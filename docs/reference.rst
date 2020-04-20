@@ -135,10 +135,6 @@ Global variable definitions
 
     Specifies whether AVX512PF instructions are available on the target architecture.
 
-.. cpp:var:: static constexpr bool has_avx512er
-
-    Specifies whether AVX512ER instructions are available on the target architecture.
-
 .. cpp:var:: static constexpr bool has_avx512vpopcntdq
 
     Specifies whether AVX512VPOPCNTDQ instructions are available on the target architecture.
@@ -779,14 +775,13 @@ Elementary Arithmetic Functions
 
     Computes the reciprocal :math:`\frac{1}{x}`. A slightly less accurate (but
     more efficient) implementation is used when approximate mode is enabled for
-    ``Array``. Relies on AVX512ER instructions if available.
-
+    ``Array``.
 
 .. cpp:function:: template <typename Array> Array rsqrt(Array x)
 
     Computes the reciprocal square root :math:`\frac{1}{\sqrt{x}}`. A slightly
     less accurate (but more efficient) implementation is used when approximate
-    mode is enabled for ``Array``. Relies on AVX512ER instructions if available.
+    mode is enabled for ``Array``.
 
 .. cpp:function:: template <typename Array> Array abs(Array x)
 
@@ -1636,7 +1631,6 @@ Exponential, logarithm, and others
 .. cpp:function:: template <typename Array> Array exp(Array x)
 
    Natural exponential function approximation based on the CEPHES library.
-   Relies on AVX512ER instructions if available.
 
 .. cpp:function:: template <typename Array> Array log(Array x)
 

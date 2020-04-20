@@ -67,11 +67,7 @@ ENOKI_TEST_FLOAT(test03_exp) {
         [](const T &a) -> T { return exp(a); },
         [](double a) { return std::exp(a); },
         Value(-20), Value(30),
-#if defined(ENOKI_X86_AVX512ER)
-        27
-#else
         3
-#endif
     );
 
     Array<T, 4> x((Value) M_PI);

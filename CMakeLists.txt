@@ -1,40 +1,20 @@
-cmake_minimum_required (VERSION 2.8.12)
-project(enoki CXX)
+project(enoki)
+cmake_minimum_required(VERSION 3.9.0)
 
-if (POLICY CMP0042)
-  cmake_policy(SET CMP0042 NEW) # MACOSX_RPATH is enabled by default
-endif()
+option(ENOKI_ENABLE_JIT      "Build Enoki just in time compilation library?" OFF)
+option(ENOKI_ENABLE_AUTODIFF "Build Enoki automatic differentation library? (requires ENOKI_AUTODIFF)" OFF)
+option(ENOKI_ENABLE_PYTHON   "Build pybind11 interface to Enoki types?" OFF)
+option(ENOKI_ENABLE_TESTS    "Build Enoki test suite?" OFF)
 
-set(CMAKE_MACOSX_RPATH ON)
-
-option(ENOKI_CUDA     "Build Enoki CUDA library?" OFF)
-option(ENOKI_AUTODIFF "Build Enoki automatic differentation library?" OFF)
-option(ENOKI_PYTHON   "Build pybind11 interface to CUDA & automatic differentiation libraries?" OFF)
-
-if (ENOKI_CUDA)
-  set(ENOKI_CUDA_COMPUTE_CAPABILITY "50" CACHE STRING "Compute capability as specified by https://developer.nvidia.com/cuda-gpus")
-  set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -gencode arch=compute_${ENOKI_CUDA_COMPUTE_CAPABILITY},code=compute_${ENOKI_CUDA_COMPUTE_CAPABILITY}")
-
-  if (${CMAKE_VERSION} VERSION_GREATER_EQUAL "3.17.0")
-    # CMake 3.17.0 introduces CMAKE_CUDA_RUNTIME which must be used instead of explicit -cudart shared flag
-    set(CMAKE_CUDA_RUNTIME_LIBRARY Shared)
-  else()
-    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -cudart shared")
-  endif()
-
-  if (NOT WIN32)
-    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -Xcompiler -fvisibility=hidden")
-  endif()
-  enable_language(CUDA)
-  add_definitions(-DENOKI_CUDA=1)
+if (ENOKI_ENABLE_AUTODIFF AND NOT ENOKI_ENABLE_JIT)
+  message(WARNING "ENOKI_ENABLE_AUTODIFF depends on the JIT compiler. Setting ENOKI_ENABLE_JIT=ON.")
+  set(ENOKI_ENABLE_JIT ON)
 endif()
 
 set(ENOKI_MASTER_PROJECT OFF)
 if (${CMAKE_CURRENT_SOURCE_DIR} STREQUAL ${CMAKE_SOURCE_DIR})
   set(ENOKI_MASTER_PROJECT ON)
 endif()
-
-option(ENOKI_TEST "Build Enoki test suite?" OFF)
 
 if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   message(STATUS "Setting build type to 'Release' as none was specified.")
@@ -92,21 +72,22 @@ endif()
 set(CMAKE_CXX_FLAGS ${ENOKI_CXXFLAGS_BACKUP})
 
 # Optimize for current architecture
-if (CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR
-    CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-  if (NOT ENOKI_NATIVE_FLAGS)
-    set(ENOKI_NATIVE_FLAGS -march=native)
+if (NOT ENOKI_NATIVE_FLAGS)
+  if (CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR
+      CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+    # set(ENOKI_NATIVE_FLAGS -march=native)
+    set(ENOKI_NATIVE_FLAGS -msse4.2)
+  elseif (CMAKE_CXX_COMPILER_ID MATCHES "Intel")
+    set(ENOKI_NATIVE_FLAGS -xHost)
+  elseif (MSVC)
+    # MSVC doesn't have a flag equivalent to -march=native
+    # The 'archflags' executable provides this functionality
+    set(ENOKI_NATIVE_FLAGS ${ENOKI_ARCH_FLAGS})
   endif()
-elseif (CMAKE_CXX_COMPILER_ID MATCHES "Intel")
-  set(ENOKI_NATIVE_FLAGS -xHost)
-elseif (MSVC)
-  # MSVC doesn't have a flag equivalent to -march=native
-  # The 'archflags' executable provides this functionality
-  set(ENOKI_NATIVE_FLAGS ${ENOKI_ARCH_FLAGS})
 endif()
 
 if (NOT ENOKI_MASTER_PROJECT)
-  set(ENOKI_ARCH_FLAGS   ${ENOKI_ARCH_FLAGS} PARENT_SCOPE)
+  set(ENOKI_ARCH_FLAGS   ${ENOKI_ARCH_FLAGS}   PARENT_SCOPE)
   set(ENOKI_NATIVE_FLAGS ${ENOKI_NATIVE_FLAGS} PARENT_SCOPE)
 endif()
 
@@ -114,7 +95,6 @@ set(ENOKI_HOST "INTEL")
 set(ENOKI_TEST_SSE42 OFF)
 set(ENOKI_TEST_AVX OFF)
 set(ENOKI_TEST_AVX2 OFF)
-set(ENOKI_TEST_KNL OFF)
 set(ENOKI_TEST_SKX OFF)
 set(ENOKI_TEST_ARM OFF)
 
@@ -133,13 +113,6 @@ if (ENOKI_ARCH_FLAGS MATCHES "AVX2")
   set(ENOKI_TEST_SSE42 ON)
   set(ENOKI_TEST_AVX ON)
   set(ENOKI_TEST_AVX2 ON)
-endif()
-
-if (ENOKI_ARCH_FLAGS MATCHES "KNL")
-  set(ENOKI_TEST_SSE42 ON)
-  set(ENOKI_TEST_AVX ON)
-  set(ENOKI_TEST_AVX2 ON)
-  set(ENOKI_TEST_KNL ON)
 endif()
 
 if (ENOKI_ARCH_FLAGS MATCHES "SKX")
@@ -290,183 +263,46 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND NOT CMAKE_CXX_FLAGS MATCHES "-stdl
   endif()
 endif()
 
+if (ENOKI_ENABLE_JIT)
+  message(STATUS "Enoki: building the CUDA & LLVM JIT backend.")
+  add_subdirectory(ext/enoki-jit)
+endif()
+
+if (ENOKI_ENABLE_AUTODIFF)
+  message(STATUS "Enoki: building the autodiff backend.")
+  add_subdirectory(src/autodiff)
+endif()
+
 if (ENOKI_TEST)
   enable_testing()
   add_subdirectory(tests)
 endif()
 
-add_definitions(-DENOKI_BUILD=1)
-
-if (ENOKI_CUDA)
-  include_directories(ext/cub)
-  set(CMAKE_SHARED_LINKER_FLAGS_BACKUP "${CMAKE_SHARED_LINKER_FLAGS}")
-  string(REPLACE "-stdlib=libc++" "" CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS}")
-  add_library(enoki-cuda SHARED
-      src/cuda/common.cuh
-      src/cuda/common.cu
-      src/cuda/horiz.cu
-      src/cuda/jit.cu
-  )
-  target_compile_definitions(enoki-cuda PRIVATE -DENOKI_CUDA_COMPUTE_CAPABILITY=${ENOKI_CUDA_COMPUTE_CAPABILITY})
-  target_link_libraries(enoki-cuda PRIVATE cuda)
-  message(STATUS "Enoki: building the CUDA backend.")
-endif()
-
 enoki_set_native_flags()
 enoki_set_compile_flags()
 
-if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|Intel")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
-elseif (MSVC)
-  add_compile_options("/std:c++17")
-endif()
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS NO)
 
-if (ENOKI_AUTODIFF)
-  add_definitions(-DENOKI_AUTODIFF=1)
-  add_library(enoki-autodiff SHARED
-      ${PROJECT_SOURCE_DIR}/include/enoki/autodiff.h
-      ${PROJECT_SOURCE_DIR}/src/autodiff/autodiff.cpp
-  )
-  target_compile_definitions(enoki-autodiff PRIVATE -DENOKI_AUTODIFF_BUILD=1)
-  if (ENOKI_CUDA)
-      target_link_libraries(enoki-autodiff PRIVATE enoki-cuda)
-  endif()
-  message(STATUS "Enoki: building the autodiff backend.")
-endif()
+include_directories(ext/enoki-jit/include)
 
-if (ENOKI_PYTHON)
-  set(ENOKI_PYBIND11_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ext/pybind11"
-    CACHE STRING "Path containing the 'pybind11' library used to compile Enoki.")
+if (ENOKI_ENABLE_PYTHON)
   message(STATUS "Enoki: building the Python plugin.")
+  add_subdirectory(src/python)
 
-  set(CMAKE_CXX_STANDARD 17)
-  add_subdirectory(${ENOKI_PYBIND11_DIR} pybind11)
-
-  pybind11_add_module(
-      enoki-python-core
-      THIN_LTO
-      src/python/main.cpp
+  set_target_properties(enoki-python PROPERTIES
+    OUTPUT_NAME enoki
+    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
   )
 
-  pybind11_add_module(
-      enoki-python-scalar
-      THIN_LTO
-
-      src/python/common.h
-      src/python/complex.h
-      src/python/matrix.h
-      src/python/quat.h
-      src/python/scalar.cpp
-      src/python/scalar_0d.cpp
-      src/python/scalar_1d.cpp
-      src/python/scalar_2d.cpp
-      src/python/scalar_3d.cpp
-      src/python/scalar_4d.cpp
-      src/python/scalar_complex.cpp
-      src/python/scalar_matrix.cpp
-      src/python/scalar_quat.cpp
-      src/python/scalar_pcg32.cpp
-  )
-
-  pybind11_add_module(
-      enoki-python-dynamic
-      THIN_LTO
-
-      src/python/common.h
-      src/python/complex.h
-      src/python/matrix.h
-      src/python/quat.h
-      src/python/dynamic.cpp
-      src/python/dynamic_0d.cpp
-      src/python/dynamic_1d.cpp
-      src/python/dynamic_2d.cpp
-      src/python/dynamic_3d.cpp
-      src/python/dynamic_4d.cpp
-      src/python/dynamic_complex.cpp
-      src/python/dynamic_matrix.cpp
-      src/python/dynamic_pcg32.cpp
-  )
-
-  set(ENOKI_PYTHON_TARGETS core scalar dynamic)
-
-  if (ENOKI_CUDA)
-    pybind11_add_module(
-        enoki-python-cuda
-        THIN_LTO
-
-        src/python/common.h
-        src/python/complex.h
-        src/python/matrix.h
-        src/python/quat.h
-        src/python/cuda.cpp
-        src/python/cuda_0d.cpp
-        src/python/cuda_1d.cpp
-        src/python/cuda_2d.cpp
-        src/python/cuda_3d.cpp
-        src/python/cuda_4d.cpp
-        src/python/cuda_complex.cpp
-        src/python/cuda_matrix.cpp
-        src/python/cuda_pcg32.cpp
-    )
-    target_link_libraries(enoki-python-cuda PRIVATE enoki-cuda cuda)
-    set(ENOKI_PYTHON_TARGETS ${ENOKI_PYTHON_TARGETS} cuda)
+  if (CMAKE_CXX_COMPILER_ID MATCHES "GCC|Clang")
+    target_compile_options(enoki-python PRIVATE -g0 -Os)
+  elseif (MSVC)
+    target_compile_options(enoki-python PRIVATE /Os)
   endif()
-
-  if (ENOKI_CUDA AND ENOKI_AUTODIFF)
-    pybind11_add_module(
-        enoki-python-cuda-autodiff
-        THIN_LTO
-
-        src/python/common.h
-        src/python/complex.h
-        src/python/matrix.h
-        src/python/quat.h
-        src/python/cuda_autodiff.cpp
-        src/python/cuda_autodiff_0d.cpp
-        src/python/cuda_autodiff_1d.cpp
-        src/python/cuda_autodiff_2d.cpp
-        src/python/cuda_autodiff_3d.cpp
-        src/python/cuda_autodiff_4d.cpp
-        src/python/cuda_autodiff_complex.cpp
-        src/python/cuda_autodiff_matrix.cpp
-    )
-    target_link_libraries(enoki-python-cuda-autodiff PRIVATE enoki-autodiff enoki-cuda cuda)
-    set(ENOKI_PYTHON_TARGETS ${ENOKI_PYTHON_TARGETS} cuda-autodiff)
-  endif()
-
-  foreach (TARGET IN LISTS ENOKI_PYTHON_TARGETS)
-    string(REPLACE "-" "_" TARGET_U ${TARGET})
-
-    if (${TARGET} MATCHES "core")
-      set_target_properties(enoki-python-${TARGET} PROPERTIES
-        OUTPUT_NAME "core"
-        LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/enoki
-      )
-    else()
-      set_target_properties(enoki-python-${TARGET} PROPERTIES
-        OUTPUT_NAME ${TARGET_U}
-        LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/enoki
-      )
-    endif()
-
-    if (CMAKE_CXX_COMPILER_ID MATCHES "GCC|Clang")
-      target_compile_options(enoki-python-${TARGET} PRIVATE -g0 -Os)
-    elseif (MSVC)
-      target_compile_options(enoki-python-${TARGET} PRIVATE /Os)
-    endif()
-  endforeach()
-
-  add_custom_command(
-    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/enoki/__init__.py
-    COMMAND ${CMAKE_COMMAND} -E copy
-    ${CMAKE_CURRENT_SOURCE_DIR}/resources/__init__.py
-    ${CMAKE_CURRENT_BINARY_DIR}/enoki/__init__.py
-  )
-
-  add_custom_target(
-    enoki-python-init
-    ALL DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/enoki/__init__.py
-  )
+else()
+  message(STATUS "Enoki: *not* building the Python plugin.")
 endif()
 
 # Build the documentation
@@ -485,6 +321,6 @@ if (ENOKI_MASTER_PROJECT)
 endif()
 
 mark_as_advanced(
-  Eigen3_DIR PYBIND11_INSTALL PYBIND11_PYTHON_VERSION PYBIND11_TEST
+  PYBIND11_INSTALL PYBIND11_PYTHON_VERSION PYBIND11_TEST
   PYBIND11_WERROR USE_PYTHON_INCLUDE_DIR
 )

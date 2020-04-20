@@ -1,0 +1,51 @@
+/*
+    enoki/array_constants.h -- Common constants and other useful quantities
+
+    Enoki is a C++ template library for efficient vectorization and
+    differentiation of numerical kernels on modern processor architectures.
+
+    Copyright (c) 2020 Wenzel Jakob <wenzel.jakob@epfl.ch>
+
+    All rights reserved. Use of this source code is governed by a BSD-style
+    license that can be found in the LICENSE file.
+*/
+
+#pragma once
+
+#include <enoki/array_traits.h>
+
+NAMESPACE_BEGIN(enoki)
+
+template <typename T> constexpr auto E               = scalar_t<T>(2.71828182845904523536);
+
+template <typename T> constexpr auto Pi              = scalar_t<T>(3.14159265358979323846);
+template <typename T> constexpr auto InvPi           = scalar_t<T>(0.31830988618379067154);
+template <typename T> constexpr auto SqrtPi          = scalar_t<T>(1.77245385090551602793);
+template <typename T> constexpr auto InvSqrtPi       = scalar_t<T>(0.56418958354775628695);
+
+template <typename T> constexpr auto TwoPi           = scalar_t<T>(6.28318530717958647692);
+template <typename T> constexpr auto InvTwoPi        = scalar_t<T>(0.15915494309189533577);
+template <typename T> constexpr auto SqrtTwoPi       = scalar_t<T>(2.50662827463100050242);
+template <typename T> constexpr auto InvSqrtTwoPi    = scalar_t<T>(0.39894228040143267794);
+
+template <typename T> constexpr auto FourPi          = scalar_t<T>(12.5663706143591729539);
+template <typename T> constexpr auto InvFourPi       = scalar_t<T>(0.07957747154594766788);
+template <typename T> constexpr auto SqrtFourPi      = scalar_t<T>(3.54490770181103205460);
+template <typename T> constexpr auto InvSqrtFourPi   = scalar_t<T>(0.28209479177387814347);
+
+template <typename T> constexpr auto SqrtTwo         = scalar_t<T>(1.41421356237309504880);
+template <typename T> constexpr auto InvSqrtTwo      = scalar_t<T>(0.70710678118654752440);
+
+template <typename T> constexpr auto Infinity        = scalar_t<T>(__builtin_inf());
+template <typename T> constexpr auto NaN             = scalar_t<T>(__builtin_nan(""));
+
+template <typename T> constexpr auto Epsilon         = scalar_t<T>(sizeof(scalar_t<T>) == 8
+                                                                   ? 0x1p-53
+                                                                   : 0x1p-24);
+
+template <typename T> constexpr auto OneMinusEpsilon = scalar_t<T>(sizeof(scalar_t<T>) == 8
+                                                                   ? 0x1.fffffffffffffp-1
+                                                                   : 0x1.fffffep-1);
+template <typename T> constexpr auto RecipOverflow   = scalar_t<T>(sizeof(scalar_t<T>) == 8
+                                                                   ? 0x1p-1024 : 0x1p-128);
+NAMESPACE_END(enoki)

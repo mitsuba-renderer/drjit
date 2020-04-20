@@ -1,100 +1,61 @@
 /*
-    enoki/array_kmask.h -- Hardware-specific intrinsics and compatibility
-    wrappers
+    enoki/packet_intrin.h -- Import processor intrinsics and declares utility
+    functions built from them
 
-    Enoki is a C++ template library that enables transparent vectorization
-    of numerical kernels using ENOKI instruction sets available on current
-    processor architectures.
+    Enoki is a C++ template library for efficient vectorization and
+    differentiation of numerical kernels on modern processor architectures.
 
-    Copyright (c) 2019 Wenzel Jakob <wenzel.jakob@epfl.ch>
+    Copyright (c) 2020 Wenzel Jakob <wenzel.jakob@epfl.ch>
 
     All rights reserved. Use of this source code is governed by a BSD-style
     license that can be found in the LICENSE file.
 */
 
 #pragma once
-#include <enoki/fwd.h>
 
-#if defined(ENOKI_X86_64) || defined(ENOKI_X86_32)
-#  if defined(__GNUC__) && !defined(__clang__)
-#    pragma GCC diagnostic push
-#    pragma GCC diagnostic ignored "-Wconversion"
-#    pragma GCC diagnostic ignored "-Wuninitialized"
-#    pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
-#  endif
-#  include <immintrin.h>
-#  if defined(__GNUC__) && !defined(__clang__)
-#    pragma GCC diagnostic pop
-#  endif
+#if !defined(__IMMINTRIN_H)
+/* We want to be able to selectively include intrinsics. For instance, it's often
+   not desirable to pull in 1 MB (!) of AVX512 header code unless the application
+   is really using those intrinsics. Unfortunately, immintrin.h tries to prevent
+   this kind of seletiveness, which we simply circumvent with the following define..
+*/
+#  define __IMMINTRIN_H
 #endif
 
-#if defined(ENOKI_ARM_NEON)
-#  include <arm_neon.h>
+#if defined(ENOKI_X86_SSE42)
+#  include <nmmintrin.h>
 #endif
 
-#if defined(_MSC_VER)
-#  include <intrin.h>
+#if defined(ENOKI_X86_AVX)
+#  include <avxintrin.h>
 #endif
 
+#if defined(ENOKI_X86_AVX2)
+#  include <avx2intrin.h>
+#endif
 
-NAMESPACE_BEGIN(enoki)
+#if defined(ENOKI_X86_FMA)
+#  include <fmaintrin.h>
+#endif
+
+#if defined(ENOKI_X86_AVX512)
+#  include <avx512fintrin.h>
+#  include <avx512vlintrin.h>
+#  include <avx512bwintrin.h>
+#  include <avx512cdintrin.h>
+#  include <avx512dqintrin.h>
+#  include <avx512vldqintrin.h>
+#  include <avx512vlbwintrin.h>
+#endif
 
 // -----------------------------------------------------------------------
 //! @{ \name Available instruction sets
 // -----------------------------------------------------------------------
 
-#if defined(ENOKI_X86_AVX512F)
-    static constexpr bool has_avx512f = true;
+#if defined(ENOKI_X86_AVX512)
+    static constexpr bool has_avx512 = true;
 #else
-    static constexpr bool has_avx512f = false;
-#endif
-
-#if defined(ENOKI_X86_AVX512CD)
-    static constexpr bool has_avx512cd = true;
-#else
-    static constexpr bool has_avx512cd = false;
-#endif
-
-#if defined(ENOKI_X86_AVX512DQ)
-    static constexpr bool has_avx512dq = true;
-#else
-    static constexpr bool has_avx512dq = false;
-#endif
-
-#if defined(ENOKI_X86_AVX512VL)
-    static constexpr bool has_avx512vl = true;
-#else
-    static constexpr bool has_avx512vl = false;
-#endif
-
-#if defined(ENOKI_X86_AVX512BW)
-    static constexpr bool has_avx512bw = true;
-#else
-    static constexpr bool has_avx512bw = false;
-#endif
-
-#if defined(ENOKI_X86_AVX512PF)
-    static constexpr bool has_avx512pf = true;
-#else
-    static constexpr bool has_avx512pf = false;
-#endif
-
-#if defined(ENOKI_X86_AVX512ER)
-    static constexpr bool has_avx512er = true;
-#else
-    static constexpr bool has_avx512er = false;
-#endif
-
-#if defined(__AVX512VBMI__)
-    static constexpr bool has_avx512vbmi = true;
-#else
-    static constexpr bool has_avx512vbmi = false;
-#endif
-
-#if defined(ENOKI_X86_AVX512VPOPCNTDQ)
-    static constexpr bool has_avx512vpopcntdq = true;
-#else
-    static constexpr bool has_avx512vpopcntdq = false;
+    static constexpr bool has_avx512 = false;
 #endif
 
 #if defined(ENOKI_X86_AVX2)
@@ -162,37 +123,7 @@ static constexpr bool has_vectorization = has_sse42 || has_neon;
 //! @}
 // -----------------------------------------------------------------------
 
-#if defined(ENOKI_X86_SSE42)
-/// Flush denormalized numbers to zero
-inline void set_flush_denormals(bool value) {
-    _MM_SET_FLUSH_ZERO_MODE(value ? _MM_FLUSH_ZERO_ON : _MM_FLUSH_ZERO_OFF);
-    _MM_SET_DENORMALS_ZERO_MODE(value ? _MM_DENORMALS_ZERO_ON : _MM_DENORMALS_ZERO_OFF);
-}
-
-inline bool flush_denormals() {
-    return _MM_GET_FLUSH_ZERO_MODE() == _MM_FLUSH_ZERO_ON;
-}
-
-#else
-inline void set_flush_denormals(bool) { }
-inline bool flush_denormals() { return false; }
-#endif
-
-struct scoped_flush_denormals {
-public:
-    scoped_flush_denormals(bool value) {
-        m_old_value = flush_denormals();
-        set_flush_denormals(value);
-
-    }
-
-    ~scoped_flush_denormals() {
-        set_flush_denormals(m_old_value);
-    }
-private:
-    bool m_old_value;
-};
-
+NAMESPACE_BEGIN(enoki)
 NAMESPACE_BEGIN(detail)
 
 // -----------------------------------------------------------------------
@@ -213,15 +144,9 @@ ENOKI_INLINE __m256i concat(__m128i l, __m128i h) {
 }
 #endif
 
-#if defined(ENOKI_X86_AVX512F)
+#if defined(ENOKI_X86_AVX512)
 ENOKI_INLINE __m512 concat(__m256 l, __m256 h) {
-    #if defined(ENOKI_X86_AVX512DQ)
-        return _mm512_insertf32x8(_mm512_castps256_ps512(l), h, 1);
-    #else
-        return _mm512_castpd_ps(
-            _mm512_insertf64x4(_mm512_castps_pd(_mm512_castps256_ps512(l)),
-                               _mm256_castps_pd(h), 1));
-    #endif
+    return _mm512_insertf32x8(_mm512_castps256_ps512(l), h, 1);
 }
 
 ENOKI_INLINE __m512d concat(__m256d l, __m256d h) {
@@ -253,7 +178,7 @@ ENOKI_INLINE __m256i mm256_cvtepi32_epi64(__m128i x) {
 }
 
 ENOKI_INLINE __m128i mm256_cvtepi64_epi32(__m256i x) {
-#if defined(ENOKI_X86_AVX512VL)
+#if defined(ENOKI_X86_AVX512)
     return _mm256_cvtepi64_epi32(x);
 #else
     __m128i x0 = _mm256_castsi256_si128(x);
@@ -281,7 +206,6 @@ ENOKI_INLINE __m256i mm512_cvtepi64_epi32(__m256i x0, __m256i x1) {
 #endif
 
 #if defined(ENOKI_X86_SSE42)
-
 ENOKI_INLINE __m128i mm256_cvtepi64_epi32(__m128i x0, __m128i x1) {
     return _mm_castps_si128(_mm_shuffle_ps(
         _mm_castsi128_ps(x0), _mm_castsi128_ps(x1), _MM_SHUFFLE(2, 0, 2, 0)));
@@ -321,6 +245,53 @@ ENOKI_INLINE long long mm_extract_epi64(__m128i m)  {
 
 //! @}
 // -----------------------------------------------------------------------
+
+#define ENOKI_PACKET_DECLARE(size)                                             \
+    namespace detail {                                                         \
+        template <typename T> struct vectorize<T, size> {                      \
+            static constexpr bool recurse = false;                             \
+            static constexpr bool self = true;                                 \
+        };                                                                     \
+    }
+
+#define ENOKI_PACKET_TYPE(Type, Size_, Register)                               \
+    using Base = StaticArrayBase<Type, Size_, IsMask_, Derived_>;              \
+    ENOKI_ARRAY_IMPORT(StaticArrayImpl, Base)                                  \
+    using typename Base::Derived;                                              \
+    using typename Base::Value;                                                \
+    using typename Base::Array1;                                               \
+    using typename Base::Array2;                                               \
+    using Base::derived;                                                       \
+    using Base::Size;                                                          \
+    using Ref = const Derived &;                                               \
+    static constexpr bool IsPacked = true;                                     \
+    Register m;                                                                \
+    StaticArrayImpl(Register m) : m(m) {}                                      \
+    StaticArrayImpl(Register m, detail::reinterpret_flag) : m(m) {}            \
+    ENOKI_INLINE Value &coeff(size_t i) { return ((Value *) this)[i]; }        \
+    ENOKI_INLINE const Value &coeff(size_t i) const {                          \
+        return ((const Value *) this)[i];                                      \
+    }
+
+#define ENOKI_CONVERT(Value)                                                   \
+    template <typename Value2, typename Derived2,                              \
+              enable_if_t<detail::is_same_v<Value2, Value>> = 0>               \
+    ENOKI_INLINE StaticArrayImpl(                                              \
+        const StaticArrayBase<Value2, Size, IsMask_, Derived2> &a)
+
+#define ENOKI_REINTERPRET(Value)                                               \
+    template <typename Value2, typename Derived2, bool IsMask2,                \
+              enable_if_t<detail::is_same_v<Value2, Value>> = 0>               \
+    ENOKI_INLINE StaticArrayImpl(                                              \
+        const StaticArrayBase<Value2, Size, IsMask2, Derived2> &a,             \
+        detail::reinterpret_flag)
+
+#define ENOKI_REINTERPRET_MASK(Value)                                          \
+    template <typename Value2, typename Derived2, typename T = Derived,        \
+              enable_if_t<T::IsMask && detail::is_same_v<Value2, Value>> = 0>  \
+    ENOKI_INLINE StaticArrayImpl(                                              \
+        const StaticArrayBase<Value2, Size, true, Derived2> &a,                \
+        detail::reinterpret_flag)
 
 NAMESPACE_END(detail)
 NAMESPACE_END(enoki)

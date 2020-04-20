@@ -5,7 +5,7 @@
     of numerical kernels using SIMD instruction sets available on current
     processor architectures.
 
-    Copyright (c) 2019 Wenzel Jakob <wenzel.jakob@epfl.ch>
+    Copyright (c) 2020 Wenzel Jakob <wenzel.jakob@epfl.ch>
 
     All rights reserved. Use of this source code is governed by a BSD-style
     license that can be found in the LICENSE file.
@@ -13,38 +13,26 @@
 
 #pragma once
 
-#if defined(_MSC_VER)
-#  if !defined(_USE_MATH_DEFINES)
-#    define _USE_MATH_DEFINES
-#  endif
-#endif
-
-#include <cstddef>
-#include <cstring>
-#include <type_traits>
+#include <stddef.h>
 
 #if defined(_MSC_VER)
 #  define ENOKI_NOINLINE               __declspec(noinline)
 #  define ENOKI_INLINE                 __forceinline
 #  define ENOKI_INLINE_LAMBDA
-#  define ENOKI_PURE
 #  define ENOKI_MALLOC                 __declspec(restrict)
 #  define ENOKI_MAY_ALIAS
 #  define ENOKI_ASSUME_ALIGNED(x, s)   x
 #  define ENOKI_UNROLL
 #  define ENOKI_NOUNROLL
-#  define ENOKI_IVDEP                  __pragma(loop(ivdep))
 #  define ENOKI_PACK
 #  define ENOKI_LIKELY(x)              x
 #  define ENOKI_UNLIKELY(x)            x
-#  define ENOKI_REGCALL
 #  define ENOKI_IMPORT                 __declspec(dllimport)
 #  define ENOKI_EXPORT                 __declspec(dllexport)
 #else
 #  define ENOKI_NOINLINE               __attribute__ ((noinline))
 #  define ENOKI_INLINE                 __attribute__ ((always_inline)) inline
 #  define ENOKI_INLINE_LAMBDA          __attribute__ ((always_inline))
-#  define ENOKI_PURE                   __attribute__ ((const,nothrow))
 #  define ENOKI_MALLOC                 __attribute__ ((malloc))
 #  define ENOKI_ASSUME_ALIGNED(x, s)   __builtin_assume_aligned(x, s)
 #  define ENOKI_LIKELY(x)              __builtin_expect(!!(x), 1)
@@ -53,25 +41,15 @@
 #  if defined(__clang__)
 #    define ENOKI_UNROLL               _Pragma("unroll")
 #    define ENOKI_NOUNROLL             _Pragma("nounroll")
-#    define ENOKI_IVDEP
 #    define ENOKI_MAY_ALIAS            __attribute__ ((may_alias))
-#    define ENOKI_REGCALL              __attribute__ ((regcall))
 #  elif defined(__INTEL_COMPILER)
 #    define ENOKI_MAY_ALIAS
 #    define ENOKI_UNROLL               _Pragma("unroll")
 #    define ENOKI_NOUNROLL             _Pragma("nounroll")
-#    define ENOKI_IVDEP                _Pragma("ivdep")
-#    define ENOKI_REGCALL              __attribute__ ((regcall))
 #  else
 #    define ENOKI_MAY_ALIAS            __attribute__ ((may_alias))
 #    define ENOKI_UNROLL
 #    define ENOKI_NOUNROLL
-#    if defined(__GNUC__) && (__GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 9))
-#      define ENOKI_IVDEP              _Pragma("GCC ivdep")
-#    else
-#      define ENOKI_IVDEP
-#    endif
-#    define ENOKI_REGCALL
 #  endif
 #  define ENOKI_IMPORT
 #  define ENOKI_EXPORT                 __attribute__ ((visibility("default")))
@@ -88,7 +66,7 @@
 #endif
 
 #define ENOKI_VERSION_MAJOR 0
-#define ENOKI_VERSION_MINOR 1
+#define ENOKI_VERSION_MINOR 2
 #define ENOKI_VERSION_PATCH 0
 
 #define ENOKI_STRINGIFY(x) #x
@@ -127,33 +105,15 @@
 #endif
 
 #if (defined(_MSC_VER) && defined(ENOKI_X86_32)) && !defined(ENOKI_DISABLE_VECTORIZATION)
-// Enoki does not support vectorization on 32-bit Windows due to various
-// platform limitations (unaligned stack, calling conventions don't allow
-// passing vector registers, etc.).
+/* Enoki does not support vectorization on 32-bit Windows due to various
+   platform limitations (unaligned stack, calling conventions don't allow
+   passing vector registers, etc.). */
 # define ENOKI_DISABLE_VECTORIZATION 1
 #endif
 
 # if !defined(ENOKI_DISABLE_VECTORIZATION)
-#  if defined(__AVX512F__)
-#    define ENOKI_X86_AVX512F 1
-#  endif
-#  if defined(__AVX512CD__)
-#    define ENOKI_X86_AVX512CD 1
-#  endif
-#  if defined(__AVX512DQ__)
-#    define ENOKI_X86_AVX512DQ 1
-#  endif
-#  if defined(__AVX512VL__)
-#    define ENOKI_X86_AVX512VL 1
-#  endif
-#  if defined(__AVX512BW__)
-#    define ENOKI_X86_AVX512BW 1
-#  endif
-#  if defined(__AVX512PF__)
-#    define ENOKI_X86_AVX512PF 1
-#  endif
-#  if defined(__AVX512ER__)
-#    define ENOKI_X86_AVX512ER 1
+#  if defined(__AVX512F__) && defined(__AVX512CD__) && defined(__AVX512VL__) && defined(__AVX512DQ__) && defined(__AVX512BW__)
+#    define ENOKI_X86_AVX512 1
 #  endif
 #  if defined(__AVX512VBMI__)
 #    define ENOKI_X86_AVX512VBMI 1
@@ -184,8 +144,8 @@
 #  endif
 #endif
 
-/* Fix missing/inconsistent preprocessor flags */
-#if defined(ENOKI_X86_AVX512F) && !defined(ENOKI_X86_AVX2)
+// Fix missing/inconsistent preprocessor flags
+#if defined(ENOKI_X86_AVX512) && !defined(ENOKI_X86_AVX2)
 #  define ENOKI_X86_AVX2
 #endif
 
@@ -209,88 +169,69 @@
    unimplemented methods in vectorized backends */
 
 #if !defined(ENOKI_TRACK_SCALAR)
-#  define ENOKI_TRACK_SCALAR(reason)
-#endif
-
-#if defined(ENOKI_ALLOC_VERBOSE)
-#  define ENOKI_TRACK_ALLOC(ptr, size)                                         \
-      printf("Enoki: %p: alloc(%llu)\n", (ptr), (unsigned long long) (size));
-#  define ENOKI_TRACK_DEALLOC(ptr, size)                                       \
-      printf("Enoki: %p: dealloc(%llu)\n", (ptr), (unsigned long long) (size));
-#endif
-
-#if !defined(ENOKI_TRACK_ALLOC)
-#  define ENOKI_TRACK_ALLOC(ptr, size)
-#endif
-
-#if !defined(ENOKI_TRACK_DEALLOC)
-#  define ENOKI_TRACK_DEALLOC(ptr, size)
+#  define ENOKI_TRACK_SCALAR(reason) { }
 #endif
 
 #define ENOKI_CHKSCALAR(reason)                                                \
-    if (std::is_arithmetic_v<std::decay_t<Value>>) {                           \
-        ENOKI_TRACK_SCALAR(reason)                                             \
-    }
-
-#if !defined(ENOKI_APPROX_DEFAULT)
-#  define ENOKI_APPROX_DEFAULT 1
-#endif
+    if (std::is_scalar_v<std::decay_t<Value>>)                                 \
+        ENOKI_TRACK_SCALAR(reason)
 
 NAMESPACE_BEGIN(enoki)
 
-using ssize_t = std::make_signed_t<size_t>;
-
 /// Maximum hardware-supported packet size in bytes
-#if defined(ENOKI_X86_AVX512F)
-    static constexpr size_t max_packet_size = 64;
+#if defined(ENOKI_X86_AVX512)
+    static constexpr size_t DefaultSize = 16;
 #elif defined(ENOKI_X86_AVX)
-    static constexpr size_t max_packet_size = 32;
+    static constexpr size_t DefaultSize = 8;
 #elif defined(ENOKI_X86_SSE42) || defined(ENOKI_ARM_NEON)
-    static constexpr size_t max_packet_size = 16;
+    static constexpr size_t DefaultSize = 4;
 #else
-    static constexpr size_t max_packet_size = 4;
+    static constexpr size_t DefaultSize = 1;
 #endif
 
-constexpr size_t array_default_size = max_packet_size / 4;
-
 /// Base class of all arrays
-template <typename Value_, typename Derived_> struct ArrayBase;
+struct ArrayBase;
+
+/// Base class of all arrays (CRT)
+template <typename Value_, typename Derived_> struct ArrayBaseT;
 
 /// Base class of all statically sized arrays
 template <typename Value_, size_t Size_, bool IsMask_, typename Derived_>
 struct StaticArrayBase;
 
 /// Generic array class, which broadcasts from the outer to inner dimensions
-template <typename Value_, size_t Size_ = array_default_size>
+template <typename Value_, size_t Size_ = DefaultSize>
 struct Array;
 
 /// Generic array class, which broadcasts from the inner to outer dimensions
-template <typename Value_, size_t Size_ = array_default_size>
+template <typename Value_, size_t Size_ = DefaultSize>
 struct Packet;
 
 /// Generic mask class, which broadcasts from the outer to inner dimensions
-template <typename Value_, size_t Size_ = array_default_size>
+template <typename Value_, size_t Size_ = DefaultSize>
 struct Mask;
 
 /// Generic mask class, which broadcasts from the inner to outer dimensions
-template <typename Value_, size_t Size_ = array_default_size>
+template <typename Value_, size_t Size_ = DefaultSize>
 struct PacketMask;
 
-/// Dynamically sized array
-template <typename Packet_> struct DynamicArray;
-template <typename Packet_> struct DynamicMask;
+/// JIT-compiled dynamically sized CUDA array
+template <typename Value_> struct CUDAArray;
 
-/// Reverse-mode autodiff array
-template <typename Value> struct DiffArray;
+/// JIT-compiled dynamically sized LLVM array
+template <typename Value_> struct LLVMArray;
 
-template <typename Value_, size_t Size_>
-struct Matrix;
+/// Forward- and reverse-mode automatic differentiation wrapper
+template <typename Value_> struct DiffArray;
 
-template <typename Value_>
-struct Complex;
+/// Generic square matrix type
+template <typename Value_, size_t Size_> struct Matrix;
 
-template <typename Value_>
-struct Quaternion;
+/// Generic complex number type
+template <typename Value_> struct Complex;
+
+/// Generic quaternion type
+template <typename Value_> struct Quaternion;
 
 /// Helper class for custom data structures
 template <typename T, typename = int>
@@ -299,16 +240,8 @@ struct struct_support;
 template <typename Value>
 struct CUDAArray;
 
-template <typename T> class cuda_host_allocator;
-template <typename T> class cuda_managed_allocator;
-
-extern ENOKI_IMPORT void* cuda_host_malloc(size_t);
-extern ENOKI_IMPORT void cuda_host_free(void *);
-
 /// Half-precision floating point value
 struct half;
-
-template <typename T> struct MaskBit;
 
 namespace detail {
     struct reinterpret_flag { };
@@ -318,13 +251,5 @@ template <typename T, bool UseIntrinsic = false, typename = int>
 struct divisor;
 template <typename T>
 struct divisor_ext;
-
-/// Reinterpret the binary represesentation of a data type
-template<typename T, typename U> ENOKI_INLINE T memcpy_cast(const U &val) {
-    static_assert(sizeof(T) == sizeof(U), "memcpy_cast: sizes did not match!");
-    T result;
-    std::memcpy(&result, &val, sizeof(T));
-    return result;
-}
 
 NAMESPACE_END(enoki)

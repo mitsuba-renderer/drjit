@@ -3,8 +3,6 @@
 int main(int argc, char *argv[]) {
 #if defined(__AVX512DQ__)
     std::cout << "-march=skx" << std::endl;
-#elif defined(__AVX512ER__)
-    std::cout << "-march=knl" << std::endl;
 #elif defined(__AVX2__)
     std::cout << "-mavx2" << std::endl;
 #elif defined(__AVX__)
