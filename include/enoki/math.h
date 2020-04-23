@@ -158,7 +158,7 @@ namespace detail {
         constexpr size_t Shift = sizeof(Scalar) * 8 - 3;
 
         if constexpr (Sin)
-            sign_sin = reinterpret_array<Value>(sl<Shift>(j)) ^ x;
+            sign_sin = detail::xor_(reinterpret_array<Value>(sl<Shift>(j)), x);
 
         if constexpr (Cos)
             sign_cos = reinterpret_array<Value>(sl<Shift>(~(j - Int(2))));
@@ -175,7 +175,7 @@ namespace detail {
         }
 
         Value z = sqr(y), s, c;
-        z |= eq(xa, Infinity<Value>);
+        z = detail::or_(z, eq(xa, Infinity<Value>));
 
         if constexpr (Single) {
             s = poly2(z, -1.6666654611e-1,

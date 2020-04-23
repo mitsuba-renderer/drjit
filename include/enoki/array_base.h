@@ -17,17 +17,27 @@
 
 NAMESPACE_BEGIN(enoki)
 
-#define ENOKI_ARRAY_DEFAULTS(Name)                                             \
-    Name() = default;                                                          \
+#define ENOKI_IMPORT_BASE(Name, Base)                                          \
     Name(const Name &) = default;                                              \
     Name(Name &&) = default;                                                   \
     Name &operator=(const Name &) = default;                                   \
-    Name &operator=(Name &&) = default;
-
-#define ENOKI_ARRAY_IMPORT(Name, Base)                                         \
-    ENOKI_ARRAY_DEFAULTS(Name)                                                 \
+    Name &operator=(Name &&) = default;                                        \
     using Base::Base;                                                          \
     using Base::operator=;
+
+#define ENOKI_ARRAY_IMPORT(Name, Base)                                         \
+    Name() = default;                                                          \
+    ENOKI_IMPORT_BASE(Name, Base)
+
+#if defined(NDEBUG)
+#  define ENOKI_ARRAY_IMPORT_DEFAULT(Name, Base, Scalar)                       \
+      Name() = default;                                                        \
+      ENOKI_IMPORT_BASE(Name, Base)
+#else
+#  define ENOKI_ARRAY_IMPORT_DEFAULT(Name, Base, Scalar)                       \
+      Name() : Name(DebugInitialization<Scalar>) { }                           \
+      ENOKI_IMPORT_BASE(Name, Base)
+#endif
 
 /// Generic array base class
 struct ArrayBase {
@@ -90,13 +100,13 @@ template <typename Value_, typename Derived_> struct ArrayBaseT : ArrayBase {
     static constexpr bool IsMask = is_mask_v<Value_>;
 
     /// Is this an array of values that can be added, multiplied, etc.?
-    static constexpr bool IsArithmetic = std::is_arithmetic_v<Scalar>;
+    static constexpr bool IsArithmetic = std::is_arithmetic_v<Scalar> && !IsMask;
 
     /// Is this an array of signed or unsigned integer values?
-    static constexpr bool IsIntegral = std::is_integral_v<Scalar>;
+    static constexpr bool IsIntegral = std::is_integral_v<Scalar> && !IsMask;
 
     /// Is this an array of floating point values?
-    static constexpr bool IsFloat = std::is_floating_point_v<Scalar>;
+    static constexpr bool IsFloat = std::is_floating_point_v<Scalar> && !IsMask;
 
     /// Does this array compute derivatives using automatic differentation?
     static constexpr bool IsDiff = is_diff_array_v<Value_>;
@@ -138,25 +148,37 @@ template <typename Value_, typename Derived_> struct ArrayBaseT : ArrayBase {
 
     ENOKI_ARRAY_IMPORT(ArrayBaseT, ArrayBase)
 
-    template <typename Value2, typename Derived2>
+    template <typename Value2, typename Derived2, typename T = Derived,
+              enable_if_t<Derived2::Size == T::Size> = 0>
     ArrayBaseT(const ArrayBaseT<Value2, Derived2> &v) {
         ENOKI_CHKSCALAR("Copy constructor (conversion)");
-        derived().init_(v.derived().size());
+
+        if constexpr (Derived::Size == Dynamic)
+            derived().init_(v.derived().size());
+
         for (size_t i = 0; i < derived().size(); ++i)
             derived().coeff(i) = (Value) v.derived().coeff(i);
     }
 
-    template <typename Value2, typename Derived2>
-    ArrayBaseT(const ArrayBaseT<Value2, Derived2> &v, detail::reinterpret_flag) {
+    template <typename Value2, typename Derived2, typename T = Derived,
+              enable_if_t<Derived2::Size == T::Size> = 0>
+    ArrayBaseT(const ArrayBaseT<Value2, Derived2> &v,
+               detail::reinterpret_flag) {
         ENOKI_CHKSCALAR("Copy constructor (reinterpret_cast)");
-        derived().init_(v.derived().size());
+
+        if constexpr (Derived::Size == Dynamic)
+            derived().init_(v.derived().size());
+
         for (size_t i = 0; i < derived().size(); ++i)
             derived().coeff(i) = reinterpret_array<Value>(v[i]);
     }
 
     ArrayBaseT(const Value &v) {
         ENOKI_CHKSCALAR("Constructor (scalar broadcast)");
-        derived().init_(1);
+
+        if constexpr (Derived::Size == Dynamic)
+            derived().init_(1);
+
         for (size_t i = 0; i < derived().size(); ++i)
             derived().coeff(i) = v;
     }
@@ -272,6 +294,29 @@ template <typename Value_, typename Derived_> struct ArrayBaseT : ArrayBase {
             return result;                                                   \
         }
 
+    #define ENOKI_IMPLEMENT_ROUND2INT(name)                                  \
+        template <typename T> T name##2int_() const {                        \
+            ENOKI_CHKSCALAR(#name "_");                                      \
+            T result;                                                        \
+                                                                             \
+            if constexpr (!IsFloat) {                                        \
+                enoki_raise(#name "_(): unsupported operation!");            \
+            } else if constexpr (std::is_scalar_v<Value>) {                  \
+                size_t sa = derived().size();                                \
+                                                                             \
+                if constexpr (T::Size == Dynamic)                            \
+                    result = enoki::empty<T>(sa);                            \
+                                                                             \
+                for (size_t i = 0; i < sa; ++i)                              \
+                    result.coeff(i) =                                        \
+                        enoki::name##2int<value_t<T>> (derived().coeff(i));  \
+            } else {                                                         \
+                result = T(enoki::name(derived()));                          \
+            }                                                                \
+                                                                             \
+            return result;                                                   \
+        }
+
     #define ENOKI_IMPLEMENT_BINARY(name, op, cond)                           \
         Derived name##_(const Derived &v) const {                            \
             ENOKI_CHKSCALAR(#name "_");                                      \
@@ -356,12 +401,14 @@ template <typename Value_, typename Derived_> struct ArrayBaseT : ArrayBase {
             return result;                                                   \
         }
 
-    #define ENOKI_IMPLEMENT_TERNARY(name, op, cond)                          \
+    #define ENOKI_IMPLEMENT_TERNARY_ALT(name, op, alt, cond)                 \
         Derived name##_(const Derived &v1, const Derived &v2) const {        \
             ENOKI_CHKSCALAR(#name "_");                                      \
             Derived result;                                                  \
                                                                              \
-            if constexpr (cond) {                                            \
+            if constexpr (!cond) {                                           \
+                enoki_raise(#name "_(): unsupported operation!");            \
+            } else if constexpr (std::is_scalar_v<Value>) {                  \
                 size_t sa = derived().size(), sb = v1.size(), sc = v2.size(),\
                        sr = sa > sb ? sa : (sb > sc ? sb : sc);              \
                                                                              \
@@ -380,7 +427,7 @@ template <typename Value_, typename Derived_> struct ArrayBaseT : ArrayBase {
                     result.coeff(i) = op;                                    \
                 }                                                            \
             } else {                                                         \
-                enoki_raise(#name "_(): unsupported operation!");            \
+                return alt;                                                  \
             }                                                                \
                                                                              \
             return result;                                                   \
@@ -424,10 +471,10 @@ template <typename Value_, typename Derived_> struct ArrayBaseT : ArrayBase {
     ENOKI_IMPLEMENT_UNARY(trunc, enoki::trunc(a), IsFloat)
     ENOKI_IMPLEMENT_UNARY(round, enoki::round(a), IsFloat)
 
-    ENOKI_IMPLEMENT_UNARY_TEMPLATE(floor2int, typename T, enoki::floor2int<value_t<T>>(a), IsFloat)
-    ENOKI_IMPLEMENT_UNARY_TEMPLATE(ceil2int,  typename T, enoki::ceil2int<value_t<T>>(a), IsFloat)
-    ENOKI_IMPLEMENT_UNARY_TEMPLATE(trunc2int, typename T, enoki::trunc2int<value_t<T>>(a), IsFloat)
-    ENOKI_IMPLEMENT_UNARY_TEMPLATE(round2int, typename T, enoki::round2int<value_t<T>>(a), IsFloat)
+    ENOKI_IMPLEMENT_ROUND2INT(trunc)
+    ENOKI_IMPLEMENT_ROUND2INT(ceil)
+    ENOKI_IMPLEMENT_ROUND2INT(floor)
+    ENOKI_IMPLEMENT_ROUND2INT(round)
 
     ENOKI_IMPLEMENT_BINARY(min, enoki::min(a, b), IsArithmetic)
     ENOKI_IMPLEMENT_BINARY(max, enoki::max(a, b), IsArithmetic)
@@ -435,17 +482,18 @@ template <typename Value_, typename Derived_> struct ArrayBaseT : ArrayBase {
     ENOKI_IMPLEMENT_UNARY(rcp, enoki::rcp(a), IsFloat)
     ENOKI_IMPLEMENT_UNARY(rsqrt, enoki::rsqrt(a), IsFloat)
 
-    ENOKI_IMPLEMENT_TERNARY(fmadd, enoki::fmadd(a, b, c), IsFloat)
-    ENOKI_IMPLEMENT_TERNARY(fmsub, enoki::fmsub(a, b, c), IsFloat)
-    ENOKI_IMPLEMENT_TERNARY(fnmadd, enoki::fnmadd(a, b, c), IsFloat)
-    ENOKI_IMPLEMENT_TERNARY(fnmsub, enoki::fnmsub(a, b, c), IsFloat)
+    ENOKI_IMPLEMENT_TERNARY_ALT(fmadd,  enoki::fmadd(a, b, c),   derived()*v1+v2, IsFloat)
+    ENOKI_IMPLEMENT_TERNARY_ALT(fmsub,  enoki::fmsub(a, b, c),   derived()*v1-v2, IsFloat)
+    ENOKI_IMPLEMENT_TERNARY_ALT(fnmadd, enoki::fnmadd(a, b, c), -derived()*v1+v2, IsFloat)
+    ENOKI_IMPLEMENT_TERNARY_ALT(fnmsub, enoki::fnmsub(a, b, c), -derived()*v1-v2, IsFloat)
 
     #undef ENOKI_IMPLEMENT_UNARY
     #undef ENOKI_IMPLEMENT_UNARY_TEMPLATE
+    #undef ENOKI_IMPLEMENT_ROUND2INT
     #undef ENOKI_IMPLEMENT_BINARY
     #undef ENOKI_IMPLEMENT_BINARY_BITOP
     #undef ENOKI_IMPLEMENT_BINARY_MASK
-    #undef ENOKI_IMPLEMENT_TERNARY
+    #undef ENOKI_IMPLEMENT_TERNARY_ALT
 
     template <typename Mask>
     static ENOKI_INLINE auto select_(const Mask &m, const Derived &t, const Derived &f) {
@@ -612,6 +660,14 @@ template <typename Value_, typename Derived_> struct ArrayBaseT : ArrayBase {
         }
 
         return value;
+    }
+
+    static Derived load_(const void *mem, size_t size) {
+        return Derived::load_unaligned_(mem, size);
+    }
+
+    void store_(void *mem, size_t size) const {
+        return derived().store_unaligned_(mem, size);
     }
 };
 

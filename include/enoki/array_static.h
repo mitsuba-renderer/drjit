@@ -34,8 +34,10 @@ namespace detail {
 }
 
 template <typename Value_, size_t Size_, bool IsMask_, typename Derived_>
-struct StaticArrayBase : ArrayBaseT<Value_, Derived_> {
-    using Base = ArrayBaseT<Value_, Derived_>;
+struct StaticArrayBase : ArrayBaseT<std::conditional_t<IsMask_, mask_t<Value_>, Value_>, Derived_> {
+    using Base = ArrayBaseT<std::conditional_t<IsMask_, mask_t<Value_>, Value_>, Derived_>;
+    ENOKI_ARRAY_IMPORT(StaticArrayBase, Base)
+
     using typename Base::Derived;
     using typename Base::Value;
     using typename Base::Scalar;
@@ -103,7 +105,7 @@ struct StaticArrayBase : ArrayBaseT<Value_, Derived_> {
         }
     }
 
-    static Derived full_(std::conditional_t<IsMask_, bool, Scalar> value, size_t size) {
+    static Derived full_(const std::conditional_t<IsMask_, bool, Scalar> &value, size_t size) {
         if constexpr (is_array_v<Value>) {
             Derived result;
             for (size_t i = 0; i < Derived::Size; ++i)
@@ -112,6 +114,40 @@ struct StaticArrayBase : ArrayBaseT<Value_, Derived_> {
         } else {
             ENOKI_MARK_USED(size);
             return Derived(value);
+        }
+    }
+
+    template <typename T = Derived>
+    static Derived load_unaligned_(const void *mem, size_t) {
+        static_assert(!is_dynamic_v<value_t<T>>,
+                      "store_unaligned(): nested dynamic array not "
+                      "supported! Did you mean to use enoki::gather?");
+
+        Derived result;
+
+        if constexpr (std::is_scalar_v<Value>) {
+            memcpy(derived().data(), mem, sizeof(Value) * Derived::Size);
+        } else {
+            ENOKI_CHKSCALAR("store_unaligned");
+            for (size_t i = 0; i < Derived::Size; ++i)
+                derived().coeff(i) =
+                    load_unaligned<Value>(static_cast<Value *>(mem) + i);
+        }
+    }
+
+    template <typename T = Derived>
+    void store_unaligned_(void *mem) const {
+        static_assert(!is_dynamic_v<value_t<T>>,
+                      "store_unaligned(): nested dynamic array not "
+                      "supported! Did you mean to use enoki::gather?");
+
+        if constexpr (std::is_scalar_v<Value>) {
+            memcpy(mem, derived().data(), sizeof(Value) * Derived::Size);
+        } else {
+            ENOKI_CHKSCALAR("store_unaligned");
+            for (size_t i = 0; i < Derived::Size; ++i)
+                store_unaligned(static_cast<Value *>(mem) + i,
+                                derived().coeff(i));
         }
     }
 
@@ -131,7 +167,39 @@ private:
         return T(derived().coeff(Offset + Is)...);
     }
 
+    template <typename T, size_t... Is>
+    static ENOKI_INLINE auto linspace_impl_(std::index_sequence<Is...>, T offset, T step) {
+        ENOKI_MARK_USED(step);
+        if constexpr (sizeof...(Is) == 0)
+            return Derived();
+        else if constexpr (sizeof...(Is) == 1)
+            return Derived((Scalar) offset);
+        else
+            return Derived(((Scalar) ((T) Is * step + offset))...);
+    }
+
 public:
+    /// Construct an evenly spaced integer sequence
+    static ENOKI_INLINE Derived arange_(ssize_t start, ssize_t stop, ssize_t step) {
+        (void) stop;
+        return linspace_impl_(std::make_index_sequence<Derived::Size>(), start,
+                              step);
+    }
+
+    /// Construct an array that linearly interpolates from min..max
+    static ENOKI_INLINE Derived linspace_(Scalar min, Scalar max, size_t) {
+        if constexpr (Derived::Size == 1)
+            return Derived(min);
+        else if constexpr (std::is_floating_point_v<Scalar>)
+            return linspace_impl_(
+                std::make_index_sequence<Derived::Size>(), min,
+                (max - min) / Scalar(Derived::Size - 1));
+        else
+            return linspace_impl_(
+                std::make_index_sequence<Derived::Size>(), (double) min,
+                ((double) max - (double) min) / double(Derived::Size - 1));
+    }
+
     /// Return the low array part (always a power of two)
     ENOKI_INLINE auto low_() const {
         return sub_array_<typename Derived::Array1, 0>(
@@ -147,8 +215,6 @@ public:
 
     //! @}
     // -----------------------------------------------------------------------
-
-    ENOKI_ARRAY_IMPORT(StaticArrayBase, Base)
 };
 
 NAMESPACE_END(enoki)

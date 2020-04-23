@@ -14,11 +14,11 @@
 #pragma once
 
 #if !defined(__IMMINTRIN_H)
-/* We want to be able to selectively include intrinsics. For instance, it's often
-   not desirable to pull in 1 MB (!) of AVX512 header code unless the application
-   is really using those intrinsics. Unfortunately, immintrin.h tries to prevent
-   this kind of seletiveness, which we simply circumvent with the following define..
-*/
+/* We want to be able to selectively include intrinsics. For instance, it's
+   often not desirable to pull in 1 MB (!) of AVX512 header code unless the
+   application is really using those intrinsics. Unfortunately, immintrin.h
+   tries to prevent this kind of seletiveness, which we simply circumvent with
+   the following define.. */
 #  define __IMMINTRIN_H
 #endif
 
@@ -48,20 +48,42 @@
 #  include <avx512vlbwintrin.h>
 #endif
 
+#if defined(ENOKI_ARM_NEON)
+#  include <arm_neon.h>
+#endif
+
 // -----------------------------------------------------------------------
 //! @{ \name Available instruction sets
 // -----------------------------------------------------------------------
 
-#if defined(ENOKI_X86_AVX512)
-    static constexpr bool has_avx512 = true;
+#if defined(ENOKI_X86_32)
+    static constexpr bool has_x86_32 = true;
 #else
-    static constexpr bool has_avx512 = false;
+    static constexpr bool has_x86_32 = false;
 #endif
 
-#if defined(ENOKI_X86_AVX2)
-    static constexpr bool has_avx2 = true;
+#if defined(ENOKI_X86_64)
+    static constexpr bool has_x86_64 = true;
 #else
-    static constexpr bool has_avx2 = false;
+    static constexpr bool has_x86_64 = false;
+#endif
+
+#if defined(ENOKI_ARM_32)
+    static constexpr bool has_arm_32 = true;
+#else
+    static constexpr bool has_arm_32 = false;
+#endif
+
+#if defined(ENOKI_ARM_64)
+    static constexpr bool has_arm_64 = true;
+#else
+    static constexpr bool has_arm_64 = false;
+#endif
+
+#if defined(ENOKI_X86_SSE42)
+    static constexpr bool has_sse42 = true;
+#else
+    static constexpr bool has_sse42 = false;
 #endif
 
 #if defined(ENOKI_X86_FMA) || defined(ENOKI_ARM_FMA)
@@ -82,22 +104,16 @@
     static constexpr bool has_avx = false;
 #endif
 
-#if defined(ENOKI_X86_SSE42)
-    static constexpr bool has_sse42 = true;
+#if defined(ENOKI_X86_AVX2)
+    static constexpr bool has_avx2 = true;
 #else
-    static constexpr bool has_sse42 = false;
+    static constexpr bool has_avx2 = false;
 #endif
 
-#if defined(ENOKI_X86_32)
-    static constexpr bool has_x86_32 = true;
+#if defined(ENOKI_X86_AVX512)
+    static constexpr bool has_avx512 = true;
 #else
-    static constexpr bool has_x86_32 = false;
-#endif
-
-#if defined(ENOKI_X86_64)
-    static constexpr bool has_x86_64 = true;
-#else
-    static constexpr bool has_x86_64 = false;
+    static constexpr bool has_avx512 = false;
 #endif
 
 #if defined(ENOKI_ARM_NEON)
@@ -106,18 +122,8 @@
     static constexpr bool has_neon = false;
 #endif
 
-#if defined(ENOKI_ARM_32)
-    static constexpr bool has_arm_32 = true;
-#else
-    static constexpr bool has_arm_32 = false;
-#endif
-
-#if defined(ENOKI_ARM_64)
-    static constexpr bool has_arm_64 = true;
-#else
-    static constexpr bool has_arm_64 = false;
-#endif
-
+static constexpr bool has_x86 = has_x86_32 || has_x86_64;
+static constexpr bool has_arm = has_arm_32 || has_arm_64;
 static constexpr bool has_vectorization = has_sse42 || has_neon;
 
 //! @}
@@ -246,9 +252,17 @@ ENOKI_INLINE long long mm_extract_epi64(__m128i m)  {
 //! @}
 // -----------------------------------------------------------------------
 
-#define ENOKI_PACKET_DECLARE(size)                                             \
+#define ENOKI_PACKET_DECLARE(Size)                                             \
     namespace detail {                                                         \
-        template <typename T> struct vectorize<T, size> {                      \
+        template <typename Type> struct vectorize<Type, Size> {                \
+            static constexpr bool recurse = false;                             \
+            static constexpr bool self = true;                                 \
+        };                                                                     \
+    }
+
+#define ENOKI_PACKET_DECLARE_COND(Size, Cond)                                  \
+    namespace detail {                                                         \
+        template <typename Type> struct vectorize<Type, Size, Cond> {          \
             static constexpr bool recurse = false;                             \
             static constexpr bool self = true;                                 \
         };                                                                     \
@@ -256,7 +270,7 @@ ENOKI_INLINE long long mm_extract_epi64(__m128i m)  {
 
 #define ENOKI_PACKET_TYPE(Type, Size_, Register)                               \
     using Base = StaticArrayBase<Type, Size_, IsMask_, Derived_>;              \
-    ENOKI_ARRAY_IMPORT(StaticArrayImpl, Base)                                  \
+    ENOKI_ARRAY_IMPORT_DEFAULT(StaticArrayImpl, Base, Type)                    \
     using typename Base::Derived;                                              \
     using typename Base::Value;                                                \
     using typename Base::Array1;                                               \
@@ -272,6 +286,18 @@ ENOKI_INLINE long long mm_extract_epi64(__m128i m)  {
     ENOKI_INLINE const Value &coeff(size_t i) const {                          \
         return ((const Value *) this)[i];                                      \
     }
+
+#define ENOKI_PACKET_TYPE_3D(Type)                                             \
+    using Base = StaticArrayImpl<Type, 4, IsMask_, Derived_>;                  \
+    ENOKI_ARRAY_IMPORT(StaticArrayImpl, Base)                                  \
+    ENOKI_INLINE StaticArrayImpl(Type f1, Type f2, Type f3)                    \
+        : Base(f1, f2, f3, (Type) 0) { }                                       \
+    using typename Base::Derived;                                              \
+    using typename Base::Value;                                                \
+    using typename Base::Ref;                                                  \
+    using Base::derived;                                                       \
+    using Base::m;                                                             \
+    static constexpr size_t Size = 3;
 
 #define ENOKI_CONVERT(Value)                                                   \
     template <typename Value2, typename Derived2,                              \

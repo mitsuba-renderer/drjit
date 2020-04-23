@@ -19,6 +19,8 @@
 #include <stdio.h>
 #include <stdarg.h>
 
+#include <exception>
+
 NAMESPACE_BEGIN(enoki)
 
 /// Reinterpret the binary represesentation of a data type
@@ -209,6 +211,94 @@ template <typename T> T rcp_(const T &a) {
 
 template <typename T> T rsqrt_(const T &a) {
     return enoki::detail::rcp_(enoki::detail::sqrt_(a));
+}
+
+template <typename T> ENOKI_INLINE T popcnt_(T v) {
+#if defined(_MSC_VER)
+    if constexpr (sizeof(T) <= 4)
+        return (T) __popcnt((unsigned int) v);
+    else
+        return (T) __popcnt64((unsigned long long) v);
+#else
+    if constexpr (sizeof(T) <= 4)
+        return (T) __builtin_popcount((unsigned int) v);
+    else
+        return (T) __builtin_popcountll((unsigned long long) v);
+#endif
+}
+
+template <typename T> ENOKI_INLINE T lzcnt_(T v) {
+#if defined(_MSC_VER)
+    if constexpr (sizeof(T) <= 4)
+        return (T) (v != 0 ? __lzcnt((unsigned int) v) : 32);
+    else
+        return (T) (v != 0 ? __lzcnt64((unsigned long long) v) : 64);
+#else
+    if constexpr (sizeof(T) <= 4)
+        return (T) (v != 0 ? __builtin_clz((unsigned int) v) : 32);
+    else
+        return (T) (v != 0 ? __builtin_clzll((unsigned long long) v) : 64);
+#endif
+}
+
+template <typename T> ENOKI_INLINE T tzcnt_(T v) {
+#if defined(_MSC_VER)
+    if constexpr (sizeof(T) <= 4)
+        return (T) (v != 0 ? __tzcnt((unsigned int) v) : 32);
+    else
+        return (T) (v != 0 ? __tzcnt64((unsigned long long) v) : 64);
+#else
+    if constexpr (sizeof(T) <= 4)
+        return (T) (v != 0 ? __builtin_clz((unsigned int) v) : 32);
+    else
+        return (T) (v != 0 ? __builtin_clzll((unsigned long long) v) : 64);
+#endif
+}
+
+template <typename T>
+ENOKI_INLINE T mulhi_(T x, T y) {
+    if (sizeof(T) == 4) {
+        using Wide = std::conditional_t<std::is_signed_v<T>, int64_t, uint64_t>;
+        return T(((Wide) x * (Wide) y) >> 32);
+    } else {
+#if defined(_MSC_VER) && defined(ENOKI_X86_64)
+        if constexpr (std::is_signed_v<T>)
+            return __mulh(x, y);
+        else
+            return __umulh(x, y);
+#elif defined(__SIZEOF_INT128__)
+        using Wide = std::conditional_t<std::is_signed_v<T>, __int128_t, __uint128_t>;
+        return T(((Wide) x * (Wide) y) >> 64);
+#else
+        // full 128 bits are x0 * y0 + (x0 * y1 << 32) + (x1 * y0 << 32) + (x1 * y1 << 64)
+        uint32_t mask = 0xFFFFFFFF;
+        uint32_t x0 = (uint32_t) (x & mask),
+                 y0 = (uint32_t) (y & mask);
+
+        if constexpr (std::is_signed_v<T>) {
+            int32_t x1 = (int32_t) (x >> 32);
+            int32_t y1 = (int32_t) (y >> 32);
+            uint32_t x0y0_hi = mulhi_scalar(x0, y0);
+            int64_t t = x1 * (int64_t) y0 + x0y0_hi;
+            int64_t w1 = x0 * (int64_t) y1 + (t & mask);
+
+            return x1 * (int64_t) y1 + (t >> 32) + (w1 >> 32);
+        } else {
+            uint32_t x1 = (uint32_t) (x >> 32);
+            uint32_t y1 = (uint32_t) (y >> 32);
+            uint32_t x0y0_hi = mulhi_(x0, y0);
+
+            uint64_t x0y1 = x0 * (uint64_t) y1;
+            uint64_t x1y0 = x1 * (uint64_t) y0;
+            uint64_t x1y1 = x1 * (uint64_t) y1;
+            uint64_t temp = x1y0 + x0y0_hi;
+            uint64_t temp_lo = temp & mask,
+                     temp_hi = temp >> 32;
+
+            return x1y1 + temp_hi + ((temp_lo + x0y1) >> 32);
+        }
+#endif
+    }
 }
 
 NAMESPACE_END(detail)

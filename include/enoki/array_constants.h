@@ -48,4 +48,19 @@ template <typename T> constexpr auto OneMinusEpsilon = scalar_t<T>(sizeof(scalar
                                                                    : 0x1.fffffep-1);
 template <typename T> constexpr auto RecipOverflow   = scalar_t<T>(sizeof(scalar_t<T>) == 8
                                                                    ? 0x1p-1024 : 0x1p-128);
+NAMESPACE_BEGIN(detail)
+template <typename T> struct debug_initialization {
+    static constexpr T value = T(int_array_t<T>(-1));
+};
+template <> struct debug_initialization<float> {
+    static constexpr float value = NaN<float>;
+};
+template <> struct debug_initialization<double> {
+    static constexpr double value = NaN<double>;
+};
+NAMESPACE_END(detail)
+
+template <typename T>
+constexpr auto DebugInitialization = detail::debug_initialization<T>::value;
+
 NAMESPACE_END(enoki)

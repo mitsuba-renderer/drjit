@@ -326,10 +326,10 @@ using :cpp:func:`enoki::divisor::operator()`, as shown in the following example:
     using Int32P = enoki::Packet<uint32_t, 8>;
 
     void divide(Int32P *a, int32_t b, size_t n) {
-        /* Precompute magic constants */
+        // Precompute magic constants
         divisor<int32_t> prec_div = b;
 
-        /* Now apply the precomputed division efficiently */
+        // Now apply the precomputed division efficiently
         for (size_t i = 0; i < n; ++i)
             a[i] = prec_div(a[i]);
     }

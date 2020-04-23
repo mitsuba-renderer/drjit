@@ -19,40 +19,43 @@ template <typename Value_, size_t Size_, bool IsMask_, typename Derived_, typena
 struct StaticArrayImpl;
 
 namespace detail {
-    template <typename T, size_t Size> struct vectorize {
-        using Parent = vectorize<T, detail::lpow2(Size)>;
+    template <typename Type, size_t Size, typename = int> struct vectorize {
+        using Parent = vectorize<Type, detail::lpow2(Size)>;
         static constexpr bool recurse = Parent::recurse || Parent::self;
         static constexpr bool self = false;
     };
 
-    template <typename T> struct vectorize<T, 1> {
+    template <typename Type> struct vectorize<Type, 1> {
         static constexpr bool recurse = false;
         static constexpr bool self = false;
     };
 
-    template <typename T> struct vectorize<T, 0> {
+    template <typename Type> struct vectorize<Type, 0> {
         static constexpr bool recurse = false;
         static constexpr bool self = false;
     };
 
-    /// Decide whether or not an array should be handled using a packet or generic implementation
-    template <typename T>
-    constexpr bool vectorizable_type_v = std::is_same_v<T, float> ||
-                                         std::is_same_v<T, double> ||
-                                         (std::is_integral_v<T> &&
-                                          (sizeof(T) == 4 || sizeof(T) == 8));
+    /// Decide whether an array can be handled using a packet implementation
+    template <typename Type>
+    constexpr bool vectorizable_type_v = std::is_same_v<Type, float> ||
+                                         std::is_same_v<Type, double> ||
+                                         (std::is_integral_v<Type> &&
+                                          (sizeof(Type) == 4 || sizeof(Type) == 8));
 
-    template <typename T, size_t Size>
+    template <typename Type, size_t Size>
+    using vectorize_t = vectorize<Type, Size * sizeof(Type)>;
+
+    template <typename Type, size_t Size>
     using enable_if_generic =
         enable_if_t<Size != 0 &&
-                    !(vectorizable_type_v<T> &&
-                     (vectorize<T, Size * sizeof(T)>::self ||
-                      vectorize<T, Size * sizeof(T)>::recurse))>;
+                    !(vectorizable_type_v<Type> &&
+                      (vectorize_t<Type, Size>::self ||
+                       (Size >= 4 && vectorize_t<Type, Size>::recurse)))>;
 
-    template <typename T, size_t Size>
+    template <typename Type, size_t Size>
     using enable_if_recursive =
-        enable_if_t<vectorizable_type_v<T> &&
-                    vectorize<T, Size * sizeof(T)>::recurse>;
+        enable_if_t<vectorizable_type_v<Type> && (Size >= 4) &&
+                    vectorize_t<Type, Size>::recurse>;
 };
 
 /**
@@ -62,11 +65,9 @@ namespace detail {
 template <typename Value_, size_t Size_, bool IsMask_, typename Derived_>
 struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
                        detail::enable_if_generic<Value_, Size_>>
-    : StaticArrayBase<std::conditional_t<IsMask_, mask_t<Value_>, Value_>,
-                      Size_, IsMask_, Derived_> {
+    : StaticArrayBase<Value_, Size_, IsMask_, Derived_> {
 
-    using Base = StaticArrayBase<std::conditional_t<IsMask_, mask_t<Value_>, Value_>,
-                                 Size_, IsMask_, Derived_>;
+    using Base = StaticArrayBase<Value_, Size_, IsMask_, Derived_>;
 
     using typename Base::Derived;
     using typename Base::Value;

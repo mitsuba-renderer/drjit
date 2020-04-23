@@ -10,6 +10,8 @@
     license that can be found in the LICENSE file.
 */
 
+#pragma once
+
 #include <enoki/array.h>
 #include <enoki/packet_intrin.h>
 #include <enoki/packet_recursive.h>
@@ -20,6 +22,18 @@
 
 #if defined(ENOKI_X86_SSE42)
 #  include <enoki/packet_sse42.h>
+#endif
+
+#if defined(ENOKI_X86_AVX)
+#  include <enoki/packet_avx.h>
+#endif
+
+#if defined(ENOKI_X86_AVX2)
+#  include <enoki/packet_avx2.h>
+#endif
+
+#if defined(ENOKI_X86_AVX512)
+#  include <enoki/packet_avx512.h>
 #endif
 
 NAMESPACE_BEGIN(enoki)

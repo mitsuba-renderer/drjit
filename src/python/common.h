@@ -7,6 +7,7 @@
 
 #include <pybind11/pybind11.h>
 #include <enoki/array.h>
+#include <enoki/packet.h>
 #include <enoki/dynamic.h>
 #include <enoki-jit/traits.h>
 

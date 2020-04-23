@@ -247,9 +247,4 @@ namespace detail {
     struct reinterpret_flag { };
 }
 
-template <typename T, bool UseIntrinsic = false, typename = int>
-struct divisor;
-template <typename T>
-struct divisor_ext;
-
 NAMESPACE_END(enoki)

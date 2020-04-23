@@ -17,6 +17,10 @@
 #include <enoki/array_utils.h>
 #include <enoki/array_constants.h>
 
+#if defined(min) || defined(max)
+#  error min/max are defined as preprocessor symbols! Define NOMINMAX on MSVC.
+#endif
+
 NAMESPACE_BEGIN(enoki)
 
 /// Define an unary operation
@@ -48,7 +52,7 @@ NAMESPACE_BEGIN(enoki)
 
 /// Define an unary operation with a fallback expression for scalar arguments
 #define ENOKI_ROUTE_UNARY_TYPE_FALLBACK(name, func, expr)                      \
-    template <typename T, typename T2> ENOKI_INLINE auto name(const T &a) {    \
+    template <typename T2, typename T> ENOKI_INLINE auto name(const T &a) {    \
         if constexpr (!is_array_v<T>)                                          \
             return expr; /* Scalar fallback implementation */                  \
         else                                                                   \
@@ -192,6 +196,11 @@ ENOKI_ROUTE_UNARY_FALLBACK(rsqrt, rsqrt, detail::rsqrt_(a))
 ENOKI_ROUTE_BINARY_FALLBACK(max, max, detail::max_((E) a1, (E) a2))
 ENOKI_ROUTE_BINARY_FALLBACK(min, min, detail::min_((E) a1, (E) a2))
 
+ENOKI_ROUTE_BINARY_FALLBACK(mulhi, mulhi, detail::mulhi_((E) a1, (E) a2))
+ENOKI_ROUTE_UNARY_FALLBACK(lzcnt, lzcnt, detail::lzcnt_(a))
+ENOKI_ROUTE_UNARY_FALLBACK(tzcnt, tzcnt, detail::tzcnt_(a))
+ENOKI_ROUTE_UNARY_FALLBACK(popcnt, popcnt, detail::popcnt_(a))
+
 ENOKI_ROUTE_TERNARY_FALLBACK(fmadd, fmadd,   detail::fmadd_((E) a1, (E) a2, (E) a3))
 ENOKI_ROUTE_TERNARY_FALLBACK(fmsub, fmsub,   detail::fmadd_((E) a1, (E) a2, -(E) a3))
 ENOKI_ROUTE_TERNARY_FALLBACK(fnmadd, fnmadd, detail::fmadd_(-(E) a1, (E) a2, (E) a3))
@@ -206,7 +215,6 @@ ENOKI_ROUTE_COMPOUND_OPERATOR(|)
 ENOKI_ROUTE_COMPOUND_OPERATOR(&)
 ENOKI_ROUTE_COMPOUND_OPERATOR(<<)
 ENOKI_ROUTE_COMPOUND_OPERATOR(>>)
-
 
 template <typename T, enable_if_not_array_t<T> = 0> T andnot(const T &a1, const T &a2) {
     return detail::andnot_(a1, a2);
@@ -276,21 +284,21 @@ template <typename T> ENOKI_INLINE auto isfinite(const T &a) {
 }
 
 namespace detail {
-    template <typename Array> Array sign_mask() {
+    template <typename Array> ENOKI_INLINE Array sign_mask() {
         using Scalar = scalar_t<Array>;
         using UInt = uint_array_t<Scalar>;
         return Array(memcpy_cast<Scalar>(UInt(1) << (sizeof(UInt) * 8 - 1)));
     }
 }
 
-template <typename Array> Array sign(const Array &v) {
+template <typename Array> ENOKI_INLINE Array sign(const Array &v) {
     if constexpr (std::is_floating_point_v<scalar_t<Array>> && !is_diff_array_v<Array>)
         return detail::or_(Array(1), detail::and_(detail::sign_mask<Array>(), v));
     else
         return select(v >= 0, Array(1), Array(-1));
 }
 
-template <typename Array> Array copysign(const Array &v1, const Array &v2) {
+template <typename Array> ENOKI_INLINE Array copysign(const Array &v1, const Array &v2) {
     if constexpr (std::is_floating_point_v<scalar_t<Array>> && !is_diff_array_v<Array>) {
         return detail::or_(enoki::abs(v1), detail::and_(detail::sign_mask<Array>(), v2));
     } else {
@@ -299,7 +307,7 @@ template <typename Array> Array copysign(const Array &v1, const Array &v2) {
     }
 }
 
-template <typename Array> Array copysign_neg(const Array &v1, const Array &v2) {
+template <typename Array> ENOKI_INLINE Array copysign_neg(const Array &v1, const Array &v2) {
     if constexpr (std::is_floating_point_v<scalar_t<Array>> && !is_diff_array_v<Array>) {
         return detail::or_(enoki::abs(v1), detail::andnot_(detail::sign_mask<Array>(), v2));
     } else {
@@ -308,7 +316,7 @@ template <typename Array> Array copysign_neg(const Array &v1, const Array &v2) {
     }
 }
 
-template <typename Array> Array mulsign(const Array &v1, const Array &v2) {
+template <typename Array> ENOKI_INLINE Array mulsign(const Array &v1, const Array &v2) {
     if constexpr (std::is_floating_point_v<scalar_t<Array>> && !is_diff_array_v<Array>) {
         return detail::xor_(v1, detail::and_(detail::sign_mask<Array>(), v2));
     } else {
@@ -316,12 +324,17 @@ template <typename Array> Array mulsign(const Array &v1, const Array &v2) {
     }
 }
 
-template <typename Array> Array mulsign_neg(const Array &v1, const Array &v2) {
+template <typename Array> ENOKI_INLINE Array mulsign_neg(const Array &v1, const Array &v2) {
     if constexpr (std::is_floating_point_v<scalar_t<Array>> && !is_diff_array_v<Array>) {
         return detail::xor_(v1, detail::andnot_(detail::sign_mask<Array>(), v2));
     } else {
         return select(v2 >= 0, -v1, v1);
     }
+}
+
+/// Fast implementation for computing the base 2 log of an integer.
+template <typename T> ENOKI_INLINE T log2i(T value) {
+    return scalar_t<T>(sizeof(scalar_t<T>) * 8 - 1) - lzcnt(value);
 }
 
 // -----------------------------------------------------------------------
@@ -510,11 +523,34 @@ template <typename T> ENOKI_INLINE T empty(size_t size = 1) {
 }
 
 template <typename T> ENOKI_INLINE T full(scalar_t<T> value, size_t size = 1) {
-    if constexpr (is_array_v<T>) {
+    if constexpr (is_array_v<T>)
         return T::Derived::full_(size);
-    } else {
+    else
         return value;
-    }
+}
+
+template <typename Array>
+ENOKI_INLINE Array linspace(scalar_t<Array> min, scalar_t<Array> max, size_t size = 1) {
+    if constexpr (is_array_v<Array>)
+        return Array::linspace_(min, max, size);
+    else
+        return min;
+}
+
+template <typename Array>
+ENOKI_INLINE Array arange(size_t size = 1) {
+    if constexpr (is_array_v<Array>)
+        return Array::arange_(0, (ssize_t) size, 1);
+    else
+        return Array(0);
+}
+
+template <typename Array>
+ENOKI_INLINE Array arange(ssize_t start, ssize_t end, ssize_t step = 1) {
+    if constexpr (is_array_v<Array>)
+        return Array::arange_(start, end, step);
+    else
+        return Array(start);
 }
 
 /// Load an array from aligned memory

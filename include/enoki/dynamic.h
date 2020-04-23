@@ -21,13 +21,16 @@ NAMESPACE_BEGIN(enoki)
 template <typename Value_> struct DynamicArray : ArrayBaseT<Value_, DynamicArray<Value_>> {
     using Base = ArrayBaseT<Value_, DynamicArray<Value_>>;
     using typename Base::Value;
+    using typename Base::Scalar;
     using Base::empty;
+
+    /// This is a dynamically allocated array, indicated using a special size flag
+    static constexpr size_t Size = Dynamic;
+    static constexpr bool IsDynamic = true;
 
     using ArrayType = DynamicArray<array_t<Value>>;
     using MaskType  = DynamicArray<mask_t<Value>>;
     template <typename T> using ReplaceValue = DynamicArray<T>;
-
-    static constexpr size_t Size = Dynamic;
 
     using Base::Base;
     using Base::coeff;
@@ -96,6 +99,12 @@ template <typename Value_> struct DynamicArray : ArrayBaseT<Value_, DynamicArray
     ENOKI_INLINE Value &coeff(size_t i) { return m_data[i]; }
     ENOKI_INLINE const Value &coeff(size_t i) const { return m_data[i]; }
 
+    static DynamicArray empty_(size_t size) {
+        DynamicArray result;
+        result.init_(size);
+        return result;
+    }
+
     static DynamicArray zero_(size_t size) {
         DynamicArray result;
         result.init_(size);
@@ -106,9 +115,40 @@ template <typename Value_> struct DynamicArray : ArrayBaseT<Value_, DynamicArray
         return result;
     }
 
-    static DynamicArray empty_(size_t size) {
+    static DynamicArray full_(const Value &v, size_t size) {
         DynamicArray result;
         result.init_(size);
+
+        for (size_t i = 0; i < size; ++i)
+            result.coeff(i) = v;
+
+        return result;
+    }
+
+    static DynamicArray arange_(ssize_t start, ssize_t stop, ssize_t step) {
+        size_t size = size_t((stop - start + step - (step > 0 ? 1 : -1)) / step);
+        DynamicArray result;
+        result.init_(size);
+
+        for (size_t i = 0; i < size; ++i)
+            result.coeff(i) = (Scalar) ((ssize_t) start + (ssize_t) i * step);
+
+        return result;
+    }
+
+    static DynamicArray linspace_(Value min, Value max, size_t size) {
+        DynamicArray result;
+        result.init_(size);
+
+        Scalar step = (max - min) / Scalar(size - 1);
+
+        for (size_t i = 0; i < size; ++i) {
+            if constexpr (std::is_floating_point_v<Scalar>)
+                result.coeff(i) = fmadd(Scalar(i), step, min);
+            else
+                result.coeff(i) = Scalar(i) * step + min;
+        }
+
         return result;
     }
 

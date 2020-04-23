@@ -190,6 +190,12 @@ template <typename T> constexpr size_t array_depth_v = detail::array_depth<T>::v
 /// Determine the size of a nested Enoki array (scalars evaluate to one)
 template <typename T> constexpr size_t array_size_v = detail::array_size<T>::value;
 
+template <typename T> constexpr bool is_floating_point_v = std::is_floating_point_v<scalar_t<T>> && !is_mask_v<T>;
+template <typename T> constexpr bool is_integral_v = std::is_integral_v<scalar_t<T>> && !is_mask_v<T>;
+template <typename T> constexpr bool is_arithmetic_v = std::is_arithmetic_v<scalar_t<T>> && !is_mask_v<T>;
+template <typename T> constexpr bool is_signed_v = std::is_signed_v<scalar_t<T>>;
+template <typename T> constexpr bool is_unsigned_v = std::is_unsigned_v<scalar_t<T>>;
+
 namespace detail {
     template <typename T, typename = int> struct mask {
         using type = bool;
