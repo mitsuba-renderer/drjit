@@ -91,42 +91,6 @@ if (NOT ENOKI_MASTER_PROJECT)
   set(ENOKI_NATIVE_FLAGS ${ENOKI_NATIVE_FLAGS} PARENT_SCOPE)
 endif()
 
-set(ENOKI_HOST "INTEL")
-set(ENOKI_TEST_SSE42 OFF)
-set(ENOKI_TEST_AVX OFF)
-set(ENOKI_TEST_AVX2 OFF)
-set(ENOKI_TEST_SKX OFF)
-set(ENOKI_TEST_ARM OFF)
-
-string(TOUPPER "${ENOKI_ARCH_FLAGS}" ENOKI_ARCH_FLAGS)
-
-if (MSVC OR ENOKI_ARCH_FLAGS MATCHES "SSE")
-  set(ENOKI_TEST_SSE42 ON)
-endif()
-
-if (ENOKI_ARCH_FLAGS MATCHES "AVX")
-  set(ENOKI_TEST_SSE42 ON)
-  set(ENOKI_TEST_AVX ON)
-endif()
-
-if (ENOKI_ARCH_FLAGS MATCHES "AVX2")
-  set(ENOKI_TEST_SSE42 ON)
-  set(ENOKI_TEST_AVX ON)
-  set(ENOKI_TEST_AVX2 ON)
-endif()
-
-if (ENOKI_ARCH_FLAGS MATCHES "SKX")
-  set(ENOKI_TEST_SSE42 ON)
-  set(ENOKI_TEST_AVX ON)
-  set(ENOKI_TEST_AVX2 ON)
-  set(ENOKI_TEST_SKX ON)
-endif()
-
-if (ENOKI_ARCH_FLAGS MATCHES "ARMV")
-  set(ENOKI_HOST "ARM")
-  set(ENOKI_TEST_ARM ON)
-endif()
-
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/resources")
 
 macro(enoki_set_native_flags)
@@ -266,6 +230,7 @@ endif()
 if (ENOKI_ENABLE_JIT)
   message(STATUS "Enoki: building the CUDA & LLVM JIT backend.")
   add_subdirectory(ext/enoki-jit)
+  add_definitions(-DENOKI_ENABLE_JIT=1)
 endif()
 
 if (ENOKI_ENABLE_AUTODIFF)

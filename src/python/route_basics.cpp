@@ -21,8 +21,8 @@ static py::object array_route_min(py::object a0, py::object a1);
 static py::object array_route_max(py::object a0, py::object a1);
 
 static char array_name_tmp[64];
-const char *array_name(VarType vtype, size_t depth, size_t size, bool packet_mode) {
-    if (depth == 0 || (packet_mode && depth == 1))
+const char *array_name(VarType vtype, size_t depth, size_t size, bool scalar_mode) {
+    if (depth == 0 || (!scalar_mode && depth == 1))
         return var_type_name[(int) vtype];
 
     if (size == ek::Dynamic)
@@ -242,11 +242,31 @@ static py::object array_route_hsum(const py::object &a) {
     return a.attr("hsum_")();
 }
 
+static py::object array_route_hsum_async(const py::object &a) {
+    if (!var_is_enoki_type(a))
+        return a;
+    test_arithmetic("hsum_async", var_type(a));
+    if (py::hasattr(a, "hsum_async_"))
+        return a.attr("hsum_async_")();
+    else
+        return a.get_type()(a.attr("hsum_")());
+}
+
 static py::object array_route_hprod(const py::object &a) {
     if (!var_is_enoki_type(a))
         return a;
     test_arithmetic("hprod", var_type(a));
     return a.attr("hprod_")();
+}
+
+static py::object array_route_hprod_async(const py::object &a) {
+    if (!var_is_enoki_type(a))
+        return a;
+    test_arithmetic("hprod_async", var_type(a));
+    if (py::hasattr(a, "hprod_async_"))
+        return a.attr("hprod_async_")();
+    else
+        return a.get_type()(a.attr("hprod_")());
 }
 
 static py::object array_route_hmin(const py::object &a) {
@@ -256,11 +276,31 @@ static py::object array_route_hmin(const py::object &a) {
     return a.attr("hmin_")();
 }
 
+static py::object array_route_hmin_async(const py::object &a) {
+    if (!var_is_enoki_type(a))
+        return a;
+    test_arithmetic("hmin_async", var_type(a));
+    if (py::hasattr(a, "hmin_async_"))
+        return a.attr("hmin_async_")();
+    else
+        return a.get_type()(a.attr("hmin_")());
+}
+
 static py::object array_route_hmax(const py::object &a) {
     if (!var_is_enoki_type(a))
         return a;
     test_arithmetic("hmax", var_type(a));
     return a.attr("hmax_")();
+}
+
+static py::object array_route_hmax_async(const py::object &a) {
+    if (!var_is_enoki_type(a))
+        return a;
+    test_arithmetic("hmax_async", var_type(a));
+    if (py::hasattr(a, "hmax_async_"))
+        return a.attr("hmax_async_")();
+    else
+        return a.get_type()(a.attr("hmax_")());
 }
 
 static py::object array_generic_hsum(const py::object &a) {
@@ -603,11 +643,14 @@ py::object array_route_abs(const py::object &a) {
         return py::reinterpret_steal<py::object>(PyNumber_Absolute(a.ptr()));
     }
 }
-
 ENOKI_PY_ROUTE_UNARY_FLOAT(sqrt, ek::sqrt(a0d))
+ENOKI_PY_ROUTE_UNARY_FLOAT(rcp, ek::rcp(a0d))
+ENOKI_PY_ROUTE_UNARY_FLOAT(rsqrt, ek::rsqrt(a0d))
 
 ENOKI_PY_UNARY_OPERATION(abs, array_route_abs(a0[i0]))
 ENOKI_PY_UNARY_OPERATION(sqrt, array_route_sqrt(a0[i0]))
+ENOKI_PY_UNARY_OPERATION(rcp, array_route_rcp(a0[i0]))
+ENOKI_PY_UNARY_OPERATION(rsqrt, array_route_rsqrt(a0[i0]))
 
 static py::object array_route_sqr(const py::object &a) {
     return a * a;
@@ -819,6 +862,8 @@ void export_route_basics(py::module &m) {
         .def("__abs__", &array_route_abs)
         .def("abs_", &array_generic_abs)
         .def("sqrt_", &array_generic_sqrt)
+        .def("rsqrt_", &array_generic_rsqrt)
+        .def("rcp_", &array_generic_rcp)
         .def("fmadd_", &array_generic_fmadd)
         .def("fmsub_", &array_generic_fmsub)
         .def("fnmadd_", &array_generic_fnmadd)
@@ -839,7 +884,7 @@ void export_route_basics(py::module &m) {
         return py::module::import(module.c_str())
             .attr(array_name(v, py::cast<size_t>(cls.attr("Depth")),
                              py::cast<size_t>(cls.attr("Size")),
-                             module.find("packet") != std::string::npos));
+                             module.find("scalar") != std::string::npos));
     });
 
     base.attr("reinterpret_array_") = classmethod([](const py::object &target,
@@ -934,6 +979,8 @@ void export_route_basics(py::module &m) {
     m.def("sqr", &array_route_sqr);
     m.def("abs", &array_route_abs);
     m.def("sqrt", &array_route_sqrt);
+    m.def("rsqrt", &array_route_rsqrt);
+    m.def("rcp", &array_route_rcp);
 
     m.def("min", &array_route_min);
     m.def("max", &array_route_max);
@@ -950,6 +997,11 @@ void export_route_basics(py::module &m) {
     m.def("hprod", &array_route_hprod);
     m.def("hmin", &array_route_hmin);
     m.def("hmax", &array_route_hmax);
+
+    m.def("hsum_async", &array_route_hsum_async);
+    m.def("hprod_async", &array_route_hprod_async);
+    m.def("hmin_async", &array_route_hmin_async);
+    m.def("hmax_async", &array_route_hmax_async);
 
     m.def("all_nested", &array_route_all_nested);
     m.def("any_nested", &array_route_any_nested);

@@ -79,7 +79,7 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
     using Base::derived;
     using Base::coeff;
 
-    ENOKI_ARRAY_IMPORT(StaticArrayImpl, Base)
+    ENOKI_ARRAY_IMPORT_DEFAULT(StaticArrayImpl, Base, Scalar)
 
     /// Move-construct if possible. Convert values with the wrong type.
     template <typename Src>

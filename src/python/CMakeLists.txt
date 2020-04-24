@@ -21,6 +21,11 @@ pybind11_add_module(
   constants.cpp
   type_traits.cpp
 
-  bind_packet.cpp
   bind_scalar.cpp
+  bind_packet.cpp
+  bind_cuda.cpp
 )
+
+if (ENOKI_ENABLE_JIT)
+  target_link_libraries(enoki-python PRIVATE enoki-jit)
+endif()

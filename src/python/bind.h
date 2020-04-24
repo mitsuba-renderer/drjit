@@ -4,14 +4,14 @@
 #include <enoki/math.h>
 
 template <typename Array>
-auto bind_type(py::module &m, bool packet_mode = false) {
+auto bind_type(py::module &m, bool scalar_mode = false) {
     using Scalar = std::conditional_t<Array::IsMask, bool, ek::scalar_t<Array>>;
     using Value = std::conditional_t<Array::IsMask, ek::mask_t<ek::value_t<Array>>,
                                      ek::value_t<Array>>;
     constexpr VarType Type = ek::var_type<Scalar>::value;
 
-    auto cls = py::class_<Array, ek::ArrayBase>(
-        m, array_name(Type, Array::Depth, Array::Size, packet_mode));
+    const char *name = array_name(Type, Array::Depth, Array::Size, scalar_mode);
+    auto cls = py::class_<Array, ek::ArrayBase>(m, name);
 
     cls.attr("Scalar") = py::cast(Scalar()).get_type();
     cls.attr("Value") = py::cast(Value()).get_type();
@@ -41,10 +41,13 @@ void bind_basic_methods(py::class_<Array, ek::ArrayBase> &cls) {
 
     cls.def("__len__", &Array::size)
        .def("coeff", [](const Array &a, size_t i) -> Value { return a.coeff(i); })
-       .def("set_coeff", [](Array &a, size_t i, const Value &value) {
-           a.coeff(i) = value;
-       })
        .def_static("empty_", &Array::empty_);
+
+    if constexpr (!(ek::is_jit_array_v<Array> && ek::array_depth_v<Array> == 1)) {
+       cls.def("set_coeff", [](Array &a, size_t i, const Value &value) {
+           a.coeff(i) = value;
+       });
+    }
 }
 
 template <typename Array>
@@ -58,8 +61,8 @@ void bind_generic_constructor(py::class_<Array, ek::ArrayBase> &cls) {
         py::detail::is_new_style_constructor());
 }
 
-template <typename Array> auto bind(py::module &m, bool packet_mode = false) {
-    auto cls = bind_type<Array>(m, packet_mode);
+template <typename Array> auto bind(py::module &m, bool scalar_mode = false) {
+    auto cls = bind_type<Array>(m, scalar_mode);
     bind_generic_constructor(cls);
     bind_basic_methods(cls);
     return cls;
@@ -67,7 +70,7 @@ template <typename Array> auto bind(py::module &m, bool packet_mode = false) {
 
 template <typename Array>
 auto bind_full(py::class_<Array, ek::ArrayBase> &cls,
-               bool packet_mode = false) {
+               bool scalar_mode = false) {
     bind_basic_methods(cls);
 
     using Scalar = std::conditional_t<Array::IsMask, bool, ek::scalar_t<Array>>;
@@ -138,6 +141,14 @@ auto bind_full(py::class_<Array, ek::ArrayBase> &cls,
         cls.def("hprod_", &Array::hprod_);
         cls.def("hmin_", &Array::hmin_);
         cls.def("hmax_", &Array::hmax_);
+
+        if constexpr (ek::is_jit_array_v<Array> &&
+                      ek::array_depth_v<Array> == 1) {
+            cls.def("hsum_async_", &Array::hsum_async_);
+            cls.def("hprod_async_", &Array::hprod_async_);
+            cls.def("hmin_async_", &Array::hmin_async_);
+            cls.def("hmax_async_", &Array::hmax_async_);
+        }
 
         cls.def("and_", [](const Array &a, const Mask &b) {
             return a.and_(static_cast<const ek::mask_t<Array> &>(b));
@@ -237,40 +248,40 @@ auto bind_full(py::class_<Array, ek::ArrayBase> &cls,
     (void) d_i32; (void) d_u32; (void) d_i64; (void) d_u64; (void) d_f32;      \
     (void) d_f64; (void) d_b;
 
-#define ENOKI_BIND_ARRAY_TYPES_DIM(Module, Guide, Packet, Dim)                 \
-    bind<ek::Array<ek::int32_array_t<Guide>, Dim>>(Module, Packet);            \
-    bind<ek::Array<ek::uint32_array_t<Guide>, Dim>>(Module, Packet);           \
-    bind<ek::Array<ek::int64_array_t<Guide>, Dim>>(Module, Packet);            \
-    bind<ek::Array<ek::uint64_array_t<Guide>, Dim>>(Module, Packet);           \
-    bind<ek::Array<ek::float32_array_t<Guide>, Dim>>(Module, Packet);          \
-    bind<ek::Array<ek::float64_array_t<Guide>, Dim>>(Module, Packet);          \
+#define ENOKI_BIND_ARRAY_TYPES_DIM(Module, Guide, Scalar, Dim)                 \
+    bind<ek::Array<ek::int32_array_t<Guide>, Dim>>(Module, Scalar);            \
+    bind<ek::Array<ek::uint32_array_t<Guide>, Dim>>(Module, Scalar);           \
+    bind<ek::Array<ek::int64_array_t<Guide>, Dim>>(Module, Scalar);            \
+    bind<ek::Array<ek::uint64_array_t<Guide>, Dim>>(Module, Scalar);           \
+    bind<ek::Array<ek::float32_array_t<Guide>, Dim>>(Module, Scalar);          \
+    bind<ek::Array<ek::float64_array_t<Guide>, Dim>>(Module, Scalar);          \
     bind<ek::mask_t<ek::Array<ek::float32_array_t<Guide>, Dim>>>(Module,       \
-                                                                 Packet);
+                                                                 Scalar);
 
 
-#define ENOKI_BIND_ARRAY_TYPES(Module, Guide, Packet)                          \
-    ENOKI_BIND_ARRAY_TYPES_DIM(Module, Guide, Packet, 0)                       \
-    ENOKI_BIND_ARRAY_TYPES_DIM(Module, Guide, Packet, 1)                       \
-    ENOKI_BIND_ARRAY_TYPES_DIM(Module, Guide, Packet, 2)                       \
-    ENOKI_BIND_ARRAY_TYPES_DIM(Module, Guide, Packet, 3)                       \
-    ENOKI_BIND_ARRAY_TYPES_DIM(Module, Guide, Packet, 4)                       \
+#define ENOKI_BIND_ARRAY_TYPES(Module, Guide, Scalar)                          \
+    ENOKI_BIND_ARRAY_TYPES_DIM(Module, Guide, Scalar, 0)                       \
+    ENOKI_BIND_ARRAY_TYPES_DIM(Module, Guide, Scalar, 1)                       \
+    ENOKI_BIND_ARRAY_TYPES_DIM(Module, Guide, Scalar, 2)                       \
+    ENOKI_BIND_ARRAY_TYPES_DIM(Module, Guide, Scalar, 3)                       \
+    ENOKI_BIND_ARRAY_TYPES_DIM(Module, Guide, Scalar, 4)                       \
     ENOKI_BIND_ARRAY_TYPES_DYN(Module, Guide)
 
-#define ENOKI_BIND_ARRAY_BASE_1(Module, Guide, Packet)                         \
-    auto a_i32 = bind_type<ek::int32_array_t<Guide>>(Module, Packet);          \
-    auto a_u32 = bind_type<ek::uint32_array_t<Guide>>(Module, Packet);         \
-    auto a_i64 = bind_type<ek::int64_array_t<Guide>>(Module, Packet);          \
-    auto a_u64 = bind_type<ek::uint64_array_t<Guide>>(Module, Packet);         \
-    auto a_f32 = bind_type<ek::float32_array_t<Guide>>(Module, Packet);        \
-    auto a_f64 = bind_type<ek::float64_array_t<Guide>>(Module, Packet);        \
+#define ENOKI_BIND_ARRAY_BASE_1(Module, Guide, Scalar)                         \
+    auto a_i32 = bind_type<ek::int32_array_t<Guide>>(Module, Scalar);          \
+    auto a_u32 = bind_type<ek::uint32_array_t<Guide>>(Module, Scalar);         \
+    auto a_i64 = bind_type<ek::int64_array_t<Guide>>(Module, Scalar);          \
+    auto a_u64 = bind_type<ek::uint64_array_t<Guide>>(Module, Scalar);         \
+    auto a_f32 = bind_type<ek::float32_array_t<Guide>>(Module, Scalar);        \
+    auto a_f64 = bind_type<ek::float64_array_t<Guide>>(Module, Scalar);        \
     auto a_msk =                                                               \
-        bind_type<ek::mask_t<ek::float32_array_t<Guide>>>(Module, Packet);
+        bind_type<ek::mask_t<ek::float32_array_t<Guide>>>(Module, Scalar);
 
-#define ENOKI_BIND_ARRAY_BASE_2(Packet)                                        \
-    bind_full(a_i32, Packet);                                                  \
-    bind_full(a_u32, Packet);                                                  \
-    bind_full(a_i64, Packet);                                                  \
-    bind_full(a_u64, Packet);                                                  \
-    bind_full(a_f32, Packet);                                                  \
-    bind_full(a_f64, Packet);                                                  \
-    bind_full(a_msk, Packet);
+#define ENOKI_BIND_ARRAY_BASE_2(Scalar)                                        \
+    bind_full(a_i32, Scalar);                                                  \
+    bind_full(a_u32, Scalar);                                                  \
+    bind_full(a_i64, Scalar);                                                  \
+    bind_full(a_u64, Scalar);                                                  \
+    bind_full(a_f32, Scalar);                                                  \
+    bind_full(a_f64, Scalar);                                                  \
+    bind_full(a_msk, Scalar);

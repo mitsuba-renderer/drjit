@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdarg.h>
+#include <string.h>
 
 #include <exception>
 
@@ -27,7 +28,7 @@ NAMESPACE_BEGIN(enoki)
 template<typename T, typename U> ENOKI_INLINE T memcpy_cast(const U &val) {
     static_assert(sizeof(T) == sizeof(U), "memcpy_cast: sizes did not match!");
     T result;
-    __builtin_memcpy(&result, &val, sizeof(T));
+    memcpy(&result, &val, sizeof(T));
     return result;
 }
 

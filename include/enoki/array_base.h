@@ -530,6 +530,11 @@ template <typename Value_, typename Derived_> struct ArrayBaseT : ArrayBase {
         return out;
     }
 
+    Derived hsum_async_()  const { return hsum_(); }
+    Derived hprod_async_() const { return hprod_(); }
+    Derived hmax_async_() const  { return hmax_(); }
+    Derived hmin_async_() const  { return hmin_(); }
+
     Value hsum_() const {
         Value value;
 

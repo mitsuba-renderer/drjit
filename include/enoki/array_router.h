@@ -348,7 +348,11 @@ ENOKI_ROUTE_UNARY_FALLBACK(hsum,  hsum,  a)
 ENOKI_ROUTE_UNARY_FALLBACK(hprod, hprod, a)
 ENOKI_ROUTE_UNARY_FALLBACK(hmin,  hmin,  a)
 ENOKI_ROUTE_UNARY_FALLBACK(hmax,  hmax,  a)
-ENOKI_ROUTE_UNARY_FALLBACK(hmean, hmean, a)
+
+ENOKI_ROUTE_UNARY_FALLBACK(hsum_async,  hsum_async,  a)
+ENOKI_ROUTE_UNARY_FALLBACK(hprod_async, hprod_async, a)
+ENOKI_ROUTE_UNARY_FALLBACK(hmin_async,  hmin_async,  a)
+ENOKI_ROUTE_UNARY_FALLBACK(hmax_async,  hmax_async,  a)
 
 /// Extract the low elements from an array of even size
 template <typename Array, enable_if_t<(array_size_v<Array> > 1 && array_size_v<Array> != Dynamic)> = 0>
