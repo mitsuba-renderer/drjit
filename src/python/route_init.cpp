@@ -13,12 +13,12 @@ void array_init(py::handle inst, const py::args &args, size_t size) {
 
     bool success = false;
     try {
+        py::object value_type = inst.attr("Value");
         if (argc == 1) {
             py::object o = args[0];
             PyTypeObject *type2 = (PyTypeObject *) o.get_type().ptr();
 
             if (strncmp(type2->tp_name, "enoki.", 6) == 0) {
-                py::object value_type = inst.attr("Value");
                 size_t other_size = py::len(o);
                 if (dynamic) {
                     size = other_size;
@@ -67,7 +67,7 @@ void array_init(py::handle inst, const py::args &args, size_t size) {
                 inst.attr("init_")(size);
             }
             for (size_t i = 0; i < size; ++i)
-                set_coeff(i, args[i]);
+                set_coeff(i, value_type(args[i]));
             success = true;
         }
 

@@ -348,19 +348,37 @@ ENOKI_ROUTE_UNARY_FALLBACK(hsum,  hsum,  a)
 ENOKI_ROUTE_UNARY_FALLBACK(hprod, hprod, a)
 ENOKI_ROUTE_UNARY_FALLBACK(hmin,  hmin,  a)
 ENOKI_ROUTE_UNARY_FALLBACK(hmax,  hmax,  a)
+ENOKI_ROUTE_BINARY_FALLBACK(dot, dot, (E) a1 * (E) a2)
 
 ENOKI_ROUTE_UNARY_FALLBACK(hsum_async,  hsum_async,  a)
 ENOKI_ROUTE_UNARY_FALLBACK(hprod_async, hprod_async, a)
 ENOKI_ROUTE_UNARY_FALLBACK(hmin_async,  hmin_async,  a)
 ENOKI_ROUTE_UNARY_FALLBACK(hmax_async,  hmax_async,  a)
+ENOKI_ROUTE_BINARY_FALLBACK(dot_async, dot_async, (E) a1 * (E) a2)
+
+template <typename Array>
+ENOKI_INLINE auto hmean(const Array &a) {
+    if constexpr (is_array_v<Array>)
+        return hsum(a) * (1.f / a.derived().size());
+    else
+        return a;
+}
+
+template <typename Array>
+ENOKI_INLINE auto hmean_async(const Array &a) {
+    if constexpr (is_array_v<Array>)
+        return hsum_async(a) * (1.f / a.derived().size());
+    else
+        return a;
+}
 
 /// Extract the low elements from an array of even size
 template <typename Array, enable_if_t<(array_size_v<Array> > 1 && array_size_v<Array> != Dynamic)> = 0>
-auto low(const Array &a) { return a.derived().low_(); }
+ENOKI_INLINE auto low(const Array &a) { return a.derived().low_(); }
 
 /// Extract the high elements from an array of even size
 template <typename Array, enable_if_t<(array_size_v<Array> > 1 && array_size_v<Array> != Dynamic)> = 0>
-auto high(const Array &a) { return a.derived().high_(); }
+ENOKI_INLINE auto high(const Array &a) { return a.derived().high_(); }
 
 
 template <typename T1, typename T2, enable_if_array_any_t<T1, T2> = 0>

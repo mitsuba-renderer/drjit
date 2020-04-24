@@ -19,6 +19,7 @@ size_t coeff_evals = 0;
 static py::object array_route_empty(py::handle h, size_t);
 static py::object array_route_min(py::object a0, py::object a1);
 static py::object array_route_max(py::object a0, py::object a1);
+static py::object array_route_fmadd(py::object a0, py::object a1, py::object a2);
 
 static char array_name_tmp[64];
 const char *array_name(VarType vtype, size_t depth, size_t size, bool scalar_mode) {
@@ -303,6 +304,27 @@ static py::object array_route_hmax_async(const py::object &a) {
         return a.get_type()(a.attr("hmax_")());
 }
 
+static py::object array_route_dot(py::object &a, py::object &b) {
+    var_promote("dot", a, b, true, test_float);
+    return a.attr("dot_")(b);
+}
+
+static py::object array_route_dot_async(py::object &a, py::object &b) {
+    var_promote("dot_async", a, b, true, test_float);
+    if (py::hasattr(a, "dot_async_"))
+        return a.attr("dot_async_")(b);
+    else
+        return a.get_type()(a.attr("dot_")(b));
+}
+
+static py::object array_route_hmean(const py::object &a) {
+    return array_route_hsum(a) / py::float_((double) py::len(a));
+}
+
+static py::object array_route_hmean_async(const py::object &a) {
+    return array_route_hsum_async(a) / py::float_((double) py::len(a));
+}
+
 static py::object array_generic_hsum(const py::object &a) {
     size_t size = py::len(a);
     if (size == 0)
@@ -347,6 +369,25 @@ static py::object array_generic_hmax(const py::object &a) {
     return value;
 }
 
+static py::object array_generic_dot(const py::object &a0, const py::object &a1) {
+    size_t s0 = py::len(a0), s1 = py::len(a1), sr = std::max(s0, s1), si;
+    array_check("dot", a0, a1, s0, s1, sr, si);
+    if (sr == 0)
+        ek::enoki_raise("dot(): zero-sized array!");
+
+    py::int_ z(0);
+    py::object value = a0[z] * a1[z];
+    bool fp = jitc_is_floating_point(var_type(a0));
+    for (size_t i_ = 1; i_ < sr; ++i_) {
+        py::int_ i(i_);
+        if (fp)
+            value = array_route_fmadd(a0[s0 > 1 ? i : z], a1[s1 > 1 ? i : z], value);
+        else
+            value = value + a0[s0 > 1 ? i : z] * a1[s1 > 1 ? i : z];
+    }
+    return value;
+}
+
 static py::object array_route_hsum_nested(py::object a) {
     while (var_is_enoki(a))
         a = array_route_hsum(a);
@@ -368,6 +409,12 @@ static py::object array_route_hmin_nested(py::object a) {
 static py::object array_route_hmax_nested(py::object a) {
     while (var_is_enoki(a))
         a = array_route_hmax(a);
+    return a;
+}
+
+static py::object array_route_hmean_nested(py::object a) {
+    while (var_is_enoki(a))
+        a = array_route_hmean(a);
     return a;
 }
 
@@ -859,6 +906,7 @@ void export_route_basics(py::module &m) {
         .def("hprod_", &array_generic_hprod)
         .def("hmin_", &array_generic_hmin)
         .def("hmax_", &array_generic_hmax)
+        .def("dot_", &array_generic_dot)
         .def("__abs__", &array_route_abs)
         .def("abs_", &array_generic_abs)
         .def("sqrt_", &array_generic_sqrt)
@@ -990,30 +1038,36 @@ void export_route_basics(py::module &m) {
     m.def("fnmadd", &array_route_fnmadd);
     m.def("fnmsub", &array_route_fnmsub);
 
-    m.def("all", &array_route_all);
-    m.def("any", &array_route_any);
-    m.def("none", &array_route_none);
     m.def("hsum", &array_route_hsum);
     m.def("hprod", &array_route_hprod);
     m.def("hmin", &array_route_hmin);
     m.def("hmax", &array_route_hmax);
+    m.def("hmean", &array_route_hmean);
+    m.def("dot", &array_route_dot);
 
     m.def("hsum_async", &array_route_hsum_async);
     m.def("hprod_async", &array_route_hprod_async);
     m.def("hmin_async", &array_route_hmin_async);
     m.def("hmax_async", &array_route_hmax_async);
+    m.def("hmean_async", &array_route_hmean_async);
+    m.def("dot_async", &array_route_dot_async);
 
-    m.def("all_nested", &array_route_all_nested);
-    m.def("any_nested", &array_route_any_nested);
-    m.def("none_nested", &array_route_none_nested);
     m.def("hsum_nested", &array_route_hsum_nested);
     m.def("hprod_nested", &array_route_hprod_nested);
     m.def("hmin_nested", &array_route_hmin_nested);
     m.def("hmax_nested", &array_route_hmax_nested);
+    m.def("hmean_nested", &array_route_hmean_nested);
 
+    m.def("all", &array_route_all);
+    m.def("any", &array_route_any);
+    m.def("none", &array_route_none);
     m.def("all_or", &array_route_all_or);
     m.def("any_or", &array_route_any_or);
     m.def("none_or", &array_route_none_or);
+
+    m.def("all_nested", &array_route_all_nested);
+    m.def("any_nested", &array_route_any_nested);
+    m.def("none_nested", &array_route_none_nested);
     m.def("all_nested_or", &array_route_all_nested_or);
     m.def("any_nested_or", &array_route_any_nested_or);
     m.def("none_nested_or", &array_route_none_nested_or);

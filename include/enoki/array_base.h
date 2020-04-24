@@ -530,6 +530,38 @@ template <typename Value_, typename Derived_> struct ArrayBaseT : ArrayBase {
         return out;
     }
 
+    Value dot_(const Derived &a) const {
+        Value result;
+        if constexpr (IsArithmetic) {
+			if constexpr (is_array_v<Value>) {
+				size_t sa = derived().size(), sb = a.size(), sr = std::max(sa, sb);
+
+                if constexpr (Derived::Size == Dynamic) {
+                    if ((sa != sr && sa != 1) || (sb != sr && sb != 1))
+                        enoki_raise("dot_() : mismatched input sizes "
+                                    "(%zu and %zu)", sa, sb);
+                    else if (sr == 0)
+                        enoki_raise("dot_(): zero-sized array!");
+                }
+
+				result = derived().coeff(0) * a.coeff(0);
+				if constexpr (std::is_floating_point_v<Scalar>) {
+                    for (size_t i = 1; i < sr; ++i)
+                        result = enoki::fmadd(derived().coeff(sa > 1 ? i : 0),
+                                              a.coeff(sb > 1 ? i : 0), result);
+                } else {
+                    for (size_t i = 1; i < sr; ++i)
+                        result += derived().coeff(sa > 1 ? i : 0) *
+                                  a.coeff(sb > 1 ? i : 0);
+                }
+            } else {
+				result = hsum(derived() * a);
+			}
+		}
+        return result;
+    }
+
+    Derived dot_async_(const Derived &a) const { return dot_(a); }
     Derived hsum_async_()  const { return hsum_(); }
     Derived hprod_async_() const { return hprod_(); }
     Derived hmax_async_() const  { return hmax_(); }

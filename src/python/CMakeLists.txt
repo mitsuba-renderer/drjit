@@ -24,6 +24,7 @@ pybind11_add_module(
   bind_scalar.cpp
   bind_packet.cpp
   bind_cuda.cpp
+  bind_llvm.cpp
 )
 
 if (ENOKI_ENABLE_JIT)

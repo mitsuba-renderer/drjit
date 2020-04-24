@@ -42,21 +42,22 @@ PYBIND11_MODULE(enoki, m) {
         .value("Managed", AllocType::Managed)
         .value("ManagedReadMostly", AllocType::ManagedReadMostly);
 
-    m.def("jitc_device_count", &jitc_device_count);
-    m.def("jitc_device_set", &jitc_device_set, "device"_a, "stream"_a = 0);
-    m.def("jitc_has_llvm", &jitc_has_llvm);
-    m.def("jitc_has_cuda", &jitc_has_cuda);
-    m.def("jitc_sync_stream", &jitc_sync_stream);
-    m.def("jitc_sync_device", &jitc_sync_device);
-    m.def("jitc_eval", &jitc_eval);
-    m.def("jitc_parallel_dispatch", &jitc_parallel_dispatch);
-    m.def("jitc_set_parallel_dispatch", &jitc_set_parallel_dispatch);
-    m.def("jitc_malloc_trim", &jitc_malloc_trim);
-    m.def("jitc_log_set_stderr", &jitc_log_set_stderr);
-    m.def("jitc_log_stderr", &jitc_log_stderr);
+    m.def("device_count", &jitc_device_count);
+    m.def("set_device", &jitc_set_device, "device"_a, "stream"_a = 0);
+    m.def("has_llvm", &jitc_has_llvm);
+    m.def("has_cuda", &jitc_has_cuda);
+    m.def("sync_stream", &jitc_sync_stream);
+    m.def("sync_device", &jitc_sync_device);
+    m.def("eval", &jitc_eval);
+    m.def("parallel_dispatch", &jitc_parallel_dispatch);
+    m.def("set_parallel_dispatch", &jitc_set_parallel_dispatch);
+    m.def("malloc_trim", &jitc_malloc_trim);
+    m.def("log_set_stderr", &jitc_log_set_stderr);
+    m.def("log_stderr", &jitc_log_stderr);
 
     jitc_log_set_stderr(LogLevel::Trace);
     export_cuda(m);
+    export_llvm(m);
 
     /* Register a cleanup callback function that is invoked when
        the 'enoki::ArrayBase' Python type is garbage collected */

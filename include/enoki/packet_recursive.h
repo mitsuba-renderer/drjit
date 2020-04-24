@@ -90,64 +90,56 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
     ENOKI_INLINE auto gt_ (Ref a) const { return mask_t<Derived>(a1 >  a.a1, a2 >  a.a2); }
     ENOKI_INLINE auto le_ (Ref a) const { return mask_t<Derived>(a1 <= a.a1, a2 <= a.a2); }
     ENOKI_INLINE auto ge_ (Ref a) const { return mask_t<Derived>(a1 >= a.a1, a2 >= a.a2); }
-    ENOKI_INLINE auto eq_ (Ref a) const { return mask_t<Derived>(eq(a1, a.a1), eq(a2, a.a2)); }
-    ENOKI_INLINE auto neq_(Ref a) const { return mask_t<Derived>(neq(a1, a.a1), neq(a2, a.a2)); }
+    ENOKI_INLINE auto eq_ (Ref a) const { return mask_t<Derived>(enoki::eq(a1, a.a1), enoki::eq(a2, a.a2)); }
+    ENOKI_INLINE auto neq_(Ref a) const { return mask_t<Derived>(enoki::neq(a1, a.a1), enoki::neq(a2, a.a2)); }
 
-    ENOKI_INLINE Derived min_(Ref a) const { return Derived(min(a1, a.a1), min(a2, a.a2)); }
-    ENOKI_INLINE Derived max_(Ref a) const { return Derived(max(a1, a.a1), max(a2, a.a2)); }
-    ENOKI_INLINE Derived abs_() const { return Derived(abs(a1), abs(a2)); }
-    ENOKI_INLINE Derived sqrt_() const { return Derived(sqrt(a1), sqrt(a2)); }
-    ENOKI_INLINE Derived ceil_() const { return Derived(ceil(a1), ceil(a2)); }
-    ENOKI_INLINE Derived floor_() const { return Derived(floor(a1), floor(a2)); }
-    ENOKI_INLINE Derived round_() const { return Derived(round(a1), round(a2)); }
-    ENOKI_INLINE Derived trunc_() const { return Derived(trunc(a1), trunc(a2)); }
-    ENOKI_INLINE Derived rcp_() const { return Derived(rcp(a1), rcp(a2)); }
-    ENOKI_INLINE Derived rsqrt_() const { return Derived(rsqrt(a1), rsqrt(a2)); }
+    ENOKI_INLINE Derived min_(Ref a) const { return Derived(enoki::min(a1, a.a1), enoki::min(a2, a.a2)); }
+    ENOKI_INLINE Derived max_(Ref a) const { return Derived(enoki::max(a1, a.a1), enoki::max(a2, a.a2)); }
+    ENOKI_INLINE Derived abs_() const { return Derived(enoki::abs(a1), enoki::abs(a2)); }
+    ENOKI_INLINE Derived sqrt_() const { return Derived(enoki::sqrt(a1), enoki::sqrt(a2)); }
+    ENOKI_INLINE Derived ceil_() const { return Derived(enoki::ceil(a1), enoki::ceil(a2)); }
+    ENOKI_INLINE Derived floor_() const { return Derived(enoki::floor(a1), enoki::floor(a2)); }
+    ENOKI_INLINE Derived round_() const { return Derived(enoki::round(a1), enoki::round(a2)); }
+    ENOKI_INLINE Derived trunc_() const { return Derived(enoki::trunc(a1), enoki::trunc(a2)); }
+    ENOKI_INLINE Derived rcp_() const { return Derived(enoki::rcp(a1), enoki::rcp(a2)); }
+    ENOKI_INLINE Derived rsqrt_() const { return Derived(enoki::rsqrt(a1), enoki::rsqrt(a2)); }
     ENOKI_INLINE Derived not_() const { return Derived(~a1, ~a2); }
     ENOKI_INLINE Derived neg_() const { return Derived(-a1, -a2); }
 
     ENOKI_INLINE Derived fmadd_(Ref b, Ref c) const {
-        return Derived(fmadd(a1, b.a1, c.a1), fmadd(a2, b.a2, c.a2));
+        return Derived(enoki::fmadd(a1, b.a1, c.a1), enoki::fmadd(a2, b.a2, c.a2));
     }
 
     ENOKI_INLINE Derived fnmadd_(Ref b, Ref c) const {
-        return Derived(fnmadd(a1, b.a1, c.a1), fnmadd(a2, b.a2, c.a2));
+        return Derived(enoki::fnmadd(a1, b.a1, c.a1), enoki::fnmadd(a2, b.a2, c.a2));
     }
 
     ENOKI_INLINE Derived fmsub_(Ref b, Ref c) const {
-        return Derived(fmsub(a1, b.a1, c.a1), fmsub(a2, b.a2, c.a2));
+        return Derived(enoki::fmsub(a1, b.a1, c.a1), enoki::fmsub(a2, b.a2, c.a2));
     }
 
     ENOKI_INLINE Derived fnmsub_(Ref b, Ref c) const {
-        return Derived(fnmsub(a1, b.a1, c.a1), fnmsub(a2, b.a2, c.a2));
-    }
-
-    ENOKI_INLINE Derived fmaddsub_(Ref b, Ref c) const {
-        return Derived(fmaddsub(a1, b.a1, c.a1), fmaddsub(a2, b.a2, c.a2));
-    }
-
-    ENOKI_INLINE Derived fmsubadd_(Ref b, Ref c) const {
-        return Derived(fmsubadd(a1, b.a1, c.a1), fmsubadd(a2, b.a2, c.a2));
+        return Derived(enoki::fnmsub(a1, b.a1, c.a1), enoki::fnmsub(a2, b.a2, c.a2));
     }
 
     template <typename T> ENOKI_INLINE Derived or_(const T &a) const {
-        return Derived(a1 | low(a), a2 | high(a));
+        return Derived(a1 | enoki::low(a), a2 | enoki::high(a));
     }
 
     template <typename T> ENOKI_INLINE Derived andnot_(const T &a) const {
-        return Derived(andnot(a1, low(a)), andnot(a2, high(a)));
+        return Derived(enoki::andnot(a1, low(a)), enoki::andnot(a2, high(a)));
     }
 
     template <typename T> ENOKI_INLINE Derived and_(const T &a) const {
-        return Derived(a1 & low(a), a2 & high(a));
+        return Derived(a1 & enoki::low(a), a2 & enoki::high(a));
     }
 
     template <typename T> ENOKI_INLINE Derived xor_(const T &a) const {
-        return Derived(a1 ^ low(a), a2 ^ high(a));
+        return Derived(a1 ^ enoki::low(a), a2 ^ enoki::high(a));
     }
 
     template <int Imm> ENOKI_INLINE Derived sl_() const {
-        return Derived(sl<Imm>(a1), sl<Imm>(a2));
+        return Derived(enoki::sl<Imm>(a1), enoki::sl<Imm>(a2));
     }
 
     ENOKI_INLINE Derived sl_(Ref a) const {
@@ -155,7 +147,7 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
     }
 
     template <int Imm> ENOKI_INLINE Derived sr_() const {
-        return Derived(sr<Imm>(a1), sr<Imm>(a2));
+        return Derived(enoki::sr<Imm>(a1), enoki::sr<Imm>(a2));
     }
 
     ENOKI_INLINE Derived sr_(Ref a) const {
@@ -164,32 +156,32 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
 
     template <typename Mask>
     static ENOKI_INLINE Derived select_(const Mask &m, Ref t, Ref f) {
-        return Derived(select(m.a1, t.a1, f.a1),
-                       select(m.a2, t.a2, f.a2));
+        return Derived(enoki::select(m.a1, t.a1, f.a1),
+                       enoki::select(m.a2, t.a2, f.a2));
     }
 
     template <typename T>
     ENOKI_INLINE auto floor2int_() const {
-        return T(floor2int<typename T::Array1>(a1),
-                 floor2int<typename T::Array2>(a2));
+        return T(enoki::floor2int<typename T::Array1>(a1),
+                 enoki::floor2int<typename T::Array2>(a2));
     }
 
     template <typename T>
     ENOKI_INLINE auto ceil2int_() const {
-        return T(ceil2int<typename T::Array1>(a1),
-                 ceil2int<typename T::Array2>(a2));
+        return T(enoki::ceil2int<typename T::Array1>(a1),
+                 enoki::ceil2int<typename T::Array2>(a2));
     }
 
     template <typename T>
     ENOKI_INLINE auto trunc2int_() const {
-        return T(trunc2int<typename T::Array1>(a1),
-                 trunc2int<typename T::Array2>(a2));
+        return T(enoki::trunc2int<typename T::Array1>(a1),
+                 enoki::trunc2int<typename T::Array2>(a2));
     }
 
     template <typename T>
     ENOKI_INLINE auto round2int_() const {
-        return T(round2int<typename T::Array1>(a1),
-                 round2int<typename T::Array2>(a2));
+        return T(enoki::round2int<typename T::Array1>(a1),
+                 enoki::round2int<typename T::Array2>(a2));
     }
 
     //! @}
@@ -201,54 +193,54 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
 
     ENOKI_INLINE Value hsum_() const {
         if constexpr (Size1 == Size2)
-            return hsum(a1 + a2);
+            return enoki::hsum(a1 + a2);
         else
-            return hsum(a1) + hsum(a2);
+            return enoki::hsum(a1) + enoki::hsum(a2);
     }
 
     ENOKI_INLINE Value hprod_() const {
         if constexpr (Size1 == Size2)
-            return hprod(a1 * a2);
+            return enoki::hprod(a1 * a2);
         else
-            return hprod(a1) * hprod(a2);
+            return enoki::hprod(a1) * enoki::hprod(a2);
     }
 
     ENOKI_INLINE Value hmin_() const {
         if constexpr (Size1 == Size2)
-            return hmin(min(a1, a2));
+            return enoki::hmin(enoki::min(a1, a2));
         else
-            return min(hmin(a1), hmin(a2));
+            return enoki::min(enoki::hmin(a1), enoki::hmin(a2));
     }
 
     ENOKI_INLINE Value hmax_() const {
         if constexpr (Size1 == Size2)
-            return hmax(max(a1, a2));
+            return enoki::hmax(enoki::max(a1, a2));
         else
-            return max(hmax(a1), hmax(a2));
+            return enoki::max(enoki::hmax(a1), enoki::hmax(a2));
     }
 
     ENOKI_INLINE Value dot_(Ref a) const {
         if constexpr (Size1 == Size2)
-            return hsum(fmadd(a1, a.a1, a2 * a.a2));
+            return enoki::hsum(enoki::fmadd(a1, a.a1, a2 * a.a2));
         else
-            return dot(a1, a.a1) + dot(a2, a.a2);
+            return enoki::dot(a1, a.a1) + enoki::dot(a2, a.a2);
     }
 
     ENOKI_INLINE bool all_() const {
         if constexpr (Size1 == Size2)
-            return all(a1 & a2);
+            return enoki::all(a1 & a2);
         else
-            return all(a1) && all(a2);
+            return enoki::all(a1) && enoki::all(a2);
     }
 
     ENOKI_INLINE bool any_() const {
         if constexpr (Size1 == Size2)
-            return any(a1 | a2);
+            return enoki::any(a1 | a2);
         else
-            return any(a1) || any(a2);
+            return enoki::any(a1) || enoki::any(a2);
     }
 
-    ENOKI_INLINE size_t count_() const { return count(a1) + count(a2); }
+    ENOKI_INLINE size_t count_() const { return enoki::count(a1) + enoki::count(a2); }
 
     //! @}
     // -----------------------------------------------------------------------
@@ -258,35 +250,35 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
     // -----------------------------------------------------------------------
 
     ENOKI_INLINE void store_(void *mem, size_t) const {
-        store((uint8_t *) mem, a1);
-        store((uint8_t *) mem + sizeof(Array1), a2);
+        enoki::store((uint8_t *) mem, a1);
+        enoki::store((uint8_t *) mem + sizeof(Array1), a2);
     }
 
     ENOKI_INLINE void store_unaligned_(void *mem, size_t) const {
-        store_unaligned((uint8_t *) mem, a1);
-        store_unaligned((uint8_t *) mem + sizeof(Array1), a2);
+        enoki::store_unaligned((uint8_t *) mem, a1);
+        enoki::store_unaligned((uint8_t *) mem + sizeof(Array1), a2);
     }
 
     static ENOKI_INLINE Derived load_(const void *mem, size_t) {
         return Derived(
-            load<Array1>((uint8_t *) mem),
-            load<Array2>((uint8_t *) mem + sizeof(Array1))
+            enoki::load<Array1>((uint8_t *) mem),
+            enoki::load<Array2>((uint8_t *) mem + sizeof(Array1))
         );
     }
 
     static ENOKI_INLINE Derived load_unaligned_(const void *a, size_t) {
         return Derived(
-            load_unaligned<Array1>((uint8_t *) a),
-            load_unaligned<Array2>((uint8_t *) a + sizeof(Array1))
+            enoki::load_unaligned<Array1>((uint8_t *) a),
+            enoki::load_unaligned<Array2>((uint8_t *) a + sizeof(Array1))
         );
     }
 
     static ENOKI_INLINE Derived zero_(size_t) {
-        return Derived(zero<Array1>(), zero<Array2>());
+        return Derived(enoki::zero<Array1>(), enoki::zero<Array2>());
     }
 
     static ENOKI_INLINE Derived empty_(size_t) {
-        return Derived(empty<Array1>(), empty<Array2>());
+        return Derived(enoki::empty<Array1>(), enoki::empty<Array2>());
     }
 
     //! @}

@@ -137,6 +137,7 @@ auto bind_full(py::class_<Array, ek::ArrayBase> &cls,
         cls.def(Array::IsFloat ? "itruediv_" : "ifloordiv_",
                 [](Array *a, const Array &b) { *a = a->div_(b); return a; });
 
+        cls.def("dot_", &Array::dot_);
         cls.def("hsum_", &Array::hsum_);
         cls.def("hprod_", &Array::hprod_);
         cls.def("hmin_", &Array::hmin_);
@@ -144,6 +145,7 @@ auto bind_full(py::class_<Array, ek::ArrayBase> &cls,
 
         if constexpr (ek::is_jit_array_v<Array> &&
                       ek::array_depth_v<Array> == 1) {
+            cls.def("dot_async_", &Array::dot_async_);
             cls.def("hsum_async_", &Array::hsum_async_);
             cls.def("hprod_async_", &Array::hprod_async_);
             cls.def("hmin_async_", &Array::hmin_async_);
@@ -236,15 +238,21 @@ auto bind_full(py::class_<Array, ek::ArrayBase> &cls,
     return cls;
 }
 
-#define ENOKI_BIND_ARRAY_TYPES_DYN(Module, Guide)                              \
-    auto d_i32 = bind<ek::DynamicArray<ek::int32_array_t<Guide>>>(Module);     \
-    auto d_u32 = bind<ek::DynamicArray<ek::uint32_array_t<Guide>>>(Module);    \
-    auto d_i64 = bind<ek::DynamicArray<ek::int64_array_t<Guide>>>(Module);     \
-    auto d_u64 = bind<ek::DynamicArray<ek::uint64_array_t<Guide>>>(Module);    \
-    auto d_f32 = bind<ek::DynamicArray<ek::float32_array_t<Guide>>>(Module);   \
-    auto d_f64 = bind<ek::DynamicArray<ek::float64_array_t<Guide>>>(Module);   \
+#define ENOKI_BIND_ARRAY_TYPES_DYN(Module, Guide, Scalar)                      \
+    auto d_i32 =                                                               \
+        bind<ek::DynamicArray<ek::int32_array_t<Guide>>>(Module, Scalar);      \
+    auto d_u32 =                                                               \
+        bind<ek::DynamicArray<ek::uint32_array_t<Guide>>>(Module, Scalar);     \
+    auto d_i64 =                                                               \
+        bind<ek::DynamicArray<ek::int64_array_t<Guide>>>(Module, Scalar);      \
+    auto d_u64 =                                                               \
+        bind<ek::DynamicArray<ek::uint64_array_t<Guide>>>(Module, Scalar);     \
+    auto d_f32 =                                                               \
+        bind<ek::DynamicArray<ek::float32_array_t<Guide>>>(Module, Scalar);    \
+    auto d_f64 =                                                               \
+        bind<ek::DynamicArray<ek::float64_array_t<Guide>>>(Module, Scalar);    \
     auto d_b = bind<ek::mask_t<ek::DynamicArray<ek::float32_array_t<Guide>>>>( \
-        Module);                                                               \
+        Module, Scalar);                                                       \
     (void) d_i32; (void) d_u32; (void) d_i64; (void) d_u64; (void) d_f32;      \
     (void) d_f64; (void) d_b;
 
@@ -258,14 +266,13 @@ auto bind_full(py::class_<Array, ek::ArrayBase> &cls,
     bind<ek::mask_t<ek::Array<ek::float32_array_t<Guide>, Dim>>>(Module,       \
                                                                  Scalar);
 
-
 #define ENOKI_BIND_ARRAY_TYPES(Module, Guide, Scalar)                          \
     ENOKI_BIND_ARRAY_TYPES_DIM(Module, Guide, Scalar, 0)                       \
     ENOKI_BIND_ARRAY_TYPES_DIM(Module, Guide, Scalar, 1)                       \
     ENOKI_BIND_ARRAY_TYPES_DIM(Module, Guide, Scalar, 2)                       \
     ENOKI_BIND_ARRAY_TYPES_DIM(Module, Guide, Scalar, 3)                       \
     ENOKI_BIND_ARRAY_TYPES_DIM(Module, Guide, Scalar, 4)                       \
-    ENOKI_BIND_ARRAY_TYPES_DYN(Module, Guide)
+    ENOKI_BIND_ARRAY_TYPES_DYN(Module, Guide, Scalar)
 
 #define ENOKI_BIND_ARRAY_BASE_1(Module, Guide, Scalar)                         \
     auto a_i32 = bind_type<ek::int32_array_t<Guide>>(Module, Scalar);          \

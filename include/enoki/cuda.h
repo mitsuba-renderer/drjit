@@ -76,7 +76,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
             "reinterpret_array requires arrays with equal-sized element types!");
 
         if constexpr (std::is_integral_v<Value> != std::is_integral_v<T>) {
-            m_index = jitc_var_new_1( Type, "mov.$b0 $r0, $r1", 1, v.index());
+            m_index = jitc_var_new_1(Type, "mov.$b0 $r0, $r1", 1, v.index());
         } else {
             m_index = v.index();
             jitc_var_inc_ref_ext(m_index);
@@ -346,6 +346,9 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
     }
 
     CUDAArray sl_(const CUDAArray<uint32_t> &v) const {
+        if constexpr (!jitc_is_integral(Type))
+            enoki_raise("Unsupported operand type");
+
         return from_index(jitc_var_new_2(
             Type, "shl.$b0 $r0, $r1, $r2", 1, m_index, v.index()));
     }
@@ -355,7 +358,10 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
     }
 
     CUDAArray sr_(const CUDAArray<uint32_t> &v) const {
-        if (std::is_integral_v<Value> && std::is_signed_v<Value>)
+        if constexpr (!jitc_is_integral(Type))
+            enoki_raise("Unsupported operand type");
+
+        if (std::is_signed_v<Value>)
             return from_index(jitc_var_new_2(
                 Type, "shr.$t0 $r0, $r1, $r2", 1, m_index, v.index()));
         else
@@ -444,7 +450,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
     }
 
     CUDAArray min_(const CUDAArray &a) const {
-        const char *op = std::is_same<Value, float>::value
+        const char *op = std::is_same_v<Value, float>
                              ? "min.ftz.$t0 $r0, $r1, $r2"
                              : "min.$t0 $r0, $r1, $r2";
 
@@ -452,7 +458,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
     }
 
     CUDAArray max_(const CUDAArray &a) const {
-        const char *op = std::is_same<Value, float>::value
+        const char *op = std::is_same_v<Value, float>
                              ? "max.ftz.$t0 $r0, $r1, $r2"
                              : "max.$t0 $r0, $r1, $r2";
 
@@ -569,13 +575,36 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
             return t;
         } else if (m.is_literal_zero()) {
             return f;
-        } else if (!std::is_same<Value, bool>::value) {
+        } else if (!std::is_same_v<Value, bool>) {
             return from_index(jitc_var_new_3(Type,
                                              "selp.$t0 $r0, $r1, $r2, $r3", 1,
                                              t.index(), f.index(), m.index()));
         } else {
             return (m & t) | (~m & f);
         }
+    }
+
+    CUDAArray popcnt_() const {
+        if constexpr (!jitc_is_integral(Type))
+            enoki_raise("Unsupported operand type");
+
+        return from_index(
+            jitc_var_new_1(Type, "popc.$b0 $r0, $r1", 1, m_index));
+    }
+
+    CUDAArray lzcnt_() const {
+        if constexpr (!jitc_is_integral(Type))
+            enoki_raise("Unsupported operand type");
+
+        return from_index(jitc_var_new_1(Type, "clz.$b0 $r0, $r1", 1, m_index));
+    }
+
+    CUDAArray tzcnt_() const {
+        if constexpr (!jitc_is_integral(Type))
+            enoki_raise("Unsupported operand type");
+
+        return from_index(jitc_var_new_1(
+            Type, "brev.$b0 $r0, $r1$nclz.$b0 $r0, $r0", 1, m_index));
     }
 
     //! @}
@@ -634,6 +663,14 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
     ENOKI_HORIZONTAL_OP(hmax,  ReductionType::Max)
 
     #undef ENOKI_HORIZONTAL_OP
+
+    Value dot_(const CUDAArray &a) const {
+        return enoki::hsum(*this * a);
+    }
+
+    CUDAArray dot_async_(const CUDAArray &a) const {
+        return enoki::hsum_async(*this * a);
+    }
 
     //! @}
     // -----------------------------------------------------------------------
