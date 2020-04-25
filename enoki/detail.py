@@ -1,4 +1,5 @@
 import enoki
+import sys
 
 VAR_TYPE_NAME = [
     'Invalid', 'Int8',   'UInt8',   'Int16',   'UInt16',  'Int32', 'UInt32',
@@ -114,3 +115,29 @@ def array_init(self, args):
                             "PyTorch array." % (type(self).__name__, "" if
                                                 size == 1 else "1 or ", size,
                                                 value_type.__name__)) from err
+
+
+def array_configure(cls):
+    """Populates an Enoki array class with extra type trait fields"""
+    depth = 1
+
+    value = cls.Value
+    while issubclass(value, enoki.ArrayBase):
+        value = value.Value
+        depth += 1
+
+    cls.Depth = depth
+    cls.Scalar = value
+    cls.IsEnoki = True
+    cls.IsMask = issubclass(value, bool)
+    cls.IsIntegral = issubclass(value, int) and not cls.IsMask
+    cls.IsFloat = issubclass(value, float)
+    cls.IsArithmetic = cls.IsIntegral or cls.IsFloat
+    cls.IsScalar = cls.__module__ == 'enoki.scalar'
+    cls.IsPacket = cls.__module__ == 'enoki.packet'
+    cls.IsLLVM = cls.__module__ == 'enoki.llvm'
+    cls.IsCUDA = cls.__module__ == 'enoki.cuda'
+    cls.IsJIT = cls.IsLLVM or cls.IsCUDA
+    cls.MaskType = getattr(
+        sys.modules.get(cls.__module__),
+        array_name(enoki.VarType.Bool, cls.Depth, cls.Size, cls.IsScalar))

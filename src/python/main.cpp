@@ -12,7 +12,7 @@ const uint32_t var_type_size[(int) VarType::Count] {
     (uint32_t) -1, 1, 1, 2, 2, 4, 4, 8, 8, 2, 4, 8, 1, 8
 };
 
-py::handle array_name, array_init;
+py::handle array_name, array_init, array_configure;
 
 PYBIND11_MODULE(enoki_ext, m_) {
 #if defined(ENOKI_ENABLE_JIT)
@@ -27,6 +27,7 @@ PYBIND11_MODULE(enoki_ext, m_) {
     py::handle array_detail = m.attr("detail");
     array_name = array_detail.attr("array_name");
     array_init = array_detail.attr("array_init");
+    array_configure = array_detail.attr("array_configure");
 
     m.attr("Dynamic") = ek::Dynamic;
 
@@ -46,6 +47,9 @@ PYBIND11_MODULE(enoki_ext, m_) {
         .value("Bool", VarType::Bool)
         .def_property_readonly(
             "Size", [](VarType v) { return var_type_size[(int) v]; });
+
+    py::class_<ek::detail::reinterpret_flag>(m.attr("detail"), "reinterpret_flag")
+        .def(py::init<>());
 
     py::class_<ek::ArrayBase>(m, "ArrayBase")
         .def_property("x",
@@ -78,6 +82,7 @@ PYBIND11_MODULE(enoki_ext, m_) {
             });
 
     py::register_exception<enoki::Exception>(m, "Exception");
+    m.def("reinterpret_scalar", &reinterpret_scalar);
 
     export_scalar(m);
     export_packet(m);

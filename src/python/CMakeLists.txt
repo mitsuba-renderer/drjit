@@ -9,6 +9,7 @@ pybind11_add_module(
 
   main.cpp
   implicit.cpp
+  reinterpret.cpp
   bind_scalar.cpp
   bind_packet.cpp
   bind_cuda.cpp

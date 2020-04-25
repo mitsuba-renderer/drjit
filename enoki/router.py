@@ -1,10 +1,13 @@
-from enoki import ArrayBase, VarType, Exception
+import enoki as _ek
+from enoki import ArrayBase, VarType, Exception, Dynamic
 from enoki.detail import array_name as _array_name
 from sys import modules as _modules
+import math as _math
 
 # -------------------------------------------------------------------
 #                        Type promotion logic
 # -------------------------------------------------------------------
+
 
 def _var_is_enoki(a):
     return isinstance(a, ArrayBase)
@@ -63,6 +66,10 @@ def _var_promote(*args):
             if base is None or a.Depth > base.Depth:
                 base = a
 
+    if base is None:
+        raise Exception("At least one of the input arguments "
+                        "must be an Enoki array!")
+
     for i in range(n):
         j = (i + 1) % n
         if vt[i] != vt[j]:
@@ -79,7 +86,7 @@ def _var_promote(*args):
 
 
 def _replace_scalar(cls, vt):
-    name = _array_name(vt, cls.Depth, cls.Size, 'scalar' in cls.__name__)
+    name = _array_name(vt, cls.Depth, cls.Size, cls.IsScalar)
     module = _modules.get(cls.__module__)
     return getattr(module, name)
 
@@ -190,6 +197,13 @@ def op_repr(self):
         return buf.getvalue()
 
 
+def op_bool(self):
+    raise Exception(
+        "To convert an Enoki array into a boolean value, use a mask reduction "
+        "operation such as enoki.all(), enoki.any(), enoki.none(). Special "
+        "variants (enoki.all_nested(), etc.) are available for nested arrays.")
+
+
 # Mainly for testcases: keep track of how often eval() is invoked.
 _coeff_evals = 0
 
@@ -202,7 +216,9 @@ def op_getitem(self, index):
         return self
     else:
         size = len(self)
-        if index < size:
+        if index < 0:
+            index = size + index
+        if index >= 0 and index < size:
             _coeff_evals += 1
             return self.coeff(index)
         else:
@@ -218,12 +234,37 @@ def op_setitem(self, index, value):
         op_setitem(self, index[-1], value)
     else:
         size = len(self)
-        if index < size:
+        if index < 0:
+            index = size + index
+        if index >= 0 and index < size:
             _coeff_evals += 1
             self.set_coeff(index, value)
         else:
             raise IndexError("Index %i exceeds the array "
                              "bounds %i!" % (index, size))
+
+
+def reinterpret_array(target_type, value,
+                      vt_target=VarType.Invalid,
+                      vt_value=VarType.Invalid):
+    assert isinstance(target_type, type)
+
+    if issubclass(target_type, ArrayBase):
+        if hasattr(target_type, "reinterpret_array_"):
+            return target_type.reinterpret_array_(value)
+        else:
+            result = target_type()
+            if result.Size == Dynamic:
+                result.init_(len(value))
+
+            for i in range(len(value)):
+                result[i] = reinterpret_array(target_type.Value, value[i],
+                                              target_type.Type, value.Type)
+
+            return result
+    else:
+        return _ek.reinterpret_scalar(target_type, value,
+                                      vt_target, vt_value)
 
 
 
@@ -237,16 +278,188 @@ def op_add(a, b):
     return a.add_(b)
 
 
+def op_iadd(a, b):
+    if type(a) is not type(b):
+        a, b = _var_promote(a, b)
+    return a.iadd_(b)
+
+
 def op_sub(a, b):
     if type(a) is not type(b):
         a, b = _var_promote(a, b)
     return a.sub_(b)
 
 
+def op_isub(a, b):
+    if type(a) is not type(b):
+        a, b = _var_promote(a, b)
+    return a.isub_(b)
+
+
 def op_mul(a, b):
     if type(a) is not type(b):
         a, b = _var_promote(a, b)
     return a.mul_(b)
+
+
+def op_imul(a, b):
+    if type(a) is not type(b):
+        a, b = _var_promote(a, b)
+    return a.imul_(b)
+
+
+def op_truediv(a, b):
+    if isinstance(b, float) or isinstance(b, int):
+        return a * (1.0 / b)
+
+    if type(a) is not type(b):
+        a, b = _var_promote(a, b)
+    return a.truediv_(b)
+
+
+def op_itruediv(a, b):
+    if isinstance(b, float) or isinstance(b, int):
+        a *= 1.0 / b
+
+    if type(a) is not type(b):
+        a, b = _var_promote(a, b)
+    return a.itruediv_(b)
+
+
+def op_floordiv(a, b):
+    if isinstance(b, int):
+        if b != 0 and b & (b - 1) == 0:
+            return a >> int(_math.log2(b))
+
+    if type(a) is not type(b):
+        a, b = _var_promote(a, b)
+    return a.floordiv_(b)
+
+
+def op_ifloordiv(a, b):
+    if isinstance(b, int):
+        if b != 0 and b & (b - 1) == 0:
+            a >>= int(_math.log2(b))
+
+    if type(a) is not type(b):
+        a, b = _var_promote(a, b)
+    return a.ifloordiv_(b)
+
+
+def op_mod(a, b):
+    if type(a) is not type(b):
+        a, b = _var_promote(a, b)
+    return a.mod_(b)
+
+
+def op_imod(a, b):
+    if type(a) is not type(b):
+        a, b = _var_promote(a, b)
+    return a.imod_(b)
+
+
+def op_and(a, b):
+    if type(a) is not type(b):
+        a, b = _var_promote(a, b)
+
+    return a.and_(b)
+
+
+def op_iand(a, b):
+    if type(a) is not type(b):
+        a, b = _var_promote(a, b)
+
+    return a.iand_(b)
+
+
+def op_or(a, b):
+    if type(a) is not type(b):
+        a, b = _var_promote(a, b)
+    return a.or_(b)
+
+
+def op_ior(a, b):
+    if type(a) is not type(b):
+        a, b = _var_promote(a, b)
+    return a.ior_(b)
+
+
+def op_xor(a, b):
+    if type(a) is not type(b):
+        a, b = _var_promote(a, b)
+    return a.xor_(b)
+
+
+def op_ixor(a, b):
+    if type(a) is not type(b):
+        a, b = _var_promote(a, b)
+    return a.ixor_(b)
+
+
+def op_lshift(a, b):
+    if type(a) is not type(b):
+        a, b = _var_promote(a, b)
+    return a.sl_(b)
+
+
+def op_ilshift(a, b):
+    if type(a) is not type(b):
+        a, b = _var_promote(a, b)
+    return a.isl_(b)
+
+
+def op_rshift(a, b):
+    if type(a) is not type(b):
+        a, b = _var_promote(a, b)
+    return a.sr_(b)
+
+
+def op_irshift(a, b):
+    if type(a) is not type(b):
+        a, b = _var_promote(a, b)
+    return a.isr_(b)
+
+
+def op_lt(a, b):
+    if type(a) is not type(b):
+        a, b = _var_promote(a, b)
+    return a.lt_(b)
+
+
+def op_le(a, b):
+    if type(a) is not type(b):
+        a, b = _var_promote(a, b)
+    return a.le_(b)
+
+
+def op_gt(a, b):
+    if type(a) is not type(b):
+        a, b = _var_promote(a, b)
+    return a.gt_(b)
+
+
+def op_ge(a, b):
+    if type(a) is not type(b):
+        a, b = _var_promote(a, b)
+    return a.ge_(b)
+
+
+def eq(a, b):
+    if not isinstance(a, ArrayBase) and not isinstance(b, ArrayBase):
+        return a == b
+    else:
+        if type(a) is not type(b):
+            a, b = _var_promote(a, b)
+        return a.eq_(b)
+
+
+def neq(a, b):
+    if not isinstance(a, ArrayBase) and not isinstance(b, ArrayBase):
+        return a != b
+    else:
+        if type(a) is not type(b):
+            a, b = _var_promote(a, b)
+        return a.neq_(b)
 
 # -------------------------------------------------------------------
 #                       Horizontal operations

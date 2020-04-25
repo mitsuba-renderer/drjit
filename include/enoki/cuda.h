@@ -172,7 +172,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
 
         const char *op;
         if constexpr (std::is_same_v<Value, float>)
-            op = "div.ftz.$t0 $r0, $r1, $r2";
+            op = "div.rn.ftz.$t0 $r0, $r1, $r2";
         else if constexpr (std::is_same_v<Value, double>)
             op = "div.rn.$t0 $r0, $r1, $r2";
         else

@@ -10,14 +10,20 @@ import enoki.router as router
 # Generic fallback implementations of array operations
 import enoki.generic as generic
 
+# Type traits analogous to the ones provided in C++
+import enoki.traits as traits
+
 # Install routing functions in ArrayBase and global scope
 self = vars()
 base = self['ArrayBase']
 for k, v in enoki.router.__dict__.items():
-    if k.startswith('_'):
+    if k.startswith('_') or k[0].isupper():
         continue
     if k.startswith('op_'):
         setattr(base, '__' + k[3:] + '__', v)
+        if k[3:] in ['add', 'sub', 'mul', 'truediv', 'floordiv', 'and', 'or',
+                     'xor', 'lshift', 'rshift']:
+            setattr(base, '__r' + k[3:] + '__', v)
     else:
         self[k] = v
 
@@ -25,6 +31,13 @@ for k, v in enoki.router.__dict__.items():
 for k, v in enoki.generic.__dict__.items():
     if k.startswith('_') or k[0].isupper():
         continue
-    setattr(base, k + '_', v)
+    setattr(base, k, v)
 
-del k, v, self, base, generic, router, enoki_ext
+
+# Install type traits in global scope
+for k, v in enoki.traits.__dict__.items():
+    if k.startswith('_') or k[0].isupper():
+        continue
+    self[k] = v
+
+del k, v, self, base, generic, router, traits, enoki_ext

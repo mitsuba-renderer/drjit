@@ -3,7 +3,7 @@
 #include "common.h"
 #include <enoki/math.h>
 
-extern py::handle array_name, array_init;
+extern py::handle array_name, array_init, array_configure;
 
 template <typename Array>
 auto bind_type(py::module &m, bool scalar_mode = false) {
@@ -16,10 +16,8 @@ auto bind_type(py::module &m, bool scalar_mode = false) {
     auto cls = py::class_<Array, ek::ArrayBase>(
         m, PyUnicode_AsUTF8AndSize(name.ptr(), nullptr));
 
-    cls.attr("Scalar") = py::cast(Scalar()).get_type();
     cls.attr("Value") = py::cast(Value()).get_type();
     cls.attr("Type") = py::cast(Type);
-    cls.attr("Depth") = py::cast(Array::Depth);
     cls.attr("Size") = py::cast(Array::Size);
 
     if constexpr (Array::Size == ek::Dynamic) {
@@ -30,6 +28,7 @@ auto bind_type(py::module &m, bool scalar_mode = false) {
         });
     }
 
+    array_configure(cls);
     register_implicit_conversions(typeid(Array));
 
     return cls;
@@ -126,6 +125,34 @@ auto bind_full(py::class_<Array, ek::ArrayBase> &cls,
         cls.def("any_", &Array::any_);
         cls.def("count_", &Array::count_);
     } else {
+        if constexpr (sizeof(Scalar) == 4) {
+            cls.def_static("reinterpret_array_",
+                           [](const ek::int32_array_t<Array> &a) {
+                               return ek::reinterpret_array<Array>(a);
+                           });
+            cls.def_static("reinterpret_array_",
+                           [](const ek::uint32_array_t<Array> &a) {
+                               return ek::reinterpret_array<Array>(a);
+                           });
+            cls.def_static("reinterpret_array_",
+                           [](const ek::float32_array_t<Array> &a) {
+                               return ek::reinterpret_array<Array>(a);
+                           });
+        } else {
+            cls.def_static("reinterpret_array_",
+                           [](const ek::int64_array_t<Array> &a) {
+                               return ek::reinterpret_array<Array>(a);
+                           });
+            cls.def_static("reinterpret_array_",
+                           [](const ek::uint64_array_t<Array> &a) {
+                               return ek::reinterpret_array<Array>(a);
+                           });
+            cls.def_static("reinterpret_array_",
+                           [](const ek::float64_array_t<Array> &a) {
+                               return ek::reinterpret_array<Array>(a);
+                           });
+        }
+
         cls.def("add_", &Array::add_);
         cls.def("sub_", &Array::sub_);
         cls.def("mul_", &Array::mul_);
@@ -242,6 +269,8 @@ auto bind_full(py::class_<Array, ek::ArrayBase> &cls,
 }
 
 #define ENOKI_BIND_ARRAY_TYPES_DYN(Module, Guide, Scalar)                      \
+    auto d_b = bind<ek::mask_t<ek::DynamicArray<ek::float32_array_t<Guide>>>>( \
+        Module, Scalar);                                                       \
     auto d_i32 =                                                               \
         bind<ek::DynamicArray<ek::int32_array_t<Guide>>>(Module, Scalar);      \
     auto d_u32 =                                                               \
@@ -254,20 +283,18 @@ auto bind_full(py::class_<Array, ek::ArrayBase> &cls,
         bind<ek::DynamicArray<ek::float32_array_t<Guide>>>(Module, Scalar);    \
     auto d_f64 =                                                               \
         bind<ek::DynamicArray<ek::float64_array_t<Guide>>>(Module, Scalar);    \
-    auto d_b = bind<ek::mask_t<ek::DynamicArray<ek::float32_array_t<Guide>>>>( \
-        Module, Scalar);                                                       \
     (void) d_i32; (void) d_u32; (void) d_i64; (void) d_u64; (void) d_f32;      \
     (void) d_f64; (void) d_b;
 
 #define ENOKI_BIND_ARRAY_TYPES_DIM(Module, Guide, Scalar, Dim)                 \
+    bind<ek::mask_t<ek::Array<ek::float32_array_t<Guide>, Dim>>>(Module,       \
+                                                                 Scalar);      \
     bind<ek::Array<ek::int32_array_t<Guide>, Dim>>(Module, Scalar);            \
     bind<ek::Array<ek::uint32_array_t<Guide>, Dim>>(Module, Scalar);           \
     bind<ek::Array<ek::int64_array_t<Guide>, Dim>>(Module, Scalar);            \
     bind<ek::Array<ek::uint64_array_t<Guide>, Dim>>(Module, Scalar);           \
     bind<ek::Array<ek::float32_array_t<Guide>, Dim>>(Module, Scalar);          \
-    bind<ek::Array<ek::float64_array_t<Guide>, Dim>>(Module, Scalar);          \
-    bind<ek::mask_t<ek::Array<ek::float32_array_t<Guide>, Dim>>>(Module,       \
-                                                                 Scalar);
+    bind<ek::Array<ek::float64_array_t<Guide>, Dim>>(Module, Scalar);
 
 #define ENOKI_BIND_ARRAY_TYPES(Module, Guide, Scalar)                          \
     ENOKI_BIND_ARRAY_TYPES_DIM(Module, Guide, Scalar, 0)                       \
@@ -278,14 +305,14 @@ auto bind_full(py::class_<Array, ek::ArrayBase> &cls,
     ENOKI_BIND_ARRAY_TYPES_DYN(Module, Guide, Scalar)
 
 #define ENOKI_BIND_ARRAY_BASE_1(Module, Guide, Scalar)                         \
+    auto a_msk =                                                               \
+        bind_type<ek::mask_t<ek::float32_array_t<Guide>>>(Module, Scalar);     \
     auto a_i32 = bind_type<ek::int32_array_t<Guide>>(Module, Scalar);          \
     auto a_u32 = bind_type<ek::uint32_array_t<Guide>>(Module, Scalar);         \
     auto a_i64 = bind_type<ek::int64_array_t<Guide>>(Module, Scalar);          \
     auto a_u64 = bind_type<ek::uint64_array_t<Guide>>(Module, Scalar);         \
     auto a_f32 = bind_type<ek::float32_array_t<Guide>>(Module, Scalar);        \
-    auto a_f64 = bind_type<ek::float64_array_t<Guide>>(Module, Scalar);        \
-    auto a_msk =                                                               \
-        bind_type<ek::mask_t<ek::float32_array_t<Guide>>>(Module, Scalar);
+    auto a_f64 = bind_type<ek::float64_array_t<Guide>>(Module, Scalar);
 
 #define ENOKI_BIND_ARRAY_BASE_2(Scalar)                                        \
     bind_full(a_i32, Scalar);                                                  \

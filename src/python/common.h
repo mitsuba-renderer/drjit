@@ -18,3 +18,9 @@ using namespace py::literals;
 
 /// Register an implicit conversion handler for a particular type
 extern void register_implicit_conversions(const std::type_info &type);
+
+extern py::object reinterpret_scalar(const py::object &target_type,
+                                     const py::object &source,
+                                     VarType vt_target, VarType vt_source);
+
+extern const uint32_t var_type_size[(int) VarType::Count];
