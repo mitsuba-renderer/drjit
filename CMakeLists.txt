@@ -255,17 +255,6 @@ include_directories(ext/enoki-jit/include)
 if (ENOKI_ENABLE_PYTHON)
   message(STATUS "Enoki: building the Python plugin.")
   add_subdirectory(src/python)
-
-  set_target_properties(enoki-python PROPERTIES
-    OUTPUT_NAME enoki
-    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-  )
-
-  if (CMAKE_CXX_COMPILER_ID MATCHES "GCC|Clang")
-    target_compile_options(enoki-python PRIVATE -g0 -Os)
-  elseif (MSVC)
-    target_compile_options(enoki-python PRIVATE /Os)
-  endif()
 else()
   message(STATUS "Enoki: *not* building the Python plugin.")
 endif()

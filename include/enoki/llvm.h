@@ -30,7 +30,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
 
     static constexpr bool IsLLVM = true;
     static constexpr bool IsJIT = true;
-    static constexpr VarType Type = var_type<Value>::value;
+    static constexpr VarType Type = var_type_v<Value>;
     static constexpr size_t Size = Dynamic;
 
     template <typename T> using ReplaceValue = LLVMArray<T>;
@@ -761,16 +761,22 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
     // -----------------------------------------------------------------------
 
     static LLVMArray empty_(size_t size) {
+        if (size == 0)
+            return LLVMArray();
         size_t byte_size = size * sizeof(Value);
         void *ptr = jitc_malloc(AllocType::HostAsync, byte_size);
         return from_index(jitc_var_map(Type, ptr, (uint32_t) size, 1));
     }
 
     static LLVMArray zero_(size_t size) {
+        if (size == 0)
+            return LLVMArray();
         return from_index(mkfull_(Value(0), (uint32_t) size));
     }
 
     static LLVMArray full_(Value value, size_t size) {
+        if (size == 0)
+            return LLVMArray();
         return from_index(mkfull_(value, (uint32_t) size));
     }
 

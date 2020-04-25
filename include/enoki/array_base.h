@@ -534,7 +534,8 @@ template <typename Value_, typename Derived_> struct ArrayBaseT : ArrayBase {
         Value result;
         if constexpr (IsArithmetic) {
 			if constexpr (is_array_v<Value>) {
-				size_t sa = derived().size(), sb = a.size(), sr = std::max(sa, sb);
+                size_t sa = derived().size(), sb = a.size(),
+                       sr = sa > sb ? sa : sb;
 
                 if constexpr (Derived::Size == Dynamic) {
                     if ((sa != sr && sa != 1) || (sb != sr && sb != 1))

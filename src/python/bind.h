@@ -3,15 +3,18 @@
 #include "common.h"
 #include <enoki/math.h>
 
+extern py::handle array_name, array_init;
+
 template <typename Array>
 auto bind_type(py::module &m, bool scalar_mode = false) {
     using Scalar = std::conditional_t<Array::IsMask, bool, ek::scalar_t<Array>>;
     using Value = std::conditional_t<Array::IsMask, ek::mask_t<ek::value_t<Array>>,
                                      ek::value_t<Array>>;
-    constexpr VarType Type = ek::var_type<Scalar>::value;
+    constexpr VarType Type = ek::var_type_v<Scalar>;
 
-    const char *name = array_name(Type, Array::Depth, Array::Size, scalar_mode);
-    auto cls = py::class_<Array, ek::ArrayBase>(m, name);
+    py::str name = array_name(Type, Array::Depth, Array::Size, scalar_mode);
+    auto cls = py::class_<Array, ek::ArrayBase>(
+        m, PyUnicode_AsUTF8AndSize(name.ptr(), nullptr));
 
     cls.attr("Scalar") = py::cast(Scalar()).get_type();
     cls.attr("Value") = py::cast(Value()).get_type();
@@ -56,7 +59,7 @@ void bind_generic_constructor(py::class_<Array, ek::ArrayBase> &cls) {
         "__init__",
         [](py::detail::value_and_holder &v_h, py::args args) {
             v_h.value_ptr() = new Array();
-            array_init((PyObject *) v_h.inst, args, Array::Size);
+            array_init(py::handle((PyObject *) v_h.inst), args);
         },
         py::detail::is_new_style_constructor());
 }

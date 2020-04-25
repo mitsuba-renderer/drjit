@@ -30,7 +30,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
 
     static constexpr bool IsCUDA = true;
     static constexpr bool IsJIT = true;
-    static constexpr VarType Type = var_type<Value>::value;
+    static constexpr VarType Type = var_type_v<Value>;
     static constexpr size_t Size = Dynamic;
 
     template <typename T> using ReplaceValue = CUDAArray<T>;
@@ -333,7 +333,11 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
             return from_index(jitc_var_new_2(Type, "xor.$b0 $r0, $r1, $r2", 1,
                                              m_index, a.index()));
         } else {
-            printf("Unbelievable.\n");
+            // Simple constant propagation
+            if (a.is_literal_zero())
+                return a;
+
+            return select(a, ~*this, *this);
         }
     }
 
@@ -680,16 +684,22 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
     // -----------------------------------------------------------------------
 
     static CUDAArray empty_(size_t size) {
+        if (size == 0)
+            return CUDAArray();
         size_t byte_size = size * sizeof(Value);
         void *ptr = jitc_malloc(AllocType::Device, byte_size);
         return from_index(jitc_var_map(Type, ptr, (uint32_t) size, 1));
     }
 
     static CUDAArray zero_(size_t size) {
+        if (size == 0)
+            return CUDAArray();
         return from_index(mkfull_(Value(0), (uint32_t) size));
     }
 
     static CUDAArray full_(Value value, size_t size) {
+        if (size == 0)
+            return CUDAArray();
         return from_index(mkfull_(value, (uint32_t) size));
     }
 

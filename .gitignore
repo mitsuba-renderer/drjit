@@ -44,7 +44,6 @@ Release
 *_sse42
 *_avx
 *_avx2
-*_avx512_knl
 *_avx512_skx
 *_neon
 *.ppm
@@ -55,7 +54,6 @@ libenoki-autodiff.so
 libenoki-autodiff.dylib
 enoki-autodiff.dll
 enoki.cpython*
-/enoki
 compile_commands.json
 \.clangd
 
