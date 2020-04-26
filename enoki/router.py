@@ -57,15 +57,21 @@ def _var_type(a, preferred=VarType.Invalid):
 
 
 def _var_promote(*args):
+    """
+    Given a list of Enoki arrays and scalars, determine the flavor and shape of
+    the result array and broadcast/convert everything into this form.
+    """
     n = len(args)
     vt = [None] * n
     base = None
+    depth = 0
 
     for i, a in enumerate(args):
         vt[i] = _var_type(a)
-        if isinstance(a, ArrayBase):
-            if base is None or a.Depth > base.Depth:
-                base = a
+        depth_i = getattr(a, 'Depth', 0)
+        if depth_i > depth:
+            base = a
+            depth = depth_i
 
     if base is None:
         raise Exception("At least one of the input arguments "
@@ -84,6 +90,32 @@ def _var_promote(*args):
             result[i] = t(result[i])
 
     return result
+
+
+def _var_promote_mask(a0, a1):
+    """
+    Like _var_promote(), but has a special case where 'a1' can be a mask.
+    """
+    vt0 = _var_type(a0)
+    vt1 = _var_type(a1)
+
+    if vt0 != vt1:
+        vt0 = _var_type(a0, vt1)
+        vt1 = _var_type(a1, vt0)
+
+    if vt1 != VarType.Bool:
+        vt0 = vt1 = max(vt0, vt1)
+
+    base = a0 if getattr(a0, 'Depth', 0) >= getattr(a1, 'Depth', 0) else a1
+    t0 = base.ReplaceScalar(vt0)
+    t1 = base.ReplaceScalar(vt1)
+
+    if type(a0) is not t0:
+        a0 = t0(a0)
+    if type(a1) is not t1:
+        a1 = t1(a1)
+
+    return a0, a1
 
 
 def _replace_scalar(cls, vt):
@@ -264,8 +296,7 @@ def reinterpret_array(target_type, value,
 
             return result
     else:
-        return _ek.detail.reinterpret_scalar(target_type, value,
-                                             vt_target, vt_value)
+        return _ek.detail.reinterpret_scalar(value, vt_value, vt_target)
 
 
 # -------------------------------------------------------------------
@@ -368,40 +399,40 @@ def op_imod(a, b):
 
 
 def op_and(a, b):
-    if type(a) is not type(b):
-        a, b = _var_promote(a, b)
+    if type(a) is not type(b) and type(b) is not _ek.mask_t(a):
+        a, b = _var_promote_mask(a, b)
 
     return a.and_(b)
 
 
 def op_iand(a, b):
-    if type(a) is not type(b):
-        a, b = _var_promote(a, b)
+    if type(a) is not type(b) and type(b) is not _ek.mask_t(a):
+        a, b = _var_promote_mask(a, b)
 
     return a.iand_(b)
 
 
 def op_or(a, b):
-    if type(a) is not type(b):
-        a, b = _var_promote(a, b)
+    if type(a) is not type(b) and type(b) is not _ek.mask_t(a):
+        a, b = _var_promote_mask(a, b)
     return a.or_(b)
 
 
 def op_ior(a, b):
-    if type(a) is not type(b):
-        a, b = _var_promote(a, b)
+    if type(a) is not type(b) and type(b) is not _ek.mask_t(a):
+        a, b = _var_promote_mask(a, b)
     return a.ior_(b)
 
 
 def op_xor(a, b):
-    if type(a) is not type(b):
-        a, b = _var_promote(a, b)
+    if type(a) is not type(b) and type(b) is not _ek.mask_t(a):
+        a, b = _var_promote_mask(a, b)
     return a.xor_(b)
 
 
 def op_ixor(a, b):
-    if type(a) is not type(b):
-        a, b = _var_promote(a, b)
+    if type(a) is not type(b) and type(b) is not _ek.mask_t(a):
+        a, b = _var_promote_mask(a, b)
     return a.ixor_(b)
 
 

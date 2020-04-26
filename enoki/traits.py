@@ -14,14 +14,20 @@ def array_depth_v(a):
 
 
 def scalar_t(a):
+    if not isinstance(a, type):
+        a = type(a)
     return getattr(a, 'Scalar', a)
 
 
 def value_t(a):
+    if not isinstance(a, type):
+        a = type(a)
     return getattr(a, 'Value', a)
 
 
 def mask_t(a):
+    if not isinstance(a, type):
+        a = type(a)
     return getattr(a, 'MaskType', bool)
 
 

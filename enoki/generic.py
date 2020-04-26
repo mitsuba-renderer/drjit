@@ -1,4 +1,4 @@
-from enoki import Dynamic, Exception
+from enoki import Dynamic, Exception, VarType
 import enoki as _ek
 
 
@@ -79,6 +79,30 @@ def _check3(a0, a1, a2):
         raise Exception("Type mismatch!")
     ar = a0.empty_(sr if a0.Size == Dynamic else 0)
     return (s0, s1, s2, ar, sr)
+
+
+def _binary_op(a, b, fn):
+    """
+    Perform a bit-level operation 'fn' involving variables 'a' and 'b' in a way
+    that works even when the operands are floating point variables
+    """
+
+    convert = isinstance(a, float) or isinstance(b, float)
+
+    if convert:
+        src, dst = VarType.Float64, VarType.Int64
+        a = _ek.detail.reinterpret_scalar(a, src, dst)
+        if isinstance(b, bool):
+            b = -1 if b else 0
+        else:
+            b = _ek.detail.reinterpret_scalar(b, src, dst)
+
+    c = fn(a, b)
+
+    if convert:
+        c = _ek.detail.reinterpret_scalar(c, dst, src)
+
+    return c
 
 
 # -------------------------------------------------------------------
@@ -221,50 +245,86 @@ def imod_(a0, a1):
 
 
 def and_(a0, a1):
-    if a0.Depth == 1 and a0.IsFloat:
-        a0i = _ek.reinterpret_array(_ek.uint_array_t(type(a0)), a0)
-        a1i = _ek.reinterpret_array(_ek.uint_array_t(type(a1)), a1) \
-            if a1.IsFloat else a1
-        return _ek.reinterpret_array(type(a0), a0i.and_(a1i))
-    else:
-        s0, s1, ar, sr = _check2_bitop(a0, a1)
+    s0, s1, ar, sr = _check2_bitop(a0, a1)
+
+    if ar.Depth > 1:
         for i in range(sr):
             ar[i] = a0[i if s0 > 1 else 0] & a1[i if s1 > 1 else 0]
-        return ar
+    else:
+        for i in range(sr):
+            ar[i] = _binary_op(a0[i if s0 > 1 else 0],
+                               a1[i if s1 > 1 else 0],
+                               lambda a, b: a & b)
+
+    return ar
 
 
 def iand_(a0, a1):
     s0, s1, sr = _check2_bitop_inplace(a0, a1)
-    for i in range(sr):
-        a0[i] &= a1[i if s1 > 1 else 0]
+    if a0.Depth > 1:
+        for i in range(sr):
+            a0[i] &= a1[i if s1 > 1 else 0]
+    else:
+        for i in range(sr):
+            a0[i] = _binary_op(a0[i if s0 > 1 else 0],
+                               a1[i if s1 > 1 else 0],
+                               lambda a, b: a & b)
     return a0
 
 
 def or_(a0, a1):
     s0, s1, ar, sr = _check2_bitop(a0, a1)
-    for i in range(sr):
-        ar[i] = a0[i if s0 > 1 else 0] | a1[i if s1 > 1 else 0]
+
+    if ar.Depth > 1:
+        for i in range(sr):
+            ar[i] = a0[i if s0 > 1 else 0] | a1[i if s1 > 1 else 0]
+    else:
+        for i in range(sr):
+            ar[i] = _binary_op(a0[i if s0 > 1 else 0],
+                               a1[i if s1 > 1 else 0],
+                               lambda a, b: a | b)
+
     return ar
 
 
 def ior_(a0, a1):
     s0, s1, sr = _check2_bitop_inplace(a0, a1)
-    for i in range(sr):
-        a0[i] |= a1[i if s1 > 1 else 0]
+    if a0.Depth > 1:
+        for i in range(sr):
+            a0[i] |= a1[i if s1 > 1 else 0]
+    else:
+        for i in range(sr):
+            a0[i] = _binary_op(a0[i if s0 > 1 else 0],
+                               a1[i if s1 > 1 else 0],
+                               lambda a, b: a | b)
     return a0
 
 
 def xor_(a0, a1):
     s0, s1, ar, sr = _check2_bitop(a0, a1)
-    for i in range(sr):
-        ar[i] = a0[i if s0 > 1 else 0] ^ a1[i if s1 > 1 else 0]
+
+    if ar.Depth > 1:
+        for i in range(sr):
+            ar[i] = a0[i if s0 > 1 else 0] ^ a1[i if s1 > 1 else 0]
+    else:
+        for i in range(sr):
+            ar[i] = _binary_op(a0[i if s0 > 1 else 0],
+                               a1[i if s1 > 1 else 0],
+                               lambda a, b: a ^ b)
+
     return ar
 
 
 def ixor_(a0, a1):
     s0, s1, sr = _check2_bitop_inplace(a0, a1)
-    for i in range(sr):
-        a0[i] ^= a1[i if s1 > 1 else 0]
+    if a0.Depth > 1:
+        for i in range(sr):
+            a0[i] ^= a1[i if s1 > 1 else 0]
+    else:
+        for i in range(sr):
+            a0[i] = _binary_op(a0[i if s0 > 1 else 0],
+                               a1[i if s1 > 1 else 0],
+                               lambda a, b: a ^ b)
     return a0
 
 

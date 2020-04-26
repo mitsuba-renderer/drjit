@@ -1,9 +1,8 @@
 #include "common.h"
 
-py::object reinterpret_scalar(const py::object &target_type,
-                              const py::object &source,
-                              VarType vt_target,
-                              VarType vt_source) {
+py::object reinterpret_scalar(const py::object &source,
+                              VarType vt_source,
+                              VarType vt_target) {
     if (var_type_size[(int) vt_source] != var_type_size[(int) vt_target])
         ek::enoki_raise("reinterpret_scalar(): input/output size mismatch!");
 
