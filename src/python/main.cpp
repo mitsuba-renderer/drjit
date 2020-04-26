@@ -9,7 +9,7 @@ extern void export_llvm(py::module &m);
 #endif
 
 const uint32_t var_type_size[(int) VarType::Count] {
-    (uint32_t) -1, 1, 1, 2, 2, 4, 4, 8, 8, 2, 4, 8, 1, 8
+    (uint32_t) -1, 1, 1, 1, 2, 2, 4, 4, 8, 8, 2, 4, 8, 8
 };
 
 py::handle array_name, array_init, array_configure;

@@ -108,9 +108,6 @@ ENOKI_TEST_ALL(test01_add) {
         [](const T &a) -> T { return Value(3) + a; },
         [](Value a) -> Value { return Value(3) + a; }
     );
-
-    Array<T, 4> x((Value) 5); Array<T&, 4> y(x);
-    assert((x + x == y + y) && (x + y == y + x));
 }
 
 ENOKI_TEST_ALL(test02_sub) {
@@ -135,9 +132,6 @@ ENOKI_TEST_ALL(test02_sub) {
         [](const T &a) -> T { return Value(3) - a; },
         [](Value a) -> Value { return Value(3) - a; }
     );
-
-    Array<T, 4> x((Value) 5); Array<T&, 4> y(x);
-    assert((x - x == y - y) && (x - y == y - x));
 }
 
 ENOKI_TEST_ALL(test03_mul) {
@@ -162,9 +156,6 @@ ENOKI_TEST_ALL(test03_mul) {
         [](const T &a) -> T { return Value(3) * a; },
         [](Value a) -> Value { return Value(3) * a; }
     );
-
-    Array<T, 4> x((Value) 5); Array<T&, 4> y(x);
-    assert((x * x == y * y) && (x * y == y * x));
 }
 
 ENOKI_TEST_ALL(test05_neg) {
@@ -186,9 +177,6 @@ ENOKI_TEST_ALL(test06_lt) {
 
     assert(select(T(1) < T(2), T(1), T(2)) == T(1));
     assert(select(T(1) > T(2), T(1), T(2)) == T(2));
-
-    Array<T, 4> x((Value) 5); Array<T&, 4> y(x);
-    assert(none_nested(x < y));
 }
 
 ENOKI_TEST_ALL(test07_le) {
@@ -198,9 +186,6 @@ ENOKI_TEST_ALL(test07_le) {
         [](const T &a, const T &b) -> T { return select(a <= b, T(0), T(1)); },
         [](Value a, Value b) -> Value { return Value(a <= b ? 0 : 1); }
     );
-
-    Array<T, 4> x((Value) 5); Array<T&, 4> y(x);
-    assert(all_nested(x <= y));
 }
 
 ENOKI_TEST_ALL(test08_gt) {
@@ -210,9 +195,6 @@ ENOKI_TEST_ALL(test08_gt) {
         [](const T &a, const T &b) -> T { return select(a > b, T(0), T(1)); },
         [](Value a, Value b) -> Value { return Value(a > b ? 0 : 1); }
     );
-
-    Array<T, 4> x((Value) 5); Array<T&, 4> y(x);
-    assert(none_nested(x > y));
 }
 
 ENOKI_TEST_ALL(test09_ge) {
@@ -222,9 +204,6 @@ ENOKI_TEST_ALL(test09_ge) {
         [](const T &a, const T &b) -> T { return select(a >= b, T(0), T(1)); },
         [](Value a, Value b) -> Value { return Value(a >= b ? 0 : 1); }
     );
-
-    Array<T, 4> x((Value) 5); Array<T&, 4> y(x);
-    assert(all_nested(x >= y));
 }
 
 ENOKI_TEST_ALL(test10_eq) {
@@ -234,10 +213,6 @@ ENOKI_TEST_ALL(test10_eq) {
         [](const T &a, const T &b) -> T { return select(eq(a, b), T(0), T(1)); },
         [](Value a, Value b) -> Value { return Value(a == b ? 0 : 1); }
     );
-
-    Array<T, 4> x((Value) 5); Array<T&, 4> y(x);
-    assert(all_nested(eq(x, x)) && all_nested(eq(y, y)) && all_nested(eq(x, y)) &&
-           all_nested(eq(y, x)) && all_nested(eq(y, Value(5))) && y == Value(5));
 
     // Equality of mask values.
     mask_t<Value> m1(true), m2(true | true), m3(false);
@@ -253,10 +228,6 @@ ENOKI_TEST_ALL(test11_neq) {
         [](const T &a, const T &b) -> T { return select(neq(a, b), T(0), T(1)); },
         [](Value a, Value b) -> Value { return Value(a != b ? 0 : 1); }
     );
-
-    Array<T, 4> x((Value) 5); Array<T&, 4> y(x);
-    assert(none_nested(neq(x, x)) && none_nested(neq(y, y)) && none_nested(neq(x, y)) &&
-           none_nested(neq(y, x)) && none_nested(neq(y, Value(5))) && y != Value(1));
 
     // Equality of mask values.
     mask_t<Value> m1(true), m2(true | true), m3(false);
@@ -276,9 +247,6 @@ ENOKI_TEST_ALL(test12_min) {
         [](const T &a, const T &b) -> T { return min(a, b); },
         [](Value a, Value b) -> Value { return std::min(a, b); }
     );
-
-    Array<T, 4> x((Value) 5); Array<T&, 4> y(x);
-    assert(min(x, y) == y);
 }
 
 ENOKI_TEST_ALL(test13_max) {
