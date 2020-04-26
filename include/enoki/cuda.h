@@ -57,12 +57,12 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
     template <typename T> CUDAArray(const CUDAArray<T> &v) {
         const char *op;
 
-        if (std::is_floating_point_v<Value> &&
-            std::is_floating_point_v<T> && sizeof(Value) > sizeof(T))
+        if constexpr (std::is_floating_point_v<Value> &&
+                      std::is_floating_point_v<T> && sizeof(Value) > sizeof(T))
             op = "cvt.$t0.$t1 $r0, $r1";
-        else if (std::is_floating_point_v<Value>)
+        else if constexpr (std::is_floating_point_v<Value>)
             op = "cvt.rn.$t0.$t1 $r0, $r1";
-        else if (std::is_floating_point_v<T> && std::is_integral_v<Value>)
+        else if constexpr (std::is_floating_point_v<T> && std::is_integral_v<Value>)
             op = "cvt.rzi.$t0.$t1 $r0, $r1";
         else
             op = "cvt.$t0.$t1 $r0, $r1";
@@ -153,7 +153,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
             return *this;
 
         const char *op;
-        if (std::is_floating_point_v<Value>)
+        if constexpr (std::is_floating_point_v<Value>)
             op = std::is_same_v<Value, float> ? "mul.ftz.$t0 $r0, $r1, $r2"
                                               : "mul.$t0 $r0, $r1, $r2";
         else
@@ -275,7 +275,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
     template <typename T> CUDAArray or_(const T &a) const {
         if constexpr (std::is_same_v<T, CUDAArray>) {
             // Simple constant propagation
-            if (std::is_same_v<Value, bool>) {
+            if constexpr (std::is_same_v<Value, bool>) {
                 if (is_literal_one() || a.is_literal_zero())
                     return *this;
                 else if (a.is_literal_one() || is_literal_zero())
@@ -299,7 +299,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
     template <typename T> CUDAArray and_(const T &a) const {
         if constexpr (std::is_same_v<T, CUDAArray>) {
             // Simple constant propagation
-            if (std::is_same_v<Value, bool>) {
+            if constexpr (std::is_same_v<Value, bool>) {
                 if (is_literal_one() || a.is_literal_zero())
                     return a;
                 else if (a.is_literal_one() || is_literal_zero())
@@ -323,7 +323,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
     template <typename T> CUDAArray xor_(const T &a) const {
         if constexpr (std::is_same_v<T, CUDAArray>) {
             // Simple constant propagation
-            if (std::is_same_v<Value, bool>) {
+            if constexpr (std::is_same_v<Value, bool>) {
                 if (is_literal_zero())
                     return a;
                 else if (a.is_literal_zero())
@@ -365,12 +365,13 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
         if constexpr (!jitc_is_integral(Type))
             enoki_raise("Unsupported operand type");
 
-        if (std::is_signed_v<Value>)
-            return from_index(jitc_var_new_2(
-                Type, "shr.$t0 $r0, $r1, $r2", 1, m_index, v.index()));
+        const char *op;
+        if constexpr (std::is_signed<Value>::value)
+            op = "shr.$t0 $r0, $r1, $r2";
         else
-            return from_index(jitc_var_new_2(
-                Type, "shr.$b0 $r0, $r1, $r2", 1, m_index, v.index()));
+            op = "shr.$b0 $r0, $r1, $r2";
+
+        return from_index(jitc_var_new_2(Type, op, 1, m_index, v.index()));
     }
 
     CUDAArray abs_() const {

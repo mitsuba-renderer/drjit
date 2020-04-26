@@ -81,11 +81,17 @@ struct StaticArrayBase : ArrayBaseT<std::conditional_t<IsMask_, mask_t<Value_>, 
     ENOKI_INLINE void init_(size_t) { }
 
     static Derived empty_(size_t size) {
+        printf("Got here.\n");
         Derived result;
+        printf("Got here B.\n");
 
         if constexpr (Derived::IsDynamic) {
-            for (size_t i = 0; i < Derived::Size; ++i)
-                result.coeff(i) = empty<Value>(size);
+        printf("A.\n");
+            if (size != 0) {
+        printf("B.\n");
+                for (size_t i = 0; i < Derived::Size; ++i)
+                    result.coeff(i) = empty<Value>(size);
+            }
         } else {
             ENOKI_MARK_USED(size);
         }

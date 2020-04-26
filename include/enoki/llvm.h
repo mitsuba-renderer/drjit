@@ -60,17 +60,17 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
                       "correspond to a conversion!");
 
         const char *op;
-        if (std::is_floating_point_v<Value> && std::is_integral_v<T>) {
+        if constexpr (std::is_floating_point_v<Value> && std::is_integral_v<T>) {
             op = std::is_signed_v<T> ? "$r0 = sitofp <$w x $t1> $r1 to <$w x $t0>"
                                      : "$r0 = uitofp <$w x $t1> $r1 to <$w x $t0>";
-        } else if (std::is_integral_v<Value> && std::is_floating_point_v<T>) {
+        } else if constexpr (std::is_integral_v<Value> && std::is_floating_point_v<T>) {
             op = std::is_signed_v<Value>? "$r0 = fptosi <$w x $t1> $r1 to <$w x $t0>"
                                         : "$r0 = fptoui <$w x $t1> $r1 to <$w x $t0>";
-        } else if (std::is_floating_point_v<T> && std::is_floating_point_v<Value>) {
+        } else if constexpr (std::is_floating_point_v<T> && std::is_floating_point_v<Value>) {
             op = sizeof(T) > sizeof(Value) ? "$r0 = fptrunc <$w x $t1> $r1 to <$w x $t0>"
                                            : "$r0 = fpext <$w x $t1> $r1 to <$w x $t0>";
-        } else if (std::is_integral_v<T> && std::is_integral_v<Value>) {
-            if (sizeof(T) == sizeof(Value)) {
+        } else if constexpr (std::is_integral_v<T> && std::is_integral_v<Value>) {
+            if constexpr (sizeof(T) == sizeof(Value)) {
                 m_index = v.index();
                 jitc_var_inc_ref_ext(m_index);
                 return;
@@ -217,7 +217,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
             enoki_raise("Unsupported operand type");
 
         const char *op;
-        if (std::is_integral_v<Value>)
+        if constexpr (std::is_integral_v<Value>)
             op = std::is_signed_v<Value>
                      ? "$r0 = icmp sgt <$w x $t1> $r1, $r2"
                      : "$r0 = icmp ugt <$w x $t1> $r1, $r2";
@@ -233,7 +233,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
             enoki_raise("Unsupported operand type");
 
         const char *op;
-        if (std::is_integral_v<Value>)
+        if constexpr (std::is_integral_v<Value>)
             op = std::is_signed_v<Value>
                      ? "$r0 = icmp sge <$w x $t1> $r1, $r2"
                      : "$r0 = icmp uge <$w x $t1> $r1, $r2";
@@ -250,7 +250,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
             enoki_raise("Unsupported operand type");
 
         const char *op;
-        if (std::is_integral_v<Value>)
+        if constexpr (std::is_integral_v<Value>)
             op = std::is_signed_v<Value>
                      ? "$r0 = icmp slt <$w x $t1> $r1, $r2"
                      : "$r0 = icmp ult <$w x $t1> $r1, $r2";
@@ -266,7 +266,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
             enoki_raise("Unsupported operand type");
 
         const char *op;
-        if (std::is_integral_v<Value>)
+        if constexpr (std::is_integral_v<Value>)
             op = std::is_signed_v<Value>
                      ? "$r0 = icmp sle <$w x $t1> $r1, $r2"
                      : "$r0 = icmp ule <$w x $t1> $r1, $r2";
@@ -300,7 +300,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
             enoki_raise("Unsupported operand type");
 
         const char *op;
-        if (std::is_floating_point_v<Value>) {
+        if constexpr (std::is_floating_point_v<Value>) {
             if (jitc_llvm_version_major() > 7)
                 op = "$r0 = fneg <$w x $t0> $r1";
             else
@@ -324,7 +324,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
     template <typename T> LLVMArray or_(const T &a) const {
         if constexpr (std::is_same_v<T, LLVMArray>) {
             // Simple constant propagation
-            if (std::is_same_v<Value, bool>) {
+            if constexpr (std::is_same_v<Value, bool>) {
                 if (is_literal_one() || a.is_literal_zero())
                     return *this;
                 else if (a.is_literal_one() || is_literal_zero())
@@ -359,7 +359,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
     template <typename T> LLVMArray and_(const T &a) const {
         if constexpr (std::is_same_v<T, LLVMArray>) {
             // Simple constant propagation
-            if (std::is_same_v<Value, bool>) {
+            if constexpr (std::is_same_v<Value, bool>) {
                 if (is_literal_one() || a.is_literal_zero())
                     return a;
                 else if (a.is_literal_one() || is_literal_zero())
@@ -393,7 +393,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
     template <typename T> LLVMArray xor_(const T &a) const {
         if constexpr (std::is_same_v<T, LLVMArray>) {
             // Simple constant propagation
-            if (std::is_same_v<Value, bool>) {
+            if constexpr (std::is_same_v<Value, bool>) {
                 if (is_literal_zero())
                     return a;
                 else if (a.is_literal_zero())
@@ -446,19 +446,20 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
         if constexpr (!jitc_is_integral(Type))
             enoki_raise("Unsupported operand type");
 
-        if (std::is_signed_v<Value>)
-            return from_index(jitc_var_new_2(
-                Type, "$r0 = ashr <$w x $t0> $r1, $r2", 1, m_index, v.index()));
+        const char *op;
+        if constexpr (std::is_signed_v<Value>)
+            op = "$r0 = ashr <$w x $t0> $r1, $r2";
         else
-            return from_index(jitc_var_new_2(
-                Type, "$r0 = lshr <$w x $t0> $r1, $r2", 1, m_index, v.index()));
+            op = "$r0 = lshr <$w x $t0> $r1, $r2";
+
+        return from_index(jitc_var_new_2(Type, op, 1, m_index, v.index()));
     }
 
     LLVMArray abs_() const {
         if constexpr (!jitc_is_arithmetic(Type))
             enoki_raise("Unsupported operand type");
 
-        if (std::is_floating_point<Value>::value)
+        if constexpr (std::is_floating_point_v<Value>)
             return LLVMArray<Value>(detail::not_(detail::sign_mask<Value>())) & *this;
         else
             return select(*this > 0, *this, -*this);
@@ -487,26 +488,29 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
                          "$r1, <$w x $t2> $r2)";
 
         // Prefer an X86-specific intrinsic (produces nicer machine code)
-        if (std::is_same<Value, float>::value) {
+        if constexpr (std::is_integral_v<Value>) {
+            (void) op;
+            return select(*this < a, *this, a);
+        } else if constexpr (std::is_same_v<Value, float>) {
             if (jitc_llvm_if_at_least(16, "+avx512f")) {
-                op = "$2$r0 = call <$w x $t0> @llvm.x86.avx512.min.ps.512(<$w x $t1> "
-                     "$r1, <$w x $t2> $r2, i32 4)";
+                op = "$4$r0 = call <$w x $t0> @llvm.x86.avx512.min.ps.512(<$w x $t1> "
+                     "$r1, <$w x $t2> $r2, i32$S 4)";
             } else if (jitc_llvm_if_at_least(8, "+avx")) {
                 op = "$3$r0 = call <$w x $t0> @llvm.x86.avx.min.ps.256(<$w x $t1> "
                      "$r1, <$w x $t2> $r2)";
             } else if (jitc_llvm_if_at_least(4, "+sse4.2")) {
-                op = "$4$r0 = call <$w x $t0> @llvm.x86.sse.min.ps(<$w x $t1> $r1, "
+                op = "$2$r0 = call <$w x $t0> @llvm.x86.sse.min.ps(<$w x $t1> $r1, "
                      "<$w x $t2> $r2)";
             }
-        } else if (std::is_same<Value, double>::value) {
+        } else if (std::is_same_v<Value, double>) {
             if (jitc_llvm_if_at_least(8, "+avx512f")) {
-                op = "$1$r0 = call <$w x $t0> @llvm.x86.avx512.min.pd.512(<$w x $t1> "
-                     "$r1, <$w x $t2> $r2, i32 4)";
+                op = "$3$r0 = call <$w x $t0> @llvm.x86.avx512.min.pd.512(<$w x $t1> "
+                     "$r1, <$w x $t2> $r2, i32$S 4)";
             } else if (jitc_llvm_if_at_least(4, "+avx")) {
                 op = "$2$r0 = call <$w x $t0> @llvm.x86.avx.min.pd.256(<$w x $t1> "
                      "$r1, <$w x $t2> $r2)";
             } else if (jitc_llvm_if_at_least(2, "+sse4.2")) {
-                op = "$3$r0 = call <$w x $t0> @llvm.x86.sse.min.pd(<$w x $t1> $r1, "
+                op = "$1$r0 = call <$w x $t0> @llvm.x86.sse.min.pd(<$w x $t1> $r1, "
                      "<$w x $t2> $r2)";
             }
         }
@@ -520,7 +524,10 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
                          "$r1, <$w x $t2> $r2)";
 
         // Prefer an X86-specific intrinsic (produces nicer machine code)
-        if (std::is_same<Value, float>::value) {
+        if constexpr (std::is_integral_v<Value>) {
+            (void) op;
+            return select(*this < a, a, *this);
+        } else if constexpr (std::is_same_v<Value, float>) {
             if (jitc_llvm_if_at_least(16, "+avx512f")) {
                 op = "$4$r0 = call <$w x $t0> @llvm.x86.avx512.max.ps.512(<$w x $t1> "
                      "$r1, <$w x $t2> $r2, i32$S 4)";
@@ -531,7 +538,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
                 op = "$2$r0 = call <$w x $t0> @llvm.x86.sse.max.ps(<$w x $t1> $r1, "
                      "<$w x $t2> $r2)";
             }
-        } else if (std::is_same<Value, double>::value) {
+        } else if constexpr (std::is_same_v<Value, double>) {
             if (jitc_llvm_if_at_least(8, "+avx512f")) {
                 op = "$3$r0 = call <$w x $t0> @llvm.x86.avx512.max.pd.512(<$w x $t1> "
                      "$r1, <$w x $t2> $r2, i32$S 4)";
@@ -652,7 +659,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
             return t;
         } else if (m.is_literal_zero()) {
             return f;
-        } else if (!std::is_same<Value, bool>::value) {
+        } else if (!std::is_same_v<Value, bool>) {
             return from_index(jitc_var_new_3(Type,
                 "$r0 = select <$w x $t1> $r1, <$w x $t2> $r2, <$w x $t3> $r3",
                 1, m.index(), t.index(), f.index()));
@@ -926,7 +933,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
         constexpr bool Signed = std::is_signed_v<ValueOut>;
         constexpr size_t SizeIn = sizeof(Value), SizeOut = sizeof(ValueOut);
 
-        if (!jitc_is_floating_point(Type) || !jitc_is_integral(OutArray::Type))
+        if constexpr (!jitc_is_floating_point(Type) || !jitc_is_integral(OutArray::Type))
             jitc_raise("Unsupported operand type");
 
         if (!((SizeIn == 4 && SizeOut == 4 &&

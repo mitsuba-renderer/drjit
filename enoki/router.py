@@ -531,6 +531,26 @@ def op_abs(a):
         return a.abs_()
 
 
+def max(a, b):
+    if not isinstance(a, ArrayBase) and \
+       not isinstance(b, ArrayBase):
+        return _builtins.max(a, b)
+    else:
+        if type(a) is not type(b):
+            a, b = _var_promote(a, b)
+        return a.max_(b)
+
+
+def min(a, b):
+    if not isinstance(a, ArrayBase) and \
+       not isinstance(b, ArrayBase):
+        return _builtins.min(a, b)
+    else:
+        if type(a) is not type(b):
+            a, b = _var_promote(a, b)
+        return a.min_(b)
+
+
 def fmadd(a, b, c):
     if not isinstance(a, ArrayBase) and \
        not isinstance(b, ArrayBase) and \

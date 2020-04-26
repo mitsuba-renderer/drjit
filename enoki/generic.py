@@ -432,6 +432,26 @@ def abs_(a0):
     return ar
 
 
+def max_(a0, a1):
+    s0, s1, ar, sr = _check2(a0, a1)
+    if not a0.IsArithmetic:
+        raise Exception("max(): requires arithmetic operands!")
+    for i in range(sr):
+        ar[i] = _ek.max(a0[i if s0 > 1 else 0],
+                        a1[i if s1 > 1 else 0])
+    return ar
+
+
+def min_(a0, a1):
+    s0, s1, ar, sr = _check2(a0, a1)
+    if not a0.IsArithmetic:
+        raise Exception("min(): requires arithmetic operands!")
+    for i in range(sr):
+        ar[i] = _ek.min(a0[i if s0 > 1 else 0],
+                        a1[i if s1 > 1 else 0])
+    return ar
+
+
 def fmadd_(a0, a1, a2):
     s0, s1, s2, ar, sr = _check3(a0, a1, a2)
     if not a0.IsFloat:
