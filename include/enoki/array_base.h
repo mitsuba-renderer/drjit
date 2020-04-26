@@ -17,27 +17,33 @@
 
 NAMESPACE_BEGIN(enoki)
 
-#define ENOKI_IMPORT_BASE(Name, Base)                                          \
+#define ENOKI_ARRAY_DEFAULTS(Name)                                             \
     Name(const Name &) = default;                                              \
     Name(Name &&) = default;                                                   \
     Name &operator=(const Name &) = default;                                   \
-    Name &operator=(Name &&) = default;                                        \
-    using Base::Base;                                                          \
-    using Base::operator=;
+    Name &operator=(Name &&) = default;
 
 #define ENOKI_ARRAY_IMPORT(Name, Base)                                         \
     Name() = default;                                                          \
-    ENOKI_IMPORT_BASE(Name, Base)
+    ENOKI_ARRAY_DEFAULTS(Name)                                                 \
+    using Base::Base;                                                          \
+    using Base::operator=;
 
-#if defined(NDEBUG)
-#  define ENOKI_ARRAY_IMPORT_DEFAULT(Name, Base, Scalar)                       \
-      Name() = default;                                                        \
-      ENOKI_IMPORT_BASE(Name, Base)
-#else
-#  define ENOKI_ARRAY_IMPORT_DEFAULT(Name, Base, Scalar)                       \
-      Name() : Name(DebugInitialization<Scalar>) { }                           \
-      ENOKI_IMPORT_BASE(Name, Base)
-#endif
+#define ENOKI_ARRAY_FALLBACK_CONSTRUCTORS(Name)                                \
+    template <typename Value2, typename Derived2, typename T = Derived_,       \
+              enable_if_t<Derived2::Size == T::Size> = 0>                      \
+    Name(const ArrayBaseT<Value2, Derived2> &v) {                              \
+        ENOKI_CHKSCALAR("Copy constructor (conversion)");                      \
+        for (size_t i = 0; i < derived().size(); ++i)                          \
+            derived().coeff(i) = (Value) v.derived().coeff(i);                 \
+    }                                                                          \
+    template <typename Value2, typename Derived2, typename T = Derived_,       \
+              enable_if_t<Derived2::Size == T::Size> = 0>                      \
+    Name(const ArrayBaseT<Value2, Derived2> &v, detail::reinterpret_flag) {    \
+        ENOKI_CHKSCALAR("Copy constructor (reinterpret_cast)");                \
+        for (size_t i = 0; i < derived().size(); ++i)                          \
+            derived().coeff(i) = reinterpret_array<Value>(v[i]);               \
+    }
 
 /// Generic array base class
 struct ArrayBase {
@@ -138,50 +144,6 @@ template <typename Value_, typename Derived_> struct ArrayBaseT : ArrayBase {
 
     /// Cast to derived type (const version)
     ENOKI_INLINE const Derived &derived() const { return (Derived &) *this; }
-
-    //! @}
-    // -----------------------------------------------------------------------
-
-    // -----------------------------------------------------------------------
-    //! @{ \name Constructors
-    // -----------------------------------------------------------------------
-
-    ENOKI_ARRAY_IMPORT(ArrayBaseT, ArrayBase)
-
-    template <typename Value2, typename Derived2, typename T = Derived,
-              enable_if_t<Derived2::Size == T::Size> = 0>
-    ArrayBaseT(const ArrayBaseT<Value2, Derived2> &v) {
-        ENOKI_CHKSCALAR("Copy constructor (conversion)");
-
-        if constexpr (Derived::Size == Dynamic)
-            derived().init_(v.derived().size());
-
-        for (size_t i = 0; i < derived().size(); ++i)
-            derived().coeff(i) = (Value) v.derived().coeff(i);
-    }
-
-    template <typename Value2, typename Derived2, typename T = Derived,
-              enable_if_t<Derived2::Size == T::Size> = 0>
-    ArrayBaseT(const ArrayBaseT<Value2, Derived2> &v,
-               detail::reinterpret_flag) {
-        ENOKI_CHKSCALAR("Copy constructor (reinterpret_cast)");
-
-        if constexpr (Derived::Size == Dynamic)
-            derived().init_(v.derived().size());
-
-        for (size_t i = 0; i < derived().size(); ++i)
-            derived().coeff(i) = reinterpret_array<Value>(v[i]);
-    }
-
-    ArrayBaseT(const Value &v) {
-        ENOKI_CHKSCALAR("Constructor (scalar broadcast)");
-
-        if constexpr (Derived::Size == Dynamic)
-            derived().init_(1);
-
-        for (size_t i = 0; i < derived().size(); ++i)
-            derived().coeff(i) = v;
-    }
 
     //! @}
     // -----------------------------------------------------------------------

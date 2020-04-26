@@ -82,7 +82,7 @@ def _var_promote(*args):
         if vt[i] != vt[j]:
             vt[i] = _var_type(args[i], vt[j])
 
-    t = base.ReplaceScalar(max(vt))
+    t = base.ReplaceScalar(_builtins.max(vt))
 
     result = list(args)
     for i, a in enumerate(result):
@@ -104,7 +104,7 @@ def _var_promote_mask(a0, a1):
         vt1 = _var_type(a1, vt0)
 
     if vt1 != VarType.Bool:
-        vt0 = vt1 = max(vt0, vt1)
+        vt0 = vt1 = _builtins.max(vt0, vt1)
 
     base = a0 if getattr(a0, 'Depth', 0) >= getattr(a1, 'Depth', 0) else a1
     t0 = base.ReplaceScalar(vt0)
@@ -213,7 +213,7 @@ def print_threshold():
 
 def set_print_threshold(size):
     global _print_threshold
-    _print_threshold = max(size, 11)
+    _print_threshold = _builtins.max(size, 11)
 
 
 def op_repr(self):

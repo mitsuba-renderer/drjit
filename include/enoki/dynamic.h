@@ -35,27 +35,10 @@ template <typename Value_> struct DynamicArray : ArrayBaseT<Value_, DynamicArray
     using Base::Base;
     using Base::coeff;
 
-    DynamicArray() : m_data(nullptr), m_size(0), m_free(true) { }
-
-    /// Move-construct if possible. Convert values with the wrong type.
-    template <typename Src>
-    using cast_t = std::conditional_t<
-        std::is_same_v<std::decay_t<Src>, Value>,
-        std::conditional_t<std::is_reference_v<Src>, Src, Src &&>, Value>;
-
-    /// Construct from component values
-    template <typename... Ts, enable_if_t<(sizeof...(Ts) > 1 &&
-              (!std::is_same_v<Ts, detail::reinterpret_flag> && ...))> = 0>
-    ENOKI_INLINE DynamicArray(Ts&&... ts) : m_data(nullptr), m_size(0), m_free(true) {
-        ENOKI_CHKSCALAR("Constructor (component values)");
-        Value data[] = { cast_t<Ts>(ts)... };
-        init_(sizeof...(Ts));
-        for (size_t i = 0; i < sizeof...(Ts); ++i)
-            m_data[i] = std::move(data[i]);
-    }
+    DynamicArray() = default;
 
     DynamicArray(const DynamicArray &a)
-        : m_data(nullptr), m_size(a.m_size), m_free(true) {
+        : m_size(a.m_size) {
         if (empty())
             return;
         m_data = new Value[m_size];
@@ -67,6 +50,44 @@ template <typename Value_> struct DynamicArray : ArrayBaseT<Value_, DynamicArray
         a.m_size = 0;
         a.m_data = nullptr;
         a.m_free = true;
+    }
+
+    template <typename Value2, typename Derived2>
+    DynamicArray(const ArrayBaseT<Value2, Derived2> &v) {
+        size_t size = v.derived().size();
+        init_(size);
+        for (size_t i = 0; i < size; ++i)
+            m_data[i] = (Value) v.derived().coeff(i);
+    }
+
+    template <typename Value2, typename Derived2>
+    DynamicArray(const ArrayBaseT<Value2, Derived2> &v, detail::reinterpret_flag) {
+        size_t size = v.derived().size();
+        init_(size);
+        for (size_t i = 0; i < size; ++i)
+            m_data[i] = reinterpret_array<Value>(v.derived().coeff(i));
+    }
+
+    DynamicArray(const Value &v) {
+        init_(1);
+        m_data[0] = v;
+    }
+
+    /// Move-construct if possible. Convert values with the wrong type.
+    template <typename Src>
+    using cast_t = std::conditional_t<
+        std::is_same_v<std::decay_t<Src>, Value>,
+        std::conditional_t<std::is_reference_v<Src>, Src, Src &&>, Value>;
+
+    /// Construct from component values
+    template <typename... Ts, enable_if_t<(sizeof...(Ts) > 1 &&
+              (!std::is_same_v<Ts, detail::reinterpret_flag> && ...))> = 0>
+    ENOKI_INLINE DynamicArray(Ts&&... ts) {
+        ENOKI_CHKSCALAR("Constructor (component values)");
+        Value data[] = { cast_t<Ts>(ts)... };
+        init_(sizeof...(Ts));
+        for (size_t i = 0; i < sizeof...(Ts); ++i)
+            m_data[i] = std::move(data[i]);
     }
 
     ~DynamicArray() {
@@ -153,15 +174,16 @@ template <typename Value_> struct DynamicArray : ArrayBaseT<Value_, DynamicArray
     }
 
     void init_(size_t size) {
-        m_data = size == 0 ? nullptr : new Value[size];
+        if (size == 0)
+            return;
+        m_data = new Value[size];
         m_size = size;
-        m_free = true;
     }
 
-private:
-    Value *m_data;
-    size_t m_size;
-    bool m_free;
+protected:
+    Value *m_data = nullptr;
+    size_t m_size = 0;
+    bool m_free = true;
 };
 
 NAMESPACE_END(enoki)

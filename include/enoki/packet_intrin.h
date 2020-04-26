@@ -268,9 +268,14 @@ ENOKI_INLINE long long mm_extract_epi64(__m128i m)  {
         };                                                                     \
     }
 
+#if defined(NDEBUG)
+#  define ENOKI_PACKET_INIT(Name) Name() = default;
+#else
+#  define ENOKI_PACKET_INIT(Name) Name() : Name(DebugInitialization<Value>) { }
+#endif
+
 #define ENOKI_PACKET_TYPE(Type, Size_, Register)                               \
     using Base = StaticArrayBase<Type, Size_, IsMask_, Derived_>;              \
-    ENOKI_ARRAY_IMPORT_DEFAULT(StaticArrayImpl, Base, Type)                    \
     using typename Base::Derived;                                              \
     using typename Base::Value;                                                \
     using typename Base::Array1;                                               \
@@ -280,6 +285,9 @@ ENOKI_INLINE long long mm_extract_epi64(__m128i m)  {
     using Ref = const Derived &;                                               \
     static constexpr bool IsPacked = true;                                     \
     Register m;                                                                \
+    ENOKI_PACKET_INIT(StaticArrayImpl)                                         \
+    ENOKI_ARRAY_DEFAULTS(StaticArrayImpl)                                      \
+    ENOKI_ARRAY_FALLBACK_CONSTRUCTORS(StaticArrayImpl)                         \
     StaticArrayImpl(Register m) : m(m) {}                                      \
     StaticArrayImpl(Register m, detail::reinterpret_flag) : m(m) {}            \
     ENOKI_INLINE Value &coeff(size_t i) { return ((Value *) this)[i]; }        \

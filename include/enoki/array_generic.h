@@ -79,13 +79,30 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
     using Base::derived;
     using Base::coeff;
 
-    ENOKI_ARRAY_IMPORT_DEFAULT(StaticArrayImpl, Base, Scalar)
+    ENOKI_ARRAY_DEFAULTS(StaticArrayImpl)
+    ENOKI_ARRAY_FALLBACK_CONSTRUCTORS(StaticArrayImpl)
+
+
+#if defined(NDEBUG)
+    StaticArrayImpl() = default;
+#else
+    template <typename T = Value_, enable_if_t<std::is_scalar_v<T>> = 0>
+    StaticArrayImpl() { };
+    template <typename T = Value_, enable_if_t<!std::is_scalar_v<T>> = 0>
+    StaticArrayImpl() : StaticArrayImpl(DebugInitialization<Scalar>) { };
+#endif
 
     /// Move-construct if possible. Convert values with the wrong type.
     template <typename Src>
     using cast_t = std::conditional_t<
         std::is_same_v<std::decay_t<Src>, Value>,
         std::conditional_t<std::is_reference_v<Src>, Src, Src &&>, Value>;
+
+    StaticArrayImpl(const Value &v) {
+        ENOKI_CHKSCALAR("Constructor (scalar broadcast)");
+        for (size_t i = 0; i < Size_; ++i)
+            m_data[i] = v;
+    }
 
     /// Construct from component values
     template <typename... Ts, detail::enable_if_components_t<Size_, Ts...> = 0>
@@ -139,7 +156,14 @@ struct StaticArrayImpl<Value_, 0, IsMask_, Derived_>
     /// Pointer to the underlying storage (returns \c nullptr, const)
     const Value *data() const { return nullptr; }
 
-    ENOKI_ARRAY_IMPORT(StaticArrayImpl, Base)
+    ENOKI_ARRAY_DEFAULTS(StaticArrayImpl)
+
+    StaticArrayImpl() = default;
+    template <typename Value2, typename Derived2>
+    StaticArrayImpl(const ArrayBaseT<Value2, Derived2> &) { }
+    template <typename Value2, typename Derived2>
+    StaticArrayImpl(const ArrayBaseT<Value2, Derived2> &, detail::reinterpret_flag) { }
+    StaticArrayImpl(const Value &) { }
 };
 
 namespace detail {
