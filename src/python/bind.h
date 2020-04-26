@@ -230,9 +230,6 @@ auto bind_full(py::class_<Array, ek::ArrayBase> &cls,
         }
 
         cls.def("fmadd_", &Array::fmadd_);
-        cls.def("fmsub_", &Array::fmsub_);
-        cls.def("fnmadd_", &Array::fnmadd_);
-        cls.def("fnmsub_", &Array::fnmsub_);
 
         cls.def("neg_", &Array::neg_);
         cls.def("hsum_", &Array::hsum_);

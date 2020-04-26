@@ -3,6 +3,7 @@ from enoki import ArrayBase, VarType, Exception, Dynamic
 from enoki.detail import array_name as _array_name
 from sys import modules as _modules
 import math as _math
+import builtins as _builtins
 
 # -------------------------------------------------------------------
 #                        Type promotion logic
@@ -263,14 +264,22 @@ def reinterpret_array(target_type, value,
 
             return result
     else:
-        return _ek.reinterpret_scalar(target_type, value,
-                                      vt_target, vt_value)
-
+        return _ek.detail.reinterpret_scalar(target_type, value,
+                                             vt_target, vt_value)
 
 
 # -------------------------------------------------------------------
 #                        Vertical operations
 # -------------------------------------------------------------------
+
+
+def op_neg(a):
+    return a.neg_()
+
+
+def op_invert(a):
+    return a.not_()
+
 
 def op_add(a, b):
     if type(a) is not type(b):
@@ -444,6 +453,14 @@ def op_ge(a, b):
     return a.ge_(b)
 
 
+def op_eq(a, b):
+    return all_nested(eq(a, b))
+
+
+def op_neq(a, b):
+    return any_nested(neq(a, b))
+
+
 def eq(a, b):
     if not isinstance(a, ArrayBase) and not isinstance(b, ArrayBase):
         return a == b
@@ -461,29 +478,79 @@ def neq(a, b):
             a, b = _var_promote(a, b)
         return a.neq_(b)
 
+
+def sqrt(a):
+    if not isinstance(a, ArrayBase):
+        return _math.sqrt(a)
+    else:
+        return a.sqrt_()
+
+
+def abs(a):
+    if not isinstance(a, ArrayBase):
+        return _builtins.abs(a)
+    else:
+        return a.abs_()
+
+
+def op_abs(a):
+    if not isinstance(a, ArrayBase):
+        return _builtins.abs(a)
+    else:
+        return a.abs_()
+
+
+def fmadd(a, b, c):
+    if not isinstance(a, ArrayBase) and \
+       not isinstance(b, ArrayBase) and \
+       not isinstance(c, ArrayBase):
+        return _ek.detail.fmadd_scalar(a, b, c)
+    else:
+        if type(a) is not type(b) or type(b) is not type(c):
+            a, b, c = _var_promote(a, b, c)
+        return a.fmadd_(b, c)
+
+
+def fmsub(a, b, c):
+    return fmadd(a, b, -c)
+
+
+def fnmadd(a, b, c):
+    return fmadd(-a, b, c)
+
+
+def fnmsub(a, b, c):
+    return fmadd(-a, b, -c)
+
 # -------------------------------------------------------------------
 #                       Horizontal operations
 # -------------------------------------------------------------------
 
 
 def all(a):
-    if _var_type(a) != VarType.Bool:
+    if _var_type(a) == VarType.Bool:
+        return a.all_() if _var_is_enoki(a) else a
+    else:
         raise Exception("all(): input array must be a mask!")
 
-    if _var_is_enoki(a):
-        return a.all_()
-    else:
-        return a
+
+def all_nested(a):
+    while _var_is_enoki(a):
+        a = all(a)
+    return a
 
 
 def any(a):
-    if _var_type(a) != VarType.Bool:
+    if _var_type(a) == VarType.Bool:
+        return a.any_() if _var_is_enoki(a) else a
+    else:
         raise Exception("any(): input array must be a mask!")
 
-    if _var_is_enoki(a):
-        return a.any_()
-    else:
-        return a
+
+def any_nested(a):
+    while _var_is_enoki(a):
+        a = all(a)
+    return a
 
 
 def none(a):
@@ -494,3 +561,47 @@ def none(a):
         return ~any(a)
     else:
         return not a
+
+
+def none_nested(a):
+    return not any_nested(a)
+
+
+def hsum(a):
+    return a.hsum_() if _var_is_enoki(a) else a
+
+
+def hsum_nested(a):
+    while _var_is_enoki(a):
+        a = hsum(a)
+    return a
+
+
+def hprod(a):
+    return a.hprod_() if _var_is_enoki(a) else a
+
+
+def hprod_nested(a):
+    while _var_is_enoki(a):
+        a = hprod(a)
+    return a
+
+
+def hmax(a):
+    return a.hmax_() if _var_is_enoki(a) else a
+
+
+def hmax_nested(a):
+    while _var_is_enoki(a):
+        a = hmax(a)
+    return a
+
+
+def hmin(a):
+    return a.hmin_() if _var_is_enoki(a) else a
+
+
+def hmin_nested(a):
+    while _var_is_enoki(a):
+        a = hmin(a)
+    return a

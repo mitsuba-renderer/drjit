@@ -24,7 +24,7 @@ PYBIND11_MODULE(enoki_ext, m_) {
     py::module m = py::module::import("enoki");
 
     // Look up some variables from the detail namespace
-    py::handle array_detail = m.attr("detail");
+    py::module array_detail = (py::module) m.attr("detail");
     array_name = array_detail.attr("array_name");
     array_init = array_detail.attr("array_init");
     array_configure = array_detail.attr("array_configure");
@@ -48,7 +48,7 @@ PYBIND11_MODULE(enoki_ext, m_) {
         .def_property_readonly(
             "Size", [](VarType v) { return var_type_size[(int) v]; });
 
-    py::class_<ek::detail::reinterpret_flag>(m.attr("detail"), "reinterpret_flag")
+    py::class_<ek::detail::reinterpret_flag>(array_detail, "reinterpret_flag")
         .def(py::init<>());
 
     py::class_<ek::ArrayBase>(m, "ArrayBase")
@@ -82,7 +82,8 @@ PYBIND11_MODULE(enoki_ext, m_) {
             });
 
     py::register_exception<enoki::Exception>(m, "Exception");
-    m.def("reinterpret_scalar", &reinterpret_scalar);
+    array_detail.def("reinterpret_scalar", &reinterpret_scalar);
+    array_detail.def("fmadd_scalar", [](double a, double b, double c) { return std::fma(a, b, c); });
 
     export_scalar(m);
     export_packet(m);
