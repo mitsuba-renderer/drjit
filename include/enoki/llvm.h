@@ -58,6 +58,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
         static_assert(!std::is_same_v<T, Value>,
                       "Conversion constructor called with arguments that don't "
                       "correspond to a conversion!");
+        static_assert(!std::is_same_v<T, bool>, "Conversion from mask not permitted.");
 
         const char *op;
         if constexpr (std::is_floating_point_v<Value> && std::is_integral_v<T>) {
@@ -655,11 +656,12 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
     static LLVMArray select_(const LLVMArray<bool> &m, const LLVMArray &t,
                              const LLVMArray &f) {
         // Simple constant propagation
-        if (m.is_literal_one()) {
+        if (m.is_literal_one())
             return t;
-        } else if (m.is_literal_zero()) {
+        else if (m.is_literal_zero())
             return f;
-        } else if (!std::is_same_v<Value, bool>) {
+
+        if constexpr (!std::is_same_v<Value, bool>) {
             return from_index(jitc_var_new_3(Type,
                 "$r0 = select <$w x $t1> $r1, <$w x $t2> $r2, <$w x $t3> $r3",
                 1, m.index(), t.index(), f.index()));

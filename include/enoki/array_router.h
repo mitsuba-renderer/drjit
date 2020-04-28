@@ -21,6 +21,11 @@
 #  error min/max are defined as preprocessor symbols! Define NOMINMAX on MSVC.
 #endif
 
+extern "C" {
+    /// Evaluate all computation that is scheduled on the current stream
+    extern void jitc_eval();
+};
+
 NAMESPACE_BEGIN(enoki)
 
 /// Define an unary operation
@@ -67,8 +72,8 @@ NAMESPACE_BEGIN(enoki)
         if constexpr (std::is_same_v<T1, E> && std::is_same_v<T2, E>)          \
             return a1.derived().func##_(a2.derived());                         \
         else                                                                   \
-            return name(static_cast<const E &>(a1),                            \
-                        static_cast<const E &>(a2));                           \
+            return name(static_cast<ref_cast_t<T1, E>>(a1),                    \
+                        static_cast<ref_cast_t<T2, E>>(a2));                   \
     }
 
 /// Define a binary operation for bit operations
@@ -84,11 +89,11 @@ NAMESPACE_BEGIN(enoki)
         else if constexpr (std::is_same_v<T1, E1> && std::is_same_v<T2, E2>)   \
             return a1.derived().func##_(a2.derived());                         \
         else if constexpr (is_mask_v<T2>)                                      \
-            return name(static_cast<const E1 &>(a1),                           \
-                        static_cast<const E2 &>(a2));                          \
+            return name(static_cast<ref_cast_t<T1, E1>>(a1),                   \
+                        static_cast<ref_cast_t<T2, E2>>(a2));                  \
         else                                                                   \
-            return name(static_cast<const E &>(a1),                            \
-                        static_cast<const E &>(a2));                           \
+            return name(static_cast<ref_cast_t<T1, E>>(a1),                    \
+                        static_cast<ref_cast_t<T2, E>>(a2));                   \
     }
 
 #define ENOKI_ROUTE_BINARY_SHIFT(name, func)                                   \
@@ -100,12 +105,12 @@ NAMESPACE_BEGIN(enoki)
         if constexpr (std::is_same_v<T1, E> && std::is_same_v<T2, E>)          \
             return a1.derived().func##_(a2.derived());                         \
         else                                                                   \
-            return name(static_cast<const E &>(a1),                            \
-                        static_cast<const E &>(a2));                           \
+            return name(static_cast<ref_cast_t<T1, E>>(a1),                    \
+                        static_cast<ref_cast_t<T2, E>>(a2));                   \
     }
 
 /// Define a binary operation with a fallback expression for scalar arguments
-#define ENOKI_ROUTE_BINARY_FALLBACK(name, func, expr)                            \
+#define ENOKI_ROUTE_BINARY_FALLBACK(name, func, expr)                          \
     template <typename T1, typename T2>                                        \
     ENOKI_INLINE auto name(const T1 &a1, const T2 &a2) {                       \
         using E = expr_t<T1, T2>;                                              \
@@ -113,15 +118,15 @@ NAMESPACE_BEGIN(enoki)
             if constexpr (std::is_same_v<T1, E> && std::is_same_v<T2, E>)      \
                 return a1.derived().func##_(a2.derived());                     \
             else                                                               \
-                return name(static_cast<const E &>(a1),                        \
-                            static_cast<const E &>(a2));                       \
+                return name(static_cast<ref_cast_t<T1, E>>(a1),                \
+                            static_cast<ref_cast_t<T2, E>>(a2));               \
         } else {                                                               \
             return expr;                                                       \
         }                                                                      \
     }
 
 /// Define a ternary operation
-#define ENOKI_ROUTE_TERNARY_FALLBACK(name, func, expr)                           \
+#define ENOKI_ROUTE_TERNARY_FALLBACK(name, func, expr)                         \
     template <typename T1, typename T2, typename T3>                           \
     ENOKI_INLINE auto name(const T1 &a1, const T2 &a2, const T3 &a3) {         \
         using E = expr_t<T1, T2, T3>;                                          \
@@ -131,9 +136,9 @@ NAMESPACE_BEGIN(enoki)
                           std::is_same_v<T3, E>)                               \
                 return a1.derived().func##_(a2.derived(), a3.derived());       \
             else                                                               \
-                return name(static_cast<const E &>(a1),                        \
-                            static_cast<const E &>(a2),                        \
-                            static_cast<const E &>(a3));                       \
+                return name(static_cast<ref_cast_t<T1, E>>(a1),                \
+                            static_cast<ref_cast_t<T2, E>>(a2),                \
+                            static_cast<ref_cast_t<T3, E>>(a3));               \
         } else {                                                               \
             return expr;                                                       \
         }                                                                      \
@@ -224,14 +229,18 @@ template <typename M, typename T, typename F>
 ENOKI_INLINE auto select(const M &m, const T &t, const F &f) {
     using E = replace_scalar_t<array_t<typename detail::deepest<M, T, F>::type>,
                                typename detail::expr<scalar_t<T>, scalar_t<F>>::type>;
+    using EM = mask_t<E>;
     if constexpr (!is_array_v<E>)
         return (bool) m ? (E) t : (E) f;
-    else if constexpr (std::is_same_v<M, mask_t<E>> &&
+    else if constexpr (std::is_same_v<M, EM> &&
                        std::is_same_v<T, E> &&
                        std::is_same_v<F, E>)
         return E::select_(m.derived(), t.derived(), f.derived());
     else
-        return select((const mask_t<E> &) m, (const E &) t, (const E &) f);
+        return select(
+            static_cast<ref_cast_t<M, EM>>(m),
+            static_cast<ref_cast_t<T, E>>(t),
+            static_cast<ref_cast_t<F, E>>(f));
 }
 
 /// Shuffle the entries of an array
@@ -624,12 +633,18 @@ template <typename T> ENOKI_INLINE void store_unaligned(void *ptr, const T &valu
 // -----------------------------------------------------------------------
 
 template <typename T> ENOKI_INLINE void schedule(const T &value) {
-    if constexpr (is_jit_array_v<T>)
-        value.schedule();
-    else if constexpr (std::is_class_v<T>)
+    if constexpr (is_jit_array_v<T>) {
+        if constexpr (is_jit_array_v<value_t<T>>) {
+            for (size_t i = 0; i < value.derived().size(); ++i)
+                schedule(value.derived().coeff(i));
+        } else {
+            value.schedule();
+        }
+    } else if constexpr (std::is_class_v<T>) {
         struct_support<T>::schedule(value);
-    else
+    } else {
         ; /* do nothing */
+    }
 }
 
 template <typename T1, typename T2, typename... Ts>
@@ -639,20 +654,10 @@ ENOKI_INLINE void schedule(const T1 &value1, const T2 &value2,
     schedule(value2, values...);
 }
 
-template <typename T> ENOKI_INLINE void eval(const T &value) {
-    if constexpr (is_jit_array_v<T>)
-        value.eval();
-    else if constexpr (std::is_class_v<T>)
-        struct_support<T>::eval(value);
-    else
-        ; /* do nothing */
-}
-
-template <typename T1, typename T2, typename... Ts>
-ENOKI_INLINE void eval(const T1 &value1, const T2 &value2,
-                       const Ts&... values) {
-    eval(value1);
-    eval(value2, values...);
+template <typename... Ts>
+ENOKI_INLINE void eval(const Ts&... values) {
+    schedule(values...);
+    jitc_eval();
 }
 
 template <typename T> ENOKI_INLINE decltype(auto) detach(const T &value) {

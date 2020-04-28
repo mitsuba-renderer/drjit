@@ -2,7 +2,7 @@ import enoki
 import sys
 
 VAR_TYPE_NAME = [
-    'Invalid', 'Int8',  'Bool',   'UInt8',   'Int16',   'UInt16',  'Int32',
+    'Invalid', 'Bool',  'Int8',   'UInt8',   'Int16',   'UInt16',  'Int32',
     'UInt32',  'Int64', 'UInt64', 'Float16', 'Float32', 'Float64', 'Pointer'
 ]
 

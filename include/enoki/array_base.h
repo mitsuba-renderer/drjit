@@ -263,7 +263,7 @@ template <typename Value_, typename Derived_> struct ArrayBaseT : ArrayBase {
                                                                              \
             if constexpr (!IsFloat) {                                        \
                 enoki_raise(#name "_(): unsupported operation!");            \
-            } else if constexpr (std::is_scalar_v<Value>) {                  \
+            } else if constexpr (!std::is_scalar_v<Value>) {                 \
                 size_t sa = derived().size();                                \
                                                                              \
                 if constexpr (T::Size == Dynamic)                            \
@@ -370,7 +370,7 @@ template <typename Value_, typename Derived_> struct ArrayBaseT : ArrayBase {
                                                                              \
             if constexpr (!cond) {                                           \
                 enoki_raise(#name "_(): unsupported operation!");            \
-            } else if constexpr (std::is_scalar_v<Value>) {                  \
+            } else if constexpr (!std::is_scalar_v<Value>) {                 \
                 size_t sa = derived().size(), sb = v1.size(), sc = v2.size(),\
                        sr = sa > sb ? sa : (sb > sc ? sb : sc);              \
                                                                              \
@@ -408,15 +408,14 @@ template <typename Value_, typename Derived_> struct ArrayBaseT : ArrayBase {
     ENOKI_IMPLEMENT_BINARY_BITOP(andnot, detail::andnot_(a, b), true)
     ENOKI_IMPLEMENT_BINARY_BITOP(xor,    detail::xor_(a, b),    true)
 
-    ENOKI_IMPLEMENT_BINARY(eq,  enoki::eq(a, b), true)
-    ENOKI_IMPLEMENT_BINARY(neq, enoki::neq(a, b), true)
-
     ENOKI_IMPLEMENT_BINARY(sl, a << b, IsIntegral)
     ENOKI_IMPLEMENT_BINARY(sr, a >> b, IsIntegral)
 
     ENOKI_IMPLEMENT_UNARY_TEMPLATE(sl, int Imm, a << Imm, IsIntegral)
     ENOKI_IMPLEMENT_UNARY_TEMPLATE(sr, int Imm, a >> Imm, IsIntegral)
 
+    ENOKI_IMPLEMENT_BINARY_MASK(eq,  enoki::eq(a, b), true)
+    ENOKI_IMPLEMENT_BINARY_MASK(neq, enoki::neq(a, b), true)
     ENOKI_IMPLEMENT_BINARY_MASK(lt, a < b,  IsArithmetic)
     ENOKI_IMPLEMENT_BINARY_MASK(le, a <= b, IsArithmetic)
     ENOKI_IMPLEMENT_BINARY_MASK(gt, a > b,  IsArithmetic)
@@ -473,7 +472,7 @@ template <typename Value_, typename Derived_> struct ArrayBaseT : ArrayBase {
         }
 
         for (size_t i = 0; i < sr; ++i) {
-            const Value &v_m = m.coeff(sm > 1 ? i : 0);
+            auto &v_m = m.coeff(sm > 1 ? i : 0);
             const Value &v_t = t.coeff(st > 1 ? i : 0);
             const Value &v_f = f.coeff(sf > 1 ? i : 0);
             result.coeff(i) = enoki::select(v_m, v_t, v_f);

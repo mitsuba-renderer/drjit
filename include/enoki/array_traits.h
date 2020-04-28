@@ -337,6 +337,11 @@ template <typename... Ts>
 using expr_t = replace_scalar_t<typename detail::deepest_t<Ts...>,
                                 typename detail::expr<scalar_t<Ts>...>::type>;
 
+/// Intermediary for performing a cast from 'const Source &' to 'const Target &'
+template <typename Source, typename Target>
+using ref_cast_t =
+    std::conditional_t<std::is_same_v<Source, Target>, const Target &, Target>;
+
 //! @}
 // -----------------------------------------------------------------------
 

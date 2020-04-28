@@ -86,10 +86,10 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
 #if defined(NDEBUG)
     StaticArrayImpl() = default;
 #else
-    template <typename T = Value_, enable_if_t<std::is_scalar_v<T>> = 0>
-    StaticArrayImpl() { };
     template <typename T = Value_, enable_if_t<!std::is_scalar_v<T>> = 0>
-    StaticArrayImpl() : StaticArrayImpl(DebugInitialization<Scalar>) { };
+    StaticArrayImpl() { }
+    template <typename T = Value_, enable_if_t<std::is_scalar_v<T>> = 0>
+    StaticArrayImpl() : StaticArrayImpl(DebugInitialization<Scalar>) { }
 #endif
 
     /// Move-construct if possible. Convert values with the wrong type.
@@ -256,6 +256,7 @@ template <typename Array> bool ragged(const Array &a) {
 template <typename Stream, typename Value, typename Derived>
 ENOKI_NOINLINE Stream &operator<<(Stream &os, const ArrayBaseT<Value, Derived> &a) {
     size_t shape[array_depth_v<Derived> + 1];
+    schedule(a);
     detail::put_shape(a, shape);
 
     if (detail::is_ragged(a, shape))

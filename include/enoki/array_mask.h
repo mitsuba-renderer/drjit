@@ -90,6 +90,7 @@ struct MaskBase : StaticArrayImpl<Value_, Size_, true, Derived_> {
     MaskBase(const T1 &a1, const T2 &a2)
         : Base(a1, a2) { }
 
+    using Base::coeff;
     ENOKI_INLINE decltype(auto) coeff(size_t i) {
         if constexpr (!Base::IsPacked)
             return Base::coeff(i);

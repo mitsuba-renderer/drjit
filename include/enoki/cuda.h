@@ -55,6 +55,10 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
     }
 
     template <typename T> CUDAArray(const CUDAArray<T> &v) {
+        static_assert(!std::is_same_v<T, Value>,
+                      "Conversion constructor called with arguments that don't "
+                      "correspond to a conversion!");
+        static_assert(!std::is_same_v<T, bool>, "Conversion from mask not permitted.");
         const char *op;
 
         if constexpr (std::is_floating_point_v<Value> &&
@@ -335,7 +339,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
         } else {
             // Simple constant propagation
             if (a.is_literal_zero())
-                return a;
+                return *this;
 
             return select(a, ~*this, *this);
         }
@@ -576,11 +580,12 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
     static CUDAArray select_(const CUDAArray<bool> &m, const CUDAArray &t,
                              const CUDAArray &f) {
         // Simple constant propagation
-        if (m.is_literal_one()) {
+        if (m.is_literal_one())
             return t;
-        } else if (m.is_literal_zero()) {
+        else if (m.is_literal_zero())
             return f;
-        } else if (!std::is_same_v<Value, bool>) {
+
+        if constexpr (!std::is_same_v<Value, bool>) {
             return from_index(jitc_var_new_3(Type,
                                              "selp.$t0 $r0, $r1, $r2, $r3", 1,
                                              t.index(), f.index(), m.index()));
