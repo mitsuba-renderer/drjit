@@ -86,7 +86,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
             jitc_fail("Unsupported conversion!");
         }
 
-        m_index = jitc_var_new_1(Type, op, 1, v.index());
+        m_index = jitc_var_new_1(Type, op, 1, 0, v.index());
     }
 
     template <typename T> LLVMArray(const LLVMArray<T> &v, detail::reinterpret_flag) {
@@ -96,7 +96,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
 
         if constexpr (std::is_integral_v<Value> != std::is_integral_v<T>) {
             m_index = jitc_var_new_1(
-                Type, "$r0 = bitcast <$w x $t1> $r1 to <$w x $t0>", 1,
+                Type, "$r0 = bitcast <$w x $t1> $r1 to <$w x $t0>", 1, 0,
                 v.index());
         } else {
             m_index = v.index();
@@ -112,7 +112,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
               (!std::is_same_v<Ts, detail::reinterpret_flag> && ...))> = 0>
     LLVMArray(Ts&&... ts) {
         Value data[] = { (Value) ts... };
-        m_index = jitc_var_copy(AllocType::Host, Type, data,
+        m_index = jitc_var_copy(AllocType::Host, Type, 0, data,
                                 (uint32_t) sizeof...(Ts));
     }
 
@@ -149,7 +149,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
             ? "$r0 = fadd <$w x $t0> $r1, $r2"
             : "$r0 = add <$w x $t0> $r1, $r2";
 
-        return from_index(jitc_var_new_2(Type, op, 1, m_index, v.m_index));
+        return from_index(jitc_var_new_2(Type, op, 1, 0, m_index, v.m_index));
     }
 
     LLVMArray sub_(const LLVMArray &v) const {
@@ -161,7 +161,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
             : "$r0 = sub <$w x $t0> $r1, $r2";
 
 
-        return from_index(jitc_var_new_2(Type, op, 1, m_index, v.m_index));
+        return from_index(jitc_var_new_2(Type, op, 1, 0, m_index, v.m_index));
     }
 
     LLVMArray mul_(const LLVMArray &v) const {
@@ -178,7 +178,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
             ? "$r0 = fmul <$w x $t0> $r1, $r2"
             : "$r0 = mul <$w x $t0> $r1, $r2";
 
-        return from_index(jitc_var_new_2(Type, op, 1, m_index, v.m_index));
+        return from_index(jitc_var_new_2(Type, op, 1, 0, m_index, v.m_index));
     }
 
     LLVMArray div_(const LLVMArray &v) const {
@@ -197,7 +197,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
         else
             op = "$r0 = udiv <$w x $t0> $r1, $r2";
 
-        return from_index(jitc_var_new_2(Type, op, 1, m_index, v.m_index));
+        return from_index(jitc_var_new_2(Type, op, 1, 0, m_index, v.m_index));
     }
 
     LLVMArray mod_(const LLVMArray &v) const {
@@ -210,7 +210,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
         else
             op = "$r0 = urem <$w x $t0> $r1, $r2";
 
-        return from_index(jitc_var_new_2(Type, op, 1, m_index, v.m_index));
+        return from_index(jitc_var_new_2(Type, op, 1, 0, m_index, v.m_index));
     }
 
     LLVMArray<bool> gt_(const LLVMArray &a) const {
@@ -226,7 +226,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
             op = "$r0 = fcmp ogt <$w x $t1> $r1, $r2";
 
         return LLVMArray<bool>::from_index(jitc_var_new_2(
-            LLVMArray<bool>::Type, op, 1, m_index, a.index()));
+            LLVMArray<bool>::Type, op, 1, 0, m_index, a.index()));
     }
 
     LLVMArray<bool> ge_(const LLVMArray &a) const {
@@ -242,7 +242,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
             op = "$r0 = fcmp oge <$w x $t1> $r1, $r2";
 
         return LLVMArray<bool>::from_index(jitc_var_new_2(
-            LLVMArray<bool>::Type, op, 1, m_index, a.index()));
+            LLVMArray<bool>::Type, op, 1, 0, m_index, a.index()));
     }
 
 
@@ -259,7 +259,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
             op = "$r0 = fcmp olt <$w x $t1> $r1, $r2";
 
         return LLVMArray<bool>::from_index(jitc_var_new_2(
-            LLVMArray<bool>::Type, op, 1, m_index, a.index()));
+            LLVMArray<bool>::Type, op, 1, 0, m_index, a.index()));
     }
 
     LLVMArray<bool> le_(const LLVMArray &a) const {
@@ -275,7 +275,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
             op = "$r0 = fcmp ole <$w x $t1> $r1, $r2";
 
         return LLVMArray<bool>::from_index(jitc_var_new_2(
-            LLVMArray<bool>::Type, op, 1, m_index, a.index()));
+            LLVMArray<bool>::Type, op, 1, 0, m_index, a.index()));
     }
 
     LLVMArray<bool> eq_(const LLVMArray &b) const {
@@ -284,7 +284,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
                              : "$r0 = fcmp oeq <$w x $t1> $r1, $r2";
 
         return LLVMArray<bool>::from_index(jitc_var_new_2(
-            LLVMArray<bool>::Type, op, 1, m_index, b.index()));
+            LLVMArray<bool>::Type, op, 1, 0, m_index, b.index()));
     }
 
     LLVMArray<bool> neq_(const LLVMArray &b) const {
@@ -293,7 +293,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
                              : "$r0 = fcmp one <$w x $t1> $r1, $r2";
 
         return LLVMArray<bool>::from_index(jitc_var_new_2(
-            LLVMArray<bool>::Type, op, 1, m_index, b.index()));
+            LLVMArray<bool>::Type, op, 1, 0, m_index, b.index()));
     }
 
     LLVMArray neg_() const {
@@ -310,7 +310,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
             op = "$r0 = sub <$w x $t0> $z, $r1";
         }
 
-        return from_index(jitc_var_new_1(Type, op, 1, m_index));
+        return from_index(jitc_var_new_1(Type, op, 1, 0, m_index));
     }
 
     LLVMArray not_() const {
@@ -319,7 +319,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
                              : "$r0_0 = bitcast <$w x $t1> $r1 to <$w x $b0>$n"
                                "$r0_1 = xor <$w x $b0> $r0_0, $o0$n"
                                "$r0 = bitcast <$w x $b0> $r0_1 to <$w x $t0>";
-        return from_index(jitc_var_new_1(Type, op, 1, m_index));
+        return from_index(jitc_var_new_1(Type, op, 1, 0, m_index));
     }
 
     template <typename T> LLVMArray or_(const T &a) const {
@@ -339,7 +339,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
                                    "$r0_2 = or <$w x $b0> $r0_0, $r0_1"
                                    "$r0 = bitcast <$w x $b0> $r0_2 to <$w x $t0>";
 
-            return from_index(jitc_var_new_2(Type, op, 1,
+            return from_index(jitc_var_new_2(Type, op, 1, 0,
                                              m_index, a.index()));
         } else {
             // Simple constant propagation
@@ -350,7 +350,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
 
             using UInt = uint_array_t<LLVMArray>;
             UInt x = UInt::from_index(jitc_var_new_1(
-                UInt::Type, "$r0 = sext <$w x $t1> $r1 to <$w x $b0>", 1,
+                UInt::Type, "$r0 = sext <$w x $t1> $r1 to <$w x $b0>", 1, 0,
                 a.index()));
 
             return *this | reinterpret_array<LLVMArray>(x);
@@ -374,7 +374,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
                                    "$r0_2 = and <$w x $b0> $r0_0, $r0_1"
                                    "$r0 = bitcast <$w x $b0> $r0_2 to <$w x $t0>";
 
-            return from_index(jitc_var_new_2(Type, op, 1, m_index, a.index()));
+            return from_index(jitc_var_new_2(Type, op, 1, 0, m_index, a.index()));
         } else {
             // Simple constant propagation
             if (a.is_literal_one())
@@ -384,7 +384,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
 
             using UInt = uint_array_t<LLVMArray>;
             UInt x = UInt::from_index(jitc_var_new_1(
-                UInt::Type, "$r0 = sext <$w x $t1> $r1 to <$w x $b0>", 1,
+                UInt::Type, "$r0 = sext <$w x $t1> $r1 to <$w x $b0>", 1, 0,
                 a.index()));
 
             return *this & reinterpret_array<LLVMArray>(x);
@@ -408,7 +408,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
                                    "$r0_2 = xor <$w x $b0> $r0_0, $r0_1$n"
                                    "$r0 = bitcast <$w x $b0> $r0_2 to <$w x $t0>";
 
-            return from_index(jitc_var_new_2(Type, op, 1, m_index, a.index()));
+            return from_index(jitc_var_new_2(Type, op, 1, 0, m_index, a.index()));
         } else {
             // Simple constant propagation
             if (a.is_literal_zero())
@@ -416,7 +416,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
 
             using UInt = uint_array_t<LLVMArray>;
             UInt x = UInt::from_index(jitc_var_new_1(
-                UInt::Type, "$r0 = sext <$w x $t1> $r1 to <$w x $b0>", 1,
+                UInt::Type, "$r0 = sext <$w x $t1> $r1 to <$w x $b0>", 1, 0,
                 a.index()));
 
             return *this ^ reinterpret_array<LLVMArray>(x);
@@ -436,7 +436,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
             enoki_raise("Unsupported operand type");
 
         return from_index(jitc_var_new_2(
-            Type, "$r0 = shl <$w x $t0> $r1, $r2", 1, m_index, v.index()));
+            Type, "$r0 = shl <$w x $t0> $r1, $r2", 1, 0, m_index, v.index()));
     }
 
     template <int Imm> LLVMArray sr_() const {
@@ -453,7 +453,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
         else
             op = "$r0 = lshr <$w x $t0> $r1, $r2";
 
-        return from_index(jitc_var_new_2(Type, op, 1, m_index, v.index()));
+        return from_index(jitc_var_new_2(Type, op, 1, 0, m_index, v.index()));
     }
 
     LLVMArray abs_() const {
@@ -471,7 +471,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
             enoki_raise("Unsupported operand type");
 
         return from_index(jitc_var_new_1(
-            Type, "$r0 = call <$w x $t0> @llvm.sqrt.v$w$a1(<$w x $t1> $r1)", 1,
+            Type, "$r0 = call <$w x $t0> @llvm.sqrt.v$w$a1(<$w x $t1> $r1)", 1, 0,
             m_index));
     }
 
@@ -516,7 +516,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
             }
         }
 
-        return from_index(jitc_var_new_2(Type, op, 1, m_index, a.index()));
+        return from_index(jitc_var_new_2(Type, op, 1, 0, m_index, a.index()));
     }
 
     LLVMArray max_(const LLVMArray &a) const {
@@ -552,7 +552,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
             }
         }
 
-        return from_index(jitc_var_new_2(Type, op, 1, m_index, a.index()));
+        return from_index(jitc_var_new_2(Type, op, 1, 0, m_index, a.index()));
     }
 
     LLVMArray round_() const {
@@ -560,7 +560,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
             enoki_raise("Unsupported operand type");
 
         return from_index(jitc_var_new_1(Type,
-            "$r0 = call <$w x $t0> @llvm.nearbyint.v$w$a1(<$w x $t1> $r1)", 1,
+            "$r0 = call <$w x $t0> @llvm.nearbyint.v$w$a1(<$w x $t1> $r1)", 1, 0,
             m_index));
     }
 
@@ -576,7 +576,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
             enoki_raise("Unsupported operand type");
 
         return from_index(jitc_var_new_1(
-            Type, "$r0 = call <$w x $t0> @llvm.floor.v$w$a1(<$w x $t1> $r1)", 1,
+            Type, "$r0 = call <$w x $t0> @llvm.floor.v$w$a1(<$w x $t1> $r1)", 1, 0,
             m_index));
     }
 
@@ -592,7 +592,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
             enoki_raise("Unsupported operand type");
 
         return from_index(jitc_var_new_1(
-            Type, "$r0 = call <$w x $t0> @llvm.ceil.v$w$a1(<$w x $t1> $r1)", 1,
+            Type, "$r0 = call <$w x $t0> @llvm.ceil.v$w$a1(<$w x $t1> $r1)", 1, 0,
             m_index));
     }
 
@@ -608,7 +608,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
             enoki_raise("Unsupported operand type");
 
         return from_index(jitc_var_new_1(
-            Type, "$r0 = call <$w x $t0> @llvm.trunc.v$w$a1(<$w x $t1> $r1)", 1,
+            Type, "$r0 = call <$w x $t0> @llvm.trunc.v$w$a1(<$w x $t1> $r1)", 1, 0,
             m_index));
     }
 
@@ -638,7 +638,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
             Type,
             "$r0 = call <$w x $t0> @llvm.fma.v$w$a1(<$w x $t1> $r1, "
             "<$w x $t2> $r2, <$w x $t3> $r3)",
-            1, m_index, b.index(), c.index()));
+            1, 0, m_index, b.index(), c.index()));
     }
 
     LLVMArray fmsub_(const LLVMArray &b, const LLVMArray &c) const {
@@ -664,7 +664,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
         if constexpr (!std::is_same_v<Value, bool>) {
             return from_index(jitc_var_new_3(Type,
                 "$r0 = select <$w x $t1> $r1, <$w x $t2> $r2, <$w x $t3> $r3",
-                1, m.index(), t.index(), f.index()));
+                1, 0, m.index(), t.index(), f.index()));
         } else {
             return (m & t) | (~m & f);
         }
@@ -676,7 +676,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
 
         return from_index(jitc_var_new_1(Type,
             "$r0 = call <$w x $t0> @llvm.ctpop.v$w$a1(<$w x $t1> $r1)",
-            1, m_index));
+            1, 0, m_index));
     }
 
     LLVMArray lzcnt_() const {
@@ -685,7 +685,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
 
         return from_index(jitc_var_new_1(Type,
             "$r0 = call <$w x $t0> @llvm.ctlz.v$w$a1(<$w x $t1> $r1, i1$S 0)",
-            1, m_index));
+            1, 0, m_index));
     }
 
     LLVMArray tzcnt_() const {
@@ -694,7 +694,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
 
         return from_index(jitc_var_new_1(Type,
             "$r0 = call <$w x $t0> @llvm.cttz.v$w$a1(<$w x $t1> $r1, i1$S 0)",
-            1, m_index));
+            1, 0, m_index));
     }
 
     //! @}
@@ -774,7 +774,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
             return LLVMArray();
         size_t byte_size = size * sizeof(Value);
         void *ptr = jitc_malloc(AllocType::HostAsync, byte_size);
-        return from_index(jitc_var_map(Type, ptr, (uint32_t) size, 1));
+        return from_index(jitc_var_map(Type, 0, ptr, (uint32_t) size, 1));
     }
 
     static LLVMArray zero_(size_t size) {
@@ -818,11 +818,11 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
 
     static LLVMArray map_(void *ptr, size_t size, bool free = false) {
         return from_index(
-            jitc_var_map(Type, ptr, (uint32_t) size, free ? 1 : 0));
+            jitc_var_map(Type, 0, ptr, (uint32_t) size, free ? 1 : 0));
     }
 
     static LLVMArray load_unaligned_(const void *ptr, size_t size) {
-        return from_index(jitc_var_copy(AllocType::Host, Type, ptr, (uint32_t) size));
+        return from_index(jitc_var_copy(AllocType::Host, Type, 0, ptr, (uint32_t) size));
     }
 
     //! @}
@@ -872,15 +872,19 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
         if (jitc_var_int_ref(m_index) > 0) {
             eval();
             *this = LLVMArray::from_index(
-                jitc_var_copy(AllocType::HostAsync, LLVMArray<Value>::Type, data(),
-                              (uint32_t) size()));
+                jitc_var_copy(AllocType::HostAsync, LLVMArray<Value>::Type, 0,
+                              data(), (uint32_t) size()));
         }
 
         jitc_var_write(m_index, offset, &value);
     }
 
-    void set_label_(const char *label) {
+    void set_label_(const char *label) const {
         jitc_var_set_label(m_index, label);
+    }
+
+    const char *label_() const {
+        return jitc_var_label(m_index);
     }
 
     //! @}
@@ -899,7 +903,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
             "$r0_1 = insertelement <$w x $t0> undef, $t0 $r0_0, i32 0$n"
             "$r0_2 = shufflevector <$w x $t0> $r0_1, <$w x $t0> undef, "
                 "<$w x i32> $z$n"
-            "$r0 = add <$w x $t0> $r0_2, $l0", 1, (uint32_t) size));
+            "$r0 = add <$w x $t0> $r0_2, $l0", 1, 0, (uint32_t) size));
     }
 
     static uint32_t mkfull_(Value value, uint32_t size) {
@@ -923,11 +927,11 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
             "$r0 = shufflevector <$w x $t0> $r0_0, <$w x $t0> undef, <$w x i32> $z",
             value_ull);
 
-        return jitc_var_new_0(Type, value_str, 0, size);
+        return jitc_var_new_0(Type, value_str, 0, 0, size);
     }
 
-    void init_(size_t) {
-        enoki_raise("Internal error: LLVMArray::init_ should never be called!");
+    void init_(size_t size) {
+        *this = empty_(size);
     }
 
     template <typename OutArray> OutArray f2i_cast_(int mode) {
@@ -954,7 +958,7 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
                  "x $t1> $r1, <$w x $t0> $z, i$w$S -1, i32$S %i)",
                  (SizeIn == 4 && SizeOut == 4) ? 4 : 3, in_t, out_t, mode);
 
-        return OutArray::from_index(jitc_var_new_1(OutArray::Type, op, 0, m_index));
+        return OutArray::from_index(jitc_var_new_1(OutArray::Type, op, 0, 0, m_index));
     }
 
 protected:

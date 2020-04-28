@@ -509,6 +509,15 @@ def select_(a0, a1, a2):
 # -------------------------------------------------------------------
 
 
+def set_label_(a0, label):
+    if a0.IsJIT:
+        if a0.Depth == 1:
+            a0.set_label_(label)
+        else:
+            for i in range(len(a0)):
+                a0[i].set_label_(label + "_%i" % i)
+
+
 def schedule(a0):
     if a0.IsJIT:
         if a0.Depth == 1:

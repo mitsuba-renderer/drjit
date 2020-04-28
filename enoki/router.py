@@ -684,10 +684,21 @@ def mulsign_neg(a, b):
 # -------------------------------------------------------------------
 
 
+def set_label(a, name):
+    if isinstance(a, ArrayBase):
+        a.set_label_(name)
+    elif isinstance(a, tuple) or isinstance(a, list):
+        for i, v in enumerate(a):
+            set_label(v, name + "_%i" % i)
+
+
 def schedule(*args):
     for a in args:
-        if hasattr(a, 'schedule'):
+        if isinstance(a, ArrayBase):
             a.schedule()
+        elif isinstance(a, tuple) or isinstance(a, list):
+            for v in a:
+                schedule(v)
 
 
 def eval(*args):

@@ -342,6 +342,13 @@ template <typename Source, typename Target>
 using ref_cast_t =
     std::conditional_t<std::is_same_v<Source, Target>, const Target &, Target>;
 
+/// As above, but move-construct if possible. Convert values with the wrong type.
+template <typename Source, typename Target>
+using move_cast_t = std::conditional_t<
+    std::is_same_v<std::decay_t<Source>, Target>,
+    std::conditional_t<std::is_reference_v<Source>, Source, Source &&>, Target>;
+
+
 //! @}
 // -----------------------------------------------------------------------
 

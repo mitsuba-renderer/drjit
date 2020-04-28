@@ -92,12 +92,6 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
     StaticArrayImpl() : StaticArrayImpl(DebugInitialization<Scalar>) { }
 #endif
 
-    /// Move-construct if possible. Convert values with the wrong type.
-    template <typename Src>
-    using cast_t = std::conditional_t<
-        std::is_same_v<std::decay_t<Src>, Value>,
-        std::conditional_t<std::is_reference_v<Src>, Src, Src &&>, Value>;
-
     StaticArrayImpl(const Value &v) {
         ENOKI_CHKSCALAR("Constructor (scalar broadcast)");
         for (size_t i = 0; i < Size_; ++i)
@@ -106,7 +100,7 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
 
     /// Construct from component values
     template <typename... Ts, detail::enable_if_components_t<Size_, Ts...> = 0>
-    ENOKI_INLINE StaticArrayImpl(Ts&&... ts) : m_data{ cast_t<Ts>(ts)... } {
+    ENOKI_INLINE StaticArrayImpl(Ts&&... ts) : m_data{ move_cast_t<Ts, Value>(ts)... } {
         ENOKI_CHKSCALAR("Constructor (component values)");
     }
 

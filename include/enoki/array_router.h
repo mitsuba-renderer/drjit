@@ -629,6 +629,17 @@ template <typename T> ENOKI_INLINE void store_unaligned(void *ptr, const T &valu
 // -----------------------------------------------------------------------
 
 // -----------------------------------------------------------------------
+//! @{ \name Forward declarations of math functions
+// -----------------------------------------------------------------------
+
+template <typename Value> Value sin(const Value &value);
+template <typename Value> Value cos(const Value &value);
+template <typename Value> std::pair<Value, Value> sincos(const Value &value);
+
+//! @}
+// -----------------------------------------------------------------------
+
+// -----------------------------------------------------------------------
 //! @{ \name JIT compilation and autodiff-related
 // -----------------------------------------------------------------------
 

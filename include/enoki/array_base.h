@@ -228,7 +228,7 @@ template <typename Value_, typename Derived_> struct ArrayBaseT : ArrayBase {
                     result.coeff(i) = op;                                    \
                 }                                                            \
             } else {                                                         \
-                enoki_raise(#name "_(): unsupported operation!");            \
+                enoki_raise(#name "_(): invalid operand type!");             \
             }                                                                \
                                                                              \
             return result;                                                   \
@@ -250,7 +250,7 @@ template <typename Value_, typename Derived_> struct ArrayBaseT : ArrayBase {
                     result.coeff(i) = op;                                    \
                 }                                                            \
             } else {                                                         \
-                enoki_raise(#name "_(): unsupported operation!");            \
+                enoki_raise(#name "_(): invalid operand type!");             \
             }                                                                \
                                                                              \
             return result;                                                   \
@@ -262,7 +262,7 @@ template <typename Value_, typename Derived_> struct ArrayBaseT : ArrayBase {
             T result;                                                        \
                                                                              \
             if constexpr (!IsFloat) {                                        \
-                enoki_raise(#name "_(): unsupported operation!");            \
+                enoki_raise(#name "_(): invalid operand type!");             \
             } else if constexpr (!std::is_scalar_v<Value>) {                 \
                 size_t sa = derived().size();                                \
                                                                              \
@@ -301,7 +301,7 @@ template <typename Value_, typename Derived_> struct ArrayBaseT : ArrayBase {
                     result.coeff(i) = op;                                    \
                 }                                                            \
             } else {                                                         \
-                enoki_raise(#name "_(): unsupported operation!");            \
+                enoki_raise(#name "_(): invalid operand type!");             \
             }                                                                \
                                                                              \
             return result;                                                   \
@@ -329,7 +329,7 @@ template <typename Value_, typename Derived_> struct ArrayBaseT : ArrayBase {
                     result.coeff(i) = op;                                    \
                 }                                                            \
             } else {                                                         \
-                enoki_raise(#name "_(): unsupported operation!");            \
+                enoki_raise(#name "_(): invalid operand type!");             \
             }                                                                \
                                                                              \
             return result;                                                   \
@@ -357,7 +357,7 @@ template <typename Value_, typename Derived_> struct ArrayBaseT : ArrayBase {
                     result.coeff(i) = op;                                    \
                 }                                                            \
             } else {                                                         \
-                enoki_raise(#name "_(): unsupported operation!");            \
+                enoki_raise(#name "_(): invalid operand type!");             \
             }                                                                \
                                                                              \
             return result;                                                   \
@@ -369,7 +369,7 @@ template <typename Value_, typename Derived_> struct ArrayBaseT : ArrayBase {
             Derived result;                                                  \
                                                                              \
             if constexpr (!cond) {                                           \
-                enoki_raise(#name "_(): unsupported operation!");            \
+                enoki_raise(#name "_(): invalid operand type!");             \
             } else if constexpr (!std::is_scalar_v<Value>) {                 \
                 size_t sa = derived().size(), sb = v1.size(), sc = v2.size(),\
                        sr = sa > sb ? sa : (sb > sc ? sb : sc);              \
@@ -394,7 +394,6 @@ template <typename Value_, typename Derived_> struct ArrayBaseT : ArrayBase {
                                                                              \
             return result;                                                   \
         }
-
 
     ENOKI_IMPLEMENT_BINARY(add,   a + b,       IsArithmetic)
     ENOKI_IMPLEMENT_BINARY(sub,   a - b,       IsArithmetic)
@@ -447,6 +446,31 @@ template <typename Value_, typename Derived_> struct ArrayBaseT : ArrayBase {
     ENOKI_IMPLEMENT_TERNARY_ALT(fmsub,  enoki::fmsub(a, b, c),   derived()*v1-v2, IsFloat)
     ENOKI_IMPLEMENT_TERNARY_ALT(fnmadd, enoki::fnmadd(a, b, c), -derived()*v1+v2, IsFloat)
     ENOKI_IMPLEMENT_TERNARY_ALT(fnmsub, enoki::fnmsub(a, b, c), -derived()*v1-v2, IsFloat)
+
+    template <typename T = Value, enable_if_array_t<T> = 0>
+    ENOKI_IMPLEMENT_UNARY(sin, enoki::sin(a), IsFloat)
+    template <typename T = Value, enable_if_array_t<T> = 0>
+    ENOKI_IMPLEMENT_UNARY(cos, enoki::cos(a), IsFloat)
+    template <typename T = Value, enable_if_array_t<T> = 0>
+    std::pair<Derived, Derived> sincos_() {
+        Derived result_s, result_c;
+
+        if constexpr (IsFloat) {
+            size_t sa = derived().size();
+
+            if constexpr (Derived::Size == Dynamic) {
+                result_s = enoki::empty<Derived>(sa);
+                result_c = enoki::empty<Derived>(sa);
+            }
+
+            for (size_t i = 0; i < sa; ++i) {
+                const Value &a = derived().coeff(i);
+                std::tie(result_s.coeff(i), result_c.coeff(i)) = enoki::sincos(a);
+            }
+        } else {
+            enoki_raise("sincos_(): invalid operand type!");
+        }
+    }
 
     #undef ENOKI_IMPLEMENT_UNARY
     #undef ENOKI_IMPLEMENT_UNARY_TEMPLATE
@@ -542,7 +566,7 @@ template <typename Value_, typename Derived_> struct ArrayBaseT : ArrayBase {
             for (size_t i = 1; i < derived().size(); ++i)
                 value += derived().coeff(i);
         } else {
-            enoki_raise("hsum_(): unsupported operation!");
+            enoki_raise("hsum_(): invalid operand type!");
         }
 
         return value;
@@ -561,7 +585,7 @@ template <typename Value_, typename Derived_> struct ArrayBaseT : ArrayBase {
             for (size_t i = 1; i < derived().size(); ++i)
                 value *= derived().coeff(i);
         } else {
-            enoki_raise("hprod_(): unsupported operation!");
+            enoki_raise("hprod_(): invalid operand type!");
         }
 
         return value;
@@ -580,7 +604,7 @@ template <typename Value_, typename Derived_> struct ArrayBaseT : ArrayBase {
             for (size_t i = 1; i < derived().size(); ++i)
                 value = enoki::min(value, derived().coeff(i));
         } else {
-            enoki_raise("hmin_(): unsupported operation!");
+            enoki_raise("hmin_(): invalid operand type!");
         }
 
         return value;
@@ -599,7 +623,7 @@ template <typename Value_, typename Derived_> struct ArrayBaseT : ArrayBase {
             for (size_t i = 1; i < derived().size(); ++i)
                 value = enoki::max(value, derived().coeff(i));
         } else {
-            enoki_raise("hmax_(): unsupported operation!");
+            enoki_raise("hmax_(): invalid operand type!");
         }
 
         return value;
@@ -618,7 +642,7 @@ template <typename Value_, typename Derived_> struct ArrayBaseT : ArrayBase {
             for (size_t i = 1; i < derived().size(); ++i)
                 value = value && derived().coeff(i);
         } else {
-            enoki_raise("all_(): unsupported operation!");
+            enoki_raise("all_(): invalid operand type!");
         }
 
         return value;
@@ -637,7 +661,7 @@ template <typename Value_, typename Derived_> struct ArrayBaseT : ArrayBase {
             for (size_t i = 1; i < derived().size(); ++i)
                 value = value || derived().coeff(i);
         } else {
-            enoki_raise("any_(): unsupported operation!");
+            enoki_raise("any_(): invalid operand type!");
         }
 
         return value;
@@ -655,7 +679,7 @@ template <typename Value_, typename Derived_> struct ArrayBaseT : ArrayBase {
             for (size_t i = 1; i < derived().size(); ++i)
                 value += select(derived().coeff(i), 1, 0);
         } else {
-            enoki_raise("count_(): unsupported operation!");
+            enoki_raise("count_(): invalid operand type!");
         }
 
         return value;

@@ -45,7 +45,11 @@ void bind_basic_methods(py::class_<Array, ek::ArrayBase> &cls) {
        .def("coeff", [](const Array &a, size_t i) -> Value { return a.coeff(i); })
        .def_static("empty_", &Array::empty_);
 
-    if constexpr (!(ek::is_jit_array_v<Array> && ek::array_depth_v<Array> == 1)) {
+    if constexpr (ek::is_jit_array_v<Array> && ek::array_depth_v<Array> == 1) {
+       cls.def("set_coeff", [](Array &a, size_t i, const Value &value) {
+           a.write(i, value);
+       });
+    } else {
        cls.def("set_coeff", [](Array &a, size_t i, const Value &value) {
            a.coeff(i) = value;
        });
@@ -260,8 +264,11 @@ auto bind_full(py::class_<Array, ek::ArrayBase> &cls,
         cls.def("sincos_", [](const Array &a) { return ek::sincos(a); });
     }
 
-    if constexpr (Array::IsJIT || Array::IsDiff)
+    if constexpr (Array::IsJIT || Array::IsDiff) {
         cls.def("index", [](const Array &a) { return a.index(); });
+        cls.def("set_label_", [](const Array &a, const char *name) { a.set_label_(name); });
+        cls.def("label_", [](const Array &a) { return a.label_(); });
+    }
 
     bind_generic_constructor(cls);
 

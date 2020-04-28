@@ -71,7 +71,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
         else
             op = "cvt.$t0.$t1 $r0, $r1";
 
-        m_index = jitc_var_new_1(Type, op, 1, v.index());
+        m_index = jitc_var_new_1(Type, op, 1, 1, v.index());
     }
 
     template <typename T> CUDAArray(const CUDAArray<T> &v, detail::reinterpret_flag) {
@@ -80,7 +80,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
             "reinterpret_array requires arrays with equal-sized element types!");
 
         if constexpr (std::is_integral_v<Value> != std::is_integral_v<T>) {
-            m_index = jitc_var_new_1(Type, "mov.$b0 $r0, $r1", 1, v.index());
+            m_index = jitc_var_new_1(Type, "mov.$b0 $r0, $r1", 1, 1, v.index());
         } else {
             m_index = v.index();
             jitc_var_inc_ref_ext(m_index);
@@ -95,7 +95,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
               (!std::is_same_v<Ts, detail::reinterpret_flag> && ...))> = 0>
     CUDAArray(Ts&&... ts) {
         Value data[] = { (Value) ts... };
-        m_index = jitc_var_copy(AllocType::Host, Type, data,
+        m_index = jitc_var_copy(AllocType::Host, Type, 1, data,
                                 (uint32_t) sizeof...(Ts));
     }
 
@@ -132,7 +132,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
                              ? "add.ftz.$t0 $r0, $r1, $r2"
                              : "add.$t0 $r0, $r1, $r2";
 
-        return from_index(jitc_var_new_2(Type, op, 1, m_index, v.m_index));
+        return from_index(jitc_var_new_2(Type, op, 1, 1, m_index, v.m_index));
     }
 
     CUDAArray sub_(const CUDAArray &v) const {
@@ -143,7 +143,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
                              ? "sub.ftz.$t0 $r0, $r1, $r2"
                              : "sub.$t0 $r0, $r1, $r2";
 
-        return from_index(jitc_var_new_2(Type, op, 1, m_index, v.m_index));
+        return from_index(jitc_var_new_2(Type, op, 1, 1, m_index, v.m_index));
     }
 
     CUDAArray mul_(const CUDAArray &v) const {
@@ -163,7 +163,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
         else
             op = "mul.lo.$t0 $r0, $r1, $r2";
 
-        return from_index(jitc_var_new_2(Type, op, 1, m_index, v.m_index));
+        return from_index(jitc_var_new_2(Type, op, 1, 1, m_index, v.m_index));
     }
 
     CUDAArray div_(const CUDAArray &v) const {
@@ -182,14 +182,14 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
         else
             op = "div.$t0 $r0, $r1, $r2";
 
-        return from_index(jitc_var_new_2(Type, op, 1, m_index, v.m_index));
+        return from_index(jitc_var_new_2(Type, op, 1, 1, m_index, v.m_index));
     }
 
     CUDAArray mod_(const CUDAArray &v) const {
         if constexpr (!jitc_is_integral(Type))
             enoki_raise("Unsupported operand type");
 
-        return from_index(jitc_var_new_2(Type, "rem.$t0 $r0, $r1, $r2", 1,
+        return from_index(jitc_var_new_2(Type, "rem.$t0 $r0, $r1, $r2", 1, 1,
                                          m_index, v.m_index));
     }
 
@@ -202,7 +202,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
                              : "setp.hi.$t1 $r0, $r1, $r2";
 
         return CUDAArray<bool>::from_index(jitc_var_new_2(
-            CUDAArray<bool>::Type, op, 1, m_index, a.index()));
+            CUDAArray<bool>::Type, op, 1, 1, m_index, a.index()));
     }
 
     CUDAArray<bool> ge_(const CUDAArray &a) const {
@@ -214,7 +214,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
                              : "setp.hs.$t1 $r0, $r1, $r2";
 
         return CUDAArray<bool>::from_index(jitc_var_new_2(
-            CUDAArray<bool>::Type, op, 1, m_index, a.index()));
+            CUDAArray<bool>::Type, op, 1, 1, m_index, a.index()));
     }
 
 
@@ -227,7 +227,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
                              : "setp.lo.$t1 $r0, $r1, $r2";
 
         return CUDAArray<bool>::from_index(jitc_var_new_2(
-            CUDAArray<bool>::Type, op, 1, m_index, a.index()));
+            CUDAArray<bool>::Type, op, 1, 1, m_index, a.index()));
     }
 
     CUDAArray<bool> le_(const CUDAArray &a) const {
@@ -239,7 +239,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
                              : "setp.lo.$t1 $r0, $r1, $r2";
 
         return CUDAArray<bool>::from_index(jitc_var_new_2(
-            CUDAArray<bool>::Type, op, 1, m_index, a.index()));
+            CUDAArray<bool>::Type, op, 1, 1, m_index, a.index()));
     }
 
     CUDAArray<bool> eq_(const CUDAArray &b) const {
@@ -249,7 +249,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
               "not.$t1 $r0, $r0";
 
         return CUDAArray<bool>::from_index(jitc_var_new_2(
-            CUDAArray<bool>::Type, op, 1, m_index, b.index()));
+            CUDAArray<bool>::Type, op, 1, 1, m_index, b.index()));
     }
 
     CUDAArray<bool> neq_(const CUDAArray &b) const {
@@ -258,7 +258,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
               "xor.$t1 $r0, $r1, $r2";
 
         return CUDAArray<bool>::from_index(jitc_var_new_2(
-            CUDAArray<bool>::Type, op, 1, m_index, b.index()));
+            CUDAArray<bool>::Type, op, 1, 1, m_index, b.index()));
     }
 
     CUDAArray neg_() const {
@@ -269,11 +269,11 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
                              ? "neg.ftz.$t0 $r0, $r1"
                              : "neg.$t0 $r0, $r1";
 
-        return from_index(jitc_var_new_1(Type, op, 1, m_index));
+        return from_index(jitc_var_new_1(Type, op, 1, 1, m_index));
     }
 
     CUDAArray not_() const {
-        return from_index(jitc_var_new_1(Type, "not.$b0 $r0, $r1", 1, m_index));
+        return from_index(jitc_var_new_1(Type, "not.$b0 $r0, $r1", 1, 1, m_index));
     }
 
     template <typename T> CUDAArray or_(const T &a) const {
@@ -286,7 +286,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
                     return a;
             }
 
-            return from_index(jitc_var_new_2(Type, "or.$b0 $r0, $r1, $r2", 1,
+            return from_index(jitc_var_new_2(Type, "or.$b0 $r0, $r1, $r2", 1, 1,
                                              m_index, a.index()));
         } else {
             // Simple constant propagation
@@ -295,7 +295,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
             else if (a.is_literal_one())
                 return CUDAArray(memcpy_cast<Value>(int_array_t<Value>(-1)));
 
-            return from_index(jitc_var_new_2(Type, "selp.$b0 $r0, -1, $r1, $r2", 1,
+            return from_index(jitc_var_new_2(Type, "selp.$b0 $r0, -1, $r1, $r2", 1, 1,
                                              m_index, a.index()));
         }
     }
@@ -310,7 +310,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
                     return *this;
             }
 
-            return from_index(jitc_var_new_2(Type, "and.$b0 $r0, $r1, $r2", 1,
+            return from_index(jitc_var_new_2(Type, "and.$b0 $r0, $r1, $r2", 1, 1,
                                              m_index, a.index()));
         } else {
             // Simple constant propagation
@@ -319,7 +319,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
             else if (a.is_literal_zero())
                 return CUDAArray(Value(0));
 
-            return from_index(jitc_var_new_2(Type, "selp.$b0 $r0, $r1, 0, $r2", 1,
+            return from_index(jitc_var_new_2(Type, "selp.$b0 $r0, $r1, 0, $r2", 1, 1,
                                              m_index, a.index()));
         }
     }
@@ -334,7 +334,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
                     return *this;
             }
 
-            return from_index(jitc_var_new_2(Type, "xor.$b0 $r0, $r1, $r2", 1,
+            return from_index(jitc_var_new_2(Type, "xor.$b0 $r0, $r1, $r2", 1, 1,
                                              m_index, a.index()));
         } else {
             // Simple constant propagation
@@ -358,7 +358,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
             enoki_raise("Unsupported operand type");
 
         return from_index(jitc_var_new_2(
-            Type, "shl.$b0 $r0, $r1, $r2", 1, m_index, v.index()));
+            Type, "shl.$b0 $r0, $r1, $r2", 1, 1, m_index, v.index()));
     }
 
     template <int Imm> CUDAArray sr_() const {
@@ -375,7 +375,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
         else
             op = "shr.$b0 $r0, $r1, $r2";
 
-        return from_index(jitc_var_new_2(Type, op, 1, m_index, v.index()));
+        return from_index(jitc_var_new_2(Type, op, 1, 1, m_index, v.index()));
     }
 
     CUDAArray abs_() const {
@@ -386,7 +386,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
                              ? "abs.ftz.$t0 $r0, $r1"
                              : "abs.$t0 $r0, $r1";
 
-        return from_index(jitc_var_new_1(Type, op, 1, m_index));
+        return from_index(jitc_var_new_1(Type, op, 1, 1, m_index));
     }
 
     CUDAArray sqrt_() const {
@@ -397,7 +397,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
                              ? "sqrt.rn.ftz.$t0 $r0, $r1"
                              : "sqrt.rn.$t0 $r0, $r1";
 
-        return from_index(jitc_var_new_1(Type, op, 1, m_index));
+        return from_index(jitc_var_new_1(Type, op, 1, 1, m_index));
     }
 
     CUDAArray rcp_() const {
@@ -408,7 +408,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
                              ? "rcp.approx.ftz.$t0 $r0, $r1"
                              : "div.rn.$t0 $r0, 1.0, $r1";
 
-        return from_index(jitc_var_new_1(Type, op, 1, m_index));
+        return from_index(jitc_var_new_1(Type, op, 1, 1, m_index));
     }
 
     CUDAArray rsqrt_() const {
@@ -420,7 +420,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
                              : "sqrt.rn.$t0 $r0, $r1$n"
                                "div.rn.$t0 $r0, 1.0, $r0";
 
-        return from_index(jitc_var_new_1(Type, op, 1, m_index));
+        return from_index(jitc_var_new_1(Type, op, 1, 1, m_index));
     }
 
     template <typename T = Value, enable_if_t<std::is_same_v<T, float>> = 0>
@@ -444,13 +444,13 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
     template <typename T = Value, enable_if_t<std::is_same_v<T, float>> = 0>
     CUDAArray sin_() const {
         return from_index(
-            jitc_var_new_1(Type, "sin.approx.ftz.$t1 $r0, $r1", 1, m_index));
+            jitc_var_new_1(Type, "sin.approx.ftz.$t1 $r0, $r1", 1, 1, m_index));
     }
 
     template <typename T = Value, enable_if_t<std::is_same_v<T, float>> = 0>
     CUDAArray cos_() const {
         return from_index(
-            jitc_var_new_1(Type, "cos.approx.ftz.$t1 $r0, $r1", 1, m_index));
+            jitc_var_new_1(Type, "cos.approx.ftz.$t1 $r0, $r1", 1, 1, m_index));
     }
 
     template <typename T = Value, enable_if_t<std::is_same_v<T, float>> = 0>
@@ -463,7 +463,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
                              ? "min.ftz.$t0 $r0, $r1, $r2"
                              : "min.$t0 $r0, $r1, $r2";
 
-        return from_index(jitc_var_new_2(Type, op, 1, m_index, a.index()));
+        return from_index(jitc_var_new_2(Type, op, 1, 1, m_index, a.index()));
     }
 
     CUDAArray max_(const CUDAArray &a) const {
@@ -471,7 +471,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
                              ? "max.ftz.$t0 $r0, $r1, $r2"
                              : "max.$t0 $r0, $r1, $r2";
 
-        return from_index(jitc_var_new_2(Type, op, 1, m_index, a.index()));
+        return from_index(jitc_var_new_2(Type, op, 1, 1, m_index, a.index()));
     }
 
     CUDAArray round_() const {
@@ -479,7 +479,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
             enoki_raise("Unsupported operand type");
 
         return from_index(jitc_var_new_1(Type,
-            "cvt.rni.$t0.$t0 $r0, $r1", 1, m_index));
+            "cvt.rni.$t0.$t0 $r0, $r1", 1, 1, m_index));
     }
 
     template <typename T> T round2int_(const CUDAArray &a) const {
@@ -488,7 +488,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
             enoki_raise("Unsupported operand type");
 
         return T::from_index(jitc_var_new_1(T::Type,
-            "cvt.rni.$t0.$t0 $r0, $r1", 1, m_index));
+            "cvt.rni.$t0.$t0 $r0, $r1", 1, 1, m_index));
     }
 
     CUDAArray floor_(const CUDAArray &a) const {
@@ -496,7 +496,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
             enoki_raise("Unsupported operand type");
 
         return from_index(jitc_var_new_1(Type,
-            "cvt.rmi.$t0.$t0 $r0, $r1", 1, m_index));
+            "cvt.rmi.$t0.$t0 $r0, $r1", 1, 1, m_index));
     }
 
     template <typename T> T floor2int_(const CUDAArray &a) const {
@@ -505,7 +505,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
             enoki_raise("Unsupported operand type");
 
         return T::from_index(jitc_var_new_1(T::Type,
-            "cvt.rmi.$t0.$t0 $r0, $r1", 1, m_index));
+            "cvt.rmi.$t0.$t0 $r0, $r1", 1, 1, m_index));
     }
 
     CUDAArray ceil_(const CUDAArray &a) const {
@@ -513,7 +513,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
             enoki_raise("Unsupported operand type");
 
         return from_index(jitc_var_new_1(Type,
-            "cvt.rpi.$t0.$t0 $r0, $r1", 1, m_index));
+            "cvt.rpi.$t0.$t0 $r0, $r1", 1, 1, m_index));
     }
 
     template <typename T> T ceil2int_(const CUDAArray &a) const {
@@ -522,7 +522,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
             enoki_raise("Unsupported operand type");
 
         return T::from_index(jitc_var_new_1(T::Type,
-            "cvt.rpi.$t0.$t0 $r0, $r1", 1, m_index));
+            "cvt.rpi.$t0.$t0 $r0, $r1", 1, 1, m_index));
     }
 
     CUDAArray trunc_(const CUDAArray &a) const {
@@ -530,7 +530,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
             enoki_raise("Unsupported operand type");
 
         return from_index(jitc_var_new_1(Type,
-            "cvt.rzi.$t0.$t0 $r0, $r1", 1, m_index));
+            "cvt.rzi.$t0.$t0 $r0, $r1", 1, 1, m_index));
     }
 
     template <typename T> T trunc2int_(const CUDAArray &a) const {
@@ -539,7 +539,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
             enoki_raise("Unsupported operand type");
 
         return T::from_index(jitc_var_new_1(T::Type,
-            "cvt.rzi.$t0.$t0 $r0, $r1", 1, m_index));
+            "cvt.rzi.$t0.$t0 $r0, $r1", 1, 1, m_index));
     }
 
     CUDAArray fmadd_(const CUDAArray &b, const CUDAArray &c) const {
@@ -562,7 +562,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
                              : "fma.rn.$t0 $r0, $r1, $r2, $r3";
 
         return from_index(
-            jitc_var_new_3(Type, op, 1, m_index, b.index(), c.index()));
+            jitc_var_new_3(Type, op, 1, 1, m_index, b.index(), c.index()));
     }
 
     CUDAArray fmsub_(const CUDAArray &b, const CUDAArray &c) const {
@@ -587,7 +587,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
 
         if constexpr (!std::is_same_v<Value, bool>) {
             return from_index(jitc_var_new_3(Type,
-                                             "selp.$t0 $r0, $r1, $r2, $r3", 1,
+                                             "selp.$t0 $r0, $r1, $r2, $r3", 1, 1,
                                              t.index(), f.index(), m.index()));
         } else {
             return (m & t) | (~m & f);
@@ -599,14 +599,14 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
             enoki_raise("Unsupported operand type");
 
         return from_index(
-            jitc_var_new_1(Type, "popc.$b0 $r0, $r1", 1, m_index));
+            jitc_var_new_1(Type, "popc.$b0 $r0, $r1", 1, 1, m_index));
     }
 
     CUDAArray lzcnt_() const {
         if constexpr (!jitc_is_integral(Type))
             enoki_raise("Unsupported operand type");
 
-        return from_index(jitc_var_new_1(Type, "clz.$b0 $r0, $r1", 1, m_index));
+        return from_index(jitc_var_new_1(Type, "clz.$b0 $r0, $r1", 1, 1, m_index));
     }
 
     CUDAArray tzcnt_() const {
@@ -614,7 +614,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
             enoki_raise("Unsupported operand type");
 
         return from_index(jitc_var_new_1(
-            Type, "brev.$b0 $r0, $r1$nclz.$b0 $r0, $r0", 1, m_index));
+            Type, "brev.$b0 $r0, $r1$nclz.$b0 $r0, $r0", 1, 1, m_index));
     }
 
     //! @}
@@ -694,7 +694,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
             return CUDAArray();
         size_t byte_size = size * sizeof(Value);
         void *ptr = jitc_malloc(AllocType::Device, byte_size);
-        return from_index(jitc_var_map(Type, ptr, (uint32_t) size, 1));
+        return from_index(jitc_var_map(Type, 1, ptr, (uint32_t) size, 1));
     }
 
     static CUDAArray zero_(size_t size) {
@@ -714,7 +714,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
 
         size_t size = size_t((stop - start + step - (step > 0 ? 1 : -1)) / step);
         UInt32 index = UInt32::from_index(
-            jitc_var_new_0(VarType::UInt32, "mov.u32 $r0, $i", 1, (uint32_t) size));
+            jitc_var_new_0(VarType::UInt32, "mov.u32 $r0, $i", 1, 1, (uint32_t) size));
 
         if (start == 0 && step == 1) {
             return CUDAArray(index);
@@ -733,7 +733,7 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
         using UInt32 = CUDAArray<uint32_t>;
 
         UInt32 index = UInt32::from_index(
-            jitc_var_new_0(VarType::UInt32, "mov.u32 $r0, $i", 1, (uint32_t) size));
+            jitc_var_new_0(VarType::UInt32, "mov.u32 $r0, $i", 1, 1, (uint32_t) size));
 
         Value step = (max - min) / Value(size - 1);
         return fmadd(index, step, min);
@@ -741,11 +741,11 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
 
     static CUDAArray map_(void *ptr, size_t size, bool free = false) {
         return from_index(
-            jitc_var_map(Type, ptr, (uint32_t) size, free ? 1 : 0));
+            jitc_var_map(Type, 1, ptr, (uint32_t) size, free ? 1 : 0));
     }
 
     static CUDAArray load_unaligned_(const void *ptr, size_t size) {
-        return from_index(jitc_var_copy(AllocType::Host, Type, ptr, (uint32_t) size));
+        return from_index(jitc_var_copy(AllocType::Host, Type, 1, ptr, (uint32_t) size));
     }
 
     //! @}
@@ -795,15 +795,19 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
         if (jitc_var_int_ref(m_index) > 0) {
             eval();
             *this = CUDAArray::from_index(
-                jitc_var_copy(AllocType::Device, CUDAArray<Value>::Type, data(),
-                              (uint32_t) size()));
+                jitc_var_copy(AllocType::Device, CUDAArray<Value>::Type, 1,
+                              data(), (uint32_t) size()));
         }
 
         jitc_var_write(m_index, offset, &value);
     }
 
-    void set_label_(const char *label) {
+    void set_label_(const char *label) const {
         jitc_var_set_label(m_index, label);
+    }
+
+    const char *label_() const {
+        return jitc_var_label(m_index);
     }
 
     //! @}
@@ -866,11 +870,11 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
         memcpy(&value_uint, &value, sizeof(Value));
         snprintf(value_str, 48, fmt, value_uint);
 
-        return jitc_var_new_0(Type, value_str, 0, size);
+        return jitc_var_new_0(Type, value_str, 0, 1, size);
     }
 
-    void init_(size_t) {
-        enoki_raise("Internal error: CUDAArray::init_ should never be called!");
+    void init_(size_t size) {
+        *this = empty_(size);
     }
 
 protected:

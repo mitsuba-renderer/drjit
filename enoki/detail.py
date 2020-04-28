@@ -2,13 +2,13 @@ import enoki
 import sys
 
 VAR_TYPE_NAME = [
-    'Invalid', 'Bool',  'Int8',   'UInt8',   'Int16',   'UInt16',  'Int32',
-    'UInt32',  'Int64', 'UInt64', 'Float16', 'Float32', 'Float64', 'Pointer'
+    'Invalid', 'Bool',  'Int8',   'UInt8',   'Int16',   'UInt16',  'Int',
+    'UInt',    'Int64', 'UInt64', 'Float16', 'Float',   'Float64', 'Pointer'
 ]
 
 VAR_TYPE_SUFFIX = [
-    '???', 'b', 'i8',  'u8',  'i16', 'u16', 'i32', 'u32', 'i64', 'u64', 'f16',
-    'f32', 'f64',  'p'
+    '???', 'b', 'i8',  'u8',  'i16', 'u16', 'i', 'u', 'i64', 'u64', 'f16',
+    'f', 'f64',  'p'
 ]
 
 
