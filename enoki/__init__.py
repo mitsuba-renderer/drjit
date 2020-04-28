@@ -13,6 +13,9 @@ import enoki.generic as generic
 # Type traits analogous to the ones provided in C++
 import enoki.traits as traits
 
+# Math library and const
+import enoki.const as const
+
 # Install routing functions in ArrayBase and global scope
 self = vars()
 base = self['ArrayBase']
@@ -40,4 +43,11 @@ for k, v in enoki.traits.__dict__.items():
         continue
     self[k] = v
 
-del k, v, self, base, generic, router, traits, enoki_ext
+
+# Install const in global scope
+for k, v in enoki.const.__dict__.items():
+    if k.startswith('_'):
+        continue
+    self[k] = v
+
+del k, v, self, base, generic, router, traits, const, enoki_ext

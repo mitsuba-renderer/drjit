@@ -118,6 +118,37 @@ def _var_promote_mask(a0, a1):
     return a0, a1
 
 
+def _var_promote_select(a0, a1, a2):
+    """
+    Like _var_promote(), but specially adapted to the select() operation
+    """
+    vt0 = _var_type(a0)
+    vt1 = _var_type(a1)
+    vt2 = _var_type(a2)
+
+    if vt1 != vt2:
+        vt1 = _var_type(a1, vt2)
+        vt2 = _var_type(a2, vt1)
+
+    if vt0 != VarType.Bool:
+        raise Exception("select(): first argument must be a mask!")
+
+    base = a0 if getattr(a0, 'Depth', 0) >= getattr(a1, 'Depth', 0) else a1
+    base = base if getattr(base, 'Depth', 0) >= getattr(a2, 'Depth', 0) else a2
+
+    t0 = base.ReplaceScalar(vt0)
+    t12 = base.ReplaceScalar(_builtins.max(vt1, vt2))
+
+    if type(a0) is not t0:
+        a0 = t0(a0)
+    if type(a1) is not t12:
+        a1 = t12(a1)
+    if type(a2) is not t12:
+        a2 = t12(a2)
+
+    return a0, a1, a2
+
+
 def _replace_scalar(cls, vt):
     name = _array_name(vt, cls.Depth, cls.Size, cls.IsScalar)
     module = _modules.get(cls.__module__)
@@ -133,21 +164,23 @@ ArrayBase.ReplaceScalar = classmethod(_replace_scalar)
 
 def shape(a):
     """
-    Return the shape of an N-dimensional Enoki input array, or an empty list
-    when the provided argument is not an Enoki array.
+    Return the shape of an N-dimensional Enoki input
+    array, or an empty list when the provided argument is
+    not an Enoki array.
     """
     result = []
-    while isinstance(a, ArrayBase):
-        size = len(a)
+    t = type(a)
+    size = 0
+    is_array = issubclass(t, ArrayBase)
+
+    while is_array:
+        t = t.Value
+        is_array = issubclass(t, ArrayBase)
+        if a is not None:
+            size = len(a)
+            if is_array:
+                a = a[0] if size > 0 else None
         result.append(size)
-        if size == 0:
-            while True:
-                a = a.Value
-                if not issubclass(a, ArrayBase):
-                    break
-                result.append(0)
-            break
-        a = a[0]
     return result
 
 
@@ -226,6 +259,7 @@ def op_repr(self):
     else:
         import io
         buf = io.StringIO()
+        self.schedule()
         _repr_impl(self, s, buf)
         return buf.getvalue()
 
@@ -237,7 +271,7 @@ def op_bool(self):
         "variants (enoki.all_nested(), etc.) are available for nested arrays.")
 
 
-# Mainly for testcases: keep track of how often eval() is invoked.
+# Mainly for testcases: keep track of how often coeff() is invoked.
 _coeff_evals = 0
 
 
@@ -412,6 +446,13 @@ def op_iand(a, b):
     return a.iand_(b)
 
 
+def and_(a, b):
+    if type(a) is bool and type(b) is bool:
+        return a and b
+    else:
+        return a & b
+
+
 def op_or(a, b):
     if type(a) is not type(b) and type(b) is not _ek.mask_t(a):
         a, b = _var_promote_mask(a, b)
@@ -424,6 +465,13 @@ def op_ior(a, b):
     return a.ior_(b)
 
 
+def or_(a, b):
+    if type(a) is bool and type(b) is bool:
+        return a or b
+    else:
+        return a | b
+
+
 def op_xor(a, b):
     if type(a) is not type(b) and type(b) is not _ek.mask_t(a):
         a, b = _var_promote_mask(a, b)
@@ -434,6 +482,13 @@ def op_ixor(a, b):
     if type(a) is not type(b) and type(b) is not _ek.mask_t(a):
         a, b = _var_promote_mask(a, b)
     return a.ixor_(b)
+
+
+def xor_(a, b):
+    if type(a) is bool and type(b) is bool:
+        return a != b
+    else:
+        return a ^ b
 
 
 def op_lshift(a, b):
@@ -493,73 +548,91 @@ def op_neq(a, b):
 
 
 def eq(a, b):
-    if not isinstance(a, ArrayBase) and not isinstance(b, ArrayBase):
-        return a == b
-    else:
+    if isinstance(a, ArrayBase) or isinstance(b, ArrayBase):
         if type(a) is not type(b):
             a, b = _var_promote(a, b)
         return a.eq_(b)
+    else:
+        return a == b
 
 
 def neq(a, b):
-    if not isinstance(a, ArrayBase) and not isinstance(b, ArrayBase):
-        return a != b
-    else:
+    if isinstance(a, ArrayBase) or isinstance(b, ArrayBase):
         if type(a) is not type(b):
             a, b = _var_promote(a, b)
         return a.neq_(b)
-
-
-def sqrt(a):
-    if not isinstance(a, ArrayBase):
-        return _math.sqrt(a)
     else:
-        return a.sqrt_()
-
-
-def abs(a):
-    if not isinstance(a, ArrayBase):
-        return _builtins.abs(a)
-    else:
-        return a.abs_()
+        return a != b
 
 
 def op_abs(a):
-    if not isinstance(a, ArrayBase):
-        return _builtins.abs(a)
-    else:
+    if isinstance(a, ArrayBase):
         return a.abs_()
+    else:
+        return _builtins.abs(a)
+
+
+def abs(a):
+    if isinstance(a, ArrayBase):
+        return a.abs_()
+    else:
+        return _builtins.abs(a)
+
+
+def sqr(a):
+    return a * a
+
+
+def sqrt(a):
+    if isinstance(a, ArrayBase):
+        return a.sqrt_()
+    else:
+        return _math.sqrt(a)
+
+
+def rcp(a):
+    if isinstance(a, ArrayBase):
+        return a.rcp_()
+    else:
+        return 1.0 / a
+
+
+def rsqrt(a):
+    if isinstance(a, ArrayBase):
+        return a.rsqrt_()
+    else:
+        return 1.0 / _math.sqrt(a)
 
 
 def max(a, b):
-    if not isinstance(a, ArrayBase) and \
-       not isinstance(b, ArrayBase):
-        return _builtins.max(a, b)
-    else:
+    if isinstance(a, ArrayBase) or \
+       isinstance(b, ArrayBase):
         if type(a) is not type(b):
             a, b = _var_promote(a, b)
         return a.max_(b)
+    else:
+        return _builtins.max(a, b)
 
 
 def min(a, b):
-    if not isinstance(a, ArrayBase) and \
-       not isinstance(b, ArrayBase):
-        return _builtins.min(a, b)
-    else:
+    if isinstance(a, ArrayBase) or \
+       isinstance(b, ArrayBase):
         if type(a) is not type(b):
             a, b = _var_promote(a, b)
         return a.min_(b)
+    else:
+        return _builtins.min(a, b)
 
 
 def fmadd(a, b, c):
-    if not isinstance(a, ArrayBase) and \
-       not isinstance(b, ArrayBase) and \
-       not isinstance(c, ArrayBase):
-        return _ek.detail.fmadd_scalar(a, b, c)
-    else:
+    if isinstance(a, ArrayBase) or \
+       isinstance(b, ArrayBase) or \
+       isinstance(c, ArrayBase):
         if type(a) is not type(b) or type(b) is not type(c):
             a, b, c = _var_promote(a, b, c)
         return a.fmadd_(b, c)
+    else:
+        return _ek.detail.fmadd_scalar(a, b, c)
 
 
 def fmsub(a, b, c):
@@ -572,6 +645,85 @@ def fnmadd(a, b, c):
 
 def fnmsub(a, b, c):
     return fmadd(-a, b, -c)
+
+
+def select(m, t, f):
+    if isinstance(m, bool):
+        return t if m else f
+
+    if type(t) is not type(f) or type(m) is not _ek.mask_t(t):
+        m, t, f = _var_promote_select(m, t, f)
+
+    return type(t).select_(m, t, f)
+
+
+def sign(a):
+    t = type(a)
+    return select(a >= 0, t(1), t(-1))
+
+
+def copysign(a, b):
+    a_a = abs(a)
+    return select(b >= 0, a_a, -a_a)
+
+
+def copysign_neg(a, b):
+    a_a = abs(a)
+    return select(b >= 0, a_a, -a_a)
+
+
+def mulsign(a, b):
+    return select(b >= 0, a, -a)
+
+
+def mulsign_neg(a, b):
+    return select(b >= 0, -a, a)
+
+# -------------------------------------------------------------------
+#       Vertical operations -- autodiff/JIT compilation-related
+# -------------------------------------------------------------------
+
+
+def schedule(*args):
+    for a in args:
+        if hasattr(a, 'schedule'):
+            a.schedule()
+
+
+def eval(*args):
+    schedule(*args)
+    _ek.detail.eval()
+
+
+def detach(a):
+    return a.detach() if hasattr(a, 'detach') else a
+
+
+# -------------------------------------------------------------------
+#           Vertical operations -- transcendental functions
+# -------------------------------------------------------------------
+
+
+def sin(a):
+    if isinstance(a, ArrayBase):
+        return a.sin_()
+    else:
+        return _math.sin(a)
+
+
+def cos(a):
+    if isinstance(a, ArrayBase):
+        return a.cos_()
+    else:
+        return _math.cos(a)
+
+
+def sincos(a):
+    if isinstance(a, ArrayBase):
+        return a.sincos_()
+    else:
+        return (_math.sin(a), _math.cos(a))
+
 
 # -------------------------------------------------------------------
 #                       Horizontal operations
@@ -622,6 +774,15 @@ def hsum(a):
     return a.hsum_() if _var_is_enoki(a) else a
 
 
+def hsum_async(a):
+    if not _var_is_enoki(a):
+        return a
+    elif hasattr(a, 'hsum_async_'):
+        return a.hsum_async_()
+    else:
+        return type(a)(a.hsum_())
+
+
 def hsum_nested(a):
     while _var_is_enoki(a):
         a = hsum(a)
@@ -630,6 +791,15 @@ def hsum_nested(a):
 
 def hprod(a):
     return a.hprod_() if _var_is_enoki(a) else a
+
+
+def hprod_async(a):
+    if not _var_is_enoki(a):
+        return a
+    elif hasattr(a, 'hprod_async_'):
+        return a.hprod_async_()
+    else:
+        return type(a)(a.hprod_())
 
 
 def hprod_nested(a):
@@ -642,6 +812,15 @@ def hmax(a):
     return a.hmax_() if _var_is_enoki(a) else a
 
 
+def hmax_async(a):
+    if not _var_is_enoki(a):
+        return a
+    elif hasattr(a, 'hmax_async_'):
+        return a.hmax_async_()
+    else:
+        return type(a)(a.hmax_())
+
+
 def hmax_nested(a):
     while _var_is_enoki(a):
         a = hmax(a)
@@ -652,7 +831,75 @@ def hmin(a):
     return a.hmin_() if _var_is_enoki(a) else a
 
 
+def hmin_async(a):
+    if not _var_is_enoki(a):
+        return a
+    elif hasattr(a, 'hmin_async_'):
+        return a.hmin_async_()
+    else:
+        return type(a)(a.hmin_())
+
+
 def hmin_nested(a):
     while _var_is_enoki(a):
         a = hmin(a)
     return a
+
+
+def dot(a, b):
+    if type(a) is not type(b):
+        a, b = _var_promote(a, b)
+    return a.dot_(b)
+
+
+def dot_async(a, b):
+    if type(a) is not type(b):
+        a, b = _var_promote(a, b)
+
+    elif hasattr(a, 'dot_async_'):
+        return a.dot_async_(b)
+    else:
+        return type(a)(a.dot_(b))
+
+# -------------------------------------------------------------------
+#                      Initialization operations
+# -------------------------------------------------------------------
+
+
+def zero(type_, size=1):
+    if issubclass(type_, ArrayBase):
+        return type_.zero_(size)
+    else:
+        assert isinstance(type_, type)
+        return type_(0)
+
+
+def full(type_, value, size=1):
+    if issubclass(type_, ArrayBase):
+        return type_.zero_(value, size)
+    else:
+        assert isinstance(type_, type)
+        return type_(value)
+
+
+def linspace(type_, min, max, size=1):
+    if issubclass(type_, ArrayBase):
+        return type_.linspace_(min, max, size)
+    else:
+        assert isinstance(type_, type)
+        return type_(min)
+
+
+def arange(type_, start=None, end=None, step=1):
+    if start is None:
+        start = 0
+        end = 1
+    elif end is None:
+        end = start
+        start = 0
+
+    if issubclass(type_, ArrayBase):
+        return type_.arange_(start, end, step)
+    else:
+        assert isinstance(type_, type)
+        return type_(start)

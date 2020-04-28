@@ -81,6 +81,20 @@ def _check3(a0, a1, a2):
     return (s0, s1, s2, ar, sr)
 
 
+def _check3_select(a0, a1, a2):
+    """Validate the inputs of a select() array operation"""
+    s0, s1, s2 = len(a0), len(a1), len(a2)
+    sr = max(s0, s1, s2)
+    if (s0 != sr and s0 != 1) or (s1 != sr and s1 != 1) or \
+       (s2 != sr and s2 != 1):
+        raise Exception("Incompatible argument sizes: %i, %i, and %i"
+                        % (s0, s1, s2))
+    elif type(a1) is not type(a2) or type(a0) is not type(a1).MaskType:  # noqa
+        raise Exception("Type mismatch!")
+    ar = a1.empty_(sr if a0.Size == Dynamic else 0)
+    return (s0, s1, s2, ar, sr)
+
+
 def _binary_op(a, b, fn):
     """
     Perform a bit-level operation 'fn' involving variables 'a' and 'b' in a way
@@ -423,6 +437,24 @@ def sqrt_(a0):
     return ar
 
 
+def rsqrt_(a0):
+    s0, ar = _check1(a0)
+    if not a0.IsFloat:
+        raise Exception("rsqrt(): requires floating point operands!")
+    for i in range(s0):
+        ar[i] = _ek.rsqrt(a0[i])
+    return ar
+
+
+def rcp_(a0):
+    s0, ar = _check1(a0)
+    if not a0.IsFloat:
+        raise Exception("rcp(): requires floating point operands!")
+    for i in range(s0):
+        ar[i] = _ek.rcp(a0[i])
+    return ar
+
+
 def abs_(a0):
     s0, ar = _check1(a0)
     if not a0.IsArithmetic:
@@ -461,6 +493,69 @@ def fmadd_(a0, a1, a2):
                           a1[i if s1 > 1 else 0],
                           a2[i if s2 > 1 else 0])
     return ar
+
+
+@staticmethod
+def select_(a0, a1, a2):
+    s0, s1, s2, ar, sr = _check3_select(a0, a1, a2)
+    for i in range(sr):
+        ar[i] = _ek.select(a0[i if s0 > 1 else 0],
+                           a1[i if s1 > 1 else 0],
+                           a2[i if s2 > 1 else 0])
+    return ar
+
+# -------------------------------------------------------------------
+#       Vertical operations -- autodiff/JIT compilation-related
+# -------------------------------------------------------------------
+
+
+def schedule(a0):
+    if a0.IsJIT:
+        if a0.Depth == 1:
+            _ek.detail.schedule(a0.index())
+        else:
+            for i in range(len(a0)):
+                a0[i].schedule()
+
+
+def eval(a0):
+    if a0.IsJIT:
+        schedule(a0)
+        _ek.eval()
+
+# -------------------------------------------------------------------
+#           Vertical operations -- transcendental functions
+# -------------------------------------------------------------------
+
+
+def sin_(a0):
+    s0, ar = _check1(a0)
+    if not a0.IsFloat:
+        raise Exception("sin(): requires floating point operands!")
+    for i in range(s0):
+        ar[i] = _ek.sin(a0[i])
+    return ar
+
+
+def cos_(a0):
+    s0, ar = _check1(a0)
+    if not a0.IsFloat:
+        raise Exception("cos(): requires floating point operands!")
+    for i in range(s0):
+        ar[i] = _ek.cos(a0[i])
+    return ar
+
+
+def sincos_(a0):
+    s0, ar0 = _check1(a0)
+    ar1 = a0.empty_(s0 if a0.Size == Dynamic else 0)
+    if not ar0.IsFloat:
+        raise Exception("sincos(): requires floating point operands!")
+    for i in range(s0):
+        result = _ek.sincos(a0[i])
+        ar0[i] = result[0]
+        ar1[i] = result[1]
+    return ar0, ar1
 
 # -------------------------------------------------------------------
 #                       Horizontal operations
@@ -531,3 +626,64 @@ def hmax_(a0):
     for i in range(1, size):
         value = _ek.max(value, a0[i])
     return value
+
+
+def dot_(a0, a1):
+    size = len(a0)
+    if size == 0:
+        raise Exception("dot(): zero-sized array!")
+    if size != len(a1):
+        raise Exception("dot(): incompatible array sizes!")
+    if type(a0) is not type(a1):
+        raise Exception("Type mismatch!")
+
+    value = a0[0] * a1[0]
+    if a0.IsFloat:
+        for i in range(1, size):
+            value = _ek.fmadd(a0[i], a1[i], value)
+    else:
+        for i in range(1, size):
+            value += a0[i] * a1[i]
+    return value
+
+# -------------------------------------------------------------------
+#                      Initialization operations
+# -------------------------------------------------------------------
+
+
+@classmethod
+def zero_(cls, size=1):
+    result = cls.empty_(size)
+    for i in range(len(result)):
+        result[i] = 0
+    return result
+
+
+@classmethod
+def full(cls, value, size=1):
+    result = cls.empty_(size)
+    for i in range(len(result)):
+        result[i] = value
+    return result
+
+
+@classmethod
+def linspace(cls, min, max, size=1):
+    result = cls.empty_(size)
+    step = (max - min) / (len(result) - 1)
+    if cls.IsFloat:
+        for i in range(len(result)):
+            result[i] = min + step * i
+    else:
+        for i in range(len(result)):
+            result[i] = _ek.fmadd(step, i, min)
+    return result
+
+
+@classmethod
+def arange(cls, start, end, step):
+    size = (end - start + step - (1 if step > 0 else -1)) / step
+    result = cls.empty_(size)
+    for i in range(len(result)):
+        result[i] = start + step*i
+    return result

@@ -22,6 +22,7 @@ Makefile
 *~
 \.DS_Store
 *.dSYM
+__pycache__
 
 # Visual Studio
 *.vcxproj

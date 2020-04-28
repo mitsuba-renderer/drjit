@@ -260,6 +260,9 @@ auto bind_full(py::class_<Array, ek::ArrayBase> &cls,
         cls.def("sincos_", [](const Array &a) { return ek::sincos(a); });
     }
 
+    if constexpr (Array::IsJIT || Array::IsDiff)
+        cls.def("index", [](const Array &a) { return a.index(); });
+
     bind_generic_constructor(cls);
 
     return cls;

@@ -619,6 +619,54 @@ template <typename T> ENOKI_INLINE void store_unaligned(void *ptr, const T &valu
 //! @}
 // -----------------------------------------------------------------------
 
+// -----------------------------------------------------------------------
+//! @{ \name JIT compilation and autodiff-related
+// -----------------------------------------------------------------------
+
+template <typename T> ENOKI_INLINE void schedule(const T &value) {
+    if constexpr (is_jit_array_v<T>)
+        value.schedule();
+    else if constexpr (std::is_class_v<T>)
+        struct_support<T>::schedule(value);
+    else
+        ; /* do nothing */
+}
+
+template <typename T1, typename T2, typename... Ts>
+ENOKI_INLINE void schedule(const T1 &value1, const T2 &value2,
+                           const Ts&... values) {
+    schedule(value1);
+    schedule(value2, values...);
+}
+
+template <typename T> ENOKI_INLINE void eval(const T &value) {
+    if constexpr (is_jit_array_v<T>)
+        value.eval();
+    else if constexpr (std::is_class_v<T>)
+        struct_support<T>::eval(value);
+    else
+        ; /* do nothing */
+}
+
+template <typename T1, typename T2, typename... Ts>
+ENOKI_INLINE void eval(const T1 &value1, const T2 &value2,
+                       const Ts&... values) {
+    eval(value1);
+    eval(value2, values...);
+}
+
+template <typename T> ENOKI_INLINE decltype(auto) detach(const T &value) {
+    if constexpr (is_diff_array_v<T>)
+        return value.detach();
+    else if constexpr (std::is_class_v<T>)
+        return struct_support<T>::detach(value);
+    else
+        return value;
+}
+
+//! @}
+// -----------------------------------------------------------------------
+
 #undef ENOKI_ROUTE_UNARY
 #undef ENOKI_ROUTE_UNARY_FALLBACK
 #undef ENOKI_ROUTE_UNARY_IMM_FALLBACK

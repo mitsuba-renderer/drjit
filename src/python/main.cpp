@@ -116,12 +116,13 @@ PYBIND11_MODULE(enoki_ext, m_) {
     m.def("sync_device", &jitc_sync_device);
     m.def("whos_str", &jitc_var_whos);
     m.def("whos", []() { py::print(jitc_var_whos()); });
-    m.def("eval", &jitc_eval);
-    m.def("parallel_dispatch", &jitc_parallel_dispatch);
-    m.def("set_parallel_dispatch", &jitc_set_parallel_dispatch);
     m.def("malloc_trim", &jitc_malloc_trim);
-    m.def("set_log_level_stderr", &jitc_set_log_level_stderr);
-    m.def("log_level_stderr", &jitc_log_level_stderr);
+    m.def("set_log_level", &jitc_set_log_level_stderr);
+    m.def("log_level", &jitc_log_level_stderr);
+
+    array_detail.def("schedule", &jitc_var_schedule);
+    array_detail.def("eval", &jitc_var_eval);
+    array_detail.def("eval", &jitc_eval);
 
     /* Register a cleanup callback function that is invoked when
        the 'enoki::ArrayBase' Python type is garbage collected */
