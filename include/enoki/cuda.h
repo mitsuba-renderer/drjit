@@ -19,7 +19,10 @@
 NAMESPACE_BEGIN(enoki)
 
 template <typename Value_>
-struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
+struct CUDAArray : ArrayBaseT<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
+    static_assert(std::is_scalar_v<Value_>,
+                  "CUDA Arrays can only be created over scalar types!");
+
     // -----------------------------------------------------------------------
     //! @{ \name Basic type declarations
     // -----------------------------------------------------------------------
@@ -628,7 +631,9 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
         if constexpr (!jitc_is_mask(Type))
             enoki_raise("Unsupported operand type");
 
-        if (is_literal_one()) {
+        if (size() == 0) {
+            enoki_raise("all_(): zero-sized array!");
+        } else if (is_literal_one()) {
             return true;
         } else if (is_literal_zero()) {
             return false;
@@ -642,7 +647,9 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
         if constexpr (!jitc_is_mask(Type))
             enoki_raise("Unsupported operand type");
 
-        if (is_literal_one()) {
+        if (size() == 0) {
+            enoki_raise("any_(): zero-sized array!");
+        } else if (is_literal_one()) {
             return true;
         } else if (is_literal_zero()) {
             return false;
@@ -656,8 +663,9 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
         CUDAArray name##_async_() const {                                     \
             if constexpr (!jitc_is_arithmetic(Type))                          \
                 enoki_raise("Unsupported operand type");                      \
-                                                                              \
-            if (size() == 1)                                                  \
+            if (size() == 0)                                                  \
+                enoki_raise(#name "_async_(): zero-sized array!");            \
+            else if (size() == 1)                                             \
                 return *this;                                                 \
                                                                               \
             eval();                                                           \
@@ -752,6 +760,226 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
     // -----------------------------------------------------------------------
 
     // -----------------------------------------------------------------------
+    //! @{ \name Scatter/gather support
+    // -----------------------------------------------------------------------
+private:
+    template <typename Index>
+    static CUDAArray gather_impl_(const void *src_ptr, uint32_t src_index,
+                                  const CUDAArray<Index> &index,
+                                  const CUDAArray<bool> &mask = true) {
+        if constexpr (sizeof(Index) != 4) {
+            /* Prefer 32 bit index arithmetic, 64 bit multiplies are
+               emulated and thus very expensive on NVIDIA GPUs.. */
+            using Int32 = int32_array_t<CUDAArray<Index>>;
+            return gather_impl_(src_ptr, src_index, Int32(index), mask);
+        } else {
+            CUDAArray<void *> base = CUDAArray<void *>::from_index(
+                jitc_var_copy_ptr(src_ptr, src_index));
+
+            uint32_t var = 0;
+            if (mask.is_literal_one()) {
+                var = jitc_var_new_2(Type,
+                                     !std::is_same_v<Value, bool>
+                                         ? "mul.wide.$t2 %rd3, $r2, $s0$n"
+                                           "add.$t1 %rd3, %rd3, $r1$n"
+                                           "ld.global.nc.$t0 $r0, [%rd3]"
+                                         : "mul.wide.$t2 %rd3, $r2, $s0$n"
+                                           "add.$t1 %rd3, %rd3, $r1$n"
+                                           "ld.global.nc.u8 %w0, [%rd3]$n"
+                                           "setp.ne.u16 $r0, %w0, 0",
+                                     1, 1, base.index(), index.index());
+            } else {
+                var = jitc_var_new_3(Type,
+                                     !std::is_same_v<Value, bool>
+                                         ? "mul.wide.$t2 %rd3, $r2, $s0$n"
+                                           "add.$t1 %rd3, %rd3, $r1$n"
+                                           "@$r3 ld.global.nc.$t0 $r0, [$r1]$n"
+                                           "@!$r3 mov.$b0 $r0, 0"
+                                         : "mul.wide.$t2 %rd3, $r2, $s0$n"
+                                           "add.$t1 %rd3, %rd3, $r1$n"
+                                           "@$r3 ld.global.nc.u8 %w0, [$r1]$n"
+                                           "@!$r3 mov.u16 %w0, 0$n"
+                                           "setp.ne.u16 $r0, %w0, 0",
+                                     1, 1, base.index(), index.index(),
+                                     mask.index());
+            }
+
+            return from_index(var);
+        }
+    }
+
+    template <typename Index>
+    void scatter_impl_(void *dst, uint32_t dst_index,
+                       const CUDAArray<Index> &index,
+                       const CUDAArray<bool> &mask = true) {
+        if constexpr (sizeof(Index) != 4) {
+            /* Prefer 32 bit index arithmetic, 64 bit multiplies are
+               emulated and thus very expensive on NVIDIA GPUs.. */
+            using Int32 = int32_array_t<CUDAArray<Index>>;
+            return scatter_impl_(dst, dst_index, Int32(index), mask);
+        } else {
+            CUDAArray<void *> base = CUDAArray<void *>::from_index(
+                jitc_var_copy_ptr(dst, dst_index));
+
+            uint32_t var;
+            if (mask.is_literal_one()) {
+                if constexpr (!std::is_same_v<Value, bool>) {
+                    var = jitc_var_new_3(VarType::Invalid,
+                                         "mul.wide.$t3 %rd3, $r3, $s2$n"
+                                         "add.$t1 %rd3, %rd3, $r1$n"
+                                         "st.global.$t2 [%rd3], $r2",
+                                         1, 1, base.index(), m_index,
+                                         index.index());
+                } else {
+                    var = jitc_var_new_3(VarType::Invalid,
+                                         "mul.wide.$t3 %rd3, $r3, $s2$n"
+                                         "add.$t1 %rd3, %rd3, $r1$n"
+                                         "selp.u16 %w0, 1, 0, $r2$n"
+                                         "st.global.u8 [%rd3], %w0",
+                                         1, 1, base.index(), m_index,
+                                         index.index());
+                }
+            } else {
+                if (!std::is_same_v<Value, bool>) {
+                    var = jitc_var_new_4(VarType::Invalid,
+                                         "mul.wide.$t3 %rd3, $r3, $s2$n"
+                                         "add.$t1 %rd3, %rd3, $r1$n"
+                                         "@$r4 st.global.$t2 [%rd3], $r2",
+                                         1, 1, base.index(), m_index,
+                                         index.index(), mask.index());
+                } else {
+                    var = jitc_var_new_4(VarType::Invalid,
+                                         "mul.wide.$t3 %rd3, $r3, $s2$n"
+                                         "add.$t1 %rd3, %rd3, $r1$n"
+                                         "selp.u16 %w0, 1, 0, $r2$n"
+                                         "@$r4 st.global.u8 [%rd3], %w0",
+                                         1, 1, base.index(), m_index,
+                                         index.index(), mask.index());
+                }
+            }
+            jitc_var_mark_scatter(var, dst_index);
+        }
+    }
+
+    template <typename Index>
+    void scatter_add_impl_(void *dst, uint32_t dst_index,
+                           const CUDAArray<Index> &index,
+                           const CUDAArray<bool> &mask = true) {
+        if constexpr (sizeof(Index) != 4) {
+            /* Prefer 32 bit index arithmetic, 64 bit multiplies are
+               emulated and thus very expensive on NVIDIA GPUs.. */
+            using Int32 = int32_array_t<CUDAArray<Index>>;
+            return scatter_add_impl_(dst, Int32(index), mask);
+        } else {
+            CUDAArray<void *> base = CUDAArray<void *>::from_index(
+                jitc_var_copy_ptr(dst, dst_index));
+
+            uint32_t var;
+            if (mask.is_literal_one()) {
+                var = jitc_var_new_3(VarType::Invalid,
+                                     "mul.wide.$t3 %rd3, $r3, $s2$n"
+                                     "add.$t1 %rd3, %rd3, $r1$n"
+                                     "red.global.add.$t2 [%rd3], $r2",
+                                     1, 1, base.index(), m_index,
+                                     index.index());
+            } else {
+                var = jitc_var_new_4(VarType::Invalid,
+                                     "mul.wide.$t3 %rd3, $r3, $s2$n"
+                                     "add.$t1 %rd3, %rd3, $r1$n"
+                                     "@$r4 red.global.add.$t2 [%rd3], $r2",
+                                     1, 1, base.index(), m_index, index.index(),
+                                     mask.index());
+            }
+
+            jitc_var_mark_scatter(var, dst_index);
+        }
+    }
+
+public:
+    template <typename Index>
+    static CUDAArray gather_raw_(const void *src, const CUDAArray<Index> &index,
+                                 const CUDAArray<bool> &mask = true) {
+        if (mask.is_literal_zero())
+            return Value(0);
+
+        return gather_impl_(src, 0, index, mask);
+    }
+
+    template <typename Index>
+    static CUDAArray gather_(const CUDAArray &src, const CUDAArray<Index> &index,
+                             const CUDAArray<bool> &mask = true) {
+        if (mask.is_literal_zero())
+            return Value(0);
+
+        src.eval();
+        return gather_impl_(src.data(), src.index(), index, mask);
+    }
+
+    template <typename Index>
+    void scatter_raw_(void *dst, const CUDAArray<Index> &index,
+                      const CUDAArray<bool> &mask = true) {
+        if (mask.is_literal_zero())
+            return;
+
+        scatter_impl_(dst, 0, index, mask);
+    }
+
+    template <typename Index>
+    void scatter_(CUDAArray &dst, const CUDAArray<Index> &index,
+                  const CUDAArray<bool> &mask = true) {
+        if (mask.is_literal_zero())
+            return;
+
+        void *ptr = dst.data();
+
+        if (!ptr) {
+            dst.eval();
+            ptr = dst.data();
+        }
+
+        if (jitc_var_int_ref(dst.index()) > 0) {
+            dst = CUDAArray<Value>::from_index(
+                jitc_var_copy(AllocType::Device, CUDAArray<Value>::Type,
+                              1, ptr, (uint32_t) dst.size()));
+            ptr = dst.data();
+        }
+
+        scatter_impl_(ptr, dst.index(), index, mask);
+    }
+
+    template <typename Index>
+    void scatter_add_raw_(void *dst, const CUDAArray<Index> &index,
+                          const CUDAArray<bool> &mask = true) {
+        if (mask.is_literal_zero())
+            return;
+
+        scatter_add_impl_(dst, 0, index, mask);
+    }
+
+    template <typename Index>
+    void scatter_add_(CUDAArray &dst, const CUDAArray<Index> &index,
+                      const CUDAArray<bool> &mask = true) {
+        if (mask.is_literal_zero())
+            return;
+
+        void *ptr = dst.data();
+
+        if (!ptr) {
+            dst.eval();
+            ptr = dst.data();
+        }
+
+        if (jitc_var_int_ref(dst.index()) > 0) {
+            dst = CUDAArray<Value>::from_index(
+                jitc_var_copy(AllocType::Device, CUDAArray<Value>::Type,
+                              1, ptr, (uint32_t) dst.size()));
+            ptr = dst.data();
+        }
+
+        scatter_add_impl_(ptr, dst.index(), index, mask);
+    }
+
+    // -----------------------------------------------------------------------
     //! @{ \name Miscellaneous
     // -----------------------------------------------------------------------
 
@@ -800,6 +1028,10 @@ struct CUDAArray : ArrayBaseT<Value_, CUDAArray<Value_>> {
         }
 
         jitc_var_write(m_index, offset, &value);
+    }
+
+    void migrate(AllocType type) {
+        jitc_var_migrate(m_index, type);
     }
 
     void set_label_(const char *label) const {

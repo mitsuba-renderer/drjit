@@ -65,9 +65,12 @@ namespace detail {
 template <typename Value_, size_t Size_, bool IsMask_, typename Derived_>
 struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
                        detail::enable_if_generic<Value_, Size_>>
-    : StaticArrayBase<Value_, Size_, IsMask_, Derived_> {
+    : StaticArrayBase<std::conditional_t<IsMask_, mask_t<Value_>, Value_>,
+                      Size_, IsMask_, Derived_> {
 
-    using Base = StaticArrayBase<Value_, Size_, IsMask_, Derived_>;
+    using Base = StaticArrayBase<
+        std::conditional_t<IsMask_, mask_t<Value_>, Value_>,
+        Size_, IsMask_, Derived_>;
 
     using typename Base::Derived;
     using typename Base::Value;
@@ -154,9 +157,9 @@ struct StaticArrayImpl<Value_, 0, IsMask_, Derived_>
 
     StaticArrayImpl() = default;
     template <typename Value2, typename Derived2>
-    StaticArrayImpl(const ArrayBaseT<Value2, Derived2> &) { }
+    StaticArrayImpl(const ArrayBaseT<Value2, IsMask_, Derived2> &) { }
     template <typename Value2, typename Derived2>
-    StaticArrayImpl(const ArrayBaseT<Value2, Derived2> &, detail::reinterpret_flag) { }
+    StaticArrayImpl(const ArrayBaseT<Value2, IsMask_, Derived2> &, detail::reinterpret_flag) { }
     StaticArrayImpl(const Value &) { }
 };
 
@@ -247,8 +250,8 @@ template <typename Array> bool ragged(const Array &a) {
     return detail::is_ragged(a, shape);
 }
 
-template <typename Stream, typename Value, typename Derived>
-ENOKI_NOINLINE Stream &operator<<(Stream &os, const ArrayBaseT<Value, Derived> &a) {
+template <typename Stream, typename Value, bool IsMask, typename Derived>
+ENOKI_NOINLINE Stream &operator<<(Stream &os, const ArrayBaseT<Value, IsMask, Derived> &a) {
     size_t shape[array_depth_v<Derived> + 1];
     schedule(a);
     detail::put_shape(a, shape);

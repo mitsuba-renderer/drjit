@@ -192,8 +192,8 @@ NAMESPACE_BEGIN(enoki)
 /// Base class of all arrays
 struct ArrayBase;
 
-/// Base class of all arrays (CRT)
-template <typename Value_, typename Derived_> struct ArrayBaseT;
+/// Base class of all arrays (Curiously recurring template)
+template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT;
 
 /// Base class of all statically sized arrays
 template <typename Value_, size_t Size_, bool IsMask_, typename Derived_>

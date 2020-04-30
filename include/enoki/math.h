@@ -212,50 +212,349 @@ namespace detail {
         if constexpr (Cos)
             *c_out = mulsign(select(polymask, c, s), sign_cos);
     }
+
+    template <bool Tan, typename Value>
+    ENOKI_INLINE auto tancot(const Value &x) {
+        using Scalar = scalar_t<Value>;
+        constexpr bool Single = std::is_same_v<Scalar, float>;
+        using IntArray = int_array_t<Value>;
+        using Int = scalar_t<IntArray>;
+
+        /*
+         - tan (in [-8192, 8192]):
+           * avg abs. err = 4.63693e-06
+           * avg rel. err = 3.60191e-08
+              -> in ULPs  = 0.435442
+           * max abs. err = 0.8125
+             (at x=-6199.93)
+           * max rel. err = 3.12284e-06
+             -> in ULPs   = 30
+             (at x=-7406.3)
+        */
+
+        Value xa = abs(x);
+
+        /* Scale by 4/Pi and get the integer part */
+        IntArray j(xa * Scalar(1.2732395447351626862));
+
+        /* Map zeros to origin; if (j & 1) j += 1 */
+        j = (j + Int(1)) & Int(~1u);
+
+        /* Cast back to a floating point value */
+        Value y(j);
+
+        /* Extended precision modular arithmetic */
+        if constexpr (Single) {
+            y = xa - y * Scalar(0.78515625)
+                   - y * Scalar(2.4187564849853515625e-4)
+                   - y * Scalar(3.77489497744594108e-8);
+        } else {
+            y = xa - y * Scalar(7.85398125648498535156e-1)
+                   - y * Scalar(3.77489470793079817668e-8)
+                   - y * Scalar(2.69515142907905952645e-15);
+        }
+
+        Value z = y * y;
+        z |= eq(xa, Infinity<Scalar>);
+
+        Value r;
+        if constexpr (Single) {
+            r = poly5(z, 3.33331568548e-1,
+                         1.33387994085e-1,
+                         5.34112807005e-2,
+                         2.44301354525e-2,
+                         3.11992232697e-3,
+                         9.38540185543e-3);
+        } else {
+            r = poly2(z, -1.79565251976484877988e7,
+                          1.15351664838587416140e6,
+                         -1.30936939181383777646e4) /
+                poly4(z, -5.38695755929454629881e7,
+                          2.50083801823357915839e7,
+                         -1.32089234440210967447e6,
+                          1.36812963470692954678e4,
+                          1.00000000000000000000e0);
+        }
+
+        r = fmadd(r, z * y, y);
+
+        auto recip_mask = Tan ? neq(j & Int(2), Int(0)) :
+                                 eq(j & Int(2), Int(0));
+        masked(r, xa < Scalar(1e-4)) = y;
+        masked(r, recip_mask) = rcp(r);
+
+        Value sign =
+            reinterpret_array<Value>(sl<sizeof(Scalar) * 8 - 2>(j)) ^ x;
+
+        return mulsign(r, sign);
+    }
 };
 
 namespace detail {
     #define ENOKI_DETECTOR(name)                                          \
         template <typename T>                                             \
-        using has_##name = decltype(std::declval<T>().name##_());         \
-        template <typename T>                                             \
-        constexpr bool has_##name##_v = is_detected_v<has_##name, T>;
+        using has_##name = decltype(std::declval<T>().name##_());
 
     ENOKI_DETECTOR(sin)
     ENOKI_DETECTOR(cos)
     ENOKI_DETECTOR(sincos)
+    ENOKI_DETECTOR(exp)
+    ENOKI_DETECTOR(log)
 }
 
-template <typename Value> ENOKI_INLINE Value sin(const Value &value) {
-    if constexpr (detail::has_sin_v<Value>) {
-        return value.sin_();
+template <typename Value> ENOKI_INLINE Value sin(const Value &x) {
+    if constexpr (is_detected_v<detail::has_sin, Value>) {
+        return x.sin_();
     } else {
         Value result;
-        detail::sincos<true, false>(value, &result, (Value *) nullptr);
+        detail::sincos<true, false>(x, &result, (Value *) nullptr);
         return result;
     }
 }
 
-template <typename Value> ENOKI_INLINE Value cos(const Value &value) {
-    if constexpr (detail::has_cos_v<Value>) {
-        return value.cos_();
+template <typename Value> ENOKI_INLINE Value cos(const Value &x) {
+    if constexpr (is_detected_v<detail::has_cos, Value>) {
+        return x.cos_();
     } else {
         Value result;
-        detail::sincos<false, true>(value, (Value *) nullptr, &result);
+        detail::sincos<false, true>(x, (Value *) nullptr, &result);
         return result;
     }
 }
 
-template <typename Value> ENOKI_INLINE std::pair<Value, Value> sincos(const Value &value) {
-    if constexpr (detail::has_sincos_v<Value>) {
-        return value.sincos_();
-    } else if constexpr (detail::has_sin_v<Value> && detail::has_cos_v<Value>) {
-        return { value.sin_(), value.cos_()} ;
+template <typename Value> ENOKI_INLINE std::pair<Value, Value> sincos(const Value &x) {
+    if constexpr (is_detected_v<detail::has_sincos, Value>) {
+        return x.sincos_();
     } else {
         Value result_s, result_c;
-        detail::sincos<true, true>(value, &result_s, &result_c);
+        detail::sincos<true, true>(x, &result_s, &result_c);
         return { result_s, result_c };
     }
+}
+
+template <typename Value> Value csc(const Value &x) { return rcp(sin(x)); }
+template <typename Value> Value sec(const Value &x) { return rcp(cos(x)); }
+
+template <typename Value> ENOKI_INLINE Value tan(const Value &x) {
+    return detail::tancot<true>(x);
+}
+
+template <typename Value> ENOKI_INLINE Value cot(const Value &x) {
+    return detail::tancot<false>(x);
+}
+
+template <typename Value> ENOKI_INLINE Value asin(const Value &x) {
+    /*
+       Arc sine function approximation based on CEPHES.
+
+     - asin (in [-1, 1]):
+       * avg abs. err = 2.25422e-08
+       * avg rel. err = 2.85777e-08
+          -> in ULPs  = 0.331032
+       * max abs. err = 1.19209e-07
+         (at x=-0.999998)
+       * max rel. err = 2.27663e-07
+         -> in ULPs   = 2
+         (at x=-0.841416)
+    */
+
+    using Scalar = scalar_t<Value>;
+    using Mask = mask_t<Value>;
+    constexpr bool Single = std::is_same_v<Scalar, float>;
+
+    Value xa          = abs(x),
+          x2          = sqr(x),
+          r;
+
+    if constexpr (Single) {
+        Mask mask_big = xa > Scalar(0.5);
+
+        Value x1 = Scalar(0.5) * (Scalar(1) - xa);
+        Value x3 = select(mask_big, x1, x2);
+        Value x4 = select(mask_big, sqrt(x1), xa);
+
+        Value z1 = poly4(x3, 1.6666752422e-1f,
+                             7.4953002686e-2f,
+                             4.5470025998e-2f,
+                             2.4181311049e-2f,
+                             4.2163199048e-2f);
+
+        z1 = fmadd(z1, x3*x4, x4);
+
+        r = select(mask_big, Scalar(.5f * Pi<Scalar>) - (z1 + z1), z1);
+    } else {
+        Mask mask_big = xa > Scalar(0.625);
+
+        if (any_nested_or<true>(mask_big)) {
+            const Scalar pio4 = Scalar(0.78539816339744830962);
+            const Scalar more_bits = Scalar(6.123233995736765886130e-17);
+
+            /* arcsin(1-x) = pi/2 - sqrt(2x)(1+R(x))  */
+            Value zz = Scalar(1) - xa;
+            Value p = poly4(zz, 2.853665548261061424989e1,
+                               -2.556901049652824852289e1,
+                                6.968710824104713396794e0,
+                               -5.634242780008963776856e-1,
+                                2.967721961301243206100e-3) /
+                      poly4(zz, 3.424398657913078477438e2,
+                               -3.838770957603691357202e2,
+                                1.470656354026814941758e2,
+                               -2.194779531642920639778e1,
+                                1.000000000000000000000e0) * zz;
+            zz = sqrt(zz + zz);
+            Value z = pio4 - zz;
+            masked(r, mask_big) = z - fmsub(zz, p, more_bits) + pio4;
+        }
+
+        if (!all_nested_or<false>(mask_big)) {
+            Value z = poly5(x2, -8.198089802484824371615e0,
+                                 1.956261983317594739197e1,
+                                -1.626247967210700244449e1,
+                                 5.444622390564711410273e0,
+                                -6.019598008014123785661e-1,
+                                 4.253011369004428248960e-3) /
+                      poly5(x2, -4.918853881490881290097e1,
+                                 1.395105614657485689735e2,
+                                -1.471791292232726029859e2,
+                                 7.049610280856842141659e1,
+                                -1.474091372988853791896e1,
+                                 1.000000000000000000000e0) * x2;
+            z = fmadd(xa, z, xa);
+            z = select(xa < Scalar(1e-8), xa, z);
+            masked(r, ~mask_big) = z;
+        }
+    }
+
+    return copysign(r, x);
+}
+
+template <typename Value> ENOKI_INLINE Value acos(const Value &x) {
+    /*
+       Arc cosine function approximation based on CEPHES.
+
+     - acos (in [-1, 1]):
+       * avg abs. err = 4.72002e-08
+       * avg rel. err = 2.85612e-08
+          -> in ULPs  = 0.33034
+       * max abs. err = 2.38419e-07
+         (at x=-0.99999)
+       * max rel. err = 1.19209e-07
+         -> in ULPs   = 1
+         (at x=-0.99999)
+    */
+
+    using Scalar = scalar_t<Value>;
+    using Mask = mask_t<Value>;
+    constexpr bool Single = std::is_same_v<Scalar, float>;
+
+    if constexpr (Single) {
+        Value xa = abs(x), x2 = sqr(x);
+
+        Mask mask_big = xa > Scalar(0.5);
+
+        Value x1 = Scalar(0.5) * (Scalar(1) - xa);
+        Value x3 = select(mask_big, x1, x2);
+        Value x4 = select(mask_big, sqrt(x1), xa);
+
+        Value z1 = poly4(x3, 1.666675242e-1f,
+                             7.4953002686e-2f,
+                             4.5470025998e-2f,
+                             2.4181311049e-2f,
+                             4.2163199048e-2f);
+
+        z1 = fmadd(z1, x3 * x4, x4);
+        Value z2 = z1 + z1;
+        z2 = select(x < Scalar(0), Scalar(Pi<Scalar>) - z2, z2);
+
+        Value z3 = Scalar(Pi<Scalar> * .5f) - copysign(z1, x);
+        return select(mask_big, z2, z3);
+    } else {
+        const Scalar pio4 = Scalar(0.78539816339744830962);
+        const Scalar more_bits = Scalar(6.123233995736765886130e-17);
+        const Scalar h = Scalar(0.5);
+
+        Mask mask = x > h;
+
+        Value y = asin(select(mask, sqrt(fnmadd(h, x, h)), x));
+        return select(mask, y + y, pio4 - y + more_bits + pio4);
+    }
+}
+
+template <typename Y, typename X> ENOKI_INLINE auto atan2(const Y &y, const X &x) {
+    if constexpr (!std::is_same_v<X, Y>) {
+        using E = expr_t<X, Y>;
+        return atan2(static_cast<ref_cast_t<Y, E>>(y),
+                     static_cast<ref_cast_t<X, E>>(x));
+    } else {
+        /*
+           MiniMax fit by Wenzel Jakob, May 2016
+
+         - atan2() tested via atan() (in [-1, 1]):
+           * avg abs. err = 1.81543e-07
+           * avg rel. err = 4.15224e-07
+              -> in ULPs  = 4.9197
+           * max abs. err = 5.96046e-07
+             (at x=-0.976062)
+           * max rel. err = 7.73931e-07
+             -> in ULPs   = 12
+             (at x=-0.015445)
+        */
+
+        using Value = X;
+        using Scalar = scalar_t<Value>;
+        constexpr bool Single = std::is_same_v<Scalar, float>;
+
+        Value x_ = y,
+              y_ = x,
+              abs_x      = abs(x_),
+              abs_y      = abs(y_),
+              min_val    = min(abs_y, abs_x),
+              max_val    = max(abs_x, abs_y),
+              scaled_min = min_val / max_val,
+              z          = sqr(scaled_min);
+
+        // How to find these:
+        // f[x_] = MiniMaxApproximation[ArcTan[Sqrt[x]]/Sqrt[x],
+        //         {x, {1/10000, 1}, 6, 0}, WorkingPrecision->20][[2, 1]]
+
+        Value t;
+        if constexpr (Single) {
+            t = poly6(z, 0.99999934166683966009,
+                        -0.33326497518773606976,
+                        +0.19881342388439013552,
+                        -0.13486708938456973185,
+                        +0.083863120428809689910,
+                        -0.037006525670417265220,
+                         0.0078613793713198150252);
+        } else {
+            t = poly6(z, 9.9999999999999999419e-1,
+                         2.50554429737833465113e0,
+                         2.28289058385464073556e0,
+                         9.20960512187107069075e-1,
+                         1.59189681028889623410e-1,
+                         9.35911604785115940726e-3,
+                         8.07005540507283419124e-5) /
+                poly6(z, 1.00000000000000000000e0,
+                         2.83887763071166519407e0,
+                         3.02918312742541450749e0,
+                         1.50576983803701596773e0,
+                         3.49719171130492192607e-1,
+                         3.29968942624402204199e-2,
+                         8.26619391703564168942e-4);
+        }
+
+        t = t * scaled_min;
+
+        t = select(abs_y > abs_x, Pi<Scalar> * Scalar(.5f) - t, t);
+        t = select(x_ < zero<Value>(), Pi<Scalar> - t, t);
+        Value r = select(y_ < zero<Value>(), -t, t);
+        r &= neq(max_val, Scalar(0));
+        return r;
+    }
+}
+
+template <typename Value> ENOKI_INLINE Value atan(const Value &x) {
+    return atan2(x, Value(1));
 }
 
 NAMESPACE_END(enoki)

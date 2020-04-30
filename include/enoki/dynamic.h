@@ -18,8 +18,11 @@
 
 NAMESPACE_BEGIN(enoki)
 
-template <typename Value_> struct DynamicArray : ArrayBaseT<Value_, DynamicArray<Value_>> {
-    using Base = ArrayBaseT<Value_, DynamicArray<Value_>>;
+template <typename Value_>
+struct DynamicArray
+    : ArrayBaseT<Value_, is_mask_v<Value_>, DynamicArray<Value_>> {
+    static constexpr bool IsMask = is_mask_v<Value_>;
+    using Base = ArrayBaseT<Value_, IsMask, DynamicArray<Value_>>;
     using typename Base::Value;
     using typename Base::Scalar;
     using Base::empty;
@@ -53,7 +56,7 @@ template <typename Value_> struct DynamicArray : ArrayBaseT<Value_, DynamicArray
     }
 
     template <typename Value2, typename Derived2>
-    DynamicArray(const ArrayBaseT<Value2, Derived2> &v) {
+    DynamicArray(const ArrayBaseT<Value2, IsMask, Derived2> &v) {
         size_t size = v.derived().size();
         init_(size);
         for (size_t i = 0; i < size; ++i)
@@ -61,7 +64,8 @@ template <typename Value_> struct DynamicArray : ArrayBaseT<Value_, DynamicArray
     }
 
     template <typename Value2, typename Derived2>
-    DynamicArray(const ArrayBaseT<Value2, Derived2> &v, detail::reinterpret_flag) {
+    DynamicArray(const ArrayBaseT<Value2, IsMask, Derived2> &v,
+                 detail::reinterpret_flag) {
         size_t size = v.derived().size();
         init_(size);
         for (size_t i = 0; i < size; ++i)

@@ -19,7 +19,10 @@
 NAMESPACE_BEGIN(enoki)
 
 template <typename Value_>
-struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
+struct LLVMArray : ArrayBaseT<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
+    static_assert(std::is_scalar_v<Value_>,
+                  "LLVM Arrays can only be created over scalar types!");
+
     // -----------------------------------------------------------------------
     //! @{ \name Basic type declarations
     // -----------------------------------------------------------------------
@@ -708,7 +711,9 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
         if constexpr (!jitc_is_mask(Type))
             enoki_raise("Unsupported operand type");
 
-        if (is_literal_one()) {
+        if (size() == 0) {
+            enoki_raise("all_(): zero-sized array!");
+        } else if (is_literal_one()) {
             return true;
         } else if (is_literal_zero()) {
             return false;
@@ -722,7 +727,9 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
         if constexpr (!jitc_is_mask(Type))
             enoki_raise("Unsupported operand type");
 
-        if (is_literal_one()) {
+        if (size() == 0) {
+            enoki_raise("any_(): zero-sized array!");
+        } else if (is_literal_one()) {
             return true;
         } else if (is_literal_zero()) {
             return false;
@@ -736,8 +743,9 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
         LLVMArray name##_async_() const {                                     \
             if constexpr (!jitc_is_arithmetic(Type))                          \
                 enoki_raise("Unsupported operand type");                      \
-                                                                              \
-            if (size() == 1)                                                  \
+            if (size() == 0)                                                  \
+                enoki_raise(#name "_async_(): zero-sized array!");            \
+            else if (size() == 1)                                             \
                 return *this;                                                 \
                                                                               \
             eval();                                                           \
@@ -829,6 +837,228 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
     // -----------------------------------------------------------------------
 
     // -----------------------------------------------------------------------
+    //! @{ \name Scatter/gather support
+    // -----------------------------------------------------------------------
+private:
+    template <typename Index>
+    static LLVMArray gather_impl_(const void *src_ptr, uint32_t src_index,
+                                  const LLVMArray<Index> &index,
+                                  const LLVMArray<bool> &mask = true) {
+        LLVMArray<void *> base = LLVMArray<void *>::from_index(
+            jitc_var_copy_ptr(src_ptr, src_index));
+
+        uint32_t var;
+        if constexpr (sizeof(Value) != 1) {
+            if (mask.is_literal_one())
+                var = jitc_var_new_2(
+                    Type,
+                    "$r0_0 = bitcast $t1 $r1 to $t0*$n"
+                    "$r0_1 = getelementptr $t0, $t0* $r0_0, <$w x $t2> $r2$n"
+                    "$r0 = call <$w x $t0> @llvm.masked.gather.v$w$a0"
+                    "(<$w x $t0*> $r0$S_1, i32 $s0, <$w x i1> $O, <$w x $t0> $z)",
+                    1, 0, base.index(), index.index());
+            else
+                var = jitc_var_new_3(
+                    Type,
+                    "$r0_0 = bitcast $t1 $r1 to $t0*$n"
+                    "$r0_1 = getelementptr $t0, $t0* $r0_0, <$w x $t2> $r2$n"
+                    "$r0 = call <$w x $t0> @llvm.masked.gather.v$w$a0"
+                    "(<$w x $t0*> $r0$S_1, i32 $s0, <$w x $t3> $r3, <$w x $t0> $z)",
+                    1, 0, base.index(), index.index(), mask.index());
+        } else {
+            if (mask.is_literal_one())
+                var = jitc_var_new_2(
+                    Type,
+                    "$r0_0 = bitcast $t1 $r1 to i8*$n"
+                    "$r0_1 = getelementptr i8, i8* $r0_0, <$w x $t2> $r2$n"
+                    "$r0_2 = bitcast <$w x i8*> $r0_1 to <$w x i32*>$n"
+                    "$r0_3 = call <$w x i32> @llvm.masked.gather.v$wi32"
+                    "(<$w x i32*> $r0$S_2, i32 $s0, <$w x i1> $O, <$w x i32> $z)$n"
+                    "$r0 = trunc <$w x i32> $r0_3 to <$w x $t0>",
+                    1, 0, base.index(), index.index());
+            else
+                var = jitc_var_new_3(
+                    Type,
+                    "$r0_0 = bitcast $t1 $r1 to i8*$n"
+                    "$r0_1 = getelementptr i8, i8* $r0_0, <$w x $t2> $r2$n"
+                    "$r0_2 = bitcast <$w x i8*> $r0_1 to <$w x i32*>$n"
+                    "$r0_3 = call <$w x i32> @llvm.masked.gather.v$wi32"
+                    "(<$w x i32*> $r0$S_2, i32 $s0, <$w x $t3> $r3, <$w x i32> $z)$n"
+                    "$r0 = trunc <$w x i32> $r0_3 to <$w x $t0>",
+                    1, 0, base.index(), index.index(), mask.index());
+        }
+
+        return from_index(var);
+    }
+
+    template <typename Index>
+    void scatter_impl_(void *dst, uint32_t dst_index,
+                       const LLVMArray<Index> &index,
+                       const LLVMArray<bool> &mask = true) {
+        LLVMArray<void *> base = LLVMArray<void *>::from_index(
+            jitc_var_copy_ptr(dst, dst_index));
+
+        uint32_t var;
+        if (mask.is_literal_one()) {
+            var = jitc_var_new_3(
+                VarType::Invalid,
+                "$r0_0 = bitcast $t1 $r1 to $t2*$n"
+                "$r0_1 = getelementptr $t2, $t2* $r0_0, <$w x $t3> $r3$n"
+                "call void @llvm.masked.scatter.v$w$a2"
+                "(<$w x $t2> $r2, <$w x $t2*> $r0$S_1, i32 $s1, <$w x i1> $O)",
+                1, 0, base.index(), m_index, index.index());
+        } else {
+            var = jitc_var_new_4(
+                VarType::Invalid,
+                "$r0_0 = bitcast $t1 $r1 to $t2*$n"
+                "$r0_1 = getelementptr $t2, $t2* $r0_0, <$w x $t3> $r3$n"
+                "call void @llvm.masked.scatter.v$w$a2"
+                "(<$w x $t2> $r2, <$w x $t2*> $r0$S_1, i32 $s1, <$w x $t4> $r4)",
+                1, 0, base.index(), m_index, index.index(), mask.index());
+        }
+
+        jitc_var_mark_scatter(var, dst_index);
+    }
+
+    template <typename Index>
+    void scatter_add_impl_(void *dst, uint32_t dst_index,
+                           const LLVMArray<Index> &index,
+                           const LLVMArray<bool> &mask = true) {
+        if constexpr (sizeof(Index) != sizeof(Value)) {
+            using UInt = uint_array_t<LLVMArray>;
+            return scatter_add_impl_(dst, dst_index, UInt(index), mask);
+        } else {
+            LLVMArray<void *> base = LLVMArray<void *>::from_index(
+                jitc_var_copy_ptr(dst, dst_index));
+
+            uint32_t var;
+            if (mask.is_literal_one()) {
+                const char *op;
+                if (sizeof(Value) == 4 &&
+                    jitc_llvm_if_at_least(16, "+avx512dq") != 0)
+                    op = "$4call void @ek.scatter_add_v$w$a2($t1 $r1, <$w x "
+                         "$t2> $r2, <$w x $t3> $r3)";
+                else if (sizeof(Value) == 8 &&
+                         jitc_llvm_if_at_least(8, "+avx512dq") != 0)
+                    op = "$3call void @ek.scatter_add_v$w$a2($t1 $r1, <$w x "
+                         "$t2> $r2, <$w x $t3> $r3)";
+                else
+                    op = "$0call void @ek.scatter_add_v$w$a2($t1 $r1, <$w x "
+                         "$t2> $r2, <$w x $t3> $r3)";
+
+                var = jitc_var_new_3(VarType::Invalid, op, 1, 0, base.index(),
+                                     m_index, index.index());
+            } else {
+                const char *op;
+                if (sizeof(Value) == 4 &&
+                    jitc_llvm_if_at_least(16, "+avx512dq"))
+                    op = "$4call void @ek.masked_scatter_add_v$w$a2($t1 $r1, "
+                         "<$w x $t2> $r2, <$w x $t3> $r3, <$w x $t4> $r4)";
+                else if (sizeof(Value) == 8 &&
+                         jitc_llvm_if_at_least(8, "+avx512dq"))
+                    op = "$3call void @ek.masked_scatter_add_v$w$a2($t1 $r1, "
+                         "<$w x $t2> $r2, <$w x $t3> $r3, <$w x $t4> $r4)";
+                else
+                    op = "$0call void @ek.masked_scatter_add_v$w$a2($t1 $r1, "
+                         "<$w x $t2> $r2, <$w x $t3> $r3, <$w x $t4> $r4)";
+
+                var =
+                    jitc_var_new_4(VarType::Invalid, op, 1, 0, base.index(),
+                                   m_index, index.index(), mask.index());
+            }
+
+            jitc_var_mark_scatter(var, dst_index);
+        }
+    }
+
+public:
+    template <typename Index>
+    static LLVMArray gather_raw_(const void *src, const LLVMArray<Index> &index,
+                                 const LLVMArray<bool> &mask = true) {
+        if (mask.is_literal_zero())
+            return Value(0);
+
+        return gather_impl_(src, 0, index, mask);
+    }
+
+    template <typename Index>
+    static LLVMArray gather_(const LLVMArray &src, const LLVMArray<Index> &index,
+                             const LLVMArray<bool> &mask = true) {
+        if (mask.is_literal_zero())
+            return Value(0);
+
+        src.eval();
+        return gather_impl_(src.data(), src.index(), index, mask);
+    }
+
+    template <typename Index>
+    void scatter_raw_(void *dst, const LLVMArray<Index> &index,
+                      const LLVMArray<bool> &mask = true) {
+        if (mask.is_literal_zero())
+            return;
+
+        scatter_impl_(dst, 0, index, mask);
+    }
+
+    template <typename Index>
+    void scatter_(LLVMArray &dst, const LLVMArray<Index> &index,
+                  const LLVMArray<bool> &mask = true) {
+        if (mask.is_literal_zero())
+            return;
+
+        void *ptr = dst.data();
+
+        if (!ptr) {
+            dst.eval();
+            ptr = dst.data();
+        }
+
+        if (jitc_var_int_ref(dst.index()) > 0) {
+            dst = LLVMArray<Value>::from_index(
+                jitc_var_copy(AllocType::HostAsync, LLVMArray<Value>::Type,
+                              0, ptr, (uint32_t) dst.size()));
+            ptr = dst.data();
+        }
+
+        scatter_impl_(ptr, dst.index(), index, mask);
+    }
+
+    template <typename Index>
+    void scatter_add_raw_(void *dst, const LLVMArray<Index> &index,
+                          const LLVMArray<bool> &mask = true) {
+        if (mask.is_literal_zero())
+            return;
+
+        scatter_add_impl_(dst, 0, index, mask);
+    }
+
+    template <typename Index>
+    void scatter_add_(LLVMArray &dst, const LLVMArray<Index> &index,
+                      const LLVMArray<bool> &mask = true) {
+        if (mask.is_literal_zero())
+            return;
+
+        void *ptr = dst.data();
+
+        if (!ptr) {
+            dst.eval();
+            ptr = dst.data();
+        }
+
+        if (jitc_var_int_ref(dst.index()) > 0) {
+            dst = LLVMArray<Value>::from_index(
+                jitc_var_copy(AllocType::HostAsync, LLVMArray<Value>::Type,
+                              0, ptr, (uint32_t) dst.size()));
+            ptr = dst.data();
+        }
+
+        scatter_add_impl_(ptr, dst.index(), index, mask);
+    }
+
+    //! @}
+    // -----------------------------------------------------------------------
+
+    // -----------------------------------------------------------------------
     //! @{ \name Miscellaneous
     // -----------------------------------------------------------------------
 
@@ -877,6 +1107,10 @@ struct LLVMArray : ArrayBaseT<Value_, LLVMArray<Value_>> {
         }
 
         jitc_var_write(m_index, offset, &value);
+    }
+
+    void migrate(AllocType type) {
+        jitc_var_migrate(m_index, type);
     }
 
     void set_label_(const char *label) const {

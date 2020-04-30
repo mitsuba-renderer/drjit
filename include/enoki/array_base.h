@@ -32,14 +32,15 @@ NAMESPACE_BEGIN(enoki)
 #define ENOKI_ARRAY_FALLBACK_CONSTRUCTORS(Name)                                \
     template <typename Value2, typename Derived2, typename T = Derived_,       \
               enable_if_t<Derived2::Size == T::Size> = 0>                      \
-    Name(const ArrayBaseT<Value2, Derived2> &v) {                              \
+    Name(const ArrayBaseT<Value2, false, Derived2> &v) {                       \
         ENOKI_CHKSCALAR("Copy constructor (conversion)");                      \
         for (size_t i = 0; i < derived().size(); ++i)                          \
             derived().coeff(i) = (Value) v.derived().coeff(i);                 \
     }                                                                          \
     template <typename Value2, typename Derived2, typename T = Derived_,       \
               enable_if_t<Derived2::Size == T::Size> = 0>                      \
-    Name(const ArrayBaseT<Value2, Derived2> &v, detail::reinterpret_flag) {    \
+    Name(const ArrayBaseT<Value2, IsMask_, Derived2> &v,                       \
+         detail::reinterpret_flag) {                                           \
         ENOKI_CHKSCALAR("Copy constructor (reinterpret_cast)");                \
         for (size_t i = 0; i < derived().size(); ++i)                          \
             derived().coeff(i) = reinterpret_array<Value>(v[i]);               \
@@ -86,7 +87,7 @@ struct ArrayBase {
 };
 
 /// Array base class templated via the curiously recurring template pattern
-template <typename Value_, typename Derived_> struct ArrayBaseT : ArrayBase {
+template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : ArrayBase {
     using Base = ArrayBase;
 
     // -----------------------------------------------------------------------
@@ -103,7 +104,7 @@ template <typename Value_, typename Derived_> struct ArrayBaseT : ArrayBase {
     static constexpr size_t Depth = 1 + array_depth_v<Value>;
 
     /// Is this a mask array?
-    static constexpr bool IsMask = is_mask_v<Value_>;
+    static constexpr bool IsMask = IsMask_;
 
     /// Is this an array of values that can be added, multiplied, etc.?
     static constexpr bool IsArithmetic = std::is_arithmetic_v<Scalar> && !IsMask;
@@ -448,9 +449,14 @@ template <typename Value_, typename Derived_> struct ArrayBaseT : ArrayBase {
     ENOKI_IMPLEMENT_TERNARY_ALT(fnmsub, enoki::fnmsub(a, b, c), -derived()*v1-v2, IsFloat)
 
     template <typename T = Value, enable_if_array_t<T> = 0>
+    ENOKI_IMPLEMENT_UNARY(exp, enoki::exp(a), IsFloat)
+    template <typename T = Value, enable_if_array_t<T> = 0>
+    ENOKI_IMPLEMENT_UNARY(log, enoki::log(a), IsFloat)
+    template <typename T = Value, enable_if_array_t<T> = 0>
     ENOKI_IMPLEMENT_UNARY(sin, enoki::sin(a), IsFloat)
     template <typename T = Value, enable_if_array_t<T> = 0>
     ENOKI_IMPLEMENT_UNARY(cos, enoki::cos(a), IsFloat)
+
     template <typename T = Value, enable_if_array_t<T> = 0>
     std::pair<Derived, Derived> sincos_() {
         Derived result_s, result_c;
@@ -465,7 +471,9 @@ template <typename Value_, typename Derived_> struct ArrayBaseT : ArrayBase {
 
             for (size_t i = 0; i < sa; ++i) {
                 const Value &a = derived().coeff(i);
-                std::tie(result_s.coeff(i), result_c.coeff(i)) = enoki::sincos(a);
+                auto result = enoki::sincos(a);
+                result_s.coeff(i) = std::move(result.first);
+                result_c.coeff(i) = std::move(result.second);
             }
         } else {
             enoki_raise("sincos_(): invalid operand type!");

@@ -14,6 +14,10 @@ def _var_is_enoki(a):
     return isinstance(a, ArrayBase)
 
 
+def _var_is_container(a):
+    return hasattr(a, '__len__') and hasattr(a, '__iter__')
+
+
 def _var_type(a, preferred=VarType.Invalid):
     """
     Return the VarType of a given Enoki object or plain Python type. Return
@@ -334,6 +338,97 @@ def reinterpret_array(target_type, value,
 
 
 # -------------------------------------------------------------------
+#                      Scatter/gather operations
+# -------------------------------------------------------------------
+
+def _broadcast_index(target_type, index):
+    if target_type.Depth > index.Depth:
+        size = target_type.Size
+        assert size != Dynamic
+        index_scaled = index * size
+        result = target_type()
+        for i in range(size):
+            result[i] = _broadcast_index(target_type.Value, index_scaled + i)
+        return result
+    else:
+        return index
+
+
+def gather(target_type, source, index, mask=True):
+    if not issubclass(target_type, ArrayBase):
+        assert isinstance(index, int) and isinstance(mask, bool)
+        return source[index] if mask else 0
+    else:
+        assert source.Depth == 1
+
+        index_type = _ek.uint_array_t(target_type)
+        if not isinstance(index, index_type):
+            index = _broadcast_index(index_type, index)
+
+        mask_type = index_type.MaskType
+        if not isinstance(mask, mask_type):
+            mask = mask_type(mask)
+
+        return target_type.gather_(source, index, mask)
+
+
+def scatter(target, value, index, mask=True):
+    if not isinstance(value, ArrayBase):
+        assert isinstance(index, int) and isinstance(mask, bool)
+        if mask:
+            target[index] = value
+    else:
+        assert target.Depth == 1
+
+        index_type = _ek.uint_array_t(type(value))
+        if not isinstance(index, index_type):
+            index = _broadcast_index(index_type, index)
+
+        mask_type = index_type.MaskType
+        if not isinstance(mask, mask_type):
+            mask = mask_type(mask)
+
+        return value.scatter_(target, index, mask)
+
+
+def ravel(array):
+    if not _var_is_enoki(array) or array.Depth == 1:
+        return array
+
+    if ragged(array):
+        raise Exception('ravel(): ragged arrays not permitted!')
+
+    target_type = type(array)
+    while target_type.Depth > 1:
+        target_type = target_type.Value
+    index_type = _ek.uint32_array_t(target_type)
+
+    s = shape(array)
+    target = empty(target_type, hprod(s))
+    scatter(target, array, arange(index_type, s[-1]))
+    return target
+
+
+def unravel(target_class, array):
+    if not isinstance(array, ArrayBase) or array.Depth != 1:
+        raise Exception('unravel(): array input must be a flat array!')
+    elif not issubclass(target_class, ArrayBase) or target_class.Depth == 1:
+        raise Exception("unravel(): expected a nested array as target type!")
+
+    size = 1
+    t = target_class
+    while t.Size != Dynamic:
+        size *= t.Size
+        t = t.Value
+
+    if len(array) % size != 0:
+        raise Exception('unravel(): input array length must be '
+                        'divisible by %i!' % size)
+
+    indices = arange(_ek.int32_array_t(type(array)), len(array) // size)
+    return gather(target_class, array, indices)
+
+# -------------------------------------------------------------------
 #                        Vertical operations
 # -------------------------------------------------------------------
 
@@ -394,6 +489,7 @@ def op_truediv(a, b):
 def op_itruediv(a, b):
     if isinstance(b, float) or isinstance(b, int):
         a *= 1.0 / b
+        return a
 
     if type(a) is not type(b):
         a, b = _var_promote(a, b)
@@ -414,6 +510,7 @@ def op_ifloordiv(a, b):
     if isinstance(b, int):
         if b != 0 and b & (b - 1) == 0:
             a >>= int(_math.log2(b))
+            return a
 
     if type(a) is not type(b):
         a, b = _var_promote(a, b)
@@ -736,124 +833,238 @@ def sincos(a):
         return (_math.sin(a), _math.cos(a))
 
 
+def tan(a):
+    if isinstance(a, ArrayBase):
+        return a.tan_()
+    else:
+        return _math.tan(a)
+
+
+def cot(a):
+    if isinstance(a, ArrayBase):
+        return a.cot_()
+    else:
+        return 1.0 / _math.tan(a)
+
+
+def asin(a):
+    if isinstance(a, ArrayBase):
+        return a.asin_()
+    else:
+        return _math.asin(a)
+
+
+def acos(a):
+    if isinstance(a, ArrayBase):
+        return a.acos_()
+    else:
+        return _math.acos(a)
+
+
+def atan(a):
+    if isinstance(a, ArrayBase):
+        return a.atan_()
+    else:
+        return _math.atan(a)
+
+
+def atan2(a, b):
+    if isinstance(a, ArrayBase) or \
+       isinstance(b, ArrayBase):
+        if type(a) is not type(b):
+            a, b = _var_promote(a, b)
+        return a.atan2_(b)
+    else:
+        return _builtins.atan2(a, b)
+
 # -------------------------------------------------------------------
 #                       Horizontal operations
 # -------------------------------------------------------------------
 
 
 def all(a):
-    if _var_type(a) == VarType.Bool:
-        return a.all_() if _var_is_enoki(a) else a
+    if _var_is_enoki(a):
+        if a.Type != VarType.Bool:
+            raise Exception("all(): input array must be a mask!")
+        return a.all_()
+    elif _var_is_container(a):
+        size = len(a)
+        if size == 0:
+            raise Exception("all(): input container is empty!")
+        value = a[0]
+        for i in range(1, size):
+            value = value & a[i]
+        return value
     else:
-        raise Exception("all(): input array must be a mask!")
+        return a
 
 
 def all_nested(a):
-    while _var_is_enoki(a):
-        a = all(a)
+    while True:
+        b = all(a)
+        if b is a:
+            break
+        a = b
     return a
 
 
 def any(a):
-    if _var_type(a) == VarType.Bool:
-        return a.any_() if _var_is_enoki(a) else a
+    if _var_is_enoki(a):
+        if a.Type != VarType.Bool:
+            raise Exception("any(): input array must be a mask!")
+        return a.any_()
+    elif _var_is_container(a):
+        size = len(a)
+        if size == 0:
+            raise Exception("any(): input container is empty!")
+        value = a[0]
+        for i in range(1, size):
+            value = value | a[i]
+        return value
     else:
-        raise Exception("any(): input array must be a mask!")
+        return a
 
 
 def any_nested(a):
-    while _var_is_enoki(a):
-        a = all(a)
+    while True:
+        b = any(a)
+        if b is a:
+            break
+        a = b
     return a
 
 
 def none(a):
-    if _var_type(a) != VarType.Bool:
-        raise Exception("none(): input array must be a mask!")
-
-    if _var_is_enoki(a):
-        return ~any(a)
-    else:
-        return not a
+    b = any(a)
+    return not b if isinstance(b, bool) else ~b
 
 
 def none_nested(a):
-    return not any_nested(a)
+    b = any_nested(a)
+    return not b if isinstance(b, bool) else ~b
 
 
 def hsum(a):
-    return a.hsum_() if _var_is_enoki(a) else a
+    if _var_is_enoki(a):
+        return a.hsum_()
+    elif _var_is_container(a):
+        size = len(a)
+        if size == 0:
+            raise Exception("hsum(): input container is empty!")
+        value = a[0]
+        for i in range(1, size):
+            value = value + a[i]
+        return value
+    else:
+        return a
 
 
 def hsum_async(a):
-    if not _var_is_enoki(a):
-        return a
-    elif hasattr(a, 'hsum_async_'):
+    if _var_is_enoki(a) and hasattr(a, 'hsum_async_'):
         return a.hsum_async_()
     else:
-        return type(a)(a.hsum_())
+        return type(a)([a.hsum_()])
 
 
 def hsum_nested(a):
-    while _var_is_enoki(a):
-        a = hsum(a)
+    while True:
+        b = hsum(a)
+        if b is a:
+            break
+        a = b
     return a
 
 
 def hprod(a):
-    return a.hprod_() if _var_is_enoki(a) else a
+    if _var_is_enoki(a):
+        return a.hprod_()
+    elif _var_is_container(a):
+        size = len(a)
+        if size == 0:
+            raise Exception("hprod(): input container is empty!")
+        value = a[0]
+        for i in range(1, size):
+            value = value * a[i]
+        return value
+    else:
+        return a
 
 
 def hprod_async(a):
-    if not _var_is_enoki(a):
-        return a
-    elif hasattr(a, 'hprod_async_'):
+    if _var_is_enoki(a) and hasattr(a, 'hprod_async_'):
         return a.hprod_async_()
     else:
-        return type(a)(a.hprod_())
+        return type(a)([a.hprod_()])
 
 
 def hprod_nested(a):
-    while _var_is_enoki(a):
-        a = hprod(a)
+    while True:
+        b = hprod(a)
+        if b is a:
+            break
+        a = b
     return a
 
 
 def hmax(a):
-    return a.hmax_() if _var_is_enoki(a) else a
+    if _var_is_enoki(a):
+        return a.hmax_()
+    elif _var_is_container(a):
+        size = len(a)
+        if size == 0:
+            raise Exception("hmax(): input container is empty!")
+        value = a[0]
+        for i in range(1, size):
+            value = _ek.max(value, a[i])
+        return value
+    else:
+        return a
 
 
 def hmax_async(a):
-    if not _var_is_enoki(a):
-        return a
-    elif hasattr(a, 'hmax_async_'):
+    if _var_is_enoki(a) and hasattr(a, 'hmax_async_'):
         return a.hmax_async_()
     else:
-        return type(a)(a.hmax_())
+        return type(a)([a.hmax_()])
 
 
 def hmax_nested(a):
-    while _var_is_enoki(a):
-        a = hmax(a)
+    while True:
+        b = hmax(a)
+        if b is a:
+            break
+        a = b
     return a
 
 
 def hmin(a):
-    return a.hmin_() if _var_is_enoki(a) else a
+    if _var_is_enoki(a):
+        return a.hmin_()
+    elif _var_is_container(a):
+        size = len(a)
+        if size == 0:
+            raise Exception("hmin(): input container is empty!")
+        value = a[0]
+        for i in range(1, size):
+            value = _ek.min(value, a[i])
+        return value
+    else:
+        return a
 
 
 def hmin_async(a):
-    if not _var_is_enoki(a):
-        return a
-    elif hasattr(a, 'hmin_async_'):
+    if _var_is_enoki(a) and hasattr(a, 'hmin_async_'):
         return a.hmin_async_()
     else:
-        return type(a)(a.hmin_())
+        return type(a)([a.hmin_()])
 
 
 def hmin_nested(a):
-    while _var_is_enoki(a):
-        a = hmin(a)
+    while True:
+        b = hmin(a)
+        if b is a:
+            break
+        a = b
     return a
 
 
@@ -880,6 +1091,14 @@ def dot_async(a, b):
 def zero(type_, size=1):
     if issubclass(type_, ArrayBase):
         return type_.zero_(size)
+    else:
+        assert isinstance(type_, type)
+        return type_(0)
+
+
+def empty(type_, size=1):
+    if issubclass(type_, ArrayBase):
+        return type_.empty_(size)
     else:
         assert isinstance(type_, type)
         return type_(0)

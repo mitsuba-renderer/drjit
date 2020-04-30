@@ -632,6 +632,8 @@ template <typename T> ENOKI_INLINE void store_unaligned(void *ptr, const T &valu
 //! @{ \name Forward declarations of math functions
 // -----------------------------------------------------------------------
 
+template <typename Value> Value exp(const Value &value);
+template <typename Value> Value log(const Value &value);
 template <typename Value> Value sin(const Value &value);
 template <typename Value> Value cos(const Value &value);
 template <typename Value> std::pair<Value, Value> sincos(const Value &value);
@@ -651,7 +653,7 @@ template <typename T> ENOKI_INLINE void schedule(const T &value) {
         } else {
             value.schedule();
         }
-    } else if constexpr (std::is_class_v<T>) {
+    } else if constexpr (!is_array_v<T> && std::is_class_v<T>) {
         struct_support<T>::schedule(value);
     } else {
         ; /* do nothing */
@@ -674,7 +676,7 @@ ENOKI_INLINE void eval(const Ts&... values) {
 template <typename T> ENOKI_INLINE decltype(auto) detach(const T &value) {
     if constexpr (is_diff_array_v<T>)
         return value.detach();
-    else if constexpr (std::is_class_v<T>)
+    else if constexpr (!is_array_v<T> && std::is_class_v<T>)
         return struct_support<T>::detach(value);
     else
         return value;

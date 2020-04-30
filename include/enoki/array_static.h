@@ -34,8 +34,8 @@ namespace detail {
 }
 
 template <typename Value_, size_t Size_, bool IsMask_, typename Derived_>
-struct StaticArrayBase : ArrayBaseT<std::conditional_t<IsMask_, mask_t<Value_>, Value_>, Derived_> {
-    using Base = ArrayBaseT<std::conditional_t<IsMask_, mask_t<Value_>, Value_>, Derived_>;
+struct StaticArrayBase : ArrayBaseT<Value_, IsMask_, Derived_> {
+    using Base = ArrayBaseT<Value_, IsMask_, Derived_>;
     ENOKI_ARRAY_IMPORT(StaticArrayBase, Base)
 
     using typename Base::Derived;

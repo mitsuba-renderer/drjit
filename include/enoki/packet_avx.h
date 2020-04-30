@@ -163,6 +163,16 @@ template <bool IsMask_, typename Derived_> struct alignas(32)
     ENOKI_INLINE Derived mul_(Ref a) const    { return _mm256_mul_ps(m, a.m); }
     ENOKI_INLINE Derived div_(Ref a) const    { return _mm256_div_ps(m, a.m); }
 
+    ENOKI_INLINE Derived not_() const {
+        #if defined(ENOKI_X86_AVX512)
+            __m256i mi = _mm256_castps_si256(m);
+            mi = _mm256_ternarylogic_epi32(mi, mi, mi, 0b01010101);
+            return _mm256_castsi256_ps(mi);
+        #else
+            return _mm256_xor_ps(m, _mm256_castsi256_ps(_mm256_set1_epi32(-1)));
+        #endif
+    }
+
     ENOKI_INLINE Derived neg_() const {
         return _mm256_sub_ps(_mm256_setzero_ps(), m);
     }
@@ -570,6 +580,16 @@ template <bool IsMask_, typename Derived_> struct alignas(32)
     ENOKI_INLINE Derived sub_(Ref a) const { return _mm256_sub_pd(m, a.m); }
     ENOKI_INLINE Derived mul_(Ref a) const { return _mm256_mul_pd(m, a.m); }
     ENOKI_INLINE Derived div_(Ref a) const { return _mm256_div_pd(m, a.m); }
+
+    ENOKI_INLINE Derived not_() const {
+        #if defined(ENOKI_X86_AVX512)
+            __m256i mi = _mm256_castpd_si256(m);
+            mi = _mm256_ternarylogic_epi32(mi, mi, mi, 0b01010101);
+            return _mm256_castsi256_pd(mi);
+        #else
+            return _mm256_xor_pd(m, _mm256_castsi256_pd(_mm256_set1_epi32(-1)));
+        #endif
+    }
 
     ENOKI_INLINE Derived neg_() const {
         return _mm256_sub_pd(_mm256_setzero_pd(), m);

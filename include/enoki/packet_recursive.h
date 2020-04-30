@@ -60,13 +60,14 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
 
     /// Copy another array
     template <typename Value2, typename Derived2>
-    ENOKI_INLINE StaticArrayImpl(const ArrayBaseT<Value2, Derived2> &a)
+    ENOKI_INLINE StaticArrayImpl(const ArrayBaseT<Value2, IsMask_, Derived2> &a)
         : a1(low(a)), a2(high(a)) { }
 
     /// Reinterpret another array
     template <typename Value2, typename Derived2>
-    ENOKI_INLINE StaticArrayImpl(const ArrayBaseT<Value2, Derived2> &a, detail::reinterpret_flag)
-        : a1(low (a), detail::reinterpret_flag()),
+    ENOKI_INLINE StaticArrayImpl(const ArrayBaseT<Value2, IsMask_, Derived2> &a,
+                                 detail::reinterpret_flag)
+        : a1(low(a), detail::reinterpret_flag()),
           a2(high(a), detail::reinterpret_flag()) { }
 
     //! @}

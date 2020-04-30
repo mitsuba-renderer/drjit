@@ -329,6 +329,9 @@ namespace detail {
         using type = std::decay_t<T>;
     };
 
+    template <typename T> struct expr<T, T> : expr<T> { };
+    template <typename T> struct expr<T, T, T> : expr<T> { };
+
     template <typename ... Ts> using deepest_t = typename deepest<Ts...>::type;
 }
 

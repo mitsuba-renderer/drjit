@@ -86,12 +86,14 @@ auto bind_full(py::class_<Array, ek::ArrayBase> &cls,
     if constexpr (Array::IsFloat)
         cls.def(py::init([](ssize_t value) { return new Array((Scalar) value); }));
 
-    cls.def(py::init<const ek::  int32_array_t<Array> &>());
-    cls.def(py::init<const ek:: uint32_array_t<Array> &>());
-    cls.def(py::init<const ek::  int64_array_t<Array> &>());
-    cls.def(py::init<const ek:: uint64_array_t<Array> &>());
-    cls.def(py::init<const ek::float32_array_t<Array> &>());
-    cls.def(py::init<const ek::float64_array_t<Array> &>());
+    if constexpr (!Array::IsMask) {
+        cls.def(py::init<const ek::  int32_array_t<Array> &>());
+        cls.def(py::init<const ek:: uint32_array_t<Array> &>());
+        cls.def(py::init<const ek::  int64_array_t<Array> &>());
+        cls.def(py::init<const ek:: uint64_array_t<Array> &>());
+        cls.def(py::init<const ek::float32_array_t<Array> &>());
+        cls.def(py::init<const ek::float64_array_t<Array> &>());
+    }
 
     cls.def("or_",     [](const Array &a, const Array &b) { return a.or_(b); });
     cls.def("and_",    [](const Array &a, const Array &b) { return a.and_(b); });
@@ -184,6 +186,11 @@ auto bind_full(py::class_<Array, ek::ArrayBase> &cls,
             cls.def("hprod_async_", &Array::hprod_async_);
             cls.def("hmin_async_", &Array::hmin_async_);
             cls.def("hmax_async_", &Array::hmax_async_);
+
+            using UInt32 = ek::uint32_array_t<Array>;
+            cls.def("scatter_add_", &Array::template scatter_add_<uint32_t>);
+            cls.def("scatter_", &Array::template scatter_<uint32_t>);
+            cls.def("gather_", &Array::template gather_<uint32_t>);
         }
 
         cls.def("and_", [](const Array &a, const Mask &b) {
@@ -262,6 +269,12 @@ auto bind_full(py::class_<Array, ek::ArrayBase> &cls,
         cls.def("sin_", [](const Array &a) { return ek::sin(a); });
         cls.def("cos_", [](const Array &a) { return ek::cos(a); });
         cls.def("sincos_", [](const Array &a) { return ek::sincos(a); });
+        cls.def("tan_", [](const Array &a) { return ek::tan(a); });
+        cls.def("cot_", [](const Array &a) { return ek::cot(a); });
+        cls.def("asin_", [](const Array &a) { return ek::asin(a); });
+        cls.def("acos_", [](const Array &a) { return ek::acos(a); });
+        cls.def("atan_", [](const Array &a) { return ek::atan(a); });
+        cls.def("atan2_", [](const Array &y, const Array &x) { return ek::atan2(y, x); });
     }
 
     if constexpr (Array::IsJIT || Array::IsDiff) {

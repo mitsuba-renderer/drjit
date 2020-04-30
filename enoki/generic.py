@@ -1,4 +1,4 @@
-from enoki import Dynamic, Exception, VarType
+from enoki import ArrayBase, Dynamic, Exception, VarType
 import enoki as _ek
 
 
@@ -566,6 +566,61 @@ def sincos_(a0):
         ar1[i] = result[1]
     return ar0, ar1
 
+
+def tan_(a0):
+    s0, ar = _check1(a0)
+    if not a0.IsFloat:
+        raise Exception("tan(): requires floating point operands!")
+    for i in range(s0):
+        ar[i] = _ek.tan(a0[i])
+    return ar
+
+
+def cot_(a0):
+    s0, ar = _check1(a0)
+    if not a0.IsFloat:
+        raise Exception("cot(): requires floating point operands!")
+    for i in range(s0):
+        ar[i] = _ek.cot(a0[i])
+    return ar
+
+
+def asin_(a0):
+    s0, ar = _check1(a0)
+    if not a0.IsFloat:
+        raise Exception("asin(): requires floating point operands!")
+    for i in range(s0):
+        ar[i] = _ek.asin(a0[i])
+    return ar
+
+
+def acos_(a0):
+    s0, ar = _check1(a0)
+    if not a0.IsFloat:
+        raise Exception("acos(): requires floating point operands!")
+    for i in range(s0):
+        ar[i] = _ek.acos(a0[i])
+    return ar
+
+
+def atan_(a0):
+    s0, ar = _check1(a0)
+    if not a0.IsFloat:
+        raise Exception("atan(): requires floating point operands!")
+    for i in range(s0):
+        ar[i] = _ek.atan(a0[i])
+    return ar
+
+
+def atan2_(a0, a1):
+    s0, s1, ar, sr = _check2(a0, a1)
+    if not a0.IsFloat:
+        raise Exception("atan2(): requires floating point operands!")
+    for i in range(sr):
+        ar[i] = _ek.atan2(a0[i if s0 > 1 else 0],
+                          a1[i if s1 > 1 else 0])
+    return ar
+
 # -------------------------------------------------------------------
 #                       Horizontal operations
 # -------------------------------------------------------------------
@@ -695,4 +750,60 @@ def arange(cls, start, end, step):
     result = cls.empty_(size)
     for i in range(len(result)):
         result[i] = start + step*i
+    return result
+
+
+@classmethod
+def gather_(cls, source, index, mask):
+    assert source.Depth == 1
+    s0, s1 = len(index), len(mask)
+    sr = max(s0, s1)
+    result = cls.empty_(sr if cls.Size == Dynamic else 0)
+    for i in range(sr):
+        result[i] = _ek.gather(cls.Value, source,
+                               index[i if s0 > 1 else 0],
+                               mask[i if s1 > 1 else 0])
+    return result
+
+
+def scatter_(self, target, index, mask):
+    assert target.Depth == 1
+    s0, s1, s2 = len(self), len(index), len(mask)
+    sr = max(s0, s1, s2)
+    for i in range(sr):
+        _ek.scatter(target,
+                    self[i if s0 > 1 else 0],
+                    index[i if s1 > 1 else 0],
+                    mask[i if s2 > 1 else 0])
+
+
+# -------------------------------------------------------------------
+#                     Convert to a NumPy array
+# -------------------------------------------------------------------
+
+
+def numpy(a):
+    import numpy as np
+    if _ek.ragged(a):
+        raise Exception("Ragged arrays cannot be converted!")
+
+    _ek.reshape(_ek.cuda.Float32)
+    #  shape = _ek.shape(a)
+    #  result = np.empty(list(reversed(shape)), dtype=a.Type.NumPy, order='F')
+    #  _copy_array(
+    #      src=a,
+    #      dst=result.__array_interface__['data'][0],
+    #      shape=shape,
+    #      strides=result.strides
+    #  )
+    #  ndim = len(shape)
+    #  strides = [None] * ndim
+    #  size, stride = 1, a.Type.Size
+    #  for i in range(ndim):
+    #      v = shape[i]
+    #      strides[i] = stride
+    #      size *= v
+    #      stride *= v
+    #  print("Shape=%s" % str(shape))
+
     return result
