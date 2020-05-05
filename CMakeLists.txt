@@ -1,15 +1,12 @@
 project(enoki)
 cmake_minimum_required(VERSION 3.9.0)
 
+option(ENOKI_ENABLE_TBB      "Use Intel Thread Building Blocks (TBB) with LLVM backend?" ON)
 option(ENOKI_ENABLE_JIT      "Build Enoki just in time compilation library?" OFF)
-option(ENOKI_ENABLE_AUTODIFF "Build Enoki automatic differentation library? (requires ENOKI_AUTODIFF)" OFF)
-option(ENOKI_ENABLE_PYTHON   "Build pybind11 interface to Enoki types?" OFF)
+option(ENOKI_ENABLE_AUTODIFF "Build Enoki automatic differentation library?" OFF)
+option(ENOKI_ENABLE_PYTHON   "Build Python extension library?" OFF)
 option(ENOKI_ENABLE_TESTS    "Build Enoki test suite?" OFF)
-
-if (ENOKI_ENABLE_AUTODIFF AND NOT ENOKI_ENABLE_JIT)
-  message(WARNING "ENOKI_ENABLE_AUTODIFF depends on the JIT compiler. Setting ENOKI_ENABLE_JIT=ON.")
-  set(ENOKI_ENABLE_JIT ON)
-endif()
+set(ENOKI_NATIVE_FLAGS "-march=native" CACHE STRING "Compilation flags used to target the host processor architecture.")
 
 set(ENOKI_MASTER_PROJECT OFF)
 if (${CMAKE_CURRENT_SOURCE_DIR} STREQUAL ${CMAKE_SOURCE_DIR})
@@ -24,176 +21,9 @@ if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 string(TOUPPER "${CMAKE_BUILD_TYPE}" ENOKI_U_CMAKE_BUILD_TYPE)
 
-set(ENOKI_CXXFLAGS_BACKUP ${CMAKE_CXX_FLAGS})
-set(ENOKI_NATIVE_FLAGS "")
-
-if (MSVC)
-  set(ENOKI_ARCH_FLAGS_FILE archflags_win32.cpp)
-  if (CMAKE_SIZEOF_VOID_P EQUAL 4)
-    message(WARNING "Enoki does not support vectorization on 32-bit Windows due to various")
-    message(WARNING "platform limitations (unaligned stack, calling conventions don't allow")
-    message(WARNING "passing vector registers, etc.). Switching to scalar mode.")
-  endif()
-else()
-  set(ENOKI_ARCH_FLAGS_FILE archflags_unix.cpp)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native")
-  if (ENOKI_CUDA AND CMAKE_BUILD_TYPE MATCHES "Release")
-    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -DNDEBUG")
-  endif()
-endif()
-
-# Clang refuses -march=native on ARM machines
-if (${CMAKE_SYSTEM_PROCESSOR} MATCHES "armv7")
-  set(ENOKI_ARCH_FLAGS -march=armv7-a -mtune=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -mfp16-format=ieee)
-  set(ENOKI_NATIVE_FLAGS ${ENOKI_ARCH_FLAGS})
-elseif (${CMAKE_SYSTEM_PROCESSOR} MATCHES "aarch64")
-  set(ENOKI_ARCH_FLAGS -march=armv8-a+simd -mtune=cortex-a53)
-  set(ENOKI_NATIVE_FLAGS ${ENOKI_ARCH_FLAGS})
-elseif (CMAKE_CXX_COMPILER MATCHES "/em\\+\\+(-[a-zA-Z0-9.])?$")
-  # Emscripten
-else()
-  if (UNIX)
-    set(ENOKI_ARCH_FLAGS_LINK_LIBRARIES ${CMAKE_EXE_LINKER_FLAGS})
-  endif()
-  try_run(
-    ENOKI_ARCH_FLAGS_RETVAL ENOKI_ARCH_FLAGS_COMPILE_RESULT
-    ${CMAKE_BINARY_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/resources/${ENOKI_ARCH_FLAGS_FILE}
-    COMPILE_OUTPUT_VARIABLE ENOKI_ARCH_FLAGS_MSG
-    RUN_OUTPUT_VARIABLE ENOKI_ARCH_FLAGS
-    LINK_LIBRARIES ${ENOKI_ARCH_FLAGS_LINK_LIBRARIES}
-  )
-
-  if (NOT ${ENOKI_ARCH_FLAGS_COMPILE_RESULT})
-    message(FATAL_ERROR "Failed to compile 'archflags' binary: ${ENOKI_ARCH_FLAGS_MSG}")
-  endif()
-endif()
-
-set(CMAKE_CXX_FLAGS ${ENOKI_CXXFLAGS_BACKUP})
-
-# Optimize for current architecture
-if (NOT ENOKI_NATIVE_FLAGS)
-  if (CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR
-      CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-    set(ENOKI_NATIVE_FLAGS -march=native)
-    # set(ENOKI_NATIVE_FLAGS -msse4.2 -mavx -mavx2 -mfma)
-  elseif (CMAKE_CXX_COMPILER_ID MATCHES "Intel")
-    set(ENOKI_NATIVE_FLAGS -xHost)
-  elseif (MSVC)
-    # MSVC doesn't have a flag equivalent to -march=native
-    # The 'archflags' executable provides this functionality
-    set(ENOKI_NATIVE_FLAGS ${ENOKI_ARCH_FLAGS})
-  endif()
-endif()
-
-if (NOT ENOKI_MASTER_PROJECT)
-  set(ENOKI_ARCH_FLAGS   ${ENOKI_ARCH_FLAGS}   PARENT_SCOPE)
-  set(ENOKI_NATIVE_FLAGS ${ENOKI_NATIVE_FLAGS} PARENT_SCOPE)
-endif()
-
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/resources")
-
-macro(enoki_set_native_flags)
-  add_compile_options(${ENOKI_NATIVE_FLAGS})
-  string(REPLACE ";" " " ENOKI_NATIVE_FLAGS_STR "${ENOKI_NATIVE_FLAGS}")
-  # Some linkers want to know the architecture flags (for LTO)
-  if (NOT MSVC)
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${ENOKI_NATIVE_FLAGS_STR}")
-    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${ENOKI_NATIVE_FLAGS_STR}")
-  endif()
-endmacro()
-
-macro(enoki_set_compile_flags)
-  if (CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR
-      CMAKE_CXX_COMPILER_ID MATCHES "GNU" OR
-      CMAKE_CXX_COMPILER_ID MATCHES "Intel")
-    string(TOUPPER "${CMAKE_BUILD_TYPE}" ENOKI_U_CMAKE_BUILD_TYPE)
-    if (NOT (${ENOKI_U_CMAKE_BUILD_TYPE} MATCHES "DEB"))
-      if (NOT (${CMAKE_CXX_FLAGS} MATCHES "fsanitize"))
-        # Don't use stack security features in release mode
-        add_compile_options(-fno-stack-protector)
-
-        # In release mode, don't keep the frame pointer in a dedicated register unless needed
-        add_compile_options(-fomit-frame-pointer)
-      endif()
-    endif()
-
-    # Never update the 'errno' variable due to arithmetic exceptions
-    add_compile_options(-fno-math-errno)
-
-    if (NOT CMAKE_CXX_COMPILER_ID MATCHES "Intel")
-      # Look for opportunities to fuse additions & multiplications into FMA operations
-      add_compile_options(-ffp-contract=fast)
-    endif()
-  endif()
-
-  # Disable overly aggressive FP optimization in the Intel compiler
-  if (CMAKE_CXX_COMPILER_ID MATCHES "Intel")
-    add_compile_options(-fp-model precise)
-  endif()
-
-  if (MSVC)
-    # Disable buffer security check cookie
-    set(Configurations RELEASE RELWITHDEBINFO MINSIZEREL)
-    foreach(Configuration ${Configurations})
-      string(REPLACE "/GS"  "" CMAKE_CXX_FLAGS_${Configuration} "${CMAKE_CXX_FLAGS_${Configuration}}")
-    endforeach()
-    string(REPLACE "/GS"  "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-    add_compile_options("$<$<NOT:$<CONFIG:Debug>>:/GS->")
-
-    # Enable intrinsic functions
-    add_compile_options("$<$<CONFIG:Release>:/Oi>")
-
-    # Honor __forceinline statements even in debug mode, needed to avoid internal compiler errors on MSVC
-    string(REPLACE "/Ob0" "" CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
-    add_compile_options("$<$<CONFIG:Debug>:/Ob1>")
-
-    # Don't complain about class/struct X needs to have dll-interface to be used by clients of class/struct Y
-    add_compile_options("/wd4251")
-  endif()
-endmacro()
-
-include_directories(include)
-
-set(ENOKI_HEADERS
-    ${PROJECT_SOURCE_DIR}/include/enoki/array.h
-    ${PROJECT_SOURCE_DIR}/include/enoki/array_avx.h
-    ${PROJECT_SOURCE_DIR}/include/enoki/array_avx2.h
-    ${PROJECT_SOURCE_DIR}/include/enoki/array_avx512.h
-    ${PROJECT_SOURCE_DIR}/include/enoki/array_base.h
-    ${PROJECT_SOURCE_DIR}/include/enoki/array_call.h
-    ${PROJECT_SOURCE_DIR}/include/enoki/array_enum.h
-    ${PROJECT_SOURCE_DIR}/include/enoki/array_fallbacks.h
-    ${PROJECT_SOURCE_DIR}/include/enoki/array_generic.h
-    ${PROJECT_SOURCE_DIR}/include/enoki/array_idiv.h
-    ${PROJECT_SOURCE_DIR}/include/enoki/array_intrin.h
-    ${PROJECT_SOURCE_DIR}/include/enoki/array_kmask.h
-    ${PROJECT_SOURCE_DIR}/include/enoki/array_masked.h
-    ${PROJECT_SOURCE_DIR}/include/enoki/array_macro.h
-    ${PROJECT_SOURCE_DIR}/include/enoki/array_math.h
-    ${PROJECT_SOURCE_DIR}/include/enoki/array_recursive.h
-    ${PROJECT_SOURCE_DIR}/include/enoki/array_router.h
-    ${PROJECT_SOURCE_DIR}/include/enoki/array_sse42.h
-    ${PROJECT_SOURCE_DIR}/include/enoki/array_static.h
-    ${PROJECT_SOURCE_DIR}/include/enoki/array_struct.h
-    ${PROJECT_SOURCE_DIR}/include/enoki/array_traits.h
-    ${PROJECT_SOURCE_DIR}/include/enoki/array_utils.h
-    ${PROJECT_SOURCE_DIR}/include/enoki/autodiff.h
-    ${PROJECT_SOURCE_DIR}/include/enoki/color.h
-    ${PROJECT_SOURCE_DIR}/include/enoki/complex.h
-    ${PROJECT_SOURCE_DIR}/include/enoki/dynamic.h
-    ${PROJECT_SOURCE_DIR}/include/enoki/fwd.h
-    ${PROJECT_SOURCE_DIR}/include/enoki/half.h
-    ${PROJECT_SOURCE_DIR}/include/enoki/matrix.h
-    ${PROJECT_SOURCE_DIR}/include/enoki/morton.h
-    ${PROJECT_SOURCE_DIR}/include/enoki/python.h
-    ${PROJECT_SOURCE_DIR}/include/enoki/quaternion.h
-    ${PROJECT_SOURCE_DIR}/include/enoki/random.h
-    ${PROJECT_SOURCE_DIR}/include/enoki/sh.h
-    ${PROJECT_SOURCE_DIR}/include/enoki/special.h
-    ${PROJECT_SOURCE_DIR}/include/enoki/stl.h
-    ${PROJECT_SOURCE_DIR}/include/enoki/transform.h
-)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS NO)
 
 include(CheckCXXSourceRuns)
 
@@ -231,28 +61,33 @@ if (ENOKI_ENABLE_JIT)
   message(STATUS "Enoki: building the CUDA & LLVM JIT backend.")
   add_subdirectory(ext/enoki-jit)
   add_definitions(-DENOKI_ENABLE_JIT=1)
+else()
+  message(STATUS "Enoki: *not* building the CUDA & LLVM JIT backend.")
 endif()
+
+if (ENOKI_ENABLE_TBB)
+  # Try to detect TBB
+  set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
+    ${CMAKE_CURRENT_SOURCE_DIR}/ext/enoki-jit/cmake
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources)
+  find_package(TBB)
+endif()
+
+include_directories(include ext/enoki-jit/include)
 
 if (ENOKI_ENABLE_AUTODIFF)
   message(STATUS "Enoki: building the autodiff backend.")
+  add_definitions(-DENOKI_ENABLE_AUTODIFF=1)
   add_subdirectory(src/autodiff)
+else()
+  message(STATUS "Enoki: *not* building the autodiff backend.")
 endif()
-
-if (ENOKI_TEST)
-  enable_testing()
-  add_subdirectory(tests)
-endif()
-
-enoki_set_native_flags()
-enoki_set_compile_flags()
-
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS NO)
-
-include_directories(ext/enoki-jit/include)
 
 if (ENOKI_ENABLE_PYTHON)
+  set(ENOKI_PYBIND11_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ext/pybind11"
+    CACHE STRING "Path containing the 'pybind11' library used to compile Enoki.")
+  add_subdirectory(${ENOKI_PYBIND11_DIR})
+
   message(STATUS "Enoki: building the Python plugin.")
   add_subdirectory(src/python)
 else()
@@ -261,6 +96,7 @@ endif()
 
 # Build the documentation
 if (ENOKI_MASTER_PROJECT)
+  set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} )
   find_package(Sphinx)
 
   if (Sphinx_FOUND)
@@ -276,5 +112,5 @@ endif()
 
 mark_as_advanced(
   PYBIND11_INSTALL PYBIND11_PYTHON_VERSION PYBIND11_TEST
-  PYBIND11_WERROR USE_PYTHON_INCLUDE_DIR
+  PYBIND11_WERROR USE_PYTHON_INCLUDE_DIR ENOKI_PYBIND11_DIR
 )

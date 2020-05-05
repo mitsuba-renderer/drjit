@@ -114,10 +114,7 @@ template <typename T1, typename T2, enable_if_array_any_t<T1, T2> = 0>
 auto and_(const T1 &a1, const T2 &a2) { return a1 & a2; }
 
 template <typename T1, typename T2, enable_if_array_any_t<T1, T2> = 0>
-auto andnot_(const T1 &a1, const T2 &a2) {
-    using E = expr_t<T1, T2>;
-    return andnot_((const E &) a1, (const E &) a2);
-}
+auto andnot_(const T1 &a1, const T2 &a2) { return andnot(a1, a2); }
 
 template <typename T1, typename T2, enable_if_array_any_t<T1, T2> = 0>
 auto xor_(const T1 &a1, const T2 &a2) { return a1 ^ a2; }

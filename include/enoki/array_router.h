@@ -534,12 +534,14 @@ template <bool Default, typename T> auto none_nested_or(const T &value) {
 // -----------------------------------------------------------------------
 
 template <typename T> ENOKI_INLINE T zero(size_t size = 1) {
-    if constexpr (is_array_v<T>)
+    if constexpr (is_array_v<T>) {
         return T::Derived::zero_(size);
-    else if constexpr (std::is_class_v<T>)
+    } else if constexpr (std::is_class_v<T>) {
+        static_assert(struct_support<T>::Defined, "Missing ENOKI_STRUCT_SUPPORT() declaration?");
         return struct_support<T>::zero(size);
-    else
+    } else {
         return T(0);
+    }
 }
 
 template <typename T> ENOKI_INLINE T empty(size_t size = 1) {
@@ -555,7 +557,7 @@ template <typename T> ENOKI_INLINE T empty(size_t size = 1) {
 
 template <typename T> ENOKI_INLINE T full(scalar_t<T> value, size_t size = 1) {
     if constexpr (is_array_v<T>)
-        return T::Derived::full_(size);
+        return T::Derived::full_(value, size);
     else
         return value;
 }
@@ -625,6 +627,98 @@ template <typename T> ENOKI_INLINE void store_unaligned(void *ptr, const T &valu
         *static_cast<T *>(ptr) = value;
 }
 
+namespace detail {
+    template <typename Target, typename Index> Target broadcast_index(const Index &index) {
+        using Scalar = scalar_t<Index>;
+        static_assert(Target::Size != Dynamic);
+
+        Index scaled = index * Scalar(Target::Size);
+        Target result;
+        for (size_t i = 0; i < Target::Size; ++i) {
+            if constexpr (array_depth_v<Target> == array_depth_v<Index> + 1)
+                result.coeff(i) = scaled + Scalar(i);
+            else
+                result.coeff(i) = broadcast_index<value_t<Target>>(scaled + Scalar(i));
+        }
+        return result;
+    }
+}
+
+template <typename Target, typename Source, typename Index>
+Target gather(Source &&source, const Index &index, const mask_t<Target> &mask = true) {
+    if constexpr (is_array_v<Target>) {
+        static_assert(std::is_pointer_v<std::decay_t<Source>> || array_depth_v<Source> == 1,
+                      "Source argument of gather operation must either be a "
+                      "pointer address or a flat array!");
+        static_assert(is_array_v<Index> && is_integral_v<Index>,
+                      "Second argument of gather operation must be an index array!");
+
+        if constexpr (array_depth_v<Target> == array_depth_v<Index>) {
+            return Target::gather_(source, index, mask);
+        } else {
+            using TargetIndex = replace_scalar_t<Target, scalar_t<Index>>;
+
+            return enoki::gather<Target>(source, detail::broadcast_index<TargetIndex>(index), mask);
+        }
+    } else if constexpr (std::is_class_v<Target>) {
+        static_assert(struct_support<Target>::Defined, "Missing ENOKI_STRUCT_SUPPORT() declaration?");
+        return struct_support<Target>::gather(source, index, mask);
+    } else {
+        static_assert(std::is_integral_v<Index>, "Index of scalar gather must be an integer!");
+        return mask ? source[index] : Target(0);
+    }
+}
+
+template <typename Target, typename Value, typename Index>
+void scatter(Target &&target, const Value &value, const Index &index, const mask_t<Value> &mask = true) {
+    if constexpr (is_array_v<Value>) {
+        static_assert(std::is_pointer_v<std::decay_t<Target>> || array_depth_v<Target> == 1,
+                      "Target argument of scatter operation must either be a "
+                      "pointer address or a flat array!");
+        static_assert(is_array_v<Index> && is_integral_v<Index>,
+                      "Second argument of gather operation must be an index array!");
+
+        if constexpr (array_depth_v<Value> == array_depth_v<Index>) {
+            value.scatter_(target, index, mask);
+        } else {
+            using TargetIndex = replace_scalar_t<Value, scalar_t<Index>>;
+            enoki::scatter(target, value, detail::broadcast_index<TargetIndex>(index), mask);
+        }
+    } else if constexpr (std::is_class_v<Value>) {
+        static_assert(struct_support<Value>::Defined, "Missing ENOKI_STRUCT_SUPPORT() declaration?");
+        struct_support<Value>::scatter(target, value, index, mask);
+    } else {
+        static_assert(std::is_integral_v<Index>, "Index of scalar scatter must be an integer!");
+        if (mask)
+            target[index] = value;
+    }
+}
+
+template <typename Target, typename Value, typename Index>
+void scatter_add(Target &&target, const Value &value, const Index &index, const mask_t<Value> &mask = true) {
+    if constexpr (is_array_v<Value>) {
+        static_assert(std::is_pointer_v<std::decay_t<Target>> || array_depth_v<Target> == 1,
+                      "Target argument of scatter_add operation must either be a "
+                      "pointer address or a flat array!");
+        static_assert(is_array_v<Index> && is_integral_v<Index>,
+                      "Second argument of gather operation must be an index array!");
+
+        if constexpr (array_depth_v<Value> == array_depth_v<Index>) {
+            value.scatter_add_(target, index, mask);
+        } else {
+            using TargetIndex = replace_scalar_t<Value, scalar_t<Index>>;
+            enoki::scatter_add(target, value, detail::broadcast_index<TargetIndex>(index), mask);
+        }
+    } else if constexpr (std::is_class_v<Value>) {
+        static_assert(struct_support<Value>::Defined, "Missing ENOKI_STRUCT_SUPPORT() declaration?");
+        struct_support<Value>::scatter_add(target, value, index, mask);
+    } else {
+        static_assert(std::is_integral_v<Index>, "Index of scalar scatter_add must be an integer!");
+        if (mask)
+            target[index] = value;
+    }
+}
+
 //! @}
 // -----------------------------------------------------------------------
 
@@ -645,18 +739,20 @@ template <typename Value> std::pair<Value, Value> sincos(const Value &value);
 //! @{ \name JIT compilation and autodiff-related
 // -----------------------------------------------------------------------
 
+
 template <typename T> ENOKI_INLINE void schedule(const T &value) {
     if constexpr (is_jit_array_v<T>) {
         if constexpr (is_jit_array_v<value_t<T>>) {
             for (size_t i = 0; i < value.derived().size(); ++i)
                 schedule(value.derived().coeff(i));
         } else {
-            value.schedule();
+            value.derived().schedule();
         }
     } else if constexpr (!is_array_v<T> && std::is_class_v<T>) {
+        static_assert(struct_support<T>::Defined, "Missing ENOKI_STRUCT_SUPPORT() declaration?");
         struct_support<T>::schedule(value);
     } else {
-        ; /* do nothing */
+        ; // do nothing
     }
 }
 
@@ -673,13 +769,143 @@ ENOKI_INLINE void eval(const Ts&... values) {
     jitc_eval();
 }
 
-template <typename T> ENOKI_INLINE decltype(auto) detach(const T &value) {
-    if constexpr (is_diff_array_v<T>)
+template <typename T> ENOKI_INLINE size_t slices(const T &value) {
+    if constexpr (is_static_array_v<T>) {
+        if constexpr (array_size_v<T> != 0)
+            return slices(value.coeff(0));
+        else
+            return 0;
+    } else if constexpr (is_dynamic_array_v<T>) {
+        return value.size();
+    } else if constexpr (!is_array_v<T> && std::is_class_v<T>) {
+        static_assert(struct_support<T>::Defined, "Missing ENOKI_STRUCT_SUPPORT() declaration?");
+        return struct_support<T>::slices(value);
+    } else {
+        return 1;
+    }
+}
+
+template <typename T> ENOKI_INLINE auto detach(const T &value) {
+    if constexpr (array_depth_v<T> > 1) {
+        using ValueGrad = decltype(detach(std::declval<value_t<T>>()));
+        using Result = typename T::template ReplaceType<ValueGrad>;
+        Result result;
+        result.init_(value.size());
+        for (size_t i = 0; i < value.size(); ++i)
+            result.coeff(i) = detach(value.coeff(i));
+        return result;
+    } else if constexpr (is_diff_array_v<T>) {
         return value.detach();
-    else if constexpr (!is_array_v<T> && std::is_class_v<T>)
+    } else if constexpr (!is_array_v<T> && std::is_class_v<T>) {
+        static_assert(struct_support<T>::Defined, "Missing ENOKI_STRUCT_SUPPORT() declaration?");
         return struct_support<T>::detach(value);
-    else
+    } else {
         return value;
+    }
+}
+
+template <typename T> ENOKI_INLINE auto grad(const T &value) {
+    if constexpr (array_depth_v<T> > 1) {
+        using ValueGrad = decltype(grad(std::declval<value_t<T>>()));
+        using Result = typename T::template ReplaceType<ValueGrad>;
+        Result result;
+        result.init_(value.size());
+        for (size_t i = 0; i < value.size(); ++i)
+            result.coeff(i) = grad(value.coeff(i));
+        return result;
+    } else if constexpr (is_diff_array_v<T>) {
+        return value.grad();
+    } else if constexpr (!is_array_v<T> && std::is_class_v<T>) {
+        static_assert(struct_support<T>::Defined, "Missing ENOKI_STRUCT_SUPPORT() declaration?");
+        return struct_support<T>::grad(value);
+    } else {
+        return; // return void
+    }
+}
+
+template <typename T1, typename T2> ENOKI_INLINE void set_grad(T1 &value, const T2 &grad) {
+    if constexpr (array_depth_v<T1> > 1) {
+        for (size_t i = 0; i < value.size(); ++i) {
+            if constexpr (array_size_v<T1> == array_size_v<T2>)
+                set_grad(value.coeff(i), grad.coeff(i));
+            else
+                set_grad(value.coeff(i), grad);
+        }
+    } else if constexpr (is_diff_array_v<T1>) {
+        value.set_grad(grad);
+    } else {
+        static_assert(detail::false_v<T1, T2>, "Unsupported inputs!");
+    }
+}
+
+template <typename T1> ENOKI_INLINE void set_label(T1 &value, const char *label) {
+    if constexpr (array_depth_v<T1> > 1) {
+        size_t label_size = strlen(label) + 11;
+        char *buf = (char *) alloca(label_size);
+        for (size_t i = 0; i < value.size(); ++i) {
+            snprintf(buf, label_size, "%s_%zu", label, i);
+            set_grad(value.coeff(i), buf);
+        }
+    } else if constexpr (is_diff_array_v<T1> || is_jit_array_v<T1>) {
+        value.set_label(label);
+    } else if constexpr (!is_array_v<T1> && std::is_class_v<T1>) {
+        static_assert(struct_support<T1>::Defined, "Missing ENOKI_STRUCT_SUPPORT() declaration?");
+        struct_support<T1>::set_label(value);
+    }
+}
+
+template <typename T> ENOKI_INLINE void requires_grad(T &value, bool state = true) {
+    if constexpr (is_diff_array_v<T>) {
+        value.requires_grad(state);
+    } else if constexpr (array_depth_v<T> > 1) {
+        for (size_t i = 0; i < value.size(); ++i)
+            requires_grad(value.coeff(i), state);
+    } else if constexpr (!is_array_v<T> && std::is_class_v<T>) {
+        static_assert(struct_support<T>::Defined, "Missing ENOKI_STRUCT_SUPPORT() declaration?");
+        struct_support<T>::requires_grad(value, state);
+    } else {
+        ; // do nothing
+    }
+}
+
+template <typename... Ts>
+ENOKI_INLINE void requires_grad(const Ts&... values) {
+    bool unused[] = { (requires_grad(values), false)... };
+    (void) unused;
+}
+
+template <typename T> ENOKI_INLINE void ad_schedule(T &value, bool reverse = true) {
+    if constexpr (array_depth_v<T> > 1) {
+        for (size_t i = 0; i < value.size(); ++i)
+            ad_schedule(value.coeff(i), reverse);
+    } else if constexpr (is_diff_array_v<T>) {
+        value.ad_schedule(reverse);
+    } else if constexpr (!is_array_v<T> && std::is_class_v<T>) {
+        struct_support<T>::ad_schedule(value, reverse);
+    } else {
+        ; // do nothing
+    }
+}
+
+template <typename T>
+ENOKI_INLINE const char *graphviz(const T& value) {
+    using DiffArray = diff_array_t<T>;
+    ad_schedule(value);
+    return DiffArray::graphviz();
+}
+
+template <typename T> ENOKI_INLINE void backward(T& value, bool retain_graph = false) {
+    using DiffArray = diff_array_t<T>;
+    set_grad(value, 1.f);
+    ad_schedule(value, true);
+    DiffArray::traverse(true, retain_graph);
+}
+
+template <typename T> ENOKI_INLINE void forward(T& value, bool retain_graph = false) {
+    using DiffArray = diff_array_t<T>;
+    set_grad(value, 1.f);
+    ad_schedule(value, false);
+    DiffArray::traverse(false, retain_graph);
 }
 
 //! @}

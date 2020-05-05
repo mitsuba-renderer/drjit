@@ -359,9 +359,10 @@ def gather(target_type, source, index, mask=True):
         assert isinstance(index, int) and isinstance(mask, bool)
         return source[index] if mask else 0
     else:
-        assert source.Depth == 1
+        if source.Depth != 1:
+            raise Exception("Source of gather op. must be a flat array!")
 
-        index_type = _ek.uint_array_t(target_type)
+        index_type = _ek.uint32_array_t(target_type)
         if not isinstance(index, index_type):
             index = _broadcast_index(index_type, index)
 
@@ -378,9 +379,10 @@ def scatter(target, value, index, mask=True):
         if mask:
             target[index] = value
     else:
-        assert target.Depth == 1
+        if target.Depth != 1:
+            raise Exception("Target of scatter op. must be a flat array!")
 
-        index_type = _ek.uint_array_t(type(value))
+        index_type = _ek.uint32_array_t(type(value))
         if not isinstance(index, index_type):
             index = _broadcast_index(index_type, index)
 
@@ -389,6 +391,26 @@ def scatter(target, value, index, mask=True):
             mask = mask_type(mask)
 
         return value.scatter_(target, index, mask)
+
+
+def scatter_add(target, value, index, mask=True):
+    if not isinstance(value, ArrayBase):
+        assert isinstance(index, int) and isinstance(mask, bool)
+        if mask:
+            target[index] += value
+    else:
+        if target.Depth != 1:
+            raise Exception("Target of scatter op. must be a flat array!")
+
+        index_type = _ek.uint32_array_t(type(value))
+        if not isinstance(index, index_type):
+            index = _broadcast_index(index_type, index)
+
+        mask_type = index_type.MaskType
+        if not isinstance(mask, mask_type):
+            mask = mask_type(mask)
+
+        return value.scatter_add_(target, index, mask)
 
 
 def ravel(array):
@@ -783,7 +805,7 @@ def mulsign_neg(a, b):
 
 def set_label(a, name):
     if isinstance(a, ArrayBase):
-        a.set_label_(name)
+        a.set_label(name)
     elif isinstance(a, tuple) or isinstance(a, list):
         for i, v in enumerate(a):
             set_label(v, name + "_%i" % i)

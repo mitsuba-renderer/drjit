@@ -6,7 +6,12 @@ extern void export_packet(py::module &m);
 #if defined(ENOKI_ENABLE_JIT)
 extern void export_cuda(py::module &m);
 extern void export_llvm(py::module &m);
+#if defined(ENOKI_ENABLE_AUTODIFF)
+extern void export_cuda_ad(py::module &m);
+extern void export_llvm_ad(py::module &m);
 #endif
+#endif
+
 
 const uint32_t var_type_size[(int) VarType::Count] {
     (uint32_t) -1, 1, 1, 1, 2, 2, 4, 4, 8, 8, 2, 4, 8, 8
@@ -101,6 +106,10 @@ PYBIND11_MODULE(enoki_ext, m_) {
 #if defined(ENOKI_ENABLE_JIT)
     export_cuda(m);
     export_llvm(m);
+#if defined(ENOKI_ENABLE_AUTODIFF)
+    export_cuda_ad(m);
+    export_llvm_ad(m);
+#endif
 
     py::enum_<LogLevel>(m, "LogLevel")
         .value("Disable", LogLevel::Disable)
@@ -131,6 +140,8 @@ PYBIND11_MODULE(enoki_ext, m_) {
     m.def("malloc_trim", &jitc_malloc_trim);
     m.def("set_log_level", &jitc_set_log_level_stderr);
     m.def("log_level", &jitc_log_level_stderr);
+    m.def("set_parallel_dispatch", &jitc_set_parallel_dispatch);
+    m.def("parallel_dispatch", &jitc_parallel_dispatch);
 
     array_detail.def("schedule", &jitc_var_schedule);
     array_detail.def("eval", &jitc_var_eval);

@@ -1,8 +1,3 @@
-set(ENOKI_PYBIND11_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../ext/pybind11"
-  CACHE STRING "Path containing the 'pybind11' library used to compile Enoki.")
-
-add_subdirectory(${ENOKI_PYBIND11_DIR} pybind11)
-
 pybind11_add_module(
   enoki-python
   THIN_LTO
@@ -13,28 +8,18 @@ pybind11_add_module(
   bind_scalar.cpp
   bind_packet.cpp
   bind_cuda.cpp
+  bind_cuda_ad.cpp
   bind_llvm.cpp
-
-  #common.h
-  #bind.h
-
-  #main.cpp
-
-  #promote.cpp promote.h
-
-  #route_basics.cpp
-  #route_init.cpp
-  #route_math.cpp
-
-  #constants.cpp
-  #type_traits.cpp
-
+  bind_llvm_ad.cpp
 )
 
 if (ENOKI_ENABLE_JIT)
   target_link_libraries(enoki-python PRIVATE enoki-jit)
 endif()
 
+if (ENOKI_ENABLE_AUTODIFF)
+  target_link_libraries(enoki-python PRIVATE enoki-autodiff)
+endif()
 
 set_target_properties(enoki-python PROPERTIES
   OUTPUT_NAME enoki_ext
@@ -43,7 +28,7 @@ set_target_properties(enoki-python PROPERTIES
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "GCC|Clang")
   if (NOT (${ENOKI_U_CMAKE_BUILD_TYPE} MATCHES "DEB"))
-    target_compile_options(enoki-python PRIVATE -g0 -Os)
+    target_compile_options(enoki-python PRIVATE -g0 -Os ${ENOKI_NATIVE_FLAGS})
   endif()
 elseif (MSVC)
   target_compile_options(enoki-python PRIVATE /Os)

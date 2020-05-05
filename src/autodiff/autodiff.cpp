@@ -1,1142 +1,671 @@
-/*
-    src/autodiff/autodiff.cpp -- Reverse mode automatic differentiation
-
-    Enoki is a C++ template library that enables transparent vectorization
-    of numerical kernels using SIMD instruction sets available on current
-    processor architectures.
-
-    Copyrighe (c) 2019 Wenzel Jakob <wenzel.jakob@epfl.ch>
-
-    All rights reserved. Use of this source code is governed by a BSD-style
-    license that can be found in the LICENSE file.
-*/
-
-#include <enoki/dynamic.h>
-#if defined(ENOKI_CUDA)
+#include "common.h"
 #include <enoki/cuda.h>
-#endif
+#include <enoki/llvm.h>
 #include <enoki/autodiff.h>
+#include <tsl/robin_map.h>
+#include <type_traits>
+#include <assert.h>
 
-#include <unordered_map>
-#include <set>
-#include <sstream>
-#include <iomanip>
-
-#if defined(NDEBUG)
-#  define ENOKI_AUTODIFF_DEFAULT_LOG_LEVEL 0
+#if defined(ENOKI_USE_TBB)
+#  include <tbb/spin_mutex.h>
 #else
-#  define ENOKI_AUTODIFF_DEFAULT_LOG_LEVEL 1
+#  include <mutex>
 #endif
 
-/// Max. allowed cost in number of arithmetic operations that a simplification can do
-#define ENOKI_AUTODIFF_MAX_SIMPLIFICATION_COST 10
+/* Prefer TBB's spin mutex, which are slightly faster in
+   single threaded workloads (which are the expectation.) */
+#if defined(ENOKI_USE_TBB)
+    using Mutex = tbb::spin_mutex;
+#else
+    using Mutex = std::mutex;
+#endif
+
+#define CONCAT(x,y) x ## _ ## y
+#define EVAL(x,y) CONCAT(x,y)
+#define RENAME(fun) EVAL(fun, ENOKI_AUTODIFF_NAME)
+
+/// Rename various things to avoid symbol clashes
+#define Special  RENAME(Special)
+#define Edge     RENAME(Edge)
+#define Variable RENAME(Variable)
+#define State    RENAME(State)
 
 NAMESPACE_BEGIN(enoki)
+NAMESPACE_BEGIN(detail)
 
-using Index = uint32_t;
+using Value = ENOKI_AUTODIFF_VALUE;
+using Mask = mask_t<Value>;
+constexpr bool IsDouble = std::is_same_v<Value, double>;
 
-template <typename Value>
-Value safe_mul(const Value &value1, const Value &value2);
-template <typename Value>
-Value safe_fmadd(const Value &value1, const Value &value2, const Value &value3);
+struct Variable;
 
-template <typename Value> struct Tape<Value>::Node {
-    /// Descriptive label
-    std::string label;
-
-    /// Gradient value
-    Value grad;
-
-    /// Pointer to incident edge linked list
-    std::vector<Edge> edges;
-
-    /// Reverse edge list
-    std::vector<uint32_t> edges_rev;
-
-    /// External (i.e. by Enoki) reference count
-    uint32_t ref_count_ext = 0;
-
-    /// Internal (i.e. within the computation graph) reference count
-    uint32_t ref_count_int = 0;
-
-    /// Size of the variable
-    uint32_t size = 0;
-
-    Node(size_t size, const char *label)
-        : label(label ? label : ""), size((uint32_t) size) { }
-
-    bool is_scalar() const {
-        return size == 1;
-    }
-
-    bool collapse_allowed() const {
-        return !edges.empty() && !edges_rev.empty();
-    }
-
-    Index score() const {
-        return (uint32_t) (edges.size() * edges_rev.size());
-    }
-
-    Edge *edge(Index source) {
-        for (auto &e: edges) {
-            if (e.source == source)
-                return &e;
-        }
-        return nullptr;
-    }
-
-    Edge remove_edge(Index source) {
-        for (auto it = edges.begin(); it != edges.end(); ++it) {
-            if (it->source == source) {
-                Edge temp(std::move(*it));
-                edges.erase(it);
-                return temp;
-            }
-        }
-        throw std::runtime_error("Node::remove_edge(): not found!");
-    }
-
-    Node() = default;
-    Node(const Node &) = delete;
-    Node(Node&&) = default;
-    Node& operator=(const Node &) = delete;
-    Node& operator=(Node&&) = default;
-};
-
-template <typename Value> struct Tape<Value>::Edge {
-    /// Source node ID associated with this edge
-    Index source;
-
-    /// Edge weight
-    Value weight;
-
-    /// Optional: special operation (scatter/gather/reduction)
-    std::unique_ptr<Special> special;
-
-    /// Pointer to next edge
-    std::unique_ptr<Edge> next;
-
-    Edge(Index source, const Value &weight)
-        : source(source), weight(weight) { }
-
-    Edge(Index source, Special *special)
-        : source(source), special(special) { }
-
-    bool is_special() const { return special != nullptr; }
-
-    Edge() = default;
-    Edge(const Edge &) = delete;
-    Edge(Edge&&) = default;
-    Edge& operator=(const Edge &) = delete;
-    Edge& operator=(Edge&&) = default;
-};
-
-template <typename Value> struct Tape<Value>::Special {
-    virtual void backward(Detail *detail, Index target_idx, const Edge &edge) const {
+// Special edge (scatter, gather, scatter_add, block_sum, etc.)
+struct Special {
+    virtual void backward(Variable *source, const Variable *target) const {
         throw std::runtime_error("Special::backward(): not implemented!");
     }
 
-    virtual void forward(Detail *detail, Index target_idx, const Edge &edge) const {
+    virtual void forward(const Variable *source, Variable *target) const {
         throw std::runtime_error("Special::forward(): not implemented!");
     }
 
     virtual ~Special() = default;
 };
 
-template <typename Value> struct Tape<Value>::Detail {
-    Index node_counter = 1,
-          node_counter_last = 1;
+// Weighted edge connecting two variables
+struct Edge {
+    /// Variable index of source operand
+    uint32_t source = 0;
 
-    std::unordered_map<Index, Node> nodes;
-    std::vector<std::string> prefix;
-    Index *scatter_gather_index = nullptr;
-    size_t scatter_gather_size = 0;
-    bool scatter_gather_permute = false;
-    uint32_t log_level = ENOKI_AUTODIFF_DEFAULT_LOG_LEVEL;
-    bool graph_simplification = true,
-         is_simplified = true;
+    /// Source variable index
+    uint32_t target = 0;
 
-    /// Set of indices selected for next backward pass
-    std::set<uint32_t> scheduled;
+    /// Links to the next forward edge
+    uint32_t next_fwd = 0;
 
-    Node &node(Index index) {
-        auto it = nodes.find(index);
-        if (it == nodes.end())
-            throw std::runtime_error("autodiff: Detail::node(): Unknown index " +
-                                     std::to_string(index));
-        return it->second;
+    /// Links to the next reverse edge
+    uint32_t next_rev = 0;
+
+    /// Pointer to a handler for "special" edges
+    Special *special = nullptr;
+
+    /// Weight value (zero/empty for "special" edges)
+    Value weight{};
+
+    ENOKI_ARRAY_DEFAULTS(Edge);
+
+    Edge() = default;
+
+
+    /// Reset the contents of this edge to the default values
+    void reset() {
+        delete special;
+        memset(this, 0, sizeof(uint32_t) * 4);
+        weight = Value();
     }
 
-    void dfs(Index k, bool backward, bool clear_grad) {
-        if (scheduled.find(k) != scheduled.end())
-            return;
-        scheduled.insert(k);
+    template <typename T = Value>
+    uint32_t weight_size() const {
+        if constexpr (std::is_scalar_v<T>)
+            return 1;
+        else
+            return (uint32_t) ((const T &) weight).size();
+    }
+};
 
-        Node &n = node(k);
-        if (clear_grad) {
-            if (is_dynamic_v<Value>)
-                n.grad = Value();
+static_assert(sizeof(Edge) == 8 * sizeof(uint32_t),
+              "Edge data structure has incorrect size. Padding problem?");
+
+/// Represents a variable in the computation graph
+struct Variable {
+    /// Descriptive label or nullptr
+    char *label;
+
+    /// Number of times this variable is referenced by other variables
+    uint32_t ref_count_int;
+
+    /// Number of times this variable is referenced from Python/C++
+    uint32_t ref_count_ext : 30;
+
+    /// Should the label variable be freed when the Variable is deallocated?
+    uint32_t free_label : 1;
+
+    /// Was the variable queued up for via ad_schedule()?
+    uint32_t scheduled : 1;
+
+    /// Links to the first forward edge at this node
+    uint32_t next_fwd;
+
+    /// Links to the first reverse edge at this node
+    uint32_t next_rev;
+
+    /// Number of entries that we expect for the gradient
+    uint32_t size;
+
+    /// This will eventually hold a gradient value
+    Value grad{};
+
+    Variable() {
+        memset(this, 0, 7 * sizeof(uint32_t));
+    }
+
+    Variable(const char *label_, uint32_t size_) : Variable() {
+        label = (char *) label_;
+        size = size_;
+    }
+
+    template <typename T = Value>
+    uint32_t grad_size() const {
+        if constexpr (std::is_scalar_v<T>)
+            return 1;
+        else
+            return (uint32_t) ((const T &) grad).size();
+    }
+
+    template <typename T = Value>
+    bool grad_valid() const {
+        if constexpr (std::is_scalar_v<T>)
+            return true;
+        else
+            return ((const T &) grad).valid();
+    }
+
+    bool is_scalar() const { return size == 1; }
+
+    ENOKI_ARRAY_DEFAULTS(Variable);
+};
+
+static_assert(sizeof(Variable) == ((IsDouble ? 2 : 0) + 8) * sizeof(uint32_t),
+              "Variable data structure has incorrect size. Padding problem?");
+
+/// Thread-local list used by ad_schedule() and ad_traverse()
+static __thread std::vector<uint32_t> *thread_schedule = nullptr;
+
+/// Records all internal application state
+struct State {
+    using VariableMap = tsl::robin_map<uint32_t, Variable>;
+    using EdgeVector  = std::vector<Edge>;
+
+    /// Mutex protecting the state data structure
+    Mutex mutex;
+
+    /// Hash table mapping variable IDs to variable instances
+    VariableMap variables;
+
+    /// List of all edges (used and unused ones)
+    EdgeVector edges;
+
+    /// List of currently unused edges
+    std::vector<uint32_t> unused_edges;
+
+    /// Counter for variable indices
+    uint32_t variable_index = 1;
+
+    State() : edges(1) { }
+
+    Variable *operator[](uint32_t index) {
+        auto it = variables.find(index);
+        if (unlikely(it == variables.end()))
+            ad_fail("referenced an unknown variable %u!", index);
+        return &it.value();
+    }
+
+    ~State() {
+        if (!variables.empty())
+            ad_log(Warn,
+                   "enoki-ad: variable leak detected (%zu variables "
+                   "remain in use)!", variables.size());
+
+        size_t edges_used = edges.size() - unused_edges.size() - 1;
+        if (edges_used != 0)
+            ad_log(Warn,
+                   "enoki-ad: edge leak detected (%zu edges "
+                   "remain in use)!", edges_used);
+
+        if (thread_schedule) {
+            delete thread_schedule;
+            thread_schedule = nullptr;
+        }
+    }
+};
+
+static State state;
+static Buffer buffer{0};
+
+/// Queue up nodes for a reverse-mode traversal
+static void ad_schedule_rev(std::vector<uint32_t> *sched, uint32_t index) {
+    Variable *v = state[index];
+    if (v->scheduled)
+        return;
+    v->scheduled = 1;
+    sched->push_back(index);
+
+    uint32_t edge = v->next_rev;
+    while (edge) {
+        const Edge &e = state.edges[edge];
+        ad_schedule_rev(sched, e.source);
+        edge = e.next_rev;
+    }
+}
+
+/// Queue up nodes for a forward-mode traversal
+static void ad_schedule_fwd(std::vector<uint32_t> *sched, uint32_t index) {
+    Variable *v = state[index];
+    if (v->scheduled)
+        return;
+    v->scheduled = 1;
+    sched->push_back(index);
+
+    uint32_t edge = v->next_fwd;
+    while (edge) {
+        const Edge &e = state.edges[edge];
+        ad_schedule_fwd(sched, e.target);
+        edge = e.next_fwd;
+    }
+}
+
+/// Allocate a new edge from the pool
+static uint32_t ad_edge_new() {
+    uint32_t index;
+    if (likely(!state.unused_edges.empty())) {
+        index = state.unused_edges.back();
+        state.unused_edges.pop_back();
+    } else {
+        index = state.edges.size();
+        state.edges.emplace_back();
+    }
+    return index;
+}
+
+/// Allocate a new variable
+static std::pair<uint32_t, Variable *> ad_var_new(const char *label, uint32_t size) {
+    while (true) {
+        uint32_t index = state.variable_index++;
+
+        if (unlikely(index == 0)) // overflow
+            index = state.variable_index++;
+
+        auto result = state.variables.try_emplace(index, label, size);
+        if (likely(result.second))
+            return { index, &result.first.value() };
+    }
+}
+
+static void ad_free(uint32_t index, Variable *v);
+
+/// Clear reverse edges of the given variable and decrease int. ref. counts
+static void ad_free_edges(uint32_t index, Variable *v) {
+    uint32_t edge_id = v->next_rev;
+    ad_log(Trace, "ad_free_edges(): freeing edges of vertex %u", index);
+    while (edge_id) {
+        Edge &edge = state.edges[edge_id];
+
+        ad_log(Trace,
+               "ad_free_edges(): freeing edge %u: %u -> %u",
+               edge_id, edge.source, edge.target);
+
+        uint32_t source = edge.source,
+                 next_rev = edge.next_rev,
+                 next_fwd = edge.next_fwd;
+
+        assert(edge.target == index);
+        edge.reset();
+
+        Variable *v2 = state[source];
+        if (unlikely(v2->ref_count_int == 0))
+            ad_fail("%u: int. reference count became negative!", source);
+
+        if (--v2->ref_count_int == 0 && v2->ref_count_ext == 0) {
+            ad_free(source, v2);
+        } else {
+            uint32_t fwd = v2->next_fwd;
+            if (fwd == edge_id) {
+                v2->next_fwd = next_fwd;
+            } else {
+                while (true) {
+                    Edge &edge2 = state.edges[fwd];
+                    assert(edge2.source == source);
+                    if (edge2.next_fwd == edge_id) {
+                        edge2.next_fwd = next_fwd;
+                        break;
+                    }
+                    fwd = edge2.next_fwd;
+                }
+            }
+        }
+
+        state.unused_edges.push_back(edge_id);
+
+        edge_id = next_rev;
+    }
+
+    v->next_rev = 0;
+}
+
+static void ad_free(uint32_t index, Variable *v) {
+    ad_log(Debug, "ad_free(%u)", index);
+    if (v->free_label)
+        free(v->label);
+    if (v->next_rev)
+        ad_free_edges(index, v);
+    state.variables.erase(index);
+}
+
+template <typename T>
+uint32_t ad_new(const char *label, uint32_t size, uint32_t op_count,
+                const uint32_t *op, T *weights) {
+    std::lock_guard<Mutex> guard(state.mutex);
+
+    auto [index, var] = ad_var_new(label, size);
+
+    if (unlikely(log_level >= Debug)) {
+        const char *l = label ? label : "unnamed";
+        switch (op_count) {
+            case 0:
+                ad_log(Debug, "ad_new(%u): %s", index, l); break;
+            case 1:
+                ad_log(Debug, "ad_new(%u <- %u): %s", index, op[0], l); break;
+            case 2:
+                ad_log(Debug, "ad_new(%u <- %u, %u): %s", index, op[0], op[1], l); break;
+            case 3:
+                ad_log(Debug, "ad_new(%u <- %u, %u, %u): %s", index, op[0], op[1], op[2], l); break;
+            default: break;
+        }
+    }
+
+    uint32_t edge_index = 0;
+    for (uint32_t i = 0; i < op_count; ++i) {
+        if (op[i] == 0)
+            continue;
+
+        bool weight_is_zero = false;
+        if constexpr (std::is_scalar_v<T>)
+            weight_is_zero = weights[i] == 0;
+        else
+            weight_is_zero = weights[i].is_literal_zero();
+
+        if (weight_is_zero)
+            continue;
+
+        Variable *var2 = state[op[i]];
+
+        uint32_t edge_index_new = ad_edge_new();
+        Edge &edge = state.edges[edge_index_new];
+        edge.source = op[i];
+        edge.target = index;
+        edge.weight = std::move(weights[i]);
+        edge.next_fwd = var2->next_fwd;
+        edge.next_rev = edge_index;
+        edge_index = edge_index_new;
+
+        var2->ref_count_int++;
+        var2->next_fwd = edge_index_new;
+    }
+
+    var->next_rev = edge_index;
+    var->ref_count_ext = 1;
+
+    return index;
+}
+
+template <typename Value, typename Mask>
+uint32_t ad_new_select(const char *label, uint32_t size, const Mask &mask_,
+                       uint32_t t_index, uint32_t f_index) {
+
+    struct SelectEdge : Special {
+        SelectEdge(const Mask &mask) : mask(mask) { }
+
+        void backward(Variable *source, const Variable *target) const override {
+            Value masked_grad = detail::and_(target->grad, mask);
+            if (source->grad_valid())
+                source->grad += masked_grad;
             else
-                n.grad = zero<Value>();
+                source->grad = masked_grad;
         }
 
-        if (backward) {
-            for (const Edge &edge : n.edges)
-                dfs(edge.source, backward, clear_grad);
-        } else {
-            for (Index k2: n.edges_rev)
-                dfs(k2, backward, clear_grad);
-        }
-    }
-};
-
-template <typename Value> struct Tape<Value>::SimplificationLock {
-    SimplificationLock(Tape &tape) : tape(tape) {
-        std::swap(state, tape.d->graph_simplification);
-    }
-
-    ~SimplificationLock() {
-        std::swap(state, tape.d->graph_simplification);
-    }
-
-    Tape &tape;
-    bool state = false;
-};
-
-template <typename Value> std::unique_ptr<Tape<Value>> Tape<Value>::s_tape;
-template <typename Value> ENOKI_PURE Tape<Value> *Tape<Value>::get() {
-    if (ENOKI_UNLIKELY(!s_tape))
-        s_tape = std::unique_ptr<Tape>(new Tape());
-    return s_tape.get();
-}
-
-template <typename Value> Tape<Value>::Tape() {
-    d = new Detail();
-
-#if defined(ENOKI_CUDA)
-    if constexpr (is_cuda_array_v<Value>)
-        cuda_register_callback((void (*)(void *)) & Tape::cuda_callback, this);
-#endif
-}
-
-template <typename Value> Tape<Value>::~Tape() {
-#if !defined(NDEBUG)
-    if (d->log_level >= 1) {
-        if (d->node_counter != 1)
-            std::cerr << "autodiff: shutdown." << std::endl;
-        size_t n_live = 0;
-        for (const auto &it : d->nodes) {
-            if (n_live < 10)
-                std::cerr << "autodiff: variable " << it.first
-                          << " still live at shutdown. (ref_count_int="
-                          << it.second.ref_count_int
-                          << ", ref_count_ext=" << it.second.ref_count_ext << ")"
-                          << std::endl;
-            if (n_live == 9)
-                std::cerr << "(skipping remainder)" << std::endl;
-            n_live++;
-        }
-        if (n_live > 0)
-            std::cerr << "autodiff: " << n_live
-                      << " variables were still live at shutdown." << std::endl;
-    }
-#endif
-    delete d;
-}
-
-template <typename Value> void Tape<Value>::cuda_callback(void *ptr) {
-    Tape *tape = (Tape *) ptr;
-    if (tape->d->graph_simplification)
-        tape->simplify_graph();
-}
-
-template <typename Value> void Tape<Value>::set_log_level(uint32_t level) {
-    d->log_level = level;
-}
-
-template <typename Value> uint32_t Tape<Value>::log_level() const {
-    return d->log_level;
-}
-
-template <typename Value> void Tape<Value>::set_graph_simplification(bool value) {
-    d->graph_simplification = value;
-}
-
-template <typename Value>
-Index Tape<Value>::append(const char *label, size_t size, Index i1, const Value &w1) {
-    if (i1 == 0)
-        return 0;
-    Index idx = append_node(size, label);
-#if !defined(NDEBUG)
-    if (d->log_level >= 3)
-        std::cerr << "autodiff: append(\"" << (label ? label : "") << "\", " << idx
-                  << " <- " << i1 << ")" << std::endl;
-#endif
-    append_edge(i1, idx, w1);
-    return idx;
-}
-
-template <typename Value>
-Index Tape<Value>::append(const char *label, size_t size, Index i1, Index i2,
-                          const Value &w1, const Value &w2) {
-    if (i1 == 0 && i2 == 0)
-        return 0;
-    Index idx = append_node(size, label);
-#if !defined(NDEBUG)
-    if (d->log_level >= 3)
-        std::cerr << "autodiff: append(\"" << (label ? label : "") << "\", " << idx
-                  << " <- [" << i1 << ", " << i2 << "])" << std::endl;
-#endif
-    append_edge(i1, idx, w1);
-    append_edge(i2, idx, w2);
-    return idx;
-}
-
-template <typename Value>
-Index Tape<Value>::append(const char *label, size_t size, Index i1, Index i2, Index i3,
-                          const Value &w1, const Value &w2, const Value &w3) {
-    if (i1 == 0 && i2 == 0 && i3 == 0)
-        return 0;
-    Index idx = append_node(size, label);
-#if !defined(NDEBUG)
-    if (d->log_level >= 3)
-        std::cerr << "autodiff: append(\"" << (label ? label : "") << "\", " << idx
-                  << " <- [" << i1 << ", " << i2 << ", " << i3 << "])" << std::endl;
-#endif
-    append_edge(i1, idx, w1);
-    append_edge(i2, idx, w2);
-    append_edge(i3, idx, w3);
-    return idx;
-}
-
-template <typename Value>
-Index Tape<Value>::append_node(size_t size, const char *label) {
-    Index idx = d->node_counter++;
-    auto result = d->nodes.emplace(std::make_pair(idx, Node(size, label)));
-
-    Node &node = result.first->second;
-    for (auto it = d->prefix.rbegin(); it != d->prefix.rend(); ++it)
-        node.label = *it + '/' + node.label;
-
-#if !defined(NDEBUG)
-    if (d->log_level >= 3)
-        std::cerr << "autodiff: append_node(\"" << (label ? label : "")
-                  << "\", size=" << size << ") -> " << idx << std::endl;
-#endif
-    inc_ref_ext(idx);
-    d->is_simplified = false;
-    return idx;
-}
-
-template <typename Value>
-Index Tape<Value>::append_leaf(size_t size) {
-    Index idx = append_node(size, "'unnamed'");
-    Node &n = d->node(idx);
-    n.grad = zero<Value>(n.size);
-    return idx;
-}
-
-template <typename Value>
-void Tape<Value>::set_label(Index idx, const char *label) {
-    if (idx == 0)
-        return;
-#if !defined(NDEBUG)
-    if (d->log_level >= 3)
-        std::cerr << "autodiff: set_label(" << idx << ") -> " << label << std::endl;
-#endif
-    std::string name = "'" + std::string(label) + "'";
-    Node &n = d->node(idx);
-    n.label = name;
-    enoki::set_label(n.grad, (label + std::string(".grad")).c_str());
-}
-
-template <typename Value>
-Index Tape<Value>::append_gather(const Int64 &offset, const Mask &mask) {
-    if constexpr (is_dynamic_v<Value>) {
-        if (d->scatter_gather_index == nullptr ||
-           *d->scatter_gather_index == 0)
-            return 0;
-        Index source = *d->scatter_gather_index;
-
-        struct Gather : Special {
-            Int64 offset;
-            Mask mask;
-            size_t size;
-            bool permute;
-
-            void forward(Detail *detail, Index target_idx,
-                         const Edge &edge) const override {
-                const Value &grad_source = detail->node(edge.source).grad;
-                Value &grad_target = detail->node(target_idx).grad;
-
-                if (grad_source.size() != size)
-                    throw std::runtime_error("Internal error in Gather::forward()!");
-
-                Value value = gather<Value>(grad_source, offset, mask);
-
-                if (grad_target.empty())
-                    grad_target = value;
-                else
-                    grad_target += value;
-            }
-
-            void backward(Detail *detail, Index target_idx,
-                          const Edge &edge) const override {
-                const Value &grad_target = detail->node(target_idx).grad;
-                Value &grad_source = detail->node(edge.source).grad;
-
-                if (grad_source.empty())
-                    grad_source = zero<Value>(size);
-                else if (grad_source.size() != size)
-                    throw std::runtime_error("Internal error in Gather::backward()!");
-
-                if (permute)
-                    scatter(grad_source, grad_target, offset, mask);
-                else
-                    scatter_add(grad_source, grad_target, offset, mask);
-            }
-        };
-
-        Gather *gather = new Gather();
-        gather->offset = offset;
-        gather->mask = mask;
-        gather->size = d->scatter_gather_size;
-        gather->permute = d->scatter_gather_permute;
-
-        Index target = append_node(slices(offset), "gather");
-        d->node(target).edges.emplace_back(source, gather);
-        inc_ref_int(source, target);
-
-#if !defined(NDEBUG)
-        if (d->log_level >= 3)
-            std::cerr << "autodiff: append_gather(" << target << " <- " << source << ")"
-                      << std::endl;
-#endif
-
-        return target;
-    } else {
-        return 0;
-    }
-}
-
-template <typename Value>
-void Tape<Value>::append_scatter(Index source, const Int64 &offset, const Mask &mask, bool scatter_add) {
-    if constexpr (is_dynamic_v<Value>) {
-        SimplificationLock lock(*this);
-
-        if (d->scatter_gather_index == nullptr || source == 0)
-            return;
-        Index target_orig = *d->scatter_gather_index;
-
-        struct Scatter : Special {
-            Int64 offset;
-            Mask mask;
-            size_t size;
-            bool scatter_add;
-
-            void forward(Detail *detail, Index target_idx, const Edge &edge) const override {
-                const Value &grad_source = detail->node(edge.source).grad;
-                Value &grad_target = detail->node(target_idx).grad;
-
-                if (grad_target.empty())
-                    grad_target = zero<Value>(size);
-                else if (grad_target.size() != size)
-                    throw std::runtime_error("Internal error in Scatter::forward()!");
-
-                if (scatter_add)
-                    enoki::scatter_add(grad_target, grad_source, offset, mask);
-                else
-                    enoki::scatter(grad_target, grad_source, offset, mask);
-            }
-
-            void backward(Detail *detail, Index target_idx, const Edge &edge) const override {
-                Node &source = detail->node(edge.source);
-                const Value &grad_target = detail->node(target_idx).grad;
-                Value &grad_source = source.grad;
-
-                if (grad_target.size() != size)
-                    throw std::runtime_error("Internal error in Scatter::backward()!");
-
-                Value result = gather<Value>(grad_target, offset, mask);
-                if (source.size == 1)
-                    result = hsum(result);
-                else if (result.size() == 1 && source.size != 1)
-                    set_slices(result, source.size);
-
-                if (grad_source.empty())
-                    grad_source = result;
-                else
-                    grad_source += result;
-            }
-        };
-
-        Scatter *s = new Scatter();
-        s->offset = offset;
-        s->mask = mask;
-        s->size = d->scatter_gather_size;
-        s->scatter_add = scatter_add;
-
-        Index target_new = append_node(d->scatter_gather_size,
-                                       scatter_add ? "scatter_add" : "scatter");
-        d->node(target_new).edges.emplace_back(source, s);
-        inc_ref_int(source, target_new);
-
-        if (target_orig != 0) {
-            Index sa_node = target_new;
-
-            Value weight = 1.f;
-            if (!scatter_add && !d->scatter_gather_permute) {
-                weight = full<Value>(1.f, d->scatter_gather_size);
-                scatter(weight, Value(0), offset, mask);
-            }
-            target_new = append("scatter_combine", d->scatter_gather_size,
-                                target_new, target_orig, 1, weight);
-            dec_ref_ext(sa_node);
-            dec_ref_ext(target_orig);
+        void forward(const Variable *source, Variable *target) const override {
+            Value masked_grad = detail::and_(source->grad, mask);
+            if (target->grad_valid())
+                target->grad += masked_grad;
+            else
+                target->grad = masked_grad;
         }
 
-        *d->scatter_gather_index = target_new;
+        Mask mask;
+    };
 
-#if !defined(NDEBUG)
-        if (d->log_level >= 3)
-            std::cerr << "autodiff: append_scatter(" << target_orig << " <- "
-                      << source << ", scatter_add=" << scatter_add << ") -> "
-                      << target_new << std::endl;
-#endif
-    }
-}
+    std::lock_guard<Mutex> guard(state.mutex);
+    auto [index, var] = ad_var_new(label, size);
 
-template <typename Value>
-void Tape<Value>::append_edge(Index source_idx, Index target_idx,
-                              const Value &weight) {
-    if (source_idx == 0)
-        return;
-    assert(target_idx != 0);
+    ad_log(Debug, "ad_new_select(%u <- %u, %u)", index, t_index, f_index);
+    uint32_t op[2]= { t_index, f_index };
 
-#if !defined(NDEBUG)
-    if (d->log_level >= 4)
-        enoki::set_label(weight, ("edge[" + std::to_string(source_idx) + " -> " +
-                                  std::to_string(target_idx) + "]").c_str());
-#endif
+    uint32_t edge_index = 0;
+    for (uint32_t i = 0; i < 2; ++i) {
+        if (op[i] == 0)
+            continue;
 
-    Node &target = d->node(target_idx);
-    if (Edge *edge = target.edge(source_idx); edge != nullptr) {
-#if !defined(NDEBUG)
-        if (d->log_level >= 4)
-            std::cerr << "autodiff: append_edge(" << target_idx << " <- "
-                      << source_idx << "): merging."
-                      << std::endl;
-#endif
-        SimplificationLock lock(*this);
-        edge->weight += weight;
-    } else {
-#if !defined(NDEBUG)
-        if (d->log_level >= 4)
-            std::cerr << "autodiff: append_edge(" << target_idx << " <- "
-                      << source_idx << "): creating."
-                      << std::endl;
-#endif
-        target.edges.emplace_back(source_idx, weight);
-        inc_ref_int(source_idx, target_idx);
-    }
-}
+        Variable *var2 = state[op[i]];
 
-template <typename Value>
-void Tape<Value>::append_edge_prod(Index source_idx, Index target_idx,
-                                   const Value &weight1, const Value &weight2) {
-    if (source_idx == 0)
-        return;
-    assert(target_idx != 0);
+        uint32_t edge_index_new = ad_edge_new();
+        Edge &edge = state.edges[edge_index_new];
+        edge.source = op[i];
+        edge.target = index;
+        edge.special = new SelectEdge(i == 0 ? mask_ : !mask_);
+        edge.next_fwd = var2->next_fwd;
+        edge.next_rev = edge_index;
+        edge_index = edge_index_new;
 
-    Node &target = d->node(target_idx);
-    if (Edge *edge = target.edge(source_idx); edge != nullptr) {
-        Value weight = safe_fmadd(weight1, weight2, edge->weight);
-#if !defined(NDEBUG)
-        if (d->log_level >= 4) {
-            std::cerr << "autodiff: append_edge_prod(" << target_idx << " <- "
-                      << source_idx << "): merging."
-                      << std::endl;
-            enoki::set_label(weight, ("edge[" + std::to_string(source_idx) + " -> " +
-                                      std::to_string(target_idx) + "]").c_str());
-        }
-#endif
-        edge->weight = weight;
-    } else {
-        Value weight = safe_mul(weight1, weight2);
-#if !defined(NDEBUG)
-        if (d->log_level >= 4) {
-            std::cerr << "autodiff: append_edge_prod(" << target_idx << " <- "
-                      << source_idx << "): creating."
-                      << std::endl;
-            enoki::set_label(weight, ("edge[" + std::to_string(source_idx) + " -> " +
-                                      std::to_string(target_idx) + "]").c_str());
-        }
-#endif
-        target.edges.emplace_back(source_idx, weight);
-        inc_ref_int(source_idx, target_idx);
-    }
-}
-
-template <typename Value> void Tape<Value>::inc_ref_int(Index index, Index from) {
-    Node &node = d->node(index);
-
-#if !defined(NDEBUG)
-    if (d->log_level >= 4)
-        std::cerr << "autodiff: inc_ref_int(" << index << ", " << from
-                  << ") -> " << (node.ref_count_int + 1) << std::endl;
-#endif
-
-    auto it = std::find(node.edges_rev.begin(), node.edges_rev.end(), from);
-    if (it != node.edges_rev.end())
-        throw std::runtime_error("inc_ref_int(): internal error -- edge already exists!");
-
-    node.edges_rev.push_back(from);
-    node.ref_count_int++;
-}
-
-template <typename Value> void Tape<Value>::dec_ref_int(Index index, Index from) {
-    if (index == 0)
-        return;
-    Node &node = d->node(index);
-
-#if !defined(NDEBUG)
-    if (d->log_level >= 4)
-        std::cerr << "autodiff: dec_ref_int(" << index << ", " << from
-                  << ") -> " << (node.ref_count_int - 1) << std::endl;
-
-    if (node.ref_count_int == 0)
-        throw std::runtime_error("autodiff: dec_ref_int(): Node " +
-                                 std::to_string(index) +
-                                 " has no internal references!");
-#endif
-    --node.ref_count_int;
-
-    auto it = std::find(node.edges_rev.begin(), node.edges_rev.end(), from);
-    if (ENOKI_UNLIKELY(it == node.edges_rev.end()))
-        throw std::runtime_error("dec_ref_int(): internal error -- edge not found!");
-
-    node.edges_rev.erase(it);
-
-    if (node.ref_count_int == 0 && node.ref_count_ext == 0)
-        free_node(index);
-}
-
-template <typename Value> void Tape<Value>::inc_ref_ext(Index index) {
-    if (index == 0)
-        return;
-    Node &node = d->node(index);
-    node.ref_count_ext++;
-
-#if !defined(NDEBUG)
-    if (d->log_level >= 4)
-        std::cerr << "autodiff: inc_ref_ext(" << index << ") -> " << node.ref_count_ext << std::endl;
-#endif
-}
-
-template <typename Value> void Tape<Value>::dec_ref_ext(Index index) {
-    if (index == 0)
-        return;
-    Node &node = d->node(index);
-
-#if !defined(NDEBUG)
-    if (d->log_level >= 4)
-        std::cerr << "autodiff: dec_ref_ext(" << index << ") -> " << (node.ref_count_ext - 1) << std::endl;
-
-    if (node.ref_count_ext == 0)
-        throw std::runtime_error("autodiff: dec_ref_ext(): Node " +
-                                 std::to_string(index) +
-                                 " has no external references!");
-#endif
-
-    --node.ref_count_ext;
-
-    if (node.ref_count_int == 0 && node.ref_count_ext == 0)
-        free_node(index);
-}
-
-template <typename Value> void Tape<Value>::free_node(Index index) {
-#if !defined(NDEBUG)
-    if (d->log_level >= 4)
-        std::cerr << "autodiff: free_node(" << index << ")" << std::endl;
-#endif
-
-    auto it = d->nodes.find(index);
-    if (it == d->nodes.end())
-        throw std::runtime_error("autodiff: free_node(): Unknown index " +
-                                 std::to_string(index));
-
-    Node &node = it->second;
-    for (const Edge &edge : node.edges)
-        dec_ref_int(edge.source, index);
-
-    d->nodes.erase(it);
-}
-
-template <typename Value> void Tape<Value>::push_prefix(const char *value) {
-    d->prefix.push_back(value);
-}
-
-template <typename Value> void Tape<Value>::pop_prefix() {
-    if (d->prefix.empty())
-        throw std::runtime_error("pop_prefix(): prefix list is already empty!");
-    d->prefix.pop_back();
-}
-
-template <typename Value>
-void Tape<Value>::set_scatter_gather_operand(Index *index, size_t size,
-                                             bool permute) {
-    if (ENOKI_UNLIKELY(index != nullptr && d->scatter_gather_index != 0))
-        throw std::runtime_error("set_scatter_gather_operand(): attempted to override an existing operand!");
-    d->scatter_gather_index = index;
-    d->scatter_gather_size = size;
-    d->scatter_gather_permute = permute;
-}
-
-template <typename Value> const Value &Tape<Value>::gradient(Index index) {
-    if (index == 0)
-        throw std::runtime_error(
-            "No gradient was computed for this variable! (a call to "
-            "requires_gradient() is necessary.)");
-    return d->node(index).grad;
-}
-
-template <typename Value>
-void Tape<Value>::backward(Index index, bool free_graph) {
-    using Scalar = scalar_t<Value>;
-
-    SimplificationLock lock(*this);
-    set_gradient(index, Scalar(1), true);
-    backward(free_graph);
-}
-
-template <typename Value>
-void Tape<Value>::forward(Index index, bool free_graph) {
-    using Scalar = scalar_t<Value>;
-
-    SimplificationLock lock(*this);
-    set_gradient(index, Scalar(1), false);
-    forward(free_graph);
-}
-
-template <typename Value>
-void Tape<Value>::set_gradient(Index index, const Value &value, bool backward) {
-    if (index == 0)
-        throw std::runtime_error(
-            "set_gradient(): no gradients are associated with this variable (a "
-            "prior call to requires_gradient() is required.) ");
-
-    d->dfs(index, backward, true);
-    Node &node = d->node(index);
-    node.grad = value;
-    if constexpr (is_dynamic_v<Value>) {
-        if (node.size > 1 && node.grad.size() == 1)
-            set_slices(node.grad, node.size);
-    }
-}
-
-template <typename Value>
-void Tape<Value>::backward(bool free_graph) {
-    auto &scheduled = d->scheduled;
-
-    if (free_graph) {
-        for (auto it = scheduled.begin(); it != scheduled.end(); ++it)
-            inc_ref_ext(*it);
+        var2->ref_count_int++;
+        var2->next_fwd = edge_index_new;
     }
 
-    for (auto it = scheduled.rbegin(); it != scheduled.rend(); ++it) {
-        Index target_idx = *it;
-        Node &target = d->node(target_idx);
+    var->next_rev = edge_index;
+    var->ref_count_ext = 1;
 
-        if constexpr (is_dynamic_v<Value>) {
-            if (ENOKI_UNLIKELY(target.size != target.grad.size())) {
-                if (target.grad.size() == 1)
-                    set_slices(target.grad, target.size);
-                else
-                    throw std::runtime_error(
-                        "backward(): gradient sizes don't match: expected " +
-                        std::to_string(target.size) + ", got " +
-                        std::to_string(target.grad.size()));
-            }
+    return index;
+}
+
+static void ad_traverse_rev(std::vector<uint32_t> *sched, bool retain_graph) {
+    ad_log(Info, "ad_traverse_rev(): processing %zu nodes ..", sched->size());
+
+    for (uint32_t index : *sched) {
+        Variable *v = state[index];
+        assert(v->scheduled == 1);
+        ad_log(Debug, "Visiting vertex %u", index);
+
+        if (is_dynamic_v<Value>) {
+            uint32_t grad_size = (uint32_t) v->grad_size();
+            if (unlikely(v->size != grad_size && grad_size != 1))
+                ad_fail("ad_traverse_rev(): variable %u has an invalid "
+                        "gradient size: expected %u, got %u!", index,
+                        v->size, grad_size);
         }
 
-        for (Edge &edge : target.edges) {
-            Node &source = d->node(edge.source);
-            if (ENOKI_LIKELY(!edge.is_special())) {
-                if constexpr (is_dynamic_v<Value>) {
-                    if (source.size == 1 && (edge.weight.size() != 1 || target.grad.size() != 1)) {
-                        if (source.grad.empty())
-                            source.grad = hsum(safe_mul(edge.weight, target.grad));
-                        else
-                            source.grad += hsum(safe_mul(edge.weight, target.grad));
-                    } else {
-                        if (source.grad.empty())
-                            source.grad = safe_mul(edge.weight, target.grad);
-                        else
-                            source.grad = safe_fmadd(edge.weight, target.grad, source.grad);
-                    }
-                } else {
-                    source.grad = safe_fmadd(edge.weight, target.grad, source.grad);
+        if (unlikely(v->free_label)) {
+            char tmp[256];
+            snprintf(tmp, 256, "%s_grad", v->label);
+            set_label(v->grad, tmp);
+        }
+
+        uint32_t edge_id = v->next_rev;
+        while (edge_id) {
+            Edge &edge = state.edges[edge_id];
+            assert(edge.target == index);
+            Variable *v2 = state[edge.source];
+
+            if (unlikely(edge.special)) {
+                edge.special->backward(v2, v);
+                if (!retain_graph) {
+                    delete edge.special;
+                    edge.special = nullptr;
                 }
             } else {
-                edge.special->backward(d, target_idx, edge);
-            }
-            if (free_graph) {
-                dec_ref_int(edge.source, target_idx);
-                edge.source = 0;
-            }
-        }
-        if (free_graph) {
-            if (target.edges.size() > 0) {
-                target.edges.clear();
-                target.grad = Value();
-            }
-            dec_ref_ext(target_idx);
-        } else {
-            if (target.ref_count_int > 0)
-                target.grad = Value();
-        }
-    }
-
-    if (d->log_level >= 1)
-        std::cerr << "autodiff: backward(): processed " << scheduled.size() << "/"
-                  << (d->node_counter - d->node_counter_last) << " nodes."
-                  << std::endl;
-
-    if (free_graph)
-        d->node_counter_last = d->node_counter;
-
-    scheduled.clear();
-}
-
-template <typename Value>
-void Tape<Value>::forward(bool free_graph) {
-    auto &scheduled = d->scheduled;
-
-    if (free_graph) {
-        for (auto it = scheduled.begin(); it != scheduled.end(); ++it)
-            inc_ref_ext(*it);
-    }
-
-    for (auto it = scheduled.begin(); it != scheduled.end(); ++it) {
-        Index source_idx = *it;
-        Node &source = d->node(source_idx);
-
-        if constexpr (is_dynamic_v<Value>) {
-            if (source.size == 1 && source.grad.size() > 1)
-                source.grad = hsum(source.grad);
-        }
-
-        for (Index target_idx : source.edges_rev) {
-            Node &target = d->node(target_idx);
-            Edge *edge = target.edge(source_idx);
-            if (edge == nullptr)
-                throw std::runtime_error("forward(): invalid graph structure!");
-
-            if (ENOKI_LIKELY(!edge->is_special())) {
-                if constexpr (is_dynamic_v<Value>) {
-                    if (target.size == 1 && (edge->weight.size() != 1 || source.grad.size() != 1)) {
-                        if (target.grad.empty())
-                            target.grad = hsum(safe_mul(edge->weight, source.grad));
+                if (is_dynamic_v<Value>) {
+                    if (!v2->is_scalar() || (edge.weight_size() == 1 && v->is_scalar())) {
+                        if (v2->grad_valid())
+                            v2->grad = fmadd(edge.weight, v->grad, v2->grad);
                         else
-                            target.grad += hsum(safe_mul(edge->weight, source.grad));
+                            v2->grad = edge.weight * v->grad;
                     } else {
-                        if (target.grad.empty())
-                            target.grad = safe_mul(edge->weight, source.grad);
+                        Value temp = hsum_async(edge.weight * v->grad);
+                        if (v2->grad_valid())
+                            v2->grad += temp;
                         else
-                            target.grad = safe_fmadd(edge->weight, source.grad, target.grad);
+                            v2->grad = temp;
                     }
                 } else {
-                    target.grad = safe_fmadd(edge->weight, source.grad, target.grad);
+                    v2->grad = fmadd(edge.weight, v->grad, v2->grad);
                 }
-            } else {
-                edge->special->forward(d, target_idx, *edge);
+
+                if (!retain_graph)
+                    edge.weight = Value();
             }
-            if constexpr (is_dynamic_v<Value>) {
-                if (ENOKI_UNLIKELY(target.size != target.grad.size())) {
-                    if (target.grad.size() == 1)
-                        set_slices(target.grad, target.size);
-                    else
-                        throw std::runtime_error(
-                            "forward(): gradient sizes don't match: expected " +
-                            std::to_string(target.size) + ", got " +
-                            std::to_string(target.grad.size()));
-                }
-            }
+
+            edge_id = edge.next_rev;
         }
-        if (source.ref_count_int > 0)
-            source.grad = Value();
-        if (free_graph) {
-            auto edges_rev = source.edges_rev;
-            for (Index target_idx : edges_rev) {
-                dec_ref_int(source_idx, target_idx);
-                d->node(target_idx).remove_edge(source_idx);
-            }
-            dec_ref_ext(source_idx);
+
+        if (v->next_rev) {
+            /// Clear the gradients at interior nodes
+            v->grad = Value();
         }
     }
 
-    if (d->log_level >= 1)
-        std::cerr << "autodiff: forward(): processed " << scheduled.size() << "/"
-                  << (d->node_counter - d->node_counter_last) << " nodes."
-                  << std::endl;
+    if (!retain_graph) {
+        ad_log(Info, "ad_traverse_rev(): cleaning up ..");
+        for (auto it = sched->rbegin(); it != sched->rend(); ++it) {
+            uint32_t index = *it;
+            Variable *v = state[index];
+            v->scheduled = 0;
+            ad_free_edges(index, v);
+        }
+        sched->clear();
+    }
 
-    if (free_graph)
-        d->node_counter_last = d->node_counter;
-
-    scheduled.clear();
+    ad_log(Info, "ad_traverse_rev(): done.");
 }
 
-template <typename Value> void Tape<Value>::simplify_graph() {
-    if (d->is_simplified)
+static void ad_traverse_fwd(std::vector<uint32_t> *sched, bool retain_graph) {
+}
+
+template <typename Value> const char *ad_graphviz() {
+    std::lock_guard<Mutex> guard(state.mutex);
+    std::vector<uint32_t> *sched = thread_schedule;
+    if (!sched)
+        return "digraph { }";
+
+    buffer.clear();
+    buffer.put("digraph {\n");
+    buffer.put("  rankdir=BT;\n");
+    buffer.put("  node [shape=record fontname=Consolas];\n");
+    buffer.put("  edge [fontname=Consolas];\n");
+
+    for (uint32_t index : *sched) {
+        Variable *v = state[index];
+        v->scheduled = 0;
+
+        const char *color = "";
+        if (v->next_rev == 0)
+            color = " fillcolor=salmon style=filled";
+        else if (v->next_fwd == 0)
+            color = " fillcolor=cornflowerblue style=filled";
+
+        buffer.fmt("  %u [label=\"{%s%s%s%s|{#%u|E:%u|I:%u}}\"%s];\n", index,
+                   v->free_label ? "\\\"" : "",
+                   v->label ? v->label : "unnamed",
+                   v->free_label ? "\\\"" : "",
+                   v->size == 1 ? " [s]" : "",
+                   index, v->ref_count_ext, v->ref_count_int, color);
+
+        uint32_t edge = v->next_rev;
+        while (edge) {
+            const Edge &e = state.edges[edge];
+            buffer.fmt("  %u -> %u [label=\"%u\"%s];\n", e.target, e.source,
+                       edge, e.special ? " color=red" : "");
+            edge = e.next_rev;
+        }
+    }
+    buffer.put("}\n");
+    sched->clear();
+
+    return buffer.get();
+}
+
+template <typename T> void ad_inc_ref(uint32_t index) {
+    if (index == 0)
+        return;
+    std::lock_guard<Mutex> guard(state.mutex);
+    state[index]->ref_count_ext++;
+}
+
+template <typename T> void ad_dec_ref(uint32_t index) {
+    if (index == 0)
+        return;
+    std::lock_guard<Mutex> guard(state.mutex);
+    Variable *v = state[index];
+    if (unlikely(v->ref_count_ext == 0))
+        ad_fail("%u: ext. reference count became negative!", index);
+    if (--v->ref_count_ext == 0 && v->ref_count_int == 0)
+        ad_free(index, v);
+}
+
+template <typename T> T ad_grad(uint32_t index) {
+    if (index == 0)
+        enoki_raise("grad(): attempted to retrieve the gradient of a "
+                    "variable that was not registered with the AD "
+                    "backend. Did you forget to call requires_grad()?");
+
+    std::lock_guard<Mutex> guard(state.mutex);
+    return state[index]->grad;
+}
+
+template <typename T> void ad_set_grad(uint32_t index, const T &value) {
+    if (index == 0)
+        enoki_raise("set_grad(): attempted to set the gradient of a "
+                    "variable that was not registered with the AD "
+                    "backend. Did you forget to call requires_grad()?");
+
+    std::lock_guard<Mutex> guard(state.mutex);
+    state[index]->grad = value;
+}
+
+template <typename T> void ad_set_label(uint32_t index, const char *label) {
+    std::lock_guard<Mutex> guard(state.mutex);
+    Variable *v = state[index];
+    if (v->free_label)
+        free(v->label);
+    v->label = strdup(label);
+    v->free_label = true;
+}
+
+template <typename T> const char *ad_label(uint32_t index) {
+    std::lock_guard<Mutex> guard(state.mutex);
+    return state[index]->label;
+}
+
+template <typename T> void ad_schedule(uint32_t index, bool reverse) {
+    if (index == 0)
+        return;
+    std::lock_guard<Mutex> guard(state.mutex);
+    std::vector<uint32_t> *sched = thread_schedule;
+    if (!sched)
+        sched = thread_schedule = new std::vector<uint32_t>();
+    if (reverse)
+        ad_schedule_rev(sched, index);
+    else
+        ad_schedule_fwd(sched, index);
+}
+
+template <typename T> void ad_traverse(bool reverse, bool retain_graph) {
+    std::lock_guard<Mutex> guard(state.mutex);
+    std::vector<uint32_t> *sched = thread_schedule;
+    if (!sched || sched->empty())
         return;
 
-    SimplificationLock lock(*this);
-    if (d->log_level >= 2)
-        std::cerr << "autodiff: simplify_graph(): starting.." << std::endl;
+    std::sort(sched->begin(), sched->end(), std::greater<uint32_t>());
 
-    std::set<std::pair<Index, Index>> todo;
-    std::vector<std::pair<Index, Index>> update;
-    std::vector<Index> edges_rev;
-    for (const auto &it : d->nodes)
-        todo.emplace(it.second.score(), it.first);
-    size_t cost = 0;
-
-    while (!todo.empty()) {
-        auto it = todo.begin();
-        uint32_t score = it->first, index = it->second;
-        todo.erase(it);
-        Node &node = d->node(index);
-        if (!node.collapse_allowed())
-            continue;
-        if (score > ENOKI_AUTODIFF_MAX_SIMPLIFICATION_COST) {
-            if (d->log_level >= 2)
-                std::cerr << "autodiff: simplify_graph(): cost of next simplification = " << cost << ", giving up." << std::endl;
-            break;
-        }
-
-        update.clear();
-        bool skip = false;
-
-        /* Collect predecessors and successors */ {
-            for (Index k : node.edges_rev) {
-                Edge *e = d->node(k).edge(index);
-                assert(e != nullptr);
-                if (e->is_special())
-                    skip = true;
-                update.emplace_back(d->node(k).score(), k);
-            }
-            for (const Edge &edge : node.edges) {
-                const Node &node2 = d->node(edge.source);
-                update.emplace_back(node2.score(), edge.source);
-                if ((node.size == 1 && (node2.size != node.size)) || edge.is_special())
-                    skip = true;
-            }
-        }
-
-        if (skip)
-            continue;
-
-        if (d->log_level >= 3)
-            std::cerr << "autodiff: simplify_graph(): collapsing node " << index << ", cost = " << score << std::endl;
-
-        /* Remove node and create edges */ {
-            edges_rev = node.edges_rev;
-            for (Index other : edges_rev) {
-                Edge edge1 = d->node(other).remove_edge(index);
-
-                for (auto const &edge2 : node.edges) {
-                    append_edge_prod(edge2.source, other, edge1.weight, edge2.weight);
-                    cost++;
-                }
-
-                dec_ref_int(index, other);
-            }
-        }
-
-        /* Update costs (if changed) */ {
-            for (auto [old_score, id] : update) {
-                auto it = todo.find({ old_score, id });
-                if (it == todo.end())
-                    continue;
-                uint32_t new_score = d->node(id).score();
-                if (old_score != new_score) {
-                    todo.erase(it);
-                    todo.emplace(new_score, id);
-                }
-            }
-        }
-    }
-
-    if (d->log_level >= 2)
-        std::cerr << "autodiff: simplify_graph(): done. (cost = " << cost << ")" << std::endl;
-    d->is_simplified = true;
+    if (reverse)
+        ad_traverse_rev(sched, retain_graph);
+    else
+        ad_traverse_fwd(sched, retain_graph);
 }
 
-template <typename Value>
-std::string Tape<Value>::graphviz(const std::vector<Index> &indices_) {
-    std::ostringstream oss;
-    oss << "digraph {" << std::endl
-        << "  rankdir=BT;" << std::endl // BT or RL
-        << "  fontname=Consolas;" << std::endl
-        << "  node [shape=record fontname=Consolas];" << std::endl;
+template ENOKI_EXPORT void ad_inc_ref<Value>(uint32_t);
+template ENOKI_EXPORT void ad_dec_ref<Value>(uint32_t);
+template ENOKI_EXPORT uint32_t ad_new<Value>(const char *, uint32_t, uint32_t,
+                                             const uint32_t *, Value *);
+template ENOKI_EXPORT Value ad_grad<Value>(uint32_t);
+template ENOKI_EXPORT void ad_set_grad<Value>(uint32_t, const Value &);
+template ENOKI_EXPORT void ad_set_label<Value>(uint32_t, const char *);
+template ENOKI_EXPORT const char *ad_label<Value>(uint32_t);
+template ENOKI_EXPORT void ad_schedule<Value>(uint32_t, bool);
+template ENOKI_EXPORT void ad_traverse<Value>(bool, bool);
+template ENOKI_EXPORT const char *ad_graphviz<Value>();
+template ENOKI_EXPORT uint32_t ad_new_select<Value, Mask>(
+    const char *, uint32_t, const Mask &, uint32_t, uint32_t);
 
-    for (Index index : indices_)
-        d->dfs(index, true, false);
+NAMESPACE_END(detail)
 
-    auto &indices = d->scheduled;
-
-    int current_depth = 0;
-    auto hasher = std::hash<std::string>();
-    std::string current_path = "";
-
-    for (Index index : indices) {
-        const Node &node = d->node(index);
-        if (node.label.empty())
-            continue;
-        std::string label = node.label;
-
-        auto sepidx = label.rfind("/");
-        std::string path, suffix;
-        if (sepidx != std::string::npos) {
-            path = label.substr(0, sepidx);
-            label = label.substr(sepidx + 1);
-        }
-
-        if (current_path != path) {
-            for (int i = 0; i < current_depth; ++i)
-                oss << "  }" << std::endl;
-            current_depth = 0;
-            current_path = path;
-
-            do {
-                sepidx = path.find('/');
-                std::string graph_label = path.substr(0, sepidx);
-                if (graph_label.empty())
-                    break;
-
-                oss << "  subgraph cluster"
-                    << std::to_string(hasher(graph_label)) << " {" << std::endl
-                    << "  label=\"" << graph_label << "\";" << std::endl;
-                ++current_depth;
-
-                if (sepidx == std::string::npos)
-                    break;
-                path = path.substr(sepidx + 1, std::string::npos);
-            } while (true);
-        }
-
-        oss <<  "  " << std::to_string(index) << " [label=\"" + label;
-        if (node.is_scalar())
-            oss << " [s]";
-
-        oss << "\\n#" << std::to_string(index) << " [E/I: "
-            << std::to_string(node.ref_count_ext) << "/"
-            << std::to_string(node.ref_count_int) << "]"
-            << "\"";
-        if (node.label[0] == '\'')
-            oss << " fillcolor=salmon style=filled";
-        oss << "];" << std::endl;
-    }
-    for (int i = 0; i < current_depth; ++i)
-        oss << "  }\n";
-
-    for (Index index : indices) {
-        const Node &node = d->node(index);
-        for (const Edge &edge : node.edges) {
-            oss << "  " << std::to_string(index) << " -> "
-                << std::to_string(edge.source) << ";" << std::endl;
-
-            if (edge.is_special())
-                oss << "  " << std::to_string(index)
-                    << " [shape=doubleoctagon];" << std::endl;
-        }
-    }
-
-    for (Index idx : indices_)
-        oss << "  " << std::to_string(idx)
-            << " [fillcolor=cornflowerblue style=filled];" << std::endl;
-
-    oss << "}";
-    indices.clear();
-    return oss.str();
-}
-
-template <typename Value> std::string Tape<Value>::whos() const {
-    std::ostringstream oss;
-    oss << std::endl
-        << "  ID      E/I Refs   Size        Label" << std::endl
-        << "  ====================================" << std::endl;
-
-    std::vector<uint32_t> indices;
-    indices.reserve(d->nodes.size());
-    for (const auto& it : d->nodes)
-        indices.push_back(it.first);
-    std::sort(indices.begin(), indices.end());
-
-    for (uint32_t id : indices) {
-        const Node &n = d->node(id);
-        oss << "  " << std::left << std::setw(7) << id << " ";
-        oss << std::left << std::setw(10) << (std::to_string(n.ref_count_ext) + " / " + std::to_string(n.ref_count_int)) << " ";
-        oss << std::left << std::setw(12) << n.size;
-        oss << n.label;
-        oss << std::endl;
-    }
-
-    oss << "  ====================================" << std::endl << std::endl;
-
-    return oss.str();
-}
-
-template <typename Value> Value safe_mul(const Value &value1, const Value &value2) {
-    Value tentative = value1 * value2;
-    if constexpr (!is_cuda_array_v<Value>) {
-        Value zero = scalar_t<Value>(0);
-        mask_t<Value> is_zero = eq(value1, zero) || eq(value2, zero);
-        return select(is_zero, zero, tentative);
-    } else {
-#if defined(ENOKI_CUDA)
-        using Mask = mask_t<Value>;
-        Mask m1 = Mask::from_index_(cuda_trace_append(EnokiType::Bool, "setp.eq.f32 $r1, $r2, 0.0", value1.index_())),
-             m2 = Mask::from_index_(cuda_trace_append(EnokiType::Bool, "setp.eq.or.f32 $r1, $r2, 0.0, $r3", value2.index_(), m1.index_()));
-        return Value::from_index_(cuda_trace_append(Value::Type, "selp.$t1 $r1, 0.0, $r2, $r3", tentative.index_(), m2.index_()));
-#endif
-    }
-}
-
-template <typename Value> Value safe_fmadd(const Value &value1, const Value &value2, const Value &value3) {
-    Value tentative = fmadd(value1, value2, value3);
-    if constexpr (!is_cuda_array_v<Value>) {
-        Value zero = scalar_t<Value>(0);
-        mask_t<Value> is_zero = eq(value1, zero) || eq(value2, zero);
-        return select(is_zero, value3, tentative);
-    } else {
-#if defined(ENOKI_CUDA)
-        using Mask = mask_t<Value>;
-        Mask m1 = Mask::from_index_(cuda_trace_append(EnokiType::Bool, "setp.eq.f32 $r1, $r2, 0.0", value1.index_())),
-             m2 = Mask::from_index_(cuda_trace_append(EnokiType::Bool, "setp.eq.or.f32 $r1, $r2, 0.0, $r3", value2.index_(), m1.index_()));
-        return Value::from_index_(cuda_trace_append(Value::Type, "selp.$t1 $r1, $r2, $r3, $r4", value3.index_(), tentative.index_(), m2.index_()));
-#endif
-    }
-}
-
-template struct ENOKI_EXPORT Tape<float>;
-template struct ENOKI_EXPORT DiffArray<float>;
-
-template struct ENOKI_EXPORT Tape<double>;
-template struct ENOKI_EXPORT DiffArray<double>;
-
-template struct ENOKI_EXPORT Tape<DynamicArray<Packet<float>>>;
-template struct ENOKI_EXPORT DiffArray<DynamicArray<Packet<float>>>;
-
-template struct ENOKI_EXPORT Tape<DynamicArray<Packet<double>>>;
-template struct ENOKI_EXPORT DiffArray<DynamicArray<Packet<double>>>;
-
-#if defined(ENOKI_CUDA)
-    template struct ENOKI_EXPORT Tape<CUDAArray<float>>;
-    template struct ENOKI_EXPORT DiffArray<CUDAArray<float>>;
-
-    template struct ENOKI_EXPORT Tape<CUDAArray<double>>;
-    template struct ENOKI_EXPORT DiffArray<CUDAArray<double>>;
-#endif
+template struct ENOKI_EXPORT DiffArray<detail::Value>;
 
 NAMESPACE_END(enoki)

@@ -97,48 +97,48 @@ namespace detail {
 }
 
 template <typename T>
-constexpr bool is_array_v = is_detected_v<detail::is_array_det, T>;
+constexpr bool is_array_v = is_detected_v<detail::is_array_det, std::decay_t<T>>;
 template <typename T> using enable_if_array_t = enable_if_t<is_array_v<T>>;
 template <typename T> using enable_if_not_array_t = enable_if_t<!is_array_v<T>>;
 
 template <typename T>
-constexpr bool is_static_array_v = is_detected_v<detail::is_static_array_det, T>;
+constexpr bool is_static_array_v = is_detected_v<detail::is_static_array_det, std::decay_t<T>>;
 template <typename T> using enable_if_static_array_t = enable_if_t<is_static_array_v<T>>;
 
 template <typename T>
-constexpr bool is_dynamic_array_v = is_detected_v<detail::is_dynamic_array_det, T>;
+constexpr bool is_dynamic_array_v = is_detected_v<detail::is_dynamic_array_det, std::decay_t<T>>;
 template <typename T> using enable_if_dynamic_array_t = enable_if_t<is_dynamic_array_v<T>>;
 
 template <typename T>
-constexpr bool is_dynamic_v = is_detected_v<detail::is_dynamic_det, T>;
+constexpr bool is_dynamic_v = is_detected_v<detail::is_dynamic_det, std::decay_t<T>>;
 template <typename T> using enable_if_dynamic_t = enable_if_t<is_dynamic_v<T>>;
 
 template <typename T>
-constexpr bool is_packed_array_v = is_detected_v<detail::is_packed_array_det, T>;
+constexpr bool is_packed_array_v = is_detected_v<detail::is_packed_array_det, std::decay_t<T>>;
 template <typename T> using enable_if_packed_array_t = enable_if_t<is_packed_array_v<T>>;
 
 template <typename T>
-constexpr bool is_cuda_array_v = is_detected_v<detail::is_cuda_array_det, T>;
+constexpr bool is_cuda_array_v = is_detected_v<detail::is_cuda_array_det, std::decay_t<T>>;
 template <typename T> using enable_if_cuda_array_t = enable_if_t<is_cuda_array_v<T>>;
 
 template <typename T>
-constexpr bool is_llvm_array_v = is_detected_v<detail::is_llvm_array_det, T>;
+constexpr bool is_llvm_array_v = is_detected_v<detail::is_llvm_array_det, std::decay_t<T>>;
 template <typename T> using enable_if_llvm_array_t = enable_if_t<is_llvm_array_v<T>>;
 
 template <typename T>
-constexpr bool is_jit_array_v = is_detected_v<detail::is_jit_array_det, T>;
+constexpr bool is_jit_array_v = is_detected_v<detail::is_jit_array_det, std::decay_t<T>>;
 template <typename T> using enable_if_jit_array_t = enable_if_t<is_jit_array_v<T>>;
 
 template <typename T>
-constexpr bool is_diff_array_v = is_detected_v<detail::is_diff_array_det, T>;
+constexpr bool is_diff_array_v = is_detected_v<detail::is_diff_array_det, std::decay_t<T>>;
 template <typename T> using enable_if_diff_array_t = enable_if_t<is_diff_array_v<T>>;
 
 template <typename T>
-constexpr bool is_recursive_array_v = is_detected_v<detail::is_recursive_array_det, T>;
+constexpr bool is_recursive_array_v = is_detected_v<detail::is_recursive_array_det, std::decay_t<T>>;
 template <typename T> using enable_if_recursive_array_t = enable_if_t<is_recursive_array_v<T>>;
 
 template <typename T>
-constexpr bool is_mask_v = std::is_same_v<T, bool> || is_detected_v<detail::is_mask_det, T>;
+constexpr bool is_mask_v = std::is_same_v<T, bool> || is_detected_v<detail::is_mask_det, std::decay_t<T>>;
 template <typename T> using enable_if_mask_t = enable_if_t<is_mask_v<T>>;
 
 template <typename... Ts> constexpr bool is_array_any_v = (is_array_v<Ts> || ...);
@@ -219,6 +219,25 @@ template <typename T> using mask_t = typename detail::mask<T>::type;
 
 /// Type trait to access the array type underlying a mask
 template <typename T> using array_t = typename detail::array<T>::type;
+
+namespace detail {
+    template <typename T, typename = int> struct diff_array {
+        using type = void;
+    };
+
+    template <typename T> struct diff_array<T, enable_if_t<is_diff_array_v<value_t<T>>>> {
+        using type = diff_array<value_t<T>>;
+    };
+
+    template <typename T>
+    struct diff_array<
+        T, enable_if_t<is_diff_array_v<T> && !is_diff_array_v<value_t<T>>>> {
+        using type = T;
+    };
+};
+
+/// Get the differentiable array underlying a potentially nested array
+template <typename T> using diff_array_t = typename detail::diff_array<T>::type;
 
 //! @}
 // -----------------------------------------------------------------------

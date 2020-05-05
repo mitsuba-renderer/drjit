@@ -33,6 +33,7 @@ struct CUDAArray : ArrayBaseT<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
 
     static constexpr bool IsCUDA = true;
     static constexpr bool IsJIT = true;
+    static constexpr bool IsDynamic = true;
     static constexpr VarType Type = var_type_v<Value>;
     static constexpr size_t Size = Dynamic;
 
@@ -239,7 +240,7 @@ struct CUDAArray : ArrayBaseT<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
 
         const char *op = std::is_signed_v<Value>
                              ? "setp.le.$t1 $r0, $r1, $r2"
-                             : "setp.lo.$t1 $r0, $r1, $r2";
+                             : "setp.ls.$t1 $r0, $r1, $r2";
 
         return CUDAArray<bool>::from_index(jitc_var_new_2(
             CUDAArray<bool>::Type, op, 1, 1, m_index, a.index()));
@@ -485,7 +486,7 @@ struct CUDAArray : ArrayBaseT<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
             "cvt.rni.$t0.$t0 $r0, $r1", 1, 1, m_index));
     }
 
-    template <typename T> T round2int_(const CUDAArray &a) const {
+    template <typename T> T round2int_() const {
         if constexpr (!jitc_is_floating_point(Type) ||
                       !jitc_is_integral(T::Type))
             enoki_raise("Unsupported operand type");
@@ -494,7 +495,7 @@ struct CUDAArray : ArrayBaseT<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
             "cvt.rni.$t0.$t0 $r0, $r1", 1, 1, m_index));
     }
 
-    CUDAArray floor_(const CUDAArray &a) const {
+    CUDAArray floor_() const {
         if constexpr (!jitc_is_floating_point(Type))
             enoki_raise("Unsupported operand type");
 
@@ -502,7 +503,7 @@ struct CUDAArray : ArrayBaseT<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
             "cvt.rmi.$t0.$t0 $r0, $r1", 1, 1, m_index));
     }
 
-    template <typename T> T floor2int_(const CUDAArray &a) const {
+    template <typename T> T floor2int_() const {
         if constexpr (!jitc_is_floating_point(Type) ||
                       !jitc_is_integral(T::Type))
             enoki_raise("Unsupported operand type");
@@ -511,7 +512,7 @@ struct CUDAArray : ArrayBaseT<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
             "cvt.rmi.$t0.$t0 $r0, $r1", 1, 1, m_index));
     }
 
-    CUDAArray ceil_(const CUDAArray &a) const {
+    CUDAArray ceil_() const {
         if constexpr (!jitc_is_floating_point(Type))
             enoki_raise("Unsupported operand type");
 
@@ -519,7 +520,7 @@ struct CUDAArray : ArrayBaseT<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
             "cvt.rpi.$t0.$t0 $r0, $r1", 1, 1, m_index));
     }
 
-    template <typename T> T ceil2int_(const CUDAArray &a) const {
+    template <typename T> T ceil2int_() const {
         if constexpr (!jitc_is_floating_point(Type) ||
                       !jitc_is_integral(T::Type))
             enoki_raise("Unsupported operand type");
@@ -528,7 +529,7 @@ struct CUDAArray : ArrayBaseT<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
             "cvt.rpi.$t0.$t0 $r0, $r1", 1, 1, m_index));
     }
 
-    CUDAArray trunc_(const CUDAArray &a) const {
+    CUDAArray trunc_() const {
         if constexpr (!jitc_is_floating_point(Type))
             enoki_raise("Unsupported operand type");
 
@@ -536,7 +537,7 @@ struct CUDAArray : ArrayBaseT<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
             "cvt.rzi.$t0.$t0 $r0, $r1", 1, 1, m_index));
     }
 
-    template <typename T> T trunc2int_(const CUDAArray &a) const {
+    template <typename T> T trunc2int_() const {
         if constexpr (!jitc_is_floating_point(Type) ||
                       !jitc_is_integral(T::Type))
             enoki_raise("Unsupported operand type");
@@ -667,7 +668,6 @@ struct CUDAArray : ArrayBaseT<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
                 enoki_raise(#name "_async_(): zero-sized array!");            \
             else if (size() == 1)                                             \
                 return *this;                                                 \
-                                                                              \
             eval();                                                           \
             CUDAArray result = empty<CUDAArray>(1);                           \
             jitc_reduce(Type, op, data(), (uint32_t) size(), result.data());  \
@@ -811,7 +811,7 @@ private:
     template <typename Index>
     void scatter_impl_(void *dst, uint32_t dst_index,
                        const CUDAArray<Index> &index,
-                       const CUDAArray<bool> &mask = true) {
+                       const CUDAArray<bool> &mask = true) const {
         if constexpr (sizeof(Index) != 4) {
             /* Prefer 32 bit index arithmetic, 64 bit multiplies are
                emulated and thus very expensive on NVIDIA GPUs.. */
@@ -864,7 +864,7 @@ private:
     template <typename Index>
     void scatter_add_impl_(void *dst, uint32_t dst_index,
                            const CUDAArray<Index> &index,
-                           const CUDAArray<bool> &mask = true) {
+                           const CUDAArray<bool> &mask = true) const {
         if constexpr (sizeof(Index) != 4) {
             /* Prefer 32 bit index arithmetic, 64 bit multiplies are
                emulated and thus very expensive on NVIDIA GPUs.. */
@@ -897,8 +897,8 @@ private:
 
 public:
     template <typename Index>
-    static CUDAArray gather_raw_(const void *src, const CUDAArray<Index> &index,
-                                 const CUDAArray<bool> &mask = true) {
+    static CUDAArray gather_(const void *src, const CUDAArray<Index> &index,
+                             const CUDAArray<bool> &mask = true) {
         if (mask.is_literal_zero())
             return Value(0);
 
@@ -916,8 +916,8 @@ public:
     }
 
     template <typename Index>
-    void scatter_raw_(void *dst, const CUDAArray<Index> &index,
-                      const CUDAArray<bool> &mask = true) {
+    void scatter_(void *dst, const CUDAArray<Index> &index,
+                  const CUDAArray<bool> &mask = true) const {
         if (mask.is_literal_zero())
             return;
 
@@ -926,7 +926,7 @@ public:
 
     template <typename Index>
     void scatter_(CUDAArray &dst, const CUDAArray<Index> &index,
-                  const CUDAArray<bool> &mask = true) {
+                  const CUDAArray<bool> &mask = true) const {
         if (mask.is_literal_zero())
             return;
 
@@ -948,8 +948,8 @@ public:
     }
 
     template <typename Index>
-    void scatter_add_raw_(void *dst, const CUDAArray<Index> &index,
-                          const CUDAArray<bool> &mask = true) {
+    void scatter_add_(void *dst, const CUDAArray<Index> &index,
+                      const CUDAArray<bool> &mask = true) const {
         if (mask.is_literal_zero())
             return;
 
@@ -958,7 +958,7 @@ public:
 
     template <typename Index>
     void scatter_add_(CUDAArray &dst, const CUDAArray<Index> &index,
-                      const CUDAArray<bool> &mask = true) {
+                      const CUDAArray<bool> &mask = true) const {
         if (mask.is_literal_zero())
             return;
 
@@ -1034,11 +1034,11 @@ public:
         jitc_var_migrate(m_index, type);
     }
 
-    void set_label_(const char *label) const {
+    void set_label(const char *label) const {
         jitc_var_set_label(m_index, label);
     }
 
-    const char *label_() const {
+    const char *label() const {
         return jitc_var_label(m_index);
     }
 

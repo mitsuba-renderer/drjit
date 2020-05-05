@@ -184,7 +184,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
             enoki_raise("ArrayBase: out of range access (tried to "
                         "access index %zu in an array of size %zu)",
                         i, derived().size());
-#endif
+        #endif
         return derived().coeff(i);
     }
 
@@ -373,7 +373,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                 enoki_raise(#name "_(): invalid operand type!");             \
             } else if constexpr (!std::is_scalar_v<Value>) {                 \
                 size_t sa = derived().size(), sb = v1.size(), sc = v2.size(),\
-                       sr = sa > sb ? sa : (sb > sc ? sb : sc);              \
+                       sd = sa > sb ? sa : sb, sr = sc > sd ? sc : sd;       \
                                                                              \
                 if constexpr (Derived::Size == Dynamic) {                    \
                     result = enoki::empty<Derived>(sr);                      \
@@ -492,7 +492,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
     static ENOKI_INLINE auto select_(const Mask &m, const Derived &t, const Derived &f) {
         ENOKI_CHKSCALAR("select_");
         size_t sm = m.size(), st = t.size(), sf = f.size(),
-               sr = sm > st ? sm : (st > sf ? st : sf);
+               sd = sm > st ? sm : st, sr = sf > sd ? sf : sd;
         Derived result;
 
         if constexpr (Derived::Size == Dynamic) {
@@ -512,6 +512,13 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
 
         return result;
     }
+
+    //! @}
+    // -----------------------------------------------------------------------
+
+    // -----------------------------------------------------------------------
+    //! @{ \name Fallback implementations of horizontal operations
+    // -----------------------------------------------------------------------
 
     template <size_t... Indices> ENOKI_INLINE Derived shuffle_() const {
         static_assert(sizeof...(Indices) == Derived::Size, "shuffle(): Invalid size!");
@@ -693,6 +700,61 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
         return value;
     }
 
+    //! @}
+    // -----------------------------------------------------------------------
+
+    // -----------------------------------------------------------------------
+    //! @{ \name Fallback implementations of scatter/gather/load/store ops
+    // -----------------------------------------------------------------------
+
+    template <typename Source, typename Index, typename Mask>
+    static Derived gather_(Source &&source, const Index &index, const Mask &mask) {
+        ENOKI_CHKSCALAR("gather_");
+        Derived result;
+
+        size_t sa = index.size(), sb = mask.size(),
+               sr = sa > sb ? sa : sb;
+
+        if constexpr (Derived::Size == Dynamic) {
+            result = enoki::empty<Derived>(sr);
+            if ((sa != sr && sa != 1) || (sb != sr && sb != 1))
+                enoki_raise("gather_() : mismatched input sizes "
+                            "(%zu and %zu)", sa, sb);
+        }
+
+        for (size_t i = 0; i < sr; ++i)
+            result.coeff(i) = gather<Value>(source, index.coeff(sa > 1 ? i : 0),
+                                            mask.coeff(sb > 1 ? i : 0));
+
+        return result;
+    }
+
+    template <typename Target, typename Index, typename Mask>
+    void scatter_(Target &&target, const Index &index, const Mask &mask) const {
+        ENOKI_CHKSCALAR("scatter_");
+
+        size_t sa = derived().size(), sb = index.size(), sc = mask.size(),
+               sd = sa > sb ? sa : sb, sr = sc > sd ? sc : sd;
+
+        for (size_t i = 0; i < sr; ++i)
+            scatter(target, derived().coeff(sa > 1 ? i : 0),
+                            index.coeff(sb > 1 ? i : 0),
+                            mask.coeff(sc > 1 ? i : 0));
+    }
+
+    template <typename Target, typename Index, typename Mask>
+    void scatter_add_(Target &&target, const Index &index, const Mask &mask) const {
+        ENOKI_CHKSCALAR("scatter_add_");
+
+        size_t sa = derived().size(), sb = index.size(), sc = mask.size(),
+               sd = sa > sb ? sa : sb, sr = sc > sd ? sc : sd;
+
+        for (size_t i = 0; i < sr; ++i)
+            scatter_add(target, derived().coeff(sa > 1 ? i : 0),
+                        index.coeff(sb > 1 ? i : 0),
+                        mask.coeff(sc > 1 ? i : 0));
+    }
+
     static Derived load_(const void *mem, size_t size) {
         return Derived::load_unaligned_(mem, size);
     }
@@ -700,6 +762,9 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
     void store_(void *mem, size_t size) const {
         return derived().store_unaligned_(mem, size);
     }
+
+    //! @}
+    // -----------------------------------------------------------------------
 };
 
 NAMESPACE_END(enoki)

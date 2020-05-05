@@ -179,18 +179,30 @@ auto bind_full(py::class_<Array, ek::ArrayBase> &cls,
         cls.def("hmin_", &Array::hmin_);
         cls.def("hmax_", &Array::hmax_);
 
-        if constexpr (ek::is_jit_array_v<Array> &&
+        if constexpr (ek::is_dynamic_v<Array> &&
                       ek::array_depth_v<Array> == 1) {
-            cls.def("dot_async_", &Array::dot_async_);
-            cls.def("hsum_async_", &Array::hsum_async_);
-            cls.def("hprod_async_", &Array::hprod_async_);
-            cls.def("hmin_async_", &Array::hmin_async_);
-            cls.def("hmax_async_", &Array::hmax_async_);
-
             using UInt32 = ek::uint32_array_t<Array>;
-            cls.def("scatter_add_", &Array::template scatter_add_<uint32_t>);
-            cls.def("scatter_", &Array::template scatter_<uint32_t>);
-            cls.def("gather_", &Array::template gather_<uint32_t>);
+            cls.def("gather_",
+                    [](const Array &source, const UInt32 &index, const Mask &mask) {
+                        return ek::gather<Array>(source, index, mask);
+                    });
+            cls.def("scatter_",
+                    [](Array &target, const Array &value, const UInt32 &index, const Mask &mask) {
+                        ek::scatter(target, value, index, mask);
+                    });
+            cls.def("scatter_add_",
+                    [](Array &target, const Array &value, const UInt32 &index, const Mask &mask) {
+                        ek::scatter_add(target, value, index, mask);
+                    });
+
+            if constexpr (ek::is_jit_array_v<Array>) {
+                cls.def("dot_async_", &Array::dot_async_);
+                cls.def("hsum_async_", &Array::hsum_async_);
+                cls.def("hprod_async_", &Array::hprod_async_);
+                cls.def("hmin_async_", &Array::hmin_async_);
+                cls.def("hmax_async_", &Array::hmax_async_);
+                cls.def("migrate", &Array::migrate);
+            }
         }
 
         cls.def("and_", [](const Array &a, const Mask &b) {
@@ -279,8 +291,21 @@ auto bind_full(py::class_<Array, ek::ArrayBase> &cls,
 
     if constexpr (Array::IsJIT || Array::IsDiff) {
         cls.def("index", [](const Array &a) { return a.index(); });
-        cls.def("set_label_", [](const Array &a, const char *name) { a.set_label_(name); });
-        cls.def("label_", [](const Array &a) { return a.label_(); });
+        cls.def("set_label", [](const Array &a, const char *name) { a.set_label(name); });
+        cls.def("label", [](const Array &a) { return a.label(); });
+    }
+
+    if constexpr (Array::IsDiff) {
+        using Detached = decltype(ek::detach(std::declval<Array>()));
+        cls.def(py::init<Detached>());
+        cls.def("detach", &Array::detach);
+        if constexpr (Array::IsFloat) {
+            cls.def("grad", &Array::grad);
+            cls.def("set_grad", &Array::set_grad);
+            cls.def("requires_grad", &Array::requires_grad);
+            cls.def("ad_schedule", &Array::ad_schedule);
+            cls.def("graphviz", &Array::graphviz);
+        }
     }
 
     bind_generic_constructor(cls);

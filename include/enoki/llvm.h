@@ -33,6 +33,7 @@ struct LLVMArray : ArrayBaseT<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
 
     static constexpr bool IsLLVM = true;
     static constexpr bool IsJIT = true;
+    static constexpr bool IsDynamic = true;
     static constexpr VarType Type = var_type_v<Value>;
     static constexpr size_t Size = Dynamic;
 
@@ -567,14 +568,14 @@ struct LLVMArray : ArrayBaseT<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
             m_index));
     }
 
-    template <typename T> T round2int_(const LLVMArray &a) const {
-        T out = f2i_cast_<T>(a, 8);
+    template <typename T> T round2int_() const {
+        T out = f2i_cast_<T>(8);
         if (!out.valid())
-            out = OutArray(ceil(a));
+            out = OutArray(ceil(*this));
         return out;
     }
 
-    LLVMArray floor_(const LLVMArray &a) const {
+    LLVMArray floor_() const {
         if constexpr (!jitc_is_floating_point(Type))
             enoki_raise("Unsupported operand type");
 
@@ -583,14 +584,14 @@ struct LLVMArray : ArrayBaseT<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
             m_index));
     }
 
-    template <typename T> T floor2int_(const LLVMArray &a) const {
-        T out = f2i_cast_<T>(a, 9);
+    template <typename T> T floor2int_() const {
+        T out = f2i_cast_<T>(9);
         if (!out.valid())
-            out = OutArray(ceil(a));
+            out = OutArray(ceil(*this));
         return out;
     }
 
-    LLVMArray ceil_(const LLVMArray &a) const {
+    LLVMArray ceil_() const {
         if constexpr (!jitc_is_floating_point(Type))
             enoki_raise("Unsupported operand type");
 
@@ -599,14 +600,14 @@ struct LLVMArray : ArrayBaseT<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
             m_index));
     }
 
-    template <typename T> T ceil2int_(const LLVMArray &a) const {
-        T out = f2i_cast_<T>(a, 10);
+    template <typename T> T ceil2int_() const {
+        T out = f2i_cast_<T>(10);
         if (!out.valid())
-            out = OutArray(ceil(a));
+            out = OutArray(ceil(*this));
         return out;
     }
 
-    LLVMArray trunc_(const LLVMArray &a) const {
+    LLVMArray trunc_() const {
         if constexpr (!jitc_is_floating_point(Type))
             enoki_raise("Unsupported operand type");
 
@@ -615,10 +616,10 @@ struct LLVMArray : ArrayBaseT<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
             m_index));
     }
 
-    template <typename T> T trunc2int_(const LLVMArray &a) const {
-        T out = f2i_cast_<T>(a, 11);
+    template <typename T> T trunc2int_() const {
+        T out = f2i_cast_<T>(11);
         if (!out.valid())
-            out = OutArray(ceil(a));
+            out = OutArray(ceil(*this));
         return out;
     }
 
@@ -894,7 +895,7 @@ private:
     template <typename Index>
     void scatter_impl_(void *dst, uint32_t dst_index,
                        const LLVMArray<Index> &index,
-                       const LLVMArray<bool> &mask = true) {
+                       const LLVMArray<bool> &mask = true) const {
         LLVMArray<void *> base = LLVMArray<void *>::from_index(
             jitc_var_copy_ptr(dst, dst_index));
 
@@ -923,7 +924,7 @@ private:
     template <typename Index>
     void scatter_add_impl_(void *dst, uint32_t dst_index,
                            const LLVMArray<Index> &index,
-                           const LLVMArray<bool> &mask = true) {
+                           const LLVMArray<bool> &mask = true) const {
         if constexpr (sizeof(Index) != sizeof(Value)) {
             using UInt = uint_array_t<LLVMArray>;
             return scatter_add_impl_(dst, dst_index, UInt(index), mask);
@@ -973,8 +974,8 @@ private:
 
 public:
     template <typename Index>
-    static LLVMArray gather_raw_(const void *src, const LLVMArray<Index> &index,
-                                 const LLVMArray<bool> &mask = true) {
+    static LLVMArray gather_(const void *src, const LLVMArray<Index> &index,
+                             const LLVMArray<bool> &mask = true) {
         if (mask.is_literal_zero())
             return Value(0);
 
@@ -992,8 +993,8 @@ public:
     }
 
     template <typename Index>
-    void scatter_raw_(void *dst, const LLVMArray<Index> &index,
-                      const LLVMArray<bool> &mask = true) {
+    void scatter_(void *dst, const LLVMArray<Index> &index,
+                  const LLVMArray<bool> &mask = true) const {
         if (mask.is_literal_zero())
             return;
 
@@ -1002,7 +1003,7 @@ public:
 
     template <typename Index>
     void scatter_(LLVMArray &dst, const LLVMArray<Index> &index,
-                  const LLVMArray<bool> &mask = true) {
+                  const LLVMArray<bool> &mask = true) const {
         if (mask.is_literal_zero())
             return;
 
@@ -1024,8 +1025,8 @@ public:
     }
 
     template <typename Index>
-    void scatter_add_raw_(void *dst, const LLVMArray<Index> &index,
-                          const LLVMArray<bool> &mask = true) {
+    void scatter_add_(void *dst, const LLVMArray<Index> &index,
+                      const LLVMArray<bool> &mask = true) const {
         if (mask.is_literal_zero())
             return;
 
@@ -1034,7 +1035,7 @@ public:
 
     template <typename Index>
     void scatter_add_(LLVMArray &dst, const LLVMArray<Index> &index,
-                      const LLVMArray<bool> &mask = true) {
+                      const LLVMArray<bool> &mask = true) const {
         if (mask.is_literal_zero())
             return;
 
@@ -1113,11 +1114,11 @@ public:
         jitc_var_migrate(m_index, type);
     }
 
-    void set_label_(const char *label) const {
+    void set_label(const char *label) const {
         jitc_var_set_label(m_index, label);
     }
 
-    const char *label_() const {
+    const char *label() const {
         return jitc_var_label(m_index);
     }
 
