@@ -182,16 +182,16 @@ auto bind_full(py::class_<Array, ek::ArrayBase> &cls,
         if constexpr (ek::is_dynamic_v<Array> &&
                       ek::array_depth_v<Array> == 1) {
             using UInt32 = ek::uint32_array_t<Array>;
-            cls.def("gather_",
+            cls.def_static("gather_",
                     [](const Array &source, const UInt32 &index, const Mask &mask) {
                         return ek::gather<Array>(source, index, mask);
                     });
             cls.def("scatter_",
-                    [](Array &target, const Array &value, const UInt32 &index, const Mask &mask) {
+                    [](const Array &value, Array &target, const UInt32 &index, const Mask &mask) {
                         ek::scatter(target, value, index, mask);
                     });
             cls.def("scatter_add_",
-                    [](Array &target, const Array &value, const UInt32 &index, const Mask &mask) {
+                    [](const Array &value, Array &target, const UInt32 &index, const Mask &mask) {
                         ek::scatter_add(target, value, index, mask);
                     });
 
@@ -302,9 +302,10 @@ auto bind_full(py::class_<Array, ek::ArrayBase> &cls,
         if constexpr (Array::IsFloat) {
             cls.def("grad", &Array::grad);
             cls.def("set_grad", &Array::set_grad);
-            cls.def("requires_grad", &Array::requires_grad);
+            cls.def("requires_grad", &Array::requires_grad, "value"_a = true);
             cls.def("ad_schedule", &Array::ad_schedule);
-            cls.def("graphviz", &Array::graphviz);
+            cls.def("graphviz_", &Array::graphviz_);
+            cls.def_static("traverse", &Array::traverse);
         }
     }
 

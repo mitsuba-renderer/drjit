@@ -221,10 +221,14 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
     }
 
     ENOKI_INLINE Value dot_(Ref a) const {
-        if constexpr (Size1 == Size2)
-            return enoki::hsum(enoki::fmadd(a1, a.a1, a2 * a.a2));
-        else
+        if constexpr (Size1 == Size2) {
+            if constexpr (std::is_floating_point_v<Value>)
+                return enoki::hsum(enoki::fmadd(a1, a.a1, a2 * a.a2));
+            else
+                return enoki::hsum(a1 * a.a1 + a2 * a.a2);
+        } else {
             return enoki::dot(a1, a.a1) + enoki::dot(a2, a.a2);
+        }
     }
 
     ENOKI_INLINE bool all_() const {

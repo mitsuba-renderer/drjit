@@ -133,11 +133,16 @@ def array_configure(cls):
     cls.IsIntegral = issubclass(value, int) and not cls.IsMask
     cls.IsFloat = issubclass(value, float)
     cls.IsArithmetic = cls.IsIntegral or cls.IsFloat
-    cls.IsScalar = cls.__module__ == 'enoki.scalar'
-    cls.IsPacket = cls.__module__ == 'enoki.packet'
-    cls.IsLLVM = cls.__module__ == 'enoki.llvm'
-    cls.IsCUDA = cls.__module__ == 'enoki.cuda'
+    cls.IsScalar = cls.__module__.startswith('enoki.scalar')
+    cls.IsPacket = cls.__module__.startswith('enoki.packet')
+    cls.IsLLVM = cls.__module__.startswith('enoki.llvm')
+    cls.IsCUDA = cls.__module__.startswith('enoki.cuda')
+    cls.IsDiff = 'autodiff' in cls.__module__
     cls.IsJIT = cls.IsLLVM or cls.IsCUDA
     cls.MaskType = getattr(
         sys.modules.get(cls.__module__),
         array_name(enoki.VarType.Bool, cls.Depth, cls.Size, cls.IsScalar))
+
+    if cls.IsDiff:
+        ad_module = sys.modules.get(cls.__module__.replace('.autodiff', ''))
+        cls.DetachedType = getattr(ad_module, cls.__name__)

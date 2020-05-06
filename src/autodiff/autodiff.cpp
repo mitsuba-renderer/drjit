@@ -76,11 +76,10 @@ struct Edge {
 
     Edge() = default;
 
-
     /// Reset the contents of this edge to the default values
     void reset() {
         delete special;
-        memset(this, 0, sizeof(uint32_t) * 4);
+        memset(this, 0, sizeof(uint32_t) * 6);
         weight = Value();
     }
 
@@ -105,7 +104,10 @@ struct Variable {
     uint32_t ref_count_int;
 
     /// Number of times this variable is referenced from Python/C++
-    uint32_t ref_count_ext : 30;
+    uint32_t ref_count_ext : 29;
+
+    /// Was the label manually overwritten via set_label()?
+    uint32_t custom_label : 1;
 
     /// Should the label variable be freed when the Variable is deallocated?
     uint32_t free_label : 1;
@@ -131,7 +133,17 @@ struct Variable {
 
     Variable(const char *label_, uint32_t size_) : Variable() {
         label = (char *) label_;
+        if (!label)
+            label = (char *) "unnamed";
         size = size_;
+        const char *prefix = ad_prefix();
+        if (unlikely(prefix)) {
+            size_t size = strlen(prefix) + strlen(label) + 2;
+            char *out = (char *) malloc(size);
+            snprintf(out, size, "%s/%s", prefix, label);
+            label = out;
+            free_label = 1;
+        }
     }
 
     template <typename T = Value>
@@ -210,7 +222,22 @@ struct State {
 };
 
 static State state;
-static Buffer buffer{0};
+
+extern void RENAME(ad_whos)() {
+    std::vector<uint32_t> indices;
+    for (auto &kv: state.variables)
+        indices.push_back(kv.first);
+    std::sort(indices.begin(), indices.end());
+
+    for (uint32_t id : indices) {
+        const Variable *v = state[id];
+        buffer.fmt("  %-7u ", id);
+        size_t sz = buffer.fmt("%u / %u", v->ref_count_ext, v->ref_count_int);
+
+        buffer.fmt("%*s%-12u%-8s\n", 11 - (int) sz, "", v->size,
+                   v->label ? v->label : "");
+    }
+}
 
 /// Queue up nodes for a reverse-mode traversal
 static void ad_schedule_rev(std::vector<uint32_t> *sched, uint32_t index) {
@@ -462,7 +489,7 @@ static void ad_traverse_rev(std::vector<uint32_t> *sched, bool retain_graph) {
                         v->size, grad_size);
         }
 
-        if (unlikely(v->free_label)) {
+        if (unlikely(v->custom_label)) {
             char tmp[256];
             snprintf(tmp, 256, "%s_grad", v->label);
             set_label(v->grad, tmp);
@@ -537,12 +564,47 @@ template <typename Value> const char *ad_graphviz() {
     buffer.clear();
     buffer.put("digraph {\n");
     buffer.put("  rankdir=BT;\n");
+    buffer.put("  graph [dpi=50];\n");
     buffer.put("  node [shape=record fontname=Consolas];\n");
     buffer.put("  edge [fontname=Consolas];\n");
 
+    std::sort(sched->begin(), sched->end(), std::less<uint32_t>());
+
+    std::string current_path;
+    int current_depth = 0;
     for (uint32_t index : *sched) {
         Variable *v = state[index];
         v->scheduled = 0;
+
+        std::string label = v->label;
+
+        auto sepidx = label.rfind("/");
+        std::string path;
+        if (sepidx != std::string::npos) {
+            path = label.substr(1, sepidx);
+            label = label.substr(sepidx + 1);
+        }
+
+        if (current_path != path) {
+            for (int i = 0; i < current_depth; ++i)
+                buffer.put("  }\n");
+            current_depth = 0;
+            current_path = path;
+
+            do {
+                sepidx = path.find('/');
+                std::string graph_label = path.substr(0, sepidx);
+                if (graph_label.empty())
+                    break;
+                buffer.fmt("  subgraph cluster_%x {\n", (uint32_t) std::hash<std::string>()(graph_label));
+                buffer.fmt("  label=\"%s\";\n", graph_label.c_str());
+                ++current_depth;
+
+                if (sepidx == std::string::npos)
+                    break;
+                path = path.substr(sepidx + 1, std::string::npos);
+            } while (true);
+        }
 
         const char *color = "";
         if (v->next_rev == 0)
@@ -551,9 +613,8 @@ template <typename Value> const char *ad_graphviz() {
             color = " fillcolor=cornflowerblue style=filled";
 
         buffer.fmt("  %u [label=\"{%s%s%s%s|{#%u|E:%u|I:%u}}\"%s];\n", index,
-                   v->free_label ? "\\\"" : "",
-                   v->label ? v->label : "unnamed",
-                   v->free_label ? "\\\"" : "",
+                   v->custom_label ? "\\\"" : "", label.c_str(),
+                   v->custom_label ? "\\\"" : "",
                    v->size == 1 ? " [s]" : "",
                    index, v->ref_count_ext, v->ref_count_int, color);
 
@@ -565,6 +626,8 @@ template <typename Value> const char *ad_graphviz() {
             edge = e.next_rev;
         }
     }
+    for (int i = 0; i < current_depth; ++i)
+        buffer.put("  }\n");
     buffer.put("}\n");
     sched->clear();
 
@@ -616,6 +679,7 @@ template <typename T> void ad_set_label(uint32_t index, const char *label) {
         free(v->label);
     v->label = strdup(label);
     v->free_label = true;
+    v->custom_label = true;
 }
 
 template <typename T> const char *ad_label(uint32_t index) {

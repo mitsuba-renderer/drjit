@@ -20,10 +20,12 @@ foreach(ENOKI_AUTODIFF_VARIANT ${ENOKI_AUTODIFF_VARIANTS})
   )
   set_target_properties(${ENOKI_AUTODIFF_VARIANT_NAME} PROPERTIES POSITION_INDEPENDENT_CODE ON)
   set(ENOKI_AUTODIFF_OBJECTS ${ENOKI_AUTODIFF_OBJECTS} $<TARGET_OBJECTS:${ENOKI_AUTODIFF_VARIANT_NAME}>)
-  string(REPLACE "-" "_" ENOKI_AUTODIFF_VARIANT_NAME_U ${ENOKI_AUTODIFF_VARIANT_NAME})
+  string(REPLACE "enoki-autodiff-" "" ENOKI_AUTODIFF_VARIANT_NAME_U ${ENOKI_AUTODIFF_VARIANT_NAME})
+  string(REPLACE "-" "_" ENOKI_AUTODIFF_VARIANT_NAME_U ${ENOKI_AUTODIFF_VARIANT_NAME_U})
   target_compile_definitions(${ENOKI_AUTODIFF_VARIANT_NAME} PRIVATE
     -DENOKI_AUTODIFF_NAME=${ENOKI_AUTODIFF_VARIANT_NAME_U}
     -DENOKI_AUTODIFF_VALUE=${ENOKI_AUTODIFF_VARIANT_VALUE}
+    -DENOKI_BUILD_AUTODIFF=1
   )
   target_compile_options(${ENOKI_AUTODIFF_VARIANT_NAME} PRIVATE -fvisibility=hidden)
 endforeach()
@@ -32,6 +34,9 @@ add_library(enoki-autodiff SHARED
   ${ENOKI_AUTODIFF_OBJECTS}
   common.h common.cpp
 )
+
+target_compile_options(enoki-autodiff PRIVATE -fvisibility=hidden)
+target_compile_definitions(enoki-autodiff PRIVATE -DENOKI_BUILD_AUTODIFF=1)
 
 if (ENOKI_ENABLE_JIT)
   target_link_libraries(enoki-autodiff PRIVATE enoki-jit)

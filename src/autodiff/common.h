@@ -60,6 +60,7 @@ private:
     char *m_start, *m_cur, *m_end;
 };
 
+extern Buffer buffer;
 static constexpr LogLevel Disable = LogLevel::Disable;
 static constexpr LogLevel Error   = LogLevel::Error;
 static constexpr LogLevel Warn    = LogLevel::Warn;
@@ -71,3 +72,7 @@ extern LogLevel log_level;
 
 extern void ad_fail(const char *fmt, ...);
 extern void ad_log(LogLevel level, const char *fmt, ...);
+
+namespace enoki {
+    extern const char *ad_prefix();
+}

@@ -1,4 +1,5 @@
 #include "bind.h"
+#include <enoki/autodiff.h>
 
 extern void export_scalar(py::module &m);
 extern void export_packet(py::module &m);
@@ -109,6 +110,22 @@ PYBIND11_MODULE(enoki_ext, m_) {
 #if defined(ENOKI_ENABLE_AUTODIFF)
     export_cuda_ad(m);
     export_llvm_ad(m);
+    m.def("ad_whos_str", &ek::ad_whos);
+    m.def("ad_whos", []() { py::print(ek::ad_whos()); });
+
+    struct Scope {
+        Scope(const std::string &name) : name(name) { }
+
+        void enter() { ek::ad_prefix_push(name.c_str()); }
+        void exit(py::handle, py::handle, py::handle) { ek::ad_prefix_pop(); }
+
+        std::string name;
+    };
+
+    py::class_<Scope>(m, "Scope")
+        .def(py::init<const std::string &>())
+        .def("__enter__", &Scope::enter)
+        .def("__exit__", &Scope::exit);
 #endif
 
     py::enum_<LogLevel>(m, "LogLevel")

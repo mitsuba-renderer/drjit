@@ -1,9 +1,11 @@
+#include <enoki/fwd.h>
 #include "common.h"
 #include <algorithm>
 #include <stdio.h>
 #include <stdarg.h>
 
-LogLevel log_level = LogLevel::Trace;
+LogLevel log_level = LogLevel::Info;
+Buffer buffer{0};
 
 void ad_fail(const char *fmt, ...) {
     fprintf(stderr, "\n\nCritical failure in Enoki AD backend: ");
@@ -77,3 +79,66 @@ void Buffer::expand(size_t minval) {
     m_end = m_start + new_alloc_size;
     m_cur = m_start + used_size;
 }
+
+namespace enoki {
+    namespace detail {
+        extern void ad_whos_scalar_f32();
+        extern void ad_whos_scalar_f64();
+#if defined(ENOKI_ENABLE_JIT)
+        extern void ad_whos_cuda_f32();
+        extern void ad_whos_cuda_f64();
+        extern void ad_whos_llvm_f32();
+        extern void ad_whos_llvm_f64();
+#endif
+    }
+
+    struct PrefixEntry {
+        PrefixEntry *prev;
+        char *value = nullptr;
+    };
+
+    static __thread PrefixEntry *prefix = nullptr;
+
+    ENOKI_EXPORT void ad_prefix_push(const char *value) {
+        if (strchr(value, '/'))
+            throw std::runtime_error(
+                "ad_prefix_push(): may not contain a '/' character!");
+        const char *prev = prefix ? prefix->value : "";
+        size_t size = strlen(prev) + strlen(value) + 2;
+        char *out = (char *) malloc(size);
+        snprintf(out, size, "%s/%s", prev, value);
+        prefix = new PrefixEntry{ prefix, out };
+    }
+
+    ENOKI_EXPORT void ad_prefix_pop() {
+        PrefixEntry *p = prefix;
+        if (p) {
+            prefix = p->prev;
+            free(p->value);
+            delete p;
+        }
+    }
+
+    const char *ad_prefix() {
+        PrefixEntry *p = prefix;
+        return p ? p->value : nullptr;
+    }
+
+    ENOKI_EXPORT const char *ad_whos() {
+        buffer.clear();
+        buffer.put("\n");
+        buffer.put("  ID      E/I Refs   Size        Label\n");
+        buffer.put("  =========================================\n");
+        detail::ad_whos_scalar_f32();
+        detail::ad_whos_scalar_f64();
+        #if defined(ENOKI_ENABLE_JIT)
+            detail::ad_whos_cuda_f32();
+            detail::ad_whos_cuda_f64();
+            detail::ad_whos_llvm_f32();
+            detail::ad_whos_llvm_f64();
+        #endif
+        buffer.put("  =========================================\n");
+        return buffer.get();
+    }
+}
+

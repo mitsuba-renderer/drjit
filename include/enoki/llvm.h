@@ -15,6 +15,7 @@
 #include <enoki/array.h>
 #include <enoki-jit/jit.h>
 #include <enoki-jit/traits.h>
+#include <iostream>
 
 NAMESPACE_BEGIN(enoki)
 
@@ -1200,5 +1201,11 @@ protected:
     uint32_t m_index = 0;
 };
 
+#if defined(ENOKI_AUTODIFF_H)
+NAMESPACE_BEGIN(detail)
+ENOKI_DECLARE_EXTERN_TEMPLATE(LLVMArray<float>, LLVMArray<bool>)
+ENOKI_DECLARE_EXTERN_TEMPLATE(LLVMArray<double>, LLVMArray<bool>)
+NAMESPACE_END(detail)
+#endif
 
 NAMESPACE_END(enoki)

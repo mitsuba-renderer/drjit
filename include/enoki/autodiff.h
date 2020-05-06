@@ -11,6 +11,7 @@
 */
 
 #pragma once
+#define ENOKI_AUTODIFF_H
 
 #include <enoki/array.h>
 #include <enoki-jit/jit.h>
@@ -21,7 +22,6 @@ NAMESPACE_BEGIN(detail)
 // -----------------------------------------------------------------------
 //! @{ \name External API compiled as part of libenoki-ad.so
 // -----------------------------------------------------------------------
-
 /// Increase the external reference count of a given variable
 template <typename Value> void ad_inc_ref(uint32_t index);
 
@@ -931,10 +931,9 @@ struct DiffArray : ArrayBaseT<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>
                     m_index = 0;
                 }
             } else {
-                if (value) {
+                if (value)
                     m_index = detail::ad_new<Type>(nullptr, (uint32_t) slices(m_value),
                                                    0, nullptr, (Type *) nullptr);
-                }
             }
         }
     }
@@ -989,7 +988,7 @@ struct DiffArray : ArrayBaseT<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>
         return nullptr;
     }
 
-    static const char *graphviz() {
+    static const char *graphviz_() {
         if constexpr (IsEnabled)
             return enoki::detail::ad_graphviz<Type>();
     }
@@ -1071,28 +1070,44 @@ protected:
     uint32_t m_index = 0;
 };
 
+#if defined(ENOKI_BUILD_AUTODIFF)
+#  define ENOKI_AUTODIFF_EXPORT ENOKI_EXPORT
+#else
+#  define ENOKI_AUTODIFF_EXPORT ENOKI_IMPORT
+#endif
+
 #define ENOKI_DECLARE_EXTERN_TEMPLATE(T, Mask)                                 \
-    extern template void ad_inc_ref<T>(uint32_t);                              \
-    extern template void ad_dec_ref<T>(uint32_t);                              \
-    extern template uint32_t ad_new<T>(const char *, uint32_t, uint32_t,       \
-                                       const uint32_t *, T *);                 \
-    extern template T ad_grad<T>(uint32_t);                                    \
-    extern template void ad_set_grad<T>(uint32_t, const T &);                  \
-    extern template void ad_set_label<T>(uint32_t, const char *);              \
-    extern template const char *ad_label<T>(uint32_t);                         \
-    extern template const char *ad_graphviz<T>();                              \
-    extern template void ad_schedule<T>(uint32_t, bool);                       \
-    extern template void ad_traverse<T>(bool, bool);                           \
-    extern template uint32_t ad_new_select<T, Mask>(                           \
+    extern template ENOKI_AUTODIFF_EXPORT void ad_inc_ref<T>(uint32_t);        \
+    extern template ENOKI_AUTODIFF_EXPORT void ad_dec_ref<T>(uint32_t);        \
+    extern template ENOKI_AUTODIFF_EXPORT uint32_t ad_new<T>(                  \
+        const char *, uint32_t, uint32_t,                                      \
+        ENOKI_AUTODIFF_EXPORT const uint32_t *, T *);                          \
+    extern template ENOKI_AUTODIFF_EXPORT T ad_grad<T>(uint32_t);              \
+    extern template ENOKI_AUTODIFF_EXPORT void ad_set_grad<T>(uint32_t,        \
+                                                              const T &);      \
+    extern template ENOKI_AUTODIFF_EXPORT void ad_set_label<T>(uint32_t,       \
+                                                               const char *);  \
+    extern template ENOKI_AUTODIFF_EXPORT const char *ad_label<T>(uint32_t);   \
+    extern template ENOKI_AUTODIFF_EXPORT const char *ad_graphviz<T>();        \
+    extern template ENOKI_AUTODIFF_EXPORT void ad_schedule<T>(uint32_t, bool); \
+    extern template ENOKI_AUTODIFF_EXPORT void ad_traverse<T>(bool, bool);     \
+    extern template ENOKI_AUTODIFF_EXPORT uint32_t ad_new_select<T, Mask>(     \
         const char *, uint32_t, const Mask &, uint32_t, uint32_t);
 
 NAMESPACE_BEGIN(detail)
 ENOKI_DECLARE_EXTERN_TEMPLATE(float, bool)
 ENOKI_DECLARE_EXTERN_TEMPLATE(double, bool)
+#if defined(ENOKI_CUDA_H)
 ENOKI_DECLARE_EXTERN_TEMPLATE(CUDAArray<float>, CUDAArray<bool>)
 ENOKI_DECLARE_EXTERN_TEMPLATE(CUDAArray<double>, CUDAArray<bool>)
+#endif
+#if defined(ENOKI_LLVM_H)
 ENOKI_DECLARE_EXTERN_TEMPLATE(LLVMArray<float>, LLVMArray<bool>)
 ENOKI_DECLARE_EXTERN_TEMPLATE(LLVMArray<double>, LLVMArray<bool>)
+#endif
 NAMESPACE_END(detail)
 
+extern ENOKI_AUTODIFF_EXPORT const char *ad_whos();
+extern ENOKI_AUTODIFF_EXPORT void ad_prefix_push(const char *value);
+extern ENOKI_AUTODIFF_EXPORT void ad_prefix_pop();
 NAMESPACE_END(enoki)

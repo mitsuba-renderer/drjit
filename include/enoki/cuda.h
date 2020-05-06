@@ -1113,5 +1113,11 @@ protected:
     uint32_t m_index = 0;
 };
 
+#if defined(ENOKI_AUTODIFF_H)
+NAMESPACE_BEGIN(detail)
+ENOKI_DECLARE_EXTERN_TEMPLATE(CUDAArray<float>, CUDAArray<bool>)
+ENOKI_DECLARE_EXTERN_TEMPLATE(CUDAArray<double>, CUDAArray<bool>)
+NAMESPACE_END(detail)
+#endif
 
 NAMESPACE_END(enoki)

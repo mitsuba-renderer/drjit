@@ -1,4 +1,4 @@
-from enoki import ArrayBase, Dynamic, Exception, VarType
+from enoki import Dynamic, Exception, VarType
 import enoki as _ek
 
 
@@ -711,6 +711,65 @@ def dot_(a0, a1):
     return value
 
 # -------------------------------------------------------------------
+#                     Automatic differentiation
+# -------------------------------------------------------------------
+
+
+def detach(a):
+    if not a.IsDiff:
+        return a
+
+    result = a.DetachedType()
+    for i in range(len(a)):
+        result[i] = _ek.detach(a[i])
+    return result
+
+
+def grad(a):
+    if not a.IsDiff:
+        return None
+
+    result = a.DetachedType()
+    for i in range(len(a)):
+        result[i] = _ek.grad(a[i])
+    return result
+
+
+def set_grad(a, grad):
+    s0, s1 = len(a), len(grad)
+    for i in range(s0):
+        _ek.set_grad(a[i], grad[i if s1 > 1 else 0])
+
+
+def requires_grad(a, value=True):
+    for i in range(len(a)):
+        _ek.requires_grad(a[i], value)
+
+
+def ad_schedule(a, reverse=True):
+    for i in range(len(a)):
+        _ek.ad_schedule(a[i], reverse)
+
+
+def graphviz_str(a):
+    _ek.ad_schedule(a)
+    t = type(a)
+    while _ek.is_diff_array_v(_ek.value_t(t)):
+        t = t.Value
+    return t.graphviz_()
+
+
+def graphviz(a):
+    try:
+        from graphviz import Source
+        return Source(_ek.graphviz_str(a))
+    except ImportError:
+        raise Exception('graphviz Python package not available! Install via '
+                        '"python -m pip install graphviz". Alternatively, you'
+                        'can call enoki.graphviz_str() function to obtain a '
+                        'string representation.')
+
+# -------------------------------------------------------------------
 #                      Initialization operations
 # -------------------------------------------------------------------
 
@@ -724,7 +783,7 @@ def zero_(cls, size=1):
 
 
 @classmethod
-def full(cls, value, size=1):
+def full_(cls, value, size=1):
     result = cls.empty_(size)
     for i in range(len(result)):
         result[i] = value
@@ -732,7 +791,7 @@ def full(cls, value, size=1):
 
 
 @classmethod
-def linspace(cls, min, max, size=1):
+def linspace_(cls, min, max, size=1):
     result = cls.empty_(size)
     step = (max - min) / (len(result) - 1)
     if cls.IsFloat:
@@ -745,7 +804,7 @@ def linspace(cls, min, max, size=1):
 
 
 @classmethod
-def arange(cls, start, end, step):
+def arange_(cls, start, end, step):
     size = (end - start + step - (1 if step > 0 else -1)) / step
     result = cls.empty_(size)
     for i in range(len(result)):

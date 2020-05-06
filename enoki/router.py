@@ -263,7 +263,10 @@ def op_repr(self):
     else:
         import io
         buf = io.StringIO()
-        self.schedule()
+        try:
+            self.schedule()
+        except:  # noqa
+            return "[backend issue]"
         _repr_impl(self, s, buf)
         return buf.getvalue()
 
@@ -825,10 +828,6 @@ def eval(*args):
     _ek.detail.eval()
 
 
-def detach(a):
-    return a.detach() if hasattr(a, 'detach') else a
-
-
 # -------------------------------------------------------------------
 #           Vertical operations -- transcendental functions
 # -------------------------------------------------------------------
@@ -1104,6 +1103,76 @@ def dot_async(a, b):
         return a.dot_async_(b)
     else:
         return type(a)(a.dot_(b))
+
+# -------------------------------------------------------------------
+#                     Automatic differentiation
+# -------------------------------------------------------------------
+
+
+def detach(a):
+    if _ek.is_diff_array_v(a):
+        return a.detach()
+    else:
+        return a
+
+
+def grad(a):
+    if _ek.is_diff_array_v(a):
+        return a.grad()
+    else:
+        return None
+
+
+def set_grad(a, value):
+    if _ek.is_diff_array_v(a):
+        a.set_grad(type(a).DetachedType(value))
+    else:
+        raise Exception("Expected a differentiable array type!")
+
+
+def requires_grad(a, value=True):
+    if _ek.is_diff_array_v(a):
+        a.requires_grad(value)
+    else:
+        raise Exception("Expected a differentiable array type!")
+
+
+def ad_schedule(a, reverse=True):
+    if _ek.is_diff_array_v(a):
+        a.ad_schedule(reverse)
+    else:
+        raise Exception("Expected a differentiable array type!")
+
+
+def backward(a, retain_graph=False):
+    set_grad(a, 1)
+    ad_schedule(a, True)
+
+    t = type(a)
+    while _ek.is_diff_array_v(_ek.value_t(t)):
+        t = t.Value
+
+    t.traverse(True, retain_graph)
+
+
+def forward(a, retain_graph=False):
+    set_grad(a, 1)
+    ad_schedule(a, False)
+
+    t = type(a)
+    while _ek.is_diff_array_v(_ek.value_t(t)):
+        t = t.Value
+
+    t.traverse(False, retain_graph)
+
+
+def graphviz_str(a):
+    return a.graphviz_str()
+
+
+def graphviz(a):
+    return a.graphviz()
+
 
 # -------------------------------------------------------------------
 #                      Initialization operations
