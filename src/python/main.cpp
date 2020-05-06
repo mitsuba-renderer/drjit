@@ -160,9 +160,10 @@ PYBIND11_MODULE(enoki_ext, m_) {
     m.def("set_parallel_dispatch", &jitc_set_parallel_dispatch);
     m.def("parallel_dispatch", &jitc_parallel_dispatch);
 
-    array_detail.def("schedule", &jitc_var_schedule);
-    array_detail.def("eval", &jitc_var_eval);
-    array_detail.def("eval", &jitc_eval);
+    array_detail.def("jitc_graphviz", &jitc_var_graphviz);
+    array_detail.def("jitc_schedule", &jitc_var_schedule);
+    array_detail.def("jitc_eval", &jitc_var_eval);
+    array_detail.def("jitc_eval", &jitc_eval);
 
     /* Register a cleanup callback function that is invoked when
        the 'enoki::ArrayBase' Python type is garbage collected */

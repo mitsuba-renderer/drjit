@@ -521,7 +521,7 @@ def set_label_(a0, label):
 def schedule(a0):
     if a0.IsJIT:
         if a0.Depth == 1:
-            _ek.detail.schedule(a0.index())
+            _ek.detail.jitc_schedule(a0.index())
         else:
             for i in range(len(a0)):
                 a0[i].schedule()
@@ -530,7 +530,7 @@ def schedule(a0):
 def eval(a0):
     if a0.IsJIT:
         schedule(a0)
-        _ek.eval()
+        _ek.detail.jitc_eval()
 
 # -------------------------------------------------------------------
 #           Vertical operations -- transcendental functions
@@ -752,11 +752,17 @@ def ad_schedule(a, reverse=True):
 
 
 def graphviz_str(a):
-    _ek.ad_schedule(a)
     t = type(a)
-    while _ek.is_diff_array_v(_ek.value_t(t)):
-        t = t.Value
-    return t.graphviz_()
+    if t.IsDiff:
+        _ek.ad_schedule(a)
+        while _ek.is_diff_array_v(_ek.value_t(t)):
+            t = t.Value
+        return t.graphviz_()
+    elif _ek.is_jit_array_v(t):
+        return _ek.detail.jitc_graphviz()
+    else:
+        raise Exception('graphviz_str(): only variables registered with the '
+                        'JIT (LLVM/CUDA) or AD backend are supported!')
 
 
 def graphviz(a):

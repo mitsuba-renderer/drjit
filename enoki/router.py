@@ -825,7 +825,7 @@ def schedule(*args):
 
 def eval(*args):
     schedule(*args)
-    _ek.detail.eval()
+    _ek.detail.jitc_eval()
 
 
 # -------------------------------------------------------------------
