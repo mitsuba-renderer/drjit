@@ -5,6 +5,7 @@
 #include <tsl/robin_map.h>
 #include <type_traits>
 #include <assert.h>
+#include <iostream> // XXX
 
 #if defined(ENOKI_USE_TBB)
 #  include <tbb/spin_mutex.h>
@@ -82,15 +83,14 @@ struct Edge {
         memset(this, 0, sizeof(uint32_t) * 6);
         weight = Value();
     }
-
-    template <typename T = Value>
-    uint32_t weight_size() const {
-        if constexpr (std::is_scalar_v<T>)
-            return 1;
-        else
-            return (uint32_t) ((const T &) weight).size();
-    }
 };
+
+template <typename T> size_t asize(const T &value) {
+    if constexpr (std::is_scalar_v<T>)
+        return 1;
+    else
+        return value.size();
+}
 
 static_assert(sizeof(Edge) == 8 * sizeof(uint32_t),
               "Edge data structure has incorrect size. Padding problem?");
@@ -509,13 +509,19 @@ static void ad_traverse_rev(std::vector<uint32_t> *sched, bool retain_graph) {
                 }
             } else {
                 if (is_dynamic_v<Value>) {
-                    if (!v2->is_scalar() || (edge.weight_size() == 1 && v->is_scalar())) {
+                    if (!v2->is_scalar() || v->is_scalar()) {
                         if (v2->grad_valid())
                             v2->grad = fmadd(edge.weight, v->grad, v2->grad);
                         else
                             v2->grad = edge.weight * v->grad;
                     } else {
-                        Value temp = hsum_async(edge.weight * v->grad);
+                        Value temp = edge.weight * v->grad;
+                        uint32_t temp_size = asize(temp);
+                        if (asize(temp) == 1)
+                            temp *= scalar_t<Value>(v->size);
+                        else
+                            temp = hsum_async(temp);
+
                         if (v2->grad_valid())
                             v2->grad += temp;
                         else
@@ -546,13 +552,94 @@ static void ad_traverse_rev(std::vector<uint32_t> *sched, bool retain_graph) {
             v->scheduled = 0;
             ad_free_edges(index, v);
         }
-        sched->clear();
     }
 
+    sched->clear();
     ad_log(Info, "ad_traverse_rev(): done.");
 }
 
 static void ad_traverse_fwd(std::vector<uint32_t> *sched, bool retain_graph) {
+    ad_log(Info, "ad_traverse_fwd(): processing %zu nodes ..", sched->size());
+
+    for (auto it = sched->rbegin(); it != sched->rend(); ++it) {
+        uint32_t index = *it;
+        Variable *v = state[index];
+        assert(v->scheduled == 1);
+        ad_log(Debug, "Visiting vertex %u", index);
+
+        if (is_dynamic_v<Value>) {
+            uint32_t grad_size = (uint32_t) v->grad_size();
+            if (unlikely(v->size != grad_size && grad_size != 1))
+                ad_fail("ad_traverse_rev(): variable %u has an invalid "
+                        "gradient size: expected %u, got %u!", index,
+                        v->size, grad_size);
+        }
+
+        if (unlikely(v->custom_label)) {
+            char tmp[256];
+            snprintf(tmp, 256, "%s_grad", v->label);
+            set_label(v->grad, tmp);
+        }
+        std::cout << "Local gradient is " << v->grad << std::endl;
+
+        uint32_t edge_id = v->next_fwd;
+        while (edge_id) {
+            Edge &edge = state.edges[edge_id];
+            assert(edge.source == index);
+            Variable *v2 = state[edge.target];
+            ad_log(Debug, "Visiting neighboring vertex %u", edge.target);
+
+            if (unlikely(edge.special)) {
+                edge.special->forward(v, v2);
+                if (!retain_graph) {
+                    delete edge.special;
+                    edge.special = nullptr;
+                }
+            } else {
+                if (is_dynamic_v<Value>) {
+                    if (!v2->is_scalar() || v->is_scalar()) {
+                        if (v2->grad_valid())
+                            v2->grad = fmadd(edge.weight, v->grad, v2->grad);
+                        else
+                            v2->grad = edge.weight * v->grad;
+                    } else {
+                        Value temp = edge.weight * v->grad;
+                        uint32_t temp_size = asize(temp);
+                        if (asize(temp) == 1)
+                            temp *= scalar_t<Value>(v->size);
+                        else
+                            temp = hsum_async(temp);
+
+                        if (v2->grad_valid())
+                            v2->grad += temp;
+                        else
+                            v2->grad = temp;
+                    }
+                } else {
+                    v2->grad = fmadd(edge.weight, v->grad, v2->grad);
+                }
+                std::cout << "Updated target gradient is " << v2->grad << std::endl;
+
+                if (!retain_graph)
+                    edge.weight = Value();
+            }
+
+            edge_id = edge.next_fwd;
+        }
+
+        if (v->next_fwd) {
+            /// Clear the gradients at interior nodes
+            v->grad = Value();
+        }
+
+        if (!retain_graph) {
+            v->scheduled = 0;
+            ad_free_edges(index, v);
+        }
+    }
+
+    sched->clear();
+    ad_log(Info, "ad_traverse_fwd(): done.");
 }
 
 template <typename Value> const char *ad_graphviz() {

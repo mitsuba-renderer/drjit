@@ -993,7 +993,7 @@ struct DiffArray : ArrayBaseT<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>
             return enoki::detail::ad_graphviz<Type>();
     }
 
-    const Type detach() const {
+    const Type value() const {
         return m_value;
     }
 

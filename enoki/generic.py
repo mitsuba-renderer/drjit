@@ -521,16 +521,21 @@ def set_label_(a0, label):
 def schedule(a0):
     if a0.IsJIT:
         if a0.Depth == 1:
-            _ek.detail.jitc_schedule(a0.index())
+            if a0.IsDiff:
+                a0.value_().schedule()
+            else:
+                _ek.detail.jitc_schedule(a0.index_())
         else:
             for i in range(len(a0)):
                 a0[i].schedule()
+    return a0
 
 
 def eval(a0):
     if a0.IsJIT:
         schedule(a0)
         _ek.detail.jitc_eval()
+    return a0
 
 # -------------------------------------------------------------------
 #           Vertical operations -- transcendental functions
@@ -715,17 +720,13 @@ def dot_(a0, a1):
 # -------------------------------------------------------------------
 
 
-def detach(a):
-    if not a.IsDiff:
-        return a
-
-    result = a.DetachedType()
-    for i in range(len(a)):
-        result[i] = _ek.detach(a[i])
-    return result
+def index_(a):
+    if a.IsJIT or a.IsDiff:
+        return [v.index_() for v in a]
+    return None
 
 
-def grad(a):
+def grad_(a):
     if not a.IsDiff:
         return None
 
@@ -735,10 +736,23 @@ def grad(a):
     return result
 
 
-def set_grad(a, grad):
+def set_grad_(a, grad):
+    if not a.IsDiff:
+        raise Exception("Expected a differentiable array type!")
+
     s0, s1 = len(a), len(grad)
     for i in range(s0):
-        _ek.set_grad(a[i], grad[i if s1 > 1 else 0])
+        _ek.set_grad_(a[i], grad[i if s1 > 1 else 0])
+
+
+def value_(a):
+    if not a.IsDiff:
+        return a
+
+    result = a.DetachedType()
+    for i in range(len(a)):
+        result[i] = a[i].value_()
+    return result
 
 
 def requires_grad(a, value=True):
@@ -751,6 +765,29 @@ def ad_schedule(a, reverse=True):
         _ek.ad_schedule(a[i], reverse)
 
 
+def backward(a, retain_graph=False):
+    a.grad = 1
+    a.ad_schedule(True)
+
+    t = type(a)
+    while _ek.is_diff_array_v(_ek.value_t(t)):
+        t = t.Value
+
+    t.traverse(True, retain_graph)
+
+
+def forward(a, retain_graph=False):
+    a.grad = 1
+    a.ad_schedule(False)
+
+    t = type(a)
+    while _ek.is_diff_array_v(_ek.value_t(t)):
+        t = t.Value
+
+    t.traverse(False, retain_graph)
+
+
+@property
 def graphviz_str(a):
     t = type(a)
     if t.IsDiff:
@@ -761,19 +798,43 @@ def graphviz_str(a):
     elif _ek.is_jit_array_v(t):
         return _ek.detail.jitc_graphviz()
     else:
-        raise Exception('graphviz_str(): only variables registered with the '
+        raise Exception('graphviz_str: only variables registered with the '
                         'JIT (LLVM/CUDA) or AD backend are supported!')
 
 
+@property
 def graphviz(a):
     try:
         from graphviz import Source
-        return Source(_ek.graphviz_str(a))
+        return Source(a.graphviz_str)
     except ImportError:
         raise Exception('graphviz Python package not available! Install via '
                         '"python -m pip install graphviz". Alternatively, you'
                         'can call enoki.graphviz_str() function to obtain a '
                         'string representation.')
+
+
+@property
+def index(a):
+    return a.index_()
+
+
+@property
+def grad(a):
+    return a.grad_()
+
+
+@grad.setter
+def grad(a, value):
+    t = type(a).DetachedType
+    if not isinstance(value, t):
+        value = t(value)
+    a.set_grad_(value)
+
+
+@property
+def value(a):
+    return a.value_()
 
 # -------------------------------------------------------------------
 #                      Initialization operations

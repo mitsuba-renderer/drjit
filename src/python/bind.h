@@ -290,7 +290,7 @@ auto bind_full(py::class_<Array, ek::ArrayBase> &cls,
     }
 
     if constexpr (Array::IsJIT || Array::IsDiff) {
-        cls.def("index", [](const Array &a) { return a.index(); });
+        cls.def("index_", [](const Array &a) { return a.index(); });
         cls.def("set_label", [](const Array &a, const char *name) { a.set_label(name); });
         cls.def("label", [](const Array &a) { return a.label(); });
     }
@@ -298,10 +298,10 @@ auto bind_full(py::class_<Array, ek::ArrayBase> &cls,
     if constexpr (Array::IsDiff) {
         using Detached = decltype(ek::detach(std::declval<Array>()));
         cls.def(py::init<Detached>());
-        cls.def("detach", &Array::detach);
+        cls.def("value_", &Array::value);
         if constexpr (Array::IsFloat) {
-            cls.def("grad", &Array::grad);
-            cls.def("set_grad", &Array::set_grad);
+            cls.def("grad_", &Array::grad);
+            cls.def("set_grad_", &Array::set_grad);
             cls.def("requires_grad", &Array::requires_grad, "value"_a = true);
             cls.def("ad_schedule", &Array::ad_schedule);
             cls.def("graphviz_", &Array::graphviz_);

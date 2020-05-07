@@ -795,7 +795,7 @@ template <typename T> ENOKI_INLINE auto detach(const T &value) {
             result.coeff(i) = detach(value.coeff(i));
         return result;
     } else if constexpr (is_diff_array_v<T>) {
-        return value.detach();
+        return value.value();
     } else if constexpr (!is_array_v<T> && std::is_class_v<T>) {
         static_assert(struct_support<T>::Defined, "Missing ENOKI_STRUCT_SUPPORT() declaration?");
         return struct_support<T>::detach(value);

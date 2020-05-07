@@ -56,6 +56,8 @@ def _var_type(a, preferred=VarType.Invalid):
                     preferred = VarType.Int64
 
         return preferred
+    elif isinstance(a, tuple) or isinstance(a, list):
+        return _builtins.max([_var_type(v, preferred) for v in a])
     else:
         raise Exception("var_type(): Unsupported type!")
 
@@ -1111,27 +1113,33 @@ def dot_async(a, b):
 
 def detach(a):
     if _ek.is_diff_array_v(a):
-        return a.detach()
+        return a.value_()
     else:
         return a
 
 
 def grad(a):
     if _ek.is_diff_array_v(a):
-        return a.grad()
+        return a.grad_()
     else:
         return None
 
 
 def set_grad(a, value):
     if _ek.is_diff_array_v(a):
-        a.set_grad(type(a).DetachedType(value))
+        t = type(a).DetachedType
+        if not isinstance(value, t):
+            value = t(value)
+        a.set_grad_(value)
     else:
         raise Exception("Expected a differentiable array type!")
 
 
-def requires_grad(a, value=True):
-    if _ek.is_diff_array_v(a):
+def requires_grad(a, value=True, *args):
+    if not isinstance(value, bool) or len(args) > 0:
+        for v in [a, value] + list(args):
+            requires_grad(v)
+    elif _ek.is_diff_array_v(a):
         a.requires_grad(value)
     else:
         raise Exception("Expected a differentiable array type!")
@@ -1145,25 +1153,17 @@ def ad_schedule(a, reverse=True):
 
 
 def backward(a, retain_graph=False):
-    set_grad(a, 1)
-    ad_schedule(a, True)
-
-    t = type(a)
-    while _ek.is_diff_array_v(_ek.value_t(t)):
-        t = t.Value
-
-    t.traverse(True, retain_graph)
+    if _ek.is_diff_array_v(a):
+        a.backward(retain_graph)
+    else:
+        raise Exception("Expected a differentiable array type!")
 
 
 def forward(a, retain_graph=False):
-    set_grad(a, 1)
-    ad_schedule(a, False)
-
-    t = type(a)
-    while _ek.is_diff_array_v(_ek.value_t(t)):
-        t = t.Value
-
-    t.traverse(False, retain_graph)
+    if _ek.is_diff_array_v(a):
+        a.forward(retain_graph)
+    else:
+        raise Exception("Expected a differentiable array type!")
 
 
 def graphviz_str(a):
@@ -1224,3 +1224,44 @@ def arange(type_, start=None, end=None, step=1):
     else:
         assert isinstance(type_, type)
         return type_(start)
+
+# -------------------------------------------------------------------
+#                  Higher-level utility functions
+# -------------------------------------------------------------------
+
+
+def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
+    if _ek.is_array_v(a) or _ek.is_array_v(b):
+        if type(a) is not type(b):
+            a, b = _var_promote(a, b)
+        cond = _ek.abs(a - b) <= _ek.abs(b) * rtol + atol
+        if equal_nan:
+            cond |= _ek.isnan(a) & _ek.isnan(b)
+        return _ek.all_nested(cond)
+
+    def safe_len(x):
+        try:
+            return len(x)
+        except TypeError:
+            return 0
+
+    def safe_getitem(x, xl, i):
+        return x[i if xl > 1 else 0] if xl > 0 else x
+
+    al, bl = safe_len(a), safe_len(b)
+    size = max(al, bl)
+
+    if al != size and al > 1 or bl != size and bl > 1:
+        raise Exception("allclose(): size mismatch (%i vs %i)!" % (al, bl))
+    elif size == 0:
+        if equal_nan and _math.isnan(a) and _math.isnan(b):
+            return True
+        return abs(a - b) <= abs(b) * rtol + atol
+    else:
+        for i in range(size):
+            ai = safe_getitem(a, al, i)
+            bi = safe_getitem(b, bl, i)
+            if not allclose(ai, bi, rtol, atol, equal_nan):
+                return False
+        return True
+

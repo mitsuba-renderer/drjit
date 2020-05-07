@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 
-LogLevel log_level = LogLevel::Info;
+LogLevel log_level = LogLevel::Trace;
 Buffer buffer{0};
 
 void ad_fail(const char *fmt, ...) {
