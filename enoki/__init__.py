@@ -1,20 +1,27 @@
+import sys
+
+if sys.version_info < (3, 5):
+    raise ImportError("Enoki requires Python >= 3.5")
+
+del sys
+
 # Implementation details accessed by both C++ and Python
-import enoki.detail
+import enoki.detail  # noqa
 
 # Native extension defining low-level arrays
-import enoki.enoki_ext as enoki_ext
+import enoki.enoki_ext as enoki_ext  # noqa
 
 # Routing functionality (type promotion, broadcasting, etc.)
-import enoki.router as router
+import enoki.router as router  # noqa
 
 # Generic fallback implementations of array operations
-import enoki.generic as generic
+import enoki.generic as generic  # noqa
 
 # Type traits analogous to the ones provided in C++
-import enoki.traits as traits
+import enoki.traits as traits  # noqa
 
 # Math library and const
-import enoki.const as const
+import enoki.const as const  # noqa
 
 # Install routing functions in ArrayBase and global scope
 self = vars()

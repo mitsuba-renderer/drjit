@@ -77,6 +77,7 @@ template <typename Array> auto bind(py::module &m, bool scalar_mode = false) {
 template <typename Array>
 auto bind_full(py::class_<Array, ek::ArrayBase> &cls,
                bool scalar_mode = false) {
+    static_assert(ek::array_depth_v<Array> == 1);
     bind_basic_methods(cls);
 
     using Scalar = std::conditional_t<Array::IsMask, bool, ek::scalar_t<Array>>;
@@ -181,27 +182,13 @@ auto bind_full(py::class_<Array, ek::ArrayBase> &cls,
 
         if constexpr (ek::is_dynamic_v<Array> &&
                       ek::array_depth_v<Array> == 1) {
-            using UInt32 = ek::uint32_array_t<Array>;
-            cls.def_static("gather_",
-                    [](const Array &source, const UInt32 &index, const Mask &mask) {
-                        return ek::gather<Array>(source, index, mask);
-                    });
-            cls.def("scatter_",
-                    [](const Array &value, Array &target, const UInt32 &index, const Mask &mask) {
-                        ek::scatter(target, value, index, mask);
-                    });
-            cls.def("scatter_add_",
-                    [](const Array &value, Array &target, const UInt32 &index, const Mask &mask) {
-                        ek::scatter_add(target, value, index, mask);
-                    });
-
             if constexpr (ek::is_jit_array_v<Array>) {
                 cls.def("dot_async_", &Array::dot_async_);
                 cls.def("hsum_async_", &Array::hsum_async_);
                 cls.def("hprod_async_", &Array::hprod_async_);
                 cls.def("hmin_async_", &Array::hmin_async_);
                 cls.def("hmax_async_", &Array::hmax_async_);
-                cls.def("migrate", &Array::migrate);
+                cls.def("migrate_", &Array::migrate);
             }
         }
 
@@ -261,6 +248,22 @@ auto bind_full(py::class_<Array, ek::ArrayBase> &cls,
         cls.def("hmin_", &Array::hmin_);
     }
 
+    if constexpr (ek::is_dynamic_v<Array>) {
+        using UInt32 = ek::uint32_array_t<Array>;
+        cls.def_static("gather_",
+                [](const Array &source, const UInt32 &index, const Mask &mask) {
+                    return ek::gather<Array>(source, index, mask);
+                });
+        cls.def("scatter_",
+                [](const Array &value, Array &target, const UInt32 &index, const Mask &mask) {
+                    ek::scatter(target, value, index, mask);
+                });
+        cls.def("scatter_add_",
+                [](const Array &value, Array &target, const UInt32 &index, const Mask &mask) {
+                    ek::scatter_add(target, value, index, mask);
+                });
+    }
+
     if constexpr (Array::IsFloat) {
         cls.def("sqrt_",  &Array::sqrt_);
         cls.def("floor_", &Array::floor_);
@@ -291,8 +294,8 @@ auto bind_full(py::class_<Array, ek::ArrayBase> &cls,
 
     if constexpr (Array::IsJIT || Array::IsDiff) {
         cls.def("index_", [](const Array &a) { return a.index(); });
-        cls.def("set_label", [](const Array &a, const char *name) { a.set_label(name); });
-        cls.def("label", [](const Array &a) { return a.label(); });
+        cls.def("set_label_", [](const Array &a, const char *name) { a.set_label(name); });
+        cls.def("label_", [](const Array &a) { return a.label(); });
     }
 
     if constexpr (Array::IsDiff) {
@@ -300,12 +303,23 @@ auto bind_full(py::class_<Array, ek::ArrayBase> &cls,
         cls.def(py::init<Detached>());
         cls.def("value_", &Array::value);
         if constexpr (Array::IsFloat) {
-            cls.def("grad_", &Array::grad);
+            cls.def("grad_", [](const Array &a) -> py::object {
+                if (a.index() == 0)
+                    return py::none();
+                else
+                    return py::cast(a.grad());
+            });
             cls.def("set_grad_", &Array::set_grad);
-            cls.def("requires_grad", &Array::requires_grad, "value"_a = true);
-            cls.def("ad_schedule", &Array::ad_schedule);
+            cls.def(
+                "requires_grad_",
+                [](Array *a, bool value) -> Array * {
+                    ek::requires_grad(*a, value);
+                    return a;
+                },
+                "value"_a = true);
+            cls.def("ad_schedule_", &Array::ad_schedule);
             cls.def("graphviz_", &Array::graphviz_);
-            cls.def_static("traverse", &Array::traverse);
+            cls.def_static("traverse_", &Array::traverse);
         }
     }
 
@@ -358,7 +372,10 @@ auto bind_full(py::class_<Array, ek::ArrayBase> &cls,
     auto a_i64 = bind_type<ek::int64_array_t<Guide>>(Module, Scalar);          \
     auto a_u64 = bind_type<ek::uint64_array_t<Guide>>(Module, Scalar);         \
     auto a_f32 = bind_type<ek::float32_array_t<Guide>>(Module, Scalar);        \
-    auto a_f64 = bind_type<ek::float64_array_t<Guide>>(Module, Scalar);
+    auto a_f64 = bind_type<ek::float64_array_t<Guide>>(Module, Scalar);        \
+    Module.attr("Int32") = Module.attr("Int");                                 \
+    Module.attr("UInt32") = Module.attr("UInt");                               \
+    Module.attr("Float32") = Module.attr("Float");
 
 #define ENOKI_BIND_ARRAY_BASE_2(Scalar)                                        \
     bind_full(a_i32, Scalar);                                                  \

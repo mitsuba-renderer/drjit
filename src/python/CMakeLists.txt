@@ -27,8 +27,9 @@ set_target_properties(enoki-python PROPERTIES
 )
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "GCC|Clang")
+  target_compile_options(enoki-python PRIVATE ${ENOKI_NATIVE_FLAGS})
   if (NOT (${ENOKI_U_CMAKE_BUILD_TYPE} MATCHES "DEB"))
-    target_compile_options(enoki-python PRIVATE -g0 -Os ${ENOKI_NATIVE_FLAGS})
+    target_compile_options(enoki-python PRIVATE -g0 -Os)
   endif()
 elseif (MSVC)
   target_compile_options(enoki-python PRIVATE /Os)

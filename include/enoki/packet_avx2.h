@@ -392,33 +392,33 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(32)
     static ENOKI_INLINE Derived empty_(size_t) { return _mm256_undefined_si256(); }
     static ENOKI_INLINE Derived zero_(size_t) { return _mm256_setzero_si256(); }
 
-    template <size_t Stride, typename Index, typename Mask>
+    template <bool, typename Index, typename Mask>
     static ENOKI_INLINE Derived gather_(const void *ptr, const Index &index, const Mask &mask) {
-        #if defined(ENOKI_X86_AVX51)
+        #if defined(ENOKI_X86_AVX512)
             if constexpr (sizeof(scalar_t<Index>) == 4)
-                return _mm256_mmask_i32gather_epi32(_mm256_setzero_si256(), mask.k, index.m, (const int *) ptr, Stride);
+                return _mm256_mmask_i32gather_epi32(_mm256_setzero_si256(), mask.k, index.m, (const int *) ptr, 4);
             else
-                return _mm512_mask_i64gather_epi32(_mm256_setzero_si256(), mask.k, index.m, (const int *) ptr, Stride);
+                return _mm512_mask_i64gather_epi32(_mm256_setzero_si256(), mask.k, index.m, (const int *) ptr, 4);
         #else
             if constexpr (sizeof(scalar_t<Index>) == 4) {
                 return _mm256_mask_i32gather_epi32(
-                    _mm256_setzero_si256(), (const int *) ptr, index.m, mask.m, Stride);
+                    _mm256_setzero_si256(), (const int *) ptr, index.m, mask.m, 4);
             } else {
                 return Derived(
-                    _mm256_mask_i64gather_epi32(_mm_setzero_si128(), (const int *) ptr, low(index).m, low(mask).m, Stride),
-                    _mm256_mask_i64gather_epi32(_mm_setzero_si128(), (const int *) ptr, high(index).m, high(mask).m, Stride)
+                    _mm256_mask_i64gather_epi32(_mm_setzero_si128(), (const int *) ptr, low(index).m, low(mask).m, 4),
+                    _mm256_mask_i64gather_epi32(_mm_setzero_si128(), (const int *) ptr, high(index).m, high(mask).m, 4)
                 );
             }
         #endif
     }
 
 #if defined(ENOKI_X86_AVX512)
-    template <size_t Stride, typename Index, typename Mask>
+    template <bool, typename Index, typename Mask>
     ENOKI_INLINE void scatter_(void *ptr, const Index &index, const Mask &mask) const {
         if constexpr (sizeof(scalar_t<Index>) == 4)
-            _mm256_mask_i32scatter_epi32(ptr, mask.k, index.m, m, Stride);
+            _mm256_mask_i32scatter_epi32(ptr, mask.k, index.m, m, 4);
         else
-            _mm512_mask_i64scatter_epi32(ptr, mask.k, index.m, m, Stride);
+            _mm512_mask_i64scatter_epi32(ptr, mask.k, index.m, m, 4);
     }
 #endif
 
@@ -850,28 +850,28 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(32)
     static ENOKI_INLINE Derived zero_(size_t) { return _mm256_setzero_si256(); }
     static ENOKI_INLINE Derived empty_(size_t) { return _mm256_undefined_si256(); }
 
-    template <size_t Stride, typename Index, typename Mask>
+    template <bool, typename Index, typename Mask>
     static ENOKI_INLINE Derived gather_(const void *ptr, const Index &index, const Mask &mask) {
         #if defined(ENOKI_X86_AVX512)
             if constexpr (sizeof(scalar_t<Index>) == 4)
-                return _mm256_mmask_i32gather_epi64(_mm256_setzero_si256(), mask.k, index.m, (const long long *) ptr, Stride);
+                return _mm256_mmask_i32gather_epi64(_mm256_setzero_si256(), mask.k, index.m, (const long long *) ptr, 8);
             else
-                return _mm256_mmask_i64gather_epi64(_mm256_setzero_si256(), mask.k, index.m, (const long long *) ptr, Stride);
+                return _mm256_mmask_i64gather_epi64(_mm256_setzero_si256(), mask.k, index.m, (const long long *) ptr, 8);
         #else
             if constexpr (sizeof(scalar_t<Index>) == 4)
-                return _mm256_mask_i32gather_epi64(_mm256_setzero_si256(), (const long long *) ptr, index.m, mask.m, Stride);
+                return _mm256_mask_i32gather_epi64(_mm256_setzero_si256(), (const long long *) ptr, index.m, mask.m, 8);
             else
-                return _mm256_mask_i64gather_epi64(_mm256_setzero_si256(), (const long long *) ptr, index.m, mask.m, Stride);
+                return _mm256_mask_i64gather_epi64(_mm256_setzero_si256(), (const long long *) ptr, index.m, mask.m, 8);
         #endif
     }
 
 #if defined(ENOKI_X86_AVX512)
-    template <size_t Stride, typename Index, typename Mask>
+    template <bool, typename Index, typename Mask>
     ENOKI_INLINE void scatter_(void *ptr, const Index &index, const Mask &mask) const {
         if constexpr (sizeof(scalar_t<Index>) == 4)
-            _mm256_mask_i32scatter_epi64(ptr, mask.k, index.m, m, Stride);
+            _mm256_mask_i32scatter_epi64(ptr, mask.k, index.m, m, 8);
         else
-            _mm256_mask_i64scatter_epi64(ptr, mask.k, index.m, m, Stride);
+            _mm256_mask_i64scatter_epi64(ptr, mask.k, index.m, m, 8);
     }
 #endif
 
@@ -980,15 +980,15 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(32)
         return result;
     }
 
-    template <size_t Stride, typename Index, typename Mask>
+    template <typename Index, typename Mask>
     static ENOKI_INLINE Derived gather_(const void *ptr, const Index &index, const Mask &mask) {
-        return Base::template gather_<Stride>(ptr, index, mask & mask_());
+        return Base::gather_<false>(ptr, index, mask & mask_());
     }
 
 #if defined(ENOKI_X86_AVX512)
-    template <size_t Stride, typename Index, typename Mask>
+    template <bool, typename Index, typename Mask>
     ENOKI_INLINE void scatter_(void *ptr, const Index &index, const Mask &mask) const {
-        Base::template scatter_<Stride>(ptr, index, mask & mask_());
+        Base::scatter_<false>(ptr, index, mask & mask_());
     }
 #endif
 

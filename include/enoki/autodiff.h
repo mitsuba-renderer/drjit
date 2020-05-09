@@ -58,6 +58,18 @@ template <typename Value, typename Mask>
 uint32_t ad_new_select(const char *label, uint32_t size, const Mask &m,
                        uint32_t t_index, uint32_t f_index);
 
+/// Special case of ad_new: create a node for a gather() expression
+template <typename Value, typename Mask, typename Index>
+uint32_t ad_new_gather(const char *label, uint32_t size, uint32_t src_index,
+                       const Index &offset, const Mask &mask, bool permute);
+
+
+/// Special case of ad_new: create a node for a scatter[_add]() statement.
+template <typename Value, typename Mask, typename Index>
+uint32_t ad_new_scatter(const char *label, uint32_t size, uint32_t src_index,
+                        uint32_t dst_index, const Index &offset,
+                        const Mask &mask, bool permute, bool scatter_add);
+
 //! @}
 // -----------------------------------------------------------------------
 
@@ -79,6 +91,7 @@ struct DiffArray : ArrayBaseT<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>
     using Type = Type_;
     using MaskType = DiffArray<mask_t<Type_>>;
     using ArrayType = DiffArray;
+    using IndexType = DiffArray<uint32_array_t<Type_>>;
     using typename Base::Value;
     using typename Base::Scalar;
 
@@ -483,7 +496,7 @@ struct DiffArray : ArrayBaseT<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>
         if constexpr (IsEnabled) {
             const Scalar value = memcpy_cast<Scalar>(int_array_t<Scalar>(-1));
             if (m_index)
-                return enoki::select(mask, *this, DiffArray(value));
+                return enoki::select(mask, DiffArray(value), *this);
         }
         return DiffArray::create(0, detail::or_(m_value, mask.m_value));
     }
@@ -506,6 +519,59 @@ struct DiffArray : ArrayBaseT<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>
                             "floating point arrays attached to the AD graph!");
         }
         return DiffArray::create(0, detail::andnot_(m_value, mask.m_value));
+    }
+
+    //! @}
+    // -----------------------------------------------------------------------
+
+    // -----------------------------------------------------------------------
+    //! @{ \name Transcendental functions
+    // -----------------------------------------------------------------------
+
+    DiffArray sin_() const {
+        if constexpr (!std::is_floating_point_v<Scalar>) {
+            enoki_raise("sin_(): invalid operand type!");
+        } else {
+            if constexpr (IsEnabled) {
+                if (m_index) {
+                    auto [s, c] = sincos(m_value);
+
+                    uint32_t indices[1] = { m_index };
+                    Type weights[1] = { std::move(c) };
+                    uint32_t index_new = detail::ad_new<Type>(
+                        "sin", (uint32_t) slices(s), 1, indices, weights);
+
+                    return DiffArray::create(index_new, std::move(s));
+                }
+            }
+
+            return DiffArray::create(0, enoki::sin(m_value));
+        }
+    }
+
+    DiffArray cos_() const {
+        if constexpr (!std::is_floating_point_v<Scalar>) {
+            enoki_raise("cos_(): invalid operand type!");
+        } else {
+            if constexpr (IsEnabled) {
+                if (m_index) {
+                    auto [s, c] = sincos(m_value);
+
+                    uint32_t indices[1] = { m_index };
+                    Type weights[1] = { -s };
+                    uint32_t index_new = detail::ad_new<Type>(
+                        "cos", (uint32_t) slices(c), 1, indices, weights);
+
+                    return DiffArray::create(index_new, std::move(c));
+                }
+            }
+
+            return DiffArray::create(0, enoki::cos(m_value));
+        }
+    }
+
+    std::pair<DiffArray, DiffArray> sincos_() const {
+        return { sin_(), cos_() };
     }
 
     //! @}
@@ -545,7 +611,7 @@ struct DiffArray : ArrayBaseT<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>
 
     DiffArray or_(const DiffArray &a) const {
         if constexpr (is_floating_point_v<Scalar>) {
-            if (m_index)
+            if (m_index || a.m_index)
                 enoki_raise("or_(): bit operations are not permitted for "
                             "floating point arrays attached to the AD graph!");
         }
@@ -554,7 +620,7 @@ struct DiffArray : ArrayBaseT<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>
 
     DiffArray and_(const DiffArray &a) const {
         if constexpr (is_floating_point_v<Scalar>) {
-            if (m_index)
+            if (m_index || a.m_index)
                 enoki_raise("and_(): bit operations are not permitted for "
                             "floating point arrays attached to the AD graph!");
         }
@@ -563,8 +629,8 @@ struct DiffArray : ArrayBaseT<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>
 
     DiffArray xor_(const DiffArray &a) const {
         if constexpr (is_floating_point_v<Scalar>) {
-            if (m_index)
-                enoki_raise("and_(): bit operations are not permitted for "
+            if (m_index || a.m_index)
+                enoki_raise("xor_(): bit operations are not permitted for "
                             "floating point arrays attached to the AD graph!");
         }
         return DiffArray::create(0, detail::xor_(m_value, a.m_value));
@@ -572,7 +638,7 @@ struct DiffArray : ArrayBaseT<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>
 
     DiffArray andnot_(const DiffArray &a) const {
         if constexpr (is_floating_point_v<Scalar>) {
-            if (m_index)
+            if (m_index || a.m_index)
                 enoki_raise("andnot_(): bit operations are not permitted for "
                             "floating point arrays attached to the AD graph!");
         }
@@ -763,12 +829,24 @@ struct DiffArray : ArrayBaseT<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>
         if constexpr (!std::is_arithmetic_v<Scalar>) {
             enoki_raise("hmin_async_(): invalid operand type!");
         } else {
+            Type result = enoki::hmin_async(m_value);
+            uint32_t index_new = 0;
+
             if constexpr (IsEnabled) {
-                if (m_index)
-                    enoki_raise("hmin_async_(): differentiable case not yet implemented!");
+                if (m_index) {
+                    /* This gradient has duplicate '1' entries when
+                       multiple entries are equal to the minimum , which is
+                       strictly speaking not correct (but getting this right
+                       would make the operation quite a bit more expensive). */
+                    uint32_t indices[1] = { m_index };
+                    Type weights[1] = { enoki::select(
+                        enoki::eq(m_value, result), Type(1), Type(0)) };
+                    index_new = detail::ad_new<Type>(
+                        "hmin_async", 1, 1, indices, weights);
+                }
             }
 
-            return DiffArray::create(0, enoki::hmin(m_value));
+            return DiffArray::create(index_new, std::move(result));
         }
     }
 
@@ -791,12 +869,25 @@ struct DiffArray : ArrayBaseT<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>
         if constexpr (!std::is_arithmetic_v<Scalar>) {
             enoki_raise("hmax_async_(): invalid operand type!");
         } else {
+            Type result = enoki::hmax_async(m_value);
+            uint32_t index_new = 0;
+
             if constexpr (IsEnabled) {
-                if (m_index)
-                    enoki_raise("hmax_async_(): differentiable case not yet implemented!");
+                if (m_index) {
+                    /* This gradient has duplicate '1' entries when
+                       multiple entries are equal to the maximum, which is
+                       strictly speaking not correct (but getting this right
+                       would make the operation quite a bit more expensive). */
+
+                    uint32_t indices[1] = { m_index };
+                    Type weights[1] = { enoki::select(
+                        enoki::eq(m_value, result), Type(1), Type(0)) };
+                    index_new = detail::ad_new<Type>(
+                        "hmax_async", 1, 1, indices, weights);
+                }
             }
 
-            return DiffArray::create(0, enoki::hmax(m_value));
+            return DiffArray::create(index_new, std::move(result));
         }
     }
 
@@ -841,43 +932,78 @@ struct DiffArray : ArrayBaseT<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>
     //! @{ \name Scatter/gather operations
     // -----------------------------------------------------------------------
 
-    template <typename Index>
-    static DiffArray gather_(const DiffArray &src, const DiffArray<Index> &index,
+    template <bool Permute>
+    static DiffArray gather_(const DiffArray &src, const IndexType &offset,
                              const MaskType &mask = true) {
-        if constexpr (std::is_scalar_v<Type>)
+        if constexpr (std::is_scalar_v<Type>) {
             enoki_raise("Array gather operation not supported for scalar array type.");
+        } else {
+            Type result = gather<Type>(src.m_value, offset.m_value, mask.m_value);
+            uint32_t index_new = 0;
+            if constexpr (IsEnabled) {
+                if (src.m_index)
+                    index_new = detail::ad_new_gather<Type>(
+                        Permute ? "gather[permute]" : "gather",
+                        (uint32_t) slices(result), src.m_index, offset.m_value,
+                        mask.m_value, Permute);
+            }
+            return create(index_new, std::move(result));
+        }
     }
 
-    template <typename Index>
-    void scatter_(DiffArray &dst, const DiffArray<Index> &index,
+    template <bool Permute>
+    void scatter_(DiffArray &dst, const IndexType &offset,
                   const MaskType &mask = true) const {
-        if constexpr (std::is_scalar_v<Type>)
+        if constexpr (std::is_scalar_v<Type>) {
             enoki_raise("Array scatter operation not supported for scalar array type.");
+        } else {
+            enoki::scatter(dst.m_value, m_value, offset.m_value, mask.m_value);
+            if constexpr (IsEnabled) {
+                if (m_index || dst.m_index) {
+                    uint32_t index = detail::ad_new_scatter<Type>(
+                        Permute ? "scatter[permute]" : "scatter", slices(dst),
+                        m_index, dst.m_index, offset.m_value, mask.m_value,
+                        Permute, false);
+                    detail::ad_dec_ref<Type>(dst.m_index);
+                    dst.m_index = index;
+                }
+            }
+        }
     }
 
-    template <typename Index>
-    void scatter_add_(DiffArray &dst, const DiffArray<Index> &index,
-                      const MaskType &mask = true) const {
-        if constexpr (std::is_scalar_v<Type>)
-            enoki_raise("Array scatter operation not supported for scalar array type.");
+    void scatter_add_(DiffArray &dst, const IndexType &offset,
+                  const MaskType &mask = true) const {
+        if constexpr (std::is_scalar_v<Type>) {
+            enoki_raise("Array scatter_add operation not supported for scalar array type.");
+        } else {
+            enoki::scatter_add(dst.m_value, m_value, offset.m_value, mask.m_value);
+            if constexpr (IsEnabled) {
+                if (m_index) { // safe to ignore dst.m_index in the case of scatter_add
+                    uint32_t index = detail::ad_new_scatter<Type>(
+                        "scatter_add", slices(dst), m_index, dst.m_index,
+                        offset.m_value, mask.m_value, false, true);
+                    detail::ad_dec_ref<Type>(dst.m_index);
+                    dst.m_index = index;
+                }
+            }
+        }
     }
 
-    template <typename Index>
-    static DiffArray gather_(const void *src, const DiffArray<Index> &index,
+    template <bool>
+    static DiffArray gather_(const void *src, const IndexType &offset,
                              const MaskType &mask = true) {
-        return create(0, gather<Type>(src, index.m_value, mask.m_value));
+        return create(0, gather<Type>(src, offset.m_value, mask.m_value));
     }
 
-    template <typename Index>
-    void scatter_(void *dst, const DiffArray<Index> &index,
+    template <bool>
+    void scatter_(void *dst, const IndexType &offset,
                   const MaskType &mask = true) const {
-        enoki::scatter(dst, m_value, index.m_value, mask.m_value);
+        enoki::scatter(dst, m_value, offset.m_value, mask.m_value);
     }
 
-    template <typename Index>
-    void scatter_add_(void *dst, const DiffArray<Index> &index,
+    void scatter_add_(void *dst, const IndexType &offset,
                       const MaskType &mask = true) const {
-        enoki::scatter_add(dst, m_value, index.m_value, mask.m_value);
+        enoki::scatter_add(dst, m_value, offset.m_value, mask.m_value);
     }
 
     //! @}
@@ -980,11 +1106,16 @@ struct DiffArray : ArrayBaseT<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>
     void set_label(const char *label) const {
         if constexpr (IsEnabled)
             enoki::detail::ad_set_label<Type>(m_index, label);
+        enoki::set_label(m_value, label);
     }
 
     const char *label() const {
-        if constexpr (IsEnabled)
-            return enoki::detail::ad_label<Type>(m_index);
+        if constexpr (IsEnabled) {
+            if (m_index)
+                enoki::detail::ad_label<Type>(m_index);
+        }
+        if constexpr (is_jit_array_v<Type>)
+            return m_value.label();
         return nullptr;
     }
 
@@ -1001,7 +1132,7 @@ struct DiffArray : ArrayBaseT<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>
         if constexpr (IsEnabled)
             return detail::ad_grad<Type>(m_index);
         else
-            return zero<Type>();
+            return Type();
     }
 
     void set_grad(const Type &value) {
@@ -1076,7 +1207,7 @@ protected:
 #  define ENOKI_AUTODIFF_EXPORT ENOKI_IMPORT
 #endif
 
-#define ENOKI_DECLARE_EXTERN_TEMPLATE(T, Mask)                                 \
+#define ENOKI_DECLARE_EXTERN_TEMPLATE(T, Mask, Index)                          \
     extern template ENOKI_AUTODIFF_EXPORT void ad_inc_ref<T>(uint32_t);        \
     extern template ENOKI_AUTODIFF_EXPORT void ad_dec_ref<T>(uint32_t);        \
     extern template ENOKI_AUTODIFF_EXPORT uint32_t ad_new<T>(                  \
@@ -1092,18 +1223,24 @@ protected:
     extern template ENOKI_AUTODIFF_EXPORT void ad_schedule<T>(uint32_t, bool); \
     extern template ENOKI_AUTODIFF_EXPORT void ad_traverse<T>(bool, bool);     \
     extern template ENOKI_AUTODIFF_EXPORT uint32_t ad_new_select<T, Mask>(     \
-        const char *, uint32_t, const Mask &, uint32_t, uint32_t);
+        const char *, uint32_t, const Mask &, uint32_t, uint32_t);             \
+    extern template ENOKI_AUTODIFF_EXPORT uint32_t                             \
+    ad_new_gather<T, Mask, Index>(const char *, uint32_t, uint32_t,            \
+                                  const Index &, const Mask &, bool);          \
+    extern template ENOKI_AUTODIFF_EXPORT uint32_t                             \
+    ad_new_scatter<T, Mask, Index>(const char *, uint32_t, uint32_t, uint32_t, \
+                                  const Index &, const Mask &, bool, bool);
 
 NAMESPACE_BEGIN(detail)
-ENOKI_DECLARE_EXTERN_TEMPLATE(float, bool)
-ENOKI_DECLARE_EXTERN_TEMPLATE(double, bool)
+ENOKI_DECLARE_EXTERN_TEMPLATE(float, bool, uint32_t)
+ENOKI_DECLARE_EXTERN_TEMPLATE(double, bool, uint32_t)
 #if defined(ENOKI_CUDA_H)
-ENOKI_DECLARE_EXTERN_TEMPLATE(CUDAArray<float>, CUDAArray<bool>)
-ENOKI_DECLARE_EXTERN_TEMPLATE(CUDAArray<double>, CUDAArray<bool>)
+ENOKI_DECLARE_EXTERN_TEMPLATE(CUDAArray<float>, CUDAArray<bool>, CUDAArray<uint32_t>)
+ENOKI_DECLARE_EXTERN_TEMPLATE(CUDAArray<double>, CUDAArray<bool>, CUDAArray<uint32_t>)
 #endif
 #if defined(ENOKI_LLVM_H)
-ENOKI_DECLARE_EXTERN_TEMPLATE(LLVMArray<float>, LLVMArray<bool>)
-ENOKI_DECLARE_EXTERN_TEMPLATE(LLVMArray<double>, LLVMArray<bool>)
+ENOKI_DECLARE_EXTERN_TEMPLATE(LLVMArray<float>, LLVMArray<bool>, LLVMArray<uint32_t>)
+ENOKI_DECLARE_EXTERN_TEMPLATE(LLVMArray<double>, LLVMArray<bool>, LLVMArray<uint32_t>)
 #endif
 NAMESPACE_END(detail)
 

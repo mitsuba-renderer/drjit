@@ -1,11 +1,12 @@
 #include "common.h"
 #include <enoki/cuda.h>
 #include <enoki/llvm.h>
+#include <enoki/math.h>
 #include <enoki/autodiff.h>
 #include <tsl/robin_map.h>
 #include <type_traits>
 #include <assert.h>
-#include <iostream> // XXX
+#include <iostream> /// XXX
 
 #if defined(ENOKI_USE_TBB)
 #  include <tbb/spin_mutex.h>
@@ -36,6 +37,8 @@ NAMESPACE_BEGIN(detail)
 
 using Value = ENOKI_AUTODIFF_VALUE;
 using Mask = mask_t<Value>;
+using Index = uint32_array_t<Value>;
+using Scalar = scalar_t<Value>;
 constexpr bool IsDouble = std::is_same_v<Value, double>;
 
 struct Variable;
@@ -85,11 +88,11 @@ struct Edge {
     }
 };
 
-template <typename T> size_t asize(const T &value) {
+template <typename T> uint32_t asize(const T &value) {
     if constexpr (std::is_scalar_v<T>)
         return 1;
     else
-        return value.size();
+        return (uint32_t) value.size();
 }
 
 static_assert(sizeof(Edge) == 8 * sizeof(uint32_t),
@@ -146,20 +149,55 @@ struct Variable {
         }
     }
 
-    template <typename T = Value>
-    uint32_t grad_size() const {
-        if constexpr (std::is_scalar_v<T>)
-            return 1;
-        else
-            return (uint32_t) ((const T &) grad).size();
+    template <typename T>
+    void accum(const T& v, uint32_t src_size) {
+        if constexpr (is_array_v<T>) {
+            if (size == 1 && src_size != 1) {
+                Value v2;
+                if (((const T &) v).size() == 1)
+                    v2 = v * Scalar(src_size);
+                else
+                    v2 = hsum_async(v);
+
+                if (((const T &) grad).valid())
+                    grad += v2;
+                else
+                    grad = std::move(v2);
+            } else {
+                if (((const T &) grad).valid())
+                    grad += v;
+                else
+                    grad = v;
+            }
+        } else {
+            grad += v;
+        }
     }
 
-    template <typename T = Value>
-    bool grad_valid() const {
-        if constexpr (std::is_scalar_v<T>)
-            return true;
-        else
-            return ((const T &) grad).valid();
+    template <typename T>
+    void mul_accum(const T &v1, const T &v2, uint32_t src_size) {
+        if constexpr (is_array_v<T>) {
+            if (size == 1 && src_size != 1) {
+                T v3;
+                if (((const T &) v1).size() == 1 &&
+                    ((const T &) v2).size() == 1)
+                    v3 = v1 * v2 * Scalar(src_size);
+                else
+                    v3 = hsum_async(v1 * v2);
+
+                if (((const T &) grad).valid())
+                    grad += v3;
+                else
+                    grad = std::move(v3);
+            } else {
+                if (((const T &) grad).valid())
+                    grad = enoki::fmadd(v1, v2, grad);
+                else
+                    grad = v1 * v2;
+            }
+        } else {
+            grad = enoki::fmadd(v1, v2, grad);
+        }
     }
 
     bool is_scalar() const { return size == 1; }
@@ -415,32 +453,32 @@ uint32_t ad_new(const char *label, uint32_t size, uint32_t op_count,
     return index;
 }
 
+
+template <typename Value> struct MaskEdge : Special {
+    MaskEdge(const Mask &mask, bool negate) : mask(mask), negate(negate) { }
+
+    void backward(Variable *source, const Variable *target) const override {
+        if (!negate)
+            source->accum(detail::and_(target->grad, mask), target->size);
+        else
+            source->accum(detail::andnot_(target->grad, mask), target->size);
+    }
+
+    void forward(const Variable *source, Variable *target) const override {
+        if (!negate)
+            target->accum(detail::and_(source->grad, mask), source->size);
+        else
+            target->accum(detail::andnot_(source->grad, mask), source->size);
+    }
+
+    Mask mask;
+    bool negate;
+};
+
+
 template <typename Value, typename Mask>
 uint32_t ad_new_select(const char *label, uint32_t size, const Mask &mask_,
                        uint32_t t_index, uint32_t f_index) {
-
-    struct SelectEdge : Special {
-        SelectEdge(const Mask &mask) : mask(mask) { }
-
-        void backward(Variable *source, const Variable *target) const override {
-            Value masked_grad = detail::and_(target->grad, mask);
-            if (source->grad_valid())
-                source->grad += masked_grad;
-            else
-                source->grad = masked_grad;
-        }
-
-        void forward(const Variable *source, Variable *target) const override {
-            Value masked_grad = detail::and_(source->grad, mask);
-            if (target->grad_valid())
-                target->grad += masked_grad;
-            else
-                target->grad = masked_grad;
-        }
-
-        Mask mask;
-    };
-
     std::lock_guard<Mutex> guard(state.mutex);
     auto [index, var] = ad_var_new(label, size);
 
@@ -458,7 +496,7 @@ uint32_t ad_new_select(const char *label, uint32_t size, const Mask &mask_,
         Edge &edge = state.edges[edge_index_new];
         edge.source = op[i];
         edge.target = index;
-        edge.special = new SelectEdge(i == 0 ? mask_ : !mask_);
+        edge.special = new MaskEdge<Value>(i == 0 ? mask_ : !mask_, false);
         edge.next_fwd = var2->next_fwd;
         edge.next_rev = edge_index;
         edge_index = edge_index_new;
@@ -473,6 +511,156 @@ uint32_t ad_new_select(const char *label, uint32_t size, const Mask &mask_,
     return index;
 }
 
+template <typename Value> struct GatherEdge : Special {
+    GatherEdge(const Index &offset, const Mask &mask, bool permute)
+        : offset(offset), mask(mask), permute(permute) { }
+
+    void backward(Variable *source, const Variable *target) const override {
+        Value &source_grad = (Value &) source->grad;
+        uint32_t size = source->size;
+
+        if (!source_grad.valid())
+            source_grad = zero<Value>(size);
+        else if ((uint32_t) source_grad.size() != size)
+            source_grad.resize(size);
+
+        if (permute)
+            enoki::scatter(source_grad, target->grad, offset, mask);
+        else
+            enoki::scatter_add(source_grad, target->grad, offset, mask);
+    }
+
+    void forward(const Variable *source, Variable *target) const override {
+        target->accum(enoki::gather<Value>(source->grad, offset, mask),
+                      asize(offset));
+    }
+
+    Index offset;
+    Mask mask;
+    bool permute;
+};
+
+template <typename Value, typename Mask, typename Index>
+uint32_t ad_new_gather(const char *label, uint32_t size, uint32_t src_index,
+                       const Index &offset, const Mask &mask, bool permute) {
+    if constexpr (is_array_v<Value>) {
+        std::lock_guard<Mutex> guard(state.mutex);
+        auto [index, var] = ad_var_new(label, size);
+
+        ad_log(Debug, "ad_new_gather(%u <- %u, %u, permute=%i)", index,
+               src_index, (int) permute);
+
+        Variable *var2 = state[src_index];
+        uint32_t edge_index_new = ad_edge_new();
+        Edge &edge = state.edges[edge_index_new];
+        edge.source = src_index;
+        edge.target = index;
+        edge.special = new GatherEdge<Value>(offset, mask, permute);
+        edge.next_fwd = var2->next_fwd;
+        edge.next_rev = 0;
+        var2->ref_count_int++;
+        var2->next_fwd = edge_index_new;
+        var->next_rev = edge_index_new;
+        var->ref_count_ext = 1;
+
+        return index;
+    } else {
+        enoki_raise("ad_new_gather(): differentiable gathers not supported by "
+                    "this backend!");
+    }
+}
+
+template <typename Value> struct ScatterEdge : Special {
+    ScatterEdge(const Index &offset, const Mask &mask, bool scatter_add)
+        : offset(offset), mask(mask), scatter_add(scatter_add) { }
+
+    void backward(Variable *source, const Variable *target) const override {
+        source->accum(enoki::gather<Value>(target->grad, offset, mask),
+                      asize(offset));
+    }
+
+    void forward(const Variable *source, Variable *target) const override {
+        Value &target_grad = (Value &) target->grad;
+        uint32_t size = target->size;
+
+        if (!target_grad.valid())
+            target_grad = zero<Value>(size);
+        else if ((uint32_t) target_grad.size() != size)
+            target_grad.resize(size);
+
+        if (scatter_add)
+            enoki::scatter_add(target_grad, source->grad, offset, mask);
+        else
+            enoki::scatter(target_grad, source->grad, offset, mask);
+    }
+
+    Index offset;
+    Mask mask;
+    bool scatter_add;
+};
+
+template <typename Value, typename Mask, typename Index>
+uint32_t ad_new_scatter(const char *label, uint32_t size, uint32_t src_index,
+                        uint32_t dst_index, const Index &offset,
+                        const Mask &mask, bool permute, bool scatter_add) {
+
+    if constexpr (is_array_v<Value>) {
+        std::lock_guard<Mutex> guard(state.mutex);
+        auto [index, var] = ad_var_new(label, size);
+
+        ad_log(Debug,
+               "ad_new_scatter(%u <- %u, %u, permute=%i, scatter_add=%i)",
+               index, src_index, dst_index, (int) permute, (int) scatter_add);
+
+        uint32_t edge_index = 0;
+
+        if (src_index) {
+            Variable *var2 = state[src_index];
+            uint32_t edge_index_new = ad_edge_new();
+            Edge &edge = state.edges[edge_index_new];
+            edge.source = src_index;
+            edge.target = index;
+            edge.special = new ScatterEdge<Value>(offset, mask, scatter_add);
+            edge.next_fwd = var2->next_fwd;
+            edge.next_rev = 0;
+            var2->ref_count_int++;
+            var2->next_fwd = edge_index_new;
+            edge_index = edge_index_new;
+        }
+
+        if (dst_index && (scatter_add || !permute)) {
+            Variable *var2 = state[dst_index];
+            uint32_t edge_index_new = ad_edge_new();
+            Edge &edge2 = state.edges[edge_index_new];
+            edge2.source = dst_index;
+            edge2.target = index;
+            edge2.next_fwd = var2->next_fwd;
+            edge2.next_rev = edge_index;
+            if (scatter_add) {
+                edge2.weight = 1;
+            } else {
+                Mask edge_mask = full<Mask>(false, size);
+                enoki::scatter(edge_mask, Mask(true), offset, mask);
+                edge2.special = new MaskEdge<Value>(edge_mask, true);
+            }
+            var2->ref_count_int++;
+            var2->next_fwd = edge_index_new;
+            edge_index = edge_index_new;
+        }
+
+        if (edge_index == 0)
+            ad_fail("ad_new_scatter(): all inputs were non-differentiable!");
+
+        var->next_rev = edge_index;
+        var->ref_count_ext = 1;
+
+        return index;
+    } else {
+        enoki_raise("ad_new_scatter(): differentiable scatters not supported "
+                    "by this backend!");
+    }
+}
+
 static void ad_traverse_rev(std::vector<uint32_t> *sched, bool retain_graph) {
     ad_log(Info, "ad_traverse_rev(): processing %zu nodes ..", sched->size());
 
@@ -482,7 +670,7 @@ static void ad_traverse_rev(std::vector<uint32_t> *sched, bool retain_graph) {
         ad_log(Debug, "Visiting vertex %u", index);
 
         if (is_dynamic_v<Value>) {
-            uint32_t grad_size = (uint32_t) v->grad_size();
+            uint32_t grad_size = asize(v->grad);
             if (unlikely(v->size != grad_size && grad_size != 1))
                 ad_fail("ad_traverse_rev(): variable %u has an invalid "
                         "gradient size: expected %u, got %u!", index,
@@ -503,33 +691,13 @@ static void ad_traverse_rev(std::vector<uint32_t> *sched, bool retain_graph) {
 
             if (unlikely(edge.special)) {
                 edge.special->backward(v2, v);
+
                 if (!retain_graph) {
                     delete edge.special;
                     edge.special = nullptr;
                 }
             } else {
-                if (is_dynamic_v<Value>) {
-                    if (!v2->is_scalar() || v->is_scalar()) {
-                        if (v2->grad_valid())
-                            v2->grad = fmadd(edge.weight, v->grad, v2->grad);
-                        else
-                            v2->grad = edge.weight * v->grad;
-                    } else {
-                        Value temp = edge.weight * v->grad;
-                        uint32_t temp_size = asize(temp);
-                        if (asize(temp) == 1)
-                            temp *= scalar_t<Value>(v->size);
-                        else
-                            temp = hsum_async(temp);
-
-                        if (v2->grad_valid())
-                            v2->grad += temp;
-                        else
-                            v2->grad = temp;
-                    }
-                } else {
-                    v2->grad = fmadd(edge.weight, v->grad, v2->grad);
-                }
+                v2->mul_accum(edge.weight, v->grad, v->size);
 
                 if (!retain_graph)
                     edge.weight = Value();
@@ -568,7 +736,7 @@ static void ad_traverse_fwd(std::vector<uint32_t> *sched, bool retain_graph) {
         ad_log(Debug, "Visiting vertex %u", index);
 
         if (is_dynamic_v<Value>) {
-            uint32_t grad_size = (uint32_t) v->grad_size();
+            uint32_t grad_size = asize(v->grad);
             if (unlikely(v->size != grad_size && grad_size != 1))
                 ad_fail("ad_traverse_rev(): variable %u has an invalid "
                         "gradient size: expected %u, got %u!", index,
@@ -580,45 +748,22 @@ static void ad_traverse_fwd(std::vector<uint32_t> *sched, bool retain_graph) {
             snprintf(tmp, 256, "%s_grad", v->label);
             set_label(v->grad, tmp);
         }
-        std::cout << "Local gradient is " << v->grad << std::endl;
 
         uint32_t edge_id = v->next_fwd;
         while (edge_id) {
             Edge &edge = state.edges[edge_id];
             assert(edge.source == index);
             Variable *v2 = state[edge.target];
-            ad_log(Debug, "Visiting neighboring vertex %u", edge.target);
 
             if (unlikely(edge.special)) {
                 edge.special->forward(v, v2);
+
                 if (!retain_graph) {
                     delete edge.special;
                     edge.special = nullptr;
                 }
             } else {
-                if (is_dynamic_v<Value>) {
-                    if (!v2->is_scalar() || v->is_scalar()) {
-                        if (v2->grad_valid())
-                            v2->grad = fmadd(edge.weight, v->grad, v2->grad);
-                        else
-                            v2->grad = edge.weight * v->grad;
-                    } else {
-                        Value temp = edge.weight * v->grad;
-                        uint32_t temp_size = asize(temp);
-                        if (asize(temp) == 1)
-                            temp *= scalar_t<Value>(v->size);
-                        else
-                            temp = hsum_async(temp);
-
-                        if (v2->grad_valid())
-                            v2->grad += temp;
-                        else
-                            v2->grad = temp;
-                    }
-                } else {
-                    v2->grad = fmadd(edge.weight, v->grad, v2->grad);
-                }
-                std::cout << "Updated target gradient is " << v2->grad << std::endl;
+                v2->mul_accum(edge.weight, v->grad, v->size);
 
                 if (!retain_graph)
                     edge.weight = Value();
@@ -705,11 +850,17 @@ template <typename Value> const char *ad_graphviz() {
                    v->size == 1 ? " [s]" : "",
                    index, v->ref_count_ext, v->ref_count_int, color);
 
-        uint32_t edge = v->next_rev;
+        uint32_t edge = v->next_rev, edge_ctr = 0;
+        while (edge) {
+            edge = state.edges[edge].next_rev;
+            edge_ctr++;
+        }
+
+        edge = v->next_rev;
         while (edge) {
             const Edge &e = state.edges[edge];
             buffer.fmt("  %u -> %u [label=\"%u\"%s];\n", e.target, e.source,
-                       edge, e.special ? " color=red" : "");
+                       edge_ctr--, e.special ? " color=red" : "");
             edge = e.next_rev;
         }
     }
@@ -760,6 +911,8 @@ template <typename T> void ad_set_grad(uint32_t index, const T &value) {
 }
 
 template <typename T> void ad_set_label(uint32_t index, const char *label) {
+    if (index == 0)
+        return;
     std::lock_guard<Mutex> guard(state.mutex);
     Variable *v = state[index];
     if (v->free_label)
@@ -770,6 +923,8 @@ template <typename T> void ad_set_label(uint32_t index, const char *label) {
 }
 
 template <typename T> const char *ad_label(uint32_t index) {
+    if (index == 0)
+        return nullptr;
     std::lock_guard<Mutex> guard(state.mutex);
     return state[index]->label;
 }
@@ -814,6 +969,11 @@ template ENOKI_EXPORT void ad_traverse<Value>(bool, bool);
 template ENOKI_EXPORT const char *ad_graphviz<Value>();
 template ENOKI_EXPORT uint32_t ad_new_select<Value, Mask>(
     const char *, uint32_t, const Mask &, uint32_t, uint32_t);
+template ENOKI_EXPORT uint32_t ad_new_gather<Value, Mask, Index>(
+    const char *, uint32_t, uint32_t, const Index &, const Mask &, bool);
+template ENOKI_EXPORT uint32_t
+ad_new_scatter<Value, Mask, Index>(const char *, uint32_t, uint32_t, uint32_t,
+                                   const Index &, const Mask &, bool, bool);
 
 NAMESPACE_END(detail)
 

@@ -707,7 +707,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
     //! @{ \name Fallback implementations of scatter/gather/load/store ops
     // -----------------------------------------------------------------------
 
-    template <typename Source, typename Index, typename Mask>
+    template <bool Permute, typename Source, typename Index, typename Mask>
     static Derived gather_(Source &&source, const Index &index, const Mask &mask) {
         ENOKI_CHKSCALAR("gather_");
         Derived result;
@@ -723,13 +723,14 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
         }
 
         for (size_t i = 0; i < sr; ++i)
-            result.coeff(i) = gather<Value>(source, index.coeff(sa > 1 ? i : 0),
-                                            mask.coeff(sb > 1 ? i : 0));
+            result.coeff(i) = enoki::gather<Value, Permute>(
+                source, index.coeff(sa > 1 ? i : 0),
+                mask.coeff(sb > 1 ? i : 0));
 
         return result;
     }
 
-    template <typename Target, typename Index, typename Mask>
+    template <bool Permute, typename Target, typename Index, typename Mask>
     void scatter_(Target &&target, const Index &index, const Mask &mask) const {
         ENOKI_CHKSCALAR("scatter_");
 
@@ -737,9 +738,9 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                sd = sa > sb ? sa : sb, sr = sc > sd ? sc : sd;
 
         for (size_t i = 0; i < sr; ++i)
-            scatter(target, derived().coeff(sa > 1 ? i : 0),
-                            index.coeff(sb > 1 ? i : 0),
-                            mask.coeff(sc > 1 ? i : 0));
+            enoki::scatter<Permute>(target, derived().coeff(sa > 1 ? i : 0),
+                                    index.coeff(sb > 1 ? i : 0),
+                                    mask.coeff(sc > 1 ? i : 0));
     }
 
     template <typename Target, typename Index, typename Mask>
@@ -750,9 +751,9 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                sd = sa > sb ? sa : sb, sr = sc > sd ? sc : sd;
 
         for (size_t i = 0; i < sr; ++i)
-            scatter_add(target, derived().coeff(sa > 1 ? i : 0),
-                        index.coeff(sb > 1 ? i : 0),
-                        mask.coeff(sc > 1 ? i : 0));
+            enoki::scatter_add(target, derived().coeff(sa > 1 ? i : 0),
+                               index.coeff(sb > 1 ? i : 0),
+                               mask.coeff(sc > 1 ? i : 0));
     }
 
     static Derived load_(const void *mem, size_t size) {

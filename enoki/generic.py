@@ -509,13 +509,32 @@ def select_(a0, a1, a2):
 # -------------------------------------------------------------------
 
 
-def set_label_(a0, label):
-    if a0.IsJIT:
-        if a0.Depth == 1:
-            a0.set_label_(label)
+def label_(a):
+    if a.IsJIT or a.IsDiff:
+        return [v.label_() for v in a]
+    return None
+
+
+def set_label_(a, label):
+    if a.IsJIT or a.IsDiff:
+        if isinstance(label, tuple) or isinstance(label, list):
+            if len(a) != len(label):
+                raise Exception("Size mismatch!")
+            for i, v in enumerate(a):
+                v.set_label_(label[i])
         else:
-            for i in range(len(a0)):
-                a0[i].set_label_(label + "_%i" % i)
+            for i, v in enumerate(a):
+                v.set_label_(label + "_%i" % i)
+
+
+@property
+def label(a):
+    return a.label_()
+
+
+@label.setter
+def label(a, label):
+    a.set_label_(label)
 
 
 def schedule(a0):
@@ -536,6 +555,33 @@ def eval(a0):
         schedule(a0)
         _ek.detail.jitc_eval()
     return a0
+
+
+@property
+def graphviz_str(a):
+    t = type(a)
+    if t.IsDiff:
+        _ek.ad_schedule(a)
+        while _ek.is_diff_array_v(_ek.value_t(t)):
+            t = t.Value
+        return t.graphviz_()
+    elif _ek.is_jit_array_v(t):
+        return _ek.detail.jitc_graphviz()
+    else:
+        raise Exception('graphviz_str: only variables registered with the '
+                        'JIT (LLVM/CUDA) or AD backend are supported!')
+
+
+@property
+def graphviz(a):
+    try:
+        from graphviz import Source
+        return Source(a.graphviz_str)
+    except ImportError:
+        raise Exception('graphviz Python package not available! Install via '
+                        '"python -m pip install graphviz". Alternatively, you'
+                        'can call enoki.graphviz_str() function to obtain a '
+                        'string representation.')
 
 # -------------------------------------------------------------------
 #           Vertical operations -- transcendental functions
@@ -732,7 +778,10 @@ def grad_(a):
 
     result = a.DetachedType()
     for i in range(len(a)):
-        result[i] = _ek.grad(a[i])
+        g = a[i].grad_()
+        if g is None:
+            return None
+        result[i] = g
     return result
 
 
@@ -742,7 +791,7 @@ def set_grad_(a, grad):
 
     s0, s1 = len(a), len(grad)
     for i in range(s0):
-        _ek.set_grad_(a[i], grad[i if s1 > 1 else 0])
+        a[i].set_grad_(grad[i if s1 > 1 else 0])
 
 
 def value_(a):
@@ -755,63 +804,18 @@ def value_(a):
     return result
 
 
-def requires_grad(a, value=True):
+def requires_grad_(a, value=True):
+    if not a.IsDiff:
+        raise Exception("Expected a differentiable array type!")
     for i in range(len(a)):
-        _ek.requires_grad(a[i], value)
+        a[i] = a[i].requires_grad_(value)
 
 
-def ad_schedule(a, reverse=True):
+def ad_schedule_(a, reverse=True):
+    if not a.IsDiff:
+        raise Exception("Expected a differentiable array type!")
     for i in range(len(a)):
-        _ek.ad_schedule(a[i], reverse)
-
-
-def backward(a, retain_graph=False):
-    a.grad = 1
-    a.ad_schedule(True)
-
-    t = type(a)
-    while _ek.is_diff_array_v(_ek.value_t(t)):
-        t = t.Value
-
-    t.traverse(True, retain_graph)
-
-
-def forward(a, retain_graph=False):
-    a.grad = 1
-    a.ad_schedule(False)
-
-    t = type(a)
-    while _ek.is_diff_array_v(_ek.value_t(t)):
-        t = t.Value
-
-    t.traverse(False, retain_graph)
-
-
-@property
-def graphviz_str(a):
-    t = type(a)
-    if t.IsDiff:
-        _ek.ad_schedule(a)
-        while _ek.is_diff_array_v(_ek.value_t(t)):
-            t = t.Value
-        return t.graphviz_()
-    elif _ek.is_jit_array_v(t):
-        return _ek.detail.jitc_graphviz()
-    else:
-        raise Exception('graphviz_str: only variables registered with the '
-                        'JIT (LLVM/CUDA) or AD backend are supported!')
-
-
-@property
-def graphviz(a):
-    try:
-        from graphviz import Source
-        return Source(a.graphviz_str)
-    except ImportError:
-        raise Exception('graphviz Python package not available! Install via '
-                        '"python -m pip install graphviz". Alternatively, you'
-                        'can call enoki.graphviz_str() function to obtain a '
-                        'string representation.')
+        a[i].ad_schedule_(reverse)
 
 
 @property
@@ -835,6 +839,7 @@ def grad(a, value):
 @property
 def value(a):
     return a.value_()
+
 
 # -------------------------------------------------------------------
 #                      Initialization operations
@@ -902,6 +907,16 @@ def scatter_(self, target, index, mask):
                     index[i if s1 > 1 else 0],
                     mask[i if s2 > 1 else 0])
 
+
+def scatter_add_(self, target, index, mask):
+    assert target.Depth == 1
+    s0, s1, s2 = len(self), len(index), len(mask)
+    sr = max(s0, s1, s2)
+    for i in range(sr):
+        _ek.scatter_add(target,
+                        self[i if s0 > 1 else 0],
+                        index[i if s1 > 1 else 0],
+                        mask[i if s2 > 1 else 0])
 
 # -------------------------------------------------------------------
 #                     Convert to a NumPy array

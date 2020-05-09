@@ -234,16 +234,16 @@ namespace detail {
 
         Value xa = abs(x);
 
-        /* Scale by 4/Pi and get the integer part */
+        // Scale by 4/Pi and get the integer part
         IntArray j(xa * Scalar(1.2732395447351626862));
 
-        /* Map zeros to origin; if (j & 1) j += 1 */
+        // Map zeros to origin; if (j & 1) j += 1
         j = (j + Int(1)) & Int(~1u);
 
-        /* Cast back to a floating point value */
+        // Cast back to a floating point value
         Value y(j);
 
-        /* Extended precision modular arithmetic */
+        // Extended precision modular arithmetic
         if constexpr (Single) {
             y = xa - y * Scalar(0.78515625)
                    - y * Scalar(2.4187564849853515625e-4)

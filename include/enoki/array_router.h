@@ -644,7 +644,7 @@ namespace detail {
     }
 }
 
-template <typename Target, typename Source, typename Index>
+template <typename Target, bool Permute = false, typename Source, typename Index>
 Target gather(Source &&source, const Index &index, const mask_t<Target> &mask = true) {
     if constexpr (is_array_v<Target>) {
         static_assert(std::is_pointer_v<std::decay_t<Source>> || array_depth_v<Source> == 1,
@@ -654,22 +654,26 @@ Target gather(Source &&source, const Index &index, const mask_t<Target> &mask = 
                       "Second argument of gather operation must be an index array!");
 
         if constexpr (array_depth_v<Target> == array_depth_v<Index>) {
-            return Target::gather_(source, index, mask);
+            return Target::template gather_<Permute>(source, index, mask);
         } else {
             using TargetIndex = replace_scalar_t<Target, scalar_t<Index>>;
 
-            return enoki::gather<Target>(source, detail::broadcast_index<TargetIndex>(index), mask);
+            return enoki::gather<Target, Permute>(
+                source, detail::broadcast_index<TargetIndex>(index), mask);
         }
     } else if constexpr (std::is_class_v<Target>) {
         static_assert(struct_support<Target>::Defined, "Missing ENOKI_STRUCT_SUPPORT() declaration?");
-        return struct_support<Target>::gather(source, index, mask);
+        return struct_support<Target>::template gather<Permute>(source, index, mask);
     } else {
         static_assert(std::is_integral_v<Index>, "Index of scalar gather must be an integer!");
-        return mask ? source[index] : Target(0);
+        if constexpr (is_array_v<Source>)
+            return mask ? source[index] : Target(0);
+        else
+            return mask ? ((Target *) source)[index] : Target(0);
     }
 }
 
-template <typename Target, typename Value, typename Index>
+template <bool Permute = false, typename Target, typename Value, typename Index>
 void scatter(Target &&target, const Value &value, const Index &index, const mask_t<Value> &mask = true) {
     if constexpr (is_array_v<Value>) {
         static_assert(std::is_pointer_v<std::decay_t<Target>> || array_depth_v<Target> == 1,
@@ -679,18 +683,23 @@ void scatter(Target &&target, const Value &value, const Index &index, const mask
                       "Second argument of gather operation must be an index array!");
 
         if constexpr (array_depth_v<Value> == array_depth_v<Index>) {
-            value.scatter_(target, index, mask);
+            value.template scatter_<Permute>(target, index, mask);
         } else {
             using TargetIndex = replace_scalar_t<Value, scalar_t<Index>>;
-            enoki::scatter(target, value, detail::broadcast_index<TargetIndex>(index), mask);
+            enoki::scatter<Permute>(target, value,
+                                    detail::broadcast_index<TargetIndex>(index), mask);
         }
     } else if constexpr (std::is_class_v<Value>) {
         static_assert(struct_support<Value>::Defined, "Missing ENOKI_STRUCT_SUPPORT() declaration?");
-        struct_support<Value>::scatter(target, value, index, mask);
+        struct_support<Value>::template scatter<Permute>(target, value, index, mask);
     } else {
         static_assert(std::is_integral_v<Index>, "Index of scalar scatter must be an integer!");
-        if (mask)
-            target[index] = value;
+        if (mask) {
+            if constexpr (is_array_v<Target>)
+                target[index] = value;
+            else
+                ((Value *) target)[index] = value;
+        }
     }
 }
 
@@ -714,8 +723,12 @@ void scatter_add(Target &&target, const Value &value, const Index &index, const 
         struct_support<Value>::scatter_add(target, value, index, mask);
     } else {
         static_assert(std::is_integral_v<Index>, "Index of scalar scatter_add must be an integer!");
-        if (mask)
-            target[index] = value;
+        if (mask) {
+            if constexpr (is_array_v<Target>)
+                target[index] += value;
+            else
+                ((Value *) target)[index] += value;
+        }
     }
 }
 
@@ -786,7 +799,7 @@ template <typename T> ENOKI_INLINE size_t slices(const T &value) {
 }
 
 template <typename T> ENOKI_INLINE auto detach(const T &value) {
-    if constexpr (array_depth_v<T> > 1) {
+    if constexpr (is_diff_array_v<T> && array_depth_v<T> > 1) {
         using ValueGrad = decltype(detach(std::declval<value_t<T>>()));
         using Result = typename T::template ReplaceType<ValueGrad>;
         Result result;
@@ -805,7 +818,7 @@ template <typename T> ENOKI_INLINE auto detach(const T &value) {
 }
 
 template <typename T> ENOKI_INLINE auto grad(const T &value) {
-    if constexpr (array_depth_v<T> > 1) {
+    if constexpr (is_diff_array_v<T> && array_depth_v<T> > 1) {
         using ValueGrad = decltype(grad(std::declval<value_t<T>>()));
         using Result = typename T::template ReplaceType<ValueGrad>;
         Result result;

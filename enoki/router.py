@@ -808,12 +808,18 @@ def mulsign_neg(a, b):
 # -------------------------------------------------------------------
 
 
-def set_label(a, name):
+def label(a):
     if isinstance(a, ArrayBase):
-        a.set_label(name)
-    elif isinstance(a, tuple) or isinstance(a, list):
-        for i, v in enumerate(a):
-            set_label(v, name + "_%i" % i)
+        return a.label_()
+    else:
+        return None
+
+
+def set_label(a, label):
+    if _ek.is_jit_array_v(a) or _ek.is_diff_array_v(a):
+        a.set_label_(label)
+    else:
+        raise Exception("set_label(): only supported for JIT and AD arrays!")
 
 
 def schedule(*args):
@@ -828,6 +834,14 @@ def schedule(*args):
 def eval(*args):
     schedule(*args)
     _ek.detail.jitc_eval()
+
+
+def graphviz_str(a):
+    return a.graphviz_str
+
+
+def graphviz(a):
+    return a.graphviz
 
 
 # -------------------------------------------------------------------
@@ -1140,39 +1154,44 @@ def requires_grad(a, value=True, *args):
         for v in [a, value] + list(args):
             requires_grad(v)
     elif _ek.is_diff_array_v(a):
-        a.requires_grad(value)
+        a.requires_grad_(value)
     else:
         raise Exception("Expected a differentiable array type!")
 
 
 def ad_schedule(a, reverse=True):
     if _ek.is_diff_array_v(a):
-        a.ad_schedule(reverse)
+        a.ad_schedule_(reverse)
     else:
         raise Exception("Expected a differentiable array type!")
 
 
+def traverse(t, reverse=True, retain_graph=False):
+    if not _ek.is_diff_array_v(t):
+        raise Exception('traverse(): expected a differentiable array type!')
+
+    while _ek.is_diff_array_v(_ek.value_t(t)):
+        t = t.Value
+
+    t.traverse_(reverse, retain_graph)
+
+
 def backward(a, retain_graph=False):
     if _ek.is_diff_array_v(a):
-        a.backward(retain_graph)
+        a.grad = 1
+        a.ad_schedule_(True)
+        traverse(type(a), reverse=True, retain_graph=retain_graph)
     else:
         raise Exception("Expected a differentiable array type!")
 
 
 def forward(a, retain_graph=False):
     if _ek.is_diff_array_v(a):
-        a.forward(retain_graph)
+        a.grad = 1
+        a.ad_schedule_(False)
+        traverse(type(a), reverse=False, retain_graph=retain_graph)
     else:
         raise Exception("Expected a differentiable array type!")
-
-
-def graphviz_str(a):
-    return a.graphviz_str()
-
-
-def graphviz(a):
-    return a.graphviz()
-
 
 # -------------------------------------------------------------------
 #                      Initialization operations

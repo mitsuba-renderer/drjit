@@ -15,12 +15,13 @@
 #include <enoki/array.h>
 #include <enoki-jit/jit.h>
 #include <enoki-jit/traits.h>
-#include <iostream>
 
 NAMESPACE_BEGIN(enoki)
 
 template <typename Value_>
 struct LLVMArray : ArrayBaseT<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
+    template <typename> friend struct LLVMArray;
+
     static_assert(std::is_scalar_v<Value_>,
                   "LLVM Arrays can only be created over scalar types!");
 
@@ -63,8 +64,6 @@ struct LLVMArray : ArrayBaseT<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
         static_assert(!std::is_same_v<T, Value>,
                       "Conversion constructor called with arguments that don't "
                       "correspond to a conversion!");
-        static_assert(!std::is_same_v<T, bool>, "Conversion from mask not permitted.");
-
         const char *op;
         if constexpr (std::is_floating_point_v<Value> && std::is_integral_v<T>) {
             op = std::is_signed_v<T> ? "$r0 = sitofp <$w x $t1> $r1 to <$w x $t0>"
@@ -76,12 +75,15 @@ struct LLVMArray : ArrayBaseT<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
             op = sizeof(T) > sizeof(Value) ? "$r0 = fptrunc <$w x $t1> $r1 to <$w x $t0>"
                                            : "$r0 = fpext <$w x $t1> $r1 to <$w x $t0>";
         } else if constexpr (std::is_integral_v<T> && std::is_integral_v<Value>) {
-            if constexpr (sizeof(T) == sizeof(Value)) {
+            constexpr size_t size_1 = std::is_same_v<T,     bool> ? 0 : sizeof(T),
+                             size_2 = std::is_same_v<Value, bool> ? 0 : sizeof(Value);
+
+            if constexpr (size_1 == size_2) {
                 m_index = v.index();
                 jitc_var_inc_ref_ext(m_index);
                 return;
             } else {
-                op = sizeof(T) > sizeof(Value)
+                op = size_1 > size_2
                          ? "$r0 = trunc <$w x $t1> $r1 to <$w x $t0>"
                          : (std::is_signed_v<T>
                                 ? "$r0 = sext <$w x $t1> $r1 to <$w x $t0>"
@@ -319,6 +321,13 @@ struct LLVMArray : ArrayBaseT<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
     }
 
     LLVMArray not_() const {
+        if constexpr (std::is_same_v<Value, bool>) {
+            if (is_literal_one())
+                return LLVMArray(false);
+            else if (is_literal_zero())
+                return LLVMArray(true);
+        }
+
         const char *op = std::is_integral_v<Value>
                              ? "$r0 = xor <$w x $t1> $r1, $o0"
                              : "$r0_0 = bitcast <$w x $t1> $r1 to <$w x $b0>$n"
@@ -897,29 +906,33 @@ private:
     void scatter_impl_(void *dst, uint32_t dst_index,
                        const LLVMArray<Index> &index,
                        const LLVMArray<bool> &mask = true) const {
-        LLVMArray<void *> base = LLVMArray<void *>::from_index(
-            jitc_var_copy_ptr(dst, dst_index));
-
-        uint32_t var;
-        if (mask.is_literal_one()) {
-            var = jitc_var_new_3(
-                VarType::Invalid,
-                "$r0_0 = bitcast $t1 $r1 to $t2*$n"
-                "$r0_1 = getelementptr $t2, $t2* $r0_0, <$w x $t3> $r3$n"
-                "call void @llvm.masked.scatter.v$w$a2"
-                "(<$w x $t2> $r2, <$w x $t2*> $r0$S_1, i32 $s1, <$w x i1> $O)",
-                1, 0, base.index(), m_index, index.index());
+        if (std::is_same<Value, bool>::value) {
+            LLVMArray<uint8_t>(*this).scatter_impl_(dst, dst_index, index, mask);
         } else {
-            var = jitc_var_new_4(
-                VarType::Invalid,
-                "$r0_0 = bitcast $t1 $r1 to $t2*$n"
-                "$r0_1 = getelementptr $t2, $t2* $r0_0, <$w x $t3> $r3$n"
-                "call void @llvm.masked.scatter.v$w$a2"
-                "(<$w x $t2> $r2, <$w x $t2*> $r0$S_1, i32 $s1, <$w x $t4> $r4)",
-                1, 0, base.index(), m_index, index.index(), mask.index());
-        }
+            LLVMArray<void *> base = LLVMArray<void *>::from_index(
+                jitc_var_copy_ptr(dst, dst_index));
 
-        jitc_var_mark_scatter(var, dst_index);
+            uint32_t var;
+            if (mask.is_literal_one()) {
+                var = jitc_var_new_3(
+                    VarType::Invalid,
+                    "$r0_0 = bitcast $t1 $r1 to $t2*$n"
+                    "$r0_1 = getelementptr $t2, $t2* $r0_0, <$w x $t3> $r3$n"
+                    "call void @llvm.masked.scatter.v$w$a2"
+                    "(<$w x $t2> $r2, <$w x $t2*> $r0$S_1, i32 $s1, <$w x i1> $O)",
+                    1, 0, base.index(), m_index, index.index());
+            } else {
+                var = jitc_var_new_4(
+                    VarType::Invalid,
+                    "$r0_0 = bitcast $t1 $r1 to $t2*$n"
+                    "$r0_1 = getelementptr $t2, $t2* $r0_0, <$w x $t3> $r3$n"
+                    "call void @llvm.masked.scatter.v$w$a2"
+                    "(<$w x $t2> $r2, <$w x $t2*> $r0$S_1, i32 $s1, <$w x $t4> $r4)",
+                    1, 0, base.index(), m_index, index.index(), mask.index());
+            }
+
+            jitc_var_mark_scatter(var, dst_index);
+        }
     }
 
     template <typename Index>
@@ -974,7 +987,7 @@ private:
     }
 
 public:
-    template <typename Index>
+    template <bool, typename Index>
     static LLVMArray gather_(const void *src, const LLVMArray<Index> &index,
                              const LLVMArray<bool> &mask = true) {
         if (mask.is_literal_zero())
@@ -983,17 +996,19 @@ public:
         return gather_impl_(src, 0, index, mask);
     }
 
-    template <typename Index>
+    template <bool, typename Index>
     static LLVMArray gather_(const LLVMArray &src, const LLVMArray<Index> &index,
                              const LLVMArray<bool> &mask = true) {
         if (mask.is_literal_zero())
             return Value(0);
+        else if (src.size() == 1)
+            return src & mask;
 
         src.eval();
         return gather_impl_(src.data(), src.index(), index, mask);
     }
 
-    template <typename Index>
+    template <bool, typename Index>
     void scatter_(void *dst, const LLVMArray<Index> &index,
                   const LLVMArray<bool> &mask = true) const {
         if (mask.is_literal_zero())
@@ -1002,7 +1017,7 @@ public:
         scatter_impl_(dst, 0, index, mask);
     }
 
-    template <typename Index>
+    template <bool, typename Index>
     void scatter_(LLVMArray &dst, const LLVMArray<Index> &index,
                   const LLVMArray<bool> &mask = true) const {
         if (mask.is_literal_zero())
@@ -1111,6 +1126,12 @@ public:
         jitc_var_write(m_index, offset, &value);
     }
 
+    void resize(size_t size) {
+        uint32_t index = jitc_var_set_size(m_index, (uint32_t) size);
+        jitc_var_dec_ref_ext(m_index);
+        m_index = index;
+    }
+
     void migrate(AllocType type) {
         jitc_var_migrate(m_index, type);
     }
@@ -1203,8 +1224,8 @@ protected:
 
 #if defined(ENOKI_AUTODIFF_H)
 NAMESPACE_BEGIN(detail)
-ENOKI_DECLARE_EXTERN_TEMPLATE(LLVMArray<float>, LLVMArray<bool>)
-ENOKI_DECLARE_EXTERN_TEMPLATE(LLVMArray<double>, LLVMArray<bool>)
+ENOKI_DECLARE_EXTERN_TEMPLATE(LLVMArray<float>, LLVMArray<bool>, LLVMArray<uint32_t>)
+ENOKI_DECLARE_EXTERN_TEMPLATE(LLVMArray<double>, LLVMArray<bool>, LLVMArray<uint32_t>)
 NAMESPACE_END(detail)
 #endif
 

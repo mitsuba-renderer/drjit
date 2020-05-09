@@ -277,6 +277,12 @@ struct CUDAArray : ArrayBaseT<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
     }
 
     CUDAArray not_() const {
+        if constexpr (std::is_same_v<Value, bool>) {
+            if (is_literal_one())
+                return CUDAArray(false);
+            else if (is_literal_zero())
+                return CUDAArray(true);
+        }
         return from_index(jitc_var_new_1(Type, "not.$b0 $r0, $r1", 1, 1, m_index));
     }
 
@@ -896,7 +902,7 @@ private:
     }
 
 public:
-    template <typename Index>
+    template <bool, typename Index>
     static CUDAArray gather_(const void *src, const CUDAArray<Index> &index,
                              const CUDAArray<bool> &mask = true) {
         if (mask.is_literal_zero())
@@ -905,17 +911,19 @@ public:
         return gather_impl_(src, 0, index, mask);
     }
 
-    template <typename Index>
+    template <bool, typename Index>
     static CUDAArray gather_(const CUDAArray &src, const CUDAArray<Index> &index,
                              const CUDAArray<bool> &mask = true) {
         if (mask.is_literal_zero())
             return Value(0);
+        else if (src.size() == 1)
+            return src & mask;
 
         src.eval();
         return gather_impl_(src.data(), src.index(), index, mask);
     }
 
-    template <typename Index>
+    template <bool, typename Index>
     void scatter_(void *dst, const CUDAArray<Index> &index,
                   const CUDAArray<bool> &mask = true) const {
         if (mask.is_literal_zero())
@@ -924,12 +932,13 @@ public:
         scatter_impl_(dst, 0, index, mask);
     }
 
-    template <typename Index>
+    template <bool, typename Index>
     void scatter_(CUDAArray &dst, const CUDAArray<Index> &index,
                   const CUDAArray<bool> &mask = true) const {
         if (mask.is_literal_zero())
             return;
 
+        fprintf(stderr, "In array scatter impl..\n");
         void *ptr = dst.data();
 
         if (!ptr) {
@@ -1030,6 +1039,12 @@ public:
         jitc_var_write(m_index, offset, &value);
     }
 
+    void resize(size_t size) {
+        uint32_t index = jitc_var_set_size(m_index, (uint32_t) size);
+        jitc_var_dec_ref_ext(m_index);
+        m_index = index;
+    }
+
     void migrate(AllocType type) {
         jitc_var_migrate(m_index, type);
     }
@@ -1115,8 +1130,8 @@ protected:
 
 #if defined(ENOKI_AUTODIFF_H)
 NAMESPACE_BEGIN(detail)
-ENOKI_DECLARE_EXTERN_TEMPLATE(CUDAArray<float>, CUDAArray<bool>)
-ENOKI_DECLARE_EXTERN_TEMPLATE(CUDAArray<double>, CUDAArray<bool>)
+ENOKI_DECLARE_EXTERN_TEMPLATE(CUDAArray<float>, CUDAArray<bool>, CUDAArray<uint32_t>)
+ENOKI_DECLARE_EXTERN_TEMPLATE(CUDAArray<double>, CUDAArray<bool>, CUDAArray<uint32_t>)
 NAMESPACE_END(detail)
 #endif
 

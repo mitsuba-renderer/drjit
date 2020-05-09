@@ -14,7 +14,6 @@
 #pragma once
 
 #include <enoki/array.h>
-#include <iostream>
 
 NAMESPACE_BEGIN(enoki)
 
