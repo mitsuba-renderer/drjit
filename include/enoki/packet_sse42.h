@@ -127,10 +127,10 @@ template <bool IsMask_, typename Derived_> struct alignas(16)
     // -----------------------------------------------------------------------
 
     StaticArrayImpl(const Array1 &a1, const Array2 &a2)
-        : m(_mm_setr_ps(a1.coeff(0), a1.coeff(1), a2.coeff(0), a2.coeff(1))) { }
+        : m(_mm_setr_ps(a1.entry(0), a1.entry(1), a2.entry(0), a2.entry(1))) { }
 
-    ENOKI_INLINE Array1 low_()  const { return Array1(coeff(0), coeff(1)); }
-    ENOKI_INLINE Array2 high_() const { return Array2(coeff(2), coeff(3)); }
+    ENOKI_INLINE Array1 low_()  const { return Array1(entry(0), entry(1)); }
+    ENOKI_INLINE Array2 high_() const { return Array2(entry(2), entry(3)); }
 
     //! @}
     // -----------------------------------------------------------------------
@@ -432,18 +432,6 @@ template <bool IsMask_, typename Derived_> struct alignas(16)
     }
 #endif
 
-#if 0 // XXX
-    template <typename Mask>
-    ENOKI_INLINE Value extract_(const Mask &mask) const {
-        #if !defined(ENOKI_X86_AVX512)
-            unsigned int k = (unsigned int) _mm_movemask_ps(mask.m);
-            return coeff((size_t) (detail::tzcnt_scalar(k) & 3));
-        #else
-            return _mm_cvtss_f32(_mm_mask_compress_ps(_mm_setzero_ps(), mask.k, m));
-        #endif
-    }
-#endif
-
     //! @}
     // -----------------------------------------------------------------------
 } ENOKI_MAY_ALIAS;
@@ -509,7 +497,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(16)
 #else
             ENOKI_TRACK_SCALAR("Constructor (converting, double[4] -> uint32[4])");
             for (size_t i = 0; i < Size; ++i)
-                coeff(i) = Value(a.derived().coeff(i));
+                entry(i) = Value(a.derived().entry(i));
 #endif
         }
     }
@@ -569,11 +557,11 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(16)
     // -----------------------------------------------------------------------
 
     StaticArrayImpl(const Array1 &a1, const Array2 &a2)
-        : m(_mm_setr_epi32((int32_t) a1.coeff(0), (int32_t) a1.coeff(1),
-                           (int32_t) a2.coeff(0), (int32_t) a2.coeff(1))) { }
+        : m(_mm_setr_epi32((int32_t) a1.entry(0), (int32_t) a1.entry(1),
+                           (int32_t) a2.entry(0), (int32_t) a2.entry(1))) { }
 
-    ENOKI_INLINE Array1 low_()  const { return Array1(coeff(0), coeff(1)); }
-    ENOKI_INLINE Array2 high_() const { return Array2(coeff(2), coeff(3)); }
+    ENOKI_INLINE Array1 low_()  const { return Array1(entry(0), entry(1)); }
+    ENOKI_INLINE Array2 high_() const { return Array2(entry(2), entry(3)); }
 
     //! @}
     // -----------------------------------------------------------------------
@@ -877,18 +865,6 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(16)
     }
 #endif
 
-#if 0 // XXX
-    template <typename Mask>
-    ENOKI_INLINE Value extract_(const Mask &mask) const {
-        #if !defined(ENOKI_X86_AVX512)
-            unsigned int k = (unsigned int) _mm_movemask_ps(_mm_castsi128_ps(mask.m));
-            return coeff((size_t) (detail::tzcnt_scalar(k) & 3));
-        #else
-            return (Value) _mm_cvtsi128_si32(_mm_mask_compress_epi32(_mm_setzero_si128(), mask.k, m));
-        #endif
-    }
-#endif
-
     //! @}
     // -----------------------------------------------------------------------
 } ENOKI_MAY_ALIAS;
@@ -940,19 +916,19 @@ template <bool IsMask_, typename Derived_> struct alignas(16)
 
     ENOKI_REINTERPRET_MASK(float) {
         ENOKI_TRACK_SCALAR("Constructor (reinterpreting, float32[2] -> double[2])");
-        auto v0 = a.derived().coeff(0), v1 = a.derived().coeff(1);
+        auto v0 = a.derived().entry(0), v1 = a.derived().entry(1);
         m = _mm_castps_pd(_mm_setr_ps(v0, v0, v1, v1));
     }
 
     ENOKI_REINTERPRET_MASK(int32_t) {
         ENOKI_TRACK_SCALAR("Constructor (reinterpreting, int32[2] -> double[2])");
-        auto v0 = a.derived().coeff(0), v1 = a.derived().coeff(1);
+        auto v0 = a.derived().entry(0), v1 = a.derived().entry(1);
         m = _mm_castsi128_pd(_mm_setr_epi32(v0, v0, v1, v1));
     }
 
     ENOKI_REINTERPRET_MASK(uint32_t) {
         ENOKI_TRACK_SCALAR("Constructor (reinterpreting, uint32[2] -> double[2])");
-        auto v0 = a.derived().coeff(0), v1 = a.derived().coeff(1);
+        auto v0 = a.derived().entry(0), v1 = a.derived().entry(1);
         m = _mm_castsi128_pd(_mm_setr_epi32((int32_t) v0, (int32_t) v0,
                                             (int32_t) v1, (int32_t) v1));
     }
@@ -969,10 +945,10 @@ template <bool IsMask_, typename Derived_> struct alignas(16)
     // -----------------------------------------------------------------------
 
     StaticArrayImpl(const Array1 &a1, const Array2 &a2)
-        : m(_mm_setr_pd(a1.coeff(0), a2.coeff(0))) { }
+        : m(_mm_setr_pd(a1.entry(0), a2.entry(0))) { }
 
-    ENOKI_INLINE Array1 low_()  const { return Array1(coeff(0)); }
-    ENOKI_INLINE Array2 high_() const { return Array2(coeff(1)); }
+    ENOKI_INLINE Array1 low_()  const { return Array1(entry(0)); }
+    ENOKI_INLINE Array2 high_() const { return Array2(entry(1)); }
 
     //! @}
     // -----------------------------------------------------------------------
@@ -1323,19 +1299,19 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(16)
 
     ENOKI_REINTERPRET_MASK(float) {
         ENOKI_TRACK_SCALAR("Constructor (reinterpreting, float32[2] -> int64[2])");
-        auto v0 = a.derived().coeff(0), v1 = a.derived().coeff(1);
+        auto v0 = a.derived().entry(0), v1 = a.derived().entry(1);
         m = _mm_castps_si128(_mm_setr_ps(v0, v0, v1, v1));
     }
 
     ENOKI_REINTERPRET_MASK(int32_t) {
         ENOKI_TRACK_SCALAR("Constructor (reinterpreting, int32[2] -> int64[2])");
-        auto v0 = a.derived().coeff(0), v1 = a.derived().coeff(1);
+        auto v0 = a.derived().entry(0), v1 = a.derived().entry(1);
         m = _mm_setr_epi32(v0, v0, v1, v1);
     }
 
     ENOKI_REINTERPRET_MASK(uint32_t) {
         ENOKI_TRACK_SCALAR("Constructor (reinterpreting, uint32[2] -> int64[2])");
-        auto v0 = a.derived().coeff(0), v1 = a.derived().coeff(1);
+        auto v0 = a.derived().entry(0), v1 = a.derived().entry(1);
         m = _mm_setr_epi32((int32_t) v0, (int32_t) v0, (int32_t) v1,
                            (int32_t) v1);
     }
@@ -1353,13 +1329,13 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(16)
 
     StaticArrayImpl(const Array1 &a1, const Array2 &a2) {
         alignas(16) Value data[2];
-        data[0] = (Value) a1.coeff(0);
-        data[1] = (Value) a2.coeff(0);
+        data[0] = (Value) a1.entry(0);
+        data[1] = (Value) a2.entry(0);
         m = _mm_load_si128((__m128i *) data);
     }
 
-    ENOKI_INLINE Array1 low_()  const { return Array1(coeff(0)); }
-    ENOKI_INLINE Array2 high_() const { return Array2(coeff(1)); }
+    ENOKI_INLINE Array1 low_()  const { return Array1(entry(0)); }
+    ENOKI_INLINE Array2 high_() const { return Array2(entry(1)); }
 
     //! @}
     // -----------------------------------------------------------------------

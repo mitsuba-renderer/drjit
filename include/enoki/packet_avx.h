@@ -452,18 +452,6 @@ template <bool IsMask_, typename Derived_> struct alignas(32)
     }
 #endif
 
-#if 0
-    template <typename Mask>
-    ENOKI_INLINE Value extract_(const Mask &mask) const {
-        #if !defined(ENOKI_X86_AVX512)
-            unsigned int k = (unsigned int) _mm256_movemask_ps(mask.m);
-            return coeff((size_t) (tzcnt(k) & 7));
-        #else
-            return _mm256_cvtss_f32(_mm256_mask_compress_ps(_mm256_setzero_ps(), mask.k, m));
-        #endif
-    }
-#endif
-
     //! @}
     // -----------------------------------------------------------------------
 } ENOKI_MAY_ALIAS;
@@ -819,12 +807,6 @@ template <bool IsMask_, typename Derived_> struct alignas(32)
         else
             _mm256_mask_i64scatter_pd(ptr, mask.k, index.m, m, 8);
     }
-
-    template <typename Mask>
-    ENOKI_INLINE Value extract_(const Mask &mask) const {
-        return _mm256_cvtsd_f64(_mm256_mask_compress_pd(_mm256_setzero_pd(), mask.k, m));
-    }
-
 #endif
 
     //! @}

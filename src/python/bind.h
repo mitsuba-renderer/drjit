@@ -38,22 +38,15 @@ template <typename Array>
 void bind_basic_methods(py::class_<Array, ek::ArrayBase> &cls) {
     using Value = std::conditional_t<Array::IsMask, ek::mask_t<ek::value_t<Array>>,
                                      ek::value_t<Array>>;
-    if (hasattr(cls, "coeff"))
+    if (hasattr(cls, "entry"))
         return;
 
     cls.def("__len__", &Array::size)
-       .def("coeff", [](const Array &a, size_t i) -> Value { return a.coeff(i); })
+       .def("entry", [](const Array &a, size_t i) -> Value { return a.entry(i); })
+       .def("set_entry", [](Array &a, size_t i, const Value &value) {
+           a.set_entry(i, value);
+       })
        .def_static("empty_", &Array::empty_);
-
-    if constexpr (ek::is_jit_array_v<Array> && ek::array_depth_v<Array> == 1) {
-       cls.def("set_coeff", [](Array &a, size_t i, const Value &value) {
-           a.write(i, value);
-       });
-    } else {
-       cls.def("set_coeff", [](Array &a, size_t i, const Value &value) {
-           a.coeff(i) = value;
-       });
-    }
 }
 
 template <typename Array>

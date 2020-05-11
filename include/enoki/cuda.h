@@ -15,6 +15,7 @@
 #include <enoki/array.h>
 #include <enoki-jit/jit.h>
 #include <enoki-jit/traits.h>
+#include <vector>
 
 NAMESPACE_BEGIN(enoki)
 
@@ -34,10 +35,20 @@ struct CUDAArray : ArrayBaseT<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
     static constexpr bool IsCUDA = true;
     static constexpr bool IsJIT = true;
     static constexpr bool IsDynamic = true;
-    static constexpr VarType Type = var_type_v<Value>;
     static constexpr size_t Size = Dynamic;
+    static constexpr bool IsClass =
+        std::is_pointer_v<Value_> &&
+        std::is_class_v<std::remove_pointer_t<Value_>>;
+
+    static constexpr VarType Type =
+        IsClass ? VarType::UInt32 : var_type_v<Value>;
+
+    using ActualValue = std::conditional_t<IsClass, uint32_t, Value>;
+    using CallSupport =
+        call_support<std::decay_t<std::remove_pointer_t<Value_>>, CUDAArray>;
 
     template <typename T> using ReplaceValue = CUDAArray<T>;
+
 
     //! @}
     // -----------------------------------------------------------------------
@@ -66,14 +77,20 @@ struct CUDAArray : ArrayBaseT<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
         const char *op;
 
         if constexpr (std::is_floating_point_v<Value> &&
-                      std::is_floating_point_v<T> && sizeof(Value) > sizeof(T))
+                      std::is_floating_point_v<T> && sizeof(Value) > sizeof(T)) {
             op = "cvt.$t0.$t1 $r0, $r1";
-        else if constexpr (std::is_floating_point_v<Value>)
-            op = "cvt.rn.$t0.$t1 $r0, $r1";
-        else if constexpr (std::is_floating_point_v<T> && std::is_integral_v<Value>)
-            op = "cvt.rzi.$t0.$t1 $r0, $r1";
-        else
+        } else if constexpr (std::is_floating_point_v<Value>) {
+                op = "cvt.rn.$t0.$t1 $r0, $r1";
+        } else if constexpr (std::is_floating_point_v<T> && std::is_integral_v<Value>) {
+                op = "cvt.rzi.$t0.$t1 $r0, $r1";
+        } else {
+            if constexpr (sizeof(T) == sizeof(Value)) {
+                m_index = v.index();
+                jitc_var_inc_ref_ext(m_index);
+                return;
+            }
             op = "cvt.$t0.$t1 $r0, $r1";
+        }
 
         m_index = jitc_var_new_1(Type, op, 1, 1, v.index());
     }
@@ -92,15 +109,28 @@ struct CUDAArray : ArrayBaseT<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
     }
 
     CUDAArray(Value value) {
-        m_index = mkfull_(value, 1);
+        if constexpr (!IsClass) {
+            uint64_t tmp = 0;
+            memcpy(&tmp, &value, sizeof(Value));
+            m_index = jitc_var_new_literal(Type, 1, tmp, 1);
+        } else {
+            m_index = jitc_var_new_literal(
+                Type, 1, (uint64_t) jitc_registry_get_id(value), 1);
+        }
     }
 
     template <typename... Ts, enable_if_t<(sizeof...(Ts) > 1 &&
               (!std::is_same_v<Ts, detail::reinterpret_flag> && ...))> = 0>
     CUDAArray(Ts&&... ts) {
-        Value data[] = { (Value) ts... };
-        m_index = jitc_var_copy(AllocType::Host, Type, 1, data,
-                                (uint32_t) sizeof...(Ts));
+        if constexpr (!IsClass) {
+            Value data[] = { (Value) ts... };
+            m_index = jitc_var_copy(AllocType::Host, Type, 1, data,
+                                    (uint32_t) sizeof...(Ts));
+        } else {
+            uint32_t data[] = { jitc_registry_get_id(ts)... };
+            m_index = jitc_var_copy(AllocType::Host, Type, 1, data,
+                                    (uint32_t) sizeof...(Ts));
+        }
     }
 
     CUDAArray &operator=(const CUDAArray &a) {
@@ -679,7 +709,7 @@ struct CUDAArray : ArrayBaseT<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
             jitc_reduce(Type, op, data(), (uint32_t) size(), result.data());  \
             return result;                                                    \
         }                                                                     \
-        Value name##_() const { return name##_async_().coeff(0); }
+        Value name##_() const { return name##_async_().entry(0); }
 
     ENOKI_HORIZONTAL_OP(hsum,  ReductionType::Add)
     ENOKI_HORIZONTAL_OP(hprod, ReductionType::Mul)
@@ -704,23 +734,27 @@ struct CUDAArray : ArrayBaseT<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
     // -----------------------------------------------------------------------
 
     static CUDAArray empty_(size_t size) {
-        if (size == 0)
-            return CUDAArray();
-        size_t byte_size = size * sizeof(Value);
-        void *ptr = jitc_malloc(AllocType::Device, byte_size);
+        void *ptr = jitc_malloc(AllocType::Device, size * sizeof(Value));
         return from_index(jitc_var_map(Type, 1, ptr, (uint32_t) size, 1));
     }
 
     static CUDAArray zero_(size_t size) {
-        if (size == 0)
-            return CUDAArray();
-        return from_index(mkfull_(Value(0), (uint32_t) size));
+        return from_index(jitc_var_new_literal(Type, 1, 0, (uint32_t) size));
     }
 
     static CUDAArray full_(Value value, size_t size) {
-        if (size == 0)
-            return CUDAArray();
-        return from_index(mkfull_(value, (uint32_t) size));
+        uint32_t index;
+
+        if constexpr (!IsClass) {
+            uint64_t tmp = 0;
+            memcpy(&tmp, &value, sizeof(Value));
+            index = jitc_var_new_literal(Type, 1, tmp, (uint32_t) size);
+        } else {
+            index = jitc_var_new_literal(
+                Type, 1, (uint64_t) jitc_registry_get_id(value), (uint32_t) size);
+        }
+
+        return from_index(index);
     }
 
     static CUDAArray arange_(ssize_t start, ssize_t stop, ssize_t step) {
@@ -938,7 +972,6 @@ public:
         if (mask.is_literal_zero())
             return;
 
-        fprintf(stderr, "In array scatter impl..\n");
         void *ptr = dst.data();
 
         if (!ptr) {
@@ -992,6 +1025,26 @@ public:
     //! @{ \name Miscellaneous
     // -----------------------------------------------------------------------
 
+    std::vector<std::pair<void *, CUDAArray<uint32_t>>> vcall_() const {
+        if constexpr (!IsClass) {
+            enoki_raise("Unsupported operand type");
+        } else {
+            uint32_t bucket_count = 0;
+            VCallBucket *buckets =
+                jitc_vcall(CallSupport::Domain, m_index, &bucket_count);
+
+            std::vector<std::pair<void *, CUDAArray<uint32_t>>> result;
+            result.reserve(bucket_count);
+            for (uint32_t i = 0; i < bucket_count; ++i) {
+                jitc_var_inc_ref_ext(buckets[i].index);
+                result.emplace_back(buckets[i].ptr,
+                                    CUDAArray<uint32_t>::from_index(buckets[i].index));
+            }
+
+            return result;
+        }
+    }
+
     CUDAArray& schedule() {
         jitc_var_schedule(m_index);
         return *this;
@@ -1022,13 +1075,17 @@ public:
     bool is_literal_one() const { return (bool) jitc_var_is_literal_one(m_index); }
     bool is_literal_zero() const { return (bool) jitc_var_is_literal_zero(m_index); }
 
-    Value coeff(size_t offset) const {
-        Value out;
+    Value entry(size_t offset) const {
+        ActualValue out;
         jitc_var_read(m_index, (uint32_t) offset, &out);
-        return out;
+
+        if constexpr (!IsClass)
+            return out;
+        else
+            return (Value) jitc_registry_get_ptr(CallSupport::Domain, out);
     }
 
-    void write(uint32_t offset, Value value) {
+    void set_entry(uint32_t offset, Value value) {
         if (jitc_var_int_ref(m_index) > 0) {
             eval();
             *this = CUDAArray::from_index(
@@ -1036,7 +1093,12 @@ public:
                               data(), (uint32_t) size()));
         }
 
-        jitc_var_write(m_index, offset, &value);
+        if constexpr (!IsClass) {
+            jitc_var_write(m_index, offset, &value);
+        } else {
+            ActualValue av = jitc_registry_get_id(value);
+            jitc_var_write(m_index, offset, &av);
+        }
     }
 
     void resize(size_t size) {
@@ -1057,6 +1119,10 @@ public:
         return jitc_var_label(m_index);
     }
 
+    const CallSupport operator->() const {
+        return CallSupport(*this);
+    }
+
     //! @}
     // -----------------------------------------------------------------------
 
@@ -1066,7 +1132,7 @@ public:
         return result;
     }
 
-    static uint32_t mkfull_(Value value, uint32_t size) {
+    static uint32_t mkfull_(ActualValue value, uint32_t size) {
         const char *fmt = nullptr;
 
         switch (Type) {
@@ -1112,9 +1178,9 @@ public:
                 break;
         }
 
-        uint_array_t<Value> value_uint;
+        uint_array_t<ActualValue> value_uint;
         char value_str[48];
-        memcpy(&value_uint, &value, sizeof(Value));
+        memcpy(&value_uint, &value, sizeof(ActualValue));
         snprintf(value_str, 48, fmt, value_uint);
 
         return jitc_var_new_0(Type, value_str, 0, 1, size);

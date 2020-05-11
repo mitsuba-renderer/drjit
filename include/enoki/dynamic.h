@@ -35,7 +35,7 @@ struct DynamicArray
     template <typename T> using ReplaceValue = DynamicArray<T>;
 
     using Base::Base;
-    using Base::coeff;
+    using Base::entry;
 
     DynamicArray() = default;
 
@@ -59,7 +59,7 @@ struct DynamicArray
         size_t size = v.derived().size();
         init_(size);
         for (size_t i = 0; i < size; ++i)
-            m_data[i] = (Value) v.derived().coeff(i);
+            m_data[i] = (Value) v.derived().entry(i);
     }
 
     template <typename Value2, typename Derived2>
@@ -68,7 +68,7 @@ struct DynamicArray
         size_t size = v.derived().size();
         init_(size);
         for (size_t i = 0; i < size; ++i)
-            m_data[i] = reinterpret_array<Value>(v.derived().coeff(i));
+            m_data[i] = reinterpret_array<Value>(v.derived().entry(i));
     }
 
     DynamicArray(const Value &v) {
@@ -120,8 +120,8 @@ struct DynamicArray
 
     ENOKI_INLINE size_t size() const { return m_size; }
 
-    ENOKI_INLINE Value &coeff(size_t i) { return m_data[i]; }
-    ENOKI_INLINE const Value &coeff(size_t i) const { return m_data[i]; }
+    ENOKI_INLINE Value &entry(size_t i) { return m_data[i]; }
+    ENOKI_INLINE const Value &entry(size_t i) const { return m_data[i]; }
 
     static DynamicArray empty_(size_t size) {
         DynamicArray result;
@@ -134,7 +134,7 @@ struct DynamicArray
         result.init_(size);
 
         for (size_t i = 0; i < size; ++i)
-            result.coeff(i) = zero<Value>();
+            result.entry(i) = zero<Value>();
 
         return result;
     }
@@ -144,7 +144,7 @@ struct DynamicArray
         result.init_(size);
 
         for (size_t i = 0; i < size; ++i)
-            result.coeff(i) = v;
+            result.entry(i) = v;
 
         return result;
     }
@@ -155,7 +155,7 @@ struct DynamicArray
         result.init_(size);
 
         for (size_t i = 0; i < size; ++i)
-            result.coeff(i) = (Scalar) ((ssize_t) start + (ssize_t) i * step);
+            result.entry(i) = (Scalar) ((ssize_t) start + (ssize_t) i * step);
 
         return result;
     }
@@ -168,9 +168,9 @@ struct DynamicArray
 
         for (size_t i = 0; i < size; ++i) {
             if constexpr (std::is_floating_point_v<Scalar>)
-                result.coeff(i) = fmadd(Scalar(i), step, min);
+                result.entry(i) = fmadd(Scalar(i), step, min);
             else
-                result.coeff(i) = Scalar(i) * step + min;
+                result.entry(i) = Scalar(i) * step + min;
         }
 
         return result;

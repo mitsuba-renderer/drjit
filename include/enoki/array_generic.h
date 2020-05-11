@@ -39,7 +39,7 @@ namespace detail {
     template <typename Type>
     constexpr bool vectorizable_type_v = std::is_same_v<Type, float> ||
                                          std::is_same_v<Type, double> ||
-                                         (std::is_integral_v<Type> &&
+                                         (is_integral_ext_v<Type> &&
                                           (sizeof(Type) == 4 || sizeof(Type) == 8));
 
     template <typename Type, size_t Size>
@@ -80,7 +80,7 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
 
     using Base::Size;
     using Base::derived;
-    using Base::coeff;
+    using Base::entry;
 
     ENOKI_ARRAY_DEFAULTS(StaticArrayImpl)
     ENOKI_ARRAY_FALLBACK_CONSTRUCTORS(StaticArrayImpl)
@@ -117,10 +117,10 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
                                   std::make_index_sequence<Base::Size2>()) { }
 
     /// Access elements by reference, and without error-checking
-    ENOKI_INLINE Value &coeff(size_t i) { return m_data[i]; }
+    ENOKI_INLINE Value &entry(size_t i) { return m_data[i]; }
 
     /// Access elements by reference, and without error-checking (const)
-    ENOKI_INLINE const Value &coeff(size_t i) const { return m_data[i]; }
+    ENOKI_INLINE const Value &entry(size_t i) const { return m_data[i]; }
 
     /// Pointer to the underlying storage
     Value *data() { return m_data; }
@@ -142,10 +142,10 @@ struct StaticArrayImpl<Value_, 0, IsMask_, Derived_>
                         IsMask_, Derived_>;
 
     using typename Base::Value;
-    using Base::coeff;
+    using Base::entry;
 
-    Value &coeff(size_t i) { return *data(); }
-    const Value &coeff(size_t i) const { return *data(); }
+    Value &entry(size_t i) { return *data(); }
+    const Value &entry(size_t i) const { return *data(); }
 
     /// Pointer to the underlying storage (returns \c nullptr)
     Value *data() { return nullptr; }
@@ -182,7 +182,7 @@ namespace detail {
                 if (size == 0)
                     put_shape<value_t<T>>(shape + 1);
                 else
-                    put_shape(array.derived().coeff(0), shape + 1);
+                    put_shape(array.derived().entry(0), shape + 1);
             }
         }
     }
@@ -198,7 +198,7 @@ namespace detail {
             if constexpr (is_dynamic_v<T>) {
                 bool match = false;
                 for (size_t i = 0; i < size; ++i)
-                    match |= is_ragged(array.derived().coeff(i), shape + 1);
+                    match |= is_ragged(array.derived().entry(i), shape + 1);
                 return match;
             }
 
@@ -210,7 +210,7 @@ namespace detail {
     void print(Stream &os, const Array &a, const size_t *shape, Indices... indices) {
         ENOKI_MARK_USED(shape);
         if constexpr (sizeof...(Indices) == array_depth_v<Array>) {
-            os << a.derived().coeff(indices...);
+            os << a.derived().entry(indices...);
         } else {
             constexpr size_t k = array_depth_v<Array> - sizeof...(Indices) - 1;
             os << "[";
@@ -253,7 +253,7 @@ template <typename Array> bool ragged(const Array &a) {
 template <typename Stream, typename Value, bool IsMask, typename Derived>
 ENOKI_NOINLINE Stream &operator<<(Stream &os, const ArrayBaseT<Value, IsMask, Derived> &a) {
     size_t shape[array_depth_v<Derived> + 1];
-    schedule(a);
+    enoki::schedule(a);
     detail::put_shape(a, shape);
 
     if (detail::is_ragged(a, shape))

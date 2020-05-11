@@ -17,12 +17,13 @@
 /* We want to be able to selectively include intrinsics. For instance, it's
    often not desirable to pull in 1 MB (!) of AVX512 header code unless the
    application is really using those intrinsics. Unfortunately, immintrin.h
-   tries to prevent this kind of seletiveness, which we simply circumvent with
+   tries to prevent this kind of selectiveness, which we simply circumvent with
    the following define.. */
 #  define __IMMINTRIN_H
 #endif
 
 #if !defined(_IMMINTRIN_H_INCLUDED)
+// And the same once more, for GCC..
 #  define _IMMINTRIN_H_INCLUDED
 #endif
 
@@ -36,6 +37,7 @@
 
 #if defined(ENOKI_X86_AVX2)
 #  include <avx2intrin.h>
+#  include <bmiintrin.h>
 #endif
 
 #if defined(ENOKI_X86_FMA)
@@ -253,6 +255,24 @@ ENOKI_INLINE long long mm_extract_epi64(__m128i m)  {
 
 #endif
 
+#if defined(ENOKI_X86_AVX2)
+template <typename T> ENOKI_INLINE T tzcnt(T v) {
+    static_assert(std::is_integral_v<T>, "tzcnt(): requires an integer argument!");
+    if (sizeof(T) <= 4) {
+        return (T) _tzcnt_u32((unsigned int) v);
+    } else {
+#if defined(ENOKI_X86_64)
+        return (T) _tzcnt_u64((unsigned long long) v);
+#else
+        unsigned long long v_ = (unsigned long long) v;
+        unsigned int lo = (unsigned int) v_;
+        unsigned int hi = (unsigned int) (v_ >> 32);
+        return (T) (lo != 0 ? _tzcnt_u32(lo) : (_tzcnt_u32(hi) + 32));
+#endif
+    }
+}
+#endif
+
 //! @}
 // -----------------------------------------------------------------------
 
@@ -294,8 +314,8 @@ ENOKI_INLINE long long mm_extract_epi64(__m128i m)  {
     ENOKI_ARRAY_FALLBACK_CONSTRUCTORS(StaticArrayImpl)                         \
     StaticArrayImpl(Register m) : m(m) {}                                      \
     StaticArrayImpl(Register m, detail::reinterpret_flag) : m(m) {}            \
-    ENOKI_INLINE Value &coeff(size_t i) { return ((Value *) this)[i]; }        \
-    ENOKI_INLINE const Value &coeff(size_t i) const {                          \
+    ENOKI_INLINE Value &entry(size_t i) { return ((Value *) this)[i]; }        \
+    ENOKI_INLINE const Value &entry(size_t i) const {                          \
         return ((const Value *) this)[i];                                      \
     }
 

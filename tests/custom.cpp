@@ -99,8 +99,8 @@ ENOKI_TEST(test03_tricky) {
         slice(x, i) = Tricky((Test *) (0xdeadbeef + i), (i & 1) != 0);
 
     for (size_t i = 0; i<FloatP::Size; ++i) {
-        assert(x.mask.coeff(i) == ((i & 1) != 0));
-        assert(x.ptr.coeff(i) == (Test *) (0xdeadbeef + i));
+        assert(x.mask.entry(i) == ((i & 1) != 0));
+        assert(x.ptr.entry(i) == (Test *) (0xdeadbeef + i));
     }
 
     TrickyX xl;

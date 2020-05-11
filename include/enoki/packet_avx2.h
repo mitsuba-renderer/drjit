@@ -13,7 +13,7 @@
 #pragma once
 
 NAMESPACE_BEGIN(enoki)
-ENOKI_PACKET_DECLARE_COND(32, enable_if_t<std::is_integral_v<Type>>)
+ENOKI_PACKET_DECLARE_COND(32, enable_if_t<is_integral_ext_v<Type>>)
 ENOKI_PACKET_DECLARE_COND(24, enable_if_int64_t<Type>)
 
 /// Partial overload of StaticArrayImpl using AVX intrinsics (32 bit integers)
@@ -83,7 +83,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(32)
             #else
                 ENOKI_TRACK_SCALAR("Constructor (converting, double[8] -> [u]int32[8])");
                 for (size_t i = 0; i < Size; ++i)
-                    coeff(i) = Value(a.derived().coeff(i));
+                    entry(i) = Value(a.derived().entry(i));
             #endif
         }
     }
@@ -422,18 +422,17 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(32)
     }
 #endif
 
-#if 0
     template <typename Mask>
     ENOKI_INLINE Value extract_(const Mask &mask) const {
-        #if !defined(ENOKI_X86_AVX512)
-            unsigned int k = (unsigned int) _mm256_movemask_ps(_mm256_castsi256_ps(mask.m));
-            return coeff((size_t) (detail::tzcnt_scalar(k) & 7));
-        #else
+        #if defined(ENOKI_X86_AVX512)
             return (Value) _mm_cvtsi128_si32(_mm256_castsi256_si128(
                 _mm256_mask_compress_epi32(_mm256_setzero_si256(), mask.k, m)));
+        #else
+            int k = _mm256_movemask_ps(_mm256_castsi256_ps(mask.m));
+            return entry((size_t) (detail::tzcnt(k) & 7));
         #endif
     }
-#endif
+
 
     //! @}
     // -----------------------------------------------------------------------
@@ -875,17 +874,16 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(32)
     }
 #endif
 
-    // template <typename Mask>
-    // ENOKI_INLINE Value extract_(const Mask &mask) const {
-    //     #if defined(ENOKI_X86_AVX512)
-    //         return (Value) detail::mm_cvtsi128_si64(_mm256_castsi256_si128(
-    //             _mm256_mask_compress_epi64(_mm256_setzero_si256(), mask.k, m)));
-    //     #else
-    //         unsigned int k =
-    //             (unsigned int) _mm256_movemask_pd(_mm256_castsi256_pd(mask.m));
-    //         return coeff((size_t) (tzcnt(k) & 3));
-    //     #endif
-    // }
+    template <typename Mask>
+    ENOKI_INLINE Value extract_(const Mask &mask) const {
+        #if defined(ENOKI_X86_AVX512)
+            return (Value) detail::mm_cvtsi128_si64(_mm256_castsi256_si128(
+                _mm256_mask_compress_epi64(_mm256_setzero_si256(), mask.k, m)));
+        #else
+            int k = _mm256_movemask_pd(_mm256_castsi256_pd(mask.m));
+            return entry((size_t) (detail::tzcnt(k) & 3));
+        #endif
+    }
 
     //! @}
     // -----------------------------------------------------------------------
@@ -896,7 +894,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(32)
     StaticArrayImpl<Value_, 3, IsMask_, Derived_, enable_if_int64_t<Value_>>
   : StaticArrayImpl<Value_, 4, IsMask_, Derived_> {
     ENOKI_PACKET_TYPE_3D(Value_)
-    using Base::coeff;
+    using Base::entry;
 
     template <int I0, int I1, int I2>
     ENOKI_INLINE Derived shuffle_() const {
@@ -913,30 +911,30 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(32)
     // -----------------------------------------------------------------------
 
     ENOKI_INLINE Value hsum_() const {
-        Value result = coeff(0);
+        Value result = entry(0);
         for (size_t i = 1; i < 3; ++i)
-            result += coeff(i);
+            result += entry(i);
         return result;
     }
 
     ENOKI_INLINE Value hprod_() const {
-        Value result = coeff(0);
+        Value result = entry(0);
         for (size_t i = 1; i < 3; ++i)
-            result *= coeff(i);
+            result *= entry(i);
         return result;
     }
 
     ENOKI_INLINE Value hmin_() const {
-        Value result = coeff(0);
+        Value result = entry(0);
         for (size_t i = 1; i < 3; ++i)
-            result = enoki::min(result, coeff(i));
+            result = enoki::min(result, entry(i));
         return result;
     }
 
     ENOKI_INLINE Value hmax_() const {
-        Value result = coeff(0);
+        Value result = entry(0);
         for (size_t i = 1; i < 3; ++i)
-            result = enoki::max(result, coeff(i));
+            result = enoki::max(result, entry(i));
         return result;
     }
 

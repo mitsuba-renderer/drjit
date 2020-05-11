@@ -237,6 +237,9 @@ template <typename Value_> struct Quaternion;
 template <typename T, typename = int>
 struct struct_support;
 
+template <typename T, typename Array>
+struct call_support { };
+
 template <typename Value>
 struct CUDAArray;
 

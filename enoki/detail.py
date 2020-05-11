@@ -75,14 +75,14 @@ def array_init(self, args):
                     if not isinstance(o, value_type):
                         o = value_type(o)
                     for i in range(size):
-                        self.set_coeff(i, o)
+                        self.set_entry(i, o)
                 else:
                     if isinstance(o[0], value_type):
                         for i in range(size):
-                            self.set_coeff(i, o[i])
+                            self.set_entry(i, o[i])
                     else:
                         for i in range(size):
-                            self.set_coeff(i, value_type(o[i]))
+                            self.set_entry(i, value_type(o[i]))
                 success = True
             else:
                 if dynamic:
@@ -91,14 +91,14 @@ def array_init(self, args):
                 if not isinstance(o, value_type):
                     o = value_type(o)
                 for i in range(size):
-                    self.set_coeff(i, o)
+                    self.set_entry(i, o)
                 success = True
         elif n == size or dynamic:
             if dynamic:
                 size = n
                 self.init_(size)
             for i in range(size):
-                self.set_coeff(i, value_type(args[i]))
+                self.set_entry(i, value_type(args[i]))
             success = True
     except Exception as e:
         err = e

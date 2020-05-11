@@ -43,6 +43,9 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
     /// Construct from a scalar
     ENOKI_INLINE StaticArrayImpl(const Value &v) : a1(v), a2(v) { }
 
+    template <typename T, enable_if_t<std::is_same_v<T, bool> && IsMask_> = 0>
+    ENOKI_INLINE StaticArrayImpl(const T &v) : a1(v), a2(v) { }
+
     /// Construct from component values
     template <typename... Ts, enable_if_t<sizeof...(Ts) == Size_ && Size_ != 1 &&
               (!std::is_same_v<Ts, detail::reinterpret_flag> && ...)> = 0>
@@ -247,6 +250,18 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
 
     ENOKI_INLINE size_t count_() const { return enoki::count(a1) + enoki::count(a2); }
 
+    template <typename Mask>
+    ENOKI_INLINE Value extract_(const Mask &mask) const {
+        if constexpr (Size1 == Size2) {
+            return extract(select(low(mask), a1, a2), low(mask) | high(mask));
+        } else {
+            if (ENOKI_LIKELY(any(low(mask))))
+                return extract(a1, low(mask));
+            else
+                return extract(a2, high(mask));
+        }
+    }
+
     //! @}
     // -----------------------------------------------------------------------
 
@@ -296,18 +311,18 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
     ENOKI_INLINE const Array1& low_()  const { return a1; }
     ENOKI_INLINE const Array2& high_() const { return a2; }
 
-    ENOKI_INLINE decltype(auto) coeff(size_t i) const {
+    ENOKI_INLINE decltype(auto) entry(size_t i) const {
         if constexpr (Size1 == Size2)
-            return ((i < Size1) ? a1 : a2).coeff(i % Size1);
+            return ((i < Size1) ? a1 : a2).entry(i % Size1);
         else
-            return (i < Size1) ? a1.coeff(i) : a2.coeff(i - Size1);
+            return (i < Size1) ? a1.entry(i) : a2.entry(i - Size1);
     }
 
-    ENOKI_INLINE decltype(auto) coeff(size_t i) {
+    ENOKI_INLINE decltype(auto) entry(size_t i) {
         if constexpr (Size1 == Size2)
-            return ((i < Size1) ? a1 : a2).coeff(i % Size1);
+            return ((i < Size1) ? a1 : a2).entry(i % Size1);
         else
-            return (i < Size1) ? a1.coeff(i) : a2.coeff(i - Size1);
+            return (i < Size1) ? a1.entry(i) : a2.entry(i - Size1);
     }
 
     //! @}

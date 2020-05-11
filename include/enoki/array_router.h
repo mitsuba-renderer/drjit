@@ -464,6 +464,11 @@ template <typename T> auto none_nested(const T &a) {
     return !any_nested(a);
 }
 
+template <typename Array, typename Mask>
+value_t<Array> extract(const Array &array, const Mask &mask) {
+    return array.extract_(mask);
+}
+
 //! @}
 // -----------------------------------------------------------------------
 
@@ -536,8 +541,7 @@ template <bool Default, typename T> auto none_nested_or(const T &value) {
 template <typename T> ENOKI_INLINE T zero(size_t size = 1) {
     if constexpr (is_array_v<T>) {
         return T::Derived::zero_(size);
-    } else if constexpr (std::is_class_v<T>) {
-        static_assert(struct_support<T>::Defined, "Missing ENOKI_STRUCT_SUPPORT() declaration?");
+    } else if constexpr (has_struct_support_v<T>) {
         return struct_support<T>::zero(size);
     } else {
         return T(0);
@@ -547,7 +551,7 @@ template <typename T> ENOKI_INLINE T zero(size_t size = 1) {
 template <typename T> ENOKI_INLINE T empty(size_t size = 1) {
     if constexpr (is_array_v<T>) {
         return T::Derived::empty_(size);
-    } else if constexpr (std::is_class_v<T>) {
+    } else if constexpr (has_struct_support_v<T>) {
         return struct_support<T>::empty(size);
     } else {
         T undef;
@@ -636,9 +640,9 @@ namespace detail {
         Target result;
         for (size_t i = 0; i < Target::Size; ++i) {
             if constexpr (array_depth_v<Target> == array_depth_v<Index> + 1)
-                result.coeff(i) = scaled + Scalar(i);
+                result.entry(i) = scaled + Scalar(i);
             else
-                result.coeff(i) = broadcast_index<value_t<Target>>(scaled + Scalar(i));
+                result.entry(i) = broadcast_index<value_t<Target>>(scaled + Scalar(i));
         }
         return result;
     }
@@ -661,8 +665,7 @@ Target gather(Source &&source, const Index &index, const mask_t<Target> &mask = 
             return enoki::gather<Target, Permute>(
                 source, detail::broadcast_index<TargetIndex>(index), mask);
         }
-    } else if constexpr (std::is_class_v<Target>) {
-        static_assert(struct_support<Target>::Defined, "Missing ENOKI_STRUCT_SUPPORT() declaration?");
+    } else if constexpr (has_struct_support_v<Target>) {
         return struct_support<Target>::template gather<Permute>(source, index, mask);
     } else {
         static_assert(std::is_integral_v<Index>, "Index of scalar gather must be an integer!");
@@ -689,11 +692,10 @@ void scatter(Target &&target, const Value &value, const Index &index, const mask
             enoki::scatter<Permute>(target, value,
                                     detail::broadcast_index<TargetIndex>(index), mask);
         }
-    } else if constexpr (std::is_class_v<Value>) {
-        static_assert(struct_support<Value>::Defined, "Missing ENOKI_STRUCT_SUPPORT() declaration?");
+    } else if constexpr (has_struct_support_v<Value>) {
         struct_support<Value>::template scatter<Permute>(target, value, index, mask);
     } else {
-        static_assert(std::is_integral_v<Index>, "Index of scalar scatter must be an integer!");
+        static_assert(std::is_integral_v<Index>, "Index of scalar scatter must be a scalar integer!");
         if (mask) {
             if constexpr (is_array_v<Target>)
                 target[index] = value;
@@ -718,11 +720,10 @@ void scatter_add(Target &&target, const Value &value, const Index &index, const 
             using TargetIndex = replace_scalar_t<Value, scalar_t<Index>>;
             enoki::scatter_add(target, value, detail::broadcast_index<TargetIndex>(index), mask);
         }
-    } else if constexpr (std::is_class_v<Value>) {
-        static_assert(struct_support<Value>::Defined, "Missing ENOKI_STRUCT_SUPPORT() declaration?");
+    } else if constexpr (has_struct_support_v<Value>) {
         struct_support<Value>::scatter_add(target, value, index, mask);
     } else {
-        static_assert(std::is_integral_v<Index>, "Index of scalar scatter_add must be an integer!");
+        static_assert(std::is_integral_v<Index>, "Index of scalar scatter_add must be a scalar integer!");
         if (mask) {
             if constexpr (is_array_v<Target>)
                 target[index] += value;
@@ -757,24 +758,24 @@ template <typename T> ENOKI_INLINE void schedule(const T &value) {
     if constexpr (is_jit_array_v<T>) {
         if constexpr (is_jit_array_v<value_t<T>>) {
             for (size_t i = 0; i < value.derived().size(); ++i)
-                schedule(value.derived().coeff(i));
+                schedule(value.derived().entry(i));
         } else {
             value.derived().schedule();
         }
-    } else if constexpr (!is_array_v<T> && std::is_class_v<T>) {
-        static_assert(struct_support<T>::Defined, "Missing ENOKI_STRUCT_SUPPORT() declaration?");
+    } else if constexpr (has_struct_support_v<T>) {
         struct_support<T>::schedule(value);
     } else {
         ; // do nothing
     }
 }
 
-template <typename T1, typename T2, typename... Ts>
-ENOKI_INLINE void schedule(const T1 &value1, const T2 &value2,
-                           const Ts&... values) {
-    schedule(value1);
-    schedule(value2, values...);
+template <typename T1, typename... Ts, enable_if_t<sizeof...(Ts) != 0> = 0>
+ENOKI_INLINE void schedule(const T1 &value, const Ts&... values) {
+    schedule(value);
+    schedule(values...);
 }
+
+ENOKI_INLINE void schedule() { }
 
 template <typename... Ts>
 ENOKI_INLINE void eval(const Ts&... values) {
@@ -785,13 +786,12 @@ ENOKI_INLINE void eval(const Ts&... values) {
 template <typename T> ENOKI_INLINE size_t slices(const T &value) {
     if constexpr (is_static_array_v<T>) {
         if constexpr (array_size_v<T> != 0)
-            return slices(value.coeff(0));
+            return slices(value.entry(0));
         else
             return 0;
     } else if constexpr (is_dynamic_array_v<T>) {
         return value.size();
-    } else if constexpr (!is_array_v<T> && std::is_class_v<T>) {
-        static_assert(struct_support<T>::Defined, "Missing ENOKI_STRUCT_SUPPORT() declaration?");
+    } else if constexpr (has_struct_support_v<T>) {
         return struct_support<T>::slices(value);
     } else {
         return 1;
@@ -805,12 +805,11 @@ template <typename T> ENOKI_INLINE auto detach(const T &value) {
         Result result;
         result.init_(value.size());
         for (size_t i = 0; i < value.size(); ++i)
-            result.coeff(i) = detach(value.coeff(i));
+            result.entry(i) = detach(value.entry(i));
         return result;
     } else if constexpr (is_diff_array_v<T>) {
         return value.value();
-    } else if constexpr (!is_array_v<T> && std::is_class_v<T>) {
-        static_assert(struct_support<T>::Defined, "Missing ENOKI_STRUCT_SUPPORT() declaration?");
+    } else if constexpr (has_struct_support_v<T>) {
         return struct_support<T>::detach(value);
     } else {
         return value;
@@ -824,12 +823,11 @@ template <typename T> ENOKI_INLINE auto grad(const T &value) {
         Result result;
         result.init_(value.size());
         for (size_t i = 0; i < value.size(); ++i)
-            result.coeff(i) = grad(value.coeff(i));
+            result.entry(i) = grad(value.entry(i));
         return result;
     } else if constexpr (is_diff_array_v<T>) {
         return value.grad();
-    } else if constexpr (!is_array_v<T> && std::is_class_v<T>) {
-        static_assert(struct_support<T>::Defined, "Missing ENOKI_STRUCT_SUPPORT() declaration?");
+    } else if constexpr (has_struct_support_v<T>) {
         return struct_support<T>::grad(value);
     } else {
         return; // return void
@@ -840,9 +838,9 @@ template <typename T1, typename T2> ENOKI_INLINE void set_grad(T1 &value, const 
     if constexpr (array_depth_v<T1> > 1) {
         for (size_t i = 0; i < value.size(); ++i) {
             if constexpr (array_size_v<T1> == array_size_v<T2>)
-                set_grad(value.coeff(i), grad.coeff(i));
+                set_grad(value.entry(i), grad.entry(i));
             else
-                set_grad(value.coeff(i), grad);
+                set_grad(value.entry(i), grad);
         }
     } else if constexpr (is_diff_array_v<T1>) {
         value.set_grad(grad);
@@ -857,12 +855,11 @@ template <typename T1> ENOKI_INLINE void set_label(T1 &value, const char *label)
         char *buf = (char *) alloca(label_size);
         for (size_t i = 0; i < value.size(); ++i) {
             snprintf(buf, label_size, "%s_%zu", label, i);
-            set_grad(value.coeff(i), buf);
+            set_grad(value.entry(i), buf);
         }
     } else if constexpr (is_diff_array_v<T1> || is_jit_array_v<T1>) {
         value.set_label(label);
-    } else if constexpr (!is_array_v<T1> && std::is_class_v<T1>) {
-        static_assert(struct_support<T1>::Defined, "Missing ENOKI_STRUCT_SUPPORT() declaration?");
+    } else if constexpr (has_struct_support_v<T1>) {
         struct_support<T1>::set_label(value);
     }
 }
@@ -872,9 +869,8 @@ template <typename T> ENOKI_INLINE void requires_grad(T &value, bool state = tru
         value.requires_grad(state);
     } else if constexpr (array_depth_v<T> > 1) {
         for (size_t i = 0; i < value.size(); ++i)
-            requires_grad(value.coeff(i), state);
-    } else if constexpr (!is_array_v<T> && std::is_class_v<T>) {
-        static_assert(struct_support<T>::Defined, "Missing ENOKI_STRUCT_SUPPORT() declaration?");
+            requires_grad(value.entry(i), state);
+    } else if constexpr (has_struct_support_v<T>) {
         struct_support<T>::requires_grad(value, state);
     } else {
         ; // do nothing
@@ -890,10 +886,10 @@ ENOKI_INLINE void requires_grad(const Ts&... values) {
 template <typename T> ENOKI_INLINE void ad_schedule(T &value, bool reverse = true) {
     if constexpr (array_depth_v<T> > 1) {
         for (size_t i = 0; i < value.size(); ++i)
-            ad_schedule(value.coeff(i), reverse);
+            ad_schedule(value.entry(i), reverse);
     } else if constexpr (is_diff_array_v<T>) {
         value.ad_schedule(reverse);
-    } else if constexpr (!is_array_v<T> && std::is_class_v<T>) {
+    } else if constexpr (has_struct_support_v<T>) {
         struct_support<T>::ad_schedule(value, reverse);
     } else {
         ; // do nothing

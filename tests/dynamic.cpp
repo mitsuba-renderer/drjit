@@ -25,7 +25,7 @@ ENOKI_TEST(test01_alloc)  {
     assert(x.capacity() == 12);
     assert(packets(x) == 3);
     assert(!x.is_mapped());
-    x.coeff(1) = 1.f;
+    x.entry(1) = 1.f;
 
     auto y = std::move(x);
     assert(x.size() == 0);
@@ -44,7 +44,7 @@ ENOKI_TEST(test01_alloc)  {
     assert( any(enoki::isnan(packet(y, 2))));
     assert(!all(enoki::isnan(packet(y, 2))));
 
-    y.coeff(2) = 2.f;
+    y.entry(2) = 2.f;
     assert(to_string(y) == "[-nan, 1, 2, -nan, -nan, -nan, -nan, -nan, -nan, -nan]" ||
            to_string(y) == "[nan, 1, 2, nan, nan, nan, nan, nan, nan, nan]");
     set_shape(y, {{ 3 }});

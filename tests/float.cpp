@@ -137,7 +137,7 @@ ENOKI_TEST_FLOAT(test07_rsqrt) {
         [](const T &a) -> T {
             T result;
             for (size_t i = 0; i < Size; ++i)
-               result.coeff(i) = rsqrt(a.coeff(i));
+               result.entry(i) = rsqrt(a.entry(i));
             return result;
         },
         [](double a) { return 1 / std::sqrt(a); },
@@ -156,7 +156,7 @@ ENOKI_TEST_FLOAT(test08_rcp) {
         [](const T &a) -> T {
             T result;
             for (size_t i = 0; i < Size; ++i)
-               result.coeff(i) = rcp(a.coeff(i));
+               result.entry(i) = rcp(a.entry(i));
             return result;
         },
         [](double a) { return 1 / a; },

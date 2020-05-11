@@ -1064,13 +1064,13 @@ struct DiffArray : ArrayBaseT<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>
         }
     }
 
-    void write(uint32_t offset, Value value) {
+    void set_entry(uint32_t offset, Value value) {
         if constexpr (is_jit_array_v<Type_>) {
             if (m_index)
                 enoki_raise(
                     "Attempted to overwrite entries of a variable that is "
                     "attached to the AD graph. This is not allowed.");
-            m_value.write(offset, value);
+            m_value.set_entry(offset, value);
         } else {
             #if !defined(NDEBUG) && !defined(ENOKI_DISABLE_RANGE_CHECK)
             if (offset != 0)
@@ -1158,11 +1158,11 @@ struct DiffArray : ArrayBaseT<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>
             return m_value.size();
     }
 
-    Value coeff(size_t offset) const {
+    Value entry(size_t offset) const {
         if constexpr (std::is_scalar_v<Type>)
             return m_value;
         else
-            return m_value.coeff(offset);
+            return m_value.entry(offset);
     }
 
     Scalar *data() {

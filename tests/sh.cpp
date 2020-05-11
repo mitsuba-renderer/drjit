@@ -55,7 +55,7 @@ ENOKI_TEST(test00_sh) {
     for (size_t i = 0; i < 10; ++i) {
         sh_eval(d, i, out);
         for (size_t j = 0; j<(i+1)*(i+1); ++j) {
-            assert(std::abs(out[j].coeff(0) - ref[j]) < 5e-6f);
+            assert(std::abs(out[j].entry(0) - ref[j]) < 5e-6f);
         }
     }
 }

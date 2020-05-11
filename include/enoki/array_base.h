@@ -35,7 +35,7 @@ NAMESPACE_BEGIN(enoki)
     Name(const ArrayBaseT<Value2, false, Derived2> &v) {                       \
         ENOKI_CHKSCALAR("Copy constructor (conversion)");                      \
         for (size_t i = 0; i < derived().size(); ++i)                          \
-            derived().coeff(i) = (Value) v.derived().coeff(i);                 \
+            derived().entry(i) = (Value) v.derived().entry(i);                 \
     }                                                                          \
     template <typename Value2, typename Derived2, typename T = Derived_,       \
               enable_if_t<Derived2::Size == T::Size> = 0>                      \
@@ -43,7 +43,7 @@ NAMESPACE_BEGIN(enoki)
          detail::reinterpret_flag) {                                           \
         ENOKI_CHKSCALAR("Copy constructor (reinterpret_cast)");                \
         for (size_t i = 0; i < derived().size(); ++i)                          \
-            derived().coeff(i) = reinterpret_array<Value>(v[i]);               \
+            derived().entry(i) = reinterpret_array<Value>(v[i]);               \
     }
 
 /// Generic array base class
@@ -99,6 +99,10 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
 
     /// Scalar data type all the way at the lowest level
     using Scalar = scalar_t<Value_>;
+
+    /// Helper structure for dispatching vectorized method calls
+    using CallSupport =
+        call_support<std::decay_t<std::remove_pointer_t<Value_>>, Derived_>;
 
     /// Specifies how deeply nested this array is
     static constexpr size_t Depth = 1 + array_depth_v<Value>;
@@ -167,14 +171,14 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
 
     /// Recursive array indexing operator
     template <typename... Indices, enable_if_t<(sizeof...(Indices) >= 1)> = 0>
-    ENOKI_INLINE decltype(auto) coeff(size_t i0, Indices... indices) {
-        return derived().coeff(i0).coeff(indices...);
+    ENOKI_INLINE decltype(auto) entry(size_t i0, Indices... indices) {
+        return derived().entry(i0).entry(indices...);
     }
 
     /// Recursive array indexing operator (const)
     template <typename... Indices, enable_if_t<(sizeof...(Indices) >= 1)> = 0>
-    ENOKI_INLINE decltype(auto) coeff(size_t i0, Indices... indices) const {
-        return derived().coeff(i0).coeff(indices...);
+    ENOKI_INLINE decltype(auto) entry(size_t i0, Indices... indices) const {
+        return derived().entry(i0).entry(indices...);
     }
 
     /// Array indexing operator with bounds checks in debug mode
@@ -185,7 +189,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                         "access index %zu in an array of size %zu)",
                         i, derived().size());
         #endif
-        return derived().coeff(i);
+        return derived().entry(i);
     }
 
     /// Array indexing operator with bounds checks in debug mode, const version
@@ -196,7 +200,12 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                         "access index %zu in an array of size %zu)",
                         i, derived().size());
         #endif
-        return derived().coeff(i);
+        return derived().entry(i);
+    }
+
+    template <typename T>
+    ENOKI_INLINE void set_entry(size_t i, const T &value) {
+        derived().entry(i) = value;
     }
 
     // template <typename Mask, enable_if_mask_t<Mask> = 0>
@@ -205,6 +214,10 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
     // }
 
     ENOKI_INLINE bool empty() const { return derived().size() == 0; }
+
+    const CallSupport operator->() const {
+        return CallSupport(derived());
+    }
 
     //! @}
     // -----------------------------------------------------------------------
@@ -225,8 +238,8 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                     result = enoki::empty<Derived>(sa);                      \
                                                                              \
                 for (size_t i = 0; i < sa; ++i) {                            \
-                    const Value &a = derived().coeff(i);                     \
-                    result.coeff(i) = op;                                    \
+                    const Value &a = derived().entry(i);                     \
+                    result.entry(i) = op;                                    \
                 }                                                            \
             } else {                                                         \
                 enoki_raise(#name "_(): invalid operand type!");             \
@@ -247,8 +260,8 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                     result = enoki::empty<Derived>(sa);                      \
                                                                              \
                 for (size_t i = 0; i < sa; ++i) {                            \
-                    const Value &a = derived().coeff(i);                     \
-                    result.coeff(i) = op;                                    \
+                    const Value &a = derived().entry(i);                     \
+                    result.entry(i) = op;                                    \
                 }                                                            \
             } else {                                                         \
                 enoki_raise(#name "_(): invalid operand type!");             \
@@ -271,8 +284,8 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                     result = enoki::empty<T>(sa);                            \
                                                                              \
                 for (size_t i = 0; i < sa; ++i)                              \
-                    result.coeff(i) =                                        \
-                        enoki::name##2int<value_t<T>> (derived().coeff(i));  \
+                    result.entry(i) =                                        \
+                        enoki::name##2int<value_t<T>> (derived().entry(i));  \
             } else {                                                         \
                 result = T(enoki::name(derived()));                          \
             }                                                                \
@@ -297,9 +310,9 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                 }                                                            \
                                                                              \
                 for (size_t i = 0; i < sr; ++i) {                            \
-                    const Value &a = derived().coeff(sa > 1 ? i : 0);        \
-                    const Value &b = v.coeff(sb > 1 ? i : 0);                \
-                    result.coeff(i) = op;                                    \
+                    const Value &a = derived().entry(sa > 1 ? i : 0);        \
+                    const Value &b = v.entry(sb > 1 ? i : 0);                \
+                    result.entry(i) = op;                                    \
                 }                                                            \
             } else {                                                         \
                 enoki_raise(#name "_(): invalid operand type!");             \
@@ -325,9 +338,9 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                 }                                                            \
                                                                              \
                 for (size_t i = 0; i < sr; ++i) {                            \
-                    const Value &a = derived().coeff(sa > 1 ? i : 0);        \
-                    const auto &b = v.coeff(sb > 1 ? i : 0);                 \
-                    result.coeff(i) = op;                                    \
+                    const Value &a = derived().entry(sa > 1 ? i : 0);        \
+                    const auto &b = v.entry(sb > 1 ? i : 0);                 \
+                    result.entry(i) = op;                                    \
                 }                                                            \
             } else {                                                         \
                 enoki_raise(#name "_(): invalid operand type!");             \
@@ -353,9 +366,9 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                 }                                                            \
                                                                              \
                 for (size_t i = 0; i < sr; ++i) {                            \
-                    const Value &a = derived().coeff(sa > 1 ? i : 0);        \
-                    const Value &b = v.coeff(sb > 1 ? i : 0);                \
-                    result.coeff(i) = op;                                    \
+                    const Value &a = derived().entry(sa > 1 ? i : 0);        \
+                    const Value &b = v.entry(sb > 1 ? i : 0);                \
+                    result.entry(i) = op;                                    \
                 }                                                            \
             } else {                                                         \
                 enoki_raise(#name "_(): invalid operand type!");             \
@@ -384,10 +397,10 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                 }                                                            \
                                                                              \
                 for (size_t i = 0; i < sr; ++i) {                            \
-                    const Value &a = derived().coeff(sa > 1 ? i : 0);        \
-                    const Value &b = v1.coeff(sb > 1 ? i : 0);               \
-                    const Value &c = v2.coeff(sc > 1 ? i : 0);               \
-                    result.coeff(i) = op;                                    \
+                    const Value &a = derived().entry(sa > 1 ? i : 0);        \
+                    const Value &b = v1.entry(sb > 1 ? i : 0);               \
+                    const Value &c = v2.entry(sc > 1 ? i : 0);               \
+                    result.entry(i) = op;                                    \
                 }                                                            \
             } else {                                                         \
                 return alt;                                                  \
@@ -470,10 +483,10 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
             }
 
             for (size_t i = 0; i < sa; ++i) {
-                const Value &a = derived().coeff(i);
+                const Value &a = derived().entry(i);
                 auto result = enoki::sincos(a);
-                result_s.coeff(i) = std::move(result.first);
-                result_c.coeff(i) = std::move(result.second);
+                result_s.entry(i) = std::move(result.first);
+                result_c.entry(i) = std::move(result.second);
             }
         } else {
             enoki_raise("sincos_(): invalid operand type!");
@@ -504,10 +517,10 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
         }
 
         for (size_t i = 0; i < sr; ++i) {
-            auto &v_m = m.coeff(sm > 1 ? i : 0);
-            const Value &v_t = t.coeff(st > 1 ? i : 0);
-            const Value &v_f = f.coeff(sf > 1 ? i : 0);
-            result.coeff(i) = enoki::select(v_m, v_t, v_f);
+            const auto &v_m = m.entry(sm > 1 ? i : 0);
+            const Value &v_t = t.entry(st > 1 ? i : 0);
+            const Value &v_f = f.entry(sf > 1 ? i : 0);
+            result.entry(i) = enoki::select(v_m, v_t, v_f);
         }
 
         return result;
@@ -525,7 +538,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
         ENOKI_CHKSCALAR("shuffle_");
         Derived out;
         size_t idx = 0;
-        bool result[] = { (out.coeff(idx++) = derived().coeff(Indices % Derived::Size), false)... };
+        bool result[] = { (out.entry(idx++) = derived().entry(Indices % Derived::Size), false)... };
         (void) idx; (void) result;
         return out;
     }
@@ -545,15 +558,15 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                         enoki_raise("dot_(): zero-sized array!");
                 }
 
-				result = derived().coeff(0) * a.coeff(0);
+				result = derived().entry(0) * a.entry(0);
 				if constexpr (std::is_floating_point_v<Scalar>) {
                     for (size_t i = 1; i < sr; ++i)
-                        result = enoki::fmadd(derived().coeff(sa > 1 ? i : 0),
-                                              a.coeff(sb > 1 ? i : 0), result);
+                        result = enoki::fmadd(derived().entry(sa > 1 ? i : 0),
+                                              a.entry(sb > 1 ? i : 0), result);
                 } else {
                     for (size_t i = 1; i < sr; ++i)
-                        result += derived().coeff(sa > 1 ? i : 0) *
-                                  a.coeff(sb > 1 ? i : 0);
+                        result += derived().entry(sa > 1 ? i : 0) *
+                                  a.entry(sb > 1 ? i : 0);
                 }
             } else {
 				result = hsum(derived() * a);
@@ -577,9 +590,9 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                     enoki_raise("hsum_(): zero-sized array!");
             }
 
-            value = derived().coeff(0);
+            value = derived().entry(0);
             for (size_t i = 1; i < derived().size(); ++i)
-                value += derived().coeff(i);
+                value += derived().entry(i);
         } else {
             enoki_raise("hsum_(): invalid operand type!");
         }
@@ -596,9 +609,9 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                     enoki_raise("hprod_(): zero-sized array!");
             }
 
-            value = derived().coeff(0);
+            value = derived().entry(0);
             for (size_t i = 1; i < derived().size(); ++i)
-                value *= derived().coeff(i);
+                value *= derived().entry(i);
         } else {
             enoki_raise("hprod_(): invalid operand type!");
         }
@@ -615,9 +628,9 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                     enoki_raise("hmin_(): zero-sized array!");
             }
 
-            value = derived().coeff(0);
+            value = derived().entry(0);
             for (size_t i = 1; i < derived().size(); ++i)
-                value = enoki::min(value, derived().coeff(i));
+                value = enoki::min(value, derived().entry(i));
         } else {
             enoki_raise("hmin_(): invalid operand type!");
         }
@@ -634,9 +647,9 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                     enoki_raise("hmax_(): zero-sized array!");
             }
 
-            value = derived().coeff(0);
+            value = derived().entry(0);
             for (size_t i = 1; i < derived().size(); ++i)
-                value = enoki::max(value, derived().coeff(i));
+                value = enoki::max(value, derived().entry(i));
         } else {
             enoki_raise("hmax_(): invalid operand type!");
         }
@@ -653,9 +666,9 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                     enoki_raise("all_(): zero-sized array!");
             }
 
-            value = derived().coeff(0);
+            value = derived().entry(0);
             for (size_t i = 1; i < derived().size(); ++i)
-                value = value && derived().coeff(i);
+                value = value && derived().entry(i);
         } else {
             enoki_raise("all_(): invalid operand type!");
         }
@@ -672,9 +685,9 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                     enoki_raise("any_(): zero-sized array!");
             }
 
-            value = derived().coeff(0);
+            value = derived().entry(0);
             for (size_t i = 1; i < derived().size(); ++i)
-                value = value || derived().coeff(i);
+                value = value || derived().entry(i);
         } else {
             enoki_raise("any_(): invalid operand type!");
         }
@@ -690,14 +703,28 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                 if (empty())
                     enoki_raise("count_(): zero-sized array!");
             }
-            value = select(derived().coeff(0), 1, 0);
+            value = select(derived().entry(0), 1, 0);
             for (size_t i = 1; i < derived().size(); ++i)
-                value += select(derived().coeff(i), 1, 0);
+                value += select(derived().entry(i), 1, 0);
         } else {
             enoki_raise("count_(): invalid operand type!");
         }
 
         return value;
+    }
+
+    template <typename Mask, enable_if_t<Mask::Depth == 1> = 0>
+    ENOKI_INLINE Value extract_(const Mask &mask) const {
+        size_t sa = derived().size(), sb = mask.size(),
+               sr = sa > sb ? sa : sb;
+
+        for (size_t i = 0; i < sr; ++i) {
+            bool m = mask.entry(sb > 1 ? i : 0);
+            if (m)
+                return derived().entry(sa > 1 ? i : 0);
+        }
+
+        return zero<Value>();
     }
 
     //! @}
@@ -723,9 +750,9 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
         }
 
         for (size_t i = 0; i < sr; ++i)
-            result.coeff(i) = enoki::gather<Value, Permute>(
-                source, index.coeff(sa > 1 ? i : 0),
-                mask.coeff(sb > 1 ? i : 0));
+            result.entry(i) = enoki::gather<Value, Permute>(
+                source, index.entry(sa > 1 ? i : 0),
+                mask.entry(sb > 1 ? i : 0));
 
         return result;
     }
@@ -738,9 +765,9 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                sd = sa > sb ? sa : sb, sr = sc > sd ? sc : sd;
 
         for (size_t i = 0; i < sr; ++i)
-            enoki::scatter<Permute>(target, derived().coeff(sa > 1 ? i : 0),
-                                    index.coeff(sb > 1 ? i : 0),
-                                    mask.coeff(sc > 1 ? i : 0));
+            enoki::scatter<Permute>(target, derived().entry(sa > 1 ? i : 0),
+                                    index.entry(sb > 1 ? i : 0),
+                                    mask.entry(sc > 1 ? i : 0));
     }
 
     template <typename Target, typename Index, typename Mask>
@@ -751,9 +778,9 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                sd = sa > sb ? sa : sb, sr = sc > sd ? sc : sd;
 
         for (size_t i = 0; i < sr; ++i)
-            enoki::scatter_add(target, derived().coeff(sa > 1 ? i : 0),
-                               index.coeff(sb > 1 ? i : 0),
-                               mask.coeff(sc > 1 ? i : 0));
+            enoki::scatter_add(target, derived().entry(sa > 1 ? i : 0),
+                               index.entry(sb > 1 ? i : 0),
+                               mask.entry(sc > 1 ? i : 0));
     }
 
     static Derived load_(const void *mem, size_t size) {

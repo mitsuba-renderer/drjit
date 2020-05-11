@@ -36,8 +36,17 @@ struct LLVMArray : ArrayBaseT<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
     static constexpr bool IsLLVM = true;
     static constexpr bool IsJIT = true;
     static constexpr bool IsDynamic = true;
-    static constexpr VarType Type = var_type_v<Value>;
     static constexpr size_t Size = Dynamic;
+    static constexpr bool IsClass =
+        std::is_pointer_v<Value_> &&
+        std::is_class_v<std::remove_pointer_t<Value_>>;
+
+    static constexpr VarType Type =
+        IsClass ? VarType::UInt32 : var_type_v<Value>;
+
+    using ActualValue = std::conditional_t<IsClass, uint32_t, Value>;
+    using CallSupport =
+        call_support<std::decay_t<std::remove_pointer_t<Value_>>, LLVMArray>;
 
     template <typename T> using ReplaceValue = LLVMArray<T>;
 
@@ -112,15 +121,28 @@ struct LLVMArray : ArrayBaseT<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
     }
 
     LLVMArray(Value value) {
-        m_index = mkfull_(value, 1);
+        if constexpr (!IsClass) {
+            uint64_t tmp = 0;
+            memcpy(&tmp, &value, sizeof(Value));
+            m_index = jitc_var_new_literal(Type, 0, tmp, 1);
+        } else {
+            m_index = jitc_var_new_literal(
+                Type, 0, (uint64_t) jitc_registry_get_id(value), 1);
+        }
     }
 
     template <typename... Ts, enable_if_t<(sizeof...(Ts) > 1 &&
               (!std::is_same_v<Ts, detail::reinterpret_flag> && ...))> = 0>
     LLVMArray(Ts&&... ts) {
-        Value data[] = { (Value) ts... };
-        m_index = jitc_var_copy(AllocType::Host, Type, 0, data,
-                                (uint32_t) sizeof...(Ts));
+        if constexpr (!IsClass) {
+            Value data[] = { (Value) ts... };
+            m_index = jitc_var_copy(AllocType::Host, Type, 0, data,
+                                    (uint32_t) sizeof...(Ts));
+        } else {
+            uint32_t data[] = { jitc_registry_get_id(ts)... };
+            m_index = jitc_var_copy(AllocType::Host, Type, 0, data,
+                                    (uint32_t) sizeof...(Ts));
+        }
     }
 
     LLVMArray &operator=(const LLVMArray &a) {
@@ -764,7 +786,7 @@ struct LLVMArray : ArrayBaseT<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
             jitc_reduce(Type, op, data(), (uint32_t) size(), result.data());  \
             return result;                                                    \
         }                                                                     \
-        Value name##_() const { return name##_async_().coeff(0); }
+        Value name##_() const { return name##_async_().entry(0); }
 
     ENOKI_HORIZONTAL_OP(hsum,  ReductionType::Add)
     ENOKI_HORIZONTAL_OP(hprod, ReductionType::Mul)
@@ -789,23 +811,27 @@ struct LLVMArray : ArrayBaseT<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
     // -----------------------------------------------------------------------
 
     static LLVMArray empty_(size_t size) {
-        if (size == 0)
-            return LLVMArray();
-        size_t byte_size = size * sizeof(Value);
-        void *ptr = jitc_malloc(AllocType::HostAsync, byte_size);
+        void *ptr = jitc_malloc(AllocType::HostAsync, size * sizeof(Value));
         return from_index(jitc_var_map(Type, 0, ptr, (uint32_t) size, 1));
     }
 
     static LLVMArray zero_(size_t size) {
-        if (size == 0)
-            return LLVMArray();
-        return from_index(mkfull_(Value(0), (uint32_t) size));
+        return from_index(jitc_var_new_literal(Type, 0, 0, (uint32_t) size));
     }
 
     static LLVMArray full_(Value value, size_t size) {
-        if (size == 0)
-            return LLVMArray();
-        return from_index(mkfull_(value, (uint32_t) size));
+        uint32_t index;
+
+        if constexpr (!IsClass) {
+            uint64_t tmp = 0;
+            memcpy(&tmp, &value, sizeof(Value));
+            index = jitc_var_new_literal(Type, 0, tmp, (uint32_t) size);
+        } else {
+            index = jitc_var_new_literal(
+                Type, 0, (uint64_t) jitc_registry_get_id(value), (uint32_t) size);
+        }
+
+        return from_index(index);
     }
 
     static LLVMArray arange_(ssize_t start, ssize_t stop, ssize_t step) {
@@ -1079,6 +1105,26 @@ public:
     //! @{ \name Miscellaneous
     // -----------------------------------------------------------------------
 
+    std::vector<std::pair<void *, LLVMArray<uint32_t>>> vcall_() const {
+        if constexpr (!IsClass) {
+            enoki_raise("Unsupported operand type");
+        } else {
+            uint32_t bucket_count = 0;
+            VCallBucket *buckets =
+                jitc_vcall(CallSupport::Domain, m_index, &bucket_count);
+
+            std::vector<std::pair<void *, LLVMArray<uint32_t>>> result;
+            result.reserve(bucket_count);
+            for (uint32_t i = 0; i < bucket_count; ++i) {
+                jitc_var_inc_ref_ext(buckets[i].index);
+                result.emplace_back(buckets[i].ptr,
+                                    LLVMArray<uint32_t>::from_index(buckets[i].index));
+            }
+
+            return result;
+        }
+    }
+
     LLVMArray& schedule() {
         jitc_var_schedule(m_index);
         return *this;
@@ -1109,13 +1155,17 @@ public:
     bool is_literal_one() const { return (bool) jitc_var_is_literal_one(m_index); }
     bool is_literal_zero() const { return (bool) jitc_var_is_literal_zero(m_index); }
 
-    Value coeff(size_t offset) const {
-        Value out;
+    Value entry(size_t offset) const {
+        ActualValue out;
         jitc_var_read(m_index, (uint32_t) offset, &out);
-        return out;
+
+        if constexpr (!IsClass)
+            return out;
+        else
+            return (Value) jitc_registry_get_ptr(CallSupport::Domain, out);
     }
 
-    void write(uint32_t offset, Value value) {
+    void set_entry(uint32_t offset, Value value) {
         if (jitc_var_int_ref(m_index) > 0) {
             eval();
             *this = LLVMArray::from_index(
@@ -1123,7 +1173,12 @@ public:
                               data(), (uint32_t) size()));
         }
 
-        jitc_var_write(m_index, offset, &value);
+        if constexpr (!IsClass) {
+            jitc_var_write(m_index, offset, &value);
+        } else {
+            ActualValue av = jitc_registry_get_id(value);
+            jitc_var_write(m_index, offset, &av);
+        }
     }
 
     void resize(size_t size) {
@@ -1142,6 +1197,10 @@ public:
 
     const char *label() const {
         return jitc_var_label(m_index);
+    }
+
+    const CallSupport operator->() const {
+        return CallSupport(*this);
     }
 
     //! @}
@@ -1163,15 +1222,15 @@ public:
             "$r0 = add <$w x $t0> $r0_2, $l0", 1, 0, (uint32_t) size));
     }
 
-    static uint32_t mkfull_(Value value, uint32_t size) {
-        uint_array_t<Value> value_uint;
+    static uint32_t mkfull_(ActualValue value, uint32_t size) {
+        uint_array_t<ActualValue> value_uint;
         unsigned long long value_ull;
 
         if (Type == VarType::Float32) {
             double d = (double) value;
             memcpy(&value_ull, &d, sizeof(double));
         }  else {
-            memcpy(&value_uint, &value, sizeof(Value));
+            memcpy(&value_uint, &value, sizeof(ActualValue));
             value_ull = (unsigned long long) value_uint;
         }
 

@@ -381,13 +381,13 @@ ENOKI_TEST_ALL(test21_mask_assign) {
     T x = arange<T>();
     x[x > Value(0)] = x + Value(1);
     if (Size >= 2) {
-        assert(x.coeff(0) == Value(0));
-        assert(x.coeff(1) == Value(2));
+        assert(x.entry(0) == Value(0));
+        assert(x.entry(1) == Value(2));
     }
     x[x > Value(0)] = Value(-1);
     if (Size >= 2) {
-        assert(x.coeff(0) == Value(0));
-        assert(x.coeff(1) == Value(-1));
+        assert(x.entry(0) == Value(0));
+        assert(x.entry(1) == Value(-1));
     }
 }
 
@@ -424,8 +424,8 @@ ENOKI_TEST_ALL(test24_fmaddsub) {
     auto b = fmsubadd(T(0), T(0), T(1));
     assert(a == -b);
     if (std::is_signed<scalar_t<T>>::value)
-        assert(a.coeff(0) < 0);
-    assert(b.coeff(0) > 0);
+        assert(a.entry(0) < 0);
+    assert(b.entry(0) > 0);
 }
 
 ENOKI_TEST_ALL(test25_rorl_array) {
@@ -503,7 +503,7 @@ ENOKI_TEST_ALL(test29_pointer_arithmetic) {
         assert(y == a + UInt32P(1));
         assert(x != y);
         assert(y-x == 1);
-        assert((uintptr_t) y.coeff(0) - (uintptr_t) x.coeff(0) == sizeof(Class));
+        assert((uintptr_t) y.entry(0) - (uintptr_t) x.entry(0) == sizeof(Class));
         y -= UInt32P(1);
         assert(x == y);
 
@@ -525,7 +525,7 @@ ENOKI_TEST_ALL(test29_pointer_arithmetic) {
         assert(y == a + UInt32P(1));
         assert(x != y);
         assert(y-x == 1);
-        assert((uintptr_t) y.coeff(0) - (uintptr_t) x.coeff(0) == sizeof(Class));
+        assert((uintptr_t) y.entry(0) - (uintptr_t) x.entry(0) == sizeof(Class));
         y -= UInt32P(1);
         assert(x == y);
 

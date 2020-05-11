@@ -51,6 +51,11 @@ struct MaskBase : StaticArrayImpl<Value_, Size_, true, Derived_> {
     MaskBase &operator=(const MaskBase &) = default;
     MaskBase &operator=(MaskBase &&) = default;
 
+    /// Catch-all move/copy assignment operator
+    template <typename T> MaskBase &operator=(T&& value) {
+        return operator=(Derived_(std::forward<T>(value)));
+    }
+
     /// Forward to base
     template <typename T> MaskBase(T &&value, detail::reinterpret_flag)
         : Base(std::forward<T>(value), detail::reinterpret_flag()) { }
@@ -90,17 +95,17 @@ struct MaskBase : StaticArrayImpl<Value_, Size_, true, Derived_> {
     MaskBase(const T1 &a1, const T2 &a2)
         : Base(a1, a2) { }
 
-    using Base::coeff;
-    ENOKI_INLINE decltype(auto) coeff(size_t i) {
+    using Base::entry;
+    ENOKI_INLINE decltype(auto) entry(size_t i) {
         if constexpr (!Base::IsPacked)
-            return Base::coeff(i);
+            return Base::entry(i);
         else
             return MaskBit<MaskBase>(derived(), i);
     }
 
-    ENOKI_INLINE decltype(auto) coeff(size_t i) const {
+    ENOKI_INLINE decltype(auto) entry(size_t i) const {
         if constexpr (!Base::IsPacked)
-            return Base::coeff(i);
+            return Base::entry(i);
         else
             return MaskBit<const MaskBase>(derived(), i);
     }
@@ -110,9 +115,9 @@ struct MaskBase : StaticArrayImpl<Value_, Size_, true, Derived_> {
             return Base::bit_(index);
         } else if constexpr (Base::IsPacked) {
             using Int = int_array_t<Value_>;
-            return memcpy_cast<Int>(Base::coeff(index)) != 0;
+            return memcpy_cast<Int>(Base::entry(index)) != 0;
         } else {
-            return Base::coeff(index);
+            return Base::entry(index);
         }
     }
 
@@ -121,9 +126,9 @@ struct MaskBase : StaticArrayImpl<Value_, Size_, true, Derived_> {
             Base::set_bit_(index, value);
         } else if constexpr (Base::IsPacked) {
             using Int = int_array_t<Value_>;
-            Base::coeff(index) = memcpy_cast<Value_>(Int(value ? -1 : 0));
+            Base::entry(index) = memcpy_cast<Value_>(Int(value ? -1 : 0));
         } else {
-            Base::coeff(index) = value;
+            Base::entry(index) = value;
         }
     }
 };

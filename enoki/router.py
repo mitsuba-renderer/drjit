@@ -280,12 +280,12 @@ def op_bool(self):
         "variants (enoki.all_nested(), etc.) are available for nested arrays.")
 
 
-# Mainly for testcases: keep track of how often coeff() is invoked.
-_coeff_evals = 0
+# Mainly for testcases: keep track of how often entry() is invoked.
+_entry_evals = 0
 
 
 def op_getitem(self, index):
-    global _coeff_evals
+    global _entry_evals
     if isinstance(index, tuple):
         for i in index:
             self = op_getitem(self, i)
@@ -295,15 +295,15 @@ def op_getitem(self, index):
         if index < 0:
             index = size + index
         if index >= 0 and index < size:
-            _coeff_evals += 1
-            return self.coeff(index)
+            _entry_evals += 1
+            return self.entry(index)
         else:
             raise IndexError("Index %i exceeds the array "
                              "bounds %i!" % (index, size))
 
 
 def op_setitem(self, index, value):
-    global _coeff_evals
+    global _entry_evals
     if isinstance(index, tuple):
         for i in index[:-1]:
             self = op_getitem(self, i)
@@ -313,8 +313,8 @@ def op_setitem(self, index, value):
         if index < 0:
             index = size + index
         if index >= 0 and index < size:
-            _coeff_evals += 1
-            self.set_coeff(index, value)
+            _entry_evals += 1
+            self.set_entry(index, value)
         else:
             raise IndexError("Index %i exceeds the array "
                              "bounds %i!" % (index, size))

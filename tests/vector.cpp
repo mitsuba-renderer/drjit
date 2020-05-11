@@ -62,18 +62,18 @@ template <typename T> void test02_vecops_float() {
     assert(hprod(v) == 6.f);
     assert(hmax(v) == 3.f);
     if (T::ActualSize == 4)
-        v.coeff(3) = -4;
+        v.entry(3) = -4;
     assert(hmin(v) == 1.f);
     assert(dot(v, v) == 14.f);
 
     v = T(0);
     if (T::ActualSize == 4)
-        v.coeff(3) = -1;
+        v.entry(3) = -1;
     assert(!any(v < Value(0)));
 
     v = T(-1);
     if (T::ActualSize == 4)
-        v.coeff(3) = 0;
+        v.entry(3) = 0;
     assert(all(v < Value(0)));
 
     /* Test cross product */
@@ -84,7 +84,7 @@ template <typename T> void test02_vecops_float() {
 
     v.x() = 3; v.y() = 4; v.z() = 5;
     if (T::ActualSize == 4)
-        v.coeff(3) = -1;
+        v.entry(3) = -1;
     assert(v == T(3, 4, 5));
     assert(v != T(3, 2, 5));
 }
@@ -141,8 +141,8 @@ ENOKI_TEST(array_float_02_test07_matrix) {
     assert(to_string(a) == "[[1, 2],\n [3, 4]]");
     assert(to_string(transpose(a)) == "[[1, 3],\n [2, 4]]");
     assert(a(0, 1) == 2);
-    assert(to_string(a.coeff(0)) == "[1, 3]");
-    assert(to_string(a.coeff(1)) == "[2, 4]");
+    assert(to_string(a.entry(0)) == "[1, 3]");
+    assert(to_string(a.entry(1)) == "[2, 4]");
     assert(to_string(a*a) == "[[7, 10],\n [15, 22]]");
     assert(to_string(a*a) == "[[7, 10],\n [15, 22]]");
     assert(to_string(a*b) == "[3, 7]");
@@ -299,10 +299,10 @@ ENOKI_TEST(masked_assignment) {
     masked(z, true) *= 2.f;
     masked(z, z > 0.f) *= 2.f;
     masked(z, eq(arange<FloatP>(), 0.f)) *= 2.f;
-    assert(z.coeff(0, 0, 0) == 8.f);
+    assert(z.entry(0, 0, 0) == 8.f);
 
     if (FloatP::Size > 1) {
-        assert(z.coeff(0, 0, 1) == 4.f);
-        assert(z.coeff(1, 0, 1) == 0.f);
+        assert(z.entry(0, 0, 1) == 4.f);
+        assert(z.entry(1, 0, 1) == 0.f);
     }
 }

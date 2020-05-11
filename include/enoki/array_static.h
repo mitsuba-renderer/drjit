@@ -86,7 +86,7 @@ struct StaticArrayBase : ArrayBaseT<Value_, IsMask_, Derived_> {
         if constexpr (Derived::IsDynamic) {
             if (size != 0) {
                 for (size_t i = 0; i < Derived::Size; ++i)
-                    result.coeff(i) = empty<Value>(size);
+                    result.entry(i) = empty<Value>(size);
             }
         } else {
             ENOKI_MARK_USED(size);
@@ -99,7 +99,7 @@ struct StaticArrayBase : ArrayBaseT<Value_, IsMask_, Derived_> {
         if constexpr (is_array_v<Value>) {
             Derived result;
             for (size_t i = 0; i < Derived::Size; ++i)
-                result.coeff(i) = zero<Value>(size);
+                result.entry(i) = zero<Value>(size);
             return result;
         } else {
             ENOKI_MARK_USED(size);
@@ -111,7 +111,7 @@ struct StaticArrayBase : ArrayBaseT<Value_, IsMask_, Derived_> {
         if constexpr (is_array_v<Value>) {
             Derived result;
             for (size_t i = 0; i < Derived::Size; ++i)
-                result.coeff(i) = full<Value>(value, size);
+                result.entry(i) = full<Value>(value, size);
             return result;
         } else {
             ENOKI_MARK_USED(size);
@@ -132,7 +132,7 @@ struct StaticArrayBase : ArrayBaseT<Value_, IsMask_, Derived_> {
         } else {
             ENOKI_CHKSCALAR("store_unaligned");
             for (size_t i = 0; i < Derived::Size; ++i)
-                derived().coeff(i) =
+                derived().entry(i) =
                     load_unaligned<Value>(static_cast<Value *>(mem) + i);
         }
     }
@@ -149,7 +149,7 @@ struct StaticArrayBase : ArrayBaseT<Value_, IsMask_, Derived_> {
             ENOKI_CHKSCALAR("store_unaligned");
             for (size_t i = 0; i < Derived::Size; ++i)
                 store_unaligned(static_cast<Value *>(mem) + i,
-                                derived().coeff(i));
+                                derived().entry(i));
         }
     }
 
@@ -166,7 +166,7 @@ private:
 
     template <typename T, size_t Offset, size_t... Is>
     ENOKI_INLINE T sub_array_(std::index_sequence<Is...>) const {
-        return T(derived().coeff(Offset + Is)...);
+        return T(derived().entry(Offset + Is)...);
     }
 
     template <typename T, size_t... Is>

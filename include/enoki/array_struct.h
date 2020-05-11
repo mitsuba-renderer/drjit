@@ -90,6 +90,7 @@ ENOKI_INLINE auto masked(T &value, const Mask &mask) {
 // -----------------------------------------------------------------------
 
 template <typename T, typename> struct struct_support {
+    static constexpr bool Defined = false;
 };
 
 NAMESPACE_END(enoki)

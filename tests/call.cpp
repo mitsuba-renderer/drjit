@@ -86,19 +86,19 @@ ENOKI_TEST(test01_call) {
     Test *b = new Test(20);
 
     TestP pointers(a);
-    pointers.coeff(offset) = b;
+    pointers.entry(offset) = b;
 
     Int32P index = arange<Int32P>();
     Int32P ref = arange<Int32P>() + 10;
     if (offset < Int32P::Size)
-        ref.coeff(offset) += 10;
+        ref.entry(offset) += 10;
 
     Int32P result = pointers->func1(index);
     assert(result == ref);
 
     Int32P ref2 = 10;
     if (offset < Int32P::Size)
-        ref2.coeff(offset) += 10;
+        ref2.entry(offset) += 10;
 
     assert(pointers->get_value() == ref2);
 
@@ -122,7 +122,7 @@ ENOKI_TEST(test01_call) {
     assert(mask == eq(pointers, b));
 
     /* The following should not crash */
-    pointers.coeff(0) = nullptr;
+    pointers.entry(0) = nullptr;
     pointers->func3();
 
     delete a;
