@@ -57,6 +57,9 @@ struct KMaskBase : StaticArrayBase<Value_, Size_, true, Derived_> {
     template <typename T, enable_if_t<std::is_same_v<bool, T> || std::is_same_v<int, T>> = 0>
     ENOKI_INLINE KMaskBase(const T &b) : k(bool(b) ? BitMask : Register(0)) { }
 
+    template <typename T>
+    KMaskBase(const detail::MaskBit<T> &bit, detail::reinterpret_flag) : KMaskBase((bool) bit) { }
+
     ENOKI_REINTERPRET_KMASK(bool, Size) : k(load_bool_(a.derived().data())) { }
 
     ENOKI_REINTERPRET_KMASK(double, 16)   { k = _mm512_kunpackb(high(a).k, low(a).k); }

@@ -16,6 +16,7 @@
 #include <enoki/array_generic.h>
 
 NAMESPACE_BEGIN(enoki)
+NAMESPACE_BEGIN(detail)
 
 template <typename T> struct MaskBit {
 public:
@@ -36,6 +37,8 @@ private:
     T &mask;
     size_t index;
 };
+
+NAMESPACE_END(detail)
 
 template <typename Value_, size_t Size_, typename Derived_>
 struct MaskBase : StaticArrayImpl<Value_, Size_, true, Derived_> {
@@ -100,14 +103,14 @@ struct MaskBase : StaticArrayImpl<Value_, Size_, true, Derived_> {
         if constexpr (!Base::IsPacked)
             return Base::entry(i);
         else
-            return MaskBit<MaskBase>(derived(), i);
+            return detail::MaskBit<MaskBase>(derived(), i);
     }
 
     ENOKI_INLINE decltype(auto) entry(size_t i) const {
         if constexpr (!Base::IsPacked)
             return Base::entry(i);
         else
-            return MaskBit<const MaskBase>(derived(), i);
+            return detail::MaskBit<const MaskBase>(derived(), i);
     }
 
     ENOKI_INLINE bool bit_(size_t index) const {

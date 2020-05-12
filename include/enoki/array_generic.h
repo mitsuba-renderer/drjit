@@ -85,6 +85,34 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
     ENOKI_ARRAY_DEFAULTS(StaticArrayImpl)
     ENOKI_ARRAY_FALLBACK_CONSTRUCTORS(StaticArrayImpl)
 
+    template <typename Value2, typename D2, typename D = Derived_,
+              enable_if_t<D::Size != D2::Size || D::Depth != D2::Depth> = 0>
+    StaticArrayImpl(const ArrayBaseT<Value2, false, D2> &v) {
+        if constexpr (D::Size == D2::Size && D2::BroadcastOuter) {
+            static_assert(std::is_constructible_v<Value, value_t<D2>>);
+            for (size_t i = 0; i < derived().size(); ++i)
+                derived().entry(i) = (Value) v.derived().entry(i);
+        } else {
+            static_assert(std::is_constructible_v<Value, D2>);
+            for (size_t i = 0; i < derived().size(); ++i)
+                derived().entry(i) = v.derived();
+        }
+    }
+
+    template <typename Value2, typename D2, typename D = Derived_,
+              enable_if_t<D::Size != D2::Size || D::Depth != D2::Depth> = 0>
+    StaticArrayImpl(const ArrayBaseT<Value2, IsMask_, D2> &v,
+                    detail::reinterpret_flag) {
+        if constexpr (D::Size == D2::Size && D2::BroadcastOuter) {
+            static_assert(std::is_constructible_v<Value, value_t<D2>, detail::reinterpret_flag>);
+            for (size_t i = 0; i < derived().size(); ++i)
+                derived().entry(i) = reinterpret_array<Value>(v.derived().entry(i));
+        } else {
+            static_assert(std::is_constructible_v<Value, D2, detail::reinterpret_flag>);
+            for (size_t i = 0; i < derived().size(); ++i)
+                derived().entry(i) = reinterpret_array<Value>(v.derived());
+        }
+    }
 
 #if defined(NDEBUG)
     StaticArrayImpl() = default;

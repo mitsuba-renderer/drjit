@@ -30,17 +30,16 @@ NAMESPACE_BEGIN(enoki)
     using Base::operator=;
 
 #define ENOKI_ARRAY_FALLBACK_CONSTRUCTORS(Name)                                \
-    template <typename Value2, typename Derived2, typename T = Derived_,       \
-              enable_if_t<Derived2::Size == T::Size> = 0>                      \
-    Name(const ArrayBaseT<Value2, false, Derived2> &v) {                       \
+    template <typename Value2, typename D2, typename D = Derived_,             \
+              enable_if_t<D::Size == D2::Size && D::Depth == D2::Depth> = 0>   \
+    Name(const ArrayBaseT<Value2, false, D2> &v) {                             \
         ENOKI_CHKSCALAR("Copy constructor (conversion)");                      \
         for (size_t i = 0; i < derived().size(); ++i)                          \
             derived().entry(i) = (Value) v.derived().entry(i);                 \
     }                                                                          \
-    template <typename Value2, typename Derived2, typename T = Derived_,       \
-              enable_if_t<Derived2::Size == T::Size> = 0>                      \
-    Name(const ArrayBaseT<Value2, IsMask_, Derived2> &v,                       \
-         detail::reinterpret_flag) {                                           \
+    template <typename Value2, typename D2, typename D = Derived_,             \
+              enable_if_t<D::Size == D2::Size && D::Depth == D2::Depth> = 0>   \
+    Name(const ArrayBaseT<Value2, IsMask_, D2> &v, detail::reinterpret_flag) { \
         ENOKI_CHKSCALAR("Copy constructor (reinterpret_cast)");                \
         for (size_t i = 0; i < derived().size(); ++i)                          \
             derived().entry(i) = reinterpret_array<Value>(v[i]);               \

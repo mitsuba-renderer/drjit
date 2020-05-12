@@ -250,6 +250,7 @@ namespace detail {
     struct reinterpret_flag { };
     template <typename T> struct MaskedValue;
     template <typename T> struct MaskedArray;
+    template <typename T> struct MaskBit;
 }
 
 NAMESPACE_END(enoki)
