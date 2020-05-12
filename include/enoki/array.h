@@ -23,7 +23,6 @@
 
 #include <enoki/array_generic.h>
 #include <enoki/array_mask.h>
-#include <enoki/array_struct.h>
 
 NAMESPACE_BEGIN(enoki)
 
@@ -51,6 +50,24 @@ struct Mask : MaskBase<Value_, Size_, Mask<Value_, Size_>> {
     template <typename T> using ReplaceValue = Mask<T, Size_>;
 
     ENOKI_ARRAY_IMPORT(Mask, Base)
+};
+
+template <typename Value_, size_t Size_>
+struct Array<detail::MaskedArray<Value_>, Size_>
+    : detail::MaskedArray<Array<Value_, Size_>> {
+    using Base = detail::MaskedArray<Array<Value_, Size_>>;
+    using Base::Base;
+    using Base::operator=;
+    Array(const Base &b) : Base(b) { }
+};
+
+template <typename Value_, size_t Size_>
+struct Mask<detail::MaskedArray<Value_>, Size_>
+    : detail::MaskedArray<Mask<Value_, Size_>> {
+    using Base = detail::MaskedArray<Mask<Value_, Size_>>;
+    using Base::Base;
+    using Base::operator=;
+    Mask(const Base &b) : Base(b) { }
 };
 
 NAMESPACE_END(enoki)

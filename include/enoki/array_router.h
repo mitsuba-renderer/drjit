@@ -668,7 +668,11 @@ Target gather(Source &&source, const Index &index, const mask_t<Target> &mask = 
     } else if constexpr (has_struct_support_v<Target>) {
         return struct_support<Target>::template gather<Permute>(source, index, mask);
     } else {
-        static_assert(std::is_integral_v<Index>, "Index of scalar gather must be an integer!");
+        static_assert(
+            std::is_integral_v<Index>,
+            "gather(): don't know what to do with these inputs. Did you forget "
+            "an ENOKI_STRUCT() declaration for type to be gathered?");
+
         if constexpr (is_array_v<Source>)
             return mask ? source[index] : Target(0);
         else
@@ -695,7 +699,11 @@ void scatter(Target &&target, const Value &value, const Index &index, const mask
     } else if constexpr (has_struct_support_v<Value>) {
         struct_support<Value>::template scatter<Permute>(target, value, index, mask);
     } else {
-        static_assert(std::is_integral_v<Index>, "Index of scalar scatter must be a scalar integer!");
+        static_assert(
+            std::is_integral_v<Index>,
+            "scatter(): don't know what to do with these inputs. Did you forget "
+            "an ENOKI_STRUCT() declaration for type to be scattered?");
+
         if (mask) {
             if constexpr (is_array_v<Target>)
                 target[index] = value;
@@ -723,7 +731,11 @@ void scatter_add(Target &&target, const Value &value, const Index &index, const 
     } else if constexpr (has_struct_support_v<Value>) {
         struct_support<Value>::scatter_add(target, value, index, mask);
     } else {
-        static_assert(std::is_integral_v<Index>, "Index of scalar scatter_add must be a scalar integer!");
+        static_assert(
+            std::is_integral_v<Index>,
+            "scatter_add(): don't know what to do with these inputs. Did you forget "
+            "an ENOKI_STRUCT() declaration for type to be scattered?");
+
         if (mask) {
             if constexpr (is_array_v<Target>)
                 target[index] += value;
@@ -784,18 +796,14 @@ ENOKI_INLINE void eval(const Ts&... values) {
 }
 
 template <typename T> ENOKI_INLINE size_t slices(const T &value) {
-    if constexpr (is_static_array_v<T>) {
-        if constexpr (array_size_v<T> != 0)
-            return slices(value.entry(0));
-        else
-            return 0;
-    } else if constexpr (is_dynamic_array_v<T>) {
+    if constexpr (array_depth_v<T> > 1)
+        return enoki::slices(value.entry(0));
+    else if constexpr (is_array_v<T>)
         return value.size();
-    } else if constexpr (has_struct_support_v<T>) {
+    else if constexpr (has_struct_support_v<T>)
         return struct_support<T>::slices(value);
-    } else {
+    else
         return 1;
-    }
 }
 
 template <typename T> ENOKI_INLINE auto detach(const T &value) {
@@ -915,6 +923,81 @@ template <typename T> ENOKI_INLINE void forward(T& value, bool retain_graph = fa
     set_grad(value, 1.f);
     ad_schedule(value, false);
     DiffArray::traverse(false, retain_graph);
+}
+
+//! @}
+// -----------------------------------------------------------------------
+
+// -----------------------------------------------------------------------
+//! @{ \name Masked array helper classes
+// -----------------------------------------------------------------------
+
+NAMESPACE_BEGIN(detail)
+
+template <typename T> struct MaskedValue {
+    MaskedValue() = default;
+    MaskedValue(T &d, bool m) : d(&d), m(m) { }
+
+    template <typename T2> ENOKI_INLINE void operator =(const T2 &value) { if (m) *d = value; }
+    template <typename T2> ENOKI_INLINE void operator+=(const T2 &value) { if (m) *d += value; }
+    template <typename T2> ENOKI_INLINE void operator-=(const T2 &value) { if (m) *d -= value; }
+    template <typename T2> ENOKI_INLINE void operator*=(const T2 &value) { if (m) *d *= value; }
+    template <typename T2> ENOKI_INLINE void operator/=(const T2 &value) { if (m) *d /= value; }
+    template <typename T2> ENOKI_INLINE void operator|=(const T2 &value) { if (m) *d |= value; }
+    template <typename T2> ENOKI_INLINE void operator&=(const T2 &value) { if (m) *d &= value; }
+    template <typename T2> ENOKI_INLINE void operator^=(const T2 &value) { if (m) *d ^= value; }
+    template <typename T2> ENOKI_INLINE void operator<<=(const T2 &value) { if (m) *d <<= value; }
+    template <typename T2> ENOKI_INLINE void operator>>=(const T2 &value) { if (m) *d >>= value; }
+
+    T *d = nullptr;
+    bool m = false;
+};
+
+template <typename T> struct MaskedArray : ArrayBaseT<value_t<T>, is_mask_v<T>, MaskedArray<T>> {
+    using Mask     = mask_t<T>;
+    static constexpr size_t Size = array_size_v<T>;
+    static constexpr bool IsMaskedArray = true;
+
+    MaskedArray() = default;
+    MaskedArray(T &d, const Mask &m) : d(&d), m(m) { }
+
+    template <typename T2> ENOKI_INLINE void operator =(const T2 &value) { *d = select(m, value, *d); }
+    template <typename T2> ENOKI_INLINE void operator+=(const T2 &value) { *d = select(m, *d + value, *d); }
+    template <typename T2> ENOKI_INLINE void operator-=(const T2 &value) { *d = select(m, *d - value, *d); }
+    template <typename T2> ENOKI_INLINE void operator*=(const T2 &value) { *d = select(m, *d * value, *d); }
+    template <typename T2> ENOKI_INLINE void operator/=(const T2 &value) { *d = select(m, *d / value, *d); }
+    template <typename T2> ENOKI_INLINE void operator|=(const T2 &value) { *d = select(m, *d | value, *d); }
+    template <typename T2> ENOKI_INLINE void operator&=(const T2 &value) { *d = select(m, *d & value, *d); }
+    template <typename T2> ENOKI_INLINE void operator^=(const T2 &value) { *d = select(m, *d ^ value, *d); }
+    template <typename T2> ENOKI_INLINE void operator<<=(const T2 &value) { *d = select(m, *d << value, *d); }
+    template <typename T2> ENOKI_INLINE void operator>>=(const T2 &value) { *d = select(m, *d >> value, *d); }
+
+    /// Type alias for a similar-shaped array over a different type
+    template <typename T2> using ReplaceValue = MaskedArray<typename T::template ReplaceValue<T2>>;
+
+    T *d = nullptr;
+    Mask m = false;
+};
+
+NAMESPACE_END(detail)
+
+template <typename T> struct struct_support {
+    static constexpr bool Defined = false;
+};
+
+template <typename T, typename Mask>
+ENOKI_INLINE auto masked(T &value, const Mask &mask) {
+    if constexpr (is_array_v<T>) {
+        return detail::MaskedArray<T>{ value, mask };
+    } else if constexpr (has_struct_support_v<T>) {
+        return struct_support<T>::masked(value, mask);
+    } else {
+        static_assert(
+            std::is_same_v<Mask, bool>,
+            "masked(): don't know what to do with these inputs. Did you forget "
+            "an ENOKI_STRUCT() declaration for type to be masked?");
+        return detail::MaskedValue<T>{ value, mask };
+    }
 }
 
 //! @}

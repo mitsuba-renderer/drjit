@@ -208,10 +208,11 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
         derived().entry(i) = value;
     }
 
-    // template <typename Mask, enable_if_mask_t<Mask> = 0>
-    // ENOKI_INLINE auto operator[](const Mask &m) {
-    //     return detail::MaskedArray<Derived>{ derived(), (const mask_t<Derived> &) m };
-    // }
+    template <typename Mask, enable_if_mask_t<Mask> = 0>
+    ENOKI_INLINE auto operator[](const Mask &m) {
+        return detail::MaskedArray<Derived>{ derived(),
+                                             (const mask_t<Derived> &) m };
+    }
 
     ENOKI_INLINE bool empty() const { return derived().size() == 0; }
 

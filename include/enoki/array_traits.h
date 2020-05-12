@@ -150,7 +150,7 @@ template <typename T> using enable_if_mask_t = enable_if_t<is_mask_v<T>>;
 template <typename... Ts> constexpr bool is_array_any_v = (is_array_v<Ts> || ...);
 template <typename... Ts> using enable_if_array_any_t = enable_if_t<is_array_any_v<Ts...>>;
 
-template <typename T> constexpr bool has_struct_support_v = struct_support<T>::Defined;
+template <typename T> constexpr bool has_struct_support_v = struct_support<std::decay_t<T>>::Defined;
 
 namespace detail {
     template <typename T, typename = int> struct scalar {

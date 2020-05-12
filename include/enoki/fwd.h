@@ -234,7 +234,7 @@ template <typename Value_> struct Complex;
 template <typename Value_> struct Quaternion;
 
 /// Helper class for custom data structures
-template <typename T, typename = int>
+template <typename T>
 struct struct_support;
 
 template <typename T, typename Array>
@@ -248,6 +248,8 @@ struct half;
 
 namespace detail {
     struct reinterpret_flag { };
+    template <typename T> struct MaskedValue;
+    template <typename T> struct MaskedArray;
 }
 
 NAMESPACE_END(enoki)
