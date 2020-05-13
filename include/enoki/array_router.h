@@ -776,137 +776,182 @@ template <typename Value> std::pair<Value, Value> sincos(const Value &value);
 // -----------------------------------------------------------------------
 
 
-template <typename T> ENOKI_INLINE void schedule(const T &value) {
+template <typename T> ENOKI_INLINE bool schedule(const T &value) {
     if constexpr (is_jit_array_v<T>) {
         if constexpr (is_jit_array_v<value_t<T>>) {
+            bool result = false;
             for (size_t i = 0; i < value.derived().size(); ++i)
-                schedule(value.derived().entry(i));
+                result |= schedule(value.derived().entry(i));
+            return result;
         } else {
-            value.derived().schedule();
+            return value.derived().schedule_();
         }
     } else if constexpr (has_struct_support_v<T>) {
-        struct_support<T>::schedule(value);
+        return struct_support<T>::schedule(value);
     } else {
         ; // do nothing
     }
+    return false;
 }
 
 template <typename T1, typename... Ts, enable_if_t<sizeof...(Ts) != 0> = 0>
-ENOKI_INLINE void schedule(const T1 &value, const Ts&... values) {
-    enoki::schedule(value);
-    enoki::schedule(values...);
+ENOKI_INLINE bool schedule(const T1 &value, const Ts&... values) {
+    return enoki::schedule(value) | enoki::schedule(values...);
 }
 
-ENOKI_INLINE void schedule() { }
+ENOKI_INLINE bool schedule() { return false; }
 
 template <typename... Ts>
 ENOKI_INLINE void eval(const Ts&... values) {
-    enoki::schedule(values...);
-    jitc_eval();
+    if (enoki::schedule(values...))
+        jitc_eval();
 }
 
-template <typename T> ENOKI_INLINE size_t slices(const T &value) {
+ENOKI_INLINE void eval() { jitc_eval(); }
+
+template <typename T> ENOKI_INLINE size_t width(const T &value) {
     if constexpr (array_depth_v<T> > 1)
-        return enoki::slices(value.entry(0));
+        return enoki::width(value.entry(0));
     else if constexpr (is_array_v<T>)
         return value.size();
     else if constexpr (has_struct_support_v<T>)
-        return struct_support<T>::slices(value);
+        return struct_support<T>::width(value);
     else
         return 1;
 }
 
-template <typename T> ENOKI_INLINE auto detach(const T &value) {
-    if constexpr (is_diff_array_v<T> && array_depth_v<T> > 1) {
-        using ValueGrad = decltype(detach(std::declval<value_t<T>>()));
-        using Result = typename T::template ReplaceType<ValueGrad>;
-        Result result;
-        result.init_(value.size());
-        for (size_t i = 0; i < value.size(); ++i)
-            result.entry(i) = detach(value.entry(i));
-        return result;
-    } else if constexpr (is_diff_array_v<T>) {
-        return value.value();
-    } else if constexpr (has_struct_support_v<T>) {
-        return struct_support<T>::detach(value);
-    } else {
-        return value;
-    }
-}
-
-template <typename T> ENOKI_INLINE auto grad(const T &value) {
-    if constexpr (is_diff_array_v<T> && array_depth_v<T> > 1) {
-        using ValueGrad = decltype(grad(std::declval<value_t<T>>()));
-        using Result = typename T::template ReplaceType<ValueGrad>;
-        Result result;
-        result.init_(value.size());
-        for (size_t i = 0; i < value.size(); ++i)
-            result.entry(i) = grad(value.entry(i));
-        return result;
-    } else if constexpr (is_diff_array_v<T>) {
-        return value.grad();
-    } else if constexpr (has_struct_support_v<T>) {
-        return struct_support<T>::grad(value);
-    } else {
-        return; // return void
-    }
-}
-
-template <typename T1, typename T2> ENOKI_INLINE void set_grad(T1 &value, const T2 &grad) {
-    if constexpr (array_depth_v<T1> > 1) {
-        for (size_t i = 0; i < value.size(); ++i) {
-            if constexpr (array_size_v<T1> == array_size_v<T2>)
-                set_grad(value.entry(i), grad.entry(i));
-            else
-                set_grad(value.entry(i), grad);
+template <typename T1, typename T2> ENOKI_INLINE void set_gradient(T1 &value, const T2 &gradient) {
+    if constexpr (is_diff_array_v<T1>) {
+        if constexpr (array_depth_v<T1> > 1) {
+            for (size_t i = 0; i < value.size(); ++i) {
+                if constexpr (array_size_v<T1> == array_size_v<T2>)
+                    set_gradient(value.entry(i), gradient.entry(i));
+                else
+                    set_gradient(value.entry(i), gradient);
+            }
+        } else {
+            value.set_gradient_(gradient);
         }
-    } else if constexpr (is_diff_array_v<T1>) {
-        value.set_grad(grad);
     } else {
         static_assert(detail::false_v<T1, T2>, "Unsupported inputs!");
     }
 }
 
 template <typename T1> ENOKI_INLINE void set_label(T1 &value, const char *label) {
-    if constexpr (array_depth_v<T1> > 1) {
-        size_t label_size = strlen(label) + 11;
-        char *buf = (char *) alloca(label_size);
-        for (size_t i = 0; i < value.size(); ++i) {
-            snprintf(buf, label_size, "%s_%zu", label, i);
-            set_grad(value.entry(i), buf);
+    if constexpr (is_diff_array_v<T1> || is_jit_array_v<T1>) {
+        if constexpr (array_depth_v<T1> > 1) {
+            size_t label_size = strlen(label) + 11;
+            char *buf = (char *) alloca(label_size);
+            for (size_t i = 0; i < value.size(); ++i) {
+                snprintf(buf, label_size, "%s_%zu", label, i);
+                set_grad(value.entry(i), buf);
+            }
+        } else {
+            value.set_label_(label);
         }
-    } else if constexpr (is_diff_array_v<T1> || is_jit_array_v<T1>) {
-        value.set_label(label);
     } else if constexpr (has_struct_support_v<T1>) {
-        struct_support<T1>::set_label(value);
+        struct_support<T1>::set_label(value, label);
     }
 }
 
-template <typename T> ENOKI_INLINE void requires_grad(T &value, bool state = true) {
+template <typename T> ENOKI_INLINE void attach(T &value) {
     if constexpr (is_diff_array_v<T>) {
-        value.requires_grad(state);
-    } else if constexpr (array_depth_v<T> > 1) {
-        for (size_t i = 0; i < value.size(); ++i)
-            requires_grad(value.entry(i), state);
+        if constexpr (array_depth_v<T> > 1) {
+            for (size_t i = 0; i < value.size(); ++i)
+                attach(value.entry(i));
+        } else {
+            value.attach_();
+        }
     } else if constexpr (has_struct_support_v<T>) {
-        struct_support<T>::requires_grad(value, state);
+        struct_support<T>::attach(value);
     } else {
         ; // do nothing
     }
 }
 
 template <typename... Ts>
-ENOKI_INLINE void requires_grad(const Ts&... values) {
-    bool unused[] = { (requires_grad(values), false)... };
+ENOKI_INLINE void attach(const Ts&... values) {
+    bool unused[] = { (attach(values), false)... };
     (void) unused;
 }
 
+template <typename T> ENOKI_INLINE void detach(T &value) {
+    if constexpr (is_diff_array_v<T>) {
+        if constexpr (array_depth_v<T> > 1) {
+            for (size_t i = 0; i < value.size(); ++i)
+                detach(value.entry(i));
+        } else {
+            value.detach_();
+        }
+    } else if constexpr (has_struct_support_v<T>) {
+        struct_support<T>::detach(value);
+    } else {
+        ; // do nothing
+    }
+}
+
+template <typename... Ts>
+ENOKI_INLINE void detach(const Ts&... values) {
+    bool unused[] = { (detach(values), false)... };
+    (void) unused;
+}
+
+template <typename T> ENOKI_INLINE auto detached(const T &value) {
+    if constexpr (is_diff_array_v<T>) {
+        if constexpr (array_depth_v<T> > 1) {
+            using Value = decltype(enoki::detached(T()));
+            using Result = typename T::template ReplaceType<Value>;
+
+            Result result;
+            if constexpr (Result::Size == Dynamic)
+                result = enoki::empty<Result>(value.size());
+
+            for (size_t i = 0; i < value.size(); ++i)
+                result.entry(i) = enoki::detached(value.entry(i));
+
+            return result;
+        } else {
+            return value.detached_();
+        }
+    } else if constexpr (has_struct_support_v<T>) {
+        return struct_support<T>::detached(value);
+    } else {
+        return value;
+    }
+}
+
+template <typename T> ENOKI_INLINE auto gradient(const T &value) {
+    if constexpr (is_diff_array_v<T>) {
+        if constexpr (array_depth_v<T> > 1) {
+            using Value = decltype(enoki::gradient(T()));
+            using Result = typename T::template ReplaceType<Value>;
+
+            Result result;
+            if constexpr (Result::Size == Dynamic)
+                result = enoki::empty<Result>(value.size());
+
+            for (size_t i = 0; i < value.size(); ++i)
+                result.entry(i) = enoki::gradient(value.entry(i));
+
+            return result;
+        } else {
+            return value.gradient_();
+        }
+    } else if constexpr (has_struct_support_v<T>) {
+        return struct_support<T>::gradient(value);
+    } else {
+        return value;
+    }
+}
+
 template <typename T> ENOKI_INLINE void ad_schedule(T &value, bool reverse = true) {
-    if constexpr (array_depth_v<T> > 1) {
-        for (size_t i = 0; i < value.size(); ++i)
-            ad_schedule(value.entry(i), reverse);
-    } else if constexpr (is_diff_array_v<T>) {
-        value.ad_schedule(reverse);
+    if constexpr (is_diff_array_v<T>) {
+        if constexpr (array_depth_v<T> > 1) {
+            for (size_t i = 0; i < value.size(); ++i)
+                ad_schedule(value.entry(i), reverse);
+        } else {
+            value.ad_schedule_(reverse);
+        }
     } else if constexpr (has_struct_support_v<T>) {
         struct_support<T>::ad_schedule(value, reverse);
     } else {

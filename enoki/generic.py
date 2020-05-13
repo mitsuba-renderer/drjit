@@ -529,9 +529,8 @@ def schedule(a0):
     if a0.IsJIT:
         if a0.Depth == 1:
             if a0.IsDiff:
-                a0.value_().schedule()
-            else:
-                _ek.detail.jitc_schedule(a0.index_())
+                a0 = a0.detached_()
+            _ek.detail.jitc_schedule(a0.index_())
         else:
             for i in range(len(a0)):
                 a0[i].schedule()
@@ -753,49 +752,52 @@ def dot_(a0, a1):
 # -------------------------------------------------------------------
 
 
-def index_(a):
-    if a.IsJIT or a.IsDiff:
-        return [v.index_() for v in a]
-    return None
+def detached_(a):
+    if not a.IsDiff:
+        return a
+
+    result = a.DetachedType()
+    for i in range(len(a)):
+        result[i] = a[i].detached_()
+    return result
 
 
-def grad_(a):
+def gradient_(a):
     if not a.IsDiff:
         return None
 
     result = a.DetachedType()
     for i in range(len(a)):
-        g = a[i].grad_()
+        g = a[i].gradient_()
         if g is None:
             return None
         result[i] = g
     return result
 
 
-def set_grad_(a, grad):
+def set_gradient_(a, gradient):
     if not a.IsDiff:
         raise Exception("Expected a differentiable array type!")
 
     s = len(a)
     for i in range(s):
-        a[i].set_grad_(grad[i])
+        a[i].set_gradient_(gradient[i])
 
 
-def value_(a):
-    if not a.IsDiff:
-        return a
-
-    result = a.DetachedType()
-    for i in range(len(a)):
-        result[i] = a[i].value_()
-    return result
-
-
-def requires_grad_(a, value=True):
+def attach_(a):
     if not a.IsDiff:
         raise Exception("Expected a differentiable array type!")
     for i in range(len(a)):
-        a[i] = a[i].requires_grad_(value)
+        a[i] = a[i].attach_(value)
+    return a
+
+
+def detach_(a):
+    if not a.IsDiff:
+        raise Exception("Expected a differentiable array type!")
+    for i in range(len(a)):
+        a[i] = a[i].detach_(value)
+    return a
 
 
 def ad_schedule_(a, reverse=True):
@@ -803,29 +805,6 @@ def ad_schedule_(a, reverse=True):
         raise Exception("Expected a differentiable array type!")
     for i in range(len(a)):
         a[i].ad_schedule_(reverse)
-
-
-@property
-def index(a):
-    return a.index_()
-
-
-@property
-def grad(a):
-    return a.grad_()
-
-
-@grad.setter
-def grad(a, value):
-    t = type(a).DetachedType
-    if not isinstance(value, t):
-        value = t(value)
-    a.set_grad_(value)
-
-
-@property
-def value(a):
-    return a.value_()
 
 
 # -------------------------------------------------------------------
@@ -874,8 +853,7 @@ def arange_(cls, start, end, step):
 @classmethod
 def gather_(cls, source, index, mask):
     assert source.Depth == 1
-    s0, s1 = len(index), len(mask)
-    sr = max(s0, s1)
+    sr = max(len(index), len(mask))
     result = cls.empty_(sr if cls.Size == Dynamic else 0)
     for i in range(sr):
         result[i] = _ek.gather(cls.Value, source, index[i], mask[i])
@@ -884,46 +862,13 @@ def gather_(cls, source, index, mask):
 
 def scatter_(self, target, index, mask):
     assert target.Depth == 1
-    s0, s1, s2 = len(self), len(index), len(mask)
-    sr = max(s0, s1, s2)
+    sr = max(len(self), len(index), len(mask))
     for i in range(sr):
         _ek.scatter(target, self[i], index[i], mask[i])
 
 
 def scatter_add_(self, target, index, mask):
     assert target.Depth == 1
-    s0, s1, s2 = len(self), len(index), len(mask)
-    sr = max(s0, s1, s2)
+    sr = max(len(self), len(index), len(mask))
     for i in range(sr):
         _ek.scatter_add(target, self[i], index[i], mask[i])
-
-# -------------------------------------------------------------------
-#                     Convert to a NumPy array
-# -------------------------------------------------------------------
-
-
-def numpy(a):
-    import numpy as np
-    if _ek.ragged(a):
-        raise Exception("Ragged arrays cannot be converted!")
-
-    _ek.reshape(_ek.cuda.Float32)
-    #  shape = _ek.shape(a)
-    #  result = np.empty(list(reversed(shape)), dtype=a.Type.NumPy, order='F')
-    #  _copy_array(
-    #      src=a,
-    #      dst=result.__array_interface__['data'][0],
-    #      shape=shape,
-    #      strides=result.strides
-    #  )
-    #  ndim = len(shape)
-    #  strides = [None] * ndim
-    #  size, stride = 1, a.Type.Size
-    #  for i in range(ndim):
-    #      v = shape[i]
-    #      strides[i] = stride
-    #      size *= v
-    #      stride *= v
-    #  print("Shape=%s" % str(shape))
-
-    return result

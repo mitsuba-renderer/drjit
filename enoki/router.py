@@ -1130,45 +1130,52 @@ def abs_dot_async(a, b):
 # -------------------------------------------------------------------
 
 
-def detach(a):
+def detached(a):
     if _ek.is_diff_array_v(a):
-        return a.value_()
+        return a.detached_()
     else:
         return a
 
 
-def grad(a):
+def gradient(a):
     if _ek.is_diff_array_v(a):
-        return a.grad_()
+        return a.gradient_()
     else:
         return None
 
 
-def set_grad(a, value):
+def set_gradient(a, value):
     if _ek.is_diff_array_v(a):
         t = type(a).DetachedType
         if not isinstance(value, t):
             value = t(value)
-        a.set_grad_(value)
+        a.set_gradient_(value)
     else:
         raise Exception("Expected a differentiable array type!")
 
 
-def requires_grad(a, value=True, *args):
-    if not isinstance(value, bool) or len(args) > 0:
-        for v in [a, value] + list(args):
-            requires_grad(v)
-    elif _ek.is_diff_array_v(a):
-        a.requires_grad_(value)
-    else:
-        raise Exception("Expected a differentiable array type!")
+def attach(*args):
+    for v in args:
+        if _ek.is_diff_array_v(v):
+            v.attach_()
+        else:
+            raise Exception("Expected differentiable array types as input!")
 
 
-def ad_schedule(a, reverse=True):
-    if _ek.is_diff_array_v(a):
-        a.ad_schedule_(reverse)
-    else:
-        raise Exception("Expected a differentiable array type!")
+def detach(*args):
+    for v in args:
+        if _ek.is_diff_array_v(v):
+            v.detach_()
+        else:
+            raise Exception("Expected differentiable array types as input!")
+
+
+def ad_schedule(*args, reverse=True):
+    for v in args:
+        if _ek.is_diff_array_v(v):
+            v.ad_schedule_(reverse)
+        else:
+            raise Exception("Expected differentiable array types as input!")
 
 
 def traverse(t, reverse=True, retain_graph=False):
@@ -1183,7 +1190,7 @@ def traverse(t, reverse=True, retain_graph=False):
 
 def backward(a, retain_graph=False):
     if _ek.is_diff_array_v(a):
-        a.grad = 1
+        set_gradient(a, 1)
         a.ad_schedule_(True)
         traverse(type(a), reverse=True, retain_graph=retain_graph)
     else:
@@ -1192,7 +1199,7 @@ def backward(a, retain_graph=False):
 
 def forward(a, retain_graph=False):
     if _ek.is_diff_array_v(a):
-        a.grad = 1
+        set_gradient(a, 1)
         a.ad_schedule_(False)
         traverse(type(a), reverse=False, retain_graph=retain_graph)
     else:
@@ -1289,3 +1296,32 @@ def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
                 return False
         return True
 
+
+# -------------------------------------------------------------------
+#    Interoperability with other frameworks (NumPy, PyTorch, Jax)
+# -------------------------------------------------------------------
+
+@property
+def op_array_interface(a):
+    print('yay gotcha here')
+    flat = _ek.ravel(a)
+    shape = _ek.shape(a)
+    strides = []
+    stride = flat.Type.Size
+    for i in range(len(shape)):
+        strides.append(stride)
+        stride *= shape[i]
+    print(shape)
+    print(stride)
+    return {
+        'shape'  : shape,
+        'stride' : stride,
+        'data'   : (flat.data_(), False)
+    }
+
+def numpy(a):
+    import numpy as np
+
+
+
+    return result

@@ -325,11 +325,14 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
             return (i < Size1) ? a1.entry(i) : a2.entry(i - Size1);
     }
 
+    ENOKI_INLINE Value *data() { return (Value *) this; }
+    ENOKI_INLINE const Value *data() const { return (const Value *) this; }
+
     //! @}
     // -----------------------------------------------------------------------
 
     Array1 a1;
     Array2 a2;
-};
+} ENOKI_MAY_ALIAS;
 
 NAMESPACE_END(enoki)

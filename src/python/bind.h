@@ -181,7 +181,7 @@ auto bind_full(py::class_<Array, ek::ArrayBase> &cls,
                 cls.def("hprod_async_", &Array::hprod_async_);
                 cls.def("hmin_async_", &Array::hmin_async_);
                 cls.def("hmax_async_", &Array::hmax_async_);
-                cls.def("migrate_", &Array::migrate);
+                cls.def("migrate_", &Array::migrate_);
             }
         }
 
@@ -287,30 +287,28 @@ auto bind_full(py::class_<Array, ek::ArrayBase> &cls,
 
     if constexpr (Array::IsJIT || Array::IsDiff) {
         cls.def("index_", [](const Array &a) { return a.index(); });
-        cls.def("set_label_", [](const Array &a, const char *name) { a.set_label(name); });
-        cls.def("label_", [](const Array &a) { return a.label(); });
+        cls.def("set_label_", [](const Array &a, const char *name) { a.set_label_(name); });
+        cls.def("label_", [](const Array &a) { return a.label_(); });
     }
 
+    if constexpr (!ek::is_mask_v<Array> || ek::is_dynamic_v<Array>)
+        cls.def("data_", [](const Array &a) { enoki::eval(a); return (uintptr_t) a.data(); });
+
     if constexpr (Array::IsDiff) {
-        using Detached = decltype(ek::detach(std::declval<Array>()));
+        using Detached = decltype(ek::detached(std::declval<Array>()));
         cls.def(py::init<Detached>());
-        cls.def("value_", &Array::value);
+        cls.def("detached_", &Array::detached_);
         if constexpr (Array::IsFloat) {
-            cls.def("grad_", [](const Array &a) -> py::object {
+            cls.def("gradient_", [](const Array &a) -> py::object {
                 if (a.index() == 0)
                     return py::none();
                 else
-                    return py::cast(a.grad());
+                    return py::cast(a.gradient_());
             });
-            cls.def("set_grad_", &Array::set_grad);
-            cls.def(
-                "requires_grad_",
-                [](Array *a, bool value) -> Array * {
-                    ek::requires_grad(*a, value);
-                    return a;
-                },
-                "value"_a = true);
-            cls.def("ad_schedule_", &Array::ad_schedule);
+            cls.def("set_gradient_", &Array::set_gradient_);
+            cls.def("attach_", [](Array *a) { a->attach_(); return a; });
+            cls.def("detach_", [](Array *a) { a->detach_(); return a; });
+            cls.def("ad_schedule_", &Array::ad_schedule_);
             cls.def("graphviz_", &Array::graphviz_);
             cls.def_static("traverse_", &Array::traverse);
         }

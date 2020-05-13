@@ -312,12 +312,15 @@ template <typename T> ENOKI_INLINE T tzcnt(T v) {
     ENOKI_PACKET_INIT(StaticArrayImpl)                                         \
     ENOKI_ARRAY_DEFAULTS(StaticArrayImpl)                                      \
     ENOKI_ARRAY_FALLBACK_CONSTRUCTORS(StaticArrayImpl)                         \
-    StaticArrayImpl(Register m) : m(m) {}                                      \
-    StaticArrayImpl(Register m, detail::reinterpret_flag) : m(m) {}            \
+    ENOKI_INLINE StaticArrayImpl(Register m) : m(m) { }                        \
+    ENOKI_INLINE StaticArrayImpl(Register m, detail::reinterpret_flag):m(m){}  \
+    ENOKI_INLINE Value *data() { return (Value *) this; }                      \
+    ENOKI_INLINE const Value *data() const { return (const Value *) this; }    \
     ENOKI_INLINE Value &entry(size_t i) { return ((Value *) this)[i]; }        \
     ENOKI_INLINE const Value &entry(size_t i) const {                          \
         return ((const Value *) this)[i];                                      \
     }
+
 
 #define ENOKI_PACKET_TYPE_3D(Type)                                             \
     using Base = StaticArrayImpl<Type, 4, IsMask_, Derived_>;                  \

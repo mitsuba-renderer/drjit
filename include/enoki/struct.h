@@ -26,14 +26,20 @@
 #define ENOKI_STRUCT_EMPTY(x) \
     result.x = enoki::empty<decltype(Class::x)>(size);
 
-#define ENOKI_STRUCT_DETACH(x) \
-    result.x = enoki::detach(value.x);
+#define ENOKI_STRUCT_ATTACH(x) \
+    enoki::detach(v.x);
 
-#define ENOKI_STRUCT_GRAD(x) \
-    result.x = enoki::grad(value.x);
+#define ENOKI_STRUCT_DETACH(x) \
+    enoki::detach(v.x);
+
+#define ENOKI_STRUCT_DETACHED(x) \
+    result.x = enoki::detached(v.x);
+
+#define ENOKI_STRUCT_GRADIENT(x) \
+    result.x = enoki::gradient(v.x);
 
 #define ENOKI_STRUCT_MASKED(x) \
-    result.x = enoki::masked(value.x, mask);
+    result.x = enoki::masked(v.x, mask);
 
 #define ENOKI_STRUCT_CONSTR_COPY(x) \
     x(v.x)
@@ -48,7 +54,14 @@
     x = std::move(v.x);
 
 #define ENOKI_STRUCT_SLICES(x) \
-    enoki::slices(value.x)
+    enoki::slices(v.x)
+
+#define ENOKI_STRUCT_ITEMS(x) \
+    v.x
+
+#define ENOKI_STRUCT_SET_LABEL(x) \
+    snprintf(tmp, sizeof(tmp), "%s_%s", label, #x); \
+    enoki::set_label(v.x, tmp);
 
 #define ENOKI_STRUCT(Name, ...)                                                \
     Name() = default;                                                          \
@@ -98,35 +111,49 @@
                 ENOKI_MAP(ENOKI_STRUCT_GATHER, __VA_ARGS__)                    \
                 return result;                                                 \
             }                                                                  \
-            static auto detach(const Class &value) {                           \
+            static void attach(Class &class) {                                 \
+                ENOKI_MAP(ENOKI_STRUCT_ATTACH, __VA_ARGS__);                   \
+            }                                                                  \
+            static void detach(Class &class) {                                 \
+                ENOKI_MAP(ENOKI_STRUCT_DETACH, __VA_ARGS__);                   \
+            }                                                                  \
+            static auto detached(const Class &v) {                             \
                 using Result =                                                 \
-                    Name<decltype(enoki::detach(std::declval<Args &>()))...>;  \
+                    Name<decltype(enoki::detached(std::declval<Args &>()))...>;\
                 Result result;                                                 \
-                ENOKI_MAP(ENOKI_STRUCT_DETACH, __VA_ARGS__)                    \
+                ENOKI_MAP(ENOKI_STRUCT_DETACHED, __VA_ARGS__)                  \
                 return result;                                                 \
             }                                                                  \
-            static auto grad(const Class &value) {                             \
+            static auto gradient(const Class &v) {                             \
                 using Result =                                                 \
-                    Name<decltype(enoki::grad(std::declval<Args &>()))...>;    \
+                    Name<decltype(enoki::gradient(std::declval<Args &>()))...>;\
                 Result result;                                                 \
-                ENOKI_MAP(ENOKI_STRUCT_GRAD, __VA_ARGS__)                      \
+                ENOKI_MAP(ENOKI_STRUCT_GRADIENT, __VA_ARGS__)                  \
                 return result;                                                 \
             }                                                                  \
             template <typename Mask>                                           \
-            static auto masked(Class &value, const Mask &mask) {               \
+            static auto masked(Class &v, const Mask &mask) {                   \
                 using Result = Name<decltype(                                  \
                     enoki::masked(std::declval<Args &>(), mask))...>;          \
                 Result result;                                                 \
                 ENOKI_MAP(ENOKI_STRUCT_MASKED, __VA_ARGS__)                    \
                 return result;                                                 \
             }                                                                  \
-            static size_t slices(const Class &value) {                         \
-                size_t sizes[] = {                                             \
+            static bool schedule(const Class &v) {                             \
+                return enoki::schedule(                                        \
+                    ENOKI_MAPC(ENOKI_STRUCT_ITEMS, __VA_ARGS__) );             \
+            }                                                                  \
+            static size_t width(const Class &v) {                              \
+                size_t widths[] = {                                            \
                     ENOKI_MAPC(ENOKI_STRUCT_SLICES, __VA_ARGS__) };            \
-                size_t size = 0;                                               \
-                for (size_t s: sizes)                                          \
-                    size = s > size ? s : size;                                \
-                return size;                                                   \
+                size_t width = 0;                                              \
+                for (size_t w: widths)                                         \
+                    width = w > width ? w : width;                             \
+                return width;                                                  \
+            }                                                                  \
+            static void set_label(Class &v, const char *label) {               \
+                char tmp[256];                                                 \
+                ENOKI_MAP(ENOKI_STRUCT_SET_LABEL, __VA_ARGS__);                \
             }                                                                  \
         };                                                                     \
     }

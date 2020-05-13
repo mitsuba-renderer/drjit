@@ -192,6 +192,9 @@ struct DynamicArray
         m_size = size;
     }
 
+    const Value *data() const { return m_data; }
+    Value *data() { return m_data; }
+
 protected:
     Value *m_data = nullptr;
     size_t m_size = 0;

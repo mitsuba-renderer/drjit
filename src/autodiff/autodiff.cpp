@@ -127,7 +127,7 @@ struct Variable {
     uint32_t size;
 
     /// This will eventually hold a gradient value
-    Value grad{};
+    Value gradient{};
 
     Variable() {
         memset(this, 0, 7 * sizeof(uint32_t));
@@ -158,18 +158,18 @@ struct Variable {
                 else
                     v2 = hsum_async(v);
 
-                if (((const T &) grad).valid())
-                    grad += v2;
+                if (((const T &) gradient).valid())
+                    gradient += v2;
                 else
-                    grad = std::move(v2);
+                    gradient = std::move(v2);
             } else {
-                if (((const T &) grad).valid())
-                    grad += v;
+                if (((const T &) gradient).valid())
+                    gradient += v;
                 else
-                    grad = v;
+                    gradient = v;
             }
         } else {
-            grad += v;
+            gradient += v;
         }
     }
 
@@ -184,18 +184,18 @@ struct Variable {
                 else
                     v3 = hsum_async(v1 * v2);
 
-                if (((const T &) grad).valid())
-                    grad += v3;
+                if (((const T &) gradient).valid())
+                    gradient += v3;
                 else
-                    grad = std::move(v3);
+                    gradient = std::move(v3);
             } else {
-                if (((const T &) grad).valid())
-                    grad = enoki::fmadd(v1, v2, grad);
+                if (((const T &) gradient).valid())
+                    gradient = enoki::fmadd(v1, v2, gradient);
                 else
-                    grad = v1 * v2;
+                    gradient = v1 * v2;
             }
         } else {
-            grad = enoki::fmadd(v1, v2, grad);
+            gradient = enoki::fmadd(v1, v2, gradient);
         }
     }
 
@@ -341,6 +341,8 @@ static void ad_free(uint32_t index, Variable *v);
 static void ad_free_edges(uint32_t index, Variable *v) {
     uint32_t edge_id = v->next_rev;
     ad_log(Trace, "ad_free_edges(): freeing edges of vertex %u", index);
+    v->next_rev = 0;
+
     while (edge_id) {
         Edge &edge = state.edges[edge_id];
 
@@ -369,11 +371,12 @@ static void ad_free_edges(uint32_t index, Variable *v) {
                 while (true) {
                     Edge &edge2 = state.edges[fwd];
                     assert(edge2.source == source);
-                    if (edge2.next_fwd == edge_id) {
+                    if (edge2.next_fwd != edge_id) {
+                        fwd = edge2.next_fwd;
+                    } else {
                         edge2.next_fwd = next_fwd;
                         break;
                     }
-                    fwd = edge2.next_fwd;
                 }
             }
         }
@@ -382,8 +385,6 @@ static void ad_free_edges(uint32_t index, Variable *v) {
 
         edge_id = next_rev;
     }
-
-    v->next_rev = 0;
 }
 
 static void ad_free(uint32_t index, Variable *v) {
@@ -458,16 +459,16 @@ template <typename Value> struct MaskEdge : Special {
 
     void backward(Variable *source, const Variable *target) const override {
         if (!negate)
-            source->accum(detail::and_(target->grad, mask), target->size);
+            source->accum(detail::and_(target->gradient, mask), target->size);
         else
-            source->accum(detail::andnot_(target->grad, mask), target->size);
+            source->accum(detail::andnot_(target->gradient, mask), target->size);
     }
 
     void forward(const Variable *source, Variable *target) const override {
         if (!negate)
-            target->accum(detail::and_(source->grad, mask), source->size);
+            target->accum(detail::and_(source->gradient, mask), source->size);
         else
-            target->accum(detail::andnot_(source->grad, mask), source->size);
+            target->accum(detail::andnot_(source->gradient, mask), source->size);
     }
 
     Mask mask;
@@ -515,22 +516,22 @@ template <typename Value> struct GatherEdge : Special {
         : offset(offset), mask(mask), permute(permute) { }
 
     void backward(Variable *source, const Variable *target) const override {
-        Value &source_grad = (Value &) source->grad;
+        Value &source_gradient = (Value &) source->gradient;
         uint32_t size = source->size;
 
-        if (!source_grad.valid())
-            source_grad = zero<Value>(size);
-        else if ((uint32_t) source_grad.size() != size)
-            source_grad.resize(size);
+        if (!source_gradient.valid())
+            source_gradient = zero<Value>(size);
+        else if ((uint32_t) source_gradient.size() != size)
+            source_gradient.resize(size);
 
         if (permute)
-            enoki::scatter(source_grad, target->grad, offset, mask);
+            enoki::scatter(source_gradient, target->gradient, offset, mask);
         else
-            enoki::scatter_add(source_grad, target->grad, offset, mask);
+            enoki::scatter_add(source_gradient, target->gradient, offset, mask);
     }
 
     void forward(const Variable *source, Variable *target) const override {
-        target->accum(enoki::gather<Value>(source->grad, offset, mask),
+        target->accum(enoki::gather<Value>(source->gradient, offset, mask),
                       asize(offset));
     }
 
@@ -574,23 +575,23 @@ template <typename Value> struct ScatterEdge : Special {
         : offset(offset), mask(mask), scatter_add(scatter_add) { }
 
     void backward(Variable *source, const Variable *target) const override {
-        source->accum(enoki::gather<Value>(target->grad, offset, mask),
+        source->accum(enoki::gather<Value>(target->gradient, offset, mask),
                       asize(offset));
     }
 
     void forward(const Variable *source, Variable *target) const override {
-        Value &target_grad = (Value &) target->grad;
+        Value &target_gradient = (Value &) target->gradient;
         uint32_t size = target->size;
 
-        if (!target_grad.valid())
-            target_grad = zero<Value>(size);
-        else if ((uint32_t) target_grad.size() != size)
-            target_grad.resize(size);
+        if (!target_gradient.valid())
+            target_gradient = zero<Value>(size);
+        else if ((uint32_t) target_gradient.size() != size)
+            target_gradient.resize(size);
 
         if (scatter_add)
-            enoki::scatter_add(target_grad, source->grad, offset, mask);
+            enoki::scatter_add(target_gradient, source->gradient, offset, mask);
         else
-            enoki::scatter(target_grad, source->grad, offset, mask);
+            enoki::scatter(target_gradient, source->gradient, offset, mask);
     }
 
     Index offset;
@@ -668,17 +669,17 @@ static void ad_traverse_rev(std::vector<uint32_t> *sched, bool retain_graph) {
         assert(v->scheduled == 1);
 
         if (is_dynamic_v<Value>) {
-            uint32_t grad_size = asize(v->grad);
-            if (unlikely(v->size != grad_size && grad_size != 1))
+            uint32_t gradient_size = asize(v->gradient);
+            if (unlikely(v->size != gradient_size && gradient_size != 1))
                 ad_fail("ad_traverse_rev(): variable %u has an invalid "
                         "gradient size: expected %u, got %u!", index,
-                        v->size, grad_size);
+                        v->size, gradient_size);
         }
 
         if (unlikely(v->custom_label)) {
             char tmp[256];
-            snprintf(tmp, 256, "%s_grad", v->label);
-            set_label(v->grad, tmp);
+            snprintf(tmp, 256, "%s_gradient", v->label);
+            set_label(v->gradient, tmp);
         }
 
         uint32_t edge_id = v->next_rev;
@@ -695,7 +696,7 @@ static void ad_traverse_rev(std::vector<uint32_t> *sched, bool retain_graph) {
                     edge.special = nullptr;
                 }
             } else {
-                v2->mul_accum(edge.weight, v->grad, v->size);
+                v2->mul_accum(edge.weight, v->gradient, v->size);
 
                 if (!retain_graph)
                     edge.weight = Value();
@@ -706,7 +707,7 @@ static void ad_traverse_rev(std::vector<uint32_t> *sched, bool retain_graph) {
 
         if (v->next_rev) {
             /// Clear the gradients at interior nodes
-            v->grad = Value();
+            v->gradient = Value();
         }
     }
 
@@ -733,17 +734,17 @@ static void ad_traverse_fwd(std::vector<uint32_t> *sched, bool retain_graph) {
         assert(v->scheduled == 1);
 
         if (is_dynamic_v<Value>) {
-            uint32_t grad_size = asize(v->grad);
-            if (unlikely(v->size != grad_size && grad_size != 1))
+            uint32_t gradient_size = asize(v->gradient);
+            if (unlikely(v->size != gradient_size && gradient_size != 1))
                 ad_fail("ad_traverse_rev(): variable %u has an invalid "
                         "gradient size: expected %u, got %u!", index,
-                        v->size, grad_size);
+                        v->size, gradient_size);
         }
 
         if (unlikely(v->custom_label)) {
             char tmp[256];
-            snprintf(tmp, 256, "%s_grad", v->label);
-            set_label(v->grad, tmp);
+            snprintf(tmp, 256, "%s_gradient", v->label);
+            set_label(v->gradient, tmp);
         }
 
         uint32_t edge_id = v->next_fwd;
@@ -760,7 +761,7 @@ static void ad_traverse_fwd(std::vector<uint32_t> *sched, bool retain_graph) {
                     edge.special = nullptr;
                 }
             } else {
-                v2->mul_accum(edge.weight, v->grad, v->size);
+                v2->mul_accum(edge.weight, v->gradient, v->size);
 
                 if (!retain_graph)
                     edge.weight = Value();
@@ -771,7 +772,7 @@ static void ad_traverse_fwd(std::vector<uint32_t> *sched, bool retain_graph) {
 
         if (v->next_fwd) {
             /// Clear the gradients at interior nodes
-            v->grad = Value();
+            v->gradient = Value();
         }
 
         if (!retain_graph) {
@@ -887,24 +888,24 @@ template <typename T> void ad_dec_ref(uint32_t index) {
         ad_free(index, v);
 }
 
-template <typename T> T ad_grad(uint32_t index) {
+template <typename T> T ad_gradient(uint32_t index) {
     if (index == 0)
-        enoki_raise("grad(): attempted to retrieve the gradient of a "
+        enoki_raise("gradient(): attempted to retrieve the gradient of a "
                     "variable that was not registered with the AD "
-                    "backend. Did you forget to call requires_grad()?");
+                    "backend. Did you forget to call requires_gradient()?");
 
     std::lock_guard<Mutex> guard(state.mutex);
-    return state[index]->grad;
+    return state[index]->gradient;
 }
 
-template <typename T> void ad_set_grad(uint32_t index, const T &value) {
+template <typename T> void ad_set_gradient(uint32_t index, const T &value) {
     if (index == 0)
-        enoki_raise("set_grad(): attempted to set the gradient of a "
+        enoki_raise("set_gradient(): attempted to set the gradient of a "
                     "variable that was not registered with the AD "
-                    "backend. Did you forget to call requires_grad()?");
+                    "backend. Did you forget to call requires_gradient()?");
 
     std::lock_guard<Mutex> guard(state.mutex);
-    state[index]->grad = value;
+    state[index]->gradient = value;
 }
 
 template <typename T> void ad_set_label(uint32_t index, const char *label) {
@@ -957,8 +958,8 @@ template ENOKI_EXPORT void ad_inc_ref<Value>(uint32_t);
 template ENOKI_EXPORT void ad_dec_ref<Value>(uint32_t);
 template ENOKI_EXPORT uint32_t ad_new<Value>(const char *, uint32_t, uint32_t,
                                              const uint32_t *, Value *);
-template ENOKI_EXPORT Value ad_grad<Value>(uint32_t);
-template ENOKI_EXPORT void ad_set_grad<Value>(uint32_t, const Value &);
+template ENOKI_EXPORT Value ad_gradient<Value>(uint32_t);
+template ENOKI_EXPORT void ad_set_gradient<Value>(uint32_t, const Value &);
 template ENOKI_EXPORT void ad_set_label<Value>(uint32_t, const char *);
 template ENOKI_EXPORT const char *ad_label<Value>(uint32_t);
 template ENOKI_EXPORT void ad_schedule<Value>(uint32_t, bool);

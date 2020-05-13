@@ -675,7 +675,7 @@ struct CUDAArray : ArrayBaseT<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
         } else if (is_literal_zero()) {
             return false;
         } else {
-            eval();
+            eval_();
             return (bool) jitc_all((uint8_t *) data(), (uint32_t) size());
         }
     }
@@ -691,7 +691,7 @@ struct CUDAArray : ArrayBaseT<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
         } else if (is_literal_zero()) {
             return false;
         } else {
-            eval();
+            eval_();
             return (bool) jitc_any((uint8_t *) data(), (uint32_t) size());
         }
     }
@@ -704,7 +704,7 @@ struct CUDAArray : ArrayBaseT<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
                 enoki_raise(#name "_async_(): zero-sized array!");            \
             else if (size() == 1)                                             \
                 return *this;                                                 \
-            eval();                                                           \
+            eval_();                                                           \
             CUDAArray result = empty<CUDAArray>(1);                           \
             jitc_reduce(Type, op, data(), (uint32_t) size(), result.data());  \
             return result;                                                    \
@@ -953,7 +953,7 @@ public:
         else if (src.size() == 1)
             return src & mask;
 
-        src.eval();
+        src.eval_();
         return gather_impl_(src.data(), src.index(), index, mask);
     }
 
@@ -975,7 +975,7 @@ public:
         void *ptr = dst.data();
 
         if (!ptr) {
-            dst.eval();
+            dst.eval_();
             ptr = dst.data();
         }
 
@@ -1007,7 +1007,7 @@ public:
         void *ptr = dst.data();
 
         if (!ptr) {
-            dst.eval();
+            dst.eval_();
             ptr = dst.data();
         }
 
@@ -1045,25 +1045,8 @@ public:
         }
     }
 
-    CUDAArray& schedule() {
-        jitc_var_schedule(m_index);
-        return *this;
-    }
-
-    const CUDAArray& schedule() const {
-        jitc_var_schedule(m_index);
-        return *this;
-    }
-
-    CUDAArray& eval() {
-        jitc_var_eval(m_index);
-        return *this;
-    }
-
-    const CUDAArray& eval() const {
-        jitc_var_eval(m_index);
-        return *this;
-    }
+    bool schedule_() const { return jitc_var_schedule(m_index) != 0; }
+    bool eval_() const { return jitc_var_eval(m_index) != 0; }
 
     bool valid() const { return m_index != 0; }
     size_t size() const { return jitc_var_size(m_index); }
@@ -1087,7 +1070,7 @@ public:
 
     void set_entry(uint32_t offset, Value value) {
         if (jitc_var_int_ref(m_index) > 0) {
-            eval();
+            eval_();
             *this = CUDAArray::from_index(
                 jitc_var_copy(AllocType::Device, CUDAArray<Value>::Type, 1,
                               data(), (uint32_t) size()));
@@ -1107,15 +1090,17 @@ public:
         m_index = index;
     }
 
-    void migrate(AllocType type) {
-        jitc_var_migrate(m_index, type);
+    void migrate_(AllocType type) {
+        uint32_t index = jitc_var_migrate(m_index, type);
+        jitc_var_dec_ref_ext(m_index);
+        m_index = index;
     }
 
-    void set_label(const char *label) const {
+    void set_label_(const char *label) const {
         jitc_var_set_label(m_index, label);
     }
 
-    const char *label() const {
+    const char *label_() const {
         return jitc_var_label(m_index);
     }
 
