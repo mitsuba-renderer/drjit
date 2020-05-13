@@ -6,7 +6,6 @@
 #include <tsl/robin_map.h>
 #include <type_traits>
 #include <assert.h>
-#include <iostream> /// XXX
 
 #if defined(ENOKI_USE_TBB)
 #  include <tbb/spin_mutex.h>
@@ -667,7 +666,6 @@ static void ad_traverse_rev(std::vector<uint32_t> *sched, bool retain_graph) {
     for (uint32_t index : *sched) {
         Variable *v = state[index];
         assert(v->scheduled == 1);
-        ad_log(Debug, "Visiting vertex %u", index);
 
         if (is_dynamic_v<Value>) {
             uint32_t grad_size = asize(v->grad);
@@ -733,7 +731,6 @@ static void ad_traverse_fwd(std::vector<uint32_t> *sched, bool retain_graph) {
         uint32_t index = *it;
         Variable *v = state[index];
         assert(v->scheduled == 1);
-        ad_log(Debug, "Visiting vertex %u", index);
 
         if (is_dynamic_v<Value>) {
             uint32_t grad_size = asize(v->grad);

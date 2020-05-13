@@ -310,8 +310,8 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                 }                                                            \
                                                                              \
                 for (size_t i = 0; i < sr; ++i) {                            \
-                    const Value &a = derived().entry(sa > 1 ? i : 0);        \
-                    const Value &b = v.entry(sb > 1 ? i : 0);                \
+                    const Value &a = derived().entry(i);                     \
+                    const Value &b = v.entry(i);                             \
                     result.entry(i) = op;                                    \
                 }                                                            \
             } else {                                                         \
@@ -338,8 +338,8 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                 }                                                            \
                                                                              \
                 for (size_t i = 0; i < sr; ++i) {                            \
-                    const Value &a = derived().entry(sa > 1 ? i : 0);        \
-                    const auto &b = v.entry(sb > 1 ? i : 0);                 \
+                    const Value &a = derived().entry(i);                     \
+                    const auto &b = v.entry(i);                              \
                     result.entry(i) = op;                                    \
                 }                                                            \
             } else {                                                         \
@@ -366,8 +366,8 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                 }                                                            \
                                                                              \
                 for (size_t i = 0; i < sr; ++i) {                            \
-                    const Value &a = derived().entry(sa > 1 ? i : 0);        \
-                    const Value &b = v.entry(sb > 1 ? i : 0);                \
+                    const Value &a = derived().entry(i);                     \
+                    const Value &b = v.entry(i);                             \
                     result.entry(i) = op;                                    \
                 }                                                            \
             } else {                                                         \
@@ -397,9 +397,9 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                 }                                                            \
                                                                              \
                 for (size_t i = 0; i < sr; ++i) {                            \
-                    const Value &a = derived().entry(sa > 1 ? i : 0);        \
-                    const Value &b = v1.entry(sb > 1 ? i : 0);               \
-                    const Value &c = v2.entry(sc > 1 ? i : 0);               \
+                    const Value &a = derived().entry(i);                     \
+                    const Value &b = v1.entry(i);                            \
+                    const Value &c = v2.entry(i);                            \
                     result.entry(i) = op;                                    \
                 }                                                            \
             } else {                                                         \
@@ -561,12 +561,11 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
 				result = derived().entry(0) * a.entry(0);
 				if constexpr (std::is_floating_point_v<Scalar>) {
                     for (size_t i = 1; i < sr; ++i)
-                        result = enoki::fmadd(derived().entry(sa > 1 ? i : 0),
-                                              a.entry(sb > 1 ? i : 0), result);
+                        result = enoki::fmadd(derived().entry(i),
+                                              a.entry(i), result);
                 } else {
                     for (size_t i = 1; i < sr; ++i)
-                        result += derived().entry(sa > 1 ? i : 0) *
-                                  a.entry(sb > 1 ? i : 0);
+                        result += derived().entry(i) * a.entry(i);
                 }
             } else {
 				result = hsum(derived() * a);
@@ -719,9 +718,9 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                sr = sa > sb ? sa : sb;
 
         for (size_t i = 0; i < sr; ++i) {
-            bool m = mask.entry(sb > 1 ? i : 0);
+            bool m = mask.entry(i);
             if (m)
-                return derived().entry(sa > 1 ? i : 0);
+                return derived().entry(i);
         }
 
         return zero<Value>();
@@ -751,8 +750,8 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
 
         for (size_t i = 0; i < sr; ++i)
             result.entry(i) = enoki::gather<Value, Permute>(
-                source, index.entry(sa > 1 ? i : 0),
-                mask.entry(sb > 1 ? i : 0));
+                source, index.entry(i),
+                mask.entry(i));
 
         return result;
     }
@@ -765,9 +764,9 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                sd = sa > sb ? sa : sb, sr = sc > sd ? sc : sd;
 
         for (size_t i = 0; i < sr; ++i)
-            enoki::scatter<Permute>(target, derived().entry(sa > 1 ? i : 0),
-                                    index.entry(sb > 1 ? i : 0),
-                                    mask.entry(sc > 1 ? i : 0));
+            enoki::scatter<Permute>(target, derived().entry(i),
+                                    index.entry(i),
+                                    mask.entry(i));
     }
 
     template <typename Target, typename Index, typename Mask>
@@ -778,9 +777,8 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                sd = sa > sb ? sa : sb, sr = sc > sd ? sc : sd;
 
         for (size_t i = 0; i < sr; ++i)
-            enoki::scatter_add(target, derived().entry(sa > 1 ? i : 0),
-                               index.entry(sb > 1 ? i : 0),
-                               mask.entry(sc > 1 ? i : 0));
+            enoki::scatter_add(target, derived().entry(i), index.entry(i),
+                               mask.entry(i));
     }
 
     static Derived load_(const void *mem, size_t size) {

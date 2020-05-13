@@ -192,46 +192,49 @@ struct StaticArrayImpl<Value_, 0, IsMask_, Derived_>
 };
 
 namespace detail {
-    template <typename T> void put_shape(size_t *shape) {
-        size_t size = array_size_v<T>;
-        *shape = size == Dynamic ? 0 : size;
-        if constexpr (is_array_v<value_t<T>>)
-            put_shape<value_t<T>>(shape + 1);
+    template <typename T> bool put_shape(size_t *shape) {
+        size_t cur = *shape,
+               size = array_size_v<T> == Dynamic ? 0 : array_size_v<T>,
+               maxval = cur > size ? cur : size;
+
+        if (maxval != size && size != 1)
+            return false; // ragged array
+
+        *shape = maxval;
+
+        if constexpr (is_array_v<value_t<T>>) {
+            if (!put_shape<value_t<T>>(shape + 1))
+                return false;
+        }
+
+        return true;
     }
 
     /// Write the shape of an array to 'shape'
-    template <typename T> void put_shape(const T &array, size_t *shape) {
+    template <typename T> bool put_shape(const T &array, size_t *shape) {
         ENOKI_MARK_USED(shape); ENOKI_MARK_USED(array);
 
         if constexpr (is_array_v<T>) {
-            size_t size = array.derived().size();
-            *shape = size;
+            size_t cur = *shape, size = array.derived().size(),
+                   maxval = cur > size ? cur : size;
+
+            if (maxval != size && size != 1)
+                return false; // ragged array
+
+            *shape = maxval;
+
             if constexpr (is_array_v<value_t<T>>) {
-                if (size == 0)
-                    put_shape<value_t<T>>(shape + 1);
-                else
-                    put_shape(array.derived().entry(0), shape + 1);
+                if (size == 0) {
+                    return put_shape<value_t<T>>(shape + 1);
+                } else {
+                    for (size_t i = 0; i < size; ++i)
+                        if (!put_shape(array.derived().entry(i), shape + 1))
+                            return false;
+                }
             }
         }
-    }
 
-    template <typename T>
-    bool is_ragged(const T &array, const size_t *shape) {
-        ENOKI_MARK_USED(shape);
-        if constexpr (is_array_v<T>) {
-            size_t size = array.derived().size();
-            if (*shape != size)
-                return true;
-
-            if constexpr (is_dynamic_v<T>) {
-                bool match = false;
-                for (size_t i = 0; i < size; ++i)
-                    match |= is_ragged(array.derived().entry(i), shape + 1);
-                return match;
-            }
-
-        }
-        return false;
+        return true;
     }
 
     template <bool Abbrev = false, typename Stream, typename Array, typename... Indices>
@@ -273,21 +276,19 @@ namespace detail {
 }
 
 template <typename Array> bool ragged(const Array &a) {
-    size_t shape[array_depth_v<Array> + 1];
-    detail::put_shape(a, shape);
-    return detail::is_ragged(a, shape);
+    size_t shape[array_depth_v<Array> + 1 /* avoid zero-sized array */ ] { };
+    return detail::put_shape(a, shape);
 }
 
 template <typename Stream, typename Value, bool IsMask, typename Derived>
 ENOKI_NOINLINE Stream &operator<<(Stream &os, const ArrayBaseT<Value, IsMask, Derived> &a) {
     size_t shape[array_depth_v<Derived> + 1];
-    enoki::schedule(a);
-    detail::put_shape(a, shape);
-
-    if (detail::is_ragged(a, shape))
+    if (!detail::put_shape(a, shape)) {
         os << "[ragged array]";
-    else
+    } else {
+        enoki::schedule(a);
         detail::print<true>(os, a, shape);
+    }
 
     return os;
 }

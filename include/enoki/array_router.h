@@ -237,7 +237,7 @@ ENOKI_INLINE auto select(const M &m, const T &t, const F &f) {
                        std::is_same_v<F, E>)
         return E::select_(m.derived(), t.derived(), f.derived());
     else
-        return select(
+        return enoki::select(
             static_cast<ref_cast_t<M, EM>>(m),
             static_cast<ref_cast_t<T, E>>(t),
             static_cast<ref_cast_t<F, E>>(f));
@@ -304,15 +304,15 @@ template <typename Array> ENOKI_INLINE Array sign(const Array &v) {
     if constexpr (std::is_floating_point_v<scalar_t<Array>> && !is_diff_array_v<Array>)
         return detail::or_(Array(1), detail::and_(detail::sign_mask<Array>(), v));
     else
-        return select(v >= 0, Array(1), Array(-1));
+        return enoki::select(v >= 0, Array(1), Array(-1));
 }
 
 template <typename Array> ENOKI_INLINE Array copysign(const Array &v1, const Array &v2) {
     if constexpr (std::is_floating_point_v<scalar_t<Array>> && !is_diff_array_v<Array>) {
         return detail::or_(enoki::abs(v1), detail::and_(detail::sign_mask<Array>(), v2));
     } else {
-        Array v1_a = abs(v1);
-        return select(v2 >= 0, v1_a, -v1_a);
+        Array v1_a = enoki::abs(v1);
+        return enoki::select(v2 >= 0, v1_a, -v1_a);
     }
 }
 
@@ -320,8 +320,8 @@ template <typename Array> ENOKI_INLINE Array copysign_neg(const Array &v1, const
     if constexpr (std::is_floating_point_v<scalar_t<Array>> && !is_diff_array_v<Array>) {
         return detail::or_(enoki::abs(v1), detail::andnot_(detail::sign_mask<Array>(), v2));
     } else {
-        Array v1_a = abs(v1);
-        return select(v2 >= 0, -v1_a, v1_a);
+        Array v1_a = enoki::abs(v1);
+        return enoki::select(v2 >= 0, -v1_a, v1_a);
     }
 }
 
@@ -329,7 +329,7 @@ template <typename Array> ENOKI_INLINE Array mulsign(const Array &v1, const Arra
     if constexpr (std::is_floating_point_v<scalar_t<Array>> && !is_diff_array_v<Array>) {
         return detail::xor_(v1, detail::and_(detail::sign_mask<Array>(), v2));
     } else {
-        return select(v2 >= 0, v1, -v1);
+        return enoki::select(v2 >= 0, v1, -v1);
     }
 }
 
@@ -337,13 +337,13 @@ template <typename Array> ENOKI_INLINE Array mulsign_neg(const Array &v1, const 
     if constexpr (std::is_floating_point_v<scalar_t<Array>> && !is_diff_array_v<Array>) {
         return detail::xor_(v1, detail::andnot_(detail::sign_mask<Array>(), v2));
     } else {
-        return select(v2 >= 0, -v1, v1);
+        return enoki::select(v2 >= 0, -v1, v1);
     }
 }
 
 /// Fast implementation for computing the base 2 log of an integer.
 template <typename T> ENOKI_INLINE T log2i(T value) {
-    return scalar_t<T>(sizeof(scalar_t<T>) * 8 - 1) - lzcnt(value);
+    return scalar_t<T>(sizeof(scalar_t<T>) * 8 - 1) - enoki::lzcnt(value);
 }
 
 // -----------------------------------------------------------------------
@@ -368,7 +368,7 @@ ENOKI_ROUTE_BINARY_FALLBACK(dot_async, dot_async, (E) a1 * (E) a2)
 template <typename Array>
 ENOKI_INLINE auto hmean(const Array &a) {
     if constexpr (is_array_v<Array>)
-        return hsum(a) * (1.f / a.derived().size());
+        return enoki::hsum(a) * (1.f / a.derived().size());
     else
         return a;
 }
@@ -376,9 +376,19 @@ ENOKI_INLINE auto hmean(const Array &a) {
 template <typename Array>
 ENOKI_INLINE auto hmean_async(const Array &a) {
     if constexpr (is_array_v<Array>)
-        return hsum_async(a) * (1.f / a.derived().size());
+        return enoki::hsum_async(a) * (1.f / a.derived().size());
     else
         return a;
+}
+
+template <typename T1, typename T2>
+ENOKI_INLINE auto abs_dot(const T1 &a1, const T2 &a2) {
+    return enoki::abs(enoki::dot(a1, a2));
+}
+
+template <typename T1, typename T2>
+ENOKI_INLINE auto abs_dot_async(const T1 &a1, const T2 &a2) {
+    return enoki::abs(enoki::dot_async(a1, a2));
 }
 
 /// Extract the low elements from an array of even size
@@ -482,7 +492,7 @@ template <bool Default, typename T> auto all_or(const T &value) {
         ENOKI_MARK_USED(value);
         return Default;
     } else {
-        return all(value);
+        return enoki::all(value);
     }
 }
 
@@ -491,7 +501,7 @@ template <bool Default, typename T> auto any_or(const T &value) {
         ENOKI_MARK_USED(value);
         return Default;
     } else {
-        return any(value);
+        return enoki::any(value);
     }
 }
 
@@ -500,7 +510,7 @@ template <bool Default, typename T> auto none_or(const T &value) {
         ENOKI_MARK_USED(value);
         return Default;
     } else {
-        return none(value);
+        return enoki::none(value);
     }
 }
 
@@ -509,7 +519,7 @@ template <bool Default, typename T> auto all_nested_or(const T &value) {
         ENOKI_MARK_USED(value);
         return Default;
     } else {
-        return all_nested(value);
+        return enoki::all_nested(value);
     }
 }
 
@@ -518,7 +528,7 @@ template <bool Default, typename T> auto any_nested_or(const T &value) {
         ENOKI_MARK_USED(value);
         return Default;
     } else {
-        return any_nested(value);
+        return enoki::any_nested(value);
     }
 }
 
@@ -527,7 +537,7 @@ template <bool Default, typename T> auto none_nested_or(const T &value) {
         ENOKI_MARK_USED(value);
         return Default;
     } else {
-        return none_nested(value);
+        return enoki::none_nested(value);
     }
 }
 
@@ -783,15 +793,15 @@ template <typename T> ENOKI_INLINE void schedule(const T &value) {
 
 template <typename T1, typename... Ts, enable_if_t<sizeof...(Ts) != 0> = 0>
 ENOKI_INLINE void schedule(const T1 &value, const Ts&... values) {
-    schedule(value);
-    schedule(values...);
+    enoki::schedule(value);
+    enoki::schedule(values...);
 }
 
 ENOKI_INLINE void schedule() { }
 
 template <typename... Ts>
 ENOKI_INLINE void eval(const Ts&... values) {
-    schedule(values...);
+    enoki::schedule(values...);
     jitc_eval();
 }
 
@@ -961,16 +971,16 @@ template <typename T> struct MaskedArray : ArrayBaseT<value_t<T>, is_mask_v<T>, 
     MaskedArray() = default;
     MaskedArray(T &d, const Mask &m) : d(&d), m(m) { }
 
-    template <typename T2> ENOKI_INLINE void operator =(const T2 &value) { *d = select(m, value, *d); }
-    template <typename T2> ENOKI_INLINE void operator+=(const T2 &value) { *d = select(m, *d + value, *d); }
-    template <typename T2> ENOKI_INLINE void operator-=(const T2 &value) { *d = select(m, *d - value, *d); }
-    template <typename T2> ENOKI_INLINE void operator*=(const T2 &value) { *d = select(m, *d * value, *d); }
-    template <typename T2> ENOKI_INLINE void operator/=(const T2 &value) { *d = select(m, *d / value, *d); }
-    template <typename T2> ENOKI_INLINE void operator|=(const T2 &value) { *d = select(m, *d | value, *d); }
-    template <typename T2> ENOKI_INLINE void operator&=(const T2 &value) { *d = select(m, *d & value, *d); }
-    template <typename T2> ENOKI_INLINE void operator^=(const T2 &value) { *d = select(m, *d ^ value, *d); }
-    template <typename T2> ENOKI_INLINE void operator<<=(const T2 &value) { *d = select(m, *d << value, *d); }
-    template <typename T2> ENOKI_INLINE void operator>>=(const T2 &value) { *d = select(m, *d >> value, *d); }
+    template <typename T2> ENOKI_INLINE void operator =(const T2 &value) { *d = enoki::select(m, value, *d); }
+    template <typename T2> ENOKI_INLINE void operator+=(const T2 &value) { *d = enoki::select(m, *d + value, *d); }
+    template <typename T2> ENOKI_INLINE void operator-=(const T2 &value) { *d = enoki::select(m, *d - value, *d); }
+    template <typename T2> ENOKI_INLINE void operator*=(const T2 &value) { *d = enoki::select(m, *d * value, *d); }
+    template <typename T2> ENOKI_INLINE void operator/=(const T2 &value) { *d = enoki::select(m, *d / value, *d); }
+    template <typename T2> ENOKI_INLINE void operator|=(const T2 &value) { *d = enoki::select(m, *d | value, *d); }
+    template <typename T2> ENOKI_INLINE void operator&=(const T2 &value) { *d = enoki::select(m, *d & value, *d); }
+    template <typename T2> ENOKI_INLINE void operator^=(const T2 &value) { *d = enoki::select(m, *d ^ value, *d); }
+    template <typename T2> ENOKI_INLINE void operator<<=(const T2 &value) { *d = enoki::select(m, *d << value, *d); }
+    template <typename T2> ENOKI_INLINE void operator>>=(const T2 &value) { *d = enoki::select(m, *d >> value, *d); }
 
     /// Type alias for a similar-shaped array over a different type
     template <typename T2> using ReplaceValue = MaskedArray<typename T::template ReplaceValue<T2>>;

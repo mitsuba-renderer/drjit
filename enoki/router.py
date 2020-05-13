@@ -167,53 +167,47 @@ ArrayBase.ReplaceScalar = classmethod(_replace_scalar)
 #                      Miscellaneous operations
 # -------------------------------------------------------------------
 
+def _shape_impl(a, i, shape):
+    if not isinstance(a, ArrayBase):
+        return
+
+    size = len(a)
+    if i < len(shape):
+        cur = shape[i]
+        maxval = _builtins.max(cur, size)
+
+        if maxval != size and size != 1:
+            return False
+
+        shape[i] = maxval
+    else:
+        shape.append(size)
+
+    if issubclass(a.Value, ArrayBase):
+        for j in range(size):
+            if not _shape_impl(a[j], i + 1, shape):
+                return False
+
+    return True
+
 
 def shape(a):
     """
-    Return the shape of an N-dimensional Enoki input
-    array, or an empty list when the provided argument is
-    not an Enoki array.
+    Return the shape of an N-dimensional Enoki input array, or an empty list
+    when the provided argument is not an Enoki array.
+
+    When the arrays is ragged, the implementation signals a failure by
+    returning ``None``. A ragged array has entries of incompatible size, e.g.
+    ``[[1, 2], [3, 4, 5]]``. Note that an scalar entries (e.g. ``[[1, 2],
+    [3]]``) are acceptable, since broadcasting can effectively convert them to
+    any size.
+
     """
-    result = []
-    t = type(a)
-    size = 0
-    is_array = issubclass(t, ArrayBase)
-
-    while is_array:
-        t = t.Value
-        is_array = issubclass(t, ArrayBase)
-        if a is not None:
-            size = len(a)
-            if is_array:
-                a = a[0] if size > 0 else None
-        result.append(size)
-    return result
-
-
-def _ragged_impl(a, shape, i, ndim):
-    """Implementation detail of ragged()"""
-    if len(a) != shape[i]:
-        return True
-
-    if i + 1 != ndim:
-        for j in range(shape[i]):
-            if _ragged_impl(a[j], shape, i + 1, ndim):
-                return True
-
-    return False
-
-
-def ragged(a):
-    """
-    Check if the Enoki array ``a`` has ragged entries (e.g. when ``len(a[0])
-    != len(a[1])``). Enoki can work with such arrays, but they are a special
-    case and unsupported by some operations (e.g. ``repr()``).
-    """
-    s = shape(a)
-    ndim = len(s)
-    if ndim == 0:
-        return False
-    return _ragged_impl(a, s, 0, ndim)
+    s = []
+    if not _shape_impl(a, 0, s):
+        return None
+    else:
+        return s
 
 
 # By default, don't print full contents of arrays with more than 20 entries
@@ -260,7 +254,7 @@ def op_repr(self):
         return '[]'
 
     s = shape(self)
-    if _ragged_impl(self, s, 0, len(s)):
+    if s is None:
         return "[ragged array]"
     else:
         import io
@@ -292,8 +286,11 @@ def op_getitem(self, index):
         return self
     else:
         size = len(self)
+        if size == 1:
+            index = 0
         if index < 0:
             index = size + index
+
         if index >= 0 and index < size:
             _entry_evals += 1
             return self.entry(index)
@@ -422,7 +419,8 @@ def ravel(array):
     if not _var_is_enoki(array) or array.Depth == 1:
         return array
 
-    if ragged(array):
+    s = shape(array)
+    if s is None:
         raise Exception('ravel(): ragged arrays not permitted!')
 
     target_type = type(array)
@@ -430,7 +428,6 @@ def ravel(array):
         target_type = target_type.Value
     index_type = _ek.uint32_array_t(target_type)
 
-    s = shape(array)
     target = empty(target_type, hprod(s))
     scatter(target, array, arange(index_type, s[-1]))
     return target
@@ -1119,6 +1116,14 @@ def dot_async(a, b):
         return a.dot_async_(b)
     else:
         return type(a)(a.dot_(b))
+
+
+def abs_dot(a, b):
+    return abs(dot(a, b))
+
+
+def abs_dot_async(a, b):
+    return abs(dot_async(a, b))
 
 # -------------------------------------------------------------------
 #                     Automatic differentiation

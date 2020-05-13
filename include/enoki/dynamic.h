@@ -120,8 +120,17 @@ struct DynamicArray
 
     ENOKI_INLINE size_t size() const { return m_size; }
 
-    ENOKI_INLINE Value &entry(size_t i) { return m_data[i]; }
-    ENOKI_INLINE const Value &entry(size_t i) const { return m_data[i]; }
+    ENOKI_INLINE Value &entry(size_t i) {
+        if (m_size == 1)
+            i = 0;
+        return m_data[i];
+    }
+
+    ENOKI_INLINE const Value &entry(size_t i) const {
+        if (m_size == 1)
+            i = 0;
+        return m_data[i];
+    }
 
     static DynamicArray empty_(size_t size) {
         DynamicArray result;
