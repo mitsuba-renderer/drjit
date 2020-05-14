@@ -1,5 +1,6 @@
 #include "bind.h"
 #include <enoki/autodiff.h>
+#include <tsl/robin_map.h>
 
 extern void export_scalar(py::module &m);
 extern void export_packet(py::module &m);
@@ -13,7 +14,6 @@ extern void export_llvm_ad(py::module &m);
 #endif
 #endif
 
-
 const uint32_t var_type_size[(int) VarType::Count] {
     (uint32_t) -1, 1, 1, 1, 2, 2, 4, 4, 8, 8, 2, 4, 8, 8
 };
@@ -25,6 +25,22 @@ const char* var_type_numpy[(int) VarType::Count] {
 
 py::handle array_name, array_init, array_configure;
 
+tsl::robin_pg_map<const enoki::ArrayBase *, py::list> registry;
+
+void enoki_free_keepalive(const enoki::ArrayBase *array) { registry.erase(array); }
+
+static py::list enoki_get_keepalive(const enoki::ArrayBase *array) {
+    if (!array)
+        return py::none();
+    auto it = registry.find(array);
+    if (it == registry.end()) {
+        py::list result;
+        registry.emplace(array, result);
+        return result;
+    } else {
+        return it.value();
+    }
+}
 
 PYBIND11_MODULE(enoki_ext, m_) {
 #if defined(ENOKI_ENABLE_JIT)
@@ -65,7 +81,7 @@ PYBIND11_MODULE(enoki_ext, m_) {
     py::class_<ek::detail::reinterpret_flag>(array_detail, "reinterpret_flag")
         .def(py::init<>());
 
-    py::class_<ek::ArrayBase>(m, "ArrayBase")
+    py::class_<ek::ArrayBase, EnokiHolder<ek::ArrayBase>>(m, "ArrayBase")
         .def_property("x",
             [](const py::object &self) -> py::object {
                 return self[py::int_(0)];
@@ -97,6 +113,7 @@ PYBIND11_MODULE(enoki_ext, m_) {
 
     py::register_exception<enoki::Exception>(m, "Exception");
     array_detail.def("reinterpret_scalar", &reinterpret_scalar);
+    array_detail.def("get_keepalive", &enoki_get_keepalive);
     array_detail.def("fmadd_scalar", [](double a, double b, double c) {
         return std::fma(a, b, c);
     });
@@ -160,10 +177,10 @@ PYBIND11_MODULE(enoki_ext, m_) {
     m.def("set_parallel_dispatch", &jitc_set_parallel_dispatch);
     m.def("parallel_dispatch", &jitc_parallel_dispatch);
 
-    array_detail.def("jitc_graphviz", &jitc_var_graphviz);
-    array_detail.def("jitc_schedule", &jitc_var_schedule);
-    array_detail.def("jitc_eval", &jitc_var_eval);
-    array_detail.def("jitc_eval", &jitc_eval);
+    array_detail.def("graphviz", &jitc_var_graphviz);
+    array_detail.def("schedule", &jitc_var_schedule);
+    array_detail.def("eval", &jitc_var_eval);
+    array_detail.def("eval", &jitc_eval);
 
     /* Register a cleanup callback function that is invoked when
        the 'enoki::ArrayBase' Python type is garbage collected */

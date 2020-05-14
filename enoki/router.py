@@ -830,16 +830,38 @@ def schedule(*args):
 
 def eval(*args):
     schedule(*args)
-    _ek.detail.jitc_eval()
+    _ek.detail.eval()
 
 
 def graphviz_str(a):
-    return a.graphviz_str
-
+    t = type(a)
+    if t.IsDiff:
+        _ek.ad_schedule(a)
+        while _ek.is_diff_array_v(_ek.value_t(t)):
+            t = t.Value
+        return t.graphviz_()
+    elif _ek.is_jit_array_v(t):
+        return _ek.detail.graphviz()
+    else:
+        raise Exception('graphviz_str: only variables registered with the '
+                        'JIT (LLVM/CUDA) or AD backend are supported!')
 
 def graphviz(a):
-    return a.graphviz
+    try:
+        from graphviz import Source
+        return Source(graphviz_str(a))
+    except ImportError:
+        raise Exception('graphviz Python package not available! Install via '
+                        '"python -m pip install graphviz". Alternatively, you'
+                        'can call enoki.graphviz_str() function to obtain a '
+                        'string representation.')
 
+
+def migrate(a, type_):
+    if _ek.is_jit_array_v(a):
+        a.migrate_(type_)
+    else:
+        raise Exception("migrate(): expected a JIT array type!")
 
 # -------------------------------------------------------------------
 #           Vertical operations -- transcendental functions
@@ -1303,25 +1325,43 @@ def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
 
 @property
 def op_array_interface(a):
-    print('yay gotcha here')
-    flat = _ek.ravel(a)
     shape = _ek.shape(a)
-    strides = []
-    stride = flat.Type.Size
-    for i in range(len(shape)):
-        strides.append(stride)
-        stride *= shape[i]
-    print(shape)
-    print(stride)
+
+    result = _ek.ravel(a)
+    if result is a:
+        result = type(a)(result)
+
+    if result.IsJIT:
+        result.migrate_(_ek.AllocType.Host)
+        _ek.sync_stream()
+
+    _ek.detail.get_keepalive(a).append(result)
+
     return {
-        'shape'  : shape,
-        'stride' : stride,
-        'data'   : (flat.data_(), False)
+        'shape'   : tuple(reversed(shape)),
+        'typestr' : result.Type.NumPy,
+        'data'    : (result.data_(), False),
+        'version' : 3
     }
 
-def numpy(a):
-    import numpy as np
 
+@property
+def op_cuda_array_interface(a):
+    shape = _ek.shape(a)
 
+    result = _ek.ravel(a)
+    if result is a:
+        result = type(a)(result)
 
-    return result
+    if result.IsJIT:
+        result.migrate_(_ek.AllocType.Device)
+        _ek.sync_stream()
+
+    _ek.detail.get_keepalive(a).append(result)
+
+    return {
+        'shape'   : tuple(reversed(shape)),
+        'typestr' : result.Type.NumPy,
+        'data'    : (result.data_(), False),
+        'version' : 2
+    }

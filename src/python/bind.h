@@ -13,10 +13,27 @@ auto bind_type(py::module &m, bool scalar_mode = false) {
     constexpr VarType Type = ek::var_type_v<Scalar>;
 
     py::str name = array_name(Type, Array::Depth, Array::Size, scalar_mode);
-    auto cls = py::class_<Array, ek::ArrayBase>(
+    auto cls = py::class_<Array, ek::ArrayBase, EnokiHolder<Array>>(
         m, PyUnicode_AsUTF8AndSize(name.ptr(), nullptr));
 
-    cls.attr("Value") = py::cast(Value()).get_type();
+    auto &reg_types = py::detail::get_internals().registered_types_cpp;
+
+    PyTypeObject *type_obj;
+    if constexpr (std::is_scalar_v<Value>) {
+        if constexpr (std::is_same_v<bool, Value>)
+            type_obj = &PyBool_Type;
+        else if constexpr (std::is_integral_v<Value>)
+            type_obj = &PyLong_Type;
+        else
+            type_obj = &PyFloat_Type;
+    } else {
+        auto it = reg_types.find(std::type_index(typeid(Value)));
+        if (it == reg_types.end())
+            ek::enoki_raise("bind_type(): value type was not bound!");
+        type_obj = it->second->type;
+    }
+
+    cls.attr("Value") = py::reinterpret_borrow<py::object>((PyObject *) type_obj);
     cls.attr("Type") = py::cast(Type);
     cls.attr("Size") = py::cast(Array::Size);
 
@@ -35,7 +52,7 @@ auto bind_type(py::module &m, bool scalar_mode = false) {
 }
 
 template <typename Array>
-void bind_basic_methods(py::class_<Array, ek::ArrayBase> &cls) {
+void bind_basic_methods(py::class_<Array, ek::ArrayBase, EnokiHolder<Array>> &cls) {
     using Value = std::conditional_t<Array::IsMask, ek::mask_t<ek::value_t<Array>>,
                                      ek::value_t<Array>>;
     if (hasattr(cls, "entry"))
@@ -50,7 +67,7 @@ void bind_basic_methods(py::class_<Array, ek::ArrayBase> &cls) {
 }
 
 template <typename Array>
-void bind_generic_constructor(py::class_<Array, ek::ArrayBase> &cls) {
+void bind_generic_constructor(py::class_<Array, ek::ArrayBase, EnokiHolder<Array>> &cls) {
     cls.def(
         "__init__",
         [](py::detail::value_and_holder &v_h, py::args args) {
@@ -68,7 +85,7 @@ template <typename Array> auto bind(py::module &m, bool scalar_mode = false) {
 };
 
 template <typename Array>
-auto bind_full(py::class_<Array, ek::ArrayBase> &cls,
+auto bind_full(py::class_<Array, ek::ArrayBase, EnokiHolder<Array>> &cls,
                bool scalar_mode = false) {
     static_assert(ek::array_depth_v<Array> == 1);
     bind_basic_methods(cls);
@@ -181,7 +198,6 @@ auto bind_full(py::class_<Array, ek::ArrayBase> &cls,
                 cls.def("hprod_async_", &Array::hprod_async_);
                 cls.def("hmin_async_", &Array::hmin_async_);
                 cls.def("hmax_async_", &Array::hmax_async_);
-                cls.def("migrate_", &Array::migrate_);
             }
         }
 
@@ -293,6 +309,9 @@ auto bind_full(py::class_<Array, ek::ArrayBase> &cls,
 
     if constexpr (!ek::is_mask_v<Array> || ek::is_dynamic_v<Array>)
         cls.def("data_", [](const Array &a) { enoki::eval(a); return (uintptr_t) a.data(); });
+
+    if constexpr (Array::IsJIT)
+        cls.def("migrate_", [](Array *a, AllocType type) { a->migrate_(type); return a; });
 
     if constexpr (Array::IsDiff) {
         using Detached = decltype(ek::detached(std::declval<Array>()));

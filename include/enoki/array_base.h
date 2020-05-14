@@ -45,6 +45,7 @@ NAMESPACE_BEGIN(enoki)
             derived().entry(i) = reinterpret_array<Value>(v[i]);               \
     }
 
+
 /// Generic array base class
 struct ArrayBase {
     // -----------------------------------------------------------------------

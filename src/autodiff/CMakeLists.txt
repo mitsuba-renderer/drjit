@@ -1,5 +1,3 @@
-include_directories(../../ext/enoki-jit/ext/robin_map/include/)
-
 set(ENOKI_AUTODIFF_VARIANTS enoki-autodiff-scalar-f32:float enoki-autodiff-scalar-f64:double)
 
 if (ENOKI_ENABLE_JIT)

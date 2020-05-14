@@ -75,7 +75,11 @@ if (ENOKI_ENABLE_TBB)
   find_package(TBB)
 endif()
 
-include_directories(include ext/enoki-jit/include)
+include_directories(
+  include
+  ext/enoki-jit/include
+  ext/enoki-jit/ext/robin_map/include
+)
 
 if (ENOKI_ENABLE_AUTODIFF)
   message(STATUS "Enoki: building the autodiff backend.")

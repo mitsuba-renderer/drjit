@@ -515,22 +515,12 @@ def set_label_(a, label):
                 v.set_label_(label + "_%i" % i)
 
 
-@property
-def label(a):
-    return a.label_()
-
-
-@label.setter
-def label(a, label):
-    a.set_label_(label)
-
-
 def schedule(a0):
     if a0.IsJIT:
         if a0.Depth == 1:
             if a0.IsDiff:
                 a0 = a0.detached_()
-            _ek.detail.jitc_schedule(a0.index_())
+            _ek.detail.schedule(a0.index_())
         else:
             for i in range(len(a0)):
                 a0[i].schedule()
@@ -540,35 +530,8 @@ def schedule(a0):
 def eval(a0):
     if a0.IsJIT:
         schedule(a0)
-        _ek.detail.jitc_eval()
+        _ek.detail.eval()
     return a0
-
-
-@property
-def graphviz_str(a):
-    t = type(a)
-    if t.IsDiff:
-        _ek.ad_schedule(a)
-        while _ek.is_diff_array_v(_ek.value_t(t)):
-            t = t.Value
-        return t.graphviz_()
-    elif _ek.is_jit_array_v(t):
-        return _ek.detail.jitc_graphviz()
-    else:
-        raise Exception('graphviz_str: only variables registered with the '
-                        'JIT (LLVM/CUDA) or AD backend are supported!')
-
-
-@property
-def graphviz(a):
-    try:
-        from graphviz import Source
-        return Source(a.graphviz_str)
-    except ImportError:
-        raise Exception('graphviz Python package not available! Install via '
-                        '"python -m pip install graphviz". Alternatively, you'
-                        'can call enoki.graphviz_str() function to obtain a '
-                        'string representation.')
 
 # -------------------------------------------------------------------
 #           Vertical operations -- transcendental functions
@@ -805,6 +768,13 @@ def ad_schedule_(a, reverse=True):
         raise Exception("Expected a differentiable array type!")
     for i in range(len(a)):
         a[i].ad_schedule_(reverse)
+
+
+def migrate_(a, type_):
+    if not a.IsJIT:
+        raise Exception("Expected a JIT array type!")
+    for i in range(len(a)):
+        a[i] = a[i].migrate_(type_)
 
 
 # -------------------------------------------------------------------
