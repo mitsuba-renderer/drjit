@@ -1,4 +1,5 @@
-from enoki import VarType, Exception
+from enoki import VarType, Exception, ArrayBase
+import sys as _sys
 
 
 def is_array_v(a):
@@ -165,3 +166,35 @@ def float32_array_t(a):
 def float64_array_t(a):
     t = a.ReplaceScalar(VarType.Float64) if is_array_v(a) else float
     return t if isinstance(a, type) else t(a)
+
+
+def diff_array_t(a):
+    if isinstance(a, type):
+        if not issubclass(a, ArrayBase):
+            raise Exception("diff_array_t(): requires an Enoki array type as input!")
+        if a.IsDiff:
+            return a
+        mod = a.__module__ \
+            .replace('cuda', 'cuda.autodiff') \
+            .replace('llvm', 'llvm.autodiff')
+        if mod == a.__module__:
+            raise Exception("diff_array_t(): input type unsupported!")
+        return getattr(_sys.modules.get(mod), a.__name__)
+    else:
+        return diff_array_t(type(a))(a)
+
+
+def nondiff_array_t(a):
+    if isinstance(a, type):
+        if not issubclass(a, ArrayBase):
+            raise Exception("diff_array_t(): requires an Enoki array type as input!")
+        if not a.IsDiff:
+            return a
+        mod = a.__module__ \
+            .replace('cuda.autodiff', 'cuda') \
+            .replace('llvm.autodiff', 'llvm')
+        if mod == a.__module__:
+            raise Exception("diff_array_t(): input type unsupported!")
+        return getattr(_sys.modules.get(mod), a.__name__)
+    else:
+        return nondiff_array_t(type(a))(a)

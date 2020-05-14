@@ -27,16 +27,13 @@
     result.x = enoki::empty<decltype(Class::x)>(size);
 
 #define ENOKI_STRUCT_ATTACH(x) \
-    enoki::detach(v.x);
-
-#define ENOKI_STRUCT_DETACH(x) \
-    enoki::detach(v.x);
+    enoki::set_grad_enabled(v.x, value);
 
 #define ENOKI_STRUCT_DETACHED(x) \
-    result.x = enoki::detached(v.x);
+    result.x = enoki::detach(v.x);
 
 #define ENOKI_STRUCT_GRADIENT(x) \
-    result.x = enoki::gradient(v.x);
+    result.x = enoki::grad(v.x);
 
 #define ENOKI_STRUCT_MASKED(x) \
     result.x = enoki::masked(v.x, mask);
@@ -111,22 +108,19 @@
                 ENOKI_MAP(ENOKI_STRUCT_GATHER, __VA_ARGS__)                    \
                 return result;                                                 \
             }                                                                  \
-            static void attach(Class &class) {                                 \
-                ENOKI_MAP(ENOKI_STRUCT_ATTACH, __VA_ARGS__);                   \
+            static void set_grad_enabled(Class &class, bool value) {           \
+                ENOKI_MAP(ENOKI_STRUCT_SET_GRAD_ENABLED, __VA_ARGS__);         \
             }                                                                  \
-            static void detach(Class &class) {                                 \
-                ENOKI_MAP(ENOKI_STRUCT_DETACH, __VA_ARGS__);                   \
-            }                                                                  \
-            static auto detached(const Class &v) {                             \
+            static auto detach(const Class &v) {                               \
                 using Result =                                                 \
-                    Name<decltype(enoki::detached(std::declval<Args &>()))...>;\
+                    Name<decltype(enoki::detach(std::declval<Args &>()))...>;  \
                 Result result;                                                 \
                 ENOKI_MAP(ENOKI_STRUCT_DETACHED, __VA_ARGS__)                  \
                 return result;                                                 \
             }                                                                  \
-            static auto gradient(const Class &v) {                             \
+            static auto grad(const Class &v) {                                 \
                 using Result =                                                 \
-                    Name<decltype(enoki::gradient(std::declval<Args &>()))...>;\
+                    Name<decltype(enoki::grad(std::declval<Args &>()))...>;    \
                 Result result;                                                 \
                 ENOKI_MAP(ENOKI_STRUCT_GRADIENT, __VA_ARGS__)                  \
                 return result;                                                 \
