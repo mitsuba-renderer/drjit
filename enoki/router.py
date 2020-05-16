@@ -833,23 +833,23 @@ def eval(*args):
     _ek.detail.eval()
 
 
-def graphviz_str(a):
+def graphviz_str(a, reverse=True):
     t = type(a)
     if t.IsDiff:
-        _ek.ad_schedule(a)
+        _ek.enqueue(a)
         while _ek.is_diff_array_v(_ek.value_t(t)):
             t = t.Value
-        return t.graphviz_()
+        return t.graphviz_(reverse)
     elif _ek.is_jit_array_v(t):
         return _ek.detail.graphviz()
     else:
         raise Exception('graphviz_str: only variables registered with the '
                         'JIT (LLVM/CUDA) or AD backend are supported!')
 
-def graphviz(a):
+def graphviz(a, reverse=True):
     try:
         from graphviz import Source
-        return Source(graphviz_str(a))
+        return Source(graphviz_str(a, reverse))
     except ImportError:
         raise Exception('graphviz Python package not available! Install via '
                         '"python -m pip install graphviz". Alternatively, you'
@@ -1152,50 +1152,51 @@ def abs_dot_async(a, b):
 # -------------------------------------------------------------------
 
 
-def detached(a):
+def detach(a):
     if _ek.is_diff_array_v(a):
-        return a.detached_()
+        return a.detach_()
     else:
         return a
 
 
-def gradient(a):
+def grad(a):
     if _ek.is_diff_array_v(a):
-        return a.gradient_()
+        return a.grad_()
     else:
         return None
 
 
-def set_gradient(a, value):
+def set_grad(a, value):
     if _ek.is_diff_array_v(a):
-        t = type(a).DetachedType
+        t = _ek.nondiff_array_t(type(a))
         if not isinstance(value, t):
             value = t(value)
-        a.set_gradient_(value)
+        a.set_grad_(value)
     else:
         raise Exception("Expected a differentiable array type!")
 
 
-def attach(*args):
+def set_grad_enabled(a, value):
+    if _ek.is_diff_array_v(a):
+        a.set_grad_enabled_(value)
+    else:
+        raise Exception("Expected differentiable array types as input!")
+
+
+def enable_grad(*args):
+    for v in args:
+        set_grad_enabled(v, True)
+
+
+def disable_grad(*args):
+    for v in args:
+        set_grad_enabled(v, False)
+
+
+def enqueue(*args):
     for v in args:
         if _ek.is_diff_array_v(v):
-            v.attach_()
-        else:
-            raise Exception("Expected differentiable array types as input!")
-
-
-def detach(*args):
-    for v in args:
-        if _ek.is_diff_array_v(v):
-            v.detach_()
-        else:
-            raise Exception("Expected differentiable array types as input!")
-
-
-def ad_schedule(*args, reverse=True):
-    for v in args:
-        if _ek.is_diff_array_v(v):
-            v.ad_schedule_(reverse)
+            v.enqueue_()
         else:
             raise Exception("Expected differentiable array types as input!")
 
@@ -1212,8 +1213,8 @@ def traverse(t, reverse=True, retain_graph=False):
 
 def backward(a, retain_graph=False):
     if _ek.is_diff_array_v(a):
-        set_gradient(a, 1)
-        a.ad_schedule_(True)
+        set_grad(a, 1)
+        a.enqueue_()
         traverse(type(a), reverse=True, retain_graph=retain_graph)
     else:
         raise Exception("Expected a differentiable array type!")
@@ -1221,8 +1222,8 @@ def backward(a, retain_graph=False):
 
 def forward(a, retain_graph=False):
     if _ek.is_diff_array_v(a):
-        set_gradient(a, 1)
-        a.ad_schedule_(False)
+        set_grad(a, 1)
+        a.enqueue_()
         traverse(type(a), reverse=False, retain_graph=retain_graph)
     else:
         raise Exception("Expected a differentiable array type!")

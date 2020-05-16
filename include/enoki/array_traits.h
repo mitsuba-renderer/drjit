@@ -228,24 +228,63 @@ template <typename T> using mask_t = typename detail::mask<T>::type;
 /// Type trait to access the array type underlying a mask
 template <typename T> using array_t = typename detail::array<T>::type;
 
+//! @}
+// -----------------------------------------------------------------------
+
+// -----------------------------------------------------------------------
+//! @{ \name Traits for differentiable array
+// -----------------------------------------------------------------------
+
 namespace detail {
-    template <typename T, typename = int> struct diff_array {
+    template <typename T, typename = int> struct extract_diff_array {
         using type = void;
     };
 
-    template <typename T> struct diff_array<T, enable_if_t<is_diff_array_v<value_t<T>>>> {
-        using type = diff_array<value_t<T>>;
+    template <typename T>
+    struct extract_diff_array<T, enable_if_t<is_diff_array_v<value_t<T>>>> {
+        using type = extract_diff_array<value_t<T>>;
     };
 
     template <typename T>
-    struct diff_array<
-        T, enable_if_t<is_diff_array_v<T> && !is_diff_array_v<value_t<T>>>> {
+    struct extract_diff_array<T, enable_if_t<is_diff_array_v<T> &&
+                                            !is_diff_array_v<value_t<T>>>> {
         using type = T;
+    };
+
+    /// Get the differentiable array underlying a potentially nested array
+    template <typename T>
+    using extract_diff_array_t = typename detail::extract_diff_array<T>::type;
+
+    template <typename T, typename = int> struct diff_array { using type = void; };
+
+    template <typename T> struct diff_array<T, enable_if_t<!T::IsDiff && T::IsJIT && T::Depth != 1>> {
+        using type = typename std::decay_t<T>::Derived::template ReplaceValue<
+            typename diff_array<value_t<T>>::type>;
+    };
+
+    template <typename T> struct diff_array<T, enable_if_t<!T::IsDiff && T::IsJIT && T::Depth == 1>> {
+        using type = DiffArray<T>;
+    };
+
+    template <typename T, typename = int> struct nondiff_array { using type = void; };
+
+    template <typename T> struct nondiff_array<T, enable_if_t<T::IsDiff && T::Depth != 1>> {
+        using type = typename std::decay_t<T>::Derived::template ReplaceValue<
+            typename nondiff_array<value_t<T>>::type>;
+    };
+
+    template <typename T> struct nondiff_array<T, enable_if_t<T::IsDiff && T::Depth == 1>> {
+        using type = typename std::decay_t<T>::Type;
     };
 };
 
-/// Get the differentiable array underlying a potentially nested array
-template <typename T> using diff_array_t = typename detail::diff_array<T>::type;
+/// Convert a non-differentiable array type into a differentiable one
+template <typename T>
+using diff_array_t = typename detail::diff_array<T>::type;
+
+/// Convert a differentiable array type into a non-differentiable one
+template <typename T>
+using nondiff_array_t = typename detail::nondiff_array<T>::type;
 
 //! @}
 // -----------------------------------------------------------------------

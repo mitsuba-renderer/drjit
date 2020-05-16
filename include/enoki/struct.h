@@ -18,7 +18,7 @@
     enoki::scatter<Perm>(dst.x, src.x, index, mask);
 
 #define ENOKI_STRUCT_GATHER(x) \
-    result.x = enoki::gather<Perm>(src.x, index, mask);
+    result.x = enoki::gather<decltype(src.x), Perm>(src.x, index, mask);
 
 #define ENOKI_STRUCT_ZERO(x) \
     result.x = enoki::zero<decltype(Class::x)>(size);
@@ -26,7 +26,7 @@
 #define ENOKI_STRUCT_EMPTY(x) \
     result.x = enoki::empty<decltype(Class::x)>(size);
 
-#define ENOKI_STRUCT_ATTACH(x) \
+#define ENOKI_STRUCT_SET_GRAD_ENABLED(x) \
     enoki::set_grad_enabled(v.x, value);
 
 #define ENOKI_STRUCT_DETACHED(x) \
@@ -50,8 +50,8 @@
 #define ENOKI_STRUCT_ASSIGN_MOVE(x) \
     x = std::move(v.x);
 
-#define ENOKI_STRUCT_SLICES(x) \
-    enoki::slices(v.x)
+#define ENOKI_STRUCT_WIDTH(x) \
+    enoki::width(v.x)
 
 #define ENOKI_STRUCT_ITEMS(x) \
     v.x
@@ -72,11 +72,11 @@
     template <typename... Ts>                                                  \
     Name(Name<Ts...> &&v)                                                      \
         : ENOKI_MAPC(ENOKI_STRUCT_CONSTR_MOVE, __VA_ARGS__) { }                \
-    template <typename... Ts> Test &operator=(Test<Ts...> &&v) {               \
+    template <typename... Ts> Name &operator=(Name<Ts...> &&v) {               \
         ENOKI_MAP(ENOKI_STRUCT_ASSIGN_MOVE, __VA_ARGS__)                       \
         return *this;                                                          \
     }                                                                          \
-    template <typename... Ts> Test &operator=(const Test<Ts...> &v) {          \
+    template <typename... Ts> Name &operator=(const Name<Ts...> &v) {          \
         ENOKI_MAP(ENOKI_STRUCT_ASSIGN_COPY, __VA_ARGS__)                       \
         return *this;                                                          \
     }
@@ -97,8 +97,8 @@
                 return result;                                                 \
             }                                                                  \
             template <bool Perm, typename Index, typename Mask>                \
-            static void scatter(Class &dst, Class &src, const Index &index,    \
-                                const Mask &mask) {                            \
+            static void scatter(Class &dst, const Class &src,                  \
+                                const Index &index, const Mask &mask) {        \
                 ENOKI_MAP(ENOKI_STRUCT_SCATTER, __VA_ARGS__)                   \
             }                                                                  \
             template <bool Perm, typename Index, typename Mask>                \
@@ -108,8 +108,16 @@
                 ENOKI_MAP(ENOKI_STRUCT_GATHER, __VA_ARGS__)                    \
                 return result;                                                 \
             }                                                                  \
-            static void set_grad_enabled(Class &class, bool value) {           \
-                ENOKI_MAP(ENOKI_STRUCT_SET_GRAD_ENABLED, __VA_ARGS__);         \
+            static bool grad_enabled(const Class &v) {                         \
+                return enoki::grad_enabled(                                    \
+                    ENOKI_MAPC(ENOKI_STRUCT_ITEMS, __VA_ARGS__ ));             \
+            }                                                                  \
+            static void set_grad_enabled(Class &v, bool value) {               \
+                ENOKI_MAP(ENOKI_STRUCT_SET_GRAD_ENABLED, __VA_ARGS__)          \
+            }                                                                  \
+            static void enqueue(const Class &v) {                              \
+                enoki::enqueue(                                                \
+                    ENOKI_MAPC(ENOKI_STRUCT_ITEMS, __VA_ARGS__) );             \
             }                                                                  \
             static auto detach(const Class &v) {                               \
                 using Result =                                                 \
@@ -139,7 +147,7 @@
             }                                                                  \
             static size_t width(const Class &v) {                              \
                 size_t widths[] = {                                            \
-                    ENOKI_MAPC(ENOKI_STRUCT_SLICES, __VA_ARGS__) };            \
+                    ENOKI_MAPC(ENOKI_STRUCT_WIDTH, __VA_ARGS__) };             \
                 size_t width = 0;                                              \
                 for (size_t w: widths)                                         \
                     width = w > width ? w : width;                             \
@@ -147,7 +155,7 @@
             }                                                                  \
             static void set_label(Class &v, const char *label) {               \
                 char tmp[256];                                                 \
-                ENOKI_MAP(ENOKI_STRUCT_SET_LABEL, __VA_ARGS__);                \
+                ENOKI_MAP(ENOKI_STRUCT_SET_LABEL, __VA_ARGS__)                 \
             }                                                                  \
         };                                                                     \
     }

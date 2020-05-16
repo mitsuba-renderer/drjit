@@ -181,6 +181,8 @@ PYBIND11_MODULE(enoki_ext, m_) {
     array_detail.def("schedule", &jitc_var_schedule);
     array_detail.def("eval", &jitc_var_eval);
     array_detail.def("eval", &jitc_eval);
+    m.def("cse", &jitc_cse);
+    m.def("set_cse", &jitc_set_cse);
 
     /* Register a cleanup callback function that is invoked when
        the 'enoki::ArrayBase' Python type is garbage collected */

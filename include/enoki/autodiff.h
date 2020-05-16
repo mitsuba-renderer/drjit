@@ -33,15 +33,15 @@ template <typename Value> uint32_t ad_new(const char *label, uint32_t size, uint
                                           const uint32_t *indices, Value *weights);
 
 /// Query the gradient associated with a variable
-template <typename Value> Value ad_gradient(uint32_t index);
+template <typename Value> Value ad_grad(uint32_t index);
 
 /// Overwrite the gradient associated with a variable
-template <typename Value> void ad_set_gradient(uint32_t index, const Value &v);
+template <typename Value> void ad_set_grad(uint32_t index, const Value &v);
 
-/// Schedule a variable and its dependencies
-template <typename Value> void ad_schedule(uint32_t index, bool reverse);
+/// Enqueue a variable for a subsequent command (ad_traverse() / ad_graphviz())
+template <typename Value> void ad_enqueue(uint32_t index);
 
-/// Perform a forward or reverse mode traversal of scheduled variables
+/// Perform a forward or reverse mode traversal of queued variables
 template <typename Value> void ad_traverse(bool reverse, bool retain_graph);
 
 /// Label a variable (useful for debugging via graphviz etc.)
@@ -51,7 +51,7 @@ template <typename Value> void ad_set_label(uint32_t index, const char *);
 template <typename Value> const char *ad_label(uint32_t index);
 
 /// Generate a graphviz plot of the subgraph specified via ad_schedule()
-template <typename Value> const char *ad_graphviz();
+template <typename Value> const char *ad_graphviz(bool reverse);
 
 /// Special case of ad_new: create a node for a select() statement.
 template <typename Value, typename Mask>
@@ -1049,21 +1049,26 @@ struct DiffArray : ArrayBaseT<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>
     //! @{ \name Miscellaneous
     // -----------------------------------------------------------------------
 
-    void attach_() {
-        if constexpr (IsEnabled) {
-            if (m_index)
-                return;
-            m_index = detail::ad_new<Type>(nullptr, (uint32_t) width(m_value),
-                                           0, nullptr, (Type *) nullptr);
-        }
+    auto vcall_() const {
+        if constexpr (is_jit_array_v<Type>)
+            return m_value.vcall_();
+        else
+            enoki_raise("vcall_(): not supported in scalar mode!");
     }
 
-    void detach_() {
+    void set_grad_enabled_(bool value) {
         if constexpr (IsEnabled) {
-            if (m_index == 0)
-                return;
-            detail::ad_dec_ref<Type>(m_index);
-            m_index = 0;
+            if (value) {
+                if (m_index)
+                    return;
+                m_index = detail::ad_new<Type>(nullptr, (uint32_t) width(m_value),
+                                               0, nullptr, (Type *) nullptr);
+            } else {
+                if (m_index == 0)
+                    return;
+                detail::ad_dec_ref<Type>(m_index);
+                m_index = 0;
+            }
         }
     }
 
@@ -1101,13 +1106,12 @@ struct DiffArray : ArrayBaseT<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>
         return false;
     }
 
-    void ad_schedule_(bool reverse) const {
-        ENOKI_MARK_USED(reverse);
+    void enqueue_() const {
         if constexpr (IsEnabled)
-            enoki::detail::ad_schedule<Type>(m_index, reverse);
+            enoki::detail::ad_enqueue<Type>(m_index);
     }
 
-    static void traverse(bool reverse, bool retain_graph) {
+    static void traverse_(bool reverse, bool retain_graph) {
         ENOKI_MARK_USED(reverse);
         if constexpr (IsEnabled)
             enoki::detail::ad_traverse<Type>(reverse, retain_graph);
@@ -1130,27 +1134,27 @@ struct DiffArray : ArrayBaseT<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>
         return nullptr;
     }
 
-    static const char *graphviz_() {
+    static const char *graphviz_(bool reverse) {
         if constexpr (IsEnabled)
-            return enoki::detail::ad_graphviz<Type>();
+            return enoki::detail::ad_graphviz<Type>(reverse);
     }
 
-    const Type detached_() const {
+    const Type detach_() const {
         return m_value;
     }
 
-    const Type gradient_() const {
+    const Type grad_() const {
         if constexpr (IsEnabled)
-            return detail::ad_gradient<Type>(m_index);
+            return detail::ad_grad<Type>(m_index);
         else
             return Type();
     }
 
-    void set_gradient_(const Type &value) {
+    void set_grad_(const Type &value) {
         if constexpr (IsEnabled)
-            detail::ad_set_gradient<Type>(m_index, value);
+            detail::ad_set_grad<Type>(m_index, value);
         else
-            enoki_raise("set_gradient(): gradients not enabled for this type!");
+            enoki_raise("set_grad(): gradients not enabled for this type!");
     }
 
     void set_label(const char *label) {
@@ -1224,14 +1228,14 @@ protected:
     extern template ENOKI_AUTODIFF_EXPORT uint32_t ad_new<T>(                  \
         const char *, uint32_t, uint32_t,                                      \
         ENOKI_AUTODIFF_EXPORT const uint32_t *, T *);                          \
-    extern template ENOKI_AUTODIFF_EXPORT T ad_gradient<T>(uint32_t);          \
-    extern template ENOKI_AUTODIFF_EXPORT void ad_set_gradient<T>(uint32_t,    \
-                                                                  const T &);  \
+    extern template ENOKI_AUTODIFF_EXPORT T ad_grad<T>(uint32_t);              \
+    extern template ENOKI_AUTODIFF_EXPORT void ad_set_grad<T>(uint32_t,        \
+                                                              const T &);      \
     extern template ENOKI_AUTODIFF_EXPORT void ad_set_label<T>(uint32_t,       \
                                                                const char *);  \
     extern template ENOKI_AUTODIFF_EXPORT const char *ad_label<T>(uint32_t);   \
-    extern template ENOKI_AUTODIFF_EXPORT const char *ad_graphviz<T>();        \
-    extern template ENOKI_AUTODIFF_EXPORT void ad_schedule<T>(uint32_t, bool); \
+    extern template ENOKI_AUTODIFF_EXPORT const char *ad_graphviz<T>(bool);    \
+    extern template ENOKI_AUTODIFF_EXPORT void ad_enqueue<T>(uint32_t);        \
     extern template ENOKI_AUTODIFF_EXPORT void ad_traverse<T>(bool, bool);     \
     extern template ENOKI_AUTODIFF_EXPORT uint32_t ad_new_select<T, Mask>(     \
         const char *, uint32_t, const Mask &, uint32_t, uint32_t);             \

@@ -314,22 +314,23 @@ auto bind_full(py::class_<Array, ek::ArrayBase, EnokiHolder<Array>> &cls,
         cls.def("migrate_", [](Array *a, AllocType type) { a->migrate_(type); return a; });
 
     if constexpr (Array::IsDiff) {
-        using Detached = decltype(ek::detached(std::declval<Array>()));
-        cls.def(py::init<Detached>());
-        cls.def("detached_", &Array::detached_);
+        cls.def(py::init<ek::nondiff_array_t<Array>>());
+        cls.def("detach_", &Array::detach_);
         if constexpr (Array::IsFloat) {
-            cls.def("gradient_", [](const Array &a) -> py::object {
+            cls.def("grad_", [](const Array &a) -> py::object {
                 if (a.index() == 0)
                     return py::none();
                 else
-                    return py::cast(a.gradient_());
+                    return py::cast(a.grad_());
             });
-            cls.def("set_gradient_", &Array::set_gradient_);
-            cls.def("attach_", [](Array *a) { a->attach_(); return a; });
-            cls.def("detach_", [](Array *a) { a->detach_(); return a; });
-            cls.def("ad_schedule_", &Array::ad_schedule_);
+            cls.def("set_grad_", &Array::set_grad_);
+            cls.def("set_grad_enabled_", [](Array *a, bool value) {
+                a->set_grad_enabled_(value);
+                return a;
+            });
+            cls.def("enqueue_", &Array::enqueue_);
             cls.def("graphviz_", &Array::graphviz_);
-            cls.def_static("traverse_", &Array::traverse);
+            cls.def_static("traverse_", &Array::traverse_);
         }
     }
 

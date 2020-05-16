@@ -144,6 +144,12 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
         : StaticArrayImpl(a1, a2, std::make_index_sequence<Base::Size1>(),
                                   std::make_index_sequence<Base::Size2>()) { }
 
+    /// Catch-all move/copy assignment operator
+    template <typename T, enable_if_t<!std::is_same_v<std::decay_t<T>, Derived>> = 0>
+    StaticArrayImpl &operator=(T&& value) {
+        return operator=((StaticArrayImpl &&) Derived_(std::forward<T>(value)));
+    }
+
     /// Access elements by reference, and without error-checking
     ENOKI_INLINE Value &entry(size_t i) { return m_data[i]; }
 
@@ -277,12 +283,12 @@ namespace detail {
 
 template <typename Array> bool ragged(const Array &a) {
     size_t shape[array_depth_v<Array> + 1 /* avoid zero-sized array */ ] { };
-    return detail::put_shape(a, shape);
+    return !detail::put_shape(a, shape);
 }
 
 template <typename Stream, typename Value, bool IsMask, typename Derived>
 ENOKI_NOINLINE Stream &operator<<(Stream &os, const ArrayBaseT<Value, IsMask, Derived> &a) {
-    size_t shape[array_depth_v<Derived> + 1];
+    size_t shape[array_depth_v<Derived> + 1 /* avoid zero-sized array */ ] { };
     if (!detail::put_shape(a, shape)) {
         os << "[ragged array]";
     } else {

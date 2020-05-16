@@ -54,11 +54,6 @@ struct MaskBase : StaticArrayImpl<Value_, Size_, true, Derived_> {
     MaskBase &operator=(const MaskBase &) = default;
     MaskBase &operator=(MaskBase &&) = default;
 
-    /// Catch-all move/copy assignment operator
-    template <typename T> MaskBase &operator=(T&& value) {
-        return operator=(Derived_(std::forward<T>(value)));
-    }
-
     /// Forward to base
     template <typename T> MaskBase(T &&value, detail::reinterpret_flag)
         : Base(std::forward<T>(value), detail::reinterpret_flag()) { }

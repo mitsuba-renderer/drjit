@@ -142,7 +142,3 @@ def array_configure(cls):
     cls.MaskType = getattr(
         sys.modules.get(cls.__module__),
         array_name(enoki.VarType.Bool, cls.Depth, cls.Size, cls.IsScalar))
-
-    if cls.IsDiff:
-        ad_module = sys.modules.get(cls.__module__.replace('.autodiff', ''))
-        cls.DetachedType = getattr(ad_module, cls.__name__)

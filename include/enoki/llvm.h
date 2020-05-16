@@ -136,11 +136,11 @@ struct LLVMArray : ArrayBaseT<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
     LLVMArray(Ts&&... ts) {
         if constexpr (!IsClass) {
             Value data[] = { (Value) ts... };
-            m_index = jitc_var_copy(AllocType::Host, Type, 0, data,
+            m_index = jitc_var_copy_mem(AllocType::Host, Type, 0, data,
                                     (uint32_t) sizeof...(Ts));
         } else {
             uint32_t data[] = { jitc_registry_get_id(ts)... };
-            m_index = jitc_var_copy(AllocType::Host, Type, 0, data,
+            m_index = jitc_var_copy_mem(AllocType::Host, Type, 0, data,
                                     (uint32_t) sizeof...(Ts));
         }
     }
@@ -696,6 +696,8 @@ struct LLVMArray : ArrayBaseT<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
             return t;
         else if (m.is_literal_zero())
             return f;
+        else if (t.is_literal_zero() && f.is_literal_zero())
+            return t;
 
         if constexpr (!std::is_same_v<Value, bool>) {
             return from_index(jitc_var_new_3(Type,
@@ -812,7 +814,7 @@ struct LLVMArray : ArrayBaseT<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
 
     static LLVMArray empty_(size_t size) {
         void *ptr = jitc_malloc(AllocType::HostAsync, size * sizeof(Value));
-        return from_index(jitc_var_map(Type, 0, ptr, (uint32_t) size, 1));
+        return from_index(jitc_var_map_mem(Type, 0, ptr, (uint32_t) size, 1));
     }
 
     static LLVMArray zero_(size_t size) {
@@ -863,11 +865,11 @@ struct LLVMArray : ArrayBaseT<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
 
     static LLVMArray map_(void *ptr, size_t size, bool free = false) {
         return from_index(
-            jitc_var_map(Type, 0, ptr, (uint32_t) size, free ? 1 : 0));
+            jitc_var_map_mem(Type, 0, ptr, (uint32_t) size, free ? 1 : 0));
     }
 
     static LLVMArray load_unaligned_(const void *ptr, size_t size) {
-        return from_index(jitc_var_copy(AllocType::Host, Type, 0, ptr, (uint32_t) size));
+        return from_index(jitc_var_copy_mem(AllocType::Host, Type, 0, ptr, (uint32_t) size));
     }
 
     //! @}
@@ -1057,9 +1059,7 @@ public:
         }
 
         if (jitc_var_int_ref(dst.index()) > 0) {
-            dst = LLVMArray<Value>::from_index(
-                jitc_var_copy(AllocType::HostAsync, LLVMArray<Value>::Type,
-                              0, ptr, (uint32_t) dst.size()));
+            dst = dst.copy();
             ptr = dst.data();
         }
 
@@ -1089,9 +1089,7 @@ public:
         }
 
         if (jitc_var_int_ref(dst.index()) > 0) {
-            dst = LLVMArray<Value>::from_index(
-                jitc_var_copy(AllocType::HostAsync, LLVMArray<Value>::Type,
-                              0, ptr, (uint32_t) dst.size()));
+            dst = dst.copy();
             ptr = dst.data();
         }
 
@@ -1128,6 +1126,8 @@ public:
     bool schedule_() const { return jitc_var_schedule(m_index) != 0; }
     bool eval_() const { return jitc_var_eval(m_index) != 0; }
 
+    LLVMArray copy() const { return from_index(jitc_var_copy_var(m_index)); }
+
     bool valid() const { return m_index != 0; }
     size_t size() const { return jitc_var_size(m_index); }
     uint32_t index() const { return m_index; }
@@ -1152,7 +1152,7 @@ public:
         if (jitc_var_int_ref(m_index) > 0) {
             eval_();
             *this = LLVMArray::from_index(
-                jitc_var_copy(AllocType::HostAsync, LLVMArray<Value>::Type, 0,
+                jitc_var_copy_mem(AllocType::HostAsync, LLVMArray<Value>::Type, 0,
                               data(), (uint32_t) size()));
         }
 

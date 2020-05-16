@@ -24,7 +24,7 @@ namespace detail {
         if constexpr (!is_jit_array_v<DT> && !has_struct_support_v<DT>)
             return v;
         else
-            return gather<DT, true>(v, perm);
+            return enoki::gather<DT, true>(v, perm);
     }
 
 
@@ -34,7 +34,7 @@ namespace detail {
 
     template <typename Guide, typename Type>
     struct vectorize_type<
-        Guide, Type, enable_if_t<!std::is_void_v<Type> && !is_array_v<Type>>> {
+        Guide, Type, enable_if_t<!std::is_void_v<Type> && std::is_scalar_v<Type>>> {
         using type = replace_scalar_t<Guide, Type>;
     };
 
@@ -45,14 +45,16 @@ namespace detail {
         return Mask(true);
     }
 
-    template <typename Mask, typename Arg, typename...Args> ENOKI_INLINE Mask get_mask(const Arg &arg, const Args&... args) {
+    template <typename Mask, typename Arg, typename... Args>
+    ENOKI_INLINE Mask get_mask(const Arg &arg, const Args &... args) {
         if constexpr (is_mask_v<Arg>)
             return Mask(arg);
         else
             return get_mask<Mask>(args...);
     }
 
-    template <typename Arg, typename Mask> ENOKI_INLINE auto& replace_mask(Arg &arg, const Mask &mask) {
+    template <typename Arg, typename Mask>
+    ENOKI_INLINE auto &replace_mask(Arg &arg, const Mask &mask) {
         if constexpr (is_mask_v<Arg>)
             return mask;
         else
@@ -65,7 +67,6 @@ namespace detail {
         using Mask = mask_t<Array>;
 
         if constexpr (is_jit_array_v<Array>) {
-            enoki::schedule(args...);
 
             if constexpr (!std::is_void_v<FuncRV>) {
                 using Result = detail::vectorize_type_t<Array, FuncRV>;
@@ -74,13 +75,18 @@ namespace detail {
                 if (self.size() == 1) {
                     result = func(self.entry(0), args...);
                 } else {
-                    result = zero<Result>(self.size());
+                    result = enoki::empty<Result>(self.size());
+                    enoki::schedule(args...);
                     for (auto const &kv : self.vcall_()) {
-                        scatter<true>(
-                            result,
-                            ref_cast_t<FuncRV, Result>(func(
-                                kv.first, detail::gather_helper(args, kv.second)...)),
-                            kv.second);
+                        if (kv.first) {
+                            enoki::scatter<true>(
+                                result,
+                                ref_cast_t<FuncRV, Result>(func(
+                                    kv.first, detail::gather_helper(args, kv.second)...)),
+                                kv.second);
+                        } else {
+                            enoki::scatter<true>(result, zero<Result>(), kv.second);
+                        }
                     }
                     enoki::schedule(result);
                 }
@@ -181,13 +187,14 @@ extern "C" {
             array, std::forward<Args>(args)...);                               \
     }
 
-#define ENOKI_VCALL_GETTER(name)                                               \
+#define ENOKI_VCALL_GETTER(name, type)                                         \
     auto get_field(const mask_t<Array> &mask = true) const {                   \
         if constexpr (is_jit_array_v<Array>) {                                 \
-            using Result = replace_scalar_t<Array, float>;                     \
-            return gather<Result>(jitc_registry_attr_data(Domain, #name),      \
-                                  reinterpret_cast<const UInt32 &>(array),     \
-                                  mask);                                       \
+            using Result = replace_scalar_t<Array, type>;                      \
+            using UInt32 = uint32_array_t<Array>;                              \
+            return enoki::gather<Result>(                                      \
+                jitc_registry_attr_data(Domain, #name),                        \
+                reinterpret_cast<const UInt32 &>(array), mask);                \
         } else {                                                               \
             return detail::dispatch(                                           \
                 [](void *ptr)                                                  \

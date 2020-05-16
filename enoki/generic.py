@@ -515,11 +515,21 @@ def set_label_(a, label):
                 v.set_label_(label + "_%i" % i)
 
 
+@property
+def label(a):
+    return a.label_()
+
+
+@label.setter
+def label(a, value):
+    return a.set_label_(value)
+
+
 def schedule(a0):
     if a0.IsJIT:
         if a0.Depth == 1:
             if a0.IsDiff:
-                a0 = a0.detached_()
+                a0 = a0.detach_()
             _ek.detail.schedule(a0.index_())
         else:
             for i in range(len(a0)):
@@ -715,36 +725,36 @@ def dot_(a0, a1):
 # -------------------------------------------------------------------
 
 
-def detached_(a):
+def detach_(a):
     if not a.IsDiff:
         return a
 
-    result = a.DetachedType()
+    t = _ek.nondiff_array_t(type(a))
     for i in range(len(a)):
-        result[i] = a[i].detached_()
+        result[i] = a[i].detach_()
     return result
 
 
-def gradient_(a):
+def grad_(a):
     if not a.IsDiff:
         return None
 
-    result = a.DetachedType()
+    t = _ek.nondiff_array_t(type(a))
     for i in range(len(a)):
-        g = a[i].gradient_()
+        g = a[i].grad_()
         if g is None:
             return None
         result[i] = g
     return result
 
 
-def set_gradient_(a, gradient):
+def set_grad_(a, grad):
     if not a.IsDiff:
         raise Exception("Expected a differentiable array type!")
 
     s = len(a)
     for i in range(s):
-        a[i].set_gradient_(gradient[i])
+        a[i].set_grad_(grad[i])
 
 
 def attach_(a):
@@ -763,11 +773,11 @@ def detach_(a):
     return a
 
 
-def ad_schedule_(a, reverse=True):
+def enqueue_(a):
     if not a.IsDiff:
         raise Exception("Expected a differentiable array type!")
     for i in range(len(a)):
-        a[i].ad_schedule_(reverse)
+        a[i].enqueue_()
 
 
 def migrate_(a, type_):

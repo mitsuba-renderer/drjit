@@ -124,11 +124,11 @@ struct CUDAArray : ArrayBaseT<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
     CUDAArray(Ts&&... ts) {
         if constexpr (!IsClass) {
             Value data[] = { (Value) ts... };
-            m_index = jitc_var_copy(AllocType::Host, Type, 1, data,
+            m_index = jitc_var_copy_mem(AllocType::Host, Type, 1, data,
                                     (uint32_t) sizeof...(Ts));
         } else {
             uint32_t data[] = { jitc_registry_get_id(ts)... };
-            m_index = jitc_var_copy(AllocType::Host, Type, 1, data,
+            m_index = jitc_var_copy_mem(AllocType::Host, Type, 1, data,
                                     (uint32_t) sizeof...(Ts));
         }
     }
@@ -469,7 +469,7 @@ struct CUDAArray : ArrayBaseT<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
             jitc_var_new_1(Type,
                            "mul.ftz.$t0 $r0, $r1, 1.4426950408889634074$n"
                            "ex2.approx.ftz.$t0 $r0, $r0",
-                           1, m_index));
+                           1, 1, m_index));
     }
 
     template <typename T = Value, enable_if_t<std::is_same_v<T, float>> = 0>
@@ -478,7 +478,7 @@ struct CUDAArray : ArrayBaseT<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
             jitc_var_new_1(Type,
                            "mul.ftz.$t0 $r0, $r1, 0.69314718055994530942$n"
                            "lg2.approx.ftz.$t1 $r0, $r0",
-                           1, m_index));
+                           1, 1, m_index));
     }
 
     template <typename T = Value, enable_if_t<std::is_same_v<T, float>> = 0>
@@ -624,6 +624,8 @@ struct CUDAArray : ArrayBaseT<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
             return t;
         else if (m.is_literal_zero())
             return f;
+        else if (t.is_literal_zero() && f.is_literal_zero())
+            return t;
 
         if constexpr (!std::is_same_v<Value, bool>) {
             return from_index(jitc_var_new_3(Type,
@@ -735,7 +737,7 @@ struct CUDAArray : ArrayBaseT<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
 
     static CUDAArray empty_(size_t size) {
         void *ptr = jitc_malloc(AllocType::Device, size * sizeof(Value));
-        return from_index(jitc_var_map(Type, 1, ptr, (uint32_t) size, 1));
+        return from_index(jitc_var_map_mem(Type, 1, ptr, (uint32_t) size, 1));
     }
 
     static CUDAArray zero_(size_t size) {
@@ -789,11 +791,12 @@ struct CUDAArray : ArrayBaseT<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
 
     static CUDAArray map_(void *ptr, size_t size, bool free = false) {
         return from_index(
-            jitc_var_map(Type, 1, ptr, (uint32_t) size, free ? 1 : 0));
+            jitc_var_map_mem(Type, 1, ptr, (uint32_t) size, free ? 1 : 0));
     }
 
     static CUDAArray load_unaligned_(const void *ptr, size_t size) {
-        return from_index(jitc_var_copy(AllocType::Host, Type, 1, ptr, (uint32_t) size));
+        return from_index(
+            jitc_var_copy_mem(AllocType::Host, Type, 1, ptr, (uint32_t) size));
     }
 
     //! @}
@@ -980,9 +983,7 @@ public:
         }
 
         if (jitc_var_int_ref(dst.index()) > 0) {
-            dst = CUDAArray<Value>::from_index(
-                jitc_var_copy(AllocType::Device, CUDAArray<Value>::Type,
-                              1, ptr, (uint32_t) dst.size()));
+            dst = dst.copy();
             ptr = dst.data();
         }
 
@@ -1012,9 +1013,7 @@ public:
         }
 
         if (jitc_var_int_ref(dst.index()) > 0) {
-            dst = CUDAArray<Value>::from_index(
-                jitc_var_copy(AllocType::Device, CUDAArray<Value>::Type,
-                              1, ptr, (uint32_t) dst.size()));
+            dst = dst.copy();
             ptr = dst.data();
         }
 
@@ -1045,6 +1044,8 @@ public:
         }
     }
 
+    CUDAArray copy() const { return from_index(jitc_var_copy_var(m_index)); }
+
     bool schedule_() const { return jitc_var_schedule(m_index) != 0; }
     bool eval_() const { return jitc_var_eval(m_index) != 0; }
 
@@ -1072,7 +1073,7 @@ public:
         if (jitc_var_int_ref(m_index) > 0) {
             eval_();
             *this = CUDAArray::from_index(
-                jitc_var_copy(AllocType::Device, CUDAArray<Value>::Type, 1,
+                jitc_var_copy_mem(AllocType::Device, CUDAArray<Value>::Type, 1,
                               data(), (uint32_t) size()));
         }
 

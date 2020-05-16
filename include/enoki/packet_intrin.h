@@ -332,6 +332,7 @@ template <typename T> ENOKI_INLINE T tzcnt(T v) {
     using typename Base::Ref;                                                  \
     using Base::derived;                                                       \
     using Base::m;                                                             \
+    static constexpr size_t ActualSize = 4;                                    \
     static constexpr size_t Size = 3;
 
 #define ENOKI_CONVERT(Value)                                                   \

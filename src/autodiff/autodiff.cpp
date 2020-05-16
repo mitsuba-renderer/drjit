@@ -4,7 +4,7 @@
 #include <enoki/math.h>
 #include <enoki/autodiff.h>
 #include <tsl/robin_map.h>
-#include <type_traits>
+#include <deque>
 #include <assert.h>
 
 #if defined(ENOKI_USE_TBB)
@@ -58,16 +58,19 @@ struct Special {
 // Weighted edge connecting two variables
 struct Edge {
     /// Variable index of source operand
-    uint32_t source = 0;
+    uint32_t source;
 
     /// Source variable index
-    uint32_t target = 0;
+    uint32_t target;
 
     /// Links to the next forward edge
-    uint32_t next_fwd = 0;
+    uint32_t next_fwd;
 
     /// Links to the next reverse edge
-    uint32_t next_rev = 0;
+    uint32_t next_rev : 31;
+
+    /// Marks the edge status during topo-sort
+    uint32_t visited : 1;
 
     /// Pointer to a handler for "special" edges
     Special *special = nullptr;
@@ -77,10 +80,13 @@ struct Edge {
 
     ENOKI_ARRAY_DEFAULTS(Edge);
 
-    Edge() = default;
+    Edge() {
+        memset(this, 0, sizeof(uint32_t) * 6);
+    }
 
     /// Reset the contents of this edge to the default values
     void reset() {
+        assert(!visited);
         delete special;
         memset(this, 0, sizeof(uint32_t) * 6);
         weight = Value();
@@ -106,16 +112,13 @@ struct Variable {
     uint32_t ref_count_int;
 
     /// Number of times this variable is referenced from Python/C++
-    uint32_t ref_count_ext : 29;
+    uint32_t ref_count_ext : 30;
 
     /// Was the label manually overwritten via set_label()?
     uint32_t custom_label : 1;
 
     /// Should the label variable be freed when the Variable is deallocated?
     uint32_t free_label : 1;
-
-    /// Was the variable queued up for via ad_schedule()?
-    uint32_t scheduled : 1;
 
     /// Links to the first forward edge at this node
     uint32_t next_fwd;
@@ -127,7 +130,7 @@ struct Variable {
     uint32_t size;
 
     /// This will eventually hold a gradient value
-    Value gradient{};
+    Value grad{};
 
     Variable() {
         memset(this, 0, 7 * sizeof(uint32_t));
@@ -158,18 +161,18 @@ struct Variable {
                 else
                     v2 = hsum_async(v);
 
-                if (((const T &) gradient).valid())
-                    gradient += v2;
+                if (((const T &) grad).valid())
+                    grad += v2;
                 else
-                    gradient = std::move(v2);
+                    grad = std::move(v2);
             } else {
-                if (((const T &) gradient).valid())
-                    gradient += v;
+                if (((const T &) grad).valid())
+                    grad += v;
                 else
-                    gradient = v;
+                    grad = v;
             }
         } else {
-            gradient += v;
+            grad += v;
         }
     }
 
@@ -184,18 +187,18 @@ struct Variable {
                 else
                     v3 = hsum_async(v1 * v2);
 
-                if (((const T &) gradient).valid())
-                    gradient += v3;
+                if (((const T &) grad).valid())
+                    grad += v3;
                 else
-                    gradient = std::move(v3);
+                    grad = std::move(v3);
             } else {
-                if (((const T &) gradient).valid())
-                    gradient = enoki::fmadd(v1, v2, gradient);
+                if (((const T &) grad).valid())
+                    grad = enoki::fmadd(v1, v2, grad);
                 else
-                    gradient = v1 * v2;
+                    grad = v1 * v2;
             }
         } else {
-            gradient = enoki::fmadd(v1, v2, gradient);
+            grad = enoki::fmadd(v1, v2, grad);
         }
     }
 
@@ -207,8 +210,8 @@ struct Variable {
 static_assert(sizeof(Variable) == ((IsDouble ? 2 : 0) + 8) * sizeof(uint32_t),
               "Variable data structure has incorrect size. Padding problem?");
 
-/// Thread-local list used by ad_schedule() and ad_traverse()
-static __thread std::vector<uint32_t> *thread_schedule = nullptr;
+/// Thread-local list used by ad_queue() and ad_traverse()
+static __thread std::deque<uint32_t> *tls_queue = nullptr;
 
 /// Records all internal application state
 struct State {
@@ -226,6 +229,9 @@ struct State {
 
     /// List of currently unused edges
     std::vector<uint32_t> unused_edges;
+
+    /// List of variables to be processed in traverse() / graphviz()
+    std::vector<uint32_t> todo;
 
     /// Counter for variable indices
     uint32_t variable_index = 1;
@@ -251,9 +257,9 @@ struct State {
                    "enoki-ad: edge leak detected (%zu edges "
                    "remain in use)!", edges_used);
 
-        if (thread_schedule) {
-            delete thread_schedule;
-            thread_schedule = nullptr;
+        if (tls_queue) {
+            delete tls_queue;
+            tls_queue = nullptr;
         }
     }
 };
@@ -262,6 +268,7 @@ static State state;
 
 extern void RENAME(ad_whos)() {
     std::vector<uint32_t> indices;
+    indices.reserve(state.variables.size());
     for (auto &kv: state.variables)
         indices.push_back(kv.first);
     std::sort(indices.begin(), indices.end());
@@ -276,35 +283,124 @@ extern void RENAME(ad_whos)() {
     }
 }
 
-/// Queue up nodes for a reverse-mode traversal
-static void ad_schedule_rev(std::vector<uint32_t> *sched, uint32_t index) {
+/// Forward-mode DFS starting from 'index'
+static void ad_dfs_fwd(uint32_t index) {
     Variable *v = state[index];
-    if (v->scheduled)
-        return;
-    v->scheduled = 1;
-    sched->push_back(index);
+    uint32_t edge = v->next_fwd;
+    while (edge) {
+        Edge &e = state.edges[edge];
+        if (e.visited == 0) {
+            e.visited = 1;
+            ad_dfs_fwd(e.target);
+        }
+        edge = e.next_fwd;
+    }
+}
 
+
+/// Reverse-mode DFS starting from 'index'
+static void ad_dfs_rev(uint32_t index) {
+    Variable *v = state[index];
     uint32_t edge = v->next_rev;
     while (edge) {
-        const Edge &e = state.edges[edge];
-        ad_schedule_rev(sched, e.source);
+        Edge &e = state.edges[edge];
+        if (e.visited == 0) {
+            e.visited = 1;
+            ad_dfs_rev(e.source);
+        }
         edge = e.next_rev;
     }
 }
 
-/// Queue up nodes for a forward-mode traversal
-static void ad_schedule_fwd(std::vector<uint32_t> *sched, uint32_t index) {
-    Variable *v = state[index];
-    if (v->scheduled)
+template <typename T> void ad_enqueue(uint32_t index) {
+    if (index == 0)
         return;
-    v->scheduled = 1;
-    sched->push_back(index);
+    std::lock_guard<Mutex> guard(state.mutex);
+    std::deque<uint32_t> *queue = tls_queue;
+    if (unlikely(!queue))
+        queue = tls_queue = new std::deque<uint32_t>();
+    queue->push_back(index);
+}
 
-    uint32_t edge = v->next_fwd;
-    while (edge) {
-        const Edge &e = state.edges[edge];
-        ad_schedule_fwd(sched, e.target);
-        edge = e.next_fwd;
+/// Kahn-style topological sort in forward mode
+static void ad_toposort_fwd() {
+    state.todo.clear();
+
+    std::deque<uint32_t> *queue = tls_queue;
+    if (!queue || queue->empty())
+        return;
+
+    /// DFS traversal to tag all reachable edges
+    for (uint32_t index: *queue)
+        ad_dfs_fwd(index);
+
+    while (!queue->empty()) {
+        uint32_t index = queue->front();
+        queue->pop_front();
+        state.todo.push_back(index);
+
+        uint32_t edge = state[index]->next_fwd;
+        while (edge) {
+            Edge &e = state.edges[edge];
+            e.visited = 0;
+
+            uint32_t edge2 = state[e.target]->next_rev;
+            bool ready = true;
+            while (edge2) {
+                const Edge &e2 = state.edges[edge2];
+                if (e2.visited) {
+                    ready = false;
+                    break;
+                }
+                edge2 = e2.next_rev;
+            }
+
+            if (ready)
+                queue->push_back(e.target);
+
+            edge = e.next_fwd;
+        }
+    }
+}
+
+/// Kahn-style topological sort in reverse mode
+static void ad_toposort_rev() {
+    state.todo.clear();
+
+    std::deque<uint32_t> *queue = tls_queue;
+    if (!queue || queue->empty())
+        return;
+
+    /// DFS traversal to tag all reachable edges
+    for (uint32_t index: *queue)
+        ad_dfs_rev(index);
+
+    while (!queue->empty()) {
+        uint32_t index = queue->front();
+        queue->pop_front();
+        state.todo.push_back(index);
+
+        uint32_t edge = state[index]->next_rev;
+        while (edge) {
+            Edge &e = state.edges[edge];
+            e.visited = 0;
+
+            uint32_t edge2 = state[e.source]->next_fwd;
+            bool ready = true;
+            while (edge2) {
+                const Edge &e2 = state.edges[edge2];
+                if (e2.visited) {
+                    ready = false;
+                    break;
+                }
+                edge2 = e2.next_fwd;
+            }
+
+            if (ready)
+                queue->push_back(e.source);
+
+            edge = e.next_rev;
+        }
     }
 }
 
@@ -388,7 +484,7 @@ static void ad_free_edges(uint32_t index, Variable *v) {
 }
 
 static void ad_free(uint32_t index, Variable *v) {
-    ad_log(Debug, "ad_free(%u)", index);
+    ad_log(Trace, "ad_free(%u)", index);
     if (v->free_label)
         free(v->label);
     if (v->next_rev)
@@ -459,16 +555,16 @@ template <typename Value> struct MaskEdge : Special {
 
     void backward(Variable *source, const Variable *target) const override {
         if (!negate)
-            source->accum(detail::and_(target->gradient, mask), target->size);
+            source->accum(detail::and_(target->grad, mask), target->size);
         else
-            source->accum(detail::andnot_(target->gradient, mask), target->size);
+            source->accum(detail::andnot_(target->grad, mask), target->size);
     }
 
     void forward(const Variable *source, Variable *target) const override {
         if (!negate)
-            target->accum(detail::and_(source->gradient, mask), source->size);
+            target->accum(detail::and_(source->grad, mask), source->size);
         else
-            target->accum(detail::andnot_(source->gradient, mask), source->size);
+            target->accum(detail::andnot_(source->grad, mask), source->size);
     }
 
     Mask mask;
@@ -516,22 +612,22 @@ template <typename Value> struct GatherEdge : Special {
         : offset(offset), mask(mask), permute(permute) { }
 
     void backward(Variable *source, const Variable *target) const override {
-        Value &source_gradient = (Value &) source->gradient;
+        Value &source_grad = (Value &) source->grad;
         uint32_t size = source->size;
 
-        if (!source_gradient.valid())
-            source_gradient = zero<Value>(size);
-        else if ((uint32_t) source_gradient.size() != size)
-            source_gradient.resize(size);
+        if (!source_grad.valid())
+            source_grad = zero<Value>(size).copy(); // avoid issues with CSA
+        else if ((uint32_t) source_grad.size() != size)
+            source_grad.resize(size);
 
         if (permute)
-            enoki::scatter(source_gradient, target->gradient, offset, mask);
+            enoki::scatter(source_grad, target->grad, offset, mask);
         else
-            enoki::scatter_add(source_gradient, target->gradient, offset, mask);
+            enoki::scatter_add(source_grad, target->grad, offset, mask);
     }
 
     void forward(const Variable *source, Variable *target) const override {
-        target->accum(enoki::gather<Value>(source->gradient, offset, mask),
+        target->accum(enoki::gather<Value>(source->grad, offset, mask),
                       asize(offset));
     }
 
@@ -575,23 +671,23 @@ template <typename Value> struct ScatterEdge : Special {
         : offset(offset), mask(mask), scatter_add(scatter_add) { }
 
     void backward(Variable *source, const Variable *target) const override {
-        source->accum(enoki::gather<Value>(target->gradient, offset, mask),
+        source->accum(enoki::gather<Value>(target->grad, offset, mask),
                       asize(offset));
     }
 
     void forward(const Variable *source, Variable *target) const override {
-        Value &target_gradient = (Value &) target->gradient;
+        Value &target_grad = (Value &) target->grad;
         uint32_t size = target->size;
 
-        if (!target_gradient.valid())
-            target_gradient = zero<Value>(size);
-        else if ((uint32_t) target_gradient.size() != size)
-            target_gradient.resize(size);
+        if (!target_grad.valid())
+            target_grad = zero<Value>(size).copy(); // avoid issues with CSA
+        else if ((uint32_t) target_grad.size() != size)
+            target_grad.resize(size);
 
         if (scatter_add)
-            enoki::scatter_add(target_gradient, source->gradient, offset, mask);
+            enoki::scatter_add(target_grad, source->grad, offset, mask);
         else
-            enoki::scatter(target_gradient, source->gradient, offset, mask);
+            enoki::scatter(target_grad, source->grad, offset, mask);
     }
 
     Index offset;
@@ -606,7 +702,19 @@ uint32_t ad_new_scatter(const char *label, uint32_t size, uint32_t src_index,
 
     if constexpr (is_array_v<Value>) {
         std::lock_guard<Mutex> guard(state.mutex);
-        auto [index, var] = ad_var_new(label, size);
+        Variable *var = nullptr;
+        uint32_t index = 0;
+
+        if (permute && dst_index) {
+            Variable *var2 = state[dst_index];
+            if (strcmp(var2->label, "scatter[permute]") == 0) {
+                index = dst_index;
+                var = var2;
+            }
+        }
+
+        if (index == 0)
+            std::tie(index, var) = ad_var_new(label, size);
 
         ad_log(Debug,
                "ad_new_scatter(%u <- %u, %u, permute=%i, scatter_add=%i)",
@@ -622,21 +730,22 @@ uint32_t ad_new_scatter(const char *label, uint32_t size, uint32_t src_index,
             edge.target = index;
             edge.special = new ScatterEdge<Value>(offset, mask, scatter_add);
             edge.next_fwd = var2->next_fwd;
-            edge.next_rev = 0;
+            edge.next_rev = var->next_rev;
             var2->ref_count_int++;
             var2->next_fwd = edge_index_new;
             edge_index = edge_index_new;
         }
 
-        if (dst_index && (scatter_add || !permute)) {
+        if (dst_index && dst_index != index) {
             Variable *var2 = state[dst_index];
+
             uint32_t edge_index_new = ad_edge_new();
             Edge &edge2 = state.edges[edge_index_new];
             edge2.source = dst_index;
             edge2.target = index;
             edge2.next_fwd = var2->next_fwd;
             edge2.next_rev = edge_index;
-            if (scatter_add) {
+            if (scatter_add || permute) {
                 edge2.weight = 1;
             } else {
                 Mask edge_mask = full<Mask>(false, size);
@@ -652,7 +761,7 @@ uint32_t ad_new_scatter(const char *label, uint32_t size, uint32_t src_index,
             ad_fail("ad_new_scatter(): all inputs were non-differentiable!");
 
         var->next_rev = edge_index;
-        var->ref_count_ext = 1;
+        var->ref_count_ext++;
 
         return index;
     } else {
@@ -661,25 +770,24 @@ uint32_t ad_new_scatter(const char *label, uint32_t size, uint32_t src_index,
     }
 }
 
-static void ad_traverse_rev(std::vector<uint32_t> *sched, bool retain_graph) {
-    ad_log(Info, "ad_traverse_rev(): processing %zu nodes ..", sched->size());
+static void ad_traverse_rev(bool retain_graph) {
+    ad_log(Info, "ad_traverse_rev(): processing %zu nodes ..", state.todo.size());
 
-    for (uint32_t index : *sched) {
+    for (uint32_t index : state.todo) {
         Variable *v = state[index];
-        assert(v->scheduled == 1);
 
         if (is_dynamic_v<Value>) {
-            uint32_t gradient_size = asize(v->gradient);
-            if (unlikely(v->size != gradient_size && gradient_size != 1))
+            uint32_t grad_size = asize(v->grad);
+            if (unlikely(v->size != grad_size && grad_size != 1))
                 ad_fail("ad_traverse_rev(): variable %u has an invalid "
                         "gradient size: expected %u, got %u!", index,
-                        v->size, gradient_size);
+                        v->size, grad_size);
         }
 
         if (unlikely(v->custom_label)) {
             char tmp[256];
-            snprintf(tmp, 256, "%s_gradient", v->label);
-            set_label(v->gradient, tmp);
+            snprintf(tmp, 256, "%s_grad", v->label);
+            set_label(v->grad, tmp);
         }
 
         uint32_t edge_id = v->next_rev;
@@ -696,7 +804,7 @@ static void ad_traverse_rev(std::vector<uint32_t> *sched, bool retain_graph) {
                     edge.special = nullptr;
                 }
             } else {
-                v2->mul_accum(edge.weight, v->gradient, v->size);
+                v2->mul_accum(edge.weight, v->grad, v->size);
 
                 if (!retain_graph)
                     edge.weight = Value();
@@ -706,45 +814,41 @@ static void ad_traverse_rev(std::vector<uint32_t> *sched, bool retain_graph) {
         }
 
         if (v->next_rev) {
-            /// Clear the gradients at interior nodes
-            v->gradient = Value();
+            /// Clear the grads at interior nodes
+            v->grad = Value();
         }
     }
 
     if (!retain_graph) {
         ad_log(Info, "ad_traverse_rev(): cleaning up ..");
-        for (auto it = sched->rbegin(); it != sched->rend(); ++it) {
+        for (auto it = state.todo.rbegin(); it != state.todo.rend(); ++it) {
             uint32_t index = *it;
             Variable *v = state[index];
-            v->scheduled = 0;
             ad_free_edges(index, v);
         }
     }
 
-    sched->clear();
     ad_log(Info, "ad_traverse_rev(): done.");
 }
 
-static void ad_traverse_fwd(std::vector<uint32_t> *sched, bool retain_graph) {
-    ad_log(Info, "ad_traverse_fwd(): processing %zu nodes ..", sched->size());
+static void ad_traverse_fwd(bool retain_graph) {
+    ad_log(Info, "ad_traverse_fwd(): processing %zu nodes ..", state.todo.size());
 
-    for (auto it = sched->rbegin(); it != sched->rend(); ++it) {
-        uint32_t index = *it;
+    for (uint32_t index : state.todo) {
         Variable *v = state[index];
-        assert(v->scheduled == 1);
 
         if (is_dynamic_v<Value>) {
-            uint32_t gradient_size = asize(v->gradient);
-            if (unlikely(v->size != gradient_size && gradient_size != 1))
+            uint32_t grad_size = asize(v->grad);
+            if (unlikely(v->size != grad_size && grad_size != 1))
                 ad_fail("ad_traverse_rev(): variable %u has an invalid "
                         "gradient size: expected %u, got %u!", index,
-                        v->size, gradient_size);
+                        v->size, grad_size);
         }
 
         if (unlikely(v->custom_label)) {
             char tmp[256];
-            snprintf(tmp, 256, "%s_gradient", v->label);
-            set_label(v->gradient, tmp);
+            snprintf(tmp, 256, "%s_grad", v->label);
+            set_label(v->grad, tmp);
         }
 
         uint32_t edge_id = v->next_fwd;
@@ -761,7 +865,7 @@ static void ad_traverse_fwd(std::vector<uint32_t> *sched, bool retain_graph) {
                     edge.special = nullptr;
                 }
             } else {
-                v2->mul_accum(edge.weight, v->gradient, v->size);
+                v2->mul_accum(edge.weight, v->grad, v->size);
 
                 if (!retain_graph)
                     edge.weight = Value();
@@ -771,25 +875,25 @@ static void ad_traverse_fwd(std::vector<uint32_t> *sched, bool retain_graph) {
         }
 
         if (v->next_fwd) {
-            /// Clear the gradients at interior nodes
-            v->gradient = Value();
+            /// Clear the grads at interior nodes
+            v->grad = Value();
         }
 
-        if (!retain_graph) {
-            v->scheduled = 0;
+        if (!retain_graph)
             ad_free_edges(index, v);
-        }
     }
 
-    sched->clear();
     ad_log(Info, "ad_traverse_fwd(): done.");
 }
 
-template <typename Value> const char *ad_graphviz() {
+template <typename Value> const char *ad_graphviz(bool reverse) {
     std::lock_guard<Mutex> guard(state.mutex);
-    std::vector<uint32_t> *sched = thread_schedule;
-    if (!sched)
-        return "digraph { }";
+
+    if (reverse)
+        ad_toposort_rev();
+    else
+        ad_toposort_fwd();
+
 
     buffer.clear();
     buffer.put("digraph {\n");
@@ -798,13 +902,10 @@ template <typename Value> const char *ad_graphviz() {
     buffer.put("  node [shape=record fontname=Consolas];\n");
     buffer.put("  edge [fontname=Consolas];\n");
 
-    std::sort(sched->begin(), sched->end(), std::less<uint32_t>());
-
     std::string current_path;
     int current_depth = 0;
-    for (uint32_t index : *sched) {
+    for (uint32_t index : state.todo) {
         Variable *v = state[index];
-        v->scheduled = 0;
 
         std::string label = v->label;
 
@@ -857,7 +958,7 @@ template <typename Value> const char *ad_graphviz() {
         edge = v->next_rev;
         while (edge) {
             const Edge &e = state.edges[edge];
-            buffer.fmt("  %u -> %u [label=\"%u\"%s];\n", e.target, e.source,
+            buffer.fmt("  %u -> %u [label=\" %u\"%s];\n", e.target, e.source,
                        edge_ctr--, e.special ? " color=red" : "");
             edge = e.next_rev;
         }
@@ -865,7 +966,6 @@ template <typename Value> const char *ad_graphviz() {
     for (int i = 0; i < current_depth; ++i)
         buffer.put("  }\n");
     buffer.put("}\n");
-    sched->clear();
 
     return buffer.get();
 }
@@ -888,24 +988,24 @@ template <typename T> void ad_dec_ref(uint32_t index) {
         ad_free(index, v);
 }
 
-template <typename T> T ad_gradient(uint32_t index) {
+template <typename T> T ad_grad(uint32_t index) {
     if (index == 0)
-        enoki_raise("gradient(): attempted to retrieve the gradient of a "
+        enoki_raise("grad(): attempted to retrieve the gradient of a "
                     "variable that was not registered with the AD "
-                    "backend. Did you forget to call requires_gradient()?");
+                    "backend. Did you forget to call requires_grad()?");
 
     std::lock_guard<Mutex> guard(state.mutex);
-    return state[index]->gradient;
+    return state[index]->grad;
 }
 
-template <typename T> void ad_set_gradient(uint32_t index, const T &value) {
+template <typename T> void ad_set_grad(uint32_t index, const T &value) {
     if (index == 0)
-        enoki_raise("set_gradient(): attempted to set the gradient of a "
+        enoki_raise("set_grad(): attempted to set the gradient of a "
                     "variable that was not registered with the AD "
-                    "backend. Did you forget to call requires_gradient()?");
+                    "backend. Did you forget to call requires_grad()?");
 
     std::lock_guard<Mutex> guard(state.mutex);
-    state[index]->gradient = value;
+    state[index]->grad = value;
 }
 
 template <typename T> void ad_set_label(uint32_t index, const char *label) {
@@ -926,45 +1026,31 @@ template <typename T> const char *ad_label(uint32_t index) {
     std::lock_guard<Mutex> guard(state.mutex);
     return state[index]->label;
 }
-
-template <typename T> void ad_schedule(uint32_t index, bool reverse) {
-    if (index == 0)
-        return;
-    std::lock_guard<Mutex> guard(state.mutex);
-    std::vector<uint32_t> *sched = thread_schedule;
-    if (!sched)
-        sched = thread_schedule = new std::vector<uint32_t>();
-    if (reverse)
-        ad_schedule_rev(sched, index);
-    else
-        ad_schedule_fwd(sched, index);
-}
-
 template <typename T> void ad_traverse(bool reverse, bool retain_graph) {
     std::lock_guard<Mutex> guard(state.mutex);
-    std::vector<uint32_t> *sched = thread_schedule;
-    if (!sched || sched->empty())
-        return;
-
-    std::sort(sched->begin(), sched->end(), std::greater<uint32_t>());
 
     if (reverse)
-        ad_traverse_rev(sched, retain_graph);
+        ad_toposort_rev();
     else
-        ad_traverse_fwd(sched, retain_graph);
+        ad_toposort_fwd();
+
+    if (reverse)
+        ad_traverse_rev(retain_graph);
+    else
+        ad_traverse_fwd(retain_graph);
 }
 
 template ENOKI_EXPORT void ad_inc_ref<Value>(uint32_t);
 template ENOKI_EXPORT void ad_dec_ref<Value>(uint32_t);
 template ENOKI_EXPORT uint32_t ad_new<Value>(const char *, uint32_t, uint32_t,
                                              const uint32_t *, Value *);
-template ENOKI_EXPORT Value ad_gradient<Value>(uint32_t);
-template ENOKI_EXPORT void ad_set_gradient<Value>(uint32_t, const Value &);
+template ENOKI_EXPORT Value ad_grad<Value>(uint32_t);
+template ENOKI_EXPORT void ad_set_grad<Value>(uint32_t, const Value &);
 template ENOKI_EXPORT void ad_set_label<Value>(uint32_t, const char *);
 template ENOKI_EXPORT const char *ad_label<Value>(uint32_t);
-template ENOKI_EXPORT void ad_schedule<Value>(uint32_t, bool);
+template ENOKI_EXPORT void ad_enqueue<Value>(uint32_t);
 template ENOKI_EXPORT void ad_traverse<Value>(bool, bool);
-template ENOKI_EXPORT const char *ad_graphviz<Value>();
+template ENOKI_EXPORT const char *ad_graphviz<Value>(bool);
 template ENOKI_EXPORT uint32_t ad_new_select<Value, Mask>(
     const char *, uint32_t, const Mask &, uint32_t, uint32_t);
 template ENOKI_EXPORT uint32_t ad_new_gather<Value, Mask, Index>(
