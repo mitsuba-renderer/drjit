@@ -294,11 +294,19 @@ auto bind_full(py::class_<Array, ek::ArrayBase, EnokiHolder<Array>> &cls,
         cls.def("cos_", [](const Array &a) { return ek::cos(a); });
         cls.def("sincos_", [](const Array &a) { return ek::sincos(a); });
         cls.def("tan_", [](const Array &a) { return ek::tan(a); });
+        cls.def("csc_", [](const Array &a) { return ek::csc(a); });
+        cls.def("sec_", [](const Array &a) { return ek::sec(a); });
         cls.def("cot_", [](const Array &a) { return ek::cot(a); });
         cls.def("asin_", [](const Array &a) { return ek::asin(a); });
         cls.def("acos_", [](const Array &a) { return ek::acos(a); });
         cls.def("atan_", [](const Array &a) { return ek::atan(a); });
         cls.def("atan2_", [](const Array &y, const Array &x) { return ek::atan2(y, x); });
+        cls.def("exp_", [](const Array &a) { return ek::exp(a); });
+        cls.def("exp2_", [](const Array &a) { return ek::exp2(a); });
+        cls.def("log_", [](const Array &a) { return ek::log(a); });
+        cls.def("log2_", [](const Array &a) { return ek::log2(a); });
+        cls.def("pow_", [](const Array &x, Scalar y) { return ek::pow(x, y); });
+        cls.def("pow_", [](const Array &x, const Array &y) { return ek::pow(x, y); });
     }
 
     if constexpr (Array::IsJIT || Array::IsDiff) {

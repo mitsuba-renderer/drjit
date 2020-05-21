@@ -48,6 +48,9 @@ template <bool IsMask_, typename Derived_> struct alignas(32)
 
 #if defined(ENOKI_X86_AVX2)
     ENOKI_CONVERT(int32_t) : m(_mm256_cvtepi32_ps(a.derived().m)) { }
+#else
+    ENOKI_CONVERT(int32_t)
+        : m(detail::concat(_mm_cvtepi32_ps(low(a).m), _mm_cvtepi32_ps(high(a).m))) { }
 #endif
 
     ENOKI_CONVERT(uint32_t) {
@@ -202,6 +205,15 @@ template <bool IsMask_, typename Derived_> struct alignas(32)
             else
         #endif
         return _mm256_xor_ps(m, a.m);
+    }
+
+    template <typename T> ENOKI_INLINE Derived andnot_(const T &a) const {
+        #if defined(ENOKI_X86_AVX512)
+            if constexpr (is_mask_v<T>)
+                return _mm256_mask_mov_ps(m, a.k, _mm256_setzero_ps());
+            else
+        #endif
+        return _mm256_andnot_ps(a.m, m);
     }
 
     #if defined(ENOKI_X86_AVX512)
@@ -608,6 +620,15 @@ template <bool IsMask_, typename Derived_> struct alignas(32)
             else
         #endif
         return _mm256_xor_pd(m, a.m);
+    }
+
+    template <typename T> ENOKI_INLINE Derived andnot_(const T &a) const {
+        #if defined(ENOKI_X86_AVX512)
+            if constexpr (is_mask_v<T>)
+                return _mm256_mask_mov_pd(m, a.k, _mm256_setzero_pd());
+            else
+        #endif
+        return _mm256_andnot_pd(a.m, m);
     }
 
     #if defined(ENOKI_X86_AVX512)

@@ -32,7 +32,8 @@ namespace test {
 #define ENOKI_TRACK_DEALLOC(ptr, size) { ++test::dealloc_count; }
 #define ENOKI_TEST(name) void name(); static test::Test name##_test{#name, &name}; void name()
 
-#include <enoki/array.h>
+#include <enoki/packet.h>
+#include <enoki/math.h>
 #include <vector>
 #include <algorithm>
 #include <iostream>
@@ -217,6 +218,8 @@ void probe_accuracy(T (*func)(const T &), double (*ref)(double),
     Value max_err_pos = -1;
 
     auto update_errors = [&](Value x, Value v, Value v_ref) {
+        if (!std::isfinite(v_ref))
+            return;
         Value err = std::abs(v - v_ref);
         Value err_rel = err / std::abs(v_ref);
         if (v_ref == 0 && v == 0)
@@ -524,14 +527,7 @@ int main(int argc, char** argv) {
     std::cout << "=== Enoki test suite (version " << ENOKI_VERSION << ") ===" << std::endl;
     std::cout << "Enabled compiler features: ";
 
-    if (has_avx512f)         std::cout << "avx512f ";
-    if (has_avx512cd)        std::cout << "avx512cd ";
-    if (has_avx512dq)        std::cout << "avx512dq ";
-    if (has_avx512vl)        std::cout << "avx512vl ";
-    if (has_avx512bw)        std::cout << "avx512bw ";
-    if (has_avx512pf)        std::cout << "avx512pf ";
-    if (has_avx512er)        std::cout << "avx512er ";
-    if (has_avx512vpopcntdq) std::cout << "avx512vpopcntdq ";
+    if (has_avx512)          std::cout << "avx512 ";
     if (has_avx2)            std::cout << "avx2 ";
     if (has_avx)             std::cout << "avx ";
     if (has_fma)             std::cout << "fma ";

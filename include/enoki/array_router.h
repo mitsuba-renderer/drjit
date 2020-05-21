@@ -276,6 +276,12 @@ ENOKI_INLINE decltype(auto) reinterpret_array(const Source &src) {
     }
 }
 
+template <typename Target, typename Source>
+ENOKI_INLINE bool reinterpret_array(const detail::MaskBit<Source> &src) {
+    static_assert(std::is_same_v<Target, bool>);
+    return (bool) src;
+}
+
 template <typename T> ENOKI_INLINE auto sqr(const T &value) {
     return value * value;
 }
@@ -793,11 +799,25 @@ void scatter_add(Target &&target, const Value &value, const Index &index, const 
 //! @{ \name Forward declarations of math functions
 // -----------------------------------------------------------------------
 
-template <typename Value> Value exp(const Value &value);
-template <typename Value> Value log(const Value &value);
-template <typename Value> Value sin(const Value &value);
-template <typename Value> Value cos(const Value &value);
-template <typename Value> std::pair<Value, Value> sincos(const Value &value);
+template <typename T> T sin(const T &a);
+template <typename T> T cos(const T &a);
+template <typename T> std::pair<T, T> sincos(const T &a);
+template <typename T> T csc(const T &a);
+template <typename T> T sec(const T &a);
+template <typename T> T tan(const T &a);
+template <typename T> T cot(const T &a);
+template <typename T> T asin(const T &a);
+template <typename T> T acos(const T &a);
+template <typename T> T atan(const T &a);
+template <typename T1, typename T2> auto atan2(const T1 &a, const T2 &b);
+
+template <typename T> std::pair<T, T> frexp(const T &a);
+template <typename T1, typename T2> auto ldexp(const T1 &a, const T2 &b);
+template <typename T> T exp(const T &a);
+template <typename T> T exp2(const T &a);
+template <typename T> T log(const T &a);
+template <typename T> T log2(const T &a);
+template <typename T1, typename T2> auto pow(const T1 &a, const T2 &b);
 
 //! @}
 // -----------------------------------------------------------------------

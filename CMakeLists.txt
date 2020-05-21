@@ -5,7 +5,7 @@ option(ENOKI_ENABLE_TBB      "Use Intel Thread Building Blocks (TBB) with LLVM b
 option(ENOKI_ENABLE_JIT      "Build Enoki just in time compilation library?" OFF)
 option(ENOKI_ENABLE_AUTODIFF "Build Enoki automatic differentation library?" OFF)
 option(ENOKI_ENABLE_PYTHON   "Build Python extension library?" OFF)
-option(ENOKI_ENABLE_TESTS    "Build Enoki test suite?" OFF)
+option(ENOKI_ENABLE_TESTS    "Build Enoki test suite? (Warning, this takes *very* long to compile)" OFF)
 set(ENOKI_NATIVE_FLAGS "-march=native" CACHE STRING "Compilation flags used to target the host processor architecture.")
 
 set(ENOKI_MASTER_PROJECT OFF)
@@ -100,6 +100,11 @@ if (ENOKI_ENABLE_PYTHON)
   add_subdirectory(src/python)
 else()
   message(STATUS "Enoki: *not* building the Python plugin.")
+endif()
+
+if (ENOKI_ENABLE_TESTS)
+  message(STATUS "Enoki: building the test suite (Warning, this takes *very* long to compile).")
+  add_subdirectory(tests)
 endif()
 
 # Build the documentation

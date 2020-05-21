@@ -17,6 +17,8 @@
 NAMESPACE_BEGIN(enoki)
 
 template <typename T> constexpr auto E               = scalar_t<T>(2.71828182845904523536);
+template <typename T> constexpr auto LogTwo          = scalar_t<T>(0.69314718055994530942);
+template <typename T> constexpr auto InvLogTwo       = scalar_t<T>(1.44269504088896340736);
 
 template <typename T> constexpr auto Pi              = scalar_t<T>(3.14159265358979323846);
 template <typename T> constexpr auto InvPi           = scalar_t<T>(0.31830988618379067154);

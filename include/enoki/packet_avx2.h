@@ -812,10 +812,10 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(32)
     //! @{ \name Horizontal operations
     // -----------------------------------------------------------------------
     //
-    ENOKI_INLINE Value hsum_()  const { printf("myhs\n"); return hsum(low_() + high_()); }
-    ENOKI_INLINE Value hprod_() const { printf("myhp\n"); return hprod(low_() * high_()); }
-    ENOKI_INLINE Value hmin_()  const { printf("myhmi\n"); return hmin(min(low_(), high_())); }
-    ENOKI_INLINE Value hmax_()  const { printf("myhma\n"); return hmax(max(low_(), high_())); }
+    ENOKI_INLINE Value hsum_()  const { return hsum(low_() + high_()); }
+    ENOKI_INLINE Value hprod_() const { return hprod(low_() * high_()); }
+    ENOKI_INLINE Value hmin_()  const { return hmin(enoki::min(low_(), high_())); }
+    ENOKI_INLINE Value hmax_()  const { return hmax(enoki::max(low_(), high_())); }
 
     ENOKI_INLINE bool all_() const { return _mm256_movemask_pd(_mm256_castsi256_pd(m)) == 0xF; }
     ENOKI_INLINE bool any_() const { return _mm256_movemask_pd(_mm256_castsi256_pd(m)) != 0; }

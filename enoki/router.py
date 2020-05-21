@@ -933,6 +933,49 @@ def atan2(a, b):
     else:
         return _builtins.atan2(a, b)
 
+
+def exp(a):
+    if isinstance(a, ArrayBase):
+        return a.exp_()
+    else:
+        return _math.exp(a)
+
+
+def exp2(a):
+    if isinstance(a, ArrayBase):
+        return a.exp2_()
+    else:
+        return _math.exp(a * _math.log(2.0))
+
+
+def log(a):
+    if isinstance(a, ArrayBase):
+        return a.log_()
+    else:
+        return _math.log(a)
+
+
+def log2(a):
+    if isinstance(a, ArrayBase):
+        return a.log2_()
+    else:
+        return _math.log2(a)
+
+
+def pow(a, b):
+    if isinstance(a, ArrayBase) or \
+       isinstance(b, ArrayBase):
+        if type(a) is not type(b) and not \
+           (isinstance(b, int) or isinstance(b, float)):
+            a, b = _var_promote(a, b)
+        return a.pow_(b)
+    else:
+        return _math.pow(a, b)
+
+
+def op_pow(a, b):
+    return pow(a, b)
+
 # -------------------------------------------------------------------
 #                       Horizontal operations
 # -------------------------------------------------------------------

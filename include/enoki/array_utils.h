@@ -37,7 +37,9 @@ NAMESPACE_BEGIN(detail)
 template <typename T> auto not_(const T &a) {
     using UInt = uint_array_t<T>;
 
-    if constexpr (is_array_v<T> || std::is_integral_v<T>)
+    if constexpr (is_same_v<T, bool>)
+        return !a;
+    else if constexpr (is_array_v<T> || std::is_integral_v<T>)
         return ~a;
     else
         return memcpy_cast<T>(~memcpy_cast<UInt>(a));

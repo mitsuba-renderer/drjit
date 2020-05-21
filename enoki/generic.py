@@ -567,11 +567,11 @@ def cos_(a0):
 
 
 def sincos_(a0):
-    if not ar0.IsFloat:
+    if not a0.IsFloat:
         raise Exception("sincos(): requires floating point operands!")
-    ar, sr0 = _check1(a0)
-    ar1 = a0.empty_(sr if a0.Size == Dynamic else 0)
-    for i in range(sr):
+    ar0, sr0 = _check1(a0)
+    ar1 = a0.empty_(sr0 if a0.Size == Dynamic else 0)
+    for i in range(sr0):
         result = _ek.sincos(a0[i])
         ar0[i] = result[0]
         ar1[i] = result[1]
@@ -630,6 +630,57 @@ def atan2_(a0, a1):
     for i in range(sr):
         ar[i] = _ek.atan2(a0[i], a1[i])
     return ar
+
+
+def exp_(a0):
+    if not a0.IsFloat:
+        raise Exception("exp(): requires floating point operands!")
+    ar, sr = _check1(a0)
+    for i in range(sr):
+        ar[i] = _ek.exp(a0[i])
+    return ar
+
+
+def exp2_(a0):
+    if not a0.IsFloat:
+        raise Exception("exp2(): requires floating point operands!")
+    ar, sr = _check1(a0)
+    for i in range(sr):
+        ar[i] = _ek.exp2(a0[i])
+    return ar
+
+
+def log_(a0):
+    if not a0.IsFloat:
+        raise Exception("log(): requires floating point operands!")
+    ar, sr = _check1(a0)
+    for i in range(sr):
+        ar[i] = _ek.log(a0[i])
+    return ar
+
+
+def log2_(a0):
+    if not a0.IsFloat:
+        raise Exception("log2(): requires floating point operands!")
+    ar, sr = _check1(a0)
+    for i in range(sr):
+        ar[i] = _ek.log2(a0[i])
+    return ar
+
+
+def pow_(a0, a1):
+    if not a0.IsFloat:
+        raise Exception("pow(): requires floating point operands!")
+    if isinstance(a1, int) or isinstance(a1, float):
+        ar, sr = _check1(a0)
+        for i in range(sr):
+            ar[i] = _ek.pow(a0[i], a1)
+    else:
+        ar, sr = _check2(a0, a1)
+        for i in range(sr):
+            ar[i] = _ek.pow(a0[i], a1[i])
+    return ar
+
 
 # -------------------------------------------------------------------
 #                       Horizontal operations
@@ -730,6 +781,7 @@ def detach_(a):
         return a
 
     t = _ek.nondiff_array_t(type(a))
+    result = t.empty_(len(a) if a.Size == Dynamic else 0)
     for i in range(len(a)):
         result[i] = a[i].detach_()
     return result
@@ -740,12 +792,20 @@ def grad_(a):
         return None
 
     t = _ek.nondiff_array_t(type(a))
+    result = t.empty_(len(a) if a.Size == Dynamic else 0)
     for i in range(len(a)):
         g = a[i].grad_()
         if g is None:
             return None
         result[i] = g
     return result
+
+
+def et_grad_enabled_(a, value):
+    if not a.IsDiff:
+        raise Exception("Expected a differentiable array type!")
+    for i in range(len(a)):
+        a[i] = a[i].set_grad_enabled_(value)
 
 
 def set_grad_(a, grad):
@@ -755,22 +815,6 @@ def set_grad_(a, grad):
     s = len(a)
     for i in range(s):
         a[i].set_grad_(grad[i])
-
-
-def attach_(a):
-    if not a.IsDiff:
-        raise Exception("Expected a differentiable array type!")
-    for i in range(len(a)):
-        a[i] = a[i].attach_(value)
-    return a
-
-
-def detach_(a):
-    if not a.IsDiff:
-        raise Exception("Expected a differentiable array type!")
-    for i in range(len(a)):
-        a[i] = a[i].detach_(value)
-    return a
 
 
 def enqueue_(a):

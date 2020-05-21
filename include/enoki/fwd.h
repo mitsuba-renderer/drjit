@@ -155,6 +155,10 @@
 
 #if defined(ENOKI_X86_AVX2) && !defined(ENOKI_X86_FMA)
 #  define ENOKI_X86_FMA
+#  if defined(__GNUG__)
+/// Seriously complain about this one when compiling with GCC/Clang
+#    error Invalid processor feature flags: FMA (-mfma) must be specified when AVX2 (-mavx2) is enabled!
+#  endif
 #endif
 
 #if defined(ENOKI_X86_AVX2) && !defined(ENOKI_X86_AVX)

@@ -49,6 +49,8 @@ struct Mask : MaskBase<Value_, Size_, Mask<Value_, Size_>> {
 
     using MaskType = Mask;
     using ArrayType = Array<Value_, Size_>;
+    using Value = Value_;
+    using Scalar = scalar_t<Value_>;
 
     /// Type alias for creating a similar-shaped array over a different type
     template <typename T> using ReplaceValue = Mask<T, Size_>;

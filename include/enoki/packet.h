@@ -64,6 +64,8 @@ struct PacketMask : MaskBase<Value_, Size_, PacketMask<Value_, Size_>> {
 
     using MaskType = PacketMask;
     using ArrayType = Packet<Value_, Size_>;
+    using Value = Value_;
+    using Scalar = scalar_t<Value_>;
 
     /// Packet types prefer to be broadcasted to the *inner* dimensions of a N-D array
     static constexpr bool BroadcastOuter = false;

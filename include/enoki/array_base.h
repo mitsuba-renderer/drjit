@@ -26,8 +26,7 @@ NAMESPACE_BEGIN(enoki)
 #define ENOKI_ARRAY_IMPORT(Name, Base)                                         \
     Name() = default;                                                          \
     ENOKI_ARRAY_DEFAULTS(Name)                                                 \
-    using Base::Base;                                                          \
-    using Base::operator=;
+    using Base::Base;
 
 #define ENOKI_ARRAY_FALLBACK_CONSTRUCTORS(Name)                                \
     template <typename Value2, typename D2, typename D = Derived_,             \
@@ -271,6 +270,32 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
             return result;                                                   \
         }
 
+    #define ENOKI_IMPLEMENT_UNARY_PAIR(name, op, cond)                       \
+        std::pair<Derived, Derived> name##_() const {                        \
+            Derived result_1, result_2;                                      \
+                                                                             \
+            if constexpr (cond) {                                            \
+                size_t sa = derived().size();                                \
+                                                                             \
+                if constexpr (Derived::Size == Dynamic) {                    \
+                    result_1 = enoki::empty<Derived>(sa);                    \
+                    result_2 = enoki::empty<Derived>(sa);                    \
+                }                                                            \
+                                                                             \
+                for (size_t i = 0; i < sa; ++i) {                            \
+                    const Value &a = derived().entry(i);                     \
+                    auto result = op;                                        \
+                    result_1.entry(i) = std::move(result.first);             \
+                    result_2.entry(i) = std::move(result.second);            \
+                }                                                            \
+            } else {                                                         \
+                enoki_raise(#name "_(): invalid operand type!");             \
+            }                                                                \
+                                                                             \
+            return std::pair<Derived, Derived>(std::move(result_1),          \
+                                               std::move(result_2));         \
+        }
+
     #define ENOKI_IMPLEMENT_ROUND2INT(name)                                  \
         template <typename T> T name##2int_() const {                        \
             ENOKI_CHKSCALAR(#name "_");                                      \
@@ -463,36 +488,44 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
     ENOKI_IMPLEMENT_TERNARY_ALT(fnmsub, enoki::fnmsub(a, b, c), -derived()*v1-v2, IsFloat)
 
     template <typename T = Value, enable_if_array_t<T> = 0>
-    ENOKI_IMPLEMENT_UNARY(exp, enoki::exp(a), IsFloat)
-    template <typename T = Value, enable_if_array_t<T> = 0>
-    ENOKI_IMPLEMENT_UNARY(log, enoki::log(a), IsFloat)
-    template <typename T = Value, enable_if_array_t<T> = 0>
     ENOKI_IMPLEMENT_UNARY(sin, enoki::sin(a), IsFloat)
     template <typename T = Value, enable_if_array_t<T> = 0>
     ENOKI_IMPLEMENT_UNARY(cos, enoki::cos(a), IsFloat)
 
     template <typename T = Value, enable_if_array_t<T> = 0>
-    std::pair<Derived, Derived> sincos_() {
-        Derived result_s, result_c;
+    ENOKI_IMPLEMENT_UNARY(csc, enoki::csc(a), IsFloat)
+    template <typename T = Value, enable_if_array_t<T> = 0>
+    ENOKI_IMPLEMENT_UNARY(sec, enoki::sec(a), IsFloat)
+    template <typename T = Value, enable_if_array_t<T> = 0>
+    ENOKI_IMPLEMENT_UNARY(tan, enoki::tan(a), IsFloat)
+    template <typename T = Value, enable_if_array_t<T> = 0>
+    ENOKI_IMPLEMENT_UNARY(cot, enoki::cot(a), IsFloat)
+    template <typename T = Value, enable_if_array_t<T> = 0>
+    ENOKI_IMPLEMENT_UNARY(asin, enoki::asin(a), IsFloat)
+    template <typename T = Value, enable_if_array_t<T> = 0>
+    ENOKI_IMPLEMENT_UNARY(acos, enoki::acos(a), IsFloat)
+    template <typename T = Value, enable_if_array_t<T> = 0>
+    ENOKI_IMPLEMENT_UNARY(atan, enoki::atan(a), IsFloat)
+    template <typename T = Value, enable_if_array_t<T> = 0>
+    ENOKI_IMPLEMENT_BINARY(atan2, enoki::atan2(a, b), IsFloat)
+    template <typename T = Value, enable_if_array_t<T> = 0>
+    ENOKI_IMPLEMENT_BINARY(ldexp, enoki::ldexp(a, b), IsFloat)
 
-        if constexpr (IsFloat) {
-            size_t sa = derived().size();
+    template <typename T = Value, enable_if_array_t<T> = 0>
+    ENOKI_IMPLEMENT_UNARY(exp2, enoki::exp2(a), IsFloat)
+    template <typename T = Value, enable_if_array_t<T> = 0>
+    ENOKI_IMPLEMENT_UNARY(exp, enoki::exp(a), IsFloat)
+    template <typename T = Value, enable_if_array_t<T> = 0>
+    ENOKI_IMPLEMENT_UNARY(log2, enoki::log2(a), IsFloat)
+    template <typename T = Value, enable_if_array_t<T> = 0>
+    ENOKI_IMPLEMENT_UNARY(log, enoki::log(a), IsFloat)
+    template <typename T = Value, enable_if_array_t<T> = 0>
+    ENOKI_IMPLEMENT_BINARY(pow, enoki::pow(a, b), IsFloat)
 
-            if constexpr (Derived::Size == Dynamic) {
-                result_s = enoki::empty<Derived>(sa);
-                result_c = enoki::empty<Derived>(sa);
-            }
-
-            for (size_t i = 0; i < sa; ++i) {
-                const Value &a = derived().entry(i);
-                auto result = enoki::sincos(a);
-                result_s.entry(i) = std::move(result.first);
-                result_c.entry(i) = std::move(result.second);
-            }
-        } else {
-            enoki_raise("sincos_(): invalid operand type!");
-        }
-    }
+    template <typename T = Value, enable_if_array_t<T> = 0>
+    ENOKI_IMPLEMENT_UNARY_PAIR(sincos, enoki::sincos(a), IsFloat)
+    template <typename T = Value, enable_if_array_t<T> = 0>
+    ENOKI_IMPLEMENT_UNARY_PAIR(frexp, enoki::frexp(a), IsFloat)
 
     #undef ENOKI_IMPLEMENT_UNARY
     #undef ENOKI_IMPLEMENT_UNARY_TEMPLATE

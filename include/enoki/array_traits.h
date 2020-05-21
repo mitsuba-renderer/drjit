@@ -99,6 +99,7 @@ namespace detail {
     template <typename T> using is_jit_array_det       = std::enable_if_t<T::IsEnoki && T::Derived::IsJIT>;
     template <typename T> using is_diff_array_det      = std::enable_if_t<T::IsEnoki && T::Derived::IsDiff>;
     template <typename T> using is_mask_det            = std::enable_if_t<T::IsEnoki && T::Derived::IsMask>;
+    template <typename T> using is_kmask_det           = std::enable_if_t<T::IsEnoki && T::Derived::IsKMask>;
     template <typename T> using is_dynamic_det         = std::enable_if_t<T::IsDynamic>;
 }
 
@@ -145,6 +146,8 @@ template <typename T> using enable_if_recursive_array_t = enable_if_t<is_recursi
 
 template <typename T>
 constexpr bool is_mask_v = std::is_same_v<T, bool> || is_detected_v<detail::is_mask_det, std::decay_t<T>>;
+template <typename T>
+constexpr bool is_kmask_v = is_detected_v<detail::is_kmask_det, std::decay_t<T>>;
 template <typename T> using enable_if_mask_t = enable_if_t<is_mask_v<T>>;
 
 template <typename... Ts> constexpr bool is_array_any_v = (is_array_v<Ts> || ...);
@@ -240,9 +243,13 @@ namespace detail {
         using type = void;
     };
 
+    /// Get the differentiable array underlying a potentially nested array
+    template <typename T>
+    using extract_diff_array_t = typename detail::extract_diff_array<T>::type;
+
     template <typename T>
     struct extract_diff_array<T, enable_if_t<is_diff_array_v<value_t<T>>>> {
-        using type = extract_diff_array<value_t<T>>;
+        using type = extract_diff_array_t<value_t<T>>;
     };
 
     template <typename T>
@@ -250,10 +257,6 @@ namespace detail {
                                             !is_diff_array_v<value_t<T>>>> {
         using type = T;
     };
-
-    /// Get the differentiable array underlying a potentially nested array
-    template <typename T>
-    using extract_diff_array_t = typename detail::extract_diff_array<T>::type;
 
     template <typename T, typename = int> struct diff_array { using type = void; };
 

@@ -67,6 +67,7 @@ namespace detail {
         using Mask = mask_t<Array>;
 
         if constexpr (is_jit_array_v<Array>) {
+            using UInt32 = uint32_array_t<Array>;
 
             if constexpr (!std::is_void_v<FuncRV>) {
                 using Result = detail::vectorize_type_t<Array, FuncRV>;
@@ -77,15 +78,18 @@ namespace detail {
                 } else {
                     result = enoki::empty<Result>(self.size());
                     enoki::schedule(args...);
-                    for (auto const &kv : self.vcall_()) {
-                        if (kv.first) {
+                    auto [buckets, size] = self.vcall_();
+                    for (size_t i = 0; i < size; ++i) {
+                        UInt32 perm = UInt32::borrow(buckets[i].index);
+
+                        if (buckets[i].ptr) {
                             enoki::scatter<true>(
                                 result,
                                 ref_cast_t<FuncRV, Result>(func(
-                                    kv.first, detail::gather_helper(args, kv.second)...)),
-                                kv.second);
+                                    buckets[i].ptr, detail::gather_helper(args, perm)...)),
+                                perm);
                         } else {
-                            enoki::scatter<true>(result, zero<Result>(), kv.second);
+                            enoki::scatter<true>(result, zero<Result>(), perm);
                         }
                     }
                     enoki::schedule(result);
@@ -95,8 +99,13 @@ namespace detail {
                 if (self.size() == 1) {
                     func(self.entry(0), args...);
                 } else {
-                    for (auto const &kv : self.vcall_())
-                        func(kv.first, detail::gather_helper(args, kv.second)...);
+                    auto [buckets, size] = self.vcall_();
+                    for (size_t i = 0; i < size; ++i) {
+                        if (!buckets[i].ptr)
+                            continue;
+                        UInt32 perm = UInt32::borrow(buckets[i].index);
+                        func(buckets[i].ptr, detail::gather_helper(args, perm)...);
+                    }
                 }
             }
         } else {

@@ -68,6 +68,10 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
     : StaticArrayBase<std::conditional_t<IsMask_, mask_t<Value_>, Value_>,
                       Size_, IsMask_, Derived_> {
 
+    static_assert(
+        std::is_default_constructible_v<Value_>,
+        "Type underlying enoki::Array must be default-constructible!");
+
     using Base = StaticArrayBase<
         std::conditional_t<IsMask_, mask_t<Value_>, Value_>,
         Size_, IsMask_, Derived_>;
@@ -123,8 +127,14 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
     StaticArrayImpl() : StaticArrayImpl(DebugInitialization<Scalar>) { }
 #endif
 
-    StaticArrayImpl(const Value &v) {
+    StaticArrayImpl(const Scalar &v) {
         ENOKI_CHKSCALAR("Constructor (scalar broadcast)");
+        for (size_t i = 0; i < Size_; ++i)
+            m_data[i] = v;
+    }
+
+    template <typename T = Value_, enable_if_t<!std::is_same_v<T, Scalar>> = 0>
+    StaticArrayImpl(const Value &v) {
         for (size_t i = 0; i < Size_; ++i)
             m_data[i] = v;
     }
@@ -143,12 +153,6 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
     StaticArrayImpl(const T1 &a1, const T2 &a2)
         : StaticArrayImpl(a1, a2, std::make_index_sequence<Base::Size1>(),
                                   std::make_index_sequence<Base::Size2>()) { }
-
-    /// Catch-all move/copy assignment operator
-    template <typename T, enable_if_t<!std::is_same_v<std::decay_t<T>, Derived>> = 0>
-    StaticArrayImpl &operator=(T&& value) {
-        return operator=((StaticArrayImpl &&) Derived_(std::forward<T>(value)));
-    }
 
     /// Access elements by reference, and without error-checking
     ENOKI_INLINE Value &entry(size_t i) { return m_data[i]; }

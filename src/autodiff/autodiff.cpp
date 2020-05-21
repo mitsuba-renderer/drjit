@@ -970,14 +970,14 @@ template <typename Value> const char *ad_graphviz(bool reverse) {
     return buffer.get();
 }
 
-template <typename T> void ad_inc_ref(uint32_t index) {
+template <typename T> void ad_inc_ref_impl(uint32_t index) noexcept(true) {
     if (index == 0)
         return;
     std::lock_guard<Mutex> guard(state.mutex);
     state[index]->ref_count_ext++;
 }
 
-template <typename T> void ad_dec_ref(uint32_t index) {
+template <typename T> void ad_dec_ref_impl(uint32_t index) noexcept(true) {
     if (index == 0)
         return;
     std::lock_guard<Mutex> guard(state.mutex);
@@ -992,7 +992,7 @@ template <typename T> T ad_grad(uint32_t index) {
     if (index == 0)
         enoki_raise("grad(): attempted to retrieve the gradient of a "
                     "variable that was not registered with the AD "
-                    "backend. Did you forget to call requires_grad()?");
+                    "backend. Did you forget to call enable_grad()?");
 
     std::lock_guard<Mutex> guard(state.mutex);
     return state[index]->grad;
@@ -1002,7 +1002,7 @@ template <typename T> void ad_set_grad(uint32_t index, const T &value) {
     if (index == 0)
         enoki_raise("set_grad(): attempted to set the gradient of a "
                     "variable that was not registered with the AD "
-                    "backend. Did you forget to call requires_grad()?");
+                    "backend. Did you forget to call enable_grad()?");
 
     std::lock_guard<Mutex> guard(state.mutex);
     state[index]->grad = value;
@@ -1026,6 +1026,7 @@ template <typename T> const char *ad_label(uint32_t index) {
     std::lock_guard<Mutex> guard(state.mutex);
     return state[index]->label;
 }
+
 template <typename T> void ad_traverse(bool reverse, bool retain_graph) {
     std::lock_guard<Mutex> guard(state.mutex);
 
@@ -1040,8 +1041,8 @@ template <typename T> void ad_traverse(bool reverse, bool retain_graph) {
         ad_traverse_fwd(retain_graph);
 }
 
-template ENOKI_EXPORT void ad_inc_ref<Value>(uint32_t);
-template ENOKI_EXPORT void ad_dec_ref<Value>(uint32_t);
+template ENOKI_EXPORT void ad_inc_ref_impl<Value>(uint32_t);
+template ENOKI_EXPORT void ad_dec_ref_impl<Value>(uint32_t);
 template ENOKI_EXPORT uint32_t ad_new<Value>(const char *, uint32_t, uint32_t,
                                              const uint32_t *, Value *);
 template ENOKI_EXPORT Value ad_grad<Value>(uint32_t);

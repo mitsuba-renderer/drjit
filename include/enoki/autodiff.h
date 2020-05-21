@@ -23,10 +23,10 @@ NAMESPACE_BEGIN(detail)
 //! @{ \name External API compiled as part of libenoki-ad.so
 // -----------------------------------------------------------------------
 /// Increase the external reference count of a given variable
-template <typename Value> void ad_inc_ref(uint32_t index);
+template <typename Value> void ad_inc_ref_impl(uint32_t index) noexcept (true);
 
 /// Decrease the external reference count of a given variable
-template <typename Value> void ad_dec_ref(uint32_t index);
+template <typename Value> void ad_dec_ref_impl(uint32_t index) noexcept (true);
 
 /// Create a new variable with the given number of operands and AD weights
 template <typename Value> uint32_t ad_new(const char *label, uint32_t size, uint32_t ops,
@@ -73,6 +73,20 @@ uint32_t ad_new_scatter(const char *label, uint32_t size, uint32_t src_index,
 //! @}
 // -----------------------------------------------------------------------
 
+#if defined(__GNUC__)
+template <typename T> ENOKI_INLINE void ad_inc_ref(uint32_t index) noexcept(true) {
+    if (!__builtin_constant_p(index) || index != 0)
+        ad_inc_ref_impl<T>(index);
+}
+template <typename T> ENOKI_INLINE void ad_dec_ref(uint32_t index) noexcept(true) {
+    if (!__builtin_constant_p(index) || index != 0)
+        ad_dec_ref_impl<T>(index);
+}
+#else
+#define ad_inc_ref ad_inc_ref_impl
+#define ad_dec_ref ad_dec_ref_impl
+#endif
+
 NAMESPACE_END(detail)
 
 template <typename Type_>
@@ -117,7 +131,7 @@ struct DiffArray : ArrayBaseT<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>
 
     ENOKI_INLINE DiffArray() = default;
 
-    ENOKI_INLINE ~DiffArray() {
+    ENOKI_INLINE ~DiffArray() noexcept(true) {
         if constexpr (IsEnabled)
             detail::ad_dec_ref<Type>(m_index);
     }
@@ -141,12 +155,12 @@ struct DiffArray : ArrayBaseT<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>
 
     template <typename T>
     DiffArray(const DiffArray<T> &v, detail::reinterpret_flag)
-        : m_value(v.m_value) { }
+        : m_value(v.m_value, detail::reinterpret_flag()) { }
 
+    template <typename T = Value, enable_if_t<!std::is_same_v<T, Type>> = 0>
     DiffArray(const Type &value) : m_value(value) { }
     DiffArray(Type &&value) : m_value(std::move(value)) { }
 
-    template <typename T = Value, enable_if_t<!std::is_same_v<T, Type>> = 0>
     DiffArray(const Value &value) : m_value(value) { }
 
     template <typename... Ts, enable_if_t<(sizeof...(Ts) > 1 &&
@@ -414,16 +428,16 @@ struct DiffArray : ArrayBaseT<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>
     }
 
     DiffArray min_(const DiffArray &a) const {
-        if constexpr (!std::is_integral_v<Scalar>) {
+        if constexpr (!std::is_arithmetic_v<Scalar>) {
             enoki_raise("min_(): invalid operand type!");
         } else {
             uint32_t index_new = 0;
             Type result = enoki::min(m_value, a.m_value);
 
             if constexpr (IsEnabled) {
-                if (m_index || a.m_value) {
+                if (m_index || a.m_index) {
                     mask_t<Type> m = m_value <= a.m_value;
-                    uint32_t indices[2] = { m_index, a.m_value };
+                    uint32_t indices[2] = { m_index, a.m_index };
                     Type weights[2] = { select(m, Type(1), Type(0)),
                                         select(m, Type(0), Type(1)) };
                     index_new = detail::ad_new<Type>(
@@ -436,14 +450,14 @@ struct DiffArray : ArrayBaseT<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>
     }
 
     DiffArray max_(const DiffArray &a) const {
-        if constexpr (!std::is_integral_v<Scalar>) {
+        if constexpr (!std::is_arithmetic_v<Scalar>) {
             enoki_raise("max_(): invalid operand type!");
         } else {
             uint32_t index_new = 0;
             Type result = enoki::max(m_value, a.m_value);
             if constexpr (IsEnabled) {
-                if (m_index || a.m_value) {
-                    uint32_t indices[2] = { m_index, a.m_value };
+                if (m_index || a.m_index) {
+                    uint32_t indices[2] = { m_index, a.m_index };
                     mask_t<Type> m = m_value > a.m_value;
                     Type weights[2] = { select(m, Type(1), Type(0)),
                                         select(m, Type(0), Type(1)) };
@@ -573,6 +587,188 @@ struct DiffArray : ArrayBaseT<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>
 
     std::pair<DiffArray, DiffArray> sincos_() const {
         return { sin_(), cos_() };
+    }
+
+    DiffArray csc_() const {
+        if constexpr (!std::is_floating_point_v<Scalar>) {
+            enoki_raise("csc_(): invalid operand type!");
+        } else {
+            uint32_t index_new = 0;
+            Type result = enoki::csc(m_value);
+            if constexpr (IsEnabled) {
+                if (m_index) {
+                    uint32_t indices[1] = { m_index };
+                    Type weights[1] = { -result * enoki::cot(m_value) };
+                    index_new = detail::ad_new<Type>(
+                        "csc", (uint32_t) width(result), 1, indices, weights);
+                }
+            }
+
+            return DiffArray::create(index_new, std::move(result));
+        }
+    }
+
+    DiffArray sec_() const {
+        if constexpr (!std::is_floating_point_v<Scalar>) {
+            enoki_raise("sec_(): invalid operand type!");
+        } else {
+            uint32_t index_new = 0;
+            Type result = enoki::sec(m_value);
+            if constexpr (IsEnabled) {
+                if (m_index) {
+                    uint32_t indices[1] = { m_index };
+                    Type weights[1] = { result * enoki::tan(m_value) };
+                    index_new = detail::ad_new<Type>(
+                        "sec", (uint32_t) width(result), 1, indices, weights);
+                }
+            }
+            return DiffArray::create(index_new, std::move(result));
+        }
+    }
+
+    DiffArray tan_() const {
+        if constexpr (!std::is_floating_point_v<Scalar>) {
+            enoki_raise("tan_(): invalid operand type!");
+        } else {
+            uint32_t index_new = 0;
+            Type result = enoki::tan(m_value);
+            if constexpr (IsEnabled) {
+                if (m_index) {
+                    uint32_t indices[1] = { m_index };
+                    Type weights[1] = { enoki::sqr(enoki::sec(m_value)) };
+                    index_new = detail::ad_new<Type>(
+                        "tan", (uint32_t) width(result), 1, indices, weights);
+                }
+            }
+            return DiffArray::create(index_new, std::move(result));
+        }
+    }
+
+    DiffArray cot_() const {
+        if constexpr (!std::is_floating_point_v<Scalar>) {
+            enoki_raise("cot_(): invalid operand type!");
+        } else {
+            uint32_t index_new = 0;
+            Type result = enoki::cot(m_value);
+            if constexpr (IsEnabled) {
+                if (m_index) {
+                    uint32_t indices[1] = { m_index };
+                    Type weights[1] = { -enoki::sqr(enoki::csc(m_value)) };
+                    index_new = detail::ad_new<Type>(
+                        "cot", (uint32_t) width(result), 1, indices, weights);
+                }
+            }
+            return DiffArray::create(index_new, std::move(result));
+        }
+    }
+
+    DiffArray asin_() const {
+        if constexpr (!std::is_floating_point_v<Scalar>) {
+            enoki_raise("asin_(): invalid operand type!");
+        } else {
+            uint32_t index_new = 0;
+            Type result = enoki::asin(m_value);
+            if constexpr (IsEnabled) {
+                if (m_index) {
+                    uint32_t indices[1] = { m_index };
+                    Type weights[1] = { rsqrt(fnmadd(m_value, m_value, 1.f)) };
+                    index_new = detail::ad_new<Type>(
+                        "asin", (uint32_t) width(result), 1, indices, weights);
+                }
+            }
+            return DiffArray::create(index_new, std::move(result));
+        }
+    }
+
+    DiffArray acos_() const {
+        if constexpr (!std::is_floating_point_v<Scalar>) {
+            enoki_raise("acos_(): invalid operand type!");
+        } else {
+            uint32_t index_new = 0;
+            Type result = enoki::acos(m_value);
+            if constexpr (IsEnabled) {
+                if (m_index) {
+                    uint32_t indices[1] = { m_index };
+                    Type weights[1] = { -rsqrt(fnmadd(m_value, m_value, 1.f)) };
+                    index_new = detail::ad_new<Type>(
+                        "acos", (uint32_t) width(result), 1, indices, weights);
+                }
+            }
+            return DiffArray::create(index_new, std::move(result));
+        }
+    }
+
+    DiffArray atan_() const {
+        if constexpr (!std::is_floating_point_v<Scalar>) {
+            enoki_raise("atan_(): invalid operand type!");
+        } else {
+            uint32_t index_new = 0;
+            Type result = enoki::atan(m_value);
+            if constexpr (IsEnabled) {
+                if (m_index) {
+                    uint32_t indices[1] = { m_index };
+                    Type weights[1] = { rcp(fmadd(m_value, m_value, 1)) };
+                    index_new = detail::ad_new<Type>(
+                        "atan", (uint32_t) width(result), 1, indices, weights);
+                }
+            }
+            return DiffArray::create(index_new, std::move(result));
+        }
+    }
+
+    DiffArray atan2_(const DiffArray &x) const {
+        if constexpr (!std::is_floating_point_v<Scalar>) {
+            enoki_raise("atan2_(): invalid operand type!");
+        } else {
+            uint32_t index_new = 0;
+            Type result = enoki::atan2(m_value, x.m_value);
+            if constexpr (IsEnabled) {
+                if (m_index || x.m_index) {
+                    Type il2 = rcp(fmadd(m_value, m_value, sqr(x.m_value)));
+                    uint32_t indices[2] = { m_index, x.m_index };
+                    Type weights[2] = { il2 * x.m_value, -il2 * m_value };
+                    index_new = detail::ad_new<Type>(
+                        "atan2", (uint32_t) width(result), 2, indices, weights);
+                }
+            }
+            return DiffArray::create(index_new, std::move(result));
+        }
+    }
+
+    DiffArray exp_() const {
+        if constexpr (!std::is_floating_point_v<Scalar>) {
+            enoki_raise("exp_(): invalid operand type!");
+        } else {
+            uint32_t index_new = 0;
+            Type result = enoki::exp(m_value);
+            if constexpr (IsEnabled) {
+                if (m_index) {
+                    uint32_t indices[1] = { m_index };
+                    Type weights[1] = { result };
+                    index_new = detail::ad_new<Type>(
+                        "exp", (uint32_t) width(result), 1, indices, weights);
+                }
+            }
+            return DiffArray::create(index_new, std::move(result));
+        }
+    }
+
+    DiffArray log_() const {
+        if constexpr (!std::is_floating_point_v<Scalar>) {
+            enoki_raise("log_(): invalid operand type!");
+        } else {
+            uint32_t index_new = 0;
+            Type result = enoki::log(m_value);
+            if constexpr (IsEnabled) {
+                if (m_index) {
+                    uint32_t indices[1] = { m_index };
+                    Type weights[1] = { rcp(m_value) };
+                    index_new = detail::ad_new<Type>(
+                        "log", (uint32_t) width(result), 1, indices, weights);
+                }
+            }
+            return DiffArray::create(index_new, std::move(result));
+        }
     }
 
     //! @}
@@ -1056,6 +1252,20 @@ struct DiffArray : ArrayBaseT<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>
             enoki_raise("vcall_(): not supported in scalar mode!");
     }
 
+    static DiffArray steal(uint32_t index) {
+        if constexpr (is_jit_array_v<Type>)
+            return Type::steal(index);
+        else
+            enoki_raise("steal(): not supported in scalar mode!");
+    }
+
+    static DiffArray borrow(uint32_t index) {
+        if constexpr (is_jit_array_v<Type>)
+            return Type::borrow(index);
+        else
+            enoki_raise("borrow(): not supported in scalar mode!");
+    }
+
     void set_grad_enabled_(bool value) {
         if constexpr (IsEnabled) {
             if (value) {
@@ -1218,16 +1428,23 @@ protected:
 
 #if defined(ENOKI_BUILD_AUTODIFF)
 #  define ENOKI_AUTODIFF_EXPORT ENOKI_EXPORT
+#  define ENOKI_AUTODIFF_EXPORT_TEMPLATE(T)
 #else
 #  define ENOKI_AUTODIFF_EXPORT ENOKI_IMPORT
+#define ENOKI_AUTODIFF_EXPORT_TEMPLATE(T)                                      \
+    extern template ENOKI_AUTODIFF_EXPORT struct DiffArray<T>;
 #endif
 
 #define ENOKI_DECLARE_EXTERN_TEMPLATE(T, Mask, Index)                          \
-    extern template ENOKI_AUTODIFF_EXPORT void ad_inc_ref<T>(uint32_t);        \
-    extern template ENOKI_AUTODIFF_EXPORT void ad_dec_ref<T>(uint32_t);        \
-    extern template ENOKI_AUTODIFF_EXPORT uint32_t ad_new<T>(                  \
-        const char *, uint32_t, uint32_t,                                      \
-        ENOKI_AUTODIFF_EXPORT const uint32_t *, T *);                          \
+    ENOKI_AUTODIFF_EXPORT_TEMPLATE(T)                                          \
+    namespace detail {                                                         \
+    extern template ENOKI_AUTODIFF_EXPORT void                                 \
+        ad_inc_ref_impl<T>(uint32_t) noexcept(true);                           \
+    extern template ENOKI_AUTODIFF_EXPORT void                                 \
+        ad_dec_ref_impl<T>(uint32_t) noexcept(true);                           \
+    extern template ENOKI_AUTODIFF_EXPORT uint32_t                             \
+    ad_new<T>(const char *, uint32_t, uint32_t,                                \
+              ENOKI_AUTODIFF_EXPORT const uint32_t *, T *);                    \
     extern template ENOKI_AUTODIFF_EXPORT T ad_grad<T>(uint32_t);              \
     extern template ENOKI_AUTODIFF_EXPORT void ad_set_grad<T>(uint32_t,        \
                                                               const T &);      \
@@ -1244,9 +1461,9 @@ protected:
                                   const Index &, const Mask &, bool);          \
     extern template ENOKI_AUTODIFF_EXPORT uint32_t                             \
     ad_new_scatter<T, Mask, Index>(const char *, uint32_t, uint32_t, uint32_t, \
-                                   const Index &, const Mask &, bool, bool);
+                                   const Index &, const Mask &, bool, bool);   \
+    }
 
-NAMESPACE_BEGIN(detail)
 ENOKI_DECLARE_EXTERN_TEMPLATE(float, bool, uint32_t)
 ENOKI_DECLARE_EXTERN_TEMPLATE(double, bool, uint32_t)
 #if defined(ENOKI_CUDA_H)
@@ -1257,7 +1474,6 @@ ENOKI_DECLARE_EXTERN_TEMPLATE(CUDAArray<double>, CUDAArray<bool>, CUDAArray<uint
 ENOKI_DECLARE_EXTERN_TEMPLATE(LLVMArray<float>, LLVMArray<bool>, LLVMArray<uint32_t>)
 ENOKI_DECLARE_EXTERN_TEMPLATE(LLVMArray<double>, LLVMArray<bool>, LLVMArray<uint32_t>)
 #endif
-NAMESPACE_END(detail)
 
 extern ENOKI_AUTODIFF_EXPORT const char *ad_whos();
 extern ENOKI_AUTODIFF_EXPORT void ad_prefix_push(const char *value);
