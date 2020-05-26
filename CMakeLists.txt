@@ -109,7 +109,7 @@ endif()
 
 # Build the documentation
 if (ENOKI_MASTER_PROJECT)
-  set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} )
+  set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} resources)
   find_package(Sphinx)
 
   if (Sphinx_FOUND)

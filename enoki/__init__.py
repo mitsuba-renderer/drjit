@@ -31,9 +31,6 @@ for k, v in enoki.router.__dict__.items():
         continue
     if k.startswith('op_'):
         setattr(base, '__' + k[3:] + '__', v)
-        if k[3:] in ['add', 'sub', 'mul', 'truediv', 'floordiv', 'and', 'or',
-                     'xor', 'lshift', 'rshift']:
-            setattr(base, '__r' + k[3:] + '__', v)
     else:
         self[k] = v
 

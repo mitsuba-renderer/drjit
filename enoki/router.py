@@ -163,9 +163,11 @@ def _replace_scalar(cls, vt):
 
 ArrayBase.ReplaceScalar = classmethod(_replace_scalar)
 
+
 # -------------------------------------------------------------------
 #                      Miscellaneous operations
 # -------------------------------------------------------------------
+
 
 def _shape_impl(a, i, shape):
     if not isinstance(a, ArrayBase):
@@ -471,6 +473,12 @@ def op_add(a, b):
     return a.add_(b)
 
 
+def op_radd(a, b):
+    if type(a) is not type(b):
+        a, b = _var_promote(a, b)
+    return b.add_(a)
+
+
 def op_iadd(a, b):
     if type(a) is not type(b):
         a, b = _var_promote(a, b)
@@ -483,6 +491,12 @@ def op_sub(a, b):
     return a.sub_(b)
 
 
+def op_rsub(a, b):
+    if type(a) is not type(b):
+        a, b = _var_promote(a, b)
+    return b.sub_(a)
+
+
 def op_isub(a, b):
     if type(a) is not type(b):
         a, b = _var_promote(a, b)
@@ -493,6 +507,12 @@ def op_mul(a, b):
     if type(a) is not type(b):
         a, b = _var_promote(a, b)
     return a.mul_(b)
+
+
+def op_rmul(a, b):
+    if type(a) is not type(b):
+        a, b = _var_promote(a, b)
+    return b.mul_(a)
 
 
 def op_imul(a, b):
@@ -508,6 +528,15 @@ def op_truediv(a, b):
     if type(a) is not type(b):
         a, b = _var_promote(a, b)
     return a.truediv_(b)
+
+
+def op_rtruediv(a, b):
+    if (isinstance(b, float) or isinstance(b, int)) and b == 1:
+        return rcp(a)
+
+    if type(a) is not type(b):
+        a, b = _var_promote(a, b)
+    return b.truediv_(a)
 
 
 def op_itruediv(a, b):
@@ -541,6 +570,12 @@ def op_ifloordiv(a, b):
     return a.ifloordiv_(b)
 
 
+def op_rfloordiv(a, b):
+    if type(a) is not type(b):
+        a, b = _var_promote(a, b)
+    return b.floordiv_(a)
+
+
 def op_mod(a, b):
     if type(a) is not type(b):
         a, b = _var_promote(a, b)
@@ -558,6 +593,12 @@ def op_and(a, b):
         a, b = _var_promote_mask(a, b)
 
     return a.and_(b)
+
+
+def op_rand(a, b):
+    if type(a) is not type(b) and type(a) is not _ek.mask_t(b):
+        b, a = _var_promote_mask(b, a)
+    return b.and_(a)
 
 
 def op_iand(a, b):
@@ -580,6 +621,12 @@ def op_or(a, b):
     return a.or_(b)
 
 
+def op_ror(a, b):
+    if type(a) is not type(b) and type(a) is not _ek.mask_t(b):
+        b, a = _var_promote_mask(b, a)
+    return b.or_(a)
+
+
 def op_ior(a, b):
     if type(a) is not type(b) and type(b) is not _ek.mask_t(a):
         a, b = _var_promote_mask(a, b)
@@ -597,6 +644,12 @@ def op_xor(a, b):
     if type(a) is not type(b) and type(b) is not _ek.mask_t(a):
         a, b = _var_promote_mask(a, b)
     return a.xor_(b)
+
+
+def op_rxor(a, b):
+    if type(a) is not type(b) and type(a) is not _ek.mask_t(b):
+        b, a = _var_promote_mask(b, a)
+    return b.xor_(a)
 
 
 def op_ixor(a, b):
@@ -618,6 +671,12 @@ def op_lshift(a, b):
     return a.sl_(b)
 
 
+def op_rlshift(a, b):
+    if type(a) is not type(b):
+        a, b = _var_promote(a, b)
+    return b.sl_(a)
+
+
 def op_ilshift(a, b):
     if type(a) is not type(b):
         a, b = _var_promote(a, b)
@@ -628,6 +687,12 @@ def op_rshift(a, b):
     if type(a) is not type(b):
         a, b = _var_promote(a, b)
     return a.sr_(b)
+
+
+def op_rrshift(a, b):
+    if type(a) is not type(b):
+        a, b = _var_promote(a, b)
+    return b.sr_(a)
 
 
 def op_irshift(a, b):
@@ -800,8 +865,49 @@ def mulsign(a, b):
 def mulsign_neg(a, b):
     return select(b >= 0, -a, a)
 
+
+def isnan(a):
+    if _ek.is_array_v(a):
+        return ~eq(a, a)
+    else:
+        return not (a == a)
+
+
+def isinf(a):
+    return eq(abs(a), _ek.Infinity)
+
+
+def isfinite(a):
+    return abs(a) < _ek.Infinity
+
+
+def lerp(a, b, t):
+    return fmadd(b, t, fnmadd(a, t, a))
+
+
+def clamp(value, min, max):
+    return _ek.max(_ek.min(value, max), min)
+
+
 # -------------------------------------------------------------------
-#       Vertical operations -- autodiff/JIT compilation-related
+#   "Safe" functions that avoid domain errors due to rounding
+# -------------------------------------------------------------------
+
+
+def safe_sqrt(a):
+    return sqrt(max(a, 0))
+
+
+def safe_asin(a):
+    return asin(clamp(a, -1, 1))
+
+
+def safe_acos(a):
+    return acos(clamp(a, -1, 1))
+
+
+# -------------------------------------------------------------------
+#       Vertical operations -- AD/JIT compilation-related
 # -------------------------------------------------------------------
 
 
@@ -845,6 +951,7 @@ def graphviz_str(a, reverse=True):
     else:
         raise Exception('graphviz_str: only variables registered with the '
                         'JIT (LLVM/CUDA) or AD backend are supported!')
+
 
 def graphviz(a, reverse=True):
     try:
@@ -894,6 +1001,20 @@ def tan(a):
         return a.tan_()
     else:
         return _math.tan(a)
+
+
+def csc(a):
+    if isinstance(a, ArrayBase):
+        return a.csc_()
+    else:
+        return 1 / _math.sin(a)
+
+
+def sec(a):
+    if isinstance(a, ArrayBase):
+        return a.sec_()
+    else:
+        return 1 / _math.sec(a)
 
 
 def cot(a):
@@ -975,6 +1096,74 @@ def pow(a, b):
 
 def op_pow(a, b):
     return pow(a, b)
+
+
+def cbrt(a):
+    if isinstance(a, ArrayBase):
+        return a.cbrt_()
+    else:
+        return _math.pow(a, 1.0 / 3.0)
+
+
+def sinh(a):
+    if isinstance(a, ArrayBase):
+        return a.sinh_()
+    else:
+        return _math.sinh(a)
+
+
+def cosh(a):
+    if isinstance(a, ArrayBase):
+        return a.cosh_()
+    else:
+        return _math.cosh(a)
+
+
+def sincosh(a):
+    if isinstance(a, ArrayBase):
+        return a.sincosh_()
+    else:
+        return (_math.sinh(a), _math.cosh(a))
+
+
+def tanh(a):
+    if isinstance(a, ArrayBase):
+        return a.tanh_()
+    else:
+        return _math.tanh(a)
+
+
+def csch(a):
+    return 1 / sinh(a)
+
+
+def sech(a):
+    return 1 / cosh(a)
+
+
+def coth(a):
+    return 1 / tanh(a)
+
+
+def asinh(a):
+    if isinstance(a, ArrayBase):
+        return a.asinh_()
+    else:
+        return _math.asinh(a)
+
+
+def acosh(a):
+    if isinstance(a, ArrayBase):
+        return a.acosh_()
+    else:
+        return _math.acosh(a)
+
+
+def atanh(a):
+    if isinstance(a, ArrayBase):
+        return a.atanh_()
+    else:
+        return _math.atanh(a)
 
 # -------------------------------------------------------------------
 #                       Horizontal operations
@@ -1294,7 +1483,7 @@ def empty(type_, size=1):
 
 def full(type_, value, size=1):
     if issubclass(type_, ArrayBase):
-        return type_.zero_(value, size)
+        return type_.full_(value, size)
     else:
         assert isinstance(type_, type)
         return type_(value)
@@ -1332,6 +1521,8 @@ def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
         if type(a) is not type(b):
             a, b = _var_promote(a, b)
         cond = _ek.abs(a - b) <= _ek.abs(b) * rtol + atol
+        if _ek.is_floating_point_v(a):
+            cond |= _ek.eq(a, b)  # plus/minus infinity
         if equal_nan:
             cond |= _ek.isnan(a) & _ek.isnan(b)
         return _ek.all_nested(cond)
@@ -1382,10 +1573,10 @@ def op_array_interface(a):
     _ek.detail.get_keepalive(a).append(result)
 
     return {
-        'shape'   : tuple(reversed(shape)),
-        'typestr' : result.Type.NumPy,
-        'data'    : (result.data_(), False),
-        'version' : 3
+        'shape': tuple(reversed(shape)),
+        'typestr': result.Type.NumPy,
+        'data': (result.data_(), False),
+        'version': 3
     }
 
 

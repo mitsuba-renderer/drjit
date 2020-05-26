@@ -493,7 +493,7 @@ def select_(a0, a1, a2):
     return ar
 
 # -------------------------------------------------------------------
-#       Vertical operations -- autodiff/JIT compilation-related
+#       Vertical operations -- ad/JIT compilation-related
 # -------------------------------------------------------------------
 
 
@@ -576,6 +576,24 @@ def sincos_(a0):
         ar0[i] = result[0]
         ar1[i] = result[1]
     return ar0, ar1
+
+
+def csc_(a0):
+    if not a0.IsFloat:
+        raise Exception("csc(): requires floating point operands!")
+    ar, sr = _check1(a0)
+    for i in range(sr):
+        ar[i] = _ek.csc(a0[i])
+    return ar
+
+
+def sec_(a0):
+    if not a0.IsFloat:
+        raise Exception("sec(): requires floating point operands!")
+    ar, sr = _check1(a0)
+    for i in range(sr):
+        ar[i] = _ek.sec(a0[i])
+    return ar
 
 
 def tan_(a0):
@@ -681,6 +699,71 @@ def pow_(a0, a1):
             ar[i] = _ek.pow(a0[i], a1[i])
     return ar
 
+
+def sinh_(a0):
+    if not a0.IsFloat:
+        raise Exception("sinh(): requires floating point operands!")
+    ar, sr = _check1(a0)
+    for i in range(sr):
+        ar[i] = _ek.sinh(a0[i])
+    return ar
+
+
+def cosh_(a0):
+    if not a0.IsFloat:
+        raise Exception("cosh(): requires floating point operands!")
+    ar, sr = _check1(a0)
+    for i in range(sr):
+        ar[i] = _ek.cosh(a0[i])
+    return ar
+
+
+def sincosh_(a0):
+    if not a0.IsFloat:
+        raise Exception("sincosh(): requires floating point operands!")
+    ar0, sr0 = _check1(a0)
+    ar1 = a0.empty_(sr0 if a0.Size == Dynamic else 0)
+    for i in range(sr0):
+        result = _ek.sincosh(a0[i])
+        ar0[i] = result[0]
+        ar1[i] = result[1]
+    return ar0, ar1
+
+
+def asinh_(a0):
+    if not a0.IsFloat:
+        raise Exception("asinh(): requires floating point operands!")
+    ar, sr = _check1(a0)
+    for i in range(sr):
+        ar[i] = _ek.asinh(a0[i])
+    return ar
+
+
+def acosh_(a0):
+    if not a0.IsFloat:
+        raise Exception("acosh(): requires floating point operands!")
+    ar, sr = _check1(a0)
+    for i in range(sr):
+        ar[i] = _ek.acosh(a0[i])
+    return ar
+
+
+def atanh_(a0):
+    if not a0.IsFloat:
+        raise Exception("atanh(): requires floating point operands!")
+    ar, sr = _check1(a0)
+    for i in range(sr):
+        ar[i] = _ek.atanh(a0[i])
+    return ar
+
+
+def cbrt_(a0):
+    if not a0.IsFloat:
+        raise Exception("cbrt(): requires floating point operands!")
+    ar, sr = _check1(a0)
+    for i in range(sr):
+        ar[i] = _ek.cbrt(a0[i])
+    return ar
 
 # -------------------------------------------------------------------
 #                       Horizontal operations

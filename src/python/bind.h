@@ -307,6 +307,14 @@ auto bind_full(py::class_<Array, ek::ArrayBase, EnokiHolder<Array>> &cls,
         cls.def("log2_", [](const Array &a) { return ek::log2(a); });
         cls.def("pow_", [](const Array &x, Scalar y) { return ek::pow(x, y); });
         cls.def("pow_", [](const Array &x, const Array &y) { return ek::pow(x, y); });
+        cls.def("sinh_", [](const Array &a) { return ek::sinh(a); });
+        cls.def("cosh_", [](const Array &a) { return ek::cosh(a); });
+        cls.def("sincosh_", [](const Array &a) { return ek::sincosh(a); });
+        cls.def("tanh_", [](const Array &a) { return ek::tanh(a); });
+        cls.def("asinh_", [](const Array &a) { return ek::asinh(a); });
+        cls.def("acosh_", [](const Array &a) { return ek::acosh(a); });
+        cls.def("atanh_", [](const Array &a) { return ek::atanh(a); });
+        cls.def("cbrt_", [](const Array &a) { return ek::cbrt(a); });
     }
 
     if constexpr (Array::IsJIT || Array::IsDiff) {

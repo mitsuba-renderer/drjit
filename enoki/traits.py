@@ -175,8 +175,8 @@ def diff_array_t(a):
         if a.IsDiff:
             return a
         mod = a.__module__ \
-            .replace('cuda', 'cuda.autodiff') \
-            .replace('llvm', 'llvm.autodiff')
+            .replace('cuda', 'cuda.ad') \
+            .replace('llvm', 'llvm.ad')
         if mod == a.__module__:
             raise Exception("diff_array_t(): input type unsupported!")
         return getattr(_sys.modules.get(mod), a.__name__)
@@ -191,8 +191,8 @@ def nondiff_array_t(a):
         if not a.IsDiff:
             return a
         mod = a.__module__ \
-            .replace('cuda.autodiff', 'cuda') \
-            .replace('llvm.autodiff', 'llvm')
+            .replace('cuda.ad', 'cuda') \
+            .replace('llvm.ad', 'llvm')
         if mod == a.__module__:
             raise Exception("diff_array_t(): input type unsupported!")
         return getattr(_sys.modules.get(mod), a.__name__)

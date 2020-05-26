@@ -226,6 +226,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
     //! @{ \name Fallback implementations of vertical operations
     // -----------------------------------------------------------------------
 
+
     #define ENOKI_IMPLEMENT_UNARY(name, op, cond)                            \
         Derived name##_() const {                                            \
             ENOKI_CHKSCALAR(#name "_");                                      \
@@ -247,6 +248,10 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                                                                              \
             return result;                                                   \
         }
+
+    #define ENOKI_IMPLEMENT_UNARY_REC(name, op, cond)                        \
+        template <typename T = Value, enable_if_array_t<T> = 0>              \
+        ENOKI_IMPLEMENT_UNARY(name, op, cond)
 
     #define ENOKI_IMPLEMENT_UNARY_TEMPLATE(name, arg, op, cond)              \
         template <arg> Derived name##_() const {                             \
@@ -270,7 +275,8 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
             return result;                                                   \
         }
 
-    #define ENOKI_IMPLEMENT_UNARY_PAIR(name, op, cond)                       \
+    #define ENOKI_IMPLEMENT_UNARY_PAIR_REC(name, op, cond)                   \
+        template <typename T = Value, enable_if_array_t<T> = 0>              \
         std::pair<Derived, Derived> name##_() const {                        \
             Derived result_1, result_2;                                      \
                                                                              \
@@ -346,6 +352,11 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                                                                              \
             return result;                                                   \
         }
+
+    #define ENOKI_IMPLEMENT_BINARY_REC(name, op, cond)                       \
+        template <typename T = Value, enable_if_array_t<T> = 0>              \
+        ENOKI_IMPLEMENT_BINARY(name, op, cond)
+
 
     #define ENOKI_IMPLEMENT_BINARY_BITOP(name, op, cond)                     \
         template <typename Mask> Derived name##_(const Mask &v) const {      \
@@ -487,56 +498,50 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
     ENOKI_IMPLEMENT_TERNARY_ALT(fnmadd, enoki::fnmadd(a, b, c), -derived()*v1+v2, IsFloat)
     ENOKI_IMPLEMENT_TERNARY_ALT(fnmsub, enoki::fnmsub(a, b, c), -derived()*v1-v2, IsFloat)
 
-    template <typename T = Value, enable_if_array_t<T> = 0>
-    ENOKI_IMPLEMENT_UNARY(sin, enoki::sin(a), IsFloat)
-    template <typename T = Value, enable_if_array_t<T> = 0>
-    ENOKI_IMPLEMENT_UNARY(cos, enoki::cos(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_REC(cbrt, enoki::cbrt(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_REC(sin, enoki::sin(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_REC(cos, enoki::cos(a), IsFloat)
 
-    template <typename T = Value, enable_if_array_t<T> = 0>
-    ENOKI_IMPLEMENT_UNARY(csc, enoki::csc(a), IsFloat)
-    template <typename T = Value, enable_if_array_t<T> = 0>
-    ENOKI_IMPLEMENT_UNARY(sec, enoki::sec(a), IsFloat)
-    template <typename T = Value, enable_if_array_t<T> = 0>
-    ENOKI_IMPLEMENT_UNARY(tan, enoki::tan(a), IsFloat)
-    template <typename T = Value, enable_if_array_t<T> = 0>
-    ENOKI_IMPLEMENT_UNARY(cot, enoki::cot(a), IsFloat)
-    template <typename T = Value, enable_if_array_t<T> = 0>
-    ENOKI_IMPLEMENT_UNARY(asin, enoki::asin(a), IsFloat)
-    template <typename T = Value, enable_if_array_t<T> = 0>
-    ENOKI_IMPLEMENT_UNARY(acos, enoki::acos(a), IsFloat)
-    template <typename T = Value, enable_if_array_t<T> = 0>
-    ENOKI_IMPLEMENT_UNARY(atan, enoki::atan(a), IsFloat)
-    template <typename T = Value, enable_if_array_t<T> = 0>
-    ENOKI_IMPLEMENT_BINARY(atan2, enoki::atan2(a, b), IsFloat)
-    template <typename T = Value, enable_if_array_t<T> = 0>
-    ENOKI_IMPLEMENT_BINARY(ldexp, enoki::ldexp(a, b), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_REC(csc, enoki::csc(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_REC(sec, enoki::sec(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_REC(tan, enoki::tan(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_REC(cot, enoki::cot(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_REC(asin, enoki::asin(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_REC(acos, enoki::acos(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_REC(atan, enoki::atan(a), IsFloat)
+    ENOKI_IMPLEMENT_BINARY_REC(atan2, enoki::atan2(a, b), IsFloat)
+    ENOKI_IMPLEMENT_BINARY_REC(ldexp, enoki::ldexp(a, b), IsFloat)
 
-    template <typename T = Value, enable_if_array_t<T> = 0>
-    ENOKI_IMPLEMENT_UNARY(exp2, enoki::exp2(a), IsFloat)
-    template <typename T = Value, enable_if_array_t<T> = 0>
-    ENOKI_IMPLEMENT_UNARY(exp, enoki::exp(a), IsFloat)
-    template <typename T = Value, enable_if_array_t<T> = 0>
-    ENOKI_IMPLEMENT_UNARY(log2, enoki::log2(a), IsFloat)
-    template <typename T = Value, enable_if_array_t<T> = 0>
-    ENOKI_IMPLEMENT_UNARY(log, enoki::log(a), IsFloat)
-    template <typename T = Value, enable_if_array_t<T> = 0>
-    ENOKI_IMPLEMENT_BINARY(pow, enoki::pow(a, b), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_REC(exp2, enoki::exp2(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_REC(exp, enoki::exp(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_REC(log2, enoki::log2(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_REC(log, enoki::log(a), IsFloat)
 
-    template <typename T = Value, enable_if_array_t<T> = 0>
-    ENOKI_IMPLEMENT_UNARY_PAIR(sincos, enoki::sincos(a), IsFloat)
-    template <typename T = Value, enable_if_array_t<T> = 0>
-    ENOKI_IMPLEMENT_UNARY_PAIR(frexp, enoki::frexp(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_REC(sinh, enoki::sinh(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_REC(cosh, enoki::cosh(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_REC(tanh, enoki::tanh(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_REC(asinh, enoki::asinh(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_REC(acosh, enoki::acosh(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_REC(atanh, enoki::atanh(a), IsFloat)
+
+    ENOKI_IMPLEMENT_UNARY_PAIR_REC(sincos, enoki::sincos(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_PAIR_REC(sincosh, enoki::sincosh(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_PAIR_REC(frexp, enoki::frexp(a), IsFloat)
 
     #undef ENOKI_IMPLEMENT_UNARY
+    #undef ENOKI_IMPLEMENT_UNARY_REC
     #undef ENOKI_IMPLEMENT_UNARY_TEMPLATE
+    #undef ENOKI_IMPLEMENT_UNARY_PAIR_REC
     #undef ENOKI_IMPLEMENT_ROUND2INT
     #undef ENOKI_IMPLEMENT_BINARY
+    #undef ENOKI_IMPLEMENT_BINARY_REC
     #undef ENOKI_IMPLEMENT_BINARY_BITOP
     #undef ENOKI_IMPLEMENT_BINARY_MASK
     #undef ENOKI_IMPLEMENT_TERNARY_ALT
 
     template <typename Mask>
-    static ENOKI_INLINE auto select_(const Mask &m, const Derived &t, const Derived &f) {
+    static ENOKI_INLINE
+        auto select_(const Mask &m, const Derived &t, const Derived &f) {
         ENOKI_CHKSCALAR("select_");
         size_t sm = m.size(), st = t.size(), sf = f.size(),
                sd = sm > st ? sm : st, sr = sf > sd ? sf : sd;
@@ -570,10 +575,9 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
     template <size_t... Indices> ENOKI_INLINE Derived shuffle_() const {
         static_assert(sizeof...(Indices) == Derived::Size, "shuffle(): Invalid size!");
         ENOKI_CHKSCALAR("shuffle_");
+        size_t idx = 0; (void) idx;
         Derived out;
-        size_t idx = 0;
-        bool result[] = { (out.entry(idx++) = derived().entry(Indices % Derived::Size), false)... };
-        (void) idx; (void) result;
+        ((out.entry(idx++) = derived().entry(Indices % Derived::Size)), ...);
         return out;
     }
 

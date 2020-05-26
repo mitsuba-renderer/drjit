@@ -381,9 +381,27 @@ struct DiffArray : ArrayBaseT<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>
             if constexpr (IsEnabled) {
                 if (m_index) {
                     uint32_t indices[1] = { m_index };
-                    Type weights[1] = { .5f / result };
+                    Type weights[1] = { .5f * rcp(result) };
                     index_new = detail::ad_new<Type>(
                         "sqrt", (uint32_t) width(result), 1, indices, weights);
+                }
+            }
+            return DiffArray::create(index_new, std::move(result));
+        }
+    }
+
+    DiffArray cbrt_() const {
+        if constexpr (!std::is_floating_point_v<Scalar>) {
+            enoki_raise("cbrt_(): invalid operand type!");
+        } else {
+            uint32_t index_new = 0;
+            Type result = enoki::cbrt(m_value);
+            if constexpr (IsEnabled) {
+                if (m_index) {
+                    uint32_t indices[1] = { m_index };
+                    Type weights[1] = { (1.f / 3.f) * sqr(rcp(result)) };
+                    index_new = detail::ad_new<Type>(
+                        "cbrt", (uint32_t) width(result), 1, indices, weights);
                 }
             }
             return DiffArray::create(index_new, std::move(result));
@@ -547,20 +565,19 @@ struct DiffArray : ArrayBaseT<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>
         if constexpr (!std::is_floating_point_v<Scalar>) {
             enoki_raise("sin_(): invalid operand type!");
         } else {
+            auto [s, c] = enoki::sincos(m_value);
+            uint32_t index_new = 0;
+
             if constexpr (IsEnabled) {
                 if (m_index) {
-                    auto [s, c] = sincos(m_value);
-
                     uint32_t indices[1] = { m_index };
                     Type weights[1] = { std::move(c) };
-                    uint32_t index_new = detail::ad_new<Type>(
-                        "sin", (uint32_t) width(s), 1, indices, weights);
-
-                    return DiffArray::create(index_new, std::move(s));
+                    index_new = detail::ad_new<Type>("sin", (uint32_t) width(s),
+                                                     1, indices, weights);
                 }
             }
 
-            return DiffArray::create(0, enoki::sin(m_value));
+            return DiffArray::create(index_new, std::move(s));
         }
     }
 
@@ -568,25 +585,46 @@ struct DiffArray : ArrayBaseT<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>
         if constexpr (!std::is_floating_point_v<Scalar>) {
             enoki_raise("cos_(): invalid operand type!");
         } else {
+            auto [s, c] = enoki::sincos(m_value);
+            uint32_t index_new = 0;
+
             if constexpr (IsEnabled) {
                 if (m_index) {
-                    auto [s, c] = sincos(m_value);
-
                     uint32_t indices[1] = { m_index };
                     Type weights[1] = { -s };
-                    uint32_t index_new = detail::ad_new<Type>(
-                        "cos", (uint32_t) width(c), 1, indices, weights);
-
-                    return DiffArray::create(index_new, std::move(c));
+                    index_new = detail::ad_new<Type>("cos", (uint32_t) width(c),
+                                                     1, indices, weights);
                 }
             }
 
-            return DiffArray::create(0, enoki::cos(m_value));
+            return DiffArray::create(index_new, std::move(c));
         }
     }
 
     std::pair<DiffArray, DiffArray> sincos_() const {
-        return { sin_(), cos_() };
+        if constexpr (!std::is_floating_point_v<Scalar>) {
+            enoki_raise("sincos_(): invalid operand type!");
+        } else {
+            auto [s, c] = enoki::sincos(m_value);
+            uint32_t index_s = 0, index_c = 0;
+
+            if constexpr (IsEnabled) {
+                if (m_index) {
+                    uint32_t indices[1] = { m_index };
+                    Type weights_s[1] = { c }, weights_c[1] = { -s };
+                    uint32_t w = (uint32_t) width(s);
+                    index_s =
+                        detail::ad_new<Type>("sincos[s]", w, 1, indices, weights_s);
+                    index_c =
+                        detail::ad_new<Type>("sincos[c]", w, 1, indices, weights_c);
+                }
+            }
+
+            return {
+                DiffArray::create(index_s, std::move(s)),
+                DiffArray::create(index_c, std::move(c)),
+            };
+        }
     }
 
     DiffArray csc_() const {
@@ -753,6 +791,24 @@ struct DiffArray : ArrayBaseT<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>
         }
     }
 
+    DiffArray exp2_() const {
+        if constexpr (!std::is_floating_point_v<Scalar>) {
+            enoki_raise("exp2_(): invalid operand type!");
+        } else {
+            uint32_t index_new = 0;
+            Type result = enoki::exp2(m_value);
+            if constexpr (IsEnabled) {
+                if (m_index) {
+                    uint32_t indices[1] = { m_index };
+                    Type weights[1] = { result * LogTwo<Value> };
+                    index_new = detail::ad_new<Type>(
+                        "exp2", (uint32_t) width(result), 1, indices, weights);
+                }
+            }
+            return DiffArray::create(index_new, std::move(result));
+        }
+    }
+
     DiffArray log_() const {
         if constexpr (!std::is_floating_point_v<Scalar>) {
             enoki_raise("log_(): invalid operand type!");
@@ -765,6 +821,162 @@ struct DiffArray : ArrayBaseT<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>
                     Type weights[1] = { rcp(m_value) };
                     index_new = detail::ad_new<Type>(
                         "log", (uint32_t) width(result), 1, indices, weights);
+                }
+            }
+            return DiffArray::create(index_new, std::move(result));
+        }
+    }
+
+    DiffArray log2_() const {
+        if constexpr (!std::is_floating_point_v<Scalar>) {
+            enoki_raise("log2_(): invalid operand type!");
+        } else {
+            uint32_t index_new = 0;
+            Type result = enoki::log2(m_value);
+            if constexpr (IsEnabled) {
+                if (m_index) {
+                    uint32_t indices[1] = { m_index };
+                    Type weights[1] = { rcp(m_value) * InvLogTwo<Value> };
+                    index_new = detail::ad_new<Type>(
+                        "log2", (uint32_t) width(result), 1, indices, weights);
+                }
+            }
+            return DiffArray::create(index_new, std::move(result));
+        }
+    }
+
+    DiffArray sinh_() const {
+        if constexpr (!std::is_floating_point_v<Scalar>) {
+            enoki_raise("sinh_(): invalid operand type!");
+        } else {
+            auto [s, c] = enoki::sincosh(m_value);
+            uint32_t index_new = 0;
+
+            if constexpr (IsEnabled) {
+                if (m_index) {
+                    uint32_t indices[1] = { m_index };
+                    Type weights[1] = { std::move(c) };
+                    index_new = detail::ad_new<Type>("sinh", (uint32_t) width(s),
+                                                     1, indices, weights);
+                }
+            }
+
+            return DiffArray::create(index_new, std::move(s));
+        }
+    }
+
+    DiffArray cosh_() const {
+        if constexpr (!std::is_floating_point_v<Scalar>) {
+            enoki_raise("cosh_(): invalid operand type!");
+        } else {
+            auto [s, c] = enoki::sincosh(m_value);
+            uint32_t index_new = 0;
+
+            if constexpr (IsEnabled) {
+                if (m_index) {
+                    uint32_t indices[1] = { m_index };
+                    Type weights[1] = { s };
+                    index_new = detail::ad_new<Type>("cosh", (uint32_t) width(c),
+                                                     1, indices, weights);
+                }
+            }
+
+            return DiffArray::create(index_new, std::move(c));
+        }
+    }
+
+    std::pair<DiffArray, DiffArray> sincosh_() const {
+        if constexpr (!std::is_floating_point_v<Scalar>) {
+            enoki_raise("sincosh_(): invalid operand type!");
+        } else {
+            auto [s, c] = enoki::sincosh(m_value);
+            uint32_t index_s = 0, index_c = 0;
+
+            if constexpr (IsEnabled) {
+                if (m_index) {
+                    uint32_t indices[1] = { m_index };
+                    Type weights_s[1] = { c }, weights_c[1] = { s };
+                    uint32_t w = (uint32_t) width(s);
+                    index_s =
+                        detail::ad_new<Type>("sincosh[s]", w, 1, indices, weights_s);
+                    index_c =
+                        detail::ad_new<Type>("sincosh[c]", w, 1, indices, weights_c);
+                }
+            }
+
+            return {
+                DiffArray::create(index_s, std::move(s)),
+                DiffArray::create(index_c, std::move(c)),
+            };
+        }
+    }
+
+    DiffArray tanh_() const {
+        if constexpr (!std::is_floating_point_v<Scalar>) {
+            enoki_raise("tanh_(): invalid operand type!");
+        } else {
+            uint32_t index_new = 0;
+            Type result = enoki::tanh(m_value);
+            if constexpr (IsEnabled) {
+                if (m_index) {
+                    uint32_t indices[1] = { m_index };
+                    Type weights[1] = { enoki::sqr(enoki::sech(m_value)) };
+                    index_new = detail::ad_new<Type>(
+                        "tanh", (uint32_t) width(result), 1, indices, weights);
+                }
+            }
+            return DiffArray::create(index_new, std::move(result));
+        }
+    }
+
+    DiffArray asinh_() const {
+        if constexpr (!std::is_floating_point_v<Scalar>) {
+            enoki_raise("asinh_(): invalid operand type!");
+        } else {
+            uint32_t index_new = 0;
+            Type result = enoki::asinh(m_value);
+            if constexpr (IsEnabled) {
+                if (m_index) {
+                    uint32_t indices[1] = { m_index };
+                    Type weights[1] = { rsqrt((Scalar) 1 + sqr(m_value)) };
+                    index_new = detail::ad_new<Type>(
+                        "asinh", (uint32_t) width(result), 1, indices, weights);
+                }
+            }
+            return DiffArray::create(index_new, std::move(result));
+        }
+    }
+
+    DiffArray acosh_() const {
+        if constexpr (!std::is_floating_point_v<Scalar>) {
+            enoki_raise("acosh_(): invalid operand type!");
+        } else {
+            uint32_t index_new = 0;
+            Type result = enoki::acosh(m_value);
+            if constexpr (IsEnabled) {
+                if (m_index) {
+                    uint32_t indices[1] = { m_index };
+                    Type weights[1] = { rsqrt(sqr(m_value) - (Scalar) 1) };
+                    index_new = detail::ad_new<Type>(
+                        "acosh", (uint32_t) width(result), 1, indices, weights);
+                }
+            }
+            return DiffArray::create(index_new, std::move(result));
+        }
+    }
+
+    DiffArray atanh_() const {
+        if constexpr (!std::is_floating_point_v<Scalar>) {
+            enoki_raise("atanh_(): invalid operand type!");
+        } else {
+            uint32_t index_new = 0;
+            Type result = enoki::atanh(m_value);
+            if constexpr (IsEnabled) {
+                if (m_index) {
+                    uint32_t indices[1] = { m_index };
+                    Type weights[1] = { rcp((Scalar) 1 - sqr(m_value)) };
+                    index_new = detail::ad_new<Type>(
+                        "atanh", (uint32_t) width(result), 1, indices, weights);
                 }
             }
             return DiffArray::create(index_new, std::move(result));

@@ -298,6 +298,18 @@ template <typename T> ENOKI_INLINE auto isfinite(const T &a) {
     return enoki::abs(a) < Infinity<scalar_t<T>>;
 }
 
+/// Linearly interpolate between 'a' and 'b', using 't'
+template <typename Value1, typename Value2, typename Value3>
+auto lerp(const Value1 &a, const Value2 &b, const Value3 &t) {
+    return enoki::fmadd(b, t, enoki::fnmadd(a, t, a));
+}
+
+/// Clamp the value 'value' to the range [min, max]
+template <typename Value1, typename Value2, typename Value3>
+auto clamp(const Value1 &value, const Value2 &min, const Value3 &max) {
+    return enoki::max(enoki::min(value, max), min);
+}
+
 namespace detail {
     template <typename Array> ENOKI_INLINE Array sign_mask() {
         using Scalar = scalar_t<Array>;
@@ -799,6 +811,7 @@ void scatter_add(Target &&target, const Value &value, const Index &index, const 
 //! @{ \name Forward declarations of math functions
 // -----------------------------------------------------------------------
 
+template <typename T> T cbrt(const T &a);
 template <typename T> T sin(const T &a);
 template <typename T> T cos(const T &a);
 template <typename T> std::pair<T, T> sincos(const T &a);
@@ -818,6 +831,34 @@ template <typename T> T exp2(const T &a);
 template <typename T> T log(const T &a);
 template <typename T> T log2(const T &a);
 template <typename T1, typename T2> auto pow(const T1 &a, const T2 &b);
+
+template <typename T> T sinh(const T &a);
+template <typename T> T cosh(const T &a);
+template <typename T> std::pair<T, T> sincosh(const T &a);
+
+template <typename T> T tanh(const T &a);
+template <typename T> T asinh(const T &a);
+template <typename T> T acosh(const T &a);
+template <typename T> T atanh(const T &a);
+
+//! @}
+// -----------------------------------------------------------------------
+
+// -----------------------------------------------------------------------
+//! @{ \name "Safe" functions that avoid domain errors due to rounding
+// -----------------------------------------------------------------------
+
+template <typename Value> ENOKI_INLINE Value safe_sqrt(const Value &a) {
+    return enoki::sqrt(enoki::max(a, enoki::zero<Value>()));
+}
+
+template <typename Value> ENOKI_INLINE Value safe_asin(const Value &a) {
+    return enoki::asin(enoki::clamp(a, -1, 1));
+}
+
+template <typename Value> ENOKI_INLINE Value safe_acos(const Value &a) {
+    return enoki::acos(enoki::clamp(a, -1, 1));
+}
 
 //! @}
 // -----------------------------------------------------------------------

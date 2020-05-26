@@ -1792,10 +1792,6 @@ Miscellaneous operations
 
     Checks for finite values and returns a mask, analogous to ``std::isfinite``.
 
-.. cpp:function:: template <typename Array> mask_t<Array> isdenormal(Array x)
-
-    Checks for denormalized values and returns a mask.
-
 .. cpp:function:: template <typename Array> Array deg_to_rad(Array array)
 
     Convenience function which multiplies the input array by :math:`\frac{\pi}{180}`.

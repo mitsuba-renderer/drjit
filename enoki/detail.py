@@ -137,7 +137,7 @@ def array_configure(cls):
     cls.IsPacket = cls.__module__.startswith('enoki.packet')
     cls.IsLLVM = cls.__module__.startswith('enoki.llvm')
     cls.IsCUDA = cls.__module__.startswith('enoki.cuda')
-    cls.IsDiff = 'autodiff' in cls.__module__
+    cls.IsDiff = 'ad' in cls.__module__
     cls.IsJIT = cls.IsLLVM or cls.IsCUDA
     cls.MaskType = getattr(
         sys.modules.get(cls.__module__),
