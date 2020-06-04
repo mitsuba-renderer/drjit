@@ -421,8 +421,8 @@ template <typename Value> ENOKI_INLINE Value asin(const Value &x) {
         static_assert(std::is_floating_point_v<Scalar>,
                       "asin(): function requires a floating point argument!");
 
-        Value xa          = abs(x),
-              x2          = sqr(x),
+        Value xa = abs(x),
+              x2 = sqr(x),
               r;
 
         if constexpr (Single) {

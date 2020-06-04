@@ -78,7 +78,7 @@ struct ArrayBase {
     /// Does this array represent a matrix?
     static constexpr bool IsMatrix = false;
 
-    /// Does this array represent the result of a 'masked(...)' epxpression?
+    /// Does this array represent the result of a 'masked(...)' expression?
     static constexpr bool IsMaskedArray = false;
 
     //! @}

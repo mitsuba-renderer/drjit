@@ -27,7 +27,6 @@ namespace detail {
             return enoki::gather<DT, true>(v, perm);
     }
 
-
     template <typename Guide, typename Type, typename = int> struct vectorize_type {
         using type = Type;
     };

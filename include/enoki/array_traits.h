@@ -350,8 +350,8 @@ using uint_array_t = replace_scalar_t<T, typename detail::sized_types<sizeof(sca
 template <typename T>
 using float_array_t = replace_scalar_t<T, typename detail::sized_types<sizeof(scalar_t<T>)>::Float>;
 
-template <typename T> using int8_array_t   = replace_scalar_t<T, int8_t>;
-template <typename T> using uint8_array_t  = replace_scalar_t<T, uint8_t>;
+template <typename T> using int8_array_t    = replace_scalar_t<T, int8_t>;
+template <typename T> using uint8_array_t   = replace_scalar_t<T, uint8_t>;
 template <typename T> using int16_array_t   = replace_scalar_t<T, int16_t>;
 template <typename T> using uint16_array_t  = replace_scalar_t<T, uint16_t>;
 template <typename T> using int32_array_t   = replace_scalar_t<T, int32_t>;
