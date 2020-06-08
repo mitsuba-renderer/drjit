@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <stdio.h>
 #include <stdarg.h>
+#include <stdexcept>
 
 LogLevel log_level = LogLevel::Debug;
 Buffer buffer{0};

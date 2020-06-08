@@ -1442,9 +1442,12 @@ struct DiffArray : ArrayBaseT<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>
         return linspace<Type>(min, max, size);
     }
 
-    // static CUDAArray map_(void *ptr, size_t size, bool free = false) {
-    //     return map<Type>(ptr, size, free);
-    // }
+    static DiffArray map_(void *ptr, size_t size, bool free = false) {
+        if constexpr (is_jit_array_v<Type>)
+            return Type::map_(ptr, size, free);
+        else
+            enoki_raise("map_(): not supported in scalar mode!");
+    }
 
     static DiffArray load_unaligned_(const void *ptr, size_t size) {
         return load_unaligned<Type>(ptr, size);
@@ -1639,7 +1642,7 @@ protected:
 };
 
 #if defined(ENOKI_BUILD_AUTODIFF)
-#  define ENOKI_AUTODIFF_EXPORT ENOKI_EXPORT
+#  define ENOKI_AUTODIFF_EXPORT
 #  define ENOKI_AUTODIFF_EXPORT_TEMPLATE(T)
 #else
 #  define ENOKI_AUTODIFF_EXPORT ENOKI_IMPORT

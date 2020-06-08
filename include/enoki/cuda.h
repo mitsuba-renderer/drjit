@@ -821,7 +821,7 @@ struct CUDAArray : ArrayBaseT<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
 
     static CUDAArray load_unaligned_(const void *ptr, size_t size) {
         return steal(
-            jitc_var_copy_mem(AllocType::Host, Type, 1, ptr, (uint32_t) size));
+            jitc_var_copy_mem(AllocType::Auto, Type, 1, ptr, (uint32_t) size));
     }
 
     //! @}

@@ -11,6 +11,7 @@ pybind11_add_module(
   bind_cuda_ad.cpp
   bind_llvm.cpp
   bind_llvm_ad.cpp
+  dlpack.cpp
 )
 
 if (ENOKI_ENABLE_JIT)

@@ -105,6 +105,7 @@ struct DynamicArray
         m_size = a.m_size;
         m_free = true;
         memcpy(m_data, a.m_data, m_size * sizeof(Value));
+        return *this;
     }
 
     DynamicArray &operator=(DynamicArray &&a) {
@@ -130,6 +131,13 @@ struct DynamicArray
         if (m_size == 1)
             i = 0;
         return m_data[i];
+    }
+
+    static DynamicArray load_unaligned_(const void *ptr, size_t size) {
+        DynamicArray result;
+        result.init_(size);
+        memcpy(result.m_data, ptr, sizeof(Value) * size);
+        return result;
     }
 
     static DynamicArray empty_(size_t size) {
@@ -186,7 +194,7 @@ struct DynamicArray
     }
 
     void init_(size_t size) {
-        if (size == 0)
+        if (size == 0 || size == Dynamic)
             return;
         m_data = new Value[size];
         m_size = size;

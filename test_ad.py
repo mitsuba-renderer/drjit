@@ -359,6 +359,7 @@ def test24_log(m):
     print(2/ek.detach(x))
     assert ek.allclose(ek.grad(x), 2 / ek.detach(x))
 
+
 def test25_pow(m):
     x = ek.linspace(m.Float, 1, 10, 10)
     y = ek.full(m.Float, 2.0, 10)
@@ -538,7 +539,23 @@ def test36_tanh(m):
     )
 
 
-def test37_acosh(m):
+def test37_asinh(m):
+    x = ek.linspace(m.Float, -.9, .9, 10)
+    ek.enable_grad(x)
+    y = ek.asinh(x)
+    ek.backward(y)
+    assert ek.allclose(
+        y,
+        m.Float(-0.808867, -0.652667, -0.481212, -0.295673, -0.0998341,
+                0.0998341, 0.295673, 0.481212, 0.652667, 0.808867))
+    assert ek.allclose(
+        ek.grad(x),
+        m.Float(0.743294, 0.819232, 0.894427, 0.957826, 0.995037,
+                0.995037, 0.957826, 0.894427, 0.819232, 0.743294)
+    )
+
+
+def test38_acosh(m):
     x = ek.linspace(m.Float, 1.01, 2, 10)
     ek.enable_grad(x)
     y = ek.acosh(x)
@@ -554,35 +571,17 @@ def test37_acosh(m):
     )
 
 
-def test37_acosh(m):
-    x = ek.linspace(m.Float, -.9, .9, 10)
+def test39_atanh(m):
+    x = ek.linspace(m.Float, -.99, .99, 10)
     ek.enable_grad(x)
-    y = ek.acosh(x)
+    y = ek.atanh(x)
     ek.backward(y)
     assert ek.allclose(
         y,
-        m.Float(-0.808867, -0.652667, -0.481212, -0.295673, -0.0998341,
-                0.0998341, 0.295673, 0.481212, 0.652667, 0.808867))
+        m.Float(-2.64665, -1.02033, -0.618381, -0.342828, -0.110447, 0.110447,
+                0.342828, 0.618381, 1.02033, 2.64665))
     assert ek.allclose(
         ek.grad(x),
-        m.Float(0.743294, 0.819232, 0.894427, 0.957826, 0.995037,
-                0.995037, 0.957826, 0.894427, 0.819232, 0.743294)
+        m.Float(50.2513, 2.4564, 1.43369, 1.12221, 1.01225, 1.01225, 1.12221,
+                1.43369, 2.4564, 50.2513)
     )
-
-# ENOKI_TEST(test26_acosh) {
-#     FloatD x = linspace<FloatD>(1.01f, 2.f, 10);
-#     set_requires_gradient(x);
-#     FloatD y = acosh(x*x);
-#     my_backward(y);
-#     assert(allclose(y, acosh(sqr(detach(x)))));
-#     assert(allclose(gradient(x), 2.f*detach(x) * rsqrt(sqr(sqr(detach(x))) - 1.f)));
-# }
-# 
-# ENOKI_TEST(test27_atanh) {
-#     FloatD x = linspace<FloatD>(-.99f, .99f, 10);
-#     set_requires_gradient(x);
-#     FloatD y = atanh(x*x);
-#     my_backward(y);
-#     assert(allclose(y, atanh(sqr(detach(x)))));
-#     assert(allclose(gradient(x), -2.f*detach(x) * rcp(sqr(sqr(detach(x))) - 1.f)));
-# }

@@ -19,13 +19,19 @@ extern py::object reinterpret_scalar(const py::object &source,
 
 extern const uint32_t var_type_size[(int) VarType::Count];
 
-extern void enoki_free_keepalive(const enoki::ArrayBase *array);
+extern void enoki_free_cache(const enoki::ArrayBase *array);
+
+extern py::capsule to_dlpack(const py::object &owner, uint64_t data,
+                             VarType type, int device, const py::tuple &shape,
+                             const py::tuple &strides);
+
+extern py::dict from_dlpack(const py::capsule &o);
 
 template <typename T> struct EnokiHolder {
     EnokiHolder() : value(nullptr) { }
     EnokiHolder(T *value) : value(value) { }
     ~EnokiHolder() {
-        enoki_free_keepalive(value);
+        enoki_free_cache(value);
         delete value;
     }
 

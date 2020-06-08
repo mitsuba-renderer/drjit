@@ -38,7 +38,10 @@ for k, v in enoki.router.__dict__.items():
 for k, v in enoki.generic.__dict__.items():
     if k.startswith('_') or k[0].isupper():
         continue
-    setattr(base, k, v)
+    if k.startswith('op_'):
+        setattr(base, '__' + k[3:] + '__', v)
+    else:
+        setattr(base, k, v)
 
 
 # Install type traits in global scope

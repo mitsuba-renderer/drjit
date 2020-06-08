@@ -46,12 +46,12 @@ Release
 *_sse42
 *_avx
 *_avx2
-*_avx512_skx
+*_avx512
 *_neon
 *.ppm
-libenoki-cuda.so
-libenoki-cuda.dylib
-enoki-cuda.dll
+libenoki-jit.so
+libenoki-jit.dylib
+enoki-jit.dll
 libenoki-autodiff.so
 libenoki-autodiff.dylib
 enoki-autodiff.dll

@@ -2,6 +2,8 @@
 
 #include "common.h"
 #include <enoki/math.h>
+#include <pybind11/functional.h>
+#include <iostream>
 
 extern py::handle array_name, array_init, array_configure;
 
@@ -59,11 +61,17 @@ void bind_basic_methods(py::class_<Array, ek::ArrayBase, EnokiHolder<Array>> &cl
         return;
 
     cls.def("__len__", &Array::size)
-       .def("entry", [](const Array &a, size_t i) -> Value { return a.entry(i); })
-       .def("set_entry", [](Array &a, size_t i, const Value &value) {
+       .def("entry_", [](const Array &a, size_t i) -> Value { return a.entry(i); })
+       .def("set_entry_", [](Array &a, size_t i, const Value &value) {
            a.set_entry(i, value);
        })
+       .def("assign_", [](Array &a, const Array &b) {
+           a = b;
+       })
        .def_static("empty_", &Array::empty_);
+
+    if constexpr (!ek::is_mask_v<Array> || ek::is_dynamic_v<Array>)
+       cls.def("data_", [](const Array &a) { enoki::eval(a); return (uintptr_t) a.data(); });
 }
 
 template <typename Array>
@@ -323,8 +331,27 @@ auto bind_full(py::class_<Array, ek::ArrayBase, EnokiHolder<Array>> &cls,
         cls.def("label_", [](const Array &a) { return a.label_(); });
     }
 
-    if constexpr (!ek::is_mask_v<Array> || ek::is_dynamic_v<Array>)
-        cls.def("data_", [](const Array &a) { enoki::eval(a); return (uintptr_t) a.data(); });
+    if constexpr (!ek::is_mask_v<Array> || ek::is_dynamic_v<Array>) {
+        cls.def_static("load_", [](uintptr_t ptr, size_t size) {
+            return enoki::load_unaligned<Array>((const void *) ptr, size);
+        });
+    }
+
+    if constexpr (ek::is_jit_array_v<Array>) {
+        cls.def_static("map_", [](uintptr_t ptr, size_t size, std::function<void (void)> callback) {
+            Array result = Array::map_((void *) ptr, size, false);
+            if (callback) {
+                std::function<void (void)> *func = new std::function<void (void)>(std::move(callback));
+                jitc_var_set_free_callback(ek::detach(result).index(), [](void *arg) {
+                    std::function<void(void)> *func2 =
+                        (std::function<void(void)> *) arg;
+                    (*func2)();
+                    delete func2;
+                }, func);
+            }
+            return result;
+        }, "ptr"_a, "size"_a, "callback"_a = py::none());
+    }
 
     if constexpr (Array::IsJIT)
         cls.def("migrate_", [](Array *a, AllocType type) { a->migrate_(type); return a; });

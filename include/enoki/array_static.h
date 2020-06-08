@@ -128,13 +128,15 @@ struct StaticArrayBase : ArrayBaseT<Value_, IsMask_, Derived_> {
         Derived result;
 
         if constexpr (std::is_scalar_v<Value>) {
-            memcpy(derived().data(), mem, sizeof(Value) * Derived::Size);
+            memcpy(result.data(), mem, sizeof(Value) * Derived::Size);
         } else {
             ENOKI_CHKSCALAR("store_unaligned");
             for (size_t i = 0; i < Derived::Size; ++i)
-                derived().entry(i) =
+                result.entry(i) =
                     load_unaligned<Value>(static_cast<Value *>(mem) + i);
         }
+
+        return result;
     }
 
     template <typename T = Derived>

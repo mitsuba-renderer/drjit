@@ -25,20 +25,28 @@ const char* var_type_numpy[(int) VarType::Count] {
 
 py::handle array_name, array_init, array_configure;
 
-tsl::robin_pg_map<const enoki::ArrayBase *, py::list> registry;
+tsl::robin_pg_map<const enoki::ArrayBase *, py::handle> cache;
 
-void enoki_free_keepalive(const enoki::ArrayBase *array) { registry.erase(array); }
+void enoki_free_cache(const enoki::ArrayBase *array) {
+    auto it = cache.find(array);
+    if (it != cache.end()) {
+        py::handle h = it.value();
+        h.dec_ref();
+        cache.erase(array);
+    }
+}
 
-static py::list enoki_get_keepalive(const enoki::ArrayBase *array) {
+static py::dict enoki_get_cache(const enoki::ArrayBase *array) {
     if (!array)
         return py::none();
-    auto it = registry.find(array);
-    if (it == registry.end()) {
-        py::list result;
-        registry.emplace(array, result);
+    auto it = cache.find(array);
+    if (it == cache.end()) {
+        py::dict result;
+        result.inc_ref();
+        cache.emplace(array, result);
         return result;
     } else {
-        return it.value();
+        return py::reinterpret_borrow<py::dict>(it.value());
     }
 }
 
@@ -113,7 +121,7 @@ PYBIND11_MODULE(enoki_ext, m_) {
 
     py::register_exception<enoki::Exception>(m, "Exception");
     array_detail.def("reinterpret_scalar", &reinterpret_scalar);
-    array_detail.def("get_keepalive", &enoki_get_keepalive);
+    array_detail.def("get_cache", &enoki_get_cache);
     array_detail.def("fmadd_scalar", [](double a, double b, double c) {
         return std::fma(a, b, c);
     });
@@ -164,6 +172,7 @@ PYBIND11_MODULE(enoki_ext, m_) {
 
     m.def("device_count", &jitc_device_count);
     m.def("set_device", &jitc_set_device, "device"_a, "stream"_a = 0);
+    m.def("stream", &jitc_stream);
     m.def("has_llvm", &jitc_has_llvm);
     m.def("has_cuda", &jitc_has_cuda);
     m.def("sync_stream", &jitc_sync_stream);
@@ -181,10 +190,16 @@ PYBIND11_MODULE(enoki_ext, m_) {
     array_detail.def("schedule", &jitc_var_schedule);
     array_detail.def("eval", &jitc_var_eval);
     array_detail.def("eval", &jitc_eval);
+    array_detail.def("to_dlpack", &to_dlpack, "owner"_a, "data"_a,
+                     "type"_a, "device"_a, "shape"_a, "strides"_a);
+    array_detail.def("from_dlpack", &from_dlpack);
+    array_detail.def("device", &jitc_device);
+    array_detail.def("device", &jitc_var_device);
+
     m.def("cse", &jitc_cse);
     m.def("set_cse", &jitc_set_cse);
 
-    /* Register a cleanup callback function that is invoked when
+    /* Register a cleanup callback funceion that is invoked when
        the 'enoki::ArrayBase' Python type is garbage collected */
     py::cpp_function cleanup_callback(
         [](py::handle weakref) { jitc_shutdown(false); }

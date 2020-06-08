@@ -212,6 +212,17 @@ def shape(a):
         return s
 
 
+def device(value=None):
+    if value is None:
+        return _ek.detail.device()
+    elif value.IsDiff:
+        return device(_ek.detach(value))
+    elif value.IsJIT:
+        return _ek.detail.device(value.index_())
+    else:
+        return -1
+
+
 # By default, don't print full contents of arrays with more than 20 entries
 _print_threshold = 20
 
@@ -295,7 +306,7 @@ def op_getitem(self, index):
 
         if index >= 0 and index < size:
             _entry_evals += 1
-            return self.entry(index)
+            return self.entry_(index)
         else:
             raise IndexError("Index %i exceeds the array "
                              "bounds %i!" % (index, size))
@@ -313,7 +324,7 @@ def op_setitem(self, index, value):
             index = size + index
         if index >= 0 and index < size:
             _entry_evals += 1
-            self.set_entry(index, value)
+            self.set_entry_(index, value)
         else:
             raise IndexError("Index %i exceeds the array "
                              "bounds %i!" % (index, size))
@@ -1552,51 +1563,3 @@ def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
             if not allclose(ai, bi, rtol, atol, equal_nan):
                 return False
         return True
-
-
-# -------------------------------------------------------------------
-#    Interoperability with other frameworks (NumPy, PyTorch, Jax)
-# -------------------------------------------------------------------
-
-@property
-def op_array_interface(a):
-    shape = _ek.shape(a)
-
-    result = _ek.ravel(a)
-    if result is a:
-        result = type(a)(result)
-
-    if result.IsJIT:
-        result.migrate_(_ek.AllocType.Host)
-        _ek.sync_stream()
-
-    _ek.detail.get_keepalive(a).append(result)
-
-    return {
-        'shape': tuple(reversed(shape)),
-        'typestr': result.Type.NumPy,
-        'data': (result.data_(), False),
-        'version': 3
-    }
-
-
-@property
-def op_cuda_array_interface(a):
-    shape = _ek.shape(a)
-
-    result = _ek.ravel(a)
-    if result is a:
-        result = type(a)(result)
-
-    if result.IsJIT:
-        result.migrate_(_ek.AllocType.Device)
-        _ek.sync_stream()
-
-    _ek.detail.get_keepalive(a).append(result)
-
-    return {
-        'shape'   : tuple(reversed(shape)),
-        'typestr' : result.Type.NumPy,
-        'data'    : (result.data_(), False),
-        'version' : 2
-    }
