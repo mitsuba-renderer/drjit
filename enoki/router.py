@@ -156,7 +156,7 @@ def _var_promote_select(a0, a1, a2):
 
 
 def _replace_scalar(cls, vt):
-    name = _array_name(vt, cls.Depth, cls.Size, cls.IsScalar)
+    name = _array_name(cls.Prefix, vt, cls.Depth, cls.Size, cls.IsScalar)
     module = _modules.get(cls.__module__)
     return getattr(module, name)
 
@@ -227,11 +227,15 @@ def device(value=None):
 _print_threshold = 20
 
 
-def _repr_impl(self, shape, buf, *args):
+def _repr_impl(self, shape, buf, *idx):
     """Implementation detail of op_repr()"""
-    k = len(shape) - len(args)
+    k = len(shape) - len(idx)
     if k == 0:
-        buf.write(repr(self[args]))
+        if self.IsComplex and idx[0] > 0:
+            value = self[idx]
+            buf.write(('+ ' if value >= 0 else '- ') + repr(abs(value)) + 'i')
+        else:
+            buf.write(repr(self[idx]))
     else:
         size = shape[k - 1]
         buf.write('[')
@@ -241,14 +245,15 @@ def _repr_impl(self, shape, buf, *args):
                 buf.write('.. %i skipped ..' % (size - 10))
                 i = size - 6
             else:
-                _repr_impl(self, shape, buf, i, *args)
+                _repr_impl(self, shape, buf, i, *idx)
 
             if i + 1 < size:
                 if k == 1:
-                    buf.write(', ')
+                    buf.write(' ' if self.IsComplex or self.IsQuaternion
+                              else ', ')
                 else:
                     buf.write(',\n')
-                    buf.write(' ' * (len(args) + 1))
+                    buf.write(' ' * (len(idx) + 1))
             i += 1
         buf.write(']')
 
@@ -1389,6 +1394,19 @@ def abs_dot(a, b):
 
 def abs_dot_async(a, b):
     return abs(dot_async(a, b))
+
+
+def squared_norm(a):
+    return dot(a, a)
+
+
+def norm(a):
+    return sqrt(dot(a, a))
+
+
+def normalize(a):
+    return a * rsqrt(squared_norm(a))
+
 
 # -------------------------------------------------------------------
 #                     Automatic differentiation

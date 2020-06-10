@@ -12,12 +12,15 @@ VAR_TYPE_SUFFIX = [
 ]
 
 
-def array_name(vt, depth, size, scalar):
+def array_name(prefix, vt, depth, size, scalar):
     """
-    Determines the name of an array (e.g. Float32 ArrayXf32, etc.). This
+    Determines the name of an array (e.g. Float32, ArrayXf32, etc.). This
     function is used when arrays are created during initialization of the Enoki
     extension module, and during implicit type promotion where array types are
     determined dynamically.
+
+    Parameter ``prefix`` (``str``):
+        Array flavor prefix (Array/Matrix/Complex/Quaternion)
 
     Parameter ``vt`` (``enoki.VarType``):
         Underlying scalar type (e.g. ``VarType.Int32``) of the desired array
@@ -36,7 +39,8 @@ def array_name(vt, depth, size, scalar):
     if depth == 0 or (not scalar and depth == 1):
         return VAR_TYPE_NAME[int(vt)]
 
-    return "Array%s%s" % (
+    return "%s%s%s" % (
+        prefix,
         'X' if size == enoki.Dynamic else str(size),
         VAR_TYPE_SUFFIX[int(vt)]
     )
@@ -65,6 +69,9 @@ def array_from_dlpack(t, capsule):
     elif not t.IsCUDA and device_type != 1:
         raise Exception("Cannot create an Enoki CPU array from a "
                         "DLPack GPU tensor!")
+
+    if dtype != t.Type:
+        raise Exception("Incompatible type!")
 
     shape_target = list(reversed(enoki.shape(t())))
     if len(shape_target) != ndim:
@@ -131,10 +138,8 @@ def array_init(self, args):
                 if size == 0:
                     pass
                 elif size != os:
-                    if not isinstance(o, value_type):
-                        o = value_type(o)
-                    for i in range(size):
-                        self.set_entry_(i, o)
+                    self.broadcast_(value_type(o)
+                                    if not isinstance(o, value_type) else o)
                 else:
                     if isinstance(o[0], value_type):
                         for i in range(size):
@@ -146,10 +151,8 @@ def array_init(self, args):
                 if dynamic:
                     size = 1
                     self.init_(size)
-                if not isinstance(o, value_type):
-                    o = value_type(o)
-                for i in range(size):
-                    self.set_entry_(i, o)
+                self.broadcast_(value_type(o)
+                                if not isinstance(o, value_type) else o)
             elif mod == 'numpy':
                 if o.dtype != self.Type.NumPy:
                     raise Exception("Incompatible dtype!")
@@ -183,7 +186,8 @@ def array_init(self, args):
                 from jax.dlpack import to_dlpack
                 self.assign_(array_from_dlpack(type(self), to_dlpack(o)))
             else:
-                raise Exception('Don\'t know how to create an Enoki array from type \"%s.%s\"!' % (mod, name))
+                raise Exception('Don\'t know how to create an Enoki array '
+                                'from type \"%s.%s\"!' % (mod, name))
         elif n == size or dynamic:
             if dynamic:
                 size = n
@@ -209,6 +213,46 @@ def array_init(self, args):
                                                 value_type.__name__)) from err
 
 
+@property
+def prop_x(self):
+    return self[0]
+
+
+@prop_x.setter
+def prop_x(self, value):
+    self[0] = value
+
+
+@property
+def prop_y(self):
+    return self[1]
+
+
+@prop_y.setter
+def prop_y(self, value):
+    self[1] = value
+
+
+@property
+def prop_z(self):
+    return self[2]
+
+
+@prop_z.setter
+def prop_z(self, value):
+    self[2] = value
+
+
+@property
+def prop_w(self):
+    return self[3]
+
+
+@prop_w.setter
+def prop_w(self, value):
+    self[3] = value
+
+
 def array_configure(cls):
     """Populates an Enoki array class with extra type trait fields"""
     depth = 1
@@ -218,6 +262,9 @@ def array_configure(cls):
         value = value.Value
         depth += 1
 
+    name = cls.__name__
+    mod = cls.__module__
+
     cls.Depth = depth
     cls.Scalar = value
     cls.IsEnoki = True
@@ -225,12 +272,38 @@ def array_configure(cls):
     cls.IsIntegral = issubclass(value, int) and not cls.IsMask
     cls.IsFloat = issubclass(value, float)
     cls.IsArithmetic = cls.IsIntegral or cls.IsFloat
-    cls.IsScalar = cls.__module__.startswith('enoki.scalar')
-    cls.IsPacket = cls.__module__.startswith('enoki.packet')
-    cls.IsLLVM = cls.__module__.startswith('enoki.llvm')
-    cls.IsCUDA = cls.__module__.startswith('enoki.cuda')
-    cls.IsDiff = '.ad' in cls.__module__
+    cls.IsScalar = mod.startswith('enoki.scalar')
+    cls.IsPacket = mod.startswith('enoki.packet')
+    cls.IsDiff = mod.endswith('.ad')
+    cls.IsLLVM = mod.startswith('enoki.llvm')
+    cls.IsCUDA = mod.startswith('enoki.cuda')
     cls.IsJIT = cls.IsLLVM or cls.IsCUDA
+    cls.IsMatrix = 'Matrix' in name
+    cls.IsComplex = 'Complex' in name
+    cls.IsQuaternion = 'Quaternion' in name
+    cls.IsSpecial = cls.IsMatrix or cls.IsComplex or cls.IsQuaternion
+
+    if cls.IsSpecial:
+        for i, c in enumerate(name):
+            if c.isdigit():
+                cls.Prefix = name[:i]
+                break
+
+        if cls.IsComplex:
+            cls.real = prop_x
+            cls.imag = prop_y
+    else:
+        cls.Prefix = 'Array'
+        if cls.Size > 0:
+            cls.x = prop_x
+        if cls.Size > 1:
+            cls.y = prop_y
+        if cls.Size > 2:
+            cls.z = prop_z
+        if cls.Size > 3:
+            cls.w = prop_w
+
     cls.MaskType = getattr(
-        sys.modules.get(cls.__module__),
-        array_name(enoki.VarType.Bool, cls.Depth, cls.Size, cls.IsScalar))
+        sys.modules.get(mod),
+        array_name("Array", enoki.VarType.Bool, cls.Depth,
+                   cls.Size, cls.IsScalar))

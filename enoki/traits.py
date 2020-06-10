@@ -64,6 +64,22 @@ def is_diff_array_v(a):
     return getattr(a, 'IsDiff', False)
 
 
+def is_complex_v(a):
+    return getattr(a, 'IsComplex', False)
+
+
+def is_matrix_v(a):
+    return getattr(a, 'IsMatrix', False)
+
+
+def is_quaternion_v(a):
+    return getattr(a, 'IsQuaternion', False)
+
+
+def is_special_v(a):
+    return getattr(a, 'IsSpecial', False)
+
+
 def is_unsigned_v(a):
     if not is_array_v(a):
         return False

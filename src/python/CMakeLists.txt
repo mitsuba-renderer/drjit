@@ -27,7 +27,7 @@ set_target_properties(enoki-python PROPERTIES
   LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/../../enoki
 )
 
-if (CMAKE_CXX_COMPILER_ID MATCHES "GCC|Clang")
+if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(enoki-python PRIVATE ${ENOKI_NATIVE_FLAGS})
   if (NOT (${ENOKI_U_CMAKE_BUILD_TYPE} MATCHES "DEB"))
     target_compile_options(enoki-python PRIVATE -g0 -Os)

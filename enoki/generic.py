@@ -123,7 +123,6 @@ def _binary_op(a, b, fn):
 #                        Vertical operations
 # -------------------------------------------------------------------
 
-
 def neg_(a0):
     if not a0.IsArithmetic:
         raise Exception("neg(): requires arithmetic operands!")
@@ -186,8 +185,14 @@ def mul_(a0, a1):
     if not a0.IsArithmetic:
         raise Exception("mul(): requires arithmetic operands!")
     ar, sr = _check2(a0, a1)
-    for i in range(sr):
-        ar[i] = a0[i] * a1[i]
+    if not a0.IsSpecial:
+        for i in range(sr):
+            ar[i] = a0[i] * a1[i]
+    elif a0.IsComplex:
+        ar.real = _ek.fmsub(a0.real, a1.real, a0.imag*a1.imag)
+        ar.imag = _ek.fmadd(a0.real, a1.imag, a0.imag*a1.real)
+    else:
+        raise Exception("mul(): unsupported array type!")
     return ar
 
 
@@ -195,8 +200,11 @@ def imul_(a0, a1):
     if not a0.IsArithmetic:
         raise Exception("imul(): requires arithmetic operands!")
     sr = _check2_inplace(a0, a1)
-    for i in range(sr):
-        a0[i] *= a1[i]
+    if not a0.IsSpecial:
+        for i in range(sr):
+            a0[i] *= a1[i]
+    else:
+        a0.assign_(a0 * a1)
     return a0
 
 
@@ -204,10 +212,15 @@ def truediv_(a0, a1):
     if not a0.IsFloat:
         raise Exception("Use the floor division operator \"//\" for "
                         "Enoki integer arrays.")
-    ar, sr = _check2(a0, a1)
-    for i in range(sr):
-        ar[i] = a0[i] / a1[i]
-    return ar
+    if not a0.IsSpecial:
+        ar, sr = _check2(a0, a1)
+        for i in range(sr):
+            ar[i] = a0[i] / a1[i]
+        return ar
+    elif a0.IsComplex:
+        return a0 * a1.rcp_()
+    else:
+        raise Exception("truediv(): unsupported array type!")
 
 
 def itruediv_(a0, a1):
@@ -215,8 +228,12 @@ def itruediv_(a0, a1):
         raise Exception("Use the floor division operator \"//=\" for "
                         "Enoki integer arrays.")
     sr = _check2_inplace(a0, a1)
-    for i in range(sr):
-        a0[i] /= a1[i]
+    if not a0.IsSpecial:
+        for i in range(sr):
+            a0[i] /= a1[i]
+    else:
+        a0.assign_(a0 / a1)
+
     return a0
 
 
@@ -426,36 +443,61 @@ def sqrt_(a0):
     if not a0.IsFloat:
         raise Exception("sqrt(): requires floating point operands!")
     ar, sr = _check1(a0)
-    for i in range(sr):
-        ar[i] = _ek.sqrt(a0[i])
+    if not a0.IsSpecial:
+        for i in range(sr):
+            ar[i] = _ek.sqrt(a0[i])
+    elif a0.IsComplex:
+        n = abs(a0)
+        t1 = _ek.sqrt(.5 * (n + abs(a0.real)))
+        t2 = .5 * a0.imag / t1
+        m = a0.real >= 0
+        ar.real = _ek.select(m, t1, abs(t2))
+        ar.imag = _ek.select(m, t2, _ek.copysign(t1, a0.imag))
+    else:
+        raise Exception("sqrt(): unsupported array type!")
     return ar
 
 
 def rsqrt_(a0):
     if not a0.IsFloat:
         raise Exception("rsqrt(): requires floating point operands!")
-    ar, sr = _check1(a0)
-    for i in range(sr):
-        ar[i] = _ek.rsqrt(a0[i])
-    return ar
+    if not a0.IsSpecial:
+        ar, sr = _check1(a0)
+        for i in range(sr):
+            ar[i] = _ek.rsqrt(a0[i])
+        return ar
+    else:
+        return _ek.rcp(_ek.sqrt(a0))
 
 
 def rcp_(a0):
     if not a0.IsFloat:
         raise Exception("rcp(): requires floating point operands!")
     ar, sr = _check1(a0)
-    for i in range(sr):
-        ar[i] = _ek.rcp(a0[i])
+    if not a0.IsSpecial:
+        for i in range(sr):
+            ar[i] = _ek.rcp(a0[i])
+    elif a0.IsComplex:
+        scale = _ek.rcp(_ek.squared_norm(a0))
+        ar.real = a0.real * scale
+        ar.imag = -a0.imag * scale
+    else:
+        raise Exception('rcp(): unsupported array type!')
     return ar
 
 
 def abs_(a0):
     if not a0.IsArithmetic:
         raise Exception("abs(): requires arithmetic operands!")
-    ar, sr = _check1(a0)
-    for i in range(sr):
-        ar[i] = _ek.abs(a0[i])
-    return ar
+    if not a0.IsSpecial:
+        ar, sr = _check1(a0)
+        for i in range(sr):
+            ar[i] = _ek.abs(a0[i])
+        return ar
+    elif a0.IsComplex:
+        return _ek.sqrt(_ek.fmadd(a0.real, a0.real, a0.imag * a0.imag))
+    else:
+        raise Exception('abs(): unsupported array type!')
 
 
 def max_(a0, a1):
@@ -854,6 +896,7 @@ def dot_(a0, a1):
             value += a0[i] * a1[i]
     return value
 
+
 # -------------------------------------------------------------------
 #                     Automatic differentiation
 # -------------------------------------------------------------------
@@ -923,6 +966,17 @@ def index_(a):
 # -------------------------------------------------------------------
 #                      Initialization operations
 # -------------------------------------------------------------------
+
+def broadcast_(self, value):
+    if not self.IsSpecial:
+        for i in range(len(self)):
+            self.set_entry_(i, value)
+    elif self.IsComplex or self.IsQuaternion:
+        self.set_entry_(0, value)
+        for i in range(1, len(self)):
+            self.set_entry_(i, 0)
+    else:
+        raise Exception("broadcast_(): don't know how to handle this type!")
 
 
 @classmethod

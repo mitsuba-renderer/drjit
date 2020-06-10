@@ -178,7 +178,8 @@ def all_arrays(cond=lambda x: True):
     a += ek.cuda.__dict__.items()
     a += ek.llvm.__dict__.items()
     a += ek.llvm.__dict__.items()
-    return [v for k, v in a if isinstance(v, type) and cond(v)]
+    return [v for k, v in a if isinstance(v, type) and cond(v)
+            and not ek.is_special_v(v)]
 
 
 # Run various standard operations on *every available* type

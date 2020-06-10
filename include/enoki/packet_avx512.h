@@ -403,7 +403,7 @@ template <bool IsMask_, typename Derived_> struct alignas(64)
 
     template <typename T> ENOKI_INLINE Derived xor_(const T &a) const {
         if constexpr (is_mask_v<T>) {
-            const __m512 c = _mm512_set1_pd(memcpy_cast<Value>(int64_t(-1)));
+            const __m512d c = _mm512_set1_pd(memcpy_cast<Value>(int64_t(-1)));
             return _mm512_mask_xor_pd(m, a.k, m, c);
         } else {
             return _mm512_xor_pd(m, a.m);

@@ -546,11 +546,11 @@ template <typename Value> ENOKI_INLINE Value acos(const Value &x) {
     }
 }
 
-template <typename Y, typename X> ENOKI_INLINE auto atan2(const Y &y, const X &x) {
+template <typename Y, typename X> ENOKI_INLINE expr_t<Y, X> atan2(const Y &y, const X &x) {
     if constexpr (!std::is_same_v<X, Y>) {
         using E = expr_t<X, Y>;
-        return enoki::atan2(static_cast<ref_cast_t<Y, E>>(y),
-                            static_cast<ref_cast_t<X, E>>(x));
+        return atan2(static_cast<ref_cast_t<Y, E>>(y),
+                     static_cast<ref_cast_t<X, E>>(x));
     } else if constexpr (is_detected_v<detail::has_atan2, Y>) {
         return y.atan2_(x);
     } else {
@@ -635,11 +635,11 @@ template <typename Value> ENOKI_INLINE Value atan(const Value &x) {
 //! @{ \name Exponential function, logarithm, power
 // -----------------------------------------------------------------------
 
-template <typename X, typename Y> ENOKI_INLINE auto ldexp(const X &x, const Y &y) {
+template <typename X, typename Y> ENOKI_INLINE expr_t<X, Y> ldexp(const X &x, const Y &y) {
     if constexpr (!std::is_same_v<X, Y>) {
         using E = expr_t<X, Y>;
-        return enoki::ldexp(static_cast<ref_cast_t<X, E>>(x),
-                            static_cast<ref_cast_t<Y, E>>(y));
+        return ldexp(static_cast<ref_cast_t<X, E>>(x),
+                     static_cast<ref_cast_t<Y, E>>(y));
     } else if constexpr (is_detected_v<detail::has_ldexp, X>) {
         return x.ldexp_(y);
     } else {
@@ -998,7 +998,7 @@ namespace detail {
     }
 }
 
-template <typename X, typename Y> ENOKI_INLINE auto pow(const X &x, const Y &y) {
+template <typename X, typename Y> ENOKI_INLINE expr_t<X, Y> pow(const X &x, const Y &y) {
     if constexpr (!std::is_scalar_v<X> && std::is_scalar_v<Y> && is_dynamic_v<X>) {
         if (std::is_floating_point_v<Y>) {
             if (detail::round_(y) == y)
@@ -1010,8 +1010,8 @@ template <typename X, typename Y> ENOKI_INLINE auto pow(const X &x, const Y &y) 
         }
     } else if constexpr (!std::is_same_v<X, Y>) {
         using E = expr_t<X, Y>;
-        return enoki::pow(static_cast<ref_cast_t<X, E>>(x),
-                          static_cast<ref_cast_t<Y, E>>(y));
+        return pow(static_cast<ref_cast_t<X, E>>(x),
+                   static_cast<ref_cast_t<Y, E>>(y));
     } else if constexpr (is_detected_v<detail::has_pow, X>) {
         return x.pow_(y);
     } else {

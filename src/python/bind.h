@@ -2,8 +2,8 @@
 
 #include "common.h"
 #include <enoki/math.h>
+#include <enoki/complex.h>
 #include <pybind11/functional.h>
-#include <iostream>
 
 extern py::handle array_name, array_init, array_configure;
 
@@ -14,7 +14,15 @@ auto bind_type(py::module &m, bool scalar_mode = false) {
                                      ek::value_t<Array>>;
     constexpr VarType Type = ek::var_type_v<Scalar>;
 
-    py::str name = array_name(Type, Array::Depth, Array::Size, scalar_mode);
+    const char *prefix = "Array";
+    if constexpr (ek::is_complex_v<Array>)
+        prefix = "Complex";
+    if constexpr (ek::is_quaternion_v<Array>)
+        prefix = "Quaternion";
+    if constexpr (ek::is_matrix_v<Array>)
+        prefix = "Matrix";
+
+    py::object name = array_name(prefix, Type, Array::Depth, Array::Size, scalar_mode);
     auto cls = py::class_<Array, ek::ArrayBase, EnokiHolder<Array>>(
         m, PyUnicode_AsUTF8AndSize(name.ptr(), nullptr));
 
@@ -416,7 +424,8 @@ auto bind_full(py::class_<Array, ek::ArrayBase, EnokiHolder<Array>> &cls,
     ENOKI_BIND_ARRAY_TYPES_DIM(Module, Guide, Scalar, 2)                       \
     ENOKI_BIND_ARRAY_TYPES_DIM(Module, Guide, Scalar, 3)                       \
     ENOKI_BIND_ARRAY_TYPES_DIM(Module, Guide, Scalar, 4)                       \
-    ENOKI_BIND_ARRAY_TYPES_DYN(Module, Guide, Scalar)
+    ENOKI_BIND_ARRAY_TYPES_DYN(Module, Guide, Scalar)                          \
+    bind<ek::Complex<ek::float32_array_t<Guide>>>(Module, Scalar);
 
 #define ENOKI_BIND_ARRAY_BASE_1(Module, Guide, Scalar)                         \
     auto a_msk =                                                               \

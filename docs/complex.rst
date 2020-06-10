@@ -220,8 +220,3 @@ Miscellaneous functions
 
    Efficiently evaluates ``sin(arg(z1) - arg(z2))`` and ``cos(arg(z1) - arg(z2))``.
 
-.. cpp:function:: template <typename T> Complex<T> sqrtz(T x)
-
-    Compute the complex square root of a real-valued argument ``x`` (which may
-    be negative). This is considerably more efficient than the general complex
-    square root above.

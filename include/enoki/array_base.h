@@ -317,9 +317,9 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                                                                              \
                 for (size_t i = 0; i < sa; ++i)                              \
                     result.entry(i) =                                        \
-                        enoki::name##2int<value_t<T>> (derived().entry(i));  \
+                        name##2int<value_t<T>> (derived().entry(i));         \
             } else {                                                         \
-                result = T(enoki::name(derived()));                          \
+                result = T(name(derived()));                                 \
             }                                                                \
                                                                              \
             return result;                                                   \
@@ -464,8 +464,8 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
     ENOKI_IMPLEMENT_UNARY_TEMPLATE(sl, int Imm, a << Imm, IsIntegral)
     ENOKI_IMPLEMENT_UNARY_TEMPLATE(sr, int Imm, a >> Imm, IsIntegral)
 
-    ENOKI_IMPLEMENT_BINARY_MASK(eq,  enoki::eq(a, b), true)
-    ENOKI_IMPLEMENT_BINARY_MASK(neq, enoki::neq(a, b), true)
+    ENOKI_IMPLEMENT_BINARY_MASK(eq,  eq(a, b), true)
+    ENOKI_IMPLEMENT_BINARY_MASK(neq, neq(a, b), true)
     ENOKI_IMPLEMENT_BINARY_MASK(lt, a < b,  IsArithmetic)
     ENOKI_IMPLEMENT_BINARY_MASK(le, a <= b, IsArithmetic)
     ENOKI_IMPLEMENT_BINARY_MASK(gt, a > b,  IsArithmetic)
@@ -474,59 +474,59 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
     ENOKI_IMPLEMENT_UNARY(neg, -a, IsArithmetic)
     ENOKI_IMPLEMENT_UNARY(not, detail::not_(a), !IsFloat)
 
-    ENOKI_IMPLEMENT_UNARY(sqrt,  enoki::sqrt(a), IsFloat)
-    ENOKI_IMPLEMENT_UNARY(abs,   enoki::abs(a), IsArithmetic)
+    ENOKI_IMPLEMENT_UNARY(sqrt,  sqrt(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY(abs,   abs(a), IsArithmetic)
 
-    ENOKI_IMPLEMENT_UNARY(floor, enoki::floor(a), IsFloat)
-    ENOKI_IMPLEMENT_UNARY(ceil,  enoki::ceil(a),  IsFloat)
-    ENOKI_IMPLEMENT_UNARY(trunc, enoki::trunc(a), IsFloat)
-    ENOKI_IMPLEMENT_UNARY(round, enoki::round(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY(floor, floor(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY(ceil,  ceil(a),  IsFloat)
+    ENOKI_IMPLEMENT_UNARY(trunc, trunc(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY(round, round(a), IsFloat)
 
     ENOKI_IMPLEMENT_ROUND2INT(trunc)
     ENOKI_IMPLEMENT_ROUND2INT(ceil)
     ENOKI_IMPLEMENT_ROUND2INT(floor)
     ENOKI_IMPLEMENT_ROUND2INT(round)
 
-    ENOKI_IMPLEMENT_BINARY(min, enoki::min(a, b), IsArithmetic)
-    ENOKI_IMPLEMENT_BINARY(max, enoki::max(a, b), IsArithmetic)
+    ENOKI_IMPLEMENT_BINARY(min, min(a, b), IsArithmetic)
+    ENOKI_IMPLEMENT_BINARY(max, max(a, b), IsArithmetic)
 
-    ENOKI_IMPLEMENT_UNARY(rcp, enoki::rcp(a), IsFloat)
-    ENOKI_IMPLEMENT_UNARY(rsqrt, enoki::rsqrt(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY(rcp, rcp(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY(rsqrt, rsqrt(a), IsFloat)
 
-    ENOKI_IMPLEMENT_TERNARY_ALT(fmadd,  enoki::fmadd(a, b, c),   derived()*v1+v2, IsFloat)
-    ENOKI_IMPLEMENT_TERNARY_ALT(fmsub,  enoki::fmsub(a, b, c),   derived()*v1-v2, IsFloat)
-    ENOKI_IMPLEMENT_TERNARY_ALT(fnmadd, enoki::fnmadd(a, b, c), -derived()*v1+v2, IsFloat)
-    ENOKI_IMPLEMENT_TERNARY_ALT(fnmsub, enoki::fnmsub(a, b, c), -derived()*v1-v2, IsFloat)
+    ENOKI_IMPLEMENT_TERNARY_ALT(fmadd,  fmadd(a, b, c),   derived()*v1+v2, IsFloat)
+    ENOKI_IMPLEMENT_TERNARY_ALT(fmsub,  fmsub(a, b, c),   derived()*v1-v2, IsFloat)
+    ENOKI_IMPLEMENT_TERNARY_ALT(fnmadd, fnmadd(a, b, c), -derived()*v1+v2, IsFloat)
+    ENOKI_IMPLEMENT_TERNARY_ALT(fnmsub, fnmsub(a, b, c), -derived()*v1-v2, IsFloat)
 
-    ENOKI_IMPLEMENT_UNARY_REC(cbrt, enoki::cbrt(a), IsFloat)
-    ENOKI_IMPLEMENT_UNARY_REC(sin, enoki::sin(a), IsFloat)
-    ENOKI_IMPLEMENT_UNARY_REC(cos, enoki::cos(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_REC(cbrt, cbrt(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_REC(sin, sin(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_REC(cos, cos(a), IsFloat)
 
-    ENOKI_IMPLEMENT_UNARY_REC(csc, enoki::csc(a), IsFloat)
-    ENOKI_IMPLEMENT_UNARY_REC(sec, enoki::sec(a), IsFloat)
-    ENOKI_IMPLEMENT_UNARY_REC(tan, enoki::tan(a), IsFloat)
-    ENOKI_IMPLEMENT_UNARY_REC(cot, enoki::cot(a), IsFloat)
-    ENOKI_IMPLEMENT_UNARY_REC(asin, enoki::asin(a), IsFloat)
-    ENOKI_IMPLEMENT_UNARY_REC(acos, enoki::acos(a), IsFloat)
-    ENOKI_IMPLEMENT_UNARY_REC(atan, enoki::atan(a), IsFloat)
-    ENOKI_IMPLEMENT_BINARY_REC(atan2, enoki::atan2(a, b), IsFloat)
-    ENOKI_IMPLEMENT_BINARY_REC(ldexp, enoki::ldexp(a, b), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_REC(csc, csc(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_REC(sec, sec(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_REC(tan, tan(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_REC(cot, cot(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_REC(asin, asin(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_REC(acos, acos(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_REC(atan, atan(a), IsFloat)
+    ENOKI_IMPLEMENT_BINARY_REC(atan2, atan2(a, b), IsFloat)
+    ENOKI_IMPLEMENT_BINARY_REC(ldexp, ldexp(a, b), IsFloat)
 
-    ENOKI_IMPLEMENT_UNARY_REC(exp2, enoki::exp2(a), IsFloat)
-    ENOKI_IMPLEMENT_UNARY_REC(exp, enoki::exp(a), IsFloat)
-    ENOKI_IMPLEMENT_UNARY_REC(log2, enoki::log2(a), IsFloat)
-    ENOKI_IMPLEMENT_UNARY_REC(log, enoki::log(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_REC(exp2, exp2(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_REC(exp, exp(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_REC(log2, log2(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_REC(log, log(a), IsFloat)
 
-    ENOKI_IMPLEMENT_UNARY_REC(sinh, enoki::sinh(a), IsFloat)
-    ENOKI_IMPLEMENT_UNARY_REC(cosh, enoki::cosh(a), IsFloat)
-    ENOKI_IMPLEMENT_UNARY_REC(tanh, enoki::tanh(a), IsFloat)
-    ENOKI_IMPLEMENT_UNARY_REC(asinh, enoki::asinh(a), IsFloat)
-    ENOKI_IMPLEMENT_UNARY_REC(acosh, enoki::acosh(a), IsFloat)
-    ENOKI_IMPLEMENT_UNARY_REC(atanh, enoki::atanh(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_REC(sinh, sinh(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_REC(cosh, cosh(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_REC(tanh, tanh(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_REC(asinh, asinh(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_REC(acosh, acosh(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_REC(atanh, atanh(a), IsFloat)
 
-    ENOKI_IMPLEMENT_UNARY_PAIR_REC(sincos, enoki::sincos(a), IsFloat)
-    ENOKI_IMPLEMENT_UNARY_PAIR_REC(sincosh, enoki::sincosh(a), IsFloat)
-    ENOKI_IMPLEMENT_UNARY_PAIR_REC(frexp, enoki::frexp(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_PAIR_REC(sincos, sincos(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_PAIR_REC(sincosh, sincosh(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_PAIR_REC(frexp, frexp(a), IsFloat)
 
     #undef ENOKI_IMPLEMENT_UNARY
     #undef ENOKI_IMPLEMENT_UNARY_REC
@@ -559,7 +559,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
             const auto &v_m = m.entry(sm > 1 ? i : 0);
             const Value &v_t = t.entry(st > 1 ? i : 0);
             const Value &v_f = f.entry(sf > 1 ? i : 0);
-            result.entry(i) = enoki::select(v_m, v_t, v_f);
+            result.entry(i) = select(v_m, v_t, v_f);
         }
 
         return result;
@@ -599,8 +599,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
 				result = derived().entry(0) * a.entry(0);
 				if constexpr (std::is_floating_point_v<Scalar>) {
                     for (size_t i = 1; i < sr; ++i)
-                        result = enoki::fmadd(derived().entry(i),
-                                              a.entry(i), result);
+                        result = fmadd(derived().entry(i), a.entry(i), result);
                 } else {
                     for (size_t i = 1; i < sr; ++i)
                         result += derived().entry(i) * a.entry(i);
@@ -667,7 +666,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
 
             value = derived().entry(0);
             for (size_t i = 1; i < derived().size(); ++i)
-                value = enoki::min(value, derived().entry(i));
+                value = min(value, derived().entry(i));
         } else {
             enoki_raise("hmin_(): invalid operand type!");
         }
@@ -686,7 +685,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
 
             value = derived().entry(0);
             for (size_t i = 1; i < derived().size(); ++i)
-                value = enoki::max(value, derived().entry(i));
+                value = max(value, derived().entry(i));
         } else {
             enoki_raise("hmax_(): invalid operand type!");
         }
@@ -787,7 +786,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
         }
 
         for (size_t i = 0; i < sr; ++i)
-            result.entry(i) = enoki::gather<Value, Permute>(
+            result.entry(i) = gather<Value, Permute>(
                 source, index.entry(i),
                 mask.entry(i));
 
@@ -802,9 +801,9 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                sd = sa > sb ? sa : sb, sr = sc > sd ? sc : sd;
 
         for (size_t i = 0; i < sr; ++i)
-            enoki::scatter<Permute>(target, derived().entry(i),
-                                    index.entry(i),
-                                    mask.entry(i));
+            scatter<Permute>(target, derived().entry(i),
+                             index.entry(i),
+                             mask.entry(i));
     }
 
     template <typename Target, typename Index, typename Mask>
@@ -815,8 +814,8 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                sd = sa > sb ? sa : sb, sr = sc > sd ? sc : sd;
 
         for (size_t i = 0; i < sr; ++i)
-            enoki::scatter_add(target, derived().entry(i), index.entry(i),
-                               mask.entry(i));
+            scatter_add(target, derived().entry(i), index.entry(i),
+                        mask.entry(i));
     }
 
     static Derived load_(const void *mem, size_t size) {

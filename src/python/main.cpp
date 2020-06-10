@@ -89,36 +89,7 @@ PYBIND11_MODULE(enoki_ext, m_) {
     py::class_<ek::detail::reinterpret_flag>(array_detail, "reinterpret_flag")
         .def(py::init<>());
 
-    py::class_<ek::ArrayBase, EnokiHolder<ek::ArrayBase>>(m, "ArrayBase")
-        .def_property("x",
-            [](const py::object &self) -> py::object {
-                return self[py::int_(0)];
-            },
-            [](const py::object &self, const py::object &v) {
-                self[py::int_(0)] = v;
-            })
-        .def_property("y",
-            [](const py::object &self) -> py::object {
-                return self[py::int_(1)];
-            },
-            [](const py::object &self, const py::object &v) {
-                self[py::int_(1)] = v;
-            })
-        .def_property("z",
-            [](const py::object &self) -> py::object {
-                return self[py::int_(2)];
-            },
-            [](const py::object &self, const py::object &v) {
-                self[py::int_(2)] = v;
-            })
-        .def_property("w",
-            [](const py::object &self) -> py::object {
-                return self[py::int_(3)];
-            },
-            [](const py::object &self, const py::object &v) {
-                self[py::int_(3)] = v;
-            });
-
+    py::class_<ek::ArrayBase, EnokiHolder<ek::ArrayBase>>(m, "ArrayBase");
     py::register_exception<enoki::Exception>(m, "Exception");
     array_detail.def("reinterpret_scalar", &reinterpret_scalar);
     array_detail.def("get_cache", &enoki_get_cache);
