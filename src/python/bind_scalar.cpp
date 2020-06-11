@@ -1,4 +1,5 @@
 #include "bind.h"
+#include "random.h"
 
 void export_scalar(py::module &m) {
     py::module scalar = m.def_submodule("scalar");
@@ -7,4 +8,6 @@ void export_scalar(py::module &m) {
     bind_full(d_i32, true); bind_full(d_u32, true); bind_full(d_i64, true);
     bind_full(d_u64, true); bind_full(d_f32, true); bind_full(d_f64, true);
     bind_full(d_b, true);
+
+    bind_pcg32<uint64_t>(scalar);
 }

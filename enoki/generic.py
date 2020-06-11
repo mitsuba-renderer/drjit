@@ -500,6 +500,15 @@ def abs_(a0):
         raise Exception('abs(): unsupported array type!')
 
 
+def mulhi_(a0, a1):
+    ar, sr = _check2(a0, a1)
+    if not a0.IsIntegral:
+        raise Exception("mulhi(): requires integral operands!")
+    for i in range(sr):
+        ar[i] = _ek.mulhi(a0[i], a1[i])
+    return ar
+
+
 def max_(a0, a1):
     ar, sr = _check2(a0, a1)
     if not a0.IsArithmetic:

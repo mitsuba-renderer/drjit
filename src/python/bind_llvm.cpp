@@ -1,5 +1,6 @@
 #if defined(ENOKI_ENABLE_JIT)
 #include "bind.h"
+#include "random.h"
 #include <enoki/llvm.h>
 
 void export_llvm(py::module &m) {
@@ -9,5 +10,7 @@ void export_llvm(py::module &m) {
     ENOKI_BIND_ARRAY_BASE_1(llvm, Guide, false);
     ENOKI_BIND_ARRAY_BASE_2(false);
     ENOKI_BIND_ARRAY_TYPES(llvm, Guide, false);
+
+    bind_pcg32<Guide>(llvm);
 }
 #endif

@@ -88,7 +88,7 @@ NAMESPACE_BEGIN(enoki)
             return a1.derived().func##_(a2.derived());                         \
         else if constexpr (std::is_same_v<T1, E1> && std::is_same_v<T2, E2>)   \
             return a1.derived().func##_(a2.derived());                         \
-        else if constexpr (is_mask_v<T2>)                                      \
+        else if constexpr (!is_mask_v<T1> && is_mask_v<T2>)                    \
             return name(static_cast<ref_cast_t<T1, E1>>(a1),                   \
                         static_cast<ref_cast_t<T2, E2>>(a2));                  \
         else                                                                   \

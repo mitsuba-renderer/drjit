@@ -781,6 +781,16 @@ def abs(a):
         return _builtins.abs(a)
 
 
+def mulhi(a, b):
+    if isinstance(a, ArrayBase) or \
+       isinstance(b, ArrayBase):
+        if type(a) is not type(b):
+            a, b = _var_promote(a, b)
+        return a.mulhi_(b)
+    else:
+        raise Exception("mulhi(): undefined for Python integers!")
+
+
 def sqr(a):
     return a * a
 

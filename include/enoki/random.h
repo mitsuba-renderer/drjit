@@ -38,12 +38,10 @@ template <typename T> struct PCG32 {
     using Float32    = float32_array_t<T>;
     using Mask       = mask_t<UInt64>;
 
-    PCG32(const UInt64 &state, const UInt64 &inc) : state(state), inc(inc) { }
-
     /// Initialize the pseudorandom number generator with the \ref seed() function
     PCG32(size_t size = 1,
           const UInt64 &initstate = PCG32_DEFAULT_STATE,
-          const UInt64 &initseq = PCG32_DEFAULT_STREAM) {
+          const UInt64 &initseq   = PCG32_DEFAULT_STREAM) {
         seed(size, initstate, initseq);
     }
 
@@ -53,8 +51,9 @@ template <typename T> struct PCG32 {
      * Specified in two parts: a state initializer and a sequence selection
      * constant (a.k.a. stream id)
      */
-    void seed(size_t size = 1, const UInt64 &initstate = PCG32_DEFAULT_STATE,
-              const UInt64 &initseq = PCG32_DEFAULT_STREAM) {
+    void seed(size_t size = 1,
+              const UInt64 &initstate = PCG32_DEFAULT_STATE,
+              const UInt64 &initseq   = PCG32_DEFAULT_STREAM) {
         state = zero<UInt64>();
         inc = sl<1>(initseq + arange<UInt64>(size)) | 1u;
         next_uint32();
@@ -239,7 +238,7 @@ template <typename T> struct PCG32 {
             }
         }
 
-        return PCG32(acc_mult * state + acc_plus, inc);
+        return PCG32(initialize_state(), acc_mult * state + acc_plus, inc);
     }
 
     PCG32 operator-(const Int64 &delta) const {
@@ -296,6 +295,11 @@ template <typename T> struct PCG32 {
 
     UInt64 state;  // RNG state.  All values are possible.
     UInt64 inc;    // Controls which RNG sequence (stream) is selected. Must *always* be odd.
+
+private:
+    struct initialize_state { };
+    ENOKI_INLINE PCG32(initialize_state, const UInt64 &state, const UInt64 &inc)
+        : state(state), inc(inc) { }
 };
 
 NAMESPACE_END(enoki)

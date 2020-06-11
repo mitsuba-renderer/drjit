@@ -298,7 +298,7 @@ auto bind_full(py::class_<Array, ek::ArrayBase, EnokiHolder<Array>> &cls,
         cls.def("rcp_",   &Array::rcp_);
         cls.def("rsqrt_", &Array::rsqrt_);
     } else if constexpr(Array::IsIntegral) {
-        // cls.def("mulhi_", &Array::mulhi_);
+        cls.def("mulhi_", &Array::mulhi_);
         cls.def("sl_", [](const Array &a, const Array &b) { return a.sl_(b); });
         cls.def("sr_", [](const Array &a, const Array &b) { return a.sr_(b); });
         cls.def("isl_", [](Array *a, const Array &b) { *a = a->sl_(b); return a; });

@@ -211,6 +211,32 @@ struct LLVMArray : ArrayBaseT<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
         return steal(jitc_var_new_2(Type, op, 1, 0, m_index, v.m_index));
     }
 
+    LLVMArray mulhi_(const LLVMArray &v) const {
+        if constexpr (!jitc_is_integral(Type))
+            enoki_raise("Unsupported operand type");
+
+        LLVMArray shift(Value(sizeof(Value) * 8));
+
+        const char *op;
+        if constexpr (std::is_signed_v<Value>)
+            op = "$r0_1 = sext <$w x $t1> $r1 to <$w x $T1>$n"
+                 "$r0_2 = sext <$w x $t2> $r2 to <$w x $T2>$n"
+                 "$r0_3 = sext <$w x $t3> $r3 to <$w x $T3>$n"
+                 "$r0_4 = mul <$w x $T1> $r0_1, $r0_2$n"
+                 "$r0_5 = lshr <$w x $T1> $r0_4, $r0_3$n"
+                 "$r0 = trunc <$w x $T1> $r0_5 to <$w x $t1>";
+        else
+            op = "$r0_1 = zext <$w x $t1> $r1 to <$w x $T1>$n"
+                 "$r0_2 = zext <$w x $t2> $r2 to <$w x $T2>$n"
+                 "$r0_3 = zext <$w x $t3> $r3 to <$w x $T3>$n"
+                 "$r0_4 = mul <$w x $T1> $r0_1, $r0_2$n"
+                 "$r0_5 = lshr <$w x $T1> $r0_4, $r0_3$n"
+                 "$r0 = trunc <$w x $T1> $r0_5 to <$w x $t1>";
+
+        return steal(
+            jitc_var_new_3(Type, op, 1, 0, m_index, v.m_index, shift.m_index));
+    }
+
     LLVMArray div_(const LLVMArray &v) const {
         if constexpr (!jitc_is_arithmetic(Type))
             enoki_raise("Unsupported operand type");

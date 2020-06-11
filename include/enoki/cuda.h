@@ -308,11 +308,15 @@ struct CUDAArray : ArrayBaseT<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
         if constexpr (!jitc_is_arithmetic(Type))
             enoki_raise("Unsupported operand type");
 
-        const char *op = std::is_same_v<Value, float>
-                             ? "neg.ftz.$t0 $r0, $r1"
-                             : "neg.$t0 $r0, $r1";
+        if constexpr (std::is_integral_v<Value> && std::is_unsigned_v<Value>) {
+            return not_() + 1u;
+        } else {
+            const char *op = std::is_same_v<Value, float>
+                                 ? "neg.ftz.$t0 $r0, $r1"
+                                 : "neg.$t0 $r0, $r1";
 
-        return steal(jitc_var_new_1(Type, op, 1, 1, m_index));
+            return steal(jitc_var_new_1(Type, op, 1, 1, m_index));
+        }
     }
 
     CUDAArray not_() const {
