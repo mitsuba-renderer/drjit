@@ -141,6 +141,14 @@ def array_init(self, args):
                     self.broadcast_(value_type(o)
                                     if not isinstance(o, value_type) else o)
                 else:
+                    if self.IsJIT and getattr(t, 'IsJIT', 0) and \
+                       self.Depth == 1 and t.Depth == 1:
+                        raise Exception(
+                            'Refusing to do an extremely inefficient '
+                            'element-by-element array conversion from type %s '
+                            'to %s. Did you forget a cast or detach operation?'
+                            % (str(type(o)), str(type(self))))
+
                     if isinstance(o[0], value_type):
                         for i in range(size):
                             self.set_entry_(i, o[i])

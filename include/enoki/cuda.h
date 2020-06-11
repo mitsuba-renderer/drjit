@@ -113,10 +113,10 @@ struct CUDAArray : ArrayBaseT<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
         if constexpr (!IsClass) {
             uint64_t tmp = 0;
             memcpy(&tmp, &value, sizeof(Value));
-            m_index = jitc_var_new_literal(Type, 1, tmp, 1);
+            m_index = jitc_var_new_literal(Type, 1, tmp, 1, 0);
         } else {
             m_index = jitc_var_new_literal(
-                Type, 1, (uint64_t) jitc_registry_get_id(value), 1);
+                Type, 1, (uint64_t) jitc_registry_get_id(value), 1, 0);
         }
     }
 
@@ -126,7 +126,7 @@ struct CUDAArray : ArrayBaseT<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
         if constexpr (!IsClass) {
             Value data[] = { (Value) ts... };
             m_index = jitc_var_copy_mem(AllocType::Host, Type, 1, data,
-                                    (uint32_t) sizeof...(Ts));
+                                        (uint32_t) sizeof...(Ts));
         } else {
             uint32_t data[] = { jitc_registry_get_id(ts)... };
             m_index = jitc_var_copy_mem(AllocType::Host, Type, 1, data,
@@ -199,6 +199,14 @@ struct CUDAArray : ArrayBaseT<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
             op = "mul.lo.$t0 $r0, $r1, $r2";
 
         return steal(jitc_var_new_2(Type, op, 1, 1, m_index, v.m_index));
+    }
+
+    CUDAArray mulhi_(const CUDAArray &v) const {
+        if constexpr (!jitc_is_integral(Type))
+            enoki_raise("Unsupported operand type");
+
+        return steal(jitc_var_new_2(
+            Type, "mul.hi.$t0 $r0, $r1, $r2", 1, 1, m_index, v.m_index));
     }
 
     CUDAArray div_(const CUDAArray &v) const {
@@ -766,19 +774,19 @@ struct CUDAArray : ArrayBaseT<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
     }
 
     static CUDAArray zero_(size_t size) {
-        return steal(jitc_var_new_literal(Type, 1, 0, (uint32_t) size));
+        return steal(jitc_var_new_literal(Type, 1, 0, (uint32_t) size, 0));
     }
 
-    static CUDAArray full_(Value value, size_t size) {
+    static CUDAArray full_(Value value, size_t size, bool eval) {
         uint32_t index;
 
         if constexpr (!IsClass) {
             uint64_t tmp = 0;
             memcpy(&tmp, &value, sizeof(Value));
-            index = jitc_var_new_literal(Type, 1, tmp, (uint32_t) size);
+            index = jitc_var_new_literal(Type, 1, tmp, (uint32_t) size, eval);
         } else {
             index = jitc_var_new_literal(
-                Type, 1, (uint64_t) jitc_registry_get_id(value), (uint32_t) size);
+                Type, 1, (uint64_t) jitc_registry_get_id(value), (uint32_t) size, eval);
         }
 
         return steal(index);
@@ -1139,60 +1147,6 @@ public:
         jitc_var_inc_ref_ext(index);
         result.m_index = index;
         return result;
-    }
-
-    static uint32_t mkfull_(ActualValue value, uint32_t size) {
-        const char *fmt = nullptr;
-
-        switch (Type) {
-            case VarType::Float16:
-                fmt = "mov.$b0 $r0, 0x%04x";
-                break;
-
-            case VarType::Float32:
-                fmt = "mov.$t0 $r0, 0f%08x";
-                break;
-
-            case VarType::Float64:
-                fmt = "mov.$t0 $r0, 0d%016llx";
-                break;
-
-            case VarType::Bool:
-                fmt = "mov.$t0 $r0, %i";
-                break;
-
-            case VarType::Int8:
-            case VarType::UInt8:
-                fmt = "mov.b16 %%w1, 0x%02x$ncvt.u8.u16 $r0, %%w1";
-                break;
-
-            case VarType::Int16:
-            case VarType::UInt16:
-                fmt = "mov.$b0 $r0, 0x%04x";
-                break;
-
-            case VarType::Int32:
-            case VarType::UInt32:
-                fmt = "mov.$b0 $r0, 0x%08x";
-                break;
-
-            case VarType::Pointer:
-            case VarType::Int64:
-            case VarType::UInt64:
-                fmt = "mov.$b0 $r0, 0x%016llx";
-                break;
-
-            default:
-                fmt = "<<invalid format during cast>>";
-                break;
-        }
-
-        uint_array_t<ActualValue> value_uint;
-        char value_str[48];
-        memcpy(&value_uint, &value, sizeof(ActualValue));
-        snprintf(value_str, 48, fmt, value_uint);
-
-        return jitc_var_new_0(Type, value_str, 0, 1, size);
     }
 
     void init_(size_t size) {

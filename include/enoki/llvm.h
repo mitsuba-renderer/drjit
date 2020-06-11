@@ -125,10 +125,10 @@ struct LLVMArray : ArrayBaseT<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
         if constexpr (!IsClass) {
             uint64_t tmp = 0;
             memcpy(&tmp, &value, sizeof(Value));
-            m_index = jitc_var_new_literal(Type, 0, tmp, 1);
+            m_index = jitc_var_new_literal(Type, 0, tmp, 1, 0);
         } else {
             m_index = jitc_var_new_literal(
-                Type, 0, (uint64_t) jitc_registry_get_id(value), 1);
+                Type, 0, (uint64_t) jitc_registry_get_id(value), 1, 0);
         }
     }
 
@@ -823,19 +823,19 @@ struct LLVMArray : ArrayBaseT<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
     }
 
     static LLVMArray zero_(size_t size) {
-        return steal(jitc_var_new_literal(Type, 0, 0, (uint32_t) size));
+        return steal(jitc_var_new_literal(Type, 0, 0, (uint32_t) size, 0));
     }
 
-    static LLVMArray full_(Value value, size_t size) {
+    static LLVMArray full_(Value value, size_t size, bool eval) {
         uint32_t index;
 
         if constexpr (!IsClass) {
             uint64_t tmp = 0;
             memcpy(&tmp, &value, sizeof(Value));
-            index = jitc_var_new_literal(Type, 0, tmp, (uint32_t) size);
+            index = jitc_var_new_literal(Type, 0, tmp, (uint32_t) size, eval);
         } else {
             index = jitc_var_new_literal(
-                Type, 0, (uint64_t) jitc_registry_get_id(value), (uint32_t) size);
+                Type, 0, (uint64_t) jitc_registry_get_id(value), (uint32_t) size, eval);
         }
 
         return steal(index);
@@ -1208,30 +1208,6 @@ public:
             "$r0_2 = shufflevector <$w x $t0> $r0_1, <$w x $t0> undef, "
                 "<$w x i32> $z$n"
             "$r0 = add <$w x $t0> $r0_2, $l0", 1, 0, (uint32_t) size));
-    }
-
-    static uint32_t mkfull_(ActualValue value, uint32_t size) {
-        uint_array_t<ActualValue> value_uint;
-        unsigned long long value_ull;
-
-        if (Type == VarType::Float32) {
-            double d = (double) value;
-            memcpy(&value_ull, &d, sizeof(double));
-        }  else {
-            memcpy(&value_uint, &value, sizeof(ActualValue));
-            value_ull = (unsigned long long) value_uint;
-        }
-
-        char value_str[256];
-        snprintf(value_str, 256,
-            (Type == VarType::Float32 || Type == VarType::Float64) ?
-            "$r0_0 = insertelement <$w x $t0> undef, $t0 0x%llx, i32 0$n"
-            "$r0 = shufflevector <$w x $t0> $r0_0, <$w x $t0> undef, <$w x i32> $z" :
-            "$r0_0 = insertelement <$w x $t0> undef, $t0 %llu, i32 0$n"
-            "$r0 = shufflevector <$w x $t0> $r0_0, <$w x $t0> undef, <$w x i32> $z",
-            value_ull);
-
-        return jitc_var_new_0(Type, value_str, 0, 0, size);
     }
 
     void init_(size_t size) {

@@ -290,7 +290,8 @@ template <typename Array> bool ragged(const Array &a) {
     return !detail::put_shape(a, shape);
 }
 
-template <typename Stream, typename Value, bool IsMask, typename Derived>
+template <typename Stream, typename Value, bool IsMask, typename Derived,
+          enable_if_not_array_t<Stream> = 0>
 ENOKI_NOINLINE Stream &operator<<(Stream &os, const ArrayBaseT<Value, IsMask, Derived> &a) {
     size_t shape[array_depth_v<Derived> + 1 /* avoid zero-sized array */ ] { };
     if (!detail::put_shape(a, shape)) {

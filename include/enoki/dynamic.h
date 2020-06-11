@@ -156,7 +156,7 @@ struct DynamicArray
         return result;
     }
 
-    static DynamicArray full_(const Value &v, size_t size) {
+    static DynamicArray full_(const Value &v, size_t size, bool) {
         DynamicArray result;
         result.init_(size);
 

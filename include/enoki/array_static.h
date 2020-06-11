@@ -107,14 +107,15 @@ struct StaticArrayBase : ArrayBaseT<Value_, IsMask_, Derived_> {
         }
     }
 
-    static Derived full_(const std::conditional_t<IsMask_, bool, Scalar> &value, size_t size) {
+    static Derived full_(const std::conditional_t<IsMask_, bool, Scalar> &value, size_t size, bool eval) {
         if constexpr (is_array_v<Value>) {
             Derived result;
             for (size_t i = 0; i < Derived::Size; ++i)
-                result.entry(i) = full<Value>(value, size);
+                result.entry(i) = full<Value>(value, size, eval);
             return result;
         } else {
             ENOKI_MARK_USED(size);
+            ENOKI_MARK_USED(eval);
             return Derived(value);
         }
     }

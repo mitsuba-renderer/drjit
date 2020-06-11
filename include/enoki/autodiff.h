@@ -1430,8 +1430,8 @@ struct DiffArray : ArrayBaseT<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>
         return zero<Type>(size);
     }
 
-    static DiffArray full_(Value value, size_t size) {
-        return full<Type>(value, size);
+    static DiffArray full_(Value value, size_t size, bool eval) {
+        return full<Type>(value, size, eval);
     }
 
     static DiffArray arange_(ssize_t start, ssize_t stop, ssize_t step) {

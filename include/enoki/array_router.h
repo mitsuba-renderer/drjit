@@ -621,9 +621,9 @@ template <typename T> ENOKI_INLINE T empty(size_t size = 1) {
     }
 }
 
-template <typename T> ENOKI_INLINE T full(scalar_t<T> value, size_t size = 1) {
+template <typename T> ENOKI_INLINE T full(scalar_t<T> value, size_t size = 1, bool eval = false) {
     if constexpr (is_array_v<T>)
-        return T::Derived::full_(value, size);
+        return T::Derived::full_(value, size, eval);
     else
         return value;
 }

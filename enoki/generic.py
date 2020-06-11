@@ -988,7 +988,7 @@ def zero_(cls, size=1):
 
 
 @classmethod
-def full_(cls, value, size=1):
+def full_(cls, value, size, eval):
     result = cls.empty_(size)
     for i in range(len(result)):
         result[i] = value

@@ -1510,9 +1510,9 @@ def empty(type_, size=1):
         return type_(0)
 
 
-def full(type_, value, size=1):
+def full(type_, value, size=1, eval=False):
     if issubclass(type_, ArrayBase):
-        return type_.full_(value, size)
+        return type_.full_(value, size, eval)
     else:
         assert isinstance(type_, type)
         return type_(value)
@@ -1547,6 +1547,10 @@ def arange(type_, start=None, end=None, step=1):
 
 def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
     if _ek.is_array_v(a) or _ek.is_array_v(b):
+        if _ek.is_diff_array_v(a):
+            a = _ek.detach(a)
+        if _ek.is_diff_array_v(b):
+            b = _ek.detach(b)
         if type(a) is not type(b):
             a, b = _var_promote(a, b)
         cond = _ek.abs(a - b) <= _ek.abs(b) * rtol + atol
