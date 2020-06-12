@@ -104,6 +104,7 @@ namespace detail {
     template <typename T> using is_complex_det         = std::enable_if_t<T::IsComplex>;
     template <typename T> using is_matrix_det          = std::enable_if_t<T::IsMatrix>;
     template <typename T> using is_quaternion_det      = std::enable_if_t<T::IsQuaternion>;
+    template <typename T> using is_special_det         = std::enable_if_t<T::IsSpecial>;
 }
 
 template <typename T>
@@ -167,6 +168,10 @@ template <typename T> using enable_if_matrix_t = enable_if_t<is_matrix_v<T>>;
 template <typename T>
 constexpr bool is_quaternion_v = is_detected_v<detail::is_quaternion_det, std::decay_t<T>>;
 template <typename T> using enable_if_quaternion_t = enable_if_t<is_quaternion_v<T>>;
+
+template <typename T>
+constexpr bool is_special_v = is_detected_v<detail::is_special_det, std::decay_t<T>>;
+template <typename T> using enable_if_special_t = enable_if_t<is_special_v<T>>;
 
 template <typename T> constexpr bool has_struct_support_v = struct_support<std::decay_t<T>>::Defined;
 

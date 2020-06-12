@@ -161,11 +161,23 @@ def array_init(self, args):
                     self.init_(size)
                 self.broadcast_(value_type(o)
                                 if not isinstance(o, value_type) else o)
+            elif issubclass(t, complex) and self.IsComplex:
+                self.set_entry_(0, o.real)
+                self.set_entry_(1, o.imag)
             elif mod == 'numpy':
-                if o.dtype != self.Type.NumPy:
-                    raise Exception("Incompatible dtype!")
+                import numpy as np
                 s1 = tuple(reversed(enoki.shape(self)))
                 s2 = o.shape
+
+                if o.dtype == np.complex64:
+                    o = o.view(np.float32)
+                    s2 = (*s2, 2)
+                elif o.dtype == np.complex128:
+                    o = o.view(np.float64)
+                    s2 = (*s2, 2)
+
+                if o.dtype != self.Type.NumPy:
+                    raise Exception("Incompatible dtype!")
                 dim = len(s1)
                 if dim != len(s2):
                     raise Exception("Incompatible dimension!")
@@ -175,8 +187,7 @@ def array_init(self, args):
                 if dim == 0:
                     pass
                 elif dim == 1:
-                    import numpy
-                    o = numpy.ascontiguousarray(o)
+                    o = np.ascontiguousarray(o)
                     d = o.__array_interface__['data'][0]
                     self.assign_(self.load_(d, s2[0]))
                 else:
@@ -205,6 +216,7 @@ def array_init(self, args):
         else:
             raise Exception('Invalid size!')
     except Exception as e:
+        print(e)
         err = e
 
     if err is not None:

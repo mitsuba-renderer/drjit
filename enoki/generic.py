@@ -448,11 +448,13 @@ def sqrt_(a0):
             ar[i] = _ek.sqrt(a0[i])
     elif a0.IsComplex:
         n = abs(a0)
+        m = a0.real >= 0
+        zero = _ek.eq(n, 0)
         t1 = _ek.sqrt(.5 * (n + abs(a0.real)))
         t2 = .5 * a0.imag / t1
-        m = a0.real >= 0
+        im = _ek.select(m, t2, _ek.copysign(t1, a0.imag))
         ar.real = _ek.select(m, t1, abs(t2))
-        ar.imag = _ek.select(m, t2, _ek.copysign(t1, a0.imag))
+        ar.imag = _ek.select(zero, 0, im)
     else:
         raise Exception("sqrt(): unsupported array type!")
     return ar
@@ -530,10 +532,13 @@ def min_(a0, a1):
 def fmadd_(a0, a1, a2):
     if not a0.IsFloat:
         raise Exception("fmadd(): requires floating point operands!")
-    ar, sr = _check3(a0, a1, a2)
-    for i in range(sr):
-        ar[i] = _ek.fmadd(a0[i], a1[i], a2[i])
-    return ar
+    if not a0.IsSpecial:
+        ar, sr = _check3(a0, a1, a2)
+        for i in range(sr):
+            ar[i] = _ek.fmadd(a0[i], a1[i], a2[i])
+        return ar
+    else:
+        return a0 * a1 + a2
 
 
 @staticmethod
@@ -603,8 +608,16 @@ def sin_(a0):
     if not a0.IsFloat:
         raise Exception("sin(): requires floating point operands!")
     ar, sr = _check1(a0)
-    for i in range(sr):
-        ar[i] = _ek.sin(a0[i])
+    if not a0.IsSpecial:
+        for i in range(sr):
+            ar[i] = _ek.sin(a0[i])
+    elif a0.IsComplex:
+        s, c = _ek.sincos(a0.real)
+        sh, ch = _ek.sincosh(a0.imag)
+        ar.real = s * ch
+        ar.imag = c * sh
+    else:
+        raise Exception("sin(): unsupported array type!")
     return ar
 
 
@@ -612,8 +625,17 @@ def cos_(a0):
     if not a0.IsFloat:
         raise Exception("cos(): requires floating point operands!")
     ar, sr = _check1(a0)
-    for i in range(sr):
-        ar[i] = _ek.cos(a0[i])
+    if not a0.IsSpecial:
+        for i in range(sr):
+            ar[i] = _ek.cos(a0[i])
+    elif a0.IsComplex:
+        s, c = _ek.sincos(a0.real)
+        sh, ch = _ek.sincosh(a0.imag)
+        ar.real = c * ch
+        ar.imag = -s * sh
+    else:
+        raise Exception("cos(): unsupported array type!")
+
     return ar
 
 
@@ -622,46 +644,74 @@ def sincos_(a0):
         raise Exception("sincos(): requires floating point operands!")
     ar0, sr0 = _check1(a0)
     ar1 = a0.empty_(sr0 if a0.Size == Dynamic else 0)
-    for i in range(sr0):
-        result = _ek.sincos(a0[i])
-        ar0[i] = result[0]
-        ar1[i] = result[1]
+    if not a0.IsSpecial:
+        for i in range(sr0):
+            result = _ek.sincos(a0[i])
+            ar0[i] = result[0]
+            ar1[i] = result[1]
+    elif a0.IsComplex:
+        s, c = _ek.sincos(a0.real)
+        sh, ch = _ek.sincosh(a0.imag)
+        ar0.real = s * ch
+        ar0.imag = c * sh
+        ar1.real = c * ch
+        ar1.imag = -s * sh
+    else:
+        raise Exception("sincos(): unsupported array type!")
     return ar0, ar1
 
 
 def csc_(a0):
     if not a0.IsFloat:
         raise Exception("csc(): requires floating point operands!")
-    ar, sr = _check1(a0)
-    for i in range(sr):
-        ar[i] = _ek.csc(a0[i])
+    if not a0.IsSpecial:
+        ar, sr = _check1(a0)
+        for i in range(sr):
+            ar[i] = _ek.csc(a0[i])
+    else:
+        return 1 / _ek.sin(a0)
     return ar
 
 
 def sec_(a0):
     if not a0.IsFloat:
         raise Exception("sec(): requires floating point operands!")
-    ar, sr = _check1(a0)
-    for i in range(sr):
-        ar[i] = _ek.sec(a0[i])
+    if not a0.IsSpecial:
+        ar, sr = _check1(a0)
+        for i in range(sr):
+            ar[i] = _ek.sec(a0[i])
+    else:
+        return 1 / _ek.cos(a0)
     return ar
 
 
 def tan_(a0):
     if not a0.IsFloat:
         raise Exception("tan(): requires floating point operands!")
-    ar, sr = _check1(a0)
-    for i in range(sr):
-        ar[i] = _ek.tan(a0[i])
+    if not a0.IsSpecial:
+        ar, sr = _check1(a0)
+        for i in range(sr):
+            ar[i] = _ek.tan(a0[i])
+    elif a0.IsComplex:
+        s, c = _ek.sincos(a0)
+        return s / c
+    else:
+        raise Exception("tan(): unsupported array type!")
     return ar
 
 
 def cot_(a0):
     if not a0.IsFloat:
         raise Exception("cot(): requires floating point operands!")
-    ar, sr = _check1(a0)
-    for i in range(sr):
-        ar[i] = _ek.cot(a0[i])
+    if not a0.IsSpecial:
+        ar, sr = _check1(a0)
+        for i in range(sr):
+            ar[i] = _ek.cot(a0[i])
+    elif a0.IsComplex:
+        s, c = _ek.sincos(a0)
+        return c / s
+    else:
+        raise Exception("cot(): unsupported array type!")
     return ar
 
 
@@ -669,8 +719,15 @@ def asin_(a0):
     if not a0.IsFloat:
         raise Exception("asin(): requires floating point operands!")
     ar, sr = _check1(a0)
-    for i in range(sr):
-        ar[i] = _ek.asin(a0[i])
+    if not a0.IsSpecial:
+        for i in range(sr):
+            ar[i] = _ek.asin(a0[i])
+    elif a0.IsSpecial:
+        tmp = _ek.log(type(a0)(-a0.imag, a0.real) + _ek.sqrt(1 - _ek.sqr(a0)))
+        ar.real = tmp.imag
+        ar.imag = -tmp.real
+    else:
+        raise Exception("asin(): unsupported array type!")
     return ar
 
 
@@ -678,8 +735,16 @@ def acos_(a0):
     if not a0.IsFloat:
         raise Exception("acos(): requires floating point operands!")
     ar, sr = _check1(a0)
-    for i in range(sr):
-        ar[i] = _ek.acos(a0[i])
+    if not a0.IsSpecial:
+        for i in range(sr):
+            ar[i] = _ek.acos(a0[i])
+    elif a0.IsSpecial:
+        tmp = _ek.sqrt(1 - _ek.sqr(a0))
+        tmp = _ek.log(a0 + type(a0)(-tmp.imag, tmp.real))
+        ar.real = tmp.imag
+        ar.imag = -tmp.real
+    else:
+        raise Exception("acos(): unsupported array type!")
     return ar
 
 
@@ -687,8 +752,15 @@ def atan_(a0):
     if not a0.IsFloat:
         raise Exception("atan(): requires floating point operands!")
     ar, sr = _check1(a0)
-    for i in range(sr):
-        ar[i] = _ek.atan(a0[i])
+    if not a0.IsSpecial:
+        for i in range(sr):
+            ar[i] = _ek.atan(a0[i])
+    elif a0.IsSpecial:
+        im = type(a0)(0, 1)
+        tmp = _ek.log((im - a0) / (im + a0))
+        return type(a0)(tmp.imag * .5, -tmp.real * 0.5)
+    else:
+        raise Exception("atan(): unsupported array type!")
     return ar
 
 
@@ -696,8 +768,11 @@ def atan2_(a0, a1):
     if not a0.IsFloat:
         raise Exception("atan2(): requires floating point operands!")
     ar, sr = _check2(a0, a1)
-    for i in range(sr):
-        ar[i] = _ek.atan2(a0[i], a1[i])
+    if not a0.IsSpecial:
+        for i in range(sr):
+            ar[i] = _ek.atan2(a0[i], a1[i])
+    else:
+        raise Exception("atan2(): unsupported array type!")
     return ar
 
 
@@ -705,8 +780,16 @@ def exp_(a0):
     if not a0.IsFloat:
         raise Exception("exp(): requires floating point operands!")
     ar, sr = _check1(a0)
-    for i in range(sr):
-        ar[i] = _ek.exp(a0[i])
+    if not a0.IsSpecial:
+        for i in range(sr):
+            ar[i] = _ek.exp(a0[i])
+    elif a0.IsComplex:
+        s, c = _ek.sincos(a0.imag)
+        exp_r = _ek.exp(a0.real)
+        ar.real = exp_r * c
+        ar.imag = exp_r * s
+    else:
+        raise Exception("exp(): unsupported array type!")
     return ar
 
 
@@ -714,8 +797,16 @@ def exp2_(a0):
     if not a0.IsFloat:
         raise Exception("exp2(): requires floating point operands!")
     ar, sr = _check1(a0)
-    for i in range(sr):
-        ar[i] = _ek.exp2(a0[i])
+    if not a0.IsSpecial:
+        for i in range(sr):
+            ar[i] = _ek.exp2(a0[i])
+    elif a0.IsComplex:
+        s, c = _ek.sincos(a0.imag * _ek.LogTwo)
+        exp_r = _ek.exp2(a0.real)
+        ar.real = exp_r * c
+        ar.imag = exp_r * s
+    else:
+        raise Exception("exp2(): unsupported array type!")
     return ar
 
 
@@ -723,8 +814,14 @@ def log_(a0):
     if not a0.IsFloat:
         raise Exception("log(): requires floating point operands!")
     ar, sr = _check1(a0)
-    for i in range(sr):
-        ar[i] = _ek.log(a0[i])
+    if not a0.IsSpecial:
+        for i in range(sr):
+            ar[i] = _ek.log(a0[i])
+    elif a0.IsComplex:
+        ar.real = .5 * _ek.log(_ek.squared_norm(a0))
+        ar.imag = _ek.arg(a0)
+    else:
+        raise Exception("log(): unsupported array type!")
     return ar
 
 
@@ -732,22 +829,31 @@ def log2_(a0):
     if not a0.IsFloat:
         raise Exception("log2(): requires floating point operands!")
     ar, sr = _check1(a0)
-    for i in range(sr):
-        ar[i] = _ek.log2(a0[i])
+    if not a0.IsSpecial:
+        for i in range(sr):
+            ar[i] = _ek.log2(a0[i])
+    elif a0.IsComplex:
+        ar.real = .5 * _ek.log2(_ek.squared_norm(a0))
+        ar.imag = _ek.arg(a0) * _ek.InvLogTwo
+    else:
+        raise Exception("log2(): unsupported array type!")
     return ar
 
 
 def pow_(a0, a1):
     if not a0.IsFloat:
         raise Exception("pow(): requires floating point operands!")
-    if isinstance(a1, int) or isinstance(a1, float):
-        ar, sr = _check1(a0)
-        for i in range(sr):
-            ar[i] = _ek.pow(a0[i], a1)
+    if not a0.IsSpecial:
+        if isinstance(a1, int) or isinstance(a1, float):
+            ar, sr = _check1(a0)
+            for i in range(sr):
+                ar[i] = _ek.pow(a0[i], a1)
+        else:
+            ar, sr = _check2(a0, a1)
+            for i in range(sr):
+                ar[i] = _ek.pow(a0[i], a1[i])
     else:
-        ar, sr = _check2(a0, a1)
-        for i in range(sr):
-            ar[i] = _ek.pow(a0[i], a1[i])
+        return _ek.exp(_ek.log(a0) * a1)
     return ar
 
 
@@ -755,8 +861,16 @@ def sinh_(a0):
     if not a0.IsFloat:
         raise Exception("sinh(): requires floating point operands!")
     ar, sr = _check1(a0)
-    for i in range(sr):
-        ar[i] = _ek.sinh(a0[i])
+    if not a0.IsSpecial:
+        for i in range(sr):
+            ar[i] = _ek.sinh(a0[i])
+    elif a0.IsComplex:
+        s, c = _ek.sincos(a0.imag)
+        sh, ch = _ek.sincosh(a0.real)
+        ar.real = sh * c
+        ar.imag = ch * s
+    else:
+        raise Exception("sinh(): unsupported array type!")
     return ar
 
 
@@ -764,8 +878,16 @@ def cosh_(a0):
     if not a0.IsFloat:
         raise Exception("cosh(): requires floating point operands!")
     ar, sr = _check1(a0)
-    for i in range(sr):
-        ar[i] = _ek.cosh(a0[i])
+    if not a0.IsSpecial:
+        for i in range(sr):
+            ar[i] = _ek.cosh(a0[i])
+    elif a0.IsComplex:
+        s, c = _ek.sincos(a0.imag)
+        sh, ch = _ek.sincosh(a0.real)
+        ar.real = ch * c
+        ar.imag = sh * s
+    else:
+        raise Exception("cosh(): unsupported array type!")
     return ar
 
 
@@ -774,10 +896,20 @@ def sincosh_(a0):
         raise Exception("sincosh(): requires floating point operands!")
     ar0, sr0 = _check1(a0)
     ar1 = a0.empty_(sr0 if a0.Size == Dynamic else 0)
-    for i in range(sr0):
-        result = _ek.sincosh(a0[i])
-        ar0[i] = result[0]
-        ar1[i] = result[1]
+    if not a0.IsSpecial:
+        for i in range(sr0):
+            result = _ek.sincosh(a0[i])
+            ar0[i] = result[0]
+            ar1[i] = result[1]
+    elif a0.IsComplex:
+        s, c = _ek.sincos(a0.imag)
+        sh, ch = _ek.sincosh(a0.real)
+        ar0.real = sh * c
+        ar0.imag = ch * s
+        ar1.real = ch * c
+        ar1.imag = sh * s
+    else:
+        raise Exception("sincosh(): unsupported array type!")
     return ar0, ar1
 
 
@@ -785,8 +917,13 @@ def asinh_(a0):
     if not a0.IsFloat:
         raise Exception("asinh(): requires floating point operands!")
     ar, sr = _check1(a0)
-    for i in range(sr):
-        ar[i] = _ek.asinh(a0[i])
+    if not a0.IsSpecial:
+        for i in range(sr):
+            ar[i] = _ek.asinh(a0[i])
+    elif a0.IsComplex:
+        return _ek.log(a0 + _ek.sqrt(_ek.sqr(a0) + 1))
+    else:
+        raise Exception("asinh(): unsupported array type!")
     return ar
 
 
@@ -794,8 +931,13 @@ def acosh_(a0):
     if not a0.IsFloat:
         raise Exception("acosh(): requires floating point operands!")
     ar, sr = _check1(a0)
-    for i in range(sr):
-        ar[i] = _ek.acosh(a0[i])
+    if not a0.IsSpecial:
+        for i in range(sr):
+            ar[i] = _ek.acosh(a0[i])
+    elif a0.IsComplex:
+        return 2 * _ek.log(_ek.sqrt(.5 * (a0 + 1)) + _ek.sqrt(.5 * (a0 - 1)))
+    else:
+        raise Exception("acosh(): unsupported array type!")
     return ar
 
 
@@ -803,8 +945,13 @@ def atanh_(a0):
     if not a0.IsFloat:
         raise Exception("atanh(): requires floating point operands!")
     ar, sr = _check1(a0)
-    for i in range(sr):
-        ar[i] = _ek.atanh(a0[i])
+    if not a0.IsSpecial:
+        for i in range(sr):
+            ar[i] = _ek.atanh(a0[i])
+    elif a0.IsComplex:
+        return _ek.log((1 + a0) / (1 - a0)) * .5
+    else:
+        raise Exception("atanh(): unsupported array type!")
     return ar
 
 
@@ -812,8 +959,11 @@ def cbrt_(a0):
     if not a0.IsFloat:
         raise Exception("cbrt(): requires floating point operands!")
     ar, sr = _check1(a0)
-    for i in range(sr):
-        ar[i] = _ek.cbrt(a0[i])
+    if not a0.IsSpecial:
+        for i in range(sr):
+            ar[i] = _ek.cbrt(a0[i])
+    else:
+        raise Exception("cbrt(): unsupported array type!")
     return ar
 
 # -------------------------------------------------------------------
@@ -1150,7 +1300,16 @@ def torch(a):
 
 def numpy(a):
     import numpy
-    return numpy.array(a, copy=False)
+    arr = numpy.array(a, copy=False)
+    if a.IsComplex:
+        arr = arr = numpy.ascontiguousarray(arr)
+        if arr.dtype == numpy.float32:
+            return arr.view(numpy.complex64)[..., 0]
+        elif arr.dtype == numpy.float64:
+            return arr.view(numpy.complex128)[..., 0]
+        else:
+            raise Exception("Unsupported dtype for complex conversion!")
+    return arr
 
 
 def jax(a):

@@ -123,6 +123,8 @@ namespace detail {
         using Mask = mask_t<Value>;
         ENOKI_MARK_USED(s_out);
         ENOKI_MARK_USED(c_out);
+        static_assert(!is_special_v<Value>,
+                      "sincos(): requires a regular scalar/array argument!");
         static_assert(std::is_floating_point_v<Scalar>,
                       "sin()/cos(): function requires a floating point argument!");
 
@@ -229,6 +231,8 @@ namespace detail {
         using Int = scalar_t<IntArray>;
         static_assert(std::is_floating_point_v<Scalar>,
                       "tan()/cot(): function requires a floating point argument!");
+        static_assert(!is_special_v<Value>,
+                      "tancot(): requires a regular scalar/array argument!");
 
         /*
          - tan (in [-8192, 8192]):
@@ -420,6 +424,8 @@ template <typename Value> ENOKI_INLINE Value asin(const Value &x) {
         constexpr bool Single = std::is_same_v<Scalar, float>;
         static_assert(std::is_floating_point_v<Scalar>,
                       "asin(): function requires a floating point argument!");
+        static_assert(!is_special_v<Value>,
+                      "asin(): requires a regular scalar/array argument!");
 
         Value xa = abs(x),
               x2 = sqr(x),
@@ -511,6 +517,8 @@ template <typename Value> ENOKI_INLINE Value acos(const Value &x) {
         constexpr bool Single = std::is_same_v<Scalar, float>;
         static_assert(std::is_floating_point_v<Scalar>,
                       "acos(): function requires a floating point argument!");
+        static_assert(!is_special_v<Value>,
+                      "acos(): requires a regular scalar/array argument!");
 
         if constexpr (Single) {
             Value xa = abs(x), x2 = sqr(x);
@@ -573,6 +581,8 @@ template <typename Y, typename X> ENOKI_INLINE expr_t<Y, X> atan2(const Y &y, co
         constexpr bool Single = std::is_same_v<Scalar, float>;
         static_assert(std::is_floating_point_v<Scalar>,
                       "atan2(): function requires a floating point argument!");
+        static_assert(!is_special_v<Value>,
+                      "atan2(): requires a regular scalar/array argument!");
 
         Value abs_x      = abs(x),
               abs_y      = abs(y),
@@ -646,6 +656,8 @@ template <typename X, typename Y> ENOKI_INLINE expr_t<X, Y> ldexp(const X &x, co
         using Scalar = scalar_t<X>;
         static_assert(std::is_floating_point_v<Scalar>,
                       "ldexp(): function requires a floating point argument!");
+        static_assert(!is_special_v<X>,
+                      "ldexp(): requires a regular scalar/array argument!");
         constexpr bool Single = std::is_same_v<Scalar, float>;
         return x * reinterpret_array<X>(
             sl<Single ? 23 : 52>(int_array_t<X>(int32_array_t<X>(y) + (Single ? 0x7f : 0x3ff))));
@@ -665,6 +677,8 @@ template <typename Value> ENOKI_INLINE std::pair<Value, Value> frexp(const Value
 
         static_assert(std::is_floating_point_v<Scalar>,
                       "frexp(): function requires a floating point argument!");
+        static_assert(!is_special_v<Value>,
+                      "frexp(): requires a regular scalar/array argument!");
 
         const IntArray
             exponent_mask(Int(Single ? 0x7f800000ull : 0x7ff0000000000000ull)),
@@ -714,6 +728,8 @@ template <typename Value> ENOKI_INLINE Value exp(const Value &x) {
              (at x=-19.9999)
         */
 
+        static_assert(!is_special_v<Value>,
+                      "exp(): requires a regular scalar/array argument!");
         using Scalar = scalar_t<Value>;
         constexpr bool Single = std::is_same_v<Scalar, float>;
         using Mask = mask_t<Value>;
@@ -783,6 +799,8 @@ template <typename Value> ENOKI_INLINE Value exp2(const Value &x) {
              (at x=-19.9999)
         */
 
+        static_assert(!is_special_v<Value>,
+                      "exp2(): requires a regular scalar/array argument!");
         using Scalar = scalar_t<Value>;
         constexpr bool Single = std::is_same_v<Scalar, float>;
         using Mask = mask_t<Value>;
@@ -849,6 +867,8 @@ template <typename Value> ENOKI_INLINE Value log(const Value &x) {
              (at x=0.021)
         */
 
+        static_assert(!is_special_v<Value>,
+                      "log(): requires a regular scalar/array argument!");
         using Scalar = scalar_t<Value>;
         using UInt = scalar_t<int_array_t<Value>>;
         using Mask = mask_t<Value>;
@@ -925,6 +945,8 @@ template <typename Value> ENOKI_INLINE Value log2(const Value &x) {
              (at x=0.021)
         */
 
+        static_assert(!is_special_v<Value>,
+                      "log2(): requires a regular scalar/array argument!");
         using Scalar = scalar_t<Value>;
         using UInt = scalar_t<int_array_t<Value>>;
         using Mask = mask_t<Value>;
@@ -999,6 +1021,8 @@ namespace detail {
 }
 
 template <typename X, typename Y> ENOKI_INLINE expr_t<X, Y> pow(const X &x, const Y &y) {
+    static_assert(!is_special_v<X> && !is_special_v<Y>,
+                  "pow(): requires a regular scalar/array argument!");
     if constexpr (!std::is_scalar_v<X> && std::is_scalar_v<Y> && is_dynamic_v<X>) {
         if (std::is_floating_point_v<Y>) {
             if (detail::round_(y) == y)
@@ -1041,6 +1065,9 @@ template <typename Value> ENOKI_INLINE Value sinh(const Value &x) {
              -> in ULPs   = 3
              (at x=-9.69866)
         */
+
+        static_assert(!is_special_v<Value>,
+                      "sinh(): requires a regular scalar/array argument!");
         using Scalar = scalar_t<Value>;
         using UInt = scalar_t<int_array_t<Value>>;
         using Mask = mask_t<Value>;
@@ -1099,6 +1126,9 @@ template <typename Value> ENOKI_INLINE Value cosh(const Value &x) {
              -> in ULPs   = 3
              (at x=-9.70164)
         */
+        static_assert(!is_special_v<Value>,
+                      "cosh(): requires a regular scalar/array argument!");
+
         Value exp0 = exp(x),
               exp1 = rcp(exp0);
 
@@ -1111,6 +1141,8 @@ ENOKI_INLINE std::pair<Value, Value> sincosh(const Value &x) {
     if constexpr (is_detected_v<detail::has_sincosh, Value>) {
         return x.sincosh_();
     } else {
+        static_assert(!is_special_v<Value>,
+                      "sincosh(): requires a regular scalar/array argument!");
         using Scalar = scalar_t<Value>;
         using UInt = scalar_t<int_array_t<Value>>;
         using Mask = mask_t<Value>;
@@ -1171,6 +1203,8 @@ template <typename Value> ENOKI_INLINE Value tanh(const Value &x) {
              (at x=-2.12867)
         */
 
+        static_assert(!is_special_v<Value>,
+                      "tanh(): requires a regular scalar/array argument!");
         using Scalar = scalar_t<Value>;
         using Mask = mask_t<Value>;
         constexpr bool Single = std::is_same_v<Scalar, float>;
@@ -1233,6 +1267,8 @@ template <typename Value> ENOKI_INLINE Value asinh(const Value &x) {
              (at x=-1.17457)
         */
 
+        static_assert(!is_special_v<Value>,
+                      "asinh(): requires a regular scalar/array argument!");
         using Scalar = scalar_t<Value>;
         using Mask = mask_t<Value>;
         constexpr bool Single = std::is_same_v<Scalar, float>;
@@ -1291,6 +1327,8 @@ template <typename Value> ENOKI_INLINE Value acosh(const Value &x) {
              (at x=1.02974)
         */
 
+        static_assert(!is_special_v<Value>,
+                      "acosh(): requires a regular scalar/array argument!");
         using Scalar = scalar_t<Value>;
         using Mask = mask_t<Value>;
         constexpr bool Single = std::is_same_v<Scalar, float>;
@@ -1352,6 +1390,8 @@ template <typename Value> ENOKI_INLINE Value atanh(const Value &x) {
              (at x=-0.998962)
         */
 
+        static_assert(!is_special_v<Value>,
+                      "atanh(): requires a regular scalar/array argument!");
         using Scalar = scalar_t<Value>;
         using Mask = mask_t<Value>;
         constexpr bool Single = std::is_same_v<Scalar, float>;
@@ -1414,6 +1454,8 @@ template <typename Value> ENOKI_INLINE Value cbrt(const Value &x) {
              (at x=-9.99994)
         */
 
+        static_assert(!is_special_v<Value>,
+                      "cbrt(): requires a regular scalar/array argument!");
         using Scalar = scalar_t<Value>;
         constexpr bool Single = std::is_same_v<Scalar, float>;
 

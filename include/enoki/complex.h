@@ -23,6 +23,7 @@ struct Complex : StaticArrayImpl<Value_, 2, false, Complex<Value_>> {
     using Base::operator=;
 
     static constexpr bool IsComplex = true;
+    static constexpr bool IsSpecial = true;
     static constexpr bool IsVector = false;
 
     using ArrayType = Complex;
@@ -130,8 +131,18 @@ template <typename T> Complex<T> exp(const Complex<T> &z) {
     return { exp_r * c, exp_r * s };
 }
 
+template <typename T> Complex<T> exp2(const Complex<T> &z) {
+    T exp_r = exp2(real(z));
+    auto [s, c] = sincos(imag(z) * LogTwo<T>);
+    return { exp_r * c, exp_r * s };
+}
+
 template <typename T> Complex<T> log(const Complex<T> &z) {
     return { .5f * log(squared_norm(z)), arg(z) };
+}
+
+template <typename T> Complex<T> log2(const Complex<T> &z) {
+    return { .5f * log2(squared_norm(z)), arg(z) * InvLogTwo<T> };
 }
 
 template <typename T> T arg(const Complex<T> &z) {
@@ -155,11 +166,12 @@ template <typename T> Complex<T> sqrt(const Complex<T> &z) {
       t1 = sqrt(.5f * (n + abs(real(z)))),
       t2 = .5f * imag(z) / t1;
 
+    mask_t<T> zero = eq(n, 0.f);
     mask_t<T> m = real(z) >= 0.f;
 
     return {
         select(m, t1, abs(t2)),
-        select(m, t2, copysign(t1, imag(z)))
+        select(zero, 0.f, select(m, t2, copysign(t1, imag(z))))
     };
 }
 
@@ -192,13 +204,13 @@ template <typename T> Complex<T> tan(const Complex<T> &z) {
 
 template <typename T>
 Complex<T> asin(const Complex<T> &z) {
-    Complex<T> tmp = log(R(-imag(z), real(z)) + sqrt(1.f - z*z));
+    Complex<T> tmp = log(Complex<T>(-imag(z), real(z)) + sqrt(1.f - sqr(z)));
     return { imag(tmp), -real(tmp) };
 }
 
 template <typename T> Complex<T> acos(const Complex<T> &z) {
-    Complex<T> tmp = sqrt(1.f - z*z);
-    tmp = log(z + R(-imag(tmp), real(tmp)));
+    Complex<T> tmp = sqrt(1.f - sqr(z));
+    tmp = log(z + Complex<T>(-imag(tmp), real(tmp)));
     return Complex<T>{ imag(tmp), -real(tmp) };
 }
 
@@ -239,12 +251,12 @@ Complex<T> tanh(const Complex<T> &z) {
 
 template <typename T>
 Complex<T> asinh(const Complex<T> &z) {
-    return log(z + sqrt(z*z + 1.f));
+    return log(z + sqrt(sqr(z) + 1.f));
 }
 
 template <typename T>
 Complex<T> acosh(const Complex<T> &z) {
-    return log(z + sqrt(z*z - 1.f));
+    return 2 * log(sqrt(.5f * (z + 1.f)) + sqrt(.5f * (z - 1.f)));
 }
 
 template <typename T>

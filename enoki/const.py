@@ -6,20 +6,27 @@ import enoki as _enoki
 # -------------------------------------------------------------------
 
 E                  = 2.71828182845904523536  # noqa
+LogTwo             = 0.69314718055994530942  # noqa
+InvLogTwo          = 1.44269504088896340736  # noqa
+
 Pi                 = 3.14159265358979323846  # noqa
 InvPi              = 0.31830988618379067154  # noqa
 SqrtPi             = 1.77245385090551602793  # noqa
 InvSqrtPi          = 0.56418958354775628695  # noqa
+
 TwoPi              = 6.28318530717958647692  # noqa
 InvTwoPi           = 0.15915494309189533577  # noqa
 SqrtTwoPi          = 2.50662827463100050242  # noqa
 InvSqrtTwoPi       = 0.39894228040143267794  # noqa
+
 FourPi             = 12.5663706143591729539  # noqa
 InvFourPi          = 0.07957747154594766788  # noqa
 SqrtFourPi         = 3.54490770181103205460  # noqa
 InvSqrtFourPi      = 0.28209479177387814347  # noqa
+
 SqrtTwo            = 1.41421356237309504880  # noqa
 InvSqrtTwo         = 0.70710678118654752440  # noqa
+
 Infinity           = float('inf')  # noqa
 NaN                = float('nan')  # noqa
 _Epsilon32         = float.fromhex('0x1p-24')  # noqa

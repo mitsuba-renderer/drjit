@@ -65,7 +65,7 @@ def is_diff_array_v(a):
 
 
 def is_complex_v(a):
-    return getattr(a, 'IsComplex', False)
+    return getattr(a, 'IsComplex', False) or isinstance(a, complex)
 
 
 def is_matrix_v(a):

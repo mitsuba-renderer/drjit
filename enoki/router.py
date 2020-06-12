@@ -915,6 +915,13 @@ def clamp(value, min, max):
     return _ek.max(_ek.min(value, max), min)
 
 
+def arg(value):
+    if _ek.is_complex_v(value):
+        return _ek.atan2(value.imag, value.real)
+    else:
+        return _ek.select(value >= 0, 0, -_ek.Pi)
+
+
 # -------------------------------------------------------------------
 #   "Safe" functions that avoid domain errors due to rounding
 # -------------------------------------------------------------------
@@ -1416,6 +1423,13 @@ def norm(a):
 
 def normalize(a):
     return a * rsqrt(squared_norm(a))
+
+
+def conj(a):
+    if _ek.is_complex_v(a):
+        return type(a)(a.real, -a.imag)
+    else:
+        return a
 
 
 # -------------------------------------------------------------------
