@@ -1,4 +1,4 @@
-from enoki import VarType, Exception, ArrayBase
+from enoki import VarType, Exception, Dynamic
 import sys as _sys
 
 
@@ -76,8 +76,16 @@ def is_quaternion_v(a):
     return getattr(a, 'IsQuaternion', False)
 
 
+def is_vector_v(a):
+    return getattr(a, 'IsVector', False)
+
+
 def is_special_v(a):
     return getattr(a, 'IsSpecial', False)
+
+
+def is_static_array_v(a):
+    return getattr(a, 'Size', Dynamic) != Dynamic
 
 
 def is_unsigned_v(a):
@@ -186,8 +194,8 @@ def float64_array_t(a):
 
 def diff_array_t(a):
     if isinstance(a, type):
-        if not issubclass(a, ArrayBase):
-            raise Exception("diff_array_t(): requires an Enoki array type as input!")
+        if not is_array_v(a):
+            raise Exception("diff_array_t(): requires an Enoki input array!")
         if a.IsDiff:
             return a
         mod = a.__module__ \
@@ -202,8 +210,8 @@ def diff_array_t(a):
 
 def nondiff_array_t(a):
     if isinstance(a, type):
-        if not issubclass(a, ArrayBase):
-            raise Exception("diff_array_t(): requires an Enoki array type as input!")
+        if not is_array_v(a):
+            raise Exception("diff_array_t(): requires an Enoki input array!")
         if not a.IsDiff:
             return a
         mod = a.__module__ \

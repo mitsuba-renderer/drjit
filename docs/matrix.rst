@@ -41,7 +41,7 @@ coordinate "look-at" camera matrix and its inverse:
         Vector3f left = normalize(cross(up, dir));
         Vector3f new_up = cross(dir, left);
 
-        Matrix4f result = Matrix4f::from_cols(
+        Matrix4f result(
             concat(left, 0.f),
             concat(new_up, 0.f),
             concat(dir, 0.f),
@@ -53,12 +53,12 @@ coordinate "look-at" camera matrix and its inverse:
 
             Matrix4f inverse = inverse(result);
         */
-        Matrix4f inverse = Matrix4f::from_rows(
+        Matrix4f inverse = transpose(Matrix4f(
             concat(left, 0.f),
             concat(new_up, 0.f),
             concat(dir, 0.f),
             Vector4f(0.f, 0.f, 0.f, 1.f)
-        );
+        ));
 
         inverse[3] = inverse * concat(-origin, 1.f);
 

@@ -20,7 +20,7 @@
 NAMESPACE_BEGIN(enoki)
 
 template <typename Value_>
-struct LLVMArray : ArrayBaseT<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
+struct LLVMArray : ArrayBase<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
     template <typename> friend struct LLVMArray;
 
     static_assert(std::is_scalar_v<Value_>,

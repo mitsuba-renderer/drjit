@@ -1,3 +1,4 @@
+import math
 import cmath
 import enoki as ek
 from enoki.packet import Complex2f as C
@@ -12,7 +13,7 @@ def test01_bcast():
     assert a == b
 
 
-def test02_add():
+def test02_sub():
     a = C(1, 3)
     b = C(5, 7)
     c = C(1-5, 3-7)
@@ -164,3 +165,7 @@ def test12_numpy():
     assert 'j' in repr(arr2)
     arr3 = C(arr2)
     assert arr1 == arr3
+
+
+def test13_abs():
+    assert ek.allclose(abs(C(1, 2)), math.sqrt(5))

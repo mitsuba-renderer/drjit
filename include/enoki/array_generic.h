@@ -91,7 +91,7 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
 
     template <typename Value2, typename D2, typename D = Derived_,
               enable_if_t<D::Size != D2::Size || D::Depth != D2::Depth> = 0>
-    StaticArrayImpl(const ArrayBaseT<Value2, false, D2> &v) {
+    StaticArrayImpl(const ArrayBase<Value2, false, D2> &v) {
         if constexpr (D::Size == D2::Size && D2::BroadcastOuter) {
             static_assert(std::is_constructible_v<Value, value_t<D2>>);
             for (size_t i = 0; i < derived().size(); ++i)
@@ -105,7 +105,7 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
 
     template <typename Value2, typename D2, typename D = Derived_,
               enable_if_t<D::Size != D2::Size || D::Depth != D2::Depth> = 0>
-    StaticArrayImpl(const ArrayBaseT<Value2, IsMask_, D2> &v,
+    StaticArrayImpl(const ArrayBase<Value2, IsMask_, D2> &v,
                     detail::reinterpret_flag) {
         if constexpr (D::Size == D2::Size && D2::BroadcastOuter) {
             static_assert(std::is_constructible_v<Value, value_t<D2>, detail::reinterpret_flag>);
@@ -195,9 +195,9 @@ struct StaticArrayImpl<Value_, 0, IsMask_, Derived_>
 
     StaticArrayImpl() = default;
     template <typename Value2, typename Derived2>
-    StaticArrayImpl(const ArrayBaseT<Value2, IsMask_, Derived2> &) { }
+    StaticArrayImpl(const ArrayBase<Value2, IsMask_, Derived2> &) { }
     template <typename Value2, typename Derived2>
-    StaticArrayImpl(const ArrayBaseT<Value2, IsMask_, Derived2> &, detail::reinterpret_flag) { }
+    StaticArrayImpl(const ArrayBase<Value2, IsMask_, Derived2> &, detail::reinterpret_flag) { }
     StaticArrayImpl(const Value &) { }
 };
 
@@ -292,7 +292,7 @@ template <typename Array> bool ragged(const Array &a) {
 
 template <typename Stream, typename Value, bool IsMask, typename Derived,
           enable_if_not_array_t<Stream> = 0>
-ENOKI_NOINLINE Stream &operator<<(Stream &os, const ArrayBaseT<Value, IsMask, Derived> &a) {
+ENOKI_NOINLINE Stream &operator<<(Stream &os, const ArrayBase<Value, IsMask, Derived> &a) {
     size_t shape[array_depth_v<Derived> + 1 /* avoid zero-sized array */ ] { };
     if (!detail::put_shape(a, shape)) {
         os << "[ragged array]";

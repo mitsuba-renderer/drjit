@@ -20,7 +20,6 @@ template <typename Value_>
 struct Complex : StaticArrayImpl<Value_, 2, false, Complex<Value_>> {
     using Base = StaticArrayImpl<Value_, 2, false, Complex<Value_>>;
     ENOKI_ARRAY_DEFAULTS(Complex)
-    using Base::operator=;
 
     static constexpr bool IsComplex = true;
     static constexpr bool IsSpecial = true;
@@ -37,8 +36,12 @@ struct Complex : StaticArrayImpl<Value_, 2, false, Complex<Value_>> {
     template <typename T, enable_if_t<is_complex_v<T> || array_depth_v<T> == Base::Depth> = 0>
     ENOKI_INLINE Complex(T&& z) : Base(std::forward<T>(z)) { }
 
-    template <typename T, enable_if_t<!is_complex_v<T> && array_depth_v<T> != Base::Depth> = 0>
+    template <typename T, enable_if_t<!is_complex_v<T> && array_depth_v<T> != Base::Depth &&
+                                       (is_array_v<T> || std::is_scalar_v<T>)> = 0>
     ENOKI_INLINE Complex(T&& z) : Base(std::forward<T>(z), zero<Value_>()) { }
+
+    template <typename T, enable_if_t<!is_array_v<T> && !std::is_scalar_v<T>> = 0> // __m128d
+    ENOKI_INLINE Complex(T&& z) : Base(z) { }
 
     ENOKI_INLINE Complex(const Value_ &v1, const Value_ &v2) : Base(v1, v2) { }
     ENOKI_INLINE Complex(Value_ &&v1, Value_ &&v2) : Base(std::move(v1), std::move(v2)) { }
@@ -69,16 +72,11 @@ template <typename T> Complex<T> normalize(const Complex<T> &z) {
     return normalize(Array<T, 2>(z));
 }
 
-template <typename T> Complex<T> rcp(const Complex<T> &z) {
-    T scale = rcp(squared_norm(z));
-    return Complex<T>(
-         real(z) * scale,
-        -imag(z) * scale
-    );
-}
-
-template <typename T> Complex<T> rsqrt(const Complex<T> &z) {
-    return rcp(sqrt(z));
+template <typename T> Complex<T> conj(const Complex<T> &z) {
+    if constexpr (!is_array_v<T>)
+        return z ^ Complex<T>(0.f, -0.f);
+    else
+        return { z.x(), -z.y() };
 }
 
 template <typename T0, typename T1>
@@ -105,6 +103,10 @@ Complex<expr_t<T0, T1>> operator*(const T0 &v0,
     return v0 * Array<T1, 2>(z1);
 }
 
+template <typename T> Complex<T> rcp(const Complex<T> &z) {
+    return conj(z) * rcp(squared_norm(z));
+}
+
 template <typename T0, typename T1>
 Complex<expr_t<T0, T1>> operator/(const Complex<T0> &z0,
                                   const Complex<T1> &z1) {
@@ -117,12 +119,12 @@ Complex<expr_t<T0, T1>> operator/(const Complex<T0> &z0,
     return Array<T0, 2>(z0) / v1;
 }
 
-template <typename T> Complex<T> conj(const Complex<T> &z) {
-    return { real(z), -imag(z) };
-}
-
 template <typename T> T abs(const Complex<T> &z) {
     return norm(z);
+}
+
+template <typename T> Complex<T> rsqrt(const Complex<T> &z) {
+    return rcp(sqrt(z));
 }
 
 template <typename T> Complex<T> exp(const Complex<T> &z) {

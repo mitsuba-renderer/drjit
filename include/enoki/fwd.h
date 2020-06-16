@@ -193,11 +193,8 @@ NAMESPACE_BEGIN(enoki)
     static constexpr size_t DefaultSize = 1;
 #endif
 
-/// Base class of all arrays
-struct ArrayBase;
-
-/// Base class of all arrays (Curiously recurring template)
-template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT;
+/// Base class of all arrays (via the Curiously recurring template pattern)
+template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase;
 
 /// Base class of all statically sized arrays
 template <typename Value_, size_t Size_, bool IsMask_, typename Derived_>

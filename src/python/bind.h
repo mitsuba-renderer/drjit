@@ -3,9 +3,11 @@
 #include "common.h"
 #include <enoki/math.h>
 #include <enoki/complex.h>
+#include <enoki/matrix.h>
+#include <enoki/quaternion.h>
 #include <pybind11/functional.h>
 
-extern py::handle array_name, array_init, array_configure;
+extern py::handle array_base, array_name, array_init, array_configure;
 
 template <typename Array>
 auto bind_type(py::module &m, bool scalar_mode = false) {
@@ -22,9 +24,21 @@ auto bind_type(py::module &m, bool scalar_mode = false) {
     if constexpr (ek::is_matrix_v<Array>)
         prefix = "Matrix";
 
-    py::object name = array_name(prefix, Type, Array::Depth, Array::Size, scalar_mode);
-    auto cls = py::class_<Array, ek::ArrayBase, EnokiHolder<Array>>(
-        m, PyUnicode_AsUTF8AndSize(name.ptr(), nullptr));
+    py::tuple shape;
+
+    if constexpr (Array::Depth == 1)
+        shape = py::make_tuple(Array::Size);
+    else if constexpr (Array::Depth == 2)
+        shape = py::make_tuple(Array::Size, Value::Size);
+    else if constexpr (Array::Depth == 3)
+        shape = py::make_tuple(Array::Size, Value::Size, Value::Value::Size);
+    else if constexpr (Array::Depth == 4)
+        shape = py::make_tuple(Array::Size, Value::Size, Value::Value::Size,
+                               Value::Value::Value::Size);
+
+    py::object name = array_name(prefix, Type, shape, scalar_mode);
+    auto cls = py::class_<Array, EnokiHolder<Array>>(
+        m, PyUnicode_AsUTF8AndSize(name.ptr(), nullptr), array_base);
 
     auto &reg_types = py::detail::get_internals().registered_types_cpp;
 
@@ -45,7 +59,7 @@ auto bind_type(py::module &m, bool scalar_mode = false) {
 
     cls.attr("Value") = py::reinterpret_borrow<py::object>((PyObject *) type_obj);
     cls.attr("Type") = py::cast(Type);
-    cls.attr("Size") = py::cast(Array::Size);
+    cls.attr("Shape") = shape;
 
     if constexpr (Array::Size == ek::Dynamic) {
         cls.def("init_", [](Array &a, size_t size) {
@@ -62,7 +76,7 @@ auto bind_type(py::module &m, bool scalar_mode = false) {
 }
 
 template <typename Array>
-void bind_basic_methods(py::class_<Array, ek::ArrayBase, EnokiHolder<Array>> &cls) {
+void bind_basic_methods(py::class_<Array, EnokiHolder<Array>> &cls) {
     using Value = std::conditional_t<Array::IsMask, ek::mask_t<ek::value_t<Array>>,
                                      ek::value_t<Array>>;
     if (hasattr(cls, "entry"))
@@ -74,7 +88,8 @@ void bind_basic_methods(py::class_<Array, ek::ArrayBase, EnokiHolder<Array>> &cl
            a.set_entry(i, value);
        })
        .def("assign_", [](Array &a, const Array &b) {
-           a = b;
+           if (&a != &b)
+               a = b;
        })
        .def_static("empty_", &Array::empty_);
 
@@ -83,7 +98,7 @@ void bind_basic_methods(py::class_<Array, ek::ArrayBase, EnokiHolder<Array>> &cl
 }
 
 template <typename Array>
-void bind_generic_constructor(py::class_<Array, ek::ArrayBase, EnokiHolder<Array>> &cls) {
+void bind_generic_constructor(py::class_<Array, EnokiHolder<Array>> &cls) {
     cls.def(
         "__init__",
         [](py::detail::value_and_holder &v_h, py::args args) {
@@ -101,7 +116,7 @@ template <typename Array> auto bind(py::module &m, bool scalar_mode = false) {
 };
 
 template <typename Array>
-auto bind_full(py::class_<Array, ek::ArrayBase, EnokiHolder<Array>> &cls,
+auto bind_full(py::class_<Array, EnokiHolder<Array>> &cls,
                bool scalar_mode = false) {
     static_assert(ek::array_depth_v<Array> == 1);
     bind_basic_methods(cls);
@@ -418,6 +433,18 @@ auto bind_full(py::class_<Array, ek::ArrayBase, EnokiHolder<Array>> &cls,
     bind<ek::Array<ek::float32_array_t<Guide>, Dim>>(Module, Scalar);          \
     bind<ek::Array<ek::float64_array_t<Guide>, Dim>>(Module, Scalar);
 
+#define ENOKI_BIND_COMPLEX_TYPES(Module, Guide, Scalar)                        \
+    bind<ek::Complex<ek::float32_array_t<Guide>>>(Module, Scalar);             \
+    bind<ek::Complex<ek::float64_array_t<Guide>>>(Module, Scalar);             \
+
+#define ENOKI_BIND_QUATERNION_TYPES(Module, Guide, Scalar)                     \
+    bind<ek::Quaternion<ek::float32_array_t<Guide>>>(Module, Scalar);          \
+    bind<ek::Quaternion<ek::float64_array_t<Guide>>>(Module, Scalar);
+
+#define ENOKI_BIND_MATRIX_TYPES_DIM(Module, Guide, Scalar, Dim)                \
+    bind<ek::Matrix<ek::float32_array_t<Guide>, Dim>>(Module, Scalar);         \
+    bind<ek::Matrix<ek::float64_array_t<Guide>, Dim>>(Module, Scalar);
+
 #define ENOKI_BIND_ARRAY_TYPES(Module, Guide, Scalar)                          \
     ENOKI_BIND_ARRAY_TYPES_DIM(Module, Guide, Scalar, 0)                       \
     ENOKI_BIND_ARRAY_TYPES_DIM(Module, Guide, Scalar, 1)                       \
@@ -425,7 +452,32 @@ auto bind_full(py::class_<Array, ek::ArrayBase, EnokiHolder<Array>> &cls,
     ENOKI_BIND_ARRAY_TYPES_DIM(Module, Guide, Scalar, 3)                       \
     ENOKI_BIND_ARRAY_TYPES_DIM(Module, Guide, Scalar, 4)                       \
     ENOKI_BIND_ARRAY_TYPES_DYN(Module, Guide, Scalar)                          \
-    bind<ek::Complex<ek::float32_array_t<Guide>>>(Module, Scalar);
+    bind<ek::mask_t<ek::Array<ek::Array<Guide, 2>, 2>>>(Module, Scalar);       \
+    bind<ek::mask_t<ek::Array<ek::Array<Guide, 3>, 3>>>(Module, Scalar);       \
+    bind<ek::mask_t<ek::Array<ek::Array<Guide, 4>, 4>>>(Module, Scalar);       \
+    ENOKI_BIND_COMPLEX_TYPES(Module, Guide, Scalar)                            \
+    ENOKI_BIND_QUATERNION_TYPES(Module, Guide, Scalar)                         \
+    ENOKI_BIND_MATRIX_TYPES_DIM(Module, Guide, Scalar, 2)                      \
+    ENOKI_BIND_MATRIX_TYPES_DIM(Module, Guide, Scalar, 3)                      \
+    ENOKI_BIND_MATRIX_TYPES_DIM(Module, Guide, Scalar, 4)                      \
+                                                                               \
+    using Guide1 = ek::Array<Guide, 1>;                                        \
+    using Guide4 = ek::Array<Guide, 4>;                                        \
+    bind<ek::mask_t<ek::Array<ek::float32_array_t<Guide1>, 2>>>(Module,        \
+                                                                Scalar);       \
+    bind<ek::mask_t<ek::Array<ek::float32_array_t<Guide4>, 2>>>(Module,        \
+                                                                Scalar);       \
+    bind<ek::mask_t<ek::Array<Guide1, 4>>>(Module, Scalar);                    \
+    bind<ek::mask_t<ek::Array<ek::Array<Guide1, 4>, 4>>>(Module, Scalar);      \
+    bind<ek::mask_t<ek::Array<ek::Array<Guide4, 4>, 4>>>(Module, Scalar);      \
+    bind<ek::Array<ek::float32_array_t<Guide1>, 4>>(Module, Scalar);           \
+    bind<ek::Array<ek::float64_array_t<Guide1>, 4>>(Module, Scalar);           \
+    bind<ek::Array<ek::float32_array_t<Guide4>, 4>>(Module, Scalar);           \
+    bind<ek::Array<ek::float64_array_t<Guide4>, 4>>(Module, Scalar);           \
+    ENOKI_BIND_COMPLEX_TYPES(Module, Guide1, Scalar)                           \
+    ENOKI_BIND_COMPLEX_TYPES(Module, Guide4, Scalar)                           \
+    ENOKI_BIND_MATRIX_TYPES_DIM(Module, Guide1, Scalar, 4)                     \
+    ENOKI_BIND_MATRIX_TYPES_DIM(Module, Guide4, Scalar, 4)                     \
 
 #define ENOKI_BIND_ARRAY_BASE_1(Module, Guide, Scalar)                         \
     auto a_msk =                                                               \

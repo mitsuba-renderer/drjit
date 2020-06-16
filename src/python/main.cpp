@@ -23,11 +23,11 @@ const char* var_type_numpy[(int) VarType::Count] {
     "i8", "u8", "f2", "f4", "f8", "u8"
 };
 
-py::handle array_name, array_init, array_configure;
+py::handle array_base, array_name, array_init, array_configure;
 
-tsl::robin_pg_map<const enoki::ArrayBase *, py::handle> cache;
+tsl::robin_pg_map<const void *, py::handle> cache;
 
-void enoki_free_cache(const enoki::ArrayBase *array) {
+void enoki_free_cache(const void *array) {
     auto it = cache.find(array);
     if (it != cache.end()) {
         py::handle h = it.value();
@@ -36,7 +36,7 @@ void enoki_free_cache(const enoki::ArrayBase *array) {
     }
 }
 
-static py::dict enoki_get_cache(const enoki::ArrayBase *array) {
+static py::dict enoki_get_cache(const void *array) {
     if (!array)
         return py::none();
     auto it = cache.find(array);
@@ -49,6 +49,9 @@ static py::dict enoki_get_cache(const enoki::ArrayBase *array) {
         return py::reinterpret_borrow<py::dict>(it.value());
     }
 }
+
+/// Placeholder base of all Enoki arrays in the Python domain
+struct ArrayBase { };
 
 PYBIND11_MODULE(enoki_ext, m_) {
 #if defined(ENOKI_ENABLE_JIT)
@@ -89,7 +92,8 @@ PYBIND11_MODULE(enoki_ext, m_) {
     py::class_<ek::detail::reinterpret_flag>(array_detail, "reinterpret_flag")
         .def(py::init<>());
 
-    py::class_<ek::ArrayBase, EnokiHolder<ek::ArrayBase>>(m, "ArrayBase");
+    array_base = py::class_<ArrayBase, EnokiHolder<ArrayBase>>(m, "ArrayBase");
+
     py::register_exception<enoki::Exception>(m, "Exception");
     array_detail.def("reinterpret_scalar", &reinterpret_scalar);
     array_detail.def("get_cache", &enoki_get_cache);

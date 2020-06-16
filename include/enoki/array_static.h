@@ -34,8 +34,8 @@ namespace detail {
 }
 
 template <typename Value_, size_t Size_, bool IsMask_, typename Derived_>
-struct StaticArrayBase : ArrayBaseT<Value_, IsMask_, Derived_> {
-    using Base = ArrayBaseT<Value_, IsMask_, Derived_>;
+struct StaticArrayBase : ArrayBase<Value_, IsMask_, Derived_> {
+    using Base = ArrayBase<Value_, IsMask_, Derived_>;
     ENOKI_ARRAY_IMPORT(StaticArrayBase, Base)
 
     using typename Base::Derived;

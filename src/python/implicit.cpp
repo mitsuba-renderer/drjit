@@ -20,7 +20,7 @@ PyObject *implicit_conversion_handler(PyObject *obj, PyTypeObject *type_) {
     } else if (strncmp(tp_name_src, "enoki.", 6) == 0) {
         if (py::cast<size_t>(py::handle(obj).attr("Size")) == Size) {
             pass = true;
-        } else if (py::handle(obj).get_type().is(type.attr("Type"))) {
+        } else if (py::handle(obj).get_type().is(type.attr("Value"))) {
             pass = true;
         }
     }

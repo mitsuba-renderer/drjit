@@ -20,7 +20,7 @@
 NAMESPACE_BEGIN(enoki)
 
 template <typename Value_>
-struct CUDAArray : ArrayBaseT<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
+struct CUDAArray : ArrayBase<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
     static_assert(std::is_scalar_v<Value_>,
                   "CUDA Arrays can only be created over scalar types!");
 

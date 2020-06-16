@@ -31,28 +31,53 @@ NAMESPACE_BEGIN(enoki)
 #define ENOKI_ARRAY_FALLBACK_CONSTRUCTORS(Name)                                \
     template <typename Value2, typename D2, typename D = Derived_,             \
               enable_if_t<D::Size == D2::Size && D::Depth == D2::Depth> = 0>   \
-    Name(const ArrayBaseT<Value2, false, D2> &v) {                             \
+    Name(const ArrayBase<Value2, false, D2> &v) {                              \
         ENOKI_CHKSCALAR("Copy constructor (conversion)");                      \
         for (size_t i = 0; i < derived().size(); ++i)                          \
             derived().entry(i) = (Value) v.derived().entry(i);                 \
     }                                                                          \
     template <typename Value2, typename D2, typename D = Derived_,             \
               enable_if_t<D::Size == D2::Size && D::Depth == D2::Depth> = 0>   \
-    Name(const ArrayBaseT<Value2, IsMask_, D2> &v, detail::reinterpret_flag) { \
+    Name(const ArrayBase<Value2, IsMask_, D2> &v, detail::reinterpret_flag) {  \
         ENOKI_CHKSCALAR("Copy constructor (reinterpret_cast)");                \
         for (size_t i = 0; i < derived().size(); ++i)                          \
             derived().entry(i) = reinterpret_array<Value>(v[i]);               \
     }
 
 
-/// Generic array base class
-struct ArrayBase {
+/// Array base class templated via the curiously recurring template pattern
+template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
     // -----------------------------------------------------------------------
     //! @{ \name Basic declarations (may be overridden in subclasses)
     // -----------------------------------------------------------------------
 
+    /// Type underlying the array
+    using Value = Value_;
+
+    /// Scalar data type all the way at the lowest level
+    using Scalar = scalar_t<Value_>;
+
+    /// Helper structure for dispatching vectorized method calls
+    using CallSupport =
+        call_support<std::decay_t<std::remove_pointer_t<Value_>>, Derived_>;
+
     /// Is this an Enoki array?
     static constexpr bool IsEnoki = true;
+
+    /// Specifies how deeply nested this array is
+    static constexpr size_t Depth = 1 + array_depth_v<Value>;
+
+    /// Is this a mask array?
+    static constexpr bool IsMask = IsMask_;
+
+    /// Is this an array of values that can be added, multiplied, etc.?
+    static constexpr bool IsArithmetic = std::is_arithmetic_v<Scalar> && !IsMask;
+
+    /// Is this an array of signed or unsigned integer values?
+    static constexpr bool IsIntegral = std::is_integral_v<Scalar> && !IsMask;
+
+    /// Is this an array of floating point values?
+    static constexpr bool IsFloat = std::is_floating_point_v<Scalar> && !IsMask;
 
     /// Does this array map operations onto packed vector instructions?
     static constexpr bool IsPacked = false;
@@ -80,43 +105,6 @@ struct ArrayBase {
 
     /// Does this array represent the result of a 'masked(...)' expression?
     static constexpr bool IsMaskedArray = false;
-
-    //! @}
-    // -----------------------------------------------------------------------
-};
-
-/// Array base class templated via the curiously recurring template pattern
-template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : ArrayBase {
-    using Base = ArrayBase;
-
-    // -----------------------------------------------------------------------
-    //! @{ \name Basic declarations (may be overridden in subclasses)
-    // -----------------------------------------------------------------------
-
-    /// Type underlying the array
-    using Value = Value_;
-
-    /// Scalar data type all the way at the lowest level
-    using Scalar = scalar_t<Value_>;
-
-    /// Helper structure for dispatching vectorized method calls
-    using CallSupport =
-        call_support<std::decay_t<std::remove_pointer_t<Value_>>, Derived_>;
-
-    /// Specifies how deeply nested this array is
-    static constexpr size_t Depth = 1 + array_depth_v<Value>;
-
-    /// Is this a mask array?
-    static constexpr bool IsMask = IsMask_;
-
-    /// Is this an array of values that can be added, multiplied, etc.?
-    static constexpr bool IsArithmetic = std::is_arithmetic_v<Scalar> && !IsMask;
-
-    /// Is this an array of signed or unsigned integer values?
-    static constexpr bool IsIntegral = std::is_integral_v<Scalar> && !IsMask;
-
-    /// Is this an array of floating point values?
-    static constexpr bool IsFloat = std::is_floating_point_v<Scalar> && !IsMask;
 
     /// Does this array compute derivatives using automatic differentation?
     static constexpr bool IsDiff = is_diff_array_v<Value_>;

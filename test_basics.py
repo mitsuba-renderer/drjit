@@ -179,13 +179,15 @@ def all_arrays(cond=lambda x: True):
     a += ek.llvm.__dict__.items()
     a += ek.llvm.__dict__.items()
     return [v for k, v in a if isinstance(v, type) and cond(v)
-            and not ek.is_special_v(v)]
+            and not ek.is_special_v(v)
+            and not ek.array_depth_v(v) >= 3
+            and not (ek.array_depth_v(v) >= 2 and 'scalar' in v.__module__)]
 
 
 # Run various standard operations on *every available* type
 @pytest.mark.parametrize("t", all_arrays())
 def test05_scalar(t):
-    if ek.array_size_v(t) == 0:
+    if not ek.is_array_v(t) or ek.array_size_v(t) == 0:
         return
     if t.IsCUDA:
         ek.set_device(0)
@@ -243,6 +245,11 @@ def test05_scalar(t):
         assert ek.dot(t2, t2) == t.Value(4 * len(t2))
         assert ek.dot_async(t2, t2) == t(4 * len(t2))
 
+        value = t(1)
+        value[ek.eq(value, t(1))] = t(2)
+        value[ek.eq(value, t(3))] = t(5)
+        assert value == t(2)
+
 
 def test06_reinterpret_cast():
     I3 = ek.scalar.Array3i
@@ -278,7 +285,8 @@ def test07_gather_ravel_unravel(pkg):
     assert repr(d) == str_1
 
 
-@pytest.mark.parametrize("t", all_arrays(lambda a: a.IsFloat))
+@pytest.mark.parametrize("t", all_arrays(lambda a:
+                                         getattr(a, 'IsFloat', False)))
 def test07_sincos(t):
     def poly2(x, c0, c1, c2):
         x2 = ek.sqr(x)
@@ -330,4 +338,6 @@ def test07_sincos(t):
         ek.set_device(0)
     elif t.IsLLVM:
         ek.set_device(-1)
-    print(sincos(t(1)))
+    s, c = sincos(t(1))
+    if t.Size != 0:
+        assert ek.allclose(s**2 + c**2, 1)

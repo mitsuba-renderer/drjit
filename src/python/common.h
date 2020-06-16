@@ -19,7 +19,7 @@ extern py::object reinterpret_scalar(const py::object &source,
 
 extern const uint32_t var_type_size[(int) VarType::Count];
 
-extern void enoki_free_cache(const enoki::ArrayBase *array);
+extern void enoki_free_cache(const void *array);
 
 extern py::capsule to_dlpack(const py::object &owner, uint64_t data,
                              VarType type, int device, const py::tuple &shape,

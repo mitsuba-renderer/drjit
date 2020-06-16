@@ -90,11 +90,11 @@ template <typename T> ENOKI_INLINE void ad_dec_ref(uint32_t index) noexcept(true
 NAMESPACE_END(detail)
 
 template <typename Type_>
-struct DiffArray : ArrayBaseT<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>> {
+struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>> {
     static_assert(std::is_scalar_v<Type_> || (is_dynamic_array_v<Type_> && array_depth_v<Type_> == 1),
                   "DiffArray template parameter must either be a scalar (e.g. "
                   "float) or a dynamic array of depth 1.");
-    using Base = ArrayBaseT<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>;
+    using Base = ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>;
 
     template <typename> friend struct DiffArray;
 

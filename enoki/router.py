@@ -156,7 +156,7 @@ def _var_promote_select(a0, a1, a2):
 
 
 def _replace_scalar(cls, vt):
-    name = _array_name(cls.Prefix, vt, cls.Depth, cls.Size, cls.IsScalar)
+    name = _array_name(cls.Prefix, vt, cls.Shape, cls.IsScalar)
     module = _modules.get(cls.__module__)
     return getattr(module, name)
 
@@ -215,9 +215,11 @@ def shape(a):
 def device(value=None):
     if value is None:
         return _ek.detail.device()
-    elif value.IsDiff:
+    elif _ek.array_depth_v(value) > 1:
+        return device(value[0])
+    elif _ek.is_diff_array_v(value):
         return device(_ek.detach(value))
-    elif value.IsJIT:
+    elif _ek.is_jit_array_v(value):
         return _ek.detail.device(value.index_())
     else:
         return -1
@@ -231,11 +233,25 @@ def _repr_impl(self, shape, buf, *idx):
     """Implementation detail of op_repr()"""
     k = len(shape) - len(idx)
     if k == 0:
-        if self.IsComplex and idx[0] > 0:
-            value = self[idx]
-            buf.write(('+ ' if value >= 0 else '- ') + repr(abs(value)) + 'i')
-        else:
-            buf.write(repr(self[idx]))
+        el = idx[0]
+
+        if self.IsQuaternion:
+            idx = (3 if el == 0 else (el - 1), *idx[1:])
+
+        value = self
+        for k in idx:
+            value = value.entry_(k)
+        value_str = repr(value)
+
+        if (self.IsComplex or self.IsQuaternion) and el > 0:
+            if value_str[0] == '-':
+                value_str = '- ' + value_str[1:]
+            else:
+                value_str = '+ ' + value_str
+
+            value_str += '_ijk'[el]
+
+        buf.write(value_str)
     else:
         size = shape[k - 1]
         buf.write('[')
@@ -298,11 +314,7 @@ _entry_evals = 0
 
 def op_getitem(self, index):
     global _entry_evals
-    if isinstance(index, tuple):
-        for i in index:
-            self = op_getitem(self, i)
-        return self
-    else:
+    if isinstance(index, int):
         size = len(self)
         if size == 1:
             index = 0
@@ -313,26 +325,49 @@ def op_getitem(self, index):
             _entry_evals += 1
             return self.entry_(index)
         else:
-            raise IndexError("Index %i exceeds the array "
-                             "bounds %i!" % (index, size))
+            raise IndexError("Tried to read from array index %i, which "
+                             "exceeds its size (%i)!" % (index, size))
+    elif isinstance(index, tuple):
+        if self.IsMatrix:
+            index = (index[1], index[0], *index[2:])
+        for i in index:
+            self = op_getitem(self, i)
+        return self
+    elif _ek.is_mask_v(index):
+        raise Exception("Indexing via masks is only allowed in the case of "
+                        "assignments, e.g.: array[mask] = value")
+    else:
+        raise Exception("Invalid array index! (must be an integer or a tuple "
+                        "of integers!)")
 
 
 def op_setitem(self, index, value):
-    global _entry_evals
-    if isinstance(index, tuple):
-        for i in index[:-1]:
-            self = op_getitem(self, i)
-        op_setitem(self, index[-1], value)
-    else:
+    if isinstance(index, int):
         size = len(self)
         if index < 0:
             index = size + index
         if index >= 0 and index < size:
+            global _entry_evals
             _entry_evals += 1
             self.set_entry_(index, value)
         else:
-            raise IndexError("Index %i exceeds the array "
-                             "bounds %i!" % (index, size))
+            raise IndexError("Tried to write to array index %i, which "
+                             "exceeds its size (%i)!" % (index, size))
+    elif isinstance(index, tuple):
+        if len(index) > 1:
+            if self.IsMatrix:
+                index = (index[1], index[0], *index[2:])
+            value2 = op_getitem(self, index[0])
+            op_setitem(value2, index[1:], value)
+            op_setitem(self, index[0], value2)
+        else:
+            op_setitem(self, index[0], value)
+    elif _ek.is_mask_v(index):
+        self.assign_(_ek.select(index, value, self))
+    else:
+        raise Exception("Invalid array index! (must be an integer or a tuple "
+                        "of integers!)")
+    return self
 
 
 def reinterpret_array(target_type, value,
@@ -520,7 +555,9 @@ def op_isub(a, b):
 
 
 def op_mul(a, b):
-    if type(a) is not type(b):
+    if type(a) is not type(b) \
+       and not (isinstance(b, int) or isinstance(b, float)) \
+       and not (_ek.is_matrix_v(a) and _ek.is_vector_v(b)):
         a, b = _var_promote(a, b)
     return a.mul_(b)
 
@@ -672,13 +709,6 @@ def op_ixor(a, b):
     if type(a) is not type(b) and type(b) is not _ek.mask_t(a):
         a, b = _var_promote_mask(a, b)
     return a.ixor_(b)
-
-
-def xor_(a, b):
-    if type(a) is bool and type(b) is bool:
-        return a != b
-    else:
-        return a ^ b
 
 
 def op_lshift(a, b):
@@ -1198,6 +1228,15 @@ def atanh(a):
     else:
         return _math.atanh(a)
 
+
+def deg_to_rad(a):
+    return a * (180.0 / _ek.Pi)
+
+
+def rad_to_deg(a):
+    return a * (_ek.Pi / 180.0)
+
+
 # -------------------------------------------------------------------
 #                       Horizontal operations
 # -------------------------------------------------------------------
@@ -1428,9 +1467,64 @@ def normalize(a):
 def conj(a):
     if _ek.is_complex_v(a):
         return type(a)(a.real, -a.imag)
+    elif _ek.is_quaternion_v(a):
+        return type(a)(-a.x, -a.y, -a.z, a.w)
     else:
         return a
 
+
+# -------------------------------------------------------------------
+#    Transformations, matrices, operations for 3D vector spaces
+# -------------------------------------------------------------------
+
+def cross(a, b):
+    if _ek.array_size_v(a) != 3 or _ek.array_size_v(a) != 3:
+        raise Exception("cross(): requires 3D input arrays!")
+
+    ta, tb = type(a), type(b)
+
+    return fmsub(ta(a.y, a.z, a.x), tb(b.z, b.x, b.y),
+                 ta(a.z, a.x, a.y) * tb(b.y, b.z, b.x))
+
+
+def rotate(target_type, axis, angle):
+    if target_type.IsQuaternion:
+        s, c = sincos(angle * .5)
+        quat = target_type()
+        quat.imag = axis * s
+        quat.real = c
+        return quat
+    else:
+        raise Exception("Unsupported target type!")
+
+
+def transpose(a):
+    if _ek.is_matrix_v(a):
+        result = type(a)()
+        for i in range(a.Size):
+            for j in range(a.Size):
+                result[j, i] = a[i, j]
+        return result
+    else:
+        return a
+
+
+def diag(a):
+    if _ek.is_matrix_v(a):
+        result = a.Value()
+        for i in range(a.Size):
+            result[i] = a[i, i]
+        return result
+    elif _ek.is_static_array_v(a):
+        name = _array_name('Matrix', a.Type, (a.Size, *a.Shape), a.IsScalar)
+        module = _modules.get(a.__module__)
+        cls = getattr(module, name)
+        result = _ek.zero(cls)
+        for i in range(a.Size):
+            result[i, i] = a[i]
+        return result
+    else:
+        raise Exception('Unsupported type!')
 
 # -------------------------------------------------------------------
 #                     Automatic differentiation

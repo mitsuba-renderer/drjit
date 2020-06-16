@@ -364,6 +364,16 @@ template <typename T> ENOKI_INLINE T log2i(T value) {
     return scalar_t<T>(sizeof(scalar_t<T>) * 8 - 1) - lzcnt(value);
 }
 
+//// Convert radians to degrees
+template <typename T> ENOKI_INLINE auto rad_to_deg(const T &a) {
+    return a * scalar_t<T>(180.0 / Pi<double>);
+}
+
+/// Convert degrees to radians
+template <typename T> ENOKI_INLINE auto deg_to_rad(const T &a) {
+    return a * scalar_t<T>(Pi<double> / 180.0);
+}
+
 // -----------------------------------------------------------------------
 //! @{ \name Horizontal operations: shuffle/gather/scatter/reductions..
 // -----------------------------------------------------------------------
@@ -398,14 +408,6 @@ ENOKI_INLINE auto hmean_async(const Array &a) {
     else
         return a;
 }
-
-/// Extract the low elements from an array of even size
-template <typename Array, enable_if_t<(array_size_v<Array> > 1 && array_size_v<Array> != Dynamic)> = 0>
-ENOKI_INLINE auto low(const Array &a) { return a.derived().low_(); }
-
-/// Extract the high elements from an array of even size
-template <typename Array, enable_if_t<(array_size_v<Array> > 1 && array_size_v<Array> != Dynamic)> = 0>
-ENOKI_INLINE auto high(const Array &a) { return a.derived().high_(); }
 
 
 template <typename T1, typename T2, enable_if_array_any_t<T1, T2> = 0>
@@ -504,27 +506,26 @@ ENOKI_INLINE auto abs_dot_async(const T1 &a1, const T2 &a2) {
     return abs(dot_async(a1, a2));
 }
 
-template <typename T> ENOKI_INLINE auto norm(const T &v) {
-    return sqrt(dot(v, v));
+template <typename T> ENOKI_INLINE auto squared_norm(const T &v) {
+    return hsum(v * v);
 }
 
-template <typename T> ENOKI_INLINE auto squared_norm(const T &v) {
-    return dot(v, v);
+template <typename T> ENOKI_INLINE auto norm(const T &v) {
+    return sqrt(squared_norm(v));
 }
 
 template <typename T> ENOKI_INLINE auto normalize(const T &v) {
     return v * rsqrt(squared_norm(v));
 }
 
-template <typename T1, typename T2,
-          enable_if_t<array_size_v<T1> == 3 &&
-                      array_size_v<T2> == 3> = 0>
+template <typename T1, typename T2>
 ENOKI_INLINE auto cross(const T1 &v1, const T2 &v2) {
+    static_assert(array_size_v<T1> == 3 && array_size_v<T2> == 3,
+            "cross(): requires 3D input arrays!");
+
 #if defined(ENOKI_ARM_32) || defined(ENOKI_ARM_64)
-    return fnmadd(
-        shuffle<2, 0, 1>(v1), shuffle<1, 2, 0>(v2),
-        shuffle<1, 2, 0>(v1) * shuffle<2, 0, 1>(v2)
-    );
+    return fnmadd(shuffle<2, 0, 1>(v1), shuffle<1, 2, 0>(v2),
+                  shuffle<1, 2, 0>(v1) * shuffle<2, 0, 1>(v2));
 #else
     return fmsub(shuffle<1, 2, 0>(v1),  shuffle<2, 0, 1>(v2),
                  shuffle<2, 0, 1>(v1) * shuffle<1, 2, 0>(v2));
@@ -901,7 +902,6 @@ template <typename Value> ENOKI_INLINE Value safe_acos(const Value &a) {
 //! @{ \name JIT compilation and autodiff-related
 // -----------------------------------------------------------------------
 
-
 template <typename T> ENOKI_INLINE bool schedule(const T &value) {
     if constexpr (is_jit_array_v<T>) {
         if constexpr (is_jit_array_v<value_t<T>>) {
@@ -1140,7 +1140,7 @@ template <typename T> struct MaskedValue {
     bool m = false;
 };
 
-template <typename T> struct MaskedArray : ArrayBaseT<value_t<T>, is_mask_v<T>, MaskedArray<T>> {
+template <typename T> struct MaskedArray : ArrayBase<value_t<T>, is_mask_v<T>, MaskedArray<T>> {
     using Mask     = mask_t<T>;
     static constexpr size_t Size = array_size_v<T>;
     static constexpr bool IsMaskedArray = true;
@@ -1184,6 +1184,96 @@ ENOKI_INLINE auto masked(T &value, const Mask &mask) {
             "masked(): don't know what to do with these inputs. Did you forget "
             "an ENOKI_STRUCT() declaration for type to be masked?");
         return detail::MaskedValue<T>{ value, mask };
+    }
+}
+
+//! @}
+// -----------------------------------------------------------------------
+
+// -----------------------------------------------------------------------
+//! @{ \name Functions for accessing sub-regions of an array
+// -----------------------------------------------------------------------
+
+/// Extract the low elements from an array of even size
+template <typename Array, enable_if_t<(array_size_v<Array> > 1 && array_size_v<Array> != Dynamic)> = 0>
+ENOKI_INLINE auto low(const Array &a) { return a.derived().low_(); }
+
+/// Extract the high elements from an array of even size
+template <typename Array, enable_if_t<(array_size_v<Array> > 1 && array_size_v<Array> != Dynamic)> = 0>
+ENOKI_INLINE auto high(const Array &a) { return a.derived().high_(); }
+
+namespace detail {
+    template <typename Return, size_t Offset, typename T, size_t... Index>
+    static ENOKI_INLINE Return extract(const T &a, std::index_sequence<Index...>) {
+        return Return(a.entry(Index + Offset)...);
+    }
+}
+
+template <size_t Size, typename T> ENOKI_INLINE Array<value_t<T>, Size> head(const T &a) {
+    static_assert(is_static_array_v<T>, "head(): input must be a static Enoki array!");
+
+    if constexpr (T::Size == Size ||
+                  Array<value_t<T>, Size>::ActualSize == T::ActualSize) {
+        return a;
+    } else if constexpr (T::Size1 == Size) {
+        return low(a);
+    } else {
+        static_assert(Size <= array_size_v<T>, "Array size mismatch");
+        return detail::extract<Array<value_t<T>, Size>, 0>(
+            a, std::make_index_sequence<Size>());
+    }
+}
+
+template <size_t Size, typename T> ENOKI_INLINE Array<value_t<T>, Size> tail(const T &a) {
+    static_assert(is_static_array_v<T>, "tail(): input must be a static Enoki array!");
+
+    if constexpr (T::Size == Size) {
+        return a;
+    } else if constexpr (T::Size2 == Size) {
+        return high(a);
+    } else {
+        static_assert(Size <= array_size_v<T>, "Array size mismatch");
+        return detail::extract<Array<value_t<T>, Size>, T::Size - Size>(
+            a, std::make_index_sequence<Size>());
+    }
+}
+
+template <typename T1, typename T2, enable_if_array_any_t<T1, T2> = 0>
+auto concat(const T1 &a1, const T2 &a2) {
+    static_assert(is_array_any_v<T1, T2>,
+                  "concat(): at least one of the inputs must be an array!");
+    static_assert(std::is_same_v<scalar_t<T1>, scalar_t<T2>>,
+                  "concat(): Scalar types must be identical");
+
+    constexpr size_t Size1 = array_size_v<T1>,
+                     Size2 = array_size_v<T2>;
+
+    using Result = Array<value_t<expr_t<T1, T2>>, Size1 + Size2>;
+
+    if constexpr (Result::Size1 == T1::Size && Result::Size2 == T2::Size2) {
+        return Result(a1, a2);
+    } else {
+        Result result;
+
+        if constexpr (is_array_v<T1>) {
+            if constexpr (Result::Size == T1::ActualSize) {
+                result = a1.derived();
+            } else {
+                for (size_t i = 0; i < Size1; ++i)
+                    result.entry(i) = a1.derived().entry(i);
+            }
+        } else {
+            result.entry(0) = a1;
+        }
+
+        if constexpr (is_array_v<T2>) {
+            for (size_t i = 0; i < Size2; ++i)
+                result.entry(i + Size1) = a2.derived().entry(i);
+        } else {
+            result.entry(Size1) = a2;
+        }
+
+        return result;
     }
 }
 

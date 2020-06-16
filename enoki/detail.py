@@ -12,7 +12,7 @@ VAR_TYPE_SUFFIX = [
 ]
 
 
-def array_name(prefix, vt, depth, size, scalar):
+def array_name(prefix, vt, shape, scalar):
     """
     Determines the name of an array (e.g. Float32, ArrayXf32, etc.). This
     function is used when arrays are created during initialization of the Enoki
@@ -25,10 +25,7 @@ def array_name(prefix, vt, depth, size, scalar):
     Parameter ``vt`` (``enoki.VarType``):
         Underlying scalar type (e.g. ``VarType.Int32``) of the desired array
 
-    Parameter ``depth`` (``int``):
-        Depth of the desired array type (0-2D supported)
-
-    Parameter ``size`` (``int``):
+    Parameter ``size`` (``Tuple[int]``):
         Number of components
 
     Parameter ``scalar`` (``bool``):
@@ -36,12 +33,17 @@ def array_name(prefix, vt, depth, size, scalar):
         convention, which is indicated via this parameter.
     """
 
-    if depth == 0 or (not scalar and depth == 1):
+    if not scalar:
+        shape = shape[:-1]
+    if prefix == 'Matrix':
+        shape = shape[1:]
+
+    if len(shape) == 0:
         return VAR_TYPE_NAME[int(vt)]
 
     return "%s%s%s" % (
         prefix,
-        'X' if size == enoki.Dynamic else str(size),
+        ''.join(repr(s) if s != enoki.Dynamic else 'X' for s in shape),
         VAR_TYPE_SUFFIX[int(vt)]
     )
 
@@ -127,19 +129,19 @@ def array_init(self, args):
             t = type(o)
             mod = t.__module__
             name = t.__name__
+            is_array = issubclass(t, enoki.ArrayBase)
 
-            if issubclass(t, enoki.ArrayBase) or \
-               issubclass(t, list) or \
-               issubclass(t, tuple):
+            if is_array or issubclass(t, list) or issubclass(t, tuple):
                 os = len(o)
                 if dynamic:
                     size = os
                     self.init_(size)
                 if size == 0:
                     pass
-                elif size != os:
+                elif size != os or (is_array and self.Size != o.Size):
                     self.broadcast_(value_type(o)
-                                    if not isinstance(o, value_type) else o)
+                                    if not isinstance(o, value_type)
+                                    and not self.IsMatrix else o)
                 else:
                     if self.IsJIT and getattr(t, 'IsJIT', 0) and \
                        self.Depth == 1 and t.Depth == 1:
@@ -149,7 +151,7 @@ def array_init(self, args):
                             'to %s. Did you forget a cast or detach operation?'
                             % (str(type(o)), str(type(self))))
 
-                    if isinstance(o[0], value_type):
+                    if isinstance(o[0], value_type) or self.IsMatrix:
                         for i in range(size):
                             self.set_entry_(i, o[i])
                     else:
@@ -159,8 +161,7 @@ def array_init(self, args):
                 if dynamic:
                     size = 1
                     self.init_(size)
-                self.broadcast_(value_type(o)
-                                if not isinstance(o, value_type) else o)
+                self.broadcast_(o)
             elif issubclass(t, complex) and self.IsComplex:
                 self.set_entry_(0, o.real)
                 self.set_entry_(1, o.imag)
@@ -213,10 +214,13 @@ def array_init(self, args):
                 self.init_(size)
             for i in range(size):
                 self.set_entry_(i, value_type(args[i]))
+        elif self.IsMatrix and n == self.Size * self.Size:
+            tbl = [[args[i*self.Size + j] for i in range(self.Size)]
+                   for j in range(self.Size)]
+            array_init(self, tbl)
         else:
             raise Exception('Invalid size!')
     except Exception as e:
-        print(e)
         err = e
 
     if err is not None:
@@ -273,6 +277,20 @@ def prop_w(self, value):
     self[3] = value
 
 
+@property
+def prop_xyz(self):
+    return self.Imag(self[0], self[1], self[2])
+
+
+@prop_xyz.setter
+def prop_xyz(self, value):
+    if not isinstance(value, self.Imag):
+        value = self.Imag(value)
+    self.x = value.x
+    self.y = value.y
+    self.z = value.z
+
+
 def array_configure(cls):
     """Populates an Enoki array class with extra type trait fields"""
     depth = 1
@@ -285,6 +303,7 @@ def array_configure(cls):
     name = cls.__name__
     mod = cls.__module__
 
+    cls.Size = cls.Shape[0]
     cls.Depth = depth
     cls.Scalar = value
     cls.IsEnoki = True
@@ -302,6 +321,8 @@ def array_configure(cls):
     cls.IsComplex = 'Complex' in name
     cls.IsQuaternion = 'Quaternion' in name
     cls.IsSpecial = cls.IsMatrix or cls.IsComplex or cls.IsQuaternion
+    cls.IsVector = cls.Size != enoki.Dynamic and not \
+        (cls.IsPacket and cls.Depth == 1) and not cls.IsSpecial
 
     if cls.IsSpecial:
         for i, c in enumerate(name):
@@ -312,8 +333,17 @@ def array_configure(cls):
         if cls.IsComplex:
             cls.real = prop_x
             cls.imag = prop_y
+        elif cls.IsQuaternion:
+            cls.real = prop_w
+            cls.imag = prop_xyz
+            cls.Imag = getattr(sys.modules.get(mod),
+                               name.replace('Quaternion4', 'Array3'))
+            cls.Complex = getattr(sys.modules.get(mod),
+                                  name.replace('Quaternion4', 'Complex2'))
     else:
         cls.Prefix = 'Array'
+
+    if not cls.IsSpecial or cls.IsQuaternion:
         if cls.Size > 0:
             cls.x = prop_x
         if cls.Size > 1:
@@ -325,5 +355,5 @@ def array_configure(cls):
 
     cls.MaskType = getattr(
         sys.modules.get(mod),
-        array_name("Array", enoki.VarType.Bool, cls.Depth,
-                   cls.Size, cls.IsScalar))
+        array_name("Array", enoki.VarType.Bool,
+                   cls.Shape, cls.IsScalar))

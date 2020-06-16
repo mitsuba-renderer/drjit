@@ -184,13 +184,42 @@ def isub_(a0, a1):
 def mul_(a0, a1):
     if not a0.IsArithmetic:
         raise Exception("mul(): requires arithmetic operands!")
+    if isinstance(a1, int) or isinstance(a1, float):
+        # Avoid type promotion in scalars multiplication, which would
+        # be costly for special types (matrices, quaternions, etc.)
+        sr = len(a0)
+        ar = a0.empty_(sr if a0.Size == Dynamic else 0)
+        for i in range(len(a0)):
+            ar[i] = a0[i] * a1
+        return ar
+    elif a0.IsMatrix and a1.IsVector and a0.Size == a1.Size:
+        ar = a0[0] * a1[0]
+        for i in range(a1.Size):
+            ar = _ek.fmadd(a0[i], a1[i], ar)
+        return ar
+
     ar, sr = _check2(a0, a1)
     if not a0.IsSpecial:
         for i in range(sr):
             ar[i] = a0[i] * a1[i]
     elif a0.IsComplex:
-        ar.real = _ek.fmsub(a0.real, a1.real, a0.imag*a1.imag)
-        ar.imag = _ek.fmadd(a0.real, a1.imag, a0.imag*a1.real)
+        ar.real = _ek.fmsub(a0.real, a1.real, a0.imag * a1.imag)
+        ar.imag = _ek.fmadd(a0.real, a1.imag, a0.imag * a1.real)
+    elif a0.IsQuaternion:
+        tbl = (4, 3, -2, 1, -3, 4, 1, 2, 2, -1, 4, 3, -1, -2, -3, 4)
+        for i in range(4):
+            accum = 0
+            for j in range(4):
+                idx = tbl[i*4 + j]
+                value = a1[abs(idx) - 1]
+                accum = _ek.fmadd(a0[j], value if idx > 0 else -value, accum)
+            ar[i] = accum
+    elif a0.IsMatrix:
+        for j in range(a0.Size):
+            accum = a0[0] * _ek.full(a0.Value, a1[0, j])
+            for i in range(1, a0.Size):
+                accum = _ek.fmadd(a0[i], _ek.full(a0.Value, a1[i, j]), accum)
+            ar[j] = accum
     else:
         raise Exception("mul(): unsupported array type!")
     return ar
@@ -217,7 +246,7 @@ def truediv_(a0, a1):
         for i in range(sr):
             ar[i] = a0[i] / a1[i]
         return ar
-    elif a0.IsComplex:
+    elif a0.IsSpecial:
         return a0 * a1.rcp_()
     else:
         raise Exception("truediv(): unsupported array type!")
@@ -455,6 +484,11 @@ def sqrt_(a0):
         im = _ek.select(m, t2, _ek.copysign(t1, a0.imag))
         ar.real = _ek.select(m, t1, abs(t2))
         ar.imag = _ek.select(zero, 0, im)
+    elif a0.IsQuaternion:
+        ri = _ek.norm(a0.imag)
+        cs = _ek.sqrt(a0.Complex(a0.real, ri))
+        ar.imag = a0.imag * (_ek.rcp(ri) * cs.imag)
+        ar.real = cs.real
     else:
         raise Exception("sqrt(): unsupported array type!")
     return ar
@@ -479,10 +513,8 @@ def rcp_(a0):
     if not a0.IsSpecial:
         for i in range(sr):
             ar[i] = _ek.rcp(a0[i])
-    elif a0.IsComplex:
-        scale = _ek.rcp(_ek.squared_norm(a0))
-        ar.real = a0.real * scale
-        ar.imag = -a0.imag * scale
+    elif a0.IsComplex or a0.IsQuaternion:
+        return _ek.conj(a0) * _ek.rcp(_ek.squared_norm(a0))
     else:
         raise Exception('rcp(): unsupported array type!')
     return ar
@@ -496,8 +528,8 @@ def abs_(a0):
         for i in range(sr):
             ar[i] = _ek.abs(a0[i])
         return ar
-    elif a0.IsComplex:
-        return _ek.sqrt(_ek.fmadd(a0.real, a0.real, a0.imag * a0.imag))
+    elif a0.IsSpecial:
+        return _ek.norm(a0)
     else:
         raise Exception('abs(): unsupported array type!')
 
@@ -788,6 +820,13 @@ def exp_(a0):
         exp_r = _ek.exp(a0.real)
         ar.real = exp_r * c
         ar.imag = exp_r * s
+    elif a0.IsQuaternion:
+        qi = a0.imag
+        ri = _ek.norm(qi)
+        exp_w = _ek.exp(a0.real)
+        s, c = _ek.sincos(ri)
+        ar.imag = qi * (s * exp_w / ri)
+        ar.real = c * exp_w
     else:
         raise Exception("exp(): unsupported array type!")
     return ar
@@ -820,6 +859,13 @@ def log_(a0):
     elif a0.IsComplex:
         ar.real = .5 * _ek.log(_ek.squared_norm(a0))
         ar.imag = _ek.arg(a0)
+    elif a0.IsQuaternion:
+        qi_n = _ek.normalize(a0.imag)
+        rq = _ek.norm(a0)
+        acos_rq = _ek.acos(a0.real / rq)
+        log_rq = _ek.log(rq)
+        ar.imag = qi_n * acos_rq
+        ar.real = log_rq
     else:
         raise Exception("log(): unsupported array type!")
     return ar
@@ -1130,10 +1176,19 @@ def broadcast_(self, value):
     if not self.IsSpecial:
         for i in range(len(self)):
             self.set_entry_(i, value)
-    elif self.IsComplex or self.IsQuaternion:
+    elif self.IsComplex:
         self.set_entry_(0, value)
-        for i in range(1, len(self)):
+        self.set_entry_(1, 0)
+    elif self.IsQuaternion:
+        for i in range(3):
             self.set_entry_(i, 0)
+        self.set_entry_(3, value)
+    elif self.IsMatrix:
+        t = self.Value
+        for i in range(len(self)):
+            c = _ek.zero(t)
+            c.set_entry_(i, t.Value(value))
+            self.set_entry_(i, c)
     else:
         raise Exception("broadcast_(): don't know how to handle this type!")
 
@@ -1218,6 +1273,15 @@ def export_(a, migrate_to_host, version):
         for i in range(ndim):
             strides[i] = temp
             temp *= shape[i]
+
+        print({
+            'shape': shape,
+            'strides': tuple(strides),
+            'typestr': '<' + a.Type.NumPy,
+            'data': (a.data_(), False),
+            'version': version,
+            'device': -1}
+        )
 
         return {
             'shape': shape,
