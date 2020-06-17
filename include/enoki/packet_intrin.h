@@ -13,49 +13,53 @@
 
 #pragma once
 
-#if !defined(__IMMINTRIN_H)
+#if !defined(_MSC_VER)
+#  if !defined(__IMMINTRIN_H) && defined(__clang__)
 /* We want to be able to selectively include intrinsics. For instance, it's
    often not desirable to pull in 1 MB (!) of AVX512 header code unless the
    application is really using those intrinsics. Unfortunately, immintrin.h
    tries to prevent this kind of selectiveness, which we simply circumvent with
    the following define.. */
-#  define __IMMINTRIN_H
-#endif
+#    define __IMMINTRIN_H
+#  endif
 
-#if !defined(_IMMINTRIN_H_INCLUDED)
-// And the same once more, for GCC..
-#  define _IMMINTRIN_H_INCLUDED
-#endif
+#  if !defined(_IMMINTRIN_H_INCLUDED) && !defined(__clang__) && defined(__GNUC__)
+     // And the same once more, for GCC..
+#    define _IMMINTRIN_H_INCLUDED
+#  endif
 
-#if defined(ENOKI_X86_SSE42)
-#  include <nmmintrin.h>
-#endif
+#  if defined(ENOKI_X86_SSE42)
+#    include <nmmintrin.h>
+#  endif
 
-#if defined(ENOKI_X86_AVX)
-#  include <avxintrin.h>
-#endif
+#  if defined(ENOKI_X86_AVX)
+#    include <avxintrin.h>
+#  endif
 
-#if defined(ENOKI_X86_AVX2)
-#  include <avx2intrin.h>
-#  include <bmiintrin.h>
-#endif
+#  if defined(ENOKI_X86_AVX2)
+#    include <avx2intrin.h>
+#    include <bmiintrin.h>
+#  endif
 
-#if defined(ENOKI_X86_FMA)
-#  include <fmaintrin.h>
-#endif
+#  if defined(ENOKI_X86_FMA)
+#    include <fmaintrin.h>
+#  endif
 
-#if defined(ENOKI_X86_AVX512)
-#  include <avx512fintrin.h>
-#  include <avx512vlintrin.h>
-#  include <avx512bwintrin.h>
-#  include <avx512cdintrin.h>
-#  include <avx512dqintrin.h>
-#  include <avx512vldqintrin.h>
-#  include <avx512vlbwintrin.h>
-#endif
+#  if defined(ENOKI_X86_AVX512)
+#    include <avx512fintrin.h>
+#    include <avx512vlintrin.h>
+#    include <avx512bwintrin.h>
+#    include <avx512cdintrin.h>
+#    include <avx512dqintrin.h>
+#    include <avx512vldqintrin.h>
+#    include <avx512vlbwintrin.h>
+#  endif
 
-#if defined(ENOKI_ARM_NEON)
-#  include <arm_neon.h>
+#  if defined(ENOKI_ARM_NEON)
+#    include <arm_neon.h>
+#  endif
+#else
+#  include <intrin.h>
 #endif
 
 // -----------------------------------------------------------------------

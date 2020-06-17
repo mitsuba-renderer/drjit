@@ -121,11 +121,17 @@ auto andnot_(const T1 &a1, const T2 &a2) { return andnot(a1, a2); }
 template <typename T1, typename T2, enable_if_array_any_t<T1, T2> = 0>
 auto xor_(const T1 &a1, const T2 &a2) { return a1 ^ a2; }
 
+#if defined(__GNUC__)
+#  define ENOKI_BUILTIN(name) ::__builtin_##name
+#else
+#  define ENOKI_BUILTIN(name) ::name
+#endif
+
 template <typename T> T abs_(const T &a) {
     if constexpr (std::is_same_v<T, float>)
-        return __builtin_fabsf(a);
+        return ENOKI_BUILTIN(fabsf)(a);
     else if constexpr (std::is_same_v<T, double>)
-        return __builtin_fabs(a);
+        return ENOKI_BUILTIN(fabs)(a);
     else if constexpr (std::is_signed_v<T>)
         return a < 0 ? -a : a;
     else
@@ -134,63 +140,63 @@ template <typename T> T abs_(const T &a) {
 
 template <typename T> T sqrt_(const T &a) {
     if constexpr (std::is_same_v<T, float>)
-        return __builtin_sqrtf(a);
+        return ENOKI_BUILTIN(sqrtf)(a);
     else if constexpr (std::is_same_v<T, double>)
-        return __builtin_sqrt(a);
+        return ENOKI_BUILTIN(sqrt)(a);
     else
         return (T) enoki::detail::sqrt_((float) a);
 }
 
 template <typename T> T floor_(const T &a) {
     if constexpr (std::is_same_v<T, float>)
-        return __builtin_floorf(a);
+        return ENOKI_BUILTIN(floorf)(a);
     else if constexpr (std::is_same_v<T, double>)
-        return __builtin_floor(a);
+        return ENOKI_BUILTIN(floor)(a);
     else
         return (T) enoki::detail::floor_((float) a);
 }
 
 template <typename T> T ceil_(const T &a) {
     if constexpr (std::is_same_v<T, float>)
-        return __builtin_ceilf(a);
+        return ENOKI_BUILTIN(ceilf)(a);
     else if constexpr (std::is_same_v<T, double>)
-        return __builtin_ceil(a);
+        return ENOKI_BUILTIN(ceil)(a);
     else
         return (T) enoki::detail::ceil_((float) a);
 }
 
 template <typename T> T trunc_(const T &a) {
     if constexpr (std::is_same_v<T, float>)
-        return __builtin_truncf(a);
+        return ENOKI_BUILTIN(truncf)(a);
     else if constexpr (std::is_same_v<T, double>)
-        return __builtin_trunc(a);
+        return ENOKI_BUILTIN(trunc)(a);
     else
         return (T) enoki::detail::trunc_((float) a);
 }
 
 template <typename T> T round_(const T &a) {
     if constexpr (std::is_same_v<T, float>)
-        return __builtin_rintf(a);
+        return ENOKI_BUILTIN(rintf)(a);
     else if constexpr (std::is_same_v<T, double>)
-        return __builtin_rint(a);
+        return ENOKI_BUILTIN(rint)(a);
     else
         return (T) enoki::detail::round_((float) a);
 }
 
 template <typename T> T max_(const T &a, const T &b) {
     if constexpr (std::is_same_v<T, float>)
-        return __builtin_fmaxf(a, b);
+        return ENOKI_BUILTIN(fmaxf)(a, b);
     else if constexpr (std::is_same_v<T, double>)
-        return __builtin_fmax(a, b);
+        return ENOKI_BUILTIN(fmax)(a, b);
     else
         return a > b ? a : b;
 }
 
 template <typename T> T min_(const T &a, const T &b) {
     if constexpr (std::is_same_v<T, float>)
-        return __builtin_fminf(a, b);
+        return ENOKI_BUILTIN(fminf)(a, b);
     else if constexpr (std::is_same_v<T, double>)
-        return __builtin_fmin(a, b);
+        return ENOKI_BUILTIN(fmin)(a, b);
     else
         return a < b ? a : b;
 }
@@ -198,9 +204,9 @@ template <typename T> T min_(const T &a, const T &b) {
 template <typename T> T fmadd_(const T &a, const T &b, const T &c) {
 #if defined(ENOKI_X86_FMA) || defined(ENOKI_ARM_FMA)
     if constexpr (std::is_same_v<T, float>)
-        return __builtin_fmaf(a, b, c);
+        return ENOKI_BUILTIN(fmaf)(a, b, c);
     else if constexpr (std::is_same_v<T, double>)
-        return __builtin_fma(a, b, c);
+        return ENOKI_BUILTIN(fma)(a, b, c);
 #endif
     return a * b + c;
 }
@@ -307,7 +313,7 @@ NAMESPACE_END(detail)
 #if defined(__cpp_exceptions)
 class Exception : public std::exception {
 public:
-    Exception(const char *msg) { m_msg = __builtin_strdup(msg); }
+    Exception(const char *msg) { m_msg = strdup(msg); }
     virtual const char *what() const noexcept { return m_msg; }
     virtual ~Exception() { free(m_msg); }
 private:
@@ -315,7 +321,11 @@ private:
 };
 #endif
 
+#if !defined(_MSC_VER)
 __attribute__((noreturn,noinline))
+#else
+__declspec(noreturn,noinline)
+#endif
 inline void enoki_raise(const char *fmt, ...) {
     char msg[256];
     va_list args;

@@ -84,7 +84,7 @@ struct DynamicArray
 
     /// Construct from component values
     template <typename... Ts, enable_if_t<(sizeof...(Ts) > 1 &&
-              (!std::is_same_v<Ts, detail::reinterpret_flag> && ...))> = 0>
+              detail::and_v<!std::is_same_v<Ts, detail::reinterpret_flag>...>)> = 0>
     ENOKI_INLINE DynamicArray(Ts&&... ts) {
         ENOKI_CHKSCALAR("Constructor (component values)");
         Value data[] = { cast_t<Ts>(ts)... };
@@ -135,6 +135,10 @@ struct DynamicArray
         result.init_(size);
         memcpy(result.m_data, ptr, sizeof(Value) * size);
         return result;
+    }
+
+    void store_unaligned_(void *ptr) const {
+        memcpy(ptr, result.m_data, sizeof(Value) * m_size);
     }
 
     static DynamicArray empty_(size_t size) {

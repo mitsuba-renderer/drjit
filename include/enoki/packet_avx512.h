@@ -259,11 +259,11 @@ template <bool IsMask_, typename Derived_> struct alignas(64)
     //! @}
     // -----------------------------------------------------------------------
 
-    ENOKI_INLINE void store_(void *ptr, size_t) const {
+    ENOKI_INLINE void store_(void *ptr) const {
         _mm512_store_ps((Value *) ENOKI_ASSUME_ALIGNED(ptr, 64), m);
     }
 
-    ENOKI_INLINE void store_unaligned_(void *ptr, size_t) const {
+    ENOKI_INLINE void store_unaligned_(void *ptr) const {
         _mm512_storeu_ps((Value *) ptr, m);
     }
 
@@ -530,11 +530,11 @@ template <bool IsMask_, typename Derived_> struct alignas(64)
     //! @}
     // -----------------------------------------------------------------------
 
-    ENOKI_INLINE void store_(void *ptr, size_t) const {
+    ENOKI_INLINE void store_(void *ptr) const {
         _mm512_store_pd((Value *) ENOKI_ASSUME_ALIGNED(ptr, 64), m);
     }
 
-    ENOKI_INLINE void store_unaligned_(void *ptr, size_t) const {
+    ENOKI_INLINE void store_unaligned_(void *ptr) const {
         _mm512_storeu_pd((Value *) ptr, m);
     }
 
@@ -785,11 +785,11 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(64)
     //! @}
     // -----------------------------------------------------------------------
 
-    ENOKI_INLINE void store_(void *ptr, size_t) const {
+    ENOKI_INLINE void store_(void *ptr) const {
         _mm512_store_si512((__m512i *) ENOKI_ASSUME_ALIGNED(ptr, 64), m);
     }
 
-    ENOKI_INLINE void store_unaligned_(void *ptr, size_t) const {
+    ENOKI_INLINE void store_unaligned_(void *ptr) const {
         _mm512_storeu_si512((__m512i *) ptr, m);
     }
 
@@ -1060,11 +1060,11 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(64)
     //! @}
     // -----------------------------------------------------------------------
 
-    ENOKI_INLINE void store_(void *ptr, size_t) const {
+    ENOKI_INLINE void store_(void *ptr) const {
         _mm512_store_si512((__m512i *) ENOKI_ASSUME_ALIGNED(ptr, 64), m);
     }
 
-    ENOKI_INLINE void store_unaligned_(void *ptr, size_t) const {
+    ENOKI_INLINE void store_unaligned_(void *ptr) const {
         _mm512_storeu_si512((__m512i *) ptr, m);
     }
 

@@ -386,11 +386,11 @@ template <bool IsMask_, typename Derived_> struct alignas(16)
     //! @{ \name Initialization, loading/writing data
     // -----------------------------------------------------------------------
 
-    ENOKI_INLINE void store_(void *ptr, size_t) const {
+    ENOKI_INLINE void store_(void *ptr) const {
         _mm_store_ps((Value *) ENOKI_ASSUME_ALIGNED(ptr, 16), m);
     }
 
-    ENOKI_INLINE void store_unaligned_(void *ptr, size_t) const {
+    ENOKI_INLINE void store_unaligned_(void *ptr) const {
         _mm_storeu_ps((Value *) ptr, m);
     }
 
@@ -819,11 +819,11 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(16)
     //! @{ \name Initialization, loading/writing data
     // -----------------------------------------------------------------------
 
-    ENOKI_INLINE void store_(void *ptr, size_t) const {
+    ENOKI_INLINE void store_(void *ptr) const {
         _mm_store_si128((__m128i *) ENOKI_ASSUME_ALIGNED(ptr, 16), m);
     }
 
-    ENOKI_INLINE void store_unaligned_(void *ptr, size_t) const {
+    ENOKI_INLINE void store_unaligned_(void *ptr) const {
         _mm_storeu_si128((__m128i *) ptr, m);
     }
 
@@ -1192,11 +1192,11 @@ template <bool IsMask_, typename Derived_> struct alignas(16)
     //! @{ \name Initialization, loading/writing data
     // -----------------------------------------------------------------------
 
-    ENOKI_INLINE void store_(void *ptr, size_t) const {
+    ENOKI_INLINE void store_(void *ptr) const {
         _mm_store_pd((Value *) ENOKI_ASSUME_ALIGNED(ptr, 16), m);
     }
 
-    ENOKI_INLINE void store_unaligned_(void *ptr, size_t) const {
+    ENOKI_INLINE void store_unaligned_(void *ptr) const {
         _mm_storeu_pd((Value *) ptr, m);
     }
 
@@ -1612,11 +1612,11 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(16)
     //! @{ \name Initialization, loading/writing data
     // -----------------------------------------------------------------------
 
-    ENOKI_INLINE void store_(void *ptr, size_t) const {
+    ENOKI_INLINE void store_(void *ptr) const {
         _mm_store_si128((__m128i *) ENOKI_ASSUME_ALIGNED(ptr, 16), m);
     }
 
-    ENOKI_INLINE void store_unaligned_(void *ptr, size_t) const {
+    ENOKI_INLINE void store_unaligned_(void *ptr) const {
         _mm_storeu_si128((__m128i *) ptr, m);
     }
 
@@ -1734,15 +1734,18 @@ template <bool IsMask_, typename Derived_> struct alignas(16)
         #endif
     }
 
-    ENOKI_INLINE void store_(void *ptr, size_t) const {
+    ENOKI_INLINE void store_(void *ptr) const {
         memcpy(ptr, &m, sizeof(Value) * 3);
     }
-    ENOKI_INLINE void store_unaligned_(void *ptr, size_t) const {
+
+    ENOKI_INLINE void store_unaligned_(void *ptr) const {
         store_(ptr);
     }
+
     static ENOKI_INLINE Derived load_(const void *ptr, size_t) {
         return Base::load_unaligned_(ptr);
     }
+
     static ENOKI_INLINE Derived load_unaligned_(const void *ptr, size_t) {
         Derived result;
         memcpy(&result.m, ptr, sizeof(Value) * 3);
@@ -1840,11 +1843,11 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(16)
         #endif
     }
 
-    ENOKI_INLINE void store_(void *ptr, size_t) const {
+    ENOKI_INLINE void store_(void *ptr) const {
         memcpy(ptr, &m, sizeof(Value) * 3);
     }
 
-    ENOKI_INLINE void store_unaligned_(void *ptr, size_t) const {
+    ENOKI_INLINE void store_unaligned_(void *ptr) const {
         store_(ptr);
     }
 

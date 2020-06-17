@@ -239,7 +239,9 @@ template <typename T>
 struct struct_support;
 
 template <typename T, typename Array>
-struct call_support { };
+struct call_support {
+    call_support(const Array &) { }
+};
 
 template <typename Value>
 struct CUDAArray;

@@ -38,7 +38,11 @@ template <typename T> constexpr auto InvSqrtFourPi   = scalar_t<T>(0.28209479177
 template <typename T> constexpr auto SqrtTwo         = scalar_t<T>(1.41421356237309504880);
 template <typename T> constexpr auto InvSqrtTwo      = scalar_t<T>(0.70710678118654752440);
 
+#if defined(__GNUC__)
 template <typename T> constexpr auto Infinity        = scalar_t<T>(__builtin_inf());
+#else
+template <typename T> constexpr auto Infinity        = scalar_t<T>(__builtin_huge_val());
+#endif
 template <typename T> constexpr auto NaN             = scalar_t<T>(__builtin_nan(""));
 
 template <typename T> constexpr auto Epsilon         = scalar_t<T>(sizeof(scalar_t<T>) == 8

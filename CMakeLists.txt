@@ -1,5 +1,5 @@
 project(enoki)
-cmake_minimum_required(VERSION 3.9.0)
+cmake_minimum_required(VERSION 3.10.0)
 
 option(ENOKI_ENABLE_JIT      "Build Enoki just in time compilation library?" OFF)
 option(ENOKI_ENABLE_AUTODIFF "Build Enoki automatic differentation library?" OFF)
@@ -71,6 +71,11 @@ include_directories(
   ext/enoki-jit/include
   ext/enoki-jit/ext/robin_map/include
 )
+
+if (MSVC)
+   add_definitions(-D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE -DNOMINMAX)
+   add_compile_options(/wd4251) # 'warning C4251: X needs to have dll-interface to be used by clients of struct Y
+endif()
 
 if (ENOKI_ENABLE_AUTODIFF)
   message(STATUS "Enoki: building the autodiff backend.")

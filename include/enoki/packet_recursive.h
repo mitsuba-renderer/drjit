@@ -48,7 +48,7 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
 
     /// Construct from component values
     template <typename... Ts, enable_if_t<sizeof...(Ts) == Size_ && Size_ != 1 &&
-              (!std::is_same_v<Ts, detail::reinterpret_flag> && ...)> = 0>
+              detail::and_v<!std::is_same_v<Ts, detail::reinterpret_flag>...>> = 0>
     ENOKI_INLINE StaticArrayImpl(Ts&&... ts) {
         alignas(alignof(Array1)) Value storage[Size_] = { (Value) ts... };
         a1 = load<Array1>(storage);
@@ -269,12 +269,12 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
     //! @{ \name Initialization, loading/writing data
     // -----------------------------------------------------------------------
 
-    ENOKI_INLINE void store_(void *mem, size_t) const {
+    ENOKI_INLINE void store_(void *mem) const {
         enoki::store((uint8_t *) mem, a1);
         enoki::store((uint8_t *) mem + sizeof(Array1), a2);
     }
 
-    ENOKI_INLINE void store_unaligned_(void *mem, size_t) const {
+    ENOKI_INLINE void store_unaligned_(void *mem) const {
         enoki::store_unaligned((uint8_t *) mem, a1);
         enoki::store_unaligned((uint8_t *) mem + sizeof(Array1), a2);
     }

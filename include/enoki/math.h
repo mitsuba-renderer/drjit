@@ -155,13 +155,13 @@ namespace detail {
         Value xa = abs(x);
 
         // Scale by 4/Pi and get the integer part
-        IntArray j(xa * Scalar(1.2732395447351626862));
+        IntArray j = IntArray(xa * Scalar(1.2732395447351626862));
 
         // Map zeros to origin; if (j & 1) j += 1
         j = (j + Int(1)) & Int(~1u);
 
         // Cast back to a floating point value
-        Value y(j);
+        Value y = Value(j);
 
         // Determine sign of result
         Value sign_sin, sign_cos;
@@ -818,8 +818,8 @@ template <typename Value> ENOKI_INLINE Value exp2(const Value &x) {
             y = x - n;
 
             Mask gth = y > .5f;
-            masked(n, gth) += 1;
-            masked(y, gth) -= 1;
+            masked(n, gth) += 1.f;
+            masked(y, gth) -= 1.f;
 
             z = poly5(y, 6.931472028550421e-1, 2.402264791363012e-1,
                          5.550332471162809e-2, 9.618437357674640e-3,
@@ -1480,8 +1480,8 @@ template <typename Value> ENOKI_INLINE Value cbrt(const Value &x) {
                        0.54664601366395524503440,
                       -0.13466110473359520655053);
 
-        Value f1 = select(xe >= 0, cbrt2, 1 / cbrt2),
-              f2 = select(xe >= 0, cbrt4, 1 / cbrt4),
+        Value f1 = select(xe >= 0.f, cbrt2, 1.f / cbrt2),
+              f2 = select(xe >= 0.f, cbrt4, 1.f / cbrt4),
               f  = select(eq(rem, 1.f), f1, f2);
 
         masked(xm, neq(rem, 0.f)) *= f;

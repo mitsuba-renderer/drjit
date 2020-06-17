@@ -373,11 +373,11 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(32)
     //! @{ \name Initialization, loading/writing data
     // -----------------------------------------------------------------------
 
-    ENOKI_INLINE void store_(void *ptr, size_t) const {
+    ENOKI_INLINE void store_(void *ptr) const {
         _mm256_store_si256((__m256i *) ENOKI_ASSUME_ALIGNED(ptr, 32), m);
     }
 
-    ENOKI_INLINE void store_unaligned_(void *ptr, size_t) const {
+    ENOKI_INLINE void store_unaligned_(void *ptr) const {
         _mm256_storeu_si256((__m256i *) ptr, m);
     }
 
@@ -830,11 +830,11 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(32)
     //! @{ \name Initialization, loading/writing data
     // -----------------------------------------------------------------------
 
-    ENOKI_INLINE void store_(void *ptr, size_t) const {
+    ENOKI_INLINE void store_(void *ptr) const {
         _mm256_store_si256((__m256i *) ENOKI_ASSUME_ALIGNED(ptr, 32), m);
     }
 
-    ENOKI_INLINE void store_unaligned_(void *ptr, size_t) const {
+    ENOKI_INLINE void store_unaligned_(void *ptr) const {
         _mm256_storeu_si256((__m256i *) ptr, m);
     }
 
@@ -960,11 +960,11 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(32)
         #endif
     }
 
-    ENOKI_INLINE void store_(void *ptr, size_t) const {
+    ENOKI_INLINE void store_(void *ptr) const {
         memcpy(ptr, &m, sizeof(Value) * 3);
     }
 
-    ENOKI_INLINE void store_unaligned_(void *ptr, size_t) const {
+    ENOKI_INLINE void store_unaligned_(void *ptr) const {
         store_(ptr);
     }
 

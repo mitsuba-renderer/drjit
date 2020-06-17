@@ -191,8 +191,8 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
     }
 
     template <typename T>
-    ENOKI_INLINE void set_entry(size_t i, const T &value) {
-        derived().entry(i) = value;
+    ENOKI_INLINE void set_entry(size_t i, T &&value) {
+        derived().entry(i) = std::forward<T>(value);
     }
 
     template <typename Mask, enable_if_mask_t<Mask> = 0>
@@ -228,7 +228,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
                                                                              \
                 for (size_t i = 0; i < sa; ++i) {                            \
                     const Value &a = derived().entry(i);                     \
-                    result.entry(i) = op;                                    \
+                    result.set_entry(i, op);                                 \
                 }                                                            \
             } else {                                                         \
                 enoki_raise(#name "_(): invalid operand type!");             \
@@ -254,7 +254,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
                                                                              \
                 for (size_t i = 0; i < sa; ++i) {                            \
                     const Value &a = derived().entry(i);                     \
-                    result.entry(i) = op;                                    \
+                    result.set_entry(i, op);                                 \
                 }                                                            \
             } else {                                                         \
                 enoki_raise(#name "_(): invalid operand type!");             \
@@ -279,8 +279,8 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
                 for (size_t i = 0; i < sa; ++i) {                            \
                     const Value &a = derived().entry(i);                     \
                     auto result = op;                                        \
-                    result_1.entry(i) = std::move(result.first);             \
-                    result_2.entry(i) = std::move(result.second);            \
+                    result_1.set_entry(i, std::move(result.first));          \
+                    result_2.set_entry(i, std::move(result.second));         \
                 }                                                            \
             } else {                                                         \
                 enoki_raise(#name "_(): invalid operand type!");             \
@@ -304,8 +304,8 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
                     result = enoki::empty<T>(sa);                            \
                                                                              \
                 for (size_t i = 0; i < sa; ++i)                              \
-                    result.entry(i) =                                        \
-                        name##2int<value_t<T>> (derived().entry(i));         \
+                    result.set_entry(i,                                      \
+                        name##2int<value_t<T>>(derived().entry(i)));         \
             } else {                                                         \
                 result = T(name(derived()));                                 \
             }                                                                \
@@ -332,7 +332,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
                 for (size_t i = 0; i < sr; ++i) {                            \
                     const Value &a = derived().entry(i);                     \
                     const Value &b = v.entry(i);                             \
-                    result.entry(i) = op;                                    \
+                    result.set_entry(i, op);                                 \
                 }                                                            \
             } else {                                                         \
                 enoki_raise(#name "_(): invalid operand type!");             \
@@ -365,7 +365,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
                 for (size_t i = 0; i < sr; ++i) {                            \
                     const Value &a = derived().entry(i);                     \
                     const auto &b = v.entry(i);                              \
-                    result.entry(i) = op;                                    \
+                    result.set_entry(i, op);                                 \
                 }                                                            \
             } else {                                                         \
                 enoki_raise(#name "_(): invalid operand type!");             \
@@ -393,7 +393,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
                 for (size_t i = 0; i < sr; ++i) {                            \
                     const Value &a = derived().entry(i);                     \
                     const Value &b = v.entry(i);                             \
-                    result.entry(i) = op;                                    \
+                    result.set_entry(i, op);                                 \
                 }                                                            \
             } else {                                                         \
                 enoki_raise(#name "_(): invalid operand type!");             \
@@ -426,7 +426,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
                     const Value &a = derived().entry(i);                     \
                     const Value &b = v1.entry(i);                            \
                     const Value &c = v2.entry(i);                            \
-                    result.entry(i) = op;                                    \
+                    result.set_entry(i, op);                                 \
                 }                                                            \
             } else {                                                         \
                 return alt;                                                  \
@@ -811,8 +811,8 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
         return Derived::load_unaligned_(mem, size);
     }
 
-    void store_(void *mem, size_t size) const {
-        return derived().store_unaligned_(mem, size);
+    void store_(void *mem) const {
+        return derived().store_unaligned_(mem);
     }
 
     //! @}

@@ -23,7 +23,7 @@
 
 extern "C" {
     /// Evaluate all computation that is scheduled on the current stream
-    extern void jitc_eval();
+    extern ENOKI_IMPORT void jitc_eval();
 };
 
 NAMESPACE_BEGIN(enoki)
@@ -675,22 +675,22 @@ template <typename T> ENOKI_INLINE T load_unaligned(const void *ptr, size_t size
 }
 
 /// Store an array to aligned memory
-template <typename T> ENOKI_INLINE void store(void *ptr, const T &value, size_t size = 1) {
+template <typename T> ENOKI_INLINE void store(void *ptr, const T &value) {
 #if !defined(NDEBUG)
     if (ENOKI_UNLIKELY((uintptr_t) ptr % alignof(T) != 0))
         enoki_raise("store(): pointer %p is misaligned (alignment = %zu)!", ptr, alignof(T));
 #endif
 
     if constexpr (is_array_v<T>)
-        value.store_(ptr, size);
+        value.store_(ptr);
     else
         *static_cast<T *>(ptr) = value;
 }
 
 /// Store an array to unaligned memory
-template <typename T> ENOKI_INLINE void store_unaligned(void *ptr, const T &value, size_t size = 1) {
+template <typename T> ENOKI_INLINE void store_unaligned(void *ptr, const T &value) {
     if constexpr (is_array_v<T>)
-        value.store_unaligned_(ptr, size);
+        value.store_unaligned_(ptr);
     else
         *static_cast<T *>(ptr) = value;
 }

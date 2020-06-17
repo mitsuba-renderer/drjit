@@ -121,7 +121,7 @@ struct CUDAArray : ArrayBase<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
     }
 
     template <typename... Ts, enable_if_t<(sizeof...(Ts) > 1 &&
-              (!std::is_same_v<Ts, detail::reinterpret_flag> && ...))> = 0>
+              detail::and_v<!std::is_same_v<Ts, detail::reinterpret_flag>...>)> = 0>
     CUDAArray(Ts&&... ts) {
         if constexpr (!IsClass) {
             Value data[] = { (Value) ts... };
@@ -744,7 +744,7 @@ struct CUDAArray : ArrayBase<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
             else if (size() == 1)                                             \
                 return *this;                                                 \
             eval_();                                                          \
-            CUDAArray result = empty<CUDAArray>(1);                           \
+            CUDAArray result = enoki::empty<CUDAArray>(1);                    \
             jitc_reduce(Type, op, data(), (uint32_t) size(), result.data());  \
             return result;                                                    \
         }                                                                     \
@@ -834,6 +834,11 @@ struct CUDAArray : ArrayBase<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
     static CUDAArray load_unaligned_(const void *ptr, size_t size) {
         return steal(
             jitc_var_copy_mem(AllocType::Auto, Type, 1, ptr, (uint32_t) size));
+    }
+
+    void store_unaligned_(void *ptr) const {
+        eval_();
+        jitc_memcpy(ptr, data(), size() * sizeof(Value));
     }
 
     //! @}
@@ -1097,19 +1102,19 @@ public:
             return (Value) jitc_registry_get_ptr(CallSupport::Domain, out);
     }
 
-    void set_entry(uint32_t offset, Value value) {
+    void set_entry(size_t offset, Value value) {
         if (jitc_var_int_ref(m_index) > 0) {
             eval_();
             *this = CUDAArray::steal(
                 jitc_var_copy_mem(AllocType::Device, CUDAArray<Value>::Type, 1,
-                              data(), (uint32_t) size()));
+                                  data(), (uint32_t) size()));
         }
 
         if constexpr (!IsClass) {
-            jitc_var_write(m_index, offset, &value);
+            jitc_var_write(m_index, (uint32_t) offset, &value);
         } else {
             ActualValue av = jitc_registry_get_id(value);
-            jitc_var_write(m_index, offset, &av);
+            jitc_var_write(m_index, (uint32_t) offset, &av);
         }
     }
 

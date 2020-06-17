@@ -25,15 +25,21 @@ foreach(ENOKI_AUTODIFF_VARIANT ${ENOKI_AUTODIFF_VARIANTS})
     -DENOKI_AUTODIFF_VALUE=${ENOKI_AUTODIFF_VARIANT_VALUE}
     -DENOKI_BUILD_AUTODIFF=1
   )
-  target_compile_options(${ENOKI_AUTODIFF_VARIANT_NAME} PRIVATE -fvisibility=hidden)
+  if (NOT MSVC)
+    target_compile_options(${ENOKI_AUTODIFF_VARIANT_NAME} PRIVATE -fvisibility=hidden)
+  endif()
 endforeach()
+
+message(STATUS "YES HERE ${CMAKE_CXX_STANDARD}")
 
 add_library(enoki-autodiff SHARED
   ${ENOKI_AUTODIFF_OBJECTS}
   common.h common.cpp
 )
 
-target_compile_options(enoki-autodiff PRIVATE -fvisibility=hidden)
+if (NOT MSVC)
+  target_compile_options(enoki-autodiff PRIVATE -fvisibility=hidden)
+endif()
 target_compile_definitions(enoki-autodiff PRIVATE -DENOKI_BUILD_AUTODIFF=1)
 
 if (ENOKI_ENABLE_JIT)

@@ -98,7 +98,11 @@ namespace enoki {
         char *value = nullptr;
     };
 
+#if !defined(_MSC_VER)
     static __thread PrefixEntry *prefix = nullptr;
+#else
+    static __declspec(thread) PrefixEntry *prefix = nullptr;
+#endif
 
     ENOKI_EXPORT void ad_prefix_push(const char *value) {
         if (strchr(value, '/'))

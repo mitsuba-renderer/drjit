@@ -34,14 +34,14 @@ namespace detail {
     };
 
     /// Detector pattern that is used to drive many type traits below
-    template <typename, template <typename...> typename Op, typename... Ts>
+    template <typename SFINAE, template <typename> typename Op, typename Arg>
     struct detector : std::false_type { };
 
-    template <template <typename...> typename Op, typename... Ts>
-    struct detector<std::void_t<Op<Ts...>>, Op, Ts...>
+    template <template <typename> typename Op, typename Arg>
+    struct detector<std::void_t<Op<Arg>>, Op, Arg>
         : std::true_type { };
 
-    template <typename... > constexpr bool false_v = false;
+    template <typename...> constexpr bool false_v = false;
 
     template <typename T>
     constexpr bool is_integral_ext_v =
@@ -63,6 +63,7 @@ namespace detail {
     using enable_if_components_t = enable_if_t<sizeof...(Ts) == Size && Size != 1 &&
               (!std::is_same_v<Ts, detail::reinterpret_flag> && ...)>;
 
+    template <bool... Args> constexpr bool and_v = (Args && ...);
 }
 
 /// True for any type that can reasonably be packed into a 32 bit integer array
@@ -75,8 +76,8 @@ using enable_if_int64_t = enable_if_t<sizeof(T) == 8 && detail::is_integral_ext_
 
 template <typename... Ts> using identity_t = typename detail::identity<Ts...>::type;
 
-template <template<typename ...> class Op, class... Args>
-constexpr bool is_detected_v = detail::detector<void, Op, Args...>::value;
+template <template<typename> class Op, typename Arg>
+constexpr bool is_detected_v = detail::detector<void, Op, Arg>::value;
 
 constexpr size_t Dynamic = (size_t) -1;
 

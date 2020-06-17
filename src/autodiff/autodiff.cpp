@@ -211,7 +211,11 @@ static_assert(sizeof(Variable) == ((IsDouble ? 2 : 0) + 8) * sizeof(uint32_t),
               "Variable data structure has incorrect size. Padding problem?");
 
 /// Thread-local list used by ad_queue() and ad_traverse()
+#if !defined(_MSC_VER)
 static __thread std::deque<uint32_t> *tls_queue = nullptr;
+#else
+static __declspec(thread) std::deque<uint32_t>* tls_queue = nullptr;
+#endif
 
 /// Records all internal application state
 struct State {
@@ -411,7 +415,7 @@ static uint32_t ad_edge_new() {
         index = state.unused_edges.back();
         state.unused_edges.pop_back();
     } else {
-        index = state.edges.size();
+        index = (uint32_t) state.edges.size();
         state.edges.emplace_back();
     }
     return index;
@@ -1041,8 +1045,8 @@ template <typename T> void ad_traverse(bool reverse, bool retain_graph) {
         ad_traverse_fwd(retain_graph);
 }
 
-template ENOKI_EXPORT void ad_inc_ref_impl<Value>(uint32_t);
-template ENOKI_EXPORT void ad_dec_ref_impl<Value>(uint32_t);
+template ENOKI_EXPORT void ad_inc_ref_impl<Value>(uint32_t) noexcept;
+template ENOKI_EXPORT void ad_dec_ref_impl<Value>(uint32_t) noexcept;
 template ENOKI_EXPORT uint32_t ad_new<Value>(const char *, uint32_t, uint32_t,
                                              const uint32_t *, Value *);
 template ENOKI_EXPORT Value ad_grad<Value>(uint32_t);

@@ -133,16 +133,16 @@ struct LLVMArray : ArrayBase<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
     }
 
     template <typename... Ts, enable_if_t<(sizeof...(Ts) > 1 &&
-              (!std::is_same_v<Ts, detail::reinterpret_flag> && ...))> = 0>
+              detail::and_v<!std::is_same_v<Ts, detail::reinterpret_flag>>)> = 0>
     LLVMArray(Ts&&... ts) {
         if constexpr (!IsClass) {
             Value data[] = { (Value) ts... };
             m_index = jitc_var_copy_mem(AllocType::Host, Type, 0, data,
-                                    (uint32_t) sizeof...(Ts));
+                                        (uint32_t) sizeof...(Ts));
         } else {
             uint32_t data[] = { jitc_registry_get_id(ts)... };
             m_index = jitc_var_copy_mem(AllocType::Host, Type, 0, data,
-                                    (uint32_t) sizeof...(Ts));
+                                        (uint32_t) sizeof...(Ts));
         }
     }
 
@@ -814,8 +814,8 @@ struct LLVMArray : ArrayBase<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
             else if (size() == 1)                                             \
                 return *this;                                                 \
                                                                               \
-            eval_();                                                           \
-            LLVMArray result = empty<LLVMArray>(1);                           \
+            eval_();                                                          \
+            LLVMArray result = enoki::empty<LLVMArray>(1);                    \
             jitc_reduce(Type, op, data(), (uint32_t) size(), result.data());  \
             return result;                                                    \
         }                                                                     \
@@ -901,6 +901,11 @@ struct LLVMArray : ArrayBase<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
 
     static LLVMArray load_unaligned_(const void *ptr, size_t size) {
         return steal(jitc_var_copy_mem(AllocType::Host, Type, 0, ptr, (uint32_t) size));
+    }
+
+    void store_unaligned_(void *ptr) const {
+        eval_();
+        jitc_memcpy(ptr, data(), size() * sizeof(Value));
     }
 
     //! @}
@@ -1170,19 +1175,19 @@ public:
             return (Value) jitc_registry_get_ptr(CallSupport::Domain, out);
     }
 
-    void set_entry(uint32_t offset, Value value) {
+    void set_entry(size_t offset, Value value) {
         if (jitc_var_int_ref(m_index) > 0) {
             eval_();
             *this = LLVMArray::steal(
                 jitc_var_copy_mem(AllocType::HostAsync, LLVMArray<Value>::Type, 0,
-                              data(), (uint32_t) size()));
+                                  data(), (uint32_t) size()));
         }
 
         if constexpr (!IsClass) {
-            jitc_var_write(m_index, offset, &value);
+            jitc_var_write(m_index, (uint32_t) offset, &value);
         } else {
             ActualValue av = jitc_registry_get_id(value);
-            jitc_var_write(m_index, offset, &av);
+            jitc_var_write(m_index, (uint32_t) offset, &av);
         }
     }
 
