@@ -1664,7 +1664,7 @@ protected:
         ad_dec_ref_impl<T>(uint32_t) noexcept(true);                           \
     extern template ENOKI_AUTODIFF_EXPORT uint32_t                             \
     ad_new<T>(const char *, uint32_t, uint32_t,                                \
-              ENOKI_AUTODIFF_EXPORT const uint32_t *, T *);                    \
+              const uint32_t *, T *);                                          \
     extern template ENOKI_AUTODIFF_EXPORT T ad_grad<T>(uint32_t);              \
     extern template ENOKI_AUTODIFF_EXPORT void ad_set_grad<T>(uint32_t,        \
                                                               const T &);      \

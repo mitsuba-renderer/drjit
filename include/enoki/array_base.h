@@ -460,7 +460,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
     ENOKI_IMPLEMENT_BINARY_MASK(gt, a > b,  IsArithmetic)
     ENOKI_IMPLEMENT_BINARY_MASK(ge, a >= b, IsArithmetic)
 
-    ENOKI_IMPLEMENT_UNARY(neg, -a, IsArithmetic)
+    ENOKI_IMPLEMENT_UNARY(neg, detail::neg_(a), IsArithmetic)
     ENOKI_IMPLEMENT_UNARY(not, detail::not_(a), !IsFloat)
 
     ENOKI_IMPLEMENT_UNARY(sqrt,  sqrt(a), IsFloat)

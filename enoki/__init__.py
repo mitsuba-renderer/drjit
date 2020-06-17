@@ -6,7 +6,7 @@ if sys.version_info < (3, 5):
 del sys
 
 # Implementation details accessed by both C++ and Python
-import enoki.detail  # noqa
+import enoki.detail as detail # noqa
 
 # Native extension defining low-level arrays
 import enoki.enoki_ext as enoki_ext  # noqa
@@ -26,7 +26,7 @@ import enoki.const as const  # noqa
 # Install routing functions in ArrayBase and global scope
 self = vars()
 base = self['ArrayBase']
-for k, v in enoki.router.__dict__.items():
+for k, v in router.__dict__.items():
     if k.startswith('_') or k[0].isupper():
         continue
     if k.startswith('op_'):
@@ -35,7 +35,7 @@ for k, v in enoki.router.__dict__.items():
         self[k] = v
 
 # Install generic array functions in ArrayBase
-for k, v in enoki.generic.__dict__.items():
+for k, v in generic.__dict__.items():
     if k.startswith('_') or k[0].isupper():
         continue
     if k.startswith('op_'):
@@ -45,14 +45,14 @@ for k, v in enoki.generic.__dict__.items():
 
 
 # Install type traits in global scope
-for k, v in enoki.traits.__dict__.items():
+for k, v in traits.__dict__.items():
     if k.startswith('_') or k[0].isupper():
         continue
     self[k] = v
 
 
 # Install const in global scope
-for k, v in enoki.const.__dict__.items():
+for k, v in const.__dict__.items():
     if k.startswith('_'):
         continue
     self[k] = v

@@ -127,6 +127,13 @@ auto xor_(const T1 &a1, const T2 &a2) { return a1 ^ a2; }
 #  define ENOKI_BUILTIN(name) ::name
 #endif
 
+template <typename T> T neg_(const T &a) {
+    if constexpr (std::is_unsigned_v<T>)
+        return ~a + T(1);
+    else
+        return -a;
+}
+
 template <typename T> T abs_(const T &a) {
     if constexpr (std::is_same_v<T, float>)
         return ENOKI_BUILTIN(fabsf)(a);
@@ -269,9 +276,9 @@ ENOKI_INLINE T mulhi_(T x, T y) {
     } else {
 #if defined(_MSC_VER) && defined(ENOKI_X86_64)
         if constexpr (std::is_signed_v<T>)
-            return __mulh(x, y);
+            return (T) __mulh(x, y);
         else
-            return __umulh(x, y);
+            return (T) __umulh(x, y);
 #elif defined(__SIZEOF_INT128__)
         using Wide = std::conditional_t<std::is_signed_v<T>, __int128_t, __uint128_t>;
         return T(((Wide) x * (Wide) y) >> 64);

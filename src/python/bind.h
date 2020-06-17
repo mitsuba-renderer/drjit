@@ -299,10 +299,13 @@ auto bind_full(py::class_<Array, EnokiHolder<Array>> &cls,
                 [](const Array &value, Array &target, const UInt32 &index, const Mask &mask) {
                     ek::scatter(target, value, index, mask);
                 });
-        cls.def("scatter_add_",
-                [](const Array &value, Array &target, const UInt32 &index, const Mask &mask) {
-                    ek::scatter_add(target, value, index, mask);
-                });
+
+        if constexpr (!Array::IsMask) {
+            cls.def("scatter_add_",
+                    [](const Array& value, Array& target, const UInt32& index, const Mask& mask) {
+                        ek::scatter_add(target, value, index, mask);
+                    });
+        }
     }
 
     if constexpr (Array::IsFloat) {

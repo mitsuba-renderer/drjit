@@ -86,7 +86,7 @@ struct StaticArrayBase : ArrayBase<Value_, IsMask_, Derived_> {
         if constexpr (Derived::IsDynamic) {
             if (size != 0) {
                 for (size_t i = 0; i < Derived::Size; ++i)
-                    result.entry(i) = empty<Value>(size);
+                    result.entry(i) = enoki::empty<Value>(size);
             }
         } else {
             ENOKI_MARK_USED(size);

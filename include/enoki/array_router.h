@@ -611,6 +611,11 @@ template <typename T> ENOKI_INLINE T zero(size_t size = 1) {
     }
 }
 
+#if defined(_MSC_VER) // don't warn about 'undef' below
+#  pragma warning(push)
+#  pragma warning(disable: 4700)
+#endif
+
 template <typename T> ENOKI_INLINE T empty(size_t size = 1) {
     if constexpr (is_array_v<T>) {
         return T::Derived::empty_(size);
@@ -621,6 +626,10 @@ template <typename T> ENOKI_INLINE T empty(size_t size = 1) {
         return undef;
     }
 }
+
+#if defined(_MSC_VER)
+#  pragma warning(pop)
+#endif
 
 template <typename T, typename T2>
 ENOKI_INLINE T full(const T2 &value, size_t size = 1, bool eval = false) {
@@ -825,18 +834,18 @@ void scatter_add(Target &&target, const Value &value, const Index &index, const 
         }
     } else if constexpr (has_struct_support_v<Value>) {
         struct_support<Value>::scatter_add(target, value, index, mask);
-    } else {
-        static_assert(
-            std::is_integral_v<Index>,
-            "scatter_add(): don't know what to do with these inputs. Did you forget "
-            "an ENOKI_STRUCT() declaration for type to be scattered?");
-
+    } else if constexpr (std::is_integral_v<Index> && std::is_arithmetic_v<Value> && !std::is_same_v<Value, bool>) {
         if (mask) {
             if constexpr (is_array_v<Target>)
                 target[index] += value;
             else
                 ((Value *) target)[index] += value;
         }
+    } else {
+        static_assert(
+            detail::false_v<Index, Value>,
+            "scatter_add(): don't know what to do with these inputs. Did you forget "
+            "an ENOKI_STRUCT() declaration for type to be scattered?");
     }
 }
 

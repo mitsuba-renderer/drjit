@@ -56,12 +56,24 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND NOT CMAKE_CXX_FLAGS MATCHES "-stdl
   endif()
 endif()
 
+
+if (MSVC)
+  set(ENOKI_OUTPUT_DIRECTORY
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE        ${CMAKE_CURRENT_BINARY_DIR}
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG          ${CMAKE_CURRENT_BINARY_DIR}
+    RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_CURRENT_BINARY_DIR}
+    RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL     ${CMAKE_CURRENT_BINARY_DIR}
+  )
+else()
+  set(ENOKI_OUTPUT_DIRECTORY
+    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+endif()
+
 if (ENOKI_ENABLE_JIT)
   message(STATUS "Enoki: building the CUDA & LLVM JIT backend.")
   add_subdirectory(ext/enoki-jit)
   add_definitions(-DENOKI_ENABLE_JIT=1)
-  set_target_properties(enoki-jit PROPERTIES
-    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+  set_target_properties(enoki-jit PROPERTIES ${ENOKI_OUTPUT_DIRECTORY})
 else()
   message(STATUS "Enoki: *not* building the CUDA & LLVM JIT backend.")
 endif()
@@ -81,8 +93,7 @@ if (ENOKI_ENABLE_AUTODIFF)
   message(STATUS "Enoki: building the autodiff backend.")
   add_definitions(-DENOKI_ENABLE_AUTODIFF=1)
   add_subdirectory(src/autodiff)
-  set_target_properties(enoki-autodiff PROPERTIES
-    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+  set_target_properties(enoki-autodiff PROPERTIES ${ENOKI_OUTPUT_DIRECTORY})
 else()
   message(STATUS "Enoki: *not* building the autodiff backend.")
 endif()

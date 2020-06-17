@@ -71,7 +71,7 @@ py::capsule to_dlpack(const py::object &owner, uint64_t data, VarType type,
                       const py::tuple &strides) {
     DLManagedTensor* t = new DLManagedTensor();
     t->data = (void *) data;
-    t->ndim = shape.size();
+    t->ndim = (int) shape.size();
     t->device_type = device == -1 ? 1 : 2;
     t->device_id = device == -1 ? 0 : device;
     t->shape = convert_tuple(shape);
