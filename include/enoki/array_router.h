@@ -622,7 +622,8 @@ template <typename T> ENOKI_INLINE T empty(size_t size = 1) {
     }
 }
 
-template <typename T> ENOKI_INLINE T full(scalar_t<T> value, size_t size = 1, bool eval = false) {
+template <typename T, typename T2>
+ENOKI_INLINE T full(const T2 &value, size_t size = 1, bool eval = false) {
     if constexpr (is_array_v<T>)
         return T::Derived::full_(value, size, eval);
     else
@@ -1195,12 +1196,18 @@ ENOKI_INLINE auto masked(T &value, const Mask &mask) {
 // -----------------------------------------------------------------------
 
 /// Extract the low elements from an array of even size
-template <typename Array, enable_if_t<(array_size_v<Array> > 1 && array_size_v<Array> != Dynamic)> = 0>
-ENOKI_INLINE auto low(const Array &a) { return a.derived().low_(); }
+template <typename Array, enable_if_t<(array_size_v<Array>> 1 &&
+                                       array_size_v<Array> != Dynamic)> = 0>
+ENOKI_INLINE auto low(const Array &a) {
+    return a.derived().low_();
+}
 
 /// Extract the high elements from an array of even size
-template <typename Array, enable_if_t<(array_size_v<Array> > 1 && array_size_v<Array> != Dynamic)> = 0>
-ENOKI_INLINE auto high(const Array &a) { return a.derived().high_(); }
+template <typename Array, enable_if_t<(array_size_v<Array>> 1 &&
+                                       array_size_v<Array> != Dynamic)> = 0>
+ENOKI_INLINE auto high(const Array &a) {
+    return a.derived().high_();
+}
 
 namespace detail {
     template <typename Return, size_t Offset, typename T, size_t... Index>

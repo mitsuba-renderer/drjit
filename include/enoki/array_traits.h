@@ -103,6 +103,7 @@ namespace detail {
     template <typename T> using is_dynamic_det         = std::enable_if_t<T::IsDynamic>;
     template <typename T> using is_complex_det         = std::enable_if_t<T::IsComplex>;
     template <typename T> using is_matrix_det          = std::enable_if_t<T::IsMatrix>;
+    template <typename T> using is_vector_det          = std::enable_if_t<T::IsVector>;
     template <typename T> using is_quaternion_det      = std::enable_if_t<T::IsQuaternion>;
     template <typename T> using is_special_det         = std::enable_if_t<T::IsSpecial>;
 }
@@ -164,6 +165,10 @@ template <typename T> using enable_if_complex_t = enable_if_t<is_complex_v<T>>;
 template <typename T>
 constexpr bool is_matrix_v = is_detected_v<detail::is_matrix_det, std::decay_t<T>>;
 template <typename T> using enable_if_matrix_t = enable_if_t<is_matrix_v<T>>;
+
+template <typename T>
+constexpr bool is_vector_v = is_detected_v<detail::is_vector_det, std::decay_t<T>>;
+template <typename T> using enable_if_vector_t = enable_if_t<is_vector_v<T>>;
 
 template <typename T>
 constexpr bool is_quaternion_v = is_detected_v<detail::is_quaternion_det, std::decay_t<T>>;

@@ -1,7 +1,6 @@
 project(enoki)
 cmake_minimum_required(VERSION 3.9.0)
 
-option(ENOKI_ENABLE_TBB      "Use Intel Thread Building Blocks (TBB) with LLVM backend?" ON)
 option(ENOKI_ENABLE_JIT      "Build Enoki just in time compilation library?" OFF)
 option(ENOKI_ENABLE_AUTODIFF "Build Enoki automatic differentation library?" OFF)
 option(ENOKI_ENABLE_PYTHON   "Build Python extension library?" OFF)
@@ -67,14 +66,6 @@ else()
   message(STATUS "Enoki: *not* building the CUDA & LLVM JIT backend.")
 endif()
 
-if (ENOKI_ENABLE_TBB)
-  # Try to detect TBB
-  set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH}
-    ${CMAKE_CURRENT_SOURCE_DIR}/ext/enoki-jit/cmake
-    ${CMAKE_CURRENT_SOURCE_DIR}/resources)
-  find_package(TBB)
-endif()
-
 include_directories(
   include
   ext/enoki-jit/include
@@ -127,4 +118,5 @@ mark_as_advanced(
   PYBIND11_INSTALL PYBIND11_PYTHON_VERSION PYBIND11_TEST
   PYBIND11_WERROR USE_PYTHON_INCLUDE_DIR ENOKI_PYBIND11_DIR
   CMAKE_EXECUTABLE_FORMAT CMAKE_OSX_ARCHITECTURES
+  ENOKI_JIT_ENABLE_TESTS
 )

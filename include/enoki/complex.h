@@ -44,11 +44,8 @@ struct Complex : StaticArrayImpl<Value_, 2, false, Complex<Value_>> {
     ENOKI_INLINE Complex(T&& z) : Base(z) { }
 
     ENOKI_INLINE Complex(const Value_ &v1, const Value_ &v2) : Base(v1, v2) { }
-    ENOKI_INLINE Complex(Value_ &&v1, Value_ &&v2) : Base(std::move(v1), std::move(v2)) { }
-
-    ENOKI_INLINE static Complex full_(const Scalar &value, size_t size, bool eval) {
-        return Array<Value_, 2>::full_(value, size, eval);
-    }
+    ENOKI_INLINE Complex(Value_ &&v1, Value_ &&v2)
+        : Base(std::move(v1), std::move(v2)) { }
 };
 
 template <typename T> ENOKI_INLINE T real(const Complex<T> &z) { return z.x(); }
