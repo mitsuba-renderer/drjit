@@ -130,7 +130,7 @@ struct CUDAArray : ArrayBase<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
         } else {
             uint32_t data[] = { jitc_registry_get_id(ts)... };
             m_index = jitc_var_copy_mem(AllocType::Host, Type, 1, data,
-                                    (uint32_t) sizeof...(Ts));
+                                        (uint32_t) sizeof...(Ts));
         }
     }
 

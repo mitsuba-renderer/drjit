@@ -133,7 +133,7 @@ struct LLVMArray : ArrayBase<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
     }
 
     template <typename... Ts, enable_if_t<(sizeof...(Ts) > 1 &&
-              detail::and_v<!std::is_same_v<Ts, detail::reinterpret_flag>>)> = 0>
+              detail::and_v<!std::is_same_v<Ts, detail::reinterpret_flag>...>)> = 0>
     LLVMArray(Ts&&... ts) {
         if constexpr (!IsClass) {
             Value data[] = { (Value) ts... };

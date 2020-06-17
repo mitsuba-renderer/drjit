@@ -138,7 +138,7 @@ struct DynamicArray
     }
 
     void store_unaligned_(void *ptr) const {
-        memcpy(ptr, result.m_data, sizeof(Value) * m_size);
+        memcpy(ptr, m_data, sizeof(Value) * m_size);
     }
 
     static DynamicArray empty_(size_t size) {
