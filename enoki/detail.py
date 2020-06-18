@@ -291,19 +291,21 @@ def prop_xyz(self, value):
     self.z = value.z
 
 
-def array_configure(cls):
+def array_configure(cls, shape, type_, value):
     """Populates an Enoki array class with extra type trait fields"""
     depth = 1
 
-    value = cls.Value
+    cls.Value = value
+    cls.Type = type_
+    cls.Shape = shape
+    cls.Size = shape[0]
+    cls.IsDynamic = cls.Size == enoki.Dynamic or \
+        getattr(value, 'IsDynamic', False)
+
     while issubclass(value, enoki.ArrayBase):
         value = value.Value
         depth += 1
 
-    name = cls.__name__
-    mod = cls.__module__
-
-    cls.Size = cls.Shape[0]
     cls.Depth = depth
     cls.Scalar = value
     cls.IsEnoki = True
@@ -311,12 +313,16 @@ def array_configure(cls):
     cls.IsIntegral = issubclass(value, int) and not cls.IsMask
     cls.IsFloat = issubclass(value, float)
     cls.IsArithmetic = cls.IsIntegral or cls.IsFloat
+
+    mod = cls.__module__
     cls.IsScalar = mod.startswith('enoki.scalar')
     cls.IsPacket = mod.startswith('enoki.packet')
     cls.IsDiff = mod.endswith('.ad')
     cls.IsLLVM = mod.startswith('enoki.llvm')
     cls.IsCUDA = mod.startswith('enoki.cuda')
     cls.IsJIT = cls.IsLLVM or cls.IsCUDA
+
+    name = cls.__name__
     cls.IsMatrix = 'Matrix' in name
     cls.IsComplex = 'Complex' in name
     cls.IsQuaternion = 'Quaternion' in name

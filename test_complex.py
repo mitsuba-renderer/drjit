@@ -2,7 +2,7 @@ import math
 import cmath
 import enoki as ek
 from enoki.packet import Complex2f as C
-from enoki.packet import Float, Array2f
+from enoki.packet import Float
 
 
 def test01_bcast():
@@ -98,7 +98,7 @@ def test09_trig():
             if abs(j) != 1 or i != 0:
                 a = ek.atan(C(i, j))
                 b = C(cmath.atan(complex(i, j)))
-                assert ek.allclose(a, b)
+                assert ek.allclose(a, b, atol=1e-7)
 
 
 def test10_math_explog():
@@ -151,12 +151,12 @@ def test11_hyp():
 
             a = ek.acosh(C(i, j))
             b = C(cmath.acosh(complex(i, j)))
-            assert ek.allclose(a, b)
+            assert ek.allclose(a, b, atol=1e-7)
 
             if abs(i) != 1 or j != 0:
                 a = ek.atanh(C(i, j))
                 b = C(cmath.atanh(complex(i, j)))
-                assert ek.allclose(a, b)
+                assert ek.allclose(a, b, atol=1e-7)
 
 
 def test12_numpy():

@@ -308,6 +308,10 @@ def op_bool(self):
         "variants (enoki.all_nested(), etc.) are available for nested arrays.")
 
 
+def op_len(self):
+    return self.Size
+
+
 # Mainly for testcases: keep track of how often entry() is invoked.
 _entry_evals = 0
 
@@ -1631,25 +1635,40 @@ def arange(type_, start=None, end=None, step=1):
         assert isinstance(type_, type)
         return type_(start)
 
+
+def identity(type_, size=1):
+    if _ek.is_special_v(type_):
+        result = zero(type_, size)
+
+        if type_.IsComplex or type_.IsQuaternion:
+            result.real = identity(type_.Value, size)
+        elif type_.IsMatrix:
+            one = identity(type_.Value.Value, size)
+            for i in range(type_.Size):
+                result[i, i] = one
+        return result
+    elif _ek.is_array_v(type_):
+        return full(type_, 1, size)
+    else:
+        return type_(1)
+
 # -------------------------------------------------------------------
 #                  Higher-level utility functions
 # -------------------------------------------------------------------
 
 
 def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
-    input_is_array = _ek.is_array_v(a) or _ek.is_array_v(b)
-    input_is_special = _ek.is_special_v(a) or _ek.is_special_v(b)
-
     # Fast path for Enoki arrays, avoid for special array types
     # due to their non-standard broadcasting behavior
-    if input_is_array and not input_is_special:
+    if _ek.is_array_v(a) or _ek.is_array_v(b):
         if _ek.is_diff_array_v(a):
             a = _ek.detach(a)
         if _ek.is_diff_array_v(b):
             b = _ek.detach(b)
         if type(a) is not type(b):
             a, b = _var_promote(a, b)
-        cond = _ek.abs(a - b) <= _ek.abs(b) * rtol + atol
+        diff = abs(a - b)
+        cond = diff <= abs(b) * rtol + _ek.full(type(diff), atol)
         if _ek.is_floating_point_v(a):
             cond |= _ek.eq(a, b)  # plus/minus infinity
         if equal_nan:
@@ -1665,19 +1684,19 @@ def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
     def safe_getitem(x, xl, i):
         return x[i if xl > 1 else 0] if xl > 0 else x
 
-    al, bl = safe_len(a), safe_len(b)
-    size = max(al, bl)
+    la, lb = safe_len(a), safe_len(b)
+    size = max(la, lb)
 
-    if al != size and al > 1 or bl != size and bl > 1:
-        raise Exception("allclose(): size mismatch (%i vs %i)!" % (al, bl))
+    if la != size and la > 1 or lb != size and lb > 1:
+        raise Exception("allclose(): size mismatch (%i vs %i)!" % (la, lb))
     elif size == 0:
         if equal_nan and _math.isnan(a) and _math.isnan(b):
             return True
         return abs(a - b) <= abs(b) * rtol + atol
     else:
         for i in range(size):
-            ai = safe_getitem(a, al, i)
-            bi = safe_getitem(b, bl, i)
-            if not allclose(ai, bi, rtol, atol, equal_nan):
+            ia = safe_getitem(a, la, i)
+            ib = safe_getitem(b, lb, i)
+            if not allclose(ia, ib, rtol, atol, equal_nan):
                 return False
         return True

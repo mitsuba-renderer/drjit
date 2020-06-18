@@ -4,7 +4,7 @@ from sys import modules as _modules
 
 def rotate(target_type, axis, angle):
     if target_type.IsQuaternion:
-        s, c = sincos(angle * .5)
+        s, c = _ek.sincos(angle * .5)
         quat = target_type()
         quat.imag = axis * s
         quat.real = c

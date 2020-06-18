@@ -36,40 +36,29 @@ auto bind_type(py::module &m, bool scalar_mode = false) {
         shape = py::make_tuple(Array::Size, Value::Size, Value::Value::Size,
                                Value::Value::Value::Size);
 
-    py::object name = array_name(prefix, Type, shape, scalar_mode);
-    auto cls = py::class_<Array, EnokiHolder<Array>>(
-        m, PyUnicode_AsUTF8AndSize(name.ptr(), nullptr), array_base);
-
-    auto &reg_types = py::detail::get_internals().registered_types_cpp;
-
-    PyTypeObject *type_obj;
+    PyTypeObject *value_obj;
     if constexpr (std::is_scalar_v<Value>) {
         if constexpr (std::is_same_v<bool, Value>)
-            type_obj = &PyBool_Type;
+            value_obj = &PyBool_Type;
         else if constexpr (std::is_integral_v<Value>)
-            type_obj = &PyLong_Type;
+            value_obj = &PyLong_Type;
         else
-            type_obj = &PyFloat_Type;
+            value_obj = &PyFloat_Type;
     } else {
+        auto &reg_types = py::detail::get_internals().registered_types_cpp;
         auto it = reg_types.find(std::type_index(typeid(Value)));
         if (it == reg_types.end())
             ek::enoki_raise("bind_type(): value type was not bound!");
-        type_obj = it->second->type;
+        value_obj = it->second->type;
     }
 
-    cls.attr("Value") = py::reinterpret_borrow<py::object>((PyObject *) type_obj);
-    cls.attr("Type") = py::cast(Type);
-    cls.attr("Shape") = shape;
+    py::object type = py::cast(Type),
+               name = array_name(prefix, type, shape, scalar_mode);
 
-    if constexpr (Array::Size == ek::Dynamic) {
-        cls.def("init_", [](Array &a, size_t size) {
-            if (!a.empty())
-                ek::enoki_raise("Dynamic array was already initialized!");
-            a.init_(size);
-        });
-    }
+    auto cls = py::class_<Array, EnokiHolder<Array>>(
+        m, PyUnicode_AsUTF8AndSize(name.ptr(), nullptr), array_base);
 
-    array_configure(cls);
+    array_configure(cls, shape, type, py::handle((PyObject *) value_obj));
     register_implicit_conversions(typeid(Array));
 
     return cls;
@@ -79,22 +68,22 @@ template <typename Array>
 void bind_basic_methods(py::class_<Array, EnokiHolder<Array>> &cls) {
     using Value = std::conditional_t<Array::IsMask, ek::mask_t<ek::value_t<Array>>,
                                      ek::value_t<Array>>;
-    if (hasattr(cls, "entry"))
-        return;
-
-    cls.def("__len__", &Array::size)
-       .def("entry_", [](const Array &a, size_t i) -> Value { return a.entry(i); })
+    cls.def("entry_", [](const Array &a, size_t i) -> Value { return a.entry(i); })
        .def("set_entry_", [](Array &a, size_t i, const Value &value) {
            a.set_entry(i, value);
-       })
-       .def("assign_", [](Array &a, const Array &b) {
-           if (&a != &b)
-               a = b;
-       })
-       .def_static("empty_", &Array::empty_);
+       });
 
-    if constexpr (!ek::is_mask_v<Array> || ek::is_dynamic_v<Array>)
-       cls.def("data_", [](const Array &a) { enoki::eval(a); return (uintptr_t) a.data(); });
+    if constexpr (ek::is_dynamic_array_v<Array> ||
+                  (!ek::is_jit_array_v<Array> && !ek::is_mask_v<Array>))
+        cls.def("data_", [](const Array &a) {
+            enoki::eval(a);
+            return (uintptr_t) a.data();
+        });
+
+    if constexpr (ek::is_dynamic_array_v<Array>) {
+        cls.def("__len__", &Array::size);
+        cls.def("init_", [](Array &a, size_t size) { a.init_(size); });
+    }
 }
 
 template <typename Array>
@@ -104,8 +93,7 @@ void bind_generic_constructor(py::class_<Array, EnokiHolder<Array>> &cls) {
         [](py::detail::value_and_holder &v_h, py::args args) {
             v_h.value_ptr() = new Array();
             array_init(py::handle((PyObject *) v_h.inst), args);
-        },
-        py::detail::is_new_style_constructor());
+        }, py::detail::is_new_style_constructor());
 }
 
 template <typename Array> auto bind(py::module &m, bool scalar_mode = false) {
@@ -124,7 +112,12 @@ auto bind_full(py::class_<Array, EnokiHolder<Array>> &cls,
     using Scalar = std::conditional_t<Array::IsMask, bool, ek::scalar_t<Array>>;
     using Mask = ek::mask_t<ek::float32_array_t<Array>>;
 
-    cls.def(py::init<Scalar>());
+    cls.def(py::init<Scalar>())
+       .def("assign_", [](Array &a, const Array &b) {
+           if (&a != &b)
+               a = b;
+       });
+
     if constexpr (Array::IsFloat)
         cls.def(py::init([](ssize_t value) { return new Array((Scalar) value); }));
 

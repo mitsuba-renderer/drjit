@@ -55,7 +55,13 @@ def test04_trace_frob():
 
 def test05_allclose():
     m = ek.full(M, 1)
+    assert ek.allclose(m, ek.full(M, 1))
+    m[1, 0] = 0
+    assert not ek.allclose(m, ek.full(M, 1))
+    m = ek.identity(M)
     assert ek.allclose(m, 1)
+    m[1, 0] = 1
+    assert not ek.allclose(m, 1)
 
 
 @pytest.mark.parametrize('M', [M2, M3, M4])

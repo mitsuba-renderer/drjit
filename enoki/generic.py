@@ -118,7 +118,6 @@ def _binary_op(a, b, fn):
 
     return c
 
-
 # -------------------------------------------------------------------
 #                        Vertical operations
 # -------------------------------------------------------------------
@@ -523,7 +522,7 @@ def rcp_(a0):
 def abs_(a0):
     if not a0.IsArithmetic:
         raise Exception("abs(): requires arithmetic operands!")
-    if not a0.IsSpecial:
+    if not a0.IsSpecial or a0.IsMatrix:
         ar, sr = _check1(a0)
         for i in range(sr):
             ar[i] = _ek.abs(a0[i])
@@ -1172,6 +1171,16 @@ def index_(a):
 #                      Initialization operations
 # -------------------------------------------------------------------
 
+def assign_(self, other):
+    if self is other:
+        return
+    elif len(self) != len(other):
+        raise Exception("assign_(): size mismatch!")
+    else:
+        for i in range(len(self)):
+            self[i] = other[i]
+
+
 def broadcast_(self, value):
     if not self.IsSpecial:
         for i in range(len(self)):
@@ -1191,6 +1200,18 @@ def broadcast_(self, value):
             self.set_entry_(i, c)
     else:
         raise Exception("broadcast_(): don't know how to handle this type!")
+
+
+@classmethod
+def empty_(cls, size):
+    result = cls()
+    if cls.IsDynamic:
+        if cls.Size == Dynamic:
+            result.init_(size)
+        else:
+            for i in range(len(result)):
+                result.set_entry_(i, cls.Value.empty_(size))
+    return result
 
 
 @classmethod
@@ -1273,15 +1294,6 @@ def export_(a, migrate_to_host, version):
         for i in range(ndim):
             strides[i] = temp
             temp *= shape[i]
-
-        print({
-            'shape': shape,
-            'strides': tuple(strides),
-            'typestr': '<' + a.Type.NumPy,
-            'data': (a.data_(), False),
-            'version': version,
-            'device': -1}
-        )
 
         return {
             'shape': shape,
