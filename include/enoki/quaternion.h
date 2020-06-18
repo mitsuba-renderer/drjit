@@ -61,7 +61,7 @@ struct Quaternion : StaticArrayImpl<Value_, 4, false, Quaternion<Value_>> {
 template <typename T, enable_if_quaternion_t<T> = 0> T identity(size_t size = 1) {
     using Value = value_t<T>;
     Value z = zero<Value>(size),
-          o = full<Value>(1.f, size);
+          o = identity<Value>(size);
     return T(z, z, z, o);
 }
 

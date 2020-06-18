@@ -1242,6 +1242,17 @@ def rad_to_deg(a):
 # -------------------------------------------------------------------
 
 
+def shuffle(perm, value):
+    if not _ek.is_array_v(value) or len(perm) != value.Size:
+        raise Exception("shuffle(): incompatible input!")
+
+    result = type(value)()
+    for i, j in enumerate(perm):
+        result[i] = value[j]
+
+    return result
+
+
 def all(a):
     if _var_is_enoki(a):
         if a.Type != VarType.Bool:
@@ -1487,44 +1498,6 @@ def cross(a, b):
                  ta(a.z, a.x, a.y) * tb(b.y, b.z, b.x))
 
 
-def rotate(target_type, axis, angle):
-    if target_type.IsQuaternion:
-        s, c = sincos(angle * .5)
-        quat = target_type()
-        quat.imag = axis * s
-        quat.real = c
-        return quat
-    else:
-        raise Exception("Unsupported target type!")
-
-
-def transpose(a):
-    if _ek.is_matrix_v(a):
-        result = type(a)()
-        for i in range(a.Size):
-            for j in range(a.Size):
-                result[j, i] = a[i, j]
-        return result
-    else:
-        return a
-
-
-def diag(a):
-    if _ek.is_matrix_v(a):
-        result = a.Value()
-        for i in range(a.Size):
-            result[i] = a[i, i]
-        return result
-    elif _ek.is_static_array_v(a):
-        name = _array_name('Matrix', a.Type, (a.Size, *a.Shape), a.IsScalar)
-        module = _modules.get(a.__module__)
-        cls = getattr(module, name)
-        result = _ek.zero(cls)
-        for i in range(a.Size):
-            result[i, i] = a[i]
-        return result
-    else:
-        raise Exception('Unsupported type!')
 
 # -------------------------------------------------------------------
 #                     Automatic differentiation
@@ -1664,7 +1637,12 @@ def arange(type_, start=None, end=None, step=1):
 
 
 def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
-    if _ek.is_array_v(a) or _ek.is_array_v(b):
+    input_is_array = _ek.is_array_v(a) or _ek.is_array_v(b)
+    input_is_special = _ek.is_special_v(a) or _ek.is_special_v(b)
+
+    # Fast path for Enoki arrays, avoid for special array types
+    # due to their non-standard broadcasting behavior
+    if input_is_array and not input_is_special:
         if _ek.is_diff_array_v(a):
             a = _ek.detach(a)
         if _ek.is_diff_array_v(b):

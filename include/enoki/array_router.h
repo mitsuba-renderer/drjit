@@ -639,6 +639,11 @@ ENOKI_INLINE T full(const T2 &value, size_t size = 1, bool eval = false) {
         return value;
 }
 
+template <typename T, enable_if_t<!is_special_v<T>> = 0>
+ENOKI_INLINE T identity(size_t size = 1) {
+    return full<T>(scalar_t<T>(1), size);
+}
+
 template <typename Array>
 ENOKI_INLINE Array linspace(scalar_t<Array> min, scalar_t<Array> max, size_t size = 1) {
     if constexpr (is_array_v<Array>)

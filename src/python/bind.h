@@ -157,7 +157,7 @@ auto bind_full(py::class_<Array, EnokiHolder<Array>> &cls,
 
     cls.attr("zero_") = py::cpp_function(&Array::zero_);
     cls.attr("full_") = py::cpp_function(
-        [](Scalar v, size_t size) { return ek::full<Array>(v, size); });
+        [](Scalar v, size_t size, bool eval) { return ek::full<Array>(v, size, eval); });
 
     if constexpr (!Array::IsMask) {
         cls.attr("arange_") = py::cpp_function(&Array::arange_);

@@ -54,7 +54,7 @@ template <typename T> ENOKI_INLINE T imag(const Complex<T> &z) { return z.y(); }
 template <typename T, enable_if_complex_t<T> = 0>
 T identity(size_t size = 1) {
     using Value = value_t<T>;
-    return T(full<Value>(1.f, size), zero<Value>(size));
+    return { identity<Value>(size), zero<Value>(size) };
 }
 
 template <typename T> T squared_norm(const Complex<T> &z) {

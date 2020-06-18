@@ -23,6 +23,9 @@ import enoki.traits as traits  # noqa
 # Math library and const
 import enoki.const as const  # noqa
 
+# Matrix-related functions
+import enoki.matrix as matrix # noqa
+
 # Install routing functions in ArrayBase and global scope
 self = vars()
 base = self['ArrayBase']
@@ -51,10 +54,17 @@ for k, v in traits.__dict__.items():
     self[k] = v
 
 
-# Install const in global scope
+# Install constants in global scope
 for k, v in const.__dict__.items():
     if k.startswith('_'):
         continue
     self[k] = v
 
-del k, v, self, base, generic, router, traits, const, enoki_ext
+
+# Install matrix-related functions
+for k, v in matrix.__dict__.items():
+    if k.startswith('_') or k[0].isupper():
+        continue
+    self[k] = v
+
+del k, v, self, base, generic, router, matrix, traits, const, enoki_ext
