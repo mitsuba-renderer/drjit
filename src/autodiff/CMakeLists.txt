@@ -30,8 +30,6 @@ foreach(ENOKI_AUTODIFF_VARIANT ${ENOKI_AUTODIFF_VARIANTS})
   endif()
 endforeach()
 
-message(STATUS "YES HERE ${CMAKE_CXX_STANDARD}")
-
 add_library(enoki-autodiff SHARED
   ${ENOKI_AUTODIFF_OBJECTS}
   common.h common.cpp

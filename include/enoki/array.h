@@ -13,8 +13,8 @@
 
 #pragma once
 
-#if __cplusplus < 201703L || (defined(_MSVC_LANG) && _MSVC_LANG <= 201402)
-//#  error Enoki requires compilation in C++17 mode!
+#if __cplusplus < 201703L && (!defined(_MSVC_LANG) || _MSVC_LANG < 201703L)
+#  error Enoki requires compilation in C++17 mode!
 #endif
 
 /// Clang-specific workaround: don't pull in all of <math.h> when including <stdlib.h>.

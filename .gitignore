@@ -27,6 +27,9 @@ __pycache__
 
 # Visual Studio
 *.vcxproj
+*.vcxproj.user
+*.iobj
+*.ipdb
 enoki.sdf
 enoki.sln
 enoki.opensdf
@@ -55,7 +58,7 @@ enoki-jit.dll
 libenoki-autodiff.so
 libenoki-autodiff.dylib
 enoki-autodiff.dll
-enoki_ext.cpython*
+enoki_ext.cp*
 compile_commands.json
 \.clangd
 
