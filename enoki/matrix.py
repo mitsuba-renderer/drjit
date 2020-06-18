@@ -62,10 +62,90 @@ def det(m):
         raise Exception('Unsupported array size!')
 
 
-def inverse_transpose(a):
-    if not _ek.is_matrix_v(a):
+def inverse_transpose(m):
+    if not _ek.is_matrix_v(m):
         raise Exception("Unsupported target type!")
-    return a.inverse_transpose_()
+
+    t = type(m)
+    if m.Size == 1:
+        return t(_ek.rcp(m[0, 0]))
+    elif m.Size == 2:
+        inv_det = _ek.rcp(_ek.fmsub(m[0, 0], m[1, 1], m[0, 1] * m[1, 0]))
+        return t(
+            m[1, 1] * inv_det, -m[1, 0] * inv_det,
+            -m[0, 1] * inv_det, m[0, 0] * inv_det
+        )
+    elif m.Size == 3:
+        col0, col1, col2 = m
+        row0 = _ek.cross(col1, col2)
+        row1 = _ek.cross(col2, col0)
+        row2 = _ek.cross(col0, col1)
+        inv_det = _ek.rcp(_ek.dot(col0, row0))
+
+        return t(
+            row0 * inv_det,
+            row1 * inv_det,
+            row2 * inv_det
+        )
+
+    elif m.Size == 4:
+        col0, col1, col2, col3 = m
+
+        col1 = _ek.shuffle((2, 3, 0, 1), col1)
+        col3 = _ek.shuffle((2, 3, 0, 1), col3)
+
+        temp = _ek.shuffle((1, 0, 3, 2), col2 * col3)
+        row0 = col1 * temp
+        row1 = col0 * temp
+        temp = _ek.shuffle((2, 3, 0, 1), temp)
+        row0 = _ek.fmsub(col1, temp, row0)
+        row1 = _ek.shuffle((2, 3, 0, 1), _ek.fmsub(col0, temp, row1))
+
+        temp = _ek.shuffle((1, 0, 3, 2), col1 * col2)
+        row0 = _ek.fmadd(col3, temp, row0)
+        row3 = col0 * temp
+        temp = _ek.shuffle((2, 3, 0, 1), temp)
+        row0 = _ek.fnmadd(col3, temp, row0)
+        row3 = _ek.shuffle((2, 3, 0, 1), _ek.fmsub(col0, temp, row3))
+
+        temp = _ek.shuffle((1, 0, 3, 2),
+                           _ek.shuffle((2, 3, 0, 1), col1) * col3)
+        col2 = _ek.shuffle((2, 3, 0, 1), col2)
+        row0 = _ek.fmadd(col2, temp, row0)
+        row2 = col0 * temp
+        temp = _ek.shuffle((2, 3, 0, 1), temp)
+        row0 = _ek.fnmadd(col2, temp, row0)
+        row2 = _ek.shuffle((2, 3, 0, 1), _ek.fmsub(col0, temp, row2))
+
+        temp = _ek.shuffle((1, 0, 3, 2), col0 * col1)
+        row2 = _ek.fmadd(col3, temp, row2)
+        row3 = _ek.fmsub(col2, temp, row3)
+        temp = _ek.shuffle((2, 3, 0, 1), temp)
+        row2 = _ek.fmsub(col3, temp, row2)
+        row3 = _ek.fnmadd(col2, temp, row3)
+
+        temp = _ek.shuffle((1, 0, 3, 2), col0 * col3)
+        row1 = _ek.fnmadd(col2, temp, row1)
+        row2 = _ek.fmadd(col1, temp, row2)
+        temp = _ek.shuffle((2, 3, 0, 1), temp)
+        row1 = _ek.fmadd(col2, temp, row1)
+        row2 = _ek.fnmadd(col1, temp, row2)
+
+        temp = _ek.shuffle((1, 0, 3, 2), col0 * col2)
+        row1 = _ek.fmadd(col3, temp, row1)
+        row3 = _ek.fnmadd(col1, temp, row3)
+        temp = _ek.shuffle((2, 3, 0, 1), temp)
+        row1 = _ek.fnmadd(col3, temp, row1)
+        row3 = _ek.fmadd(col1, temp, row3)
+
+        inv_det = _ek.rcp(_ek.dot(col0, row0))
+
+        return t(
+            row0 * inv_det, row1 * inv_det,
+            row2 * inv_det, row3 * inv_det
+        )
+    else:
+        raise Exception('Unsupported array size!')
 
 
 def inverse(a):

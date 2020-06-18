@@ -65,7 +65,7 @@ def test05_allclose():
 
 
 @pytest.mark.parametrize('M', [M2, M3, M4])
-def test06_det_inverse(M):
+def test06_det(M):
     import numpy as np
     np.random.seed(1)
     for i in range(100):
@@ -74,3 +74,17 @@ def test06_det_inverse(M):
         det1 = Float(np.linalg.det(m1))
         det2 = ek.det(m2)
         assert ek.allclose(det1, det2, atol=1e-6)
+
+
+@pytest.mark.parametrize('M', [M2, M3, M4])
+def test07_inverse(M):
+    import numpy as np
+    np.random.seed(1)
+    for i in range(100):
+        m1 = np.float32(np.random.normal(size=list(reversed(M.Shape))))
+        m2 = M(m1)
+        inv1 = M(np.linalg.inv(m1))
+        inv2 = ek.inverse(m2)
+        print(inv1)
+        print(inv2)
+        assert ek.allclose(inv1, inv2, rtol=1e-3)

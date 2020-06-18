@@ -1205,28 +1205,40 @@ def broadcast_(self, value):
 @classmethod
 def empty_(cls, size):
     result = cls()
-    if cls.IsDynamic:
-        if cls.Size == Dynamic:
-            result.init_(size)
-        else:
-            for i in range(len(result)):
-                result.set_entry_(i, cls.Value.empty_(size))
+    if cls.Size == Dynamic:
+        result.init_(size)
+    elif cls.IsDynamic:
+        for i in range(len(result)):
+            result.set_entry_(i, _ek.empty(cls.Value, size))
     return result
 
 
 @classmethod
 def zero_(cls, size=1):
-    result = cls.empty_(size)
-    for i in range(len(result)):
-        result[i] = 0
+    result = cls()
+    if cls.Size == Dynamic:
+        result.init_(size)
+        for i in range(size):
+            result.set_entry_(i, 0)
+    else:
+        for i in range(cls.Size):
+            result.set_entry_(i, _ek.zero(cls.Value, size))
     return result
 
 
 @classmethod
 def full_(cls, value, size, eval):
-    result = cls.empty_(size)
-    for i in range(len(result)):
-        result[i] = value
+    result = cls()
+    if cls.Size == Dynamic:
+        result.init_(size)
+        for i in range(size):
+            result.set_entry_(i, value)
+    else:
+        if _ek.array_depth_v(value) != cls.Depth - 1:
+            value = _ek.full(cls.Value, value, size, eval)
+
+        for i in range(cls.Size):
+            result.set_entry_(i, value)
     return result
 
 

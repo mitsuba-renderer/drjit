@@ -201,7 +201,7 @@ struct LLVMArray : ArrayBase<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
         // Simple constant propagation
         if (is_literal_one())
             return v;
-        else if (v.is_literal_one())
+        else if (v.is_literal_one() || (is_literal_zero() && v.is_literal_zero()))
             return *this;
 
         const char *op = std::is_floating_point_v<Value>
