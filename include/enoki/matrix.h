@@ -446,4 +446,16 @@ template <typename T> Matrix<T, 4> inverse(const Matrix<T, 4> &m) {
     return transpose(inverse_transpose(m));
 }
 
+template <typename T, size_t Size> std::pair<Matrix<T, Size>, Matrix<T, Size>>
+polar_decomp(const enoki::Matrix<T, Size> &A, size_t it = 10) {
+    using AsArray = Array<Array<T, Size>, Size>;
+    Matrix<T, Size> Q = A;
+    for (size_t i = 0; i < it; ++i) {
+        Matrix<T, Size> Qi = inverse_transpose(Q);
+        T gamma = sqrt(frob(Qi) / frob(Q));
+        Q = fmadd(AsArray(Q), gamma * .5f, AsArray(Qi) * (rcp(gamma) * .5f));
+    }
+    return { Q, transpose(Q) * A };
+}
+
 NAMESPACE_END(enoki)

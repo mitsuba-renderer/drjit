@@ -769,7 +769,7 @@ Target gather(Source &&source, const Index &index, const mask_t<Target> &mask = 
         static_assert(
             std::is_integral_v<Index>,
             "gather(): don't know what to do with these inputs. Did you forget "
-            "an ENOKI_STRUCT() declaration for type to be gathered?");
+            "an ENOKI_STRUCT() declaration for the type to be gathered?");
 
         if constexpr (is_array_v<Source>)
             return mask ? source[index] : Target(0);
@@ -811,7 +811,7 @@ void scatter(Target &&target, const Value &value, const Index &index, const mask
         static_assert(
             std::is_integral_v<Index>,
             "scatter(): don't know what to do with these inputs. Did you forget "
-            "an ENOKI_STRUCT() declaration for type to be scattered?");
+            "an ENOKI_STRUCT() declaration for the type to be scattered?");
 
         if (mask) {
             if constexpr (is_array_v<Target>)
@@ -850,7 +850,7 @@ void scatter_add(Target &&target, const Value &value, const Index &index, const 
         static_assert(
             detail::false_v<Index, Value>,
             "scatter_add(): don't know what to do with these inputs. Did you forget "
-            "an ENOKI_STRUCT() declaration for type to be scattered?");
+            "an ENOKI_STRUCT() declaration for the type to be scattered?");
     }
 }
 

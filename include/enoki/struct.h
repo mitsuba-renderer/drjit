@@ -180,10 +180,9 @@ template <typename T1, typename T2> struct struct_support<std::pair<T1, T2>> {
     template <bool Perm, typename Index, typename Mask>
     static Class gather(const Class &src, const Index &index,
                         const Mask &mask) {
-        Class result;
-        result.first  = enoki::gather<T1, Perm>(src.first,  index, mask);
-        result.second = enoki::gather<T2, Perm>(src.second, index, mask);
-        return result;
+        return Class(
+            enoki::gather<T1, Perm>(src.first,  index, mask),
+            enoki::gather<T2, Perm>(src.second, index, mask));
     }
     static bool grad_enabled(const Class &v) {
         return enoki::grad_enabled(v.first, v.second);
@@ -196,32 +195,21 @@ template <typename T1, typename T2> struct struct_support<std::pair<T1, T2>> {
     static auto detach(const Class &v) {
         using Result = std::pair<
             decltype(enoki::detach(std::declval<T1 &>())),
-            decltype(enoki::detach(std::declval<T2 &>()))
-        >;
-        Result result;
-        result.first = enoki::detach(v.first);
-        result.second = enoki::detach(v.second);
-        return result;
+            decltype(enoki::detach(std::declval<T2 &>()))>;
+        return Result(enoki::detach(v.first), enoki::detach(v.second));
     }
     static auto grad(const Class &v) {
         using Result = std::pair<
             decltype(enoki::grad(std::declval<T1 &>())),
-            decltype(enoki::grad(std::declval<T2 &>()))
-        >;
-        Result result;
-        result.first = enoki::grad(v.first);
-        result.second = enoki::grad(v.second);
-        return result;
+            decltype(enoki::grad(std::declval<T2 &>()))>;
+        return Result(enoki::grad(v.first), enoki::grad(v.second));
     }
     template <typename Mask> static auto masked(Class &v, const Mask &mask) {
         using Result = std::pair<
             decltype(enoki::masked(std::declval<T1 &>(), mask)),
-            decltype(enoki::masked(std::declval<T2 &>(), mask))
-        >;
-        Result result;
-        result.first = enoki::masked(v.first, mask);
-        result.second = enoki::masked(v.second, mask);
-        return result;
+            decltype(enoki::masked(std::declval<T2 &>(), mask))>;
+        return Result(enoki::masked(v.first, mask),
+                      enoki::masked(v.second, mask));
     }
     static bool schedule(const Class &v) {
         return enoki::schedule(v.first, v.second);
@@ -233,10 +221,125 @@ template <typename T1, typename T2> struct struct_support<std::pair<T1, T2>> {
     }
     static void set_label(Class &v, const char *label) {
         char tmp[256];
-        snprintf(tmp, sizeof(tmp), "%s_%s", label, "first");
+        snprintf(tmp, sizeof(tmp), "%s_0", label);
         enoki::set_label(v.first, tmp);
-        snprintf(tmp, sizeof(tmp), "%s_%s", label, "second");
+        snprintf(tmp, sizeof(tmp), "%s_1", label);
         enoki::set_label(v.second, tmp);
+    }
+};
+
+
+template <typename... Ts> struct struct_support<std::tuple<Ts...>> {
+    using Class = std::tuple<Ts...>;
+    static constexpr bool Defined = true;
+    static Class empty(size_t size) { return Class(enoki::empty<Ts>(size)...); }
+    static Class zero(size_t size) { return Class(enoki::zero<Ts>(size)...); }
+    static constexpr auto index_seq = std::make_index_sequence<sizeof...(Ts)>();
+
+    template <bool Perm, typename Index, typename Mask>
+    static void scatter(Class &dst, const Class &src, const Index &index,
+                        const Mask &mask) {
+        scatter_impl<Perm>(dst, src, index, mask, index_seq);
+    }
+
+    template <bool Perm, typename Index, typename Mask, size_t... Is>
+    static void scatter_impl(Class &dst, const Class &src, const Index &index,
+                             const Mask &mask, std::index_sequence<Is...>) {
+        (enoki::scatter<Perm>(std::get<Is>(dst), std::get<Is>(src), index,
+                              mask), ...);
+    }
+
+    template <bool Perm, typename Index, typename Mask>
+    static Class gather(const Class &src, const Index &index,
+                        const Mask &mask) {
+        return gather_impl<Perm>(src, index, mask, index_seq);
+    }
+
+    template <bool Perm, typename Index, typename Mask, size_t... Is>
+    static Class gather_impl(const Class &src, const Index &index,
+                             const Mask &mask, std::index_sequence<Is...>) {
+        return Class(enoki::gather<Ts, Perm>(std::get<Is>(src),  index, mask)...);
+    }
+
+    static bool grad_enabled(const Class &v) {
+        return grad_enabled_impl(v, index_seq);
+    }
+
+    template <size_t... Is>
+    static bool grad_enabled_impl(const Class &v, std::index_sequence<Is...>) {
+        return enoki::grad_enabled(std::get<Is>(v)...);
+    }
+
+    static void set_grad_enabled(Class &v, bool value) {
+        set_grad_enabled_impl(v, value, index_seq);
+    }
+
+    template <size_t... Is>
+    static void set_grad_enabled_impl(Class &v, bool value, std::index_sequence<Is...>) {
+        (enoki::set_grad_enabled(std::get<Is>(v), value), ...);
+    }
+
+    static bool schedule(const Class &v) { return schedule_impl(v, index_seq); }
+
+    template <size_t... Is>
+    static bool schedule_impl(const Class &v, std::index_sequence<Is...>) {
+        return enoki::schedule(std::get<Is>(v)...);
+    }
+
+    static void enqueue(const Class &v) { enqueue_impl(v, index_seq); }
+
+    template <size_t... Is> static void enqueue_impl(const Class &v, std::index_sequence<Is...>) {
+        enoki::enqueue(std::get<Is>(v)...);
+    }
+    static auto detach(const Class &v) { return detach_impl(v, index_seq); }
+
+    template <size_t... Is>
+    static auto detach_impl(const Class &v, std::index_sequence<Is...>) {
+        using Result =
+            std::tuple<decltype(enoki::detach(std::declval<Ts &>()))...>;
+        return Result(enoki::detach(std::get<Is>(v))...);
+    }
+
+    static auto grad(const Class &v) { return grad_impl(v, index_seq); }
+
+    template <size_t... Is>
+    static auto grad_impl(const Class &v, std::index_sequence<Is...>) {
+        using Result =
+            std::tuple<decltype(enoki::grad(std::declval<Ts &>()))...>;
+        return Result(enoki::grad(std::get<Is>(v))...);
+    }
+
+    static size_t width(const Class &v) { return width_impl(v, index_seq); }
+
+    template <size_t... Is>
+    static size_t width_impl(const Class &v, std::index_sequence<Is...>) {
+        size_t widths[] = { enoki::width(std::get<Is>(v))..., 0 }, result = 0;
+        for (size_t i = 0; i < sizeof...(Ts); ++i)
+            result = widths[i] > result ? widths[i] : result;
+        return result;
+    }
+
+    static void set_label(Class &v, const char *label) {
+        set_label_impl(v, label, index_seq);
+    }
+
+    template <size_t... Is>
+    static void set_label_impl(Class &v, const char *label,
+                               std::index_sequence<Is...>) {
+        char tmp[256];
+        ((snprintf(tmp, sizeof(tmp), "%s_%i", label, int(Is)),
+          enoki::set_label(std::get<Is>(v), tmp)), ...);
+    }
+
+    template <typename Mask> static auto masked(Class &v, const Mask &mask) {
+        return masked_impl(v, mask, index_seq);
+    }
+
+    template <typename Mask, size_t... Is>
+    static auto masked_impl(Class &v, const Mask &mask,
+                            std::index_sequence<Is...>) {
+        using Result = std::tuple<decltype(enoki::masked(std::declval<Ts &>(), mask))...>;
+        return Result(enoki::masked(std::get<Is>(v), mask)...);
     }
 };
 

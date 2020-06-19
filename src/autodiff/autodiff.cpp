@@ -647,7 +647,7 @@ uint32_t ad_new_gather(const char *label, uint32_t size, uint32_t src_index,
         std::lock_guard<Mutex> guard(state.mutex);
         auto [index, var] = ad_var_new(label, size);
 
-        ad_log(Debug, "ad_new_gather(%u <- %u, %u, permute=%i)", index,
+        ad_log(Debug, "ad_new_gather(%u <- %u, permute=%i)", index,
                src_index, (int) permute);
 
         Variable *var2 = state[src_index];
@@ -1016,6 +1016,7 @@ template <typename T> void ad_set_label(uint32_t index, const char *label) {
     if (index == 0)
         return;
     std::lock_guard<Mutex> guard(state.mutex);
+    ad_log(Debug, "ad_set_label(%u, \"%s\")", index, label ? label : "(null)");
     Variable *v = state[index];
     if (v->free_label)
         free(v->label);

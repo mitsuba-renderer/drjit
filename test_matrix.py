@@ -66,25 +66,31 @@ def test05_allclose():
 
 @pytest.mark.parametrize('M', [M2, M3, M4])
 def test06_det(M):
-    import numpy as np
-    np.random.seed(1)
-    for i in range(100):
-        m1 = np.float32(np.random.normal(size=list(reversed(M.Shape))))
-        m2 = M(m1)
-        det1 = Float(np.linalg.det(m1))
-        det2 = ek.det(m2)
-        assert ek.allclose(det1, det2, atol=1e-6)
+  import numpy as np
+  np.random.seed(1)
+  for i in range(100):
+      m1 = np.float32(np.random.normal(size=list(reversed(M.Shape))))
+      m2 = M(m1)
+      det1 = Float(np.linalg.det(m1))
+      det2 = ek.det(m2)
+      assert ek.allclose(det1, det2, atol=1e-6)
 
 
 @pytest.mark.parametrize('M', [M2, M3, M4])
 def test07_inverse(M):
-    import numpy as np
-    np.random.seed(1)
-    for i in range(100):
-        m1 = np.float32(np.random.normal(size=list(reversed(M.Shape))))
-        m2 = M(m1)
-        inv1 = M(np.linalg.inv(m1))
-        inv2 = ek.inverse(m2)
-        print(inv1)
-        print(inv2)
-        assert ek.allclose(inv1, inv2, rtol=1e-3)
+  import numpy as np
+  np.random.seed(1)
+  for i in range(100):
+      m1 = np.float32(np.random.normal(size=list(reversed(M.Shape))))
+      m2 = M(m1)
+      inv1 = M(np.linalg.inv(m1))*m2 - ek.identity(M)
+      inv2 = ek.inverse(m2)*m2 - ek.identity(M)
+      assert ek.allclose(inv1, 0, atol=1e-3)
+      assert ek.allclose(inv2, 0, atol=1e-3)
+
+
+def test08_polar():
+    m = M(*range(1, 17)) + ek.identity(M)
+    q, r = ek.polar_decomp(m)
+    assert ek.allclose(q*r, m)
+    assert ek.allclose(q*ek.transpose(q), ek.identity(M), atol=1e-6)

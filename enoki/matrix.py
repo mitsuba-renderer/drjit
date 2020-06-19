@@ -189,3 +189,15 @@ def frob(a):
         value = a[i]
         result = _ek.fmadd(value, value, result)
     return _ek.hsum(result)
+
+
+def polar_decomp(a, it=10):
+    q = type(a)(a)
+    for i in range(it):
+        qi = _ek.inverse_transpose(q)
+        print(qi)
+        gamma = _ek.sqrt(_ek.frob(qi) / _ek.frob(q))
+        s1, s2 = gamma * .5, (_ek.rcp(gamma) * .5)
+        for i in range(a.Size):
+            q[i] = _ek.fmadd(q[i], s1, qi[i] * s2)
+    return q, q*a
