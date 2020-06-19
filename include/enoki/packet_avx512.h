@@ -209,24 +209,21 @@ template <bool IsMask_, typename Derived_> struct alignas(64)
     }
 
     ENOKI_INLINE Derived rcp_() const {
-        /* Use best reciprocal approximation available on the current
-           hardware and refine */
-        __m512 r = _mm512_rcp14_ps(m); /* rel error < 2^-14 */
+        __m512 r = _mm512_rcp14_ps(m); // rel error < 2^-14
 
-        /* Refine using one Newton-Raphson iteration */
+        // Refine using one Newton-Raphson iteration
         __m512 t0 = _mm512_add_ps(r, r),
                t1 = _mm512_mul_ps(r, m);
 
         r = _mm512_fnmadd_ps(t1, r, t0);
 
-        return _mm512_fixupimm_ps(r, m,
-            _mm512_set1_epi32(0x0087A622), 0);
+        return _mm512_fixupimm_ps(r, m, _mm512_set1_epi32(0x0087A622), 0);
     }
 
     ENOKI_INLINE Derived rsqrt_() const {
-        __m512 r = _mm512_rsqrt14_ps(m); /* rel error < 2^-14 */
+        __m512 r = _mm512_rsqrt14_ps(m); // rel error < 2^-14
 
-        /* Refine using one Newton-Raphson iteration */
+        // Refine using one Newton-Raphson iteration
         const __m512 c0 = _mm512_set1_ps(0.5f),
                      c1 = _mm512_set1_ps(3.0f);
 
@@ -235,8 +232,7 @@ template <bool IsMask_, typename Derived_> struct alignas(64)
 
         r = _mm512_mul_ps(_mm512_fnmadd_ps(t1, r, c1), t0);
 
-        return _mm512_fixupimm_ps(r, m,
-            _mm512_set1_epi32(0x0383A622), 0);
+        return _mm512_fixupimm_ps(r, m, _mm512_set1_epi32(0x0383A622), 0);
     }
 
     ENOKI_INLINE Derived ldexp_(Ref arg) const { return _mm512_scalef_ps(m, arg.m); }
@@ -296,6 +292,43 @@ template <bool IsMask_, typename Derived_> struct alignas(64)
         } else {
             _mm512_mask_i64scatter_ps(ptr, low(mask).k,   low(index).m,  low(derived()).m,  4);
             _mm512_mask_i64scatter_ps(ptr, high(mask).k, high(index).m, high(derived()).m, 4);
+        }
+    }
+
+    template <typename Index, typename Mask>
+    ENOKI_INLINE void scatter_add_(void *ptr, const Index &index_, const Mask &active_) const {
+        if constexpr (sizeof(scalar_t<Index>) == 4) {
+            __m512i index = index_.m;
+            __mmask16 active = active_.k;
+            __m512 value = m;
+
+            __m512 value_orig = _mm512_mask_i32gather_ps(
+                _mm512_undefined(), active, index, ptr, 4);
+
+            __m512i conflicts = _mm512_and_si512(_mm512_conflict_epi32(index),
+                                                 _mm512_broadcastmw_epi32(active));
+
+            __mmask16 todo = _mm512_test_epi32_mask(conflicts, conflicts);
+
+            if (ENOKI_UNLIKELY(!_mm512_kortestz(todo, todo))) {
+                __m512i perm_idx = _mm512_sub_epi32(_mm512_set1_epi32(31),
+                                                    _mm512_lzcnt_epi32(conflicts)),
+                        all_ones = _mm512_set1_epi32(-1);
+                do {
+                    __m512 value_peer = _mm512_maskz_permutexvar_ps(todo, perm_idx, value);
+                    perm_idx = _mm512_mask_permutexvar_epi32(perm_idx, todo,
+                                                             perm_idx, perm_idx);
+                    value = _mm512_add_ps(value, value_peer);
+                    todo = _mm512_mask_cmp_epi32_mask(active, all_ones, perm_idx,
+                                                      _MM_CMPINT_NE);
+                } while (!_mm512_kortestz(todo, todo));
+            }
+
+            value = _mm512_add_ps(value, value_orig);
+
+            _mm512_mask_i32scatter_ps(ptr, active, index, value, 4);
+        } else {
+            scatter_add_(ptr, int32_array_t<Index>(index_), active_);
         }
     }
 
@@ -565,6 +598,43 @@ template <bool IsMask_, typename Derived_> struct alignas(64)
             _mm512_mask_i64scatter_pd(ptr, mask.k, index.m, m, 8);
     }
 
+    template <typename Index, typename Mask>
+    ENOKI_INLINE void scatter_add_(void *ptr, const Index &index_, const Mask &active_) const {
+        if constexpr (sizeof(scalar_t<Index>) == 8) {
+            __m512i index = index_.m;
+            __mmask8 active = active_.k;
+            __m512d value = m;
+
+            __m512d value_orig = _mm512_mask_i64gather_pd(
+                _mm512_undefined(), active, index, ptr, 8);
+
+            __m512i conflicts = _mm512_and_si512(_mm512_conflict_epi64(index),
+                                                 _mm512_broadcastmb_epi64(active));
+
+            __mmask8 todo = _mm512_test_epi64_mask(conflicts, conflicts);
+
+            if (ENOKI_UNLIKELY(!_kortestz_mask8_u8(todo, todo))) {
+                __m512i perm_idx = _mm512_sub_epi64(_mm512_set1_epi64(63),
+                                                    _mm512_lzcnt_epi64(conflicts)),
+                        all_ones = _mm512_set1_epi64(-1);
+                do {
+                    __m512 value_peer = _mm512_maskz_permutexvar_pd(todo, perm_idx, value);
+                    perm_idx = _mm512_mask_permutexvar_epi64(perm_idx, todo,
+                                                             perm_idx, perm_idx);
+                    value = _mm512_add_pd(value, value_peer);
+                    todo = _mm512_mask_cmp_epi64_mask(active, all_ones, perm_idx,
+                                                      _MM_CMPINT_NE);
+                } while (!_kortestz_mask8_u8(todo, todo));
+            }
+
+            value = _mm512_add_pd(value, value_orig);
+
+            _mm512_mask_i64scatter_pd(ptr, active, index, value, 8);
+        } else {
+            scatter_add_(ptr, int64_array_t<Index>(index_), active_);
+        }
+    }
+
     //! @}
     // -----------------------------------------------------------------------
 } ENOKI_MAY_ALIAS;
@@ -804,7 +874,6 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(64)
     static ENOKI_INLINE Derived zero_(size_t) { return _mm512_setzero_si512(); }
     static ENOKI_INLINE Derived empty_(size_t) { return _mm512_undefined_epi32(); }
 
-
     template <bool, typename Index, typename Mask>
     static ENOKI_INLINE Derived gather_(const void *ptr, const Index &index, const Mask &mask) {
         if constexpr (sizeof(scalar_t<Index>) == 4) {
@@ -823,6 +892,43 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(64)
         } else {
             _mm512_mask_i64scatter_epi32(ptr, low(mask).k,   low(index).m,  low(derived()).m,  4);
             _mm512_mask_i64scatter_epi32(ptr, high(mask).k, high(index).m, high(derived()).m, 4);
+        }
+    }
+
+    template <typename Index, typename Mask>
+    ENOKI_INLINE void scatter_add_(void *ptr, const Index &index_, const Mask &active_) const {
+        if constexpr (sizeof(scalar_t<Index>) == 4) {
+            __m512i index = index_.m;
+            __mmask16 active = active_.k;
+            __m512i value = m;
+
+            __m512i value_orig = _mm512_mask_i32gather_epi32(
+                _mm512_undefined(), active, index, ptr, 4);
+
+            __m512i conflicts = _mm512_and_si512(_mm512_conflict_epi32(index),
+                                                 _mm512_broadcastmw_epi32(active));
+
+            __mmask16 todo = _mm512_test_epi32_mask(conflicts, conflicts);
+
+            if (ENOKI_UNLIKELY(!_mm512_kortestz(todo, todo))) {
+                __m512i perm_idx = _mm512_sub_epi32(_mm512_set1_epi32(31),
+                                                    _mm512_lzcnt_epi32(conflicts)),
+                        all_ones = _mm512_set1_epi32(-1);
+                do {
+                    __m512i value_peer = _mm512_maskz_permutexvar_epi32(todo, perm_idx, value);
+                    perm_idx = _mm512_mask_permutexvar_epi32(perm_idx, todo,
+                                                             perm_idx, perm_idx);
+                    value = _mm512_add_epi32(value, value_peer);
+                    todo = _mm512_mask_cmp_epi32_mask(active, all_ones, perm_idx,
+                                                      _MM_CMPINT_NE);
+                } while (!_mm512_kortestz(todo, todo));
+            }
+
+            value = _mm512_add_epi32(value, value_orig);
+
+            _mm512_mask_i32scatter_epi32(ptr, active, index, value, 4);
+        } else {
+            scatter_add_(ptr, int32_array_t<Index>(index_), active_);
         }
     }
 
@@ -1094,6 +1200,43 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(64)
             _mm512_mask_i32scatter_epi64(ptr, mask.k, index.m, m, 8);
         else
             _mm512_mask_i64scatter_epi64(ptr, mask.k, index.m, m, 8);
+    }
+
+    template <typename Index, typename Mask>
+    ENOKI_INLINE void scatter_add_(void *ptr, const Index &index_, const Mask &active_) const {
+        if constexpr (sizeof(scalar_t<Index>) == 8) {
+            __m512i index = index_.m;
+            __mmask8 active = active_.k;
+            __m512i value = m;
+
+            __m512i value_orig = _mm512_mask_i64gather_epi64(
+                _mm512_undefined(), active, index, ptr, 8);
+
+            __m512i conflicts = _mm512_and_si512(_mm512_conflict_epi64(index),
+                                                 _mm512_broadcastmb_epi64(active));
+
+            __mmask8 todo = _mm512_test_epi64_mask(conflicts, conflicts);
+
+            if (ENOKI_UNLIKELY(!_kortestz_mask8_u8(todo, todo))) {
+                __m512i perm_idx = _mm512_sub_epi64(_mm512_set1_epi64(63),
+                                                    _mm512_lzcnt_epi64(conflicts)),
+                        all_ones = _mm512_set1_epi64(-1);
+                do {
+                    __m512 value_peer = _mm512_maskz_permutexvar_epi64(todo, perm_idx, value);
+                    perm_idx = _mm512_mask_permutexvar_epi64(perm_idx, todo,
+                                                             perm_idx, perm_idx);
+                    value = _mm512_add_epi64(value, value_peer);
+                    todo = _mm512_mask_cmp_epi64_mask(active, all_ones, perm_idx,
+                                                      _MM_CMPINT_NE);
+                } while (!_kortestz_mask8_u8(todo, todo));
+            }
+
+            value = _mm512_add_epi64(value, value_orig);
+
+            _mm512_mask_i64scatter_epi64(ptr, active, index, value, 8);
+        } else {
+            scatter_add_(ptr, int64_array_t<Index>(index_), active_);
+        }
     }
 
     template <typename Mask>
