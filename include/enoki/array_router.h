@@ -607,6 +607,10 @@ template <typename T> ENOKI_INLINE T zero(size_t size = 1) {
     } else if constexpr (has_struct_support_v<T>) {
         return struct_support<T>::zero(size);
     } else {
+        static_assert(std::is_scalar_v<T>,
+                      "Unsupported data structure -- did you forget to include "
+                      "'enoki/struct.h' or provide a suitable "
+                      "ENOKI_STRUCT_SUPPORT() declaration?");
         return T(0);
     }
 }
@@ -622,6 +626,10 @@ template <typename T> ENOKI_INLINE T empty(size_t size = 1) {
     } else if constexpr (has_struct_support_v<T>) {
         return struct_support<T>::empty(size);
     } else {
+        static_assert(std::is_scalar_v<T>,
+                      "Unsupported data structure -- did you forget to include "
+                      "'enoki/struct.h' or provide a suitable "
+                      "ENOKI_STRUCT_SUPPORT() declaration?");
         T undef;
         return undef;
     }
@@ -766,10 +774,10 @@ Target gather(Source &&source, const Index &index, const mask_t<Target> &mask = 
         return struct_support<Target>::template gather<Permute>(source, index, mask);
     } else {
         /// Case 4: gather<float>(const float *, ...)
-        static_assert(
-            std::is_integral_v<Index>,
-            "gather(): don't know what to do with these inputs. Did you forget "
-            "an ENOKI_STRUCT() declaration for the type to be gathered?");
+        static_assert(std::is_integral_v<Index> && std::is_scalar_v<Target>,
+                      "gather(): unsupported inputs -- did you forget to "
+                      "include 'enoki/struct.h' or provide a suitable "
+                      "ENOKI_STRUCT_SUPPORT() declaration?");
 
         if constexpr (is_array_v<Source>)
             return mask ? source[index] : Target(0);
@@ -808,10 +816,10 @@ void scatter(Target &&target, const Value &value, const Index &index, const mask
     } else if constexpr (has_struct_support_v<Value>) {
         struct_support<Value>::template scatter<Permute>(target, value, index, mask);
     } else {
-        static_assert(
-            std::is_integral_v<Index>,
-            "scatter(): don't know what to do with these inputs. Did you forget "
-            "an ENOKI_STRUCT() declaration for the type to be scattered?");
+        static_assert(std::is_integral_v<Index> && std::is_scalar_v<Value>,
+                      "scatter(): unsupported inputs -- did you forget to "
+                      "include 'enoki/struct.h' or provide a suitable "
+                      "ENOKI_STRUCT_SUPPORT() declaration?");
 
         if (mask) {
             if constexpr (is_array_v<Target>)
@@ -1296,6 +1304,16 @@ auto concat(const T1 &a1, const T2 &a2) {
 
         return result;
     }
+}
+
+template <int Imm, typename T, enable_if_static_array_t<T> = 0>
+ENOKI_INLINE T rotate_left(const T &a) {
+    return a.template rotate_left_<Imm>();
+}
+
+template <int Imm, typename T, enable_if_static_array_t<T> = 0>
+ENOKI_INLINE T rotate_right(const T &a) {
+    return a.template rotate_right_<Imm>();
 }
 
 //! @}

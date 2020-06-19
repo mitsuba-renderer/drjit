@@ -199,16 +199,6 @@ struct StaticArrayBase : ArrayBase<Value_, IsMask_, Derived_> {
     }
 
 private:
-    template <size_t Imm, size_t... Is>
-    ENOKI_INLINE Derived ror_array_(std::index_sequence<Is...>) const {
-        return shuffle<(Is + Derived::Size - Imm) % Derived::Size...>(derived());
-    }
-
-    template <size_t Imm, size_t... Is>
-    ENOKI_INLINE Derived rol_array_(std::index_sequence<Is...>) const {
-        return shuffle<(Is + Imm) % Derived::Size...>(derived());
-    }
-
     template <typename T, size_t Offset, size_t... Is>
     ENOKI_INLINE T sub_array_(std::index_sequence<Is...>) const {
         return T(derived().entry(Offset + Is)...);
@@ -223,6 +213,16 @@ private:
             return Derived((Scalar) offset);
         else
             return Derived(((Scalar) ((T) Is * step + offset))...);
+    }
+
+    template <size_t Imm, size_t... Is>
+    ENOKI_INLINE Derived rotate_right_(std::index_sequence<Is...>) const {
+        return shuffle<(Is + Derived::Size - Imm) % Derived::Size...>(derived());
+    }
+
+    template <size_t Imm, size_t... Is>
+    ENOKI_INLINE Derived rotate_left_(std::index_sequence<Is...>) const {
+        return shuffle<(Is + Imm) % Derived::Size...>(derived());
     }
 
 public:
@@ -258,6 +258,14 @@ public:
     ENOKI_INLINE auto high_() const {
         return sub_array_<typename Derived::Array2, Derived::Size1>(
             std::make_index_sequence<Derived::Size2>());
+    }
+
+    template <size_t Imm> ENOKI_INLINE Derived rotate_right_() const {
+        return rotate_right_<Imm>(std::make_index_sequence<Derived::Size>());
+    }
+
+    template <size_t Imm> ENOKI_INLINE Derived rotate_left_() const {
+        return rotate_left_<Imm>(std::make_index_sequence<Derived::Size>());
     }
 
     //! @}

@@ -752,12 +752,12 @@ Elementary Arithmetic Operators
 
     Right shift with rotation by an immediate amount ``Imm``.
 
-.. cpp:function:: template <size_t Imm, typename Array> Array ror_array(Array x)
+.. cpp:function:: template <size_t Imm, typename Array> Array rotate_right(Array x)
 
     Rotate the entire array by ``Imm`` entries towards the right, i.e.
     ``coeff[0]`` becomes ``coeff[Imm]``, etc.
 
-.. cpp:function:: template <size_t Imm, typename Array> Array rol_array(Array x)
+.. cpp:function:: template <size_t Imm, typename Array> Array rotate_left(Array x)
 
     Rotate the entire array by ``Imm`` entries towards the left, i.e.
     ``coeff[Imm]`` becomes ``coeff[0]``, etc.

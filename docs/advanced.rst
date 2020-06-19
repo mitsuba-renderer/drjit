@@ -651,4 +651,4 @@ the routing templates in ``enoki/enoki_router.h``.
     ``rol_``,  ``ror_``.
 
   * Optional array rotation operations (reduced to shuffles by default):
-    ``rol_array_``, ``ror_array_``.
+    ``rotate_left_``, ``rotate_right_``.
