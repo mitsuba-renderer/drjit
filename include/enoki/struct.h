@@ -228,7 +228,6 @@ template <typename T1, typename T2> struct struct_support<std::pair<T1, T2>> {
     }
 };
 
-
 template <typename... Ts> struct struct_support<std::tuple<Ts...>> {
     using Class = std::tuple<Ts...>;
     static constexpr bool Defined = true;
