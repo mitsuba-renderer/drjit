@@ -38,8 +38,15 @@
 
 #  if defined(ENOKI_X86_AVX2)
 #    include <avx2intrin.h>
+#  endif
+
+#  if defined(ENOKI_X86_BMI)
 #    include <bmiintrin.h>
 #  endif
+
+#  if defined(ENOKI_X86_BMI2)
+#    include <bmi2intrin.h>
+#endif
 
 #  if defined(ENOKI_X86_FMA)
 #    include <fmaintrin.h>
@@ -112,6 +119,18 @@
     static constexpr bool has_avx = true;
 #else
     static constexpr bool has_avx = false;
+#endif
+
+#if defined(ENOKI_X86_BMI)
+    static constexpr bool has_bmi = true;
+#else
+    static constexpr bool has_bmi = false;
+#endif
+
+#if defined(ENOKI_X86_BMI2)
+    static constexpr bool has_bmi2 = true;
+#else
+    static constexpr bool has_bmi2 = false;
 #endif
 
 #if defined(ENOKI_X86_AVX2)

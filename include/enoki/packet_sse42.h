@@ -39,11 +39,11 @@ template <bool IsMask_, typename Derived_> struct alignas(16)
     //! @{ \name Type converting constructors
     // -----------------------------------------------------------------------
 
-#if defined(ENOKI_X86_F16C)
+// #if defined(ENOKI_X86_F16C)
     // ENOKI_CONVERT(half) {
     //     m = _mm_cvtph_ps(_mm_loadl_epi64((const __m128i *) a.derived().data()));
     // }
-#endif
+// #endif
 
     ENOKI_CONVERT(float) : m(a.derived().m) { }
     ENOKI_CONVERT(int32_t) : m(_mm_cvtepi32_ps(a.derived().m)) { }
@@ -1668,7 +1668,7 @@ template <bool IsMask_, typename Derived_> struct alignas(16)
   : StaticArrayImpl<float, 4, IsMask_, Derived_> {
     ENOKI_PACKET_TYPE_3D(float)
 
-#if defined(ENOKI_X86_F16C)
+// #if defined(ENOKI_X86_F16C)
     // template <typename Derived2>
     // ENOKI_INLINE StaticArrayImpl(
     //     const StaticArrayBase<half, 3, IsMask_, Derived2> &a) {
@@ -1677,7 +1677,7 @@ template <bool IsMask_, typename Derived_> struct alignas(16)
     //     temp[3] = 0;
     //     m = _mm_cvtph_ps(_mm_loadl_epi64((const __m128i *) temp));
     // }
-#endif
+// #endif
 
     template <int I0, int I1, int I2>
     ENOKI_INLINE Derived shuffle_() const {

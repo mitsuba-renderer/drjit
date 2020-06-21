@@ -130,6 +130,12 @@
 #  if defined(__F16C__)
 #    define ENOKI_X86_F16C 1
 #  endif
+#  if defined(__BMI__)
+#    define ENOKI_X86_BMI 1
+#  endif
+#  if defined(__BMI2__)
+#    define ENOKI_X86_BMI2 1
+#  endif
 #  if defined(__AVX__)
 #    define ENOKI_X86_AVX 1
 #  endif
@@ -146,32 +152,32 @@
 
 // Fix missing/inconsistent preprocessor flags
 #if defined(ENOKI_X86_AVX512) && !defined(ENOKI_X86_AVX2)
-#  define ENOKI_X86_AVX2
+#  define ENOKI_X86_AVX2 1
 #endif
-
-#if defined(ENOKI_X86_AVX2) && !defined(ENOKI_X86_F16C)
-#  define ENOKI_X86_F16C
-#endif
-
-#if defined(ENOKI_X86_AVX2) && !defined(ENOKI_X86_FMA)
-#  define ENOKI_X86_FMA
-#  if defined(__GNUG__)
-/// Seriously complain about this one when compiling with GCC/Clang
-#    error Invalid processor feature flags: FMA (-mfma) must be specified when AVX2 (-mavx2) is enabled!
-#  endif
-#endif
-
 #if defined(ENOKI_X86_AVX2) && !defined(ENOKI_X86_AVX)
-#  define ENOKI_X86_AVX
+#  define ENOKI_X86_AVX 1
+#endif
+#if defined(ENOKI_X86_AVX) && !defined(ENOKI_X86_SSE42)
+#  define ENOKI_X86_SSE42 1
 #endif
 
-#if defined(ENOKI_X86_AVX) && !defined(ENOKI_X86_SSE42)
-#  define ENOKI_X86_SSE42
+#if defined(_MSC_VER)
+  #if defined(ENOKI_X86_AVX2) && !defined(ENOKI_X86_F16C)
+  #  define ENOKI_X86_F16C 1
+  #endif
+  #if defined(ENOKI_X86_AVX2) && !defined(ENOKI_X86_BMI)
+  #  define ENOKI_X86_BMI 1
+  #endif
+  #if defined(ENOKI_X86_AVX2) && !defined(ENOKI_X86_BMI2)
+  #  define ENOKI_X86_BMI2 1
+  #endif
+  #if defined(ENOKI_X86_AVX2) && !defined(ENOKI_X86_FMA)
+  #  define ENOKI_X86_FMA 1
+  #endif
 #endif
 
 /* The following macro is used by the test suite to detect
    unimplemented methods in vectorized backends */
-
 #if !defined(ENOKI_TRACK_SCALAR)
 #  define ENOKI_TRACK_SCALAR(reason) { }
 #endif
