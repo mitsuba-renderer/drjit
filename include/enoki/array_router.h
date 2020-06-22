@@ -481,7 +481,6 @@ ENOKI_INLINE auto hmean_async(const Array &a) {
         return a;
 }
 
-
 template <typename T1, typename T2, enable_if_array_any_t<T1, T2> = 0>
 ENOKI_INLINE bool operator==(const T1 &a1, const T2 &a2) {
     return all_nested(eq(a1, a2));
@@ -970,6 +969,41 @@ template <typename T> T tanh(const T &a);
 template <typename T> T asinh(const T &a);
 template <typename T> T acosh(const T &a);
 template <typename T> T atanh(const T &a);
+
+//! @}
+// -----------------------------------------------------------------------
+
+// -----------------------------------------------------------------------
+//! @{ \name Reductions that operate on the inner dimension of an array
+// -----------------------------------------------------------------------
+
+#define ENOKI_INNER_REDUCTION(red)                                             \
+    template <bool Reduce = false, typename Array>                             \
+    ENOKI_INLINE auto red##_inner(const Array &a) {                            \
+        if constexpr (array_depth_v<Array> <= 1) {                             \
+            if constexpr (Reduce)                                              \
+                return red(a);                                                 \
+            else                                                               \
+                return a;                                                      \
+        } else {                                                               \
+            using Value = decltype(red##_inner<true>(a.entry(0)));             \
+            using Result = typename Array::template ReplaceValue<Value>;       \
+            Result result;                                                     \
+            if (Result::Size == Dynamic)                                       \
+                result = enoki::empty<Result>(a.size());                       \
+            for (size_t i = 0; i < a.size(); ++i)                              \
+                result.set_entry(i, red##_inner<true>(a.entry(i)));            \
+            return result;                                                     \
+        }                                                                      \
+    }
+
+ENOKI_INNER_REDUCTION(hsum)
+ENOKI_INNER_REDUCTION(hprod)
+ENOKI_INNER_REDUCTION(hmin)
+ENOKI_INNER_REDUCTION(hmax)
+ENOKI_INNER_REDUCTION(hmean)
+
+#undef ENOKI_INNER_REDUCTION
 
 //! @}
 // -----------------------------------------------------------------------
