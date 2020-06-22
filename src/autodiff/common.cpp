@@ -129,6 +129,12 @@ namespace enoki {
         return p ? p->value : nullptr;
     }
 
+    /// Check edge weights for NaNs/infinities?
+    bool check_weights = false;
+
+    ENOKI_EXPORT void ad_check_weights(bool value) { check_weights = value; }
+    ENOKI_EXPORT void ad_check_weights_cb() { }
+
     ENOKI_EXPORT const char *ad_whos() {
         buffer.clear();
         buffer.put("\n");

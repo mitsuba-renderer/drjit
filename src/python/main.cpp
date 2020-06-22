@@ -113,6 +113,7 @@ PYBIND11_MODULE(enoki_ext, m_) {
     export_llvm_ad(m);
     m.def("ad_whos_str", &ek::ad_whos);
     m.def("ad_whos", []() { py::print(ek::ad_whos()); });
+    m.def("ad_check_weights", [](bool value) { ek::ad_check_weights(value); });
 
     struct Scope {
         Scope(const std::string &name) : name(name) { }

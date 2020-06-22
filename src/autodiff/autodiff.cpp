@@ -32,6 +32,9 @@
 #define State    RENAME(State)
 
 NAMESPACE_BEGIN(enoki)
+
+extern bool check_weights;
+
 NAMESPACE_BEGIN(detail)
 
 using Value = ENOKI_AUTODIFF_VALUE;
@@ -531,6 +534,28 @@ uint32_t ad_new(const char *label, uint32_t size, uint32_t op_count,
 
         if (weight_is_zero)
             continue;
+
+        if (ENOKI_UNLIKELY(check_weights)) {
+            bool nan_weights = any(isnan(weights[i])),
+                 inf_weights = any(isinf(weights[i]));
+
+            if (nan_weights)
+                ad_log(Warn,
+                      "ad_new(%u <- %u): \"%s\" -- weight of edge %i contains NaNs! "
+                      "Inspect the computation graph via enokik::graphviz() or put "
+                      "a breakpoint on ad_check_weights_cb() to investigate further.",
+                       index, op[i], label ? label : "unnamed", i);
+
+            if (inf_weights)
+                ad_log(Warn,
+                      "ad_new(%u <- %u): \"%s\": weight of edge %i contains infinities! "
+                      "Inspect the computation graph via enokik::graphviz() or put "
+                      "a breakpoint on ad_check_weights_cb() to investigate further.",
+                       index, op[i], label ? label : "unnamed", i);
+
+            if (nan_weights || inf_weights)
+                ad_check_weights_cb();
+        }
 
         Variable *var2 = state[op[i]];
 

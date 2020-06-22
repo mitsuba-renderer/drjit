@@ -1719,4 +1719,5 @@ ENOKI_DECLARE_EXTERN_TEMPLATE(LLVMArray<double>, LLVMArray<bool>, LLVMArray<uint
 extern ENOKI_AUTODIFF_EXPORT const char *ad_whos();
 extern ENOKI_AUTODIFF_EXPORT void ad_prefix_push(const char *value);
 extern ENOKI_AUTODIFF_EXPORT void ad_prefix_pop();
+extern ENOKI_AUTODIFF_EXPORT void ad_check_weights(bool value);
 NAMESPACE_END(enoki)
