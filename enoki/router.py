@@ -71,10 +71,12 @@ def _var_promote(*args):
     vt = [None] * n
     base = None
     depth = 0
+    diff = False
 
     for i, a in enumerate(args):
         vt[i] = _var_type(a)
         depth_i = getattr(a, 'Depth', 0)
+        diff |= getattr(a, 'IsDiff', False)
         if depth_i > depth:
             base = a
             depth = depth_i
@@ -88,7 +90,7 @@ def _var_promote(*args):
         if vt[i] != vt[j]:
             vt[i] = _var_type(args[i], vt[j])
 
-    t = base.ReplaceScalar(_builtins.max(vt))
+    t = base.ReplaceScalar(_builtins.max(vt), diff)
 
     result = list(args)
     for i, a in enumerate(result):
@@ -104,17 +106,20 @@ def _var_promote_mask(a0, a1):
     """
     vt0 = _var_type(a0)
     vt1 = _var_type(a1)
+    diff = False
 
     if vt0 != vt1:
         vt0 = _var_type(a0, vt1)
         vt1 = _var_type(a1, vt0)
+        diff |= getattr(a0, 'IsDiff', False)
+        diff |= getattr(a1, 'IsDiff', False)
 
     if vt1 != VarType.Bool:
         vt0 = vt1 = _builtins.max(vt0, vt1)
 
     base = a0 if getattr(a0, 'Depth', 0) >= getattr(a1, 'Depth', 0) else a1
-    t0 = base.ReplaceScalar(vt0)
-    t1 = base.ReplaceScalar(vt1)
+    t0 = base.ReplaceScalar(vt0, diff)
+    t1 = base.ReplaceScalar(vt1, diff)
 
     if type(a0) is not t0:
         a0 = t0(a0)
@@ -131,10 +136,13 @@ def _var_promote_select(a0, a1, a2):
     vt0 = _var_type(a0)
     vt1 = _var_type(a1)
     vt2 = _var_type(a2)
+    diff = False
 
     if vt1 != vt2:
         vt1 = _var_type(a1, vt2)
         vt2 = _var_type(a2, vt1)
+        diff |= getattr(a1, 'IsDiff', False)
+        diff |= getattr(a2, 'IsDiff', False)
 
     if vt0 != VarType.Bool:
         raise Exception("select(): first argument must be a mask!")
@@ -142,8 +150,8 @@ def _var_promote_select(a0, a1, a2):
     base = a0 if getattr(a0, 'Depth', 0) >= getattr(a1, 'Depth', 0) else a1
     base = base if getattr(base, 'Depth', 0) >= getattr(a2, 'Depth', 0) else a2
 
-    t0 = base.ReplaceScalar(vt0)
-    t12 = base.ReplaceScalar(_builtins.max(vt1, vt2))
+    t0 = base.ReplaceScalar(vt0, diff)
+    t12 = base.ReplaceScalar(_builtins.max(vt1, vt2), diff)
 
     if type(a0) is not t0:
         a0 = t0(a0)
@@ -155,9 +163,12 @@ def _var_promote_select(a0, a1, a2):
     return a0, a1, a2
 
 
-def _replace_scalar(cls, vt):
+def _replace_scalar(cls, vt, diff=False):
     name = _array_name(cls.Prefix, vt, cls.Shape, cls.IsScalar)
-    module = _modules.get(cls.__module__)
+    modname = cls.__module__
+    if diff and not modname.endswith('.ad'):
+        modname = modname + '.ad'
+    module = _modules.get(modname)
     return getattr(module, name)
 
 
