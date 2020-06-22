@@ -215,6 +215,11 @@ struct LLVMArray : ArrayBase<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
         if constexpr (!jitc_is_integral(Type))
             enoki_raise("Unsupported operand type");
 
+        if (is_literal_zero())
+            return *this;
+        else if (v.is_literal_zero())
+            return v;
+
         LLVMArray shift(Value(sizeof(Value) * 8));
 
         const char *op;

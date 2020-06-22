@@ -37,15 +37,11 @@ ENOKI_TEST_ALL(test00_align) {
 
     using Packet     = T;
     using Vector4x   = Array<Value, 4>;
-    using Vector4xr  = Array<Value&, 4>;
     using Vector4xP  = Array<Packet, 4>;
-    using Vector4xPr = Array<Packet&, 4>;
 
     static_assert(std::is_same<value_t<Value>,      Value>::value, "value_t failure");
     static_assert(std::is_same<value_t<Vector4x>,   Value>::value, "value_t failure");
-    static_assert(std::is_same<value_t<Vector4xr>,  Value&>::value, "value_t failure");
     static_assert(std::is_same<value_t<Vector4xP>,  Packet>::value, "value_t failure");
-    static_assert(std::is_same<value_t<Vector4xPr>, Packet&>::value, "value_t failure");
 
     using DoubleP    = Array<double, array_size_v<T>>;
     using Vector4d   = Array<double, 4>;
@@ -59,12 +55,9 @@ ENOKI_TEST_ALL(test00_align) {
 
     /* Array input */
     static_assert(std::is_same<expr_t<Vector4x>,            Vector4x>::value, "expr_t failure");
-    static_assert(std::is_same<expr_t<Vector4xr>,           Vector4x>::value, "expr_t failure");
     static_assert(std::is_same<expr_t<Vector4xP>,           Vector4xP>::value, "expr_t failure");
-    static_assert(std::is_same<expr_t<Vector4xPr>,          Vector4xP>::value, "expr_t failure");
 
     static_assert(std::is_same<expr_t<Vector4x, double>,    Vector4d>::value, "expr_t failure");
-    static_assert(std::is_same<expr_t<Vector4xPr, double>,  Vector4dP>::value, "expr_t failure");
 
     /* Non-array input */
     static_assert(std::is_same<scalar_t<Value>,             Value>::value, "scalar_t failure");
@@ -72,9 +65,7 @@ ENOKI_TEST_ALL(test00_align) {
 
     /* Array input */
     static_assert(std::is_same<scalar_t<Vector4x>,          Value>::value, "scalar_t failure");
-    static_assert(std::is_same<scalar_t<Vector4xr>,         Value>::value, "scalar_t failure");
     static_assert(std::is_same<scalar_t<Vector4xP>,         Value>::value, "scalar_t failure");
-    static_assert(std::is_same<scalar_t<Vector4xPr>,        Value>::value, "scalar_t failure");
 
     /* Pointers */
     struct Test;
@@ -261,9 +252,6 @@ ENOKI_TEST_ALL(test13_max) {
         [](const T &a, const T &b) -> T { return max(a, b); },
         [](Value a, Value b) -> Value { return std::max(a, b); }
     );
-
-    Array<T, 4> x((Value) 5); Array<T&, 4> y(x);
-    assert(max(x, y) == y);
 }
 
 ENOKI_TEST_ALL(test14_abs) {
@@ -419,19 +407,10 @@ ENOKI_TEST_FLOAT(test23_mulsign) {
     );
 }
 
-ENOKI_TEST_ALL(test24_fmaddsub) {
-    auto a = fmaddsub(T(0), T(0), T(1));
-    auto b = fmsubadd(T(0), T(0), T(1));
-    assert(a == -b);
-    if (std::is_signed<scalar_t<T>>::value)
-        assert(a.entry(0) < 0);
-    assert(b.entry(0) > 0);
-}
-
 ENOKI_TEST_ALL(test25_rorl_array) {
     auto a = arange<T>();
-    auto b = ror_array<2>(a);
-    auto c = rol_array<2>(b);
+    auto b = rotate_left<2>(a);
+    auto c = rotate_right<2>(b);
     assert(a == c);
 }
 
@@ -480,70 +459,4 @@ ENOKI_TEST_ALL(test28_mask_from_int) {
     masked(val, true & true)       = one;    assert(all(eq(val, one)));
     val                            = zero;
     masked(val, true & false)      = one;    assert(all(eq(val, zero)));
-}
-
-ENOKI_TEST_ALL(test29_pointer_arithmetic) {
-    /* Power of two sized instance */ {
-        struct Class { uint32_t x; };
-        static_assert(sizeof(Class) == 4);
-        using ClassP = Packet<Class *, Size>;
-        using UInt32P = Packet<uint32_t, Size>;
-
-        using Ptr = value_t<ClassP>;
-        using PtrPtr = value_t<replace_scalar_t<ClassP, Class *>>;
-        static_assert(std::is_same_v<Ptr, Class *>);
-        static_assert(std::is_same_v<PtrPtr, Class **>);
-
-        Class *a = (Class *) 0x1234;
-        ClassP x(a), y(x);
-
-        assert(x-x == 0);
-        assert(a-x == 0);
-        y += 1;
-        assert(y == a + UInt32P(1));
-        assert(x != y);
-        assert(y-x == 1);
-        assert((uintptr_t) y.entry(0) - (uintptr_t) x.entry(0) == sizeof(Class));
-        y -= UInt32P(1);
-        assert(x == y);
-
-        Class z; z.x = 0; (void) z; /* Quench warnings */
-    }
-
-    /* Non-power of two sized instance */ {
-        struct Class { uint32_t x[3];};
-        static_assert(sizeof(Class) == 12);
-        using ClassP = Packet<Class*, Size>;
-        using UInt32P = Packet<uint32_t, Size>;
-
-        Class *a = (Class *) 0x1234;
-        ClassP x(a), y(x);
-
-        assert(x-x == 0);
-        assert(a-x == 0);
-        y += 1;
-        assert(y == a + UInt32P(1));
-        assert(x != y);
-        assert(y-x == 1);
-        assert((uintptr_t) y.entry(0) - (uintptr_t) x.entry(0) == sizeof(Class));
-        y -= UInt32P(1);
-        assert(x == y);
-
-        Class z; z.x[0] = 0; (void) z; /* Quench warnings */
-    }
-}
-
-ENOKI_TEST_ALL(test30_shuffle_dynamic) {
-    using Int = int_array_t<T>;
-    T x1 = arange<T>();
-    T x2 = Size - scalar_t<T>(1) - x1;
-    Int idx1, idx2;
-
-    for (size_t i = 0; i < Size; ++i) {
-        idx1[i] = scalar_t<Int>(i);
-        idx2[i] = scalar_t<Int>(Size - 1 - i);
-    }
-
-    assert(x1 == shuffle(x1, idx1));
-    assert(x2 == shuffle(x1, idx2));
 }

@@ -150,10 +150,17 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
               array_depth_v<T1> == array_depth_v<T> && array_size_v<T1> == Base::Size1 &&
               array_depth_v<T2> == array_depth_v<T> && array_size_v<T2> == Base::Size2 &&
               Base::Size2 != 0> = 0>
-    StaticArrayImpl(const T1 &a1, const T2 &a2)
+    StaticArrayImpl(T1 &&a1, T2 &&a2)
         : StaticArrayImpl(a1, a2, std::make_index_sequence<Base::Size1>(),
                                   std::make_index_sequence<Base::Size2>()) { }
 
+private:
+    template <typename T1, typename T2, size_t... Is1, size_t... Is2>
+    StaticArrayImpl(T1 &&a1, T2 &&a2, std::index_sequence<Is1...>,
+                    std::index_sequence<Is2...>)
+        : m_data{ a1.entry(Is1)..., a2.entry(Is2)... } { }
+
+public:
     /// Access elements by reference, and without error-checking
     ENOKI_INLINE Value &entry(size_t i) { return m_data[i]; }
 

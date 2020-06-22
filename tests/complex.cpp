@@ -15,7 +15,6 @@
 #include <enoki/complex.h>
 #include <enoki/quaternion.h>
 #include <enoki/transform.h>
-#include <enoki/dynamic.h>
 
 using Cf = Complex<double>;
 using Qf = Quaternion<double>;
@@ -118,36 +117,16 @@ ENOKI_TEST(test17_complex_asinh_acosh_atanh) {
     assert(abs(atanh(Cf(1, 2)) - Cf(0.173287, 1.1781)) < 1e-5);
 }
 
-using FloatP = Packet<float>;
-using FloatX = DynamicArray<FloatP>;
 using Quaternion4f = Quaternion<float>;
-using Quaternion4X = Quaternion<FloatX>;
-using Matrix4X  = Matrix<FloatX, 4>;
 using Matrix4f  = Matrix<float, 4>;
-using Matrix4fP = Matrix<FloatP, 4>;
 using Vector3f  = Array<float, 3>;
 using Vector4f  = Array<float, 4>;
-
-Matrix4X slerp_matrix(const Quaternion4X &x, const Quaternion4X &y, float t) {
-    return vectorize([t](auto &&x, auto &&y) { return quat_to_matrix<Matrix4fP>(slerp(x, y, t)); }, x, y);
-};
-
-Quaternion4X to_quat(const Matrix4X &m) {
-    return vectorize([](auto &&m) { return matrix_to_quat(m); }, m);
-};
 
 ENOKI_TEST(test18_complex_vectorize_scalar) {
     Quaternion4f a = normalize(Quaternion4f(1, 2, 3, 4));
     Quaternion4f b = normalize(Quaternion4f(0, 0, 0, 1));
-
-    Quaternion4X x, y;
-    set_slices(x, 1);
-    set_slices(y, 1);
-    slice(x, 0) = a;
-    slice(y, 0) = b;
-    auto tmp0 = slerp_matrix(x, y, 0.5f);
-    auto tmp1 = to_quat(tmp0);
-    Quaternion4f result = slice(tmp1, 0);
+    Matrix4f tmp0 = quat_to_matrix<Matrix4f>(slerp(a, b, 0.5f));
+    Quaternion4f result = matrix_to_quat(tmp0);
     Quaternion4f ref = normalize(a+b);
     assert(abs(result - ref) < 1e-5f);
 }

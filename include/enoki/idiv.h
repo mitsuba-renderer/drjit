@@ -125,35 +125,38 @@ NAMESPACE_END(detail)
 template <typename T, typename = int> struct divisor;
 
 template <typename T> struct divisor<T, enable_if_t<std::is_unsigned_v<T>>> {
+    T div;
     T multiplier;
     uint8_t shift;
 
     divisor() = default;
 
-    ENOKI_INLINE divisor(T d) {
+    divisor(T div) : div(div) {
         /* Division by +/-1 is not supported by the
            precomputation-based approach */
-        shift = (uint8_t) log2i(d);
+        shift = (uint8_t) log2i(div);
 
-        if ((d & (d - 1)) == 0) {
+        if ((div & (div - 1)) == 0) {
             // Power of two
             multiplier = 0;
             shift--;
         } else {
             // General case
-            auto [m, rem] = detail::div_wide(T(1) << shift, T(0), d);
+            auto [m, rem] = detail::div_wide(T(1) << shift, T(0), div);
             multiplier = m * 2 + 1;
 
             T rem2 = rem * 2;
-            if (rem2 >= d || rem2 < rem)
+            if (rem2 >= div || rem2 < rem)
                 multiplier += 1;
         }
     }
 
-    template <typename T2>
-    ENOKI_INLINE auto operator()(const T2 &value) const {
-        auto q = mulhi(multiplier, value);
-        auto t = sr<1>(value - q) + q;
+    template <typename Value>
+    ENOKI_INLINE Value operator()(const Value &value) const {
+        if (div == 1)
+            return value;
+        Value q = mulhi(multiplier, value);
+        Value t = sr<1>(value - q) + q;
         return t >> shift;
     }
 } ENOKI_PACK;
@@ -162,13 +165,14 @@ template <typename T>
 struct divisor<T, enable_if_t<std::is_signed_v<T>>> {
     using U = std::make_unsigned_t<T>;
 
+    T div;
     T multiplier;
     uint8_t shift;
 
     divisor() = default;
 
-    ENOKI_INLINE divisor(T d) {
-        U ad = d < 0 ? (U) -d : (U) d;
+    divisor(T div) {
+        U ad = div < 0 ? (U) -div : (U) div;
         shift = (uint8_t) log2i(ad);
 
         if ((ad & (ad - 1)) == 0) {
@@ -184,13 +188,16 @@ struct divisor<T, enable_if_t<std::is_signed_v<T>>> {
             if (rem2 >= ad || rem2 < rem)
                 multiplier += 1;
         }
-        if (d < 0)
+        if (div < 0)
             shift |= 0x80;
     }
 
-    template <typename T2> ENOKI_INLINE auto operator()(const T2 &value) const {
+    template <typename Value> ENOKI_INLINE Value operator()(const Value &value) const {
+        if (div == 1)
+            return value;
+
         uint8_t shift_ = shift & 0x3f;
-        T2 sign(int8_t(shift) >> 7);
+        Value sign(int8_t(shift) >> 7);
 
         auto q = mulhi(multiplier, value) + value;
         auto q_sign = sr<sizeof(T) * 8 - 1>(q);
@@ -200,25 +207,19 @@ struct divisor<T, enable_if_t<std::is_signed_v<T>>> {
     }
 } ENOKI_PACK;
 
-/// Stores *both* the original divisor + magic number
-template <typename T> struct divisor_ext : divisor<T> {
-    T value;
-    ENOKI_INLINE divisor_ext(T value) : divisor<T>(value), value(value) { }
-} ENOKI_PACK;
-
-template <typename T> ENOKI_INLINE T idiv(const T &a, const divisor<scalar_t<T>> &div) {
-    static_assert(std::is_integral_v<scalar_t<T>>, "idiv(): requires an integer operand!");
+template <typename Value> ENOKI_INLINE Value idiv(const Value &a, const divisor<scalar_t<Value>> &div) {
+    static_assert(std::is_integral_v<scalar_t<Value>>, "idiv(): requires integral operands!");
     return div(a);
 }
 
-template <typename T> ENOKI_INLINE T imod(const T &a, const divisor_ext<scalar_t<T>> &div) {
-    static_assert(std::is_integral_v<scalar_t<T>>, "imod(): requires an integer operand!");
-    return a - div(a) * div.value;
+template <typename Value> ENOKI_INLINE Value imod(const Value &a, const divisor<scalar_t<Value>> &div) {
+    static_assert(std::is_integral_v<scalar_t<Value>>, "imod(): requires integral operands!");
+    return a - div(a) * div.div;
 }
 
-template <typename T> ENOKI_INLINE std::pair<T, T> idivmod(const T &a, const divisor_ext<scalar_t<T>> &div) {
-    static_assert(std::is_integral_v<scalar_t<T>>, "idivmod(): requires an integer operand!");
-    T d = div(a), m = a - d*div.value;
+template <typename Value> ENOKI_INLINE std::pair<Value, Value> idivmod(const Value &a, const divisor<scalar_t<Value>> &div) {
+    static_assert(std::is_integral_v<scalar_t<Value>>, "idivmod(): requires integral operands!");
+    Value d = div(a), m = a - d*div.div;
     return { d, m };
 }
 

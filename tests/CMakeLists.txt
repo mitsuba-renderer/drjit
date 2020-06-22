@@ -93,7 +93,7 @@ function(enoki_test NAME)
   endif()
 endfunction()
 
-#enoki_test(basic basic.cpp)
+enoki_test(basic basic.cpp)
 #enoki_test(float float.cpp)
 #enoki_test(integer integer.cpp)
 enoki_test(explog explog.cpp)

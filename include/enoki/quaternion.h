@@ -160,8 +160,8 @@ Quaternion<expr_t<T0, T1>> pow(const Quaternion<T0> &q0,
 }
 
 template <typename T> Quaternion<T> sqrt(const Quaternion<T> &q) {
-    T ri = norm(imag(q)),
-      cs = sqrt(Complex<T>(real(q), ri));
+    T ri = norm(imag(q));
+    Complex<T> cs = sqrt(Complex<T>(real(q), ri));
     return { imag(q) * (rcp(ri) * imag(cs)), real(cs) };
 }
 
@@ -234,7 +234,7 @@ Quaternion<Value> slerp(const Quaternion<Value> &q0,
     using Base = Array<Value, 4>;
 
     Value cos_theta = dot(q0, q1_);
-    Quaternion<Value> q1 = mulsign(Base(q1_), cos_theta);
+    Quaternion<Value> q1 = mulsign(Base(q1_), Base(cos_theta));
     cos_theta = mulsign(cos_theta, cos_theta);
 
     Value theta = acos(cos_theta);

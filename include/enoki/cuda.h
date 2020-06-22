@@ -205,6 +205,11 @@ struct CUDAArray : ArrayBase<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
         if constexpr (!jitc_is_integral(Type))
             enoki_raise("Unsupported operand type");
 
+        if (is_literal_zero())
+            return *this;
+        else if (v.is_literal_zero())
+            return v;
+
         return steal(jitc_var_new_2(
             Type, "mul.hi.$t0 $r0, $r1, $r2", 1, 1, m_index, v.m_index));
     }

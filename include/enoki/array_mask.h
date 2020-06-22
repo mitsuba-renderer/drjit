@@ -60,18 +60,18 @@ struct MaskBase : StaticArrayImpl<Value_, Size_, true, Derived_> {
 
     /// Forward to base
     template <typename T, typename T2 = MaskBase,
-              enable_if_t<!detail::is_bool_v<T>> = 0>
+              enable_if_t<!std::is_scalar_v<std::decay_t<T>>> = 0>
     MaskBase(T &&value)
         : Base(std::forward<T>(value), detail::reinterpret_flag()) { }
 
     /// Broadcast boolean
     template <typename T, typename T2 = MaskBase,
-              enable_if_t<detail::is_bool_v<T> && !T2::IsOldStyleMask> = 0>
-    MaskBase(T &&value) : Base(value) { }
+              enable_if_t<std::is_scalar_v<std::decay_t<T>> && !T2::IsOldStyleMask> = 0>
+    MaskBase(T &&value) : Base((bool) value) { }
 
     /// Broadcast boolean (SSE/AVX packed format)
     template <typename T, typename T2 = MaskBase,
-              enable_if_t<detail::is_bool_v<T> && T2::IsOldStyleMask> = 0>
+              enable_if_t<std::is_scalar_v<std::decay_t<T>> && T2::IsOldStyleMask> = 0>
     MaskBase(T &&value)
         : Base(memcpy_cast<Scalar>(int_array_t<Scalar>(value ? -1 : 0))) { }
 

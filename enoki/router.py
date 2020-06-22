@@ -590,6 +590,9 @@ def op_imul(a, b):
 
 
 def op_truediv(a, b):
+    if not a.IsFloat:
+        raise Exception("Use the floor division operator \"//\" for "
+                        "Enoki integer arrays.")
     if isinstance(b, float) or isinstance(b, int):
         return a * (1.0 / b)
 
@@ -608,6 +611,10 @@ def op_rtruediv(a, b):
 
 
 def op_itruediv(a, b):
+    if not a.IsFloat:
+        raise Exception("Use the floor division operator \"//\" for "
+                        "Enoki integer arrays.")
+
     if isinstance(b, float) or isinstance(b, int):
         a *= 1.0 / b
         return a
@@ -618,6 +625,10 @@ def op_itruediv(a, b):
 
 
 def op_floordiv(a, b):
+    if not a.IsIntegral:
+        raise Exception("Use the true division operator \"/\" for "
+                        "Enoki floating point arrays.")
+
     if isinstance(b, int):
         if b != 0 and b & (b - 1) == 0:
             return a >> int(_math.log2(b))
@@ -628,6 +639,10 @@ def op_floordiv(a, b):
 
 
 def op_ifloordiv(a, b):
+    if not a.IsIntegral:
+        raise Exception("Use the true division operator \"/\" for "
+                        "Enoki floating point arrays.")
+
     if isinstance(b, int):
         if b != 0 and b & (b - 1) == 0:
             a >>= int(_math.log2(b))

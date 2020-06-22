@@ -55,9 +55,6 @@ namespace detail {
         std::is_signed_v<T0> == std::is_signed_v<T1> &&
         is_integral_ext_v<T0> == is_integral_ext_v<T1>;
 
-    template <typename T>
-    static constexpr bool is_bool_v = std::is_same_v<std::decay_t<T>, bool>;
-
     /// SFINAE checker for component-based array constructors
     template <size_t Size, typename... Ts>
     using enable_if_components_t = enable_if_t<sizeof...(Ts) == Size && Size != 1 &&
@@ -427,6 +424,8 @@ namespace detail {
     template <typename T> struct expr<T, T> : expr<T> { };
     template <typename T> struct expr<T, T, T> : expr<T> { };
     template <typename T> struct expr<T*, std::nullptr_t> : expr<T*> { };
+    template <typename T> struct expr<const T*, T*> : expr<const T*> { };
+    template <typename T> struct expr<T*, const T*> : expr<const T*> { };
     template <typename T> struct expr<std::nullptr_t, T*> : expr<T*> { };
 
     template <typename ... Ts> using deepest_t = typename deepest<Ts...>::type;

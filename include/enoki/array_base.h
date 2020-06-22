@@ -566,7 +566,8 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
     // -----------------------------------------------------------------------
 
     template <size_t... Indices> ENOKI_INLINE Derived shuffle_() const {
-        static_assert(sizeof...(Indices) == Derived::Size, "shuffle(): Invalid size!");
+        static_assert(sizeof...(Indices) == Derived::Size ||
+                      sizeof...(Indices) == Derived::ActualSize, "shuffle(): Invalid size!");
         ENOKI_CHKSCALAR("shuffle_");
         size_t idx = 0; (void) idx;
         Derived out;

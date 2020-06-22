@@ -322,11 +322,6 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(32)
             _mm256_setr_epi32(I0, I1, I2, I3, I4, I5, I6, I7));
     }
 
-    template <typename Index>
-    ENOKI_INLINE Derived shuffle_(const Index &index) const {
-        return _mm256_permutevar8x32_epi32(m, index.m);
-    }
-
     ENOKI_INLINE Derived mulhi_(Ref b) const {
         Derived even, odd;
 
@@ -795,11 +790,6 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(32)
         return _mm256_permute4x64_epi64(m, _MM_SHUFFLE(I3, I2, I1, I0));
     }
 
-    template <typename Index>
-    ENOKI_INLINE Derived shuffle_(const Index &index) const {
-        return Base::shuffle_(index);
-    }
-
 #if defined(ENOKI_X86_AVX512)
     ENOKI_INLINE Derived lzcnt_() const { return _mm256_lzcnt_epi64(m); }
     ENOKI_INLINE Derived tzcnt_() const { return Value(64) - lzcnt(~derived() & (derived() - Value(1))); }
@@ -901,11 +891,6 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(32)
         return Base::template shuffle_<I0, I1, I2, 3>();
     }
 
-    template <typename Index>
-    ENOKI_INLINE Derived shuffle_(const Index &idx) const {
-        return Base::shuffle_(idx);
-    }
-
     // -----------------------------------------------------------------------
     //! @{ \name Horizontal operations (adapted for the n=3 case)
     // -----------------------------------------------------------------------
@@ -968,8 +953,8 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(32)
         store_(ptr);
     }
 
-    static ENOKI_INLINE Derived load_(const void *ptr, size_t) {
-        return Base::load_unaligned_(ptr);
+    static ENOKI_INLINE Derived load_(const void *ptr, size_t size) {
+        return Base::load_unaligned_(ptr, size);
     }
 
     static ENOKI_INLINE Derived load_unaligned_(const void *ptr, size_t) {
