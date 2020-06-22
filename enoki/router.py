@@ -223,6 +223,10 @@ def shape(a):
         return s
 
 
+def width(a):
+    return shape(a)[-1]
+
+
 def device(value=None):
     if value is None:
         return _ek.detail.device()
@@ -1639,6 +1643,22 @@ def enable_grad(*args):
 def disable_grad(*args):
     for v in args:
         set_grad_enabled(v, False)
+
+
+def replace_grad(a, b):
+    if type(a) is not type(b) or not _ek.is_diff_array_v(a):
+        raise Exception("replace_grad(): unsupported input types!")
+
+    if a.Depth > 1:
+        size = _builtins.max(len(a), len(b))
+        result = type(a)()
+        if a.Size == Dynamic:
+            result.init_(size)
+        for i in range(size):
+            result[i] = replace_grad(a[i], b[i])
+        return result
+    else:
+        return type(a).create_(b.index_(), a.detach_())
 
 
 def enqueue(*args):

@@ -585,3 +585,36 @@ def test39_atanh(m):
         m.Float(50.2513, 2.4564, 1.43369, 1.12221, 1.01225, 1.01225, 1.12221,
                 1.43369, 2.4564, 50.2513)
     )
+
+
+def test40_safe_functions(m):
+    x = ek.linspace(m.Float, 0, 1, 10)
+    y = ek.linspace(m.Float, -1, 1, 10)
+    z = ek.linspace(m.Float, -1, 1, 10)
+    ek.enable_grad(x, y, z)
+    x2 = ek.safe_sqrt(x)
+    y2 = ek.safe_acos(y)
+    z2 = ek.safe_asin(z)
+    ek.backward(x2)
+    ek.backward(y2)
+    ek.backward(z2)
+    assert ek.grad(x)[0] == 0
+    assert ek.grad(x)[1] == .5 / ek.sqrt(1 / 9)
+    assert x[0] == 0
+    assert ek.all(ek.isfinite(ek.grad(x)))
+    assert ek.all(ek.isfinite(ek.grad(y)))
+    assert ek.all(ek.isfinite(ek.grad(z)))
+
+
+def test41_replace_grad(m):
+    x = m.Array3f(1, 2, 3)
+    y = m.Array3f(3, 2, 1)
+    ek.enable_grad(x, y)
+    x2 = x*x
+    y2 = y*y
+    z = ek.replace_grad(x2, y2)
+    z2 = z*z
+    ek.backward(z2)
+    assert ek.allclose(z2, [1, 16, 81])
+    assert ek.width(ek.grad(x)) == 0
+    assert ek.allclose(ek.grad(y), [12, 32, 36])

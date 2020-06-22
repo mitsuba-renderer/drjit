@@ -5,6 +5,7 @@
 #include <enoki/complex.h>
 #include <enoki/matrix.h>
 #include <enoki/quaternion.h>
+#include <enoki/autodiff.h>
 #include <pybind11/functional.h>
 
 extern py::handle array_base, array_name, array_init, array_configure;
@@ -380,7 +381,7 @@ auto bind_full(py::class_<Array, EnokiHolder<Array>> &cls,
         cls.def("migrate_", [](Array *a, AllocType type) { a->migrate_(type); return a; });
 
     if constexpr (Array::IsDiff) {
-        cls.def(py::init<ek::nondiff_array_t<Array>>());
+        cls.def(py::init<ek::detached_t<Array>>());
         cls.def("detach_", &Array::detach_);
         if constexpr (Array::IsFloat) {
             cls.def("grad_", [](const Array &a) -> py::object {
@@ -397,6 +398,12 @@ auto bind_full(py::class_<Array, EnokiHolder<Array>> &cls,
             cls.def("enqueue_", &Array::enqueue_);
             cls.def("graphviz_", &Array::graphviz_);
             cls.def_static("traverse_", &Array::traverse_);
+
+            cls.def_static("create_", [](uint32_t index,
+                                         const ek::detached_t<Array> &value) {
+                ek::detail::ad_inc_ref_impl<ek::detached_t<Array>>(index);
+                return Array::create(index, ek::detached_t<Array>(value));
+            });
         }
     }
 

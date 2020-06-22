@@ -323,10 +323,10 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
                        sr = sa > sb ? sa : sb;                               \
                                                                              \
                 if constexpr (Derived::Size == Dynamic) {                    \
-                    result = enoki::empty<Derived>(sr);                      \
                     if ((sa != sr && sa != 1) || (sb != sr && sb != 1))      \
                         enoki_raise(#name "_() : mismatched input sizes "    \
                                    "(%zu and %zu)", sa, sb);                 \
+                    result = enoki::empty<Derived>(sr);                      \
                 }                                                            \
                                                                              \
                 for (size_t i = 0; i < sr; ++i) {                            \
@@ -356,10 +356,10 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
                        sr = sa > sb ? sa : sb;                               \
                                                                              \
                 if constexpr (Derived::Size == Dynamic) {                    \
-                    result = enoki::empty<Derived>(sr);                      \
                     if ((sa != sr && sa != 1) || (sb != sr && sb != 1))      \
                         enoki_raise(#name "_() : mismatched input sizes "    \
                                    "(%zu and %zu)", sa, sb);                 \
+                    result = enoki::empty<Derived>(sr);                      \
                 }                                                            \
                                                                              \
                 for (size_t i = 0; i < sr; ++i) {                            \
@@ -384,10 +384,10 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
                        sr = sa > sb ? sa : sb;                               \
                                                                              \
                 if constexpr (Derived::Size == Dynamic) {                    \
-                    result = enoki::empty<mask_t<Derived>>(sr);              \
                     if ((sa != sr && sa != 1) || (sb != sr && sb != 1))      \
                         enoki_raise(#name "_() : mismatched input sizes "    \
                                    "(%zu and %zu)", sa, sb);                 \
+                    result = enoki::empty<mask_t<Derived>>(sr);              \
                 }                                                            \
                                                                              \
                 for (size_t i = 0; i < sr; ++i) {                            \
@@ -415,11 +415,11 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
                        sd = sa > sb ? sa : sb, sr = sc > sd ? sc : sd;       \
                                                                              \
                 if constexpr (Derived::Size == Dynamic) {                    \
-                    result = enoki::empty<Derived>(sr);                      \
                     if ((sa != sr && sa != 1) || (sb != sr && sb != 1) ||    \
                         (sc != sr && sc != 1))                               \
                         enoki_raise(#name "_() : mismatched input sizes "    \
                                    "(%zu, %zu, and %zu)", sa, sb, sc);       \
+                    result = enoki::empty<Derived>(sr);                      \
                 }                                                            \
                                                                              \
                 for (size_t i = 0; i < sr; ++i) {                            \
@@ -541,11 +541,11 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
         Derived result;
 
         if constexpr (Derived::Size == Dynamic) {
-            result = enoki::empty<Derived>(sr);
             if ((sm != sr && sm != 1) || (st != sr && st != 1) ||
                 (sf != sr && sf != 1))
                 enoki_raise("select_() : mismatched input sizes "
                            "(%zu, %zu, and %zu)", sm, st, sf);
+            result = enoki::empty<Derived>(sr);
         }
 
         for (size_t i = 0; i < sr; ++i) {
@@ -773,10 +773,10 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
                sr = sa > sb ? sa : sb;
 
         if constexpr (Derived::Size == Dynamic) {
-            result = enoki::empty<Derived>(sr);
             if ((sa != sr && sa != 1) || (sb != sr && sb != 1))
                 enoki_raise("gather_() : mismatched input sizes "
                             "(%zu and %zu)", sa, sb);
+            result = enoki::empty<Derived>(sr);
         }
 
         for (size_t i = 0; i < sr; ++i)

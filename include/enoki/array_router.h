@@ -1109,6 +1109,28 @@ template <typename T> ENOKI_INLINE bool grad_enabled(const T &a) {
     }
 }
 
+template <typename T> ENOKI_INLINE T replace_grad(const T &a, const T &b) {
+    static_assert(is_diff_array_v<T>, "Type does not support gradients!");
+
+    if constexpr (array_depth_v<T> > 1) {
+        size_t sa = a.size(), sb = b.size(), sr = sa > sb ? sa : sb;
+        T result;
+        if constexpr (T::Size == Dynamic) {
+            result = enoki::empty<T>(sr);
+            if ((sa != sr && sa != 1) || (sb != sr && sb != 1))
+                enoki_raise("replace_grad() : mismatched input sizes "
+                            "(%zu and %zu)", sa, sb);
+        }
+
+        for (size_t i = 0; i < sr; ++i)
+            result.entry(i) = replace_grad(a.entry(i), b.entry(i));
+
+        return result;
+    } else {
+        return T::create(a.detach_(), b.index());
+    }
+}
+
 template <typename T> ENOKI_INLINE void set_grad_enabled(T &a, bool value) {
     if constexpr (is_diff_array_v<T>) {
         if constexpr (array_depth_v<T> > 1) {
@@ -1140,7 +1162,7 @@ template <typename... Ts> ENOKI_INLINE void disable_grad(Ts&... ts) {
 template <typename T> ENOKI_INLINE auto detach(const T &value) {
     if constexpr (is_diff_array_v<T>) {
         if constexpr (array_depth_v<T> > 1) {
-            using Result = nondiff_array_t<T>;
+            using Result = detached_t<T>;
 
             Result result;
             if constexpr (Result::Size == Dynamic)
@@ -1163,7 +1185,7 @@ template <typename T> ENOKI_INLINE auto detach(const T &value) {
 template <typename T> ENOKI_INLINE auto grad(const T &value) {
     if constexpr (is_diff_array_v<T>) {
         if constexpr (array_depth_v<T> > 1) {
-            using Result = nondiff_array_t<T>;
+            using Result = detached_t<T>;
 
             Result result;
             if constexpr (Result::Size == Dynamic)
@@ -1184,7 +1206,7 @@ template <typename T> ENOKI_INLINE auto grad(const T &value) {
 }
 
 template <typename T>
-ENOKI_INLINE void set_grad(T &value, const nondiff_array_t<T> &grad) {
+ENOKI_INLINE void set_grad(T &value, const detached_t<T> &grad) {
     if constexpr (is_diff_array_v<T>) {
         if constexpr (array_depth_v<T> > 1) {
             for (size_t i = 0; i < value.size(); ++i)

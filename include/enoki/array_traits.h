@@ -292,14 +292,14 @@ namespace detail {
         using type = DiffArray<T>;
     };
 
-    template <typename T, typename = int> struct nondiff_array { using type = void; };
+    template <typename T, typename = int> struct detached { using type = void; };
 
-    template <typename T> struct nondiff_array<T, enable_if_t<T::IsDiff && T::Depth != 1>> {
+    template <typename T> struct detached<T, enable_if_t<T::IsDiff && T::Depth != 1>> {
         using type = typename std::decay_t<T>::Derived::template ReplaceValue<
-            typename nondiff_array<value_t<T>>::type>;
+            typename detached<value_t<T>>::type>;
     };
 
-    template <typename T> struct nondiff_array<T, enable_if_t<T::IsDiff && T::Depth == 1>> {
+    template <typename T> struct detached<T, enable_if_t<T::IsDiff && T::Depth == 1>> {
         using type = typename std::decay_t<T>::Type;
     };
 };
@@ -310,7 +310,7 @@ using diff_array_t = typename detail::diff_array<T>::type;
 
 /// Convert a differentiable array type into a non-differentiable one
 template <typename T>
-using nondiff_array_t = typename detail::nondiff_array<T>::type;
+using detached_t = typename detail::detached<T>::type;
 
 //! @}
 // -----------------------------------------------------------------------
