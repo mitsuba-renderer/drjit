@@ -76,4 +76,35 @@ struct PacketMask : MaskBase<Value_, Size_, PacketMask<Value_, Size_>> {
     ENOKI_ARRAY_IMPORT(PacketMask, Base)
 };
 
+#if defined(ENOKI_X86_SSE42)
+/// Flush denormalized numbers to zero
+inline void set_flush_denormals(bool value) {
+    _MM_SET_FLUSH_ZERO_MODE(value ? _MM_FLUSH_ZERO_ON : _MM_FLUSH_ZERO_OFF);
+    _MM_SET_DENORMALS_ZERO_MODE(value ? _MM_DENORMALS_ZERO_ON : _MM_DENORMALS_ZERO_OFF);
+}
+
+inline bool flush_denormals() {
+    return _MM_GET_FLUSH_ZERO_MODE() == _MM_FLUSH_ZERO_ON;
+}
+
+#else
+inline void set_flush_denormals(bool) { }
+inline bool flush_denormals() { return false; }
+#endif
+
+struct scoped_flush_denormals {
+public:
+    scoped_flush_denormals(bool value) {
+        m_old_value = flush_denormals();
+        set_flush_denormals(value);
+
+    }
+
+    ~scoped_flush_denormals() {
+        set_flush_denormals(m_old_value);
+    }
+private:
+    bool m_old_value;
+};
+
 NAMESPACE_END(enoki)
