@@ -313,6 +313,7 @@ def array_configure(cls, shape, type_, value):
     cls.IsIntegral = issubclass(value, int) and not cls.IsMask
     cls.IsFloat = issubclass(value, float)
     cls.IsArithmetic = cls.IsIntegral or cls.IsFloat
+    cls.IsSigned = cls.IsFloat or 'i' in VAR_TYPE_SUFFIX[int(type_)]
 
     mod = cls.__module__
     cls.IsScalar = mod.startswith('enoki.scalar')

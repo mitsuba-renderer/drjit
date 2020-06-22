@@ -186,6 +186,10 @@ struct LLVMArray : ArrayBase<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
         if constexpr (!jitc_is_arithmetic(Type))
             enoki_raise("Unsupported operand type");
 
+        // Simple constant propagation
+        if (v.is_literal_zero())
+            return *this;
+
         const char *op = std::is_floating_point_v<Value>
             ? "$r0 = fsub <$w x $t0> $r1, $r2"
             : "$r0 = sub <$w x $t0> $r1, $r2";
@@ -462,12 +466,10 @@ struct LLVMArray : ArrayBase<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
     template <typename T> LLVMArray xor_(const T &a) const {
         if constexpr (std::is_same_v<T, LLVMArray>) {
             // Simple constant propagation
-            if constexpr (std::is_same_v<Value, bool>) {
-                if (is_literal_zero())
-                    return a;
-                else if (a.is_literal_zero())
-                    return *this;
-            }
+            if (is_literal_zero())
+                return a;
+            else if (a.is_literal_zero())
+                return *this;
 
             const char *op = std::is_integral_v<Value>
                                  ? "$r0 = xor <$w x $t1> $r1, $r2"

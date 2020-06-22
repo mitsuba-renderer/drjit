@@ -1,5 +1,6 @@
 #include "bind.h"
 #include <enoki/autodiff.h>
+#include <enoki/idiv.h>
 #include <tsl/robin_map.h>
 
 extern void export_scalar(py::module &m);
@@ -182,4 +183,35 @@ PYBIND11_MODULE(enoki_ext, m_) {
 
     (void) py::weakref(m.attr("ArrayBase"), cleanup_callback).release();
 #endif
+
+    array_detail.def("idiv", [](VarType t, py::object value) -> py::object {
+        switch (t) {
+            case VarType::Int32: {
+                    enoki::divisor<int32_t> div(py::cast<int32_t>(value));
+                    return py::make_tuple(div.multiplier, div.shift);
+                }
+                break;
+
+            case VarType::UInt32: {
+                    enoki::divisor<uint32_t> div(py::cast<uint32_t>(value));
+                    return py::make_tuple(div.multiplier, div.shift);
+                }
+                break;
+
+            case VarType::Int64: {
+                    enoki::divisor<int64_t> div(py::cast<int64_t>(value));
+                    return py::make_tuple(div.multiplier, div.shift);
+                }
+                break;
+
+            case VarType::UInt64: {
+                    enoki::divisor<uint64_t> div(py::cast<uint64_t>(value));
+                    return py::make_tuple(div.multiplier, div.shift);
+                }
+                break;
+
+            default:
+                throw enoki::Exception("Unsupported integer type!");
+        }
+    });
 }

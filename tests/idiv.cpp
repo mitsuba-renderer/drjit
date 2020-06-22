@@ -13,6 +13,7 @@
 
 #include "test.h"
 #include <random>
+#include <enoki/idiv.h>
 
 #define ITERATIONS 1000000
 

@@ -155,6 +155,12 @@ template <typename T> struct divisor<T, enable_if_t<std::is_unsigned_v<T>>> {
     ENOKI_INLINE Value operator()(const Value &value) const {
         if (div == 1)
             return value;
+
+        if constexpr (is_dynamic_v<Value>) {
+            if (multiplier == 0)
+                return value >> (shift + 1);
+        }
+
         Value q = mulhi(multiplier, value);
         Value t = sr<1>(value - q) + q;
         return t >> shift;
@@ -171,7 +177,7 @@ struct divisor<T, enable_if_t<std::is_signed_v<T>>> {
 
     divisor() = default;
 
-    divisor(T div) {
+    divisor(T div) : div(div) {
         U ad = div < 0 ? (U) -div : (U) div;
         shift = (uint8_t) log2i(ad);
 
@@ -188,22 +194,17 @@ struct divisor<T, enable_if_t<std::is_signed_v<T>>> {
             if (rem2 >= ad || rem2 < rem)
                 multiplier += 1;
         }
-        if (div < 0)
-            shift |= 0x80;
     }
 
     template <typename Value> ENOKI_INLINE Value operator()(const Value &value) const {
         if (div == 1)
             return value;
 
-        uint8_t shift_ = shift & 0x3f;
-        Value sign(int8_t(shift) >> 7);
-
-        auto q = mulhi(multiplier, value) + value;
-        auto q_sign = sr<sizeof(T) * 8 - 1>(q);
-        q += q_sign & ((T(1) << shift_) - (multiplier == 0 ? 1 : 0));
-
-        return ((q >> shift_) ^ sign) - sign;
+        Value q = mulhi(multiplier, value) + value;
+        Value q_sign = sr<sizeof(T) * 8 - 1>(q);
+        q = q + (q_sign & ((T(1) << shift) - (multiplier == 0 ? 1 : 0)));
+        Value sign = div < 0 ? -1 : 0;
+        return ((q >> shift) ^ sign) - sign;
     }
 } ENOKI_PACK;
 

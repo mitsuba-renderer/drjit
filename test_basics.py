@@ -341,3 +341,36 @@ def test07_sincos(t):
     s, c = sincos(t(1))
     if t.Size != 0:
         assert ek.allclose(s**2 + c**2, 1)
+
+
+@pytest.mark.parametrize("cname", ["enoki.packet.Int",
+                                   "enoki.packet.Int64",
+                                   "enoki.packet.UInt",
+                                   "enoki.packet.UInt64",
+                                   "enoki.cuda.Int",
+                                   "enoki.cuda.Int64",
+                                   "enoki.cuda.UInt",
+                                   "enoki.cuda.UInt64",
+                                   "enoki.llvm.Int",
+                                   "enoki.llvm.Int64",
+                                   "enoki.llvm.UInt",
+                                   "enoki.llvm.UInt64"])
+def test08_divmod(cname):
+    t = get_class(cname)
+    if 'cuda' in cname:
+        ek.set_device(0)
+    elif 'llvm' in cname:
+        ek.set_device(-1)
+
+    index = ek.arange(t, 10000000)
+    index[index < len(index) // 2] = -index
+    index *= 256203161
+
+    for i in range(1, 100):
+        assert index // i == index // ek.full(t, i, 1, eval=True)
+        assert index % i == index % ek.full(t, i, 1, eval=True)
+
+    if t.IsSigned:
+        for i in range(1, 100):
+            assert index // -i == index // ek.full(t, -i, 1, eval=True)
+            assert index % -i == index % ek.full(t, -i, 1, eval=True)

@@ -174,6 +174,10 @@ struct CUDAArray : ArrayBase<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
         if constexpr (!jitc_is_arithmetic(Type))
             enoki_raise("Unsupported operand type");
 
+        // Simple constant propagation
+        if (v.is_literal_zero())
+            return *this;
+
         const char *op = std::is_same_v<Value, float>
                              ? "sub.ftz.$t0 $r0, $r1, $r2"
                              : "sub.$t0 $r0, $r1, $r2";
@@ -385,12 +389,10 @@ struct CUDAArray : ArrayBase<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
     template <typename T> CUDAArray xor_(const T &a) const {
         if constexpr (std::is_same_v<T, CUDAArray>) {
             // Simple constant propagation
-            if constexpr (std::is_same_v<Value, bool>) {
-                if (is_literal_zero())
-                    return a;
-                else if (a.is_literal_zero())
-                    return *this;
-            }
+            if (is_literal_zero())
+                return a;
+            else if (a.is_literal_zero())
+                return *this;
 
             return steal(jitc_var_new_2(Type, "xor.$b0 $r0, $r1, $r2", 1, 1,
                                              m_index, a.index()));

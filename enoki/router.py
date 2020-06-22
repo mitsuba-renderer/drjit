@@ -630,11 +630,31 @@ def op_floordiv(a, b):
                         "Enoki floating point arrays.")
 
     if isinstance(b, int):
-        if b != 0 and b & (b - 1) == 0:
-            return a >> int(_math.log2(b))
+        if b == 0:
+            raise Exception("Division by zero!")
+        elif b == 1:
+            return a
+
+        # Division via multiplication by magic number + shift
+        multiplier, shift = _ek.detail.idiv(a.Type, b)
+
+        if a.IsSigned:
+            q = mulhi(multiplier, a) + a
+            q_sign = q >> (a.Type.Size * 8 - 1)
+            q = q + (q_sign & ((1 << shift) - (1 if multiplier == 0 else 0)))
+            sign = type(a)(-1 if b < 0 else 0)
+            return ((q >> shift) ^ sign) - sign
+        else:
+            if multiplier == 0:
+                return a >> (shift + 1)
+
+            q = _ek.mulhi(multiplier, a)
+            t = ((a - q) >> 1) + q
+            return t >> shift
 
     if type(a) is not type(b):
         a, b = _var_promote(a, b)
+
     return a.floordiv_(b)
 
 
@@ -644,9 +664,8 @@ def op_ifloordiv(a, b):
                         "Enoki floating point arrays.")
 
     if isinstance(b, int):
-        if b != 0 and b & (b - 1) == 0:
-            a >>= int(_math.log2(b))
-            return a
+        a.assign_(a // b)
+        return a
 
     if type(a) is not type(b):
         a, b = _var_promote(a, b)
@@ -660,12 +679,25 @@ def op_rfloordiv(a, b):
 
 
 def op_mod(a, b):
+    if not a.IsIntegral:
+        raise Exception("The modulo operator only supports integral arrays!")
+
+    if isinstance(b, int):
+        return a - (a // b) * b
+
     if type(a) is not type(b):
         a, b = _var_promote(a, b)
     return a.mod_(b)
 
 
 def op_imod(a, b):
+    if not a.IsIntegral:
+        raise Exception("The modulo operator only supports integral arrays!")
+
+    if isinstance(b, int):
+        a.assign_(a % b)
+        return a
+
     if type(a) is not type(b):
         a, b = _var_promote(a, b)
     return a.imod_(b)
