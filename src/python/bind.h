@@ -311,6 +311,9 @@ auto bind_full(py::class_<Array, EnokiHolder<Array>> &cls,
         cls.def("rsqrt_", &Array::rsqrt_);
     } else if constexpr(Array::IsIntegral) {
         cls.def("mulhi_", &Array::mulhi_);
+        cls.def("tzcnt_", [](const Array &a) { return ek::tzcnt(a); });
+        cls.def("lzcnt_", [](const Array &a) { return ek::lzcnt(a); });
+        cls.def("popcnt_", [](const Array &a) { return ek::popcnt(a); });
         cls.def("sl_", [](const Array &a, const Array &b) { return a.sl_(b); });
         cls.def("sr_", [](const Array &a, const Array &b) { return a.sr_(b); });
         cls.def("isl_", [](Array *a, const Array &b) { *a = a->sl_(b); return a; });

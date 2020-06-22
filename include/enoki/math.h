@@ -342,7 +342,7 @@ namespace detail {
     ENOKI_DETECTOR(cbrt)
 }
 
-template <typename Value> ENOKI_INLINE Value sin(const Value &x) {
+template <typename Value> Value sin(const Value &x) {
     if constexpr (is_detected_v<detail::has_sin, Value>) {
         return x.sin_();
     } else {
@@ -352,7 +352,7 @@ template <typename Value> ENOKI_INLINE Value sin(const Value &x) {
     }
 }
 
-template <typename Value> ENOKI_INLINE Value cos(const Value &x) {
+template <typename Value> Value cos(const Value &x) {
     if constexpr (is_detected_v<detail::has_cos, Value>) {
         return x.cos_();
     } else {
@@ -362,7 +362,7 @@ template <typename Value> ENOKI_INLINE Value cos(const Value &x) {
     }
 }
 
-template <typename Value> ENOKI_INLINE std::pair<Value, Value> sincos(const Value &x) {
+template <typename Value> std::pair<Value, Value> sincos(const Value &x) {
     if constexpr (is_detected_v<detail::has_sincos, Value>) {
         return x.sincos_();
     } else {
@@ -372,14 +372,14 @@ template <typename Value> ENOKI_INLINE std::pair<Value, Value> sincos(const Valu
     }
 }
 
-template <typename Value> ENOKI_INLINE Value csc(const Value &x) {
+template <typename Value> Value csc(const Value &x) {
     if constexpr (is_detected_v<detail::has_csc, Value>)
         return x.csc_();
     else
         return rcp(sin(x));
 }
 
-template <typename Value> ENOKI_INLINE Value sec(const Value &x) {
+template <typename Value> Value sec(const Value &x) {
     if constexpr (is_detected_v<detail::has_sec, Value>)
         return x.sec_();
     else
@@ -387,21 +387,21 @@ template <typename Value> ENOKI_INLINE Value sec(const Value &x) {
 
 }
 
-template <typename Value> ENOKI_INLINE Value tan(const Value &x) {
+template <typename Value> Value tan(const Value &x) {
     if constexpr (is_detected_v<detail::has_tan, Value>)
         return x.tan_();
     else
         return detail::tancot<true>(x);
 }
 
-template <typename Value> ENOKI_INLINE Value cot(const Value &x) {
+template <typename Value> Value cot(const Value &x) {
     if constexpr (is_detected_v<detail::has_cot, Value>)
         return x.cot_();
     else
         return detail::tancot<false>(x);
 }
 
-template <typename Value> ENOKI_INLINE Value asin(const Value &x) {
+template <typename Value> Value asin(const Value &x) {
     /*
        Arc sine function approximation based on CEPHES.
 
@@ -494,7 +494,7 @@ template <typename Value> ENOKI_INLINE Value asin(const Value &x) {
     }
 }
 
-template <typename Value> ENOKI_INLINE Value acos(const Value &x) {
+template <typename Value> Value acos(const Value &x) {
     if constexpr (is_detected_v<detail::has_acos, Value>) {
         return x.acos_();
     } else {
@@ -554,7 +554,7 @@ template <typename Value> ENOKI_INLINE Value acos(const Value &x) {
     }
 }
 
-template <typename Y, typename X> ENOKI_INLINE expr_t<Y, X> atan2(const Y &y, const X &x) {
+template <typename Y, typename X> expr_t<Y, X> atan2(const Y &y, const X &x) {
     if constexpr (!std::is_same_v<X, Y>) {
         using E = expr_t<X, Y>;
         return atan2(static_cast<ref_cast_t<Y, E>>(y),
@@ -631,7 +631,7 @@ template <typename Y, typename X> ENOKI_INLINE expr_t<Y, X> atan2(const Y &y, co
     }
 }
 
-template <typename Value> ENOKI_INLINE Value atan(const Value &x) {
+template <typename Value> Value atan(const Value &x) {
     if constexpr (is_detected_v<detail::has_atan, Value>)
         return x.atan_();
     else
@@ -645,7 +645,7 @@ template <typename Value> ENOKI_INLINE Value atan(const Value &x) {
 //! @{ \name Exponential function, logarithm, power
 // -----------------------------------------------------------------------
 
-template <typename X, typename Y> ENOKI_INLINE expr_t<X, Y> ldexp(const X &x, const Y &y) {
+template <typename X, typename Y> expr_t<X, Y> ldexp(const X &x, const Y &y) {
     if constexpr (!std::is_same_v<X, Y>) {
         using E = expr_t<X, Y>;
         return ldexp(static_cast<ref_cast_t<X, E>>(x),
@@ -664,7 +664,7 @@ template <typename X, typename Y> ENOKI_INLINE expr_t<X, Y> ldexp(const X &x, co
     }
 }
 
-template <typename Value> ENOKI_INLINE std::pair<Value, Value> frexp(const Value &x) {
+template <typename Value> std::pair<Value, Value> frexp(const Value &x) {
     if constexpr (is_detected_v<detail::has_frexp, Value>) {
         return x.frexp_();
     } else {
@@ -711,7 +711,7 @@ template <typename Value> ENOKI_INLINE std::pair<Value, Value> frexp(const Value
     }
 }
 
-template <typename Value> ENOKI_INLINE Value exp(const Value &x) {
+template <typename Value> Value exp(const Value &x) {
     if constexpr (is_detected_v<detail::has_exp, Value>) {
         return x.exp_();
     } else {
@@ -782,7 +782,7 @@ template <typename Value> ENOKI_INLINE Value exp(const Value &x) {
     }
 }
 
-template <typename Value> ENOKI_INLINE Value exp2(const Value &x) {
+template <typename Value> Value exp2(const Value &x) {
     if constexpr (is_detected_v<detail::has_exp2, Value>) {
         return x.exp2_();
     } else {
@@ -850,7 +850,7 @@ template <typename Value> ENOKI_INLINE Value exp2(const Value &x) {
     }
 }
 
-template <typename Value> ENOKI_INLINE Value log(const Value &x) {
+template <typename Value> Value log(const Value &x) {
     if constexpr (is_detected_v<detail::has_log, Value>) {
         return x.log_();
     } else {
@@ -928,7 +928,7 @@ template <typename Value> ENOKI_INLINE Value log(const Value &x) {
     }
 }
 
-template <typename Value> ENOKI_INLINE Value log2(const Value &x) {
+template <typename Value> Value log2(const Value &x) {
     if constexpr (is_detected_v<detail::has_log2, Value>) {
         return x.log2_();
     } else {
@@ -1020,7 +1020,7 @@ namespace detail {
     }
 }
 
-template <typename X, typename Y> ENOKI_INLINE expr_t<X, Y> pow(const X &x, const Y &y) {
+template <typename X, typename Y> expr_t<X, Y> pow(const X &x, const Y &y) {
     static_assert(!is_special_v<X> && !is_special_v<Y>,
                   "pow(): requires a regular scalar/array argument!");
     if constexpr (!std::is_scalar_v<X> && std::is_scalar_v<Y> && is_dynamic_v<X>) {
@@ -1050,7 +1050,7 @@ template <typename X, typename Y> ENOKI_INLINE expr_t<X, Y> pow(const X &x, cons
 //! @{ \name Hyperbolic and inverse hyperbolic functions
 // -----------------------------------------------------------------------
 
-template <typename Value> ENOKI_INLINE Value sinh(const Value &x) {
+template <typename Value> Value sinh(const Value &x) {
     if constexpr (is_detected_v<detail::has_sinh, Value>) {
         return x.sinh_();
     } else {
@@ -1111,7 +1111,7 @@ template <typename Value> ENOKI_INLINE Value sinh(const Value &x) {
     }
 }
 
-template <typename Value> ENOKI_INLINE Value cosh(const Value &x) {
+template <typename Value> Value cosh(const Value &x) {
     if constexpr (is_detected_v<detail::has_cosh, Value>) {
         return x.cosh_();
     } else {
@@ -1136,8 +1136,7 @@ template <typename Value> ENOKI_INLINE Value cosh(const Value &x) {
     }
 }
 
-template <typename Value>
-ENOKI_INLINE std::pair<Value, Value> sincosh(const Value &x) {
+template <typename Value> std::pair<Value, Value> sincosh(const Value &x) {
     if constexpr (is_detected_v<detail::has_sincosh, Value>) {
         return x.sincosh_();
     } else {
@@ -1185,7 +1184,7 @@ ENOKI_INLINE std::pair<Value, Value> sincosh(const Value &x) {
     }
 }
 
-template <typename Value> ENOKI_INLINE Value tanh(const Value &x) {
+template <typename Value> Value tanh(const Value &x) {
     if constexpr (is_detected_v<detail::has_tanh, Value>) {
         return x.tanh_();
     } else {
@@ -1249,7 +1248,7 @@ template <typename Value> Value csch(const Value &a) { return rcp(sinh(a)); }
 template <typename Value> Value sech(const Value &a) { return rcp(cosh(a)); }
 template <typename Value> Value coth(const Value &a) { return rcp(tanh(a)); }
 
-template <typename Value> ENOKI_INLINE Value asinh(const Value &x) {
+template <typename Value> Value asinh(const Value &x) {
     if constexpr (is_detected_v<detail::has_asinh, Value>) {
         return x.asinh_();
     } else {
@@ -1309,7 +1308,7 @@ template <typename Value> ENOKI_INLINE Value asinh(const Value &x) {
     }
 }
 
-template <typename Value> ENOKI_INLINE Value acosh(const Value &x) {
+template <typename Value> Value acosh(const Value &x) {
     if constexpr (is_detected_v<detail::has_acosh, Value>) {
         return x.acosh_();
     } else {
@@ -1372,7 +1371,7 @@ template <typename Value> ENOKI_INLINE Value acosh(const Value &x) {
     }
 }
 
-template <typename Value> ENOKI_INLINE Value atanh(const Value &x) {
+template <typename Value> Value atanh(const Value &x) {
     if constexpr (is_detected_v<detail::has_atanh, Value>) {
         return x.atanh_();
     } else {
@@ -1437,7 +1436,7 @@ template <typename Value> ENOKI_INLINE Value atanh(const Value &x) {
 //! @}
 // -----------------------------------------------------------------------
 
-template <typename Value> ENOKI_INLINE Value cbrt(const Value &x) {
+template <typename Value> Value cbrt(const Value &x) {
     if constexpr (is_detected_v<detail::has_cbrt, Value>) {
         return x.cbrt_();
     } else {

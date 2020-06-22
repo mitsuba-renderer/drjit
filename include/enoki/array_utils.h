@@ -25,7 +25,7 @@
 NAMESPACE_BEGIN(enoki)
 
 /// Reinterpret the binary represesentation of a data type
-template<typename T, typename U> ENOKI_INLINE T memcpy_cast(const U &val) {
+template <typename T, typename U> ENOKI_INLINE T memcpy_cast(const U &val) {
     static_assert(sizeof(T) == sizeof(U), "memcpy_cast: sizes did not match!");
     T result;
     memcpy(&result, &val, sizeof(T));

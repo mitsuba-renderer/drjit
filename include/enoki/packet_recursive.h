@@ -157,6 +157,18 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
         return Derived(a1 >> a.a1, a2 >> a.a2);
     }
 
+    ENOKI_INLINE Derived lzcnt_() const {
+        return Derived(lzcnt(a1), lzcnt(a2));
+    }
+
+    ENOKI_INLINE Derived tzcnt_() const {
+        return Derived(tzcnt(a1), tzcnt(a2));
+    }
+
+    ENOKI_INLINE Derived popcnt_() const {
+        return Derived(popcnt(a1), popcnt(a2));
+    }
+
     template <typename Mask>
     static ENOKI_INLINE Derived select_(const Mask &m, Ref t, Ref f) {
         return Derived(select(m.a1, t.a1, f.a1),

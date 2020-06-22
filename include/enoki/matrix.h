@@ -33,6 +33,7 @@ struct Matrix : StaticArrayImpl<Array<Value_, Size_>, Size_, false,
 
     using ArrayType = Matrix;
     using MaskType = Mask<mask_t<Column>, Size_>;
+    using Entry = Value_;
 
     template <typename T> using ReplaceValue = Matrix<value_t<T>, Size_>;
 
@@ -457,5 +458,7 @@ polar_decomp(const enoki::Matrix<T, Size> &A, size_t it = 10) {
     }
     return { Q, transpose(Q) * A };
 }
+
+template <typename T> using entry_t = typename T::Entry;
 
 NAMESPACE_END(enoki)

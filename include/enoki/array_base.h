@@ -513,6 +513,10 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
     ENOKI_IMPLEMENT_UNARY_REC(acosh, acosh(a), IsFloat)
     ENOKI_IMPLEMENT_UNARY_REC(atanh, atanh(a), IsFloat)
 
+    ENOKI_IMPLEMENT_UNARY(tzcnt, tzcnt(a), IsIntegral)
+    ENOKI_IMPLEMENT_UNARY(lzcnt, lzcnt(a), IsIntegral)
+    ENOKI_IMPLEMENT_UNARY(popcnt, popcnt(a), IsIntegral)
+
     ENOKI_IMPLEMENT_UNARY_PAIR_REC(sincos, sincos(a), IsFloat)
     ENOKI_IMPLEMENT_UNARY_PAIR_REC(sincosh, sincosh(a), IsFloat)
     ENOKI_IMPLEMENT_UNARY_PAIR_REC(frexp, frexp(a), IsFloat)

@@ -1138,6 +1138,27 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             return DiffArray::create(0, sr<Imm>(m_value));
     }
 
+    DiffArray tzcnt_() const {
+        if constexpr (!std::is_integral_v<Scalar>)
+            enoki_raise("tzcnt_(): invalid operand type!");
+        else
+            return DiffArray::create(0, tzcnt(m_value));
+    }
+
+    DiffArray lzcnt_() const {
+        if constexpr (!std::is_integral_v<Scalar>)
+            enoki_raise("lzcnt_(): invalid operand type!");
+        else
+            return DiffArray::create(0, lzcnt(m_value));
+    }
+
+    DiffArray popcnt_() const {
+        if constexpr (!std::is_integral_v<Scalar>)
+            enoki_raise("popcnt_(): invalid operand type!");
+        else
+            return DiffArray::create(0, popcnt(m_value));
+    }
+
     //! @}
     // -----------------------------------------------------------------------
 

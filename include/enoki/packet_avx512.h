@@ -1249,6 +1249,30 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(64)
 
 } ENOKI_MAY_ALIAS;
 
+ENOKI_INLINE float ldexp(float a1, float a2) {
+    return _mm_cvtss_f32(_mm_scalef_ss(_mm_set_ss(a1), _mm_set_ss(a2)));
+}
+
+ENOKI_INLINE double ldexp(double a1, double a2) {
+    return _mm_cvtsd_f64(_mm_scalef_sd(_mm_set_sd(a1), _mm_set_sd(a2)));
+}
+
+ENOKI_INLINE std::pair<float, float> frexp(float a) {
+    __m128 v = _mm_set_ss(a);
+    return {
+        _mm_cvtss_f32(_mm_getmant_ss(v, v, _MM_MANT_NORM_p5_1, _MM_MANT_SIGN_src)),
+        _mm_cvtss_f32(_mm_getexp_ss(v, v))
+    };
+}
+
+ENOKI_INLINE std::pair<double, double> frexp(double a) {
+    __m128d v = _mm_set_sd(a);
+    return {
+        _mm_cvtsd_f64(_mm_getmant_sd(v, v, _MM_MANT_NORM_p5_1, _MM_MANT_SIGN_src)),
+        _mm_cvtsd_f64(_mm_getexp_sd(v, v))
+    };
+}
+
 template <typename Derived_>
 ENOKI_DECLARE_KMASK(float, 16, Derived_, int)
 template <typename Derived_>

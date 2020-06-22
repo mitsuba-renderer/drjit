@@ -956,6 +956,26 @@ def arg(value):
         return _ek.select(value >= 0, 0, -_ek.Pi)
 
 
+def tzcnt(a):
+    if isinstance(a, ArrayBase):
+        return a.tzcnt_()
+    else:
+        raise Exception("tzcnt(): operation only supported for Enoki arrays!")
+
+
+def lzcnt(a):
+    if isinstance(a, ArrayBase):
+        return a.lzcnt_()
+    else:
+        raise Exception("lzcnt(): operation only supported for Enoki arrays!")
+
+
+def popcnt(a):
+    if isinstance(a, ArrayBase):
+        return a.popcnt_()
+    else:
+        raise Exception("popcnt(): operation only supported for Enoki arrays!")
+
 # -------------------------------------------------------------------
 #   "Safe" functions that avoid domain errors due to rounding
 # -------------------------------------------------------------------
@@ -1486,6 +1506,20 @@ def conj(a):
         return type(a)(-a.x, -a.y, -a.z, a.w)
     else:
         return a
+
+
+def hypot(a, b):
+    a, b = abs(a), abs(b)
+    maxval = _ek.max(a, b)
+    minval = _ek.min(a, b)
+    ratio = minval / maxval
+    inf = _ek.Infinity
+
+    return _ek.select(
+        (a < inf) & (b < inf) & (ratio < inf),
+        maxval * _ek.sqrt(_ek.fmadd(ratio, ratio, 1)),
+        a + b
+    )
 
 
 # -------------------------------------------------------------------

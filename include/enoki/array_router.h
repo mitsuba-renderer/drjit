@@ -364,14 +364,86 @@ template <typename T> ENOKI_INLINE T log2i(T value) {
     return scalar_t<T>(sizeof(scalar_t<T>) * 8 - 1) - lzcnt(value);
 }
 
-//// Convert radians to degrees
-template <typename T> ENOKI_INLINE auto rad_to_deg(const T &a) {
-    return a * scalar_t<T>(180.0 / Pi<double>);
+template <typename A, typename B> expr_t<A, B> hypot(const A &a, const B &b) {
+    if constexpr (!std::is_same_v<A, B>) {
+        using E = expr_t<A, B>;
+        return hypot(static_cast<ref_cast_t<A, E>>(a),
+                     static_cast<ref_cast_t<B, E>>(b));
+    } else {
+        using Value = A;
+
+        Value abs_a  = abs(a),
+              abs_b  = abs(b),
+              maxval = max(abs_a, abs_b),
+              minval = min(abs_a, abs_b),
+              ratio  = minval / maxval;
+
+        scalar_t<Value> inf = Infinity<Value>;
+
+        return select(
+            (abs_a < inf) && (abs_b < inf) && (ratio < inf),
+            maxval * sqrt(fmadd(ratio, ratio, 1)),
+            abs_a + abs_b
+        );
+    }
 }
 
-/// Convert degrees to radians
-template <typename T> ENOKI_INLINE auto deg_to_rad(const T &a) {
-    return a * scalar_t<T>(Pi<double> / 180.0);
+template <typename Value>
+ENOKI_INLINE Value prev_float(const Value &value) {
+    using Int = int_array_t<Value>;
+    using IntMask = mask_t<Int>;
+    using IntScalar = scalar_t<Int>;
+
+    const Int exponent_mask = sizeof(IntScalar) == 4
+                                  ? IntScalar(0x7f800000)
+                                  : IntScalar(0x7ff0000000000000ll);
+
+    const Int pos_denorm = sizeof(IntScalar) == 4
+                              ? IntScalar(0x80000001)
+                              : IntScalar(0x8000000000000001ll);
+
+    Int i = reinterpret_array<Int>(value);
+
+    IntMask is_nan_inf = eq(i & exponent_mask, exponent_mask),
+            is_pos_0   = eq(i, 0),
+            is_gt_0    = i >= 0,
+            is_special = is_nan_inf | is_pos_0;
+
+    Int j1 = i + select(is_gt_0, Int(-1), Int(1)),
+        j2 = select(is_pos_0, pos_denorm, i);
+
+    return reinterpret_array<Value>(select(is_special, j2, j1));
+}
+
+template <typename Value>
+ENOKI_INLINE Value next_float(const Value &value) {
+    using Int = int_array_t<Value>;
+    using IntMask = mask_t<Int>;
+    using IntScalar = scalar_t<Int>;
+
+    const Int exponent_mask = sizeof(IntScalar) == 4
+                                  ? IntScalar(0x7f800000)
+                                  : IntScalar(0x7ff0000000000000ll);
+
+    const Int sign_mask = sizeof(IntScalar) == 4
+                              ? IntScalar(0x80000000)
+                              : IntScalar(0x8000000000000000ll);
+
+    Int i = reinterpret_array<Int>(value);
+
+    IntMask is_nan_inf = eq(i & exponent_mask, exponent_mask),
+            is_neg_0   = eq(i, sign_mask),
+            is_gt_0    = i >= 0,
+            is_special = is_nan_inf | is_neg_0;
+
+    Int j1 = i + select(is_gt_0, Int(1), Int(-1)),
+        j2 = select(is_neg_0, Int(1), i);
+
+    return reinterpret_array<Value>(select(is_special, j2, j1));
+}
+
+template <typename X, typename Y> expr_t<X, Y> fmod(const X &x, const Y &y) {
+    return fnmadd(trunc(x / y), y, x);
 }
 
 // -----------------------------------------------------------------------

@@ -572,6 +572,33 @@ def fmadd_(a0, a1, a2):
         return a0 * a1 + a2
 
 
+def tzcnt_(a0):
+    if not a0.IsIntegral:
+        raise Exception("tzcnt(): requires integral operands!")
+    ar, sr = _check1(a0)
+    for i in range(sr):
+        ar[i] = _ek.tzcnt(a0[i])
+    return ar
+
+
+def lzcnt_(a0):
+    if not a0.IsIntegral:
+        raise Exception("lzcnt(): requires integral operands!")
+    ar, sr = _check1(a0)
+    for i in range(sr):
+        ar[i] = _ek.lzcnt(a0[i])
+    return ar
+
+
+def popcnt_(a0):
+    if not a0.IsIntegral:
+        raise Exception("popcnt(): requires integral operands!")
+    ar, sr = _check1(a0)
+    for i in range(sr):
+        ar[i] = _ek.popcnt(a0[i])
+    return ar
+
+
 @staticmethod
 def select_(a0, a1, a2):
     ar, sr = _check3_select(a0, a1, a2)
