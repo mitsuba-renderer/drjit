@@ -1044,15 +1044,35 @@ def popcnt(a):
 
 
 def safe_sqrt(a):
-    return sqrt(max(a, 0))
+    result = sqrt(max(a, 0))
+    if _ek.is_diff_array_v(a) and _ek.grad_enabled(a):
+        alt = sqrt(max(a, _ek.Epsilon(a)))
+        result = _ek.replace_grad(result, alt)
+    return result
+
+
+def safe_cbrt(a):
+    result = cbrt(max(a, 0))
+    if _ek.is_diff_array_v(a) and _ek.grad_enabled(a):
+        alt = cbrt(max(a, _ek.Epsilon(a)))
+        result = _ek.replace_grad(result, alt)
+    return result
 
 
 def safe_asin(a):
-    return asin(clamp(a, -1, 1))
+    result = asin(clamp(a, -1, 1))
+    if _ek.is_diff_array_v(a) and _ek.grad_enabled(a):
+        alt = asin(clamp(a, -_ek.OneMinusEpsilon(a), _ek.OneMinusEpsilon(a)))
+        result = _ek.replace_grad(result, alt)
+    return result
 
 
 def safe_acos(a):
-    return acos(clamp(a, -1, 1))
+    result = acos(clamp(a, -1, 1))
+    if _ek.is_diff_array_v(a) and _ek.grad_enabled(a):
+        alt = acos(clamp(a, -_ek.OneMinusEpsilon(a), _ek.OneMinusEpsilon(a)))
+        result = _ek.replace_grad(result, alt)
+    return result
 
 
 # -------------------------------------------------------------------
@@ -1598,7 +1618,6 @@ def cross(a, b):
                  ta(a.z, a.x, a.y) * tb(b.y, b.z, b.x))
 
 
-
 # -------------------------------------------------------------------
 #                     Automatic differentiation
 # -------------------------------------------------------------------
@@ -1626,6 +1645,13 @@ def set_grad(a, value):
         a.set_grad_(value)
     else:
         raise Exception("Expected a differentiable array type!")
+
+
+def grad_enabled(a):
+    if _ek.is_diff_array_v(a):
+        return a.grad_enabled_()
+    else:
+        return False
 
 
 def set_grad_enabled(a, value):

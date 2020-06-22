@@ -1009,25 +1009,6 @@ ENOKI_INNER_REDUCTION(hmean)
 // -----------------------------------------------------------------------
 
 // -----------------------------------------------------------------------
-//! @{ \name "Safe" functions that avoid domain errors due to rounding
-// -----------------------------------------------------------------------
-
-template <typename Value> ENOKI_INLINE Value safe_sqrt(const Value &a) {
-    return sqrt(max(a, zero<Value>()));
-}
-
-template <typename Value> ENOKI_INLINE Value safe_asin(const Value &a) {
-    return asin(clamp(a, -1, 1));
-}
-
-template <typename Value> ENOKI_INLINE Value safe_acos(const Value &a) {
-    return acos(clamp(a, -1, 1));
-}
-
-//! @}
-// -----------------------------------------------------------------------
-
-// -----------------------------------------------------------------------
 //! @{ \name JIT compilation and autodiff-related
 // -----------------------------------------------------------------------
 
@@ -1261,6 +1242,60 @@ template <typename T> ENOKI_INLINE void forward(T& value, bool retain_graph = fa
     set_grad(value, 1.f);
     enqueue(value);
     traverse<T>(false, retain_graph);
+}
+
+//! @}
+// -----------------------------------------------------------------------
+
+// -----------------------------------------------------------------------
+//! @{ \name "Safe" functions that avoid domain errors due to rounding
+// -----------------------------------------------------------------------
+
+template <typename Value> ENOKI_INLINE Value safe_sqrt(const Value &a) {
+    Value result = sqrt(max(a, 0));
+
+    if constexpr (is_diff_array_v<Value>) {
+        if (grad_enabled(a))
+            result = replace_grad(result, sqrt(max(a, Epsilon<Value>)));
+    }
+
+    return result;
+}
+
+
+template <typename Value> ENOKI_INLINE Value safe_cbrt(const Value &a) {
+    Value result = cbrt(max(a, 0));
+
+    if constexpr (is_diff_array_v<Value>) {
+        if (grad_enabled(a))
+            result = replace_grad(result, cbrt(max(a, Epsilon<Value>)));
+    }
+
+    return result;
+}
+
+template <typename Value> ENOKI_INLINE Value safe_asin(const Value &a) {
+    Value result = asin(clamp(a, -1, 1));
+
+    if constexpr (is_diff_array_v<Value>) {
+        if (grad_enabled(a))
+            result = replace_grad(result, asin(clamp(a, -OneMinusEpsilon<Value>,
+                                                     OneMinusEpsilon<Value>)));
+    }
+
+    return result;
+}
+
+template <typename Value> ENOKI_INLINE Value safe_acos(const Value &a) {
+    Value result = acos(clamp(a, -1, 1));
+
+    if constexpr (is_diff_array_v<Value>) {
+        if (grad_enabled(a))
+            result = replace_grad(result, acos(clamp(a, -OneMinusEpsilon<Value>,
+                                                     OneMinusEpsilon<Value>)));
+    }
+
+    return result;
 }
 
 //! @}

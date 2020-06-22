@@ -1158,6 +1158,19 @@ def grad_(a):
     return result
 
 
+def grad_enabled_(a):
+    if not a.IsDiff:
+        raise Exception("Expected a differentiable array type!")
+
+    if a.Depth > 1:
+        enabled = False
+        for i in range(len(a)):
+            enabled |= a[i].grad_enabled_()
+        return enabled
+    else:
+        return a.index_() != 0
+
+
 def set_grad_enabled_(a, value):
     if not a.IsDiff:
         raise Exception("Expected a differentiable array type!")

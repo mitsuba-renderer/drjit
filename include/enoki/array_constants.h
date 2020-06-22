@@ -45,15 +45,23 @@ template <typename T> constexpr auto Infinity        = scalar_t<T>(__builtin_hug
 #endif
 template <typename T> constexpr auto NaN             = scalar_t<T>(__builtin_nan(""));
 
+/// Machine epsilon
 template <typename T> constexpr auto Epsilon         = scalar_t<T>(sizeof(scalar_t<T>) == 8
                                                                    ? 0x1p-53
                                                                    : 0x1p-24);
-
+/// 1 - Machine epsilon
 template <typename T> constexpr auto OneMinusEpsilon = scalar_t<T>(sizeof(scalar_t<T>) == 8
                                                                    ? 0x1.fffffffffffffp-1
                                                                    : 0x1.fffffep-1);
+
+/// Any numbers below this threshold will overflow to infinity when a reciprocal is evaluated
 template <typename T> constexpr auto RecipOverflow   = scalar_t<T>(sizeof(scalar_t<T>) == 8
                                                                    ? 0x1p-1024 : 0x1p-128);
+
+/// Smallest normalized floating point value
+template <typename T> constexpr auto Smallest        = scalar_t<T>(sizeof(scalar_t<T>) == 8
+                                                                   ? 0x1p-1022 : 0x1p-126);
+
 NAMESPACE_BEGIN(detail)
 template <typename T> struct debug_initialization {
     static constexpr T value = T(int_array_t<T>(-1));
