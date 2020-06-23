@@ -412,3 +412,27 @@ def test10_meshgrid(cname):
     cn, dn = np.meshgrid(a.numpy(), b.numpy())
     assert ek.allclose(c.numpy(), cn.ravel())
     assert ek.allclose(d.numpy(), dn.ravel())
+
+
+@pytest.mark.parametrize("cname", ["enoki.cuda.Float", "enoki.llvm.Float"])
+def test11_binary_search(cname):
+    t = get_class(cname)
+    if 'cuda' in cname:
+        ek.set_device(0)
+    elif 'llvm' in cname:
+        ek.set_device(-1)
+    import numpy as np
+
+    data_np = np.float32(np.sort(np.random.normal(size=10000)))
+    search_np = np.float32(np.random.normal(size=10000))
+    data = t(data_np)
+    search = t(search_np)
+
+    index = ek.binary_search(
+        0, len(data) - 1,
+        lambda index: ek.gather(t, data, index) < search
+    )
+
+    value = ek.gather(t, data, index)
+    cond = ek.eq(index, len(data)-1) | (value >= search)
+    assert ek.all(cond)

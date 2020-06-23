@@ -416,8 +416,10 @@ def reinterpret_array(target_type, value,
 # -------------------------------------------------------------------
 
 def _broadcast_index(target_type, index):
-    if target_type.Depth > index.Depth:
-        size = target_type.Size
+    size = target_type.Size
+    if isinstance(index, int) and size == Dynamic:
+        return target_type(index)
+    elif target_type.Depth > index.Depth:
         assert size != Dynamic
         index_scaled = index * size
         result = target_type()
@@ -1025,21 +1027,45 @@ def tzcnt(a):
     if isinstance(a, ArrayBase):
         return a.tzcnt_()
     else:
-        raise Exception("tzcnt(): operation only supported for Enoki arrays!")
+        # The following assumes that 'a' is a 32 bit integer
+        assert a >= 0 and a <= 0xFFFFFFFF
+        result = 32
+        while a & 0xFFFFFFFF:
+            result -= 1
+            a <<= 1
+        return result
 
 
 def lzcnt(a):
     if isinstance(a, ArrayBase):
         return a.lzcnt_()
     else:
-        raise Exception("lzcnt(): operation only supported for Enoki arrays!")
+        # The following assumes that 'a' is a 32 bit integer
+        assert a >= 0 and a <= 0xFFFFFFFF
+        result = 32
+        while a:
+            result -= 1
+            a >>= 1
+        return result
 
 
 def popcnt(a):
     if isinstance(a, ArrayBase):
         return a.popcnt_()
     else:
-        raise Exception("popcnt(): operation only supported for Enoki arrays!")
+        result = 0
+        while a:
+            result += a & 1
+            a >>= 1
+        return result
+
+
+def log2i(a):
+    if isinstance(a, ArrayBase):
+        return (a.Type.Size * 8 - 1) - lzcnt(a)
+    else:
+        return 31 - lzcnt(a)
+
 
 # -------------------------------------------------------------------
 #   "Safe" functions that avoid domain errors due to rounding
@@ -1668,6 +1694,28 @@ def meshgrid(x, y):
         index = _ek.arange(_ek.uint32_array_t(t), lx*ly)
         yi, xi = index // lx, index % lx
         return _ek.gather(t, x, xi), _ek.gather(t, y, yi)
+
+
+def binary_search(start, end, pred):
+    assert isinstance(start, int) and isinstance(end, int)
+
+    iterations = log2i(end - start) + 1 if start < end else 0
+
+    for i in range(iterations):
+        middle = (start + end) >> 1
+
+        cond = pred(middle)
+
+        if isinstance(cond, bool):
+            if cond:
+                start = _ek.min(middle + 1, end)
+            else:
+                cond = middle
+        else:
+            start = _ek.select(cond, _ek.min(middle + 1, end), start)
+            end = _ek.select(cond, end, middle)
+
+    return start
 
 
 # -------------------------------------------------------------------

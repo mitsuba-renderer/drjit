@@ -359,7 +359,7 @@ template <typename Array> ENOKI_INLINE Array mulsign_neg(const Array &v1, const 
     }
 }
 
-/// Fast implementation for computing the base 2 log of an integer.
+/// Fast implementation to compute ``floor(log2(value))`` for integer ``value``
 template <typename T> ENOKI_INLINE T log2i(T value) {
     return scalar_t<T>(sizeof(scalar_t<T>) * 8 - 1) - lzcnt(value);
 }

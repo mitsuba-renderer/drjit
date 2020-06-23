@@ -60,8 +60,7 @@ template <typename Array> Array repeat(const Array &array, size_t count) {
     }
 }
 
-template <typename T>
-std::pair<T, T> meshgrid(const T &x, const T &y) {
+template <typename T> std::pair<T, T> meshgrid(const T &x, const T &y) {
     static_assert(array_depth_v<T> == 1 && is_dynamic_array_v<T>,
                   "meshgrid(): requires two 1D dynamic Enoki arrays as input!");
 
@@ -73,6 +72,26 @@ std::pair<T, T> meshgrid(const T &x, const T &y) {
         auto [yi, xi] = idivmod(arange<uint32_array_t<T>>(lx*ly), lx);
         return { gather<T>(x, xi), gather<T>(y, yi) };
     }
+}
+
+template <typename Index, typename Predicate>
+Index binary_search(scalar_t<Index> start_, scalar_t<Index> end_,
+                    const Predicate &pred) {
+    Index start(start_), end(end_);
+
+    scalar_t<Index> iterations = (start_ < end_) ?
+        (log2i(end_ - start_) + 1) : 0;
+
+    for (size_t i = 0; i < iterations; ++i) {
+        Index middle = sr<1>(start + end);
+
+        mask_t<Index> cond = pred(middle);
+
+        masked(start,  cond) = min(middle + 1, end);
+        masked(end,   !cond) = middle;
+    }
+
+    return start;
 }
 
 NAMESPACE_END(enoki)
