@@ -374,3 +374,41 @@ def test08_divmod(cname):
         for i in range(1, 100):
             assert index // -i == index // ek.full(t, -i, 1, eval=True)
             assert index % -i == index % ek.full(t, -i, 1, eval=True)
+
+
+@pytest.mark.parametrize("cname", ["enoki.cuda.Float", "enoki.llvm.Float"])
+def test09_repeat_tile(cname):
+    t = get_class(cname)
+    a3 = get_class(cname.replace('Float', 'Array3f'))
+    if 'cuda' in cname:
+        ek.set_device(0)
+    elif 'llvm' in cname:
+        ek.set_device(-1)
+    vec = t([1, 2, 3])
+    tiled = t([1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3])
+    reptd = t([1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3])
+
+    assert ek.tile(vec, 5) == tiled
+    assert ek.tile(a3(vec, vec + 1, vec + 2), 5) == \
+        a3(tiled, tiled + 1, tiled + 2)
+
+    assert ek.repeat(vec, 5) == reptd
+    assert ek.repeat(a3(vec, vec + 1, vec + 2), 5) == \
+        a3(reptd, reptd + 1, reptd + 2)
+
+
+@pytest.mark.parametrize("cname", ["enoki.cuda.Float", "enoki.llvm.Float"])
+def test10_meshgrid(cname):
+    t = get_class(cname)
+    if 'cuda' in cname:
+        ek.set_device(0)
+    elif 'llvm' in cname:
+        ek.set_device(-1)
+    import numpy as np
+    a = ek.linspace(t, 0, 1, 3)
+    b = ek.linspace(t, 0, 1, 4)
+    c, d = ek.meshgrid(a, b)
+    ek.schedule(c, d)
+    cn, dn = np.meshgrid(a.numpy(), b.numpy())
+    assert ek.allclose(c.numpy(), cn.ravel())
+    assert ek.allclose(d.numpy(), dn.ravel())

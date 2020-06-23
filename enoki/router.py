@@ -687,7 +687,10 @@ def op_mod(a, b):
         raise Exception("The modulo operator only supports integral arrays!")
 
     if isinstance(b, int):
-        return a - (a // b) * b
+        if not a.IsSigned and b != 0 and (b & (b - 1)) == 0:
+            return a & (b - 1)
+        else:
+            return a - (a // b) * b
 
     if type(a) is not type(b):
         a, b = _var_promote(a, b)
@@ -1602,6 +1605,69 @@ def hypot(a, b):
         maxval * _ek.sqrt(_ek.fmadd(ratio, ratio, 1)),
         a + b
     )
+
+
+def tile(array, count: int):
+    if not _ek.is_array_v(array) or not isinstance(count, int):
+        raise("tile(): invalid input types!")
+    elif not array.IsDynamic:
+        raise("tile(): first input argument must be a dynamic Enoki array!")
+
+    size = len(array)
+    t = type(array)
+
+    if array.Depth > 1:
+        result = t()
+
+        if array.Size == Dynamic:
+            result.init_(size)
+
+        for i in range(size):
+            result[i] = tile(array[i], count)
+
+        return result
+    else:
+        index = _ek.arange(_ek.uint_array_t(t), size * count) % size
+        return _ek.gather(t, array, index)
+
+
+def repeat(array, count: int):
+    if not _ek.is_array_v(array) or not isinstance(count, int):
+        raise("tile(): invalid input types!")
+    elif not array.IsDynamic:
+        raise("tile(): first input argument must be a dynamic Enoki array!")
+
+    size = len(array)
+    t = type(array)
+
+    if array.Depth > 1:
+        result = t()
+
+        if array.Size == Dynamic:
+            result.init_(size)
+
+        for i in range(size):
+            result[i] = repeat(array[i], count)
+
+        return result
+    else:
+        index = _ek.arange(_ek.uint_array_t(t), size * count) // count
+        return _ek.gather(t, array, index)
+
+
+def meshgrid(x, y):
+    if type(x) is not type(y) or _ek.array_depth_v(x) != 1 or \
+       not _ek.is_dynamic_array_v(x):
+        raise Exception("meshgrid(): requires two 1D dynamic arrays as input!")
+
+    lx, ly = len(x), len(y)
+    if lx == 1 or ly == 1:
+        return x, y
+    else:
+        t = type(x)
+        index = _ek.arange(_ek.uint32_array_t(t), lx*ly)
+        yi, xi = index // lx, index % lx
+        return _ek.gather(t, x, xi), _ek.gather(t, y, yi)
 
 
 # -------------------------------------------------------------------

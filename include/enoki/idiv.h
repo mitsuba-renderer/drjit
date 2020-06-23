@@ -132,8 +132,6 @@ template <typename T> struct divisor<T, enable_if_t<std::is_unsigned_v<T>>> {
     divisor() = default;
 
     divisor(T div) : div(div) {
-        /* Division by +/-1 is not supported by the
-           precomputation-based approach */
         shift = (uint8_t) log2i(div);
 
         if ((div & (div - 1)) == 0) {
@@ -153,6 +151,8 @@ template <typename T> struct divisor<T, enable_if_t<std::is_unsigned_v<T>>> {
 
     template <typename Value>
     ENOKI_INLINE Value operator()(const Value &value) const {
+        /* Division by +/-1 is not supported by the
+           precomputation-based approach */
         if (div == 1)
             return value;
 
@@ -197,6 +197,8 @@ struct divisor<T, enable_if_t<std::is_signed_v<T>>> {
     }
 
     template <typename Value> ENOKI_INLINE Value operator()(const Value &value) const {
+        /* Division by +/-1 is not supported by the
+           precomputation-based approach */
         if (div == 1)
             return value;
 
@@ -215,13 +217,25 @@ template <typename Value> ENOKI_INLINE Value idiv(const Value &a, const divisor<
 
 template <typename Value> ENOKI_INLINE Value imod(const Value &a, const divisor<scalar_t<Value>> &div) {
     static_assert(std::is_integral_v<scalar_t<Value>>, "imod(): requires integral operands!");
+
+    if constexpr (is_dynamic_v<Value> && std::is_unsigned_v<scalar_t<Value>>) {
+        if (div.multiplier == 0)
+            return a & (div.div - 1);
+    }
+
     return a - div(a) * div.div;
 }
 
 template <typename Value> ENOKI_INLINE std::pair<Value, Value> idivmod(const Value &a, const divisor<scalar_t<Value>> &div) {
     static_assert(std::is_integral_v<scalar_t<Value>>, "idivmod(): requires integral operands!");
-    Value d = div(a), m = a - d*div.div;
-    return { d, m };
+    Value d = div(a);
+
+    if constexpr (is_dynamic_v<Value> && std::is_unsigned_v<scalar_t<Value>>) {
+        if (div.multiplier == 0)
+            return { d, a & (div.div - 1) };
+    }
+
+    return { d, a - d*div.div };
 }
 
 NAMESPACE_END(enoki)

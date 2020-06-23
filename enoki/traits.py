@@ -88,6 +88,14 @@ def is_static_array_v(a):
     return getattr(a, 'Size', Dynamic) != Dynamic
 
 
+def is_dynamic_array_v(a):
+    return getattr(a, 'Size', Dynamic) == Dynamic
+
+
+def is_dynamic_v(a):
+    return getattr(a, 'IsDynamic', False)
+
+
 def is_unsigned_v(a):
     if not is_array_v(a):
         return False
