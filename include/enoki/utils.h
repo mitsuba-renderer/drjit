@@ -94,4 +94,86 @@ Index binary_search(scalar_t<Index> start_, scalar_t<Index> end_,
     return start;
 }
 
+/// Vectorized N-dimensional 'range' iterable with automatic mask computation
+template <typename Value> struct range {
+    static constexpr size_t Dimension = array_depth_v<Value> == 2 ?
+        array_size_v<Value> : 1;
+
+    using Scalar = scalar_t<Value>;
+    using Packet =
+        std::conditional_t<array_depth_v<Value> == 2, value_t<Value>, Value>;
+    using Size   = Array<Scalar, Dimension>;
+
+    struct iterator {
+        iterator(size_t index) : index(index) { }
+        iterator(size_t index, Size size)
+            : index(index), size(size) {
+            for (size_t i = 0; i < Dimension - 1; ++i)
+                div[i] = size[i];
+            if constexpr (!is_dynamic_v<Value>)
+                index_p = arange<Packet>();
+        }
+
+        bool operator==(const iterator &it) const { return it.index == index; }
+        bool operator!=(const iterator &it) const { return it.index != index; }
+
+        iterator &operator++() {
+            index += 1;
+            if constexpr (!is_dynamic_v<Value>)
+                index_p += Scalar(Packet::Size);
+            return *this;
+        }
+
+        std::pair<Value, mask_t<Packet>> operator*() const {
+            if constexpr (array_depth_v<Value> == 1) {
+                if constexpr (!is_dynamic_v<Value>)
+                    return { index_p, index_p < size[0] };
+                else
+                    return { arange<Value>(size[0]), true };
+            } else {
+                Value value;
+                if constexpr (!is_dynamic_v<Value>)
+                    value[0] = index_p;
+                else
+                    value[0] = arange<Packet>(hprod(size));
+                ENOKI_UNROLL for (size_t i = 0; i < Dimension - 1; ++i)
+                    value[i + 1] = div[i](value[i]);
+                Packet offset = zero<Packet>();
+                ENOKI_UNROLL for (size_t i = Dimension - 2; ; --i) {
+                    offset = size[i] * (value[i + 1] + offset);
+                    value[i] -= offset;
+                    if (i == 0)
+                        break;
+                }
+
+                return { value, value[Dimension - 1] < size[Dimension - 1] };
+            }
+        }
+
+    private:
+        size_t index;
+        Packet index_p;
+        Size size;
+        divisor<Scalar> div[Dimension > 1 ? (Dimension - 1) : 1];
+    };
+
+    template <typename... Args>
+    range(Args&&... args) : size(args...) { }
+
+    iterator begin() {
+        return iterator(0, size);
+    }
+
+    iterator end() {
+        if constexpr (is_dynamic_v<Value>)
+            return iterator(hprod(size) == 0 ? 0 : 1);
+        else
+            return iterator((hprod(size) + Packet::Size - 1) / Packet::Size);
+    }
+
+private:
+    Size size;
+};
+
+
 NAMESPACE_END(enoki)
