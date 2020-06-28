@@ -298,6 +298,7 @@ namespace detail {
     ENOKI_DETECTOR(atanh)
 
     ENOKI_DETECTOR(cbrt)
+    ENOKI_DETECTOR(erf)
 }
 
 template <typename Value> Value sin(const Value &x) {
@@ -1393,6 +1394,57 @@ template <typename Value> Value atanh(const Value &x) {
 
 //! @}
 // -----------------------------------------------------------------------
+
+template <typename Value> Value erf(const Value &x) {
+    if constexpr (is_detected_v<detail::has_erf, Value>) {
+        return x.erf_();
+    } else {
+        // Fits computed using 'resources/remez.cpp'
+        // Combined error on [-4, 4]:
+        //  - single precision: avg = 0.167 ulp, max = 4.24 ulp
+        //  - double precision: avg = 0.167 ulp, max = 4.24 ulp
+
+        Value xa = abs(x), x2 = sqr(x), c0, c1;
+
+        if constexpr (std::is_same_v<Value, float>) {
+            c0 = estrin(x2, // max = 2.17 ulp, avg = 0.502 ulp.
+                 0x1.20dd74p+0, //  1.128379107e+00
+                -0x1.812682p-2, // -3.761234581e-01
+                 0x1.ce0a26p-4, //  1.128026471e-01
+                -0x1.b5a796p-6, // -2.671231888e-02
+                 0x1.424cbcp-8, //  4.917903803e-03
+                -0x1.273dc2p-11 // -5.631279782e-04
+            );
+
+            c1 = estrin(xa, // max = 1.95 ulp, avg = 0.427 ulp.
+                -0x1.a0d71ap+0, // -1.628282189e+00
+                -0x1.d51e2ep-1, // -9.162458777e-01
+                -0x1.3a90a2p-3, // -1.535961777e-01
+                 0x1.1c3a2cp-5, //  3.469570726e-02
+                -0x1.685834p-8, // -5.498421378e-03
+                 0x1.180f8ep-11, //  5.341735086e-04
+                -0x1.8ca6dcp-16  // -2.364228931e-05
+            );
+        } else {
+            c0 = estrin(x, // max = 1.902 ulp, avg = 0.463 ulp.
+                 0x1.20dd750429b6dp+0,  //  1.128379167e+00
+                -0x1.812746b0379bcp-2,  // -3.761263890e-01
+                 0x1.ce2f21a040d1p-4,   //  1.128379167e-01
+                -0x1.b82ce311fa931p-6,  // -2.686617064e-02
+                 0x1.565bccf92b2fdp-8,  //  5.223977606e-03
+                -0x1.c02db03dd71d4p-11, // -8.548325929e-04
+                 0x1.f9a2baa8fedb1p-14, //  1.205529358e-04
+                -0x1.f4ca4d6f3e1dcp-17, // -1.492471230e-05
+                 0x1.b97fd3d991fdap-20, //  1.644713157e-06
+                -0x1.5c0726f04ad4ep-23, // -1.620631376e-07
+                 0x1.d71b0f1aff8c8p-27, //  1.371098040e-08
+                -0x1.abae491c19be5p-31  // -7.779468489e-10
+            );
+        }
+
+        return select(xa < 1, x * c0, copysign(1.f - exp2(c1 * xa), x));
+    }
+}
 
 template <typename Value> Value cbrt(const Value &x) {
     if constexpr (is_detected_v<detail::has_cbrt, Value>) {
