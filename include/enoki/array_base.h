@@ -488,6 +488,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
     ENOKI_IMPLEMENT_TERNARY_ALT(fnmsub, fnmsub(a, b, c), -derived()*v1-v2, IsFloat)
 
     ENOKI_IMPLEMENT_UNARY_REC(cbrt, cbrt(a), IsFloat)
+    ENOKI_IMPLEMENT_UNARY_REC(erf, erf(a), IsFloat)
     ENOKI_IMPLEMENT_UNARY_REC(sin, sin(a), IsFloat)
     ENOKI_IMPLEMENT_UNARY_REC(cos, cos(a), IsFloat)
 

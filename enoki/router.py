@@ -1296,6 +1296,13 @@ def op_pow(a, b):
     return pow(a, b)
 
 
+def erf(a):
+    if isinstance(a, ArrayBase):
+        return a.erf_()
+    else:
+        return _math.erf(a)
+
+
 def cbrt(a):
     if isinstance(a, ArrayBase):
         return a.cbrt_()

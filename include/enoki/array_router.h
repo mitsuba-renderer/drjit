@@ -940,7 +940,6 @@ void scatter_add(Target &&target, const Value &value, const Index &index, const 
 //! @{ \name Forward declarations of math functions
 // -----------------------------------------------------------------------
 
-template <typename T> T cbrt(const T &a);
 template <typename T> T sin(const T &a);
 template <typename T> T cos(const T &a);
 template <typename T> std::pair<T, T> sincos(const T &a);
@@ -969,6 +968,9 @@ template <typename T> T tanh(const T &a);
 template <typename T> T asinh(const T &a);
 template <typename T> T acosh(const T &a);
 template <typename T> T atanh(const T &a);
+
+template <typename T> T cbrt(const T &a);
+template <typename T> T erf(const T &a);
 
 //! @}
 // -----------------------------------------------------------------------

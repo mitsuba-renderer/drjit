@@ -1395,57 +1395,6 @@ template <typename Value> Value atanh(const Value &x) {
 //! @}
 // -----------------------------------------------------------------------
 
-template <typename Value> Value erf(const Value &x) {
-    if constexpr (is_detected_v<detail::has_erf, Value>) {
-        return x.erf_();
-    } else {
-        // Fits computed using 'resources/remez.cpp'
-        // Combined error on [-4, 4]:
-        //  - single precision: avg = 0.167 ulp, max = 4.24 ulp
-        //  - double precision: avg = 0.167 ulp, max = 4.24 ulp
-
-        Value xa = abs(x), x2 = sqr(x), c0, c1;
-
-        if constexpr (std::is_same_v<Value, float>) {
-            c0 = estrin(x2, // max = 2.17 ulp, avg = 0.502 ulp.
-                 0x1.20dd74p+0, //  1.128379107e+00
-                -0x1.812682p-2, // -3.761234581e-01
-                 0x1.ce0a26p-4, //  1.128026471e-01
-                -0x1.b5a796p-6, // -2.671231888e-02
-                 0x1.424cbcp-8, //  4.917903803e-03
-                -0x1.273dc2p-11 // -5.631279782e-04
-            );
-
-            c1 = estrin(xa, // max = 1.95 ulp, avg = 0.427 ulp.
-                -0x1.a0d71ap+0, // -1.628282189e+00
-                -0x1.d51e2ep-1, // -9.162458777e-01
-                -0x1.3a90a2p-3, // -1.535961777e-01
-                 0x1.1c3a2cp-5, //  3.469570726e-02
-                -0x1.685834p-8, // -5.498421378e-03
-                 0x1.180f8ep-11, //  5.341735086e-04
-                -0x1.8ca6dcp-16  // -2.364228931e-05
-            );
-        } else {
-            c0 = estrin(x, // max = 1.902 ulp, avg = 0.463 ulp.
-                 0x1.20dd750429b6dp+0,  //  1.128379167e+00
-                -0x1.812746b0379bcp-2,  // -3.761263890e-01
-                 0x1.ce2f21a040d1p-4,   //  1.128379167e-01
-                -0x1.b82ce311fa931p-6,  // -2.686617064e-02
-                 0x1.565bccf92b2fdp-8,  //  5.223977606e-03
-                -0x1.c02db03dd71d4p-11, // -8.548325929e-04
-                 0x1.f9a2baa8fedb1p-14, //  1.205529358e-04
-                -0x1.f4ca4d6f3e1dcp-17, // -1.492471230e-05
-                 0x1.b97fd3d991fdap-20, //  1.644713157e-06
-                -0x1.5c0726f04ad4ep-23, // -1.620631376e-07
-                 0x1.d71b0f1aff8c8p-27, //  1.371098040e-08
-                -0x1.abae491c19be5p-31  // -7.779468489e-10
-            );
-        }
-
-        return select(xa < 1, x * c0, copysign(1.f - exp2(c1 * xa), x));
-    }
-}
-
 template <typename Value> Value cbrt(const Value &x) {
     if constexpr (is_detected_v<detail::has_cbrt, Value>) {
         return x.cbrt_();
@@ -1507,5 +1456,59 @@ template <typename Value> Value cbrt(const Value &x) {
         return select(isfinite(x), r, x);
     }
 }
+
+template <typename Value> Value erf(const Value &x) {
+    if constexpr (is_detected_v<detail::has_erf, Value>) {
+        return x.erf_();
+    } else {
+        // Fits computed using 'resources/remez.cpp'
+        // Total error on [-6, 6]:
+        //  - single precision: avg = 0.231 ulp, max = 3.80 ulp
+        //  - double precision: avg = 0.306 ulp, max = 3.59 ulp
+
+        Value xa = abs(x), x2 = sqr(x), c0, c1;
+
+        if constexpr (std::is_same_v<Value, float>) {
+            // max = 1.98 ulp, avg = 0.495 ulp on [0, 1]
+            c0 = estrin(x2,
+                0x1.20dd74p+0, -0x1.812672p-2,
+                0x1.ce0934p-4, -0x1.b5a334p-6,
+                0x1.4246b4p-8, -0x1.273facp-11
+            );
+
+            // max = 2.60 ulp, avg = 0.783 ulp on [1, 4]
+            c1 = estrin(xa,
+                -0x1.a0d71ap+0, -0x1.d51e3ap-1,
+                -0x1.3a904cp-3,  0x1.1c395cp-5,
+                -0x1.6856bep-8,  0x1.180f1ep-11,
+                -0x1.8ca9f6p-16);
+        } else {
+            // max = 2.0 ulp, avg = 0.482 ulp on [0, 1]
+            c0 = estrin(x2,
+                0x1.20dd750429b6dp+0,  -0x1.812746b0379bcp-2,
+                0x1.ce2f21a040d12p-4,  -0x1.b82ce311fa924p-6,
+                0x1.565bccf92b298p-8,  -0x1.c02db03dd71b8p-11,
+                0x1.f9a2baa8fee07p-14, -0x1.f4ca4d6f3e31bp-17,
+                0x1.b97fd3d992af4p-20, -0x1.5c0726f04e805p-23,
+                0x1.d71b0f1b15b0ap-27, -0x1.abae491c540bp-31
+            );
+
+            /// max = 4.0 ulp, avg = 0.605 ulp on [1, 6]
+            c1 = estrin(xa,
+                 -0x1.a0be83b09c3d7p+0, -0x1.8bb29648c7afep+1,
+                 -0x1.639eb89a5975p+1,  -0x1.7b48b8cd14d9fp+0,
+                 -0x1.fb25a03ddc781p-2, -0x1.9cdb7dcacdfb3p-4,
+                 -0x1.64f7fbe544f07p-7, -0x1.9a3c3874b3919p-12
+            ) / estrin(xa,
+                  0x1p+0,                 0x1.55b5d06f1c2dep+0,
+                  0x1.b998ffae5528ep-1,   0x1.46884d56cb49bp-2,
+                  0x1.18e8848a2cc38p-4,   0x1.ee7f90e8d480cp-8,
+                  0x1.1c6a194029df4p-12, -0x1.03d1306b29028p-31);
+        }
+
+        return select(xa < 1, x * c0, copysign(1.f - exp2(c1 * xa), x));
+    }
+}
+
 
 NAMESPACE_END(enoki)

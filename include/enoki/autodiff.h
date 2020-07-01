@@ -408,6 +408,24 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         }
     }
 
+    DiffArray erf_() const {
+        if constexpr (!std::is_floating_point_v<Scalar>) {
+            enoki_raise("erf_(): invalid operand type!");
+        } else {
+            uint32_t index_new = 0;
+            Type result = erf(m_value);
+            if constexpr (IsEnabled) {
+                if (m_index) {
+                    uint32_t indices[1] = { m_index };
+                    Type weights[1] = { (2.f * InvSqrtPi<Type>) * exp(-sqr(m_value)) };
+                    index_new = detail::ad_new<Type>(
+                        "erf", (uint32_t) width(result), 1, indices, weights);
+                }
+            }
+            return DiffArray::create(index_new, std::move(result));
+        }
+    }
+
     DiffArray rcp_() const {
         if constexpr (!std::is_floating_point_v<Scalar>) {
             enoki_raise("rcp_(): invalid operand type!");

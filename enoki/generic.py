@@ -1038,6 +1038,18 @@ def cbrt_(a0):
         raise Exception("cbrt(): unsupported array type!")
     return ar
 
+
+def erf_(a0):
+    if not a0.IsFloat:
+        raise Exception("erf(): requires floating point operands!")
+    ar, sr = _check1(a0)
+    if not a0.IsSpecial:
+        for i in range(sr):
+            ar[i] = _ek.erf(a0[i])
+    else:
+        raise Exception("erf(): unsupported array type!")
+    return ar
+
 # -------------------------------------------------------------------
 #                       Horizontal operations
 # -------------------------------------------------------------------
