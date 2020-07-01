@@ -4,6 +4,7 @@
 #include <limits>
 #include <memory>
 #include <atomic>
+#include <iostream>
 #include <random>
 #include <signal.h>
 #include <unistd.h>
@@ -586,6 +587,7 @@ template <typename Func, typename Target> struct Annealer {
     /// Annealing parameters
     size_t sample_count;
     size_t iterations;
+    size_t cycles;
     bool estrin;
 
     /// Reference values
@@ -595,7 +597,7 @@ template <typename Func, typename Target> struct Annealer {
 
     Annealer(int deg_p, int deg_q, Func func, Float start, Float end,
              Float *coeffs_, size_t sample_count, size_t iterations,
-             bool estrin)
+             size_t cycles, bool estrin)
         : deg_p(deg_p), deg_q(deg_q), func(func),
           start(start.cast<Target>()), end(end.cast<Target>()),
           coeffs_cur(new Target[deg_p + deg_q + 2]),
@@ -603,6 +605,7 @@ template <typename Func, typename Target> struct Annealer {
           coeffs_best(new Target[deg_p + deg_q + 2]),
           sample_count(sample_count),
           iterations(iterations),
+          cycles(cycles),
           estrin(estrin),
           x(new Target[sample_count]),
           x_ulp(new long double[sample_count]),
@@ -632,21 +635,26 @@ template <typename Func, typename Target> struct Annealer {
     void dump() {
         const char *fmt = sizeof(float) == 4 ? "        %s%a%s // %s%.9e\n"
                                              : "        %s%a%s // %s%.17e\n";
-        printf("\n   P = %s(x,\n", estrin ? "estrin" : "horner");
+        printf("\n   p = %s(x,\n", estrin ? "estrin" : "horner");
         for (int i = 0; i <= deg_p; ++i)
             printf(fmt,
                    coeffs_best[i] >= 0 ? " " : "", coeffs_best[i],
                    i < deg_p ? "," : " ",
                    coeffs_best[i] >= 0 ? " " : "", coeffs_best[i]);
         if (deg_q > 0) {
-            printf("   )\n   Q = %s(x,\n", estrin ? "estrin" : "horner");
+            printf("   );\n   q = %s(x,\n", estrin ? "estrin" : "horner");
             for (int i = 0; i <= deg_q; ++i)
                 printf(fmt,
                        coeffs_best[i + deg_p + 1] >= 0 ? " " : "", coeffs_best[i + deg_p + 1],
                        i < deg_q ? "," : "",
                        coeffs_best[i + deg_p + 1] >= 0 ? " " : "", coeffs_best[i + deg_p + 1]);
         }
-        printf("   )\n\n");
+        printf("   );\n\n");
+
+        printf("   Restart search with -C ");
+        for (int i = 0; i < deg_p + deg_q + 2; ++i)
+            printf("%a%s", coeffs_best[i], (i < deg_p + deg_q + 1) ? "," : "");
+        printf("\n\n");
     }
 
     std::pair<float, float> error(Target *c) const {
@@ -749,73 +757,66 @@ template <typename Func, typename Target> struct Annealer {
     void go() {
         std::mt19937 engine;
         std::uniform_real_distribution<float> uniform;
+        std::uniform_int_distribution<uint32_t> uniform_i(0, deg_p + deg_q - 1);
         std::normal_distribution<float> normal;
 
         size_t n_invalid = 0, n_accepted = 0, n_rejected = 0;
-        float scale = 10;
+        float scale = 1;
 
         printf("\n");
-        for (size_t i = 0; i < iterations && !stop; ++i) {
-            float temp = 10 * expf(i / -float(iterations - 1) * 5);
+        for (int j = 0; j < cycles && !stop; ++j) {
+            memcpy(coeffs_cur.get(), coeffs_best.get(),
+                   sizeof(Target) * (deg_p + deg_q + 2));
+            err_cur = err_best;
+            for (size_t i = 0; i < iterations && !stop; ++i) {
+                float temp = .5 * expf(i / -float(iterations - 1) * 5);
 
-            if (i % 4000 == 0) {
-                printf("   %05zu: best max=%.3f ulp, best avg=%.3f ulp, cur max=%.3f ulp, cur avg=%.3f ulp, temp=%.1f.\n", i,
-                       err_best.first, err_best.second,
-                       err_cur.first, err_cur.second,
-                       temp);
-                fflush(stdout);
-            }
+                if (i % 1000 == 0) {
+                    printf("   %05zu: best max=%.3f ulp, best avg=%.3f ulp, cur max=%.3f ulp, cur avg=%.3f ulp, temp=%.1f.\n", i,
+                           err_best.first, err_best.second,
+                           err_cur.first, err_cur.second,
+                           temp);
+                    fflush(stdout);
+                }
 
-            bool changed = false;
-            for (int i = 0; i < deg_p + deg_q + 2; ++i) {
-                if (i == deg_p + 1)
+                int k = uniform_i(engine);
+                if (k == deg_p + 1)
                     continue;
-
-                Int value = memcpy_cast<Int>(coeffs_cur[i]);
-                int shift = (int) (normal(engine) * temp);
+                Int value = memcpy_cast<Int>(coeffs_cur[k]);
+                int shift = normal(engine) > 0 ? 1 : -1;
                 value += shift;
-                if (shift != 0)
-                    changed = true;
-                coeffs_prop[i] = memcpy_cast<Target>(value);
-            }
 
-            if (!changed) {
-                n_invalid++;
-                continue;
-            }
-
-            if (i % 50000 == 0) {
-                memcpy(coeffs_cur.get(), coeffs_best.get(),
+                memcpy(coeffs_prop.get(), coeffs_cur.get(),
                        sizeof(Target) * (deg_p + deg_q + 2));
-                err_cur = err_best;
-            }
+                coeffs_prop[k] = memcpy_cast<Target>(value);
 
-            err_prop = error(coeffs_prop.get());
+                err_prop = error(coeffs_prop.get());
 
-            float err_cur_w = err_cur.first * scale + err_cur.second,
-                  err_prop_w = err_prop.first * scale + err_prop.second,
-                  err_best_w = err_best.first * scale + err_best.second;
+                float err_cur_w = err_cur.first * scale + err_cur.second,
+                      err_prop_w = err_prop.first * scale + err_prop.second,
+                      err_best_w = err_best.first * scale + err_best.second;
 
-            if (err_cur_w < err_best_w) {
-                memcpy(coeffs_best.get(), coeffs_cur.get(),
-                       sizeof(Target) * (deg_p + deg_q + 2));
-                err_best = err_cur;
-            }
+                if (err_cur_w < err_best_w) {
+                    memcpy(coeffs_best.get(), coeffs_cur.get(),
+                           sizeof(Target) * (deg_p + deg_q + 2));
+                    err_best = err_cur;
+                }
 
-            if (err_prop_w < err_cur_w) {
-                coeffs_prop.swap(coeffs_cur);
-                err_prop.swap(err_cur);
-                n_accepted++;
-            } else {
-                float sample = uniform(engine),
-                      acceptance = std::exp((err_cur_w - err_prop_w) / temp);
-
-                if (sample < acceptance) {
+                if (err_prop_w < err_cur_w) {
                     coeffs_prop.swap(coeffs_cur);
                     err_prop.swap(err_cur);
                     n_accepted++;
                 } else {
-                    n_rejected++;
+                    float sample = uniform(engine),
+                          acceptance = std::exp((err_cur_w - err_prop_w) / temp);
+
+                    if (sample < acceptance) {
+                        coeffs_prop.swap(coeffs_cur);
+                        err_prop.swap(err_cur);
+                        n_accepted++;
+                    } else {
+                        n_rejected++;
+                    }
                 }
             }
         }
@@ -1189,9 +1190,10 @@ template <typename Func> struct Remez {
     }
 
     template <typename Target>
-    Annealer<Func, Target> anneal(size_t sample_count, size_t iterations, bool estrin) {
+    Annealer<Func, Target> anneal(size_t sample_count, size_t iterations,
+                                  size_t cycles, bool estrin) {
         return Annealer<Func, Target>(deg_p, deg_q, func, start, end,
-                                      coeffs.get(), sample_count,
-                                      iterations, estrin);
+                                      coeffs.get(), sample_count, iterations,
+                                      cycles, estrin);
     }
 };
