@@ -102,7 +102,9 @@ template <bool IsMask_, typename Derived_> struct alignas(64)
     ENOKI_INLINE Derived mul_(Ref a) const { return _mm512_mul_ps(m, a.m); }
     ENOKI_INLINE Derived div_(Ref a) const { return _mm512_div_ps(m, a.m); }
 
-    ENOKI_INLINE Derived neg_() const { return _mm512_sub_ps(_mm512_setzero_ps(), m); }
+    ENOKI_INLINE Derived neg_() const {
+        return _mm512_xor_ps(m, _mm512_set1_ps(-0.f));
+    }
 
     template <typename T> ENOKI_INLINE Derived or_(const T &a) const {
         if constexpr (is_mask_v<T>)
@@ -407,7 +409,9 @@ template <bool IsMask_, typename Derived_> struct alignas(64)
     ENOKI_INLINE Derived mul_(Ref a) const { return _mm512_mul_pd(m, a.m); }
     ENOKI_INLINE Derived div_(Ref a) const { return _mm512_div_pd(m, a.m); }
 
-    ENOKI_INLINE Derived neg_() const { return _mm512_sub_pd(_mm512_setzero_pd(), m); }
+    ENOKI_INLINE Derived neg_() const {
+        return _mm512_xor_pd(m, _mm512_set1_pd(-0.0));
+    }
 
     template <typename T> ENOKI_INLINE Derived or_(const T &a) const {
         if constexpr (is_mask_v<T>)

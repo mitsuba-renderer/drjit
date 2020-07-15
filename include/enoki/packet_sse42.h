@@ -155,7 +155,7 @@ template <bool IsMask_, typename Derived_> struct alignas(16)
     }
 
     ENOKI_INLINE Derived neg_() const {
-        return _mm_sub_ps(_mm_setzero_ps(), m);
+        return _mm_xor_ps(m, _mm_set1_ps(-0.f));
     }
 
     template <typename T> ENOKI_INLINE Derived or_(const T &a) const {
@@ -955,7 +955,7 @@ template <bool IsMask_, typename Derived_> struct alignas(16)
     }
 
     ENOKI_INLINE Derived neg_() const {
-        return _mm_sub_pd(_mm_set1_pd(0.f), m);
+        return _mm_xor_pd(m, _mm_set1_pd(-0.0));
     }
 
     template <typename T> ENOKI_INLINE Derived or_(const T &a) const {
