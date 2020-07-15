@@ -191,21 +191,11 @@ template <typename T> T round_(const T &a) {
 }
 
 template <typename T> T max_(const T &a, const T &b) {
-    if constexpr (std::is_same_v<T, float>)
-        return ENOKI_BUILTIN(fmaxf)(a, b);
-    else if constexpr (std::is_same_v<T, double>)
-        return ENOKI_BUILTIN(fmax)(a, b);
-    else
-        return a > b ? a : b;
+    return a < b ? b : a;
 }
 
 template <typename T> T min_(const T &a, const T &b) {
-    if constexpr (std::is_same_v<T, float>)
-        return ENOKI_BUILTIN(fminf)(a, b);
-    else if constexpr (std::is_same_v<T, double>)
-        return ENOKI_BUILTIN(fmin)(a, b);
-    else
-        return a < b ? a : b;
+    return b < a ? b : a;
 }
 
 template <typename T> T fmadd_(const T &a, const T &b, const T &c) {
