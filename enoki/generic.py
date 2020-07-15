@@ -1188,6 +1188,7 @@ def set_grad_enabled_(a, value):
         raise Exception("Expected a differentiable array type!")
     for i in range(len(a)):
         a[i] = a[i].set_grad_enabled_(value)
+    return a
 
 
 def set_grad_(a, grad):

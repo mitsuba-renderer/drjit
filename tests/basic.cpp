@@ -264,6 +264,8 @@ ENOKI_TEST_ALL(test14_abs) {
 }
 
 ENOKI_TEST_ALL(test15_fmadd) {
+    if (!T::IsFloat)
+        return;
     auto sample = test::sample_values<Value>();
 
     test::validate_ternary<T>(sample,
@@ -276,6 +278,8 @@ ENOKI_TEST_ALL(test15_fmadd) {
 }
 
 ENOKI_TEST_ALL(test16_fmsub) {
+    if (!T::IsFloat)
+        return;
     auto sample = test::sample_values<Value>();
 
     test::validate_ternary<T>(sample,

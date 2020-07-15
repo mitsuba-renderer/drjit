@@ -111,6 +111,7 @@ endif()
 
 if (ENOKI_ENABLE_TESTS)
   message(STATUS "Enoki: building the test suite (Warning, this takes *very* long to compile).")
+  enable_testing()
   add_subdirectory(tests)
 endif()
 
