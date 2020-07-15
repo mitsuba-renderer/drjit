@@ -68,9 +68,6 @@ ENOKI_TEST_FLOAT(test02_ceil) {
         [](const T &a) -> T { return ceil(a); },
         [](Value a) -> Value { return std::ceil(a); }
     );
-
-    Array<T, 4> x(3.4f); Array<T&, 4> y(x);
-    assert(ceil(x) == ceil(y));
 }
 
 ENOKI_TEST_FLOAT(test03_floor) {
@@ -80,9 +77,6 @@ ENOKI_TEST_FLOAT(test03_floor) {
         [](const T &a) -> T { return floor(a); },
         [](Value a) -> Value { return std::floor(a); }
     );
-
-    Array<T, 4> x(3.4f); Array<T&, 4> y(x);
-    assert(floor(x) == floor(y));
 }
 
 ENOKI_TEST_FLOAT(test04_round) {
@@ -92,9 +86,6 @@ ENOKI_TEST_FLOAT(test04_round) {
         [](const T &a) -> T { return round(a); },
         [](Value a) -> Value { return std::rint(a); }
     );
-
-    Array<T, 4> x(3.4f); Array<T&, 4> y(x);
-    assert(round(x) == round(y));
 }
 
 ENOKI_TEST_FLOAT(test05_trunc) {
@@ -104,9 +95,6 @@ ENOKI_TEST_FLOAT(test05_trunc) {
         [](const T &a) -> T { return trunc(a); },
         [](Value a) -> Value { return std::trunc(a); }
     );
-
-    Array<T, 4> x(3.4f); Array<T&, 4> y(x);
-    assert(trunc(x) == trunc(y));
 }
 
 ENOKI_TEST_FLOAT(test06_sqrt) {
@@ -121,9 +109,6 @@ ENOKI_TEST_FLOAT(test06_sqrt) {
         1e-6f
 #endif
     );
-
-    Array<T, 4> x(3.4f); Array<T&, 4> y(x);
-    assert(sqrt(x) == sqrt(y));
 }
 
 ENOKI_TEST_FLOAT(test07_rsqrt) {
@@ -171,9 +156,6 @@ ENOKI_TEST_FLOAT(test09_sign) {
         [](const T &a) -> T { return enoki::sign(a); },
         [](Value a) -> Value { return std::copysign(1.f, a); }
     );
-
-    Array<T, 4> x(3.4f); Array<T&, 4> y(x);
-    assert(sign(x) == sign(y));
 }
 
 ENOKI_TEST_FLOAT(test10_isinf) {
@@ -210,30 +192,6 @@ ENOKI_TEST_FLOAT(test13_nan_initialization) {
     T x;
     for (size_t i = 0; i < Size; ++i)
         assert(std::isnan(x[i]));
-}
-
-ENOKI_TEST(test14_half) {
-    using T = Array<float, 4>;
-    using THalf = Array<half, 4>;
-
-    for (uint32_t i = 0; i < 0xFFFF; ++i) {
-        uint16_t data[8]  = { (uint16_t) i };
-        uint16_t data3[8] = { (uint16_t) i };
-
-        float f1 = T(load<THalf>((const half *) data))[0];
-        float f2 = (float) half::from_binary(data[0]);
-
-        bool both_nan = std::isnan(f1) && std::isnan(f2);
-
-        assert((memcpy_cast<uint32_t>(f1) ==
-                memcpy_cast<uint32_t>(f2)) || both_nan);
-
-        half data2[8];
-        store(data2, THalf(T(f1)));
-        data3[0] = half(f2).value;
-
-        assert((data2[0].value == data3[0]) || both_nan);
-    }
 }
 
 ENOKI_TEST_FLOAT(test16_hypot) {
