@@ -14,6 +14,7 @@
 #include "test.h"
 #include <enoki/matrix.h>
 #include <enoki/dynamic.h>
+#include <enoki/util.h>
 
 #if defined(_MSC_VER)
 #  define NOMINMAX
@@ -31,37 +32,16 @@ ENOKI_TEST_ALL(test01_extract) {
         assert(extract(idx, eq(idx, Value(i))) == Value(i));
 }
 
-ENOKI_TEST_ALL(test02_compress) {
-    alignas(alignof(T)) Value tmp[T::ActualSize];
-    auto value = arange<T>();
-    Value *tmp2 = tmp;
-    compress(tmp2, value, value >= Value(2));
-    for (int i = 0; i < int(Size) - 2; ++i)
-        assert(tmp[i] == Value(2 + i));
-    assert(int(tmp2 - tmp) == std::max(0, int(Size) - 2));
-}
-
-ENOKI_TEST_ALL(test03_transform) {
+ENOKI_TEST_ALL(test03_scatter_add) {
     Value tmp[T::ActualSize] = { 0 };
     auto index = arange<uint_array_t<T>>();
     auto index2 = uint_array_t<T>(0u);
 
-    transform<T>(tmp, index,
-                 [](auto &value, auto & /*mask*/) { value += Value(1); });
+    scatter_add(tmp, T(1), index);
+    scatter_add(tmp, T(1), index, mask_t<T>(false));
 
-    transform<T>(tmp, index,
-                 [](auto &value, auto & /* mask */) { value += Value(1); },
-                 mask_t<T>(false));
-
-    transform<T>(
-        tmp, index2,
-        [](auto &value, auto &amount, auto & /* mask */) { value += amount; },
-        T(2));
-
-    transform<T>(
-        tmp, index2,
-        [](auto &value, auto &amount, auto & /* mask */) { value += amount; },
-        T(2), mask_t<T>(false));
+    scatter_add(tmp, T(2), index2);
+    scatter_add(tmp, T(2), index2, mask_t<T>(false));
 
     assert(tmp[0] == 2*Size + 1);
     for (size_t i = 1; i < Size; ++i) {
@@ -128,10 +108,6 @@ void test04_nested_gather_packed_impl() {
         else
             assert(slice(q, i) + full<Matrix4>(Value(1000)) == x[i]);
     }
-
-    /* Nested prefetch -- doesn't do anything here, let's just make sure it compiles */
-    prefetch<Matrix4P>(x, arange<UInt32P>());
-    prefetch<Matrix4P>(x, arange<UInt32P>(), arange<UInt32P>() < 2u);
 
     /* Nested gather + slice for dynamic arrays */
     using UInt32X   = DynamicArray<UInt32P>;
@@ -218,10 +194,6 @@ void test05_nested_gather_nonpacked_impl() {
         else
             assert(slice(q, i) + full<Matrix3>(Value(1000)) == x[i]);
     }
-
-    /* Nested prefetch -- doesn't do anything here, let's just make sure it compiles */
-    prefetch<Matrix3P, false, 2, 0, false>(x, arange<UInt32P>());
-    prefetch<Matrix3P, false, 2, 0, false>(x, arange<UInt32P>(), arange<UInt32P>() < 2u);
 
     /* Nested gather + slice for dynamic arrays */
     using UInt32X   = DynamicArray<UInt32P>;

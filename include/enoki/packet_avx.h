@@ -886,14 +886,14 @@ template <bool IsMask_, typename Derived_> struct alignas(32)
 #if defined(ENOKI_X86_AVX2)
     template <bool, typename Index, typename Mask>
     static ENOKI_INLINE Derived gather_(const void *ptr, const Index &index, const Mask &mask) {
-        return Base::gather_<false>(ptr, index, mask & mask_());
+        return Base::template gather_<false>(ptr, index, mask & mask_());
     }
 #endif
 
 #if defined(ENOKI_X86_AVX512)
     template <bool, typename Index, typename Mask>
     ENOKI_INLINE void scatter_(void *ptr, const Index &index, const Mask &mask) const {
-        Base::scatter_<false>(ptr, index, mask & mask_());
+        Base::template scatter_<false>(ptr, index, mask & mask_());
     }
 #endif
 

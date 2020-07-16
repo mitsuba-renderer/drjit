@@ -72,6 +72,9 @@ template <> struct debug_initialization<float> {
 template <> struct debug_initialization<double> {
     static constexpr double value = NaN<double>;
 };
+template <typename T> struct debug_initialization<T*> {
+    static constexpr T *value = nullptr;
+};
 NAMESPACE_END(detail)
 
 template <typename T>

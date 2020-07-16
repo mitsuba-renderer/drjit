@@ -1,5 +1,5 @@
 /*
-    enoki/utils.h -- Supplemental utility functions for Enoki arrays
+    enoki/util.h -- Supplemental utility functions for Enoki arrays
 
     Enoki is a C++ template library for efficient vectorization and
     differentiation of numerical kernels on modern processor architectures.

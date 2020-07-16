@@ -320,21 +320,21 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
     template <bool, typename Index, typename Mask>
     static ENOKI_INLINE Derived gather_(const void *ptr, const Index &index, const Mask &mask) {
         return Derived(
-            gather<Array1>(ptr, index.a1, mask.a1),
-            gather<Array2>(ptr, index.a2, mask.a2)
+            gather<Array1>(ptr, low(index), low(mask)),
+            gather<Array2>(ptr, high(index), high(mask))
         );
     }
 
     template <bool, typename Index, typename Mask>
     ENOKI_INLINE void scatter_(void *ptr, const Index &index, const Mask &mask) const {
-        scatter(ptr, a1, index.a1, mask.a1);
-        scatter(ptr, a2, index.a2, mask.a2);
+        scatter(ptr, a1, low(index), low(mask));
+        scatter(ptr, a2, high(index), high(mask));
     }
 
     template <typename Index, typename Mask>
     ENOKI_INLINE void scatter_add_(void *ptr, const Index &index, const Mask &mask) const {
-        scatter_add(ptr, a1, index.a1, mask.a1);
-        scatter_add(ptr, a2, index.a2, mask.a2);
+        scatter_add(ptr, a1, low(index), low(mask));
+        scatter_add(ptr, a2, high(index), high(mask));
     }
 
     static ENOKI_INLINE Derived zero_(size_t) {
