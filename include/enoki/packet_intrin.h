@@ -60,6 +60,7 @@
 #    include <avx512dqintrin.h>
 #    include <avx512vldqintrin.h>
 #    include <avx512vlbwintrin.h>
+#    include <avx512vlcdintrin.h>
 #  endif
 
 #  if defined(ENOKI_ARM_NEON)

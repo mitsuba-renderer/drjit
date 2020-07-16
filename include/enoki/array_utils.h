@@ -252,9 +252,9 @@ template <typename T> ENOKI_INLINE T tzcnt_(T v) {
         return (T) (v != 0 ? __tzcnt64((unsigned long long) v) : 64);
 #else
     if constexpr (sizeof(T) <= 4)
-        return (T) (v != 0 ? __builtin_clz((unsigned int) v) : 32);
+        return (T) (v != 0 ? __builtin_ctz((unsigned int) v) : 32);
     else
-        return (T) (v != 0 ? __builtin_clzll((unsigned long long) v) : 64);
+        return (T) (v != 0 ? __builtin_ctzll((unsigned long long) v) : 64);
 #endif
 }
 

@@ -13,17 +13,6 @@
 
 #include "test.h"
 
-ENOKI_TEST(test01_string) { /* Arrays can be instantiated for all sorts of types */
-    Array<std::string, 2> v1("Hello ", " How are ");
-    Array<std::string, 2> v2("world!", "you?");
-
-    assert(v1.x() == "Hello ");
-    assert(to_string(v1) == "[Hello ,  How are ]");
-    assert(to_string(v1 + v2) == "[Hello world!,  How are you?]");
-    assert(hsum(v1 + v2) == "Hello world! How are you?");
-    assert(hsum(v1 + std::string("you!")) == "Hello you! How are you!");
-}
-
 ENOKI_TEST(test02_float_array) {
     /* Value initialization */
     Array<float, 4> a(1.f);
@@ -46,44 +35,6 @@ ENOKI_TEST(test02_float_array) {
 
     /* Binary operations */
     assert(to_string(c + c) == "[2, 4, 6, 8]");
-}
-
-ENOKI_TEST(test03_floatref_array) {
-    float tmp1 = 1.f;
-    Array<float, 4> tmp2(1.f, 2.f, 3.f, 4.f);
-
-    /* Value initialization */
-    Array<float&, 4> a(tmp1, tmp1, tmp1, tmp1);
-    assert(to_string(a) == "[1, 1, 1, 1]");
-    a.x() = 2.f;
-    assert(to_string(a) == "[2, 2, 2, 2]");
-
-    /* Reference an existing array */
-    Array<float&, 4> b(tmp2);
-    assert(to_string(b) == "[1, 2, 3, 4]");
-    assert(to_string(a + b) == "[3, 4, 5, 6]");
-
-    /* .. and reference it once more */
-    Array<float&, 4> c(b);
-
-    /* Convert back into a regular array */
-    Array<float, 4> d(c);
-    assert(to_string(d) == "[1, 2, 3, 4]");
-
-    /* Operations involving scalars (left) */
-    assert(to_string(c + 1.f) == "[2, 3, 4, 5]");
-
-    /* Operations involving scalars (right) */
-    assert(to_string(1.f + c) == "[2, 3, 4, 5]");
-
-    /* Binary operations */
-    assert(to_string(c + c) == "[2, 4, 6, 8]");
-    assert(to_string(d + c) == "[2, 4, 6, 8]");
-    assert(to_string(c + d) == "[2, 4, 6, 8]");
-
-    c += c; c += d; c += 1.f;
-
-    assert(to_string(c) == "[4, 7, 10, 13]");
 }
 
 ENOKI_TEST(test04_array_of_arrays) {
@@ -131,7 +82,7 @@ ENOKI_TEST(test06_nested_reductions) {
 
     auto to_string = [](auto value) {
         std::ostringstream oss;
-        detail::print(oss, value, false, shape(value));
+        oss << value;
         return oss.str();
     };
 

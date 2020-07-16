@@ -322,7 +322,7 @@ auto lerp(const Value1 &a, const Value2 &b, const Value3 &t) {
 /// Clamp the value 'value' to the range [min, max]
 template <typename Value1, typename Value2, typename Value3>
 auto clamp(const Value1 &value, const Value2 &min, const Value3 &max) {
-    return max(min(value, max), min);
+    return enoki::max(enoki::min(value, max), min);
 }
 
 namespace detail {

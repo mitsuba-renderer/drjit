@@ -726,8 +726,8 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
         return value;
     }
 
-    uint32_array_t<Value> count_() const {
-        uint32_array_t<Value> value;
+    uint32_array_t<array_t<Value>> count_() const {
+        uint32_array_t<array_t<Value>> value;
 
         if constexpr (IsMask) {
             if constexpr (Derived::Size == Dynamic) {

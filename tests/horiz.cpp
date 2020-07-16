@@ -135,7 +135,6 @@ ENOKI_TEST_ALL(test08_count) {
     assert(0 == count(mask_t<T>(false)));
 }
 
-
 ENOKI_TEST_ALL(test09_dot) {
     auto sample = test::sample_values<Value>();
     T value1, value2;

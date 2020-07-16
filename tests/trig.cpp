@@ -7,10 +7,6 @@ ENOKI_TEST_FLOAT(test01_sin) {
         Value(-8192), Value(8192),
         19
     );
-
-    Array<T, 4> x((Value) M_PI);
-    Array<T&, 4> y(x);
-    assert(sin(x) == sin(y));
 }
 
 ENOKI_TEST_FLOAT(test02_cos) {
@@ -20,10 +16,6 @@ ENOKI_TEST_FLOAT(test02_cos) {
         Value(-8192), Value(8192),
         47
     );
-
-    Array<T, 4> x((Value) M_PI);
-    Array<T&, 4> y(x);
-    assert(cos(x) == cos(y));
 }
 
 ENOKI_TEST_FLOAT(test03_sincos_sin) {
@@ -42,11 +34,6 @@ ENOKI_TEST_FLOAT(test04_sincos_cos) {
         Value(-8192), Value(8192),
         47
     );
-
-    Array<T, 4> x((Value) M_PI), s, c;
-    Array<T&, 4> y(x);
-    auto result = sincos(y);
-    assert(result.first == sin(y) && result.second == cos(y));
 }
 
 ENOKI_TEST_FLOAT(test05_tan) {
@@ -56,10 +43,6 @@ ENOKI_TEST_FLOAT(test05_tan) {
         Value(-8192), Value(8192),
         30
     );
-
-    Array<T, 4> x((Value) M_PI);
-    Array<T&, 4> y(x);
-    assert(tan(x) == tan(y));
 }
 
 ENOKI_TEST_FLOAT(test06_cot) {
@@ -69,10 +52,6 @@ ENOKI_TEST_FLOAT(test06_cot) {
         Value(-8192), Value(8192),
         47
     );
-
-    Array<T, 4> x((Value) M_PI);
-    Array<T&, 4> y(x);
-    assert(tan(x) == tan(y));
 }
 
 ENOKI_TEST_FLOAT(test07_asin) {
@@ -82,10 +61,6 @@ ENOKI_TEST_FLOAT(test07_asin) {
         Value(-1), Value(1),
         61
     );
-
-    Array<T, 4> x((Value) 0.5);
-    Array<T&, 4> y(x);
-    assert(asin(x) == asin(y));
 }
 
 ENOKI_TEST_FLOAT(test08_acos) {
@@ -95,10 +70,6 @@ ENOKI_TEST_FLOAT(test08_acos) {
         Value(-1), Value(1),
         4
     );
-
-    Array<T, 4> x((Value) 0.5);
-    Array<T&, 4> y(x);
-    assert(acos(x) == acos(y));
 }
 
 ENOKI_TEST_FLOAT(test09_atan) {
@@ -108,10 +79,6 @@ ENOKI_TEST_FLOAT(test09_atan) {
         Value(-1), Value(1),
         12
     );
-
-    Array<T, 4> x((Value) 0.5);
-    Array<T&, 4> y(x);
-    assert(atan(x) == atan(y));
 }
 
 ENOKI_TEST_FLOAT(test10_atan2) {
