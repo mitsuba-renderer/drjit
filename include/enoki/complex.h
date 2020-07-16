@@ -37,10 +37,10 @@ struct Complex : StaticArrayImpl<Value_, 2, false, Complex<Value_>> {
     ENOKI_INLINE Complex(T&& z) : Base(std::forward<T>(z)) { }
 
     template <typename T, enable_if_t<!is_complex_v<T> && array_depth_v<T> != Base::Depth &&
-                                       (is_array_v<T> || std::is_scalar_v<T>)> = 0>
+                                       (is_array_v<T> || std::is_scalar_v<std::decay_t<T>>)> = 0>
     ENOKI_INLINE Complex(T&& z) : Base(std::forward<T>(z), zero<Value_>()) { }
 
-    template <typename T, enable_if_t<!is_array_v<T> && !std::is_scalar_v<T>> = 0> // __m128d
+    template <typename T, enable_if_t<!is_array_v<T> && !std::is_scalar_v<std::decay_t<T>>> = 0> // __m128d
     ENOKI_INLINE Complex(T&& z) : Base(z) { }
 
     ENOKI_INLINE Complex(const Value_ &v1, const Value_ &v2) : Base(v1, v2) { }

@@ -35,10 +35,10 @@ struct Quaternion : StaticArrayImpl<Value_, 4, false, Quaternion<Value_>> {
     ENOKI_INLINE Quaternion(T&& q) : Base(std::forward<T>(q)) { }
 
     template <typename T, enable_if_t<!is_quaternion_v<T> && array_depth_v<T> != Base::Depth &&
-                                       (is_array_v<T> || std::is_scalar_v<T>)> = 0>
+                                       (is_array_v<T> || std::is_scalar_v<std::decay_t<T>>)> = 0>
     ENOKI_INLINE Quaternion(T&& v) : Base(zero<Value_>(), zero<Value_>(), zero<Value_>(), std::forward<T>(v)) { }
 
-    template <typename T, enable_if_t<!is_array_v<T> && !std::is_scalar_v<T>> = 0> // __m128, __m256d
+    template <typename T, enable_if_t<!is_array_v<T> && !std::is_scalar_v<std::decay_t<T>>> = 0> // __m128, __m256d
     ENOKI_INLINE Quaternion(T&& v) : Base(v) { }
 
     ENOKI_INLINE Quaternion(const Value_ &vi, const Value_ &vj, const Value_ &vk, const Value_ &vr)
