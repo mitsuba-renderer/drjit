@@ -599,8 +599,8 @@ def op_truediv(a, b):
     if not a.IsFloat:
         raise Exception("Use the floor division operator \"//\" for "
                         "Enoki integer arrays.")
-    if isinstance(b, float) or isinstance(b, int):
-        return a * (1.0 / b)
+    if getattr(b, 'Depth', 0) < a.Depth:
+        return a * rcp(b)
 
     if type(a) is not type(b):
         a, b = _var_promote(a, b)

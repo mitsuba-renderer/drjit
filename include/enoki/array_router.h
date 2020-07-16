@@ -156,7 +156,6 @@ NAMESPACE_BEGIN(enoki)
 ENOKI_ROUTE_BINARY(operator+, add)
 ENOKI_ROUTE_BINARY(operator-, sub)
 ENOKI_ROUTE_BINARY(operator*, mul)
-ENOKI_ROUTE_BINARY(operator/, div)
 ENOKI_ROUTE_BINARY(operator%, mod)
 ENOKI_ROUTE_UNARY(operator-, neg)
 
@@ -220,6 +219,22 @@ ENOKI_ROUTE_COMPOUND_OPERATOR(|)
 ENOKI_ROUTE_COMPOUND_OPERATOR(&)
 ENOKI_ROUTE_COMPOUND_OPERATOR(<<)
 ENOKI_ROUTE_COMPOUND_OPERATOR(>>)
+
+template <typename T1, typename T2, enable_if_array_any_t<T1, T2> = 0>
+ENOKI_INLINE auto operator/(const T1 &a1, const T2 &a2) {
+    using E  = expr_t<T1, T2>;
+    using E2 = expr_t<scalar_t<T1>, T2>;
+
+    if constexpr (std::is_same_v<T1, E> && std::is_same_v<T2, E>)
+        return a1.derived().div_(a2.derived());
+    else if constexpr (std::is_floating_point_v<scalar_t<E>> &&
+                       array_depth_v<T1> > array_depth_v<T2>) // reciprocal approximation
+        return static_cast<ref_cast_t<T1, E>>(a1) *
+               rcp(static_cast<ref_cast_t<T1, E2>>(a2));
+    else
+        return operator/(static_cast<ref_cast_t<T1, E>>(a1),
+                         static_cast<ref_cast_t<T2, E>>(a2));
+}
 
 template <typename T, enable_if_not_array_t<T> = 0> T andnot(const T &a1, const T &a2) {
     return detail::andnot_(a1, a2);
