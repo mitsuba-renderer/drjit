@@ -602,7 +602,7 @@ template <bool IsMask_, typename Derived_> struct alignas(64)
             __m512d value = m;
 
             __m512d value_orig = _mm512_mask_i64gather_pd(
-                _mm512_undefined(), active, index, ptr, 8);
+                _mm512_undefined_pd(), active, index, ptr, 8);
 
             __m512i conflicts = _mm512_and_si512(_mm512_conflict_epi64(index),
                                                  _mm512_broadcastmb_epi64(active));
@@ -614,7 +614,7 @@ template <bool IsMask_, typename Derived_> struct alignas(64)
                                                     _mm512_lzcnt_epi64(conflicts)),
                         all_ones = _mm512_set1_epi64(-1);
                 do {
-                    __m512 value_peer = _mm512_maskz_permutexvar_pd(todo, perm_idx, value);
+                    __m512d value_peer = _mm512_maskz_permutexvar_pd(todo, perm_idx, value);
                     perm_idx = _mm512_mask_permutexvar_epi64(perm_idx, todo,
                                                              perm_idx, perm_idx);
                     value = _mm512_add_pd(value, value_peer);
@@ -895,7 +895,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(64)
             __m512i value = m;
 
             __m512i value_orig = _mm512_mask_i32gather_epi32(
-                _mm512_undefined(), active, index, ptr, 4);
+                _mm512_undefined_epi32(), active, index, ptr, 4);
 
             __m512i conflicts = _mm512_and_si512(_mm512_conflict_epi32(index),
                                                  _mm512_broadcastmw_epi32(active));
@@ -1198,7 +1198,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(64)
             __m512i value = m;
 
             __m512i value_orig = _mm512_mask_i64gather_epi64(
-                _mm512_undefined(), active, index, ptr, 8);
+                _mm512_undefined_epi32(), active, index, ptr, 8);
 
             __m512i conflicts = _mm512_and_si512(_mm512_conflict_epi64(index),
                                                  _mm512_broadcastmb_epi64(active));
@@ -1210,7 +1210,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(64)
                                                     _mm512_lzcnt_epi64(conflicts)),
                         all_ones = _mm512_set1_epi64(-1);
                 do {
-                    __m512 value_peer = _mm512_maskz_permutexvar_epi64(todo, perm_idx, value);
+                    __m512i value_peer = _mm512_maskz_permutexvar_epi64(todo, perm_idx, value);
                     perm_idx = _mm512_mask_permutexvar_epi64(perm_idx, todo,
                                                              perm_idx, perm_idx);
                     value = _mm512_add_epi64(value, value_peer);
