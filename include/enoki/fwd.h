@@ -249,8 +249,7 @@ struct call_support {
     call_support(const Array &) { }
 };
 
-template <typename Value>
-struct CUDAArray;
+struct StringBuffer;
 
 /// Half-precision floating point value
 struct half;

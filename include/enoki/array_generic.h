@@ -12,6 +12,7 @@
 #pragma once
 
 #include <enoki/array_static.h>
+#include <enoki/string.h>
 
 NAMESPACE_BEGIN(enoki)
 
@@ -254,40 +255,38 @@ namespace detail {
         return true;
     }
 
-    template <bool Abbrev = false, typename Stream, typename Array, typename... Indices>
-    void print(Stream &os, const Array &a, const size_t *shape, Indices... indices) {
+    template <bool Abbrev, typename Array, typename... Indices>
+    void to_string(StringBuffer &buf, const Array &a, const size_t *shape, Indices... indices) {
         ENOKI_MARK_USED(shape);
         if constexpr (sizeof...(Indices) == array_depth_v<Array>) {
-            os << a.derived().entry(indices...);
+            buf.put(a.derived().entry(indices...));
         } else {
             constexpr size_t k = array_depth_v<Array> - sizeof...(Indices) - 1;
-            os << "[";
+            buf.put('[');
             for (size_t i = 0; i < shape[k]; ++i) {
                 if constexpr (is_dynamic_array_v<Array>) {
                     if (Abbrev && shape[k] > 20 && i == 5) {
+                        buf.fmt(".. %zu skipped ..,%s", shape[k] - 10, k > 0 ? "\n" : " ");
                         if (k > 0) {
-                            os << ".. " << shape[k] - 10 << " skipped ..,\n";
                             for (size_t j = 0; j <= sizeof...(Indices); ++j)
-                                os << " ";
-                        } else {
-                            os << ".. " << shape[k] - 10 << " skipped .., ";
+                                buf.put(' ');
                         }
                         i = shape[k] - 6;
                         continue;
                     }
                 }
-                print<false>(os, a, shape, i, indices...);
+                to_string<false>(buf, a, shape, i, indices...);
                 if (i + 1 < shape[k]) {
                     if constexpr (k == 0) {
-                        os << ", ";
+                        buf.put(", ");
                     } else {
-                        os << ",\n";
+                        buf.put(",\n");
                         for (size_t j = 0; j <= sizeof...(Indices); ++j)
-                            os << " ";
+                            buf.put(' ');
                     }
                 }
             }
-            os << "]";
+            buf.put(']');
         }
     }
 }
@@ -301,11 +300,14 @@ template <typename Stream, typename Value, bool IsMask, typename Derived,
           enable_if_not_array_t<Stream> = 0>
 ENOKI_NOINLINE Stream &operator<<(Stream &os, const ArrayBase<Value, IsMask, Derived> &a) {
     size_t shape[array_depth_v<Derived> + 1 /* avoid zero-sized array */ ] { };
+
     if (!detail::put_shape(a, shape)) {
         os << "[ragged array]";
     } else {
         enoki::schedule(a);
-        detail::print<true>(os, a, shape);
+        StringBuffer buf;
+        detail::to_string<true>(buf, a, shape);
+        os << buf.get();
     }
 
     return os;
