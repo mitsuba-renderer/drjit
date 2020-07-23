@@ -22,7 +22,11 @@ namespace detail {
     template <bool Abbrev, typename Array, typename... Indices>
     void to_string(StringBuffer &buf, const Array &a, const size_t *shape, Indices... indices);
     template <typename T> bool put_shape(const T &array, size_t *shape);
+
+    template <typename T> using has_c_str     = decltype(std::declval<T>().c_str());
+    template <typename T> using has_to_string = decltype(to_string(std::declval<T>()));
 };
+
 
 /**
  * \brief Helper class for string construction
@@ -132,6 +136,14 @@ struct StringBuffer {
 
         return *this;
     }
+
+    /// Append a string (or similar class) that exposes a <tt>c_str()</tt> method
+    template <typename T, enable_if_t<is_detected_v<detail::has_c_str, const T &>> = 0>
+    StringBuffer &put(const T &value) { return put(value.c_str()); }
+
+    /// Handle instances providing <tt>to_string(const T &)</tt> that can be found via ADL
+    template <typename T, enable_if_t<is_detected_v<detail::has_to_string, const T &>> = 0>
+    StringBuffer &put(const T &value) { return put(to_string(value)); }
 
     /// Append nothing (no-op)
     StringBuffer &put() { return *this; }

@@ -299,17 +299,9 @@ template <typename Array> bool ragged(const Array &a) {
 template <typename Stream, typename Value, bool IsMask, typename Derived,
           enable_if_not_array_t<Stream> = 0>
 ENOKI_NOINLINE Stream &operator<<(Stream &os, const ArrayBase<Value, IsMask, Derived> &a) {
-    size_t shape[array_depth_v<Derived> + 1 /* avoid zero-sized array */ ] { };
-
-    if (!detail::put_shape(a, shape)) {
-        os << "[ragged array]";
-    } else {
-        enoki::schedule(a);
-        StringBuffer buf;
-        detail::to_string<true>(buf, a, shape);
-        os << buf.get();
-    }
-
+    StringBuffer buf;
+    buf.put(a);
+    os << buf.get();
     return os;
 }
 
