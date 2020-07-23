@@ -190,8 +190,8 @@ struct StaticArrayImpl<Value_, 0, IsMask_, Derived_>
     using typename Base::Value;
     using Base::entry;
 
-    Value &entry(size_t i) { return *data(); }
-    const Value &entry(size_t i) const { return *data(); }
+    Value &entry(size_t /*i*/) { return *data(); }
+    const Value &entry(size_t /*i*/) const { return *data(); }
 
     /// Pointer to the underlying storage (returns \c nullptr)
     Value *data() { return nullptr; }

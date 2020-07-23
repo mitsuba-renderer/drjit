@@ -190,7 +190,7 @@ template <typename Type, size_t Size_>
 struct Vector : enoki::StaticArrayImpl<Type, Size_, false, Vector<Type, Size_>> {
 
     using Base = enoki::StaticArrayImpl<Type, Size_, false, Vector<Type, Size_>>;
-    ENOKI_ARRAY_IMPORT(Base, Vector)
+    ENOKI_ARRAY_IMPORT(Vector, Base)
 
     using ArrayType = Vector;
     using MaskType = Mask<Type, Size_>;
