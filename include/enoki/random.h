@@ -92,6 +92,17 @@ template <typename T> struct PCG32 {
         return UInt64(next_uint32(mask)) | sl<32>(UInt64(next_uint32(mask)));
     }
 
+    /// Forward \ref next_uint call to the correct method based given type size
+    template <typename Value,
+              enable_if_t<std::is_same_v<scalar_t<Value>, uint32_t> ||
+                          std::is_same_v<scalar_t<Value>, uint64_t>> = 0>
+    ENOKI_INLINE Value next_uint() {
+        if constexpr (std::is_same_v<scalar_t<Value>, uint64_t>)
+            return next_uint64();
+        else
+            return next_uint32();
+    }
+
     /// Generate a single precision floating point value on the interval [0, 1)
     ENOKI_INLINE Float32 next_float32() {
         return reinterpret_array<Float32>(sr<9>(next_uint32()) | 0x3f800000u) - 1.f;
@@ -120,6 +131,17 @@ template <typename T> struct PCG32 {
     ENOKI_INLINE Float64 next_float64(const Mask &mask) {
         return reinterpret_array<Float64>(sl<20>(UInt64(next_uint32(mask))) |
                                           0x3ff0000000000000ull) - 1.0;
+    }
+
+    /// Forward \ref next_float call to the correct method based given type size
+    template <typename Value,
+              enable_if_t<std::is_same_v<scalar_t<Value>, float> ||
+                          std::is_same_v<scalar_t<Value>, double>> = 0>
+    ENOKI_INLINE Value next_float() {
+        if constexpr (std::is_same_v<scalar_t<Value>, double>)
+            return next_float64();
+        else
+            return next_float32();
     }
 
     /// Generate a uniformly distributed integer r, where 0 <= r < bound
@@ -204,6 +226,18 @@ template <typename T> struct PCG32 {
 
             return imod(result, div);
         }
+    }
+
+    /// Forward \ref next_uint_bounded call to the correct method based given type size
+    template <typename Value,
+              enable_if_t<std::is_same_v<scalar_t<Value>, uint32_t> ||
+                          std::is_same_v<scalar_t<Value>, uint64_t>> = 0>
+    ENOKI_INLINE Value next_uint_bounded(scalar_t<Value> bound,
+                                         const mask_t<Value> &mask = true) {
+        if constexpr (std::is_same_v<scalar_t<Value>, uint64_t>)
+            return next_uint64_bounded(bound, mask);
+        else
+            return next_uint32_bounded(bound, mask);
     }
 
     /**

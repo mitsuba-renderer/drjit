@@ -11,6 +11,7 @@
 */
 
 #include <enoki/map.h>
+#include <enoki/util.h>
 
 #pragma once
 
@@ -81,8 +82,28 @@
         return *this;                                                          \
     }
 
+#define ENOKI_DERIVED_STRUCT(Name, ...)                                        \
+    Name() = default;                                                          \
+    Name(const Name &) = default;                                              \
+    Name(Name &&) = default;                                                   \
+    Name &operator=(const Name &) = default;                                   \
+    Name &operator=(Name &&) = default;                                        \
+    template <typename... Ts> Name(const Name<Ts...> &v) {                     \
+        ENOKI_MAP(ENOKI_STRUCT_ASSIGN_COPY, __VA_ARGS__)                       \
+    }                                                                          \
+    template <typename... Ts> Name(Name<Ts...> &&v) {                          \
+        ENOKI_MAP(ENOKI_STRUCT_ASSIGN_MOVE, __VA_ARGS__)                       \
+    }                                                                          \
+    template <typename... Ts> Name &operator=(Name<Ts...> &&v) {               \
+        ENOKI_MAP(ENOKI_STRUCT_ASSIGN_MOVE, __VA_ARGS__)                       \
+        return *this;                                                          \
+    }                                                                          \
+    template <typename... Ts> Name &operator=(const Name<Ts...> &v) {          \
+        ENOKI_MAP(ENOKI_STRUCT_ASSIGN_COPY, __VA_ARGS__)                       \
+        return *this;
+
 #define ENOKI_STRUCT_SUPPORT(Name, ...)                                        \
-    namespace enoki {                                                          \
+    NAMESPACE_BEGIN(enoki)                                                     \
         template <typename... Args> struct struct_support<Name<Args...>> {     \
             using Class = Name<Args...>;                                       \
             static constexpr bool Defined = true;                              \
@@ -158,7 +179,7 @@
                 ENOKI_MAP(ENOKI_STRUCT_SET_LABEL, __VA_ARGS__)                 \
             }                                                                  \
         };                                                                     \
-    }
+    NAMESPACE_END(enoki)
 
 NAMESPACE_BEGIN(enoki)
 

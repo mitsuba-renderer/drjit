@@ -21,7 +21,7 @@ NAMESPACE_BEGIN(enoki)
 template <typename Matrix>
 Matrix translate(const Array<entry_t<Matrix>, array_size_v<Matrix> - 1> &v) {
     Matrix trafo = identity<Matrix>();
-    trafo.coeff(array_size_v<Matrix> - 1) = concat(v, Array<entry_t<Matrix>, 1>(1));
+    trafo.entry(array_size_v<Matrix> - 1) = concat(v, Array<entry_t<Matrix>, 1>(1));
     return trafo;
 }
 
@@ -189,7 +189,7 @@ transform_decompose(const Matrix<Value, 4> &a) {
     Q = mulsign(Array33(Q), sign_q);
     P = mulsign(Array33(P), sign_q);
 
-    return std::make_tuple(P, matrix_to_quat(Q), head<3>(a.col(3)));
+    return std::make_tuple(P, matrix_to_quat(Q), head<3>(a.entry(3)));
 }
 
 template <typename Matrix4>
@@ -202,7 +202,7 @@ Matrix4 transform_compose(const Matrix<entry_t<Matrix4>, 3> &s,
 
     using Value = entry_t<Matrix4>;
     Matrix4 result(quat_to_matrix<Matrix<Value, 3>>(q) * s);
-    result.coeff(3) = concat(t, Array<Value, 1>(1));
+    result.entry(3) = concat(t, Array<Value, 1>(1));
     return result;
 }
 
@@ -217,7 +217,7 @@ Matrix4 transform_compose_inverse(const Matrix<entry_t<Matrix4>, 3> &s,
     using Value = entry_t<Matrix4>;
     Matrix<Value, 3> inv_m = inverse(quat_to_matrix<Matrix<Value, 3>>(q) * s);
     Matrix4 result(inv_m);
-    result.coeff(3) = concat(inv_m * -t, Array<Value, 1>(1));
+    result.entry(3) = concat(inv_m * -t, Array<Value, 1>(1));
     return result;
 }
 

@@ -120,7 +120,7 @@ struct StringBuffer {
 
     /// Append a floating point value to the buffer
     template <typename T, enable_if_t<std::is_floating_point_v<T>> = 0>
-    StringBuffer &put(T value) { return fmt("%.6g", value); }
+    StringBuffer &put(T value) { return fmt("%.6g", (double) value); }
 
     /// Append an Enoki array to the buffer
     template <typename T, enable_if_t<is_array_v<T>> = 0>
