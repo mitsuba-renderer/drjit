@@ -27,7 +27,7 @@ Matrix translate(const Array<entry_t<Matrix>, array_size_v<Matrix> - 1> &v) {
 
 template <typename Matrix>
 Matrix scale(const Array<entry_t<Matrix>, array_size_v<Matrix> - 1> &v) {
-    return diag<Matrix>(concat(v, Array<entry_t<Matrix>, 1>(1)));
+    return diag(concat(v, Array<entry_t<Matrix>, 1>(1)));
 }
 
 template <typename Matrix,
