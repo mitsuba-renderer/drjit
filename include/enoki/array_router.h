@@ -340,35 +340,39 @@ template <typename Array> ENOKI_INLINE Array sign(const Array &v) {
         return select(v >= 0, Array(1), Array(-1));
 }
 
-template <typename Array> ENOKI_INLINE Array copysign(const Array &v1, const Array &v2) {
-    if constexpr (std::is_floating_point_v<scalar_t<Array>> && !is_diff_array_v<Array>) {
-        return detail::or_(abs(v1), detail::and_(detail::sign_mask<Array>(), v2));
+template <typename Array1, typename Array2>
+ENOKI_INLINE Array1 copysign(const Array1 &v1, const Array2 &v2) {
+    if constexpr (std::is_floating_point_v<scalar_t<Array2>> && !is_diff_array_v<Array2>) {
+        return detail::or_(abs(v1), detail::and_(detail::sign_mask<Array2>(), v2));
     } else {
-        Array v1_a = abs(v1);
+        Array1 v1_a = abs(v1);
         return select(v2 >= 0, v1_a, -v1_a);
     }
 }
 
-template <typename Array> ENOKI_INLINE Array copysign_neg(const Array &v1, const Array &v2) {
-    if constexpr (std::is_floating_point_v<scalar_t<Array>> && !is_diff_array_v<Array>) {
-        return detail::or_(abs(v1), detail::andnot_(detail::sign_mask<Array>(), v2));
+template <typename Array1, typename Array2>
+ENOKI_INLINE Array1 copysign_neg(const Array1 &v1, const Array2 &v2) {
+    if constexpr (std::is_floating_point_v<scalar_t<Array2>> && !is_diff_array_v<Array2>) {
+        return detail::or_(abs(v1), detail::andnot_(detail::sign_mask<Array2>(), v2));
     } else {
-        Array v1_a = abs(v1);
+        Array1 v1_a = abs(v1);
         return select(v2 >= 0, -v1_a, v1_a);
     }
 }
 
-template <typename Array> ENOKI_INLINE Array mulsign(const Array &v1, const Array &v2) {
-    if constexpr (std::is_floating_point_v<scalar_t<Array>> && !is_diff_array_v<Array>) {
-        return detail::xor_(v1, detail::and_(detail::sign_mask<Array>(), v2));
+template <typename Array1, typename Array2>
+ENOKI_INLINE Array1 mulsign(const Array1 &v1, const Array2 &v2) {
+    if constexpr (std::is_floating_point_v<scalar_t<Array2>> && !is_diff_array_v<Array2>) {
+        return detail::xor_(v1, detail::and_(detail::sign_mask<Array2>(), v2));
     } else {
         return select(v2 >= 0, v1, -v1);
     }
 }
 
-template <typename Array> ENOKI_INLINE Array mulsign_neg(const Array &v1, const Array &v2) {
-    if constexpr (std::is_floating_point_v<scalar_t<Array>> && !is_diff_array_v<Array>) {
-        return detail::xor_(v1, detail::andnot_(detail::sign_mask<Array>(), v2));
+template <typename Array1, typename Array2>
+ENOKI_INLINE Array1 mulsign_neg(const Array1 &v1, const Array2 &v2) {
+    if constexpr (std::is_floating_point_v<scalar_t<Array2>> && !is_diff_array_v<Array2>) {
+        return detail::xor_(v1, detail::andnot_(detail::sign_mask<Array2>(), v2));
     } else {
         return select(v2 >= 0, -v1, v1);
     }
