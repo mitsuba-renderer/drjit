@@ -348,6 +348,7 @@ auto bind_full(py::class_<Array, EnokiHolder<Array>> &cls,
         cls.def("atanh_", [](const Array &a) { return ek::atanh(a); });
         cls.def("cbrt_", [](const Array &a) { return ek::cbrt(a); });
         cls.def("erf_", [](const Array &a) { return ek::erf(a); });
+        cls.def("erfinv_", [](const Array &a) { return ek::erfinv(a); });
     }
 
     if constexpr (Array::IsJIT || Array::IsDiff) {

@@ -1050,6 +1050,19 @@ def erf_(a0):
         raise Exception("erf(): unsupported array type!")
     return ar
 
+
+def erfinv_(a0):
+    if not a0.IsFloat:
+        raise Exception("erfinv(): requires floating point operands!")
+    ar, sr = _check1(a0)
+    if not a0.IsSpecial:
+        for i in range(sr):
+            ar[i] = _ek.erfinv(a0[i])
+    else:
+        raise Exception("erfinv(): unsupported array type!")
+    return ar
+
+
 # -------------------------------------------------------------------
 #                       Horizontal operations
 # -------------------------------------------------------------------

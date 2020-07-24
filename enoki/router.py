@@ -1296,6 +1296,13 @@ def op_pow(a, b):
     return pow(a, b)
 
 
+def cbrt(a):
+    if isinstance(a, ArrayBase):
+        return a.cbrt_()
+    else:
+        return _math.pow(a, 1.0 / 3.0)
+
+
 def erf(a):
     if isinstance(a, ArrayBase):
         return a.erf_()
@@ -1303,11 +1310,11 @@ def erf(a):
         return _math.erf(a)
 
 
-def cbrt(a):
+def erfinv(a):
     if isinstance(a, ArrayBase):
-        return a.cbrt_()
+        return a.erfinv_()
     else:
-        return _math.pow(a, 1.0 / 3.0)
+        return _math.erfinv(a)
 
 
 def sinh(a):

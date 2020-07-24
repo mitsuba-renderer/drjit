@@ -986,6 +986,7 @@ template <typename T> T atanh(const T &a);
 
 template <typename T> T cbrt(const T &a);
 template <typename T> T erf(const T &a);
+template <typename T> T erfinv(const T &a);
 
 //! @}
 // -----------------------------------------------------------------------

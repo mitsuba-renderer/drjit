@@ -1510,5 +1510,29 @@ template <typename Value> Value erf(const Value &x) {
     }
 }
 
+// Inverse real error function approximation based on on "Approximating the
+// erfinv function" by Mark Giles
+template <typename Value> Value erfinv(const Value &x) {
+    Value w = -log((Value(1.f) - x) * (Value(1.f) + x));
+
+    Value w1 = w - 2.5f;
+    Value w2 = sqrt(w) - 3.f;
+
+    Value p1 = estrin(w1,
+         1.50140941,     0.246640727,
+        -0.00417768164, -0.00125372503,
+         0.00021858087, -4.39150654e-06,
+        -3.5233877e-06,  3.43273939e-07,
+         2.81022636e-08);
+
+    Value p2 = estrin(w2,
+         2.83297682,     1.00167406,
+         0.00943887047, -0.0076224613,
+         0.00573950773, -0.00367342844,
+         0.00134934322,  0.000100950558,
+        -0.000200214257);
+
+    return select(w < 5.f, p1, p2) * x;
+}
 
 NAMESPACE_END(enoki)
