@@ -222,6 +222,9 @@ struct Mask;
 template <typename Value_, size_t Size_ = DefaultSize>
 struct PacketMask;
 
+/// Naive dynamic array
+template <typename Value_> struct DynamicArray;
+
 /// JIT-compiled dynamically sized CUDA array
 template <typename Value_> struct CUDAArray;
 
