@@ -242,7 +242,7 @@ template <typename T, enable_if_not_array_t<T> = 0> T andnot(const T &a1, const 
 
 template <typename M, typename T, typename F>
 ENOKI_INLINE auto select(const M &m, const T &t, const F &f) {
-    using E = replace_scalar_t<array_t<typename detail::deepest<M, T, F>::type>,
+    using E = replace_scalar_t<array_t<typename detail::deepest<T, F, M>::type>,
                                typename detail::expr<scalar_t<T>, scalar_t<F>>::type>;
     using EM = mask_t<E>;
     if constexpr (!is_array_v<E>)

@@ -48,7 +48,7 @@ struct Mask : MaskBase<Value_, Size_, Mask<Value_, Size_>> {
     using Base = MaskBase<Value_, Size_, Mask<Value_, Size_>>;
 
     using MaskType = Mask;
-    using ArrayType = Array<Value_, Size_>;
+    using ArrayType = Array<array_t<Value_>, Size_>;
     using Value = Value_;
     using Scalar = scalar_t<Value_>;
 
