@@ -179,8 +179,8 @@ Matrix look_at(const Array<entry_t<Matrix>, 3> &origin,
 
 template <typename Value>
 std::tuple<Matrix<Value, 3>, Quaternion<Value>, Array<Value, 3>>
-transform_decompose(const Matrix<Value, 4> &a) {
-    auto [Q, P] = polar_decomp(Matrix<Value, 3>(a));
+transform_decompose(const Matrix<Value, 4> &a, size_t it = 10) {
+    auto [Q, P] = polar_decomp(Matrix<Value, 3>(a), it);
     Q[isnan(Q(0, 0))] = identity<Matrix<Value, 3>>();
 
     Value sign_q = det(Q);
