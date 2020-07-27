@@ -103,6 +103,17 @@ template <typename T> struct PCG32 {
             return next_uint32();
     }
 
+    /// Forward \ref next_uint call to the correct method based given type size (masked version)
+    template <typename Value,
+              enable_if_t<std::is_same_v<scalar_t<Value>, uint32_t> ||
+                          std::is_same_v<scalar_t<Value>, uint64_t>> = 0>
+    ENOKI_INLINE Value next_uint(const Mask &mask) {
+        if constexpr (std::is_same_v<scalar_t<Value>, uint64_t>)
+            return next_uint64(mask);
+        else
+            return next_uint32(mask);
+    }
+
     /// Generate a single precision floating point value on the interval [0, 1)
     ENOKI_INLINE Float32 next_float32() {
         return reinterpret_array<Float32>(sr<9>(next_uint32()) | 0x3f800000u) - 1.f;
@@ -142,6 +153,17 @@ template <typename T> struct PCG32 {
             return next_float64();
         else
             return next_float32();
+    }
+
+    /// Forward \ref next_float call to the correct method based given type size (masked version)
+    template <typename Value,
+              enable_if_t<std::is_same_v<scalar_t<Value>, float> ||
+                          std::is_same_v<scalar_t<Value>, double>> = 0>
+    ENOKI_INLINE Value next_float(const Mask &mask) {
+        if constexpr (std::is_same_v<scalar_t<Value>, double>)
+            return next_float64(mask);
+        else
+            return next_float32(mask);
     }
 
     /// Generate a uniformly distributed integer r, where 0 <= r < bound
