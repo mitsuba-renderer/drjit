@@ -67,11 +67,9 @@
     Name(Name &&) = default;                                                   \
     Name &operator=(const Name &) = default;                                   \
     Name &operator=(Name &&) = default;                                        \
-    template <typename... Ts>                                                  \
-    Name(const Name<Ts...> &v)                                                 \
+    template <typename... Ts> Name(const Name<Ts...> &v)                       \
         : ENOKI_MAPC(ENOKI_STRUCT_CONSTR_COPY, __VA_ARGS__) { }                \
-    template <typename... Ts>                                                  \
-    Name(Name<Ts...> &&v)                                                      \
+    template <typename... Ts> Name(Name<Ts...> &&v)                            \
         : ENOKI_MAPC(ENOKI_STRUCT_CONSTR_MOVE, __VA_ARGS__) { }                \
     template <typename... Ts> Name &operator=(Name<Ts...> &&v) {               \
         ENOKI_MAP(ENOKI_STRUCT_ASSIGN_MOVE, __VA_ARGS__)                       \
@@ -100,7 +98,8 @@
     }                                                                          \
     template <typename... Ts> Name &operator=(const Name<Ts...> &v) {          \
         ENOKI_MAP(ENOKI_STRUCT_ASSIGN_COPY, __VA_ARGS__)                       \
-        return *this;
+        return *this;                                                          \
+    }
 
 #define ENOKI_STRUCT_SUPPORT(Name, ...)                                        \
     NAMESPACE_BEGIN(enoki)                                                     \
