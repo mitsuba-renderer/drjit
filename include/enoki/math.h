@@ -966,7 +966,7 @@ template <typename Value> Value log2(const Value &x) {
 namespace detail {
     template <typename Value> ENOKI_INLINE Value powi(const Value &x_, int y) {
         uint32_t n = (uint32_t) abs(y);
-        Value result(1.f), x(x_);
+        Value result(1), x(x_);
 
         while (n) {
             if (n & 1)
@@ -975,15 +975,18 @@ namespace detail {
             n >>= 1;
         }
 
-        return (y >= 0) ? result : rcp(result);
+        if constexpr (std::is_floating_point_v<scalar_t<Value>>)
+            return (y >= 0) ? result : rcp(result);
+        else
+            return result;
     }
 }
 
 template <typename X, typename Y> expr_t<X, Y> pow(const X &x, const Y &y) {
     static_assert(!is_special_v<X> && !is_special_v<Y>,
                   "pow(): requires a regular scalar/array argument!");
-    if constexpr (!std::is_scalar_v<X> && std::is_scalar_v<Y> && is_dynamic_v<X>) {
-        if (std::is_floating_point_v<Y>) {
+    if constexpr ((is_dynamic_v<X> && std::is_scalar_v<Y>) || std::is_integral_v<expr_t<X, Y>>) {
+        if constexpr (std::is_floating_point_v<Y>) {
             if (detail::round_(y) == y)
                 return detail::powi(x, (int) y);
             else
