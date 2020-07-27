@@ -1329,26 +1329,8 @@ template <typename Value> ENOKI_INLINE Value safe_acos(const Value &a) {
 
 NAMESPACE_BEGIN(detail)
 
-template <typename T> struct MaskedValue {
-    MaskedValue() = default;
-    MaskedValue(T &d, bool m) : d(&d), m(m) { }
-
-    template <typename T2> ENOKI_INLINE void operator =(const T2 &value) { if (m) *d = value; }
-    template <typename T2> ENOKI_INLINE void operator+=(const T2 &value) { if (m) *d += value; }
-    template <typename T2> ENOKI_INLINE void operator-=(const T2 &value) { if (m) *d -= value; }
-    template <typename T2> ENOKI_INLINE void operator*=(const T2 &value) { if (m) *d *= value; }
-    template <typename T2> ENOKI_INLINE void operator/=(const T2 &value) { if (m) *d /= value; }
-    template <typename T2> ENOKI_INLINE void operator|=(const T2 &value) { if (m) *d |= value; }
-    template <typename T2> ENOKI_INLINE void operator&=(const T2 &value) { if (m) *d &= value; }
-    template <typename T2> ENOKI_INLINE void operator^=(const T2 &value) { if (m) *d ^= value; }
-    template <typename T2> ENOKI_INLINE void operator<<=(const T2 &value) { if (m) *d <<= value; }
-    template <typename T2> ENOKI_INLINE void operator>>=(const T2 &value) { if (m) *d >>= value; }
-
-    T *d = nullptr;
-    bool m = false;
-};
-
-template <typename T> struct MaskedArray : ArrayBase<value_t<T>, is_mask_v<T>, MaskedArray<T>> {
+template <typename T>
+struct MaskedArray : ArrayBase<value_t<T>, is_mask_v<T>, MaskedArray<T>> {
     using Mask     = mask_t<T>;
     static constexpr size_t Size = array_size_v<T>;
     static constexpr bool IsMaskedArray = true;
@@ -1356,19 +1338,33 @@ template <typename T> struct MaskedArray : ArrayBase<value_t<T>, is_mask_v<T>, M
     MaskedArray() = default;
     MaskedArray(T &d, const Mask &m) : d(&d), m(m) { }
 
-    template <typename T2> ENOKI_INLINE void operator =(const T2 &value) { *d = select(m, value, *d); }
-    template <typename T2> ENOKI_INLINE void operator+=(const T2 &value) { *d = select(m, *d + value, *d); }
-    template <typename T2> ENOKI_INLINE void operator-=(const T2 &value) { *d = select(m, *d - value, *d); }
-    template <typename T2> ENOKI_INLINE void operator*=(const T2 &value) { *d = select(m, *d * value, *d); }
-    template <typename T2> ENOKI_INLINE void operator/=(const T2 &value) { *d = select(m, *d / value, *d); }
-    template <typename T2> ENOKI_INLINE void operator|=(const T2 &value) { *d = select(m, *d | value, *d); }
-    template <typename T2> ENOKI_INLINE void operator&=(const T2 &value) { *d = select(m, *d & value, *d); }
-    template <typename T2> ENOKI_INLINE void operator^=(const T2 &value) { *d = select(m, *d ^ value, *d); }
-    template <typename T2> ENOKI_INLINE void operator<<=(const T2 &value) { *d = select(m, *d << value, *d); }
-    template <typename T2> ENOKI_INLINE void operator>>=(const T2 &value) { *d = select(m, *d >> value, *d); }
+    ENOKI_INLINE void operator =(const MaskedArray<T> &value) { d = value.d; m = value.m; }
+
+    #define ENOKI_MASKED_OPERATOR(name, expr)                                 \
+        template <typename T2> ENOKI_INLINE void name(const T2 &value) {      \
+            if constexpr (is_same_v<Mask, bool>) {                            \
+                if (m)                                                        \
+                    *d = expr;                                                \
+            } else {                                                          \
+                *d = select(m, expr, *d);                                     \
+            }                                                                 \
+        }
+
+    ENOKI_MASKED_OPERATOR(operator=,         value)
+    ENOKI_MASKED_OPERATOR(operator+=,  *d +  value)
+    ENOKI_MASKED_OPERATOR(operator-=,  *d -  value)
+    ENOKI_MASKED_OPERATOR(operator*=,  *d *  value)
+    ENOKI_MASKED_OPERATOR(operator/=,  *d /  value)
+    ENOKI_MASKED_OPERATOR(operator|=,  *d |  value)
+    ENOKI_MASKED_OPERATOR(operator&=,  *d &  value)
+    ENOKI_MASKED_OPERATOR(operator^=,  *d ^  value)
+    ENOKI_MASKED_OPERATOR(operator<<=, *d << value)
+    ENOKI_MASKED_OPERATOR(operator>>=, *d >> value)
+
+    #undef ENOKI_MASKED_OPERATOR
 
     /// Type alias for a similar-shaped array over a different type
-    template <typename T2> using ReplaceValue = MaskedArray<typename T::template ReplaceValue<T2>>;
+    template <typename T2> using ReplaceValue = MaskedArray<replace_value_t<T, T2>>;
 
     T *d = nullptr;
     Mask m = false;
@@ -1382,16 +1378,15 @@ template <typename T> struct struct_support {
 
 template <typename T, typename Mask>
 ENOKI_INLINE auto masked(T &value, const Mask &mask) {
-    if constexpr (is_array_v<T>) {
+    if constexpr (is_array_v<T> || std::is_scalar_v<Mask>) {
         return detail::MaskedArray<T>{ value, mask };
     } else if constexpr (has_struct_support_v<T>) {
         return struct_support<T>::masked(value, mask);
     } else {
         static_assert(
-            std::is_same_v<Mask, bool>,
+            detail::false_v<T, Mask>,
             "masked(): don't know what to do with these inputs. Did you forget "
             "an ENOKI_STRUCT() declaration for type to be masked?");
-        return detail::MaskedValue<T>{ value, mask };
     }
 }
 

@@ -112,6 +112,10 @@ template <typename T> using enable_if_array_t = enable_if_t<is_array_v<T>>;
 template <typename T> using enable_if_not_array_t = enable_if_t<!is_array_v<T>>;
 
 template <typename T>
+constexpr bool is_masked_array_v = is_detected_v<detail::is_masked_array_det, std::decay_t<T>>;
+template <typename T> using enable_if_masked_array_t = enable_if_t<is_masked_array_v<T>>;
+
+template <typename T>
 constexpr bool is_static_array_v = is_detected_v<detail::is_static_array_det, std::decay_t<T>>;
 template <typename T> using enable_if_static_array_t = enable_if_t<is_static_array_v<T>>;
 
@@ -235,6 +239,10 @@ namespace detail {
         using type = bool;
     };
 
+    template <typename T> struct mask<MaskedArray<T>> {
+        using type = MaskedArray<typename mask<T>::type>;
+    };
+
     template <typename T> struct mask<T, enable_if_array_t<T>> {
         using type = typename std::decay_t<T>::Derived::MaskType;
     };
@@ -355,11 +363,24 @@ namespace detail {
         using Entry = typename replace_scalar<value_t<T>, Value>::type;
         using type = typename std::decay_t<T>::Derived::template ReplaceValue<Entry>;
     };
+
+    template <typename T, typename Value, typename = int>
+    struct replace_value {
+        using type = Value;
+    };
+
+    template <typename T, typename Value> struct replace_value<T, Value, enable_if_array_t<T>> {
+        using type = typename std::decay_t<T>::Derived::template ReplaceValue<Value>;
+    };
 };
 
 /// Replace the base scalar type of a (potentially nested) array
 template <typename T, typename Value>
 using replace_scalar_t = typename detail::replace_scalar<T, Value>::type;
+
+/// Replace the value type of an array
+template <typename T, typename Value>
+using replace_value_t = typename detail::replace_value<T, Value>::type;
 
 /// Integer-based version of a given array class
 template <typename T>
