@@ -847,12 +847,13 @@ Target gather(Source &&source, const Index &index, const mask_t<Target> &mask = 
                       "Source argument of gather operation must either be a "
                       "pointer address or a flat array!");
         if constexpr (!is_array_v<Index>) {
+            size_t offset = index * sizeof(Target);
             if constexpr (std::is_pointer_v<std::decay_t<Source>>) {
                 // Case 2.0.0: gather<Target>(const void *, size_t, ...)
-                return load_unaligned<Target>(source, index);
+                return load_unaligned<Target>((const uint8_t *)source + offset);
             } else {
                 // Case 2.0.1: gather<Target>(const FloatC&, size_t, ...)
-                return load_unaligned<Target>(source.data(), index);
+                return load_unaligned<Target>((const uint8_t *)source.data() + offset);
             }
         } else if constexpr (array_depth_v<Target> == array_depth_v<Index>) {
             // Case 2.1: gather<FloatC>(const FloatC& / const void *, ...)
