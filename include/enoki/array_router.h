@@ -957,6 +957,13 @@ void scatter_add(Target &&target, const Value &value, const Index &index, const 
     }
 }
 
+template <typename Array, typename Type> void migrate(Array &array, Type type) {
+    if constexpr (is_jit_array_v<Array>) {
+        static_assert(std::is_enum_v<Type>);
+        array.derived().migrate_(type);
+    }
+}
+
 //! @}
 // -----------------------------------------------------------------------
 

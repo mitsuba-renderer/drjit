@@ -821,6 +821,13 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
         return derived().store_unaligned_(mem);
     }
 
+    template <typename T> void migrate_(T type) {
+        if constexpr (is_jit_array_v<Value_>) {
+            for (size_t i = 0; i < derived().size(); ++i)
+                derived().entry(i).migrate_(type);
+        }
+    }
+
     //! @}
     // -----------------------------------------------------------------------
 };
