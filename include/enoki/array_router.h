@@ -1289,6 +1289,16 @@ template <typename Value> ENOKI_INLINE Value safe_sqrt(const Value &a) {
     return result;
 }
 
+template <typename Value> ENOKI_INLINE Value safe_rsqrt(const Value &a) {
+    Value result = rsqrt(max(a, 0));
+
+    if constexpr (is_diff_array_v<Value>) {
+        if (grad_enabled(a))
+            result = replace_grad(result, rsqrt(max(a, Epsilon<Value>)));
+    }
+
+    return result;
+}
 
 template <typename Value> ENOKI_INLINE Value safe_cbrt(const Value &a) {
     Value result = cbrt(max(a, 0));
