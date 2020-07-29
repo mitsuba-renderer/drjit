@@ -190,13 +190,13 @@ extern "C" {
     template <typename... Args> auto name(Args &&... args) const {             \
         return detail::dispatch(                                               \
             [](void *ptr, auto &&... args2) ENOKI_INLINE_LAMBDA {              \
-                return ((Base *) ptr)->name(args2...);                         \
+                return ((Class *) ptr)->name(args2...);                         \
             },                                                                 \
             array, std::forward<Args>(args)...);                               \
     }
 
 #define ENOKI_VCALL_GETTER(name, type)                                         \
-    auto get_field(const mask_t<Array> &mask = true) const {                   \
+    auto name(const mask_t<Array> &mask = true) const {                        \
         if constexpr (is_jit_array_v<Array>) {                                 \
             using Result = replace_scalar_t<Array, type>;                      \
             using UInt32 = uint32_array_t<Array>;                              \
@@ -206,14 +206,16 @@ extern "C" {
         } else {                                                               \
             return detail::dispatch(                                           \
                 [](void *ptr)                                                  \
-                    ENOKI_INLINE_LAMBDA { return ((Base *) ptr)->name(); },    \
+                    ENOKI_INLINE_LAMBDA { return ((Class *) ptr)->name(); },   \
                 array & mask);                                                 \
         }                                                                      \
     }
 
 #define ENOKI_VCALL_BEGIN(Name)                                                \
     namespace enoki {                                                          \
-        template <typename Array> struct call_support<Name, Array> {           \
+        template <typename Array>                                              \
+        struct call_support<Name, Array> {                                     \
+            using Class = Name;                                                \
             static constexpr const char *Domain = #Name;                       \
             call_support(const Array &array) : array(array) { }                \
             const call_support *operator->() const {                           \
@@ -225,3 +227,17 @@ extern "C" {
             const Array &array;                                                \
         };                                                                     \
     }
+
+#define ENOKI_VCALL_TEMPLATE_BEGIN(Name)                                       \
+    namespace enoki {                                                          \
+        template <typename Array, typename... Ts>                              \
+        struct call_support<Name<Ts...>, Array> {                              \
+            using Class = Name<Ts...>;                                         \
+            static constexpr const char *Domain = #Name;                       \
+            call_support(const Array &array) : array(array) { }                \
+            const call_support *operator->() const {                           \
+                return this;                                                   \
+            }
+
+#define ENOKI_VCALL_TEMPLATE_END(Name)                                         \
+    ENOKI_VCALL_END(Name)
