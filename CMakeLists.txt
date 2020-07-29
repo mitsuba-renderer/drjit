@@ -101,7 +101,7 @@ endif()
 if (ENOKI_ENABLE_PYTHON)
   set(ENOKI_PYBIND11_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ext/pybind11"
     CACHE STRING "Path containing the 'pybind11' library used to compile Enoki.")
-  add_subdirectory(${ENOKI_PYBIND11_DIR})
+  add_subdirectory(${ENOKI_PYBIND11_DIR} pybind11)
 
   message(STATUS "Enoki: building the Python plugin.")
   add_subdirectory(src/python)
