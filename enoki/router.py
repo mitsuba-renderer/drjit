@@ -577,7 +577,7 @@ def op_isub(a, b):
 
 def op_mul(a, b):
     if type(a) is not type(b) \
-       and not (isinstance(b, int) or isinstance(b, float)) \
+       and not (isinstance(b, int) or (_ek.is_floating_point_v(a) and isinstance(b, float))) \
        and not (_ek.is_matrix_v(a) and _ek.is_vector_v(b)):
         a, b = _var_promote(a, b)
     return a.mul_(b)
@@ -1250,7 +1250,7 @@ def atan2(a, b):
             a, b = _var_promote(a, b)
         return a.atan2_(b)
     else:
-        return _builtins.atan2(a, b)
+        return _math.atan2(a, b)
 
 
 def exp(a):
@@ -1931,8 +1931,15 @@ def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
             a = _ek.detach(a)
         if _ek.is_diff_array_v(b):
             b = _ek.detach(b)
+
+        if _ek.is_array_v(a) and not _ek.is_floating_point_v(a):
+            a, _ = _var_promote(a, 1.0)
+        if _ek.is_array_v(b) and not _ek.is_floating_point_v(b):
+            b, _ = _var_promote(b, 1.0)
+
         if type(a) is not type(b):
             a, b = _var_promote(a, b)
+
         diff = abs(a - b)
         cond = diff <= abs(b) * rtol + _ek.full(type(diff), atol)
         if _ek.is_floating_point_v(a):

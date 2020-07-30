@@ -195,9 +195,132 @@ def polar_decomp(a, it=10):
     q = type(a)(a)
     for i in range(it):
         qi = _ek.inverse_transpose(q)
-        print(qi)
         gamma = _ek.sqrt(_ek.frob(qi) / _ek.frob(q))
         s1, s2 = gamma * .5, (_ek.rcp(gamma) * .5)
         for i in range(a.Size):
             q[i] = _ek.fmadd(q[i], s1, qi[i] * s2)
-    return q, q*a
+    return q, transpose(q) * a
+
+
+def quat_to_matrix(q, size = 4):
+    if not _ek.is_quaternion_v(q):
+        raise Exception('Unsupported type!')
+
+    name = _ek.detail.array_name('Matrix', q.Type, (size, size), q.IsScalar)
+    module = _modules.get(q.__module__)
+    Matrix = getattr(module, name)
+
+    q = q * _ek.SqrtTwo
+
+    xx = q.x * q.x; yy = q.y * q.y; zz = q.z * q.z
+    xy = q.x * q.y; xz = q.x * q.z; yz = q.y * q.z
+    xw = q.x * q.w; yw = q.y * q.w; zw = q.z * q.w
+
+    if size == 4:
+        return Matrix(
+            1.0 - (yy + zz), xy - zw, xz + yw, 0.0,
+            xy + zw, 1.0 - (xx + zz), yz - xw, 0.0,
+            xz - yw, yz + xw, 1.0 - (xx + yy), 0.0,
+            0.0, 0.0, 0.0, 1.0)
+    else:
+        return Matrix(
+            1.0 - (yy + zz), xy - zw, xz + yw,
+            xy + zw, 1.0 - (xx + zz), yz - xw,
+            xz - yw,  yz + xw, 1.0 - (xx + yy)
+        )
+
+
+def matrix_to_quat(m):
+    if not _ek.is_matrix_v(m):
+        raise Exception('Unsupported type!')
+
+    name = _ek.detail.array_name('Quaternion', m.Type, [4], m.IsScalar)
+    module = _modules.get(m.__module__)
+    Quat4f = getattr(module, name)
+
+    o = 1.0
+    t0 = o + m[0, 0] - m[1, 1] - m[2, 2]
+    q0 = Quat4f(t0, m[1, 0] + m[0, 1], m[0, 2] + m[2, 0], m[2, 1] - m[1, 2])
+
+    t1 = o - m[0, 0] + m[1, 1] - m[2, 2]
+    q1 = Quat4f(m[1, 0] + m[0, 1], t1, m[2, 1] + m[1, 2], m[0, 2] - m[2, 0])
+
+    t2 = o - m[0, 0] - m[1, 1] + m[2, 2]
+    q2 = Quat4f(m[0, 2] + m[2, 0], m[2, 1] + m[1, 2], t2, m[1, 0] - m[0, 1])
+
+    t3 = o + m[0, 0] + m[1, 1] + m[2, 2]
+    q3 = Quat4f(m[2, 1] - m[1, 2], m[0, 2] - m[2, 0], m[1, 0] - m[0, 1], t3)
+
+    mask0 = m[0, 0] > m[1, 1]
+    t01 = _ek.select(mask0, t0, t1)
+    q01 = _ek.select(mask0, q0, q1)
+
+    mask1 = m[0, 0] < -m[1, 1]
+    t23 = _ek.select(mask1, t2, t3)
+    q23 = _ek.select(mask1, q2, q3)
+
+    mask2 = m[2, 2] < 0.0
+    t0123 = _ek.select(mask2, t01, t23)
+    q0123 = _ek.select(mask2, q01, q23)
+
+    return q0123 * (_ek.rsqrt(t0123) * 0.5)
+
+
+def quat_to_euler(q):
+    q_y_2 = _ek.sqr(q.y)
+
+    sinr_cosp = 2 * _ek.fmadd(q.w, q.x, q.y * q.z)
+    cosr_cosp = _ek.fnmadd(2, _ek.fmadd(q.x, q.x, q_y_2), 1)
+    roll = _ek.atan2(sinr_cosp, cosr_cosp)
+
+    # pitch (y-axis rotation)
+    sinp = 2 * _ek.fmsub(q.w, q.y, q.z * q.x)
+    if (_ek.abs(sinp) >= 1.0):
+        pitch = _ek.copysign(0.5 * _ek.Pi, sinp)
+    else:
+        pitch = _ek.asin(sinp)
+
+    # yaw (z-axis rotation)
+    siny_cosp = 2 * _ek.fmadd(q.w, q.z, q.x * q.y)
+    cosy_cosp = _ek.fnmadd(2, _ek.fmadd(q.z, q.z, q_y_2), 1)
+    yaw = _ek.atan2(siny_cosp, cosy_cosp)
+
+    name = _ek.detail.array_name('Array', q.Type, [3], q.IsScalar)
+    module = _modules.get(q.__module__)
+    Array3f = getattr(module, name)
+
+    return Array3f(roll, pitch, yaw)
+
+
+def transform_decompose(a, it=10):
+    if not _ek.is_matrix_v(a):
+        raise Exception('Unsupported type!')
+
+    name = _ek.detail.array_name('Array', a.Type, [3], a.IsScalar)
+    module = _modules.get(a.__module__)
+    Array3f = getattr(module, name)
+
+    name = _ek.detail.array_name('Matrix', a.Type, (3, 3), a.IsScalar)
+    Matrix3f = getattr(module, name)
+
+    Q, P = polar_decomp(Matrix3f(a), it)
+
+    sign_q = det(Q)
+    Q = _ek.mulsign(Q, sign_q)
+    P = _ek.mulsign(P, sign_q)
+
+    return P, matrix_to_quat(Q), Array3f(a[3][0], a[3][1], a[3][2])
+
+
+def transform_compose(s, q, t):
+    if not _ek.is_matrix_v(s) or not _ek.is_quaternion_v(q):
+        raise Exception('Unsupported type!')
+
+    name = _ek.detail.array_name('Matrix', q.Type, (4, 4), q.IsScalar)
+    module = _modules.get(q.__module__)
+    Matrix4f = getattr(module, name)
+
+    result = Matrix4f(quat_to_matrix(q, 3) * s)
+    result[3] = [t[0], t[1], t[2], 1.0]
+
+    return result

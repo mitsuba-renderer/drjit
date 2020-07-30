@@ -184,10 +184,8 @@ transform_decompose(const Matrix<Value, 4> &a, size_t it = 10) {
     Q[isnan(Q(0, 0))] = identity<Matrix<Value, 3>>();
 
     Value sign_q = det(Q);
-    using Array33 = Array<Array<Value, 3>, 3>;
-
-    Q = mulsign(Array33(Q), sign_q);
-    P = mulsign(Array33(P), sign_q);
+    Q = mulsign(Q, sign_q);
+    P = mulsign(P, sign_q);
 
     return std::make_tuple(P, matrix_to_quat(Q), head<3>(a.entry(3)));
 }

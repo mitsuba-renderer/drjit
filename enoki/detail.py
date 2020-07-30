@@ -138,10 +138,18 @@ def array_init(self, args):
                     self.init_(size)
                 if size == 0:
                     pass
-                elif size != os or (is_array and self.Size != o.Size):
-                    self.broadcast_(value_type(o)
-                                    if not isinstance(o, value_type)
-                                    and not self.IsMatrix else o)
+                elif size != os or (is_array and size != o.Size):
+                    if self.IsMatrix and o.IsMatrix:
+                        for x in range(size):
+                            for y in range(size):
+                                if x < o.Size and y < o.Size:
+                                    self[x, y] = value_type.Value(o[x, y])
+                                else:
+                                    self[x, y] = value_type.Value(0)
+                    else:
+                        self.broadcast_(value_type(o)
+                                        if not isinstance(o, value_type)
+                                        and not self.IsMatrix else o)
                 else:
                     if self.IsJIT and getattr(t, 'IsJIT', 0) and \
                        self.Depth == 1 and t.Depth == 1:
@@ -178,7 +186,7 @@ def array_init(self, args):
                     s2 = (*s2, 2)
 
                 if o.dtype != self.Type.NumPy:
-                    raise Exception("Incompatible dtype!")
+                    o = o.astype(self.Type.NumPy)
                 dim = len(s1)
                 if dim != len(s2):
                     raise Exception("Incompatible dimension!")
@@ -187,7 +195,7 @@ def array_init(self, args):
                         raise Exception("Incompatible shape!")
                 if dim == 0:
                     pass
-                elif dim == 1:
+                elif dim == 1 and self.IsDynamic:
                     o = np.ascontiguousarray(o)
                     d = o.__array_interface__['data'][0]
                     self.assign_(self.load_(d, s2[0]))

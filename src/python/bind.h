@@ -488,7 +488,7 @@ auto bind_full(py::class_<Array, EnokiHolder<Array>> &cls,
     ENOKI_BIND_MATRIX_TYPES_DIM(Module, Guide1, Scalar, 4)                     \
     ENOKI_BIND_MATRIX_TYPES_DIM(Module, Guide4, Scalar, 4)                     \
 
-#define ENOKI_BIND_ARRAY_BASE_1(Module, Guide, Scalar)                         \
+#define ENOKI_BIND_ARRAY_BASE(Module, Guide, Scalar)                           \
     auto a_msk =                                                               \
         bind_type<ek::mask_t<ek::float32_array_t<Guide>>>(Module, Scalar);     \
     auto a_i32 = bind_type<ek::int32_array_t<Guide>>(Module, Scalar);          \
@@ -499,9 +499,7 @@ auto bind_full(py::class_<Array, EnokiHolder<Array>> &cls,
     auto a_f64 = bind_type<ek::float64_array_t<Guide>>(Module, Scalar);        \
     Module.attr("Int32") = Module.attr("Int");                                 \
     Module.attr("UInt32") = Module.attr("UInt");                               \
-    Module.attr("Float32") = Module.attr("Float");
-
-#define ENOKI_BIND_ARRAY_BASE_2(Scalar)                                        \
+    Module.attr("Float32") = Module.attr("Float");                             \
     bind_full(a_i32, Scalar);                                                  \
     bind_full(a_u32, Scalar);                                                  \
     bind_full(a_i64, Scalar);                                                  \

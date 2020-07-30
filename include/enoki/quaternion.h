@@ -227,6 +227,34 @@ Quaternion<Value> matrix_to_quat(const Matrix<Value, Size> &m) {
     return q0123 * (rsqrt(t0123) * .5f);
 }
 
+
+template <typename Value>
+Array<Value, 3> quat_to_euler(const Quaternion<Value> &q) {
+    // https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles
+
+    Value q_y_2 = sqr(q.y());
+
+    Value sinr_cosp = 2 * fmadd(q.w(), q.x(), q.y() * q.z());
+    Value cosr_cosp = fnmadd(2, fmadd(q.x(), q.x(), q_y_2), 1);
+    Value roll = atan2(sinr_cosp, cosr_cosp);
+
+    // pitch (y-axis rotation)
+    Value sinp = 2 * fmsub(q.w(), q.y(), q.z() * q.x());
+    Value pitch;
+    if (abs(sinp) >= 1)
+        pitch = copysign(0.5f * Pi<Value>, sinp); // use 90 degrees if out of range
+    else
+        pitch = asin(sinp);
+
+    // yaw (z-axis rotation)
+    Value siny_cosp = 2 * fmadd(q.w(), q.z(), q.x() * q.y());
+    Value cosy_cosp = fnmadd(2, fmadd(q.z(), q.z(), q_y_2), 1);
+    Value yaw = atan2(siny_cosp, cosy_cosp);
+
+    return Array<Value, 3>(roll, pitch, yaw);
+}
+
+
 template <typename Value>
 Quaternion<Value> slerp(const Quaternion<Value> &q0,
                         const Quaternion<Value> &q1_,
