@@ -1028,6 +1028,26 @@ def arg(value):
         return _ek.select(value >= 0, 0, -_ek.Pi)
 
 
+def real(value):
+    if _ek.is_complex_v(value):
+        return value[0]
+    elif _ek.is_quaternion_v(value):
+        return value[3]
+    else:
+        return value
+
+
+def imag(value):
+    if _ek.is_complex_v(value):
+        return value[1]
+    elif _ek.is_quaternion_v(value):
+        name = _ek.detail.array_name('Array', value.Type, (3), value.IsScalar)
+        Array3f = getattr(_modules.get(value.__module__), name)
+        return Array3f(value[0], value[1], value[2])
+    else:
+        return type(value)(0)
+
+
 def tzcnt(a):
     if isinstance(a, ArrayBase):
         return a.tzcnt_()
