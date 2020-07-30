@@ -108,6 +108,17 @@ def array_from_dlpack(t, capsule):
     return load(t, 0, 0)
 
 
+def sub_len(o):
+    ol = len(o[0])
+    try:
+        for i in range(1, len(o)):
+            if len(o[i]) != ol:
+                return -1
+    except Exception:
+        return -1
+    return ol
+
+
 def array_init(self, args):
     """
     This generic initialization routine initializes an arbitrary Enoki array
@@ -130,8 +141,14 @@ def array_init(self, args):
             mod = t.__module__
             name = t.__name__
             is_array = issubclass(t, enoki.ArrayBase)
+            is_sequence = issubclass(t, list) or issubclass(t, tuple)
 
-            if is_array or issubclass(t, list) or issubclass(t, tuple):
+            if is_sequence and self.IsMatrix and \
+                len(o) == size and sub_len(o) == size:
+                for x in range(size):
+                    for y in range(size):
+                        self[x, y] = value_type.Value(o[x][y])
+            elif is_array or is_sequence:
                 os = len(o)
                 if dynamic:
                     size = os
