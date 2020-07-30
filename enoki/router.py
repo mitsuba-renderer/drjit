@@ -373,7 +373,7 @@ def op_setitem(self, index, value):
         if index >= 0 and index < size:
             global _entry_evals
             _entry_evals += 1
-            self.set_entry_(index, value)
+            self.set_entry_(index, self.Value(value))
         else:
             raise IndexError("Tried to write to array index %i, which "
                              "exceeds its size (%i)!" % (index, size))
@@ -388,6 +388,10 @@ def op_setitem(self, index, value):
             op_setitem(self, index[0], value)
     elif _ek.is_mask_v(index):
         self.assign_(_ek.select(index, value, self))
+    elif isinstance(index, slice):
+        indices = tuple(range(len(self)))[index]
+        for i in range(len(indices)):
+            op_setitem(self, indices[i], value[i])
     else:
         raise Exception("Invalid array index! (must be an integer or a tuple "
                         "of integers!)")
