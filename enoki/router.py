@@ -891,6 +891,34 @@ def abs(a):
         return _builtins.abs(a)
 
 
+def floor(a):
+    if isinstance(a, ArrayBase):
+        return a.floor_()
+    else:
+        return _math.floor(a)
+
+
+def ceil(a):
+    if isinstance(a, ArrayBase):
+        return a.ceil_()
+    else:
+        return _math.ceil(a)
+
+
+def round(a):
+    if isinstance(a, ArrayBase):
+        return a.round_()
+    else:
+        return _math.round(a)
+
+
+def trunc(a):
+    if isinstance(a, ArrayBase):
+        return a.trunc_()
+    else:
+        return _math.trunc(a)
+
+
 def mulhi(a, b):
     if isinstance(a, ArrayBase) or \
        isinstance(b, ArrayBase):
