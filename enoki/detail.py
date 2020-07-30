@@ -145,7 +145,7 @@ def array_init(self, args):
                                 if x < o.Size and y < o.Size:
                                     self[x, y] = value_type.Value(o[x, y])
                                 else:
-                                    self[x, y] = value_type.Value(0)
+                                    self[x, y] = value_type.Value(1 if x == y else 0)
                     else:
                         self.broadcast_(value_type(o)
                                         if not isinstance(o, value_type)
