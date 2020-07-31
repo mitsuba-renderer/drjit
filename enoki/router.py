@@ -381,9 +381,16 @@ def op_setitem(self, index, value):
         if len(index) > 1:
             if self.IsMatrix:
                 index = (index[1], index[0], *index[2:])
-            value2 = op_getitem(self, index[0])
-            op_setitem(value2, index[1:], value)
-            op_setitem(self, index[0], value2)
+            if isinstance(index[0], slice):
+                indices = tuple(range(len(self)))[index[0]]
+                for i in range(len(indices)):
+                    value2 = op_getitem(self, indices[i])
+                    op_setitem(value2, index[1:], value)
+                    op_setitem(self, indices[i], value2)
+            else:
+                value2 = op_getitem(self, index[0])
+                op_setitem(value2, index[1:], value)
+                op_setitem(self, index[0], value2)
         else:
             op_setitem(self, index[0], value)
     elif _ek.is_mask_v(index):
@@ -391,7 +398,10 @@ def op_setitem(self, index, value):
     elif isinstance(index, slice):
         indices = tuple(range(len(self)))[index]
         for i in range(len(indices)):
-            op_setitem(self, indices[i], value[i])
+            if isinstance(value, (float, int, bool)):
+                op_setitem(self, indices[i], value)
+            else:
+                op_setitem(self, indices[i], value[i])
     else:
         raise Exception("Invalid array index! (must be an integer or a tuple "
                         "of integers!)")

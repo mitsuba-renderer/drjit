@@ -436,3 +436,27 @@ def test11_binary_search(cname):
     value = ek.gather(t, data, index)
     cond = ek.eq(index, len(data)-1) | (value >= search)
     assert ek.all(cond)
+
+
+def test12_slice_setitem():
+    a = ek.zero(ek.scalar.ArrayXf, 5)
+    a[2] = 1.0
+    assert ek.allclose(a, [0, 0, 1, 0, 0])
+    a[2:] = [2.0, 1.0, 1.0]
+    assert ek.allclose(a, [0, 0, 2, 1, 1])
+    a[:] = 0.0
+    assert ek.allclose(a, [0, 0, 0, 0, 0])
+
+    v = ek.scalar.Array3f(0)
+    v[2] = 1.0
+    assert ek.allclose(v, [0, 0, 1])
+    v[1:] = 2.0
+    assert ek.allclose(v, [0, 2, 2])
+
+    m = ek.scalar.Matrix3f(0)
+    m[1:, 1] = 1.0
+    assert ek.allclose(m, [[0, 0, 0], [0, 1, 0], [0, 1, 0]])
+    m[0, 1:] = 2.0
+    assert ek.allclose(m, [[0, 2, 2], [0, 1, 0], [0, 1, 0]])
+    m[1:, 1:] = 3.0
+    assert ek.allclose(m, [[0, 2, 2], [0, 3, 3], [0, 3, 3]])

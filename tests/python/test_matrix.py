@@ -1,4 +1,5 @@
 import enoki as ek
+import numpy as np
 import pytest
 from enoki.packet import Matrix2f as M2
 from enoki.packet import Matrix3f as M3
@@ -94,3 +95,26 @@ def test08_polar():
     q, r = ek.polar_decomp(m)
     assert ek.allclose(q*r, m)
     assert ek.allclose(q*ek.transpose(q), ek.identity(M), atol=1e-6)
+
+
+def test09_transform_decompose():
+    m = ek.scalar.Matrix4f([[1, 0, 0, 8], [0, 2, 0, 7], [0, 0, 9, 6], [0, 0, 0, 1]])
+    s, q, t = ek.transform_decompose(m)
+
+    assert ek.allclose(s, ek.scalar.Matrix3f(m))
+    assert ek.allclose(q, ek.scalar.Quaternion4f(1))
+    assert ek.allclose(t, [8, 7, 6])
+    assert ek.allclose(m, ek.transform_compose(s, q, t))
+
+    q2 = ek.rotate(ek.scalar.Quaternion4f, ek.scalar.Array3f(0, 0, 1), 15.0)
+    m *= ek.quat_to_matrix(q2)
+    s, q, t = ek.transform_decompose(m)
+
+    assert ek.allclose(q, q2)
+
+
+def test10_matrix_to_quat():
+    q = ek.rotate(ek.scalar.Quaternion4f, ek.scalar.Array3f(0, 0, 1), 15.0)
+    m = ek.quat_to_matrix(q)
+    q2 = ek.matrix_to_quat(m)
+    assert ek.allclose(q, q2)
