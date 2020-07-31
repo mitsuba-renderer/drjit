@@ -460,3 +460,13 @@ def test12_slice_setitem():
     assert ek.allclose(m, [[0, 2, 2], [0, 1, 0], [0, 1, 0]])
     m[1:, 1:] = 3.0
     assert ek.allclose(m, [[0, 2, 2], [0, 3, 3], [0, 3, 3]])
+
+
+def test13_slice_getitem():
+    a = ek.scalar.ArrayXf(*range(5))
+    assert ek.allclose(a[1:4], [1, 2, 3])
+    assert ek.allclose(a[:], [0, 1, 2, 3, 4])
+
+    a = ek.scalar.ArrayXi(*range(5))
+    assert ek.allclose(a[1:4], [1, 2, 3])
+    assert ek.allclose(a[:], [0, 1, 2, 3, 4])

@@ -357,6 +357,15 @@ def op_getitem(self, index):
         for i in index:
             self = op_getitem(self, i)
         return self
+    elif isinstance(index, slice):
+        if not self.Size == Dynamic:
+            raise Exception("Indexing via slice is only allowed in the case of "
+                            "dynamic arrays")
+        indices = tuple(range(len(self)))[index]
+        result = _ek.empty(type(self), len(indices))
+        for i in range(len(indices)):
+            result[i] = op_getitem(self, indices[i])
+        return result
     elif _ek.is_mask_v(index):
         raise Exception("Indexing via masks is only allowed in the case of "
                         "assignments, e.g.: array[mask] = value")

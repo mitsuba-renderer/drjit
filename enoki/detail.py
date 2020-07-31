@@ -141,6 +141,7 @@ def array_init(self, args):
             mod = t.__module__
             name = t.__name__
             is_array = issubclass(t, enoki.ArrayBase)
+            is_static_array = is_array and not o.Size == enoki.Dynamic
             is_sequence = issubclass(t, list) or issubclass(t, tuple)
 
             if is_sequence and self.IsMatrix and \
@@ -155,7 +156,7 @@ def array_init(self, args):
                     self.init_(size)
                 if size == 0:
                     pass
-                elif size != os or (is_array and size != o.Size):
+                elif size != os or (is_static_array and size != o.Size):
                     if self.IsMatrix and o.IsMatrix:
                         for x in range(size):
                             for y in range(size):
