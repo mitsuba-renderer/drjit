@@ -135,7 +135,7 @@ def not_(a0):
     if a0.IsFloat:
         raise Exception("not(): requires an integral or mask operand!")
     ar, sr = _check1(a0)
-    if type(a0.Value) is bool:
+    if a0.Value is bool:
         for i in range(sr):
             ar[i] = not a0[i]
     else:
