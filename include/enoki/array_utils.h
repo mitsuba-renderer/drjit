@@ -232,10 +232,14 @@ template <typename T> ENOKI_INLINE T popcnt_(T v) {
 
 template <typename T> ENOKI_INLINE T lzcnt_(T v) {
 #if defined(_MSC_VER)
-    if constexpr (sizeof(T) <= 4)
-        return (T) (v != 0 ? __lzcnt((unsigned int) v) : 32);
-    else
-        return (T) (v != 0 ? __lzcnt64((unsigned long long) v) : 64);
+    unsigned long result;
+    if constexpr (sizeof(T) <= 4) {
+        _BitScanReverse(&result, (unsigned long) v);
+        return (v != 0) ? (31 - result) : 32;
+    } else {
+        _BitScanReverse64(&result, (unsigned long long) v);
+        return (v != 0) ? (63 - result) : 64;
+    }
 #else
     if constexpr (sizeof(T) <= 4)
         return (T) (v != 0 ? __builtin_clz((unsigned int) v) : 32);
@@ -246,10 +250,14 @@ template <typename T> ENOKI_INLINE T lzcnt_(T v) {
 
 template <typename T> ENOKI_INLINE T tzcnt_(T v) {
 #if defined(_MSC_VER)
-    if constexpr (sizeof(T) <= 4)
-        return (T) (v != 0 ? __tzcnt((unsigned int) v) : 32);
-    else
-        return (T) (v != 0 ? __tzcnt64((unsigned long long) v) : 64);
+    unsigned long result;
+    if (sizeof(T) <= 4) {
+        _BitScanForward(&result, (unsigned long) v);
+        return (v != 0) ? result : 32;
+    } else {
+        _BitScanForward64(&result, (unsigned long long) v);
+        return (v != 0) ? result: 64;
+    }
 #else
     if constexpr (sizeof(T) <= 4)
         return (T) (v != 0 ? __builtin_ctz((unsigned int) v) : 32);
@@ -310,7 +318,13 @@ NAMESPACE_END(detail)
 #if defined(__cpp_exceptions)
 class Exception : public std::exception {
 public:
-    Exception(const char *msg) { m_msg = strdup(msg); }
+    Exception(const char *msg) {
+#if defined(_MSC_VER)
+        m_msg = _strdup(msg);
+#else
+        m_msg = strdup(msg);
+#endif
+    }
     virtual const char *what() const noexcept { return m_msg; }
     virtual ~Exception() { free(m_msg); }
 private:

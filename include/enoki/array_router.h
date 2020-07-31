@@ -413,13 +413,14 @@ ENOKI_INLINE Value prev_float(const Value &value) {
     using IntMask = mask_t<Int>;
     using IntScalar = scalar_t<Int>;
 
-    const Int exponent_mask = sizeof(IntScalar) == 4
-                                  ? IntScalar(0x7f800000)
-                                  : IntScalar(0x7ff0000000000000ll);
-
-    const Int pos_denorm = sizeof(IntScalar) == 4
-                              ? IntScalar(0x80000001)
-                              : IntScalar(0x8000000000000001ll);
+    Int exponent_mask, pos_denorm;
+    if constexpr (sizeof(IntScalar) == 4) {
+        exponent_mask = IntScalar(0x7f800000);
+        pos_denorm    = IntScalar(0x80000001);
+    } else {
+        exponent_mask = IntScalar(0x7ff0000000000000ll);
+        pos_denorm    = IntScalar(0x8000000000000001ll);
+    }
 
     Int i = reinterpret_array<Int>(value);
 
@@ -440,13 +441,14 @@ ENOKI_INLINE Value next_float(const Value &value) {
     using IntMask = mask_t<Int>;
     using IntScalar = scalar_t<Int>;
 
-    const Int exponent_mask = sizeof(IntScalar) == 4
-                                  ? IntScalar(0x7f800000)
-                                  : IntScalar(0x7ff0000000000000ll);
-
-    const Int sign_mask = sizeof(IntScalar) == 4
-                              ? IntScalar(0x80000000)
-                              : IntScalar(0x8000000000000000ll);
+    Int exponent_mask, sign_mask;
+    if constexpr (sizeof(IntScalar) == 4) {
+        exponent_mask = IntScalar(0x7f800000);
+        sign_mask     = IntScalar(0x80000000);
+    } else {
+        exponent_mask = IntScalar(0x7ff0000000000000ll);
+        sign_mask     = IntScalar(0x8000000000000000ll);
+    }
 
     Int i = reinterpret_array<Int>(value);
 
@@ -1074,11 +1076,17 @@ ENOKI_INLINE bool schedule() { return false; }
 
 template <typename... Ts>
 ENOKI_INLINE void eval(const Ts&... values) {
+#if defined(ENOKI_ENABLE_JIT)
     if (schedule(values...))
         jitc_eval();
+#endif
 }
 
-ENOKI_INLINE void eval() { jitc_eval(); }
+ENOKI_INLINE void eval() {
+#if defined(ENOKI_ENABLE_JIT)
+    jitc_eval();
+#endif
+}
 
 template <typename T> ENOKI_INLINE size_t width(const T &value) {
     if constexpr (array_depth_v<T> > 1)

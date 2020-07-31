@@ -101,7 +101,7 @@ struct StringBuffer {
         using UInt = std::make_unsigned_t<T>;
         bool neg = std::is_signed_v<T> && value_ < 0;
 
-        UInt value = UInt(neg ? -value_ : value_);
+        UInt value = UInt(neg ? -int(value_) : value_);
 
         const char *num = "0123456789";
         char buf[Digits];

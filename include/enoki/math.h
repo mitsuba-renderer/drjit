@@ -1509,7 +1509,7 @@ template <typename Value> Value erf(const Value &x) {
                   0x1.1c6a194029df4p-12, -0x1.03d1306b29028p-31);
         }
 
-        return select(xa < 1, x * c0, copysign(1.f - exp2(c1 * xa), x));
+        return select(xa < 1.f, x * c0, copysign(1.f - exp2(c1 * xa), x));
     }
 }
 
