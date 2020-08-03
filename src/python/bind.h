@@ -26,7 +26,6 @@ auto bind_type(py::module &m, bool scalar_mode = false) {
         prefix = "Matrix";
 
     py::tuple shape;
-
     if constexpr (Array::Depth == 1)
         shape = py::make_tuple(Array::Size);
     else if constexpr (Array::Depth == 2)
