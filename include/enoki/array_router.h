@@ -1076,10 +1076,8 @@ ENOKI_INLINE bool schedule() { return false; }
 
 template <typename... Ts>
 ENOKI_INLINE void eval(const Ts&... values) {
-#if defined(ENOKI_ENABLE_JIT)
     if (schedule(values...))
-        jitc_eval();
-#endif
+        eval();
 }
 
 ENOKI_INLINE void eval() {
