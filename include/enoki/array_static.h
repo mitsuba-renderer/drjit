@@ -109,8 +109,9 @@ struct StaticArrayBase : ArrayBase<Value_, IsMask_, Derived_> {
 
     template <typename T>
     static Derived full_(const T &value, size_t size, bool eval) {
-        if constexpr (array_depth_v<T> == array_depth_v<Derived> ||
-                      !is_array_v<Value>) {
+        if constexpr (array_depth_v<T> > array_depth_v<Value> ||
+                      (array_depth_v<T> == array_depth_v<Value> &&
+                       (is_dynamic_array_v<Value> || !is_array_v<Value>))) {
             ENOKI_MARK_USED(size);
             ENOKI_MARK_USED(eval);
             return value;
