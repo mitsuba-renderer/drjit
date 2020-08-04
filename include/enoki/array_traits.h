@@ -243,7 +243,7 @@ namespace detail {
         using type = MaskedArray<typename mask<T>::type>;
     };
 
-    template <typename T> struct mask<T, enable_if_array_t<T>> {
+    template <typename T> struct mask<T, enable_if_t<is_array_v<T> && !is_masked_array_v<T>>> {
         using type = typename std::decay_t<T>::Derived::MaskType;
     };
 
