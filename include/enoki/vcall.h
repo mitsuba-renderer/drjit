@@ -73,7 +73,7 @@ namespace detail {
                 Result result;
 
                 if (self.size() == 1) {
-                    result = func(self.entry(0), args...);
+                    result = func((void*)self.entry(0), args...);
                 } else {
                     result = enoki::empty<Result>(self.size());
                     enoki::schedule(args...);
