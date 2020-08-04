@@ -1365,9 +1365,10 @@ struct MaskedArray : ArrayBase<value_t<T>, is_mask_v<T>, MaskedArray<T>> {
     static constexpr bool IsMaskedArray = true;
 
     MaskedArray() = default;
+    template <typename T2> MaskedArray(T2) { }
     MaskedArray(T &d, const Mask &m) : d(&d), m(m) { }
 
-    ENOKI_INLINE void operator =(const MaskedArray<T> &value) { d = value.d; m = value.m; }
+    ENOKI_INLINE void operator=(const MaskedArray<T> &value) { d = value.d; m = value.m; }
 
     #define ENOKI_MASKED_OPERATOR(name, expr)                                 \
         template <typename T2> ENOKI_INLINE void name(const T2 &value) {      \
