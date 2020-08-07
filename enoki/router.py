@@ -382,7 +382,10 @@ def op_setitem(self, index, value):
         if index >= 0 and index < size:
             global _entry_evals
             _entry_evals += 1
-            self.set_entry_(index, self.Value(value))
+            if not type(value) is self.Value:
+                self.set_entry_(index, self.Value(value))
+            else:
+                self.set_entry_(index, value)
         else:
             raise IndexError("Tried to write to array index %i, which "
                              "exceeds its size (%i)!" % (index, size))
