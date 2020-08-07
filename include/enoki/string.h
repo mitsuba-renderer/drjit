@@ -92,6 +92,29 @@ struct StringBuffer {
     /// Append a boolean to the buffer
     StringBuffer &put(bool value) { return put(value ? '1' : '0'); }
 
+    /// Append a pointer to the buffer
+    template <typename T, enable_if_t<std::is_pointer_v<T>> = 0>
+    StringBuffer &put(T ptr) {
+        size_t value = size_t(ptr);
+        const char *num = "0123456789abcdef";
+        char buf[9];
+        int i = 9;
+
+        do {
+            buf[--i] = num[value % 16];
+            value /= 16;
+        } while (value);
+
+        do {
+            buf[--i] = '0';
+        } while (i > 1);
+
+        buf[0] = '0';
+        buf[1] = 'x';
+
+        return put_str(buf, 9);
+    }
+
     /// Append an integral value
     template <typename T, enable_if_t<std::is_integral_v<T>> = 0>
     StringBuffer &put(T value_) {
