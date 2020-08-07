@@ -589,7 +589,7 @@ struct CUDAArray : ArrayBase<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
             enoki_raise("Unsupported operand type");
 
         return T::steal(jitc_var_new_1(T::Type,
-            "cvt.rmi.$t0.$t0 $r0, $r1", 1, 1, m_index));
+            "cvt.rmi.$t0.$t1 $r0, $r1", 1, 1, m_index));
     }
 
     CUDAArray ceil_() const {
@@ -606,7 +606,7 @@ struct CUDAArray : ArrayBase<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
             enoki_raise("Unsupported operand type");
 
         return T::steal(jitc_var_new_1(T::Type,
-            "cvt.rpi.$t0.$t0 $r0, $r1", 1, 1, m_index));
+            "cvt.rpi.$t0.$t1 $r0, $r1", 1, 1, m_index));
     }
 
     CUDAArray trunc_() const {
@@ -623,7 +623,7 @@ struct CUDAArray : ArrayBase<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
             enoki_raise("Unsupported operand type");
 
         return T::steal(jitc_var_new_1(T::Type,
-            "cvt.rzi.$t0.$t0 $r0, $r1", 1, 1, m_index));
+            "cvt.rzi.$t0.$t1 $r0, $r1", 1, 1, m_index));
     }
 
     CUDAArray fmadd_(const CUDAArray &b, const CUDAArray &c) const {
@@ -885,11 +885,11 @@ private:
                                      !std::is_same_v<Value, bool>
                                          ? "mul.wide.$t2 %rd3, $r2, $s0$n"
                                            "add.$t1 %rd3, %rd3, $r1$n"
-                                           "@$r3 ld.global.nc.$t0 $r0, [$r1]$n"
+                                           "@$r3 ld.global.nc.$t0 $r0, [%rd3]$n"
                                            "@!$r3 mov.$b0 $r0, 0"
                                          : "mul.wide.$t2 %rd3, $r2, $s0$n"
                                            "add.$t1 %rd3, %rd3, $r1$n"
-                                           "@$r3 ld.global.nc.u8 %w0, [$r1]$n"
+                                           "@$r3 ld.global.nc.u8 %w0, [%rd3]$n"
                                            "@!$r3 mov.u16 %w0, 0$n"
                                            "setp.ne.u16 $r0, %w0, 0",
                                      1, 1, base.index(), index.index(),
