@@ -190,7 +190,7 @@ extern "C" {
     template <typename... Args> auto name(Args &&... args) const {             \
         return detail::dispatch(                                               \
             [](void *ptr, auto &&... args2) ENOKI_INLINE_LAMBDA {              \
-                return ((Class *) ptr)->name(args2...);                         \
+                return ((Class *) ptr)->name(args2...);                        \
             },                                                                 \
             array, std::forward<Args>(args)...);                               \
     }
