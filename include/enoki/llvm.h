@@ -641,7 +641,7 @@ struct LLVMArray : ArrayBase<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
     template <typename T> T round2int_() const {
         T out = f2i_cast_<T>(8);
         if (!out.valid())
-            out = OutArray(ceil(*this));
+            out = T(ceil(*this));
         return out;
     }
 
@@ -657,7 +657,7 @@ struct LLVMArray : ArrayBase<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
     template <typename T> T floor2int_() const {
         T out = f2i_cast_<T>(9);
         if (!out.valid())
-            out = OutArray(ceil(*this));
+            out = T(ceil(*this));
         return out;
     }
 
@@ -673,7 +673,7 @@ struct LLVMArray : ArrayBase<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
     template <typename T> T ceil2int_() const {
         T out = f2i_cast_<T>(10);
         if (!out.valid())
-            out = OutArray(ceil(*this));
+            out = T(ceil(*this));
         return out;
     }
 
@@ -689,7 +689,7 @@ struct LLVMArray : ArrayBase<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
     template <typename T> T trunc2int_() const {
         T out = f2i_cast_<T>(11);
         if (!out.valid())
-            out = OutArray(ceil(*this));
+            out = T(ceil(*this));
         return out;
     }
 
@@ -1252,7 +1252,7 @@ public:
         *this = empty_(size);
     }
 
-    template <typename OutArray> OutArray f2i_cast_(int mode) {
+    template <typename OutArray> OutArray f2i_cast_(int mode) const {
         using ValueOut = typename OutArray::Value;
         constexpr bool Signed = std::is_signed_v<ValueOut>;
         constexpr size_t SizeIn = sizeof(Value), SizeOut = sizeof(ValueOut);
