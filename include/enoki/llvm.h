@@ -17,6 +17,13 @@
 #include <enoki-jit/jit.h>
 #include <enoki-jit/traits.h>
 
+// TODO: a scalar version of the LLVM kernel will be assembled if
+// the kernel contains gather/scatter intrinsics (see eval.cpp:937). AVX512 intrisics
+// are invalid for the scalar kernels which leads to a critival enoki failure.
+// This is a workaround and should be removed. The scalar kernels should be updated
+// with valid intrisics when assembled.
+#define ENOKI_DISABLE_AVX512_OP 1
+
 NAMESPACE_BEGIN(enoki)
 
 template <typename Value_>
@@ -562,6 +569,7 @@ struct LLVMArray : ArrayBase<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
         const char *op = "$r0 = call <$w x $t0> @llvm.minnum.v$w$a1(<$w x $t1> "
                          "$r1, <$w x $t2> $r2)";
 
+#if !defined(ENOKI_DISABLE_AVX512_OP)
         // Prefer an X86-specific intrinsic (produces nicer machine code)
         if constexpr (std::is_integral_v<Value>) {
             (void) op;
@@ -589,6 +597,7 @@ struct LLVMArray : ArrayBase<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
                      "<$w x $t2> $r2)";
             }
         }
+#endif
 
         return steal(jitc_var_new_2(Type, op, 1, 0, m_index, a.index()));
     }
@@ -598,6 +607,7 @@ struct LLVMArray : ArrayBase<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
         const char *op = "$r0 = call <$w x $t0> @llvm.maxnum.v$w$a1(<$w x $t1> "
                          "$r1, <$w x $t2> $r2)";
 
+#if !defined(ENOKI_DISABLE_AVX512_OP)
         // Prefer an X86-specific intrinsic (produces nicer machine code)
         if constexpr (std::is_integral_v<Value>) {
             (void) op;
@@ -625,6 +635,7 @@ struct LLVMArray : ArrayBase<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
                      "<$w x $t2> $r2)";
             }
         }
+#endif
 
         return steal(jitc_var_new_2(Type, op, 1, 0, m_index, a.index()));
     }
@@ -641,7 +652,7 @@ struct LLVMArray : ArrayBase<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
     template <typename T> T round2int_() const {
         T out = f2i_cast_<T>(8);
         if (!out.valid())
-            out = T(ceil(*this));
+            out = T(round(*this));
         return out;
     }
 
@@ -657,7 +668,7 @@ struct LLVMArray : ArrayBase<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
     template <typename T> T floor2int_() const {
         T out = f2i_cast_<T>(9);
         if (!out.valid())
-            out = T(ceil(*this));
+            out = T(floor(*this));
         return out;
     }
 
@@ -689,7 +700,7 @@ struct LLVMArray : ArrayBase<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
     template <typename T> T trunc2int_() const {
         T out = f2i_cast_<T>(11);
         if (!out.valid())
-            out = T(ceil(*this));
+            out = T(trunc(*this));
         return out;
     }
 
@@ -1253,6 +1264,10 @@ public:
     }
 
     template <typename OutArray> OutArray f2i_cast_(int mode) const {
+#if defined(ENOKI_DISABLE_AVX512_OP)
+        ENOKI_MARK_USED(mode);
+        return OutArray();
+#else
         using ValueOut = typename OutArray::Value;
         constexpr bool Signed = std::is_signed_v<ValueOut>;
         constexpr size_t SizeIn = sizeof(Value), SizeOut = sizeof(ValueOut);
@@ -1277,6 +1292,7 @@ public:
                  (SizeIn == 4 && SizeOut == 4) ? 4 : 3, in_t, out_t, mode);
 
         return OutArray::steal(jitc_var_new_1(OutArray::Type, op, 0, 0, m_index));
+#endif
     }
 
 protected:
