@@ -565,6 +565,9 @@ struct LLVMArray : ArrayBase<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
     }
 
     LLVMArray min_(const LLVMArray &a) const {
+        if constexpr (std::is_integral_v<Value>)
+            return select(*this < a, *this, a);
+
         // Portable intrinsic as a last resort
         const char *op = "$r0 = call <$w x $t0> @llvm.minnum.v$w$a1(<$w x $t1> "
                          "$r1, <$w x $t2> $r2)";
@@ -603,6 +606,9 @@ struct LLVMArray : ArrayBase<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
     }
 
     LLVMArray max_(const LLVMArray &a) const {
+        if constexpr (std::is_integral_v<Value>)
+            return select(*this < a, a, *this);
+
         // Portable intrinsic as a last resort
         const char *op = "$r0 = call <$w x $t0> @llvm.maxnum.v$w$a1(<$w x $t1> "
                          "$r1, <$w x $t2> $r2)";
