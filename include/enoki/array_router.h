@@ -1067,23 +1067,23 @@ template <typename T> ENOKI_INLINE bool schedule(const T &value) {
     return false;
 }
 
+ENOKI_INLINE bool schedule() { return false; }
+
 template <typename T1, typename... Ts, enable_if_t<sizeof...(Ts) != 0> = 0>
 ENOKI_INLINE bool schedule(const T1 &value, const Ts&... values) {
     return schedule(value) | schedule(values...);
-}
-
-ENOKI_INLINE bool schedule() { return false; }
-
-template <typename... Ts>
-ENOKI_INLINE void eval(const Ts&... values) {
-    if (schedule(values...))
-        eval();
 }
 
 ENOKI_INLINE void eval() {
 #if defined(ENOKI_ENABLE_JIT)
     jitc_eval();
 #endif
+}
+
+template <typename... Ts>
+ENOKI_INLINE void eval(const Ts&... values) {
+    if (schedule(values...))
+        eval();
 }
 
 template <typename T> ENOKI_INLINE size_t width(const T &value) {
