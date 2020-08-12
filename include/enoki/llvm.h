@@ -351,7 +351,7 @@ struct LLVMArray : ArrayBase<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
     }
 
     LLVMArray<bool> eq_(const LLVMArray &b) const {
-        const char *op = std::is_integral_v<Value>
+        const char *op = std::is_integral_v<ActualValue>
                              ? "$r0 = icmp eq <$w x $t1> $r1, $r2"
                              : "$r0 = fcmp oeq <$w x $t1> $r1, $r2";
 
@@ -360,7 +360,7 @@ struct LLVMArray : ArrayBase<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
     }
 
     LLVMArray<bool> neq_(const LLVMArray &b) const {
-        const char *op = std::is_integral_v<Value>
+        const char *op = std::is_integral_v<ActualValue>
                              ? "$r0 = icmp ne <$w x $t1> $r1, $r2"
                              : "$r0 = fcmp one <$w x $t1> $r1, $r2";
 
