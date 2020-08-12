@@ -91,7 +91,9 @@ struct LLVMArray : ArrayBase<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
         } else if constexpr (std::is_floating_point_v<T> && std::is_floating_point_v<Value>) {
             op = sizeof(T) > sizeof(Value) ? "$r0 = fptrunc <$w x $t1> $r1 to <$w x $t0>"
                                            : "$r0 = fpext <$w x $t1> $r1 to <$w x $t0>";
-        } else if constexpr (std::is_integral_v<T> && std::is_integral_v<Value>) {
+        } else if constexpr (std::is_integral_v<
+                                 typename LLVMArray<T>::ActualValue> &&
+                             std::is_integral_v<ActualValue>) {
             constexpr size_t size_1 = std::is_same_v<T,     bool> ? 0 : sizeof(T),
                              size_2 = std::is_same_v<Value, bool> ? 0 : sizeof(Value);
 
