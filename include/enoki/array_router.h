@@ -1097,6 +1097,17 @@ template <typename T> ENOKI_INLINE size_t width(const T &value) {
         return 1;
 }
 
+template <typename T> ENOKI_INLINE void resize(T &value, size_t size) {
+    if constexpr (array_depth_v<T> > 1) {
+        for (size_t i = 0; i < value.size(); ++i)
+            resize(value.entry(i), size);
+    } else if constexpr (is_jit_array_v<T>) {
+        value.resize(size);
+    } else if constexpr (has_struct_support_v<T>) {
+        struct_support<T>::resize(value, size);
+    }
+}
+
 template <typename T1> ENOKI_INLINE void set_label(T1 &value, const char *label) {
     if constexpr (is_diff_array_v<T1> || is_jit_array_v<T1>) {
         if constexpr (array_depth_v<T1> > 1) {

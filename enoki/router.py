@@ -232,6 +232,14 @@ def width(a):
     return shape(a)[-1]
 
 
+def resize(a, size):
+    if _ek.array_depth_v(value) > 1:
+        for i in range(a.Size):
+            resize(a[i], size)
+    elif _ek.is_jit_array_v(x):
+        a.resize_(size)
+
+
 def device(value=None):
     if value is None:
         return _ek.detail.device()

@@ -54,6 +54,9 @@
 #define ENOKI_STRUCT_WIDTH(x) \
     enoki::width(v.x)
 
+#define ENOKI_STRUCT_RESIZE(x) \
+    enoki::resize(v.x, size);
+
 #define ENOKI_STRUCT_ITEMS(x) \
     v.x
 
@@ -172,6 +175,9 @@
                 for (size_t w: widths)                                         \
                     width = w > width ? w : width;                             \
                 return width;                                                  \
+            }                                                                  \
+            static void resize(Class &v, size_t size) {                        \
+                ENOKI_MAP(ENOKI_STRUCT_RESIZE, __VA_ARGS__)                    \
             }                                                                  \
             static void set_label(Class &v, const char *label) {               \
                 char tmp[256];                                                 \
