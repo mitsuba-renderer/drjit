@@ -70,12 +70,13 @@ namespace detail {
 
             if constexpr (!std::is_void_v<FuncRV>) {
                 using Result = detail::vectorize_type_t<Array, FuncRV>;
-                Result result;
+                Result result = enoki::empty<Result>(self.size());
 
                 if (self.size() == 1) {
-                    result = func((void*)self.entry(0), args...);
+                    void* ptr = (void*)self.entry(0);
+                    if (ptr)
+                        result = func(ptr, args...);
                 } else {
-                    result = enoki::empty<Result>(self.size());
                     enoki::schedule(args...);
                     auto [buckets, size] = self.vcall_();
                     for (size_t i = 0; i < size; ++i) {
@@ -96,7 +97,9 @@ namespace detail {
                 return result;
             } else {
                 if (self.size() == 1) {
-                    func(self.entry(0), args...);
+                    void* ptr = (void*)self.entry(0);
+                    if (ptr)
+                        func(ptr, args...);
                 } else {
                     auto [buckets, size] = self.vcall_();
                     for (size_t i = 0; i < size; ++i) {
