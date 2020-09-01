@@ -118,3 +118,30 @@ def test10_matrix_to_quat():
     m = ek.quat_to_matrix(q)
     q2 = ek.matrix_to_quat(m)
     assert ek.allclose(q, q2)
+
+
+@pytest.mark.parametrize("package", [ek.scalar, ek.cuda, ek.llvm])
+def test11_constructor(package):
+    """
+    Check Matrix construction from Python array and Numpy array
+    """
+    Float, Matrix3f = package.Float, package.Matrix3f
+    if ek.is_jit_array_v(Float):
+        ek.set_device(0 if Float.IsCUDA else -1)
+
+    m1 = [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6], [0.7, 0.8, 0.9]]
+    m2 = np.array(m1, dtype=np.float32)
+    m3 = Matrix3f(m1)
+    m4 = Matrix3f(m2)
+
+    assert ek.allclose(m3, m1)
+    assert ek.allclose(m3, m2)
+    assert ek.allclose(m3, m4)
+    assert ek.allclose(m4, m2)
+
+    if ek.is_jit_array_v(Float):
+        np.random.seed(1)
+        for i in range(1, 4):
+            values = np.random.random((i, 3, 3)).astype('float32')
+            m5 = Matrix3f(values)
+            assert ek.allclose(m5, values)

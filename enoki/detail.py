@@ -196,6 +196,11 @@ def array_init(self, args):
                 s1 = tuple(reversed(enoki.shape(self)))
                 s2 = o.shape
 
+                # Remove unnecessary outer dimension is possible
+                if s2[0] == 1:
+                    o = o[0, ...]
+                    s2 = o.shape
+
                 if o.dtype == np.complex64:
                     o = o.view(np.float32)
                     s2 = (*s2, 2)
@@ -205,21 +210,30 @@ def array_init(self, args):
 
                 if o.dtype != self.Type.NumPy:
                     o = o.astype(self.Type.NumPy)
-                dim = len(s1)
-                if dim != len(s2):
+
+                dim1 = len(s1)
+                dim2 = len(s2)
+
+                # Numpy array might have one dimension less when initializing dynamic arrays
+                if not dim1 == dim2 and not (dim1 == dim2 + 1 and self.IsDynamic):
                     raise Exception("Incompatible dimension!")
-                for i in range(dim):
+                for i in reversed(range(dim2)):
                     if s1[i] != s2[i] and s1[i] != 0:
                         raise Exception("Incompatible shape!")
-                if dim == 0:
+
+                if dim1 == 0:
                     pass
-                elif dim == 1 and self.IsDynamic:
+                elif dim1 == 1 and self.IsDynamic:
                     o = np.ascontiguousarray(o)
                     d = o.__array_interface__['data'][0]
                     self.assign_(self.load_(d, s2[0]))
                 else:
                     for i in range(s1[-1]):
-                        self.set_entry_(i, value_type(o[..., i]))
+                        if dim2 == 1 and self.IsDynamic:
+                            self.set_entry_(i, value_type.Value(o[i]))
+                        else:
+                            self.set_entry_(i, value_type(o[..., i]))
+
             elif mod == 'builtins' and name == 'PyCapsule':
                 self.assign_(array_from_dlpack(type(self), o))
             elif mod == 'torch':
