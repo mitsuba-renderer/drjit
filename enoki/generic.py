@@ -1063,6 +1063,30 @@ def erfinv_(a0):
     return ar
 
 
+def lgamma_(a0):
+    if not a0.IsFloat:
+        raise Exception("lgamma(): requires floating point operands!")
+    ar, sr = _check1(a0)
+    if not a0.IsSpecial:
+        for i in range(sr):
+            ar[i] = _ek.lgamma(a0[i])
+    else:
+        raise Exception("lgamma(): unsupported array type!")
+    return ar
+
+
+def tgamma_(a0):
+    if not a0.IsFloat:
+        raise Exception("tgamma(): requires floating point operands!")
+    ar, sr = _check1(a0)
+    if not a0.IsSpecial:
+        for i in range(sr):
+            ar[i] = _ek.tgamma(a0[i])
+    else:
+        raise Exception("tgamma(): unsupported array type!")
+    return ar
+
+
 # -------------------------------------------------------------------
 #                       Horizontal operations
 # -------------------------------------------------------------------

@@ -1404,6 +1404,20 @@ def erfinv(a):
         return _math.erfinv(a)
 
 
+def lgamma(a):
+    if isinstance(a, ArrayBase):
+        return a.lgamma_()
+    else:
+        return _math.lgamma(a)
+
+
+def tgamma(a):
+    if isinstance(a, ArrayBase):
+        return a.tgamma_()
+    else:
+        return _math.gamma(a)
+
+
 def sinh(a):
     if isinstance(a, ArrayBase):
         return a.sinh_()

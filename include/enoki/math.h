@@ -1540,4 +1540,44 @@ template <typename Value> Value erfinv(const Value &x) {
     return select(w < 5.f, p1, p2) * x;
 }
 
+/// Natural logarithm of the Gamma function
+template <typename Value> Value lgamma(Value x_) {
+    using Mask = mask_t<Value>;
+    using Scalar = scalar_t<Value>;
+
+    // 'g' and 'n' parameters of the Lanczos approximation
+    // See mrob.com/pub/ries/lanczos-gamma.html
+    const int n = 6;
+    const Scalar g = 5.0f;
+    const Scalar log_sqrt2pi = Scalar(0.91893853320467274178);
+    const Scalar coeff[n + 1] = { (Scalar)  1.000000000190015, (Scalar) 76.18009172947146,
+                                  (Scalar) -86.50532032941677, (Scalar) 24.01409824083091,
+                                  (Scalar) -1.231739572450155, (Scalar) 0.1208650973866179e-2,
+                                  (Scalar) -0.5395239384953e-5 };
+
+    // potentially reflect using gamma(x) = pi / (sin(pi*x) * gamma(1-x))
+    Mask reflect = x_ < .5f;
+
+    Value x = select(reflect, -x_, x_ - 1.f),
+          b = x + g + .5f; // base
+
+    Value sum = 0;
+    for (int i = n; i >= 1; --i)
+        sum += coeff[i] / (x + Scalar(i));
+    sum += coeff[0];
+
+    // gamma(x) = sqrt(2*pi) * sum * b^(x + .5) / exp(b)
+    Value result = ((log_sqrt2pi + log(sum)) - b) + log(b) * (x + .5f);
+
+    if (is_cuda_array_v<Value> || any_nested(reflect)) {
+        masked(result, reflect) = log(abs(Scalar(Pi<Scalar>) / sin(Scalar(Pi<Scalar>) * x_))) - result;
+        masked(result, reflect && eq(x_, round(x_))) = Infinity<Scalar>;
+    }
+
+    return result;
+}
+
+/// Gamma function
+template <typename Value> Value tgamma(Value x) { return exp(lgamma(x)); }
+
 NAMESPACE_END(enoki)
