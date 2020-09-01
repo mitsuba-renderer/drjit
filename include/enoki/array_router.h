@@ -1075,9 +1075,7 @@ ENOKI_INLINE bool schedule(const T1 &value, const Ts&... values) {
 }
 
 ENOKI_INLINE void eval() {
-#if defined(ENOKI_ENABLE_JIT)
     jitc_eval();
-#endif
 }
 
 template <typename... Ts>
