@@ -1408,7 +1408,6 @@ def export_(a, migrate_to_host, version):
     else:
         # JIT array -- requires some extra processing. Cache the
         # result in case this function is called multiple times
-
         cache = _ek.detail.get_cache(a)
         b = _ek.detach(a) if a.IsDiff else a
         key = (b.index_(), migrate_to_host, version)
@@ -1437,6 +1436,9 @@ def export_(a, migrate_to_host, version):
             'version': version,
             'device': _ek.device(b)
         }
+
+        if a is not b:
+            record['owner'] = b
 
         cache[key] = record
         _ek.eval()
