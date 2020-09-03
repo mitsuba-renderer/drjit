@@ -232,12 +232,12 @@ def width(a):
     return shape(a)[-1]
 
 
-def resize(a, size):
+def resize(value, size):
     if _ek.array_depth_v(value) > 1:
-        for i in range(a.Size):
-            resize(a[i], size)
-    elif _ek.is_jit_array_v(x):
-        a.resize_(size)
+        for i in range(value.Size):
+            resize(value[i], size)
+    elif _ek.is_jit_array_v(value):
+        value.resize_(size)
 
 
 def device(value=None):
