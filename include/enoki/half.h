@@ -14,6 +14,7 @@
 #pragma once
 
 #include <enoki/array_traits.h>
+#include <enoki/packet_intrin.h>
 
 NAMESPACE_BEGIN(enoki)
 struct half;

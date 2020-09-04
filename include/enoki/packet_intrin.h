@@ -52,6 +52,10 @@
 #    include <fmaintrin.h>
 #  endif
 
+#  if defined(ENOKI_X86_F16C)
+#    include <f16cintrin.h>
+#  endif
+
 #  if defined(ENOKI_X86_AVX512)
 #    include <avx512fintrin.h>
 #    include <avx512vlintrin.h>
