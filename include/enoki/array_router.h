@@ -849,7 +849,7 @@ Target gather(Source &&source, const Index &index, const mask_t<Target> &mask = 
                       "Source argument of gather operation must either be a "
                       "pointer address or a flat array!");
         if constexpr (!is_array_v<Index>) {
-            size_t offset = index * sizeof(Target);
+            size_t offset = index * sizeof(value_t<Target>) * Target::Size;
             if constexpr (std::is_pointer_v<std::decay_t<Source>>) {
                 // Case 2.0.0: gather<Target>(const void *, size_t, ...)
                 return load_unaligned<Target>((const uint8_t *)source + offset);
@@ -859,7 +859,11 @@ Target gather(Source &&source, const Index &index, const mask_t<Target> &mask = 
             }
         } else if constexpr (array_depth_v<Target> == array_depth_v<Index>) {
             // Case 2.1: gather<FloatC>(const FloatC& / const void *, ...)
-            return Target::template gather_<Permute>(source, index, mask);
+
+            if constexpr (Target::IsPacked && is_array_v<Source>)
+                return Target::template gather_<Permute>(source.data(), index, mask);
+            else
+                return Target::template gather_<Permute>(source, index, mask);
         } else {
             // Case 2.2: gather<Vector3fC>(const FloatC & / const void *, ...)
             using TargetIndex = replace_scalar_t<Target, scalar_t<Index>>;
