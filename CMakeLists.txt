@@ -5,7 +5,20 @@ option(ENOKI_ENABLE_JIT      "Build Enoki just in time compilation library?" OFF
 option(ENOKI_ENABLE_AUTODIFF "Build Enoki automatic differentation library?" OFF)
 option(ENOKI_ENABLE_PYTHON   "Build Python extension library?" OFF)
 option(ENOKI_ENABLE_TESTS    "Build Enoki test suite? (Warning, this takes *very* long to compile)" OFF)
-set(ENOKI_NATIVE_FLAGS "-march=native" CACHE STRING "Compilation flags used to target the host processor architecture.")
+
+# Compile for the native processor architecture by default. MSVC cannot detect
+# this automatically, and the following assumes a reasonably modern CPU with
+# AVX2 instructions. You may want to overwrite MTS_NATIVE_FLAGS when building
+# binaries that will be distributed to others.
+
+if (MSVC)
+  set(ENOKI_NATIVE_FLAGS_DEFAULT "/arch:AVX2")
+else()
+  set(ENOKI_NATIVE_FLAGS_DEFAULT "-march=native")
+endif()
+
+set(ENOKI_NATIVE_FLAGS ${ENOKI_NATIVE_FLAGS_DEFAULT} CACHE STRING
+    "Compilation flags used to target the host processor architecture.")
 
 set(ENOKI_MASTER_PROJECT OFF)
 if (${CMAKE_CURRENT_SOURCE_DIR} STREQUAL ${CMAKE_SOURCE_DIR})
