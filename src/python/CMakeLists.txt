@@ -1,6 +1,6 @@
 pybind11_add_module(
   enoki-python
-  THIN_LTO
+  THIN_LTO OPT_SIZE
 
   main.cpp
   implicit.cpp
@@ -36,11 +36,4 @@ endif()
 set_target_properties(enoki-python PROPERTIES
   OUTPUT_NAME enoki_ext ${ENOKI_OUTPUT_DIRECTORY})
 
-if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-  target_compile_options(enoki-python PRIVATE ${ENOKI_NATIVE_FLAGS})
-  if (NOT (${ENOKI_U_CMAKE_BUILD_TYPE} MATCHES "DEB"))
-    target_compile_options(enoki-python PRIVATE -g0 -Os)
-  endif()
-elseif (MSVC)
-  target_compile_options(enoki-python PRIVATE /Os)
-endif()
+target_compile_options(enoki-python PRIVATE ${ENOKI_NATIVE_FLAGS})
