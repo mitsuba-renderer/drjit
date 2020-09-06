@@ -1,5 +1,11 @@
-project(enoki)
-cmake_minimum_required(VERSION 3.10.0)
+cmake_minimum_required(VERSION 3.13..3.18)
+
+project(mitsuba
+  DESCRIPTION
+    "Enoki 2"
+  LANGUAGES
+    CXX
+)
 
 option(ENOKI_ENABLE_JIT      "Build Enoki just in time compilation library?" OFF)
 option(ENOKI_ENABLE_AUTODIFF "Build Enoki automatic differentation library?" OFF)
@@ -112,6 +118,8 @@ else()
 endif()
 
 if (ENOKI_ENABLE_PYTHON)
+  find_package(Python COMPONENTS Interpreter Development REQUIRED)
+
   set(ENOKI_PYBIND11_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ext/pybind11"
     CACHE STRING "Path containing the 'pybind11' library used to compile Enoki.")
   add_subdirectory(${ENOKI_PYBIND11_DIR} pybind11)
