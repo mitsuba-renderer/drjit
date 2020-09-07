@@ -118,11 +118,19 @@ else()
 endif()
 
 if (ENOKI_ENABLE_PYTHON)
-  find_package(Python COMPONENTS Interpreter Development REQUIRED)
+  if (NOT TARGET pybind11::module)
+    find_package(Python COMPONENTS Interpreter Development REQUIRED)
 
-  set(ENOKI_PYBIND11_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ext/pybind11"
-    CACHE STRING "Path containing the 'pybind11' library used to compile Enoki.")
-  add_subdirectory(${ENOKI_PYBIND11_DIR} pybind11)
+    set(ENOKI_PYBIND11_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ext/pybind11"
+      CACHE STRING "Path containing the 'pybind11' library used to compile Enoki.")
+    add_subdirectory(${ENOKI_PYBIND11_DIR} pybind11)
+
+    mark_as_advanced(
+      USE_PYTHON_INCLUDE_DIR PYBIND11_INSTALL PYBIND11_TEST PYBIND11_NOPYTHON
+      PYBIND11_FINDPYTHON PYBIND11_PYTHON_VERSION PYBIND11_WERROR
+      ENOKI_PYBIND11_DIR
+    )
+  endif()
 
   message(STATUS "Enoki: building the Python plugin.")
   add_subdirectory(src/python)
@@ -153,8 +161,6 @@ if (ENOKI_MASTER_PROJECT)
 endif()
 
 mark_as_advanced(
-  PYBIND11_INSTALL PYBIND11_PYTHON_VERSION PYBIND11_TEST
-  PYBIND11_WERROR USE_PYTHON_INCLUDE_DIR ENOKI_PYBIND11_DIR
   CMAKE_EXECUTABLE_FORMAT CMAKE_OSX_ARCHITECTURES
   ENOKI_JIT_ENABLE_TESTS
 )
