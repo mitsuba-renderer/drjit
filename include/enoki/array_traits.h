@@ -106,6 +106,8 @@ namespace detail {
     template <typename T> using is_special_det         = std::enable_if_t<T::IsSpecial>;
 }
 
+template <typename T> using enable_if_scalar_t = enable_if_t<std::is_scalar_v<T>>;
+
 template <typename T>
 constexpr bool is_array_v = is_detected_v<detail::is_array_det, std::decay_t<T>>;
 template <typename T> using enable_if_array_t = enable_if_t<is_array_v<T>>;

@@ -26,7 +26,8 @@ template <bool IsMask_, typename Derived_> struct alignas(64)
     //! @{ \name Value constructors
     // -----------------------------------------------------------------------
 
-    ENOKI_INLINE StaticArrayImpl(Value value) : m(_mm512_set1_ps(value)) { }
+    template <typename T, enable_if_scalar_t<T> = 0>
+    ENOKI_INLINE StaticArrayImpl(T value) : m(_mm512_set1_ps((float) value)) { }
 
     ENOKI_INLINE StaticArrayImpl(Value f0,  Value f1,  Value f2,  Value f3,
                                  Value f4,  Value f5,  Value f6,  Value f7,
@@ -344,7 +345,9 @@ template <bool IsMask_, typename Derived_> struct alignas(64)
     //! @{ \name Value constructors
     // -----------------------------------------------------------------------
 
-    ENOKI_INLINE StaticArrayImpl(const Value &value) : m(_mm512_set1_pd(value)) { }
+    template <typename T, enable_if_scalar_t<T> = 0>
+    ENOKI_INLINE StaticArrayImpl(T value) : m(_mm512_set1_pd((double) value)) { }
+
     ENOKI_INLINE StaticArrayImpl(Value f0, Value f1, Value f2, Value f3,
                                  Value f4, Value f5, Value f6, Value f7)
         : m(_mm512_setr_pd(f0, f1, f2, f3, f4, f5, f6, f7)) { }
@@ -646,7 +649,8 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(64)
     //! @{ \name Value constructors
     // -----------------------------------------------------------------------
 
-    ENOKI_INLINE StaticArrayImpl(Value value) : m(_mm512_set1_epi32((int32_t) value)) { }
+    template <typename T, enable_if_scalar_t<T> = 0>
+    ENOKI_INLINE StaticArrayImpl(T value) : m(_mm512_set1_epi32((int32_t) value)) { }
 
     ENOKI_INLINE StaticArrayImpl(Value f0,  Value f1,  Value f2,  Value f3,
                                  Value f4,  Value f5,  Value f6,  Value f7,
@@ -944,7 +948,9 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(64)
     //! @{ \name Value constructors
     // -----------------------------------------------------------------------
 
-    ENOKI_INLINE StaticArrayImpl(const Value &value) : m(_mm512_set1_epi64((long long) value)) { }
+    template <typename T, enable_if_scalar_t<T> = 0>
+    ENOKI_INLINE StaticArrayImpl(T value) : m(_mm512_set1_epi64((long long) value)) { }
+
     ENOKI_INLINE StaticArrayImpl(Value f0, Value f1, Value f2, Value f3,
                                  Value f4, Value f5, Value f6, Value f7)
         : m(_mm512_setr_epi64((long long) f0, (long long) f1, (long long) f2,

@@ -124,14 +124,16 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
 #else
     template <typename T = Value_, enable_if_t<!std::is_scalar_v<T>> = 0>
     StaticArrayImpl() { }
-    template <typename T = Value_, enable_if_t<std::is_scalar_v<T>> = 0>
+    template <typename T = Value_, enable_if_scalar_t<T> = 0>
     StaticArrayImpl() : StaticArrayImpl(DebugInitialization<Scalar>) { }
 #endif
 
-    StaticArrayImpl(const Scalar &v) {
+    template <typename T, enable_if_scalar_t<T> = 0>
+    StaticArrayImpl(T v) {
+        Scalar value = (Scalar) v;
         ENOKI_CHKSCALAR("Constructor (scalar broadcast)");
         for (size_t i = 0; i < Size_; ++i)
-            m_data[i] = v;
+            m_data[i] = value;
     }
 
     template <typename T = Value_, enable_if_t<!std::is_same_v<T, Scalar>> = 0>

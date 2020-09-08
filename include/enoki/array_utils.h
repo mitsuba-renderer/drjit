@@ -204,6 +204,7 @@ template <typename T> T fmadd_(const T &a, const T &b, const T &c) {
         return ENOKI_BUILTIN(fmaf)(a, b, c);
     else if constexpr (std::is_same_v<T, double>)
         return ENOKI_BUILTIN(fma)(a, b, c);
+    else
 #endif
     return a * b + c;
 }

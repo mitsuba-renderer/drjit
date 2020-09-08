@@ -27,7 +27,8 @@ template <bool IsMask_, typename Derived_> struct alignas(16)
     //! @{ \name Value constructors
     // -----------------------------------------------------------------------
 
-    ENOKI_INLINE StaticArrayImpl(Value value) : m(_mm_set1_ps(value)) { }
+    template <typename T, enable_if_scalar_t<T> = 0>
+    ENOKI_INLINE StaticArrayImpl(T value) : m(_mm_set1_ps((float) value)) {}
 
     ENOKI_INLINE StaticArrayImpl(Value v0, Value v1, Value v2, Value v3)
         : m(_mm_setr_ps(v0, v1, v2, v3)) { }
@@ -438,7 +439,8 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(16)
     //! @{ \name Value constructors
     // -----------------------------------------------------------------------
 
-    ENOKI_INLINE StaticArrayImpl(Value value) : m(_mm_set1_epi32((int32_t) value)) { }
+    template <typename T, enable_if_scalar_t<T> = 0>
+    ENOKI_INLINE StaticArrayImpl(T value) : m(_mm_set1_epi32((int32_t) value)) { }
     ENOKI_INLINE StaticArrayImpl(Value v0, Value v1, Value v2, Value v3)
         : m(_mm_setr_epi32((int32_t) v0, (int32_t) v1, (int32_t) v2, (int32_t) v3)) { }
 
@@ -862,7 +864,8 @@ template <bool IsMask_, typename Derived_> struct alignas(16)
     //! @{ \name Value constructors
     // -----------------------------------------------------------------------
 
-    ENOKI_INLINE StaticArrayImpl(Value value) : m(_mm_set1_pd(value)) { }
+    template <typename T, enable_if_scalar_t<T> = 0>
+    ENOKI_INLINE StaticArrayImpl(T value) : m(_mm_set1_pd((double) value)) {}
     ENOKI_INLINE StaticArrayImpl(Value v0, Value v1)
         : m(_mm_setr_pd(v0, v1)) { }
 
@@ -1229,7 +1232,8 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(16)
     //! @{ \name Value constructors
     // -----------------------------------------------------------------------
 
-    ENOKI_INLINE StaticArrayImpl(Value value) : m(_mm_set1_epi64x((int64_t) value)) { }
+    template <typename T, enable_if_scalar_t<T> = 0>
+    ENOKI_INLINE StaticArrayImpl(T value) : m(_mm_set1_epi64x((int64_t) value)) { }
     ENOKI_INLINE StaticArrayImpl(Value v0, Value v1) {
         alignas(16) Value data[2];
         data[0] = (Value) v0;

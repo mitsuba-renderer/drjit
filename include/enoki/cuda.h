@@ -109,7 +109,9 @@ struct CUDAArray : ArrayBase<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
         }
     }
 
-    CUDAArray(Value value) {
+    template <typename T, enable_if_scalar_t<T> = 0>
+    CUDAArray(T value_) {
+        Value value = (Value) value_;
         if constexpr (!IsClass) {
             uint64_t tmp = 0;
             memcpy(&tmp, &value, sizeof(Value));

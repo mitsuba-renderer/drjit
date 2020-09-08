@@ -161,7 +161,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
     DiffArray(const Type &value) : m_value(value) { }
     DiffArray(Type &&value) : m_value(std::move(value)) { }
 
-    DiffArray(const Value &value) : m_value(value) { }
+    template <typename T, enable_if_scalar_t<T> = 0>
+    DiffArray(T value) : m_value((Value) value) { }
 
     template <typename... Ts, enable_if_t<(sizeof...(Ts) > 1 &&
               detail::and_v<!std::is_same_v<Ts, detail::reinterpret_flag>...>)> = 0>

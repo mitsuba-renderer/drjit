@@ -27,7 +27,8 @@ template <bool IsMask_, typename Derived_> struct alignas(32)
     //! @{ \name Value constructors
     // -----------------------------------------------------------------------
 
-    ENOKI_INLINE StaticArrayImpl(Value value) : m(_mm256_set1_ps(value)) { }
+    template <typename T, enable_if_scalar_t<T> = 0>
+    ENOKI_INLINE StaticArrayImpl(T value) : m(_mm256_set1_ps((float) value)) {}
     ENOKI_INLINE StaticArrayImpl(Value v0, Value v1, Value v2, Value v3,
                                  Value v4, Value v5, Value v6, Value v7)
         : m(_mm256_setr_ps(v0, v1, v2, v3, v4, v5, v6, v7)) { }
@@ -451,7 +452,8 @@ template <bool IsMask_, typename Derived_> struct alignas(32)
     //! @{ \name Value constructors
     // -----------------------------------------------------------------------
 
-    ENOKI_INLINE StaticArrayImpl(Value value) : m(_mm256_set1_pd(value)) { }
+    template <typename T, enable_if_scalar_t<T> = 0>
+    ENOKI_INLINE StaticArrayImpl(T value) : m(_mm256_set1_pd((double) value)) {}
     ENOKI_INLINE StaticArrayImpl(Value v0, Value v1, Value v2, Value v3)
         : m(_mm256_setr_pd(v0, v1, v2, v3)) { }
 

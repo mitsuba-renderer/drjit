@@ -623,6 +623,11 @@ template <typename X, typename Y> expr_t<X, Y> ldexp(const X &x, const Y &y) {
     }
 }
 
+#if defined(_MSC_VER)
+#  pragma warning(push)
+#  pragma warning(disable: 4310) // cast truncates constant value
+#endif
+
 template <typename Value> std::pair<Value, Value> frexp(const Value &x) {
     if constexpr (is_detected_v<detail::has_frexp, Value>) {
         return x.frexp_();
@@ -669,6 +674,10 @@ template <typename Value> std::pair<Value, Value> frexp(const Value &x) {
         );
     }
 }
+
+#if defined(_MSC_VER)
+#  pragma warning(pop)
+#endif
 
 template <typename Value> Value exp(const Value &x) {
     if constexpr (is_detected_v<detail::has_exp, Value>) {

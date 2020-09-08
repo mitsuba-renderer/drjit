@@ -71,9 +71,10 @@ struct DynamicArray
             m_data[i] = reinterpret_array<Value>(v.derived().entry(i));
     }
 
-    DynamicArray(const Value &v) {
+    template <typename T, enable_if_scalar_t<T> = 0>
+    DynamicArray(T value) {
         init_(1);
-        m_data[0] = v;
+        m_data[0] = (Value) value;
     }
 
     /// Move-construct if possible. Convert values with the wrong type.
