@@ -1504,6 +1504,13 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
     //! @{ \name Miscellaneous
     // -----------------------------------------------------------------------
 
+    DiffArray copy() const {
+        if constexpr (is_jit_array_v<Type>) {
+            return create(m_index, m_value.copy());
+        } else
+            enoki_raise("copy(): not supported in scalar mode!");
+    }
+
     auto vcall_() const {
         if constexpr (is_jit_array_v<Type>)
             return m_value.vcall_();
