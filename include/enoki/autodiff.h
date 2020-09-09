@@ -22,6 +22,7 @@ NAMESPACE_BEGIN(detail)
 // -----------------------------------------------------------------------
 //! @{ \name External API compiled as part of libenoki-ad.so
 // -----------------------------------------------------------------------
+
 /// Increase the external reference count of a given variable
 template <typename Value> void ad_inc_ref_impl(uint32_t index) noexcept (true);
 
@@ -1740,14 +1741,14 @@ protected:
                                    const Index &, const Mask &, bool, bool);   \
     }
 
-ENOKI_DECLARE_EXTERN_TEMPLATE(float, bool, uint32_t)
+ENOKI_DECLARE_EXTERN_TEMPLATE(float,  bool, uint32_t)
 ENOKI_DECLARE_EXTERN_TEMPLATE(double, bool, uint32_t)
 #if defined(ENOKI_CUDA_H)
-ENOKI_DECLARE_EXTERN_TEMPLATE(CUDAArray<float>, CUDAArray<bool>, CUDAArray<uint32_t>)
+ENOKI_DECLARE_EXTERN_TEMPLATE(CUDAArray<float>,  CUDAArray<bool>, CUDAArray<uint32_t>)
 ENOKI_DECLARE_EXTERN_TEMPLATE(CUDAArray<double>, CUDAArray<bool>, CUDAArray<uint32_t>)
 #endif
 #if defined(ENOKI_LLVM_H)
-ENOKI_DECLARE_EXTERN_TEMPLATE(LLVMArray<float>, LLVMArray<bool>, LLVMArray<uint32_t>)
+ENOKI_DECLARE_EXTERN_TEMPLATE(LLVMArray<float>,  LLVMArray<bool>, LLVMArray<uint32_t>)
 ENOKI_DECLARE_EXTERN_TEMPLATE(LLVMArray<double>, LLVMArray<bool>, LLVMArray<uint32_t>)
 #endif
 

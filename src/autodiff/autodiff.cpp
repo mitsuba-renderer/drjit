@@ -304,7 +304,6 @@ static void ad_dfs_fwd(uint32_t index) {
     }
 }
 
-
 /// Reverse-mode DFS starting from 'index'
 static void ad_dfs_rev(uint32_t index) {
     Variable *v = state[index];
@@ -578,7 +577,6 @@ uint32_t ad_new(const char *label, uint32_t size, uint32_t op_count,
     return index;
 }
 
-
 template <typename Value> struct MaskEdge : Special {
     MaskEdge(const Mask &mask, bool negate) : mask(mask), negate(negate) { }
 
@@ -599,7 +597,6 @@ template <typename Value> struct MaskEdge : Special {
     Mask mask;
     bool negate;
 };
-
 
 template <typename Value, typename Mask>
 uint32_t ad_new_select(const char *label, uint32_t size, const Mask &mask_,
