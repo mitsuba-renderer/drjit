@@ -229,4 +229,4 @@ def nondiff_array_t(a):
             raise Exception("diff_array_t(): input type unsupported!")
         return getattr(_sys.modules.get(mod), a.__name__)
     else:
-        return nondiff_array_t(type(a))(a)
+        return nondiff_array_t(type(a))
