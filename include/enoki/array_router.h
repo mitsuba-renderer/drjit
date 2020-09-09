@@ -1144,7 +1144,7 @@ template <typename T> ENOKI_INLINE bool grad_enabled(const T &a) {
     }
 }
 
-template <typename T> ENOKI_INLINE T replace_grad(const T &a, const T &b) {
+template <typename T> ENOKI_INLINE T replace_grad(T &a, const T &b) {
     static_assert(is_diff_array_v<T>, "Type does not support gradients!");
 
     if constexpr (array_depth_v<T> > 1) {
@@ -1162,7 +1162,7 @@ template <typename T> ENOKI_INLINE T replace_grad(const T &a, const T &b) {
 
         return result;
     } else {
-        return T::create(a.detach_(), b.index());
+        return T::create(b.index(), a.detach_());
     }
 }
 

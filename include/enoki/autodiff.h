@@ -1105,28 +1105,28 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         if constexpr (!std::is_floating_point_v<Scalar>)
             enoki_raise("ceil2int_(): invalid operand type!");
         else
-            return T::create(0, ceil2int<T::Type>(m_value));
+            return T::create(0, ceil2int<typename T::Type>(m_value));
     }
 
     template <typename T> T floor2int_() const {
         if constexpr (!std::is_floating_point_v<Scalar>)
             enoki_raise("floor2int_(): invalid operand type!");
         else
-            return T::create(0, floor2int<T::Type>(m_value));
+            return T::create(0, floor2int<typename T::Type>(m_value));
     }
 
     template <typename T> T round2int_() const {
         if constexpr (!std::is_floating_point_v<Scalar>)
             enoki_raise("round2int_(): invalid operand type!");
         else
-            return T::create(0, round2int<T::Type>(m_value));
+            return T::create(0, round2int<typename T::Type>(m_value));
     }
 
     template <typename T> T trunc2int_() const {
         if constexpr (!std::is_floating_point_v<Scalar>)
             enoki_raise("trunc2int_(): invalid operand type!");
         else
-            return T::create(0, trunc2int<T::Type>(m_value));
+            return T::create(0, trunc2int<typename T::Type>(m_value));
     }
 
     DiffArray sl_(const DiffArray &a) const {
@@ -1595,6 +1595,10 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         return m_value;
     }
 
+    Type detach_() {
+        return m_value;
+    }
+
     const Type grad_() const {
         if constexpr (IsEnabled)
             return detail::ad_grad<Type>(m_index);
@@ -1648,6 +1652,11 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
 #endif
             m_value = value;
         }
+    }
+
+    void resize(size_t size) {
+        if constexpr (is_dynamic_v<Type>)
+            m_value.resize(size);
     }
 
     Scalar *data() {

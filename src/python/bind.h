@@ -388,7 +388,7 @@ auto bind_full(py::class_<Array, EnokiHolder<Array>> &cls,
 
     if constexpr (Array::IsDiff) {
         cls.def(py::init<ek::detached_t<Array>>());
-        cls.def("detach_", &Array::detach_);
+        cls.def("detach_", py::overload_cast<>(&Array::detach_, py::const_));
         if constexpr (Array::IsFloat) {
             cls.def("grad_", [](const Array &a) -> py::object {
                 if (a.index() == 0)
