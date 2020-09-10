@@ -728,19 +728,8 @@ uint32_t ad_new_scatter(const char *label, uint32_t size, uint32_t src_index,
 
     if constexpr (is_array_v<Value>) {
         std::lock_guard<Mutex> guard(state.mutex);
-        Variable *var = nullptr;
-        uint32_t index = 0;
 
-        if (permute && dst_index) {
-            Variable *var2 = state[dst_index];
-            if (strcmp(var2->label, "scatter[permute]") == 0) {
-                index = dst_index;
-                var = var2;
-            }
-        }
-
-        if (index == 0)
-            std::tie(index, var) = ad_var_new(label, size);
+        auto [index, var] = ad_var_new(label, size);
 
         ad_log(Debug,
                "ad_new_scatter(%u <- %u, %u, permute=%i, scatter_add=%i)",
@@ -762,7 +751,7 @@ uint32_t ad_new_scatter(const char *label, uint32_t size, uint32_t src_index,
             edge_index = edge_index_new;
         }
 
-        if (dst_index && dst_index != index) {
+        if (dst_index) {
             Variable *var2 = state[dst_index];
 
             uint32_t edge_index_new = ad_edge_new();
@@ -783,12 +772,10 @@ uint32_t ad_new_scatter(const char *label, uint32_t size, uint32_t src_index,
             edge_index = edge_index_new;
         }
 
-        if (edge_index == 0 && dst_index != index)
+        if (edge_index == 0)
             ad_fail("ad_new_scatter(): all inputs were non-differentiable!");
 
-        if (edge_index != 0)
-            var->next_rev = edge_index;
-
+        var->next_rev = edge_index;
         var->ref_count_ext++;
 
         return index;

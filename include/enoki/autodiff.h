@@ -1409,7 +1409,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         } else {
             scatter(dst.m_value, m_value, offset.m_value, mask.m_value);
             if constexpr (IsEnabled) {
-                if (m_index || dst.m_index) {
+                if (m_index || (dst.m_index && !Permute)) {
                     uint32_t index = detail::ad_new_scatter<Type>(
                         Permute ? "scatter[permute]" : "scatter", (uint32_t) width(dst),
                         m_index, dst.m_index, offset.m_value, mask.m_value,

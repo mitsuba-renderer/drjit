@@ -289,8 +289,11 @@ auto bind_full(py::class_<Array, EnokiHolder<Array>> &cls,
                     return ek::gather<Array>(source, index, mask);
                 });
         cls.def("scatter_",
-                [](const Array &value, Array &target, const UInt32 &index, const Mask &mask) {
-                    ek::scatter(target, value, index, mask);
+                [](const Array &value, Array &target, const UInt32 &index, const Mask &mask, bool permute) {
+                    if (permute)
+                        ek::scatter<true>(target, value, index, mask);
+                    else
+                        ek::scatter<false>(target, value, index, mask);
                 });
 
         if constexpr (!Array::IsMask) {

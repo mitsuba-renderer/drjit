@@ -488,7 +488,7 @@ def gather(target_type, source, index, mask=True):
         return target_type.gather_(source, index, mask)
 
 
-def scatter(target, value, index, mask=True):
+def scatter(target, value, index, mask=True, permute=False):
     if not isinstance(value, ArrayBase):
         assert isinstance(index, int) and isinstance(mask, bool)
         if mask:
@@ -505,7 +505,7 @@ def scatter(target, value, index, mask=True):
         if not isinstance(mask, mask_type):
             mask = mask_type(mask)
 
-        return value.scatter_(target, index, mask)
+        return value.scatter_(target, index, mask, permute)
 
 
 def scatter_add(target, value, index, mask=True):

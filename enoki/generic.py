@@ -1364,11 +1364,11 @@ def gather_(cls, source, index, mask):
     return result
 
 
-def scatter_(self, target, index, mask):
+def scatter_(self, target, index, mask, permute):
     assert target.Depth == 1
     sr = max(len(self), len(index), len(mask))
     for i in range(sr):
-        _ek.scatter(target, self[i], index[i], mask[i])
+        _ek.scatter(target, self[i], index[i], mask[i], permute)
 
 
 def scatter_add_(self, target, index, mask):

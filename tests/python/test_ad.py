@@ -311,14 +311,10 @@ def test22_scatter_rev(m):
         ref_buf = m.Float(0.0000, 0.2500, 0.5000, 1.0000, 1.3333,
                           1.6667, 2.0000, 0.0000, 0.0000, 0.0000)
 
-        print('allclose checks')
         assert ek.allclose(ref_buf, buf2, atol=1e-4)
         assert ek.allclose(ref_buf, buf, atol=1e-4)
-        print('allclose done')
 
         s = ek.dot_async(buf2, buf2)
-
-        print(ek.graphviz_str(s))
 
         ek.backward(s)
 
@@ -338,6 +334,67 @@ def test22_scatter_rev(m):
             assert ek.grad(buf) is None
 
 
+def test22_scatter_fwd(m):
+    x = m.Float(4.0)
+    ek.enable_grad(x)
+
+    values = x * x * ek.linspace(m.Float, 1, 4, 4)
+    idx = 2 * ek.arange(m.UInt32, 4)
+
+    buf = ek.zero(m.Float, 10)
+    ek.scatter(buf, values, idx)
+
+    assert ek.grad_enabled(buf)
+
+    ref = [16.0, 0.0, 32.0, 0.0, 48.0, 0.0, 64.0, 0.0, 0.0, 0.0]
+    assert ek.allclose(buf, ref)
+
+    ek.forward(x, retain_graph=True)
+    grad = ek.grad(buf)
+
+    ref_grad = [8.0, 0.0, 16.0, 0.0, 24.0, 0.0, 32.0, 0.0, 0.0, 0.0]
+    assert ek.allclose(grad, ref_grad)
+
+    # Overwrite first value with non-diff value, resulting gradient entry should be 0
+    y = m.Float(3)
+    idx = m.UInt32(0)
+    ek.scatter(buf, y, idx)
+
+    ref = [3.0, 0.0, 32.0, 0.0, 48.0, 0.0, 64.0, 0.0, 0.0, 0.0]
+    assert ek.allclose(buf, ref)
+
+    ek.forward(x)
+    grad = ek.grad(buf)
+
+    ref_grad = [0.0, 0.0, 16.0, 0.0, 24.0, 0.0, 32.0, 0.0, 0.0, 0.0]
+    assert ek.allclose(grad, ref_grad)
+
+
+def test22_scatter_fwd_permute(m):
+    x = m.Float(4.0)
+    ek.enable_grad(x)
+
+    values_0 = x * ek.linspace(m.Float, 1, 9, 5)
+    values_1 = x * ek.linspace(m.Float, 11, 19, 5)
+
+    buf = ek.zero(m.Float, 10)
+
+    idx_0 = ek.arange(m.UInt32, 5)
+    idx_1 = ek.arange(m.UInt32, 5) + 5
+
+    ek.scatter(buf, values_0, idx_0, permute=False)
+    ek.scatter(buf, values_1, idx_1, permute=False)
+
+    ref = [4.0, 12.0, 20.0, 28.0, 36.0, 44.0, 52.0, 60.0, 68.0, 76.0]
+    assert ek.allclose(buf, ref)
+
+    ek.forward(x)
+    grad = ek.grad(buf)
+
+    ref_grad = [1.0, 3.0, 5.0, 7.0, 9.0, 11.0, 13.0, 15.0, 17.0, 19.0]
+    assert ek.allclose(grad, ref_grad)
+
+
 def test23_exp(m):
     x = ek.linspace(m.Float, 0, 1, 10)
     ek.enable_grad(x)
@@ -355,8 +412,6 @@ def test24_log(m):
     ek.backward(y)
     log_x = ek.log(ek.sqr(ek.detach(x)))
     assert ek.allclose(y, log_x)
-    print(ek.grad(x))
-    print(2/ek.detach(x))
     assert ek.allclose(ek.grad(x), 2 / ek.detach(x))
 
 
