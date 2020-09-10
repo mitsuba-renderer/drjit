@@ -82,6 +82,8 @@ def test_roundtrip_pytorch_jax():
 
 
 def test_matrix_numpy_construction():
+    import numpy as np
+
     m_py = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
     m_np = np.array(m_py)
     m_ek1 = ek.scalar.Matrix3f(m_py)
