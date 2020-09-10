@@ -783,10 +783,12 @@ uint32_t ad_new_scatter(const char *label, uint32_t size, uint32_t src_index,
             edge_index = edge_index_new;
         }
 
-        if (edge_index == 0)
+        if (edge_index == 0 && dst_index != index)
             ad_fail("ad_new_scatter(): all inputs were non-differentiable!");
 
-        var->next_rev = edge_index;
+        if (edge_index != 0)
+            var->next_rev = edge_index;
+
         var->ref_count_ext++;
 
         return index;
@@ -797,7 +799,7 @@ uint32_t ad_new_scatter(const char *label, uint32_t size, uint32_t src_index,
 }
 
 static void ad_traverse_rev(bool retain_graph) {
-    ad_log(Info, "ad_traverse_rev(): processing %zu nodes ..", state.todo.size());
+    ad_log(Debug, "ad_traverse_rev(): processing %zu nodes ..", state.todo.size());
 
     for (uint32_t index : state.todo) {
         Variable *v = state[index];
@@ -846,7 +848,7 @@ static void ad_traverse_rev(bool retain_graph) {
     }
 
     if (!retain_graph) {
-        ad_log(Info, "ad_traverse_rev(): cleaning up ..");
+        ad_log(Debug, "ad_traverse_rev(): cleaning up ..");
         for (auto it = state.todo.rbegin(); it != state.todo.rend(); ++it) {
             uint32_t index = *it;
             Variable *v = state[index];
@@ -854,11 +856,11 @@ static void ad_traverse_rev(bool retain_graph) {
         }
     }
 
-    ad_log(Info, "ad_traverse_rev(): done.");
+    ad_log(Debug, "ad_traverse_rev(): done.");
 }
 
 static void ad_traverse_fwd(bool retain_graph) {
-    ad_log(Info, "ad_traverse_fwd(): processing %zu nodes ..", state.todo.size());
+    ad_log(Debug, "ad_traverse_fwd(): processing %zu nodes ..", state.todo.size());
 
     for (uint32_t index : state.todo) {
         Variable *v = state[index];
@@ -909,7 +911,7 @@ static void ad_traverse_fwd(bool retain_graph) {
             ad_free_edges(index, v);
     }
 
-    ad_log(Info, "ad_traverse_fwd(): done.");
+    ad_log(Debug, "ad_traverse_fwd(): done.");
 }
 
 template <typename Value> const char *ad_graphviz(bool reverse) {

@@ -5,7 +5,7 @@
 #include <stdarg.h>
 #include <stdexcept>
 
-LogLevel log_level = LogLevel::Debug;
+LogLevel log_level = LogLevel::Info;
 Buffer buffer{0};
 
 void ad_fail(const char *fmt, ...) {
