@@ -1089,7 +1089,7 @@ ENOKI_INLINE void eval(const Ts&... values) {
 }
 
 template <typename T> ENOKI_INLINE size_t width(const T &value) {
-    if constexpr (array_depth_v<T> > 1)
+    if constexpr (array_depth_v<T> > 1 && array_size_v<T> > 0)
         return width(value.derived().entry(0));
     else if constexpr (is_array_v<T>)
         return value.derived().size();
