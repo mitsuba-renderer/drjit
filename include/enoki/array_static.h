@@ -126,7 +126,7 @@ struct StaticArrayBase : ArrayBase<Value_, IsMask_, Derived_> {
     template <typename T = Derived>
     static Derived load_unaligned_(const void *mem, size_t) {
         static_assert(!is_dynamic_v<value_t<T>>,
-                      "store_unaligned(): nested dynamic array not "
+                      "load_unaligned(): nested dynamic array not "
                       "supported! Did you mean to use enoki::gather?");
 
         Derived result;
@@ -134,10 +134,10 @@ struct StaticArrayBase : ArrayBase<Value_, IsMask_, Derived_> {
         if constexpr (std::is_scalar_v<Value>) {
             memcpy(result.data(), mem, sizeof(Value) * Derived::Size);
         } else {
-            ENOKI_CHKSCALAR("store_unaligned");
+            ENOKI_CHKSCALAR("load_unaligned");
             for (size_t i = 0; i < Derived::Size; ++i)
                 result.entry(i) =
-                    load_unaligned<Value>(static_cast<Value *>(mem) + i);
+                    load_unaligned<Value>(static_cast<const Value *>(mem) + i);
         }
 
         return result;
