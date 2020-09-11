@@ -1688,7 +1688,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         return result;
     }
 
-    static DiffArray create_borrow(uint32_t index, Type&& value) {
+    static DiffArray create_borrow(uint32_t index, const Type value) {
         DiffArray result;
         result.m_index = index;
         result.m_value = std::move(value);
