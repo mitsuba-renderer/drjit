@@ -1507,7 +1507,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
 
     DiffArray copy() const {
         if constexpr (is_jit_array_v<Type>) {
-            return create(m_index, m_value.copy());
+            return create_borrow(m_index, m_value.copy());
         } else
             enoki_raise("copy(): not supported in scalar mode!");
     }
@@ -1685,6 +1685,14 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         DiffArray result;
         result.m_index = index;
         result.m_value = std::move(value);
+        return result;
+    }
+
+    static DiffArray create_borrow(uint32_t index, Type&& value) {
+        DiffArray result;
+        result.m_index = index;
+        result.m_value = std::move(value);
+        detail::ad_inc_ref<Type>(index);
         return result;
     }
 

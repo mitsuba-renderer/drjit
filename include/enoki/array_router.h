@@ -1186,7 +1186,7 @@ template <typename T> ENOKI_INLINE T replace_grad(T &a, const T &b) {
 
         return result;
     } else {
-        return T::create(b.index(), a.detach_());
+        return T::create_borrow(b.index(), a.detach_());
     }
 }
 
