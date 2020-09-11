@@ -24,6 +24,14 @@
 extern "C" {
     /// Evaluate all computation that is scheduled on the current stream
     extern ENOKI_IMPORT void jitc_eval();
+    /// Set the currently active device and stream
+    extern ENOKI_IMPORT void jitc_set_device(int32_t device, uint32_t stream);
+    /// Wait for all computation on the current stream to finish
+    extern ENOKI_IMPORT void jitc_sync_stream();
+    /// Wait for all computation on the current device to finish
+    extern ENOKI_IMPORT void jitc_sync_device();
+    /// Wait for all computation on the *all devices* to finish
+    extern ENOKI_IMPORT void jitc_sync_all_devices();
 };
 
 NAMESPACE_BEGIN(enoki)
@@ -1086,6 +1094,22 @@ template <typename... Ts>
 ENOKI_INLINE void eval(const Ts&... values) {
     if (schedule(values...))
         eval();
+}
+
+ENOKI_INLINE void set_device(int32_t device, uint32_t stream = 0) {
+    jitc_set_device(device, stream);
+}
+
+ENOKI_INLINE void sync_stream() {
+    jitc_sync_stream();
+}
+
+ENOKI_INLINE void sync_device() {
+    jitc_sync_device();
+}
+
+ENOKI_INLINE void sync_all_devices() {
+    jitc_sync_all_devices();
 }
 
 template <typename T> ENOKI_INLINE size_t width(const T &value) {
