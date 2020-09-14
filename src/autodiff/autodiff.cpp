@@ -828,7 +828,7 @@ static void ad_traverse_rev(bool retain_graph) {
             edge_id = edge.next_rev;
         }
 
-        if (v->next_rev) {
+        if (v->next_rev && v->ref_count_ext == 0) {
             /// Clear the grads at interior nodes
             v->grad = Value();
         }
@@ -889,7 +889,7 @@ static void ad_traverse_fwd(bool retain_graph) {
             edge_id = edge.next_fwd;
         }
 
-        if (v->next_fwd) {
+        if (v->next_fwd && v->ref_count_ext == 0) {
             /// Clear the grads at interior nodes
             v->grad = Value();
         }
