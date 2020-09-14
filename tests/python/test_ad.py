@@ -363,7 +363,6 @@ def test22_scatter_fwd(m):
     ref = [3.0, 0.0, 32.0, 0.0, 48.0, 0.0, 64.0, 0.0, 0.0, 0.0]
     assert ek.allclose(buf, ref)
 
-    ek.set_grad(buf, 0.0)
     ek.forward(x)
     grad = ek.grad(buf)
 
