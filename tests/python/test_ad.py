@@ -363,6 +363,7 @@ def test22_scatter_fwd(m):
     ref = [3.0, 0.0, 32.0, 0.0, 48.0, 0.0, 64.0, 0.0, 0.0, 0.0]
     assert ek.allclose(buf, ref)
 
+    ek.set_grad(buf, 0.0)
     ek.forward(x)
     grad = ek.grad(buf)
 
@@ -671,5 +672,5 @@ def test41_replace_grad(m):
     z2 = z*z
     ek.backward(z2)
     assert ek.allclose(z2, [1, 16, 81])
-    assert ek.width(ek.grad(x)) == 0
+    assert ek.grad(x) is None
     assert ek.allclose(ek.grad(y), [12, 32, 36])
