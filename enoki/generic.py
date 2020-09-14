@@ -1199,11 +1199,18 @@ def grad_(a):
 
     t = _ek.nondiff_array_t(type(a))
     result = t.empty_(len(a) if a.Size == Dynamic else 0)
+    has_grad = False
     for i in range(len(a)):
         g = a[i].grad_()
-        if g is None:
-            return None
-        result[i] = g
+        if g is None or len(g) == 0:
+            result[i] = 0
+        else:
+            result[i] = g
+            has_grad = True
+
+    if not has_grad:
+        return None
+
     return result
 
 
