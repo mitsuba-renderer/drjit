@@ -1456,6 +1456,13 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         scatter_add(dst, m_value, offset.m_value, mask.m_value);
     }
 
+    auto compress_() const {
+        if constexpr (!is_mask_v<Type>)
+            enoki_raise("compress_(): invalid operand type!");
+        else
+            return uint32_array_t<ArrayType>::create(0, compress(m_value));
+    }
+
     //! @}
     // -----------------------------------------------------------------------
 

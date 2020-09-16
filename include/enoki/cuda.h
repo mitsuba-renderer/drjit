@@ -1086,6 +1086,21 @@ public:
         }
     }
 
+    CUDAArray<uint32_t> compress_() const {
+        if constexpr (!jitc_is_mask(Type)) {
+            enoki_raise("Unsupported operand type");
+        } else {
+            uint32_t size_in = (uint32_t) size();
+            uint32_t *indices = (uint32_t *) jitc_malloc(
+                AllocType::Device, size_in * sizeof(uint32_t));
+
+            eval_();
+            uint32_t size_out = jitc_compress((const uint8_t *) data(), size_in, indices);
+            return CUDAArray<uint32_t>::steal(
+                jitc_var_map_mem(VarType::UInt32, 1, indices, size_out, 1));
+        }
+    }
+
     CUDAArray copy() const { return steal(jitc_var_copy_var(m_index)); }
 
     bool schedule_() const { return jitc_var_schedule(m_index) != 0; }

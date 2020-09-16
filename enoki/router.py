@@ -1503,6 +1503,12 @@ def shuffle(perm, value):
     return result
 
 
+def compress(mask):
+    if not _ek.is_mask_v(mask) or not mask.IsDynamic:
+        raise Exception("compress(): incompatible input!")
+    return mask.compress_()
+
+
 def all(a):
     if _var_is_enoki(a):
         if a.Type != VarType.Bool:

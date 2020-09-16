@@ -296,7 +296,11 @@ auto bind_full(py::class_<Array, EnokiHolder<Array>> &cls,
                         ek::scatter<false>(target, value, index, mask);
                 });
 
-        if constexpr (!Array::IsMask) {
+        if constexpr (Array::IsMask) {
+            cls.def("compress_", [](const Array &source) {
+                return ek::compress(source);
+            });
+        } else {
             cls.def("scatter_add_",
                     [](const Array& value, Array& target, const UInt32& index, const Mask& mask) {
                         ek::scatter_add(target, value, index, mask);

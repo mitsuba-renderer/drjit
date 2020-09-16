@@ -589,6 +589,12 @@ value_t<Array> extract(const Array &array, const Mask &mask) {
     return array.extract_(mask);
 }
 
+template <typename Mask>
+uint32_array_t<array_t<Mask>> compress(const Mask &mask) {
+    static_assert(is_dynamic_array_v<Mask>);
+    return mask.compress_();
+}
+
 //! @}
 // -----------------------------------------------------------------------
 
