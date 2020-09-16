@@ -1820,15 +1820,8 @@ def binary_search(start, end, pred):
         middle = (start + end) >> 1
 
         cond = pred(middle)
-
-        if isinstance(cond, bool):
-            if cond:
-                start = _ek.min(middle + 1, end)
-            else:
-                cond = middle
-        else:
-            start = _ek.select(cond, _ek.min(middle + 1, end), start)
-            end = _ek.select(cond, end, middle)
+        start = _ek.select(cond, _ek.min(middle + 1, end), start)
+        end = _ek.select(cond, end, middle)
 
     return start
 
