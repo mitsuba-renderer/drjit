@@ -76,6 +76,8 @@ namespace detail {
                     void* ptr = (void*)self.entry(0);
                     if (ptr)
                         result = func(ptr, args...);
+                    else
+                        result = zero<Result>();
                 } else {
                     enoki::schedule(args...);
                     auto [buckets, size] = self.vcall_();
