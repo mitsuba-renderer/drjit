@@ -199,7 +199,7 @@ def polar_decomp(a, it=10):
         s1, s2 = gamma * .5, (_ek.rcp(gamma) * .5)
         for i in range(a.Size):
             q[i] = _ek.fmadd(q[i], s1, qi[i] * s2)
-    return q, transpose(q) * a
+    return q, transpose(q) @ a
 
 
 def quat_to_matrix(q, size = 4):
@@ -320,7 +320,7 @@ def transform_compose(s, q, t):
     module = _modules.get(q.__module__)
     Matrix4f = getattr(module, name)
 
-    result = Matrix4f(quat_to_matrix(q, 3) * s)
+    result = Matrix4f(quat_to_matrix(q, 3) @ s)
     result[3] = [t[0], t[1], t[2], 1.0]
 
     return result
