@@ -628,6 +628,14 @@ def op_rmul(a, b):
     return b.mul_(a)
 
 
+def op_matmul(a, b):
+    if type(a) is not type(b) \
+       and not (isinstance(b, int) or (_ek.is_floating_point_v(a) and isinstance(b, float))) \
+       and not (_ek.is_matrix_v(a) and _ek.is_vector_v(b)):
+        a, b = _var_promote(a, b)
+    return a.matmul_(b)
+
+
 def op_imul(a, b):
     if type(a) is not type(b):
         a, b = _var_promote(a, b)

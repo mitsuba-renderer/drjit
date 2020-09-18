@@ -214,11 +214,7 @@ def mul_(a0, a1):
                 accum = _ek.fmadd(a0[j], value if idx > 0 else -value, accum)
             ar[i] = accum
     elif a0.IsMatrix:
-        for j in range(a0.Size):
-            accum = a0[0] * _ek.full(a0.Value, a1[0, j])
-            for i in range(1, a0.Size):
-                accum = _ek.fmadd(a0[i], _ek.full(a0.Value, a1[i, j]), accum)
-            ar[j] = accum
+        raise Exception("mul(): please use the matrix multiplication operator '@' instead.")
     else:
         raise Exception("mul(): unsupported array type!")
     return ar
@@ -234,6 +230,35 @@ def imul_(a0, a1):
     else:
         a0.assign_(a0 * a1)
     return a0
+
+
+def matmul_(a0, a1):
+    if not a0.IsMatrix:
+        raise Exception("matmul(): requires a matrix-valued left hand side!")
+
+    if isinstance(a1, int) or isinstance(a1, float):
+        # Avoid type promotion in scalars multiplication, which would
+        # be costly for special types (matrices, quaternions, etc.)
+        sr = len(a0)
+        ar = a0.empty_(sr if a0.Size == Dynamic else 0)
+        for i in range(len(a0)):
+            ar[i] = a0[i] * a1
+        return ar
+    elif a1.IsVector and a0.Size == a1.Size:
+        ar = a0[0] * a1[0]
+        for i in range(a1.Size):
+            ar = _ek.fmadd(a0[i], a1[i], ar)
+        return ar
+    elif a1.IsMatrix:
+        ar, sr = _check2(a0, a1)
+        for j in range(a0.Size):
+            accum = a0[0] * _ek.full(a0.Value, a1[0, j])
+            for i in range(1, a0.Size):
+                accum = _ek.fmadd(a0[i], _ek.full(a0.Value, a1[i, j]), accum)
+            ar[j] = accum
+        return ar
+    else:
+        raise Exception("matmul(): unsupported right hand side!")
 
 
 def truediv_(a0, a1):
