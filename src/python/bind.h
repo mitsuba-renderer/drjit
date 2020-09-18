@@ -404,6 +404,7 @@ auto bind_full(py::class_<Array, EnokiHolder<Array>> &cls,
                     return py::cast(a.grad_());
             });
             cls.def("set_grad_", &Array::set_grad_);
+            cls.def("index", &Array::index);
             cls.def("set_grad_enabled_", [](Array *a, bool value) {
                 a->set_grad_enabled_(value);
                 return a;
