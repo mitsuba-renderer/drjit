@@ -60,6 +60,49 @@ template <typename Array> Array repeat(const Array &array, size_t count) {
     }
 }
 
+template <typename Array> auto ravel(const Array &array) {
+    if constexpr (array_depth_v<Array> <= 1) {
+        return array;
+    } else {
+        using Result = leaf_array_t<Array>;
+        using Index = uint32_array_t<Result>;
+
+        size_t shape[array_depth_v<Array> + 1 /* avoid zero-sized array */ ] { };
+        detail::put_shape(array, shape);
+
+        size_t size = shape[0];
+        for (size_t i = 1; i < array_depth_v<Array>; ++i)
+            size *= shape[i];
+
+        Result result = empty<Result>(size);
+        scatter(result, array,
+                arange<Index>(shape[array_depth_v<Array> - 1]));
+
+        return result;
+    }
+}
+
+template <typename Target, typename Source> Target unravel(const Source &source) {
+    static_assert(array_depth_v<Source> == 1, "Expected a flat array as input!");
+    static_assert(array_depth_v<Target> > 1, "Expected a nested array as output!");
+
+    Target target;
+    size_t shape[array_depth_v<Target> + 1 /* avoid zero-sized array */ ] { };
+    detail::put_shape(target, shape);
+
+    size_t source_size = source.size(), size = shape[0];
+    for (size_t i = 1; i < array_depth_v<Target> - 1; ++i)
+        size *= shape[i];
+
+    if (size == 0 || source_size % size != 0)
+        enoki_raise("unravel(): input array length not divisible by stride");
+
+    using Index = uint32_array_t<Source>;
+    Index indices = arange<Index>(source_size / size);
+
+    return gather<Target>(source, indices);
+}
+
 template <typename T> std::pair<T, T> meshgrid(const T &x, const T &y) {
     static_assert(array_depth_v<T> == 1 && is_dynamic_array_v<T>,
                   "meshgrid(): requires two 1D dynamic Enoki arrays as input!");

@@ -1309,11 +1309,11 @@ ENOKI_INLINE void enqueue() { }
 
 template <typename T> ENOKI_INLINE const char *graphviz(const T& value, bool reverse = true) {
     enqueue(value);
-    return detail::extract_diff_array_t<T>::graphviz_(reverse);
+    return leaf_array_t<T>::graphviz_(reverse);
 }
 
 template <typename T> ENOKI_INLINE void traverse(bool reverse = true, bool retain_graph = false) {
-    detail::extract_diff_array_t<T>::traverse_(reverse, retain_graph);
+    leaf_array_t<T>::traverse_(reverse, retain_graph);
 }
 
 template <typename T> ENOKI_INLINE void backward(T& value, bool retain_graph = false) {

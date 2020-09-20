@@ -272,22 +272,18 @@ template <typename T> using array_t = typename detail::array<T>::type;
 // -----------------------------------------------------------------------
 
 namespace detail {
-    template <typename T, typename = int> struct extract_diff_array {
-        using type = void;
-    };
-
-    /// Get the differentiable array underlying a potentially nested array
-    template <typename T>
-    using extract_diff_array_t = typename detail::extract_diff_array<T>::type;
-
-    template <typename T>
-    struct extract_diff_array<T, enable_if_t<is_diff_array_v<value_t<T>>>> {
-        using type = extract_diff_array_t<value_t<T>>;
+    template <typename T, typename = int> struct leaf_array {
+        using type = T;
     };
 
     template <typename T>
-    struct extract_diff_array<T, enable_if_t<is_diff_array_v<T> &&
-                                            !is_diff_array_v<value_t<T>>>> {
+    struct leaf_array<T, enable_if_t<is_array_v<value_t<T>>>> {
+        using type = typename leaf_array<value_t<T>>::type;
+    };
+
+    template <typename T>
+    struct leaf_array<T, enable_if_t<is_array_v<T> &&
+                                    !is_array_v<value_t<T>>>> {
         using type = T;
     };
 
@@ -321,6 +317,10 @@ using diff_array_t = typename detail::diff_array<T>::type;
 /// Convert a differentiable array type into a non-differentiable one
 template <typename T>
 using detached_t = typename detail::detached<T>::type;
+
+/// Get the lowest-level array type underlying a potentially nested array
+template <typename T>
+using leaf_array_t = typename detail::leaf_array<T>::type;
 
 //! @}
 // -----------------------------------------------------------------------

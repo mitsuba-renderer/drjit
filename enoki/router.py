@@ -562,7 +562,7 @@ def unravel(target_class, array):
         raise Exception('unravel(): input array length must be '
                         'divisible by %i!' % size)
 
-    indices = arange(_ek.int32_array_t(type(array)), len(array) // size)
+    indices = arange(_ek.uint32_array_t(type(array)), len(array) // size)
     return gather(target_class, array, indices)
 
 # -------------------------------------------------------------------
