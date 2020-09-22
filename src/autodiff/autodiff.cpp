@@ -641,10 +641,13 @@ template <typename Value> struct GatherEdge : Special {
         Value &source_grad = (Value &) source->grad;
         uint32_t size = source->size;
 
-        if (!source_grad.valid())
-            source_grad = zero<Value>(size).copy(); // avoid issues with CSA
-        else if ((uint32_t) source_grad.size() != size)
+        if (!source_grad.valid()) {
+            source_grad = zero<Value>(size);
+            if (size == 1) // avoid issues with CSA
+                source_grad = source_grad.copy();
+        } else if ((uint32_t) source_grad.size() != size) {
             source_grad.resize(size);
+        }
 
         if (permute)
             enoki::scatter(source_grad, target->grad, offset, mask);
@@ -705,10 +708,13 @@ template <typename Value> struct ScatterEdge : Special {
         Value &target_grad = (Value &) target->grad;
         uint32_t size = target->size;
 
-        if (!target_grad.valid())
-            target_grad = zero<Value>(size).copy(); // avoid issues with CSA
-        else if ((uint32_t) target_grad.size() != size)
+        if (!target_grad.valid()) {
+            target_grad = zero<Value>(size);
+            if (size == 1) // avoid issues with CSA
+                target_grad = target_grad.copy();
+        } else if ((uint32_t) target_grad.size() != size) {
             target_grad.resize(size);
+        }
 
         if (scatter_add)
             enoki::scatter_add(target_grad, source->grad, offset, mask);
