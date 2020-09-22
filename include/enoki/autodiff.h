@@ -1,5 +1,5 @@
 /*
-    enoki/autodiff.h -- Forward/reverse-mode automatic differentiation wrapper
+    enoki/autodiff.h -- Forward/backward-mode automatic differentiation wrapper
 
     Enoki is a C++ template library for efficient vectorization and
     differentiation of numerical kernels on modern processor architectures.
@@ -21,7 +21,7 @@ NAMESPACE_BEGIN(enoki)
 /// Custom graph edge for implementing custom differentiable operations
 template <typename Type> struct CustomEdge {
     virtual Type forward(const Type &value) = 0;
-    virtual Type reverse(const Type &value) = 0;
+    virtual Type backward(const Type &value) = 0;
     virtual ~CustomEdge();
 };
 
@@ -50,8 +50,8 @@ template <typename Value> void ad_set_grad(uint32_t index, const Value &v);
 /// Enqueue a variable for a subsequent command (ad_traverse() / ad_graphviz())
 template <typename Value> void ad_enqueue(uint32_t index);
 
-/// Perform a forward or reverse mode traversal of queued variables
-template <typename Value> void ad_traverse(bool reverse, bool retain_graph);
+/// Perform a forward or backward mode traversal of queued variables
+template <typename Value> void ad_traverse(bool backward, bool retain_graph);
 
 /// Label a variable (useful for debugging via graphviz etc.)
 template <typename Value> void ad_set_label(uint32_t index, const char *);
@@ -60,7 +60,7 @@ template <typename Value> void ad_set_label(uint32_t index, const char *);
 template <typename Value> const char *ad_label(uint32_t index);
 
 /// Generate a graphviz plot of the subgraph specified via ad_schedule()
-template <typename Value> const char *ad_graphviz(bool reverse);
+template <typename Value> const char *ad_graphviz(bool backward);
 
 /// Special case of ad_new: create a node for a select() statement.
 template <typename Value, typename Mask>
@@ -1590,10 +1590,10 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             enoki::detail::ad_enqueue<Type>(m_index);
     }
 
-    static void traverse_(bool reverse, bool retain_graph) {
-        ENOKI_MARK_USED(reverse);
+    static void traverse_(bool backward, bool retain_graph) {
+        ENOKI_MARK_USED(backward);
         if constexpr (IsEnabled)
-            enoki::detail::ad_traverse<Type>(reverse, retain_graph);
+            enoki::detail::ad_traverse<Type>(backward, retain_graph);
     }
 
     void set_label_(const char *label) const {
@@ -1613,9 +1613,9 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         return nullptr;
     }
 
-    static const char *graphviz_(bool reverse) {
+    static const char *graphviz_(bool backward) {
         if constexpr (IsEnabled)
-            return enoki::detail::ad_graphviz<Type>(reverse);
+            return enoki::detail::ad_graphviz<Type>(backward);
     }
 
     const Type detach_() const {

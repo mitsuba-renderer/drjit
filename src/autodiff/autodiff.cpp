@@ -47,8 +47,8 @@ struct Variable;
 
 // Special edge (scatter, gather, scatter_add, block_sum, etc.)
 struct Special {
-    virtual void reverse(Variable *source, const Variable *target) const {
-        throw std::runtime_error("Special::reverse(): not implemented!");
+    virtual void backward(Variable *source, const Variable *target) const {
+        throw std::runtime_error("Special::backward(): not implemented!");
     }
 
     virtual void forward(const Variable *source, Variable *target) const {
@@ -69,7 +69,7 @@ struct Edge {
     /// Links to the next forward edge
     uint32_t next_fwd;
 
-    /// Links to the next reverse edge
+    /// Links to the next backward edge
     uint32_t next_rev : 31;
 
     /// Marks the edge status during topo-sort
@@ -126,7 +126,7 @@ struct Variable {
     /// Links to the first forward edge at this node
     uint32_t next_fwd;
 
-    /// Links to the first reverse edge at this node
+    /// Links to the first backward edge at this node
     uint32_t next_rev;
 
     /// Number of entries that we expect for the gradient
@@ -369,7 +369,7 @@ static void ad_toposort_fwd() {
     }
 }
 
-/// Kahn-style topological sort in reverse mode
+/// Kahn-style topological sort in backward mode
 static void ad_toposort_rev() {
     state.todo.clear();
 
@@ -439,7 +439,7 @@ static std::pair<uint32_t, Variable *> ad_var_new(const char *label, uint32_t si
 
 static void ad_free(uint32_t index, Variable *v);
 
-/// Clear reverse edges of the given variable and decrease int. ref. counts
+/// Clear backward edges of the given variable and decrease int. ref. counts
 static void ad_free_edges(uint32_t index, Variable *v) {
     uint32_t edge_id = v->next_rev;
     ad_log(Trace, "ad_free_edges(): freeing edges of vertex %u", index);
@@ -580,7 +580,7 @@ uint32_t ad_new(const char *label, uint32_t size, uint32_t op_count,
 template <typename Value> struct MaskEdge : Special {
     MaskEdge(const Mask &mask, bool negate) : mask(mask), negate(negate) { }
 
-    void reverse(Variable *source, const Variable *target) const override {
+    void backward(Variable *source, const Variable *target) const override {
         if (!negate)
             source->accum(detail::and_(target->grad, mask), target->size);
         else
@@ -604,8 +604,8 @@ template <typename Value> struct CustomWrapper : Special {
     CustomWrapper(CustomEdge<Value>* impl) : impl(impl) { }
     ~CustomWrapper() { delete impl; }
 
-    void reverse(Variable *source, const Variable *target) const override {
-        source->accum(impl->reverse(target->grad), target->size);
+    void backward(Variable *source, const Variable *target) const override {
+        source->accum(impl->backward(target->grad), target->size);
     }
 
     void forward(const Variable *source, Variable *target) const override {
@@ -652,7 +652,7 @@ template <typename Value> struct GatherEdge : Special {
     GatherEdge(const Index &offset, const Mask &mask, bool permute)
         : offset(offset), mask(mask), permute(permute) { }
 
-    void reverse(Variable *source, const Variable *target) const override {
+    void backward(Variable *source, const Variable *target) const override {
         Value &source_grad = (Value &) source->grad;
         uint32_t size = source->size;
 
@@ -714,7 +714,7 @@ template <typename Value> struct ScatterEdge : Special {
     ScatterEdge(const Index &offset, const Mask &mask, bool scatter_add)
         : offset(offset), mask(mask), scatter_add(scatter_add) { }
 
-    void reverse(Variable *source, const Variable *target) const override {
+    void backward(Variable *source, const Variable *target) const override {
         source->accum(enoki::gather<Value>(target->grad, offset, mask),
                       asize(offset));
     }
@@ -833,7 +833,7 @@ static void ad_traverse_rev(bool retain_graph) {
             Variable *v2 = state[edge.source];
 
             if (unlikely(edge.special)) {
-                edge.special->reverse(v2, v);
+                edge.special->backward(v2, v);
 
                 if (!retain_graph) {
                     delete edge.special;
@@ -922,10 +922,10 @@ static void ad_traverse_fwd(bool retain_graph) {
     ad_log(Debug, "ad_traverse_fwd(): done.");
 }
 
-template <typename Value> const char *ad_graphviz(bool reverse) {
+template <typename Value> const char *ad_graphviz(bool backward) {
     std::lock_guard<Mutex> guard(state.mutex);
 
-    if (reverse)
+    if (backward)
         ad_toposort_rev();
     else
         ad_toposort_fwd();
@@ -1085,15 +1085,15 @@ void ad_add_edge(uint32_t source_idx, uint32_t target_idx,
     target->next_rev = edge_index_new;
 }
 
-template <typename T> void ad_traverse(bool reverse, bool retain_graph) {
+template <typename T> void ad_traverse(bool backward, bool retain_graph) {
     std::lock_guard<Mutex> guard(state.mutex);
 
-    if (reverse)
+    if (backward)
         ad_toposort_rev();
     else
         ad_toposort_fwd();
 
-    if (reverse)
+    if (backward)
         ad_traverse_rev(retain_graph);
     else
         ad_traverse_fwd(retain_graph);
