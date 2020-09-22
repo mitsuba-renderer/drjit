@@ -97,22 +97,18 @@ struct StringBuffer {
     StringBuffer &put(T ptr) {
         size_t value = size_t(ptr);
         const char *num = "0123456789abcdef";
-        char buf[9];
-        int i = 9;
+        char buf[18];
+        int i = 18;
 
         do {
             buf[--i] = num[value % 16];
             value /= 16;
         } while (value);
 
-        do {
-            buf[--i] = '0';
-        } while (i > 1);
+        buf[--i] = 'x';
+        buf[--i] = '0';
 
-        buf[0] = '0';
-        buf[1] = 'x';
-
-        return put_str(buf, 9);
+        return put_str(buf + i, 18 - i);
     }
 
     /// Append an integral value
