@@ -47,8 +47,8 @@ struct Variable;
 
 // Special edge (scatter, gather, scatter_add, block_sum, etc.)
 struct Special {
-    virtual void backward(Variable *source, const Variable *target) const {
-        throw std::runtime_error("Special::backward(): not implemented!");
+    virtual void reverse(Variable *source, const Variable *target) const {
+        throw std::runtime_error("Special::reverse(): not implemented!");
     }
 
     virtual void forward(const Variable *source, Variable *target) const {
@@ -580,7 +580,7 @@ uint32_t ad_new(const char *label, uint32_t size, uint32_t op_count,
 template <typename Value> struct MaskEdge : Special {
     MaskEdge(const Mask &mask, bool negate) : mask(mask), negate(negate) { }
 
-    void backward(Variable *source, const Variable *target) const override {
+    void reverse(Variable *source, const Variable *target) const override {
         if (!negate)
             source->accum(detail::and_(target->grad, mask), target->size);
         else
@@ -596,6 +596,21 @@ template <typename Value> struct MaskEdge : Special {
 
     Mask mask;
     bool negate;
+};
+
+template <typename Value> struct CustomWrapper : Special {
+    CustomEdge<Value> *impl;
+
+    CustomWrapper(CustomEdge<Value>* impl) : impl(impl) { }
+    ~CustomWrapper() { delete impl; }
+
+    void reverse(Variable *source, const Variable *target) const override {
+        source->accum(impl->reverse(target->grad), target->size);
+    }
+
+    void forward(const Variable *source, Variable *target) const override {
+        target->accum(impl->forward(source->grad), source->size);
+    }
 };
 
 template <typename Value, typename Mask>
@@ -637,7 +652,7 @@ template <typename Value> struct GatherEdge : Special {
     GatherEdge(const Index &offset, const Mask &mask, bool permute)
         : offset(offset), mask(mask), permute(permute) { }
 
-    void backward(Variable *source, const Variable *target) const override {
+    void reverse(Variable *source, const Variable *target) const override {
         Value &source_grad = (Value &) source->grad;
         uint32_t size = source->size;
 
@@ -699,7 +714,7 @@ template <typename Value> struct ScatterEdge : Special {
     ScatterEdge(const Index &offset, const Mask &mask, bool scatter_add)
         : offset(offset), mask(mask), scatter_add(scatter_add) { }
 
-    void backward(Variable *source, const Variable *target) const override {
+    void reverse(Variable *source, const Variable *target) const override {
         source->accum(enoki::gather<Value>(target->grad, offset, mask),
                       asize(offset));
     }
@@ -818,7 +833,7 @@ static void ad_traverse_rev(bool retain_graph) {
             Variable *v2 = state[edge.source];
 
             if (unlikely(edge.special)) {
-                edge.special->backward(v2, v);
+                edge.special->reverse(v2, v);
 
                 if (!retain_graph) {
                     delete edge.special;
@@ -1049,6 +1064,27 @@ template <typename T> const char *ad_label(uint32_t index) {
     return state[index]->label;
 }
 
+template <typename T>
+void ad_add_edge(uint32_t source_idx, uint32_t target_idx,
+                 CustomEdge<T> *custom) {
+    std::lock_guard<Mutex> guard(state.mutex);
+
+    Variable *source = state[source_idx],
+             *target = state[target_idx];
+
+    uint32_t edge_index_new = ad_edge_new();
+    Edge &edge = state.edges[edge_index_new];
+    edge.source = source_idx;
+    edge.target = target_idx;
+    edge.special = new CustomWrapper(custom);
+    edge.next_fwd = source->next_fwd;
+    edge.next_rev = target->next_rev;
+
+    source->next_fwd = edge_index_new;
+    source->ref_count_int++;
+    target->next_rev = edge_index_new;
+}
+
 template <typename T> void ad_traverse(bool reverse, bool retain_graph) {
     std::lock_guard<Mutex> guard(state.mutex);
 
@@ -1081,9 +1117,13 @@ template ENOKI_EXPORT uint32_t ad_new_gather<Value, Mask, Index>(
 template ENOKI_EXPORT uint32_t
 ad_new_scatter<Value, Mask, Index>(const char *, uint32_t, uint32_t, uint32_t,
                                    const Index &, const Mask &, bool, bool);
+template ENOKI_EXPORT void ad_add_edge<Value>(uint32_t, uint32_t,
+                                              CustomEdge<Value> *);
 
 NAMESPACE_END(detail)
 
+template<> CustomEdge<detail::Value>::~CustomEdge() { }
 template struct ENOKI_EXPORT DiffArray<detail::Value>;
+template struct ENOKI_EXPORT CustomEdge<detail::Value>;
 
 NAMESPACE_END(enoki)

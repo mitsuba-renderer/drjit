@@ -17,6 +17,14 @@
 #include <enoki-jit/jit.h>
 
 NAMESPACE_BEGIN(enoki)
+
+/// Custom graph edge for implementing custom differentiable operations
+template <typename Type> struct CustomEdge {
+    virtual Type forward(const Type &value) = 0;
+    virtual Type reverse(const Type &value) = 0;
+    virtual ~CustomEdge();
+};
+
 NAMESPACE_BEGIN(detail)
 
 // -----------------------------------------------------------------------
@@ -70,6 +78,10 @@ template <typename Value, typename Mask, typename Index>
 uint32_t ad_new_scatter(const char *label, uint32_t size, uint32_t src_index,
                         uint32_t dst_index, const Index &offset,
                         const Mask &mask, bool permute, bool scatter_add);
+
+/// Register a custom/user-provided differentiable operation
+template <typename Value>
+void ad_add_edge(uint32_t src_index, uint32_t dst_index, CustomEdge<Value> *edge);
 
 //! @}
 // -----------------------------------------------------------------------
@@ -1718,13 +1730,25 @@ protected:
     uint32_t m_index = 0;
 };
 
+template <typename Array>
+void add_edge(const Array &source, const Array &target, CustomEdge<typename Array::Type> *edge) {
+    if constexpr (Array::IsEnabled) {
+        if (!source.index() || !target.index())
+            enoki_raise("Array::add_edge(): source or destination operand are non-differentiable");
+        detail::ad_add_edge<typename Array::Type>(source.index(), target.index(), edge);
+    } else {
+        enoki_raise("Array::add_edge(): gradients not enabled for this type!");
+    }
+}
+
 #if defined(ENOKI_BUILD_AUTODIFF)
 #  define ENOKI_AUTODIFF_EXPORT
 #  define ENOKI_AUTODIFF_EXPORT_TEMPLATE(T)
 #else
 #  define ENOKI_AUTODIFF_EXPORT ENOKI_IMPORT
-#define ENOKI_AUTODIFF_EXPORT_TEMPLATE(T)                                      \
-    extern template ENOKI_AUTODIFF_EXPORT struct DiffArray<T>;
+#  define ENOKI_AUTODIFF_EXPORT_TEMPLATE(T)                                    \
+     extern template ENOKI_AUTODIFF_EXPORT struct DiffArray<T>;                \
+     extern template ENOKI_AUTODIFF_EXPORT struct CustomEdge<T>;
 #endif
 
 #define ENOKI_DECLARE_EXTERN_TEMPLATE(T, Mask, Index)                          \
@@ -1754,6 +1778,8 @@ protected:
     extern template ENOKI_AUTODIFF_EXPORT uint32_t                             \
     ad_new_scatter<T, Mask, Index>(const char *, uint32_t, uint32_t, uint32_t, \
                                    const Index &, const Mask &, bool, bool);   \
+    extern template ENOKI_AUTODIFF_EXPORT void ad_add_edge<T>(uint32_t,        \
+            uint32_t, CustomEdge<T>*);                                         \
     }
 
 ENOKI_DECLARE_EXTERN_TEMPLATE(float,  bool, uint32_t)

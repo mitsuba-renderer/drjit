@@ -152,4 +152,3 @@ namespace enoki {
         return buffer.get();
     }
 }
-
