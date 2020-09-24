@@ -1421,60 +1421,49 @@ def export_(a, migrate_to_host, version):
     shape = tuple(reversed(shape))
 
     if not a.IsJIT:
-        # Array is already contiguous in memory -- document its structure
-
-        # Fortran-style strides
+        # F-style strides
         temp, strides = a.Type.Size, [0] * ndim
         for i in range(ndim):
             strides[i] = temp
             temp *= shape[i]
 
+        # Array is already contiguous in memory -- document its structure
         return {
             'shape': shape,
             'strides': tuple(strides),
             'typestr': '<' + a.Type.NumPy,
             'data': (a.data_(), False),
             'version': version,
-            'device': -1
+            'device': -1,
+            'owner': a
         }
     else:
-        # JIT array -- requires some extra processing. Cache the
-        # result in case this function is called multiple times
-        cache = _ek.detail.get_cache(a)
-        b = _ek.detach(a) if a.IsDiff else a
-        key = (b.index_(), migrate_to_host, version)
-        record = cache.get(key, None)
-        if record is not None:
-            return record
-
-        b = _ek.ravel(b)
-        if b is a:
-            b = type(a)(b)
-
-        if b.IsCUDA and migrate_to_host:
-            b.migrate_(_ek.AllocType.Host)
-
         # C-style strides
         temp, strides = a.Type.Size, [0] * ndim
         for i in reversed(range(ndim)):
             strides[i] = temp
             temp *= shape[i]
 
+        # JIT array -- requires extra transformations
+        b = _ek.ravel(_ek.detach(a) if a.IsDiff else a)
+        _ek.eval(b)
+
+        if b.IsCUDA and migrate_to_host:
+            if b is a:
+                b = type(a)(b)
+            b.migrate_(_ek.AllocType.Host)
+            _ek.sync_stream()
+
         record = {
             'shape': shape,
             'strides': tuple(strides),
-            'typestr': a.Type.NumPy,
+            'typestr': '<' + a.Type.NumPy,
             'data': (b.data_(), False),
             'version': version,
-            'device': _ek.device(b)
+            'device': _ek.device(b),
+            'owner': b
         }
 
-        if a is not b:
-            record['owner'] = b
-
-        cache[key] = record
-        _ek.eval()
-        _ek.sync_stream()
         return record
 
 
@@ -1496,7 +1485,7 @@ def dlpack(a):
     isize = a.Type.Size
     strides = tuple(k // isize for k in struct['strides'])
     return _ek.detail.to_dlpack(
-        owner=a,
+        owner=struct['owner'],
         data=struct['data'][0],
         type=a.Type,
         device=struct['device'],

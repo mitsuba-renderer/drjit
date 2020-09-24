@@ -94,7 +94,7 @@ def test_matrix_numpy_construction():
     assert ek.allclose(m_ek1, m_np)
 
 
-def test_matrix_3__to_4_conversion():
+def test_matrix_3_to_4_conversion():
     m3 = ek.scalar.Matrix3f(*range(1, 10))
     m4 = ek.scalar.Matrix4f(m3)
 

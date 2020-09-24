@@ -55,7 +55,7 @@ auto bind_type(py::module &m, bool scalar_mode = false) {
     py::object type = py::cast(Type),
                name = array_name(prefix, type, shape, scalar_mode);
 
-    auto cls = py::class_<Array, EnokiHolder<Array>>(
+    auto cls = py::class_<Array>(
         m, PyUnicode_AsUTF8AndSize(name.ptr(), nullptr), array_base);
 
     array_configure(cls, shape, type, py::handle((PyObject *) value_obj));
@@ -65,7 +65,7 @@ auto bind_type(py::module &m, bool scalar_mode = false) {
 }
 
 template <typename Array>
-void bind_basic_methods(py::class_<Array, EnokiHolder<Array>> &cls) {
+void bind_basic_methods(py::class_<Array> &cls) {
     using Value = std::conditional_t<Array::IsMask, ek::mask_t<ek::value_t<Array>>,
                                      ek::value_t<Array>>;
     cls.def("entry_", [](const Array &a, size_t i) -> Value { return a.entry(i); })
@@ -87,7 +87,7 @@ void bind_basic_methods(py::class_<Array, EnokiHolder<Array>> &cls) {
 }
 
 template <typename Array>
-void bind_generic_constructor(py::class_<Array, EnokiHolder<Array>> &cls) {
+void bind_generic_constructor(py::class_<Array> &cls) {
     cls.def(
         "__init__",
         [](py::detail::value_and_holder &v_h, py::args args) {
@@ -104,8 +104,7 @@ template <typename Array> auto bind(py::module &m, bool scalar_mode = false) {
 };
 
 template <typename Array>
-auto bind_full(py::class_<Array, EnokiHolder<Array>> &cls,
-               bool scalar_mode = false) {
+auto bind_full(py::class_<Array> &cls, bool scalar_mode = false) {
     static_assert(ek::array_depth_v<Array> == 1);
     bind_basic_methods(cls);
 
