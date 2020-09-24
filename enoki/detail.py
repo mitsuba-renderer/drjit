@@ -202,11 +202,11 @@ def array_init(self, args):
                     s2 = o.shape
 
                 if o.dtype == np.complex64:
-                    o = o.view(np.float32)
                     s2 = (*s2, 2)
+                    o = o.view(np.float32).reshape(s2)
                 elif o.dtype == np.complex128:
-                    o = o.view(np.float64)
                     s2 = (*s2, 2)
+                    o = o.view(np.float64).reshape(s2)
 
                 if o.dtype != self.Type.NumPy:
                     o = o.astype(self.Type.NumPy)
