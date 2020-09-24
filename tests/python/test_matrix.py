@@ -10,7 +10,7 @@ M = M4
 
 def test01_init_broadcast_mul():
     m = M(*range(1, 17))
-    m2 = m * m + 1
+    m2 = m @ m + 1
     m2[1, 2] = 3
     assert m2[1, 2] == 3
 
@@ -84,8 +84,8 @@ def test07_inverse(M):
   for i in range(100):
       m1 = np.float32(np.random.normal(size=list(reversed(M.Shape))))
       m2 = M(m1)
-      inv1 = M(np.linalg.inv(m1))*m2 - ek.identity(M)
-      inv2 = ek.inverse(m2)*m2 - ek.identity(M)
+      inv1 = M(np.linalg.inv(m1))@m2 - ek.identity(M)
+      inv2 = ek.inverse(m2)@m2 - ek.identity(M)
       assert ek.allclose(inv1, 0, atol=1e-3)
       assert ek.allclose(inv2, 0, atol=1e-3)
 
@@ -93,8 +93,8 @@ def test07_inverse(M):
 def test08_polar():
     m = M(*range(1, 17)) + ek.identity(M)
     q, r = ek.polar_decomp(m)
-    assert ek.allclose(q*r, m)
-    assert ek.allclose(q*ek.transpose(q), ek.identity(M), atol=1e-6)
+    assert ek.allclose(q@r, m)
+    assert ek.allclose(q@ek.transpose(q), ek.identity(M), atol=1e-6)
 
 
 def test09_transform_decompose():
@@ -107,7 +107,7 @@ def test09_transform_decompose():
     assert ek.allclose(m, ek.transform_compose(s, q, t))
 
     q2 = ek.rotate(ek.scalar.Quaternion4f, ek.scalar.Array3f(0, 0, 1), 15.0)
-    m *= ek.quat_to_matrix(q2)
+    m @= ek.quat_to_matrix(q2)
     s, q, t = ek.transform_decompose(m)
 
     assert ek.allclose(q, q2)
