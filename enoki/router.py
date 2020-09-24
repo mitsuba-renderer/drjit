@@ -95,7 +95,10 @@ def _var_promote(*args):
         if vt[i] != vt[j]:
             vt[i] = _var_type(args[i], vt[j])
 
-    t = base.ReplaceScalar(_builtins.max(vt), diff)
+    t = type(base)
+    vtm = _builtins.max(vt)
+    if t.IsDiff != diff or t.Type != vtm:
+        t = base.ReplaceScalar(vtm, diff)
 
     result = list(args)
     for i, a in enumerate(result):
