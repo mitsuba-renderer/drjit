@@ -3,4 +3,4 @@
     url = https://github.com/pybind/pybind11
 [submodule "ext/enoki-jit"]
 	path = ext/enoki-jit
-	url = https://github.com/wjakob/enoki-jit
+	url = https://github.com/mitsuba-renderer/enoki-jit
