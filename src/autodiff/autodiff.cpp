@@ -849,10 +849,9 @@ static void ad_traverse_rev(bool retain_graph) {
             edge_id = edge.next_rev;
         }
 
-        if (v->next_rev) {
-            /// Clear the grads at interior nodes
+        /// Clear the gradients at interior nodes
+        if (v->next_rev)
             v->grad = Value();
-        }
     }
 
     if (!retain_graph) {
@@ -910,10 +909,9 @@ static void ad_traverse_fwd(bool retain_graph) {
             edge_id = edge.next_fwd;
         }
 
-        if (v->next_fwd) {
-            /// Clear the grads at interior nodes
+        /// Clear the gradients at interior nodes
+        if (v->next_fwd)
             v->grad = Value();
-        }
 
         if (!retain_graph)
             ad_free_edges(index, v);
