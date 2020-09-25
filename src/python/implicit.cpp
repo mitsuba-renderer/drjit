@@ -17,7 +17,8 @@ PyObject *implicit_conversion_handler(PyObject *obj, PyTypeObject *type_) {
                 (strcmp(tp_name_src, "numpy.ndarray") == 0 ||
                  strcmp(tp_name_src, "Tensor") == 0)) {
         pass = true;
-    } else if (strncmp(tp_name_src, "enoki.", 6) == 0) {
+    } else if (strncmp(tp_name_src, "enoki.", 6) == 0 ||
+               PyObject_HasAttrString(obj, "IsEnoki")) {
         if (py::cast<size_t>(py::handle(obj).attr("Size")) == Size) {
             pass = true;
         } else if (py::handle(obj).get_type().is(type.attr("Value"))) {
