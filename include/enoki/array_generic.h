@@ -266,7 +266,7 @@ namespace detail {
             constexpr size_t k = array_depth_v<Array> - sizeof...(Indices) - 1;
             buf.put('[');
             for (size_t i = 0; i < shape[k]; ++i) {
-                if constexpr (is_dynamic_array_v<Array>) {
+                if constexpr (is_dynamic_v<Array>) {
                     if (Abbrev && shape[k] > 20 && i == 5) {
                         buf.fmt(".. %zu skipped ..,%s", shape[k] - 10, k > 0 ? "\n" : " ");
                         if (k > 0) {
