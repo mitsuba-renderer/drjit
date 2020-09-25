@@ -98,12 +98,12 @@ namespace detail {
     template <typename T> using is_diff_array_det      = std::enable_if_t<T::IsEnoki && T::Derived::IsDiff>;
     template <typename T> using is_mask_det            = std::enable_if_t<T::IsEnoki && T::Derived::IsMask>;
     template <typename T> using is_kmask_det           = std::enable_if_t<T::IsEnoki && T::Derived::IsKMask>;
+    template <typename T> using is_complex_det         = std::enable_if_t<T::Derived::IsComplex>;
+    template <typename T> using is_matrix_det          = std::enable_if_t<T::Derived::IsMatrix>;
+    template <typename T> using is_vector_det          = std::enable_if_t<T::Derived::IsVector>;
+    template <typename T> using is_quaternion_det      = std::enable_if_t<T::Derived::IsQuaternion>;
+    template <typename T> using is_special_det         = std::enable_if_t<T::Derived::IsSpecial>;
     template <typename T> using is_dynamic_det         = std::enable_if_t<T::IsDynamic>;
-    template <typename T> using is_complex_det         = std::enable_if_t<T::IsComplex>;
-    template <typename T> using is_matrix_det          = std::enable_if_t<T::IsMatrix>;
-    template <typename T> using is_vector_det          = std::enable_if_t<T::IsVector>;
-    template <typename T> using is_quaternion_det      = std::enable_if_t<T::IsQuaternion>;
-    template <typename T> using is_special_det         = std::enable_if_t<T::IsSpecial>;
 }
 
 template <typename T> using enable_if_scalar_t = enable_if_t<std::is_scalar_v<T>>;

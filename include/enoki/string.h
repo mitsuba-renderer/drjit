@@ -150,7 +150,7 @@ struct StringBuffer {
             put("[ragged array]");
         } else {
             enoki::schedule(shape);
-            detail::to_string<true>(*this, value, shape);
+            detail::to_string<true>(*this, value.derived(), shape);
         }
 
         return *this;
