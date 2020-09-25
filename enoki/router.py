@@ -174,8 +174,20 @@ def _var_promote_select(a0, a1, a2):
 def _replace_scalar(cls, vt, diff=False):
     name = _array_name(cls.Prefix, vt, cls.Shape, cls.IsScalar)
     modname = cls.__module__
+
+    if not modname.startswith('enoki.'):
+        if cls.IsCUDA:
+            modname = "enoki.cuda"
+        elif cls.IsLLVM:
+            modname = "enoki.llvm"
+        elif cls.IsPacket:
+            modname = "enoki.packet"
+        else:
+            modname = "enoki.scalar"
+
     if diff and not modname.endswith('.ad'):
         modname = modname + '.ad'
+
     module = _modules.get(modname)
     return getattr(module, name)
 
