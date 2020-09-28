@@ -206,6 +206,8 @@ def diff_array_t(a):
             raise Exception("diff_array_t(): requires an Enoki input array!")
         if a.IsDiff:
             return a
+        if not a.__module__.startswith('enoki.'):
+            return diff_array_t(a.mro()[1])
         mod = a.__module__ \
             .replace('cuda', 'cuda.ad') \
             .replace('llvm', 'llvm.ad')
@@ -222,6 +224,8 @@ def nondiff_array_t(a):
             raise Exception("diff_array_t(): requires an Enoki input array!")
         if not a.IsDiff:
             return a
+        if not a.__module__.startswith('enoki.'):
+            return nondiff_array_t(a.mro()[1])
         mod = a.__module__ \
             .replace('cuda.ad', 'cuda') \
             .replace('llvm.ad', 'llvm')

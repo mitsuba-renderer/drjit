@@ -184,6 +184,8 @@ def _replace_scalar(cls, vt, diff=False):
             modname = "enoki.packet"
         else:
             modname = "enoki.scalar"
+        if cls.IsDiff:
+            modname = modname + '.ad'
 
     if diff and not modname.endswith('.ad'):
         modname = modname + '.ad'
