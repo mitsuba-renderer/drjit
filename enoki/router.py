@@ -171,7 +171,7 @@ def _var_promote_select(a0, a1, a2):
     return a0, a1, a2
 
 
-def _replace_scalar(cls, vt, diff=False):
+def _replace_scalar(cls, vt, diff=None):
     name = _array_name(cls.Prefix, vt, cls.Shape, cls.IsScalar)
     modname = cls.__module__
 
@@ -184,11 +184,17 @@ def _replace_scalar(cls, vt, diff=False):
             modname = "enoki.packet"
         else:
             modname = "enoki.scalar"
-        if cls.IsDiff:
-            modname = modname + '.ad'
 
-    if diff and not modname.endswith('.ad'):
-        modname = modname + '.ad'
+        if cls.IsDiff:
+            modname += '.ad'
+
+    if diff is not None:
+        is_diff = modname.endswith('.ad')
+        if is_diff != diff:
+            if diff:
+                modname += '.ad'
+            else:
+                modname = modname[:-3]
 
     module = _modules.get(modname)
     return getattr(module, name)

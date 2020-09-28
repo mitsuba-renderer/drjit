@@ -201,36 +201,22 @@ def float64_array_t(a):
 
 
 def diff_array_t(a):
-    if isinstance(a, type):
-        if not is_array_v(a):
-            raise Exception("diff_array_t(): requires an Enoki input array!")
-        if a.IsDiff:
-            return a
-        if not a.__module__.startswith('enoki.'):
-            return diff_array_t(a.mro()[1])
-        mod = a.__module__ \
-            .replace('cuda', 'cuda.ad') \
-            .replace('llvm', 'llvm.ad')
-        if mod == a.__module__:
-            raise Exception("diff_array_t(): input type unsupported!")
-        return getattr(_sys.modules.get(mod), a.__name__)
-    else:
+    if not is_array_v(a):
+        raise Exception("diff_array_t(): requires an Enoki input array!")
+    elif not isinstance(a, type):
         return diff_array_t(type(a))(a)
+    elif a.IsDiff:
+        return a
+    else:
+        return a.ReplaceScalar(a.Type, diff=True)
 
 
 def nondiff_array_t(a):
-    if isinstance(a, type):
-        if not is_array_v(a):
-            raise Exception("diff_array_t(): requires an Enoki input array!")
-        if not a.IsDiff:
-            return a
-        if not a.__module__.startswith('enoki.'):
-            return nondiff_array_t(a.mro()[1])
-        mod = a.__module__ \
-            .replace('cuda.ad', 'cuda') \
-            .replace('llvm.ad', 'llvm')
-        if mod == a.__module__:
-            raise Exception("diff_array_t(): input type unsupported!")
-        return getattr(_sys.modules.get(mod), a.__name__)
-    else:
+    if not is_array_v(a):
+        raise Exception("nondiff_array_t(): requires an Enoki input array!")
+    elif not isinstance(a, type):
         return nondiff_array_t(type(a))
+    elif not a.IsDiff:
+        return a
+    else:
+        return a.ReplaceScalar(a.Type, diff=False)
