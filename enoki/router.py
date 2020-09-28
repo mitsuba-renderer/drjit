@@ -114,13 +114,11 @@ def _var_promote_mask(a0, a1):
     """
     vt0 = _var_type(a0)
     vt1 = _var_type(a1)
-    diff = False
+    diff = getattr(a0, 'IsDiff', False) | getattr(a1, 'IsDiff', False)
 
     if vt0 != vt1:
         vt0 = _var_type(a0, vt1)
         vt1 = _var_type(a1, vt0)
-        diff |= getattr(a0, 'IsDiff', False)
-        diff |= getattr(a1, 'IsDiff', False)
 
     if vt1 != VarType.Bool:
         vt0 = vt1 = _builtins.max(vt0, vt1)
@@ -144,13 +142,11 @@ def _var_promote_select(a0, a1, a2):
     vt0 = _var_type(a0)
     vt1 = _var_type(a1)
     vt2 = _var_type(a2)
-    diff = False
+    diff = getattr(a1, 'IsDiff', False) | getattr(a2, 'IsDiff', False)
 
     if vt1 != vt2:
         vt1 = _var_type(a1, vt2)
         vt2 = _var_type(a2, vt1)
-        diff |= getattr(a1, 'IsDiff', False)
-        diff |= getattr(a2, 'IsDiff', False)
 
     if vt0 != VarType.Bool:
         raise Exception("select(): first argument must be a mask!")
