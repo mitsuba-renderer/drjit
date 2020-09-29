@@ -1453,6 +1453,8 @@ def export_(a, migrate_to_host, version):
                 b = type(a)(b)
             b.migrate_(_ek.AllocType.Host)
             _ek.sync_stream()
+        elif b.IsLLVM:
+            _ek.sync_stream()
 
         record = {
             'shape': shape,

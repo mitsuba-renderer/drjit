@@ -225,8 +225,8 @@ def array_init(self, args):
                     pass
                 elif dim1 == 1 and self.IsDynamic:
                     o = np.ascontiguousarray(o)
-                    d = o.__array_interface__['data'][0]
-                    self.assign_(self.load_(d, s2[0]))
+                    holder = (o, o.__array_interface__['data'][0])
+                    self.assign_(self.load_(holder[1], s2[0]))
                 else:
                     for i in range(s1[-1]):
                         if dim2 == 1 and self.IsDynamic:
