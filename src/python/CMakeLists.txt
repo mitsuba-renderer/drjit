@@ -37,3 +37,23 @@ set_target_properties(enoki-python PROPERTIES
   OUTPUT_NAME enoki_ext ${ENOKI_OUTPUT_DIRECTORY})
 
 target_compile_options(enoki-python PRIVATE ${ENOKI_NATIVE_FLAGS})
+
+if (ENOKI_MASTER_PROJECT)
+  set(ENOKI_PYTHON_FILES
+     __init__.py const.py detail.py generic.py
+     matrix.py router.py traits.py
+  )
+
+  set(ENOKI_COPY_FILES "")
+  foreach(file ${ENOKI_PYTHON_FILES})
+    set(IN_FILE ${CMAKE_CURRENT_SOURCE_DIR}/../../enoki/${file})
+    set(OUT_FILE ${CMAKE_CURRENT_BINARY_DIR}/../../enoki/${file})
+
+    add_custom_command(
+      OUTPUT ${OUT_FILE} DEPENDS ${IN_FILE}
+      COMMAND ${CMAKE_COMMAND} -E copy ${IN_FILE} ${OUT_FILE})
+    list(APPEND ENOKI_COPY_FILES ${OUT_FILE})
+  endforeach(file)
+
+  add_custom_target(copy-python-files ALL DEPENDS ${ENOKI_COPY_FILES})
+endif()

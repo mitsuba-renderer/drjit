@@ -27,7 +27,7 @@ set(ENOKI_NATIVE_FLAGS ${ENOKI_NATIVE_FLAGS_DEFAULT} CACHE STRING
     "Compilation flags used to target the host processor architecture.")
 
 set(ENOKI_MASTER_PROJECT OFF)
-if (${CMAKE_CURRENT_SOURCE_DIR} STREQUAL ${CMAKE_SOURCE_DIR})
+if(${CMAKE_PROJECT_NAME} STREQUAL ${PROJECT_NAME})
   set(ENOKI_MASTER_PROJECT ON)
 endif()
 
@@ -146,7 +146,7 @@ endif()
 
 # Build the documentation
 if (ENOKI_MASTER_PROJECT)
-  set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} resources)
+  set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/resources)
   find_package(Sphinx)
 
   if (Sphinx_FOUND)
