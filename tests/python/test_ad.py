@@ -673,3 +673,23 @@ def test41_replace_grad(m):
     assert ek.allclose(z2, [1, 16, 81])
     assert ek.grad(x) is None
     assert ek.allclose(ek.grad(y), [12, 32, 36])
+
+
+def test42_suspend_resume(m):
+    x = m.Array3f(1, 2, 3)
+    y = m.Array3f(3, 2, 1)
+    ek.enable_grad(x, y)
+    assert ek.grad_enabled(x) and ek.grad_enabled(y)
+    assert not ek.grad_suspended(x) and not ek.grad_suspended(y)
+    ek.suspend_grad(x, y)
+    assert not ek.grad_enabled(x) and not ek.grad_enabled(y)
+    assert ek.grad_suspended(x) and ek.grad_suspended(y)
+    b = x*y
+    ek.resume_grad(x, y)
+    assert ek.grad_enabled(x) and ek.grad_enabled(y)
+    assert not ek.grad_suspended(x) and not ek.grad_suspended(y)
+    c = x*y
+    ek.backward(c)
+    assert ek.grad(x) == ek.detach(y)
+    assert ek.grad(y) == ek.detach(x)
+    ek.suspend_grad(x, y) # validate reference counting of suspended variables

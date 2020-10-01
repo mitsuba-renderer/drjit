@@ -1165,10 +1165,27 @@ template <typename T> ENOKI_INLINE bool grad_enabled(const T &a) {
                 result |= grad_enabled(a.entry(i));
             return result;
         } else {
-            return a.derived().index() != 0;
+            return a.derived().index() > 0;
         }
     } else if constexpr (has_struct_support_v<T>) {
         return struct_support<T>::grad_enabled(a);
+    } else {
+        return false;
+    }
+}
+
+template <typename T> ENOKI_INLINE bool grad_suspended(const T &a) {
+    if constexpr (is_diff_array_v<T>) {
+        if constexpr (array_depth_v<T> > 1) {
+            bool result = false;
+            for (size_t i = 0; i < a.size(); ++i)
+                result |= grad_suspended(a.entry(i));
+            return result;
+        } else {
+            return a.derived().index() < 0;
+        }
+    } else if constexpr (has_struct_support_v<T>) {
+        return struct_support<T>::grad_suspended(a);
     } else {
         return false;
     }
@@ -1211,6 +1228,21 @@ template <typename T> ENOKI_INLINE void set_grad_enabled(T &a, bool value) {
     }
 }
 
+template <typename T> ENOKI_INLINE void set_grad_suspended(T &a, bool value) {
+    if constexpr (is_diff_array_v<T>) {
+        if constexpr (array_depth_v<T> > 1) {
+            for (size_t i = 0; i < a.size(); ++i)
+                set_grad_suspended(a.entry(i), value);
+        } else {
+            a.derived().set_grad_suspended_(value);
+        }
+    } else if constexpr (has_struct_support_v<T>) {
+        struct_support<T>::set_grad_suspended(a, value);
+    } else {
+        static_assert(detail::false_v<T>, "Type does not support gradients!");
+    }
+}
+
 template <typename... Ts, enable_if_t<(sizeof...(Ts) > 1)> = 0>
 ENOKI_INLINE bool grad_enabled(const Ts& ... ts) {
     return (grad_enabled(ts) || ...);
@@ -1222,6 +1254,14 @@ template <typename... Ts> ENOKI_INLINE void enable_grad(Ts&... ts) {
 
 template <typename... Ts> ENOKI_INLINE void disable_grad(Ts&... ts) {
     (set_grad_enabled(ts, false), ...);
+}
+
+template <typename... Ts> ENOKI_INLINE void suspend_grad(Ts&... ts) {
+    (set_grad_suspended(ts, true), ...);
+}
+
+template <typename... Ts> ENOKI_INLINE void resume_grad(Ts&... ts) {
+    (set_grad_suspended(ts, false), ...);
 }
 
 template <typename T> ENOKI_INLINE auto detach(const T &value) {

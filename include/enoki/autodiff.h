@@ -1568,6 +1568,13 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         }
     }
 
+    void set_grad_suspended_(bool value) {
+        if constexpr (IsEnabled) {
+            if (value != (m_index < 0))
+                m_index = -m_index;
+        }
+    }
+
     void migrate_(AllocType type) {
         if constexpr (is_jit_array_v<Type_>)
             m_value.migrate_(type);

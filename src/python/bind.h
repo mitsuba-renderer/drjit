@@ -408,6 +408,10 @@ auto bind_full(py::class_<Array> &cls, bool scalar_mode = false) {
                 a->set_grad_enabled_(value);
                 return a;
             });
+            cls.def("set_grad_suspended_", [](Array *a, bool value) {
+                a->set_grad_suspended_(value);
+                return a;
+            });
             cls.def("enqueue_", &Array::enqueue_);
             cls.def("graphviz_", &Array::graphviz_);
             cls.def_static("traverse_", &Array::traverse_);

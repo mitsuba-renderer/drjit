@@ -1926,6 +1926,30 @@ def disable_grad(*args):
         set_grad_enabled(v, False)
 
 
+def grad_suspended(a):
+    if _ek.is_diff_array_v(a):
+        return a.grad_suspended_()
+    else:
+        return False
+
+
+def set_grad_suspended(a, value):
+    if _ek.is_diff_array_v(a):
+        a.set_grad_suspended_(value)
+    else:
+        raise Exception("Expected differentiable array types as input!")
+
+
+def suspend_grad(*args):
+    for v in args:
+        set_grad_suspended(v, True)
+
+
+def resume_grad(*args):
+    for v in args:
+        set_grad_suspended(v, False)
+
+
 def replace_grad(a, b):
     if type(a) is not type(b) or not _ek.is_diff_array_v(a):
         raise Exception("replace_grad(): unsupported input types!")
