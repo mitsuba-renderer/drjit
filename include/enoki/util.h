@@ -139,13 +139,14 @@ Index binary_search(scalar_t<Index> start_, scalar_t<Index> end_,
 
 /// Vectorized N-dimensional 'range' iterable with automatic mask computation
 template <typename Value> struct range {
-    static constexpr size_t Dimension = array_depth_v<Value> == 2 ?
-        array_size_v<Value> : 1;
+    static constexpr bool Recurse = !Value::IsPacked || array_depth_v<Value> == 2;
+    static constexpr size_t Dimension = Recurse ? array_size_v<Value> : 1;
 
     using Scalar = scalar_t<Value>;
-    using Packet =
-        std::conditional_t<array_depth_v<Value> == 2, value_t<Value>, Value>;
+    using Packet = std::conditional_t<Recurse, value_t<Value>, Value>;
     using Size   = Array<Scalar, Dimension>;
+
+    static constexpr size_t PacketSize = array_size_v<Packet>;
 
     struct iterator {
         iterator(size_t index) : index(index) { }
@@ -163,12 +164,12 @@ template <typename Value> struct range {
         iterator &operator++() {
             index += 1;
             if constexpr (!is_dynamic_v<Value>)
-                index_p += Scalar(Packet::Size);
+                index_p += Scalar(PacketSize);
             return *this;
         }
 
         std::pair<Value, mask_t<Packet>> operator*() const {
-            if constexpr (array_depth_v<Value> == 1) {
+            if constexpr (!Recurse) {
                 if constexpr (!is_dynamic_v<Value>)
                     return { index_p, index_p < size[0] };
                 else
@@ -211,7 +212,7 @@ template <typename Value> struct range {
         if constexpr (is_dynamic_v<Value>)
             return iterator(hprod(size) == 0 ? 0 : 1);
         else
-            return iterator((hprod(size) + Packet::Size - 1) / Packet::Size);
+            return iterator((hprod(size) + PacketSize - 1) / PacketSize);
     }
 
 private:

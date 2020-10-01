@@ -61,10 +61,10 @@ struct Special {
 // Weighted edge connecting two variables
 struct Edge {
     /// Variable index of source operand
-    uint32_t source;
+    int32_t source;
 
     /// Source variable index
-    uint32_t target;
+    int32_t target;
 
     /// Links to the next forward edge
     uint32_t next_fwd;
@@ -215,14 +215,14 @@ static_assert(sizeof(Variable) == ((IsDouble ? 2 : 0) + 8) * sizeof(uint32_t),
 
 /// Thread-local list used by ad_queue() and ad_traverse()
 #if !defined(_MSC_VER)
-static __thread std::deque<uint32_t> *tls_queue = nullptr;
+static __thread std::deque<int32_t> *tls_queue = nullptr;
 #else
-static __declspec(thread) std::deque<uint32_t>* tls_queue = nullptr;
+static __declspec(thread) std::deque<int32_t>* tls_queue = nullptr;
 #endif
 
 /// Records all internal application state
 struct State {
-    using VariableMap = tsl::robin_map<uint32_t, Variable>;
+    using VariableMap = tsl::robin_map<int32_t, Variable>;
     using EdgeVector  = std::vector<Edge>;
 
     /// Mutex protecting the state data structure
@@ -238,16 +238,16 @@ struct State {
     std::vector<uint32_t> unused_edges;
 
     /// List of variables to be processed in traverse() / graphviz()
-    std::vector<uint32_t> todo;
+    std::vector<int32_t> todo;
 
     /// Counter for variable indices
-    uint32_t variable_index = 1;
+    int32_t variable_index = 1;
 
     State() : edges(1) { }
 
-    Variable *operator[](uint32_t index) {
+    Variable *operator[](int32_t index) {
         auto it = variables.find(index);
-        if (unlikely(it == variables.end()))
+        if (unlikely(index < 0 || it == variables.end()))
             ad_fail("referenced an unknown variable %u!", index);
         return &it.value();
     }
@@ -274,15 +274,15 @@ struct State {
 static State state;
 
 extern void RENAME(ad_whos)() {
-    std::vector<uint32_t> indices;
+    std::vector<int32_t> indices;
     indices.reserve(state.variables.size());
     for (auto &kv: state.variables)
         indices.push_back(kv.first);
     std::sort(indices.begin(), indices.end());
 
-    for (uint32_t id : indices) {
+    for (int32_t id : indices) {
         const Variable *v = state[id];
-        buffer.fmt("  %-7u ", id);
+        buffer.fmt("  %-7i ", id);
         size_t sz = buffer.fmt("%u / %u", v->ref_count_ext, v->ref_count_int);
 
         buffer.fmt("%*s%-12u%-8s\n", 11 - (int) sz, "", v->size,
@@ -291,7 +291,7 @@ extern void RENAME(ad_whos)() {
 }
 
 /// Forward-mode DFS starting from 'index'
-static void ad_dfs_fwd(uint32_t index) {
+static void ad_dfs_fwd(int32_t index) {
     Variable *v = state[index];
     uint32_t edge = v->next_fwd;
     while (edge) {
@@ -305,7 +305,7 @@ static void ad_dfs_fwd(uint32_t index) {
 }
 
 /// Reverse-mode DFS starting from 'index'
-static void ad_dfs_rev(uint32_t index) {
+static void ad_dfs_rev(int32_t index) {
     Variable *v = state[index];
     uint32_t edge = v->next_rev;
     while (edge) {
@@ -318,13 +318,13 @@ static void ad_dfs_rev(uint32_t index) {
     }
 }
 
-template <typename T> void ad_enqueue(uint32_t index) {
+template <typename T> void ad_enqueue(int32_t index) {
     if (index == 0)
         return;
     std::lock_guard<Mutex> guard(state.mutex);
-    std::deque<uint32_t> *queue = tls_queue;
+    std::deque<int32_t> *queue = tls_queue;
     if (unlikely(!queue))
-        queue = tls_queue = new std::deque<uint32_t>();
+        queue = tls_queue = new std::deque<int32_t>();
     queue->push_back(index);
 }
 
@@ -332,16 +332,16 @@ template <typename T> void ad_enqueue(uint32_t index) {
 static void ad_toposort_fwd() {
     state.todo.clear();
 
-    std::deque<uint32_t> *queue = tls_queue;
+    std::deque<int32_t> *queue = tls_queue;
     if (!queue || queue->empty())
         return;
 
     /// DFS traversal to tag all reachable edges
-    for (uint32_t index: *queue)
+    for (int32_t index: *queue)
         ad_dfs_fwd(index);
 
     while (!queue->empty()) {
-        uint32_t index = queue->front();
+        int32_t index = queue->front();
         queue->pop_front();
         state.todo.push_back(index);
 
@@ -373,16 +373,16 @@ static void ad_toposort_fwd() {
 static void ad_toposort_rev() {
     state.todo.clear();
 
-    std::deque<uint32_t> *queue = tls_queue;
+    std::deque<int32_t> *queue = tls_queue;
     if (!queue || queue->empty())
         return;
 
     /// DFS traversal to tag all reachable edges
-    for (uint32_t index: *queue)
+    for (int32_t index: *queue)
         ad_dfs_rev(index);
 
     while (!queue->empty()) {
-        uint32_t index = queue->front();
+        int32_t index = queue->front();
         queue->pop_front();
         state.todo.push_back(index);
 
@@ -424,12 +424,14 @@ static uint32_t ad_edge_new() {
 }
 
 /// Allocate a new variable
-static std::pair<uint32_t, Variable *> ad_var_new(const char *label, uint32_t size) {
+static std::pair<int32_t, Variable *> ad_var_new(const char *label, uint32_t size) {
     while (true) {
-        uint32_t index = state.variable_index++;
+        int32_t index = state.variable_index++;
 
-        if (unlikely(index == 0)) // overflow
+        if (unlikely(index <= 0)) { // overflow
+            state.variable_index = 1;
             index = state.variable_index++;
+        }
 
         auto result = state.variables.try_emplace(index, label, size);
         if (likely(result.second))
@@ -437,10 +439,10 @@ static std::pair<uint32_t, Variable *> ad_var_new(const char *label, uint32_t si
     }
 }
 
-static void ad_free(uint32_t index, Variable *v);
+static void ad_free(int32_t index, Variable *v);
 
 /// Clear backward edges of the given variable and decrease int. ref. counts
-static void ad_free_edges(uint32_t index, Variable *v) {
+static void ad_free_edges(int32_t index, Variable *v) {
     uint32_t edge_id = v->next_rev;
     ad_log(Trace, "ad_free_edges(): freeing edges of vertex %u", index);
     v->next_rev = 0;
@@ -452,8 +454,8 @@ static void ad_free_edges(uint32_t index, Variable *v) {
                "ad_free_edges(): freeing edge %u: %u -> %u",
                edge_id, edge.source, edge.target);
 
-        uint32_t source = edge.source,
-                 next_rev = edge.next_rev,
+        int32_t source = edge.source;
+        uint32_t next_rev = edge.next_rev,
                  next_fwd = edge.next_fwd;
 
         assert(edge.target == index);
@@ -489,7 +491,7 @@ static void ad_free_edges(uint32_t index, Variable *v) {
     }
 }
 
-static void ad_free(uint32_t index, Variable *v) {
+static void ad_free(int32_t index, Variable *v) {
     ad_log(Trace, "ad_free(%u)", index);
     if (v->free_label)
         free(v->label);
@@ -499,8 +501,8 @@ static void ad_free(uint32_t index, Variable *v) {
 }
 
 template <typename T>
-uint32_t ad_new(const char *label, uint32_t size, uint32_t op_count,
-                const uint32_t *op, T *weights) {
+int32_t ad_new(const char *label, uint32_t size, uint32_t op_count,
+               const int32_t *op, T *weights) {
     std::lock_guard<Mutex> guard(state.mutex);
 
     auto [index, var] = ad_var_new(label, size);
@@ -509,20 +511,20 @@ uint32_t ad_new(const char *label, uint32_t size, uint32_t op_count,
         const char *l = label ? label : "unnamed";
         switch (op_count) {
             case 0:
-                ad_log(Debug, "ad_new(%u): %s", index, l); break;
+                ad_log(Debug, "ad_new(%i): %s", index, l); break;
             case 1:
-                ad_log(Debug, "ad_new(%u <- %u): %s", index, op[0], l); break;
+                ad_log(Debug, "ad_new(%i <- %i): %s", index, op[0], l); break;
             case 2:
-                ad_log(Debug, "ad_new(%u <- %u, %u): %s", index, op[0], op[1], l); break;
+                ad_log(Debug, "ad_new(%i <- %i, %i): %s", index, op[0], op[1], l); break;
             case 3:
-                ad_log(Debug, "ad_new(%u <- %u, %u, %u): %s", index, op[0], op[1], op[2], l); break;
+                ad_log(Debug, "ad_new(%i <- %i, %i, %i): %s", index, op[0], op[1], op[2], l); break;
             default: break;
         }
     }
 
     uint32_t edge_index = 0;
     for (uint32_t i = 0; i < op_count; ++i) {
-        if (op[i] == 0)
+        if (op[i] <= 0)
             continue;
 
         bool weight_is_zero = false;
@@ -540,14 +542,14 @@ uint32_t ad_new(const char *label, uint32_t size, uint32_t op_count,
 
             if (nan_weights)
                 ad_log(Warn,
-                      "ad_new(%u <- %u): \"%s\" -- weight of edge %i contains NaNs! "
+                      "ad_new(%i <- %i): \"%s\" -- weight of edge %i contains NaNs! "
                       "Inspect the computation graph via enokik::graphviz() or put "
                       "a breakpoint on ad_check_weights_cb() to investigate further.",
                        index, op[i], label ? label : "unnamed", i);
 
             if (inf_weights)
                 ad_log(Warn,
-                      "ad_new(%u <- %u): \"%s\": weight of edge %i contains infinities! "
+                      "ad_new(%i <- %i): \"%s\": weight of edge %i contains infinities! "
                       "Inspect the computation graph via enokik::graphviz() or put "
                       "a breakpoint on ad_check_weights_cb() to investigate further.",
                        index, op[i], label ? label : "unnamed", i);
@@ -614,17 +616,17 @@ template <typename Value> struct CustomWrapper : Special {
 };
 
 template <typename Value, typename Mask>
-uint32_t ad_new_select(const char *label, uint32_t size, const Mask &mask_,
-                       uint32_t t_index, uint32_t f_index) {
+int32_t ad_new_select(const char *label, uint32_t size, const Mask &mask_,
+                      int32_t t_index, int32_t f_index) {
     std::lock_guard<Mutex> guard(state.mutex);
     auto [index, var] = ad_var_new(label, size);
 
     ad_log(Debug, "ad_new_select(%u <- %u, %u)", index, t_index, f_index);
-    uint32_t op[2]= { t_index, f_index };
+    int32_t op[2]= { t_index, f_index };
 
     uint32_t edge_index = 0;
     for (uint32_t i = 0; i < 2; ++i) {
-        if (op[i] == 0)
+        if (op[i] <= 0)
             continue;
 
         Variable *var2 = state[op[i]];
@@ -681,8 +683,8 @@ template <typename Value> struct GatherEdge : Special {
 };
 
 template <typename Value, typename Mask, typename Index>
-uint32_t ad_new_gather(const char *label, uint32_t size, uint32_t src_index,
-                       const Index &offset, const Mask &mask, bool permute) {
+int32_t ad_new_gather(const char *label, uint32_t size, int32_t src_index,
+                      const Index &offset, const Mask &mask, bool permute) {
     if constexpr (is_array_v<Value>) {
         std::lock_guard<Mutex> guard(state.mutex);
         auto [index, var] = ad_var_new(label, size);
@@ -743,9 +745,9 @@ template <typename Value> struct ScatterEdge : Special {
 };
 
 template <typename Value, typename Mask, typename Index>
-uint32_t ad_new_scatter(const char *label, uint32_t size, uint32_t src_index,
-                        uint32_t dst_index, const Index &offset,
-                        const Mask &mask, bool permute, bool scatter_add) {
+int32_t ad_new_scatter(const char *label, uint32_t size, int32_t src_index,
+                       int32_t dst_index, const Index &offset,
+                       const Mask &mask, bool permute, bool scatter_add) {
 
     if constexpr (is_array_v<Value>) {
         std::lock_guard<Mutex> guard(state.mutex);
@@ -758,7 +760,7 @@ uint32_t ad_new_scatter(const char *label, uint32_t size, uint32_t src_index,
 
         uint32_t edge_index = 0;
 
-        if (src_index) {
+        if (src_index > 0) {
             Variable *var2 = state[src_index];
             uint32_t edge_index_new = ad_edge_new();
             Edge &edge = state.edges[edge_index_new];
@@ -772,7 +774,7 @@ uint32_t ad_new_scatter(const char *label, uint32_t size, uint32_t src_index,
             edge_index = edge_index_new;
         }
 
-        if (dst_index) {
+        if (dst_index > 0) {
             Variable *var2 = state[dst_index];
 
             uint32_t edge_index_new = ad_edge_new();
@@ -809,7 +811,7 @@ uint32_t ad_new_scatter(const char *label, uint32_t size, uint32_t src_index,
 static void ad_traverse_rev(bool retain_graph) {
     ad_log(Debug, "ad_traverse_rev(): processing %zu nodes ..", state.todo.size());
 
-    for (uint32_t index : state.todo) {
+    for (int32_t index : state.todo) {
         Variable *v = state[index];
 
         if (is_dynamic_v<Value>) {
@@ -857,7 +859,7 @@ static void ad_traverse_rev(bool retain_graph) {
     if (!retain_graph) {
         ad_log(Debug, "ad_traverse_rev(): cleaning up ..");
         for (auto it = state.todo.rbegin(); it != state.todo.rend(); ++it) {
-            uint32_t index = *it;
+            int32_t index = *it;
             Variable *v = state[index];
             ad_free_edges(index, v);
         }
@@ -869,7 +871,7 @@ static void ad_traverse_rev(bool retain_graph) {
 static void ad_traverse_fwd(bool retain_graph) {
     ad_log(Debug, "ad_traverse_fwd(): processing %zu nodes ..", state.todo.size());
 
-    for (uint32_t index : state.todo) {
+    for (int32_t index : state.todo) {
         Variable *v = state[index];
 
         if (is_dynamic_v<Value>) {
@@ -938,7 +940,7 @@ template <typename Value> const char *ad_graphviz(bool backward) {
 
     std::string current_path;
     int current_depth = 0;
-    for (uint32_t index : state.todo) {
+    for (int32_t index : state.todo) {
         Variable *v = state[index];
 
         std::string label = v->label;
@@ -1004,16 +1006,18 @@ template <typename Value> const char *ad_graphviz(bool backward) {
     return buffer.get();
 }
 
-template <typename T> void ad_inc_ref_impl(uint32_t index) noexcept(true) {
+template <typename T> void ad_inc_ref_impl(int32_t index) noexcept(true) {
     if (index == 0)
         return;
+    index = std::abs(index);
     std::lock_guard<Mutex> guard(state.mutex);
     state[index]->ref_count_ext++;
 }
 
-template <typename T> void ad_dec_ref_impl(uint32_t index) noexcept(true) {
+template <typename T> void ad_dec_ref_impl(int32_t index) noexcept(true) {
     if (index == 0)
         return;
+    index = std::abs(index);
     std::lock_guard<Mutex> guard(state.mutex);
     Variable *v = state[index];
     if (unlikely(v->ref_count_ext == 0))
@@ -1022,29 +1026,39 @@ template <typename T> void ad_dec_ref_impl(uint32_t index) noexcept(true) {
         ad_free(index, v);
 }
 
-template <typename T> T ad_grad(uint32_t index) {
-    if (index == 0)
-        enoki_raise("grad(): attempted to retrieve the gradient of a "
-                    "variable that was not registered with the AD "
-                    "backend. Did you forget to call enable_grad()?");
-
+template <typename T> T ad_grad(int32_t index) {
+    if (unlikely(index <= 0)) {
+        if (index == 0)
+            enoki_raise("grad(): attempted to retrieve the gradient of a "
+                        "variable that was not registered with the AD "
+                        "backend. Did you forget to call enable_grad()?");
+        else
+            enoki_raise("grad(): attempted to retrieve the gradient of a "
+                        "suspended variable!");
+    }
     std::lock_guard<Mutex> guard(state.mutex);
     return state[index]->grad;
 }
 
-template <typename T> void ad_set_grad(uint32_t index, const T &value) {
-    if (index == 0)
-        enoki_raise("set_grad(): attempted to set the gradient of a "
-                    "variable that was not registered with the AD "
-                    "backend. Did you forget to call enable_grad()?");
+template <typename T> void ad_set_grad(int32_t index, const T &value) {
+    if (unlikely(index <= 0)) {
+        if (index == 0)
+            enoki_raise("set_grad(): attempted to set the gradient of a "
+                        "variable that was not registered with the AD "
+                        "backend. Did you forget to call enable_grad()?");
+        else
+            enoki_raise("set_grad(): attempted to set the gradient of a "
+                        "suspended variable!");
+    }
 
     std::lock_guard<Mutex> guard(state.mutex);
     state[index]->grad = value;
 }
 
-template <typename T> void ad_set_label(uint32_t index, const char *label) {
+template <typename T> void ad_set_label(int32_t index, const char *label) {
     if (index == 0)
         return;
+    index = std::abs(index);
     std::lock_guard<Mutex> guard(state.mutex);
     ad_log(Debug, "ad_set_label(%u, \"%s\")", index, label ? label : "(null)");
     Variable *v = state[index];
@@ -1055,15 +1069,16 @@ template <typename T> void ad_set_label(uint32_t index, const char *label) {
     v->custom_label = true;
 }
 
-template <typename T> const char *ad_label(uint32_t index) {
+template <typename T> const char *ad_label(int32_t index) {
     if (index == 0)
         return nullptr;
+    index = std::abs(index);
     std::lock_guard<Mutex> guard(state.mutex);
     return state[index]->label;
 }
 
 template <typename T>
-void ad_add_edge(uint32_t source_idx, uint32_t target_idx,
+void ad_add_edge(int32_t source_idx, int32_t target_idx,
                  CustomEdge<T> *custom) {
     std::lock_guard<Mutex> guard(state.mutex);
 
@@ -1097,25 +1112,25 @@ template <typename T> void ad_traverse(bool backward, bool retain_graph) {
         ad_traverse_fwd(retain_graph);
 }
 
-template ENOKI_EXPORT void ad_inc_ref_impl<Value>(uint32_t) noexcept;
-template ENOKI_EXPORT void ad_dec_ref_impl<Value>(uint32_t) noexcept;
-template ENOKI_EXPORT uint32_t ad_new<Value>(const char *, uint32_t, uint32_t,
-                                             const uint32_t *, Value *);
-template ENOKI_EXPORT Value ad_grad<Value>(uint32_t);
-template ENOKI_EXPORT void ad_set_grad<Value>(uint32_t, const Value &);
-template ENOKI_EXPORT void ad_set_label<Value>(uint32_t, const char *);
-template ENOKI_EXPORT const char *ad_label<Value>(uint32_t);
-template ENOKI_EXPORT void ad_enqueue<Value>(uint32_t);
+template ENOKI_EXPORT void ad_inc_ref_impl<Value>(int32_t) noexcept;
+template ENOKI_EXPORT void ad_dec_ref_impl<Value>(int32_t) noexcept;
+template ENOKI_EXPORT int32_t ad_new<Value>(const char *, uint32_t, uint32_t,
+                                            const int32_t *, Value *);
+template ENOKI_EXPORT Value ad_grad<Value>(int32_t);
+template ENOKI_EXPORT void ad_set_grad<Value>(int32_t, const Value &);
+template ENOKI_EXPORT void ad_set_label<Value>(int32_t, const char *);
+template ENOKI_EXPORT const char *ad_label<Value>(int32_t);
+template ENOKI_EXPORT void ad_enqueue<Value>(int32_t);
 template ENOKI_EXPORT void ad_traverse<Value>(bool, bool);
 template ENOKI_EXPORT const char *ad_graphviz<Value>(bool);
-template ENOKI_EXPORT uint32_t ad_new_select<Value, Mask>(
-    const char *, uint32_t, const Mask &, uint32_t, uint32_t);
-template ENOKI_EXPORT uint32_t ad_new_gather<Value, Mask, Index>(
-    const char *, uint32_t, uint32_t, const Index &, const Mask &, bool);
-template ENOKI_EXPORT uint32_t
-ad_new_scatter<Value, Mask, Index>(const char *, uint32_t, uint32_t, uint32_t,
+template ENOKI_EXPORT int32_t ad_new_select<Value, Mask>(
+    const char *, uint32_t, const Mask &, int32_t, int32_t);
+template ENOKI_EXPORT int32_t ad_new_gather<Value, Mask, Index>(
+    const char *, uint32_t, int32_t, const Index &, const Mask &, bool);
+template ENOKI_EXPORT int32_t
+ad_new_scatter<Value, Mask, Index>(const char *, uint32_t, int32_t, int32_t,
                                    const Index &, const Mask &, bool, bool);
-template ENOKI_EXPORT void ad_add_edge<Value>(uint32_t, uint32_t,
+template ENOKI_EXPORT void ad_add_edge<Value>(int32_t, int32_t,
                                               CustomEdge<Value> *);
 
 NAMESPACE_END(detail)
