@@ -27,7 +27,7 @@ keeping compilation times short.
 Algorithms designed using Enoki are expressed a generic way (using *templates*)
 and specialized to specific requirements by "lifting" them onto a computational
 backend. By stacking up such transformations, it becomes possible to create
-elaborate architectures that would be very tedious to develop "by hand"---for
+elaborate architectures that would be very tedious to develop by hand—for
 example, a GPU implementation of an algorithm that can be differentiated
 end-to-end along with other code running in an interactive Python session.
 The following backends are currently included:
@@ -80,14 +80,13 @@ In addition to the above, Enoki is designed to be
 
 * **Non-viral**. Enoki is licensed under the terms of the 3-clause BSD license.
 
-
 To the author's knowledge, nothing quite like it exists, although there are of
 course many vectorization techniques (Autovectorization, expression templates),
 frameworks (Eigen, XLA, Numba, Agner Fog's vector classes) and AD tools
 (PyTorch, Tensorflow, Jax) that provide subsets of the above functionality.
 
-Compilers
----------
+Requirements
+------------
 Enoki requires a recent C++17-capable compiler. The following are known to work:
 
 - GCC >= 8.2

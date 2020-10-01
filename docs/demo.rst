@@ -1,7 +1,7 @@
 .. _demo:
 
-A quick demonstration
-=====================
+Demonstration
+=============
 
 This section contains a quick and somewhat contrived demonstration that
 illustrates a number of basic Enoki features. The remainder of the

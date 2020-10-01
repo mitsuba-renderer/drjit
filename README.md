@@ -38,7 +38,7 @@ keeping compilation times short.
 Algorithms designed using Enoki are expressed a generic way (using *templates*)
 and specialized to specific requirements by "lifting" them onto a computational
 backend. By stacking up such transformations, it becomes possible to create
-elaborate architectures that would be very tedious to develop "by hand"---for
+elaborate architectures that would be very tedious to develop by hand—for
 example, a GPU implementation of an algorithm that can be differentiated
 end-to-end along with other code running in an interactive Python session.
 The following backends are currently included:
@@ -112,8 +112,9 @@ $ git clone --recursive https://github.com/mitsuba-renderer/enoki
 
 ## Documentation
 
-An extensive set of tutorials and reference documentation are available at
-[readthedocs.org](http://enoki.readthedocs.org/en/master).
+Please see Enoki's page on
+[readthedocs](https://enoki.readthedocs.io/en/master/demo.html) for example
+code and reference documentation.
 
 ## About
 
