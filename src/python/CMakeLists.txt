@@ -38,7 +38,7 @@ set_target_properties(enoki-python PROPERTIES
 
 target_compile_options(enoki-python PRIVATE ${ENOKI_NATIVE_FLAGS})
 
-if (ENOKI_MASTER_PROJECT)
+if (ENOKI_MASTER_PROJECT AND NOT "${CMAKE_CURRENT_SOURCE_DIR}" STREQUAL "${CMAKE_CURRENT_BINARY_DIR}")
   set(ENOKI_PYTHON_FILES
      __init__.py const.py detail.py generic.py
      matrix.py router.py traits.py
