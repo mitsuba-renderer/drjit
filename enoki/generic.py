@@ -183,18 +183,16 @@ def isub_(a0, a1):
 def mul_(a0, a1):
     if not a0.IsArithmetic:
         raise Exception("mul(): requires arithmetic operands!")
-    if isinstance(a1, int) or isinstance(a1, float):
+
+
+    if _ek.array_depth_v(a1) < _ek.array_depth_v(a0) and not \
+       _ek.array_size_v(a0) == _ek.array_size_v(a1):
         # Avoid type promotion in scalars multiplication, which would
         # be costly for special types (matrices, quaternions, etc.)
         sr = len(a0)
         ar = a0.empty_(sr if a0.Size == Dynamic else 0)
         for i in range(len(a0)):
             ar[i] = a0[i] * a1
-        return ar
-    elif a0.IsMatrix and a1.IsVector and a0.Size == a1.Size:
-        ar = a0[0] * a1[0]
-        for i in range(a1.Size):
-            ar = _ek.fmadd(a0[i], a1[i], ar)
         return ar
 
     ar, sr = _check2(a0, a1)
@@ -236,20 +234,12 @@ def matmul_(a0, a1):
     if not a0.IsMatrix:
         raise Exception("matmul(): requires a matrix-valued left hand side!")
 
-    if isinstance(a1, int) or isinstance(a1, float):
-        # Avoid type promotion in scalars multiplication, which would
-        # be costly for special types (matrices, quaternions, etc.)
-        sr = len(a0)
-        ar = a0.empty_(sr if a0.Size == Dynamic else 0)
-        for i in range(len(a0)):
-            ar[i] = a0[i] * a1
-        return ar
-    elif a1.IsVector and a0.Size == a1.Size:
+    if a1.IsVector and a0.Size == a1.Size:
         ar = a0[0] * a1[0]
-        for i in range(a1.Size):
+        for i in range(1, a1.Size):
             ar = _ek.fmadd(a0[i], a1[i], ar)
         return ar
-    elif a1.IsMatrix:
+    elif a1.IsMatrix and a0.Size == a1.Size:
         ar, sr = _check2(a0, a1)
         for j in range(a0.Size):
             accum = a0[0] * _ek.full(a0.Value, a1[0, j])
@@ -258,7 +248,7 @@ def matmul_(a0, a1):
             ar[j] = accum
         return ar
     else:
-        raise Exception("matmul(): unsupported right hand side!")
+        raise Exception("matmul(): unsupported operand shape!")
 
 
 def truediv_(a0, a1):

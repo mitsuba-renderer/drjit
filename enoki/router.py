@@ -634,23 +634,35 @@ def op_isub(a, b):
 
 
 def op_mul(a, b):
-    if type(a) is not type(b) \
-       and not (isinstance(b, int) or (_ek.is_floating_point_v(a) and isinstance(b, float))) \
-       and not (_ek.is_matrix_v(a) and _ek.is_vector_v(b)):
-        a, b = _var_promote(a, b)
+    if type(a) is not type(b):
+        scalar_multp = isinstance(b, int) or (a.IsFloat and isinstance(b, float))
+        value_type_a = a.Value.Value if a.IsMatrix else a.Value
+        value_type_b = None
+
+        if _ek.is_array_v(b):
+            value_type_b = b.Value.Value if b.IsMatrix else b.Value
+
+        if scalar_multp or value_type_a is type(b):
+            pass
+        elif value_type_b is type(a):
+            a, b = b, a
+        else:
+            a, b = _var_promote(a, b)
+
     return a.mul_(b)
 
 
 def op_rmul(a, b):
     if type(a) is not type(b):
-        a, b = _var_promote(a, b)
-    return b.mul_(a)
+        if isinstance(b, int) or (a.IsFloat and isinstance(b, float)):
+            pass
+        else:
+            a, b = _var_promote(a, b)
+    return a.mul_(b)
 
 
 def op_matmul(a, b):
-    if type(a) is not type(b) \
-       and not (isinstance(b, int) or (_ek.is_floating_point_v(a) and isinstance(b, float))) \
-       and not (_ek.is_matrix_v(a) and _ek.is_vector_v(b)):
+    if type(a) is not type(b) and not (_ek.is_matrix_v(a) and _ek.is_vector_v(b)):
         a, b = _var_promote(a, b)
     return a.matmul_(b)
 

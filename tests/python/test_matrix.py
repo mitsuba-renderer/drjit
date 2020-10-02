@@ -145,3 +145,33 @@ def test11_constructor(package):
             values = np.random.random((i, 3, 3)).astype('float32')
             m5 = Matrix3f(values)
             assert ek.allclose(m5, values)
+
+
+@pytest.mark.parametrize("package", [ek.scalar, ek.cuda, ek.llvm])
+def test12_matrix_scale(package):
+    Float, Matrix3f = package.Float, package.Matrix3f
+    if ek.is_jit_array_v(Float):
+        ek.set_device(0 if Float.IsCUDA else -1)
+
+    m = np.array([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6], [0.7, 0.8, 0.9]], dtype=np.float32)
+    m2 = np.float32(2*m)
+
+    assert package.Matrix3f(m) * 2 == package.Matrix3f(m2)
+    assert package.Matrix3f(m) @ 2 == package.Matrix3f(m2)
+    assert package.Matrix3f(m) * package.Float(2) == package.Matrix3f(m2)
+    assert package.Matrix3f(m) @ package.Float(2) == package.Matrix3f(m2)
+    assert 2 * package.Matrix3f(m) == package.Matrix3f(m2)
+    assert package.Float(2) * package.Matrix3f(m) == package.Matrix3f(m2)
+
+
+@pytest.mark.parametrize("package", [ek.scalar, ek.cuda, ek.llvm])
+def test12_matrix_vector(package):
+    m = np.array([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6], [0.7, 0.8, 0.9]], dtype=np.float32)
+    Float, Matrix3f, Array3f = package.Float, package.Matrix3f, package.Array3f
+    if ek.is_jit_array_v(Float):
+        ek.set_device(0 if Float.IsCUDA else -1)
+    m = Matrix3f(m)
+    v1 = m @ Array3f(1, 0, 0)
+    v2 = m @ Array3f(1, 1, 0)
+    assert ek.allclose(v1, [0.1, 0.4, 0.7])
+    assert ek.allclose(v2, [0.3, 0.9, 1.5])
