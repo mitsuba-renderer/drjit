@@ -166,12 +166,28 @@ def test12_matrix_scale(package):
 
 @pytest.mark.parametrize("package", [ek.scalar, ek.cuda, ek.llvm])
 def test12_matrix_vector(package):
-    m = np.array([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6], [0.7, 0.8, 0.9]], dtype=np.float32)
+    m_ = np.array([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6], [0.7, 0.8, 0.9]], dtype=np.float32)
     Float, Matrix3f, Array3f = package.Float, package.Matrix3f, package.Array3f
     if ek.is_jit_array_v(Float):
         ek.set_device(0 if Float.IsCUDA else -1)
-    m = Matrix3f(m)
+    m = Matrix3f(m_)
     v1 = m @ Array3f(1, 0, 0)
     v2 = m @ Array3f(1, 1, 0)
     assert ek.allclose(v1, [0.1, 0.4, 0.7])
     assert ek.allclose(v2, [0.3, 0.9, 1.5])
+    v1 = m @ ek.scalar.Array3f(1, 0, 0)
+    v2 = m @ ek.scalar.Array3f(1, 1, 0)
+    assert ek.allclose(v1, [0.1, 0.4, 0.7])
+    assert ek.allclose(v2, [0.3, 0.9, 1.5])
+
+    with pytest.raises(ek.Exception):
+        m * Array3f(1, 0, 0)
+
+    with pytest.raises(ek.Exception):
+        m * ek.scalar.Array3f(1, 0, 0)
+
+    with pytest.raises(ek.Exception):
+        m * m
+
+    with pytest.raises(ek.Exception):
+        m * ek.scalar.Matrix3f(m_)

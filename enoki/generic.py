@@ -184,9 +184,7 @@ def mul_(a0, a1):
     if not a0.IsArithmetic:
         raise Exception("mul(): requires arithmetic operands!")
 
-
-    if _ek.array_depth_v(a1) < _ek.array_depth_v(a0) and not \
-       _ek.array_size_v(a0) == _ek.array_size_v(a1):
+    if _ek.array_depth_v(a1) < _ek.array_depth_v(a0):
         # Avoid type promotion in scalars multiplication, which would
         # be costly for special types (matrices, quaternions, etc.)
         sr = len(a0)
