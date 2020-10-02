@@ -207,6 +207,28 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
         return CallSupport(derived());
     }
 
+    Derived& operator++() {
+        derived() += 1;
+        return derived();
+    }
+
+    Derived& operator--() {
+        derived() -= 1;
+        return derived();
+    }
+
+    Derived operator++(int) const {
+        Derived value = derived();
+        derived() += 1;
+        return value;
+    }
+
+    Derived operator--(int) const {
+        Derived value = derived();
+        derived() -= 1;
+        return value;
+    }
+
     //! @}
     // -----------------------------------------------------------------------
 
