@@ -21,7 +21,7 @@ namespace detail {
     ENOKI_INLINE decltype(auto) gather_helper(T& v, const UInt32 &perm) {
         ENOKI_MARK_USED(perm);
         using DT = std::decay_t<T>;
-        if constexpr (!is_jit_array_v<DT> && !has_struct_support_v<DT>)
+        if constexpr (!is_jit_array_v<DT> && !is_enoki_struct_v<DT>)
             return v;
         else
             return enoki::gather<DT, true>(v, perm);

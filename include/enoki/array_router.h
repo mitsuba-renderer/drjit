@@ -710,13 +710,20 @@ template <bool Default, typename T> auto none_nested_or(const T &value) {
 template <typename T> ENOKI_INLINE T zero(size_t size = 1) {
     if constexpr (is_array_v<T>) {
         return T::Derived::zero_(size);
-    } else if constexpr (has_struct_support_v<T>) {
-        return struct_support<T>::zero(size);
+    } else if constexpr (is_enoki_struct_v<T>) {
+        T result;
+        struct_support_t<T>::apply_1(
+            result,
+            [size](auto &x) ENOKI_INLINE_LAMBDA {
+                using X = std::decay_t<decltype(x)>;
+                x = zero<X>(size);
+            });
+        return result;
     } else {
         static_assert(std::is_scalar_v<T>,
                       "Unsupported data structure -- did you forget to include "
-                      "'enoki/struct.h' or provide a suitable "
-                      "ENOKI_STRUCT_SUPPORT() declaration?");
+                      "'enoki/struct.h' or provide a suitable ENOKI_STRUCT() "
+                      "declaration?");
         return T(0);
     }
 }
@@ -729,13 +736,20 @@ template <typename T> ENOKI_INLINE T zero(size_t size = 1) {
 template <typename T> ENOKI_INLINE T empty(size_t size = 1) {
     if constexpr (is_array_v<T>) {
         return T::Derived::empty_(size);
-    } else if constexpr (has_struct_support_v<T>) {
-        return struct_support<T>::empty(size);
+    } else if constexpr (is_enoki_struct_v<T>) {
+        T result;
+        struct_support_t<T>::apply_1(
+            result,
+            [size](auto &x) ENOKI_INLINE_LAMBDA {
+                using X = std::decay_t<decltype(x)>;
+                x = empty<X>(size);
+            });
+        return result;
     } else {
         static_assert(std::is_scalar_v<T>,
                       "Unsupported data structure -- did you forget to include "
-                      "'enoki/struct.h' or provide a suitable "
-                      "ENOKI_STRUCT_SUPPORT() declaration?");
+                      "'enoki/struct.h' or provide a suitable ENOKI_STRUCT() "
+                      "declaration?");
         T undef;
         return undef;
     }
@@ -885,15 +899,25 @@ Target gather(Source &&source, const Index &index, const mask_t<Target> &mask = 
             return gather<Target, Permute>(
                 source, detail::broadcast_index<TargetIndex>(index), mask);
         }
-    } else if constexpr (has_struct_support_v<Target>) {
+    } else if constexpr (is_enoki_struct_v<Target>) {
         /// Case 3: gather<MyStruct>(const MyStruct &, ...)
-        return struct_support<Target>::template gather<Permute>(source, index, mask);
+        static_assert(is_enoki_struct_v<Source>, "Source must also be a custom data structure!");
+
+        Target result;
+        struct_support_t<Target>::apply_2(
+            source, result,
+            [&index, &mask](auto const &x1, auto &x2) ENOKI_INLINE_LAMBDA {
+                using X2 = std::decay_t<decltype(x2)>;
+                x2 = gather<X2, Permute>(x1, index, mask);
+            });
+
+        return result;
     } else {
         /// Case 4: gather<float>(const float *, ...)
         static_assert(std::is_integral_v<Index> && std::is_scalar_v<Target>,
                       "gather(): unsupported inputs -- did you forget to "
                       "include 'enoki/struct.h' or provide a suitable "
-                      "ENOKI_STRUCT_SUPPORT() declaration?");
+                      "ENOKI_STRUCT() declaration?");
 
         if constexpr (is_array_v<Source>)
             return mask ? source[index] : Target(0);
@@ -929,13 +953,18 @@ void scatter(Target &&target, const Value &value, const Index &index, const mask
             scatter<Permute>(target, value,
                                     detail::broadcast_index<TargetIndex>(index), mask);
         }
-    } else if constexpr (has_struct_support_v<Value>) {
-        struct_support<Value>::template scatter<Permute>(target, value, index, mask);
+    } else if constexpr (is_enoki_struct_v<Value>) {
+        static_assert(is_enoki_struct_v<Target>, "Target must also be a custom data structure!");
+        struct_support_t<Value>::apply_2(
+            target, value,
+            [&index, &mask](auto &x1, const auto &x2) ENOKI_INLINE_LAMBDA {
+                scatter<Permute>(x1, x2, index, mask);
+            });
     } else {
         static_assert(std::is_integral_v<Index> && std::is_scalar_v<Value>,
                       "scatter(): unsupported inputs -- did you forget to "
                       "include 'enoki/struct.h' or provide a suitable "
-                      "ENOKI_STRUCT_SUPPORT() declaration?");
+                      "ENOKI_STRUCT() declaration?");
 
         if (mask) {
             if constexpr (is_array_v<Target>)
@@ -961,7 +990,7 @@ void scatter_add(Target &&target, const Value &value, const Index &index, const 
             using TargetIndex = replace_scalar_t<Value, scalar_t<Index>>;
             scatter_add(target, value, detail::broadcast_index<TargetIndex>(index), mask);
         }
-    } else if constexpr (has_struct_support_v<Value>) {
+    } else if constexpr (is_enoki_struct_v<Value>) {
         struct_support<Value>::scatter_add(target, value, index, mask);
     } else if constexpr (std::is_integral_v<Index> && std::is_arithmetic_v<Value> && !std::is_same_v<Value, bool>) {
         if (mask) {
@@ -1077,8 +1106,14 @@ template <typename T> ENOKI_INLINE bool schedule(const T &value) {
         } else {
             return value.derived().schedule_();
         }
-    } else if constexpr (has_struct_support_v<T>) {
-        return struct_support<T>::schedule(value);
+    } else if constexpr (is_enoki_struct_v<T>) {
+        bool result = false;
+        struct_support_t<T>::apply_1(
+            value,
+            [&](auto const &x) ENOKI_INLINE_LAMBDA {
+                result |= schedule(x);
+            });
+        return result;
     } else {
         ; // do nothing
     }
@@ -1119,14 +1154,33 @@ ENOKI_INLINE void sync_all_devices() {
 }
 
 template <typename T> ENOKI_INLINE size_t width(const T &value) {
-    if constexpr (array_depth_v<T> > 1 && array_size_v<T> > 0)
-        return width(value.derived().entry(0));
-    else if constexpr (is_array_v<T>)
+    if constexpr (array_size_v<T> == 0) {
+        return 0;
+    } if constexpr (array_depth_v<T> > 1) {
+        size_t result = 0;
+        for (size_t i = 0; i < value.derived().size(); ++i) {
+            size_t w = width(value.derived().entry(i));
+            if (w > result)
+                result = w;
+        }
+        return result;
+    } else if constexpr (is_array_v<T>) {
         return value.derived().size();
-    else if constexpr (has_struct_support_v<T>)
-        return struct_support<T>::width(value);
-    else
+    } else if constexpr (is_enoki_struct_v<T>) {
+        size_t result = 0;
+
+        struct_support_t<T>::apply_1(
+            value,
+            [&](auto const &x) ENOKI_INLINE_LAMBDA {
+                size_t w = width(x);
+                if (w > result)
+                    result = w;
+            });
+
+        return result;
+    } else {
         return 1;
+    }
 }
 
 template <typename T> ENOKI_INLINE void resize(T &value, size_t size) {
@@ -1135,57 +1189,85 @@ template <typename T> ENOKI_INLINE void resize(T &value, size_t size) {
             resize(value.entry(i), size);
     } else if constexpr (is_jit_array_v<T>) {
         value.resize(size);
-    } else if constexpr (has_struct_support_v<T>) {
-        struct_support<T>::resize(value, size);
+    } else if constexpr (is_enoki_struct_v<T>) {
+        struct_support_t<T>::apply_1(
+            value,
+            [size](auto &x) ENOKI_INLINE_LAMBDA {
+                resize(x, size);
+            });
     }
 }
 
-template <typename T1> ENOKI_INLINE void set_label(T1 &value, const char *label) {
-    if constexpr (is_diff_array_v<T1> || is_jit_array_v<T1>) {
-        if constexpr (array_depth_v<T1> > 1) {
-            size_t label_size = strlen(label) + 11;
-            char *buf = (char *) alloca(label_size);
+template <typename T> ENOKI_INLINE void set_label(T &value, const char *label) {
+    if constexpr (is_diff_array_v<T> || is_jit_array_v<T>) {
+        if constexpr (array_depth_v<T> > 1) {
+            size_t bufsize = strlen(label) + 11;
+            char *buf = (char *) alloca(bufsize);
             for (size_t i = 0; i < value.size(); ++i) {
-                snprintf(buf, label_size, "%s_%zu", label, i);
+                snprintf(buf, bufsize, "%s_%zu", label, i);
                 set_label(value.entry(i), buf);
             }
         } else {
             value.derived().set_label_(label);
         }
-    } else if constexpr (has_struct_support_v<T1>) {
-        struct_support<T1>::set_label(value, label);
+    } else if constexpr (is_enoki_struct_v<T>) {
+        size_t bufsize = strlen(label) + 128;
+        char *buf = (char *) alloca(bufsize);
+
+        struct_support_t<T>::apply_label(
+            value,
+            [buf, bufsize, label](const char *label_2, auto &x) ENOKI_INLINE_LAMBDA {
+                snprintf(buf, bufsize, "%s_%s", label, label_2);
+                set_label(x, buf);
+            });
     }
 }
 
-template <typename T> ENOKI_INLINE bool grad_enabled(const T &a) {
+template <typename T> ENOKI_INLINE bool grad_enabled(const T &value) {
     if constexpr (is_diff_array_v<T>) {
         if constexpr (array_depth_v<T> > 1) {
             bool result = false;
-            for (size_t i = 0; i < a.size(); ++i)
-                result |= grad_enabled(a.entry(i));
+            for (size_t i = 0; i < value.size(); ++i)
+                result |= grad_enabled(value.entry(i));
             return result;
         } else {
-            return a.derived().index() > 0;
+            return value.derived().index() > 0;
         }
-    } else if constexpr (has_struct_support_v<T>) {
-        return struct_support<T>::grad_enabled(a);
+    } else if constexpr (is_enoki_struct_v<T>) {
+        bool result = false;
+
+        struct_support_t<T>::apply_1(
+            value,
+            [&](auto const &x) ENOKI_INLINE_LAMBDA {
+                result |= grad_enabled(x);
+            });
+
+        return result;
     } else {
         return false;
     }
 }
 
-template <typename T> ENOKI_INLINE bool grad_suspended(const T &a) {
+template <typename T> ENOKI_INLINE bool grad_suspended(const T &value) {
     if constexpr (is_diff_array_v<T>) {
         if constexpr (array_depth_v<T> > 1) {
             bool result = false;
-            for (size_t i = 0; i < a.size(); ++i)
-                result |= grad_suspended(a.entry(i));
+            for (size_t i = 0; i < value.size(); ++i)
+                result |= grad_suspended(value.entry(i));
             return result;
         } else {
-            return a.derived().index() < 0;
+            return value.derived().index() < 0;
         }
-    } else if constexpr (has_struct_support_v<T>) {
-        return struct_support<T>::grad_suspended(a);
+    } else if constexpr (is_enoki_struct_v<T>) {
+        bool result = false;
+
+        struct_support_t<T>::apply_1(
+            value,
+            [&](auto const &x) ENOKI_INLINE_LAMBDA {
+                result |= grad_suspended(x);
+            });
+
+        return result;
     } else {
         return false;
     }
@@ -1213,31 +1295,39 @@ template <typename T> ENOKI_INLINE T replace_grad(const T &a, const T &b) {
     }
 }
 
-template <typename T> ENOKI_INLINE void set_grad_enabled(T &a, bool value) {
+template <typename T> ENOKI_INLINE void set_grad_enabled(T &value, bool state) {
     if constexpr (is_diff_array_v<T>) {
         if constexpr (array_depth_v<T> > 1) {
-            for (size_t i = 0; i < a.size(); ++i)
-                set_grad_enabled(a.entry(i), value);
+            for (size_t i = 0; i < value.size(); ++i)
+                set_grad_enabled(value.entry(i), state);
         } else {
-            a.derived().set_grad_enabled_(value);
+            value.derived().set_grad_enabled_(state);
         }
-    } else if constexpr (has_struct_support_v<T>) {
-        struct_support<T>::set_grad_enabled(a, value);
+    } else if constexpr (is_enoki_struct_v<T>) {
+        struct_support_t<T>::apply_1(
+            value,
+            [state](auto &x) ENOKI_INLINE_LAMBDA {
+                set_grad_enabled(x, state);
+            });
     } else {
         static_assert(detail::false_v<T>, "Type does not support gradients!");
     }
 }
 
-template <typename T> ENOKI_INLINE void set_grad_suspended(T &a, bool value) {
+template <typename T> ENOKI_INLINE void set_grad_suspended(T &value, bool state) {
     if constexpr (is_diff_array_v<T>) {
         if constexpr (array_depth_v<T> > 1) {
-            for (size_t i = 0; i < a.size(); ++i)
-                set_grad_suspended(a.entry(i), value);
+            for (size_t i = 0; i < value.size(); ++i)
+                set_grad_suspended(value.entry(i), state);
         } else {
-            a.derived().set_grad_suspended_(value);
+            value.derived().set_grad_suspended_(state);
         }
-    } else if constexpr (has_struct_support_v<T>) {
-        struct_support<T>::set_grad_suspended(a, value);
+    } else if constexpr (is_enoki_struct_v<T>) {
+        struct_support_t<T>::apply_1(
+            value,
+            [state](auto &x) ENOKI_INLINE_LAMBDA {
+                set_grad_suspended(x, state);
+            });
     } else {
         static_assert(detail::false_v<T>, "Type does not support gradients!");
     }
@@ -1264,11 +1354,11 @@ template <typename... Ts> ENOKI_INLINE void resume_grad(Ts&... ts) {
     (set_grad_suspended(ts, false), ...);
 }
 
-template <typename T> ENOKI_INLINE auto detach(const T &value) {
+template <typename T> ENOKI_INLINE detached_t<T> detach(const T &value) {
+    using Result = detached_t<T>;
+
     if constexpr (is_diff_array_v<T>) {
         if constexpr (array_depth_v<T> > 1) {
-            using Result = detached_t<T>;
-
             Result result;
             if constexpr (Result::Size == Dynamic)
                 result = empty<Result>(value.size());
@@ -1280,18 +1370,26 @@ template <typename T> ENOKI_INLINE auto detach(const T &value) {
         } else {
             return value.derived().detach_();
         }
-    } else if constexpr (has_struct_support_v<T>) {
-        return struct_support<T>::detach(value);
+    } else if constexpr (is_enoki_struct_v<T>) {
+        Result result;
+
+        struct_support_t<T>::apply_2(
+            value, result,
+            [](auto const &x1, auto &x2) ENOKI_INLINE_LAMBDA {
+                x2 = detach(x1);
+            });
+
+        return result;
     } else {
         return value;
     }
 }
 
-template <typename T> ENOKI_INLINE auto grad(const T &value) {
+template <typename T> ENOKI_INLINE detached_t<T> grad(const T &value) {
+    using Result = detached_t<T>;
+
     if constexpr (is_diff_array_v<T>) {
         if constexpr (array_depth_v<T> > 1) {
-            using Result = detached_t<T>;
-
             Result result;
             if constexpr (Result::Size == Dynamic)
                 result = empty<Result>(value.size());
@@ -1303,10 +1401,18 @@ template <typename T> ENOKI_INLINE auto grad(const T &value) {
         } else {
             return value.derived().grad_();
         }
-    } else if constexpr (has_struct_support_v<T>) {
-        return struct_support<T>::grad(value);
+    } else if constexpr (is_enoki_struct_v<T>) {
+        Result result;
+
+        struct_support_t<T>::apply_2(
+            value, result,
+            [](auto const &x1, auto &x2) ENOKI_INLINE_LAMBDA {
+                x2 = grad(x1);
+            });
+
+        return result;
     } else {
-        return value;
+        return Result();
     }
 }
 
@@ -1319,8 +1425,6 @@ ENOKI_INLINE void set_grad(T &value, const detached_t<T> &grad) {
         } else {
             value.derived().set_grad_(grad);
         }
-    } else {
-        static_assert(detail::false_v<T>, "Type does not support gradients!");
     }
 }
 
@@ -1332,8 +1436,12 @@ template <typename T> ENOKI_INLINE void enqueue(const T &value) {
         } else {
             value.derived().enqueue_();
         }
-    } else if constexpr (has_struct_support_v<T>) {
-        struct_support<T>::enqueue(value);
+    } else if constexpr (is_enoki_struct_v<T>) {
+        struct_support_t<T>::apply_1(
+            value,
+            [](auto const &x) ENOKI_INLINE_LAMBDA {
+                enqueue(x);
+            });
     } else {
         ; // do nothing
     }
@@ -1487,15 +1595,27 @@ struct MaskedArray : ArrayBase<value_t<T>, is_mask_v<T>, MaskedArray<T>> {
 NAMESPACE_END(detail)
 
 template <typename T> struct struct_support {
-    static constexpr bool Defined = false;
+    using type = T;
+    static constexpr bool Defined =
+        is_detected_v<detail::is_enoki_struct_det, type>;
 };
 
 template <typename T, typename Mask>
-ENOKI_INLINE auto masked(T &value, const Mask &mask) {
+ENOKI_INLINE masked_t<T> masked(T &value, const Mask &mask) {
+    using Result = masked_t<T>;
+
     if constexpr (is_array_v<T> || std::is_scalar_v<Mask>) {
-        return detail::MaskedArray<T>{ value, mask };
-    } else if constexpr (has_struct_support_v<T>) {
-        return struct_support<T>::masked(value, mask);
+        return Result{ value, mask };
+    } else if constexpr (is_enoki_struct_v<T>) {
+        Result result;
+
+        struct_support_t<T>::apply_2(
+            value, result,
+            [&mask](auto &x1, auto &x2) ENOKI_INLINE_LAMBDA {
+                x2 = masked(x1, mask);
+            });
+
+        return result;
     } else {
         static_assert(
             detail::false_v<T, Mask>,

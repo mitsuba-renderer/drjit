@@ -252,8 +252,8 @@ namespace detail {
 
         auto recip_mask = Tan ? neq(j & Int(2), Int(0)) :
                                  eq(j & Int(2), Int(0));
-        masked(r, xa < Scalar(1e-4)) = y;
-        masked(r, recip_mask) = rcp(r);
+        enoki::masked(r, xa < Scalar(1e-4)) = y;
+        enoki::masked(r, recip_mask) = rcp(r);
 
         Value sign = detail::xor_(
             reinterpret_array<Value>(sl<sizeof(Scalar) * 8 - 2>(j)), x);

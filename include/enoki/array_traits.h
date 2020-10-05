@@ -104,6 +104,7 @@ namespace detail {
     template <typename T> using is_quaternion_det      = std::enable_if_t<T::Derived::IsQuaternion>;
     template <typename T> using is_special_det         = std::enable_if_t<T::Derived::IsSpecial>;
     template <typename T> using is_dynamic_det         = std::enable_if_t<T::IsDynamic>;
+    template <typename T> using is_enoki_struct_det    = std::enable_if_t<T::IsEnokiStruct>;
 }
 
 template <typename T> using enable_if_scalar_t = enable_if_t<std::is_scalar_v<T>>;
@@ -182,7 +183,8 @@ template <typename T>
 constexpr bool is_special_v = is_detected_v<detail::is_special_det, std::decay_t<T>>;
 template <typename T> using enable_if_special_t = enable_if_t<is_special_v<T>>;
 
-template <typename T> constexpr bool has_struct_support_v = struct_support<std::decay_t<T>>::Defined;
+template <typename T> constexpr bool is_enoki_struct_v = struct_support<std::decay_t<T>>::Defined;
+template <typename T> using enable_if_enoki_struct_t = enable_if_t<is_enoki_struct_v<T>>;
 
 namespace detail {
     template <typename T, typename = int> struct scalar {
@@ -264,6 +266,9 @@ template <typename T> using mask_t = typename detail::mask<T>::type;
 /// Type trait to access the array type underlying a mask
 template <typename T> using array_t = typename detail::array<T>::type;
 
+template <typename T>
+using struct_support_t = typename struct_support<T>::type;
+
 //! @}
 // -----------------------------------------------------------------------
 
@@ -298,7 +303,9 @@ namespace detail {
         using type = DiffArray<T>;
     };
 
-    template <typename T, typename = int> struct detached { using type = void; };
+    template <typename T, typename = int> struct detached {
+        using type = T;
+    };
 
     template <typename T> struct detached<T, enable_if_t<T::IsDiff && T::Depth != 1>> {
         using type = typename std::decay_t<T>::Derived::template ReplaceValue<
@@ -307,6 +314,30 @@ namespace detail {
 
     template <typename T> struct detached<T, enable_if_t<T::IsDiff && T::Depth == 1>> {
         using type = typename std::decay_t<T>::Type;
+    };
+
+    template <template <typename...> typename Base, typename... Ts>
+    struct detached<Base<Ts...>, enable_if_enoki_struct_t<Base<Ts...>>> {
+        using type = Base<typename detached<Ts>::type...>;
+    };
+
+    template <template <typename, size_t> typename Base, typename T, size_t S>
+    struct detached<Base<T, S>, enable_if_enoki_struct_t<Base<T, S>>> {
+        using type = Base<typename detached<T>::type, S>;
+    };
+
+    template <typename T, typename = int> struct masked {
+        using type = MaskedArray<T>;
+    };
+
+    template <template <typename...> typename Base, typename... Ts>
+    struct masked<Base<Ts...>, enable_if_enoki_struct_t<Base<Ts...>>> {
+        using type = Base<typename masked<Ts>::type...>;
+    };
+
+    template <template <typename, size_t> typename Base, typename T, size_t S>
+    struct masked<Base<T, S>, enable_if_enoki_struct_t<Base<T, S>>> {
+        using type = Base<typename masked<T>::type, S>;
     };
 };
 
@@ -321,6 +352,10 @@ using detached_t = typename detail::detached<T>::type;
 /// Get the lowest-level array type underlying a potentially nested array
 template <typename T>
 using leaf_array_t = typename detail::leaf_array<T>::type;
+
+/// Get the type of the masked(..) expression
+template <typename T>
+using masked_t = typename detail::masked<T>::type;
 
 //! @}
 // -----------------------------------------------------------------------
