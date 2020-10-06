@@ -1625,11 +1625,11 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             return enoki::detail::ad_graphviz<Type>(backward);
     }
 
-    const Type detach_() const {
+    const Type &detach_() const {
         return m_value;
     }
 
-    Type detach_() {
+    Type &detach_() {
         return m_value;
     }
 

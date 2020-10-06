@@ -1149,6 +1149,7 @@ public:
     bool valid() const { return m_index != 0; }
     size_t size() const { return jitc_var_size(m_index); }
     uint32_t index() const { return m_index; }
+    uint32_t* index_ptr() { return &m_index; }
 
     const Value *data() const { return (const Value *) jitc_var_ptr(m_index); }
     Value *data() { return (Value *) jitc_var_ptr(m_index); }
