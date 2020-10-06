@@ -139,7 +139,9 @@ Index binary_search(scalar_t<Index> start_, scalar_t<Index> end_,
 
 /// Vectorized N-dimensional 'range' iterable with automatic mask computation
 template <typename Value> struct range {
-    static constexpr bool Recurse = !Value::IsPacked || array_depth_v<Value> == 2;
+    static constexpr bool Recurse =
+        !(Value::IsPacked || Value::Size == Dynamic) ||
+        array_depth_v<Value> == 2;
     static constexpr size_t Dimension = Recurse ? array_size_v<Value> : 1;
 
     using Scalar = scalar_t<Value>;

@@ -10,6 +10,7 @@
     license that can be found in the LICENSE file.
 */
 
+#include <enoki/array.h>
 #include <enoki/map.h>
 
 #pragma once

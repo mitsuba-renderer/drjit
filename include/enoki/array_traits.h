@@ -58,7 +58,7 @@ namespace detail {
     /// SFINAE checker for component-based array constructors
     template <size_t Size, typename... Ts>
     using enable_if_components_t = enable_if_t<sizeof...(Ts) == Size && Size != 1 &&
-              (!std::is_same_v<Ts, detail::reinterpret_flag> && ...)>;
+              (!std::is_same_v<Ts, reinterpret_flag> && ...)>;
 
     template <bool... Args> constexpr bool and_v = (Args && ...);
 }
@@ -182,6 +182,12 @@ template <typename T> using enable_if_quaternion_t = enable_if_t<is_quaternion_v
 template <typename T>
 constexpr bool is_special_v = is_detected_v<detail::is_special_det, std::decay_t<T>>;
 template <typename T> using enable_if_special_t = enable_if_t<is_special_v<T>>;
+
+template <typename T> struct struct_support {
+    using type = T;
+    static constexpr bool Defined =
+        is_detected_v<detail::is_enoki_struct_det, type>;
+};
 
 template <typename T> constexpr bool is_enoki_struct_v = struct_support<std::decay_t<T>>::Defined;
 template <typename T> using enable_if_enoki_struct_t = enable_if_t<is_enoki_struct_v<T>>;

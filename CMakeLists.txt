@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.13..3.18)
 
-project(mitsuba
+project(enoki
   DESCRIPTION
     "Enoki 2"
   LANGUAGES

@@ -1594,20 +1594,12 @@ struct MaskedArray : ArrayBase<value_t<T>, is_mask_v<T>, MaskedArray<T>> {
 
 NAMESPACE_END(detail)
 
-template <typename T> struct struct_support {
-    using type = T;
-    static constexpr bool Defined =
-        is_detected_v<detail::is_enoki_struct_det, type>;
-};
-
 template <typename T, typename Mask>
-ENOKI_INLINE masked_t<T> masked(T &value, const Mask &mask) {
-    using Result = masked_t<T>;
-
+ENOKI_INLINE auto masked(T &value, const Mask &mask) {
     if constexpr (is_array_v<T> || std::is_scalar_v<Mask>) {
-        return Result{ value, mask };
+        return detail::MaskedArray<T>{ value, mask };
     } else if constexpr (is_enoki_struct_v<T>) {
-        Result result;
+        masked_t<T> result;
 
         struct_support_t<T>::apply_2(
             value, result,
