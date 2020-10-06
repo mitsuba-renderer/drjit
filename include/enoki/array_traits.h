@@ -298,6 +298,16 @@ namespace detail {
         using type = T;
     };
 
+    template <template <typename...> typename Base, typename T0, typename... Ts>
+    struct leaf_array<Base<T0, Ts...>, enable_if_enoki_struct_t<Base<T0, Ts...>>> {
+        using type = typename leaf_array<T0>::type;
+    };
+
+    template <template <typename, size_t> typename Base, typename T, size_t S>
+    struct leaf_array<Base<T, S>, enable_if_enoki_struct_t<Base<T, S>>> {
+        using type = typename leaf_array<T>::type;
+    };
+
     template <typename T, typename = int> struct diff_array { using type = void; };
 
     template <typename T> struct diff_array<T, enable_if_t<!T::IsDiff && T::IsJIT && T::Depth != 1>> {
