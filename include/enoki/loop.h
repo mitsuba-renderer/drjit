@@ -66,32 +66,23 @@ template <typename... Args> struct Loop {
         }
     }
 
-    decltype(auto) mask() const {
-        if constexpr (IsLLVM)
-            return m_mask;
-        else
-            return true;
-    }
-
-    bool cond(const Mask &mask) {
+    bool cond(const Mask &mask_) {
         if constexpr (!Enabled) {
-            return (bool) mask;
+            return (bool) mask_;
         } else {
             if (m_counter == 0) {
+                Mask mask;
                 if constexpr (IsLLVM)
-                    m_mask = mask && UInt32::launch_index() <
-                                     UInt32::last_index();
+                    mask = mask_ && Mask::active_mask();
                 else
-                    m_mask = mask;
-            }
+                    mask = mask_;
 
-            uint32_t mask_index = 0;
-            if constexpr (is_diff_array_v<Mask>)
-                mask_index = detach(m_mask).index();
-            else
-                mask_index = m_mask.index();
+                uint32_t mask_index = 0;
+                if constexpr (is_diff_array_v<Mask>)
+                    mask_index = detach(mask).index();
+                else
+                    mask_index = mask.index();
 
-            if (m_counter == 0) {
                 if constexpr (IsLLVM) {
                     /// ----------- LLVM -----------
 
@@ -105,22 +96,35 @@ template <typename... Args> struct Loop {
                     // Branch to end of loop if all done
                     append(jitc_var_new_2(
                         VarType::Invalid,
-                        "br $t1 $r1, label %$L2_body, label %$L2_done", 1, 0,
+                        "br $t1 $r1, label %$L2_body, label %$L2_post", 1, 0,
                         m_id, m_loop_id));
+
+                    jitc_llvm_active_mask_push(mask_index);
                 } else {
                     /// ----------- CUDA -----------
-                    // Branch to end of Loop if all done
+                    // Branch to end of loop if all done
                     append(jitc_var_new_3(VarType::Invalid,
-                                          "@!$r1 bra $L2_done", 1, 1,
+                                          "@!$r1 bra $L2_post", 1, 1,
                                           mask_index, m_loop_id, m_id));
-                    m_mask = Mask();
                 }
 
                 // Start the main loop body
                 append(jitc_var_new_2(VarType::Invalid, "\n$L1_body:", 1, IsCUDA,
                                       m_loop_id, m_id));
             } else if (m_counter == 1) {
-                /// Assign changed variables
+                uint32_t mask_index = IsCUDA ? 0 : jitc_llvm_active_mask();
+
+                if constexpr (IsLLVM) {
+                    // Ensure that the final state of all loop vars. is evaluted by this point
+                    for (size_t i = 0; i < m_var_count; ++i)
+                        append(jitc_var_new_2(VarType::Invalid, "", 1, 0, *m_vars[i], m_id));
+
+                    append(jitc_var_new_2(VarType::Invalid,
+                                          "br label %$L1_end\n\n$L1_end:", 1, 0,
+                                          m_loop_id, m_id));
+                }
+
+                // Assign changed variables
                 for (size_t i = 0; i < m_var_count; ++i) {
                     if (IsCUDA && m_vars_phi[i] == *m_vars[i])
                         continue;
@@ -138,10 +142,15 @@ template <typename... Args> struct Loop {
                     }
                 }
 
+                jitc_var_dec_ref_ext(mask_index);
+
                 append(jitc_var_new_2(VarType::Invalid,
-                                      IsLLVM ? "br label %$L1_phi\n\n$L1_done:"
-                                             : "bra $L1_cond$n\n$L1_done:",
+                                      IsLLVM ? "br label %$L1_phi\n\n$L1_post:"
+                                             : "bra $L1_cond$n\n$L1_post:",
                                       1, IsCUDA, m_loop_id, m_id));
+
+                if constexpr (IsLLVM)
+                    jitc_llvm_active_mask_pop();
             } else {
                 enoki_raise("enoki::Loop::cond() was called more than twice!");
             }
@@ -223,7 +232,7 @@ protected:
             if constexpr (IsLLVM) {
                 // Ensure that the initial state of all loop vars. is evaluted by this point
                 for (size_t i = 0; i < m_var_count; ++i)
-                    append(jitc_var_new_2(VarType::Invalid, "", 1, IsCUDA, *m_vars[i], m_id));
+                    append(jitc_var_new_2(VarType::Invalid, "", 1, 0, *m_vars[i], m_id));
 
                 /* Insert two dummy basic blocks, used to establish
                    a source in the following set of phi exprs. */
@@ -241,7 +250,7 @@ protected:
 
                     uint32_t id = jitc_var_new_3(jitc_var_type(*idp),
                         "$r0 = phi <$w x $t0> [ $r1, %$L2_pre ], "
-                        "[ $r0_end, %$L2_body ]",
+                        "[ $r0_end, %$L2_end ]",
                         1, 0, *idp, m_loop_id, m_id);
 
                     m_vars_phi[i] = id;
@@ -279,7 +288,7 @@ protected:
         }
     }
 
-    /// Extracts JIT variable indices of Loop variables
+    /// Extracts JIT variable indices of loop variables
     template <typename T> void extract(T &value, bool store) {
         if constexpr (is_array_v<T>) {
             if constexpr (array_depth_v<T> == 1) {
@@ -321,7 +330,6 @@ protected:
     uint32_t m_id = 0;
     uint32_t m_loop_id = 0;
     uint32_t m_side_effect_counter = 0;
-    Mask m_mask;
 };
 
 NAMESPACE_END(enoki)

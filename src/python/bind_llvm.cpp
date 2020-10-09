@@ -16,8 +16,7 @@ void export_llvm(py::module_ &m) {
 
     py::class_<Loop<Guide>> loop(llvm, "Loop");
     loop.def(py::init<py::args>())
-        .def("cond", &Loop<Guide>::cond)
-        .def("mask", &Loop<Guide>::mask);
+        .def("cond", &Loop<Guide>::cond);
 
 #if defined(ENOKI_ENABLE_AUTODIFF)
     loop.def("cond", [](Loop<Guide> &g,

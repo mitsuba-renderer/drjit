@@ -138,3 +138,37 @@ def test05_test_collatz(pkg, variant):
 
     assert value == p.Int([1]*10)
     assert ctr == p.Int([0,1,7,2,5,8,16,3,19,6])
+
+@pytest.mark.parametrize("variant", [0, 1])
+@pytest.mark.parametrize("pkg", ["enoki.cuda",
+                                 "enoki.cuda.ad",
+                                 "enoki.llvm",
+                                 "enoki.llvm.ad"])
+def test06_loop_nest(pkg, variant):
+    ek.set_device(-1 if 'llvm' in pkg else 0)
+    p = get_class(pkg)
+
+    def collatz(value: p.Int):
+        counter = p.Int(0)
+        loop = p.Loop(value, counter)
+        while (loop.cond(ek.neq(value, 1))):
+            is_even = ek.eq(value & 1, 0)
+            value.assign(ek.select(is_even, value // 2, 3*value + 1))
+            counter += 1
+        return counter
+
+    i = p.Int(1)
+    buf = ek.full(p.Int, 1000, 16)
+    ek.eval(buf)
+
+    if variant == 0:
+        loop_1 = p.Loop(i)
+        while loop_1.cond(i <= 10):
+            ek.scatter(buf, collatz(p.Int(i)), i - 1)
+            i += 1
+    else:
+        for i in range(1, 11):
+            ek.scatter(buf, collatz(p.Int(i)), i - 1)
+            i += 1
+
+    assert buf == p.Int(0, 1, 7, 2, 5, 8, 16, 3, 19, 6, 1000, 1000, 1000, 1000, 1000, 1000)

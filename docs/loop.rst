@@ -76,12 +76,14 @@ variable ``is_even``, and only declares two loop variables ``value`` and
     // Collatz conjecture: count # of iterations to reach 1
     UInt32 collatz(UInt32 value) {
         UInt32 counter = 0;
+
         ek::Loop loop(value, counter);
         while (loop.cond(ek::neq(value, 1))) {
             mask_t<UInt32> is_even = ek::eq(value & 1, 0);
             value = ek::select(is_even, value / 2, 3*value + 1);
             counter++;
         }
+
         return counter;
     }
 
@@ -104,9 +106,11 @@ array class. It is not needed for in-place updates like ``+=``.
 
     def collatz(value: UInt32):
         counter = UInt32(0)
+
         loop = Loop(value, counter)
-        while (loop.cond(ek.neq(value, 1))):
+        while loop.cond(ek.neq(value, 1)):
             is_even = ek.eq(value & 1, 0)
             value.assign(ek.select(is_even, value // 2, 3*value + 1))
             counter += 1
+
         return counter

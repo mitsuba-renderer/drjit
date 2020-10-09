@@ -939,8 +939,7 @@ private:
         LLVMArray<void *> base = LLVMArray<void *>::steal(
             jitc_var_copy_ptr(src_ptr, src_index));
 
-        LLVMArray<bool> mask_2 = mask && LLVMArray<uint32_t>::launch_index() <
-                                         LLVMArray<uint32_t>::last_index();
+        LLVMArray<bool> mask_2 = mask & active_mask();
 
         uint32_t var;
         if constexpr (sizeof(Value) != 1) {
@@ -976,8 +975,7 @@ private:
             LLVMArray<void *> base = LLVMArray<void *>::steal(
                 jitc_var_copy_ptr(dst, dst_index));
 
-            LLVMArray<bool> mask_2 = mask && LLVMArray<uint32_t>::launch_index() <
-                                             LLVMArray<uint32_t>::last_index();
+            LLVMArray<bool> mask_2 = mask & active_mask();
 
             uint32_t var = jitc_var_new_4(
                 VarType::Invalid,
@@ -1001,9 +999,7 @@ private:
         } else {
             LLVMArray<void *> base = LLVMArray<void *>::steal(
                 jitc_var_copy_ptr(dst, dst_index));
-
-            LLVMArray<bool> mask_2 = mask && LLVMArray<uint32_t>::launch_index() <
-                                             LLVMArray<uint32_t>::last_index();
+            LLVMArray<bool> mask_2 = mask & active_mask();
 
             const char *op;
             if (sizeof(Value) == 4 &&
@@ -1232,12 +1228,8 @@ public:
             "$r0 = add <$w x $t0> $r0_1, $l0", 1, 0, (uint32_t) size));
     }
 
-    static LLVMArray last_index(size_t size = 1) {
-        return steal(jitc_var_new_0(
-            Type,
-            "$r0_0 = insertelement <$w x $t0> undef, i32 %end, i32 0$n"
-            "$r0 = shufflevector <$w x $t0> $r0_0, <$w x $t0> undef, <$w x i32> $z$n",
-            1, 0, (uint32_t) size));
+    static LLVMArray<bool> active_mask() {
+        return LLVMArray<bool>::steal(jitc_llvm_active_mask());
     }
 
     void init_(size_t size) {
