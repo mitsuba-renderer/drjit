@@ -7,6 +7,18 @@ from enoki.packet import Matrix4f as M4
 from enoki.packet import Float
 M = M4
 
+def prepare(pkg):
+    if 'cuda' in pkg.__name__:
+        if ek.has_cuda():
+            ek.set_device(0)
+        else:
+            pytest.skip('CUDA mode is unsupported')
+    elif 'llvm' in pkg.__name__:
+        if ek.has_llvm():
+            ek.set_device(-1)
+        else:
+            pytest.skip('LLVM mode is unsupported')
+
 
 def test01_init_broadcast_mul():
     m = M(*range(1, 17))
@@ -43,6 +55,7 @@ def test02_transpose_diag():
 
 
 def test03_roundtrip():
+    pytest.importorskip("numpy")
     m = M(*range(1, 17)) + ek.full(M, ek.arange(ek.packet.Float))
     m2 = M(m.numpy())
     assert m == m2
@@ -67,27 +80,29 @@ def test05_allclose():
 
 @pytest.mark.parametrize('M', [M2, M3, M4])
 def test06_det(M):
-  import numpy as np
-  np.random.seed(1)
-  for i in range(100):
-      m1 = np.float32(np.random.normal(size=list(reversed(M.Shape))))
-      m2 = M(m1)
-      det1 = Float(np.linalg.det(m1))
-      det2 = ek.det(m2)
-      assert ek.allclose(det1, det2, atol=1e-6)
+    pytest.importorskip("numpy")
+    import numpy as np
+    np.random.seed(1)
+    for i in range(100):
+        m1 = np.float32(np.random.normal(size=list(reversed(M.Shape))))
+        m2 = M(m1)
+        det1 = Float(np.linalg.det(m1))
+        det2 = ek.det(m2)
+        assert ek.allclose(det1, det2, atol=1e-6)
 
 
 @pytest.mark.parametrize('M', [M2, M3, M4])
 def test07_inverse(M):
-  import numpy as np
-  np.random.seed(1)
-  for i in range(100):
-      m1 = np.float32(np.random.normal(size=list(reversed(M.Shape))))
-      m2 = M(m1)
-      inv1 = M(np.linalg.inv(m1))@m2 - ek.identity(M)
-      inv2 = ek.inverse(m2)@m2 - ek.identity(M)
-      assert ek.allclose(inv1, 0, atol=1e-3)
-      assert ek.allclose(inv2, 0, atol=1e-3)
+    pytest.importorskip("numpy")
+    import numpy as np
+    np.random.seed(1)
+    for i in range(100):
+        m1 = np.float32(np.random.normal(size=list(reversed(M.Shape))))
+        m2 = M(m1)
+        inv1 = M(np.linalg.inv(m1))@m2 - ek.identity(M)
+        inv2 = ek.inverse(m2)@m2 - ek.identity(M)
+        assert ek.allclose(inv1, 0, atol=1e-3)
+        assert ek.allclose(inv2, 0, atol=1e-3)
 
 
 def test08_polar():
@@ -126,8 +141,7 @@ def test11_constructor(package):
     Check Matrix construction from Python array and Numpy array
     """
     Float, Matrix3f = package.Float, package.Matrix3f
-    if ek.is_jit_array_v(Float):
-        ek.set_device(0 if Float.IsCUDA else -1)
+    prepare(package)
 
     m1 = [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6], [0.7, 0.8, 0.9]]
     m2 = np.array(m1, dtype=np.float32)
@@ -150,8 +164,7 @@ def test11_constructor(package):
 @pytest.mark.parametrize("package", [ek.scalar, ek.cuda, ek.llvm])
 def test12_matrix_scale(package):
     Float, Matrix3f = package.Float, package.Matrix3f
-    if ek.is_jit_array_v(Float):
-        ek.set_device(0 if Float.IsCUDA else -1)
+    prepare(package)
 
     m = np.array([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6], [0.7, 0.8, 0.9]], dtype=np.float32)
     m2 = np.float32(2*m)
@@ -168,8 +181,7 @@ def test12_matrix_scale(package):
 def test12_matrix_vector(package):
     m_ = np.array([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6], [0.7, 0.8, 0.9]], dtype=np.float32)
     Float, Matrix3f, Array3f = package.Float, package.Matrix3f, package.Array3f
-    if ek.is_jit_array_v(Float):
-        ek.set_device(0 if Float.IsCUDA else -1)
+    prepare(package)
     m = Matrix3f(m_)
     v1 = m @ Array3f(1, 0, 0)
     v2 = m @ Array3f(1, 1, 0)

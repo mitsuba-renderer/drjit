@@ -1,12 +1,24 @@
+import enoki
 import enoki as ek
 import pytest
 
+def prepare(pkg):
+    if 'cuda' in pkg.__name__:
+        if ek.has_cuda():
+            ek.set_device(0)
+        else:
+            pytest.skip('CUDA mode is unsupported')
+    elif 'llvm' in pkg.__name__:
+        if ek.has_llvm():
+            ek.set_device(-1)
+        else:
+            pytest.skip('LLVM mode is unsupported')
 
 @pytest.mark.parametrize("package", [ek.cuda, ek.cuda.ad,
                                      ek.llvm, ek.llvm.ad])
 def test_roundtrip_dlpack_all(package):
     Float, Array3f = package.Float, package.Array3f
-    ek.set_device(0 if Float.IsCUDA else -1)
+    prepare(package)
     a1 = Array3f(
         ek.arange(Float, 10),
         ek.arange(Float, 10)+100,
@@ -24,7 +36,7 @@ def test_roundtrip_dlpack_all(package):
 def test_roundtrip_numpy_all(package):
     pytest.importorskip("numpy")
     Float, Array3f = package.Float, package.Array3f
-    ek.set_device(0 if Float.IsCUDA else -1)
+    prepare(package)
     a1 = Array3f(
         ek.arange(Float, 10),
         ek.arange(Float, 10)+100,
@@ -38,8 +50,8 @@ def test_roundtrip_numpy_all(package):
 
 def test_roundtrip_pytorch_cuda():
     pytest.importorskip("torch")
+    prepare(enoki.cuda.ad)
     from enoki.cuda.ad import Float, Array3f
-    ek.set_device(0)
     a1 = Array3f(
         ek.arange(Float, 10),
         ek.arange(Float, 10)+100,
@@ -53,8 +65,8 @@ def test_roundtrip_pytorch_cuda():
 
 def test_roundtrip_pytorch_llvm():
     pytest.importorskip("torch")
+    prepare(enoki.llvm.ad)
     from enoki.llvm.ad import Float, Array3f
-    ek.set_device(-1)
     a1 = Array3f(
         ek.arange(Float, 10),
         ek.arange(Float, 10)+100,
@@ -68,8 +80,8 @@ def test_roundtrip_pytorch_llvm():
 
 def test_roundtrip_pytorch_jax():
     pytest.importorskip("jax")
+    prepare(enoki.cuda.ad)
     from enoki.cuda.ad import Float, Array3f
-    ek.set_device(0)
     a1 = Array3f(
         ek.arange(Float, 10),
         ek.arange(Float, 10)+100,
@@ -82,6 +94,7 @@ def test_roundtrip_pytorch_jax():
 
 
 def test_matrix_numpy_construction():
+    pytest.importorskip("numpy")
     import numpy as np
 
     m_py = [[1, 2, 3], [4, 5, 6], [7, 8, 9]]

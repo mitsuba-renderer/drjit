@@ -5,6 +5,17 @@ import gc
 
 def get_class(name):
     """Resolve a package+class name into the corresponding type"""
+    if 'cuda' in name:
+        if ek.has_cuda():
+            ek.set_device(0)
+        else:
+            pytest.skip('CUDA mode is unsupported')
+    elif 'llvm' in name:
+        if ek.has_llvm():
+            ek.set_device(-1)
+        else:
+            pytest.skip('LLVM mode is unsupported')
+
     name = name.split('.')
     value = __import__(".".join(name[:-1]))
     for item in name[1:]:
@@ -55,10 +66,6 @@ def test01_construct():
                                    ])
 def test02_basic_ops(cname):
     t = get_class(cname)
-    if 'cuda' in cname:
-        ek.set_device(0)
-    elif 'llvm' in cname:
-        ek.set_device(-1)
 
     # Test basic arithmetic operations
     import enoki.router as r
@@ -121,7 +128,7 @@ def test03_type_promotion():
 
     with pytest.raises(ek.Exception) as ei:
         _ = s.Array1b() + s.Array1b()
-    assert "add(): requires arithmetic operands!" in str(ei)
+    assert "add(): requires arithmetic operands!" in str(ei.value)
 
     assert type(s.Array1i() + s.Array1i()) is s.Array1i
     assert type(s.Array1i() + s.Array1u()) is s.Array1u
@@ -132,7 +139,7 @@ def test03_type_promotion():
 
     with pytest.raises(ek.Exception) as ei:
         _ = ek.sqrt(s.Array1i())
-    assert "sqrt(): requires floating point operands!" in str(ei)
+    assert "sqrt(): requires floating point operands!" in str(ei.value)
 
     assert type(s.Array1f() + s.Array1f()) is s.Array1f
     assert type(s.Array1f() + s.Array1u()) is s.Array1f
@@ -189,10 +196,7 @@ def all_arrays(cond=lambda x: True):
 def test05_scalar(t):
     if not ek.is_array_v(t) or ek.array_size_v(t) == 0:
         return
-    if t.IsCUDA:
-        ek.set_device(0)
-    elif t.IsLLVM:
-        ek.set_device(-1)
+    get_class(t.__module__)
 
     if ek.is_mask_v(t):
         assert ek.all_nested(t(True))
@@ -272,7 +276,7 @@ def test06_reinterpret_cast():
 
 @pytest.mark.parametrize("pkg", [ek.cuda, ek.llvm])
 def test07_gather_ravel_unravel(pkg):
-    ek.set_device(0 if 'cuda' in pkg.__name__ else -1)
+    get_class(pkg.__name__)
     str_1 = '[[0.0, 1.0, 2.0],\n [3.0, 4.0, 5.0],\n [6.0, 7.0, 8.0],\n' \
         ' [9.0, 10.0, 11.0]]'
     str_2 = '[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0]'
@@ -334,10 +338,7 @@ def test07_sincos(t):
             ek.mulsign(ek.select(polymask, c, s), sign_cos)
         )
 
-    if t.IsCUDA:
-        ek.set_device(0)
-    elif t.IsLLVM:
-        ek.set_device(-1)
+    get_class(t.__module__)
     s, c = sincos(t(1))
     if t.Size != 0:
         assert ek.allclose(s**2 + c**2, 1)
@@ -357,10 +358,6 @@ def test07_sincos(t):
                                    "enoki.llvm.UInt64"])
 def test08_divmod(cname):
     t = get_class(cname)
-    if 'cuda' in cname:
-        ek.set_device(0)
-    elif 'llvm' in cname:
-        ek.set_device(-1)
 
     index = ek.arange(t, 10000000)
     index[index < len(index) // 2] = -index
@@ -380,10 +377,6 @@ def test08_divmod(cname):
 def test09_repeat_tile(cname):
     t = get_class(cname)
     a3 = get_class(cname.replace('Float', 'Array3f'))
-    if 'cuda' in cname:
-        ek.set_device(0)
-    elif 'llvm' in cname:
-        ek.set_device(-1)
     vec = t([1, 2, 3])
     tiled = t([1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3])
     reptd = t([1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3])
@@ -400,10 +393,6 @@ def test09_repeat_tile(cname):
 @pytest.mark.parametrize("cname", ["enoki.cuda.Float", "enoki.llvm.Float"])
 def test10_meshgrid(cname):
     t = get_class(cname)
-    if 'cuda' in cname:
-        ek.set_device(0)
-    elif 'llvm' in cname:
-        ek.set_device(-1)
     import numpy as np
     a = ek.linspace(t, 0, 1, 3)
     b = ek.linspace(t, 0, 1, 4)
@@ -417,10 +406,6 @@ def test10_meshgrid(cname):
 @pytest.mark.parametrize("cname", ["enoki.cuda.Float", "enoki.llvm.Float"])
 def test11_binary_search(cname):
     t = get_class(cname)
-    if 'cuda' in cname:
-        ek.set_device(0)
-    elif 'llvm' in cname:
-        ek.set_device(-1)
     import numpy as np
 
     data_np = np.float32(np.sort(np.random.normal(size=10000)))
