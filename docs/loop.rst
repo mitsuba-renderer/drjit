@@ -58,6 +58,10 @@ PTX or LLVM IR code, but potentially also crashes or incorrect results.
     evaluation, you cannot access an array using both scatter and read/gather
     instructions within the same loop.
 
+  - Loop variables must be LLVM or CUDA arrays. If you use a scalar variable
+    (e.g. an ``int``) or similar, Enoki won't be able to record how it is
+    updated from iteration.
+
 For an example of temporary and loop variables, see the following simple C++
 example of a loop that measures the number of iterations needed to reach the
 value 1 in the sequence underlying the `Collatz conjecture

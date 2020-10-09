@@ -274,6 +274,7 @@ protected:
                 append(jitc_var_new_2(VarType::Invalid, "\n$L1_cond:", 1, 1,
                                       m_loop_id, m_id));
             }
+
             insert_copies();
         }
     }
