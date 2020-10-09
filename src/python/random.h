@@ -4,7 +4,7 @@
 #include "common.h"
 
 template <typename Guide>
-void bind_pcg32(py::module &m) {
+void bind_pcg32(py::module_ &m) {
     using UInt64 = ek::uint64_array_t<Guide>;
     using Int64 = ek::int64_array_t<Guide>;
     using PCG32 = ek::PCG32<UInt64>;

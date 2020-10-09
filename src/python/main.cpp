@@ -3,15 +3,15 @@
 #include <enoki/idiv.h>
 #include <tsl/robin_map.h>
 
-extern void export_scalar(py::module &m);
-extern void export_packet(py::module &m);
+extern void export_scalar(py::module_ &m);
+extern void export_packet(py::module_ &m);
 
 #if defined(ENOKI_ENABLE_JIT)
-extern void export_cuda(py::module &m);
-extern void export_llvm(py::module &m);
+extern void export_cuda(py::module_ &m);
+extern void export_llvm(py::module_ &m);
 #if defined(ENOKI_ENABLE_AUTODIFF)
-extern void export_cuda_ad(py::module &m);
-extern void export_llvm_ad(py::module &m);
+extern void export_cuda_ad(py::module_ &m);
+extern void export_llvm_ad(py::module_ &m);
 #endif
 #endif
 
@@ -36,10 +36,10 @@ PYBIND11_MODULE(enoki_ext, m_) {
 #endif
 
     (void) m_;
-    py::module m = py::module::import("enoki");
+    py::module_ m = py::module_::import("enoki");
 
     // Look up some variables from the detail namespace
-    py::module array_detail = (py::module) m.attr("detail");
+    py::module_ array_detail = (py::module_) m.attr("detail");
     array_name = array_detail.attr("array_name");
     array_init = array_detail.attr("array_init");
     array_configure = array_detail.attr("array_configure");

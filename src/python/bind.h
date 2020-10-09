@@ -11,7 +11,7 @@
 extern py::handle array_base, array_name, array_init, array_configure;
 
 template <typename Array>
-auto bind_type(py::module &m, bool scalar_mode = false) {
+auto bind_type(py::module_ &m, bool scalar_mode = false) {
     using Scalar = std::conditional_t<Array::IsMask, bool, ek::scalar_t<Array>>;
     using Value = std::conditional_t<Array::IsMask, ek::mask_t<ek::value_t<Array>>,
                                      ek::value_t<Array>>;
@@ -84,6 +84,12 @@ void bind_basic_methods(py::class_<Array> &cls) {
         cls.def("__len__", &Array::size);
         cls.def("init_", [](Array &a, size_t size) { a.init_(size); });
     }
+
+    if constexpr (ek::array_depth_v<Array> > 1)
+        cls.def(
+            "entry_ref_",
+            [](Array &a, size_t i) -> Value & { return a.entry(i); },
+            py::return_value_policy::reference_internal);
 }
 
 template <typename Array>
@@ -96,7 +102,7 @@ void bind_generic_constructor(py::class_<Array> &cls) {
         }, py::detail::is_new_style_constructor());
 }
 
-template <typename Array> auto bind(py::module &m, bool scalar_mode = false) {
+template <typename Array> auto bind(py::module_ &m, bool scalar_mode = false) {
     auto cls = bind_type<Array>(m, scalar_mode);
     bind_generic_constructor(cls);
     bind_basic_methods(cls);
@@ -112,7 +118,7 @@ auto bind_full(py::class_<Array> &cls, bool scalar_mode = false) {
     using Mask = ek::mask_t<ek::float32_array_t<Array>>;
 
     cls.def(py::init<Scalar>())
-       .def("assign_", [](Array &a, const Array &b) {
+       .def("assign", [](Array &a, const Array &b) {
            if (&a != &b)
                a = b;
        });
@@ -293,7 +299,7 @@ auto bind_full(py::class_<Array> &cls, bool scalar_mode = false) {
                         ek::scatter<true>(target, value, index, mask);
                     else
                         ek::scatter<false>(target, value, index, mask);
-                });
+                }, "target"_a.noconvert(), "index"_a, "mask"_a, "permute"_a);
 
         if constexpr (Array::IsMask) {
             cls.def("compress_", [](const Array &source) {
@@ -303,7 +309,7 @@ auto bind_full(py::class_<Array> &cls, bool scalar_mode = false) {
             cls.def("scatter_add_",
                     [](const Array& value, Array& target, const UInt32& index, const Mask& mask) {
                         ek::scatter_add(target, value, index, mask);
-                    });
+                    }, "target"_a.noconvert(), "index"_a, "mask"_a);
         }
     }
 
@@ -362,7 +368,6 @@ auto bind_full(py::class_<Array> &cls, bool scalar_mode = false) {
     }
 
     if constexpr (Array::IsJIT || Array::IsDiff) {
-        cls.def("index_", [](const Array &a) { return a.index(); });
         cls.def("set_label_", [](const Array &a, const char *name) { a.set_label_(name); });
         cls.def("label_", [](const Array &a) { return a.label_(); });
     }
@@ -390,11 +395,19 @@ auto bind_full(py::class_<Array> &cls, bool scalar_mode = false) {
     }
 
     if constexpr (Array::IsJIT)
-        cls.def("migrate_", [](Array *a, AllocType type) { a->migrate_(type); return a; });
+        cls.def("migrate_", &Array::migrate_);
+
+    if constexpr (Array::IsDiff || (!Array::IsDiff && Array::IsJIT))
+        cls.def("index", &Array::index);
+
+    if constexpr (!Array::IsDiff && Array::IsJIT)
+        cls.def("set_index_",
+                [](Array &a, uint32_t index) { *a.index_ptr() = index; });
 
     if constexpr (Array::IsDiff) {
         cls.def(py::init<ek::detached_t<Array>>());
-        cls.def("detach_", py::overload_cast<>(&Array::detach_, py::const_));
+        cls.def("detach_", py::overload_cast<>(&Array::detach_),
+                py::return_value_policy::reference_internal);
         if constexpr (Array::IsFloat) {
             cls.def("grad_", [](const Array &a) -> py::object {
                 if (a.index() == 0)
@@ -403,15 +416,8 @@ auto bind_full(py::class_<Array> &cls, bool scalar_mode = false) {
                     return py::cast(a.grad_());
             });
             cls.def("set_grad_", &Array::set_grad_);
-            cls.def("index", &Array::index);
-            cls.def("set_grad_enabled_", [](Array *a, bool value) {
-                a->set_grad_enabled_(value);
-                return a;
-            });
-            cls.def("set_grad_suspended_", [](Array *a, bool value) {
-                a->set_grad_suspended_(value);
-                return a;
-            });
+            cls.def("set_grad_enabled_", &Array::set_grad_enabled_);
+            cls.def("set_grad_suspended_", &Array::set_grad_suspended_);
             cls.def("enqueue_", &Array::enqueue_);
             cls.def("graphviz_", &Array::graphviz_);
             cls.def_static("traverse_", &Array::traverse_);

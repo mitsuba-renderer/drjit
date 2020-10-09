@@ -226,7 +226,7 @@ def array_init(self, args):
                 elif dim1 == 1 and self.IsDynamic:
                     o = np.ascontiguousarray(o)
                     holder = (o, o.__array_interface__['data'][0])
-                    self.assign_(self.load_(holder[1], s2[0]))
+                    self.assign(self.load_(holder[1], s2[0]))
                 else:
                     for i in range(s1[-1]):
                         if dim2 == 1 and self.IsDynamic:
@@ -235,16 +235,16 @@ def array_init(self, args):
                             self.set_entry_(i, value_type(o[..., i]))
 
             elif mod == 'builtins' and name == 'PyCapsule':
-                self.assign_(array_from_dlpack(type(self), o))
+                self.assign(array_from_dlpack(type(self), o))
             elif mod == 'torch':
                 from torch.utils.dlpack import to_dlpack
-                self.assign_(array_from_dlpack(type(self), to_dlpack(o)))
+                self.assign(array_from_dlpack(type(self), to_dlpack(o)))
             elif mod.startswith('tensorflow.'):
                 from tensorflow.experimental.dlpack import to_dlpack
-                self.assign_(array_from_dlpack(type(self), to_dlpack(o)))
+                self.assign(array_from_dlpack(type(self), to_dlpack(o)))
             elif mod.startswith('jax.'):
                 from jax.dlpack import to_dlpack
-                self.assign_(array_from_dlpack(type(self), to_dlpack(o)))
+                self.assign(array_from_dlpack(type(self), to_dlpack(o)))
             else:
                 raise Exception('Don\'t know how to create an Enoki array '
                                 'from type \"%s.%s\"!' % (mod, name))
@@ -404,3 +404,45 @@ def array_configure(cls, shape, type_, value):
         sys.modules.get(mod),
         array_name("Array", enoki.VarType.Bool,
                    cls.Shape, cls.IsScalar))
+
+
+# Read JIT variable IDs, used by ek.cuda/llvm.loop
+def read_indices(*args):
+    result = []
+    for a in args:
+        if enoki.is_array_v(a):
+            if a.Depth > 1:
+                for i in range(len(a)):
+                    result.extend(read_indices(a.entry_ref_(i)))
+            elif a.IsDiff:
+                if enoki.grad_enabled(a):
+                    raise enoki.Exception(
+                        'Encountered a differentiable array with enabled '
+                        'gradients! This is not supported.')
+                result.extend(read_indices(a.detach_()))
+            elif a.IsJIT:
+                result.append(a.index())
+        elif type(a) is tuple or type(a) is list:
+            for b in a:
+                result.extend(read_indices(b))
+    return result
+
+
+# Write JIT variable IDs, used by ek.cuda/llvm.loop
+def write_indices(indices, *args):
+    for a in args:
+        if enoki.is_array_v(a):
+            if a.Depth > 1:
+                for i in range(len(a)):
+                    write_indices(indices, a.entry_ref_(i))
+            elif a.IsDiff:
+                if enoki.grad_enabled(a):
+                    raise enoki.Exception(
+                        'Encountered a differentiable array with enabled '
+                        'gradients! This is not supported.')
+                write_indices(indices, a.detach_())
+            elif a.IsJIT:
+                a.set_index_(indices.pop(0))
+        elif type(a) is tuple or type(a) is list:
+            for b in a:
+                write_indices(indices, b)

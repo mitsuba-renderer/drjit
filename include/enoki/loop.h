@@ -1,5 +1,5 @@
 /*
-    enoki/loop.h -- Infrastructure to execute CUDA&LLVM loops symbolically
+    enoki/Loop.h -- Infrastructure to execute CUDA&LLVM Loops symbolically
 
     Enoki is a C++ template library for efficient vectorization and
     differentiation of numerical kernels on modern processor architectures.
@@ -21,125 +21,132 @@ template <typename T1, typename...Ts>
 struct extract_1 { using type = T1; };
 NAMESPACE_END(detail)
 
-template <typename... Args> struct loop {
+template <typename... Args> struct Loop {
     using Mask = mask_t<leaf_array_t<typename detail::extract_1<Args...>::type>>;
+    using UInt32 = uint32_array_t<Mask>;
     static constexpr bool Enabled = is_jit_array_v<Mask>;
+    static constexpr bool IsLLVM = is_llvm_array_v<Mask>;
+    static constexpr bool IsCUDA = is_cuda_array_v<Mask>;
 
-    loop(Args&... args) {
+    Loop(const Loop &) = delete;
+    Loop(Loop &&) = delete;
+    Loop& operator=(const Loop &) = delete;
+    Loop& operator=(Loop &&) = delete;
+
+    Loop(Args&... args) {
         if constexpr (Enabled) {
             // Count the JIT variable IDs of all arguments in 'args'
             (extract(args, false), ...);
 
             // Allocate storage for these indices
-            m_variables = new uint32_t*[m_variable_count];
-            m_variables_phi = new uint32_t[m_variable_count];
+            m_vars = new uint32_t*[m_var_count];
+            m_vars_phi = new uint32_t[m_var_count];
 
             // Collect the JIT variable IDs of all arguments in 'args'
-            m_variable_count = 0;
+            m_var_count = 0;
             (extract(args, true), ...);
 
             init();
         }
     }
 
-    ~loop() {
+    ~Loop() {
         if constexpr (Enabled) {
-            delete[] m_variables;
-            delete[] m_variables_phi;
+            delete[] m_vars;
+            delete[] m_vars_phi;
 
-            if (m_counter != 2)
-                enoki_raise( // throwing from destructor, will abort the application
-                    "enoki::loop::cond() must be called exactly twice! (this "
-                    "should happen automatically in the following expression: "
-                    "`while(loop.cond(...)) { ... }` )");
+            if (m_counter != 2) {
+                jitc_log(::LogLevel::Warn,
+                         "enoki::Loop::cond() must be called exactly twice! "
+                         "(please make sure that you use the loop object as "
+                         "follows: `while (loop.cond(...)) { .. code .. }` )");
+                jitc_set_eval_enabled(m_eval_enabled);
+                jitc_var_dec_ref_ext(m_id);
+            }
         }
+    }
+
+    decltype(auto) mask() const {
+        if constexpr (IsLLVM)
+            return m_mask;
+        else
+            return true;
     }
 
     bool cond(const Mask &mask) {
         if constexpr (!Enabled) {
             return (bool) mask;
         } else {
-            uint32_t prev;
+            if (m_counter == 0) {
+                if constexpr (IsLLVM)
+                    m_mask = mask && UInt32::launch_index() <
+                                     UInt32::last_index();
+                else
+                    m_mask = mask;
+            }
+
+            uint32_t mask_index = 0;
+            if constexpr (is_diff_array_v<Mask>)
+                mask_index = detach(m_mask).index();
+            else
+                mask_index = m_mask.index();
 
             if (m_counter == 0) {
-                if constexpr (is_llvm_array_v<Mask>)
-                    m_mask = mask;
+                if constexpr (IsLLVM) {
+                    /// ----------- LLVM -----------
 
-                uint32_t mask_index = 0;
-                if (is_diff_array_v<Mask>)
-                    mask_index = detach(mask).index();
-                else
-                    mask_index = mask.index();
+                    // Reduce loop condition to a single bit
+                    append(jitc_var_new_2(
+                        VarType::Bool,
+                        "$r0 = call i1 "
+                        "@llvm.experimental.vector.reduce.or.v$wi1(<$w x i1> $r1)",
+                        1, 0, mask_index, m_id));
 
-                // Reduce loop condition to a single bit
-                prev = m_id;
-                m_id = jitc_var_new_2(
-                    VarType::Bool,
-                    "$r0 = call i1 "
-                    "@llvm.experimental.vector.reduce.or.v$wi1(<$w x i1> $r1)",
-                    1, 0, mask_index, m_id);
-                jitc_var_dec_ref_ext(prev);
-
-                // Branch to end of loop if all done
-                prev = m_id;
-                m_id = jitc_var_new_2(
-                    VarType::Invalid,
-                    "br $t1 $r1, label %$L2_body, label %$L2_after", 1, 0,
-                    m_id, m_loop_id);
-                jitc_var_dec_ref_ext(prev);
+                    // Branch to end of loop if all done
+                    append(jitc_var_new_2(
+                        VarType::Invalid,
+                        "br $t1 $r1, label %$L2_body, label %$L2_done", 1, 0,
+                        m_id, m_loop_id));
+                } else {
+                    /// ----------- CUDA -----------
+                    // Branch to end of Loop if all done
+                    append(jitc_var_new_3(VarType::Invalid,
+                                          "@!$r1 bra $L2_done", 1, 1,
+                                          mask_index, m_loop_id, m_id));
+                    m_mask = Mask();
+                }
 
                 // Start the main loop body
-                prev = m_id;
-                m_id = jitc_var_new_2(
-                    VarType::Invalid, "\n$L1_body:", 1, 0, m_loop_id, m_id);
-                jitc_var_dec_ref_ext(prev);
-
-                for (size_t i = 0; i < m_variable_count; ++i) {
-                    uint32_t *idp = m_variables[i],
-                             id = jitc_var_new_3(
-                                 jitc_var_type(*m_variables[i]),
-                                 "$r0 = phi <$w x $t0> [ $r1, %$L2_header ]", 1,
-                                 0, m_variables_phi[i], m_loop_id, m_id);
-                    jitc_var_dec_ref_ext(*idp);
-                    *idp = id;
-                }
+                append(jitc_var_new_2(VarType::Invalid, "\n$L1_body:", 1, IsCUDA,
+                                      m_loop_id, m_id));
             } else if (m_counter == 1) {
-                uint32_t mask_index = 0;
-                if (is_diff_array_v<Mask>)
-                    mask_index = detach(m_mask).index();
-                else
-                    mask_index = m_mask.index();
+                /// Assign changed variables
+                for (size_t i = 0; i < m_var_count; ++i) {
+                    if (IsCUDA && m_vars_phi[i] == *m_vars[i])
+                        continue;
 
-                for (size_t i = 0; i < m_variable_count; ++i) {
-                    prev = m_id;
-                    m_id = jitc_var_new_4(
-                        VarType::Invalid,
-                        "$r3_end = select <$w x $t1> $r1, <$w x $t2> $r2, <$w x $t3> $r3",
-                        1, 0, mask_index, *m_variables[i], m_variables_phi[i], m_id);
-                    jitc_var_dec_ref_ext(prev);
+                    if constexpr (IsLLVM) {
+                        append(jitc_var_new_4(
+                            VarType::Invalid,
+                            "$r3_end = select <$w x $t1> $r1, <$w x $t2> $r2, "
+                            "<$w x $t3> $r3",
+                            1, 0, mask_index, *m_vars[i], m_vars_phi[i], m_id));
+                    } else {
+                        append(jitc_var_new_3(VarType::Invalid,
+                                              "mov.$b2 $r2, $r1", 1, 1,
+                                              *m_vars[i], m_vars_phi[i], m_id));
+                    }
                 }
 
-                m_mask = Mask();
-
-                prev = m_id;
-                m_id = jitc_var_new_2(VarType::Invalid,
-                                      "br label %$L1_header\n\n$L1_after:", 1,
-                                      0, m_loop_id, m_id);
-                jitc_var_dec_ref_ext(prev);
-
+                append(jitc_var_new_2(VarType::Invalid,
+                                      IsLLVM ? "br label %$L1_phi\n\n$L1_done:"
+                                             : "bra $L1_cond$n\n$L1_done:",
+                                      1, IsCUDA, m_loop_id, m_id));
             } else {
-                enoki_raise("enoki::loop::cond() was called more than twice!");
+                enoki_raise("enoki::Loop::cond() was called more than twice!");
             }
 
-            for (size_t i = 0; i < m_variable_count; ++i) {
-                uint32_t *idp = m_variables[i],
-                         id = jitc_var_new_3(
-                             jitc_var_type(*m_variables[i]),
-                             "$r0 = phi <$w x $t0> [ $r1, %$L2_header ]", 1,
-                             0, m_variables_phi[i], m_loop_id, m_id);
-                jitc_var_dec_ref_ext(*idp);
-                *idp = id;
-            }
+            insert_copies();
 
             if (m_counter == 1) {
                 if (jitc_side_effect_counter() != m_side_effect_counter) {
@@ -148,13 +155,12 @@ template <typename... Args> struct loop {
                        depends on the final branch statement to ensure that the
                        loop is correctly generated. */
                     uint32_t idx =
-                        jitc_var_new_1(VarType::Invalid, "", 1, m_cuda, m_id);
+                        jitc_var_new_1(VarType::Invalid, "", 1, IsCUDA, m_id);
                     jitc_var_mark_scatter(idx, 0);
                 }
 
                 // Clean up
                 jitc_var_dec_ref_ext(m_id);
-                jitc_set_cse(m_cse_enabled);
                 jitc_set_eval_enabled(m_eval_enabled);
                 m_loop_id = m_id = 0;
             }
@@ -163,75 +169,116 @@ template <typename... Args> struct loop {
         }
     }
 
-    const Mask &mask() const { return m_mask; }
+    void insert_copies() {
+        for (size_t i = 0; i < m_var_count; ++i) {
+            uint32_t *idp = m_vars[i];
 
-private:
+            uint32_t id = jitc_var_new_2(jitc_var_type(*idp),
+                                         IsLLVM ? "$r0 = select i1 true, <$w x $t1> "
+                                                  "$r1, <$w x $t1> zeroinitializer"
+                                                : "mov.$b0 $r0, $r1",
+                                         1, IsCUDA, m_vars_phi[i], m_id);
+
+            jitc_var_dec_ref_ext(*idp);
+            *idp = id;
+        }
+    }
+
+protected:
+    Loop() = default;
+
+    /**
+       This function generates a stream of wrapper instructions that enforce
+       a relative ordering of the instruction stream
+     */
+    void append(uint32_t id, bool decref = true) {
+        jitc_var_dec_ref_ext(m_id);
+        m_id = id;
+    }
+
     void init() {
         if constexpr (Enabled) {
-            if (m_cuda == m_llvm)
-                enoki_raise("enoki::loop(): expected either CUDA or LLVM array "
+            if (m_var_count == 0)
+                enoki_raise("enoki::Loop(): no valid loop variables found!");
+            else if (m_cuda != IsCUDA || m_llvm != IsLLVM)
+                enoki_raise("enoki::Loop(): expected either CUDA or LLVM array "
                             "arguments!");
             else if (m_other)
-                enoki_raise("enoki::loop(): mixture of JIT (CUDA/LLVM) and "
-                            "non-JIT values specified as loop variables!");
+                enoki_raise("enoki::Loop(): mixture of JIT (CUDA/LLVM) and "
+                            "non-JIT values specified as Loop variables!");
 
-            // Prevent CSE interactions between code inside & outside the loop
-            m_cse_enabled = jitc_cse();
-            jitc_set_cse(false);
+            for (size_t i = 0; i < m_var_count; ++i) {
+                if (*m_vars[i] == 0)
+                    enoki_raise("All variables provided to enoki::Loop() must be initialized!");
+            }
 
-            /// Temporarily disallow any calls to jitc_eval()
+            // Temporarily disallow any calls to jitc_eval()
             m_eval_enabled = jitc_eval_enabled();
             jitc_set_eval_enabled(false);
 
             m_side_effect_counter = jitc_side_effect_counter();
 
-            /* Generate a sequence of dummy instructions to ensure that all
-               loop variables are evaluated before the loop starts */
-            uint32_t prev;
-            for (size_t i = 0; i < m_variable_count; ++i) {
-                uint32_t id = *m_variables[i];
-                if (id == 0)
-                    enoki_raise("All variables provided to enoki::loop() must be initialized!");
+            m_loop_id = m_id = jitc_var_new_0(VarType::Invalid, "", 1, IsCUDA, 1);
 
-                if (m_id == 0) {
+            if constexpr (IsLLVM) {
+                // Ensure that the initial state of all loop vars. is evaluted by this point
+                for (size_t i = 0; i < m_var_count; ++i)
+                    append(jitc_var_new_2(VarType::Invalid, "", 1, IsCUDA, *m_vars[i], m_id));
+
+                /* Insert two dummy basic blocks, used to establish
+                   a source in the following set of phi exprs. */
+                append(jitc_var_new_2(VarType::Invalid,
+                                      "br label %$L1_pre\n\n$L1_pre:",
+                                      1, 0, m_loop_id, m_id));
+
+                // Create a basic block containing only the phi nodes
+                append(jitc_var_new_2(VarType::Invalid,
+                                      "br label %$L1_phi\n\n$L1_phi:", 1, 0,
+                                      m_loop_id, m_id));
+
+                for (size_t i = 0; i < m_var_count; ++i) {
+                    uint32_t *idp = m_vars[i];
+
+                    uint32_t id = jitc_var_new_3(jitc_var_type(*idp),
+                        "$r0 = phi <$w x $t0> [ $r1, %$L2_pre ], "
+                        "[ $r0_end, %$L2_body ]",
+                        1, 0, *idp, m_loop_id, m_id);
+
+                    m_vars_phi[i] = id;
+                    jitc_var_dec_ref_ext(*idp);
                     jitc_var_inc_ref_ext(id);
-                    m_id = id;
-                } else {
-                    prev = m_id;
-                    m_id = jitc_var_new_2(VarType::Invalid, "", 1, m_cuda, id, m_id);
-                    jitc_var_dec_ref_ext(prev);
+                    *idp = id;
+                    append(id);
                 }
+
+                // Next, evalute the branch condition
+                append(jitc_var_new_2(
+                    VarType::Invalid,
+                    "br label %$L1_cond\n\n$L1_cond:", 1,
+                    0, m_loop_id, m_id));
+
+            } else {
+                for (size_t i = 0; i < m_var_count; ++i) {
+                    uint32_t *idp = m_vars[i];
+
+                    uint32_t id = jitc_var_new_3(jitc_var_type(*idp),
+                        "mov.$b0 $r0, $r1", 1, 1, *idp, m_loop_id, m_id);
+
+                    m_vars_phi[i] = id;
+                    jitc_var_dec_ref_ext(*idp);
+                    jitc_var_inc_ref_ext(id);
+                    *idp = id;
+                    append(id);
+                }
+
+                append(jitc_var_new_2(VarType::Invalid, "\n$L1_cond:", 1, 1,
+                                      m_loop_id, m_id));
             }
-
-            // Jump to beginning of loop
-            prev = m_id;
-            m_loop_id = m_id = jitc_var_new_1(VarType::Invalid,
-                 "br label %$L0\n\n$L0:$n"
-                 "br label %$L0_header\n\n$L0_header:",
-                 1, 0, m_id);
-            jitc_var_dec_ref_ext(prev);
-
-            // Create a phi expression per loop variable
-            for (size_t i = 0; i < m_variable_count; ++i) {
-                uint32_t *idp = m_variables[i];
-
-                prev = m_id;
-                m_id = jitc_var_new_3(
-                    jitc_var_type(*idp),
-                    "$r0 = phi <$w x $t0> [ $r1, %$L2 ], [ $r0_end, %$L2_body ]",
-                    1, 0, *idp, m_loop_id, m_id);
-
-                jitc_var_dec_ref_ext(prev);
-                jitc_var_dec_ref_ext(*idp);
-                jitc_var_inc_ref_ext(m_id);
-
-                *idp = m_variables_phi[i] = m_id;
-            }
+            insert_copies();
         }
     }
 
-
-    /// Extracts JIT variable indices of loop variables
+    /// Extracts JIT variable indices of Loop variables
     template <typename T> void extract(T &value, bool store) {
         if constexpr (is_array_v<T>) {
             if constexpr (array_depth_v<T> == 1) {
@@ -243,8 +290,8 @@ private:
                     else if constexpr (is_llvm_array_v<T>)
                         m_llvm = true;
                     if (store)
-                        m_variables[m_variable_count] = value.index_ptr();
-                    m_variable_count++;
+                        m_vars[m_var_count] = value.index_ptr();
+                    m_var_count++;
                 } else {
                     m_other = true;
                 }
@@ -261,12 +308,11 @@ private:
         }
     }
 
-private:
-    uint32_t **m_variables = nullptr;
-    uint32_t *m_variables_phi = nullptr;
-    size_t m_variable_count = 0;
+protected:
+    uint32_t **m_vars = nullptr;
+    uint32_t *m_vars_phi = nullptr;
+    size_t m_var_count = 0;
     int m_counter = 0;
-    bool m_cse_enabled = true;
     bool m_eval_enabled = true;
     bool m_cuda = false;
     bool m_llvm = false;
@@ -274,7 +320,7 @@ private:
     uint32_t m_id = 0;
     uint32_t m_loop_id = 0;
     uint32_t m_side_effect_counter = 0;
-    Mask m_mask = true;
+    Mask m_mask;
 };
 
 NAMESPACE_END(enoki)

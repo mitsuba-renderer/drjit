@@ -1,8 +1,8 @@
 #include "bind.h"
 #include "random.h"
 
-void export_scalar(py::module &m) {
-    py::module scalar = m.def_submodule("scalar");
+void export_scalar(py::module_ &m) {
+    py::module_ scalar = m.def_submodule("scalar");
 
     scalar.attr("Bool")    = py::handle((PyObject *) &PyBool_Type);
     scalar.attr("Float32") = py::handle((PyObject *) &PyFloat_Type);

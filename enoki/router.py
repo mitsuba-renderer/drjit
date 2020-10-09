@@ -267,7 +267,7 @@ def device(value=None):
     elif _ek.is_diff_array_v(value):
         return device(_ek.detach(value))
     elif _ek.is_jit_array_v(value):
-        return _ek.detail.device(value.index_())
+        return _ek.detail.device(value.index())
     else:
         return -1
 
@@ -433,7 +433,7 @@ def op_setitem(self, index, value):
         else:
             op_setitem(self, index[0], value)
     elif _ek.is_mask_v(index):
-        self.assign_(_ek.select(index, value, self))
+        self.assign(_ek.select(index, value, self))
     elif isinstance(index, slice):
         indices = tuple(range(len(self)))[index]
         for i in range(len(indices)):
@@ -748,7 +748,7 @@ def op_ifloordiv(a, b):
                         "Enoki floating point arrays.")
 
     if isinstance(b, int):
-        a.assign_(a // b)
+        a.assign(a // b)
         return a
 
     if type(a) is not type(b):
@@ -782,7 +782,7 @@ def op_imod(a, b):
         raise Exception("The modulo operator only supports integral arrays!")
 
     if isinstance(b, int):
-        a.assign_(a % b)
+        a.assign(a % b)
         return a
 
     if type(a) is not type(b):
@@ -1975,7 +1975,7 @@ def replace_grad(a, b):
             result[i] = replace_grad(a[i], b[i])
         return result
     else:
-        return type(a).create_(b.index_(), a.detach_())
+        return type(a).create_(b.index(), a.detach_())
 
 
 def enqueue(*args):

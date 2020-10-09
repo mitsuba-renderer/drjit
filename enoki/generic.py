@@ -224,7 +224,7 @@ def imul_(a0, a1):
         for i in range(sr):
             a0[i] *= a1[i]
     else:
-        a0.assign_(a0 * a1)
+        a0.assign(a0 * a1)
     return a0
 
 
@@ -273,7 +273,7 @@ def itruediv_(a0, a1):
         for i in range(sr):
             a0[i] /= a1[i]
     else:
-        a0.assign_(a0 / a1)
+        a0.assign(a0 / a1)
 
     return a0
 
@@ -657,7 +657,7 @@ def schedule(a0):
         if a0.Depth == 1:
             if a0.IsDiff:
                 a0 = a0.detach_()
-            _ek.detail.schedule(a0.index_())
+            _ek.detail.schedule(a0.index())
         else:
             for i in range(len(a0)):
                 a0[i].schedule()
@@ -1237,14 +1237,14 @@ def grad_enabled_(a):
             enabled |= a[i].grad_enabled_()
         return enabled
     else:
-        return a.index_() > 0
+        return a.index() > 0
 
 
 def set_grad_enabled_(a, value):
     if not a.IsDiff:
         raise Exception("Expected a differentiable array type!")
     for i in range(len(a)):
-        a[i] = a[i].set_grad_enabled_(value)
+        a.entry_ref_(i).set_grad_enabled_(value)
     return a
 
 
@@ -1258,14 +1258,14 @@ def grad_suspended_(a):
             suspended |= a[i].grad_suspended_()
         return suspended
     else:
-        return a.index_() < 0
+        return a.index() < 0
 
 
 def set_grad_suspended_(a, value):
     if not a.IsDiff:
         raise Exception("Expected a differentiable array type!")
     for i in range(len(a)):
-        a[i] = a[i].set_grad_suspended_(value)
+        a.entry_ref_(i).set_grad_suspended_(value)
     return a
 
 
@@ -1289,24 +1289,24 @@ def migrate_(a, type_):
     if not a.IsJIT:
         raise Exception("Expected a JIT array type!")
     for i in range(len(a)):
-        a[i] = a[i].migrate_(type_)
+        a.entry_ref_(i).migrate_(type_)
 
 
 def index_(a):
     if not a.IsJIT:
         raise Exception("Expected a JIT array type!")
-    return tuple(v.index_() for v in a)
+    return tuple(v.index() for v in a)
 
 
 # -------------------------------------------------------------------
 #                      Initialization operations
 # -------------------------------------------------------------------
 
-def assign_(self, other):
+def assign(self, other):
     if self is other:
         return
     elif len(self) != len(other):
-        raise Exception("assign_(): size mismatch!")
+        raise Exception("assign(): size mismatch!")
     else:
         for i in range(len(self)):
             self[i] = other[i]
