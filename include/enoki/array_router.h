@@ -613,7 +613,14 @@ ENOKI_INLINE auto abs_dot_async(const T1 &a1, const T2 &a2) {
 }
 
 template <typename T> ENOKI_INLINE auto squared_norm(const T &v) {
-    return hsum(v * v);
+    if constexpr (array_depth_v<T> == 1 || array_size_v<T> == 0) {
+        return hsum(v * v);
+    } else {
+        value_t<T> result = sqr(v.x());
+        for (size_t i = 1; i < v.size(); ++i)
+            result = fmadd(v.entry(i), v.entry(i), result);
+        return result;
+    }
 }
 
 template <typename T> ENOKI_INLINE auto norm(const T &v) {
