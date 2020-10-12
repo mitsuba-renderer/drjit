@@ -60,7 +60,7 @@ struct LLVMArray : ArrayBase<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
 
     LLVMArray() = default;
 
-    ~LLVMArray() noexcept(true) { jitc_var_dec_ref_ext(m_index); }
+    ~LLVMArray() noexcept { jitc_var_dec_ref_ext(m_index); }
 
     LLVMArray(const LLVMArray &a) : m_index(a.m_index) {
         jitc_var_inc_ref_ext(m_index);

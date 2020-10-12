@@ -707,6 +707,20 @@ template <bool Default, typename T> auto none_nested_or(const T &value) {
     }
 }
 
+template <typename T1, typename T2>
+bool allclose(const T1 &a, const T2 &b, float rtol = 1e-5f, float atol = 1e-8f,
+              bool equal_nan = false) {
+    auto cond = abs(a - b) <= abs(b) * rtol + atol;
+
+    if constexpr (std::is_floating_point_v<scalar_t<T1>> &&
+                  std::is_floating_point_v<scalar_t<T2>>) {
+        if (equal_nan)
+            cond |= isnan(a) & isnan(b);
+    }
+
+    return all_nested(cond);
+}
+
 //! @}
 // -----------------------------------------------------------------------
 
@@ -1205,7 +1219,7 @@ template <typename T> ENOKI_INLINE void resize(T &value, size_t size) {
     }
 }
 
-template <typename T> ENOKI_INLINE void set_label(T &value, const char *label) {
+template <typename T> void set_label(T &value, const char *label) {
     if constexpr (is_diff_array_v<T> || is_jit_array_v<T>) {
         if constexpr (array_depth_v<T> > 1) {
             size_t bufsize = strlen(label) + 11;
@@ -1230,7 +1244,7 @@ template <typename T> ENOKI_INLINE void set_label(T &value, const char *label) {
     }
 }
 
-template <typename T> ENOKI_INLINE bool grad_enabled(const T &value) {
+template <typename T> bool grad_enabled(const T &value) {
     if constexpr (is_diff_array_v<T>) {
         if constexpr (array_depth_v<T> > 1) {
             bool result = false;
@@ -1255,7 +1269,7 @@ template <typename T> ENOKI_INLINE bool grad_enabled(const T &value) {
     }
 }
 
-template <typename T> ENOKI_INLINE bool grad_suspended(const T &value) {
+template <typename T> bool grad_suspended(const T &value) {
     if constexpr (is_diff_array_v<T>) {
         if constexpr (array_depth_v<T> > 1) {
             bool result = false;
@@ -1280,7 +1294,7 @@ template <typename T> ENOKI_INLINE bool grad_suspended(const T &value) {
     }
 }
 
-template <typename T> ENOKI_INLINE T replace_grad(const T &a, const T &b) {
+template <typename T> T replace_grad(const T &a, const T &b) {
     static_assert(is_diff_array_v<T>, "Type does not support gradients!");
 
     if constexpr (array_depth_v<T> > 1) {
@@ -1302,7 +1316,7 @@ template <typename T> ENOKI_INLINE T replace_grad(const T &a, const T &b) {
     }
 }
 
-template <typename T> ENOKI_INLINE void set_grad_enabled(T &value, bool state) {
+template <typename T> void set_grad_enabled(T &value, bool state) {
     if constexpr (is_diff_array_v<T>) {
         if constexpr (array_depth_v<T> > 1) {
             for (size_t i = 0; i < value.size(); ++i)
@@ -1316,12 +1330,10 @@ template <typename T> ENOKI_INLINE void set_grad_enabled(T &value, bool state) {
             [state](auto &x) ENOKI_INLINE_LAMBDA {
                 set_grad_enabled(x, state);
             });
-    } else {
-        static_assert(detail::false_v<T>, "Type does not support gradients!");
     }
 }
 
-template <typename T> ENOKI_INLINE void set_grad_suspended(T &value, bool state) {
+template <typename T> void set_grad_suspended(T &value, bool state) {
     if constexpr (is_diff_array_v<T>) {
         if constexpr (array_depth_v<T> > 1) {
             for (size_t i = 0; i < value.size(); ++i)
@@ -1335,33 +1347,31 @@ template <typename T> ENOKI_INLINE void set_grad_suspended(T &value, bool state)
             [state](auto &x) ENOKI_INLINE_LAMBDA {
                 set_grad_suspended(x, state);
             });
-    } else {
-        static_assert(detail::false_v<T>, "Type does not support gradients!");
     }
 }
 
 template <typename... Ts, enable_if_t<(sizeof...(Ts) > 1)> = 0>
-ENOKI_INLINE bool grad_enabled(const Ts& ... ts) {
+bool grad_enabled(const Ts& ... ts) {
     return (grad_enabled(ts) || ...);
 }
 
-template <typename... Ts> ENOKI_INLINE void enable_grad(Ts&... ts) {
+template <typename... Ts> void enable_grad(Ts&... ts) {
     (set_grad_enabled(ts, true), ...);
 }
 
-template <typename... Ts> ENOKI_INLINE void disable_grad(Ts&... ts) {
+template <typename... Ts> void disable_grad(Ts&... ts) {
     (set_grad_enabled(ts, false), ...);
 }
 
-template <typename... Ts> ENOKI_INLINE void suspend_grad(Ts&... ts) {
+template <typename... Ts> void suspend_grad(Ts&... ts) {
     (set_grad_suspended(ts, true), ...);
 }
 
-template <typename... Ts> ENOKI_INLINE void resume_grad(Ts&... ts) {
+template <typename... Ts> void resume_grad(Ts&... ts) {
     (set_grad_suspended(ts, false), ...);
 }
 
-template <typename T> ENOKI_INLINE detached_t<T> detach(const T &value) {
+template <typename T> detached_t<T> detach(const T &value) {
     using Result = detached_t<T>;
 
     if constexpr (is_diff_array_v<T>) {
@@ -1392,7 +1402,7 @@ template <typename T> ENOKI_INLINE detached_t<T> detach(const T &value) {
     }
 }
 
-template <typename T> ENOKI_INLINE detached_t<T> grad(const T &value) {
+template <typename T> detached_t<T> grad(const T &value) {
     using Result = detached_t<T>;
 
     if constexpr (is_diff_array_v<T>) {
@@ -1419,12 +1429,12 @@ template <typename T> ENOKI_INLINE detached_t<T> grad(const T &value) {
 
         return result;
     } else {
-        return Result();
+        return zero<Result>();
     }
 }
 
 template <typename T>
-ENOKI_INLINE void set_grad(T &value, const detached_t<T> &grad) {
+void set_grad(T &value, const detached_t<T> &grad) {
     if constexpr (is_diff_array_v<T>) {
         if constexpr (array_depth_v<T> > 1) {
             for (size_t i = 0; i < value.size(); ++i)
@@ -1432,10 +1442,34 @@ ENOKI_INLINE void set_grad(T &value, const detached_t<T> &grad) {
         } else {
             value.derived().set_grad_(grad);
         }
+    } else if constexpr (is_enoki_struct_v<T>) {
+        struct_support_t<T>::apply_2(
+            value, grad,
+            [&](auto &x1, auto &x2) ENOKI_INLINE_LAMBDA {
+                set_grad(x1, x2);
+            });
     }
 }
 
-template <typename T> ENOKI_INLINE void enqueue(const T &value) {
+template <typename T>
+void accum_grad(T &value, const detached_t<T> &grad) {
+    if constexpr (is_diff_array_v<T>) {
+        if constexpr (array_depth_v<T> > 1) {
+            for (size_t i = 0; i < value.size(); ++i)
+                accum_grad(value.entry(i), grad.entry(i));
+        } else {
+            value.derived().accum_grad_(grad);
+        }
+    } else if constexpr (is_enoki_struct_v<T>) {
+        struct_support_t<T>::apply_2(
+            value, grad,
+            [&](auto &x1, auto &x2) ENOKI_INLINE_LAMBDA {
+                accum_grad(x1, x2);
+            });
+    }
+}
+
+template <typename T> void enqueue(const T &value) {
     if constexpr (is_diff_array_v<T>) {
         if constexpr (array_depth_v<T> > 1) {
             for (size_t i = 0; i < value.size(); ++i)
@@ -1449,35 +1483,41 @@ template <typename T> ENOKI_INLINE void enqueue(const T &value) {
             [](auto const &x) ENOKI_INLINE_LAMBDA {
                 enqueue(x);
             });
-    } else {
-        ; // do nothing
     }
 }
 
 template <typename T1, typename... Ts, enable_if_t<sizeof...(Ts) != 0> = 0>
-ENOKI_INLINE void enqueue(const T1 &value, const Ts&... values) {
+void enqueue(const T1 &value, const Ts&... values) {
     enqueue(value);
     enqueue(values...);
 }
 
 ENOKI_INLINE void enqueue() { }
 
-template <typename T> ENOKI_INLINE const char *graphviz(const T& value, bool reverse = true) {
+template <typename T> const char *graphviz(const T& value, bool reverse = true) {
     enqueue(value);
     return leaf_array_t<T>::graphviz_(reverse);
 }
 
-template <typename T> ENOKI_INLINE void traverse(bool reverse = true, bool retain_graph = false) {
+template <typename T> void traverse(bool reverse = true, bool retain_graph = false) {
     leaf_array_t<T>::traverse_(reverse, retain_graph);
 }
 
-template <typename T> ENOKI_INLINE void backward(T& value, bool retain_graph = false) {
+template <typename T> void backward(T& value, bool retain_graph = false) {
+    if (!grad_enabled(value))
+        enoki_raise("backward(): attempted to propagate derivatives through a "
+                    "variable that is not registered with the AD backend. Did "
+                    "you forget to call enable_grad()?");
     set_grad(value, 1.f);
     enqueue(value);
     traverse<T>(true, retain_graph);
 }
 
-template <typename T> ENOKI_INLINE void forward(T& value, bool retain_graph = false) {
+template <typename T> void forward(T& value, bool retain_graph = false) {
+    if (!grad_enabled(value))
+        enoki_raise("forward(): attempted to propagate derivatives through a "
+                    "variable that is not registered with the AD backend. Did "
+                    "you forget to call enable_grad()?");
     set_grad(value, 1.f);
     enqueue(value);
     traverse<T>(false, retain_graph);

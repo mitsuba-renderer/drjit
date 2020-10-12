@@ -245,13 +245,13 @@ def test20_scatter_add_rev(m):
             assert ek.allclose(ek.grad(y), ek.detach(ref_y), atol=1e-4)
             assert ek.allclose(ek.grad(x), ek.detach(ref_x), atol=1e-4)
         else:
-            assert ek.grad(x) is None
-            assert ek.grad(y) is None
+            assert ek.grad(x) == 0
+            assert ek.grad(y) == 0
 
         if i % 2 == 0:
             assert ek.allclose(ek.grad(buf), ek.detach(ref_buf) * 2, atol=1e-4)
         else:
-            assert ek.grad(buf) is None
+            assert ek.grad(buf) == 0
 
 
 def test21_scatter_add_fwd(m):
@@ -334,13 +334,13 @@ def test22_scatter_rev(m):
             assert ek.allclose(ek.grad(y), ek.detach(ref_y), atol=1e-4)
             assert ek.allclose(ek.grad(x), ek.detach(ref_x), atol=1e-4)
         else:
-            assert ek.grad(x) is None
-            assert ek.grad(y) is None
+            assert ek.grad(x) == 0
+            assert ek.grad(y) == 0
 
         if i % 2 == 0:
             assert ek.allclose(ek.grad(buf), 0, atol=1e-4)
         else:
-            assert ek.grad(buf) is None
+            assert ek.grad(buf) == 0
 
 
 def test22_scatter_fwd(m):
@@ -680,7 +680,7 @@ def test41_replace_grad(m):
     z2 = z*z
     ek.backward(z2)
     assert ek.allclose(z2, [1, 16, 81])
-    assert ek.grad(x) is None
+    assert ek.grad(x) == 0
     assert ek.allclose(ek.grad(y), [12, 32, 36])
 
 
@@ -702,3 +702,46 @@ def test42_suspend_resume(m):
     assert ek.grad(x) == ek.detach(y)
     assert ek.grad(y) == ek.detach(x)
     ek.suspend_grad(x, y) # validate reference counting of suspended variables
+
+
+class Normalize(ek.CustomOp):
+    def eval(self, value):
+        self.value = value
+        self.inv_norm = ek.rcp(ek.norm(value))
+        return value * self.inv_norm
+
+    def forward(self):
+        grad_in = self.grad_in('value')
+        grad_out = grad_in * self.inv_norm
+        grad_out -= self.value * (ek.dot(self.value, grad_out) * ek.sqr(self.inv_norm))
+        self.set_grad_out(grad_out)
+
+    def backward(self):
+        grad_out = self.grad_out()
+        grad_in = grad_out * self.inv_norm
+        grad_in -= self.value * (ek.dot(self.value, grad_in) * ek.sqr(self.inv_norm))
+        self.set_grad_in('value', grad_in)
+
+    def name(self):
+        return "normalize"
+
+
+def test43_custom_forward(m):
+    d = m.Array3f(1, 2, 3)
+    ek.enable_grad(d)
+    d2 = ek.custom(Normalize, d)
+    ek.set_grad(d2, m.Array3f(5, 6, 7))
+    ek.enqueue(d2)
+    ek.traverse(m.Float, reverse=True)
+    assert ek.allclose(ek.grad(d), m.Array3f(0.610883, 0.152721, -0.305441))
+    print(ek.grad(d))
+
+
+def test44_custom_reverse(m):
+    d = m.Array3f(1, 2, 3)
+    ek.enable_grad(d)
+    d2 = ek.custom(Normalize, d)
+    ek.set_grad(d, m.Array3f(5, 6, 7))
+    ek.enqueue(d)
+    ek.traverse(m.Float, reverse=False)
+    assert ek.allclose(ek.grad(d2), m.Array3f(0.610883, 0.152721, -0.305441))

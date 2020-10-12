@@ -139,8 +139,8 @@ PYBIND11_MODULE(enoki_ext, m_) {
 
     array_detail.def("graphviz", &jitc_var_graphviz);
     array_detail.def("schedule", &jitc_var_schedule);
-    array_detail.def("eval", &jitc_var_eval);
-    array_detail.def("eval", &jitc_eval);
+    array_detail.def("eval", &jitc_var_eval, py::call_guard<py::gil_scoped_release>());
+    array_detail.def("eval", &jitc_eval, py::call_guard<py::gil_scoped_release>());
     array_detail.def("to_dlpack", &to_dlpack, "owner"_a, "data"_a,
                      "type"_a, "device"_a, "shape"_a, "strides"_a);
     array_detail.def("from_dlpack", &from_dlpack);
@@ -153,7 +153,7 @@ PYBIND11_MODULE(enoki_ext, m_) {
     /* Register a cleanup callback funceion that is invoked when
        the 'enoki::ArrayBase' Python type is garbage collected */
     py::cpp_function cleanup_callback(
-        [](py::handle weakref) { jitc_shutdown(false); }
+        [](py::handle weakref) { py::gil_scoped_release gsr; jitc_shutdown(false); }
     );
 
     (void) py::weakref(m.attr("ArrayBase"), cleanup_callback).release();

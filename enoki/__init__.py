@@ -30,7 +30,7 @@ import enoki.matrix as matrix # noqa
 self = vars()
 base = self['ArrayBase']
 for k, v in router.__dict__.items():
-    if k.startswith('_') or k[0].isupper():
+    if k.startswith('_') or (k[0].isupper() and not k == 'CustomOp'):
         continue
     if k.startswith('op_'):
         setattr(base, '__' + k[3:] + '__', v)

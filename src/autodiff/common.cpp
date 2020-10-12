@@ -151,4 +151,15 @@ namespace enoki {
         buffer.put("  =========================================\n");
         return buffer.get();
     }
+
+    namespace detail {
+        /// Custom graph edge for implementing custom differentiable operations
+        struct ENOKI_EXPORT DiffCallback {
+            virtual void forward() = 0;
+            virtual void backward() = 0;
+            virtual ~DiffCallback();
+        };
+
+        DiffCallback::~DiffCallback() { }
+    }
 }

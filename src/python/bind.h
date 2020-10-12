@@ -409,18 +409,14 @@ auto bind_full(py::class_<Array> &cls, bool scalar_mode = false) {
         cls.def("detach_", py::overload_cast<>(&Array::detach_),
                 py::return_value_policy::reference_internal);
         if constexpr (Array::IsFloat) {
-            cls.def("grad_", [](const Array &a) -> py::object {
-                if (a.index() == 0)
-                    return py::none();
-                else
-                    return py::cast(a.grad_());
-            });
+            cls.def("grad_", &Array::grad_);
             cls.def("set_grad_", &Array::set_grad_);
+            cls.def("accum_grad_", &Array::accum_grad_);
             cls.def("set_grad_enabled_", &Array::set_grad_enabled_);
             cls.def("set_grad_suspended_", &Array::set_grad_suspended_);
             cls.def("enqueue_", &Array::enqueue_);
             cls.def("graphviz_", &Array::graphviz_);
-            cls.def_static("traverse_", &Array::traverse_);
+            cls.def_static("traverse_", &Array::traverse_, py::call_guard<py::gil_scoped_release>());
 
             cls.def_static("create_", [](uint32_t index,
                                          const ek::detached_t<Array> &value) {

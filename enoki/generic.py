@@ -1193,7 +1193,7 @@ def detach_(a):
     if not a.IsDiff:
         return a
 
-    t = _ek.nondiff_array_t(type(a))
+    t = _ek.detached_t(type(a))
     result = t.empty_(len(a) if a.Size == Dynamic else 0)
     for i in range(len(a)):
         result[i] = a[i].detach_()
@@ -1204,19 +1204,10 @@ def grad_(a):
     if not a.IsDiff:
         return None
 
-    t = _ek.nondiff_array_t(type(a))
+    t = _ek.detached_t(type(a))
     result = t.empty_(len(a) if a.Size == Dynamic else 0)
-    has_grad = False
     for i in range(len(a)):
-        g = a[i].grad_()
-        if g is None or len(g) == 0:
-            result[i] = 0
-        else:
-            result[i] = g
-            has_grad = True
-
-    if not has_grad:
-        return None
+        result[i] = a[i].grad_()
 
     return result
 
@@ -1270,6 +1261,15 @@ def set_grad_(a, grad):
     s = len(a)
     for i in range(s):
         a[i].set_grad_(grad[i])
+
+
+def accum_grad_(a, grad):
+    if not a.IsDiff:
+        raise Exception("Expected a differentiable array type!")
+
+    s = len(a)
+    for i in range(s):
+        a[i].accum_grad_(grad[i])
 
 
 def enqueue_(a):

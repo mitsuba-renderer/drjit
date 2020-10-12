@@ -211,12 +211,17 @@ def diff_array_t(a):
         return a.ReplaceScalar(a.Type, diff=True)
 
 
-def nondiff_array_t(a):
+def detached_t(a):
     if not is_array_v(a):
-        raise Exception("nondiff_array_t(): requires an Enoki input array!")
+        raise Exception("detached_t(): requires an Enoki input array!")
     elif not isinstance(a, type):
-        return nondiff_array_t(type(a))
+        return detached_t(type(a))
     elif not a.IsDiff:
         return a
     else:
         return a.ReplaceScalar(a.Type, diff=False)
+
+def leaf_array_t(t):
+    while is_array_v(value_t(t)):
+        t = t.Value
+    return t

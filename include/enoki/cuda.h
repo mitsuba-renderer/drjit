@@ -58,7 +58,7 @@ struct CUDAArray : ArrayBase<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
 
     CUDAArray() = default;
 
-    ~CUDAArray() noexcept(true) {
+    ~CUDAArray() noexcept {
         jitc_var_dec_ref_ext(m_index);
     }
 

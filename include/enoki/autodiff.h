@@ -13,17 +13,19 @@
 #pragma once
 #define ENOKI_AUTODIFF_H
 
+#if defined(ENOKI_BUILD_AUTODIFF)
+#  define ENOKI_AUTODIFF_EXPORT
+#  define ENOKI_AUTODIFF_EXPORT_TEMPLATE(T)
+#else
+#  define ENOKI_AUTODIFF_EXPORT ENOKI_IMPORT
+#  define ENOKI_AUTODIFF_EXPORT_TEMPLATE(T)                                    \
+     extern template ENOKI_AUTODIFF_EXPORT struct DiffArray<T>;
+#endif
+
 #include <enoki/array.h>
 #include <enoki-jit/jit.h>
 
 NAMESPACE_BEGIN(enoki)
-
-/// Custom graph edge for implementing custom differentiable operations
-template <typename Type> struct CustomEdge {
-    virtual Type forward(const Type &value) = 0;
-    virtual Type backward(const Type &value) = 0;
-    virtual ~CustomEdge();
-};
 
 NAMESPACE_BEGIN(detail)
 
@@ -46,6 +48,9 @@ template <typename Value> Value ad_grad(int32_t index);
 
 /// Overwrite the gradient associated with a variable
 template <typename Value> void ad_set_grad(int32_t index, const Value &v);
+
+/// Accumulate gradients into a variable
+template <typename Value> void ad_accum_grad(int32_t index, const Value &v);
 
 /// Enqueue a variable for a subsequent command (ad_traverse() / ad_graphviz())
 template <typename Value> void ad_enqueue(int32_t index);
@@ -79,19 +84,27 @@ int32_t ad_new_scatter(const char *label, uint32_t size, int32_t src_index,
                        int32_t dst_index, const Index &offset,
                        const Mask &mask, bool permute, bool scatter_add);
 
+/// Custom graph edge for implementing custom differentiable operations
+struct ENOKI_AUTODIFF_EXPORT DiffCallback {
+    virtual void forward() = 0;
+    virtual void backward() = 0;
+    virtual ~DiffCallback();
+};
+
 /// Register a custom/user-provided differentiable operation
 template <typename Value>
-void ad_add_edge(int32_t src_index, int32_t dst_index, CustomEdge<Value> *edge);
+void ad_add_edge(int32_t src_index, int32_t dst_index,
+                 DiffCallback *callback = nullptr);
 
 //! @}
 // -----------------------------------------------------------------------
 
 #if defined(__GNUC__)
-template <typename T> ENOKI_INLINE void ad_inc_ref(int32_t index) noexcept(true) {
+template <typename T> ENOKI_INLINE void ad_inc_ref(int32_t index) noexcept {
     if (!__builtin_constant_p(index) || index != 0)
         ad_inc_ref_impl<T>(index);
 }
-template <typename T> ENOKI_INLINE void ad_dec_ref(int32_t index) noexcept(true) {
+template <typename T> ENOKI_INLINE void ad_dec_ref(int32_t index) noexcept {
     if (!__builtin_constant_p(index) || index != 0)
         ad_dec_ref_impl<T>(index);
 }
@@ -144,7 +157,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
 
     ENOKI_INLINE DiffArray() = default;
 
-    ENOKI_INLINE ~DiffArray() noexcept(true) {
+    ENOKI_INLINE ~DiffArray() noexcept {
         if constexpr (IsEnabled)
             detail::ad_dec_ref<Type>(m_index);
     }
@@ -156,7 +169,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         }
     }
 
-    ENOKI_INLINE DiffArray(DiffArray &&a) noexcept : m_value(std::move(a.m_value)) {
+    ENOKI_INLINE DiffArray(DiffArray &&a) noexcept
+        : m_value(std::move(a.m_value)) {
         if constexpr (IsEnabled) {
             m_index = a.m_index;
             a.m_index = 0;
@@ -1300,6 +1314,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                        multiple entries are equal to the minimum , which is
                        strictly speaking not correct (but getting this right
                        would make the operation quite a bit more expensive). */
+
                     int32_t indices[1] = { m_index };
                     Type weights[1] = { select(
                         eq(m_value, result), Type(1), Type(0)) };
@@ -1637,14 +1652,17 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         if constexpr (IsEnabled)
             return detail::ad_grad<Type>(m_index);
         else
-            return Type();
+            return zero<Type>();
     }
 
     void set_grad_(const Type &value) {
         if constexpr (IsEnabled)
             detail::ad_set_grad<Type>(m_index, value);
-        else
-            enoki_raise("set_grad(): gradients not enabled for this type!");
+    }
+
+    void accum_grad_(const Type &value) {
+        if constexpr (IsEnabled)
+            detail::ad_accum_grad<Type>(m_index, value);
     }
 
     void set_label(const char *label) {
@@ -1737,39 +1755,20 @@ protected:
     int32_t m_index = 0;
 };
 
-template <typename Array>
-void add_edge(const Array &source, const Array &target, CustomEdge<typename Array::Type> *edge) {
-    if constexpr (Array::IsEnabled) {
-        if (source.index() <= 0 || target.index() <= 0)
-            enoki_raise("Array::add_edge(): source or destination operand are non-differentiable");
-        detail::ad_add_edge<typename Array::Type>(source.index(), target.index(), edge);
-    } else {
-        enoki_raise("Array::add_edge(): gradients not enabled for this type!");
-    }
-}
-
-#if defined(ENOKI_BUILD_AUTODIFF)
-#  define ENOKI_AUTODIFF_EXPORT
-#  define ENOKI_AUTODIFF_EXPORT_TEMPLATE(T)
-#else
-#  define ENOKI_AUTODIFF_EXPORT ENOKI_IMPORT
-#  define ENOKI_AUTODIFF_EXPORT_TEMPLATE(T)                                    \
-     extern template ENOKI_AUTODIFF_EXPORT struct DiffArray<T>;                \
-     extern template ENOKI_AUTODIFF_EXPORT struct CustomEdge<T>;
-#endif
-
 #define ENOKI_DECLARE_EXTERN_TEMPLATE(T, Mask, Index)                          \
     ENOKI_AUTODIFF_EXPORT_TEMPLATE(T)                                          \
     namespace detail {                                                         \
     extern template ENOKI_AUTODIFF_EXPORT void                                 \
-        ad_inc_ref_impl<T>(int32_t) noexcept(true);                            \
+        ad_inc_ref_impl<T>(int32_t) noexcept;                            \
     extern template ENOKI_AUTODIFF_EXPORT void                                 \
-        ad_dec_ref_impl<T>(int32_t) noexcept(true);                            \
+        ad_dec_ref_impl<T>(int32_t) noexcept;                            \
     extern template ENOKI_AUTODIFF_EXPORT int32_t                              \
     ad_new<T>(const char *, uint32_t, uint32_t,                                \
               const int32_t *, T *);                                           \
     extern template ENOKI_AUTODIFF_EXPORT T ad_grad<T>(int32_t);               \
     extern template ENOKI_AUTODIFF_EXPORT void ad_set_grad<T>(int32_t,         \
+                                                              const T &);      \
+    extern template ENOKI_AUTODIFF_EXPORT void ad_accum_grad<T>(int32_t,       \
                                                               const T &);      \
     extern template ENOKI_AUTODIFF_EXPORT void ad_set_label<T>(int32_t,        \
                                                                const char *);  \
@@ -1786,7 +1785,7 @@ void add_edge(const Array &source, const Array &target, CustomEdge<typename Arra
     ad_new_scatter<T, Mask, Index>(const char *, uint32_t, int32_t, int32_t,   \
                                    const Index &, const Mask &, bool, bool);   \
     extern template ENOKI_AUTODIFF_EXPORT void ad_add_edge<T>(int32_t,         \
-            int32_t, CustomEdge<T>*);                                          \
+            int32_t, DiffCallback*);                                           \
     }
 
 ENOKI_DECLARE_EXTERN_TEMPLATE(float,  bool, uint32_t)

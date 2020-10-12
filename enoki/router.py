@@ -1901,15 +1901,28 @@ def grad(a):
     if _ek.is_diff_array_v(a):
         return a.grad_()
     else:
-        return None
+        return _ek.zero(type(a))
 
 
 def set_grad(a, value):
     if _ek.is_diff_array_v(a):
-        t = _ek.nondiff_array_t(type(a))
-        if not isinstance(value, t):
+        if _ek.is_diff_array_v(value):
+            value = _ek.detach(value)
+
+        t = _ek.detached_t(a)
+        if type(value) is not t:
             value = t(value)
+
         a.set_grad_(value)
+    else:
+        raise Exception("Expected a differentiable array type!")
+
+
+def accum_grad(a, value):
+    if _ek.is_diff_array_v(a):
+        if _ek.is_diff_array_v(value):
+            value = _ek.detach(value)
+        a.accum_grad_(value)
     else:
         raise Exception("Expected a differentiable array type!")
 
@@ -1924,8 +1937,6 @@ def grad_enabled(a):
 def set_grad_enabled(a, value):
     if _ek.is_diff_array_v(a):
         a.set_grad_enabled_(value)
-    else:
-        raise Exception("Expected differentiable array types as input!")
 
 
 def enable_grad(*args):
@@ -1990,14 +2001,16 @@ def traverse(t, reverse=True, retain_graph=False):
     if not _ek.is_diff_array_v(t):
         raise Exception('traverse(): expected a differentiable array type!')
 
-    while _ek.is_diff_array_v(_ek.value_t(t)):
-        t = t.Value
-
-    t.traverse_(reverse, retain_graph)
+    _ek.leaf_array_t(t).traverse_(reverse, retain_graph)
 
 
 def backward(a, retain_graph=False):
     if _ek.is_diff_array_v(a):
+        if not grad_enabled(a):
+            raise Exception("backward(): attempted to propagate derivatives "
+                            "through a variable that is not registered with "
+                            "the AD backend. Did you forget to call "
+                            "enable_grad()?");
         set_grad(a, 1)
         a.enqueue_()
         traverse(type(a), reverse=True, retain_graph=retain_graph)
@@ -2007,6 +2020,11 @@ def backward(a, retain_graph=False):
 
 def forward(a, retain_graph=False):
     if _ek.is_diff_array_v(a):
+        if not grad_enabled(a):
+            raise Exception("forard(): attempted to propagate derivatives "
+                            "through a variable that is not registered with "
+                            "the AD backend. Did you forget to call "
+                            "enable_grad()?");
         set_grad(a, 1)
         a.enqueue_()
         traverse(type(a), reverse=False, retain_graph=retain_graph)
@@ -2136,3 +2154,90 @@ def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
             if not allclose(ia, ib, rtol, atol, equal_nan):
                 return False
         return True
+
+# -------------------------------------------------------------------
+#             Automatic differentation of custom fuctions
+# -------------------------------------------------------------------
+
+class CustomOp:
+    def grad_out(self):
+        return _ek.grad(self.output)
+
+    def set_grad_out(self, value):
+        _ek.set_grad(self.output, value)
+
+    def grad_in(self, name):
+        if name not in self.inputs:
+            raise Exception('Could not find input argument named \"%s\"!' % name)
+        return _ek.grad(self.inputs[name])
+
+    def set_grad_in(self, name, value):
+        if name not in self.inputs:
+            raise Exception('Could not find input argument named \"%s\"!' % name)
+        _ek.set_grad(self.inputs[name], value)
+
+
+def custom(cls, *args, **kwargs):
+    # Extract indices of differentiable variables
+    def diff_vars(o, indices):
+        if _ek.array_depth_v(o) > 1 \
+           or isinstance(o, list) \
+           or isinstance(o, tuple):
+            for v in o:
+                diff_vars(v, indices)
+        elif isinstance(o, dict):
+            for k, v in o.items():
+                diff_vars(v, indices)
+        elif _ek.is_diff_array_v(o):
+            indices.append(o.index())
+
+    inst = cls()
+
+    # Convert args to kwargs
+    kwargs.update(zip(inst.eval.__code__.co_varnames[1:], args))
+
+    output = inst.eval(**{ k: _ek.detach(v) for k, v in kwargs.items() })
+    del args
+
+    diff_vars_in = []
+    diff_vars(kwargs, diff_vars_in)
+
+    if len(diff_vars_in) > 0:
+        output = _ek.diff_array_t(output)
+        _ek.enable_grad(output)
+
+        inst.inputs = kwargs
+        inst.output = output
+
+        diff_vars_out = []
+        diff_vars(output, diff_vars_out)
+
+        Type = _ek.leaf_array_t(output)
+        detail = _modules.get(Type.__module__ + ".detail")
+
+        if len(diff_vars_out) == 0:
+            raise Exception("enoki.custom(): internal error!");
+
+        tmp_in, tmp_out = None, None
+
+        if len(diff_vars_in) > 1:
+            tmp_in = Type()
+            _ek.enable_grad(tmp_in)
+            _ek.set_label(tmp_in, inst.name() + "_in")
+            for index in diff_vars_in:
+                detail.ad_add_edge(index, tmp_in.index())
+
+        if len(diff_vars_out) > 1:
+            tmp_out = Type()
+            _ek.enable_grad(tmp_out)
+            _ek.set_label(tmp_out, inst.name() + "_out")
+            for index in diff_vars_out:
+                detail.ad_add_edge(tmp_out.index(), index)
+
+        detail.ad_add_edge(
+            diff_vars_in[0] if tmp_in is None else tmp_in.index(),
+            diff_vars_out[0] if tmp_out is None else tmp_out.index(),
+            inst
+        )
+
+    return output

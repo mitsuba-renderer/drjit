@@ -47,11 +47,11 @@ struct Variable;
 
 // Special edge (scatter, gather, scatter_add, block_sum, etc.)
 struct Special {
-    virtual void backward(Variable *source, const Variable *target) const {
+    virtual bool backward(Variable *source, const Variable *target) const {
         throw std::runtime_error("Special::backward(): not implemented!");
     }
 
-    virtual void forward(const Variable *source, Variable *target) const {
+    virtual bool forward(const Variable *source, Variable *target) const {
         throw std::runtime_error("Special::forward(): not implemented!");
     }
 
@@ -76,7 +76,7 @@ struct Edge {
     uint32_t visited : 1;
 
     /// Pointer to a handler for "special" edges
-    Special *special = nullptr;
+    Special *special;
 
     /// Weight value (zero/empty for "special" edges)
     Value weight{};
@@ -84,16 +84,11 @@ struct Edge {
     ENOKI_ARRAY_DEFAULTS(Edge);
 
     Edge() {
-        memset(this, 0, sizeof(uint32_t) * 6);
+        memset(this, 0, sizeof(uint32_t) * 4 + sizeof(Special *));
     }
 
     /// Reset the contents of this edge to the default values
-    void reset() {
-        assert(!visited);
-        delete special;
-        memset(this, 0, sizeof(uint32_t) * 6);
-        weight = Value();
-    }
+    void reset();
 };
 
 template <typename T> uint32_t asize(const T &value) {
@@ -136,7 +131,7 @@ struct Variable {
     Value grad{};
 
     Variable() {
-        memset(this, 0, 7 * sizeof(uint32_t));
+        memset(this, 0, sizeof(char *) + 5 * sizeof(uint32_t));
     }
 
     Variable(const char *label_, uint32_t size_) : Variable() {
@@ -215,9 +210,9 @@ static_assert(sizeof(Variable) == ((IsDouble ? 2 : 0) + 8) * sizeof(uint32_t),
 
 /// Thread-local list used by ad_queue() and ad_traverse()
 #if !defined(_MSC_VER)
-static __thread std::deque<int32_t> *tls_queue = nullptr;
+  static __thread std::deque<int32_t> *tls_queue = nullptr;
 #else
-static __declspec(thread) std::deque<int32_t>* tls_queue = nullptr;
+  static __declspec(thread) std::deque<int32_t>* tls_queue = nullptr;
 #endif
 
 /// Records all internal application state
@@ -272,6 +267,17 @@ struct State {
 };
 
 static State state;
+
+void Edge::reset() {
+    Special *special_copy = special;
+    assert(!visited);
+    memset(this, 0, sizeof(uint32_t) * 4 + sizeof(Special *));
+    weight = Value();
+    if (special_copy) {
+        unlock_guard<Mutex> guard(state.mutex);
+        delete special_copy;
+    }
+}
 
 extern void RENAME(ad_whos)() {
     std::vector<int32_t> indices;
@@ -582,36 +588,45 @@ int32_t ad_new(const char *label, uint32_t size, uint32_t op_count,
 template <typename Value> struct MaskEdge : Special {
     MaskEdge(const Mask &mask, bool negate) : mask(mask), negate(negate) { }
 
-    void backward(Variable *source, const Variable *target) const override {
-        if (!negate)
-            source->accum(detail::and_(target->grad, mask), target->size);
-        else
-            source->accum(detail::andnot_(target->grad, mask), target->size);
+    bool backward(Variable *source, const Variable *target) const override {
+        source->accum(!negate ? detail::and_(target->grad, mask)
+                              : detail::andnot_(target->grad, mask),
+                      target->size);
+        return true;
     }
 
-    void forward(const Variable *source, Variable *target) const override {
-        if (!negate)
-            target->accum(detail::and_(source->grad, mask), source->size);
-        else
-            target->accum(detail::andnot_(source->grad, mask), source->size);
+    bool forward(const Variable *source, Variable *target) const override {
+        target->accum(!negate ? detail::and_(source->grad, mask)
+                              : detail::andnot_(source->grad, mask),
+                      source->size);
+        return true;
     }
 
     Mask mask;
     bool negate;
 };
 
-template <typename Value> struct CustomWrapper : Special {
-    CustomEdge<Value> *impl;
+template <typename Value> struct SpecialCallback : Special {
+    std::unique_ptr<DiffCallback> callback;
 
-    CustomWrapper(CustomEdge<Value>* impl) : impl(impl) { }
-    ~CustomWrapper() { delete impl; }
+    SpecialCallback(DiffCallback* callback) : callback(callback) { }
 
-    void backward(Variable *source, const Variable *target) const override {
-        source->accum(impl->backward(target->grad), target->size);
+    bool backward(Variable *, const Variable *target) const override {
+        if (callback) {
+            unlock_guard<Mutex> guard(state.mutex);
+            callback->backward();
+        } else {
+        }
+        return callback != nullptr;
     }
 
-    void forward(const Variable *source, Variable *target) const override {
-        target->accum(impl->forward(source->grad), source->size);
+    bool forward(const Variable *source, Variable *) const override {
+        if (callback) {
+            unlock_guard<Mutex> guard(state.mutex);
+            callback->forward();
+        } else {
+        }
+        return callback != nullptr;
     }
 };
 
@@ -654,7 +669,7 @@ template <typename Value> struct GatherEdge : Special {
     GatherEdge(const Index &offset, const Mask &mask, bool permute)
         : offset(offset), mask(mask), permute(permute) { }
 
-    void backward(Variable *source, const Variable *target) const override {
+    bool backward(Variable *source, const Variable *target) const override {
         Value &source_grad = (Value &) source->grad;
         uint32_t size = source->size;
 
@@ -670,11 +685,14 @@ template <typename Value> struct GatherEdge : Special {
             enoki::scatter(source_grad, target->grad, offset, mask);
         else
             enoki::scatter_add(source_grad, target->grad, offset, mask);
+
+        return true;
     }
 
-    void forward(const Variable *source, Variable *target) const override {
+    bool forward(const Variable *source, Variable *target) const override {
         target->accum(enoki::gather<Value>(source->grad, offset, mask),
                       asize(offset));
+        return true;
     }
 
     Index offset;
@@ -716,12 +734,13 @@ template <typename Value> struct ScatterEdge : Special {
     ScatterEdge(const Index &offset, const Mask &mask, bool scatter_add)
         : offset(offset), mask(mask), scatter_add(scatter_add) { }
 
-    void backward(Variable *source, const Variable *target) const override {
+    bool backward(Variable *source, const Variable *target) const override {
         source->accum(enoki::gather<Value>(target->grad, offset, mask),
                       asize(offset));
+        return true;
     }
 
-    void forward(const Variable *source, Variable *target) const override {
+    bool forward(const Variable *source, Variable *target) const override {
         Value &target_grad = (Value &) target->grad;
         uint32_t size = target->size;
 
@@ -737,6 +756,8 @@ template <typename Value> struct ScatterEdge : Special {
             enoki::scatter_add(target_grad, source->grad, offset, mask);
         else
             enoki::scatter(target_grad, source->grad, offset, mask);
+
+        return true;
     }
 
     Index offset;
@@ -814,7 +835,7 @@ static void ad_traverse_rev(bool retain_graph) {
     for (int32_t index : state.todo) {
         Variable *v = state[index];
 
-        if (is_dynamic_v<Value>) {
+        if constexpr (is_dynamic_v<Value>) {
             uint32_t grad_size = asize(v->grad);
             if (unlikely(v->size != grad_size && grad_size != 1))
                 ad_fail("ad_traverse_rev(): variable %u has an invalid "
@@ -825,21 +846,25 @@ static void ad_traverse_rev(bool retain_graph) {
         if (unlikely(v->custom_label)) {
             char tmp[256];
             snprintf(tmp, 256, "%s_grad", v->label);
-            set_label(v->grad, tmp);
+            if (width(v->grad) != 0)
+                set_label(v->grad, tmp);
         }
 
         uint32_t edge_id = v->next_rev;
+        bool consumed_grad = true;
         while (edge_id) {
             Edge &edge = state.edges[edge_id];
             assert(edge.target == index);
             Variable *v2 = state[edge.source];
 
             if (unlikely(edge.special)) {
-                edge.special->backward(v2, v);
+                consumed_grad &= edge.special->backward(v2, v);
 
                 if (!retain_graph) {
-                    delete edge.special;
+                    Special *special = edge.special;
                     edge.special = nullptr;
+                    unlock_guard<Mutex> guard(state.mutex);
+                    delete special;
                 }
             } else {
                 v2->mul_accum(edge.weight, v->grad, v->size);
@@ -852,7 +877,7 @@ static void ad_traverse_rev(bool retain_graph) {
         }
 
         /// Clear the gradients at interior nodes
-        if (v->next_rev)
+        if (v->next_rev && consumed_grad)
             v->grad = Value();
     }
 
@@ -874,7 +899,7 @@ static void ad_traverse_fwd(bool retain_graph) {
     for (int32_t index : state.todo) {
         Variable *v = state[index];
 
-        if (is_dynamic_v<Value>) {
+        if constexpr (is_dynamic_v<Value>) {
             uint32_t grad_size = asize(v->grad);
             if (unlikely(v->size != grad_size && grad_size != 1))
                 ad_fail("ad_traverse_rev(): variable %u has an invalid "
@@ -885,21 +910,25 @@ static void ad_traverse_fwd(bool retain_graph) {
         if (unlikely(v->custom_label)) {
             char tmp[256];
             snprintf(tmp, 256, "%s_grad", v->label);
-            set_label(v->grad, tmp);
+            if (width(v->grad) != 0)
+                set_label(v->grad, tmp);
         }
 
         uint32_t edge_id = v->next_fwd;
+        bool consumed_grad = true;
         while (edge_id) {
             Edge &edge = state.edges[edge_id];
             assert(edge.source == index);
             Variable *v2 = state[edge.target];
 
             if (unlikely(edge.special)) {
-                edge.special->forward(v, v2);
+                consumed_grad &= edge.special->forward(v, v2);
 
                 if (!retain_graph) {
-                    delete edge.special;
+                    Special *special = edge.special;
                     edge.special = nullptr;
+                    unlock_guard<Mutex> guard(state.mutex);
+                    delete special;
                 }
             } else {
                 v2->mul_accum(edge.weight, v->grad, v->size);
@@ -912,7 +941,7 @@ static void ad_traverse_fwd(bool retain_graph) {
         }
 
         /// Clear the gradients at interior nodes
-        if (v->next_fwd)
+        if (v->next_fwd && consumed_grad)
             v->grad = Value();
 
         if (!retain_graph)
@@ -1027,32 +1056,34 @@ template <typename T> void ad_dec_ref_impl(int32_t index) noexcept(true) {
 }
 
 template <typename T> T ad_grad(int32_t index) {
-    if (unlikely(index <= 0)) {
-        if (index == 0)
-            enoki_raise("grad(): attempted to retrieve the gradient of a "
-                        "variable that was not registered with the AD "
-                        "backend. Did you forget to call enable_grad()?");
-        else
-            enoki_raise("grad(): attempted to retrieve the gradient of a "
-                        "suspended variable!");
-    }
+    if (unlikely(index <= 0))
+        return T(0);
     std::lock_guard<Mutex> guard(state.mutex);
-    return state[index]->grad;
+    const T &value = state[index]->grad;
+    if (unlikely(width(value) == 0))
+        return T(0);
+    return value;
 }
 
 template <typename T> void ad_set_grad(int32_t index, const T &value) {
-    if (unlikely(index <= 0)) {
-        if (index == 0)
-            enoki_raise("set_grad(): attempted to set the gradient of a "
-                        "variable that was not registered with the AD "
-                        "backend. Did you forget to call enable_grad()?");
-        else
-            enoki_raise("set_grad(): attempted to set the gradient of a "
-                        "suspended variable!");
-    }
+    if (unlikely(index <= 0))
+        return;
 
     std::lock_guard<Mutex> guard(state.mutex);
-    state[index]->grad = value;
+    Variable *var = state[index];
+    if (var->size != 1 || width(value) == 1)
+        var->grad = value;
+    else
+        var->grad = hsum_async(value);
+}
+
+template <typename T> void ad_accum_grad(int32_t index, const T &value) {
+    if (unlikely(index <= 0))
+        return;
+
+    std::lock_guard<Mutex> guard(state.mutex);
+    Variable *var = state[index];
+    var->accum(value, width(value));
 }
 
 template <typename T> void ad_set_label(int32_t index, const char *label) {
@@ -1079,7 +1110,7 @@ template <typename T> const char *ad_label(int32_t index) {
 
 template <typename T>
 void ad_add_edge(int32_t source_idx, int32_t target_idx,
-                 CustomEdge<T> *custom) {
+                 DiffCallback *callback) {
     std::lock_guard<Mutex> guard(state.mutex);
 
     Variable *source = state[source_idx],
@@ -1089,7 +1120,7 @@ void ad_add_edge(int32_t source_idx, int32_t target_idx,
     Edge &edge = state.edges[edge_index_new];
     edge.source = source_idx;
     edge.target = target_idx;
-    edge.special = new CustomWrapper(custom);
+    edge.special = new SpecialCallback<Value>(callback);
     edge.next_fwd = source->next_fwd;
     edge.next_rev = target->next_rev;
 
@@ -1101,15 +1132,13 @@ void ad_add_edge(int32_t source_idx, int32_t target_idx,
 template <typename T> void ad_traverse(bool backward, bool retain_graph) {
     std::lock_guard<Mutex> guard(state.mutex);
 
-    if (backward)
+    if (backward) {
         ad_toposort_rev();
-    else
-        ad_toposort_fwd();
-
-    if (backward)
         ad_traverse_rev(retain_graph);
-    else
+    } else {
+        ad_toposort_fwd();
         ad_traverse_fwd(retain_graph);
+    }
 }
 
 template ENOKI_EXPORT void ad_inc_ref_impl<Value>(int32_t) noexcept;
@@ -1118,6 +1147,7 @@ template ENOKI_EXPORT int32_t ad_new<Value>(const char *, uint32_t, uint32_t,
                                             const int32_t *, Value *);
 template ENOKI_EXPORT Value ad_grad<Value>(int32_t);
 template ENOKI_EXPORT void ad_set_grad<Value>(int32_t, const Value &);
+template ENOKI_EXPORT void ad_accum_grad<Value>(int32_t, const Value &);
 template ENOKI_EXPORT void ad_set_label<Value>(int32_t, const char *);
 template ENOKI_EXPORT const char *ad_label<Value>(int32_t);
 template ENOKI_EXPORT void ad_enqueue<Value>(int32_t);
@@ -1131,12 +1161,10 @@ template ENOKI_EXPORT int32_t
 ad_new_scatter<Value, Mask, Index>(const char *, uint32_t, int32_t, int32_t,
                                    const Index &, const Mask &, bool, bool);
 template ENOKI_EXPORT void ad_add_edge<Value>(int32_t, int32_t,
-                                              CustomEdge<Value> *);
+                                              DiffCallback *);
 
 NAMESPACE_END(detail)
 
-template<> CustomEdge<detail::Value>::~CustomEdge() { }
 template struct ENOKI_EXPORT DiffArray<detail::Value>;
-template struct ENOKI_EXPORT CustomEdge<detail::Value>;
 
 NAMESPACE_END(enoki)

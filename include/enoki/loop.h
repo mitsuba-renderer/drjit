@@ -1,5 +1,5 @@
 /*
-    enoki/Loop.h -- Infrastructure to execute CUDA&LLVM Loops symbolically
+    enoki/loop.h -- Infrastructure to execute CUDA&LLVM loops symbolically
 
     Enoki is a C++ template library for efficient vectorization and
     differentiation of numerical kernels on modern processor architectures.
