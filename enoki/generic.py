@@ -664,12 +664,6 @@ def schedule(a0):
     return a0
 
 
-def eval(a0):
-    if a0.IsJIT:
-        schedule(a0)
-        _ek.detail.eval()
-    return a0
-
 # -------------------------------------------------------------------
 #           Vertical operations -- transcendental functions
 # -------------------------------------------------------------------
