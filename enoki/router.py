@@ -2191,6 +2191,18 @@ def custom(cls, *args, **kwargs):
         elif _ek.is_diff_array_v(o):
             indices.append(o.index())
 
+    # Clear primal values of a differentiable array
+    def clear_primal(o):
+        if _ek.array_depth_v(o) > 1 \
+           or isinstance(o, list) \
+           or isinstance(o, tuple):
+            return type(o)(*[clear_primal(v) for v in o])
+        elif isinstance(o, dict):
+            return { k: clear_primal(v) for k, v in o.items() }
+        elif _ek.is_diff_array_v(o):
+            to = type(o)
+            return to.create_(o.index(), _ek.detached_t(to)())
+
     inst = cls()
 
     # Convert args to kwargs
@@ -2206,17 +2218,17 @@ def custom(cls, *args, **kwargs):
         output = _ek.diff_array_t(output)
         _ek.enable_grad(output)
 
-        inst.inputs = kwargs
-        inst.output = output
+        inst.inputs = clear_primal(kwargs)
+        inst.output = clear_primal(output)
 
         diff_vars_out = []
-        diff_vars(output, diff_vars_out)
-
-        Type = _ek.leaf_array_t(output)
-        detail = _modules.get(Type.__module__ + ".detail")
+        diff_vars(inst.output, diff_vars_out)
 
         if len(diff_vars_out) == 0:
             raise Exception("enoki.custom(): internal error!");
+
+        Type = _ek.leaf_array_t(output)
+        detail = _modules.get(Type.__module__ + ".detail")
 
         tmp_in, tmp_out = None, None
 
