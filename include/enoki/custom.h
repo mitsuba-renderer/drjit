@@ -39,7 +39,7 @@ public:
     virtual void backward() = 0;
 
     /// Return a descriptive name (used in GraphViz output)
-    virtual const char *name() = 0;
+    virtual const char *name() const = 0;
 
 protected:
 

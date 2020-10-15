@@ -58,7 +58,7 @@ struct Normalize : ek::CustomOp<FloatD,      // Underlying differentiable type
         Base::set_grad_in(grad_in);
     }
 
-    const char *name() override {
+    const char *name() const override {
         return "normalize";
     }
 
@@ -121,7 +121,7 @@ struct ScaleAdd2 : ek::CustomOp<FloatD, Vector3fD, Vector3fD, Vector3fD, int> {
             Base::set_grad_in<1>(grad_out * m_scale);
     }
 
-    const char *name() override {
+    const char *name() const override {
         return "scale_add2";
     }
 

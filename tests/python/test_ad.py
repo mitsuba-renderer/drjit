@@ -32,14 +32,29 @@ def test01_add_rev(m):
 
 
 def test02_add_fwd(m):
-    a, b = m.Float(1), m.Float(2)
-    ek.enable_grad(a, b)
-    c = 2 * a + b
-    ek.forward(a, retain_graph=True)
-    assert ek.grad(c) == 2
-    ek.set_grad(c, 101)
-    ek.forward(b)
-    assert ek.grad(c) == 102
+    if True:
+        a, b = m.Float(1), m.Float(2)
+        ek.enable_grad(a, b)
+        c = 2 * a + b
+        ek.forward(a, retain_graph=True)
+        assert ek.grad(c) == 2
+        ek.set_grad(c, 101)
+        ek.forward(b)
+        assert ek.grad(c) == 102
+
+    if True:
+        a, b = m.Float(1), m.Float(2)
+        ek.enable_grad(a, b)
+        c = 2 * a + b
+        ek.set_grad(a, 1.0)
+        ek.enqueue(a)
+        ek.traverse(m.Float, retain_graph=True, reverse=False)
+        assert ek.grad(c) == 2
+        assert ek.grad(a) == 0
+        ek.set_grad(a, 1.0)
+        ek.enqueue(a)
+        ek.traverse(m.Float, retain_graph=False, reverse=False)
+        assert ek.grad(c) == 4
 
 
 def test03_sub_mul(m):
@@ -726,7 +741,7 @@ class Normalize(ek.CustomOp):
         return "normalize"
 
 
-def test43_custom_forward(m):
+def test43_custom_reverse(m):
     d = m.Array3f(1, 2, 3)
     ek.enable_grad(d)
     d2 = ek.custom(Normalize, d)
@@ -734,14 +749,18 @@ def test43_custom_forward(m):
     ek.enqueue(d2)
     ek.traverse(m.Float, reverse=True)
     assert ek.allclose(ek.grad(d), m.Array3f(0.610883, 0.152721, -0.305441))
-    print(ek.grad(d))
 
 
-def test44_custom_reverse(m):
+def test44_custom_forward(m):
     d = m.Array3f(1, 2, 3)
     ek.enable_grad(d)
     d2 = ek.custom(Normalize, d)
     ek.set_grad(d, m.Array3f(5, 6, 7))
     ek.enqueue(d)
-    ek.traverse(m.Float, reverse=False)
+    ek.traverse(m.Float, reverse=False, retain_graph=True)
+    assert ek.grad(d) == 0
+    ek.set_grad(d, m.Array3f(5, 6, 7))
     assert ek.allclose(ek.grad(d2), m.Array3f(0.610883, 0.152721, -0.305441))
+    ek.enqueue(d)
+    ek.traverse(m.Float, reverse=False, retain_graph=False)
+    assert ek.allclose(ek.grad(d2), m.Array3f(0.610883, 0.152721, -0.305441)*2)

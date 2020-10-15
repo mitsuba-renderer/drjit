@@ -47,11 +47,11 @@ struct Variable;
 
 // Special edge (scatter, gather, scatter_add, block_sum, etc.)
 struct Special {
-    virtual bool backward(Variable *source, const Variable *target) const {
+    virtual void backward(Variable *source, const Variable *target) const {
         throw std::runtime_error("Special::backward(): not implemented!");
     }
 
-    virtual bool forward(const Variable *source, Variable *target) const {
+    virtual void forward(const Variable *source, Variable *target) const {
         throw std::runtime_error("Special::forward(): not implemented!");
     }
 
@@ -107,16 +107,19 @@ struct Variable {
     char *label;
 
     /// Number of times this variable is referenced by other variables
-    uint32_t ref_count_int;
+    uint64_t ref_count_int : 26;
 
     /// Number of times this variable is referenced from Python/C++
-    uint32_t ref_count_ext : 30;
+    uint64_t ref_count_ext : 26;
+
+    /// Gradient reference count for special operations
+    uint64_t ref_count_grad : 10;
 
     /// Was the label manually overwritten via set_label()?
-    uint32_t custom_label : 1;
+    uint64_t custom_label : 1;
 
     /// Should the label variable be freed when the Variable is deallocated?
-    uint32_t free_label : 1;
+    uint64_t free_label : 1;
 
     /// Links to the first forward edge at this node
     uint32_t next_fwd;
@@ -289,7 +292,9 @@ extern void RENAME(ad_whos)() {
     for (int32_t id : indices) {
         const Variable *v = state[id];
         buffer.fmt("  %-7i ", id);
-        size_t sz = buffer.fmt("%u / %u", v->ref_count_ext, v->ref_count_int);
+        size_t sz =
+            buffer.fmt("%llu / %llu", (unsigned long long) v->ref_count_ext,
+                       (unsigned long long) v->ref_count_int);
 
         buffer.fmt("%*s%-12u%-8s\n", 11 - (int) sz, "", v->size,
                    v->label ? v->label : "");
@@ -588,18 +593,16 @@ int32_t ad_new(const char *label, uint32_t size, uint32_t op_count,
 template <typename Value> struct MaskEdge : Special {
     MaskEdge(const Mask &mask, bool negate) : mask(mask), negate(negate) { }
 
-    bool backward(Variable *source, const Variable *target) const override {
+    void backward(Variable *source, const Variable *target) const override {
         source->accum(!negate ? detail::and_(target->grad, mask)
                               : detail::andnot_(target->grad, mask),
                       target->size);
-        return true;
     }
 
-    bool forward(const Variable *source, Variable *target) const override {
+    void forward(const Variable *source, Variable *target) const override {
         target->accum(!negate ? detail::and_(source->grad, mask)
                               : detail::andnot_(source->grad, mask),
                       source->size);
-        return true;
     }
 
     Mask mask;
@@ -611,22 +614,52 @@ template <typename Value> struct SpecialCallback : Special {
 
     SpecialCallback(DiffCallback* callback) : callback(callback) { }
 
-    bool backward(Variable *, const Variable *target) const override {
+    void backward(Variable *, const Variable *target) const override {
         if (callback) {
-            unlock_guard<Mutex> guard(state.mutex);
-            callback->backward();
+            /* leave critical section */ {
+                unlock_guard<Mutex> guard(state.mutex);
+                callback->backward();
+            }
+            uint32_t edge = target->next_fwd;
+            if (edge && state.edges[edge].next_fwd) { // fan-in > 1, update ref counts
+                do {
+                    const Edge &e = state.edges[edge];
+                    Variable *v = state[e.target];
+                    if (v->ref_count_grad == 0)
+                        enoki_raise("SpecialCallback::backward(): reference counting error!");
+                    if (--v->ref_count_grad == 0)
+                        v->grad = Value();
+                    edge = e.next_fwd;
+                } while (edge);
+            }
         } else {
+            if (target->size != 0)
+                const_cast<Variable *>(target)->ref_count_grad++;
         }
-        return callback != nullptr;
     }
 
-    bool forward(const Variable *source, Variable *) const override {
+    void forward(const Variable *source, Variable *) const override {
         if (callback) {
-            unlock_guard<Mutex> guard(state.mutex);
-            callback->forward();
+            /* leave critical section */ {
+                unlock_guard<Mutex> guard(state.mutex);
+                callback->forward();
+            }
+            uint32_t edge = source->next_rev;
+            if (edge && state.edges[edge].next_rev) { // fan-in > 1, update ref counts
+                do {
+                    const Edge &e = state.edges[edge];
+                    Variable *v = state[e.source];
+                    if (v->ref_count_grad == 0)
+                        enoki_raise("SpecialCallback::forward(): reference counting error!");
+                    if (--v->ref_count_grad == 0)
+                        v->grad = Value();
+                    edge = e.next_rev;
+                } while (edge);
+            }
         } else {
+            if (source->size != 0)
+                const_cast<Variable *>(source)->ref_count_grad++;
         }
-        return callback != nullptr;
     }
 };
 
@@ -669,7 +702,7 @@ template <typename Value> struct GatherEdge : Special {
     GatherEdge(const Index &offset, const Mask &mask, bool permute)
         : offset(offset), mask(mask), permute(permute) { }
 
-    bool backward(Variable *source, const Variable *target) const override {
+    void backward(Variable *source, const Variable *target) const override {
         Value &source_grad = (Value &) source->grad;
         uint32_t size = source->size;
 
@@ -686,13 +719,11 @@ template <typename Value> struct GatherEdge : Special {
         else
             enoki::scatter_add(source_grad, target->grad, offset, mask);
 
-        return true;
     }
 
-    bool forward(const Variable *source, Variable *target) const override {
+    void forward(const Variable *source, Variable *target) const override {
         target->accum(enoki::gather<Value>(source->grad, offset, mask),
                       asize(offset));
-        return true;
     }
 
     Index offset;
@@ -734,13 +765,12 @@ template <typename Value> struct ScatterEdge : Special {
     ScatterEdge(const Index &offset, const Mask &mask, bool scatter_add)
         : offset(offset), mask(mask), scatter_add(scatter_add) { }
 
-    bool backward(Variable *source, const Variable *target) const override {
+    void backward(Variable *source, const Variable *target) const override {
         source->accum(enoki::gather<Value>(target->grad, offset, mask),
                       asize(offset));
-        return true;
     }
 
-    bool forward(const Variable *source, Variable *target) const override {
+    void forward(const Variable *source, Variable *target) const override {
         Value &target_grad = (Value &) target->grad;
         uint32_t size = target->size;
 
@@ -756,8 +786,6 @@ template <typename Value> struct ScatterEdge : Special {
             enoki::scatter_add(target_grad, source->grad, offset, mask);
         else
             enoki::scatter(target_grad, source->grad, offset, mask);
-
-        return true;
     }
 
     Index offset;
@@ -829,10 +857,10 @@ int32_t ad_new_scatter(const char *label, uint32_t size, int32_t src_index,
     }
 }
 
-static void ad_traverse_rev(bool retain_graph) {
-    ad_log(Debug, "ad_traverse_rev(): processing %zu nodes ..", state.todo.size());
+static void ad_traverse_rev(std::vector<int32_t> &todo, bool retain_graph) {
+    ad_log(Debug, "ad_traverse_rev(): processing %zu nodes ..", todo.size());
 
-    for (int32_t index : state.todo) {
+    for (int32_t index : todo) {
         Variable *v = state[index];
 
         if constexpr (is_dynamic_v<Value>) {
@@ -851,14 +879,13 @@ static void ad_traverse_rev(bool retain_graph) {
         }
 
         uint32_t edge_id = v->next_rev;
-        bool consumed_grad = true;
         while (edge_id) {
             Edge &edge = state.edges[edge_id];
             assert(edge.target == index);
             Variable *v2 = state[edge.source];
 
             if (unlikely(edge.special)) {
-                consumed_grad &= edge.special->backward(v2, v);
+                edge.special->backward(v2, v);
 
                 if (!retain_graph) {
                     Special *special = edge.special;
@@ -877,13 +904,13 @@ static void ad_traverse_rev(bool retain_graph) {
         }
 
         /// Clear the gradients at interior nodes
-        if (v->next_rev && consumed_grad)
+        if (v->next_rev && v->ref_count_grad == 0)
             v->grad = Value();
     }
 
     if (!retain_graph) {
         ad_log(Debug, "ad_traverse_rev(): cleaning up ..");
-        for (auto it = state.todo.rbegin(); it != state.todo.rend(); ++it) {
+        for (auto it = todo.rbegin(); it != todo.rend(); ++it) {
             int32_t index = *it;
             Variable *v = state[index];
             ad_free_edges(index, v);
@@ -893,10 +920,10 @@ static void ad_traverse_rev(bool retain_graph) {
     ad_log(Debug, "ad_traverse_rev(): done.");
 }
 
-static void ad_traverse_fwd(bool retain_graph) {
-    ad_log(Debug, "ad_traverse_fwd(): processing %zu nodes ..", state.todo.size());
+static void ad_traverse_fwd(std::vector<int32_t> &todo, bool retain_graph) {
+    ad_log(Debug, "ad_traverse_fwd(): processing %zu nodes ..", todo.size());
 
-    for (int32_t index : state.todo) {
+    for (int32_t index : todo) {
         Variable *v = state[index];
 
         if constexpr (is_dynamic_v<Value>) {
@@ -915,14 +942,13 @@ static void ad_traverse_fwd(bool retain_graph) {
         }
 
         uint32_t edge_id = v->next_fwd;
-        bool consumed_grad = true;
         while (edge_id) {
             Edge &edge = state.edges[edge_id];
             assert(edge.source == index);
             Variable *v2 = state[edge.target];
 
             if (unlikely(edge.special)) {
-                consumed_grad &= edge.special->forward(v, v2);
+                edge.special->forward(v, v2);
 
                 if (!retain_graph) {
                     Special *special = edge.special;
@@ -941,7 +967,7 @@ static void ad_traverse_fwd(bool retain_graph) {
         }
 
         /// Clear the gradients at interior nodes
-        if (v->next_fwd && consumed_grad)
+        if (v->next_fwd && v->ref_count_grad == 0)
             v->grad = Value();
 
         if (!retain_graph)
@@ -1008,11 +1034,12 @@ template <typename Value> const char *ad_graphviz(bool backward) {
         else if (v->next_fwd == 0)
             color = " fillcolor=cornflowerblue style=filled";
 
-        buffer.fmt("  %u [label=\"{%s%s%s%s|{#%u|E:%u|I:%u}}\"%s];\n", index,
+        buffer.fmt("  %u [label=\"{%s%s%s%s|{#%u|E:%llu|I:%llu}}\"%s];\n", index,
                    v->custom_label ? "\\\"" : "", label.c_str(),
                    v->custom_label ? "\\\"" : "",
                    v->size == 1 ? " [s]" : "",
-                   index, v->ref_count_ext, v->ref_count_int, color);
+                   index, (unsigned long long) v->ref_count_ext,
+                   (unsigned long long) v->ref_count_int, color);
 
         uint32_t edge = v->next_rev, edge_ctr = 0;
         while (edge) {
@@ -1132,13 +1159,22 @@ void ad_add_edge(int32_t source_idx, int32_t target_idx,
 template <typename T> void ad_traverse(bool backward, bool retain_graph) {
     std::lock_guard<Mutex> guard(state.mutex);
 
-    if (backward) {
+    if (backward)
         ad_toposort_rev();
-        ad_traverse_rev(retain_graph);
-    } else {
+    else
         ad_toposort_fwd();
-        ad_traverse_fwd(retain_graph);
-    }
+
+    /* Custom operation callbacks may themselves create AD
+     * graphs, be prepared for that */
+    std::vector<int32_t> todo;
+    todo.swap(state.todo);
+
+    if (backward)
+        ad_traverse_rev(todo, retain_graph);
+    else
+        ad_traverse_fwd(todo, retain_graph);
+
+    todo.swap(state.todo);
 }
 
 template ENOKI_EXPORT void ad_inc_ref_impl<Value>(int32_t) noexcept;
