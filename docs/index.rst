@@ -14,5 +14,6 @@ Enoki: structured vectorization and differentiation on modern processor architec
    intro
    demo
    loops
+   custom
    → GitHub <https://github.com/mitsuba-renderer/enoki>
 

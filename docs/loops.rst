@@ -1,3 +1,7 @@
+.. cpp:namespace:: enoki
+
+.. _symbolic-loops:
+
 Symbolic loops
 ==============
 
@@ -65,15 +69,15 @@ example uses CUDA arrays, but everything applies equally to the LLVM case.
    GPU registers.
 
    However, this approach has its limits: it cannot be used when the maximum
-   iteration count cannot be bounded. Significant inefficiencies also arise
-   when some array entries require many fewer iterations, since the global
-   iteration count prevents an early exit.
+   iteration count is unknown. Significant inefficiencies also arise when some
+   array entries require many fewer iterations, since the fixed global
+   iteration count prevents an early exit optimization.
 
    Finally, consider what happens when the iteration count is very large (e.g.
    1 million): in this case, the generated kernel will become correspondingly
-   large (e.g. 10-100 MiB of CUDA PTX or LLVM IR), at which point CUDA/LLVM
-   will likely freeze or run out of memory when trying to generate
-   corresponding machine instructions.
+   large (e.g. 10-100 MiB of CUDA PTX or LLVM IR), at which point CUDA/LLVM may
+   run out of memory or freeze when trying to generate corresponding machine
+   instructions.
 
 3. **One small kernel with symbolic loop**:
 
@@ -86,7 +90,8 @@ example uses CUDA arrays, but everything applies equally to the LLVM case.
 
    providing the :cpp:class:`Loop` class. The class must be instantiated with
    the list of variables that are modified by the loop iteration, and the loop
-   stopping condition should then be wrapped into the `.cond()` member:
+   stopping condition should then be wrapped into its :cpp:func:`Loop::cond()`
+   method:
 
    .. code-block:: cpp
 
@@ -99,14 +104,14 @@ example uses CUDA arrays, but everything applies equally to the LLVM case.
            done = stopping_criterion(value); // Are we done yet?
        }
 
-   This does something quite surprising: it runs the loop only a single time on
-   the CPU, and this iteration has the purpose of recording all involved
-   arithmetic symbolically. The generated GPU kernel includes additional branch
-   statements that ultimately cause the loop to run until ``done==true`` is
-   satisfied for all entries. Like in the previous example, this approach
-   avoids costly global memory accesses, and it has the added benefit of
-   producing small kernels that terminate as soon as the iteration has
-   converged.
+   This does something quite surprising: it runs the loop *a single time* on
+   the CPU, which has the sole purpose of recording all involved arithmetic
+   symbolically. In contrast to this, the generated GPU kernel will include
+   additional branch statements that cause the iteration associated with each
+   entry to run just until stopping condition is satisfied (and no longer!).
+   Like in the previous example, this approach avoids costly global memory
+   accesses, and it has the added benefit of producing small kernels that
+   terminate as soon as the iteration has converged.
 
    Importantly, none of the previous steps triggered a kernel evaluation: we
    can continue to use ``value`` and queue up further computation, e.g., to
@@ -117,23 +122,24 @@ example uses CUDA arrays, but everything applies equally to the LLVM case.
 Usage and limitations
 ---------------------
 
-Enoki's :cpp:class:`Loop` primitive is quite unusual: it will run your loop once,
-record everything that it does symbolically, and then surround the captured
-instruction sequence with additional loop instructions (branch statements, `Phi
-functions <https://en.wikipedia.org/wiki/Static_single_assignment_form>`_ in
-SSA form). When evaluated on the target device, the resulting kernel will then
-run the loop many times until the specified condition is satisfied.
+Enoki's :cpp:class:`Loop` primitive is quite unusual: it will run your loop
+once, record everything that it does symbolically, and then surround the
+captured instruction sequence with additional loop instructions (branch
+statements, `Phi functions
+<https://en.wikipedia.org/wiki/Static_single_assignment_form>`_ in SSA form).
+When evaluated on the target device, the resulting kernel will then run the
+loop until the specified condition is satisfied.
 
 The involved machinery makes this process more fragile than a standard C++ or
 Python ``while`` loop, and you must carefully adhere to the set of rules
-outlined below. Failure to do so will result in undefined behavior: ideally
+outlined below. Failure to do so may result in undefined behavior: ideally
 LLVM/CUDA failing due to an invalid PTX/LLVM intermediate representation, but
 potentially also crashes or incorrect results.
 
 - **Variable usage**: The loop is allowed to read any variable that was before
   or inside the loop. However, writing variables requires extra precautions:
 
-  - **Local variables**: You don't need to do anything special when your loop
+  - **Local variables**: You do not need to do anything special when your loop
     writes to a local variable that does not propagate information between loop
     iterations. However, stashing this variable somewhere and accessing it
     later on outside of the loop is not allowed (it's not local in that case).
@@ -144,7 +150,7 @@ potentially also crashes or incorrect results.
     instructions that ensure the correct flow of computed information.
 
     Loop variables must be LLVM or CUDA arrays. Builtin C++ or Python types
-    (e.g. an ``int``) don't work because writes to such variables cannot be
+    (e.g. an ``int``) does not work because writes to such variables cannot be
     intercepted by Enoki.
 
   - **Scatter operations**: the target of a scatter operation
@@ -204,7 +210,7 @@ potentially also crashes or incorrect results.
      :emphasize-lines: 2, 3
 
       ek::Loop loop(x);
-      x += 1; // Don't modify loop variables between ek::Loop and the loop body
+      x += 1; // Do not  modify loop variables between ek::Loop and the loop body
       while (!loop.cond(x > 0)) { // Negate argument (x > 0) instead of loop.cond()
           //...
       }
@@ -217,7 +223,7 @@ The following simple C++ example counts the number of iterations needed to
 reach the value 1 in the sequence underlying the `Collatz conjecture
 <https://en.wikipedia.org/wiki/Collatz_conjecture>`_. This involves two loop
 variables ``value`` and ``cond`` that are both written and read in each
-iteration. In contrast, the variable ``is_even`` is only temporary and doesn't
+iteration. In contrast, the variable ``is_even`` is only temporary and does not
 need to be provided to the :cpp:class:`Loop` constructor.
 
 .. code-block:: cpp
@@ -317,7 +323,7 @@ Reference
       here, as long as their contents were exposed to Enoki via a
       :c:macro:`ENOKI_STRUCT` declaration.
 
-   .. cpp:function:: bool cond(Mask m)
+   .. cpp:function:: bool cond(const Mask &m)
 
        This function will be called exactly twice in practice: the first time,
        it returns ``true`` indicating that the loop condition should be
