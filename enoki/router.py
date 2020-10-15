@@ -2164,7 +2164,7 @@ class CustomOp:
         return _ek.grad(self.output)
 
     def set_grad_out(self, value):
-        _ek.set_grad(self.output, value)
+        _ek.accum_grad(self.output, value)
 
     def grad_in(self, name):
         if name not in self.inputs:
@@ -2174,7 +2174,7 @@ class CustomOp:
     def set_grad_in(self, name, value):
         if name not in self.inputs:
             raise Exception('Could not find input argument named \"%s\"!' % name)
-        _ek.set_grad(self.inputs[name], value)
+        _ek.accum_grad(self.inputs[name], value)
 
 
 def custom(cls, *args, **kwargs):
