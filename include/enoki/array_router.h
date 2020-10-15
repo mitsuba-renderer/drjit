@@ -829,6 +829,13 @@ template <typename T> ENOKI_INLINE T load(const void *ptr, size_t size = 1) {
         return *static_cast<const T *>(ptr);
 }
 
+/// Map an array
+template <typename T> ENOKI_INLINE T map(void *ptr, size_t size = 1, bool free = false) {
+    static_assert(is_jit_array_v<T> && array_depth_v<T> == 1,
+                  "enoki::map(): only flat JIT arrays supported!");
+    return T::map_(ptr, size, free);
+}
+
 /// Load an array from unaligned memory
 template <typename T> ENOKI_INLINE T load_unaligned(const void *ptr, size_t size = 1) {
     if constexpr (is_array_v<T>)
