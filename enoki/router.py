@@ -1548,6 +1548,25 @@ def compress(mask):
     return mask.compress_()
 
 
+def count(a):
+    if _var_is_enoki(a):
+        if a.Type != VarType.Bool:
+            raise Exception("count(): input array must be a mask!")
+        return a.count_()
+    elif _var_is_container(a):
+        size = len(a)
+        if size == 0:
+            raise Exception("count(): input container is empty!")
+        value = 1 if a[0][0] else 0
+        for i in range(1, size):
+            value += 1 if a[i][0] else 0
+        return value
+    elif isinstance(a, bool):
+        return 1 if a else 0
+    else:
+        raise Exception("count(): incompatible input!")
+
+
 def all(a):
     if _var_is_enoki(a):
         if a.Type != VarType.Bool:
