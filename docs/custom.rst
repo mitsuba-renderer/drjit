@@ -265,7 +265,7 @@ Custom differentiable operations (Python)
 -----------------------------------------
 
 Please first review the section on :ref:`custom differentiable operations in
-C++ <custom-autodiff>`. The Python syntax is very similar, except that input 
+C++ <custom-autodiff>`. The Python syntax is very similar, except that input
 arguments are referenced by name instead of index.
 
 .. code-block:: python
@@ -325,17 +325,14 @@ The remainder of this section provides some examples in Python, though
 everything applies equally to the C++ interface.
 
 Trivially differentiable loops
-______________________________
-
+``````````````````````````````
 
 In the easiest case, the derivative of a loop containing some fragment of code
-is simply the same loop containing the derivative of the fragment. For example,
+is simply that same loop containing the derivative of the fragment. For example,
 suppose that we are estimating the value of an `Elliptic integral
 <https://en.wikipedia.org/wiki/Elliptic_integral>`_ using Monte Carlo
 integration, which entails generating a large number of random variates on the
-interval :math:`[0, \frac{\pi}{2}]` and adding up evaluations of the integrand
-(clearly not the best way of computing an elliptic integral, but we shall stick
-with the example here.)
+interval :math:`[0, \frac{\pi}{2}]` and adding up evaluations of the integrand:
 
 .. math::
 
@@ -344,16 +341,20 @@ with the example here.)
        \approx& \frac{1}{n}\sum_{i=1}^n\frac{1}{\sqrt{1-m\sin^2 \theta_i}}\mathrm{d}\theta\\
    \end{aligned}
 
-We can factor the details of Monte Carlo integration into a separate function
-``mcint`` using a symbolic loop.
+As a side note, please do not compute elliptic integrals that way. Enoki
+includes vastly more efficient implementations in its special function library.
+Nonetheless, we shall stick with this example here.
+
+First, we can factor out the details of Monte Carlo integration into a separate
+function ``mcint`` that relies on a symbolic loop.
 
 .. code-block:: python
 
     from enoki.cuda.ad import PCG32, Loop, UInt32, Float
 
-    def mcint(a, b, f, n=100000):
+    def mcint(a, b, f, n=1000000):
         ''' Integrate the function ``f`` from ``a`` to ``b``, using ``n`` samples. '''
-        rng = PCG32()
+        rng = PCG32()  # Pseudorandom number generator
         i = UInt32(0)
         result = Float(0)
         l = Loop(i, rng, result)
@@ -367,7 +368,7 @@ With this functionality at hand, :math:`K(m)` becomes simple to express:
 .. code-block:: python
 
     def elliptic_k(m):
-        return mcint(a=0, b=ek.Pi/2, 
+        return mcint(a=0, b=ek.Pi/2,
                      f=lambda x: ek.rsqrt(1 - m * ek.sqr(ek.sin(x))))
 
 However, attempting to differentiate ``elliptic_k`` will yield an error message
@@ -378,39 +379,46 @@ of the form
     enoki.Exception: Symbolic loop encountered a differentiable array with
     enabled gradients! This is not supported.
 
-Here, the function :math:`K` has a simple analytic derivative
+The function :math:`K` has a simple analytic derivative given by
 
 .. math::
 
-   K'(m)=\int_0^{\frac{\pi}{2}} \frac{\sin^2\theta}{2(1-m\sin^2 \theta)^\frac{3}{2}}\mathrm{d}\theta,
+   K'(m)=\int_0^{\frac{\pi}{2}} \frac{\sin^2\theta}{2(1-m\sin^2 \theta)^\frac{3}{2}}\mathrm{d}\theta.
 
-which we could in principle implement manually via a :cpp:class:`CustomOp`
+We could simply implement this derivative manually via a :cpp:class:`CustomOp`
 subclass. This leads to the following customized differentiable operation:
 
 .. code-block:: python
-   :emphasize-lines: 5-8
+   :emphasize-lines: 9-12
 
     class EllipticK(ek.CustomOp):
+        # --- Internally used utility methods ---
+
+        # Integrand of the 'K' function
         def K(self, x, m):
             return ek.rsqrt(1 - m * ek.sqr(ek.sin(x)))
 
+        # Derivative of the above with respect to 'm'
         def dK(self, x, m):
             sin_x = ek.sin(x)
             tmp = ek.rsqrt(1 - m * ek.sqr(sin_x))
             return 0.5 * ek.sqr(tmp * sin_x) * tmp
 
+        # Monte Carlo integral of dK, used in forward/reverse pass
+        def eval_grad(self):
+            return mcint(a=0, b=ek.Pi/2, f=lambda x: self.dK(x, self.m))
+
+        # --- CustomOp interface ---
+
         def eval(self, m):
             self.m = m # Stash 'm' for later
             return mcint(a=0, b=ek.Pi/2, f=lambda x: self.K(x, self.m))
 
-        def _eval_grad(self): # MC integral of derivative, used in forward/reverse pass
-            return mcint(a=0, b=ek.Pi/2, f=lambda x: self.dK(x, self.m))
-
         def forward(self):
-            self.set_grad_out(self.grad_in('m') * self._eval_grad())
+            self.set_grad_out(self.grad_in('m') * self.eval_grad())
 
         def backward(self):
-            self.set_grad_in('m', self.grad_out() * self._eval_grad())
+            self.set_grad_in('m', self.grad_out() * self.eval_grad())
 
         def name(self):
             return "EllipticK"
@@ -433,18 +441,241 @@ the following snippet:
         ek.forward(m)
         return ek.grad(y)
 
-The Monte Carlo integration procedure will evaluate ``dK`` 100'000 times, hence
-you may be wondering whether function calls like `ek.forward` that trigger
-derivative propagation through the AD computation graph in every iteration
-could lead to inefficiencies? Rest assured that this is not the case: Enoki's
-symbolic loop feature performs a single symbolic evaluation of the loop on the
-host, during which time it records all operations that take place within the
-loop body. However, only operations involving CUDA/LLVM arrays are relevant:
-the effect of this is that Enoki only sees the final computation needed to
-evaluate ``ek:grad(y)``. The mechanical process of actually obtaining this code
-(a graph traversal involving multiple hash tables) evaporates along the way,
-and the end result is generally equivalent to hand-written derivative code.
+The Monte Carlo integration procedure will evaluate ``dK`` 1 million times,
+hence you may be wondering whether function calls like `ek.forward` that
+trigger derivative propagation through the AD computation graph in every
+iteration could lead to inefficiencies? Rest assured that this is not the case:
+Enoki performs a single symbolic evaluation of the loop on the host, during
+which time it records all operations that take place within the loop body. Only
+operations involving CUDA/LLVM arrays are of interest, which means that Enoki
+only will only "see" the final computation needed to evaluate ``ek:grad(y)``.
+The mechanical process of actually obtaining this code---a topologically sorted
+graph traversal involving several different hash tables---evaporates along the
+way, and the end result is generally equivalent to hand-written derivative
+code. This nesting can be arbitrarily deep, so ``EllipticK.K()`` could in turn
+call custom operations, whose reverse- or forward-mode differentiation callback
+invokes AD once more.
 
+Finally, we can visualize the end result of this computation:
+
+.. code-block:: python
+
+    x = ek.linspace(Float, 0, 0.9, 100)
+    ek.enable_grad(x)
+    y = elliptic_k(x)
+    ek.backward(y)
+    ek.eval(x, y, ek.grad(x))
+
+    import matplotlib.pyplot as plt
+    plt.plot(x, y, label="$K(m)$")
+    plt.plot(x, ek.grad(x), label="$K'(m)$")
+    plt.legend()
+    plt.show()
+
+.. image:: custom-01.svg
+    :width: 800px
+    :align: center
+
+The :cpp:func:`eval` function call compiles and evaluates a single CUDA kernel
+containing both primal and derivative evaluation.
+
+.. container:: toggle
+
+    .. container:: header
+
+        **Show/Hide PTX Code**
+
+    .. code-block:: asm
+
+        .version 6.3
+        .target sm_75
+        .address_size 64
+        .entry enoki_b457ffb74bef12bc(.param .u32 size,
+                                      .param .u64 arg0,
+                                      .param .u64 arg1,
+                                      .param .u64 arg2) {
+            .reg.b8 %b<139>;
+            .reg.b16 %w<139>;
+            .reg.b32 %r<139>;
+            .reg.b64 %rd<139>;
+            .reg.f32 %f<139>;
+            .reg.f64 %d<139>;
+            .reg.pred %p<139>;
+
+            // Grid-stride loop setup
+            mov.u32 %r0, %ctaid.x;
+            mov.u32 %r1, %ntid.x;
+            mov.u32 %r2, %tid.x;
+            mad.lo.u32 %r0, %r0, %r1, %r2;
+            ld.param.u32 %r2, [size];
+            setp.ge.u32 %p0, %r0, %r2;
+            @%p0 bra L0;
+
+            mov.u32 %r3, %nctaid.x;
+            mul.lo.u32 %r1, %r3, %r1;
+
+        L1: // Loop body (compute capability 75)
+            mov.u32 %r4, %r0;
+            cvt.rn.f32.u32 %f5, %r4;
+            mov.b32 %f6, 0x3c14f209;
+            mul.ftz.f32 %f7, %f5, %f6;
+            ld.param.u64 %rd0, [arg0];
+            mul.wide.u32 %rd1, %r0, 4;
+            add.u64 %rd0, %rd0, %rd1;
+            st.global.cs.f32 [%rd0], %f7;
+            mov.u32 %r8, %r0;
+            cvt.u64.u32 %rd9, %r8;
+            mov.b64 %rd10, 0xda3e39cb94b95bdb;
+            add.u64 %rd11, %rd10, %rd9;
+            mov.b32 %r12, 0x1;
+            shl.b64 %rd13, %rd11, %r12;
+            mov.b64 %rd14, 0x1;
+            or.b64 %rd15, %rd13, %rd14;
+            mov.b64 %rd16, 0x0;
+            mov.b64 %rd17, 0x5851f42d4c957f2d;
+            mul.lo.u64 %rd18, %rd16, %rd17;
+            add.u64 %rd19, %rd18, %rd15;
+            mov.b64 %rd20, 0x853c49e6748fea9b;
+            add.u64 %rd21, %rd19, %rd20;
+            mul.lo.u64 %rd22, %rd21, %rd17;
+            add.u64 %rd23, %rd22, %rd15;
+            mov.b32 %r24, 0x0;
+            mov.b32 %r26, %r24;
+            mov.b64 %rd27, %rd23;
+            mov.b64 %rd28, %rd15;
+            mov.b32 %f29, 0x0;
+            mov.b32 %f30, %f29;
+
+        L25_cond:
+            mov.b32 %r32, %r26;
+            mov.b32 %r33, 0xf4240;
+            setp.lo.u32 %p34, %r32, %r33;
+            @!%p34 bra L25_post;
+
+        L25_body:
+            mov.b64 %rd37, %rd27;
+            mov.b32 %r38, 0x12;
+            shr.b64 %rd39, %rd37, %r38;
+            xor.b64 %rd40, %rd39, %rd37;
+            mov.b32 %r41, 0x1b;
+            shr.b64 %rd42, %rd40, %r41;
+            cvt.u32.u64 %r43, %rd42;
+            mov.b32 %r44, 0x3b;
+            shr.b64 %rd45, %rd37, %r44;
+            cvt.u32.u64 %r46, %rd45;
+            not.b32 %r47, %r46;
+            add.u32 %r48, %r47, %r12;
+            mov.b32 %r49, 0x1f;
+            and.b32 %r50, %r48, %r49;
+            shl.b32 %r51, %r43, %r50;
+            shr.b32 %r52, %r43, %r46;
+            or.b32 %r53, %r52, %r51;
+            mov.b32 %r54, 0x9;
+            shr.b32 %r55, %r53, %r54;
+            mov.b32 %r56, 0x3f800000;
+            or.b32 %r57, %r55, %r56;
+            mov.b32 %f58, %r57;
+            mov.b32 %f59, 0x3f800000;
+            sub.ftz.f32 %f60, %f58, %f59;
+            mov.b32 %f61, 0x3fc90fdb;
+            mul.ftz.f32 %f62, %f61, %f60;
+            sin.approx.ftz.f32 %f63, %f62;
+            mul.ftz.f32 %f64, %f63, %f63;
+            mul.ftz.f32 %f65, %f7, %f64;
+            sub.ftz.f32 %f66, %f59, %f65;
+            rsqrt.approx.ftz.f32 %f67, %f66;
+            mov.b32 %f68, %f30;
+            add.ftz.f32 %f69, %f68, %f67;
+            mov.b64 %rd70, %rd28;
+            mul.lo.u64 %rd71, %rd37, %rd17;
+            add.u64 %rd72, %rd71, %rd70;
+            mov.b32 %r73, %r26;
+            add.u32 %r74, %r73, %r12;
+            mov.b32 %r26, %r74;
+            mov.b64 %rd27, %rd72;
+            mov.b64 %rd28, %rd70;
+            mov.b32 %f30, %f69;
+            bra L25_cond;
+
+        L25_post:
+            mov.b32 %f80, %f30;
+            mul.ftz.f32 %f81, %f80, %f61;
+            mov.b32 %f82, 0x358637bd;
+            mul.ftz.f32 %f83, %f81, %f82;
+            ld.param.u64 %rd0, [arg1];
+            mul.wide.u32 %rd1, %r0, 4;
+            add.u64 %rd0, %rd0, %rd1;
+            st.global.cs.f32 [%rd0], %f83;
+            mov.b32 %r85, %r24;
+            mov.b64 %rd86, %rd23;
+            mov.b64 %rd87, %rd15;
+            mov.b32 %f88, %f29;
+
+        L84_cond:
+            mov.b32 %r90, %r85;
+            setp.lo.u32 %p91, %r90, %r33;
+            @!%p91 bra L84_post;
+
+        L84_body:
+            mov.b64 %rd94, %rd86;
+            shr.b64 %rd95, %rd94, %r38;
+            xor.b64 %rd96, %rd95, %rd94;
+            shr.b64 %rd97, %rd96, %r41;
+            cvt.u32.u64 %r98, %rd97;
+            shr.b64 %rd99, %rd94, %r44;
+            cvt.u32.u64 %r100, %rd99;
+            not.b32 %r101, %r100;
+            add.u32 %r102, %r101, %r12;
+            and.b32 %r103, %r102, %r49;
+            shl.b32 %r104, %r98, %r103;
+            shr.b32 %r105, %r98, %r100;
+            or.b32 %r106, %r105, %r104;
+            shr.b32 %r107, %r106, %r54;
+            or.b32 %r108, %r107, %r56;
+            mov.b32 %f109, %r108;
+            sub.ftz.f32 %f110, %f109, %f59;
+            mul.ftz.f32 %f111, %f61, %f110;
+            sin.approx.ftz.f32 %f112, %f111;
+            mul.ftz.f32 %f113, %f112, %f112;
+            mul.ftz.f32 %f114, %f7, %f113;
+            sub.ftz.f32 %f115, %f59, %f114;
+            rsqrt.approx.ftz.f32 %f116, %f115;
+            mul.ftz.f32 %f117, %f116, %f116;
+            mul.ftz.f32 %f118, %f116, %f117;
+            mov.b32 %f119, 0xbf000000;
+            mul.ftz.f32 %f120, %f119, %f118;
+            mov.b32 %f121, 0xbf800000;
+            mul.ftz.f32 %f122, %f121, %f113;
+            mul.ftz.f32 %f123, %f120, %f122;
+            mov.b32 %f124, %f88;
+            add.ftz.f32 %f125, %f124, %f123;
+            mov.b64 %rd126, %rd87;
+            mul.lo.u64 %rd127, %rd94, %rd17;
+            add.u64 %rd128, %rd127, %rd126;
+            mov.b32 %r129, %r85;
+            add.u32 %r130, %r129, %r12;
+            mov.b32 %r85, %r130;
+            mov.b64 %rd86, %rd128;
+            mov.b64 %rd87, %rd126;
+            mov.b32 %f88, %f125;
+            bra L84_cond;
+
+        L84_post:
+            mov.b32 %f136, %f88;
+            mul.ftz.f32 %f137, %f136, %f61;
+            mul.ftz.f32 %f138, %f137, %f82;
+            ld.param.u64 %rd0, [arg2];
+            mul.wide.u32 %rd1, %r0, 4;
+            add.u64 %rd0, %rd0, %rd1;
+            st.global.cs.f32 [%rd0], %f138;
+
+            add.u32 %r0, %r0, %r1;
+            setp.ge.u32 %p0, %r0, %r2;
+            @!%p0 bra L1;
+
+        L0:
+            ret;
+        }
 
 
 Reference
