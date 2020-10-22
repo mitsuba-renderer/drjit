@@ -554,10 +554,56 @@ struct LLVMArray : ArrayBase<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
     }
 
     LLVMArray rcp_() const {
+        if constexpr (std::is_same_v<Value, float>) {
+            // Prefer an X86-specific intrinsic (produces nicer machine code)
+            if (jitc_llvm_if_at_least(16, "+avx512f")) {
+                LLVMArray r =
+                    steal(jitc_var_new_1(Type,
+                                         "$4$r0 = call <$w x $t0> "
+                                         "@llvm.x86.avx512.rcp14.ps.512(<$w "
+                                         "x $t1> $r1, <$w x $t1> $z, i16$S -1)",
+                                         1, 0, m_index));
+
+                r = fnmadd(r* *this, r, r + r);
+
+                LLVMArray<uint32_t> flags(0x0087A622);
+                return steal(
+                    jitc_var_new_3(Type,
+                                   "$4$r0 = call <$w x $t0> "
+                                   "@llvm.x86.avx512.mask.fixupimm.ps.512(<$w "
+                                   "x $t1> $r1, <$w x $t2> $r2, <$w x $t3> "
+                                   "$r3, i32$S 0, i16$S -1, i32$S 4)",
+                                   1, 0, r.index(), m_index, flags.index()));
+            }
+        }
+
         return Value(1) / *this;
     }
 
     LLVMArray rsqrt_() const {
+        if constexpr (std::is_same_v<Value, float>) {
+            // Prefer an X86-specific intrinsic (produces nicer machine code)
+            if (jitc_llvm_if_at_least(16, "+avx512f")) {
+                LLVMArray r =
+                    steal(jitc_var_new_1(Type,
+                                         "$4$r0 = call <$w x $t0> "
+                                         "@llvm.x86.avx512.rsqrt14.ps.512(<$w "
+                                         "x $t1> $r1, <$w x $t1> $z, i16$S -1)",
+                                         1, 0, m_index));
+
+                r = fnmadd(r * *this, r, 3.f) * r * .5f;
+
+                LLVMArray<uint32_t> flags(0x0383A622);
+                return steal(
+                    jitc_var_new_3(Type,
+                                   "$4$r0 = call <$w x $t0> "
+                                   "@llvm.x86.avx512.mask.fixupimm.ps.512(<$w "
+                                   "x $t1> $r1, <$w x $t2> $r2, <$w x $t3> "
+                                   "$r3, i32$S 0, i16$S -1, i32$S 4)",
+                                   1, 0, r.index(), m_index, flags.index()));
+            }
+        }
+
         return sqrt(Value(1) / *this);
     }
 

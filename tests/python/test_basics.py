@@ -455,3 +455,12 @@ def test13_slice_getitem():
     a = ek.scalar.ArrayXi(*range(5))
     assert ek.allclose(a[1:4], [1, 2, 3])
     assert ek.allclose(a[:], [0, 1, 2, 3, 4])
+
+
+def test14_test_avx512_approx():
+    Float = get_class('enoki.llvm.Float')
+
+    x = ek.linspace(Float, 0, 10, 1000)
+    o = ek.full(Float, 1, 1000)
+    assert ek.allclose(ek.rsqrt(x), o / ek.sqrt(x), rtol=2e-7, atol=0)
+    assert ek.allclose(ek.rcp(x), o / x, rtol=2e-7, atol=0)

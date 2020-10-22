@@ -489,7 +489,7 @@ def _broadcast_index(target_type, index):
 
 
 def gather(target_type, source, index, mask=True):
-    if not isinstance(type_, type):
+    if not isinstance(target_type, type):
         raise Exception('gather(): Type expected as first argument')
     elif not issubclass(target_type, ArrayBase):
         assert isinstance(index, int) and isinstance(mask, bool)

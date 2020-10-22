@@ -678,7 +678,7 @@ def test40_safe_functions(m):
     ek.backward(y2)
     ek.backward(z2)
     assert ek.grad(x)[0] == 0
-    assert ek.grad(x)[1] == .5 / ek.sqrt(1 / 9)
+    assert ek.allclose(ek.grad(x)[1], .5 / ek.sqrt(1 / 9))
     assert x[0] == 0
     assert ek.all(ek.isfinite(ek.grad(x)))
     assert ek.all(ek.isfinite(ek.grad(y)))
