@@ -9,7 +9,7 @@ void bind_pcg32(py::module_ &m) {
     using Int64 = ek::int64_array_t<Guide>;
     using PCG32 = ek::PCG32<UInt64>;
 
-    py::class_<PCG32>(m, "PCG32")
+    auto pcg32 = py::class_<PCG32>(m, "PCG32")
         .def(py::init<size_t, const UInt64 &, const UInt64 &>(),
              "size"_a = 1,
              "initstate"_a = PCG32_DEFAULT_STATE,
@@ -41,4 +41,7 @@ void bind_pcg32(py::module_ &m) {
         .def("__sub__", [](const PCG32 &a, const PCG32 &b) -> Int64 { return a - b; }, py::is_operator())
         .def_readwrite("state", &PCG32::state)
         .def_readwrite("inc", &PCG32::inc);
+
+    pcg32.attr("IsEnokiStruct") = true;
+    pcg32.attr("Fields") = py::make_tuple("state", "inc");
 }

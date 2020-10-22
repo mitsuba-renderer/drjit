@@ -225,3 +225,7 @@ def leaf_array_t(t):
     while is_array_v(value_t(t)):
         t = t.Value
     return t
+
+
+def is_enoki_struct_v(a):
+    return getattr(a, 'IsEnokiStruct', False)

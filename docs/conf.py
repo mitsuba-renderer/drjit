@@ -121,6 +121,7 @@ html_static_path = ['_static']
 extensions = []
 extensions.append("guzzle_sphinx_theme")
 extensions.append("sphinxcontrib.katex")
+#katex_prerender = True
 
 # Guzzle theme options (see theme.conf for more information)
 html_theme_options = {

@@ -883,13 +883,16 @@ static void ad_traverse_rev(std::vector<int32_t> &todo, bool retain_graph) {
             Edge &edge = state.edges[edge_id];
             assert(edge.target == index);
             Variable *v2 = state[edge.source];
+            uint32_t next_rev = edge.next_rev;
 
             if (unlikely(edge.special)) {
                 edge.special->backward(v2, v);
 
                 if (!retain_graph) {
-                    Special *special = edge.special;
-                    edge.special = nullptr;
+                    // Look up edge, once more, entry in table may have changed
+                    Edge &edge2 = state.edges[edge_id];
+                    Special *special = edge2.special;
+                    edge2.special = nullptr;
                     unlock_guard<Mutex> guard(state.mutex);
                     delete special;
                 }
@@ -900,7 +903,7 @@ static void ad_traverse_rev(std::vector<int32_t> &todo, bool retain_graph) {
                     edge.weight = Value();
             }
 
-            edge_id = edge.next_rev;
+            edge_id = next_rev;
         }
 
         /// Clear the gradients at interior nodes
@@ -946,13 +949,15 @@ static void ad_traverse_fwd(std::vector<int32_t> &todo, bool retain_graph) {
             Edge &edge = state.edges[edge_id];
             assert(edge.source == index);
             Variable *v2 = state[edge.target];
+            uint32_t next_fwd = edge.next_fwd;
 
             if (unlikely(edge.special)) {
                 edge.special->forward(v, v2);
 
                 if (!retain_graph) {
-                    Special *special = edge.special;
-                    edge.special = nullptr;
+                    Edge &edge2 = state.edges[edge_id];
+                    Special *special = edge2.special;
+                    edge2.special = nullptr;
                     unlock_guard<Mutex> guard(state.mutex);
                     delete special;
                 }
@@ -963,7 +968,7 @@ static void ad_traverse_fwd(std::vector<int32_t> &todo, bool retain_graph) {
                     edge.weight = Value();
             }
 
-            edge_id = edge.next_fwd;
+            edge_id = next_fwd;
         }
 
         /// Clear the gradients at interior nodes

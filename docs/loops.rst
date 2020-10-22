@@ -150,7 +150,7 @@ potentially also crashes or incorrect results.
     instructions that ensure the correct flow of computed information.
 
     Loop variables must be LLVM or CUDA arrays. Builtin C++ or Python types
-    (e.g. an ``int``) does not work because writes to such variables cannot be
+    (e.g. an ``int``) do not work, because writes to such variables cannot be
     intercepted by Enoki.
 
   - **Scatter operations**: the target of a scatter operation
@@ -315,7 +315,7 @@ Reference
 
    Mechanism for JIT-compiling loops with dynamic stopping criteria
 
-   .. cpp:function:: template <typename Args...> Loop(Args&... args)
+   .. cpp:function:: template <typename... Args> Loop(Args&... args)
 
       Captures the supplied loop variables and modifies them to intercept
       modifications. Loop variables must be LLVM or CUDA arrays, or nested arrays

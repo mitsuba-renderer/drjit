@@ -229,7 +229,7 @@ be omitted. Before returning, the function must call
 
     void forward() override {
         Array3f grad_in = Base::grad_in<0>(),
-                 grad_out = grad_in * m_inv_norm;
+                grad_out = grad_in * m_inv_norm;
         grad_out -= m_input * (ek::dot(m_input, grad_out) *
                                ek::sqr(m_inv_norm));
         Base::set_grad_out(grad_out);
@@ -307,15 +307,145 @@ Once defined, a custom operation can be invoked as follows:
 Differentiable loops
 --------------------
 
-For instance, suppose that we are using a loop to compute
+Iterative computation performed using normal C++ or Python loops is effectively
+unrolled within the AD computation graph, and its differentiation poses no
+problems. However, automatic differentiation of :ref:`symbolic loops
+<symbolic-loops>` recorded using the :cpp:class:`Loop` class is not currently
+supported.
 
+As the name indicates, reverse-mode differentiation traverses the computation
+graph from outputs to inputs, which requires suitable reversed loop constructs
+that are not available by default. While Enoki could likely be modified to
+generate them automatically, this would not produce an efficient result, as
+each loop iteration would need to store copies of all loop variables to enable
+a reversal under general conditions. For this reason, symbolic loops must
+provide :ref:`custom derivative handling <custom-autodiff>`, which enables
+targeted optimizations that exploit the properties of different types of loops.
+The remainder of this section provides some examples in Python, though
+everything applies equally to the C++ interface.
+
+Trivially differentiable loops
+______________________________
+
+
+In the easiest case, the derivative of a loop containing some fragment of code
+is simply the same loop containing the derivative of the fragment. For example,
+suppose that we are estimating the value of an `Elliptic integral
+<https://en.wikipedia.org/wiki/Elliptic_integral>`_ using Monte Carlo
+integration, which entails generating a large number of random variates on the
+interval :math:`[0, \frac{\pi}{2}]` and adding up evaluations of the integrand
+(clearly not the best way of computing an elliptic integral, but we shall stick
+with the example here.)
+
+.. math::
+
+   \begin{aligned}
+       K(m)\coloneqq&\int_0^{\frac{\pi}{2}} \frac{1}{\sqrt{1-m\sin^2 \theta}}\mathrm{d}\theta\\
+       \approx& \frac{1}{n}\sum_{i=1}^n\frac{1}{\sqrt{1-m\sin^2 \theta_i}}\mathrm{d}\theta\\
+   \end{aligned}
+
+We can factor the details of Monte Carlo integration into a separate function
+``mcint`` using a symbolic loop.
 
 .. code-block:: python
 
-   float value = 0.f;
-   for (int i = 0; i < 1000; ++i) {
-       value += f(value);
-   }
+    from enoki.cuda.ad import PCG32, Loop, UInt32, Float
+
+    def mcint(a, b, f, n=100000):
+        ''' Integrate the function ``f`` from ``a`` to ``b``, using ``n`` samples. '''
+        rng = PCG32()
+        i = UInt32(0)
+        result = Float(0)
+        l = Loop(i, rng, result)
+        while l.cond(i < n):
+            result += f(ek.lerp(a, b, rng.next_float32()))
+            i += 1
+        return result * (b - a) / n
+
+With this functionality at hand, :math:`K(m)` becomes simple to express:
+
+.. code-block:: python
+
+    def elliptic_k(m):
+        return mcint(a=0, b=ek.Pi/2, 
+                     f=lambda x: ek.rsqrt(1 - m * ek.sqr(ek.sin(x))))
+
+However, attempting to differentiate ``elliptic_k`` will yield an error message
+of the form
+
+.. code-block:: text
+
+    enoki.Exception: Symbolic loop encountered a differentiable array with
+    enabled gradients! This is not supported.
+
+Here, the function :math:`K` has a simple analytic derivative
+
+.. math::
+
+   K'(m)=\int_0^{\frac{\pi}{2}} \frac{\sin^2\theta}{2(1-m\sin^2 \theta)^\frac{3}{2}}\mathrm{d}\theta,
+
+which we could in principle implement manually via a :cpp:class:`CustomOp`
+subclass. This leads to the following customized differentiable operation:
+
+.. code-block:: python
+   :emphasize-lines: 5-8
+
+    class EllipticK(ek.CustomOp):
+        def K(self, x, m):
+            return ek.rsqrt(1 - m * ek.sqr(ek.sin(x)))
+
+        def dK(self, x, m):
+            sin_x = ek.sin(x)
+            tmp = ek.rsqrt(1 - m * ek.sqr(sin_x))
+            return 0.5 * ek.sqr(tmp * sin_x) * tmp
+
+        def eval(self, m):
+            self.m = m # Stash 'm' for later
+            return mcint(a=0, b=ek.Pi/2, f=lambda x: self.K(x, self.m))
+
+        def _eval_grad(self): # MC integral of derivative, used in forward/reverse pass
+            return mcint(a=0, b=ek.Pi/2, f=lambda x: self.dK(x, self.m))
+
+        def forward(self):
+            self.set_grad_out(self.grad_in('m') * self._eval_grad())
+
+        def backward(self):
+            self.set_grad_in('m', self.grad_out() * self._eval_grad())
+
+        def name(self):
+            return "EllipticK"
+
+    def elliptic_k(m):
+        return ek.custom(EllipticK, m)
+
+
+But what if ``K`` is complex and messy, and we'd like to still rely on
+automatic differentiation? Fortunately, automatic differentiation can be nested
+like a Matryoshka doll: simply replace the highlighted yellow lines above by
+the following snippet:
+
+.. code-block:: python
+
+    def dK(self, x, m):
+        m = Float(m) # Convert 'm' to differentiable type (enoki.cuda.ad.Float)
+        ek.enable_grad(m)
+        y = self.K(x, m)
+        ek.forward(m)
+        return ek.grad(y)
+
+The Monte Carlo integration procedure will evaluate ``dK`` 100'000 times, hence
+you may be wondering whether function calls like `ek.forward` that trigger
+derivative propagation through the AD computation graph in every iteration
+could lead to inefficiencies? Rest assured that this is not the case: Enoki's
+symbolic loop feature performs a single symbolic evaluation of the loop on the
+host, during which time it records all operations that take place within the
+loop body. However, only operations involving CUDA/LLVM arrays are relevant:
+the effect of this is that Enoki only sees the final computation needed to
+evaluate ``ek:grad(y)``. The mechanical process of actually obtaining this code
+(a graph traversal involving multiple hash tables) evaporates along the way,
+and the end result is generally equivalent to hand-written derivative code.
+
+
 
 Reference
 ---------

@@ -2040,7 +2040,7 @@ def backward(a, retain_graph=False):
 def forward(a, retain_graph=False):
     if _ek.is_diff_array_v(a):
         if not grad_enabled(a):
-            raise Exception("forard(): attempted to propagate derivatives "
+            raise Exception("forward(): attempted to propagate derivatives "
                             "through a variable that is not registered with "
                             "the AD backend. Did you forget to call "
                             "enable_grad()?");

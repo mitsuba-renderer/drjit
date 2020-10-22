@@ -417,14 +417,19 @@ def read_indices(*args):
             elif a.IsDiff:
                 if enoki.grad_enabled(a):
                     raise enoki.Exception(
-                        'Encountered a differentiable array with enabled '
-                        'gradients! This is not supported.')
+                        'Symbolic loop encountered a differentiable array '
+                        'with enabled gradients! This is not supported.')
                 result.extend(read_indices(a.detach_()))
             elif a.IsJIT:
                 result.append(a.index())
-        elif type(a) is tuple or type(a) is list:
+        elif isinstance(a, tuple) or isinstance(a, list):
             for b in a:
                 result.extend(read_indices(b))
+        elif enoki.is_enoki_struct_v(a):
+            for field in type(a).Fields:
+                result.extend(read_indices(getattr(a, field)))
+        else:
+            print(" do not know what to do with %s\n" % str(a))
     return result
 
 
@@ -438,11 +443,16 @@ def write_indices(indices, *args):
             elif a.IsDiff:
                 if enoki.grad_enabled(a):
                     raise enoki.Exception(
-                        'Encountered a differentiable array with enabled '
-                        'gradients! This is not supported.')
+                        'Symbolic loop encountered a differentiable array '
+                        'with enabled gradients! This is not supported.')
                 write_indices(indices, a.detach_())
             elif a.IsJIT:
                 a.set_index_(indices.pop(0))
-        elif type(a) is tuple or type(a) is list:
+        elif isinstance(a, tuple) or isinstance(a, list):
             for b in a:
                 write_indices(indices, b)
+        elif enoki.is_enoki_struct_v(a):
+            for field in type(a).Fields:
+                write_indices(indices, getattr(a, field))
+        else:
+            print(" do not know what to do with %s\n" % str(a))
