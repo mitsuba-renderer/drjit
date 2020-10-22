@@ -489,7 +489,9 @@ def _broadcast_index(target_type, index):
 
 
 def gather(target_type, source, index, mask=True):
-    if not issubclass(target_type, ArrayBase):
+    if not isinstance(type_, type):
+        raise Exception('gather(): Type expected as first argument')
+    elif not issubclass(target_type, ArrayBase):
         assert isinstance(index, int) and isinstance(mask, bool)
         return source[index] if mask else 0
     else:
@@ -2056,34 +2058,38 @@ def forward(a, retain_graph=False):
 
 
 def zero(type_, size=1):
-    if issubclass(type_, ArrayBase):
+    if not isinstance(type_, type):
+        raise Exception('zero(): Type expected as first argument')
+    elif issubclass(type_, ArrayBase):
         return type_.zero_(size)
     else:
-        assert isinstance(type_, type)
         return type_(0)
 
 
 def empty(type_, size=1):
-    if issubclass(type_, ArrayBase):
+    if not isinstance(type_, type):
+        raise Exception('empty(): Type expected as first argument')
+    elif issubclass(type_, ArrayBase):
         return type_.empty_(size)
     else:
-        assert isinstance(type_, type)
         return type_(0)
 
 
 def full(type_, value, size=1, eval=False):
-    if issubclass(type_, ArrayBase):
+    if not isinstance(type_, type):
+        raise Exception('full(): Type expected as first argument')
+    elif issubclass(type_, ArrayBase):
         return type_.full_(value, size, eval)
     else:
-        assert isinstance(type_, type)
         return type_(value)
 
 
 def linspace(type_, min, max, size=1):
-    if issubclass(type_, ArrayBase):
+    if not isinstance(type_, type):
+        raise Exception('linspace(): Type expected as first argument')
+    elif issubclass(type_, ArrayBase):
         return type_.linspace_(min, max, size)
     else:
-        assert isinstance(type_, type)
         return type_(min)
 
 
@@ -2095,10 +2101,11 @@ def arange(type_, start=None, end=None, step=1):
         end = start
         start = 0
 
-    if issubclass(type_, ArrayBase):
+    if not isinstance(type_, type):
+        raise Exception('arange(): Type expected as first argument')
+    elif issubclass(type_, ArrayBase):
         return type_.arange_(start, end, step)
     else:
-        assert isinstance(type_, type)
         return type_(start)
 
 
