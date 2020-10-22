@@ -120,7 +120,7 @@ html_static_path = ['_static']
 # Register the theme as an extension to generate a sitemap.xml
 extensions = []
 extensions.append("guzzle_sphinx_theme")
-extensions.append("sphinx.ext.mathjax")
+extensions.append("sphinxcontrib.katex")
 
 # Guzzle theme options (see theme.conf for more information)
 html_theme_options = {

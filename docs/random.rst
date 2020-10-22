@@ -4,7 +4,7 @@
 Random number generation
 ========================
 
-Enoki ships with a vectorized implementation of the `PCG32 random number
+Enoki includes a fully vectorized implementation of the `PCG32 random number
 generator <http://www.pcg-random.org/>`_ developed by `Melissa O'Neill
 <https://www.cs.hmc.edu/~oneill>`_. To use it, include the following header:
 
@@ -12,40 +12,63 @@ generator <http://www.pcg-random.org/>`_ developed by `Melissa O'Neill
 
     #include <enoki/random.h>
 
-The following reference is based on the original `PCG32 documentation
+The following reference is partly based on the original `PCG32 documentation
 <http://www.pcg-random.org/using-pcg-c.html>`_.
 
 Usage
 -----
 
-The :cpp:class:`enoki::PCG32` class takes a single template parameter ``T``
-that denotes the "shape" of the output. This can be any scalar type like
-``uint32_t``, in which case the implementation generates scalar variates:
+The :cpp:class:`PCG32` class is parameterized by a template parameter ``T``
+that denotes the desired output type. Scalar values, SIMD packets, and
+CUDA/LLVM arrays are all supported. The specific scalar type underlying ``T``
+(e.g. integral, floating point, etc.) is ignored here, since only the shape
+of the output is relevant at this point.
+
+Using a scalar type like ``uint32_t`` leads to an implementation that generates
+scalar variates:
 
 .. code-block:: cpp
 
-    /* Scalar RNG */
-    using RNG_1x = PCG32<uint32_t>;
+    // Scalar RNG
+    using RNG = PCG32<uint32_t>;
 
-    RNG_1x my_rng;
-    float value = my_rng.next_float32();
+    RNG my_rng;
+    float value_f    = my_rng.next_float32(); // uniform on the interval [0, 1)
+    uint32_t value_u = my_rng.next_uint32();  // uniform integer on [0, 2^32 - 1]
 
-Alternatively, it can be an Enoki array, in which case the implementation
-produces arrays of variates.
+Specifying an Enoki array type leads to a vectorized random number generator
+that generates arrays of random variates in parallel.
 
 .. code-block:: cpp
 
-    using FloatP = Packet<float, 16>;
+    using Float = Packet<float, 16>;
 
-    /* Vector RNG -- generates 16 independent variates at once */
-    using RNG_16x = PCG32<FloatP>;
+    // Vector RNG -- generates 16 independent variates at once
+    using RNG = PCG32<Float>;
 
-    RNG_16x my_rng;
-    FloatP value = my_rng.next_float32();
+    RNG my_rng;
+    Float value = my_rng.next_float32();
 
 PCG32 is *fast*: on a Skylake i7-6920HQ processor, the vectorized
 implementation provided here generates around 1.4 billion single precision
-variates per second.
+variates per second. Note that the implementation uses a small amount of
+internal storage to record the current RNG state and a stream selector.
+Together, they require 16 bytes per SIMD lane.
+
+When used with LLVM or CUDA arrays, the arithmetic underlying pseudorandom
+number generation will be JIT-compiled along with other computation performed
+by the caller. Differentiable array types, e.g.:
+
+.. code-block:: cpp
+
+    using RNG = PCG32<DiffArray<LLVMArray<float>>>;
+
+are supported but do not have an influence on the behavior of this class, since
+the generated variates are the result of integral (i.e. non-differentiable)
+computation. This can still be useful when a differentiable computation is
+expressed using such types, in which case no special precautions must be taken
+for the random number generator.
+
 
 Reference
 ---------
@@ -61,11 +84,6 @@ Member types
 ************
 
 .. cpp:namespace:: template <typename T> enoki::PCG32
-
-.. cpp:member:: constexpr size_t Size
-
-    Denotes the SIMD width of the random number generator (i.e. how many
-    pseudorandom variates are generated at the same time)
 
 .. cpp:type:: Int64 = int64_array_t<T>
 
@@ -87,6 +105,10 @@ Member types
 
     Type alias for a double precision float (or an array thereof).
 
+.. cpp:type:: Mask = mask_t<UInt64>
+
+    Type alias for masks that are internally used
+
 Member variables
 ****************
 
@@ -102,21 +124,28 @@ Member variables
 Constructors
 ************
 
-.. cpp:function:: PCG32(const UInt64 &initstate = PCG32_DEFAULT_STATE, \
-                        const UInt64 &initseq = PCG32_DEFAULT_STREAM + arange<UInt64>())
+.. cpp:function:: PCG32(size_t = 1, \
+                        const UInt64 &initstate = PCG32_DEFAULT_STATE, \
+                        const UInt64 &initseq   = PCG32_DEFAULT_STREAM)
 
-     Seeds the PCG32 with the default state. When ``T`` is an array, every
-     entry by default uses a different stream index, which yields an
-     uncorrelated and non-overlapping set of sequences.
+     Seeds the PCG32 with the default state using the :cpp:func:`seed()`
+     method.
 
 Methods
 *******
 
-.. cpp:function:: void seed(const UInt64 &initstate, const UInt64 &initseq)
+.. cpp:function:: void seed(size_t = 1, \
+                            const UInt64 &initstate = PCG32_DEFAULT_STATE, \
+                            const UInt64 &initseq = PCG32_DEFAULT_STREAM)
 
     This function initializes (a.k.a. "seeds") the random number generator, a
     required initialization step before the generator can be used. The provided
     arguments are defined as follows:
+
+    - ``size`` denotes the number of parallel instances of random number
+      generators that should be instantiated. This value is only relevant
+      when ``T`` is a dynamic array type, in which case an appropriate
+      offset is added to ``initseq`` for every entry.
 
     - ``initstate`` is the starting state for the RNG. Any 64-bit value is
       permissible.
@@ -133,7 +162,7 @@ Methods
     Calling :cpp:func:`PCG32::seed` with the same arguments produces the same
     output, allowing programs to use random number sequences repeatably.
 
-.. cpp:function:: UInt32 next_uint32(const mask_t<UInt64> &mask = true)
+.. cpp:function:: UInt32 next_uint32(const Mask &mask = true)
 
     Generate a uniformly distributed unsigned 32-bit random number (i.e.
     :math:`x`, where :math:`0\le x< 2^{32}`)
@@ -141,7 +170,7 @@ Methods
     If a mask parameter is provided, only the pseudorandom number generators
     of active SIMD lanes are advanced.
 
-.. cpp:function:: UInt64 next_uint64(const mask_t<UInt64> &mask = true)
+.. cpp:function:: UInt64 next_uint64(const Mask &mask = true)
 
     Generate a uniformly distributed unsigned 64-bit random number (i.e.
     :math:`x`, where :math:`0\le x< 2^{64}`)
@@ -153,7 +182,7 @@ Methods
 
         This function performs two internal calls to :cpp:func:`next_uint32()`.
 
-.. cpp:function:: UInt32 next_uint32_bound(uint32_t bound, const mask_t<UInt64> &mask = true)
+.. cpp:function:: UInt32 next_uint32_bound(uint32_t bound, const Mask &mask = true)
 
     Generate a uniformly distributed unsigned 32-bit random number less
     than ``bound`` (i.e. :math:`x`, where :math:`0\le x<` ``bound``)
@@ -168,7 +197,7 @@ Methods
         several steps. This is only relevant when using the
         :cpp:func:`advance()` or :cpp:func:`operator-()` method.
 
-.. cpp:function:: UInt64 next_uint64_bound(uint64_t bound, const mask_t<UInt64> &mask = true)
+.. cpp:function:: UInt64 next_uint64_bound(uint64_t bound, const Mask &mask = true)
 
     Generate a uniformly distributed unsigned 64-bit random number less
     than ``bound`` (i.e. :math:`x`, where :math:`0\le x<` ``bound``)
@@ -183,14 +212,14 @@ Methods
         several steps. This is only relevant when using the
         :cpp:func:`advance()` or :cpp:func:`operator-()` method.
 
-.. cpp:function:: Float32 next_float32(const mask_t<UInt64> &mask = true)
+.. cpp:function:: Float32 next_float32(const Mask &mask = true)
 
     Generate a single precision floating point value on the interval :math:`[0, 1)`
 
     If a mask parameter is provided, only the pseudorandom number generators of
     active SIMD lanes are advanced.
 
-.. cpp:function:: Float64 next_float64(const mask_t<UInt64> &mask = true)
+.. cpp:function:: Float64 next_float64(const Mask &mask = true)
 
     Generate a double precision floating point value on the interval :math:`[0, 1)`
 

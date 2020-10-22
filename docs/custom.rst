@@ -4,7 +4,8 @@ Customization
 =============
 
 Enoki offers several escape hatches to implement custom features that are
-difficult to express using builtin functionality.
+difficult to express using builtin functionality. This section explains such
+extension mechanisms related to the JIT compiler and automatic differentiation.
 
 .. _custom-cuda:
 
@@ -268,6 +269,7 @@ C++ <custom-autodiff>`. The Python syntax is very similar, except that input
 arguments are referenced by name instead of index.
 
 .. code-block:: python
+    :emphasize-lines: 8, 19
 
     class Normalize(ek.CustomOp):
         def eval(self, value):
@@ -304,6 +306,9 @@ Once defined, a custom operation can be invoked as follows:
 
 Differentiable loops
 --------------------
+
+For instance, suppose that we are using a loop to compute
+
 
 .. code-block:: python
 
