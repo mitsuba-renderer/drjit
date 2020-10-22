@@ -84,7 +84,7 @@ def test03_failures(pkg):
         ek.enable_grad(v)
         with pytest.raises(ek.Exception) as e:
             p.Loop(i, v)
-        assert 'Encountered a differentiable array with enabled gradients! This is not supported.' in str(e.value)
+        assert 'Symbolic loop encountered a differentiable array with enabled gradients! This is not supported.' in str(e.value)
 
 
 @pytest.mark.parametrize("pkg", pkgs)
