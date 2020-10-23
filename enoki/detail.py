@@ -98,7 +98,7 @@ def array_from_dlpack(t, capsule):
                 return data
             else:
                 i = enoki.arange(enoki.int32_array_t(t), size)
-                return t.gather_(data, offset + stride * i, True)
+                return t.gather_(data, offset + stride * i, True, False)
         else:
             result = t()
             for j in range(size):

@@ -488,7 +488,7 @@ def _broadcast_index(target_type, index):
         return index
 
 
-def gather(target_type, source, index, mask=True):
+def gather(target_type, source, index, mask=True, permute=False):
     if not isinstance(target_type, type):
         raise Exception('gather(): Type expected as first argument')
     elif not issubclass(target_type, ArrayBase):
@@ -496,17 +496,23 @@ def gather(target_type, source, index, mask=True):
         return source[index] if mask else 0
     else:
         if source.Depth != 1:
-            raise Exception("Source of gather op. must be a flat array!")
+            if source.Size != target_type.Size:
+                raise Exception("gather(): mismatched source/target configuration!")
 
-        index_type = _ek.uint32_array_t(target_type)
-        if not isinstance(index, index_type):
-            index = _broadcast_index(index_type, index)
+            result = target_type()
+            for i in range(target_type.Size):
+                result[i] = gather(target_type.Value, source[i], index, mask, permute)
+            return result
+        else:
+            index_type = _ek.uint32_array_t(target_type)
+            if not isinstance(index, index_type):
+                index = _broadcast_index(index_type, index)
 
-        mask_type = index_type.MaskType
-        if not isinstance(mask, mask_type):
-            mask = mask_type(mask)
+            mask_type = index_type.MaskType
+            if not isinstance(mask, mask_type):
+                mask = mask_type(mask)
 
-        return target_type.gather_(source, index, mask)
+            return target_type.gather_(source, index, mask, permute)
 
 
 def scatter(target, value, index, mask=True, permute=False):
@@ -516,17 +522,21 @@ def scatter(target, value, index, mask=True, permute=False):
             target[index] = value
     else:
         if target.Depth != 1:
-            raise Exception("Target of scatter op. must be a flat array!")
+            if _ek.array_size_v(target) != _ek.array_size_v(value):
+                raise Exception("scatter(): mismatched source/target configuration!")
 
-        index_type = _ek.uint32_array_t(type(value))
-        if not isinstance(index, index_type):
-            index = _broadcast_index(index_type, index)
+            for i in range(len(target)):
+                scatter(target[i], value[i], index, mask, permute)
+        else:
+            index_type = _ek.uint32_array_t(type(value))
+            if not isinstance(index, index_type):
+                index = _broadcast_index(index_type, index)
 
-        mask_type = index_type.MaskType
-        if not isinstance(mask, mask_type):
-            mask = mask_type(mask)
+            mask_type = index_type.MaskType
+            if not isinstance(mask, mask_type):
+                mask = mask_type(mask)
 
-        return value.scatter_(target, index, mask, permute)
+            return value.scatter_(target, index, mask, permute)
 
 
 def scatter_add(target, value, index, mask=True):
@@ -1921,6 +1931,10 @@ def detach(a):
 def grad(a):
     if _ek.is_diff_array_v(a):
         return a.grad_()
+    elif isinstance(a, tuple) or isinstance(a, list):
+        return type(a)([grad(v) for v in a])
+    elif isinstance(a, dict):
+        return {k : grad(v) for k, v in a.items()}
     else:
         return _ek.zero(type(a))
 
@@ -1949,15 +1963,27 @@ def accum_grad(a, value):
 
 
 def grad_enabled(a):
+    result = False
     if _ek.is_diff_array_v(a):
-        return a.grad_enabled_()
-    else:
-        return False
+        result = a.grad_enabled_()
+    elif isinstance(a, tuple) or isinstance(a, list):
+        for v in a:
+            result |= grad_enabled(v)
+    elif isinstance(a, dict):
+        for k, v in a.items():
+            result |= grad_enabled(v)
+    return result
 
 
 def set_grad_enabled(a, value):
     if _ek.is_diff_array_v(a):
         a.set_grad_enabled_(value)
+    elif isinstance(a, tuple) or isinstance(a, list):
+        for v in a:
+            set_grad_enabled(v, value)
+    elif isinstance(a, dict):
+        for k, v in a.items():
+            set_grad_enabled(v, value)
 
 
 def enable_grad(*args):
@@ -1971,17 +1997,27 @@ def disable_grad(*args):
 
 
 def grad_suspended(a):
+    result = False
     if _ek.is_diff_array_v(a):
-        return a.grad_suspended_()
-    else:
-        return False
+        result = a.grad_suspended_()
+    elif isinstance(a, tuple) or isinstance(a, list):
+        for v in a:
+            result |= grad_suspended(v)
+    elif isinstance(a, dict):
+        for k, v in a.items():
+            result |= grad_suspended(v)
+    return result
 
 
 def set_grad_suspended(a, value):
     if _ek.is_diff_array_v(a):
         a.set_grad_suspended_(value)
-    else:
-        raise Exception("Expected differentiable array types as input!")
+    elif isinstance(a, tuple) or isinstance(a, list):
+        for v in a:
+            set_grad_suspended(v, value)
+    elif isinstance(a, dict):
+        for k, v in a.items():
+            set_grad_suspended(v, value)
 
 
 def suspend_grad(*args):
@@ -2202,6 +2238,15 @@ class CustomOp:
             raise Exception('Could not find input argument named \"%s\"!' % name)
         _ek.accum_grad(self.inputs[name], value)
 
+    def forward(self):
+        raise Exception('CustomOp.forward(): not implemented')
+
+    def backward(self):
+        raise Exception('CustomOp.backward(): not implemented')
+
+    def name(self):
+        return "CustomOp[unnamed]"
+
 
 def custom(cls, *args, **kwargs):
     # Extract indices of differentiable variables
@@ -2214,7 +2259,7 @@ def custom(cls, *args, **kwargs):
         elif isinstance(o, dict):
             for k, v in o.items():
                 diff_vars(v, indices)
-        elif _ek.is_diff_array_v(o):
+        elif _ek.is_diff_array_v(o) and _ek.grad_enabled(o):
             indices.append(o.index())
 
     # Clear primal values of a differentiable array
@@ -2222,7 +2267,7 @@ def custom(cls, *args, **kwargs):
         if _ek.array_depth_v(o) > 1 \
            or isinstance(o, list) \
            or isinstance(o, tuple):
-            return type(o)(*[clear_primal(v) for v in o])
+            return type(o)([clear_primal(v) for v in o])
         elif isinstance(o, dict):
             return { k: clear_primal(v) for k, v in o.items() }
         elif _ek.is_diff_array_v(o):

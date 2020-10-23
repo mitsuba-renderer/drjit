@@ -304,6 +304,8 @@ Once defined, a custom operation can be invoked as follows:
    d = Array3f(...)
    d2 = ek.custom(Normalize, d)
 
+.. _diff-loop:
+
 Differentiable loops
 --------------------
 
@@ -353,7 +355,7 @@ function ``mcint`` that relies on a symbolic loop.
     from enoki.cuda.ad import PCG32, Loop, UInt32, Float
 
     def mcint(a, b, f, n=1000000):
-        ''' Integrate the function ``f`` from ``a`` to ``b``, using ``n`` samples. '''
+        ''' Integrate the function 'f' from 'a' to 'b', using 'n' samples. '''
         rng = PCG32()  # Pseudorandom number generator
         i = UInt32(0)
         result = Float(0)
@@ -427,6 +429,9 @@ subclass. This leads to the following customized differentiable operation:
         return ek.custom(EllipticK, m)
 
 
+AD all the way down
+```````````````````
+
 But what if ``K`` is complex and messy, and we'd like to still rely on
 automatic differentiation? Fortunately, automatic differentiation can be nested
 like a Matryoshka doll: simply replace the highlighted yellow lines above by
@@ -442,21 +447,20 @@ the following snippet:
         return ek.grad(y)
 
 The Monte Carlo integration procedure will evaluate ``dK`` 1 million times,
-hence you may be wondering whether function calls like `ek.forward` that
-trigger derivative propagation through the AD computation graph in every
-iteration could lead to inefficiencies? Rest assured that this is not the case:
-Enoki performs a single symbolic evaluation of the loop on the host, during
-which time it records all operations that take place within the loop body. Only
-operations involving CUDA/LLVM arrays are of interest, which means that Enoki
-only will only "see" the final computation needed to evaluate ``ek:grad(y)``.
-The mechanical process of actually obtaining this code---a topologically sorted
-graph traversal involving several different hash tables---evaporates along the
-way, and the end result is generally equivalent to hand-written derivative
-code. This nesting can be arbitrarily deep, so ``EllipticK.K()`` could in turn
-call custom operations, whose reverse- or forward-mode differentiation callback
-invokes AD once more.
+hence you may be wondering whether repetitive function calls like
+``ek.forward()`` that propagate derivatives through the AD computation graph
+could lead to inefficiencies? This is not the case: Enoki performs a single
+symbolic evaluation of the loop on the host, during which time it records all
+operations that take place within. Only operations involving CUDA/LLVM arrays
+are of interest, which means that Enoki only will only "see" the final
+computation needed to evaluate ``ek.grad(y)``. The mechanical process of
+actually obtaining this code---a topologically sorted graph traversal involving
+several different hash tables---evaporates along the way, and the end result is
+generally equivalent to hand-written derivative code. This nesting can be
+arbitrarily deep, so ``EllipticK.K()`` could in turn call custom operations,
+whose reverse- or forward-mode differentiation callback invokes AD once more.
 
-Finally, we can visualize the end result of this computation:
+Finally, we can visualize the fruits of this work:
 
 .. code-block:: python
 
@@ -473,11 +477,13 @@ Finally, we can visualize the end result of this computation:
     plt.show()
 
 .. image:: custom-01.svg
-    :width: 800px
+    :width: 600px
     :align: center
 
-The :cpp:func:`eval` function call compiles and evaluates a single CUDA kernel
-containing both primal and derivative evaluation.
+The :cpp:func:`eval()` call on line 5 of the previous code fragment compiles
+and evaluates a single CUDA kernel containing both primal and derivative
+evaluation (i.e. two separate loops). If you're interested in the nitty-gritty
+details, click on the following link to see the resulting PTX code.
 
 .. container:: toggle
 
@@ -677,6 +683,238 @@ containing both primal and derivative evaluation.
             ret;
         }
 
+
+Complex loops
+`````````````
+
+Various types of loops fall into the previously discussed category, and this
+also includes iterations with fixed points (e.g., root-finding and optimization
+methods like Newton-Raphson), where the derivative typically doesn't involve a
+loop at all.
+
+However, more complex cases require the derivation of a corresponding reverse
+loop, which is sometimes possible using ideas from *reversible computing*. The
+idea here is to determine the loop variables in iteration ``i`` from those of
+iteration ``i+1``, possibly by caching a limited amount of additional
+information to facilitate this process.
+
+In the worst case, all loop variables must be stored in each iteration. A bound
+on the maximum iteration count is generally required in this case so that a
+suitable temporary memory region can be pre-allocated. This design pattern
+should be avoided whenever possible, because the resulting memory traffic will
+lead to poor performance.
+
+Let's look at an example of both kinds of approaches: we will simulate the
+motion of a particle subject to gravity and aerodynamic drag, which is
+governed by the following system of partial differential equations
+
+.. math::
+
+   \begin{aligned}
+   \frac{\mathrm{d}}{\mathrm{d}t}\mathbf{p} &= \mathbf{v}\\
+   \frac{\mathrm{d}}{\mathrm{d}t}\mathbf{v} &= \begin{pmatrix}
+   -\mu v_x \|v\| \\
+   -g - \mu v_y \|v\|
+   \end{pmatrix}
+   \end{aligned}
+
+Here, :math:`\mathbf{p}` is the position, :math:`\mathbf{v}` is the velocity,
+:math:`\mu` controls the amount of drag, and :math:`g` is the gravity. We will
+once more create a custom operation and discretize the ODE in time using
+Euler's method, which we evaluate for 100 steps. The ``timestep()`` method
+takes the current position and velocity and takes a step of size ``dt``:
+
+.. code-block:: python
+
+    class Ballistic(ek.CustomOp):
+        def timestep(self, pos, vel, dt=0.02, mu=0.1, g=9.81):
+            acc = -mu*vel*ek.norm(vel) - Array2f(0, g)
+            pos_out = pos + dt * vel
+            vel_out = vel + dt * acc
+            return pos_out, vel_out
+
+Let's start with the naive approach first: in this case, the
+``Ballistic.eval()`` method writes a copy of the loop variable into temporary
+arrays (``temp_pos``, ``temp_vel``).
+
+.. code-block:: python
+
+    def eval(self, pos, vel):
+        # Copy input arguments
+        pos, vel = Array2f(pos), Array2f(vel)
+
+        # Run for 100 iterations
+        it, max_it = UInt32(0), 100
+
+        # Allocate scratch space
+        n = max(ek.width(pos), ek.width(vel))
+        self.temp_pos = ek.empty(Array2f, n * max_it)
+        self.temp_vel = ek.empty(Array2f, n * max_it)
+
+        loop = Loop(pos, vel, it)
+        while loop.cond(it < max_it):
+            # Store current loop variables
+            index = it * n + ek.arange(UInt32, n)
+            ek.scatter(self.temp_pos, pos, index)
+            ek.scatter(self.temp_vel, vel, index)
+
+            # Run simulation step, update loop variables
+            pos_out, vel_out = self.timestep(pos, vel)
+            pos.assign(pos_out)
+            vel.assign(vel_out)
+
+            it += 1
+
+        return pos, vel, self.temp_pos
+
+The function returns the current position and velocity after 100 steps, as well
+as the array of intermediate positions to facilitate plotting.
+
+The ``Ballistic.backward()`` differentiation callback executes the loop in
+reverse via the stored loop variables. Each step propagates gradients through
+the loop body via :cpp:func:`set_grad()`, :cpp:func:`enqueue()`, and
+:cpp:func:`traverse()`.
+
+.. code-block:: python
+
+    def backward(self):
+        grad_pos, grad_vel, _ = self.grad_out()
+
+        # Run for 100 iterations
+        it = UInt32(100)
+
+        # Ensure temporary arrays are evaluated at this point
+        ek.eval(self.temp_pos, self.temp_vel)
+
+        loop = Loop(it, grad_pos, grad_vel)
+        n = ek.width(grad_pos)
+        while loop.cond(it > 0):
+            # Retrieve loop variables, reverse chronological order
+            it -= 1
+            index = it * n + ek.arange(UInt32, n)
+            pos = ek.gather(Array2f, self.temp_pos, index)
+            vel = ek.gather(Array2f, self.temp_vel, index)
+
+            # Differentiate time step in reverse mode
+            ek.enable_grad(pos, vel)
+            pos_out, vel_out = self.timestep(pos, vel)
+            ek.set_grad(pos_out, grad_pos)
+            ek.set_grad(vel_out, grad_vel)
+            ek.enqueue(pos_out, vel_out)
+            ek.traverse(Float, reverse=True)
+
+            # Update loop variables
+            grad_pos.assign(ek.grad(pos))
+            grad_vel.assign(ek.grad(vel))
+
+        self.set_grad_in('pos', grad_pos)
+        self.set_grad_in('vel', grad_vel)
+
+Click below to show a small program that uses this functionality to optimize
+three arbitrary trajectories so that they simultaneously reach a user-specified
+point.
+
+.. image:: custom-02.gif
+    :width: 600px
+    :align: center
+
+.. container:: toggle
+
+    .. container:: header
+
+        **Show/Hide example program**
+
+    .. code-block:: python
+
+        import matplotlib.pyplot as plt
+        import numpy as np
+
+        pos_in = Array2f([1, 2, 4], [1, 2, 1])
+        vel_in = Array2f([10, 9, 4], [5, 3, 6])
+
+        for i in range(15):
+            ek.enable_grad(vel_in)
+            pos_out, vel_out, traj = ek.custom(Ballistic, pos_in, vel_in)
+
+            loss = ek.squared_norm(pos_out - Array2f(5, 0))
+            ek.backward(loss)
+
+            plt.clf()
+            traj = np.array(traj).reshape(100, 3, 2)
+            plt.plot(traj[:, 0, 0], traj[:, 0, 1])
+            plt.plot(traj[:, 1, 0], traj[:, 1, 1])
+            plt.plot(traj[:, 2, 0], traj[:, 2, 1])
+            plt.scatter(5, 0)
+            plt.xlim(0, 9)
+            plt.ylim(-2, 6)
+            plt.title('Iteration %i' % i)
+            plt.savefig('frame_%02i.png' % i)
+
+            vel_in = Array2f(ek.detach(vel_in) - 0.2 * ek.grad(vel_in))
+
+Finally, let's discuss an alternative way of differentiating this loop in
+reverse mode, while avoiding the costly storage of intermediate states. We
+begin by modifying ``Ballistic.eval()`` so that it merely caches the final
+position and velocity.
+
+.. code-block:: python
+
+    def eval(self, pos, vel):
+        pos, vel = Array2f(pos), Array2f(vel)
+
+        # Run for 100 iterations
+        it, max_it = UInt32(0), 100
+
+        loop = Loop(pos, vel, it)
+        while loop.cond(it < max_it):
+            pos_out, vel_out = self.timestep(pos, vel)
+            pos.assign(pos_out)
+            vel.assign(vel_out)
+            it += 1
+
+        # Cache final configuration
+        self.pos = pos
+        self.vel = vel
+
+        return pos, vel
+
+Each time-step inside ``Ballistic.backward()`` now runs the physical simulation
+*backwards in time* using a negative value of ``dt``, and then it repeats the
+forward step once more while tracking derivatives in reverse mode. Note that
+this is not exact in this case in the sense that we won't end up exactly at the
+same point, but it yields a good approximation. Better variants with an exact
+time-reversal may be possible using a more advanced ODE integrator.
+
+.. code-block:: python
+
+    def backward(self):
+        grad_pos, grad_vel = self.grad_out()
+        pos, vel = self.pos, self.vel
+
+        # Run for 100 iterations
+        it = UInt32(0)
+
+        loop = Loop(it, pos, vel, grad_pos, grad_vel)
+        while loop.cond(it < 100):
+            # Take reverse step in time
+            pos_rev, vel_rev = self.timestep(pos, vel, dt=-0.02)
+            pos.assign(pos_rev)
+            vel.assign(vel_rev)
+
+            # Take a forward step in time, keep track of derivatives
+            ek.enable_grad(pos_rev, vel_rev)
+            pos_fwd, vel_fwd = self.timestep(pos_rev, vel_rev, dt=0.02)
+            ek.set_grad(pos_fwd, grad_pos)
+            ek.set_grad(vel_fwd, grad_vel)
+            ek.enqueue(pos_fwd, vel_fwd)
+            ek.traverse(Float, reverse=True)
+
+            grad_pos.assign(ek.grad(pos_rev))
+            grad_vel.assign(ek.grad(vel_rev))
+            it += 1
+
+        self.set_grad_in('pos', grad_pos)
+        self.set_grad_in('vel', grad_vel)
 
 Reference
 ---------

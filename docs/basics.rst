@@ -11,7 +11,7 @@ All code snippets assume that the following lines are present:
     #include <iostream>
     #include <enoki/array.h>
 
-    /* Don't forget to include the 'enoki' namespace */
+    // Don't forget to include the 'enoki' namespace
     using namespace enoki;
 
 .. note::

@@ -201,7 +201,11 @@ def float64_array_t(a):
 
 
 def diff_array_t(a):
-    if not is_array_v(a):
+    if isinstance(a, tuple):
+        return tuple(diff_array_t(v) for v in a)
+    elif isinstance(a, list):
+        return [diff_array_t(v) for v in a]
+    elif not is_array_v(a):
         raise Exception("diff_array_t(): requires an Enoki input array!")
     elif not isinstance(a, type):
         return diff_array_t(type(a))(a)
@@ -222,8 +226,12 @@ def detached_t(a):
         return a.ReplaceScalar(a.Type, diff=False)
 
 def leaf_array_t(t):
+    if isinstance(t, tuple) or isinstance(t, list):
+        return leaf_array_t(t[0])
+
     while is_array_v(value_t(t)):
         t = t.Value
+
     return t
 
 

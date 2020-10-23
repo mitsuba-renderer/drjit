@@ -290,8 +290,11 @@ auto bind_full(py::class_<Array> &cls, bool scalar_mode = false) {
     if constexpr (ek::is_dynamic_v<Array>) {
         using UInt32 = ek::uint32_array_t<Array>;
         cls.def_static("gather_",
-                [](const Array &source, const UInt32 &index, const Mask &mask) {
-                    return ek::gather<Array>(source, index, mask);
+                [](const Array &source, const UInt32 &index, const Mask &mask, bool permute) {
+                    if (permute)
+                        return ek::gather<Array, true>(source, index, mask);
+                    else
+                        return ek::gather<Array, false>(source, index, mask);
                 });
         cls.def("scatter_",
                 [](const Array &value, Array &target, const UInt32 &index, const Mask &mask, bool permute) {

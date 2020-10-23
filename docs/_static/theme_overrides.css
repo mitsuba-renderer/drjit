@@ -38,3 +38,11 @@ div.sphinxsidebar {
 div.sidebar-wrapper {
     padding:0px;
 }
+
+pre {
+    background: transparent;
+}
+
+div.highlight {
+    background: transparent;
+}

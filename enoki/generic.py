@@ -1390,12 +1390,12 @@ def arange_(cls, start, end, step):
 
 
 @classmethod
-def gather_(cls, source, index, mask):
+def gather_(cls, source, index, mask, permute):
     assert source.Depth == 1
     sr = max(len(index), len(mask))
     result = cls.empty_(sr if cls.Size == Dynamic else 0)
     for i in range(sr):
-        result[i] = _ek.gather(cls.Value, source, index[i], mask[i])
+        result[i] = _ek.gather(cls.Value, source, index[i], mask[i], permute)
     return result
 
 
