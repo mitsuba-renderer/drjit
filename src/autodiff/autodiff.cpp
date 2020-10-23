@@ -615,20 +615,20 @@ template <typename Value> struct SpecialCallback : Special {
     SpecialCallback(DiffCallback* callback) : callback(callback) { }
 
     void backward(Variable *, const Variable *target) const override {
+        uint32_t edge = target->next_fwd;
         if (callback) {
             /* leave critical section */ {
                 unlock_guard<Mutex> guard(state.mutex);
                 callback->backward();
             }
-            uint32_t edge = target->next_fwd;
             if (edge && state.edges[edge].next_fwd) { // fan-in > 1, update ref counts
                 do {
                     const Edge &e = state.edges[edge];
                     Variable *v = state[e.target];
-                    if (v->ref_count_grad == 0)
-                        enoki_raise("SpecialCallback::backward(): reference counting error!");
-                    if (--v->ref_count_grad == 0)
-                        v->grad = Value();
+                    if (v->ref_count_grad > 0) {
+                        if (--v->ref_count_grad == 0)
+                            v->grad = Value();
+                    }
                     edge = e.next_fwd;
                 } while (edge);
             }
@@ -639,20 +639,20 @@ template <typename Value> struct SpecialCallback : Special {
     }
 
     void forward(const Variable *source, Variable *) const override {
+        uint32_t edge = source->next_rev;
         if (callback) {
             /* leave critical section */ {
                 unlock_guard<Mutex> guard(state.mutex);
                 callback->forward();
             }
-            uint32_t edge = source->next_rev;
             if (edge && state.edges[edge].next_rev) { // fan-in > 1, update ref counts
                 do {
                     const Edge &e = state.edges[edge];
                     Variable *v = state[e.source];
-                    if (v->ref_count_grad == 0)
-                        enoki_raise("SpecialCallback::forward(): reference counting error!");
-                    if (--v->ref_count_grad == 0)
-                        v->grad = Value();
+                    if (v->ref_count_grad > 0) {
+                        if (--v->ref_count_grad == 0)
+                            v->grad = Value();
+                    }
                     edge = e.next_rev;
                 } while (edge);
             }
@@ -907,6 +907,7 @@ static void ad_traverse_rev(std::vector<int32_t> &todo, bool retain_graph) {
         }
 
         /// Clear the gradients at interior nodes
+        v = state[index];
         if (v->next_rev && v->ref_count_grad == 0)
             v->grad = Value();
     }
@@ -972,6 +973,7 @@ static void ad_traverse_fwd(std::vector<int32_t> &todo, bool retain_graph) {
         }
 
         /// Clear the gradients at interior nodes
+        v = state[index];
         if (v->next_fwd && v->ref_count_grad == 0)
             v->grad = Value();
 
