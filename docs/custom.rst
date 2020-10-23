@@ -191,7 +191,7 @@ Apart from ``name()``, this declaration must override *three* other virtual
 methods: the first, ``eval()``, performs an ordinary (non-differentiable)
 function evaluation. Note that its parameter(s) and return value must be
 non-differentiable variants of the input/outputs as originally specified via
-template parameters of :cpp:struct:`CustomOp`. Non-differentiable is as defined
+template parameters of :cpp:class:`CustomOp`. Non-differentiable is as defined
 by :cpp:type:`detached_t`. For example, ``detached_t<Array3fD>`` equals
 ``Array3f``. Finally, the inputs must be specified as ``const`` references
 (see the following note).
@@ -746,7 +746,7 @@ arrays (``temp_pos``, ``temp_vel``).
         # Run for 100 iterations
         it, max_it = UInt32(0), 100
 
-        # Allocate scratch space
+        # Allocate scratch space: (# of particles) * (# of iterations)
         n = max(ek.width(pos), ek.width(vel))
         self.temp_pos = ek.empty(Array2f, n * max_it)
         self.temp_vel = ek.empty(Array2f, n * max_it)
