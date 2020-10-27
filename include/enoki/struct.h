@@ -19,6 +19,7 @@
 #define ENOKI_STRUCT_ASSIGN_MOVE(x)   x = std::move(v.x);
 #define ENOKI_STRUCT_APPLY_1(x)       func(v.x);
 #define ENOKI_STRUCT_APPLY_2(x)       func(v1.x, v2.x);
+#define ENOKI_STRUCT_APPLY_3(x)       func(v1.x, v2.x, v3.x);
 #define ENOKI_STRUCT_APPLY_LABEL(x)   func(#x, v.x);
 
 #define ENOKI_STRUCT(Name, ...)                                                \
@@ -50,10 +51,19 @@
     static ENOKI_INLINE void apply_2(T1_ &v1, T2_ &v2, Func_ func) {           \
         ENOKI_MAP(ENOKI_STRUCT_APPLY_2, __VA_ARGS__)                           \
     }                                                                          \
+    template <typename T1_, typename T2_, typename T3_, typename Func_>        \
+    static ENOKI_INLINE void apply_3(T1_ &v1, T2_ &v2, T3_ &v3, Func_ func) {  \
+        ENOKI_MAP(ENOKI_STRUCT_APPLY_3, __VA_ARGS__)                           \
+    }                                                                          \
     template <typename T_, typename Func_>                                     \
     static ENOKI_INLINE void apply_label(T_ &v, Func_ func) {                  \
         ENOKI_MAP(ENOKI_STRUCT_APPLY_LABEL, __VA_ARGS__)                       \
     }                                                                          \
+    template <typename Array, enoki::enable_if_mask_t<Array> = 0>              \
+    auto operator[](const Array &array) {                                      \
+        return enoki::masked(*this, array);                                    \
+    }
+
 
 NAMESPACE_BEGIN(enoki)
 
@@ -70,6 +80,11 @@ template <typename T1_, typename T2_> struct struct_support<std::pair<T1_, T2_>>
     static ENOKI_INLINE void apply_2(T1 &v1, T2 &v2, Func func) {
         func(v1.first,  v2.first);
         func(v1.second, v2.second);
+    }
+    template <typename T1, typename T2, typename T3, typename Func>
+    static ENOKI_INLINE void apply_3(T1 &v1, T2 &v2, T3 &v3, Func func) {
+        func(v1.first,  v2.first,  v3.first);
+        func(v1.second, v2.second, v3.second);
     }
     template <typename T, typename Func>
     static ENOKI_INLINE void apply_label(T &v, Func func) {
@@ -108,6 +123,14 @@ template <typename... Ts> struct struct_support<std::tuple<Ts...>> {
     template <typename T1, typename T2, typename Func, size_t... Is>
     static ENOKI_INLINE void apply_2(T1 &v1, T2 &v2, Func func, std::index_sequence<Is...>) {
         (func(std::get<Is>(v1), std::get<Is>(v2)), ...);
+    }
+    template <typename T1, typename T2, typename T3, typename Func>
+    static ENOKI_INLINE void apply_3(T1 &v1, T2 &v2, T3 &v3, Func func) {
+        apply_3(v1, v2, v3, func, std::make_index_sequence<sizeof...(Ts)>());
+    }
+    template <typename T1, typename T2, typename T3, typename Func, size_t... Is>
+    static ENOKI_INLINE void apply_3(T1 &v1, T2 &v2, T3 &v3, Func func, std::index_sequence<Is...>) {
+        (func(std::get<Is>(v1), std::get<Is>(v2), std::get<Is>(v3)), ...);
     }
     template <typename T, typename Func>
     static ENOKI_INLINE void apply_label(T &v, Func func) {

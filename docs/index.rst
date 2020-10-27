@@ -13,6 +13,7 @@ Enoki: structured vectorization and differentiation on modern processor architec
 
    intro
    demo
+   struct
    loops
    custom
    random

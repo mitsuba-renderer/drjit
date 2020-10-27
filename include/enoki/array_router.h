@@ -253,17 +253,26 @@ ENOKI_INLINE auto select(const M &m, const T &t, const F &f) {
     using E = replace_scalar_t<array_t<typename detail::deepest<T, F, M>::type>,
                                typename detail::expr<scalar_t<T>, scalar_t<F>>::type>;
     using EM = mask_t<E>;
-    if constexpr (!is_array_v<E>)
+    if constexpr (!is_array_v<E>) {
         return (bool) m ? (E) t : (E) f;
-    else if constexpr (std::is_same_v<M, EM> &&
-                       std::is_same_v<T, E> &&
-                       std::is_same_v<F, E>)
+    } else if constexpr (std::is_same_v<M, EM> &&
+                         std::is_same_v<T, E> &&
+                         std::is_same_v<F, E>) {
         return E::select_(m.derived(), t.derived(), f.derived());
-    else
+    } else if constexpr (is_enoki_struct_v<T> && std::is_same_v<T, F>) {
+        T result;
+        struct_support_t<T>::apply_3(
+            t, f, result,
+            [&m](auto const &x1, auto const &x2, auto &x3) ENOKI_INLINE_LAMBDA {
+                x3 = select(m, x1, x2);
+            });
+        return result;
+    } else {
         return select(
             static_cast<ref_cast_t<M, EM>>(m),
             static_cast<ref_cast_t<T, E>>(t),
             static_cast<ref_cast_t<F, E>>(f));
+    }
 }
 
 /// Shuffle the entries of an array
@@ -1035,10 +1044,22 @@ void scatter_add(Target &&target, const Value &value, const Index &index, const 
     }
 }
 
-template <typename Array, typename Type> void migrate(Array &array, Type type) {
-    if constexpr (is_jit_array_v<Array>) {
-        static_assert(std::is_enum_v<Type>);
-        array.derived().migrate_(type);
+template <typename T, typename Type> void migrate(T &value, Type type) {
+    static_assert(std::is_enum_v<Type>);
+    if constexpr (is_jit_array_v<T>) {
+        if constexpr (is_jit_array_v<value_t<T>>) {
+            for (size_t i = 0; i < value.derived().size(); ++i)
+                migrate(value.derived().entry(i), type);
+        } else {
+            value.derived().migrate_(type);
+        }
+    } else if constexpr (is_enoki_struct_v<T>) {
+        struct_support_t<T>::apply_1(
+            value, [type](auto &x) {
+                 migrate(x, type);
+            });
+    } else {
+        ; // do nothing
     }
 }
 

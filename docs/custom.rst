@@ -491,7 +491,7 @@ details, click on the following link to see the resulting PTX code.
 
         **Show/Hide PTX Code**
 
-    .. code-block:: asm
+    .. code-block:: text
 
         .version 6.3
         .target sm_75
