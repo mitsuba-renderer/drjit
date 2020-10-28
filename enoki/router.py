@@ -63,6 +63,8 @@ def _var_type(a, preferred=VarType.Invalid):
                 return t
     elif isinstance(a, tuple) or isinstance(a, list):
         return _builtins.max([_var_type(v, preferred) for v in a])
+    elif isinstance(a, type(None)) or 'pybind11' in type(type(a)).__name__:
+        return VarType.Pointer
     else:
         raise Exception("var_type(): Unsupported type!")
 

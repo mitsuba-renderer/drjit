@@ -59,6 +59,7 @@ PYBIND11_MODULE(enoki_ext, m_) {
         .value("Float16", VarType::Float16)
         .value("Float32", VarType::Float32)
         .value("Float64", VarType::Float64)
+        .value("Pointer", VarType::Pointer)
         .value("Bool", VarType::Bool)
         .def_property_readonly(
             "NumPy", [](VarType v) { return var_type_numpy[(int) v]; })
