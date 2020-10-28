@@ -151,8 +151,8 @@ sequence of equivalent assignments of the form
 
 .. _struct-supported:
 
-Supported operations
-====================
+Interface (C++)
+---------------
 
 In the following, suppose that the following declarations are available:
 
@@ -161,7 +161,7 @@ In the following, suppose that the following declarations are available:
    using Float    = ek::CUDAArray<float>;
    using UInt32   = ek::CUDAArray<uint32_t>;
    using Mask     = ek::CUDAArray<bool>;
-   using MyStruct = ::MyStruct<Float>:
+   using MyStruct = ::MyStruct<Float>;
 
    Mask mask;
    UInt32 index;
@@ -251,9 +251,69 @@ structures.
    function calls <virtual-functions>`, and they can be used as loop variables
    in :ref:`symbolic loops <symbolic-loops>`.
 
+Adding support to further operations is easy, and patches to this end are
+welcomed.
 
-Reference
----------
+Interface (Python)
+------------------
+
+Custom data structures are also supported in the Python bindings, though the
+:c:macro:`ENOKI_STRUCT` specification takes a different from here. In a class
+defined within Python, add a top-level static attribute documenting the fields
+and their types.
+
+.. code-block:: python
+
+    from enoki.cuda import UInt32, Array3f
+
+    class MyStruct:
+        ENOKI_STRUCT = { 'a' : Array3f, 'b' : UInt32 }
+
+        def __init__(self, a, b):
+            self.a = a
+            self.b = b
+
+In classes exposed via `pybind11 <https://pybind11.readthedocs.io>`_, follow
+the following pattern:
+
+.. code-block:: cpp
+
+    auto mystruct = py::class_<MyStruct>(m, "MyStruct")
+        .def(py::init<>()) // default constructor (important!)
+        .def_readwrite("a", &MyStruct::a)
+        .def_readwrite("b", &MyStruct::b);
+
+    py::dict fields;
+    fields["a"] = py::type::of<Array3f>();
+    fields["b"] = py::type::of<Float>();
+
+    mystruct.attr("ENOKI_STRUCT") = fields;
+
+The set of compatible operations is currently much smaller than in the C++
+interface. 
+
+1. **Initialization**: :cpp:func:`zero()`, and :cpp:func:`empty()`.
+
+2. **Mask-based selection**: :cpp:func:`select()`.
+
+3.  **Vectorized scatter/gather**: :cpp:func:`scatter()`,
+    :cpp:func:`scatter_add()`, and :cpp:func:`gather()`.
+
+4. **Operations specific to dynamic arrays**: :cpp:func:`width()` and
+   :cpp:func:`resize()`.
+
+5. **Operations specific to JIT (CUDA/LLVM) arrays**: :cpp:func:`schedule()`
+   and :cpp:func:`eval()`.
+
+3. **Other**: Custom data structures can be passed through :ref:`virtual
+   function calls <virtual-functions>`, and they can be used as loop variables
+   in :ref:`symbolic loops <symbolic-loops>`.
+
+Adding support to further operations is easy, and patches to this end are
+welcomed.
+
+C++ Reference
+-------------
 
 .. c:macro:: ENOKI_STRUCT(Name, ...)
 

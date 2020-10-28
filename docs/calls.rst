@@ -4,8 +4,9 @@
 Method calls
 ============
 
-Method calls and virtual method calls are important building blocks of modern
-object-oriented C++ applications. When vectorization enters the picture, it is
+Method calls and virtual method calls are important building blocks of 
+object-oriented C++ and Python applications. 
+When vectorization enters the picture, it is
 not immediately clear how they should be dealt with. This section introduces
 Enoki's method call vectorization support, focusing on a hypothetical
 ``Sensor`` class that decodes a measurement performed by a sensor.

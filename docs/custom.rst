@@ -1,93 +1,18 @@
 .. cpp:namespace:: enoki
 
-Customization
-=============
+.. _custom-autodiff:
+
+Customizing differentiation
+===========================
 
 Enoki offers several escape hatches to implement custom features that are
 difficult to express using builtin functionality. This section explains such
-extension mechanisms related to the JIT compiler and automatic differentiation.
+extension mechanisms related to automatic differentiation.
 
-.. _custom-cuda:
+.. _custom-autodiff-cpp:
 
-Enoki ↔ CUDA interoperability
------------------------------
-
-Enoki's :cpp:class:`CUDAArray` class dispatches its work to CUDA streams,
-making it possible to mix the use of Enoki with standard CUDA kernels. Please
-take note of the following points in doing so:
-
-1. Enoki queues up computation for later execution, and its effect won't be
-   visible to a CUDA kernel unless you enforce timely evaluation via
-   :cpp:func:`eval()`.
-
-2. CUDA kernels run in *streams*: you must submit work to the right stream
-   (i.e. the one used by Enoki) to ensure a correct relative ordering of
-   operations.
-
-3. C++17 support in NVCC remains limited: it will fail with (incorrect) error
-   messages when any Enoki header is included in a file compiled by NVCC. For
-   now, it is necessary to partition your project into compilation units
-   handled by NVCC and other compilers.
-
-The following example shows what this looks like in practice:
-
-.. code-block:: cpp
-
-   // Forward declaration
-   extern void launch_mykernel(cudaStream_t stream, size_t size, const float *in_x,
-                               const float *in_y, float *out_x, float *out_y);
-
-   // ...
-
-   using Float   = ek::CUDAArray<float>;
-   using Array2f = ek::Array<Float, 2>;
-
-   Array2f in = /* Some Enoki calculation, only symbolic at this point */;
-
-   // Launch CUDA kernel containing queued computation
-   ek::eval(in /*, ... other variables ... */);
-
-   // Create empty array (wraps cudaMalloc(), no need to ek::eval() the result)
-   Array2f out = ek::empty<Array2f>(1000000);
-
-   // Determine CUDA stream used by Enoki
-   cudaStream_t stream = (cudaStream_t) jitc_cuda_stream();
-
-   /// Launch CUDA kernel
-   launch_mykernel(
-        stream, ek::width(in),
-        in.x().data(), in.y().data(),
-        out.x().data(), out.y().data()
-    );
-
-   // Can now use 'out' in further calculations within Enoki
-   out *= 2;
-
-   // Finally, can wrap existing CUDA device pointers into an Enoki array
-   float *cuda_device_ptr = ...;
-   Float out_2 = ek::map<Float>(cuda_device_ptr,
-                                /* # of entries = */ 1000000);
-
-Where the following file containing the kernel is compiled separately by NVCC:
-
-.. code-block:: cpp
-
-    __global__ void my_kernel(size_t size, const float *in_x, const float *in_y,
-                              float *out_x, float *out_y) {
-        // .. kernel code ..
-    }
-
-    // Launcher
-    void launch_mykernel(cudaStream_t stream, size_t size, const float *in_x,
-                         const float *in_y, float *out_x, float *out_y) {
-       my_kernel<<<grid_size, block_size, 0, stream /* <-- important! */>>>(
-           size, in_x, in_y, out_x, out_y);
-    }
-
-.. _custom-autodiff:
-
-Custom differentiable operations (C++)
---------------------------------------
+In C++
+------
 
 Enoki can compute derivatives of builtin operations in both forward and reverse
 mode. In rare cases, it may be useful or even necessary to tell Enoki how a
@@ -246,7 +171,7 @@ not the case.
 
     void backward() override {
         Array3f grad_out = Base::grad_out(),
-                 grad_in = grad_out * m_inv_norm;
+                grad_in = grad_out * m_inv_norm;
         grad_in -= m_input * (ek::dot(m_input, grad_in) *
                               ek::sqr(m_inv_norm));
         Base::set_grad_in<0>(grad_in);
@@ -261,11 +186,11 @@ Once defined, the custom operation can be invoked as follows:
 
 .. _custom-autodiff-py:
 
-Custom differentiable operations (Python)
------------------------------------------
+In Python
+---------
 
 Please first review the section on :ref:`custom differentiable operations in
-C++ <custom-autodiff>`. The Python syntax is very similar, except that input
+C++ <custom-autodiff-cpp>`. The Python syntax is very similar, except that input
 arguments are referenced by name instead of index.
 
 .. code-block:: python

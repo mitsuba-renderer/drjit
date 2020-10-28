@@ -236,4 +236,4 @@ def leaf_array_t(t):
 
 
 def is_enoki_struct_v(a):
-    return getattr(a, 'IsEnokiStruct', False)
+    return hasattr(a, 'ENOKI_STRUCT')

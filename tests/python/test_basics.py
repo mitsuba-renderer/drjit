@@ -464,3 +464,36 @@ def test14_test_avx512_approx():
     o = ek.full(Float, 1, 1000)
     assert ek.allclose(ek.rsqrt(x), o / ek.sqrt(x), rtol=2e-7, atol=0)
     assert ek.allclose(ek.rcp(x), o / x, rtol=2e-7, atol=0)
+
+
+@pytest.mark.parametrize("cname", ["enoki.cuda.PCG32", "enoki.llvm.PCG32"])
+def test15_custom(cname):
+    t = get_class(cname)
+
+    v1 = ek.zero(t, 100)
+    v2 = ek.empty(t, 100)
+    assert len(v1.state) == 100
+    assert len(v2.inc) == 100
+
+    v2.state = v1.state
+    v1.state = ek.arange(type(v1.state), 100)
+    v3 = ek.select(v1.state < 10, v1, v2)
+    assert v3.state[3] == 3
+    assert v3.state[11] == 0
+
+    assert ek.width(v3) == 100
+    v4 = ek.zero(t, 1)
+    ek.schedule(v4)
+    ek.resize(v4, 200)
+    assert ek.width(v4) == 200
+
+    assert ek.width(v3) == 100
+    v4 = ek.zero(t, 1)
+    ek.resize(v4, 200)
+    assert ek.width(v4) == 200
+
+    index = ek.arange(type(v1.state), 100)
+    ek.scatter(v4, v1, index)
+    v5 = ek.gather(t, v4, index)
+    ek.eval(v5)
+    assert v5.state == v1.state and v5.inc == v1.inc

@@ -13,9 +13,16 @@ Enoki: structured vectorization and differentiation on modern processor architec
 
    intro
    demo
+   → GitHub <https://github.com/mitsuba-renderer/enoki>
+
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Optional features
+
+   vcall
    struct
    loops
    custom
    random
-   → GitHub <https://github.com/mitsuba-renderer/enoki>
 

@@ -247,8 +247,16 @@ def shape(a):
         return s
 
 
-def width(a):
-    return shape(a)[-1]
+def width(value):
+    if _ek.is_array_v(value):
+        return shape(value)[-1]
+    elif _ek.is_enoki_struct_v(value):
+        result = 0
+        for k in type(value).ENOKI_STRUCT.keys():
+            result = max(result, width(getattr(value, k)))
+        return result
+    else:
+        return 1
 
 
 def resize(value, size):
@@ -257,6 +265,9 @@ def resize(value, size):
             resize(value[i], size)
     elif _ek.is_jit_array_v(value):
         value.resize_(size)
+    elif _ek.is_enoki_struct_v(value):
+        for k in type(value).ENOKI_STRUCT.keys():
+            resize(getattr(value, k), size)
 
 
 def device(value=None):
@@ -341,7 +352,7 @@ def op_repr(self):
         import io
         buf = io.StringIO()
         try:
-            self.schedule()
+            self.schedule_()
         except:  # noqa
             return "[backend issue]"
         _repr_impl(self, s, buf)
@@ -492,8 +503,17 @@ def gather(target_type, source, index, mask=True, permute=False):
     if not isinstance(target_type, type):
         raise Exception('gather(): Type expected as first argument')
     elif not issubclass(target_type, ArrayBase):
-        assert isinstance(index, int) and isinstance(mask, bool)
-        return source[index] if mask else 0
+        if _ek.is_enoki_struct_v(target_type):
+            if type(source) is not target_type:
+                raise Exception('gather(): type mismatch involving custom data structure!')
+            result = target_type()
+            for k, v in target_type.ENOKI_STRUCT.items():
+                setattr(result, k, 
+                        gather(v, getattr(source, k), index, mask, permute))
+            return result
+        else:
+            assert isinstance(index, int) and isinstance(mask, bool)
+            return source[index] if mask else 0
     else:
         if source.Depth != 1:
             if source.Size != target_type.Size:
@@ -516,10 +536,18 @@ def gather(target_type, source, index, mask=True, permute=False):
 
 
 def scatter(target, value, index, mask=True, permute=False):
-    if not isinstance(value, ArrayBase):
-        assert isinstance(index, int) and isinstance(mask, bool)
-        if mask:
-            target[index] = value
+    target_type = type(target)
+    if not issubclass(target_type, ArrayBase):
+        if _ek.is_enoki_struct_v(target_type):
+            if type(value) is not target_type:
+                raise Exception('scatter(): type mismatch involving custom data structure!')
+            for k in target_type.ENOKI_STRUCT.keys():
+                scatter(getattr(target, k), getattr(value, k),
+                        index, mask, permute)
+        else:
+            assert isinstance(index, int) and isinstance(mask, bool)
+            if mask:
+                target[index] = value
     else:
         if target.Depth != 1:
             if _ek.array_size_v(target) != _ek.array_size_v(value):
@@ -540,10 +568,18 @@ def scatter(target, value, index, mask=True, permute=False):
 
 
 def scatter_add(target, value, index, mask=True):
-    if not isinstance(value, ArrayBase):
-        assert isinstance(index, int) and isinstance(mask, bool)
-        if mask:
-            target[index] += value
+    target_type = type(target)
+    if not issubclass(target_type, ArrayBase):
+        if _ek.is_enoki_struct_v(target_type):
+            if type(value) is not target_type:
+                raise Exception('scatter_add(): type mismatch involving custom data structure!')
+            for k in target_type.ENOKI_STRUCT.keys():
+                scatter_add(getattr(target, k), getattr(value, k),
+                            index, mask, permute)
+        else:
+            assert isinstance(index, int) and isinstance(mask, bool)
+            if mask:
+                target[index] += value
     else:
         if target.Depth != 1:
             raise Exception("Target of scatter op. must be a flat array!")
@@ -1081,8 +1117,15 @@ def fnmsub(a, b, c):
 def select(m, t, f):
     if isinstance(m, bool):
         return t if m else f
+    type_t, type_f, type_m = type(t), type(f), type(m)
 
-    if type(t) is not type(f) or type(m) is not _ek.mask_t(t):
+    if type_t is not type_f or type_m is not _ek.mask_t(t):
+        if type_t is type_f and _ek.is_enoki_struct_v(type_t):
+            result = type_t()
+            for k in type_t.ENOKI_STRUCT.keys():
+                setattr(result, k, select(m, getattr(t, k), getattr(f, k)))
+            return result
+
         m, t, f = _var_promote_select(m, t, f)
 
     return type(t).select_(m, t, f)
@@ -1262,17 +1305,23 @@ def set_label(a, label):
 
 
 def schedule(*args):
+    result = False
     for a in args:
-        if isinstance(a, ArrayBase):
-            a.schedule()
-        elif isinstance(a, tuple) or isinstance(a, list):
+        t = type(a)
+        if issubclass(t, ArrayBase):
+            result |= a.schedule_()
+        elif _ek.is_enoki_struct_v(t):
+            for k in t.ENOKI_STRUCT.keys():
+                result |= schedule(getattr(a, k))
+        elif issubclass(t, tuple) or issubclass(t, list):
             for v in a:
-                schedule(v)
+                result |= schedule(v)
+    return result
 
 
 def eval(*args):
-    schedule(*args)
-    _ek.detail.eval()
+    if schedule(*args) or len(args) == 0:
+        _ek.detail.eval()
 
 
 def graphviz_str(a, reverse=True):
@@ -2098,6 +2147,11 @@ def zero(type_, size=1):
         raise Exception('zero(): Type expected as first argument')
     elif issubclass(type_, ArrayBase):
         return type_.zero_(size)
+    elif _ek.is_enoki_struct_v(type_):
+        result = type_()
+        for k, v in type_.ENOKI_STRUCT.items():
+            setattr(result, k, zero(v, size))
+        return result
     else:
         return type_(0)
 
@@ -2107,6 +2161,11 @@ def empty(type_, size=1):
         raise Exception('empty(): Type expected as first argument')
     elif issubclass(type_, ArrayBase):
         return type_.empty_(size)
+    elif _ek.is_enoki_struct_v(type_):
+        result = type_()
+        for k, v in type_.ENOKI_STRUCT.items():
+            setattr(result, k, empty(v, size))
+        return result
     else:
         return type_(0)
 

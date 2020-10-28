@@ -157,6 +157,10 @@ PYBIND11_MODULE(enoki_ext, m_) {
     );
 
     (void) py::weakref(m.attr("ArrayBase"), cleanup_callback).release();
+#else
+    array_detail.def("schedule", [](uint32_t) { return false; });
+    array_detail.def("eval", [](uint32_t) { return false; });
+    array_detail.def("eval", []() { });
 #endif
 
     array_detail.def("idiv", [](VarType t, py::object value) -> py::object {

@@ -652,16 +652,17 @@ def label(a, value):
     return a.set_label_(value)
 
 
-def schedule(a0):
+def schedule_(a0):
+    result = False
     if a0.IsJIT:
         if a0.Depth == 1:
             if a0.IsDiff:
                 a0 = a0.detach_()
-            _ek.detail.schedule(a0.index())
+            result |= _ek.detail.schedule(a0.index())
         else:
             for i in range(len(a0)):
-                a0[i].schedule()
-    return a0
+                result |= a0[i].schedule_()
+    return result
 
 
 # -------------------------------------------------------------------

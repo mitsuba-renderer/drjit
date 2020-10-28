@@ -42,6 +42,13 @@ void bind_pcg32(py::module_ &m) {
         .def_readwrite("state", &PCG32::state)
         .def_readwrite("inc", &PCG32::inc);
 
-    pcg32.attr("IsEnokiStruct") = true;
-    pcg32.attr("Fields") = py::make_tuple("state", "inc");
+    py::handle u64;
+    if constexpr (ek::is_array_v<UInt64>)
+        u64 = py::type::of<UInt64>();
+    else
+        u64 = py::handle((PyObject *) &PyLong_Type);
+    py::dict fields;
+    fields["state"] = u64;
+    fields["inc"] = u64;
+    pcg32.attr("ENOKI_STRUCT") = fields;
 }

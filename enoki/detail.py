@@ -426,8 +426,8 @@ def read_indices(*args):
             for b in a:
                 result.extend(read_indices(b))
         elif enoki.is_enoki_struct_v(a):
-            for field in type(a).Fields:
-                result.extend(read_indices(getattr(a, field)))
+            for k, v in type(a).ENOKI_STRUCT.items():
+                result.extend(read_indices(getattr(a, k)))
         else:
             print(" do not know what to do with %s\n" % str(a))
     return result
@@ -452,7 +452,7 @@ def write_indices(indices, *args):
             for b in a:
                 write_indices(indices, b)
         elif enoki.is_enoki_struct_v(a):
-            for field in type(a).Fields:
-                write_indices(indices, getattr(a, field))
+            for k, v in type(a).ENOKI_STRUCT.items():
+                write_indices(indices, getattr(a, k))
         else:
             print(" do not know what to do with %s\n" % str(a))

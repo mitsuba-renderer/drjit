@@ -258,7 +258,7 @@ reference counts. This is normally perfectly fine, but here it interferes with
 symbolically executed loop iteration (the original ``a`` will appear
 unchanged!)
 
-To avoid this issue in Python, you can use the `.assign()` member of the Enoki
+To avoid this issue in Python, you can use the ``.assign()`` member of the Enoki
 array class. It is not needed for in-place updates like ``+=``.
 
 .. code-block:: python
@@ -304,7 +304,7 @@ example by builtin scalar types:
         return counter;
     }
 
-In this case, `ek::Loop()` turns into a no-op, and `loop.cond()` simply returns
+In this case, ``ek::Loop()`` turns into a no-op, and ``loop.cond()`` simply returns
 its input argument. This is useful in template programs that support
 compilation to several different backends.
 
