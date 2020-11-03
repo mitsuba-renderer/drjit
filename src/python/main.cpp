@@ -16,11 +16,11 @@ extern void export_llvm_ad(py::module_ &m);
 #endif
 
 const uint32_t var_type_size[(int) VarType::Count] {
-    (uint32_t) -1, 1, 1, 1, 2, 2, 4, 4, 8, 8, 2, 4, 8, 8
+    (uint32_t) -1, (uint32_t) -1, 1, 1, 1, 2, 2, 4, 4, 8, 8, 2, 4, 8, 8
 };
 
 const char* var_type_numpy[(int) VarType::Count] {
-    "", "?1", "b1", "B1", "i2", "u2", "i4", "u4",
+    "", "", "?1", "b1", "B1", "i2", "u2", "i4", "u4",
     "i8", "u8", "f2", "f4", "f8", "u8"
 };
 
@@ -48,6 +48,7 @@ PYBIND11_MODULE(enoki_ext, m_) {
 
     py::enum_<VarType>(m, "VarType", py::arithmetic())
         .value("Invalid", VarType::Invalid)
+        .value("Global", VarType::Global)
         .value("Int8", VarType::Int8)
         .value("UInt8", VarType::UInt8)
         .value("Int16", VarType::Int16)
