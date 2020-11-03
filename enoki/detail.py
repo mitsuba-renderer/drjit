@@ -36,7 +36,10 @@ def array_name(prefix, vt, shape, scalar):
     if not scalar:
         shape = shape[:-1]
     if prefix == 'Matrix':
-        shape = shape[1:]
+        if vt != enoki.VarType.Bool:
+            shape = shape[1:]
+        else:
+            prefix = 'Array'
 
     if len(shape) == 0:
         return VAR_TYPE_NAME[int(vt)]
