@@ -2027,7 +2027,7 @@ def grad_enabled(a):
 
 
 def set_grad_enabled(a, value):
-    if _ek.is_diff_array_v(a):
+    if _ek.is_diff_array_v(a) and a.IsFloat:
         a.set_grad_enabled_(value)
     elif isinstance(a, tuple) or isinstance(a, list):
         for v in a:
@@ -2061,7 +2061,7 @@ def grad_suspended(a):
 
 
 def set_grad_suspended(a, value):
-    if _ek.is_diff_array_v(a):
+    if _ek.is_diff_array_v(a) and a.IsFloat:
         a.set_grad_suspended_(value)
     elif isinstance(a, tuple) or isinstance(a, list):
         for v in a:
