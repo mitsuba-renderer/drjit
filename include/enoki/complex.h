@@ -201,6 +201,11 @@ template <typename T> Complex<T> tan(const Complex<T> &z) {
     return s / c;
 }
 
+template <typename T> Complex<T> cot(const Complex<T> &z) {
+    auto [s, c] = sincos(z);
+    return c / s;
+}
+
 template <typename T>
 Complex<T> asin(const Complex<T> &z) {
     Complex<T> tmp = log(Complex<T>(-imag(z), real(z)) + sqrt(1.f - sqr(z)));
