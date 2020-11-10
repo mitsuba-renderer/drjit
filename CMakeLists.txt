@@ -160,6 +160,14 @@ if (ENOKI_MASTER_PROJECT)
   endif()
 endif()
 
+add_library(enoki INTERFACE)
+target_compile_features(enoki INTERFACE cxx_std_17)
+target_include_directories(enoki
+  INTERFACE
+  ${CMAKE_CURRENT_SOURCE_DIR}/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/ext/enoki-jit/include
+)
+
 mark_as_advanced(
   CMAKE_EXECUTABLE_FORMAT CMAKE_OSX_ARCHITECTURES
   ENOKI_JIT_ENABLE_TESTS
