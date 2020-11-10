@@ -899,6 +899,13 @@ struct LLVMArray : ArrayBase<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
         return enoki::hsum_async(*this * a);
     }
 
+    uint32_t count_() const {
+        if constexpr (!jitc_is_mask(Type))
+            enoki_raise("Unsupported operand type");
+        else
+            return hsum(select(*this, (uint32_t) 1, (uint32_t) 0));
+    }
+
     //! @}
     // -----------------------------------------------------------------------
 

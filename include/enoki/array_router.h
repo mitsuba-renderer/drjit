@@ -492,7 +492,7 @@ template <typename X, typename Y> expr_t<X, Y> fmod(const X &x, const Y &y) {
 
 ENOKI_ROUTE_UNARY_FALLBACK(all,   all,   (bool) a)
 ENOKI_ROUTE_UNARY_FALLBACK(any,   any,   (bool) a)
-ENOKI_ROUTE_UNARY_FALLBACK(count, count, (size_t) ((bool) a ? 1 : 0))
+ENOKI_ROUTE_UNARY_FALLBACK(count, count, (uint32_t) ((bool) a ? 1 : 0))
 ENOKI_ROUTE_UNARY_FALLBACK(hsum,  hsum,  a)
 ENOKI_ROUTE_UNARY_FALLBACK(hprod, hprod, a)
 ENOKI_ROUTE_UNARY_FALLBACK(hmin,  hmin,  a)
