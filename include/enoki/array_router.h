@@ -343,6 +343,8 @@ auto clamp(const Value1 &value, const Value2 &min, const Value3 &max) {
 }
 
 namespace detail {
+    template <typename T> using has_zero = decltype(T().zero_(0));
+
     template <typename Array> ENOKI_INLINE Array sign_mask() {
         using Scalar = scalar_t<Array>;
         using UInt = uint_array_t<Scalar>;
@@ -748,6 +750,8 @@ template <typename T> ENOKI_INLINE T zero(size_t size = 1) {
                 using X = std::decay_t<decltype(x)>;
                 x = zero<X>(size);
             });
+        if constexpr (is_detected_v<detail::has_zero, T>)
+            result.zero_(size);
         return result;
     } else {
         static_assert(std::is_scalar_v<T>,

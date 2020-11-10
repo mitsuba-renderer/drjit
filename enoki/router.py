@@ -510,7 +510,7 @@ def gather(target_type, source, index, mask=True, permute=False):
                 raise Exception('gather(): type mismatch involving custom data structure!')
             result = target_type()
             for k, v in target_type.ENOKI_STRUCT.items():
-                setattr(result, k, 
+                setattr(result, k,
                         gather(v, getattr(source, k), index, mask, permute))
             return result
         else:
@@ -2153,7 +2153,11 @@ def zero(type_, size=1):
         result = type_()
         for k, v in type_.ENOKI_STRUCT.items():
             setattr(result, k, zero(v, size))
+        if hasattr(type_, 'zero_'):
+            result.zero_(size)
         return result
+    elif not type_ in (int, float, complex, bool):
+        return None
     else:
         return type_(0)
 
