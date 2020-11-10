@@ -28,16 +28,22 @@ foreach(ENOKI_AUTODIFF_VARIANT ${ENOKI_AUTODIFF_VARIANTS})
   if (NOT MSVC)
     target_compile_options(${ENOKI_AUTODIFF_VARIANT_NAME} PRIVATE -fvisibility=hidden)
   endif()
+  target_link_libraries(${ENOKI_AUTODIFF_VARIANT_NAME} PRIVATE enoki)
+  target_include_directories(
+    ${ENOKI_AUTODIFF_VARIANT_NAME} PRIVATE ../../ext/enoki-jit/ext/robin_map/include
+  )
 endforeach()
 
 add_library(enoki-autodiff SHARED
   ${ENOKI_AUTODIFF_OBJECTS}
   common.h common.cpp
 )
+target_link_libraries(enoki-autodiff PUBLIC enoki)
 
 if (NOT MSVC)
   target_compile_options(enoki-autodiff PRIVATE -fvisibility=hidden)
 endif()
+
 target_compile_definitions(enoki-autodiff PRIVATE -DENOKI_BUILD_AUTODIFF=1)
 
 if (ENOKI_ENABLE_JIT)

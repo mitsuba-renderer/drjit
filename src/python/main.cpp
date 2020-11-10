@@ -1,7 +1,6 @@
 #include "bind.h"
 #include <enoki/autodiff.h>
 #include <enoki/idiv.h>
-#include <tsl/robin_map.h>
 
 extern void export_scalar(py::module_ &m);
 extern void export_packet(py::module_ &m);
@@ -169,25 +168,25 @@ PYBIND11_MODULE(enoki_ext, m_) {
         switch (t) {
             case VarType::Int32: {
                     enoki::divisor<int32_t> div(py::cast<int32_t>(value));
-                    return py::make_tuple(div.multiplier, div.shift);
+                    return py::make_tuple((int32_t) div.multiplier, div.shift);
                 }
                 break;
 
             case VarType::UInt32: {
                     enoki::divisor<uint32_t> div(py::cast<uint32_t>(value));
-                    return py::make_tuple(div.multiplier, div.shift);
+                    return py::make_tuple((uint32_t) div.multiplier, div.shift);
                 }
                 break;
 
             case VarType::Int64: {
                     enoki::divisor<int64_t> div(py::cast<int64_t>(value));
-                    return py::make_tuple(div.multiplier, div.shift);
+                    return py::make_tuple((int64_t) div.multiplier, div.shift);
                 }
                 break;
 
             case VarType::UInt64: {
                     enoki::divisor<uint64_t> div(py::cast<uint64_t>(value));
-                    return py::make_tuple(div.multiplier, div.shift);
+                    return py::make_tuple((uint64_t) div.multiplier, div.shift);
                 }
                 break;
 
