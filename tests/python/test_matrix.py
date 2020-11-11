@@ -203,3 +203,17 @@ def test12_matrix_vector(package):
 
     with pytest.raises(ek.Exception):
         m * ek.scalar.Matrix3f(m_)
+
+
+@pytest.mark.parametrize("package", [ek.scalar, ek.cuda, ek.llvm])
+def test13_matmul_other(package):
+    Float, Matrix3f, Array3f = package.Float, package.Matrix3f, package.Array3f
+    prepare(package)
+
+    m = Matrix3f(1,2,3,4,5,6,7,8,9)
+    m2 = Matrix3f(30, 36, 42, 66, 81, 96, 102, 126, 150)
+    v = Array3f(5,2,1)
+    assert ek.allclose(m @ m, m2)
+    assert ek.allclose(m @ v, Array3f(12, 36, 60))
+    assert ek.allclose(v @ m, Array3f(20, 28, 36))
+    assert ek.allclose(v @ v, Float(30))

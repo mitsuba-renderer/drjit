@@ -229,15 +229,23 @@ def imul_(a0, a1):
 
 
 def matmul_(a0, a1):
-    if not a0.IsMatrix:
-        raise Exception("matmul(): requires a matrix-valued left hand side!")
+    if not (a0.Size == a1.Size and (a0.IsMatrix or a0.IsVector) \
+                               and (a1.IsMatrix or a1.IsVector)):
+        raise Exception("matmul(): unsupported operand shape!")
 
-    if a1.IsVector and a0.Size == a1.Size:
+    if a0.IsVector and a1.IsVector:
+        return _ek.dot(a0, a1)
+    elif a0.IsMatrix and a1.IsVector:
         ar = a0[0] * a1[0]
         for i in range(1, a1.Size):
             ar = _ek.fmadd(a0[i], a1[i], ar)
         return ar
-    elif a1.IsMatrix and a0.Size == a1.Size:
+    elif a0.IsVector and a1.IsMatrix:
+        ar = a1.Value()
+        for i in range(a1.Size):
+            ar[i] = _ek.dot(a0, a1[i])
+        return ar
+    else: # matrix @ matrix
         ar, sr = _check2(a0, a1)
         for j in range(a0.Size):
             accum = a0[0] * _ek.full(a0.Value, a1[0, j])
@@ -245,9 +253,6 @@ def matmul_(a0, a1):
                 accum = _ek.fmadd(a0[i], _ek.full(a0.Value, a1[i, j]), accum)
             ar[j] = accum
         return ar
-    else:
-        raise Exception("matmul(): unsupported operand shape!")
-
 
 def truediv_(a0, a1):
     if not a0.IsFloat:
