@@ -1,3 +1,2 @@
 guzzle_sphinx_theme
-pygments-mathematica
 sphinxcontrib-katex

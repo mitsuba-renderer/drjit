@@ -18,6 +18,16 @@ import os
 import shlex
 import subprocess
 
+# Work around an odd exception on readthedocs.org
+from sphinx.writers.html5 import HTML5Translator
+vr = HTML5Translator.visit_reference
+def replacement(self, node):
+    if 'refuri' not in node and 'refid' not in node:
+        print(node)
+        return
+    vr(self, node)
+HTML5Translator.visit_reference = replacement
+
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
@@ -76,7 +86,7 @@ language = None
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
-exclude_patterns = ['.build', 'release.rst']
+exclude_patterns = ['.build', 'unused']
 
 # The reST default role (used for this markup: `text`) to use for all
 # documents.
@@ -104,7 +114,6 @@ default_role = 'any'
 
 # If true, `todo` and `todoList` produce output, else they produce nothing.
 todo_include_todos = False
-
 
 # -- Options for HTML output ----------------------------------------------
 
