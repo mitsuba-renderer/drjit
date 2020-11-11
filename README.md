@@ -2,17 +2,15 @@
 
 # Enoki — structured vectorization and differentiation on modern processor architectures
 
-| Documentation   | Linux             | Windows             |
-|      :---:      |       :---:       |        :---:        |
-| [![docs][1]][2] | [![rgl-ci][3]][4] | [![appveyor][5]][6] |
+| Documentation   | Continuous Integration |
+|      :---:      |          :---:         |
+| [![docs][1]][2] |    [![rgl-ci][3]][4]   |
 
 
 [1]: https://readthedocs.org/projects/enoki/badge/?version=master
 [2]: http://enoki.readthedocs.org/en/master
 [3]: https://rgl-ci.epfl.ch/app/rest/builds/buildType(id:Enoki_Build)/statusIcon.svg
 [4]: https://rgl-ci.epfl.ch/viewType.html?buildTypeId=Enoki_Build&guest=1
-[5]: https://ci.appveyor.com/api/projects/status/68db7e5es7el1btd/branch/master?svg=true
-[6]: https://ci.appveyor.com/project/wjakob/enoki/branch/master
 
 ## Introduction
 
@@ -33,7 +31,7 @@ types of program transformations that are often applied to numerical software:
   Matplotlib, PyTorch, etc).
 
 All features are "opt-in" and activated by including specific header files,
-keeping compilation times short. 
+keeping compilation times short.
 
 Algorithms designed using Enoki are expressed a generic way (using *templates*)
 and specialized to specific requirements by "lifting" them onto a computational
@@ -101,7 +99,7 @@ frameworks (Eigen, XLA, Numba, Agner Fog's vector classes) and AD tools
 Enoki recursively depends on two other repositories:
 [pybind11](https://github.com/pybind/pybind11) for Python bindings, and
 [enoki-jit](https://github.com/mitsuba-renderer/enoki-jit) providing the JIT
-compiler. 
+compiler.
 
 To fetch the entire project including these dependencies, clone the project
 using the ``--recursive`` flag as follows:
