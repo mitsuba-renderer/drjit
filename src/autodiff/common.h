@@ -2,6 +2,7 @@
 
 #include <string.h>
 #include <stdlib.h>
+#include <enoki/fwd.h>
 #include <enoki-jit/jit.h>
 
 #if !defined(likely)
@@ -86,6 +87,6 @@ extern void ad_log(LogLevel level, const char *fmt, ...);
 
 namespace enoki {
     extern const char *ad_prefix();
-    extern void ad_check_weights_cb();
-    extern void ad_check_weights(bool value);
+    ENOKI_EXPORT void ad_check_weights_cb();
+    ENOKI_EXPORT void ad_check_weights(bool value);
 }

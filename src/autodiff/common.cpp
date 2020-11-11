@@ -1,4 +1,3 @@
-#include <enoki/fwd.h>
 #include "common.h"
 #include <algorithm>
 #include <stdio.h>
