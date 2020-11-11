@@ -49,3 +49,21 @@ jobs:
       - uses: actions/upload-artifact@v2
         with:
           path: ./wheelhouse/*.whl
+
+  upload_pypi:
+    name: Upload to PyPI
+    runs-on: ubuntu-latest
+    # Publish when a GitHub Release is created
+    if: github.event_name == 'release' && github.event.action == 'published'
+    needs: [build_wheels]
+
+    steps:
+      - uses: actions/download-artifact@v2
+        with:
+          name: artifact
+          path: dist
+
+      - uses: pypa/gh-action-pypi-publish@master
+        with:
+          user: __token__
+          password: ${{ secrets.pypi_password }}
