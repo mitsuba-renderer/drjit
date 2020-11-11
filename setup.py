@@ -40,6 +40,7 @@ setup(
         '-DENOKI_ENABLE_AUTODIFF:BOOL=ON',
         '-DENOKI_ENABLE_PYTHON:BOOL=ON',
         '-DCMAKE_INSTALL_LIBDIR=enoki',
+        '-DCMAKE_INSTALL_BINDIR=enoki',
         '-DCMAKE_INSTALL_INCLUDEDIR=enoki/include',
         '-DCMAKE_INSTALL_DATAROOTDIR=enoki/share'
     ],
