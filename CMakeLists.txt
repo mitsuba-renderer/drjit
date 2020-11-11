@@ -34,15 +34,14 @@ option(ENOKI_ENABLE_AUTODIFF "Build Enoki automatic differentation library?" OFF
 option(ENOKI_ENABLE_PYTHON   "Build Python extension library?" OFF)
 option(ENOKI_ENABLE_TESTS    "Build Enoki test suite? (Warning, this takes *very* long to compile)" OFF)
 
-# Compile for the native processor architecture by default. MSVC cannot detect
-# this automatically, and the following assumes a reasonably modern CPU with
-# AVX2 instructions. You may want to overwrite MTS_NATIVE_FLAGS when building
-# binaries that will be distributed to others.
+# Compile for a sufficiently recent processor. Assumes Haswell+ (with AVX2) by
+# default. You may want to set MTS_NATIVE_FLAGS to "-march=native" to use all
+# instructions available on a particular machine.
 
 if (MSVC)
   set(ENOKI_NATIVE_FLAGS_DEFAULT "/arch:AVX2")
 else()
-  set(ENOKI_NATIVE_FLAGS_DEFAULT "-march=native")
+  set(ENOKI_NATIVE_FLAGS_DEFAULT "-march=haswell")
 endif()
 
 # Adapt to variations in rpath handling on Linux and macOS
