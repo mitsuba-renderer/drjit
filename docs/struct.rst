@@ -16,11 +16,12 @@ requires the following optional header file:
 Motivation
 ----------
 
-Enoki's main purpose is to convert a piece of software into a corresponding
-"wide" vectorized version that processes many inputs at once. Simply replacing
-all scalar types (e.g. ``float``, ``int32_t``) by Enoki arrays may be enough to
-accomplish this goal in some cases. However, this strategy tends to fail when
-the program relies on more complex types. Consider the following example:
+One of the main purposes of Enoki is to convert a piece of software into a
+corresponding "wide" vectorized version that processes many inputs at once.
+Simply replacing all scalar types (e.g. ``float``, ``int32_t``) by Enoki arrays
+may be enough to accomplish this goal in some cases. However, this strategy
+tends to fail when the program relies on more complex types. Consider the
+following example:
 
 .. code-block:: cpp
 
@@ -258,9 +259,9 @@ Interface (Python)
 ------------------
 
 Custom data structures are also supported in the Python bindings, though the
-:c:macro:`ENOKI_STRUCT` specification takes a different from here. In a class
-defined within Python, add a top-level static attribute documenting the fields
-and their types.
+:c:macro:`ENOKI_STRUCT` specification takes on a different form here. In a
+class defined within Python, you will need to specify a top-level static
+attribute documenting the fields and their types.
 
 .. code-block:: python
 

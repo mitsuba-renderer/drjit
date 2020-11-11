@@ -20,6 +20,7 @@ Enoki: structured vectorization and differentiation on modern processor architec
    :maxdepth: 1
    :caption: Optional features
 
+   python
    vcall
    struct
    loops

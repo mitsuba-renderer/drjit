@@ -1,22 +1,160 @@
 .. cpp:namespace:: enoki
+.. _python:
 
-Python bindings
-===============
+Python interface
+================
 
-Enoki provides support for `pybind11 <https://github.com/pybind/pybind11/>`_, a
-lightweight header-only binding library that is used to expose C++ types in
-Python and vice versa.
+Enoki is internally a C++ library, while bindings provide access to most
+functionality within Python. This interface is useful in two ways:
 
-To use this feature, include the following header file in the extension module:
+1. It enables fast prototyping of numerical code in a Python environment
+   (Jupyter, Matplotlib, etc.)
+
+2. Projects can rely on components written in both languages depending on which
+   is more suitable for a particular task. Transitions between C++ and Python
+   become seamless thanks to `pybind11 <https://github.com/pybind/pybind11>`_.
+
+Note that the Python bindings are not compiled by default---to enable them,
+specify the parameter ``-DENOKI_ENABLE_PYTHON=1`` to the CMake build system.
+See the section on :ref:`building Enoki <building-enoki>` for details.
+
+The remainder of this section discusses conventions relating the C++ and Python
+interfaces, followed by an example that combines code written in both languages.
+
+.. _python-cpp-interface:
+
+Conventions
+-----------
+
+Most Enoki functionality is accessible from both C++ and Python, and these
+interfaces are also designed to yield similar-looking code. A few simple rules
+suffice to translate from one to the other.
+
+Namespace
+~~~~~~~~~
+
+Most of the documentation accesses the library through a short-hand namespace
+alias ``ek``. To declare this alias, specify (in C++)
 
 .. code-block:: cpp
 
-    #include <enoki/python.h>
+   namespace ek = enoki;
 
-Usage
------
+and in Python:
 
-The example below shows how to create bindings for a simple vector computation
+.. code-block:: cpp
+
+   import enoki as ek
+
+Types
+~~~~~
+
+In C++, new array types can be created on the fly by instantiating a template, e.g.:
+
+.. code-block:: cpp
+
+   using Float = ek::CUDAArray<float>;
+   using Array2f = ek::Array<Float, 2>;
+
+However, this mechanism is not portable to Python, which lacks a notion of
+templates. Enoki's bindings instead expose a large variety of specific template
+variants, which leads to the following equivalent Python code:
+
+.. code-block:: cpp
+
+   from enoki.cuda import Float
+   from enoki.cuda import Array2f
+
+Altogether, there are six top-level packages:
+
+- ``enoki.scalar``: Arrays built on top of scalars (``float``, ``int``, etc.)
+- ``enoki.packet``: Arrays built on top of ``Packet<T>``
+- ``enoki.llvm``: Arrays built on top of ``LLVMArray<T>``
+- ``enoki.cuda``: Arrays built on top of ``CUDAArray<T>``
+- ``enoki.llvm.ad``: Arrays built on top of ``DiffArray<LLVMArray<T>>``
+- ``enoki.cuda.ad``: Arrays built on top of ``DiffArray<CUDAArray<T>>``
+
+Each of these six namespaces contains the following
+
+- Arithmetic and mask types: ``Bool``, ``Float``, ``Int``, ``UInt``,
+  ``Float64``, ``Int64``, ``UInt64``
+
+- Static arrays (0-4 dimensions, 1D shown here): ``Array1b``, ``Array1f``,
+  ``Array1i``, ``Array1u``, ``Array1f64``, ``Array1i64``, ``Array1u64``.
+
+- Dynamic arrays (N dimensions): ``ArrayXb``, ``ArrayXf``,
+  ``ArrayXi``, ``ArrayXu``, ``ArrayXf64``, ``ArrayXi64``, ``ArrayXu64``.
+
+- Matrices (2-4 dimensions): ``Matrix2f``, ``Matrix2f64``, ``Matrix3f``,
+  ``Matrix3f64``, ``Matrix4f``, ``Matrix4f64``.
+
+- Complex numbers: ``Complex2f``, ``Complex2f64``.
+
+- Quaternions: ``Quaternion4f``, ``Quaternion4f64``.
+
+Using this naming convention, ``enoki.llvm.ad.Array3f`` e.g. corresponds to
+``Array<DiffArray<LLVMArray<float>>, 3>``.
+
+This approach is convenient because it enables straightforward porting between
+Enoki's different computational backends simply by changing an import
+directive.
+
+Functions
+~~~~~~~~~
+
+All Enoki functions are part of the ``enoki`` namespace in both languages, and
+they generally have the same signature. One exception are functions that take
+a template type parameter:
+
+.. code-block:: cpp
+
+    Float x = ek::zero<Float>(100);
+    Float y = ek::gather<Float>(x, ek::arange<UInt32>(100));
+
+In the Python interface, the template parameters are simply specified as the
+first argument of the function:
+
+.. code-block:: python
+
+    x = ek.zero(Float, 100)
+    y = ek.gather(Float, x, ek.arange(UInt32, 100))
+
+
+Conversion from/to other frameworks
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Enoki arrays are interoperable with `NumPy <https://numpy.org/>`_ `PyTorch
+<https://pytorch.org/>`_, `TensorFlow <https://www.tensorflow.org/>`_, and `JAX
+<https://github.com/google/jax>`_, which are widely used frameworks for
+scientific computing and machine learning. Whenever applicable and possible,
+Enoki uses a zero-copy approach that wraps the existing data in device (GPU)
+memory.
+
+.. code-block:: python
+
+   x = Array3f(..) # Calculation producing an Enoki array
+
+   # Convert to a NumPy array
+   x_np = x.numpy()
+   x = Array3f(x_np) # .. and back
+
+   # Convert to a PyTorch array
+   x_py = x.torch()
+   x = Array3f(x_py) # .. and back
+
+   # Convert to a TensorFlow array
+   x_tf = x.tf()
+   x = Array3f(x_tf) # .. and back
+
+   # Convert to a JAX array
+   x_jax = x.jax()
+   x = Array3f(x_jax) # .. and back
+
+
+Binding C++ code
+----------------
+
+The example below details the creation of bindings for a simple computation
 that converts spherical to Cartesian coordinates. A CMake build system file is
 provided at the :ref:`bottom <py-build>` of this page.
 
@@ -25,156 +163,138 @@ Extension module
 
 .. code-block:: cpp
 
-    #include <enoki/python.h>
+    #include <enoki/array.h>
+    #include <enoki/math.h>
+    #include <enoki/cuda.h>
 
-    /* Import pybind11 and Enoki namespaces */
+    #include <pybind11/pybind11.h>
+
+    // Import pybind11 and Enoki namespaces
     namespace py = pybind11;
-    using namespace enoki;
-    using namespace py::literals; // Enables the ""_a parameter tags used below
+    namespace ek = enoki;
 
-    /* Define a packet type used for vectorization */
-    using FloatP    = Packet<float>;
-
-    /* Dynamic type for arbitrary-length arrays */
-    using FloatX    = DynamicArray<FloatP>;
-
-    /* Various flavors of 3D vectors */
-    using Vector3f  = Array<float, 3>;
-    using Vector3fP = Array<FloatP, 3>;
-    using Vector3fX = Array<FloatX, 3>;
-
-    /* The function we want to expose in Python */
+    // The function we want to expose in Python
     template <typename Float>
-    Array<Float, 3> sph_to_cartesian(Float theta, Float phi) {
-        auto sc_theta = sincos(theta);
-        auto sc_phi   = sincos(phi);
+    ek::Array<Float, 3> sph_to_cartesian(Float theta, Float phi) {
+        auto [sin_theta, cos_theta ] = ek::sincos(theta);
+        auto [sin_phi,   cos_phi   ] = ek::sincos(phi);
 
-        return {
-            sc_theta.first * sc_phi.second,
-            sc_theta.first * sc_phi.first,
-            sc_theta.second
-        };
+        return { sin_theta * cos_phi,
+                 sin_theta * sin_phi,
+                 cos_theta };
     }
 
     /* The function below is called when the extension module is loaded. It performs a
        sequence of m.def(...) calls which define functions in the module namespace 'm' */
-    PYBIND11_MODULE(pybind11_test /* <- name of extension module */, m) {
+    PYBIND11_MODULE(ek_python_test /* <- name of extension module */, m) {
         m.doc() = "Enoki & pybind11 test plugin"; // Set a docstring
 
-        /* 1. Bind the scalar version of the function */
-        m.def(
-              /* Name of the function in the Python extension module */
-              "sph_to_cartesian",
+        // Ensure Enoki Python bindings are loaded
+        py::module::import("enoki");
 
-              /* Function that should be exposed */
-              sph_to_cartesian<float>,
+        // 1. Bind the scalar version of the function
+        m.def("sph_to_cartesian",      // Function name in Python
+              sph_to_cartesian<float>, // Function to be  exposed
 
-              /* Function docstring */
+              // Docstring (shown in the auto-generated help)
               "Convert from spherical to cartesian coordinates [scalar version]",
 
-              /* Parameter names for function signature in docstring */
-              "theta"_a, "phi"_a
-        );
+              // Designate parameter names for help and keyword-based calls
+              py::arg("theta"), py::arg("phi"));
 
-        /* 2. Bind the packet version of the function */
+        // 2. Bind the GPU version of the function
         m.def("sph_to_cartesian",
-               /* The only differnce is the FloatP template argument */
-               sph_to_cartesian<FloatP>,
-              "Convert from spherical to cartesian coordinates [packet version]",
-              "theta"_a, "phi"_a);
-
-        /* 3. Bind dynamic version of the function */
-        m.def("sph_to_cartesian",
-               /* Note the use of 'vectorize_wrapper', which is described below */
-               vectorize_wrapper(sph_to_cartesian<FloatP>),
-              "Convert from spherical to cartesian coordinates [dynamic version]",
-              "theta"_a, "phi"_a);
+              sph_to_cartesian<ek::CUDAArray<float>>,
+              "Convert from spherical to cartesian coordinates [GPU version]",
+              py::arg("theta"), py::arg("phi"));
     }
 
 pybind11 infers the necessary binding code from the type of the function
-provided to the ``def()`` calls. Including the :file:`enoki/python.h` header is
-all it takes to make the pybind11 library fully Enoki-aware---arbitrarily
-nested dynamic and static arrays will be converted automatically.
-
-In practice, one would usually skip the packet version since it is subsumed by
-the dynamic case.
+provided to the ``def()`` calls.
 
 Using the extension from Python
 *******************************
 
-The following iteractive session shows how to load the extension module and
+The following interactive session shows how to load the extension module and
 query its automatically generated help page.
 
 .. code-block:: pycon
 
-    Python 3.5.2 |Anaconda 4.2.0 (x86_64)| (default, Jul  2 2016, 17:52:12)
-    [GCC 4.2.1 Compatible Apple LLVM 4.2 (clang-425.0.28)] on darwin
+    Python 3.8.5 (default, Jul 28 2020, 12:59:40)
+    [GCC 9.3.0] on linux
     Type "help", "copyright", "credits" or "license" for more information.
 
-    >>> import pybind11_test
-    >>> help(pybind11_test)
+    >>> import ek_python_test
+    >>> help(ek_python_test)
 
-    Help on module pybind11_test
+    Help on module ek_python_test:
 
     NAME
-        pybind11_test - Enoki & pybind11 test plugin
+        ek_python_test - Enoki & pybind11 test plugin
 
     FUNCTIONS
-        sph_to_cartesian(...)
+        sph_to_cartesian(...) method of builtins.PyCapsule instance
             sph_to_cartesian(*args, **kwargs)
             Overloaded function.
 
-            1. sph_to_cartesian(theta: float, phi: float)
-                   -> numpy.ndarray[dtype=float32, shape=(3)]
+            1. sph_to_cartesian(theta: float, phi: float) -> enoki.scalar.Array3f
 
             Convert from spherical to cartesian coordinates [scalar version]
 
-            2. sph_to_cartesian(theta: numpy.ndarray[dtype=float32, shape=(8)],
-                                phi: numpy.ndarray[dtype=float32, shape=(8)])
-                   -> numpy.ndarray[dtype=float32, shape=(8, 3)]
+            2. sph_to_cartesian(theta: enoki.cuda.Float, phi: enoki.cuda.Float) -> enoki.cuda.Array3f
 
-            Convert from spherical to cartesian coordinates [packet version]
-
-            3. sph_to_cartesian(theta: numpy.ndarray[dtype=float32, shape=(n)],
-                                phi: numpy.ndarray[dtype=float32, shape=(n)])
-                   -> numpy.ndarray[dtype=float32, shape=(n, 3)]
-
-            Convert from spherical to cartesian coordinates [dynamic version]
+            Convert from spherical to cartesian coordinates [GPU version]
 
     FILE
-        /Users/wjakob/pybind11_test/pybind11_test.cpython-35m-darwin.so
+        /home/wjakob/ek_python_test/ek_python_test.cpython-38-x86_64-linux-gnu.so
 
-As can be seen, the help describes all three overloads along with the name and shape of their input arguments.
-Let's try calling one of them:
-
-.. code-block:: python
-
-    >>> from pybind11_test import sph_to_cartesian
-    >>> sph_to_cartesian(theta=1, phi=2)
-    array([-0.35017547,  0.76514739,  0.54030228], dtype=float32)
-
-Note how the returned Enoki array was automatically converted into a NumPy array.
-
-Let's now call the dynamic version of the function. We will use ``np.linspace``
-to generate inputs, which actually have an *incorrect* ``dtype`` of
-``np.float64``. The binding layer detects this and automatically creates a
-temporary single precision input array before performing the function call.
+As can be seen, the help describes the overloads along with the name and shape
+of their input arguments. Let's try calling one of them:
 
 .. code-block:: python
 
-    >>> import numpy as np
-    >>> sph_to_cartesian(theta=np.linspace(0.0, 1.0, 10),
-    ...                  phi=np.linspace(1.0, 2.0, 10))
-    array([[ 0.        ,  0.        ,  1.        ],
-           [ 0.04919485,  0.09937215,  0.99383354],
-           [ 0.07527862,  0.20714317,  0.9754101 ],
-           [ 0.07696848,  0.31801295,  0.9449569 ],
-           [ 0.05418137,  0.42652887,  0.90284967],
-           [ 0.00803789,  0.52735412,  0.84960753],
-           [-0.05919253,  0.61553025,  0.7858873 ],
-           [-0.14420365,  0.68672061,  0.71247464],
-           [-0.24281444,  0.73742425,  0.63027501],
-           [-0.35017547,  0.76514739,  0.54030228]], dtype=float32)
+    >>> from ek_python_test import sph_to_cartesian
+
+    >>> r = sph_to_cartesian(theta=1, phi=2)
+
+    >>> r
+    [-0.3501754701137543, 0.7651473879814148, 0.5403022766113281]
+
+    >>> type(r)
+    <class 'enoki.scalar.Array3f'>
+
+Let's now call the CUDA version of the function. We will use ``ek.linspace`` to
+generate generate a few example inputs:
+
+.. code-block:: python
+
+    >>> import enoki as ek
+
+    >>> from enoki.cuda import Float
+
+    >>> from ek_python_test import sph_to_cartesian
+
+    >>> sph_to_cartesian(theta=ek.linspace(Float, 0.0, 1.0, 100),
+    ...                  phi=ek.linspace(Float, 1.0, 2.0, 100))
+
+    [[0.0, 0.0, 1.0],
+     [0.00537129258736968, 0.008554124273359776, 0.999949038028717],
+     [0.010568737052381039, 0.017215078696608543, 0.9997959733009338],
+     [0.015590270049870014, 0.02597944624722004, 0.9995409250259399],
+     [0.020433608442544937, 0.034843236207962036, 0.9991838932037354],
+     .. 90 skipped ..,
+     [-0.3104492425918579, 0.7578364610671997, 0.5738508701324463],
+     [-0.3203235864639282, 0.7599647045135498, 0.5655494332313538],
+     [-0.33023831248283386, 0.7618932127952576, 0.5571902394294739],
+     [-0.340190589427948, 0.763620913028717, 0.5487741827964783],
+     [-0.3501753807067871, 0.7651472687721252, 0.5403023362159729]]
+
+Note how the C++ code was able to process an Enoki array created via the Python
+bindings. All features like JIT compilation and automatic differentiation work
+seamlessly across language boundaries: in this case, a single CUDA kernel was
+compiled to produce the output, and that kernel contains both the arithmetic
+from the ``sph_to_cartesian`` function, and the computation of the inputs via
+``ek.linspace`` done on the Python side.
 
 .. _py-build:
 
@@ -186,11 +306,13 @@ various platforms.
 
 .. code-block:: cmake
 
-    cmake_minimum_required (VERSION 2.8.12)
-    project(pybind11_test CXX)
-    include(CheckCXXCompilerFlag)
+    # This script is fully compatible with a range of CMake versions
+    cmake_minimum_required(VERSION 3.13...3.18)
 
-    # Set a default build configuration (Release)
+    # Declare the project name and version
+    project(ek_python_test VERSION 0.0.1)
+
+    # Set a default build configuration (Release) if none was specified
     if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
       message(STATUS "Setting build type to 'Release' as none was specified.")
       set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
@@ -198,63 +320,37 @@ various platforms.
         "MinSizeRel" "RelWithDebInfo")
     endif()
 
-    # Enable C++14 support
-    if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|Intel")
-      CHECK_CXX_COMPILER_FLAG("-std=c++14" HAS_CPP14_FLAG)
-      if (HAS_CPP14_FLAG)
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14")
-      else()
-        message(FATAL_ERROR "Unsupported compiler -- C++14 support is needed!")
-      endif()
+    # Find suitable Python interpreter
+    if (SKBUILD)
+      set(Python_EXECUTABLE ${PYTHON_EXECUTABLE})
+    else()
+      find_package(Python COMPONENTS Interpreter Development REQUIRED)
     endif()
 
-    # Assumes that pybind11 is located in the 'pybind11' subdirectory
-    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/pybind11)
+    # Add Python's site-packages directory to the search path, needed by the next step
+    execute_process(
+      COMMAND "${Python_EXECUTABLE}" -c
+        "import pybind11, os; print(os.path.dirname(os.path.dirname(pybind11.__file__)))"
+      OUTPUT_VARIABLE EK_SITEPKG OUTPUT_STRIP_TRAILING_WHITESPACE)
+    list(APPEND CMAKE_PREFIX_PATH "${EK_SITEPKG}")
 
-    # Assumes that enoki is located in the 'enoki' subdirectory
-    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/enoki)
+    # Find pybind11 and enoki
+    find_package(pybind11 CONFIG REQUIRED)
+    find_package(enoki    CONFIG REQUIRED)
 
-    # Enable some helpful vectorization-related compiler flags
-    enoki_set_compile_flags()
-    enoki_set_native_flags()
+    # Compile the extension module
+    pybind11_add_module(ek_python_test MODULE ek_python_test.cpp)
 
-    include_directories(enoki/include pybind11/include)
+    # Link against Enoki and the JIT compiler (enoki-autodiff also needed if AD is used)
+    target_link_libraries(ek_python_test PRIVATE enoki enoki-jit)
 
-    # Compile our pybind11 module
-    pybind11_add_module(pybind11_test pybind11_test.cpp)
+    # Install directive for scikit-build
+    install(TARGETS ek_python_test DESTINATION .)
 
-Reference
----------
+``pyproject.toml``
 
-Please refer to pybind11's extensive `documentation
-<http://pybind11.readthedocs.io/en/master/?badge=master>`_. for details on
-using it in general. The :file:`enoki/python.h` API only provides one public
-function:
+.. code-block:: ini
 
-.. cpp:function:: template <typename Func> auto vectorize_wrapper(Func func)
+    [build-system]
+    requires = ["scikit-build", "cmake", "ninja", "pybind11>=2.6.0", "enoki>=0.2.0"]
 
-    "Converts" a function that takes a set of packets and structures of packets
-    as inputs into a new function that processes dynamic versions of these
-    parameters. Non-array arguments are not transformed. For instance, it would
-    turn the following hypothetical signature
-
-    .. code-block:: cpp
-
-        FloatP my_func(Array<FloatP, 3> position, GPSRecord2<FloatP> record, int scalar);
-
-    into
-
-    .. code-block:: cpp
-
-        FloatX my_func(Array<FloatX, 3> position, GPSRecord2<FloatX> record, int scalar);
-
-    where
-
-    .. code-block:: cpp
-
-        using FloatX = DynamicArray<FloatP>;
-
-    This is handy because a one-liner like
-    ``vectorize_wrapper(sph_to_cartesian<FloatP>)`` in the above example is all
-    it takes to take a packet version of a function and expose a dynamic
-    version that can process arbitrarily large NumPy arrays.

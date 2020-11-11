@@ -1,5 +1,12 @@
 .. cpp:namespace:: enoki
 
+.. _building-enoki:
+
+Building
+--------
+
+- cmake...
+
 Basics
 ======
 

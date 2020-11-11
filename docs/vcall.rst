@@ -5,6 +5,46 @@
 Virtual function calls
 ======================
 
+One of the main purposes of Enoki is to convert a piece of software into a
+corresponding "wide" vectorized version that processes many inputs at once.
+Advanced C++ features like like polymorphism can pose difficulties during this
+transformation, which this section of the documentation addresses. Consider the
+following example:
+
+.. code-block:: cpp
+
+    struct Base {
+        virtual float eval(float x) = 0;
+        virtual ~Base() = default;
+    };
+
+    struct Foo : Base { /* ...*/ };
+    struct Bar : Base { /* ...*/ };
+
+    void some_calculation(Base *base) {
+        Base *base = /* .. */;
+        float value = /* ... */;
+        float result = base->f(value);
+    }
+
+An interface ``Base`` has two implementations ``Foo`` and ``Bar`` that each
+provide different versions of a function ``foo()``.
+
+Vectorizing this code entails replacing scalar types (like ``float``) by a
+corresponding Enoki array type (e.g. :cpp:class:`Packet`,
+:cpp:class:`CUDAArray`, :cpp:class:`LLVMArray`, or :cpp:class:`DiffArray`)
+
+Virtual method calls are important building blocks of 
+object-oriented C++ and Python applications. 
+When vectorization enters the picture, it is
+not immediately clear how they should be dealt with. This section introduces
+Enoki's method call vectorization support, focusing on a hypothetical
+``Sensor`` class that decodes a measurement performed by a sensor.
+
+.. image:: vcall-01.svg
+    :width: 600px
+    :align: center
+
 .. c:macro:: ENOKI_VCALL_REGISTER_IF(Class, Cond)
 
 .. c:macro:: ENOKI_VCALL_REGISTER(Class)

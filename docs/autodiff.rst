@@ -4,17 +4,66 @@
 Automatic differentiation
 =========================
 
-Automatic differentiation (AD) broadly refers to a set of techniques that
-numerically evaluate the gradient of a computer program. Two variants of AD are
-widely used:
+*Automatic differentiation* (AD) refers to a set of techniques to numerically
+evaluate the gradient of a computer program. Enoki enables such differentiable
+computation using the :cpp:class:`DiffArray` array class defined in the
+optional header file
 
-1. **Forward mode**. Starting with a set of inputs (e.g. ``a`` and ``b``) and
+.. code-block:: cpp
+
+    #include <enoki/autodiff.h>
+
+AD is also available through the Python bindings, and most examples in this
+section are written in Python for simplicity. They are easily translated to C++
+using the :ref:`conventions relating the C++ and Python interfaces
+<python-cpp-interface>`.
+
+
+Background
+----------
+
+AD is based on a remarkably simple idea: no matter how big and complex a
+computer program becomes, it will ultimately be built from operations
+that are individually simple to understand, like additions and multiplications.
+Each of these operations can be differentiated without problems, and the `chain
+rule <https://en.wikipedia.org/wiki/Chain_rule>`_ then explains how those
+individual derivatives can be put together to yield a derivative of the entire
+program. This derivative evaluation can be performed at a moderate extra cost,
+usually no more than 3-4x the cost of the original computation. Many variants
+of AD exist, and the excellent book by Griewank and Walther [GrWa08]_ provides
+a thorough overview of the state of the art.
+
+Enoki implements AD by recording a graph of the computation performed using its
+:cpp:class:`DiffArray` type. 
+
+<example>
+
+This graph can then be processed in two different
+ways:
+
+1. **Forward mode**. This variant of AD is preferable for functions with many
+   outputs and just a few inputs. Conceptually, it
+
+   Starting with a set of inputs (e.g. ``a`` and ``b``) and
    associated derivatives (``da`` and ``db``), *forward-mode* AD instruments
    every operation (e.g. ``c = a * b``) with an additional step that tracks the
-   evolution of derivatives (``dc = a*db + b*da``). Forward mode is ideal for
-   functions with a single input and many outputs. When the function has
-   multiple inputs, a separate propagation pass is needed per parameter, which
-   can become very costly.
+   evolution of derivatives (``dc = a*db + b*da``). Forward mode is 
+
+
+
+
+General Jacobian products 
+-------------------------
+
+vector-jacobian product ("*vjp*")
+jacobian-vector product ("*jvp*")
+
+Interaction with JIT compiler
+-----------------------------
+
+Two variants of AD are
+widely used:
+
 
 2. **Reverse mode**. On the other hand, *reverse-mode* AD specifically targets
    the case where the function to be differentiated has one (or few) outputs
@@ -28,9 +77,8 @@ widely used:
    computations must furthermore be kept in memory, which can become costly for
    long-running computations.
 
-The implementation in Enoki is realized via the special ``DiffArray<T>`` array
-type and supports both of the above variants, though it is particularly
-optimized for reverse mode operation. The template argument ``T`` refers to an
+
+The template argument ``T`` refers to an
 arithmetic type (e.g. ``float`` or an Enoki array) that is used to carry out
 the underlying primal and derivative computation.
 
