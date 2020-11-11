@@ -1,11 +1,17 @@
 name: Build
 
-on: [push, pull_request]
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - master
 
 env:
   CIBW_BUILD: cp3?-*
   CIBW_SKIP: "*-win32 *-manylinux_i686"
   CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
+  MACOSX_DEPLOYMENT_TARGET: 10.14
 
 jobs:
   build_wheels:
@@ -25,6 +31,12 @@ jobs:
         name: Install Python
         with:
           python-version: '3.7'
+
+      - name: Prepare compiler environment for Windows
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
 
       - name: Install cibuildwheel
         run: |
