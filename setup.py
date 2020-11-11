@@ -2,7 +2,7 @@
 
 from __future__ import print_function
 
-import sys, re
+import sys, re, os
 
 try:
     from skbuild import setup
@@ -14,9 +14,16 @@ except ImportError:
 VERSION_REGEX = re.compile(
     r"^\s*#\s*define\s+ENOKI_VERSION_([A-Z]+)\s+(.*)$", re.MULTILINE)
 
-with open("include/enoki/fwd.h") as f:
+this_directory = os.path.abspath(os.path.dirname(__file__))
+
+with open(os.path.join("include/enoki/fwd.h")) as f:
     matches = dict(VERSION_REGEX.findall(f.read()))
     enoki_version = "{MAJOR}.{MINOR}.{PATCH}".format(**matches)
+
+with open(os.path.join(this_directory, 'README.md'), encoding='utf-8') as f:
+    long_description = f.read()
+
+long_description = long_description[long_description.find('## Introduction'):]
 
 setup(
     name="enoki",
@@ -26,6 +33,8 @@ setup(
     description="Structured vectorization and differentiation on modern processor architectures",
     url="https://github.com/mitsuba-renderer/enoki",
     license="BSD",
+    long_description=long_description,
+    long_description_content_type='text/markdown',
     cmake_args=[
         '-DENOKI_ENABLE_JIT:BOOL=ON',
         '-DENOKI_ENABLE_AUTODIFF:BOOL=ON',
