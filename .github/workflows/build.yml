@@ -2,10 +2,11 @@ name: Build
 
 on:
   workflow_dispatch:
-  pull_request:
-  push:
-    branches:
-      - master
+    inputs:
+      upload:
+        description: 'Upload wheels to PyPI? (0: no, 1: yes)'
+        required: true
+        default: '0'
 
 env:
   CIBW_BUILD: cp3?-*
@@ -48,19 +49,19 @@ jobs:
 
       - uses: actions/upload-artifact@v2
         with:
+          name: wheels
           path: ./wheelhouse/*.whl
 
   upload_pypi:
-    name: Upload to PyPI
+    name: Build wheels and upload to PyPI
     runs-on: ubuntu-latest
-    # Publish when a GitHub Release is created
-    if: github.event_name == 'release' && github.event.action == 'published'
+    if: ${{ github.event.inputs.upload == '1'}}
     needs: [build_wheels]
 
     steps:
       - uses: actions/download-artifact@v2
         with:
-          name: artifact
+          name: wheels
           path: dist
 
       - uses: pypa/gh-action-pypi-publish@master
