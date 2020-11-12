@@ -2,15 +2,17 @@
 
 # Enoki — structured vectorization and differentiation on modern processor architectures
 
-| Documentation   | Continuous Integration |
-|      :---:      |          :---:         |
-| [![docs][1]][2] |    [![rgl-ci][3]][4]   |
+| Documentation   | Continuous Integration |       PyPI      |
+|      :---:      |          :---:         |       :---:     |
+| [![docs][1]][2] |    [![rgl-ci][3]][4]   | [![pypi][5]][6] |
 
 
-[1]: https://readthedocs.org/projects/enoki/badge/?version=master
-[2]: http://enoki.readthedocs.org/en/master
+[1]: https://readthedocs.org/projects/enoki-wjakob/badge/?version=latest
+[2]: http://enoki-wjakob.readthedocs.org/en/latest
 [3]: https://rgl-ci.epfl.ch/app/rest/builds/buildType(id:Enoki_Build)/statusIcon.svg
 [4]: https://rgl-ci.epfl.ch/viewType.html?buildTypeId=Enoki_Build&guest=1
+[5]: https://img.shields.io/pypi/v/enoki.svg
+[6]: https://pypi.org/pypi/enoki
 
 ## Introduction
 

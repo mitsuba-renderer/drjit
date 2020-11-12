@@ -69,6 +69,20 @@ computation. This can still be useful when a differentiable computation is
 expressed using such types, in which case no special precautions must be taken
 for the random number generator.
 
+Python
+------
+
+Bindings of PCG32 are provided for all backends, see the discussion on
+:ref:`Python types <python-types>` with regards to package naming conventions.
+
+.. code-block:: pycon
+
+    >>> from enoki.llvm import PCG32
+
+    >>> rng = PCG32()
+
+    >>> rng.next_float32()
+    [0.10837864875793457, 0.15841352939605713, 0.9734833240509033, 0.006844520568847656, 0.05747580528259277, .. 90 skipped .., 0.209586501121521, 0.3716639280319214, 0.8550137281417847, 0.30228495597839355, 0.21239590644836426]
 
 Reference
 ---------

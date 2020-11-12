@@ -83,7 +83,7 @@ In addition to the above, Enoki is designed to be
 To the author's knowledge, nothing quite like it exists, although there are of
 course many vectorization techniques (Autovectorization, expression templates),
 frameworks (Eigen, XLA, Numba, Agner Fog's vector classes) and AD tools
-(PyTorch, Tensorflow, Jax) that provide subsets of the above functionality.
+(PyTorch, TensorFlow, Jax) that provide subsets of the above functionality.
 
 Requirements
 ------------

@@ -255,6 +255,14 @@ structures.
 Adding support to further operations is easy, and patches to this end are
 welcomed.
 
+Pairs and tuples (C++)
+----------------------
+
+The mechanism for traversing custom data structures including all of the
+operations discussed above, is fully compatible with the ``std::pair`` and
+``std::tuple`` standard containers without the need for any additional
+declarations.
+
 Interface (Python)
 ------------------
 

@@ -4,8 +4,11 @@
 Python interface
 ================
 
-Enoki is internally a C++ library, while bindings provide access to most
-functionality within Python. This interface is useful in two ways:
+Motivation
+----------
+
+Enoki is internally a C++ library. The reason for providing an additional
+Python interface is two-fold:
 
 1. It enables fast prototyping of numerical code in a Python environment
    (Jupyter, Matplotlib, etc.)
@@ -14,17 +17,27 @@ functionality within Python. This interface is useful in two ways:
    is more suitable for a particular task. Transitions between C++ and Python
    become seamless thanks to `pybind11 <https://github.com/pybind/pybind11>`_.
 
-Note that the Python bindings are not compiled by default---to enable them,
-specify the parameter ``-DENOKI_ENABLE_PYTHON=1`` to the CMake build system.
-See the section on :ref:`building Enoki <building-enoki>` for details.
+Installation
+------------
+
+The Enoki Python bindings are available on `PyPI
+<https://pypi.org/project/enoki/>`_ and can be installed via
+
+.. code-block:: cpp
+
+   python -m pip install enoki
+
+It is also possible to compile these bindings manually for a specific Enoki
+release. See the section on :ref:`building Enoki <building-enoki>` for details.
 
 The remainder of this section discusses conventions relating the C++ and Python
 interfaces, followed by an example that combines code written in both languages.
 
+
 .. _python-cpp-interface:
 
-Conventions
------------
+C++ ↔ Python differences
+------------------------
 
 Most Enoki functionality is accessible from both C++ and Python, and these
 interfaces are also designed to yield similar-looking code. A few simple rules
@@ -45,6 +58,8 @@ and in Python:
 .. code-block:: cpp
 
    import enoki as ek
+
+.. _python-types:
 
 Types
 ~~~~~
@@ -91,6 +106,8 @@ Each of these six namespaces contains the following
 - Complex numbers: ``Complex2f``, ``Complex2f64``.
 
 - Quaternions: ``Quaternion4f``, ``Quaternion4f64``.
+
+- A pseudorandom number generator: ``PCG32``.
 
 Using this naming convention, ``enoki.llvm.ad.Array3f`` e.g. corresponds to
 ``Array<DiffArray<LLVMArray<float>>, 3>``.
@@ -155,11 +172,10 @@ Binding C++ code
 ----------------
 
 The example below details the creation of bindings for a simple computation
-that converts spherical to Cartesian coordinates. A CMake build system file is
-provided at the :ref:`bottom <py-build>` of this page.
+that converts spherical to Cartesian coordinates.
 
-Extension module
-****************
+The full project including a tiny build system is available `on GitHub
+<https://github.com/wjakob/ek_python_test>`_.
 
 .. code-block:: cpp
 
@@ -189,9 +205,6 @@ Extension module
     PYBIND11_MODULE(ek_python_test /* <- name of extension module */, m) {
         m.doc() = "Enoki & pybind11 test plugin"; // Set a docstring
 
-        // Ensure Enoki Python bindings are loaded
-        py::module::import("enoki");
-
         // 1. Bind the scalar version of the function
         m.def("sph_to_cartesian",      // Function name in Python
               sph_to_cartesian<float>, // Function to be  exposed
@@ -212,8 +225,8 @@ Extension module
 pybind11 infers the necessary binding code from the type of the function
 provided to the ``def()`` calls.
 
-Using the extension from Python
-*******************************
+Using from Python
+*****************
 
 The following interactive session shows how to load the extension module and
 query its automatically generated help page.
@@ -269,9 +282,7 @@ generate generate a few example inputs:
 .. code-block:: python
 
     >>> import enoki as ek
-
     >>> from enoki.cuda import Float
-
     >>> from ek_python_test import sph_to_cartesian
 
     >>> sph_to_cartesian(theta=ek.linspace(Float, 0.0, 1.0, 100),
@@ -295,62 +306,3 @@ seamlessly across language boundaries: in this case, a single CUDA kernel was
 compiled to produce the output, and that kernel contains both the arithmetic
 from the ``sph_to_cartesian`` function, and the computation of the inputs via
 ``ek.linspace`` done on the Python side.
-
-.. _py-build:
-
-Build system
-************
-
-The following ``CMakeLists.txt`` file can be used to build the module on
-various platforms.
-
-.. code-block:: cmake
-
-    # This script is fully compatible with a range of CMake versions
-    cmake_minimum_required(VERSION 3.13...3.18)
-
-    # Declare the project name and version
-    project(ek_python_test VERSION 0.0.1)
-
-    # Set a default build configuration (Release) if none was specified
-    if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
-      message(STATUS "Setting build type to 'Release' as none was specified.")
-      set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
-      set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release"
-        "MinSizeRel" "RelWithDebInfo")
-    endif()
-
-    # Find suitable Python interpreter
-    if (SKBUILD)
-      set(Python_EXECUTABLE ${PYTHON_EXECUTABLE})
-    else()
-      find_package(Python COMPONENTS Interpreter Development REQUIRED)
-    endif()
-
-    # Add Python's site-packages directory to the search path, needed by the next step
-    execute_process(
-      COMMAND "${Python_EXECUTABLE}" -c
-        "import pybind11, os; print(os.path.dirname(os.path.dirname(pybind11.__file__)))"
-      OUTPUT_VARIABLE EK_SITEPKG OUTPUT_STRIP_TRAILING_WHITESPACE)
-    list(APPEND CMAKE_PREFIX_PATH "${EK_SITEPKG}")
-
-    # Find pybind11 and enoki
-    find_package(pybind11 CONFIG REQUIRED)
-    find_package(enoki    CONFIG REQUIRED)
-
-    # Compile the extension module
-    pybind11_add_module(ek_python_test MODULE ek_python_test.cpp)
-
-    # Link against Enoki and the JIT compiler (enoki-autodiff also needed if AD is used)
-    target_link_libraries(ek_python_test PRIVATE enoki enoki-jit)
-
-    # Install directive for scikit-build
-    install(TARGETS ek_python_test DESTINATION .)
-
-``pyproject.toml``
-
-.. code-block:: ini
-
-    [build-system]
-    requires = ["scikit-build", "cmake", "ninja", "pybind11>=2.6.0", "enoki>=0.2.0"]
-
