@@ -167,23 +167,23 @@ extern "C" {
     static constexpr bool Registered = Cond;                                   \
     void *operator new(size_t size) {                                          \
         void *ptr = ::operator new(size);                                      \
-        if (Registered)                                                        \
+        if constexpr (Registered)                                              \
             jitc_registry_put(#Class, ptr);                                    \
         return ptr;                                                            \
     }                                                                          \
     void *operator new(size_t size, std::align_val_t align) {                  \
         void *ptr = ::operator new(size, align);                               \
-        if (Registered)                                                        \
+        if constexpr (Registered)                                              \
             jitc_registry_put(#Class, ptr);                                    \
         return ptr;                                                            \
     }                                                                          \
     void operator delete(void *ptr) {                                          \
-        if (Registered)                                                        \
+        if constexpr (Registered)                                              \
             jitc_registry_remove(ptr);                                         \
         ::operator delete(ptr);                                                \
     }                                                                          \
     void operator delete(void *ptr, std::align_val_t align) {                  \
-        if (Registered)                                                        \
+        if constexpr (Registered)                                              \
             jitc_registry_remove(ptr);                                         \
         ::operator delete(ptr, align);                                         \
     }
