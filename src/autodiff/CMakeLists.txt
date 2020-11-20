@@ -49,8 +49,3 @@ target_compile_definitions(enoki-autodiff PRIVATE -DENOKI_BUILD_AUTODIFF=1)
 if (ENOKI_ENABLE_JIT)
   target_link_libraries(enoki-autodiff PRIVATE enoki-jit)
 endif()
-
-if (ENOKI_ENABLE_TBB)
-  target_compile_definitions(enoki-autodiff PRIVATE -DENOKI_ENABLE_TBB=1)
-  target_link_libraries(enoki-autodiff PRIVATE TBB::tbb)
-endif()

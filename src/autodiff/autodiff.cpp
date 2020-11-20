@@ -6,20 +6,7 @@
 #include <tsl/robin_map.h>
 #include <deque>
 #include <assert.h>
-
-#if defined(ENOKI_USE_TBB)
-#  include <tbb/spin_mutex.h>
-#else
-#  include <mutex>
-#endif
-
-/* Prefer TBB's spin mutex, which are slightly faster in
-   single threaded workloads (which are the expectation.) */
-#if defined(ENOKI_USE_TBB)
-    using Mutex = tbb::spin_mutex;
-#else
-    using Mutex = std::mutex;
-#endif
+#include <mutex>
 
 #define CONCAT(x,y) x ## _ ## y
 #define EVAL(x,y) CONCAT(x,y)
@@ -223,8 +210,8 @@ struct State {
     using VariableMap = tsl::robin_map<int32_t, Variable>;
     using EdgeVector  = std::vector<Edge>;
 
-    /// Mutex protecting the state data structure
-    Mutex mutex;
+    /// std::mutex protecting the state data structure
+    std::mutex mutex;
 
     /// Hash table mapping variable IDs to variable instances
     VariableMap variables;
@@ -277,7 +264,7 @@ void Edge::reset() {
     memset(this, 0, sizeof(uint32_t) * 4 + sizeof(Special *));
     weight = Value();
     if (special_copy) {
-        unlock_guard<Mutex> guard(state.mutex);
+        unlock_guard<std::mutex> guard(state.mutex);
         delete special_copy;
     }
 }
@@ -332,7 +319,7 @@ static void ad_dfs_rev(int32_t index) {
 template <typename T> void ad_enqueue(int32_t index) {
     if (index == 0)
         return;
-    std::lock_guard<Mutex> guard(state.mutex);
+    std::lock_guard<std::mutex> guard(state.mutex);
     std::deque<int32_t> *queue = tls_queue;
     if (unlikely(!queue))
         queue = tls_queue = new std::deque<int32_t>();
@@ -514,7 +501,7 @@ static void ad_free(int32_t index, Variable *v) {
 template <typename T>
 int32_t ad_new(const char *label, uint32_t size, uint32_t op_count,
                const int32_t *op, T *weights) {
-    std::lock_guard<Mutex> guard(state.mutex);
+    std::lock_guard<std::mutex> guard(state.mutex);
 
     auto [index, var] = ad_var_new(label, size);
 
@@ -618,7 +605,7 @@ template <typename Value> struct SpecialCallback : Special {
         uint32_t edge = target->next_fwd;
         if (callback) {
             /* leave critical section */ {
-                unlock_guard<Mutex> guard(state.mutex);
+                unlock_guard<std::mutex> guard(state.mutex);
                 callback->backward();
             }
             if (edge && state.edges[edge].next_fwd) { // fan-in > 1, update ref counts
@@ -642,7 +629,7 @@ template <typename Value> struct SpecialCallback : Special {
         uint32_t edge = source->next_rev;
         if (callback) {
             /* leave critical section */ {
-                unlock_guard<Mutex> guard(state.mutex);
+                unlock_guard<std::mutex> guard(state.mutex);
                 callback->forward();
             }
             if (edge && state.edges[edge].next_rev) { // fan-in > 1, update ref counts
@@ -666,7 +653,7 @@ template <typename Value> struct SpecialCallback : Special {
 template <typename Value, typename Mask>
 int32_t ad_new_select(const char *label, uint32_t size, const Mask &mask_,
                       int32_t t_index, int32_t f_index) {
-    std::lock_guard<Mutex> guard(state.mutex);
+    std::lock_guard<std::mutex> guard(state.mutex);
     auto [index, var] = ad_var_new(label, size);
 
     ad_log(Debug, "ad_new_select(%u <- %u, %u)", index, t_index, f_index);
@@ -735,7 +722,7 @@ template <typename Value, typename Mask, typename Index>
 int32_t ad_new_gather(const char *label, uint32_t size, int32_t src_index,
                       const Index &offset, const Mask &mask, bool permute) {
     if constexpr (is_array_v<Value>) {
-        std::lock_guard<Mutex> guard(state.mutex);
+        std::lock_guard<std::mutex> guard(state.mutex);
         auto [index, var] = ad_var_new(label, size);
 
         ad_log(Debug, "ad_new_gather(%u <- %u, permute=%i)", index,
@@ -799,7 +786,7 @@ int32_t ad_new_scatter(const char *label, uint32_t size, int32_t src_index,
                        const Mask &mask, bool permute, bool scatter_add) {
 
     if constexpr (is_array_v<Value>) {
-        std::lock_guard<Mutex> guard(state.mutex);
+        std::lock_guard<std::mutex> guard(state.mutex);
 
         auto [index, var] = ad_var_new(label, size);
 
@@ -893,7 +880,7 @@ static void ad_traverse_rev(std::vector<int32_t> &todo, bool retain_graph) {
                     Edge &edge2 = state.edges[edge_id];
                     Special *special = edge2.special;
                     edge2.special = nullptr;
-                    unlock_guard<Mutex> guard(state.mutex);
+                    unlock_guard<std::mutex> guard(state.mutex);
                     delete special;
                 }
             } else {
@@ -959,7 +946,7 @@ static void ad_traverse_fwd(std::vector<int32_t> &todo, bool retain_graph) {
                     Edge &edge2 = state.edges[edge_id];
                     Special *special = edge2.special;
                     edge2.special = nullptr;
-                    unlock_guard<Mutex> guard(state.mutex);
+                    unlock_guard<std::mutex> guard(state.mutex);
                     delete special;
                 }
             } else {
@@ -985,7 +972,7 @@ static void ad_traverse_fwd(std::vector<int32_t> &todo, bool retain_graph) {
 }
 
 template <typename Value> const char *ad_graphviz(bool backward) {
-    std::lock_guard<Mutex> guard(state.mutex);
+    std::lock_guard<std::mutex> guard(state.mutex);
 
     if (backward)
         ad_toposort_rev();
@@ -1073,7 +1060,7 @@ template <typename T> void ad_inc_ref_impl(int32_t index) noexcept(true) {
     if (index == 0)
         return;
     index = std::abs(index);
-    std::lock_guard<Mutex> guard(state.mutex);
+    std::lock_guard<std::mutex> guard(state.mutex);
     state[index]->ref_count_ext++;
 }
 
@@ -1081,7 +1068,7 @@ template <typename T> void ad_dec_ref_impl(int32_t index) noexcept(true) {
     if (index == 0)
         return;
     index = std::abs(index);
-    std::lock_guard<Mutex> guard(state.mutex);
+    std::lock_guard<std::mutex> guard(state.mutex);
     Variable *v = state[index];
     if (unlikely(v->ref_count_ext == 0))
         ad_fail("%u: ext. reference count became negative!", index);
@@ -1092,7 +1079,7 @@ template <typename T> void ad_dec_ref_impl(int32_t index) noexcept(true) {
 template <typename T> T ad_grad(int32_t index) {
     if (unlikely(index <= 0))
         return T(0);
-    std::lock_guard<Mutex> guard(state.mutex);
+    std::lock_guard<std::mutex> guard(state.mutex);
     const T &value = state[index]->grad;
     if (unlikely(width(value) == 0))
         return T(0);
@@ -1103,7 +1090,7 @@ template <typename T> void ad_set_grad(int32_t index, const T &value) {
     if (unlikely(index <= 0))
         return;
 
-    std::lock_guard<Mutex> guard(state.mutex);
+    std::lock_guard<std::mutex> guard(state.mutex);
     Variable *var = state[index];
     if (var->size != 1 || width(value) == 1)
         var->grad = value;
@@ -1115,7 +1102,7 @@ template <typename T> void ad_accum_grad(int32_t index, const T &value) {
     if (unlikely(index <= 0))
         return;
 
-    std::lock_guard<Mutex> guard(state.mutex);
+    std::lock_guard<std::mutex> guard(state.mutex);
     Variable *var = state[index];
     var->accum(value, width(value));
 }
@@ -1124,7 +1111,7 @@ template <typename T> void ad_set_label(int32_t index, const char *label) {
     if (index == 0)
         return;
     index = std::abs(index);
-    std::lock_guard<Mutex> guard(state.mutex);
+    std::lock_guard<std::mutex> guard(state.mutex);
     ad_log(Debug, "ad_set_label(%u, \"%s\")", index, label ? label : "(null)");
     Variable *v = state[index];
     if (v->free_label)
@@ -1138,14 +1125,14 @@ template <typename T> const char *ad_label(int32_t index) {
     if (index == 0)
         return nullptr;
     index = std::abs(index);
-    std::lock_guard<Mutex> guard(state.mutex);
+    std::lock_guard<std::mutex> guard(state.mutex);
     return state[index]->label;
 }
 
 template <typename T>
 void ad_add_edge(int32_t source_idx, int32_t target_idx,
                  DiffCallback *callback) {
-    std::lock_guard<Mutex> guard(state.mutex);
+    std::lock_guard<std::mutex> guard(state.mutex);
 
     Variable *source = state[source_idx],
              *target = state[target_idx];
@@ -1164,7 +1151,7 @@ void ad_add_edge(int32_t source_idx, int32_t target_idx,
 }
 
 template <typename T> void ad_traverse(bool backward, bool retain_graph) {
-    std::lock_guard<Mutex> guard(state.mutex);
+    std::lock_guard<std::mutex> guard(state.mutex);
 
     if (backward)
         ad_toposort_rev();

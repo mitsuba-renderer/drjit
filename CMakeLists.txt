@@ -119,7 +119,6 @@ target_compile_features(enoki INTERFACE cxx_std_17)
 target_include_directories(enoki
   INTERFACE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ext/enoki-jit/include>
   $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
@@ -127,9 +126,11 @@ if (ENOKI_ENABLE_JIT)
   message(STATUS "Enoki: building the CUDA & LLVM JIT backend.")
   add_subdirectory(ext/enoki-jit)
   set_target_properties(enoki-jit PROPERTIES ${ENOKI_OUTPUT_DIRECTORY})
+  set_target_properties(enoki-thread PROPERTIES ${ENOKI_OUTPUT_DIRECTORY})
 
   if (ENOKI_MASTER_PROJECT)
     install(TARGETS enoki-jit EXPORT enokiTargets)
+    install(TARGETS enoki-thread EXPORT enokiTargets)
   endif()
 else()
   message(STATUS "Enoki: *not* building the CUDA & LLVM JIT backend.")
