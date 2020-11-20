@@ -29,6 +29,9 @@ foreach(ENOKI_AUTODIFF_VARIANT ${ENOKI_AUTODIFF_VARIANTS})
     target_compile_options(${ENOKI_AUTODIFF_VARIANT_NAME} PRIVATE -fvisibility=hidden)
   endif()
   target_link_libraries(${ENOKI_AUTODIFF_VARIANT_NAME} PRIVATE enoki)
+  if (ENOKI_ENABLE_JIT)
+    target_link_libraries(${ENOKI_AUTODIFF_VARIANT_NAME} PRIVATE enoki-jit)
+  endif()
   target_include_directories(
     ${ENOKI_AUTODIFF_VARIANT_NAME} PRIVATE ../../ext/enoki-jit/ext/robin_map/include
   )
