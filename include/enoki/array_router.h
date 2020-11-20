@@ -1186,8 +1186,10 @@ ENOKI_INLINE void eval() {
 
 template <typename... Ts>
 ENOKI_INLINE void eval(const Ts&... values) {
-    if (schedule(values...))
-        eval();
+    if constexpr (((is_jit_array_v<Ts> || is_enoki_struct_v<Ts>) || ...)) {
+        if (schedule(values...))
+            eval();
+    }
 }
 
 ENOKI_INLINE void set_device(int32_t device, uint32_t stream = 0) {
