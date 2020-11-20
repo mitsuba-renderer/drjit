@@ -250,16 +250,7 @@ template <typename T, enable_if_not_array_t<T> = 0> T andnot(const T &a1, const 
 
 template <typename M, typename T, typename F>
 ENOKI_INLINE auto select(const M &m, const T &t, const F &f) {
-    using E = replace_scalar_t<array_t<typename detail::deepest<T, F, M>::type>,
-                               typename detail::expr<scalar_t<T>, scalar_t<F>>::type>;
-    using EM = mask_t<E>;
-    if constexpr (!is_array_v<E>) {
-        return (bool) m ? (E) t : (E) f;
-    } else if constexpr (std::is_same_v<M, EM> &&
-                         std::is_same_v<T, E> &&
-                         std::is_same_v<F, E>) {
-        return E::select_(m.derived(), t.derived(), f.derived());
-    } else if constexpr (is_enoki_struct_v<T> && std::is_same_v<T, F>) {
+    if constexpr (is_enoki_struct_v<T> && std::is_same_v<T, F>) {
         T result;
         struct_support_t<T>::apply_3(
             t, f, result,
@@ -268,10 +259,22 @@ ENOKI_INLINE auto select(const M &m, const T &t, const F &f) {
             });
         return result;
     } else {
-        return select(
-            static_cast<ref_cast_t<M, EM>>(m),
-            static_cast<ref_cast_t<T, E>>(t),
-            static_cast<ref_cast_t<F, E>>(f));
+        using E = replace_scalar_t<array_t<typename detail::deepest<T, F, M>::type>,
+                                   typename detail::expr<scalar_t<T>, scalar_t<F>>::type>;
+        using EM = mask_t<E>;
+
+        if constexpr (!is_array_v<E>) {
+            return (bool) m ? (E) t : (E) f;
+        } else if constexpr (std::is_same_v<M, EM> &&
+                             std::is_same_v<T, E> &&
+                             std::is_same_v<F, E>) {
+            return E::select_(m.derived(), t.derived(), f.derived());
+        } else {
+            return select(
+                static_cast<ref_cast_t<M, EM>>(m),
+                static_cast<ref_cast_t<T, E>>(t),
+                static_cast<ref_cast_t<F, E>>(f));
+        }
     }
 }
 
