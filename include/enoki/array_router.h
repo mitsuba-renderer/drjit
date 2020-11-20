@@ -1034,8 +1034,6 @@ void scatter_add(Target &&target, const Value &value, const Index &index, const 
             using TargetIndex = replace_scalar_t<Value, scalar_t<Index>>;
             scatter_add(target, value, detail::broadcast_index<TargetIndex>(index), mask);
         }
-    } else if constexpr (is_enoki_struct_v<Value>) {
-        struct_support<Value>::scatter_add(target, value, index, mask);
     } else if constexpr (std::is_integral_v<Index> && std::is_arithmetic_v<Value> && !std::is_same_v<Value, bool>) {
         if (mask) {
             if constexpr (is_array_v<Target>)
@@ -1046,8 +1044,7 @@ void scatter_add(Target &&target, const Value &value, const Index &index, const 
     } else {
         static_assert(
             detail::false_v<Index, Value>,
-            "scatter_add(): don't know what to do with these inputs. Did you forget "
-            "an ENOKI_STRUCT() declaration for the type to be scattered?");
+            "scatter_add(): don't know what to do with these inputs.");
     }
 }
 
