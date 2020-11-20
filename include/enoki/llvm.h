@@ -1046,30 +1046,19 @@ private:
     void scatter_add_impl_(void *dst, uint32_t dst_index,
                            const LLVMArray<Index> &index,
                            const LLVMArray<bool> &mask = true) const {
-        if constexpr (sizeof(Index) != sizeof(Value)) {
-            using UInt = uint_array_t<LLVMArray>;
+        if constexpr (!std::is_same_v<scalar_t<Index>, uint32_t>) {
+            using UInt = uint32_array_t<LLVMArray>;
             return scatter_add_impl_(dst, dst_index, UInt(index), mask);
         } else {
             LLVMArray<void *> base = LLVMArray<void *>::steal(
                 jitc_var_copy_ptr(dst, dst_index));
             LLVMArray<bool> mask_2 = mask & active_mask();
 
-            const char *op;
-            if (sizeof(Value) == 4 &&
-                jitc_llvm_if_at_least(16, "+avx512dq"))
-                op = "$4call void @ek.masked_scatter_add_v$w$a2($t1 $r1, "
-                     "<$w x $t2> $r2, <$w x $t3> $r3, <$w x $t4> $r4)";
-            else if (sizeof(Value) == 8 &&
-                     jitc_llvm_if_at_least(8, "+avx512dq"))
-                op = "$3call void @ek.masked_scatter_add_v$w$a2($t1 $r1, "
-                     "<$w x $t2> $r2, <$w x $t3> $r3, <$w x $t4> $r4)";
-            else
-                op = "$0call void @ek.masked_scatter_add_v$w$a2($t1 $r1, "
-                     "<$w x $t2> $r2, <$w x $t3> $r3, <$w x $t4> $r4)";
-
-            uint32_t var =
-                jitc_var_new_4(VarType::Invalid, op, 1, 0, base.index(),
-                               m_index, index.index(), mask_2.index());
+            uint32_t var = jitc_var_new_4(
+                VarType::Invalid,
+                "$0call void @ek.scatter_add_$a2($t1 $r1, "
+                "<$w x $t2> $r2, <$w x $t3> $r3, <$w x $t4> $r4)",
+                1, 0, base.index(), m_index, index.index(), mask_2.index());
 
             jitc_var_mark_scatter(var, dst_index);
         }
