@@ -55,6 +55,9 @@ Release
 libenoki-jit.so
 libenoki-jit.dylib
 enoki-jit.dll
+libenoki-thread.so
+libenoki-thread.dylib
+enoki-thread.dll
 libenoki-autodiff.so
 libenoki-autodiff.dylib
 enoki-autodiff.dll

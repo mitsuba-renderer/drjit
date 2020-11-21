@@ -207,6 +207,28 @@ struct CUDAArray : ArrayBase<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
         return steal(jitc_var_new_2(Type, op, 1, 1, m_index, v.m_index));
     }
 
+    /// Special mul_() variant for AD, in which 0 * NaN == 0
+    CUDAArray mulz_(const CUDAArray &v) const {
+        if constexpr (!jitc_is_arithmetic(Type))
+            enoki_raise("Unsupported operand type");
+
+        // Simple constant propagation
+        if (is_literal_one())
+            return v;
+        else if (v.is_literal_one() || is_literal_zero())
+            return *this;
+
+        const char *op = std::is_same_v<Value, float>
+              ? "setp.eq.$t0 %p1, $r1, 0.0$n"
+                "mul.ftz.$t0 $r0, $r1, $r2$n"
+                "selp.$t0 $r0, 0.0, $r0, %p1"
+              : "setp.eq.$t0 %p1, $r1, 0.0$n"
+                "mul.$t0 $r0, $r1, $r2$n"
+                "selp.$t0 $r0, 0.0, $r0, %p1";
+
+        return steal(jitc_var_new_2(Type, op, 1, 1, m_index, v.m_index));
+    }
+
     CUDAArray mulhi_(const CUDAArray &v) const {
         if constexpr (!jitc_is_integral(Type))
             enoki_raise("Unsupported operand type");
@@ -646,6 +668,35 @@ struct CUDAArray : ArrayBase<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
         const char *op = std::is_same_v<Value, float>
                              ? "fma.rn.ftz.$t0 $r0, $r1, $r2, $r3"
                              : "fma.rn.$t0 $r0, $r1, $r2, $r3";
+
+        return steal(
+            jitc_var_new_3(Type, op, 1, 1, m_index, b.index(), c.index()));
+    }
+
+
+    /// Special fmadd_() variant for AD, in which 0 * NaN + c == c
+    CUDAArray fmaddz_(const CUDAArray &b, const CUDAArray &c) const {
+        if constexpr (!jitc_is_floating_point(Type))
+            enoki_raise("Unsupported operand type");
+
+        // Simple constant propagation
+        if (is_literal_one()) {
+            return b + c;
+        } else if (b.is_literal_one()) {
+            return *this + c;
+        } else if (is_literal_zero() || b.is_literal_zero()) {
+            return c;
+        } else if (c.is_literal_zero()) {
+            return *this * b;
+        }
+
+        const char *op = std::is_same_v<Value, float>
+                             ? "setp.eq.$t0 %p1, $r1, 0.0$n"
+                               "fma.rn.ftz.$t0 $r0, $r1, $r2, $r3$n"
+                               "selp.$t0 $r0, $r3, $r0, %p1"
+                             : "setp.eq.$t0 %p1, $r1, 0.0$n"
+                               "fma.rn.$t0 $r0, $r1, $r2, $r3$n"
+                               "selp.$t0 $r0, $r3, $r0, %p1";
 
         return steal(
             jitc_var_new_3(Type, op, 1, 1, m_index, b.index(), c.index()));

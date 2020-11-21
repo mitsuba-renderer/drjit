@@ -971,3 +971,29 @@ def test46_loop_ballistic_2(m):
 
     assert ek.allclose(loss, 0, atol=1e-4)
     assert ek.allclose(vel_in.x, [3.3516, 2.3789, 0.79156], atol=1e-3)
+
+
+def test47_nan_propagation(m):
+    for i in range(2):
+        x = ek.arange(m.Float, 10)
+        ek.enable_grad(x)
+        f0 = m.Float(0)
+        y = ek.select(x < (20 if i == 0 else 0), x, x * (f0 / f0))
+        ek.backward(y)
+        g = ek.grad(x)
+        if i == 0:
+            assert g == 1
+        else:
+            assert ek.all(ek.isnan(g))
+
+    for i in range(2):
+        x = ek.arange(m.Float, 10)
+        ek.enable_grad(x)
+        f0 = m.Float(0)
+        y = ek.select(x < (20 if i == 0 else 0), x, x * (f0 / f0))
+        ek.forward(x)
+        g = ek.grad(y)
+        if i == 0:
+            assert g == 1
+        else:
+            assert ek.all(ek.isnan(g))
