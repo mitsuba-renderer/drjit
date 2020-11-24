@@ -269,7 +269,8 @@ Interface (Python)
 Custom data structures are also supported in the Python bindings, though the
 :c:macro:`ENOKI_STRUCT` specification takes on a different form here. In a
 class defined within Python, you will need to specify a top-level static
-attribute documenting the fields and their types.
+attribute documenting the fields and their types. It is also important for that
+class to be constructible using the default constructor (e.g. no arguments).
 
 .. code-block:: python
 
@@ -278,7 +279,7 @@ attribute documenting the fields and their types.
     class MyStruct:
         ENOKI_STRUCT = { 'a' : Array3f, 'b' : UInt32 }
 
-        def __init__(self, a, b):
+        def __init__(self, a=Array3f(), b=UInt32()):
             self.a = a
             self.b = b
 
@@ -299,7 +300,7 @@ the following pattern:
     mystruct.attr("ENOKI_STRUCT") = fields;
 
 The set of compatible operations is currently much smaller than in the C++
-interface. 
+interface.
 
 1. **Initialization**: :cpp:func:`zero()`, and :cpp:func:`empty()`.
 
@@ -314,7 +315,12 @@ interface.
 5. **Operations specific to JIT (CUDA/LLVM) arrays**: :cpp:func:`schedule()`
    and :cpp:func:`eval()`.
 
-3. **Other**: Custom data structures can be passed through :ref:`virtual
+6. **Operations specific to differentiable arrays**:
+   :cpp:func:`grad_enabled()`, :cpp:func:`enable_grad()`, :cpp:func:`disable_grad()`,
+   :cpp:func:`set_grad_enabled()`, :cpp:func:`suspend_grad()`, :cpp:func:`resume_grad()`,
+   :cpp:func:`set_grad_suspended()`, :cpp:func:`set_grad()`, :cpp:func:`accum_grad()`, and :cpp:func:`detach()`.
+
+7. **Other**: Custom data structures can be passed through :ref:`virtual
    function calls <virtual-functions>`, and they can be used as loop variables
    in :ref:`symbolic loops <symbolic-loops>`.
 

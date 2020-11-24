@@ -1976,6 +1976,11 @@ def cross(a, b):
 def detach(a):
     if _ek.is_diff_array_v(a):
         return a.detach_()
+    elif _ek.is_enoki_struct_v(a):
+        result = type(a)()
+        for k in type(a).ENOKI_STRUCT.keys():
+            setattr(result, k, detach(getattr(a, k)))
+        return result
     else:
         return a
 
@@ -1983,6 +1988,11 @@ def detach(a):
 def grad(a):
     if _ek.is_diff_array_v(a):
         return a.grad_()
+    elif _ek.is_enoki_struct_v(a):
+        result = type(a)()
+        for k in type(a).ENOKI_STRUCT.keys():
+            setattr(result, k, grad(getattr(a, k)))
+        return result
     elif isinstance(a, tuple) or isinstance(a, list):
         return type(a)([grad(v) for v in a])
     elif isinstance(a, dict):
@@ -2001,6 +2011,9 @@ def set_grad(a, value):
             value = t(value)
 
         a.set_grad_(value)
+    elif _ek.is_enoki_struct_v(a):
+        for k in type(a).ENOKI_STRUCT.keys():
+            set_grad(getattr(a, k), value)
     else:
         raise Exception("Expected a differentiable array type!")
 
@@ -2009,7 +2022,15 @@ def accum_grad(a, value):
     if _ek.is_diff_array_v(a):
         if _ek.is_diff_array_v(value):
             value = _ek.detach(value)
+
+        t = _ek.detached_t(a)
+        if type(value) is not t:
+            value = t(value)
+
         a.accum_grad_(value)
+    elif _ek.is_enoki_struct_v(a):
+        for k in type(a).ENOKI_STRUCT.keys():
+            accum_grad(getattr(a, k), value)
     else:
         raise Exception("Expected a differentiable array type!")
 
@@ -2018,6 +2039,9 @@ def grad_enabled(a):
     result = False
     if _ek.is_diff_array_v(a):
         result = a.grad_enabled_()
+    elif _ek.is_enoki_struct_v(a):
+        for k in type(a).ENOKI_STRUCT.keys():
+            result |= grad_enabled(getattr(a, k))
     elif isinstance(a, tuple) or isinstance(a, list):
         for v in a:
             result |= grad_enabled(v)
@@ -2030,6 +2054,9 @@ def grad_enabled(a):
 def set_grad_enabled(a, value):
     if _ek.is_diff_array_v(a) and a.IsFloat:
         a.set_grad_enabled_(value)
+    elif _ek.is_enoki_struct_v(a):
+        for k in type(a).ENOKI_STRUCT.keys():
+            set_grad_enabled(getattr(a, k), value)
     elif isinstance(a, tuple) or isinstance(a, list):
         for v in a:
             set_grad_enabled(v, value)
@@ -2052,6 +2079,9 @@ def grad_suspended(a):
     result = False
     if _ek.is_diff_array_v(a):
         result = a.grad_suspended_()
+    elif _ek.is_enoki_struct_v(a):
+        for k in type(a).ENOKI_STRUCT.keys():
+            result |= grad_suspended(getattr(a, k))
     elif isinstance(a, tuple) or isinstance(a, list):
         for v in a:
             result |= grad_suspended(v)
@@ -2064,6 +2094,9 @@ def grad_suspended(a):
 def set_grad_suspended(a, value):
     if _ek.is_diff_array_v(a) and a.IsFloat:
         a.set_grad_suspended_(value)
+    elif _ek.is_enoki_struct_v(a):
+        for k in type(a).ENOKI_STRUCT.keys():
+           set_grad_suspended(getattr(a, k), value)
     elif isinstance(a, tuple) or isinstance(a, list):
         for v in a:
             set_grad_suspended(v, value)
