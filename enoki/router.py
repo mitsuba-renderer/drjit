@@ -4,6 +4,7 @@ from enoki.detail import array_name as _array_name
 from sys import modules as _modules
 import math as _math
 import builtins as _builtins
+from collections.abc import Mapping as _Mapping
 
 # -------------------------------------------------------------------
 #                        Type promotion logic
@@ -1995,7 +1996,7 @@ def grad(a):
         return result
     elif isinstance(a, tuple) or isinstance(a, list):
         return type(a)([grad(v) for v in a])
-    elif isinstance(a, dict):
+    elif isinstance(a, _Mapping):
         return {k : grad(v) for k, v in a.items()}
     else:
         return _ek.zero(type(a))
@@ -2045,7 +2046,7 @@ def grad_enabled(a):
     elif isinstance(a, tuple) or isinstance(a, list):
         for v in a:
             result |= grad_enabled(v)
-    elif isinstance(a, dict):
+    elif isinstance(a, _Mapping):
         for k, v in a.items():
             result |= grad_enabled(v)
     return result
@@ -2060,7 +2061,7 @@ def set_grad_enabled(a, value):
     elif isinstance(a, tuple) or isinstance(a, list):
         for v in a:
             set_grad_enabled(v, value)
-    elif isinstance(a, dict):
+    elif isinstance(a, _Mapping):
         for k, v in a.items():
             set_grad_enabled(v, value)
 
@@ -2085,7 +2086,7 @@ def grad_suspended(a):
     elif isinstance(a, tuple) or isinstance(a, list):
         for v in a:
             result |= grad_suspended(v)
-    elif isinstance(a, dict):
+    elif isinstance(a, _Mapping):
         for k, v in a.items():
             result |= grad_suspended(v)
     return result
@@ -2100,7 +2101,7 @@ def set_grad_suspended(a, value):
     elif isinstance(a, tuple) or isinstance(a, list):
         for v in a:
             set_grad_suspended(v, value)
-    elif isinstance(a, dict):
+    elif isinstance(a, _Mapping):
         for k, v in a.items():
             set_grad_suspended(v, value)
 
@@ -2355,7 +2356,7 @@ def custom(cls, *args, **kwargs):
            or isinstance(o, tuple):
             for v in o:
                 diff_vars(v, indices)
-        elif isinstance(o, dict):
+        elif isinstance(o, _Mapping):
             for k, v in o.items():
                 diff_vars(v, indices)
         elif _ek.is_diff_array_v(o) and _ek.grad_enabled(o):
@@ -2367,7 +2368,7 @@ def custom(cls, *args, **kwargs):
            or isinstance(o, list) \
            or isinstance(o, tuple):
             return type(o)([clear_primal(v) for v in o])
-        elif isinstance(o, dict):
+        elif isinstance(o, _Mapping):
             return { k: clear_primal(v) for k, v in o.items() }
         elif _ek.is_diff_array_v(o):
             to = type(o)
