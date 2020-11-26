@@ -711,7 +711,7 @@ template <typename Value> struct GatherEdge : Special {
 
         if (!source_grad.valid()) {
             source_grad = zero<Value>(size);
-            if (size == 1) // avoid issues with CSA
+            if (size == 1) // avoid issues with CSE
                 source_grad = source_grad.copy();
         } else if ((uint32_t) source_grad.size() != size) {
             source_grad.resize(size);
@@ -721,7 +721,6 @@ template <typename Value> struct GatherEdge : Special {
             enoki::scatter(source_grad, target->grad, offset, mask);
         else
             enoki::scatter_add(source_grad, target->grad, offset, mask);
-
     }
 
     void forward(const Variable *source, Variable *target) const override {
@@ -779,7 +778,7 @@ template <typename Value> struct ScatterEdge : Special {
 
         if (!target_grad.valid()) {
             target_grad = zero<Value>(size);
-            if (size == 1) // avoid issues with CSA
+            if (size == 1) // avoid issues with CSE
                 target_grad = target_grad.copy();
         } else if ((uint32_t) target_grad.size() != size) {
             target_grad.resize(size);

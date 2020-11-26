@@ -18,13 +18,40 @@ NAMESPACE_BEGIN(enoki)
 
 namespace detail {
     template <typename T, typename UInt32>
-    ENOKI_INLINE decltype(auto) gather_helper(T& v, const UInt32 &perm) {
-        ENOKI_MARK_USED(perm);
-        using DT = std::decay_t<T>;
-        if constexpr (!is_jit_array_v<DT> && !is_enoki_struct_v<DT>)
-            return v;
-        else
-            return enoki::gather<DT, true>(v, perm);
+    ENOKI_INLINE decltype(auto) gather_helper(const T& value, const UInt32 &perm) {
+        if constexpr (is_jit_array_v<T>) {
+            return enoki::gather<T, true>(value, perm);
+        } else if constexpr (is_enoki_struct_v<T>) {
+            T result = value;
+            struct_support_t<T>::apply_1(
+                result, [&perm](auto &x) { x = gather_helper(x, perm); });
+            return result;
+        } else {
+            ENOKI_MARK_USED(perm);
+            return value;
+        }
+    }
+
+    template <typename T>
+    ENOKI_INLINE decltype(auto) copy_diff(const T& value) {
+        if constexpr (is_jit_array_v<T> && is_diff_array_v<T> &&
+                      std::is_floating_point_v<scalar_t<T>>) {
+            T result;
+            if constexpr (array_depth_v<T> == 1) {
+                result = value.copy();
+            } else {
+                for (size_t i = 0; i < value.derived().size(); ++i)
+                    result.entry(i) = copy_diff(value.entry(i));
+            }
+            return result;
+        } else if constexpr (is_enoki_struct_v<T>) {
+            T result = value;
+            struct_support_t<T>::apply_1(result,
+                                         [](auto &x) { x = copy_diff(x); });
+            return result;
+        } else {
+            return value;
+        }
     }
 
     template <typename Guide, typename Type, typename = int> struct vectorize_type {
@@ -192,12 +219,11 @@ extern "C" {
     ENOKI_VCALL_REGISTER_IF(Class, true)
 
 #define ENOKI_VCALL_METHOD(name)                                               \
-    template <typename... Args> auto name(Args &&... args) const {             \
+    template <typename... Args> auto name(const Args &... args) const {        \
         return detail::dispatch(                                               \
-            [](void *ptr, auto &&... args2) ENOKI_INLINE_LAMBDA {              \
+            [](void *ptr, const auto &... args2) ENOKI_INLINE_LAMBDA {         \
                 return ((Class *) ptr)->name(args2...);                        \
-            },                                                                 \
-            array, std::forward<Args>(args)...);                               \
+            }, array, detail::copy_diff(args)...);                             \
     }
 
 #define ENOKI_VCALL_GETTER(name, type)                                         \
