@@ -31,6 +31,7 @@ foreach(ENOKI_AUTODIFF_VARIANT ${ENOKI_AUTODIFF_VARIANTS})
   target_link_libraries(${ENOKI_AUTODIFF_VARIANT_NAME} PRIVATE enoki)
   if (ENOKI_ENABLE_JIT)
     target_link_libraries(${ENOKI_AUTODIFF_VARIANT_NAME} PRIVATE enoki-jit)
+    target_compile_definitions(${ENOKI_AUTODIFF_VARIANT_NAME} PRIVATE -DENOKI_ENABLE_JIT=1)
   endif()
   target_include_directories(
     ${ENOKI_AUTODIFF_VARIANT_NAME} PRIVATE ../../ext/enoki-jit/ext/robin_map/include
@@ -51,4 +52,5 @@ target_compile_definitions(enoki-autodiff PRIVATE -DENOKI_BUILD_AUTODIFF=1)
 
 if (ENOKI_ENABLE_JIT)
   target_link_libraries(enoki-autodiff PRIVATE enoki-jit)
+  target_compile_definitions(enoki-autodiff PRIVATE -DENOKI_ENABLE_JIT=1)
 endif()
