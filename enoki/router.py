@@ -2003,7 +2003,7 @@ def grad(a):
 
 
 def set_grad(a, value):
-    if _ek.is_diff_array_v(a):
+    if _ek.is_diff_array_v(a) and a.IsFloat:
         if _ek.is_diff_array_v(value):
             value = _ek.detach(value)
 
@@ -2015,12 +2015,10 @@ def set_grad(a, value):
     elif _ek.is_enoki_struct_v(a):
         for k in type(a).ENOKI_STRUCT.keys():
             set_grad(getattr(a, k), value)
-    else:
-        raise Exception("Expected a differentiable array type!")
 
 
 def accum_grad(a, value):
-    if _ek.is_diff_array_v(a):
+    if _ek.is_diff_array_v(a) and a.IsFloat:
         if _ek.is_diff_array_v(value):
             value = _ek.detach(value)
 
@@ -2032,8 +2030,6 @@ def accum_grad(a, value):
     elif _ek.is_enoki_struct_v(a):
         for k in type(a).ENOKI_STRUCT.keys():
             accum_grad(getattr(a, k), value)
-    else:
-        raise Exception("Expected a differentiable array type!")
 
 
 def grad_enabled(a):
