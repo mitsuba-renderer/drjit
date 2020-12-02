@@ -203,6 +203,7 @@ if (ENOKI_MASTER_PROJECT)
   install(DIRECTORY include/enoki DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
   if (ENOKI_ENABLE_JIT)
     install(DIRECTORY ext/enoki-jit/include/enoki-jit DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+    install(DIRECTORY ext/enoki-jit/ext/enoki-thread/include/enoki-thread DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
   endif()
 
   install(TARGETS enoki EXPORT enokiTargets)
