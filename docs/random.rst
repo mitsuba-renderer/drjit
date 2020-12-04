@@ -4,8 +4,8 @@
 Random number generation
 ========================
 
-Enoki includes a fully vectorized implementation of the `PCG32 random number
-generator <http://www.pcg-random.org/>`_ developed by `Melissa O'Neill
+Enoki includes a fully vectorized implementation of the `PCG32 pseudorandom
+number generator <http://www.pcg-random.org/>`_ developed by `Melissa O'Neill
 <https://www.cs.hmc.edu/~oneill>`_. To use it, include the following header:
 
 .. code-block:: cpp
@@ -37,7 +37,7 @@ scalar variates:
     uint32_t value_u = my_rng.next_uint32();  // uniform integer on [0, 2^32 - 1]
 
 Specifying an Enoki array type leads to a vectorized random number generator
-that generates arrays of random variates in parallel.
+that generates arrays of pseudorandom variates in parallel.
 
 .. code-block:: cpp
 
@@ -53,7 +53,7 @@ PCG32 is *fast*: on a Skylake i7-6920HQ processor, the vectorized
 implementation provided here generates around 1.4 billion single precision
 variates per second. Note that the implementation uses a small amount of
 internal storage to record the current RNG state and a stream selector.
-Together, they require 16 bytes per SIMD lane.
+Together, these two fields require 16 bytes per SIMD lane.
 
 When used with LLVM or CUDA arrays, the arithmetic underlying pseudorandom
 number generation will be JIT-compiled along with other computation performed
@@ -79,20 +79,20 @@ Bindings of PCG32 are provided for all backends, see the discussion on
 
     >>> from enoki.llvm import PCG32
 
-    >>> rng = PCG32()
+    >>> rng = PCG32(size=100)
 
     >>> rng.next_float32()
     [0.10837864875793457, 0.15841352939605713, 0.9734833240509033, 0.006844520568847656, 0.05747580528259277, .. 90 skipped .., 0.209586501121521, 0.3716639280319214, 0.8550137281417847, 0.30228495597839355, 0.21239590644836426]
 
-Reference
----------
+C++ Reference
+-------------
 
 .. cpp:class:: template <typename T> PCG32
 
-    This class implements the PCG32 pseudorandom number generator. It has a
-    period of :math:`2^{64}` and supports :math:`2^{63}` separate *streams*.
-    Each stream produces a different unique sequence of random numbers, which
-    is particularly useful in the context of vectorized computations.
+    This class implements the PCG32 random number generator. It has a period of
+    :math:`2^{64}` and supports :math:`2^{63}` separate *streams*. Each stream
+    produces a different unique sequence of pseudorandom numbers, which is
+    particularly useful in the context of vectorized computations.
 
 Member types
 ************

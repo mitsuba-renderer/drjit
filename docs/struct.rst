@@ -1,7 +1,7 @@
 .. cpp:namespace:: enoki
 
-Data structures
-===============
+Custom data structures
+======================
 
 Many Enoki operations can be applied to custom data structures, causing them to
 recursively propagate through all of the data structure's fields. The remainder

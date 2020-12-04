@@ -7,10 +7,11 @@ Symbolic loops
 
 Numerical software frequently involves iterative root-finding or optimization
 steps that present challenges during vectorization, especially when working
-with very "wide" backends (:cpp:class:`CUDAArray` and :cpp:class:`LLVMArray`)
-processing millions of entries at once. This section presents Enoki's
-facilities for recording loops *symbolically* to considerably improve
-performance in many such situations.
+with backends processing millions of entries at once. This section presents
+Enoki's facilities for recording loops *symbolically* to considerably improve
+performance in many such situations. You can skip this section if you are not
+using JIT-compiled types (i.e., :cpp:class:`CUDAArray` or
+:cpp:class:`LLVMArray`)
 
 Motivation
 ----------
@@ -75,9 +76,8 @@ example uses CUDA arrays, but everything applies equally to the LLVM case.
 
    Finally, consider what happens when the iteration count is very large (e.g.
    1 million): in this case, the generated kernel will become correspondingly
-   large (e.g. 10-100 MiB of CUDA PTX or LLVM IR), at which point CUDA/LLVM may
-   run out of memory or freeze when trying to generate corresponding machine
-   instructions.
+   large (e.g. 10-100 MiB of CUDA PTX or LLVM IR), at which point compilation
+   to machine code will likely fail.
 
 3. **One small kernel with symbolic loop**:
 
@@ -106,12 +106,13 @@ example uses CUDA arrays, but everything applies equally to the LLVM case.
 
    This does something quite surprising: it runs the loop *a single time* on
    the CPU, which has the sole purpose of recording all involved arithmetic
-   symbolically. In contrast to this, the generated GPU kernel will include
+   symbolically. In contrast, the generated GPU kernel will include
    additional branch statements that cause the iteration associated with each
    entry to run just until stopping condition is satisfied (and no longer!).
-   Like in the previous example, this approach avoids costly global memory
-   accesses, and it has the added benefit of producing small kernels that
-   terminate as soon as the iteration has converged.
+   Like in the previous example, this approach uses registers to propagate
+   information from one loop iteration to the next (i.e. without costly global
+   memory accesses), and it has the added benefit of producing small kernels
+   that terminate as soon as the iteration has converged.
 
    Importantly, none of the previous steps triggered a kernel evaluation: we
    can continue to use ``value`` and queue up further computation, e.g., to
@@ -122,10 +123,9 @@ example uses CUDA arrays, but everything applies equally to the LLVM case.
 Usage and limitations
 ---------------------
 
-Enoki's :cpp:class:`Loop` primitive is quite unusual: it will run your loop
-once, record everything that it does symbolically, and then surround the
-captured instruction sequence with additional loop instructions (branch
-statements, `Phi functions
+Enoki's :cpp:class:`Loop` primitive will run your loop once, record everything
+that it does symbolically, and then surround the captured instruction sequence
+with additional loop instructions (branch statements, `Phi functions
 <https://en.wikipedia.org/wiki/Static_single_assignment_form>`_ in SSA form).
 When evaluated on the target device, the resulting kernel will then run the
 loop until the specified condition is satisfied.
@@ -149,9 +149,9 @@ potentially also crashes or incorrect results.
     be passed to the :cpp:class:`Loop` constructor so that Enoki can insert
     instructions that ensure the correct flow of computed information.
 
-    Loop variables must be LLVM or CUDA arrays. Builtin C++ or Python types
-    (e.g. an ``int``) do not work, because writes to such variables cannot be
-    intercepted by Enoki.
+    Loop variables must be LLVM or CUDA arrays or more complex types built from
+    them. Builtin C++ or Python types (e.g. an ``int``) do not work, because
+    writes to such variables cannot be intercepted by Enoki.
 
   - **Scatter operations**: the target of a scatter operation
     (:cpp:func:`scatter` and :cpp:func:`scatter_add`) is a special case: it
@@ -308,8 +308,8 @@ In this case, ``ek::Loop()`` turns into a no-op, and ``loop.cond()`` simply retu
 its input argument. This is useful in template programs that support
 compilation to several different backends.
 
-Reference
----------
+C++ Reference
+-------------
 
 .. cpp:class:: Loop
 

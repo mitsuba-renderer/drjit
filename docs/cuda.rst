@@ -1,3 +1,19 @@
+.. cpp:namespace:: enoki
+
+.. _cuda:
+
+CUDA arrays
+===========
+
+Many Enoki operations can be applied to custom data structures, causing them to
+recursively propagate through all of the data structure's fields. The remainder
+of this sections explains several use cases of this functionality, and how to
+enable it via a suitable :c:macro:`ENOKI_STRUCT` declaration. This feature
+requires the following optional header file:
+
+.. code-block:: cpp
+
+    #include <enoki/cuda.h>
 
 .. _custom-cuda:
 
