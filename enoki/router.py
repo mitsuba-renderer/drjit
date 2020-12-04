@@ -1328,29 +1328,36 @@ def eval(*args):
         _ek.detail.eval()
 
 
-def graphviz_str(a, reverse=True):
-    t = type(a)
-    if t.IsDiff:
+def graphviz_str(*args, reverse=True):
+    diff_base = None
+
+    for a in args:
         _ek.enqueue(a)
-        while _ek.is_diff_array_v(_ek.value_t(t)):
-            t = t.Value
-        return t.graphviz_(reverse)
-    elif _ek.is_jit_array_v(t):
-        return _ek.detail.graphviz()
+        t = _ek.leaf_array_t(a)
+
+        if not _ek.is_jit_array_v(t) and \
+           not _ek.is_diff_array_v(t):
+            raise Exception('graphviz_str(): only variables registered with '
+                            'the JIT (LLVM/CUDA) or AD backend are supported!')
+
+        if t.IsDiff and t.IsFloat:
+            diff_base = t
+
+    if diff_base is not None:
+        return diff_base.graphviz_(reverse)
     else:
-        raise Exception('graphviz_str: only variables registered with the '
-                        'JIT (LLVM/CUDA) or AD backend are supported!')
+        return _ek.detail.graphviz()
 
 
-def graphviz(a, reverse=True):
+def graphviz(*args, reverse=True):
     try:
         from graphviz import Source
-        return Source(graphviz_str(a, reverse))
+        return Source(graphviz_str(*args, reverse=reverse))
     except ImportError:
-        raise Exception('graphviz Python package not available! Install via '
-                        '"python -m pip install graphviz". Alternatively, you'
-                        'can call enoki.graphviz_str() function to obtain a '
-                        'string representation.')
+        raise Exception('The "graphviz" Python package not available! Install '
+                        'via "python -m pip install graphviz". Alternatively, '
+                        'you can call enoki.graphviz_str() function to obtain '
+                        'a string representation.')
 
 
 def migrate(a, type_):
@@ -2129,11 +2136,9 @@ def replace_grad(a, b):
 
 
 def enqueue(*args):
-    for v in args:
-        if _ek.is_diff_array_v(v):
-            v.enqueue_()
-        else:
-            raise Exception("Expected differentiable array types as input!")
+    for a in args:
+        if _ek.is_diff_array_v(a):
+            a.enqueue_()
 
 
 def traverse(t, reverse=True, retain_graph=False):
