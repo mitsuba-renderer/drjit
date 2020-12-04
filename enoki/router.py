@@ -489,7 +489,7 @@ def reinterpret_array(target_type, value,
 
 def _broadcast_index(target_type, index):
     size = target_type.Size
-    if isinstance(index, int) and size == Dynamic:
+    if _ek.array_size_v(index) <= 1 and size == Dynamic:
         return target_type(index)
     elif target_type.Depth > index.Depth:
         assert size != Dynamic

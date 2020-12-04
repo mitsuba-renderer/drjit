@@ -970,12 +970,32 @@ struct LLVMArray : ArrayBase<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
     }
 
     static LLVMArray load_unaligned_(const void *ptr, size_t size) {
-        return steal(jitc_var_copy_mem(AllocType::Host, Type, 0, ptr, (uint32_t) size));
+        if constexpr (!IsClass) {
+            return steal(
+                jitc_var_copy_mem(AllocType::Host, Type, 0, ptr, (uint32_t) size));
+        } else {
+            uint32_t *temp = new uint32_t[size];
+            for (uint32_t i = 0; i < size; i++)
+                temp[i] = jitc_registry_get_id(((const void **) ptr)[i]);
+            LLVMArray result = steal(
+                jitc_var_copy_mem(AllocType::Host, Type, 0, temp, (uint32_t) size));
+            delete[] temp;
+            return result;
+        }
     }
 
     void store_unaligned_(void *ptr) const {
         eval_();
-        jitc_memcpy(ptr, data(), size() * sizeof(Value));
+        if constexpr (!IsClass) {
+            jitc_memcpy(ptr, data(), size() * sizeof(Value));
+        } else {
+            uint32_t size = this->size();
+            uint32_t *temp = new uint32_t[size];
+            jitc_memcpy(temp, data(), size * sizeof(uint32_t));
+            for (uint32_t i = 0; i < size; i++)
+                ((void **) ptr)[i] = jitc_registry_get_ptr(CallSupport::Domain, temp[i]);
+            delete[] temp;
+        }
     }
 
     //! @}

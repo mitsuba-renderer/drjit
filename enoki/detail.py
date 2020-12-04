@@ -26,8 +26,8 @@ def array_name(prefix, vt, shape, scalar):
     Parameter ``vt`` (``enoki.VarType``):
         Underlying scalar type (e.g. ``VarType.Int32``) of the desired array
 
-    Parameter ``size`` (``Tuple[int]``):
-        Number of components
+    Parameter ``shape`` (``Tuple[int]``):
+        Size per dimension
 
     Parameter ``scalar`` (``bool``):
         Arrays in the ``enoki.scalar.*`` module use a different depth
