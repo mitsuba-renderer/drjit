@@ -6,7 +6,7 @@ Automatic differentiation
 
 *Automatic differentiation* (AD) refers to a set of techniques to numerically
 evaluate the gradient of a computer program. Enoki enables such differentiable
-computation using the :cpp:class:`DiffArray` array class defined in the
+computation using the :cpp:struct:`DiffArray` array class defined in the
 optional header file
 
 .. code-block:: cpp
@@ -34,7 +34,7 @@ of AD exist, and the excellent book by Griewank and Walther [GrWa08]_ provides
 a thorough overview of the state of the art.
 
 Enoki implements AD by recording a graph of the computation performed using its
-:cpp:class:`DiffArray` type. 
+:cpp:struct:`DiffArray` type. 
 
 <example>
 

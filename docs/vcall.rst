@@ -31,8 +31,8 @@ An interface ``Base`` has two implementations ``Foo`` and ``Bar`` that each
 provide different versions of a function ``foo()``.
 
 Vectorizing this code entails replacing scalar types (like ``float``) by a
-corresponding Enoki array type (e.g. :cpp:class:`Packet`,
-:cpp:class:`CUDAArray`, :cpp:class:`LLVMArray`, or :cpp:class:`DiffArray`)
+corresponding Enoki array type (e.g. :cpp:struct:`Packet`,
+:cpp:struct:`CUDAArray`, :cpp:struct:`LLVMArray`, or :cpp:struct:`DiffArray`)
 
 Virtual method calls are important building blocks of 
 object-oriented C++ and Python applications. 

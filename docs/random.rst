@@ -18,7 +18,7 @@ The following reference is partly based on the original `PCG32 documentation
 Usage
 -----
 
-The :cpp:class:`PCG32` class is parameterized by a template parameter ``T``
+The :cpp:struct:`PCG32` class is parameterized by a template parameter ``T``
 that denotes the desired output type. Scalar values, SIMD packets, and
 CUDA/LLVM arrays are all supported. The specific scalar type underlying ``T``
 (e.g. integral, floating point, etc.) is ignored here, since only the shape
@@ -87,7 +87,7 @@ Bindings of PCG32 are provided for all backends, see the discussion on
 C++ Reference
 -------------
 
-.. cpp:class:: template <typename T> PCG32
+.. cpp:struct:: template <typename T> PCG32
 
     This class implements the PCG32 random number generator. It has a period of
     :math:`2^{64}` and supports :math:`2^{63}` separate *streams*. Each stream

@@ -1665,6 +1665,14 @@ def all_nested(a):
     return a
 
 
+def all_or(value, a):
+    assert isinstance(value, bool)
+    if _ek.is_jit_array_v(a) and a.Depth == 1:
+        return value
+    else:
+        return _ek.all(a)
+
+
 def any(a):
     if _var_is_enoki(a):
         if a.Type != VarType.Bool:
@@ -1691,6 +1699,14 @@ def any_nested(a):
     return a
 
 
+def any_or(value, a):
+    assert isinstance(value, bool)
+    if _ek.is_jit_array_v(a) and a.Depth == 1:
+        return value
+    else:
+        return _ek.any(a)
+
+
 def none(a):
     b = any(a)
     return not b if isinstance(b, bool) else ~b
@@ -1699,6 +1715,14 @@ def none(a):
 def none_nested(a):
     b = any_nested(a)
     return not b if isinstance(b, bool) else ~b
+
+
+def none_or(value, a):
+    assert isinstance(value, bool)
+    if _ek.is_jit_array_v(a) and a.Depth == 1:
+        return value
+    else:
+        return _ek.none(a)
 
 
 def hsum(a):

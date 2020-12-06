@@ -668,7 +668,7 @@ ENOKI_INLINE auto cross(const T1 &v1, const T2 &v2) {
 // -----------------------------------------------------------------------
 
 template <bool Default, typename T> auto all_or(const T &value) {
-    if constexpr (is_jit_array_v<T>) {
+    if constexpr (is_jit_array_v<T> && array_depth_v<T> == 1) {
         ENOKI_MARK_USED(value);
         return Default;
     } else {
@@ -677,7 +677,7 @@ template <bool Default, typename T> auto all_or(const T &value) {
 }
 
 template <bool Default, typename T> auto any_or(const T &value) {
-    if constexpr (is_jit_array_v<T>) {
+    if constexpr (is_jit_array_v<T> && array_depth_v<T> == 1) {
         ENOKI_MARK_USED(value);
         return Default;
     } else {
@@ -686,7 +686,7 @@ template <bool Default, typename T> auto any_or(const T &value) {
 }
 
 template <bool Default, typename T> auto none_or(const T &value) {
-    if constexpr (is_jit_array_v<T>) {
+    if constexpr (is_jit_array_v<T> && array_depth_v<T> == 1) {
         ENOKI_MARK_USED(value);
         return Default;
     } else {

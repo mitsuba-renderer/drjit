@@ -2,8 +2,8 @@
 
 .. _custom-autodiff:
 
-Customizing differentiation
-===========================
+Custom differentiable ops
+=========================
 
 Enoki offers several escape hatches to implement custom features that are
 difficult to express using builtin functionality. This section explains such
@@ -20,7 +20,7 @@ particular operation should be differentiated. Reasons for this may include:
 
 1. The automatic differentiation backend cannot keep track of computation that
    is performed outside of Enoki (e.g. using a highly optimized :ref:`CUDA
-   kernel <custom-cuda>`), or when :cpp:class:`DiffArray` is not used for other
+   kernel <custom-cuda>`), or when :cpp:struct:`DiffArray` is not used for other
    reasons.
 
 2. Multiple frameworks (e.g. PyTorch/TensorFlow and Enoki) may be involved in
@@ -56,7 +56,7 @@ the following types
     using FloatD = ek::DiffArray<Float>; // .. which furthermore tracks derivatives
 
 We must define the aforementioned callback class deriving from
-:cpp:class:`CustomOp`, which is a variadic template class parameterized by the
+:cpp:struct:`CustomOp`, which is a variadic template class parameterized by the
 type underlying automatic differentiation (`FloatD` in this example), and the
 function output and input(s).
 
@@ -116,7 +116,7 @@ Apart from ``name()``, this declaration must override *three* other virtual
 methods: the first, ``eval()``, performs an ordinary (non-differentiable)
 function evaluation. Note that its parameter(s) and return value must be
 non-differentiable variants of the input/outputs as originally specified via
-template parameters of :cpp:class:`CustomOp`. Non-differentiable is as defined
+template parameters of :cpp:struct:`CustomOp`. Non-differentiable is as defined
 by :cpp:type:`detached_t`. For example, ``detached_t<Array3fD>`` equals
 ``Array3f``. Finally, the inputs must be specified as ``const`` references
 (see the following note).
@@ -237,7 +237,7 @@ Differentiable loops
 Iterative computation performed using normal C++ or Python loops is effectively
 unrolled within the AD computation graph, and its differentiation poses no
 problems. However, automatic differentiation of :ref:`symbolic loops
-<symbolic-loops>` recorded using the :cpp:class:`Loop` class is not currently
+<symbolic-loops>` recorded using the :cpp:struct:`Loop` class is not currently
 supported.
 
 As the name indicates, reverse-mode differentiation traverses the computation
@@ -312,7 +312,7 @@ The function :math:`K` has a simple analytic derivative given by
 
    K'(m)=\int_0^{\frac{\pi}{2}} \frac{\sin^2\theta}{2(1-m\sin^2 \theta)^\frac{3}{2}}\mathrm{d}\theta.
 
-We could simply implement this derivative manually via a :cpp:class:`CustomOp`
+We could simply implement this derivative manually via a :cpp:struct:`CustomOp`
 subclass. This leads to the following customized differentiable operation:
 
 .. code-block:: python
@@ -844,7 +844,7 @@ time-reversal may be possible using a more advanced ODE integrator.
 Reference
 ---------
 
-.. cpp:class:: template <typename Type, typename Result, typename... Args> CustomOp
+.. cpp:struct:: template <typename Type, typename Result, typename... Args> CustomOp
 
    Callback interface used to integrate custom operations into Enoki's
    graph-based AD implementation.
@@ -901,7 +901,7 @@ Reference
 .. cpp:function:: template <typename Custom, typename... Input> auto custom(const Input&... inputs)
 
    This function requires a template parameter providing an implementation of
-   the :cpp:class:`CustomOp` interface. It then runs the associated function
+   the :cpp:struct:`CustomOp` interface. It then runs the associated function
    with detached (non-AD) types and splices callback functions into the AD
    graph representation that are invoked during forward and reverse mode
    differentiation.

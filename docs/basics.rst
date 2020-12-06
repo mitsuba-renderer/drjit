@@ -32,10 +32,10 @@ All code snippets assume that the following lines are present:
 Static arrays
 -------------
 
-The most important data structure in this library is :cpp:class:`enoki::Array`,
+The most important data structure in this library is :cpp:struct:`enoki::Array`,
 a generic container that stores a fixed-size array of an arbitrary data type.
 This is somewhat similar to the standard template library class ``std::array``.
-The main distinction between the two is that :cpp:class:`enoki::Array` forwards
+The main distinction between the two is that :cpp:struct:`enoki::Array` forwards
 all C++ operators (and other standard mathematical functions) to the contained
 elements.
 
@@ -88,7 +88,7 @@ and AVX512 instruction sets and vectorizes arithmetic involving single and
 double precision floating point values as well as signed and unsigned 32-bit
 and 64-bit integers.
 
-It is worth pointing out that that :cpp:class:`enoki::Array` does *not* require
+It is worth pointing out that that :cpp:struct:`enoki::Array` does *not* require
 ``Size`` to exactly match what is supported by the hardware to benefit from
 vectorization. Enoki relies on template metaprogramming techniques to ensure
 optimal code generation even in such challenging situations. For instance,

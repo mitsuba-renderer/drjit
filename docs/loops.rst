@@ -10,8 +10,8 @@ steps that present challenges during vectorization, especially when working
 with backends processing millions of entries at once. This section presents
 Enoki's facilities for recording loops *symbolically* to considerably improve
 performance in many such situations. You can skip this section if you are not
-using JIT-compiled types (i.e., :cpp:class:`CUDAArray` or
-:cpp:class:`LLVMArray`)
+using JIT-compiled types (i.e., :cpp:struct:`CUDAArray` or
+:cpp:struct:`LLVMArray`)
 
 Motivation
 ----------
@@ -88,7 +88,7 @@ example uses CUDA arrays, but everything applies equally to the LLVM case.
 
        #include <enoki/loop.h>
 
-   providing the :cpp:class:`Loop` class. The class must be instantiated with
+   providing the :cpp:struct:`Loop` class. The class must be instantiated with
    the list of variables that are modified by the loop iteration, and the loop
    stopping condition should then be wrapped into its :cpp:func:`Loop::cond()`
    method:
@@ -123,7 +123,7 @@ example uses CUDA arrays, but everything applies equally to the LLVM case.
 Usage and limitations
 ---------------------
 
-Enoki's :cpp:class:`Loop` primitive will run your loop once, record everything
+Enoki's :cpp:struct:`Loop` primitive will run your loop once, record everything
 that it does symbolically, and then surround the captured instruction sequence
 with additional loop instructions (branch statements, `Phi functions
 <https://en.wikipedia.org/wiki/Static_single_assignment_form>`_ in SSA form).
@@ -146,7 +146,7 @@ potentially also crashes or incorrect results.
 
   - **Loop variables**: Variables that propagate state between iterations, or
     from inside to outside of the loop are called *loop variables*. They must
-    be passed to the :cpp:class:`Loop` constructor so that Enoki can insert
+    be passed to the :cpp:struct:`Loop` constructor so that Enoki can insert
     instructions that ensure the correct flow of computed information.
 
     Loop variables must be LLVM or CUDA arrays or more complex types built from
@@ -156,7 +156,7 @@ potentially also crashes or incorrect results.
   - **Scatter operations**: the target of a scatter operation
     (:cpp:func:`scatter` and :cpp:func:`scatter_add`) is a special case: it
     does not count as a loop variable despite being the target of a write, and
-    it should not be passed to the :cpp:class:`Loop` constructor.
+    it should not be passed to the :cpp:struct:`Loop` constructor.
 
 - **No automatic differentiation**: Enoki will raise an exception when your loop involves
   differentiable variables for which :cpp:func:`grad_enabled()` evaluates to
@@ -175,7 +175,7 @@ potentially also crashes or incorrect results.
 
   - Other access to unevaluated array contents, e.g. a ``print()`` statement.
 
-  You are not allowed to do any of the above, both within the :cpp:class:`Loop`
+  You are not allowed to do any of the above, both within the :cpp:struct:`Loop`
   condition and the body. Enoki will raise an exception when a kernel
   evaluation is triggered while recording a loop.
 
@@ -201,7 +201,7 @@ potentially also crashes or incorrect results.
 
 - **Other deviations**:
 
-  The :cpp:class:`Loop` constructor modifies the supplied loop variables to
+  The :cpp:struct:`Loop` constructor modifies the supplied loop variables to
   intercept arithmetic involving them, which assumes that this declaration is
   immediately followed by a directive of the form ``while (loop.cond(...))``.
   Deviations from this pattern are not permitted:
@@ -224,7 +224,7 @@ reach the value 1 in the sequence underlying the `Collatz conjecture
 <https://en.wikipedia.org/wiki/Collatz_conjecture>`_. This involves two loop
 variables ``value`` and ``cond`` that are both written and read in each
 iteration. In contrast, the variable ``is_even`` is only temporary and does not
-need to be provided to the :cpp:class:`Loop` constructor.
+need to be provided to the :cpp:struct:`Loop` constructor.
 
 .. code-block:: cpp
 
@@ -254,7 +254,7 @@ There is a major complication in Python that does not appear in C++: an
 assignment statement (``a = b``) does not overwrite the contents of ``a``.
 Instead, it modifies the local scope to refer to the new value while updating
 reference counts. This is normally perfectly fine, but here it interferes with
-:cpp:class:`Loop`'s ability to understand how a variable was modified by a
+:cpp:struct:`Loop`'s ability to understand how a variable was modified by a
 symbolically executed loop iteration (the original ``a`` will appear
 unchanged!)
 
@@ -285,7 +285,7 @@ Apart from this caveat, everything should be have exactly the same as in C++.
 Scalar fallback
 ---------------
 
-The C++ and Python versions of :cpp:class:`Loop` class provide a scalar
+The C++ and Python versions of :cpp:struct:`Loop` class provide a scalar
 fallback mode: suppose that we replace all CUDA arrays of the previous C++
 example by builtin scalar types:
 
@@ -311,7 +311,7 @@ compilation to several different backends.
 C++ Reference
 -------------
 
-.. cpp:class:: Loop
+.. cpp:struct:: Loop
 
    Mechanism for JIT-compiling loops with dynamic stopping criteria
 

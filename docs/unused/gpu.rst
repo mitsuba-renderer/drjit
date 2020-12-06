@@ -718,12 +718,3 @@ Note that that there are of of course many use cases where PyTorch, Tensorflow,
 etc. are vastly superior to Enoki, and it is often a good idea to combine the
 two in such cases (e.g. to feed the output of a differentiable simulation into
 a neural network).
-
-One last related framework is `ArrayFire
-<https://github.com/arrayfire/arrayfire>`_, which provides a JIT compiler that
-lazily fuses instructions similar to our ``CUDAArray<T>`` type. ArrayFire
-targets a higher-level language (C), but appears to be limited to fairly small
-kernels (100 operations by default), and does not support a mechanism for
-automatic differentiation. In contrast, Enoki emits an intermediate
-representation (PTX) and fuses instructions into comparatively larger kernels
-that often exceed 100K instructions.
