@@ -227,7 +227,7 @@ def detached_t(a):
 
 
 def leaf_array_t(t):
-    if issubclass(t, tuple) or issubclass(t, list):
+    if isinstance(t, tuple) or isinstance(t, list):
         return leaf_array_t(t[0])
     elif not isinstance(t, type):
         return leaf_array_t(type(t))

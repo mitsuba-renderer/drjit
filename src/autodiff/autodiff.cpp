@@ -935,7 +935,7 @@ static void ad_traverse_fwd(std::vector<int32_t> &todo, bool retain_graph) {
         if constexpr (is_dynamic_v<Value>) {
             uint32_t grad_size = asize(v->grad);
             if (unlikely(v->size != grad_size && grad_size != 1))
-                ad_fail("ad_traverse_rev(): variable %u has an invalid "
+                ad_fail("ad_traverse_fwd(): variable %u has an invalid "
                         "gradient size: expected %u, got %u!", index,
                         v->size, grad_size);
         }
