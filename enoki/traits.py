@@ -227,10 +227,10 @@ def detached_t(a):
 
 
 def leaf_array_t(t):
-    if not isinstance(t, type):
-        return leaf_array_t(type(t))
     if issubclass(t, tuple) or issubclass(t, list):
         return leaf_array_t(t[0])
+    elif not isinstance(t, type):
+        return leaf_array_t(type(t))
     while is_array_v(value_t(t)):
         t = t.Value
     return t
