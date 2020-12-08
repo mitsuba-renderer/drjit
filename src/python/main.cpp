@@ -19,7 +19,7 @@ const uint32_t var_type_size[(int) VarType::Count] {
 };
 
 const char* var_type_numpy[(int) VarType::Count] {
-    "", "", "?1", "b1", "B1", "i2", "u2", "i4", "u4",
+    "", "", "b1", "i1", "u1", "i2", "u2", "i4", "u4",
     "i8", "u8", "f2", "f4", "f8", "u8"
 };
 
