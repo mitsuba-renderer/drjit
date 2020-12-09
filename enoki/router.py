@@ -1320,6 +1320,9 @@ def schedule(*args):
         elif issubclass(t, tuple) or issubclass(t, list):
             for v in a:
                 result |= schedule(v)
+        elif issubclass(t, _Mapping):
+            for k, v in a.items():
+                result |= schedule(v)
     return result
 
 
