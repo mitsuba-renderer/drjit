@@ -128,7 +128,7 @@ PYBIND11_MODULE(enoki_ext, m_) {
 
     m.def("has_llvm", &jitc_has_llvm);
     m.def("has_cuda", &jitc_has_cuda);
-    m.def("sync_stream", &jitc_sync_stream);
+    m.def("sync_thread", &jitc_sync_thread);
     m.def("sync_device", &jitc_sync_device);
     m.def("sync_all_devices", &jitc_sync_all_devices);
     m.def("whos_str", &jitc_var_whos);
