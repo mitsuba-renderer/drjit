@@ -24,8 +24,8 @@
 extern "C" {
     /// Evaluate all computation that is scheduled on the current stream
     extern ENOKI_IMPORT void jitc_eval();
-    /// Set the currently active device and stream
-    extern ENOKI_IMPORT void jitc_set_device(int32_t device, uint32_t stream);
+    /// Set the active CUDA device
+    extern ENOKI_IMPORT void jitc_cuda_set_device(int32_t device);
     /// Wait for all computation on the current stream to finish
     extern ENOKI_IMPORT void jitc_sync_stream();
     /// Wait for all computation on the current device to finish
@@ -1192,8 +1192,8 @@ ENOKI_INLINE void eval(const Ts&... values) {
     }
 }
 
-ENOKI_INLINE void set_device(int32_t device, uint32_t stream = 0) {
-    jitc_set_device(device, stream);
+ENOKI_INLINE void set_device(int32_t device) {
+    jitc_cuda_set_device(device);
 }
 
 ENOKI_INLINE void sync_stream() {
