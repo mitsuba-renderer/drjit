@@ -4,14 +4,10 @@ import pytest
 def get_class(name):
     """Resolve a package+class name into the corresponding type"""
     if 'cuda' in name:
-        if ek.has_cuda():
-            ek.set_device(0)
-        else:
+        if not ek.has_cuda():
             pytest.skip('CUDA mode is unsupported')
     elif 'llvm' in name:
-        if ek.has_llvm():
-            ek.set_device(-1)
-        else:
+        if not ek.has_llvm():
             pytest.skip('LLVM mode is unsupported')
 
     name = name.split('.')

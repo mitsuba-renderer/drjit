@@ -8,14 +8,10 @@ def m(request):
     gc.collect()
     gc.collect()
     if 'cuda' in request.param.__name__:
-        if ek.has_cuda():
-            ek.set_device(0)
-        else:
+        if not ek.has_cuda():
             pytest.skip('CUDA mode is unsupported')
     else:
-        if ek.has_llvm():
-            ek.set_device(-1)
-        else:
+        if not ek.has_llvm():
             pytest.skip('LLVM mode is unsupported')
     yield request.param
     gc.collect()

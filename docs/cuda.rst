@@ -132,6 +132,12 @@ Kernel cache
 - Second step compilation step is slow, but can be avoided
 - Size of arrays doesn't matter
 
+Other design aspects
+--------------------
+
+- Reference counting
+- Common subexpression elimination
+
 Gotchas
 -------
 

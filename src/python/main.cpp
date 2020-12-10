@@ -122,9 +122,10 @@ PYBIND11_MODULE(enoki_ext, m_) {
         .value("Managed", AllocType::Managed)
         .value("ManagedReadMostly", AllocType::ManagedReadMostly);
 
-    m.def("device_count", &jitc_device_count);
-    m.def("set_device", &jitc_set_device, "device"_a, "stream"_a = 0);
-    m.def("stream", &jitc_stream);
+    m.def("device_count", &jitc_cuda_device_count);
+    m.def("set_device", &jitc_cuda_set_device, "device"_a);
+    m.def("device", &jitc_cuda_device);
+
     m.def("has_llvm", &jitc_has_llvm);
     m.def("has_cuda", &jitc_has_cuda);
     m.def("sync_stream", &jitc_sync_stream);
@@ -135,8 +136,6 @@ PYBIND11_MODULE(enoki_ext, m_) {
     m.def("malloc_trim", &jitc_malloc_trim);
     m.def("set_log_level", &jitc_set_log_level_stderr);
     m.def("log_level", &jitc_log_level_stderr);
-    m.def("set_parallel_dispatch", &jitc_set_parallel_dispatch);
-    m.def("parallel_dispatch", &jitc_parallel_dispatch);
 
     array_detail.def("graphviz", &jitc_var_graphviz);
     array_detail.def("schedule", &jitc_var_schedule);
@@ -145,7 +144,8 @@ PYBIND11_MODULE(enoki_ext, m_) {
     array_detail.def("to_dlpack", &to_dlpack, "owner"_a, "data"_a,
                      "type"_a, "device"_a, "shape"_a, "strides"_a);
     array_detail.def("from_dlpack", &from_dlpack);
-    array_detail.def("device", &jitc_device);
+
+    array_detail.def("device", &jitc_cuda_device);
     array_detail.def("device", &jitc_var_device);
 
     m.def("cse", &jitc_cse);

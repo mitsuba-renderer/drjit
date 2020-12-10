@@ -60,7 +60,7 @@ template <typename... Args> struct Loop {
                          "enoki::Loop::cond() must be called exactly twice! "
                          "(please make sure that you use the loop object as "
                          "follows: `while (loop.cond(...)) { .. code .. }` )");
-                jitc_set_eval_enabled(m_eval_enabled);
+                jitc_set_eval_enabled(IsCUDA, m_eval_enabled);
                 jitc_var_dec_ref_ext(m_id);
             }
         }
@@ -88,28 +88,28 @@ template <typename... Args> struct Loop {
 
                     // Reduce loop condition to a single bit
                     append(jitc_var_new_2(
-                        VarType::Bool,
+                        0, VarType::Bool,
                         "$r0 = call i1 "
                         "@llvm.experimental.vector.reduce.or.v$wi1(<$w x i1> $r1)",
-                        1, 0, mask_index, m_id));
+                        1, mask_index, m_id));
 
                     // Branch to end of loop if all done
                     append(jitc_var_new_2(
-                        VarType::Invalid,
-                        "br $t1 $r1, label %$L2_body, label %$L2_post", 1, 0,
-                        m_id, m_loop_id));
+                        0, VarType::Invalid,
+                        "br $t1 $r1, label %$L2_body, label %$L2_post", 1, m_id,
+                        m_loop_id));
 
                     jitc_llvm_active_mask_push(mask_index);
                 } else {
                     /// ----------- CUDA -----------
                     // Branch to end of loop if all done
-                    append(jitc_var_new_3(VarType::Invalid,
-                                          "@!$r1 bra $L2_post", 1, 1,
+                    append(jitc_var_new_3(1, VarType::Invalid,
+                                          "@!$r1 bra $L2_post", 1,
                                           mask_index, m_loop_id, m_id));
                 }
 
                 // Start the main loop body
-                append(jitc_var_new_2(VarType::Invalid, "\n$L1_body:", 1, IsCUDA,
+                append(jitc_var_new_2(IsCUDA, VarType::Invalid, "\n$L1_body:", 1,
                                       m_loop_id, m_id));
             } else if (m_counter == 1) {
                 uint32_t mask_index = IsCUDA ? 0 : jitc_llvm_active_mask();
@@ -117,10 +117,10 @@ template <typename... Args> struct Loop {
                 if constexpr (IsLLVM) {
                     // Ensure that the final state of all loop vars. is evaluted by this point
                     for (size_t i = 0; i < m_var_count; ++i)
-                        append(jitc_var_new_2(VarType::Invalid, "", 1, 0, *m_vars[i], m_id));
+                        append(jitc_var_new_2(0, VarType::Invalid, "", 1, *m_vars[i], m_id));
 
-                    append(jitc_var_new_2(VarType::Invalid,
-                                          "br label %$L1_end\n\n$L1_end:", 1, 0,
+                    append(jitc_var_new_2(0, VarType::Invalid,
+                                          "br label %$L1_end\n\n$L1_end:", 1,
                                           m_loop_id, m_id));
                 }
 
@@ -131,23 +131,23 @@ template <typename... Args> struct Loop {
 
                     if constexpr (IsLLVM) {
                         append(jitc_var_new_4(
-                            VarType::Invalid,
+                            0, VarType::Invalid,
                             "$r3_end = select <$w x $t1> $r1, <$w x $t2> $r2, "
                             "<$w x $t3> $r3",
-                            1, 0, mask_index, *m_vars[i], m_vars_phi[i], m_id));
+                            1, mask_index, *m_vars[i], m_vars_phi[i], m_id));
                     } else {
-                        append(jitc_var_new_3(VarType::Invalid,
-                                              "mov.$b2 $r2, $r1", 1, 1,
+                        append(jitc_var_new_3(1, VarType::Invalid,
+                                              "mov.$b2 $r2, $r1", 1,
                                               *m_vars[i], m_vars_phi[i], m_id));
                     }
                 }
 
                 jitc_var_dec_ref_ext(mask_index);
 
-                append(jitc_var_new_2(VarType::Invalid,
+                append(jitc_var_new_2(IsCUDA, VarType::Invalid,
                                       IsLLVM ? "br label %$L1_phi\n\n$L1_post:"
                                              : "bra $L1_cond$n\n$L1_post:",
-                                      1, IsCUDA, m_loop_id, m_id));
+                                      1, m_loop_id, m_id));
 
                 if constexpr (IsLLVM)
                     jitc_llvm_active_mask_pop();
@@ -158,19 +158,19 @@ template <typename... Args> struct Loop {
             insert_copies();
 
             if (m_counter == 1) {
-                if (jitc_side_effect_counter() != m_side_effect_counter) {
+                if (jitc_side_effect_counter(IsCUDA) != m_side_effect_counter) {
                     /* There was a side effect somewhere in the loop.
                        Create a dummy variable (also a side effect) that
                        depends on the final branch statement to ensure that the
                        loop is correctly generated. */
                     uint32_t idx =
-                        jitc_var_new_1(VarType::Invalid, "", 1, IsCUDA, m_id);
+                        jitc_var_new_1(IsCUDA, VarType::Invalid, "", 1, m_id);
                     jitc_var_mark_scatter(idx, 0);
                 }
 
                 // Clean up
                 jitc_var_dec_ref_ext(m_id);
-                jitc_set_eval_enabled(m_eval_enabled);
+                jitc_set_eval_enabled(IsCUDA, m_eval_enabled);
                 m_loop_id = m_id = 0;
             }
 
@@ -182,11 +182,11 @@ template <typename... Args> struct Loop {
         for (size_t i = 0; i < m_var_count; ++i) {
             uint32_t *idp = m_vars[i];
 
-            uint32_t id = jitc_var_new_2(jitc_var_type(*idp),
+            uint32_t id = jitc_var_new_2(IsCUDA, jitc_var_type(*idp),
                                          IsLLVM ? "$r0 = select i1 true, <$w x $t1> "
                                                   "$r1, <$w x $t1> zeroinitializer"
                                                 : "mov.$b0 $r0, $r1",
-                                         1, IsCUDA, m_vars_phi[i], m_id);
+                                         1, m_vars_phi[i], m_id);
 
             jitc_var_dec_ref_ext(*idp);
             *idp = id;
@@ -222,36 +222,37 @@ protected:
             }
 
             // Temporarily disallow any calls to jitc_eval()
-            m_eval_enabled = jitc_eval_enabled();
-            jitc_set_eval_enabled(false);
+            m_eval_enabled = jitc_eval_enabled(IsCUDA);
+            jitc_set_eval_enabled(IsCUDA, false);
 
-            m_side_effect_counter = jitc_side_effect_counter();
+            m_side_effect_counter = jitc_side_effect_counter(IsCUDA);
 
-            m_loop_id = m_id = jitc_var_new_0(VarType::Invalid, "", 1, IsCUDA, 1);
+            m_loop_id = m_id = jitc_var_new_0(IsCUDA, VarType::Invalid, "", 1, 1);
 
             if constexpr (IsLLVM) {
                 // Ensure that the initial state of all loop vars. is evaluted by this point
                 for (size_t i = 0; i < m_var_count; ++i)
-                    append(jitc_var_new_2(VarType::Invalid, "", 1, 0, *m_vars[i], m_id));
+                    append(jitc_var_new_2(0, VarType::Invalid, "", 1, *m_vars[i], m_id));
 
                 /* Insert two dummy basic blocks, used to establish
                    a source in the following set of phi exprs. */
-                append(jitc_var_new_2(VarType::Invalid,
+                append(jitc_var_new_2(0, VarType::Invalid,
                                       "br label %$L1_pre\n\n$L1_pre:",
-                                      1, 0, m_loop_id, m_id));
+                                      1, m_loop_id, m_id));
 
                 // Create a basic block containing only the phi nodes
-                append(jitc_var_new_2(VarType::Invalid,
-                                      "br label %$L1_phi\n\n$L1_phi:", 1, 0,
+                append(jitc_var_new_2(0, VarType::Invalid,
+                                      "br label %$L1_phi\n\n$L1_phi:", 1,
                                       m_loop_id, m_id));
 
                 for (size_t i = 0; i < m_var_count; ++i) {
                     uint32_t *idp = m_vars[i];
 
-                    uint32_t id = jitc_var_new_3(jitc_var_type(*idp),
+                    uint32_t id = jitc_var_new_3(
+                        0, jitc_var_type(*idp),
                         "$r0 = phi <$w x $t0> [ $r1, %$L2_pre ], "
                         "[ $r0_end, %$L2_end ]",
-                        1, 0, *idp, m_loop_id, m_id);
+                        1, *idp, m_loop_id, m_id);
 
                     m_vars_phi[i] = id;
                     jitc_var_dec_ref_ext(*idp);
@@ -262,16 +263,17 @@ protected:
 
                 // Next, evalute the branch condition
                 append(jitc_var_new_2(
-                    VarType::Invalid,
+                    0, VarType::Invalid,
                     "br label %$L1_cond\n\n$L1_cond:", 1,
-                    0, m_loop_id, m_id));
+                    m_loop_id, m_id));
 
             } else {
                 for (size_t i = 0; i < m_var_count; ++i) {
                     uint32_t *idp = m_vars[i];
 
-                    uint32_t id = jitc_var_new_3(jitc_var_type(*idp),
-                        "mov.$b0 $r0, $r1", 1, 1, *idp, m_loop_id, m_id);
+                    uint32_t id = jitc_var_new_3(1, jitc_var_type(*idp),
+                                                 "mov.$b0 $r0, $r1", 1, *idp,
+                                                 m_loop_id, m_id);
 
                     m_vars_phi[i] = id;
                     jitc_var_dec_ref_ext(*idp);
@@ -280,7 +282,7 @@ protected:
                     append(id);
                 }
 
-                append(jitc_var_new_2(VarType::Invalid, "\n$L1_cond:", 1, 1,
+                append(jitc_var_new_2(1, VarType::Invalid, "\n$L1_cond:", 1,
                                       m_loop_id, m_id));
             }
 

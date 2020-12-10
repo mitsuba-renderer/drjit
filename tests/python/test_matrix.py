@@ -9,14 +9,10 @@ M = M4
 
 def prepare(pkg):
     if 'cuda' in pkg.__name__:
-        if ek.has_cuda():
-            ek.set_device(0)
-        else:
+        if not ek.has_cuda():
             pytest.skip('CUDA mode is unsupported')
     elif 'llvm' in pkg.__name__:
-        if ek.has_llvm():
-            ek.set_device(-1)
-        else:
+        if not ek.has_llvm():
             pytest.skip('LLVM mode is unsupported')
 
 
