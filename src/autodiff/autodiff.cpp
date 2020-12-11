@@ -709,7 +709,11 @@ template <typename Value> struct GatherEdge : Special {
         Value &source_grad = (Value &) source->grad;
         uint32_t size = source->size;
 
-        if (!source_grad.valid()) {
+        if (source->size == 1 && target->size == 1) {
+            // Downgrade to scalar op
+            source->accum(select(mask, target->grad, 0.f), 1);
+            return;
+        } else if (!source_grad.valid()) {
             source_grad = zero<Value>(size);
             if (size == 1) // avoid issues with CSE
                 source_grad = source_grad.copy();
