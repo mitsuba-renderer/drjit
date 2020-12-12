@@ -221,5 +221,4 @@ private:
     Size size;
 };
 
-
 NAMESPACE_END(enoki)

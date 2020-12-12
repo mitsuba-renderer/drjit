@@ -525,13 +525,13 @@ int32_t ad_new(const char *label, uint32_t size, uint32_t op_count,
         const char *l = label ? label : "unnamed";
         switch (op_count) {
             case 0:
-                ad_log(Debug, "ad_new(%i): %s", index, l); break;
+                ad_log(Debug, "ad_new(%i, size=%u): %s", index, size, l); break;
             case 1:
-                ad_log(Debug, "ad_new(%i <- %i): %s", index, op[0], l); break;
+                ad_log(Debug, "ad_new(%i <- %i, size=%u): %s", index, op[0], size, l); break;
             case 2:
-                ad_log(Debug, "ad_new(%i <- %i, %i): %s", index, op[0], op[1], l); break;
+                ad_log(Debug, "ad_new(%i <- %i, %i, size=%u): %s", index, op[0], op[1], size, l); break;
             case 3:
-                ad_log(Debug, "ad_new(%i <- %i, %i, %i): %s", index, op[0], op[1], op[2], l); break;
+                ad_log(Debug, "ad_new(%i <- %i, %i, %i, size=%u): %s", index, op[0], op[1], op[2], size, l); break;
             default: break;
         }
     }
@@ -744,8 +744,8 @@ int32_t ad_new_gather(const char *label, uint32_t size, int32_t src_index,
         std::lock_guard<std::mutex> guard(state.mutex);
         auto [index, var] = ad_var_new(label, size);
 
-        ad_log(Debug, "ad_new_gather(%u <- %u, permute=%i)", index,
-               src_index, (int) permute);
+        ad_log(Debug, "ad_new_gather(%u <- %u, size=%u, permute=%i)", index,
+               src_index, size, (int) permute);
 
         Variable *var2 = state[src_index];
         uint32_t edge_index_new = ad_edge_new();
@@ -868,6 +868,7 @@ static void ad_traverse_rev(std::vector<int32_t> &todo, bool retain_graph) {
 
     for (int32_t index : todo) {
         Variable *v = state[index];
+        ad_log(Trace, "ad_traverse_rev(): processing node %u ..", index);
 
         if constexpr (is_dynamic_v<Value>) {
             uint32_t grad_size = asize(v->grad);
@@ -935,6 +936,7 @@ static void ad_traverse_fwd(std::vector<int32_t> &todo, bool retain_graph) {
 
     for (int32_t index : todo) {
         Variable *v = state[index];
+        ad_log(Trace, "ad_traverse_fwd(): processing node %u ..", index);
 
         if constexpr (is_dynamic_v<Value>) {
             uint32_t grad_size = asize(v->grad);

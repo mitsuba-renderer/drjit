@@ -273,7 +273,7 @@ template <typename T> using mask_t = typename detail::mask<T>::type;
 template <typename T> using array_t = typename detail::array<T>::type;
 
 template <typename T>
-using struct_support_t = typename struct_support<T>::type;
+using struct_support_t = typename struct_support<std::decay_t<T>>::type;
 
 //! @}
 // -----------------------------------------------------------------------
@@ -283,29 +283,46 @@ using struct_support_t = typename struct_support<T>::type;
 // -----------------------------------------------------------------------
 
 namespace detail {
-    template <typename T, typename = int> struct leaf_array {
+    template <typename = int, typename... Ts> struct leaf_array;
+};
+
+/* Get the lowest-level array type underlying a potentially nested array,
+   prefer floating point arrays when multiple options are available. */
+template <typename... Ts>
+using leaf_array_t = typename detail::leaf_array<int, std::decay_t<Ts>...>::type;
+
+namespace detail {
+    template <typename T>
+    struct leaf_array<enable_if_t<!is_array_v<T> && !is_enoki_struct_v<T>>, T> {
         using type = T;
     };
 
-    template <typename T>
-    struct leaf_array<T, enable_if_t<is_array_v<value_t<T>>>> {
-        using type = typename leaf_array<value_t<T>>::type;
+    template <typename T> struct leaf_array<enable_if_array_t<T>, T> {
+        using type = std::conditional_t<
+            is_array_v<value_t<T>>,
+            value_t<T>, T
+        >;
     };
 
-    template <typename T>
-    struct leaf_array<T, enable_if_t<is_array_v<T> &&
-                                    !is_array_v<value_t<T>>>> {
-        using type = T;
-    };
-
-    template <template <typename...> typename Base, typename T0, typename... Ts>
-    struct leaf_array<Base<T0, Ts...>, enable_if_enoki_struct_t<Base<T0, Ts...>>> {
-        using type = typename leaf_array<T0>::type;
+    template <template <typename...> typename Base, typename... Ts>
+    struct leaf_array<enable_if_enoki_struct_t<Base<Ts...>>, Base<Ts...>> {
+        using type = leaf_array_t<Ts...>;
     };
 
     template <template <typename, size_t> typename Base, typename T, size_t S>
-    struct leaf_array<Base<T, S>, enable_if_enoki_struct_t<Base<T, S>>> {
-        using type = typename leaf_array<T>::type;
+    struct leaf_array<enable_if_enoki_struct_t<Base<T, S>>, Base<T, S>> {
+        using type = leaf_array_t<T>;
+    };
+
+    template <typename T0, typename T1, typename... Ts> struct leaf_array<int, T0, T1, Ts...> {
+        using T0L = leaf_array_t<T0>;
+        using TsL = leaf_array_t<T1, Ts...>;
+
+        using type = std::conditional_t<
+            is_array_v<T0L> && std::is_floating_point_v<scalar_t<T0L>>,
+            T0L,
+            TsL
+        >;
     };
 
     template <typename T, typename = int> struct diff_array { using type = void; };
@@ -363,15 +380,11 @@ using diff_array_t = typename detail::diff_array<T>::type;
 
 /// Convert a differentiable array type into a non-differentiable one
 template <typename T>
-using detached_t = typename detail::detached<T>::type;
-
-/// Get the lowest-level array type underlying a potentially nested array
-template <typename T>
-using leaf_array_t = typename detail::leaf_array<T>::type;
+using detached_t = typename detail::detached<std::decay_t<T>>::type;
 
 /// Get the type of the masked(..) expression
 template <typename T>
-using masked_t = typename detail::masked<T>::type;
+using masked_t = typename detail::masked<std::decay_t<T>>::type;
 
 //! @}
 // -----------------------------------------------------------------------

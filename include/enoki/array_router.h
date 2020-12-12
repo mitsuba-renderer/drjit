@@ -743,7 +743,9 @@ bool allclose(const T1 &a, const T2 &b, float rtol = 1e-5f, float atol = 1e-8f,
 // -----------------------------------------------------------------------
 
 template <typename T> ENOKI_INLINE T zero(size_t size = 1) {
-    if constexpr (is_array_v<T>) {
+    if constexpr (std::is_same_v<T, std::nullptr_t>) {
+        return nullptr;
+    } else if constexpr (is_array_v<T>) {
         return T::Derived::zero_(size);
     } else if constexpr (is_enoki_struct_v<T>) {
         T result;
@@ -972,7 +974,9 @@ Target gather(Source &&source, const Index &index, const mask_t<Target> &mask = 
 
 template <bool Permute = false, typename Target, typename Value, typename Index>
 void scatter(Target &&target, const Value &value, const Index &index, const mask_t<Value> &mask = true) {
-    if constexpr (array_depth_v<Target> > 1) {
+    if constexpr (std::is_same_v<std::decay_t<Target>, std::nullptr_t>) {
+        return; // Used by virtual function call dispatch when there is no return value
+    } else if constexpr (array_depth_v<Target> > 1) {
         // Case 1: scatter(Vector3fC&, const Vector3fC &...)
         static_assert(array_size_v<Value> == array_size_v<Target>,
                       "When scattering a nested array value, the source and "
@@ -1356,7 +1360,7 @@ template <typename T> void set_grad_enabled(T &value, bool state) {
             for (size_t i = 0; i < value.size(); ++i)
                 set_grad_enabled(value.entry(i), state);
         } else {
-            value.derived().set_grad_enabled_(state);
+            value.set_grad_enabled_(state);
         }
     } else if constexpr (is_enoki_struct_v<T>) {
         struct_support_t<T>::apply_1(
@@ -1474,7 +1478,7 @@ void set_grad(T &value, const detached_t<T> &grad) {
             for (size_t i = 0; i < value.size(); ++i)
                 set_grad(value.entry(i), grad.entry(i));
         } else {
-            value.derived().set_grad_(grad);
+            value.set_grad_(grad);
         }
     } else if constexpr (is_enoki_struct_v<T>) {
         struct_support_t<T>::apply_2(

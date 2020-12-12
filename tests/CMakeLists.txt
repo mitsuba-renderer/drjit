@@ -127,4 +127,8 @@ if (ENOKI_ENABLE_JIT AND ENOKI_ENABLE_AUTODIFF)
   add_executable(custom custom.cpp)
   target_link_libraries(custom enoki enoki-autodiff enoki-jit)
   add_test(custom_test custom)
+
+  add_executable(vcall vcall.cpp)
+  target_link_libraries(vcall enoki enoki-autodiff enoki-jit)
+  add_test(vcall_test vcall)
 endif()

@@ -1099,7 +1099,10 @@ public:
                              const LLVMArray<bool> &mask = true) {
         if (mask.is_literal_zero())
             return Value(0);
-        else if (src.size() == 1)
+
+        /* Avoid a gather operation when the source array is scalar. Skip
+           in symbolic mode, where this can interfere with vcalls */
+        if (src.size() == 1 && jitc_mode() == JitMode::Eager)
             return src & mask;
 
         src.eval_();
@@ -1335,3 +1338,8 @@ ENOKI_DECLARE_EXTERN_TEMPLATE(LLVMArray<double>, LLVMArray<bool>, LLVMArray<uint
 #endif
 
 NAMESPACE_END(enoki)
+
+#if defined(ENOKI_VCALL_H)
+#  include <enoki/vcall_jit_reduce.h>
+#  include <enoki/vcall_jit_symbolic.h>
+#endif

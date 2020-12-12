@@ -142,4 +142,42 @@ template <typename... Ts> struct struct_support<std::tuple<Ts...>> {
     }
 };
 
+template <typename... Ts> struct struct_support<detail::tuple<Ts...>> {
+    static constexpr bool Defined = true;
+    using type = struct_support;
+
+    template <typename T, typename Func>
+    static ENOKI_INLINE void apply_1(T &v, Func func) {
+        apply_1(v, func, std::make_index_sequence<sizeof...(Ts)>());
+    }
+    template <typename T, typename Func, size_t... Is>
+    static ENOKI_INLINE void apply_1(T &v, Func func, std::index_sequence<Is...>) {
+        (func(v.template get<Is>()), ...);
+    }
+    template <typename T1, typename T2, typename Func>
+    static ENOKI_INLINE void apply_2(T1 &v1, T2 &v2, Func func) {
+        apply_2(v1, v2, func, std::make_index_sequence<sizeof...(Ts)>());
+    }
+    template <typename T1, typename T2, typename Func, size_t... Is>
+    static ENOKI_INLINE void apply_2(T1 &v1, T2 &v2, Func func, std::index_sequence<Is...>) {
+        (func(v1.template get<Is>(), v2.template get<Is>()), ...);
+    }
+    template <typename T1, typename T2, typename T3, typename Func>
+    static ENOKI_INLINE void apply_3(T1 &v1, T2 &v2, T3 &v3, Func func) {
+        apply_3(v1, v2, v3, func, std::make_index_sequence<sizeof...(Ts)>());
+    }
+    template <typename T1, typename T2, typename T3, typename Func, size_t... Is>
+    static ENOKI_INLINE void apply_3(T1 &v1, T2 &v2, T3 &v3, Func func, std::index_sequence<Is...>) {
+        (func(v1.template get<Is>(), v2.template get<Is>(), v3.template get<Is>()), ...);
+    }
+    template <typename T, typename Func>
+    static ENOKI_INLINE void apply_label(T &v, Func func) {
+        apply_label(v, func, std::make_index_sequence<sizeof...(Ts)>());
+    }
+    template <typename T, typename Func, size_t... Is>
+    static ENOKI_INLINE void apply_label(T &v, Func func, std::index_sequence<Is...>) {
+        (func(detail::itoa<Is>::value, v.template get<Is>()), ...);
+    }
+};
+
 NAMESPACE_END(enoki)

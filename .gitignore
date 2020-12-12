@@ -52,6 +52,8 @@ Release
 *_avx512
 *_neon
 *.ppm
+tests/custom
+tests/vcall
 libenoki-jit.so
 libenoki-jit.dylib
 enoki-jit.dll

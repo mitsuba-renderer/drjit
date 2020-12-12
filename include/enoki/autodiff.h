@@ -11,6 +11,7 @@
 */
 
 #pragma once
+
 #define ENOKI_AUTODIFF_H
 
 #if defined(ENOKI_BUILD_AUTODIFF)
@@ -1746,7 +1747,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         DiffArray result;
         result.m_index = index;
         result.m_value = value;
-        detail::ad_inc_ref<Type>(index);
+        if constexpr (IsEnabled)
+            detail::ad_inc_ref<Type>(index);
         return result;
     }
 
@@ -1814,3 +1816,7 @@ extern ENOKI_AUTODIFF_EXPORT void ad_prefix_push(const char *value);
 extern ENOKI_AUTODIFF_EXPORT void ad_prefix_pop();
 extern ENOKI_AUTODIFF_EXPORT void ad_check_weights(bool value);
 NAMESPACE_END(enoki)
+
+#if defined(ENOKI_VCALL_H)
+#  include <enoki/vcall_autodiff.h>
+#endif

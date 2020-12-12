@@ -313,6 +313,91 @@ ENOKI_INLINE T mulhi_(T x, T y) {
     }
 }
 
+// Tiny self-contained unique_ptr to avoid having to import thousands of LOC from <memory>
+template <typename T> struct tiny_unique_ptr {
+    using Type = std::remove_extent_t<T>;
+
+    tiny_unique_ptr() = default;
+    tiny_unique_ptr(Type *data) : data(data) { }
+    tiny_unique_ptr(tiny_unique_ptr &&other) : data(other.data) {
+        other.data = nullptr;
+    }
+
+    tiny_unique_ptr &operator=(tiny_unique_ptr &&other) {
+        if constexpr (is_array_v<T>)
+            delete[] data;
+        else
+            delete data;
+        data = other.data;
+        other.data = nullptr;
+        return *this;
+    }
+
+    ~tiny_unique_ptr() {
+        if constexpr (is_array_v<T>)
+            delete[] data;
+        else
+            delete data;
+    }
+
+    Type& operator[](size_t index) { return data[index]; }
+    Type* get() { return data; }
+    Type* operator->() { return data; }
+    const Type* operator->() const { return data; }
+    Type* release () {
+        Type *tmp = data;
+        data = nullptr;
+        return tmp;
+    }
+    Type *data = nullptr;
+};
+
+// Tiny self-contained tuple to avoid having to import thousands of LOC from <tuple>
+template <typename... Ts> struct tuple;
+template <> struct tuple<> {
+    template <size_t> using type = void;
+};
+
+template <typename T, typename... Ts> struct tuple<T, Ts...> : tuple<Ts...> {
+    using Base = tuple<Ts...>;
+
+    tuple() = default;
+    tuple(const tuple &) = default;
+    tuple(tuple &&) = default;
+    tuple& operator=(tuple &&) = default;
+    tuple& operator=(const tuple &) = default;
+
+    tuple(const T& value, const Ts&... ts)
+        : Base(ts...), value(value) { }
+
+    tuple(T&& value, Ts&&... ts)
+        : Base(std::move(ts)...), value(std::move(value)) { }
+
+    template <size_t I> auto& get() {
+        if constexpr (I == 0)
+            return value;
+        else
+            return Base::template get<I - 1>();
+    }
+
+    template <size_t I> const auto& get() const {
+        if constexpr (I == 0)
+            return value;
+        else
+            return Base::template get<I - 1>();
+    }
+
+    template <size_t I>
+    using type =
+        std::conditional_t<I == 0, T, typename Base::template type<I - 1>>;
+
+private:
+    T value;
+};
+
+template <typename... Ts>
+tuple(Ts &&...) -> tuple<std::decay_t<Ts>...>;
+
 NAMESPACE_END(detail)
 
 

@@ -13,8 +13,6 @@
 #pragma once
 
 #include <enoki/autodiff.h>
-#include <tuple>
-#include <memory>
 
 NAMESPACE_BEGIN(enoki)
 
@@ -24,7 +22,8 @@ struct CustomOp : detail::DiffCallback {
 public:
     using Type   = detached_t<Type_>;
     using Output = Output_;
-    using Inputs = std::tuple<Input...>;
+    using Inputs = detail::tuple<Input...>;
+    static constexpr bool ClearPrimal = true;
 
     /**
      * Evaluate the custom function in primal mode. The inputs will be detached
@@ -46,13 +45,19 @@ protected:
     /// Check if gradients are enabled for a specific input variable
     template <size_t Index = 0>
     bool grad_enabled_in() const {
-        return grad_enabled(std::get<Index>(m_grad_input));
+        return grad_enabled(m_grad_input->template get<Index>());
     }
 
     /// Access the gradient associated with the input argument 'Index' (fwd. mode AD)
     template <size_t Index = 0>
-    detached_t<std::tuple_element_t<Index, Inputs>> grad_in() const {
-        return grad(std::get<Index>(m_grad_input));
+    detached_t<typename Inputs::template type<Index>> grad_in() const {
+        return grad(m_grad_input->template get<Index>());
+    }
+
+    /// Access the primal value associated with the input argument 'Index', requires ClearPrimal=false
+    template <size_t Index = 0>
+    typename Inputs::template type<Index> value_in() const {
+        return detach(m_grad_input->template get<Index>());
     }
 
     /// Access the gradient associated with the output argument (rev. mode AD)
@@ -62,8 +67,8 @@ protected:
 
     /// Accumulate a gradient value into an input argument (rev. mode AD)
     template <size_t Index = 0>
-    void set_grad_in(const detached_t<std::tuple_element_t<Index, Inputs>> &value) {
-        accum_grad(std::get<Index>(m_grad_input), value);
+    void set_grad_in(const detached_t<typename Inputs::template type<Index>> &value) {
+        accum_grad(m_grad_input->template get<Index>(), value);
     }
 
     /// Accumulate a gradient value into the output argument (fwd. mode AD)
@@ -71,7 +76,7 @@ protected:
         accum_grad(m_grad_output, value);
     }
 
-    Inputs m_grad_input;
+    detail::tiny_unique_ptr<Inputs> m_grad_input;
     Output m_grad_output;
 };
 
@@ -137,7 +142,7 @@ template <typename Custom, typename... Input> auto custom(const Input&... input)
     using Type   = typename Custom::Type;
     using Output = typename Custom::Output;
 
-    std::unique_ptr<Custom> custom(new Custom());
+    detail::tiny_unique_ptr<Custom> custom(new Custom());
 
     Output output = custom->eval(detach(input)...);
 
@@ -153,17 +158,22 @@ template <typename Custom, typename... Input> auto custom(const Input&... input)
         char *buf = (char *) alloca(buf_size);
         set_label(output, name);
 
-        // Only retain variable indices
-        custom->m_grad_input = std::make_tuple(detail::clear_primal(input)...);
-        custom->m_grad_output = detail::clear_primal(output);
+        if constexpr (Custom::ClearPrimal) {
+            // Only retain variable indices
+            custom->m_grad_input = new detail::tuple<Input...>(detail::clear_primal(input)...);
+            custom->m_grad_output = detail::clear_primal(output);
+        } else {
+            custom->m_grad_input = new detail::tuple<Input...>(input...);
+            custom->m_grad_output = output;
+        }
 
         size_t diff_vars_out_ctr = 0;
         detail::diff_vars(output, diff_vars_out_ctr, nullptr);
         if (diff_vars_out_ctr == 0)
             enoki_raise("enoki::custom(): internal error!");
 
-        std::unique_ptr<uint32_t[]> diff_vars_in(new uint32_t[diff_vars_in_ctr]);
-        std::unique_ptr<uint32_t[]> diff_vars_out(new uint32_t[diff_vars_out_ctr]);
+        detail::tiny_unique_ptr<uint32_t[]> diff_vars_in(new uint32_t[diff_vars_in_ctr]);
+        detail::tiny_unique_ptr<uint32_t[]> diff_vars_out(new uint32_t[diff_vars_out_ctr]);
 
         diff_vars_in_ctr = diff_vars_out_ctr = 0;
         (detail::diff_vars(input, diff_vars_in_ctr, diff_vars_in.get()), ...);

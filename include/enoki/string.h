@@ -161,8 +161,12 @@ struct StringBuffer {
     StringBuffer &put(const T &value) { return put(value.c_str()); }
 
     /// Handle instances providing <tt>to_string(const T &)</tt> that can be found via ADL
-    template <typename T, enable_if_t<is_detected_v<detail::has_to_string, const T &>> = 0>
-    StringBuffer &put(const T &value) { return put(to_string(value)); }
+    template <typename T,
+              enable_if_t<!std::is_pointer_v<T> && !is_array_v<T> &&
+                          is_detected_v<detail::has_to_string, const T &>> = 0>
+    StringBuffer &put(const T &value) {
+        return put(to_string(value));
+    }
 
     /// Append nothing (no-op)
     StringBuffer &put() { return *this; }

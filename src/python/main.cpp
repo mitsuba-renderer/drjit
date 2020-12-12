@@ -122,6 +122,11 @@ PYBIND11_MODULE(enoki_ext, m_) {
         .value("Managed", AllocType::Managed)
         .value("ManagedReadMostly", AllocType::ManagedReadMostly);
 
+    py::enum_<JitMode>(m, "JitMode")
+        .value("Eager", JitMode::Eager)
+        .value("SymbolicPreferred", JitMode::SymbolicPreferred)
+        .value("SymbolicRequired", JitMode::SymbolicRequired);
+
     m.def("device_count", &jitc_cuda_device_count);
     m.def("set_device", &jitc_cuda_set_device, "device"_a);
     m.def("device", &jitc_cuda_device);
@@ -147,6 +152,9 @@ PYBIND11_MODULE(enoki_ext, m_) {
 
     array_detail.def("device", &jitc_cuda_device);
     array_detail.def("device", &jitc_var_device);
+
+    array_detail.def("set_mode", &jitc_set_mode);
+    array_detail.def("mode", &jitc_mode);
 
     m.def("cse", &jitc_cse);
     m.def("set_cse", &jitc_set_cse);
