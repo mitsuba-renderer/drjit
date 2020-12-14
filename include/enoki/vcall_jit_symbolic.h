@@ -87,15 +87,15 @@ std::pair<uint32_t, uint64_t> record(Func func, const Args&... args) {
     return { id, func_hash };
 }
 
-struct jit_mode_guard {
+struct jit_flag_guard {
 public:
-    jit_mode_guard() : mode(jitc_mode()) {
-        jitc_set_mode(JitMode::SymbolicRequired);
+    jit_flag_guard() : flags(jitc_flags()) {
+        jitc_set_flags(flags | (uint32_t) JitFlag::RecordingVCall);
     }
-    ~jit_mode_guard() { jitc_set_mode(mode); }
+    ~jit_flag_guard() { jitc_set_flags(flags); }
 
 private:
-    JitMode mode;
+    uint32_t flags;
 };
 
 template <typename Result, typename Func, typename Self, typename... Args>
@@ -104,7 +104,7 @@ ENOKI_INLINE Result dispatch_jit_symbolic(Func func, const Self &self, const Arg
 
     constexpr bool IsCUDA = is_cuda_array_v<Self>;
 
-    jit_mode_guard guard;
+    jit_flag_guard guard;
     Result result = zero<Result>();
 
     // Determine # of existing instances, and preallocate memory for IR codegen

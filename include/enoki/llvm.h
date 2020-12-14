@@ -1106,7 +1106,8 @@ public:
 
         /* Avoid a gather operation when the source array is scalar. Skip
            in symbolic mode, where this can interfere with vcalls */
-        if (src.size() == 1 && jitc_mode() == JitMode::Eager)
+        if (src.size() == 1 &&
+            (jitc_flags() & (uint32_t) JitFlag::RecordingVCall) == 0)
             return src & mask;
 
         src.eval_();

@@ -60,7 +60,7 @@ template <typename... Args> struct Loop {
                          "enoki::Loop::cond() must be called exactly twice! "
                          "(please make sure that you use the loop object as "
                          "follows: `while (loop.cond(...)) { .. code .. }` )");
-                jitc_set_mode(m_mode_backup);
+                jitc_set_flags(m_flags);
                 jitc_var_dec_ref_ext(m_id);
             }
         }
@@ -170,7 +170,7 @@ template <typename... Args> struct Loop {
 
                 // Clean up
                 jitc_var_dec_ref_ext(m_id);
-                jitc_set_mode(m_mode_backup);
+                jitc_set_flags(m_flags);
                 m_loop_id = m_id = 0;
             }
 
@@ -222,8 +222,8 @@ protected:
             }
 
             // Temporarily disallow any calls to jitc_eval()
-            m_mode_backup = jitc_mode();
-            jitc_set_mode(JitMode::SymbolicRequired);
+            m_flags = jitc_flags();
+            jitc_set_flags(m_flags | (uint32_t) JitFlag::RecordingLoop);
 
             m_side_effect_counter = jitc_side_effect_counter(IsCUDA);
 
@@ -325,7 +325,7 @@ protected:
     uint32_t *m_vars_phi = nullptr;
     size_t m_var_count = 0;
     int m_counter = 0;
-    JitMode m_mode_backup = JitMode::Eager;
+    uint32_t m_flags = 0;
     bool m_cuda = false;
     bool m_llvm = false;
     bool m_other = false;

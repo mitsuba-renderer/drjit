@@ -25,8 +25,7 @@ extern "C" {
                                                     const void *value, size_t size);
     extern ENOKI_IMPORT const void *jitc_registry_attr_data(const char *domain,
                                                             const char *name);
-    enum class JitMode : uint32_t;
-    extern ENOKI_IMPORT JitMode jitc_mode();
+    extern ENOKI_IMPORT uint32_t jitc_flags();
 };
 
 NAMESPACE_BEGIN(enoki)
@@ -85,7 +84,7 @@ namespace detail {
             typename vectorize_type<Self, decltype(func((Class *) nullptr, args...))>::type;
 
         if constexpr (is_jit_array_v<Self>) {
-            if ((uint32_t) jitc_mode() == 0 || is_llvm_array_v<Self>) {
+            if ((jitc_flags() & 2) == 0 || is_llvm_array_v<Self>) {
                 return detail::dispatch_jit_reduce<Result>(func, self, copy_diff(args)...);
             } else {
                 if constexpr (is_diff_array_v<Self>)

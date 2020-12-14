@@ -74,7 +74,7 @@ ENOKI_TEST(test01_vcall_eager_symbolic) {
 
     jitc_init(0, 1);
     for (int i = 0; i < 2; ++i) {
-        jitc_set_mode(i == 0 ? JitMode::Eager : JitMode::SymbolicPreferred);
+        jitc_set_flags((uint32_t) (i == 0 ? JitFlag::Default : JitFlag::RecordVCalls));
         for (int j = 0; j < 2; ++j) {
             fprintf(stderr, "=============================\n");
             A *a = new A(j != 0);
@@ -176,7 +176,7 @@ ENOKI_TEST(test02_vcall_eager_symbolic_ad_fwd) {
 
     jitc_init(0, 1);
     for (int i = 0; i < 2; ++i) {
-        jitc_set_mode(i == 0 ? JitMode::Eager : JitMode::SymbolicPreferred);
+        jitc_set_flags((uint32_t) (i == 0 ? JitFlag::Default : JitFlag::RecordVCalls));
         for (int k = 0; k < 2; ++k) {
             fprintf(stderr, "=============================\n");
 
