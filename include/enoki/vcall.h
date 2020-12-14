@@ -157,26 +157,40 @@ NAMESPACE_END(enoki)
             [](Class *self, const auto &grad_in, auto ... args)                \
                 ENOKI_INLINE_LAMBDA {                                          \
                     enoki::enable_grad(args...);                               \
-                    auto result = self->name(args...);                         \
-                    detail::tuple args_tuple{ args... };                       \
-                    enoki::set_grad(args_tuple, grad_in);                      \
-                    enoki::enqueue(result);                                    \
-                    using Float = leaf_array_t<decltype(result),               \
-                                               decltype(args)...>;             \
-                    enoki::traverse<Float>(false);                             \
-                    return enoki::grad(result);                                \
+                    using Result = decltype(self->name(args...));              \
+                    if constexpr (!std::is_same_v<Result, void>) {             \
+                        Result result = self->name(args...);                   \
+                        detail::tuple args_tuple{ args... };                   \
+                        enoki::set_grad(args_tuple, grad_in);                  \
+                        enoki::enqueue(args_tuple);                            \
+                        enoki::traverse<decltype(result),                      \
+                                        decltype(args)...>(false, true);       \
+                        return enoki::grad(result);                            \
+                    } else {                                                   \
+                        self->name(args...);                                   \
+                        detail::tuple args_tuple{ args... };                   \
+                        enoki::set_grad(args_tuple, grad_in);                  \
+                        enoki::enqueue(args_tuple);                            \
+                        enoki::traverse<decltype(args)...>(false, true);       \
+                        return nullptr;                                        \
+                    }                                                          \
                 },                                                             \
             [](Class *self, const auto &grad_out, auto ... args)               \
                 ENOKI_INLINE_LAMBDA {                                          \
                     enoki::enable_grad(args...);                               \
-                    auto result = self->name(args...);                         \
-                    enoki::set_grad(result, grad_out);                         \
-                    enoki::enqueue(result);                                    \
-                    using Float = leaf_array_t<decltype(result),               \
-                                               decltype(args)...>;             \
-                    enoki::traverse<Float>();                                  \
+                    using Result = decltype(self->name(args...));              \
+                    if constexpr (!std::is_same_v<Result, void>) {             \
+                        Result result = self->name(args...);                   \
+                        enoki::set_grad(result, grad_out);                     \
+                        enoki::enqueue(result);                                \
+                        enoki::traverse<decltype(result),                      \
+                                        decltype(args)...>(true, true);        \
+                        return detail::tuple{ enoki::grad(args)... };          \
+                    } else {                                                   \
+                        self->name(args...);                                   \
+                    }                                                          \
                     return detail::tuple{ enoki::grad(args)... };              \
-            }, array, args_...);                                                \
+                }, array, args_...);                                           \
     }
 
 #define ENOKI_VCALL_GETTER(name, type)                                         \

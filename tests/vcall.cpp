@@ -21,12 +21,16 @@ using Array3f = ek::Array<Float, 3>;
 using StructF = Struct<Array3f>;
 
 struct Base {
-    Base() : x(ek::full<Float>(10, 10, true)) { }
+    Base(bool scalar) : x(ek::full<Float>(10, scalar ? 1 : 10, true)) { }
 
     virtual StructF f(const StructF &m) = 0;
 
     virtual void side_effect() {
         ek::scatter(x, Float(-10), UInt32(0));
+    }
+
+    UInt32 strlen(const std::string &string) {
+        return string.length();
     }
 
     float field() const { return 1.2f; };
@@ -39,22 +43,29 @@ protected:
 using BasePtr = ek::CUDAArray<Base *>;
 
 struct A : Base {
-    A() { ek::set_attr(this, "field", 2.4f); }
+    A(bool scalar) : Base(scalar) { ek::set_attr(this, "field", 2.4f); }
     StructF f(const StructF &m) override {
-        return Struct { m.a * ek::gather<Float>(x, UInt32(0)), m.b * 15};
+        if (x.size() == 1)
+            return Struct { m.a * x, m.b * 15 };
+        else
+            return Struct { m.a * ek::gather<Float>(x, UInt32(0)), m.b * 15 };
     }
 };
 
 struct B : Base {
-    B() { ek::set_attr(this, "field", 4.8f); }
+    B(bool scalar) : Base(scalar) { ek::set_attr(this, "field", 4.8f); }
     StructF f(const StructF &m) override {
-        return Struct { m.b * 20, m.a * ek::gather<Float>(x, UInt32(0))};
+        if (x.size() == 1)
+            return Struct { m.b * 20, m.a * x };
+        else
+            return Struct { m.b * 20, m.a * ek::gather<Float>(x, UInt32(0)) };
     }
 };
 
 ENOKI_VCALL_BEGIN(Base)
 ENOKI_VCALL_METHOD(f)
 ENOKI_VCALL_METHOD(side_effect)
+ENOKI_VCALL_METHOD(strlen)
 ENOKI_VCALL_GETTER(field, float)
 ENOKI_VCALL_END(Base)
 
@@ -64,44 +75,48 @@ ENOKI_TEST(test01_vcall_eager_symbolic) {
     jitc_init(0, 1);
     for (int i = 0; i < 2; ++i) {
         jitc_set_mode(i == 0 ? JitMode::Eager : JitMode::SymbolicPreferred);
-        printf("=============================\n");
+        for (int j = 0; j < 2; ++j) {
+            fprintf(stderr, "=============================\n");
+            A *a = new A(j != 0);
+            B *b = new B(j != 0);
 
-        A *a = new A();
-        B *b = new B();
+            ::Mask m = ek::neq(ek::arange<UInt32>(n) & 1, 0);
+            BasePtr arr = ek::select(m, (Base *) b, (Base *) a);
 
-        ::Mask m = ek::neq(ek::arange<UInt32>(n) & 1, 0);
-        BasePtr arr = ek::select(m, (Base *) b, (Base *) a);
+            StructF result = arr->f(Struct{ Array3f(1, 2, 3) * ek::full<Float>(1, n),
+                                            Array3f(4, 5, 6) * ek::full<Float>(1, n)});
 
-        StructF result = arr->f(Struct{ Array3f(1, 2, 3) * ek::full<Float>(1, n),
-                                        Array3f(4, 5, 6) * ek::full<Float>(1, n)});
+            assert(ek::all_nested(
+                ek::eq(result.a, Array3f(ek::select(m, 80.f, 10.f),
+                                         ek::select(m, 100.f, 20.f),
+                                         ek::select(m, 120.f, 30.f))) &&
+                ek::eq(result.b, Array3f(ek::select(m, 10.f, 60.f),
+                                         ek::select(m, 20.f, 75.f),
+                                         ek::select(m, 30.f, 90.f)))));
 
-        assert(ek::all_nested(
-            ek::eq(result.a, Array3f(ek::select(m, 80.f, 10.f),
-                                     ek::select(m, 100.f, 20.f),
-                                     ek::select(m, 120.f, 30.f))) &&
-            ek::eq(result.b, Array3f(ek::select(m, 10.f, 60.f),
-                                     ek::select(m, 20.f, 75.f),
-                                     ek::select(m, 30.f, 90.f)))));
+            UInt32 len = arr->strlen("Hello world");
+            assert(len == 11);
 
-        arr->side_effect();
+            arr->side_effect();
 
-        jitc_eval();
+            jitc_eval();
 
-        result = arr->f(Struct{ Array3f(1, 2, 3) * ek::full<Float>(1, n),
-                                Array3f(4, 5, 6) * ek::full<Float>(1, n)});
+            result = arr->f(Struct{ Array3f(1, 2, 3) * ek::full<Float>(1, n),
+                                    Array3f(4, 5, 6) * ek::full<Float>(1, n)});
 
-        assert(ek::all_nested(
-            ek::eq(result.a, Array3f(ek::select(m, 80.f, -10.f),
-                                     ek::select(m, 100.f, -20.f),
-                                     ek::select(m, 120.f, -30.f))) &&
-            ek::eq(result.b, Array3f(ek::select(m, -10.f, 60.f),
-                                     ek::select(m, -20.f, 75.f),
-                                     ek::select(m, -30.f, 90.f)))));
+            assert(ek::all_nested(
+                ek::eq(result.a, Array3f(ek::select(m, 80.f, -10.f),
+                                         ek::select(m, 100.f, -20.f),
+                                         ek::select(m, 120.f, -30.f))) &&
+                ek::eq(result.b, Array3f(ek::select(m, -10.f, 60.f),
+                                         ek::select(m, -20.f, 75.f),
+                                         ek::select(m, -30.f, 90.f)))));
 
-        assert(ek::all(ek::eq(arr->field(), ek::select(m, 4.8f, 2.4f))));
+            assert(ek::all(ek::eq(arr->field(), ek::select(m, 4.8f, 2.4f))));
 
-        delete a;
-        delete b;
+            delete a;
+            delete b;
+        }
     }
 }
 
@@ -113,23 +128,47 @@ using Array3fD = ek::Array<FloatD, 3>;
 using StructFD = Struct<Array3fD>;
 
 struct BaseD {
-    BaseD() { }
+    BaseD(bool scalar) {
+        if (scalar) {
+            x = 10;
+            ek::enable_grad(x);
+            ek::set_grad(x, ek::full<Float>(0, 1, true));
+        }
+    }
+
+    void dummy() { }
+
     virtual StructFD f(const StructFD &m) = 0;
     ENOKI_VCALL_REGISTER(BaseD)
+
+    FloatD x;
 };
 
 using BasePtrD = ek::DiffArray<ek::CUDAArray<BaseD *>>;
 
 struct AD : BaseD {
-    StructFD f(const StructFD &m) override { return { m.a * 10, m.b * 15 }; }
+    using BaseD::BaseD;
+    StructFD f(const StructFD &m) override {
+        if (x.size() > 0)
+            return { m.a * x, m.b * 15 };
+        else
+            return { m.a * 10, m.b * 15 };
+    }
 };
 
 struct BD : BaseD {
-    StructFD f(const StructFD &m) override { return { m.b * 20, m.a * 10 }; }
+    using BaseD::BaseD;
+    StructFD f(const StructFD &m) override {
+        if (x.size() > 0)
+            return { m.b * 20, m.a * x };
+        else
+            return { m.b * 20, m.a * 10 };
+    }
 };
 
 ENOKI_VCALL_BEGIN(BaseD)
 ENOKI_VCALL_METHOD(f)
+ENOKI_VCALL_METHOD(dummy)
 ENOKI_VCALL_END(BaseD)
 
 ENOKI_TEST(test02_vcall_eager_symbolic_ad_fwd) {
@@ -138,48 +177,53 @@ ENOKI_TEST(test02_vcall_eager_symbolic_ad_fwd) {
     jitc_init(0, 1);
     for (int i = 0; i < 2; ++i) {
         jitc_set_mode(i == 0 ? JitMode::Eager : JitMode::SymbolicPreferred);
-        printf("=============================\n");
+        for (int k = 0; k < 2; ++k) {
+            fprintf(stderr, "=============================\n");
 
-        AD *a = new AD();
-        BD *b = new BD();
+            AD *a = new AD(k == 1);
+            BD *b = new BD(k == 1);
 
-        MaskD m = ek::neq(ek::arange<UInt32>(n) & 1, 0);
-        BasePtrD arr = ek::select(m, (BaseD *) b, (BaseD *) a);
+            MaskD m = ek::neq(ek::arange<UInt32>(n) & 1, 0);
+            BasePtrD arr = ek::select(m, (BaseD *) b, (BaseD *) a);
 
-        FloatD o = ek::full<FloatD>(1, n);
+            arr->dummy();
 
-        Struct input{ Array3fD(1, 2, 3) * o, Array3fD(4, 5, 6) * o };
+            FloatD o = ek::full<FloatD>(1, n);
 
-        ek::enable_grad(input);
-        ek::set_label(input, "input");
+            Struct input{ Array3fD(1, 2, 3) * o, Array3fD(4, 5, 6) * o };
 
-        StructFD result = arr->f(input);
+            ek::enable_grad(input);
+            ek::set_label(input, "input");
 
-        assert(ek::all_nested(
-            ek::eq(result.a, Array3fD(ek::select(m, 80.f, 10.f),
-                                      ek::select(m, 100.f, 20.f),
-                                      ek::select(m, 120.f, 30.f))) &&
-            ek::eq(result.b, Array3fD(ek::select(m, 10.f, 60.f),
-                                      ek::select(m, 20.f, 75.f),
-                                      ek::select(m, 30.f, 90.f)))));
+            StructFD result = arr->f(input);
 
-        ek::set_label(result, "result");
-        ek::enqueue(result);
-        ek::set_grad(result, StructF(1, 1));
-        ek::traverse<FloatD>();
+            assert(ek::all_nested(
+                ek::eq(result.a, Array3fD(ek::select(m, 80.f, 10.f),
+                                          ek::select(m, 100.f, 20.f),
+                                          ek::select(m, 120.f, 30.f))) &&
+                ek::eq(result.b, Array3fD(ek::select(m, 10.f, 60.f),
+                                          ek::select(m, 20.f, 75.f),
+                                          ek::select(m, 30.f, 90.f)))));
 
-        StructF grad = ek::grad(input);
-        ek::eval(grad);
+            ek::set_label(result, "result");
+            ek::enqueue(result);
+            ek::set_grad(result, StructF(1, 1));
+            ek::traverse<FloatD>();
 
-        std::cout << grad.a << std::endl;
-        std::cout << grad.b << std::endl;
+            StructF grad = ek::grad(input);
+            ek::eval(grad);
 
-        delete a;
-        delete b;
+            assert(ek::allclose(grad.a, Array3f(10)));
+            assert(ek::allclose(grad.b,
+                                Array3f(ek::select(ek::detach(m), 20, 15))));
+
+            if (k == 1) {
+                assert(ek::grad(a->x) == 30000);
+                assert(ek::grad(b->x) == 29994);
+            }
+
+            delete a;
+            delete b;
+        }
     }
 }
-
-
-/// Functions returning void
-/// Functions reading from a private scalar value
-/// Autodiffing functions reading from a private scalar value in reverse mode

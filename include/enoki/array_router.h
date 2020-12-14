@@ -32,6 +32,8 @@ extern "C" {
     extern ENOKI_IMPORT void jitc_sync_device();
     /// Wait for all computation on the *all devices* to finish
     extern ENOKI_IMPORT void jitc_sync_all_devices();
+    /// Return a GraphViz representation of queued computation
+    extern ENOKI_IMPORT const char *jitc_var_graphviz();
 };
 
 NAMESPACE_BEGIN(enoki)
@@ -794,6 +796,24 @@ template <typename T> ENOKI_INLINE T empty(size_t size = 1) {
     }
 }
 
+/// Create a dummy memory region that can be used to capture computation symbolically
+template <typename T> ENOKI_INLINE decltype(auto) placeholder(const T &value) {
+    if constexpr (is_jit_array_v<T>) {
+        return value.placeholder_();
+    } else if constexpr (is_enoki_struct_v<T>) {
+        T result;
+        struct_support_t<T>::apply_2(
+            result, value,
+            [](auto &x, const auto &y) ENOKI_INLINE_LAMBDA {
+                using X = std::decay_t<decltype(x)>;
+                x = placeholder<X>(y);
+            });
+        return result;
+    } else {
+        return (const T &) value;
+    }
+}
+
 #if defined(_MSC_VER)
 #  pragma warning(pop)
 #endif
@@ -1533,12 +1553,22 @@ void enqueue(const T1 &value, const Ts&... values) {
 ENOKI_INLINE void enqueue() { }
 
 template <typename T> const char *graphviz(const T& value, bool reverse = true) {
-    enqueue(value);
-    return leaf_array_t<T>::graphviz_(reverse);
+    using Type = leaf_array_t<T>;
+    static_assert(is_jit_array_v<Type> || is_diff_array_v<Type>,
+                  "graphviz(): invalid input type!");
+
+    if constexpr (is_diff_array_v<Type>) {
+        enqueue(value);
+        return Type::graphviz_(reverse);
+    } else {
+        return jitc_var_graphviz();
+    }
 }
 
-template <typename T> void traverse(bool reverse = true, bool retain_graph = false) {
-    leaf_array_t<T>::traverse_(reverse, retain_graph);
+template <typename...Ts> void traverse(bool reverse = true, bool retain_graph = false) {
+    using Type = leaf_array_t<Ts...>;
+    if constexpr (is_diff_array_v<Type> && std::is_floating_point_v<scalar_t<Type>>)
+        Type::traverse_(reverse, retain_graph);
 }
 
 template <typename T> void backward(T& value, bool retain_graph = false) {

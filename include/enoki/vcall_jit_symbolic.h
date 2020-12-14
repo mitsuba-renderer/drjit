@@ -129,10 +129,10 @@ ENOKI_INLINE Result dispatch_jit_symbolic(Func func, const Self &self, const Arg
 
         if (ptr)
             id_and_hash = record<IsCUDA>(
-                [&](const Args &...args) { return func(ptr, args...); }, empty<Args>()...);
+                [&](const Args &...args) { return func(ptr, args...); }, placeholder<Args>(args)...);
         else
             id_and_hash = record<IsCUDA>(
-                [&](const Args &...args) { return result; }, empty<Args>()...);
+                [&](const Args &...args) { return result; }, placeholder<Args>(args)...);
 
         index = jitc_var_new_2(1, VarType::Global, "", 1, index, id_and_hash.first);
         jitc_var_dec_ref_ext(id_and_hash.first);

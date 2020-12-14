@@ -170,6 +170,18 @@ struct Variable {
                 else
                     grad = std::move(v2);
             } else {
+                if constexpr (is_jit_array_v<T>) {
+                    /* While recording derivative code symbolically, turn
+                       gradient updates involving pre-allocated memory regions into
+                       scatters. */
+                    if (next_rev == 0 &&
+                        jitc_mode() == JitMode::SymbolicRequired &&
+                        ((const T &) grad).data()) {
+                        scatter_add(grad, v, uint32_array_t<T>(0), neq(v, 0.f));
+                        return;
+                    }
+                }
+
                 if (((const T &) grad).valid())
                     grad += v;
                 else
@@ -196,6 +208,17 @@ struct Variable {
                 else
                     grad = std::move(v3);
             } else {
+                if constexpr (is_jit_array_v<T>) {
+                    /* While recording derivative code symbolically, turn
+                       gradient updates involving pre-allocated memory regions into
+                       scatters. */
+                    if (next_rev == 0 && jitc_mode() == JitMode::SymbolicRequired &&
+                        ((const T &) grad).data()) {
+                        scatter_add(grad, v1 * v2, uint32_array_t<T>(0), neq(v1, 0));
+                        return;
+                    }
+                }
+
                 if (((const T &) grad).valid())
                     grad = fmaddz(v1, v2, grad);
                 else

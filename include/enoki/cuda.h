@@ -838,6 +838,10 @@ struct CUDAArray : ArrayBase<Value_, is_mask_v<Value_>, CUDAArray<Value_>> {
     //! @{ \name Fancy array initialization
     // -----------------------------------------------------------------------
 
+    CUDAArray placeholder_() const {
+        return steal(jitc_var_map_mem(1, Type, (void *) (uintptr_t) 1, 1, 0));
+    }
+
     static CUDAArray empty_(size_t size) {
         void *ptr = jitc_malloc(AllocType::Device, size * sizeof(Value));
         return steal(jitc_var_map_mem(1, Type, ptr, (uint32_t) size, 1));

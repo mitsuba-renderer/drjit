@@ -292,6 +292,10 @@ template <typename... Ts>
 using leaf_array_t = typename detail::leaf_array<int, std::decay_t<Ts>...>::type;
 
 namespace detail {
+    template <> struct leaf_array<int> {
+        using type = void;
+    };
+
     template <typename T>
     struct leaf_array<enable_if_t<!is_array_v<T> && !is_enoki_struct_v<T>>, T> {
         using type = T;

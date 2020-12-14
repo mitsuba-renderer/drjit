@@ -32,7 +32,7 @@ struct DiffVCall : CustomOp<leaf_array_t<Result, Args...>, Result, Self, Func, F
     }
 
     template <size_t... Is>
-    void forward_impl(std::index_sequence<Is>...) {
+    void forward_impl(std::index_sequence<Is...>) {
         const detached_t<Self> &self = detach(Base::m_grad_input->template get<0>());
         const FuncFwd &func_fwd = Base::m_grad_input->template get<2>();
         using ResultFwd = detached_t<Result>;
@@ -48,7 +48,7 @@ struct DiffVCall : CustomOp<leaf_array_t<Result, Args...>, Result, Self, Func, F
     }
 
     template <size_t... Is>
-    void backward_impl(std::index_sequence<Is>...) {
+    void backward_impl(std::index_sequence<Is...>) {
         const detached_t<Self> &self = detach(Base::m_grad_input->template get<0>());
         const FuncRev &func_rev = Base::m_grad_input->template get<3>();
         using ResultRev = detail::tuple<detached_t<Args>...>;
@@ -81,8 +81,14 @@ template <typename Result, typename Func, typename FuncFwd, typename FuncRev,
 ENOKI_INLINE Result dispatch_autodiff(const Func &func, const FuncFwd &func_fwd,
                                       const FuncRev &func_rev, const Self &self,
                                       const Args &... args) {
-    return custom<DiffVCall<Self, Result, Func, FuncFwd, FuncRev, Args...>>(
-        self, func, func_fwd, func_rev, args...);
+    using Type = leaf_array_t<Result, Args...>;
+
+    if constexpr (is_diff_array_v<Type> && std::is_floating_point_v<scalar_t<Type>>) {
+        return custom<DiffVCall<Self, Result, Func, FuncFwd, FuncRev, Args...>>(
+            self, func, func_fwd, func_rev, args...);
+    } else {
+        return detach(dispatch_jit_symbolic<Result>(func, detach(self), args...));
+    }
 }
 
 NAMESPACE_END(detail)

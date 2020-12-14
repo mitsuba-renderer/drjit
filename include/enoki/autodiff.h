@@ -1498,6 +1498,10 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
     //! @{ \name Standard initializers
     // -----------------------------------------------------------------------
 
+    DiffArray placeholder_() const {
+        return enoki::placeholder<Type>(m_value);
+    }
+
     static DiffArray empty_(size_t size) {
         return enoki::empty<Type>(size);
     }
