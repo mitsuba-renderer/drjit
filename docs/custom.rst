@@ -48,12 +48,12 @@ To start, make sure to include the extra header file
     #include <enoki/custom.h>
 
 which provides all necessary infrastructure. Suppose, that we are working with
-the following types
+the following type:
 
 .. code-block:: cpp
 
-    using Float  = ek::CUDAArray<float>; // JIT-ed CUDA array
-    using FloatD = ek::DiffArray<Float>; // .. which furthermore tracks derivatives
+    // JIT-compiled array that furthermore tracks derivatives
+    using Float = ek::DiffArray<ek::CUDAArray<float>>;
 
 We must define the aforementioned callback class deriving from
 :cpp:struct:`CustomOp`, which is a variadic template class parameterized by the
@@ -62,9 +62,9 @@ function output and input(s).
 
 .. code-block:: cpp
 
-    struct MyOp : ek::CustomOp<FloatD, /* <-- type underlying AD backend */,
-                               ...,    /* output type */,
-                               ...     /* one or more input type (s) */> { ... };
+    struct MyOp : ek::CustomOp<Float, /* <-- type underlying AD backend */,
+                               ...,   /* output type */,
+                               ...    /* one or more input type (s) */> { ... };
 
 Suppose that we're interested in computing the derivative of the following operation,
 which normalizes a 3D input vector:
@@ -92,14 +92,13 @@ Let's define non-differentiable and differentiable 3D vector types first:
 .. code-block:: cpp
 
     using Array3f  = ek::Array<Float, 3>;
-    using Array3fD = ek::Array<FloatD, 3>;
 
 The basic structure of the ``Normalize`` class then looks as follows:
 
 .. code-block:: cpp
 
-    struct Normalize : ek::CustomOp<FloatD, Array3fD, Array3fD> {
-        using Base = ek::CustomOp<FloatD, Array3fD, Array3fD>;
+    struct Normalize : ek::CustomOp<Float, Array3f, Array3f> {
+        using Base = ek::CustomOp<Float, Array3f, Array3f>;
 
         // Return a descriptive name that used in GraphViz output
         const char *name() override { return "normalize"; }
@@ -114,12 +113,13 @@ The basic structure of the ``Normalize`` class then looks as follows:
 
 Apart from ``name()``, this declaration must override *three* other virtual
 methods: the first, ``eval()``, performs an ordinary (non-differentiable)
-function evaluation. Note that its parameter(s) and return value must be
-non-differentiable variants of the input/outputs as originally specified via
-template parameters of :cpp:struct:`CustomOp`. Non-differentiable is as defined
-by :cpp:type:`detached_t`. For example, ``detached_t<Array3fD>`` equals
-``Array3f``. Finally, the inputs must be specified as ``const`` references
-(see the following note).
+function evaluation. In particular, the function will be called with inputs
+that are *detached* from the computation graph, and it must also return a
+result with the same property (you don't need to worry about this unless your
+function accesses some kind of global variable ``x`` with ``ek::grad_enabled(x)
+== true``, in which case the function result must be passed through
+:cpp:func:`detach()`). Finally, note the inputs must be specified as ``const``
+references (see the following note).
 
 .. note::
 
@@ -131,9 +131,9 @@ by :cpp:type:`detached_t`. For example, ``detached_t<Array3fD>`` equals
    ``std::pair``, ``std::tuple`` or custom data structure exposed via
    :c:macro:`ENOKI_STRUCT`.
 
-The ``eval()`` method also stores two temporary variables (``m_input`` and
-``m_inv_norm``) since they are required by in both forward and reverse-mode
-derivative propagation.
+Here, our ``eval()`` implementation also stores two temporary variables
+(``m_input`` and ``m_inv_norm``) since they are going to be useful in both
+forward and reverse-mode derivative propagation.
 
 .. code-block:: cpp
 
@@ -849,11 +849,11 @@ Reference
    Callback interface used to integrate custom operations into Enoki's
    graph-based AD implementation.
 
-   .. cpp:function:: virtual detached_t<Result> eval(const detached_t<Args>& ... args) = 0
+   .. cpp:function:: virtual Result eval(const Args& ... args) = 0
 
       This callback function must be provided by implementations of this
-      interface. It should perform the underlying "primal" computation using
-      detached types, i.e. without keeping track of derivatives.
+      interface. It will be invoked with variables that are detached from
+      the AD graph, and the result must satisfy the same property.
 
    .. cpp:function:: virtual void forward() = 0
 

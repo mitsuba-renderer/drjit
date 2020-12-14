@@ -760,12 +760,10 @@ template <typename T> ENOKI_INLINE T zero(size_t size = 1) {
         if constexpr (is_detected_v<detail::has_zero, T>)
             result.zero_(size);
         return result;
-    } else {
-        static_assert(std::is_scalar_v<T>,
-                      "Unsupported data structure -- did you forget to include "
-                      "'enoki/struct.h' or provide a suitable ENOKI_STRUCT() "
-                      "declaration?");
+    } else if constexpr (std::is_scalar_v<T>) {
         return T(0);
+    } else {
+        return T();
     }
 }
 
@@ -1429,8 +1427,8 @@ template <typename... Ts> void resume_grad(Ts&... ts) {
     (set_grad_suspended(ts, false), ...);
 }
 
-template <typename T> detached_t<T> detach(const T &value) {
-    using Result = detached_t<T>;
+template <bool Underlying = true, typename T> auto detach(const T &value) {
+    using Result = std::conditional_t<Underlying, detached_t<T>, T>;
 
     if constexpr (is_diff_array_v<T>) {
         if constexpr (array_depth_v<T> > 1) {
@@ -1439,7 +1437,7 @@ template <typename T> detached_t<T> detach(const T &value) {
                 result = empty<Result>(value.size());
 
             for (size_t i = 0; i < value.size(); ++i)
-                result.entry(i) = detach(value.entry(i));
+                result.entry(i) = detach<Underlying>(value.entry(i));
 
             return result;
         } else {
@@ -1451,7 +1449,7 @@ template <typename T> detached_t<T> detach(const T &value) {
         struct_support_t<T>::apply_2(
             value, result,
             [](auto const &x1, auto &x2) ENOKI_INLINE_LAMBDA {
-                x2 = detach(x1);
+                x2 = detach<Underlying>(x1);
             });
 
         return result;
@@ -1460,8 +1458,8 @@ template <typename T> detached_t<T> detach(const T &value) {
     }
 }
 
-template <typename T> detached_t<T> grad(const T &value) {
-    using Result = detached_t<T>;
+template <bool Underlying = true, typename T> auto grad(const T &value) {
+    using Result = std::conditional_t<Underlying, detached_t<T>, T>;
 
     if constexpr (is_diff_array_v<T>) {
         if constexpr (array_depth_v<T> > 1) {
@@ -1470,7 +1468,7 @@ template <typename T> detached_t<T> grad(const T &value) {
                 result = empty<Result>(value.size());
 
             for (size_t i = 0; i < value.size(); ++i)
-                result.entry(i) = grad(value.entry(i));
+                result.entry(i) = grad<Underlying>(value.entry(i));
 
             return result;
         } else {
@@ -1482,7 +1480,7 @@ template <typename T> detached_t<T> grad(const T &value) {
         struct_support_t<T>::apply_2(
             value, result,
             [](auto const &x1, auto &x2) ENOKI_INLINE_LAMBDA {
-                x2 = grad(x1);
+                x2 = grad<Underlying>(x1);
             });
 
         return result;
@@ -1491,14 +1489,17 @@ template <typename T> detached_t<T> grad(const T &value) {
     }
 }
 
-template <typename T>
-void set_grad(T &value, const detached_t<T> &grad) {
+template <typename T, typename T2>
+void set_grad(T &value, const T2 &grad) {
     if constexpr (is_diff_array_v<T>) {
         if constexpr (array_depth_v<T> > 1) {
             for (size_t i = 0; i < value.size(); ++i)
                 set_grad(value.entry(i), grad.entry(i));
         } else {
-            value.set_grad_(grad);
+            if constexpr (is_diff_array_v<T2>)
+                set_grad(value, detach(grad));
+            else
+                value.set_grad_(grad);
         }
     } else if constexpr (is_enoki_struct_v<T>) {
         struct_support_t<T>::apply_2(
@@ -1509,14 +1510,17 @@ void set_grad(T &value, const detached_t<T> &grad) {
     }
 }
 
-template <typename T>
-void accum_grad(T &value, const detached_t<T> &grad) {
+template <typename T, typename T2>
+void accum_grad(T &value, const T2 &grad) {
     if constexpr (is_diff_array_v<T>) {
         if constexpr (array_depth_v<T> > 1) {
             for (size_t i = 0; i < value.size(); ++i)
                 accum_grad(value.entry(i), grad.entry(i));
         } else {
-            value.derived().accum_grad_(grad);
+            if constexpr (is_diff_array_v<T2>)
+                accum_grad(value, detach(grad));
+            else
+                value.accum_grad_(grad);
         }
     } else if constexpr (is_enoki_struct_v<T>) {
         struct_support_t<T>::apply_2(

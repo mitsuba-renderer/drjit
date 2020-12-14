@@ -496,9 +496,9 @@ namespace detail {
         using T0 = Arg;
         using T1 = typename deepest<Args...>::type;
 
-        // Give precedence to dynamic arrays
-        static constexpr size_t D0 = array_depth_v<T0>;
-        static constexpr size_t D1 = array_depth_v<T1>;
+        // Give precedence to differentiable arrays
+        static constexpr size_t D0 = array_depth_v<T0> * 2 + (is_diff_array_v<T0> ? 1 : 0);
+        static constexpr size_t D1 = array_depth_v<T1> * 2 + (is_diff_array_v<T1> ? 1 : 0);
 
     public:
         using type = std::conditional_t<(D1 > D0 || D0 == 0), T1, T0>;

@@ -132,7 +132,7 @@ ENOKI_INLINE Result dispatch_jit_symbolic(Func func, const Self &self, const Arg
                 [&](const Args &...args) { return func(ptr, args...); }, placeholder<Args>(args)...);
         else
             id_and_hash = record<IsCUDA>(
-                [&](const Args &...args) { return result; }, placeholder<Args>(args)...);
+                [&](const Args &...) { return result; }, placeholder<Args>(args)...);
 
         index = jitc_var_new_2(1, VarType::Global, "", 1, index, id_and_hash.first);
         jitc_var_dec_ref_ext(id_and_hash.first);
@@ -151,7 +151,7 @@ ENOKI_INLINE Result dispatch_jit_symbolic(Func func, const Self &self, const Arg
     uint32_t offset = jitc_var_new_2(1, VarType::UInt64,
             "mov.$t0 $r0, $r2$n"
             "mad.wide.u32 $r0, $r1, 8, $r0$n"
-            "ld.const.$t0 $r0, [$r0]", 1, self.index(), call_table);
+            "ld.const.$t0 $r0, [$r0]", 1, detach(self).index(), call_table);
 
     const uint32_t var_type_size[(int) VarType::Count] {
         0, 0, 1, 1, 1, 2, 2, 4, 4, 8, 8, 2, 4, 8, 8
@@ -194,7 +194,7 @@ ENOKI_INLINE Result dispatch_jit_symbolic(Func func, const Self &self, const Arg
     if (offset_out == 0)
         offset_out = 1;
 
-    int printed = snprintf(buf.data, buf_size,
+    snprintf(buf.data, buf_size,
             "\n    {\n"
 	        "        .param .align %u .b8 param_in[%u];\n"
 	        "        .param .align %u .b8 param_out[%u]",

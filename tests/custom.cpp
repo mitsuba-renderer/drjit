@@ -8,17 +8,14 @@
 namespace ek = enoki;
 
 // Let's define some JIT & differentiable types
-using Float     = ek::LLVMArray<float>;
-using FloatD    = ek::DiffArray<Float>;
-
-using Vector3f  = ek::Array<Float, 3>;
-using Vector3fD = ek::Array<FloatD, 3>;
+using Float    = ek::DiffArray<ek::LLVMArray<float>>;
+using Vector3f = ek::Array<Float, 3>;
 
 
-struct Normalize : ek::CustomOp<FloatD,      // Underlying differentiable type
-                                Vector3fD,   // Function output, is allowed to be a std::pair/tuple for multi-valued functions
-                                Vector3fD> { // Input argument(s) -- this is a varidic template, just specify a list
-    using Base = ek::CustomOp<FloatD, Vector3fD, Vector3fD>;
+struct Normalize : ek::CustomOp<Float,      // Underlying differentiable type
+                                Vector3f,   // Function output, is allowed to be a std::pair/tuple for multi-valued functions
+                                Vector3f> { // Input argument(s) -- this is a varidic template, just specify a list
+    using Base = ek::CustomOp<Float, Vector3f, Vector3f>;
 
     // Primal evaluation function, uses non-differentiable input/outputs
     Vector3f eval(const Vector3f &input) override {
@@ -72,30 +69,30 @@ ENOKI_TEST(test01_basic) {
     jitc_init(1, 0);
 
     {
-        Vector3fD d(1, 2, 3);
+        Vector3f d(1, 2, 3);
         ek::enable_grad(d);
-        Vector3fD d2 = ek::custom<Normalize>(d);
+        Vector3f d2 = ek::custom<Normalize>(d);
         ek::set_grad(d2, Vector3f(5, 6, 7));
         ek::enqueue(d2);
-        ek::traverse<FloatD>(true, false);
+        ek::traverse<Float>(true, false);
         assert(ek::allclose(ek::grad(d), Vector3f(0.610883, 0.152721, -0.305441)));
     }
 
     {
-        Vector3fD d(1, 2, 3);
+        Vector3f d(1, 2, 3);
         ek::enable_grad(d);
-        Vector3fD d2 = ek::custom<Normalize>(d);
+        Vector3f d2 = ek::custom<Normalize>(d);
         ek::set_grad(d, Vector3f(5, 6, 7));
         ek::enqueue(d);
-        ek::traverse<FloatD>(false, false);
+        ek::traverse<Float>(false, false);
         assert(ek::allclose(ek::grad(d2), Vector3f(0.610883, 0.152721, -0.305441)));
     }
 
     jitc_shutdown();
 }
 
-struct ScaleAdd2 : ek::CustomOp<FloatD, Vector3fD, Vector3fD, Vector3fD, int> {
-    using Base = ek::CustomOp<FloatD, Vector3fD, Vector3fD, Vector3fD, int>;
+struct ScaleAdd2 : ek::CustomOp<Float, Vector3f, Vector3f, Vector3f, int> {
+    using Base = ek::CustomOp<Float, Vector3f, Vector3f, Vector3f, int>;
 
     // Primal evaluation function, uses non-differentiable input/outputs
     Vector3f eval(const Vector3f &in1, const Vector3f &in2, const int &scale) override {
@@ -133,24 +130,24 @@ ENOKI_TEST(test02_corner_case) {
     jitc_init(1, 0);
 
     {
-        Vector3fD d1(1, 2, 3);
-        Vector3fD d2(4, 5, 6);
+        Vector3f d1(1, 2, 3);
+        Vector3f d2(4, 5, 6);
         ek::enable_grad(d1.y());
-        Vector3fD d3 = ek::custom<ScaleAdd2>(d1, d2, 5);
+        Vector3f d3 = ek::custom<ScaleAdd2>(d1, d2, 5);
         ek::set_grad(d3, Vector3f(5, 6, 7));
         ek::enqueue(d3);
-        ek::traverse<FloatD>(true, false);
+        ek::traverse<Float>(true, false);
         assert(ek::allclose(ek::grad(d1), Vector3f(0, 30, 0)));
     }
 
     {
-        Vector3fD d1(1, 2, 3);
-        Vector3fD d2(4, 5, 6);
+        Vector3f d1(1, 2, 3);
+        Vector3f d2(4, 5, 6);
         ek::enable_grad(d1.y());
-        Vector3fD d3 = ek::custom<ScaleAdd2>(d1, d2, 5);
+        Vector3f d3 = ek::custom<ScaleAdd2>(d1, d2, 5);
         ek::set_grad(d1, Vector3f(5, 6, 7));
         ek::enqueue(d1, d2);
-        ek::traverse<FloatD>(false, false);
+        ek::traverse<Float>(false, false);
         assert(ek::allclose(ek::grad(d3), Vector3f(0, 30, 0)));
     }
 

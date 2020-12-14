@@ -27,9 +27,9 @@ public:
 
     /**
      * Evaluate the custom function in primal mode. The inputs will be detached
-     * from the AD graph, and the output must also be detached.
+     * from the AD graph, and the output *must* also be detached.
      */
-    virtual detached_t<Output> eval(const detached_t<Input>&... input) = 0;
+    virtual Output eval(const Input&... input) = 0;
 
     /// Callback to implement forward-mode derivatives
     virtual void forward() = 0;
@@ -50,29 +50,29 @@ protected:
 
     /// Access the gradient associated with the input argument 'Index' (fwd. mode AD)
     template <size_t Index = 0>
-    detached_t<typename Inputs::template type<Index>> grad_in() const {
-        return grad(m_grad_input->template get<Index>());
+    typename Inputs::template type<Index> grad_in() const {
+        return grad<false>(m_grad_input->template get<Index>());
     }
 
     /// Access the primal value associated with the input argument 'Index', requires ClearPrimal=false
     template <size_t Index = 0>
     typename Inputs::template type<Index> value_in() const {
-        return detach(m_grad_input->template get<Index>());
+        return detach<false>(m_grad_input->template get<Index>());
     }
 
     /// Access the gradient associated with the output argument (rev. mode AD)
-    detached_t<Output> grad_out() const {
-        return grad(m_grad_output);
+    Output grad_out() const {
+        return grad<false>(m_grad_output);
     }
 
     /// Accumulate a gradient value into an input argument (rev. mode AD)
     template <size_t Index = 0>
-    void set_grad_in(const detached_t<typename Inputs::template type<Index>> &value) {
+    void set_grad_in(const typename Inputs::template type<Index> &value) {
         accum_grad(m_grad_input->template get<Index>(), value);
     }
 
     /// Accumulate a gradient value into the output argument (fwd. mode AD)
-    void set_grad_out(const detached_t<Output> &value) {
+    void set_grad_out(const Output &value) {
         accum_grad(m_grad_output, value);
     }
 
@@ -144,7 +144,12 @@ template <typename Custom, typename... Input> auto custom(const Input&... input)
 
     detail::tiny_unique_ptr<Custom> custom(new Custom());
 
-    Output output = custom->eval(detach(input)...);
+    Output output = custom->eval(detach<false>(input)...);
+
+    if (grad_enabled(output))
+        enoki_raise("enoki::custom(): the return value of the CustomOp::eval() "
+                    "implementation was attached to the AD graph. This is not "
+                    "allowed.");
 
     // Collect the input autodiff variable indices
     size_t diff_vars_in_ctr = 0;

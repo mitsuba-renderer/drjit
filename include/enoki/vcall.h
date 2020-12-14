@@ -144,7 +144,7 @@ NAMESPACE_END(enoki)
 #define ENOKI_VCALL_METHOD(name)                                               \
     template <typename... Args> auto name(const Args &... args_) const {       \
         return detail::dispatch<Class>(                                        \
-            [](Class *self, const auto &... args) ENOKI_INLINE_LAMBDA {        \
+            [](auto self, const auto &... args) ENOKI_INLINE_LAMBDA {          \
                 using Result = decltype(self->name(args...));                  \
                 if constexpr (std::is_same_v<Result, void>) {                  \
                     self->name(args...);                                       \
@@ -153,7 +153,7 @@ NAMESPACE_END(enoki)
                     return self->name(args...);                                \
                 }                                                              \
             },                                                                 \
-            [](Class *self, const auto &grad_in, auto ... args)                \
+            [](auto self, const auto &grad_in, auto ... args)                  \
                 ENOKI_INLINE_LAMBDA {                                          \
                     enoki::enable_grad(args...);                               \
                     using Result = decltype(self->name(args...));              \
@@ -174,7 +174,7 @@ NAMESPACE_END(enoki)
                         return nullptr;                                        \
                     }                                                          \
                 },                                                             \
-            [](Class *self, const auto &grad_out, auto ... args)               \
+            [](auto self, const auto &grad_out, auto ... args)                 \
                 ENOKI_INLINE_LAMBDA {                                          \
                     enoki::enable_grad(args...);                               \
                     using Result = decltype(self->name(args...));              \

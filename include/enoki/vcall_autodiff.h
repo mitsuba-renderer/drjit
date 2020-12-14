@@ -25,23 +25,22 @@ struct DiffVCall
 
     static constexpr bool ClearPrimal = false;
 
-    detached_t<Result> eval(const detached_t<Self> &self,
-                            const Func &func,
-                            const FuncFwd &func_fwd,
-                            const FuncRev &func_rev,
-                            const detached_t<Args> &... args) override {
-        return detach(dispatch_jit_symbolic<Result>(func, self, args...));
+    Result eval(const Self &self,
+                const Func &func,
+                const FuncFwd &,
+                const FuncRev &,
+                const Args &... args) override {
+        return dispatch_jit_symbolic<Result>(func, self, detach<false>(args)...);
     }
 
     template <size_t... Is>
     void forward_impl(std::index_sequence<Is...>) {
         const detached_t<Self> &self = detach(Base::m_grad_input->template get<0>());
         const FuncFwd &func_fwd = Base::m_grad_input->template get<2>();
-        using ResultFwd = detached_t<Result>;
 
         uint32_t se_before = jitc_side_effect_counter(is_cuda_array_v<Type>);
 
-        ResultFwd grad_out = dispatch_jit_symbolic<ResultFwd>(
+        Result grad_out = dispatch_jit_symbolic<Result>(
             func_fwd, self, detail::tuple(Base::template grad_in<4 + Is>()...),
             Base::template value_in<4 + Is>()...);
 
@@ -58,7 +57,7 @@ struct DiffVCall
     void backward_impl(std::index_sequence<Is...>) {
         const detached_t<Self> &self = detach(Base::m_grad_input->template get<0>());
         const FuncRev &func_rev = Base::m_grad_input->template get<3>();
-        using ResultRev = detail::tuple<detached_t<Args>...>;
+        using ResultRev = detail::tuple<Args...>;
 
         uint32_t se_before = jitc_side_effect_counter(is_cuda_array_v<Type>);
 
@@ -99,7 +98,7 @@ ENOKI_INLINE Result dispatch_autodiff(const Func &func, const FuncFwd &func_fwd,
         return custom<DiffVCall<Type, Self, Result, Func, FuncFwd, FuncRev, Args...>>(
             self, func, func_fwd, func_rev, args...);
     } else {
-        return detach(dispatch_jit_symbolic<Result>(func, detach(self), args...));
+        return dispatch_jit_symbolic<Result>(func, self, args...);
     }
 }
 
