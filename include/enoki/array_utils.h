@@ -318,38 +318,78 @@ template <typename T> struct tiny_unique_ptr {
     using Type = std::remove_extent_t<T>;
 
     tiny_unique_ptr() = default;
-    tiny_unique_ptr(Type *data) : data(data) { }
-    tiny_unique_ptr(tiny_unique_ptr &&other) : data(other.data) {
-        other.data = nullptr;
+    tiny_unique_ptr(Type *data) : m_data(data) { }
+    tiny_unique_ptr(tiny_unique_ptr &&other) : m_data(other.m_data) {
+        other.m_data = nullptr;
     }
 
+    tiny_unique_ptr(const tiny_unique_ptr &) = delete;
+    tiny_unique_ptr &operator=(const tiny_unique_ptr &) = delete;
+
     tiny_unique_ptr &operator=(tiny_unique_ptr &&other) {
-        if constexpr (is_array_v<T>)
-            delete[] data;
+        if constexpr (std::is_array_v<T>)
+            delete[] m_data;
         else
-            delete data;
-        data = other.data;
-        other.data = nullptr;
+            delete m_data;
+        m_data = other.m_data;
+        other.m_data = nullptr;
         return *this;
     }
 
     ~tiny_unique_ptr() {
-        if constexpr (is_array_v<T>)
-            delete[] data;
+        if constexpr (std::is_array_v<T>)
+            delete[] m_data;
         else
-            delete data;
+            delete m_data;
     }
 
-    Type& operator[](size_t index) { return data[index]; }
-    Type* get() { return data; }
-    Type* operator->() { return data; }
-    const Type* operator->() const { return data; }
+    Type& operator[](size_t index) { return m_data[index]; }
+    const Type& operator[](size_t index) const { return m_data[index]; }
+
+    Type* get() { return m_data; }
+    const Type* get() const { return m_data; }
+    Type* operator->() { return m_data; }
+    const Type* operator->() const { return m_data; }
+
     Type* release () {
-        Type *tmp = data;
-        data = nullptr;
+        Type *tmp = m_data;
+        m_data = nullptr;
         return tmp;
     }
-    Type *data = nullptr;
+
+    Type *m_data = nullptr;
+};
+
+// Tiny expanding vector avoid having to import thousands of LOC from <vector>
+template <typename T> struct tiny_vector {
+    tiny_vector() = default;
+    tiny_vector(const tiny_vector &) = delete;
+    tiny_vector(tiny_vector &&) = default;
+    tiny_vector &operator=(tiny_vector &&) = default;
+    tiny_vector &operator=(const tiny_vector &) = delete;
+
+    void push_back(const T &value) {
+        if (m_size >= m_capacity)
+            expand();
+        m_data[m_size++] = value;
+    }
+
+    size_t size() const { return m_size; }
+    T *data() { return m_data.get(); }
+    const T *data() const { return m_data.get(); }
+
+    void expand() {
+        size_t capacity_new = m_capacity * 2 + 10;
+        tiny_unique_ptr<T> data_new(new T[capacity_new]);
+        for (size_t i = 0; i < m_size; ++i)
+            data_new[i] = std::move(m_data[i]);
+        m_data = std::move(data_new);
+        m_capacity = capacity_new;
+    }
+
+    tiny_unique_ptr<T> m_data;
+    size_t m_size = 0;
+    size_t m_capacity = 0;
 };
 
 // Tiny self-contained tuple to avoid having to import thousands of LOC from <tuple>
