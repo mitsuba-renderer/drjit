@@ -17,7 +17,7 @@ extern "C" {
     extern ENOKI_IMPORT uint32_t jitc_eval_ir_var(
         int cuda, const uint32_t *in, uint32_t n_in, const uint32_t *out,
         uint32_t n_out, uint32_t n_side_effects, uint64_t *hash_out,
-        void ***extra_out, uint32_t *extra_count_out);
+        uint32_t **extra_out, uint32_t *extra_count_out);
     extern ENOKI_IMPORT uint32_t jitc_side_effect_counter(int cuda);
 };
 
@@ -37,9 +37,7 @@ void read_indices(uint32_t *out, uint32_t &count, const T &value) {
         count += 1;
     } else if constexpr (is_enoki_struct_v<T>) {
         struct_support_t<T>::apply_1(
-            value, [&](const auto &x) {
-                 read_indices(out, count, x);
-            });
+            value, [&](const auto &x) { read_indices(out, count, x); });
     }
 }
 
@@ -54,14 +52,12 @@ void write_indices(uint32_t *out, uint32_t &count, T &value) {
         value = T::steal(out[count++]);
     } else if constexpr (is_enoki_struct_v<T>) {
         struct_support_t<T>::apply_1(
-            value, [&](auto &x) {
-                 write_indices(out, count, x);
-            });
+            value, [&](auto &x) { write_indices(out, count, x); });
     }
 }
 
 template <bool IsCUDA, typename Func, typename... Args>
-bool record(uint32_t &id, uint64_t &hash, detail::tiny_vector<void *> &extra,
+bool record(uint32_t &id, uint64_t &hash, detail::tiny_vector<uint32_t> &extra,
             Func func, const Args &... args) {
     using Result       = decltype(func(args...));
     uint32_t se_before = jitc_side_effect_counter(IsCUDA);
@@ -81,13 +77,13 @@ bool record(uint32_t &id, uint64_t &hash, detail::tiny_vector<void *> &extra,
     (read_indices(in.get(), in_count, args), ...);
     read_indices(out.get(), out_count, result);
 
-    void **ptrs        = nullptr;
-    uint32_t ptr_count = 0;
+    uint32_t *extra_p = nullptr;
+    uint32_t extra_count_p = 0;
     id = jitc_eval_ir_var(IsCUDA, in.get(), in_count, out.get(), out_count,
-                          se_total, &hash, &ptrs, &ptr_count);
+                          se_total, &hash, &extra_p, &extra_count_p);
 
-    for (uint32_t i = 0; i < ptr_count; ++i)
-        extra.push_back(ptrs[i]);
+    for (uint32_t i = 0; i < extra_count_p; ++i)
+        extra.push_back(extra_p[i]);
 
     return se_total != 0;
 }
@@ -118,14 +114,14 @@ ENOKI_INLINE Result dispatch_jit_symbolic(Func func, const Self &self, const Arg
     detail::tiny_unique_ptr<uint32_t[]> call_id(new uint32_t[n_inst]);
     detail::tiny_unique_ptr<uint64_t[]> call_hash(new uint64_t[n_inst]);
     detail::tiny_unique_ptr<uint32_t[]> extra_offset(new uint32_t[n_inst]);
-    detail::tiny_vector<void *> extra;
+    detail::tiny_vector<uint32_t> extra;
     bool side_effects = false;
 
     // Call each instance symbolically and record!
     for (uint32_t i = 0; i < n_inst; ++i) {
         Class *ptr = (Class *) jitc_registry_get_ptr(Class::Domain, i);
 
-        extra_offset[i] = (uint32_t)(extra.size() * sizeof(void *));
+        extra_offset[i] = (uint32_t) (extra.size() * sizeof(void *));
 
         if (ptr)
             side_effects |= record<IsCUDA>(
@@ -155,7 +151,7 @@ ENOKI_INLINE Result dispatch_jit_symbolic(Func func, const Self &self, const Arg
 
     jitc_var_vcall(IsCUDA, detach(self).index(), n_inst, call_id.get(),
                    call_hash.get(), in_count, in.get(), out_count, out.get(),
-                   (uint32_t) extra.size(), (const void **) extra.data(),
+                   (uint32_t) extra.size(), extra.data(),
                    extra_offset.get(), side_effects);
 
     out_count = 0;
