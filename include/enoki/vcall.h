@@ -199,12 +199,12 @@ NAMESPACE_END(enoki)
             using UInt32 = uint32_array_t<Array>;                              \
             return enoki::gather<Result>(                                      \
                 jitc_registry_attr_data(Domain, #name),                        \
-                reinterpret_cast<const UInt32 &>(array), mask);                \
+                UInt32::borrow(detach(array).index()), mask);                  \
         } else {                                                               \
             return detail::dispatch<Class>(                                    \
-                [](Class *ptr)                                                 \
-                    ENOKI_INLINE_LAMBDA { return ptr->name(); },               \
-                nullptr, array & mask);                                        \
+                [](auto self)                                                  \
+                    ENOKI_INLINE_LAMBDA { return self->name(); },              \
+                nullptr, nullptr, array & mask);                               \
         }                                                                      \
     }
 
