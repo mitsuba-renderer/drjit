@@ -83,6 +83,9 @@ namespace detail {
         using Result =
             typename vectorize_type<Self, decltype(func((Class *) nullptr, args...))>::type;
 
+        ENOKI_MARK_USED(func_fwd);
+        ENOKI_MARK_USED(func_rev);
+
         if constexpr (is_jit_array_v<Self>) {
             if ((jitc_flags() & 2) == 0 || is_llvm_array_v<Self>) {
                 return detail::dispatch_jit_reduce<Result>(func, self, copy_diff(args)...);
@@ -100,6 +103,9 @@ namespace detail {
 
 template <typename Class, typename Value>
 void set_attr(Class *self, const char *name, const Value &value) {
+    ENOKI_MARK_USED(self);
+    ENOKI_MARK_USED(name);
+    ENOKI_MARK_USED(value);
     if constexpr (Class::Registered) {
         if constexpr (std::is_pointer_v<Value> &&
                       std::is_class_v<std::remove_pointer_t<Value>>) {

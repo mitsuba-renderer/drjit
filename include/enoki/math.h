@@ -131,6 +131,9 @@ namespace detail {
         if constexpr (Cos)
             sign_cos = reinterpret_array<Value>(sl<Shift>(~(j - Int(2))));
 
+        ENOKI_MARK_USED(sign_sin);
+        ENOKI_MARK_USED(sign_cos);
+
         // Extended precision modular arithmetic
         if constexpr (Single) {
             y = xa - y * Scalar(0.78515625)

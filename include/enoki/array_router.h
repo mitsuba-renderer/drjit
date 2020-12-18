@@ -745,6 +745,7 @@ bool allclose(const T1 &a, const T2 &b, float rtol = 1e-5f, float atol = 1e-8f,
 // -----------------------------------------------------------------------
 
 template <typename T> ENOKI_INLINE T zero(size_t size = 1) {
+    ENOKI_MARK_USED(size);
     if constexpr (std::is_same_v<T, std::nullptr_t>) {
         return nullptr;
     } else if constexpr (is_array_v<T>) {
@@ -818,6 +819,8 @@ template <typename T> ENOKI_INLINE decltype(auto) placeholder(const T &value) {
 
 template <typename T, typename T2>
 ENOKI_INLINE T full(const T2 &value, size_t size = 1, bool eval = false) {
+    ENOKI_MARK_USED(size);
+    ENOKI_MARK_USED(eval);
     if constexpr (is_array_v<T>)
         return T::Derived::full_(value, size, eval);
     else
@@ -839,6 +842,7 @@ ENOKI_INLINE Array linspace(scalar_t<Array> min, scalar_t<Array> max, size_t siz
 
 template <typename Array>
 ENOKI_INLINE Array arange(size_t size = 1) {
+    ENOKI_MARK_USED(size);
     if constexpr (is_array_v<Array>)
         return Array::arange_(0, (ssize_t) size, 1);
     else
@@ -1261,6 +1265,9 @@ template <typename T> ENOKI_INLINE size_t width(const T &value) {
 }
 
 template <typename T> ENOKI_INLINE void resize(T &value, size_t size) {
+    ENOKI_MARK_USED(value);
+    ENOKI_MARK_USED(size);
+
     if constexpr (array_depth_v<T> > 1) {
         for (size_t i = 0; i < value.size(); ++i)
             resize(value.entry(i), size);
@@ -1276,6 +1283,9 @@ template <typename T> ENOKI_INLINE void resize(T &value, size_t size) {
 }
 
 template <typename T> void set_label(T &value, const char *label) {
+    ENOKI_MARK_USED(value);
+    ENOKI_MARK_USED(label);
+
     if constexpr (is_diff_array_v<T> || is_jit_array_v<T>) {
         if constexpr (array_depth_v<T> > 1) {
             size_t bufsize = strlen(label) + 11;
@@ -1321,6 +1331,7 @@ template <typename T> bool grad_enabled(const T &value) {
 
         return result;
     } else {
+        ENOKI_MARK_USED(value);
         return false;
     }
 }
@@ -1346,6 +1357,7 @@ template <typename T> bool grad_suspended(const T &value) {
 
         return result;
     } else {
+        ENOKI_MARK_USED(value);
         return false;
     }
 }
@@ -1390,6 +1402,9 @@ template <typename T> void set_grad_enabled(T &value, bool state) {
 }
 
 template <typename T> void set_grad_suspended(T &value, bool state) {
+    ENOKI_MARK_USED(value);
+    ENOKI_MARK_USED(state);
+
     if constexpr (is_diff_array_v<T>) {
         if constexpr (array_depth_v<T> > 1) {
             for (size_t i = 0; i < value.size(); ++i)
