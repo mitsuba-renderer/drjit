@@ -155,8 +155,8 @@ PYBIND11_MODULE(enoki_ext, m_) {
     array_detail.def("device", &jitc_cuda_device);
     array_detail.def("device", &jitc_var_device);
 
-    array_detail.def("set_flag", &jitc_set_flag);
-    array_detail.def("unset_flag", &jitc_unset_flag);
+    array_detail.def("enable_flag", &jitc_enable_flag);
+    array_detail.def("disable_flag", &jitc_disable_flag);
     array_detail.def("flags", &jitc_flags);
 
     m.def("cse", &jitc_cse);
