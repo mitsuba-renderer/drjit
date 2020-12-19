@@ -124,10 +124,12 @@ PYBIND11_MODULE(enoki_ext, m_) {
 
     py::enum_<JitFlag>(m, "JitFlag", py::arithmetic())
         .value("Default", JitFlag::Default)
-        .value("RecordVCalls", JitFlag::RecordVCalls)
         .value("RecordLoops", JitFlag::RecordLoops)
+        .value("RecordingLoop", JitFlag::RecordingLoop)
+        .value("RecordVCalls", JitFlag::RecordVCalls)
         .value("RecordingVCall", JitFlag::RecordingVCall)
-        .value("RecordingLoop", JitFlag::RecordingLoop);
+        .value("RecordOptiX", JitFlag::RecordOptiX)
+        .value("Recording", JitFlag::Recording);
 
     m.def("device_count", &jitc_cuda_device_count);
     m.def("set_device", &jitc_cuda_set_device, "device"_a);

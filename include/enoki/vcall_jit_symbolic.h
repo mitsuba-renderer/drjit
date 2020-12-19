@@ -14,7 +14,7 @@
 
 extern "C" {
     extern ENOKI_IMPORT uint32_t jitc_registry_get_max(const char *domain);
-    extern ENOKI_IMPORT uint32_t jitc_eval_ir_var(
+    extern ENOKI_IMPORT uint32_t jitc_capture_var(
         int cuda, const uint32_t *in, uint32_t n_in, const uint32_t *out,
         uint32_t n_out, uint32_t n_side_effects, uint64_t *hash_out,
         uint32_t **extra_out, uint32_t *extra_count_out);
@@ -79,7 +79,7 @@ bool record(uint32_t &id, uint64_t &hash, detail::tiny_vector<uint32_t> &extra,
 
     uint32_t *extra_p = nullptr;
     uint32_t extra_count_p = 0;
-    id = jitc_eval_ir_var(IsCUDA, in.get(), in_count, out.get(), out_count,
+    id = jitc_capture_var(IsCUDA, in.get(), in_count, out.get(), out_count,
                           se_total, &hash, &extra_p, &extra_count_p);
 
     for (uint32_t i = 0; i < extra_count_p; ++i)
