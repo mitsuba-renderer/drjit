@@ -15,7 +15,7 @@ void export_llvm(py::module_ &m) {
 
     bind_pcg32<Guide>(llvm);
 
-    py::class_<Loop<Guide>, ek::LoopBase> loop(llvm, "Loop");
+    py::class_<Loop<Guide>> loop(llvm, "Loop");
     loop.def(py::init<py::args>())
         .def("put", &Loop<Guide>::put)
         .def("init", &Loop<Guide>::init)

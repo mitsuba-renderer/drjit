@@ -15,7 +15,7 @@ void export_cuda(py::module_ &m) {
 
     bind_pcg32<Guide>(cuda);
 
-    py::class_<Loop<Guide>, ek::LoopBase> loop(cuda, "Loop");
+    py::class_<Loop<Guide>> loop(cuda, "Loop");
     loop.def(py::init<py::args>())
         .def("put", &Loop<Guide>::put)
         .def("init", &Loop<Guide>::init)

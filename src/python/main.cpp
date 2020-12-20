@@ -71,7 +71,6 @@ PYBIND11_MODULE(enoki_ext, m_) {
         .def(py::init<>());
 
     array_base = py::class_<ArrayBase>(m, "ArrayBase");
-    py::class_<ek::LoopBase> loop(m, "LoopBase");
 
     py::register_exception<enoki::Exception>(m, "Exception");
     array_detail.def("reinterpret_scalar", &reinterpret_scalar);

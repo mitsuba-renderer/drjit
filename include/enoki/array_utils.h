@@ -381,9 +381,9 @@ template <typename T> struct ek_vector {
     const T *data() const { return m_data.get(); }
 
     void expand() {
-        size_t capacity_new = m_capacity * 2 + 10;
+        uint32_t capacity_new = m_capacity * 2 + 10;
         ek_unique_ptr<T[]> data_new(new T[capacity_new]);
-        for (size_t i = 0; i < m_size; ++i)
+        for (uint32_t i = 0; i < m_size; ++i)
             data_new[i] = m_data[i];
         m_data = std::move(data_new);
         m_capacity = capacity_new;
@@ -393,8 +393,8 @@ template <typename T> struct ek_vector {
     const T &operator[](size_t i) const { return m_data[i]; }
 
     ek_unique_ptr<T[]> m_data;
-    size_t m_size = 0;
-    size_t m_capacity = 0;
+    uint32_t m_size = 0;
+    uint32_t m_capacity = 0;
 };
 
 // Tiny self-contained tuple to avoid having to import 1000s of LOC from <tuple>
@@ -478,7 +478,7 @@ inline void enoki_raise(const char *fmt, ...) {
     throw enoki::Exception(msg);
 #else
     fprintf(stderr, "%s\n", msg);
-    abort(EXIT_FAILURE);
+    abort();
 #endif
 }
 
