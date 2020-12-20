@@ -1,14 +1,14 @@
 .. cpp:namespace:: enoki
 
-.. _symbolic-loops:
+.. _recording-loops:
 
-Symbolic loops
-==============
+Recording loops
+===============
 
 Numerical software frequently involves iterative root-finding or optimization
 steps that present challenges during vectorization, especially when working
 with backends processing millions of entries at once. This section presents
-Enoki's facilities for recording loops *symbolically* to considerably improve
+Enoki's facilities for recording loop constructs to considerably improve
 performance in many such situations. You can skip this section if you are not
 using JIT-compiled types (i.e., :cpp:struct:`CUDAArray` or
 :cpp:struct:`LLVMArray`)
@@ -79,10 +79,17 @@ example uses CUDA arrays, but everything applies equally to the LLVM case.
    large (e.g. 10-100 MiB of CUDA PTX or LLVM IR), at which point compilation
    to machine code will likely fail.
 
-3. **One small kernel with symbolic loop**:
+3. **One small kernel with recorded loop**:
 
-   This section presents a new primitive for recording a loop *symbolically*: to use
-   it, you will require an extra header file
+   This section presents a new primitive for *recording the loop itself*. The
+   feature must first be enabled explicitly in the JIT compiler, otherwise it
+   will fall back to approach (1), i.e. many small loops:
+
+   .. code-block:: cpp
+
+       ek::enable_flag(JitFlag::RecordLoops);
+
+   To record loops, you must also include an extra header file
 
    .. code-block:: cpp
 
@@ -124,7 +131,7 @@ Usage and limitations
 ---------------------
 
 Enoki's :cpp:struct:`Loop` primitive will run your loop once, record everything
-that it does symbolically, and then surround the captured instruction sequence
+that it does, and then surround the captured instruction sequence
 with additional loop instructions (branch statements, `Phi functions
 <https://en.wikipedia.org/wiki/Static_single_assignment_form>`_ in SSA form).
 When evaluated on the target device, the resulting kernel will then run the
@@ -323,6 +330,33 @@ C++ Reference
       here, as long as their contents were exposed to Enoki via a
       :c:macro:`ENOKI_STRUCT` declaration.
 
+      Construction can occur either in one step:
+
+      .. code-block:: cpp
+
+          ek::Loop loop(arg_1, arg_2);
+
+      Alternative, the class can also be constructed in multiple steps. In this
+      case the type of one of the loop variables (does not matter which one)
+      must be specified as a template parameter:
+
+      .. code-block:: cpp
+
+          ek::Loop<Float> loop;
+          look.put(arg_1);
+          look.put(arg_2);
+          loop.init();
+
+
+   .. cpp:function:: template <typename Value> put(Value &value)
+
+       Register a loop variable with the loop.
+
+   .. cpp:function:: void init()
+
+       Finish creating the loop class. Must be called after all loop variables
+       are registered, and before :cpp:func:`cond` is invoked.
+
    .. cpp:function:: bool cond(const Mask &m)
 
        This function will be called exactly twice in practice: the first time,
@@ -331,5 +365,11 @@ C++ Reference
        to capture subsequent modifications.
 
        The second time, it returns ``false`` and updates the loop variables
-       to reflect the (still symbolic) result following loop termination.
+       to reflect the (still unevaluated) result following loop termination.
 
+   .. cpp:function:: const Mask mask()
+
+       Return the mask value that was previously supplied to the
+       :cpp:func:`cond()` function. This is only relevant when the loop
+       recording feature is disabled---in all other cases, the return value is
+       ``Mask(true)``.

@@ -7,22 +7,31 @@ template <typename Guide> struct Loop : ek::Loop<Guide> {
     using Base = ek::Loop<Guide>;
     using Base::m_vars;
     using Base::m_vars_phi;
-    using Base::m_var_count;
-    using Base::m_cuda;
-    using Base::m_llvm;
 
-    Loop(py::args args) : m_args(args) {
+    Loop(py::args args) {
         py::object detail = py::module_::import("enoki").attr("detail");
         m_read_indices = detail.attr("read_indices");
         m_write_indices = detail.attr("write_indices");
-        read_indices();
+        put(args);
+        init();
+    }
 
-        m_vars = new uint32_t*[m_var_count];
-        m_vars_phi = new uint32_t[m_var_count];
-        for (uint32_t i = 0; i< m_var_count; ++i)
-            m_vars[i] = &m_vars_val[i];
-        m_cuda = Base::IsCUDA;
-        m_llvm = Base::IsLLVM;
+    void put(py::args args) {
+        for (py::handle h : args)
+            m_args.append(h);
+    }
+
+    void init() {
+        py::list indices = m_read_indices(*m_args);
+        size_t size = indices.size();
+
+        for (uint32_t i = 0; i < size; ++i)
+            m_vars_py.push_back(py::cast<uint32_t>(indices[i]));
+
+        for (uint32_t i = 0; i < size; ++i) {
+            m_vars.push_back(&m_vars_py[i]);
+            m_vars_phi.push_back(0);
+        }
 
         Base::init();
         write_indices();
@@ -30,21 +39,19 @@ template <typename Guide> struct Loop : ek::Loop<Guide> {
 
     void read_indices() {
         py::list indices = m_read_indices(*m_args);
+        size_t size = indices.size();
 
-        if (m_var_count == 0) {
-            m_var_count = indices.size();
-            m_vars_val = new uint32_t[m_var_count];
-        } else if (indices.size() != m_var_count) {
-            ek::enoki_raise("enoki::Loop(): internal error: loop variable index changed!");
-        }
-        for (uint32_t i = 0; i< m_var_count; ++i)
-            m_vars_val[i] = py::cast<uint32_t>(indices[i]);
+        if (size != m_vars_py.size())
+            ek::enoki_raise("Loop::read_indices(): number of indices changed!");
+
+        for (uint32_t i = 0; i < size; ++i)
+            m_vars_py[i] = py::cast<uint32_t>(indices[i]);
     }
 
     void write_indices() {
         py::list list;
-        for (size_t i = 0; i < m_var_count; ++i)
-            list.append(m_vars_val[i]);
+        for (size_t i = 0; i < m_vars_py.size(); ++i)
+            list.append(m_vars_py[i]);
         m_write_indices(list, *m_args);
     }
 
@@ -55,11 +62,9 @@ template <typename Guide> struct Loop : ek::Loop<Guide> {
         return result;
     }
 
-    ~Loop() { delete[] m_vars_val; }
-
 private:
-    py::args m_args;
+    py::list m_args;
     py::object m_read_indices;
     py::object m_write_indices;
-    uint32_t *m_vars_val = nullptr;
+    ek::detail::ek_vector<uint32_t> m_vars_py;
 };

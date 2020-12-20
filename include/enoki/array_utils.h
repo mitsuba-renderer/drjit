@@ -313,20 +313,20 @@ ENOKI_INLINE T mulhi_(T x, T y) {
     }
 }
 
-// Tiny self-contained unique_ptr to avoid having to import thousands of LOC from <memory>
-template <typename T> struct tiny_unique_ptr {
+// Tiny self-contained unique_ptr to avoid having to import 1000s of LOC from <memory>
+template <typename T> struct ek_unique_ptr {
     using Type = std::remove_extent_t<T>;
 
-    tiny_unique_ptr() = default;
-    tiny_unique_ptr(Type *data) : m_data(data) { }
-    tiny_unique_ptr(tiny_unique_ptr &&other) : m_data(other.m_data) {
+    ek_unique_ptr() = default;
+    ek_unique_ptr(Type *data) : m_data(data) { }
+    ek_unique_ptr(ek_unique_ptr &&other) : m_data(other.m_data) {
         other.m_data = nullptr;
     }
 
-    tiny_unique_ptr(const tiny_unique_ptr &) = delete;
-    tiny_unique_ptr &operator=(const tiny_unique_ptr &) = delete;
+    ek_unique_ptr(const ek_unique_ptr &) = delete;
+    ek_unique_ptr &operator=(const ek_unique_ptr &) = delete;
 
-    tiny_unique_ptr &operator=(tiny_unique_ptr &&other) {
+    ek_unique_ptr &operator=(ek_unique_ptr &&other) {
         if constexpr (std::is_array_v<T>)
             delete[] m_data;
         else
@@ -336,7 +336,7 @@ template <typename T> struct tiny_unique_ptr {
         return *this;
     }
 
-    ~tiny_unique_ptr() {
+    ~ek_unique_ptr() {
         if constexpr (std::is_array_v<T>)
             delete[] m_data;
         else
@@ -360,13 +360,13 @@ template <typename T> struct tiny_unique_ptr {
     Type *m_data = nullptr;
 };
 
-// Tiny expanding vector avoid having to import thousands of LOC from <vector>
-template <typename T> struct tiny_vector {
-    tiny_vector() = default;
-    tiny_vector(const tiny_vector &) = delete;
-    tiny_vector(tiny_vector &&) = default;
-    tiny_vector &operator=(tiny_vector &&) = default;
-    tiny_vector &operator=(const tiny_vector &) = delete;
+// Tiny POD vector, without having to import 1000s of LOC from <vector>
+template <typename T> struct ek_vector {
+    ek_vector() = default;
+    ek_vector(const ek_vector &) = delete;
+    ek_vector(ek_vector &&) = default;
+    ek_vector &operator=(ek_vector &&) = default;
+    ek_vector &operator=(const ek_vector &) = delete;
 
     void push_back(const T &value) {
         if (m_size >= m_capacity)
@@ -374,43 +374,48 @@ template <typename T> struct tiny_vector {
         m_data[m_size++] = value;
     }
 
+    void clear() { m_size = 0; }
+
     size_t size() const { return m_size; }
     T *data() { return m_data.get(); }
     const T *data() const { return m_data.get(); }
 
     void expand() {
         size_t capacity_new = m_capacity * 2 + 10;
-        tiny_unique_ptr<T> data_new(new T[capacity_new]);
+        ek_unique_ptr<T[]> data_new(new T[capacity_new]);
         for (size_t i = 0; i < m_size; ++i)
-            data_new[i] = std::move(m_data[i]);
+            data_new[i] = m_data[i];
         m_data = std::move(data_new);
         m_capacity = capacity_new;
     }
 
-    tiny_unique_ptr<T> m_data;
+    T &operator[](size_t i) { return m_data[i]; }
+    const T &operator[](size_t i) const { return m_data[i]; }
+
+    ek_unique_ptr<T[]> m_data;
     size_t m_size = 0;
     size_t m_capacity = 0;
 };
 
-// Tiny self-contained tuple to avoid having to import thousands of LOC from <tuple>
-template <typename... Ts> struct tuple;
-template <> struct tuple<> {
+// Tiny self-contained tuple to avoid having to import 1000s of LOC from <tuple>
+template <typename... Ts> struct ek_tuple;
+template <> struct ek_tuple<> {
     template <size_t> using type = void;
 };
 
-template <typename T, typename... Ts> struct tuple<T, Ts...> : tuple<Ts...> {
-    using Base = tuple<Ts...>;
+template <typename T, typename... Ts> struct ek_tuple<T, Ts...> : ek_tuple<Ts...> {
+    using Base = ek_tuple<Ts...>;
 
-    tuple() = default;
-    tuple(const tuple &) = default;
-    tuple(tuple &&) = default;
-    tuple& operator=(tuple &&) = default;
-    tuple& operator=(const tuple &) = default;
+    ek_tuple() = default;
+    ek_tuple(const ek_tuple &) = default;
+    ek_tuple(ek_tuple &&) = default;
+    ek_tuple& operator=(ek_tuple &&) = default;
+    ek_tuple& operator=(const ek_tuple &) = default;
 
-    tuple(const T& value, const Ts&... ts)
+    ek_tuple(const T& value, const Ts&... ts)
         : Base(ts...), value(value) { }
 
-    tuple(T&& value, Ts&&... ts)
+    ek_tuple(T&& value, Ts&&... ts)
         : Base(std::move(ts)...), value(std::move(value)) { }
 
     template <size_t I> auto& get() {
@@ -436,7 +441,7 @@ private:
 };
 
 template <typename... Ts>
-tuple(Ts &&...) -> tuple<std::decay_t<Ts>...>;
+ek_tuple(Ts &&...) -> ek_tuple<std::decay_t<Ts>...>;
 
 NAMESPACE_END(detail)
 

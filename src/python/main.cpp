@@ -1,6 +1,7 @@
 #include "bind.h"
 #include <enoki/autodiff.h>
 #include <enoki/idiv.h>
+#include <enoki/loop.h>
 
 extern void export_scalar(py::module_ &m);
 extern void export_packet(py::module_ &m);
@@ -70,6 +71,7 @@ PYBIND11_MODULE(enoki_ext, m_) {
         .def(py::init<>());
 
     array_base = py::class_<ArrayBase>(m, "ArrayBase");
+    py::class_<ek::LoopBase> loop(m, "LoopBase");
 
     py::register_exception<enoki::Exception>(m, "Exception");
     array_detail.def("reinterpret_scalar", &reinterpret_scalar);
@@ -157,14 +159,14 @@ PYBIND11_MODULE(enoki_ext, m_) {
     array_detail.def("device", &jitc_cuda_device);
     array_detail.def("device", &jitc_var_device);
 
-    array_detail.def("enable_flag", &jitc_enable_flag);
-    array_detail.def("disable_flag", &jitc_disable_flag);
-    array_detail.def("flags", &jitc_flags);
+    m.def("enable_flag", &jitc_enable_flag);
+    m.def("disable_flag", &jitc_disable_flag);
+    m.def("flags", &jitc_flags);
 
     m.def("cse", &jitc_cse);
     m.def("set_cse", &jitc_set_cse);
 
-    /* Register a cleanup callback funceion that is invoked when
+    /* Register a cleanup callback function that is invoked when
        the 'enoki::ArrayBase' Python type is garbage collected */
     py::cpp_function cleanup_callback(
         [](py::handle weakref) { py::gil_scoped_release gsr; jitc_shutdown(false); }

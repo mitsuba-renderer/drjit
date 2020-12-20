@@ -41,7 +41,7 @@ struct DiffVCall
         uint32_t se_before = jitc_side_effect_counter(is_cuda_array_v<Type>);
 
         Result grad_out = dispatch_jit_symbolic<Result>(
-            func_fwd, self, detail::tuple(Base::template grad_in<4 + Is>()...),
+            func_fwd, self, detail::ek_tuple(Base::template grad_in<4 + Is>()...),
             Base::template value_in<4 + Is>()...);
 
         uint32_t se_after = jitc_side_effect_counter(is_cuda_array_v<Type>);
@@ -57,7 +57,7 @@ struct DiffVCall
     void backward_impl(std::index_sequence<Is...>) {
         const detached_t<Self> &self = detach(Base::m_grad_input->template get<0>());
         const FuncRev &func_rev = Base::m_grad_input->template get<3>();
-        using ResultRev = detail::tuple<Args...>;
+        using ResultRev = detail::ek_tuple<Args...>;
 
         uint32_t se_before = jitc_side_effect_counter(is_cuda_array_v<Type>);
 

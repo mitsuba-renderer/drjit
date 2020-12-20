@@ -142,7 +142,7 @@ template <typename... Ts> struct struct_support<std::tuple<Ts...>> {
     }
 };
 
-template <typename... Ts> struct struct_support<detail::tuple<Ts...>> {
+template <typename... Ts> struct struct_support<detail::ek_tuple<Ts...>> {
     static constexpr bool Defined = true;
     using type = struct_support;
 

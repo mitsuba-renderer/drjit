@@ -22,6 +22,7 @@
 #endif
 
 extern "C" {
+    enum class JitFlag : uint32_t;
     /// Evaluate all computation that is scheduled on the current stream
     extern ENOKI_IMPORT void jitc_eval();
     /// Set the active CUDA device
@@ -34,6 +35,12 @@ extern "C" {
     extern ENOKI_IMPORT void jitc_sync_all_devices();
     /// Return a GraphViz representation of queued computation
     extern ENOKI_IMPORT const char *jitc_var_graphviz();
+    /// Retrieve the JIT compiler status flags (see \ref JitFlags)
+    extern ENOKI_IMPORT uint32_t jitc_flags();
+    /// Equivalent to <tt>jitc_set_flags(jitc_flags() | flag)</tt>
+    extern ENOKI_IMPORT void jitc_enable_flag(JitFlag flag);
+    /// Equivalent to <tt>jitc_set_flags(jitc_flags() & ~flag)</tt>
+    extern ENOKI_IMPORT void jitc_disable_flag(JitFlag flag);
 };
 
 NAMESPACE_BEGIN(enoki)
@@ -1858,6 +1865,10 @@ ENOKI_INLINE T rotate_right(const T &a) {
 
 //! @}
 // -----------------------------------------------------------------------
+
+inline uint32_t flags() { return jitc_flags(); }
+inline void enable_flag(JitFlag flag) { jitc_enable_flag(flag); }
+inline void disable_flag(JitFlag flag) { jitc_disable_flag(flag); }
 
 #undef ENOKI_ROUTE_UNARY
 #undef ENOKI_ROUTE_UNARY_FALLBACK

@@ -146,7 +146,7 @@ sequence of equivalent assignments of the form
     **Loops and virtual function calls**: When a custom data structure is an
     argument or return value of a :ref:`virtual function call
     <virtual-functions>`, or when it is a loop variable of a :ref:`symbolic
-    loop <symbolic-loops>`, then Enoki must inspect the data structure's
+    loop <recording-loops>`, then Enoki must inspect the data structure's
     individual fields. In such cases, an :c:macro:`ENOKI_STRUCT` declaration is
     mandatory.
 
@@ -250,7 +250,7 @@ structures.
 
 8. **Other**: Custom data structures can be passed through :ref:`virtual
    function calls <virtual-functions>`, and they can be used as loop variables
-   in :ref:`symbolic loops <symbolic-loops>`.
+   in :ref:`symbolic loops <recording-loops>`.
 
 Adding support to further operations is easy, and patches to this end are
 welcomed.
@@ -322,7 +322,7 @@ interface.
 
 7. **Other**: Custom data structures can be passed through :ref:`virtual
    function calls <virtual-functions>`, and they can be used as loop variables
-   in :ref:`symbolic loops <symbolic-loops>`.
+   in :ref:`symbolic loops <recording-loops>`.
 
 Adding support to further operations is easy, and patches to this end are
 welcomed.

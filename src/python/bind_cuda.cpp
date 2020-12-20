@@ -15,9 +15,12 @@ void export_cuda(py::module_ &m) {
 
     bind_pcg32<Guide>(cuda);
 
-    py::class_<Loop<Guide>> loop(cuda, "Loop");
+    py::class_<Loop<Guide>, ek::LoopBase> loop(cuda, "Loop");
     loop.def(py::init<py::args>())
-        .def("cond", &Loop<Guide>::cond);
+        .def("put", &Loop<Guide>::put)
+        .def("init", &Loop<Guide>::init)
+        .def("cond", &Loop<Guide>::cond)
+        .def("mask", &Loop<Guide>::mask);
 
 #if defined(ENOKI_ENABLE_AUTODIFF)
     loop.def("cond", [](Loop<Guide> &g,

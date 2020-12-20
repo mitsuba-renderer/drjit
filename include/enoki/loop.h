@@ -1,5 +1,5 @@
 /*
-    enoki/loop.h -- Infrastructure to execute CUDA&LLVM loops symbolically
+    enoki/loop.h -- Infrastructure to record CUDA and LLVM loops
 
     Enoki is a C++ template library for efficient vectorization and
     differentiation of numerical kernels on modern processor architectures.
@@ -16,46 +16,161 @@
 #include <enoki-jit/jit.h>
 
 NAMESPACE_BEGIN(enoki)
-NAMESPACE_BEGIN(detail)
-template <typename T1, typename...Ts>
-struct extract_1 { using type = T1; };
-NAMESPACE_END(detail)
 
-template <typename... Args> struct Loop {
-    using Mask = mask_t<leaf_array_t<typename detail::extract_1<Args...>::type>>;
-    using UInt32 = uint32_array_t<Mask>;
-    static constexpr bool Enabled = is_jit_array_v<Mask>;
-    static constexpr bool IsLLVM = is_llvm_array_v<Mask>;
-    static constexpr bool IsCUDA = is_cuda_array_v<Mask>;
+struct LoopBase {
+public:
+    /// Register JIT variable indices of loop variables
+    template <typename Value, typename... Args>
+    void put(Value &value, Args &... args) {
+        if constexpr (is_array_v<Value>) {
+            if constexpr (array_depth_v<Value> == 1) {
+                if constexpr (is_diff_array_v<Value>) {
+                    put(value.detach_());
+                } else if constexpr (is_jit_array_v<Value>) {
+                    if (m_initialized)
+                        enoki_raise("enoki::Loop::put(): must be called "
+                                    "*before* initialization!");
 
+                    m_vars.push_back(value.index_ptr());
+                    m_vars_phi.push_back(0);
+                }
+            } else {
+                for (size_t i = 0; i < value.size(); ++i)
+                    put(value.entry(i));
+            }
+        } else if constexpr (is_enoki_struct_v<Value>) {
+            struct_support_t<Value>::apply_1(value, [&](auto &x) { put(x); });
+        }
+        put(args...);
+    }
+
+    void put() { }
+
+protected:
+    /// *Pointers* to JIT variables used within the loop
+    detail::ek_vector<uint32_t*> m_vars;
+
+    /// Scratch space for PHI variable indices that will be created
+    detail::ek_vector<uint32_t> m_vars_phi;
+
+    /// Have started executing this loop (& the condition?)
+    bool m_initialized = false;
+};
+
+template <typename... Args> struct Loop : LoopBase {
+    using Type   = leaf_array_t<Args...>;
+    using UInt32 = uint32_array_t<Type>;
+    using Mask   = mask_t<UInt32>;
+
+    static constexpr bool Enabled = is_jit_array_v<Type>;
+    static constexpr bool IsLLVM = is_llvm_array_v<Type>;
+    static constexpr bool IsCUDA = is_cuda_array_v<Type>;
+
+    Loop() = default;
     Loop(const Loop &) = delete;
     Loop(Loop &&) = delete;
     Loop& operator=(const Loop &) = delete;
     Loop& operator=(Loop &&) = delete;
 
     Loop(Args&... args) {
+        put(args...);
+        init();
+    }
+
+    void init() {
         if constexpr (Enabled) {
-            // Count the JIT variable IDs of all arguments in 'args'
-            (extract(args, false), ...);
+            if (m_vars.size() == 0)
+                return;
 
-            // Allocate storage for these indices
-            m_vars = new uint32_t*[m_var_count];
-            m_vars_phi = new uint32_t[m_var_count];
+            for (size_t i = 0; i < m_vars.size(); ++i) {
+                if (*m_vars[i] == 0)
+                    enoki_raise("Variables provided to enoki::Loop() must "
+                                "be fully initialized!");
+            }
 
-            // Collect the JIT variable IDs of all arguments in 'args'
-            m_var_count = 0;
-            (extract(args, true), ...);
+            if (m_initialized)
+                enoki_raise("enoki::Loop()::init(): should only be called once!");
 
-            init();
+            uint32_t flags = jitc_flags();
+
+            // Do nothing if symbolic loops aren't enabled
+            if ((flags & (uint32_t) JitFlag::RecordLoops) == 0)
+                return;
+
+            m_initialized = true;
+            m_flags = flags;
+
+            // Temporarily disallow any calls to jitc_eval()
+            jitc_set_flags(m_flags | (uint32_t) JitFlag::RecordingLoop);
+
+            m_side_effect_counter = jitc_side_effect_counter(IsCUDA);
+
+            m_loop_id = m_id = jitc_var_new_0(IsCUDA, VarType::Invalid, "", 1, 1);
+
+            if constexpr (IsLLVM) {
+                // Ensure that the initial state of all loop vars. is evaluted by this point
+                for (size_t i = 0; i < m_vars.size(); ++i)
+                    append(jitc_var_new_2(0, VarType::Invalid, "", 1, *m_vars[i], m_id));
+
+                /* Insert two dummy basic blocks, used to establish
+                   a source in the following set of phi exprs. */
+                append(jitc_var_new_2(0, VarType::Invalid,
+                                      "br label %$L1_pre\n\n$L1_pre:",
+                                      1, m_loop_id, m_id));
+
+                // Create a basic block containing only the phi nodes
+                append(jitc_var_new_2(0, VarType::Invalid,
+                                      "br label %$L1_phi\n\n$L1_phi:", 1,
+                                      m_loop_id, m_id));
+
+                for (size_t i = 0; i < m_vars.size(); ++i) {
+                    uint32_t *idp = m_vars[i];
+
+                    uint32_t id = jitc_var_new_3(
+                        0, jitc_var_type(*idp),
+                        "$r0 = phi <$w x $t0> [ $r1, %$L2_pre ], "
+                        "[ $r0_end, %$L2_end ]",
+                        1, *idp, m_loop_id, m_id);
+
+                    m_vars_phi[i] = id;
+                    jitc_var_dec_ref_ext(*idp);
+                    jitc_var_inc_ref_ext(id);
+                    *idp = id;
+                    append(id);
+                }
+
+                // Next, evalute the branch condition
+                append(jitc_var_new_2(
+                    0, VarType::Invalid,
+                    "br label %$L1_cond\n\n$L1_cond:", 1,
+                    m_loop_id, m_id));
+
+            } else {
+                for (size_t i = 0; i < m_vars.size(); ++i) {
+                    uint32_t *idp = m_vars[i];
+
+                    uint32_t id = jitc_var_new_3(1, jitc_var_type(*idp),
+                                                 "mov.$b0 $r0, $r1", 1, *idp,
+                                                 m_loop_id, m_id);
+
+                    m_vars_phi[i] = id;
+                    jitc_var_dec_ref_ext(*idp);
+                    jitc_var_inc_ref_ext(id);
+                    *idp = id;
+                    append(id);
+                }
+
+                append(jitc_var_new_2(1, VarType::Invalid, "\n$L1_cond:", 1,
+                                      m_loop_id, m_id));
+            }
+
+            insert_copies();
         }
     }
 
     ~Loop() {
         if constexpr (Enabled) {
-            delete[] m_vars;
-            delete[] m_vars_phi;
-
-            if (m_counter != 2) {
+            if (m_initialized && m_counter != 2) {
                 jitc_log(::LogLevel::Warn,
                          "enoki::Loop::cond() must be called exactly twice! "
                          "(please make sure that you use the loop object as "
@@ -66,22 +181,32 @@ template <typename... Args> struct Loop {
         }
     }
 
-    bool cond(const Mask &mask_) {
-        if constexpr (!Enabled) {
-            return (bool) mask_;
-        } else {
-            if (m_counter == 0) {
-                Mask mask;
-                if constexpr (IsLLVM)
-                    mask = mask_ && Mask::active_mask();
-                else
-                    mask = mask_;
+    const Mask &mask() { return m_mask; }
 
-                uint32_t mask_index = 0;
-                if constexpr (is_diff_array_v<Mask>)
-                    mask_index = detach(mask).index();
+    bool cond(const Mask &mask) {
+        if constexpr (!Enabled) {
+            return (bool) mask;
+        } else {
+            if ((m_flags & (uint32_t) JitFlag::RecordLoops) == 0) {
+                for (size_t i = 0; i < m_vars.size(); ++i)
+                    jitc_var_schedule(*m_vars[i]);
+                jitc_eval();
+                m_mask = mask;
+                return any(mask);
+            }
+
+            if (!m_initialized)
+                enoki_raise("enoki::Loop()::init(): must be called before "
+                            "entering the loop!");
+
+            if (m_counter == 0) {
+                Mask active_mask;
+                if constexpr (IsLLVM)
+                    active_mask = mask && Mask::active_mask();
                 else
-                    mask_index = mask.index();
+                    active_mask = mask;
+
+                uint32_t mask_index = detach(active_mask).index();
 
                 if constexpr (IsLLVM) {
                     /// ----------- LLVM -----------
@@ -116,7 +241,7 @@ template <typename... Args> struct Loop {
 
                 if constexpr (IsLLVM) {
                     // Ensure that the final state of all loop vars. is evaluted by this point
-                    for (size_t i = 0; i < m_var_count; ++i)
+                    for (size_t i = 0; i < m_vars.size(); ++i)
                         append(jitc_var_new_2(0, VarType::Invalid, "", 1, *m_vars[i], m_id));
 
                     append(jitc_var_new_2(0, VarType::Invalid,
@@ -125,7 +250,7 @@ template <typename... Args> struct Loop {
                 }
 
                 // Assign changed variables
-                for (size_t i = 0; i < m_var_count; ++i) {
+                for (size_t i = 0; i < m_vars.size(); ++i) {
                     if (IsCUDA && m_vars_phi[i] == *m_vars[i])
                         continue;
 
@@ -158,18 +283,13 @@ template <typename... Args> struct Loop {
             insert_copies();
 
             if (m_counter == 1) {
-                if (jitc_side_effect_counter(IsCUDA) != m_side_effect_counter) {
-                    /* There was a side effect somewhere in the loop.
-                       Create a dummy variable (also a side effect) that
-                       depends on the final branch statement to ensure that the
-                       loop is correctly generated. */
-                    uint32_t idx =
-                        jitc_var_new_1(IsCUDA, VarType::Invalid, "", 1, m_id);
-                    jitc_var_mark_scatter(idx, 0);
-                }
+                /* If there was a side effect somewhere in the loop, mark the
+                   loop itself as a side effect to ensure that it will run. */
+                if (jitc_side_effect_counter(IsCUDA) != m_side_effect_counter)
+                    jitc_var_mark_scatter(m_id, 0);
+                else
+                    jitc_var_dec_ref_ext(m_id);
 
-                // Clean up
-                jitc_var_dec_ref_ext(m_id);
                 jitc_set_flags(m_flags);
                 m_loop_id = m_id = 0;
             }
@@ -178,8 +298,10 @@ template <typename... Args> struct Loop {
         }
     }
 
+protected:
+    /// Copy all variables from the phi expression in m_vars_phi[i]
     void insert_copies() {
-        for (size_t i = 0; i < m_var_count; ++i) {
+        for (size_t i = 0; i < m_vars.size(); ++i) {
             uint32_t *idp = m_vars[i];
 
             uint32_t id = jitc_var_new_2(IsCUDA, jitc_var_type(*idp),
@@ -193,145 +315,22 @@ template <typename... Args> struct Loop {
         }
     }
 
-protected:
-    Loop() = default;
-
     /**
-       This function generates a stream of wrapper instructions that enforce
-       a relative ordering of the instruction stream
+     * \brief Generates a stream of wrapper instructions that enforce a
+     * relative ordering of the instruction stream
      */
     void append(uint32_t id, bool decref = true) {
         jitc_var_dec_ref_ext(m_id);
         m_id = id;
     }
 
-    void init() {
-        if constexpr (Enabled) {
-            if (m_var_count == 0)
-                enoki_raise("enoki::Loop(): no valid loop variables found!");
-            else if (m_cuda != IsCUDA || m_llvm != IsLLVM)
-                enoki_raise("enoki::Loop(): expected either CUDA or LLVM array "
-                            "arguments!");
-            else if (m_other)
-                enoki_raise("enoki::Loop(): mixture of JIT (CUDA/LLVM) and "
-                            "non-JIT values specified as Loop variables!");
-
-            for (size_t i = 0; i < m_var_count; ++i) {
-                if (*m_vars[i] == 0)
-                    enoki_raise("All variables provided to enoki::Loop() must be initialized!");
-            }
-
-            // Temporarily disallow any calls to jitc_eval()
-            m_flags = jitc_flags();
-            jitc_set_flags(m_flags | (uint32_t) JitFlag::RecordingLoop);
-
-            m_side_effect_counter = jitc_side_effect_counter(IsCUDA);
-
-            m_loop_id = m_id = jitc_var_new_0(IsCUDA, VarType::Invalid, "", 1, 1);
-
-            if constexpr (IsLLVM) {
-                // Ensure that the initial state of all loop vars. is evaluted by this point
-                for (size_t i = 0; i < m_var_count; ++i)
-                    append(jitc_var_new_2(0, VarType::Invalid, "", 1, *m_vars[i], m_id));
-
-                /* Insert two dummy basic blocks, used to establish
-                   a source in the following set of phi exprs. */
-                append(jitc_var_new_2(0, VarType::Invalid,
-                                      "br label %$L1_pre\n\n$L1_pre:",
-                                      1, m_loop_id, m_id));
-
-                // Create a basic block containing only the phi nodes
-                append(jitc_var_new_2(0, VarType::Invalid,
-                                      "br label %$L1_phi\n\n$L1_phi:", 1,
-                                      m_loop_id, m_id));
-
-                for (size_t i = 0; i < m_var_count; ++i) {
-                    uint32_t *idp = m_vars[i];
-
-                    uint32_t id = jitc_var_new_3(
-                        0, jitc_var_type(*idp),
-                        "$r0 = phi <$w x $t0> [ $r1, %$L2_pre ], "
-                        "[ $r0_end, %$L2_end ]",
-                        1, *idp, m_loop_id, m_id);
-
-                    m_vars_phi[i] = id;
-                    jitc_var_dec_ref_ext(*idp);
-                    jitc_var_inc_ref_ext(id);
-                    *idp = id;
-                    append(id);
-                }
-
-                // Next, evalute the branch condition
-                append(jitc_var_new_2(
-                    0, VarType::Invalid,
-                    "br label %$L1_cond\n\n$L1_cond:", 1,
-                    m_loop_id, m_id));
-
-            } else {
-                for (size_t i = 0; i < m_var_count; ++i) {
-                    uint32_t *idp = m_vars[i];
-
-                    uint32_t id = jitc_var_new_3(1, jitc_var_type(*idp),
-                                                 "mov.$b0 $r0, $r1", 1, *idp,
-                                                 m_loop_id, m_id);
-
-                    m_vars_phi[i] = id;
-                    jitc_var_dec_ref_ext(*idp);
-                    jitc_var_inc_ref_ext(id);
-                    *idp = id;
-                    append(id);
-                }
-
-                append(jitc_var_new_2(1, VarType::Invalid, "\n$L1_cond:", 1,
-                                      m_loop_id, m_id));
-            }
-
-            insert_copies();
-        }
-    }
-
-    /// Extracts JIT variable indices of loop variables
-    template <typename T> void extract(T &value, bool store) {
-        if constexpr (is_array_v<T>) {
-            if constexpr (array_depth_v<T> == 1) {
-                if constexpr (is_diff_array_v<T>) {
-                    extract(value.detach_(), store);
-                } else if constexpr (is_jit_array_v<T>) {
-                    if constexpr (is_cuda_array_v<T>)
-                        m_cuda = true;
-                    else if constexpr (is_llvm_array_v<T>)
-                        m_llvm = true;
-                    if (store)
-                        m_vars[m_var_count] = value.index_ptr();
-                    m_var_count++;
-                } else {
-                    m_other = true;
-                }
-            } else {
-                for (size_t i = 0; i < value.size(); ++i)
-                    extract(value.entry(i), store);
-            }
-        } else if constexpr (is_enoki_struct_v<T>) {
-            struct_support_t<T>::apply_1(value,
-                [&](auto &x) { extract(x, store); }
-            );
-        } else {
-            m_other = true;
-        }
-    }
-
 protected:
-    uint32_t **m_vars = nullptr;
-    uint32_t *m_vars_phi = nullptr;
-    size_t m_var_count = 0;
     int m_counter = 0;
     uint32_t m_flags = 0;
-    bool m_cuda = false;
-    bool m_llvm = false;
-    bool m_other = false;
     uint32_t m_id = 0;
     uint32_t m_loop_id = 0;
     uint32_t m_side_effect_counter = 0;
+    Mask m_mask = true;
 };
 
 NAMESPACE_END(enoki)

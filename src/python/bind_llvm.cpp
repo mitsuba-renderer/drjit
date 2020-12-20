@@ -3,6 +3,7 @@
 #include "random.h"
 #include "loop.h"
 #include <enoki/llvm.h>
+#include <enoki/autodiff.h>
 
 using Guide = ek::LLVMArray<float>;
 
@@ -14,9 +15,12 @@ void export_llvm(py::module_ &m) {
 
     bind_pcg32<Guide>(llvm);
 
-    py::class_<Loop<Guide>> loop(llvm, "Loop");
+    py::class_<Loop<Guide>, ek::LoopBase> loop(llvm, "Loop");
     loop.def(py::init<py::args>())
-        .def("cond", &Loop<Guide>::cond);
+        .def("put", &Loop<Guide>::put)
+        .def("init", &Loop<Guide>::init)
+        .def("cond", &Loop<Guide>::cond)
+        .def("mask", &Loop<Guide>::mask);
 
 #if defined(ENOKI_ENABLE_AUTODIFF)
     loop.def("cond", [](Loop<Guide> &g,

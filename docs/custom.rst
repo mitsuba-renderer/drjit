@@ -31,7 +31,7 @@ particular operation should be differentiated. Reasons for this may include:
    to what direct application of automatic differentiation would produce.
 
 4. Automatic derivative propagation through Enoki's :ref:`symbolic loops
-   <symbolic-loops>` is not supported. They will always require extra steps as
+   <recording-loops>` is not supported. They will always require extra steps as
    outlined here and in the section on :ref:`differentiating loops
    <diff-loop>`.
 
@@ -237,7 +237,7 @@ Differentiable loops
 Iterative computation performed using normal C++ or Python loops is effectively
 unrolled within the AD computation graph, and its differentiation poses no
 problems. However, automatic differentiation of :ref:`symbolic loops
-<symbolic-loops>` recorded using the :cpp:struct:`Loop` class is not currently
+<recording-loops>` recorded using the :cpp:struct:`Loop` class is not currently
 supported.
 
 As the name indicates, reverse-mode differentiation traverses the computation
@@ -690,6 +690,9 @@ arrays (``temp_pos``, ``temp_vel``).
 
             it += 1
 
+        # Ensure output and temp. arrays are evaluated at this point
+        ek.eval(pos, vel)
+
         return pos, vel, self.temp_pos
 
 The function returns the current position and velocity after 100 steps, as well
@@ -707,9 +710,6 @@ the loop body via :cpp:func:`set_grad()`, :cpp:func:`enqueue()`, and
 
         # Run for 100 iterations
         it = UInt32(100)
-
-        # Ensure temporary arrays are evaluated at this point
-        ek.eval(self.temp_pos, self.temp_vel)
 
         loop = Loop(it, grad_pos, grad_vel)
         n = ek.width(grad_pos)

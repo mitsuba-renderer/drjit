@@ -57,7 +57,7 @@ void write_indices(uint32_t *out, uint32_t &count, T &value) {
 }
 
 template <bool IsCUDA, typename Func, typename... Args>
-bool record(uint32_t &id, uint64_t &hash, detail::tiny_vector<uint32_t> &extra,
+bool record(uint32_t &id, uint64_t &hash, detail::ek_vector<uint32_t> &extra,
             Func func, const Args &... args) {
     using Result       = decltype(func(args...));
     uint32_t se_before = jitc_side_effect_counter(IsCUDA);
@@ -70,7 +70,7 @@ bool record(uint32_t &id, uint64_t &hash, detail::tiny_vector<uint32_t> &extra,
     (read_indices(nullptr, in_count, args), ...);
     read_indices(nullptr, out_count, result);
 
-    detail::tiny_unique_ptr<uint32_t[]> in(new uint32_t[in_count]),
+    detail::ek_unique_ptr<uint32_t[]> in(new uint32_t[in_count]),
                                        out(new uint32_t[out_count]);
 
     in_count = 0, out_count = 0;
@@ -111,10 +111,10 @@ ENOKI_INLINE Result dispatch_jit_symbolic(Func func, const Self &self, const Arg
     // Determine # of existing instances, and preallocate memory for IR codegen
     uint32_t n_inst = jitc_registry_get_max(Class::Domain) + 1;
 
-    detail::tiny_unique_ptr<uint32_t[]> call_id(new uint32_t[n_inst]);
-    detail::tiny_unique_ptr<uint64_t[]> call_hash(new uint64_t[n_inst]);
-    detail::tiny_unique_ptr<uint32_t[]> extra_offset(new uint32_t[n_inst]);
-    detail::tiny_vector<uint32_t> extra;
+    detail::ek_unique_ptr<uint32_t[]> call_id(new uint32_t[n_inst]);
+    detail::ek_unique_ptr<uint64_t[]> call_hash(new uint64_t[n_inst]);
+    detail::ek_unique_ptr<uint32_t[]> extra_offset(new uint32_t[n_inst]);
+    detail::ek_vector<uint32_t> extra;
     bool side_effects = false;
 
     // Call each instance symbolically and record!
@@ -138,14 +138,14 @@ ENOKI_INLINE Result dispatch_jit_symbolic(Func func, const Self &self, const Arg
     // Collect input arguments
     uint32_t in_count = 0;
     (read_indices(nullptr, in_count, args), ...);
-    detail::tiny_unique_ptr<uint32_t[]> in(new uint32_t[in_count]);
+    detail::ek_unique_ptr<uint32_t[]> in(new uint32_t[in_count]);
     in_count = 0;
     (read_indices(in.get(), in_count, args), ...);
 
     // Collect output arguments
     uint32_t out_count = 0;
     read_indices(nullptr, out_count, result);
-    detail::tiny_unique_ptr<uint32_t[]> out(new uint32_t[out_count]);
+    detail::ek_unique_ptr<uint32_t[]> out(new uint32_t[out_count]);
     out_count = 0;
     read_indices(out.get(), out_count, result);
 

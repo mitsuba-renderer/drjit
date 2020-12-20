@@ -14,7 +14,15 @@ def get_class(name):
     value = __import__(".".join(name[:-1]))
     for item in name[1:]:
         value = getattr(value, item)
+    ek.enable_flag(ek.JitFlag.RecordLoops)
+
     return value
+
+def setup_function(function):
+    ek.enable_flag(ek.JitFlag.RecordLoops)
+
+def teardown_function(function):
+    ek.disable_flag(ek.JitFlag.RecordLoops)
 
 pkgs = ["enoki.cuda", "enoki.cuda.ad",
         "enoki.llvm", "enoki.llvm.ad"]
@@ -73,7 +81,7 @@ def test03_failures(pkg):
     with pytest.raises(ek.Exception) as e:
         p.Loop(i, v)
 
-    assert 'All variables provided to enoki::Loop() must be initialized' in str(e.value)
+    assert 'Variables provided to enoki::Loop() must be fully initialized' in str(e.value)
 
     if 'ad' in pkg:
         i = p.Int(0)
@@ -97,6 +105,27 @@ def test04_side_effect(pkg):
         i += 1
         ek.scatter_add(target=buf, value=p.Float(i), index=0)
 
+    ek.eval(i, j)
+    assert i == p.Int([10]*10)
+    assert buf == p.Float(550, *([0]*9))
+    assert j == p.Int([45]*10)
+
+
+@pytest.mark.parametrize("pkg", pkgs)
+def test05_side_effect_noloop(pkg):
+    p = get_class(pkg)
+
+    i = ek.zero(p.Int, 10)
+    j = ek.zero(p.Int, 10)
+    buf = ek.zero(p.Float, 10)
+    ek.disable_flag(ek.JitFlag.RecordLoops)
+
+    loop = p.Loop(i, j)
+    while loop.cond(i < 10):
+        j += i
+        i += 1
+        ek.scatter_add(target=buf, value=p.Float(i), index=0, mask=loop.mask())
+
     assert i == p.Int([10]*10)
     assert buf == p.Float(550, *([0]*9))
     assert j == p.Int([45]*10)
@@ -104,7 +133,7 @@ def test04_side_effect(pkg):
 
 @pytest.mark.parametrize("variant", [0, 1, 2])
 @pytest.mark.parametrize("pkg", pkgs)
-def test05_test_collatz(pkg, variant):
+def test06_test_collatz(pkg, variant):
     p = get_class(pkg)
 
     def collatz(value: p.Int):
@@ -134,7 +163,7 @@ def test05_test_collatz(pkg, variant):
                                  "enoki.cuda.ad",
                                  "enoki.llvm",
                                  "enoki.llvm.ad"])
-def test06_loop_nest(pkg, variant):
+def test07_loop_nest(pkg, variant):
     p = get_class(pkg)
 
     def collatz(value: p.Int):

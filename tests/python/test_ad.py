@@ -804,12 +804,14 @@ def test45_diff_loop(m):
     def elliptic_k(m_):
         return ek.custom(EllipticK, m_)
 
+    ek.enable_flag(ek.JitFlag.RecordLoops)
     x = m.Float(0.5)
     ek.enable_grad(x)
     y = elliptic_k(x)
     ek.forward(x)
     assert ek.allclose(y, 1.85407, rtol=5e-4)
     assert ek.allclose(ek.grad(y), 0.847213, rtol=5e-4)
+    ek.disable_flag(ek.JitFlag.RecordLoops)
 
 
 def test46_loop_ballistic(m):
@@ -845,6 +847,9 @@ def test46_loop_ballistic(m):
 
                 it += 1
 
+            # Ensure output and temp. arrays are evaluated at this point
+            ek.eval(pos, vel)
+
             return pos, vel
 
         def backward(self):
@@ -852,9 +857,6 @@ def test46_loop_ballistic(m):
 
             # Run for 100 iterations
             it = m.UInt32(100)
-
-            # Ensure temporary arrays are evaluated at this point
-            ek.eval(self.temp_pos, self.temp_vel)
 
             loop = m.Loop(it, grad_pos, grad_vel)
             n = ek.width(grad_pos)
@@ -883,6 +885,7 @@ def test46_loop_ballistic(m):
     pos_in = m.Array2f([1, 2, 4], [1, 2, 1])
     vel_in = m.Array2f([10, 9, 4], [5, 3, 6])
 
+    ek.enable_flag(ek.JitFlag.RecordLoops)
     for i in range(20):
         ek.enable_grad(vel_in)
         ek.eval(vel_in, pos_in)
@@ -894,6 +897,7 @@ def test46_loop_ballistic(m):
 
     assert ek.allclose(loss, 0, atol=1e-4)
     assert ek.allclose(vel_in.x, [3.3516, 2.3789, 0.79156], atol=1e-3)
+    ek.disable_flag(ek.JitFlag.RecordLoops)
 
 
 def test46_loop_ballistic_2(m):
@@ -953,6 +957,7 @@ def test46_loop_ballistic_2(m):
             self.set_grad_in('pos', grad_pos)
             self.set_grad_in('vel', grad_vel)
 
+    ek.enable_flag(ek.JitFlag.RecordLoops)
     pos_in = m.Array2f([1, 2, 4], [1, 2, 1])
     vel_in = m.Array2f([10, 9, 4], [5, 3, 6])
 
@@ -967,6 +972,7 @@ def test46_loop_ballistic_2(m):
 
     assert ek.allclose(loss, 0, atol=1e-4)
     assert ek.allclose(vel_in.x, [3.3516, 2.3789, 0.79156], atol=1e-3)
+    ek.disable_flag(ek.JitFlag.RecordLoops)
 
 
 def test47_nan_propagation(m):
