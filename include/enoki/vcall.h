@@ -87,7 +87,7 @@ namespace detail {
         ENOKI_MARK_USED(func_rev);
 
         if constexpr (is_jit_array_v<Self>) {
-            if ((jitc_flags() & 2) == 0 || is_llvm_array_v<Self>) {
+            if ((jitc_flags() & 4) == 0 || is_llvm_array_v<Self>) {
                 return detail::dispatch_jit_reduce<Result>(func, self, copy_diff(args)...);
             } else {
                 if constexpr (is_diff_array_v<Self>)
