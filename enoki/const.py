@@ -37,6 +37,8 @@ _RecipOverflow32   = float.fromhex('0x1p-128')  # noqa
 _RecipOverflow64   = float.fromhex('0x1p-1024')  # noqa
 _Smallest32        = float.fromhex('0x1p-126')  # noqa
 _Smallest64        = float.fromhex('0x1p-1022')  # noqa
+_Largest32         = float.fromhex('0x1.fffffep+127')  # noqa
+_Largest64         = float.fromhex('0x1.fffffffffffffp+1023')  # noqa
 _f64               = _enoki.VarType.Float64
 
 
@@ -58,3 +60,7 @@ def RecipOverflow(t):
 def Smallest(t):
     double_precision = getattr(t, 'Type', _f64) == _f64
     return _Smallest64 if double_precision else _Smallest32
+
+def Largest(t):
+    double_precision = getattr(t, 'Type', _f64) == _f64
+    return _Largest64 if double_precision else _Largest32

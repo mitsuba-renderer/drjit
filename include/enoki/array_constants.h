@@ -62,6 +62,11 @@ template <typename T> constexpr auto RecipOverflow   = scalar_t<T>(sizeof(scalar
 template <typename T> constexpr auto Smallest        = scalar_t<T>(sizeof(scalar_t<T>) == 8
                                                                    ? 0x1p-1022 : 0x1p-126);
 
+/// Largest normalized floating point value
+template <typename T> constexpr auto Largest         = scalar_t<T>(sizeof(scalar_t<T>) == 8
+                                                                   ? 0x1.fffffffffffffp+1023
+                                                                   : 0x1.fffffep+127 );
+
 NAMESPACE_BEGIN(detail)
 template <typename T> struct debug_initialization {
     static constexpr T value = T(int_array_t<T>(-1));
