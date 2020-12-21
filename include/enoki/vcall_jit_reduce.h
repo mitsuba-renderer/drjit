@@ -36,7 +36,7 @@ ENOKI_INLINE Result dispatch_jit_reduce(Func func, const Self &self, const Args&
     using Class = scalar_t<Self>;
 
     if constexpr (!std::is_void_v<Result>) {
-        Result result = empty<Result>(self.size());
+        Result result;
 
         if (self.size() == 1) {
             Class ptr = (Class) self.entry(0);
@@ -47,22 +47,28 @@ ENOKI_INLINE Result dispatch_jit_reduce(Func func, const Self &self, const Args&
         } else {
             schedule(args...);
             auto [buckets, size] = self.vcall_();
-            for (size_t i = 0; i < size; ++i) {
-                UInt32 perm = UInt32::borrow(buckets[i].index);
 
-                if (buckets[i].ptr) {
-                    using OrigResult = decltype(func((Class) nullptr, args...));
-                    scatter<true>(
-                        result,
-                        ref_cast_t<OrigResult, Result>(func(
-                            (Class) buckets[i].ptr,
-                            detail::gather_helper(args, perm)...)),
-                        perm);
-                } else {
-                    scatter<true>(result, zero<Result>(), perm);
+            if (size > 0) {
+                result = empty<Result>(self.size());
+                for (size_t i = 0; i < size; ++i) {
+                    UInt32 perm = UInt32::borrow(buckets[i].index);
+
+                    if (buckets[i].ptr) {
+                        using OrigResult = decltype(func((Class) nullptr, args...));
+                        scatter<true>(
+                            result,
+                            ref_cast_t<OrigResult, Result>(func(
+                                (Class) buckets[i].ptr,
+                                detail::gather_helper(args, perm)...)),
+                            perm);
+                    } else {
+                        scatter<true>(result, zero<Result>(), perm);
+                    }
                 }
+                schedule(result);
+            } else {
+                result = zero<Result>(self.size());
             }
-            schedule(result);
         }
         return result;
     } else {
