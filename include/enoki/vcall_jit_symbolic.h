@@ -32,8 +32,11 @@ void read_indices(uint32_t *out, uint32_t &count, const T &value) {
     } else if constexpr (is_diff_array_v<T>) {
         read_indices(out, count, value.detach_());
     } else if constexpr (is_jit_array_v<T>) {
+        uint32_t i = value.index();
+        if (i == 0)
+            jitc_fail("enoki::detail::read_indices(): uninitialized variable!");
         if (out)
-            out[count] = value.index();
+            out[count] = i;
         count += 1;
     } else if constexpr (is_enoki_struct_v<T>) {
         struct_support_t<T>::apply_1(

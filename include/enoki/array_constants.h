@@ -65,7 +65,7 @@ template <typename T> constexpr auto Smallest        = scalar_t<T>(sizeof(scalar
 /// Largest normalized floating point value
 template <typename T> constexpr auto Largest         = scalar_t<T>(sizeof(scalar_t<T>) == 8
                                                                    ? 0x1.fffffffffffffp+1023
-                                                                   : 0x1.fffffep+127 );
+                                                                   : 0x1.fffffep+127);
 
 NAMESPACE_BEGIN(detail)
 template <typename T> struct debug_initialization {
