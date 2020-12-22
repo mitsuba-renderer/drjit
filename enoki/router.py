@@ -1365,9 +1365,9 @@ def graphviz(*args, reverse=True):
 
 def migrate(a, type_):
     if _ek.is_jit_array_v(a):
-        a.migrate_(type_)
+        return a.migrate_(type_)
     else:
-        raise Exception("migrate(): expected a JIT array type!")
+        return a
 
 # -------------------------------------------------------------------
 #           Vertical operations -- transcendental functions

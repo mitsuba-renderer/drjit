@@ -1285,11 +1285,14 @@ def enqueue_(a):
         a[i].enqueue_()
 
 
-def migrate_(a, type_):
+def migrate_(a, target):
     if not a.IsJIT:
         raise Exception("Expected a JIT array type!")
+    t = type(a)
+    result = t.empty_(len(a) if a.Size == Dynamic else 0)
     for i in range(len(a)):
-        a.entry_ref_(i).migrate_(type_)
+        result[i] = a[i].migrate_(target)
+    return result
 
 
 def index_(a):
@@ -1460,7 +1463,7 @@ def export_(a, migrate_to_host, version):
         if b.IsCUDA and migrate_to_host:
             if b is a:
                 b = type(a)(b)
-            b.migrate_(_ek.AllocType.Host)
+            b = b.migrate_(_ek.AllocType.Host)
             _ek.sync_thread()
         elif b.IsLLVM:
             _ek.sync_thread()
@@ -1514,7 +1517,7 @@ def numpy(a):
     import numpy
     arr = numpy.array(a, copy=False)
     if a.IsComplex:
-        arr = arr = numpy.ascontiguousarray(arr)
+        arr = numpy.ascontiguousarray(arr)
         if arr.dtype == numpy.float32:
             return arr.view(numpy.complex64)[..., 0]
         elif arr.dtype == numpy.float64:

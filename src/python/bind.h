@@ -376,7 +376,7 @@ auto bind_full(py::class_<Array> &cls, bool scalar_mode = false) {
     }
 
     if constexpr (!ek::is_mask_v<Array> || ek::is_dynamic_v<Array>) {
-        cls.def_static("load_aligned_", [](uintptr_t ptr, size_t size) {
+        cls.def_static("load_", [](uintptr_t ptr, size_t size) {
             return enoki::load<Array>((const void *) ptr, size);
         });
     }
