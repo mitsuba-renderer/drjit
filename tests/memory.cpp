@@ -20,26 +20,26 @@ ENOKI_TEST_ALL(test01_load) {
     alignas(alignof(T)) Value mem[Size];
     for (size_t i = 0; i < Size; ++i)
         mem[i] = (Value) i;
-    assert(load<T>(mem) == arange<T>());
+    assert(load_aligned<T>(mem) == arange<T>());
 }
 
-ENOKI_TEST_ALL(test02_load_unaligned) {
+ENOKI_TEST_ALL(test02_load) {
     Value mem[Size];
     for (size_t i = 0; i < Size; ++i)
         mem[i] = (Value) i;
-    assert(load_unaligned<T>(mem) == arange<T>());
+    assert(load<T>(mem) == arange<T>());
 }
 
 ENOKI_TEST_ALL(test03_store) {
     alignas(alignof(T)) Value mem[Size];
-    store(mem, arange<T>());
+    store_aligned(mem, arange<T>());
     for (size_t i = 0; i < Size; ++i)
         assert(mem[i] == (Value) i);
 }
 
-ENOKI_TEST_ALL(test04_store_unaligned) {
+ENOKI_TEST_ALL(test04_store) {
     Value mem[Size];
-    store_unaligned(mem, arange<T>());
+    store(mem, arange<T>());
     for (size_t i = 0; i < Size; ++i)
         assert(mem[i] == (Value) i);
 }
@@ -54,15 +54,15 @@ ENOKI_TEST_ALL(test05_gather) {
         mem[i] = (Value) i;
     }
 
-    auto id32 = load_unaligned<Array<uint32_t, Size>>(indices32);
-    auto id64 = load_unaligned<Array<uint64_t, Size>>(indices64);
+    auto id32 = load<Array<uint32_t, Size>>(indices32);
+    auto id64 = load<Array<uint64_t, Size>>(indices64);
 
 #if defined(_MSC_VER)
     /// MSVC doesn't seem to correctly track data dependencies involving gathers
     MemoryBarrier();
 #endif
 
-    store(dst, gather<T>(mem, id32));
+    store_aligned(dst, gather<T>(mem, id32));
     for (size_t i = 0; i < Size; ++i)
         assert(dst[i] == Value(Size - 1 - i));
     memset(dst, 0, sizeof(Value) * Size);
@@ -72,7 +72,7 @@ ENOKI_TEST_ALL(test05_gather) {
     MemoryBarrier();
 #endif
 
-    store(dst, gather<T>(mem, id64));
+    store_aligned(dst, gather<T>(mem, id64));
 
     for (size_t i = 0; i < Size; ++i)
         assert(dst[i] == Value(Size - 1 - i));
@@ -122,8 +122,8 @@ ENOKI_TEST_ALL(test07_gather_mask) {
         mem[i] = (Value) i;
     }
 
-    auto id32 = load_unaligned<Array<uint32_t, Size>>(indices32);
-    auto id64 = load_unaligned<Array<uint64_t, Size>>(indices64);
+    auto id32 = load<Array<uint32_t, Size>>(indices32);
+    auto id64 = load<Array<uint64_t, Size>>(indices64);
     auto idx = arange<uint_array_t<T>>();
     auto even_mask = mask_t<T>(eq(sl<1>(sr<1>(idx)), idx));
 
@@ -133,7 +133,7 @@ ENOKI_TEST_ALL(test07_gather_mask) {
 #endif
 
     memset(dst, 0, sizeof(Value) * Size);
-    store(dst, gather<T>(mem, id32, even_mask));
+    store_aligned(dst, gather<T>(mem, id32, even_mask));
     for (size_t i = 0; i < Size; ++i)
         assert(dst[i] == ((i % 2 == 0) ? Value(Size - 1 - i) : 0));
     memset(dst, 0, sizeof(Value) * Size);
@@ -143,7 +143,7 @@ ENOKI_TEST_ALL(test07_gather_mask) {
     MemoryBarrier();
 #endif
 
-    store(dst, gather<T>(mem, id64, even_mask));
+    store_aligned(dst, gather<T>(mem, id64, even_mask));
     for (size_t i = 0; i < Size; ++i)
         assert(dst[i] == ((i % 2 == 0) ? Value(Size - 1 - i) : 0));
 }
@@ -158,16 +158,16 @@ ENOKI_TEST_ALL(test08_scatter) {
         mem[i] = (Value) i;
     }
 
-    auto id32 = load_unaligned<Array<uint32_t, Size>>(indices32);
-    auto id64 = load_unaligned<Array<uint64_t, Size>>(indices64);
+    auto id32 = load<Array<uint32_t, Size>>(indices32);
+    auto id64 = load<Array<uint64_t, Size>>(indices64);
 
     memset(dst, 0, sizeof(Value) * Size);
-    scatter(dst, load<T>(mem), id32);
+    scatter(dst, load_aligned<T>(mem), id32);
     for (size_t i = 0; i < Size; ++i)
         assert(dst[i] == Value(Size - 1 - i));
     memset(dst, 0, sizeof(Value) * Size);
 
-    scatter(dst, load<T>(mem), id64);
+    scatter(dst, load_aligned<T>(mem), id64);
     for (size_t i = 0; i < Size; ++i)
         assert(dst[i] == Value(Size - 1 - i));
     memset(dst, 0, sizeof(Value) * Size);
@@ -182,19 +182,19 @@ ENOKI_TEST_ALL(test09_scatter_mask) {
         indices64[i] = uint64_t(Size - 1 - i);
         mem[i] = (Value) i;
     }
-    auto id32 = load_unaligned<Array<uint32_t, Size>>(indices32);
-    auto id64 = load_unaligned<Array<uint64_t, Size>>(indices64);
+    auto id32 = load<Array<uint32_t, Size>>(indices32);
+    auto id64 = load<Array<uint64_t, Size>>(indices64);
 
     auto idx = arange<uint_array_t<T>>();
     auto even_mask = mask_t<T>(eq(sl<1>(sr<1>(idx)), idx));
 
     memset(dst, 0, sizeof(Value) * Size);
-    scatter(dst, load<T>(mem), id32, even_mask);
+    scatter(dst, load_aligned<T>(mem), id32, even_mask);
     for (size_t i = 0; i < Size; ++i)
         assert(dst[i] == (((Size-1-i) % 2 == 0) ? Value(Size - 1 - i) : 0));
     memset(dst, 0, sizeof(Value) * Size);
 
-    scatter(dst, load<T>(mem), id64, even_mask);
+    scatter(dst, load_aligned<T>(mem), id64, even_mask);
     for (size_t i = 0; i < Size; ++i)
         assert(dst[i] == (((Size-1-i) % 2 == 0) ? Value(Size - 1 - i) : 0));
 }

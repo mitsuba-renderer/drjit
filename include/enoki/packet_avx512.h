@@ -254,19 +254,19 @@ template <bool IsMask_, typename Derived_> struct alignas(64)
     //! @}
     // -----------------------------------------------------------------------
 
-    ENOKI_INLINE void store_(void *ptr) const {
+    ENOKI_INLINE void store_aligned_(void *ptr) const {
         _mm512_store_ps((Value *) ENOKI_ASSUME_ALIGNED(ptr, 64), m);
     }
 
-    ENOKI_INLINE void store_unaligned_(void *ptr) const {
+    ENOKI_INLINE void store_(void *ptr) const {
         _mm512_storeu_ps((Value *) ptr, m);
     }
 
-    static ENOKI_INLINE Derived load_(const void *ptr, size_t) {
+    static ENOKI_INLINE Derived load_aligned_(const void *ptr, size_t) {
         return _mm512_load_ps((const Value *) ENOKI_ASSUME_ALIGNED(ptr, 64));
     }
 
-    static ENOKI_INLINE Derived load_unaligned_(const void *ptr, size_t) {
+    static ENOKI_INLINE Derived load_(const void *ptr, size_t) {
         return _mm512_loadu_ps((const Value *) ptr);
     }
 
@@ -562,19 +562,19 @@ template <bool IsMask_, typename Derived_> struct alignas(64)
     //! @}
     // -----------------------------------------------------------------------
 
-    ENOKI_INLINE void store_(void *ptr) const {
+    ENOKI_INLINE void store_aligned_(void *ptr) const {
         _mm512_store_pd((Value *) ENOKI_ASSUME_ALIGNED(ptr, 64), m);
     }
 
-    ENOKI_INLINE void store_unaligned_(void *ptr) const {
+    ENOKI_INLINE void store_(void *ptr) const {
         _mm512_storeu_pd((Value *) ptr, m);
     }
 
-    static ENOKI_INLINE Derived load_(const void *ptr, size_t) {
+    static ENOKI_INLINE Derived load_aligned_(const void *ptr, size_t) {
         return _mm512_load_pd((const Value *) ENOKI_ASSUME_ALIGNED(ptr, 64));
     }
 
-    static ENOKI_INLINE Derived load_unaligned_(const void *ptr, size_t) {
+    static ENOKI_INLINE Derived load_(const void *ptr, size_t) {
         return _mm512_loadu_pd((const Value *) ptr);
     }
 
@@ -851,19 +851,19 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(64)
     //! @}
     // -----------------------------------------------------------------------
 
-    ENOKI_INLINE void store_(void *ptr) const {
+    ENOKI_INLINE void store_aligned_(void *ptr) const {
         _mm512_store_si512((__m512i *) ENOKI_ASSUME_ALIGNED(ptr, 64), m);
     }
 
-    ENOKI_INLINE void store_unaligned_(void *ptr) const {
+    ENOKI_INLINE void store_(void *ptr) const {
         _mm512_storeu_si512((__m512i *) ptr, m);
     }
 
-    static ENOKI_INLINE Derived load_(const void *ptr, size_t) {
+    static ENOKI_INLINE Derived load_aligned_(const void *ptr, size_t) {
         return _mm512_load_si512((const __m512i *) ENOKI_ASSUME_ALIGNED(ptr, 64));
     }
 
-    static ENOKI_INLINE Derived load_unaligned_(const void *ptr, size_t) {
+    static ENOKI_INLINE Derived load_(const void *ptr, size_t) {
         return _mm512_loadu_si512((const __m512i *) ptr);
     }
 
@@ -1160,19 +1160,19 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(64)
     //! @}
     // -----------------------------------------------------------------------
 
-    ENOKI_INLINE void store_(void *ptr) const {
+    ENOKI_INLINE void store_aligned_(void *ptr) const {
         _mm512_store_si512((__m512i *) ENOKI_ASSUME_ALIGNED(ptr, 64), m);
     }
 
-    ENOKI_INLINE void store_unaligned_(void *ptr) const {
+    ENOKI_INLINE void store_(void *ptr) const {
         _mm512_storeu_si512((__m512i *) ptr, m);
     }
 
-    static ENOKI_INLINE Derived load_(const void *ptr, size_t) {
+    static ENOKI_INLINE Derived load_aligned_(const void *ptr, size_t) {
         return _mm512_load_si512((const __m512i *) ENOKI_ASSUME_ALIGNED(ptr, 64));
     }
 
-    static ENOKI_INLINE Derived load_unaligned_(const void *ptr, size_t) {
+    static ENOKI_INLINE Derived load_(const void *ptr, size_t) {
         return _mm512_loadu_si512((const __m512i *) ptr);
     }
 

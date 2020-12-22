@@ -1532,12 +1532,12 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             enoki_raise("map_(): not supported in scalar mode!");
     }
 
-    static DiffArray load_unaligned_(const void *ptr, size_t size) {
-        return load_unaligned<Type>(ptr, size);
+    static DiffArray load_(const void *ptr, size_t size) {
+        return load<Type>(ptr, size);
     }
 
-    void store_unaligned_(void *ptr) const {
-        store_unaligned(ptr, m_value);
+    void store_(void *ptr) const {
+        store(ptr, m_value);
     }
 
     //! @}
@@ -1608,9 +1608,10 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         }
     }
 
-    void migrate_(AllocType type) {
+    DiffArray migrate_(AllocType type) const {
         if constexpr (is_jit_array_v<Type_>)
-            m_value.migrate_(type);
+            return m_value.migrate_(type);
+        return *this;
     }
 
     bool schedule_() const {

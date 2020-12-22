@@ -865,13 +865,13 @@ ENOKI_INLINE Array arange(ssize_t start, ssize_t end, ssize_t step = 1) {
 }
 
 /// Load an array from aligned memory
-template <typename T> ENOKI_INLINE T load(const void *ptr, size_t size = 1) {
+template <typename T> ENOKI_INLINE T load_aligned(const void *ptr, size_t size = 1) {
 #if !defined(NDEBUG)
     if (ENOKI_UNLIKELY((uintptr_t) ptr % alignof(T) != 0))
-        enoki_raise("load(): pointer %p is misaligned (alignment = %zu)!", ptr, alignof(T));
+        enoki_raise("load_aligned(): pointer %p is misaligned (alignment = %zu)!", ptr, alignof(T));
 #endif
     if constexpr (is_array_v<T>)
-        return T::load_(ptr, size);
+        return T::load_aligned_(ptr, size);
     else
         return *static_cast<const T *>(ptr);
 }
@@ -884,30 +884,30 @@ template <typename T> ENOKI_INLINE T map(void *ptr, size_t size = 1, bool free =
 }
 
 /// Load an array from unaligned memory
-template <typename T> ENOKI_INLINE T load_unaligned(const void *ptr, size_t size = 1) {
+template <typename T> ENOKI_INLINE T load(const void *ptr, size_t size = 1) {
     if constexpr (is_array_v<T>)
-        return T::load_unaligned_(ptr, size);
+        return T::load_(ptr, size);
     else
         return *static_cast<const T *>(ptr);
 }
 
 /// Store an array to aligned memory
-template <typename T> ENOKI_INLINE void store(void *ptr, const T &value) {
+template <typename T> ENOKI_INLINE void store_aligned(void *ptr, const T &value) {
 #if !defined(NDEBUG)
     if (ENOKI_UNLIKELY((uintptr_t) ptr % alignof(T) != 0))
-        enoki_raise("store(): pointer %p is misaligned (alignment = %zu)!", ptr, alignof(T));
+        enoki_raise("store_aligned(): pointer %p is misaligned (alignment = %zu)!", ptr, alignof(T));
 #endif
 
     if constexpr (is_array_v<T>)
-        value.store_(ptr);
+        value.store_aligned_(ptr);
     else
         *static_cast<T *>(ptr) = value;
 }
 
 /// Store an array to unaligned memory
-template <typename T> ENOKI_INLINE void store_unaligned(void *ptr, const T &value) {
+template <typename T> ENOKI_INLINE void store(void *ptr, const T &value) {
     if constexpr (is_array_v<T>)
-        value.store_unaligned_(ptr);
+        value.store_(ptr);
     else
         *static_cast<T *>(ptr) = value;
 }
@@ -955,10 +955,10 @@ Target gather(Source &&source, const Index &index, const mask_t<Target> &mask = 
             size_t offset = index * sizeof(value_t<Target>) * Target::Size;
             if constexpr (std::is_pointer_v<std::decay_t<Source>>) {
                 // Case 2.0.0: gather<Target>(const void *, size_t, ...)
-                return load_unaligned<Target>((const uint8_t *)source + offset);
+                return load<Target>((const uint8_t *)source + offset);
             } else {
                 // Case 2.0.1: gather<Target>(const FloatC&, size_t, ...)
-                return load_unaligned<Target>((const uint8_t *)source.data() + offset);
+                return load<Target>((const uint8_t *)source.data() + offset);
             }
         } else if constexpr (array_depth_v<Target> == array_depth_v<Index>) {
             // Case 2.1: gather<FloatC>(const FloatC& / const void *, ...)

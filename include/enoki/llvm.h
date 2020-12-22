@@ -1038,7 +1038,7 @@ struct LLVMArray : ArrayBase<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
             jitc_var_map_mem(0, Type, ptr, (uint32_t) size, free ? 1 : 0));
     }
 
-    static LLVMArray load_unaligned_(const void *ptr, size_t size) {
+    static LLVMArray load_(const void *ptr, size_t size) {
         if constexpr (!IsClass) {
             return steal(
                 jitc_var_copy_mem(0, AllocType::Host, Type, ptr, (uint32_t) size));
@@ -1053,7 +1053,7 @@ struct LLVMArray : ArrayBase<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
         }
     }
 
-    void store_unaligned_(void *ptr) const {
+    void store_(void *ptr) const {
         eval_();
         if constexpr (!IsClass) {
             jitc_memcpy(0, ptr, data(), size() * sizeof(Value));

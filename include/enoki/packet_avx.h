@@ -388,19 +388,19 @@ template <bool IsMask_, typename Derived_> struct alignas(32)
     //! @{ \name Initialization, loading/writing data
     // -----------------------------------------------------------------------
 
-    ENOKI_INLINE void store_(void *ptr) const {
+    ENOKI_INLINE void store_aligned_(void *ptr) const {
         _mm256_store_ps((Value *) ENOKI_ASSUME_ALIGNED(ptr, 32), m);
     }
 
-    ENOKI_INLINE void store_unaligned_(void *ptr) const {
+    ENOKI_INLINE void store_(void *ptr) const {
         _mm256_storeu_ps((Value *) ptr, m);
     }
 
-    static ENOKI_INLINE Derived load_(const void *ptr, size_t) {
+    static ENOKI_INLINE Derived load_aligned_(const void *ptr, size_t) {
         return _mm256_load_ps((const Value *) ENOKI_ASSUME_ALIGNED(ptr, 32));
     }
 
-    static ENOKI_INLINE Derived load_unaligned_(const void *ptr, size_t) {
+    static ENOKI_INLINE Derived load_(const void *ptr, size_t) {
         return _mm256_loadu_ps((const Value *) ptr);
     }
 
@@ -753,19 +753,19 @@ template <bool IsMask_, typename Derived_> struct alignas(32)
     //! @{ \name Initialization, loading/writing data
     // -----------------------------------------------------------------------
 
-    ENOKI_INLINE void store_(void *ptr) const {
+    ENOKI_INLINE void store_aligned_(void *ptr) const {
         _mm256_store_pd((Value *) ENOKI_ASSUME_ALIGNED(ptr, 32), m);
     }
 
-    ENOKI_INLINE void store_unaligned_(void *ptr) const {
+    ENOKI_INLINE void store_(void *ptr) const {
         _mm256_storeu_pd((Value *) ptr, m);
     }
 
-    static ENOKI_INLINE Derived load_(const void *ptr, size_t) {
+    static ENOKI_INLINE Derived load_aligned_(const void *ptr, size_t) {
         return _mm256_load_pd((const Value *) ENOKI_ASSUME_ALIGNED(ptr, 32));
     }
 
-    static ENOKI_INLINE Derived load_unaligned_(const void *ptr, size_t) {
+    static ENOKI_INLINE Derived load_(const void *ptr, size_t) {
         return _mm256_loadu_pd((const Value *) ptr);
     }
 
@@ -867,19 +867,19 @@ template <bool IsMask_, typename Derived_> struct alignas(32)
         #endif
     }
 
-    ENOKI_INLINE void store_(void *ptr) const {
+    ENOKI_INLINE void store_aligned_(void *ptr) const {
         memcpy(ptr, &m, sizeof(Value) * 3);
     }
 
-    ENOKI_INLINE void store_unaligned_(void *ptr) const {
-        store_(ptr);
+    ENOKI_INLINE void store_(void *ptr) const {
+        store_aligned_(ptr);
     }
 
-    static ENOKI_INLINE Derived load_(const void *ptr, size_t size) {
-        return Base::load_unaligned_(ptr, size);
+    static ENOKI_INLINE Derived load_aligned_(const void *ptr, size_t size) {
+        return Base::load_(ptr, size);
     }
 
-    static ENOKI_INLINE Derived load_unaligned_(const void *ptr, size_t) {
+    static ENOKI_INLINE Derived load_(const void *ptr, size_t) {
         Derived result;
         memcpy(&result.m, ptr, sizeof(Value) * 3);
         return result;

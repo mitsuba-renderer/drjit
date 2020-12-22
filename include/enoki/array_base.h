@@ -835,12 +835,12 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
                         mask.entry(i));
     }
 
-    static Derived load_(const void *mem, size_t size) {
-        return Derived::load_unaligned_(mem, size);
+    static Derived load_aligned_(const void *mem, size_t size) {
+        return Derived::load_(mem, size);
     }
 
-    void store_(void *mem) const {
-        return derived().store_unaligned_(mem);
+    void store_aligned_(void *mem) const {
+        return derived().store_(mem);
     }
 
     template <typename T> void migrate_(T type) {

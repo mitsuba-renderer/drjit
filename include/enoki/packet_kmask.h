@@ -201,21 +201,21 @@ struct KMaskBase : StaticArrayBase<Value_, Size_, true, Derived_> {
         return KMask<Value_, Size_ / 2>::from_k(k >> (Size_ / 2));
     }
 
-    static ENOKI_INLINE Derived load_(const void *ptr, size_t) {
-        return load_unaligned_(ptr);
+    static ENOKI_INLINE Derived load_aligned_(const void *ptr, size_t) {
+        return load_(ptr);
     }
 
-    static ENOKI_INLINE Derived load_unaligned_(const void *ptr, size_t) {
+    static ENOKI_INLINE Derived load_(const void *ptr, size_t) {
         Derived result;
         memcpy(&result.k, ptr, sizeof(Register));
         return result;
     }
 
-    ENOKI_INLINE void store_(void *ptr, size_t) const {
-        store_unaligned_(ptr);
+    ENOKI_INLINE void store_aligned_(void *ptr, size_t) const {
+        store_(ptr);
     }
 
-    ENOKI_INLINE void store_unaligned_(void *ptr, size_t) const {
+    ENOKI_INLINE void store_(void *ptr, size_t) const {
         memcpy(ptr, &k, sizeof(Register));
     }
 

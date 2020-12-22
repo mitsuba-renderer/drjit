@@ -33,7 +33,7 @@ template <typename T, typename Value2> void masktest() {
         mask_t<T2> mask2(mask);
         T2 result = select(mask2, T2(Value2(1)), T2(Value2(0)));
         Value2 out[T::Size];
-        store_unaligned(out, result);
+        store(out, result);
         for (size_t j = 0; j < T::Size; ++j)
             assert(out[j] == ((j == i) ? Value2(1) : Value2(0)));
     }

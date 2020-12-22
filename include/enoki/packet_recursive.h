@@ -52,8 +52,8 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
               detail::and_v<!std::is_same_v<Ts, detail::reinterpret_flag>...>> = 0>
     ENOKI_INLINE StaticArrayImpl(Ts&&... ts) {
         alignas(alignof(Array1)) Value storage[Size_] = { (Value) ts... };
-        a1 = load<Array1>(storage);
-        a2 = load<Array2>(storage + Size1);
+        a1 = load_aligned<Array1>(storage);
+        a2 = load_aligned<Array2>(storage + Size1);
     }
 
     /// Construct from two smaller arrays
@@ -293,27 +293,27 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
     //! @{ \name Initialization, loading/writing data
     // -----------------------------------------------------------------------
 
+    ENOKI_INLINE void store_aligned_(void *mem) const {
+        store_aligned((uint8_t *) mem, a1);
+        store_aligned((uint8_t *) mem + sizeof(Array1), a2);
+    }
+
     ENOKI_INLINE void store_(void *mem) const {
         store((uint8_t *) mem, a1);
         store((uint8_t *) mem + sizeof(Array1), a2);
     }
 
-    ENOKI_INLINE void store_unaligned_(void *mem) const {
-        store_unaligned((uint8_t *) mem, a1);
-        store_unaligned((uint8_t *) mem + sizeof(Array1), a2);
-    }
-
-    static ENOKI_INLINE Derived load_(const void *mem, size_t) {
+    static ENOKI_INLINE Derived load_aligned_(const void *mem, size_t) {
         return Derived(
-            load<Array1>((uint8_t *) mem),
-            load<Array2>((uint8_t *) mem + sizeof(Array1))
+            load_aligned<Array1>((uint8_t *) mem),
+            load_aligned<Array2>((uint8_t *) mem + sizeof(Array1))
         );
     }
 
-    static ENOKI_INLINE Derived load_unaligned_(const void *a, size_t) {
+    static ENOKI_INLINE Derived load_(const void *a, size_t) {
         return Derived(
-            load_unaligned<Array1>((uint8_t *) a),
-            load_unaligned<Array2>((uint8_t *) a + sizeof(Array1))
+            load<Array1>((uint8_t *) a),
+            load<Array2>((uint8_t *) a + sizeof(Array1))
         );
     }
 

@@ -133,14 +133,14 @@ struct DynamicArray
         return m_data[i];
     }
 
-    static DynamicArray load_unaligned_(const void *ptr, size_t size) {
+    static DynamicArray load_(const void *ptr, size_t size) {
         DynamicArray result;
         result.init_(size);
         memcpy(result.m_data, ptr, sizeof(Value) * size);
         return result;
     }
 
-    void store_unaligned_(void *ptr) const {
+    void store_(void *ptr) const {
         memcpy(ptr, m_data, sizeof(Value) * m_size);
     }
 

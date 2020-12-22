@@ -133,9 +133,9 @@ struct StaticArrayBase : ArrayBase<Value_, IsMask_, Derived_> {
     }
 
     template <typename T = Derived>
-    static Derived load_unaligned_(const void *mem, size_t) {
+    static Derived load_(const void *mem, size_t) {
         static_assert(!is_dynamic_v<value_t<T>>,
-                      "load_unaligned(): nested dynamic array not "
+                      "load(): nested dynamic array not "
                       "supported! Did you mean to use enoki::gather?");
 
         Derived result;
@@ -143,27 +143,27 @@ struct StaticArrayBase : ArrayBase<Value_, IsMask_, Derived_> {
         if constexpr (std::is_scalar_v<Value>) {
             memcpy(result.data(), mem, sizeof(Value) * Derived::Size);
         } else {
-            ENOKI_CHKSCALAR("load_unaligned");
+            ENOKI_CHKSCALAR("load");
             for (size_t i = 0; i < Derived::Size; ++i)
                 result.entry(i) =
-                    load_unaligned<Value>(static_cast<const Value *>(mem) + i);
+                    load<Value>(static_cast<const Value *>(mem) + i);
         }
 
         return result;
     }
 
     template <typename T = Derived>
-    void store_unaligned_(void *mem) const {
+    void store_(void *mem) const {
         static_assert(!is_dynamic_v<value_t<T>>,
-                      "store_unaligned(): nested dynamic array not "
+                      "store(): nested dynamic array not "
                       "supported! Did you mean to use enoki::gather?");
 
         if constexpr (std::is_scalar_v<Value>) {
             memcpy(mem, derived().data(), sizeof(Value) * Derived::Size);
         } else {
-            ENOKI_CHKSCALAR("store_unaligned");
+            ENOKI_CHKSCALAR("store");
             for (size_t i = 0; i < Derived::Size; ++i)
-                store_unaligned(static_cast<Value *>(mem) + i,
+                store(static_cast<Value *>(mem) + i,
                                 derived().entry(i));
         }
     }
