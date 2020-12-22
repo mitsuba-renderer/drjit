@@ -64,6 +64,9 @@ template <typename Type> struct Loop<Type, enable_if_jit_array_t<Type>> {
                     if (m_initialized)
                         enoki_raise("enoki::Loop::put(): must be called "
                                     "*before* initialization!");
+                    if (value.index() == 0)
+                        enoki_raise("enoki::Loop::put(): a loop variable (or "
+                                    "an element thereof) is unintialized!");
 
                     m_vars.push_back(value.index_ptr());
                     m_vars_phi.push_back(0);
@@ -83,6 +86,10 @@ template <typename Type> struct Loop<Type, enable_if_jit_array_t<Type>> {
     void init() {
         if (m_vars.size() == 0)
             return;
+
+        jitc_log(LogLevel::Info,
+                 "enoki::Loop(): starting to record loop with %u variables",
+                 (uint32_t) m_vars.size());
 
         for (size_t i = 0; i < m_vars.size(); ++i) {
             if (*m_vars[i] == 0)
@@ -184,6 +191,7 @@ template <typename Type> struct Loop<Type, enable_if_jit_array_t<Type>> {
 
     bool cond(const Mask &mask) {
         if ((m_flags & (uint32_t) JitFlag::RecordLoops) == 0) {
+            jitc_var_schedule(detach(mask).index());
             for (size_t i = 0; i < m_vars.size(); ++i)
                 jitc_var_schedule(*m_vars[i]);
             jitc_eval();
@@ -196,6 +204,8 @@ template <typename Type> struct Loop<Type, enable_if_jit_array_t<Type>> {
                         "entering the loop!");
 
         if (m_counter == 0) {
+            jitc_log(LogLevel::Info, "enoki::Loop(): begin loop.");
+
             Mask active_mask;
             if constexpr (IsLLVM)
                 active_mask = mask && Mask::active_mask();
@@ -237,6 +247,8 @@ template <typename Type> struct Loop<Type, enable_if_jit_array_t<Type>> {
             append(jitc_var_new_2(IsCUDA, VarType::Void, "\n$L1_body:", 1,
                                   m_loop_id, m_id));
         } else if (m_counter == 1) {
+            jitc_log(LogLevel::Info, "enoki::Loop(): end loop.");
+
             uint32_t mask_index = IsCUDA ? 0 : jitc_llvm_active_mask();
 
             if constexpr (IsLLVM) {
@@ -261,9 +273,19 @@ template <typename Type> struct Loop<Type, enable_if_jit_array_t<Type>> {
                         "<$w x $t3> $r3",
                         1, mask_index, *m_vars[i], m_vars_phi[i], m_id));
                 } else {
-                    append(jitc_var_new_3(1, VarType::Void,
-                                          "mov.$b2 $r2, $r1", 1,
-                                          *m_vars[i], m_vars_phi[i], m_id));
+                    if (*m_vars[i]) {
+                        append(jitc_var_new_3(1, VarType::Void,
+                                              "mov.$b2 $r2, $r1", 1,
+                                              *m_vars[i], m_vars_phi[i], m_id));
+                    } else {
+                        jitc_log(LogLevel::Warn,
+                                 "enoki::Loop(): the %u-th loop variable was "
+                                 "overwritten with an uninitialized array! "
+                                 "Setting to zero..", (uint32_t) i);
+                        append(jitc_var_new_2(1, VarType::Void,
+                                              "mov.$b1 $r1, 0", 1,
+                                              m_vars_phi[i], m_id));
+                    }
                 }
             }
 
@@ -318,7 +340,7 @@ protected:
      * \brief Generates a stream of wrapper instructions that enforce a
      * relative ordering of the instruction stream
      */
-    void append(uint32_t id, bool decref = true) {
+    void append(uint32_t id) {
         jitc_var_dec_ref_ext(m_id);
         m_id = id;
     }

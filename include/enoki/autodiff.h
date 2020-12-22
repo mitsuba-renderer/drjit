@@ -1532,6 +1532,13 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             enoki_raise("map_(): not supported in scalar mode!");
     }
 
+    static MaskType active_mask() {
+        if constexpr (is_llvm_array_v<Type>)
+            return Type::active_mask();
+        else
+            return true;
+    }
+
     static DiffArray load_(const void *ptr, size_t size) {
         return load<Type>(ptr, size);
     }
