@@ -45,9 +45,9 @@ struct DiffVCall
 
         uint32_t se_before = jitc_side_effect_counter(is_cuda_array_v<Type>);
 
-        size_t name_size = strlen(m_name) + 5;
+        size_t name_size = strlen(m_name) + 9;
         ek_unique_ptr<char[]> name(new char[name_size]);
-        snprintf(name.get(), name_size, "%s_fwd", m_name);
+        snprintf(name.get(), name_size, "ad_fwd[%s]", m_name);
 
         Result grad_out = dispatch_jit_symbolic<Result>(
             name.get(), func_fwd, self, detail::ek_tuple(Base::template grad_in<5 + Is>()...),
@@ -70,9 +70,9 @@ struct DiffVCall
 
         uint32_t se_before = jitc_side_effect_counter(is_cuda_array_v<Type>);
 
-        size_t name_size = strlen(m_name) + 5;
+        size_t name_size = strlen(m_name) + 9;
         ek_unique_ptr<char[]> name(new char[name_size]);
-        snprintf(name.get(), name_size, "%s_fwd", m_name);
+        snprintf(name.get(), name_size, "ad_rev[%s]", m_name);
 
         ResultRev grad_in = dispatch_jit_symbolic<ResultRev>(
             name.get(), func_rev, self, Base::grad_out(),
