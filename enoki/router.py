@@ -19,7 +19,7 @@ def _var_is_container(a):
     return hasattr(a, '__len__') and hasattr(a, '__iter__')
 
 
-def _var_type(a, preferred=VarType.Invalid):
+def _var_type(a, preferred=VarType.Void):
     """
     Return the VarType of a given Enoki object or plain Python type. Return
     'preferred' when there is sufficient room for interpretation (e.g. when
@@ -34,7 +34,7 @@ def _var_type(a, preferred=VarType.Invalid):
     elif isinstance(a, int):
         ok = False
 
-        if preferred is not VarType.Invalid:
+        if preferred is not VarType.Void:
             if preferred == VarType.UInt32:
                 ok |= a >= 0 and a <= 0xFFFFFFFF
             elif preferred == VarType.Int32:
@@ -462,8 +462,8 @@ def op_setitem(self, index, value):
 
 
 def reinterpret_array(target_type, value,
-                      vt_target=VarType.Invalid,
-                      vt_value=VarType.Invalid):
+                      vt_target=VarType.Void,
+                      vt_value=VarType.Void):
     assert isinstance(target_type, type)
 
     if issubclass(target_type, ArrayBase):

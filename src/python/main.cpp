@@ -47,7 +47,7 @@ PYBIND11_MODULE(enoki_ext, m_) {
     m.attr("Dynamic") = ek::Dynamic;
 
     py::enum_<VarType>(m, "VarType", py::arithmetic())
-        .value("Invalid", VarType::Invalid)
+        .value("Void", VarType::Void)
         .value("Global", VarType::Global)
         .value("Int8", VarType::Int8)
         .value("UInt8", VarType::UInt8)
