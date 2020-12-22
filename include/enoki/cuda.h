@@ -1225,10 +1225,8 @@ public:
         m_index = index;
     }
 
-    void migrate_(AllocType type) {
-        uint32_t index = jitc_var_migrate(m_index, type);
-        jitc_var_dec_ref_ext(m_index);
-        m_index = index;
+    CUDAArray migrate_(AllocType type) const {
+        return steal(jitc_var_migrate(m_index, type));
     }
 
     void set_label_(const char *label) const {

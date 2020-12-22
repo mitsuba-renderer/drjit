@@ -1081,22 +1081,34 @@ void scatter_add(Target &&target, const Value &value, const Index &index, const 
     }
 }
 
-template <typename T, typename Type> void migrate(T &value, Type type) {
-    static_assert(std::is_enum_v<Type>);
+template <typename T, typename TargetType> decltype(auto) migrate(const T &value, TargetType target) {
+    static_assert(std::is_enum_v<TargetType>);
+
     if constexpr (is_jit_array_v<T>) {
-        if constexpr (is_jit_array_v<value_t<T>>) {
-            for (size_t i = 0; i < value.derived().size(); ++i)
-                migrate(value.derived().entry(i), type);
+        if constexpr (array_depth_v<T> > 1) {
+            T result;
+            if constexpr (T::Size == Dynamic)
+                result = empty<T>(value.size());
+
+            for (size_t i = 0; i < value.size(); ++i)
+                result.entry(i) = migrate(value.entry(i), target);
+
+            return result;
         } else {
-            value.derived().migrate_(type);
+            return value.derived().migrate_(target);
         }
     } else if constexpr (is_enoki_struct_v<T>) {
-        struct_support_t<T>::apply_1(
-            value, [type](auto &x) {
-                 migrate(x, type);
+        T result;
+
+        struct_support_t<T>::apply_2(
+            value, result,
+            [target](auto const &x1, auto &x2) ENOKI_INLINE_LAMBDA {
+                x2 = migrate(x1, target);
             });
+
+        return result;
     } else {
-        ; // do nothing
+        return (const T &) value;
     }
 }
 
