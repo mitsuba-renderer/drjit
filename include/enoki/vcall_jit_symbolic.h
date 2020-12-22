@@ -103,7 +103,7 @@ private:
 };
 
 template <typename Result, typename Func, typename Self, typename... Args>
-ENOKI_INLINE Result dispatch_jit_symbolic(Func func, const Self &self, const Args&... args) {
+ENOKI_INLINE Result dispatch_jit_symbolic(const char *name, Func func, const Self &self, const Args&... args) {
     using Class = std::remove_pointer_t<scalar_t<Self>>;
 
     constexpr bool IsCUDA = is_cuda_array_v<Self>;
@@ -152,9 +152,9 @@ ENOKI_INLINE Result dispatch_jit_symbolic(Func func, const Self &self, const Arg
     out_count = 0;
     read_indices(out.get(), out_count, result);
 
-    jitc_var_vcall(IsCUDA, detach(self).index(), n_inst, call_id.get(),
-                   call_hash.get(), in_count, in.get(), out_count, out.get(),
-                   (uint32_t) extra.size(), extra.data(),
+    jitc_var_vcall(IsCUDA, Class::Domain, name, detach(self).index(), n_inst,
+                   call_id.get(), call_hash.get(), in_count, in.get(),
+                   out_count, out.get(), (uint32_t) extra.size(), extra.data(),
                    extra_offset.get(), side_effects);
 
     out_count = 0;

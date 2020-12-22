@@ -63,14 +63,17 @@ namespace detail {
     };
 
     template <typename Result, typename Func, typename Self, typename... Args>
-    ENOKI_INLINE Result dispatch_jit_symbolic(Func func, const Self &self, const Args&... args);
+    ENOKI_INLINE Result dispatch_jit_symbolic(const char *name, Func func,
+                                              const Self &self,
+                                              const Args &... args);
 
     template <typename Result, typename Func, typename Self, typename... Args>
     ENOKI_INLINE Result dispatch_jit_reduce(Func func, const Self &self, const Args&... args);
 
     template <typename Result, typename Func, typename FuncFwd, typename FuncRev, typename Self,
               typename... Args>
-    ENOKI_INLINE Result dispatch_autodiff(const Func &func,
+    ENOKI_INLINE Result dispatch_autodiff(const char *name,
+                                          const Func &func,
                                           const FuncFwd &func_fwd,
                                           const FuncRev &func_rev,
                                           const Self &self,
@@ -78,22 +81,24 @@ namespace detail {
 
     template <typename Class, typename Func, typename FuncFwd, typename FuncRev,
               typename Self, typename... Args>
-    auto dispatch(const Func &func, const FuncFwd &func_fwd, const FuncRev func_rev,
-                  const Self &self, const Args &... args) {
+    auto dispatch(const char *name, const Func &func, const FuncFwd &func_fwd,
+                  const FuncRev func_rev, const Self &self,
+                  const Args &... args) {
         using Result =
             typename vectorize_type<Self, decltype(func((Class *) nullptr, args...))>::type;
 
         ENOKI_MARK_USED(func_fwd);
         ENOKI_MARK_USED(func_rev);
+        ENOKI_MARK_USED(name);
 
         if constexpr (is_jit_array_v<Self>) {
             if ((jitc_flags() & 4) == 0 || is_llvm_array_v<Self>) {
                 return detail::dispatch_jit_reduce<Result>(func, self, copy_diff(args)...);
             } else {
                 if constexpr (is_diff_array_v<Self>)
-                    return detail::dispatch_autodiff<Result>(func, func_fwd, func_rev, self, args...);
+                    return detail::dispatch_autodiff<Result>(name, func, func_fwd, func_rev, self, args...);
                 else
-                    return detail::dispatch_jit_symbolic<Result>(func, self, args...);
+                    return detail::dispatch_jit_symbolic<Result>(name, func, self, args...);
             }
         } else {
             return detail::dispatch_packet<Result>(func, self, args...);
@@ -150,6 +155,7 @@ NAMESPACE_END(enoki)
 #define ENOKI_VCALL_METHOD(name)                                               \
     template <typename... Args> auto name(const Args &... args_) const {       \
         return detail::dispatch<Class>(                                        \
+            #name,                                                             \
             [](auto self, const auto &... args) ENOKI_INLINE_LAMBDA {          \
                 using Result = decltype(self->name(args...));                  \
                 if constexpr (std::is_same_v<Result, void>) {                  \
@@ -165,7 +171,7 @@ NAMESPACE_END(enoki)
                     using Result = decltype(self->name(args...));              \
                     if constexpr (!std::is_same_v<Result, void>) {             \
                         Result result = self->name(args...);                   \
-                        detail::ek_tuple args_tuple{ args... };                   \
+                        detail::ek_tuple args_tuple{ args... };                \
                         enoki::set_grad(args_tuple, grad_in);                  \
                         enoki::enqueue(args_tuple);                            \
                         enoki::traverse<decltype(result),                      \
@@ -173,7 +179,7 @@ NAMESPACE_END(enoki)
                         return enoki::grad(result);                            \
                     } else {                                                   \
                         self->name(args...);                                   \
-                        detail::ek_tuple args_tuple{ args... };                   \
+                        detail::ek_tuple args_tuple{ args... };                \
                         enoki::set_grad(args_tuple, grad_in);                  \
                         enoki::enqueue(args_tuple);                            \
                         enoki::traverse<decltype(args)...>(false, true);       \
@@ -190,11 +196,11 @@ NAMESPACE_END(enoki)
                         enoki::enqueue(result);                                \
                         enoki::traverse<decltype(result),                      \
                                         decltype(args)...>(true, true);        \
-                        return detail::ek_tuple{ enoki::grad(args)... };          \
+                        return detail::ek_tuple{ enoki::grad(args)... };       \
                     } else {                                                   \
                         self->name(args...);                                   \
                     }                                                          \
-                    return detail::ek_tuple{ enoki::grad(args)... };              \
+                    return detail::ek_tuple{ enoki::grad(args)... };           \
                 }, array, args_...);                                           \
     }
 
@@ -208,7 +214,7 @@ NAMESPACE_END(enoki)
                 UInt32::borrow(detach(array).index()), mask);                  \
         } else {                                                               \
             return detail::dispatch<Class>(                                    \
-                [](auto self)                                                  \
+                nullptr, [](auto self)                                         \
                     ENOKI_INLINE_LAMBDA { return self->name(); },              \
                 nullptr, nullptr, array & mask);                               \
         }                                                                      \
