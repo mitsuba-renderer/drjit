@@ -129,6 +129,7 @@ PYBIND11_MODULE(enoki_ext, m_) {
         .value("RecordingLoop", JitFlag::RecordingLoop)
         .value("RecordVCalls", JitFlag::RecordVCalls)
         .value("RecordingVCall", JitFlag::RecordingVCall)
+        .value("OptimizeVCalls", JitFlag::OptimizeVCalls)
         .value("Recording", JitFlag::Recording);
 
     m.def("device_count", &jitc_cuda_device_count);
