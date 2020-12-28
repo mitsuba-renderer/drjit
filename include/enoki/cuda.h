@@ -1045,14 +1045,16 @@ private:
                 var = jitc_var_new_3(1, VarType::Void,
                                      "mul.wide.$t3 %rd3, $r3, $s2$n"
                                      "add.$t1 %rd3, %rd3, $r1$n"
-                                     "red.global.add.$t2 [%rd3], $r2",
+                                     ".reg.$t2 $r0$n"
+                                     "atom.global.add.$t2 $r0, [%rd3], $r2",
                                      1, base.index(), m_index,
                                      index.index());
             } else {
                 var = jitc_var_new_4(1, VarType::Void,
                                      "mul.wide.$t3 %rd3, $r3, $s2$n"
                                      "add.$t1 %rd3, %rd3, $r1$n"
-                                     "@$r4 red.global.add.$t2 [%rd3], $r2",
+                                     ".reg.$t2 $r0$n"
+                                     "@$r4 atom.global.add.$t2 $r0, [%rd3], $r2",
                                      1, base.index(), m_index, index.index(),
                                      mask.index());
             }
