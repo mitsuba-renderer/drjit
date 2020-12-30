@@ -59,14 +59,12 @@ template <typename T> struct PCG32 {
         next_uint32();
         state += initstate;
         next_uint32();
-        schedule(inc, state);
     }
 
     /// Generate a uniformly distributed unsigned 32-bit random number
     ENOKI_INLINE UInt32 next_uint32() {
         UInt64 oldstate = state;
         state = oldstate * uint64_t(PCG32_MULT) + inc;
-        schedule(state);
         UInt32 xorshifted = UInt32(sr<27>(sr<18>(oldstate) ^ oldstate));
         UInt32 rot = UInt32(sr<59>(oldstate));
         return (xorshifted >> rot) | (xorshifted << ((~rot + 1u) & 31));
@@ -76,7 +74,6 @@ template <typename T> struct PCG32 {
     ENOKI_INLINE UInt32 next_uint32(const Mask &mask) {
         UInt64 oldstate = state;
         masked(state, mask) = oldstate * uint64_t(PCG32_MULT) + inc;
-        schedule(state);
         UInt32 xorshifted = UInt32(sr<27>(sr<18>(oldstate) ^ oldstate));
         UInt32 rot = UInt32(sr<59>(oldstate));
         return (xorshifted >> rot) | (xorshifted << ((~rot + 1u) & 31));
