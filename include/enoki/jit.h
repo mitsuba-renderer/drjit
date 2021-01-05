@@ -225,37 +225,37 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, JitArray<Backend_, Value_
         return steal(jit_var_new_op_1(JitOp::Rsqrt, m_index));
     }
 
-    template <typename T = Value, enable_if_t<std::is_same_v<T, float>> = 0>
+    template <typename T = Value, enable_if_t<std::is_same_v<T, float> && IsCUDA> = 0>
     JitArray exp2_() const {
         return steal(jit_var_new_op_1(JitOp::Exp2, m_index));
     }
 
-    template <typename T = Value, enable_if_t<std::is_same_v<T, float>> = 0>
+    template <typename T = Value, enable_if_t<std::is_same_v<T, float> && IsCUDA> = 0>
     JitArray exp_() const {
         return exp2(InvLogTwo<T> * (*this));
     }
 
-    template <typename T = Value, enable_if_t<std::is_same_v<T, float>> = 0>
+    template <typename T = Value, enable_if_t<std::is_same_v<T, float> && IsCUDA> = 0>
     JitArray log2_() const {
         return steal(jit_var_new_op_1(JitOp::Log2, m_index));
     }
 
-    template <typename T = Value, enable_if_t<std::is_same_v<T, float>> = 0>
+    template <typename T = Value, enable_if_t<std::is_same_v<T, float> && IsCUDA> = 0>
     JitArray log_() const {
         return log2(*this) * InvLogTwo<T>;
     }
 
-    template <typename T = Value, enable_if_t<std::is_same_v<T, float>> = 0>
+    template <typename T = Value, enable_if_t<std::is_same_v<T, float> && IsCUDA> = 0>
     JitArray sin_() const {
         return steal(jit_var_new_op_1(JitOp::Sin, m_index));
     }
 
-    template <typename T = Value, enable_if_t<std::is_same_v<T, float>> = 0>
+    template <typename T = Value, enable_if_t<std::is_same_v<T, float> && IsCUDA> = 0>
     JitArray cos_() const {
         return steal(jit_var_new_op_1(JitOp::Cos, m_index));
     }
 
-    template <typename T = Value, enable_if_t<std::is_same_v<T, float>> = 0>
+    template <typename T = Value, enable_if_t<std::is_same_v<T, float> && IsCUDA> = 0>
     std::pair<JitArray, JitArray> sincos_() const {
         return { sin_(), cos_() };
     }
