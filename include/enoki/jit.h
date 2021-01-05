@@ -569,8 +569,7 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, JitArray<Backend_, Value_
 
     const char *str() { return jit_var_str(m_index); }
 
-    bool is_literal_one() const { return (bool) jit_var_is_literal_one(m_index); }
-    bool is_literal_zero() const { return (bool) jit_var_is_literal_zero(m_index); }
+    bool is_literal() const { return (bool) jit_var_is_literal(m_index); }
 
     Value entry(size_t offset) const {
         ActualValue out;

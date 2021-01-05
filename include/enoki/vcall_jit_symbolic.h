@@ -80,7 +80,7 @@ bool record(const char *domain, const char *name, uint32_t &id, uint64_t &hash,
 struct jit_flag_guard {
 public:
     jit_flag_guard() : flags(jit_flags()) {
-        jit_set_flags(flags | (uint32_t) JitFlag::RecordingVCall);
+        jit_set_flags(flags | (uint32_t) JitFlag::VCallRecord);
     }
     ~jit_flag_guard() { jit_set_flags(flags); }
 
