@@ -8,10 +8,10 @@ def m(request):
     gc.collect()
     gc.collect()
     if 'cuda' in request.param.__name__:
-        if not ek.has_cuda():
+        if not ek.has_backend(ek.JitBackend.CUDA):
             pytest.skip('CUDA mode is unsupported')
     else:
-        if not ek.has_llvm():
+        if not ek.has_backend(ek.JitBackend.LLVM):
             pytest.skip('LLVM mode is unsupported')
     yield request.param
     gc.collect()
@@ -804,7 +804,7 @@ def test45_diff_loop(m):
     def elliptic_k(m_):
         return ek.custom(EllipticK, m_)
 
-    ek.enable_flag(ek.JitFlag.RecordLoops)
+    ek.jit_set_flag(ek.JitFlag.RecordLoops, True)
     x = m.Float(0.5)
     ek.enable_grad(x)
     y = elliptic_k(x)
@@ -885,7 +885,7 @@ def test46_loop_ballistic(m):
     pos_in = m.Array2f([1, 2, 4], [1, 2, 1])
     vel_in = m.Array2f([10, 9, 4], [5, 3, 6])
 
-    ek.enable_flag(ek.JitFlag.RecordLoops)
+    ek.jit_set_flag(ek.JitFlag.RecordLoops, True)
     for i in range(20):
         ek.enable_grad(vel_in)
         ek.eval(vel_in, pos_in)
@@ -957,7 +957,7 @@ def test46_loop_ballistic_2(m):
             self.set_grad_in('pos', grad_pos)
             self.set_grad_in('vel', grad_vel)
 
-    ek.enable_flag(ek.JitFlag.RecordLoops)
+    ek.jit_set_flag(ek.JitFlag.RecordLoops, True)
     pos_in = m.Array2f([1, 2, 4], [1, 2, 1])
     vel_in = m.Array2f([10, 9, 4], [5, 3, 6])
 

@@ -549,10 +549,11 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
 
             if constexpr (IsEnabled) {
                 if (t.m_index > 0 || f.m_index > 0) {
-                    if (m.m_value.is_literal_one()) {
-                        return t;
-                    } else if (m.m_value.is_literal_zero()) {
-                        return f;
+                    if (m.m_value.is_literal()) {
+                        if (m.m_value[0])
+                            return t;
+                        else
+                            return f;
                     } else {
                         index_new = detail::ad_new_select<Type>(
                             "select", (int32_t) width(result),
@@ -1530,13 +1531,6 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             return Type::map_(ptr, size, free);
         else
             enoki_raise("map_(): not supported in scalar mode!");
-    }
-
-    static MaskType active_mask() {
-        if constexpr (is_llvm_array_v<Type>)
-            return Type::active_mask();
-        else
-            return true;
     }
 
     static DiffArray load_(const void *ptr, size_t size) {

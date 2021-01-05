@@ -170,8 +170,7 @@ PYBIND11_MODULE(enoki_ext, m_) {
     array_detail.def("device", &jit_cuda_device);
     array_detail.def("device", &jit_var_device);
 
-    m.def("enable_flag", &jit_enable_flag);
-    m.def("disable_flag", &jit_disable_flag);
+    m.def("set_flag", &jit_set_flag);
     m.def("flags", &jit_flags);
 
     /* Register a cleanup callback function that is invoked when

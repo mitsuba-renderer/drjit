@@ -37,10 +37,6 @@ extern "C" {
     extern ENOKI_IMPORT const char *jit_var_graphviz();
     /// Retrieve the JIT compiler status flags (see \ref JitFlags)
     extern ENOKI_IMPORT uint32_t jit_flags();
-    /// Equivalent to <tt>jit_set_flags(jit_flags() | flag)</tt>
-    extern ENOKI_IMPORT void jit_enable_flag(JitFlag flag);
-    /// Equivalent to <tt>jit_set_flags(jit_flags() & ~flag)</tt>
-    extern ENOKI_IMPORT void jit_disable_flag(JitFlag flag);
 };
 
 NAMESPACE_BEGIN(enoki)
@@ -1879,8 +1875,6 @@ ENOKI_INLINE T rotate_right(const T &a) {
 // -----------------------------------------------------------------------
 
 inline uint32_t flags() { return jit_flags(); }
-inline void enable_flag(JitFlag flag) { jit_enable_flag(flag); }
-inline void disable_flag(JitFlag flag) { jit_disable_flag(flag); }
 
 #undef ENOKI_ROUTE_UNARY
 #undef ENOKI_ROUTE_UNARY_FALLBACK

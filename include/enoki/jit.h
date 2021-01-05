@@ -83,7 +83,8 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, JitArray<Backend_, Value_
     }
 
     template <typename T, enable_if_scalar_t<T> = 0>
-    JitArray(T value) {
+    JitArray(T v) {
+        scalar_t<Value> value(v);
         m_index = jit_var_new_literal(Backend, Type, &value);
     }
 
@@ -193,18 +194,18 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, JitArray<Backend_, Value_
     }
 
     template <int Imm> JitArray sl_() const {
-        return sl_((uint32_t) Imm);
+        return sl_(Imm);
     }
 
-    JitArray sl_(const JitArray<Backend, uint32_t> &v) const {
+    JitArray sl_(const JitArray &v) const {
         return steal(jit_var_new_op_2(JitOp::Shl, m_index, v.index()));
     }
 
     template <int Imm> JitArray sr_() const {
-        return sr_((uint32_t) Imm);
+        return sr_(Imm);
     }
 
-    JitArray sr_(const JitArray<Backend, uint32_t> &v) const {
+    JitArray sr_(const JitArray &v) const {
         return steal(jit_var_new_op_2(JitOp::Shr, m_index, v.index()));
     }
 
@@ -530,27 +531,29 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, JitArray<Backend_, Value_
     // -----------------------------------------------------------------------
 
     std::pair<VCallBucket *, uint32_t> vcall_() const {
-        if constexpr (!IsClass)
+        if constexpr (!IsClass) {
             enoki_raise("Unsupported operand type");
-
-        uint32_t bucket_count = 0;
-        VCallBucket *buckets =
-            jit_vcall(Backend, CallSupport::Domain, m_index, &bucket_count);
-        return { buckets, bucket_count };
+        } else {
+            uint32_t bucket_count = 0;
+            VCallBucket *buckets =
+                jit_vcall(Backend, CallSupport::Domain, m_index, &bucket_count);
+            return { buckets, bucket_count };
+        }
     }
 
     JitArray<Backend, uint32_t> compress_() const {
-        if constexpr (!is_mask_v<Value>)
+        if constexpr (!is_mask_v<Value>) {
             enoki_raise("Unsupported operand type");
+        } else {
+            uint32_t size_in = (uint32_t) size();
+            uint32_t *indices = (uint32_t *) jit_malloc(
+                AllocType::Device, size_in * sizeof(uint32_t));
 
-        uint32_t size_in = (uint32_t) size();
-        uint32_t *indices = (uint32_t *) jit_malloc(
-            AllocType::Device, size_in * sizeof(uint32_t));
-
-        eval_();
-        uint32_t size_out = jit_compress(Backend, (const uint8_t *) data(), size_in, indices);
-        return JitArray<Backend, uint32_t>::steal(
-            jit_var_mem_map(Backend, VarType::UInt32, indices, size_out, 1));
+            eval_();
+            uint32_t size_out = jit_compress(Backend, (const uint8_t *) data(), size_in, indices);
+            return JitArray<Backend, uint32_t>::steal(
+                jit_var_mem_map(Backend, VarType::UInt32, indices, size_out, 1));
+        }
     }
 
     JitArray copy() const { return steal(jit_var_copy(m_index)); }
@@ -582,19 +585,15 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, JitArray<Backend_, Value_
     }
 
     void set_entry(size_t offset, Value value) {
-        // TODO check implementation
-        if (jit_var_ref_int(m_index) > 0) {
-            eval_();
-            *this = steal(jit_var_mem_copy(Backend, AllocType::HostAsync, Type,
-                                            data(), (uint32_t)size()));
-        }
-
+        uint32_t index;
         if constexpr (!IsClass) {
-            jit_var_write(m_index, (uint32_t) offset, &value);
+            index = jit_var_write(m_index, offset, &value);
         } else {
             ActualValue av = jit_registry_get_id(value);
-            jit_var_write(m_index, (uint32_t) offset, &av);
+            index = jit_var_write(m_index, (uint32_t) offset, &av);
         }
+        jit_var_dec_ref_ext(m_index);
+        m_index = index;
     }
 
 	void resize(size_t size) {
@@ -619,6 +618,10 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, JitArray<Backend_, Value_
 	const char *label_() const {
 		return jit_var_label(m_index);
 	}
+
+    const CallSupport operator->() const {
+        return CallSupport(*this);
+    }
 
     //! @}
     // -----------------------------------------------------------------------

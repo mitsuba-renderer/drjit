@@ -40,51 +40,51 @@ struct DiffVCall
 
     template <size_t... Is>
     void forward_impl(std::index_sequence<Is...>) {
-        const detached_t<Self> &self = detach(Base::m_grad_input->template get<1>());
-        const FuncFwd &func_fwd = Base::m_grad_input->template get<3>();
+        // const detached_t<Self> &self = detach(Base::m_grad_input->template get<1>());
+        // const FuncFwd &func_fwd = Base::m_grad_input->template get<3>();
 
-        uint32_t se_before = jit_side_effect_counter(is_cuda_array_v<Type>);
+        // uint32_t se_before = jit_side_effect_counter(is_cuda_array_v<Type>);
 
-        size_t name_size = strlen(m_name) + 9;
-        ek_unique_ptr<char[]> name(new char[name_size]);
-        snprintf(name.get(), name_size, "ad_fwd[%s]", m_name);
+        // size_t name_size = strlen(m_name) + 9;
+        // ek_unique_ptr<char[]> name(new char[name_size]);
+        // snprintf(name.get(), name_size, "ad_fwd[%s]", m_name);
 
-        Result grad_out = dispatch_jit_symbolic<Result>(
-            name.get(), func_fwd, self, detail::ek_tuple(Base::template grad_in<5 + Is>()...),
-            Base::template value_in<5 + Is>()...);
+        // Result grad_out = dispatch_jit_symbolic<Result>(
+        //     name.get(), func_fwd, self, detail::ek_tuple(Base::template grad_in<5 + Is>()...),
+        //     Base::template value_in<5 + Is>()...);
 
-        uint32_t se_after = jit_side_effect_counter(is_cuda_array_v<Type>);
+        // uint32_t se_after = jit_side_effect_counter(is_cuda_array_v<Type>);
 
-        if (se_before != se_after &&
-            (jit_flags() & (uint32_t) JitFlag::Recording) == 0)
-            enoki::eval(grad_out);
+        // if (se_before != se_after &&
+        //     (jit_flags() & (uint32_t) JitFlag::Recording) == 0)
+        //     enoki::eval(grad_out);
 
-        Base::set_grad_out(grad_out);
+        // Base::set_grad_out(grad_out);
     }
 
     template <size_t... Is>
     void backward_impl(std::index_sequence<Is...>) {
-        const detached_t<Self> &self = detach(Base::m_grad_input->template get<1>());
-        const FuncRev &func_rev = Base::m_grad_input->template get<4>();
-        using ResultRev = detail::ek_tuple<Args...>;
+        // const detached_t<Self> &self = detach(Base::m_grad_input->template get<1>());
+        // const FuncRev &func_rev = Base::m_grad_input->template get<4>();
+        // using ResultRev = detail::ek_tuple<Args...>;
 
-        uint32_t se_before = jit_side_effect_counter(is_cuda_array_v<Type>);
+        // uint32_t se_before = jit_side_effect_counter(is_cuda_array_v<Type>);
 
-        size_t name_size = strlen(m_name) + 9;
-        ek_unique_ptr<char[]> name(new char[name_size]);
-        snprintf(name.get(), name_size, "ad_rev[%s]", m_name);
+        // size_t name_size = strlen(m_name) + 9;
+        // ek_unique_ptr<char[]> name(new char[name_size]);
+        // snprintf(name.get(), name_size, "ad_rev[%s]", m_name);
 
-        ResultRev grad_in = dispatch_jit_symbolic<ResultRev>(
-            name.get(), func_rev, self, Base::grad_out(),
-            Base::template value_in<5 + Is>()...);
+        // ResultRev grad_in = dispatch_jit_symbolic<ResultRev>(
+        //     name.get(), func_rev, self, Base::grad_out(),
+        //     Base::template value_in<5 + Is>()...);
 
-        uint32_t se_after = jit_side_effect_counter(is_cuda_array_v<Type>);
+        // uint32_t se_after = jit_side_effect_counter(is_cuda_array_v<Type>);
 
-        if (se_before != se_after &&
-            (jit_flags() & (uint32_t) JitFlag::Recording) == 0)
-            enoki::eval(grad_in);
+        // if (se_before != se_after &&
+        //     (jit_flags() & (uint32_t) JitFlag::Recording) == 0)
+        //     enoki::eval(grad_in);
 
-        (Base::template set_grad_in<5 + Is>(grad_in.template get<Is>()), ...);
+        // (Base::template set_grad_in<5 + Is>(grad_in.template get<Is>()), ...);
     }
 
     void forward() override {

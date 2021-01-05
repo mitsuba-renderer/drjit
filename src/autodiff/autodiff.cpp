@@ -554,7 +554,7 @@ int32_t ad_new(const char *label, uint32_t size, uint32_t op_count,
         if constexpr (std::is_scalar_v<T>)
             weight_is_zero = weights[i] == 0;
         else
-            weight_is_zero = weights[i].is_literal_zero();
+            weight_is_zero = weights[i].is_literal() && weights[i] == 0;
 
         if (weight_is_zero)
             continue;

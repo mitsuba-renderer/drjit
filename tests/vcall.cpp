@@ -72,7 +72,7 @@ ENOKI_VCALL_END(Base)
 ENOKI_TEST(test01_vcall_eager_symbolic) {
     int n = 9999;
 
-    jit_init(JitBackend::CUDA);
+    jit_init((uint32_t) JitBackend::CUDA);
     for (int i = 0; i < 2; ++i) {
         jit_set_flags((uint32_t) (i == 0 ? JitFlag::Default : JitFlag::RecordVCalls));
         for (int j = 0; j < 2; ++j) {
@@ -174,7 +174,7 @@ ENOKI_VCALL_END(BaseD)
 ENOKI_TEST(test02_vcall_eager_symbolic_ad_fwd) {
     int n = 9999;
 
-    jit_init(JitBackend::CUDA);
+    jit_init((uint32_t) JitBackend::CUDA);
     for (int i = 0; i < 2; ++i) {
         jit_set_flags((uint32_t) (i == 0 ? JitFlag::Default : JitFlag::RecordVCalls));
         for (int k = 0; k < 2; ++k) {

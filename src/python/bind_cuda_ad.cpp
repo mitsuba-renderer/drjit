@@ -36,7 +36,7 @@ void export_cuda_ad(py::module_ &m) {
     ENOKI_BIND_ARRAY_TYPES(cuda_ad, Guide, false);
 
     bind_pcg32<Guide>(cuda_ad);
-    cuda_ad.attr("Loop") = m.attr("cuda").attr("Loop");
+    // cuda_ad.attr("Loop") = m.attr("cuda").attr("Loop");
 
     py::module_ detail = cuda_ad.def_submodule("detail");
     detail.def("ad_add_edge", [](int32_t src_index, int32_t dst_index,

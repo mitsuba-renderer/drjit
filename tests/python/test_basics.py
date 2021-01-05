@@ -6,10 +6,10 @@ import gc
 def get_class(name):
     """Resolve a package+class name into the corresponding type"""
     if 'cuda' in name:
-        if not ek.has_cuda():
+        if not ek.has_backend(ek.JitBackend.CUDA):
             pytest.skip('CUDA mode is unsupported')
     elif 'llvm' in name:
-        if not ek.has_llvm():
+        if not ek.has_backend(ek.JitBackend.LLVM):
             pytest.skip('LLVM mode is unsupported')
 
     name = name.split('.')

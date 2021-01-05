@@ -66,7 +66,7 @@ private:
 
 
 ENOKI_TEST(test01_basic) {
-    jit_init(JitBackend::LLVM);
+    jit_init((uint32_t) JitBackend::LLVM);
 
     {
         Vector3f d(1, 2, 3);
@@ -127,7 +127,7 @@ private:
 };
 
 ENOKI_TEST(test02_corner_case) {
-    jit_init(JitBackend::LLVM);
+    jit_init((uint32_t) JitBackend::LLVM);
 
     {
         Vector3f d1(1, 2, 3);

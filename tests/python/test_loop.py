@@ -4,22 +4,22 @@ import pytest
 def get_class(name):
     """Resolve a package+class name into the corresponding type"""
     if 'cuda' in name:
-        if not ek.has_cuda():
+        if not ek.has_backend(ek.JitBackend.CUDA):
             pytest.skip('CUDA mode is unsupported')
     elif 'llvm' in name:
-        if not ek.has_llvm():
+        if not ek.has_backend(ek.JitBackend.LLVM):
             pytest.skip('LLVM mode is unsupported')
 
     name = name.split('.')
     value = __import__(".".join(name[:-1]))
     for item in name[1:]:
         value = getattr(value, item)
-    ek.enable_flag(ek.JitFlag.RecordLoops)
+    ek.jit_set_flag(ek.JitFlag.RecordLoops, True)
 
     return value
 
 def setup_function(function):
-    ek.enable_flag(ek.JitFlag.RecordLoops)
+    ek.jit_set_flag(ek.JitFlag.RecordLoops, True)
 
 def teardown_function(function):
     ek.disable_flag(ek.JitFlag.RecordLoops)
