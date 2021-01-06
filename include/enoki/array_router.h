@@ -1058,7 +1058,8 @@ void scatter(Target &&target, const Value &value, const Index &index, const mask
 }
 
 template <typename Target, typename Value, typename Index>
-void scatter_reduce(Target &&target, const Value &value, const Index &index, ReduceOp op, const mask_t<Value> &mask = true) {
+void scatter_reduce(ReduceOp op, Target &&target, const Value &value,
+                    const Index &index, const mask_t<Value> &mask = true) {
     if constexpr (is_array_v<Value>) {
         static_assert(std::is_pointer_v<std::decay_t<Target>> || array_depth_v<Target> == 1,
                       "Target argument of scatter_reduce operation must either be a "
@@ -1067,10 +1068,10 @@ void scatter_reduce(Target &&target, const Value &value, const Index &index, Red
                       "Second argument of gather operation must be an index array!");
 
         if constexpr (array_depth_v<Value> == array_depth_v<Index>) {
-            value.scatter_reduce_(target, index, op, mask);
+            value.scatter_reduce_(op, target, index, mask);
         } else {
             using TargetIndex = replace_scalar_t<Value, scalar_t<Index>>;
-            scatter_reduce(target, value, detail::broadcast_index<TargetIndex>(index), op, mask);
+            scatter_reduce(op, target, value, detail::broadcast_index<TargetIndex>(index), mask);
         }
     } else if constexpr (std::is_integral_v<Index> && std::is_arithmetic_v<Value>) {
         if (mask) {

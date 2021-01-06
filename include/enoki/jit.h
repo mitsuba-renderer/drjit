@@ -500,14 +500,16 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, JitArray<Backend_, Value_
     }
 
     template <typename Index>
-    void scatter_reduce_(void *dst, const JitArray<Backend, Index> &index,
-                         ReduceOp op, const MaskType &mask = true) const {
+    void scatter_reduce_(ReduceOp op, void *dst,
+                         const JitArray<Backend, Index> &index,
+                         const MaskType &mask = true) const {
         enoki_raise("Not implemented, please use scatter_reduce(JitArray src, index, op, mask) instead!");
     }
 
     template <typename Index>
-    void scatter_reduce_(JitArray &dst, const JitArray<Backend, Index> &index,
-                         ReduceOp op, const MaskType &mask = true) const {
+    void scatter_reduce_(ReduceOp op, JitArray &dst,
+                         const JitArray<Backend, Index> &index,
+                         const MaskType &mask = true) const {
         dst = steal(jit_var_new_scatter(dst.index(), m_index, index.index(),
                                         mask.index(), op));
     }

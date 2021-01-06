@@ -295,8 +295,8 @@ template <bool IsMask_, typename Derived_> struct alignas(64)
     }
 
     template <typename Index, typename Mask>
-    ENOKI_INLINE void scatter_reduce_(void *ptr, const Index &index_,
-                                      ReduceOp op, const Mask &active_) const {
+    ENOKI_INLINE void scatter_reduce_(ReduceOp op, void *ptr, const Index &index_,
+                                      const Mask &active_) const {
         if (op != ReduceOp::Add)
             enoki_raise("Packet scatter_reduce only support Add operation!");
 
@@ -602,8 +602,8 @@ template <bool IsMask_, typename Derived_> struct alignas(64)
     }
 
     template <typename Index, typename Mask>
-    ENOKI_INLINE void scatter_reduce_(void *ptr, const Index &index_,
-                                      ReduceOp op, const Mask &active_) const {
+    ENOKI_INLINE void scatter_reduce_(ReduceOp op, void *ptr, const Index &index_,
+                                      const Mask &active_) const {
         if (op != ReduceOp::Add)
             enoki_raise("Packet scatter_reduce only support Add operation!");
 
@@ -900,8 +900,8 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(64)
     }
 
     template <typename Index, typename Mask>
-    ENOKI_INLINE void scatter_reduce_(void *ptr, const Index &index_,
-                                      ReduceOp op, const Mask &active_) const {
+    ENOKI_INLINE void scatter_reduce_(ReduceOp op, void *ptr, const Index &index_,
+                                      const Mask &active_) const {
         if (op != ReduceOp::Add)
             enoki_raise("Packet scatter_reduce only support Add operation!");
 
@@ -1209,8 +1209,8 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(64)
     }
 
     template <typename Index, typename Mask>
-    ENOKI_INLINE void scatter_reduce_(void *ptr, const Index &index_,
-                                      ReduceOp op, const Mask &active_) const {
+    ENOKI_INLINE void scatter_reduce_(ReduceOp op, void *ptr, const Index &index_,
+                                      const Mask &active_) const {
         if (op != ReduceOp::Add)
             enoki_raise("Packet scatter_reduce only support Add operation!");
 

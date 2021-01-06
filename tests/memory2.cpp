@@ -37,11 +37,11 @@ ENOKI_TEST_ALL(test03_scatter_reduce) {
     auto index = arange<uint_array_t<T>>();
     auto index2 = uint_array_t<T>(0u);
 
-    scatter_reduce(tmp, T(1), index, ReduceOp::Add);
-    scatter_reduce(tmp, T(1), index, mask_t<T>(false), ReduceOp::Add);
+    scatter_reduce(ReduceOp::Add, tmp, T(1), index);
+    scatter_reduce(ReduceOp::Add, tmp, T(1), index, mask_t<T>(false));
 
-    scatter_reduce(tmp, T(2), index2, ReduceOp::Add);
-    scatter_reduce(tmp, T(2), index2, mask_t<T>(false), ReduceOp::Add);
+    scatter_reduce(ReduceOp::Add, tmp, T(2), index2);
+    scatter_reduce(ReduceOp::Add, tmp, T(2), index2, mask_t<T>(false));
 
     assert(tmp[0] == 2*Size + 1);
     for (size_t i = 1; i < Size; ++i) {

@@ -312,9 +312,9 @@ auto bind_full(py::class_<Array> &cls, bool scalar_mode = false) {
             });
         } else {
             cls.def("scatter_reduce_",
-                    [](const Array& value, Array& target, const UInt32& index, ReduceOp op, const Mask& mask) {
-                        ek::scatter_reduce(target, value, index, op, mask);
-                    }, "target"_a.noconvert(), "index"_a, "op"_a, "mask"_a);
+                    [](const Array& value, ReduceOp op, Array& target, const UInt32& index, const Mask& mask) {
+                        ek::scatter_reduce(op, target, value, index, mask);
+                    }, "op"_a, "target"_a.noconvert(), "index"_a, "mask"_a);
         }
     }
 

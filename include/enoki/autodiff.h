@@ -81,9 +81,9 @@ int32_t ad_new_gather(const char *label, uint32_t size, int32_t src_index,
 
 /// Special case of ad_new: create a node for a scatter[_reduce]() statement.
 template <typename Value, typename Mask, typename Index>
-int32_t ad_new_scatter(const char *label, uint32_t size, int32_t src_index,
-                       int32_t dst_index, const Index &offset, ReduceOp op,
-                       const Mask &mask, bool permute);
+int32_t ad_new_scatter(const char *label, uint32_t size, ReduceOp op,
+                       int32_t src_index, int32_t dst_index,
+                       const Index &offset, const Mask &mask, bool permute);
 
 /// Custom graph edge for implementing custom differentiable operations
 struct ENOKI_AUTODIFF_EXPORT DiffCallback {
@@ -1444,7 +1444,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                 if (m_index > 0 || (dst.m_index > 0 && !Permute)) {
                     int32_t index = detail::ad_new_scatter<Type>(
                         Permute ? "scatter[permute]" : "scatter", (uint32_t) width(dst),
-                        m_index, dst.m_index, offset.m_value, ReduceOp::None,
+                        ReduceOp::None, m_index, dst.m_index, offset.m_value,
                         mask.m_value, Permute);
                     detail::ad_dec_ref<Type>(dst.m_index);
                     dst.m_index = index;
@@ -1453,17 +1453,17 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         }
     }
 
-    void scatter_reduce_(DiffArray &dst, const IndexType &offset,
-                         ReduceOp op, const MaskType &mask = true) const {
+    void scatter_reduce_(ReduceOp op, DiffArray &dst, const IndexType &offset,
+                         const MaskType &mask = true) const {
         if constexpr (std::is_scalar_v<Type>) {
             enoki_raise("Array scatter_reduce operation not supported for scalar array type.");
         } else {
-            scatter_reduce(dst.m_value, m_value, offset.m_value, op, mask.m_value);
+            scatter_reduce(op, dst.m_value, m_value, offset.m_value, mask.m_value);
             if constexpr (IsEnabled) {
                 if (m_index > 0) { // safe to ignore dst.m_index in the case of scatter_reduce
                     int32_t index = detail::ad_new_scatter<Type>(
-                        "scatter_reduce", (uint32_t) width(dst), m_index, dst.m_index,
-                        offset.m_value, op, mask.m_value, false);
+                        "scatter_reduce", (uint32_t) width(dst), op, m_index,
+                        dst.m_index, offset.m_value, mask.m_value, false);
                     detail::ad_dec_ref<Type>(dst.m_index);
                     dst.m_index = index;
                 }
@@ -1483,9 +1483,9 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         scatter(dst, m_value, offset.m_value, mask.m_value);
     }
 
-    void scatter_reduce_(void *dst, const IndexType &offset, ReduceOp op,
+    void scatter_reduce_(ReduceOp op, void *dst, const IndexType &offset,
                          const MaskType &mask = true) const {
-        scatter_reduce(dst, m_value, offset.m_value, op, mask.m_value);
+        scatter_reduce(op, dst, m_value, offset.m_value, mask.m_value);
     }
 
     auto compress_() const {
@@ -1807,8 +1807,8 @@ protected:
     ad_new_gather<T, Mask, Index>(const char *, uint32_t, int32_t,              \
                                   const Index &, const Mask &, bool);           \
     extern template ENOKI_AUTODIFF_EXPORT int32_t                               \
-    ad_new_scatter<T, Mask, Index>(const char *, uint32_t, int32_t, int32_t,    \
-                                   const Index &, ReduceOp, const Mask &, bool);\
+    ad_new_scatter<T, Mask, Index>(const char *, uint32_t, ReduceOp, int32_t,   \
+                                   int32_t, const Index &, const Mask &, bool); \
     extern template ENOKI_AUTODIFF_EXPORT void ad_add_edge<T>(int32_t,          \
             int32_t, DiffCallback*);                                            \
     }

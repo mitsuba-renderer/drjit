@@ -824,9 +824,9 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
     }
 
     template <typename Target, typename Index, typename Mask>
-    void scatter_reduce_(Target &&target,
+    void scatter_reduce_(ReduceOp op,
+                         Target &&target,
                          const Index &index,
-                         ReduceOp op,
                          const Mask &mask) const {
         ENOKI_CHKSCALAR("scatter_reduce_");
 
@@ -834,7 +834,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
                sd = sa > sb ? sa : sb, sr = sc > sd ? sc : sd;
 
         for (size_t i = 0; i < sr; ++i)
-            scatter_reduce(target, derived().entry(i), index.entry(i), op,
+            scatter_reduce(op, target, derived().entry(i), index.entry(i),
                            mask.entry(i));
     }
 

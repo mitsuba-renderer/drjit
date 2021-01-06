@@ -146,13 +146,13 @@ PYBIND11_MODULE(enoki_ext, m_) {
         .value("Or",   ReduceOp::Or);
 
     py::enum_<JitFlag>(m, "JitFlag", py::arithmetic())
-        .value("LoopRecord", JitFlag::LoopRecord)
-        .value("LoopOptimize", JitFlag::LoopOptimize)
-        .value("VCallRecord", JitFlag::VCallRecord)
-        .value("VCallOptimize", JitFlag::VCallOptimize)
-        .value("VCallBranch", JitFlag::VCallBranch)
-        .value("ForceOptiX", JitFlag::ForceOptiX)
-        .value("DisableSideEffects", JitFlag::DisableSideEffects);
+        .value("LoopRecord",          JitFlag::LoopRecord)
+        .value("LoopOptimize",        JitFlag::LoopOptimize)
+        .value("VCallRecord",         JitFlag::VCallRecord)
+        .value("VCallOptimize",       JitFlag::VCallOptimize)
+        .value("VCallBranch",         JitFlag::VCallBranch)
+        .value("ForceOptiX",          JitFlag::ForceOptiX)
+        .value("PostponeSideEffects", JitFlag::PostponeSideEffects);
 
     m.def("device_count", &jit_cuda_device_count);
     m.def("set_device", &jit_cuda_set_device, "device"_a);

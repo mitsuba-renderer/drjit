@@ -1429,11 +1429,11 @@ def scatter_(self, target, index, mask, permute):
         _ek.scatter(target, self[i], index[i], mask[i], permute)
 
 
-def scatter_reduce_(self, target, index, op, mask):
+def scatter_reduce_(self, op, target, index, mask):
     assert target.Depth == 1
     sr = max(len(self), len(index), len(mask))
     for i in range(sr):
-        _ek.scatter_reduce(target, self[i], index[i], op, mask[i])
+        _ek.scatter_reduce(op, target, self[i], index[i], mask[i])
 
 
 # -------------------------------------------------------------------

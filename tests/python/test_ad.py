@@ -234,8 +234,8 @@ def test20_scatter_reduce_rev(m):
         buf.label = "buf"
 
         buf2 = m.Float(buf)
-        ek.scatter_reduce(buf2, x, idx1, ek.ReduceOp.Add)
-        ek.scatter_reduce(buf2, y, idx2, ek.ReduceOp.Add)
+        ek.scatter_reduce(ek.ReduceOp.Add, buf2, x, idx1)
+        ek.scatter_reduce(ek.ReduceOp.Add, buf2, y, idx2)
 
         ref_buf = m.Float(0.0000, 0.2500, 0.5000, 1.7500, 2.3333,
                           1.6667, 2.0000, 0.0000, 0.0000, 0.0000)
@@ -286,8 +286,8 @@ def test21_scatter_reduce_fwd(m):
         buf.label = "buf"
 
         buf2 = m.Float(buf)
-        ek.scatter_reduce(buf2, x, idx1, ek.ReduceOp.Add)
-        ek.scatter_reduce(buf2, y, idx2, ek.ReduceOp.Add)
+        ek.scatter_reduce(ek.ReduceOp.Add, buf2, x, idx1)
+        ek.scatter_reduce(ek.ReduceOp.Add, buf2, y, idx2)
 
         s = ek.dot_async(buf2, buf2)
 

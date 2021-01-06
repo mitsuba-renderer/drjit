@@ -14,15 +14,15 @@ def get_class(name):
     value = __import__(".".join(name[:-1]))
     for item in name[1:]:
         value = getattr(value, item)
-    ek.jit_set_flag(ek.JitFlag.RecordLoops, True)
+    ek.jit_set_flag(ek.JitFlag.LoopRecord, True)
 
     return value
 
 def setup_function(function):
-    ek.jit_set_flag(ek.JitFlag.RecordLoops, True)
+    ek.jit_set_flag(ek.JitFlag.LoopRecord, True)
 
 def teardown_function(function):
-    ek.disable_flag(ek.JitFlag.RecordLoops)
+    ek.disable_flag(ek.JitFlag.LoopRecord)
 
 pkgs = ["enoki.cuda", "enoki.cuda.ad",
         "enoki.llvm", "enoki.llvm.ad"]
@@ -107,7 +107,7 @@ def test04_side_effect(pkg):
     while loop.cond(i < 10):
         j += i
         i += 1
-        ek.scatter_reduce(target=buf, value=p.Float(i), index=0, op=ek.ReduceOp.Add)
+        ek.scatter_reduce(op=ek.ReduceOp.Add, target=buf, value=p.Float(i), index=0)
 
     ek.eval(i, j)
     assert i == p.Int([10]*10)
@@ -123,14 +123,13 @@ def test05_side_effect_noloop(pkg):
     i = ek.zero(p.Int, 10)
     j = ek.zero(p.Int, 10)
     buf = ek.zero(p.Float, 10)
-    ek.disable_flag(ek.JitFlag.RecordLoops)
+    ek.disable_flag(ek.JitFlag.LoopRecord)
 
     loop = p.Loop(i, j)
     while loop.cond(i < 10):
         j += i
         i += 1
-        ek.scatter_reduce(target=buf, value=p.Float(i), index=0,
-                          op=ek.ReduceOp.Add, mask=loop.mask())
+        ek.scatter_reduce(op=ek.ReduceOp.Add, target=buf, value=p.Float(i), index=0)
 
     assert i == p.Int([10]*10)
     assert buf == p.Float(550, *([0]*9))
