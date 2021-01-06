@@ -32,16 +32,16 @@ ENOKI_TEST_ALL(test01_extract) {
         assert(extract(idx, eq(idx, Value(i))) == Value(i));
 }
 
-ENOKI_TEST_ALL(test03_scatter_add) {
+ENOKI_TEST_ALL(test03_scatter_reduce) {
     Value tmp[T::ActualSize] = { 0 };
     auto index = arange<uint_array_t<T>>();
     auto index2 = uint_array_t<T>(0u);
 
-    scatter_add(tmp, T(1), index);
-    scatter_add(tmp, T(1), index, mask_t<T>(false));
+    scatter_reduce(tmp, T(1), index, ReduceOp::Add);
+    scatter_reduce(tmp, T(1), index, mask_t<T>(false), ReduceOp::Add);
 
-    scatter_add(tmp, T(2), index2);
-    scatter_add(tmp, T(2), index2, mask_t<T>(false));
+    scatter_reduce(tmp, T(2), index2, ReduceOp::Add);
+    scatter_reduce(tmp, T(2), index2, mask_t<T>(false), ReduceOp::Add);
 
     assert(tmp[0] == 2*Size + 1);
     for (size_t i = 1; i < Size; ++i) {

@@ -332,9 +332,10 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
     }
 
     template <typename Index, typename Mask>
-    ENOKI_INLINE void scatter_add_(void *ptr, const Index &index, const Mask &mask) const {
-        scatter_add(ptr, a1, low(index), low(mask));
-        scatter_add(ptr, a2, high(index), high(mask));
+    ENOKI_INLINE void scatter_reduce_(void *ptr, const Index &index,
+                                      ReduceOp op, const Mask &mask) const {
+        scatter_reduce(ptr, a1, low(index), op, low(mask));
+        scatter_reduce(ptr, a2, high(index), op, high(mask));
     }
 
     static ENOKI_INLINE Derived zero_(size_t) {

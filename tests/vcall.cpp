@@ -132,7 +132,7 @@ struct BaseD {
         if (scalar) {
             x = 10;
             ek::enable_grad(x);
-            ek::set_grad(x, ek::full<Float>(0, 1, true));
+            ek::set_grad(x, ek::opaque<Float>(0, 1));
         }
     }
 

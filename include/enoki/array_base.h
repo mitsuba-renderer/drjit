@@ -824,15 +824,18 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
     }
 
     template <typename Target, typename Index, typename Mask>
-    void scatter_add_(Target &&target, const Index &index, const Mask &mask) const {
-        ENOKI_CHKSCALAR("scatter_add_");
+    void scatter_reduce_(Target &&target,
+                         const Index &index,
+                         ReduceOp op,
+                         const Mask &mask) const {
+        ENOKI_CHKSCALAR("scatter_reduce_");
 
         size_t sa = derived().size(), sb = index.size(), sc = mask.size(),
                sd = sa > sb ? sa : sb, sr = sc > sd ? sc : sd;
 
         for (size_t i = 0; i < sr; ++i)
-            scatter_add(target, derived().entry(i), index.entry(i),
-                        mask.entry(i));
+            scatter_reduce(target, derived().entry(i), index.entry(i), op,
+                           mask.entry(i));
     }
 
     static Derived load_aligned_(const void *mem, size_t size) {

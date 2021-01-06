@@ -103,7 +103,7 @@ def test04_side_effect(pkg):
     while loop.cond(i < 10):
         j += i
         i += 1
-        ek.scatter_add(target=buf, value=p.Float(i), index=0)
+        ek.scatter_reduce(target=buf, value=p.Float(i), index=0, ek.ReduceOp.Add)
 
     ek.eval(i, j)
     assert i == p.Int([10]*10)
@@ -124,7 +124,8 @@ def test05_side_effect_noloop(pkg):
     while loop.cond(i < 10):
         j += i
         i += 1
-        ek.scatter_add(target=buf, value=p.Float(i), index=0, mask=loop.mask())
+        ek.scatter_reduce(target=buf, value=p.Float(i), index=0,
+                          ek.ReduceOp.Add, mask=loop.mask())
 
     assert i == p.Int([10]*10)
     assert buf == p.Float(550, *([0]*9))

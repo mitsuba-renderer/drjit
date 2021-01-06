@@ -1058,31 +1058,53 @@ void scatter(Target &&target, const Value &value, const Index &index, const mask
 }
 
 template <typename Target, typename Value, typename Index>
-void scatter_add(Target &&target, const Value &value, const Index &index, const mask_t<Value> &mask = true) {
+void scatter_reduce(Target &&target, const Value &value, const Index &index, ReduceOp op, const mask_t<Value> &mask = true) {
     if constexpr (is_array_v<Value>) {
         static_assert(std::is_pointer_v<std::decay_t<Target>> || array_depth_v<Target> == 1,
-                      "Target argument of scatter_add operation must either be a "
+                      "Target argument of scatter_reduce operation must either be a "
                       "pointer address or a flat array!");
         static_assert(is_array_v<Index> && is_integral_v<Index>,
                       "Second argument of gather operation must be an index array!");
 
         if constexpr (array_depth_v<Value> == array_depth_v<Index>) {
-            value.scatter_add_(target, index, mask);
+            value.scatter_reduce_(target, index, op, mask);
         } else {
             using TargetIndex = replace_scalar_t<Value, scalar_t<Index>>;
-            scatter_add(target, value, detail::broadcast_index<TargetIndex>(index), mask);
+            scatter_reduce(target, value, detail::broadcast_index<TargetIndex>(index), op, mask);
         }
-    } else if constexpr (std::is_integral_v<Index> && std::is_arithmetic_v<Value> && !std::is_same_v<Value, bool>) {
+    } else if constexpr (std::is_integral_v<Index> && std::is_arithmetic_v<Value>) {
         if (mask) {
+            auto func = [op](const Value &a, const Value &b) {
+                Value result;
+                if (op == ReduceOp::Add)
+                    return a + b;
+                else if (op == ReduceOp::Mul)
+                    return a * b;
+                else if (op == ReduceOp::Min)
+                    return min(a, b);
+                else if (op == ReduceOp::Max)
+                    return max(a, b);
+
+                if constexpr (std::is_same_v<Value, bool>) {
+                    if (op == ReduceOp::And)
+                        return a & b;
+                    else if (op == ReduceOp::Or)
+                        return a | b;
+                }
+
+                enoki_raise("Reduce operation not supported");
+                return Value();
+            };
+
             if constexpr (is_array_v<Target>)
-                target[index] += value;
+                target[index] = func(target[index], value);
             else
-                ((Value *) target)[index] += value;
+                ((Value *) target)[index] = func(((Value *) target)[index], value);
         }
     } else {
         static_assert(
             detail::false_v<Index, Value>,
-            "scatter_add(): don't know what to do with these inputs.");
+            "scatter_reduce(): don't know what to do with these inputs.");
     }
 }
 

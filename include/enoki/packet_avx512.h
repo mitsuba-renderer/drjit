@@ -295,7 +295,11 @@ template <bool IsMask_, typename Derived_> struct alignas(64)
     }
 
     template <typename Index, typename Mask>
-    ENOKI_INLINE void scatter_add_(void *ptr, const Index &index_, const Mask &active_) const {
+    ENOKI_INLINE void scatter_reduce_(void *ptr, const Index &index_,
+                                      ReduceOp op, const Mask &active_) const {
+        if (op != ReduceOp::Add)
+            enoki_raise("Packet scatter_reduce only support Add operation!");
+
         if constexpr (sizeof(scalar_t<Index>) == 4) {
             __m512i index = index_.m;
             __mmask16 active = active_.k;
@@ -327,7 +331,7 @@ template <bool IsMask_, typename Derived_> struct alignas(64)
 
             _mm512_mask_i32scatter_ps(ptr, active, index, value, 4);
         } else {
-            scatter_add_(ptr, int32_array_t<Index>(index_), active_);
+            scatter_reduce_(ptr, int32_array_t<Index>(index_), op, active_);
         }
     }
 
@@ -598,7 +602,11 @@ template <bool IsMask_, typename Derived_> struct alignas(64)
     }
 
     template <typename Index, typename Mask>
-    ENOKI_INLINE void scatter_add_(void *ptr, const Index &index_, const Mask &active_) const {
+    ENOKI_INLINE void scatter_reduce_(void *ptr, const Index &index_,
+                                      ReduceOp op, const Mask &active_) const {
+        if (op != ReduceOp::Add)
+            enoki_raise("Packet scatter_reduce only support Add operation!");
+
         if constexpr (sizeof(scalar_t<Index>) == 8) {
             __m512i index = index_.m;
             __mmask8 active = active_.k;
@@ -630,7 +638,7 @@ template <bool IsMask_, typename Derived_> struct alignas(64)
 
             _mm512_mask_i64scatter_pd(ptr, active, index, value, 8);
         } else {
-            scatter_add_(ptr, int64_array_t<Index>(index_), active_);
+            scatter_reduce_(ptr, int64_array_t<Index>(index_), op, active_);
         }
     }
 
@@ -892,7 +900,11 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(64)
     }
 
     template <typename Index, typename Mask>
-    ENOKI_INLINE void scatter_add_(void *ptr, const Index &index_, const Mask &active_) const {
+    ENOKI_INLINE void scatter_reduce_(void *ptr, const Index &index_,
+                                      ReduceOp op, const Mask &active_) const {
+        if (op != ReduceOp::Add)
+            enoki_raise("Packet scatter_reduce only support Add operation!");
+
         if constexpr (sizeof(scalar_t<Index>) == 4) {
             __m512i index = index_.m;
             __mmask16 active = active_.k;
@@ -924,7 +936,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(64)
 
             _mm512_mask_i32scatter_epi32(ptr, active, index, value, 4);
         } else {
-            scatter_add_(ptr, int32_array_t<Index>(index_), active_);
+            scatter_reduce_(ptr, int32_array_t<Index>(index_), op, active_);
         }
     }
 
@@ -1197,7 +1209,11 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(64)
     }
 
     template <typename Index, typename Mask>
-    ENOKI_INLINE void scatter_add_(void *ptr, const Index &index_, const Mask &active_) const {
+    ENOKI_INLINE void scatter_reduce_(void *ptr, const Index &index_,
+                                      ReduceOp op, const Mask &active_) const {
+        if (op != ReduceOp::Add)
+            enoki_raise("Packet scatter_reduce only support Add operation!");
+
         if constexpr (sizeof(scalar_t<Index>) == 8) {
             __m512i index = index_.m;
             __mmask8 active = active_.k;
@@ -1229,7 +1245,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(64)
 
             _mm512_mask_i64scatter_epi64(ptr, active, index, value, 8);
         } else {
-            scatter_add_(ptr, int64_array_t<Index>(index_), active_);
+            scatter_reduce_(ptr, int64_array_t<Index>(index_), op, active_);
         }
     }
 

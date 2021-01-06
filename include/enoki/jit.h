@@ -475,7 +475,7 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, JitArray<Backend_, Value_
     static JitArray gather_(const void *src,
                             const JitArray<Backend, Index> &index,
                             const MaskType &mask = true) {
-        enoki_raise("Not Implemented"); // TODO
+        enoki_raise("Not implemented, please use gather(JitArray src, index, mask) instead!");
     }
 
     template <bool, typename Index>
@@ -488,7 +488,7 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, JitArray<Backend_, Value_
     template <bool, typename Index>
     void scatter_(void *dst, const JitArray<Backend, Index> &index,
                   const MaskType &mask = true) const {
-        enoki_raise("Not Implemented"); // TODO
+        enoki_raise("Not implemented, please use scatter(JitArray src, index, mask) instead!");
     }
 
     template <bool, typename Index>
@@ -500,17 +500,16 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, JitArray<Backend_, Value_
     }
 
     template <typename Index>
-    void scatter_add_(void *dst, const JitArray<Backend, Index> &index,
-                      const MaskType &mask = true) const {
-        enoki_raise("Not Implemented"); // TODO
+    void scatter_reduce_(void *dst, const JitArray<Backend, Index> &index,
+                         ReduceOp op, const MaskType &mask = true) const {
+        enoki_raise("Not implemented, please use scatter_reduce(JitArray src, index, op, mask) instead!");
     }
 
-    // TODO change it to scatter reduce and add ReduceOp argument
     template <typename Index>
-    void scatter_add_(JitArray &dst, const JitArray<Backend, Index> &index,
-                      const MaskType &mask = true) const {
-        dst = steal(jit_var_new_scatter(dst.index(), m_index,
-                                        index.index(), mask.index(), ReduceOp::Add));
+    void scatter_reduce_(JitArray &dst, const JitArray<Backend, Index> &index,
+                         ReduceOp op, const MaskType &mask = true) const {
+        dst = steal(jit_var_new_scatter(dst.index(), m_index, index.index(),
+                                        mask.index(), op));
     }
 
     //! @}

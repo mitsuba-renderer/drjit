@@ -570,15 +570,15 @@ def scatter(target, value, index, mask=True, permute=False):
             return value.scatter_(target, index, mask, permute)
 
 
-def scatter_add(target, value, index, mask=True):
+def scatter_reduce(target, value, index, op, mask=True):
     target_type = type(target)
     if not issubclass(target_type, ArrayBase):
         if _ek.is_enoki_struct_v(target_type):
             if type(value) is not target_type:
-                raise Exception('scatter_add(): type mismatch involving custom data structure!')
+                raise Exception('scatter_reduce(): type mismatch involving custom data structure!')
             for k in target_type.ENOKI_STRUCT.keys():
-                scatter_add(getattr(target, k), getattr(value, k),
-                            index, mask, permute)
+                scatter_reduce(getattr(target, k), getattr(value, k),
+                               index, op, mask)
         else:
             assert isinstance(index, int) and isinstance(mask, bool)
             if mask:
@@ -595,7 +595,7 @@ def scatter_add(target, value, index, mask=True):
         if not isinstance(mask, mask_type):
             mask = mask_type(mask)
 
-        return value.scatter_add_(target, index, mask)
+        return value.scatter_reduce_(target, index, op, mask)
 
 
 def ravel(array):

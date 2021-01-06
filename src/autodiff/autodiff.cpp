@@ -31,7 +31,7 @@ constexpr bool IsDouble = std::is_same_v<Value, double>;
 
 struct Variable;
 
-// Special edge (scatter, gather, scatter_add, block_sum, etc.)
+// Special edge (scatter, gather, scatter_reduce, block_sum, etc.)
 struct Special {
     virtual void backward(Variable *source, const Variable *target) const {
         throw std::runtime_error("Special::backward(): not implemented!");
@@ -160,7 +160,7 @@ struct Variable {
                     if (next_rev == 0 &&
                         (jit_flags() & (uint32_t) JitFlag::VCallRecord) != 0 &&
                         ((const T &) grad).data()) {
-                        scatter_add(grad, v, uint32_array_t<T>(0), neq(v, 0.f));
+                        scatter_reduce(grad, v, uint32_array_t<T>(0), ReduceOp::Add, neq(v, 0.f));
                         return;
                     }
                 }
@@ -198,7 +198,7 @@ struct Variable {
                     if (next_rev == 0 &&
                         (jit_flags() & (uint32_t) JitFlag::VCallRecord) != 0 &&
                         ((const T &) grad).data()) {
-                        scatter_add(grad, v1 * v2, uint32_array_t<T>(0), neq(v1, 0));
+                        scatter_reduce(grad, v1 * v2, uint32_array_t<T>(0), ReduceOp::Add, neq(v1, 0));
                         return;
                     }
                 }
@@ -733,7 +733,7 @@ template <typename Value> struct GatherEdge : Special {
         if (permute)
             enoki::scatter(source_grad, target->grad, offset, mask);
         else
-            enoki::scatter_add(source_grad, target->grad, offset, mask);
+            enoki::scatter_reduce(source_grad, target->grad, offset, ReduceOp::Add, mask);
     }
 
     void forward(const Variable *source, Variable *target) const override {
@@ -777,12 +777,15 @@ int32_t ad_new_gather(const char *label, uint32_t size, int32_t src_index,
 }
 
 template <typename Value> struct ScatterEdge : Special {
-    ScatterEdge(const Index &offset, const Mask &mask, bool scatter_add)
-        : offset(offset), mask(mask), scatter_add(scatter_add) { }
+    ScatterEdge(const Index &offset, const Mask &mask, ReduceOp op)
+        : offset(offset), mask(mask), op(op) {
+            if (op != ReduceOp::None && op != ReduceOp::Add)
+                enoki_raise("AD only supports ReduceOp::Add in scatter_reduce!");
+        }
 
     void backward(Variable *source, const Variable *target) const override {
         source->accum(enoki::gather<Value>(target->grad, offset, mask),
-                      asize(offset));
+                        asize(offset));
     }
 
     void forward(const Variable *source, Variable *target) const override {
@@ -797,21 +800,21 @@ template <typename Value> struct ScatterEdge : Special {
             target_grad.resize(size);
         }
 
-        if (scatter_add)
-            enoki::scatter_add(target_grad, source->grad, offset, mask);
+        if (op != ReduceOp::None)
+            enoki::scatter_reduce(target_grad, source->grad, offset, op, mask);
         else
             enoki::scatter(target_grad, source->grad, offset, mask);
     }
 
     Index offset;
     Mask mask;
-    bool scatter_add;
+    ReduceOp op;
 };
 
 template <typename Value, typename Mask, typename Index>
 int32_t ad_new_scatter(const char *label, uint32_t size, int32_t src_index,
-                       int32_t dst_index, const Index &offset,
-                       const Mask &mask, bool permute, bool scatter_add) {
+                       int32_t dst_index, const Index &offset, ReduceOp op,
+                       const Mask &mask, bool permute) {
 
     if constexpr (is_array_v<Value>) {
         std::lock_guard<std::mutex> guard(state.mutex);
@@ -819,8 +822,8 @@ int32_t ad_new_scatter(const char *label, uint32_t size, int32_t src_index,
         auto [index, var] = ad_var_new(label, size);
 
         ad_log(Debug,
-               "ad_new_scatter(%u <- %u, %u, permute=%i, scatter_add=%i)",
-               index, src_index, dst_index, (int) permute, (int) scatter_add);
+               "ad_new_scatter(%u <- %u, %u, permute=%i, op=%i)",
+               index, src_index, dst_index, (int) permute, (int) op);
 
         uint32_t edge_index = 0;
 
@@ -830,7 +833,7 @@ int32_t ad_new_scatter(const char *label, uint32_t size, int32_t src_index,
             Edge &edge = state.edges[edge_index_new];
             edge.source = src_index;
             edge.target = index;
-            edge.special = new ScatterEdge<Value>(offset, mask, scatter_add);
+            edge.special = new ScatterEdge<Value>(offset, mask, op);
             edge.next_fwd = var2->next_fwd;
             edge.next_rev = var->next_rev;
             var2->ref_count_int++;
@@ -847,7 +850,7 @@ int32_t ad_new_scatter(const char *label, uint32_t size, int32_t src_index,
             edge2.target = index;
             edge2.next_fwd = var2->next_fwd;
             edge2.next_rev = edge_index;
-            if (scatter_add || permute) {
+            if (op != ReduceOp::None || permute) {
                 edge2.weight = 1;
             } else {
                 Mask edge_mask = full<Mask>(false, size);
@@ -1219,7 +1222,7 @@ template ENOKI_EXPORT int32_t ad_new_gather<Value, Mask, Index>(
     const char *, uint32_t, int32_t, const Index &, const Mask &, bool);
 template ENOKI_EXPORT int32_t
 ad_new_scatter<Value, Mask, Index>(const char *, uint32_t, int32_t, int32_t,
-                                   const Index &, const Mask &, bool, bool);
+                                   const Index &, ReduceOp, const Mask &, bool);
 template ENOKI_EXPORT void ad_add_edge<Value>(int32_t, int32_t,
                                               DiffCallback *);
 
