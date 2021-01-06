@@ -80,11 +80,12 @@ struct StaticArrayBase : ArrayBase<Value_, IsMask_, Derived_> {
 
     ENOKI_INLINE void init_(size_t) { }
 
-    Derived placeholder_() const {
+    Derived placeholder_(bool propagate_literals) const {
         Derived result;
         if constexpr (is_array_v<Value>) {
             for (size_t i = 0; i < Derived::Size; ++i)
-                result.entry(i) = enoki::placeholder<Value>(derived().entry(i));
+                result.entry(i)
+                    = enoki::placeholder<Value>(derived().entry(i), propagate_literals);
         }
         return result;
     }
@@ -117,17 +118,31 @@ struct StaticArrayBase : ArrayBase<Value_, IsMask_, Derived_> {
     }
 
     template <typename T>
-    static Derived full_(const T &value, size_t size, bool eval) {
+    static Derived full_(const T &value, size_t size) {
         if constexpr (array_depth_v<T> > array_depth_v<Value> ||
                       (array_depth_v<T> == array_depth_v<Value> &&
                        (is_dynamic_array_v<Value> || !is_array_v<Value>))) {
             ENOKI_MARK_USED(size);
-            ENOKI_MARK_USED(eval);
             return value;
         } else {
             Derived result;
             for (size_t i = 0; i < Derived::Size; ++i)
-                result.entry(i) = full<Value>(value, size, eval);
+                result.entry(i) = full<Value>(value, size);
+            return result;
+        }
+    }
+
+    template <typename T>
+    static Derived opaque_(const T &value, size_t size) {
+        if constexpr (array_depth_v<T> > array_depth_v<Value> ||
+                      (array_depth_v<T> == array_depth_v<Value> &&
+                       (is_dynamic_array_v<Value> || !is_array_v<Value>))) {
+            ENOKI_MARK_USED(size);
+            return value;
+        } else {
+            Derived result;
+            for (size_t i = 0; i < Derived::Size; ++i)
+                result.entry(i) = opaque<Value>(value, size);
             return result;
         }
     }

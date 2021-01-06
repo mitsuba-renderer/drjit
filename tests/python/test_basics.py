@@ -361,13 +361,13 @@ def test08_divmod(cname):
     index *= 256203161
 
     for i in range(1, 100):
-        assert index // i == index // ek.full(t, i, 1, eval=True)
-        assert index % i == index % ek.full(t, i, 1, eval=True)
+        assert index // i == index // ek.opaque(t, i, 1)
+        assert index % i == index % ek.opaque(t, i, 1)
 
     if t.IsSigned:
         for i in range(1, 100):
-            assert index // -i == index // ek.full(t, -i, 1, eval=True)
-            assert index % -i == index % ek.full(t, -i, 1, eval=True)
+            assert index // -i == index // ek.opaque(t, -i, 1)
+            assert index % -i == index % ek.opaque(t, -i, 1)
 
 
 @pytest.mark.skip("Until mulhi is implemented on JitArray")

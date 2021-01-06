@@ -160,7 +160,7 @@ struct DynamicArray
         return result;
     }
 
-    static DynamicArray full_(const Value &v, size_t size, bool) {
+    static DynamicArray full_(const Value &v, size_t size) {
         DynamicArray result;
         result.init_(size);
 
@@ -168,6 +168,10 @@ struct DynamicArray
             result.entry(i) = v;
 
         return result;
+    }
+
+    static DynamicArray opaque_(const Value &v, size_t size) {
+        return full_(v, size);
     }
 
     static DynamicArray arange_(ssize_t start, ssize_t stop, ssize_t step) {

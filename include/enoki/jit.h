@@ -343,25 +343,20 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, JitArray<Backend_, Value_
     // -----------------------------------------------------------------------
 
     bool all_() const {
-        return jit_var_all(m_index);
+        MaskType r = MaskType::steal(jit_var_reduce(m_index, ReduceOp::And));
+        return r.entry(0);
     }
 
     bool any_() const {
-        return jit_var_any(m_index);
+        MaskType r = MaskType::steal(jit_var_reduce(m_index, ReduceOp::Or));
+        return r.entry(0);
     }
 
     #define ENOKI_HORIZONTAL_OP(name, op)                                        \
         JitArray name##_async_() const {                                         \
-            if constexpr (!(Type != VarType::Void && Type != VarType::Bool))     \
-                enoki_raise("Unsupported operand type");                         \
             if (size() == 0)                                                     \
                 enoki_raise(#name "_async_(): zero-sized array!");               \
-            else if (size() == 1)                                                \
-                return *this;                                                    \
-            eval_();                                                             \
-            JitArray r = enoki::empty<JitArray>(1);                              \
-            jit_reduce(Backend, Type, op, data(), (uint32_t) size(), r.data()); \
-            return r;                                                            \
+            return steal(jit_var_reduce(m_index, op));                           \
         }                                                                        \
         Value name##_() const { return name##_async_().entry(0); }
 
@@ -394,8 +389,7 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, JitArray<Backend_, Value_
     //! @{ \name Fancy array initialization
     // -----------------------------------------------------------------------
 
-    JitArray placeholder_() const {
-        bool propagate_literals = true; // TODO add this as argument to API
+    JitArray placeholder_(bool propagate_literals) const {
         return steal(
             jit_var_new_placeholder(m_index, propagate_literals));
     }
@@ -415,13 +409,11 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, JitArray<Backend_, Value_
         return steal(jit_var_new_literal(Backend, Type, &value, size));
     }
 
-    // TODO change interface to remove eval
-    static JitArray full_(Value value, size_t size, bool /*eval*/) {
+    static JitArray full_(Value value, size_t size) {
         return steal(
             jit_var_new_literal(Backend, Type, &value, size, false));
     }
 
-    // TODO add this to API
     static JitArray opaque_(const Value &value, size_t size = 1) {
         return steal(
             jit_var_new_literal(Backend, Type, &value, size, true));

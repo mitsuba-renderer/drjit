@@ -2239,14 +2239,21 @@ def empty(type_, size=1):
         return type_(0)
 
 
-def full(type_, value, size=1, eval=False):
+def full(type_, value, size=1):
     if not isinstance(type_, type):
         raise Exception('full(): Type expected as first argument')
     elif issubclass(type_, ArrayBase):
-        return type_.full_(value, size, eval)
+        return type_.full_(value, size)
     else:
         return type_(value)
 
+def opaque(type_, value, size=1):
+    if not isinstance(type_, type):
+        raise Exception('opaque(): Type expected as first argument')
+    elif issubclass(type_, ArrayBase):
+        return type_.opaque_(value, size)
+    else:
+        return type_(value)
 
 def linspace(type_, min, max, size=1):
     if not isinstance(type_, type):

@@ -1502,8 +1502,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
     //! @{ \name Standard initializers
     // -----------------------------------------------------------------------
 
-    DiffArray placeholder_() const {
-        return enoki::placeholder<Type>(m_value);
+    DiffArray placeholder_(bool propagate_literals) const {
+        return enoki::placeholder<Type>(m_value, propagate_literals);
     }
 
     static DiffArray empty_(size_t size) {
@@ -1514,8 +1514,12 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         return zero<Type>(size);
     }
 
-    static DiffArray full_(Value value, size_t size, bool eval) {
-        return full<Type>(value, size, eval);
+    static DiffArray full_(Value value, size_t size) {
+        return full<Type>(value, size);
+    }
+
+    static DiffArray opaque_(Value value, size_t size) {
+        return opaque<Type>(value, size);
     }
 
     static DiffArray arange_(ssize_t start, ssize_t stop, ssize_t step) {

@@ -799,16 +799,17 @@ template <typename T> ENOKI_INLINE T empty(size_t size = 1) {
 }
 
 /// Create a dummy memory region that can be used to capture computation symbolically
-template <typename T> ENOKI_INLINE decltype(auto) placeholder(const T &value) {
+template <typename T>
+ENOKI_INLINE decltype(auto) placeholder(const T &value, bool propagate_literals = true) {
     if constexpr (is_jit_array_v<T>) {
-        return value.placeholder_();
+        return value.placeholder_(propagate_literals);
     } else if constexpr (is_enoki_struct_v<T>) {
         T result;
         struct_support_t<T>::apply_2(
             result, value,
-            [](auto &x, const auto &y) ENOKI_INLINE_LAMBDA {
+            [propagate_literals](auto &x, const auto &y) ENOKI_INLINE_LAMBDA {
                 using X = std::decay_t<decltype(x)>;
-                x = placeholder<X>(y);
+                x = placeholder<X>(y, propagate_literals);
             });
         return result;
     } else {
@@ -821,11 +822,19 @@ template <typename T> ENOKI_INLINE decltype(auto) placeholder(const T &value) {
 #endif
 
 template <typename T, typename T2>
-ENOKI_INLINE T full(const T2 &value, size_t size = 1, bool eval = false) {
+ENOKI_INLINE T full(const T2 &value, size_t size = 1) {
     ENOKI_MARK_USED(size);
-    ENOKI_MARK_USED(eval);
     if constexpr (is_array_v<T>)
-        return T::Derived::full_(value, size, eval);
+        return T::Derived::full_(value, size);
+    else
+        return value;
+}
+
+template <typename T, typename T2>
+ENOKI_INLINE T opaque(const T2 &value, size_t size = 1) {
+    ENOKI_MARK_USED(size);
+    if constexpr (is_array_v<T>)
+        return T::Derived::opaque_(value, size);
     else
         return value;
 }

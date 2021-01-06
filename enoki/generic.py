@@ -1361,7 +1361,7 @@ def zero_(cls, size=1):
 
 
 @classmethod
-def full_(cls, value, size, eval):
+def full_(cls, value, size):
     result = cls()
     if cls.Size == Dynamic:
         result.init_(size)
@@ -1369,12 +1369,26 @@ def full_(cls, value, size, eval):
             result.set_entry_(i, value)
     else:
         if _ek.array_depth_v(value) != cls.Depth - 1:
-            value = _ek.full(cls.Value, value, size, eval)
+            value = _ek.full(cls.Value, value, size)
 
         for i in range(cls.Size):
             result.set_entry_(i, value)
     return result
 
+@classmethod
+def opaque_(cls, value, size):
+    result = cls()
+    if cls.Size == Dynamic:
+        result.init_(size)
+        for i in range(size):
+            result.set_entry_(i, value)
+    else:
+        if _ek.array_depth_v(value) != cls.Depth - 1:
+            value = _ek.opaque(cls.Value, value, size)
+
+        for i in range(cls.Size):
+            result.set_entry_(i, value)
+    return result
 
 @classmethod
 def linspace_(cls, min, max, size=1):

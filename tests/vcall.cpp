@@ -21,7 +21,7 @@ using Array3f = ek::Array<Float, 3>;
 using StructF = Struct<Array3f>;
 
 struct Base {
-    Base(bool scalar) : x(ek::full<Float>(10, scalar ? 1 : 10, true)) { }
+    Base(bool scalar) : x(ek::opaque<Float>(10, scalar ? 1 : 10)) { }
 
     virtual StructF f(const StructF &m) = 0;
 
