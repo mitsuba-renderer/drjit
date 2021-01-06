@@ -242,7 +242,7 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, JitArray<Backend_, Value_
 
     template <typename T = Value, enable_if_t<std::is_same_v<T, float> && IsCUDA> = 0>
     JitArray log_() const {
-        return log2(*this) * InvLogTwo<T>;
+        return log2(*this) * LogTwo<T>;
     }
 
     template <typename T = Value, enable_if_t<std::is_same_v<T, float> && IsCUDA> = 0>
