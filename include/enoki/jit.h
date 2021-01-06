@@ -343,13 +343,11 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, JitArray<Backend_, Value_
     // -----------------------------------------------------------------------
 
     bool all_() const {
-        MaskType r = MaskType::steal(jit_var_reduce(m_index, ReduceOp::And));
-        return r.entry(0);
+        return jit_var_all(m_index);
     }
 
     bool any_() const {
-        MaskType r = MaskType::steal(jit_var_reduce(m_index, ReduceOp::Or));
-        return r.entry(0);
+        return jit_var_any(m_index);
     }
 
     #define ENOKI_HORIZONTAL_OP(name, op)                                        \
