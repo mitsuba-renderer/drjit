@@ -27,6 +27,7 @@ def teardown_function(function):
 pkgs = ["enoki.cuda", "enoki.cuda.ad",
         "enoki.llvm", "enoki.llvm.ad"]
 
+@pytest.mark.skip("TODO bring it back when loop is implemented")
 @pytest.mark.parametrize("pkg", pkgs)
 def test01_ctr(pkg):
     p = get_class(pkg)
@@ -40,6 +41,7 @@ def test01_ctr(pkg):
     assert i == p.Int(5, 5, 5, 5, 5, 5, 6, 7, 8, 9)
 
 
+@pytest.mark.skip("TODO bring it back when loop is implemented")
 @pytest.mark.parametrize("variant", [0, 1])
 @pytest.mark.parametrize("pkg", pkgs)
 def test02_multiple_values(pkg, variant):
@@ -71,6 +73,7 @@ def test02_multiple_values(pkg, variant):
     assert v.y == p.Int(30, 28, 24, 18, 10, 0, 0, 0, 0, 0)
 
 
+@pytest.mark.skip("TODO bring it back when loop is implemented")
 @pytest.mark.parametrize("pkg", pkgs)
 def test03_failures(pkg):
     p = get_class(pkg)
@@ -91,6 +94,7 @@ def test03_failures(pkg):
         assert 'Symbolic loop encountered a differentiable array with enabled gradients! This is not supported.' in str(e.value)
 
 
+@pytest.mark.skip("TODO bring it back when loop is implemented")
 @pytest.mark.parametrize("pkg", pkgs)
 def test04_side_effect(pkg):
     p = get_class(pkg)
@@ -103,7 +107,7 @@ def test04_side_effect(pkg):
     while loop.cond(i < 10):
         j += i
         i += 1
-        ek.scatter_reduce(target=buf, value=p.Float(i), index=0, ek.ReduceOp.Add)
+        ek.scatter_reduce(target=buf, value=p.Float(i), index=0, op=ek.ReduceOp.Add)
 
     ek.eval(i, j)
     assert i == p.Int([10]*10)
@@ -111,6 +115,7 @@ def test04_side_effect(pkg):
     assert j == p.Int([45]*10)
 
 
+@pytest.mark.skip("TODO bring it back when loop is implemented")
 @pytest.mark.parametrize("pkg", pkgs)
 def test05_side_effect_noloop(pkg):
     p = get_class(pkg)
@@ -125,13 +130,14 @@ def test05_side_effect_noloop(pkg):
         j += i
         i += 1
         ek.scatter_reduce(target=buf, value=p.Float(i), index=0,
-                          ek.ReduceOp.Add, mask=loop.mask())
+                          op=ek.ReduceOp.Add, mask=loop.mask())
 
     assert i == p.Int([10]*10)
     assert buf == p.Float(550, *([0]*9))
     assert j == p.Int([45]*10)
 
 
+@pytest.mark.skip("TODO bring it back when loop is implemented")
 @pytest.mark.parametrize("variant", [0, 1, 2])
 @pytest.mark.parametrize("pkg", pkgs)
 def test06_test_collatz(pkg, variant):
@@ -159,6 +165,7 @@ def test06_test_collatz(pkg, variant):
     assert value == p.Int([1]*10)
     assert ctr == p.Int([0,1,7,2,5,8,16,3,19,6])
 
+@pytest.mark.skip("TODO bring it back when loop is implemented")
 @pytest.mark.parametrize("variant", [0, 1])
 @pytest.mark.parametrize("pkg", ["enoki.cuda",
                                  "enoki.cuda.ad",
