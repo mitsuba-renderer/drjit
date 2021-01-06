@@ -16,20 +16,19 @@ void export_cuda(py::module_ &m) {
 
     bind_pcg32<Guide>(cuda);
 
-//     py::class_<ek::Loop<Mask>>(cuda, "LoopBase");
+    py::class_<ek::Loop<Mask>>(cuda, "LoopBase");
 
-//     py::class_<Loop<Mask>, ek::Loop<Mask>> loop(cuda, "Loop");
-//     loop.def(py::init<py::args>())
-//         .def("put", &Loop<Mask>::put)
-//         .def("init", &Loop<Mask>::init)
-//         .def("cond", &Loop<Mask>::cond)
-//         .def("mask", &Loop<Mask>::mask);
+    py::class_<Loop<Mask>, ek::Loop<Mask>> loop(cuda, "Loop");
+    loop.def(py::init<const char *, py::args>())
+        .def("put", &Loop<Mask>::put)
+        .def("init", &Loop<Mask>::init)
+        .def("cond", &Loop<Mask>::cond);
 
-// #if defined(ENOKI_ENABLE_AUTODIFF)
-//     loop.def("cond", [](Loop<Mask> &g,
-//                         const ek::DiffArray<ek::CUDAArray<bool>> &mask) {
-//         return g.cond(ek::detach(mask));
-//     });
-// #endif
+#if defined(ENOKI_ENABLE_AUTODIFF)
+    loop.def("cond", [](Loop<Mask> &g,
+                        const ek::DiffArray<ek::CUDAArray<bool>> &mask) {
+        return g.cond(ek::detach(mask));
+    });
+#endif
 }
 #endif

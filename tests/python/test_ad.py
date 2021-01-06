@@ -809,7 +809,7 @@ def test45_diff_loop(m):
     ek.forward(x)
     assert ek.allclose(y, 1.85407, rtol=5e-4)
     assert ek.allclose(ek.grad(y), 0.847213, rtol=5e-4)
-    ek.disable_flag(ek.JitFlag.LoopRecord)
+    ek.set_flag(ek.JitFlag.LoopRecord, False)
 
 
 @pytest.mark.skip("TODO bring it back when loop is implemented")
@@ -896,7 +896,7 @@ def test46_loop_ballistic(m):
 
     assert ek.allclose(loss, 0, atol=1e-4)
     assert ek.allclose(vel_in.x, [3.3516, 2.3789, 0.79156], atol=1e-3)
-    ek.disable_flag(ek.JitFlag.LoopRecord)
+    ek.set_flag(ek.JitFlag.LoopRecord, False)
 
 
 @pytest.mark.skip("TODO bring it back when loop is implemented")
@@ -972,7 +972,7 @@ def test46_loop_ballistic_2(m):
 
     assert ek.allclose(loss, 0, atol=1e-4)
     assert ek.allclose(vel_in.x, [3.3516, 2.3789, 0.79156], atol=1e-3)
-    ek.disable_flag(ek.JitFlag.LoopRecord)
+    ek.set_flag(ek.JitFlag.LoopRecord, False)
 
 
 def test47_nan_propagation(m):

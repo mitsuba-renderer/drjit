@@ -14,31 +14,57 @@ def get_class(name):
     value = __import__(".".join(name[:-1]))
     for item in name[1:]:
         value = getattr(value, item)
-    ek.jit_set_flag(ek.JitFlag.LoopRecord, True)
+    ek.set_flag(ek.JitFlag.LoopRecord, True)
 
     return value
 
 def setup_function(function):
-    ek.jit_set_flag(ek.JitFlag.LoopRecord, True)
+    ek.set_flag(ek.JitFlag.LoopRecord, True)
 
 def teardown_function(function):
-    ek.disable_flag(ek.JitFlag.LoopRecord)
+    ek.set_flag(ek.JitFlag.LoopRecord, False)
 
 pkgs = ["enoki.cuda", "enoki.cuda.ad",
         "enoki.llvm", "enoki.llvm.ad"]
 
-@pytest.mark.skip("TODO bring it back when loop is implemented")
 @pytest.mark.parametrize("pkg", pkgs)
 def test01_ctr(pkg):
     p = get_class(pkg)
 
     i = ek.arange(p.Int, 0, 10)
 
-    loop = p.Loop(i)
+    loop = p.Loop("MyLoop", i)
     while loop.cond(i < 5):
         i += 1
 
     assert i == p.Int(5, 5, 5, 5, 5, 5, 6, 7, 8, 9)
+
+
+@pytest.mark.parametrize("pkg", pkgs)
+def test01_record_loop(pkg):
+    p = get_class(pkg)
+
+    for i in range(3):
+        ek.set_flag(ek.JitFlag.LoopRecord, not i == 0)
+        ek.set_flag(ek.JitFlag.LoopOptimize, i == 2)
+
+        for j in range(2):
+            x = ek.arange(p.Int, 0, 10)
+            y = ek.zero(p.Float, 1)
+            z = p.Float(1)
+
+            loop = p.Loop("MyLoop", x, y, z)
+            while loop.cond(x < 5):
+                y += p.Float(x)
+                x += 1
+                z += 1
+
+            if j == 0:
+                ek.schedule(x, y, z)
+
+            assert z == p.Int(6, 5, 4, 3, 2, 1, 1, 1, 1, 1)
+            assert y == p.Int(10, 10, 9, 7, 4, 0, 0, 0, 0, 0)
+            assert x == p.Int(5, 5, 5, 5, 5, 5, 6, 7, 8, 9)
 
 
 @pytest.mark.skip("TODO bring it back when loop is implemented")
@@ -53,7 +79,7 @@ def test02_multiple_values(pkg, variant):
     if variant == 1:
         v.y = p.Float(0)
 
-    loop = p.Loop(i, v)
+    loop = p.Loop("MyLoop", i, v)
     while loop.cond(i < 5):
         i.assign(i + 1)
         f = p.Float(i)
@@ -81,16 +107,11 @@ def test03_failures(pkg):
     i = p.Int()
     v = ek.zero(p.Array3f, 10)
 
-    with pytest.raises(ek.Exception) as e:
-        p.Loop(i, v)
-
-    assert 'Variables provided to enoki::Loop() must be fully initialized' in str(e.value)
-
     if 'ad' in pkg:
         i = p.Int(0)
         ek.enable_grad(v)
         with pytest.raises(ek.Exception) as e:
-            p.Loop(i, v)
+            p.Loop("MyLoop", i, v)
         assert 'Symbolic loop encountered a differentiable array with enabled gradients! This is not supported.' in str(e.value)
 
 
@@ -103,7 +124,7 @@ def test04_side_effect(pkg):
     j = ek.zero(p.Int, 10)
     buf = ek.zero(p.Float, 10)
 
-    loop = p.Loop(i, j)
+    loop = p.Loop("MyLoop", i, j)
     while loop.cond(i < 10):
         j += i
         i += 1
@@ -123,9 +144,9 @@ def test05_side_effect_noloop(pkg):
     i = ek.zero(p.Int, 10)
     j = ek.zero(p.Int, 10)
     buf = ek.zero(p.Float, 10)
-    ek.disable_flag(ek.JitFlag.LoopRecord)
+    ek.set_flag(ek.JitFlag.LoopRecord, False)
 
-    loop = p.Loop(i, j)
+    loop = p.Loop("MyLoop", i, j)
     while loop.cond(i < 10):
         j += i
         i += 1
@@ -187,7 +208,7 @@ def test07_loop_nest(pkg, variant):
     ek.eval(buf)
 
     if variant == 0:
-        loop_1 = p.Loop(i)
+        loop_1 = p.Loop("MyLoop", i)
         while loop_1.cond(i <= 10):
             ek.scatter(buf, collatz(p.Int(i)), i - 1)
             i += 1
