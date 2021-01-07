@@ -44,8 +44,8 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
 
     template <typename... Args>
     Loop(const char *name, Args &... args)
-        : m_name(name), m_state(0), m_se_offset((uint32_t) -1),
-          m_size(0), m_record(jit_flag(JitFlag::LoopRecord)) {
+        : m_name(name), m_size(0), m_se_offset((uint32_t) -1),
+          m_state(0), m_record(jit_flag(JitFlag::LoopRecord)) {
         if constexpr (sizeof...(Args) > 0) {
             put(args...);
             init();
