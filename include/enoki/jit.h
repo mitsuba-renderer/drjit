@@ -133,8 +133,8 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, JitArray<Backend_, Value_
         return steal(jit_var_new_op_2(JitOp::Mul, m_index, v.m_index));
     }
 
-    JitArray mulhi_(const JitArray &/*v*/) const {
-        enoki_raise("Not Implemented"); // TODO
+    JitArray mulhi_(const JitArray &v) const {
+        return steal(jit_var_new_op_2(JitOp::Mulhi, m_index, v.m_index));
     }
 
     JitArray div_(const JitArray &v) const {
