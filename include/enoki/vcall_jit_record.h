@@ -41,9 +41,9 @@ template <typename T>
 void write_indices(ek_index_vector &indices, T &value, uint32_t &offset) {
     if constexpr (array_depth_v<T> > 1) {
         for (size_t i = 0; i < value.derived().size(); ++i)
-            write_indices(out, value.derived().entry(i), offset);
+            write_indices(indices, value.derived().entry(i), offset);
     } else if constexpr (is_diff_array_v<T>) {
-        write_indices(out, value.detach_(), offset);
+        write_indices(indices, value.detach_(), offset);
     } else if constexpr (is_jit_array_v<T>) {
         value = T::steal(indices[offset++]);
     } else if constexpr (is_enoki_struct_v<T>) {
@@ -61,7 +61,7 @@ template <typename T> decltype(auto) extract_mask(const T &v) {
 }
 
 template <typename T, typename... Ts, enable_if_t<sizeof...(Ts) != 0> = 0>
-decltype(auto) extract_mask(const T &v, const Ts &... vs) {
+decltype(auto) extract_mask(const T &/*v*/, const Ts &... vs) {
     return extract_mask(vs...);
 }
 
@@ -121,7 +121,7 @@ Result vcall_impl(const char *name, uint32_t n_inst, const Func &func,
         self &
         (JitArray<Backend, bool>::steal(jit_var_mask_peek(Backend)) & mask);
 
-    jit_var_vcall(domain, self_masked.index(), n_inst, indices_in.size(),
+    jit_var_vcall(Self::Domain, self_masked.index(), n_inst, indices_in.size(),
                   indices_in.data(), indices_out_all.size(),
                   indices_out_all.data(), se_count.data(), indices_out.data());
 
@@ -147,7 +147,7 @@ auto vcall_jit_record(const char *name, const Func &func,
 
     Result_2 result;
     if (n_inst == 0) {
-        result = zero<Result_2>(ek::width(args...));
+        result = zero<Result_2>(width(args...));
     } else if (n_inst == 1) {
         uint32_t i = 1;
         Base *inst = nullptr;
@@ -160,12 +160,11 @@ auto vcall_jit_record(const char *name, const Func &func,
         else
             result = func(inst, args...);
     } else {
-        constexpr size_t N = sizeof...(Args);
         result = vcall_impl<Result_2>(
             name, n_inst, func, self,
             Bool(detail::extract_mask(args...)),
             std::make_index_sequence<sizeof...(Args)>(),
-            ek::placeholder(args)...);
+            placeholder(args)...);
     }
     return result;
 }

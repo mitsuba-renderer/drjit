@@ -1076,7 +1076,6 @@ void scatter_reduce(ReduceOp op, Target &&target, const Value &value,
     } else if constexpr (std::is_integral_v<Index> && std::is_arithmetic_v<Value>) {
         if (mask) {
             auto func = [op](const Value &a, const Value &b) {
-                Value result;
                 if (op == ReduceOp::Add)
                     return a + b;
                 else if (op == ReduceOp::Mul)
