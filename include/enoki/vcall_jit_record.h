@@ -19,9 +19,9 @@ template <typename T>
 void collect_indices(ek_index_vector &indices, const T &value) {
     if constexpr (array_depth_v<T> > 1) {
         for (size_t i = 0; i < value.derived().size(); ++i)
-            read_indices(indices, value.derived().entry(i));
+            collect_indices(indices, value.derived().entry(i));
     } else if constexpr (is_diff_array_v<T>) {
-        read_indices(indices, value.detach_());
+        collect_indices(indices, value.detach_());
     } else if constexpr (is_jit_array_v<T>) {
         uint32_t index = value.index();
         if (!index)
@@ -31,7 +31,7 @@ void collect_indices(ek_index_vector &indices, const T &value) {
         indices.push_back(index);
     } else if constexpr (is_enoki_struct_v<T>) {
         struct_support_t<T>::apply_1(
-            value, [&](const auto &x) { read_indices(indices, x); });
+            value, [&](const auto &x) { collect_indices(indices, x); });
     }
 }
 
