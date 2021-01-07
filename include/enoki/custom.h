@@ -13,6 +13,7 @@
 #pragma once
 
 #include <enoki/autodiff.h>
+#include <enoki-jit/containers.h>
 
 NAMESPACE_BEGIN(enoki)
 
@@ -22,7 +23,7 @@ struct CustomOp : detail::DiffCallback {
 public:
     using Type   = detached_t<Type_>;
     using Output = Output_;
-    using Inputs = detail::ek_tuple<Input...>;
+    using Inputs = ek_tuple<Input...>;
     static constexpr bool ClearPrimal = true;
 
     /**
@@ -76,7 +77,7 @@ protected:
         accum_grad(m_grad_output, value);
     }
 
-    detail::ek_unique_ptr<Inputs> m_grad_input;
+    ek_unique_ptr<Inputs> m_grad_input;
     Output m_grad_output;
 };
 
@@ -142,7 +143,7 @@ template <typename Custom, typename... Input> auto custom(const Input&... input)
     using Type   = typename Custom::Type;
     using Output = typename Custom::Output;
 
-    detail::ek_unique_ptr<Custom> custom(new Custom());
+    ek_unique_ptr<Custom> custom(new Custom());
 
     Output output = custom->eval(detach<false>(input)...);
 
@@ -165,10 +166,10 @@ template <typename Custom, typename... Input> auto custom(const Input&... input)
 
         if constexpr (Custom::ClearPrimal) {
             // Only retain variable indices
-            custom->m_grad_input = new detail::ek_tuple<Input...>(detail::clear_primal(input)...);
+            custom->m_grad_input = new ek_tuple<Input...>(detail::clear_primal(input)...);
             custom->m_grad_output = detail::clear_primal(output);
         } else {
-            custom->m_grad_input = new detail::ek_tuple<Input...>(input...);
+            custom->m_grad_input = new ek_tuple<Input...>(input...);
             custom->m_grad_output = output;
         }
 
@@ -177,8 +178,8 @@ template <typename Custom, typename... Input> auto custom(const Input&... input)
         if (diff_vars_out_ctr == 0)
             enoki_raise("enoki::custom(): internal error!");
 
-        detail::ek_unique_ptr<uint32_t[]> diff_vars_in(new uint32_t[diff_vars_in_ctr]);
-        detail::ek_unique_ptr<uint32_t[]> diff_vars_out(new uint32_t[diff_vars_out_ctr]);
+        ek_unique_ptr<uint32_t[]> diff_vars_in(new uint32_t[diff_vars_in_ctr]);
+        ek_unique_ptr<uint32_t[]> diff_vars_out(new uint32_t[diff_vars_out_ctr]);
 
         diff_vars_in_ctr = diff_vars_out_ctr = 0;
         (detail::diff_vars(input, diff_vars_in_ctr, diff_vars_in.get()), ...);

@@ -12,6 +12,7 @@
 
 #include <enoki/array.h>
 #include <enoki/map.h>
+#include <enoki-jit/containers.h>
 
 #pragma once
 
@@ -142,7 +143,7 @@ template <typename... Ts> struct struct_support<std::tuple<Ts...>> {
     }
 };
 
-template <typename... Ts> struct struct_support<detail::ek_tuple<Ts...>> {
+template <typename... Ts> struct struct_support<ek_tuple<Ts...>> {
     static constexpr bool Defined = true;
     using type = struct_support;
 

@@ -16,6 +16,7 @@
 
 #include <enoki/array.h>
 #include <enoki/vcall_packet.h>
+#include <enoki-jit/containers.h>
 
 extern "C" {
     extern ENOKI_IMPORT uint32_t jit_registry_put(const char *domain, void *ptr);
@@ -171,7 +172,7 @@ NAMESPACE_END(enoki)
                     using Result = decltype(self->name(args...));              \
                     if constexpr (!std::is_same_v<Result, void>) {             \
                         Result result = self->name(args...);                   \
-                        detail::ek_tuple args_tuple{ args... };                \
+                        ek_tuple args_tuple{ args... };                        \
                         enoki::set_grad(args_tuple, grad_in);                  \
                         enoki::enqueue(args_tuple);                            \
                         enoki::traverse<decltype(result),                      \
@@ -179,7 +180,7 @@ NAMESPACE_END(enoki)
                         return enoki::grad(result);                            \
                     } else {                                                   \
                         self->name(args...);                                   \
-                        detail::ek_tuple args_tuple{ args... };                \
+                        ek_tuple args_tuple{ args... };                        \
                         enoki::set_grad(args_tuple, grad_in);                  \
                         enoki::enqueue(args_tuple);                            \
                         enoki::traverse<decltype(args)...>(false, true);       \
@@ -196,11 +197,11 @@ NAMESPACE_END(enoki)
                         enoki::enqueue(result);                                \
                         enoki::traverse<decltype(result),                      \
                                         decltype(args)...>(true, true);        \
-                        return detail::ek_tuple{ enoki::grad(args)... };       \
+                        return ek_tuple{ enoki::grad(args)... };               \
                     } else {                                                   \
                         self->name(args...);                                   \
                     }                                                          \
-                    return detail::ek_tuple{ enoki::grad(args)... };           \
+                    return ek_tuple{ enoki::grad(args)... };                   \
                 }, array, args_...);                                           \
     }
 

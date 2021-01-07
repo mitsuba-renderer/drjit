@@ -69,12 +69,14 @@ ENOKI_VCALL_METHOD(strlen)
 ENOKI_VCALL_GETTER(field, float)
 ENOKI_VCALL_END(Base)
 
+#if 0
 ENOKI_TEST(test01_vcall_eager_symbolic) {
     int n = 9999;
 
     jit_init((uint32_t) JitBackend::CUDA);
     for (int i = 0; i < 2; ++i) {
-        jit_set_flags((uint32_t) (i == 0 ? JitFlag::Default : JitFlag::RecordVCalls));
+        if (i != 0)
+            jit_set_flags((uint32_t) JitFlag::VCallRecord);
         for (int j = 0; j < 2; ++j) {
             fprintf(stderr, "=============================\n");
             A *a = new A(j != 0);
@@ -119,6 +121,7 @@ ENOKI_TEST(test01_vcall_eager_symbolic) {
         }
     }
 }
+#endif
 
 using FloatD = ek::DiffArray<Float>;
 using UInt32D = ek::DiffArray<UInt32>;
@@ -171,12 +174,14 @@ ENOKI_VCALL_METHOD(f)
 ENOKI_VCALL_METHOD(dummy)
 ENOKI_VCALL_END(BaseD)
 
+#if 0
 ENOKI_TEST(test02_vcall_eager_symbolic_ad_fwd) {
     int n = 9999;
 
     jit_init((uint32_t) JitBackend::CUDA);
     for (int i = 0; i < 2; ++i) {
-        jit_set_flags((uint32_t) (i == 0 ? JitFlag::Default : JitFlag::RecordVCalls));
+        if (i != 0)
+            jit_set_flags((uint32_t) JitFlag::VCallRecord);
         for (int k = 0; k < 2; ++k) {
             fprintf(stderr, "=============================\n");
 
@@ -227,3 +232,4 @@ ENOKI_TEST(test02_vcall_eager_symbolic_ad_fwd) {
         }
     }
 }
+#endif
