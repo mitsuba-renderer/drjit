@@ -34,8 +34,8 @@ struct DiffVCall
                 const FuncRev &,
                 const Args &... args) override {
         m_name = name;
-        return dispatch_jit_symbolic<Result>(name, func, self,
-                                             detach<false>(args)...);
+        return dispatch_jit_record<Result>(name, func, self,
+                                           detach<false>(args)...);
     }
 
     template <size_t... Is>
@@ -49,7 +49,7 @@ struct DiffVCall
         // ek_unique_ptr<char[]> name(new char[name_size]);
         // snprintf(name.get(), name_size, "ad_fwd[%s]", m_name);
 
-        // Result grad_out = dispatch_jit_symbolic<Result>(
+        // Result grad_out = dispatch_jit_record<Result>(
         //     name.get(), func_fwd, self, detail::ek_tuple(Base::template grad_in<5 + Is>()...),
         //     Base::template value_in<5 + Is>()...);
 
@@ -74,7 +74,7 @@ struct DiffVCall
         // ek_unique_ptr<char[]> name(new char[name_size]);
         // snprintf(name.get(), name_size, "ad_rev[%s]", m_name);
 
-        // ResultRev grad_in = dispatch_jit_symbolic<ResultRev>(
+        // ResultRev grad_in = dispatch_jit_record<ResultRev>(
         //     name.get(), func_rev, self, Base::grad_out(),
         //     Base::template value_in<5 + Is>()...);
 
@@ -115,7 +115,7 @@ ENOKI_INLINE Result dispatch_autodiff(const char *name,
         return custom<DiffVCall<Type, Self, Result, Func, FuncFwd, FuncRev, Args...>>(
             name, self, func, func_fwd, func_rev, args...);
     } else {
-        return dispatch_jit_symbolic<Result>(name, func, self, args...);
+        return dispatch_jit_record<Result>(name, func, self, args...);
     }
 }
 

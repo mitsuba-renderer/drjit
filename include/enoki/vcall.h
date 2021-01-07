@@ -64,7 +64,7 @@ namespace detail {
     };
 
     template <typename Result, typename Func, typename Self, typename... Args>
-    ENOKI_INLINE Result vcall_jit_symbolic(const char *name, Func func,
+    ENOKI_INLINE Result vcall_jit_record(const char *name, Func func,
                                            const Self &self,
                                            const Args &... args);
 
@@ -254,7 +254,7 @@ NAMESPACE_END(enoki)
 
 #if defined(ENOKI_CUDA_H) || defined(ENOKI_LLVM_H)
 #  include <enoki/vcall_jit_reduce.h>
-#  include <enoki/vcall_jit_symbolic.h>
+#  include <enoki/vcall_jit_record.h>
 #endif
 
 #if defined(ENOKI_AUTODIFF_H)
