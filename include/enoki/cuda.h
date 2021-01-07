@@ -10,6 +10,7 @@
     license that can be found in the LICENSE file.
 */
 
+#if 0
 #pragma once
 #define ENOKI_CUDA_H
 
@@ -1277,4 +1278,5 @@ NAMESPACE_END(enoki)
 #if defined(ENOKI_VCALL_H)
 #  include <enoki/vcall_jit_reduce.h>
 #  include <enoki/vcall_jit_symbolic.h>
+#endif
 #endif

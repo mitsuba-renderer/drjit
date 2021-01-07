@@ -2,7 +2,7 @@
 #include "bind.h"
 #include "random.h"
 #include "loop.h"
-#include <enoki/cuda.h>
+#include <enoki/jit.h>
 #include <enoki/autodiff.h>
 
 using Guide = ek::CUDAArray<float>;

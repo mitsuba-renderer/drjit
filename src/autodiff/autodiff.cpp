@@ -1,6 +1,5 @@
 #include "common.h"
-#include <enoki/cuda.h>
-#include <enoki/llvm.h>
+#include <enoki/jit.h>
 #include <enoki/math.h>
 #include <enoki/autodiff.h>
 #include <tsl/robin_map.h>
@@ -29,22 +28,6 @@ using Mask = mask_t<Value>;
 using Index = uint32_array_t<Value>;
 using Scalar = scalar_t<Value>;
 constexpr bool IsDouble = std::is_same_v<Value, double>;
-
-// Special variant of multiplication, where 0*NaN == 0
-template <typename T> T mulz(const T &a, const T &b) {
-    if constexpr (enoki::is_cuda_array_v<T>)
-        return a.mulz_(b);
-    else
-        return enoki::select(enoki::eq(a, 0.f), 0.f, a * b);
-}
-
-// Special variant of FMA, where 0*NaN + c == c
-template <typename T> T fmaddz(const T &a, const T &b, const T &c) {
-    if constexpr (enoki::is_cuda_array_v<T>)
-        return a.fmaddz_(b, c);
-    else
-        return enoki::select(enoki::eq(a, 0.f), c, enoki::fmadd(a, b, c));
-}
 
 struct Variable;
 
@@ -196,7 +179,7 @@ struct Variable {
     void mul_accum(const T &v1, const T &v2, uint32_t src_size) {
         if constexpr (is_array_v<T>) {
             if (size == 1 && src_size != 1) {
-                T v3 = mulz(v1, v2);
+                T v3 = enoki::select(enoki::eq(v1, 0.f), 0.f, v1 * v2);
                 if (((const T &) v1).size() == 1 &&
                     ((const T &) v2).size() == 1)
                     v3 = v3 * Scalar(src_size);
@@ -221,12 +204,14 @@ struct Variable {
                 }
 
                 if (((const T &) grad).valid())
-                    grad = fmaddz(v1, v2, grad);
+                    grad = enoki::select(enoki::eq(v1, 0.f), grad,
+                                         enoki::fmadd(v1, v2, grad));
                 else
-                    grad = mulz(v1, v2);
+                    grad = enoki::select(enoki::eq(v1, 0.f), 0.f, v1 * v2);
             }
         } else {
-            grad = fmaddz(v1, v2, grad);
+            grad = enoki::select(enoki::eq(v1, 0.f),
+                                 grad, enoki::fmadd(v1, v2, grad));
         }
     }
 

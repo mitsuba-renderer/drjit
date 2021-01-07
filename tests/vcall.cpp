@@ -1,6 +1,6 @@
 #include "test.h"
 #include <enoki/vcall.h>
-#include <enoki/cuda.h>
+#include <enoki/jit.h>
 #include <enoki/autodiff.h>
 #include <enoki/struct.h>
 
@@ -72,9 +72,9 @@ ENOKI_VCALL_END(Base)
 ENOKI_TEST(test01_vcall_eager_symbolic) {
     int n = 9999;
 
-    jitc_init(0, 1);
+    jit_init(0, 1);
     for (int i = 0; i < 2; ++i) {
-        jitc_set_flags((uint32_t) (i == 0 ? JitFlag::Default : JitFlag::RecordVCalls));
+        jit_set_flags((uint32_t) (i == 0 ? JitFlag::Default : JitFlag::RecordVCalls));
         for (int j = 0; j < 2; ++j) {
             fprintf(stderr, "=============================\n");
             A *a = new A(j != 0);
@@ -99,7 +99,7 @@ ENOKI_TEST(test01_vcall_eager_symbolic) {
 
             arr->side_effect();
 
-            jitc_eval();
+            jit_eval();
 
             result = arr->f(Struct{ Array3f(1, 2, 3) * ek::full<Float>(1, n),
                                     Array3f(4, 5, 6) * ek::full<Float>(1, n)});
@@ -174,9 +174,9 @@ ENOKI_VCALL_END(BaseD)
 ENOKI_TEST(test02_vcall_eager_symbolic_ad_fwd) {
     int n = 9999;
 
-    jitc_init(0, 1);
+    jit_init(0, 1);
     for (int i = 0; i < 2; ++i) {
-        jitc_set_flags((uint32_t) (i == 0 ? JitFlag::Default : JitFlag::RecordVCalls));
+        jit_set_flags((uint32_t) (i == 0 ? JitFlag::Default : JitFlag::RecordVCalls));
         for (int k = 0; k < 2; ++k) {
             fprintf(stderr, "=============================\n");
 

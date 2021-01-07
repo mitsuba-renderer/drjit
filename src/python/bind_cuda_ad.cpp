@@ -2,7 +2,7 @@
 #include "bind.h"
 #include "random.h"
 #include <enoki/autodiff.h>
-#include <enoki/cuda.h>
+#include <enoki/jit.h>
 
 
 struct CustomOp : ek::detail::DiffCallback {

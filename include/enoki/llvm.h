@@ -10,6 +10,7 @@
     license that can be found in the LICENSE file.
 */
 
+#if 0
 #pragma once
 #define ENOKI_LLVM_H
 
@@ -20,11 +21,9 @@
 NAMESPACE_BEGIN(enoki)
 
 template <typename Value_>
-struct LLVMArray : ArrayBase<Value_, is_mask_v<Value_>, LLVMArray<Value_>> {
-    template <typename> friend struct LLVMArray;
+struct LLVMArray : JitArray<JitBackend::LLVM, Value_, LLVMArray<Value_>> {
 
-    static_assert(std::is_scalar_v<Value_>,
-                  "LLVM Arrays can only be created over scalar types!");
+    // template <typename> friend struct LLVMArray;
 
     // -----------------------------------------------------------------------
     //! @{ \name Basic type declarations
@@ -1444,4 +1443,5 @@ NAMESPACE_END(enoki)
 #if defined(ENOKI_VCALL_H)
 #  include <enoki/vcall_jit_reduce.h>
 #  include <enoki/vcall_jit_symbolic.h>
+#endif
 #endif
