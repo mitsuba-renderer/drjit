@@ -18,14 +18,14 @@
 #include <enoki/vcall_packet.h>
 
 extern "C" {
-    extern ENOKI_IMPORT uint32_t jitc_registry_put(const char *domain, void *ptr);
-    extern ENOKI_IMPORT void jitc_registry_remove(void *ptr);
-    extern ENOKI_IMPORT uint32_t jitc_registry_get_id(const void *ptr);
-    extern ENOKI_IMPORT void jitc_registry_set_attr(void *ptr, const char *name,
+    extern ENOKI_IMPORT uint32_t jit_registry_put(const char *domain, void *ptr);
+    extern ENOKI_IMPORT void jit_registry_remove(void *ptr);
+    extern ENOKI_IMPORT uint32_t jit_registry_get_id(const void *ptr);
+    extern ENOKI_IMPORT void jit_registry_set_attr(void *ptr, const char *name,
                                                     const void *value, size_t size);
-    extern ENOKI_IMPORT const void *jitc_registry_attr_data(const char *domain,
+    extern ENOKI_IMPORT const void *jit_registry_attr_data(const char *domain,
                                                             const char *name);
-    extern ENOKI_IMPORT uint32_t jitc_flags();
+    extern ENOKI_IMPORT uint32_t jit_flags();
 };
 
 NAMESPACE_BEGIN(enoki)
@@ -92,7 +92,7 @@ namespace detail {
         ENOKI_MARK_USED(name);
 
         if constexpr (is_jit_array_v<Self>) {
-            if ((jitc_flags() & 4) == 0 || is_llvm_array_v<Self>) {
+            if ((jit_flags() & 4) == 0 || is_llvm_array_v<Self>) {
                 return detail::dispatch_jit_reduce<Result>(func, self, copy_diff(args)...);
             } else {
                 if constexpr (is_diff_array_v<Self>)
@@ -114,9 +114,9 @@ void set_attr(Class *self, const char *name, const Value &value) {
     if constexpr (Class::Registered) {
         if constexpr (std::is_pointer_v<Value> &&
                       std::is_class_v<std::remove_pointer_t<Value>>) {
-            set_attr(self, name, jitc_registry_get_id(value));
+            set_attr(self, name, jit_registry_get_id(value));
         } else {
-            jitc_registry_set_attr(self, name, &value, sizeof(Value));
+            jit_registry_set_attr(self, name, &value, sizeof(Value));
         }
     }
 }
@@ -129,23 +129,23 @@ NAMESPACE_END(enoki)
     void *operator new(size_t size) {                                          \
         void *ptr = ::operator new(size);                                      \
         if constexpr (Registered)                                              \
-            jitc_registry_put(#Class, ptr);                                    \
+            jit_registry_put(#Class, ptr);                                     \
         return ptr;                                                            \
     }                                                                          \
     void *operator new(size_t size, std::align_val_t align) {                  \
         void *ptr = ::operator new(size, align);                               \
         if constexpr (Registered)                                              \
-            jitc_registry_put(#Class, ptr);                                    \
+            jit_registry_put(#Class, ptr);                                     \
         return ptr;                                                            \
     }                                                                          \
     void operator delete(void *ptr) {                                          \
         if constexpr (Registered)                                              \
-            jitc_registry_remove(ptr);                                         \
+            jit_registry_remove(ptr);                                          \
         ::operator delete(ptr);                                                \
     }                                                                          \
     void operator delete(void *ptr, std::align_val_t align) {                  \
         if constexpr (Registered)                                              \
-            jitc_registry_remove(ptr);                                         \
+            jit_registry_remove(ptr);                                          \
         ::operator delete(ptr, align);                                         \
     }
 
@@ -210,7 +210,7 @@ NAMESPACE_END(enoki)
             using Result = replace_scalar_t<Array, type>;                      \
             using UInt32 = uint32_array_t<Array>;                              \
             return enoki::gather<Result>(                                      \
-                jitc_registry_attr_data(Domain, #name),                        \
+                jit_registry_attr_data(Domain, #name),                         \
                 UInt32::borrow(detach(array).index()), mask);                  \
         } else {                                                               \
             return detail::dispatch<Class>(                                    \

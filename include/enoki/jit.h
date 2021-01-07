@@ -18,8 +18,8 @@
 
 NAMESPACE_BEGIN(enoki)
 
-template <JitBackend Backend_, typename Value_, typename Derived_>
-struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
+template <JitBackend Backend_, typename Value_>
+struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, JitArray<Backend_, Value_>> {
     static_assert(std::is_scalar_v<Value_>,
                   "JIT Arrays can only be created over scalar types!");
 
@@ -28,7 +28,8 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
     // -----------------------------------------------------------------------
 
     using Value = Value_;
-    using Mask = typename Derived_::template ReplaceValue<bool>;
+    using MaskType = JitArray<Backend_, bool>;
+    using ArrayType = JitArray;
 
     static constexpr JitBackend Backend = Backend_;
 
@@ -51,8 +52,7 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
     using CallSupport =
         call_support<std::decay_t<std::remove_pointer_t<Value_>>, JitArray>;
 
-    template <typename T>
-    using ReplaceValue = typename Derived_::template ReplaceValue<T>;
+    template <typename T> using ReplaceValue = JitArray<Backend, T>;
 
     //! @}
     // -----------------------------------------------------------------------
@@ -69,12 +69,17 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
         jit_var_inc_ref_ext(m_index);
     }
 
-    template <typename T> JitArray(const ReplaceValue<T> &v) {
+    JitArray(JitArray &&a) noexcept : m_index(a.m_index) {
+        a.m_index = 0;
+    }
+
+    template <typename T> JitArray(const JitArray<Backend, T> &v) {
         m_index = jit_var_new_cast(v.index(), Type, 0);
     }
 
-    JitArray(JitArray &&a) noexcept : m_index(a.m_index) {
-        a.m_index = 0;
+    template <typename T>
+    JitArray(const JitArray<Backend, T> &v, detail::reinterpret_flag) {
+        m_index = jit_var_new_cast(v.index(), Type, 1);
     }
 
     template <typename T, enable_if_scalar_t<T> = 0>
@@ -82,11 +87,18 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
         m_index = jit_var_new_literal(Backend, Type, &value);
     }
 
-    template <typename... Args, enable_if_t<(sizeof...(Args) > 1)> = 0>
-    JitArray(Args&&... args) {
-        Value data[] = { (Value) args... };
-        m_index = jit_var_mem_copy(Backend, AllocType::Host, Type, data,
-                                   sizeof...(Args));
+    template <typename... Ts, enable_if_t<(sizeof...(Ts) > 1 &&
+              detail::and_v<!std::is_same_v<Ts, detail::reinterpret_flag>...>)> = 0>
+    JitArray(Ts&&... ts) {
+        if constexpr (!IsClass) {
+            Value data[] = { (Value) ts... };
+            m_index = jit_var_mem_copy(Backend, AllocType::Host, Type, data,
+                                       sizeof...(Ts));
+        } else {
+            uint32_t data[] = { jit_registry_get_id(ts)... };
+            m_index = jit_var_mem_copy(Backend, AllocType::Host, Type, data,
+                                       sizeof...(Ts));
+        }
     }
 
     JitArray &operator=(const JitArray &a) {
@@ -132,28 +144,28 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
         return steal(jit_var_new_op_2(JitOp::Mod, m_index, v.m_index));
     }
 
-    Mask gt_(const JitArray &v) const {
-        return Mask::steal(jit_var_new_op_2(JitOp::Gt, m_index, v.m_index));
+    MaskType gt_(const JitArray &v) const {
+        return MaskType::steal(jit_var_new_op_2(JitOp::Gt, m_index, v.m_index));
     }
 
-    Mask ge_(const JitArray &v) const {
-        return Mask::steal(jit_var_new_op_2(JitOp::Ge, m_index, v.m_index));
+    MaskType ge_(const JitArray &v) const {
+        return MaskType::steal(jit_var_new_op_2(JitOp::Ge, m_index, v.m_index));
     }
 
-    Mask lt_(const JitArray &v) const {
-        return Mask::steal(jit_var_new_op_2(JitOp::Lt, m_index, v.m_index));
+    MaskType lt_(const JitArray &v) const {
+        return MaskType::steal(jit_var_new_op_2(JitOp::Lt, m_index, v.m_index));
     }
 
-    Mask le_(const JitArray &v) const {
-        return Mask::steal(jit_var_new_op_2(JitOp::Le, m_index, v.m_index));
+    MaskType le_(const JitArray &v) const {
+        return MaskType::steal(jit_var_new_op_2(JitOp::Le, m_index, v.m_index));
     }
 
-    Mask eq_(const JitArray &v) const {
-        return Mask::steal(jit_var_new_op_2(JitOp::Eq, m_index, v.m_index));
+    MaskType eq_(const JitArray &v) const {
+        return MaskType::steal(jit_var_new_op_2(JitOp::Eq, m_index, v.m_index));
     }
 
-    Mask neq_(const JitArray &v) const {
-        return Mask::steal(jit_var_new_op_2(JitOp::Neq, m_index, v.m_index));
+    MaskType neq_(const JitArray &v) const {
+        return MaskType::steal(jit_var_new_op_2(JitOp::Neq, m_index, v.m_index));
     }
 
     JitArray neg_() const {
@@ -165,15 +177,15 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
     }
 
     template <typename T> JitArray or_(const T &v) const {
-        return steal(jit_var_new_op_2(JitOp::Or, m_index, v.m_index));
+        return steal(jit_var_new_op_2(JitOp::Or, m_index, v.index()));
     }
 
     template <typename T> JitArray and_(const T &v) const {
-        return steal(jit_var_new_op_2(JitOp::And, m_index, v.m_index));
+        return steal(jit_var_new_op_2(JitOp::And, m_index, v.index()));
     }
 
     template <typename T> JitArray xor_(const T &v) const {
-        return steal(jit_var_new_op_2(JitOp::Xor, m_index, v.m_index));
+        return steal(jit_var_new_op_2(JitOp::Xor, m_index, v.index()));
     }
 
     template <typename T> JitArray andnot_(const T &a) const {
@@ -184,16 +196,16 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
         return sl_((uint32_t) Imm);
     }
 
-    JitArray sl_(const ReplaceValue<uint32_t> &v) const {
-        return steal(jit_var_new_op_2(JitOp::Shl, m_index, v.m_index));
+    JitArray sl_(const JitArray<Backend, uint32_t> &v) const {
+        return steal(jit_var_new_op_2(JitOp::Shl, m_index, v.index()));
     }
 
     template <int Imm> JitArray sr_() const {
         return sr_((uint32_t) Imm);
     }
 
-    JitArray sr_(const ReplaceValue<uint32_t> &v) const {
-        return steal(jit_var_new_op_2(JitOp::Shr, m_index, v.m_index));
+    JitArray sr_(const JitArray<Backend, uint32_t> &v) const {
+        return steal(jit_var_new_op_2(JitOp::Shr, m_index, v.index()));
     }
 
     JitArray abs_() const {
@@ -248,15 +260,15 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
     }
 
     JitArray min_(const JitArray &v) const {
-        return steal(jit_var_new_op_2(JitOp::Min, m_index, v.m_index));
+        return steal(jit_var_new_op_2(JitOp::Min, m_index, v.index()));
     }
 
     JitArray max_(const JitArray &v) const {
-        return steal(jit_var_new_op_2(JitOp::Max, m_index, v.m_index));
+        return steal(jit_var_new_op_2(JitOp::Max, m_index, v.index()));
     }
 
     JitArray round_() const {
-        return Mask::steal(jit_var_new_op_1(JitOp::Round, m_index));
+        return MaskType::steal(jit_var_new_op_1(JitOp::Round, m_index));
     }
 
     template <typename T> T round2int_() const {
@@ -264,7 +276,7 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
     }
 
     JitArray floor_() const {
-        return Mask::steal(jit_var_new_op_1(JitOp::Floor, m_index));
+        return MaskType::steal(jit_var_new_op_1(JitOp::Floor, m_index));
     }
 
     template <typename T> T floor2int_() const {
@@ -272,7 +284,7 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
     }
 
     JitArray ceil_() const {
-        return Mask::steal(jit_var_new_op_1(JitOp::Ceil, m_index));
+        return MaskType::steal(jit_var_new_op_1(JitOp::Ceil, m_index));
     }
 
     template <typename T> T ceil2int_() const {
@@ -280,7 +292,7 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
     }
 
     JitArray trunc_() const {
-        return Mask::steal(jit_var_new_op_1(JitOp::Trunc, m_index));
+        return MaskType::steal(jit_var_new_op_1(JitOp::Trunc, m_index));
     }
 
     template <typename T> T trunc2int_() const {
@@ -289,7 +301,7 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
 
     JitArray fmadd_(const JitArray &b, const JitArray &c) const {
         return steal(
-            jit_var_new_op_3(JitOp::Fmadd, m_index, b.m_index, c.m_index));
+            jit_var_new_op_3(JitOp::Fmadd, m_index, b.index(), c.index()));
     }
 
     JitArray fmsub_(const JitArray &b, const JitArray &c) const {
@@ -304,22 +316,22 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
         return fmsub_(-b, -c);
     }
 
-    static JitArray select_(const Mask &m, const JitArray &t,
+    static JitArray select_(const MaskType &m, const JitArray &t,
                              const JitArray &f) {
         return steal(
-            jit_var_new_op_3(JitOp::Select, m.m_index, t.m_index, f.m_index));
+            jit_var_new_op_3(JitOp::Select, m.index(), t.index(), f.index()));
     }
 
     JitArray popcnt_() const {
-        return Mask::steal(jit_var_new_op_1(JitOp::Popc, m_index));
+        return MaskType::steal(jit_var_new_op_1(JitOp::Popc, m_index));
     }
 
     JitArray lzcnt_() const {
-        return Mask::steal(jit_var_new_op_1(JitOp::Clz, m_index));
+        return MaskType::steal(jit_var_new_op_1(JitOp::Clz, m_index));
     }
 
     JitArray tzcnt_() const {
-        return Mask::steal(jit_var_new_op_1(JitOp::Ctz, m_index));
+        return MaskType::steal(jit_var_new_op_1(JitOp::Ctz, m_index));
     }
 
     //! @}
@@ -409,21 +421,21 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
     }
 
     // TODO add this to API
-    static JitArray opaque_(const typename Value &value, size_t size = 1) {
+    static JitArray opaque_(const Value &value, size_t size = 1) {
         return steal(
             jit_var_new_literal(Backend, Type, &value, size, true));
     }
 
     static JitArray arange_(ssize_t start, ssize_t stop, ssize_t step) {
         size_t size = size_t((stop - start + step - (step > 0 ? 1 : -1)) / step);
-        return fmadd(JitArray(ReplaceValue<uint32_t>::counter(size)),
+        return fmadd(JitArray(JitArray<Backend, uint32_t>::counter(size)),
                      JitArray((Value) step),
                      JitArray((Value) start));
     }
 
     static JitArray linspace_(Value min, Value max, size_t size) {
         Value step = (max - min) / Value(size - 1);
-        return fmadd(JitArray(ReplaceValue<uint32_t>::counter(size)),
+        return fmadd(JitArray(JitArray<Backend, uint32_t>::counter(size)),
                      JitArray(step),
                      JitArray(min));
     }
@@ -470,42 +482,42 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
 
     template <bool, typename Index>
     static JitArray gather_(const void *src,
-                            const ReplaceValue<Index> &index,
-                            const Mask &mask = true) {
+                            const JitArray<Backend, Index> &index,
+                            const MaskType &mask = true) {
         enoki_raise("Not Implemented"); // TODO
     }
 
     template <bool, typename Index>
-    static JitArray gather_(const JitArray &src, const ReplaceValue<Index> &index,
-                             const Mask &mask = true) {
+    static JitArray gather_(const JitArray &src, const JitArray<Backend, Index> &index,
+                             const MaskType &mask = true) {
         return steal(
             jit_var_new_gather(src.index(), index.index(), mask.index()));
     }
 
     template <bool, typename Index>
-    void scatter_(void *dst, const ReplaceValue<Index> &index,
-                  const Mask &mask = true) const {
+    void scatter_(void *dst, const JitArray<Backend, Index> &index,
+                  const MaskType &mask = true) const {
         enoki_raise("Not Implemented"); // TODO
     }
 
     template <bool, typename Index>
-    void scatter_(JitArray &dst, const ReplaceValue<Index> &index,
-                  const Mask &mask = true) const {
+    void scatter_(JitArray &dst, const JitArray<Backend, Index> &index,
+                  const MaskType &mask = true) const {
         dst = steal(jit_var_new_scatter(dst.index(), m_index,
                                         index.index(), mask.index(),
                                         ReduceOp::None));
     }
 
     template <typename Index>
-    void scatter_add_(void *dst, const ReplaceValue<Index> &index,
-                      const Mask &mask = true) const {
+    void scatter_add_(void *dst, const JitArray<Backend, Index> &index,
+                      const MaskType &mask = true) const {
         enoki_raise("Not Implemented"); // TODO
     }
 
     // TODO change it to scatter reduce and add ReduceOp argument
     template <typename Index>
-    void scatter_add_(JitArray &dst, const ReplaceValue<Index> &index,
-                      const Mask &mask = true) const {
+    void scatter_add_(JitArray &dst, const JitArray<Backend, Index> &index,
+                      const MaskType &mask = true) const {
         dst = steal(jit_var_new_scatter(dst.index(), m_index,
                                         index.index(), mask.index(), ReduceOp::Add));
     }
@@ -527,7 +539,7 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
         return { buckets, bucket_count };
     }
 
-    ReplaceValue<uint32_t> compress_() const {
+    JitArray<Backend, uint32_t> compress_() const {
         if constexpr (!is_mask_v<Value>)
             enoki_raise("Unsupported operand type");
 
@@ -537,7 +549,7 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
 
         eval_();
         uint32_t size_out = jit_compress(Backend, (const uint8_t *) data(), size_in, indices);
-        return ReplaceValue<uint32_t>::steal(
+        return JitArray<Backend, uint32_t>::steal(
             jit_var_mem_map(Backend, VarType::UInt32, indices, size_out, 1));
     }
 
@@ -572,7 +584,7 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
 
     void set_entry(size_t offset, Value value) {
         // TODO check implementation
-        if (jit_var_int_ref(m_index) > 0) {
+        if (jit_var_ref_int(m_index) > 0) {
             eval_();
             *this = steal(jit_var_mem_copy(Backend, AllocType::HostAsync, Type,
                                             data(), (uint32_t)size()));
@@ -596,16 +608,16 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
         return steal(jit_var_migrate(m_index, type));
     }
 
-    static ReplaceValue<uint32_t> counter(size_t size) {
-        return ReplaceValue<uint32_t>::steal(
+    static JitArray<Backend, uint32_t> counter(size_t size) {
+        return JitArray<Backend, uint32_t>::steal(
             jit_var_new_counter(Backend, size));
     }
 
-	void set_label(const char *label) {
+	void set_label_(const char *label) const {
 		jit_var_set_label(m_index, label);
 	}
 
-	const char *label() {
+	const char *label_() const {
 		return jit_var_label(m_index);
 	}
 
@@ -625,22 +637,16 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
         return result;
     }
 
+    void init_(size_t size) {
+        *this = empty_(size);
+    }
+
 protected:
     uint32_t m_index = 0;
 };
 
-template <typename Value_>
-struct CUDAArray : JitArray<JitBackend::CUDA, Value_, CUDAArray<Value_>> {
-    template <typename T> using ReplaceValue = CUDAArray<T>;
-};
-
-template <typename Value_>
-struct LLVMArray : JitArray<JitBackend::LLVM, Value_, LLVMArray<Value_>> {
-    template <typename T> using ReplaceValue = LLVMArray<T>;
-};
-
-// template <typename T> using CUDAArray = JitArray<JitBackend::CUDA, T, CUDAArray<T>>;
-// template <typename T> using LLVMArray = JitArray<JitBackend::LLVM, T, LLVMArray<T>>;
+template <typename T> using CUDAArray = JitArray<JitBackend::CUDA, T>;
+template <typename T> using LLVMArray = JitArray<JitBackend::LLVM, T>;
 
 // #if defined(ENOKI_AUTODIFF_H)
 // ENOKI_DECLARE_EXTERN_TEMPLATE(CUDAArray<float>, CUDAArray<bool>, CUDAArray<uint32_t>)

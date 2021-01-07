@@ -381,21 +381,22 @@ auto bind_full(py::class_<Array> &cls, bool scalar_mode = false) {
         });
     }
 
-    if constexpr (ek::is_jit_array_v<Array>) {
-        cls.def_static("map_", [](uintptr_t ptr, size_t size, std::function<void (void)> callback) {
-            Array result = Array::map_((void *) ptr, size, false);
-            if (callback) {
-                std::function<void (void)> *func = new std::function<void (void)>(std::move(callback));
-                jitc_var_set_free_callback(ek::detach(result).index(), [](void *arg) {
-                    std::function<void(void)> *func2 =
-                        (std::function<void(void)> *) arg;
-                    (*func2)();
-                    delete func2;
-                }, func);
-            }
-            return result;
-        }, "ptr"_a, "size"_a, "callback"_a = py::none());
-    }
+    // TODO fix this
+    // if constexpr (ek::is_jit_array_v<Array>) {
+    //     cls.def_static("map_", [](uintptr_t ptr, size_t size, std::function<void (void)> callback) {
+    //         Array result = Array::map_((void *) ptr, size, false);
+    //         if (callback) {
+    //             std::function<void (void)> *func = new std::function<void (void)>(std::move(callback));
+    //             jit_var_set_callback(ek::detach(result).index(), [](void *arg) {
+    //                 std::function<void(void)> *func2 =
+    //                     (std::function<void(void)> *) arg;
+    //                 (*func2)();
+    //                 delete func2;
+    //             }, func);
+    //         }
+    //         return result;
+    //     }, "ptr"_a, "size"_a, "callback"_a = py::none());
+    // }
 
     if constexpr (Array::IsJIT)
         cls.def("migrate_", &Array::migrate_);

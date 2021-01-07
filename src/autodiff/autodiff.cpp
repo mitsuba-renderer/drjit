@@ -158,7 +158,7 @@ struct Variable {
                        gradient updates involving pre-allocated memory regions into
                        scatters. */
                     if (next_rev == 0 &&
-                        (jitc_flags() & (uint32_t) JitFlag::RecordingVCall) != 0 &&
+                        (jit_flags() & (uint32_t) JitFlag::RecordingVCall) != 0 &&
                         ((const T &) grad).data()) {
                         scatter_add(grad, v, uint32_array_t<T>(0), neq(v, 0.f));
                         return;
@@ -196,7 +196,7 @@ struct Variable {
                        gradient updates involving pre-allocated memory regions into
                        scatters. */
                     if (next_rev == 0 &&
-                        (jitc_flags() & (uint32_t) JitFlag::RecordingVCall) != 0 &&
+                        (jit_flags() & (uint32_t) JitFlag::RecordingVCall) != 0 &&
                         ((const T &) grad).data()) {
                         scatter_add(grad, v1 * v2, uint32_array_t<T>(0), neq(v1, 0));
                         return;

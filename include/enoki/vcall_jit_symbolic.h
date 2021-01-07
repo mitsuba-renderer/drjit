@@ -25,7 +25,7 @@ void read_indices(uint32_t *out, uint32_t &count, const T &value) {
     } else if constexpr (is_jit_array_v<T>) {
         uint32_t i = value.index();
         if (i == 0)
-            jitc_fail("enoki::detail::read_indices(): uninitialized variable!");
+            jit_fail("enoki::detail::read_indices(): uninitialized variable!");
         if (out)
             out[count] = i;
         count += 1;
@@ -57,9 +57,9 @@ bool record(const char *domain, const char *name, uint32_t &id, uint64_t &hash,
             const Args &... args) {
     using Result = decltype(func(args...));
 
-    uint32_t se_before = jitc_side_effect_counter(IsCUDA);
+    uint32_t se_before = jit_side_effect_counter(IsCUDA);
     Result result = func(args...);
-    uint32_t se_total = jitc_side_effect_counter(IsCUDA) - se_before;
+    uint32_t se_total = jit_side_effect_counter(IsCUDA) - se_before;
 
     uint32_t in_count = 0, out_count = 0;
     (read_indices(in, in_count, args), ...);
@@ -67,7 +67,7 @@ bool record(const char *domain, const char *name, uint32_t &id, uint64_t &hash,
 
     uint32_t *extra_p = nullptr;
     uint32_t extra_count_p = 0;
-    id = jitc_capture_var(IsCUDA, domain, name, in, in_count, out, out_count,
+    id = jit_capture_var(IsCUDA, domain, name, in, in_count, out, out_count,
                           need_in, need_out, se_total, &hash, &extra_p,
                           &extra_count_p);
 
@@ -79,10 +79,10 @@ bool record(const char *domain, const char *name, uint32_t &id, uint64_t &hash,
 
 struct jit_flag_guard {
 public:
-    jit_flag_guard() : flags(jitc_flags()) {
-        jitc_set_flags(flags | (uint32_t) JitFlag::RecordingVCall);
+    jit_flag_guard() : flags(jit_flags()) {
+        jit_set_flags(flags | (uint32_t) JitFlag::RecordingVCall);
     }
-    ~jit_flag_guard() { jitc_set_flags(flags); }
+    ~jit_flag_guard() { jit_set_flags(flags); }
 
 private:
     uint32_t flags;
@@ -98,7 +98,7 @@ ENOKI_INLINE Result dispatch_jit_symbolic(const char *name, Func func, const Sel
     Result result = zero<Result>();
 
     // Determine # of existing instances, and preallocate memory for IR codegen
-    uint32_t n_inst = jitc_registry_get_max(Class::Domain) + 1;
+    uint32_t n_inst = jit_registry_get_max(Class::Domain) + 1;
 
     uint32_t in_count = 0, out_count = 0;
     (read_indices(nullptr, in_count, args), ...);
@@ -115,7 +115,7 @@ ENOKI_INLINE Result dispatch_jit_symbolic(const char *name, Func func, const Sel
     detail::ek_vector<uint32_t> extra;
     bool side_effects = false;
 
-    int need_init = (jitc_flags() & (uint32_t) JitFlag::OptimizeVCalls) ? 0 : 1;
+    int need_init = (jit_flags() & (uint32_t) JitFlag::OptimizeVCalls) ? 0 : 1;
     memset(need_in.get(), need_init, in_count * sizeof(uint32_t));
     memset(need_out.get(), need_init, out_count * sizeof(uint32_t));
 
@@ -123,7 +123,7 @@ ENOKI_INLINE Result dispatch_jit_symbolic(const char *name, Func func, const Sel
        so irrelevant parameters can be optimized away */
     for (uint32_t j = 0; j < 2; ++j) {
         for (uint32_t i = 0; i < n_inst; ++i) {
-            Class *ptr = (Class *) jitc_registry_get_ptr(Class::Domain, i);
+            Class *ptr = (Class *) jit_registry_get_ptr(Class::Domain, i);
 
             extra_offset[i] = (uint32_t) (extra.size() * sizeof(void *));
 
@@ -143,9 +143,9 @@ ENOKI_INLINE Result dispatch_jit_symbolic(const char *name, Func func, const Sel
 
         if (j == 0) {
             for (uint32_t i = 0; i < n_inst; ++i)
-                jitc_var_dec_ref_ext(call_id[i]);
+                jit_var_dec_ref_ext(call_id[i]);
             for (uint32_t i = 0; i < extra.size(); ++i)
-                jitc_var_dec_ref_ext(extra[i]);
+                jit_var_dec_ref_ext(extra[i]);
             extra.clear();
         }
     }
@@ -156,7 +156,7 @@ ENOKI_INLINE Result dispatch_jit_symbolic(const char *name, Func func, const Sel
     out_count = 0;
     read_indices(out.get(), out_count, result);
 
-    jitc_var_vcall(IsCUDA, Class::Domain, name, detach(self).index(), n_inst,
+    jit_var_vcall(IsCUDA, Class::Domain, name, detach(self).index(), n_inst,
                    call_id.get(), call_hash.get(), in_count, in.get(),
                    out_count, out.get(), need_in.get(), need_out.get(),
                    (uint32_t) extra.size(), extra.data(), extra_offset.get(),

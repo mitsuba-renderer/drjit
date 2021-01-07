@@ -14,6 +14,7 @@
 #pragma once
 
 #include <stddef.h>
+#include <enoki-jit/jit.h>
 
 #if defined(_MSC_VER)
 #  define ENOKI_NOINLINE               __declspec(noinline)
@@ -225,11 +226,8 @@ struct PacketMask;
 /// Naive dynamic array
 template <typename Value_> struct DynamicArray;
 
-/// JIT-compiled dynamically sized CUDA array
-template <typename Value_> struct CUDAArray;
-
-/// JIT-compiled dynamically sized LLVM array
-template <typename Value_> struct LLVMArray;
+/// JIT-compiled dynamically sized generic array
+template <JitBackend Backend_, typename Value_> struct JitArray;
 
 /// Forward- and reverse-mode automatic differentiation wrapper
 template <typename Value_> struct DiffArray;

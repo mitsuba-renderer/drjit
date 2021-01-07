@@ -1,5 +1,5 @@
 #include "test.h"
-#include <enoki/llvm.h>
+#include <enoki/jit.h>
 #include <enoki/dynamic.h>
 #include <enoki/custom.h>
 
@@ -66,7 +66,7 @@ private:
 
 
 ENOKI_TEST(test01_basic) {
-    jitc_init(1, 0);
+    jit_init(JitBackend::LLVM);
 
     {
         Vector3f d(1, 2, 3);
@@ -88,7 +88,7 @@ ENOKI_TEST(test01_basic) {
         assert(ek::allclose(ek::grad(d2), Vector3f(0.610883, 0.152721, -0.305441)));
     }
 
-    jitc_shutdown();
+    jit_shutdown();
 }
 
 struct ScaleAdd2 : ek::CustomOp<Float, Vector3f, Vector3f, Vector3f, int> {
@@ -127,7 +127,7 @@ private:
 };
 
 ENOKI_TEST(test02_corner_case) {
-    jitc_init(1, 0);
+    jit_init(1, 0);
 
     {
         Vector3f d1(1, 2, 3);
@@ -152,5 +152,5 @@ ENOKI_TEST(test02_corner_case) {
     }
 
 
-    jitc_shutdown();
+    jit_shutdown();
 }

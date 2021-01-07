@@ -18,6 +18,8 @@ extern py::object reinterpret_scalar(const py::object &source,
                                      VarType vt_source, VarType vt_target);
 
 extern const uint32_t var_type_size[(int) VarType::Count];
+extern const bool var_type_is_float[(int) VarType::Count];
+extern const bool var_type_is_unsigned[(int) VarType::Count];
 
 extern py::capsule to_dlpack(const py::object &owner, uint64_t data,
                              VarType type, int device, const py::tuple &shape,

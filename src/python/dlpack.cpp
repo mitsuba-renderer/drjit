@@ -49,12 +49,12 @@ static py::object convert_tuple(int64_t *index, int ndim) {
 
 static int convert_dtype(VarType type) {
     int code;
-    if (jitc_is_floating_point(type))
+    if (var_type_is_float[(int) type])
         code = 2;
     else
-        code = jitc_is_unsigned(type) ? 1 : 0;
+        code = var_type_is_unsigned[(int) type] ? 1 : 0;
 
-    return code | ((jitc_size(type) * 8) << 8) | (1 << 16);
+    return code | ((var_type_size[(int) type] * 8) << 8) | (1 << 16);
 }
 
 static VarType convert_dtype(int dtype) {

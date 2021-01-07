@@ -16,12 +16,22 @@ extern void export_llvm_ad(py::module_ &m);
 #endif
 
 const uint32_t var_type_size[(int) VarType::Count] {
-    (uint32_t) -1, (uint32_t) -1, 1, 1, 1, 2, 2, 4, 4, 8, 8, 2, 4, 8, 8
+    (uint32_t) -1, 1, 1, 1, 2, 2, 4, 4, 8, 8, 8, 2, 4, 8
+};
+
+const bool var_type_is_float[(int) VarType::Count] {
+    false, false, false, false, false, false, false, false,
+    false, false, false, true, true, true
+};
+
+const bool var_type_is_unsigned[(int) VarType::Count] {
+    false, false, false, true, false, true, false, true,
+    false, true, true, false, false, false
 };
 
 const char* var_type_numpy[(int) VarType::Count] {
-    "", "", "b1", "i1", "u1", "i2", "u2", "i4", "u4",
-    "i8", "u8", "f2", "f4", "f8", "u8"
+    "", "b1", "i1", "u1", "i2", "u2", "i4", "u4",
+    "i8", "u8", "u8", "f2", "f4", "f8"
 };
 
 py::handle array_base, array_name, array_init, array_configure;
@@ -31,8 +41,8 @@ struct ArrayBase { };
 
 PYBIND11_MODULE(enoki_ext, m_) {
 #if defined(ENOKI_ENABLE_JIT)
-    jitc_set_log_level_stderr(LogLevel::Warn);
-    jitc_init_async(1, 1);
+    jit_set_log_level_stderr(LogLevel::Warn);
+    jit_init_async((uint32_t) JitBackend::CUDA | (uint32_t) JitBackend::LLVM);
 #endif
 
     (void) m_;
@@ -48,7 +58,7 @@ PYBIND11_MODULE(enoki_ext, m_) {
 
     py::enum_<VarType>(m, "VarType", py::arithmetic())
         .value("Void", VarType::Void)
-        .value("Global", VarType::Global)
+        .value("Bool", VarType::Bool)
         .value("Int8", VarType::Int8)
         .value("UInt8", VarType::UInt8)
         .value("Int16", VarType::Int16)
@@ -57,11 +67,10 @@ PYBIND11_MODULE(enoki_ext, m_) {
         .value("UInt32", VarType::UInt32)
         .value("Int64", VarType::Int64)
         .value("UInt64", VarType::UInt64)
+        .value("Pointer", VarType::Pointer)
         .value("Float16", VarType::Float16)
         .value("Float32", VarType::Float32)
         .value("Float64", VarType::Float64)
-        .value("Pointer", VarType::Pointer)
-        .value("Bool", VarType::Bool)
         .def_property_readonly(
             "NumPy", [](VarType v) { return var_type_numpy[(int) v]; })
         .def_property_readonly(
@@ -123,52 +132,52 @@ PYBIND11_MODULE(enoki_ext, m_) {
         .value("Managed", AllocType::Managed)
         .value("ManagedReadMostly", AllocType::ManagedReadMostly);
 
+    py::enum_<JitBackend>(m, "JitBackend")
+        .value("CUDA", JitBackend::CUDA)
+        .value("LLVM", JitBackend::LLVM);
+
     py::enum_<JitFlag>(m, "JitFlag", py::arithmetic())
-        .value("Default", JitFlag::Default)
-        .value("RecordLoops", JitFlag::RecordLoops)
-        .value("RecordingLoop", JitFlag::RecordingLoop)
-        .value("RecordVCalls", JitFlag::RecordVCalls)
-        .value("RecordingVCall", JitFlag::RecordingVCall)
-        .value("OptimizeVCalls", JitFlag::OptimizeVCalls)
-        .value("Recording", JitFlag::Recording);
+        .value("LoopRecord", JitFlag::LoopRecord)
+        .value("LoopOptimize", JitFlag::LoopOptimize)
+        .value("VCallRecord", JitFlag::VCallRecord)
+        .value("VCallOptimize", JitFlag::VCallOptimize)
+        .value("VCallBranch", JitFlag::VCallBranch)
+        .value("ForceOptiX", JitFlag::ForceOptiX)
+        .value("DisableSideEffects", JitFlag::DisableSideEffects);
 
-    m.def("device_count", &jitc_cuda_device_count);
-    m.def("set_device", &jitc_cuda_set_device, "device"_a);
-    m.def("device", &jitc_cuda_device);
+    m.def("device_count", &jit_cuda_device_count);
+    m.def("set_device", &jit_cuda_set_device, "device"_a);
+    m.def("device", &jit_cuda_device);
 
-    m.def("has_llvm", &jitc_has_llvm);
-    m.def("has_cuda", &jitc_has_cuda);
-    m.def("sync_thread", &jitc_sync_thread);
-    m.def("sync_device", &jitc_sync_device);
-    m.def("sync_all_devices", &jitc_sync_all_devices);
-    m.def("whos_str", &jitc_var_whos);
-    m.def("whos", []() { py::print(jitc_var_whos()); });
-    m.def("malloc_trim", &jitc_malloc_trim);
-    m.def("set_log_level", &jitc_set_log_level_stderr);
-    m.def("log_level", &jitc_log_level_stderr);
+    m.def("has_backend", &jit_has_backend);
+    m.def("sync_thread", &jit_sync_thread);
+    m.def("sync_device", &jit_sync_device);
+    m.def("sync_all_devices", &jit_sync_all_devices);
+    m.def("whos_str", &jit_var_whos);
+    m.def("whos", []() { py::print(jit_var_whos()); });
+    m.def("malloc_trim", &jit_malloc_trim);
+    m.def("set_log_level", &jit_set_log_level_stderr);
+    m.def("log_level", &jit_log_level_stderr);
 
-    array_detail.def("graphviz", &jitc_var_graphviz);
-    array_detail.def("schedule", &jitc_var_schedule);
-    array_detail.def("eval", &jitc_var_eval, py::call_guard<py::gil_scoped_release>());
-    array_detail.def("eval", &jitc_eval, py::call_guard<py::gil_scoped_release>());
+    array_detail.def("graphviz", &jit_var_graphviz);
+    array_detail.def("schedule", &jit_var_schedule);
+    array_detail.def("eval", &jit_var_eval, py::call_guard<py::gil_scoped_release>());
+    array_detail.def("eval", &jit_eval, py::call_guard<py::gil_scoped_release>());
     array_detail.def("to_dlpack", &to_dlpack, "owner"_a, "data"_a,
                      "type"_a, "device"_a, "shape"_a, "strides"_a);
     array_detail.def("from_dlpack", &from_dlpack);
 
-    array_detail.def("device", &jitc_cuda_device);
-    array_detail.def("device", &jitc_var_device);
+    array_detail.def("device", &jit_cuda_device);
+    array_detail.def("device", &jit_var_device);
 
-    m.def("enable_flag", &jitc_enable_flag);
-    m.def("disable_flag", &jitc_disable_flag);
-    m.def("flags", &jitc_flags);
-
-    m.def("cse", &jitc_cse);
-    m.def("set_cse", &jitc_set_cse);
+    m.def("enable_flag", &jit_enable_flag);
+    m.def("disable_flag", &jit_disable_flag);
+    m.def("flags", &jit_flags);
 
     /* Register a cleanup callback function that is invoked when
        the 'enoki::ArrayBase' Python type is garbage collected */
     py::cpp_function cleanup_callback(
-        [](py::handle weakref) { py::gil_scoped_release gsr; jitc_shutdown(false); }
+        [](py::handle weakref) { py::gil_scoped_release gsr; jit_shutdown(false); }
     );
 
     (void) py::weakref(m.attr("ArrayBase"), cleanup_callback).release();

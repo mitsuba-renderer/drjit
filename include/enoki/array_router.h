@@ -24,23 +24,23 @@
 extern "C" {
     enum class JitFlag : uint32_t;
     /// Evaluate all computation that is scheduled on the current stream
-    extern ENOKI_IMPORT void jitc_eval();
+    extern ENOKI_IMPORT void jit_eval();
     /// Set the active CUDA device
-    extern ENOKI_IMPORT void jitc_cuda_set_device(int32_t device);
+    extern ENOKI_IMPORT void jit_cuda_set_device(int32_t device);
     /// Wait for all computation on the current stream to finish
-    extern ENOKI_IMPORT void jitc_sync_thread();
+    extern ENOKI_IMPORT void jit_sync_thread();
     /// Wait for all computation on the current device to finish
-    extern ENOKI_IMPORT void jitc_sync_device();
+    extern ENOKI_IMPORT void jit_sync_device();
     /// Wait for all computation on the *all devices* to finish
-    extern ENOKI_IMPORT void jitc_sync_all_devices();
+    extern ENOKI_IMPORT void jit_sync_all_devices();
     /// Return a GraphViz representation of queued computation
-    extern ENOKI_IMPORT const char *jitc_var_graphviz();
+    extern ENOKI_IMPORT const char *jit_var_graphviz();
     /// Retrieve the JIT compiler status flags (see \ref JitFlags)
-    extern ENOKI_IMPORT uint32_t jitc_flags();
-    /// Equivalent to <tt>jitc_set_flags(jitc_flags() | flag)</tt>
-    extern ENOKI_IMPORT void jitc_enable_flag(JitFlag flag);
-    /// Equivalent to <tt>jitc_set_flags(jitc_flags() & ~flag)</tt>
-    extern ENOKI_IMPORT void jitc_disable_flag(JitFlag flag);
+    extern ENOKI_IMPORT uint32_t jit_flags();
+    /// Equivalent to <tt>jit_set_flags(jit_flags() | flag)</tt>
+    extern ENOKI_IMPORT void jit_enable_flag(JitFlag flag);
+    /// Equivalent to <tt>jit_set_flags(jit_flags() & ~flag)</tt>
+    extern ENOKI_IMPORT void jit_disable_flag(JitFlag flag);
 };
 
 NAMESPACE_BEGIN(enoki)
@@ -1226,7 +1226,7 @@ ENOKI_INLINE bool schedule(const T1 &value, const Ts&... values) {
 }
 
 ENOKI_INLINE void eval() {
-    jitc_eval();
+    jit_eval();
 }
 
 template <typename... Ts>
@@ -1238,19 +1238,19 @@ ENOKI_INLINE void eval(const Ts&... values) {
 }
 
 ENOKI_INLINE void set_device(int32_t device) {
-    jitc_cuda_set_device(device);
+    jit_cuda_set_device(device);
 }
 
 ENOKI_INLINE void sync_thread() {
-    jitc_sync_thread();
+    jit_sync_thread();
 }
 
 ENOKI_INLINE void sync_device() {
-    jitc_sync_device();
+    jit_sync_device();
 }
 
 ENOKI_INLINE void sync_all_devices() {
-    jitc_sync_all_devices();
+    jit_sync_all_devices();
 }
 
 template <typename T> ENOKI_INLINE size_t width(const T &value) {
@@ -1599,7 +1599,7 @@ template <typename T> const char *graphviz(const T& value, bool reverse = true) 
         enqueue(value);
         return Type::graphviz_(reverse);
     } else {
-        return jitc_var_graphviz();
+        return jit_var_graphviz();
     }
 }
 
@@ -1878,9 +1878,9 @@ ENOKI_INLINE T rotate_right(const T &a) {
 //! @}
 // -----------------------------------------------------------------------
 
-inline uint32_t flags() { return jitc_flags(); }
-inline void enable_flag(JitFlag flag) { jitc_enable_flag(flag); }
-inline void disable_flag(JitFlag flag) { jitc_disable_flag(flag); }
+inline uint32_t flags() { return jit_flags(); }
+inline void enable_flag(JitFlag flag) { jit_enable_flag(flag); }
+inline void disable_flag(JitFlag flag) { jit_disable_flag(flag); }
 
 #undef ENOKI_ROUTE_UNARY
 #undef ENOKI_ROUTE_UNARY_FALLBACK

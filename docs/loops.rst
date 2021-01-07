@@ -87,7 +87,7 @@ example uses CUDA arrays, but everything applies equally to the LLVM case.
 
    .. code-block:: cpp
 
-       ek::enable_flag(JitFlag::RecordLoops);
+       ek::enable_flag(JitFlag::LoopRecord);
 
    To record loops, you must also include an extra header file
 
