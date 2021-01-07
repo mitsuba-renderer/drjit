@@ -7,16 +7,21 @@ template <typename Mask> struct Loop : ek::Loop<Mask> {
     using Base = ek::Loop<Mask>;
     using Base::m_index_p;
     using Base::m_index_in;
+    using Base::m_invariant;
     using Base::m_name;
 
-    Loop(const char *name, py::args args) {
-        m_name = name;
+    Loop(const char *name, py::args args) : Base(name) {
+        m_name = strdup(name);
         py::object detail = py::module_::import("enoki").attr("detail");
         m_read_indices  = detail.attr("read_indices");
         m_write_indices = detail.attr("write_indices");
         for (py::handle h : args)
             put(h);
         init();
+    }
+
+    ~Loop() {
+        free((char *) m_name);
     }
 
     void put(py::handle arg) {
@@ -33,12 +38,21 @@ template <typename Mask> struct Loop : ek::Loop<Mask> {
         for (uint32_t i = 0; i < size; ++i) {
             m_index_p.push_back(&m_index_p_py[i]);
             m_index_in.push_back(m_index_p_py[i]);
+            m_invariant.push_back(0);
         }
 
         Base::init();
         write_indices();
     }
 
+    bool cond(const Mask &mask) {
+        read_indices();
+        bool result = Base::cond(mask);
+        write_indices();
+        return result;
+    }
+
+private:
     void read_indices() {
         py::list indices = m_read_indices(*m_args);
         size_t size = indices.size();
@@ -57,16 +71,9 @@ template <typename Mask> struct Loop : ek::Loop<Mask> {
         m_write_indices(list, *m_args);
     }
 
-    bool cond(const Mask &mask) {
-        read_indices();
-        bool result = Base::cond(mask);
-        write_indices();
-        return result;
-    }
-
 private:
     py::list m_args;
     py::object m_read_indices;
     py::object m_write_indices;
-    ek::detail::ek_vector<uint32_t> m_index_p_py;
+    ek::ek_vector<uint32_t> m_index_p_py;
 };

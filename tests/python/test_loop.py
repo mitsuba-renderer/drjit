@@ -67,7 +67,6 @@ def test01_record_loop(pkg):
             assert x == p.Int(5, 5, 5, 5, 5, 5, 6, 7, 8, 9)
 
 
-@pytest.mark.skip("TODO bring it back when loop is implemented")
 @pytest.mark.parametrize("variant", [0, 1])
 @pytest.mark.parametrize("pkg", pkgs)
 def test02_multiple_values(pkg, variant):
@@ -99,7 +98,6 @@ def test02_multiple_values(pkg, variant):
     assert v.y == p.Int(30, 28, 24, 18, 10, 0, 0, 0, 0, 0)
 
 
-@pytest.mark.skip("TODO bring it back when loop is implemented")
 @pytest.mark.parametrize("pkg", pkgs)
 def test03_failures(pkg):
     p = get_class(pkg)
@@ -115,7 +113,6 @@ def test03_failures(pkg):
         assert 'Symbolic loop encountered a differentiable array with enabled gradients! This is not supported.' in str(e.value)
 
 
-@pytest.mark.skip("TODO bring it back when loop is implemented")
 @pytest.mark.parametrize("pkg", pkgs)
 def test04_side_effect(pkg):
     p = get_class(pkg)
@@ -136,7 +133,6 @@ def test04_side_effect(pkg):
     assert j == p.Int([45]*10)
 
 
-@pytest.mark.skip("TODO bring it back when loop is implemented")
 @pytest.mark.parametrize("pkg", pkgs)
 def test05_side_effect_noloop(pkg):
     p = get_class(pkg)
@@ -157,7 +153,6 @@ def test05_side_effect_noloop(pkg):
     assert j == p.Int([45]*10)
 
 
-@pytest.mark.skip("TODO bring it back when loop is implemented")
 @pytest.mark.parametrize("variant", [0, 1, 2])
 @pytest.mark.parametrize("pkg", pkgs)
 def test06_test_collatz(pkg, variant):
@@ -165,7 +160,7 @@ def test06_test_collatz(pkg, variant):
 
     def collatz(value: p.Int):
         counter = p.Int(0)
-        loop = p.Loop(value, counter)
+        loop = p.Loop("collatz", value, counter)
         while (loop.cond(ek.neq(value, 1))):
             is_even = ek.eq(value & 1, 0)
             value.assign(ek.select(is_even, value // 2, 3*value + 1))
@@ -185,7 +180,6 @@ def test06_test_collatz(pkg, variant):
     assert value == p.Int([1]*10)
     assert ctr == p.Int([0,1,7,2,5,8,16,3,19,6])
 
-@pytest.mark.skip("TODO bring it back when loop is implemented")
 @pytest.mark.parametrize("variant", [0, 1])
 @pytest.mark.parametrize("pkg", ["enoki.cuda",
                                  "enoki.cuda.ad",
@@ -196,7 +190,7 @@ def test07_loop_nest(pkg, variant):
 
     def collatz(value: p.Int):
         counter = p.Int(0)
-        loop = p.Loop(value, counter)
+        loop = p.Loop("Nested", value, counter)
         while (loop.cond(ek.neq(value, 1))):
             is_even = ek.eq(value & 1, 0)
             value.assign(ek.select(is_even, value // 2, 3*value + 1))
