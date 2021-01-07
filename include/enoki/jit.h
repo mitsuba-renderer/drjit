@@ -133,7 +133,7 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, JitArray<Backend_, Value_
         return steal(jit_var_new_op_2(JitOp::Mul, m_index, v.m_index));
     }
 
-    JitArray mulhi_(const JitArray &v) const {
+    JitArray mulhi_(const JitArray &/*v*/) const {
         enoki_raise("Not Implemented"); // TODO
     }
 
@@ -472,9 +472,9 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, JitArray<Backend_, Value_
     // -----------------------------------------------------------------------
 
     template <bool, typename Index>
-    static JitArray gather_(const void *src,
-                            const JitArray<Backend, Index> &index,
-                            const MaskType &mask = true) {
+    static JitArray gather_(const void */*src*/,
+                            const JitArray<Backend, Index> &/*index*/,
+                            const MaskType &/*mask*/ = true) {
         enoki_raise("Not implemented, please use gather(JitArray src, index, mask) instead!");
     }
 
@@ -486,8 +486,8 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, JitArray<Backend_, Value_
     }
 
     template <bool, typename Index>
-    void scatter_(void *dst, const JitArray<Backend, Index> &index,
-                  const MaskType &mask = true) const {
+    void scatter_(void */*dst*/, const JitArray<Backend, Index> &/*index*/,
+                  const MaskType &/*mask*/ = true) const {
         enoki_raise("Not implemented, please use scatter(JitArray src, index, mask) instead!");
     }
 
@@ -500,9 +500,9 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, JitArray<Backend_, Value_
     }
 
     template <typename Index>
-    void scatter_reduce_(ReduceOp op, void *dst,
-                         const JitArray<Backend, Index> &index,
-                         const MaskType &mask = true) const {
+    void scatter_reduce_(ReduceOp /*op*/, void */*dst*/,
+                         const JitArray<Backend, Index> &/*index*/,
+                         const MaskType &/*mask*/ = true) const {
         enoki_raise("Not implemented, please use scatter_reduce(JitArray src, index, op, mask) instead!");
     }
 
