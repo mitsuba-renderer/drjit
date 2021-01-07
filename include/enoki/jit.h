@@ -11,7 +11,7 @@
 */
 
 #pragma once
-#define ENOKI_CUDA_H
+#define ENOKI_JIT_H
 
 #include <enoki/array.h>
 #include <enoki-jit/traits.h>
@@ -641,12 +641,16 @@ protected:
 template <typename T> using CUDAArray = JitArray<JitBackend::CUDA, T>;
 template <typename T> using LLVMArray = JitArray<JitBackend::LLVM, T>;
 
-// #if defined(ENOKI_AUTODIFF_H)
-// ENOKI_DECLARE_EXTERN_TEMPLATE(CUDAArray<float>, CUDAArray<bool>, CUDAArray<uint32_t>)
-// ENOKI_DECLARE_EXTERN_TEMPLATE(CUDAArray<double>, CUDAArray<bool>, CUDAArray<uint32_t>)
+#if defined(ENOKI_AUTODIFF_H)
+ENOKI_DECLARE_EXTERN_TEMPLATE(CUDAArray<float>, CUDAArray<bool>, CUDAArray<uint32_t>)
+ENOKI_DECLARE_EXTERN_TEMPLATE(CUDAArray<double>, CUDAArray<bool>, CUDAArray<uint32_t>)
+ENOKI_DECLARE_EXTERN_TEMPLATE(LLVMArray<float>, LLVMArray<bool>, LLVMArray<uint32_t>)
+ENOKI_DECLARE_EXTERN_TEMPLATE(LLVMArray<double>, LLVMArray<bool>, LLVMArray<uint32_t>)
+#endif
 
-// ENOKI_DECLARE_EXTERN_TEMPLATE(LLVMArray<float>, LLVMArray<bool>, LLVMArray<uint32_t>)
-// ENOKI_DECLARE_EXTERN_TEMPLATE(LLVMArray<double>, LLVMArray<bool>, LLVMArray<uint32_t>)
-// #endif
+#if defined(ENOKI_VCALL_H)
+#  include <enoki/vcall_jit_reduce.h>
+#  include <enoki/vcall_jit_record.h>
+#endif
 
 NAMESPACE_END(enoki)

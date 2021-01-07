@@ -1815,11 +1815,9 @@ protected:
 
 ENOKI_DECLARE_EXTERN_TEMPLATE(float,  bool, uint32_t)
 ENOKI_DECLARE_EXTERN_TEMPLATE(double, bool, uint32_t)
-#if defined(ENOKI_CUDA_H)
+#if defined(ENOKI_JIT_H)
 ENOKI_DECLARE_EXTERN_TEMPLATE(CUDAArray<float>,  CUDAArray<bool>, CUDAArray<uint32_t>)
 ENOKI_DECLARE_EXTERN_TEMPLATE(CUDAArray<double>, CUDAArray<bool>, CUDAArray<uint32_t>)
-#endif
-#if defined(ENOKI_LLVM_H)
 ENOKI_DECLARE_EXTERN_TEMPLATE(LLVMArray<float>,  LLVMArray<bool>, LLVMArray<uint32_t>)
 ENOKI_DECLARE_EXTERN_TEMPLATE(LLVMArray<double>, LLVMArray<bool>, LLVMArray<uint32_t>)
 #endif

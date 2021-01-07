@@ -30,82 +30,82 @@ extern "C" {
 };
 
 NAMESPACE_BEGIN(enoki)
+NAMESPACE_BEGIN(detail)
 
-namespace detail {
-    template <typename T>
-    ENOKI_INLINE decltype(auto) copy_diff(const T& value) {
-        if constexpr (is_jit_array_v<T> && is_diff_array_v<T> &&
-                      std::is_floating_point_v<scalar_t<T>>) {
-            T result;
-            if constexpr (array_depth_v<T> == 1) {
-                result = value.copy();
-            } else {
-                for (size_t i = 0; i < value.derived().size(); ++i)
-                    result.entry(i) = copy_diff(value.entry(i));
-            }
-            return result;
-        } else if constexpr (is_enoki_struct_v<T>) {
-            T result = value;
-            struct_support_t<T>::apply_1(result,
-                                         [](auto &x) { x = copy_diff(x); });
-            return result;
+template <typename T>
+ENOKI_INLINE decltype(auto) copy_diff(const T& value) {
+    if constexpr (is_jit_array_v<T> && is_diff_array_v<T> &&
+                  std::is_floating_point_v<scalar_t<T>>) {
+        T result;
+        if constexpr (array_depth_v<T> == 1) {
+            result = value.copy();
         } else {
-            return value;
+            for (size_t i = 0; i < value.derived().size(); ++i)
+                result.entry(i) = copy_diff(value.entry(i));
         }
-    }
-
-    template <typename Guide, typename Type, typename = int> struct vectorize_type {
-        using type = Type;
-    };
-
-    template <typename Guide, typename Type>
-    struct vectorize_type<Guide, Type, enable_if_t<std::is_scalar_v<Type> && !std::is_same_v<Type, std::nullptr_t>>> {
-        using type = replace_scalar_t<Guide, Type>;
-    };
-
-    template <typename Result, typename Func, typename Self, typename... Args>
-    ENOKI_INLINE Result vcall_jit_record(const char *name, Func func,
-                                           const Self &self,
-                                           const Args &... args);
-
-    template <typename Result, typename Func, typename Self, typename... Args>
-    ENOKI_INLINE Result vcall_jit_reduce(Func func, const Self &self, const Args&... args);
-
-    template <typename Result, typename Func, typename FuncFwd, typename FuncRev, typename Self,
-              typename... Args>
-    ENOKI_INLINE Result vcall_autodiff(const char *name,
-                                       const Func &func,
-                                       const FuncFwd &func_fwd,
-                                       const FuncRev &func_rev,
-                                       const Self &self,
-                                       const Args &... args);
-
-    template <typename Class, typename Func, typename FuncFwd, typename FuncRev,
-              typename Self, typename... Args>
-    auto dispatch(const char *name, const Func &func, const FuncFwd &func_fwd,
-                  const FuncRev func_rev, const Self &self,
-                  const Args &... args) {
-        using Result =
-            typename vectorize_type<Self, decltype(func((Class *) nullptr, args...))>::type;
-
-        ENOKI_MARK_USED(func_fwd);
-        ENOKI_MARK_USED(func_rev);
-        ENOKI_MARK_USED(name);
-
-        if constexpr (is_jit_array_v<Self>) {
-            if ((jit_flags() & 4) == 0 || is_llvm_array_v<Self>) {
-                return detail::vcall_jit_reduce<Result>(func, self, copy_diff(args)...);
-            } else {
-                if constexpr (is_diff_array_v<Self>)
-                    return detail::vcall_autodiff<Result>(name, func, func_fwd, func_rev, self, args...);
-                else
-                    return detail::vcall_jit_record<Result>(name, func, self, args...);
-            }
-        } else {
-            return detail::vcall_packet<Result>(func, self, args...);
-        }
+        return result;
+    } else if constexpr (is_enoki_struct_v<T>) {
+        T result = value;
+        struct_support_t<T>::apply_1(result, [](auto &x) { x = copy_diff(x); });
+        return result;
+    } else {
+        return value;
     }
 }
+
+template <typename Guide, typename Type, typename = int> struct vectorize_type {
+    using type = Type;
+};
+
+template <typename Guide, typename Type>
+struct vectorize_type<Guide, Type, enable_if_t<std::is_scalar_v<Type> && !std::is_same_v<Type, std::nullptr_t>>> {
+    using type = replace_scalar_t<Guide, Type>;
+};
+
+template <typename Result, typename Func, JitBackend Backend, typename Base, typename... Args>
+Result vcall_jit_record(const char *name, const Func &func,
+                        const JitArray<Backend, Base *> &self,
+                        const Args &... args);
+
+template <typename Result, typename Func, typename Self, typename... Args>
+ENOKI_INLINE Result vcall_jit_reduce(Func func, const Self &self, const Args&... args);
+
+template <typename Result, typename Func, typename FuncFwd, typename FuncRev, typename Self,
+          typename... Args>
+ENOKI_INLINE Result vcall_autodiff(const char *name,
+                                   const Func &func,
+                                   const FuncFwd &func_fwd,
+                                   const FuncRev &func_rev,
+                                   const Self &self,
+                                   const Args &... args);
+
+template <typename Class, typename Func, typename FuncFwd, typename FuncRev,
+          typename Self, typename... Args>
+auto dispatch(const char *name, const Func &func, const FuncFwd &func_fwd,
+              const FuncRev func_rev, const Self &self,
+              const Args &... args) {
+    using Result =
+        typename vectorize_type<Self, decltype(func((Class *) nullptr, args...))>::type;
+
+    ENOKI_MARK_USED(func_fwd);
+    ENOKI_MARK_USED(func_rev);
+    ENOKI_MARK_USED(name);
+
+    if constexpr (is_jit_array_v<Self>) {
+        if ((jit_flags() & 4) == 0 || is_llvm_array_v<Self>) {
+            return detail::vcall_jit_reduce<Result>(func, self, copy_diff(args)...);
+        } else {
+            if constexpr (is_diff_array_v<Self>)
+                return detail::vcall_autodiff<Result>(name, func, func_fwd, func_rev, self, args...);
+            else
+                return detail::vcall_jit_record<Result>(name, func, self, args...);
+        }
+    } else {
+        return detail::vcall_packet<Result>(func, self, args...);
+    }
+}
+
+NAMESPACE_END(detail)
 
 template <typename Class, typename Value>
 void set_attr(Class *self, const char *name, const Value &value) {
@@ -252,7 +252,7 @@ NAMESPACE_END(enoki)
 #define ENOKI_VCALL_TEMPLATE_END(Name)                                         \
     ENOKI_VCALL_END(Name)
 
-#if defined(ENOKI_CUDA_H) || defined(ENOKI_LLVM_H)
+#if defined(ENOKI_JIT_H)
 #  include <enoki/vcall_jit_reduce.h>
 #  include <enoki/vcall_jit_record.h>
 #endif

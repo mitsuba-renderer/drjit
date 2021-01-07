@@ -12,8 +12,6 @@
 
 #pragma once
 
-#include <enoki-jit/containers.h>
-
 NAMESPACE_BEGIN(enoki)
 NAMESPACE_BEGIN(detail)
 
@@ -92,8 +90,8 @@ Result vcall_impl(const char *name, uint32_t n_inst, const Func &func,
     for (uint32_t i = 1; i <= n_inst; ++i) {
         char label[128];
         snprintf(label, sizeof(label), "VCall: %s::%s() [instance %u]",
-                 Self::Domain, name, i);
-        Base *base = (Base *) jit_registry_get_ptr(Self::Domain, i);
+                 Base::Domain, name, i);
+        Base *base = (Base *) jit_registry_get_ptr(Base::Domain, i);
 
         jit_prefix_push(Backend, label);
         int flag_before = jit_flag(JitFlag::PostponeSideEffects);
@@ -121,7 +119,7 @@ Result vcall_impl(const char *name, uint32_t n_inst, const Func &func,
         self &
         (JitArray<Backend, bool>::steal(jit_var_mask_peek(Backend)) & mask);
 
-    jit_var_vcall(Self::Domain, self_masked.index(), n_inst, indices_in.size(),
+    jit_var_vcall(Base::Domain, self_masked.index(), n_inst, indices_in.size(),
                   indices_in.data(), indices_out_all.size(),
                   indices_out_all.data(), se_count.data(), indices_out.data());
 
@@ -133,26 +131,25 @@ Result vcall_impl(const char *name, uint32_t n_inst, const Func &func,
     return result;
 }
 
-template <typename Func, JitBackend Backend, typename Base, typename... Args>
-auto vcall_jit_record(const char *name, const Func &func,
-                      const JitArray<Backend, Base *> &self,
-                      const Args &... args) {
-    using Result = decltype(func(std::declval<Base *>(), args...));
+template <typename Result, typename Func, JitBackend Backend, typename Base, typename... Args>
+Result vcall_jit_record(const char *name, const Func &func,
+                        const JitArray<Backend, Base *> &self,
+                        const Args &... args) {
     constexpr bool IsVoid = std::is_void_v<Result>;
     using Result_2 = std::conditional_t<IsVoid, std::nullptr_t, Result>;
     using Self = JitArray<Backend, Base *>;
     using Bool = JitArray<Backend, bool>;
 
-    uint32_t n_inst = jit_registry_get_max(Self::Domain);
+    uint32_t n_inst = jit_registry_get_max(Base::Domain);
 
     Result_2 result;
     if (n_inst == 0) {
-        result = zero<Result_2>(width(args...));
+        result = zero<Result_2>(width(self));
     } else if (n_inst == 1) {
         uint32_t i = 1;
         Base *inst = nullptr;
         do {
-            inst = (Base *) jit_registry_get_ptr(Self::Domain, i++);
+            inst = (Base *) jit_registry_get_ptr(Base::Domain, i++);
         } while (!inst);
 
         if constexpr (IsVoid)
