@@ -18,155 +18,155 @@ NAMESPACE_BEGIN(enoki)
 NAMESPACE_BEGIN(detail)
 
 template <typename T>
-void read_indices(uint32_t *out, uint32_t &count, const T &value) {
+void collect_indices(ek_index_vector &indices, const T &value) {
     if constexpr (array_depth_v<T> > 1) {
         for (size_t i = 0; i < value.derived().size(); ++i)
-            read_indices(out, count, value.derived().entry(i));
+            read_indices(indices, value.derived().entry(i));
     } else if constexpr (is_diff_array_v<T>) {
-        read_indices(out, count, value.detach_());
+        read_indices(indices, value.detach_());
     } else if constexpr (is_jit_array_v<T>) {
-        uint32_t i = value.index();
-        if (i == 0)
-            jit_fail("enoki::detail::read_indices(): uninitialized variable!");
-        if (out)
-            out[count] = i;
-        count += 1;
+        uint32_t index = value.index();
+        if (!index)
+            enoki_raise("enoki::detail::collect_indices(): encountered an "
+                        "uninitialized function argument while recording a "
+                        "virtual function call!");
+        indices.push_back(index);
     } else if constexpr (is_enoki_struct_v<T>) {
         struct_support_t<T>::apply_1(
-            value, [&](const auto &x) { read_indices(out, count, x); });
+            value, [&](const auto &x) { read_indices(indices, x); });
     }
 }
 
 template <typename T>
-void write_indices(uint32_t *out, uint32_t &count, T &value) {
+void write_indices(ek_index_vector &indices, T &value, uint32_t &offset) {
     if constexpr (array_depth_v<T> > 1) {
         for (size_t i = 0; i < value.derived().size(); ++i)
-            write_indices(out, count, value.derived().entry(i));
+            write_indices(out, value.derived().entry(i), offset);
     } else if constexpr (is_diff_array_v<T>) {
-        write_indices(out, count, value.detach_());
+        write_indices(out, value.detach_(), offset);
     } else if constexpr (is_jit_array_v<T>) {
-        value = T::steal(out[count++]);
+        value = T::steal(indices[offset++]);
     } else if constexpr (is_enoki_struct_v<T>) {
         struct_support_t<T>::apply_1(
-            value, [&](auto &x) { write_indices(out, count, x); });
+            value, [&](auto &x) { write_indices(indices, x, offset); });
     }
 }
 
-template <bool IsCUDA, typename Func, typename... Args>
-bool record(const char *domain, const char *name, uint32_t &id, uint64_t &hash,
-            uint32_t *in, uint32_t *out, uint32_t *need_in, uint32_t *need_out,
-            ek_vector<uint32_t> &extra, Func func,
-            const Args &... args) {
-    using Result = decltype(func(args...));
-
-    uint32_t se_before = jit_side_effect_counter(IsCUDA);
-    Result result = func(args...);
-    uint32_t se_total = jit_side_effect_counter(IsCUDA) - se_before;
-
-    uint32_t in_count = 0, out_count = 0;
-    (read_indices(in, in_count, args), ...);
-    read_indices(out, out_count, result);
-
-    uint32_t *extra_p = nullptr;
-    uint32_t extra_count_p = 0;
-    id = jit_capture_var(IsCUDA, domain, name, in, in_count, out, out_count,
-                          need_in, need_out, se_total, &hash, &extra_p,
-                          &extra_count_p);
-
-    for (uint32_t i = 0; i < extra_count_p; ++i)
-        extra.push_back(extra_p[i]);
-
-    return se_total != 0;
+inline bool extract_mask() { return true; }
+template <typename T> decltype(auto) extract_mask(const T &v) {
+    if constexpr (is_mask_v<T>)
+        return v;
+    else
+        return true;
 }
 
-struct jit_flag_guard {
-public:
-    jit_flag_guard() : flags(jit_flags()) {
-        jit_set_flags(flags | (uint32_t) JitFlag::VCallRecord);
-    }
-    ~jit_flag_guard() { jit_set_flags(flags); }
+template <typename T, typename... Ts, enable_if_t<sizeof...(Ts) != 0> = 0>
+decltype(auto) extract_mask(const T &v, const Ts &... vs) {
+    return extract_mask(vs...);
+}
 
-private:
-    uint32_t flags;
-};
+template <size_t I, size_t N, typename T>
+decltype(auto) set_mask_true(const T &v) {
+    if constexpr (is_mask_v<T> && I == N - 1)
+        return true;
+    else
+        return v;
+}
 
-template <typename Result, typename Func, typename Self, typename... Args>
-ENOKI_INLINE Result dispatch_jit_symbolic(const char *name, Func func, const Self &self, const Args&... args) {
-    using Class = std::remove_pointer_t<scalar_t<Self>>;
+template <typename Result, typename Func, JitBackend Backend,
+          typename Base, typename... Args, size_t... Is>
+Result vcall_impl(const char *name, uint32_t n_inst, const Func &func,
+                  const JitArray<Backend, Base *> &self,
+                  const JitArray<Backend, bool> &mask,
+                  std::index_sequence<Is...>, const Args &... args) {
+    constexpr size_t N = sizeof...(Args);
+    Result result;
+    using Self = JitArray<Backend, Base *>;
 
-    constexpr bool IsCUDA = is_cuda_array_v<Self>;
+    ek_index_vector indices_in, indices_out_all;
+    ek_vector<uint32_t> se_count(n_inst + 1, 0);
 
-    jit_flag_guard guard;
-    Result result = zero<Result>();
+    (collect_indices(indices_in, args), ...);
+    se_count[0] = jit_side_effects_scheduled(Backend);
 
-    // Determine # of existing instances, and preallocate memory for IR codegen
-    uint32_t n_inst = jit_registry_get_max(Class::Domain) + 1;
+    for (uint32_t i = 1; i <= n_inst; ++i) {
+        char label[128];
+        snprintf(label, sizeof(label), "VCall: %s::%s() [instance %u]",
+                 Self::Domain, name, i);
+        Base *base = (Base *) jit_registry_get_ptr(Self::Domain, i);
 
-    uint32_t in_count = 0, out_count = 0;
-    (read_indices(nullptr, in_count, args), ...);
-    read_indices(nullptr, out_count, result);
-
-    ek_unique_ptr<uint32_t[]> call_id(new uint32_t[n_inst]);
-    ek_unique_ptr<uint64_t[]> call_hash(new uint64_t[n_inst]);
-    ek_unique_ptr<uint32_t[]> extra_offset(new uint32_t[n_inst]);
-    ek_unique_ptr<uint32_t[]> in(new uint32_t[in_count]),
-                                 need_in(new uint32_t[in_count]),
-                                 out(new uint32_t[out_count]),
-                                 need_out(new uint32_t[out_count]);
-
-    ek_vector<uint32_t> extra;
-    bool side_effects = false;
-
-    int need_init = (jit_flags() & (uint32_t) JitFlag::VCallOptimize) ? 0 : 1;
-    memset(need_in.get(), need_init, in_count * sizeof(uint32_t));
-    memset(need_out.get(), need_init, out_count * sizeof(uint32_t));
-
-    /* Call each instance symbolically and record. Do this twice
-       so irrelevant parameters can be optimized away */
-    for (uint32_t j = 0; j < 2; ++j) {
-        for (uint32_t i = 0; i < n_inst; ++i) {
-            Class *ptr = (Class *) jit_registry_get_ptr(Class::Domain, i);
-
-            extra_offset[i] = (uint32_t) (extra.size() * sizeof(void *));
-
-            if (ptr)
-                side_effects |= record<IsCUDA>(
-                    Class::Domain, name, call_id[i], call_hash[i], in.get(),
-                    out.get(), need_in.get(), need_out.get(), extra,
-                    [&](const Args &... args) { return func(ptr, args...); },
-                    placeholder<Args>(args)...);
-            else
-                record<IsCUDA>(
-                    Class::Domain, name, call_id[i], call_hash[i], in.get(),
-                    out.get(), need_in.get(), need_out.get(), extra,
-                    [&](const Args &...) -> Result { return result; },
-                    placeholder<Args>(args)...);
+        jit_prefix_push(Backend, label);
+        int flag_before = jit_flag(JitFlag::PostponeSideEffects);
+        try {
+            jit_set_flag(JitFlag::PostponeSideEffects, 1);
+            if constexpr (std::is_same_v<Result, std::nullptr_t>) {
+                func(base, (detail::set_mask_true<Is, N>(args))...);
+            } else {
+                collect_indices(indices_out_all, func(base, args...));
+            }
+        } catch (...) {
+            jit_prefix_pop(Backend);
+            jit_side_effects_rollback(Backend, se_count[0]);
+            jit_set_flag(JitFlag::PostponeSideEffects, flag_before);
+            throw;
         }
-
-        if (j == 0) {
-            for (uint32_t i = 0; i < n_inst; ++i)
-                jit_var_dec_ref_ext(call_id[i]);
-            for (uint32_t i = 0; i < extra.size(); ++i)
-                jit_var_dec_ref_ext(extra[i]);
-            extra.clear();
-        }
+        jit_set_flag(JitFlag::PostponeSideEffects, flag_before);
+        jit_prefix_pop(Backend);
+        se_count[i] = jit_side_effects_scheduled(Backend);
     }
 
-    // Collect input + output arguments
-    in_count = 0;
-    (read_indices(in.get(), in_count, args), ...);
-    out_count = 0;
-    read_indices(out.get(), out_count, result);
+    ek_index_vector indices_out(indices_out_all.size() / n_inst);
 
-    jit_var_vcall(IsCUDA, Class::Domain, name, detach(self).index(), n_inst,
-                   call_id.get(), call_hash.get(), in_count, in.get(),
-                   out_count, out.get(), need_in.get(), need_out.get(),
-                   (uint32_t) extra.size(), extra.data(), extra_offset.get(),
-                   side_effects);
+    JitArray<Backend, Base *> self_masked =
+        self &
+        (JitArray<Backend, bool>::steal(jit_var_mask_peek(Backend)) & mask);
 
-    out_count = 0;
-    write_indices(out.get(), out_count, result);
+    jit_var_vcall(domain, self_masked.index(), n_inst, indices_in.size(),
+                  indices_in.data(), indices_out_all.size(),
+                  indices_out_all.data(), se_count.data(), indices_out.data());
 
+    if constexpr (!std::is_same_v<Result, std::nullptr_t>) {
+        uint32_t offset = 0;
+        write_indices(indices_out, result, offset);
+    }
+
+    return result;
+}
+
+template <typename Func, JitBackend Backend, typename Base, typename... Args>
+auto vcall_jit_record(const char *name, const Func &func,
+                      const JitArray<Backend, Base *> &self,
+                      const Args &... args) {
+    using Result = decltype(func(std::declval<Base *>(), args...));
+    constexpr bool IsVoid = std::is_void_v<Result>;
+    using Result_2 = std::conditional_t<IsVoid, std::nullptr_t, Result>;
+    using Self = JitArray<Backend, Base *>;
+    using Bool = JitArray<Backend, bool>;
+
+    uint32_t n_inst = jit_registry_get_max(Self::Domain);
+
+    Result_2 result;
+    if (n_inst == 0) {
+        result = zero<Result_2>(ek::width(args...));
+    } else if (n_inst == 1) {
+        uint32_t i = 1;
+        Base *inst = nullptr;
+        do {
+            inst = (Base *) jit_registry_get_ptr(Self::Domain, i++);
+        } while (!inst);
+
+        if constexpr (IsVoid)
+            func(inst, args...);
+        else
+            result = func(inst, args...);
+    } else {
+        constexpr size_t N = sizeof...(Args);
+        result = vcall_impl<Result_2>(
+            name, n_inst, func, self,
+            Bool(detail::extract_mask(args...)),
+            std::make_index_sequence<sizeof...(Args)>(),
+            ek::placeholder(args)...);
+    }
     return result;
 }
 

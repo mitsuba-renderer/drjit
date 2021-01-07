@@ -31,7 +31,7 @@ ENOKI_INLINE decltype(auto) gather_helper(const T& value, const UInt32 &perm) {
 }
 
 template <typename Result, typename Func, typename Self, typename... Args>
-ENOKI_INLINE Result dispatch_jit_reduce(Func func, const Self &self, const Args&... args) {
+ENOKI_INLINE Result vcall_jit_reduce(Func func, const Self &self, const Args&... args) {
     using UInt32 = uint32_array_t<Self>;
     using Class = scalar_t<Self>;
 

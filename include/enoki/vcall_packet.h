@@ -37,7 +37,7 @@ ENOKI_INLINE auto &replace_mask(Arg &arg, const Mask &mask) {
 
 
 template <typename Result, typename Func, typename Self, typename... Args>
-ENOKI_INLINE Result dispatch_packet(Func func, const Self &self, const Args&... args) {
+ENOKI_INLINE Result vcall_packet(Func func, const Self &self, const Args&... args) {
     using Class = scalar_t<Self>;
     using Mask = mask_t<Self>;
     Mask mask = get_mask<Mask>(args...);

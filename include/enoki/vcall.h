@@ -64,21 +64,21 @@ namespace detail {
     };
 
     template <typename Result, typename Func, typename Self, typename... Args>
-    ENOKI_INLINE Result dispatch_jit_symbolic(const char *name, Func func,
-                                              const Self &self,
-                                              const Args &... args);
+    ENOKI_INLINE Result vcall_jit_symbolic(const char *name, Func func,
+                                           const Self &self,
+                                           const Args &... args);
 
     template <typename Result, typename Func, typename Self, typename... Args>
-    ENOKI_INLINE Result dispatch_jit_reduce(Func func, const Self &self, const Args&... args);
+    ENOKI_INLINE Result vcall_jit_reduce(Func func, const Self &self, const Args&... args);
 
     template <typename Result, typename Func, typename FuncFwd, typename FuncRev, typename Self,
               typename... Args>
-    ENOKI_INLINE Result dispatch_autodiff(const char *name,
-                                          const Func &func,
-                                          const FuncFwd &func_fwd,
-                                          const FuncRev &func_rev,
-                                          const Self &self,
-                                          const Args &... args);
+    ENOKI_INLINE Result vcall_autodiff(const char *name,
+                                       const Func &func,
+                                       const FuncFwd &func_fwd,
+                                       const FuncRev &func_rev,
+                                       const Self &self,
+                                       const Args &... args);
 
     template <typename Class, typename Func, typename FuncFwd, typename FuncRev,
               typename Self, typename... Args>
@@ -94,15 +94,15 @@ namespace detail {
 
         if constexpr (is_jit_array_v<Self>) {
             if ((jit_flags() & 4) == 0 || is_llvm_array_v<Self>) {
-                return detail::dispatch_jit_reduce<Result>(func, self, copy_diff(args)...);
+                return detail::vcall_jit_reduce<Result>(func, self, copy_diff(args)...);
             } else {
                 if constexpr (is_diff_array_v<Self>)
-                    return detail::dispatch_autodiff<Result>(name, func, func_fwd, func_rev, self, args...);
+                    return detail::vcall_autodiff<Result>(name, func, func_fwd, func_rev, self, args...);
                 else
-                    return detail::dispatch_jit_symbolic<Result>(name, func, self, args...);
+                    return detail::vcall_jit_record<Result>(name, func, self, args...);
             }
         } else {
-            return detail::dispatch_packet<Result>(func, self, args...);
+            return detail::vcall_packet<Result>(func, self, args...);
         }
     }
 }
