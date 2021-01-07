@@ -30,7 +30,7 @@ struct Loop<Mask, enable_if_t<std::is_scalar_v<Mask>>> {
     void init() { }
     template <typename Value> void put(Value &) { }
     bool cond(bool mask) { return mask; }
-    template <typename... Args> Loop(const char *name, Args&...) { }
+    template <typename... Args> Loop(const char*, Args&...) { }
 };
 
 template <typename Mask>

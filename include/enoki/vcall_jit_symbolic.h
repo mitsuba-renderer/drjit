@@ -12,6 +12,8 @@
 
 #pragma once
 
+#include <enoki-jit/containers.h>
+
 NAMESPACE_BEGIN(enoki)
 NAMESPACE_BEGIN(detail)
 
@@ -53,7 +55,7 @@ void write_indices(uint32_t *out, uint32_t &count, T &value) {
 template <bool IsCUDA, typename Func, typename... Args>
 bool record(const char *domain, const char *name, uint32_t &id, uint64_t &hash,
             uint32_t *in, uint32_t *out, uint32_t *need_in, uint32_t *need_out,
-            detail::ek_vector<uint32_t> &extra, Func func,
+            ek_vector<uint32_t> &extra, Func func,
             const Args &... args) {
     using Result = decltype(func(args...));
 
@@ -104,18 +106,18 @@ ENOKI_INLINE Result dispatch_jit_symbolic(const char *name, Func func, const Sel
     (read_indices(nullptr, in_count, args), ...);
     read_indices(nullptr, out_count, result);
 
-    detail::ek_unique_ptr<uint32_t[]> call_id(new uint32_t[n_inst]);
-    detail::ek_unique_ptr<uint64_t[]> call_hash(new uint64_t[n_inst]);
-    detail::ek_unique_ptr<uint32_t[]> extra_offset(new uint32_t[n_inst]);
-    detail::ek_unique_ptr<uint32_t[]> in(new uint32_t[in_count]),
-                                      need_in(new uint32_t[in_count]),
-                                      out(new uint32_t[out_count]),
-                                      need_out(new uint32_t[out_count]);
+    ek_unique_ptr<uint32_t[]> call_id(new uint32_t[n_inst]);
+    ek_unique_ptr<uint64_t[]> call_hash(new uint64_t[n_inst]);
+    ek_unique_ptr<uint32_t[]> extra_offset(new uint32_t[n_inst]);
+    ek_unique_ptr<uint32_t[]> in(new uint32_t[in_count]),
+                                 need_in(new uint32_t[in_count]),
+                                 out(new uint32_t[out_count]),
+                                 need_out(new uint32_t[out_count]);
 
-    detail::ek_vector<uint32_t> extra;
+    ek_vector<uint32_t> extra;
     bool side_effects = false;
 
-    int need_init = (jit_flags() & (uint32_t) JitFlag::OptimizeVCalls) ? 0 : 1;
+    int need_init = (jit_flags() & (uint32_t) JitFlag::VCallOptimize) ? 0 : 1;
     memset(need_in.get(), need_init, in_count * sizeof(uint32_t));
     memset(need_out.get(), need_init, out_count * sizeof(uint32_t));
 
