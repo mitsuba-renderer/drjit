@@ -157,9 +157,8 @@ struct Variable {
                     /* While recording derivative code symbolically, turn
                        gradient updates involving pre-allocated memory regions into
                        scatters. */
-                    if (next_rev == 0 &&
-                        (jit_flags() & (uint32_t) JitFlag::VCallRecord) != 0 &&
-                        ((const T &) grad).data()) {
+                    bool recording = jit_flag(JitFlag::PostponeSideEffects);
+                    if (next_rev == 0 && recording) {
                         scatter_reduce(ReduceOp::Add, grad, v, uint32_array_t<T>(0), neq(v, 0.f));
                         return;
                     }
@@ -177,9 +176,11 @@ struct Variable {
 
     template <typename T>
     void mul_accum(const T &v1, const T &v2, uint32_t src_size) {
+        auto inactive = enoki::eq(v1, 0.f);
+
         if constexpr (is_array_v<T>) {
             if (size == 1 && src_size != 1) {
-                T v3 = enoki::select(enoki::eq(v1, 0.f), 0.f, v1 * v2);
+                T v3 = enoki::select(inactive, 0.f, v1 * v2);
                 if (((const T &) v1).size() == 1 &&
                     ((const T &) v2).size() == 1)
                     v3 = v3 * Scalar(src_size);
@@ -195,23 +196,21 @@ struct Variable {
                     /* While recording derivative code symbolically, turn
                        gradient updates involving pre-allocated memory regions into
                        scatters. */
-                    if (next_rev == 0 &&
-                        (jit_flags() & (uint32_t) JitFlag::VCallRecord) != 0 &&
-                        ((const T &) grad).data()) {
+                    bool recording = jit_flag(JitFlag::PostponeSideEffects);
+                    if (next_rev == 0 && recording) {
                         scatter_reduce(ReduceOp::Add, grad, v1 * v2, uint32_array_t<T>(0), neq(v1, 0));
                         return;
                     }
                 }
 
                 if (((const T &) grad).valid())
-                    grad = enoki::select(enoki::eq(v1, 0.f), grad,
-                                         enoki::fmadd(v1, v2, grad));
+                    grad =
+                        enoki::select(inactive, grad, enoki::fmadd(v1, v2, grad));
                 else
-                    grad = enoki::select(enoki::eq(v1, 0.f), 0.f, v1 * v2);
+                    grad = enoki::select(inactive, 0.f, v1 * v2);
             }
         } else {
-            grad = enoki::select(enoki::eq(v1, 0.f),
-                                 grad, enoki::fmadd(v1, v2, grad));
+            grad = enoki::select(inactive, grad, enoki::fmadd(v1, v2, grad));
         }
     }
 
@@ -554,7 +553,7 @@ int32_t ad_new(const char *label, uint32_t size, uint32_t op_count,
         if constexpr (std::is_scalar_v<T>)
             weight_is_zero = weights[i] == 0;
         else
-            weight_is_zero = weights[i].is_literal() && weights[i] == 0;
+            weight_is_zero = weights[i].is_literal() && weights[i][0] == 0;
 
         if (weight_is_zero)
             continue;
