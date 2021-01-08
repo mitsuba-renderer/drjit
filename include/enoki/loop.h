@@ -53,7 +53,6 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
 
         if constexpr (sizeof...(Args) > 0) {
             put(args...);
-            init();
         }
     }
 

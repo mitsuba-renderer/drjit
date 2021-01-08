@@ -35,6 +35,7 @@ ENOKI_TEST(test01_record_loop) {
             Float z = 1;
 
             Loop<Mask> loop("MyLoop", x, y, z);
+            loop.init();
             while (loop.cond(x < 5)) {
                 y += Float(x);
                 x += 1;
