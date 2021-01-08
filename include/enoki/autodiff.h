@@ -232,7 +232,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             if constexpr (IsEnabled) {
                 if (m_index > 0 || a.m_index > 0) {
                     int32_t indices[2] = { m_index, a.m_index };
-                    Type weights[2] = { 1.f, 1.f };
+                    Type weights[2] = { 1, 1 };
                     index_new = detail::ad_new<Type>(
                         "add", (uint32_t) width(result), 2, indices, weights);
                 }
@@ -250,7 +250,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             if constexpr (IsEnabled) {
                 if (m_index > 0 || a.m_index > 0) {
                     int32_t indices[2] = { m_index, a.m_index };
-                    Type weights[2] = { 1.f, -1.f };
+                    Type weights[2] = { 1, -1 };
                     index_new = detail::ad_new<Type>(
                         "sub", (uint32_t) width(result), 2, indices, weights);
                 }
@@ -305,7 +305,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             if constexpr (IsEnabled) {
                 if (m_index > 0) {
                     int32_t indices[1] = { m_index };
-                    Type weights[1] = { -1.f };
+                    Type weights[1] = { -1 };
                     index_new = detail::ad_new<Type>(
                         "neg", (uint32_t) width(result), 1, indices, weights);
                 }
@@ -323,7 +323,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             if constexpr (IsEnabled) {
                 if (m_index > 0 || a.m_index > 0 || b.m_index > 0) {
                     int32_t indices[3] = { m_index, a.m_index, b.m_index };
-                    Type weights[3] = { a.m_value, m_value, 1.f };
+                    Type weights[3] = { a.m_value, m_value, 1 };
                     index_new = detail::ad_new<Type>(
                         "fmadd", (uint32_t) width(result), 3, indices, weights);
                 }
@@ -341,7 +341,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             if constexpr (IsEnabled) {
                 if (m_index > 0 || a.m_index > 0 || b.m_index > 0) {
                     int32_t indices[3] = { m_index, a.m_index, b.m_index };
-                    Type weights[3] = { a.m_value, m_value, -1.f };
+                    Type weights[3] = { a.m_value, m_value, -1 };
                     index_new = detail::ad_new<Type>(
                         "fmsub", (uint32_t) width(result), 3, indices, weights);
                 }
@@ -359,7 +359,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             if constexpr (IsEnabled) {
                 if (m_index > 0 || a.m_index > 0 || b.m_index > 0) {
                     int32_t indices[3] = { m_index, a.m_index, b.m_index };
-                    Type weights[3] = { -a.m_value, -m_value, 1.f };
+                    Type weights[3] = { -a.m_value, -m_value, 1 };
                     index_new = detail::ad_new<Type>(
                         "fnmadd", (uint32_t) width(result), 3, indices, weights);
                 }
@@ -377,7 +377,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             if constexpr (IsEnabled) {
                 if (m_index > 0 || a.m_index > 0 || b.m_index > 0) {
                     int32_t indices[3] = { m_index, a.m_index, b.m_index };
-                    Type weights[3] = { -a.m_value, -m_value, -1.f };
+                    Type weights[3] = { -a.m_value, -m_value, -1 };
                     index_new = detail::ad_new<Type>(
                         "fnmsub", (uint32_t) width(result), 3, indices, weights);
                 }
@@ -431,7 +431,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             if constexpr (IsEnabled) {
                 if (m_index > 0) {
                     int32_t indices[1] = { m_index };
-                    Type weights[1] = { (1.f / 3.f) * sqr(rcp(result)) };
+                    Type weights[1] = { (1 / 3.f) * sqr(rcp(result)) };
                     index_new = detail::ad_new<Type>(
                         "cbrt", (uint32_t) width(result), 1, indices, weights);
                 }
@@ -760,7 +760,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             if constexpr (IsEnabled) {
                 if (m_index > 0) {
                     int32_t indices[1] = { m_index };
-                    Type weights[1] = { rsqrt(fnmadd(m_value, m_value, 1.f)) };
+                    Type weights[1] = { rsqrt(fnmadd(m_value, m_value, 1)) };
                     index_new = detail::ad_new<Type>(
                         "asin", (uint32_t) width(result), 1, indices, weights);
                 }
@@ -778,7 +778,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             if constexpr (IsEnabled) {
                 if (m_index > 0) {
                     int32_t indices[1] = { m_index };
-                    Type weights[1] = { -rsqrt(fnmadd(m_value, m_value, 1.f)) };
+                    Type weights[1] = { -rsqrt(fnmadd(m_value, m_value, 1)) };
                     index_new = detail::ad_new<Type>(
                         "acos", (uint32_t) width(result), 1, indices, weights);
                 }
@@ -796,7 +796,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             if constexpr (IsEnabled) {
                 if (m_index > 0) {
                     int32_t indices[1] = { m_index };
-                    Type weights[1] = { rcp(fmadd(m_value, m_value, 1.f)) };
+                    Type weights[1] = { rcp(fmadd(m_value, m_value, 1)) };
                     index_new = detail::ad_new<Type>(
                         "atan", (uint32_t) width(result), 1, indices, weights);
                 }
@@ -1246,7 +1246,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             if constexpr (IsEnabled) {
                 if (m_index > 0) {
                     int32_t indices[1] = { m_index };
-                    Type weights[1] = { 1.f };
+                    Type weights[1] = { 1 };
                     index_new = detail::ad_new<Type>(
                         "hsum_async", 1, 1, indices, weights);
                 }
@@ -1556,7 +1556,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         if constexpr (IsEnabled) {
             if (m_index) {
                 int32_t indices[1] = { m_index };
-                Type weights[1] = { 1.f };
+                Type weights[1] = { 1 };
 
                 DiffArray result;
                 result.m_index = detail::ad_new<Type>(

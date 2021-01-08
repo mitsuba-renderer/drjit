@@ -35,7 +35,7 @@ struct DiffVCall
                 const Args &... args) override {
         m_name = name;
         return Result();
-        // return dispatch_jit_record<Result>(name, func, self, detach<false>(args)...);
+        // return vcall_jit_record<Result>(name, func, detach(self), detach<false>(args)...);
     }
 
     template <size_t... Is>
@@ -49,7 +49,7 @@ struct DiffVCall
         // ek_unique_ptr<char[]> name(new char[name_size]);
         // snprintf(name.get(), name_size, "ad_fwd[%s]", m_name);
 
-        // Result grad_out = dispatch_jit_record<Result>(
+        // Result grad_out = vcall_jit_record<Result>(
         //     name.get(), func_fwd, self, detail::ek_tuple(Base::template grad_in<5 + Is>()...),
         //     Base::template value_in<5 + Is>()...);
 
@@ -74,7 +74,7 @@ struct DiffVCall
         // ek_unique_ptr<char[]> name(new char[name_size]);
         // snprintf(name.get(), name_size, "ad_rev[%s]", m_name);
 
-        // ResultRev grad_in = dispatch_jit_record<ResultRev>(
+        // ResultRev grad_in = vcall_jit_record<ResultRev>(
         //     name.get(), func_rev, self, Base::grad_out(),
         //     Base::template value_in<5 + Is>()...);
 
@@ -105,10 +105,10 @@ private:
 
 template <typename Result, typename Func, typename FuncFwd, typename FuncRev,
           typename Self, typename... Args>
-ENOKI_INLINE Result dispatch_autodiff(const char *name,
-                                      const Func &func, const FuncFwd &func_fwd,
-                                      const FuncRev &func_rev, const Self &self,
-                                      const Args &... args) {
+ENOKI_INLINE Result vcall_autodiff(const char *name,
+                                   const Func &func, const FuncFwd &func_fwd,
+                                   const FuncRev &func_rev, const Self &self,
+                                   const Args &... args) {
     using Type = leaf_array_t<Result, Args...>;
 
     if constexpr (is_diff_array_v<Type> && std::is_floating_point_v<scalar_t<Type>>) {
@@ -116,7 +116,7 @@ ENOKI_INLINE Result dispatch_autodiff(const char *name,
             name, self, func, func_fwd, func_rev, args...);
     } else {
         return Result();
-        // return dispatch_jit_record<Result>(name, func, self, args...);
+        // return vcall_jit_record<Result>(name, func, detach(self), args...);
     }
 }
 
