@@ -18,7 +18,7 @@ NAMESPACE_BEGIN(detail)
 template <typename T, typename UInt32>
 ENOKI_INLINE decltype(auto) gather_helper(const T& value, const UInt32 &perm) {
     if constexpr (is_jit_array_v<T>) {
-        return enoki::gather<T, true>(value, perm);
+        return gather<T, true>(value, perm);
     } else if constexpr (is_enoki_struct_v<T>) {
         T result = value;
         struct_support_t<T>::apply_1(

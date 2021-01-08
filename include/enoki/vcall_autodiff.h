@@ -34,8 +34,8 @@ struct DiffVCall
                 const FuncRev &,
                 const Args &... args) override {
         m_name = name;
-        return dispatch_jit_record<Result>(name, func, self,
-                                           detach<false>(args)...);
+        return Result();
+        // return dispatch_jit_record<Result>(name, func, self, detach<false>(args)...);
     }
 
     template <size_t... Is>
@@ -115,7 +115,8 @@ ENOKI_INLINE Result dispatch_autodiff(const char *name,
         return custom<DiffVCall<Type, Self, Result, Func, FuncFwd, FuncRev, Args...>>(
             name, self, func, func_fwd, func_rev, args...);
     } else {
-        return dispatch_jit_record<Result>(name, func, self, args...);
+        return Result();
+        // return dispatch_jit_record<Result>(name, func, self, args...);
     }
 }
 

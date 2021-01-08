@@ -648,9 +648,9 @@ ENOKI_DECLARE_EXTERN_TEMPLATE(LLVMArray<float>, LLVMArray<bool>, LLVMArray<uint3
 ENOKI_DECLARE_EXTERN_TEMPLATE(LLVMArray<double>, LLVMArray<bool>, LLVMArray<uint32_t>)
 #endif
 
+NAMESPACE_END(enoki)
+
 #if defined(ENOKI_VCALL_H)
 #  include <enoki/vcall_jit_reduce.h>
 #  include <enoki/vcall_jit_record.h>
 #endif
-
-NAMESPACE_END(enoki)

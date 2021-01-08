@@ -1503,11 +1503,11 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
     // -----------------------------------------------------------------------
 
     DiffArray placeholder_(bool propagate_literals) const {
-        return enoki::placeholder<Type>(m_value, propagate_literals);
+        return placeholder<Type>(m_value, propagate_literals);
     }
 
     static DiffArray empty_(size_t size) {
-        return enoki::empty<Type>(size);
+        return empty<Type>(size);
     }
 
     static DiffArray zero_(size_t size) {
@@ -1633,26 +1633,28 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
 
     void enqueue_() const {
         if constexpr (IsEnabled)
-            enoki::detail::ad_enqueue<Type>(m_index);
+            detail::ad_enqueue<Type>(m_index);
     }
 
     static void traverse_(bool backward, bool retain_graph) {
         ENOKI_MARK_USED(backward);
         if constexpr (IsEnabled)
-            enoki::detail::ad_traverse<Type>(backward, retain_graph);
+            detail::ad_traverse<Type>(backward, retain_graph);
     }
 
     void set_label_(const char *label) const {
-        if constexpr (IsEnabled)
-            enoki::detail::ad_set_label<Type>(m_index, label);
-        if constexpr (is_jit_array_v<Type>)
-            return m_value.set_label_(label);
+        set_label(m_value, label);
+
+        if constexpr (IsEnabled) {
+            if (m_index)
+                detail::ad_set_label<Type>(m_index, label);
+        }
     }
 
     const char *label_() const {
         if constexpr (IsEnabled) {
             if (m_index > 0)
-                enoki::detail::ad_label<Type>(m_index);
+                detail::ad_label<Type>(m_index);
         }
         if constexpr (is_jit_array_v<Type>)
             return m_value.label_();
@@ -1661,7 +1663,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
 
     static const char *graphviz_(bool backward) {
         if constexpr (IsEnabled)
-            return enoki::detail::ad_graphviz<Type>(backward);
+            return detail::ad_graphviz<Type>(backward);
     }
 
     const Type &detach_() const {
@@ -1687,15 +1689,6 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
     void accum_grad_(const Type &value) {
         if constexpr (IsEnabled)
             detail::ad_accum_grad<Type>(m_index, value);
-    }
-
-    void set_label(const char *label) {
-        enoki::set_label(m_value, label);
-
-        if constexpr (IsEnabled) {
-            if (m_index)
-                detail::ad_set_label<Type>(m_index, label);
-        }
     }
 
     size_t size() const {
