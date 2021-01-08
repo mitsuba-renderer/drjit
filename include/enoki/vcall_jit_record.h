@@ -155,7 +155,8 @@ Result vcall_jit_record(const char *name, const Func &func,
         if constexpr (IsVoid)
             func(inst, args...);
         else
-            result = func(inst, args...);
+            result = select(neq(self, nullptr), func(inst, args...),
+                            zero<Result_2>());
     } else {
         result = vcall_impl<Result_2>(
             name, n_inst, func, self,
