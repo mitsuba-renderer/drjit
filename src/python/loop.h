@@ -8,20 +8,14 @@ template <typename Mask> struct Loop : ek::Loop<Mask> {
     using Base::m_index_p;
     using Base::m_index_in;
     using Base::m_invariant;
-    using Base::m_name;
 
     Loop(const char *name, py::args args) : Base(name) {
-        m_name = strdup(name);
         py::object detail = py::module_::import("enoki").attr("detail");
         m_read_indices  = detail.attr("read_indices");
         m_write_indices = detail.attr("write_indices");
         for (py::handle h : args)
             put(h);
         init();
-    }
-
-    ~Loop() {
-        free((char *) m_name);
     }
 
     void put(py::handle arg) {

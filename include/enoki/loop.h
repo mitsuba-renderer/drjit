@@ -44,8 +44,13 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
 
     template <typename... Args>
     Loop(const char *name, Args &... args)
-        : m_name(name), m_size(0), m_se_offset((uint32_t) -1),
-          m_state(0), m_record(jit_flag(JitFlag::LoopRecord)) {
+        : m_state(0), m_se_offset((uint32_t) -1), m_se_flag(0), m_size(0),
+          m_record(jit_flag(JitFlag::LoopRecord)) {
+
+        size_t size = strlen(name) + 1;
+        m_name = ek_unique_ptr<char[]>(new char[size]);
+        memcpy(m_name.get(), name, size);
+
         if constexpr (sizeof...(Args) > 0) {
             put(args...);
             init();
@@ -60,16 +65,12 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
 
             for (size_t i = 0; i < m_index_body.size(); ++i)
                 jit_var_dec_ref_ext(m_index_body[i]);
-
-            if (Backend == JitBackend::LLVM && m_cond.index())
-                jit_var_mask_pop(Backend);
         }
 
         // Recover if an error occurred while running a wavefront-style loop
         if (!m_record && m_index_out.size() > 0) {
             for (size_t i = 0; i < m_index_out.size(); ++i)
                 jit_var_dec_ref_ext(m_index_out[i]);
-            jit_var_mask_pop(Backend);
         }
 
         if (m_state != 0 && m_state != 3 && m_state != 4)
@@ -91,15 +92,15 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
                         jit_raise("enoki::Loop::put(): a loop variable (or "
                                   "an element of a data structure provided "
                                   "as a loop variable) is unintialized!");
-					m_index_p.push_back(value.index_ptr());
-					m_index_in.push_back(value.index());
-					m_invariant.push_back(0);
-					size_t size = value.size();
-					if (m_size != 0 && size != 1 && size != m_size)
+                    m_index_p.push_back(value.index_ptr());
+                    m_index_in.push_back(value.index());
+                    m_invariant.push_back(0);
+                    size_t size = value.size();
+                    if (m_size != 0 && size != 1 && size != m_size)
                         jit_raise("enoki::Loop::put(): loop variables have "
                                   "inconsistent sizes!");
                     if (size > m_size)
-						m_size = size;
+                        m_size = size;
                 }
             } else {
                 for (size_t i = 0; i < value.size(); ++i)
@@ -137,6 +138,27 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
     }
 
 protected:
+    struct MaskStackHelper {
+    public:
+        void push(uint32_t index) {
+            if (m_armed)
+                jit_fail("MaskStackHelper::internal error! (1)");
+            jit_var_mask_push(Mask::Backend, index);
+            m_armed = true;
+        }
+        void pop() {
+            if (!m_armed)
+                jit_fail("MaskStackHelper::internal error! (2)");
+            jit_var_mask_pop(Mask::Backend);
+            m_armed = false;
+        }
+        ~MaskStackHelper() {
+            if (m_armed)
+                pop();
+        }
+    private:
+        bool m_armed = false;
+    };
 
     bool cond_record(const Mask &cond) {
         uint32_t n = (uint32_t) m_index_p.size();
@@ -151,10 +173,6 @@ protected:
                    variables using placeholders once more. They will represent
                    their state at the start of the loop body. */
                 m_cond = detach(cond);
-                if constexpr (Backend == JitBackend::LLVM) {
-                    jit_var_mask_push(Backend, cond.index());
-                    printf("Registering mask..\n");
-                }
                 step();
                 for (uint32_t i = 0; i < n; ++i) {
                     uint32_t index = *m_index_p[i];
@@ -162,14 +180,18 @@ protected:
                     jit_var_inc_ref_ext(index);
                 }
                 m_state++;
+                if constexpr (Backend == JitBackend::LLVM)
+                    m_mask_stack.push(cond.index());
                 return true;
 
             case 2:
             case 3:
+                if constexpr (Backend == JitBackend::LLVM)
+                    m_mask_stack.pop();
                 for (uint32_t i = 0; i < n; ++i)
                     m_index_out.push_back(*m_index_p[i]);
 
-                jit_var_loop(m_name, m_cond.index(),
+                jit_var_loop(m_name.get(), m_cond.index(),
                              (uint32_t) n, m_index_body.data(),
                              m_index_out.data(), m_se_offset,
                              m_index_out.data(), m_state == 2,
@@ -204,6 +226,8 @@ protected:
                     }
 
                     m_state++;
+                    if constexpr (Backend == JitBackend::LLVM)
+                        m_mask_stack.push(cond.index());
                     return true;
                 } else {
                     // No optimization opportunities, stop now.
@@ -221,8 +245,6 @@ protected:
                     jit_set_flag(JitFlag::PostponeSideEffects, m_se_flag);
                     m_se_offset = (uint32_t) -1;
                     m_cond = Mask();
-                    if constexpr (Backend == JitBackend::LLVM)
-                        jit_var_mask_pop(Backend);
                     m_state++;
                     return false;
                 }
@@ -247,13 +269,13 @@ protected:
     bool cond_wavefront(const Mask &cond) {
         // Need to mask loop variables for disabled lanes
         if (m_cond.index()) {
+            m_mask_stack.pop();
             for (uint32_t i = 0; i < m_index_p.size(); ++i) {
                 uint32_t i1 = *m_index_p[i], i2 = m_index_out[i];
                 *m_index_p[i] = jit_var_new_op_3(JitOp::Select, m_cond.index(), i1, i2);
                 jit_var_dec_ref_ext(i1);
                 jit_var_dec_ref_ext(i2);
             }
-            jit_var_mask_pop(Backend);
             m_index_out.clear();
             m_cond = Mask();
         }
@@ -266,16 +288,15 @@ protected:
 
         // Do we run another iteration?
         if (jit_var_any(cond.index())) {
-            // Mask scatters/gathers/vcalls in the next iteration
-            m_cond = cond;
-            jit_var_mask_push(Backend, cond.index());
-
             for (uint32_t i = 0; i < m_index_p.size(); ++i) {
                 uint32_t index = *m_index_p[i];
                 jit_var_inc_ref_ext(index);
                 m_index_out.push_back(index);
             }
 
+            // Mask scatters/gathers/vcalls in the next iteration
+            m_cond = cond;
+            m_mask_stack.push(cond.index());
             return true;
         } else {
             return false;
@@ -284,7 +305,7 @@ protected:
 
 protected:
     /// A descriptive name
-    const char *m_name;
+    ek_unique_ptr<char[]> m_name;
 
     /// Pointers to loop variable indices
     ek_vector<uint32_t *> m_index_p;
@@ -304,8 +325,11 @@ protected:
     /// Stashed mask variable from the previous iteration
     detached_t<Mask> m_cond;
 
-    /// Keeps track of the size of loop variables to catch issues
-    size_t m_size;
+    /// RAII wrapper for the mask stack
+    MaskStackHelper m_mask_stack;
+
+    /// Index of the symbolic loop state machine
+    uint32_t m_state;
 
     /// Offset in the side effects queue before the beginning of the loop
     uint32_t m_se_offset;
@@ -313,8 +337,8 @@ protected:
     /// State of the PostponeSideEffects flag
     int m_se_flag;
 
-    /// Index of the symbolic loop state machine
-    uint32_t m_state;
+    /// Keeps track of the size of loop variables to catch issues
+    size_t m_size;
 
     /// Is the loop being recorded symbolically
     bool m_record;
