@@ -23,9 +23,11 @@ extern "C" {
     extern ENOKI_IMPORT void jit_registry_remove(void *ptr);
     extern ENOKI_IMPORT uint32_t jit_registry_get_id(const void *ptr);
     extern ENOKI_IMPORT void jit_registry_set_attr(void *ptr, const char *name,
-                                                    const void *value, size_t size);
-    extern ENOKI_IMPORT const void *jit_registry_attr_data(const char *domain,
-                                                            const char *name);
+                                                   const void *value, size_t size);
+    extern ENOKI_IMPORT uint32_t jit_var_registry_attr(JitBackend backend,
+                                                       VarType type,
+                                                       const char *domain,
+                                                       const char *name);
     extern ENOKI_IMPORT uint32_t jit_flags();
 };
 
@@ -210,8 +212,10 @@ NAMESPACE_END(enoki)
         if constexpr (is_jit_array_v<Array>) {                                 \
             using Result = replace_scalar_t<Array, type>;                      \
             using UInt32 = uint32_array_t<Array>;                              \
-            return enoki::gather<Result>(                                      \
-                jit_registry_attr_data(Domain, #name),                         \
+            Result data = Result::steal(                                       \
+                jit_var_registry_attr(Result::Backend, Result::Type,           \
+                                      Domain, #name));                         \
+            return enoki::gather<Result>(data,                                 \
                 UInt32::borrow(detach(array).index()), mask);                  \
         } else {                                                               \
             return detail::dispatch<Class>(                                    \
