@@ -398,11 +398,12 @@ ENOKI_INLINE Array1 mulsign(const Array1 &v1, const Array2 &v2) {
 
 template <typename Array1, typename Array2>
 ENOKI_INLINE Array1 mulsign_neg(const Array1 &v1, const Array2 &v2) {
-    if constexpr (std::is_floating_point_v<scalar_t<Array2>> && !is_diff_array_v<Array2>) {
-        return detail::xor_(v1, detail::andnot_(detail::sign_mask<Array2>(), v2));
-    } else {
+    // TODO add support for binary op for floats
+    // if constexpr (std::is_floating_point_v<scalar_t<Array2>> && !is_diff_array_v<Array2>) {
+    //     return detail::xor_(v1, detail::andnot_(detail::sign_mask<Array2>(), v2));
+    // } else {
         return select(v2 >= 0, -v1, v1);
-    }
+    // }
 }
 
 /// Fast implementation to compute ``floor(log2(value))`` for integer ``value``

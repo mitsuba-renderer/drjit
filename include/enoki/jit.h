@@ -526,8 +526,8 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, JitArray<Backend_, Value_
             enoki_raise("Unsupported operand type");
         } else {
             uint32_t bucket_count = 0;
-            VCallBucket *buckets =
-                jit_vcall(Backend, CallSupport::Domain, m_index, &bucket_count);
+            VCallBucket *buckets = jit_var_vcall_reduce(
+                Backend, CallSupport::Domain, m_index, &bucket_count);
             return { buckets, bucket_count };
         }
     }

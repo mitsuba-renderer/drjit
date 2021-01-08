@@ -36,7 +36,7 @@ void collect_indices(ek_index_vector &indices, const T &value) {
 }
 
 template <typename T>
-void write_indices(ek_index_vector &indices, T &value, uint32_t &offset) {
+void write_indices(ek_vector<uint32_t> &indices, T &value, uint32_t &offset) {
     if constexpr (array_depth_v<T> > 1) {
         for (size_t i = 0; i < value.derived().size(); ++i)
             write_indices(indices, value.derived().entry(i), offset);
@@ -113,7 +113,7 @@ Result vcall_impl(const char *name, uint32_t n_inst, const Func &func,
         se_count[i] = jit_side_effects_scheduled(Backend);
     }
 
-    ek_index_vector indices_out(indices_out_all.size() / n_inst);
+    ek_vector<uint32_t> indices_out(indices_out_all.size() / n_inst, 0);
 
     JitArray<Backend, Base *> self_masked =
         self &
