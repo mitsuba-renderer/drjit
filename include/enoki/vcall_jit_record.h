@@ -78,6 +78,7 @@ Result vcall_impl(const char *name, uint32_t n_inst, const Func &func,
                   const JitArray<Backend, bool> &mask,
                   std::index_sequence<Is...>, const Args &... args) {
     constexpr size_t N = sizeof...(Args);
+    char label[128];
     Result result;
     using Self = JitArray<Backend, Base *>;
 
@@ -88,7 +89,6 @@ Result vcall_impl(const char *name, uint32_t n_inst, const Func &func,
     se_count[0] = jit_side_effects_scheduled(Backend);
 
     for (uint32_t i = 1; i <= n_inst; ++i) {
-        char label[128];
         snprintf(label, sizeof(label), "VCall: %s::%s() [instance %u]",
                  Base::Domain, name, i);
         Base *base = (Base *) jit_registry_get_ptr(Base::Domain, i);
@@ -119,7 +119,9 @@ Result vcall_impl(const char *name, uint32_t n_inst, const Func &func,
         self &
         (JitArray<Backend, bool>::steal(jit_var_mask_peek(Backend)) & mask);
 
-    jit_var_vcall(Base::Domain, self_masked.index(), n_inst, indices_in.size(),
+    snprintf(label, sizeof(label), "%s::%s()", Base::Domain, name);
+
+    jit_var_vcall(label, self_masked.index(), n_inst, indices_in.size(),
                   indices_in.data(), indices_out_all.size(),
                   indices_out_all.data(), se_count.data(), indices_out.data());
 
