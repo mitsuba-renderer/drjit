@@ -126,6 +126,8 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
             m_se_offset = jit_side_effects_scheduled(Backend);
             step();
             m_state = 1;
+            jit_log(::LogLevel::Info,
+                    "ek::Loop(): --------- begin recording loop ---------");
         }
     }
 
@@ -227,8 +229,12 @@ protected:
                     m_state++;
                     if constexpr (Backend == JitBackend::LLVM)
                         m_mask_stack.push(cond.index());
+                    jit_log(::LogLevel::Info,
+                            "ek::Loop(): ----- recording loop body *again* ------");
                     return true;
                 } else {
+                    jit_log(::LogLevel::Info,
+                            "ek::Loop(): --------- done recording loop ----------");
                     // No optimization opportunities, stop now.
                     for (uint32_t i = 0; i < n; ++i)
                         jit_var_dec_ref_ext(m_index_body[i]);
