@@ -83,9 +83,15 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, JitArray<Backend_, Value_
     }
 
     template <typename T, enable_if_scalar_t<T> = 0>
-    JitArray(T v) {
-        scalar_t<Value> value(v);
-        m_index = jit_var_new_literal(Backend, Type, &value);
+    JitArray(T value) {
+        ActualValue av;
+
+        if constexpr (!IsClass)
+            av = (ActualValue) value;
+        else
+            av = jit_registry_get_id(value);
+
+        m_index = jit_var_new_literal(Backend, Type, &av);
     }
 
     template <typename... Ts, enable_if_t<(sizeof...(Ts) > 1 &&
