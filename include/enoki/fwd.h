@@ -227,7 +227,9 @@ struct PacketMask;
 template <typename Value_> struct DynamicArray;
 
 /// JIT-compiled dynamically sized generic array
-template <JitBackend Backend_, typename Value_> struct JitArray;
+template <JitBackend Backend_, typename Value_, typename Derived_> struct JitArray;
+template <typename Value_> struct CUDAArray;
+template <typename Value_> struct LLVMArray;
 
 /// Forward- and reverse-mode automatic differentiation wrapper
 template <typename Value_> struct DiffArray;
