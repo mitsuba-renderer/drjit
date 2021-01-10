@@ -35,7 +35,7 @@ ENOKI_INLINE decltype(auto) gather_helper(const T& value, const UInt32 &perm) {
 
 template <typename Mask>
 struct MaskScope {
-    MaskScope(const Mask &mask) { jit_var_mask_push(Mask::Backend, mask.index()); }
+    MaskScope(const Mask &mask) { jit_var_mask_push(Mask::Backend, mask.index(), 0); }
     ~MaskScope() { jit_var_mask_pop(Mask::Backend); }
 };
 
@@ -55,13 +55,17 @@ Result vcall_jit_reduce_impl(Func func, const Self &self,
 
     Result result;
     if (n_inst > 0 && self_size > 0) {
+        Mask mask = extract_mask<Mask>(args...);
+
+        if (jit_var_mask_size(Mask::Backend))
+            mask &= Mask::steal(jit_var_mask_peek(Mask::Backend));
+
         result = empty<Result>(self.size());
         for (size_t i = 0; i < n_inst ; ++i) {
             UInt32 perm = UInt32::borrow(buckets[i].index);
 
             if (buckets[i].ptr) {
-                Mask mask = gather<Mask>(extract_mask<Mask>(args...), perm);
-                MaskScope<Mask> scope(mask);
+                MaskScope<Mask> scope(gather<Mask>(mask, perm));
 
                 if constexpr (!std::is_same_v<Result, std::nullptr_t>) {
                     using OrigResult = decltype(func((Class) nullptr, args...));
@@ -75,6 +79,7 @@ Result vcall_jit_reduce_impl(Func func, const Self &self,
                     func((Class) buckets[i].ptr, gather_helper<Is, N>(args, perm)...);
                 }
             } else {
+                MaskScope<Mask> scope(true);
                 if constexpr (!std::is_same_v<Result, std::nullptr_t>)
                     scatter<true>(result, zero<Result>(), perm);
             }
