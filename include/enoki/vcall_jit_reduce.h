@@ -51,8 +51,10 @@ Result vcall_jit_reduce_impl(Func func, const Self &self,
     schedule(args...);
     auto [buckets, n_inst] = self.vcall_();
 
+    size_t self_size = self.size();
+
     Result result;
-    if (n_inst > 0) {
+    if (n_inst > 0 && self_size > 0) {
         result = empty<Result>(self.size());
         for (size_t i = 0; i < n_inst ; ++i) {
             UInt32 perm = UInt32::borrow(buckets[i].index);
@@ -79,7 +81,7 @@ Result vcall_jit_reduce_impl(Func func, const Self &self,
         }
         schedule(result);
     } else {
-        result = zero<Result>(self.size());
+        result = zero<Result>(self_size);
     }
 
     return result;

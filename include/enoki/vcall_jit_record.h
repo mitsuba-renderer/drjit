@@ -132,9 +132,11 @@ Result vcall_jit_record(const char *name, const Func &func, Self &self,
         n_inst_actual++;
     }
 
+    size_t self_size = self.size();
+
     Result result;
-    if (n_inst_actual == 0) {
-        result = zero<Result>(width(self));
+    if (n_inst_actual == 0 || self_size == 0) {
+        result = zero<Result>(self_size);
     } else if (n_inst_actual == 1) {
         if constexpr (std::is_same_v<Result, std::nullptr_t>)
             func(inst, args...);
