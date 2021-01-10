@@ -1489,8 +1489,8 @@ template <typename... Ts> void resume_grad(Ts&... ts) {
     (set_grad_suspended(ts, false), ...);
 }
 
-template <bool Underlying = true, typename T> auto detach(const T &value) {
-    using Result = std::conditional_t<Underlying, detached_t<T>, T>;
+template <bool UnderlyingType = true, typename T> decltype(auto) detach(T &&value) {
+    using Result = std::conditional_t<UnderlyingType, detached_t<T>, std::decay_t<T>>;
 
     if constexpr (is_diff_array_v<T>) {
         if constexpr (array_depth_v<T> > 1) {
@@ -1499,11 +1499,14 @@ template <bool Underlying = true, typename T> auto detach(const T &value) {
                 result = empty<Result>(value.size());
 
             for (size_t i = 0; i < value.size(); ++i)
-                result.entry(i) = detach<Underlying>(value.entry(i));
+                result.entry(i) = detach<UnderlyingType>(value.entry(i));
 
             return result;
         } else {
-            return value.derived().detach_();
+            if constexpr (UnderlyingType)
+                return value.derived().detach_();
+            else
+                return Result(value.derived().detach_());
         }
     } else if constexpr (is_enoki_struct_v<T>) {
         Result result;
@@ -1511,7 +1514,7 @@ template <bool Underlying = true, typename T> auto detach(const T &value) {
         struct_support_t<T>::apply_2(
             value, result,
             [](auto const &x1, auto &x2) ENOKI_INLINE_LAMBDA {
-                x2 = detach<Underlying>(x1);
+                x2 = detach<UnderlyingType>(x1);
             });
 
         return result;
