@@ -13,9 +13,11 @@ template <typename Mask> struct Loop : ek::Loop<Mask> {
         py::object detail = py::module_::import("enoki").attr("detail");
         m_read_indices  = detail.attr("read_indices");
         m_write_indices = detail.attr("write_indices");
-        for (py::handle h : args)
-            put(h);
-        init();
+        if (args.size() > 0) {
+            for (py::handle h : args)
+                put(h);
+            init();
+        }
     }
 
     void put(py::handle arg) {
@@ -27,11 +29,11 @@ template <typename Mask> struct Loop : ek::Loop<Mask> {
         size_t size = indices.size();
 
         for (uint32_t i = 0; i < size; ++i)
-            m_index_p_py.push_back(py::cast<uint32_t>(indices[i]));
+            m_index_py.push_back(py::cast<uint32_t>(indices[i]));
 
         for (uint32_t i = 0; i < size; ++i) {
-            m_index_p.push_back(&m_index_p_py[i]);
-            m_index_in.push_back(m_index_p_py[i]);
+            m_index_p.push_back(&m_index_py[i]);
+            m_index_in.push_back(m_index_py[i]);
             m_invariant.push_back(0);
         }
 
@@ -39,9 +41,9 @@ template <typename Mask> struct Loop : ek::Loop<Mask> {
         write_indices();
     }
 
-    bool cond(const Mask &mask) {
+    bool operator()(const Mask &mask) {
         read_indices();
-        bool result = Base::cond(mask);
+        bool result = Base::operator()(mask);
         write_indices();
         return result;
     }
@@ -51,17 +53,17 @@ private:
         py::list indices = m_read_indices(*m_args);
         size_t size = indices.size();
 
-        if (size != m_index_p_py.size())
+        if (size != m_index_py.size())
             ek::enoki_raise("Loop::read_indices(): number of indices changed!");
 
         for (uint32_t i = 0; i < size; ++i)
-            m_index_p_py[i] = py::cast<uint32_t>(indices[i]);
+            m_index_py[i] = py::cast<uint32_t>(indices[i]);
     }
 
     void write_indices() {
         py::list list;
-        for (size_t i = 0; i < m_index_p_py.size(); ++i)
-            list.append(m_index_p_py[i]);
+        for (size_t i = 0; i < m_index_py.size(); ++i)
+            list.append(m_index_py[i]);
         m_write_indices(list, *m_args);
     }
 
@@ -69,5 +71,5 @@ private:
     py::list m_args;
     py::object m_read_indices;
     py::object m_write_indices;
-    ek::ek_vector<uint32_t> m_index_p_py;
+    ek::ek_vector<uint32_t> m_index_py;
 };

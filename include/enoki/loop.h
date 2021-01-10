@@ -28,8 +28,8 @@ struct Loop<Mask, enable_if_t<std::is_scalar_v<Mask>>> {
     Loop& operator=(Loop &&) = delete;
 
     void init() { }
-    template <typename Value> void put(Value &) { }
-    bool cond(bool mask) { return mask; }
+    template <typename... Ts> void put(Ts&...) { }
+    bool operator()(bool mask) { return mask; }
     template <typename... Args> Loop(const char*, Args&...) { }
 };
 
@@ -53,6 +53,7 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
 
         if constexpr (sizeof...(Args) > 0) {
             put(args...);
+            init();
         }
     }
 
@@ -131,7 +132,7 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
         }
     }
 
-    bool cond(const Mask &cond) {
+    bool operator()(const Mask &cond) {
         if (m_record)
             return cond_record(cond);
         else

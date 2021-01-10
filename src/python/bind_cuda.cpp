@@ -22,13 +22,13 @@ void export_cuda(py::module_ &m) {
     loop.def(py::init<const char *, py::args>())
         .def("put", &Loop<Mask>::put)
         .def("init", &Loop<Mask>::init)
-        .def("cond", &Loop<Mask>::cond);
+        .def("__call__", &Loop<Mask>::operator());
 
 #if defined(ENOKI_ENABLE_AUTODIFF)
-    loop.def("cond", [](Loop<Mask> &g,
-                        const ek::DiffArray<ek::CUDAArray<bool>> &mask) {
-        return g.cond(ek::detach(mask));
-    });
+    loop.def("__call__",
+             [](Loop<Mask> &g, const ek::DiffArray<ek::CUDAArray<bool>> &mask) {
+                 return g(ek::detach(mask));
+             });
 #endif
 }
 #endif
