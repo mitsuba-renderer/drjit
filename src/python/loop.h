@@ -15,13 +15,14 @@ template <typename Mask> struct Loop : ek::Loop<Mask> {
         m_write_indices = detail.attr("write_indices");
         if (args.size() > 0) {
             for (py::handle h : args)
-                put(h);
+                m_args.append(h);
             init();
         }
     }
 
-    void put(py::handle arg) {
-        m_args.append(arg);
+    void put(py::args args) {
+        for (py::handle h : args)
+            m_args.append(h);
     }
 
     void init() {
