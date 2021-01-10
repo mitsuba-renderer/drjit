@@ -142,14 +142,10 @@ protected:
     struct MaskStackHelper {
     public:
         void push(uint32_t index) {
-            if (m_armed)
-                jit_fail("MaskStackHelper::internal error! (1)");
             jit_var_mask_push(Mask::Backend, index);
             m_armed = true;
         }
         void pop() {
-            if (!m_armed)
-                jit_fail("MaskStackHelper::internal error! (2)");
             jit_var_mask_pop(Mask::Backend);
             m_armed = false;
         }

@@ -50,74 +50,51 @@ void write_indices(ek_vector<uint32_t> &indices, T &value, uint32_t &offset) {
     }
 }
 
-inline bool extract_mask() { return true; }
-template <typename T> decltype(auto) extract_mask(const T &v) {
-    if constexpr (is_mask_v<T>)
-        return v;
-    else
-        return true;
-}
-
-template <typename T, typename... Ts, enable_if_t<sizeof...(Ts) != 0> = 0>
-decltype(auto) extract_mask(const T &/*v*/, const Ts &... vs) {
-    return extract_mask(vs...);
-}
-
-template <size_t I, size_t N, typename T>
-decltype(auto) set_mask_true(const T &v) {
-    if constexpr (is_mask_v<T> && I == N - 1)
-        return true;
-    else
-        return v;
-}
-
-template <typename Result, typename Func, JitBackend Backend,
-          typename Base, typename... Args, size_t... Is>
-Result vcall_impl(const char *name, uint32_t n_inst, const Func &func,
-                  const JitArray<Backend, Base *> &self,
-                  const JitArray<Backend, bool> &mask,
-                  std::index_sequence<Is...>, const Args &... args) {
+template <typename Result, typename Func, typename Self, typename Mask,
+          size_t... Is, typename... Args>
+Result vcall_jit_record_impl(const char *name, uint32_t n_inst,
+                             const Func &func, const Self &self,
+                             const Mask &mask, std::index_sequence<Is...>,
+                             const Args &... args) {
+    using Base = std::remove_const_t<std::remove_pointer_t<value_t<Self>>>;
     constexpr size_t N = sizeof...(Args);
     char label[128];
     Result result;
-    using Self = JitArray<Backend, Base *>;
 
     ek_index_vector indices_in, indices_out_all;
     ek_vector<uint32_t> se_count(n_inst + 1, 0);
 
     (collect_indices(indices_in, args), ...);
-    se_count[0] = jit_side_effects_scheduled(Backend);
+    se_count[0] = jit_side_effects_scheduled(Self::Backend);
 
     for (uint32_t i = 1; i <= n_inst; ++i) {
         snprintf(label, sizeof(label), "VCall: %s::%s() [instance %u]",
                  Base::Domain, name, i);
         Base *base = (Base *) jit_registry_get_ptr(Base::Domain, i);
 
-        jit_prefix_push(Backend, label);
+        jit_prefix_push(Self::Backend, label);
         int flag_before = jit_flag(JitFlag::PostponeSideEffects);
         try {
             jit_set_flag(JitFlag::PostponeSideEffects, 1);
             if constexpr (std::is_same_v<Result, std::nullptr_t>) {
-                func(base, (detail::set_mask_true<Is, N>(args))...);
+                func(base, (set_mask_true<Is, N>(args))...);
             } else {
                 collect_indices(indices_out_all, func(base, args...));
             }
         } catch (...) {
-            jit_prefix_pop(Backend);
-            jit_side_effects_rollback(Backend, se_count[0]);
+            jit_prefix_pop(Self::Backend);
+            jit_side_effects_rollback(Self::Backend, se_count[0]);
             jit_set_flag(JitFlag::PostponeSideEffects, flag_before);
             throw;
         }
         jit_set_flag(JitFlag::PostponeSideEffects, flag_before);
-        jit_prefix_pop(Backend);
-        se_count[i] = jit_side_effects_scheduled(Backend);
+        jit_prefix_pop(Self::Backend);
+        se_count[i] = jit_side_effects_scheduled(Self::Backend);
     }
 
     ek_vector<uint32_t> indices_out(indices_out_all.size() / n_inst, 0);
 
-    JitArray<Backend, Base *> self_masked =
-        self &
-        (JitArray<Backend, bool>::steal(jit_var_mask_peek(Backend)) & mask);
+    Self self_masked = self & (Mask::steal(jit_var_mask_peek(Self::Backend)) & mask);
 
     snprintf(label, sizeof(label), "%s::%s()", Base::Domain, name);
 
@@ -133,20 +110,15 @@ Result vcall_impl(const char *name, uint32_t n_inst, const Func &func,
     return result;
 }
 
-template <typename Result, typename Func, JitBackend Backend, typename Base, typename... Args>
-Result vcall_jit_record(const char *name, const Func &func,
-                        const JitArray<Backend, Base *> &self,
+template <typename Result, typename Func, typename Self, typename... Args>
+Result vcall_jit_record(const char *name, const Func &func, Self &self,
                         const Args &... args) {
-    constexpr bool IsVoid = std::is_void_v<Result>;
-    using Result_2 = std::conditional_t<IsVoid, std::nullptr_t, Result>;
-    using Self = JitArray<Backend, Base *>;
-    using Bool = JitArray<Backend, bool>;
-
+    using Base = std::remove_const_t<std::remove_pointer_t<value_t<Self>>>;
     uint32_t n_inst = jit_registry_get_max(Base::Domain);
 
-    Result_2 result;
+    Result result;
     if (n_inst == 0) {
-        result = zero<Result_2>(width(self));
+        result = zero<Result>(width(self));
     } else if (n_inst == 1) {
         uint32_t i = 1;
         Base *inst = nullptr;
@@ -154,15 +126,15 @@ Result vcall_jit_record(const char *name, const Func &func,
             inst = (Base *) jit_registry_get_ptr(Base::Domain, i++);
         } while (!inst);
 
-        if constexpr (IsVoid)
+        if constexpr (std::is_same_v<Result, std::nullptr_t>)
             func(inst, args...);
         else
             result = select(neq(self, nullptr), func(inst, args...),
-                            zero<Result_2>());
+                            zero<Result>());
     } else {
-        result = vcall_impl<Result_2>(
+        result = vcall_jit_record_impl<Result>(
             name, n_inst, func, self,
-            Bool(detail::extract_mask(args...)),
+            extract_mask<mask_t<Self>>(args...),
             std::make_index_sequence<sizeof...(Args)>(),
             placeholder(args)...);
     }

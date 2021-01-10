@@ -55,6 +55,27 @@ ENOKI_INLINE decltype(auto) copy_diff(const T& value) {
     }
 }
 
+template <typename Mask> Mask extract_mask() { return true; }
+template <typename Mask, typename T> decltype(auto) extract_mask(const T &v) {
+    if constexpr (is_mask_v<T>)
+        return v;
+    else
+        return Mask(true);
+}
+
+template <typename Mask, typename T, typename... Ts, enable_if_t<sizeof...(Ts) != 0> = 0>
+decltype(auto) extract_mask(const T &/*v*/, const Ts &... vs) {
+    return extract_mask<Mask>(vs...);
+}
+
+template <size_t I, size_t N, typename T>
+decltype(auto) set_mask_true(const T &v) {
+    if constexpr (is_mask_v<T> && I == N - 1)
+        return true;
+    else
+        return v;
+}
+
 template <typename Guide, typename Type, typename = int> struct vectorize_type {
     using type = Type;
 };
@@ -64,13 +85,13 @@ struct vectorize_type<Guide, Type, enable_if_t<std::is_scalar_v<Type> && !std::i
     using type = replace_scalar_t<Guide, Type>;
 };
 
-template <typename Result, typename Func, JitBackend Backend, typename Base, typename... Args>
-Result vcall_jit_record(const char *name, const Func &func,
-                        const JitArray<Backend, Base *> &self,
+template <typename Result, typename Func, typename Self, typename... Args>
+Result vcall_jit_record(const char *name, const Func &func, Self &self,
                         const Args &... args);
 
 template <typename Result, typename Func, typename Self, typename... Args>
-ENOKI_INLINE Result vcall_jit_reduce(Func func, const Self &self, const Args&... args);
+Result vcall_jit_reduce(const Func &func, const Self &self,
+                        const Args &... args);
 
 template <typename Result, typename Func, typename FuncFwd, typename FuncRev, typename Self,
           typename... Args>
@@ -88,6 +109,8 @@ auto dispatch(const char *name, const Func &func, const FuncFwd &func_fwd,
               const Args &... args) {
     using Result =
         typename vectorize_type<Self, decltype(func((Class *) nullptr, args...))>::type;
+    constexpr bool IsVoid = std::is_void_v<Result>;
+    using ResultOrNull = std::conditional_t<IsVoid, std::nullptr_t, Result>;
 
     ENOKI_MARK_USED(func_fwd);
     ENOKI_MARK_USED(func_rev);
@@ -95,12 +118,12 @@ auto dispatch(const char *name, const Func &func, const FuncFwd &func_fwd,
 
     if constexpr (is_jit_array_v<Self>) {
         if ((jit_flags() & 4) == 0 || is_llvm_array_v<Self>) {
-            return detail::vcall_jit_reduce<Result>(func, self, copy_diff(args)...);
+            return detail::vcall_jit_reduce<ResultOrNull>(func, self, copy_diff(args)...);
         } else {
             if constexpr (is_diff_array_v<Self>)
                 return detail::vcall_autodiff<Result>(name, func, func_fwd, func_rev, self, args...);
             else
-                return detail::vcall_jit_record<Result>(name, func, self, args...);
+                return detail::vcall_jit_record<ResultOrNull>(name, func, self, args...);
         }
     } else {
         return detail::vcall_packet<Result>(func, self, args...);

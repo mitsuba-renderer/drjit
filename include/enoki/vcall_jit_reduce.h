@@ -15,14 +15,17 @@
 NAMESPACE_BEGIN(enoki)
 NAMESPACE_BEGIN(detail)
 
-template <typename T, typename UInt32>
+
+template <size_t I, size_t N, typename T, typename UInt32>
 ENOKI_INLINE decltype(auto) gather_helper(const T& value, const UInt32 &perm) {
-    if constexpr (is_jit_array_v<T>) {
+    if constexpr (is_mask_v<T> && I == N - 1) {
+        return true;
+    } else if constexpr (is_jit_array_v<T>) {
         return gather<T, true>(value, perm);
     } else if constexpr (is_enoki_struct_v<T>) {
         T result = value;
         struct_support_t<T>::apply_1(
-            result, [&perm](auto &x) { x = gather_helper(x, perm); });
+            result, [&perm](auto &x) { x = gather_helper<1, 1>(x, perm); });
         return result;
     } else {
         ENOKI_MARK_USED(perm);
@@ -30,63 +33,63 @@ ENOKI_INLINE decltype(auto) gather_helper(const T& value, const UInt32 &perm) {
     }
 }
 
-template <typename Result, typename Func, typename Self, typename... Args>
-ENOKI_INLINE Result vcall_jit_reduce(Func func, const Self &self, const Args&... args) {
+template <typename Mask>
+struct MaskScope {
+    MaskScope(const Mask &mask) { jit_var_mask_push(Mask::Backend, mask.index()); }
+    ~MaskScope() { jit_var_mask_pop(Mask::Backend); }
+};
+
+template <typename Result, typename Func, typename Self, size_t... Is,
+          typename... Args>
+Result vcall_jit_reduce_impl(Func func, const Self &self,
+                             std::index_sequence<Is...>, const Args &... args) {
     using UInt32 = uint32_array_t<Self>;
     using Class = scalar_t<Self>;
+    using Mask = mask_t<UInt32>;
+    constexpr size_t N = sizeof...(Args);
 
-    if constexpr (!std::is_void_v<Result>) {
-        Result result;
+    schedule(args...);
+    auto [buckets, n_inst] = self.vcall_();
 
-        if (self.size() == 1) {
-            Class ptr = (Class) self.entry(0);
-            if (ptr)
-                result = func(ptr, args...);
-            else
-                result = zero<Result>();
-        } else {
-            schedule(args...);
-            auto [buckets, size] = self.vcall_();
+    Result result;
+    if (n_inst > 0) {
+        result = empty<Result>(self.size());
+        for (size_t i = 0; i < n_inst ; ++i) {
+            UInt32 perm = UInt32::borrow(buckets[i].index);
 
-            if (size > 0) {
-                result = empty<Result>(self.size());
-                for (size_t i = 0; i < size; ++i) {
-                    UInt32 perm = UInt32::borrow(buckets[i].index);
+            if (buckets[i].ptr) {
+                Mask mask = gather<Mask>(extract_mask<Mask>(args...), perm);
+                MaskScope<Mask> scope(mask);
 
-                    if (buckets[i].ptr) {
-                        using OrigResult = decltype(func((Class) nullptr, args...));
-                        scatter<true>(
-                            result,
-                            ref_cast_t<OrigResult, Result>(func(
-                                (Class) buckets[i].ptr,
-                                detail::gather_helper(args, perm)...)),
-                            perm);
-                    } else {
-                        scatter<true>(result, zero<Result>(), perm);
-                    }
+                if constexpr (!std::is_same_v<Result, std::nullptr_t>) {
+                    using OrigResult = decltype(func((Class) nullptr, args...));
+                    scatter<true>(
+                        result,
+                        ref_cast_t<OrigResult, Result>(func(
+                            (Class) buckets[i].ptr,
+                            gather_helper<Is, N>(args, perm)...)),
+                        perm);
+                } else {
+                    func((Class) buckets[i].ptr, gather_helper<Is, N>(args, perm)...);
                 }
-                schedule(result);
             } else {
-                result = zero<Result>(self.size());
+                if constexpr (!std::is_same_v<Result, std::nullptr_t>)
+                    scatter<true>(result, zero<Result>(), perm);
             }
         }
-        return result;
+        schedule(result);
     } else {
-        if (self.size() == 1) {
-            Class ptr = (Class) self.entry(0);
-            if (ptr)
-                func(ptr, args...);
-        } else {
-            auto [buckets, size] = self.vcall_();
-            for (size_t i = 0; i < size; ++i) {
-                if (!buckets[i].ptr)
-                    continue;
-                UInt32 perm = UInt32::borrow(buckets[i].index);
-                func((Class) buckets[i].ptr,
-                     detail::gather_helper(args, perm)...);
-            }
-        }
+        result = zero<Result>(self.size());
     }
+
+    return result;
+}
+
+template <typename Result, typename Func, typename Self, typename... Args>
+Result vcall_jit_reduce(const Func &func, const Self &self,
+                        const Args &... args) {
+    return vcall_jit_reduce_impl<Result>(
+        func, self, std::make_index_sequence<sizeof...(Args)>(), args...);
 }
 
 NAMESPACE_END(detail)
