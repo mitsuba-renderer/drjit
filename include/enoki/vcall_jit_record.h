@@ -81,7 +81,9 @@ Result vcall_jit_record_impl(const char *name, uint32_t n_inst_max,
             if constexpr (std::is_same_v<Result, std::nullptr_t>) {
                 func(base, (set_mask_true<Is, N>(args))...);
             } else {
-                collect_indices(indices_out_all, func(base, args...));
+                // The following assignment converts scalar return values
+                Result tmp = func(base, args...);
+                collect_indices(indices_out_all, tmp);
             }
         } catch (...) {
             jit_prefix_pop(Self::Backend);

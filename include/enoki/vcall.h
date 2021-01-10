@@ -107,10 +107,10 @@ template <typename Class, typename Func, typename FuncFwd, typename FuncRev,
 auto dispatch(const char *name, const Func &func, const FuncFwd &func_fwd,
               const FuncRev func_rev, const Self &self,
               const Args &... args) {
-    using Result =
-        typename vectorize_type<Self, decltype(func((Class *) nullptr, args...))>::type;
-    constexpr bool IsVoid = std::is_void_v<Result>;
-    using ResultOrNull = std::conditional_t<IsVoid, std::nullptr_t, Result>;
+    using Result = decltype(func((Class *) nullptr, args...));
+    using Result2 = typename vectorize_type<Self, Result>::type;
+    constexpr bool IsVoid = std::is_void_v<Result2>;
+    using Result3 = std::conditional_t<IsVoid, std::nullptr_t, Result2>;
 
     ENOKI_MARK_USED(func_fwd);
     ENOKI_MARK_USED(func_rev);
@@ -118,12 +118,12 @@ auto dispatch(const char *name, const Func &func, const FuncFwd &func_fwd,
 
     if constexpr (is_jit_array_v<Self>) {
         if ((jit_flags() & 4) == 0 || is_llvm_array_v<Self>) {
-            return detail::vcall_jit_reduce<ResultOrNull>(func, self, copy_diff(args)...);
+            return detail::vcall_jit_reduce<Result3>(func, self, copy_diff(args)...);
         } else {
             if constexpr (is_diff_array_v<Self>)
-                return detail::vcall_autodiff<Result>(name, func, func_fwd, func_rev, self, args...);
+                return detail::vcall_autodiff<Result3>(name, func, func_fwd, func_rev, self, args...);
             else
-                return detail::vcall_jit_record<ResultOrNull>(name, func, self, args...);
+                return detail::vcall_jit_record<Result3>(name, func, self, args...);
         }
     } else {
         return detail::vcall_packet<Result>(func, self, args...);
