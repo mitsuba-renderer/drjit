@@ -2,6 +2,7 @@
 #include <enoki/autodiff.h>
 #include <enoki/idiv.h>
 #include <enoki/loop.h>
+#include <pybind11/stl.h>
 
 extern void export_scalar(py::module_ &m);
 extern void export_packet(py::module_ &m);
@@ -178,6 +179,12 @@ PYBIND11_MODULE(enoki_ext, m_) {
 
     array_detail.def("device", &jit_cuda_device);
     array_detail.def("device", &jit_var_device);
+
+    array_detail.def("printf_async", [](uint32_t mask_index, const char *fmt,
+                                        std::vector<uint32_t> &indices) {
+        jit_var_printf(JitBackend::CUDA, mask_index, fmt,
+                       (uint32_t) indices.size(), indices.data());
+    });
 
     m.def("set_flag", &jit_set_flag);
     m.def("flags", &jit_flags);

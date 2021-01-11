@@ -2300,7 +2300,6 @@ def identity(type_, size=1):
 #                  Higher-level utility functions
 # -------------------------------------------------------------------
 
-
 def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
     # Fast path for Enoki arrays, avoid for special array types
     # due to their non-standard broadcasting behavior
@@ -2351,6 +2350,18 @@ def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
             if not allclose(ia, ib, rtol, atol, equal_nan):
                 return False
         return True
+
+
+def printf_async(mask, fmt, *args):
+    if not _ek.is_jit_array_v(mask) or not _ek.array_depth_v(mask) == 1 or not _ek.is_mask_v(mask):
+        raise Exception("printf_async(): 'mask' argument must be boolean-valued depth-1 JIT array")
+    indices = []
+    for a in args:
+        if not _ek.is_jit_array_v(a) or not _ek.array_depth_v(a) == 1:
+            raise Exception("printf_async(): extra arguments must all be depth-1 JIT arrays")
+        indices.append(_ek.detach(a).index())
+    _ek.detail.printf_async(_ek.detach(mask.index()), fmt, indices)
+
 
 # -------------------------------------------------------------------
 #             Automatic differentation of custom fuctions
