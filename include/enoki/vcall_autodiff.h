@@ -34,57 +34,59 @@ struct DiffVCall
                 const FuncRev &,
                 const Args &... args) override {
         m_name = name;
-        return Result();
-        // return vcall_jit_record<Result>(name, func, detach(self), detach<false>(args)...);
+        return vcall_jit_record<Result>(name, func, self, detach<false>(args)...);
     }
 
     template <size_t... Is>
     void forward_impl(std::index_sequence<Is...>) {
-        // const detached_t<Self> &self = detach(Base::m_grad_input->template get<1>());
-        // const FuncFwd &func_fwd = Base::m_grad_input->template get<3>();
+        const Self &self = Base::m_grad_input->template get<1>();
+        const FuncFwd &func_fwd = Base::m_grad_input->template get<3>();
+        static constexpr JitBackend Backend = detached_t<Self>::Backend;
 
-        // uint32_t se_before = jit_side_effect_counter(is_cuda_array_v<Type>);
+        uint32_t se_before = jit_side_effects_scheduled(Backend);
 
-        // size_t name_size = strlen(m_name) + 9;
-        // ek_unique_ptr<char[]> name(new char[name_size]);
-        // snprintf(name.get(), name_size, "ad_fwd[%s]", m_name);
+        size_t name_size = strlen(m_name) + 9;
+        ek_unique_ptr<char[]> name(new char[name_size]);
+        snprintf(name.get(), name_size, "ad_fwd[%s]", m_name);
 
-        // Result grad_out = vcall_jit_record<Result>(
-        //     name.get(), func_fwd, self, detail::ek_tuple(Base::template grad_in<5 + Is>()...),
-        //     Base::template value_in<5 + Is>()...);
+        Result grad_out = vcall_jit_record<Result>(
+            name.get(), func_fwd, self,
+            ek_tuple(Base::template grad_in<5 + Is>()...),
+            Base::template value_in<5 + Is>()...);
 
-        // uint32_t se_after = jit_side_effect_counter(is_cuda_array_v<Type>);
+        uint32_t se_after = jit_side_effects_scheduled(Backend);
 
-        // if (se_before != se_after &&
-        //     (jit_flags() & (uint32_t) JitFlag::Recording) == 0)
-        //     enoki::eval(grad_out);
+        if (se_before != se_after &&
+            (jit_flags() & (uint32_t) JitFlag::VCallRecord) == 0)
+            enoki::eval(grad_out);
 
-        // Base::set_grad_out(grad_out);
+        Base::set_grad_out(grad_out);
     }
 
     template <size_t... Is>
     void backward_impl(std::index_sequence<Is...>) {
-        // const detached_t<Self> &self = detach(Base::m_grad_input->template get<1>());
-        // const FuncRev &func_rev = Base::m_grad_input->template get<4>();
-        // using ResultRev = detail::ek_tuple<Args...>;
+        const Self &self = Base::m_grad_input->template get<1>();
+        const FuncRev &func_rev = Base::m_grad_input->template get<4>();
+        using ResultRev = ek_tuple<Args...>;
+        static constexpr JitBackend Backend = detached_t<Self>::Backend;
 
-        // uint32_t se_before = jit_side_effect_counter(is_cuda_array_v<Type>);
+        uint32_t se_before = jit_side_effects_scheduled(Backend);
 
-        // size_t name_size = strlen(m_name) + 9;
-        // ek_unique_ptr<char[]> name(new char[name_size]);
-        // snprintf(name.get(), name_size, "ad_rev[%s]", m_name);
+        size_t name_size = strlen(m_name) + 9;
+        ek_unique_ptr<char[]> name(new char[name_size]);
+        snprintf(name.get(), name_size, "ad_rev[%s]", m_name);
 
-        // ResultRev grad_in = vcall_jit_record<ResultRev>(
-        //     name.get(), func_rev, self, Base::grad_out(),
-        //     Base::template value_in<5 + Is>()...);
+        ResultRev grad_in = vcall_jit_record<ResultRev>(
+            name.get(), func_rev, self, Base::grad_out(),
+            Base::template value_in<5 + Is>()...);
 
-        // uint32_t se_after = jit_side_effect_counter(is_cuda_array_v<Type>);
+        uint32_t se_after = jit_side_effects_scheduled(Backend);
 
-        // if (se_before != se_after &&
-        //     (jit_flags() & (uint32_t) JitFlag::Recording) == 0)
-        //     enoki::eval(grad_in);
+        if (se_before != se_after &&
+            (jit_flags() & (uint32_t) JitFlag::VCallRecord) == 0)
+            enoki::eval(grad_in);
 
-        // (Base::template set_grad_in<5 + Is>(grad_in.template get<Is>()), ...);
+        (Base::template set_grad_in<5 + Is>(grad_in.template get<Is>()), ...);
     }
 
     void forward() override {
@@ -110,13 +112,11 @@ ENOKI_INLINE Result vcall_autodiff(const char *name,
                                    const FuncRev &func_rev, const Self &self,
                                    const Args &... args) {
     using Type = leaf_array_t<Result, Args...>;
-
     if constexpr (is_diff_array_v<Type> && std::is_floating_point_v<scalar_t<Type>>) {
         return custom<DiffVCall<Type, Self, Result, Func, FuncFwd, FuncRev, Args...>>(
             name, self, func, func_fwd, func_rev, args...);
     } else {
-        return Result();
-        // return vcall_jit_record<Result>(name, func, detach(self), args...);
+        return vcall_jit_record<Result>(name, func, self, args...);
     }
 }
 

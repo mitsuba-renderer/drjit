@@ -35,8 +35,9 @@ ENOKI_INLINE decltype(auto) gather_helper(const T& value, const UInt32 &perm) {
 
 template <typename Mask>
 struct MaskScope {
-    MaskScope(const Mask &mask) { jit_var_mask_push(Mask::Backend, mask.index(), 0); }
-    ~MaskScope() { jit_var_mask_pop(Mask::Backend); }
+    static constexpr JitBackend Backend = detached_t<Mask>::Backend;
+    MaskScope(const Mask &mask) { jit_var_mask_push(Backend, mask.index(), 0); }
+    ~MaskScope() { jit_var_mask_pop(Backend); }
 };
 
 template <typename Result, typename Func, typename Self, size_t... Is,
@@ -47,6 +48,7 @@ Result vcall_jit_reduce_impl(Func func, const Self &self,
     using Class = scalar_t<Self>;
     using Mask = mask_t<UInt32>;
     constexpr size_t N = sizeof...(Args);
+    static constexpr JitBackend Backend = detached_t<Mask>::Backend;
 
     schedule(args...);
     auto [buckets, n_inst] = self.vcall_();
@@ -57,8 +59,8 @@ Result vcall_jit_reduce_impl(Func func, const Self &self,
     if (n_inst > 0 && self_size > 0) {
         Mask mask = extract_mask<Mask>(args...);
 
-        if (jit_var_mask_size(Mask::Backend))
-            mask &= Mask::steal(jit_var_mask_peek(Mask::Backend));
+        if (jit_var_mask_size(Backend))
+            mask &= Mask::steal(jit_var_mask_peek(Backend));
 
         result = empty<Result>(self.size());
         for (size_t i = 0; i < n_inst ; ++i) {

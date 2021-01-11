@@ -145,7 +145,6 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
     static constexpr bool IsLLVM = is_llvm_array_v<Type_>;
     static constexpr bool IsDynamic = is_dynamic_v<Type_>;
     static constexpr bool IsEnabled = std::is_floating_point_v<scalar_t<Type_>>;
-    static constexpr JitBackend Backend = backend_v<Type_>;
 
     template <typename T>
     using ReplaceValue = DiffArray<replace_scalar_t<Type_, scalar_t<T>>>;

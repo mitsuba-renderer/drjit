@@ -202,7 +202,7 @@ NAMESPACE_END(enoki)
                         enoki::enqueue(args_tuple);                            \
                         enoki::traverse<decltype(result),                      \
                                         decltype(args)...>(false, true);       \
-                        return enoki::grad(result);                            \
+                        return enoki::grad<false>(result);                     \
                     } else {                                                   \
                         self->name(args...);                                   \
                         ek_tuple args_tuple{ args... };                        \
@@ -222,11 +222,11 @@ NAMESPACE_END(enoki)
                         enoki::enqueue(result);                                \
                         enoki::traverse<decltype(result),                      \
                                         decltype(args)...>(true, true);        \
-                        return ek_tuple{ enoki::grad(args)... };               \
+                        return ek_tuple{ enoki::grad<false>(args)... };        \
                     } else {                                                   \
                         self->name(args...);                                   \
                     }                                                          \
-                    return ek_tuple{ enoki::grad(args)... };                   \
+                    return ek_tuple{ enoki::grad<false>(args)... };            \
                 }, array, args_...);                                           \
     }
 
@@ -236,7 +236,8 @@ NAMESPACE_END(enoki)
             using Result = replace_scalar_t<Array, type>;                      \
             using UInt32 = uint32_array_t<Array>;                              \
             Result data = Result::steal(                                       \
-                jit_var_registry_attr(Result::Backend, Result::Type,           \
+                jit_var_registry_attr(detached_t<Result>::Backend,             \
+                                      detached_t<Result>::Type,                \
                                       Domain, #name));                         \
             return enoki::gather<Result>(data,                                 \
                 UInt32::borrow(detach(array).index()), mask);                  \

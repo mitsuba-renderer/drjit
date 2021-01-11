@@ -253,6 +253,8 @@ template <typename T, enable_if_not_array_t<T> = 0> T andnot(const T &a1, const 
     return detail::andnot_(a1, a2);
 }
 
+template <typename T> ENOKI_INLINE T zero(size_t size = 1);
+
 template <typename M, typename T, typename F>
 ENOKI_INLINE auto select(const M &m, const T &t, const F &f) {
     if constexpr (is_enoki_struct_v<T> && std::is_same_v<T, F>) {
@@ -260,7 +262,11 @@ ENOKI_INLINE auto select(const M &m, const T &t, const F &f) {
         struct_support_t<T>::apply_3(
             t, f, result,
             [&m](auto const &x1, auto const &x2, auto &x3) ENOKI_INLINE_LAMBDA {
-                x3 = select(m, x1, x2);
+                using X = std::decay_t<decltype(x3)>;
+                if constexpr (is_array_v<M> && !is_array_v<X>)
+                    x3 = zero<X>();
+                else
+                    x3 = select(m, x1, x2);
             });
         return result;
     } else {
@@ -748,7 +754,7 @@ bool allclose(const T1 &a, const T2 &b, float rtol = 1e-5f, float atol = 1e-8f,
 //! @{ \name Initialization, loading/writing data
 // -----------------------------------------------------------------------
 
-template <typename T> ENOKI_INLINE T zero(size_t size = 1) {
+template <typename T> ENOKI_INLINE T zero(size_t size) {
     ENOKI_MARK_USED(size);
     if constexpr (std::is_same_v<T, std::nullptr_t>) {
         return nullptr;
@@ -1537,7 +1543,7 @@ template <bool Underlying = true, typename T> auto grad(const T &value) {
 
             return result;
         } else {
-            return value.derived().grad_();
+            return Result(value.derived().grad_());
         }
     } else if constexpr (is_enoki_struct_v<T>) {
         Result result;

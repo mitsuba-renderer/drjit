@@ -58,14 +58,15 @@ Result vcall_jit_record_impl(const char *name, uint32_t n_inst_max,
                              const Mask &mask, std::index_sequence<Is...>,
                              const Args &... args) {
     constexpr size_t N = sizeof...(Args);
+    static constexpr JitBackend Backend = detached_t<Self>::Backend;
 
     Result result;
     if (n_inst_actual == 1) {
-        auto mask = neq(self, nullptr) && extract_mask<mask_t<Self>>(args...);
+        Mask mask2 = mask && neq(self, nullptr);
         if constexpr (std::is_same_v<Result, std::nullptr_t>)
-            func(inst, (set_mask<Is, N>(mask, args))...);
+            func(inst, (set_mask<Is, N>(mask2, args))...);
         else
-            result = select(mask, func(inst, (set_mask<Is, N>(mask, args))...),
+            result = select(mask2, func(inst, (set_mask<Is, N>(mask2, args))...),
                             zero<Result>());
     } else {
         char label[128];
@@ -74,7 +75,7 @@ Result vcall_jit_record_impl(const char *name, uint32_t n_inst_max,
         ek_vector<uint32_t> se_count(n_inst_actual + 1, 0);
 
         (collect_indices(indices_in, args), ...);
-        se_count[0] = jit_side_effects_scheduled(Self::Backend);
+        se_count[0] = jit_side_effects_scheduled(Backend);
 
         for (uint32_t i = 1, j = 1; i <= n_inst_max; ++i) {
             snprintf(label, sizeof(label), "VCall: %s::%s() [instance %u]",
@@ -83,7 +84,7 @@ Result vcall_jit_record_impl(const char *name, uint32_t n_inst_max,
             if (!base)
                 continue;
 
-            jit_prefix_push(Self::Backend, label);
+            jit_prefix_push(Backend, label);
             int flag_before = jit_flag(JitFlag::PostponeSideEffects);
             try {
                 jit_set_flag(JitFlag::PostponeSideEffects, 1);
@@ -95,21 +96,21 @@ Result vcall_jit_record_impl(const char *name, uint32_t n_inst_max,
                     collect_indices(indices_out_all, tmp);
                 }
             } catch (...) {
-                jit_prefix_pop(Self::Backend);
-                jit_side_effects_rollback(Self::Backend, se_count[0]);
+                jit_prefix_pop(Backend);
+                jit_side_effects_rollback(Backend, se_count[0]);
                 jit_set_flag(JitFlag::PostponeSideEffects, flag_before);
                 throw;
             }
             jit_set_flag(JitFlag::PostponeSideEffects, flag_before);
-            jit_prefix_pop(Self::Backend);
-            se_count[j] = jit_side_effects_scheduled(Self::Backend);
+            jit_prefix_pop(Backend);
+            se_count[j] = jit_side_effects_scheduled(Backend);
             ++j;
         }
 
         ek_vector<uint32_t> indices_out(indices_out_all.size() / n_inst_actual, 0);
 
         Self self_masked =
-            self & (Mask::steal(jit_var_mask_peek(Self::Backend)) & mask);
+            self & (Mask::steal(jit_var_mask_peek(Backend)) & mask);
 
         snprintf(label, sizeof(label), "%s::%s()", Base::Domain, name);
 
