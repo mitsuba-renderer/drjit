@@ -68,10 +68,10 @@ decltype(auto) extract_mask(const T &/*v*/, const Ts &... vs) {
     return extract_mask<Mask>(vs...);
 }
 
-template <size_t I, size_t N, typename T>
-decltype(auto) set_mask_true(const T &v) {
+template <size_t I, size_t N, typename Mask, typename T>
+decltype(auto) set_mask(const Mask& m, const T &v) {
     if constexpr (is_mask_v<T> && I == N - 1)
-        return true;
+        return m;
     else
         return v;
 }
