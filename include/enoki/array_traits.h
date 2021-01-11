@@ -193,6 +193,19 @@ template <typename T> constexpr bool is_enoki_struct_v = struct_support<std::dec
 template <typename T> using enable_if_enoki_struct_t = enable_if_t<is_enoki_struct_v<T>>;
 
 namespace detail {
+    template <typename T, typename = int> struct backend {
+        static constexpr JitBackend value = (JitBackend) 0u;
+    };
+
+    template <typename T> struct backend<T, enable_if_jit_array_t<T>> {
+        static constexpr JitBackend value = T::Backend;
+    };
+}
+
+/// Determine the backend of an array (0 if not a JIT array)
+template <typename T> constexpr JitBackend backend_v = detail::backend<T>::value;
+
+namespace detail {
     template <typename T, typename = int> struct scalar {
         using type = std::decay_t<T>;
     };
