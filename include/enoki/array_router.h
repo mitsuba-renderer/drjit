@@ -1371,7 +1371,7 @@ template <typename T> bool grad_enabled(const T &value) {
                 result |= grad_enabled(value.entry(i));
             return result;
         } else {
-            return value.derived().index() > 0;
+            return value.derived().index_ad() > 0;
         }
     } else if constexpr (is_enoki_struct_v<T>) {
         bool result = false;
@@ -1397,7 +1397,7 @@ template <typename T> bool grad_suspended(const T &value) {
                 result |= grad_suspended(value.entry(i));
             return result;
         } else {
-            return value.derived().index() < 0;
+            return value.derived().index_ad() < 0;
         }
     } else if constexpr (is_enoki_struct_v<T>) {
         bool result = false;
@@ -1433,7 +1433,7 @@ template <typename T> T replace_grad(const T &a, const T &b) {
 
         return result;
     } else {
-        return T::create_borrow(b.index(), a.detach_());
+        return T::create_borrow(b.index_ad(), a.detach_());
     }
 }
 

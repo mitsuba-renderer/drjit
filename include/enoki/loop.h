@@ -179,7 +179,7 @@ protected:
                 }
                 m_state++;
                 if constexpr (Backend == JitBackend::LLVM)
-                    m_mask_stack.push(cond.index());
+                    m_mask_stack.push(m_cond.index());
                 return true;
 
             case 2:
@@ -298,7 +298,7 @@ protected:
 
             // Mask scatters/gathers/vcalls in the next iteration
             m_cond = cond;
-            m_mask_stack.push(cond.index());
+            m_mask_stack.push(m_cond.index());
             return true;
         } else {
             return false;

@@ -1228,7 +1228,7 @@ def grad_enabled_(a):
             enabled |= a[i].grad_enabled_()
         return enabled
     else:
-        return a.index() > 0
+        return a.index_ad() > 0
 
 
 def set_grad_enabled_(a, value):
@@ -1249,7 +1249,7 @@ def grad_suspended_(a):
             suspended |= a[i].grad_suspended_()
         return suspended
     else:
-        return a.index() < 0
+        return a.index_ad() < 0
 
 
 def set_grad_suspended_(a, value):
@@ -1299,6 +1299,12 @@ def index_(a):
     if not a.IsJIT:
         raise Exception("Expected a JIT array type!")
     return tuple(v.index() for v in a)
+
+
+def index_ad_(a):
+    if not a.IsDiff:
+        raise Exception("Expected a differentiable array type!")
+    return tuple(v.index_ad() for v in a)
 
 
 # -------------------------------------------------------------------

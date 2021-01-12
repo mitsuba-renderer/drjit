@@ -90,9 +90,9 @@ void diff_vars(const T &value, size_t &counter, uint32_t *out) {
     if constexpr (is_array_v<T>) {
         if constexpr (array_depth_v<T> == 1) {
             if constexpr (is_diff_array_v<T>) {
-                if (value.index() > 0) {
+                if (value.index_ad() > 0) {
                     if (out)
-                        out[counter] = value.index();
+                        out[counter] = value.index_ad();
                     counter++;
                 }
             }
@@ -120,7 +120,7 @@ template <typename T> T clear_primal(const T &value) {
 
             return result;
         } else {
-            return T::create_borrow(value.index(), typename T::Type());
+            return T::create_borrow(value.index_ad(), typename T::Type());
         }
     } else if constexpr (is_enoki_struct_v<T>) {
         T result;

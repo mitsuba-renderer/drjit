@@ -512,7 +512,8 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
     }
 
     template <typename Index, typename Mask>
-    void scatter_reduce_(ReduceOp op, Derived &dst, const Index &index, const Mask &mask) const {
+    void scatter_reduce_(ReduceOp op, Derived &dst, const Index &index,
+                         const Mask &mask) const {
         static_assert(std::is_same_v<Mask, mask_t<Derived>>);
         dst = steal(jit_var_new_scatter(dst.index(), m_index, index.index(),
                                         mask.index(), op));
@@ -673,8 +674,8 @@ template <typename Mask, typename... Ts> void printf_async(const Mask &mask, con
     static_assert(!Active || ((is_jit_array_v<Ts> && array_depth_v<Ts> == 1) && ...),
                   "printf_async(): variadic arguments must be CUDA/LLVM arrays of depth 1");
     if constexpr (Active) {
-        uint32_t indices[] = { detach(ts).index()... };
-        jit_var_printf(Mask::Backend, detach(mask).index(), fmt, (uint32_t) sizeof...(Ts), indices);
+        uint32_t indices[] = { ts.index()... };
+        jit_var_printf(Mask::Backend, mask.index(), fmt, (uint32_t) sizeof...(Ts), indices);
     }
 }
 

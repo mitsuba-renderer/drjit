@@ -240,7 +240,7 @@ NAMESPACE_END(enoki)
                                       detached_t<Result>::Type,                \
                                       Domain, #name));                         \
             return enoki::gather<Result>(data,                                 \
-                UInt32::borrow(detach(array).index()), mask);                  \
+                UInt32::borrow(array.index()), mask);                          \
         } else {                                                               \
             return detail::dispatch<Class>(                                    \
                 nullptr, [](auto self)                                         \

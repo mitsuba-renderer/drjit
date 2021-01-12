@@ -388,7 +388,7 @@ auto bind_full(py::class_<Array> &cls, bool scalar_mode = false) {
             Array result = Array::map_((void *) ptr, size, false);
             if (callback) {
                 std::function<void (void)> *func = new std::function<void (void)>(std::move(callback));
-                jit_var_set_callback(ek::detach(result).index(), [](uint32_t i, int free, void *arg) {
+                jit_var_set_callback(result.index(), [](uint32_t i, int free, void *arg) {
                     if (free) {
                         std::function<void(void)> *func2 = (std::function<void(void)> *) arg;
                         (*func2)();
@@ -403,8 +403,11 @@ auto bind_full(py::class_<Array> &cls, bool scalar_mode = false) {
     if constexpr (Array::IsJIT)
         cls.def("migrate_", &Array::migrate_);
 
-    if constexpr (Array::IsDiff || (!Array::IsDiff && Array::IsJIT))
+    if constexpr (Array::IsJIT)
         cls.def("index", &Array::index);
+
+    if constexpr (Array::IsDiff)
+        cls.def("index_ad", &Array::index_ad);
 
     if constexpr (!Array::IsDiff && Array::IsJIT)
         cls.def("set_index_",

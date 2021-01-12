@@ -158,7 +158,7 @@ struct Variable {
                        gradient updates involving pre-allocated memory regions into
                        scatters. */
                     bool recording = jit_flag(JitFlag::PostponeSideEffects);
-                    bool placeholder = jit_var_is_placeholder(detach(v).index());
+                    bool placeholder = jit_var_is_placeholder(v.index());
                     if (next_rev == 0 && recording && !placeholder) {
                         scatter_reduce(ReduceOp::Add, grad, v, uint32_array_t<T>(0), neq(v, 0.f));
                         return;
@@ -200,7 +200,7 @@ struct Variable {
                     bool recording = jit_flag(JitFlag::PostponeSideEffects);
 
                     T mul = v1 * v2;
-                    bool placeholder = jit_var_is_placeholder(detach(mul).index());
+                    bool placeholder = jit_var_is_placeholder(mul.index());
                     if (next_rev == 0 && recording && !placeholder) {
                         scatter_reduce(ReduceOp::Add, grad, mul, uint32_array_t<T>(0), neq(v1, 0));
                         return;

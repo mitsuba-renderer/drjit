@@ -37,7 +37,7 @@ template <typename Mask>
 struct MaskScope {
     static constexpr JitBackend Backend = detached_t<Mask>::Backend;
     MaskScope(const Mask &mask) {
-        jit_var_mask_push(Backend, detach(mask).index(), 0);
+        jit_var_mask_push(Backend, mask.index(), 0);
     }
     ~MaskScope() { jit_var_mask_pop(Backend); }
 };

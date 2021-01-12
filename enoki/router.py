@@ -2159,7 +2159,7 @@ def replace_grad(a, b):
             result[i] = replace_grad(a[i], b[i])
         return result
     else:
-        return type(a).create_(b.index(), a.detach_())
+        return type(a).create_(b.index_ad(), a.detach_())
 
 
 def enqueue(*args):
@@ -2359,8 +2359,8 @@ def printf_async(mask, fmt, *args):
     for a in args:
         if not _ek.is_jit_array_v(a) or not _ek.array_depth_v(a) == 1:
             raise Exception("printf_async(): extra arguments must all be depth-1 JIT arrays")
-        indices.append(_ek.detach(a).index())
-    _ek.detail.printf_async(_ek.detach(mask.index()), fmt, indices)
+        indices.append(a.index())
+    _ek.detail.printf_async(mask.index(), fmt, indices)
 
 
 # -------------------------------------------------------------------
@@ -2406,7 +2406,7 @@ def custom(cls, *args, **kwargs):
             for k, v in o.items():
                 diff_vars(v, indices)
         elif _ek.is_diff_array_v(o) and _ek.grad_enabled(o):
-            indices.append(o.index())
+            indices.append(o.index_ad())
 
     # Clear primal values of a differentiable array
     def clear_primal(o):
@@ -2418,7 +2418,7 @@ def custom(cls, *args, **kwargs):
             return { k: clear_primal(v) for k, v in o.items() }
         elif _ek.is_diff_array_v(o):
             to = type(o)
-            return to.create_(o.index(), _ek.detached_t(to)())
+            return to.create_(o.index_ad(), _ek.detached_t(to)())
 
     inst = cls()
 
@@ -2454,18 +2454,18 @@ def custom(cls, *args, **kwargs):
             _ek.enable_grad(tmp_in)
             _ek.set_label(tmp_in, inst.name() + "_in")
             for index in diff_vars_in:
-                detail.ad_add_edge(index, tmp_in.index())
+                detail.ad_add_edge(index, tmp_in.index_ad())
 
         if len(diff_vars_out) > 1:
             tmp_out = Type()
             _ek.enable_grad(tmp_out)
             _ek.set_label(tmp_out, inst.name() + "_out")
             for index in diff_vars_out:
-                detail.ad_add_edge(tmp_out.index(), index)
+                detail.ad_add_edge(tmp_out.index_ad(), index)
 
         detail.ad_add_edge(
-            diff_vars_in[0] if tmp_in is None else tmp_in.index(),
-            diff_vars_out[0] if tmp_out is None else tmp_out.index(),
+            diff_vars_in[0] if tmp_in is None else tmp_in.index_ad(),
+            diff_vars_out[0] if tmp_out is None else tmp_out.index_ad(),
             inst
         )
 

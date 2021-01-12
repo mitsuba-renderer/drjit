@@ -23,7 +23,7 @@ void collect_indices(ek_index_vector &indices, const T &value) {
     } else if constexpr (is_diff_array_v<T>) {
         collect_indices(indices, value.detach_());
     } else if constexpr (is_jit_array_v<T>) {
-        uint32_t index = detach(value).index();
+        uint32_t index = value.index();
         if (!index)
             enoki_raise("enoki::detail::collect_indices(): encountered an "
                         "uninitialized function argument while recording a "
@@ -126,7 +126,7 @@ Result vcall_jit_record_impl(const char *name, uint32_t n_inst_max,
 
         snprintf(label, sizeof(label), "%s::%s()", Base::Domain, name);
 
-        jit_var_vcall(label, detach(self_masked).index(), n_inst_actual,
+        jit_var_vcall(label, self_masked.index(), n_inst_actual,
                       indices_in.size(), indices_in.data(),
                       indices_out_all.size(), indices_out_all.data(),
                       se_count.data(), indices_out.data());
