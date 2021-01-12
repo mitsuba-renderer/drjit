@@ -1763,7 +1763,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             m_value.init_(size);
     }
 
-    int32_t index() const {
+    uint32_t index() const {
         if constexpr (is_jit_array_v<Type>)
             return m_value.index();
         else
