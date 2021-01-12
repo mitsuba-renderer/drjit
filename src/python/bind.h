@@ -133,6 +133,8 @@ auto bind_full(py::class_<Array> &cls, bool scalar_mode = false) {
         cls.def(py::init<const ek:: uint64_array_t<Array> &>());
         cls.def(py::init<const ek::float32_array_t<Array> &>());
         cls.def(py::init<const ek::float64_array_t<Array> &>());
+    } else {
+        cls.def(py::init<const ek::bool_array_t<Array> &>());
     }
 
     cls.def("or_",     [](const Array &a, const Array &b) { return a.or_(b); });
