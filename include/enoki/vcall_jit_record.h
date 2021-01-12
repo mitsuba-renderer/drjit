@@ -88,6 +88,15 @@ Result vcall_jit_record_impl(const char *name, uint32_t n_inst_max,
             int flag_before = jit_flag(JitFlag::PostponeSideEffects);
             try {
                 jit_set_flag(JitFlag::PostponeSideEffects, 1);
+
+                if constexpr (Backend == JitBackend::LLVM) {
+                    Mask vcall_mask = Mask::steal(jit_var_new_stmt(
+                        Backend, VarType::Bool,
+                        "$r0 = or <$w x i1> %mask, zeroinitializer", 1, 0,
+                        nullptr));
+                    jit_var_mask_push(Backend, vcall_mask.index(), 0);
+                }
+
                 if constexpr (std::is_same_v<Result, std::nullptr_t>) {
                     func(base, (set_mask<Is, N>(true, args))...);
                 } else {
@@ -99,12 +108,15 @@ Result vcall_jit_record_impl(const char *name, uint32_t n_inst_max,
                 jit_prefix_pop(Backend);
                 jit_side_effects_rollback(Backend, se_count[0]);
                 jit_set_flag(JitFlag::PostponeSideEffects, flag_before);
+                if constexpr (Backend == JitBackend::LLVM)
+                    jit_var_mask_pop(Backend);
                 throw;
             }
             jit_set_flag(JitFlag::PostponeSideEffects, flag_before);
             jit_prefix_pop(Backend);
-            se_count[j] = jit_side_effects_scheduled(Backend);
-            ++j;
+            if constexpr (Backend == JitBackend::LLVM)
+                jit_var_mask_pop(Backend);
+            se_count[j++] = jit_side_effects_scheduled(Backend);
         }
 
         ek_vector<uint32_t> indices_out(indices_out_all.size() / n_inst_actual, 0);
