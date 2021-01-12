@@ -147,17 +147,14 @@ Result vcall_jit_record(const char *name, const Func &func, Self &self,
 
     size_t self_size = self.size();
 
-    Result result;
-    if (n_inst_actual == 0 || self_size == 0) {
-        result = zero<Result>(self_size);
-    } else {
-        result = vcall_jit_record_impl<Result>(
+    if (n_inst_actual == 0 || self_size == 0)
+        return zero<Result>(self_size);
+    else
+        return vcall_jit_record_impl<Result>(
             name, n_inst_max, n_inst_actual, inst, func, self,
             extract_mask<mask_t<Self>>(args...),
             std::make_index_sequence<sizeof...(Args)>(),
             placeholder(args)...);
-    }
-    return result;
 }
 
 NAMESPACE_END(detail)

@@ -263,7 +263,7 @@ ENOKI_INLINE auto select(const M &m, const T &t, const F &f) {
             t, f, result,
             [&m](auto const &x1, auto const &x2, auto &x3) ENOKI_INLINE_LAMBDA {
                 using X = std::decay_t<decltype(x3)>;
-                if constexpr (is_array_v<M> && !is_array_v<X>)
+                if constexpr (is_array_v<M> && !(is_array_v<X> || is_enoki_struct_v<X>))
                     x3 = zero<X>();
                 else
                     x3 = select(m, x1, x2);
