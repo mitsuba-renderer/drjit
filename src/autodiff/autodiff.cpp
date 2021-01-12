@@ -143,23 +143,25 @@ struct Variable {
         if constexpr (is_array_v<T>) {
             if (size == 1 && src_size != 1) {
                 Value v2;
-                if (((const T &) v).size() == 1)
+                if (((const T &) v).size() == 1) {
                     v2 = v * Scalar(src_size);
-                else
-                    v2 = hsum_async(v);
+                    if (((const T &) grad).valid())
+                        grad += v2;
+                    else
+                        grad = std::move(v2);
+                } else {
+                    if (!((const T &) grad).valid())
+                        grad = zero<T>(1);
 
-                if (((const T &) grad).valid())
-                    grad += v2;
-                else
-                    grad = std::move(v2);
+                    scatter_reduce(ReduceOp::Add, v2, v, uint32_array_t<T>(0), neq(v, 0.f));
+                }
             } else {
                 if constexpr (is_jit_array_v<T>) {
                     /* While recording derivative code symbolically, turn
                        gradient updates involving pre-allocated memory regions into
                        scatters. */
                     bool recording = jit_flag(JitFlag::PostponeSideEffects);
-                    bool placeholder = jit_var_is_placeholder(v.index());
-                    if (next_rev == 0 && recording && !placeholder) {
+                    if (next_rev == 0 && recording && !v.is_placeholder()) {
                         scatter_reduce(ReduceOp::Add, grad, v, uint32_array_t<T>(0), neq(v, 0.f));
                         return;
                     }
@@ -183,33 +185,33 @@ struct Variable {
             if (size == 1 && src_size != 1) {
                 T v3 = select(inactive, 0.f, v1 * v2);
                 if (((const T &) v1).size() == 1 &&
-                    ((const T &) v2).size() == 1)
+                    ((const T &) v2).size() == 1) {
                     v3 = v3 * Scalar(src_size);
-                else
-                    v3 = hsum_async(v3);
+                    if (((const T &) grad).valid())
+                        grad += v3;
+                    else
+                        grad = std::move(v3);
+                } else {
+                    if (!((const T &) grad).valid())
+                        grad = zero<T>(1);
 
-                if (((const T &) grad).valid())
-                    grad += v3;
-                else
-                    grad = std::move(v3);
+                    scatter_reduce(ReduceOp::Add, grad, v3, uint32_array_t<T>(0), !inactive);
+                }
             } else {
                 if constexpr (is_jit_array_v<T>) {
                     /* While recording derivative code symbolically, turn
                        gradient updates involving pre-allocated memory regions into
                        scatters. */
                     bool recording = jit_flag(JitFlag::PostponeSideEffects);
-
-                    T mul = v1 * v2;
-                    bool placeholder = jit_var_is_placeholder(mul.index());
-                    if (next_rev == 0 && recording && !placeholder) {
-                        scatter_reduce(ReduceOp::Add, grad, mul, uint32_array_t<T>(0), neq(v1, 0));
+                    T v3 = select(inactive, 0.f, v1 * v2);
+                    if (next_rev == 0 && recording && !v3.is_placeholder()) {
+                        scatter_reduce(ReduceOp::Add, grad, v3, uint32_array_t<T>(0), !inactive);
                         return;
                     }
                 }
 
                 if (((const T &) grad).valid())
-                    grad =
-                        select(inactive, grad, fmadd(v1, v2, grad));
+                    grad = select(inactive, grad, fmadd(v1, v2, grad));
                 else
                     grad = select(inactive, 0.f, v1 * v2);
             }

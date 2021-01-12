@@ -24,7 +24,8 @@ public:
     using Type   = detached_t<Type_>;
     using Output = Output_;
     using Inputs = ek_tuple<Input...>;
-    static constexpr bool ClearPrimal = true;
+    static constexpr bool ClearPrimal   = true;
+    static constexpr bool ForceCreation = false;
 
     /**
      * Evaluate the custom function in primal mode. The inputs will be detached
@@ -156,7 +157,7 @@ template <typename Custom, typename... Input> auto custom(const Input&... input)
     size_t diff_vars_in_ctr = 0;
     (detail::diff_vars(input, diff_vars_in_ctr, nullptr), ...);
 
-    if (diff_vars_in_ctr > 0) {
+    if (diff_vars_in_ctr > 0 || Custom::ForceCreation) {
         // Gradients are enabled for at least one input, mark outputs
         enable_grad(output);
         const char *name = custom->name();
@@ -187,7 +188,7 @@ template <typename Custom, typename... Input> auto custom(const Input&... input)
 
         // Create a dummy node in case the branch-in factor is > 1
         uint32_t in_var;
-        if (diff_vars_in_ctr > 1) {
+        if (diff_vars_in_ctr > 1 || diff_vars_in_ctr == 0) {
             in_var = detail::ad_new<Type>(nullptr, 0, 0, nullptr, (Type *) nullptr);
             snprintf(buf, buf_size, "%s_in", name);
             detail::ad_set_label<Type>(in_var, buf);
@@ -200,7 +201,7 @@ template <typename Custom, typename... Input> auto custom(const Input&... input)
 
         // Create a dummy node in case the branch-out factor is > 1
         uint32_t out_var;
-        if (diff_vars_out_ctr > 1) {
+        if (diff_vars_out_ctr > 1 || diff_vars_out_ctr == 0) {
             out_var = detail::ad_new<Type>(nullptr, 0, 0, nullptr, (Type *) nullptr);
             snprintf(buf, buf_size, "%s_out", name);
             detail::ad_set_label<Type>(out_var, buf);
