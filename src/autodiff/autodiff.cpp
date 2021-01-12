@@ -158,7 +158,8 @@ struct Variable {
                        gradient updates involving pre-allocated memory regions into
                        scatters. */
                     bool recording = jit_flag(JitFlag::PostponeSideEffects);
-                    if (next_rev == 0 && recording) {
+                    bool placeholder = jit_var_is_placeholder(detach(v).index());
+                    if (next_rev == 0 && recording && !placeholder) {
                         scatter_reduce(ReduceOp::Add, grad, v, uint32_array_t<T>(0), neq(v, 0.f));
                         return;
                     }
@@ -176,11 +177,11 @@ struct Variable {
 
     template <typename T>
     void mul_accum(const T &v1, const T &v2, uint32_t src_size) {
-        auto inactive = enoki::eq(v1, 0.f);
+        auto inactive = eq(v1, 0.f);
 
         if constexpr (is_array_v<T>) {
             if (size == 1 && src_size != 1) {
-                T v3 = enoki::select(inactive, 0.f, v1 * v2);
+                T v3 = select(inactive, 0.f, v1 * v2);
                 if (((const T &) v1).size() == 1 &&
                     ((const T &) v2).size() == 1)
                     v3 = v3 * Scalar(src_size);
@@ -197,20 +198,23 @@ struct Variable {
                        gradient updates involving pre-allocated memory regions into
                        scatters. */
                     bool recording = jit_flag(JitFlag::PostponeSideEffects);
-                    if (next_rev == 0 && recording) {
-                        scatter_reduce(ReduceOp::Add, grad, v1 * v2, uint32_array_t<T>(0), neq(v1, 0));
+
+                    T mul = v1 * v2;
+                    bool placeholder = jit_var_is_placeholder(detach(mul).index());
+                    if (next_rev == 0 && recording && !placeholder) {
+                        scatter_reduce(ReduceOp::Add, grad, mul, uint32_array_t<T>(0), neq(v1, 0));
                         return;
                     }
                 }
 
                 if (((const T &) grad).valid())
                     grad =
-                        enoki::select(inactive, grad, enoki::fmadd(v1, v2, grad));
+                        select(inactive, grad, fmadd(v1, v2, grad));
                 else
-                    grad = enoki::select(inactive, 0.f, v1 * v2);
+                    grad = select(inactive, 0.f, v1 * v2);
             }
         } else {
-            grad = enoki::select(inactive, grad, enoki::fmadd(v1, v2, grad));
+            grad = select(inactive, grad, fmadd(v1, v2, grad));
         }
     }
 
@@ -730,13 +734,13 @@ template <typename Value> struct GatherEdge : Special {
         }
 
         if (permute)
-            enoki::scatter(source_grad, target->grad, offset, mask);
+            scatter(source_grad, target->grad, offset, mask);
         else
-            enoki::scatter_reduce(ReduceOp::Add, source_grad, target->grad, offset, mask);
+            scatter_reduce(ReduceOp::Add, source_grad, target->grad, offset, mask);
     }
 
     void forward(const Variable *source, Variable *target) const override {
-        target->accum(enoki::gather<Value>(source->grad, offset, mask),
+        target->accum(gather<Value>(source->grad, offset, mask),
                       asize(offset));
     }
 
@@ -783,7 +787,7 @@ template <typename Value> struct ScatterEdge : Special {
         }
 
     void backward(Variable *source, const Variable *target) const override {
-        source->accum(enoki::gather<Value>(target->grad, offset, mask),
+        source->accum(gather<Value>(target->grad, offset, mask),
                         asize(offset));
     }
 
@@ -800,9 +804,9 @@ template <typename Value> struct ScatterEdge : Special {
         }
 
         if (op != ReduceOp::None)
-            enoki::scatter_reduce(op, target_grad, source->grad, offset, mask);
+            scatter_reduce(op, target_grad, source->grad, offset, mask);
         else
-            enoki::scatter(target_grad, source->grad, offset, mask);
+            scatter(target_grad, source->grad, offset, mask);
     }
 
     Index offset;
@@ -853,7 +857,7 @@ int32_t ad_new_scatter(const char *label, uint32_t size, ReduceOp op,
                 edge2.weight = 1;
             } else {
                 Mask edge_mask = full<Mask>(false, size);
-                enoki::scatter(edge_mask, Mask(true), offset, mask);
+                scatter(edge_mask, Mask(true), offset, mask);
                 edge2.special = new MaskEdge<Value>(edge_mask, true);
             }
             var2->ref_count_int++;

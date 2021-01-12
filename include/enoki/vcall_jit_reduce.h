@@ -36,7 +36,9 @@ ENOKI_INLINE decltype(auto) gather_helper(const T& value, const UInt32 &perm) {
 template <typename Mask>
 struct MaskScope {
     static constexpr JitBackend Backend = detached_t<Mask>::Backend;
-    MaskScope(const Mask &mask) { jit_var_mask_push(Backend, mask.index(), 0); }
+    MaskScope(const Mask &mask) {
+        jit_var_mask_push(Backend, detach(mask).index(), 0);
+    }
     ~MaskScope() { jit_var_mask_pop(Backend); }
 };
 

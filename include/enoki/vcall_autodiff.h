@@ -34,7 +34,7 @@ struct DiffVCall
                 const FuncRev &,
                 const Args &... args) override {
         m_name = name;
-        return vcall_jit_record<Result>(name, func, self, detach<false>(args)...);
+        return vcall_jit_record<Result>(name, func, self, args...);
     }
 
     template <size_t... Is>
