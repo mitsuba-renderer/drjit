@@ -55,7 +55,7 @@ void ad_set_grad(int32_t index, const Value &v, bool fail_if_missing);
 template <typename Value>
 void ad_accum_grad(int32_t index, const Value &v, bool fail_if_missing);
 
-/// Enqueue a variable for a subsequent command (ad_traverse() / ad_graphviz())
+/// Enqueue a variable for a subsequent ad_traverse() command
 template <typename Value> void ad_enqueue(int32_t index);
 
 /// Perform a forward or backward mode traversal of queued variables
@@ -67,8 +67,8 @@ template <typename Value> void ad_set_label(int32_t index, const char *);
 /// Return the label associated with a variable
 template <typename Value> const char *ad_label(int32_t index);
 
-/// Generate a graphviz plot of the subgraph specified via ad_schedule()
-template <typename Value> const char *ad_graphviz(bool backward);
+/// Generate a graphviz plot of all registered variables
+template <typename Value> const char *ad_graphviz();
 
 /// Special case of ad_new: create a node for a select() statement.
 template <typename Value, typename Mask>
@@ -1663,9 +1663,9 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         return nullptr;
     }
 
-    static const char *graphviz_(bool backward) {
+    static const char *graphviz_() {
         if constexpr (IsEnabled)
-            return detail::ad_graphviz<Type>(backward);
+            return detail::ad_graphviz<Type>();
     }
 
     const Type &detach_() const {
@@ -1802,7 +1802,7 @@ protected:
     extern template ENOKI_AUTODIFF_EXPORT void ad_set_label<T>(int32_t,        \
                                                                const char *);  \
     extern template ENOKI_AUTODIFF_EXPORT const char *ad_label<T>(int32_t);    \
-    extern template ENOKI_AUTODIFF_EXPORT const char *ad_graphviz<T>(bool);    \
+    extern template ENOKI_AUTODIFF_EXPORT const char *ad_graphviz<T>();        \
     extern template ENOKI_AUTODIFF_EXPORT void ad_enqueue<T>(int32_t);         \
     extern template ENOKI_AUTODIFF_EXPORT void ad_traverse<T>(bool, bool);     \
     extern template ENOKI_AUTODIFF_EXPORT int32_t ad_new_select<T, Mask>(      \

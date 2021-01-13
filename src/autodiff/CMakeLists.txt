@@ -34,7 +34,9 @@ foreach(ENOKI_AUTODIFF_VARIANT ${ENOKI_AUTODIFF_VARIANTS})
     target_compile_definitions(${ENOKI_AUTODIFF_VARIANT_NAME} PRIVATE -DENOKI_ENABLE_JIT=1)
   endif()
   target_include_directories(
-    ${ENOKI_AUTODIFF_VARIANT_NAME} PRIVATE ../../ext/enoki-jit/ext/robin_map/include
+    ${ENOKI_AUTODIFF_VARIANT_NAME} PRIVATE
+      ../../ext/enoki-jit/ext/lz4
+      ../../ext/enoki-jit/ext/robin_map/include
   )
 endforeach()
 

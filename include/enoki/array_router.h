@@ -1631,17 +1631,20 @@ void enqueue(const T1 &value, const Ts&... values) {
 
 ENOKI_INLINE void enqueue() { }
 
-template <typename T> const char *graphviz(const T& value, bool reverse = true) {
-    using Type = leaf_array_t<T>;
-    static_assert(is_jit_array_v<Type> || is_diff_array_v<Type>,
-                  "graphviz(): invalid input type!");
 
-    if constexpr (is_diff_array_v<Type>) {
-        enqueue(value);
-        return Type::graphviz_(reverse);
-    } else {
+template <typename T> const char *graphviz() {
+    using Type = leaf_array_t<T>;
+
+    if constexpr (is_diff_array_v<Type>)
+        return Type::graphviz_();
+    else if constexpr (is_jit_array_v<Type>)
         return jit_var_graphviz();
-    }
+    else
+        return "";
+}
+
+template <typename T> const char *graphviz(const T&) {
+    return graphviz<T>();
 }
 
 template <typename...Ts> void traverse(bool reverse = true, bool retain_graph = false) {

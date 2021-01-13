@@ -6,6 +6,7 @@
 #include <deque>
 #include <assert.h>
 #include <mutex>
+#include <xxh3.h>
 
 #define CONCAT(x,y) x ## _ ## y
 #define EVAL(x,y) CONCAT(x,y)
@@ -251,7 +252,7 @@ struct State {
                    "remain in use)!", variables.size());
             uint32_t counter;
             for (auto kv : variables) {
-                ad_log(Warn, " - variable %u", kv.first);
+                ad_log(Warn, " - variable r%u", kv.first);
                 if (++counter == 10) {
                     ad_log(Warn, " - (skipping the rest)");
                     break;
@@ -458,14 +459,14 @@ static void ad_free(int32_t index, Variable *v);
 /// Clear backward edges of the given variable and decrease int. ref. counts
 static void ad_free_edges(int32_t index, Variable *v) {
     uint32_t edge_id = v->next_rev;
-    ad_log(Trace, "ad_free_edges(): freeing edges of vertex %u", index);
+    ad_log(Trace, "ad_free_edges(): freeing edges of variable r%u", index);
     v->next_rev = 0;
 
     while (edge_id) {
         Edge &edge = state.edges[edge_id];
 
         ad_log(Trace,
-               "ad_free_edges(): freeing edge %u: %u -> %u",
+               "ad_free_edges(): freeing edge %u: r%u -> r%u",
                edge_id, edge.source, edge.target);
 
         int32_t source = edge.source;
@@ -477,7 +478,7 @@ static void ad_free_edges(int32_t index, Variable *v) {
 
         Variable *v2 = state[source];
         if (unlikely(v2->ref_count_int == 0))
-            ad_fail("%u: int. reference count became negative!", source);
+            ad_fail("r%u: int. reference count became negative!", source);
 
         if (--v2->ref_count_int == 0 && v2->ref_count_ext == 0) {
             ad_free(source, v2);
@@ -506,7 +507,7 @@ static void ad_free_edges(int32_t index, Variable *v) {
 }
 
 static void ad_free(int32_t index, Variable *v) {
-    ad_log(Trace, "ad_free(%u)", index);
+    ad_log(Trace, "ad_free(r%u)", index);
     if (v->free_label)
         free(v->label);
     if (v->next_rev)
@@ -525,13 +526,13 @@ int32_t ad_new(const char *label, uint32_t size, uint32_t op_count,
         const char *l = label ? label : "unnamed";
         switch (op_count) {
             case 0:
-                ad_log(Debug, "ad_new(%i, size=%u): %s", index, size, l); break;
+                ad_log(Debug, "ad_new(r%i, size=%u): %s", index, size, l); break;
             case 1:
-                ad_log(Debug, "ad_new(%i <- %i, size=%u): %s", index, op[0], size, l); break;
+                ad_log(Debug, "ad_new(r%i <- %i, size=%u): %s", index, op[0], size, l); break;
             case 2:
-                ad_log(Debug, "ad_new(%i <- %i, %i, size=%u): %s", index, op[0], op[1], size, l); break;
+                ad_log(Debug, "ad_new(r%i <- r%i, r%i, size=%u): %s", index, op[0], op[1], size, l); break;
             case 3:
-                ad_log(Debug, "ad_new(%i <- %i, %i, %i, size=%u): %s", index, op[0], op[1], op[2], size, l); break;
+                ad_log(Debug, "ad_new(r%i <- r%i, r%i, r%i, size=%u): %s", index, op[0], op[1], op[2], size, l); break;
             default: break;
         }
     }
@@ -556,15 +557,15 @@ int32_t ad_new(const char *label, uint32_t size, uint32_t op_count,
 
             if (nan_weights)
                 ad_log(Warn,
-                      "ad_new(%i <- %i): \"%s\" -- weight of edge %i contains NaNs! "
-                      "Inspect the computation graph via enokik::graphviz() or put "
+                      "ad_new(r%i <- r%i): \"%s\" -- weight of edge %i contains NaNs! "
+                      "Inspect the computation graph via enoki::graphviz() or put "
                       "a breakpoint on ad_check_weights_cb() to investigate further.",
                        index, op[i], label ? label : "unnamed", i);
 
             if (inf_weights)
                 ad_log(Warn,
-                      "ad_new(%i <- %i): \"%s\": weight of edge %i contains infinities! "
-                      "Inspect the computation graph via enokik::graphviz() or put "
+                      "ad_new(r%i <- r%i): \"%s\": weight of edge %i contains infinities! "
+                      "Inspect the computation graph via enoki::graphviz() or put "
                       "a breakpoint on ad_check_weights_cb() to investigate further.",
                        index, op[i], label ? label : "unnamed", i);
 
@@ -744,7 +745,7 @@ int32_t ad_new_gather(const char *label, uint32_t size, int32_t src_index,
         std::lock_guard<std::mutex> guard(state.mutex);
         auto [index, var] = ad_var_new(label, size);
 
-        ad_log(Debug, "ad_new_gather(%u <- %u, size=%u, permute=%i)", index,
+        ad_log(Debug, "ad_new_gather(r%u <- r%u, size=%u, permute=%i)", index,
                src_index, size, (int) permute);
 
         Variable *var2 = state[src_index];
@@ -813,7 +814,7 @@ int32_t ad_new_scatter(const char *label, uint32_t size, ReduceOp op,
         auto [index, var] = ad_var_new(label, size);
 
         ad_log(Debug,
-               "ad_new_scatter(op=%i, %u <- %u, %u, permute=%i)",
+               "ad_new_scatter(op=%i, r%u <- r%u, r%u, permute=%i)",
                (int) op, index, src_index, dst_index, (int) permute);
 
         uint32_t edge_index = 0;
@@ -995,87 +996,167 @@ static void ad_traverse_fwd(std::vector<int32_t> &todo, bool retain_graph) {
     ad_log(Debug, "ad_traverse_fwd(): done.");
 }
 
-template <typename Value> const char *ad_graphviz(bool backward) {
+template <typename Value> const char *ad_graphviz() {
     std::lock_guard<std::mutex> guard(state.mutex);
 
-    if (backward)
-        ad_toposort_rev();
-    else
-        ad_toposort_fwd();
+    std::vector<uint32_t> indices;
+    indices.reserve(state.variables.size());
+    for (const auto& it : state.variables)
+        indices.push_back(it.first);
 
-
+    std::sort(indices.begin(), indices.end());
     buffer.clear();
-    buffer.put("digraph {\n");
-    buffer.put("  rankdir=BT;\n");
-    buffer.put("  graph [dpi=50];\n");
-    buffer.put("  node [shape=record fontname=Consolas];\n");
-    buffer.put("  edge [fontname=Consolas];\n");
+    buffer.put("digraph {\n"
+                   "    rankdir=TB;\n"
+                   "    graph [dpi=50 fontname=Consolas];\n"
+                   "    node [shape=record fontname=Consolas];\n"
+                   "    edge [fontname=Consolas];\n");
 
-    std::string current_path;
-    int current_depth = 0;
-    for (int32_t index : state.todo) {
-        Variable *v = state[index];
+    size_t current_hash = 0, current_depth = 1;
 
-        std::string label = v->label;
+    for (int32_t index : indices) {
+        const Variable *v = state[index];
+        const char *label = v->label;
+        const char *label_without_prefix = label;
 
-        auto sepidx = label.rfind("/");
-        std::string path;
-        if (sepidx != std::string::npos) {
-            path = label.substr(1, sepidx);
-            label = label.substr(sepidx + 1);
+        size_t prefix_hash = 0;
+        if (label) {
+            const char *sep = strrchr(label, '/');
+            if (sep) {
+                prefix_hash = XXH3_64bits(label, sep - label);
+                label_without_prefix = sep + 1;
+            }
         }
 
-        if (current_path != path) {
-            for (int i = 0; i < current_depth; ++i)
-                buffer.put("  }\n");
-            current_depth = 0;
-            current_path = path;
+        if (prefix_hash != current_hash) {
+            for (size_t i = current_depth - 1; i > 0; --i) {
+                buffer.putc(' ', 4 * i);
+                buffer.put("}\n");
+            }
 
-            do {
-                sepidx = path.find('/');
-                std::string graph_label = path.substr(0, sepidx);
-                if (graph_label.empty())
-                    break;
-                buffer.fmt("  subgraph cluster_%x {\n", (uint32_t) std::hash<std::string>()(graph_label));
-                buffer.fmt("  label=\"%s\";\n", graph_label.c_str());
-                ++current_depth;
+            current_hash = prefix_hash;
+            current_depth = 1;
 
-                if (sepidx == std::string::npos)
+            const char *p = label;
+            while (true) {
+                const char *pn = p ? strchr(p, '/') : nullptr;
+                if (!pn)
                     break;
-                path = path.substr(sepidx + 1, std::string::npos);
-            } while (true);
+
+                buffer.putc(' ', 4 * current_depth);
+                buffer.fmt("subgraph cluster_%08llx {\n",
+                               (unsigned long long) XXH3_64bits(label, pn - label));
+                current_depth++;
+                buffer.putc(' ', 4 * current_depth);
+                buffer.put("label=\"");
+                buffer.put(p, pn - p);
+                buffer.put("\";\n");
+
+                p = pn + 1;
+            }
         }
 
-        const char *color = "";
+        buffer.putc(' ', 4 * current_depth);
+        buffer.put_uint32((uint32_t) index);
+        buffer.put(" [label=\"{");
+
+        auto print_escape = [](const char *s) {
+            char c;
+            while (c = *s++, c != '\0') {
+                bool escape = false;
+                switch (c) {
+                    case '$':
+                        if (s[0] == 'n') {
+                            s++;
+                            buffer.put("\\l");
+                            continue;
+                        }
+                        break;
+
+                    case '\n':
+                        buffer.put("\\l");
+                        continue;
+
+                    case '"':
+                    case '|':
+                    case '{':
+                    case '}':
+                    case '<':
+                    case '>':
+                        escape = true;
+                        break;
+                    default:
+                        break;
+                }
+                if (escape)
+                    buffer.putc('\\');
+                buffer.putc(c);
+            }
+        };
+
+        const char *color = nullptr;
+        bool labeled = false;
+        if (label_without_prefix && strlen(label_without_prefix) != 0) {
+            if (v->custom_label)
+                buffer.put("Label: \\\"");
+            print_escape(label_without_prefix);
+            if (v->custom_label)
+                buffer.put("\\\"");
+            labeled = true;
+        }
+
         if (v->next_rev == 0)
-            color = " fillcolor=salmon style=filled";
+            color = "salmon";
         else if (v->next_fwd == 0)
-            color = " fillcolor=cornflowerblue style=filled";
+            color = "lightblue2";
+        if (labeled && !color)
+            color = "wheat";
 
-        buffer.fmt("  %u [label=\"{%s%s%s%s|{#%u|E:%llu|I:%llu}}\"%s];\n", index,
-                   v->custom_label ? "\\\"" : "", label.c_str(),
-                   v->custom_label ? "\\\"" : "",
-                   v->size == 1 ? " [s]" : "",
-                   index, (unsigned long long) v->ref_count_ext,
-                   (unsigned long long) v->ref_count_int, color);
+        buffer.fmt("|{r%u|S:%u|E:%u|I:%u}",
+            index, v->size, v->ref_count_ext,
+            v->ref_count_int);
 
-        uint32_t edge = v->next_rev, edge_ctr = 0;
+        buffer.put("}\"");
+        if (color)
+            buffer.fmt(" fillcolor=%s style=filled", color);
+        buffer.put("];\n");
+    }
+
+    for (size_t i = current_depth - 1; i > 0; --i) {
+        buffer.putc(' ', 4 * i);
+        buffer.put("}\n");
+    }
+
+    for (int32_t index : indices) {
+        const Variable *v = state[index];
+
+        uint32_t edge = v->next_rev, edge_count = 0;
         while (edge) {
             edge = state.edges[edge].next_rev;
-            edge_ctr++;
+            edge_count++;
         }
-
         edge = v->next_rev;
+        uint32_t edge_ctr = edge_count;
         while (edge) {
             const Edge &e = state.edges[edge];
-            buffer.fmt("  %u -> %u [label=\" %u\"%s];\n", e.target, e.source,
-                       edge_ctr--, e.special ? " color=red" : "");
+            if (edge_count == 1)
+                buffer.fmt("    %u -> %u%s;\n", e.target, e.source,
+                           e.special ? " [color=red]" : "");
+            else
+                buffer.fmt("    %u -> %u [label=\" %u\"%s];\n", e.target, e.source,
+                           edge_ctr--, e.special ? " color=red" : "");
             edge = e.next_rev;
         }
     }
-    for (int i = 0; i < current_depth; ++i)
-        buffer.put("  }\n");
-    buffer.put("}\n");
+
+    buffer.put(
+        "    subgraph cluster_legend {\n"
+        "        label=\"Legend\";\n"
+        "        l3 [style=filled fillcolor=salmon label=\"Output\"];\n"
+        "        l2 [style=filled fillcolor=lightblue2 label=\"Input\"];\n"
+        "        l1 [style=filled fillcolor=wheat label=\"Labeled\"];\n"
+        "    }\n"
+        "}\n");
 
     return buffer.get();
 }
@@ -1086,7 +1167,7 @@ template <typename T> void ad_inc_ref_impl(int32_t index) noexcept(true) {
     index = std::abs(index);
     std::lock_guard<std::mutex> guard(state.mutex);
     Variable *v = state[index];
-    ad_log(Trace, "ad_inc_ref(%u): %u", index, v->ref_count_ext + 1);
+    ad_log(Trace, "ad_inc_ref(r%i): %u", index, v->ref_count_ext + 1);
     v->ref_count_ext++;
 }
 
@@ -1096,7 +1177,7 @@ template <typename T> void ad_dec_ref_impl(int32_t index) noexcept(true) {
     index = std::abs(index);
     std::lock_guard<std::mutex> guard(state.mutex);
     Variable *v = state[index];
-    ad_log(Trace, "ad_dec_ref(%u): %u", index, v->ref_count_ext - 1);
+    ad_log(Trace, "ad_dec_ref(r%i): %u", index, v->ref_count_ext - 1);
     if (unlikely(v->ref_count_ext == 0))
         ad_fail("%u: ext. reference count became negative!", index);
     if (--v->ref_count_ext == 0 && v->ref_count_int == 0)
@@ -1226,7 +1307,7 @@ template ENOKI_EXPORT void ad_set_label<Value>(int32_t, const char *);
 template ENOKI_EXPORT const char *ad_label<Value>(int32_t);
 template ENOKI_EXPORT void ad_enqueue<Value>(int32_t);
 template ENOKI_EXPORT void ad_traverse<Value>(bool, bool);
-template ENOKI_EXPORT const char *ad_graphviz<Value>(bool);
+template ENOKI_EXPORT const char *ad_graphviz<Value>();
 template ENOKI_EXPORT int32_t ad_new_select<Value, Mask>(
     const char *, uint32_t, const Mask &, int32_t, int32_t);
 template ENOKI_EXPORT int32_t ad_new_gather<Value, Mask, Index>(

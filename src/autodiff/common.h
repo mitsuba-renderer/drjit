@@ -45,18 +45,50 @@ public:
         m_start[0] = '\0';
     }
 
-    /// Append a string to the buffer
-    void put(const char *str) {
-        do {
-            char* cur = (char*) memccpy(m_cur, str, '\0', m_end - m_cur);
+    template <size_t N> void put(const char (&str)[N]) {
+        put(str, N - 1);
+    }
 
-            if (likely(cur)) {
-                m_cur = cur - 1;
-                break;
-            }
+    /// Append a string with the specified length
+    void put(const char *str, size_t size) {
+        if (unlikely(m_cur + size >= m_end))
+            expand(size + 1 - remain());
 
+        memcpy(m_cur, str, size);
+        m_cur += size;
+        *m_cur = '\0';
+    }
+
+    /// Append a single character to the buffer
+    void putc(char c) {
+        if (unlikely(m_cur + 1 >= m_end))
             expand();
-        } while (true);
+        *m_cur++ = c;
+        *m_cur = '\0';
+    }
+
+    /// Append multiple copies of a single character to the buffer
+    void putc(char c, size_t count) {
+        if (unlikely(m_cur + count >= m_end))
+            expand(count + 1 - remain());
+        for (size_t i = 0; i < count; ++i)
+            *m_cur++ = c;
+        *m_cur = '\0';
+    }
+
+    /// Append an unsigned 32 bit integer
+    void put_uint32(uint32_t value) {
+        const int digits = 10;
+        const char *num = "0123456789";
+        char buf[digits];
+        int i = digits;
+
+        do {
+            buf[--i] = num[value % 10];
+            value /= 10;
+        } while (value);
+
+        return put(buf + i, digits - i);
     }
 
     /// Append a formatted (printf-style) string to the buffer
@@ -64,6 +96,9 @@ public:
     __attribute__((__format__ (__printf__, 2, 3)))
 #endif
     size_t fmt(const char *format, ...);
+
+    size_t size() const { return m_cur - m_start; }
+    size_t remain() const { return m_end - m_cur; }
 
 private:
     void expand(size_t amount = 2);
