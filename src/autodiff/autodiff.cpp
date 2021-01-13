@@ -168,7 +168,6 @@ struct Variable {
                 else
                     grad = std::move(v2);
             } else {
-                assert(size == src_size);
                 if constexpr (is_jit_array_v<T>) {
                     if (next_rev == 0 && recording && !v.is_placeholder()) {
                         scatter_reduce(ReduceOp::Add, grad, v, uint32_array_t<T>(0), neq(v, 0.f));
@@ -217,7 +216,6 @@ struct Variable {
                 else
                     grad = std::move(v3);
             } else {
-                assert(size == src_size);
                 if constexpr (is_jit_array_v<T>) {
                     if (!grad_valid)
                         grad = zero<T>(1);
