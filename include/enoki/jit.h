@@ -482,41 +482,55 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
     template <bool, typename Index, typename Mask>
     static Derived gather_(const void * /*src*/, const Index & /*index*/,
                            const Mask & /*mask*/) {
-        enoki_raise("Not implemented, please use gather() variant that takes a array source argument.");
+        enoki_raise("Not implemented, please use gather() variant that takes a "
+                    "array source argument.");
     }
 
     template <bool, typename Index, typename Mask>
-    static Derived gather_(const Derived &src, const Index &index, const Mask &mask) {
+    static Derived gather_(const Derived &src, const Index &index,
+                           const Mask &mask) {
         static_assert(std::is_same_v<Mask, mask_t<Derived>>);
-        return steal(
-            jit_var_new_gather(src.index(), index.index(), mask.index()));
+        if constexpr (!is_jit_array_v<Index>)
+            return gather_<false>(src, uint32_array_t<Derived>(index), mask);
+        else
+            return steal(
+                jit_var_new_gather(src.index(), index.index(), mask.index()));
     }
 
     template <bool, typename Index, typename Mask>
-    void scatter_(void * /* dst */, const Index & /*index*/, const Mask & /*mask*/) const {
-        enoki_raise("Not implemented, please use scatter() variant that takes a array target argument.");
+    void scatter_(void * /* dst */, const Index & /*index*/,
+                  const Mask & /*mask*/) const {
+        enoki_raise("Not implemented, please use scatter() variant that takes "
+                    "a array target argument.");
     }
 
     template <bool, typename Index, typename Mask>
     void scatter_(Derived &dst, const Index &index, const Mask &mask) const {
         static_assert(std::is_same_v<Mask, mask_t<Derived>>);
-        dst = steal(jit_var_new_scatter(dst.index(), m_index, index.index(),
-                                        mask.index(), ReduceOp::None));
+        if constexpr (!is_jit_array_v<Index>)
+            scatter_<false>(dst, uint32_array_t<Derived>(index), mask);
+        else
+            dst = steal(jit_var_new_scatter(dst.index(), m_index, index.index(),
+                                            mask.index(), ReduceOp::None));
     }
 
     template <typename Index, typename Mask>
     void scatter_reduce_(ReduceOp /*op*/, void * /*dst*/,
                          const Index & /*index*/,
                          const Mask & /* mask */) const {
-        enoki_raise("Not implemented, please use scatter_reduce() variant that takes a array target argument.");
+        enoki_raise("Not implemented, please use scatter_reduce() variant that "
+                    "takes a array target argument.");
     }
 
     template <typename Index, typename Mask>
     void scatter_reduce_(ReduceOp op, Derived &dst, const Index &index,
                          const Mask &mask) const {
         static_assert(std::is_same_v<Mask, mask_t<Derived>>);
-        dst = steal(jit_var_new_scatter(dst.index(), m_index, index.index(),
-                                        mask.index(), op));
+        if constexpr (!is_jit_array_v<Index>)
+            scatter_reduce_(op, dst, uint32_array_t<Derived>(index), mask);
+        else
+            dst = steal(jit_var_new_scatter(dst.index(), m_index, index.index(),
+                                            mask.index(), op));
     }
 
     //! @}

@@ -964,20 +964,24 @@ Target gather(Source &&source, const Index &index, const mask_t<Target> &mask = 
                       "Source argument of gather operation must either be a "
                       "pointer address or a flat array!");
         if constexpr (!is_array_v<Index>) {
-            size_t offset = index * sizeof(value_t<Target>) * Target::Size;
-            if constexpr (std::is_pointer_v<std::decay_t<Source>>) {
-                // Case 2.0.0: gather<Target>(const void *, size_t, ...)
-                return load<Target>((const uint8_t *)source + offset);
+            if constexpr (is_jit_array_v<Target> && is_jit_array_v<Source>) {
+                // Case 2.0.0: gather<FloatC>(const FloatC&, size_t, ...)
+                return Target::template gather_<Permute>(source, index, mask);
             } else {
-                // Case 2.0.1: gather<Target>(const FloatC&, size_t, ...)
-                return load<Target>((const uint8_t *)source.data() + offset);
+                size_t offset = index * sizeof(value_t<Target>) * Target::Size;
+                if constexpr (std::is_pointer_v<std::decay_t<Source>>)
+                    // Case 2.0.1: gather<Target>(const void *, size_t, ...)
+                    return load<Target>((const uint8_t *)source + offset);
+                else
+                    // Case 2.0.2: gather<Target>(const FloatP&, size_t, ...)
+                    return load<Target>((const uint8_t *)source.data() + offset);
             }
         } else if constexpr (array_depth_v<Target> == array_depth_v<Index>) {
-            // Case 2.1: gather<FloatC>(const FloatC& / const void *, ...)
-
-            if constexpr (Target::IsPacked && is_array_v<Source>)
+            if constexpr (Target::IsPacked && is_array_v<Source> && !is_jit_array_v<Source>)
+                // Case 2.1.0: gather<FloatC>(const FloatP&, ...)
                 return Target::template gather_<Permute>(source.data(), index, mask);
             else
+                // Case 2.1.1: gather<FloatC>(const FloatC& / const void *, ...)
                 return Target::template gather_<Permute>(source, index, mask);
         } else {
             // Case 2.2: gather<Vector3fC>(const FloatC & / const void *, ...)
