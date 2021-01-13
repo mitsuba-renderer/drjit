@@ -4,7 +4,7 @@
 #include <stdarg.h>
 #include <stdexcept>
 
-LogLevel log_level = LogLevel::Info;
+LogLevel log_level = LogLevel::Trace;
 Buffer buffer{0};
 
 void ad_fail(const char *fmt, ...) {
@@ -14,7 +14,7 @@ void ad_fail(const char *fmt, ...) {
     vfprintf(stderr, fmt, args);
     va_end(args);
     fputc('\n', stderr);
-    exit(EXIT_FAILURE);
+    abort();
 }
 
 void ad_log(LogLevel level, const char *fmt, ...) {

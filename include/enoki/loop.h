@@ -83,6 +83,9 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
         if constexpr (is_array_v<Value>) {
             if constexpr (array_depth_v<Value> == 1) {
                 if constexpr (is_diff_array_v<Value>) {
+                    if (has_grad(value))
+                        jit_raise("enoki::Loop::put(): loop variable is "
+                                  "attached to the AD graph!");
                     put(value.detach_());
                 } else if constexpr (is_jit_array_v<Value>) {
                     if (m_state)

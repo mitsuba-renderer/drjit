@@ -12,6 +12,8 @@
 
 #pragma once
 
+#include <enoki-jit/containers.h>
+
 NAMESPACE_BEGIN(enoki)
 NAMESPACE_BEGIN(detail)
 
@@ -79,7 +81,7 @@ Result vcall_jit_record_impl(const char *name, uint32_t n_inst_max,
 
         for (uint32_t i = 1, j = 1; i <= n_inst_max; ++i) {
             snprintf(label, sizeof(label), "VCall: %s::%s() [instance %u]",
-                    Base::Domain, name, j);
+                     Base::Domain, name, j);
             Base *base = (Base *) jit_registry_get_ptr(Base::Domain, i);
             if (!base)
                 continue;

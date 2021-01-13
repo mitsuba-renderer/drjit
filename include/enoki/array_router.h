@@ -1533,7 +1533,7 @@ template <bool UnderlyingType = true, typename T> decltype(auto) detach(T &&valu
     }
 }
 
-template <bool Underlying = true, typename T> auto grad(const T &value) {
+template <bool Underlying = true, bool FailIfMissing = true, typename T> auto grad(const T &value) {
     using Result = std::conditional_t<Underlying, detached_t<T>, T>;
 
     if constexpr (is_diff_array_v<T>) {
@@ -1543,11 +1543,11 @@ template <bool Underlying = true, typename T> auto grad(const T &value) {
                 result = empty<Result>(value.size());
 
             for (size_t i = 0; i < value.size(); ++i)
-                result.entry(i) = grad<Underlying>(value.entry(i));
+                result.entry(i) = grad<Underlying, FailIfMissing>(value.entry(i));
 
             return result;
         } else {
-            return Result(value.derived().grad_());
+            return Result(value.derived().grad_(FailIfMissing));
         }
     } else if constexpr (is_enoki_struct_v<T>) {
         Result result;
@@ -1555,7 +1555,7 @@ template <bool Underlying = true, typename T> auto grad(const T &value) {
         struct_support_t<T>::apply_2(
             value, result,
             [](auto const &x1, auto &x2) ENOKI_INLINE_LAMBDA {
-                x2 = grad<Underlying>(x1);
+                x2 = grad<Underlying, FailIfMissing>(x1);
             });
 
         return result;
@@ -1564,44 +1564,44 @@ template <bool Underlying = true, typename T> auto grad(const T &value) {
     }
 }
 
-template <typename T, typename T2>
+template <bool FailIfMissing = true, typename T, typename T2>
 void set_grad(T &value, const T2 &grad) {
     if constexpr (is_diff_array_v<T>) {
         if constexpr (array_depth_v<T> > 1) {
             for (size_t i = 0; i < value.size(); ++i)
-                set_grad(value.entry(i), grad.entry(i));
+                set_grad<FailIfMissing>(value.entry(i), grad.entry(i));
         } else {
             if constexpr (is_diff_array_v<T2>)
-                set_grad(value, detach(grad));
+                set_grad<FailIfMissing>(value, detach(grad));
             else
-                value.set_grad_(grad);
+                value.set_grad_(grad, FailIfMissing);
         }
     } else if constexpr (is_enoki_struct_v<T>) {
         struct_support_t<T>::apply_2(
             value, grad,
-            [&](auto &x1, auto &x2) ENOKI_INLINE_LAMBDA {
-                set_grad(x1, x2);
+            [](auto &x1, auto &x2) ENOKI_INLINE_LAMBDA {
+                set_grad<FailIfMissing>(x1, x2);
             });
     }
 }
 
-template <typename T, typename T2>
+template <bool FailIfMissing = true, typename T, typename T2>
 void accum_grad(T &value, const T2 &grad) {
     if constexpr (is_diff_array_v<T>) {
         if constexpr (array_depth_v<T> > 1) {
             for (size_t i = 0; i < value.size(); ++i)
-                accum_grad(value.entry(i), grad.entry(i));
+                accum_grad<FailIfMissing>(value.entry(i), grad.entry(i));
         } else {
             if constexpr (is_diff_array_v<T2>)
-                accum_grad(value, detach(grad));
+                accum_grad<FailIfMissing>(value, detach(grad));
             else
-                value.accum_grad_(grad);
+                value.accum_grad_(grad, FailIfMissing);
         }
     } else if constexpr (is_enoki_struct_v<T>) {
         struct_support_t<T>::apply_2(
             value, grad,
             [&](auto &x1, auto &x2) ENOKI_INLINE_LAMBDA {
-                accum_grad(x1, x2);
+                accum_grad<FailIfMissing>(x1, x2);
             });
     }
 }

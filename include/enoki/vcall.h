@@ -16,7 +16,6 @@
 
 #include <enoki/array.h>
 #include <enoki/vcall_packet.h>
-#include <enoki-jit/containers.h>
 
 extern "C" {
     extern ENOKI_IMPORT uint32_t jit_registry_put(const char *domain, void *ptr);
@@ -86,44 +85,34 @@ struct vectorize_type<Guide, Type, enable_if_t<std::is_scalar_v<Type> && !std::i
 };
 
 template <typename Result, typename Func, typename Self, typename... Args>
+Result vcall_jit_reduce(const Func &func, const Self &self,
+                        const Args &... args);
+
+template <typename Result, typename Func, typename Self, typename... Args>
 Result vcall_jit_record(const char *name, const Func &func, Self &self,
                         const Args &... args);
 
 template <typename Result, typename Func, typename Self, typename... Args>
-Result vcall_jit_reduce(const Func &func, const Self &self,
-                        const Args &... args);
+Result vcall_autodiff(const char *name, const Func &func, const Self &self,
+                      const Args &... args);
 
-template <typename Result, typename Func, typename FuncFwd, typename FuncRev, typename Self,
-          typename... Args>
-ENOKI_INLINE Result vcall_autodiff(const char *name,
-                                   const Func &func,
-                                   const FuncFwd &func_fwd,
-                                   const FuncRev &func_rev,
-                                   const Self &self,
-                                   const Args &... args);
+template <typename Class, typename Func, typename Self, typename... Args>
+auto vcall(const char *name, const Func &func, const Self &self,
+           const Args &... args) {
+    using Output = decltype(func((Class *) nullptr, args...));
+    using Result = typename vectorize_type<Self, Output>::type;
 
-template <typename Class, typename Func, typename FuncFwd, typename FuncRev,
-          typename Self, typename... Args>
-auto dispatch(const char *name, const Func &func, const FuncFwd &func_fwd,
-              const FuncRev func_rev, const Self &self,
-              const Args &... args) {
-    using Result = decltype(func((Class *) nullptr, args...));
-    using Result2 = typename vectorize_type<Self, Result>::type;
-    constexpr bool IsVoid = std::is_void_v<Result2>;
-    using Result3 = std::conditional_t<IsVoid, std::nullptr_t, Result2>;
-
-    ENOKI_MARK_USED(func_fwd);
-    ENOKI_MARK_USED(func_rev);
     ENOKI_MARK_USED(name);
-
     if constexpr (is_jit_array_v<Self>) {
-        if ((jit_flags() & 4) == 0 || is_llvm_array_v<Self>) {
-            return detail::vcall_jit_reduce<Result3>(func, self, copy_diff(args)...);
+        if ((jit_flags() & 4 /* RecordVCall */) == 0) {
+            return detail::vcall_jit_reduce<Result>(func, self, copy_diff(args)...);
         } else {
             if constexpr (is_diff_array_v<Self>)
-                return detail::vcall_autodiff<Result3>(name, func, func_fwd, func_rev, self, args...);
+                return detail::vcall_autodiff<Result>(name, func, self,
+                                                      args...);
             else
-                return detail::vcall_jit_record<Result3>(name, func, self, args...);
+                return detail::vcall_jit_record<Result>(name, func, self,
+                                                        args...);
         }
     } else {
         return detail::vcall_packet<Result>(func, self, args...);
@@ -180,7 +169,7 @@ NAMESPACE_END(enoki)
 
 #define ENOKI_VCALL_METHOD(name)                                               \
     template <typename... Args> auto name(const Args &... args_) const {       \
-        return detail::dispatch<Class>(                                        \
+        return detail::vcall<Class>(                                           \
             #name,                                                             \
             [](auto self, const auto &... args) ENOKI_INLINE_LAMBDA {          \
                 using Result = decltype(self->name(args...));                  \
@@ -191,43 +180,7 @@ NAMESPACE_END(enoki)
                     return self->name(args...);                                \
                 }                                                              \
             },                                                                 \
-            [](auto self, const auto &grad_in, auto ... args)                  \
-                ENOKI_INLINE_LAMBDA {                                          \
-                    enoki::enable_grad(args...);                               \
-                    using Result = decltype(self->name(args...));              \
-                    if constexpr (!std::is_same_v<Result, void>) {             \
-                        Result result = self->name(args...);                   \
-                        ek_tuple args_tuple{ args... };                        \
-                        enoki::set_grad(args_tuple, grad_in);                  \
-                        enoki::enqueue(args_tuple);                            \
-                        enoki::traverse<decltype(result),                      \
-                                        decltype(args)...>(false, true);       \
-                        return enoki::grad<false>(result);                     \
-                    } else {                                                   \
-                        self->name(args...);                                   \
-                        ek_tuple args_tuple{ args... };                        \
-                        enoki::set_grad(args_tuple, grad_in);                  \
-                        enoki::enqueue(args_tuple);                            \
-                        enoki::traverse<decltype(args)...>(false, true);       \
-                        return nullptr;                                        \
-                    }                                                          \
-                },                                                             \
-            [](auto self, const auto &grad_out, auto ... args)                 \
-                ENOKI_INLINE_LAMBDA {                                          \
-                    enoki::enable_grad(args...);                               \
-                    using Result = decltype(self->name(args...));              \
-                    if constexpr (!std::is_same_v<Result, void>) {             \
-                        Result result = self->name(args...);                   \
-                        enoki::set_grad(result, grad_out);                     \
-                        enoki::enqueue(result);                                \
-                        enoki::traverse<decltype(result),                      \
-                                        decltype(args)...>(true, true);        \
-                        return ek_tuple{ enoki::grad<false>(args)... };        \
-                    } else {                                                   \
-                        self->name(args...);                                   \
-                    }                                                          \
-                    return ek_tuple{ enoki::grad<false>(args)... };            \
-                }, array, args_...);                                           \
+            array, args_...);                                                  \
     }
 
 #define ENOKI_VCALL_GETTER(name, type)                                         \
@@ -242,10 +195,10 @@ NAMESPACE_END(enoki)
             return enoki::gather<Result>(data,                                 \
                 UInt32::borrow(array.index()), mask);                          \
         } else {                                                               \
-            return detail::dispatch<Class>(                                    \
-                nullptr, [](auto self)                                         \
+            return detail::vcall<Class>(                                       \
+                #name, [](auto self)                                           \
                     ENOKI_INLINE_LAMBDA { return self->name(); },              \
-                nullptr, nullptr, array & mask);                               \
+                array & mask);                                                 \
         }                                                                      \
     }
 

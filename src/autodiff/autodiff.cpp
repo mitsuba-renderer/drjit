@@ -141,11 +141,6 @@ struct Variable {
     template <typename T>
     void accum(const T& v, uint32_t src_size) {
         if constexpr (is_array_v<T>) {
-            /* While recording derivative code symbolically, turn
-               gradient updates involving pre-allocated memory regions into
-               scatters. */
-            bool recording = jit_flag(JitFlag::PostponeSideEffects);
-
             bool grad_valid = ((const T &) grad).valid();
             if (size == 1 && src_size != 1) {
                 Value v2;
@@ -153,27 +148,14 @@ struct Variable {
                     v2 = v * Scalar(src_size);
                 } else {
                     assert(v.size() == src_size);
-                    if constexpr (is_jit_array_v<T>) {
-                        if (recording) {
-                            if (!grad_valid)
-                                grad = zero<T>(1);
-                            scatter_reduce(ReduceOp::Add, grad, v, uint32_array_t<T>(0), neq(v, 0.f));
-                            return;
-                        }
-                    }
                     v2 = hsum_async(v);
                 }
+
                 if (grad_valid)
                     grad += v2;
                 else
                     grad = std::move(v2);
             } else {
-                if constexpr (is_jit_array_v<T>) {
-                    if (next_rev == 0 && recording && !v.is_placeholder()) {
-                        scatter_reduce(ReduceOp::Add, grad, v, uint32_array_t<T>(0), neq(v, 0.f));
-                        return;
-                    }
-                }
                 if (grad_valid)
                     grad += v;
                 else
@@ -185,53 +167,33 @@ struct Variable {
     }
 
     template <typename T>
-    void mul_accum(const T &v1, const T &v2, uint32_t src_size) {
-        auto active = neq(v1, 0.f);
+    void mul_accum(const T &v1, const T &v2_, uint32_t src_size) {
+        T v2 = select(eq(v1, 0.f), v1, v2_);
 
         if constexpr (is_array_v<T>) {
-            /* While recording derivative code symbolically, turn
-               gradient updates involving pre-allocated memory regions into
-               scatters. */
-            bool recording = jit_flag(JitFlag::PostponeSideEffects);
-
             bool grad_valid = ((const T &) grad).valid();
+
             if (size == 1 && src_size != 1) {
-                T v3 = select(active, v1 * v2, 0.f);
+                T v3 = v1 * v2;
                 if (v3.size() == 1) {
                     v3 *= Scalar(src_size);
                 } else {
                     assert(v3.size() == src_size);
-                    if constexpr (is_jit_array_v<T>) {
-                        if (recording) {
-                            if (!grad_valid)
-                                grad = zero<T>(1);
-                            scatter_reduce(ReduceOp::Add, grad, v3, uint32_array_t<T>(0), active);
-                            return;
-                        }
-                    }
                     v3 = hsum_async(v3);
                 }
+
                 if (grad_valid)
                     grad += v3;
                 else
                     grad = std::move(v3);
             } else {
-                if constexpr (is_jit_array_v<T>) {
-                    if (!grad_valid)
-                        grad = zero<T>(1);
-                    T v3 = select(active, v1 * v2, 0.f);
-                    if (next_rev == 0 && recording && !v3.is_placeholder()) {
-                        scatter_reduce(ReduceOp::Add, grad, v3, uint32_array_t<T>(0), active);
-                        return;
-                    }
-                }
                 if (grad_valid)
-                    grad = select(active, fmadd(v1, v2, grad), grad);
+                    grad = fmadd(v1, v2, grad);
                 else
-                    grad = select(active, v1 * v2, 0.f);
+                    grad = v1 * v2;
             }
         } else {
-            grad = select(active, fmadd(v1, v2, grad), grad);
+            grad = fmadd(v1, v2, grad);
         }
     }
 
@@ -283,10 +245,19 @@ struct State {
     }
 
     ~State() {
-        if (!variables.empty())
+        if (!variables.empty()) {
             ad_log(Warn,
                    "enoki-ad: variable leak detected (%zu variables "
                    "remain in use)!", variables.size());
+            uint32_t counter;
+            for (auto kv : variables) {
+                ad_log(Warn, " - variable %u", kv.first);
+                if (++counter == 10) {
+                    ad_log(Warn, " - (skipping the rest)");
+                    break;
+                }
+            }
+        }
 
         size_t edges_used = edges.size() - unused_edges.size() - 1;
         if (edges_used != 0)
@@ -1114,7 +1085,9 @@ template <typename T> void ad_inc_ref_impl(int32_t index) noexcept(true) {
         return;
     index = std::abs(index);
     std::lock_guard<std::mutex> guard(state.mutex);
-    state[index]->ref_count_ext++;
+    Variable *v = state[index];
+    ad_log(Trace, "ad_inc_ref(%u): %u", index, v->ref_count_ext + 1);
+    v->ref_count_ext++;
 }
 
 template <typename T> void ad_dec_ref_impl(int32_t index) noexcept(true) {
@@ -1123,41 +1096,59 @@ template <typename T> void ad_dec_ref_impl(int32_t index) noexcept(true) {
     index = std::abs(index);
     std::lock_guard<std::mutex> guard(state.mutex);
     Variable *v = state[index];
+    ad_log(Trace, "ad_dec_ref(%u): %u", index, v->ref_count_ext - 1);
     if (unlikely(v->ref_count_ext == 0))
         ad_fail("%u: ext. reference count became negative!", index);
     if (--v->ref_count_ext == 0 && v->ref_count_int == 0)
         ad_free(index, v);
 }
 
-template <typename T> T ad_grad(int32_t index) {
+template <typename T> T ad_grad(int32_t index, bool fail_if_missing) {
     if (unlikely(index <= 0))
         return T(0);
     std::lock_guard<std::mutex> guard(state.mutex);
-    const T &value = state[index]->grad;
-    if (unlikely(width(value) == 0))
+    auto it = state.variables.find(index);
+    if (it == state.variables.end()) {
+        if (fail_if_missing)
+            throw std::runtime_error("ad_grad(): referenced an unknown variable!");
         return T(0);
-    return value;
+    }
+    const Variable &v = it->second;
+    return (width(v.grad) == 0) ? T(0) : v.grad;
 }
 
-template <typename T> void ad_set_grad(int32_t index, const T &value) {
+template <typename T> void ad_set_grad(int32_t index, const T &value, bool fail_if_missing) {
     if (unlikely(index <= 0))
         return;
 
     std::lock_guard<std::mutex> guard(state.mutex);
-    Variable *var = state[index];
-    if (var->size != 1 || width(value) == 1)
-        var->grad = value;
+    auto it = state.variables.find(index);
+    if (it == state.variables.end()) {
+        if (fail_if_missing)
+            throw std::runtime_error("ad_set_grad(): referenced an unknown variable!");
+        return;
+    }
+
+    Variable &v = it.value();
+    if (v.size != 1 || width(value) == 1)
+        v.grad = value;
     else
-        var->grad = hsum_async(value);
+        v.grad = hsum_async(value);
 }
 
-template <typename T> void ad_accum_grad(int32_t index, const T &value) {
+template <typename T> void ad_accum_grad(int32_t index, const T &value, bool fail_if_missing) {
     if (unlikely(index <= 0))
         return;
 
     std::lock_guard<std::mutex> guard(state.mutex);
-    Variable *var = state[index];
-    var->accum(value, width(value));
+    auto it = state.variables.find(index);
+    if (it == state.variables.end()) {
+        if (fail_if_missing)
+            throw std::runtime_error("ad_accum_grad(): referenced an unknown variable!");
+        return;
+    }
+    Variable &v = it.value();
+    v.accum(value, width(value));
 }
 
 template <typename T> void ad_set_label(int32_t index, const char *label) {
@@ -1228,9 +1219,9 @@ template ENOKI_EXPORT void ad_inc_ref_impl<Value>(int32_t) noexcept;
 template ENOKI_EXPORT void ad_dec_ref_impl<Value>(int32_t) noexcept;
 template ENOKI_EXPORT int32_t ad_new<Value>(const char *, uint32_t, uint32_t,
                                             const int32_t *, Value *);
-template ENOKI_EXPORT Value ad_grad<Value>(int32_t);
-template ENOKI_EXPORT void ad_set_grad<Value>(int32_t, const Value &);
-template ENOKI_EXPORT void ad_accum_grad<Value>(int32_t, const Value &);
+template ENOKI_EXPORT Value ad_grad<Value>(int32_t, bool);
+template ENOKI_EXPORT void ad_set_grad<Value>(int32_t, const Value &, bool);
+template ENOKI_EXPORT void ad_accum_grad<Value>(int32_t, const Value &, bool);
 template ENOKI_EXPORT void ad_set_label<Value>(int32_t, const char *);
 template ENOKI_EXPORT const char *ad_label<Value>(int32_t);
 template ENOKI_EXPORT void ad_enqueue<Value>(int32_t);
