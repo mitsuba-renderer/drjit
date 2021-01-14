@@ -26,7 +26,6 @@ using Array3fD = ek::Array<FloatD, 3>;
 using StructF = Struct<Array3f>;
 using StructFD = Struct<Array3fD>;
 
-#if 0
 struct Base {
     Base(bool scalar) : x(ek::opaque<Float>(10, scalar ? 1 : 10)) { }
 
@@ -79,13 +78,12 @@ ENOKI_VCALL_END(Base)
 ENOKI_TEST(test01_vcall_reduce_and_record) {
     int n = 9999;
 
-    jit_set_log_level_stderr(::LogLevel::Error);
+    // jit_set_log_level_stderr(::LogLevel::Error);
     jit_init((uint32_t) JitBackend::CUDA);
 
     for (int i = 0; i < 2; ++i) {
         jit_set_flag(JitFlag::VCallRecord, i);
         for (int j = 0; j < 2; ++j) {
-            // fprintf(stderr, "=============================\n");
             A *a = new A(j != 0);
             B *b = new B(j != 0);
 
@@ -125,7 +123,6 @@ ENOKI_TEST(test01_vcall_reduce_and_record) {
         }
     }
 }
-#endif
 
 struct BaseD {
     BaseD() {
@@ -167,7 +164,6 @@ ENOKI_VCALL_METHOD(g)
 ENOKI_VCALL_METHOD(dummy)
 ENOKI_VCALL_END(BaseD)
 
-#if 0
 ENOKI_TEST(test02_vcall_symbolic_ad_fwd) {
     jit_init((uint32_t) JitBackend::CUDA);
 
@@ -213,7 +209,6 @@ ENOKI_TEST(test02_vcall_symbolic_ad_fwd) {
     delete a;
     delete b;
 }
-#endif
 
 ENOKI_TEST(test02_vcall_symbolic_ad_fwd_accessing_local) {
     jit_init((uint32_t) JitBackend::CUDA);
@@ -250,7 +245,6 @@ ENOKI_TEST(test02_vcall_symbolic_ad_fwd_accessing_local) {
             ek::set_label(input, "input");
             ek::set_label(output, "output");
             ek::set_grad(input, StructF(2, 10));
-            std::cout << ek::graphviz(output) << std::endl;
             ek::enqueue(input);
             ek::traverse<FloatD>(false);
 
@@ -269,4 +263,55 @@ ENOKI_TEST(test02_vcall_symbolic_ad_fwd_accessing_local) {
 
     delete a;
     delete b;
+}
+
+ENOKI_TEST(test02_vcall_symbolic_ad_rev_accessing_local) {
+    jit_init((uint32_t) JitBackend::CUDA);
+    // jit_set_log_level_stderr(::LogLevel::Trace);
+
+    for (int i = 0; i < 2; ++i) {
+        AD *a = new AD();
+        BD *b = new BD();
+
+        jit_set_flag(JitFlag::VCallRecord, 1);
+        jit_set_flag(JitFlag::VCallOptimize, i);
+
+        int n = 10;
+        MaskD m = ek::neq(ek::arange<UInt32>(n) & 1, 0);
+        BasePtrD arr = ek::select(m, (BaseD *) a, (BaseD *) b);
+        ek::enable_grad(a->x);
+        ek::enable_grad(b->x);
+
+        arr->dummy();
+
+        Float o = ek::full<Float>(1, n);
+
+        Struct input{ Array3fD(1, 2, 3) * o,
+                      Array3fD(4, 5, 6) * o };
+
+        ek::enable_grad(input);
+
+        StructFD output = arr->g(input);
+        ek::set_label(input, "input");
+        ek::set_label(output, "output");
+        ek::enqueue(output);
+        ek::set_grad(output, StructF(2, 10));
+        ek::traverse<FloatD>(true);
+
+        StructF grad_in = ek::grad(input);
+        ek::eval(output, ek::grad(a->x), ek::grad(b->x), grad_in);
+
+        assert(ek::all_nested(
+            ek::eq(output.a, ek::select(m, input.a * 10, input.b * 4)) &&
+            ek::eq(output.b, ek::select(m, input.b * 3, input.a + 10))));
+
+        assert(ek::all_nested(
+            ek::eq(grad_in.a, ek::detach(ek::select(m, 20, 10))) &&
+            ek::eq(grad_in.b, ek::detach(ek::select(m, 30, 8)))));
+
+        assert(ek::grad(a->x) == 5*6*2);
+        assert(ek::grad(b->x) == 5*3*10);
+        delete a;
+        delete b;
+    }
 }

@@ -244,8 +244,6 @@ def test20_scatter_reduce_rev(m):
 
         s = ek.dot_async(buf2, buf2)
 
-        print(ek.graphviz_str(s))
-
         ek.backward(s)
 
         ref_x = m.Float(0.0000, 0.5000, 1.0000, 3.5000, 4.6667)

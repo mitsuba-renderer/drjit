@@ -34,7 +34,7 @@ def test01_ctr(pkg):
     i = ek.arange(p.Int, 0, 10)
 
     loop = p.Loop("MyLoop", i)
-    while loop.cond(i < 5):
+    while loop(i < 5):
         i += 1
 
     assert i == p.Int(5, 5, 5, 5, 5, 5, 6, 7, 8, 9)
@@ -54,7 +54,7 @@ def test01_record_loop(pkg):
             z = p.Float(1)
 
             loop = p.Loop("MyLoop", x, y, z)
-            while loop.cond(x < 5):
+            while loop(x < 5):
                 y += p.Float(x)
                 x += 1
                 z += 1
@@ -79,7 +79,7 @@ def test02_multiple_values(pkg, variant):
         v.y = p.Float(0)
 
     loop = p.Loop("MyLoop", i, v)
-    while loop.cond(i < 5):
+    while loop(i < 5):
         i.assign(i + 1)
         f = p.Float(i)
         v.x += f
@@ -122,7 +122,7 @@ def test04_side_effect(pkg):
     buf = ek.zero(p.Float, 10)
 
     loop = p.Loop("MyLoop", i, j)
-    while loop.cond(i < 10):
+    while loop(i < 10):
         j += i
         i += 1
         ek.scatter_reduce(op=ek.ReduceOp.Add, target=buf, value=p.Float(i), index=0)
@@ -143,7 +143,7 @@ def test05_side_effect_noloop(pkg):
     ek.set_flag(ek.JitFlag.LoopRecord, False)
 
     loop = p.Loop("MyLoop", i, j)
-    while loop.cond(i < 10):
+    while loop(i < 10):
         j += i
         i += 1
         ek.scatter_reduce(op=ek.ReduceOp.Add, target=buf, value=p.Float(i), index=0)
@@ -161,7 +161,7 @@ def test06_test_collatz(pkg, variant):
     def collatz(value: p.Int):
         counter = p.Int(0)
         loop = p.Loop("collatz", value, counter)
-        while (loop.cond(ek.neq(value, 1))):
+        while (loop(ek.neq(value, 1))):
             is_even = ek.eq(value & 1, 0)
             value.assign(ek.select(is_even, value // 2, 3*value + 1))
             counter += 1
@@ -191,7 +191,7 @@ def test07_loop_nest(pkg, variant):
     def collatz(value: p.Int):
         counter = p.Int(0)
         loop = p.Loop("Nested", value, counter)
-        while (loop.cond(ek.neq(value, 1))):
+        while (loop(ek.neq(value, 1))):
             is_even = ek.eq(value & 1, 0)
             value.assign(ek.select(is_even, value // 2, 3*value + 1))
             counter += 1
@@ -203,7 +203,7 @@ def test07_loop_nest(pkg, variant):
 
     if variant == 0:
         loop_1 = p.Loop("MyLoop", i)
-        while loop_1.cond(i <= 10):
+        while loop_1(i <= 10):
             ek.scatter(buf, collatz(p.Int(i)), i - 1)
             i += 1
     else:

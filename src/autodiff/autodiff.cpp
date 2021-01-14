@@ -387,17 +387,14 @@ static void ad_toposort_fwd() {
         state.todo.push_back(index);
 
         Variable *v = state[index];
-        fprintf(stderr, "Toposort fwd a%i\n", index);
 
         uint32_t edge = v->next_fwd;
         while (edge) {
             Edge &e = state.edges[edge];
-            fprintf(stderr, "Toposort fwd a%i -> a%i\n", index, e.target);
             e.visited = 0;
 
             const Variable *v2 = state[e.target];
             if (recording && !v->placeholder && !v2->placeholder) {
-                fprintf(stderr, "Ignoring..\n");
                 edge = e.next_fwd;
                 continue;
             }
@@ -497,15 +494,14 @@ static void ad_free(int32_t index, Variable *v);
 /// Clear backward edges of the given variable and decrease int. ref. counts
 static void ad_free_edges(int32_t index, Variable *v) {
     uint32_t edge_id = v->next_rev;
-    ad_log(Trace, "ad_free_edges(): freeing edges of variable a%i", index);
+    ad_trace("ad_free_edges(): freeing edges of variable a%i", index);
     v->next_rev = 0;
 
     while (edge_id) {
         Edge &edge = state.edges[edge_id];
 
-        ad_log(Trace,
-               "ad_free_edges(): freeing edge %u: a%i -> a%i",
-               edge_id, edge.source, edge.target);
+        ad_trace("ad_free_edges(): freeing edge %u: a%i -> a%i", edge_id,
+                 edge.source, edge.target);
 
         int32_t source = edge.source;
         uint32_t next_rev = edge.next_rev,
@@ -546,7 +542,7 @@ static void ad_free_edges(int32_t index, Variable *v) {
 }
 
 static void ad_free(int32_t index, Variable *v) {
-    ad_log(Trace, "ad_free(a%i)", index);
+    ad_trace("ad_free(a%i)", index);
     if (v->free_label)
         free(v->label);
     if (v->next_rev)
@@ -624,7 +620,7 @@ int32_t ad_new(const char *label, uint32_t size, uint32_t op_count,
                 ad_fail("ad_new(): variable a%i computation being recorded "
                         "accesses a non-scalar private variable (a%i)!",
                         index, index2);
-            index2 = ad_new_gather_impl<T>("gather", var2->size, op[i], Index(0),
+            index2 = ad_new_gather_impl<T>("gather", var->size, op[i], Index(0),
                                            Mask(true), false);
             var2 = state[index2];
             var2->ref_count_ext = 0;
@@ -938,7 +934,7 @@ static void ad_traverse_rev(std::vector<int32_t> &todo, bool retain_graph) {
 
     for (int32_t index : todo) {
         Variable *v = state[index];
-        ad_log(Trace, "ad_traverse_rev(): processing variable a%i ..", index);
+        ad_trace("ad_traverse_rev(): processing variable a%i ..", index);
 
         if constexpr (is_dynamic_v<Value>) {
             uint32_t grad_size = asize(v->grad);
@@ -962,8 +958,8 @@ static void ad_traverse_rev(std::vector<int32_t> &todo, bool retain_graph) {
             Variable *v2 = state[edge.source];
             uint32_t next_rev = edge.next_rev;
 
-            ad_log(Trace, "ad_traverse_fwd(): processing edge a%i -> a%i ..",
-                   index, edge.target);
+            ad_trace("ad_traverse_fwd(): processing edge a%i -> a%i ..", index,
+                     edge.source);
 
             if (unlikely(edge.special)) {
                 edge.special->backward(v2, v);
@@ -1011,7 +1007,7 @@ static void ad_traverse_fwd(std::vector<int32_t> &todo, bool retain_graph) {
 
     for (int32_t index : todo) {
         Variable *v = state[index];
-        ad_log(Trace, "ad_traverse_fwd(): processing variable a%i ..", index);
+        ad_trace("ad_traverse_fwd(): processing variable a%i ..", index);
 
         if constexpr (is_dynamic_v<Value>) {
             uint32_t grad_size = asize(v->grad);
@@ -1041,8 +1037,8 @@ static void ad_traverse_fwd(std::vector<int32_t> &todo, bool retain_graph) {
                 continue;
             }
 
-            ad_log(Trace, "ad_traverse_fwd(): processing edge a%i -> a%i ..",
-                   index, edge.target);
+            ad_trace("ad_traverse_fwd(): processing edge a%i -> a%i ..", index,
+                     edge.target);
 
             if (unlikely(edge.special)) {
                 edge.special->forward(v, v2);
@@ -1249,7 +1245,7 @@ template <typename T> void ad_inc_ref_impl(int32_t index) noexcept(true) {
     index = std::abs(index);
     std::lock_guard<std::mutex> guard(state.mutex);
     Variable *v = state[index];
-    ad_log(Trace, "ad_inc_ref(a%i): %u", index, v->ref_count_ext + 1);
+    ad_trace("ad_inc_ref(a%i): %u", index, v->ref_count_ext + 1);
     v->ref_count_ext++;
 }
 
@@ -1259,7 +1255,7 @@ template <typename T> void ad_dec_ref_impl(int32_t index) noexcept(true) {
     index = std::abs(index);
     std::lock_guard<std::mutex> guard(state.mutex);
     Variable *v = state[index];
-    ad_log(Trace, "ad_dec_ref(a%i): %u", index, v->ref_count_ext - 1);
+    ad_trace("ad_dec_ref(a%i): %u", index, v->ref_count_ext - 1);
     if (unlikely(v->ref_count_ext == 0))
         ad_fail("enoki-autodiff: fatal error: external reference count of "
                 "variable a%i became negative!", index);
@@ -1293,7 +1289,7 @@ template <typename T> void ad_set_grad(int32_t index, const T &value, bool fail_
         return;
     }
 
-    ad_log(Trace, "ad_set_grad(a%i)", index);
+    ad_trace("ad_set_grad(a%i)", index);
     Variable &v = it.value();
     if (v.size != 1 || width(value) == 1)
         v.grad = value;
@@ -1312,7 +1308,7 @@ template <typename T> void ad_accum_grad(int32_t index, const T &value, bool fai
             throw std::runtime_error("ad_accum_grad(): referenced an unknown variable!");
         return;
     }
-    ad_log(Trace, "ad_accum_grad(a%i)", index);
+    ad_trace("ad_accum_grad(a%i)", index);
     Variable &v = it.value();
     v.accum(value, width(value));
 }

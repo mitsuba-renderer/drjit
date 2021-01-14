@@ -1676,19 +1676,19 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         return m_value;
     }
 
-    const Type grad_(bool fail_if_missing) const {
+    const Type grad_(bool fail_if_missing = false) const {
         if constexpr (IsEnabled)
             return detail::ad_grad<Type>(m_index, fail_if_missing);
         else
             return zero<Type>();
     }
 
-    void set_grad_(const Type &value, bool fail_if_missing) {
+    void set_grad_(const Type &value, bool fail_if_missing = false) {
         if constexpr (IsEnabled)
             detail::ad_set_grad<Type>(m_index, value, fail_if_missing);
     }
 
-    void accum_grad_(const Type &value, bool fail_if_missing) {
+    void accum_grad_(const Type &value, bool fail_if_missing = false) {
         if constexpr (IsEnabled)
             detail::ad_accum_grad<Type>(m_index, value, fail_if_missing);
     }

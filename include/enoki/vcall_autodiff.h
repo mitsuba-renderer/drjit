@@ -25,7 +25,6 @@ struct DiffVCall : CustomOp<Type, Result, ConstStr, Self, Func, Args...> {
     using Base = CustomOp<Type, Result, ConstStr, Self, Func, Args...>;
 
     static constexpr bool ClearPrimal   = false;
-    static constexpr bool ForceCreation = false;
 
     Result eval(const ConstStr &name, const Self &self, const Func &func,
                 const Args &... args) override {
@@ -33,11 +32,8 @@ struct DiffVCall : CustomOp<Type, Result, ConstStr, Self, Func, Args...> {
         m_name_static = name;
         snprintf(m_name_long, sizeof(m_name_long), "VCall: %s::%s()",
                  Class::Domain, m_name_static);
-        fprintf(stderr, "================== part 1================\n");
         ADRecordingSession guard;
-        Result result = vcall_jit_record<Result>(name, func, self, args...);
-        fprintf(stderr, "================== done 1================\n");
-        return result;
+        return vcall_jit_record<Result>(name, func, self, args...);
     }
 
     void forward() override {
@@ -49,19 +45,13 @@ struct DiffVCall : CustomOp<Type, Result, ConstStr, Self, Func, Args...> {
         const Func &func = Base::template value_in<2>();
 
         auto func_fwd = [func](auto *self2, auto... value_grad_pair) {
-        fprintf(stderr, "================== part 2================\n");
             ADRecordingSession guard;
             enable_grad(value_grad_pair.first...);
             Result result = func(self2, value_grad_pair.first...);
             (set_grad(value_grad_pair.first, value_grad_pair.second), ...);
             enqueue(value_grad_pair.first...);
-            set_label(result, "result");
-            std::cout << graphviz(result) << std::endl;
             traverse<Type>(false, true);
-            auto result2 = grad<false>(result);
-            std::cout << jit_var_graphviz() << std::endl;
-        fprintf(stderr, "================== done 2================\n");
-        return result2;
+            return grad<false>(result);
         };
 
         size_t name_size = strlen(m_name_static) + 8;
@@ -76,31 +66,37 @@ struct DiffVCall : CustomOp<Type, Result, ConstStr, Self, Func, Args...> {
         Base::set_grad_out(grad_out);
     }
 
-#if 0
     template <size_t... Is>
     void backward_impl(std::index_sequence<Is...>) {
-        const Self &self = Base::m_grad_input->template get<1>();
-        const FuncRev &func_rev = Base::m_grad_input->template get<4>();
-        using ResultRev = ek_tuple<Args...>;
+        const Self &self = Base::template value_in<1>();
+        const Func &func = Base::template value_in<2>();
+        using Inputs = ek_tuple<Args...>;
+
+        auto func_rev = [func](auto *self2, const auto &grad_out,
+                               auto... args) -> Inputs {
+            ADRecordingSession guard;
+            enable_grad(args...);
+            Result result = func(self2, args...);
+            set_grad(result, grad_out);
+            enqueue(result);
+            traverse<Type>(true, true);
+            return ek_tuple(grad<false>(args)...);
+        };
 
         size_t name_size = strlen(m_name_static) + 8;
         ek_unique_ptr<char[]> name(new char[name_size]);
         snprintf(name.get(), name_size, "%s_ad_rev", m_name_static);
 
-        ResultRev grad_in = vcall_jit_record<ResultRev>(
+        Inputs grad_in = vcall_jit_record<Inputs>(
             name.get(), func_rev, self, Base::grad_out(),
-            Base::template value_in<5 + Is>()...);
+            Base::template value_in<3 + Is>()...);
 
-        (Base::template set_grad_in<5 + Is>(grad_in.template get<Is>()), ...);
+        (Base::template set_grad_in<3 + Is>(grad_in.template get<Is>()), ...);
     }
-#endif
 
-    void backward() override { }
-#if 0
     void backward() override {
         backward_impl(std::make_index_sequence<sizeof...(Args)>());
     }
-#endif
 
     const char *name() const override { return m_name_long; }
 
@@ -109,7 +105,9 @@ struct DiffVCall : CustomOp<Type, Result, ConstStr, Self, Func, Args...> {
             ad_clear_dependencies();
             ad_set_flag(ADFlag::Recording, 1);
         }
-        ~ADRecordingSession() { ad_set_flag(ADFlag::Recording, m_status); }
+        ~ADRecordingSession() {
+            ad_set_flag(ADFlag::Recording, m_status);
+        }
         int m_status;
     };
 

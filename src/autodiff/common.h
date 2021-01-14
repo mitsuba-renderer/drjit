@@ -15,6 +15,14 @@
 #  endif
 #endif
 
+#if 0 // verbose log messages
+#define ad_trace(...) ad_log(Trace, __VA_ARGS__)
+constexpr LogLevel log_level = LogLevel::Trace;
+#else
+#define ad_trace(...)
+constexpr LogLevel log_level = LogLevel::Info;
+#endif
+
 /// RAII helper for *unlocking* a mutex
 template <typename T> class unlock_guard {
 public:
@@ -114,8 +122,6 @@ static constexpr LogLevel Warn    = LogLevel::Warn;
 static constexpr LogLevel Info    = LogLevel::Info;
 static constexpr LogLevel Debug   = LogLevel::Debug;
 static constexpr LogLevel Trace   = LogLevel::Trace;
-
-extern LogLevel log_level;
 
 extern void ad_fail(const char *fmt, ...);
 extern void ad_log(LogLevel level, const char *fmt, ...);

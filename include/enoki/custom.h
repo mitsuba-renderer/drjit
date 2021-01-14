@@ -91,7 +91,6 @@ protected:
     Output m_output;
 };
 
-
 NAMESPACE_BEGIN(detail)
 
 // Zer out indices of variables that are attached to the AD graph
