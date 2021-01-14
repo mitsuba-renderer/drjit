@@ -1331,31 +1331,22 @@ def eval(*args):
         _ek.detail.eval()
 
 
-def graphviz_str(*args, reverse=True):
-    diff_base = None
+def graphviz_str(arg):
+    base = _ek.leaf_array_t(arg)
 
-    for a in args:
-        _ek.enqueue(a)
-        t = _ek.leaf_array_t(a)
-
-        if not _ek.is_jit_array_v(t) and \
-           not _ek.is_diff_array_v(t):
-            raise Exception('graphviz_str(): only variables registered with '
-                            'the JIT (LLVM/CUDA) or AD backend are supported!')
-
-        if t.IsDiff and t.IsFloat:
-            diff_base = t
-
-    if diff_base is not None:
-        return diff_base.graphviz_(reverse)
-    else:
+    if _ek.is_diff_array_v(base):
+        return base.graphviz_()
+    elif _ek.is_jit_array_v(base):
         return _ek.detail.graphviz()
+    else:
+        raise Exception('graphviz_str(): only variables registered with '
+                        'the JIT (LLVM/CUDA) or AD backend are supported!')
 
 
-def graphviz(*args, reverse=True):
+def graphviz(args):
     try:
         from graphviz import Source
-        return Source(graphviz_str(*args, reverse=reverse))
+        return Source(graphviz_str(arg))
     except ImportError:
         raise Exception('The "graphviz" Python package not available! Install '
                         'via "python -m pip install graphviz". Alternatively, '
