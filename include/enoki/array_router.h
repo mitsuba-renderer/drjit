@@ -1291,22 +1291,19 @@ ENOKI_INLINE void sync_all_devices() {
     jit_sync_all_devices();
 }
 
-template <typename T> ENOKI_INLINE size_t width(const T &value) {
+template <typename T, typename... Ts> ENOKI_INLINE size_t width(const T &value, const Ts& ...values) {
+    size_t result = 0;
     if constexpr (array_size_v<T> == 0) {
-        return 0;
+        ;
     } if constexpr (array_depth_v<T> > 1) {
-        size_t result = 0;
         for (size_t i = 0; i < value.derived().size(); ++i) {
             size_t w = width(value.derived().entry(i));
             if (w > result)
                 result = w;
         }
-        return result;
     } else if constexpr (is_array_v<T>) {
-        return value.derived().size();
+        result = value.derived().size();
     } else if constexpr (is_enoki_struct_v<T>) {
-        size_t result = 0;
-
         struct_support_t<T>::apply_1(
             value,
             [&](auto const &x) ENOKI_INLINE_LAMBDA {
@@ -1314,11 +1311,17 @@ template <typename T> ENOKI_INLINE size_t width(const T &value) {
                 if (w > result)
                     result = w;
             });
-
-        return result;
     } else {
-        return 1;
+        result = 1;
     }
+
+    if constexpr (sizeof...(Ts) > 0) {
+        size_t other = width(values...);
+        if (other > result)
+            result = other;
+    }
+
+    return result;
 }
 
 template <typename T> ENOKI_INLINE void resize(T &value, size_t size) {

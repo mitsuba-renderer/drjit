@@ -24,7 +24,7 @@ template <typename Type, typename Self, typename Result, typename Func,
 struct DiffVCall : CustomOp<Type, Result, ConstStr, Self, Func, Args...> {
     using Base = CustomOp<Type, Result, ConstStr, Self, Func, Args...>;
 
-    static constexpr bool ClearPrimal   = false;
+    static constexpr bool ClearPrimal = false;
 
     Result eval(const ConstStr &name, const Self &self, const Func &func,
                 const Args &... args) override {
@@ -116,19 +116,26 @@ private:
     char m_name_long[128];
 };
 
+inline std::pair<void *, uint32_t> vcall_registry_get(const char *domain);
+
 template <typename Result, typename Func, typename Self, typename... Args>
 ENOKI_INLINE Result vcall_autodiff(const char *name, const Func &func,
                                    const Self &self, const Args &... args) {
     using Type = leaf_array_t<Result, Args...>;
+    using Base = std::remove_const_t<std::remove_pointer_t<value_t<Self>>>;
 
     /* Only perform a differentiable vcall if there is a differentiable
        float type somewhere within the argument or return values */
     if constexpr (is_diff_array_v<Type> && std::is_floating_point_v<scalar_t<Type>>) {
-        return custom<DiffVCall<Type, Self, Result, Func, Args...>>(
-            name, self, func, args...);
-    } else {
-        return vcall_jit_record<Result>(name, func, self, args...);
+        auto [base, n_inst] = vcall_registry_get(Base::Domain);
+
+        // Complex approach in this header file only needed if > 1 instance
+        if (n_inst > 1)
+            return custom<DiffVCall<Type, Self, Result, Func, Args...>>(
+                name, self, func, args...);
     }
+
+    return vcall_jit_record<Result>(name, func, self, args...);
 }
 
 NAMESPACE_END(detail)

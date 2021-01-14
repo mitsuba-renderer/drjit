@@ -84,7 +84,7 @@ template <typename Mask> struct MaskRAIIGuard {
     static constexpr JitBackend Backend = detached_t<Mask>::Backend;
 
     MaskRAIIGuard(const Mask &mask) {
-        jit_var_mask_push(Backend, mask.index(), 0);
+        jit_var_mask_push(Backend, mask.index(), 1);
     }
 
     ~MaskRAIIGuard() {
@@ -94,21 +94,22 @@ template <typename Mask> struct MaskRAIIGuard {
 
 template <typename Result, typename Base, typename Func, typename Self,
           typename Mask, size_t... Is, typename... Args>
-Result vcall_jit_record_impl(const char *name, uint32_t n_inst_max,
-                             uint32_t n_inst_actual, const Func &func,
-                             const Self &self, const Mask &mask,
-                             std::index_sequence<Is...>, const Args &... args) {
+Result vcall_jit_record_impl(const char *name, uint32_t n_inst,
+                             const Func &func, const Self &self,
+                             const Mask &mask, std::index_sequence<Is...>,
+                             const Args &... args) {
     constexpr size_t N = sizeof...(Args);
     static constexpr JitBackend Backend = detached_t<Self>::Backend;
 
     char label[128];
 
     ek_index_vector indices_in, indices_out_all;
-    ek_vector<uint32_t> se_count(n_inst_actual + 1, 0);
+    ek_vector<uint32_t> se_count(n_inst + 1, 0);
 
     (collect_indices(indices_in, args), ...);
     se_count[0] = jit_side_effects_scheduled(Backend);
 
+    uint32_t n_inst_max = jit_registry_get_max(Base::Domain);
     try {
         for (uint32_t i = 1, j = 1; i <= n_inst_max; ++i) {
             snprintf(label, sizeof(label), "VCall: %s::%s() [instance %u]",
@@ -133,11 +134,12 @@ Result vcall_jit_record_impl(const char *name, uint32_t n_inst_max,
         throw;
     }
 
-    ek_vector<uint32_t> indices_out(indices_out_all.size() / n_inst_actual, 0);
+    ek_vector<uint32_t> indices_out(indices_out_all.size() / n_inst, 0);
 
     snprintf(label, sizeof(label), "%s::%s()", Base::Domain, name);
 
-    jit_var_vcall(label, (self & mask).index(), n_inst_actual,
+    Self self_masked = self & (mask & Mask::steal(jit_var_mask_peek(Backend)));
+    jit_var_vcall(label, self_masked.index(), n_inst,
                   indices_in.size(), indices_in.data(),
                   indices_out_all.size(), indices_out_all.data(),
                   se_count.data(), indices_out.data());
@@ -158,47 +160,47 @@ vcall_jit_record_impl_scalar(Base *inst, const Func &func, const Mask &mask,
     constexpr size_t N = sizeof...(Args);
     MaskRAIIGuard<Mask> guard(mask.index());
 
-    Result result = select(mask, func(inst, (set_mask_true<Is, N>(args))...),
-                           zero<Result>());
-
-    // vcall_autodiff.h assumes that this function never returns attached results
-    return detach<false>(result);
+    return select(mask, func(inst, (set_mask_true<Is, N>(args))...),
+                  zero<Result>());
 }
+
+inline std::pair<void *, uint32_t> vcall_registry_get(const char *domain) {
+    uint32_t n = jit_registry_get_max(domain), n_inst = 0;
+    void *inst = nullptr;
+
+    for (uint32_t i = 1; i <= n; ++i) {
+        void *ptr = jit_registry_get_ptr(domain, i);
+        if (ptr) {
+            inst = ptr;
+            n_inst++;
+        }
+    }
+
+    return { inst, n_inst };
+}
+
 
 template <typename Result, typename Func, typename Self, typename... Args>
 Result vcall_jit_record(const char *name, const Func &func, Self &self,
                         const Args &... args) {
     using Base = std::remove_const_t<std::remove_pointer_t<value_t<Self>>>;
     using Mask = mask_t<Self>;
-    uint32_t n_inst_max = jit_registry_get_max(Base::Domain),
-             n_inst_actual = 0;
 
-    Base *inst = nullptr;
+    auto [inst, n_inst] = vcall_registry_get(Base::Domain);
 
-    for (uint32_t i = 1; i <= n_inst_max; ++i) {
-        Base *base = (Base *) jit_registry_get_ptr(Base::Domain, i);
-        if (!base)
-            continue;
-        inst = base;
-        n_inst_actual++;
-    }
+    size_t self_size = width(self, args...);
+    Mask mask = extract_mask<Mask>(args...);
+    bool masked = mask.is_literal() && mask[0] == false;
 
-    size_t self_size = self.size();
-
-    static constexpr JitBackend Backend = detached_t<Self>::Backend;
-
-    Mask mask =
-        extract_mask<Mask>(args...) & Mask::steal(jit_var_mask_peek(Backend));
-
-    if (n_inst_actual == 0 || self_size == 0 || (mask.is_literal() && mask[0] == false))
+    if (n_inst == 0 || self_size == 0 || masked)
         return zero<Result>(self_size);
-    else if (n_inst_actual == 1)
+    else if (n_inst == 1)
         return vcall_jit_record_impl_scalar<Result, Base>(
-            inst, func, mask, std::make_index_sequence<sizeof...(Args)>(),
-            args...);
+            (Base *) inst, func, mask,
+            std::make_index_sequence<sizeof...(Args)>(), args...);
     else
         return vcall_jit_record_impl<Result, Base>(
-            name, n_inst_max, n_inst_actual, func, self, mask,
+            name, n_inst, func, self, mask,
             std::make_index_sequence<sizeof...(Args)>(), placeholder(args)...);
 }
 
