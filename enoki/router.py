@@ -356,8 +356,8 @@ def op_repr(self):
         buf = io.StringIO()
         try:
             self.schedule_()
-        except:  # noqa
-            return "[backend issue]"
+        except BaseException as e:  # noqa
+            return "[backend issue: %s]" % str(e)
         _repr_impl(self, s, buf)
         return buf.getvalue()
 

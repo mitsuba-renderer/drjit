@@ -67,9 +67,10 @@ Result vcall_jit_record_impl(const char *name, uint32_t n_inst_max,
         Mask mask2 = mask && neq(self, nullptr);
         if constexpr (std::is_same_v<Result, std::nullptr_t>)
             func(inst, (set_mask<Is, N>(mask2, args))...);
-        else
-            result = select(mask2, func(inst, (set_mask<Is, N>(mask2, args))...),
-                            zero<Result>());
+        else // vcall_autodiff.h assumes that this function never returns attached result
+            result = detach<false>(
+                select(mask2, func(inst, (set_mask<Is, N>(mask2, args))...),
+                       zero<Result>()));
     } else {
         char label[128];
 

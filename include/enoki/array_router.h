@@ -1529,7 +1529,7 @@ template <bool UnderlyingType = true, typename T> decltype(auto) detach(T &&valu
 
         return result;
     } else {
-        return value;
+        return std::forward<T>(value);
     }
 }
 

@@ -240,7 +240,7 @@ struct State {
     Variable *operator[](int32_t index) {
         auto it = variables.find(index);
         if (unlikely(index < 0 || it == variables.end()))
-            ad_fail("referenced an unknown variable %u!", index);
+            ad_fail("referenced an unknown variable a%i!", index);
         return &it.value();
     }
 
@@ -251,7 +251,7 @@ struct State {
                    "remain in use)!", variables.size());
             uint32_t counter;
             for (auto kv : variables) {
-                ad_log(Warn, " - variable r%i", kv.first);
+                ad_log(Warn, " - variable a%i", kv.first);
                 if (++counter == 10) {
                     ad_log(Warn, " - (skipping the rest)");
                     break;
@@ -725,7 +725,7 @@ int32_t ad_new_select(const char *label, uint32_t size, const Mask &mask_,
     std::lock_guard<std::mutex> guard(state.mutex);
     auto [index, var] = ad_var_new(label, size);
 
-    ad_log(Debug, "ad_new_select(%u <- %u, %u)", index, t_index, f_index);
+    ad_log(Debug, "ad_new_select(a%i <- a%i, a%i)", index, t_index, f_index);
     int32_t op[2]= { t_index, f_index };
 
     uint32_t edge_index = 0;
@@ -733,11 +733,26 @@ int32_t ad_new_select(const char *label, uint32_t size, const Mask &mask_,
         if (op[i] <= 0)
             continue;
 
-        Variable *var2 = state[op[i]];
+        uint32_t index2 = op[i];
+        Variable *var2 = state[index2];
+
+        /* When recording AD code (e.g. in a virtual function call),
+           convert reads from external/private variables into gathers */
+        if (unlikely(var->placeholder && !var2->placeholder)) {
+            if (var2->size != 1)
+                ad_fail("ad_new_select(): variable a%i computation being recorded "
+                        "accesses a non-scalar private variable (a%i)!",
+                        index, index2);
+            index2 = ad_new_gather_impl<Value>("gather", var->size, op[i],
+                                               Index(0), Mask(true), false);
+            var2 = state[index2];
+            var2->ref_count_ext = 0;
+            var = state[index];
+        }
 
         uint32_t edge_index_new = ad_edge_new();
         Edge &edge = state.edges[edge_index_new];
-        edge.source = op[i];
+        edge.source = index2;
         edge.target = index;
         edge.special = new MaskEdge<Value>(mask_, i != 0);
         edge.next_fwd = var2->next_fwd;
@@ -762,7 +777,7 @@ template <typename Value> struct GatherEdge : Special {
         Value &source_grad = (Value &) source->grad;
         uint32_t size = source->size;
 
-        if (source->size == 1 && target->size == 1) {
+        if (source->size == 1 && target->size == 1 && !target->placeholder) {
             // Downgrade to scalar op
             source->accum(select(mask, target->grad, 0.f), 1);
             return;

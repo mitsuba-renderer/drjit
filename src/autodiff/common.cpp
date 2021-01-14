@@ -145,6 +145,7 @@ namespace enoki {
 
     ENOKI_EXPORT void ad_set_flag(ADFlag flag, int enable) {
         uint32_t value = flags;
+        ad_trace("ad_set_flag(flag=%u, value=%i)", (uint32_t) flag, enable);
 
         if (enable)
             value |= (uint32_t) flag;
