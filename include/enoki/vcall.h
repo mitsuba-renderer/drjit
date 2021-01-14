@@ -188,12 +188,14 @@ NAMESPACE_END(enoki)
         if constexpr (is_jit_array_v<Array>) {                                 \
             using Result = replace_scalar_t<Array, type>;                      \
             using UInt32 = uint32_array_t<Array>;                              \
-            Result data = Result::steal(                                       \
-                jit_var_registry_attr(detached_t<Result>::Backend,             \
-                                      detached_t<Result>::Type,                \
-                                      Domain, #name));                         \
-            return enoki::gather<Result>(data,                                 \
-                UInt32::borrow(array.index()), mask);                          \
+            uint32_t attr_id = jit_var_registry_attr(                          \
+                detached_t<Result>::Backend, detached_t<Result>::Type,         \
+                Domain, #name);                                                \
+            if (attr_id == 0)                                                  \
+                return zero<Result>();                                         \
+            else                                                               \
+                return enoki::gather<Result>(Result::steal(attr_id),           \
+                    UInt32::borrow(array.index()), mask);                      \
         } else {                                                               \
             return detail::vcall<Class>(                                       \
                 #name, [](auto self)                                           \
