@@ -26,14 +26,13 @@ public:
     using Type   = detached_t<Type_>;
     using Output = Output_;
     using Inputs = ek_tuple<Input...>;
+
     template <size_t Index>
     using InputType = typename Inputs::template type<Index>;
 
     static constexpr bool ClearPrimal   = true;
-    static constexpr bool ForceCreation = false;
 
     virtual ~CustomOp() {
-        fprintf(stderr, "Destroyng custom op..\n");
         detail::clear_diff_vars(m_output);
     }
 
@@ -114,7 +113,7 @@ void clear_diff_vars(T &value) {
 
 // Collect indices of variables that are attached to the AD graph
 template <typename T>
-void diff_vars(const T &value, size_t &counter, uint32_t *out) {
+void diff_vars(const T &value, size_t &counter, int32_t *out) {
     if constexpr (is_array_v<T>) {
         if constexpr (array_depth_v<T> == 1) {
             if constexpr (is_diff_array_v<T>) {
@@ -181,16 +180,13 @@ template <typename Custom, typename... Input> auto custom(const Input&... input)
                     "allowed.");
 
     // Collect the input autodiff variable indices
-    size_t diff_vars_in_ctr = 0;
+    size_t dependency_count = ad_dependency_count();
+    size_t diff_vars_in_ctr = dependency_count;
     (detail::diff_vars(input, diff_vars_in_ctr, nullptr), ...);
 
-    if (diff_vars_in_ctr > 0 || Custom::ForceCreation) {
+    if (diff_vars_in_ctr > 0) {
         // Gradients are enabled for at least one input, mark outputs
         enable_grad(output);
-        const char *name = custom->name();
-        size_t buf_size = strlen(name) + 7;
-        char *buf = (char *) alloca(buf_size);
-        set_label(output, name);
 
         if constexpr (Custom::ClearPrimal) {
             // Only retain variable indices
@@ -206,24 +202,31 @@ template <typename Custom, typename... Input> auto custom(const Input&... input)
         if (diff_vars_out_ctr == 0)
             enoki_raise("enoki::custom(): internal error!");
 
-        ek_unique_ptr<uint32_t[]> diff_vars_in(new uint32_t[diff_vars_in_ctr]);
-        ek_unique_ptr<uint32_t[]> diff_vars_out(new uint32_t[diff_vars_out_ctr]);
+        ek_unique_ptr<int32_t[]> diff_vars_in(new int32_t[diff_vars_in_ctr]);
+        ek_unique_ptr<int32_t[]> diff_vars_out(new int32_t[diff_vars_out_ctr]);
 
-        diff_vars_in_ctr = diff_vars_out_ctr = 0;
+        diff_vars_out_ctr = 0;
+        diff_vars_in_ctr = 0;
         (detail::diff_vars(input, diff_vars_in_ctr, diff_vars_in.get()), ...);
         detail::diff_vars(output, diff_vars_out_ctr, diff_vars_out.get());
+        ad_write_dependencies(diff_vars_in.get() + diff_vars_in_ctr);
+        diff_vars_in_ctr += dependency_count;
 
-        // Decrease reference count increase due to storage in custom->m_output
+        // Undo reference count increase due to storage in custom->m_output
         for (size_t i = 0 ; i < diff_vars_out_ctr; ++i)
             detail::ad_dec_ref<Type>(diff_vars_out[i]);
 
+        const char *name = custom->name();
+        size_t buf_size = strlen(name) + 7;
+        char *buf = (char *) alloca(buf_size);
+
         // Create a dummy node in case the branch-in factor is > 1
-        uint32_t in_var;
+        int32_t in_var;
         if (diff_vars_in_ctr > 1 || diff_vars_in_ctr == 0) {
             in_var = detail::ad_new<Type>(nullptr, 0, 0, nullptr, (Type *) nullptr);
             snprintf(buf, buf_size, "%s [in]", name);
             detail::ad_set_label<Type>(in_var, buf);
-            for (uint32_t i = 0; i < diff_vars_in_ctr; ++i)
+            for (size_t i = 0; i < diff_vars_in_ctr; ++i)
                 detail::ad_add_edge<Type>(diff_vars_in[i], in_var);
         } else {
             in_var = diff_vars_in[0];
@@ -231,12 +234,12 @@ template <typename Custom, typename... Input> auto custom(const Input&... input)
         }
 
         // Create a dummy node in case the branch-out factor is > 1
-        uint32_t out_var;
+        int32_t out_var;
         if (diff_vars_out_ctr > 1 || diff_vars_out_ctr == 0) {
             out_var = detail::ad_new<Type>(nullptr, 0, 0, nullptr, (Type *) nullptr);
             snprintf(buf, buf_size, "%s [out]", name);
             detail::ad_set_label<Type>(out_var, buf);
-            for (uint32_t i = 0; i < diff_vars_out_ctr; ++i)
+            for (size_t i = 0; i < diff_vars_out_ctr; ++i)
                 detail::ad_add_edge<Type>(out_var, diff_vars_out[i]);
         } else {
             out_var = diff_vars_out[0];

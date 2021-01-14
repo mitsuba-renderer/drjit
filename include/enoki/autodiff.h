@@ -1827,10 +1827,22 @@ ENOKI_DECLARE_EXTERN_TEMPLATE(LLVMArray<float>,  LLVMArray<bool>, LLVMArray<uint
 ENOKI_DECLARE_EXTERN_TEMPLATE(LLVMArray<double>, LLVMArray<bool>, LLVMArray<uint32_t>)
 #endif
 
+enum ADFlag : uint32_t {
+    Recording = 1
+};
+
 extern ENOKI_AUTODIFF_EXPORT const char *ad_whos();
 extern ENOKI_AUTODIFF_EXPORT void ad_prefix_push(const char *value);
 extern ENOKI_AUTODIFF_EXPORT void ad_prefix_pop();
+extern ENOKI_AUTODIFF_EXPORT int ad_flag(ADFlag flag);
+extern ENOKI_AUTODIFF_EXPORT void ad_set_flag(ADFlag flag, int enable);
 extern ENOKI_AUTODIFF_EXPORT void ad_check_weights(bool value);
+
+extern ENOKI_AUTODIFF_EXPORT size_t ad_dependency_count();
+extern ENOKI_AUTODIFF_EXPORT void ad_add_dependency(int32_t index);
+extern ENOKI_AUTODIFF_EXPORT void ad_write_dependencies(int32_t *out);
+extern ENOKI_AUTODIFF_EXPORT void ad_clear_dependencies();
+
 NAMESPACE_END(enoki)
 
 #if defined(ENOKI_VCALL_H)

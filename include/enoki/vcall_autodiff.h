@@ -33,7 +33,11 @@ struct DiffVCall : CustomOp<Type, Result, ConstStr, Self, Func, Args...> {
         m_name_static = name;
         snprintf(m_name_long, sizeof(m_name_long), "VCall: %s::%s()",
                  Class::Domain, m_name_static);
-        return vcall_jit_record<Result>(name, func, self, args...);
+        fprintf(stderr, "================== part 1================\n");
+        ADRecordingSession guard;
+        Result result = vcall_jit_record<Result>(name, func, self, args...);
+        fprintf(stderr, "================== done 1================\n");
+        return result;
     }
 
     void forward() override {
@@ -45,17 +49,24 @@ struct DiffVCall : CustomOp<Type, Result, ConstStr, Self, Func, Args...> {
         const Func &func = Base::template value_in<2>();
 
         auto func_fwd = [func](auto *self2, auto... value_grad_pair) {
-            enoki::enable_grad(value_grad_pair.first...);
+        fprintf(stderr, "================== part 2================\n");
+            ADRecordingSession guard;
+            enable_grad(value_grad_pair.first...);
             Result result = func(self2, value_grad_pair.first...);
-            (enoki::set_grad(value_grad_pair.first, value_grad_pair.second), ...);
-            enoki::enqueue(value_grad_pair.first...);
-            enoki::traverse<Type>(false, true);
-            return enoki::grad<false>(result);
+            (set_grad(value_grad_pair.first, value_grad_pair.second), ...);
+            enqueue(value_grad_pair.first...);
+            set_label(result, "result");
+            std::cout << graphviz(result) << std::endl;
+            traverse<Type>(false, true);
+            auto result2 = grad<false>(result);
+            std::cout << jit_var_graphviz() << std::endl;
+        fprintf(stderr, "================== done 2================\n");
+        return result2;
         };
 
-        size_t name_size = strlen(m_name_static) + 11;
+        size_t name_size = strlen(m_name_static) + 8;
         ek_unique_ptr<char[]> name(new char[name_size]);
-        snprintf(name.get(), name_size, "%s [AD, fwd]", m_name_static);
+        snprintf(name.get(), name_size, "%s_ad_fwd", m_name_static);
 
         Result grad_out = vcall_jit_record<Result>(
             name.get(), func_fwd, self,
@@ -72,9 +83,9 @@ struct DiffVCall : CustomOp<Type, Result, ConstStr, Self, Func, Args...> {
         const FuncRev &func_rev = Base::m_grad_input->template get<4>();
         using ResultRev = ek_tuple<Args...>;
 
-        size_t name_size = strlen(m_name_static) + 11;
+        size_t name_size = strlen(m_name_static) + 8;
         ek_unique_ptr<char[]> name(new char[name_size]);
-        snprintf(name.get(), name_size, "%s [AD, rev]", m_name_static);
+        snprintf(name.get(), name_size, "%s_ad_rev", m_name_static);
 
         ResultRev grad_in = vcall_jit_record<ResultRev>(
             name.get(), func_rev, self, Base::grad_out(),
@@ -92,6 +103,15 @@ struct DiffVCall : CustomOp<Type, Result, ConstStr, Self, Func, Args...> {
 #endif
 
     const char *name() const override { return m_name_long; }
+
+    struct ADRecordingSession {
+        ADRecordingSession() : m_status(ad_flag(ADFlag::Recording)) {
+            ad_clear_dependencies();
+            ad_set_flag(ADFlag::Recording, 1);
+        }
+        ~ADRecordingSession() { ad_set_flag(ADFlag::Recording, m_status); }
+        int m_status;
+    };
 
 private:
     const char *m_name_static = nullptr;

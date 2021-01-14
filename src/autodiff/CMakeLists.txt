@@ -1,5 +1,10 @@
 set(ENOKI_AUTODIFF_VARIANTS enoki-autodiff-scalar-f32:float enoki-autodiff-scalar-f64:double)
 
+include_directories(
+  ../../ext/enoki-jit/ext/robin_map/include
+  ../../ext/enoki-jit/ext/lz4
+)
+
 if (ENOKI_ENABLE_JIT)
   set(ENOKI_AUTODIFF_VARIANTS ${ENOKI_AUTODIFF_VARIANTS}
     enoki-autodiff-cuda-f32:CUDAArray<float>
@@ -33,11 +38,6 @@ foreach(ENOKI_AUTODIFF_VARIANT ${ENOKI_AUTODIFF_VARIANTS})
     target_link_libraries(${ENOKI_AUTODIFF_VARIANT_NAME} PRIVATE enoki-jit)
     target_compile_definitions(${ENOKI_AUTODIFF_VARIANT_NAME} PRIVATE -DENOKI_ENABLE_JIT=1)
   endif()
-  target_include_directories(
-    ${ENOKI_AUTODIFF_VARIANT_NAME} PRIVATE
-      ../../ext/enoki-jit/ext/lz4
-      ../../ext/enoki-jit/ext/robin_map/include
-  )
 endforeach()
 
 add_library(enoki-autodiff SHARED
