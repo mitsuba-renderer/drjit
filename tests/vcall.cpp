@@ -81,8 +81,10 @@ ENOKI_TEST(test01_vcall_reduce_and_record) {
     // jit_set_log_level_stderr(::LogLevel::Error);
     jit_init((uint32_t) JitBackend::CUDA);
 
-    for (int i = 0; i < 2; ++i) {
-        jit_set_flag(JitFlag::VCallRecord, i);
+    for (int i = 0; i < 3; ++i) {
+        jit_set_flag(JitFlag::VCallRecord, i != 0);
+        jit_set_flag(JitFlag::VCallOptimize, i == 2);
+
         for (int j = 0; j < 2; ++j) {
             A *a = new A(j != 0);
             B *b = new B(j != 0);
@@ -170,9 +172,9 @@ ENOKI_TEST(test02_vcall_symbolic_ad_fwd) {
     AD *a = new AD();
     BD *b = new BD();
 
-    for (int i = 0; i < 2; ++i) {
-        jit_set_flag(JitFlag::VCallRecord, 1);
-        jit_set_flag(JitFlag::VCallOptimize, i);
+    for (int i = 0; i < 3; ++i) {
+        jit_set_flag(JitFlag::VCallRecord, i != 0);
+        jit_set_flag(JitFlag::VCallOptimize, i == 2);
 
         int n = 10;
         MaskD m = ek::neq(ek::arange<UInt32>(n) & 1, 0);
@@ -214,17 +216,18 @@ ENOKI_TEST(test02_vcall_symbolic_ad_fwd_accessing_local) {
     jit_init((uint32_t) JitBackend::CUDA);
     // jit_set_log_level_stderr(::LogLevel::Trace);
 
-    AD *a = new AD();
-    BD *b = new BD();
-
     for (int j = 0; j < 2; ++j) {
-        for (int i = 0; i < 2; ++i) {
-            jit_set_flag(JitFlag::VCallRecord, 1);
-            jit_set_flag(JitFlag::VCallOptimize, i);
+        for (int i = 0; i < 3; ++i) {
+            jit_set_flag(JitFlag::VCallRecord, i != 0);
+            jit_set_flag(JitFlag::VCallOptimize, i == 2);
 
             int n = 10;
             MaskD m = ek::neq(ek::arange<UInt32>(n) & 1, 0);
-            BasePtrD arr = ek::select(m, (BaseD *) a, (BaseD *) b);
+            AD *a = new AD();
+            BD *b = new BD();
+
+            ek::enable_grad(a->x);
+            ek::enable_grad(b->x);
             ek::set_grad(a->x, 100);
             ek::set_grad(b->x, 1000);
             if (j == 1) {
@@ -232,6 +235,7 @@ ENOKI_TEST(test02_vcall_symbolic_ad_fwd_accessing_local) {
                 ek::eval(ek::grad(b->x));
             }
 
+            BasePtrD arr = ek::select(m, (BaseD *) a, (BaseD *) b);
             arr->dummy();
 
             Float o = ek::full<Float>(1, n);
@@ -246,6 +250,8 @@ ENOKI_TEST(test02_vcall_symbolic_ad_fwd_accessing_local) {
             ek::set_label(output, "output");
             ek::set_grad(input, StructF(2, 10));
             ek::enqueue(input);
+            ek::enqueue(a->x);
+            ek::enqueue(b->x);
             ek::traverse<FloatD>(false);
 
             StructF grad_out = ek::grad(output);
@@ -258,23 +264,22 @@ ENOKI_TEST(test02_vcall_symbolic_ad_fwd_accessing_local) {
             assert(ek::all_nested(
                 ek::eq(grad_out.a, ek::detach(ek::select(m, input.a * 100 + 20, 40))) &&
                 ek::eq(grad_out.b, ek::detach(ek::select(m, 30, 1002)))));
+            delete a;
+            delete b;
         }
     }
-
-    delete a;
-    delete b;
 }
 
 ENOKI_TEST(test02_vcall_symbolic_ad_rev_accessing_local) {
     jit_init((uint32_t) JitBackend::CUDA);
     // jit_set_log_level_stderr(::LogLevel::Trace);
 
-    for (int i = 0; i < 2; ++i) {
+    for (int i = 0; i < 3; ++i) {
         AD *a = new AD();
         BD *b = new BD();
 
-        jit_set_flag(JitFlag::VCallRecord, 1);
-        jit_set_flag(JitFlag::VCallOptimize, i);
+        jit_set_flag(JitFlag::VCallRecord, i != 0);
+        jit_set_flag(JitFlag::VCallOptimize, i == 2);
 
         int n = 10;
         MaskD m = ek::neq(ek::arange<UInt32>(n) & 1, 0);

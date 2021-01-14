@@ -1174,12 +1174,13 @@ template <typename Value> const char *ad_graphviz() {
         const char *color = nullptr;
         bool labeled = false;
         if (label_without_prefix && strlen(label_without_prefix) != 0) {
-            if (v->custom_label)
+            if (v->custom_label) {
                 buffer.put("Label: \\\"");
+                labeled = true;
+            }
             print_escape(label_without_prefix);
             if (v->custom_label)
                 buffer.put("\\\"");
-            labeled = true;
         }
 
         if (v->next_rev == 0)

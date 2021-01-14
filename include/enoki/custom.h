@@ -171,6 +171,7 @@ template <typename Custom, typename... Input> auto custom(const Input&... input)
 
     ek_unique_ptr<Custom> custom(new Custom());
 
+    ad_clear_dependencies();
     Output output = custom->eval(detach<false>(input)...);
 
     if (grad_enabled(output))
