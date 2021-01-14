@@ -723,11 +723,27 @@ template <typename Value, typename Mask>
 int32_t ad_new_select(const char *label, uint32_t size, const Mask &mask_,
                       int32_t t_index, int32_t f_index) {
     std::lock_guard<std::mutex> guard(state.mutex);
-    auto [index, var] = ad_var_new(label, size);
+    if constexpr (is_jit_array_v<Mask>) {
+        if (mask_.is_literal()) {
+            int32_t result = mask_[0] ? t_index : f_index;
+            if (result)
+                state[result]->ref_count_ext++;
+            ad_log(Debug, "ad_new_select(a%i <- a%i, a%i): simplified", result, t_index, f_index);
+            return result;
+        }
+    }
 
-    ad_log(Debug, "ad_new_select(a%i <- a%i, a%i)", index, t_index, f_index);
+    if (f_index == t_index) {
+        if (t_index)
+            state[t_index]->ref_count_ext++;
+        ad_log(Debug, "ad_new_select(a%i <- a%i, a%i): simplified", t_index, t_index, f_index);
+        return t_index;
+    }
+
+    auto [index, var] = ad_var_new(label, size);
     int32_t op[2]= { t_index, f_index };
 
+    ad_log(Debug, "ad_new_select(a%i <- a%i, a%i)", index, t_index, f_index);
     uint32_t edge_index = 0;
     for (uint32_t i = 0; i < 2; ++i) {
         if (op[i] <= 0)

@@ -551,16 +551,9 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
 
             if constexpr (IsEnabled) {
                 if (t.m_index > 0 || f.m_index > 0) {
-                    if (m.m_value.is_literal()) {
-                        if (m.m_value[0])
-                            return t;
-                        else
-                            return f;
-                    } else {
-                        index_new = detail::ad_new_select<Type>(
-                            "select", (int32_t) width(result),
-                            m.m_value, t.m_index, f.m_index);
-                    }
+                    index_new = detail::ad_new_select<Type>(
+                        "select", (int32_t) width(result),
+                        m.m_value, t.m_index, f.m_index);
                 }
             }
 
