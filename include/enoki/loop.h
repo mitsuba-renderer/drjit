@@ -271,9 +271,11 @@ protected:
         }
     }
 
-    bool cond_wavefront(const Mask &cond) {
-        // Need to mask loop variables for disabled lanes
+    bool cond_wavefront(const Mask &cond_) {
+        Mask cond = cond_; // Hold an extra reference!
+
         if (m_cond.index()) {
+            // Need to mask loop variables for disabled lanes
             m_mask_stack.pop();
             for (uint32_t i = 0; i < m_index_p.size(); ++i) {
                 uint32_t i1 = *m_index_p[i], i2 = m_index_out[i];
