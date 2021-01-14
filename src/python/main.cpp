@@ -100,21 +100,50 @@ PYBIND11_MODULE(enoki_ext, m_) {
     m.def("ad_whos_str", &ek::ad_whos);
     m.def("ad_whos", []() { py::print(ek::ad_whos()); });
     m.def("ad_check_weights", [](bool value) { ek::ad_check_weights(value); });
+#endif
 
     struct Scope {
         Scope(const std::string &name) : name(name) { }
 
-        void enter() { ek::ad_prefix_push(name.c_str()); }
-        void exit(py::handle, py::handle, py::handle) { ek::ad_prefix_pop(); }
+        void enter() {
+            #if defined(ENOKI_ENABLE_JIT)
+                if (jit_has_backend(JitBackend::CUDA)) {
+                    jit_prefix_push(JitBackend::CUDA, name.c_str());
+                    pushed_cuda = true;
+                }
+                if (jit_has_backend(JitBackend::LLVM)) {
+                    jit_prefix_push(JitBackend::LLVM, name.c_str());
+                    pushed_llvm = true;
+                }
+            #endif
+            #if defined(ENOKI_ENABLE_AUTODIFF)
+                ek::ad_prefix_push(name.c_str());
+            #endif
+        }
+
+        void exit(py::handle, py::handle, py::handle) {
+            #if defined(ENOKI_ENABLE_JIT)
+                if (pushed_cuda)
+                    jit_prefix_pop(JitBackend::CUDA);
+                if (pushed_llvm)
+                    jit_prefix_pop(JitBackend::LLVM);
+            #endif
+            #if defined(ENOKI_ENABLE_AUTODIFF)
+                ek::ad_prefix_pop();
+            #endif
+        }
 
         std::string name;
+        #if defined(ENOKI_ENABLE_JIT)
+            bool pushed_cuda = false;
+            bool pushed_llvm = false;
+        #endif
     };
 
     py::class_<Scope>(m, "Scope")
         .def(py::init<const std::string &>())
         .def("__enter__", &Scope::enter)
         .def("__exit__", &Scope::exit);
-#endif
 
     py::enum_<LogLevel>(m, "LogLevel")
         .value("Disable", LogLevel::Disable)
