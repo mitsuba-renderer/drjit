@@ -55,16 +55,15 @@ ENOKI_INLINE decltype(auto) copy_diff(const T& value) {
 }
 
 template <typename Mask> Mask extract_mask() { return true; }
-template <typename Mask, typename T> decltype(auto) extract_mask(const T &v) {
-    if constexpr (is_mask_v<T>)
+
+template <typename Mask, typename T, typename... Ts>
+Mask extract_mask(const T &v, const Ts &... vs) {
+    if constexpr (sizeof...(Ts) != 0)
+        return extract_mask<Mask>(vs...);
+    else if constexpr (is_mask_v<T>)
         return v;
     else
-        return Mask(true);
-}
-
-template <typename Mask, typename T, typename... Ts, enable_if_t<sizeof...(Ts) != 0> = 0>
-decltype(auto) extract_mask(const T &/*v*/, const Ts &... vs) {
-    return extract_mask<Mask>(vs...);
+        return true;
 }
 
 template <size_t I, size_t N, typename T>
@@ -72,7 +71,7 @@ decltype(auto) set_mask_true(const T &v) {
     if constexpr (is_mask_v<T> && I == N - 1)
         return T(true);
     else
-        return v;
+        return (const T &) v;
 }
 
 template <typename Guide, typename Type, typename = int> struct vectorize_type {
