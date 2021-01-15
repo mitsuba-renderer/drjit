@@ -37,11 +37,11 @@ struct Variable;
 // Special edge (scatter, gather, scatter_reduce, block_sum, etc.)
 struct Special {
     virtual void backward(Variable *source, const Variable *target) const {
-        throw std::runtime_error("Special::backward(): not implemented!");
+        ad_raise("Special::backward(): not implemented!");
     }
 
     virtual void forward(const Variable *source, Variable *target) const {
-        throw std::runtime_error("Special::forward(): not implemented!");
+        ad_raise("Special::forward(): not implemented!");
     }
 
     virtual ~Special() = default;
@@ -617,9 +617,9 @@ int32_t ad_new(const char *label, uint32_t size, uint32_t op_count,
            convert reads from external/private variables into gathers */
         if (unlikely(var->placeholder && !var2->placeholder)) {
             if (var2->size != 1)
-                ad_fail("ad_new(): variable a%i computation being recorded "
-                        "accesses a non-scalar private variable (a%i)!",
-                        index, index2);
+                ad_raise("ad_new(): variable a%i computation being recorded "
+                         "accesses a non-scalar private variable (a%i)!",
+                         index, index2);
             index2 = ad_new_gather_impl<T>("gather", var->size, op[i], Index(0),
                                            Mask(true), false);
             var2 = state[index2];
@@ -741,7 +741,7 @@ int32_t ad_new_select(const char *label, uint32_t size, const Mask &mask_,
     }
 
     auto [index, var] = ad_var_new(label, size);
-    int32_t op[2]= { t_index, f_index };
+    int32_t op[2] = { t_index, f_index };
 
     ad_log(Debug, "ad_new_select(a%i <- a%i, a%i)", index, t_index, f_index);
     uint32_t edge_index = 0;
@@ -756,9 +756,9 @@ int32_t ad_new_select(const char *label, uint32_t size, const Mask &mask_,
            convert reads from external/private variables into gathers */
         if (unlikely(var->placeholder && !var2->placeholder)) {
             if (var2->size != 1)
-                ad_fail("ad_new_select(): variable a%i computation being recorded "
-                        "accesses a non-scalar private variable (a%i)!",
-                        index, index2);
+                ad_raise("ad_new_select(): variable a%i computation being recorded "
+                         "accesses a non-scalar private variable (a%i)!",
+                         index, index2);
             index2 = ad_new_gather_impl<Value>("gather", var->size, op[i],
                                                Index(0), Mask(true), false);
             var2 = state[index2];
@@ -948,7 +948,7 @@ int32_t ad_new_scatter(const char *label, uint32_t size, ReduceOp op,
         }
 
         if (edge_index == 0)
-            ad_fail("ad_new_scatter(): all inputs were non-differentiable!");
+            ad_raise("ad_new_scatter(): all inputs were non-differentiable!");
 
         var->next_rev = edge_index;
         var->ref_count_ext++;
@@ -970,9 +970,9 @@ static void ad_traverse_rev(std::vector<int32_t> &todo, bool retain_graph) {
         if constexpr (is_dynamic_v<Value>) {
             uint32_t grad_size = asize(v->grad);
             if (unlikely(v->size != grad_size && grad_size != 1))
-                ad_fail("ad_traverse_rev(): variable a%i has an invalid "
-                        "gradient size: expected %u, got %u!", index,
-                        v->size, grad_size);
+                ad_raise("ad_traverse_rev(): variable a%i has an invalid "
+                         "gradient size: expected %u, got %u!", index,
+                         v->size, grad_size);
         }
 
         if (unlikely(v->custom_label)) {
@@ -1043,9 +1043,9 @@ static void ad_traverse_fwd(std::vector<int32_t> &todo, bool retain_graph) {
         if constexpr (is_dynamic_v<Value>) {
             uint32_t grad_size = asize(v->grad);
             if (unlikely(v->size != grad_size && grad_size != 1))
-                ad_fail("ad_traverse_fwd(): variable a%i has an invalid "
-                        "gradient size: expected %u, got %u!", index,
-                        v->size, grad_size);
+                ad_raise("ad_traverse_fwd(): variable a%i has an invalid "
+                         "gradient size: expected %u, got %u!", index,
+                         v->size, grad_size);
         }
 
         if (unlikely(v->custom_label)) {
@@ -1302,7 +1302,7 @@ template <typename T> T ad_grad(int32_t index, bool fail_if_missing) {
     auto it = state.variables.find(index);
     if (it == state.variables.end()) {
         if (fail_if_missing)
-            throw std::runtime_error("ad_grad(): referenced an unknown variable!");
+            ad_raise("ad_grad(): referenced an unknown variable a%i!", index);
         return T(0);
     }
     const Variable &v = it->second;
@@ -1317,7 +1317,7 @@ template <typename T> void ad_set_grad(int32_t index, const T &value, bool fail_
     auto it = state.variables.find(index);
     if (it == state.variables.end()) {
         if (fail_if_missing)
-            throw std::runtime_error("ad_set_grad(): referenced an unknown variable!");
+            ad_raise("ad_set_grad(): referenced an unknown variable a%i!", index);
         return;
     }
 
@@ -1337,7 +1337,7 @@ template <typename T> void ad_accum_grad(int32_t index, const T &value, bool fai
     auto it = state.variables.find(index);
     if (it == state.variables.end()) {
         if (fail_if_missing)
-            throw std::runtime_error("ad_accum_grad(): referenced an unknown variable!");
+            ad_raise("ad_accum_grad(): referenced an unknown variable a%i!", index);
         return;
     }
     ad_trace("ad_accum_grad(a%i)", index);

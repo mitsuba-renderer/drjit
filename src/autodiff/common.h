@@ -1,7 +1,8 @@
 #pragma once
 
 #include <string.h>
-#include <stdlib.h>
+#include <cstdlib>
+#include <cstdarg>
 #include <enoki/fwd.h>
 #include <enoki-jit/jit.h>
 
@@ -104,6 +105,8 @@ public:
     __attribute__((__format__ (__printf__, 2, 3)))
 #endif
     size_t fmt(const char *format, ...);
+    /// Like \ref fmt, but specify arguments through a va_list.
+    size_t vfmt(const char *format, va_list args_);
 
     size_t size() const { return m_cur - m_start; }
     size_t remain() const { return m_end - m_cur; }
@@ -124,6 +127,7 @@ static constexpr LogLevel Debug   = LogLevel::Debug;
 static constexpr LogLevel Trace   = LogLevel::Trace;
 
 extern void ad_fail(const char *fmt, ...);
+extern void ad_raise(const char *fmt, ...);
 extern void ad_log(LogLevel level, const char *fmt, ...);
 
 namespace enoki {

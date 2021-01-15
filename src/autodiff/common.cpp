@@ -17,14 +17,25 @@ void ad_fail(const char *fmt, ...) {
     abort();
 }
 
+void ad_raise(const char* fmt, ...) {
+    va_list args;
+    va_start(args, fmt);
+    buffer.clear();
+    buffer.put("enoki-autodiff: ");
+    buffer.vfmt(fmt, args);
+    va_end(args);
+
+    throw std::runtime_error(buffer.get());
+}
+
 void ad_log(LogLevel level, const char *fmt, ...) {
-    if (unlikely(level <= log_level)) {
-        va_list args;
-        va_start(args, fmt);
-        vfprintf(stderr, fmt, args);
-        va_end(args);
-        fputc('\n', stderr);
-    }
+    if (likely(level <= log_level))
+        return;
+    va_list args;
+    va_start(args, fmt);
+    vfprintf(stderr, fmt, args);
+    va_end(args);
+    fputc('\n', stderr);
 }
 
 void* malloc_check(size_t size) {
@@ -49,13 +60,13 @@ Buffer::~Buffer() {
 size_t Buffer::fmt(const char *format, ...) {
     size_t written;
     do {
-        size_t size = m_end - m_cur;
+        size_t size = remain();
         va_list args;
         va_start(args, format);
         written = (size_t) vsnprintf(m_cur, size, format, args);
         va_end(args);
 
-        if (likely(written < size)) {
+        if (likely(written + 1 < size)) {
             m_cur += written;
             break;
         }
@@ -65,6 +76,26 @@ size_t Buffer::fmt(const char *format, ...) {
 
     return written;
 }
+
+size_t Buffer::vfmt(const char *format, va_list args_) {
+    size_t written;
+    va_list args;
+    do {
+        size_t size = remain();
+        va_copy(args, args_);
+        written = (size_t) vsnprintf(m_cur, size, format, args);
+        va_end(args);
+
+        if (likely(written + 1 < size)) {
+            m_cur += written;
+            break;
+        }
+
+        expand();
+    } while (true);
+    return written;
+}
+
 
 void Buffer::expand(size_t minval) {
     size_t old_alloc_size = m_end - m_start,
