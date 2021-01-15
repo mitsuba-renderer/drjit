@@ -13,6 +13,7 @@
 #pragma once
 
 #include <enoki/custom.h>
+#include <enoki/struct.h>
 
 NAMESPACE_BEGIN(enoki)
 NAMESPACE_BEGIN(detail)
