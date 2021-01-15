@@ -966,7 +966,7 @@ Target gather(Source &&source, const Index &index, const mask_t<Target> &mask = 
         if constexpr (!is_array_v<Index>) {
             if constexpr (is_jit_array_v<Target> && is_jit_array_v<Source>) {
                 // Case 2.0.0: gather<FloatC>(const FloatC&, size_t, ...)
-                return Target::template gather_<Permute>(source, index, mask);
+                return Target::template gather_<Permute>(source, uint32_array_t<Source>(index), mask);
             } else {
                 size_t offset = index * sizeof(value_t<Target>) * Target::Size;
                 if constexpr (std::is_pointer_v<std::decay_t<Source>>)
@@ -977,7 +977,7 @@ Target gather(Source &&source, const Index &index, const mask_t<Target> &mask = 
                     return load<Target>((const uint8_t *)source.data() + offset);
             }
         } else if constexpr (array_depth_v<Target> == array_depth_v<Index>) {
-            if constexpr (Target::IsPacked && is_array_v<Source> && !is_jit_array_v<Source>)
+            if constexpr (Target::IsPacked && is_array_v<Source>)
                 // Case 2.1.0: gather<FloatC>(const FloatP&, ...)
                 return Target::template gather_<Permute>(source.data(), index, mask);
             else

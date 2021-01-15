@@ -490,11 +490,8 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
     static Derived gather_(const Derived &src, const Index &index,
                            const Mask &mask) {
         static_assert(std::is_same_v<Mask, mask_t<Derived>>);
-        if constexpr (!is_jit_array_v<Index>)
-            return gather_<false>(src, uint32_array_t<Derived>(index), mask);
-        else
-            return steal(
-                jit_var_new_gather(src.index(), index.index(), mask.index()));
+        return steal(
+            jit_var_new_gather(src.index(), index.index(), mask.index()));
     }
 
     template <bool, typename Index, typename Mask>
@@ -507,11 +504,8 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
     template <bool, typename Index, typename Mask>
     void scatter_(Derived &dst, const Index &index, const Mask &mask) const {
         static_assert(std::is_same_v<Mask, mask_t<Derived>>);
-        if constexpr (!is_jit_array_v<Index>)
-            scatter_<false>(dst, uint32_array_t<Derived>(index), mask);
-        else
-            dst = steal(jit_var_new_scatter(dst.index(), m_index, index.index(),
-                                            mask.index(), ReduceOp::None));
+        dst = steal(jit_var_new_scatter(dst.index(), m_index, index.index(),
+                                        mask.index(), ReduceOp::None));
     }
 
     template <typename Index, typename Mask>
@@ -526,11 +520,8 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
     void scatter_reduce_(ReduceOp op, Derived &dst, const Index &index,
                          const Mask &mask) const {
         static_assert(std::is_same_v<Mask, mask_t<Derived>>);
-        if constexpr (!is_jit_array_v<Index>)
-            scatter_reduce_(op, dst, uint32_array_t<Derived>(index), mask);
-        else
-            dst = steal(jit_var_new_scatter(dst.index(), m_index, index.index(),
-                                            mask.index(), op));
+        dst = steal(jit_var_new_scatter(dst.index(), m_index, index.index(),
+                                        mask.index(), op));
     }
 
     //! @}
@@ -560,7 +551,8 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
                 AllocType::Device, size_in * sizeof(uint32_t));
 
             eval_();
-            uint32_t size_out = jit_compress(Backend, (const uint8_t *) data(), size_in, indices);
+            uint32_t size_out = jit_compress(Backend, (const uint8_t *) data(),
+                                             size_in, indices);
             return int32_array_t<Derived>::steal(
                 jit_var_mem_map(Backend, VarType::UInt32, indices, size_out, 1));
         }
@@ -658,7 +650,8 @@ protected:
     uint32_t m_index = 0;
 };
 
-template <typename Value> struct CUDAArray : JitArray<JitBackend::CUDA, Value, CUDAArray<Value>> {
+template <typename Value>
+struct CUDAArray : JitArray<JitBackend::CUDA, Value, CUDAArray<Value>> {
     using Base = JitArray<JitBackend::CUDA, Value, CUDAArray<Value>>;
     using MaskType = CUDAArray<bool>;
     using ArrayType = CUDAArray;
@@ -666,7 +659,8 @@ template <typename Value> struct CUDAArray : JitArray<JitBackend::CUDA, Value, C
     ENOKI_ARRAY_IMPORT(CUDAArray, Base)
 };
 
-template <typename Value> struct LLVMArray : JitArray<JitBackend::LLVM, Value, LLVMArray<Value>> {
+template <typename Value>
+struct LLVMArray : JitArray<JitBackend::LLVM, Value, LLVMArray<Value>> {
     using Base = JitArray<JitBackend::LLVM, Value, LLVMArray<Value>>;
     using MaskType = LLVMArray<bool>;
     using ArrayType = LLVMArray;
@@ -681,15 +675,21 @@ ENOKI_DECLARE_EXTERN_TEMPLATE(LLVMArray<float>, LLVMArray<bool>, LLVMArray<uint3
 ENOKI_DECLARE_EXTERN_TEMPLATE(LLVMArray<double>, LLVMArray<bool>, LLVMArray<uint32_t>)
 #endif
 
-template <typename Mask, typename... Ts> void printf_async(const Mask &mask, const char *fmt, const Ts&... ts) {
+template <typename Mask, typename... Ts>
+void printf_async(const Mask &mask, const char *fmt, const Ts &... ts) {
     constexpr bool Active = is_jit_array_v<Mask> || (is_jit_array_v<Ts> || ...);
-    static_assert(!Active || (is_jit_array_v<Mask> && array_depth_v<Mask> == 1 && is_mask_v<Mask>),
-                  "printf_async(): 'mask' argument must be CUDA/LLVM mask array of depth 1");
-    static_assert(!Active || ((is_jit_array_v<Ts> && array_depth_v<Ts> == 1) && ...),
-                  "printf_async(): variadic arguments must be CUDA/LLVM arrays of depth 1");
+    static_assert(!Active || (is_jit_array_v<Mask> &&
+                              array_depth_v<Mask> == 1 && is_mask_v<Mask>),
+                  "printf_async(): 'mask' argument must be CUDA/LLVM mask "
+                  "array of depth 1");
+    static_assert(!Active ||
+                      ((is_jit_array_v<Ts> && array_depth_v<Ts> == 1) && ...),
+                  "printf_async(): variadic arguments must be CUDA/LLVM arrays "
+                  "of depth 1");
     if constexpr (Active) {
         uint32_t indices[] = { ts.index()... };
-        jit_var_printf(Mask::Backend, mask.index(), fmt, (uint32_t) sizeof...(Ts), indices);
+        jit_var_printf(Mask::Backend, mask.index(), fmt,
+                       (uint32_t) sizeof...(Ts), indices);
     }
 }
 
