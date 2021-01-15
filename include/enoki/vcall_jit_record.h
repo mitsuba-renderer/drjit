@@ -160,8 +160,11 @@ vcall_jit_record_impl_scalar(Base *inst, const Func &func, const Mask &mask,
     constexpr size_t N = sizeof...(Args);
     MaskRAIIGuard<Mask> guard(mask.index());
 
-    return select(mask, func(inst, (set_mask_true<Is, N>(args))...),
-                  zero<Result>());
+    if constexpr (is_enoki_struct_v<Result> || is_array_v<Result>)
+        return select(mask, func(inst, (set_mask_true<Is, N>(args))...),
+                      zero<Result>());
+    else
+        return func(inst, (set_mask_true<Is, N>(args))...);
 }
 
 inline std::pair<void *, uint32_t> vcall_registry_get(const char *domain) {
