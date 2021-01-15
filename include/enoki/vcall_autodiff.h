@@ -72,13 +72,22 @@ struct DiffVCall : CustomOp<Type, Result, ConstStr, Self, Func, Args...> {
         const Func &func = Base::template value_in<2>();
         using Inputs = ek_tuple<Args...>;
 
-        auto func_rev = [func](auto *self2, const auto &grad_out,
+        auto func_rev = [func](auto *self2, auto &grad_out,
                                auto... args) -> Inputs {
             ADRecordingSession guard;
             enable_grad(args...);
-            Result result = func(self2, args...);
+            Result result = ad_copy(func(self2, args...));
             set_grad(result, grad_out);
             enqueue(result);
+
+#if 0
+            ek_tuple args_t(args...);
+            set_label(args_t, "args_in");
+            set_label(grad_out, "grad_out");
+            set_label(result, "result");
+            fprintf(stderr, "%s\n", ad_graphviz<detached_t<Type>>());
+#endif
+
             traverse<Type>(true, true);
             return ek_tuple(grad<false>(args)...);
         };
