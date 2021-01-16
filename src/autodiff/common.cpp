@@ -29,7 +29,7 @@ void ad_raise(const char* fmt, ...) {
 }
 
 void ad_log(LogLevel level, const char *fmt, ...) {
-    if (likely(level <= log_level))
+    if (likely(level > log_level))
         return;
     va_list args;
     va_start(args, fmt);
@@ -193,7 +193,7 @@ namespace enoki {
         const char *prev = prefix ? prefix->value : "";
         size_t size = strlen(prev) + strlen(value) + 2;
         char *out = (char *) malloc(size);
-        snprintf(out, size, "%s/%s", prev, value);
+        snprintf(out, size, "%s%s%s", prev, prefix ? "/" : "", value);
         prefix = new PrefixEntry{ prefix, out };
     }
 

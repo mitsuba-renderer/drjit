@@ -1159,6 +1159,10 @@ template <typename Value> const char *ad_graphviz() {
                 buffer.put("label=\"");
                 buffer.put(p, pn - p);
                 buffer.put("\";\n");
+                buffer.putc(' ', 4 * current_depth);
+                buffer.put("color=gray95;\n");
+                buffer.putc(' ', 4 * current_depth);
+                buffer.put("style=filled;\n");
 
                 p = pn + 1;
             }
