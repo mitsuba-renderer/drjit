@@ -265,7 +265,7 @@ protected:
     void step() {
         for (size_t i = 0; i < m_index_p.size(); ++i) {
             uint32_t &index = *m_index_p[i],
-                     next = jit_var_new_placeholder(index, 0);
+                     next = jit_var_new_placeholder(index, 1, 0);
             jit_var_dec_ref_ext(index);
             index = next;
         }

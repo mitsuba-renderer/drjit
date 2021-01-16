@@ -1497,8 +1497,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
     //! @{ \name Standard initializers
     // -----------------------------------------------------------------------
 
-    DiffArray placeholder_(bool propagate_literals) const {
-        return placeholder<Type>(m_value, propagate_literals);
+    DiffArray placeholder_(bool preserve_size, bool propagate_literals) const {
+        return placeholder<Type>(m_value, preserve_size, propagate_literals);
     }
 
     static DiffArray empty_(size_t size) {

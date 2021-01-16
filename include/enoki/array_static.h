@@ -80,12 +80,12 @@ struct StaticArrayBase : ArrayBase<Value_, IsMask_, Derived_> {
 
     ENOKI_INLINE void init_(size_t) { }
 
-    Derived placeholder_(bool propagate_literals) const {
+    Derived placeholder_(bool preserve_size, bool propagate_literals) const {
         Derived result;
         if constexpr (is_array_v<Value>) {
             for (size_t i = 0; i < Derived::Size; ++i)
                 result.entry(i)
-                    = enoki::placeholder<Value>(derived().entry(i), propagate_literals);
+                    = enoki::placeholder<Value>(derived().entry(i), preserve_size, propagate_literals);
         }
         return result;
     }

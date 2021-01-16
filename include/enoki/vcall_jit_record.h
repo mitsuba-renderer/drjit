@@ -210,7 +210,9 @@ Result vcall_jit_record(const char *name, const Func &func, Self &self,
         Mask mask_combined = mask && Mask::steal(jit_var_mask_peek(Backend));
         return vcall_jit_record_impl<Result, Base>(
             name, n_inst, func, self, mask_combined,
-            std::make_index_sequence<sizeof...(Args)>(), placeholder(args)...);
+            std::make_index_sequence<sizeof...(Args)>(),
+            placeholder(args, /* preserve_size = */ false,
+                        /* propagate_literals = */ true)...);
     }
 }
 
