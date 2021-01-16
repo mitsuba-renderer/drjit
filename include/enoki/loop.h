@@ -74,7 +74,7 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
         }
 
         if (m_state != 0 && m_state != 3 && m_state != 4)
-            jit_log(LogLevel::Warn, "enoki::Loop(): destructed in an inconsistent state.");
+            jit_log(LogLevel::Warn, "enoki::Loop(\"%s\"): destructed in an inconsistent state.", m_name.get());
     }
 
     /// Register JIT variable indices of loop variables
@@ -120,7 +120,7 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
     /// Configure the loop variables for recording
     void init() {
         if (m_state)
-            jit_raise("Loop(): was already initialized!");
+            jit_raise("enoki::Loop(\"%s\"): was already initialized!", m_name.get());
 
         if (m_record) {
             /* Wrap loop variables using placeholders that represent
@@ -131,7 +131,7 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
             step();
             m_state = 1;
             jit_log(::LogLevel::Info,
-                    "ek::Loop(): --------- begin recording loop ---------");
+                    "enoki::Loop(\"%s\"): --------- begin recording loop ---------", m_name.get());
         }
     }
 
@@ -167,7 +167,7 @@ protected:
 
         switch (m_state) {
             case 0:
-                jit_raise("Loop(): must be initialized first!");
+                jit_raise("Loop(\"%s\"): must be initialized first!", m_name.get());
 
             case 1:
                 /* The loop condition has been evaluated now.  Wrap loop
@@ -230,11 +230,11 @@ protected:
                     if constexpr (Backend == JitBackend::LLVM)
                         m_mask_stack.push(cond.index());
                     jit_log(::LogLevel::Info,
-                            "ek::Loop(): ----- recording loop body *again* ------");
+                            "enoki::Loop(\"%s\"): ----- recording loop body *again* ------", m_name.get());
                     return true;
                 } else {
                     jit_log(::LogLevel::Info,
-                            "ek::Loop(): --------- done recording loop ----------");
+                            "enoki::Loop(\"%s\"): --------- done recording loop ----------", m_name.get());
                     // No optimization opportunities, stop now.
                     for (uint32_t i = 0; i < n; ++i)
                         jit_var_dec_ref_ext(m_index_body[i]);
