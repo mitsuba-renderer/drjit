@@ -50,6 +50,14 @@ struct DiffVCall : CustomOp<Type, Result, ConstStr, Self, Func, Args...> {
             enable_grad(value_grad_pair.first...);
             Result result = func(self2, value_grad_pair.first...);
             (set_grad(value_grad_pair.first, value_grad_pair.second), ...);
+
+#if 0
+            ek_tuple args_t(value_grad_pair.first...);
+            set_label(args_t, "args");
+            set_label(result, "result");
+            fprintf(stderr, "%s\n", ad_graphviz<detached_t<Type>>());
+#endif
+
             enqueue(value_grad_pair.first...);
             traverse<Type>(false, true);
             return grad<false>(result);
@@ -79,16 +87,15 @@ struct DiffVCall : CustomOp<Type, Result, ConstStr, Self, Func, Args...> {
             enable_grad(args...);
             Result result = ad_copy(func(self2, args...));
             set_grad(result, grad_out);
-            enqueue(result);
 
 #if 0
             ek_tuple args_t(args...);
-            set_label(args_t, "args_in");
-            set_label(grad_out, "grad_out");
+            set_label(args_t, "args");
             set_label(result, "result");
             fprintf(stderr, "%s\n", ad_graphviz<detached_t<Type>>());
 #endif
 
+            enqueue(result);
             traverse<Type>(true, true);
             return ek_tuple(grad<false>(args)...);
         };
