@@ -1304,8 +1304,9 @@ def label(a):
 def set_label(a, label):
     if _ek.is_jit_array_v(a) or _ek.is_diff_array_v(a):
         a.set_label_(label)
-    else:
-        raise Exception("set_label(): only supported for JIT and AD arrays!")
+    elif _ek.is_enoki_struct_v(a):
+        for k in a.ENOKI_STRUCT.keys():
+            set_label(getattr(a, k), label + "_" + k)
 
 
 def schedule(*args):
