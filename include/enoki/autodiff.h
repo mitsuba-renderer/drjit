@@ -1647,13 +1647,16 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
     }
 
     const char *label_() const {
+        const char *result = nullptr;
         if constexpr (IsEnabled) {
             if (m_index > 0)
-                detail::ad_label<Type>(m_index);
+                result = detail::ad_label<Type>(m_index);
         }
-        if constexpr (is_jit_array_v<Type>)
-            return m_value.label_();
-        return nullptr;
+        if constexpr (is_jit_array_v<Type>) {
+            if (!result)
+                result = m_value.label_();
+        }
+        return result;
     }
 
     static const char *graphviz_() {
