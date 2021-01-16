@@ -375,7 +375,7 @@ auto bind_full(py::class_<Array> &cls, bool scalar_mode = false) {
     }
 
     if constexpr (Array::IsJIT || Array::IsDiff) {
-        cls.def("set_label_", [](const Array &a, const char *name) { a.set_label_(name); });
+        cls.def("set_label_", [](Array &a, const char *name) { a.set_label_(name); });
         cls.def("label_", [](const Array &a) { return a.label_(); });
     }
 
