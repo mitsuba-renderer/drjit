@@ -48,7 +48,7 @@ struct DiffVCall : CustomOp<Type, Result, ConstStr, Self, Func, Args...> {
         auto func_fwd = [func](auto *self2, auto... value_grad_pair) {
             ADRecordingSession guard;
             enable_grad(value_grad_pair.first...);
-            Result result = func(self2, value_grad_pair.first...);
+            Result result = ad_copy(func(self2, value_grad_pair.first...));
             (set_grad(value_grad_pair.first, value_grad_pair.second), ...);
 
 #if 0
