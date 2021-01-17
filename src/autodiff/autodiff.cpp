@@ -1055,6 +1055,9 @@ static void ad_traverse_rev(std::vector<int32_t> &todo, bool retain_graph) {
                     unlock_guard<std::mutex> guard(state.mutex);
                     delete special;
                 }
+
+                // Location in memory may have changed by the above
+                v = state[index];
             } else {
                 v2->mul_accum(v->grad, edge.weight, v->size);
 
@@ -1065,7 +1068,6 @@ static void ad_traverse_rev(std::vector<int32_t> &todo, bool retain_graph) {
             edge_id = next_rev;
         }
 
-        v = state[index];
         if (v->next_rev && v->ref_count_grad == 0 && !(recording && !v->placeholder)) {
             ad_trace("ad_traverse_rev(): clearing gradient at intermediate variable a%u", index);
             v->grad = Value();
@@ -1135,6 +1137,9 @@ static void ad_traverse_fwd(std::vector<int32_t> &todo, bool retain_graph) {
                     unlock_guard<std::mutex> guard(state.mutex);
                     delete special;
                 }
+
+                // Address of 'v' may have changed due to the above
+                v = state[index];
             } else {
                 v2->mul_accum(v->grad, edge.weight, v->size);
 
@@ -1145,7 +1150,6 @@ static void ad_traverse_fwd(std::vector<int32_t> &todo, bool retain_graph) {
             edge_id = next_fwd;
         }
 
-        v = state[index];
         if (v->next_fwd && v->ref_count_grad == 0 && !(recording && !v->placeholder)) {
             ad_trace("ad_traverse_fwd(): clearing gradient at intermediate variable a%u", index);
             v->grad = Value();
