@@ -611,8 +611,12 @@ int32_t ad_new(const char *label, uint32_t size, uint32_t op_count,
         else
             weight_is_zero = weights[i].is_literal() && weights[i][0] == 0;
 
-        if (weight_is_zero)
+        if (weight_is_zero) {
+            ad_trace(
+                "ad_new(a%i <- a%i): weight of edge %i is zero, skipping!",
+                index, op[i], i);
             continue;
+        }
 
         if (ENOKI_UNLIKELY(check_weights)) {
             bool nan_weights = any(isnan(weights[i])),
@@ -670,6 +674,14 @@ int32_t ad_new(const char *label, uint32_t size, uint32_t op_count,
 
         var2->ref_count_int++;
         var2->next_fwd = edge_index_new;
+    }
+
+    if (op_count > 0 && edge_index == 0) {
+        // All edges were pruned, don't create the node after all
+        ad_trace(
+            "ad_new(a%i): all nodes were pruned, removing variable from graph", index);
+        ad_free(index, var);
+        return 0;
     }
 
     var->next_rev = edge_index;
