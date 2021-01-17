@@ -121,9 +121,11 @@ struct DiffVCall : CustomOp<Type, Result, ConstStr, Self, Func, Args...> {
         ADRecordingSession() : m_status(ad_flag(ADFlag::Recording)) {
             ad_clear_dependencies();
             ad_set_flag(ADFlag::Recording, 1);
+            ad_prefix_push("Recorded VCall");
         }
         ~ADRecordingSession() {
             ad_set_flag(ADFlag::Recording, m_status);
+            ad_prefix_pop();
         }
         int m_status;
     };
