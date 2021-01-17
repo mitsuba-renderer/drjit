@@ -96,7 +96,6 @@ size_t Buffer::vfmt(const char *format, va_list args_) {
     return written;
 }
 
-
 void Buffer::expand(size_t minval) {
     size_t old_alloc_size = m_end - m_start,
            new_alloc_size = 2 * old_alloc_size + minval,
@@ -150,6 +149,7 @@ namespace enoki {
     ENOKI_EXPORT void ad_add_dependency(int32_t index) {
         if (!dependencies)
             dependencies = new tsl::robin_set<int32_t>();
+        ad_trace("ad_add_dependency(a%u)", index);
         dependencies->insert(index);
     }
 

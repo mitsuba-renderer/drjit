@@ -93,7 +93,7 @@ protected:
 
 NAMESPACE_BEGIN(detail)
 
-// Zer out indices of variables that are attached to the AD graph
+// Zero out indices of variables that are attached to the AD graph
 template <typename T>
 void clear_diff_vars(T &value) {
     if constexpr (is_array_v<T>) {

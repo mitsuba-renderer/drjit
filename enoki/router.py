@@ -1344,7 +1344,7 @@ def graphviz_str(arg):
                         'the JIT (LLVM/CUDA) or AD backend are supported!')
 
 
-def graphviz(args):
+def graphviz(arg):
     try:
         from graphviz import Source
         return Source(graphviz_str(arg))

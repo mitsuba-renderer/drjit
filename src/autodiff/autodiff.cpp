@@ -83,6 +83,13 @@ struct Edge {
 static_assert(sizeof(Edge) == 8 * sizeof(uint32_t),
               "Edge data structure has incorrect size. Padding problem?");
 
+template <typename T> bool is_valid(const T &value) {
+    if constexpr (is_jit_array_v<T>)
+        return value.valid();
+    else
+        return true;
+}
+
 /// Represents a variable in the computation graph
 struct Variable {
     /// Descriptive label or nullptr
@@ -141,7 +148,7 @@ struct Variable {
     template <typename T = Value>
     void accum(const T& v, uint32_t src_size) {
         if constexpr (is_array_v<T>) {
-            bool grad_valid = ((const T &) grad).valid();
+            bool grad_valid = is_valid(grad);
             if (size == 1 && src_size != 1) {
                 Value v2;
                 if (v.size() == 1) {
@@ -171,7 +178,7 @@ struct Variable {
         T v2 = select(eq(v1, 0.f), v1, v2_);
 
         if constexpr (is_array_v<T>) {
-            bool grad_valid = ((const T &) grad).valid();
+            bool grad_valid = is_valid(grad);
 
             if (size == 1 && src_size != 1) {
                 T v3 = v1 * v2;
@@ -317,28 +324,33 @@ extern void RENAME(ad_whos)() {
 
 /// Forward-mode DFS starting from 'index'
 static void ad_dfs_fwd(Variable *v, bool recording) {
+    // Don't traverse non-placeholder nodes while recording
+    if (recording && !v->placeholder)
+        return;
+
     uint32_t edge = v->next_fwd;
     while (edge) {
         Edge &e = state.edges[edge];
-        if (e.visited == 0) {
+        if (!e.visited) {
             e.visited = 1;
-            Variable *v2 = state[e.target];
-            if (!recording || v->placeholder || v2->placeholder)
-                ad_dfs_fwd(v2, recording);
+            ad_dfs_fwd(state[e.target], recording);
         }
         edge = e.next_fwd;
     }
 }
 
 /// Reverse-mode DFS starting from 'index'
-static void ad_dfs_rev(Variable *v) {
+static void ad_dfs_rev(Variable *v, bool recording) {
+    // Don't traverse non-placeholder nodes while recording
+    if (recording && !v->placeholder)
+        return;
+
     uint32_t edge = v->next_rev;
     while (edge) {
         Edge &e = state.edges[edge];
-        if (e.visited == 0) {
+        if (!e.visited) {
             e.visited = 1;
-            Variable *v2 = state[e.source];
-            ad_dfs_rev(v2);
+            ad_dfs_rev(state[e.source], recording);
         }
         edge = e.next_rev;
     }
@@ -361,18 +373,30 @@ template <typename T> void ad_enqueue(int32_t index) {
 
 /// Kahn-style topological sort in forward mode
 static void ad_toposort_fwd() {
-    bool recording = ad_flag(ADFlag::Recording);
+    state.todo.clear();
 
+    bool recording = ad_flag(ADFlag::Recording);
     if (recording) {
         // Also enqueue external dependencies accessed by the computation
         tsl::robin_set<int32_t> *deps = ad_dependencies();
         if (deps) {
-            for (int32_t index : *deps)
-                ad_enqueue_impl<Value>(index);
+            for (int32_t index : *deps) {
+                Variable *v = state[index];
+                if (!is_valid(v->grad))
+                    continue;
+
+                state.todo.push_back(index);
+                uint32_t edge = v->next_fwd;
+                while (edge) {
+                    Edge &e = state.edges[edge];
+                    if (state[e.target]->placeholder)
+                        ad_enqueue_impl<Value>(e.target);
+                    edge = e.next_fwd;
+                }
+            }
         }
     }
 
-    state.todo.clear();
     std::deque<int32_t> *queue = tls_queue;
     if (!queue || queue->empty())
         return;
@@ -384,22 +408,20 @@ static void ad_toposort_fwd() {
     while (!queue->empty()) {
         int32_t index = queue->front();
         queue->pop_front();
-        state.todo.push_back(index);
 
-        Variable *v = state[index];
+        // Don't traverse non-placeholder nodes while recording
+        const Variable *v = state[index];
+        if (recording && !v->placeholder)
+            continue;
+
+        state.todo.push_back(index);
 
         uint32_t edge = v->next_fwd;
         while (edge) {
             Edge &e = state.edges[edge];
             e.visited = 0;
 
-            const Variable *v2 = state[e.target];
-            if (recording && !v->placeholder && !v2->placeholder) {
-                edge = e.next_fwd;
-                continue;
-            }
-
-            uint32_t edge2 = v2->next_rev;
+            uint32_t edge2 = state[e.target]->next_rev;
             bool ready = true;
             while (edge2) {
                 const Edge &e2 = state.edges[edge2];
@@ -420,6 +442,7 @@ static void ad_toposort_fwd() {
 
 /// Kahn-style topological sort in backward mode
 static void ad_toposort_rev() {
+    bool recording = ad_flag(ADFlag::Recording);
     state.todo.clear();
 
     std::deque<int32_t> *queue = tls_queue;
@@ -428,14 +451,19 @@ static void ad_toposort_rev() {
 
     // DFS traversal to tag all reachable edges
     for (int32_t index: *queue)
-        ad_dfs_rev(state[index]);
+        ad_dfs_rev(state[index], recording);
 
     while (!queue->empty()) {
         int32_t index = queue->front();
         queue->pop_front();
+
+        const Variable *v = state[index];
+        if (recording && !v->placeholder)
+            continue;
+
         state.todo.push_back(index);
 
-        uint32_t edge = state[index]->next_rev;
+        uint32_t edge = v->next_rev;
         while (edge) {
             Edge &e = state.edges[edge];
             e.visited = 0;
@@ -620,8 +648,12 @@ int32_t ad_new(const char *label, uint32_t size, uint32_t op_count,
                 ad_raise("ad_new(): variable a%i computation being recorded "
                          "accesses a non-scalar private variable (a%i)!",
                          index, index2);
-            index2 = ad_new_gather_impl<T>("gather", var->size, op[i], Index(0),
-                                           Mask(true), false);
+            uint32_t index3 = ad_new_gather_impl<T>(
+                "gather", var->size, op[i], Index(0), Mask(true), false);
+            ad_trace("ad_new(a%u <- a%u): placeholder accesses non-placeholder "
+                     "variable, inserting a gather operation (a%u).",
+                     index, index2, index3);
+            index2 = index3;
             var2 = state[index2];
             var2->ref_count_ext = 0;
             var = state[index];
@@ -961,6 +993,7 @@ int32_t ad_new_scatter(const char *label, uint32_t size, ReduceOp op,
 }
 
 static void ad_traverse_rev(std::vector<int32_t> &todo, bool retain_graph) {
+    bool recording = ad_flag(ADFlag::Recording);
     ad_log(Debug, "ad_traverse_rev(): processing %zu nodes ..", todo.size());
 
     for (int32_t index : todo) {
@@ -989,8 +1022,14 @@ static void ad_traverse_rev(std::vector<int32_t> &todo, bool retain_graph) {
             Variable *v2 = state[edge.source];
             uint32_t next_rev = edge.next_rev;
 
-            ad_trace("ad_traverse_fwd(): processing edge a%i -> a%i ..", index,
+            ad_trace("ad_traverse_rev(): processing edge a%i -> a%i ..", index,
                      edge.source);
+
+            if (recording && !v->placeholder && !v2->placeholder) {
+                // Don't propagate gradients between ordinary variables when recording AD code
+                edge_id = next_rev;
+                continue;
+            }
 
             if (unlikely(edge.special)) {
                 edge.special->backward(v2, v);
@@ -1013,10 +1052,11 @@ static void ad_traverse_rev(std::vector<int32_t> &todo, bool retain_graph) {
             edge_id = next_rev;
         }
 
-        /// Clear the gradients at interior nodes
         v = state[index];
-        if (v->next_rev && v->ref_count_grad == 0)
+        if (v->next_rev && v->ref_count_grad == 0) {
+            ad_trace("ad_traverse_rev(): clearing gradient at intermediate variable a%u", index);
             v->grad = Value();
+        }
     }
 
     if (!retain_graph) {
@@ -1042,9 +1082,7 @@ static void ad_traverse_fwd(std::vector<int32_t> &todo, bool retain_graph) {
 
         if constexpr (is_dynamic_v<Value>) {
             uint32_t grad_size = asize(v->grad);
-            if (recording && grad_size == 0)
-                v->grad = zero<Value>(v->size);
-            else if (unlikely(v->size != grad_size && grad_size != 1))
+            if (unlikely(v->size != grad_size && grad_size != 1))
                 ad_raise("ad_traverse_fwd(): variable a%i has an invalid "
                          "gradient size: expected %u, got %u!", index,
                          v->size, grad_size);
@@ -1094,10 +1132,11 @@ static void ad_traverse_fwd(std::vector<int32_t> &todo, bool retain_graph) {
             edge_id = next_fwd;
         }
 
-        /// Clear the gradients at interior nodes
         v = state[index];
-        if (v->next_fwd && v->ref_count_grad == 0)
+        if (v->next_fwd && v->ref_count_grad == 0) {
+            ad_trace("ad_traverse_fwd(): clearing gradient at intermediate variable a%u", index);
             v->grad = Value();
+        }
 
         if (!retain_graph)
             ad_free_edges(index, v);
