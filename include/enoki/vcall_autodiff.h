@@ -51,7 +51,7 @@ struct DiffVCall : CustomOp<Type, Result, ConstStr, Self, Func, Args...> {
             Result result = ad_copy(func(self2, value_grad_pair.first...));
             (set_grad(value_grad_pair.first, value_grad_pair.second), ...);
 
-#if 0
+#if 1
             ek_tuple args_t(value_grad_pair.first...);
             set_label(args_t, "args");
             set_label(result, "result");
@@ -88,7 +88,7 @@ struct DiffVCall : CustomOp<Type, Result, ConstStr, Self, Func, Args...> {
             Result result = ad_copy(func(self2, args...));
             set_grad(result, grad_out);
 
-#if 0
+#if 1
             ek_tuple args_t(args...);
             set_label(args_t, "args");
             set_label(result, "result");

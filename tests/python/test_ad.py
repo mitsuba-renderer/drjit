@@ -757,14 +757,13 @@ def test44_custom_forward(m):
     ek.traverse(m.Float, reverse=False, retain_graph=False)
     assert ek.allclose(ek.grad(d2), m.Array3f(0.610883, 0.152721, -0.305441)*2)
 
-@pytest.mark.skip("TODO bring it back when loop is implemented")
 def test45_diff_loop(m):
     def mcint(a, b, f, sample_count=100000):
         rng = m.PCG32()
         i = m.UInt32(0)
         result = m.Float(0)
-        l = m.Loop(i, rng, result)
-        while l.cond(i < sample_count):
+        l = m.Loop("test45", i, rng, result)
+        while l(i < sample_count):
             result += f(ek.lerp(a, b, rng.next_float32()))
             i += 1
         return result * (b - a) / sample_count
@@ -810,7 +809,6 @@ def test45_diff_loop(m):
     ek.set_flag(ek.JitFlag.LoopRecord, False)
 
 
-@pytest.mark.skip("TODO bring it back when loop is implemented")
 def test46_loop_ballistic(m):
     class Ballistic(ek.CustomOp):
         def timestep(self, pos, vel, dt=0.02, mu=.1, g=9.81):
@@ -830,8 +828,8 @@ def test46_loop_ballistic(m):
             self.temp_pos = ek.empty(m.Array2f, n * max_it)
             self.temp_vel = ek.empty(m.Array2f, n * max_it)
 
-            loop = m.Loop(pos, vel, it)
-            while loop.cond(it < max_it):
+            loop = m.Loop("eval", pos, vel, it)
+            while loop(it < max_it):
                 # Store current loop variables
                 index = it * n + ek.arange(m.UInt32, n)
                 ek.scatter(self.temp_pos, pos, index)
@@ -855,9 +853,9 @@ def test46_loop_ballistic(m):
             # Run for 100 iterations
             it = m.UInt32(100)
 
-            loop = m.Loop(it, grad_pos, grad_vel)
+            loop = m.Loop("backward", it, grad_pos, grad_vel)
             n = ek.width(grad_pos)
-            while loop.cond(it > 0):
+            while loop(it > 0):
                 # Retrieve loop variables, reverse chronological order
                 it -= 1
                 index = it * n + ek.arange(m.UInt32, n)
@@ -892,8 +890,9 @@ def test46_loop_ballistic(m):
 
         vel_in = m.Array2f(ek.detach(vel_in) - 0.2 * ek.grad(vel_in))
 
+    print(loss)
     assert ek.allclose(loss, 0, atol=1e-4)
-    assert ek.allclose(vel_in.x, [3.3516, 2.3789, 0.79156], atol=1e-3)
+    assert ek.allclose(vel_in.x, [3.3516, 2.3789, 0.79156], rtol=1e-3)
     ek.set_flag(ek.JitFlag.LoopRecord, False)
 
 
@@ -913,7 +912,7 @@ def test46_loop_ballistic_2(m):
             it, max_it = m.UInt32(0), 100
 
             loop = m.Loop(pos, vel, it)
-            while loop.cond(it < max_it):
+            while loop(it < max_it):
                 # Update loop variables
                 pos_out, vel_out = self.timestep(pos, vel)
                 pos.assign(pos_out)
@@ -934,7 +933,7 @@ def test46_loop_ballistic_2(m):
             it = m.UInt32(0)
 
             loop = m.Loop(it, pos, vel, grad_pos, grad_vel)
-            while loop.cond(it < 100):
+            while loop(it < 100):
                 # Take reverse step in time
                 pos_rev, vel_rev = self.timestep(pos, vel, dt=-0.02)
                 pos.assign(pos_rev)

@@ -16,7 +16,7 @@
 #  endif
 #endif
 
-#if 0 // verbose log messages
+#if 1 // verbose log messages
 #define ad_trace(...) ad_log(Trace, __VA_ARGS__)
 constexpr LogLevel log_level = LogLevel::Trace;
 #else
