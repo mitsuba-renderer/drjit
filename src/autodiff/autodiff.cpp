@@ -362,6 +362,7 @@ template <typename T> void ad_enqueue_impl(int32_t index) {
     std::deque<int32_t> *queue = tls_queue;
     if (unlikely(!queue))
         queue = tls_queue = new std::deque<int32_t>();
+    ad_trace("ad_enqueue(a%u)", index);
     queue->push_back(index);
 }
 
@@ -1065,7 +1066,7 @@ static void ad_traverse_rev(std::vector<int32_t> &todo, bool retain_graph) {
         }
 
         v = state[index];
-        if (v->next_rev && v->ref_count_grad == 0) {
+        if (v->next_rev && v->ref_count_grad == 0 && !(recording && !v->placeholder)) {
             ad_trace("ad_traverse_rev(): clearing gradient at intermediate variable a%u", index);
             v->grad = Value();
         }
@@ -1145,7 +1146,7 @@ static void ad_traverse_fwd(std::vector<int32_t> &todo, bool retain_graph) {
         }
 
         v = state[index];
-        if (v->next_fwd && v->ref_count_grad == 0) {
+        if (v->next_fwd && v->ref_count_grad == 0 && !(recording && !v->placeholder)) {
             ad_trace("ad_traverse_fwd(): clearing gradient at intermediate variable a%u", index);
             v->grad = Value();
         }
