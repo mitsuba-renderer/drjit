@@ -200,8 +200,16 @@ Result vcall_jit_record(const char *name, const Func &func, Self &self,
     bool masked = mask.is_literal() && mask[0] == false;
 
     if (n_inst == 0 || self_size == 0 || masked) {
+        jit_log(::LogLevel::Info,
+                "jit_var_vcall(self=r%u): call (\"%s::%s()\") not performed (%s)",
+                self.index(), Base::Domain, name,
+                n_inst == 0 ? "no instances"
+                            : (masked ? "masked" : "self.size == 0"));
         return zero<Result>(self_size);
     } else if (n_inst == 1) {
+        jit_log(::LogLevel::Info,
+                "jit_var_vcall(self=r%u): call (\"%s::%s()\") inlined (only 1 "
+                "instance exists.)", self.index(), Base::Domain, name);
         return vcall_jit_record_impl_scalar<Result, Base>(
             (Base *) inst, func, mask,
             std::make_index_sequence<sizeof...(Args)>(), args...);
