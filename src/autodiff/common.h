@@ -51,7 +51,8 @@ public:
 
     void clear() {
         m_cur = m_start;
-        m_start[0] = '\0';
+        if (m_start != m_end)
+            m_start[0] = '\0';
     }
 
     template <size_t N> void put(const char (&str)[N]) {
