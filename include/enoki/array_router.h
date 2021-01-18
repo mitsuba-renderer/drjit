@@ -1150,36 +1150,6 @@ template <typename T, typename TargetType> decltype(auto) migrate(const T &value
     }
 }
 
-template <typename T> decltype(auto) ad_copy(const T &value) {
-    if constexpr (is_diff_array_v<T>) {
-        if constexpr (array_depth_v<T> > 1) {
-            T result;
-            if constexpr (T::Size == Dynamic)
-                result = empty<T>(value.size());
-
-            for (size_t i = 0; i < value.size(); ++i)
-                result.entry(i) = ad_copy(value.entry(i));
-
-            return result;
-        } else {
-            return value.derived().copy();
-        }
-    } else if constexpr (is_enoki_struct_v<T>) {
-        T result;
-
-        struct_support_t<T>::apply_2(
-            value, result,
-            [](auto const &x1, auto &x2) ENOKI_INLINE_LAMBDA {
-                x2 = ad_copy(x1);
-            });
-
-        return result;
-    } else {
-        return (const T &) value;
-    }
-}
-
-
 //! @}
 // -----------------------------------------------------------------------
 

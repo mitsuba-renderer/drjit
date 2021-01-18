@@ -18,6 +18,26 @@
 NAMESPACE_BEGIN(enoki)
 NAMESPACE_BEGIN(detail)
 
+inline void ad_copy() { }
+
+template <typename T, typename... Ts> void ad_copy(T &value, Ts&...values) {
+    if constexpr (is_diff_array_v<T>) {
+        if constexpr (array_depth_v<T> > 1) {
+            for (size_t i = 0; i < value.size(); ++i)
+                ad_copy(value.entry(i));
+        } else {
+            if (value.index_ad())
+                value = value.derived().copy();
+        }
+    } else if constexpr (is_enoki_struct_v<T>) {
+        struct_support_t<T>::apply_1(
+            value, [](auto &x1) ENOKI_INLINE_LAMBDA { ad_copy(x1); });
+    }
+
+    if constexpr (sizeof...(Ts) > 0)
+        ad_copy(values...);
+}
+
 using ConstStr = const char *;
 
 template <typename Type, typename Self, typename Result, typename Func,
@@ -47,11 +67,13 @@ struct DiffVCall : CustomOp<Type, Result, ConstStr, Self, Func, Args...> {
 
         auto func_fwd = [func](auto *self2, auto... value_grad_pair) {
             ADRecordingSession guard;
+            ad_copy(value_grad_pair.first...);
             enable_grad(value_grad_pair.first...);
-            Result result = ad_copy(func(self2, value_grad_pair.first...));
+            Result result = func(self2, value_grad_pair.first...);
+            ad_copy(result);
             (set_grad(value_grad_pair.first, value_grad_pair.second), ...);
 
-#if 1
+#if 0
             ek_tuple args_t(value_grad_pair.first...);
             set_label(args_t, "args");
             set_label(result, "result");
@@ -84,11 +106,13 @@ struct DiffVCall : CustomOp<Type, Result, ConstStr, Self, Func, Args...> {
         auto func_rev = [func](auto *self2, auto &grad_out,
                                auto... args) -> Inputs {
             ADRecordingSession guard;
+            ad_copy(args...);
             enable_grad(args...);
-            Result result = ad_copy(func(self2, args...));
+            Result result = func(self2, args...);
+            ad_copy(result);
             set_grad(result, grad_out);
 
-#if 1
+#if 0
             ek_tuple args_t(args...);
             set_label(args_t, "args");
             set_label(result, "result");
