@@ -23,6 +23,7 @@ NAMESPACE_BEGIN(enoki)
 
 extern bool check_weights;
 extern tsl::robin_set<int32_t> *ad_dependencies();
+extern size_t max_edges_per_kernel;
 
 NAMESPACE_BEGIN(detail)
 
@@ -1009,6 +1010,8 @@ static void ad_traverse_rev(std::vector<int32_t> &todo, bool retain_graph) {
     bool recording = ad_flag(ADFlag::Recording);
     ad_log(Debug, "ad_traverse_rev(): processing %zu nodes ..", todo.size());
 
+    size_t edge_counter = 0;
+
     for (int32_t index : todo) {
         Variable *v = state[index];
         ad_trace("ad_traverse_rev(): processing variable a%i ..", index);
@@ -1035,14 +1038,14 @@ static void ad_traverse_rev(std::vector<int32_t> &todo, bool retain_graph) {
             Variable *v2 = state[edge.source];
             uint32_t next_rev = edge.next_rev;
 
-            ad_trace("ad_traverse_rev(): processing edge a%i -> a%i ..", index,
-                     edge.source);
-
             if (recording && !v->placeholder && !v2->placeholder) {
                 // Don't propagate gradients between ordinary variables when recording AD code
                 edge_id = next_rev;
                 continue;
             }
+
+            ad_trace("ad_traverse_rev(): processing edge a%i -> a%i ..", index,
+                     edge.source);
 
             if (unlikely(edge.special)) {
                 edge.special->backward(v2, v);
@@ -1056,13 +1059,25 @@ static void ad_traverse_rev(std::vector<int32_t> &todo, bool retain_graph) {
                     delete special;
                 }
 
-                // Location in memory may have changed by the above
+                // Address of 'v' and 'v2' may have changed due to the above
                 v = state[index];
+                v2 = state[index];
             } else {
                 v2->mul_accum(v->grad, edge.weight, v->size);
 
                 if (!retain_graph)
                     edge.weight = Value();
+            }
+
+            if (is_jit_array_v<Value> && max_edges_per_kernel != 0) {
+                enoki::schedule(v2->grad);
+
+                if (edge_counter % max_edges_per_kernel ==
+                    max_edges_per_kernel - 1) {
+                    enoki::eval();
+                }
+
+                edge_counter++;
             }
 
             edge_id = next_rev;
@@ -1090,6 +1105,7 @@ static void ad_traverse_fwd(std::vector<int32_t> &todo, bool retain_graph) {
     ad_log(Debug, "ad_traverse_fwd(): processing %zu nodes ..", todo.size());
 
     bool recording = ad_flag(ADFlag::Recording);
+    size_t edge_counter = 0;
 
     for (int32_t index : todo) {
         Variable *v = state[index];
@@ -1138,13 +1154,25 @@ static void ad_traverse_fwd(std::vector<int32_t> &todo, bool retain_graph) {
                     delete special;
                 }
 
-                // Address of 'v' may have changed due to the above
+                // Address of 'v' and 'v2' may have changed due to the above
                 v = state[index];
+                v2 = state[index];
             } else {
                 v2->mul_accum(v->grad, edge.weight, v->size);
 
                 if (!retain_graph)
                     edge.weight = Value();
+            }
+
+            if (is_jit_array_v<Value> && max_edges_per_kernel != 0) {
+                enoki::schedule(v2->grad);
+
+                if (edge_counter % max_edges_per_kernel ==
+                    max_edges_per_kernel - 1) {
+                    enoki::eval();
+                }
+
+                edge_counter++;
             }
 
             edge_id = next_fwd;

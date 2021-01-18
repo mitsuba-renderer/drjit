@@ -100,6 +100,7 @@ PYBIND11_MODULE(enoki_ext, m_) {
     m.def("ad_whos_str", &ek::ad_whos);
     m.def("ad_whos", []() { py::print(ek::ad_whos()); });
     m.def("ad_check_weights", [](bool value) { ek::ad_check_weights(value); });
+    m.def("ad_set_max_edges_per_kernel", [](size_t value) { ek::ad_set_max_edges_per_kernel(value); });
 #endif
 
     struct Scope {

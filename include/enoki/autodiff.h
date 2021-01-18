@@ -1852,6 +1852,7 @@ extern ENOKI_AUTODIFF_EXPORT size_t ad_dependency_count();
 extern ENOKI_AUTODIFF_EXPORT void ad_add_dependency(int32_t index);
 extern ENOKI_AUTODIFF_EXPORT void ad_write_dependencies(int32_t *out);
 extern ENOKI_AUTODIFF_EXPORT void ad_clear_dependencies();
+extern ENOKI_AUTODIFF_EXPORT void ad_set_max_edges_per_kernel(size_t value);
 
 NAMESPACE_END(enoki)
 
