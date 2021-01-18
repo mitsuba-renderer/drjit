@@ -105,6 +105,7 @@ Result vcall_jit_record_impl(const char *name, uint32_t n_inst,
 
     ek_index_vector indices_in, indices_out_all;
     ek_vector<uint32_t> se_count(n_inst + 1, 0);
+    ek_vector<uint32_t> inst_id(n_inst, 0);
 
     (collect_indices(indices_in, args), ...);
     se_count[0] = jit_side_effects_scheduled(Backend);
@@ -127,6 +128,7 @@ Result vcall_jit_record_impl(const char *name, uint32_t n_inst,
                 Result tmp = func(base, set_mask_true<Is, N>(args)...);
                 collect_indices(indices_out_all, tmp);
             }
+            inst_id[j - 1] = i;
             se_count[j++] = jit_side_effects_scheduled(Backend);
         }
     } catch (...) {
@@ -138,10 +140,9 @@ Result vcall_jit_record_impl(const char *name, uint32_t n_inst,
 
     snprintf(label, sizeof(label), "%s::%s()", Base::Domain, name);
 
-    jit_var_vcall(label, self.index(), mask.index(), n_inst,
-                  indices_in.size(), indices_in.data(),
-                  indices_out_all.size(), indices_out_all.data(),
-                  se_count.data(), indices_out.data());
+    jit_var_vcall(label, self.index(), mask.index(), n_inst, inst_id.data(),
+                  indices_in.size(), indices_in.data(), indices_out_all.size(),
+                  indices_out_all.data(), se_count.data(), indices_out.data());
 
     Result result;
     if constexpr (!std::is_same_v<Result, std::nullptr_t>) {
