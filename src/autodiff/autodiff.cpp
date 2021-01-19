@@ -1331,6 +1331,8 @@ template <typename Value> const char *ad_graphviz() {
             color = "lightblue2";
         if (labeled && !color)
             color = "wheat";
+        if (is_valid(v->grad))
+            color = "yellowgreen";
 
         buffer.fmt("|{a%i|S:%u|E:%u|I:%u%s}",
             index, v->size, v->ref_count_ext,
@@ -1373,6 +1375,7 @@ template <typename Value> const char *ad_graphviz() {
     buffer.put(
         "    subgraph cluster_legend {\n"
         "        label=\"Legend\";\n"
+        "        l4 [style=filled fillcolor=yellowgreen label=\"Gradient present\"];\n"
         "        l3 [style=filled fillcolor=salmon label=\"Input\"];\n"
         "        l2 [style=filled fillcolor=lightblue2 label=\"Output\"];\n"
         "        l1 [style=filled fillcolor=wheat label=\"Labeled\"];\n"
