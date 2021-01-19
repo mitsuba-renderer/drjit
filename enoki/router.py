@@ -2000,13 +2000,16 @@ def cross(a, b):
 # -------------------------------------------------------------------
 
 
-def detach(a):
+def detach(a, preserve_type=False):
     if _ek.is_diff_array_v(a):
-        return a.detach_()
+        if preserve_type:
+            return type(a)(a.detach_())
+        else:
+            return a.detach_()
     elif _ek.is_enoki_struct_v(a):
         result = type(a)()
         for k in type(a).ENOKI_STRUCT.keys():
-            setattr(result, k, detach(getattr(a, k)))
+            setattr(result, k, detach(getattr(a, k), preserve_type=preserve_type))
         return result
     else:
         return a
