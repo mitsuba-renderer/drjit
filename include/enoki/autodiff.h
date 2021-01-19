@@ -70,6 +70,9 @@ template <typename Value> const char *ad_label(int32_t index);
 /// Generate a graphviz plot of all registered variables
 template <typename Value> const char *ad_graphviz();
 
+/// Clear the gradient of variables accessed in ad_traverse()
+template <typename Value> void ad_clear();
+
 /// Special case of ad_new: create a node for a select() statement.
 template <typename Value, typename Mask>
 int32_t ad_new_select(const char *label, uint32_t size, const Mask &m,
@@ -1826,6 +1829,7 @@ protected:
                                    bool);                                      \
     extern template ENOKI_AUTODIFF_EXPORT void                                 \
     ad_add_edge<T>(int32_t, int32_t, DiffCallback *);                          \
+    extern template ENOKI_AUTODIFF_EXPORT void ad_clear<T>();                  \
     }
 
 ENOKI_DECLARE_EXTERN_TEMPLATE(float,  bool, uint32_t)
@@ -1836,6 +1840,10 @@ ENOKI_DECLARE_EXTERN_TEMPLATE(CUDAArray<double>, CUDAArray<bool>, CUDAArray<uint
 ENOKI_DECLARE_EXTERN_TEMPLATE(LLVMArray<float>,  LLVMArray<bool>, LLVMArray<uint32_t>)
 ENOKI_DECLARE_EXTERN_TEMPLATE(LLVMArray<double>, LLVMArray<bool>, LLVMArray<uint32_t>)
 #endif
+
+template <typename T> void ad_clear() {
+    detail::ad_clear<detached_t<T>>();
+}
 
 enum ADFlag : uint32_t {
     Recording = 1

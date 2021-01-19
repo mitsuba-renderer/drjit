@@ -213,11 +213,15 @@ struct Variable {
 static_assert(sizeof(Variable) == ((IsDouble ? 2 : 0) + 8) * sizeof(uint32_t),
               "Variable data structure has incorrect size. Padding problem?");
 
-/// Thread-local list used by ad_queue() and ad_traverse()
 #if !defined(_MSC_VER)
+  /// Thread-local list used by ad_queue() and ad_traverse()
   static __thread std::deque<int32_t> *tls_queue = nullptr;
+
+  /// List of nodes that received gradients in the last forward/reverse pass
+  static __thread std::vector<int32_t> *leafs = nullptr;
 #else
   static __declspec(thread) std::deque<int32_t>* tls_queue = nullptr;
+  static __declspec(thread) std::vector<int32_t>* leafs = nullptr;
 #endif
 
 /// Records all internal application state
@@ -276,6 +280,11 @@ struct State {
         if (tls_queue) {
             delete tls_queue;
             tls_queue = nullptr;
+        }
+
+        if (leafs) {
+            delete leafs;
+            leafs = nullptr;
         }
     }
 };
@@ -1012,6 +1021,10 @@ static void ad_traverse_rev(std::vector<int32_t> &todo, bool retain_graph) {
 
     size_t edge_counter = 0;
 
+    std::vector<int32_t> *leaf_vars = leafs;
+    if (unlikely(!leaf_vars))
+        leaf_vars = leafs = new std::vector<int32_t>();
+
     for (int32_t index : todo) {
         Variable *v = state[index];
         ad_trace("ad_traverse_rev(): processing variable a%i ..", index);
@@ -1086,6 +1099,8 @@ static void ad_traverse_rev(std::vector<int32_t> &todo, bool retain_graph) {
         if (v->next_rev && v->ref_count_grad == 0 && !(recording && !v->placeholder)) {
             ad_trace("ad_traverse_rev(): clearing gradient at intermediate variable a%u", index);
             v->grad = Value();
+        } else {
+            leaf_vars->push_back(index);
         }
     }
 
@@ -1106,6 +1121,10 @@ static void ad_traverse_fwd(std::vector<int32_t> &todo, bool retain_graph) {
 
     bool recording = ad_flag(ADFlag::Recording);
     size_t edge_counter = 0;
+
+    std::vector<int32_t> *leaf_vars = leafs;
+    if (unlikely(!leaf_vars))
+        leaf_vars = leafs = new std::vector<int32_t>();
 
     for (int32_t index : todo) {
         Variable *v = state[index];
@@ -1181,6 +1200,8 @@ static void ad_traverse_fwd(std::vector<int32_t> &todo, bool retain_graph) {
         if (v->next_fwd && v->ref_count_grad == 0 && !(recording && !v->placeholder)) {
             ad_trace("ad_traverse_fwd(): clearing gradient at intermediate variable a%u", index);
             v->grad = Value();
+        } else {
+            leaf_vars->push_back(index);
         }
 
         if (!retain_graph)
@@ -1406,6 +1427,20 @@ template <typename T> T ad_grad(int32_t index, bool fail_if_missing) {
     return result;
 }
 
+template <typename T> void ad_clear() {
+    std::vector<int32_t> *leaf_vars = leafs;
+
+    if (!leaf_vars)
+        return;
+
+    for (uint32_t index : *leaf_vars) {
+        auto it = state.variables.find(index);
+        if (it == state.variables.end())
+            continue;
+        it.value().grad = T();
+    }
+}
+
 template <typename T> void ad_set_grad(int32_t index, const T &value, bool fail_if_missing) {
     if (unlikely(index <= 0))
         return;
@@ -1527,6 +1562,7 @@ ad_new_scatter<Value, Mask, Index>(const char *, uint32_t, ReduceOp, int32_t,
                                    int32_t, const Index &, const Mask &, bool);
 template ENOKI_EXPORT void ad_add_edge<Value>(int32_t, int32_t,
                                               DiffCallback *);
+template ENOKI_EXPORT void ad_clear<Value>();
 
 NAMESPACE_END(detail)
 
