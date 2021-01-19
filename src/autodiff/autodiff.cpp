@@ -1396,7 +1396,14 @@ template <typename T> T ad_grad(int32_t index, bool fail_if_missing) {
         return T(0);
     }
     const Variable &v = it->second;
-    return (width(v.grad) == 0) ? T(0) : v.grad;
+    T result = v.grad;
+    if constexpr (is_jit_array_v<T>) {
+        if (!is_valid(result))
+            result = zero<T>(v.size);
+        else if (result.size() != v.size)
+            result.resize(v.size);
+    }
+    return result;
 }
 
 template <typename T> void ad_set_grad(int32_t index, const T &value, bool fail_if_missing) {
