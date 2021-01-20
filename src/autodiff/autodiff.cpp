@@ -1339,8 +1339,8 @@ template <typename Value> const char *ad_graphviz() {
             color = "yellowgreen";
 
         buffer.fmt("|{a%i|S:%u|E:%u|I:%u%s}",
-            index, v->size, v->ref_count_ext,
-            v->ref_count_int,
+            index, v->size, (uint32_t) v->ref_count_ext,
+            (uint32_t) v->ref_count_int,
             v->placeholder ? "|P" : "");
 
         buffer.put("}\"");
