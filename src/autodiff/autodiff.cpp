@@ -1098,7 +1098,8 @@ static void ad_traverse_rev(std::vector<int32_t> &todo, bool retain_graph) {
         }
 
         if (v->next_rev && v->ref_count_grad == 0 && !(recording && !v->placeholder)) {
-            ad_trace("ad_traverse_rev(): clearing gradient at intermediate variable a%u", index);
+            ad_trace("ad_traverse_rev(): clearing gradient at intermediate "
+                     "variable a%u (\"%s\")", index, v->label ? v->label : "unnamed");
             v->grad = Value();
         } else {
             leaf_vars->push_back(index);
@@ -1200,7 +1201,8 @@ static void ad_traverse_fwd(std::vector<int32_t> &todo, bool retain_graph) {
         }
 
         if (v->next_fwd && v->ref_count_grad == 0 && !(recording && !v->placeholder)) {
-            ad_trace("ad_traverse_fwd(): clearing gradient at intermediate variable a%u", index);
+            ad_trace("ad_traverse_fwd(): clearing gradient at intermediate "
+                     "variable a%u (\"%s\")", index, v->label ? v->label : "unnamed");
             v->grad = Value();
         } else {
             leaf_vars->push_back(index);
@@ -1442,7 +1444,11 @@ template <typename T> void ad_clear() {
         auto it = state.variables.find(index);
         if (it == state.variables.end())
             continue;
-        it.value().grad = T();
+        Variable &v = it.value();
+        v.grad = T();
+        ad_trace("ad_clear(): clearing gradient at intermediate "
+                 "variable a%u (\"%s\")",
+                 index, v.label ? v.label : "unnamed");
     }
 
     leaf_vars->clear();
