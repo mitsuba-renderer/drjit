@@ -183,7 +183,8 @@ PYBIND11_MODULE(enoki_ext, m_) {
         .value("VCallOptimize",       JitFlag::VCallOptimize)
         .value("VCallBranch",         JitFlag::VCallBranch)
         .value("ForceOptiX",          JitFlag::ForceOptiX)
-        .value("PostponeSideEffects", JitFlag::PostponeSideEffects);
+        .value("PostponeSideEffects", JitFlag::PostponeSideEffects)
+        .value("PrintIR",             JitFlag::PrintIR);
 
     m.def("device_count", &jit_cuda_device_count);
     m.def("set_device", &jit_cuda_set_device, "device"_a);

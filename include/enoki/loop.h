@@ -44,7 +44,8 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
 
     template <typename... Args>
     Loop(const char *name, Args &... args)
-        : m_state(0), m_se_offset((uint32_t) -1), m_se_flag(0), m_size(0),
+        : m_state(0), m_cse_domain(jit_cse_domain(Backend)),
+          m_se_offset((uint32_t) -1), m_se_flag(0), m_size(0),
           m_record(jit_flag(JitFlag::LoopRecord)) {
 
         size_t size = strlen(name) + 1;
@@ -62,6 +63,7 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
         if (m_record && m_se_offset != (uint32_t) -1) {
             jit_side_effects_rollback(Backend, m_se_offset);
             jit_set_flag(JitFlag::PostponeSideEffects, m_se_flag);
+            jit_set_cse_domain(Backend, m_cse_domain);
 
             for (size_t i = 0; i < m_index_body.size(); ++i)
                 jit_var_dec_ref_ext(m_index_body[i]);
@@ -75,6 +77,7 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
 
         if (m_state != 0 && m_state != 3 && m_state != 4)
             jit_log(LogLevel::Warn, "enoki::Loop(\"%s\"): destructed in an inconsistent state.", m_name.get());
+
     }
 
     /// Register JIT variable indices of loop variables
@@ -127,6 +130,7 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
                their state just before the loop condition is evaluated */
             m_se_flag = jit_flag(JitFlag::PostponeSideEffects);
             jit_set_flag(JitFlag::PostponeSideEffects, 1);
+            jit_new_cse_domain(Backend);
             m_se_offset = jit_side_effects_scheduled(Backend);
             step();
             m_state = 1;
@@ -228,7 +232,7 @@ protected:
 
                     m_state++;
                     if constexpr (Backend == JitBackend::LLVM)
-                        m_mask_stack.push(cond.index());
+                        m_mask_stack.push(m_cond.index());
                     jit_log(::LogLevel::Info,
                             "enoki::Loop(\"%s\"): ----- recording loop body *again* ------", m_name.get());
                     return true;
@@ -248,6 +252,7 @@ protected:
 
                     m_index_out.clear();
                     jit_set_flag(JitFlag::PostponeSideEffects, m_se_flag);
+                    jit_set_cse_domain(Backend, m_cse_domain);
                     m_se_offset = (uint32_t) -1;
                     m_cond = Mask();
                     m_state++;
@@ -337,6 +342,9 @@ protected:
 
     /// Index of the symbolic loop state machine
     uint32_t m_state;
+
+    /// CSE domain index
+    uint32_t m_cse_domain;
 
     /// Offset in the side effects queue before the beginning of the loop
     uint32_t m_se_offset;
