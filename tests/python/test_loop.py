@@ -27,6 +27,9 @@ def teardown_function(function):
 pkgs = ["enoki.cuda", "enoki.cuda.ad",
         "enoki.llvm", "enoki.llvm.ad"]
 
+pkgs_ad = ["enoki.cuda.ad",
+           "enoki.llvm.ad"]
+
 @pytest.mark.parametrize("pkg", pkgs)
 def test01_ctr(pkg):
     p = get_class(pkg)
@@ -212,3 +215,33 @@ def test07_loop_nest(pkg, variant):
             i += 1
 
     assert buf == p.Int(0, 1, 7, 2, 5, 8, 16, 3, 19, 6, 1000, 1000, 1000, 1000, 1000, 1000)
+
+
+# @pytest.mark.parametrize("pkg", pkgs_ad)
+# def test08_nodiff_1(pkg):
+#     p = get_class(pkg)
+#
+#     i = ek.arange(p.Float, 0, 10)
+#     ek.enable_grad(i)
+#
+#     with pytest.raises(ek.Exception) as e:
+#         loop = p.Loop("MyLoop", i)
+#         while loop(i < 5):
+#             i += 1
+#
+#     assert "Symbolic loop encountered a differentiable" in str(e)
+#
+#
+# @pytest.mark.parametrize("pkg", pkgs_ad)
+# def test08_nodiff_2(pkg):
+#     p = get_class(pkg)
+#
+#     i = ek.arange(p.Float, 0, 10)
+#
+#     with pytest.raises(ek.Exception) as e:
+#         loop = p.Loop("MyLoop", i)
+#         while loop(i < 5):
+#             i += 1
+#             ek.enable_grad(i)
+#
+#     assert "Symbolic loop encountered a differentiable" in str(e)
