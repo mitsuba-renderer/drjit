@@ -1024,6 +1024,7 @@ static void ad_traverse_rev(std::vector<int32_t> &todo, bool retain_graph) {
     std::vector<int32_t> *leaf_vars = leafs;
     if (unlikely(!leaf_vars))
         leaf_vars = leafs = new std::vector<int32_t>();
+    leaf_vars->clear();
 
     for (int32_t index : todo) {
         Variable *v = state[index];
@@ -1125,6 +1126,7 @@ static void ad_traverse_fwd(std::vector<int32_t> &todo, bool retain_graph) {
     std::vector<int32_t> *leaf_vars = leafs;
     if (unlikely(!leaf_vars))
         leaf_vars = leafs = new std::vector<int32_t>();
+    leaf_vars->clear();
 
     for (int32_t index : todo) {
         Variable *v = state[index];
@@ -1442,6 +1444,8 @@ template <typename T> void ad_clear() {
             continue;
         it.value().grad = T();
     }
+
+    leaf_vars->clear();
 }
 
 template <typename T> void ad_set_grad(int32_t index, const T &value, bool fail_if_missing) {
