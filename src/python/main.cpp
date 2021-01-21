@@ -214,14 +214,15 @@ PYBIND11_MODULE(enoki_ext, m_) {
     array_detail.def("device", &jit_var_device);
 
     array_detail.def("printf_async", [](uint32_t mask_index, const char *fmt,
-                                        std::vector<uint32_t> &indices) {
+                                        const std::vector<uint32_t> &indices) {
         jit_var_printf(JitBackend::CUDA, mask_index, fmt,
                        (uint32_t) indices.size(), indices.data());
     });
 
+    m.def("set_flags", &jit_set_flags);
     m.def("set_flag", [](JitFlag f, bool v) { jit_set_flag(f, v); });
-    m.def("flag", [](JitFlag f) { return jit_flag(f); });
     m.def("flags", &jit_flags);
+    m.def("flag", [](JitFlag f) { return jit_flag(f); });
 
     /* Register a cleanup callback function that is invoked when
        the 'enoki::ArrayBase' Python type is garbage collected */
