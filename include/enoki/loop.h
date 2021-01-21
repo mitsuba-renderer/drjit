@@ -134,7 +134,7 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
             m_se_offset = jit_side_effects_scheduled(Backend);
             step();
             m_state = 1;
-            jit_log(::LogLevel::Info,
+            jit_log(::LogLevel::InfoSym,
                     "enoki::Loop(\"%s\"): --------- begin recording loop ---------", m_name.get());
         }
     }
@@ -233,11 +233,11 @@ protected:
                     m_state++;
                     if constexpr (Backend == JitBackend::LLVM)
                         m_mask_stack.push(m_cond.index());
-                    jit_log(::LogLevel::Info,
+                    jit_log(::LogLevel::InfoSym,
                             "enoki::Loop(\"%s\"): ----- recording loop body *again* ------", m_name.get());
                     return true;
                 } else {
-                    jit_log(::LogLevel::Info,
+                    jit_log(::LogLevel::InfoSym,
                             "enoki::Loop(\"%s\"): --------- done recording loop ----------", m_name.get());
                     // No optimization opportunities, stop now.
                     for (uint32_t i = 0; i < n; ++i)
