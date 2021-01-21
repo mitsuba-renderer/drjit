@@ -197,6 +197,7 @@ PYBIND11_MODULE(enoki_ext, m_) {
     m.def("whos_str", &jit_var_whos);
     m.def("whos", []() { py::print(jit_var_whos()); });
     m.def("malloc_trim", &jit_malloc_trim);
+    m.def("malloc_clear_statistics", &jit_malloc_clear_statistics);
     m.def("set_log_level", &jit_set_log_level_stderr);
     m.def("log_level", &jit_log_level_stderr);
 
@@ -217,7 +218,8 @@ PYBIND11_MODULE(enoki_ext, m_) {
                        (uint32_t) indices.size(), indices.data());
     });
 
-    m.def("set_flag", &jit_set_flag);
+    m.def("set_flag", [](JitFlag f, bool v) { jit_set_flag(f, v); });
+    m.def("flag", [](JitFlag f) { return jit_flag(f); });
     m.def("flags", &jit_flags);
 
     /* Register a cleanup callback function that is invoked when
