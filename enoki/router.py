@@ -1585,11 +1585,11 @@ def atanh(a):
         return _math.atanh(a)
 
 
-def deg_to_rad(a):
+def rad_to_deg(a):
     return a * (180.0 / _ek.Pi)
 
 
-def rad_to_deg(a):
+def deg_to_rad(a):
     return a * (_ek.Pi / 180.0)
 
 
