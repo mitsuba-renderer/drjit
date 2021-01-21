@@ -151,6 +151,7 @@ PYBIND11_MODULE(enoki_ext, m_) {
         .value("Error", LogLevel::Error)
         .value("Warn", LogLevel::Warn)
         .value("Info", LogLevel::Info)
+        .value("InfoSym", LogLevel::InfoSym)
         .value("Debug", LogLevel::Debug)
         .value("Trace", LogLevel::Trace);
     py::implicitly_convertible<unsigned, LogLevel>();
