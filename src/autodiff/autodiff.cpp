@@ -1446,8 +1446,7 @@ template <typename T> void ad_clear() {
             continue;
         Variable &v = it.value();
         v.grad = T();
-        ad_trace("ad_clear(): clearing gradient at intermediate "
-                 "variable a%u (\"%s\")",
+        ad_trace("ad_clear(): clearing gradient at variable a%u (\"%s\")",
                  index, v.label ? v.label : "unnamed");
     }
 
