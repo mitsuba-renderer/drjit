@@ -62,7 +62,7 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
         // Recover if an error occurred while recording a loop symbolically
         if (m_record && m_se_offset != (uint32_t) -1) {
             jit_side_effects_rollback(Backend, m_se_offset);
-            jit_set_flag(JitFlag::PostponeSideEffects, m_se_flag);
+            jit_set_flag(JitFlag::Recording, m_se_flag);
             jit_set_cse_domain(Backend, m_cse_domain);
 
             for (size_t i = 0; i < m_index_body.size(); ++i)
@@ -128,8 +128,8 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
         if (m_record) {
             /* Wrap loop variables using placeholders that represent
                their state just before the loop condition is evaluated */
-            m_se_flag = jit_flag(JitFlag::PostponeSideEffects);
-            jit_set_flag(JitFlag::PostponeSideEffects, 1);
+            m_se_flag = jit_flag(JitFlag::Recording);
+            jit_set_flag(JitFlag::Recording, 1);
             jit_new_cse_domain(Backend);
             m_se_offset = jit_side_effects_scheduled(Backend);
             step();
@@ -251,7 +251,7 @@ protected:
                     }
 
                     m_index_out.clear();
-                    jit_set_flag(JitFlag::PostponeSideEffects, m_se_flag);
+                    jit_set_flag(JitFlag::Recording, m_se_flag);
                     jit_set_cse_domain(Backend, m_cse_domain);
                     m_se_offset = (uint32_t) -1;
                     m_cond = Mask();
@@ -349,7 +349,7 @@ protected:
     /// Offset in the side effects queue before the beginning of the loop
     uint32_t m_se_offset;
 
-    /// State of the PostponeSideEffects flag
+    /// State of the Recording flag
     int m_se_flag;
 
     /// Keeps track of the size of loop variables to catch issues

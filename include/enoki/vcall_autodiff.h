@@ -53,7 +53,6 @@ struct DiffVCall : CustomOp<Type, Result, ConstStr, Self, Func, Args...> {
         m_name_static = name;
         snprintf(m_name_long, sizeof(m_name_long), "VCall: %s::%s()",
                  Class::Domain, m_name_static);
-        ADRecordingSession guard;
         return vcall_jit_record<Result>(name, func, self, args...);
     }
 
@@ -66,7 +65,6 @@ struct DiffVCall : CustomOp<Type, Result, ConstStr, Self, Func, Args...> {
         const Func &func = Base::template value_in<2>();
 
         auto func_fwd = [func](auto *self2, auto... value_grad_pair) {
-            ADRecordingSession guard;
             ad_copy(value_grad_pair.first...);
             enable_grad(value_grad_pair.first...);
             Result result = func(self2, value_grad_pair.first...);
@@ -105,7 +103,6 @@ struct DiffVCall : CustomOp<Type, Result, ConstStr, Self, Func, Args...> {
 
         auto func_rev = [func](auto *self2, auto &grad_out,
                                auto... args) -> Inputs {
-            ADRecordingSession guard;
             ad_copy(args...);
             enable_grad(args...);
             Result result = func(self2, args...);
@@ -140,19 +137,6 @@ struct DiffVCall : CustomOp<Type, Result, ConstStr, Self, Func, Args...> {
     }
 
     const char *name() const override { return m_name_long; }
-
-    struct ADRecordingSession {
-        ADRecordingSession() : m_status(ad_flag(ADFlag::Recording)) {
-            ad_clear_dependencies();
-            ad_set_flag(ADFlag::Recording, 1);
-            ad_prefix_push("Recorded VCall");
-        }
-        ~ADRecordingSession() {
-            ad_set_flag(ADFlag::Recording, m_status);
-            ad_prefix_pop();
-        }
-        int m_status;
-    };
 
 private:
     const char *m_name_static = nullptr;

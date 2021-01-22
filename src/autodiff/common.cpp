@@ -168,24 +168,6 @@ namespace enoki {
         }
     }
 
-    enum class ADFlag : uint32_t;
-
-    ENOKI_EXPORT int ad_flag(ADFlag flag) {
-        return (flags & (uint32_t) flag) ? 1 : 0;
-    }
-
-    ENOKI_EXPORT void ad_set_flag(ADFlag flag, int enable) {
-        uint32_t value = flags;
-        ad_trace("ad_set_flag(flag=%u, value=%i)", (uint32_t) flag, enable);
-
-        if (enable)
-            value |= (uint32_t) flag;
-        else
-            value &= ~(uint32_t) flag;
-
-        flags = value;
-    }
-
     ENOKI_EXPORT void ad_prefix_push(const char *value) {
         if (strchr(value, '/'))
             throw std::runtime_error(

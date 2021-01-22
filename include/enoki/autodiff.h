@@ -1845,15 +1845,9 @@ template <typename T> void ad_clear() {
     detail::ad_clear<detached_t<T>>();
 }
 
-enum ADFlag : uint32_t {
-    Recording = 1
-};
-
 extern ENOKI_AUTODIFF_EXPORT const char *ad_whos();
 extern ENOKI_AUTODIFF_EXPORT void ad_prefix_push(const char *value);
 extern ENOKI_AUTODIFF_EXPORT void ad_prefix_pop();
-extern ENOKI_AUTODIFF_EXPORT int ad_flag(ADFlag flag);
-extern ENOKI_AUTODIFF_EXPORT void ad_set_flag(ADFlag flag, int enable);
 extern ENOKI_AUTODIFF_EXPORT void ad_check_weights(bool value);
 
 extern ENOKI_AUTODIFF_EXPORT size_t ad_dependency_count();

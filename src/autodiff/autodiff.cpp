@@ -386,7 +386,7 @@ template <typename T> void ad_enqueue(int32_t index) {
 static void ad_toposort_fwd() {
     state.todo.clear();
 
-    bool recording = ad_flag(ADFlag::Recording);
+    bool recording = jit_flag(JitFlag::Recording);
     if (recording) {
         // Also enqueue external dependencies accessed by the computation
         tsl::robin_set<int32_t> *deps = ad_dependencies();
@@ -453,7 +453,7 @@ static void ad_toposort_fwd() {
 
 /// Kahn-style topological sort in backward mode
 static void ad_toposort_rev() {
-    bool recording = ad_flag(ADFlag::Recording);
+    bool recording = jit_flag(JitFlag::Recording);
     state.todo.clear();
 
     std::deque<int32_t> *queue = tls_queue;
@@ -522,7 +522,7 @@ static std::pair<int32_t, Variable *> ad_var_new(const char *label, uint32_t siz
         }
 
         auto result = state.variables.try_emplace(index, label, size,
-                                                  ad_flag(ADFlag::Recording));
+                                                  jit_flag(JitFlag::Recording));
         if (likely(result.second))
             return { index, &result.first.value() };
     }
@@ -587,6 +587,20 @@ static void ad_free(int32_t index, Variable *v) {
     if (v->next_rev)
         ad_free_edges(index, v);
     state.variables.erase(index);
+}
+
+/// Ensure that placeholder variables are consistenly sized to avoid horizontal ops
+static void ad_propagate_placeholder_size(Variable *v) {
+    uint32_t edge = v->next_rev;
+    while (edge) {
+        Edge &e = state.edges[edge];
+        Variable *v2 = state[e.source];
+        if (v2->placeholder && v2->size != v->size && v2->size == 1) {
+            v2->size = v->size;
+            ad_propagate_placeholder_size(v2);
+        }
+        edge = e.next_rev;
+    }
 }
 
 template <typename T>
@@ -664,7 +678,7 @@ int32_t ad_new(const char *label, uint32_t size, uint32_t op_count,
                          "accesses a non-scalar private variable (a%i)!",
                          index, index2);
             uint32_t index3 = ad_new_gather_impl<T>(
-                "gather", var->size, op[i], Index(0), Mask(true), false);
+                "gather", size, op[i], Index(0), Mask(true), false);
             ad_trace("ad_new(a%u <- a%u): placeholder accesses non-placeholder "
                      "variable, inserting a gather operation (a%u).",
                      index, index2, index3);
@@ -697,6 +711,9 @@ int32_t ad_new(const char *label, uint32_t size, uint32_t op_count,
 
     var->next_rev = edge_index;
     var->ref_count_ext = 1;
+
+    if (var->placeholder)
+        ad_propagate_placeholder_size(var);
 
     return index;
 }
@@ -814,8 +831,8 @@ int32_t ad_new_select(const char *label, uint32_t size, const Mask &mask_,
                 ad_raise("ad_new_select(): variable a%i computation being recorded "
                          "accesses a non-scalar private variable (a%i)!",
                          index, index2);
-            index2 = ad_new_gather_impl<Value>("gather", var->size, op[i],
-                                               Index(0), Mask(true), false);
+            index2 = ad_new_gather_impl<Value>("gather", size, op[i], Index(0),
+                                               Mask(true), false);
             var2 = state[index2];
             var2->ref_count_ext = 0;
             var = state[index];
@@ -836,6 +853,9 @@ int32_t ad_new_select(const char *label, uint32_t size, const Mask &mask_,
 
     var->next_rev = edge_index;
     var->ref_count_ext = 1;
+
+    if (var->placeholder)
+        ad_propagate_placeholder_size(var);
 
     return index;
 }
@@ -1016,7 +1036,7 @@ int32_t ad_new_scatter(const char *label, uint32_t size, ReduceOp op,
 }
 
 static void ad_traverse_rev(std::vector<int32_t> &todo, bool retain_graph) {
-    bool recording = ad_flag(ADFlag::Recording);
+    bool recording = jit_flag(JitFlag::Recording);
     ad_log(Debug, "ad_traverse_rev(): processing %zu nodes ..", todo.size());
 
     size_t edge_counter = 0;
@@ -1121,7 +1141,7 @@ static void ad_traverse_rev(std::vector<int32_t> &todo, bool retain_graph) {
 static void ad_traverse_fwd(std::vector<int32_t> &todo, bool retain_graph) {
     ad_log(Debug, "ad_traverse_fwd(): processing %zu nodes ..", todo.size());
 
-    bool recording = ad_flag(ADFlag::Recording);
+    bool recording = jit_flag(JitFlag::Recording);
     size_t edge_counter = 0;
 
     std::vector<int32_t> *leaf_vars = leafs;

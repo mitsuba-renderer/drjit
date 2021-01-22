@@ -56,8 +56,8 @@ template <typename Mask> struct VCallRAIIGuard {
     static constexpr JitBackend Backend = detached_t<Mask>::Backend;
 
     VCallRAIIGuard(const char *label) {
-        flag_before = jit_flag(JitFlag::PostponeSideEffects);
-        jit_set_flag(JitFlag::PostponeSideEffects, 1);
+        flag_before = jit_flag(JitFlag::Recording);
+        jit_set_flag(JitFlag::Recording, 1);
 
         jit_prefix_push(Backend, label);
 
@@ -74,7 +74,7 @@ template <typename Mask> struct VCallRAIIGuard {
         if constexpr (Backend == JitBackend::LLVM)
             jit_var_mask_pop(Backend);
         jit_prefix_pop(Backend);
-        jit_set_flag(JitFlag::PostponeSideEffects, flag_before);
+        jit_set_flag(JitFlag::Recording, flag_before);
     }
 
     int flag_before;
