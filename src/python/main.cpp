@@ -185,7 +185,9 @@ PYBIND11_MODULE(enoki_ext, m_) {
         .value("VCallBranch",         JitFlag::VCallBranch)
         .value("ForceOptiX",          JitFlag::ForceOptiX)
         .value("Recording",           JitFlag::Recording)
-        .value("PrintIR",             JitFlag::PrintIR);
+        .value("PrintIR",             JitFlag::PrintIR)
+        .value("ADOptimize",          JitFlag::ADOptimize)
+        .value("ADEagerForward",      JitFlag::ADEagerForward);
 
     m.def("device_count", &jit_cuda_device_count);
     m.def("set_device", &jit_cuda_set_device, "device"_a);

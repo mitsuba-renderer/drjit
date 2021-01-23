@@ -887,10 +887,11 @@ def test46_loop_ballistic(m):
         pos_out, vel_out = ek.custom(Ballistic, pos_in, vel_in)
         loss = ek.squared_norm(pos_out - m.Array2f(5, 0))
         ek.backward(loss)
+        print(ek.grad(vel_in))
 
         vel_in = m.Array2f(ek.detach(vel_in) - 0.2 * ek.grad(vel_in))
+        print(vel_in)
 
-    print(loss)
     assert ek.allclose(loss, 0, atol=1e-4)
     assert ek.allclose(vel_in.x, [3.3516, 2.3789, 0.79156], rtol=1e-3)
     ek.set_flag(ek.JitFlag.LoopRecord, False)
@@ -996,3 +997,127 @@ def test47_nan_propagation(m):
             assert g == 1
         else:
             assert ek.all(ek.isnan(g))
+
+
+class EagerMode:
+    def __enter__(self):
+        ek.set_flag(ek.JitFlag.ADEagerForward, True)
+
+    def __exit__(self, type, value, traceback):
+        ek.set_flag(ek.JitFlag.ADEagerForward, False)
+
+
+def test48_eager_fwd(m):
+    with EagerMode():
+        x = m.Float(1)
+        ek.enable_grad(x)
+        ek.set_grad(x, 10)
+        y = x*x*x
+        assert ek.grad(y) == 30
+
+
+def test49_gather_fwd_eager(m):
+    with EagerMode():
+        x = ek.linspace(m.Float, -1, 1, 10)
+        ek.enable_grad(x)
+        ek.set_grad(x, 1)
+        y = ek.gather(m.Float, x*x, m.UInt(1, 1, 2, 3))
+        ref = [-1.55556, -1.55556, -1.11111, -0.666667]
+        assert ek.allclose(ek.grad(y), ref)
+
+
+def test50_scatter_reduce_fwd_eager(m):
+    with EagerMode():
+        for i in range(3):
+            idx1 = ek.arange(m.UInt, 5)
+            idx2 = ek.arange(m.UInt, 4) + 3
+
+            x = ek.linspace(m.Float, 0, 1, 5)
+            y = ek.linspace(m.Float, 1, 2, 4)
+            buf = ek.zero(m.Float, 10)
+
+            if i % 2 == 0:
+                ek.enable_grad(buf)
+                ek.set_grad(buf, 1)
+            if i // 2 == 0:
+                ek.enable_grad(x, y)
+                ek.set_grad(x, 1)
+                ek.set_grad(y, 1)
+
+            x.label = "x"
+            y.label = "y"
+            buf.label = "buf"
+
+            buf2 = m.Float(buf)
+            ek.scatter_reduce(ek.ReduceOp.Add, buf2, x, idx1)
+            ek.scatter_reduce(ek.ReduceOp.Add, buf2, y, idx2)
+
+            s = ek.dot_async(buf2, buf2)
+
+            # Verified against Mathematica
+            assert ek.allclose(ek.detach(s), 15.5972)
+            assert ek.allclose(ek.grad(s), (25.1667 if i // 2 == 0 else 0)
+                               + (17 if i % 2 == 0 else 0))
+
+
+def test51_scatter_fwd_eager(m):
+    with EagerMode():
+        x = m.Float(4.0)
+        ek.enable_grad(x)
+        ek.set_grad(x, 1)
+
+        values = x * x * ek.linspace(m.Float, 1, 4, 4)
+        idx = 2 * ek.arange(m.UInt32, 4)
+
+        buf = ek.zero(m.Float, 10)
+        ek.scatter(buf, values, idx)
+
+        assert ek.grad_enabled(buf)
+
+        ref = [16.0, 0.0, 32.0, 0.0, 48.0, 0.0, 64.0, 0.0, 0.0, 0.0]
+        assert ek.allclose(buf, ref)
+
+        grad = ek.grad(buf)
+
+        ref_grad = [8.0, 0.0, 16.0, 0.0, 24.0, 0.0, 32.0, 0.0, 0.0, 0.0]
+        assert ek.allclose(grad, ref_grad)
+
+        # Overwrite first value with non-diff value, resulting gradient entry should be 0
+        y = m.Float(3)
+        idx = m.UInt32(0)
+        ek.scatter(buf, y, idx)
+
+        ref = [3.0, 0.0, 32.0, 0.0, 48.0, 0.0, 64.0, 0.0, 0.0, 0.0]
+        assert ek.allclose(buf, ref)
+
+        ek.forward(x)
+        grad = ek.grad(buf)
+
+        ref_grad = [0.0, 0.0, 16.0, 0.0, 24.0, 0.0, 32.0, 0.0, 0.0, 0.0]
+        assert ek.allclose(grad, ref_grad)
+
+
+def test52_scatter_fwd_permute_eager(m):
+    with EagerMode():
+        x = m.Float(4.0)
+        ek.enable_grad(x)
+        ek.set_grad(x, 1)
+
+        values_0 = x * ek.linspace(m.Float, 1, 9, 5)
+        values_1 = x * ek.linspace(m.Float, 11, 19, 5)
+
+        buf = ek.zero(m.Float, 10)
+
+        idx_0 = ek.arange(m.UInt32, 5)
+        idx_1 = ek.arange(m.UInt32, 5) + 5
+
+        ek.scatter(buf, values_0, idx_0, permute=False)
+        ek.scatter(buf, values_1, idx_1, permute=False)
+
+        ref = [4.0, 12.0, 20.0, 28.0, 36.0, 44.0, 52.0, 60.0, 68.0, 76.0]
+        assert ek.allclose(buf, ref)
+
+        grad = ek.grad(buf)
+
+        ref_grad = [1.0, 3.0, 5.0, 7.0, 9.0, 11.0, 13.0, 15.0, 17.0, 19.0]
+        assert ek.allclose(grad, ref_grad)

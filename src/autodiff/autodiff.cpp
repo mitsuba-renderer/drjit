@@ -626,6 +626,8 @@ int32_t ad_new(const char *label, uint32_t size, uint32_t op_count,
     }
 
     uint32_t edge_index = 0;
+    bool eager_fwd = jit_flag(JitFlag::ADEagerForward);
+
     for (uint32_t i = 0; i < op_count; ++i) {
         if (op[i] <= 0)
             continue;
@@ -634,7 +636,8 @@ int32_t ad_new(const char *label, uint32_t size, uint32_t op_count,
         if constexpr (std::is_scalar_v<T>)
             weight_is_zero = weights[i] == 0;
         else
-            weight_is_zero = jit_flag(JitFlag::ADOptimize) && weights[i].is_literal() && weights[i][0] == 0;
+            weight_is_zero = jit_flag(JitFlag::ADOptimize) &&
+                             weights[i].is_literal() && weights[i][0] == 0;
 
         if (weight_is_zero) {
             ad_trace(
@@ -670,6 +673,11 @@ int32_t ad_new(const char *label, uint32_t size, uint32_t op_count,
         uint32_t index2 = op[i];
         Variable *var2 = state[index2];
 
+        if (unlikely(eager_fwd)) {
+            var->mul_accum(var2->grad, weights[i], var2->size);
+            continue;
+        }
+
         /* When recording AD code (e.g. in a virtual function call),
            convert reads from external/private variables into gathers */
         if (unlikely(var->placeholder && !var2->placeholder)) {
@@ -701,7 +709,7 @@ int32_t ad_new(const char *label, uint32_t size, uint32_t op_count,
         var2->next_fwd = edge_index_new;
     }
 
-    if (op_count > 0 && edge_index == 0) {
+    if (op_count > 0 && edge_index == 0 && !eager_fwd) {
         // All edges were pruned, don't create the node after all
         ad_trace(
             "ad_new(a%i): all nodes were pruned, removing variable from graph", index);
@@ -792,12 +800,12 @@ template <typename Value> struct SpecialCallback : Special {
 };
 
 template <typename Value, typename Mask>
-int32_t ad_new_select(const char *label, uint32_t size, const Mask &mask_,
+int32_t ad_new_select(const char *label, uint32_t size, const Mask &mask,
                       int32_t t_index, int32_t f_index) {
     std::lock_guard<std::mutex> guard(state.mutex);
     if constexpr (is_jit_array_v<Mask>) {
-        if (jit_flag(JitFlag::ADOptimize) && mask_.is_literal()) {
-            int32_t result = mask_[0] ? t_index : f_index;
+        if (jit_flag(JitFlag::ADOptimize) && mask.is_literal()) {
+            int32_t result = mask[0] ? t_index : f_index;
             if (result)
                 state[result]->ref_count_ext++;
             ad_log(Debug, "ad_new_select(a%i <- a%i, a%i): simplified", result, t_index, f_index);
@@ -813,6 +821,19 @@ int32_t ad_new_select(const char *label, uint32_t size, const Mask &mask_,
     }
 
     auto [index, var] = ad_var_new(label, size);
+    var->grad = 0;
+
+    if (jit_flag(JitFlag::ADEagerForward)) {
+        Value vt = 0, vf = 0;
+        if (t_index)
+            vt = state[t_index]->grad;
+        if (f_index)
+            vf = state[f_index]->grad;
+        var->grad = select(mask, vt, vf);
+        var->ref_count_ext = 1;
+        return index;
+    }
+
     int32_t op[2] = { t_index, f_index };
 
     ad_log(Debug, "ad_new_select(a%i <- a%i, a%i)", index, t_index, f_index);
@@ -842,7 +863,7 @@ int32_t ad_new_select(const char *label, uint32_t size, const Mask &mask_,
         Edge &edge = state.edges[edge_index_new];
         edge.source = index2;
         edge.target = index;
-        edge.special = new MaskEdge<Value>(mask_, i != 0);
+        edge.special = new MaskEdge<Value>(mask, i != 0);
         edge.next_fwd = var2->next_fwd;
         edge.next_rev = edge_index;
         edge_index = edge_index_new;
@@ -905,6 +926,12 @@ int32_t ad_new_gather_impl(const char *label, uint32_t size, int32_t src_index,
                src_index, size, (int) permute);
 
         Variable *var2 = state[src_index];
+
+        if (jit_flag(JitFlag::ADEagerForward)) {
+            var->accum(gather<Value>(var2->grad, offset, mask), asize(offset));
+            var->ref_count_ext = 1;
+            return index;
+        }
 
         /* When recording some computation (e.g. part of a virtual function call)
            that gathers from a global or private instance variable, keep track of
@@ -984,6 +1011,26 @@ int32_t ad_new_scatter(const char *label, uint32_t size, ReduceOp op,
         ad_log(Debug,
                "ad_new_scatter(op=%i, a%i <- a%i, a%i, permute=%i)",
                (int) op, index, src_index, dst_index, (int) permute);
+
+        if (jit_flag(JitFlag::ADEagerForward)) {
+            Value vs = 0, vt = 0;
+            if (src_index)
+                vs = state[src_index]->grad;
+            if (dst_index)
+                vt = state[dst_index]->grad;
+
+            if ((uint32_t) vt.size() != size)
+                vt.resize(size);
+
+            if (op != ReduceOp::None)
+                scatter_reduce(op, vt, vs, offset, mask);
+            else
+                scatter(vt, vs, offset, mask);
+
+            var->grad = vt;
+            var->ref_count_ext = 1;
+            return index;
+        }
 
         uint32_t edge_index = 0;
 
