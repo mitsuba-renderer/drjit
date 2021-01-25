@@ -59,7 +59,10 @@ template <typename Mask> struct VCallRAIIGuard {
         flag_before = jit_flag(JitFlag::Recording);
         jit_set_flag(JitFlag::Recording, 1);
 
+        ENOKI_MARK_USED(label);
+#if defined(ENOKI_VCALL_DEBUG)
         jit_prefix_push(Backend, label);
+#endif
 
         if constexpr (Backend == JitBackend::LLVM) {
             Mask vcall_mask = Mask::steal(jit_var_new_stmt(
@@ -73,7 +76,9 @@ template <typename Mask> struct VCallRAIIGuard {
     ~VCallRAIIGuard() {
         if constexpr (Backend == JitBackend::LLVM)
             jit_var_mask_pop(Backend);
+#if defined(ENOKI_VCALL_DEBUG)
         jit_prefix_pop(Backend);
+#endif
         jit_set_flag(JitFlag::Recording, flag_before);
     }
 
