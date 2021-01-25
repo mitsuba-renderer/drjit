@@ -304,7 +304,7 @@ namespace detail {
     template <typename T> struct leaf_array<enable_if_array_t<T>, T> {
         using type = std::conditional_t<
             is_array_v<value_t<T>>,
-            value_t<T>, T
+            leaf_array_t<value_t<T>>, T
         >;
     };
 
