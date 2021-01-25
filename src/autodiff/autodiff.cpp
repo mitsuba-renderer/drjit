@@ -21,7 +21,7 @@
 
 struct Int32Hasher {
     size_t operator()(int32_t v) const {
-        return hash(&v, sizeof(int32_t));
+        return (size_t) XXH3_64bits(&v, sizeof(int32_t));
     }
 };
 
