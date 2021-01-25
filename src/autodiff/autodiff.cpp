@@ -19,6 +19,12 @@
 #define Variable RENAME(Variable)
 #define State    RENAME(State)
 
+struct Int32Hasher {
+    size_t operator()(int32_t v) const {
+        return hash(&v, sizeof(int32_t));
+    }
+};
+
 NAMESPACE_BEGIN(enoki)
 
 extern bool check_weights;
@@ -226,7 +232,8 @@ static_assert(sizeof(Variable) == ((IsDouble ? 2 : 0) + 8) * sizeof(uint32_t),
 
 /// Records all internal application state
 struct State {
-    using VariableMap = tsl::robin_map<int32_t, Variable>;
+    using VariableMap = tsl::robin_map<int32_t, Variable, Int32Hasher,
+                                       std::equal_to<int32_t>>;
     using EdgeVector  = std::vector<Edge>;
 
     /// std::mutex protecting the state data structure
