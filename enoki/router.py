@@ -145,7 +145,9 @@ def _var_promote_select(a0, a1, a2):
     vt0 = _var_type(a0)
     vt1 = _var_type(a1)
     vt2 = _var_type(a2)
-    diff = getattr(a1, 'IsDiff', False) | getattr(a2, 'IsDiff', False)
+    diff = getattr(a0, 'IsDiff', False) | \
+           getattr(a1, 'IsDiff', False) | \
+           getattr(a2, 'IsDiff', False)
 
     if vt1 != vt2:
         vt1 = _var_type(a1, vt2)
