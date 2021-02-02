@@ -60,17 +60,16 @@ Result vcall_jit_reduce_impl(Func func, const Self &self,
     Result result;
     if (n_inst > 0 && self_size > 0) {
         Mask mask = extract_mask<Mask>(args...);
+        mask &= Mask::steal(jit_var_mask_default(Backend));
 
         if (jit_var_mask_size(Backend))
             mask &= Mask::steal(jit_var_mask_peek(Backend));
 
-        result = empty<Result>(self.size());
+        result = empty<Result>(self_size);
         for (size_t i = 0; i < n_inst ; ++i) {
             UInt32 perm = UInt32::borrow(buckets[i].index);
-
+            MaskScope<Mask> scope(gather<Mask>(mask, perm));
             if (buckets[i].ptr) {
-                MaskScope<Mask> scope(gather<Mask>(mask, perm));
-
                 if constexpr (!std::is_same_v<Result, std::nullptr_t>) {
                     using OrigResult = decltype(func((Class) nullptr, args...));
                     scatter<true>(
@@ -83,7 +82,6 @@ Result vcall_jit_reduce_impl(Func func, const Self &self,
                     func((Class) buckets[i].ptr, gather_helper<Is, N>(args, perm)...);
                 }
             } else {
-                MaskScope<Mask> scope(true);
                 if constexpr (!std::is_same_v<Result, std::nullptr_t>)
                     scatter<true>(result, zero<Result>(), perm);
             }
