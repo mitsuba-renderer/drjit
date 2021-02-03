@@ -165,7 +165,7 @@ vcall_jit_record_impl_scalar(Base *inst, const Func &func, const Mask &mask,
     constexpr size_t N = sizeof...(Args);
 
     // Evaluate the single instance with mask = true, mask side effects
-    MaskRAIIGuard<Mask> guard(mask.index());
+    MaskRAIIGuard<Mask> guard(mask);
 
     if constexpr (is_enoki_struct_v<Result> || is_array_v<Result>) {
         // Return zero for masked results
@@ -190,7 +190,6 @@ inline std::pair<void *, uint32_t> vcall_registry_get(const char *domain) {
 
     return { inst, n_inst };
 }
-
 
 template <typename Result, typename Func, typename Self, typename... Args>
 Result vcall_jit_record(const char *name, const Func &func, Self &self,
@@ -220,7 +219,7 @@ Result vcall_jit_record(const char *name, const Func &func, Self &self,
             (Base *) inst, func, mask,
             std::make_index_sequence<sizeof...(Args)>(), args...);
     } else {
-        // Also check the mask stack to constrain side effects in recorded  computation
+        // Also check the mask stack to constrain side effects in recorded computation
         Mask mask_combined = mask && Mask::steal(jit_var_mask_peek(Backend));
         return vcall_jit_record_impl<Result, Base>(
             name, n_inst, func, self, mask_combined,

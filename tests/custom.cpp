@@ -8,7 +8,7 @@
 namespace ek = enoki;
 
 // Let's define some JIT & differentiable types
-using Float    = ek::DiffArray<ek::LLVMArray<float>>;
+using Float    = ek::DiffArray<ek::CUDAArray<float>>;
 using Vector3f = ek::Array<Float, 3>;
 
 
@@ -66,7 +66,7 @@ private:
 
 
 ENOKI_TEST(test01_basic) {
-    jit_init((uint32_t) JitBackend::LLVM);
+    jit_init((uint32_t) JitBackend::CUDA);
 
     {
         Vector3f d(1, 2, 3);
@@ -127,7 +127,7 @@ private:
 };
 
 ENOKI_TEST(test02_corner_case) {
-    jit_init((uint32_t) JitBackend::LLVM);
+    jit_init((uint32_t) JitBackend::CUDA);
 
     {
         Vector3f d1(1, 2, 3);
