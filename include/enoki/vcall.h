@@ -194,7 +194,8 @@ NAMESPACE_END(enoki)
                 return zero<Result>();                                         \
             else                                                               \
                 return enoki::gather<Result>(Result::steal(attr_id),           \
-                    UInt32::borrow(array.index()), mask);                      \
+                            UInt32::borrow(array.index()),                     \
+                            mask && enoki::neq(array, nullptr));               \
         } else {                                                               \
             return detail::vcall<Class>(                                       \
                 #name, [](auto self)                                           \
