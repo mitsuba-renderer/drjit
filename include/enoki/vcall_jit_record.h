@@ -64,18 +64,20 @@ template <typename Mask> struct VCallRAIIGuard {
         jit_prefix_push(Backend, label);
 #endif
 
+        Mask vcall_mask;
         if constexpr (Backend == JitBackend::LLVM) {
-            Mask vcall_mask = Mask::steal(jit_var_new_stmt(
+            vcall_mask = Mask::steal(jit_var_new_stmt(
                 Backend, VarType::Bool,
                 "$r0 = or <$w x i1> %mask, zeroinitializer", 1, 0,
                 nullptr));
-            jit_var_mask_push(Backend, vcall_mask.index(), 0);
+        } else {
+            vcall_mask = true;
         }
+        jit_var_mask_push(Backend, vcall_mask.index(), 0);
     }
 
     ~VCallRAIIGuard() {
-        if constexpr (Backend == JitBackend::LLVM)
-            jit_var_mask_pop(Backend);
+        jit_var_mask_pop(Backend);
 #if defined(ENOKI_VCALL_DEBUG)
         jit_prefix_pop(Backend);
 #endif
