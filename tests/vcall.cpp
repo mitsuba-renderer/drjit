@@ -52,9 +52,9 @@ struct A : Base {
     A(bool scalar) : Base(scalar) { ek::set_attr(this, "field", 2.4f); }
     StructF f(const StructF &m) override {
         if (x.size() == 1)
-            return Struct { m.a * x, m.b * 15 };
+            return Struct(m.a * x, m.b * 15);
         else
-            return Struct { m.a * ek::gather<Float>(x, UInt32(0)), m.b * 15 };
+            return Struct(m.a * ek::gather<Float>(x, UInt32(0)), m.b * 15);
     }
 };
 
@@ -62,9 +62,9 @@ struct B : Base {
     B(bool scalar) : Base(scalar) { ek::set_attr(this, "field", 4.8f); }
     StructF f(const StructF &m) override {
         if (x.size() == 1)
-            return Struct { m.b * 20, m.a * x };
+            return Struct(m.b * 20, m.a * x);
         else
-            return Struct { m.b * 20, m.a * ek::gather<Float>(x, UInt32(0)) };
+            return Struct(m.b * 20, m.a * ek::gather<Float>(x, UInt32(0)));
     }
 };
 
@@ -126,6 +126,51 @@ ENOKI_TEST(test01_vcall_reduce_and_record) {
     }
 }
 
+ENOKI_TEST(test02_vcall_reduce_and_record_nullptr) {
+    int n = 9999;
+
+    ::Mask mask = ek::arange<UInt32>(n) > (n / 2);
+
+    jit_set_log_level_stderr(::LogLevel::Error);
+
+    for (int k = 0; k < 2; ++k) {
+        jit_init((uint32_t) (k == 0 ? JitBackend::CUDA : JitBackend::LLVM));
+
+        for (int i = 0; i < 3; ++i) {
+            jit_set_flag(JitFlag::VCallRecord, i != 0);
+            jit_set_flag(JitFlag::VCallOptimize, i == 2);
+
+            for (int j = 0; j < 2; ++j) {
+                A *a = new A(j != 0);
+                B *b = new B(j != 0);
+
+                ::Mask m = ek::neq(ek::arange<UInt32>(n) & 1, 0);
+                BasePtr arr = ek::select(m, (Base *) b, (Base *) a);
+
+                // Masked pointer array
+                arr[!mask] = nullptr;
+
+                StructF result = arr->f(Struct(Array3f(1, 2, 3) * ek::full<Float>(1, n),
+                                               Array3f(4, 5, 6) * ek::full<Float>(1, n)));
+
+                assert(ek::all_nested(
+                    ek::eq(result.a,
+                           ek::select(mask,
+                                      ek::select(m, Array3f(80.f, 100.f, 120.f),
+                                                    Array3f(10.f, 20.f, 30.f)),
+                                      0.f)) &&
+                    ek::eq(result.b,
+                           ek::select(mask,
+                                      ek::select(m, Array3f(10.f, 20.f, 30.f),
+                                                    Array3f(60.f, 75.f, 90.f)),
+                                      0.f))));
+                delete a;
+                delete b;
+            }
+        }
+    }
+}
+
 struct BaseD {
     BaseD() {
         x = 10.f;
@@ -166,7 +211,7 @@ ENOKI_VCALL_METHOD(g)
 ENOKI_VCALL_METHOD(dummy)
 ENOKI_VCALL_END(BaseD)
 
-ENOKI_TEST(test02_vcall_symbolic_ad_fwd) {
+ENOKI_TEST(test03_vcall_symbolic_ad_fwd) {
     jit_init((uint32_t) JitBackend::CUDA);
 
     AD *a = new AD();
@@ -212,7 +257,7 @@ ENOKI_TEST(test02_vcall_symbolic_ad_fwd) {
     delete b;
 }
 
-ENOKI_TEST(test02_vcall_symbolic_ad_fwd_accessing_local) {
+ENOKI_TEST(test04_vcall_symbolic_ad_fwd_accessing_local) {
     jit_init((uint32_t) JitBackend::CUDA);
     // jit_set_log_level_stderr(::LogLevel::Trace);
 
@@ -270,7 +315,7 @@ ENOKI_TEST(test02_vcall_symbolic_ad_fwd_accessing_local) {
     }
 }
 
-ENOKI_TEST(test02_vcall_symbolic_ad_rev_accessing_local) {
+ENOKI_TEST(test05_vcall_symbolic_ad_rev_accessing_local) {
     jit_init((uint32_t) JitBackend::CUDA);
     // jit_set_log_level_stderr(::LogLevel::Trace);
 
