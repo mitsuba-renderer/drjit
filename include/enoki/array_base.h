@@ -119,7 +119,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
     static constexpr bool IsJIT = IsLLVM || IsCUDA;
 
     /// Are elements of this array dynamic?
-    static constexpr bool IsDynamic = is_dynamic_array_v<Value_>;
+    static constexpr bool IsDynamic = is_dynamic_v<Value_>;
 
     //! @}
     // -----------------------------------------------------------------------
