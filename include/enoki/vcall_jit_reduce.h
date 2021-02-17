@@ -44,7 +44,7 @@ struct MaskScope {
 
 template <typename Result, typename Func, typename Self, size_t... Is,
           typename... Args>
-Result vcall_jit_reduce_impl(Func func, const Self &self,
+Result vcall_jit_reduce_impl(Func func, const Self &self_,
                              std::index_sequence<Is...>, const Args &... args) {
     using UInt32 = uint32_array_t<Self>;
     using Class = scalar_t<Self>;
@@ -53,17 +53,16 @@ Result vcall_jit_reduce_impl(Func func, const Self &self,
     static constexpr JitBackend Backend = detached_t<Mask>::Backend;
 
     schedule(args...);
+    Self self = self_ & extract_mask<Mask>(args...);
     auto [buckets, n_inst] = self.vcall_();
 
     size_t self_size = self.size();
 
     Result result;
     if (n_inst > 0 && self_size > 0) {
-        Mask mask = extract_mask<Mask>(args...);
-
         Mask mask_default = Mask::steal(jit_var_mask_default(Backend));
-        mask &= mask_default;
 
+        Mask mask = mask_default;
         if (jit_var_mask_size(Backend))
             mask &= Mask::steal(jit_var_mask_peek(Backend));
 

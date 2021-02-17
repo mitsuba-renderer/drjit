@@ -29,7 +29,7 @@ using StructFD = Struct<Array3fD>;
 struct Base {
     Base(bool scalar) : x(ek::opaque<Float>(10, scalar ? 1 : 10)) { }
 
-    virtual StructF f(const StructF &m) = 0;
+    virtual StructF f(const StructF &m, ::Mask active = true) = 0;
 
     virtual void side_effect() {
         ek::scatter(x, Float(-10), UInt32(0));
@@ -50,7 +50,7 @@ using BasePtr = ek::CUDAArray<Base *>;
 
 struct A : Base {
     A(bool scalar) : Base(scalar) { ek::set_attr(this, "field", 2.4f); }
-    StructF f(const StructF &m) override {
+    StructF f(const StructF &m, ::Mask active = true) override {
         if (x.size() == 1)
             return Struct(m.a * x, m.b * 15);
         else
@@ -60,7 +60,7 @@ struct A : Base {
 
 struct B : Base {
     B(bool scalar) : Base(scalar) { ek::set_attr(this, "field", 4.8f); }
-    StructF f(const StructF &m) override {
+    StructF f(const StructF &m, ::Mask active = true) override {
         if (x.size() == 1)
             return Struct(m.b * 20, m.a * x);
         else
@@ -126,7 +126,7 @@ ENOKI_TEST(test01_vcall_reduce_and_record) {
     }
 }
 
-ENOKI_TEST(test02_vcall_reduce_and_record_nullptr) {
+ENOKI_TEST(test02_vcall_reduce_and_record_masked) {
     int n = 9999;
 
     ::Mask mask = ek::arange<UInt32>(n) > (n / 2);
@@ -147,11 +147,8 @@ ENOKI_TEST(test02_vcall_reduce_and_record_nullptr) {
                 ::Mask m = ek::neq(ek::arange<UInt32>(n) & 1, 0);
                 BasePtr arr = ek::select(m, (Base *) b, (Base *) a);
 
-                // Masked pointer array
-                arr[!mask] = nullptr;
-
                 StructF result = arr->f(Struct(Array3f(1, 2, 3) * ek::full<Float>(1, n),
-                                               Array3f(4, 5, 6) * ek::full<Float>(1, n)));
+                                               Array3f(4, 5, 6) * ek::full<Float>(1, n)), mask);
 
                 assert(ek::all_nested(
                     ek::eq(result.a,
@@ -164,6 +161,15 @@ ENOKI_TEST(test02_vcall_reduce_and_record_nullptr) {
                                       ek::select(m, Array3f(10.f, 20.f, 30.f),
                                                     Array3f(60.f, 75.f, 90.f)),
                                       0.f))));
+
+                // Masked pointer array
+                arr[!mask] = nullptr;
+
+                StructF result2 = arr->f(Struct(Array3f(1, 2, 3) * ek::full<Float>(1, n),
+                                                Array3f(4, 5, 6) * ek::full<Float>(1, n)));
+
+                assert(ek::all_nested(ek::eq(result.a, result2.a) && ek::eq(result.b, result2.b)));
+
                 delete a;
                 delete b;
             }
