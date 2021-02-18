@@ -108,11 +108,9 @@ auto vcall(const char *name, const Func &func, const Self &self,
             return detail::vcall_jit_reduce<Result>(func, self, copy_diff(args)...);
         } else {
             if constexpr (is_diff_array_v<Self>)
-                return detail::vcall_autodiff<Result>(name, func, self,
-                                                      args...);
+                return detail::vcall_autodiff<Result>(name, func, self, args...);
             else
-                return detail::vcall_jit_record<Result>(name, func, self,
-                                                        args...);
+                return detail::vcall_jit_record<Result>(name, func, self, args...);
         }
     } else {
         return detail::vcall_packet<Result>(func, self, args...);
