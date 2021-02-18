@@ -941,22 +941,33 @@ namespace detail {
     }
 }
 
-template <typename Target, bool Permute = false, typename Source, typename Index>
-Target gather(Source &&source, const Index &index, const mask_t<Target> &mask = true) {
+template <typename Target, bool Permute = false, typename Source,
+          typename Index, typename Mask = mask_t<Index>>
+Target gather(Source &&source, const Index &index, const Mask &mask_ = true) {
+    static_assert(array_depth_v<Index> == array_depth_v<Mask> || !is_matrix_v<Index>,
+                  "The index and mask types must be compatible when dealing with Matrix!");
+    // Mask should have the shape of Index but scalar type of Target (for Packet)
+    mask_t<replace_scalar_t<Index, scalar_t<Target>>> mask = mask_;
     if constexpr (array_depth_v<Source> > 1) {
         // Case 1: gather<Vector3fC>(const Vector3fC&, ...)
         static_assert(array_size_v<Source> == array_size_v<Target>,
                       "When gathering from a nested array source, the source "
                       "and target types must be compatible!");
-        using Index2 = replace_scalar_t<Target, scalar_t<Index>>;
         Target result;
-        if constexpr (Target::Size == Dynamic)
-            result = empty<Target>(source.size());
-        Index2 index2(index);
-        mask_t<Index2> mask2(mask);
-        for (size_t i = 0; i < source.size(); ++i)
-            result.entry(i) = gather<value_t<Target>, Permute>(
-                source.entry(i), index2.entry(i), mask2.entry(i));
+        if constexpr (is_matrix_v<Target> && array_depth_v<Index> <= 1) {
+            for (size_t i = 0; i < source.size(); ++i)
+                result.entry(i) = gather<value_t<Target>, Permute>(
+                    source.entry(i), index, mask);
+        } else {
+            using Index2 = replace_scalar_t<Target, scalar_t<Index>>;
+            if constexpr (Target::Size == Dynamic)
+                result = empty<Target>(source.size());
+            Index2 index2(index);
+            mask_t<Index2> mask2(mask);
+            for (size_t i = 0; i < source.size(); ++i)
+                result.entry(i) = gather<value_t<Target>, Permute>(
+                    source.entry(i), index2.entry(i), mask2.entry(i));
+        }
         return result;
     } else if constexpr (is_array_v<Target>) {
         static_assert(std::is_pointer_v<std::decay_t<Source>> ||
@@ -993,7 +1004,6 @@ Target gather(Source &&source, const Index &index, const mask_t<Target> &mask = 
     } else if constexpr (is_enoki_struct_v<Target>) {
         /// Case 3: gather<MyStruct>(const MyStruct &, ...)
         static_assert(is_enoki_struct_v<Source>, "Source must also be a custom data structure!");
-
         Target result;
         struct_support_t<Target>::apply_2(
             source, result,
@@ -1001,7 +1011,6 @@ Target gather(Source &&source, const Index &index, const mask_t<Target> &mask = 
                 using X2 = std::decay_t<decltype(x2)>;
                 x2 = gather<X2, Permute>(x1, index, mask);
             });
-
         return result;
     } else {
         /// Case 4: gather<float>(const float *, ...)
@@ -1017,8 +1026,18 @@ Target gather(Source &&source, const Index &index, const mask_t<Target> &mask = 
     }
 }
 
-template <bool Permute = false, typename Target, typename Value, typename Index>
-void scatter(Target &&target, const Value &value, const Index &index, const mask_t<Value> &mask = true) {
+template <bool Permute = false, typename Target, typename Value, typename Index,
+          typename Mask = mask_t<Index>>
+void scatter(Target &&target, const Value &value, const Index &index,
+             const Mask &mask_ = true) {
+    // Some sanity checks on input types
+    static_assert(array_depth_v<Index> == array_depth_v<Value> ||
+                  array_depth_v<Index> <= 1,
+                  "Index argument should have the same shape as the target "
+                  "argument or be a flat array");
+    static_assert(array_depth_v<Index> == array_depth_v<Mask> || !is_matrix_v<Index>,
+                  "The index and mask types must be compatible when dealing with Matrix!");
+    mask_t<Index> mask = mask_;
     if constexpr (std::is_same_v<std::decay_t<Target>, std::nullptr_t>) {
         return; // Used by virtual function call dispatch when there is no return value
     } else if constexpr (array_depth_v<Target> > 1) {
@@ -1026,25 +1045,29 @@ void scatter(Target &&target, const Value &value, const Index &index, const mask
         static_assert(array_size_v<Value> == array_size_v<Target>,
                       "When scattering a nested array value, the source and "
                       "target types must be compatible!");
-        using Index2 = replace_scalar_t<Value, scalar_t<Index>>;
-        Index2 index2(index);
-        mask_t<Index2> mask2(mask);
-        for (size_t i = 0; i < value.size(); ++i)
-            scatter<Permute>(target.entry(i), value.entry(i),
-                             index2.entry(i), mask2.entry(i));
+        if constexpr (is_matrix_v<Target> && array_depth_v<Index> <= 1) {
+            for (size_t i = 0; i < value.size(); ++i)
+                scatter<Permute>(target.entry(i), value.entry(i), index, mask);
+        } else {
+            using Index2 = replace_scalar_t<Value, scalar_t<Index>>;
+            Index2 index2(index);
+            mask_t<Index2> mask2(mask);
+            for (size_t i = 0; i < value.size(); ++i)
+                scatter<Permute>(target.entry(i), value.entry(i),
+                                 index2.entry(i), mask2.entry(i));
+        }
     } else if constexpr (is_array_v<Value>) {
         static_assert(std::is_pointer_v<std::decay_t<Target>> || array_depth_v<Target> == 1,
                       "Target argument of scatter operation must either be a "
                       "pointer address or a flat array!");
         static_assert(is_array_v<Index> && is_integral_v<Index>,
                       "Second argument of gather operation must be an index array!");
-
         if constexpr (array_depth_v<Value> == array_depth_v<Index>) {
             value.template scatter_<Permute>(target, index, mask);
         } else {
             using TargetIndex = replace_scalar_t<Value, scalar_t<Index>>;
             scatter<Permute>(target, value,
-                                    detail::broadcast_index<TargetIndex>(index), mask);
+                             detail::broadcast_index<TargetIndex>(index), mask);
         }
     } else if constexpr (is_enoki_struct_v<Value>) {
         static_assert(is_enoki_struct_v<Target>, "Target must also be a custom data structure!");
@@ -1058,7 +1081,6 @@ void scatter(Target &&target, const Value &value, const Index &index, const mask
                       "scatter(): unsupported inputs -- did you forget to "
                       "include 'enoki/struct.h' or provide a suitable "
                       "ENOKI_STRUCT() declaration?");
-
         if (mask) {
             if constexpr (is_array_v<Target>)
                 target[index] = value;
@@ -1070,7 +1092,7 @@ void scatter(Target &&target, const Value &value, const Index &index, const mask
 
 template <typename Target, typename Value, typename Index>
 void scatter_reduce(ReduceOp op, Target &&target, const Value &value,
-                    const Index &index, const mask_t<Value> &mask = true) {
+                    const Index &index, const mask_t<Index> &mask = true) {
     if constexpr (is_array_v<Value>) {
         static_assert(std::is_pointer_v<std::decay_t<Target>> || array_depth_v<Target> == 1,
                       "Target argument of scatter_reduce operation must either be a "
@@ -1234,7 +1256,7 @@ ENOKI_INNER_REDUCTION(hmean)
 
 template <typename T> ENOKI_INLINE bool schedule(const T &value) {
     if constexpr (is_jit_array_v<T>) {
-        if constexpr (is_jit_array_v<value_t<T>>) {
+        if constexpr (array_depth_v<T> > 1) {
             bool result = false;
             for (size_t i = 0; i < value.derived().size(); ++i)
                 result |= schedule(value.derived().entry(i));
