@@ -204,7 +204,7 @@ protected:
 
                 has_invariant = false;
                 for (uint32_t i = 0; i < n; ++i)
-                    has_invariant |= m_invariant[i];
+                    has_invariant |= (bool) m_invariant[i];
 
                 if (has_invariant && m_state == 2) {
                     /* Some loop variables don't change while running the loop.

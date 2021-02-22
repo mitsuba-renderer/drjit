@@ -68,7 +68,7 @@ ENOKI_INLINE Value horner(const Value &x, Ts... ts) {
 // -----------------------------------------------------------------------
 
 // -----------------------------------------------------------------------
-//! @{ \name Trigonometric and inverse triginometric functions
+//! @{ \name Trigonometric and inverse trigonometric functions
 // -----------------------------------------------------------------------
 
 namespace detail {

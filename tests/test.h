@@ -386,10 +386,9 @@ template <typename Value> std::vector<Value> sample_values(bool has_nan = true) 
         }
     } else if (std::is_floating_point<Value>::value) {
         args = { Value(0), Value(0.5), Value(0.6), Value(1), Value(2),
-                 Value(3), Value(M_PI), Value(-0), Value(-0.5), Value(-0.6),
+                 Value(3), enoki::Pi<Value>, Value(-0), Value(-0.5), Value(-0.6),
                  Value(-1), Value(-2), Value(-3),
-                 Value(std::numeric_limits<float>::infinity()),
-                 Value(-std::numeric_limits<float>::infinity())
+                 enoki::Infinity<Value>, -enoki::Infinity<Value>
         };
         if (has_nan)
             args.push_back(Value(std::numeric_limits<float>::quiet_NaN()));

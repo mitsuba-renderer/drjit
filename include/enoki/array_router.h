@@ -1269,6 +1269,7 @@ ENOKI_INLINE void eval() {
 
 template <typename... Ts>
 ENOKI_INLINE void eval(const Ts&... values) {
+    (ENOKI_MARK_USED(values), ...);
     if constexpr (((is_jit_array_v<Ts> || is_enoki_struct_v<Ts>) || ...)) {
         if (schedule(values...))
             eval();
@@ -1292,6 +1293,7 @@ ENOKI_INLINE void sync_all_devices() {
 }
 
 template <typename T, typename... Ts> ENOKI_INLINE size_t width(const T &value, const Ts& ...values) {
+    ENOKI_MARK_USED(value);
     size_t result = 0;
     if constexpr (array_size_v<T> == 0) {
         ;

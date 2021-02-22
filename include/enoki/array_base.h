@@ -106,7 +106,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
     /// Does this array represent the result of a 'masked(...)' expression?
     static constexpr bool IsMaskedArray = false;
 
-    /// Does this array compute derivatives using automatic differentation?
+    /// Does this array compute derivatives using automatic differentiation?
     static constexpr bool IsDiff = is_diff_array_v<Value_>;
 
     /// Are elements of this array implemented using the LLVM backend?

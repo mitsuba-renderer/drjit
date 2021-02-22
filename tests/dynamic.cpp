@@ -173,7 +173,7 @@ ENOKI_INLINE Value distance(const GPSCoord2<Value_> &r1, const GPSCoord2<Value_>
     using Scalar = scalar_t<Value>;
     using Mask = mask_t<Value>;
 
-    const Value deg_to_rad = Scalar(M_PI / 180.0);
+    const Value deg_to_rad = enoki::Pi<Scalar> / 180.f;
 
     auto sin_diff_h = sin(deg_to_rad * Scalar(.5) * (r2.pos - r1.pos));
     sin_diff_h *= sin_diff_h;

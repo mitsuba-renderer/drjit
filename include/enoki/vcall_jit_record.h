@@ -148,15 +148,18 @@ Result vcall_jit_record_impl(const char *name, uint32_t n_inst,
     snprintf(label, sizeof(label), "%s::%s()", Base::Domain, name);
 
     jit_var_vcall(label, self.index(), mask.index(), n_inst, inst_id.data(),
-                  indices_in.size(), indices_in.data(), indices_out_all.size(),
-                  indices_out_all.data(), se_count.data(), indices_out.data());
+                  (uint32_t) indices_in.size(), indices_in.data(),
+                  (uint32_t) indices_out_all.size(), indices_out_all.data(),
+                  se_count.data(), indices_out.data());
 
-    Result result;
     if constexpr (!std::is_same_v<Result, std::nullptr_t>) {
+        Result result;
         uint32_t offset = 0;
         write_indices(indices_out, result, offset);
+        return result;
+    } else {
+        return nullptr;
     }
-    return result;
 }
 
 template <typename Result, typename Base, typename Func, typename Mask,

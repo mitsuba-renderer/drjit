@@ -58,6 +58,7 @@ template <typename Mask> Mask extract_mask() { return true; }
 
 template <typename Mask, typename T, typename... Ts>
 Mask extract_mask(const T &v, const Ts &... vs) {
+    ENOKI_MARK_USED(v);
     if constexpr (sizeof...(Ts) != 0)
         return extract_mask<Mask>(vs...);
     else if constexpr (is_mask_v<T>)

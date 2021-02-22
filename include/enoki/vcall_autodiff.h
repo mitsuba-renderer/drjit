@@ -21,6 +21,7 @@ NAMESPACE_BEGIN(detail)
 inline void ad_copy() { }
 
 template <typename T, typename... Ts> void ad_copy(T &value, Ts&...values) {
+    ENOKI_MARK_USED(value);
     if constexpr (is_diff_array_v<T>) {
         if constexpr (array_depth_v<T> > 1) {
             for (size_t i = 0; i < value.size(); ++i)
@@ -40,10 +41,10 @@ template <typename T, typename... Ts> void ad_copy(T &value, Ts&...values) {
 
 using ConstStr = const char *;
 
-template <typename Type, typename Self, typename Result, typename Func,
+template <typename Type_, typename Self, typename Result, typename Func,
           typename... Args>
-struct DiffVCall : CustomOp<Type, Result, ConstStr, Self, Func, Args...> {
-    using Base = CustomOp<Type, Result, ConstStr, Self, Func, Args...>;
+struct DiffVCall : CustomOp<Type_, Result, ConstStr, Self, Func, Args...> {
+    using Base = CustomOp<Type_, Result, ConstStr, Self, Func, Args...>;
 
     static constexpr bool ClearPrimal = false;
 

@@ -104,11 +104,11 @@ ENOKI_TEST_FLOAT(test11_csc_sec_cot) {
 ENOKI_TEST_FLOAT(test12_safe_math) {
 #if defined(_MSC_VER)
     // MSVC codegen issue :-|
-    std::cout << abs(safe_asin(T(Value(-10))) - Value(-M_PI / 2)) << std::endl;
+    std::cout << abs(safe_asin(T(Value(-10))) - (-enoki::Pi<Value> / 2)) << std::endl;
 #endif
-    assert(all(abs(safe_asin(T(Value(-10))) - Value(-M_PI / 2)) < 1e-6f));
-    assert(all(abs(safe_asin(T(Value( 10))) - Value( M_PI / 2)) < 1e-6f));
-    assert(all(abs(safe_acos(T(Value(-10))) - Value(M_PI)) < 1e-6f));
+    assert(all(abs(safe_asin(T(Value(-10))) - (-enoki::Pi<Value> / 2)) < 1e-6f));
+    assert(all(abs(safe_asin(T(Value( 10))) - ( enoki::Pi<Value> / 2)) < 1e-6f));
+    assert(all(abs(safe_acos(T(Value(-10))) - (enoki::Pi<Value>)) < 1e-6f));
     assert(all(abs(safe_acos(T(Value( 10))) - Value(0)) < 1e-6f));
     assert(all(abs(safe_sqrt(T(Value(4)))   - Value(2)) < 1e-6f));
     assert(all(abs(safe_sqrt(T(Value(-1)))  - Value(0)) < 1e-6f));

@@ -268,7 +268,7 @@ struct State {
             ad_log(Warn,
                    "enoki-ad: variable leak detected (%zu variables "
                    "remain in use)!", variables.size());
-            uint32_t counter;
+            uint32_t counter = 0;
             for (auto kv : variables) {
                 ad_log(Warn, " - variable a%i", kv.first);
                 if (++counter == 10) {
@@ -596,7 +596,7 @@ static void ad_free(int32_t index, Variable *v) {
     state.variables.erase(index);
 }
 
-/// Ensure that placeholder variables are consistenly sized to avoid horizontal ops
+/// Ensure that placeholder variables are consistently sized to avoid horizontal ops
 static void ad_propagate_placeholder_size(Variable *v) {
     uint32_t edge = v->next_rev;
     while (edge) {
