@@ -41,10 +41,10 @@ template <typename T, typename... Ts> void ad_copy(T &value, Ts&...values) {
 
 using ConstStr = const char *;
 
-template <typename Type_, typename Self, typename Result, typename Func,
+template <typename DiffType, typename Self, typename Result, typename Func,
           typename... Args>
-struct DiffVCall : CustomOp<Type_, Result, ConstStr, Self, Func, Args...> {
-    using Base = CustomOp<Type_, Result, ConstStr, Self, Func, Args...>;
+struct DiffVCall : CustomOp<DiffType, Result, ConstStr, Self, Func, Args...> {
+    using Base = CustomOp<DiffType, Result, ConstStr, Self, Func, Args...>;
 
     static constexpr bool ClearPrimal = false;
 
@@ -76,11 +76,11 @@ struct DiffVCall : CustomOp<Type_, Result, ConstStr, Self, Func, Args...> {
             ek_tuple args_t(value_grad_pair.first...);
             set_label(args_t, "args");
             set_label(result, "result");
-            fprintf(stderr, "%s\n", ad_graphviz<detached_t<Type>>());
+            fprintf(stderr, "%s\n", ad_graphviz<detached_t<DiffType>>());
 #endif
 
             enqueue(value_grad_pair.first...);
-            traverse<Type>(false, true);
+            traverse<DiffType>(false, true);
             return grad<false>(result);
         };
 
@@ -114,11 +114,11 @@ struct DiffVCall : CustomOp<Type_, Result, ConstStr, Self, Func, Args...> {
             ek_tuple args_t(args...);
             set_label(args_t, "args");
             set_label(result, "result");
-            fprintf(stderr, "%s\n", ad_graphviz<detached_t<Type>>());
+            fprintf(stderr, "%s\n", ad_graphviz<detached_t<DiffType>>());
 #endif
 
             enqueue(result);
-            traverse<Type>(true, true);
+            traverse<DiffType>(true, true);
             return ek_tuple(grad<false>(args)...);
         };
 
