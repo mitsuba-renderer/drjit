@@ -264,6 +264,14 @@ namespace detail {
     template <typename T> struct array<T, enable_if_array_t<T>> {
         using type = typename std::decay_t<T>::Derived::ArrayType;
     };
+
+    template <typename T, typename = int> struct plain {
+        using type = T;
+    };
+
+    template <typename T> struct plain<T, enable_if_special_t <T>> {
+        using type = typename std::decay_t<T>::Derived::PlainArrayType;
+    };
 }
 
 /// Type trait to access the mask type underlying an array
@@ -271,6 +279,9 @@ template <typename T> using mask_t = typename detail::mask<T>::type;
 
 /// Type trait to access the array type underlying a mask
 template <typename T> using array_t = typename detail::array<T>::type;
+
+/// Type trait to access the plain array type underlying an special array
+template <typename T> using plain_t = typename detail::plain<T>::type;
 
 template <typename T>
 using struct_support_t = typename struct_support<std::decay_t<T>>::type;

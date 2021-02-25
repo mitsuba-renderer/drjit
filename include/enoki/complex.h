@@ -26,6 +26,7 @@ struct Complex : StaticArrayImpl<Value_, 2, false, Complex<Value_>> {
     static constexpr bool IsVector = false;
 
     using ArrayType = Complex;
+    using PlainArrayType = Array<Value_, 2>;
     using MaskType = Mask<Value_, 2>;
     using typename Base::Scalar;
 

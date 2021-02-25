@@ -32,6 +32,7 @@ struct Matrix : StaticArrayImpl<Array<Value_, Size_>, Size_, false,
     static constexpr bool IsVector = false;
 
     using ArrayType = Matrix;
+    using PlainArrayType = Array<Array<Value_, Size>, Size>;
     using MaskType = Mask<mask_t<Column>, Size_>;
     using Entry = Value_;
 
@@ -127,8 +128,8 @@ auto operator*(const Matrix<T0, Size> &m0, const T1 &a1) {
     } else {
         using Value = expr_t<T0, T1>;
         using Result = Matrix<Value, Size>;
-        using AsArray = Array<Array<Value, Size>, Size>;
-        return Result(AsArray(m0) * full<AsArray>(Value(a1)));
+        using PlainArrayType = plain_t<Result>;
+        return Result(PlainArrayType(m0) * full<PlainArrayType>(Value(a1)));
     }
 }
 
@@ -137,8 +138,8 @@ template <typename T0, typename T1, size_t Size,
 auto operator*(const T0 &a0, const Matrix<T1, Size> &m1) {
     using Value = expr_t<T0, T1>;
     using Result = Matrix<Value, Size>;
-    using AsArray = Array<Array<Value, Size>, Size>;
-    return Result(full<AsArray>(Value(a0)) * AsArray(m1));
+    using PlainArrayType = plain_t<Result>;
+    return Result(full<PlainArrayType>(Value(a0)) * PlainArrayType(m1));
 }
 
 template <typename T0, typename T1, size_t Size,
@@ -146,8 +147,8 @@ template <typename T0, typename T1, size_t Size,
 auto operator/(const Matrix<T0, Size> &m0, const T1 &a1) {
     using Value = expr_t<T0, T1>;
     using Result = Matrix<Value, Size>;
-    using AsArray = Array<Array<Value, Size>, Size>;
-    return Result(AsArray(m0) * full<AsArray>(rcp(Value(a1))));
+    using PlainArrayType = plain_t<Result>;
+    return Result(PlainArrayType(m0) * full<PlainArrayType>(rcp(Value(a1))));
 }
 
 template <typename Value, size_t Size>
@@ -448,13 +449,14 @@ template <typename T> Matrix<T, 4> inverse(const Matrix<T, 4> &m) {
 }
 
 template <typename T, size_t Size> std::pair<Matrix<T, Size>, Matrix<T, Size>>
-polar_decomp(const enoki::Matrix<T, Size> &A, size_t it = 10) {
-    using AsArray = Array<Array<T, Size>, Size>;
+polar_decomp(const Matrix<T, Size> &A, size_t it = 10) {
+    using PlainArrayType = plain_t<Matrix<T, Size>>;
     Matrix<T, Size> Q = A;
     for (size_t i = 0; i < it; ++i) {
         Matrix<T, Size> Qi = inverse_transpose(Q);
         T gamma = sqrt(frob(Qi) / frob(Q));
-        Q = fmadd(AsArray(Q), gamma * .5f, AsArray(Qi) * (rcp(gamma) * .5f));
+        Q = fmadd(PlainArrayType(Q), gamma * 0.5f,
+                  PlainArrayType(Qi) * (rcp(gamma) * 0.5f));
     }
     return { Q, transpose(Q) * A };
 }

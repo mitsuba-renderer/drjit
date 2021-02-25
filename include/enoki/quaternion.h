@@ -25,6 +25,7 @@ struct Quaternion : StaticArrayImpl<Value_, 4, false, Quaternion<Value_>> {
     static constexpr bool IsVector = false;
 
     using ArrayType = Quaternion;
+    using PlainArrayType = Array<Value_, 4>;
     using MaskType = Mask<Value_, 4>;
 
     template <typename T> using ReplaceValue = Quaternion<T>;
