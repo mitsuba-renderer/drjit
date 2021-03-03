@@ -800,10 +800,18 @@ template <typename T> ENOKI_INLINE T empty(size_t size = 1) {
                       "Unsupported data structure -- did you forget to include "
                       "'enoki/struct.h' or provide a suitable ENOKI_STRUCT() "
                       "declaration?");
-        T undef;
-        return undef;
+        if constexpr (std::is_same_v<T, std::nullptr_t>) {
+            return nullptr;
+        } else {
+            T undef;
+            return undef;
+        }
     }
 }
+
+#if defined(_MSC_VER)
+#  pragma warning(pop)
+#endif
 
 /// Create a dummy memory region that can be used to capture computation symbolically
 template <typename T>
@@ -823,10 +831,6 @@ ENOKI_INLINE decltype(auto) placeholder(const T &value, bool preserve_size, bool
         return (const T &) value;
     }
 }
-
-#if defined(_MSC_VER)
-#  pragma warning(pop)
-#endif
 
 template <typename T, typename T2>
 ENOKI_INLINE T full(const T2 &value, size_t size = 1) {
