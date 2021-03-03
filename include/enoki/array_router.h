@@ -800,12 +800,12 @@ template <typename T> ENOKI_INLINE T empty(size_t size = 1) {
                       "Unsupported data structure -- did you forget to include "
                       "'enoki/struct.h' or provide a suitable ENOKI_STRUCT() "
                       "declaration?");
-        if constexpr (std::is_same_v<T, std::nullptr_t>) {
-            return nullptr;
-        } else {
-            T undef;
-            return undef;
-        }
+
+        T undef;
+        #if defined(_MSC_VER) && !defined(NDEBUG) // MSVC's /RTC (Runtime error checks) requires the following
+        T* undef_ptr = &undef;
+        #endif
+        return undef;
     }
 }
 
