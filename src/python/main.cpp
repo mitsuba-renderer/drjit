@@ -203,6 +203,7 @@ PYBIND11_MODULE(enoki_ext, m_) {
     m.def("malloc_clear_statistics", &jit_malloc_clear_statistics);
     m.def("set_log_level", &jit_set_log_level_stderr);
     m.def("log_level", &jit_log_level_stderr);
+    m.def("registry_trim", &jit_registry_trim);
 
     array_detail.def("graphviz", &jit_var_graphviz);
     array_detail.def("schedule", &jit_var_schedule);
