@@ -204,6 +204,7 @@ PYBIND11_MODULE(enoki_ext, m_) {
     m.def("set_log_level", &jit_set_log_level_stderr);
     m.def("log_level", &jit_log_level_stderr);
     m.def("registry_trim", &jit_registry_trim);
+    m.def("llvm_set_thread_count", &jit_llvm_set_thread_count);
 
     array_detail.def("graphviz", &jit_var_graphviz);
     array_detail.def("schedule", &jit_var_schedule);
