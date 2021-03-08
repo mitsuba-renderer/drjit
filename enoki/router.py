@@ -15,10 +15,6 @@ def _var_is_enoki(a):
     return isinstance(a, ArrayBase)
 
 
-def _var_is_container(a):
-    return hasattr(a, '__len__') and hasattr(a, '__iter__')
-
-
 def _var_type(a, preferred=VarType.Void):
     """
     Return the VarType of a given Enoki object or plain Python type. Return
@@ -1622,18 +1618,19 @@ def count(a):
         if a.Type != VarType.Bool:
             raise Exception("count(): input array must be a mask!")
         return a.count_()
-    elif _var_is_container(a):
-        size = len(a)
-        if size == 0:
-            raise Exception("count(): input container is empty!")
-        value = 1 if a[0][0] else 0
-        for i in range(1, size):
-            value += 1 if a[i][0] else 0
-        return value
     elif isinstance(a, bool):
         return 1 if a else 0
+    elif _ek.is_iterable_v(a):
+        result = 0
+        for index, value in enumerate(a):
+            if index == 0:
+                result = ek.select(value, 0, 1)
+            else:
+                result = result + ek.select(value, 1, 0)
+        return result
     else:
-        raise Exception("count(): incompatible input!")
+        raise Exception("count(): input must be a boolean or an "
+                        "iterable containing masks!")
 
 
 def all(a):
@@ -1641,16 +1638,19 @@ def all(a):
         if a.Type != VarType.Bool:
             raise Exception("all(): input array must be a mask!")
         return a.all_()
-    elif _var_is_container(a):
-        size = len(a)
-        if size == 0:
-            raise Exception("all(): input container is empty!")
-        value = a[0]
-        for i in range(1, size):
-            value = value & a[i]
-        return value
-    else:
+    elif isinstance(a, bool):
         return a
+    elif _ek.is_iterable_v(a):
+        result = True
+        for index, value in enumerate(a):
+            if index == 0:
+                result = value
+            else:
+                result = result & value
+        return result
+    else:
+        raise Exception("all(): input must be a boolean or an "
+                        "iterable containing masks!")
 
 
 def all_nested(a):
@@ -1675,16 +1675,17 @@ def any(a):
         if a.Type != VarType.Bool:
             raise Exception("any(): input array must be a mask!")
         return a.any_()
-    elif _var_is_container(a):
-        size = len(a)
-        if size == 0:
-            raise Exception("any(): input container is empty!")
-        value = a[0]
-        for i in range(1, size):
-            value = value | a[i]
-        return value
+    elif _ek.is_iterable_v(a):
+        result = False
+        for index, value in enumerate(a):
+            if index == 0:
+                result = value
+            else:
+                result = result | value
+        return result
     else:
-        return a
+        raise Exception("any(): input must be a boolean or an "
+                        "iterable containing masks!")
 
 
 def any_nested(a):
@@ -1725,16 +1726,19 @@ def none_or(value, a):
 def hsum(a):
     if _var_is_enoki(a):
         return a.hsum_()
-    elif _var_is_container(a):
-        size = len(a)
-        if size == 0:
-            raise Exception("hsum(): input container is empty!")
-        value = a[0]
-        for i in range(1, size):
-            value = value + a[i]
-        return value
-    else:
+    elif isinstance(a, float) or isinstance(a, int):
         return a
+    elif _ek.is_iterable_v(a):
+        result = 0
+        for index, value in enumerate(a):
+            if index == 0:
+                result = value
+            else:
+                result = result + value
+        return result
+    else:
+        raise Exception("hsum(): input must be a boolean or an iterable "
+                        "containing arithmetic types!")
 
 
 def hsum_async(a):
@@ -1756,16 +1760,19 @@ def hsum_nested(a):
 def hprod(a):
     if _var_is_enoki(a):
         return a.hprod_()
-    elif _var_is_container(a):
-        size = len(a)
-        if size == 0:
-            raise Exception("hprod(): input container is empty!")
-        value = a[0]
-        for i in range(1, size):
-            value = value * a[i]
-        return value
-    else:
+    elif isinstance(a, float) or isinstance(a, int):
         return a
+    elif _ek.is_iterable_v(a):
+        result = 1
+        for index, value in enumerate(a):
+            if index == 0:
+                result = value
+            else:
+                result = result * value
+        return result
+    else:
+        raise Exception("hprod(): input must be a boolean or an iterable "
+                        "containing arithmetic types!")
 
 
 def hprod_async(a):
@@ -1787,16 +1794,21 @@ def hprod_nested(a):
 def hmax(a):
     if _var_is_enoki(a):
         return a.hmax_()
-    elif _var_is_container(a):
-        size = len(a)
-        if size == 0:
-            raise Exception("hmax(): input container is empty!")
-        value = a[0]
-        for i in range(1, size):
-            value = _ek.max(value, a[i])
-        return value
-    else:
+    elif isinstance(a, float) or isinstance(a, int):
         return a
+    elif _ek.is_iterable_v(a):
+        result = None
+        for index, value in enumerate(a):
+            if index == 0:
+                result = value
+            else:
+                result = _ek.max(result, value)
+        if result is None:
+            raise Exception("hmax(): zero-sized array!")
+        return result
+    else:
+        raise Exception("hmax(): input must be a boolean or an iterable "
+                        "containing arithmetic types!")
 
 
 def hmax_async(a):
@@ -1818,16 +1830,21 @@ def hmax_nested(a):
 def hmin(a):
     if _var_is_enoki(a):
         return a.hmin_()
-    elif _var_is_container(a):
-        size = len(a)
-        if size == 0:
-            raise Exception("hmin(): input container is empty!")
-        value = a[0]
-        for i in range(1, size):
-            value = _ek.min(value, a[i])
-        return value
-    else:
+    elif isinstance(a, float) or isinstance(a, int):
         return a
+    elif _ek.is_iterable_v(a):
+        result = None
+        for index, value in enumerate(a):
+            if index == 0:
+                result = value
+            else:
+                result = _ek.min(result, value)
+        if result is None:
+            raise Exception("hmin(): zero-sized array!")
+        return result
+    else:
+        raise Exception("hmin(): input must be a boolean or an iterable "
+                        "containing arithmetic types!")
 
 
 def hmin_async(a):
@@ -2186,7 +2203,7 @@ def backward(a, retain_graph=False):
             raise Exception("backward(): attempted to propagate derivatives "
                             "through a variable that is not registered with "
                             "the AD backend. Did you forget to call "
-                            "enable_grad()?");
+                            "enable_grad()?")
         set_grad(a, 1)
         a.enqueue_()
         traverse(type(a), reverse=True, retain_graph=retain_graph)
@@ -2200,7 +2217,7 @@ def forward(a, retain_graph=False):
             raise Exception("forward(): attempted to propagate derivatives "
                             "through a variable that is not registered with "
                             "the AD backend. Did you forget to call "
-                            "enable_grad()?");
+                            "enable_grad()?")
         set_grad(a, 1)
         a.enqueue_()
         traverse(type(a), reverse=False, retain_graph=retain_graph)
@@ -2447,7 +2464,7 @@ def custom(cls, *args, **kwargs):
         diff_vars(inst.output, diff_vars_out)
 
         if len(diff_vars_out) == 0:
-            raise Exception("enoki.custom(): internal error!");
+            raise Exception("enoki.custom(): internal error!")
 
         Type = _ek.leaf_array_t(output)
         detail = _modules.get(Type.__module__ + ".detail")

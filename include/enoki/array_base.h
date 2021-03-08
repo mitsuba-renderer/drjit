@@ -610,7 +610,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
                         enoki_raise("dot_() : mismatched input sizes "
                                     "(%zu and %zu)", sa, sb);
                     else if (sr == 0)
-                        enoki_raise("dot_(): zero-sized array!");
+                        return Value(0);
                 }
 
 				result = derived().entry(0) * a.entry(0);
@@ -640,7 +640,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
         if constexpr (IsArithmetic) {
             if constexpr (Derived::Size == Dynamic) {
                 if (empty())
-                    enoki_raise("hsum_(): zero-sized array!");
+                    return Value(0);
             }
 
             value = derived().entry(0);
@@ -659,7 +659,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
         if constexpr (IsArithmetic) {
             if constexpr (Derived::Size == Dynamic) {
                 if (empty())
-                    enoki_raise("hprod_(): zero-sized array!");
+                    return Value(1);
             }
 
             value = derived().entry(0);
@@ -716,7 +716,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
         if constexpr (IsMask) {
             if constexpr (Derived::Size == Dynamic) {
                 if (empty())
-                    enoki_raise("all_(): zero-sized array!");
+                    return true;
             }
 
             value = derived().entry(0);
@@ -735,7 +735,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
         if constexpr (IsMask) {
             if constexpr (Derived::Size == Dynamic) {
                 if (empty())
-                    enoki_raise("any_(): zero-sized array!");
+                    return false;
             }
 
             value = derived().entry(0);
@@ -754,7 +754,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
         if constexpr (IsMask) {
             if constexpr (Derived::Size == Dynamic) {
                 if (empty())
-                    enoki_raise("count_(): zero-sized array!");
+                    return 0;
             }
             value = select(derived().entry(0), 1, 0);
             for (size_t i = 1; i < derived().size(); ++i)

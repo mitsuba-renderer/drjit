@@ -112,6 +112,16 @@ def is_signed_v(a):
     return not is_unsigned_v(a)
 
 
+def is_iterable_v(a):
+    if isinstance(a, str):
+        return False
+    try:
+        iter(a)
+        return True
+    except TypeError:
+        return False
+
+
 def int_array_t(a):
     if not is_array_v(a):
         return int

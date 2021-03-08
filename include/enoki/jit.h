@@ -351,25 +351,29 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
     // -----------------------------------------------------------------------
 
     bool all_() const {
+        if (size() == 0)
+            return true;
         return jit_var_all(m_index);
     }
 
     bool any_() const {
+        if (size() == 0)
+            return false;
         return jit_var_any(m_index);
     }
 
-    #define ENOKI_HORIZONTAL_OP(name, op)                                        \
-        Derived name##_async_() const {                                         \
+    #define ENOKI_HORIZONTAL_OP(name, op, default_op)                            \
+        Derived name##_async_() const {                                          \
             if (size() == 0)                                                     \
-                enoki_raise(#name "_async_(): zero-sized array!");               \
+                default_op;                                                      \
             return steal(jit_var_reduce(m_index, op));                           \
         }                                                                        \
         Value name##_() const { return name##_async_().entry(0); }
 
-    ENOKI_HORIZONTAL_OP(hsum,  ReduceOp::Add)
-    ENOKI_HORIZONTAL_OP(hprod, ReduceOp::Mul)
-    ENOKI_HORIZONTAL_OP(hmin,  ReduceOp::Min)
-    ENOKI_HORIZONTAL_OP(hmax,  ReduceOp::Max)
+    ENOKI_HORIZONTAL_OP(hsum,  ReduceOp::Add, return Derived(0))
+    ENOKI_HORIZONTAL_OP(hprod, ReduceOp::Mul, return Derived(1))
+    ENOKI_HORIZONTAL_OP(hmin,  ReduceOp::Min, enoki_raise("hmin_async_(): zero-sized array!"))
+    ENOKI_HORIZONTAL_OP(hmax,  ReduceOp::Max, enoki_raise("hmax_async_(): zero-sized array!"))
 
     #undef ENOKI_HORIZONTAL_OP
 

@@ -1108,8 +1108,7 @@ def tgamma_(a0):
 def all_(a0):
     size = len(a0)
     if size == 0:
-        raise Exception("all(): zero-sized array!")
-
+        return True
     value = a0[0]
     for i in range(1, size):
         value = value & a0[i]
@@ -1119,8 +1118,7 @@ def all_(a0):
 def any_(a0):
     size = len(a0)
     if size == 0:
-        raise Exception("any(): zero-sized array!")
-
+        return False
     value = a0[0]
     for i in range(1, size):
         value = value | a0[i]
@@ -1130,8 +1128,7 @@ def any_(a0):
 def hsum_(a0):
     size = len(a0)
     if size == 0:
-        raise Exception("hsum(): zero-sized array!")
-
+        return 0
     value = a0[0]
     for i in range(1, size):
         value = value + a0[i]
@@ -1141,8 +1138,7 @@ def hsum_(a0):
 def hprod_(a0):
     size = len(a0)
     if size == 0:
-        raise Exception("hprod(): zero-sized array!")
-
+        return 1
     value = a0[0]
     for i in range(1, size):
         value = value * a0[i]
@@ -1174,7 +1170,7 @@ def hmax_(a0):
 def dot_(a0, a1):
     size = len(a0)
     if size == 0:
-        raise Exception("dot(): zero-sized array!")
+        return 0
     if size != len(a1):
         raise Exception("dot(): incompatible array sizes!")
     if type(a0) is not type(a1):

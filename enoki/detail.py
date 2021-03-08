@@ -271,14 +271,14 @@ def array_init(self, args):
         if dynamic:
             raise TypeError("%s constructor expects: arbitrarily many values "
                             "of type '%s', a matching list/tuple, or a NumPy/"
-                            "PyTorch array." % (type(self).__name__,
-                                                value_type.__name__)) from err
+                            "PyTorch/TF/Jax array." % (type(self).__name__,
+                                                       value_type.__name__)) from err
         else:
             raise TypeError("%s constructor expects: %s%i values "
                             "of type '%s', a matching list/tuple, or a NumPy/"
-                            "PyTorch array." % (type(self).__name__, "" if
-                                                size == 1 else "1 or ", size,
-                                                value_type.__name__)) from err
+                            "PyTorch/TF/Jax array." % (type(self).__name__, "" if
+                                                       size == 1 else "1 or ", size,
+                                                       value_type.__name__)) from err
 
 
 @property
