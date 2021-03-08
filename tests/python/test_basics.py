@@ -386,17 +386,28 @@ def test09_repeat_tile(cname):
         a3(reptd, reptd + 1, reptd + 2)
 
 
-@pytest.mark.parametrize("cname", ["enoki.cuda.Float", "enoki.llvm.Float"])
+@pytest.mark.parametrize("cname", ["enoki.cuda.Int", "enoki.llvm.Int"])
 def test10_meshgrid(cname):
-    t = get_class(cname)
-    import numpy as np
-    a = ek.linspace(t, 0, 1, 3)
-    b = ek.linspace(t, 0, 1, 4)
-    c, d = ek.meshgrid(a, b)
-    ek.schedule(c, d)
-    cn, dn = np.meshgrid(a.numpy(), b.numpy())
-    assert ek.allclose(c.numpy(), cn.ravel())
-    assert ek.allclose(d.numpy(), dn.ravel())
+    Int = get_class(cname)
+
+    assert ek.meshgrid() == ()
+
+    assert ek.meshgrid(Int(1, 2), indexing='ij') == Int(1, 2)
+    assert ek.meshgrid(Int(1, 2), indexing='xy') == Int(1, 2)
+
+    assert ek.meshgrid(Int(1, 2), Int(3, 4, 5)) == \
+        (Int(1, 2, 1, 2, 1, 2), Int(3, 3, 4, 4, 5, 5))
+    assert ek.meshgrid(Int(1, 2), Int(3, 4, 5), indexing='ij') == \
+        (Int(1, 1, 1, 2, 2, 2), Int(3, 4, 5, 3, 4, 5))
+
+    assert ek.meshgrid(Int(1, 2), Int(3, 4, 5), Int(5, 6), indexing='xy') == \
+       (Int(1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2),
+        Int(3, 3, 4, 4, 5, 5, 3, 3, 4, 4, 5, 5),
+        Int(5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6))
+    assert ek.meshgrid(Int(1, 2), Int(3, 4, 5), Int(5, 6), indexing='ij') == \
+       (Int(1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2),
+        Int(3, 3, 4, 4, 5, 5, 3, 3, 4, 4, 5, 5),
+        Int(5, 6, 5, 6, 5, 6, 5, 6, 5, 6, 5, 6))
 
 
 @pytest.mark.parametrize("cname", ["enoki.cuda.Float", "enoki.llvm.Float"])

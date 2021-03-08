@@ -1970,20 +1970,41 @@ def repeat(array, count: int):
         return _ek.gather(t, array, index)
 
 
-def meshgrid(x, y):
-    if type(x) is not type(y) or _ek.array_depth_v(x) != 1 or \
-       not _ek.is_dynamic_array_v(x):
-        raise Exception("meshgrid(): requires two 1D dynamic arrays as input!")
+def meshgrid(*args, indexing='xy'):
+    if indexing != "ij" and indexing != "xy":
+        raise Exception("meshgrid(): 'indexing' argument must equal"
+                        " 'ij' or 'xy'!")
 
-    lx, ly = len(x), len(y)
-    if lx == 1 or ly == 1:
-        return x, y
-    else:
-        t = type(x)
-        index = _ek.arange(_ek.uint32_array_t(t), lx*ly)
-        yi, xi = index // lx, index % lx
-        return _ek.gather(t, x, xi), _ek.gather(t, y, yi)
+    if len(args) == 0:
+        return ()
+    elif len(args) == 1:
+        return args[0]
 
+    t = type(args[0])
+    for v in args:
+        if not _ek.is_dynamic_array_v(v) or \
+           _ek.array_depth_v(v) != 1 or \
+           type(v) is not t:
+            raise Exception("meshgrid(): consistent 1D dynamic arrays expected!")
+
+    size = _ek.hprod((len(v) for v in args))
+    index_t = _ek.uint32_array_t(t)
+    index = _ek.arange(index_t, size)
+
+    result = []
+    if indexing == "xy":
+        args = reversed(args)
+
+    for v in args:
+        size //= len(v)
+        index_v = index // size
+        index = index - index_v * size
+        result.append(_ek.gather(t, v, index_v))
+
+    if indexing == "xy":
+        result = reversed(result)
+
+    return tuple(result)
 
 def binary_search(start, end, pred):
     assert isinstance(start, int) and isinstance(end, int)
