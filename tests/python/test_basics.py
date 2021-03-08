@@ -44,7 +44,7 @@ def test01_construct():
         a = ek.scalar.Array3f("asdf")
 
     assert "Array3f constructor expects: 1 or 3 values of type 'float', a " \
-        "matching list/tuple, or a NumPy/PyTorch array." in str(ei.value)
+        "matching list/tuple, or a NumPy/PyTorch/TF/Jax array." in str(ei.value)
 
 
 @pytest.mark.parametrize("cname", ["enoki.scalar.Array1f",

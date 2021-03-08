@@ -1675,6 +1675,8 @@ def any(a):
         if a.Type != VarType.Bool:
             raise Exception("any(): input array must be a mask!")
         return a.any_()
+    elif isinstance(a, bool):
+        return a
     elif _ek.is_iterable_v(a):
         result = False
         for index, value in enumerate(a):
