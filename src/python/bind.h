@@ -320,8 +320,12 @@ auto bind_full(py::class_<Array> &cls, bool scalar_mode = false) {
         }
     }
 
-    if constexpr (ek::is_jit_array_v<Array>)
+    if constexpr (ek::is_jit_array_v<Array>) {
         cls.def("resize_", [](Array &value, size_t size) { value.resize(size); });
+
+        if constexpr (!Array::IsMask)
+            cls.def("block_sum_", &Array::block_sum_);
+    }
 
     if constexpr (Array::IsFloat) {
         cls.def("sqrt_",  &Array::sqrt_);

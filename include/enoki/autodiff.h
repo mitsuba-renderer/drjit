@@ -1574,6 +1574,16 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             enoki_raise("vcall_(): not supported in scalar mode!");
     }
 
+    DiffArray block_sum_(size_t block_size) {
+        if constexpr (is_jit_array_v<Type>) {
+            if (m_index > 0)
+                enoki_raise("block_sum_(): not supported for attached arrays!");
+            return m_value.block_sum_(block_size);
+        } else {
+            enoki_raise("block_sum_(): not supported in scalar mode!");
+        }
+    }
+
     static DiffArray steal(int32_t index) {
         if constexpr (is_jit_array_v<Type>)
             return Type::steal(index);

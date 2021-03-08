@@ -1186,6 +1186,14 @@ def dot_(a0, a1):
     return value
 
 
+def block_sum_(a0, block_size):
+    if not a0.IsArithmetic:
+        raise Exception("block_sum(): requires arithmetic operands!")
+    ar, sr = _check1(a0)
+    for i in range(sr):
+        ar[i] = _ek.block_sum(a0[i], block_size)
+    return ar
+
 # -------------------------------------------------------------------
 #                     Automatic differentiation
 # -------------------------------------------------------------------

@@ -2008,6 +2008,14 @@ def meshgrid(*args, indexing='xy'):
 
     return tuple(result)
 
+
+def block_sum(value, block_size):
+    if _ek.is_jit_array_v(value):
+        return value.block_sum_(block_size)
+    else:
+        raise Exception("block_sum(): requires a JIT array!")
+
+
 def binary_search(start, end, pred):
     assert isinstance(start, int) and isinstance(end, int)
 

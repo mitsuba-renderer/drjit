@@ -410,8 +410,14 @@ def test10_meshgrid(cname):
         Int(5, 6, 5, 6, 5, 6, 5, 6, 5, 6, 5, 6))
 
 
+@pytest.mark.parametrize("cname", ["enoki.cuda.Int", "enoki.llvm.Int"])
+def test11_block_sum(cname):
+    Int = get_class(cname)
+    assert ek.block_sum(Int(1, 2, 3, 4), 2) == Int(3, 7)
+
+
 @pytest.mark.parametrize("cname", ["enoki.cuda.Float", "enoki.llvm.Float"])
-def test11_binary_search(cname):
+def test12_binary_search(cname):
     t = get_class(cname)
     import numpy as np
 
@@ -430,7 +436,7 @@ def test11_binary_search(cname):
     assert ek.all(cond)
 
 
-def test12_slice_setitem():
+def test13_slice_setitem():
     a = ek.zero(ek.scalar.ArrayXf, 5)
     a[2] = 1.0
     assert ek.allclose(a, [0, 0, 1, 0, 0])
@@ -454,7 +460,7 @@ def test12_slice_setitem():
     assert ek.allclose(m, [[0, 2, 2], [0, 3, 3], [0, 3, 3]])
 
 
-def test13_slice_getitem():
+def test14_slice_getitem():
     a = ek.scalar.ArrayXf(*range(5))
     assert ek.allclose(a[1:4], [1, 2, 3])
     assert ek.allclose(a[:], [0, 1, 2, 3, 4])
@@ -464,7 +470,7 @@ def test13_slice_getitem():
     assert ek.allclose(a[:], [0, 1, 2, 3, 4])
 
 
-def test14_test_avx512_approx():
+def test15_test_avx512_approx():
     Float = get_class('enoki.llvm.Float')
 
     x = ek.linspace(Float, 0, 10, 1000)
@@ -474,7 +480,7 @@ def test14_test_avx512_approx():
 
 
 @pytest.mark.parametrize("cname", ["enoki.cuda.PCG32", "enoki.llvm.PCG32"])
-def test15_custom(cname):
+def test16_custom(cname):
     t = get_class(cname)
 
     v1 = ek.zero(t, 100)

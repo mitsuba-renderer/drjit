@@ -562,6 +562,21 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
         }
     }
 
+    Derived block_sum_(size_t block_size) {
+        size_t input_size  = size(),
+               block_count = input_size / block_size;
+
+        if (block_count * block_size != input_size)
+            enoki_raise("block_sum(): input size must be a multiple of block_size!");
+
+        Derived output = empty<Derived>(block_count);
+
+        jit_block_sum(Derived::Backend, Derived::Type, data(),
+                      output.data(), block_count, block_size);
+
+        return output;
+    }
+
     Derived copy() const { return steal(jit_var_copy(m_index)); }
 
 
@@ -694,6 +709,24 @@ void printf_async(const Mask &mask, const char *fmt, const Ts &... ts) {
         uint32_t indices[] = { ts.index()... };
         jit_var_printf(Mask::Backend, mask.index(), fmt,
                        (uint32_t) sizeof...(Ts), indices);
+    }
+}
+
+template <typename Array>
+Array block_sum(const Array &array, size_t block_size) {
+    if constexpr (array_depth_v<Array> > 1) {
+        Array result;
+        if constexpr (Array::Size == Dynamic)
+            result = empty<Array>(array.size());
+
+        for (size_t i = 0; i < array.size(); ++i)
+            result.entry(i) = block_sum(array.entry(i), block_size);
+
+        return result;
+    } else if constexpr (is_jit_array_v<Array>) {
+        return array.block_sum_(block_size);
+    } else {
+        static_assert(detail::false_v<Array>, "block_sum(): requires a JIT array!");
     }
 }
 
