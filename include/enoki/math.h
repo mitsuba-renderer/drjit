@@ -430,7 +430,7 @@ template <typename Value> Value asin(const Value &x) {
                                      1.000000000000000000000e0) * zz;
                 zz = sqrt(zz + zz);
                 Value z = pio4 - zz;
-                masked(r, mask_big) = z - fmsub(zz, p, more_bits) + pio4;
+                r = z - fmsub(zz, p, more_bits) + pio4;
             }
 
             if (!all_nested_or<false>(mask_big)) {
