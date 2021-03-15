@@ -41,7 +41,7 @@ struct Base {
     }
 
     float field() const { return 1.2f; };
-    ENOKI_VCALL_REGISTER(Float::Backend, Base)
+    ENOKI_VCALL_REGISTER(Float, Base)
 
 protected:
     Float x;
@@ -191,7 +191,7 @@ struct BaseD {
     void dummy() { }
     virtual StructFD f(const StructFD &m) = 0;
     virtual StructFD g(const StructFD &m) = 0;
-    ENOKI_VCALL_REGISTER(Float::Backend, BaseD)
+    ENOKI_VCALL_REGISTER(FloatD, BaseD)
     FloatD x;
 };
 

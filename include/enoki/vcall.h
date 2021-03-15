@@ -140,10 +140,10 @@ void set_attr(Class *self, const char *name, const Value &value) {
 
 NAMESPACE_END(enoki)
 
-#define ENOKI_VCALL_REGISTER_IF(Backend_, Class, Cond)                         \
+#define ENOKI_VCALL_REGISTER(Array, Class)                                     \
     static constexpr const char *Domain = #Class;                              \
-    static constexpr bool Registered = Cond;                                   \
-    static constexpr JitBackend Backend = Backend_;                            \
+    static constexpr bool Registered = enoki::is_jit_array_v<Array>;           \
+    static constexpr JitBackend Backend = enoki::backend_v<Array>;             \
     void *operator new(size_t size) {                                          \
         void *ptr = ::operator new(size);                                      \
         if constexpr (Registered)                                              \
@@ -166,9 +166,6 @@ NAMESPACE_END(enoki)
             jit_registry_remove(Backend, ptr);                                 \
         ::operator delete(ptr, align);                                         \
     }
-
-#define ENOKI_VCALL_REGISTER(Backend, Class)                                   \
-    ENOKI_VCALL_REGISTER_IF(Backend, Class, true)
 
 #define ENOKI_VCALL_METHOD(name)                                               \
     template <typename... Args> auto name(const Args &... args_) const {       \
