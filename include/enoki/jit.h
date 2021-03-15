@@ -90,7 +90,7 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
         if constexpr (!IsClass)
             av = (ActualValue) value;
         else
-            av = jit_registry_get_id(value);
+            av = jit_registry_get_id(Backend, value);
 
         m_index = jit_var_new_literal(Backend, Type, &av);
     }
@@ -103,7 +103,7 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
             m_index = jit_var_mem_copy(Backend, AllocType::Host, Type, data,
                                        sizeof...(Ts));
         } else {
-            uint32_t data[] = { jit_registry_get_id(ts)... };
+            uint32_t data[] = { jit_registry_get_id(Backend, ts)... };
             m_index = jit_var_mem_copy(Backend, AllocType::Host, Type, data,
                                        sizeof...(Ts));
         }
@@ -454,7 +454,7 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
         } else {
             uint32_t *temp = new uint32_t[size];
             for (uint32_t i = 0; i < size; i++)
-                temp[i] = jit_registry_get_id(((const void **) ptr)[i]);
+                temp[i] = jit_registry_get_id(Backend, ((const void **) ptr)[i]);
             Derived result = steal(
                 jit_var_mem_copy(Backend, AllocType::Host, Type, temp, (uint32_t) size));
             delete[] temp;
@@ -471,7 +471,8 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
             uint32_t *temp = new uint32_t[size];
             jit_memcpy(Backend, temp, data(), size * sizeof(uint32_t));
             for (uint32_t i = 0; i < size; i++)
-                ((void **) ptr)[i] = jit_registry_get_ptr(CallSupport::Domain, temp[i]);
+                ((void **) ptr)[i] =
+                    jit_registry_get_ptr(Backend, CallSupport::Domain, temp[i]);
             delete[] temp;
         }
     }
@@ -603,7 +604,7 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
         if constexpr (!IsClass)
             return out;
         else
-            return (Value) jit_registry_get_ptr(CallSupport::Domain, out);
+            return (Value) jit_registry_get_ptr(Backend, CallSupport::Domain, out);
     }
 
     void set_entry(size_t offset, Value value) {
@@ -611,7 +612,7 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
         if constexpr (!IsClass) {
             index = jit_var_write(m_index, offset, &value);
         } else {
-            ActualValue av = jit_registry_get_id(value);
+            ActualValue av = jit_registry_get_id(Backend, value);
             index = jit_var_write(m_index, (uint32_t) offset, &av);
         }
         jit_var_dec_ref_ext(m_index);

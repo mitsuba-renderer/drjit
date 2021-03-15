@@ -144,18 +144,20 @@ private:
     char m_name_long[128];
 };
 
-inline std::pair<void *, uint32_t> vcall_registry_get(const char *domain);
+inline std::pair<void *, uint32_t> vcall_registry_get(JitBackend Backend,
+                                                      const char *domain);
 
 template <typename Result, typename Func, typename Self, typename... Args>
 ENOKI_INLINE Result vcall_autodiff(const char *name, const Func &func,
                                    const Self &self, const Args &... args) {
     using Type = leaf_array_t<Result, Args...>;
     using Base = std::remove_const_t<std::remove_pointer_t<value_t<Self>>>;
+    static constexpr JitBackend Backend = detached_t<Self>::Backend;
 
     /* Only perform a differentiable vcall if there is a differentiable
        float type somewhere within the argument or return values */
     if constexpr (is_diff_array_v<Type> && std::is_floating_point_v<scalar_t<Type>>) {
-        auto [base, n_inst] = vcall_registry_get(Base::Domain);
+        auto [base, n_inst] = vcall_registry_get(Backend, Base::Domain);
 
         // Complex approach in this header file only needed if > 1 instance
         if (n_inst > 1)

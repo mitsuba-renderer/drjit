@@ -117,12 +117,12 @@ Result vcall_jit_record_impl(const char *name, uint32_t n_inst,
     (collect_indices(indices_in, args), ...);
     se_count[0] = jit_side_effects_scheduled(Backend);
 
-    uint32_t n_inst_max = jit_registry_get_max(Base::Domain);
+    uint32_t n_inst_max = jit_registry_get_max(Backend, Base::Domain);
     try {
         for (uint32_t i = 1, j = 1; i <= n_inst_max; ++i) {
             snprintf(label, sizeof(label), "VCall: %s::%s() [instance %u]",
                      Base::Domain, name, j);
-            Base *base = (Base *) jit_registry_get_ptr(Base::Domain, i);
+            Base *base = (Base *) jit_registry_get_ptr(Backend, Base::Domain, i);
             if (!base)
                 continue;
 
@@ -181,12 +181,13 @@ vcall_jit_record_impl_scalar(Base *inst, const Func &func, const Mask &mask,
     }
 }
 
-inline std::pair<void *, uint32_t> vcall_registry_get(const char *domain) {
-    uint32_t n = jit_registry_get_max(domain), n_inst = 0;
+inline std::pair<void *, uint32_t> vcall_registry_get(JitBackend Backend,
+                                                      const char *domain) {
+    uint32_t n = jit_registry_get_max(Backend, domain), n_inst = 0;
     void *inst = nullptr;
 
     for (uint32_t i = 1; i <= n; ++i) {
-        void *ptr = jit_registry_get_ptr(domain, i);
+        void *ptr = jit_registry_get_ptr(Backend, domain, i);
         if (ptr) {
             inst = ptr;
             n_inst++;
@@ -203,7 +204,7 @@ Result vcall_jit_record(const char *name, const Func &func, Self &self,
     static constexpr JitBackend Backend = detached_t<Self>::Backend;
     using Mask = mask_t<Self>;
 
-    auto [inst, n_inst] = vcall_registry_get(Base::Domain);
+    auto [inst, n_inst] = vcall_registry_get(Backend, Base::Domain);
 
     size_t self_size = width(self, args...);
     Mask mask = extract_mask<Mask>(args...) && neq(self, nullptr);

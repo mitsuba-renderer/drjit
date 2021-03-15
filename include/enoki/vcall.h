@@ -18,16 +18,19 @@
 #include <enoki/vcall_packet.h>
 
 extern "C" {
-    extern ENOKI_IMPORT uint32_t jit_registry_put(const char *domain, void *ptr);
-    extern ENOKI_IMPORT void jit_registry_remove(void *ptr);
-    extern ENOKI_IMPORT uint32_t jit_registry_get_id(const void *ptr);
-    extern ENOKI_IMPORT void jit_registry_set_attr(void *ptr, const char *name,
-                                                   const void *value, size_t size);
-    extern ENOKI_IMPORT uint32_t jit_var_registry_attr(JitBackend backend,
-                                                       VarType type,
-                                                       const char *domain,
-                                                       const char *name);
-    extern ENOKI_IMPORT uint32_t jit_flags();
+extern ENOKI_IMPORT uint32_t jit_registry_put(JitBackend backend,
+                                              const char *domain, void *ptr);
+extern ENOKI_IMPORT void jit_registry_remove(JitBackend backend, void *ptr);
+extern ENOKI_IMPORT uint32_t jit_registry_get_id(JitBackend backend,
+                                                 const void *ptr);
+extern ENOKI_IMPORT void jit_registry_set_attr(JitBackend backend, void *ptr,
+                                               const char *name,
+                                               const void *value, size_t size);
+extern ENOKI_IMPORT uint32_t jit_var_registry_attr(JitBackend backend,
+                                                   VarType type,
+                                                   const char *domain,
+                                                   const char *name);
+extern ENOKI_IMPORT uint32_t jit_flags();
 };
 
 NAMESPACE_BEGIN(enoki)
@@ -127,43 +130,45 @@ void set_attr(Class *self, const char *name, const Value &value) {
     if constexpr (Class::Registered) {
         if constexpr (std::is_pointer_v<Value> &&
                       std::is_class_v<std::remove_pointer_t<Value>>) {
-            set_attr(self, name, jit_registry_get_id(value));
+            set_attr(self, name, jit_registry_get_id(Class::Backend, value));
         } else {
-            jit_registry_set_attr(self, name, &value, sizeof(Value));
+            jit_registry_set_attr(Class::Backend, self, name, &value,
+                                  sizeof(Value));
         }
     }
 }
 
 NAMESPACE_END(enoki)
 
-#define ENOKI_VCALL_REGISTER_IF(Class, Cond)                                   \
+#define ENOKI_VCALL_REGISTER_IF(Backend_, Class, Cond)                         \
     static constexpr const char *Domain = #Class;                              \
     static constexpr bool Registered = Cond;                                   \
+    static constexpr JitBackend Backend = Backend_;                            \
     void *operator new(size_t size) {                                          \
         void *ptr = ::operator new(size);                                      \
         if constexpr (Registered)                                              \
-            jit_registry_put(#Class, ptr);                                     \
+            jit_registry_put(Backend, #Class, ptr);                            \
         return ptr;                                                            \
     }                                                                          \
     void *operator new(size_t size, std::align_val_t align) {                  \
         void *ptr = ::operator new(size, align);                               \
         if constexpr (Registered)                                              \
-            jit_registry_put(#Class, ptr);                                     \
+            jit_registry_put(Backend, #Class, ptr);                            \
         return ptr;                                                            \
     }                                                                          \
     void operator delete(void *ptr) {                                          \
         if constexpr (Registered)                                              \
-            jit_registry_remove(ptr);                                          \
+            jit_registry_remove(Backend, ptr);                                 \
         ::operator delete(ptr);                                                \
     }                                                                          \
     void operator delete(void *ptr, std::align_val_t align) {                  \
         if constexpr (Registered)                                              \
-            jit_registry_remove(ptr);                                          \
+            jit_registry_remove(Backend, ptr);                                 \
         ::operator delete(ptr, align);                                         \
     }
 
-#define ENOKI_VCALL_REGISTER(Class)                                            \
-    ENOKI_VCALL_REGISTER_IF(Class, true)
+#define ENOKI_VCALL_REGISTER(Backend, Class)                                   \
+    ENOKI_VCALL_REGISTER_IF(Backend, Class, true)
 
 #define ENOKI_VCALL_METHOD(name)                                               \
     template <typename... Args> auto name(const Args &... args_) const {       \
