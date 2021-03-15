@@ -570,7 +570,7 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
         if (block_count * block_size != input_size)
             enoki_raise("block_sum(): input size must be a multiple of block_size!");
 
-        Derived output = empty<Derived>(block_count);
+        Derived output = empty_(block_count);
 
         jit_block_sum(Derived::Backend, Derived::Type, data(),
                       output.data(), block_count, block_size);
