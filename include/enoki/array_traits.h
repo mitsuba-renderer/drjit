@@ -286,6 +286,23 @@ template <typename T> using plain_t = typename detail::plain<T>::type;
 template <typename T>
 using struct_support_t = typename struct_support<std::decay_t<T>>::type;
 
+namespace detail {
+    template <typename T, typename = int> struct backend {
+        static constexpr JitBackend value = (JitBackend) 0u;
+    };
+
+    template <typename T> struct backend<T, enable_if_cuda_array_t<T>> {
+        static constexpr JitBackend value = JitBackend::CUDA;
+    };
+
+    template <typename T> struct backend<T, enable_if_llvm_array_t<T>> {
+        static constexpr JitBackend value = JitBackend::LLVM;
+    };
+}
+
+/// Determine the backend of an Enoki array (scalars evaluate to 0)
+template <typename T> constexpr JitBackend backend_v = detail::backend<T>::value;
+
 //! @}
 // -----------------------------------------------------------------------
 
