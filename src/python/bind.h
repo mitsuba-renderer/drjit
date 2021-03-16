@@ -484,6 +484,8 @@ auto bind_full(py::class_<Array> &cls, bool scalar_mode = false) {
     bind<ek::Quaternion<ek::float64_array_t<Guide>>>(Module, Scalar);
 
 #define ENOKI_BIND_MATRIX_TYPES_DIM(Module, Guide, Scalar, Dim)                \
+    bind<ek::Matrix<ek::int32_array_t<Guide>, Dim>>(Module, Scalar);           \
+    bind<ek::Matrix<ek::uint32_array_t<Guide>, Dim>>(Module, Scalar);          \
     bind<ek::Matrix<ek::float32_array_t<Guide>, Dim>>(Module, Scalar);         \
     bind<ek::Matrix<ek::float64_array_t<Guide>, Dim>>(Module, Scalar);
 
@@ -512,8 +514,12 @@ auto bind_full(py::class_<Array> &cls, bool scalar_mode = false) {
     bind<ek::mask_t<ek::Array<Guide1, 4>>>(Module, Scalar);                    \
     bind<ek::mask_t<ek::Array<ek::Array<Guide1, 4>, 4>>>(Module, Scalar);      \
     bind<ek::mask_t<ek::Array<ek::Array<Guide4, 4>, 4>>>(Module, Scalar);      \
+    bind<ek::Array<ek::int32_array_t<Guide1>,   4>>(Module, Scalar);           \
+    bind<ek::Array<ek::uint32_array_t<Guide1>,  4>>(Module, Scalar);           \
     bind<ek::Array<ek::float32_array_t<Guide1>, 4>>(Module, Scalar);           \
     bind<ek::Array<ek::float64_array_t<Guide1>, 4>>(Module, Scalar);           \
+    bind<ek::Array<ek::int32_array_t<Guide4>,   4>>(Module, Scalar);           \
+    bind<ek::Array<ek::uint32_array_t<Guide4>,  4>>(Module, Scalar);           \
     bind<ek::Array<ek::float32_array_t<Guide4>, 4>>(Module, Scalar);           \
     bind<ek::Array<ek::float64_array_t<Guide4>, 4>>(Module, Scalar);           \
     ENOKI_BIND_COMPLEX_TYPES(Module, Guide1, Scalar)                           \
