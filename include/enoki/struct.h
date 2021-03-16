@@ -153,6 +153,7 @@ template <typename... Ts> struct struct_support<ek_tuple<Ts...>> {
     }
     template <typename T, typename Func, size_t... Is>
     static ENOKI_INLINE void apply_1(T &v, Func func, std::index_sequence<Is...>) {
+        ENOKI_MARK_USED(func);
         (func(v.template get<Is>()), ...);
     }
     template <typename T1, typename T2, typename Func>
@@ -161,6 +162,7 @@ template <typename... Ts> struct struct_support<ek_tuple<Ts...>> {
     }
     template <typename T1, typename T2, typename Func, size_t... Is>
     static ENOKI_INLINE void apply_2(T1 &v1, T2 &v2, Func func, std::index_sequence<Is...>) {
+        ENOKI_MARK_USED(func);
         (func(v1.template get<Is>(), v2.template get<Is>()), ...);
     }
     template <typename T1, typename T2, typename T3, typename Func>
@@ -169,6 +171,7 @@ template <typename... Ts> struct struct_support<ek_tuple<Ts...>> {
     }
     template <typename T1, typename T2, typename T3, typename Func, size_t... Is>
     static ENOKI_INLINE void apply_3(T1 &v1, T2 &v2, T3 &v3, Func func, std::index_sequence<Is...>) {
+        ENOKI_MARK_USED(func);
         (func(v1.template get<Is>(), v2.template get<Is>(), v3.template get<Is>()), ...);
     }
     template <typename T, typename Func>

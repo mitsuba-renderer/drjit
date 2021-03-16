@@ -49,8 +49,9 @@ Result vcall_jit_reduce_impl(Func func, const Self &self_,
     using UInt32 = uint32_array_t<Self>;
     using Class = scalar_t<Self>;
     using Mask = mask_t<UInt32>;
-    constexpr size_t N = sizeof...(Args);
     static constexpr JitBackend Backend = detached_t<Mask>::Backend;
+    constexpr size_t N = sizeof...(Args);
+    ENOKI_MARK_USED(N);
 
     schedule(args...);
 

@@ -130,6 +130,7 @@ struct DiffVCall : CustomOp<DiffType, Result, ConstStr, Self, Func, Args...> {
             name.get(), func_rev, self, Base::grad_out(),
             Base::template value_in<3 + Is>()...);
 
+        ENOKI_MARK_USED(grad_in);
         (Base::template set_grad_in<3 + Is>(grad_in.template get<Is>()), ...);
     }
 
@@ -152,12 +153,11 @@ ENOKI_INLINE Result vcall_autodiff(const char *name, const Func &func,
                                    const Self &self, const Args &... args) {
     using Type = leaf_array_t<Result, Args...>;
     using Base = std::remove_const_t<std::remove_pointer_t<value_t<Self>>>;
-    static constexpr JitBackend Backend = detached_t<Self>::Backend;
 
     /* Only perform a differentiable vcall if there is a differentiable
        float type somewhere within the argument or return values */
     if constexpr (is_diff_array_v<Type> && std::is_floating_point_v<scalar_t<Type>>) {
-        auto [base, n_inst] = vcall_registry_get(Backend, Base::Domain);
+        auto [base, n_inst] = vcall_registry_get(backend_v<Self>, Base::Domain);
 
         // Complex approach in this header file only needed if > 1 instance
         if (n_inst > 1)

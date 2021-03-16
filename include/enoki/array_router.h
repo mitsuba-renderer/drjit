@@ -816,6 +816,9 @@ template <typename T> ENOKI_INLINE T empty(size_t size = 1) {
 /// Create a dummy memory region that can be used to capture computation symbolically
 template <typename T>
 ENOKI_INLINE decltype(auto) placeholder(const T &value, bool preserve_size, bool propagate_literals) {
+    ENOKI_MARK_USED(preserve_size);
+    ENOKI_MARK_USED(propagate_literals);
+
     if constexpr (is_jit_array_v<T>) {
         return value.placeholder_(preserve_size, propagate_literals);
     } else if constexpr (is_enoki_struct_v<T>) {
@@ -976,6 +979,7 @@ Target gather(Source &&source, const Index &index, const Mask &mask_ = true) {
                 return Target::template gather_<Permute>(
                     source, uint32_array_t<Source>(index), mask);
             } else {
+                ENOKI_MARK_USED(mask);
                 size_t offset = index * sizeof(value_t<Target>) * Target::Size;
                 if constexpr (std::is_pointer_v<std::decay_t<Source>>)
                     // Case 2.0.1: gather<Target>(const void *, size_t, ...)
@@ -1136,6 +1140,7 @@ void scatter_reduce(ReduceOp op, Target &&target, const Value &value,
 template <typename T, typename TargetType>
 decltype(auto) migrate(const T &value, TargetType target) {
     static_assert(std::is_enum_v<TargetType>);
+    ENOKI_MARK_USED(target);
 
     if constexpr (is_jit_array_v<T>) {
         if constexpr (array_depth_v<T> > 1) {
@@ -1462,6 +1467,9 @@ template <typename T> T replace_grad(const T &a, const T &b) {
 }
 
 template <typename T> void set_grad_enabled(T &value, bool state) {
+    ENOKI_MARK_USED(value);
+    ENOKI_MARK_USED(state);
+
     if constexpr (is_diff_array_v<T>) {
         if constexpr (array_depth_v<T> > 1) {
             for (size_t i = 0; i < value.size(); ++i)

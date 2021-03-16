@@ -105,8 +105,9 @@ Result vcall_jit_record_impl(const char *name, uint32_t n_inst,
                              const Func &func, const Self &self,
                              const Mask &mask, std::index_sequence<Is...>,
                              const Args &... args) {
-    constexpr size_t N = sizeof...(Args);
     static constexpr JitBackend Backend = detached_t<Self>::Backend;
+    constexpr size_t N = sizeof...(Args);
+    ENOKI_MARK_USED(N);
 
     char label[128];
 
@@ -168,6 +169,7 @@ Result
 vcall_jit_record_impl_scalar(Base *inst, const Func &func, const Mask &mask,
                              std::index_sequence<Is...>, const Args &... args) {
     constexpr size_t N = sizeof...(Args);
+    ENOKI_MARK_USED(N);
 
     // Evaluate the single instance with mask = true, mask side effects
     MaskRAIIGuard<Mask> guard(mask);

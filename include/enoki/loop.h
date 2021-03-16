@@ -172,6 +172,7 @@ protected:
         switch (m_state) {
             case 0:
                 jit_raise("Loop(\"%s\"): must be initialized first!", m_name.get());
+                break;
 
             case 1:
                 /* The loop condition has been evaluated now.  Wrap loop

@@ -1686,6 +1686,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
     }
 
     const Type grad_(bool fail_if_missing = false) const {
+        ENOKI_MARK_USED(fail_if_missing);
         if constexpr (IsEnabled)
             return detail::ad_grad<Type>(m_index, fail_if_missing);
         else
@@ -1693,11 +1694,15 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
     }
 
     void set_grad_(const Type &value, bool fail_if_missing = false) {
+        ENOKI_MARK_USED(value);
+        ENOKI_MARK_USED(fail_if_missing);
         if constexpr (IsEnabled)
             detail::ad_set_grad<Type>(m_index, value, fail_if_missing);
     }
 
     void accum_grad_(const Type &value, bool fail_if_missing = false) {
+        ENOKI_MARK_USED(value);
+        ENOKI_MARK_USED(fail_if_missing);
         if constexpr (IsEnabled)
             detail::ad_accum_grad<Type>(m_index, value, fail_if_missing);
     }
@@ -1710,6 +1715,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
     }
 
     Value entry(size_t offset) const {
+        ENOKI_MARK_USED(offset);
         if constexpr (std::is_scalar_v<Type>)
             return m_value;
         else
@@ -1735,6 +1741,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
     }
 
     void resize(size_t size) {
+        ENOKI_MARK_USED(size);
         if constexpr (is_dynamic_v<Type>)
             m_value.resize(size);
     }
