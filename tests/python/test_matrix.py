@@ -213,3 +213,50 @@ def test13_matmul_other(package):
     assert ek.allclose(m @ v, Array3f(12, 36, 60))
     assert ek.allclose(v @ m, Array3f(20, 28, 36))
     assert ek.allclose(v @ v, Float(30))
+
+
+@pytest.mark.parametrize("package", [ek.cuda, ek.llvm])
+@pytest.mark.parametrize("dest", ['numpy', 'torch', 'jax'])
+def test14_roundtrip(package, dest):
+    pytest.importorskip(dest)
+    Float, Array3f, Array4f = package.Float, package.Array3f, package.Array4f
+    Matrix3f, Matrix4f, Matrix44f = package.Matrix3f, package.Matrix4f, package.Matrix44f
+    prepare(package)
+
+    def to_dest(a):
+        if dest == 'numpy':
+            return a.numpy()
+        if dest == 'torch':
+            return a.torch()
+        if dest == 'jax':
+            return a.jax()
+
+    v = Array3f(
+        (1.0 + ek.arange(Float, 5)),
+        (1.0 + ek.arange(Float, 5)) * 2,
+        (1.0 + ek.arange(Float, 5)) * 3,
+    )
+    assert(v == Array3f(to_dest(v)))
+
+    m = Matrix3f([
+        Array3f([[1.0, 1.5], [2.0, 2.5], [3.0, 3.5]]),
+        Array3f([[1.0, 1.5], [2.0, 2.5], [3.0, 3.5]]) * 10,
+        Array3f([[1.0, 1.5], [2.0, 2.5], [3.0, 3.5]]) * 100
+    ])
+    assert(m ==Matrix3f(to_dest(m)))
+
+    m = Matrix4f([
+        Array4f([[1.0, 1.5], [2.0, 2.5], [3.0, 3.5], [4.0, 4.5]]),
+        Array4f([[1.0, 1.5], [2.0, 2.5], [3.0, 3.5], [4.0, 4.5]]) * 10,
+        Array4f([[1.0, 1.5], [2.0, 2.5], [3.0, 3.5], [4.0, 4.5]]) * 100,
+        Array4f([[1.0, 1.5], [2.0, 2.5], [3.0, 3.5], [4.0, 4.5]]) * 1000
+    ])
+    assert(m == Matrix4f(to_dest(m)))
+
+    m = Matrix44f([
+        [1.0, 2.0, 3.0, 4.0],
+        [1.0, 2.0, 3.0, 4.0],
+        [1.0, 2.0, 3.0, 4.0],
+        [1.0, 2.0, 3.0, 4.0]
+    ])
+    assert(m == Matrix44f(to_dest(m)))

@@ -1459,9 +1459,11 @@ def export_(a, migrate_to_host, version):
     if not a.IsJIT:
         # F-style strides
         temp, strides = a.Type.Size, [0] * ndim
+        # Enoki represents 3D arrays as 4D to leverage SIMD instructions
+        padding = 1 if a.IsScalar and a.IsMatrix and shape[0] == 3 else 0
         for i in range(ndim):
             strides[i] = temp
-            temp *= shape[i]
+            temp *= shape[i] + padding
 
         # Array is already contiguous in memory -- document its structure
         return {
@@ -1476,9 +1478,12 @@ def export_(a, migrate_to_host, version):
     else:
         # C-style strides
         temp, strides = a.Type.Size, [0] * ndim
-        for i in reversed(range(ndim)):
-            strides[i] = temp
+
+        # First dimension is the dynamic one, the rest should be in reversed order
+        for i in reversed(range(1, ndim)):
+            strides[ndim - i] = temp
             temp *= shape[i]
+        strides[0] = temp
 
         # JIT array -- requires extra transformations
         b = _ek.ravel(_ek.detach(a) if a.IsDiff else a)
