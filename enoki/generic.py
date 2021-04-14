@@ -1,5 +1,6 @@
 from enoki import Dynamic, Exception, VarType
 import enoki as _ek
+import weakref as _wr
 
 
 def _check1(a0):
@@ -1451,7 +1452,7 @@ def scatter_reduce_(self, op, target, index, mask):
 # -------------------------------------------------------------------
 
 
-def export_(a, migrate_to_host, version):
+def export_(a, migrate_to_host, version, owner_supported=True):
     shape = _ek.shape(a)
     ndim = len(shape)
     shape = tuple(reversed(shape))
@@ -1497,6 +1498,11 @@ def export_(a, migrate_to_host, version):
         elif b.IsLLVM:
             _ek.sync_thread()
 
+        if not owner_supported and a is not b:
+            # If the caller cannot deal with the 'owner' field, use
+            # a weak reference to keep 'b' alive while 'a' exists
+            _wr.finalize(a, lambda arg: None, b)
+
         record = {
             'shape': shape,
             'strides': tuple(strides),
@@ -1512,7 +1518,8 @@ def export_(a, migrate_to_host, version):
 
 @property
 def op_array_interface(a):
-    return a.export_(migrate_to_host=True, version=3)
+    return a.export_(migrate_to_host=True, version=3,
+                     owner_supported=False)
 
 
 @property
@@ -1521,6 +1528,20 @@ def op_cuda_array_interface(a):
         raise Exception("__cuda_array_interface__: only CUDA "
                         "arrays are supported!")
     return a.export_(migrate_to_host=False, version=2)
+
+
+def numpy(a):
+    import numpy
+    arr = numpy.array(a, copy=False)
+    if a.IsComplex:
+        arr = numpy.ascontiguousarray(arr)
+        if arr.dtype == numpy.float32:
+            return arr.view(numpy.complex64)[..., 0]
+        elif arr.dtype == numpy.float64:
+            return arr.view(numpy.complex128)[..., 0]
+        else:
+            raise Exception("Unsupported dtype for complex conversion!")
+    return arr
 
 
 def dlpack(a):
@@ -1536,24 +1557,9 @@ def dlpack(a):
         strides=strides
     )
 
-
 def torch(a):
     from torch.utils.dlpack import from_dlpack
     return from_dlpack(a.dlpack())
-
-
-def numpy(a):
-    import numpy
-    arr = numpy.array(a, copy=False)
-    if a.IsComplex:
-        arr = numpy.ascontiguousarray(arr)
-        if arr.dtype == numpy.float32:
-            return arr.view(numpy.complex64)[..., 0]
-        elif arr.dtype == numpy.float64:
-            return arr.view(numpy.complex128)[..., 0]
-        else:
-            raise Exception("Unsupported dtype for complex conversion!")
-    return arr
 
 
 def jax(a):
