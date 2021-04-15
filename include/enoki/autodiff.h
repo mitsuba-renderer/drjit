@@ -135,9 +135,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
     // -----------------------------------------------------------------------
 
     using Type = Type_;
-    using MaskType = DiffArray<mask_t<Type_>>;
+    using MaskType  = DiffArray<mask_t<Type_>>;
     using ArrayType = DiffArray;
-    using IndexType = DiffArray<uint32_array_t<Type_>>;
     using typename Base::Value;
     using typename Base::Scalar;
 
@@ -1412,38 +1411,42 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
     //! @{ \name Scatter/gather operations
     // -----------------------------------------------------------------------
 
-    template <bool Permute>
-    static DiffArray gather_(const DiffArray &src, const IndexType &offset,
-                             const MaskType &mask = true) {
+    template <bool Permute, typename Index, typename Mask>
+    static DiffArray gather_(const DiffArray &src, const Index &offset,
+                             const Mask &mask = true) {
         if constexpr (std::is_scalar_v<Type>) {
             enoki_raise("Array gather operation not supported for scalar array type.");
         } else {
-            Type result = gather<Type>(src.m_value, offset.m_value, mask.m_value);
+            Type result = gather<Type>(src.m_value, offset, mask);
             int32_t index_new = 0;
             if constexpr (IsEnabled) {
                 if (src.m_index > 0)
                     index_new = detail::ad_new_gather<Type>(
                         Permute ? "gather[permute]" : "gather",
-                        (uint32_t) width(result), src.m_index, offset.m_value,
-                        mask.m_value, Permute);
+                        (uint32_t) width(result), src.m_index,
+                        uint32_array_t<Type>(detach(offset)),
+                        mask_t<Type>(detach(mask)),
+                        Permute);
             }
             return create(index_new, std::move(result));
         }
     }
 
-    template <bool Permute>
-    void scatter_(DiffArray &dst, const IndexType &offset,
-                  const MaskType &mask = true) const {
+    template <bool Permute, typename Index, typename Mask>
+    void scatter_(DiffArray &dst, const Index &offset,
+                  const Mask &mask = true) const {
         if constexpr (std::is_scalar_v<Type>) {
             enoki_raise("Array scatter operation not supported for scalar array type.");
         } else {
-            scatter(dst.m_value, m_value, offset.m_value, mask.m_value);
+            scatter(dst.m_value, m_value, offset, mask);
             if constexpr (IsEnabled) {
                 if (m_index > 0 || (dst.m_index > 0 && !Permute)) {
                     int32_t index = detail::ad_new_scatter<Type>(
                         Permute ? "scatter[permute]" : "scatter", (uint32_t) width(dst),
-                        ReduceOp::None, m_index, dst.m_index, offset.m_value,
-                        mask.m_value, Permute);
+                        ReduceOp::None, m_index, dst.m_index,
+                        uint32_array_t<Type>(detach(offset)),
+                        mask_t<Type>(detach(mask)),
+                        Permute);
                     detail::ad_dec_ref<Type>(dst.m_index);
                     dst.m_index = index;
                 }
@@ -1451,17 +1454,20 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         }
     }
 
-    void scatter_reduce_(ReduceOp op, DiffArray &dst, const IndexType &offset,
-                         const MaskType &mask = true) const {
+    template <typename Index, typename Mask>
+    void scatter_reduce_(ReduceOp op, DiffArray &dst, const Index &offset,
+                         const Mask &mask = true) const {
         if constexpr (std::is_scalar_v<Type>) {
             enoki_raise("Array scatter_reduce operation not supported for scalar array type.");
         } else {
-            scatter_reduce(op, dst.m_value, m_value, offset.m_value, mask.m_value);
+            scatter_reduce(op, dst.m_value, m_value, offset, mask);
             if constexpr (IsEnabled) {
                 if (m_index > 0) { // safe to ignore dst.m_index in the case of scatter_reduce
                     int32_t index = detail::ad_new_scatter<Type>(
                         "scatter_reduce", (uint32_t) width(dst), op, m_index,
-                        dst.m_index, offset.m_value, mask.m_value, false);
+                        dst.m_index,
+                        uint32_array_t<Type>(detach(offset)),
+                        mask_t<Type>(detach(mask)), false);
                     detail::ad_dec_ref<Type>(dst.m_index);
                     dst.m_index = index;
                 }
@@ -1469,21 +1475,22 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         }
     }
 
-    template <bool>
-    static DiffArray gather_(const void *src, const IndexType &offset,
-                             const MaskType &mask = true) {
-        return create(0, gather<Type>(src, offset.m_value, mask.m_value));
+    template <bool, typename Index, typename Mask>
+    static DiffArray gather_(const void *src, const Index &offset,
+                             const Mask &mask = true) {
+        return create(0, gather<Type>(src, offset, mask));
     }
 
-    template <bool>
-    void scatter_(void *dst, const IndexType &offset,
-                  const MaskType &mask = true) const {
-        scatter(dst, m_value, offset.m_value, mask.m_value);
+    template <bool, typename Index, typename Mask>
+    void scatter_(void *dst, const Index &offset,
+                  const Mask &mask = true) const {
+        scatter(dst, m_value, offset, mask);
     }
 
-    void scatter_reduce_(ReduceOp op, void *dst, const IndexType &offset,
-                         const MaskType &mask = true) const {
-        scatter_reduce(op, dst, m_value, offset.m_value, mask.m_value);
+    template <typename Index, typename Mask>
+    void scatter_reduce_(ReduceOp op, void *dst, const Index &offset,
+                         const Mask &mask = true) const {
+        scatter_reduce(op, dst, m_value, offset, mask);
     }
 
     auto compress_() const {
