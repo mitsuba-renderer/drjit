@@ -185,11 +185,11 @@ struct DynamicArray
         return result;
     }
 
-    static DynamicArray linspace_(Value min, Value max, size_t size) {
+    static DynamicArray linspace_(Value min, Value max, size_t size, bool endpoint) {
         DynamicArray result;
         result.init_(size);
 
-        Scalar step = (max - min) / Scalar(size - 1);
+        Scalar step = (max - min) / Scalar(size - (endpoint ? 1 : 0));
 
         for (size_t i = 0; i < size; ++i) {
             if constexpr (std::is_floating_point_v<Scalar>)

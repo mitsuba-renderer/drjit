@@ -259,17 +259,17 @@ public:
     }
 
     /// Construct an array that linearly interpolates from min..max
-    static ENOKI_INLINE Derived linspace_(Scalar min, Scalar max, size_t) {
+    static ENOKI_INLINE Derived linspace_(Scalar min, Scalar max, size_t, bool endpoint) {
         if constexpr (Derived::Size == 1)
             return Derived(min);
         else if constexpr (std::is_floating_point_v<Scalar>)
             return linspace_impl_(
                 std::make_index_sequence<Derived::Size>(), min,
-                (max - min) / Scalar(Derived::Size - 1));
+                (max - min) / Scalar(Derived::Size - (endpoint ? 1 : 0)));
         else
             return linspace_impl_(
                 std::make_index_sequence<Derived::Size>(), (double) min,
-                ((double) max - (double) min) / double(Derived::Size - 1));
+                ((double) max - (double) min) / double(Derived::Size - (endpoint ? 1 : 0)));
     }
 
     /// Return the low array part (always a power of two)

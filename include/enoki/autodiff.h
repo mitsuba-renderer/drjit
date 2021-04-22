@@ -1531,8 +1531,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         return arange<Type>(start, stop, step);
     }
 
-    static DiffArray linspace_(Value min, Value max, size_t size) {
-        return linspace<Type>(min, max, size);
+    static DiffArray linspace_(Value min, Value max, size_t size, bool endpoint) {
+        return linspace<Type>(min, max, size, endpoint);
     }
 
     static DiffArray map_(void *ptr, size_t size, bool free = false) {

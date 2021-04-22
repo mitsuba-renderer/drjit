@@ -859,9 +859,9 @@ ENOKI_INLINE T identity(size_t size = 1) {
 }
 
 template <typename Array>
-ENOKI_INLINE Array linspace(scalar_t<Array> min, scalar_t<Array> max, size_t size = 1) {
+ENOKI_INLINE Array linspace(scalar_t<Array> min, scalar_t<Array> max, size_t size = 1, bool endpoint = true) {
     if constexpr (is_array_v<Array>)
-        return Array::linspace_(min, max, size);
+        return Array::linspace_(min, max, size, endpoint);
     else
         return min;
 }

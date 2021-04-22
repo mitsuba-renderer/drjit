@@ -1402,9 +1402,9 @@ def opaque_(cls, value, size):
     return result
 
 @classmethod
-def linspace_(cls, min, max, size=1):
+def linspace_(cls, min, max, size=1, endpoint=True):
     result = cls.empty_(size)
-    step = (max - min) / (len(result) - 1)
+    step = (max - min) / (len(result) - (1 if endpoint else 0))
     if cls.IsFloat:
         for i in range(len(result)):
             result[i] = min + step * i
