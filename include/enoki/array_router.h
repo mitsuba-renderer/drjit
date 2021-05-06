@@ -754,6 +754,10 @@ bool allclose(const T1 &a, const T2 &b, float rtol = 1e-5f, float atol = 1e-8f,
 //! @{ \name Initialization, loading/writing data
 // -----------------------------------------------------------------------
 
+/// Forward declaration of the detach and width routine
+template <bool UnderlyingType = true, typename T> decltype(auto) detach(T &&);
+template <typename T, typename... Ts> size_t width(const T &, const Ts& ...);
+
 template <typename T> ENOKI_INLINE T zero(size_t size) {
     ENOKI_MARK_USED(size);
     if constexpr (std::is_same_v<T, std::nullptr_t>) {
@@ -844,13 +848,21 @@ ENOKI_INLINE T full(const T2 &value, size_t size = 1) {
         return value;
 }
 
-template <typename T, typename T2>
-ENOKI_INLINE T opaque(const T2 &value, size_t size = 1) {
-    ENOKI_MARK_USED(size);
-    if constexpr (is_array_v<T>)
+template <typename T>
+T opaque(const T &value, size_t size = (size_t) -1) {
+    if constexpr (is_array_v<T>) {
         return T::Derived::opaque_(value, size);
-    else
+    } else if constexpr (is_enoki_struct_v<T>) {
+        T result;
+        struct_support_t<T>::apply_2(
+            result, value,
+            [=](auto &x1, auto &x2) {
+                x1 = opaque(x2, size);
+            });
+    } else {
+        ENOKI_MARK_USED(size);
         return value;
+    }
 }
 
 template <typename T, enable_if_t<!is_special_v<T>> = 0>
@@ -859,7 +871,8 @@ ENOKI_INLINE T identity(size_t size = 1) {
 }
 
 template <typename Array>
-ENOKI_INLINE Array linspace(scalar_t<Array> min, scalar_t<Array> max, size_t size = 1, bool endpoint = true) {
+ENOKI_INLINE Array linspace(scalar_t<Array> min, scalar_t<Array> max,
+                            size_t size = 1, bool endpoint = true) {
     if constexpr (is_array_v<Array>)
         return Array::linspace_(min, max, size, endpoint);
     else
@@ -947,9 +960,6 @@ namespace detail {
         return result;
     }
 }
-
-/// Forward declaration of the detach routine
-template <bool UnderlyingType = true, typename T> decltype(auto) detach(T &&);
 
 template <typename Target, bool Permute = false, typename Source,
           typename Index, typename Mask = mask_t<Index>>
@@ -1177,6 +1187,41 @@ decltype(auto) migrate(const T &value, TargetType target) {
         return result;
     } else {
         return (const T &) value;
+    }
+}
+
+template <typename ResultType = void, typename T>
+decltype(auto) get_slice(const T &value, size_t index = -1) {
+    if constexpr (array_depth_v<T> > 1) {
+        using Value = std::decay_t<decltype(get_slice(value.entry(0), index))>;
+        using Result = typename T::template ReplaceValue<Value>;
+        Result result;
+        if (Result::Size == Dynamic)
+            result = empty<Result>(value.size());
+        for (size_t i = 0; i < value.size(); ++i)
+            result.set_entry(i, get_slice(value.entry(i), index));
+        return result;
+    } else if constexpr (is_enoki_struct_v<T>) {
+        static_assert(!std::is_same_v<ResultType, void>,
+                      "get_slice(): return type should be specified for enoki struct!");
+        ResultType result;
+        struct_support_t<T>::apply_2(
+            value, result,
+            [index](auto const &x1, auto &x2) ENOKI_INLINE_LAMBDA {
+                x2 = get_slice(x1, index);
+            });
+        return result;
+    } else if constexpr (is_dynamic_array_v<T>) {
+        if (index == (size_t) -1) {
+            if (width(value) > 1)
+                enoki_raise("get_slice(): variable contains more than a single entry!");
+            index = 0;
+        }
+        return value.entry(index);
+    } else {
+        if (index != (size_t) -1 && index > 0)
+            enoki_raise("get_slice(): index out of bound!");
+        return value;
     }
 }
 

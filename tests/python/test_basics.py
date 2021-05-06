@@ -510,3 +510,43 @@ def test16_custom(cname):
     v5 = ek.gather(t, v4, index)
     ek.eval(v5)
     assert v5.state == v1.state and v5.inc == v1.inc
+
+
+def test17_opaque():
+    Float         = get_class('enoki.llvm.Float')
+    Array3f       = get_class('enoki.llvm.Array3f')
+    ScalarArray3f = get_class('enoki.scalar.Array3f')
+
+    values = (4.0, ScalarArray3f(3.0, 2.0, 4.0), Array3f(3.0, 2.0, 4.0))
+
+    for value in values:
+        v = ek.opaque(Array3f, value)
+        assert ek.width(v) == 1
+        assert ek.allclose(v, value)
+
+        v = ek.opaque(Array3f, value, 1)
+        assert ek.width(v) == 1
+        assert ek.allclose(v, value)
+
+        v = ek.opaque(Array3f, value, 10)
+        assert ek.width(v) == 10
+        assert ek.allclose(v, value)
+
+
+def test18_slice():
+    Float   = get_class('enoki.llvm.Float')
+    Array2f = get_class('enoki.llvm.Array2f')
+
+    a = ek.arange(Float, 10)
+    for i in range(10):
+        assert ek.slice(a, i) == i
+
+    a2 = Array2f(a, a * 10)
+    for i in range(10):
+        assert ek.slice(a2, i)[0] == i
+        assert ek.slice(a2, i)[1] == i * 10
+
+    a3 = (a, a * 10)
+    for i in range(10):
+        assert ek.slice(a3, i)[0] == i
+        assert ek.slice(a3, i)[1] == i * 10

@@ -636,6 +636,34 @@ def unravel(target_class, array):
     indices = arange(_ek.uint32_array_t(type(array)), len(array) // size)
     return gather(target_class, array, indices)
 
+
+def get_slice(value, index=-1, return_type=None):
+    t = type(value)
+    if _ek.array_depth_v(t) > 1 or issubclass(t, tuple) or issubclass(t, list):
+        size = len(value)
+        result = [None] * size
+        for i in range(size):
+            result[i] = get_slice(value[i], index)
+        return result
+    elif _ek.is_enoki_struct_v(a):
+        if return_type == None:
+            raise Exception('get_slice(): return type should be specified for enoki struct!')
+        result = return_type()
+        for k in type(value).ENOKI_STRUCT.keys():
+            setattr(result, k, get_slice(getattr(value, k), index))
+        return result
+    elif _ek.is_dynamic_array_v(value):
+        if index == -1:
+            if _ek.width(value) > 1:
+                raise Exception('get_slice(): variable contains more than a single entry!')
+            index = 0
+        return value.entry_(index)
+    else:
+        if index == 0:
+            raise Exception('get_slice(): index out of bound!')
+        return value
+
+
 # -------------------------------------------------------------------
 #                        Vertical operations
 # -------------------------------------------------------------------
@@ -2303,13 +2331,21 @@ def full(type_, value, size=1):
     else:
         return type_(value)
 
-def opaque(type_, value, size=1):
+
+def opaque(type_, value, size=-1):
     if not isinstance(type_, type):
         raise Exception('opaque(): Type expected as first argument')
-    elif issubclass(type_, ArrayBase):
+    value = type_(value)
+    if issubclass(type_, ArrayBase):
         return type_.opaque_(value, size)
+    elif _ek.is_enoki_struct_v(type_):
+        result = type_()
+        for k, v in type_.ENOKI_STRUCT.items():
+            setattr(result, k, opaque(v, getattr(value, k), size))
+        return result
     else:
         return type_(value)
+
 
 def linspace(type_, min, max, size=1, endpoint=True):
     if not isinstance(type_, type):
