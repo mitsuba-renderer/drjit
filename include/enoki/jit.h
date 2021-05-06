@@ -424,9 +424,13 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
             jit_var_new_literal(Backend, Type, &value, size, false));
     }
 
-    static Derived opaque_(const Value &value, size_t size = 1) {
-        return steal(
-            jit_var_new_literal(Backend, Type, &value, size, true));
+    static Derived opaque_(const Derived &value, size_t size) {
+        Derived result = value;
+        if (size != (size_t) -1 && value.size() != size)
+            result.resize(size);
+        // Variable must be fully evaluated to be accessible via a pointer
+        result.data();
+        return result;
     }
 
     static Derived arange_(ssize_t start, ssize_t stop, ssize_t step) {

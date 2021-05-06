@@ -754,6 +754,9 @@ bool allclose(const T1 &a, const T2 &b, float rtol = 1e-5f, float atol = 1e-8f,
 //! @{ \name Initialization, loading/writing data
 // -----------------------------------------------------------------------
 
+/// Forward declaration of the detach routine
+template <bool UnderlyingType = true, typename T> decltype(auto) detach(T &&);
+
 template <typename T> ENOKI_INLINE T zero(size_t size) {
     ENOKI_MARK_USED(size);
     if constexpr (std::is_same_v<T, std::nullptr_t>) {
@@ -844,13 +847,21 @@ ENOKI_INLINE T full(const T2 &value, size_t size = 1) {
         return value;
 }
 
-template <typename T, typename T2>
-ENOKI_INLINE T opaque(const T2 &value, size_t size = 1) {
-    ENOKI_MARK_USED(size);
-    if constexpr (is_array_v<T>)
+template <typename T>
+T opaque(const T &value, size_t size = (size_t) -1) {
+    if constexpr (is_array_v<T>) {
         return T::Derived::opaque_(value, size);
-    else
+    } else if constexpr (is_enoki_struct_v<T>) {
+        T result;
+        struct_support_t<T>::apply_2(
+            result, value,
+            [=](auto &x1, auto &x2) {
+                x1 = opaque(x2, size);
+            });
+    } else {
+        ENOKI_MARK_USED(size);
         return value;
+    }
 }
 
 template <typename T, enable_if_t<!is_special_v<T>> = 0>
@@ -859,7 +870,8 @@ ENOKI_INLINE T identity(size_t size = 1) {
 }
 
 template <typename Array>
-ENOKI_INLINE Array linspace(scalar_t<Array> min, scalar_t<Array> max, size_t size = 1, bool endpoint = true) {
+ENOKI_INLINE Array linspace(scalar_t<Array> min, scalar_t<Array> max,
+                            size_t size = 1, bool endpoint = true) {
     if constexpr (is_array_v<Array>)
         return Array::linspace_(min, max, size, endpoint);
     else
@@ -947,9 +959,6 @@ namespace detail {
         return result;
     }
 }
-
-/// Forward declaration of the detach routine
-template <bool UnderlyingType = true, typename T> decltype(auto) detach(T &&);
 
 template <typename Target, bool Permute = false, typename Source,
           typename Index, typename Mask = mask_t<Index>>

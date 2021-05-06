@@ -1389,16 +1389,8 @@ def full_(cls, value, size):
 @classmethod
 def opaque_(cls, value, size):
     result = cls()
-    if cls.Size == Dynamic:
-        result.init_(size)
-        for i in range(size):
-            result.set_entry_(i, value)
-    else:
-        if _ek.array_depth_v(value) != cls.Depth - 1:
-            value = _ek.opaque(cls.Value, value, size)
-
-        for i in range(cls.Size):
-            result.set_entry_(i, value)
+    for i in range(cls.Size):
+        result.set_entry_(i, _ek.opaque(cls.Value, value.entry_(i), size))
     return result
 
 @classmethod

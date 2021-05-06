@@ -2303,13 +2303,21 @@ def full(type_, value, size=1):
     else:
         return type_(value)
 
-def opaque(type_, value, size=1):
+
+def opaque(type_, value, size=-1):
     if not isinstance(type_, type):
         raise Exception('opaque(): Type expected as first argument')
-    elif issubclass(type_, ArrayBase):
+    value = type_(value)
+    if issubclass(type_, ArrayBase):
         return type_.opaque_(value, size)
+    elif _ek.is_enoki_struct_v(type_):
+        result = type_()
+        for k, v in type_.ENOKI_STRUCT.items():
+            setattr(result, k, opaque(v, getattr(value, k), size))
+        return result
     else:
         return type_(value)
+
 
 def linspace(type_, min, max, size=1, endpoint=True):
     if not isinstance(type_, type):

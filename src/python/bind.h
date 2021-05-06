@@ -159,7 +159,7 @@ auto bind_full(py::class_<Array> &cls, bool scalar_mode = false) {
     cls.attr("full_") = py::cpp_function(
         [](Scalar v, size_t size) { return ek::full<Array>(v, size); });
     cls.attr("opaque_") = py::cpp_function(
-        [](Scalar v, size_t size) { return ek::opaque<Array>(v, size); });
+        [](Array v, int size) { return ek::opaque(v, (size_t) size); });
 
     if constexpr (!Array::IsMask) {
         cls.attr("arange_") = py::cpp_function(&Array::arange_);
