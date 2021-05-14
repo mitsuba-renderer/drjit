@@ -636,6 +636,27 @@ def unravel(target_class, array):
     indices = arange(_ek.uint32_array_t(type(array)), len(array) // size)
     return gather(target_class, array, indices)
 
+
+def slice(value, index=-1):
+    if index == -1:
+        if _ek.width(value) > 1:
+            raise Exception('slice(): variable contains more than a single entry!')
+        index = 0
+    t = type(value)
+    if _ek.array_depth_v(t) > 1 or issubclass(t, tuple) or issubclass(t, list):
+        size = len(value)
+        result = [None] * size
+        for i in range(size):
+            result[i] = slice(value[i], index)
+        return result
+    elif issubclass(type(value), ArrayBase):
+        return value.entry_(index)
+    elif _ek.is_enoki_struct_v(a):
+        raise Exception('slice(): structs not supported!')
+    else:
+        return value
+
+
 # -------------------------------------------------------------------
 #                        Vertical operations
 # -------------------------------------------------------------------

@@ -532,3 +532,21 @@ def test17_opaque():
         assert ek.width(v) == 10
         assert ek.allclose(v, value)
 
+
+def test18_slice():
+    Float   = get_class('enoki.llvm.Float')
+    Array2f = get_class('enoki.llvm.Array2f')
+
+    a = ek.arange(Float, 10)
+    for i in range(10):
+        assert ek.slice(a, i) == i
+
+    a2 = Array2f(a, a * 10)
+    for i in range(10):
+        assert ek.slice(a2, i)[0] == i
+        assert ek.slice(a2, i)[1] == i * 10
+
+    a3 = (a, a * 10)
+    for i in range(10):
+        assert ek.slice(a3, i)[0] == i
+        assert ek.slice(a3, i)[1] == i * 10

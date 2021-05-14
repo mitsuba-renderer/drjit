@@ -754,8 +754,9 @@ bool allclose(const T1 &a, const T2 &b, float rtol = 1e-5f, float atol = 1e-8f,
 //! @{ \name Initialization, loading/writing data
 // -----------------------------------------------------------------------
 
-/// Forward declaration of the detach routine
+/// Forward declaration of the detach and width routine
 template <bool UnderlyingType = true, typename T> decltype(auto) detach(T &&);
+template <typename T, typename... Ts> size_t width(const T &, const Ts& ...);
 
 template <typename T> ENOKI_INLINE T zero(size_t size) {
     ENOKI_MARK_USED(size);
@@ -1186,6 +1187,31 @@ decltype(auto) migrate(const T &value, TargetType target) {
         return result;
     } else {
         return (const T &) value;
+    }
+}
+
+template <typename T>
+decltype(auto) slice(const T &value, size_t index = -1) {
+    if (index == (size_t) -1) {
+        if(width(value) > 1)
+            enoki_raise("slice(): variable contains more than a single entry!");
+        index = 0;
+    }
+    if constexpr (array_depth_v<T> > 1) {
+        using Value = decltype(slice(value.entry(0), index));
+        using Result = typename T::template ReplaceValue<Value>;
+        Result result;
+        if (Result::Size == Dynamic)
+            result = empty<Result>(value.size());
+        for (size_t i = 0; i < value.size(); ++i)
+            result.set_entry(i, slice(value.entry(i), index));
+        return result;
+    } else if constexpr (is_array_v<T>) {
+        return value.entry(index);
+    } else if constexpr (is_enoki_struct_v<T>) {
+        enoki_raise("slice(): structs are not supported!");
+    } else {
+        return value;
     }
 }
 
