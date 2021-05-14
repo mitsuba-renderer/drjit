@@ -79,3 +79,14 @@ ENOKI_TEST(test03_scatter_gather) {
     assert(c1.d.y() == Float64X(3, 4, 2, 0, 0));
     assert(c1.o.x() == FloatX(0, 0, 1, 0, 0));
 }
+
+ENOKI_TEST(test04_slice) {
+    Custom3fX c = zero<Custom3fX>(5);
+    c.o.x() = linspace<FloatX>(0, 1, 5);
+    c.i = arange<Int32X>(5);
+
+    Custom3f c3 = get_slice<Custom3f>(c, 3);
+
+    assert(c3.o.x() == 0.75f);
+    assert(c3.i == 3);
+}

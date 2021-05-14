@@ -637,23 +637,30 @@ def unravel(target_class, array):
     return gather(target_class, array, indices)
 
 
-def slice(value, index=-1):
-    if index == -1:
-        if _ek.width(value) > 1:
-            raise Exception('slice(): variable contains more than a single entry!')
-        index = 0
+def get_slice(value, index=-1, return_type=None):
     t = type(value)
     if _ek.array_depth_v(t) > 1 or issubclass(t, tuple) or issubclass(t, list):
         size = len(value)
         result = [None] * size
         for i in range(size):
-            result[i] = slice(value[i], index)
+            result[i] = get_slice(value[i], index)
         return result
-    elif issubclass(type(value), ArrayBase):
-        return value.entry_(index)
     elif _ek.is_enoki_struct_v(a):
-        raise Exception('slice(): structs not supported!')
+        if return_type == None:
+            raise Exception('get_slice(): return type should be specified for enoki struct!')
+        result = return_type()
+        for k in type(value).ENOKI_STRUCT.keys():
+            setattr(result, k, get_slice(getattr(value, k), index))
+        return result
+    elif _ek.is_dynamic_array_v(value):
+        if index == -1:
+            if _ek.width(value) > 1:
+                raise Exception('get_slice(): variable contains more than a single entry!')
+            index = 0
+        return value.entry_(index)
     else:
+        if index == 0:
+            raise Exception('get_slice(): index out of bound!')
         return value
 
 
