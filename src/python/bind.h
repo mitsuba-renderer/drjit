@@ -76,7 +76,6 @@ void bind_basic_methods(py::class_<Array> &cls) {
     if constexpr (ek::is_dynamic_array_v<Array> ||
                   (!ek::is_jit_array_v<Array> && !ek::is_mask_v<Array>))
         cls.def("data_", [](const Array &a) {
-            enoki::eval(a);
             return (uintptr_t) a.data();
         });
 
@@ -166,7 +165,7 @@ auto bind_full(py::class_<Array> &cls, bool scalar_mode = false) {
     cls.attr("full_") = py::cpp_function(
         [](Scalar v, size_t size) { return ek::full<Array>(v, size); });
     cls.attr("opaque_") = py::cpp_function(
-        [](Array v, ssize_t size) { return ek::opaque(v, (size_t) size); });
+        [](Scalar v, size_t size) { return ek::opaque<Array>(v, size); });
 
     if constexpr (!Array::IsMask) {
         cls.attr("arange_") = py::cpp_function(&Array::arange_);
@@ -329,6 +328,7 @@ auto bind_full(py::class_<Array> &cls, bool scalar_mode = false) {
 
     if constexpr (ek::is_jit_array_v<Array>) {
         cls.def("resize_", [](Array &value, size_t size) { value.resize(size); });
+        cls.def("copy_", [](Array &value) { return value.copy(); });
 
         if constexpr (!Array::IsMask)
             cls.def("block_sum_", &Array::block_sum_);

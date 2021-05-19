@@ -1389,8 +1389,13 @@ def full_(cls, value, size):
 @classmethod
 def opaque_(cls, value, size):
     result = cls()
-    for i in range(cls.Size):
-        result.set_entry_(i, _ek.opaque(cls.Value, value.entry_(i), size))
+    if _ek.is_static_array_v(value):
+        assert type(value).Size == cls.Size
+        for i in range(cls.Size):
+            result.set_entry_(i, _ek.opaque(cls.Value, value.entry_(i), size))
+    else:
+        for i in range(cls.Size):
+            result.set_entry_(i, _ek.opaque(cls.Value, value, size))
     return result
 
 @classmethod

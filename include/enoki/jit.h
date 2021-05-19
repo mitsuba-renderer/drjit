@@ -92,7 +92,7 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
         else
             av = jit_registry_get_id(Backend, value);
 
-        m_index = jit_var_new_literal(Backend, Type, &av);
+        m_index = jit_var_new_literal(Backend, Type, &av, 1, 0, IsClass);
     }
 
     template <typename... Ts, enable_if_t<(sizeof...(Ts) > 1 &&
@@ -424,14 +424,9 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
             jit_var_new_literal(Backend, Type, &value, size, false));
     }
 
-    static Derived opaque_(const Derived &value, size_t size) {
-        Derived result = value;
-        if (size != (size_t) -1 && value.size() != size)
-            result.resize(size);
-        result = result.copy();
-        // Variable must be fully evaluated to be accessible via a pointer
-        result.data();
-        return result;
+    static Derived opaque_(Value value, size_t size) {
+        return steal(
+            jit_var_new_literal(Backend, Type, &value, size, true));
     }
 
     static Derived arange_(ssize_t start, ssize_t stop, ssize_t step) {

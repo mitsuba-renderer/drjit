@@ -754,9 +754,10 @@ bool allclose(const T1 &a, const T2 &b, float rtol = 1e-5f, float atol = 1e-8f,
 //! @{ \name Initialization, loading/writing data
 // -----------------------------------------------------------------------
 
-/// Forward declaration of the detach and width routine
+/// Forward declarations
 template <bool UnderlyingType = true, typename T> decltype(auto) detach(T &&);
 template <typename T, typename... Ts> size_t width(const T &, const Ts& ...);
+template <typename T> bool schedule(const T &value);
 
 template <typename T> ENOKI_INLINE T zero(size_t size) {
     ENOKI_MARK_USED(size);
@@ -848,8 +849,9 @@ ENOKI_INLINE T full(const T2 &value, size_t size = 1) {
         return value;
 }
 
-template <typename T>
-T opaque(const T &value, size_t size = (size_t) -1) {
+template <typename T, typename T2>
+ENOKI_INLINE T opaque(const T2 &value, size_t size = 1) {
+    ENOKI_MARK_USED(size);
     if constexpr (is_array_v<T>) {
         return T::Derived::opaque_(value, size);
     } else if constexpr (is_enoki_struct_v<T>) {
@@ -859,10 +861,36 @@ T opaque(const T &value, size_t size = (size_t) -1) {
             [=](auto &x1, auto &x2) {
                 x1 = opaque(x2, size);
             });
+        return result;
     } else {
-        ENOKI_MARK_USED(size);
         return value;
     }
+}
+
+ENOKI_INLINE void make_opaque() { }
+template <typename T> ENOKI_INLINE void make_opaque(T &value) {
+     if constexpr (array_depth_v<T> > 1) {
+        for (size_t i = 0; i < value.size(); ++i)
+            make_opaque(value.entry(i));
+    } else if constexpr (is_enoki_struct_v<T>) {
+        struct_support_t<T>::apply_1(
+            value,
+            [&](auto &x) ENOKI_INLINE_LAMBDA {
+                make_opaque(x);
+            });
+    } else if constexpr (is_diff_array_v<T>) {
+        make_opaque(value.detach_());
+    } else if constexpr (is_jit_array_v<T>) {
+        // value = value.opaque_();
+        if (value.is_literal()) {
+            value = value.copy();
+            value.data();
+        }
+    }
+}
+template <typename T1, typename... Ts, enable_if_t<sizeof...(Ts) != 0> = 0>
+ENOKI_INLINE void make_opaque(T1 &value, Ts&... values) {
+    ( make_opaque(value), make_opaque(values...) );
 }
 
 template <typename T, enable_if_t<!is_special_v<T>> = 0>
@@ -1184,7 +1212,9 @@ decltype(auto) migrate(const T &value, TargetType target) {
 }
 
 template <typename ResultType = void, typename T>
-decltype(auto) get_slice(const T &value, size_t index = -1) {
+decltype(auto) get_slice(const T &value, size_t index = -1, bool is_opaque = false) {
+    if (!is_opaque)
+        schedule(value);
     if constexpr (array_depth_v<T> > 1) {
         using Value = std::decay_t<decltype(get_slice(value.entry(0), index))>;
         using Result = typename T::template ReplaceValue<Value>;
@@ -1192,7 +1222,7 @@ decltype(auto) get_slice(const T &value, size_t index = -1) {
         if (Result::Size == Dynamic)
             result = empty<Result>(value.size());
         for (size_t i = 0; i < value.size(); ++i)
-            result.set_entry(i, get_slice(value.entry(i), index));
+            result.set_entry(i, get_slice(value.entry(i), index, is_opaque));
         return result;
     } else if constexpr (is_enoki_struct_v<T>) {
         static_assert(!std::is_same_v<ResultType, void>,
@@ -1200,8 +1230,8 @@ decltype(auto) get_slice(const T &value, size_t index = -1) {
         ResultType result;
         struct_support_t<T>::apply_2(
             value, result,
-            [index](auto const &x1, auto &x2) ENOKI_INLINE_LAMBDA {
-                x2 = get_slice(x1, index);
+            [index, is_opaque](auto const &x1, auto &x2) ENOKI_INLINE_LAMBDA {
+                x2 = get_slice(x1, index, is_opaque);
             });
         return result;
     } else if constexpr (is_dynamic_array_v<T>) {
@@ -1210,7 +1240,10 @@ decltype(auto) get_slice(const T &value, size_t index = -1) {
                 enoki_raise("get_slice(): variable contains more than a single entry!");
             index = 0;
         }
-        return value.entry(index);
+        if (!is_opaque || is_cuda_array_v<T>)
+            return scalar_t<T>(value.entry(index));
+        else
+            return scalar_t<T>(value.data()[index]);
     } else {
         if (index != (size_t) -1 && index > 0)
             enoki_raise("get_slice(): index out of bound!");
