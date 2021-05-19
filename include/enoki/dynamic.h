@@ -170,20 +170,8 @@ struct DynamicArray
         return result;
     }
 
-    static DynamicArray opaque_(const DynamicArray &v, size_t size) {
-        if constexpr (!is_array_v<Value>) {
-            if (size == (size_t) -1 || v.size() == size)
-                return v;
-            else if (v.size() == 1)
-                return full_(v.entry(0), size);
-            else
-                enoki_raise("opaque(): value doesn't have the right size.");
-        } else {
-            DynamicArray result = DynamicArray::empty_(v.size());
-            for (size_t i = 0; i < v.size(); ++i)
-                result.entry(i) = opaque(v.entry(i), size);
-            return result;
-        }
+    static DynamicArray opaque_(const Value &v, size_t size) {
+        return full_(v, size);
     }
 
     static DynamicArray arange_(ssize_t start, ssize_t stop, ssize_t step) {

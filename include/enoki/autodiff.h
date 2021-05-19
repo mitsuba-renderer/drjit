@@ -1516,8 +1516,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         return full<Type>(value, size);
     }
 
-    static DiffArray opaque_(DiffArray value, size_t size) {
-        return opaque(detach(value), size);
+    static DiffArray opaque_(Value value, size_t size) {
+        return opaque<Type>(value, size);
     }
 
     static DiffArray arange_(ssize_t start, ssize_t stop, ssize_t step) {

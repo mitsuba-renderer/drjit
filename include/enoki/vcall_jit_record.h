@@ -55,7 +55,10 @@ void write_indices(ek_vector<uint32_t> &indices, T &value, uint32_t &offset) {
 template <typename Mask> struct VCallRAIIGuard {
     static constexpr JitBackend Backend = detached_t<Mask>::Backend;
 
-    VCallRAIIGuard(const char *label) {
+    VCallRAIIGuard(const char *label, uint32_t self) {
+        self_before = jit_vcall_self(Backend);
+        jit_vcall_set_self(Backend, self);
+
         flag_before = jit_flag(JitFlag::Recording);
         jit_set_flag(JitFlag::Recording, 1);
 
@@ -77,6 +80,7 @@ template <typename Mask> struct VCallRAIIGuard {
     }
 
     ~VCallRAIIGuard() {
+        jit_vcall_set_self(Backend, self_before);
         jit_var_mask_pop(Backend);
 #if defined(ENOKI_VCALL_DEBUG)
         jit_prefix_pop(Backend);
@@ -85,6 +89,7 @@ template <typename Mask> struct VCallRAIIGuard {
     }
 
     int flag_before;
+    uint32_t self_before;
 };
 
 template <typename Mask> struct MaskRAIIGuard {
@@ -127,7 +132,7 @@ Result vcall_jit_record_impl(const char *name, uint32_t n_inst,
             if (!base)
                 continue;
 
-            VCallRAIIGuard<Mask> guard(label);
+            VCallRAIIGuard<Mask> guard(label, i);
 
             if constexpr (std::is_same_v<Result, std::nullptr_t>) {
                 func(base, (set_mask_true<Is, N>(args))...);
