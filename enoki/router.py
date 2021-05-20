@@ -2346,18 +2346,23 @@ def opaque(type_, value, size=1):
     else:
         return type_(value)
 
+
 def make_opaque(*args):
     for a in args:
         t = type(a)
         if issubclass(t, ArrayBase):
             if _ek.array_depth_v(t) > 1:
+                res = t()
                 for i in range(a.Size):
-                    make_opaque(value[i])
+                    tmp = a[i]
+                    make_opaque(tmp)
+                    res[i] = tmp
+                a.assign(res)
             elif _ek.is_diff_array_v(t):
                 make_opaque(a.detach_())
             elif _ek.is_jit_array_v(t):
-                if a.is_literal():
-                    a = a.copy_()
+                if a.is_literal_():
+                    a.assign(a.copy_())
                     a.data_()
         elif _ek.is_enoki_struct_v(t):
             for k in t.ENOKI_STRUCT.keys():
@@ -2368,6 +2373,7 @@ def make_opaque(*args):
         elif issubclass(t, _Mapping):
             for k, v in a.items():
                 make_opaque(v)
+
 
 def linspace(type_, min, max, size=1, endpoint=True):
     if not isinstance(type_, type):

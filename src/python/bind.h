@@ -329,6 +329,7 @@ auto bind_full(py::class_<Array> &cls, bool scalar_mode = false) {
     if constexpr (ek::is_jit_array_v<Array>) {
         cls.def("resize_", [](Array &value, size_t size) { value.resize(size); });
         cls.def("copy_", [](Array &value) { return value.copy(); });
+        cls.def("is_literal_", [](Array &value) { return value.is_literal(); });
 
         if constexpr (!Array::IsMask)
             cls.def("block_sum_", &Array::block_sum_);
