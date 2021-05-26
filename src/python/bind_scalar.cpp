@@ -24,8 +24,11 @@ void export_scalar(py::module_ &m) {
 
     bind_pcg32<uint64_t>(scalar);
 
-    struct LoopDummy { LoopDummy(py::args) { }};
+    struct LoopDummy { LoopDummy(const char*, py::args) { }};
     py::class_<LoopDummy>(scalar, "Loop")
-        .def(py::init<py::args>())
-        .def("cond", [](LoopDummy&, bool value) { return value; });
+        .def(py::init<const char*, py::args>())
+        .def("put", [](LoopDummy&, py::args) {})
+        .def("init", [](LoopDummy&) {})
+        .def("__call__", [](LoopDummy&) { return false; })
+        .def("__call__", [](LoopDummy&, bool value) { return value; });
 }
