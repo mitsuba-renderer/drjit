@@ -357,7 +357,8 @@ auto clamp(const Value1 &value, const Value2 &min, const Value3 &max) {
 }
 
 namespace detail {
-    template <typename T> using has_zero = decltype(T().zero_(0));
+    template <typename T> using has_zero   = decltype(T().zero_(0));
+    template <typename T> using has_opaque = decltype(T().opaque_());
 
     template <typename Array> ENOKI_INLINE Array sign_mask() {
         using Scalar = scalar_t<Array>;
@@ -886,6 +887,8 @@ template <typename T> ENOKI_INLINE void make_opaque(T &value) {
             value = value.copy();
             value.data();
         }
+    } else if constexpr (is_detected_v<detail::has_opaque, T>) {
+        value.opaque_();
     }
 }
 template <typename T1, typename... Ts, enable_if_t<sizeof...(Ts) != 0> = 0>
@@ -1212,9 +1215,8 @@ decltype(auto) migrate(const T &value, TargetType target) {
 }
 
 template <typename ResultType = void, typename T>
-decltype(auto) get_slice(const T &value, size_t index = -1, bool is_opaque = false) {
-    if (!is_opaque)
-        schedule(value);
+decltype(auto) get_slice(const T &value, size_t index = -1) {
+    schedule(value);
     if constexpr (array_depth_v<T> > 1) {
         using Value = std::decay_t<decltype(get_slice(value.entry(0), index))>;
         using Result = typename T::template ReplaceValue<Value>;
@@ -1222,7 +1224,7 @@ decltype(auto) get_slice(const T &value, size_t index = -1, bool is_opaque = fal
         if (Result::Size == Dynamic)
             result = empty<Result>(value.size());
         for (size_t i = 0; i < value.size(); ++i)
-            result.set_entry(i, get_slice(value.entry(i), index, is_opaque));
+            result.set_entry(i, get_slice(value.entry(i), index));
         return result;
     } else if constexpr (is_enoki_struct_v<T>) {
         static_assert(!std::is_same_v<ResultType, void>,
@@ -1230,8 +1232,8 @@ decltype(auto) get_slice(const T &value, size_t index = -1, bool is_opaque = fal
         ResultType result;
         struct_support_t<T>::apply_2(
             value, result,
-            [index, is_opaque](auto const &x1, auto &x2) ENOKI_INLINE_LAMBDA {
-                x2 = get_slice(x1, index, is_opaque);
+            [index](auto const &x1, auto &x2) ENOKI_INLINE_LAMBDA {
+                x2 = get_slice(x1, index);
             });
         return result;
     } else if constexpr (is_dynamic_array_v<T>) {
@@ -1240,10 +1242,7 @@ decltype(auto) get_slice(const T &value, size_t index = -1, bool is_opaque = fal
                 enoki_raise("get_slice(): variable contains more than a single entry!");
             index = 0;
         }
-        if (!is_opaque || is_cuda_array_v<T>)
-            return scalar_t<T>(value.entry(index));
-        else
-            return scalar_t<T>(value.data()[index]);
+        return scalar_t<T>(value.entry(index));
     } else {
         if (index != (size_t) -1 && index > 0)
             enoki_raise("get_slice(): index out of bound!");
