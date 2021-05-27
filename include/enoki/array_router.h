@@ -1004,7 +1004,7 @@ Target gather(Source &&source, const Index &index, const Mask &mask_ = true) {
                     return load<Target>((const uint8_t *)source.data() + offset);
             }
         } else if constexpr (array_depth_v<Target> == array_depth_v<Index>) {
-            if constexpr (Target::IsPacked && is_array_v<Source>)
+            if constexpr ((Target::IsPacked || Target::IsRecursive) && is_array_v<Source>)
                 // Case 2.1.0: gather<FloatC>(const FloatP&, ...)
                 return Target::template gather_<Permute>(source.data(), index, mask);
             else
