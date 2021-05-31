@@ -267,30 +267,44 @@ def matrix_to_quat(m):
 
 
 def quat_to_euler(q):
-    q_y_2 = _ek.sqr(q.y)
-
-    sinr_cosp = 2 * _ek.fmadd(q.w, q.x, q.y * q.z)
-    cosr_cosp = _ek.fnmadd(2, _ek.fmadd(q.x, q.x, q_y_2), 1)
-    roll = _ek.atan2(sinr_cosp, cosr_cosp)
-
-    # pitch (y-axis rotation)
-    sinp = 2 * _ek.fmsub(q.w, q.y, q.z * q.x)
-    if (_ek.abs(sinp) >= 1.0):
-        pitch = _ek.copysign(0.5 * _ek.Pi, sinp)
-    else:
-        pitch = _ek.asin(sinp)
-
-    # yaw (z-axis rotation)
-    siny_cosp = 2 * _ek.fmadd(q.w, q.z, q.x * q.y)
-    cosy_cosp = _ek.fnmadd(2, _ek.fmadd(q.z, q.z, q_y_2), 1)
-    yaw = _ek.atan2(siny_cosp, cosy_cosp)
-
     name = _ek.detail.array_name('Array', q.Type, [3], q.IsScalar)
     module = _modules.get(q.__module__)
     Array3f = getattr(module, name)
 
+    sinp = 2 * _ek.fmsub(q.w, q.y, q.z * q.x)
+    gimbal_lock = _ek.abs(sinp) > (1.0 - 5e-8)
+
+    # roll (x-axis rotation)
+    q_y_2 = _ek.sqr(q.y)
+    sinr_cosp = 2 * _ek.fmadd(q.w, q.x, q.y * q.z)
+    cosr_cosp = _ek.fnmadd(2, _ek.fmadd(q.x, q.x, q_y_2), 1)
+    roll = _ek.select(gimbal_lock, 2 * _ek.atan2(q.x, q.w), _ek.atan2(sinr_cosp, cosr_cosp))
+
+    # pitch (y-axis rotation)
+    pitch = _ek.select(gimbal_lock, _ek.copysign(0.5 * _ek.Pi, sinp), _ek.asin(sinp))
+
+    # yaw (z-axis rotation)
+    siny_cosp = 2 * _ek.fmadd(q.w, q.z, q.x * q.y)
+    cosy_cosp = _ek.fnmadd(2, _ek.fmadd(q.z, q.z, q_y_2), 1)
+    yaw = _ek.select(gimbal_lock, 0, _ek.atan2(siny_cosp, cosy_cosp))
+
     return Array3f(roll, pitch, yaw)
 
+def euler_to_quat(a):
+    name = _ek.detail.array_name('Quaternion', a.Type, [4], a.IsScalar)
+    module = _modules.get(a.__module__)
+    Quat4f = getattr(module, name)
+
+    angles = a / 2.0
+    sr, cr = _ek.sincos(angles.x)
+    sp, cp = _ek.sincos(angles.y)
+    sy, cy = _ek.sincos(angles.z)
+
+    w = cr*cp*cy + sr*sp*sy
+    x = sr*cp*cy - cr*sp*sy
+    y = cr*sp*cy + sr*cp*sy
+    z = cr*cp*sy - sr*sp*cy
+    return Quat4f(x, y, z, w)
 
 def transform_decompose(a, it=10):
     if not _ek.is_matrix_v(a):

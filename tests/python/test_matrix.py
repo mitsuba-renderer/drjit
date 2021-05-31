@@ -214,7 +214,6 @@ def test13_matmul_other(package):
     assert ek.allclose(v @ m, Array3f(20, 28, 36))
     assert ek.allclose(v @ v, Float(30))
 
-
 @pytest.mark.parametrize("package", [ek.cuda, ek.llvm])
 @pytest.mark.parametrize("dest", ['numpy', 'torch', 'jax'])
 def test14_roundtrip(package, dest):
@@ -260,3 +259,23 @@ def test14_roundtrip(package, dest):
         [1.0, 2.0, 3.0, 4.0]
     ])
     assert(m == Matrix44f(to_dest(m)))
+
+@pytest.mark.parametrize("package", [ek.scalar])
+def test15_quat_to_euler(package):
+    Quaternion4f, Array3f, Float = package.Quaternion4f, package.Array3f, package.Float
+    prepare(package)
+
+    # Gimbal lock at +pi/2
+    q = Quaternion4f(0, 1.0 / np.sqrt(2), 0, 1.0 / np.sqrt(2))
+    assert(ek.allclose(ek.quat_to_euler(q), Array3f(0, np.pi / 2, 0)))
+    # Gimbal lock at -pi/2
+    q = Quaternion4f(0, -1.0 / np.sqrt(2), 0, 1.0 / np.sqrt(2))
+    assert(ek.allclose(ek.quat_to_euler(q), Array3f(0, -np.pi / 2, 0)))
+    # Quaternion without gimbal lock
+    q = Quaternion4f(0.15849363803863525, 0.5915063619613647, 0.15849363803863525, 0.7745190262794495)
+    e = Array3f(np.pi / 3, np.pi / 3, np.pi / 3)
+    assert(ek.allclose(ek.quat_to_euler(q), e))
+    # Round trip
+    assert(ek.allclose(e, ek.quat_to_euler(ek.euler_to_quat(e))))
+    # Euler -> Quat
+    assert(ek.allclose(q, ek.euler_to_quat(e)))
