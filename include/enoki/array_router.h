@@ -964,11 +964,9 @@ namespace detail {
 template <typename Target, bool Permute = false, typename Source,
           typename Index, typename Mask = mask_t<Index>>
 Target gather(Source &&source, const Index &index, const Mask &mask_ = true) {
-    // Broadcast mask to match shape of Index but scalar type of Target (for Packet)
-    detached_t<mask_t<plain_t<replace_scalar_t<Index, scalar_t<Target>>>>> mask = detach(mask_);
-    if constexpr (is_diff_array_v<Index>) {
-        return gather<Target, Permute>(source, detach(index), mask);
-    } else if constexpr (array_depth_v<Source> > 1) {
+    // Broadcast mask to match shape of Index
+    mask_t<plain_t<replace_scalar_t<Index, scalar_t<Target>>>> mask = mask_;
+    if constexpr (array_depth_v<Source> > 1) {
         // Case 1: gather<Vector3fC>(const Vector3fC&, ...)
         static_assert(array_size_v<Source> == array_size_v<Target>,
                       "When gathering from a nested array source, the source "
@@ -1048,10 +1046,8 @@ template <bool Permute = false, typename Target, typename Value, typename Index,
 void scatter(Target &&target, const Value &value, const Index &index,
              const Mask &mask_ = true) {
     // Broadcast mask to match shape of Index
-    detached_t<mask_t<plain_t<Index>>> mask = detach(mask_);
-    if constexpr (is_diff_array_v<Index>) {
-        scatter<Permute>(target, value, detach(index), mask);
-    } else if constexpr (std::is_same_v<std::decay_t<Target>, std::nullptr_t>) {
+    mask_t<plain_t<Index>> mask = mask_;
+    if constexpr (std::is_same_v<std::decay_t<Target>, std::nullptr_t>) {
         return; // Used by virtual function call dispatch when there is no return value
     } else if constexpr (array_depth_v<Target> > 1) {
         // Case 1: scatter(Vector3fC&, const Vector3fC &...)
@@ -1102,13 +1098,10 @@ void scatter(Target &&target, const Value &value, const Index &index,
     }
 }
 
-template <typename Target, typename Value, typename Index,
-          typename Mask = mask_t<Value>>
+template <typename Target, typename Value, typename Index>
 void scatter_reduce(ReduceOp op, Target &&target, const Value &value,
-                    const Index &index, const Mask &mask = true) {
-    if constexpr (is_diff_array_v<Index> || is_diff_array_v<Mask>) {
-        scatter_reduce(op, target, value, detach(index), detach(mask));
-    } else if constexpr (is_array_v<Value>) {
+                    const Index &index, const mask_t<Value> &mask = true) {
+    if constexpr (is_array_v<Value>) {
         static_assert(std::is_pointer_v<std::decay_t<Target>> || array_depth_v<Target> == 1,
                       "Target argument of scatter_reduce operation must either be a "
                       "pointer address or a flat array!");
@@ -1582,7 +1575,7 @@ template <typename... Ts> void resume_grad(Ts&... ts) {
     (set_grad_suspended(ts, false), ...);
 }
 
-template <bool UnderlyingType /* = true */, typename T> decltype(auto) detach(T &&value) {
+template <bool UnderlyingType = true, typename T> decltype(auto) detach(T &&value) {
     using Result = std::conditional_t<UnderlyingType, detached_t<T>, std::decay_t<T>>;
 
     if constexpr (is_diff_array_v<T>) {

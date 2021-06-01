@@ -501,7 +501,6 @@ def _broadcast_index(target_type, index):
 
 
 def gather(target_type, source, index, mask=True, permute=False):
-    index, mask = _ek.detach(index), _ek.detach(mask)
     if not isinstance(target_type, type):
         raise Exception('gather(): Type expected as first argument')
     elif not issubclass(target_type, ArrayBase):
@@ -538,7 +537,6 @@ def gather(target_type, source, index, mask=True, permute=False):
 
 
 def scatter(target, value, index, mask=True, permute=False):
-    index, mask = _ek.detach(index), _ek.detach(mask)
     target_type = type(target)
     if not issubclass(target_type, ArrayBase):
         if _ek.is_enoki_struct_v(target_type):
@@ -571,7 +569,6 @@ def scatter(target, value, index, mask=True, permute=False):
 
 
 def scatter_reduce(op, target, value, index, mask=True):
-    index, mask = _ek.detach(index), _ek.detach(mask)
     target_type = type(target)
     if not issubclass(target_type, ArrayBase):
         if _ek.is_enoki_struct_v(target_type):
