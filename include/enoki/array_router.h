@@ -1575,7 +1575,7 @@ template <typename... Ts> void resume_grad(Ts&... ts) {
     (set_grad_suspended(ts, false), ...);
 }
 
-template <bool UnderlyingType = true, typename T> decltype(auto) detach(T &&value) {
+template <bool UnderlyingType, typename T> decltype(auto) detach(T &&value) {
     using Result = std::conditional_t<UnderlyingType, detached_t<T>, std::decay_t<T>>;
 
     if constexpr (is_diff_array_v<T>) {
