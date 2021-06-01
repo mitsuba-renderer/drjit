@@ -1121,3 +1121,11 @@ def test52_scatter_fwd_permute_eager(m):
 
         ref_grad = [1.0, 3.0, 5.0, 7.0, 9.0, 11.0, 13.0, 15.0, 17.0, 19.0]
         assert ek.allclose(grad, ref_grad)
+
+
+def test53_scatter_implicit_detach(m):
+    x = ek.detach(m.Float(0))
+    y = ek.detach(m.Float(1))
+    i = m.UInt32(0)
+    m = m.Bool(True)
+    ek.scatter(x, y, i, m)

@@ -137,6 +137,13 @@ auto bind_full(py::class_<Array> &cls, bool scalar_mode = false) {
         cls.def(py::init<const ek::bool_array_t<Array> &>());
     }
 
+#if defined(ENOKI_ENABLE_AUTODIFF)
+    if constexpr (Array::IsJIT && !Array::IsFloat && !Array::IsDiff) {
+        cls.def(py::init([](const ek::DiffArray<Array> &value) {
+            return new Array(ek::detach(value)); }));
+    }
+#endif
+
     cls.def("or_",     [](const Array &a, const Array &b) { return a.or_(b); });
     cls.def("and_",    [](const Array &a, const Array &b) { return a.and_(b); });
     cls.def("xor_",    [](const Array &a, const Array &b) { return a.xor_(b); });
