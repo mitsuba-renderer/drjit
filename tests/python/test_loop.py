@@ -1,5 +1,6 @@
 import enoki as ek
 import pytest
+import gc
 
 def get_class(name):
     """Resolve a package+class name into the corresponding type"""
@@ -216,6 +217,28 @@ def test07_loop_nest(pkg, variant):
 
     assert buf == p.Int(0, 1, 7, 2, 5, 8, 16, 3, 19, 6, 1000, 1000, 1000, 1000, 1000, 1000)
 
+
+@pytest.mark.parametrize("pkg", pkgs)
+def test09_loop_simplification(pkg):
+    # Test a regression where most loop variables are optimized away
+    p = get_class(pkg)
+    res = p.Float(0.0)
+    active = p.Bool(True)
+    depth = p.UInt32(1000)
+
+    loop = p.Loop("TestLoop")
+    loop.put(active, depth, res)
+    loop.init()
+    while loop(active):
+        res += ek.arange(p.Float, 10)
+        depth -= 1
+        active &= (depth > 0)
+    del loop
+    del active
+    del depth
+    gc.collect()
+    gc.collect()
+    assert res == ek.arange(p.Float, 10) * 1000
 
 # @pytest.mark.parametrize("pkg", pkgs_ad)
 # def test08_nodiff_1(pkg):
