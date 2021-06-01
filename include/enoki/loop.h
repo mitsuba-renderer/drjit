@@ -102,7 +102,7 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
                     m_index_in.push_back(value.index());
                     m_invariant.push_back(0);
                     size_t size = value.size();
-                    if (m_size != 0 && size != 1 && size != m_size)
+                    if (m_size > 1 && size != 1 && size != m_size)
                         jit_raise("enoki::Loop::put(): loop variables have "
                                   "inconsistent sizes!");
                     if (size > m_size)
