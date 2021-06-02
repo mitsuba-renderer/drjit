@@ -498,7 +498,8 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
     template <bool, typename Index, typename Mask>
     static Derived gather_(const Derived &src, const Index &index,
                            const Mask &mask) {
-        static_assert(std::is_same_v<Mask, mask_t<Derived>>);
+        static_assert(
+            std::is_same_v<detached_t<Mask>, detached_t<mask_t<Derived>>>);
         return steal(
             jit_var_new_gather(src.index(), index.index(), mask.index()));
     }
@@ -512,7 +513,8 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
 
     template <bool, typename Index, typename Mask>
     void scatter_(Derived &dst, const Index &index, const Mask &mask) const {
-        static_assert(std::is_same_v<Mask, mask_t<Derived>>);
+        static_assert(
+            std::is_same_v<detached_t<Mask>, detached_t<mask_t<Derived>>>);
         dst = steal(jit_var_new_scatter(dst.index(), m_index, index.index(),
                                         mask.index(), ReduceOp::None));
     }
@@ -528,7 +530,8 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
     template <typename Index, typename Mask>
     void scatter_reduce_(ReduceOp op, Derived &dst, const Index &index,
                          const Mask &mask) const {
-        static_assert(std::is_same_v<Mask, mask_t<Derived>>);
+        static_assert(
+            std::is_same_v<detached_t<Mask>, detached_t<mask_t<Derived>>>);
         dst = steal(jit_var_new_scatter(dst.index(), m_index, index.index(),
                                         mask.index(), op));
     }
