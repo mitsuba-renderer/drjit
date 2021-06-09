@@ -506,25 +506,36 @@ auto bind_full(py::class_<Array> &cls, bool scalar_mode = false) {
     ENOKI_BIND_MATRIX_TYPES_DIM(Module, Guide, Scalar, 4)                      \
                                                                                \
     using Guide1 = ek::Array<Guide, 1>;                                        \
+    using Guide3 = ek::Array<Guide, 3>;                                        \
     using Guide4 = ek::Array<Guide, 4>;                                        \
     bind<ek::mask_t<ek::Array<ek::float32_array_t<Guide1>, 2>>>(Module,        \
+                                                                Scalar);       \
+    bind<ek::mask_t<ek::Array<ek::float32_array_t<Guide3>, 2>>>(Module,        \
                                                                 Scalar);       \
     bind<ek::mask_t<ek::Array<ek::float32_array_t<Guide4>, 2>>>(Module,        \
                                                                 Scalar);       \
     bind<ek::mask_t<ek::Array<Guide1, 4>>>(Module, Scalar);                    \
+    bind<ek::mask_t<ek::Array<Guide3, 4>>>(Module, Scalar);                    \
     bind<ek::mask_t<ek::Array<ek::Array<Guide1, 4>, 4>>>(Module, Scalar);      \
+    bind<ek::mask_t<ek::Array<ek::Array<Guide3, 4>, 4>>>(Module, Scalar);      \
     bind<ek::mask_t<ek::Array<ek::Array<Guide4, 4>, 4>>>(Module, Scalar);      \
     bind<ek::Array<ek::int32_array_t<Guide1>,   4>>(Module, Scalar);           \
     bind<ek::Array<ek::uint32_array_t<Guide1>,  4>>(Module, Scalar);           \
     bind<ek::Array<ek::float32_array_t<Guide1>, 4>>(Module, Scalar);           \
     bind<ek::Array<ek::float64_array_t<Guide1>, 4>>(Module, Scalar);           \
+    bind<ek::Array<ek::int32_array_t<Guide3>,   4>>(Module, Scalar);           \
+    bind<ek::Array<ek::uint32_array_t<Guide3>,  4>>(Module, Scalar);           \
+    bind<ek::Array<ek::float32_array_t<Guide3>, 4>>(Module, Scalar);           \
+    bind<ek::Array<ek::float64_array_t<Guide3>, 4>>(Module, Scalar);           \
     bind<ek::Array<ek::int32_array_t<Guide4>,   4>>(Module, Scalar);           \
     bind<ek::Array<ek::uint32_array_t<Guide4>,  4>>(Module, Scalar);           \
     bind<ek::Array<ek::float32_array_t<Guide4>, 4>>(Module, Scalar);           \
     bind<ek::Array<ek::float64_array_t<Guide4>, 4>>(Module, Scalar);           \
     ENOKI_BIND_COMPLEX_TYPES(Module, Guide1, Scalar)                           \
+    ENOKI_BIND_COMPLEX_TYPES(Module, Guide3, Scalar)                           \
     ENOKI_BIND_COMPLEX_TYPES(Module, Guide4, Scalar)                           \
     ENOKI_BIND_MATRIX_TYPES_DIM(Module, Guide1, Scalar, 4)                     \
+    ENOKI_BIND_MATRIX_TYPES_DIM(Module, Guide3, Scalar, 4)                     \
     ENOKI_BIND_MATRIX_TYPES_DIM(Module, Guide4, Scalar, 4)                     \
 
 #define ENOKI_BIND_ARRAY_BASE(Module, Guide, Scalar)                           \
