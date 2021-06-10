@@ -1214,37 +1214,37 @@ decltype(auto) migrate(const T &value, TargetType target) {
 }
 
 template <typename ResultType = void, typename T>
-decltype(auto) get_slice(const T &value, size_t index = -1) {
+decltype(auto) slice(const T &value, size_t index = -1) {
     schedule(value);
     if constexpr (array_depth_v<T> > 1) {
-        using Value = std::decay_t<decltype(get_slice(value.entry(0), index))>;
+        using Value = std::decay_t<decltype(slice(value.entry(0), index))>;
         using Result = typename T::template ReplaceValue<Value>;
         Result result;
         if (Result::Size == Dynamic)
             result = empty<Result>(value.size());
         for (size_t i = 0; i < value.size(); ++i)
-            result.set_entry(i, get_slice(value.entry(i), index));
+            result.set_entry(i, slice(value.entry(i), index));
         return result;
     } else if constexpr (is_enoki_struct_v<T>) {
         static_assert(!std::is_same_v<ResultType, void>,
-                      "get_slice(): return type should be specified for enoki struct!");
+                      "slice(): return type should be specified for enoki struct!");
         ResultType result;
         struct_support_t<T>::apply_2(
             value, result,
             [index](auto const &x1, auto &x2) ENOKI_INLINE_LAMBDA {
-                x2 = get_slice(x1, index);
+                x2 = slice(x1, index);
             });
         return result;
     } else if constexpr (is_dynamic_array_v<T>) {
         if (index == (size_t) -1) {
             if (width(value) > 1)
-                enoki_raise("get_slice(): variable contains more than a single entry!");
+                enoki_raise("slice(): variable contains more than a single entry!");
             index = 0;
         }
         return scalar_t<T>(value.entry(index));
     } else {
         if (index != (size_t) -1 && index > 0)
-            enoki_raise("get_slice(): index out of bound!");
+            enoki_raise("slice(): index out of bound!");
         return value;
     }
 }
