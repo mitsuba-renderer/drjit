@@ -2595,3 +2595,12 @@ def custom(cls, *args, **kwargs):
         )
 
     return output
+
+
+def get_cmake_dir():
+    from os import path
+    file_dir = path.abspath(path.dirname(__file__))
+    cmake_path = path.join(file_dir, "share", "cmake", "enoki")
+    if not path.exists(cmake_path):
+        raise ImportError("Cannot find Enoki CMake directory")
+    return cmake_path
