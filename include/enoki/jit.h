@@ -428,6 +428,7 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
         Derived result = value;
         if (size != (size_t) -1 && value.size() != size)
             result.resize(size);
+        result = result.copy();
         // Variable must be fully evaluated to be accessible via a pointer
         result.data();
         return result;
