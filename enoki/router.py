@@ -555,7 +555,7 @@ def scatter(target, value, index, mask=True, permute=False):
                 raise Exception("scatter(): mismatched source/target configuration!")
 
             for i in range(len(target)):
-                scatter(target[i], value[i], index, mask, permute)
+                scatter(target.entry_ref_(i), value[i], index, mask, permute)
         else:
             index_type = _ek.uint32_array_t(type(value))
             if not isinstance(index, index_type):
@@ -583,17 +583,21 @@ def scatter_reduce(op, target, value, index, mask=True):
                 target[index] += value
     else:
         if target.Depth != 1:
-            raise Exception("Target of scatter op. must be a flat array!")
+            if _ek.array_size_v(target) != _ek.array_size_v(value):
+                raise Exception("scatter_reduce(): mismatched source/target configuration!")
 
-        index_type = _ek.uint32_array_t(type(value))
-        if not isinstance(index, index_type):
-            index = _broadcast_index(index_type, index)
+            for i in range(len(target)):
+                scatter_reduce(op, target.entry_ref_(i), value[i], index, mask)
+        else:
+            index_type = _ek.uint32_array_t(type(value))
+            if not isinstance(index, index_type):
+                index = _broadcast_index(index_type, index)
 
-        mask_type = index_type.MaskType
-        if not isinstance(mask, mask_type):
-            mask = mask_type(mask)
+            mask_type = index_type.MaskType
+            if not isinstance(mask, mask_type):
+                mask = mask_type(mask)
 
-        return value.scatter_reduce_(op, target, index, mask)
+            return value.scatter_reduce_(op, target, index, mask)
 
 
 def ravel(array):

@@ -887,18 +887,15 @@ def test46_loop_ballistic(m):
         pos_out, vel_out = ek.custom(Ballistic, pos_in, vel_in)
         loss = ek.squared_norm(pos_out - m.Array2f(5, 0))
         ek.backward(loss)
-        print(ek.grad(vel_in))
 
         vel_in = m.Array2f(ek.detach(vel_in) - 0.2 * ek.grad(vel_in))
-        print(vel_in)
 
     assert ek.allclose(loss, 0, atol=1e-4)
     assert ek.allclose(vel_in.x, [3.3516, 2.3789, 0.79156], rtol=1e-3)
     ek.set_flag(ek.JitFlag.LoopRecord, False)
 
 
-@pytest.mark.skip("TODO bring it back when loop is implemented")
-def test46_loop_ballistic_2(m):
+def test47_loop_ballistic_2(m):
     class Ballistic2(ek.CustomOp):
         def timestep(self, pos, vel, dt=0.02, mu=.1, g=9.81):
             acc = -mu*vel*ek.norm(vel) - m.Array2f(0, g)
@@ -912,7 +909,7 @@ def test46_loop_ballistic_2(m):
             # Run for 100 iterations
             it, max_it = m.UInt32(0), 100
 
-            loop = m.Loop(pos, vel, it)
+            loop = m.Loop("eval", pos, vel, it)
             while loop(it < max_it):
                 # Update loop variables
                 pos_out, vel_out = self.timestep(pos, vel)
@@ -933,7 +930,7 @@ def test46_loop_ballistic_2(m):
             # Run for 100 iterations
             it = m.UInt32(0)
 
-            loop = m.Loop(it, pos, vel, grad_pos, grad_vel)
+            loop = m.Loop("backward", it, pos, vel, grad_pos, grad_vel)
             while loop(it < 100):
                 # Take reverse step in time
                 pos_rev, vel_rev = self.timestep(pos, vel, dt=-0.02)
@@ -973,7 +970,7 @@ def test46_loop_ballistic_2(m):
     ek.set_flag(ek.JitFlag.LoopRecord, False)
 
 
-def test47_nan_propagation(m):
+def test48_nan_propagation(m):
     for i in range(2):
         x = ek.arange(m.Float, 10)
         ek.enable_grad(x)
@@ -1007,7 +1004,7 @@ class EagerMode:
         ek.set_flag(ek.JitFlag.ADEagerForward, False)
 
 
-def test48_eager_fwd(m):
+def test49_eager_fwd(m):
     with EagerMode():
         x = m.Float(1)
         ek.enable_grad(x)
@@ -1016,7 +1013,7 @@ def test48_eager_fwd(m):
         assert ek.grad(y) == 30
 
 
-def test49_gather_fwd_eager(m):
+def test50_gather_fwd_eager(m):
     with EagerMode():
         x = ek.linspace(m.Float, -1, 1, 10)
         ek.enable_grad(x)
@@ -1026,7 +1023,7 @@ def test49_gather_fwd_eager(m):
         assert ek.allclose(ek.grad(y), ref)
 
 
-def test50_scatter_reduce_fwd_eager(m):
+def test51_scatter_reduce_fwd_eager(m):
     with EagerMode():
         for i in range(3):
             idx1 = ek.arange(m.UInt, 5)
@@ -1060,7 +1057,7 @@ def test50_scatter_reduce_fwd_eager(m):
                                + (17 if i % 2 == 0 else 0))
 
 
-def test51_scatter_fwd_eager(m):
+def test52_scatter_fwd_eager(m):
     with EagerMode():
         x = m.Float(4.0)
         ek.enable_grad(x)
@@ -1097,7 +1094,7 @@ def test51_scatter_fwd_eager(m):
         assert ek.allclose(grad, ref_grad)
 
 
-def test52_scatter_fwd_permute_eager(m):
+def test53_scatter_fwd_permute_eager(m):
     with EagerMode():
         x = m.Float(4.0)
         ek.enable_grad(x)
@@ -1123,7 +1120,7 @@ def test52_scatter_fwd_permute_eager(m):
         assert ek.allclose(grad, ref_grad)
 
 
-def test53_scatter_implicit_detach(m):
+def test54_scatter_implicit_detach(m):
     x = ek.detach(m.Float(0))
     y = ek.detach(m.Float(1))
     i = m.UInt32(0)
