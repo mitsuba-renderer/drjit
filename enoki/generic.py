@@ -1556,7 +1556,11 @@ def torch(a):
 
 def jax(a):
     from jax.dlpack import from_dlpack
-    return from_dlpack(a.dlpack())
+    from jax import devices
+    if a.IsLLVM:
+        return from_dlpack(a.dlpack(), backend=devices(backend='cpu')[0])
+    else:
+        return from_dlpack(a.dlpack())
 
 
 def tf(a):
