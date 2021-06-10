@@ -132,21 +132,6 @@ struct StaticArrayBase : ArrayBase<Value_, IsMask_, Derived_> {
         }
     }
 
-    template <typename T>
-    static Derived opaque_(const T &value, size_t size) {
-        if constexpr (array_depth_v<T> > array_depth_v<Value> ||
-                      (array_depth_v<T> == array_depth_v<Value> &&
-                       (is_dynamic_array_v<Value> || !is_array_v<Value>))) {
-            ENOKI_MARK_USED(size);
-            return value;
-        } else {
-            Derived result;
-            for (size_t i = 0; i < Derived::Size; ++i)
-                result.entry(i) = opaque<Value>(value, size);
-            return result;
-        }
-    }
-
     template <typename T = Derived>
     static Derived load_(const void *mem, size_t) {
         static_assert(!is_dynamic_v<value_t<T>>,

@@ -853,7 +853,16 @@ ENOKI_INLINE T full(const T2 &value, size_t size = 1) {
 template <typename T, typename T2>
 ENOKI_INLINE T opaque(const T2 &value, size_t size = 1) {
     ENOKI_MARK_USED(size);
-    if constexpr (is_array_v<T>) {
+    if constexpr (!is_jit_array_v<T>) {
+        return full<T>(value, size);
+    } else if constexpr (is_static_array_v<T>) {
+        T result;
+        for (size_t i = 0; i < T::Size; ++i)
+            result.entry(i) = opaque<typename T::Value>(value, size);
+        return result;
+    } if constexpr (is_diff_array_v<T>) {
+        return opaque<detached_t<T>>(value, size);
+    } else if constexpr (is_jit_array_v<T>) {
         return T::Derived::opaque_(value, size);
     } else if constexpr (is_enoki_struct_v<T>) {
         T result;
@@ -892,7 +901,7 @@ template <typename T> ENOKI_INLINE void make_opaque(T &value) {
 }
 template <typename T1, typename... Ts, enable_if_t<sizeof...(Ts) != 0> = 0>
 ENOKI_INLINE void make_opaque(T1 &value, Ts&... values) {
-    ( make_opaque(value), make_opaque(values...) );
+    (make_opaque(value), make_opaque(values...));
 }
 
 template <typename T, enable_if_t<!is_special_v<T>> = 0>

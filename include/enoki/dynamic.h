@@ -170,10 +170,6 @@ struct DynamicArray
         return result;
     }
 
-    static DynamicArray opaque_(const Value &v, size_t size) {
-        return full_(v, size);
-    }
-
     static DynamicArray arange_(ssize_t start, ssize_t stop, ssize_t step) {
         size_t size = size_t((stop - start + step - (step > 0 ? 1 : -1)) / step);
         DynamicArray result;

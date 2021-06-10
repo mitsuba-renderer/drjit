@@ -646,7 +646,7 @@ def slice(value, index=-1, return_type=None):
         for i in range(size):
             result[i] = _ek.slice(value[i], index)
         return result
-    elif _ek.is_enoki_struct_v(a):
+    elif _ek.is_enoki_struct_v(value):
         if return_type == None:
             raise Exception('slice(): return type should be specified for enoki struct!')
         result = return_type()
@@ -2336,7 +2336,16 @@ def full(type_, value, size=1):
 def opaque(type_, value, size=1):
     if not isinstance(type_, type):
         raise Exception('opaque(): Type expected as first argument')
-    if issubclass(type_, ArrayBase):
+    if not _ek.is_jit_array_v(type_):
+        return _ek.full(type_, value, size)
+    if _ek.is_static_array_v(type_):
+        result = type_()
+        for i in range(len(result)):
+            result[i] = opaque(type_.Value, value, size)
+        return result
+    if _ek.is_diff_array_v(type_):
+        return _ek.opaque(_ek.detached_t(type_), value, size)
+    if _ek.is_jit_array_v(type_):
         return type_.opaque_(value, size)
     elif _ek.is_enoki_struct_v(type_):
         result = type_()

@@ -513,24 +513,23 @@ def test16_custom(cname):
 
 
 def test17_opaque():
-    Float         = get_class('enoki.llvm.Float')
-    Array3f       = get_class('enoki.llvm.Array3f')
-    ScalarArray3f = get_class('enoki.scalar.Array3f')
+    Array3f = get_class('enoki.llvm.Array3f')
 
-    values = (4.0, ScalarArray3f(3.0, 2.0, 4.0), Array3f(3.0, 2.0, 4.0))
+    v = ek.opaque(Array3f, 4.0)
+    assert ek.width(v) == 1
+    assert ek.allclose(v, 4.0)
 
-    for value in values:
-        v = ek.opaque(Array3f, value)
-        assert ek.width(v) == 1
-        assert ek.allclose(v, value)
+    for i in range(len(v)):
+        assert not v[i].is_literal_()
+        assert v[i].is_evaluated_()
 
-        v = ek.opaque(Array3f, value, 1)
-        assert ek.width(v) == 1
-        assert ek.allclose(v, value)
+    v = ek.opaque(Array3f, 4.0, 1)
+    assert ek.width(v) == 1
+    assert ek.allclose(v, 4.0)
 
-        v = ek.opaque(Array3f, value, 10)
-        assert ek.width(v) == 10
-        assert ek.allclose(v, value)
+    v = ek.opaque(Array3f, 4.0, 10)
+    assert ek.width(v) == 10
+    assert ek.allclose(v, 4.0)
 
 
 def test18_slice():
@@ -550,3 +549,30 @@ def test18_slice():
     for i in range(10):
         assert ek.slice(a3, i)[0] == i
         assert ek.slice(a3, i)[1] == i * 10
+
+
+def test19_make_opaque():
+    Float   = get_class('enoki.llvm.Float')
+    Array3f = get_class('enoki.llvm.Array3f')
+
+    a = Float(4.4)
+    b = ek.full(Float, 3.3, 10)
+    c = Array3f(2.2, 5.5, 6.6)
+
+    assert a.is_literal_()
+    assert not a.is_evaluated_()
+    assert b.is_literal_()
+    assert not b.is_evaluated_()
+    for i in range(len(c)):
+        assert c[i].is_literal_()
+        assert not c[i].is_evaluated_()
+
+    ek.make_opaque(a, b, c)
+
+    assert not a.is_literal_()
+    assert a.is_evaluated_()
+    assert not b.is_literal_()
+    assert b.is_evaluated_()
+    for i in range(len(c)):
+        assert not c[i].is_literal_()
+        assert c[i].is_evaluated_()
