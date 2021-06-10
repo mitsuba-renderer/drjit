@@ -234,7 +234,7 @@ Array<Value, 3> quat_to_euler(const Quaternion<Value> &q) {
     // https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles
 
     Value sinp = 2 * fmsub(q.w(), q.y(), q.z() * q.x());
-    Mask gimbal_lock = abs(sinp) > (1.0f - 5e-8);
+    Mask gimbal_lock = abs(sinp) > (1.0f - 5e-8f);
 
     // roll (x-axis rotation)
     Value q_y_2 = sqr(q.y());
