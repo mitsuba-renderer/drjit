@@ -1386,17 +1386,6 @@ def full_(cls, value, size):
             result.set_entry_(i, value)
     return result
 
-@classmethod
-def opaque_(cls, value, size):
-    result = cls()
-    if _ek.is_static_array_v(value):
-        assert type(value).Size == cls.Size
-        for i in range(cls.Size):
-            result.set_entry_(i, _ek.opaque(cls.Value, value.entry_(i), size))
-    else:
-        for i in range(cls.Size):
-            result.set_entry_(i, _ek.opaque(cls.Value, value, size))
-    return result
 
 @classmethod
 def linspace_(cls, min, max, size=1, endpoint=True):
