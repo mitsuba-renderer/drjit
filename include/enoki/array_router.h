@@ -882,8 +882,7 @@ template <typename T> ENOKI_INLINE void make_opaque(T &value) {
     } else if constexpr (is_diff_array_v<T>) {
         make_opaque(value.detach_());
     } else if constexpr (is_jit_array_v<T>) {
-        // value = value.opaque_();
-        if (value.is_literal()) {
+        if (!value.is_evaluated()) {
             value = value.copy();
             value.data();
         }
