@@ -2361,7 +2361,7 @@ def make_opaque(*args):
             elif _ek.is_diff_array_v(t):
                 make_opaque(a.detach_())
             elif _ek.is_jit_array_v(t):
-                if a.is_literal_():
+                if not a.is_evaluated_():
                     a.assign(a.copy_())
                     a.data_()
         elif _ek.is_enoki_struct_v(t):

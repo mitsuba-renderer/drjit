@@ -330,6 +330,7 @@ auto bind_full(py::class_<Array> &cls, bool scalar_mode = false) {
         cls.def("resize_", [](Array &value, size_t size) { value.resize(size); });
         cls.def("copy_", [](Array &value) { return value.copy(); });
         cls.def("is_literal_", [](Array &value) { return value.is_literal(); });
+        cls.def("is_evaluated_", [](Array &value) { return value.is_evaluated(); });
 
         if constexpr (!Array::IsMask)
             cls.def("block_sum_", &Array::block_sum_);

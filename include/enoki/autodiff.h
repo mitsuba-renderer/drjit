@@ -1795,6 +1795,13 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             enoki_raise("is_literal(): expected a JIT array type");
     }
 
+    bool is_evaluated() const {
+        if constexpr (is_jit_array_v<Type>)
+            return m_value.is_evaluated();
+        else
+            enoki_raise("is_evaluated(): expected a JIT array type");
+    }
+
     uint32_t index() const {
         if constexpr (is_jit_array_v<Type>)
             return m_value.index();
