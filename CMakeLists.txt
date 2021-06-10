@@ -155,20 +155,24 @@ else()
 endif()
 
 if (ENOKI_ENABLE_PYTHON)
-  if (NOT TARGET pybind11::module)
-    if (NOT SKBUILD)
-      find_package(Python COMPONENTS Interpreter Development REQUIRED)
-    endif()
-
+  if (SKBUILD)
+		execute_process(
+			COMMAND
+				"${PYTHON_EXECUTABLE}" -c
+				"import pybind11; print(pybind11.get_cmake_dir())"
+			OUTPUT_VARIABLE _tmp_dir
+			OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ECHO STDOUT)
+		list(APPEND CMAKE_PREFIX_PATH "${_tmp_dir}")
+    find_package(pybind11 CONFIG REQUIRED)
+  else()
+    find_package(Python COMPONENTS Interpreter Development REQUIRED)
     set(ENOKI_PYBIND11_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ext/pybind11"
       CACHE STRING "Path containing the 'pybind11' library used to compile Enoki.")
     add_subdirectory(${ENOKI_PYBIND11_DIR} pybind11)
-
-    mark_as_advanced(
-      USE_PYTHON_INCLUDE_DIR PYBIND11_INSTALL PYBIND11_TEST PYBIND11_NOPYTHON
-      PYBIND11_FINDPYTHON PYBIND11_PYTHON_VERSION PYBIND11_WERROR
-      ENOKI_PYBIND11_DIR
-    )
+		mark_as_advanced(
+			USE_PYTHON_INCLUDE_DIR PYBIND11_INSTALL PYBIND11_TEST PYBIND11_NOPYTHON
+			PYBIND11_FINDPYTHON PYBIND11_PYTHON_VERSION PYBIND11_WERROR
+			ENOKI_PYBIND11_DIR)
   endif()
 
   message(STATUS "Enoki: building the Python plugin.")
