@@ -85,7 +85,7 @@ ENOKI_TEST(test04_slice) {
     c.o.x() = linspace<FloatX>(0, 1, 5);
     c.i = arange<Int32X>(5);
 
-    Custom3f c3 = get_slice<Custom3f>(c, 3);
+    Custom3f c3 = slice<Custom3f>(c, 3);
 
     assert(c3.o.x() == 0.75f);
     assert(c3.i == 3);
