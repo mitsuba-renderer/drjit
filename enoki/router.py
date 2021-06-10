@@ -2352,12 +2352,8 @@ def make_opaque(*args):
         t = type(a)
         if issubclass(t, ArrayBase):
             if _ek.array_depth_v(t) > 1:
-                res = t()
-                for i in range(a.Size):
-                    tmp = a[i]
-                    make_opaque(tmp)
-                    res[i] = tmp
-                a.assign(res)
+                for i in range(len(a)):
+                    make_opaque(a.entry_ref_(i))
             elif _ek.is_diff_array_v(t):
                 make_opaque(a.detach_())
             elif _ek.is_jit_array_v(t):
