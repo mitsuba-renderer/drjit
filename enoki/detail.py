@@ -246,7 +246,7 @@ def array_init(self, args):
             elif mod.startswith('tensorflow.'):
                 from tensorflow.experimental.dlpack import to_dlpack
                 self.assign(array_from_dlpack(type(self), to_dlpack(o)))
-            elif mod.startswith('jax.'):
+            elif mod.startswith('jax.') or mod.startswith('jaxlib.'):
                 from jax.dlpack import to_dlpack
                 self.assign(array_from_dlpack(type(self), to_dlpack(o)))
             else:
