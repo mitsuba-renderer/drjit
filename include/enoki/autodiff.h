@@ -232,8 +232,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         if constexpr (!std::is_arithmetic_v<Scalar>) {
             enoki_raise("add_(): invalid operand type!");
         } else {
-            int32_t index_new = 0;
             Type result = m_value + a.m_value;
+            int32_t index_new = 0;
             if constexpr (IsEnabled) {
                 if (m_index > 0 || a.m_index > 0) {
                     int32_t indices[2] = { m_index, a.m_index };
@@ -250,8 +250,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         if constexpr (!std::is_arithmetic_v<Scalar>) {
             enoki_raise("sub_(): invalid operand type!");
         } else {
-            int32_t index_new = 0;
             Type result = m_value - a.m_value;
+            int32_t index_new = 0;
             if constexpr (IsEnabled) {
                 if (m_index > 0 || a.m_index > 0) {
                     int32_t indices[2] = { m_index, a.m_index };
@@ -268,8 +268,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         if constexpr (!std::is_arithmetic_v<Scalar>) {
             enoki_raise("mul_(): invalid operand type!");
         } else {
-            int32_t index_new = 0;
             Type result = m_value * a.m_value;
+            int32_t index_new = 0;
             if constexpr (IsEnabled) {
                 if (m_index > 0 || a.m_index > 0) {
                     int32_t indices[2] = { m_index, a.m_index };
@@ -286,8 +286,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         if constexpr (!std::is_arithmetic_v<Scalar>) {
             enoki_raise("div_(): invalid operand type!");
         } else {
-            int32_t index_new = 0;
             Type result = m_value / a.m_value;
+            int32_t index_new = 0;
             if constexpr (IsEnabled) {
                 if (m_index > 0 || a.m_index > 0) {
                     int32_t indices[2] = { m_index, a.m_index };
@@ -305,8 +305,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         if constexpr (!std::is_arithmetic_v<Scalar>) {
             enoki_raise("neg_(): invalid operand type!");
         } else {
-            int32_t index_new = 0;
             Type result = -m_value;
+            int32_t index_new = 0;
             if constexpr (IsEnabled) {
                 if (m_index > 0) {
                     int32_t indices[1] = { m_index };
@@ -323,8 +323,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         if constexpr (!std::is_floating_point_v<Scalar>) {
             enoki_raise("fmadd_(): invalid operand type!");
         } else {
-            int32_t index_new = 0;
             Type result = fmadd(m_value, a.m_value, b.m_value);
+            int32_t index_new = 0;
             if constexpr (IsEnabled) {
                 if (m_index > 0 || a.m_index > 0 || b.m_index > 0) {
                     int32_t indices[3] = { m_index, a.m_index, b.m_index };
@@ -341,8 +341,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         if constexpr (!std::is_floating_point_v<Scalar>) {
             enoki_raise("fmsub_(): invalid operand type!");
         } else {
-            int32_t index_new = 0;
             Type result = fmsub(m_value, a.m_value, b.m_value);
+            int32_t index_new = 0;
             if constexpr (IsEnabled) {
                 if (m_index > 0 || a.m_index > 0 || b.m_index > 0) {
                     int32_t indices[3] = { m_index, a.m_index, b.m_index };
@@ -359,8 +359,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         if constexpr (!std::is_floating_point_v<Scalar>) {
             enoki_raise("fnmadd_(): invalid operand type!");
         } else {
-            int32_t index_new = 0;
             Type result = fnmadd(m_value, a.m_value, b.m_value);
+            int32_t index_new = 0;
             if constexpr (IsEnabled) {
                 if (m_index > 0 || a.m_index > 0 || b.m_index > 0) {
                     int32_t indices[3] = { m_index, a.m_index, b.m_index };
@@ -377,8 +377,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         if constexpr (!std::is_floating_point_v<Scalar>) {
             enoki_raise("fnmsub_(): invalid operand type!");
         } else {
-            int32_t index_new = 0;
             Type result = fnmsub(m_value, a.m_value, b.m_value);
+            int32_t index_new = 0;
             if constexpr (IsEnabled) {
                 if (m_index > 0 || a.m_index > 0 || b.m_index > 0) {
                     int32_t indices[3] = { m_index, a.m_index, b.m_index };
@@ -395,8 +395,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         if constexpr (!std::is_arithmetic_v<Scalar>) {
             enoki_raise("abs_(): invalid operand type!");
         } else {
-            int32_t index_new = 0;
             Type result = abs(m_value);
+            int32_t index_new = 0;
             if constexpr (IsEnabled) {
                 if (m_index > 0) {
                     int32_t indices[1] = { m_index };
@@ -413,8 +413,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         if constexpr (!std::is_floating_point_v<Scalar>) {
             enoki_raise("sqrt_(): invalid operand type!");
         } else {
-            int32_t index_new = 0;
             Type result = sqrt(m_value);
+            int32_t index_new = 0;
             if constexpr (IsEnabled) {
                 if (m_index > 0) {
                     int32_t indices[1] = { m_index };
@@ -431,8 +431,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         if constexpr (!std::is_floating_point_v<Scalar>) {
             enoki_raise("cbrt_(): invalid operand type!");
         } else {
-            int32_t index_new = 0;
             Type result = cbrt(m_value);
+            int32_t index_new = 0;
             if constexpr (IsEnabled) {
                 if (m_index > 0) {
                     int32_t indices[1] = { m_index };
@@ -449,8 +449,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         if constexpr (!std::is_floating_point_v<Scalar>) {
             enoki_raise("erf_(): invalid operand type!");
         } else {
-            int32_t index_new = 0;
             Type result = erf(m_value);
+            int32_t index_new = 0;
             if constexpr (IsEnabled) {
                 if (m_index > 0) {
                     int32_t indices[1] = { m_index };
@@ -467,8 +467,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         if constexpr (!std::is_floating_point_v<Scalar>) {
             enoki_raise("rcp_(): invalid operand type!");
         } else {
-            int32_t index_new = 0;
             Type result = rcp(m_value);
+            int32_t index_new = 0;
             if constexpr (IsEnabled) {
                 if (m_index > 0) {
                     int32_t indices[1] = { m_index };
@@ -485,8 +485,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         if constexpr (!std::is_floating_point_v<Scalar>) {
             enoki_raise("rsqrt_(): invalid operand type!");
         } else {
-            int32_t index_new = 0;
             Type result = rsqrt(m_value);
+            int32_t index_new = 0;
             if constexpr (IsEnabled) {
                 if (m_index > 0) {
                     Type rsqrt_2 = sqr(result), rsqrt_3 = result * rsqrt_2;
@@ -504,9 +504,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         if constexpr (!std::is_arithmetic_v<Scalar>) {
             enoki_raise("min_(): invalid operand type!");
         } else {
-            int32_t index_new = 0;
             Type result = min(m_value, a.m_value);
-
+            int32_t index_new = 0;
             if constexpr (IsEnabled) {
                 if (m_index > 0 || a.m_index > 0) {
                     mask_t<Type> m = m_value <= a.m_value;
@@ -517,7 +516,6 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                         "min", (uint32_t) width(result), 2, indices, weights);
                 }
             }
-
             return DiffArray::create(index_new, std::move(result));
         }
     }
@@ -526,8 +524,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         if constexpr (!std::is_arithmetic_v<Scalar>) {
             enoki_raise("max_(): invalid operand type!");
         } else {
-            int32_t index_new = 0;
             Type result = max(m_value, a.m_value);
+            int32_t index_new = 0;
             if constexpr (IsEnabled) {
                 if (m_index > 0 || a.m_index > 0) {
                     int32_t indices[2] = { m_index, a.m_index };
@@ -538,7 +536,6 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                         "max", (uint32_t) width(result), 2, indices, weights);
                 }
             }
-
             return DiffArray::create(index_new, std::move(result));
         }
     }
@@ -551,7 +548,6 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         } else {
             Type result = select(m.m_value, t.m_value, f.m_value);
             int32_t index_new = 0;
-
             if constexpr (IsEnabled) {
                 if (t.m_index > 0 || f.m_index > 0) {
                     index_new = detail::ad_new_select<Type>(
@@ -559,7 +555,6 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                         m.m_value, t.m_index, f.m_index);
                 }
             }
-
             return DiffArray::create(index_new, std::move(result));
         }
     }
@@ -612,7 +607,6 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         } else {
             auto [s, c] = sincos(m_value);
             int32_t index_new = 0;
-
             if constexpr (IsEnabled) {
                 if (m_index > 0) {
                     int32_t indices[1] = { m_index };
@@ -621,7 +615,6 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                                                      1, indices, weights);
                 }
             }
-
             return DiffArray::create(index_new, std::move(s));
         }
     }
@@ -632,7 +625,6 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         } else {
             auto [s, c] = sincos(m_value);
             int32_t index_new = 0;
-
             if constexpr (IsEnabled) {
                 if (m_index > 0) {
                     int32_t indices[1] = { m_index };
@@ -641,7 +633,6 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                                                      1, indices, weights);
                 }
             }
-
             return DiffArray::create(index_new, std::move(c));
         }
     }
@@ -652,7 +643,6 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         } else {
             auto [s, c] = sincos(m_value);
             int32_t index_s = 0, index_c = 0;
-
             if constexpr (IsEnabled) {
                 if (m_index > 0) {
                     int32_t indices[1] = { m_index };
@@ -664,7 +654,6 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                         detail::ad_new<Type>("sincos[c]", w, 1, indices, weights_c);
                 }
             }
-
             return {
                 DiffArray::create(index_s, std::move(s)),
                 DiffArray::create(index_c, std::move(c)),
@@ -676,8 +665,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         if constexpr (!std::is_floating_point_v<Scalar>) {
             enoki_raise("csc_(): invalid operand type!");
         } else {
-            int32_t index_new = 0;
             Type result = csc(m_value);
+            int32_t index_new = 0;
             if constexpr (IsEnabled) {
                 if (m_index > 0) {
                     int32_t indices[1] = { m_index };
@@ -686,7 +675,6 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                         "csc", (uint32_t) width(result), 1, indices, weights);
                 }
             }
-
             return DiffArray::create(index_new, std::move(result));
         }
     }
@@ -695,8 +683,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         if constexpr (!std::is_floating_point_v<Scalar>) {
             enoki_raise("sec_(): invalid operand type!");
         } else {
-            int32_t index_new = 0;
             Type result = sec(m_value);
+            int32_t index_new = 0;
             if constexpr (IsEnabled) {
                 if (m_index > 0) {
                     int32_t indices[1] = { m_index };
@@ -713,8 +701,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         if constexpr (!std::is_floating_point_v<Scalar>) {
             enoki_raise("tan_(): invalid operand type!");
         } else {
-            int32_t index_new = 0;
             Type result = tan(m_value);
+            int32_t index_new = 0;
             if constexpr (IsEnabled) {
                 if (m_index > 0) {
                     int32_t indices[1] = { m_index };
@@ -731,8 +719,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         if constexpr (!std::is_floating_point_v<Scalar>) {
             enoki_raise("cot_(): invalid operand type!");
         } else {
-            int32_t index_new = 0;
             Type result = cot(m_value);
+            int32_t index_new = 0;
             if constexpr (IsEnabled) {
                 if (m_index > 0) {
                     int32_t indices[1] = { m_index };
@@ -749,8 +737,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         if constexpr (!std::is_floating_point_v<Scalar>) {
             enoki_raise("asin_(): invalid operand type!");
         } else {
-            int32_t index_new = 0;
             Type result = asin(m_value);
+            int32_t index_new = 0;
             if constexpr (IsEnabled) {
                 if (m_index > 0) {
                     int32_t indices[1] = { m_index };
@@ -767,8 +755,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         if constexpr (!std::is_floating_point_v<Scalar>) {
             enoki_raise("acos_(): invalid operand type!");
         } else {
-            int32_t index_new = 0;
             Type result = acos(m_value);
+            int32_t index_new = 0;
             if constexpr (IsEnabled) {
                 if (m_index > 0) {
                     int32_t indices[1] = { m_index };
@@ -785,8 +773,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         if constexpr (!std::is_floating_point_v<Scalar>) {
             enoki_raise("atan_(): invalid operand type!");
         } else {
-            int32_t index_new = 0;
             Type result = atan(m_value);
+            int32_t index_new = 0;
             if constexpr (IsEnabled) {
                 if (m_index > 0) {
                     int32_t indices[1] = { m_index };
@@ -803,8 +791,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         if constexpr (!std::is_floating_point_v<Scalar>) {
             enoki_raise("atan2_(): invalid operand type!");
         } else {
-            int32_t index_new = 0;
             Type result = atan2(m_value, x.m_value);
+            int32_t index_new = 0;
             if constexpr (IsEnabled) {
                 if (m_index > 0 || x.m_index > 0) {
                     Type il2 = rcp(fmadd(m_value, m_value, sqr(x.m_value)));
@@ -822,8 +810,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         if constexpr (!std::is_floating_point_v<Scalar>) {
             enoki_raise("exp_(): invalid operand type!");
         } else {
-            int32_t index_new = 0;
             Type result = exp(m_value);
+            int32_t index_new = 0;
             if constexpr (IsEnabled) {
                 if (m_index > 0) {
                     int32_t indices[1] = { m_index };
@@ -840,8 +828,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         if constexpr (!std::is_floating_point_v<Scalar>) {
             enoki_raise("exp2_(): invalid operand type!");
         } else {
-            int32_t index_new = 0;
             Type result = exp2(m_value);
+            int32_t index_new = 0;
             if constexpr (IsEnabled) {
                 if (m_index > 0) {
                     int32_t indices[1] = { m_index };
@@ -858,8 +846,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         if constexpr (!std::is_floating_point_v<Scalar>) {
             enoki_raise("log_(): invalid operand type!");
         } else {
-            int32_t index_new = 0;
             Type result = log(m_value);
+            int32_t index_new = 0;
             if constexpr (IsEnabled) {
                 if (m_index > 0) {
                     int32_t indices[1] = { m_index };
@@ -876,8 +864,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         if constexpr (!std::is_floating_point_v<Scalar>) {
             enoki_raise("log2_(): invalid operand type!");
         } else {
-            int32_t index_new = 0;
             Type result = log2(m_value);
+            int32_t index_new = 0;
             if constexpr (IsEnabled) {
                 if (m_index > 0) {
                     int32_t indices[1] = { m_index };
@@ -896,7 +884,6 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         } else {
             auto [s, c] = sincosh(m_value);
             int32_t index_new = 0;
-
             if constexpr (IsEnabled) {
                 if (m_index > 0) {
                     int32_t indices[1] = { m_index };
@@ -905,7 +892,6 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                                                      1, indices, weights);
                 }
             }
-
             return DiffArray::create(index_new, std::move(s));
         }
     }
@@ -916,7 +902,6 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         } else {
             auto [s, c] = sincosh(m_value);
             int32_t index_new = 0;
-
             if constexpr (IsEnabled) {
                 if (m_index > 0) {
                     int32_t indices[1] = { m_index };
@@ -925,7 +910,6 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                                                      1, indices, weights);
                 }
             }
-
             return DiffArray::create(index_new, std::move(c));
         }
     }
@@ -936,7 +920,6 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         } else {
             auto [s, c] = sincosh(m_value);
             int32_t index_s = 0, index_c = 0;
-
             if constexpr (IsEnabled) {
                 if (m_index > 0) {
                     int32_t indices[1] = { m_index };
@@ -948,7 +931,6 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                         detail::ad_new<Type>("sincosh[c]", w, 1, indices, weights_c);
                 }
             }
-
             return {
                 DiffArray::create(index_s, std::move(s)),
                 DiffArray::create(index_c, std::move(c)),
@@ -960,8 +942,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         if constexpr (!std::is_floating_point_v<Scalar>) {
             enoki_raise("tanh_(): invalid operand type!");
         } else {
-            int32_t index_new = 0;
             Type result = tanh(m_value);
+            int32_t index_new = 0;
             if constexpr (IsEnabled) {
                 if (m_index > 0) {
                     int32_t indices[1] = { m_index };
@@ -978,8 +960,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         if constexpr (!std::is_floating_point_v<Scalar>) {
             enoki_raise("asinh_(): invalid operand type!");
         } else {
-            int32_t index_new = 0;
             Type result = asinh(m_value);
+            int32_t index_new = 0;
             if constexpr (IsEnabled) {
                 if (m_index > 0) {
                     int32_t indices[1] = { m_index };
@@ -996,8 +978,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         if constexpr (!std::is_floating_point_v<Scalar>) {
             enoki_raise("acosh_(): invalid operand type!");
         } else {
-            int32_t index_new = 0;
             Type result = acosh(m_value);
+            int32_t index_new = 0;
             if constexpr (IsEnabled) {
                 if (m_index > 0) {
                     int32_t indices[1] = { m_index };
@@ -1014,8 +996,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         if constexpr (!std::is_floating_point_v<Scalar>) {
             enoki_raise("atanh_(): invalid operand type!");
         } else {
-            int32_t index_new = 0;
             Type result = atanh(m_value);
+            int32_t index_new = 0;
             if constexpr (IsEnabled) {
                 if (m_index > 0) {
                     int32_t indices[1] = { m_index };
@@ -1245,7 +1227,6 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                         "hsum_async", 1, 1, indices, weights);
                 }
             }
-
             return DiffArray::create(index_new, hsum_async(m_value));
         }
     }
@@ -1269,8 +1250,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         if constexpr (!std::is_arithmetic_v<Scalar>) {
             enoki_raise("hprod_async_(): invalid operand type!");
         } else {
-            int32_t index_new = 0;
             Type result = hprod_async(m_value);
+            int32_t index_new = 0;
             if constexpr (IsEnabled) {
                 if (m_index > 0) {
                     int32_t indices[1] = { m_index };
@@ -1280,7 +1261,6 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                         "hprod_async", 1, 1, indices, weights);
                 }
             }
-
             return DiffArray::create(index_new, std::move(result));
         }
     }
@@ -1306,7 +1286,6 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         } else {
             Type result = hmin_async(m_value);
             int32_t index_new = 0;
-
             if constexpr (IsEnabled) {
                 if (m_index > 0) {
                     /* This gradient has duplicate '1' entries when
@@ -1321,7 +1300,6 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                         "hmin_async", 1, 1, indices, weights);
                 }
             }
-
             return DiffArray::create(index_new, std::move(result));
         }
     }
@@ -1347,7 +1325,6 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         } else {
             Type result = hmax_async(m_value);
             int32_t index_new = 0;
-
             if constexpr (IsEnabled) {
                 if (m_index > 0) {
                     /* This gradient has duplicate '1' entries when
@@ -1362,7 +1339,6 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                         "hmax_async", 1, 1, indices, weights);
                 }
             }
-
             return DiffArray::create(index_new, std::move(result));
         }
     }
