@@ -566,11 +566,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
 
     template <typename T = Type_, enable_if_t<!is_mask_v<T>> = 0>
     DiffArray and_(const MaskType &mask) const {
-        if constexpr (IsEnabled) {
-            if (m_index > 0)
-                return select(mask, *this, DiffArray(0));
-        }
-        return DiffArray::create(0, detail::and_(m_value, mask.m_value));
+        return select(mask, *this, DiffArray(Scalar(0)));
     }
 
     template <typename T = Type_, enable_if_t<!is_mask_v<T>> = 0>
