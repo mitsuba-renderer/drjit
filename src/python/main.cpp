@@ -40,9 +40,15 @@ py::handle array_base, array_name, array_init, array_configure;
 /// Placeholder base of all Enoki arrays in the Python domain
 struct ArrayBase { };
 
+static void log_callback(LogLevel level, const char *msg) {
+    py::gil_scoped_acquire acquire;
+    py::print(msg);
+}
+
 PYBIND11_MODULE(enoki_ext, m_) {
 #if defined(ENOKI_ENABLE_JIT)
-    jit_set_log_level_stderr(LogLevel::Warn);
+    jit_set_log_level_stderr(LogLevel::Disable);
+    jit_set_log_level_callback(LogLevel::Warn, log_callback);
     jit_init_async((uint32_t) JitBackend::CUDA | (uint32_t) JitBackend::LLVM);
 #endif
 
@@ -200,7 +206,7 @@ PYBIND11_MODULE(enoki_ext, m_) {
     m.def("whos", []() { py::print(jit_var_whos()); });
     m.def("malloc_trim", &jit_malloc_trim);
     m.def("malloc_clear_statistics", &jit_malloc_clear_statistics);
-    m.def("set_log_level", &jit_set_log_level_stderr);
+    m.def("set_log_level", [](LogLevel level) { jit_set_log_level_callback(level, log_callback); });
     m.def("log_level", &jit_log_level_stderr);
     m.def("registry_trim", &jit_registry_trim);
     m.def("set_thread_count", &jit_llvm_set_thread_count);
