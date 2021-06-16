@@ -37,9 +37,9 @@ def test01_ctr(pkg):
 
     i = ek.arange(p.Int, 0, 10)
 
-    loop = p.Loop("MyLoop", i)
+    loop = p.Loop("MyLoop", lambda: i)
     while loop(i < 5):
-        i += 1
+        i = i + 1
 
     assert i == p.Int(5, 5, 5, 5, 5, 5, 6, 7, 8, 9)
 
@@ -57,11 +57,11 @@ def test01_record_loop(pkg):
             y = ek.zero(p.Float, 1)
             z = p.Float(1)
 
-            loop = p.Loop("MyLoop", x, y, z)
+            loop = p.Loop("MyLoop", lambda: (x, y, z))
             while loop(x < 5):
                 y += p.Float(x)
                 x += 1
-                z += 1
+                z = z + 1
 
             if j == 0:
                 ek.schedule(x, y, z)
@@ -82,7 +82,7 @@ def test02_multiple_values(pkg, variant):
     if variant == 1:
         v.y = p.Float(0)
 
-    loop = p.Loop("MyLoop", i, v)
+    loop = p.Loop("MyLoop", lambda: (i, v))
     while loop(i < 5):
         i.assign(i + 1)
         f = p.Float(i)
@@ -113,8 +113,8 @@ def test03_failures(pkg):
         i = p.Int(0)
         ek.enable_grad(v)
         with pytest.raises(ek.Exception) as e:
-            p.Loop("MyLoop", i, v)
-        assert 'Symbolic loop encountered a differentiable array with enabled gradients! This is not supported.' in str(e.value)
+            p.Loop("MyLoop", lambda: (i, v))
+        assert 'one of the supplied loop variables is attached to the AD graph' in str(e.value)
 
 
 @pytest.mark.parametrize("pkg", pkgs)
@@ -125,7 +125,7 @@ def test04_side_effect(pkg):
     j = ek.zero(p.Int, 10)
     buf = ek.zero(p.Float, 10)
 
-    loop = p.Loop("MyLoop", i, j)
+    loop = p.Loop("MyLoop", lambda: (i, j))
     while loop(i < 10):
         j += i
         i += 1
@@ -146,7 +146,7 @@ def test05_side_effect_noloop(pkg):
     buf = ek.zero(p.Float, 10)
     ek.set_flag(ek.JitFlag.LoopRecord, False)
 
-    loop = p.Loop("MyLoop", i, j)
+    loop = p.Loop("MyLoop", lambda: (i, j))
     while loop(i < 10):
         j += i
         i += 1
@@ -164,7 +164,7 @@ def test06_test_collatz(pkg, variant):
 
     def collatz(value: p.Int):
         counter = p.Int(0)
-        loop = p.Loop("collatz", value, counter)
+        loop = p.Loop("collatz", lambda: (value, counter))
         while (loop(ek.neq(value, 1))):
             is_even = ek.eq(value & 1, 0)
             value.assign(ek.select(is_even, value // 2, 3*value + 1))
@@ -194,7 +194,7 @@ def test07_loop_nest(pkg, variant):
 
     def collatz(value: p.Int):
         counter = p.Int(0)
-        loop = p.Loop("Nested", value, counter)
+        loop = p.Loop("Nested", lambda: (value, counter))
         while (loop(ek.neq(value, 1))):
             is_even = ek.eq(value & 1, 0)
             value.assign(ek.select(is_even, value // 2, 3*value + 1))
@@ -206,7 +206,7 @@ def test07_loop_nest(pkg, variant):
     ek.eval(buf)
 
     if variant == 0:
-        loop_1 = p.Loop("MyLoop", i)
+        loop_1 = p.Loop("MyLoop", lambda: i)
         while loop_1(i <= 10):
             ek.scatter(buf, collatz(p.Int(i)), i - 1)
             i += 1
@@ -227,7 +227,7 @@ def test09_loop_simplification(pkg):
     depth = p.UInt32(1000)
 
     loop = p.Loop("TestLoop")
-    loop.put(active, depth, res)
+    loop.put(lambda: (active, depth, res))
     loop.init()
     while loop(active):
         res += ek.arange(p.Float, 10)
@@ -239,32 +239,3 @@ def test09_loop_simplification(pkg):
     gc.collect()
     gc.collect()
     assert res == ek.arange(p.Float, 10) * 1000
-
-# @pytest.mark.parametrize("pkg", pkgs_ad)
-# def test08_nodiff_1(pkg):
-#     p = get_class(pkg)
-#
-#     i = ek.arange(p.Float, 0, 10)
-#     ek.enable_grad(i)
-#
-#     with pytest.raises(ek.Exception) as e:
-#         loop = p.Loop("MyLoop", i)
-#         while loop(i < 5):
-#             i += 1
-#
-#     assert "Symbolic loop encountered a differentiable" in str(e)
-#
-#
-# @pytest.mark.parametrize("pkg", pkgs_ad)
-# def test08_nodiff_2(pkg):
-#     p = get_class(pkg)
-#
-#     i = ek.arange(p.Float, 0, 10)
-#
-#     with pytest.raises(ek.Exception) as e:
-#         loop = p.Loop("MyLoop", i)
-#         while loop(i < 5):
-#             i += 1
-#             ek.enable_grad(i)
-#
-#     assert "Symbolic loop encountered a differentiable" in str(e)

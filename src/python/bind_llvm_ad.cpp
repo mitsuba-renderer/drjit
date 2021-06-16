@@ -47,7 +47,7 @@ void export_llvm_ad(py::module_ &m) {
     py::class_<ek::Loop<Guide>>(llvm_ad, "LoopBase");
 
     py::class_<Loop<Guide>, ek::Loop<Guide>> loop(llvm_ad, "Loop");
-    loop.def(py::init<const char *, py::args>())
+    loop.def(py::init<const char *, py::handle>(), "name"_a, "vars"_a = py::none())
         .def("put", &Loop<Guide>::put)
         .def("init", &Loop<Guide>::init)
         .def("__call__", &Loop<Guide>::operator());

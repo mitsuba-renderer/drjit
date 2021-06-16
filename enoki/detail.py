@@ -434,7 +434,10 @@ def read_indices(*args):
                 result.append((a.index(), 0))
         elif isinstance(a, tuple) or isinstance(a, list):
             for b in a:
-                result.extend(read_indices(b))
+                if getattr(b, '__name__', None) == '<lambda>':
+                    result.extend(read_indices(b()))
+                else:
+                    result.extend(read_indices(b))
         elif enoki.is_enoki_struct_v(a):
             for k, v in type(a).ENOKI_STRUCT.items():
                 result.extend(read_indices(getattr(a, k)))
@@ -468,7 +471,10 @@ def write_indices(indices, *args):
                 assert idx[1] == 0
         elif isinstance(a, tuple) or isinstance(a, list):
             for b in a:
-                write_indices(indices, b)
+                if getattr(b, '__name__', None) == '<lambda>':
+                    write_indices(indices, b())
+                else:
+                    write_indices(indices, b)
         elif enoki.is_enoki_struct_v(a):
             for k, v in type(a).ENOKI_STRUCT.items():
                 write_indices(indices, getattr(a, k))

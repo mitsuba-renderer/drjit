@@ -10,24 +10,28 @@ template <typename Value> struct Loop : ek::Loop<Value> {
     using Base::m_index_in;
     using Base::m_invariant;
 
-    Loop(const char *name, py::args args) : Base(name) {
+    Loop(const char *name, py::handle func) : Base(name) {
         py::object detail = py::module_::import("enoki").attr("detail");
         m_read_indices  = detail.attr("read_indices");
         m_write_indices = detail.attr("write_indices");
-        if (args.size() > 0) {
-            for (py::handle h : args)
-                m_args.append(h);
-            init();
+        if (!func.is_none()) {
+            if (!py::isinstance<py::function>(func)) {
+                ek::enoki_raise(
+                    "Loop(): expected a lambda function as second argument "
+                    "that returns the list of loop variables.");
+            } else {
+                m_args.append(func);
+                init();
+            }
         }
     }
 
-    void put(py::args args) {
-        for (py::handle h : args)
-            m_args.append(h);
+    void put(py::function func) {
+        m_args.append(func);
     }
 
     void init() {
-        py::list indices = m_read_indices(*m_args);
+        py::list indices = m_read_indices(m_args);
         size_t size = indices.size();
 
         for (uint32_t i = 0; i < size; ++i) {
@@ -58,7 +62,7 @@ template <typename Value> struct Loop : ek::Loop<Value> {
 
 private:
     void read_indices() {
-        py::list indices = m_read_indices(*m_args);
+        py::list indices = m_read_indices(m_args);
         size_t size = indices.size();
 
         if (size != m_index_py.size())
@@ -77,7 +81,7 @@ private:
         py::list list;
         for (size_t i = 0; i < m_index_py.size(); ++i)
             list.append(py::make_tuple(m_index_py[i], m_index_py_ad[i]));
-        m_write_indices(list, *m_args);
+        m_write_indices(list, m_args);
     }
 
 private:

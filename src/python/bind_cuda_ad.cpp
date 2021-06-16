@@ -48,7 +48,7 @@ void export_cuda_ad(py::module_ &m) {
     py::class_<ek::Loop<Guide>>(cuda_ad, "LoopBase");
 
     py::class_<Loop<Guide>, ek::Loop<Guide>> loop(cuda_ad, "Loop");
-    loop.def(py::init<const char *, py::args>())
+    loop.def(py::init<const char *, py::handle>(), "name"_a, "vars"_a = py::none())
         .def("put", &Loop<Guide>::put)
         .def("init", &Loop<Guide>::init)
         .def("__call__", &Loop<Guide>::operator());

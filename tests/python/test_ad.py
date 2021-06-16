@@ -14,6 +14,14 @@ def m(request):
 
 
 @pytest.fixture
+def do_record():
+    value_before = ek.flag(ek.JitFlag.LoopRecord)
+    ek.set_flag(ek.JitFlag.LoopRecord, True)
+    yield None
+    ek.set_flag(ek.JitFlag.LoopRecord, value_before)
+
+
+@pytest.fixture
 def no_record():
     value_before = ek.flag(ek.JitFlag.LoopRecord)
     ek.set_flag(ek.JitFlag.LoopRecord, False)
@@ -760,12 +768,12 @@ def test44_custom_forward(m):
     ek.traverse(m.Float, reverse=False, retain_graph=False)
     assert ek.allclose(ek.grad(d2), m.Array3f(0.610883, 0.152721, -0.305441)*2)
 
-def test45_diff_loop(m):
+def test45_diff_loop(m, do_record):
     def mcint(a, b, f, sample_count=100000):
         rng = m.PCG32()
         i = m.UInt32(0)
         result = m.Float(0)
-        l = m.Loop("test45", i, rng, result)
+        l = m.Loop("test45", lambda: (i, rng, result))
         while l(i < sample_count):
             result += f(ek.lerp(a, b, rng.next_float32()))
             i += 1
@@ -802,17 +810,15 @@ def test45_diff_loop(m):
     def elliptic_k(m_):
         return ek.custom(EllipticK, m_)
 
-    ek.set_flag(ek.JitFlag.LoopRecord, True)
     x = m.Float(0.5)
     ek.enable_grad(x)
     y = elliptic_k(x)
     ek.forward(x)
     assert ek.allclose(y, 1.85407, rtol=5e-4)
     assert ek.allclose(ek.grad(y), 0.847213, rtol=5e-4)
-    ek.set_flag(ek.JitFlag.LoopRecord, False)
 
 
-def test46_loop_ballistic(m):
+def test46_loop_ballistic(m, do_record):
     class Ballistic(ek.CustomOp):
         def timestep(self, pos, vel, dt=0.02, mu=.1, g=9.81):
             acc = -mu*vel*ek.norm(vel) - m.Array2f(0, g)
@@ -831,7 +837,7 @@ def test46_loop_ballistic(m):
             self.temp_pos = ek.empty(m.Array2f, n * max_it)
             self.temp_vel = ek.empty(m.Array2f, n * max_it)
 
-            loop = m.Loop("eval", pos, vel, it)
+            loop = m.Loop("eval", lambda: (pos, vel, it))
             while loop(it < max_it):
                 # Store current loop variables
                 index = it * n + ek.arange(m.UInt32, n)
@@ -856,7 +862,7 @@ def test46_loop_ballistic(m):
             # Run for 100 iterations
             it = m.UInt32(100)
 
-            loop = m.Loop("backward", it, grad_pos, grad_vel)
+            loop = m.Loop("backward", lambda: (it, grad_pos, grad_vel))
             n = ek.width(grad_pos)
             while loop(it > 0):
                 # Retrieve loop variables, reverse chronological order
@@ -883,7 +889,6 @@ def test46_loop_ballistic(m):
     pos_in = m.Array2f([1, 2, 4], [1, 2, 1])
     vel_in = m.Array2f([10, 9, 4], [5, 3, 6])
 
-    ek.set_flag(ek.JitFlag.LoopRecord, True)
     for i in range(20):
         ek.enable_grad(vel_in)
         ek.eval(vel_in, pos_in)
@@ -895,10 +900,9 @@ def test46_loop_ballistic(m):
 
     assert ek.allclose(loss, 0, atol=1e-4)
     assert ek.allclose(vel_in.x, [3.3516, 2.3789, 0.79156], rtol=1e-3)
-    ek.set_flag(ek.JitFlag.LoopRecord, False)
 
 
-def test47_loop_ballistic_2(m):
+def test47_loop_ballistic_2(m, do_record):
     class Ballistic2(ek.CustomOp):
         def timestep(self, pos, vel, dt=0.02, mu=.1, g=9.81):
             acc = -mu*vel*ek.norm(vel) - m.Array2f(0, g)
@@ -912,13 +916,10 @@ def test47_loop_ballistic_2(m):
             # Run for 100 iterations
             it, max_it = m.UInt32(0), 100
 
-            loop = m.Loop("eval", pos, vel, it)
+            loop = m.Loop("eval", lambda: (pos, vel, it))
             while loop(it < max_it):
                 # Update loop variables
-                pos_out, vel_out = self.timestep(pos, vel)
-                pos.assign(pos_out)
-                vel.assign(vel_out)
-
+                pos, vel = self.timestep(pos, vel)
                 it += 1
 
             self.pos = pos
@@ -933,29 +934,28 @@ def test47_loop_ballistic_2(m):
             # Run for 100 iterations
             it = m.UInt32(0)
 
-            loop = m.Loop("backward", it, pos, vel, grad_pos, grad_vel)
+            loop = m.Loop("backward", lambda: (it, pos, vel, grad_pos, grad_vel))
             while loop(it < 100):
                 # Take reverse step in time
-                pos_rev, vel_rev = self.timestep(pos, vel, dt=-0.02)
-                pos.assign(pos_rev)
-                vel.assign(vel_rev)
+                pos, vel = self.timestep(pos, vel, dt=-0.02)
 
                 # Take a forward step in time, keep track of derivatives
+                pos_rev, vel_rev = m.Array2f(pos), m.Array2f(vel)
                 ek.enable_grad(pos_rev, vel_rev)
                 pos_fwd, vel_fwd = self.timestep(pos_rev, vel_rev, dt=0.02)
+
                 ek.set_grad(pos_fwd, grad_pos)
                 ek.set_grad(vel_fwd, grad_vel)
                 ek.enqueue(pos_fwd, vel_fwd)
                 ek.traverse(m.Float, reverse=True)
 
-                grad_pos.assign(ek.grad(pos_rev))
-                grad_vel.assign(ek.grad(vel_rev))
+                grad_pos = ek.grad(pos_rev)
+                grad_vel = ek.grad(vel_rev)
                 it += 1
 
             self.set_grad_in('pos', grad_pos)
             self.set_grad_in('vel', grad_vel)
 
-    ek.set_flag(ek.JitFlag.LoopRecord, True)
     pos_in = m.Array2f([1, 2, 4], [1, 2, 1])
     vel_in = m.Array2f([10, 9, 4], [5, 3, 6])
 
@@ -970,7 +970,6 @@ def test47_loop_ballistic_2(m):
 
     assert ek.allclose(loss, 0, atol=1e-4)
     assert ek.allclose(vel_in.x, [3.3516, 2.3789, 0.79156], atol=1e-3)
-    ek.set_flag(ek.JitFlag.LoopRecord, False)
 
 
 def test48_nan_propagation(m):
@@ -1135,7 +1134,7 @@ def test_55_diffloop_simple_fwd(m, no_record):
     fi, fo = m.Float(1, 2, 3), m.Float(0, 0, 0)
     ek.enable_grad(fi)
 
-    loop = m.Loop("MyLoop", fo)
+    loop = m.Loop("MyLoop", lambda: fo)
     while loop(fo < 10):
         fo += fi
     ek.forward(fi)
@@ -1146,7 +1145,7 @@ def test_56_diffloop_simple_rev(m, no_record):
     fi, fo = m.Float(1, 2, 3), m.Float(0, 0, 0)
     ek.enable_grad(fi)
 
-    loop = m.Loop("MyLoop", fo)
+    loop = m.Loop("MyLoop", lambda: fo)
     while loop(fo < 10):
         fo += fi
     ek.backward(fo)
@@ -1158,7 +1157,7 @@ def test_57_diffloop_masking_rev(m, no_record):
     fi = m.Float(1, 2)
     i = m.UInt32(0, 5)
     ek.enable_grad(fi)
-    loop = m.Loop("MyLoop", i)
+    loop = m.Loop("MyLoop", lambda: i)
     while loop(i < 5):
         ek.scatter_reduce(ek.ReduceOp.Add, fo, fi, i)
         i += 1
@@ -1172,7 +1171,7 @@ def test_58_diffloop_masking_rev(m, no_record):
     fi = m.Float(1, 2)
     i = m.UInt32(0, 5)
     ek.enable_grad(fi)
-    loop = m.Loop("MyLoop", i)
+    loop = m.Loop("MyLoop", lambda: i)
     while loop(i < 5):
         ek.scatter_reduce(ek.ReduceOp.Add, fo, fi, i)
         i += 1
