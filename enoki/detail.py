@@ -419,7 +419,7 @@ def read_indices(*args):
                 for i in range(len(a)):
                     result.extend(read_indices(a.entry_ref_(i)))
             elif a.IsDiff:
-                if enoki.grad_enabled(a):
+                if enoki.grad_enabled(a) and enoki.flag(enoki.JitFlag.LoopRecord):
                     raise enoki.Exception(
                         'Symbolic loop encountered a differentiable array '
                         'with enabled gradients! This is not supported.')
@@ -445,7 +445,7 @@ def write_indices(indices, *args):
                 for i in range(len(a)):
                     write_indices(indices, a.entry_ref_(i))
             elif a.IsDiff:
-                if enoki.grad_enabled(a):
+                if enoki.grad_enabled(a) and enoki.flag(enoki.JitFlag.LoopRecord):
                     raise enoki.Exception(
                         'Symbolic loop encountered a differentiable array '
                         'with enabled gradients! This is not supported.')
