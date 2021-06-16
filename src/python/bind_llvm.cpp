@@ -16,19 +16,12 @@ void export_llvm(py::module_ &m) {
 
     bind_pcg32<Guide>(llvm);
 
-    py::class_<ek::Loop<Mask>>(llvm, "LoopBase");
+    py::class_<ek::Loop<Guide>>(llvm, "LoopBase");
 
-    py::class_<Loop<Mask>, ek::Loop<Mask>> loop(llvm, "Loop");
+    py::class_<Loop<Guide>, ek::Loop<Guide>> loop(llvm, "Loop");
     loop.def(py::init<const char *, py::args>())
-        .def("put", &Loop<Mask>::put)
-        .def("init", &Loop<Mask>::init)
-        .def("__call__", &Loop<Mask>::operator());
-
-#if defined(ENOKI_ENABLE_AUTODIFF)
-    loop.def("__call__",
-             [](Loop<Mask> &g, const ek::DiffArray<ek::LLVMArray<bool>> &mask) {
-                 return g(ek::detach(mask));
-             });
-#endif
+        .def("put", &Loop<Guide>::put)
+        .def("init", &Loop<Guide>::init)
+        .def("__call__", &Loop<Guide>::operator());
 }
 #endif

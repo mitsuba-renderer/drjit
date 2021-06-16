@@ -21,8 +21,8 @@ NAMESPACE_BEGIN(enoki)
 template <typename Mask, typename SFINAE = int> struct Loop;
 
 /// Scalar fallback, expands into normal C++ loop
-template <typename Mask>
-struct Loop<Mask, enable_if_t<std::is_scalar_v<Mask>>> {
+template <typename Value>
+struct Loop<Value, enable_if_t<std::is_scalar_v<Value>>> {
     Loop(const Loop &) = delete;
     Loop(Loop &&) = delete;
     Loop& operator=(const Loop &) = delete;
@@ -35,9 +35,11 @@ struct Loop<Mask, enable_if_t<std::is_scalar_v<Mask>>> {
 };
 
 /// Array case, expands into a symbolic or wavefront-style loop
-template <typename Mask>
-struct Loop<Mask, enable_if_jit_array_t<Mask>> {
-    static constexpr JitBackend Backend = Mask::Backend;
+template <typename Value>
+struct Loop<Value, enable_if_jit_array_t<Value>> {
+    static constexpr JitBackend Backend = backend_v<Value>;
+
+    using Mask = mask_t<Value>;
 
     Loop(const Loop &) = delete;
     Loop(Loop &&) = delete;
@@ -81,9 +83,18 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
         }
 
         // Recover if an error occurred while running a wavefront-style loop
-        if (!m_record && m_index_out.size() > 0) {
+        if (!m_record) {
             for (size_t i = 0; i < m_index_out.size(); ++i)
                 jit_var_dec_ref_ext(m_index_out[i]);
+
+            if constexpr (is_diff_array_v<Value>) {
+                using Type = typename Value::Type;
+
+                for (size_t i = 0; i < m_index_out_ad.size(); ++i) {
+                    int32_t index = m_index_out_ad[i];
+                    detail::ad_dec_ref<Type>(index);
+                }
+            }
         }
 
         jit_var_dec_ref_ext(m_loop_cond);
@@ -91,16 +102,24 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
     }
 
     /// Register JIT variable indices of loop variables
-    template <typename Value, typename... Args>
-    void put(Value &value, Args &... args) {
-        if constexpr (is_array_v<Value>) {
-            if constexpr (array_depth_v<Value> == 1) {
-                if constexpr (is_diff_array_v<Value>) {
-                    if (grad_enabled(value))
-                        jit_raise("enoki::Loop::put(): loop variable is "
-                                  "attached to the AD graph!");
+    template <typename T, typename... Ts>
+    void put(T &value, Ts &... args) {
+        if constexpr (is_array_v<T>) {
+            if constexpr (array_depth_v<T> == 1) {
+                if constexpr (is_diff_array_v<T>) {
+                    if (m_record && grad_enabled(value))
+                        jit_raise(
+                            "enoki::Loop::put(): one of the supplied loop "
+                            "variables is attached to the AD graph (i.e. "
+                            "grad_enabled(..) is true). However, recorded "
+                            "loops cannot be differentiated in their entirety. "
+                            "You have two options: either disable loop "
+                            "recording via set_flag(JitFlag::LoopRecord, "
+                            "false). Alternatively, you could implement the "
+                            "adjoint of the loop using ek::CustomOp.");
                     put(value.detach_());
-                } else if constexpr (is_jit_array_v<Value>) {
+                    m_index_p_ad[m_index_p_ad.size() - 1] = value.index_ad_ptr();
+                } else if constexpr (is_jit_array_v<T>) {
                     if (m_state)
                         jit_raise("enoki::Loop::put(): must be called "
                                   "*before* initialization!");
@@ -109,6 +128,7 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
                                   "an element of a data structure provided "
                                   "as a loop variable) is unintialized!");
                     m_index_p.push_back(value.index_ptr());
+                    m_index_p_ad.push_back(nullptr);
                     m_index_in.push_back(value.index());
                     m_invariant.push_back(0);
                     size_t size = value.size();
@@ -122,8 +142,8 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
                 for (size_t i = 0; i < value.size(); ++i)
                     put(value.entry(i));
             }
-        } else if constexpr (is_enoki_struct_v<Value>) {
-            struct_support_t<Value>::apply_1(value, [&](auto &x) { put(x); });
+        } else if constexpr (is_enoki_struct_v<T>) {
+            struct_support_t<T>::apply_1(value, [&](auto &x) { put(x); });
         }
         put(args...);
     }
@@ -314,7 +334,7 @@ protected:
                     jit_set_flag(JitFlag::Recording, m_se_flag);
                     jit_set_cse_scope(Backend, m_cse_scope);
                     m_se_offset = (uint32_t) -1;
-                    m_cond = Mask();
+                    m_cond = detached_t<Mask>();
                     m_state++;
                     return false;
                 }
@@ -346,11 +366,32 @@ protected:
             m_mask_stack.pop();
             for (uint32_t i = 0; i < m_index_p.size(); ++i) {
                 uint32_t i1 = *m_index_p[i], i2 = m_index_out[i];
-                *m_index_p[i] = jit_var_new_op_3(JitOp::Select, m_cond.index(), i1, i2);
+                *m_index_p[i] =
+                    jit_var_new_op_3(JitOp::Select, m_cond.index(), i1, i2);
                 jit_var_dec_ref_ext(i1);
                 jit_var_dec_ref_ext(i2);
             }
             m_index_out.clear();
+
+            if constexpr (is_diff_array_v<Value>) {
+                using Type = typename Value::Type;
+                for (uint32_t i = 0; i < m_index_p_ad.size(); ++i) {
+                    if (!m_index_p_ad[i])
+                        continue;
+
+                    int32_t i1 = *m_index_p_ad[i], i2 = m_index_out_ad[i],
+                            index_new = 0;
+                    if (i1 > 0 || i2 > 0)
+                        index_new = i2;
+                        index_new = detail::ad_new_select<Type>(
+                            "select", jit_var_size(*m_index_p[i]),
+                            m_cond, i1, i2);
+                    *m_index_p_ad[i] = index_new;
+                    detail::ad_dec_ref<Type>(i1);
+                    detail::ad_dec_ref<Type>(i2);
+                }
+                m_index_out_ad.clear();
+            }
         }
 
         // Ensure all loop state is evaluated
@@ -367,8 +408,21 @@ protected:
                 m_index_out.push_back(index);
             }
 
+            if constexpr (is_diff_array_v<Value>) {
+                using Type = typename Value::Type;
+
+                for (uint32_t i = 0; i < m_index_p_ad.size(); ++i) {
+                    int32_t index = 0;
+                    if (m_index_p_ad[i]) {
+                        index = *m_index_p_ad[i];
+                        detail::ad_inc_ref<Type>(index);
+                    }
+                    m_index_out_ad.push_back(index);
+                }
+            }
+
             // Mask scatters/gathers/vcalls in the next iteration
-            m_cond = cond;
+            m_cond = detach(cond);
             m_mask_stack.push(m_cond.index());
             return true;
         } else {
@@ -388,6 +442,7 @@ protected:
 
     /// Pointers to loop variable indices
     ek_vector<uint32_t *> m_index_p;
+    ek_vector<int32_t *> m_index_p_ad;
 
     /// Loop variable indices before entering the loop
     ek_vector<uint32_t> m_index_in;
@@ -397,6 +452,7 @@ protected:
 
     /// Loop variable indices after the end of the loop
     ek_vector<uint32_t> m_index_out;
+    ek_vector<int32_t> m_index_out_ad;
 
     /// Detects loop-invariant variables to trigger optimizations
     ek_vector<uint8_t> m_invariant;

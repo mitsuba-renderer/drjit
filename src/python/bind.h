@@ -418,15 +418,17 @@ auto bind_full(py::class_<Array> &cls, bool scalar_mode = false) {
     if constexpr (Array::IsJIT)
         cls.def("migrate_", &Array::migrate_);
 
-    if constexpr (Array::IsJIT)
+    if constexpr (Array::IsJIT) {
         cls.def("index", &Array::index);
-
-    if constexpr (Array::IsDiff)
-        cls.def("index_ad", &Array::index_ad);
-
-    if constexpr (!Array::IsDiff && Array::IsJIT)
         cls.def("set_index_",
                 [](Array &a, uint32_t index) { *a.index_ptr() = index; });
+    }
+
+    if constexpr (Array::IsDiff) {
+        cls.def("index_ad", &Array::index_ad);
+        cls.def("set_index_ad_",
+                [](Array &a, int32_t index) { *a.index_ad_ptr() = index; });
+    }
 
     if constexpr (Array::IsDiff) {
         cls.def(py::init<ek::detached_t<Array>>());

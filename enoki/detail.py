@@ -421,19 +421,23 @@ def read_indices(*args):
             elif a.IsDiff:
                 if enoki.grad_enabled(a) and enoki.flag(enoki.JitFlag.LoopRecord):
                     raise enoki.Exception(
-                        'Symbolic loop encountered a differentiable array '
-                        'with enabled gradients! This is not supported.')
-                result.extend(read_indices(a.detach_()))
+                        "read_indices(): one of the supplied loop "
+                        "variables is attached to the AD graph (i.e. "
+                        "grad_enabled(..) is true). However, recorded "
+                        "loops cannot be differentiated in their entirety. "
+                        "You have two options: either disable loop "
+                        "recording via set_flag(JitFlag.LoopRecord, "
+                        "False). Alternatively, you could implement the "
+                        "adjoint of the loop using ek::CustomOp.")
+                result.append((a.index(), a.index_ad()))
             elif a.IsJIT:
-                result.append(a.index())
+                result.append((a.index(), 0))
         elif isinstance(a, tuple) or isinstance(a, list):
             for b in a:
                 result.extend(read_indices(b))
         elif enoki.is_enoki_struct_v(a):
             for k, v in type(a).ENOKI_STRUCT.items():
                 result.extend(read_indices(getattr(a, k)))
-        else:
-            print(" do not know what to do with %s\n" % str(a))
     return result
 
 
@@ -447,16 +451,24 @@ def write_indices(indices, *args):
             elif a.IsDiff:
                 if enoki.grad_enabled(a) and enoki.flag(enoki.JitFlag.LoopRecord):
                     raise enoki.Exception(
-                        'Symbolic loop encountered a differentiable array '
-                        'with enabled gradients! This is not supported.')
-                write_indices(indices, a.detach_())
+                        "write_indices(): one of the supplied loop "
+                        "variables is attached to the AD graph (i.e. "
+                        "grad_enabled(..) is true). However, recorded "
+                        "loops cannot be differentiated in their entirety. "
+                        "You have two options: either disable loop "
+                        "recording via set_flag(JitFlag.LoopRecord, "
+                        "False). Alternatively, you could implement the "
+                        "adjoint of the loop using ek::CustomOp.")
+                idx = indices.pop(0)
+                a.set_index_(idx[0])
+                a.set_index_ad_(idx[1])
             elif a.IsJIT:
-                a.set_index_(indices.pop(0))
+                idx = indices.pop(0)
+                a.set_index_(idx[0])
+                assert idx[1] == 0
         elif isinstance(a, tuple) or isinstance(a, list):
             for b in a:
                 write_indices(indices, b)
         elif enoki.is_enoki_struct_v(a):
             for k, v in type(a).ENOKI_STRUCT.items():
                 write_indices(indices, getattr(a, k))
-        else:
-            print(" do not know what to do with %s\n" % str(a))

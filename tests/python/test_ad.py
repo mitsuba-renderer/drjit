@@ -1,12 +1,9 @@
 import enoki as ek
 import pytest
-import gc
 
 
 @pytest.fixture(scope="module", params=[ek.cuda.ad, ek.llvm.ad])
 def m(request):
-    gc.collect()
-    gc.collect()
     if 'cuda' in request.param.__name__:
         if not ek.has_backend(ek.JitBackend.CUDA):
             pytest.skip('CUDA mode is unsupported')
@@ -14,8 +11,14 @@ def m(request):
         if not ek.has_backend(ek.JitBackend.LLVM):
             pytest.skip('LLVM mode is unsupported')
     yield request.param
-    gc.collect()
-    gc.collect()
+
+
+@pytest.fixture
+def no_record():
+    value_before = ek.flag(ek.JitFlag.LoopRecord)
+    ek.set_flag(ek.JitFlag.LoopRecord, False)
+    yield None
+    ek.set_flag(ek.JitFlag.LoopRecord, value_before)
 
 
 def test01_add_rev(m):
@@ -1126,3 +1129,52 @@ def test54_scatter_implicit_detach(m):
     i = m.UInt32(0)
     m = m.Bool(True)
     ek.scatter(x, y, i, m)
+
+
+def test_55_diffloop_simple_fwd(m, no_record):
+    fi, fo = m.Float(1, 2, 3), m.Float(0, 0, 0)
+    ek.enable_grad(fi)
+
+    loop = m.Loop("MyLoop", fo)
+    while loop(fo < 10):
+        fo += fi
+    ek.forward(fi)
+    assert ek.grad(fo) == m.Float(10, 5, 4)
+
+
+def test_56_diffloop_simple_rev(m, no_record):
+    fi, fo = m.Float(1, 2, 3), m.Float(0, 0, 0)
+    ek.enable_grad(fi)
+
+    loop = m.Loop("MyLoop", fo)
+    while loop(fo < 10):
+        fo += fi
+    ek.backward(fo)
+    assert ek.grad(fi) == m.Float(10, 5, 4)
+
+
+def test_57_diffloop_masking_rev(m, no_record):
+    fo = ek.zero(m.Float, 10)
+    fi = m.Float(1, 2)
+    i = m.UInt32(0, 5)
+    ek.enable_grad(fi)
+    loop = m.Loop("MyLoop", i)
+    while loop(i < 5):
+        ek.scatter_reduce(ek.ReduceOp.Add, fo, fi, i)
+        i += 1
+    ek.forward(fi)
+    assert fo == m.Float(1, 1, 1, 1, 1, 0, 0, 0, 0, 0)
+    assert ek.grad(fo) == m.Float(1, 1, 1, 1, 1, 0, 0, 0, 0, 0)
+
+
+def test_58_diffloop_masking_rev(m, no_record):
+    fo = ek.zero(m.Float, 10)
+    fi = m.Float(1, 2)
+    i = m.UInt32(0, 5)
+    ek.enable_grad(fi)
+    loop = m.Loop("MyLoop", i)
+    while loop(i < 5):
+        ek.scatter_reduce(ek.ReduceOp.Add, fo, fi, i)
+        i += 1
+    ek.backward(fo)
+    assert ek.grad(fi) == m.Float(5, 0)

@@ -7,6 +7,7 @@
 #include <deque>
 #include <assert.h>
 #include <mutex>
+#include <iostream>
 #include <xxh3.h>
 
 #define CONCAT(x,y) x ## _ ## y
@@ -925,8 +926,18 @@ template <typename Value> struct GatherEdge : Special {
 
 template <typename Value, typename Mask, typename Index>
 int32_t ad_new_gather_impl(const char *label, uint32_t size, int32_t src_index,
-                           const Index &offset, const Mask &mask, bool permute) {
+                           const Index &offset, const Mask &mask_, bool permute) {
+    Mask mask(mask_);
+
     if constexpr (is_array_v<Value>) {
+        if (is_jit_array_v<Value>) {
+            // Apply the mask stack (needed for wavefront-mode ek::Loop)
+            Mask top = Mask::steal(jit_var_mask_peek(Mask::Backend));
+            size_t tsize = top.size();
+            if (tsize != 1 && tsize == size)
+                mask &= top;
+        }
+
         auto [index, var] = ad_var_new(label, size);
 
         ad_log(Debug, "ad_new_gather(a%i <- a%i, size=%u, permute=%i)", index,
@@ -1008,10 +1019,25 @@ template <typename Value> struct ScatterEdge : Special {
 template <typename Value, typename Mask, typename Index>
 int32_t ad_new_scatter(const char *label, uint32_t size, ReduceOp op,
                        int32_t src_index, int32_t dst_index, const Index &offset,
-                       const Mask &mask, bool permute) {
+                       const Mask &mask_, bool permute) {
+
+    Mask mask(mask_);
 
     if constexpr (is_array_v<Value>) {
         std::lock_guard<std::mutex> guard(state.mutex);
+
+        if (is_jit_array_v<Value>) {
+            // Apply the mask stack (needed for wavefront-mode ek::Loop)
+            Mask top = Mask::steal(jit_var_mask_peek(Mask::Backend));
+            size_t tsize = top.size(),
+                   ssize = std::max(
+                       std::max(
+                           offset.size(),
+                           (size_t)(src_index ? state[src_index]->size : 0)),
+                       mask_.size());
+            if (tsize != 1 && tsize == ssize)
+                mask &= top;
+        }
 
         auto [index, var] = ad_var_new(label, size);
 

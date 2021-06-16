@@ -551,7 +551,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             if constexpr (IsEnabled) {
                 if (t.m_index > 0 || f.m_index > 0) {
                     index_new = detail::ad_new_select<Type>(
-                        "select", (int32_t) width(result),
+                        "select", (uint32_t) width(result),
                         m.m_value, t.m_index, f.m_index);
                 }
             }
@@ -1777,7 +1777,15 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             enoki_raise("index(): expected a JIT array type");
     }
 
+    uint32_t* index_ptr() {
+        if constexpr (is_jit_array_v<Type>)
+            return m_value.index_ptr();
+        else
+            enoki_raise("index_ptr(): expected a JIT array type");
+    }
+
     int32_t index_ad() const { return m_index; }
+    int32_t* index_ad_ptr() { return &m_index; }
 
     /// Change variable index without involving reference counting. Dangerous, used by custom.h
     void set_index_ad(uint32_t value) { m_index = value; }

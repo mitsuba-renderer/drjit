@@ -1,6 +1,7 @@
 #if defined(ENOKI_ENABLE_JIT) && defined(ENOKI_ENABLE_AUTODIFF)
 #include "bind.h"
 #include "random.h"
+#include "loop.h"
 #include <enoki/autodiff.h>
 #include <enoki/jit.h>
 
@@ -35,7 +36,6 @@ void export_llvm_ad(py::module_ &m) {
     ENOKI_BIND_ARRAY_TYPES(llvm_ad, Guide, false);
 
     bind_pcg32<Guide>(llvm_ad);
-    llvm_ad.attr("Loop") = m.attr("llvm").attr("Loop");
 
     py::module_ detail = llvm_ad.def_submodule("detail");
     detail.def("ad_add_edge", [](int32_t src_index, int32_t dst_index,
@@ -43,5 +43,13 @@ void export_llvm_ad(py::module_ &m) {
         ek::detail::ad_add_edge<ek::LLVMArray<float>>(
             src_index, dst_index, cb.is_none() ? nullptr : new CustomOp(cb));
     }, "src_index"_a, "dst_index"_a, "cb"_a = py::none());
+
+    py::class_<ek::Loop<Guide>>(llvm_ad, "LoopBase");
+
+    py::class_<Loop<Guide>, ek::Loop<Guide>> loop(llvm_ad, "Loop");
+    loop.def(py::init<const char *, py::args>())
+        .def("put", &Loop<Guide>::put)
+        .def("init", &Loop<Guide>::init)
+        .def("__call__", &Loop<Guide>::operator());
 }
 #endif

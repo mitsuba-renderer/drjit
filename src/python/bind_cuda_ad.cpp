@@ -1,6 +1,7 @@
 #if defined(ENOKI_ENABLE_JIT) && defined(ENOKI_ENABLE_AUTODIFF)
 #include "bind.h"
 #include "random.h"
+#include "loop.h"
 #include <enoki/autodiff.h>
 #include <enoki/jit.h>
 
@@ -36,7 +37,6 @@ void export_cuda_ad(py::module_ &m) {
     ENOKI_BIND_ARRAY_TYPES(cuda_ad, Guide, false);
 
     bind_pcg32<Guide>(cuda_ad);
-    cuda_ad.attr("Loop") = m.attr("cuda").attr("Loop");
 
     py::module_ detail = cuda_ad.def_submodule("detail");
     detail.def("ad_add_edge", [](int32_t src_index, int32_t dst_index,
@@ -44,5 +44,13 @@ void export_cuda_ad(py::module_ &m) {
         ek::detail::ad_add_edge<ek::CUDAArray<float>>(
             src_index, dst_index, cb.is_none() ? nullptr : new CustomOp(cb));
     }, "src_index"_a, "dst_index"_a, "cb"_a = py::none());
+
+    py::class_<ek::Loop<Guide>>(cuda_ad, "LoopBase");
+
+    py::class_<Loop<Guide>, ek::Loop<Guide>> loop(cuda_ad, "Loop");
+    loop.def(py::init<const char *, py::args>())
+        .def("put", &Loop<Guide>::put)
+        .def("init", &Loop<Guide>::init)
+        .def("__call__", &Loop<Guide>::operator());
 }
 #endif
