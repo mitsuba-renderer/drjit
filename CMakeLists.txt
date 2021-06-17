@@ -34,14 +34,14 @@ option(ENOKI_ENABLE_AUTODIFF "Build Enoki automatic differentation library?" OFF
 option(ENOKI_ENABLE_PYTHON   "Build Python extension library?" OFF)
 option(ENOKI_ENABLE_TESTS    "Build Enoki test suite? (Warning, this takes *very* long to compile)" OFF)
 
-# Compile for a sufficiently recent processor. Assumes Haswell+ (with AVX2) by
+# Compile for a sufficiently recent processor. Assumes Nehalem+ (with SSE4.2) by
 # default. You may want to set MTS_NATIVE_FLAGS to "-march=native" to use all
 # instructions available on a particular machine.
 
 if (MSVC)
-  set(ENOKI_NATIVE_FLAGS_DEFAULT "/arch:AVX2")
+  set(ENOKI_NATIVE_FLAGS_DEFAULT "")
 else()
-  set(ENOKI_NATIVE_FLAGS_DEFAULT "-march=haswell")
+  set(ENOKI_NATIVE_FLAGS_DEFAULT "-march=nehalem")
 endif()
 
 # Adapt to variations in rpath handling on Linux and macOS
