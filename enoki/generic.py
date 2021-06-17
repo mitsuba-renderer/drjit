@@ -618,6 +618,42 @@ def popcnt_(a0):
     return ar
 
 
+def floor_(a0):
+    if not a0.IsArithmetic:
+        raise Exception("floor(): requires arithmetic operands!")
+    ar, sr = _check1(a0)
+    for i in range(sr):
+        ar[i] = _ek.floor(a0[i])
+    return ar
+
+
+def ceil_(a0):
+    if not a0.IsArithmetic:
+        raise Exception("ceil(): requires arithmetic operands!")
+    ar, sr = _check1(a0)
+    for i in range(sr):
+        ar[i] = _ek.ceil(a0[i])
+    return ar
+
+
+def round_(a0):
+    if not a0.IsArithmetic:
+        raise Exception("round(): requires arithmetic operands!")
+    ar, sr = _check1(a0)
+    for i in range(sr):
+        ar[i] = _ek.round(a0[i])
+    return ar
+
+
+def trunc_(a0):
+    if not a0.IsArithmetic:
+        raise Exception("trunc(): requires arithmetic operands!")
+    ar, sr = _check1(a0)
+    for i in range(sr):
+        ar[i] = _ek.trunc(a0[i])
+    return ar
+
+
 @staticmethod
 def select_(a0, a1, a2):
     ar, sr = _check3_select(a0, a1, a2)
