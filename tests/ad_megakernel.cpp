@@ -6,17 +6,13 @@
 
 namespace ek = enoki;
 
-using Float  = ek::DiffArray<ek::LLVMArray<float>>;
+using Float  = ek::DiffArray<ek::CUDAArray<float>>;
 using UInt32 = ek::uint32_array_t<Float>;
 using Mask   = ek::mask_t<Float>;
 
 struct Class {
     Float value;
     Float f(UInt32 i) {
-        // a1: x
-        // a6: gather
-        // a7: mul
-        // a8: result
         return ek::sqr(ek::gather<Float>(value, i));
     }
 
@@ -30,33 +26,37 @@ ENOKI_VCALL_END(Class)
 using ClassPtr = ek::replace_scalar_t<Float, Class *>;
 
 ENOKI_TEST(test01_vcall_reduce_and_record) {
-    jit_init((uint32_t) JitBackend::LLVM);
+    jit_init((uint32_t) JitBackend::CUDA);
+    // jit_set_flag(JitFlag::VCallOptimize, false);
+    // jit_set_flag(JitFlag::VCallRecord, false);
+    // jit_set_log_level_stderr(LogLevel::Trace);
 
-    // a1
-    Float x = ek::arange<Float>(10);
-    ek::enable_grad(x);
-    ek::set_label(x, "x");
-    jit_set_log_level_stderr(LogLevel::Trace);
+    for (int i = 0; i < 2; ++i) {
+        Float x = ek::arange<Float>(10);
+        ek::enable_grad(x);
+        ek::set_label(x, "x");
 
-    // Float y = ek::gather<Float>(x, 9 - ek::arange<UInt32>(10));
+        Float y = x;
 
-    Class *b1 = new Class();
-    Class *b2 = new Class();
-    ClassPtr b2p(b2);
+        if (i == 1)
+            y = ek::gather<Float>(x, 9 - ek::arange<UInt32>(10));
 
-    b1->value = ek::zero<Float>(10);
-    b2->value = x;
+        Class *b1 = new Class();
+        Class *b2 = new Class();
+        ClassPtr b2p(b2);
 
-    // a4
-    Float z = b2p->f(arange<UInt32>(10) % 10);
-    std::cout << ek::graphviz(z) << std::endl;
-    ek::set_label(z, "z");
-    ek::backward(z);
+        b1->value = ek::zero<Float>(10);
+        b2->value = y;
 
-    std::cout << ek::grad(x) << std::endl;
-    std::cout << ek::grad(b2->value) << std::endl;
-    assert(ek::grad(x) == Float(0, 2, 4, 6, 8, 10, 12, 14, 16, 18));
+        Float z = b2p->f(arange<UInt32>(13) % 10);
+        ek::backward(z);
 
-    delete b1;
-    delete b2;
+        if (i == 0)
+            assert(ek::grad(x) == Float(0, 4, 8, 6, 8, 10, 12, 14, 16, 18));
+        else
+            assert(ek::grad(x) == Float(0, 2, 4, 6, 8, 10, 12, 28, 32, 36));
+
+        delete b1;
+        delete b2;
+    }
 }

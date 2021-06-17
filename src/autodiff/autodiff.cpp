@@ -248,9 +248,6 @@ struct State {
     /// List of currently unused edges
     std::vector<uint32_t> unused_edges;
 
-    /// List of variables to be processed in traverse()
-    std::vector<int32_t> todo;
-
     /// List of variables to be processed after leaving recording mode
     std::vector<int32_t> postponed_rev, postponed_fwd;
 
@@ -400,9 +397,7 @@ template <typename T> void ad_enqueue(int32_t index) {
 }
 
 /// Kahn-style topological sort in forward mode
-static void ad_toposort_fwd() {
-    state.todo.clear();
-
+static void ad_toposort_fwd(std::vector<int32_t> &todo) {
     tsl::robin_set<int32_t, Int32Hasher> visited;
     std::deque<int32_t> *queue = tls_queue;
     if (!queue || queue->empty())
@@ -418,11 +413,10 @@ static void ad_toposort_fwd() {
         if (!visited.insert(index).second)
             continue;
 
-        // Don't traverse non-placeholder nodes while recording
         const Variable *v = state[index];
-        state.todo.push_back(index);
-
         uint32_t edge = v->next_fwd;
+
+        todo.push_back(index);
         while (edge) {
             Edge &e = state.edges[edge];
 
@@ -450,9 +444,7 @@ static void ad_toposort_fwd() {
 }
 
 /// Kahn-style topological sort in backward mode
-static void ad_toposort_rev() {
-    state.todo.clear();
-
+static void ad_toposort_rev(std::vector<int32_t> &todo) {
     tsl::robin_set<int32_t, Int32Hasher> visited;
     std::deque<int32_t> *queue = tls_queue;
     if (!queue || queue->empty())
@@ -469,9 +461,9 @@ static void ad_toposort_rev() {
             continue;
 
         const Variable *v = state[index];
-        state.todo.push_back(index);
-
         uint32_t edge = v->next_rev;
+
+        todo.push_back(index);
         while (edge) {
             Edge &e = state.edges[edge];
 
@@ -1608,22 +1600,14 @@ void ad_add_edge(int32_t source_idx, int32_t target_idx,
 
 template <typename T>
 static void ad_traverse_impl(bool backward, bool retain_graph) {
-    if (backward)
-        ad_toposort_rev();
-    else
-        ad_toposort_fwd();
-
-    /* Custom operation callbacks may themselves create AD
-     * graphs, be prepared for that */
     std::vector<int32_t> todo;
-    todo.swap(state.todo);
-
-    if (backward)
+    if (backward) {
+        ad_toposort_rev(todo);
         ad_traverse_rev(todo, retain_graph);
-    else
+    } else {
+        ad_toposort_fwd(todo);
         ad_traverse_fwd(todo, retain_graph);
-
-    todo.swap(state.todo);
+    }
 }
 
 template <typename T> void ad_traverse(bool backward, bool retain_graph) {
@@ -1644,6 +1628,7 @@ template <typename T> void ad_traverse_postponed() {
                       state.postponed_rev.end());
         state.postponed_rev.clear();
         ad_traverse_impl<T>(true, true);
+        ad_log(Debug, "ad_traverse_postponed(): reverse mode done.");
     }
 
     if (!state.postponed_fwd.empty()) {
@@ -1653,6 +1638,7 @@ template <typename T> void ad_traverse_postponed() {
                       state.postponed_fwd.end());
         state.postponed_fwd.clear();
         ad_traverse_impl<T>(false, true);
+        ad_log(Debug, "ad_traverse_postponed(): forward mode done.");
     }
 
     backup.swap(*queue);
