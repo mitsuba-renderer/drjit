@@ -420,13 +420,25 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
     }
 
     static Derived full_(Value value, size_t size) {
+        ActualValue av;
+        if constexpr (!IsClass)
+            av = (ActualValue) value;
+        else
+            av = jit_registry_get_id(Backend, value);
+
         return steal(
-            jit_var_new_literal(Backend, Type, &value, size, false));
+            jit_var_new_literal(Backend, Type, &av, size, false));
     }
 
     static Derived opaque_(Value value, size_t size) {
+        ActualValue av;
+        if constexpr (!IsClass)
+            av = (ActualValue) value;
+        else
+            av = jit_registry_get_id(Backend, value);
+
         return steal(
-            jit_var_new_literal(Backend, Type, &value, size, true));
+            jit_var_new_literal(Backend, Type, &av, size, true));
     }
 
     static Derived arange_(ssize_t start, ssize_t stop, ssize_t step) {
