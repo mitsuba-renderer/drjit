@@ -7,7 +7,6 @@
 #include <deque>
 #include <assert.h>
 #include <mutex>
-#include <iostream>
 #include <xxh3.h>
 
 #define CONCAT(x,y) x ## _ ## y

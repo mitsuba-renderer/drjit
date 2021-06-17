@@ -27,36 +27,47 @@ using ClassPtr = ek::replace_scalar_t<Float, Class *>;
 
 ENOKI_TEST(test01_vcall_reduce_and_record) {
     jit_init((uint32_t) JitBackend::CUDA);
-    // jit_set_flag(JitFlag::VCallOptimize, false);
-    // jit_set_flag(JitFlag::VCallRecord, false);
-    // jit_set_log_level_stderr(LogLevel::Trace);
 
-    for (int i = 0; i < 2; ++i) {
-        Float x = ek::arange<Float>(10);
-        ek::enable_grad(x);
-        ek::set_label(x, "x");
+    for (int j = 0; j < 3; ++j) {
+        jit_set_flag(JitFlag::VCallOptimize, j == 2);
+        jit_set_flag(JitFlag::VCallRecord, j >= 1);
+        for (int i = 0; i < 2; ++i) {
+            for (int k = 0; k < 2; ++k) {
+                fprintf(stdout, "Testing %i %i %i..\n", j, i, k);
+                Float x = ek::arange<Float>(10);
+                ek::enable_grad(x);
+                ek::set_label(x, "x");
 
-        Float y = x;
+                Float y = x;
 
-        if (i == 1)
-            y = ek::gather<Float>(x, 9 - ek::arange<UInt32>(10));
+                if (i == 1)
+                    y = ek::gather<Float>(x, 9 - ek::arange<UInt32>(10));
 
-        Class *b1 = new Class();
-        Class *b2 = new Class();
-        ClassPtr b2p(b2);
+                Class *b1 = new Class();
+                Class *b2 = new Class();
+                ClassPtr b2p(b2);
+                if (k == 1)
+                    b2p = ek::opaque<ClassPtr>(b2, 13);
 
-        b1->value = ek::zero<Float>(10);
-        b2->value = y;
+                b1->value = ek::zero<Float>(10);
+                b2->value = y;
 
-        Float z = b2p->f(arange<UInt32>(13) % 10);
-        ek::backward(z);
+                Float z = b2p->f(arange<UInt32>(13) % 10);
+                ek::backward(z);
 
-        if (i == 0)
-            assert(ek::grad(x) == Float(0, 4, 8, 6, 8, 10, 12, 14, 16, 18));
-        else
-            assert(ek::grad(x) == Float(0, 2, 4, 6, 8, 10, 12, 28, 32, 36));
+                if (i == 0)
+                    assert(ek::grad(x) == Float(0, 4, 8, 6, 8, 10, 12, 14, 16, 18));
+                else
+                    assert(ek::grad(x) == Float(0, 2, 4, 6, 8, 10, 12, 28, 32, 36));
 
-        delete b1;
-        delete b2;
+                delete b1;
+                delete b2;
+            }
+        }
     }
+
+    // 2. test the same thing with a loop
+    // 3. what if the instance variable is a scalar
+    // 4. forward mode derivatives
+    // 5. test scatter
 }
