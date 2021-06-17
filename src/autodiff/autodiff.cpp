@@ -257,6 +257,9 @@ struct State {
     /// Counter for variable indices
     int32_t variable_index = 1;
 
+    /// Tracks dependencies between normal and placeholder variables
+    uint32_t internal_deps = 0;
+
     State() : edges(1) { }
 
     Variable *operator[](int32_t index) {
@@ -400,6 +403,7 @@ template <typename T> void ad_enqueue(int32_t index) {
 static void ad_toposort_fwd() {
     state.todo.clear();
 
+    tsl::robin_set<int32_t, Int32Hasher> visited;
     std::deque<int32_t> *queue = tls_queue;
     if (!queue || queue->empty())
         return;
@@ -411,6 +415,8 @@ static void ad_toposort_fwd() {
     while (!queue->empty()) {
         int32_t index = queue->front();
         queue->pop_front();
+        if (!visited.insert(index).second)
+            continue;
 
         // Don't traverse non-placeholder nodes while recording
         const Variable *v = state[index];
@@ -447,6 +453,7 @@ static void ad_toposort_fwd() {
 static void ad_toposort_rev() {
     state.todo.clear();
 
+    tsl::robin_set<int32_t, Int32Hasher> visited;
     std::deque<int32_t> *queue = tls_queue;
     if (!queue || queue->empty())
         return;
@@ -458,6 +465,8 @@ static void ad_toposort_rev() {
     while (!queue->empty()) {
         int32_t index = queue->front();
         queue->pop_front();
+        if (!visited.insert(index).second)
+            continue;
 
         const Variable *v = state[index];
         state.todo.push_back(index);
@@ -814,7 +823,6 @@ int32_t ad_new_select(const char *label, uint32_t size, const Mask &mask,
     }
 
     auto [index, var] = ad_var_new(label, size);
-    var->grad = 0;
 
     if (jit_flag(JitFlag::ADEagerForward)) {
         Value vt = 0, vf = 0;
@@ -935,6 +943,13 @@ int32_t ad_new_gather_impl(const char *label, uint32_t size, int32_t src_index,
             var->ref_count_ext = 1;
             return index;
         }
+
+        /* When recording some computation (e.g. part of a virtual function call)
+           that gathers from a global or private instance variable, keep track of
+           the dependency so that the computation graph can be wired up correctly
+           following the recording step. See vcall_autodiff.h */
+        if (var->placeholder && !var2->placeholder)
+            state.internal_deps++;
 
         uint32_t edge_index_new = ad_edge_new();
         Edge &edge = state.edges[edge_index_new];
@@ -1512,25 +1527,6 @@ template <typename T> T ad_grad(int32_t index, bool fail_if_missing) {
     return result;
 }
 
-template <typename T> void ad_clear() {
-    std::vector<int32_t> *leaf_vars = leafs;
-
-    if (!leaf_vars)
-        return;
-
-    for (uint32_t index : *leaf_vars) {
-        auto it = state.variables.find(index);
-        if (it == state.variables.end())
-            continue;
-        Variable &v = it.value();
-        v.grad = T();
-        ad_trace("ad_clear(): clearing gradient at variable a%u (\"%s\")",
-                 index, v.label ? v.label : "unnamed");
-    }
-
-    leaf_vars->clear();
-}
-
 template <typename T> void ad_set_grad(int32_t index, const T &value, bool fail_if_missing) {
     if (unlikely(index <= 0))
         return;
@@ -1610,9 +1606,8 @@ void ad_add_edge(int32_t source_idx, int32_t target_idx,
     target->next_rev = edge_index_new;
 }
 
-template <typename T> void ad_traverse(bool backward, bool retain_graph) {
-    std::lock_guard<std::mutex> guard(state.mutex);
-
+template <typename T>
+static void ad_traverse_impl(bool backward, bool retain_graph) {
     if (backward)
         ad_toposort_rev();
     else
@@ -1631,26 +1626,41 @@ template <typename T> void ad_traverse(bool backward, bool retain_graph) {
     todo.swap(state.todo);
 }
 
+template <typename T> void ad_traverse(bool backward, bool retain_graph) {
+    std::lock_guard<std::mutex> guard(state.mutex);
+    ad_traverse_impl<T>(backward, retain_graph);
+}
+
 template <typename T> void ad_traverse_postponed() {
+    std::lock_guard<std::mutex> guard(state.mutex);
+
+    std::deque<int32_t> *queue = tls_queue, backup;
+    backup.swap(*queue);
+
     if (!state.postponed_rev.empty()) {
         ad_log(Debug, "ad_traverse_postponed(): reverse mode (%zu indices)",
                state.postponed_rev.size());
-        state.todo.clear();
-        for (uint32_t index: state.postponed_rev)
-            ad_dfs_rev(state[index]);
+        queue->insert(queue->begin(), state.postponed_rev.begin(),
+                      state.postponed_rev.end());
         state.postponed_rev.clear();
-        ad_traverse<T>(true, true);
+        ad_traverse_impl<T>(true, true);
     }
 
     if (!state.postponed_fwd.empty()) {
         ad_log(Debug, "ad_traverse_postponed(): forward mode (%zu indices)",
                state.postponed_fwd.size());
-        state.todo.clear();
-        for (uint32_t index: state.postponed_fwd)
-            ad_dfs_fwd(state[index]);
+        queue->insert(queue->begin(), state.postponed_fwd.begin(),
+                      state.postponed_fwd.end());
         state.postponed_fwd.clear();
-        ad_traverse<T>(false, true);
+        ad_traverse_impl<T>(false, true);
     }
+
+    backup.swap(*queue);
+}
+
+template <typename T> size_t ad_internal_deps() {
+    std::lock_guard<std::mutex> guard(state.mutex);
+    return state.internal_deps;
 }
 
 template ENOKI_EXPORT void ad_inc_ref_impl<Value>(int32_t) noexcept;
@@ -1665,6 +1675,7 @@ template ENOKI_EXPORT const char *ad_label<Value>(int32_t);
 template ENOKI_EXPORT void ad_enqueue<Value>(int32_t);
 template ENOKI_EXPORT void ad_traverse<Value>(bool, bool);
 template ENOKI_EXPORT void ad_traverse_postponed<Value>();
+template ENOKI_EXPORT size_t ad_internal_deps<Value>();
 template ENOKI_EXPORT const char *ad_graphviz<Value>();
 template ENOKI_EXPORT int32_t ad_new_select<Value, Mask>(
     const char *, uint32_t, const Mask &, int32_t, int32_t);
@@ -1675,8 +1686,6 @@ ad_new_scatter<Value, Mask, Index>(const char *, uint32_t, ReduceOp, int32_t,
                                    int32_t, const Index &, const Mask &, bool);
 template ENOKI_EXPORT void ad_add_edge<Value>(int32_t, int32_t,
                                               DiffCallback *);
-template ENOKI_EXPORT void ad_clear<Value>();
-
 NAMESPACE_END(detail)
 
 template struct ENOKI_EXPORT DiffArray<detail::Value>;

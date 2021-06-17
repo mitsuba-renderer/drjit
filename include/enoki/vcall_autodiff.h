@@ -12,6 +12,8 @@
 
 #pragma once
 
+#define ENOKI_VCALL_DEBUG
+
 #include <enoki/custom.h>
 #include <enoki/struct.h>
 

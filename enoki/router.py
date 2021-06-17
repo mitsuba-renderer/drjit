@@ -2268,14 +2268,6 @@ def traverse(t, reverse=True, retain_graph=False):
     _ek.leaf_array_t(t).traverse_(reverse, retain_graph)
 
 
-def ad_clear(a):
-    t = _ek.leaf_array_t(a)
-    if _ek.is_diff_array_v(t):
-        t.ad_clear_()
-    else:
-        raise Exception("Expected a differentiable array type!")
-
-
 def backward(a, retain_graph=False):
     if _ek.is_diff_array_v(a):
         if not grad_enabled(a):

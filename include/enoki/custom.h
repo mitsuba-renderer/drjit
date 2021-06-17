@@ -170,7 +170,9 @@ template <typename Custom, typename... Input> auto custom(const Input&... input)
 
     ek_unique_ptr<Custom> custom(new Custom());
 
+    size_t ad_deps_before = detail::ad_internal_deps<Type>();
     Output output = custom->eval(detach<false>(input)...);
+    size_t ad_deps_after = detail::ad_internal_deps<Type>();
 
     if (grad_enabled(output))
         enoki_raise("enoki::custom(): the return value of the CustomOp::eval() "
@@ -181,8 +183,9 @@ template <typename Custom, typename... Input> auto custom(const Input&... input)
     size_t diff_vars_in_ctr = 0;
     (detail::diff_vars(input, diff_vars_in_ctr, nullptr), ...);
 
-    if (diff_vars_in_ctr > 0) {
-        // Gradients are enabled for at least one input, mark outputs
+    if (diff_vars_in_ctr > 0 || ad_deps_after > ad_deps_before) {
+        /* Gradients are enabled for at least one input, or the function
+           accesses an instance variable with enabled gradients */
         enable_grad(output);
 
         if constexpr (Custom::ClearPrimal) {

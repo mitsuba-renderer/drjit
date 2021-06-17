@@ -138,4 +138,8 @@ if (ENOKI_ENABLE_JIT AND ENOKI_ENABLE_AUTODIFF)
   add_executable(vcall vcall.cpp)
   target_link_libraries(vcall enoki enoki-autodiff enoki-jit)
   add_test(vcall_test vcall)
+
+  add_executable(ad_megakernel ad_megakernel.cpp)
+  target_link_libraries(ad_megakernel enoki enoki-autodiff enoki-jit)
+  add_test(ad_megakernel_test ad_megakernel)
 endif()

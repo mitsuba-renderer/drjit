@@ -16,6 +16,7 @@
 
 #include <enoki/array.h>
 #include <enoki/vcall_packet.h>
+#include <memory>
 
 extern "C" {
 extern ENOKI_IMPORT uint32_t jit_registry_put(JitBackend backend,

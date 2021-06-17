@@ -61,6 +61,9 @@ template <typename Value> void ad_enqueue(int32_t index);
 /// Perform a forward or backward mode traversal of queued variables
 template <typename Value> void ad_traverse(bool backward, bool retain_graph);
 
+/// Return the # of variables that had to be postponed while in JIT recording mode
+template <typename Value> size_t ad_internal_deps();
+
 /// Perform a forward or backward mode traversal of postponed placeholder variables
 template <typename Value> void ad_traverse_postponed();
 
@@ -72,9 +75,6 @@ template <typename Value> const char *ad_label(int32_t index);
 
 /// Generate a graphviz plot of all registered variables
 template <typename Value> const char *ad_graphviz();
-
-/// Clear the gradient of variables accessed in ad_traverse()
-template <typename Value> void ad_clear();
 
 /// Special case of ad_new: create a node for a select() statement.
 template <typename Value, typename Mask>
@@ -1828,7 +1828,8 @@ protected:
                                    bool);                                      \
     extern template ENOKI_AUTODIFF_EXPORT void                                 \
     ad_add_edge<T>(int32_t, int32_t, DiffCallback *);                          \
-    extern template ENOKI_AUTODIFF_EXPORT void ad_clear<T>();                  \
+    extern template ENOKI_AUTODIFF_EXPORT size_t ad_internal_deps<T>();        \
+    extern template ENOKI_AUTODIFF_EXPORT void ad_traverse_postponed<T>();     \
     }
 
 ENOKI_DECLARE_EXTERN_TEMPLATE(float,  bool, uint32_t)
@@ -1839,10 +1840,6 @@ ENOKI_DECLARE_EXTERN_TEMPLATE(CUDAArray<double>, CUDAArray<bool>, CUDAArray<uint
 ENOKI_DECLARE_EXTERN_TEMPLATE(LLVMArray<float>,  LLVMArray<bool>, LLVMArray<uint32_t>)
 ENOKI_DECLARE_EXTERN_TEMPLATE(LLVMArray<double>, LLVMArray<bool>, LLVMArray<uint32_t>)
 #endif
-
-template <typename T> void ad_clear() {
-    detail::ad_clear<detached_t<T>>();
-}
 
 extern ENOKI_AUTODIFF_EXPORT const char *ad_whos();
 extern ENOKI_AUTODIFF_EXPORT void ad_prefix_push(const char *value);
