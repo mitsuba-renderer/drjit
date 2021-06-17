@@ -55,6 +55,10 @@ Result vcall_jit_reduce_impl(Func func, const Self &self_,
 
     schedule(args...);
 
+    size_t self_size = self_.size();
+    if (self_size == 1)
+        return func(self_.entry(0), args...);
+
     Mask mask = extract_mask<Mask>(args...);
     if (jit_var_mask_size(Backend))
         mask &= Mask::steal(jit_var_mask_peek(Backend));
@@ -63,8 +67,6 @@ Result vcall_jit_reduce_impl(Func func, const Self &self_,
 
     Self self = self_ & mask;
     auto [buckets, n_inst] = self.vcall_();
-
-    size_t self_size = self.size();
 
     Result result;
     if (n_inst > 0 && self_size > 0) {
