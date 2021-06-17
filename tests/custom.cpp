@@ -8,7 +8,7 @@
 namespace ek = enoki;
 
 // Let's define some JIT & differentiable types
-using Float    = ek::DiffArray<ek::CUDAArray<float>>;
+using Float    = ek::DiffArray<ek::LLVMArray<float>>;
 using Vector3f = ek::Array<Float, 3>;
 
 
@@ -66,7 +66,7 @@ private:
 
 
 ENOKI_TEST(test01_basic) {
-    jit_init((uint32_t) JitBackend::CUDA);
+    jit_init((uint32_t) JitBackend::LLVM);
 
     {
         Vector3f d(1, 2, 3);
@@ -88,7 +88,7 @@ ENOKI_TEST(test01_basic) {
         assert(ek::allclose(ek::grad(d2), Vector3f(0.610883, 0.152721, -0.305441)));
     }
 
-    jit_shutdown();
+    jit_shutdown(1);
 }
 
 struct ScaleAdd2 : ek::CustomOp<Float, Vector3f, Vector3f, Vector3f, int> {
@@ -127,7 +127,7 @@ private:
 };
 
 ENOKI_TEST(test02_corner_case) {
-    jit_init((uint32_t) JitBackend::CUDA);
+    jit_init((uint32_t) JitBackend::LLVM);
 
     {
         Vector3f d1(1, 2, 3);
@@ -152,5 +152,5 @@ ENOKI_TEST(test02_corner_case) {
     }
 
 
-    jit_shutdown();
+    jit_shutdown(1);
 }

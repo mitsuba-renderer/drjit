@@ -344,6 +344,13 @@ protected:
                     m_se_offset = (uint32_t) -1;
                     m_cond = detached_t<Mask>();
                     m_state++;
+
+                    if constexpr (is_diff_array_v<Value>) {
+                        using Type = typename Value::Type;
+                        if (!m_se_flag)
+                            detail::ad_traverse_postponed<Type>();
+                    }
+
                     return false;
                 }
 

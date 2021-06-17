@@ -170,7 +170,6 @@ template <typename Custom, typename... Input> auto custom(const Input&... input)
 
     ek_unique_ptr<Custom> custom(new Custom());
 
-    ad_clear_dependencies();
     Output output = custom->eval(detach<false>(input)...);
 
     if (grad_enabled(output))
@@ -179,8 +178,7 @@ template <typename Custom, typename... Input> auto custom(const Input&... input)
                     "allowed.");
 
     // Collect the input autodiff variable indices
-    size_t dependency_count = ad_dependency_count();
-    size_t diff_vars_in_ctr = dependency_count;
+    size_t diff_vars_in_ctr = 0;
     (detail::diff_vars(input, diff_vars_in_ctr, nullptr), ...);
 
     if (diff_vars_in_ctr > 0) {
@@ -208,8 +206,6 @@ template <typename Custom, typename... Input> auto custom(const Input&... input)
         diff_vars_in_ctr = 0;
         (detail::diff_vars(input, diff_vars_in_ctr, diff_vars_in.get()), ...);
         detail::diff_vars(output, diff_vars_out_ctr, diff_vars_out.get());
-        ad_write_dependencies(diff_vars_in.get() + diff_vars_in_ctr);
-        diff_vars_in_ctr += dependency_count;
 
         // Undo reference count increase due to storage in custom->m_output
         for (size_t i = 0 ; i < diff_vars_out_ctr; ++i)

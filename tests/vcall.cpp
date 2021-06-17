@@ -76,6 +76,7 @@ ENOKI_VCALL_METHOD(strlen)
 ENOKI_VCALL_GETTER(field, float)
 ENOKI_VCALL_END(Base)
 
+#if 0
 ENOKI_TEST(test01_vcall_reduce_and_record) {
     int n = 9999;
 
@@ -181,6 +182,7 @@ ENOKI_TEST(test02_vcall_reduce_and_record_masked) {
         }
     }
 }
+#endif
 
 struct BaseD {
     BaseD() {
@@ -222,6 +224,7 @@ ENOKI_VCALL_METHOD(g)
 ENOKI_VCALL_METHOD(dummy)
 ENOKI_VCALL_END(BaseD)
 
+#if 0
 ENOKI_TEST(test03_vcall_symbolic_ad_fwd) {
     if constexpr (ek::is_cuda_array_v<Float>)
         jit_init((uint32_t) JitBackend::CUDA);
@@ -277,8 +280,6 @@ ENOKI_TEST(test04_vcall_symbolic_ad_fwd_accessing_local) {
     else
         jit_init((uint32_t) JitBackend::LLVM);
 
-    // jit_set_log_level_stderr(::LogLevel::Trace);
-
     for (int j = 0; j < 2; ++j) {
         for (int i = 0; i < 3; ++i) {
             jit_set_flag(JitFlag::VCallRecord, i != 0);
@@ -332,14 +333,13 @@ ENOKI_TEST(test04_vcall_symbolic_ad_fwd_accessing_local) {
         }
     }
 }
+#endif
 
 ENOKI_TEST(test05_vcall_symbolic_ad_rev_accessing_local) {
     if constexpr (ek::is_cuda_array_v<Float>)
         jit_init((uint32_t) JitBackend::CUDA);
     else
         jit_init((uint32_t) JitBackend::LLVM);
-
-    // jit_set_log_level_stderr(::LogLevel::Trace);
 
     for (int i = 0; i < 3; ++i) {
         AD *a = new AD();

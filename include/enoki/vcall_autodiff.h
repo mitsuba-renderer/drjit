@@ -93,6 +93,9 @@ struct DiffVCall : CustomOp<DiffType, Result, ConstStr, Self, Func, Args...> {
             std::make_pair(Base::template value_in<3 + Is>(),
                            Base::template grad_in<3 + Is>())...);
 
+        if (!jit_flag(JitFlag::Recording))
+            detail::ad_traverse_postponed<typename DiffType::Type>();
+
         Base::set_grad_out(grad_out);
     }
 
@@ -129,6 +132,9 @@ struct DiffVCall : CustomOp<DiffType, Result, ConstStr, Self, Func, Args...> {
         Inputs grad_in = vcall_jit_record<Inputs>(
             name.get(), func_rev, self, Base::grad_out(),
             Base::template value_in<3 + Is>()...);
+
+        if (!jit_flag(JitFlag::Recording))
+            detail::ad_traverse_postponed<typename DiffType::Type>();
 
         ENOKI_MARK_USED(grad_in);
         (Base::template set_grad_in<3 + Is>(grad_in.template get<Is>()), ...);

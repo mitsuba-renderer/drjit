@@ -29,7 +29,6 @@ struct Int32Hasher {
 NAMESPACE_BEGIN(enoki)
 
 extern bool check_weights;
-extern tsl::robin_set<int32_t> *ad_dependencies();
 extern size_t max_edges_per_kernel;
 
 NAMESPACE_BEGIN(detail)
@@ -252,6 +251,9 @@ struct State {
     /// List of variables to be processed in traverse()
     std::vector<int32_t> todo;
 
+    /// List of variables to be processed after leaving recording mode
+    std::vector<int32_t> postponed_rev, postponed_fwd;
+
     /// Counter for variable indices
     int32_t variable_index = 1;
 
@@ -341,34 +343,38 @@ extern void RENAME(ad_whos)() {
 }
 
 /// Forward-mode DFS starting from 'index'
-static void ad_dfs_fwd(Variable *v, bool recording) {
-    // Don't traverse non-placeholder nodes while recording
-    if (recording && !v->placeholder)
-        return;
-
+static void ad_dfs_fwd(Variable *v) {
     uint32_t edge = v->next_fwd;
     while (edge) {
         Edge &e = state.edges[edge];
         if (!e.visited) {
-            e.visited = 1;
-            ad_dfs_fwd(state[e.target], recording);
+            Variable *v2 = state[e.target];
+            if (v->placeholder && !v2->placeholder) {
+                ad_trace("ad_dfs_fwd(): adding a%u to postponed list", e.target);
+                state.postponed_fwd.push_back(e.target);
+            } else {
+                e.visited = 1;
+                ad_dfs_fwd(v2);
+            }
         }
         edge = e.next_fwd;
     }
 }
 
 /// Reverse-mode DFS starting from 'index'
-static void ad_dfs_rev(Variable *v, bool recording) {
-    // Don't traverse non-placeholder nodes while recording
-    if (recording && !v->placeholder)
-        return;
-
+static void ad_dfs_rev(Variable *v) {
     uint32_t edge = v->next_rev;
     while (edge) {
         Edge &e = state.edges[edge];
         if (!e.visited) {
-            e.visited = 1;
-            ad_dfs_rev(state[e.source], recording);
+            Variable *v2 = state[e.source];
+            if (v->placeholder && !v2->placeholder) {
+                ad_trace("ad_dfs_rev(): adding a%u to postponed list", e.source);
+                state.postponed_rev.push_back(e.source);
+            } else {
+                e.visited = 1;
+                ad_dfs_rev(v2);
+            }
         }
         edge = e.next_rev;
     }
@@ -394,35 +400,13 @@ template <typename T> void ad_enqueue(int32_t index) {
 static void ad_toposort_fwd() {
     state.todo.clear();
 
-    bool recording = jit_flag(JitFlag::Recording);
-    if (recording) {
-        // Also enqueue external dependencies accessed by the computation
-        tsl::robin_set<int32_t> *deps = ad_dependencies();
-        if (deps) {
-            for (int32_t index : *deps) {
-                Variable *v = state[index];
-                if (!is_valid(v->grad))
-                    continue;
-
-                state.todo.push_back(index);
-                uint32_t edge = v->next_fwd;
-                while (edge) {
-                    Edge &e = state.edges[edge];
-                    if (state[e.target]->placeholder)
-                        ad_enqueue_impl<Value>(e.target);
-                    edge = e.next_fwd;
-                }
-            }
-        }
-    }
-
     std::deque<int32_t> *queue = tls_queue;
     if (!queue || queue->empty())
         return;
 
     // DFS traversal to tag all reachable edges
     for (int32_t index: *queue)
-        ad_dfs_fwd(state[index], recording);
+        ad_dfs_fwd(state[index]);
 
     while (!queue->empty()) {
         int32_t index = queue->front();
@@ -430,29 +414,29 @@ static void ad_toposort_fwd() {
 
         // Don't traverse non-placeholder nodes while recording
         const Variable *v = state[index];
-        if (recording && !v->placeholder)
-            continue;
-
         state.todo.push_back(index);
 
         uint32_t edge = v->next_fwd;
         while (edge) {
             Edge &e = state.edges[edge];
-            e.visited = 0;
 
-            uint32_t edge2 = state[e.target]->next_rev;
-            bool ready = true;
-            while (edge2) {
-                const Edge &e2 = state.edges[edge2];
-                if (e2.visited) {
-                    ready = false;
-                    break;
+            if (e.visited) {
+                e.visited = 0;
+
+                uint32_t edge2 = state[e.target]->next_rev;
+                bool ready = true;
+                while (edge2) {
+                    const Edge &e2 = state.edges[edge2];
+                    if (e2.visited) {
+                        ready = false;
+                        break;
+                    }
+                    edge2 = e2.next_rev;
                 }
-                edge2 = e2.next_rev;
-            }
 
-            if (ready)
-                queue->push_back(e.target);
+                if (ready)
+                    queue->push_back(e.target);
+            }
 
             edge = e.next_fwd;
         }
@@ -461,7 +445,6 @@ static void ad_toposort_fwd() {
 
 /// Kahn-style topological sort in backward mode
 static void ad_toposort_rev() {
-    bool recording = jit_flag(JitFlag::Recording);
     state.todo.clear();
 
     std::deque<int32_t> *queue = tls_queue;
@@ -470,36 +453,36 @@ static void ad_toposort_rev() {
 
     // DFS traversal to tag all reachable edges
     for (int32_t index: *queue)
-        ad_dfs_rev(state[index], recording);
+        ad_dfs_rev(state[index]);
 
     while (!queue->empty()) {
         int32_t index = queue->front();
         queue->pop_front();
 
         const Variable *v = state[index];
-        if (recording && !v->placeholder)
-            continue;
-
         state.todo.push_back(index);
 
         uint32_t edge = v->next_rev;
         while (edge) {
             Edge &e = state.edges[edge];
-            e.visited = 0;
 
-            uint32_t edge2 = state[e.source]->next_fwd;
-            bool ready = true;
-            while (edge2) {
-                const Edge &e2 = state.edges[edge2];
-                if (e2.visited) {
-                    ready = false;
-                    break;
+            if (e.visited) {
+                e.visited = 0;
+
+                uint32_t edge2 = state[e.source]->next_fwd;
+                bool ready = true;
+                while (edge2) {
+                    const Edge &e2 = state.edges[edge2];
+                    if (e2.visited) {
+                        ready = false;
+                        break;
+                    }
+                    edge2 = e2.next_fwd;
                 }
-                edge2 = e2.next_fwd;
-            }
 
-            if (ready)
-                queue->push_back(e.source);
+                if (ready)
+                    queue->push_back(e.source);
+            }
 
             edge = e.next_rev;
         }
@@ -529,8 +512,10 @@ static std::pair<int32_t, Variable *> ad_var_new(const char *label, uint32_t siz
             index = state.variable_index++;
         }
 
-        auto result = state.variables.try_emplace(index, label, size,
-                                                  jit_flag(JitFlag::Recording));
+        bool rec = false;
+        if (is_jit_array_v<Value>)
+            rec = jit_flag(JitFlag::Recording);
+        auto result = state.variables.try_emplace(index, label, size, rec);
         if (likely(result.second))
             return { index, &result.first.value() };
     }
@@ -950,13 +935,6 @@ int32_t ad_new_gather_impl(const char *label, uint32_t size, int32_t src_index,
             var->ref_count_ext = 1;
             return index;
         }
-
-        /* When recording some computation (e.g. part of a virtual function call)
-           that gathers from a global or private instance variable, keep track of
-           the dependency so that the computation graph can be wired up correctly
-           following the recording step. See vcall_autodiff.h */
-        if (var->placeholder && !var2->placeholder)
-            ad_add_dependency(src_index);
 
         uint32_t edge_index_new = ad_edge_new();
         Edge &edge = state.edges[edge_index_new];
@@ -1653,6 +1631,28 @@ template <typename T> void ad_traverse(bool backward, bool retain_graph) {
     todo.swap(state.todo);
 }
 
+template <typename T> void ad_traverse_postponed() {
+    if (!state.postponed_rev.empty()) {
+        ad_log(Debug, "ad_traverse_postponed(): reverse mode (%zu indices)",
+               state.postponed_rev.size());
+        state.todo.clear();
+        for (uint32_t index: state.postponed_rev)
+            ad_dfs_rev(state[index]);
+        state.postponed_rev.clear();
+        ad_traverse<T>(true, true);
+    }
+
+    if (!state.postponed_fwd.empty()) {
+        ad_log(Debug, "ad_traverse_postponed(): forward mode (%zu indices)",
+               state.postponed_fwd.size());
+        state.todo.clear();
+        for (uint32_t index: state.postponed_fwd)
+            ad_dfs_fwd(state[index]);
+        state.postponed_fwd.clear();
+        ad_traverse<T>(false, true);
+    }
+}
+
 template ENOKI_EXPORT void ad_inc_ref_impl<Value>(int32_t) noexcept;
 template ENOKI_EXPORT void ad_dec_ref_impl<Value>(int32_t) noexcept;
 template ENOKI_EXPORT int32_t ad_new<Value>(const char *, uint32_t, uint32_t,
@@ -1664,6 +1664,7 @@ template ENOKI_EXPORT void ad_set_label<Value>(int32_t, const char *);
 template ENOKI_EXPORT const char *ad_label<Value>(int32_t);
 template ENOKI_EXPORT void ad_enqueue<Value>(int32_t);
 template ENOKI_EXPORT void ad_traverse<Value>(bool, bool);
+template ENOKI_EXPORT void ad_traverse_postponed<Value>();
 template ENOKI_EXPORT const char *ad_graphviz<Value>();
 template ENOKI_EXPORT int32_t ad_new_select<Value, Mask>(
     const char *, uint32_t, const Mask &, int32_t, int32_t);

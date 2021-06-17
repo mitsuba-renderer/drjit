@@ -61,6 +61,9 @@ template <typename Value> void ad_enqueue(int32_t index);
 /// Perform a forward or backward mode traversal of queued variables
 template <typename Value> void ad_traverse(bool backward, bool retain_graph);
 
+/// Perform a forward or backward mode traversal of postponed placeholder variables
+template <typename Value> void ad_traverse_postponed();
+
 /// Label a variable (useful for debugging via graphviz etc.)
 template <typename Value> void ad_set_label(int32_t index, const char *);
 
@@ -82,7 +85,6 @@ int32_t ad_new_select(const char *label, uint32_t size, const Mask &m,
 template <typename Value, typename Mask, typename Index>
 int32_t ad_new_gather(const char *label, uint32_t size, int32_t src_index,
                       const Index &offset, const Mask &mask, bool permute);
-
 
 /// Special case of ad_new: create a node for a scatter[_reduce]() statement.
 template <typename Value, typename Mask, typename Index>
@@ -1846,11 +1848,6 @@ extern ENOKI_AUTODIFF_EXPORT const char *ad_whos();
 extern ENOKI_AUTODIFF_EXPORT void ad_prefix_push(const char *value);
 extern ENOKI_AUTODIFF_EXPORT void ad_prefix_pop();
 extern ENOKI_AUTODIFF_EXPORT void ad_check_weights(bool value);
-
-extern ENOKI_AUTODIFF_EXPORT size_t ad_dependency_count();
-extern ENOKI_AUTODIFF_EXPORT void ad_add_dependency(int32_t index);
-extern ENOKI_AUTODIFF_EXPORT void ad_write_dependencies(int32_t *out);
-extern ENOKI_AUTODIFF_EXPORT void ad_clear_dependencies();
 extern ENOKI_AUTODIFF_EXPORT void ad_set_max_edges_per_kernel(size_t value);
 
 NAMESPACE_END(enoki)

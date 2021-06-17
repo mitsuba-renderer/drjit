@@ -131,42 +131,10 @@ namespace enoki {
 #if !defined(_MSC_VER)
     static __thread uint32_t flags = 0;
     static __thread PrefixEntry *prefix = nullptr;
-    static __thread tsl::robin_set<int32_t> *dependencies = nullptr;
 #else
     static __declspec(thread) PrefixEntry *prefix = nullptr;
     static __declspec(thread) uint32_t flags = 0;
-    static __declspec(thread) tsl::robin_set<int32_t> *dependencies = nullptr;
 #endif
-
-    tsl::robin_set<int32_t> *ad_dependencies() {
-        return dependencies;
-    }
-
-    ENOKI_EXPORT size_t ad_dependency_count() {
-        return dependencies ? dependencies->size() : 0;
-    }
-
-    ENOKI_EXPORT void ad_add_dependency(int32_t index) {
-        if (!dependencies)
-            dependencies = new tsl::robin_set<int32_t>();
-        ad_trace("ad_add_dependency(a%u)", index);
-        dependencies->insert(index);
-    }
-
-    ENOKI_EXPORT void ad_write_dependencies(int32_t *out) {
-        if (!dependencies)
-            return;
-        size_t ctr = 0;
-        for (int32_t index : *dependencies)
-            out[ctr++] = index;
-    }
-
-    ENOKI_EXPORT void ad_clear_dependencies() {
-        if (dependencies) {
-            delete dependencies;
-            dependencies = nullptr;
-        }
-    }
 
     ENOKI_EXPORT void ad_prefix_push(const char *value) {
         if (strchr(value, '/'))
