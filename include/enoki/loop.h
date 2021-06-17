@@ -382,7 +382,6 @@ protected:
                     int32_t i1 = *m_index_p_ad[i], i2 = m_index_out_ad[i],
                             index_new = 0;
                     if (i1 > 0 || i2 > 0)
-                        index_new = i2;
                         index_new = detail::ad_new_select<Type>(
                             "select", jit_var_size(*m_index_p[i]),
                             m_cond, i1, i2);
