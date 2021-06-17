@@ -160,7 +160,7 @@ def array_init(self, args):
                     self.init_(size)
                 if size == 0:
                     pass
-                elif size != os or (is_static_array and size != o.Size):
+                elif size != os or (is_static_array and size != o.Size) or value_type is t:
                     if self.IsMatrix and o.IsMatrix:
                         for x in range(size):
                             for y in range(size):
