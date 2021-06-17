@@ -70,21 +70,21 @@ def array_from_dlpack(t, capsule):
             tmp *= shape[i]
 
     if t.IsCUDA and device_type != 2:
-        raise Exception("Cannot create an Enoki GPU array from a "
-                        "DLPack CPU tensor!")
+        raise enoki.Exception("Cannot create an Enoki GPU array from a "
+                              "DLPack CPU tensor!")
     elif not t.IsCUDA and device_type != 1:
-        raise Exception("Cannot create an Enoki CPU array from a "
-                        "DLPack GPU tensor!")
+        raise enoki.Exception("Cannot create an Enoki CPU array from a "
+                              "DLPack GPU tensor!")
 
     if dtype != t.Type:
-        raise Exception("Incompatible type!")
+        raise enoki.Exception("Incompatible type!")
 
     shape_target = list(reversed(enoki.shape(t())))
     if len(shape_target) != ndim:
-        raise Exception("Incompatible dimension!")
+        raise enoki.Exception("Incompatible dimension!")
     for i in range(ndim):
         if shape_target[i] != shape[i] and shape_target[i] != 0:
-            raise Exception("Incompatible shape!")
+            raise enoki.Exception("Incompatible shape!")
 
     value = t
     while issubclass(value.Value, enoki.ArrayBase):
@@ -148,6 +148,7 @@ def array_init(self, args):
             is_static_array = is_array and not o.Size == enoki.Dynamic
             is_sequence = issubclass(t, list) or issubclass(t, tuple)
 
+            # Matrix initialization from nested list
             if is_sequence and self.IsMatrix and \
                 len(o) == size and sub_len(o) == size:
                 for x in range(size):
@@ -158,24 +159,32 @@ def array_init(self, args):
                 if dynamic:
                     size = os
                     self.init_(size)
+
                 if size == 0:
                     pass
-                elif size != os or (is_static_array and size != o.Size) or value_type is t:
-                    if self.IsMatrix and o.IsMatrix:
+                elif size != os or value_type is t:
+                    # Size mismatch!
+                    if self.IsMatrix and getattr(t, 'IsMatrix', False):
+                        # If both are matrices, copy the top-left block
                         for x in range(size):
                             for y in range(size):
                                 if x < o.Size and y < o.Size:
                                     self[x, y] = value_type.Value(o[x, y])
                                 else:
                                     self[x, y] = value_type.Value(1 if x == y else 0)
+                    elif self.IsMatrix and value_type is t:
+                        for x in range(size):
+                            self[x] = o
                     else:
+                        # Otherwise, try to broadcast to all entries
                         self.broadcast_(value_type(o)
-                                        if not isinstance(o, value_type)
+                                        if not issubclass(t, value_type)
                                         and not self.IsMatrix else o)
                 else:
-                    if self.IsJIT and getattr(t, 'IsJIT', 0) and \
+                    # Size matches, copy element by element
+                    if self.IsJIT and getattr(t, 'IsJIT', False) and \
                        self.Depth == 1 and t.Depth == 1:
-                        raise Exception(
+                        raise enoki.Exception(
                             'Refusing to do an extremely inefficient '
                             'element-by-element array conversion from type %s '
                             'to %s. Did you forget a cast or detach operation?'
@@ -220,10 +229,10 @@ def array_init(self, args):
 
                 # Numpy array might have one dimension less when initializing dynamic arrays
                 if not dim1 == dim2 and not (dim1 == dim2 + 1 and self.IsDynamic):
-                    raise Exception("Incompatible dimension!")
+                    raise enoki.Exception("Incompatible dimension!")
                 for i in reversed(range(dim2)):
                     if s1[i] != s2[i] and s1[i] != 0:
-                        raise Exception("Incompatible shape!")
+                        raise enoki.Exception("Incompatible shape!")
 
                 if dim1 == 0:
                     pass
@@ -250,8 +259,8 @@ def array_init(self, args):
                 from jax.dlpack import to_dlpack
                 self.assign(array_from_dlpack(type(self), to_dlpack(o)))
             else:
-                raise Exception('Don\'t know how to create an Enoki array '
-                                'from type \"%s.%s\"!' % (mod, name))
+                raise enoki.Exception('Don\'t know how to create an Enoki array '
+                                      'from type \"%s.%s\"!' % (mod, name))
         elif n == size or dynamic:
             if dynamic:
                 size = n
@@ -263,7 +272,7 @@ def array_init(self, args):
                    for j in range(self.Size)]
             array_init(self, tbl)
         else:
-            raise Exception('Invalid size!')
+            raise enoki.Exception('Invalid size!')
     except Exception as e:
         err = e
 

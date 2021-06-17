@@ -214,6 +214,7 @@ def test13_matmul_other(package):
     assert ek.allclose(v @ m, Array3f(20, 28, 36))
     assert ek.allclose(v @ v, Float(30))
 
+
 @pytest.mark.parametrize("package", [ek.cuda, ek.llvm])
 @pytest.mark.parametrize("dest", ['numpy', 'torch', 'jax'])
 def test14_roundtrip(package, dest):
@@ -259,6 +260,7 @@ def test14_roundtrip(package, dest):
         [1.0, 2.0, 3.0, 4.0]
     ])
     assert(m == Matrix44f(to_dest(m)))
+
 
 @pytest.mark.parametrize("package", [ek.scalar])
 def test15_quat_to_euler(package):
