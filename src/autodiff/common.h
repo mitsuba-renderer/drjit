@@ -134,5 +134,4 @@ extern void ad_log(LogLevel level, const char *fmt, ...);
 namespace enoki {
     extern const char *ad_prefix();
     ENOKI_EXPORT void ad_check_weights_cb();
-    ENOKI_EXPORT void ad_check_weights(bool value);
 }

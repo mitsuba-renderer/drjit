@@ -161,15 +161,6 @@ namespace enoki {
         return p ? p->value : nullptr;
     }
 
-    /// Check edge weights for NaNs/infinities?
-    bool check_weights = false;
-    size_t max_edges_per_kernel = 0;
-
-    ENOKI_EXPORT void ad_set_max_edges_per_kernel(size_t value) {
-        max_edges_per_kernel = value;
-    }
-
-    ENOKI_EXPORT void ad_check_weights(bool value) { check_weights = value; }
     ENOKI_EXPORT void ad_check_weights_cb() { }
 
     ENOKI_EXPORT const char *ad_whos() {

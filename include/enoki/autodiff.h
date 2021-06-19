@@ -1,5 +1,5 @@
 /*
-    enoki/autodiff.h -- Forward/backward-mode automatic differentiation wrapper
+    enoki/autodiff.h -- Forward/reverse-mode automatic differentiation wrapper
 
     Enoki is a C++ template library for efficient vectorization and
     differentiation of numerical kernels on modern processor architectures.
@@ -41,7 +41,7 @@ template <typename Value> void ad_inc_ref_impl(int32_t index) noexcept (true);
 template <typename Value> void ad_dec_ref_impl(int32_t index) noexcept (true);
 
 /// Create a new variable with the given number of operands and AD weights
-template <typename Value> int32_t ad_new(const char *label, uint32_t size, uint32_t ops,
+template <typename Value> int32_t ad_new(const char *label, size_t size, uint32_t ops,
                                          const int32_t *indices, Value *weights);
 
 /// Query the gradient associated with a variable
@@ -58,13 +58,13 @@ void ad_accum_grad(int32_t index, const Value &v, bool fail_if_missing);
 /// Enqueue a variable for a subsequent ad_traverse() command
 template <typename Value> void ad_enqueue(int32_t index);
 
-/// Perform a forward or backward mode traversal of queued variables
-template <typename Value> void ad_traverse(bool backward, bool retain_graph);
+/// Perform a forward or reverse mode traversal of queued variables
+template <typename Value> void ad_traverse(bool reverse, bool retain_graph);
 
 /// Return the # of variables that had to be postponed while in JIT recording mode
 template <typename Value> size_t ad_internal_deps();
 
-/// Perform a forward or backward mode traversal of postponed placeholder variables
+/// Perform a forward or reverse mode traversal of postponed placeholder variables
 template <typename Value> void ad_traverse_postponed();
 
 /// Label a variable (useful for debugging via graphviz etc.)
@@ -78,17 +78,17 @@ template <typename Value> const char *ad_graphviz();
 
 /// Special case of ad_new: create a node for a select() statement.
 template <typename Value, typename Mask>
-int32_t ad_new_select(const char *label, uint32_t size, const Mask &m,
+int32_t ad_new_select(const char *label, size_t size, const Mask &m,
                       int32_t t_index, int32_t f_index);
 
 /// Special case of ad_new: create a node for a gather() expression
 template <typename Value, typename Mask, typename Index>
-int32_t ad_new_gather(const char *label, uint32_t size, int32_t src_index,
+int32_t ad_new_gather(const char *label, size_t size, int32_t src_index,
                       const Index &offset, const Mask &mask, bool permute);
 
 /// Special case of ad_new: create a node for a scatter[_reduce]() statement.
 template <typename Value, typename Mask, typename Index>
-int32_t ad_new_scatter(const char *label, uint32_t size, ReduceOp op,
+int32_t ad_new_scatter(const char *label, size_t size, ReduceOp op,
                        int32_t src_index, int32_t dst_index,
                        const Index &offset, const Mask &mask, bool permute);
 
@@ -241,7 +241,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                     int32_t indices[2] = { m_index, a.m_index };
                     Type weights[2] = { 1, 1 };
                     index_new = detail::ad_new<Type>(
-                        "add", (uint32_t) width(result), 2, indices, weights);
+                        "add", width(result), 2, indices, weights);
                 }
             }
             return DiffArray::create(index_new, std::move(result));
@@ -259,7 +259,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                     int32_t indices[2] = { m_index, a.m_index };
                     Type weights[2] = { 1, -1 };
                     index_new = detail::ad_new<Type>(
-                        "sub", (uint32_t) width(result), 2, indices, weights);
+                        "sub", width(result), 2, indices, weights);
                 }
             }
             return DiffArray::create(index_new, std::move(result));
@@ -277,7 +277,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                     int32_t indices[2] = { m_index, a.m_index };
                     Type weights[2] = { a.m_value, m_value };
                     index_new = detail::ad_new<Type>(
-                        "mul", (uint32_t) width(result), 2, indices, weights);
+                        "mul", width(result), 2, indices, weights);
                 }
             }
             return DiffArray::create(index_new, std::move(result));
@@ -296,7 +296,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                     Type rcp_a = rcp(a.m_value);
                     Type weights[2] = { rcp_a, -m_value * sqr(rcp_a) };
                     index_new = detail::ad_new<Type>(
-                        "div", (uint32_t) width(result), 2, indices, weights);
+                        "div", width(result), 2, indices, weights);
                 }
             }
             return DiffArray::create(index_new, std::move(result));
@@ -314,7 +314,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                     int32_t indices[1] = { m_index };
                     Type weights[1] = { -1 };
                     index_new = detail::ad_new<Type>(
-                        "neg", (uint32_t) width(result), 1, indices, weights);
+                        "neg", width(result), 1, indices, weights);
                 }
             }
             return DiffArray::create(index_new, std::move(result));
@@ -332,7 +332,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                     int32_t indices[3] = { m_index, a.m_index, b.m_index };
                     Type weights[3] = { a.m_value, m_value, 1 };
                     index_new = detail::ad_new<Type>(
-                        "fmadd", (uint32_t) width(result), 3, indices, weights);
+                        "fmadd", width(result), 3, indices, weights);
                 }
             }
             return DiffArray::create(index_new, std::move(result));
@@ -350,7 +350,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                     int32_t indices[3] = { m_index, a.m_index, b.m_index };
                     Type weights[3] = { a.m_value, m_value, -1 };
                     index_new = detail::ad_new<Type>(
-                        "fmsub", (uint32_t) width(result), 3, indices, weights);
+                        "fmsub", width(result), 3, indices, weights);
                 }
             }
             return DiffArray::create(index_new, std::move(result));
@@ -368,7 +368,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                     int32_t indices[3] = { m_index, a.m_index, b.m_index };
                     Type weights[3] = { -a.m_value, -m_value, 1 };
                     index_new = detail::ad_new<Type>(
-                        "fnmadd", (uint32_t) width(result), 3, indices, weights);
+                        "fnmadd", width(result), 3, indices, weights);
                 }
             }
             return DiffArray::create(index_new, std::move(result));
@@ -386,7 +386,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                     int32_t indices[3] = { m_index, a.m_index, b.m_index };
                     Type weights[3] = { -a.m_value, -m_value, -1 };
                     index_new = detail::ad_new<Type>(
-                        "fnmsub", (uint32_t) width(result), 3, indices, weights);
+                        "fnmsub", width(result), 3, indices, weights);
                 }
             }
             return DiffArray::create(index_new, std::move(result));
@@ -404,7 +404,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                     int32_t indices[1] = { m_index };
                     Type weights[1] = { sign(m_value) };
                     index_new = detail::ad_new<Type>(
-                        "abs", (uint32_t) width(result), 1, indices, weights);
+                        "abs", width(result), 1, indices, weights);
                 }
             }
             return DiffArray::create(index_new, std::move(result));
@@ -422,7 +422,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                     int32_t indices[1] = { m_index };
                     Type weights[1] = { .5f * rcp(result) };
                     index_new = detail::ad_new<Type>(
-                        "sqrt", (uint32_t) width(result), 1, indices, weights);
+                        "sqrt", width(result), 1, indices, weights);
                 }
             }
             return DiffArray::create(index_new, std::move(result));
@@ -440,7 +440,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                     int32_t indices[1] = { m_index };
                     Type weights[1] = { (1 / 3.f) * sqr(rcp(result)) };
                     index_new = detail::ad_new<Type>(
-                        "cbrt", (uint32_t) width(result), 1, indices, weights);
+                        "cbrt", width(result), 1, indices, weights);
                 }
             }
             return DiffArray::create(index_new, std::move(result));
@@ -458,7 +458,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                     int32_t indices[1] = { m_index };
                     Type weights[1] = { (2.f * InvSqrtPi<Type>) * exp(-sqr(m_value)) };
                     index_new = detail::ad_new<Type>(
-                        "erf", (uint32_t) width(result), 1, indices, weights);
+                        "erf", width(result), 1, indices, weights);
                 }
             }
             return DiffArray::create(index_new, std::move(result));
@@ -476,7 +476,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                     int32_t indices[1] = { m_index };
                     Type weights[1] = { -sqr(result) };
                     index_new = detail::ad_new<Type>(
-                        "rcp", (uint32_t) width(result), 1, indices, weights);
+                        "rcp", width(result), 1, indices, weights);
                 }
             }
             return DiffArray::create(index_new, std::move(result));
@@ -495,7 +495,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                     int32_t indices[1] = { m_index };
                     Type weights[1] = { -.5f * rsqrt_3 };
                     index_new = detail::ad_new<Type>(
-                        "rsqrt", (uint32_t) width(result), 1, indices, weights);
+                        "rsqrt", width(result), 1, indices, weights);
                 }
             }
             return DiffArray::create(index_new, std::move(result));
@@ -515,7 +515,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                     Type weights[2] = { select(m, Type(1), Type(0)),
                                         select(m, Type(0), Type(1)) };
                     index_new = detail::ad_new<Type>(
-                        "min", (uint32_t) width(result), 2, indices, weights);
+                        "min", width(result), 2, indices, weights);
                 }
             }
             return DiffArray::create(index_new, std::move(result));
@@ -535,7 +535,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                     Type weights[2] = { select(m, Type(1), Type(0)),
                                         select(m, Type(0), Type(1)) };
                     index_new = detail::ad_new<Type>(
-                        "max", (uint32_t) width(result), 2, indices, weights);
+                        "max", width(result), 2, indices, weights);
                 }
             }
             return DiffArray::create(index_new, std::move(result));
@@ -553,7 +553,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             if constexpr (IsEnabled) {
                 if (t.m_index > 0 || f.m_index > 0) {
                     index_new = detail::ad_new_select<Type>(
-                        "select", (uint32_t) width(result),
+                        "select", width(result),
                         m.m_value, t.m_index, f.m_index);
                 }
             }
@@ -613,7 +613,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                 if (m_index > 0) {
                     int32_t indices[1] = { m_index };
                     Type weights[1] = { std::move(c) };
-                    index_new = detail::ad_new<Type>("sin", (uint32_t) width(s),
+                    index_new = detail::ad_new<Type>("sin", width(s),
                                                      1, indices, weights);
                 }
             }
@@ -631,7 +631,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                 if (m_index > 0) {
                     int32_t indices[1] = { m_index };
                     Type weights[1] = { -s };
-                    index_new = detail::ad_new<Type>("cos", (uint32_t) width(c),
+                    index_new = detail::ad_new<Type>("cos", width(c),
                                                      1, indices, weights);
                 }
             }
@@ -649,11 +649,11 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                 if (m_index > 0) {
                     int32_t indices[1] = { m_index };
                     Type weights_s[1] = { c }, weights_c[1] = { -s };
-                    uint32_t w = (uint32_t) width(s);
-                    index_s =
-                        detail::ad_new<Type>("sincos[s]", w, 1, indices, weights_s);
-                    index_c =
-                        detail::ad_new<Type>("sincos[c]", w, 1, indices, weights_c);
+                    uint32_t w = width(s);
+                    index_s = detail::ad_new<Type>("sincos[s]", w, 1, indices,
+                                                   weights_s);
+                    index_c = detail::ad_new<Type>("sincos[c]", w, 1, indices,
+                                                   weights_c);
                 }
             }
             return {
@@ -674,7 +674,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                     int32_t indices[1] = { m_index };
                     Type weights[1] = { -result * cot(m_value) };
                     index_new = detail::ad_new<Type>(
-                        "csc", (uint32_t) width(result), 1, indices, weights);
+                        "csc", width(result), 1, indices, weights);
                 }
             }
             return DiffArray::create(index_new, std::move(result));
@@ -692,7 +692,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                     int32_t indices[1] = { m_index };
                     Type weights[1] = { result * tan(m_value) };
                     index_new = detail::ad_new<Type>(
-                        "sec", (uint32_t) width(result), 1, indices, weights);
+                        "sec", width(result), 1, indices, weights);
                 }
             }
             return DiffArray::create(index_new, std::move(result));
@@ -710,7 +710,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                     int32_t indices[1] = { m_index };
                     Type weights[1] = { sqr(sec(m_value)) };
                     index_new = detail::ad_new<Type>(
-                        "tan", (uint32_t) width(result), 1, indices, weights);
+                        "tan", width(result), 1, indices, weights);
                 }
             }
             return DiffArray::create(index_new, std::move(result));
@@ -728,7 +728,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                     int32_t indices[1] = { m_index };
                     Type weights[1] = { -sqr(csc(m_value)) };
                     index_new = detail::ad_new<Type>(
-                        "cot", (uint32_t) width(result), 1, indices, weights);
+                        "cot", width(result), 1, indices, weights);
                 }
             }
             return DiffArray::create(index_new, std::move(result));
@@ -746,7 +746,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                     int32_t indices[1] = { m_index };
                     Type weights[1] = { rsqrt(fnmadd(m_value, m_value, 1)) };
                     index_new = detail::ad_new<Type>(
-                        "asin", (uint32_t) width(result), 1, indices, weights);
+                        "asin", width(result), 1, indices, weights);
                 }
             }
             return DiffArray::create(index_new, std::move(result));
@@ -764,7 +764,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                     int32_t indices[1] = { m_index };
                     Type weights[1] = { -rsqrt(fnmadd(m_value, m_value, 1)) };
                     index_new = detail::ad_new<Type>(
-                        "acos", (uint32_t) width(result), 1, indices, weights);
+                        "acos", width(result), 1, indices, weights);
                 }
             }
             return DiffArray::create(index_new, std::move(result));
@@ -782,7 +782,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                     int32_t indices[1] = { m_index };
                     Type weights[1] = { rcp(fmadd(m_value, m_value, 1)) };
                     index_new = detail::ad_new<Type>(
-                        "atan", (uint32_t) width(result), 1, indices, weights);
+                        "atan", width(result), 1, indices, weights);
                 }
             }
             return DiffArray::create(index_new, std::move(result));
@@ -801,7 +801,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                     int32_t indices[2] = { m_index, x.m_index };
                     Type weights[2] = { il2 * x.m_value, -il2 * m_value };
                     index_new = detail::ad_new<Type>(
-                        "atan2", (uint32_t) width(result), 2, indices, weights);
+                        "atan2", width(result), 2, indices, weights);
                 }
             }
             return DiffArray::create(index_new, std::move(result));
@@ -819,7 +819,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                     int32_t indices[1] = { m_index };
                     Type weights[1] = { result };
                     index_new = detail::ad_new<Type>(
-                        "exp", (uint32_t) width(result), 1, indices, weights);
+                        "exp", width(result), 1, indices, weights);
                 }
             }
             return DiffArray::create(index_new, std::move(result));
@@ -837,7 +837,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                     int32_t indices[1] = { m_index };
                     Type weights[1] = { result * LogTwo<Value> };
                     index_new = detail::ad_new<Type>(
-                        "exp2", (uint32_t) width(result), 1, indices, weights);
+                        "exp2", width(result), 1, indices, weights);
                 }
             }
             return DiffArray::create(index_new, std::move(result));
@@ -855,7 +855,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                     int32_t indices[1] = { m_index };
                     Type weights[1] = { rcp(m_value) };
                     index_new = detail::ad_new<Type>(
-                        "log", (uint32_t) width(result), 1, indices, weights);
+                        "log", width(result), 1, indices, weights);
                 }
             }
             return DiffArray::create(index_new, std::move(result));
@@ -873,7 +873,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                     int32_t indices[1] = { m_index };
                     Type weights[1] = { rcp(m_value) * InvLogTwo<Value> };
                     index_new = detail::ad_new<Type>(
-                        "log2", (uint32_t) width(result), 1, indices, weights);
+                        "log2", width(result), 1, indices, weights);
                 }
             }
             return DiffArray::create(index_new, std::move(result));
@@ -890,7 +890,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                 if (m_index > 0) {
                     int32_t indices[1] = { m_index };
                     Type weights[1] = { std::move(c) };
-                    index_new = detail::ad_new<Type>("sinh", (uint32_t) width(s),
+                    index_new = detail::ad_new<Type>("sinh", width(s),
                                                      1, indices, weights);
                 }
             }
@@ -908,7 +908,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                 if (m_index > 0) {
                     int32_t indices[1] = { m_index };
                     Type weights[1] = { s };
-                    index_new = detail::ad_new<Type>("cosh", (uint32_t) width(c),
+                    index_new = detail::ad_new<Type>("cosh", width(c),
                                                      1, indices, weights);
                 }
             }
@@ -926,7 +926,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                 if (m_index > 0) {
                     int32_t indices[1] = { m_index };
                     Type weights_s[1] = { c }, weights_c[1] = { s };
-                    uint32_t w = (uint32_t) width(s);
+                    uint32_t w = width(s);
                     index_s =
                         detail::ad_new<Type>("sincosh[s]", w, 1, indices, weights_s);
                     index_c =
@@ -951,7 +951,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                     int32_t indices[1] = { m_index };
                     Type weights[1] = { sqr(sech(m_value)) };
                     index_new = detail::ad_new<Type>(
-                        "tanh", (uint32_t) width(result), 1, indices, weights);
+                        "tanh", width(result), 1, indices, weights);
                 }
             }
             return DiffArray::create(index_new, std::move(result));
@@ -969,7 +969,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                     int32_t indices[1] = { m_index };
                     Type weights[1] = { rsqrt((Scalar) 1 + sqr(m_value)) };
                     index_new = detail::ad_new<Type>(
-                        "asinh", (uint32_t) width(result), 1, indices, weights);
+                        "asinh", width(result), 1, indices, weights);
                 }
             }
             return DiffArray::create(index_new, std::move(result));
@@ -987,7 +987,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                     int32_t indices[1] = { m_index };
                     Type weights[1] = { rsqrt(sqr(m_value) - (Scalar) 1) };
                     index_new = detail::ad_new<Type>(
-                        "acosh", (uint32_t) width(result), 1, indices, weights);
+                        "acosh", width(result), 1, indices, weights);
                 }
             }
             return DiffArray::create(index_new, std::move(result));
@@ -1005,7 +1005,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                     int32_t indices[1] = { m_index };
                     Type weights[1] = { rcp((Scalar) 1 - sqr(m_value)) };
                     index_new = detail::ad_new<Type>(
-                        "atanh", (uint32_t) width(result), 1, indices, weights);
+                        "atanh", width(result), 1, indices, weights);
                 }
             }
             return DiffArray::create(index_new, std::move(result));
@@ -1398,7 +1398,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                 if (src.m_index > 0)
                     index_new = detail::ad_new_gather<Type>(
                         Permute ? "gather[permute]" : "gather",
-                        (uint32_t) width(result), src.m_index, offset.m_value,
+                        width(result), src.m_index, offset.m_value,
                         mask.m_value, Permute);
             }
             return create(index_new, std::move(result));
@@ -1415,7 +1415,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             if constexpr (IsEnabled) {
                 if (m_index > 0 || (dst.m_index > 0 && !Permute)) {
                     int32_t index = detail::ad_new_scatter<Type>(
-                        Permute ? "scatter[permute]" : "scatter", (uint32_t) width(dst),
+                        Permute ? "scatter[permute]" : "scatter", width(dst),
                         ReduceOp::None, m_index, dst.m_index, offset.m_value,
                         mask.m_value, Permute);
                     detail::ad_dec_ref<Type>(dst.m_index);
@@ -1434,7 +1434,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             if constexpr (IsEnabled) {
                 if (m_index > 0) { // safe to ignore dst.m_index in the case of scatter_reduce
                     int32_t index = detail::ad_new_scatter<Type>(
-                        "scatter_reduce", (uint32_t) width(dst), op, m_index,
+                        "scatter_reduce", width(dst), op, m_index,
                         dst.m_index, offset.m_value, mask.m_value, false);
                     detail::ad_dec_ref<Type>(dst.m_index);
                     dst.m_index = index;
@@ -1528,7 +1528,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
 
                 DiffArray result;
                 result.m_index = detail::ad_new<Type>(
-                    "copy", (uint32_t) width(m_value), 1, indices, weights);
+                    "copy", width(m_value), 1, indices, weights);
                 result.m_value = m_value;
                 return result;
             }
@@ -1573,7 +1573,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             if (value) {
                 if (m_index > 0)
                     return;
-                m_index = detail::ad_new<Type>(nullptr, (uint32_t) width(m_value),
+                m_index = detail::ad_new<Type>(nullptr, width(m_value),
                                                0, nullptr, (Type *) nullptr);
             } else {
                 if (m_index == 0)
@@ -1614,10 +1614,10 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             detail::ad_enqueue<Type>(m_index);
     }
 
-    static void traverse_(bool backward, bool retain_graph) {
-        ENOKI_MARK_USED(backward);
+    static void traverse_(bool reverse, bool retain_graph) {
+        ENOKI_MARK_USED(reverse);
         if constexpr (IsEnabled)
-            detail::ad_traverse<Type>(backward, retain_graph);
+            detail::ad_traverse<Type>(reverse, retain_graph);
     }
 
     void set_label_(const char *label) const {
@@ -1805,7 +1805,7 @@ protected:
     extern template ENOKI_AUTODIFF_EXPORT void                                 \
         ad_dec_ref_impl<T>(int32_t) noexcept;                                  \
     extern template ENOKI_AUTODIFF_EXPORT int32_t                              \
-    ad_new<T>(const char *, uint32_t, uint32_t, const int32_t *, T *);         \
+    ad_new<T>(const char *, size_t, uint32_t, const int32_t *, T *);           \
     extern template ENOKI_AUTODIFF_EXPORT T ad_grad<T>(int32_t, bool);         \
     extern template ENOKI_AUTODIFF_EXPORT void                                 \
     ad_set_grad<T>(int32_t, const T &, bool);                                  \
@@ -1818,12 +1818,12 @@ protected:
     extern template ENOKI_AUTODIFF_EXPORT void ad_enqueue<T>(int32_t);         \
     extern template ENOKI_AUTODIFF_EXPORT void ad_traverse<T>(bool, bool);     \
     extern template ENOKI_AUTODIFF_EXPORT int32_t ad_new_select<T, Mask>(      \
-        const char *, uint32_t, const Mask &, int32_t, int32_t);               \
+        const char *, size_t, const Mask &, int32_t, int32_t);                 \
     extern template ENOKI_AUTODIFF_EXPORT int32_t                              \
-    ad_new_gather<T, Mask, Index>(const char *, uint32_t, int32_t,             \
+    ad_new_gather<T, Mask, Index>(const char *, size_t, int32_t,               \
                                   const Index &, const Mask &, bool);          \
     extern template ENOKI_AUTODIFF_EXPORT int32_t                              \
-    ad_new_scatter<T, Mask, Index>(const char *, uint32_t, ReduceOp, int32_t,  \
+    ad_new_scatter<T, Mask, Index>(const char *, size_t, ReduceOp, int32_t,    \
                                    int32_t, const Index &, const Mask &,       \
                                    bool);                                      \
     extern template ENOKI_AUTODIFF_EXPORT void                                 \
@@ -1844,8 +1844,6 @@ ENOKI_DECLARE_EXTERN_TEMPLATE(LLVMArray<double>, LLVMArray<bool>, LLVMArray<uint
 extern ENOKI_AUTODIFF_EXPORT const char *ad_whos();
 extern ENOKI_AUTODIFF_EXPORT void ad_prefix_push(const char *value);
 extern ENOKI_AUTODIFF_EXPORT void ad_prefix_pop();
-extern ENOKI_AUTODIFF_EXPORT void ad_check_weights(bool value);
-extern ENOKI_AUTODIFF_EXPORT void ad_set_max_edges_per_kernel(size_t value);
 
 NAMESPACE_END(enoki)
 

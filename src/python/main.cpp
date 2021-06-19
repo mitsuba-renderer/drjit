@@ -105,8 +105,6 @@ PYBIND11_MODULE(enoki_ext, m_) {
     export_llvm_ad(m);
     m.def("ad_whos_str", &ek::ad_whos);
     m.def("ad_whos", []() { py::print(ek::ad_whos()); });
-    m.def("ad_check_weights", [](bool value) { ek::ad_check_weights(value); });
-    m.def("ad_set_max_edges_per_kernel", [](size_t value) { ek::ad_set_max_edges_per_kernel(value); });
 #endif
 
     struct Scope {
@@ -192,7 +190,8 @@ PYBIND11_MODULE(enoki_ext, m_) {
         .value("Recording",      JitFlag::Recording)
         .value("PrintIR",        JitFlag::PrintIR)
         .value("ADOptimize",     JitFlag::ADOptimize)
-        .value("ADEagerForward", JitFlag::ADEagerForward);
+        .value("ADEagerForward", JitFlag::ADEagerForward)
+        .value("ADCheckWeights", JitFlag::ADCheckWeights);
 
     m.def("device_count", &jit_cuda_device_count);
     m.def("set_device", &jit_cuda_set_device, "device"_a);
