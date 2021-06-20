@@ -19,13 +19,14 @@ NAMESPACE_BEGIN(enoki)
 
 namespace detail { template <typename T> void clear_diff_vars(T &); };
 
-template <typename Type_, typename Output_, typename... Input>
+template <typename DiffType_, typename Output_, typename... Input>
 struct CustomOp : detail::DiffCallback {
     template <typename C, typename... Ts> friend auto custom(const Ts&... input);
 public:
-    using Type   = detached_t<Type_>;
-    using Output = Output_;
-    using Inputs = ek_tuple<Input...>;
+    using DiffType = DiffType_;
+    using Type     = detached_t<DiffType_>;
+    using Output   = Output_;
+    using Inputs   = ek_tuple<Input...>;
 
     template <size_t Index>
     using InputType = typename Inputs::template type<Index>;
@@ -165,8 +166,9 @@ template <typename T> T clear_primal(const T &value) {
 NAMESPACE_END(detail)
 
 template <typename Custom, typename... Input> auto custom(const Input&... input) {
-    using Type   = typename Custom::Type;
-    using Output = typename Custom::Output;
+    using DiffType = typename Custom::DiffType;
+    using Type     = typename Custom::Type;
+    using Output   = typename Custom::Output;
 
     ek_unique_ptr<Custom> custom(new Custom());
 
@@ -184,6 +186,9 @@ template <typename Custom, typename... Input> auto custom(const Input&... input)
     (detail::diff_vars(input, diff_vars_in_ctr, nullptr), ...);
 
     if (diff_vars_in_ctr > 0 || ad_deps_after > ad_deps_before) {
+        int32_t in_var  = detail::ad_new<Type>(nullptr, 0),
+                out_var = detail::ad_new<Type>(nullptr, 0);
+
         /* Gradients are enabled for at least one input, or the function
            accesses an instance variable with enabled gradients */
         enable_grad(output);
@@ -219,35 +224,33 @@ template <typename Custom, typename... Input> auto custom(const Input&... input)
         char *buf = (char *) alloca(buf_size);
 
         // Create a dummy node in case the branch-in factor is > 1
-        int32_t in_var;
         if (diff_vars_in_ctr > 1 || diff_vars_in_ctr == 0) {
-            in_var = detail::ad_new<Type>(nullptr, 0, 0, nullptr, (Type *) nullptr);
             snprintf(buf, buf_size, "%s [in]", name);
             detail::ad_set_label<Type>(in_var, buf);
             for (size_t i = 0; i < diff_vars_in_ctr; ++i)
                 detail::ad_add_edge<Type>(diff_vars_in[i], in_var);
         } else {
+            detail::ad_dec_ref<Type>(in_var);
             in_var = diff_vars_in[0];
             detail::ad_inc_ref<Type>(in_var);
         }
 
         // Create a dummy node in case the branch-out factor is > 1
-        int32_t out_var;
         if (diff_vars_out_ctr > 1 || diff_vars_out_ctr == 0) {
-            out_var = detail::ad_new<Type>(nullptr, 0, 0, nullptr, (Type *) nullptr);
             snprintf(buf, buf_size, "%s [out]", name);
             detail::ad_set_label<Type>(out_var, buf);
             for (size_t i = 0; i < diff_vars_out_ctr; ++i)
                 detail::ad_add_edge<Type>(out_var, diff_vars_out[i]);
         } else {
+            detail::ad_dec_ref<Type>(out_var);
             out_var = diff_vars_out[0];
             detail::ad_inc_ref<Type>(out_var);
         }
 
         // Connect the two nodes using a custom edge with a callback
         detail::ad_add_edge<Type>(in_var, out_var, custom.release());
-        detail::ad_dec_ref<Type>(out_var);
         detail::ad_dec_ref<Type>(in_var);
+        detail::ad_dec_ref<Type>(out_var);
     }
 
     return output;

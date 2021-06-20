@@ -2566,7 +2566,9 @@ def custom(cls, *args, **kwargs):
 
     if len(diff_vars_in) > 0:
         output = _ek.diff_array_t(output)
-        _ek.enable_grad(output)
+        Type = _ek.leaf_array_t(output)
+        tmp_in, tmp_out = Type(), Type()
+        _ek.enable_grad(tmp_in, tmp_out, output)
 
         inst.inputs = clear_primal(kwargs)
         inst.output = clear_primal(output)
@@ -2577,28 +2579,22 @@ def custom(cls, *args, **kwargs):
         if len(diff_vars_out) == 0:
             raise Exception("enoki.custom(): internal error!")
 
-        Type = _ek.leaf_array_t(output)
+        print(Type)
         detail = _modules.get(Type.__module__ + ".detail")
 
-        tmp_in, tmp_out = None, None
-
         if len(diff_vars_in) > 1:
-            tmp_in = Type()
-            _ek.enable_grad(tmp_in)
             _ek.set_label(tmp_in, inst.name() + "_in")
             for index in diff_vars_in:
                 detail.ad_add_edge(index, tmp_in.index_ad())
 
         if len(diff_vars_out) > 1:
-            tmp_out = Type()
-            _ek.enable_grad(tmp_out)
             _ek.set_label(tmp_out, inst.name() + "_out")
             for index in diff_vars_out:
                 detail.ad_add_edge(tmp_out.index_ad(), index)
 
         detail.ad_add_edge(
-            diff_vars_in[0] if tmp_in is None else tmp_in.index_ad(),
-            diff_vars_out[0] if tmp_out is None else tmp_out.index_ad(),
+            diff_vars_in[0]  if len(diff_vars_in)  > 1 else tmp_in.index_ad(),
+            diff_vars_out[0] if len(diff_vars_out) > 1 else tmp_out.index_ad(),
             inst
         )
 

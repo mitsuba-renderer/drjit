@@ -41,8 +41,9 @@ template <typename Value> void ad_inc_ref_impl(int32_t index) noexcept (true);
 template <typename Value> void ad_dec_ref_impl(int32_t index) noexcept (true);
 
 /// Create a new variable with the given number of operands and AD weights
-template <typename Value> int32_t ad_new(const char *label, size_t size, uint32_t ops,
-                                         const int32_t *indices, Value *weights);
+template <typename Value>
+int32_t ad_new(const char *label, size_t size, uint32_t ops = 0,
+               const int32_t *indices = nullptr, Value *weights = nullptr);
 
 /// Query the gradient associated with a variable
 template <typename Value> Value ad_grad(int32_t index, bool fail_if_missing);
@@ -1573,8 +1574,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             if (value) {
                 if (m_index > 0)
                     return;
-                m_index = detail::ad_new<Type>(nullptr, width(m_value),
-                                               0, nullptr, (Type *) nullptr);
+                m_index = detail::ad_new<Type>(nullptr, width(m_value));
             } else {
                 if (m_index == 0)
                     return;

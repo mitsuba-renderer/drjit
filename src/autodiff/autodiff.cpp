@@ -365,7 +365,7 @@ static void ad_dfs_fwd(std::vector<int32_t> &todo, int32_t index, Variable *v) {
 
 /// Reverse-mode DFS starting from 'index'
 static void ad_dfs_rev(std::vector<int32_t> &todo, uint32_t index, Variable *v) {
-    state.todo.push_back(index);
+    todo.push_back(index);
     v->visited = 1;
 
     uint32_t edge = v->next_rev;
@@ -1472,7 +1472,9 @@ void ad_add_edge(int32_t source_idx, int32_t target_idx,
 }
 
 template <typename T>
-static void ad_traverse_impl(std::vector<int32_t> &queue, bool reverse, bool retain_graph) {
+static void ad_traverse_impl(std::vector<int32_t> &queue,
+                             bool reverse,
+                             bool retain_graph) {
     std::vector<int32_t> todo;
 
     // Use existing allocated memory region if currently unused
