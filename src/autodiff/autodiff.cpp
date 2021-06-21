@@ -187,7 +187,18 @@ struct Variable {
 
     template <typename T = Value>
     void mul_accum(const T &v1, const T &v2_, uint32_t src_size) {
-        T v2 = select(eq(v1, 0.f), v1, v2_);
+
+        /*
+          The goal of the following logic is to always ensure that
+          v1 == 0 implies v1 * v2 == 0, even if multiplication by
+          v2 would produce a NaN (e.g. if v2 is infinite or NaN).
+        */
+        T z = 0.f, v2 = select(eq(v1, z), z, v2_);
+
+        if constexpr (is_jit_array_v<T>) {
+            if (v2_.is_literal() && std::isnormal(v2_[0]))
+                v2 = v2_;
+        }
 
         if constexpr (is_array_v<T>) {
             bool grad_valid = is_valid(grad);
