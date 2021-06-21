@@ -2579,7 +2579,6 @@ def custom(cls, *args, **kwargs):
         if len(diff_vars_out) == 0:
             raise Exception("enoki.custom(): internal error!")
 
-        print(Type)
         detail = _modules.get(Type.__module__ + ".detail")
 
         if len(diff_vars_in) > 1:
@@ -2593,8 +2592,8 @@ def custom(cls, *args, **kwargs):
                 detail.ad_add_edge(tmp_out.index_ad(), index)
 
         detail.ad_add_edge(
-            diff_vars_in[0]  if len(diff_vars_in)  > 1 else tmp_in.index_ad(),
-            diff_vars_out[0] if len(diff_vars_out) > 1 else tmp_out.index_ad(),
+            diff_vars_in[0]  if len(diff_vars_in)  == 1 else tmp_in.index_ad(),
+            diff_vars_out[0] if len(diff_vars_out) == 1 else tmp_out.index_ad(),
             inst
         )
 
