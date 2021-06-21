@@ -427,7 +427,7 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
             av = jit_registry_get_id(Backend, value);
 
         return steal(
-            jit_var_new_literal(Backend, Type, &av, size, false));
+            jit_var_new_literal(Backend, Type, &av, size, false, IsClass));
     }
 
     static Derived opaque_(Value value, size_t size) {
@@ -438,7 +438,7 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
             av = jit_registry_get_id(Backend, value);
 
         return steal(
-            jit_var_new_literal(Backend, Type, &av, size, true));
+            jit_var_new_literal(Backend, Type, &av, size, true, IsClass));
     }
 
     static Derived arange_(ssize_t start, ssize_t stop, ssize_t step) {
