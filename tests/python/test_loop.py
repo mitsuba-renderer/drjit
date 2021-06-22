@@ -103,22 +103,7 @@ def test02_multiple_values(pkg, variant):
 
 
 @pytest.mark.parametrize("pkg", pkgs)
-def test03_failures(pkg):
-    p = get_class(pkg)
-
-    i = p.Int()
-    v = ek.zero(p.Array3f, 10)
-
-    if 'ad' in pkg:
-        i = p.Int(0)
-        ek.enable_grad(v)
-        with pytest.raises(ek.Exception) as e:
-            p.Loop("MyLoop", lambda: (i, v))
-        assert 'one of the supplied loop variables is attached to the AD graph' in str(e.value)
-
-
-@pytest.mark.parametrize("pkg", pkgs)
-def test04_side_effect(pkg):
+def test03_side_effect(pkg):
     p = get_class(pkg)
 
     i = ek.zero(p.Int, 10)
@@ -138,7 +123,7 @@ def test04_side_effect(pkg):
 
 
 @pytest.mark.parametrize("pkg", pkgs)
-def test05_side_effect_noloop(pkg):
+def test04_side_effect_noloop(pkg):
     p = get_class(pkg)
 
     i = ek.zero(p.Int, 10)
@@ -159,7 +144,7 @@ def test05_side_effect_noloop(pkg):
 
 @pytest.mark.parametrize("variant", [0, 1, 2])
 @pytest.mark.parametrize("pkg", pkgs)
-def test06_test_collatz(pkg, variant):
+def test05_test_collatz(pkg, variant):
     p = get_class(pkg)
 
     def collatz(value: p.Int):
@@ -189,7 +174,7 @@ def test06_test_collatz(pkg, variant):
                                  "enoki.cuda.ad",
                                  "enoki.llvm",
                                  "enoki.llvm.ad"])
-def test07_loop_nest(pkg, variant):
+def test06_loop_nest(pkg, variant):
     p = get_class(pkg)
 
     def collatz(value: p.Int):
@@ -218,8 +203,9 @@ def test07_loop_nest(pkg, variant):
     assert buf == p.Int(0, 1, 7, 2, 5, 8, 16, 3, 19, 6, 1000, 1000, 1000, 1000, 1000, 1000)
 
 
+
 @pytest.mark.parametrize("pkg", pkgs)
-def test09_loop_simplification(pkg):
+def test07_loop_simplification(pkg):
     # Test a regression where most loop variables are optimized away
     p = get_class(pkg)
     res = p.Float(0.0)
@@ -239,3 +225,92 @@ def test09_loop_simplification(pkg):
     gc.collect()
     gc.collect()
     assert res == ek.arange(p.Float, 10) * 1000
+
+
+@pytest.mark.parametrize("pkg", pkgs)
+def test08_failure_invalid_loop_arg(pkg):
+    p = get_class(pkg)
+    i = p.Int(1)
+    with pytest.raises(RuntimeError) as e:
+        p.Loop("MyLoop", i)
+    assert 'expected a lambda function' in str(e.value)
+
+    i = p.Int(1)
+    with pytest.raises(TypeError) as e:
+        l = p.Loop("MyLoop")
+        l.put(i)
+    assert 'incompatible function arguments' in str(e.value)
+    del l
+
+
+@pytest.mark.parametrize("pkg", pkgs_ad)
+def test09_failure_invalid_type(pkg):
+    p = get_class(pkg)
+    i = 1
+    with pytest.raises(ek.Exception) as e:
+        p.Loop("MyLoop", lambda: i)
+    assert 'you must use Enoki arrays/structs' in str(e.value)
+
+
+@pytest.mark.parametrize("variant", [0, 1])
+@pytest.mark.parametrize("pkg", pkgs)
+def test10_failure_unitialized(pkg, variant):
+    p = get_class(pkg)
+    i = p.Int(0)
+    j = p.Int() if variant == 0 else p.Int(1)
+    l = None
+    with pytest.raises(ek.Exception) as e:
+        l = p.Loop("MyLoop", lambda: (i, j))
+        while l(i < 10):
+            j = p.Int() if variant == 1 else i + 1
+            i += 1
+
+    assert 'is uninitialized!' in str(e.value)
+    del l
+
+
+@pytest.mark.parametrize("pkg", pkgs)
+def test11_failure_changing_type(pkg):
+    p = get_class(pkg)
+    i = p.Int(0)
+    with pytest.raises(ek.Exception) as e:
+        l = p.Loop("MyLoop", lambda: i)
+        while l(i < 10):
+            i = p.Float(0)
+    assert 'the type of loop state variables must remain the same throughout the loop' in str(e.value)
+    del l
+
+
+@pytest.mark.parametrize("variant", [0, 1])
+@pytest.mark.parametrize("pkg", pkgs_ad)
+def test12_failures_ad(pkg, variant):
+    p = get_class(pkg)
+    i = p.Int(0)
+    v = p.Array3f(1,2,2)
+    l = None
+    with pytest.raises(ek.Exception) as e:
+        if variant == 0:
+            ek.enable_grad(v)
+        l = p.Loop("MyLoop", lambda: (i, v))
+        while l(i < 10):
+            i = i + 1
+            if variant == 1:
+                ek.enable_grad(v)
+    assert 'one of the supplied loop state variables of type Array3f is attached to the AD graph' in str(e.value)
+    del l
+
+
+@pytest.mark.parametrize("pkg", pkgs)
+def test13_failure_state_leak(pkg):
+    p = get_class(pkg)
+    i, j = p.Int(0), p.Int(0)
+
+    l = p.Loop("MyLoop", lambda: i)
+    while l(i < 10):
+        i = i + 1
+        j += i
+
+    with pytest.raises(RuntimeError) as e:
+        j[0]
+    assert 'placeholder variables are used to record computation symbolically' in str(e.value)
+    del l

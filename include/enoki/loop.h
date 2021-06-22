@@ -18,6 +18,14 @@
 
 NAMESPACE_BEGIN(enoki)
 
+NAMESPACE_BEGIN(detail)
+template <typename Value> void ad_inc_ref(int32_t) noexcept;
+template <typename Value> void ad_dec_ref(int32_t) noexcept;
+template <typename Value> void ad_traverse_postponed();
+template <typename Value, typename Mask>
+int32_t ad_new_select(const char *, uint32_t, const Mask &, int32_t, int32_t);
+NAMESPACE_END(detail)
+
 template <typename Mask, typename SFINAE = int> struct Loop;
 
 /// Scalar fallback, expands into normal C++ loop

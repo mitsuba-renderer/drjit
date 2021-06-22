@@ -1266,7 +1266,9 @@ def grad_enabled_(a):
     if a.Depth > 1:
         enabled = False
         for i in range(len(a)):
-            enabled |= a[i].grad_enabled_()
+            # ek.Loop requires entry_ref_ here to avoid creating copies
+            # of variables, whose entries are temporarily invalid
+            enabled |= a.entry_ref_(i).grad_enabled_()
         return enabled
     else:
         return a.index_ad() > 0

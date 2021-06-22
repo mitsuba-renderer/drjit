@@ -1152,7 +1152,7 @@ def test_56_diffloop_simple_rev(m, no_record):
     assert ek.grad(fi) == m.Float(10, 5, 4)
 
 
-def test_57_diffloop_masking_rev(m, no_record):
+def test_57_diffloop_masking_fwd(m, no_record):
     fo = ek.zero(m.Float, 10)
     fi = m.Float(1, 2)
     i = m.UInt32(0, 5)

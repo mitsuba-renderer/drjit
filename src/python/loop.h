@@ -9,40 +9,42 @@ template <typename Value> struct Loop : ek::Loop<Value> {
     using Base::m_index_p_ad;
     using Base::m_index_in;
     using Base::m_invariant;
+    using Base::m_name;
 
     Loop(const char *name, py::handle func) : Base(name) {
         py::object detail = py::module_::import("enoki").attr("detail");
-        m_read_indices  = detail.attr("read_indices");
-        m_write_indices = detail.attr("write_indices");
+        m_process_state = detail.attr("loop_process_state");
         if (!func.is_none()) {
             if (!py::isinstance<py::function>(func)) {
-                ek::enoki_raise(
-                    "Loop(): expected a lambda function as second argument "
-                    "that returns the list of loop variables.");
+                jit_raise("Loop(\"%s\"): expected a lambda function as second "
+                          "argument that returns the list of loop variables.",
+                          name);
             } else {
-                m_args.append(func);
+                m_funcs.append(func);
                 init();
             }
         }
     }
 
-    void put(py::function func) {
-        m_args.append(func);
-    }
+    void put(const py::function &func) { m_funcs.append(func); }
 
     void init() {
-        py::list indices = m_read_indices(m_args);
-        size_t size = indices.size();
+        if (m_indices.size() > 0)
+            jit_raise("enoki::Loop(\"%s\"): was already initialized!",
+                      m_name.get());
 
-        for (uint32_t i = 0; i < size; ++i) {
-            py::tuple t = indices[i];
-            if (t.size() != 2)
-                ek::enoki_raise("Loop::read_indices(): invalid input!");
-            m_index_py.push_back(py::cast<uint32_t>(t[0]));
-            m_index_py_ad.push_back(py::cast<int32_t>(t[1]));
+        process_state(false);
+
+        py::int_ i0(0), i1(1);
+        for (uint32_t i = 0, size = m_indices.size(); i < size; ++i) {
+            py::object o = m_indices[i];
+            if (!py::isinstance<py::tuple>(o))
+                continue;
+            m_index_py.push_back(py::cast<uint32_t>(o[i0]));
+            m_index_py_ad.push_back(py::cast<int32_t>(o[i1]));
         }
 
-        for (uint32_t i = 0; i < size; ++i) {
+        for (uint32_t i = 0; i < m_index_py.size(); ++i) {
             m_index_p.push_back(&m_index_py[i]);
             m_index_p_ad.push_back(&m_index_py_ad[i]);
             m_index_in.push_back(m_index_py[i]);
@@ -62,32 +64,36 @@ template <typename Value> struct Loop : ek::Loop<Value> {
 
 private:
     void read_indices() {
-        py::list indices = m_read_indices(m_args);
-        size_t size = indices.size();
+        process_state(false);
 
-        if (size != m_index_py.size())
-            ek::enoki_raise("Loop::read_indices(): number of indices changed!");
-
-        for (uint32_t i = 0; i < size; ++i) {
-            py::tuple t = indices[i];
-            if (t.size() != 2)
-                ek::enoki_raise("Loop::read_indices(): invalid input!");
-            m_index_py[i] = py::cast<uint32_t>(t[0]);
-            m_index_py_ad[i] = py::cast<int32_t>(t[1]);
+        py::int_ i0(0), i1(1);
+        for (uint32_t i = 0, j = 0, size = m_indices.size(); i < size; ++i) {
+            py::object o = m_indices[i];
+            if (!py::isinstance<py::tuple>(o))
+                continue;
+            m_index_py[j] = py::cast<uint32_t>(o[i0]);
+            m_index_py_ad[j] = py::cast<int32_t>(o[i1]);
+            j++;
         }
     }
 
     void write_indices() {
-        py::list list;
-        for (size_t i = 0; i < m_index_py.size(); ++i)
-            list.append(py::make_tuple(m_index_py[i], m_index_py_ad[i]));
-        m_write_indices(list, m_args);
+        py::int_ i0(0), i1(1);
+        for (uint32_t i = 0, j = 0, size = m_indices.size(); i < size; ++i) {
+            py::object o = m_indices[i];
+            if (!py::isinstance<py::tuple>(o))
+                continue;
+            m_indices[i] = py::make_tuple(m_index_py[j], m_index_py_ad[j]);
+            j++;
+        }
+
+        process_state(true);
     }
 
+    void process_state(bool write) { m_process_state(m_funcs, m_indices, write); }
 private:
-    py::list m_args;
-    py::object m_read_indices;
-    py::object m_write_indices;
+    py::list m_funcs, m_indices;
+    py::object m_process_state;
     ek::ek_vector<uint32_t> m_index_py;
     ek::ek_vector<int32_t> m_index_py_ad;
 };

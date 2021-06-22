@@ -419,71 +419,87 @@ def array_configure(cls, shape, type_, value):
                    cls.Shape, cls.IsScalar))
 
 
-# Read JIT variable IDs, used by ek.cuda/llvm.loop
-def read_indices(*args):
-    result = []
-    for a in args:
-        if enoki.is_array_v(a):
-            if a.Depth > 1:
-                for i in range(len(a)):
-                    result.extend(read_indices(a.entry_ref_(i)))
-            elif a.IsDiff:
-                if enoki.grad_enabled(a) and enoki.flag(enoki.JitFlag.LoopRecord):
-                    raise enoki.Exception(
-                        "read_indices(): one of the supplied loop "
-                        "variables is attached to the AD graph (i.e. "
-                        "grad_enabled(..) is true). However, recorded "
-                        "loops cannot be differentiated in their entirety. "
-                        "You have two options: either disable loop "
-                        "recording via set_flag(JitFlag.LoopRecord, "
-                        "False). Alternatively, you could implement the "
-                        "adjoint of the loop using ek::CustomOp.")
-                result.append((a.index(), a.index_ad()))
-            elif a.IsJIT:
-                result.append((a.index(), 0))
-        elif isinstance(a, tuple) or isinstance(a, list):
-            for b in a:
-                if getattr(b, '__name__', None) == '<lambda>':
-                    result.extend(read_indices(b()))
-                else:
-                    result.extend(read_indices(b))
-        elif enoki.is_enoki_struct_v(a):
-            for k, v in type(a).ENOKI_STRUCT.items():
-                result.extend(read_indices(getattr(a, k)))
-    return result
+def _loop_process_state(value: type, in_state: list, out_state: list,
+                        write: bool, in_struct: bool = False):
+    '''
+    This helper function is used by ``enoki.*.Loop`` to collect the set of loop
+    state variables and ensure that their types stay consistent over time. It
+    traverses a python object tree in ``value`` and writes state variable
+    indices to ``out_state``. If provided, it performs a consistency check
+    against the output of a prior call provided via ``in_state``. If ``write``
+    is set to ``True``, it mutates the input value based on the information in
+    ``in_state``.
+    '''
+    t = type(value)
+
+    out_state.append(t)
+    if in_state:
+        assert len(in_state) > 0
+        t_old = in_state.pop()
+        if t is not t_old:
+            raise enoki.Exception(
+                "loop_process_state(): the type of loop state variables must "
+                "remain the same throughout the loop. However, one of the "
+                "supplied variables changed from type %s to %s!"
+                % (t_old.__name__, t.__name__))
+
+    if issubclass(t, tuple) or issubclass(t, list):
+        for entry in value:
+            _loop_process_state(entry, in_state, out_state, write, in_struct)
+        return
+
+    if enoki.grad_enabled(value) and enoki.flag(enoki.JitFlag.LoopRecord):
+        raise enoki.Exception(
+            "loop_process_state(): one of the supplied loop state variables "
+            "of type %s is attached to the AD graph (i.e., grad_enabled(..) "
+            "is true). However, propagating derivatives through multiple "
+            "iterations of a recorded loop is not supported loop (and never "
+            "will be). Please see the documentation on differentiating loops "
+            "for details and suggested alternatives." % t.__name__)
+
+    if enoki.is_jit_array_v(t):
+        if t.Depth > 1:
+            for i in range(len(value)):
+                _loop_process_state(value.entry_ref_(i), in_state,
+                                    out_state, write, in_struct)
+        else:
+            index = value.index()
+            index_ad = value.index_ad() if t.IsDiff else 0
+
+            if index == 0:
+                raise enoki.Exception(
+                    "loop_process_state(): one of the supplied loop state "
+                    "variables of type %s is uninitialized!" % t.__name__)
+
+            out_state.append((index, index_ad))
+
+            if in_state:
+                assert len(in_state) > 0
+                index, index_ad = in_state.pop()
+
+                if write:
+                    value.set_index_(index)
+                    if t.IsDiff:
+                        value.set_index_ad_(index_ad)
+    elif enoki.is_enoki_struct_v(t):
+        for k, v in t.ENOKI_STRUCT.items():
+            _loop_process_state(getattr(value, k), in_state, out_state, True)
+    elif not in_struct:
+        raise enoki.Exception(
+            "loop_process_state(): one of the provided loop state variables "
+            "was of type %s, which is not allowed (you must use Enoki "
+            "arrays/structs that are managed by the JIT compiler)"
+            % t.__name__)
 
 
-# Write JIT variable IDs, used by ek.cuda/llvm.loop
-def write_indices(indices, *args):
-    for a in args:
-        if enoki.is_array_v(a):
-            if a.Depth > 1:
-                for i in range(len(a)):
-                    write_indices(indices, a.entry_ref_(i))
-            elif a.IsDiff:
-                if enoki.grad_enabled(a) and enoki.flag(enoki.JitFlag.LoopRecord):
-                    raise enoki.Exception(
-                        "write_indices(): one of the supplied loop "
-                        "variables is attached to the AD graph (i.e. "
-                        "grad_enabled(..) is true). However, recorded "
-                        "loops cannot be differentiated in their entirety. "
-                        "You have two options: either disable loop "
-                        "recording via set_flag(JitFlag.LoopRecord, "
-                        "False). Alternatively, you could implement the "
-                        "adjoint of the loop using ek::CustomOp.")
-                idx = indices.pop(0)
-                a.set_index_(idx[0])
-                a.set_index_ad_(idx[1])
-            elif a.IsJIT:
-                idx = indices.pop(0)
-                a.set_index_(idx[0])
-                assert idx[1] == 0
-        elif isinstance(a, tuple) or isinstance(a, list):
-            for b in a:
-                if getattr(b, '__name__', None) == '<lambda>':
-                    write_indices(indices, b())
-                else:
-                    write_indices(indices, b)
-        elif enoki.is_enoki_struct_v(a):
-            for k, v in type(a).ENOKI_STRUCT.items():
-                write_indices(indices, getattr(a, k))
+def loop_process_state(funcs, state, write):
+    if len(state) == 0:
+        old_state = None
+    else:
+        old_state = list(state)
+        old_state.reverse()
+    state.clear()
+
+    for func in funcs:
+        _loop_process_state(func(), old_state, state, write)
+    assert old_state is None or len(old_state) == 0

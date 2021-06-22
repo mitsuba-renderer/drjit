@@ -43,7 +43,7 @@ def test01_construct():
     with pytest.raises(TypeError) as ei:
         a = ek.scalar.Array3f("asdf")
 
-    assert "Array3f constructor expects: 1 or 3 values of type 'float', a " \
+    assert "Array3f constructor expects: 1 or 3 values of type \"float\", a " \
         "matching list/tuple, or a NumPy/PyTorch/TF/Jax array." in str(ei.value)
 
 
