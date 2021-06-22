@@ -235,9 +235,12 @@ PYBIND11_MODULE(enoki_ext, m_) {
 
     /* Register a cleanup callback function that is invoked when
        the 'enoki::ArrayBase' Python type is garbage collected */
-    py::cpp_function cleanup_callback(
-        [](py::handle weakref) { py::gil_scoped_release gsr; jit_shutdown(false); }
-    );
+    py::cpp_function cleanup_callback([](py::handle weakref) {
+        py::gil_scoped_release gsr;
+        jit_set_log_level_stderr(LogLevel::Warn);
+        jit_set_log_level_callback(LogLevel::Disable, nullptr);
+        jit_shutdown(false);
+    });
 
     (void) py::weakref(m.attr("ArrayBase"), cleanup_callback).release();
 #else
