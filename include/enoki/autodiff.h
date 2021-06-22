@@ -1787,9 +1787,6 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
     int32_t index_ad() const { return m_index; }
     int32_t* index_ad_ptr() { return &m_index; }
 
-    /// Change variable index without involving reference counting. Dangerous, used by custom.h
-    void set_index_ad(uint32_t value) { m_index = value; }
-
     //! @}
     // -----------------------------------------------------------------------
 

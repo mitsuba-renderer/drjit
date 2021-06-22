@@ -2,14 +2,14 @@ import enoki
 import sys
 
 VAR_TYPE_NAME = [
-    'Void',    'Bool',  'Int8',  'UInt8', 'Int16',
-    'UInt16',  'Int',   'UInt',  'Int64', 'UInt64', 'Pointer',
-    'Float16', 'Float', 'Float64'
+    "Void",    "Bool",  "Int8",  "UInt8", "Int16",
+    "UInt16",  "Int",   "UInt",  "Int64", "UInt64", "Pointer",
+    "Float16", "Float", "Float64"
 ]
 
 VAR_TYPE_SUFFIX = [
-    '???', 'b', 'i8',  'u8',  'i16', 'u16', 'i', 'u',
-    'i64', 'u64', 'p', 'f16', 'f', 'f64'
+    "???", "b", "i8",  "u8",  "i16", "u16", "i", "u",
+    "i64", "u64", "p", "f16", "f", "f64"
 ]
 
 
@@ -36,18 +36,18 @@ def array_name(prefix, vt, shape, scalar):
 
     if not scalar:
         shape = shape[:-1]
-    if prefix == 'Matrix':
+    if prefix == "Matrix":
         if vt != enoki.VarType.Bool:
             shape = shape[1:]
         else:
-            prefix = 'Array'
+            prefix = "Array"
 
     if len(shape) == 0:
         return VAR_TYPE_NAME[int(vt)]
 
     return "%s%s%s" % (
         prefix,
-        ''.join(repr(s) if s != enoki.Dynamic else 'X' for s in shape),
+        "".join(repr(s) if s != enoki.Dynamic else "X" for s in shape),
         VAR_TYPE_SUFFIX[int(vt)]
     )
 
@@ -55,12 +55,12 @@ def array_name(prefix, vt, shape, scalar):
 def array_from_dlpack(t, capsule):
     descr = enoki.detail.from_dlpack(capsule)
 
-    device_type = descr['device_type']
-    data = descr['data']
-    dtype = descr['dtype']
-    shape = descr['shape']
+    device_type = descr["device_type"]
+    data = descr["data"]
+    dtype = descr["dtype"]
+    shape = descr["shape"]
     ndim = len(shape)
-    strides = descr['strides']
+    strides = descr["strides"]
 
     if strides is None:
         tmp = 1
@@ -90,8 +90,8 @@ def array_from_dlpack(t, capsule):
     while issubclass(value.Value, enoki.ArrayBase):
         value = value.Value
 
-    descr['consume'](capsule)
-    data = value.map_(data, enoki.hprod(shape), descr['release'])
+    descr["consume"](capsule)
+    data = value.map_(data, enoki.hprod(shape), descr["release"])
 
     def load(t, i, offset):
         size = shape[-1 - i]
@@ -164,7 +164,7 @@ def array_init(self, args):
                     pass
                 elif size != os or value_type is t:
                     # Size mismatch!
-                    if self.IsMatrix and getattr(t, 'IsMatrix', False):
+                    if self.IsMatrix and getattr(t, "IsMatrix", False):
                         # If both are matrices, copy the top-left block
                         for x in range(size):
                             for y in range(size):
@@ -182,12 +182,12 @@ def array_init(self, args):
                                         and not self.IsMatrix else o)
                 else:
                     # Size matches, copy element by element
-                    if self.IsJIT and getattr(t, 'IsJIT', False) and \
+                    if self.IsJIT and getattr(t, "IsJIT", False) and \
                        self.Depth == 1 and t.Depth == 1:
                         raise enoki.Exception(
-                            'Refusing to do an extremely inefficient '
-                            'element-by-element array conversion from type %s '
-                            'to %s. Did you forget a cast or detach operation?'
+                            "Refusing to do an extremely inefficient "
+                            "element-by-element array conversion from type %s "
+                            "to %s. Did you forget a cast or detach operation?"
                             % (str(type(o)), str(type(self))))
 
                     if isinstance(o[0], value_type) or self.IsMatrix:
@@ -204,7 +204,7 @@ def array_init(self, args):
             elif issubclass(t, complex) and self.IsComplex:
                 self.set_entry_(0, o.real)
                 self.set_entry_(1, o.imag)
-            elif mod == 'numpy':
+            elif mod == "numpy":
                 import numpy as np
                 s1 = tuple(reversed(enoki.shape(self)))
                 s2 = o.shape
@@ -238,7 +238,7 @@ def array_init(self, args):
                     pass
                 elif dim1 == 1 and self.IsDynamic:
                     o = np.ascontiguousarray(o)
-                    holder = (o, o.__array_interface__['data'][0])
+                    holder = (o, o.__array_interface__["data"][0])
                     self.assign(self.load_(holder[1], s2[0]))
                 else:
                     for i in range(s1[-1]):
@@ -247,20 +247,20 @@ def array_init(self, args):
                         else:
                             self.set_entry_(i, value_type(o[..., i]))
 
-            elif mod == 'builtins' and name == 'PyCapsule':
+            elif mod == "builtins" and name == "PyCapsule":
                 self.assign(array_from_dlpack(type(self), o))
-            elif mod == 'torch':
+            elif mod == "torch":
                 from torch.utils.dlpack import to_dlpack
                 self.assign(array_from_dlpack(type(self), to_dlpack(o)))
-            elif mod.startswith('tensorflow.'):
+            elif mod.startswith("tensorflow."):
                 from tensorflow.experimental.dlpack import to_dlpack
                 self.assign(array_from_dlpack(type(self), to_dlpack(o)))
-            elif mod.startswith('jax.') or mod.startswith('jaxlib.'):
+            elif mod.startswith("jax.") or mod.startswith("jaxlib."):
                 from jax.dlpack import to_dlpack
                 self.assign(array_from_dlpack(type(self), to_dlpack(o)))
             else:
-                raise enoki.Exception('Don\'t know how to create an Enoki array '
-                                      'from type \"%s.%s\"!' % (mod, name))
+                raise enoki.Exception("Don\"t know how to create an Enoki array "
+                                      "from type \"%s.%s\"!" % (mod, name))
         elif n == size or dynamic:
             if dynamic:
                 size = n
@@ -272,19 +272,19 @@ def array_init(self, args):
                    for j in range(self.Size)]
             array_init(self, tbl)
         else:
-            raise enoki.Exception('Invalid size!')
+            raise enoki.Exception("Invalid size!")
     except Exception as e:
         err = e
 
     if err is not None:
         if dynamic:
             raise TypeError("%s constructor expects: arbitrarily many values "
-                            "of type '%s', a matching list/tuple, or a NumPy/"
+                            "of type \"%s\", a matching list/tuple, or a NumPy/"
                             "PyTorch/TF/Jax array." % (type(self).__name__,
                                                        value_type.__name__)) from err
         else:
             raise TypeError("%s constructor expects: %s%i values "
-                            "of type '%s', a matching list/tuple, or a NumPy/"
+                            "of type \"%s\", a matching list/tuple, or a NumPy/"
                             "PyTorch/TF/Jax array." % (type(self).__name__, "" if
                                                        size == 1 else "1 or ", size,
                                                        value_type.__name__)) from err
@@ -353,7 +353,7 @@ def array_configure(cls, shape, type_, value):
     cls.Shape = shape
     cls.Size = shape[0]
     cls.IsDynamic = cls.Size == enoki.Dynamic or \
-        getattr(value, 'IsDynamic', False)
+        getattr(value, "IsDynamic", False)
 
     while issubclass(value, enoki.ArrayBase):
         value = value.Value
@@ -366,20 +366,20 @@ def array_configure(cls, shape, type_, value):
     cls.IsIntegral = issubclass(value, int) and not cls.IsMask
     cls.IsFloat = issubclass(value, float)
     cls.IsArithmetic = cls.IsIntegral or cls.IsFloat
-    cls.IsSigned = cls.IsFloat or 'i' in VAR_TYPE_SUFFIX[int(type_)]
+    cls.IsSigned = cls.IsFloat or "i" in VAR_TYPE_SUFFIX[int(type_)]
 
     mod = cls.__module__
-    cls.IsScalar = mod.startswith('enoki.scalar')
-    cls.IsPacket = mod.startswith('enoki.packet')
-    cls.IsDiff = mod.endswith('.ad')
-    cls.IsLLVM = mod.startswith('enoki.llvm')
-    cls.IsCUDA = mod.startswith('enoki.cuda')
+    cls.IsScalar = mod.startswith("enoki.scalar")
+    cls.IsPacket = mod.startswith("enoki.packet")
+    cls.IsDiff = mod.endswith(".ad")
+    cls.IsLLVM = mod.startswith("enoki.llvm")
+    cls.IsCUDA = mod.startswith("enoki.cuda")
     cls.IsJIT = cls.IsLLVM or cls.IsCUDA
 
     name = cls.__name__
-    cls.IsMatrix = 'Matrix' in name
-    cls.IsComplex = 'Complex' in name
-    cls.IsQuaternion = 'Quaternion' in name
+    cls.IsMatrix = "Matrix" in name
+    cls.IsComplex = "Complex" in name
+    cls.IsQuaternion = "Quaternion" in name
     cls.IsSpecial = cls.IsMatrix or cls.IsComplex or cls.IsQuaternion
     cls.IsVector = cls.Size != enoki.Dynamic and not \
         (cls.IsPacket and cls.Depth == 1) and not cls.IsSpecial
@@ -397,11 +397,11 @@ def array_configure(cls, shape, type_, value):
             cls.real = prop_w
             cls.imag = prop_xyz
             cls.Imag = getattr(sys.modules.get(mod),
-                               name.replace('Quaternion4', 'Array3'))
+                               name.replace("Quaternion4", "Array3"))
             cls.Complex = getattr(sys.modules.get(mod),
-                                  name.replace('Quaternion4', 'Complex2'))
+                                  name.replace("Quaternion4", "Complex2"))
     else:
-        cls.Prefix = 'Array'
+        cls.Prefix = "Array"
 
     if not cls.IsSpecial or cls.IsQuaternion:
         if cls.Size > 0:

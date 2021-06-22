@@ -96,13 +96,12 @@ NAMESPACE_BEGIN(detail)
 // Zero out indices of variables that are attached to the AD graph
 template <typename T>
 void clear_diff_vars(T &value) {
-    if constexpr (is_array_v<T>) {
-        if constexpr (array_depth_v<T> == 1) {
-            if constexpr (is_diff_array_v<T>)
-                value.set_index_ad(0);
-        } else {
+    if constexpr (is_diffarray_v<T>) {
+        if constexpr (array_depth_v<T> > 1) {
             for (size_t i = 0; i < value.size(); ++i)
                 clear_diff_vars(value.entry(i));
+        } else {
+            *value.index_ad_ptr() = 0;
         }
     } else if constexpr (is_enoki_struct_v<T>) {
         struct_support_t<T>::apply_1(value,
