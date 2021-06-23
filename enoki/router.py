@@ -1898,12 +1898,20 @@ def hmin_nested(a):
 
 
 def dot(a, b):
+    if _ek.is_matrix_v(a) or _ek.is_matrix_v(b):
+        raise Exception("dot(): input shouldn't be a Matrix!"
+                        "The @ operator should be used instead.")
+
     if type(a) is not type(b):
         a, b = _var_promote(a, b)
     return a.dot_(b)
 
 
 def dot_async(a, b):
+    if _ek.is_matrix_v(a) or _ek.is_matrix_v(b):
+        raise Exception("dot_async(): input shouldn't be a Matrix!"
+                        "The @ operator should be used instead.")
+
     if type(a) is not type(b):
         a, b = _var_promote(a, b)
 
@@ -1914,10 +1922,18 @@ def dot_async(a, b):
 
 
 def abs_dot(a, b):
+    if _ek.is_matrix_v(a) or _ek.is_matrix_v(b):
+        raise Exception("abs_dot(): input shouldn't be a Matrix!"
+                        "The @ operator should be used instead.")
+
     return abs(dot(a, b))
 
 
 def abs_dot_async(a, b):
+    if _ek.is_matrix_v(a) or _ek.is_matrix_v(b):
+        raise Exception("abs_dot_async(): input shouldn't be a Matrix!"
+                        "The @ operator should be used instead.")
+
     return abs(dot_async(a, b))
 
 
