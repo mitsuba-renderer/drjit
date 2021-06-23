@@ -534,7 +534,7 @@ def rcp_(a0):
     elif a0.IsComplex or a0.IsQuaternion:
         return _ek.conj(a0) * _ek.rcp(_ek.squared_norm(a0))
     else:
-        raise Exception('rcp(): unsupported array type!')
+        raise Exception("rcp(): unsupported array type!")
     return ar
 
 
@@ -549,7 +549,7 @@ def abs_(a0):
     elif a0.IsSpecial:
         return _ek.norm(a0)
     else:
-        raise Exception('abs(): unsupported array type!')
+        raise Exception("abs(): unsupported array type!")
 
 
 def mulhi_(a0, a1):
@@ -1492,13 +1492,13 @@ def export_(a, migrate_to_host, version, owner_supported=True):
 
         # Array is already contiguous in memory -- document its structure
         return {
-            'shape': shape,
-            'strides': tuple(strides),
-            'typestr': '<' + a.Type.NumPy,
-            'data': (a.data_(), False),
-            'version': version,
-            'device': -1,
-            'owner': a
+            "shape": shape,
+            "strides": tuple(strides),
+            "typestr": "<" + a.Type.NumPy,
+            "data": (a.data_(), False),
+            "version": version,
+            "device": -1,
+            "owner": a
         }
     else:
         # C-style strides
@@ -1528,13 +1528,13 @@ def export_(a, migrate_to_host, version, owner_supported=True):
             _wr.finalize(a, lambda arg: None, b)
 
         record = {
-            'shape': shape,
-            'strides': tuple(strides),
-            'typestr': '<' + a.Type.NumPy,
-            'data': (b.data_(), False),
-            'version': version,
-            'device': _ek.device(b),
-            'owner': b
+            "shape": shape,
+            "strides": tuple(strides),
+            "typestr": "<" + a.Type.NumPy,
+            "data": (b.data_(), False),
+            "version": version,
+            "device": _ek.device(b),
+            "owner": b
         }
 
         return record
@@ -1571,13 +1571,13 @@ def numpy(a):
 def dlpack(a):
     struct = a.export_(migrate_to_host=False, version=2)
     isize = a.Type.Size
-    strides = tuple(k // isize for k in struct['strides'])
+    strides = tuple(k // isize for k in struct["strides"])
     return _ek.detail.to_dlpack(
-        owner=struct['owner'],
-        data=struct['data'][0],
+        owner=struct["owner"],
+        data=struct["data"][0],
         type=a.Type,
-        device=struct['device'],
-        shape=struct['shape'],
+        device=struct["device"],
+        shape=struct["shape"],
         strides=strides
     )
 
@@ -1590,7 +1590,7 @@ def jax(a):
     from jax.dlpack import from_dlpack
     from jax import devices
     if a.IsLLVM:
-        return from_dlpack(a.dlpack(), backend=devices(backend='cpu')[0])
+        return from_dlpack(a.dlpack(), backend=devices(backend="cpu")[0])
     else:
         return from_dlpack(a.dlpack())
 
