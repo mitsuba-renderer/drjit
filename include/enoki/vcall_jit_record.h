@@ -52,6 +52,29 @@ void write_indices(ek_vector<uint32_t> &indices, T &value, uint32_t &offset) {
     }
 }
 
+template <typename T> ENOKI_INLINE T wrap_vcall(const T &value) {
+    if constexpr (array_depth_v<T> > 1) {
+        T result;
+        for (size_t i = 0; i < value.derived().size(); ++i)
+            result.derived().entry(i) = wrap_vcall(value.derived().entry(i));
+        return result;
+    } else if constexpr (is_diff_array_v<T>) {
+        return wrap_vcall(value.detach_());
+    } else if constexpr (is_jit_array_v<T>) {
+        return T::steal(jit_var_wrap_vcall(value.index()));
+    } else if constexpr (is_enoki_struct_v<T>) {
+        T result;
+        struct_support_t<T>::apply_2(
+            result, value,
+            [](auto &x, const auto &y) ENOKI_INLINE_LAMBDA {
+                x = wrap_vcall(y);
+            });
+        return result;
+    } else {
+        return (const T &) value;
+    }
+}
+
 template <typename Mask> struct VCallRAIIGuard {
     static constexpr JitBackend Backend = detached_t<Mask>::Backend;
 
@@ -69,9 +92,10 @@ template <typename Mask> struct VCallRAIIGuard {
 
         Mask vcall_mask;
         if constexpr (Backend == JitBackend::LLVM) {
+            // Copy %mask function argument via no-op cast
             vcall_mask = Mask::steal(jit_var_new_stmt(
                 Backend, VarType::Bool,
-                "$r0 = or <$w x i1> %mask, zeroinitializer", 1, 0,
+                "$r0 = bitcast <$w x i1> %mask to <$w x i1>", 1, 0,
                 nullptr));
         } else {
             vcall_mask = true;
@@ -237,8 +261,7 @@ Result vcall_jit_record(const char *name, const Func &func, Self &self,
         return vcall_jit_record_impl<Result, Base>(
             name, n_inst, func, self, mask_combined,
             std::make_index_sequence<sizeof...(Args)>(),
-            placeholder(args, /* preserve_size = */ false,
-                        /* propagate_literals = */ true)...);
+            wrap_vcall(args)...);
     }
 }
 

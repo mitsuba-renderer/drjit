@@ -1475,10 +1475,6 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
     //! @{ \name Standard initializers
     // -----------------------------------------------------------------------
 
-    DiffArray placeholder_(bool preserve_size, bool propagate_literals) const {
-        return placeholder<Type>(m_value, preserve_size, propagate_literals);
-    }
-
     static DiffArray empty_(size_t size) {
         return enoki::empty<Type>(size);
     }
@@ -1749,13 +1745,6 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
     void init_(size_t size) {
         if constexpr (is_dynamic_v<Type>)
             m_value.init_(size);
-    }
-
-    bool is_placeholder() const {
-        if constexpr (is_jit_array_v<Type>)
-            return m_value.is_placeholder();
-        else
-            enoki_raise("is_placeholder(): expected a JIT array type");
     }
 
     bool is_literal() const {

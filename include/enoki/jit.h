@@ -399,11 +399,6 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
     //! @{ \name Fancy array initialization
     // -----------------------------------------------------------------------
 
-    Derived placeholder_(bool preserve_size, bool propagate_literals) const {
-        return steal(
-            jit_var_new_placeholder(m_index, preserve_size, propagate_literals));
-    }
-
     static Derived empty_(size_t size) {
         size_t byte_size = size * sizeof(Value);
         void *ptr =
