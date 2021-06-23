@@ -95,7 +95,7 @@ struct Loop<Value, enable_if_jit_array_t<Value>> {
             for (size_t i = 0; i < m_index_out.size(); ++i)
                 jit_var_dec_ref_ext(m_index_out[i]);
 
-            if constexpr (is_diff_array_v<Value>) {
+            if constexpr (is_diff_array_v<Value> && is_floating_point_v<Value>) {
                 using Type = typename Value::Type;
 
                 for (size_t i = 0; i < m_index_out_ad.size(); ++i) {
@@ -381,7 +381,7 @@ protected:
             }
             m_index_out.clear();
 
-            if constexpr (is_diff_array_v<Value>) {
+            if constexpr (is_diff_array_v<Value> && is_floating_point_v<Value>) {
                 using Type = typename Value::Type;
                 for (uint32_t i = 0; i < m_index_p_ad.size(); ++i) {
                     if (!m_index_p_ad[i])
@@ -415,7 +415,7 @@ protected:
                 m_index_out.push_back(index);
             }
 
-            if constexpr (is_diff_array_v<Value>) {
+            if constexpr (is_diff_array_v<Value> && is_floating_point_v<Value>) {
                 using Type = typename Value::Type;
 
                 for (uint32_t i = 0; i < m_index_p_ad.size(); ++i) {
