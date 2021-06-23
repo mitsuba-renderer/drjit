@@ -12,18 +12,19 @@
 
 #pragma once
 
-#include <enoki/array.h>
 #include <enoki-jit/jit.h>
 #include <enoki-jit/containers.h>
+#include <enoki-jit/state.h>
+#include <enoki/array.h>
 
 NAMESPACE_BEGIN(enoki)
-
 NAMESPACE_BEGIN(detail)
+// A few forward declarations so that this compiles even without autodiff.h
 template <typename Value> void ad_inc_ref(int32_t) noexcept;
 template <typename Value> void ad_dec_ref(int32_t) noexcept;
 template <typename Value> void ad_traverse_postponed();
 template <typename Value, typename Mask>
-int32_t ad_new_select(const char *, uint32_t, const Mask &, int32_t, int32_t);
+int32_t ad_new_select(const char *, size_t, const Mask &, int32_t, int32_t);
 NAMESPACE_END(detail)
 
 template <typename Mask, typename SFINAE = int> struct Loop;
@@ -46,6 +47,8 @@ struct Loop<Value, enable_if_t<std::is_scalar_v<Value>>> {
 template <typename Value>
 struct Loop<Value, enable_if_jit_array_t<Value>> {
     static constexpr JitBackend Backend = backend_v<Value>;
+    static constexpr bool IsDiff = is_diff_array_v<Value> &&
+        std::is_floating_point_v<scalar_t<Value>>;
 
     using Mask = mask_t<Value>;
 
@@ -56,9 +59,7 @@ struct Loop<Value, enable_if_jit_array_t<Value>> {
 
     template <typename... Args>
     Loop(const char *name, Args &... args)
-        : m_state(0), m_cse_scope(jit_cse_scope(Backend)),
-          m_se_offset((uint32_t) -1), m_se_flag(0), m_size(0),
-          m_record(jit_flag(JitFlag::LoopRecord)) {
+        : m_state(0), m_record(jit_flag(JitFlag::LoopRecord)) {
 
         size_t size = strlen(name) + 1;
         m_name = ek_unique_ptr<char[]>(new char[size]);
@@ -72,41 +73,29 @@ struct Loop<Value, enable_if_jit_array_t<Value>> {
     }
 
     ~Loop() {
-        if (m_state != 0 && m_state != 3 && m_state != 4)
-            jit_log(
-                LogLevel::Warn,
-                "enoki::Loop(\"%s\"): destructed in an inconsistent state. An "
-                "exception or disallowed scalar control flow (break, continue) "
-                "likely caused the loop to exit prematurely. Cleaning up..",
-                m_name.get());
+        #if !defined(NDEBUG)
+            if (m_state != 0 && m_state != 3 && m_state != 4)
+                jit_log(
+                    LogLevel::Warn,
+                    "Loop(\"%s\"): destructed in an inconsistent state. An "
+                    "exception or disallowed scalar control flow (break, continue) "
+                    "likely caused the loop to exit prematurely. Cleaning up..",
+                    m_name.get());
+        #endif
 
-        // Recover if an error occurred while recording a loop symbolically
-        if (m_record && m_se_offset != (uint32_t) -1) {
-            jit_side_effects_rollback(Backend, m_se_offset);
-            jit_set_flag(JitFlag::Recording, m_se_flag);
-            jit_set_cse_scope(Backend, m_cse_scope);
+        jit_var_dec_ref_ext(m_loop_init);
+        jit_var_dec_ref_ext(m_loop_cond);
 
-            for (size_t i = 0; i < m_index_body.size(); ++i)
-                jit_var_dec_ref_ext(m_index_body[i]);
-        }
+        for (size_t i = 0; i < m_indices_prev.size(); ++i)
+            jit_var_dec_ref_ext(m_indices_prev[i]);
 
-        // Recover if an error occurred while running a wavefront-style loop
-        if (!m_record) {
-            for (size_t i = 0; i < m_index_out.size(); ++i)
-                jit_var_dec_ref_ext(m_index_out[i]);
-
-            if constexpr (is_diff_array_v<Value> && is_floating_point_v<Value>) {
-                using Type = typename Value::Type;
-
-                for (size_t i = 0; i < m_index_out_ad.size(); ++i) {
-                    int32_t index = m_index_out_ad[i];
-                    detail::ad_dec_ref<Type>(index);
-                }
+        if constexpr (IsDiff) {
+            using Type = typename Value::Type;
+            for (size_t i = 0; i < m_indices_ad_prev.size(); ++i) {
+                int32_t index = m_indices_ad_prev[i];
+                detail::ad_dec_ref<Type>(index);
             }
         }
-
-        jit_var_dec_ref_ext(m_loop_cond);
-        jit_var_dec_ref_ext(m_loop_body);
     }
 
     /// Register JIT variable indices of loop variables
@@ -114,10 +103,11 @@ struct Loop<Value, enable_if_jit_array_t<Value>> {
     void put(T &value, Ts &... args) {
         if constexpr (is_array_v<T>) {
             if constexpr (array_depth_v<T> == 1) {
-                if constexpr (is_diff_array_v<T>) {
+                if constexpr (IsDiff && is_diff_array_v<T> &&
+                              std::is_floating_point_v<scalar_t<T>>) {
                     if (m_record && grad_enabled(value))
                         jit_raise(
-                            "enoki::Loop::put(): one of the supplied loop "
+                            "Loop::put(): one of the supplied loop "
                             "variables is attached to the AD graph (i.e. "
                             "grad_enabled(..) is true). However, recorded "
                             "loops cannot be differentiated in their entirety. "
@@ -126,25 +116,17 @@ struct Loop<Value, enable_if_jit_array_t<Value>> {
                             "false). Alternatively, you could implement the "
                             "adjoint of the loop using ek::CustomOp.");
                     put(value.detach_());
-                    m_index_p_ad[m_index_p_ad.size() - 1] = value.index_ad_ptr();
+                    m_indices_ad[m_indices_ad.size() - 1] = value.index_ad_ptr();
                 } else if constexpr (is_jit_array_v<T>) {
                     if (m_state)
-                        jit_raise("enoki::Loop::put(): must be called "
+                        jit_raise("Loop::put(): must be called "
                                   "*before* initialization!");
                     if (value.index() == 0)
-                        jit_raise("enoki::Loop::put(): a loop variable (or "
+                        jit_raise("Loop::put(): a loop variable (or "
                                   "an element of a data structure provided "
                                   "as a loop variable) is unintialized!");
-                    m_index_p.push_back(value.index_ptr());
-                    m_index_p_ad.push_back(nullptr);
-                    m_index_in.push_back(value.index());
-                    m_invariant.push_back(0);
-                    size_t size = value.size();
-                    if (m_size > 1 && size != 1 && size != m_size)
-                        jit_raise("enoki::Loop::put(): loop variables have "
-                                  "inconsistent sizes!");
-                    if (size > m_size)
-                        m_size = size;
+                    m_indices.push_back(value.index_ptr());
+                    m_indices_ad.push_back(nullptr);
                 }
             } else {
                 for (size_t i = 0; i < value.size(); ++i)
@@ -160,54 +142,21 @@ struct Loop<Value, enable_if_jit_array_t<Value>> {
 
     /// Configure the loop variables for recording
     void init() {
+        if (!m_record)
+            return;
+
         if (m_state)
-            jit_raise("enoki::Loop(\"%s\"): was already initialized!", m_name.get());
+            jit_raise("Loop(\"%s\"): was already initialized!", m_name.get());
 
-        if (m_record) {
-            /* Wrap loop variables using placeholders that represent
-               their state just before the loop condition is evaluated */
-            m_se_flag = jit_flag(JitFlag::Recording);
-            jit_set_flag(JitFlag::Recording, 1);
-            m_se_offset = jit_side_effects_scheduled(Backend);
+        // Capture JIT state and begin recording session
+        m_jit_state.new_scope();
 
-            /// New CSE scope for the loop condition
-            jit_new_cse_scope(Backend);
+        // Rewrite loop state variables (1)
+        m_loop_init = jit_var_loop_init(m_indices.size(), m_indices.data());
 
-            /// Copy loop state before entering loop (CUDA)
-            if (Backend == JitBackend::CUDA) {
-                for (size_t i = 0; i < m_index_p.size(); ++i) {
-                    uint32_t &index = *m_index_p[i];
-                    uint32_t dep[2] = { index };
-                    uint32_t next =
-                        jit_var_new_placeholder_loop("mov.$t0 $r0, $r1", 1, dep);
-                    jit_var_dec_ref_ext(index);
-                    index = next;
-                }
-            }
-
-            // Create a special node indicating the loop start
-            m_loop_cond = jit_var_new_stmt(Backend, VarType::Void, "", 1, 0, nullptr);
-            m_loop_cond = jit_var_resize(m_loop_cond, m_size);
-            jit_var_dec_ref_ext(m_loop_cond);
-
-            // Create phi nodes (LLVM)
-            if (Backend == JitBackend::LLVM) {
-                for (size_t i = 0; i < m_index_p.size(); ++i) {
-                    uint32_t &index = *m_index_p[i];
-                    uint32_t dep[2] = { index, m_loop_cond };
-                    uint32_t next = jit_var_new_placeholder_loop(
-                        "$r0 = phi <$w x $t0> [ $r0_final, %l_$i2_tail ], [ "
-                        "$r1, %l_$i2_start ]",
-                        2, dep);
-                    jit_var_dec_ref_ext(index);
-                    index = next;
-                }
-            }
-
-            m_state = 1;
-            jit_log(::LogLevel::InfoSym,
-                    "enoki::Loop(\"%s\"): --------- begin recording loop ---------", m_name.get());
-        }
+        m_state = 1;
+        jit_log(::LogLevel::InfoSym,
+                "Loop(\"%s\"): --------- begin recording loop ---------", m_name.get());
     }
 
     bool operator()(const Mask &cond) {
@@ -218,141 +167,85 @@ struct Loop<Value, enable_if_jit_array_t<Value>> {
     }
 
 protected:
-    struct MaskStackHelper {
-    public:
-        void push(uint32_t index) {
-            jit_var_mask_push(Backend, index);
-            m_armed = true;
-        }
-        void pop() {
-            jit_var_mask_pop(Backend);
-            m_armed = false;
-        }
-        ~MaskStackHelper() {
-            if (m_armed)
-                pop();
-        }
-    private:
-        bool m_armed = false;
-    };
-
+    /// State machine to record a loop as-is
     bool cond_record(const Mask &cond) {
-        uint32_t n = (uint32_t) m_index_p.size();
-        bool has_invariant;
+        uint32_t rv = 0;
+        bool retry = false;
 
         switch (m_state) {
             case 0:
-                jit_raise("Loop(\"%s\"): must be initialized first!", m_name.get());
-                break;
+                jit_raise("Loop(\"%s\"): must be initialized first!",
+                          m_name.get());
+            break;
 
             case 1:
-                /* The loop condition has been evaluated now.  Wrap loop
-                   variables using placeholders once more. They will represent
-                   their state at the start of the loop body. */
-                m_cond = detach(cond);
+                // Rewrite loop state variables (2)
+                m_loop_cond = jit_var_loop_cond(m_loop_init, cond.index(),
+                                                m_indices.size(),
+                                                m_indices.data());
 
-                /// New CSE scope for the loop body
-                jit_new_cse_scope(Backend);
-                m_loop_body = jit_var_new_stmt(Backend, VarType::Void, "", 1, 1,
-                                               m_cond.index_ptr());
-
-                // Create phi nodes
-                for (size_t i = 0; i < m_index_p.size(); ++i) {
-                    uint32_t &index = *m_index_p[i];
-                    uint32_t dep[2] = { index, m_loop_cond };
-                    uint32_t next = jit_var_new_placeholder_loop(
-                        Backend == JitBackend::LLVM
-                            ? "$r0 = phi <$w x $t0> [ $r1, %l_$i2_cond ]"
-                            : "mov.$t0 $r0, $r1",
-                        2, dep);
-
-                    jit_var_dec_ref_ext(index);
-                    jit_var_inc_ref_ext(next);
-                    m_index_body.push_back(next);
-                    index = next;
+                // Backup loop state before loop (for optimization)
+                m_indices_prev = ek_vector<uint32_t>(m_indices.size(), 0);
+                for (uint32_t i = 0; i < m_indices.size(); ++i) {
+                    m_indices_prev[i] = *m_indices[i];
+                    jit_var_inc_ref_ext(m_indices_prev[i]);
                 }
 
-                m_state++;
+                // Start recording side effects
+                m_jit_state.begin_recording();
+
+                // New CSE scope for the loop body
+                m_jit_state.new_scope();
+
+                // Mask deactivated SIMD lanes
                 if constexpr (Backend == JitBackend::LLVM)
-                    m_mask_stack.push(m_cond.index());
+                    m_jit_state.set_mask(cond.index());
+
+                m_state++;
+
                 return true;
 
             case 2:
             case 3:
-                if constexpr (Backend == JitBackend::LLVM)
-                    m_mask_stack.pop();
-                for (uint32_t i = 0; i < n; ++i)
-                    m_index_out.push_back(*m_index_p[i]);
+                // Rewrite loop state variables (3)
+                rv = jit_var_loop(m_name.get(), m_loop_init, m_loop_cond,
+                                  m_indices.size(), m_indices_prev.data(),
+                                  m_indices.data(), m_jit_state.checkpoint(),
+                                  m_state == 2);
 
-                jit_var_loop(m_name.get(), m_loop_cond, m_loop_body,
-                             (uint32_t) n, m_index_body.data(),
-                             m_index_out.data(), m_se_offset,
-                             m_index_out.data(), m_state == 2,
-                             m_invariant.data());
+                m_state++;
 
-                has_invariant = false;
-                for (uint32_t i = 0; i < n; ++i)
-                    has_invariant |= (bool) m_invariant[i];
-
-                if (has_invariant && m_state == 2) {
-                    /* Some loop variables don't change while running the loop.
-                       This can be exploited by recording the loop a second time
-                       while taking this information into account. */
-                    jit_side_effects_rollback(Backend, m_se_offset);
-                    m_index_out.clear();
-
-                    for (uint32_t i = 0; i < n; ++i) {
-                        // Free outputs produced by current iteration
-                        uint32_t &index = *m_index_p[i];
-                        jit_var_dec_ref_ext(index);
-
-                        if (m_invariant[i]) {
-                            uint32_t input = m_index_in[i],
-                                    &cur = m_index_body[i];
-                            jit_var_inc_ref_ext(input);
-                            jit_var_dec_ref_ext(cur);
-                            m_index_body[i] = input;
-                        }
-
-                        index = m_index_body[i];
-                        jit_var_inc_ref_ext(index);
-                    }
-
-                    m_state++;
-                    if constexpr (Backend == JitBackend::LLVM)
-                        m_mask_stack.push(m_cond.index());
+                /* Some loop variables don't change while running the loop.
+                   This can be exploited by recording the loop a second time
+                   while taking this information into account. */
+                if (rv == (uint32_t) -1) {
                     jit_log(::LogLevel::InfoSym,
-                            "enoki::Loop(\"%s\"): ----- recording loop body *again* ------", m_name.get());
+                            "Loop(\"%s\"): ----- recording loop body *again* ------", m_name.get());
                     return true;
                 } else {
                     jit_log(::LogLevel::InfoSym,
-                            "enoki::Loop(\"%s\"): --------- done recording loop ----------", m_name.get());
-                    // No optimization opportunities, stop now.
-                    for (uint32_t i = 0; i < n; ++i)
-                        jit_var_dec_ref_ext(m_index_body[i]);
-                    m_index_body.clear();
+                            "Loop(\"%s\"): --------- done recording loop ----------", m_name.get());
 
-                    for (uint32_t i = 0; i < n; ++i) {
-                        uint32_t &index = *m_index_p[i];
-                        jit_var_dec_ref_ext(index);
-                        index = m_index_out[i]; // steal ref
-                    }
+                    for (size_t i = 0; i < m_indices_prev.size(); ++i)
+                        jit_var_dec_ref_ext(m_indices_prev[i]);
+                    m_indices_prev.clear();
 
-                    m_index_out.clear();
-                    jit_set_flag(JitFlag::Recording, m_se_flag);
-                    jit_set_cse_scope(Backend, m_cse_scope);
-                    m_se_offset = (uint32_t) -1;
-                    m_cond = detached_t<Mask>();
-                    m_state++;
+                    m_jit_state.end_recording();
+                    m_jit_state.clear_scope();
+                    jit_var_mark_side_effect(rv);
 
-                    if constexpr (is_diff_array_v<Value>) {
+                    if constexpr (Backend == JitBackend::LLVM)
+                        m_jit_state.clear_mask();
+
+                    if constexpr (IsDiff) {
                         using Type = typename Value::Type;
-                        if (!m_se_flag)
+                        if (!jit_flag(JitFlag::Recording))
                             detail::ad_traverse_postponed<Type>();
                     }
 
                     return false;
                 }
+                break;
 
             default:
                 jit_raise("Loop(): invalid state!");
@@ -361,83 +254,71 @@ protected:
         return false;
     }
 
-    // Insert an indirection via placeholder variables
-    void step() {
-        for (size_t i = 0; i < m_index_p.size(); ++i) {
-            uint32_t &index = *m_index_p[i],
-                     next = jit_var_new_placeholder(index, 1, 0);
-            jit_var_dec_ref_ext(index);
-            index = next;
-        }
-    }
-
+    /// Unroll a loop using wavefronts
     bool cond_wavefront(const Mask &cond_) {
         Mask cond = cond_;
 
+        // If this is not the first iteration
         if (m_cond.index()) {
+            // Clear mask from last iteration
+            m_jit_state.clear_mask();
+
+            // Disable lanes that have terminated previously
             cond &= m_cond;
 
-            // Need to mask loop variables for disabled lanes
-            m_mask_stack.pop();
-            for (uint32_t i = 0; i < m_index_p.size(); ++i) {
-                uint32_t i1 = *m_index_p[i], i2 = m_index_out[i];
-                *m_index_p[i] =
-                    jit_var_new_op_3(JitOp::Select, m_cond.index(), i1, i2);
+            // Blend with loop state from last iteration based on mask
+            for (uint32_t i = 0; i < m_indices.size(); ++i) {
+                uint32_t i1 = *m_indices[i], i2 = m_indices_prev[i];
+                *m_indices[i] = jit_var_new_op_3(JitOp::Select, m_cond.index(), i1, i2);
                 jit_var_dec_ref_ext(i1);
                 jit_var_dec_ref_ext(i2);
             }
-            m_index_out.clear();
+            m_indices_prev.clear();
 
-            if constexpr (is_diff_array_v<Value> && is_floating_point_v<Value>) {
+            // Likewise, but for AD variables
+            if constexpr (IsDiff) {
                 using Type = typename Value::Type;
-                for (uint32_t i = 0; i < m_index_p_ad.size(); ++i) {
-                    if (!m_index_p_ad[i])
-                        continue;
-
-                    int32_t i1 = *m_index_p_ad[i], i2 = m_index_out_ad[i],
+                for (uint32_t i = 0; i < m_indices_ad.size(); ++i) {
+                    int32_t i1 = *m_indices_ad[i], i2 = m_indices_ad_prev[i],
                             index_new = 0;
                     if (i1 > 0 || i2 > 0)
                         index_new = detail::ad_new_select<Type>(
-                            "select", jit_var_size(*m_index_p[i]),
-                            m_cond, i1, i2);
-                    *m_index_p_ad[i] = index_new;
+                            "select", jit_var_size(*m_indices[i]),
+                            detach(m_cond), i1, i2);
+                    *m_indices_ad[i] = index_new;
                     detail::ad_dec_ref<Type>(i1);
                     detail::ad_dec_ref<Type>(i2);
                 }
-                m_index_out_ad.clear();
+                m_indices_ad_prev.clear();
             }
         }
 
-        // Ensure all loop state is evaluated
+        // Try to compile loop iteration into a single kernel
+        for (uint32_t i = 0; i < m_indices.size(); ++i)
+            jit_var_schedule(*m_indices[i]);
         jit_var_schedule(cond.index());
-        for (uint32_t i = 0; i < m_index_p.size(); ++i)
-            jit_var_schedule(*m_index_p[i]);
         jit_eval();
 
         // Do we run another iteration?
         if (jit_var_any(cond.index())) {
-            for (uint32_t i = 0; i < m_index_p.size(); ++i) {
-                uint32_t index = *m_index_p[i];
+            for (uint32_t i = 0; i < m_indices.size(); ++i) {
+                uint32_t index = *m_indices[i];
                 jit_var_inc_ref_ext(index);
-                m_index_out.push_back(index);
+                m_indices_prev.push_back(index);
             }
 
-            if constexpr (is_diff_array_v<Value> && is_floating_point_v<Value>) {
+            if constexpr (IsDiff) {
                 using Type = typename Value::Type;
-
-                for (uint32_t i = 0; i < m_index_p_ad.size(); ++i) {
-                    int32_t index = 0;
-                    if (m_index_p_ad[i]) {
-                        index = *m_index_p_ad[i];
-                        detail::ad_inc_ref<Type>(index);
-                    }
-                    m_index_out_ad.push_back(index);
+                for (uint32_t i = 0; i < m_indices_ad.size(); ++i) {
+                    int32_t index = *m_indices_ad[i];
+                    detail::ad_inc_ref<Type>(index);
+                    m_indices_ad_prev.push_back(index);
                 }
             }
 
             // Mask scatters/gathers/vcalls in the next iteration
-            m_cond = detach(cond);
-            m_mask_stack.push(m_cond.index());
+            m_cond = cond;
+            m_jit_state.set_mask(m_cond.index());
             return true;
         } else {
             return false;
@@ -445,55 +326,51 @@ protected:
     }
 
 protected:
+    /// Is the loop being recorded?
+    bool m_record;
+
+    /// RAII wrapper for JIT configuration
+    detail::JitState<Backend> m_jit_state;
+
     /// A descriptive name
     ek_unique_ptr<char[]> m_name;
 
-    /// Bariable representing the start of a symbolic loop
+    /// Pointers to loop variable indices (JIT handles)
+    ek_vector<uint32_t *> m_indices;
+
+    /**
+     * \brief Temporary index scratch space
+     *
+     * If m_record = true, this variable guards the contents
+     * of m_indices before entering the loop body.
+     *
+     * In wavefront mode, it represents the loop state
+     * of the previous iteration.
+     */
+    ek_vector<uint32_t> m_indices_prev;
+
+    // --------------- Loop recording ---------------
+
+    /// Variable representing the start of a symbolic loop
+    uint32_t m_loop_init = 0;
+
+    /// Variable representing the condition of a symbolic loop
     uint32_t m_loop_cond = 0;
-
-    /// Bariable representing the body of a symbolic loop
-    uint32_t m_loop_body = 0;
-
-    /// Pointers to loop variable indices
-    ek_vector<uint32_t *> m_index_p;
-    ek_vector<int32_t *> m_index_p_ad;
-
-    /// Loop variable indices before entering the loop
-    ek_vector<uint32_t> m_index_in;
-
-    /// Loop variable indices at the top of the loop body
-    ek_vector<uint32_t> m_index_body;
-
-    /// Loop variable indices after the end of the loop
-    ek_vector<uint32_t> m_index_out;
-    ek_vector<int32_t> m_index_out_ad;
-
-    /// Detects loop-invariant variables to trigger optimizations
-    ek_vector<uint8_t> m_invariant;
-
-    /// Stashed mask variable from the previous iteration
-    detached_t<Mask> m_cond;
-
-    /// RAII wrapper for the mask stack
-    MaskStackHelper m_mask_stack;
 
     /// Index of the symbolic loop state machine
     uint32_t m_state;
 
-    /// CSE scope index
-    uint32_t m_cse_scope;
+    // --------------- Wavefront mode ---------------
 
-    /// Offset in the side effects queue before the beginning of the loop
-    uint32_t m_se_offset;
+    /// Pointers to loop variable indices (AD handles)
+    ek_vector<int32_t *> m_indices_ad;
 
-    /// State of the 'recording' JIT flag
-    int m_se_flag;
+    /// AD variable state of the previous iteration
+    ek_vector<uint32_t> m_indices_ad_prev;
 
-    /// Keeps track of the size of loop variables to catch issues
-    size_t m_size;
+    /// Stashed mask variable from the previous iteration
+    Mask m_cond;
 
-    /// Is the loop being recorded symbolically?
-    bool m_record;
 };
 
 NAMESPACE_END(enoki)

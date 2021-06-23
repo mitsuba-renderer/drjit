@@ -5,10 +5,8 @@
 
 template <typename Value> struct Loop : ek::Loop<Value> {
     using Base = ek::Loop<Value>;
-    using Base::m_index_p;
-    using Base::m_index_p_ad;
-    using Base::m_index_in;
-    using Base::m_invariant;
+    using Base::m_indices;
+    using Base::m_indices_ad;
     using Base::m_name;
 
     Loop(const char *name, py::handle func) : Base(name) {
@@ -36,64 +34,63 @@ template <typename Value> struct Loop : ek::Loop<Value> {
         process_state(false);
 
         py::int_ i0(0), i1(1);
-        for (uint32_t i = 0, size = m_indices.size(); i < size; ++i) {
-            py::object o = m_indices[i];
+        for (uint32_t i = 0, size = m_state.size(); i < size; ++i) {
+            py::object o = m_state[i];
             if (!py::isinstance<py::tuple>(o))
                 continue;
-            m_index_py.push_back(py::cast<uint32_t>(o[i0]));
-            m_index_py_ad.push_back(py::cast<int32_t>(o[i1]));
+            m_indices_py.push_back(py::cast<uint32_t>(o[i0]));
+            m_indices_py_ad.push_back(py::cast<int32_t>(o[i1]));
         }
 
-        for (uint32_t i = 0; i < m_index_py.size(); ++i) {
-            m_index_p.push_back(&m_index_py[i]);
-            m_index_p_ad.push_back(&m_index_py_ad[i]);
-            m_index_in.push_back(m_index_py[i]);
-            m_invariant.push_back(0);
+        for (uint32_t i = 0; i < m_indices_py.size(); ++i) {
+            m_indices.push_back(&m_indices_py[i]);
+            m_indices_ad.push_back(&m_indices_py_ad[i]);
         }
 
         Base::init();
-        write_indices();
+        write_state();
     }
 
     bool operator()(const ek::mask_t<Value> &mask) {
-        read_indices();
+        read_state();
         bool result = Base::operator()(mask);
-        write_indices();
+        write_state();
         return result;
     }
 
 private:
-    void read_indices() {
+    void read_state() {
         process_state(false);
 
         py::int_ i0(0), i1(1);
-        for (uint32_t i = 0, j = 0, size = m_indices.size(); i < size; ++i) {
-            py::object o = m_indices[i];
+        for (uint32_t i = 0, j = 0, size = m_state.size(); i < size; ++i) {
+            py::object o = m_state[i];
             if (!py::isinstance<py::tuple>(o))
                 continue;
-            m_index_py[j] = py::cast<uint32_t>(o[i0]);
-            m_index_py_ad[j] = py::cast<int32_t>(o[i1]);
+            m_indices_py[j] = py::cast<uint32_t>(o[i0]);
+            m_indices_py_ad[j] = py::cast<int32_t>(o[i1]);
             j++;
         }
     }
 
-    void write_indices() {
+    void write_state() {
         py::int_ i0(0), i1(1);
-        for (uint32_t i = 0, j = 0, size = m_indices.size(); i < size; ++i) {
-            py::object o = m_indices[i];
+        for (uint32_t i = 0, j = 0, size = m_state.size(); i < size; ++i) {
+            py::object o = m_state[i];
             if (!py::isinstance<py::tuple>(o))
                 continue;
-            m_indices[i] = py::make_tuple(m_index_py[j], m_index_py_ad[j]);
+            m_state[i] = py::make_tuple(m_indices_py[j], m_indices_py_ad[j]);
             j++;
         }
 
         process_state(true);
     }
 
-    void process_state(bool write) { m_process_state(m_funcs, m_indices, write); }
+    void process_state(bool write) { m_process_state(m_funcs, m_state, write); }
+
 private:
-    py::list m_funcs, m_indices;
+    py::list m_funcs, m_state;
     py::object m_process_state;
-    ek::ek_vector<uint32_t> m_index_py;
-    ek::ek_vector<int32_t> m_index_py_ad;
+    ek::ek_vector<uint32_t> m_indices_py;
+    ek::ek_vector<int32_t> m_indices_py_ad;
 };

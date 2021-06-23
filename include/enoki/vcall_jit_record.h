@@ -13,6 +13,7 @@
 #pragma once
 
 #include <enoki-jit/containers.h>
+#include <enoki-jit/state.h>
 
 NAMESPACE_BEGIN(enoki)
 NAMESPACE_BEGIN(detail)
@@ -75,112 +76,82 @@ template <typename T> ENOKI_INLINE T wrap_vcall(const T &value) {
     }
 }
 
-template <typename Mask> struct VCallRAIIGuard {
-    static constexpr JitBackend Backend = detached_t<Mask>::Backend;
-
-    VCallRAIIGuard(const char *label, uint32_t self) {
-        self_before = jit_vcall_self(Backend);
-        jit_vcall_set_self(Backend, self);
-
-        flag_before = jit_flag(JitFlag::Recording);
-        jit_set_flag(JitFlag::Recording, 1);
-
-        ENOKI_MARK_USED(label);
-#if defined(ENOKI_VCALL_DEBUG)
-        jit_prefix_push(Backend, label);
-#endif
-
-        Mask vcall_mask;
-        if constexpr (Backend == JitBackend::LLVM) {
-            // Copy %mask function argument via no-op cast
-            vcall_mask = Mask::steal(jit_var_new_stmt(
-                Backend, VarType::Bool,
-                "$r0 = bitcast <$w x i1> %mask to <$w x i1>", 1, 0,
-                nullptr));
-        } else {
-            vcall_mask = true;
-        }
-        jit_var_mask_push(Backend, vcall_mask.index(), 0);
-    }
-
-    ~VCallRAIIGuard() {
-        jit_vcall_set_self(Backend, self_before);
-        jit_var_mask_pop(Backend);
-#if defined(ENOKI_VCALL_DEBUG)
-        jit_prefix_pop(Backend);
-#endif
-        jit_set_flag(JitFlag::Recording, flag_before);
-    }
-
-    int flag_before;
-    uint32_t self_before;
-};
-
-template <typename Mask> struct MaskRAIIGuard {
-    static constexpr JitBackend Backend = detached_t<Mask>::Backend;
-
-    MaskRAIIGuard(const Mask &mask) {
-        jit_var_mask_push(Backend, mask.index(), 1);
-    }
-
-    ~MaskRAIIGuard() {
-        jit_var_mask_pop(Backend);
-    }
-};
-
 template <typename Result, typename Base, typename Func, typename Self,
           typename Mask, size_t... Is, typename... Args>
 Result vcall_jit_record_impl(const char *name, uint32_t n_inst,
                              const Func &func, const Self &self,
                              const Mask &mask, std::index_sequence<Is...>,
                              const Args &... args) {
-    static constexpr JitBackend Backend = detached_t<Self>::Backend;
+    static constexpr JitBackend Backend = backend_v<Self>;
     constexpr size_t N = sizeof...(Args);
     ENOKI_MARK_USED(N);
 
     char label[128];
 
     ek_index_vector indices_in, indices_out_all;
-    ek_vector<uint32_t> se_count(n_inst + 1, 0);
+    ek_vector<uint32_t> state(n_inst + 1, 0);
     ek_vector<uint32_t> inst_id(n_inst, 0);
 
     (collect_indices(indices_in, args), ...);
-    se_count[0] = jit_side_effects_scheduled(Backend);
+
+    detail::JitState<Backend> jit_state;
+    jit_state.begin_recording();
+
+    state[0] = jit_record_checkpoint(Backend);
 
     uint32_t n_inst_max = jit_registry_get_max(Backend, Base::Domain);
-    try {
-        for (uint32_t i = 1, j = 1; i <= n_inst_max; ++i) {
-            snprintf(label, sizeof(label), "VCall: %s::%s() [instance %u]",
-                     Base::Domain, name, j);
-            Base *base = (Base *) jit_registry_get_ptr(Backend, Base::Domain, i);
-            if (!base)
-                continue;
+    for (uint32_t i = 1, j = 1; i <= n_inst_max; ++i) {
+        snprintf(label, sizeof(label), "VCall: %s::%s() [instance %u]",
+                 Base::Domain, name, j);
 
-            VCallRAIIGuard<Mask> guard(label, i);
+        Base *base = (Base *) jit_registry_get_ptr(Backend, Base::Domain, i);
+        if (!base)
+            continue;
 
-            if constexpr (std::is_same_v<Result, std::nullptr_t>) {
-                func(base, (set_mask_true<Is, N>(args))...);
-            } else {
-                // The following assignment converts scalar return values
-                Result tmp = func(base, set_mask_true<Is, N>(args)...);
-                collect_indices(indices_out_all, tmp);
-            }
-            inst_id[j - 1] = i;
-            se_count[j++] = jit_side_effects_scheduled(Backend);
+#if defined(ENOKI_VCALL_DEBUG)
+        jit_state.set_prefix(label);
+#endif
+        jit_state.set_self(i);
+
+        if constexpr (Backend == JitBackend::LLVM) {
+            Mask vcall_mask = Mask::steal(jit_var_new_stmt(
+                Backend, VarType::Bool,
+                "$r0 = or <$w x i1> %mask, zeroinitializer", 1, 0,
+                nullptr));
+            jit_state.set_mask(vcall_mask.index(), false);
         }
-    } catch (...) {
-        jit_side_effects_rollback(Backend, se_count[0]);
-        throw;
+
+        if constexpr (std::is_same_v<Result, std::nullptr_t>) {
+            func(base, (set_mask_true<Is, N>(args))...);
+        } else {
+            // The following assignment converts scalar return values
+            Result tmp = func(base, set_mask_true<Is, N>(args)...);
+            collect_indices(indices_out_all, tmp);
+        }
+
+        if constexpr (Backend == JitBackend::LLVM)
+            jit_state.clear_mask();
+
+#if defined(ENOKI_VCALL_DEBUG)
+        jit_state.clear_prefix();
+#endif
+
+        state[j] = jit_record_checkpoint(Backend);
+        inst_id[j - 1] = i;
+        j++;
     }
 
     ek_vector<uint32_t> indices_out(indices_out_all.size() / n_inst, 0);
 
     snprintf(label, sizeof(label), "%s::%s()", Base::Domain, name);
 
-    jit_var_vcall(label, self.index(), mask.index(), n_inst, inst_id.data(),
-                  (uint32_t) indices_in.size(), indices_in.data(),
-                  (uint32_t) indices_out_all.size(), indices_out_all.data(),
-                  se_count.data(), indices_out.data());
+    uint32_t se = jit_var_vcall(
+        label, self.index(), mask.index(), n_inst, inst_id.data(),
+        indices_in.size(), indices_in.data(), indices_out_all.size(),
+        indices_out_all.data(), state.data(), indices_out.data());
+
+    jit_state.end_recording();
+    jit_var_mark_side_effect(se);
 
     if constexpr (!std::is_same_v<Result, std::nullptr_t>) {
         Result result;
@@ -197,11 +168,13 @@ template <typename Result, typename Base, typename Func, typename Mask,
 Result
 vcall_jit_record_impl_scalar(Base *inst, const Func &func, const Mask &mask,
                              std::index_sequence<Is...>, const Args &... args) {
+    static constexpr JitBackend Backend = backend_v<Mask>;
     constexpr size_t N = sizeof...(Args);
     ENOKI_MARK_USED(N);
 
     // Evaluate the single instance with mask = true, mask side effects
-    MaskRAIIGuard<Mask> guard(mask);
+    detail::JitState<Backend> jit_state;
+    jit_state.set_mask(mask.index());
 
     if constexpr (is_enoki_struct_v<Result> || is_array_v<Result>) {
         // Return zero for masked results

@@ -208,7 +208,7 @@ def test06_loop_nest(pkg, variant):
 def test07_loop_simplification(pkg):
     # Test a regression where most loop variables are optimized away
     p = get_class(pkg)
-    res = p.Float(0.0)
+    res = ek.zero(p.Float, 10)
     active = p.Bool(True)
     depth = p.UInt32(1000)
 
@@ -222,8 +222,6 @@ def test07_loop_simplification(pkg):
     del loop
     del active
     del depth
-    gc.collect()
-    gc.collect()
     assert res == ek.arange(p.Float, 10) * 1000
 
 
