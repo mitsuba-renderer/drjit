@@ -196,7 +196,8 @@ struct Variable {
         T z = 0.f, v2 = select(eq(v1, z), z, v2_);
 
         if constexpr (is_jit_array_v<T>) {
-            if (v2_.is_literal() && std::isnormal(v2_[0]))
+            if (v2_.is_literal() && std::isnormal(v2_[0]) &&
+                jit_flag(JitFlag::ADOptimize))
                 v2 = v2_;
         }
 
