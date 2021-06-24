@@ -1108,9 +1108,14 @@ int32_t ad_new_scatter(const char *label, size_t size, ReduceOp op,
 static void ad_traverse_rev(std::vector<int32_t> &todo, bool retain_graph) {
     ad_log(Debug, "ad_traverse_rev(): processing %zu nodes ..", todo.size());
 
+    bool ek_loop_prev = false;
+    std::vector<Value> ek_loop_todo;
+
     for (int32_t index : todo) {
         Variable *v = state[index];
         ad_trace("ad_traverse_rev(): processing variable a%i ..", index);
+
+        bool ek_loop_cur = v->label && strstr(v->label, "ek_loop");
 
         if constexpr (is_dynamic_v<Value>) {
             uint32_t grad_size = asize(v->grad);
@@ -1162,11 +1167,20 @@ static void ad_traverse_rev(std::vector<int32_t> &todo, bool retain_graph) {
             edge_id = next_rev;
         }
 
+        if (ek_loop_cur) {
+            ek_loop_todo.push_back(v->grad);
+            schedule(v->grad);
+        } else if (ek_loop_prev) {
+            eval();
+        }
+
         if (v->next_rev && v->ref_count_grad == 0) {
             ad_trace("ad_traverse_rev(): clearing gradient at intermediate "
                      "variable a%i (\"%s\")", index, v->label ? v->label : "unnamed");
             v->grad = Value();
         }
+
+        ek_loop_prev = ek_loop_cur;
     }
 
     if (!retain_graph) {
@@ -1184,9 +1198,14 @@ static void ad_traverse_rev(std::vector<int32_t> &todo, bool retain_graph) {
 static void ad_traverse_fwd(std::vector<int32_t> &todo, bool retain_graph) {
     ad_log(Debug, "ad_traverse_fwd(): processing %zu nodes ..", todo.size());
 
+    bool ek_loop_prev = false;
+    std::vector<Value> ek_loop_todo;
+
     for (int32_t index : todo) {
         Variable *v = state[index];
         ad_trace("ad_traverse_fwd(): processing variable a%i ..", index);
+
+        bool ek_loop_cur = v->label && strstr(v->label, "ek_loop");
 
         if constexpr (is_dynamic_v<Value>) {
             uint32_t grad_size = asize(v->grad);
@@ -1238,6 +1257,13 @@ static void ad_traverse_fwd(std::vector<int32_t> &todo, bool retain_graph) {
             edge_id = next_fwd;
         }
 
+        if (ek_loop_cur) {
+            ek_loop_todo.push_back(v->grad);
+            schedule(v->grad);
+        } else if (ek_loop_prev) {
+            eval();
+        }
+
         if (v->next_fwd && v->ref_count_grad == 0) {
             ad_trace("ad_traverse_fwd(): clearing gradient at intermediate "
                      "variable a%i (\"%s\")", index, v->label ? v->label : "unnamed");
@@ -1246,6 +1272,8 @@ static void ad_traverse_fwd(std::vector<int32_t> &todo, bool retain_graph) {
 
         if (!retain_graph)
             ad_free_edges(index, v);
+
+        ek_loop_prev = ek_loop_cur;
     }
 
     ad_log(Debug, "ad_traverse_fwd(): done.");
