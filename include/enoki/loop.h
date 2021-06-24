@@ -278,10 +278,8 @@ protected:
             if constexpr (IsDiff) {
                 using Type = typename Value::Type;
                 for (uint32_t i = 0; i < m_indices_ad.size(); ++i) {
-                    if (!m_indices_ad[i]) {
-                        m_indices_ad_prev.push_back(0);
+                    if (!m_indices_ad[i])
                         continue;
-                    }
                     int32_t i1 = *m_indices_ad[i], i2 = m_indices_ad_prev[i],
                             index_new = 0;
                     if (i1 > 0 || i2 > 0)
