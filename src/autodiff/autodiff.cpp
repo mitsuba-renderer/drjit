@@ -101,13 +101,10 @@ struct Variable {
     /// Descriptive label or nullptr
     char *label;
 
-    /// Number of times this variable is referenced by other variables
-    uint64_t ref_count_int : 24;
+    /// Number of references to this variable
+    uint32_t ref_count;
 
-    /// Number of times this variable is referenced from Python/C++
-    uint64_t ref_count_ext : 24;
-
-    /// Gradient reference count for special operations
+    /// Gradient reference count for custom operations
     uint64_t ref_count_grad : 12;
 
     /// Was the node visited by the DFS traversal?
@@ -340,10 +337,7 @@ extern void RENAME(ad_whos)() {
     for (int32_t id : indices) {
         const Variable *v = state[id];
         buffer.fmt("  %-7i ", id);
-        size_t sz =
-            buffer.fmt("%llu / %llu", (unsigned long long) v->ref_count_ext,
-                       (unsigned long long) v->ref_count_int);
-
+        size_t sz = buffer.fmt("%u", v->ref_count);
         buffer.fmt("%*s%-12u%-8s\n", 11 - (int) sz, "", v->size,
                    v->label ? v->label : "");
     }
@@ -358,7 +352,7 @@ template <typename T> void ad_enqueue(int32_t index) {
         queue = tls_queue = new std::vector<int32_t>();
     ad_trace("ad_enqueue(a%i)", index);
     queue->push_back(index);
-    state[index]->ref_count_int++;
+    state[index]->ref_count++;
 }
 
 /// Forward-mode DFS starting from 'index'
@@ -392,7 +386,7 @@ static void ad_dfs_rev(std::vector<int32_t> &todo, uint32_t index, Variable *v) 
             if (!postponed)
                 postponed = new std::vector<int32_t>();
             postponed->push_back(e.source);
-            state[e.source]->ref_count_int++;
+            state[e.source]->ref_count++;
         } else if (!v2->visited) {
             ad_dfs_rev(todo, e.source, v2);
         }
@@ -485,11 +479,11 @@ static void ad_free_edges(int32_t index, Variable *v) {
         edge.reset();
 
         Variable *v2 = state[source];
-        if (unlikely(v2->ref_count_int == 0))
-            ad_fail("enoki-autodiff: fatal error: internal reference count of "
-                    "variable a%i became negative!", source);
+        if (unlikely(v2->ref_count == 0))
+            ad_fail("enoki-autodiff: fatal error: reference count of variable "
+                    "a%i became negative!", source);
 
-        if (--v2->ref_count_int == 0 && v2->ref_count_ext == 0) {
+        if (--v2->ref_count == 0) {
             ad_free(source, v2);
         } else {
             uint32_t fwd = v2->next_fwd;
@@ -546,7 +540,7 @@ struct ReleaseOperandHelper {
     ~ReleaseOperandHelper() {
         for (uint32_t index: release) {
             Variable *v = state[index];
-            if (--v->ref_count_ext == 0 && v->ref_count_int == 0)
+            if (--v->ref_count == 0)
                 ad_free(index, v);
         }
     }
@@ -673,7 +667,7 @@ int32_t ad_new(const char *label, size_t size, uint32_t op_count,
         edge.next_rev = edge_index;
         edge_index = edge_index_new;
 
-        var2->ref_count_int++;
+        var2->ref_count++;
         var2->next_fwd = edge_index_new;
     }
 
@@ -686,7 +680,7 @@ int32_t ad_new(const char *label, size_t size, uint32_t op_count,
     }
 
     var->next_rev = edge_index;
-    var->ref_count_ext = 1;
+    var->ref_count = 1;
 
     if (var->placeholder)
         ad_propagate_placeholder_size(var);
@@ -775,7 +769,7 @@ int32_t ad_new_select(const char *label, size_t size, const Mask &mask,
         if (jit_flag(JitFlag::ADOptimize) && mask.is_literal()) {
             int32_t result = mask[0] ? t_index : f_index;
             if (result)
-                state[result]->ref_count_ext++;
+                state[result]->ref_count++;
             ad_log(Debug, "ad_new_select(a%i <- a%i, a%i): simplified", result, t_index, f_index);
             return result;
         }
@@ -783,7 +777,7 @@ int32_t ad_new_select(const char *label, size_t size, const Mask &mask,
 
     if (f_index == t_index) {
         if (t_index)
-            state[t_index]->ref_count_ext++;
+            state[t_index]->ref_count++;
         ad_log(Debug, "ad_new_select(a%i <- a%i, a%i): simplified", t_index, t_index, f_index);
         return t_index;
     }
@@ -802,7 +796,7 @@ int32_t ad_new_select(const char *label, size_t size, const Mask &mask,
             vf = state[f_index]->grad;
         auto [index, var] = ad_var_new(label, size);
         var->grad = select(mask, vt, vf);
-        var->ref_count_ext = 1;
+        var->ref_count = 1;
         return index;
     }
 
@@ -858,12 +852,12 @@ int32_t ad_new_select(const char *label, size_t size, const Mask &mask,
         edge.next_rev = edge_index;
         edge_index = edge_index_new;
 
-        var2->ref_count_int++;
+        var2->ref_count++;
         var2->next_fwd = edge_index_new;
     }
 
     var->next_rev = edge_index;
-    var->ref_count_ext = 1;
+    var->ref_count = 1;
 
     if (var->placeholder)
         ad_propagate_placeholder_size(var);
@@ -933,7 +927,7 @@ int32_t ad_new_gather_impl(const char *label, size_t size, int32_t src_index,
 
         if (eager_fwd) {
             var->accum(gather<Value>(var2->grad, offset, mask), asize(offset));
-            var->ref_count_ext = 1;
+            var->ref_count = 1;
             return index;
         }
 
@@ -951,10 +945,10 @@ int32_t ad_new_gather_impl(const char *label, size_t size, int32_t src_index,
         edge.special = new GatherEdge<Value>(offset, mask, permute);
         edge.next_fwd = var2->next_fwd;
         edge.next_rev = 0;
-        var2->ref_count_int++;
+        var2->ref_count++;
         var2->next_fwd = edge_index_new;
         var->next_rev = edge_index_new;
-        var->ref_count_ext = 1;
+        var->ref_count = 1;
 
         return index;
     } else {
@@ -1051,7 +1045,7 @@ int32_t ad_new_scatter(const char *label, size_t size, ReduceOp op,
                 scatter(vt, vs, offset, mask);
 
             var->grad = vt;
-            var->ref_count_ext = 1;
+            var->ref_count = 1;
             return index;
         }
 
@@ -1066,7 +1060,7 @@ int32_t ad_new_scatter(const char *label, size_t size, ReduceOp op,
             edge.special = new ScatterEdge<Value>(offset, mask, op);
             edge.next_fwd = var2->next_fwd;
             edge.next_rev = var->next_rev;
-            var2->ref_count_int++;
+            var2->ref_count++;
             var2->next_fwd = edge_index_new;
             edge_index = edge_index_new;
         }
@@ -1087,7 +1081,7 @@ int32_t ad_new_scatter(const char *label, size_t size, ReduceOp op,
                 scatter(edge_mask, Mask(true), offset, mask);
                 edge2.special = new MaskEdge<Value>(edge_mask, true);
             }
-            var2->ref_count_int++;
+            var2->ref_count++;
             var2->next_fwd = edge_index_new;
             edge_index = edge_index_new;
         }
@@ -1096,7 +1090,7 @@ int32_t ad_new_scatter(const char *label, size_t size, ReduceOp op,
             ad_raise("ad_new_scatter(): all inputs were non-differentiable!");
 
         var->next_rev = edge_index;
-        var->ref_count_ext++;
+        var->ref_count++;
 
         return index;
     } else {
@@ -1402,9 +1396,8 @@ template <typename Value> const char *ad_graphviz() {
         if (is_valid(v->grad))
             color = "yellowgreen";
 
-        buffer.fmt("|{a%i|S:%u|E:%u|I:%u%s}",
-            index, v->size, (uint32_t) v->ref_count_ext,
-            (uint32_t) v->ref_count_int,
+        buffer.fmt("|{a%i|S:%u|R:%u%s}",
+            index, v->size, v->ref_count,
             v->placeholder ? "|P" : "");
 
         buffer.put("}\"");
@@ -1459,8 +1452,8 @@ template <typename T> void ad_inc_ref_impl(int32_t index) noexcept(true) {
     index = std::abs(index);
     std::lock_guard<std::mutex> guard(state.mutex);
     Variable *v = state[index];
-    ad_trace("ad_inc_ref(a%i): %u", index, (uint32_t) v->ref_count_ext + 1);
-    v->ref_count_ext++;
+    ad_trace("ad_inc_ref(a%i): %u", index, (uint32_t) v->ref_count + 1);
+    v->ref_count++;
 }
 
 template <typename T> void ad_dec_ref_impl(int32_t index) noexcept(true) {
@@ -1469,11 +1462,11 @@ template <typename T> void ad_dec_ref_impl(int32_t index) noexcept(true) {
     index = std::abs(index);
     std::lock_guard<std::mutex> guard(state.mutex);
     Variable *v = state[index];
-    ad_trace("ad_dec_ref(a%i): %u", index, (uint32_t) v->ref_count_ext - 1);
-    if (unlikely(v->ref_count_ext == 0))
+    ad_trace("ad_dec_ref(a%i): %u", index, (uint32_t) v->ref_count - 1);
+    if (unlikely(v->ref_count == 0))
         ad_fail("enoki-autodiff: fatal error: external reference count of "
                 "variable a%i became negative!", index);
-    if (--v->ref_count_ext == 0 && v->ref_count_int == 0)
+    if (--v->ref_count == 0 && v->ref_count == 0)
         ad_free(index, v);
 }
 
@@ -1573,7 +1566,7 @@ void ad_add_edge(int32_t source_idx, int32_t target_idx,
     edge.next_rev = target->next_rev;
 
     source->next_fwd = edge_index_new;
-    source->ref_count_int++;
+    source->ref_count++;
     target->next_rev = edge_index_new;
 }
 
@@ -1584,7 +1577,7 @@ struct ReleaseQueueHelper {
     ~ReleaseQueueHelper() {
         for (int32_t index: queue) {
             Variable *v = state[index];
-            if (--v->ref_count_int == 0 && v->ref_count_ext == 0)
+            if (--v->ref_count == 0)
                 ad_free(index, v);
         }
     }
