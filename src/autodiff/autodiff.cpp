@@ -13,11 +13,12 @@
 #define RENAME(fun) EVAL(fun, ENOKI_AUTODIFF_NAME)
 
 /// Rename various things to avoid symbol clashes
-#define Special    RENAME(Special)
-#define Edge       RENAME(Edge)
-#define Variable   RENAME(Variable)
-#define State      RENAME(State)
-#define RAIIHelper RENAME(RAIIHelper)
+#define Special              RENAME(Special)
+#define Edge                 RENAME(Edge)
+#define Variable             RENAME(Variable)
+#define State                RENAME(State)
+#define ReleaseQueueHelper   RENAME(ReleaseQueueHelper)
+#define ReleaseOperandHelper RENAME(ReleaseOperandHelper)
 
 struct Int32Hasher {
     size_t operator()(int32_t v) const {
@@ -537,6 +538,20 @@ static void ad_propagate_placeholder_size(Variable *v) {
     }
 }
 
+struct ReleaseOperandHelper {
+    std::vector<uint32_t> release;
+
+    void put(uint32_t index) { release.push_back(index); }
+
+    ~ReleaseOperandHelper() {
+        for (uint32_t index: release) {
+            Variable *v = state[index];
+            if (--v->ref_count_ext == 0 && v->ref_count_int == 0)
+                ad_free(index, v);
+        }
+    }
+};
+
 template <typename T>
 int32_t ad_new(const char *label, size_t size, uint32_t op_count,
                int32_t *op, T *weights) {
@@ -549,6 +564,7 @@ int32_t ad_new(const char *label, size_t size, uint32_t op_count,
         check_weights = jit_flag(JitFlag::ADCheckWeights);
     }
 
+    ReleaseOperandHelper helper;
     if (unlikely(rec)) {
         for (uint32_t i = 0; i < op_count; ++i) {
             if (op[i] <= 0)
@@ -572,8 +588,8 @@ int32_t ad_new(const char *label, size_t size, uint32_t op_count,
                          op[i], index);
 
                 var = state[index];
-                var->ref_count_ext = 0;
                 op[i] = index;
+                helper.put(index);
             }
         }
     }
@@ -791,6 +807,8 @@ int32_t ad_new_select(const char *label, size_t size, const Mask &mask,
     }
 
     int32_t op[2] = { t_index, f_index };
+    ReleaseOperandHelper helper;
+
     if (rec) {
         for (uint32_t i = 0; i < 2; ++i) {
             if (op[i] <= 0)
@@ -801,7 +819,7 @@ int32_t ad_new_select(const char *label, size_t size, const Mask &mask,
 
             /* When recording AD code (e.g. in a virtual function call),
                convert reads from external/private variables into gathers */
-            if (!var->placeholder) {
+            if (unlikely(!var->placeholder)) {
                 if (var->size != 1)
                     ad_raise("ad_new_select(): expression accesses a non-scalar "
                              "private variable (a%i)!", index);
@@ -814,8 +832,8 @@ int32_t ad_new_select(const char *label, size_t size, const Mask &mask,
                          op[i], index);
 
                 var = state[index];
-                var->ref_count_ext = 0;
                 op[i] = index;
+                helper.put(index);
             }
         }
     }
@@ -1531,11 +1549,11 @@ void ad_add_edge(int32_t source_idx, int32_t target_idx,
     target->next_rev = edge_index_new;
 }
 
-struct RAIIHelper {
+struct ReleaseQueueHelper {
     std::vector<int32_t> &queue;
-    RAIIHelper(std::vector<int32_t> &queue) : queue(queue) { }
+    ReleaseQueueHelper(std::vector<int32_t> &queue) : queue(queue) { }
 
-    ~RAIIHelper() {
+    ~ReleaseQueueHelper() {
         for (int32_t index: queue) {
             Variable *v = state[index];
             if (--v->ref_count_int == 0 && v->ref_count_ext == 0)
@@ -1551,7 +1569,7 @@ static void ad_traverse_impl(std::vector<int32_t> &queue_,
     std::vector<int32_t> todo, queue(queue_);
     queue_.clear();
 
-    RAIIHelper helper(queue);
+    ReleaseQueueHelper helper(queue);
 
     ad_build_todo(queue, todo, reverse);
 
