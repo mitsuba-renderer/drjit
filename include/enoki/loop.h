@@ -284,7 +284,7 @@ protected:
                             index_new = 0;
                     if (i1 > 0 || i2 > 0)
                         index_new = detail::ad_new_select<Type>(
-                            "select", jit_var_size(*m_indices[i]),
+                            "ek_loop", jit_var_size(*m_indices[i]),
                             detach(m_cond), i1, i2);
                     *m_indices_ad[i] = index_new;
                     detail::ad_dec_ref<Type>(i1);

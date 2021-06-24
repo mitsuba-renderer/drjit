@@ -187,12 +187,10 @@ struct Variable {
 
     template <typename T = Value>
     void mul_accum(const T &v1, const T &v2_, uint32_t src_size) {
+        /* The goal of the following logic is to always ensure that
+           v1 == 0 implies v1 * v2 == 0, even if multiplication by
+           v2 would produce a NaN (e.g. if v2 is infinite or NaN). */
 
-        /*
-          The goal of the following logic is to always ensure that
-          v1 == 0 implies v1 * v2 == 0, even if multiplication by
-          v2 would produce a NaN (e.g. if v2 is infinite or NaN).
-        */
         T z = 0.f, v2 = select(eq(v1, z), z, v2_);
 
         if constexpr (is_jit_array_v<T>) {
@@ -362,6 +360,7 @@ template <typename T> void ad_enqueue(int32_t index) {
 
 /// Forward-mode DFS starting from 'index'
 static void ad_dfs_fwd(std::vector<int32_t> &todo, int32_t index, Variable *v) {
+    ad_trace("ad_dfs_fwd(): adding a%i to the todo list", index);
     todo.push_back(index);
     v->visited = 1;
 
@@ -377,6 +376,7 @@ static void ad_dfs_fwd(std::vector<int32_t> &todo, int32_t index, Variable *v) {
 
 /// Reverse-mode DFS starting from 'index'
 static void ad_dfs_rev(std::vector<int32_t> &todo, uint32_t index, Variable *v) {
+    ad_trace("ad_dfs_rev(): adding a%i to the todo list", index);
     todo.push_back(index);
     v->visited = 1;
 
@@ -536,8 +536,43 @@ static void ad_propagate_placeholder_size(Variable *v) {
 
 template <typename T>
 int32_t ad_new(const char *label, size_t size, uint32_t op_count,
-               const int32_t *op, T *weights) {
+               int32_t *op, T *weights) {
     std::lock_guard<std::mutex> guard(state.mutex);
+
+    bool eager_fwd = false, rec = false;
+    if constexpr (is_jit_array_v<Value>) {
+        eager_fwd = jit_flag(JitFlag::ADEagerForward);
+        rec = jit_flag(JitFlag::Recording);
+    }
+
+    if (rec) {
+        for (uint32_t i = 0; i < op_count; ++i) {
+            if (op[i] <= 0)
+                continue;
+
+            uint32_t index = op[i];
+            Variable *var = state[index];
+
+            /* When recording AD code (e.g. in a virtual function call),
+               convert reads from external/private variables into gathers */
+            if (!var->placeholder) {
+                if (var->size != 1)
+                    ad_raise("ad_new(): expression accesses a non-scalar "
+                             "private variable (a%i)!", index);
+
+                index = ad_new_gather_impl<Value>("gather", size, op[i], Index(0),
+                                                  Mask(true), false);
+
+                ad_trace("ad_new(): placeholder accesses non-placeholder "
+                         "variable a%i, inserting a gather operation (a%i).",
+                         op[i], index);
+
+                var = state[index];
+                var->ref_count_ext = 0;
+                op[i] = index;
+            }
+        }
+    }
 
     auto [index, var] = ad_var_new(label, size);
 
@@ -557,18 +592,16 @@ int32_t ad_new(const char *label, size_t size, uint32_t op_count,
     }
 
     uint32_t edge_index = 0;
-    bool eager_fwd = jit_flag(JitFlag::ADEagerForward);
-
     for (uint32_t i = 0; i < op_count; ++i) {
         if (op[i] <= 0)
             continue;
 
         bool weight_is_zero = false;
-        if constexpr (std::is_scalar_v<T>)
-            weight_is_zero = weights[i] == 0;
-        else
+        if constexpr (is_jit_array_v<T>)
             weight_is_zero = jit_flag(JitFlag::ADOptimize) &&
                              weights[i].is_literal() && weights[i][0] == 0;
+        else
+            weight_is_zero = weights[i] == 0;
 
         if (weight_is_zero) {
             ad_trace(
@@ -609,24 +642,6 @@ int32_t ad_new(const char *label, size_t size, uint32_t op_count,
         if (unlikely(eager_fwd)) {
             var->mul_accum(var2->grad, weights[i], var2->size);
             continue;
-        }
-
-        /* When recording AD code (e.g. in a virtual function call),
-           convert reads from external/private variables into gathers */
-        if (unlikely(var->placeholder && !var2->placeholder)) {
-            if (var2->size != 1)
-                ad_raise("ad_new(): variable a%i computation being recorded "
-                         "accesses a non-scalar private variable (a%i)!",
-                         index, index2);
-            uint32_t index3 = ad_new_gather_impl<T>(
-                "gather", size, op[i], Index(0), Mask(true), false);
-            ad_trace("ad_new(a%i <- a%i): placeholder accesses non-placeholder "
-                     "variable, inserting a gather operation (a%i).",
-                     index, index2, index3);
-            index2 = index3;
-            var2 = state[index2];
-            var2->ref_count_ext = 0;
-            var = state[index];
         }
 
         uint32_t edge_index_new = ad_edge_new();
@@ -753,20 +768,55 @@ int32_t ad_new_select(const char *label, size_t size, const Mask &mask,
         return t_index;
     }
 
-    auto [index, var] = ad_var_new(label, size);
+    bool eager_fwd = false, rec = false;
+    if constexpr (is_jit_array_v<Value>) {
+        eager_fwd = jit_flag(JitFlag::ADEagerForward);
+        rec = jit_flag(JitFlag::Recording);
+    }
 
-    if (jit_flag(JitFlag::ADEagerForward)) {
+    if (eager_fwd) {
         Value vt = 0, vf = 0;
         if (t_index)
             vt = state[t_index]->grad;
         if (f_index)
             vf = state[f_index]->grad;
+        auto [index, var] = ad_var_new(label, size);
         var->grad = select(mask, vt, vf);
         var->ref_count_ext = 1;
         return index;
     }
 
     int32_t op[2] = { t_index, f_index };
+    if (rec) {
+        for (uint32_t i = 0; i < 2; ++i) {
+            if (op[i] <= 0)
+                continue;
+
+            uint32_t index = op[i];
+            Variable *var = state[index];
+
+            /* When recording AD code (e.g. in a virtual function call),
+               convert reads from external/private variables into gathers */
+            if (!var->placeholder) {
+                if (var->size != 1)
+                    ad_raise("ad_new_select(): expression accesses a non-scalar "
+                             "private variable (a%i)!", index);
+
+                index = ad_new_gather_impl<Value>("gather", size, op[i], Index(0),
+                                                   Mask(true), false);
+
+                ad_trace("ad_new_select(): placeholder accesses non-placeholder "
+                         "variable a%i, inserting a gather operation (a%i).",
+                         op[i], index);
+
+                var = state[index];
+                var->ref_count_ext = 0;
+                op[i] = index;
+            }
+        }
+    }
+
+    auto [index, var] = ad_var_new(label, size);
 
     ad_log(Debug, "ad_new_select(a%i <- a%i, a%i)", index, t_index, f_index);
     uint32_t edge_index = 0;
@@ -776,20 +826,6 @@ int32_t ad_new_select(const char *label, size_t size, const Mask &mask,
 
         uint32_t index2 = op[i];
         Variable *var2 = state[index2];
-
-        /* When recording AD code (e.g. in a virtual function call),
-           convert reads from external/private variables into gathers */
-        if (unlikely(var->placeholder && !var2->placeholder)) {
-            if (var2->size != 1)
-                ad_raise("ad_new_select(): variable a%i computation being recorded "
-                         "accesses a non-scalar private variable (a%i)!",
-                         index, index2);
-            index2 = ad_new_gather_impl<Value>("gather", size, op[i], Index(0),
-                                               Mask(true), false);
-            var2 = state[index2];
-            var2->ref_count_ext = 0;
-            var = state[index];
-        }
 
         uint32_t edge_index_new = ad_edge_new();
         Edge &edge = state.edges[edge_index_new];
@@ -853,6 +889,10 @@ int32_t ad_new_gather_impl(const char *label, size_t size, int32_t src_index,
                            const Index &offset, const Mask &mask_, bool permute) {
     Mask mask(mask_);
 
+    bool eager_fwd = false;
+    if constexpr (is_jit_array_v<Value>)
+        eager_fwd = jit_flag(JitFlag::ADEagerForward);
+
     if constexpr (is_array_v<Value>) {
         if (is_jit_array_v<Value>) {
             // Apply the mask stack (needed for wavefront-mode ek::Loop)
@@ -869,7 +909,7 @@ int32_t ad_new_gather_impl(const char *label, size_t size, int32_t src_index,
 
         Variable *var2 = state[src_index];
 
-        if (jit_flag(JitFlag::ADEagerForward)) {
+        if (eager_fwd) {
             var->accum(gather<Value>(var2->grad, offset, mask), asize(offset));
             var->ref_count_ext = 1;
             return index;
@@ -947,6 +987,10 @@ int32_t ad_new_scatter(const char *label, size_t size, ReduceOp op,
 
     Mask mask(mask_);
 
+    bool eager_fwd = false;
+    if constexpr (is_jit_array_v<Value>)
+        eager_fwd = jit_flag(JitFlag::ADEagerForward);
+
     if constexpr (is_array_v<Value>) {
         std::lock_guard<std::mutex> guard(state.mutex);
 
@@ -969,7 +1013,7 @@ int32_t ad_new_scatter(const char *label, size_t size, ReduceOp op,
                "ad_new_scatter(op=%i, a%i <- a%i, a%i, permute=%i)",
                (int) op, index, src_index, dst_index, (int) permute);
 
-        if (jit_flag(JitFlag::ADEagerForward)) {
+        if (eager_fwd) {
             Value vs = 0, vt = 0;
             if (src_index)
                 vs = state[src_index]->grad;
@@ -1528,7 +1572,7 @@ template <typename T> size_t ad_internal_deps() {
 template ENOKI_EXPORT void ad_inc_ref_impl<Value>(int32_t) noexcept;
 template ENOKI_EXPORT void ad_dec_ref_impl<Value>(int32_t) noexcept;
 template ENOKI_EXPORT int32_t ad_new<Value>(const char *, size_t, uint32_t,
-                                            const int32_t *, Value *);
+                                            int32_t *, Value *);
 template ENOKI_EXPORT Value ad_grad<Value>(int32_t, bool);
 template ENOKI_EXPORT void ad_set_grad<Value>(int32_t, const Value &, bool);
 template ENOKI_EXPORT void ad_accum_grad<Value>(int32_t, const Value &, bool);

@@ -43,7 +43,7 @@ template <typename Value> void ad_dec_ref_impl(int32_t index) noexcept (true);
 /// Create a new variable with the given number of operands and AD weights
 template <typename Value>
 int32_t ad_new(const char *label, size_t size, uint32_t ops = 0,
-               const int32_t *indices = nullptr, Value *weights = nullptr);
+               int32_t *indices = nullptr, Value *weights = nullptr);
 
 /// Query the gradient associated with a variable
 template <typename Value> Value ad_grad(int32_t index, bool fail_if_missing);
@@ -1794,7 +1794,7 @@ protected:
     extern template ENOKI_AUTODIFF_EXPORT void                                 \
         ad_dec_ref_impl<T>(int32_t) noexcept;                                  \
     extern template ENOKI_AUTODIFF_EXPORT int32_t                              \
-    ad_new<T>(const char *, size_t, uint32_t, const int32_t *, T *);           \
+    ad_new<T>(const char *, size_t, uint32_t, int32_t *, T *);                 \
     extern template ENOKI_AUTODIFF_EXPORT T ad_grad<T>(int32_t, bool);         \
     extern template ENOKI_AUTODIFF_EXPORT void                                 \
     ad_set_grad<T>(int32_t, const T &, bool);                                  \
