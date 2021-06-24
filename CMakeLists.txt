@@ -40,6 +40,9 @@ option(ENOKI_ENABLE_TESTS    "Build Enoki test suite? (Warning, this takes *very
 
 if (MSVC)
   set(ENOKI_NATIVE_FLAGS_DEFAULT "")
+elseif (APPLE AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  # Apple M1 compatibility
+  set(ENOKI_NATIVE_FLAGS_DEFAULT "-mcpu=apple-a14")
 else()
   set(ENOKI_NATIVE_FLAGS_DEFAULT "-march=nehalem")
 endif()
@@ -166,6 +169,7 @@ if (ENOKI_ENABLE_PYTHON)
         list(APPEND CMAKE_PREFIX_PATH "${_tmp_dir}")
       find_package(pybind11 CONFIG REQUIRED)
     else()
+      set(Python_FIND_FRAMEWORK LAST) # Prefer Brew/Conda to Apple framework python
       find_package(Python COMPONENTS Interpreter Development REQUIRED)
       set(ENOKI_PYBIND11_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ext/pybind11"
       CACHE STRING "Path containing the 'pybind11' library used to compile Enoki.")
