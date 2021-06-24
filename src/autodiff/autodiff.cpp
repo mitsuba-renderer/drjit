@@ -13,10 +13,11 @@
 #define RENAME(fun) EVAL(fun, ENOKI_AUTODIFF_NAME)
 
 /// Rename various things to avoid symbol clashes
-#define Special  RENAME(Special)
-#define Edge     RENAME(Edge)
-#define Variable RENAME(Variable)
-#define State    RENAME(State)
+#define Special    RENAME(Special)
+#define Edge       RENAME(Edge)
+#define Variable   RENAME(Variable)
+#define State      RENAME(State)
+#define RAIIHelper RENAME(RAIIHelper)
 
 struct Int32Hasher {
     size_t operator()(int32_t v) const {
@@ -237,8 +238,11 @@ static_assert(sizeof(Variable) == ((IsDouble ? 2 : 0) + 8) * sizeof(uint32_t),
 #if !defined(_MSC_VER)
   /// Thread-local list used by ad_queue() and ad_traverse()
   static __thread std::vector<int32_t> *tls_queue = nullptr;
+  /// List of postponed variables that are yet to be processed
+  static __thread std::vector<int32_t> *postponed = nullptr;
 #else
   static __declspec(thread) std::vector<int32_t>* tls_queue = nullptr;
+  static __declspec(thread) std::vector<int32_t>* postponed = nullptr;
 #endif
 
 /// Records all internal application state
@@ -258,9 +262,6 @@ struct State {
 
     /// List of currently unused edges
     std::vector<uint32_t> unused_edges;
-
-    /// List of vertices to be processed
-    std::vector<int32_t> todo, postponed;
 
     /// Counter for variable indices
     int32_t variable_index = 1;
@@ -356,6 +357,7 @@ template <typename T> void ad_enqueue(int32_t index) {
         queue = tls_queue = new std::vector<int32_t>();
     ad_trace("ad_enqueue(a%i)", index);
     queue->push_back(index);
+    state[index]->ref_count_int++;
 }
 
 /// Forward-mode DFS starting from 'index'
@@ -386,7 +388,10 @@ static void ad_dfs_rev(std::vector<int32_t> &todo, uint32_t index, Variable *v) 
         Variable *v2 = state[e.source];
         if (unlikely(v->placeholder && !v2->placeholder)) {
             ad_trace("ad_dfs_rev(): adding a%i to the postponed list", e.source);
-            state.postponed.push_back(e.source);
+            if (!postponed)
+                postponed = new std::vector<int32_t>();
+            postponed->push_back(e.source);
+            state[e.source]->ref_count_int++;
         } else if (!v2->visited) {
             ad_dfs_rev(todo, e.source, v2);
         }
@@ -396,9 +401,8 @@ static void ad_dfs_rev(std::vector<int32_t> &todo, uint32_t index, Variable *v) 
 
 /// Build an ordered list of nodes to traverse given a set of seed vertices
 static void ad_build_todo(std::vector<int32_t> &queue,
-                          std::vector<int32_t> &todo, bool reverse) {
-    todo.clear();
-
+                          std::vector<int32_t> &todo,
+                          bool reverse) {
     // DFS traversal to find all reachable variables
     if (reverse) {
         for (int32_t index: queue) {
@@ -413,7 +417,6 @@ static void ad_build_todo(std::vector<int32_t> &queue,
                 ad_dfs_fwd(todo, index, v);
         }
     }
-    queue.clear();
 
     // Clear visited flags
     for (int32_t i : todo)
@@ -539,13 +542,14 @@ int32_t ad_new(const char *label, size_t size, uint32_t op_count,
                int32_t *op, T *weights) {
     std::lock_guard<std::mutex> guard(state.mutex);
 
-    bool eager_fwd = false, rec = false;
+    bool eager_fwd = false, rec = false, check_weights = false;
     if constexpr (is_jit_array_v<Value>) {
         eager_fwd = jit_flag(JitFlag::ADEagerForward);
         rec = jit_flag(JitFlag::Recording);
+        check_weights = jit_flag(JitFlag::ADCheckWeights);
     }
 
-    if (rec) {
+    if (unlikely(rec)) {
         for (uint32_t i = 0; i < op_count; ++i) {
             if (op[i] <= 0)
                 continue;
@@ -555,7 +559,7 @@ int32_t ad_new(const char *label, size_t size, uint32_t op_count,
 
             /* When recording AD code (e.g. in a virtual function call),
                convert reads from external/private variables into gathers */
-            if (!var->placeholder) {
+            if (unlikely(!var->placeholder)) {
                 if (var->size != 1)
                     ad_raise("ad_new(): expression accesses a non-scalar "
                              "private variable (a%i)!", index);
@@ -611,7 +615,7 @@ int32_t ad_new(const char *label, size_t size, uint32_t op_count,
         }
 
         if constexpr (is_jit_array_v<T>) {
-            if (unlikely(jit_flag(JitFlag::ADCheckWeights))) {
+            if (unlikely(check_weights)) {
                 bool nan_weights = any(isnan(weights[i])),
                      inf_weights = any(isinf(weights[i]));
 
@@ -1232,7 +1236,7 @@ static void ad_traverse_fwd(std::vector<int32_t> &todo, bool retain_graph) {
 template <typename Value> const char *ad_graphviz() {
     std::lock_guard<std::mutex> guard(state.mutex);
 
-    std::vector<uint32_t> indices;
+    std::vector<int32_t> indices;
     indices.reserve(state.variables.size());
     for (const auto& it : state.variables)
         indices.push_back(it.first);
@@ -1527,16 +1531,27 @@ void ad_add_edge(int32_t source_idx, int32_t target_idx,
     target->next_rev = edge_index_new;
 }
 
+struct RAIIHelper {
+    std::vector<int32_t> &queue;
+    RAIIHelper(std::vector<int32_t> &queue) : queue(queue) { }
+
+    ~RAIIHelper() {
+        for (int32_t index: queue) {
+            Variable *v = state[index];
+            if (--v->ref_count_int == 0 && v->ref_count_ext == 0)
+                ad_free(index, v);
+        }
+    }
+};
+
 template <typename T>
-static void ad_traverse_impl(std::vector<int32_t> &queue,
+static void ad_traverse_impl(std::vector<int32_t> &queue_,
                              bool reverse,
                              bool retain_graph) {
-    std::vector<int32_t> todo;
+    std::vector<int32_t> todo, queue(queue_);
+    queue_.clear();
 
-    // Use existing allocated memory region if currently unused
-    bool use_global_todo = state.todo.empty();
-    if (use_global_todo)
-        todo.swap(state.todo);
+    RAIIHelper helper(queue);
 
     ad_build_todo(queue, todo, reverse);
 
@@ -1544,9 +1559,6 @@ static void ad_traverse_impl(std::vector<int32_t> &queue,
         ad_traverse_rev(todo, retain_graph);
     else
         ad_traverse_fwd(todo, retain_graph);
-
-    if (use_global_todo)
-        todo.swap(state.todo);
 }
 
 template <typename T> void ad_traverse(bool backward, bool retain_graph) {
@@ -1556,11 +1568,13 @@ template <typename T> void ad_traverse(bool backward, bool retain_graph) {
 
 template <typename T> void ad_traverse_postponed() {
     std::lock_guard<std::mutex> guard(state.mutex);
-    if (state.postponed.empty())
+    std::vector<int32_t> *queue = postponed;
+
+    if (!postponed || postponed->empty())
         return;
     ad_log(Debug, "ad_traverse_postponed(): reverse mode (%zu indices)",
-           state.postponed.size());
-    ad_traverse_impl<T>(state.postponed, true, true);
+           postponed->size());
+    ad_traverse_impl<T>(*postponed, true, true);
     ad_log(Debug, "ad_traverse_postponed(): reverse mode done.");
 }
 
