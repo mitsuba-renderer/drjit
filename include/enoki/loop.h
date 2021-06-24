@@ -59,7 +59,7 @@ struct Loop<Value, enable_if_jit_array_t<Value>> {
 
     template <typename... Args>
     Loop(const char *name, Args &... args)
-        : m_state(0), m_record(jit_flag(JitFlag::LoopRecord)) {
+        : m_record(jit_flag(JitFlag::LoopRecord)) {
 
         size_t size = strlen(name) + 1;
         m_name = ek_unique_ptr<char[]>(new char[size]);
@@ -170,7 +170,6 @@ protected:
     /// State machine to record a loop as-is
     bool cond_record(const Mask &cond) {
         uint32_t rv = 0;
-        bool retry = false;
 
         switch (m_state) {
             case 0:
@@ -358,7 +357,7 @@ protected:
     uint32_t m_loop_cond = 0;
 
     /// Index of the symbolic loop state machine
-    uint32_t m_state;
+    uint32_t m_state = 0;
 
     // --------------- Wavefront mode ---------------
 
