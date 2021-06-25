@@ -23,7 +23,9 @@
 #  define ENOKI_MALLOC                 __declspec(restrict)
 #  define ENOKI_MAY_ALIAS
 #  define ENOKI_ASSUME_ALIGNED(x, s)   x
-#  define ENOKI_UNROLL
+#  if !defined(ENOKI_UNROLL)
+#    define ENOKI_UNROLL
+#  endif
 #  define ENOKI_NOUNROLL
 #  define ENOKI_PACK
 #  define ENOKI_LIKELY(x)              x
@@ -39,19 +41,11 @@
 #  define ENOKI_LIKELY(x)              __builtin_expect(!!(x), 1)
 #  define ENOKI_UNLIKELY(x)            __builtin_expect(!!(x), 0)
 #  define ENOKI_PACK                   __attribute__ ((packed))
-#  if defined(__clang__)
+#  define ENOKI_MAY_ALIAS              __attribute__ ((may_alias))
+#  if !defined(ENOKI_UNROLL)
 #    define ENOKI_UNROLL               _Pragma("unroll")
-#    define ENOKI_NOUNROLL             _Pragma("nounroll")
-#    define ENOKI_MAY_ALIAS            __attribute__ ((may_alias))
-#  elif defined(__INTEL_COMPILER)
-#    define ENOKI_MAY_ALIAS
-#    define ENOKI_UNROLL               _Pragma("unroll")
-#    define ENOKI_NOUNROLL             _Pragma("nounroll")
-#  else
-#    define ENOKI_MAY_ALIAS            __attribute__ ((may_alias))
-#    define ENOKI_UNROLL
-#    define ENOKI_NOUNROLL
 #  endif
+#  define ENOKI_NOUNROLL               _Pragma("nounroll")
 #  define ENOKI_IMPORT
 #  define ENOKI_EXPORT                 __attribute__ ((visibility("default")))
 #endif
