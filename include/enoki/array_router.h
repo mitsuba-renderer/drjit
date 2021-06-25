@@ -825,7 +825,7 @@ ENOKI_INLINE T full(const T2 &value, size_t size = 1) {
     if constexpr (is_array_v<T>)
         return T::Derived::full_(value, size);
     else
-        return value;
+        return T(value);
 }
 
 template <typename T, typename T2>
@@ -851,7 +851,7 @@ ENOKI_INLINE T opaque(const T2 &value, size_t size = 1) {
             });
         return result;
     } else {
-        return value;
+        return T(value);
     }
 }
 
