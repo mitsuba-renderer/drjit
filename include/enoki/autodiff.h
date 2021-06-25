@@ -15,12 +15,12 @@
 #define ENOKI_AUTODIFF_H
 
 #if defined(ENOKI_BUILD_AUTODIFF)
-#  define ENOKI_AUTODIFF_EXPORT
-#  define ENOKI_AUTODIFF_EXPORT_TEMPLATE(T)
+#  define ENOKI_AD_EXPORT
+#  define ENOKI_AD_EXPORT_TEMPLATE(T)
 #else
-#  define ENOKI_AUTODIFF_EXPORT ENOKI_IMPORT
-#  define ENOKI_AUTODIFF_EXPORT_TEMPLATE(T)                                    \
-     extern template ENOKI_AUTODIFF_EXPORT struct DiffArray<T>;
+#  define ENOKI_AD_EXPORT ENOKI_IMPORT
+#  define ENOKI_AD_EXPORT_TEMPLATE(T)                                    \
+     extern template ENOKI_AD_EXPORT struct DiffArray<T>;
 #endif
 
 #include <enoki/array.h>
@@ -62,11 +62,17 @@ template <typename Value> void ad_enqueue(int32_t index);
 /// Perform a forward or reverse mode traversal of queued variables
 template <typename Value> void ad_traverse(bool reverse, bool retain_graph);
 
-/// Return the # of variables that had to be postponed while in JIT recording mode
-template <typename Value> size_t ad_internal_deps();
+/// Return # of cross-domain dependencies between recorded/ordinary computation
+template <typename Value> size_t ad_cross_deps();
 
-/// Perform a forward or reverse mode traversal of postponed placeholder variables
-template <typename Value> void ad_traverse_postponed();
+/// Pop 'count' variables indices from the list of recorded cross-domain deps
+template <typename Value> void ad_cross_steal(size_t count, int32_t *out);
+
+/// Rewind the list of recorded cross-domain deps to position 'pos'
+template <typename Value> void ad_cross_rewind(size_t pos);
+
+/// Propagate derivatives through the list of recorded cross-domain deps
+template <typename Value> void ad_cross_traverse();
 
 /// Label a variable (useful for debugging via graphviz etc.)
 template <typename Value> void ad_set_label(int32_t index, const char *);
@@ -94,7 +100,7 @@ int32_t ad_new_scatter(const char *label, size_t size, ReduceOp op,
                        const Index &offset, const Mask &mask, bool permute);
 
 /// Custom graph edge for implementing custom differentiable operations
-struct ENOKI_AUTODIFF_EXPORT DiffCallback {
+struct ENOKI_AD_EXPORT DiffCallback {
     virtual void forward() = 0;
     virtual void backward() = 0;
     virtual ~DiffCallback();
@@ -1787,38 +1793,37 @@ protected:
 };
 
 #define ENOKI_DECLARE_EXTERN_TEMPLATE(T, Mask, Index)                          \
-    ENOKI_AUTODIFF_EXPORT_TEMPLATE(T)                                          \
+    ENOKI_AD_EXPORT_TEMPLATE(T)                                                \
     namespace detail {                                                         \
-    extern template ENOKI_AUTODIFF_EXPORT void                                 \
-        ad_inc_ref_impl<T>(int32_t) noexcept;                                  \
-    extern template ENOKI_AUTODIFF_EXPORT void                                 \
-        ad_dec_ref_impl<T>(int32_t) noexcept;                                  \
-    extern template ENOKI_AUTODIFF_EXPORT int32_t                              \
-    ad_new<T>(const char *, size_t, uint32_t, int32_t *, T *);                 \
-    extern template ENOKI_AUTODIFF_EXPORT T ad_grad<T>(int32_t, bool);         \
-    extern template ENOKI_AUTODIFF_EXPORT void                                 \
-    ad_set_grad<T>(int32_t, const T &, bool);                                  \
-    extern template ENOKI_AUTODIFF_EXPORT void                                 \
-    ad_accum_grad<T>(int32_t, const T &, bool);                                \
-    extern template ENOKI_AUTODIFF_EXPORT void ad_set_label<T>(int32_t,        \
-                                                               const char *);  \
-    extern template ENOKI_AUTODIFF_EXPORT const char *ad_label<T>(int32_t);    \
-    extern template ENOKI_AUTODIFF_EXPORT const char *ad_graphviz<T>();        \
-    extern template ENOKI_AUTODIFF_EXPORT void ad_enqueue<T>(int32_t);         \
-    extern template ENOKI_AUTODIFF_EXPORT void ad_traverse<T>(bool, bool);     \
-    extern template ENOKI_AUTODIFF_EXPORT int32_t ad_new_select<T, Mask>(      \
+    extern template ENOKI_AD_EXPORT void ad_inc_ref_impl<T>(int32_t) noexcept; \
+    extern template ENOKI_AD_EXPORT void ad_dec_ref_impl<T>(int32_t) noexcept; \
+    extern template ENOKI_AD_EXPORT int32_t ad_new<T>(const char *, size_t,    \
+                                                      uint32_t, int32_t *,     \
+                                                      T *);                    \
+    extern template ENOKI_AD_EXPORT T ad_grad<T>(int32_t, bool);               \
+    extern template ENOKI_AD_EXPORT void ad_set_grad<T>(int32_t, const T &,    \
+                                                        bool);                 \
+    extern template ENOKI_AD_EXPORT void ad_accum_grad<T>(int32_t, const T &,  \
+                                                          bool);               \
+    extern template ENOKI_AD_EXPORT void ad_set_label<T>(int32_t,              \
+                                                         const char *);        \
+    extern template ENOKI_AD_EXPORT const char *ad_label<T>(int32_t);          \
+    extern template ENOKI_AD_EXPORT const char *ad_graphviz<T>();              \
+    extern template ENOKI_AD_EXPORT void ad_enqueue<T>(int32_t);               \
+    extern template ENOKI_AD_EXPORT void ad_traverse<T>(bool, bool);           \
+    extern template ENOKI_AD_EXPORT int32_t ad_new_select<T, Mask>(            \
         const char *, size_t, const Mask &, int32_t, int32_t);                 \
-    extern template ENOKI_AUTODIFF_EXPORT int32_t                              \
-    ad_new_gather<T, Mask, Index>(const char *, size_t, int32_t,               \
-                                  const Index &, const Mask &, bool);          \
-    extern template ENOKI_AUTODIFF_EXPORT int32_t                              \
-    ad_new_scatter<T, Mask, Index>(const char *, size_t, ReduceOp, int32_t,    \
-                                   int32_t, const Index &, const Mask &,       \
-                                   bool);                                      \
-    extern template ENOKI_AUTODIFF_EXPORT void                                 \
-    ad_add_edge<T>(int32_t, int32_t, DiffCallback *);                          \
-    extern template ENOKI_AUTODIFF_EXPORT size_t ad_internal_deps<T>();        \
-    extern template ENOKI_AUTODIFF_EXPORT void ad_traverse_postponed<T>();     \
+    extern template ENOKI_AD_EXPORT int32_t ad_new_gather<T, Mask, Index>(     \
+        const char *, size_t, int32_t, const Index &, const Mask &, bool);     \
+    extern template ENOKI_AD_EXPORT int32_t ad_new_scatter<T, Mask, Index>(    \
+        const char *, size_t, ReduceOp, int32_t, int32_t, const Index &,       \
+        const Mask &, bool);                                                   \
+    extern template ENOKI_AD_EXPORT void ad_add_edge<T>(int32_t, int32_t,      \
+                                                        DiffCallback *);       \
+    extern template ENOKI_AD_EXPORT size_t ad_cross_deps<T>();                 \
+    extern template ENOKI_AD_EXPORT void ad_cross_steal<T>(size_t, int32_t *); \
+    extern template ENOKI_AD_EXPORT void ad_cross_rewind<T>(size_t);           \
+    extern template ENOKI_AD_EXPORT void ad_cross_traverse<T>();               \
     }
 
 ENOKI_DECLARE_EXTERN_TEMPLATE(float,  bool, uint32_t)
@@ -1830,9 +1835,9 @@ ENOKI_DECLARE_EXTERN_TEMPLATE(LLVMArray<float>,  LLVMArray<bool>, LLVMArray<uint
 ENOKI_DECLARE_EXTERN_TEMPLATE(LLVMArray<double>, LLVMArray<bool>, LLVMArray<uint32_t>)
 #endif
 
-extern ENOKI_AUTODIFF_EXPORT const char *ad_whos();
-extern ENOKI_AUTODIFF_EXPORT void ad_prefix_push(const char *value);
-extern ENOKI_AUTODIFF_EXPORT void ad_prefix_pop();
+extern ENOKI_AD_EXPORT const char *ad_whos();
+extern ENOKI_AD_EXPORT void ad_prefix_push(const char *value);
+extern ENOKI_AD_EXPORT void ad_prefix_pop();
 
 NAMESPACE_END(enoki)
 

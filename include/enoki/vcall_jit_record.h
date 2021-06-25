@@ -18,9 +18,6 @@
 NAMESPACE_BEGIN(enoki)
 NAMESPACE_BEGIN(detail)
 
-// Forward declaration so that this compiles even without autodiff.h
-template <typename Value> void ad_traverse_postponed();
-
 template <typename T>
 void collect_indices(ek_index_vector &indices, const T &value) {
     if constexpr (array_depth_v<T> > 1) {
@@ -155,14 +152,6 @@ Result vcall_jit_record_impl(const char *name, uint32_t n_inst,
 
     jit_state.end_recording();
     jit_var_mark_side_effect(se);
-
-    if constexpr (is_diff_array_v<Self>) {
-        if (!jit_flag(JitFlag::Recording)) {
-            using T = detached_t<Self>;
-            detail::ad_traverse_postponed<float32_array_t<T>>();
-            detail::ad_traverse_postponed<float64_array_t<T>>();
-        }
-    }
 
     if constexpr (!std::is_same_v<Result, std::nullptr_t>) {
         Result result;

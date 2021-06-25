@@ -22,7 +22,7 @@ NAMESPACE_BEGIN(detail)
 // A few forward declarations so that this compiles even without autodiff.h
 template <typename Value> void ad_inc_ref(int32_t) noexcept;
 template <typename Value> void ad_dec_ref(int32_t) noexcept;
-template <typename Value> void ad_traverse_postponed();
+template <typename Value> void ad_cross_traverse();
 template <typename Value, typename Mask>
 int32_t ad_new_select(const char *, size_t, const Mask &, int32_t, int32_t);
 NAMESPACE_END(detail)
@@ -236,11 +236,11 @@ protected:
                     if constexpr (Backend == JitBackend::LLVM)
                         m_jit_state.clear_mask();
 
-                    if constexpr (IsDiff) {
-                        using Type = typename Value::Type;
-                        if (!jit_flag(JitFlag::Recording))
-                            detail::ad_traverse_postponed<Type>();
-                    }
+                    // if constexpr (IsDiff) {
+                    //     using Type = typename Value::Type;
+                    //     if (!jit_flag(JitFlag::Recording))
+                    //         detail::ad_traverse_postponed<Type>();
+                    // }
 
                     return false;
                 }

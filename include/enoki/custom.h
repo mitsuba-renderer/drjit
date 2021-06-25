@@ -172,9 +172,11 @@ template <typename Custom, typename... Input> auto custom(const Input&... input)
 
     ek_unique_ptr<Custom> custom(new Custom());
 
-    size_t ad_deps_before = detail::ad_internal_deps<Type>();
+    size_t cross_deps_checkpoint = detail::ad_cross_deps<Type>();
     Output output = custom->eval(detach<false>(input)...);
-    size_t ad_deps_after = detail::ad_internal_deps<Type>();
+
+    // Tracks dependencies between recorded/non-recorded computation
+    size_t cross_deps = detail::ad_cross_deps<Type>() - cross_deps_checkpoint;
 
     if (grad_enabled(output))
         enoki_raise("enoki::custom(): the return value of the CustomOp::eval() "
@@ -185,7 +187,7 @@ template <typename Custom, typename... Input> auto custom(const Input&... input)
     size_t diff_vars_in_ctr = 0;
     (detail::diff_vars(input, diff_vars_in_ctr, nullptr), ...);
 
-    if (diff_vars_in_ctr > 0 || ad_deps_after > ad_deps_before) {
+    if (diff_vars_in_ctr > 0 || cross_deps > 0) {
         int32_t in_var  = detail::ad_new<Type>(nullptr, 0),
                 out_var = detail::ad_new<Type>(nullptr, 0);
 
@@ -207,7 +209,7 @@ template <typename Custom, typename... Input> auto custom(const Input&... input)
         if (diff_vars_out_ctr == 0)
             enoki_raise("enoki::custom(): internal error!");
 
-        ek_unique_ptr<int32_t[]> diff_vars_in(new int32_t[diff_vars_in_ctr]);
+        ek_unique_ptr<int32_t[]> diff_vars_in(new int32_t[diff_vars_in_ctr + cross_deps]);
         ek_unique_ptr<int32_t[]> diff_vars_out(new int32_t[diff_vars_out_ctr]);
 
         diff_vars_out_ctr = 0;
@@ -215,8 +217,12 @@ template <typename Custom, typename... Input> auto custom(const Input&... input)
         (detail::diff_vars(input, diff_vars_in_ctr, diff_vars_in.get()), ...);
         detail::diff_vars(output, diff_vars_out_ctr, diff_vars_out.get());
 
+        detail::ad_cross_steal<Type>(cross_deps,
+                                     diff_vars_in.get() + diff_vars_in_ctr);
+        diff_vars_in_ctr += cross_deps;
+
         // Undo reference count increase due to storage in custom->m_output
-        for (size_t i = 0 ; i < diff_vars_out_ctr; ++i)
+        for (size_t i = 0; i < diff_vars_out_ctr; ++i)
             detail::ad_dec_ref<Type>(diff_vars_out[i]);
 
         const char *name = custom->name();
@@ -234,6 +240,9 @@ template <typename Custom, typename... Input> auto custom(const Input&... input)
             in_var = diff_vars_in[0];
             detail::ad_inc_ref<Type>(in_var);
         }
+
+        for (size_t i = 0; i < cross_deps; ++i)
+            detail::ad_dec_ref<Type>(diff_vars_in[diff_vars_in_ctr - 1 - i]);
 
         // Create a dummy node in case the branch-out factor is > 1
         if (diff_vars_out_ctr > 1 || diff_vars_out_ctr == 0) {

@@ -98,26 +98,8 @@ template <typename T> bool is_valid(const T &value) {
 
 /// Represents a variable in the computation graph
 struct Variable {
-    /// Descriptive label or nullptr
-    char *label;
-
     /// Number of references to this variable
     uint32_t ref_count;
-
-    /// Gradient reference count for custom operations
-    uint64_t ref_count_grad : 12;
-
-    /// Was the node visited by the DFS traversal?
-    uint64_t visited : 1;
-
-    /// Was the label manually overwritten via set_label()?
-    uint64_t custom_label : 1;
-
-    /// Should the label be freed when the variable is deallocated?
-    uint64_t free_label : 1;
-
-    /// Was this graph node created while recording computation?
-    uint64_t placeholder : 1;
 
     /// Links to the first forward edge at this node
     uint32_t next_fwd;
@@ -127,6 +109,27 @@ struct Variable {
 
     /// Dimension of the 'grad' field
     uint32_t size;
+
+    /// Descriptive label or nullptr
+    char *label;
+
+    /// High bits of variable index
+    uint32_t index_hi : 16;
+
+    /// Gradient reference count for custom operations
+    uint32_t ref_count_grad : 12;
+
+    /// Was the node visited by the DFS traversal?
+    uint32_t visited : 1;
+
+    /// Was the label manually overwritten via set_label()?
+    uint32_t custom_label : 1;
+
+    /// Should the label be freed when the variable is deallocated?
+    uint32_t free_label : 1;
+
+    /// Was this graph node created while recording computation?
+    uint32_t placeholder : 1;
 
     /// This will eventually hold a gradient value
     Value grad{};
@@ -153,7 +156,7 @@ struct Variable {
             free_label = 1;
         }
 
-        placeholder = (uint64_t) placeholder_;
+        placeholder = (uint32_t) placeholder_;
     }
 
     template <typename T = Value>
@@ -236,11 +239,11 @@ static_assert(sizeof(Variable) == ((IsDouble ? 2 : 0) + 8) * sizeof(uint32_t),
 #if !defined(_MSC_VER)
   /// Thread-local list used by ad_queue() and ad_traverse()
   static __thread std::vector<int32_t> *tls_queue = nullptr;
-  /// List of postponed variables that are yet to be processed
-  static __thread std::vector<int32_t> *postponed = nullptr;
+  /// Cross-domain dependencies that could not be processed
+  static __thread std::vector<int32_t> *cross_deps = nullptr;
 #else
   static __declspec(thread) std::vector<int32_t>* tls_queue = nullptr;
-  static __declspec(thread) std::vector<int32_t>* postponed = nullptr;
+  static __declspec(thread) std::vector<int32_t>* cross_deps = nullptr;
 #endif
 
 /// Records all internal application state
@@ -264,9 +267,6 @@ struct State {
     /// Counter for variable indices
     int32_t variable_index = 1;
 
-    /// Tracks dependencies between normal and placeholder variables
-    uint32_t internal_deps = 0;
-
     State() : edges(1) { }
 
     Variable *operator[](int32_t index) {
@@ -283,7 +283,8 @@ struct State {
                    "remain in use)!", variables.size());
             uint32_t counter = 0;
             for (auto kv : variables) {
-                ad_log(Warn, " - variable a%i", kv.first);
+                ad_log(Warn, " - variable a%i (%u references)", kv.first,
+                       kv.second.ref_count);
                 if (++counter == 10) {
                     ad_log(Warn, " - (skipping the rest)");
                     break;
@@ -300,6 +301,11 @@ struct State {
         if (tls_queue) {
             delete tls_queue;
             tls_queue = nullptr;
+        }
+
+        if (cross_deps) {
+            delete cross_deps;
+            cross_deps = nullptr;
         }
     }
 };
@@ -343,18 +349,6 @@ extern void RENAME(ad_whos)() {
     }
 }
 
-template <typename T> void ad_enqueue(int32_t index) {
-    // no locking needed in this function (all TLS)
-    if (index <= 0)
-        return;
-    std::vector<int32_t> *queue = tls_queue;
-    if (unlikely(!queue))
-        queue = tls_queue = new std::vector<int32_t>();
-    ad_trace("ad_enqueue(a%i)", index);
-    queue->push_back(index);
-    state[index]->ref_count++;
-}
-
 /// Forward-mode DFS starting from 'index'
 static void ad_dfs_fwd(std::vector<int32_t> &todo, int32_t index, Variable *v) {
     ad_trace("ad_dfs_fwd(): adding a%i to the todo list", index);
@@ -381,15 +375,10 @@ static void ad_dfs_rev(std::vector<int32_t> &todo, uint32_t index, Variable *v) 
     while (edge) {
         Edge &e = state.edges[edge];
         Variable *v2 = state[e.source];
-        if (unlikely(v->placeholder && !v2->placeholder)) {
-            ad_trace("ad_dfs_rev(): adding a%i to the postponed list", e.source);
-            if (!postponed)
-                postponed = new std::vector<int32_t>();
-            postponed->push_back(e.source);
-            state[e.source]->ref_count++;
-        } else if (!v2->visited) {
+        if (unlikely(v->placeholder && !v2->placeholder))
+            ad_trace("ad_dfs_rev(): skipping a%i due to cross-domain dependency.", e.source);
+        else if (!v2->visited)
             ad_dfs_rev(todo, e.source, v2);
-        }
         edge = e.next_rev;
     }
 }
@@ -459,6 +448,26 @@ static std::pair<int32_t, Variable *> ad_var_new(const char *label,
 
 static void ad_free(int32_t index, Variable *v);
 
+static void ad_inc_ref(int32_t index, Variable *v) noexcept (true) {
+    ad_trace("ad_inc_ref(a%i): %u", index, v->ref_count + 1);
+    v->ref_count++;
+}
+
+static bool ad_dec_ref(int32_t index, Variable *v) noexcept (true) {
+    ad_trace("ad_dec_ref(a%i): %u", index, v->ref_count - 1);
+
+    if (unlikely(v->ref_count == 0))
+        ad_fail("enoki-autodiff: fatal error: external reference count of "
+                "variable a%i became negative!", index);
+
+    if (--v->ref_count == 0) {
+        ad_free(index, v);
+        return true;
+    } else {
+        return false;
+    }
+}
+
 /// Clear backward edges of the given variable and decrease int. ref. counts
 static void ad_free_edges(int32_t index, Variable *v) {
     uint32_t edge_id = v->next_rev;
@@ -479,13 +488,12 @@ static void ad_free_edges(int32_t index, Variable *v) {
         edge.reset();
 
         Variable *v2 = state[source];
+
         if (unlikely(v2->ref_count == 0))
             ad_fail("enoki-autodiff: fatal error: reference count of variable "
                     "a%i became negative!", source);
 
-        if (--v2->ref_count == 0) {
-            ad_free(source, v2);
-        } else {
+        if (!ad_dec_ref(source, v2)) {
             uint32_t fwd = v2->next_fwd;
             if (fwd == edge_id) {
                 v2->next_fwd = next_fwd;
@@ -532,17 +540,26 @@ static void ad_propagate_placeholder_size(Variable *v) {
     }
 }
 
+template <typename T> void ad_enqueue(int32_t index) {
+    // no locking needed in this function (all TLS)
+    if (index <= 0)
+        return;
+    std::vector<int32_t> *queue = tls_queue;
+    if (unlikely(!queue))
+        queue = tls_queue = new std::vector<int32_t>();
+    ad_trace("ad_enqueue(a%i)", index);
+    ad_inc_ref(index, state[index]);
+    queue->push_back(index);
+}
+
 struct ReleaseOperandHelper {
     std::vector<uint32_t> release;
 
     void put(uint32_t index) { release.push_back(index); }
 
     ~ReleaseOperandHelper() {
-        for (uint32_t index: release) {
-            Variable *v = state[index];
-            if (--v->ref_count == 0)
-                ad_free(index, v);
-        }
+        for (uint32_t index: release)
+            ad_dec_ref(index, state[index]);
     }
 };
 
@@ -571,15 +588,17 @@ int32_t ad_new(const char *label, size_t size, uint32_t op_count,
                convert reads from external/private variables into gathers */
             if (unlikely(!var->placeholder)) {
                 if (var->size != 1)
-                    ad_raise("ad_new(): expression accesses a non-scalar "
-                             "private variable (a%i)!", index);
+                    ad_raise("ad_new(): recorded computation directly accesses "
+                             "a non-placeholder variable (a%i) of size %u! "
+                             "However, only scalar (size == 1) accesses are "
+                             "permitted in this case.", index, var->size);
+
+                ad_trace(
+                    "ad_new(): recorded computation accesses non-placeholder "
+                    "variable a%i, inserting a gather operation..", op[i]);
 
                 index = ad_new_gather_impl<Value>("gather", size, op[i], Index(0),
                                                   Mask(true), false);
-
-                ad_trace("ad_new(): placeholder accesses non-placeholder "
-                         "variable a%i, inserting a gather operation (a%i).",
-                         op[i], index);
 
                 var = state[index];
                 op[i] = index;
@@ -667,7 +686,7 @@ int32_t ad_new(const char *label, size_t size, uint32_t op_count,
         edge.next_rev = edge_index;
         edge_index = edge_index_new;
 
-        var2->ref_count++;
+        ad_inc_ref(index2, var2);
         var2->next_fwd = edge_index_new;
     }
 
@@ -715,6 +734,7 @@ template <typename Value> struct SpecialCallback : Special {
     void backward(Variable *, const Variable *target) const override {
         uint32_t edge = target->next_fwd;
         if (callback) {
+            ad_trace("ad_traverse_rev(): invoking user callback ..", index);
             /* leave critical section */ {
                 unlock_guard<std::mutex> guard(state.mutex);
                 callback->backward();
@@ -739,6 +759,7 @@ template <typename Value> struct SpecialCallback : Special {
     void forward(const Variable *source, Variable *) const override {
         uint32_t edge = source->next_rev;
         if (callback) {
+            ad_trace("ad_traverse_fwd(): invoking user callback ..", index);
             /* leave critical section */ {
                 unlock_guard<std::mutex> guard(state.mutex);
                 callback->forward();
@@ -769,7 +790,7 @@ int32_t ad_new_select(const char *label, size_t size, const Mask &mask,
         if (jit_flag(JitFlag::ADOptimize) && mask.is_literal()) {
             int32_t result = mask[0] ? t_index : f_index;
             if (result)
-                state[result]->ref_count++;
+                ad_inc_ref(result, state[result]);
             ad_log(Debug, "ad_new_select(a%i <- a%i, a%i): simplified", result, t_index, f_index);
             return result;
         }
@@ -777,7 +798,7 @@ int32_t ad_new_select(const char *label, size_t size, const Mask &mask,
 
     if (f_index == t_index) {
         if (t_index)
-            state[t_index]->ref_count++;
+            ad_inc_ref(t_index, state[t_index]);
         ad_log(Debug, "ad_new_select(a%i <- a%i, a%i): simplified", t_index, t_index, f_index);
         return t_index;
     }
@@ -852,7 +873,8 @@ int32_t ad_new_select(const char *label, size_t size, const Mask &mask,
         edge.next_rev = edge_index;
         edge_index = edge_index_new;
 
-        var2->ref_count++;
+        ad_inc_ref(index2, var2);
+
         var2->next_fwd = edge_index_new;
     }
 
@@ -931,12 +953,17 @@ int32_t ad_new_gather_impl(const char *label, size_t size, int32_t src_index,
             return index;
         }
 
-        /* When recording some computation (e.g. part of a virtual function call)
-           that gathers from a global or private instance variable, keep track of
-           the dependency so that the computation graph can be wired up correctly
-           following the recording step. See vcall_autodiff.h */
-        if (var->placeholder && !var2->placeholder)
-            state.internal_deps++;
+        /* Encountered a dependency between recorded/non-recorded computation
+           that will need special handling when the AD graph is traversed at
+           some later point. For now, just keep track of this event. */
+        if (unlikely(var->placeholder && !var2->placeholder)) {
+            if (!cross_deps)
+                cross_deps = new std::vector<int32_t>();
+            ad_inc_ref(src_index, var2);
+            cross_deps->push_back(src_index);
+            ad_trace("ad_new_gather(): pushing a%i onto cross-domain "
+                     "dependency list.", src_index);
+        }
 
         uint32_t edge_index_new = ad_edge_new();
         Edge &edge = state.edges[edge_index_new];
@@ -945,7 +972,7 @@ int32_t ad_new_gather_impl(const char *label, size_t size, int32_t src_index,
         edge.special = new GatherEdge<Value>(offset, mask, permute);
         edge.next_fwd = var2->next_fwd;
         edge.next_rev = 0;
-        var2->ref_count++;
+        ad_inc_ref(src_index, var2);
         var2->next_fwd = edge_index_new;
         var->next_rev = edge_index_new;
         var->ref_count = 1;
@@ -1060,7 +1087,7 @@ int32_t ad_new_scatter(const char *label, size_t size, ReduceOp op,
             edge.special = new ScatterEdge<Value>(offset, mask, op);
             edge.next_fwd = var2->next_fwd;
             edge.next_rev = var->next_rev;
-            var2->ref_count++;
+            ad_inc_ref(src_index, var2);
             var2->next_fwd = edge_index_new;
             edge_index = edge_index_new;
         }
@@ -1081,7 +1108,7 @@ int32_t ad_new_scatter(const char *label, size_t size, ReduceOp op,
                 scatter(edge_mask, Mask(true), offset, mask);
                 edge2.special = new MaskEdge<Value>(edge_mask, true);
             }
-            var2->ref_count++;
+            ad_inc_ref(dst_index, var2);
             var2->next_fwd = edge_index_new;
             edge_index = edge_index_new;
         }
@@ -1090,7 +1117,7 @@ int32_t ad_new_scatter(const char *label, size_t size, ReduceOp op,
             ad_raise("ad_new_scatter(): all inputs were non-differentiable!");
 
         var->next_rev = edge_index;
-        var->ref_count++;
+        ad_inc_ref(index, var);
 
         return index;
     } else {
@@ -1161,11 +1188,13 @@ static void ad_traverse_rev(std::vector<int32_t> &todo, bool retain_graph) {
             edge_id = next_rev;
         }
 
+        // Produce kernels with similar granularity when processing ek.Loop variables
         if (ek_loop_cur) {
             ek_loop_todo.push_back(v->grad);
             schedule(v->grad);
         } else if (ek_loop_prev) {
             eval();
+            ek_loop_todo.clear();
         }
 
         if (v->next_rev && v->ref_count_grad == 0) {
@@ -1251,11 +1280,13 @@ static void ad_traverse_fwd(std::vector<int32_t> &todo, bool retain_graph) {
             edge_id = next_fwd;
         }
 
+        // Produce kernels with similar granularity when processing ek.Loop variables
         if (ek_loop_cur) {
             ek_loop_todo.push_back(v->grad);
             schedule(v->grad);
         } else if (ek_loop_prev) {
             eval();
+            ek_loop_todo.clear();
         }
 
         if (v->next_fwd && v->ref_count_grad == 0) {
@@ -1446,30 +1477,6 @@ template <typename Value> const char *ad_graphviz() {
     return buffer.get();
 }
 
-template <typename T> void ad_inc_ref_impl(int32_t index) noexcept(true) {
-    if (index == 0)
-        return;
-    index = std::abs(index);
-    std::lock_guard<std::mutex> guard(state.mutex);
-    Variable *v = state[index];
-    ad_trace("ad_inc_ref(a%i): %u", index, (uint32_t) v->ref_count + 1);
-    v->ref_count++;
-}
-
-template <typename T> void ad_dec_ref_impl(int32_t index) noexcept(true) {
-    if (index == 0)
-        return;
-    index = std::abs(index);
-    std::lock_guard<std::mutex> guard(state.mutex);
-    Variable *v = state[index];
-    ad_trace("ad_dec_ref(a%i): %u", index, (uint32_t) v->ref_count - 1);
-    if (unlikely(v->ref_count == 0))
-        ad_fail("enoki-autodiff: fatal error: external reference count of "
-                "variable a%i became negative!", index);
-    if (--v->ref_count == 0 && v->ref_count == 0)
-        ad_free(index, v);
-}
-
 template <typename T> T ad_grad(int32_t index, bool fail_if_missing) {
     if (unlikely(index <= 0))
         return T(0);
@@ -1566,7 +1573,7 @@ void ad_add_edge(int32_t source_idx, int32_t target_idx,
     edge.next_rev = target->next_rev;
 
     source->next_fwd = edge_index_new;
-    source->ref_count++;
+    ad_inc_ref(source_idx, source);
     target->next_rev = edge_index_new;
 }
 
@@ -1575,11 +1582,8 @@ struct ReleaseQueueHelper {
     ReleaseQueueHelper(std::vector<int32_t> &queue) : queue(queue) { }
 
     ~ReleaseQueueHelper() {
-        for (int32_t index: queue) {
-            Variable *v = state[index];
-            if (--v->ref_count == 0)
-                ad_free(index, v);
-        }
+        for (int32_t index: queue)
+            ad_dec_ref(index, state[index]);
     }
 };
 
@@ -1601,25 +1605,78 @@ static void ad_traverse_impl(std::vector<int32_t> &queue_,
 }
 
 template <typename T> void ad_traverse(bool backward, bool retain_graph) {
-    std::lock_guard<std::mutex> guard(state.mutex);
-    ad_traverse_impl<T>(*tls_queue, backward, retain_graph);
-}
-
-template <typename T> void ad_traverse_postponed() {
-    std::lock_guard<std::mutex> guard(state.mutex);
-    std::vector<int32_t> *queue = postponed;
-
-    if (!postponed || postponed->empty())
+    std::vector<int32_t> *queue = tls_queue;
+    if (!queue || queue->empty())
         return;
-    ad_log(Debug, "ad_traverse_postponed(): reverse mode (%zu indices)",
-           postponed->size());
-    ad_traverse_impl<T>(*postponed, true, true);
-    ad_log(Debug, "ad_traverse_postponed(): reverse mode done.");
+
+    std::lock_guard<std::mutex> guard(state.mutex);
+    ad_traverse_impl<T>(*queue, backward, retain_graph);
 }
 
-template <typename T> size_t ad_internal_deps() {
+template <typename T> size_t ad_cross_deps() {
+    return cross_deps ? cross_deps->size() : 0;
+}
+
+template <typename T> void ad_cross_steal(size_t count, int32_t *out) {
+    if (count == 0)
+        return;
+
+    ad_trace("ad_cross_steal(): stealing %zu cross-domain dependencies.", count);
+
+    std::vector<int32_t> *deps = cross_deps; // TLS, no lock needed
+    if (!deps || count > deps->size())
+        ad_raise("ad_cross_steal(): requested too many items!");
+
+    for (size_t i = 0; i < count; ++i) {
+        out[i] = deps->back();
+        deps->pop_back();
+    }
+}
+
+template <typename T> void ad_cross_rewind(size_t pos) {
+    std::vector<int32_t> *deps = cross_deps;
+
+    if ((!deps && pos == 0) || (deps && pos == deps->size()))
+        return;
+
+    if (!deps || pos > deps->size())
+        ad_raise("ad_cross_rewind(): invalid position specified!");
+
+    ad_trace("ad_cross_rewind(): clearing %zu cross-domain dependencies.",
+             deps->size() - pos);
+
     std::lock_guard<std::mutex> guard(state.mutex);
-    return state.internal_deps;
+    while (deps->size() != pos) {
+        uint32_t index = deps->back();
+        ad_dec_ref(index, state[index]);
+        deps->pop_back();
+    }
+}
+
+template <typename T> void ad_cross_traverse() {
+    std::vector<int32_t> *queue = cross_deps;
+    if (!queue || queue->empty())
+        return;
+
+    std::lock_guard<std::mutex> guard(state.mutex);
+    if (queue && !queue->empty())
+        ad_traverse_impl<T>(*queue, true, true);
+}
+
+template <typename T> void ad_inc_ref_impl(int32_t index) noexcept(true) {
+    if (index == 0)
+        return;
+    index = std::abs(index);
+    std::lock_guard<std::mutex> guard(state.mutex);
+    ad_inc_ref(index, state[index]);
+}
+
+template <typename T> void ad_dec_ref_impl(int32_t index) noexcept(true) {
+    if (index == 0)
+        return;
+    index = std::abs(index);
+    std::lock_guard<std::mutex> guard(state.mutex);
+    ad_dec_ref(index, state[index]);
 }
 
 template ENOKI_EXPORT void ad_inc_ref_impl<Value>(int32_t) noexcept;
@@ -1633,8 +1690,10 @@ template ENOKI_EXPORT void ad_set_label<Value>(int32_t, const char *);
 template ENOKI_EXPORT const char *ad_label<Value>(int32_t);
 template ENOKI_EXPORT void ad_enqueue<Value>(int32_t);
 template ENOKI_EXPORT void ad_traverse<Value>(bool, bool);
-template ENOKI_EXPORT void ad_traverse_postponed<Value>();
-template ENOKI_EXPORT size_t ad_internal_deps<Value>();
+template ENOKI_EXPORT size_t ad_cross_deps<Value>();
+template ENOKI_EXPORT void ad_cross_steal<Value>(size_t, int32_t *);
+template ENOKI_EXPORT void ad_cross_rewind<Value>(size_t);
+template ENOKI_EXPORT void ad_cross_traverse<Value>();
 template ENOKI_EXPORT const char *ad_graphviz<Value>();
 template ENOKI_EXPORT int32_t ad_new_select<Value, Mask>(
     const char *, size_t, const Mask &, int32_t, int32_t);

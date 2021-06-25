@@ -47,8 +47,16 @@ template <typename DiffType, typename Self, typename Result, typename Func,
           typename... Args>
 struct DiffVCall : CustomOp<DiffType, Result, ConstStr, Self, Func, Args...> {
     using Base = CustomOp<DiffType, Result, ConstStr, Self, Func, Args...>;
+    using Type = typename DiffType::Type;
 
     static constexpr bool ClearPrimal = false;
+
+    /// Clear cross-domain dependencies after forward/reverse-mode AD callbacks
+    struct ADDependencyGuard {
+        ADDependencyGuard() : pos(ad_cross_deps<Type>()) { }
+        ~ADDependencyGuard() { ad_cross_rewind<Type>(pos); }
+        size_t pos;
+    };
 
     Result eval(const ConstStr &name, const Self &self, const Func &func,
                 const Args &... args) override {
@@ -68,6 +76,7 @@ struct DiffVCall : CustomOp<DiffType, Result, ConstStr, Self, Func, Args...> {
         const Func &func = Base::template value_in<2>();
 
         auto func_fwd = [func](auto *self2, auto... value_grad_pair) {
+            ADDependencyGuard guard;
             ad_copy(value_grad_pair.first...);
             enable_grad(value_grad_pair.first...);
             Result result = func(self2, value_grad_pair.first...);
@@ -78,7 +87,7 @@ struct DiffVCall : CustomOp<DiffType, Result, ConstStr, Self, Func, Args...> {
             ek_tuple args_t(value_grad_pair.first...);
             set_label(args_t, "args");
             set_label(result, "result");
-            fprintf(stderr, "%s\n", ad_graphviz<detached_t<DiffType>>());
+            fprintf(stderr, "%s\n", ad_graphviz<Type>());
 #endif
 
             enqueue(value_grad_pair.first...);
@@ -95,9 +104,6 @@ struct DiffVCall : CustomOp<DiffType, Result, ConstStr, Self, Func, Args...> {
             std::make_pair(Base::template value_in<3 + Is>(),
                            Base::template grad_in<3 + Is>())...);
 
-        if (!jit_flag(JitFlag::Recording))
-            detail::ad_traverse_postponed<typename DiffType::Type>();
-
         Base::set_grad_out(grad_out);
     }
 
@@ -109,6 +115,7 @@ struct DiffVCall : CustomOp<DiffType, Result, ConstStr, Self, Func, Args...> {
 
         auto func_rev = [func](auto *self2, auto &grad_out,
                                auto... args) -> Inputs {
+            ADDependencyGuard guard;
             ad_copy(args...);
             enable_grad(args...);
             Result result = func(self2, args...);
@@ -119,7 +126,7 @@ struct DiffVCall : CustomOp<DiffType, Result, ConstStr, Self, Func, Args...> {
             ek_tuple args_t(args...);
             set_label(args_t, "args");
             set_label(result, "result");
-            fprintf(stderr, "%s\n", ad_graphviz<detached_t<DiffType>>());
+            fprintf(stderr, "%s\n", ad_graphviz<Type>());
 #endif
 
             enqueue(result);
@@ -134,9 +141,6 @@ struct DiffVCall : CustomOp<DiffType, Result, ConstStr, Self, Func, Args...> {
         Inputs grad_in = vcall_jit_record<Inputs>(
             name.get(), func_rev, self, Base::grad_out(),
             Base::template value_in<3 + Is>()...);
-
-        if (!jit_flag(JitFlag::Recording))
-            detail::ad_traverse_postponed<typename DiffType::Type>();
 
         ENOKI_MARK_USED(grad_in);
         (Base::template set_grad_in<3 + Is>(grad_in.template get<Is>()), ...);

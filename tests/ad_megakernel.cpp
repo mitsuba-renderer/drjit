@@ -6,7 +6,7 @@
 
 namespace ek = enoki;
 
-using Float  = ek::DiffArray<ek::CUDAArray<float>>;
+using Float  = ek::DiffArray<ek::LLVMArray<float>>;
 using UInt32 = ek::uint32_array_t<Float>;
 using Mask   = ek::mask_t<Float>;
 
@@ -26,14 +26,14 @@ ENOKI_VCALL_END(Class)
 using ClassPtr = ek::replace_scalar_t<Float, Class *>;
 
 ENOKI_TEST(test01_vcall_reduce_and_record) {
-    jit_init((uint32_t) JitBackend::CUDA);
+    jit_init((uint32_t) JitBackend::LLVM);
 
-    for (int j = 0; j < 3; ++j) {
+    for (int j = 2; j < 3; ++j) {
         jit_set_flag(JitFlag::VCallOptimize, j == 2);
         jit_set_flag(JitFlag::VCallRecord, j >= 1);
+
         for (int i = 0; i < 2; ++i) {
             for (int k = 0; k < 2; ++k) {
-                fprintf(stdout, "Testing %i %i %i..\n", j, i, k);
                 Float x = ek::arange<Float>(10);
                 ek::enable_grad(x);
                 ek::set_label(x, "x");
@@ -50,7 +50,7 @@ ENOKI_TEST(test01_vcall_reduce_and_record) {
                     b2p = ek::opaque<ClassPtr>(b2, 13);
 
                 b1->value = ek::zero<Float>(10);
-                b2->value = y;
+                b2->value = std::move(y);
 
                 Float z = b2p->f(arange<UInt32>(13) % 10);
                 ek::backward(z);
@@ -67,7 +67,9 @@ ENOKI_TEST(test01_vcall_reduce_and_record) {
     }
 
     // 2. test the same thing with a loop
-    // 3. what if the instance variable is a scalar
-    // 4. forward mode derivatives
-    // 5. test scatter
+    // 3. loop *and* vcall
+    // 4. what if the instance variable is a scalar
+    // 5. forward mode derivatives
+    // 6. test scatter
+    //  what if the instance gathers from some type that doesn't even matter?
 }
