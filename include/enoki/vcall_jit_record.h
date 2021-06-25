@@ -113,13 +113,14 @@ Result vcall_jit_record_impl(const char *name, uint32_t n_inst,
 #endif
         jit_state.set_self(i);
 
-        if constexpr (Backend == JitBackend::LLVM) {
-            Mask vcall_mask = Mask::steal(jit_var_new_stmt(
+        Mask vcall_mask = true;
+        if constexpr (Backend == JitBackend::LLVM)
+            vcall_mask = Mask::steal(jit_var_new_stmt(
                 Backend, VarType::Bool,
                 "$r0 = or <$w x i1> %mask, zeroinitializer", 1, 0,
                 nullptr));
-            jit_state.set_mask(vcall_mask.index(), false);
-        }
+
+        jit_state.set_mask(vcall_mask.index(), false);
 
         if constexpr (std::is_same_v<Result, std::nullptr_t>) {
             func(base, (set_mask_true<Is, N>(args))...);
@@ -129,8 +130,7 @@ Result vcall_jit_record_impl(const char *name, uint32_t n_inst,
             collect_indices(indices_out_all, tmp);
         }
 
-        if constexpr (Backend == JitBackend::LLVM)
-            jit_state.clear_mask();
+        jit_state.clear_mask();
 
 #if defined(ENOKI_VCALL_DEBUG)
         jit_state.clear_prefix();
