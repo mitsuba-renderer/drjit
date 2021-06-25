@@ -54,7 +54,9 @@ struct DiffVCall : CustomOp<DiffType, Result, ConstStr, Self, Func, Args...> {
     /// Clear cross-domain dependencies after forward/reverse-mode AD callbacks
     struct ADDependencyGuard {
         ADDependencyGuard() : pos(ad_cross_deps<Type>()) { }
-        ~ADDependencyGuard() { ad_cross_rewind<Type>(pos); }
+        ~ADDependencyGuard() { release(); }
+        void enqueue() { ad_cross_rewind<Type>(pos, true); }
+        void release() { ad_cross_rewind<Type>(pos, false); }
         size_t pos;
     };
 
@@ -90,6 +92,7 @@ struct DiffVCall : CustomOp<DiffType, Result, ConstStr, Self, Func, Args...> {
             fprintf(stderr, "%s\n", ad_graphviz<Type>());
 #endif
 
+            guard.enqueue();
             enqueue(value_grad_pair.first...);
             traverse<DiffType>(false, true);
             return grad<false>(result);

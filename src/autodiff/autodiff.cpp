@@ -350,7 +350,7 @@ extern void RENAME(ad_whos)() {
 }
 
 /// Forward-mode DFS starting from 'index'
-static void ad_dfs_fwd(std::vector<int32_t> &todo, int32_t index, Variable *v) {
+static void ad_dfs_fwd(bool rec, std::vector<int32_t> &todo, int32_t index, Variable *v) {
     ad_trace("ad_dfs_fwd(): adding a%i to the todo list", index);
     todo.push_back(index);
     v->visited = 1;
@@ -359,14 +359,16 @@ static void ad_dfs_fwd(std::vector<int32_t> &todo, int32_t index, Variable *v) {
     while (edge) {
         Edge &e = state.edges[edge];
         Variable *v2 = state[e.target];
-        if (!v2->visited)
-            ad_dfs_fwd(todo, e.target, v2);
+        if (unlikely(rec && !v2->placeholder))
+            ad_trace("ad_dfs_fwd(): skipping a%i due to cross-domain dependency.", e.target);
+        else if (!v2->visited)
+            ad_dfs_fwd(rec, todo, e.target, v2);
         edge = e.next_fwd;
     }
 }
 
 /// Reverse-mode DFS starting from 'index'
-static void ad_dfs_rev(std::vector<int32_t> &todo, uint32_t index, Variable *v) {
+static void ad_dfs_rev(bool rec, std::vector<int32_t> &todo, uint32_t index, Variable *v) {
     ad_trace("ad_dfs_rev(): adding a%i to the todo list", index);
     todo.push_back(index);
     v->visited = 1;
@@ -375,10 +377,10 @@ static void ad_dfs_rev(std::vector<int32_t> &todo, uint32_t index, Variable *v) 
     while (edge) {
         Edge &e = state.edges[edge];
         Variable *v2 = state[e.source];
-        if (unlikely(v->placeholder && !v2->placeholder))
+        if (unlikely(rec && !v2->placeholder))
             ad_trace("ad_dfs_rev(): skipping a%i due to cross-domain dependency.", e.source);
         else if (!v2->visited)
-            ad_dfs_rev(todo, e.source, v2);
+            ad_dfs_rev(rec, todo, e.source, v2);
         edge = e.next_rev;
     }
 }
@@ -387,18 +389,22 @@ static void ad_dfs_rev(std::vector<int32_t> &todo, uint32_t index, Variable *v) 
 static void ad_build_todo(std::vector<int32_t> &queue,
                           std::vector<int32_t> &todo,
                           bool reverse) {
+    bool rec = false;
+    if (is_jit_array_v<Value>)
+        rec = jit_flag(JitFlag::Recording);
+
     // DFS traversal to find all reachable variables
     if (reverse) {
         for (int32_t index: queue) {
             Variable *v = state[index];
             if (!v->visited)
-                ad_dfs_rev(todo, index, v);
+                ad_dfs_rev(rec, todo, index, v);
         }
     } else {
         for (int32_t index: queue) {
             Variable *v = state[index];
             if (!v->visited)
-                ad_dfs_fwd(todo, index, v);
+                ad_dfs_fwd(rec, todo, index, v);
         }
     }
 
@@ -1221,6 +1227,9 @@ static void ad_traverse_rev(std::vector<int32_t> &todo, bool retain_graph) {
 static void ad_traverse_fwd(std::vector<int32_t> &todo, bool retain_graph) {
     ad_log(Debug, "ad_traverse_fwd(): processing %zu nodes ..", todo.size());
 
+    bool rec = false;
+    if (is_jit_array_v<Value>)
+        rec = jit_flag(JitFlag::Recording);
     bool ek_loop_prev = false;
     std::vector<Value> ek_loop_todo;
 
@@ -1251,6 +1260,13 @@ static void ad_traverse_fwd(std::vector<int32_t> &todo, bool retain_graph) {
             assert(edge.source == index);
             Variable *v2 = state[edge.target];
             uint32_t next_fwd = edge.next_fwd;
+
+            if (rec && !v2->placeholder) {
+                ad_trace("ad_traverse_fwd(): skipping edge a%i -> a%i ..", index,
+                         edge.target);
+                edge_id = next_fwd;
+                continue;
+            }
 
             ad_trace("ad_traverse_fwd(): processing edge a%i -> a%i ..", index,
                      edge.target);
@@ -1633,34 +1649,33 @@ template <typename T> void ad_cross_steal(size_t count, int32_t *out) {
     }
 }
 
-template <typename T> void ad_cross_rewind(size_t pos) {
+template <typename T> void ad_cross_rewind(size_t pos, bool enqueue) {
     std::vector<int32_t> *deps = cross_deps;
 
     if ((!deps && pos == 0) || (deps && pos == deps->size()))
         return;
 
-    if (!deps || pos > deps->size())
+    if (unlikely(!deps || pos > deps->size()))
         ad_raise("ad_cross_rewind(): invalid position specified!");
 
-    ad_trace("ad_cross_rewind(): clearing %zu cross-domain dependencies.",
-             deps->size() - pos);
+    ad_trace("ad_cross_rewind(): %s %zu cross-domain dependencies.",
+             enqueue ? "enqueueing" : "releasing", deps->size() - pos);
+
+    std::vector<int32_t> *queue = tls_queue;
+    if (unlikely(!queue && enqueue))
+        queue = tls_queue = new std::vector<int32_t>();
 
     std::lock_guard<std::mutex> guard(state.mutex);
     while (deps->size() != pos) {
         uint32_t index = deps->back();
-        ad_dec_ref(index, state[index]);
+        if (enqueue) {
+            ad_trace("ad_enqueue(a%i)", index);
+            queue->push_back(index);
+        } else {
+            ad_dec_ref(index, state[index]);
+        }
         deps->pop_back();
     }
-}
-
-template <typename T> void ad_cross_traverse() {
-    std::vector<int32_t> *queue = cross_deps;
-    if (!queue || queue->empty())
-        return;
-
-    std::lock_guard<std::mutex> guard(state.mutex);
-    if (queue && !queue->empty())
-        ad_traverse_impl<T>(*queue, true, true);
 }
 
 template <typename T> void ad_inc_ref_impl(int32_t index) noexcept(true) {
@@ -1692,8 +1707,7 @@ template ENOKI_EXPORT void ad_enqueue<Value>(int32_t);
 template ENOKI_EXPORT void ad_traverse<Value>(bool, bool);
 template ENOKI_EXPORT size_t ad_cross_deps<Value>();
 template ENOKI_EXPORT void ad_cross_steal<Value>(size_t, int32_t *);
-template ENOKI_EXPORT void ad_cross_rewind<Value>(size_t);
-template ENOKI_EXPORT void ad_cross_traverse<Value>();
+template ENOKI_EXPORT void ad_cross_rewind<Value>(size_t, bool);
 template ENOKI_EXPORT const char *ad_graphviz<Value>();
 template ENOKI_EXPORT int32_t ad_new_select<Value, Mask>(
     const char *, size_t, const Mask &, int32_t, int32_t);

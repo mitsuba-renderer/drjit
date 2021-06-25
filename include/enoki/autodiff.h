@@ -68,11 +68,8 @@ template <typename Value> size_t ad_cross_deps();
 /// Pop 'count' variables indices from the list of recorded cross-domain deps
 template <typename Value> void ad_cross_steal(size_t count, int32_t *out);
 
-/// Rewind the list of recorded cross-domain deps to position 'pos'
-template <typename Value> void ad_cross_rewind(size_t pos);
-
-/// Propagate derivatives through the list of recorded cross-domain deps
-template <typename Value> void ad_cross_traverse();
+/// Release/enqueue any recorded cross-domain deps beyond position 'pos'
+template <typename Value> void ad_cross_rewind(size_t pos, bool enqueue);
 
 /// Label a variable (useful for debugging via graphviz etc.)
 template <typename Value> void ad_set_label(int32_t index, const char *);
@@ -1822,8 +1819,7 @@ protected:
                                                         DiffCallback *);       \
     extern template ENOKI_AD_EXPORT size_t ad_cross_deps<T>();                 \
     extern template ENOKI_AD_EXPORT void ad_cross_steal<T>(size_t, int32_t *); \
-    extern template ENOKI_AD_EXPORT void ad_cross_rewind<T>(size_t);           \
-    extern template ENOKI_AD_EXPORT void ad_cross_traverse<T>();               \
+    extern template ENOKI_AD_EXPORT void ad_cross_rewind<T>(size_t, bool);     \
     }
 
 ENOKI_DECLARE_EXTERN_TEMPLATE(float,  bool, uint32_t)

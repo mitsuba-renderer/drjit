@@ -22,7 +22,9 @@ NAMESPACE_BEGIN(detail)
 // A few forward declarations so that this compiles even without autodiff.h
 template <typename Value> void ad_inc_ref(int32_t) noexcept;
 template <typename Value> void ad_dec_ref(int32_t) noexcept;
-template <typename Value> void ad_cross_traverse();
+template <typename Value> size_t ad_cross_deps();
+template <typename Value> void ad_cross_rewind(size_t pos, bool enqueue);
+template <typename Value> void ad_traverse(bool, bool);
 template <typename Value, typename Mask>
 int32_t ad_new_select(const char *, size_t, const Mask &, int32_t, int32_t);
 NAMESPACE_END(detail)
@@ -190,6 +192,11 @@ protected:
                     jit_var_inc_ref_ext(m_indices_prev[i]);
                 }
 
+                if constexpr (IsDiff) {
+                    using Type = typename Value::Type;
+                    m_cross_deps = detail::ad_cross_deps<Type>();
+                }
+
                 // Start recording side effects
                 m_jit_state.begin_recording();
 
@@ -236,11 +243,13 @@ protected:
                     if constexpr (Backend == JitBackend::LLVM)
                         m_jit_state.clear_mask();
 
-                    // if constexpr (IsDiff) {
-                    //     using Type = typename Value::Type;
-                    //     if (!jit_flag(JitFlag::Recording))
-                    //         detail::ad_traverse_postponed<Type>();
-                    // }
+                    if constexpr (IsDiff) {
+                        using Type = typename Value::Type;
+                        if (!jit_flag(JitFlag::Recording)) {
+                            detail::ad_cross_rewind<Type>(m_cross_deps, true);
+                            detail::ad_traverse<Type>(true, true);
+                        }
+                    }
 
                     return false;
                 }
@@ -365,6 +374,9 @@ protected:
     /// Index of the symbolic loop state machine
     uint32_t m_state = 0;
 
+    /// Cross-loop AD dependencies
+    uint32_t m_cross_deps = 0;
+
     // --------------- Wavefront mode ---------------
 
     /// Pointers to loop variable indices (AD handles)
@@ -375,7 +387,6 @@ protected:
 
     /// Stashed mask variable from the previous iteration
     Mask m_cond;
-
 };
 
 NAMESPACE_END(enoki)
