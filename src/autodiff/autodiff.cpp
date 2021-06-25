@@ -740,7 +740,7 @@ template <typename Value> struct SpecialCallback : Special {
     void backward(Variable *, const Variable *target) const override {
         uint32_t edge = target->next_fwd;
         if (callback) {
-            ad_trace("ad_traverse_rev(): invoking user callback ..", index);
+            ad_trace("ad_traverse_rev(): invoking user callback ..");
             /* leave critical section */ {
                 unlock_guard<std::mutex> guard(state.mutex);
                 callback->backward();
@@ -765,7 +765,7 @@ template <typename Value> struct SpecialCallback : Special {
     void forward(const Variable *source, Variable *) const override {
         uint32_t edge = source->next_rev;
         if (callback) {
-            ad_trace("ad_traverse_fwd(): invoking user callback ..", index);
+            ad_trace("ad_traverse_fwd(): invoking user callback ..");
             /* leave critical section */ {
                 unlock_guard<std::mutex> guard(state.mutex);
                 callback->forward();
