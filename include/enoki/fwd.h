@@ -42,10 +42,15 @@
 #  define ENOKI_UNLIKELY(x)            __builtin_expect(!!(x), 0)
 #  define ENOKI_PACK                   __attribute__ ((packed))
 #  define ENOKI_MAY_ALIAS              __attribute__ ((may_alias))
+#if defined(__clang__)
 #  if !defined(ENOKI_UNROLL)
 #    define ENOKI_UNROLL               _Pragma("unroll")
 #  endif
 #  define ENOKI_NOUNROLL               _Pragma("nounroll")
+#else
+#  define ENOKI_UNROLL
+#  define ENOKI_NOUNROLL
+#endif
 #  define ENOKI_IMPORT
 #  define ENOKI_EXPORT                 __attribute__ ((visibility("default")))
 #endif
