@@ -120,6 +120,7 @@ struct DynamicArray
     }
 
     ENOKI_INLINE size_t size() const { return m_size; }
+    ENOKI_INLINE DynamicArray copy() { return DynamicArray(*this); }
 
     ENOKI_INLINE Value &entry(size_t i) {
         if (m_size == 1)
