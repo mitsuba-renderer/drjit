@@ -8,6 +8,7 @@ template <typename Value> struct Loop : ek::Loop<Value> {
     using Base::m_indices;
     using Base::m_indices_ad;
     using Base::m_name;
+    using Base::m_state;
 
     Loop(const char *name, py::handle func) : Base(name) {
         py::object detail = py::module_::import("enoki").attr("detail");
@@ -27,15 +28,15 @@ template <typename Value> struct Loop : ek::Loop<Value> {
     void put(const py::function &func) { m_funcs.append(func); }
 
     void init() {
-        if (m_indices.size() > 0)
+        if (m_state)
             jit_raise("enoki::Loop(\"%s\"): was already initialized!",
                       m_name.get());
 
         process_state(false);
 
         py::int_ i0(0), i1(1);
-        for (uint32_t i = 0, size = m_state.size(); i < size; ++i) {
-            py::object o = m_state[i];
+        for (uint32_t i = 0, size = m_state_py.size(); i < size; ++i) {
+            py::object o = m_state_py[i];
             if (!py::isinstance<py::tuple>(o))
                 continue;
             m_indices_py.push_back(py::cast<uint32_t>(o[i0]));
@@ -63,8 +64,8 @@ private:
         process_state(false);
 
         py::int_ i0(0), i1(1);
-        for (uint32_t i = 0, j = 0, size = m_state.size(); i < size; ++i) {
-            py::object o = m_state[i];
+        for (uint32_t i = 0, j = 0, size = m_state_py.size(); i < size; ++i) {
+            py::object o = m_state_py[i];
             if (!py::isinstance<py::tuple>(o))
                 continue;
             m_indices_py[j] = py::cast<uint32_t>(o[i0]);
@@ -75,21 +76,21 @@ private:
 
     void write_state() {
         py::int_ i0(0), i1(1);
-        for (uint32_t i = 0, j = 0, size = m_state.size(); i < size; ++i) {
-            py::object o = m_state[i];
+        for (uint32_t i = 0, j = 0, size = m_state_py.size(); i < size; ++i) {
+            py::object o = m_state_py[i];
             if (!py::isinstance<py::tuple>(o))
                 continue;
-            m_state[i] = py::make_tuple(m_indices_py[j], m_indices_py_ad[j]);
+            m_state_py[i] = py::make_tuple(m_indices_py[j], m_indices_py_ad[j]);
             j++;
         }
 
         process_state(true);
     }
 
-    void process_state(bool write) { m_process_state(m_funcs, m_state, write); }
+    void process_state(bool write) { m_process_state(m_funcs, m_state_py, write); }
 
 private:
-    py::list m_funcs, m_state;
+    py::list m_funcs, m_state_py;
     py::object m_process_state;
     ek::ek_vector<uint32_t> m_indices_py;
     ek::ek_vector<int32_t> m_indices_py_ad;
