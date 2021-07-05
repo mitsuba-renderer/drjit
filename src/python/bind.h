@@ -434,7 +434,8 @@ auto bind_full(py::class_<Array> &cls, bool scalar_mode = false) {
 
     if constexpr (Array::IsDiff) {
         cls.def(py::init<ek::detached_t<Array>>());
-        cls.def("detach_", py::overload_cast<>(&Array::detach_),
+        cls.def("detach_", [](const Array &a) { return ek::detach(a); });
+        cls.def("detach_ref_", py::overload_cast<>(&Array::detach_),
                 py::return_value_policy::reference_internal);
         if constexpr (Array::IsFloat) {
             cls.def("grad_", [](const Array &a) { return a.grad_(); });
