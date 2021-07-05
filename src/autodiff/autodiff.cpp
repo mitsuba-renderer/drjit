@@ -1146,10 +1146,24 @@ static void ad_traverse_rev(std::vector<int32_t> &todo, bool retain_graph) {
 
         if constexpr (is_dynamic_v<Value>) {
             uint32_t grad_size = asize(v->grad);
-            if (unlikely(v->size != grad_size && grad_size != 1))
-                ad_raise("ad_traverse_rev(): variable a%i has an invalid "
-                         "gradient size: expected %u, got %u!", index,
-                         v->size, grad_size);
+            if (unlikely(v->size != grad_size && grad_size != 1)) {
+                if (grad_size == 0)
+                    ad_raise(
+                        "ad_traverse_rev(): while back-propagating gradients "
+                        "through the computation graph, variable a%i (\"%s\") "
+                        "was unexpectedly found to have no gradient! Is it "
+                        "possible that you enqueued (ek.enable_grad() / "
+                        "ek.enqueue()) this variable without assigning a "
+                        "gradient (ek.set_grad())?",
+                        index, v->label ? v->label : "");
+                else
+                    ad_raise(
+                        "ad_traverse_rev(): while back-propagating gradients "
+                        "through the computation graph, variable a%i (\"%s\") "
+                        "was unexpectedly found to have a gradient of "
+                        "*invalid* size (expected size %u, actual size %u)!",
+                        index, v->label ? v->label : "", v->size, grad_size);
+            }
         }
 
         if (unlikely(v->custom_label)) {
@@ -1241,10 +1255,23 @@ static void ad_traverse_fwd(std::vector<int32_t> &todo, bool retain_graph) {
 
         if constexpr (is_dynamic_v<Value>) {
             uint32_t grad_size = asize(v->grad);
-            if (unlikely(v->size != grad_size && grad_size != 1))
-                ad_raise("ad_traverse_fwd(): variable a%i has an invalid "
-                         "gradient size: expected %u, got %u!", index,
-                         v->size, grad_size);
+            if (unlikely(v->size != grad_size && grad_size != 1)) {
+                if (grad_size == 0)
+                    ad_raise(
+                        "ad_traverse_rev(): while forward-propagating "
+                        "gradients through the computation graph, variable a%i "
+                        "(\"%s\") was unexpectedly found to have no gradient! "
+                        "Is it possible that you enqueued (ek.enable_grad() / "
+                        "ek.enqueue()) this variable without assigning a "
+                        "gradient (ek.set_grad())?", index, v->label ? v->label : "");
+                else
+                    ad_raise(
+                        "ad_traverse_rev(): while forward-propagating "
+                        "gradients through the computation graph, variable a%i "
+                        "(\"%s\") was unexpectedly found to have a gradient of "
+                        "*invalid* size (expected size %u, actual size %u)!",
+                        index, v->label ? v->label : "", v->size, grad_size);
+            }
         }
 
         if (unlikely(v->custom_label)) {
