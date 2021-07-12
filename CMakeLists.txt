@@ -40,7 +40,7 @@ option(ENOKI_ENABLE_TESTS    "Build Enoki test suite? (Warning, this takes *very
 
 if (MSVC)
   set(ENOKI_NATIVE_FLAGS_DEFAULT "")
-elseif (APPLE AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+elseif (APPLE AND CMAKE_OSX_ARCHITECTURES STREQUAL "arm64")
   # Apple M1 compatibility
   set(ENOKI_NATIVE_FLAGS_DEFAULT "-mcpu=apple-a14")
 else()
@@ -86,7 +86,7 @@ endmacro()
 # Prefer libc++ in conjunction with Clang
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND NOT CMAKE_CXX_FLAGS MATCHES "-stdlib=libc\\+\\+")
   CHECK_CXX_COMPILER_AND_LINKER_FLAGS(HAS_LIBCPP "-stdlib=libc++" "-stdlib=libc++")
-  if (HAS_LIBCPP)
+  if (APPLE OR HAS_LIBCPP)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++ -D_LIBCPP_VERSION")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libc++")
     set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -stdlib=libc++")
