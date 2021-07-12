@@ -134,7 +134,7 @@ struct DiffVCall : CustomOp<DiffType, Result, ConstStr, Self, Func, Args...> {
 
             enqueue(result);
             traverse<DiffType>(true, true);
-            return ek_tuple(grad<false>(args)...);
+            return Inputs(grad<false>(args)...);
         };
 
         size_t name_size = strlen(m_name_static) + 8;

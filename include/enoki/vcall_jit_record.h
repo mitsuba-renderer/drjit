@@ -53,7 +53,7 @@ void write_indices(ek_vector<uint32_t> &indices, T &value, uint32_t &offset) {
     }
 }
 
-template <typename T> ENOKI_INLINE T wrap_vcall(const T &value) {
+template <typename T> ENOKI_INLINE auto wrap_vcall(const T &value) {
     if constexpr (array_depth_v<T> > 1) {
         T result;
         for (size_t i = 0; i < value.derived().size(); ++i)
