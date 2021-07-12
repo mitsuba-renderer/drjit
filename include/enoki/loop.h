@@ -227,6 +227,10 @@ protected:
                 if (rv == (uint32_t) -1) {
                     jit_log(::LogLevel::InfoSym,
                             "Loop(\"%s\"): ----- recording loop body *again* ------", m_name.get());
+                    if constexpr (IsDiff) {
+                        using Type = typename Value::Type;
+                        detail::ad_cross_rewind<Type>(m_cross_deps, false);
+                    }
                     return true;
                 } else {
                     jit_log(::LogLevel::InfoSym,
