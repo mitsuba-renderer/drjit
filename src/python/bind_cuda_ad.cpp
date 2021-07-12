@@ -1,4 +1,4 @@
-#if defined(ENOKI_ENABLE_JIT) && defined(ENOKI_ENABLE_AUTODIFF)
+#if defined(ENOKI_ENABLE_JIT) && defined(ENOKI_ENABLE_CUDA) && defined(ENOKI_ENABLE_AUTODIFF)
 #include "bind.h"
 #include "random.h"
 #include "loop.h"

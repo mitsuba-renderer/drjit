@@ -127,7 +127,11 @@ target_include_directories(enoki
 )
 
 if (ENOKI_ENABLE_JIT)
-  message(STATUS "Enoki: building the CUDA & LLVM JIT backend.")
+  if (APPLE)
+    message(STATUS "Enoki: building the LLVM JIT backend.")
+  else()
+    message(STATUS "Enoki: building the CUDA & LLVM JIT backend.")
+  endif()
   add_subdirectory(ext/enoki-jit)
   set_target_properties(enoki-jit PROPERTIES ${ENOKI_OUTPUT_DIRECTORY})
   set_target_properties(enoki-thread PROPERTIES ${ENOKI_OUTPUT_DIRECTORY})

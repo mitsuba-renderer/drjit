@@ -1,6 +1,6 @@
 /*
-    enoki/array_dynamic.h -- Naive dynamic array (extremely inefficient,
-    CUDA/LLVM arrays are almost always preferable)
+    enoki/dynamic.h -- Naive dynamic array (extremely inefficient, CUDA/LLVM
+    arrays are almost always preferable)
 
     Enoki is a C++ template library for efficient vectorization and
     differentiation of numerical kernels on modern processor architectures.

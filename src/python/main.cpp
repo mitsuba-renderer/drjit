@@ -8,10 +8,14 @@ extern void export_scalar(py::module_ &m);
 extern void export_packet(py::module_ &m);
 
 #if defined(ENOKI_ENABLE_JIT)
+#if defined(ENOKI_ENABLE_CUDA)
 extern void export_cuda(py::module_ &m);
+#endif
 extern void export_llvm(py::module_ &m);
 #if defined(ENOKI_ENABLE_AUTODIFF)
+#if defined(ENOKI_ENABLE_CUDA)
 extern void export_cuda_ad(py::module_ &m);
+#endif
 extern void export_llvm_ad(py::module_ &m);
 #endif
 #endif
@@ -98,10 +102,14 @@ PYBIND11_MODULE(enoki_ext, m_) {
     export_packet(m);
 
 #if defined(ENOKI_ENABLE_JIT)
+#if defined(ENOKI_ENABLE_CUDA)
     export_cuda(m);
+#endif
     export_llvm(m);
 #if defined(ENOKI_ENABLE_AUTODIFF)
+#if defined(ENOKI_ENABLE_CUDA)
     export_cuda_ad(m);
+#endif
     export_llvm_ad(m);
     m.def("ad_whos_str", &ek::ad_whos);
     m.def("ad_whos", []() { py::print(ek::ad_whos()); });
@@ -112,10 +120,12 @@ PYBIND11_MODULE(enoki_ext, m_) {
 
         void enter() {
             #if defined(ENOKI_ENABLE_JIT)
-                if (jit_has_backend(JitBackend::CUDA)) {
-                    jit_prefix_push(JitBackend::CUDA, name.c_str());
-                    pushed_cuda = true;
-                }
+                #if defined(ENOKI_ENABLE_CUDA)
+                    if (jit_has_backend(JitBackend::CUDA)) {
+                        jit_prefix_push(JitBackend::CUDA, name.c_str());
+                        pushed_cuda = true;
+                    }
+                #endif
                 if (jit_has_backend(JitBackend::LLVM)) {
                     jit_prefix_push(JitBackend::LLVM, name.c_str());
                     pushed_llvm = true;
@@ -128,8 +138,10 @@ PYBIND11_MODULE(enoki_ext, m_) {
 
         void exit(py::handle, py::handle, py::handle) {
             #if defined(ENOKI_ENABLE_JIT)
-                if (pushed_cuda)
-                    jit_prefix_pop(JitBackend::CUDA);
+                #if defined(ENOKI_ENABLE_CUDA)
+                    if (pushed_cuda)
+                        jit_prefix_pop(JitBackend::CUDA);
+                #endif
                 if (pushed_llvm)
                     jit_prefix_pop(JitBackend::LLVM);
             #endif
@@ -140,7 +152,9 @@ PYBIND11_MODULE(enoki_ext, m_) {
 
         std::string name;
         #if defined(ENOKI_ENABLE_JIT)
+        #if defined(ENOKI_ENABLE_CUDA)
             bool pushed_cuda = false;
+        #endif
             bool pushed_llvm = false;
         #endif
     };
@@ -193,9 +207,11 @@ PYBIND11_MODULE(enoki_ext, m_) {
         .value("ADEagerForward", JitFlag::ADEagerForward)
         .value("ADCheckWeights", JitFlag::ADCheckWeights);
 
+#if defined(ENOKI_ENABLE_CUDA)
     m.def("device_count", &jit_cuda_device_count);
     m.def("set_device", &jit_cuda_set_device, "device"_a);
     m.def("device", &jit_cuda_device);
+#endif
 
     m.def("has_backend", &jit_has_backend);
     m.def("sync_thread", &jit_sync_thread);
@@ -218,7 +234,9 @@ PYBIND11_MODULE(enoki_ext, m_) {
                      "type"_a, "device"_a, "shape"_a, "strides"_a);
     array_detail.def("from_dlpack", &from_dlpack);
 
+#if defined(ENOKI_ENABLE_CUDA)
     array_detail.def("device", &jit_cuda_device);
+#endif
     array_detail.def("device", &jit_var_device);
 
     array_detail.def("printf_async", [](uint32_t mask_index, const char *fmt,

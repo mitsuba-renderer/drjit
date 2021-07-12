@@ -1,4 +1,4 @@
-#if defined(ENOKI_ENABLE_JIT)
+#if defined(ENOKI_ENABLE_JIT) && defined(ENOKI_ENABLE_CUDA)
 #include "bind.h"
 #include "random.h"
 #include "loop.h"
