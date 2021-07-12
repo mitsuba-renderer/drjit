@@ -42,7 +42,7 @@ if (MSVC)
   set(ENOKI_NATIVE_FLAGS_DEFAULT "")
 elseif (APPLE AND CMAKE_OSX_ARCHITECTURES STREQUAL "arm64")
   # Apple M1 compatibility
-  set(ENOKI_NATIVE_FLAGS_DEFAULT "-mcpu=apple-a14")
+  set(ENOKI_NATIVE_FLAGS_DEFAULT "-mcpu=apple-a12")
 else()
   set(ENOKI_NATIVE_FLAGS_DEFAULT "-march=nehalem")
 endif()
