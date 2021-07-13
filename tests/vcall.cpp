@@ -223,7 +223,7 @@ ENOKI_VCALL_METHOD(g)
 ENOKI_VCALL_METHOD(dummy)
 ENOKI_VCALL_END(BaseD)
 
-#if 0
+#if 1
 ENOKI_TEST(test03_vcall_symbolic_ad_fwd) {
     if constexpr (ek::is_cuda_array_v<Float>)
         jit_init((uint32_t) JitBackend::CUDA);
