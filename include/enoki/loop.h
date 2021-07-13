@@ -78,7 +78,7 @@ struct Loop<Value, enable_if_jit_array_t<Value>> {
         #if !defined(NDEBUG)
             if (m_state != 0 && m_state != 3 && m_state != 4)
                 jit_log(
-                    LogLevel::Warn,
+                    ::LogLevel::Warn,
                     "Loop(\"%s\"): destructed in an inconsistent state. An "
                     "exception or disallowed scalar control flow (break, continue) "
                     "likely caused the loop to exit prematurely. Cleaning up..",
@@ -379,7 +379,7 @@ protected:
     uint32_t m_state = 0;
 
     /// Cross-loop AD dependencies
-    uint32_t m_cross_deps = 0;
+    size_t m_cross_deps = 0;
 
     // --------------- Wavefront mode ---------------
 

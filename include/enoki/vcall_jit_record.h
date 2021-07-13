@@ -141,14 +141,15 @@ Result vcall_jit_record_impl(const char *name, uint32_t n_inst,
         j++;
     }
 
-    ek_vector<uint32_t> indices_out(indices_out_all.size() / n_inst, 0);
+    ek_vector<uint32_t> indices_out((uint32_t) indices_out_all.size() / n_inst, 0);
 
     snprintf(label, sizeof(label), "%s::%s()", Base::Domain, name);
 
     uint32_t se = jit_var_vcall(
         label, self.index(), mask.index(), n_inst, inst_id.data(),
-        indices_in.size(), indices_in.data(), indices_out_all.size(),
-        indices_out_all.data(), state.data(), indices_out.data());
+        (uint32_t) indices_in.size(), indices_in.data(),
+        (uint32_t) indices_out_all.size(), indices_out_all.data(), state.data(),
+        indices_out.data());
 
     jit_state.end_recording();
     jit_var_mark_side_effect(se);
