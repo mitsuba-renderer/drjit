@@ -387,6 +387,8 @@ ENOKI_TEST(test05_vcall_symbolic_ad_rev_accessing_local) {
     }
 }
 
+// -----------------------------------------------------------------------------
+
 struct BaseBug {
     BaseBug() {
         x = 10.f;
@@ -394,6 +396,7 @@ struct BaseBug {
         ek::set_label(x, "BaseBug::x");
     }
     virtual FloatD f(const FloatD &m) = 0;
+    virtual FloatD g(const FloatD &m) = 0;
     ENOKI_VCALL_REGISTER(FloatD, BaseBug)
     FloatD x;
 };
@@ -404,17 +407,25 @@ struct ABug : BaseBug {
     FloatD f(const FloatD &v) override {
         return x * v;
     }
+    FloatD g(const FloatD &v) override {
+        return v * 2;
+    }
 };
 
 struct BBug : BaseBug {
     FloatD f(const FloatD &v) override {
         return x * v * 2;
     }
+    FloatD g(const FloatD &v) override {
+        return v;
+    }
 };
 
 ENOKI_VCALL_BEGIN(BaseBug)
 ENOKI_VCALL_METHOD(f)
+ENOKI_VCALL_METHOD(g)
 ENOKI_VCALL_END(BaseBug)
+
 
 ENOKI_TEST(test06_vcall_symbolic_ad_loop_opt_) {
     if constexpr (ek::is_cuda_array_v<Float>)
@@ -422,14 +433,23 @@ ENOKI_TEST(test06_vcall_symbolic_ad_loop_opt_) {
     else
         jit_init((uint32_t) JitBackend::LLVM);
 
+    int n = 20;
+    int max_depth = 5;
+
+    // Compute result values
+    float res_a = 0, res_b = 0, va = 1;
+    for (size_t i = 0; i < max_depth; i++) {
+        res_a += n * va;
+        res_b += 2.f * n;
+        va *= 2;
+    }
+
     for (int i = 0; i <= 4; ++i) {
         jit_set_flag(JitFlag::VCallRecord,   i>0);
         jit_set_flag(JitFlag::VCallOptimize, i>1);
         jit_set_flag(JitFlag::LoopRecord,    i>2);
         jit_set_flag(JitFlag::LoopOptimize,  i>3);
 
-        int n = 20;
-        int max_depth = 5;
 
         ABug *a = new ABug();
         BBug *b = new BBug();
@@ -438,28 +458,32 @@ ENOKI_TEST(test06_vcall_symbolic_ad_loop_opt_) {
         ek::enable_grad(a->x);
         ek::enable_grad(b->x);
 
-        ek::set_label(a->x, "a->x");
-        ek::set_label(b->x, "b->x");
-
         UInt32 depth = 0;
         MaskD active = ek::full<MaskD>(true, n);
         FloatD unused = 0.f;
 
-        ek::Loop<Float> loop("MyLoop", active, depth, unused);
-        while (loop(ek::detach(active))) {
-            FloatD output = arr->f(1.f);
+        {
+            // This variable will be out of scope (only consumed by a side effect)
+            FloatD value = 1.f;
 
-            ek::enqueue(output);
-            ek::set_grad(output, 1.f);
-            ek::traverse<FloatD>(true, false);
+            ek::Loop<Float> loop("MyLoop", active, depth, unused, value);
+            while (loop(ek::detach(active))) {
+                FloatD output = arr->f(2.f);
 
-            depth++;
-            active &= depth < max_depth;
+                ek::enqueue(output);
+                ek::set_grad(output, value);
+                ek::traverse<FloatD>(true, false);
+
+                value = ek::detach(arr->g(value));
+
+                depth++;
+                active &= depth < max_depth;
+            }
         }
 
         assert(ek::all_nested(
-            ek::eq(ek::grad(a->x), 0.5f * n * max_depth) &&
-            ek::eq(ek::grad(b->x), n * max_depth)));
+            ek::eq(ek::grad(a->x), res_a) &&
+            ek::eq(ek::grad(b->x), res_b)));
 
         delete a;
         delete b;
