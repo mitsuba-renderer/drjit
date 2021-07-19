@@ -45,8 +45,12 @@ py::handle array_base, array_name, array_init, array_configure;
 struct ArrayBase { };
 
 static void log_callback(LogLevel level, const char *msg) {
-    py::gil_scoped_acquire acquire;
-    py::print(msg);
+    if (!_Py_IsFinalizing()) {
+        py::gil_scoped_acquire acquire;
+        py::print(msg);
+    } else {
+        fprintf(stderr, "%s\n", msg);
+    }
 }
 
 PYBIND11_MODULE(enoki_ext, m_) {
