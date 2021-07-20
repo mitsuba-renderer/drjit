@@ -8,7 +8,6 @@ namespace ek = enoki;
 
 using Float  = ek::DiffArray<ek::LLVMArray<float>>;
 using UInt32 = ek::uint32_array_t<Float>;
-using Mask   = ek::mask_t<Float>;
 
 struct Class {
     Float value;
@@ -153,6 +152,157 @@ ENOKI_TEST(test04_loop_rev_complex) {
 
         assert(ek::grad(x) == Float(0, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1));
     }
+}
+
+
+struct Base {
+    Base() {
+        x = 10.f;
+        ek::enable_grad(x);
+        ek::set_label(x, "Base::x");
+    }
+    virtual Float f(const Float &m) = 0;
+    virtual Float g(const Float &m) = 0;
+    ENOKI_VCALL_REGISTER(Float, Base)
+    Float x;
+};
+
+using BasePtr = ek::replace_scalar_t<Float, Base *>;
+
+struct A : Base {
+    Float f(const Float &v) override {
+        return x * v;
+    }
+    Float g(const Float &v) override {
+        return v * 2;
+    }
+};
+
+struct B : Base {
+    Float f(const Float &v) override {
+        return x * v * 2;
+    }
+    Float g(const Float &v) override {
+        return v;
+    }
+};
+
+ENOKI_VCALL_BEGIN(Base)
+ENOKI_VCALL_METHOD(f)
+ENOKI_VCALL_METHOD(g)
+ENOKI_VCALL_END(Base)
+
+
+ENOKI_TEST(test05_vcall_symbolic_ad_loop_opt) {
+    if constexpr (ek::is_cuda_array_v<Float>)
+        jit_init((uint32_t) JitBackend::CUDA);
+    else
+        jit_init((uint32_t) JitBackend::LLVM);
+
+    int n = 20;
+    int max_depth = 5;
+
+    // Compute result values
+    float res_a = 0, res_b = 0, va = 1;
+    for (size_t i = 0; i < max_depth; i++) {
+        res_a += n * va;
+        res_b += 2.f * n;
+        va *= 2;
+    }
+
+    for (int i = 0; i <= 4; ++i) {
+        jit_set_flag(JitFlag::VCallRecord,   i>0);
+        jit_set_flag(JitFlag::VCallOptimize, i>1);
+        jit_set_flag(JitFlag::LoopRecord,    i>2);
+        jit_set_flag(JitFlag::LoopOptimize,  i>3);
+
+
+        A *a = new A();
+        B *b = new B();
+        ek::mask_t<Float> m = ek::neq(ek::arange<UInt32>(n) & 1, 0);
+        BasePtr arr = ek::select(m, (Base *) a, (Base *) b);
+        ek::enable_grad(a->x);
+        ek::enable_grad(b->x);
+
+        UInt32 depth = 0;
+        ek::mask_t<Float> active = ek::full<ek::mask_t<Float>>(true, n);
+        Float unused = 0.f;
+
+        {
+            // This variable will be out of scope (only consumed by a side effect)
+            Float value = 1.f;
+
+            ek::Loop<Float> loop("MyLoop", active, depth, unused, value);
+            while (loop(ek::detach(active))) {
+                Float output = arr->f(2.f);
+
+                ek::enqueue(output);
+                ek::set_grad(output, value);
+                ek::traverse<Float>(true, false);
+
+                value = ek::detach(arr->g(value));
+
+                depth++;
+                active &= depth < max_depth;
+            }
+        }
+
+        assert(ek::all_nested(
+            ek::eq(ek::grad(a->x), res_a) &&
+            ek::eq(ek::grad(b->x), res_b)));
+
+        delete a;
+        delete b;
+    }
+}
+
+
+ENOKI_TEST(test06_vcall_symbolic_nested_ad_loop_opt) {
+    if constexpr (ek::is_cuda_array_v<Float>)
+        jit_init((uint32_t) JitBackend::CUDA);
+    else
+        jit_init((uint32_t) JitBackend::LLVM);
+    int n = 20;
+    int max_depth = 5;
+    jit_set_log_level_stderr(::LogLevel::InfoSym);
+    jit_set_flag(JitFlag::VCallRecord,   true);
+    jit_set_flag(JitFlag::VCallOptimize, true);
+    jit_set_flag(JitFlag::LoopRecord,    true);
+    jit_set_flag(JitFlag::LoopOptimize,  true);
+
+    A *a = new A();
+    B *b = new B();
+    ek::mask_t<Float> m = ek::neq(ek::arange<UInt32>(n) & 1, 0);
+    BasePtr arr = ek::select(m, (Base *) a, (Base *) b);
+
+    ek::enable_grad(a->x);
+    ek::enable_grad(b->x);
+
+    UInt32 depth = 0;
+    ek::mask_t<Float> active = ek::full<ek::mask_t<Float>>(true, n);
+    Float unused = 0.f;
+    ek::Loop<Float> loop("outer", active, depth, unused);
+    while (loop(ek::detach(active))) {
+        UInt32 depth2 = 0;
+        ek::mask_t<Float> active2 = ek::full<ek::mask_t<Float>>(true, n);
+        ek::Loop<Float> loop2("inner", active2, depth2);
+        while (loop2(ek::detach(active2))) {
+            Float output = arr->f(2.f);
+            ek::backward(output);
+            depth2++;
+            active2 &= depth2 < max_depth;
+        }
+        depth++;
+        active &= depth < max_depth;
+    }
+
+
+    assert(ek::all_nested(
+        ek::eq(ek::grad(a->x), max_depth * max_depth * n) &&
+        ek::eq(ek::grad(b->x), 2.f * max_depth * max_depth * n)));
+
+    delete a;
+    delete b;
 }
 
 // 3. loop *and* vcall
