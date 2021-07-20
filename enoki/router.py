@@ -1791,6 +1791,29 @@ def hsum_nested(a):
     return a
 
 
+def hmean(a):
+    if hasattr(a, '__len__'):
+        return _ek.hsum(a) / len(a)
+    else:
+        return a
+
+
+def hmean_async(a):
+    if hasattr(a, '__len__'):
+        return _ek.hsum_async(a) / len(a)
+    else:
+        return a
+
+
+def hmean_nested(a):
+    while True:
+        b = hmean(a)
+        if b is a:
+            break
+        a = b
+    return a
+
+
 def hprod(a):
     if _var_is_enoki(a):
         return a.hprod_()
