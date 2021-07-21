@@ -209,7 +209,9 @@ PYBIND11_MODULE(enoki_ext, m_) {
         .value("PrintIR",        JitFlag::PrintIR)
         .value("ADOptimize",     JitFlag::ADOptimize)
         .value("ADEagerForward", JitFlag::ADEagerForward)
-        .value("ADCheckWeights", JitFlag::ADCheckWeights);
+        .value("ADCheckWeights", JitFlag::ADCheckWeights)
+        .value("KernelHistory",  JitFlag::KernelHistory)
+        .value("LaunchBlocking", JitFlag::LaunchBlocking);
 
 #if defined(ENOKI_ENABLE_CUDA)
     m.def("device_count", &jit_cuda_device_count);
@@ -229,6 +231,34 @@ PYBIND11_MODULE(enoki_ext, m_) {
     m.def("log_level", &jit_log_level_stderr);
     m.def("registry_trim", &jit_registry_trim);
     m.def("set_thread_count", &jit_llvm_set_thread_count);
+
+    py::object io = py::module_::import("io");
+    m.def("kernel_history", [io]() {
+        KernelHistoryEntry* data = jit_kernel_history();
+        std::vector<py::dict> history;
+        if (data) {
+            int i = 0;
+            while ((uint32_t) data[i].backend) {
+                KernelHistoryEntry &entry = data[i++];
+                py::dict dict;
+                dict["backend"] = entry.backend;
+                dict["hash"] = entry.hash;
+                dict["ir"] = io.attr("StringIO")(entry.ir);
+                dict["uses_optix"] = entry.uses_optix;
+                dict["cache_hit"] = entry.cache_hit;
+                dict["size"] = entry.size;
+                dict["input_count"] = entry.input_count;
+                dict["output_count"] = entry.output_count;
+                dict["operation_count"] = entry.operation_count;
+                dict["codegen_time"] = entry.codegen_time;
+                dict["execution_time"] = entry.execution_time;
+                history.push_back(dict);
+            }
+            free(data);
+        }
+        return history;
+    });
+    m.def("kernel_history_clear", &jit_kernel_history_clear);
 
     array_detail.def("graphviz", &jit_var_graphviz);
     array_detail.def("schedule", &jit_var_schedule);
