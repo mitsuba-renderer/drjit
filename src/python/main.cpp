@@ -235,27 +235,28 @@ PYBIND11_MODULE(enoki_ext, m_) {
     py::object io = py::module_::import("io");
     m.def("kernel_history", [io]() {
         KernelHistoryEntry* data = jit_kernel_history();
+        KernelHistoryEntry* entry = data;
         std::vector<py::dict> history;
-        if (data) {
-            int i = 0;
-            while ((uint32_t) data[i].backend) {
-                KernelHistoryEntry &entry = data[i++];
-                py::dict dict;
-                dict["backend"] = entry.backend;
-                dict["hash"] = entry.hash;
-                dict["ir"] = io.attr("StringIO")(entry.ir);
-                dict["uses_optix"] = entry.uses_optix;
-                dict["cache_hit"] = entry.cache_hit;
-                dict["size"] = entry.size;
-                dict["input_count"] = entry.input_count;
-                dict["output_count"] = entry.output_count;
-                dict["operation_count"] = entry.operation_count;
-                dict["codegen_time"] = entry.codegen_time;
-                dict["execution_time"] = entry.execution_time;
-                history.push_back(dict);
-            }
-            free(data);
+        while ((uint32_t) entry->backend) {
+            py::dict dict;
+            dict["backend"] = entry->backend;
+            dict["hash"] = entry->hash;
+            dict["ir"] = io.attr("StringIO")(entry->ir);
+            free(entry->ir);
+            dict["uses_optix"] = entry->uses_optix;
+            dict["cache_hit"] = entry->cache_hit;
+            dict["cache_disk"] = entry->cache_disk;
+            dict["size"] = entry->size;
+            dict["input_count"] = entry->input_count;
+            dict["output_count"] = entry->output_count;
+            dict["operation_count"] = entry->operation_count;
+            dict["codegen_time"] = entry->codegen_time;
+            dict["backend_time"] = entry->backend_time;
+            dict["execution_time"] = entry->execution_time;
+            history.push_back(dict);
+            entry++;
         }
+        free(data);
         return history;
     });
     m.def("kernel_history_clear", &jit_kernel_history_clear);
