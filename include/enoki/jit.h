@@ -438,6 +438,8 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
 
     static Derived arange_(ssize_t start, ssize_t stop, ssize_t step) {
         size_t size = size_t((stop - start + step - (step > 0 ? 1 : -1)) / step);
+        if (size == 0)
+            return Derived();
         return fmadd(Derived(uint32_array_t<Derived>::counter(size)),
                      Derived((Value) step),
                      Derived((Value) start));

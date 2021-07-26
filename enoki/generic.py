@@ -1527,11 +1527,16 @@ def export_(a, migrate_to_host, version, owner_supported=True):
             # a weak reference to keep 'b' alive while 'a' exists
             _wr.finalize(a, lambda arg: None, b)
 
+        data_ptr = b.data_()
+        if data_ptr == 0:
+            # NumPy does not accept null pointers (even when the array is empty)
+            data_ptr = 1
+
         record = {
             "shape": shape,
             "strides": tuple(strides),
             "typestr": "<" + a.Type.NumPy,
-            "data": (b.data_(), False),
+            "data": (data_ptr, False),
             "version": version,
             "device": _ek.device(b),
             "owner": b
