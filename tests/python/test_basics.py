@@ -178,9 +178,10 @@ def test04_operators():
 def all_arrays(cond=lambda x: True):
     a = list(ek.scalar.__dict__.items())
     a += ek.packet.__dict__.items()
-    a += ek.cuda.__dict__.items()
-    a += ek.llvm.__dict__.items()
-    a += ek.llvm.__dict__.items()
+    if hasattr(ek, "cuda"):
+        a += ek.cuda.__dict__.items()
+    if hasattr(ek, "llvm"):
+        a += ek.llvm.__dict__.items()
     return [v for k, v in a if isinstance(v, type) and cond(v)
             and not ek.is_special_v(v)
             and not ek.array_depth_v(v) >= 3
@@ -270,9 +271,9 @@ def test06_reinterpret_cast():
     assert ek.reinterpret_array(F3, I3(0x3f800000)).x == 1.0
 
 
-@pytest.mark.parametrize("pkg", [ek.cuda, ek.llvm])
+@pytest.mark.parametrize("pkg", ['enoki.cuda', 'enoki.llvm'])
 def test07_gather_ravel_unravel(pkg):
-    get_class(pkg.__name__)
+    pkg = get_class(pkg)
     str_1 = '[[0.0, 1.0, 2.0],\n [3.0, 4.0, 5.0],\n [6.0, 7.0, 8.0],\n' \
         ' [9.0, 10.0, 11.0]]'
     str_2 = '[0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0]'

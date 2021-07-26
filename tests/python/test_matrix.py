@@ -1,6 +1,8 @@
 import enoki as ek
 import numpy as np
 import pytest
+import importlib
+
 from enoki.packet import Matrix2f as M2
 from enoki.packet import Matrix3f as M3
 from enoki.packet import Matrix4f as M4
@@ -8,12 +10,13 @@ from enoki.packet import Float
 M = M4
 
 def prepare(pkg):
-    if 'cuda' in pkg.__name__:
+    if 'cuda' in pkg:
         if not ek.has_backend(ek.JitBackend.CUDA):
             pytest.skip('CUDA mode is unsupported')
-    elif 'llvm' in pkg.__name__:
+    elif 'llvm' in pkg:
         if not ek.has_backend(ek.JitBackend.LLVM):
             pytest.skip('LLVM mode is unsupported')
+    return importlib.import_module(pkg)
 
 
 def test01_init_broadcast_mul():
@@ -131,13 +134,13 @@ def test10_matrix_to_quat():
     assert ek.allclose(q, q2)
 
 
-@pytest.mark.parametrize("package", [ek.scalar, ek.cuda, ek.llvm])
+@pytest.mark.parametrize("package", ["enoki.scalar", "enoki.cuda", "enoki.llvm"])
 def test11_constructor(package):
     """
     Check Matrix construction from Python array and Numpy array
     """
+    package = prepare(package)
     Float, Matrix3f = package.Float, package.Matrix3f
-    prepare(package)
 
     m1 = [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6], [0.7, 0.8, 0.9]]
     m2 = np.array(m1, dtype=np.float32)
@@ -157,10 +160,10 @@ def test11_constructor(package):
             assert ek.allclose(m5, values)
 
 
-@pytest.mark.parametrize("package", [ek.scalar, ek.cuda, ek.llvm])
+@pytest.mark.parametrize("package", ["enoki.scalar", "enoki.cuda", "enoki.llvm"])
 def test12_matrix_scale(package):
+    package = prepare(package)
     Float, Matrix3f = package.Float, package.Matrix3f
-    prepare(package)
 
     m = np.array([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6], [0.7, 0.8, 0.9]], dtype=np.float32)
     m2 = np.float32(2*m)
@@ -173,11 +176,11 @@ def test12_matrix_scale(package):
     assert package.Float(2) * package.Matrix3f(m) == package.Matrix3f(m2)
 
 
-@pytest.mark.parametrize("package", [ek.scalar, ek.cuda, ek.llvm])
+@pytest.mark.parametrize("package", ["enoki.scalar", "enoki.cuda", "enoki.llvm"])
 def test12_matrix_vector(package):
     m_ = np.array([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6], [0.7, 0.8, 0.9]], dtype=np.float32)
+    package = prepare(package)
     Float, Matrix3f, Array3f = package.Float, package.Matrix3f, package.Array3f
-    prepare(package)
     m = Matrix3f(m_)
     v1 = m @ Array3f(1, 0, 0)
     v2 = m @ Array3f(1, 1, 0)
@@ -201,10 +204,10 @@ def test12_matrix_vector(package):
         m * ek.scalar.Matrix3f(m_)
 
 
-@pytest.mark.parametrize("package", [ek.scalar, ek.cuda, ek.llvm])
+@pytest.mark.parametrize("package", ["enoki.scalar", "enoki.cuda", "enoki.llvm"])
 def test13_matmul_other(package):
+    package = prepare(package)
     Float, Matrix3f, Array3f = package.Float, package.Matrix3f, package.Array3f
-    prepare(package)
 
     m = Matrix3f(1,2,3,4,5,6,7,8,9)
     m2 = Matrix3f(30, 36, 42, 66, 81, 96, 102, 126, 150)
@@ -215,13 +218,13 @@ def test13_matmul_other(package):
     assert ek.allclose(v @ v, Float(30))
 
 
-@pytest.mark.parametrize("package", [ek.cuda, ek.llvm])
+@pytest.mark.parametrize("package", ["enoki.cuda", "enoki.llvm"])
 @pytest.mark.parametrize("dest", ['numpy', 'torch', 'jax'])
 def test14_roundtrip(package, dest):
     pytest.importorskip(dest)
+    package = prepare(package)
     Float, Array3f, Array4f = package.Float, package.Array3f, package.Array4f
     Matrix3f, Matrix4f, Matrix44f = package.Matrix3f, package.Matrix4f, package.Matrix44f
-    prepare(package)
 
     def to_dest(a):
         if dest == 'numpy':
@@ -262,10 +265,10 @@ def test14_roundtrip(package, dest):
     assert(m == Matrix44f(to_dest(m)))
 
 
-@pytest.mark.parametrize("package", [ek.scalar])
+@pytest.mark.parametrize("package", ["enoki.scalar"])
 def test15_quat_to_euler(package):
+    package = prepare(package)
     Quaternion4f, Array3f, Float = package.Quaternion4f, package.Array3f, package.Float
-    prepare(package)
 
     # Gimbal lock at +pi/2
     q = Quaternion4f(0, 1.0 / np.sqrt(2), 0, 1.0 / np.sqrt(2))

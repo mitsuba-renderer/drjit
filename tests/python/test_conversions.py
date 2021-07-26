@@ -1,20 +1,22 @@
 import enoki
 import enoki as ek
 import pytest
+import importlib
 
-def prepare(pkg):
-    if 'cuda' in pkg.__name__:
+def prepare(name):
+    if 'cuda' in name:
         if not ek.has_backend(ek.JitBackend.CUDA):
             pytest.skip('CUDA mode is unsupported')
-    elif 'llvm' in pkg.__name__:
+    elif 'llvm' in name:
         if not ek.has_backend(ek.JitBackend.LLVM):
             pytest.skip('LLVM mode is unsupported')
+    return importlib.import_module(name)
 
-@pytest.mark.parametrize("package", [ek.cuda, ek.cuda.ad,
-                                     ek.llvm, ek.llvm.ad])
+@pytest.mark.parametrize("package", ["enoki.cuda", "enoki.cuda.ad",
+                                     "enoki.llvm", "enoki.llvm.ad"])
 def test_roundtrip_dlpack_all(package):
+    package = prepare(package)
     Float, Array3f = package.Float, package.Array3f
-    prepare(package)
     a1 = Array3f(
         ek.arange(Float, 10),
         ek.arange(Float, 10)+100,
@@ -26,13 +28,13 @@ def test_roundtrip_dlpack_all(package):
     assert a1.x == Float(a1.x.dlpack())
 
 
-@pytest.mark.parametrize("package", [ek.cuda, ek.cuda.ad,
-                                     ek.llvm, ek.llvm.ad,
-                                     ek.packet])
+@pytest.mark.parametrize("package", ["enoki.cuda", "enoki.cuda.ad",
+                                     "enoki.llvm", "enoki.llvm.ad",
+                                     "enoki.packet"])
 def test_roundtrip_numpy_all(package):
     pytest.importorskip("numpy")
+    package = prepare(package)
     Float, Array3f = package.Float, package.Array3f
-    prepare(package)
     a1 = Array3f(
         ek.arange(Float, 10),
         ek.arange(Float, 10)+100,
@@ -43,10 +45,15 @@ def test_roundtrip_numpy_all(package):
     assert a1 == a3
     assert a1.x == Float(a1.x.numpy())
 
+    if Float.IsDynamic:
+        import numpy as np
+        assert len(np.array(Float())) == 0
+        assert len(Float(np.array([], dtype=np.float32))) == 0
+
 
 def test_roundtrip_pytorch_cuda():
     pytest.importorskip("torch")
-    prepare(enoki.cuda.ad)
+    prepare("enoki.cuda.ad")
     from enoki.cuda.ad import Float, Array3f
     a1 = Array3f(
         ek.arange(Float, 10),
@@ -61,7 +68,7 @@ def test_roundtrip_pytorch_cuda():
 
 def test_roundtrip_pytorch_llvm():
     pytest.importorskip("torch")
-    prepare(enoki.llvm.ad)
+    prepare("enoki.llvm.ad")
     from enoki.llvm.ad import Float, Array3f
     a1 = Array3f(
         ek.arange(Float, 10),
@@ -76,7 +83,7 @@ def test_roundtrip_pytorch_llvm():
 
 def test_roundtrip_pytorch_jax():
     pytest.importorskip("jax")
-    prepare(enoki.cuda.ad)
+    prepare("enoki.cuda.ad")
     from enoki.cuda.ad import Float, Array3f
     a1 = Array3f(
         ek.arange(Float, 10),

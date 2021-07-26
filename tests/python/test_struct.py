@@ -1,20 +1,23 @@
 import enoki as ek
 import pytest
+import importlib
+
 
 def prepare(pkg):
-    if 'cuda' in pkg.__name__:
+    if 'cuda' in pkg:
         if not ek.has_backend(ek.JitBackend.CUDA):
             pytest.skip('CUDA mode is unsupported')
-    elif 'llvm' in pkg.__name__:
+    elif 'llvm' in pkg:
         if not ek.has_backend(ek.JitBackend.LLVM):
             pytest.skip('LLVM mode is unsupported')
+    return importlib.import_module(pkg)
 
 
-@pytest.mark.parametrize("package", [ek.cuda, ek.cuda.ad,
-                                     ek.llvm, ek.llvm.ad])
+@pytest.mark.parametrize("package", ['enoki.cuda', 'enoki.cuda.ad',
+                                     'enoki.llvm', 'enoki.llvm.ad'])
 def test_zero_initialization(package):
+    package = prepare(package)
     Float, Array3f = package.Float, package.Array3f
-    prepare(package)
 
     class MyStruct:
         ENOKI_STRUCT = { 'a' : Array3f, 'b' : Float }
@@ -37,10 +40,10 @@ def test_zero_initialization(package):
     assert ek.width(foo) == 8
 
 
-@pytest.mark.parametrize("package", [ek.cuda.ad, ek.llvm.ad])
+@pytest.mark.parametrize("package", ['enoki.cuda.ad', 'enoki.llvm.ad'])
 def test_ad_operations(package):
+    package = prepare(package)
     Float, Array3f = package.Float, package.Array3f
-    prepare(package)
 
     class MyStruct:
         ENOKI_STRUCT = { 'a' : Array3f, 'b' : Float }

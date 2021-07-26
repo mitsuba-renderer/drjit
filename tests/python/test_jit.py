@@ -1,16 +1,17 @@
 import enoki as ek
 import pytest
+import importlib
 
 
-@pytest.fixture(scope="module", params=[ek.cuda.ad, ek.llvm.ad])
+@pytest.fixture(scope="module", params=['enoki.cuda.ad', 'enoki.llvm.ad'])
 def m(request):
-    if 'cuda' in request.param.__name__:
+    if 'cuda' in request.param:
         if not ek.has_backend(ek.JitBackend.CUDA):
             pytest.skip('CUDA mode is unsupported')
     else:
         if not ek.has_backend(ek.JitBackend.LLVM):
             pytest.skip('LLVM mode is unsupported')
-    yield request.param
+    yield importlib.import_module(request.param)
 
 
 def test01_kernel_history(m):
