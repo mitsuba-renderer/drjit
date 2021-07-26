@@ -211,7 +211,8 @@ PYBIND11_MODULE(enoki_ext, m_) {
         .value("ADEagerForward", JitFlag::ADEagerForward)
         .value("ADCheckWeights", JitFlag::ADCheckWeights)
         .value("KernelHistory",  JitFlag::KernelHistory)
-        .value("LaunchBlocking", JitFlag::LaunchBlocking);
+        .value("LaunchBlocking", JitFlag::LaunchBlocking)
+        .value("Default",        JitFlag::Default);
 
 #if defined(ENOKI_ENABLE_CUDA)
     m.def("device_count", &jit_cuda_device_count);
