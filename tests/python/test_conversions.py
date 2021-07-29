@@ -1,4 +1,3 @@
-import enoki
 import enoki as ek
 import pytest
 import importlib
@@ -10,6 +9,8 @@ def prepare(name):
     elif 'llvm' in name:
         if not ek.has_backend(ek.JitBackend.LLVM):
             pytest.skip('LLVM mode is unsupported')
+    elif 'packet' in name and not hasattr(ek, 'packet'):
+        pytest.skip('Packet mode is unsupported')
     return importlib.import_module(name)
 
 @pytest.mark.parametrize("package", ["enoki.cuda", "enoki.cuda.ad",

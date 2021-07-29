@@ -103,6 +103,9 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
     /// Does this array represent a matrix?
     static constexpr bool IsMatrix = false;
 
+    /// Does this array represent a tensorial wrapper?
+    static constexpr bool IsTensor = false;
+
     /// Does this array represent the result of a 'masked(...)' expression?
     static constexpr bool IsMaskedArray = false;
 

@@ -29,10 +29,11 @@ project(enoki
     ${ENOKI_VERSION}
 )
 
-option(ENOKI_ENABLE_JIT      "Build Enoki just in time compilation library?" OFF)
-option(ENOKI_ENABLE_AUTODIFF "Build Enoki automatic differentation library?" OFF)
-option(ENOKI_ENABLE_PYTHON   "Build Python extension library?" OFF)
-option(ENOKI_ENABLE_TESTS    "Build Enoki test suite? (Warning, this takes *very* long to compile)" OFF)
+option(ENOKI_ENABLE_JIT           "Build Enoki just in time compilation library?" OFF)
+option(ENOKI_ENABLE_AUTODIFF      "Build Enoki automatic differentation library?" OFF)
+option(ENOKI_ENABLE_PYTHON        "Build Python extension library?" OFF)
+option(ENOKI_ENABLE_PYTHON_PACKET "Enable packet mode in Python extension library?" OFF)
+option(ENOKI_ENABLE_TESTS         "Build Enoki test suite? (Warning, this takes *very* long to compile)" OFF)
 
 # Compile for a sufficiently recent processor. Assumes Nehalem+ (with SSE4.2) by
 # default. You may want to set MTS_NATIVE_FLAGS to "-march=native" to use all

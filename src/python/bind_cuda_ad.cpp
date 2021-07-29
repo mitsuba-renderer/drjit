@@ -2,6 +2,7 @@
 #include "bind.h"
 #include "random.h"
 #include "loop.h"
+#include "tensor.h"
 #include <enoki/autodiff.h>
 #include <enoki/jit.h>
 
@@ -52,5 +53,7 @@ void export_cuda_ad(py::module_ &m) {
         .def("put", &Loop<Guide>::put)
         .def("init", &Loop<Guide>::init)
         .def("__call__", &Loop<Guide>::operator());
+
+    ENOKI_BIND_TENSOR_TYPES(cuda_ad);
 }
 #endif

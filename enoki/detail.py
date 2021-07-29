@@ -34,7 +34,7 @@ def array_name(prefix, vt, shape, scalar):
         convention, which is indicated via this parameter.
     """
 
-    if not scalar:
+    if not scalar and not prefix == 'Tensor':
         shape = shape[:-1]
     if prefix == "Matrix":
         if vt != enoki.VarType.Bool:
@@ -42,7 +42,7 @@ def array_name(prefix, vt, shape, scalar):
         else:
             prefix = "Array"
 
-    if len(shape) == 0:
+    if len(shape) == 0 and prefix != "Tensor":
         return VAR_TYPE_NAME[int(vt)]
 
     return "%s%s%s" % (
@@ -206,6 +206,7 @@ def array_init(self, args):
                 self.set_entry_(1, o.imag)
             elif mod == "numpy":
                 import numpy as np
+
                 s1 = tuple(reversed(enoki.shape(self)))
                 s2 = o.shape
 
@@ -289,6 +290,13 @@ def array_init(self, args):
                                                        size == 1 else "1 or ", size,
                                                        value_type.__name__)) from err
 
+
+def tensor_init(tensor_type, obj):
+    if 'tensorflow' in type(obj).__module__:
+        import tensorflow as tf
+        return tensor_type(tensor_type.Array(tf.reshape(obj, [-1])), obj.shape)
+    else:
+        return tensor_type(tensor_type.Array(obj.ravel()), obj.shape)
 
 @property
 def prop_x(self):
@@ -380,15 +388,22 @@ def array_configure(cls, shape, type_, value):
     cls.IsMatrix = "Matrix" in name
     cls.IsComplex = "Complex" in name
     cls.IsQuaternion = "Quaternion" in name
+    cls.IsTensor = "Tensor" in name
     cls.IsSpecial = cls.IsMatrix or cls.IsComplex or cls.IsQuaternion
     cls.IsVector = cls.Size != enoki.Dynamic and not \
         (cls.IsPacket and cls.Depth == 1) and not cls.IsSpecial
 
+    prefix = name
+    for i, c in enumerate(name):
+        if c.isdigit() or c == 'X':
+            prefix = name[:i]
+            break
+    mask_name = prefix
+
+    cls.Prefix = prefix
+
     if cls.IsSpecial:
-        for i, c in enumerate(name):
-            if c.isdigit():
-                cls.Prefix = name[:i]
-                break
+        mask_name = 'Array'
 
         if cls.IsComplex:
             cls.real = prop_x
@@ -400,10 +415,12 @@ def array_configure(cls, shape, type_, value):
                                name.replace("Quaternion4", "Array3"))
             cls.Complex = getattr(sys.modules.get(mod),
                                   name.replace("Quaternion4", "Complex2"))
-    else:
-        cls.Prefix = "Array"
 
-    if not cls.IsSpecial or cls.IsQuaternion:
+    if cls.IsTensor:
+        cls.__getitem__ = enoki.detail.tensor_getitem
+        cls.__setitem__ = enoki.detail.tensor_setitem
+
+    elif not cls.IsSpecial or cls.IsQuaternion:
         if cls.Size > 0:
             cls.x = prop_x
         if cls.Size > 1:
@@ -415,8 +432,7 @@ def array_configure(cls, shape, type_, value):
 
     cls.MaskType = getattr(
         sys.modules.get(mod),
-        array_name("Array", enoki.VarType.Bool,
-                   cls.Shape, cls.IsScalar))
+        array_name(mask_name, enoki.VarType.Bool, cls.Shape, cls.IsScalar))
 
 
 def _loop_process_state(value: type, in_state: list, out_state: list,
@@ -457,7 +473,9 @@ def _loop_process_state(value: type, in_state: list, out_state: list,
             "will be). Please see the documentation on differentiating loops "
             "for details and suggested alternatives." % t.__name__)
 
-    if enoki.is_jit_array_v(t):
+    if enoki.is_tensor_v(t):
+        _loop_process_state(value.array, in_state, out_state, in_struct)
+    elif enoki.is_jit_array_v(t):
         if t.Depth > 1:
             for i in range(len(value)):
                 _loop_process_state(value.entry_ref_(i), in_state,
@@ -503,3 +521,122 @@ def loop_process_state(funcs, state, write):
     for func in funcs:
         _loop_process_state(func(), old_state, state, write)
     assert old_state is None or len(old_state) == 0
+
+
+def slice_tensor(shape, indices, uint32):
+    """
+    This function takes an array shape (integer tuple) and a tuple containing
+    slice indices. It returns the resulting array shape and a flattened 32-bit
+    unsigned integer array containing element indices.
+    """
+    components = []
+    ellipsis = False
+    none_count = indices.count(None)
+    shape_offset = 0
+
+    for v in indices:
+        if v is None:
+            components.append(None)
+            continue
+
+        if shape_offset >= len(shape):
+            raise IndexError("slice_tensor(): too many indices specified!")
+
+        size = shape[shape_offset]
+
+        if isinstance(v, int):
+            # Simple integer index, handle wrap-around
+            if v < 0:
+                v += size
+            if v >= size:
+                raise IndexError("slice_tensor(): index %i for dimension %i is "
+                                 "out of range (size = %i)!" %
+                                 (v, len(components), size))
+            components.append((v, v+1, 1))
+        elif isinstance(v, slice):
+            # Rely on Python's slice.indices() function to determine everything
+            components.append(v.indices(size))
+        elif enoki.is_dynamic_array_v(v) and enoki.is_integral_v(v):
+            if enoki.is_signed_v(v):
+                v = uint32(enoki.select(v >= 0, v, v + size))
+            components.append(v)
+        elif isinstance(v, list) or isinstance(v, tuple):
+            components.append(uint32([v2 if v2 >= 0 else v2 + size for v2 in v]))
+        elif v is Ellipsis:
+            if ellipsis:
+                raise IndexError("slice_tensor(): multiple ellipses (...) are not allowed!")
+            ellipsis = True
+
+            for j in range(len(shape) - len(indices) + none_count + 1):
+                components.append((0, shape[shape_offset], 1))
+                shape_offset += 1
+            continue
+        else:
+            raise TypeError("slice_tensor(): type '%s' cannot be used to index into a tensor!",
+                            type(v).__name__)
+        shape_offset += 1
+
+    # Implicit ellipsis
+    for j in range(len(shape) - shape_offset):
+        components.append((0, shape[shape_offset], 1))
+        shape_offset += 1
+
+    # Compute total index size
+    size_out = 1
+    shape_out = []
+    for comp in components:
+        if comp is None:
+            shape_out.append(1)
+        else:
+            size = len(comp if isinstance(comp, uint32) else range(*comp))
+            if size != 1:
+                shape_out.append(size)
+                size_out *= shape_out[-1]
+    shape_out = tuple(shape_out)
+
+    index_tmp = enoki.arange(uint32, size_out)
+    index_out = uint32()
+
+    if size_out > 0:
+        size_out = 1
+        index_out = uint32(0)
+        shape_offset = len(shape)-1
+
+        for i in reversed(range(len(components))):
+            comp = components[i]
+            if comp is None:
+                continue
+            size = len(comp if isinstance(comp, uint32) else range(*comp))
+            index_next = index_tmp // size
+            index_rem = index_tmp - index_next * size
+
+            if isinstance(comp, uint32):
+                index_val = enoki.gather(uint32, comp, index_rem)
+            else:
+                if comp[0] >= 0 and comp[2] >= 0:
+                    index_val = comp[0] + comp[2] * index_rem
+                else:
+                    index_val = uint32(comp[0] + comp[2] * enoki.int32_array_t(index_rem))
+
+            index_out += index_val * size_out
+            index_tmp = index_next
+            size_out *= shape[shape_offset]
+            shape_offset -= 1
+
+    return shape_out, index_out
+
+
+def tensor_getitem(tensor, slice_arg):
+    if not isinstance(slice_arg, tuple):
+        slice_arg = (slice_arg,)
+    tensor_t = type(tensor)
+    shape, index = slice_tensor(tensor.shape, slice_arg, tensor_t.Index)
+    return tensor_t(enoki.gather(tensor_t.Array, tensor.array, index), shape)
+
+
+def tensor_setitem(tensor, slice_arg, value):
+    if not isinstance(slice_arg, tuple):
+        slice_arg = (slice_arg,)
+    tensor_t = type(tensor)
+    shape, index = slice_tensor(tensor.shape, slice_arg, tensor_t.Index)
+    enoki.scatter(target=tensor.array, value=value, index=index)

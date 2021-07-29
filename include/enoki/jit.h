@@ -321,7 +321,7 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
     }
 
     Derived fnmsub_(const Derived &b, const Derived &c) const {
-        return fmsub_(-b, -c);
+        return fmadd_(-b, -c);
     }
 
     template <typename Mask>

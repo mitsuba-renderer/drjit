@@ -1143,6 +1143,8 @@ def tgamma_(a0):
 
 
 def all_(a0):
+    if a0.IsTensor:
+        return a0.array.all_()
     size = len(a0)
     if size == 0:
         return True
@@ -1153,6 +1155,8 @@ def all_(a0):
 
 
 def any_(a0):
+    if a0.IsTensor:
+        return a0.array.any_()
     size = len(a0)
     if size == 0:
         return False
@@ -1163,6 +1167,8 @@ def any_(a0):
 
 
 def hsum_(a0):
+    if a0.IsTensor:
+        return a0.array.hsum_()
     size = len(a0)
     if size == 0:
         return 0
@@ -1173,6 +1179,8 @@ def hsum_(a0):
 
 
 def hprod_(a0):
+    if a0.IsTensor:
+        return a0.array.hprod_()
     size = len(a0)
     if size == 0:
         return 1
@@ -1183,6 +1191,8 @@ def hprod_(a0):
 
 
 def hmin_(a0):
+    if a0.IsTensor:
+        return a0.array.hmin_()
     size = len(a0)
     if size == 0:
         raise Exception("hmin(): zero-sized array!")
@@ -1194,6 +1204,9 @@ def hmin_(a0):
 
 
 def hmax_(a0):
+    if a0.IsTensor:
+        return a0.array.hmax_()
+
     size = len(a0)
     if size == 0:
         raise Exception("hmax(): zero-sized array!")
@@ -1241,10 +1254,14 @@ def detach_(a):
         return a
 
     t = _ek.detached_t(type(a))
-    result = t.empty_(len(a) if a.Size == Dynamic else 0)
-    for i in range(len(a)):
-        result[i] = a[i].detach_()
-    return result
+
+    if a.IsTensor:
+        return t(a.array.detach_(), a.shape)
+    else:
+        result = t.empty_(len(a) if a.Size == Dynamic else 0)
+        for i in range(len(a)):
+            result[i] = a[i].detach_()
+        return result
 
 
 def grad_(a):
@@ -1252,9 +1269,13 @@ def grad_(a):
         return None
 
     t = _ek.detached_t(type(a))
-    result = t.empty_(len(a) if a.Size == Dynamic else 0)
-    for i in range(len(a)):
-        result[i] = a[i].grad_()
+
+    if a.IsTensor:
+        return t(a.array.grad_(), a.shape)
+    else:
+        result = t.empty_(len(a) if a.Size == Dynamic else 0)
+        for i in range(len(a)):
+            result[i] = a[i].grad_()
 
     return result
 
@@ -1271,15 +1292,18 @@ def grad_enabled_(a):
             enabled |= a.entry_ref_(i).grad_enabled_()
         return enabled
     else:
-        return a.index_ad() > 0
+        index = a.index_ad() if not a.IsTensor else a.array.index_ad()
+        return index > 0
 
 
 def set_grad_enabled_(a, value):
     if not a.IsDiff:
         raise Exception("Expected a differentiable array type!")
-    for i in range(len(a)):
-        a.entry_ref_(i).set_grad_enabled_(value)
-    return a
+    if a.IsTensor:
+        a.array.set_grad_enabled_(value)
+    else:
+        for i in range(len(a)):
+            a.entry_ref_(i).set_grad_enabled_(value)
 
 
 def grad_suspended_(a):
@@ -1292,14 +1316,18 @@ def grad_suspended_(a):
             suspended |= a[i].grad_suspended_()
         return suspended
     else:
-        return a.index_ad() < 0
+        index = a.index_ad() if not a.IsTensor else a.array.index_ad()
+        return index < 0
 
 
 def set_grad_suspended_(a, value):
     if not a.IsDiff:
         raise Exception("Expected a differentiable array type!")
-    for i in range(len(a)):
-        a.entry_ref_(i).set_grad_suspended_(value)
+    if a.IsTensor:
+        a.array.set_grad_suspended_(value)
+    else:
+        for i in range(len(a)):
+            a.entry_ref_(i).set_grad_suspended_(value)
     return a
 
 
@@ -1307,25 +1335,40 @@ def set_grad_(a, grad):
     if not a.IsDiff:
         raise Exception("Expected a differentiable array type!")
 
-    s = len(a)
-    for i in range(s):
-        a[i].set_grad_(grad[i])
+    if a.IsTensor:
+        if _ek.is_tensor_v(grad):
+            a.array.set_grad_(grad.array)
+        else:
+            a.array.set_grad_(grad)
+    else:
+        s = len(a)
+        for i in range(s):
+            a[i].set_grad_(grad[i])
 
 
 def accum_grad_(a, grad):
     if not a.IsDiff:
         raise Exception("Expected a differentiable array type!")
 
-    s = len(a)
-    for i in range(s):
-        a[i].accum_grad_(grad[i])
+    if a.IsTensor:
+        if _ek.is_tensor_v(grad):
+            a.array.accum_grad_(grad.array)
+        else:
+            a.array.accum_grad_(grad)
+    else:
+        s = len(a)
+        for i in range(s):
+            a[i].accum_grad_(grad[i])
 
 
 def enqueue_(a):
     if not a.IsDiff:
         raise Exception("Expected a differentiable array type!")
-    for i in range(len(a)):
-        a[i].enqueue_()
+    if a.IsTensor:
+        a.array.enqueue_()
+    else:
+        for i in range(len(a)):
+            a[i].enqueue_()
 
 
 def migrate_(a, target):
@@ -1386,39 +1429,48 @@ def broadcast_(self, value):
 
 
 @classmethod
-def empty_(cls, size):
+def empty_(cls, shape):
+    if cls.IsTensor:
+        return cls(_ek.empty(cls.Array, _ek.hprod(shape)), shape)
+
     result = cls()
     if cls.Size == Dynamic:
-        result.init_(size)
+        result.init_(shape)
     elif cls.IsDynamic:
         for i in range(len(result)):
-            result.set_entry_(i, _ek.empty(cls.Value, size))
+            result.set_entry_(i, _ek.empty(cls.Value, shape))
     return result
 
 
 @classmethod
-def zero_(cls, size=1):
+def zero_(cls, shape=1):
+    if cls.IsTensor:
+        return cls(_ek.zero(cls.Array, _ek.hprod(shape)), shape)
+
     result = cls()
     if cls.Size == Dynamic:
-        result.init_(size)
-        for i in range(size):
+        result.init_(shape)
+        for i in range(shape):
             result.set_entry_(i, 0)
     else:
         for i in range(cls.Size):
-            result.set_entry_(i, _ek.zero(cls.Value, size))
+            result.set_entry_(i, _ek.zero(cls.Value, shape))
     return result
 
 
 @classmethod
-def full_(cls, value, size):
+def full_(cls, value, shape):
+    if cls.IsTensor:
+        return cls(_ek.full(cls.Array, value, _ek.hprod(shape)), shape)
+
     result = cls()
     if cls.Size == Dynamic:
-        result.init_(size)
-        for i in range(size):
+        result.init_(shape)
+        for i in range(shape):
             result.set_entry_(i, value)
     else:
         if _ek.array_depth_v(value) != cls.Depth - 1:
-            value = _ek.full(cls.Value, value, size)
+            value = _ek.full(cls.Value, value, shape)
 
         for i in range(cls.Size):
             result.set_entry_(i, value)
@@ -1479,7 +1531,8 @@ def scatter_reduce_(self, op, target, index, mask):
 def export_(a, migrate_to_host, version, owner_supported=True):
     shape = _ek.shape(a)
     ndim = len(shape)
-    shape = tuple(reversed(shape))
+    if not a.IsTensor:
+        shape = tuple(reversed(shape))
 
     if not a.IsJIT:
         # F-style strides
@@ -1506,7 +1559,7 @@ def export_(a, migrate_to_host, version, owner_supported=True):
 
         # First dimension is the dynamic one, the rest should be in reversed order
         for i in reversed(range(1, ndim)):
-            strides[ndim - i] = temp
+            strides[i if a.IsTensor else (ndim - i)] = temp
             temp *= shape[i]
         strides[0] = temp
 
@@ -1547,8 +1600,11 @@ def export_(a, migrate_to_host, version, owner_supported=True):
 
 @property
 def op_array_interface(a):
-    return a.export_(migrate_to_host=True, version=3,
-                     owner_supported=False)
+    try:
+        return a.export_(migrate_to_host=True, version=3,
+                         owner_supported=False)
+    except BaseException as e:
+        print(e)
 
 
 @property
@@ -1563,11 +1619,11 @@ def numpy(a):
     import numpy
     arr = numpy.array(a, copy=False)
     if a.IsComplex:
-        arr = numpy.ascontiguousarray(arr)
+        arr = arr.T.ravel()
         if arr.dtype == numpy.float32:
-            return arr.view(numpy.complex64)[..., 0]
+            return arr.view(numpy.complex64)[...]
         elif arr.dtype == numpy.float64:
-            return arr.view(numpy.complex128)[..., 0]
+            return arr.view(numpy.complex128)[...]
         else:
             raise Exception("Unsupported dtype for complex conversion!")
     return arr
@@ -1586,6 +1642,7 @@ def dlpack(a):
         strides=strides
     )
 
+
 def torch(a):
     from torch.utils.dlpack import from_dlpack
     return from_dlpack(a.dlpack())
@@ -1595,9 +1652,12 @@ def jax(a):
     from jax.dlpack import from_dlpack
     from jax import devices
     if a.IsLLVM:
-        return from_dlpack(a.dlpack(), backend=devices(backend="cpu")[0])
-    else:
-        return from_dlpack(a.dlpack())
+        try:
+            # Not all Jax versions accept the 'backend' parameter
+            return from_dlpack(a.dlpack(), backend=devices(backend="cpu")[0])
+        except:
+            pass
+    return from_dlpack(a.dlpack())
 
 
 def tf(a):

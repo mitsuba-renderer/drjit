@@ -32,6 +32,11 @@ if (ENOKI_ENABLE_AUTODIFF)
   target_compile_definitions(enoki-python PRIVATE -DENOKI_ENABLE_AUTODIFF=1)
 endif()
 
+
+if (ENOKI_ENABLE_PYTHON_PACKET)
+  target_compile_definitions(enoki-python PRIVATE -DENOKI_ENABLE_PYTHON_PACKET=1)
+endif()
+
 if (MSVC)
   set(ENOKI_OUTPUT_DIRECTORY
     LIBRARY_OUTPUT_DIRECTORY_RELEASE        ${CMAKE_CURRENT_BINARY_DIR}/../../enoki

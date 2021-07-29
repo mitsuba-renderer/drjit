@@ -11,6 +11,8 @@ def get_class(name):
     elif 'llvm' in name:
         if not ek.has_backend(ek.JitBackend.LLVM):
             pytest.skip('LLVM mode is unsupported')
+    elif 'packet' in name and not hasattr(ek, 'packet'):
+        pytest.skip('Packet mode is unsupported')
 
     name = name.split('.')
     value = __import__(".".join(name[:-1]))
@@ -115,38 +117,39 @@ def test02_basic_ops(cname):
     assert r._entry_evals == nc + entry_evals
 
 
-def test03_type_promotion():
-    import enoki.packet as s
+@pytest.mark.parametrize("pkg", ['enoki.packet', 'enoki.cuda', 'enoki.llvm'])
+def test03_type_promotion(pkg):
+    m = get_class(pkg)
 
-    assert type(s.Array1b() | s.Array1b()) is s.Array1b
-    assert type(s.Array1b() ^ s.Array1b()) is s.Array1b
-    assert type(s.Array1b() & s.Array1b()) is s.Array1b
+    assert type(m.Array1b() | m.Array1b()) is m.Array1b
+    assert type(m.Array1b() ^ m.Array1b()) is m.Array1b
+    assert type(m.Array1b() & m.Array1b()) is m.Array1b
 
     with pytest.raises(ek.Exception) as ei:
-        _ = s.Array1b() + s.Array1b()
+        _ = m.Array1b() + m.Array1b()
     assert "add(): requires arithmetic operands!" in str(ei.value)
 
-    assert type(s.Array1i() + s.Array1i()) is s.Array1i
-    assert type(s.Array1i() + s.Array1u()) is s.Array1u
-    assert type(s.Array1i() + s.Array1i64()) is s.Array1i64
-    assert type(s.Array1i() + s.Array1u64()) is s.Array1u64
-    assert type(s.Array1i() + s.Array1f()) is s.Array1f
-    assert type(s.Array1i() + s.Array1f64()) is s.Array1f64
+    assert type(m.Array1i() + m.Array1i()) is m.Array1i
+    assert type(m.Array1i() + m.Array1u()) is m.Array1u
+    assert type(m.Array1i() + m.Array1i64()) is m.Array1i64
+    assert type(m.Array1i() + m.Array1u64()) is m.Array1u64
+    assert type(m.Array1i() + m.Array1f()) is m.Array1f
+    assert type(m.Array1i() + m.Array1f64()) is m.Array1f64
 
     with pytest.raises(ek.Exception) as ei:
-        _ = ek.sqrt(s.Array1i())
+        _ = ek.sqrt(m.Array1i())
     assert "sqrt(): requires floating point operands!" in str(ei.value)
 
-    assert type(s.Array1f() + s.Array1f()) is s.Array1f
-    assert type(s.Array1f() + s.Array1u()) is s.Array1f
-    assert type(s.Array1f() + s.Array1i64()) is s.Array1f
-    assert type(s.Array1f() + s.Array1u64()) is s.Array1f
-    assert type(s.Array1f() + s.Array1f()) is s.Array1f
-    assert type(s.Array1f() + s.Array1f64()) is s.Array1f64
+    assert type(m.Array1f() + m.Array1f()) is m.Array1f
+    assert type(m.Array1f() + m.Array1u()) is m.Array1f
+    assert type(m.Array1f() + m.Array1i64()) is m.Array1f
+    assert type(m.Array1f() + m.Array1u64()) is m.Array1f
+    assert type(m.Array1f() + m.Array1f()) is m.Array1f
+    assert type(m.Array1f() + m.Array1f64()) is m.Array1f64
 
-    assert type(s.Array1f() | s.Array1b()) is s.Array1f
-    assert type(s.Array1f() ^ s.Array1b()) is s.Array1f
-    assert type(s.Array1f() & s.Array1b()) is s.Array1f
+    assert type(m.Array1f() | m.Array1b()) is m.Array1f
+    assert type(m.Array1f() ^ m.Array1b()) is m.Array1f
+    assert type(m.Array1f() & m.Array1b()) is m.Array1f
 
 
 # Run various standard operations on a 3D array
@@ -177,13 +180,15 @@ def test04_operators():
 
 def all_arrays(cond=lambda x: True):
     a = list(ek.scalar.__dict__.items())
-    a += ek.packet.__dict__.items()
+    if hasattr(ek, "packet"):
+        a += ek.packet.__dict__.items()
     if hasattr(ek, "cuda"):
         a += ek.cuda.__dict__.items()
     if hasattr(ek, "llvm"):
         a += ek.llvm.__dict__.items()
     return [v for k, v in a if isinstance(v, type) and cond(v)
             and not ek.is_special_v(v)
+            and not ek.is_tensor_v(v)
             and not ek.array_depth_v(v) >= 3
             and not (ek.array_depth_v(v) >= 2 and 'scalar' in v.__module__)]
 

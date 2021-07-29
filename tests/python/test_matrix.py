@@ -3,10 +3,10 @@ import numpy as np
 import pytest
 import importlib
 
-from enoki.packet import Matrix2f as M2
-from enoki.packet import Matrix3f as M3
-from enoki.packet import Matrix4f as M4
-from enoki.packet import Float
+from enoki.scalar import Matrix2f as M2
+from enoki.scalar import Matrix3f as M3
+from enoki.scalar import Matrix4f as M4
+from enoki.scalar import Float
 M = M4
 
 def prepare(pkg):
@@ -55,7 +55,7 @@ def test02_transpose_diag():
 
 def test03_roundtrip():
     pytest.importorskip("numpy")
-    m = M(*range(1, 17)) + ek.full(M, ek.arange(ek.packet.Float))
+    m = M(*range(1, 17)) + ek.full(M, ek.arange(ek.scalar.Float))
     m2 = M(m.numpy())
     assert m == m2
 

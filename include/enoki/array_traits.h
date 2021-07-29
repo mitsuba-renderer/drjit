@@ -102,6 +102,7 @@ namespace detail {
     template <typename T> using is_matrix_det          = std::enable_if_t<T::Derived::IsMatrix>;
     template <typename T> using is_vector_det          = std::enable_if_t<T::Derived::IsVector>;
     template <typename T> using is_quaternion_det      = std::enable_if_t<T::Derived::IsQuaternion>;
+    template <typename T> using is_tensor_det          = std::enable_if_t<T::Derived::IsTensor>;
     template <typename T> using is_special_det         = std::enable_if_t<T::Derived::IsSpecial>;
     template <typename T> using is_dynamic_det         = std::enable_if_t<T::IsDynamic>;
     template <typename T> using is_enoki_struct_det    = std::enable_if_t<T::IsEnokiStruct>;
@@ -178,6 +179,10 @@ template <typename T> using enable_if_vector_t = enable_if_t<is_vector_v<T>>;
 template <typename T>
 constexpr bool is_quaternion_v = is_detected_v<detail::is_quaternion_det, std::decay_t<T>>;
 template <typename T> using enable_if_quaternion_t = enable_if_t<is_quaternion_v<T>>;
+
+template <typename T>
+constexpr bool is_tensor_v = is_detected_v<detail::is_tensor_det, std::decay_t<T>>;
+template <typename T> using enable_if_tensor_t = enable_if_t<is_tensor_v<T>>;
 
 template <typename T>
 constexpr bool is_special_v = is_detected_v<detail::is_special_det, std::decay_t<T>>;
