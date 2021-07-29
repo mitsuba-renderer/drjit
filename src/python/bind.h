@@ -128,14 +128,14 @@ auto bind_full(py::class_<Array> &cls, bool scalar_mode = false) {
         cls.def(py::init([](ssize_t value) { return new Array((Scalar) value); }));
 
     if constexpr (!Array::IsMask) {
-        cls.def(py::init<const ek::  int32_array_t<Array> &>());
-        cls.def(py::init<const ek:: uint32_array_t<Array> &>());
-        cls.def(py::init<const ek::  int64_array_t<Array> &>());
-        cls.def(py::init<const ek:: uint64_array_t<Array> &>());
-        cls.def(py::init<const ek::float32_array_t<Array> &>());
-        cls.def(py::init<const ek::float64_array_t<Array> &>());
+        cls.def(py::init<const ek::  int32_array_t<Array> &>(), py::arg().noconvert());
+        cls.def(py::init<const ek:: uint32_array_t<Array> &>(), py::arg().noconvert());
+        cls.def(py::init<const ek::  int64_array_t<Array> &>(), py::arg().noconvert());
+        cls.def(py::init<const ek:: uint64_array_t<Array> &>(), py::arg().noconvert());
+        cls.def(py::init<const ek::float32_array_t<Array> &>(), py::arg().noconvert());
+        cls.def(py::init<const ek::float64_array_t<Array> &>(), py::arg().noconvert());
     } else {
-        cls.def(py::init<const ek::bool_array_t<Array> &>());
+        cls.def(py::init<const ek::bool_array_t<Array> &>(), py::arg().noconvert());
     }
 
 #if defined(ENOKI_ENABLE_AUTODIFF)
@@ -435,7 +435,7 @@ auto bind_full(py::class_<Array> &cls, bool scalar_mode = false) {
     }
 
     if constexpr (Array::IsDiff) {
-        cls.def(py::init<ek::detached_t<Array>>());
+        cls.def(py::init<ek::detached_t<Array>>(), py::arg().noconvert());
         cls.def("detach_", [](const Array &a) { return ek::detach(a); });
         cls.def("detach_ref_", py::overload_cast<>(&Array::detach_),
                 py::return_value_policy::reference_internal);

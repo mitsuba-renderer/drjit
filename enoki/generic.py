@@ -1662,4 +1662,6 @@ def jax(a):
 
 def tf(a):
     from tensorflow.experimental.dlpack import from_dlpack
+    from tensorflow import constant
+    constant(0) # Dummy op to ensure that the Tensorflow context is initialized
     return from_dlpack(a.dlpack())

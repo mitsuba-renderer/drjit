@@ -111,6 +111,7 @@ struct Tensor
     static constexpr bool IsMask = is_mask_v<Array_>;
     static constexpr bool IsTensor = true;
     static constexpr bool IsDynamic = true;
+    static constexpr bool IsDiff = Array::IsDiff;
     static constexpr size_t Size = Dynamic;
 
     template <typename T>

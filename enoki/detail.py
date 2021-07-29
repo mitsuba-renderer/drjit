@@ -531,8 +531,12 @@ def slice_tensor(shape, indices, uint32):
     """
     components = []
     ellipsis = False
-    none_count = indices.count(None)
+    none_count = 0
     shape_offset = 0
+
+    for v in indices:
+        if v is None:
+            none_count += 1
 
     for v in indices:
         if v is None:
