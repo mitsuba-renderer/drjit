@@ -1,26 +1,37 @@
 import math
 import cmath
 import enoki as ek
-from enoki.packet import Complex2f as C
-from enoki.packet import Float
+import pytest
+
+classes = []
+
+if hasattr(ek, 'cuda'):
+    classes.append(ek.cuda.Complex2f)
+if hasattr(ek, 'llvm'):
+    classes.append(ek.llvm.Complex2f)
+if hasattr(ek, 'packet'):
+    classes.append(ek.packet.Complex2f)
 
 
-def test01_bcast():
+@pytest.mark.parametrize('C', classes)
+def test01_bcast(C):
     a = C()
     a.real = 5
     a.imag = 0
-    b = C(Float(5))
+    b = C(C.Value(5))
     assert a == b
 
 
-def test02_sub():
+@pytest.mark.parametrize('C', classes)
+def test02_sub(C):
     a = C(1, 3)
     b = C(5, 7)
     c = C(1-5, 3-7)
     assert a-b == c
 
 
-def test03_mul():
+@pytest.mark.parametrize('C', classes)
+def test03_mul(C):
     a = C(1, 3)
     b = C(5, 7)
     c = a * b
@@ -30,7 +41,8 @@ def test03_mul():
     assert 2 * a == C(2, 6)
 
 
-def test04_div():
+@pytest.mark.parametrize('C', classes)
+def test04_div(C):
     a = C(1, 3)
     b = C(5, 7)
     c = a / b
@@ -39,20 +51,24 @@ def test04_div():
     assert a / 2 == C(1/2, 3/2)
 
 
-def test05_rcp():
+@pytest.mark.parametrize('C', classes)
+def test05_rcp(C):
     assert ek.allclose(ek.rcp(C(1, 3)), C(1/10, -3/10))
 
 
-def test06_from_builtin():
+@pytest.mark.parametrize('C', classes)
+def test06_from_builtin(C):
     assert C(complex(3, 4)) == C(3, 4)
 
 
-def test07_from_builtin():
+@pytest.mark.parametrize('C', classes)
+def test07_from_builtin(C):
     # Fmadd should fallback to regular multiply (complex)-add
     assert ek.fmadd(C(2, 2), C(5, 5), C(5, 6)) == C(5, 26)
 
 
-def test08_misc():
+@pytest.mark.parametrize('C', classes)
+def test08_misc(C):
     for i in range(-5, 5):
         for j in range(-5, 5):
             a = ek.sqrt(C(i, j))
@@ -68,7 +84,8 @@ def test08_misc():
                 assert ek.allclose(a, b)
 
 
-def test09_trig():
+@pytest.mark.parametrize('C', classes)
+def test09_trig(C):
     for i in range(-5, 5):
         for j in range(-5, 5):
             a = ek.sin(C(i, j))
@@ -101,7 +118,8 @@ def test09_trig():
                 assert ek.allclose(a, b, atol=1e-7)
 
 
-def test10_math_explog():
+@pytest.mark.parametrize('C', classes)
+def test10_math_explog(C):
     for i in range(-5, 5):
         for j in range(-5, 5):
             if i != 0 or j != 0:
@@ -126,7 +144,8 @@ def test10_math_explog():
             assert ek.allclose(a, b)
 
 
-def test11_hyp():
+@pytest.mark.parametrize('C', classes)
+def test11_hyp(C):
     for i in range(-5, 5):
         for j in range(-5, 5):
             a = ek.sinh(C(i, j))
@@ -159,13 +178,20 @@ def test11_hyp():
                 assert ek.allclose(a, b, atol=1e-7)
 
 
-def test12_numpy():
-    arr1 = C(1, 2)
+@pytest.mark.parametrize('C', classes)
+def test12_numpy(C):
+    arr1 = C((1, 2, 3), (4, 5, 6))
+    print(arr1)
     arr2 = arr1.numpy()
+    print(arr2)
     assert 'j' in repr(arr2)
+    print(type(arr2))
+    print(arr2)
+    print(arr2.dtype)
     arr3 = C(arr2)
     assert arr1 == arr3
 
 
-def test13_abs():
+@pytest.mark.parametrize('C', classes)
+def test13_abs(C):
     assert ek.allclose(abs(C(1, 2)), math.sqrt(5))

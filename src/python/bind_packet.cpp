@@ -1,3 +1,4 @@
+#if defined(ENOKI_ENABLE_PYTHON_PACKET)
 #include "bind.h"
 #include "random.h"
 
@@ -10,3 +11,4 @@ void export_packet(py::module_ &m) {
 
     bind_pcg32<Guide>(packet);
 }
+#endif

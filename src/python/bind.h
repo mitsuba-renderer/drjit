@@ -8,7 +8,7 @@
 #include <enoki/autodiff.h>
 #include <pybind11/functional.h>
 
-extern py::handle array_base, array_name, array_init, array_configure;
+extern py::handle array_base, array_name, array_init, tensor_init, array_configure;
 
 template <typename Array>
 auto bind_type(py::module_ &m, bool scalar_mode = false) {
@@ -20,10 +20,12 @@ auto bind_type(py::module_ &m, bool scalar_mode = false) {
     const char *prefix = "Array";
     if constexpr (ek::is_complex_v<Array>)
         prefix = "Complex";
-    if constexpr (ek::is_quaternion_v<Array>)
+    else if constexpr (ek::is_quaternion_v<Array>)
         prefix = "Quaternion";
-    if constexpr (ek::is_matrix_v<Array>)
+    else if constexpr (ek::is_matrix_v<Array>)
         prefix = "Matrix";
+    else if constexpr (ek::is_tensor_v<Array>)
+        prefix = "Tensor";
 
     py::tuple shape;
     if constexpr (Array::Depth == 1)

@@ -76,6 +76,10 @@ def is_quaternion_v(a):
     return getattr(a, 'IsQuaternion', False)
 
 
+def is_tensor_v(a):
+    return getattr(a, 'IsTensor', False)
+
+
 def is_vector_v(a):
     return getattr(a, 'IsVector', False)
 

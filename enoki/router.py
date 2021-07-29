@@ -241,6 +241,8 @@ def shape(a):
     any size.
 
     """
+    if _ek.is_tensor_v(a):
+        return a.shape
     s = []
     if not _shape_impl(a, 0, s):
         return None
@@ -350,6 +352,9 @@ def op_repr(self):
     if s is None:
         return "[ragged array]"
     else:
+        if self.IsTensor:
+            return f"{type(self).__name__}(shape={s})"
+
         import io
         buf = io.StringIO()
         try:
@@ -557,6 +562,9 @@ def scatter(target, value, index, mask=True, permute=False):
             for i in range(len(target)):
                 scatter(target.entry_ref_(i), value[i], index, mask, permute)
         else:
+            if not _ek.is_array_v(value):
+                value = target_type(value)
+
             index_type = _ek.uint32_array_t(type(value))
             if not isinstance(index, index_type):
                 index = _broadcast_index(index_type, index)
@@ -589,6 +597,9 @@ def scatter_reduce(op, target, value, index, mask=True):
             for i in range(len(target)):
                 scatter_reduce(op, target.entry_ref_(i), value[i], index, mask)
         else:
+            if not _ek.is_array_v(value):
+                value = target_type(value)
+
             index_type = _ek.uint32_array_t(type(value))
             if not isinstance(index, index_type):
                 index = _broadcast_index(index_type, index)
@@ -601,7 +612,11 @@ def scatter_reduce(op, target, value, index, mask=True):
 
 
 def ravel(array):
-    if not _var_is_enoki(array) or array.Depth == 1:
+    if not _var_is_enoki(array):
+        return array
+    elif array.IsTensor:
+        return array.array
+    elif array.Depth == 1:
         return array
 
     s = shape(array)
@@ -2288,7 +2303,10 @@ def traverse(t, reverse=True, retain_graph=False):
     if not _ek.is_diff_array_v(t):
         raise Exception('traverse(): expected a differentiable array type!')
 
-    _ek.leaf_array_t(t).traverse_(reverse, retain_graph)
+    t = _ek.leaf_array_t(t)
+    if t.IsTensor:
+        t = t.Array
+    t.traverse_(reverse, retain_graph)
 
 
 def backward(a, retain_graph=False):
@@ -2323,17 +2341,17 @@ def forward(a, retain_graph=False):
 # -------------------------------------------------------------------
 
 
-def zero(type_, size=1):
+def zero(type_, shape=1):
     if not isinstance(type_, type):
         raise Exception('zero(): Type expected as first argument')
     elif issubclass(type_, ArrayBase):
-        return type_.zero_(size)
+        return type_.zero_(shape)
     elif _ek.is_enoki_struct_v(type_):
         result = type_()
         for k, v in type_.ENOKI_STRUCT.items():
-            setattr(result, k, zero(v, size))
+            setattr(result, k, zero(v, shape))
         if hasattr(type_, 'zero_'):
-            result.zero_(size)
+            result.zero_(shape)
         return result
     elif not type_ in (int, float, complex, bool):
         return None
@@ -2341,47 +2359,47 @@ def zero(type_, size=1):
         return type_(0)
 
 
-def empty(type_, size=1):
+def empty(type_, shape=1):
     if not isinstance(type_, type):
         raise Exception('empty(): Type expected as first argument')
     elif issubclass(type_, ArrayBase):
-        return type_.empty_(size)
+        return type_.empty_(shape)
     elif _ek.is_enoki_struct_v(type_):
         result = type_()
         for k, v in type_.ENOKI_STRUCT.items():
-            setattr(result, k, empty(v, size))
+            setattr(result, k, empty(v, shape))
         return result
     else:
         return type_(0)
 
 
-def full(type_, value, size=1):
+def full(type_, value, shape=1):
     if not isinstance(type_, type):
         raise Exception('full(): Type expected as first argument')
     elif issubclass(type_, ArrayBase):
-        return type_.full_(value, size)
+        return type_.full_(value, shape)
     else:
         return type_(value)
 
 
-def opaque(type_, value, size=1):
+def opaque(type_, value, shape=1):
     if not isinstance(type_, type):
         raise Exception('opaque(): Type expected as first argument')
     if not _ek.is_jit_array_v(type_):
-        return _ek.full(type_, value, size)
+        return _ek.full(type_, value, shape)
     if _ek.is_static_array_v(type_):
         result = type_()
         for i in range(len(result)):
-            result[i] = opaque(type_.Value, value, size)
+            result[i] = opaque(type_.Value, value, shape)
         return result
     if _ek.is_diff_array_v(type_):
-        return _ek.opaque(_ek.detached_t(type_), value, size)
+        return _ek.opaque(_ek.detached_t(type_), value, shape)
     if _ek.is_jit_array_v(type_):
-        return type_.opaque_(value, size)
+        return type_.opaque_(value, shape)
     elif _ek.is_enoki_struct_v(type_):
         result = type_()
         for k, v in type_.ENOKI_STRUCT.items():
-            setattr(result, k, opaque(v, getattr(value, k), size))
+            setattr(result, k, opaque(v, getattr(value, k), shape))
         return result
     else:
         return type_(value)

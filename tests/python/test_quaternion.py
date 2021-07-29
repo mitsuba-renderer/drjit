@@ -1,7 +1,7 @@
 import math
 import enoki as ek
-from enoki.packet import Quaternion4f as Q
-from enoki.packet import Float, Array4f
+from enoki.scalar import Quaternion4f as Q
+from enoki.scalar import Float, Array4f
 
 
 def test01_bcast():

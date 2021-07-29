@@ -5,7 +5,10 @@
 #include <pybind11/stl.h>
 
 extern void export_scalar(py::module_ &m);
+
+#if defined(ENOKI_ENABLE_PYTHON_PACKET)
 extern void export_packet(py::module_ &m);
+#endif
 
 #if defined(ENOKI_ENABLE_JIT)
 #if defined(ENOKI_ENABLE_CUDA)
@@ -39,7 +42,7 @@ const char* var_type_numpy[(int) VarType::Count] {
     "i8", "u8", "u8", "f2", "f4", "f8"
 };
 
-py::handle array_base, array_name, array_init, array_configure;
+py::handle array_base, array_name, array_init, tensor_init, array_configure;
 
 /// Placeholder base of all Enoki arrays in the Python domain
 struct ArrayBase { };
@@ -67,6 +70,7 @@ PYBIND11_MODULE(enoki_ext, m_) {
     py::module_ array_detail = (py::module_) m.attr("detail");
     array_name = array_detail.attr("array_name");
     array_init = array_detail.attr("array_init");
+    tensor_init = array_detail.attr("tensor_init");
     array_configure = array_detail.attr("array_configure");
 
     m.attr("Dynamic") = ek::Dynamic;
@@ -103,7 +107,10 @@ PYBIND11_MODULE(enoki_ext, m_) {
     });
 
     export_scalar(m);
+
+#if defined(ENOKI_ENABLE_PYTHON_PACKET)
     export_packet(m);
+#endif
 
 #if defined(ENOKI_ENABLE_JIT)
 #if defined(ENOKI_ENABLE_CUDA)

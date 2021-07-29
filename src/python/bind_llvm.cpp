@@ -2,6 +2,7 @@
 #include "bind.h"
 #include "random.h"
 #include "loop.h"
+#include "tensor.h"
 #include <enoki/jit.h>
 #include <enoki/autodiff.h>
 
@@ -23,5 +24,7 @@ void export_llvm(py::module_ &m) {
         .def("put", &Loop<Guide>::put)
         .def("init", &Loop<Guide>::init)
         .def("__call__", &Loop<Guide>::operator());
+
+    ENOKI_BIND_TENSOR_TYPES(llvm);
 }
 #endif
