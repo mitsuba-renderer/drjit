@@ -4,7 +4,6 @@ PyObject *implicit_conversion_handler(PyObject *obj, PyTypeObject *type_) {
     py::handle type((PyObject *) type_);
 
     const char *tp_name_src = obj->ob_type->tp_name;
-    printf("Trying conversion from %s to %s..\n", tp_name_src, type_->tp_name);
     size_t Size = py::cast<size_t>(type.attr("Size"));
 
     bool pass = false;

@@ -620,8 +620,16 @@ def ravel(array):
         return array
 
     s = shape(array)
+
+    if array.IsSpecial:
+        name = _ek.detail.array_name('Array', array.Type, s, array.IsScalar)
+        t = getattr(_modules.get(array.__module__), name)
+        array = t(array)
+
     if s is None:
         raise Exception('ravel(): ragged arrays not permitted!')
+
+    print(s)
 
     target_type = type(array)
     while target_type.Depth > 1:

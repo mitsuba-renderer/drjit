@@ -107,7 +107,7 @@ template <typename Tensor> auto bind_tensor_conversions(py::class_<Tensor> &cls)
         cls.def(py::init<const Tensor &>(), py::arg().noconvert());
     }
 
-    if constexpr (!ek::is_diff_array_v<Tensor>)
+    if constexpr (ek::is_diff_array_v<Tensor>)
         cls.def(py::init<const ek::detached_t<Tensor> &>(), py::arg().noconvert());
 
     using Scalar = ek::scalar_t<Tensor>;

@@ -242,6 +242,9 @@ template <typename Value_> struct Complex;
 /// Generic quaternion type
 template <typename Value_> struct Quaternion;
 
+/// Generic tensor type
+template <typename Array_> struct Tensor;
+
 /// Helper class for custom data structures
 template <typename T>
 struct struct_support;

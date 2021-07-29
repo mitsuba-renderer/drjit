@@ -382,8 +382,12 @@ namespace detail {
             typename detached<value_t<T>>::type>;
     };
 
-    template <typename T> struct detached<T, enable_if_t<T::IsDiff && T::Depth == 1>> {
+    template <typename T> struct detached<T, enable_if_t<T::IsDiff && T::Depth == 1 && !T::IsTensor>> {
         using type = typename std::decay_t<T>::Type;
+    };
+
+    template <typename T> struct detached<T, enable_if_t<T::IsDiff && T::Depth == 1 && T::IsTensor>> {
+        using type = Tensor<typename detached<typename std::decay_t<T>::Array>::type>;
     };
 
     template <template <typename...> typename Base, typename... Ts>
