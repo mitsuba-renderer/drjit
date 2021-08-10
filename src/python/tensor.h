@@ -36,6 +36,9 @@ template <typename T> auto bind_tensor(py::module m) {
             for (size_t i = 0; i < t.ndim(); ++i)
                 PyTuple_SET_ITEM(shape, i, PyLong_FromLong(t.shape(i)));
             return py::reinterpret_steal<py::tuple>(shape);
+        })
+       .def("data_", [](const Tensor &a) {
+            return (uintptr_t) a.data();
         });
 
     cls.def("or_",     [](const Tensor &a, const Tensor &b) { return a.or_(b); });
