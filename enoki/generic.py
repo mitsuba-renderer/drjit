@@ -1178,6 +1178,13 @@ def hsum_(a0):
     return value
 
 
+def hsum_async_(a0):
+    if a0.IsTensor:
+        return a0.array.hsum_async_()
+    else:
+        return type(a0)([a0.hsum_()])
+
+
 def hprod_(a0):
     if a0.IsTensor:
         return a0.array.hprod_()
@@ -1188,6 +1195,13 @@ def hprod_(a0):
     for i in range(1, size):
         value = value * a0[i]
     return value
+
+
+def hprod_async_(a0):
+    if a0.IsTensor:
+        return a0.array.hprod_async_()
+    else:
+        return type(a0)([a0.hprod_()])
 
 
 def hmin_(a0):
@@ -1203,6 +1217,13 @@ def hmin_(a0):
     return value
 
 
+def hmin_async_(a0):
+    if a0.IsTensor:
+        return a0.array.hmin_async_()
+    else:
+        return type(a0)([a0.hmin_()])
+
+
 def hmax_(a0):
     if a0.IsTensor:
         return a0.array.hmax_()
@@ -1215,6 +1236,13 @@ def hmax_(a0):
     for i in range(1, size):
         value = _ek.max(value, a0[i])
     return value
+
+
+def hmax_async_(a0):
+    if a0.IsTensor:
+        return a0.array.hmax_async_()
+    else:
+        return type(a0)([a0.hmax_()])
 
 
 def dot_(a0, a1):
@@ -1431,6 +1459,7 @@ def broadcast_(self, value):
 @classmethod
 def empty_(cls, shape):
     if cls.IsTensor:
+        shape = [shape] if type(shape) is int else shape
         return cls(_ek.empty(cls.Array, _ek.hprod(shape)), shape)
 
     result = cls()
@@ -1445,6 +1474,7 @@ def empty_(cls, shape):
 @classmethod
 def zero_(cls, shape=1):
     if cls.IsTensor:
+        shape = [shape] if type(shape) is int else shape
         return cls(_ek.zero(cls.Array, _ek.hprod(shape)), shape)
 
     result = cls()
@@ -1461,6 +1491,7 @@ def zero_(cls, shape=1):
 @classmethod
 def full_(cls, value, shape):
     if cls.IsTensor:
+        shape = [shape] if type(shape) is int else shape
         return cls(_ek.full(cls.Array, value, _ek.hprod(shape)), shape)
 
     result = cls()

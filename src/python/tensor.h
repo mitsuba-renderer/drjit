@@ -70,7 +70,8 @@ template <typename T> auto bind_tensor(py::module m) {
         cls.def(Tensor::IsFloat ? "itruediv_" : "ifloordiv_",
                 [](Tensor *a, const Tensor &b) { *a = a->div_(b); return a; });
 
-        cls.def("min_", &Tensor::min_)
+        cls.def("abs_", &Tensor::abs_)
+           .def("min_", &Tensor::min_)
            .def("max_", &Tensor::max_);
      }
 

@@ -1,5 +1,6 @@
 #include "bind.h"
 #include "random.h"
+#include "tensor.h"
 
 void export_scalar(py::module_ &m) {
     py::module_ scalar = m.def_submodule("scalar");
@@ -31,4 +32,7 @@ void export_scalar(py::module_ &m) {
         .def("init", [](LoopDummy&) {})
         .def("__call__", [](LoopDummy&) { return false; })
         .def("__call__", [](LoopDummy&, bool value) { return value; });
+
+    using Guide = enoki::DynamicArray<float>;
+    ENOKI_BIND_TENSOR_TYPES(scalar);
 }
