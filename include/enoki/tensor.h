@@ -21,6 +21,7 @@ NAMESPACE_BEGIN(detail)
 
 template <typename Index, typename T>
 void tensor_broadcast_impl(const char *op, T &t, const ek_vector<size_t> &shape) {
+    ENOKI_MARK_USED(op);
     int ndim = t.ndim();
     if (ndim == 0 || memcmp(t.shape().data(), shape.data(), sizeof(size_t) * ndim) == 0)
         return;
@@ -102,6 +103,7 @@ struct Tensor
 
     using Base = ArrayBase<value_t<Array_>, is_mask_v<Array_>, Tensor<Array_>>;
     using Array = Array_;
+    using Value = typename Array::Value;
     using Index = uint32_array_t<Array>;
 
     using ArrayType = Tensor<array_t<Array>>;
@@ -142,6 +144,8 @@ struct Tensor
             enoki_raise("Tensor(): invalid size specified (%zu vs %zu)!",
                         size, data.size());
     }
+
+    operator Array() const { return m_array; }
 
     Tensor add_(const Tensor &b) const {
         Tensor t0 = *this, t1 = b;
@@ -296,6 +300,9 @@ struct Tensor
     Array &array() { return m_array; }
     const Array &array() const { return m_array; }
     const Shape &shape() const { return m_shape; }
+
+    const Value *data() const { return m_array.data(); }
+    Value *data() { return m_array.data(); }
 
 protected:
     Tensor(Array &&data, const Shape &shape)
