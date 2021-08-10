@@ -221,6 +221,8 @@ struct Tensor
         return fmadd_(-b, -c);
     }
 
+    Tensor abs_() const { return Tensor(abs(m_array), m_shape); }
+
     Tensor min_(const Tensor &b) const {
         Tensor t0 = *this, t1 = b;
         Shape shape = detail::tensor_broadcast("min_", t0, t1);

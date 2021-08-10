@@ -1799,10 +1799,7 @@ def hsum(a):
 
 
 def hsum_async(a):
-    if _var_is_enoki(a) and hasattr(a, 'hsum_async_'):
-        return a.hsum_async_()
-    else:
-        return type(a)([a.hsum_()])
+    return a.hsum_async_()
 
 
 def hsum_nested(a):
@@ -1856,12 +1853,7 @@ def hprod(a):
 
 
 def hprod_async(a):
-    if _var_is_enoki(a) and hasattr(a, 'hprod_async_'):
-        return a.hprod_async_()
-    else:
-        return type(a)([a.hprod_()])
-
-
+    return a.hprod_async_()
 def hprod_nested(a):
     while True:
         b = hprod(a)
@@ -1892,11 +1884,7 @@ def hmax(a):
 
 
 def hmax_async(a):
-    if _var_is_enoki(a) and hasattr(a, 'hmax_async_'):
-        return a.hmax_async_()
-    else:
-        return type(a)([a.hmax_()])
-
+    return a.hmax_async_()
 
 def hmax_nested(a):
     while True:
@@ -1928,10 +1916,7 @@ def hmin(a):
 
 
 def hmin_async(a):
-    if _var_is_enoki(a) and hasattr(a, 'hmin_async_'):
-        return a.hmin_async_()
-    else:
-        return type(a)([a.hmin_()])
+    return a.hmin_async_()
 
 
 def hmin_nested(a):
@@ -2500,7 +2485,8 @@ def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
             a, b = _var_promote(a, b)
 
         diff = abs(a - b)
-        cond = diff <= abs(b) * rtol + _ek.full(type(diff), atol)
+        shape = 1 if not diff.IsTensor else diff.shape
+        cond = diff <= abs(b) * rtol + _ek.full(type(diff), atol, shape)
         if _ek.is_floating_point_v(a):
             cond |= _ek.eq(a, b)  # plus/minus infinity
         if equal_nan:
