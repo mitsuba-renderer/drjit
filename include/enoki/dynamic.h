@@ -56,16 +56,16 @@ struct DynamicArray
         a.m_free = true;
     }
 
-    template <typename Value2, typename Derived2>
-    DynamicArray(const ArrayBase<Value2, IsMask, Derived2> &v) {
+    template <typename Value2, bool IsMask2, typename Derived2>
+    DynamicArray(const ArrayBase<Value2, IsMask2, Derived2> &v) {
         size_t size = v.derived().size();
         init_(size);
         for (size_t i = 0; i < size; ++i)
             m_data[i] = (Value) v.derived().entry(i);
     }
 
-    template <typename Value2, typename Derived2>
-    DynamicArray(const ArrayBase<Value2, IsMask, Derived2> &v,
+    template <typename Value2, bool IsMask2, typename Derived2>
+    DynamicArray(const ArrayBase<Value2, IsMask2, Derived2> &v,
                  detail::reinterpret_flag) {
         size_t size = v.derived().size();
         init_(size);
