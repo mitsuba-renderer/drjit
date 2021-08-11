@@ -51,17 +51,17 @@ template <typename T> auto bind_tensor(py::module m) {
     cls.def("iand_",   [](Tensor *a, const Tensor &b) { *a = a->and_(b); return a;});
     cls.def("ixor_",   [](Tensor *a, const Tensor &b) { *a = a->xor_(b); return a;});
 
-     if constexpr (!ek::is_mask_v<T>) {
-         cls.def("add_", &Tensor::add_)
-            .def("sub_", &Tensor::sub_)
-            .def("mul_", &Tensor::mul_)
-            .def("neg_", &Tensor::neg_)
-            .def("fmadd_", &Tensor::div_);
+    if constexpr (!ek::is_mask_v<T>) {
+        cls.def("add_", &Tensor::add_)
+        .def("sub_", &Tensor::sub_)
+        .def("mul_", &Tensor::mul_)
+        .def("neg_", &Tensor::neg_)
+        .def("fmadd_", &Tensor::div_);
 
-         cls.def("lt_", &Tensor::lt_)
-            .def("gt_", &Tensor::gt_)
-            .def("le_", &Tensor::le_)
-            .def("ge_", &Tensor::ge_);
+        cls.def("lt_", &Tensor::lt_)
+        .def("gt_", &Tensor::gt_)
+        .def("le_", &Tensor::le_)
+        .def("ge_", &Tensor::ge_);
 
         cls.def(Tensor::IsFloat ? "truediv_" : "floordiv_", &Tensor::div_);
 
@@ -76,27 +76,28 @@ template <typename T> auto bind_tensor(py::module m) {
         cls.def("abs_", &Tensor::abs_)
            .def("min_", &Tensor::min_)
            .def("max_", &Tensor::max_);
-     }
+    }
 
-     if constexpr (ek::is_floating_point_v<Tensor>) {
+    if constexpr (ek::is_floating_point_v<Tensor>) {
         cls.def("rcp_", &Tensor::rcp_)
            .def("rsqrt_", &Tensor::rsqrt_);
     }
 
-     if constexpr (ek::is_integral_v<Tensor>) {
-         cls.def("mod_", &Tensor::mod_);
-         cls.def("mulhi_", &Tensor::mulhi_);
-     }
+    if constexpr (ek::is_integral_v<Tensor>) {
+        cls.def("mod_", &Tensor::mod_);
+        cls.def("mulhi_", &Tensor::mulhi_);
+    }
 
-     cls.attr("select_") = py::cpp_function([](const ek::mask_t<Tensor> &m, const Tensor &t,
-                                               const Tensor &f) {
-         return Tensor::select_(m, t, f);
-     });
+    cls.attr("select_") = py::cpp_function([](const ek::mask_t<Tensor> &m,
+                                              const Tensor &t,
+                                              const Tensor &f) {
+        return Tensor::select_(m, t, f);
+    });
 
-     cls.def("neq_", &Tensor::neq_)
-        .def("eq_", &Tensor::eq_);
+    cls.def("neq_", &Tensor::neq_)
+       .def("eq_", &Tensor::eq_);
 
-     return cls;
+    return cls;
 }
 
 template <typename Tensor> auto bind_tensor_conversions(py::class_<Tensor> &cls) {
