@@ -1521,7 +1521,8 @@ template <typename Value> const char *ad_graphviz() {
 }
 
 template <typename T> T ad_grad(int32_t index, bool fail_if_missing) {
-    if (unlikely(index <= 0))
+    index = std::abs(index);
+    if (unlikely(index == 0))
         return T(0);
     std::lock_guard<std::mutex> guard(state.mutex);
     auto it = state.variables.find(index);
