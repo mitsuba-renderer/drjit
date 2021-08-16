@@ -39,12 +39,21 @@ option(ENOKI_ENABLE_TESTS    "Build Enoki test suite? (Warning, this takes *very
 # instructions available on a particular machine.
 
 if (MSVC)
-  set(ENOKI_NATIVE_FLAGS_DEFAULT "")
-elseif (APPLE AND CMAKE_OSX_ARCHITECTURES STREQUAL "arm64")
-  # Apple M1 compatibility
+  if (SKBUILD)
+    # Portable binaries for PyPI
+    set(ENOKI_NATIVE_FLAGS_DEFAULT "")
+  else()
+    set(ENOKI_NATIVE_FLAGS_DEFAULT "/arch:AVX2")
+  endif()
+elseif (APPLE AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
   set(ENOKI_NATIVE_FLAGS_DEFAULT "-mcpu=apple-a12")
 else()
-  set(ENOKI_NATIVE_FLAGS_DEFAULT "-march=nehalem")
+  if (SKBUILD)
+    # Portable binaries for PyPI
+    set(ENOKI_NATIVE_FLAGS_DEFAULT "-march=nehalem")
+  else()
+    set(ENOKI_NATIVE_FLAGS_DEFAULT "-march=native")
+  endif()
 endif()
 
 # Adapt to variations in rpath handling on Linux and macOS

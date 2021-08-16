@@ -143,10 +143,10 @@
 #    define ENOKI_X86_SSE42 1
 #  endif
 #  if defined(__ARM_NEON)
-#    define ENOKI_ARM_NEON
+#    define ENOKI_ARM_NEON 1
 #  endif
 #  if defined(__ARM_FEATURE_FMA)
-#    define ENOKI_ARM_FMA
+#    define ENOKI_ARM_FMA 1
 #  endif
 #endif
 
