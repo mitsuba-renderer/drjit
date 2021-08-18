@@ -1325,6 +1325,8 @@ template <typename T> ENOKI_INLINE bool schedule(const T &value) {
             for (size_t i = 0; i < value.derived().size(); ++i)
                 result |= schedule(value.derived().entry(i));
             return result;
+        } else if constexpr (is_tensor_v<T>) {
+            return schedule(value.array());
         } else {
             return value.derived().schedule_();
         }
@@ -1593,7 +1595,8 @@ template <typename... Ts> void resume_grad(Ts&... ts) {
     (set_grad_suspended(ts, false), ...);
 }
 
-template <bool UnderlyingType, typename T> decltype(auto) detach(T &&value) {
+template <bool UnderlyingType, typename T>
+decltype(auto) detach(T &&value) {
     using Result = std::conditional_t<UnderlyingType, detached_t<T>, std::decay_t<T>>;
 
     if constexpr (is_diff_array_v<T>) {
@@ -1607,10 +1610,15 @@ template <bool UnderlyingType, typename T> decltype(auto) detach(T &&value) {
 
             return result;
         } else {
-            if constexpr (UnderlyingType)
-                return value.derived().detach_();
-            else
-                return Result(value.derived().detach_());
+            if constexpr (is_tensor_v<T>) {
+                return Result(detach<UnderlyingType>(value.array()),
+                              value.ndim(), value.shape());
+            } else {
+                if constexpr (UnderlyingType)
+                    return value.derived().detach_();
+                else
+                    return Result(value.derived().detach_());
+            }
         }
     } else if constexpr (is_enoki_struct_v<T>) {
         Result result;
@@ -1627,7 +1635,8 @@ template <bool UnderlyingType, typename T> decltype(auto) detach(T &&value) {
     }
 }
 
-template <bool Underlying = true, bool FailIfMissing = true, typename T> auto grad(const T &value) {
+template <bool Underlying = true, bool FailIfMissing = true, typename T>
+auto grad(const T &value) {
     using Result = std::conditional_t<Underlying, detached_t<T>, T>;
 
     if constexpr (is_diff_array_v<T>) {
@@ -1641,7 +1650,12 @@ template <bool Underlying = true, bool FailIfMissing = true, typename T> auto gr
 
             return result;
         } else {
-            return Result(value.derived().grad_(FailIfMissing));
+            if constexpr (is_tensor_v<T>) {
+                return Result(grad<Underlying, FailIfMissing>(value.array()),
+                              value.ndim(), value.shape());
+            } else {
+                return Result(value.derived().grad_(FailIfMissing));
+            }
         }
     } else if constexpr (is_enoki_struct_v<T>) {
         Result result;
@@ -1667,8 +1681,14 @@ void set_grad(T &value, const T2 &grad) {
         } else {
             if constexpr (is_diff_array_v<T2>)
                 set_grad<FailIfMissing>(value, detach(grad));
-            else
-                value.set_grad_(grad, FailIfMissing);
+            else {
+                if constexpr (is_tensor_v<T2>)
+                    set_grad<FailIfMissing>(value, grad.array());
+                else if constexpr (is_tensor_v<T>)
+                    set_grad<FailIfMissing>(value.array(), grad);
+                else
+                    value.set_grad_(grad, FailIfMissing);
+            }
         }
     } else if constexpr (is_enoki_struct_v<T>) {
         struct_support_t<T>::apply_2(
@@ -1688,8 +1708,12 @@ void accum_grad(T &value, const T2 &grad) {
         } else {
             if constexpr (is_diff_array_v<T2>)
                 accum_grad<FailIfMissing>(value, detach(grad));
-            else
-                value.accum_grad_(grad, FailIfMissing);
+            else {
+                if constexpr (is_tensor_v<T>)
+                    accum_grad<FailIfMissing>(value.array(), grad);
+                else
+                    value.accum_grad_(grad, FailIfMissing);
+            }
         }
     } else if constexpr (is_enoki_struct_v<T>) {
         struct_support_t<T>::apply_2(
