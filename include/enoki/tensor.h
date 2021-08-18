@@ -145,6 +145,14 @@ struct Tensor
                         size, data.size());
     }
 
+    Tensor(const void *ptr, size_t ndim, const size_t *shape)
+        : m_shape(shape, shape + ndim) {
+        size_t size = 1;
+        for (size_t i = 0; i < ndim; ++i)
+            size *= shape[i];
+        m_array = load<Array>(ptr, size);
+    }
+
     operator Array() const { return m_array; }
 
     Tensor add_(const Tensor &b) const {
