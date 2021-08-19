@@ -12,7 +12,6 @@ template <typename T> auto bind_tensor(py::module m) {
        .def(py::init([](py::object o) -> Tensor {
             std::string mod = py::cast<std::string>(o.get_type().attr("__module__"));
             const char *mod_s = mod.c_str();
-
             if (strncmp(mod_s, "numpy", 5) == 0 ||
                 strncmp(mod_s, "torch", 5) == 0 ||
                 strncmp(mod_s, "jaxlib", 6) == 0 ||
@@ -23,7 +22,7 @@ template <typename T> auto bind_tensor(py::module m) {
                 // trick to get pybind11 to ignore this overload
                 throw py::reference_cast_error();
             }
-       }))
+       }), "array"_a)
        .def(py::init<T>(), "array"_a)
        .def(py::init([](const T &array, const std::vector<size_t> &shape) {
                return Tensor(array, shape.size(), shape.data());

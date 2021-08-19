@@ -54,8 +54,8 @@ def _var_type(a, preferred=VarType.Void):
 
         return preferred
     elif type(a).__module__ == 'numpy':
-        for t in [VarType.Float32, VarType.Float64, VarType.Int32,
-                  VarType.Int64, VarType.UInt32, VarType.UInt64]:
+        for t in [VarType.Float16, VarType.Float32, VarType.Float64,
+                  VarType.Int32, VarType.Int64, VarType.UInt32, VarType.UInt64]:
             if t.NumPy == a.dtype:
                 return t
     elif isinstance(a, tuple) or isinstance(a, list):
