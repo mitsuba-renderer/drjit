@@ -303,9 +303,10 @@ def tensor_init(tensor_type, obj):
             info = obj.__array_interface__
             shape = info['shape']
             typestr = str(info['typestr'])[3:-1]
-            if not typestr == 'f4':
+            if not typestr == tensor_type.Array.Type.NumPy:
                 raise TypeError("TensorXf: unsupported type: %s. Expect an "
-                                "array containing float32 values." % typestr)
+                                "array containing %s values." % (typestr,
+                                tensor_type.Array.Type.NumPy))
             data = tensor_type.Array.load_(info['data'][0], enoki.hprod(shape))
             return tensor_type(tensor_type.Array(data), shape)
         else:
