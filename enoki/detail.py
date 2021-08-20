@@ -292,11 +292,25 @@ def array_init(self, args):
 
 
 def tensor_init(tensor_type, obj):
-    if 'tensorflow' in type(obj).__module__:
+    mod = type(obj).__module__
+    if 'tensorflow' in mod:
         import tensorflow as tf
         return tensor_type(tensor_type.Array(tf.reshape(obj, [-1])), obj.shape)
-    else:
+    elif mod in ['numpy', 'jax', 'pytorch']:
         return tensor_type(tensor_type.Array(obj.ravel()), obj.shape)
+    else:
+        if hasattr(obj, '__array_interface__'):
+            info = obj.__array_interface__
+            shape = info['shape']
+            typestr = str(info['typestr'])[3:-1]
+            if not typestr == 'f4':
+                raise TypeError("TensorXf: unsupported type: %s. Expect an "
+                                "array containing float32 values." % typestr)
+            data = tensor_type.Array.load_(info['data'][0], enoki.hprod(shape))
+            return tensor_type(tensor_type.Array(data), shape)
+        else:
+            raise TypeError("TensorXf: expect an array that implements the "
+                            "array interface protocol!")
 
 @property
 def prop_x(self):
