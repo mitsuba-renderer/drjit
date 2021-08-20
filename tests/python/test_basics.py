@@ -560,10 +560,12 @@ def test18_slice():
 def test19_make_opaque():
     Float   = get_class('enoki.llvm.Float')
     Array3f = get_class('enoki.llvm.Array3f')
+    TensorXf = get_class('enoki.llvm.TensorXf')
 
     a = Float(4.4)
     b = ek.full(Float, 3.3, 10)
     c = Array3f(2.2, 5.5, 6.6)
+    t = ek.full(TensorXf, 4.4, (4, 4, 4))
 
     assert a.is_literal_()
     assert not a.is_evaluated_()
@@ -572,8 +574,10 @@ def test19_make_opaque():
     for i in range(len(c)):
         assert c[i].is_literal_()
         assert not c[i].is_evaluated_()
+    assert t.array.is_literal_()
+    assert not t.array.is_evaluated_()
 
-    ek.make_opaque(a, b, c)
+    ek.make_opaque(a, b, c, t)
 
     assert not a.is_literal_()
     assert a.is_evaluated_()
@@ -582,3 +586,5 @@ def test19_make_opaque():
     for i in range(len(c)):
         assert not c[i].is_literal_()
         assert c[i].is_evaluated_()
+    assert not t.array.is_literal_()
+    assert t.array.is_evaluated_()

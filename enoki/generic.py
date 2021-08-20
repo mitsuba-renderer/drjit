@@ -667,12 +667,16 @@ def select_(a0, a1, a2):
 
 
 def label_(a):
+    if a.IsTensor:
+        return a.array.label_()
     if a.IsJIT or a.IsDiff:
         return [v.label_() for v in a]
     return None
 
 
 def set_label_(a, label):
+    if a.IsTensor:
+        return a.array.set_label_(label)
     if a.IsJIT or a.IsDiff:
         if isinstance(label, tuple) or isinstance(label, list):
             if len(a) != len(label):
@@ -696,7 +700,9 @@ def label(a, value):
 
 def schedule_(a0):
     result = False
-    if a0.IsJIT:
+    if a0.IsTensor:
+        result |= a0.array.schedule_()
+    elif a0.IsJIT:
         if a0.Depth == 1:
             if a0.IsDiff:
                 a0 = a0.detach_()
@@ -1403,6 +1409,8 @@ def migrate_(a, target):
     if not a.IsJIT:
         raise Exception("Expected a JIT array type!")
     t = type(a)
+    if a.IsTensor:
+        return t(a.array.migrate_(target), a.shape)
     result = t.empty_(len(a) if a.Size == Dynamic else 0)
     for i in range(len(a)):
         result[i] = a[i].migrate_(target)
@@ -1510,6 +1518,8 @@ def full_(cls, value, shape):
 
 @classmethod
 def linspace_(cls, min, max, size=1, endpoint=True):
+    if cls.IsTensor:
+        raise Exception("linspace_(): Tensor type not supported!")
     result = cls.empty_(size)
     step = (max - min) / (len(result) - (1 if endpoint else 0))
     if cls.IsFloat:
@@ -1523,6 +1533,8 @@ def linspace_(cls, min, max, size=1, endpoint=True):
 
 @classmethod
 def arange_(cls, start, end, step):
+    if cls.IsTensor:
+        raise Exception("arange_(): Tensor type not supported!")
     size = (end - start + step - (1 if step > 0 else -1)) / step
     result = cls.empty_(size)
     for i in range(len(result)):

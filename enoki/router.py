@@ -252,7 +252,10 @@ def shape(a):
 
 def width(value):
     if _ek.is_array_v(value):
-        return shape(value)[-1]
+        if _ek.is_tensor_v(value):
+            return width(value.array)
+        else:
+            return shape(value)[-1]
     elif _ek.is_enoki_struct_v(value):
         result = 0
         for k in type(value).ENOKI_STRUCT.keys():
@@ -521,6 +524,9 @@ def gather(target_type, source, index, mask=True, permute=False):
             assert isinstance(index, int) and isinstance(mask, bool)
             return source[index] if mask else 0
     else:
+        if _ek.is_tensor_v(target_type) or _ek.is_tensor_v(source):
+            raise Exception("gather(): Tensor type not supported! Should work "
+                            "with the underlying array instead. (e.g. tensor.array)")
         if source.Depth != 1:
             if source.Size != target_type.Size:
                 raise Exception("gather(): mismatched source/target configuration!")
@@ -555,6 +561,9 @@ def scatter(target, value, index, mask=True, permute=False):
             if mask:
                 target[index] = value
     else:
+        if _ek.is_tensor_v(target) or _ek.is_tensor_v(value):
+            raise Exception("scatter(): Tensor type not supported! Should work "
+                            "with the underlying array instead. (e.g. tensor.array)")
         if target.Depth != 1:
             if _ek.array_size_v(target) != _ek.array_size_v(value):
                 raise Exception("scatter(): mismatched source/target configuration!")
@@ -590,6 +599,9 @@ def scatter_reduce(op, target, value, index, mask=True):
             if mask:
                 target[index] += value
     else:
+        if _ek.is_tensor_v(target) or _ek.is_tensor_v(value):
+            raise Exception("scatter_reduce(): Tensor type not supported! "
+                            "Should work with the underlying array instead. (e.g. tensor.array)")
         if target.Depth != 1:
             if _ek.array_size_v(target) != _ek.array_size_v(value):
                 raise Exception("scatter_reduce(): mismatched source/target configuration!")
@@ -1854,6 +1866,8 @@ def hprod(a):
 
 def hprod_async(a):
     return a.hprod_async_()
+
+
 def hprod_nested(a):
     while True:
         b = hprod(a)
