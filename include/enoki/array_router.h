@@ -857,7 +857,7 @@ ENOKI_INLINE T opaque(const T2 &value, size_t size = 1) {
 
 ENOKI_INLINE void make_opaque() { }
 template <typename T> ENOKI_INLINE void make_opaque(T &value) {
-     if constexpr (array_depth_v<T> > 1) {
+    if constexpr (array_depth_v<T> > 1) {
         for (size_t i = 0; i < value.size(); ++i)
             make_opaque(value.entry(i));
     } else if constexpr (is_enoki_struct_v<T>) {
@@ -868,6 +868,8 @@ template <typename T> ENOKI_INLINE void make_opaque(T &value) {
             });
     } else if constexpr (is_diff_array_v<T>) {
         make_opaque(value.detach_());
+    } else if constexpr (is_tensor_v<T>) {
+        make_opaque(value.array());
     } else if constexpr (is_jit_array_v<T>) {
         if (!value.is_evaluated()) {
             value = value.copy();

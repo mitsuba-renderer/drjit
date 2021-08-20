@@ -2388,6 +2388,8 @@ def opaque(type_, value, shape=1):
     if _ek.is_diff_array_v(type_):
         return _ek.opaque(_ek.detached_t(type_), value, shape)
     if _ek.is_jit_array_v(type_):
+        if _ek.is_tensor_v(type_):
+            return type_(_ek.opaque(type_.Array, value), shape)
         return type_.opaque_(value, shape)
     elif _ek.is_enoki_struct_v(type_):
         result = type_()
@@ -2407,6 +2409,8 @@ def make_opaque(*args):
                     make_opaque(a.entry_ref_(i))
             elif _ek.is_diff_array_v(t):
                 make_opaque(a.detach_())
+            elif _ek.is_tensor_v(t):
+                make_opaque(a.array)
             elif _ek.is_jit_array_v(t):
                 if not a.is_evaluated_():
                     a.assign(a.copy_())
