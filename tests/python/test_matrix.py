@@ -246,7 +246,7 @@ def test14_roundtrip(package, dest):
         Array3f([[1.0, 1.5], [2.0, 2.5], [3.0, 3.5]]) * 10,
         Array3f([[1.0, 1.5], [2.0, 2.5], [3.0, 3.5]]) * 100
     ])
-    assert(m ==Matrix3f(to_dest(m)))
+    assert(m == Matrix3f(to_dest(m)))
 
     m = Matrix4f([
         Array4f([[1.0, 1.5], [2.0, 2.5], [3.0, 3.5], [4.0, 4.5]]),

@@ -394,7 +394,10 @@ def op_getitem(self, index):
 
         if index >= 0 and index < size:
             _entry_evals += 1
-            return self.entry_(index)
+            if self.Depth > 1:
+                return self.entry_ref_(index)
+            else:
+                return self.entry_(index)
         else:
             raise IndexError("Tried to read from array index %i, which "
                              "exceeds its size (%i)!" % (index, size))
@@ -633,7 +636,7 @@ def ravel(array):
 
     s = shape(array)
 
-    if array.IsSpecial:
+    if array.IsSpecial and not array.IsMatrix:
         name = _ek.detail.array_name('Array', array.Type, s, array.IsScalar)
         t = getattr(_modules.get(array.__module__), name)
         array = t(array)
@@ -2503,7 +2506,9 @@ def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
             a, b = _var_promote(a, b)
 
         diff = abs(a - b)
-        shape = 1 if not diff.IsTensor else diff.shape
+        shape = 1
+        if _ek.is_tensor_v(diff):
+            shape = diff.shape
         cond = diff <= abs(b) * rtol + _ek.full(type(diff), atol, shape)
         if _ek.is_floating_point_v(a):
             cond |= _ek.eq(a, b)  # plus/minus infinity

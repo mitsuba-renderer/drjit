@@ -178,7 +178,7 @@ def test11_hyp(C):
                 assert ek.allclose(a, b, atol=1e-7)
 
 
-@pytest.mark.parametrize('C', classes)
+@pytest.mark.parametrize('C', [ek.llvm.Complex2f, ek.cuda.Complex2f])
 def test12_numpy(C):
     arr1 = C((1.0, 2.0, 3.0), (4.0, 5.0, 6.0))
     print(arr1)

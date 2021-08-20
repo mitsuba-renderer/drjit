@@ -1670,7 +1670,7 @@ def numpy(a):
     import numpy
     arr = numpy.array(a, copy=False)
     if a.IsComplex:
-        arr = arr.T.ravel()
+        arr = arr.ravel()
         if arr.dtype == numpy.float32:
             return arr.view(numpy.complex64)[...]
         elif arr.dtype == numpy.float64:
