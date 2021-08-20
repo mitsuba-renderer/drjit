@@ -80,8 +80,43 @@ template <typename T> auto bind_tensor(py::module m) {
     }
 
     if constexpr (ek::is_floating_point_v<Tensor>) {
-        cls.def("rcp_", &Tensor::rcp_)
-           .def("rsqrt_", &Tensor::rsqrt_);
+        cls.def("rcp_", &Tensor::rcp_);
+        cls.def("sqrt_", &Tensor::sqrt_);
+        cls.def("rsqrt_", &Tensor::rsqrt_);
+    }
+
+    if constexpr (ek::is_floating_point_v<Tensor>) {
+        cls.def("sin_", &Tensor::sin_);
+        cls.def("cos_", &Tensor::cos_);
+        cls.def("tan_", &Tensor::tan_);
+        cls.def("csc_", &Tensor::csc_);
+        cls.def("sec_", &Tensor::sec_);
+        cls.def("cot_", &Tensor::cot_);
+        cls.def("asin_", &Tensor::asin_);
+        cls.def("acos_", &Tensor::acos_);
+        cls.def("atan_", &Tensor::atan_);
+        cls.def("exp_", &Tensor::exp_);
+        cls.def("exp2_", &Tensor::exp2_);
+        cls.def("log_", &Tensor::log_);
+        cls.def("log2_", &Tensor::log2_);
+        cls.def("sinh_", &Tensor::sinh_);
+        cls.def("cosh_", &Tensor::cosh_);
+        cls.def("tanh_", &Tensor::tanh_);
+        cls.def("asinh_", &Tensor::asinh_);
+        cls.def("acosh_", &Tensor::acosh_);
+        cls.def("atanh_", &Tensor::atanh_);
+        cls.def("cbrt_", &Tensor::cbrt_);
+        cls.def("erf_", &Tensor::erf_);
+        cls.def("erfinv_", &Tensor::erfinv_);
+        cls.def("lgamma_", &Tensor::lgamma_);
+        cls.def("tgamma_", &Tensor::tgamma_);
+        cls.def("atan2_", &Tensor::atan2_);
+
+        // TODO support those operators
+        // cls.def("sincos_", &Tensor::sincos_);
+        // cls.def("sincosh_", &Tensor::sincosh_);
+        // cls.def("pow_", [](const Tensor &x, Scalar y) { return ek::pow(x, y); });
+        // cls.def("pow_", [](const Tensor &x, const Tensor &y) { return ek::pow(x, y); });
     }
 
     if constexpr (ek::is_integral_v<Tensor>) {

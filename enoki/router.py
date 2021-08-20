@@ -84,6 +84,8 @@ def _var_promote(*args):
         if depth_i > depth:
             base = a
             depth = depth_i
+        elif getattr(a, 'IsTensor', False):
+            base = a
 
     if base is None:
         raise Exception("At least one of the input arguments "
@@ -643,8 +645,6 @@ def ravel(array):
 
     if s is None:
         raise Exception('ravel(): ragged arrays not permitted!')
-
-    print(s)
 
     target_type = type(array)
     while target_type.Depth > 1:

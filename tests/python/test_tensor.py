@@ -213,3 +213,15 @@ def test09_tensorflow_conversion(pkg):
     value_2 = f(value_tf)
     assert value.shape == value_2.shape
     assert value.array == value_2.array
+
+
+@pytest.mark.parametrize("pkg", pkgs)
+def test10_tensorflow_arithmetic(pkg):
+    t = get_class(pkg + ".TensorXf")
+    f = get_class(pkg + ".Float32")
+
+    tt = t([1, 2, 3, 4, 5, 6], [2, 3])
+    ff = f(2.0)
+
+    assert ff * tt == tt * ff
+    assert ff * tt == t([2, 4, 6, 8, 10, 12], [2, 3])

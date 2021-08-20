@@ -156,6 +156,9 @@ struct Tensor
         m_array = load<Array>(ptr, size);
     }
 
+    template <typename T, enable_if_scalar_t<T> = 0>
+    Tensor(T value) : m_array(value), m_shape(1, 1) { }
+
     operator Array() const { return m_array; }
 
     Tensor add_(const Tensor &b) const {
@@ -288,8 +291,29 @@ struct Tensor
 
     Tensor neg_() const { return Tensor(-m_array, m_shape); }
     Tensor not_() const { return Tensor(~m_array, m_shape); }
-    Tensor rcp_() const { return Tensor(rcp(m_array), m_shape); }
-    Tensor rsqrt_() const { return Tensor(rsqrt(m_array), m_shape); }
+
+    #define F(op) Tensor op##_() const { return Tensor(op(m_array), m_shape); }
+    F(rcp) F(sqrt) F(rsqrt) F(sin) F(cos) F(tan) F(csc) F(sec) F(cot) F(asin)
+    F(acos) F(atan) F(exp) F(exp2) F(log) F(log2) F(cbrt) F(erf) F(erfinv)
+    F(lgamma) F(tgamma) F(sinh) F(cosh) F(tanh) F(csch) F(sech)
+    F(coth) F(asinh) F(acosh) F(atanh)
+    #undef F
+
+    std::pair<Tensor, Tensor> sincos_() const {
+        auto [s, c] = sincos(m_array);
+        return { Tensor(s, m_shape),  Tensor(c, m_shape) };
+    }
+
+    std::pair<Tensor, Tensor> sincosh_() const {
+        auto [s, c] = sincosh(m_array);
+        return { Tensor(s, m_shape),  Tensor(c, m_shape) };
+    }
+
+    Tensor atan2_(const Tensor &b) const {
+        Tensor t0 = *this, t1 = b;
+        Shape shape = detail::tensor_broadcast("atan2_", t0, t1);
+        return Tensor(enoki::atan2(t0.m_array, t1.m_array), std::move(m_shape));
+    }
 
     template <typename Mask>
     static Tensor select_(const Mask &m, const Tensor &t, const Tensor &f) {
