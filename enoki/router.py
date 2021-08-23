@@ -2205,6 +2205,13 @@ def accum_grad(a, value):
     elif _ek.is_enoki_struct_v(a):
         for k in type(a).ENOKI_STRUCT.keys():
             accum_grad(getattr(a, k), value)
+    elif isinstance(a, tuple) or isinstance(a, list):
+        for i in range(len(a)):
+            if isinstance(value, tuple) or isinstance(value, list):
+                assert len(value) == len(a)
+                accum_grad(a[i], value[i])
+            else:
+                accum_grad(a[i], value)
 
 
 def grad_enabled(a):
@@ -2307,6 +2314,9 @@ def enqueue(*args):
     for a in args:
         if _ek.is_diff_array_v(a):
             a.enqueue_()
+        elif _ek.is_enoki_struct_v(a):
+            for k in type(a).ENOKI_STRUCT.keys():
+                enqueue(getattr(a, k))
 
 
 def traverse(t, reverse=True, retain_graph=False):
@@ -2327,7 +2337,7 @@ def backward(a, retain_graph=False):
                             "the AD backend. Did you forget to call "
                             "enable_grad()?")
         set_grad(a, 1)
-        a.enqueue_()
+        enqueue(a)
         traverse(type(a), reverse=True, retain_graph=retain_graph)
     else:
         raise Exception("Expected a differentiable array type!")
@@ -2341,7 +2351,7 @@ def forward(a, retain_graph=False):
                             "the AD backend. Did you forget to call "
                             "enable_grad()?")
         set_grad(a, 1)
-        a.enqueue_()
+        enqueue(a)
         traverse(type(a), reverse=False, retain_graph=retain_graph)
     else:
         raise Exception("Expected a differentiable array type!")
@@ -2598,6 +2608,9 @@ def custom(cls, *args, **kwargs):
                 diff_vars(v, indices)
         elif _ek.is_diff_array_v(o) and _ek.grad_enabled(o):
             indices.append(o.index_ad())
+        elif _ek.is_enoki_struct_v(o):
+            for k in type(o).ENOKI_STRUCT.keys():
+                diff_vars(getattr(o, k), indices)
 
     # Clear primal values of a differentiable array
     def clear_primal(o):
@@ -2610,6 +2623,11 @@ def custom(cls, *args, **kwargs):
         elif _ek.is_diff_array_v(o):
             to = type(o)
             return to.create_(o.index_ad(), _ek.detached_t(to)())
+        elif _ek.is_enoki_struct_v(o):
+            res = type(o)()
+            for k in type(o).ENOKI_STRUCT.keys():
+                setattr(res, k, clear_primal(getattr(o, k)))
+            return res
 
     inst = cls()
 
