@@ -1574,6 +1574,11 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                 if (m_index > 0)
                     return;
                 m_index = detail::ad_new<Type>(nullptr, width(m_value));
+                if constexpr (is_jit_array_v<Type>) {
+                    const char *label = m_value.label_();
+                    if (label)
+                        detail::ad_set_label<Type>(m_index, label);
+                }
             } else {
                 if (m_index == 0)
                     return;
