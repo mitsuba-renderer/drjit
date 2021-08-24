@@ -35,9 +35,10 @@ option(ENOKI_ENABLE_PYTHON        "Build Python extension library?" OFF)
 option(ENOKI_ENABLE_PYTHON_PACKET "Enable packet mode in Python extension library?" OFF)
 option(ENOKI_ENABLE_TESTS         "Build Enoki test suite? (Warning, this takes *very* long to compile)" OFF)
 
-# Compile for a sufficiently recent processor. Assumes Nehalem+ (with SSE4.2) by
-# default. You may want to set MTS_NATIVE_FLAGS to "-march=native" to use all
-# instructions available on a particular machine.
+# Compile for the native system architecture (assumes AVX2 on windows). When
+# enoki is compiled as part of a PyPI package via scikit-build, adopt a lower
+# target architecture (Ivy Bridge, which has the AVX and F16C extensions). An
+# M1-like architecture is assumed for arm64 builds on macOS.
 
 if (MSVC)
   if (SKBUILD)
