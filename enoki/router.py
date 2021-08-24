@@ -2607,7 +2607,10 @@ def custom(cls, *args, **kwargs):
             for k, v in o.items():
                 diff_vars(v, indices)
         elif _ek.is_diff_array_v(o) and _ek.grad_enabled(o):
-            indices.append(o.index_ad())
+            if _ek.is_tensor_v(o):
+                diff_vars(o.array, indices)
+            else:
+                indices.append(o.index_ad())
         elif _ek.is_enoki_struct_v(o):
             for k in type(o).ENOKI_STRUCT.keys():
                 diff_vars(getattr(o, k), indices)
@@ -2622,7 +2625,10 @@ def custom(cls, *args, **kwargs):
             return { k: clear_primal(v) for k, v in o.items() }
         elif _ek.is_diff_array_v(o):
             to = type(o)
-            return to.create_(o.index_ad(), _ek.detached_t(to)())
+            if _ek.is_tensor_v(o):
+                return to(clear_primal(o.array), o.shape)
+            else:
+                return to.create_(o.index_ad(), _ek.detached_t(to)())
         elif _ek.is_enoki_struct_v(o):
             res = type(o)()
             for k in type(o).ENOKI_STRUCT.keys():
