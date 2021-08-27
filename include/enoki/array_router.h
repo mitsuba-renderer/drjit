@@ -1013,12 +1013,18 @@ Target gather(Source &&source, const Index &index, const Mask &mask_ = true) {
             } else {
                 ENOKI_MARK_USED(mask);
                 size_t offset = index * sizeof(value_t<Target>) * Target::Size;
-                if constexpr (std::is_pointer_v<std::decay_t<Source>>)
+                if constexpr (std::is_pointer_v<std::decay_t<Source>>) {
                     // Case 2.0.1: gather<Target>(const void *, size_t, ...)
                     return load<Target>((const uint8_t *)source + offset);
-                else
+                } else {
+#if !defined(NDEBUG)
+                    if (ENOKI_UNLIKELY((size_t) index >= source.size()))
+                        enoki_raise("gather(): out of range access (offset=%zu, size=%zu)!",
+                                    (size_t) offset, source.size());
+#endif
                     // Case 2.0.2: gather<Target>(const FloatP&, size_t, ...)
                     return load<Target>((const uint8_t *)source.data() + offset);
+                }
             }
         } else if constexpr (array_depth_v<Target> == array_depth_v<Index>) {
             if constexpr ((Target::IsPacked || Target::IsRecursive) && is_array_v<Source>)
