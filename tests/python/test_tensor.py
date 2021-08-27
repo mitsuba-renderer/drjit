@@ -230,3 +230,37 @@ def test10_tensorflow_arithmetic(pkg):
 
     assert ff * tt == tt * ff
     assert ff * tt == t([2, 4, 6, 8, 10, 12], [2, 3])
+
+
+class PowerOfTwo(ek.CustomOp):
+    def eval(self, value):
+        self.value = value
+        return value * value
+
+    def forward(self):
+        grad_in = self.grad_in('value')
+        self.set_grad_out(2.0 * self.value * grad_in)
+
+    def backward(self):
+        grad_out = self.grad_out()
+        self.set_grad_in('value', 2.0 * self.value * grad_out)
+
+    def name(self):
+        return "power of two"
+
+
+@pytest.mark.parametrize("pkg", ["enoki.llvm.ad", "enoki.cuda.ad"])
+def test11_custom_op(pkg):
+    t = get_class(pkg + ".TensorXf")
+    f = get_class(pkg + ".Float32")
+
+    tt = t([1, 2, 3, 4, 5, 6], [2, 3])
+    ek.enable_grad(tt)
+
+    tt2 = ek.custom(PowerOfTwo, tt)
+
+    ek.set_grad(tt2, 1.0)
+    ek.enqueue(tt2)
+    ek.traverse(f, reverse=True)
+
+    assert ek.grad(tt).array == [2.0, 4.0, 6.0, 8.0, 10.0, 12.0]

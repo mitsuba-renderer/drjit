@@ -1543,6 +1543,8 @@ def log2(a):
 
 
 def pow(a, b):
+    if _ek.is_tensor_v(a):
+        return a.array.pow_(b if not _ek.is_tensor_v(b) else b.array)
     if isinstance(a, ArrayBase) or \
        isinstance(b, ArrayBase):
         if type(a) is not type(b) and not \
@@ -2631,7 +2633,9 @@ def custom(cls, *args, **kwargs):
         elif _ek.is_diff_array_v(o):
             to = type(o)
             if _ek.is_tensor_v(o):
-                return to(clear_primal(o.array), o.shape)
+                a_t = type(o.array)
+                array = empty(_ek.detached_t(a_t), hprod(o.shape))
+                return to(a_t.create_(o.array.index_ad(), array), o.shape)
             else:
                 return to.create_(o.index_ad(), _ek.detached_t(to)())
         elif _ek.is_enoki_struct_v(o):
