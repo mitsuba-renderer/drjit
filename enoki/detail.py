@@ -211,7 +211,7 @@ def array_init(self, args):
                 s2 = o.shape
 
                 # Remove unnecessary outer dimension is possible
-                if s2[0] == 1:
+                if s2[0] == 1 and len(s2) > 1:
                     o = o[0, ...]
                     s2 = o.shape
 

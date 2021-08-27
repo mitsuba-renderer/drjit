@@ -168,6 +168,11 @@ def test06_numpy_conversion(pkg):
     assert value.shape == value_2.shape
     assert value.array == value_2.array
 
+    value_np = np.ones((1,1,1,1))
+    value_3 = f(value_np)
+    assert value_np.shape == value_3.shape
+    assert np.all(value_np == value_3.array)
+
 
 @pytest.mark.parametrize("pkg", pkgs)
 def test07_jax_conversion(pkg):
