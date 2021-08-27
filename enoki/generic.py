@@ -1326,8 +1326,7 @@ def grad_enabled_(a):
             enabled |= a.entry_ref_(i).grad_enabled_()
         return enabled
     else:
-        index = a.index_ad() if not a.IsTensor else a.array.index_ad()
-        return index > 0
+        return a.index_ad() > 0
 
 
 def set_grad_enabled_(a, value):
@@ -1350,8 +1349,7 @@ def grad_suspended_(a):
             suspended |= a[i].grad_suspended_()
         return suspended
     else:
-        index = a.index_ad() if not a.IsTensor else a.array.index_ad()
-        return index < 0
+        return a.index_ad() < 0
 
 
 def set_grad_suspended_(a, value):

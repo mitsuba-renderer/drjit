@@ -2307,7 +2307,12 @@ def replace_grad(a, b):
             result[i] = replace_grad(a[i], b[i])
         return result
     else:
-        return type(a).create_(b.index_ad(), a.detach_())
+        if _ek.is_tensor_v(a):
+            if not _ek.is_tensor_v(b):
+                raise Exception('replace_grad(): both arguments should be Tensors')
+            return type(a)(replace_grad(a.array, b.array), a.shape)
+        else:
+            return type(a).create_(b.index_ad(), a.detach_())
 
 
 def enqueue(*args):
