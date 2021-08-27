@@ -301,12 +301,12 @@ struct Tensor
 
     std::pair<Tensor, Tensor> sincos_() const {
         auto [s, c] = sincos(m_array);
-        return { Tensor(s, m_shape),  Tensor(c, m_shape) };
+        return { Tensor(std::move(s), m_shape),  Tensor(std::move(c), m_shape) };
     }
 
     std::pair<Tensor, Tensor> sincosh_() const {
         auto [s, c] = sincosh(m_array);
-        return { Tensor(s, m_shape),  Tensor(c, m_shape) };
+        return { Tensor(std::move(s), m_shape),  Tensor(std::move(c), m_shape) };
     }
 
     Tensor atan2_(const Tensor &b) const {

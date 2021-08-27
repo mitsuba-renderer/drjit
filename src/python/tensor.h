@@ -3,6 +3,7 @@
 
 template <typename T> auto bind_tensor(py::module m) {
     using Tensor = ek::Tensor<T>;
+
     auto cls = bind_type<Tensor>(m);
 
     cls.attr("Index") = py::type::of<typename Tensor::Index>();
@@ -111,12 +112,8 @@ template <typename T> auto bind_tensor(py::module m) {
         cls.def("lgamma_", &Tensor::lgamma_);
         cls.def("tgamma_", &Tensor::tgamma_);
         cls.def("atan2_", &Tensor::atan2_);
-
-        // TODO support those operators
-        // cls.def("sincos_", &Tensor::sincos_);
-        // cls.def("sincosh_", &Tensor::sincosh_);
-        // cls.def("pow_", [](const Tensor &x, Scalar y) { return ek::pow(x, y); });
-        // cls.def("pow_", [](const Tensor &x, const Tensor &y) { return ek::pow(x, y); });
+        cls.def("sincos_", &Tensor::sincos_);
+        cls.def("sincosh_", &Tensor::sincosh_);
     }
 
     if constexpr (ek::is_integral_v<Tensor>) {
