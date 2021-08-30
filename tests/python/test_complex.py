@@ -9,9 +9,11 @@ if hasattr(ek, 'cuda'):
     classes.append(ek.cuda.Complex2f)
 if hasattr(ek, 'llvm'):
     classes.append(ek.llvm.Complex2f)
+
+classes_dynamic = list(classes)
+
 if hasattr(ek, 'packet'):
     classes.append(ek.packet.Complex2f)
-
 
 @pytest.mark.parametrize('C', classes)
 def test01_bcast(C):
@@ -178,7 +180,7 @@ def test11_hyp(C):
                 assert ek.allclose(a, b, atol=1e-7)
 
 
-@pytest.mark.parametrize('C', [ek.llvm.Complex2f, ek.cuda.Complex2f])
+@pytest.mark.parametrize('C', classes_dynamic)
 def test12_numpy(C):
     arr1 = C((1.0, 2.0, 3.0), (4.0, 5.0, 6.0))
     print(arr1)

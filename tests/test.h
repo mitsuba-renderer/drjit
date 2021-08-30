@@ -32,6 +32,7 @@ namespace test {
 #define ENOKI_TRACK_DEALLOC(ptr, size) { ++test::dealloc_count; }
 #define ENOKI_TEST(name) void name(); static test::Test name##_test{#name, &name}; void name()
 
+#include <cmath>
 #include <enoki/packet.h>
 #include <enoki/math.h>
 #include <vector>

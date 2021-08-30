@@ -160,7 +160,6 @@ Matrix look_at(const Array<entry_t<Matrix>, 3> &origin,
     Vector3 dir = normalize(target - origin);
     Vector3 left = normalize(cross(dir, up));
     Vector3 new_up = cross(left, dir);
-    using Scalar = scalar_t<Matrix>;
 
     Array<Value, 1> z(0);
 

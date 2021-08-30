@@ -188,7 +188,6 @@ Matrix<value_t<Array>, Array::Size> diag(const Array &v) {
 template <typename Array, enable_if_array_t<Array> = 0>
 Array transpose(const Array &a) {
     using Column = value_t<Array>;
-    using Entry = value_t<Column>;
     constexpr size_t Size = array_size_v<Array>;
 
     static_assert(array_depth_v<Array> >= 2 && Size == array_size_v<Column>,
@@ -196,7 +195,7 @@ Array transpose(const Array &a) {
 
     if constexpr (Column::IsPacked) {
         #if defined(ENOKI_X86_SSE42)
-            if constexpr (std::is_same_v<Entry, float> && Size == 3) {
+            if constexpr (std::is_same_v<value_t<Column>, float> && Size == 3) {
                 __m128 c0 = a.entry(0).m, c1 = a.entry(1).m, c2 = a.entry(2).m;
 
                 __m128 t0 = _mm_unpacklo_ps(c0, c1);
@@ -209,7 +208,7 @@ Array transpose(const Array &a) {
                     _mm_movehl_ps(t1, t0),
                     _mm_movelh_ps(t2, t3)
                 );
-            } else if constexpr (std::is_same_v<Entry, float> && Size == 4) {
+            } else if constexpr (std::is_same_v<value_t<Column>, float> && Size == 4) {
                 __m128 c0 = a.entry(0).m, c1 = a.entry(1).m,
                        c2 = a.entry(2).m, c3 = a.entry(3).m;
 
@@ -228,7 +227,7 @@ Array transpose(const Array &a) {
         #endif
 
         #if defined(ENOKI_X86_AVX)
-            if constexpr (std::is_same_v<Entry, double> && Size == 3) {
+            if constexpr (std::is_same_v<value_t<Column>, double> && Size == 3) {
                 __m256d c0 = a.entry(0).m, c1 = a.entry(1).m, c2 = a.entry(2).m;
 
                 __m256d t3 = _mm256_shuffle_pd(c2, c2, 0b0000),
@@ -241,7 +240,7 @@ Array transpose(const Array &a) {
                     _mm256_permute2f128_pd(t0, t2, 0b0010'0000),
                     _mm256_permute2f128_pd(t1, t3, 0b0011'0001)
                 );
-            } else if constexpr (std::is_same_v<Entry, double> && Size == 4) {
+            } else if constexpr (std::is_same_v<value_t<Column>, double> && Size == 4) {
                 __m256d c0 = a.entry(0).m, c1 = a.entry(1).m,
                         c2 = a.entry(2).m, c3 = a.entry(3).m;
 

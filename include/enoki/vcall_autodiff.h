@@ -48,6 +48,7 @@ template <typename DiffType, typename Self, typename Result, typename Func,
 struct DiffVCall : CustomOp<DiffType, Result, ConstStr, Self, Func, Args...> {
     using Base = CustomOp<DiffType, Result, ConstStr, Self, Func, Args...>;
     using Type = typename DiffType::Type;
+    using Base::m_implicit_in;
 
     static constexpr bool ClearPrimal = false;
 
@@ -66,7 +67,17 @@ struct DiffVCall : CustomOp<DiffType, Result, ConstStr, Self, Func, Args...> {
         m_name_static = name;
         snprintf(m_name_long, sizeof(m_name_long), "VCall: %s::%s()",
                  Class::Domain, m_name_static);
-        return vcall_jit_record<Result>(name, func, self, args...);
+
+        // Perform the function call
+        size_t snapshot = ad_cross_deps<Type>();
+        Result result = vcall_jit_record<Result>(name, func, self, args...);
+
+        /// Capture implicit dependencies of the operation
+        size_t cross_deps = ad_cross_deps<Type>() - snapshot;
+        m_implicit_in = ek_vector<int32_t>(cross_deps, 0);
+        ad_cross_steal<Type>(cross_deps, m_implicit_in.data());
+
+        return result;
     }
 
     void forward() override {

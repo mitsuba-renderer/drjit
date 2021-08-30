@@ -161,6 +161,7 @@ struct Base {
         ek::enable_grad(x);
         ek::set_label(x, "Base::x");
     }
+    virtual ~Base() { }
     virtual Float f(const Float &m) = 0;
     virtual Float g(const Float &m) = 0;
     ENOKI_VCALL_REGISTER(Float, Base)
@@ -200,7 +201,7 @@ ENOKI_TEST(test05_vcall_symbolic_ad_loop_opt) {
         jit_init((uint32_t) JitBackend::LLVM);
 
     int n = 20;
-    int max_depth = 5;
+    size_t max_depth = 5;
 
     // Compute result values
     float res_a = 0, res_b = 0, va = 1;

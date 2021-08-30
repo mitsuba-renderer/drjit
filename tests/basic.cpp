@@ -43,9 +43,7 @@ ENOKI_TEST_ALL(test00_align) {
     static_assert(std::is_same<value_t<Vector4x>,   Value>::value, "value_t failure");
     static_assert(std::is_same<value_t<Vector4xP>,  Packet>::value, "value_t failure");
 
-    using DoubleP    = Array<double, array_size_v<T>>;
     using Vector4d   = Array<double, 4>;
-    using Vector4dP  = Array<DoubleP, 4>;
 
     /* Non-array input */
     static_assert(std::is_same<expr_t<Value>,               Value>::value, "expr_t failure");

@@ -281,7 +281,6 @@ Quaternion<Value> slerp(const Quaternion<Value> &q0,
 
     Value theta = acos(cos_theta);
     auto [s, c] = sincos(theta * t);
-    auto close_mask = cos_theta > 0.9995f;
 
     Quaternion<Value> qperp  = normalize(q1 - q0 * cos_theta);
 

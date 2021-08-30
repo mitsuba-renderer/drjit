@@ -30,6 +30,7 @@ using StructFD = Struct<Array3fD>;
 
 struct Base {
     Base(bool scalar) : x(ek::opaque<Float>(10, scalar ? 1 : 10)) { }
+    virtual ~Base() { }
 
     virtual StructF f(const StructF &m, ::Mask active = true) = 0;
 
@@ -52,7 +53,7 @@ using BasePtr = ek::replace_scalar_t<Float, Base *>;
 
 struct A : Base {
     A(bool scalar) : Base(scalar) { ek::set_attr(this, "field", 2.4f); }
-    StructF f(const StructF &m, ::Mask active = true) override {
+    StructF f(const StructF &m, ::Mask /* active */ = true) override {
         if (x.size() == 1)
             return Struct(m.a * x, m.b * 15);
         else
@@ -62,7 +63,7 @@ struct A : Base {
 
 struct B : Base {
     B(bool scalar) : Base(scalar) { ek::set_attr(this, "field", 4.8f); }
-    StructF f(const StructF &m, ::Mask active = true) override {
+    StructF f(const StructF &m, ::Mask /* active */ = true) override {
         if (x.size() == 1)
             return Struct(m.b * 20, m.a * x);
         else
@@ -189,6 +190,7 @@ struct BaseD {
         ek::enable_grad(x);
         ek::set_label(x, "BaseD::x");
     }
+    virtual ~BaseD() { }
     void dummy() { }
     virtual StructFD f(const StructFD &m) = 0;
     virtual StructFD g(const StructFD &m) = 0;
