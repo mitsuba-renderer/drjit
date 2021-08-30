@@ -2581,10 +2581,10 @@ class CustomOp:
         self._implicit_out = []
 
     def forward(self):
-        raise Exception('CustomOp.forward(): not implemented')
+        raise Exception("CustomOp.forward(): not implemented")
 
     def backward(self):
-        raise Exception('CustomOp.backward(): not implemented')
+        raise Exception("CustomOp.backward(): not implemented")
 
     def grad_out(self):
         return _ek.grad(self.output)
@@ -2594,12 +2594,14 @@ class CustomOp:
 
     def grad_in(self, name):
         if name not in self.inputs:
-            raise Exception('Could not find input argument named \"%s\"!' % name)
+            raise Exception("CustomOp.grad_in(): Could not find "
+                            "input argument named \"%s\"!" % name)
         return _ek.grad(self.inputs[name])
 
     def set_grad_in(self, name, value):
         if name not in self.inputs:
-            raise Exception('Could not find input argument named \"%s\"!' % name)
+            raise Exception("CustomOp.set_grad_in(): Could not find "
+                            "input argument named \"%s\"!" % name)
         _ek.accum_grad(self.inputs[name], value)
 
     def add_input(self, value):
@@ -2653,6 +2655,8 @@ def custom(cls, *args, **kwargs):
             for k in type(o).ENOKI_STRUCT.keys():
                 setattr(res, k, clear_primal(getattr(o, k)))
             return res
+        else:
+            return o
 
     inst = cls()
 
@@ -2660,10 +2664,13 @@ def custom(cls, *args, **kwargs):
     kwargs.update(zip(inst.eval.__code__.co_varnames[1:], args))
 
     output = inst.eval(**{ k: _ek.detach(v) for k, v in kwargs.items() })
-    del args
+    if _ek.grad_enabled(output):
+        raise Exception("enoki.custom(): the return value of CustomOp.eval() "
+                        "should not be attached to the AD graph!")
 
     diff_vars_in = []
     diff_vars(kwargs, diff_vars_in)
+    diff_vars(inst._implicit_in, diff_vars_in)
 
     if len(diff_vars_in) > 0:
         output = _ek.diff_array_t(output)
@@ -2677,7 +2684,6 @@ def custom(cls, *args, **kwargs):
         diff_vars_out = []
         diff_vars(inst.output, diff_vars_out)
 
-        diff_vars(inst._implicit_in, diff_vars_in)
         diff_vars(inst._implicit_out, diff_vars_out)
 
         if len(diff_vars_out) == 0:

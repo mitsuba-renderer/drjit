@@ -1190,7 +1190,7 @@ def test_59_implicit_dep_customop(m):
         def eval(self, value):
             self.add_input(v1)
             self.value = value
-            return value * v1
+            return value * ek.detach(v1)
 
         def forward(self):
             grad_in = self.grad_in('value')
