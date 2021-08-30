@@ -1179,3 +1179,37 @@ def test_58_diffloop_masking_rev(m, no_record):
         i += 1
     ek.backward(fo)
     assert ek.grad(fi) == m.Float(5, 0)
+
+
+def test_59_implicit_dep_customop(m):
+    v0 = m.Float(2)
+    ek.enable_grad(v0)
+    v1 = v0 * 3
+
+    class ImplicitDep(ek.CustomOp):
+        def eval(self, value):
+            self.add_input(v1)
+            self.value = value
+            return value * v1
+
+        def forward(self):
+            grad_in = self.grad_in('value')
+            self.set_grad_out(grad_in * ek.detach(v1) + self.value * ek.grad(v1))
+
+        def backward(self):
+            grad_out = self.grad_out()
+            self.set_grad_in('value', grad_out * ek.detach(v1))
+            ek.accum_grad(v1, grad_out * self.value)
+
+        def name(self):
+            return "implicit-dep"
+
+    v3 = ek.custom(ImplicitDep, 123)
+    assert v3[0] == 123*6
+    ek.forward(v0, retain_graph=True)
+    assert ek.grad(v3) == 123*3
+
+    v3 = ek.custom(ImplicitDep, 123)
+    assert v3[0] == 123*6
+    ek.backward(v3)
+    assert ek.grad(v0) == 123*3

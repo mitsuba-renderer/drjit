@@ -2576,6 +2576,16 @@ def printf_async(mask, fmt, *args):
 # -------------------------------------------------------------------
 
 class CustomOp:
+    def __init__(self):
+        self._implicit_in = []
+        self._implicit_out = []
+
+    def forward(self):
+        raise Exception('CustomOp.forward(): not implemented')
+
+    def backward(self):
+        raise Exception('CustomOp.backward(): not implemented')
+
     def grad_out(self):
         return _ek.grad(self.output)
 
@@ -2592,11 +2602,11 @@ class CustomOp:
             raise Exception('Could not find input argument named \"%s\"!' % name)
         _ek.accum_grad(self.inputs[name], value)
 
-    def forward(self):
-        raise Exception('CustomOp.forward(): not implemented')
+    def add_input(self, value):
+        self._implicit_in.append(value)
 
-    def backward(self):
-        raise Exception('CustomOp.backward(): not implemented')
+    def add_output(self, value):
+        self._implicit_out.append(value)
 
     def name(self):
         return "CustomOp[unnamed]"
@@ -2667,6 +2677,9 @@ def custom(cls, *args, **kwargs):
         diff_vars_out = []
         diff_vars(inst.output, diff_vars_out)
 
+        diff_vars(inst._implicit_in, diff_vars_in)
+        diff_vars(inst._implicit_out, diff_vars_out)
+
         if len(diff_vars_out) == 0:
             raise Exception("enoki.custom(): internal error!")
 
@@ -2687,6 +2700,9 @@ def custom(cls, *args, **kwargs):
             diff_vars_out[0] if len(diff_vars_out) == 1 else tmp_out.index_ad(),
             inst
         )
+
+        inst._implicit_in = []
+        inst._implicit_out = []
 
     return output
 
