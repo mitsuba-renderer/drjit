@@ -1015,7 +1015,7 @@ Target gather(Source &&source, const Index &index, const Mask &mask_ = true) {
                 size_t offset = index * sizeof(value_t<Target>) * Target::Size;
                 if constexpr (std::is_pointer_v<std::decay_t<Source>>) {
                     // Case 2.0.1: gather<Target>(const void *, size_t, ...)
-                    return load<Target>((const uint8_t *)source + offset);
+                    return select(mask, load<Target>((const uint8_t *)source + offset), 0);
                 } else {
 #if !defined(NDEBUG)
                     if (ENOKI_UNLIKELY((size_t) index >= source.size()))
@@ -1023,7 +1023,7 @@ Target gather(Source &&source, const Index &index, const Mask &mask_ = true) {
                                     (size_t) offset, source.size());
 #endif
                     // Case 2.0.2: gather<Target>(const FloatP&, size_t, ...)
-                    return load<Target>((const uint8_t *)source.data() + offset);
+                    return select(mask, load<Target>((const uint8_t *)source.data() + offset), 0);
                 }
             }
         } else if constexpr (array_depth_v<Target> == array_depth_v<Index>) {
