@@ -34,7 +34,12 @@ public:
     static constexpr bool ClearPrimal   = true;
 
     virtual ~CustomOp() {
+        /* Important: reference counts associated with 'm_output' were cleared
+           in custom() below to ensure that this edge can be garbage collected.
+           We therefore need to clear the variable indices to prevent a second
+           reference count decrease from occurring. */
         detail::clear_diff_vars(m_output);
+        clear_implicit_dependencies();
     }
 
     /**
@@ -88,8 +93,79 @@ protected:
         accum_grad<false>(m_output, value);
     }
 
+    /**
+     * \brief Register an implicit input dependency of the operation on an AD
+     * variable
+     *
+     * This function should be called by the \ref eval() implementation when an
+     * operation has a differentiable dependence on an input that is not an
+     * input argument (e.g. a private instance variable).
+     */
+    void add_input_index(int32_t index) {
+        if (index <= 0)
+            return;
+        detail::ad_inc_ref<Type>(index);
+        m_implicit_in.push_back(index);
+    }
+
+    /// Convenience wrapper around \ref add_input_index
+    template <typename T> void add_input(const T &value) {
+        if constexpr (is_diff_array_v<T>) {
+            if constexpr (array_depth_v<T> > 1) {
+                for (size_t i = 0; i < value.size(); ++i)
+                    add_input(value.entry(i));
+            } else {
+                add_input_index(value.index_ad());
+            }
+        } else if constexpr (is_enoki_struct_v<T>) {
+            struct_support_t<T>::apply_1(value,
+                [&](auto &x) { add_input(x); });
+        }
+    }
+
+    /**
+     * \brief Register an implicit output dependency of the operation on an AD
+     * variable
+     *
+     * This function should be called by the \ref eval() implementation when an
+     * operation has a differentiable dependence on an output that is not an
+     * return value of the operation (e.g. a private instance variable).
+     */
+    void add_output_index(int32_t index) {
+        if (index <= 0)
+            return;
+        detail::ad_inc_ref<Type>(index);
+        m_implicit_out.push_back(index);
+    }
+
+    /// Convenience wrapper around \ref add_output_index
+    template <typename T> void add_output(const T &value) {
+        if constexpr (is_diff_array_v<T>) {
+            if constexpr (array_depth_v<T> > 1) {
+                for (size_t i = 0; i < value.size(); ++i)
+                    add_output(value.entry(i));
+            } else {
+                add_output_index(value.index_ad());
+            }
+        } else if constexpr (is_enoki_struct_v<T>) {
+            struct_support_t<T>::apply_1(value,
+                [&](auto &x) { add_output(x); });
+        }
+    }
+
+    /// Release the implicit dependencies registered via add_input/add_output
+    void clear_implicit_dependencies() {
+        for (size_t i = 0; i < m_implicit_in.size(); ++i)
+            detail::ad_dec_ref<Type>(m_implicit_in[i]);
+        for (size_t i = 0; i < m_implicit_out.size(); ++i)
+            detail::ad_dec_ref<Type>(m_implicit_out[i]);
+        m_implicit_in.clear();
+        m_implicit_out.clear();
+    }
+protected:
     ek_unique_ptr<Inputs> m_inputs;
     Output m_output;
+    ek_vector<int32_t> m_implicit_in, m_implicit_out;
 };
 
 NAMESPACE_BEGIN(detail)
@@ -166,17 +242,12 @@ template <typename T> T clear_primal(const T &value) {
 NAMESPACE_END(detail)
 
 template <typename Custom, typename... Input> auto custom(const Input&... input) {
-    using DiffType = typename Custom::DiffType;
     using Type     = typename Custom::Type;
     using Output   = typename Custom::Output;
 
     ek_unique_ptr<Custom> custom(new Custom());
 
-    size_t cross_deps_checkpoint = detail::ad_cross_deps<Type>();
     Output output = custom->eval(detach<false>(input)...);
-
-    // Tracks dependencies between recorded/non-recorded computation
-    size_t cross_deps = detail::ad_cross_deps<Type>() - cross_deps_checkpoint;
 
     if (grad_enabled(output))
         enoki_raise("enoki::custom(): the return value of the CustomOp::eval() "
@@ -187,7 +258,7 @@ template <typename Custom, typename... Input> auto custom(const Input&... input)
     size_t diff_vars_in_ctr = 0;
     (detail::diff_vars(input, diff_vars_in_ctr, nullptr), ...);
 
-    if (diff_vars_in_ctr > 0 || cross_deps > 0) {
+    if (diff_vars_in_ctr > 0 || custom->m_implicit_in.size() > 0) {
         int32_t in_var  = detail::ad_new<Type>(nullptr, 0),
                 out_var = detail::ad_new<Type>(nullptr, 0);
 
@@ -209,21 +280,27 @@ template <typename Custom, typename... Input> auto custom(const Input&... input)
         if (diff_vars_out_ctr == 0)
             enoki_raise("enoki::custom(): internal error!");
 
-        ek_unique_ptr<int32_t[]> diff_vars_in(new int32_t[diff_vars_in_ctr + cross_deps]);
-        ek_unique_ptr<int32_t[]> diff_vars_out(new int32_t[diff_vars_out_ctr]);
+        ek_unique_ptr<int32_t[]> diff_vars_in(new int32_t[diff_vars_in_ctr + custom->m_implicit_in.size()]);
+        ek_unique_ptr<int32_t[]> diff_vars_out(new int32_t[diff_vars_out_ctr + custom->m_implicit_out.size()]);
 
         diff_vars_out_ctr = 0;
         diff_vars_in_ctr = 0;
         (detail::diff_vars(input, diff_vars_in_ctr, diff_vars_in.get()), ...);
         detail::diff_vars(output, diff_vars_out_ctr, diff_vars_out.get());
 
-        detail::ad_cross_steal<Type>(cross_deps,
-                                     diff_vars_in.get() + diff_vars_in_ctr);
-        diff_vars_in_ctr += cross_deps;
-
-        // Undo reference count increase due to storage in custom->m_output
+        /* Undo the reference count increases that resulted from storage in
+           'm_output'. This is important to avoid a reference cycle that would
+           prevent the CustomOp from being garbage collected. See also the
+           CustomOp destructor. */
         for (size_t i = 0; i < diff_vars_out_ctr; ++i)
             detail::ad_dec_ref<Type>(diff_vars_out[i]);
+
+        // Capture additional dependencies
+        for (size_t i = 0; i < custom->m_implicit_in.size(); ++i)
+            diff_vars_in[diff_vars_in_ctr++] = custom->m_implicit_in[i];
+
+        for (size_t i = 0; i < custom->m_implicit_out.size(); ++i)
+            diff_vars_out[diff_vars_out_ctr++] = custom->m_implicit_out[i];
 
         const char *name = custom->name();
         size_t buf_size = strlen(name) + 7;
@@ -241,9 +318,6 @@ template <typename Custom, typename... Input> auto custom(const Input&... input)
             detail::ad_inc_ref<Type>(in_var);
         }
 
-        for (size_t i = 0; i < cross_deps; ++i)
-            detail::ad_dec_ref<Type>(diff_vars_in[diff_vars_in_ctr - 1 - i]);
-
         // Create a dummy node in case the branch-out factor is > 1
         if (diff_vars_out_ctr > 1 || diff_vars_out_ctr == 0) {
             snprintf(buf, buf_size, "%s [out]", name);
@@ -255,6 +329,8 @@ template <typename Custom, typename... Input> auto custom(const Input&... input)
             out_var = diff_vars_out[0];
             detail::ad_inc_ref<Type>(out_var);
         }
+
+        custom->clear_implicit_dependencies();
 
         // Connect the two nodes using a custom edge with a callback
         detail::ad_add_edge<Type>(in_var, out_var, custom.release());
