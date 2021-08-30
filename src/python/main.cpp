@@ -47,7 +47,7 @@ py::handle array_base, array_name, array_init, tensor_init, array_configure;
 /// Placeholder base of all Enoki arrays in the Python domain
 struct ArrayBase { };
 
-static void log_callback(LogLevel level, const char *msg) {
+static void log_callback(LogLevel /* level */, const char *msg) {
     if (!_Py_IsFinalizing()) {
         py::gil_scoped_acquire acquire;
         py::print(msg);
@@ -299,7 +299,7 @@ PYBIND11_MODULE(enoki_ext, m_) {
 
     /* Register a cleanup callback function that is invoked when
        the 'enoki::ArrayBase' Python type is garbage collected */
-    py::cpp_function cleanup_callback([](py::handle weakref) {
+    py::cpp_function cleanup_callback([](py::handle /* weakref */) {
         py::gil_scoped_release gsr;
         jit_set_log_level_stderr(LogLevel::Warn);
         jit_set_log_level_callback(LogLevel::Disable, nullptr);

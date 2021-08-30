@@ -35,86 +35,13 @@ option(ENOKI_ENABLE_PYTHON        "Build Python extension library?" OFF)
 option(ENOKI_ENABLE_PYTHON_PACKET "Enable packet mode in Python extension library?" OFF)
 option(ENOKI_ENABLE_TESTS         "Build Enoki test suite? (Warning, this takes *very* long to compile)" OFF)
 
-# Compile for the native system architecture (assumes AVX2 on windows). When
-# enoki is compiled as part of a PyPI package via scikit-build, adopt a lower
-# target architecture (Ivy Bridge, which has the AVX and F16C extensions). An
-# M1-like architecture is assumed for arm64 builds on macOS.
-
-if (MSVC)
-  if (SKBUILD)
-    # Reasonably portable binaries for PyPI
-    set(ENOKI_NATIVE_FLAGS_DEFAULT "/arch:AVX")
-  else()
-    set(ENOKI_NATIVE_FLAGS_DEFAULT "/arch:AVX2")
-  endif()
-elseif (APPLE AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
-  set(ENOKI_NATIVE_FLAGS_DEFAULT "-mcpu=apple-a12")
-else()
-  if (SKBUILD)
-    # Reasonably portable binaries for PyPI
-    set(ENOKI_NATIVE_FLAGS_DEFAULT "-march=ivybridge")
-  else()
-    set(ENOKI_NATIVE_FLAGS_DEFAULT "-march=native")
-  endif()
+if (NOT IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/ext/enoki-jit/ext/enoki-thread/ext/cmake-defaults")
+  message(FATAL_ERROR "The enoki-jit dependencies are missing! "
+    "You probably did not clone the project with --recursive. It is possible to recover "
+    "by invoking\n$ git submodule update --init --recursive")
 endif()
 
-# Adapt to variations in rpath handling on Linux and macOS
-if (APPLE)
-  set(ENOKI_ORIGIN "@loader_path")
-elseif(UNIX)
-  set(ENOKI_ORIGIN "$ORIGIN")
-endif()
-
-set(ENOKI_NATIVE_FLAGS ${ENOKI_NATIVE_FLAGS_DEFAULT} CACHE STRING
-    "Compilation flags used to target the host processor architecture.")
-
-set(ENOKI_MASTER_PROJECT OFF)
-if(${CMAKE_PROJECT_NAME} STREQUAL ${PROJECT_NAME})
-  set(ENOKI_MASTER_PROJECT ON)
-endif()
-
-if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
-  message(STATUS "Setting build type to 'Release' as none was specified.")
-  set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
-  set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release"
-    "MinSizeRel" "RelWithDebInfo")
-endif()
-string(TOUPPER "${CMAKE_BUILD_TYPE}" ENOKI_U_CMAKE_BUILD_TYPE)
-
-include(CheckCXXSourceRuns)
-include(GNUInstallDirs)
-include(CMakePackageConfigHelpers)
-
-macro(CHECK_CXX_COMPILER_AND_LINKER_FLAGS _RESULT _CXX_FLAGS _LINKER_FLAGS)
-  set(CMAKE_REQUIRED_FLAGS ${_CXX_FLAGS})
-  set(CMAKE_REQUIRED_LIBRARIES ${_LINKER_FLAGS})
-  set(CMAKE_REQUIRED_QUIET TRUE)
-  check_cxx_source_runs("#include <iostream>\nint main(int argc, char **argv) { std::cout << \"test\"; return 0; }" ${_RESULT})
-  set(CMAKE_REQUIRED_FLAGS "")
-  set(CMAKE_REQUIRED_LIBRARIES "")
-endmacro()
-
-# Prefer libc++ in conjunction with Clang
-if (CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND NOT CMAKE_CXX_FLAGS MATCHES "-stdlib=libc\\+\\+")
-  CHECK_CXX_COMPILER_AND_LINKER_FLAGS(HAS_LIBCPP "-stdlib=libc++" "-stdlib=libc++")
-  if (APPLE OR HAS_LIBCPP)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++ -D_LIBCPP_VERSION")
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libc++")
-    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -stdlib=libc++")
-    message(STATUS "Enoki: using libc++.")
-  else()
-    CHECK_CXX_COMPILER_AND_LINKER_FLAGS(HAS_LIBCPP_AND_CPPABI "-stdlib=libc++" "-stdlib=libc++ -lc++abi")
-    if (HAS_LIBCPP_AND_CPPABI)
-      set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++ -D_LIBCPP_VERSION")
-      set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -stdlib=libc++ -lc++abi")
-      set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -stdlib=libc++ -lc++abi")
-      message(STATUS "Enoki: using libc++ and libc++abi.")
-    else()
-      message(FATAL_ERROR "When Clang is used to compile Enoki, libc++ must be available -- GCC's libstdc++ is not supported! (please insteall the libc++ development headers, provided e.g. by the packages 'libc++-dev' and 'libc++abi-dev' on Debian/Ubuntu).")
-    endif()
-  endif()
-endif()
-
+include(ext/enoki-jit/ext/enoki-thread/ext/cmake-defaults/CMakeLists.txt)
 
 if (MSVC)
   set(ENOKI_OUTPUT_DIRECTORY
@@ -173,29 +100,6 @@ else()
 endif()
 
 if (ENOKI_ENABLE_PYTHON)
-  if (NOT TARGET pybind11::module)
-    if (SKBUILD)
-      execute_process(
-        COMMAND
-        "${PYTHON_EXECUTABLE}" -c
-        "import pybind11; print(pybind11.get_cmake_dir())"
-        OUTPUT_VARIABLE _tmp_dir
-        OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ECHO STDOUT)
-        list(APPEND CMAKE_PREFIX_PATH "${_tmp_dir}")
-      find_package(pybind11 CONFIG REQUIRED)
-    else()
-      set(Python_FIND_FRAMEWORK LAST) # Prefer Brew/Conda to Apple framework python
-      find_package(Python COMPONENTS Interpreter Development REQUIRED)
-      set(ENOKI_PYBIND11_DIR "${CMAKE_CURRENT_SOURCE_DIR}/ext/pybind11"
-      CACHE STRING "Path containing the 'pybind11' library used to compile Enoki.")
-      add_subdirectory(${ENOKI_PYBIND11_DIR} pybind11)
-      mark_as_advanced(
-        USE_PYTHON_INCLUDE_DIR PYBIND11_INSTALL PYBIND11_TEST PYBIND11_NOPYTHON
-        PYBIND11_FINDPYTHON PYBIND11_PYTHON_VERSION PYBIND11_WERROR
-        ENOKI_PYBIND11_DIR)
-      endif()
-  endif()
-
   message(STATUS "Enoki: building the Python plugin.")
   add_subdirectory(src/python)
 else()

@@ -44,7 +44,7 @@ static py::object convert_tuple(int64_t *index, int ndim) {
     for (int i = 0; i < ndim; ++i)
         PyTuple_SET_ITEM(t.ptr(), i, PyLong_FromSsize_t((py::ssize_t) index[i]));
 
-    return t;
+    return std::move(t);
 }
 
 static int convert_dtype(VarType type) {

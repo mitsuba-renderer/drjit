@@ -8,9 +8,9 @@ PyObject *implicit_conversion_handler(PyObject *obj, PyTypeObject *type_) {
 
     bool pass = false;
     if (PyList_CheckExact(obj)) {
-        pass = Size == ek::Dynamic || Size == PyList_GET_SIZE(obj);
+        pass = Size == ek::Dynamic || Size == (size_t) PyList_GET_SIZE(obj);
     } else if (PyTuple_CheckExact(obj)) {
-        pass = Size == ek::Dynamic || Size == PyTuple_GET_SIZE(obj);
+        pass = Size == ek::Dynamic || Size == (size_t) PyTuple_GET_SIZE(obj);
     } else if (Size > 0 && PyNumber_Check(obj)) {
         pass = true;
     } else if (Size > 0 &&

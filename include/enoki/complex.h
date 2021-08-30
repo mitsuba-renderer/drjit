@@ -80,9 +80,6 @@ template <typename T> Complex<T> conj(const Complex<T> &z) {
 template <typename T0, typename T1>
 Complex<expr_t<T0, T1>> operator*(const Complex<T0> &z0,
                                   const Complex<T1> &z1) {
-    using Value = expr_t<T0, T1>;
-    using Base  = Array<Value, 2>;
-
     return {
         fmsub(z0.x(), z1.x(), z0.y()*z1.y()),
         fmadd(z0.x(), z1.y(), z0.y()*z1.x())

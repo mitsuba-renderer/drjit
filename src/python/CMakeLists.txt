@@ -54,6 +54,13 @@ set_target_properties(enoki-python PROPERTIES
 target_compile_options(enoki-python PRIVATE ${ENOKI_NATIVE_FLAGS})
 
 if (ENOKI_MASTER_PROJECT)
+  # Adapt to variations in rpath handling on Linux and macOS
+  if (APPLE)
+    set(ENOKI_ORIGIN "@loader_path")
+  elseif(UNIX)
+    set(ENOKI_ORIGIN "$ORIGIN")
+  endif()
+
   install(TARGETS enoki-python LIBRARY DESTINATION enoki)
   set_target_properties(enoki-python PROPERTIES INSTALL_RPATH "${ENOKI_ORIGIN}")
 endif()

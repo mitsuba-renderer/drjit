@@ -111,7 +111,7 @@ template <typename Array> auto bind(py::module_ &m, bool scalar_mode = false) {
 };
 
 template <typename Array>
-auto bind_full(py::class_<Array> &cls, bool scalar_mode = false) {
+auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
     static_assert(ek::array_depth_v<Array> == 1);
     bind_basic_methods(cls);
 
@@ -407,7 +407,7 @@ auto bind_full(py::class_<Array> &cls, bool scalar_mode = false) {
             Array result = Array::map_((void *) ptr, size, false);
             if (callback) {
                 std::function<void (void)> *func = new std::function<void (void)>(std::move(callback));
-                jit_var_set_callback(result.index(), [](uint32_t i, int free, void *arg) {
+                jit_var_set_callback(result.index(), [](uint32_t /* i */, int free, void *arg) {
                     if (free) {
                         std::function<void(void)> *func2 = (std::function<void(void)> *) arg;
                         (*func2)();

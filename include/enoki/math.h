@@ -841,7 +841,6 @@ template <typename Value> Value log(const Value &x) {
         static_assert(!is_special_v<Value>,
                       "log(): requires a regular scalar/array argument!");
         using Scalar = scalar_t<Value>;
-        using UInt = scalar_t<int_array_t<Value>>;
         using Mask = mask_t<Value>;
         constexpr bool Single = std::is_same_v<Scalar, float>;
 
@@ -919,7 +918,6 @@ template <typename Value> Value log2(const Value &x) {
         static_assert(!is_special_v<Value>,
                       "log2(): requires a regular scalar/array argument!");
         using Scalar = scalar_t<Value>;
-        using UInt = scalar_t<int_array_t<Value>>;
         using Mask = mask_t<Value>;
         constexpr bool Single = std::is_same_v<Scalar, float>;
 
@@ -1043,7 +1041,6 @@ template <typename Value> Value sinh(const Value &x) {
         static_assert(!is_special_v<Value>,
                       "sinh(): requires a regular scalar/array argument!");
         using Scalar = scalar_t<Value>;
-        using UInt = scalar_t<int_array_t<Value>>;
         using Mask = mask_t<Value>;
         constexpr bool Single = std::is_same_v<Scalar, float>;
 
@@ -1117,7 +1114,6 @@ template <typename Value> std::pair<Value, Value> sincosh(const Value &x) {
         static_assert(!is_special_v<Value>,
                       "sincosh(): requires a regular scalar/array argument!");
         using Scalar = scalar_t<Value>;
-        using UInt = scalar_t<int_array_t<Value>>;
         using Mask = mask_t<Value>;
         constexpr bool Single = std::is_same_v<Scalar, float>;
 
