@@ -45,11 +45,11 @@ struct Variable;
 
 // Special edge (scatter, gather, scatter_reduce, block_sum, etc.)
 struct Special {
-    virtual void backward(Variable *source, const Variable *target) const {
+    virtual void backward(Variable * /*source*/, const Variable * /*target*/) const {
         ad_raise("Special::backward(): not implemented!");
     }
 
-    virtual void forward(const Variable *source, Variable *target) const {
+    virtual void forward(const Variable * /*source*/, Variable * /*target*/) const {
         ad_raise("Special::forward(): not implemented!");
     }
 
@@ -455,6 +455,7 @@ static std::pair<int32_t, Variable *> ad_var_new(const char *label,
 static void ad_free(int32_t index, Variable *v);
 
 static void ad_inc_ref(int32_t index, Variable *v) noexcept (true) {
+    ENOKI_MARK_USED(index);
     ad_trace("ad_inc_ref(a%i): %u", index, v->ref_count + 1);
     v->ref_count++;
 }

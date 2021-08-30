@@ -129,11 +129,9 @@ namespace enoki {
     };
 
 #if !defined(_MSC_VER)
-    static __thread uint32_t flags = 0;
     static __thread PrefixEntry *prefix = nullptr;
 #else
     static __declspec(thread) PrefixEntry *prefix = nullptr;
-    static __declspec(thread) uint32_t flags = 0;
 #endif
 
     ENOKI_EXPORT void ad_prefix_push(const char *value) {
