@@ -462,6 +462,45 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
     return cls;
 }
 
+struct CustomOp : ek::detail::DiffCallback {
+    CustomOp(py::handle handle) : m_handle(handle) {
+        m_handle.inc_ref();
+    }
+
+    virtual void forward() override {
+        py::gil_scoped_acquire gsa;
+        m_handle.attr("forward")();
+    }
+
+    virtual void backward() override {
+        py::gil_scoped_acquire gsa;
+        m_handle.attr("backward")();
+    }
+
+    ~CustomOp() {
+        py::gil_scoped_acquire gsa;
+        m_handle.dec_ref();
+    }
+
+    py::handle m_handle;
+};
+
+template <typename T>
+void bind_ad_details(py::class_<ek::DiffArray<T>> &cls) {
+    cls.def_static(
+        "add_edge_",
+        [](int32_t src_index, int32_t dst_index, py::handle cb) {
+            ek::detail::ad_add_edge<T>(
+                src_index, dst_index,
+                cb.is_none() ? nullptr : new CustomOp(cb));
+        },
+        "src_index"_a, "dst_index"_a, "cb"_a = py::none());
+
+    cls.def("dec_ref_", [](ek::DiffArray<T> &v) {
+        ek::detail::ad_dec_ref<T>(v.index_ad());
+    });
+}
+
 #define ENOKI_BIND_ARRAY_TYPES_DYN(Module, Guide, Scalar)                      \
     auto d_b = bind<ek::mask_t<ek::DynamicArray<ek::float32_array_t<Guide>>>>( \
         Module, Scalar);                                                       \

@@ -277,8 +277,8 @@ template <typename Custom, typename... Input> auto custom(const Input&... input)
 
         size_t diff_vars_out_ctr = 0;
         detail::diff_vars(output, diff_vars_out_ctr, nullptr);
-        if (diff_vars_out_ctr == 0)
-            enoki_raise("enoki::custom(): internal error!");
+        if (diff_vars_out_ctr + custom->m_implicit_out.size() == 0)
+            return output; // Not relevant for AD after all..
 
         ek_unique_ptr<int32_t[]> diff_vars_in(new int32_t[diff_vars_in_ctr + custom->m_implicit_in.size()]);
         ek_unique_ptr<int32_t[]> diff_vars_out(new int32_t[diff_vars_out_ctr + custom->m_implicit_out.size()]);

@@ -6,29 +6,6 @@
 #include <enoki/autodiff.h>
 #include <enoki/jit.h>
 
-struct CustomOp : ek::detail::DiffCallback {
-    CustomOp(py::handle handle) : m_handle(handle) {
-        m_handle.inc_ref();
-    }
-
-    virtual void forward() override {
-        py::gil_scoped_acquire gsa;
-        m_handle.attr("forward")();
-    }
-
-    virtual void backward() override {
-        py::gil_scoped_acquire gsa;
-        m_handle.attr("backward")();
-    }
-
-    ~CustomOp() {
-        py::gil_scoped_acquire gsa;
-        m_handle.dec_ref();
-    }
-
-    py::handle m_handle;
-};
-
 void export_llvm_ad(py::module_ &m) {
     py::module_ llvm_ad = m.def_submodule("llvm").def_submodule("ad");
 
@@ -54,5 +31,8 @@ void export_llvm_ad(py::module_ &m) {
         .def("__call__", &Loop<Guide>::operator());
 
     ENOKI_BIND_TENSOR_TYPES(llvm_ad);
+
+    bind_ad_details(a_f32);
+    bind_ad_details(a_f64);
 }
 #endif

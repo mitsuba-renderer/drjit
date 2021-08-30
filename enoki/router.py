@@ -2610,6 +2610,26 @@ class CustomOp:
     def add_output(self, value):
         self._implicit_out.append(value)
 
+    def __del__(self):
+        def ad_clear(o):
+            if _ek.array_depth_v(o) > 1 \
+               or isinstance(o, list) \
+               or isinstance(o, tuple):
+                for v in o:
+                    ad_clear(v)
+            elif isinstance(o, _Mapping):
+                for k, v in o.items():
+                    ad_clear(v)
+            elif _ek.is_diff_array_v(o):
+                if _ek.is_tensor_v(o):
+                    ad_clear(o.array)
+                else:
+                    o.set_index_ad_(0)
+            elif _ek.is_enoki_struct_v(o):
+                for k in type(o).ENOKI_STRUCT.keys():
+                    ad_clear(getattr(o, k))
+        ad_clear(self.output)
+
     def name(self):
         return "CustomOp[unnamed]"
 
@@ -2635,25 +2655,32 @@ def custom(cls, *args, **kwargs):
                 diff_vars(getattr(o, k), indices)
 
     # Clear primal values of a differentiable array
-    def clear_primal(o):
+    def clear_primal(o, dec_ref):
         if _ek.array_depth_v(o) > 1 \
            or isinstance(o, list) \
            or isinstance(o, tuple):
-            return type(o)([clear_primal(v) for v in o])
+            return type(o)([clear_primal(v, dec_ref) for v in o])
         elif isinstance(o, _Mapping):
-            return { k: clear_primal(v) for k, v in o.items() }
+            return { k: clear_primal(v, dec_ref) for k, v in o.items() }
         elif _ek.is_diff_array_v(o):
-            to = type(o)
-            if _ek.is_tensor_v(o):
-                a_t = type(o.array)
-                array = empty(_ek.detached_t(a_t), hprod(o.shape))
-                return to(a_t.create_(o.array.index_ad(), array), o.shape)
+            ot = type(o)
+
+            if _ek.is_tensor_v(ot):
+                value = ot.Array.create_(
+                    o.array.index_ad(),
+                    zero(_ek.detached_t(ot.Array), hprod(o.shape)))
+                result = ot(value, o.shape)
             else:
-                return to.create_(o.index_ad(), _ek.detached_t(to)())
+                result = value = ot.create_(
+                    o.index_ad(),
+                    _ek.detached_t(ot)())
+            if dec_ref:
+                value.dec_ref_()
+            return result
         elif _ek.is_enoki_struct_v(o):
             res = type(o)()
             for k in type(o).ENOKI_STRUCT.keys():
-                setattr(res, k, clear_primal(getattr(o, k)))
+                setattr(res, k, clear_primal(getattr(o, k), dec_ref))
             return res
         else:
             return o
@@ -2678,30 +2705,29 @@ def custom(cls, *args, **kwargs):
         tmp_in, tmp_out = Type(), Type()
         _ek.enable_grad(tmp_in, tmp_out, output)
 
-        inst.inputs = clear_primal(kwargs)
-        inst.output = clear_primal(output)
+        inst.inputs = clear_primal(kwargs, dec_ref=False)
+        inst.output = clear_primal(output, dec_ref=True)
 
         diff_vars_out = []
         diff_vars(inst.output, diff_vars_out)
-
         diff_vars(inst._implicit_out, diff_vars_out)
 
         if len(diff_vars_out) == 0:
-            raise Exception("enoki.custom(): internal error!")
+            return output # Not relevant for AD after all..
 
         detail = _modules.get(Type.__module__ + ".detail")
 
         if len(diff_vars_in) > 1:
             _ek.set_label(tmp_in, inst.name() + "_in")
             for index in diff_vars_in:
-                detail.ad_add_edge(index, tmp_in.index_ad())
+                Type.add_edge_(index, tmp_in.index_ad())
 
         if len(diff_vars_out) > 1:
             _ek.set_label(tmp_out, inst.name() + "_out")
             for index in diff_vars_out:
-                detail.ad_add_edge(tmp_out.index_ad(), index)
+                Type.add_edge_(tmp_out.index_ad(), index)
 
-        detail.ad_add_edge(
+        Type.add_edge_(
             diff_vars_in[0]  if len(diff_vars_in)  == 1 else tmp_in.index_ad(),
             diff_vars_out[0] if len(diff_vars_out) == 1 else tmp_out.index_ad(),
             inst
