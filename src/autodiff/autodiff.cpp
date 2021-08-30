@@ -45,11 +45,11 @@ struct Variable;
 
 // Special edge (scatter, gather, scatter_reduce, block_sum, etc.)
 struct Special {
-    virtual void backward(Variable * /*source*/, const Variable * /*target*/) const {
+    virtual void backward(Variable * /* source */, const Variable * /* target */) const {
         ad_raise("Special::backward(): not implemented!");
     }
 
-    virtual void forward(const Variable * /*source*/, Variable * /*target*/) const {
+    virtual void forward(const Variable * /* source */, Variable * /* target */) const {
         ad_raise("Special::forward(): not implemented!");
     }
 
@@ -461,6 +461,7 @@ static void ad_inc_ref(int32_t index, Variable *v) noexcept (true) {
 }
 
 static bool ad_dec_ref(int32_t index, Variable *v) noexcept (true) {
+    ENOKI_MARK_USED(index);
     ad_trace("ad_dec_ref(a%i): %u", index, v->ref_count - 1);
 
     if (unlikely(v->ref_count == 0))
@@ -477,6 +478,8 @@ static bool ad_dec_ref(int32_t index, Variable *v) noexcept (true) {
 
 /// Clear backward edges of the given variable and decrease int. ref. counts
 static void ad_free_edges(int32_t index, Variable *v) {
+    ENOKI_MARK_USED(index);
+
     uint32_t edge_id = v->next_rev;
     ad_trace("ad_free_edges(): freeing edges of variable a%i", index);
     v->next_rev = 0;

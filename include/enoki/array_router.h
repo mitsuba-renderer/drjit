@@ -787,10 +787,7 @@ template <typename T> ENOKI_INLINE T zero(size_t size) {
 #if defined(_MSC_VER) // don't warn about 'undef' below
 #  pragma warning(push)
 #  pragma warning(disable: 4700)
-#elif defined(__clang__)
-#  pragma clang diagnostic push
-#  pragma clang diagnostic ignored "-Wuninitialized"
-#elif defined(__GNUG__)
+#elif defined(__GNUC__)
 #  pragma GCC diagnostic push
 #  pragma GCC diagnostic ignored "-Wuninitialized"
 #endif
@@ -823,9 +820,7 @@ template <typename T> ENOKI_INLINE T empty(size_t size = 1) {
 
 #if defined(_MSC_VER)
 #  pragma warning(pop)
-#elif defined(__clang__)
-#  pragma clang diagnostic pop
-#elif defined(__GNUG__)
+#elif defined(__GNUC__)
 #  pragma GCC diagnostic pop
 #endif
 
