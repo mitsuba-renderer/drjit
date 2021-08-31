@@ -1558,9 +1558,16 @@ template <typename T> void ad_set_grad(int32_t index, const T &value, bool fail_
         return;
     }
 
-    ad_trace("ad_set_grad(a%i)", index);
+    size_t size_in = width(value);
     Variable &v = it.value();
-    if (v.size != 1 || width(value) == 1)
+
+    if (v.size != size_in && size_in != 1 && v.size != 1)
+        ad_raise("ad_set_grad(): attempted to assign a gradient of size "
+                 "%zu to AD variable a%i, which has size %zu!",
+                 size_in, index, v.size);
+
+    ad_trace("ad_set_grad(a%i)", index);
+    if (v.size != 1 || size_in == 1)
         v.grad = value;
     else
         v.grad = hsum_async(value);
@@ -1577,9 +1584,17 @@ template <typename T> void ad_accum_grad(int32_t index, const T &value, bool fai
             ad_raise("ad_accum_grad(): referenced an unknown variable a%i!", index);
         return;
     }
-    ad_trace("ad_accum_grad(a%i)", index);
+
+    size_t size_in = width(value);
     Variable &v = it.value();
-    v.accum(value, width(value));
+
+    if (v.size != size_in && size_in != 1 && v.size != 1)
+        ad_raise("ad_accum_grad(): attempted to accumulate a gradient of size "
+                 "%zu into AD variable a%i, which has size %u!",
+                 size_in, index, v.size);
+
+    ad_trace("ad_accum_grad(a%i)", index);
+    v.accum(value, size_in);
 }
 
 template <typename T> void ad_set_label(int32_t index, const char *label) {
