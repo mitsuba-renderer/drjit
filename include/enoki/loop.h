@@ -200,9 +200,6 @@ protected:
                 // Start recording side effects
                 m_jit_state.begin_recording();
 
-                // New CSE scope for the loop body
-                m_jit_state.new_scope();
-
                 // Mask deactivated SIMD lanes
                 if constexpr (Backend == JitBackend::LLVM)
                     m_jit_state.set_mask(cond.index());
