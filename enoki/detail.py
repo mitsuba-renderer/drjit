@@ -484,7 +484,7 @@ def _loop_process_state(value: type, in_state: list, out_state: list,
             "loop_process_state(): one of the supplied loop state variables "
             "of type %s is attached to the AD graph (i.e., grad_enabled(..) "
             "is true). However, propagating derivatives through multiple "
-            "iterations of a recorded loop is not supported loop (and never "
+            "iterations of a recorded loop is not supported (and never "
             "will be). Please see the documentation on differentiating loops "
             "for details and suggested alternatives." % t.__name__)
 
