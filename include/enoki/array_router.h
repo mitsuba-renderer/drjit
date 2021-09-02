@@ -784,15 +784,8 @@ template <typename T> ENOKI_INLINE T zero(size_t size) {
     }
 }
 
-#if defined(_MSC_VER) // don't warn about 'undef' below
-#  pragma warning(push)
-#  pragma warning(disable: 4700)
-#elif defined(__GNUC__)
-#  pragma GCC diagnostic push
-#  pragma GCC diagnostic ignored "-Wuninitialized"
-#endif
-
 template <typename T> ENOKI_INLINE T empty(size_t size = 1) {
+    ENOKI_MARK_USED(size);
     if constexpr (is_array_v<T>) {
         return T::Derived::empty_(size);
     } else if constexpr (is_enoki_struct_v<T>) {
@@ -804,25 +797,12 @@ template <typename T> ENOKI_INLINE T empty(size_t size = 1) {
                 x = empty<X>(size);
             });
         return result;
+    } else if constexpr (std::is_scalar_v<T>) {
+        return T(0);
     } else {
-        static_assert(std::is_scalar_v<T>,
-                      "Unsupported data structure -- did you forget to include "
-                      "'enoki/struct.h' or provide a suitable ENOKI_STRUCT() "
-                      "declaration?");
-
-        T undef;
-        #if defined(_MSC_VER) && !defined(NDEBUG) // MSVC's /RTC (Runtime error checks) requires the following
-        T* undef_ptr = &undef;
-        #endif
-        return undef;
+        return T();
     }
 }
-
-#if defined(_MSC_VER)
-#  pragma warning(pop)
-#elif defined(__GNUC__)
-#  pragma GCC diagnostic pop
-#endif
 
 template <typename T, typename T2>
 ENOKI_INLINE T full(const T2 &value, size_t size = 1) {
@@ -897,6 +877,10 @@ ENOKI_INLINE T identity(size_t size = 1) {
 template <typename Array>
 ENOKI_INLINE Array linspace(scalar_t<Array> min, scalar_t<Array> max,
                             size_t size = 1, bool endpoint = true) {
+    ENOKI_MARK_USED(max);
+    ENOKI_MARK_USED(size);
+    ENOKI_MARK_USED(endpoint);
+
     if constexpr (is_array_v<Array>)
         return Array::linspace_(min, max, size, endpoint);
     else
@@ -914,6 +898,9 @@ ENOKI_INLINE Array arange(size_t size = 1) {
 
 template <typename Array>
 ENOKI_INLINE Array arange(ssize_t start, ssize_t end, ssize_t step = 1) {
+    ENOKI_MARK_USED(end);
+    ENOKI_MARK_USED(step);
+
     if constexpr (is_array_v<Array>)
         return Array::arange_(start, end, step);
     else
@@ -926,6 +913,7 @@ template <typename T> ENOKI_INLINE T load_aligned(const void *ptr, size_t size =
     if (ENOKI_UNLIKELY((uintptr_t) ptr % alignof(T) != 0))
         enoki_raise("load_aligned(): pointer %p is misaligned (alignment = %zu)!", ptr, alignof(T));
 #endif
+    ENOKI_MARK_USED(size);
     if constexpr (is_array_v<T>)
         return T::load_aligned_(ptr, size);
     else
@@ -941,6 +929,7 @@ template <typename T> ENOKI_INLINE T map(void *ptr, size_t size = 1, bool free =
 
 /// Load an array from unaligned memory
 template <typename T> ENOKI_INLINE T load(const void *ptr, size_t size = 1) {
+    ENOKI_MARK_USED(size);
     if constexpr (is_array_v<T>)
         return T::load_(ptr, size);
     else

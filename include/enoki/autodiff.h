@@ -1413,6 +1413,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
     void scatter_(DiffArray &dst, const IndexType &offset,
                   const MaskType &mask = true) const {
         if constexpr (std::is_scalar_v<Type>) {
+            (void) dst; (void) offset; (void) mask;
             enoki_raise("Array scatter operation not supported for scalar array type.");
         } else {
             scatter(dst.m_value, m_value, offset.m_value, mask.m_value);
@@ -1432,6 +1433,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
     void scatter_reduce_(ReduceOp op, DiffArray &dst, const IndexType &offset,
                          const MaskType &mask = true) const {
         if constexpr (std::is_scalar_v<Type>) {
+            (void) op; (void) dst; (void) offset; (void) mask;
             enoki_raise("Array scatter_reduce operation not supported for scalar array type.");
         } else {
             scatter_reduce(op, dst.m_value, m_value, offset.m_value, mask.m_value);
@@ -1499,6 +1501,9 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
     }
 
     static DiffArray map_(void *ptr, size_t size, bool free = false) {
+        ENOKI_MARK_USED(size);
+        ENOKI_MARK_USED(free);
+        ENOKI_MARK_USED(ptr);
         if constexpr (is_jit_array_v<Type>)
             return Type::map_(ptr, size, free);
         else
@@ -1550,11 +1555,13 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                 enoki_raise("block_sum_(): not supported for attached arrays!");
             return m_value.block_sum_(block_size);
         } else {
+            ENOKI_MARK_USED(block_size);
             enoki_raise("block_sum_(): not supported in scalar mode!");
         }
     }
 
     static DiffArray steal(int32_t index) {
+        ENOKI_MARK_USED(index);
         if constexpr (is_jit_array_v<Type>)
             return Type::steal(index);
         else
@@ -1562,6 +1569,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
     }
 
     static DiffArray borrow(int32_t index) {
+        ENOKI_MARK_USED(index);
         if constexpr (is_jit_array_v<Type>)
             return Type::borrow(index);
         else
@@ -1569,6 +1577,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
     }
 
     void set_grad_enabled_(bool value) {
+        ENOKI_MARK_USED(value);
         if constexpr (IsEnabled) {
             if (value) {
                 if (m_index > 0)
@@ -1589,6 +1598,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
     }
 
     void set_grad_suspended_(bool value) {
+        ENOKI_MARK_USED(value);
         if constexpr (IsEnabled) {
             if (value != (m_index < 0))
                 m_index = -m_index;
@@ -1596,6 +1606,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
     }
 
     DiffArray migrate_(AllocType type) const {
+        ENOKI_MARK_USED(type);
         if constexpr (is_jit_array_v<Type_>)
             return m_value.migrate_(type);
         return *this;
@@ -1703,8 +1714,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
 
         if constexpr (is_dynamic_v<Type_>) {
             m_value.set_entry(offset, value);
-        }
-        else {
+        } else {
+            ENOKI_MARK_USED(offset);
 #if !defined(NDEBUG) && !defined(ENOKI_DISABLE_RANGE_CHECK)
             if (offset != 0)
                 enoki_raise("Out of range access (tried to access index %u in "
@@ -1751,6 +1762,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
     }
 
     void init_(size_t size) {
+        ENOKI_MARK_USED(size);
         if constexpr (is_dynamic_v<Type>)
             m_value.init_(size);
     }

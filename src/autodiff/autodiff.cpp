@@ -8,6 +8,10 @@
 #include <mutex>
 #include <xxh3.h>
 
+#if defined(__GNUC__) && !defined(__clang__)
+#  pragma GCC diagnostic ignored "-Wclass-memaccess"
+#endif
+
 #define CONCAT(x,y) x ## _ ## y
 #define EVAL(x,y) CONCAT(x,y)
 #define RENAME(fun) EVAL(fun, ENOKI_AUTODIFF_NAME)
@@ -584,6 +588,7 @@ int32_t ad_new(const char *label, size_t size, uint32_t op_count,
         rec = jit_flag(JitFlag::Recording);
         check_weights = jit_flag(JitFlag::ADCheckWeights);
     }
+    (void) check_weights;
 
     ReleaseOperandHelper helper;
     if (unlikely(rec)) {
@@ -989,6 +994,8 @@ int32_t ad_new_gather_impl(const char *label, size_t size, int32_t src_index,
 
         return index;
     } else {
+        (void) mask; (void) label; (void) size;
+        (void) src_index; (void) offset; (void) permute;
         enoki_raise("ad_new_gather(): differentiable gathers not supported by "
                     "this backend!");
     }
@@ -1039,6 +1046,7 @@ int32_t ad_new_scatter(const char *label, size_t size, ReduceOp op,
                        const Mask &mask_, bool permute) {
 
     Mask mask(mask_);
+    ENOKI_MARK_USED(mask);
 
     bool eager_fwd = false;
     if constexpr (is_jit_array_v<Value>)
@@ -1131,6 +1139,8 @@ int32_t ad_new_scatter(const char *label, size_t size, ReduceOp op,
 
         return index;
     } else {
+        (void) label; (void) size; (void) op; (void) src_index;
+        (void) dst_index; (void) offset; (void) permute;
         enoki_raise("ad_new_scatter(): differentiable scatters not supported "
                     "by this backend!");
     }
