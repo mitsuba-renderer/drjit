@@ -59,7 +59,7 @@ function(enoki_test NAME)
   target_compile_options(${NAME}_none PRIVATE ${ENOKI_NONE_FLAGS})
   target_link_libraries(${NAME}_none enoki)
 
-  if (ENOKI_HOST MATCHES "ARM")
+  if (CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
     add_executable(${NAME}_neon ${ARGN} ${ENOKI_HEADERS})
     target_compile_options(${NAME}_neon PRIVATE ${ENOKI_NEON_FLAGS})
     set_target_properties(${NAME}_neon PROPERTIES FOLDER ${NAME})
