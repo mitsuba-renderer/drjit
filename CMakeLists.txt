@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.13...3.18)
 
 project(enoki
   DESCRIPTION
-    "Enoki 2"
+    "Enoki"
   LANGUAGES
     CXX
 )
@@ -129,7 +129,7 @@ if (ENOKI_MASTER_PROJECT)
 
   write_basic_package_version_file(
     enokiConfigVersion.cmake
-    VERSION ${PROJECT_VERSION}
+    VERSION ${ENOKI_VERSION}
     COMPATIBILITY AnyNewerVersion ARCH_INDEPENDENT)
 
   install(

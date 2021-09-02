@@ -9,20 +9,20 @@ namespace ek = enoki;
 using Float  = ek::DiffArray<ek::LLVMArray<float>>;
 using UInt32 = ek::uint32_array_t<Float>;
 
-struct Class {
+struct Test {
     Float value;
     Float f(UInt32 i) {
         return ek::sqr(ek::gather<Float>(value, i));
     }
 
-    ENOKI_VCALL_REGISTER(Float, Class)
+    ENOKI_VCALL_REGISTER(Float, Test)
 };
 
-ENOKI_VCALL_BEGIN(Class)
+ENOKI_VCALL_BEGIN(Test)
 ENOKI_VCALL_METHOD(f)
-ENOKI_VCALL_END(Class)
+ENOKI_VCALL_END(Test)
 
-using ClassPtr = ek::replace_scalar_t<Float, Class *>;
+using TestPtr = ek::replace_scalar_t<Float, Test *>;
 
 ENOKI_TEST(test01_vcall_reduce_and_record_rev) {
     jit_init((uint32_t) JitBackend::LLVM);
@@ -42,11 +42,11 @@ ENOKI_TEST(test01_vcall_reduce_and_record_rev) {
                 if (i == 1)
                     y = ek::gather<Float>(x, 9 - ek::arange<UInt32>(10));
 
-                Class *b1 = new Class();
-                Class *b2 = new Class();
-                ClassPtr b2p(b2);
+                Test *b1 = new Test();
+                Test *b2 = new Test();
+                TestPtr b2p(b2);
                 if (k == 1)
-                    b2p = ek::opaque<ClassPtr>(b2, 13);
+                    b2p = ek::opaque<TestPtr>(b2, 13);
 
                 b1->value = ek::zero<Float>(10);
                 b2->value = std::move(y);
@@ -84,11 +84,11 @@ ENOKI_TEST(test02_vcall_reduce_and_record_fwd) {
                 if (i == 1)
                     y = ek::gather<Float>(x, 9 - ek::arange<UInt32>(10));
 
-                Class *b1 = new Class();
-                Class *b2 = new Class();
-                ClassPtr b2p(b2);
+                Test *b1 = new Test();
+                Test *b2 = new Test();
+                TestPtr b2p(b2);
                 if (k == 1)
-                    b2p = ek::opaque<ClassPtr>(b2, 13);
+                    b2p = ek::opaque<TestPtr>(b2, 13);
 
                 b1->value = ek::zero<Float>(10);
                 b2->value = std::move(y);
