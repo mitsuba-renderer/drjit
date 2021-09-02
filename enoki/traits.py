@@ -247,6 +247,8 @@ def leaf_array_t(t):
         return leaf_array_t(type(t))
     while is_array_v(value_t(t)):
         t = t.Value
+    if is_tensor_v(t):
+        t = t.Array
     return t
 
 
