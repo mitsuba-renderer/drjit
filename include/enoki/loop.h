@@ -175,8 +175,8 @@ protected:
 
         switch (m_state) {
             case 0:
-                jit_raise("Loop(\"%s\"): must be initialized first!",
-                          m_name.get());
+                jit_raise("Loop(\"%s\"): must be initialized before "
+                          "first loop iteration!", m_name.get());
             break;
 
             case 1:

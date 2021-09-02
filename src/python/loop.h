@@ -29,7 +29,7 @@ template <typename Value> struct Loop : ek::Loop<Value> {
 
     void init() {
         if (m_state)
-            jit_raise("enoki::Loop(\"%s\"): was already initialized!",
+            jit_raise("Loop(\"%s\"): was already initialized!",
                       m_name.get());
 
         process_state(false);
@@ -68,8 +68,13 @@ private:
             py::object o = m_state_py[i];
             if (!py::isinstance<py::tuple>(o))
                 continue;
-            m_indices_py[j] = py::cast<uint32_t>(o[i0]);
-            m_indices_py_ad[j] = py::cast<int32_t>(o[i1]);
+            if (j >= m_indices_py.size()) {
+                jit_raise("Loop(\"%s\"): must be initialized before "
+                          "first loop iteration!", m_name.get());
+            } else {
+                m_indices_py[j] = py::cast<uint32_t>(o[i0]);
+                m_indices_py_ad[j] = py::cast<int32_t>(o[i1]);
+            }
             j++;
         }
     }
