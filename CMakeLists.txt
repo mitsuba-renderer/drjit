@@ -1,32 +1,10 @@
 cmake_minimum_required(VERSION 3.13...3.18)
 
-# Extract project version from source
-file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/include/enoki/fwd.h"
-  enoki_version_defines REGEX "#define ENOKI_VERSION_(MAJOR|MINOR|PATCH) ")
-
-foreach(ver ${enoki_version_defines})
-  if(ver MATCHES [[#define ENOKI_VERSION_(MAJOR|MINOR|PATCH) +([^ ]+)$]])
-      set(ENOKI_VERSION_${CMAKE_MATCH_1} "${CMAKE_MATCH_2}")
-  endif()
-endforeach()
-
-if(ENOKI_VERSION_PATCH MATCHES [[\.([a-zA-Z0-9]+)$]])
-  set(ENOKI_VERSION_TYPE "${CMAKE_MATCH_1}")
-endif()
-
-string(REGEX MATCH "^[0-9]+" ENOKI_VERSION_PATCH "${ENOKI_VERSION_PATCH}")
-
-set(ENOKI_VERSION "${ENOKI_VERSION_MAJOR}.${ENOKI_VERSION_MINOR}.${ENOKI_VERSION_PATCH}")
-
-message(STATUS "Enoki v${ENOKI_VERSION} ${ENOKI_VERSION_TYPE}")
-
 project(enoki
   DESCRIPTION
     "Enoki 2"
   LANGUAGES
     CXX
-  VERSION
-    ${ENOKI_VERSION}
 )
 
 option(ENOKI_ENABLE_JIT           "Build Enoki just in time compilation library?" OFF)
@@ -35,12 +13,18 @@ option(ENOKI_ENABLE_PYTHON        "Build Python extension library?" OFF)
 option(ENOKI_ENABLE_PYTHON_PACKET "Enable packet mode in Python extension library?" OFF)
 option(ENOKI_ENABLE_TESTS         "Build Enoki test suite? (Warning, this takes *very* long to compile)" OFF)
 
+# ----------------------------------------------------------
+#  Check if submodules have been checked out, or fail early
+# ----------------------------------------------------------
+
 if (NOT IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/ext/enoki-jit/ext/enoki-thread/ext/cmake-defaults")
-  message(FATAL_ERROR "The enoki-jit dependencies are missing! "
+  message(FATAL_ERROR "The Enoki dependencies are missing! "
     "You probably did not clone the project with --recursive. It is possible to recover "
     "by invoking\n$ git submodule update --init --recursive")
 endif()
 
+
+set(ENOKI_VERSION_FILE "${CMAKE_CURRENT_SOURCE_DIR}/include/enoki/fwd.h")
 include(ext/enoki-jit/ext/enoki-thread/ext/cmake-defaults/CMakeLists.txt)
 
 if (MSVC)
