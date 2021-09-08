@@ -344,11 +344,11 @@ template <typename T> ENOKI_INLINE T tzcnt(T v) {
     ENOKI_ARRAY_FALLBACK_CONSTRUCTORS(StaticArrayImpl)                         \
     ENOKI_INLINE StaticArrayImpl(Register m) : m(m) { }                        \
     ENOKI_INLINE StaticArrayImpl(Register m, detail::reinterpret_flag):m(m){}  \
-    ENOKI_INLINE Value *data() { return (Value *) this; }                      \
-    ENOKI_INLINE const Value *data() const { return (const Value *) this; }    \
-    ENOKI_INLINE Value &entry(size_t i) { return ((Value *) this)[i]; }        \
+    ENOKI_INLINE Value *data() { return (Value *) &m; }                        \
+    ENOKI_INLINE const Value *data() const { return (const Value *) &m; }      \
+    ENOKI_INLINE Value &entry(size_t i) { return ((Value *) &m)[i]; }          \
     ENOKI_INLINE const Value &entry(size_t i) const {                          \
-        return ((const Value *) this)[i];                                      \
+        return ((const Value *) &m)[i];                                        \
     }
 
 
