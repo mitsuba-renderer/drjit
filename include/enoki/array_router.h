@@ -784,6 +784,11 @@ template <typename T> ENOKI_INLINE T zero(size_t size) {
     }
 }
 
+#  if defined(__GNUC__) && !defined(__clang__)
+#    pragma GCC diagnostic push
+#    pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#  endif
+
 template <typename T> ENOKI_INLINE T empty(size_t size = 1) {
     ENOKI_MARK_USED(size);
     if constexpr (is_array_v<T>) {
@@ -803,6 +808,10 @@ template <typename T> ENOKI_INLINE T empty(size_t size = 1) {
         return T();
     }
 }
+
+#  if defined(__GNUC__) && !defined(__clang__)
+#    pragma GCC diagnostic pop
+#  endif
 
 template <typename T, typename T2>
 ENOKI_INLINE T full(const T2 &value, size_t size = 1) {
