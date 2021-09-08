@@ -394,6 +394,8 @@ def test09_repeat_tile(cname):
 
 @pytest.mark.parametrize("cname", ["enoki.cuda.Int", "enoki.llvm.Int"])
 def test10_meshgrid(cname):
+    import numpy as np
+
     Int = get_class(cname)
 
     assert ek.meshgrid() == ()
@@ -407,13 +409,35 @@ def test10_meshgrid(cname):
         (Int(1, 1, 1, 2, 2, 2), Int(3, 4, 5, 3, 4, 5))
 
     assert ek.meshgrid(Int(1, 2), Int(3, 4, 5), Int(5, 6), indexing='xy') == \
-       (Int(1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1, 2),
-        Int(3, 3, 4, 4, 5, 5, 3, 3, 4, 4, 5, 5),
-        Int(5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6))
+       (Int(1, 1, 2, 2, 1, 1, 2, 2, 1, 1, 2, 2),
+        Int(3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5),
+        Int(5, 6, 5, 6, 5, 6, 5, 6, 5, 6, 5, 6))
     assert ek.meshgrid(Int(1, 2), Int(3, 4, 5), Int(5, 6), indexing='ij') == \
        (Int(1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2),
         Int(3, 3, 4, 4, 5, 5, 3, 3, 4, 4, 5, 5),
         Int(5, 6, 5, 6, 5, 6, 5, 6, 5, 6, 5, 6))
+
+    # Ensure consistency with NumPy
+    a, b = ek.meshgrid(Int(1, 2), Int(3, 4, 5))
+    a_np, b_np = np.meshgrid((1, 2), (3, 4, 5))
+    assert a == a_np.ravel()
+    assert b == b_np.ravel()
+    a, b = ek.meshgrid(Int(1, 2), Int(3, 4, 5), indexing='ij')
+    a_np, b_np = np.meshgrid((1, 2), (3, 4, 5), indexing='ij')
+    assert a == a_np.ravel()
+    assert b == b_np.ravel()
+
+    a, b, c = ek.meshgrid(Int(1, 2), Int(3, 4, 5), Int(5, 6))
+    a_np, b_np, c_np = np.meshgrid((1, 2), (3, 4, 5), Int(5, 6))
+    assert a == a_np.ravel()
+    assert b == b_np.ravel()
+    assert c == c_np.ravel()
+    a, b, c = ek.meshgrid(Int(1, 2), Int(3, 4, 5), Int(5, 6), indexing='ij')
+    a_np, b_np, c_np = np.meshgrid((1, 2), (3, 4, 5), Int(5, 6), indexing='ij')
+    assert a == a_np.ravel()
+    assert b == b_np.ravel()
+    assert c == c_np.ravel()
+
 
 
 @pytest.mark.parametrize("cname", ["enoki.cuda.Int", "enoki.llvm.Int"])

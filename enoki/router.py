@@ -2093,7 +2093,7 @@ def meshgrid(*args, indexing='xy'):
 
     result = []
     if indexing == "xy":
-        args = reversed(args)
+        args = (args[1], args[0], *args[2:])
 
     for v in args:
         size //= len(v)
@@ -2102,7 +2102,7 @@ def meshgrid(*args, indexing='xy'):
         result.append(_ek.gather(t, v, index_v))
 
     if indexing == "xy":
-        result = reversed(result)
+        result[0], result[1] = result[1], result[0]
 
     return tuple(result)
 
