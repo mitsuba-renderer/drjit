@@ -48,6 +48,10 @@ target_include_directories(enoki
   $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
+if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
+  target_compile_options(enoki INTERFACE -fno-strict-aliasing)
+endif()
+
 if (ENOKI_ENABLE_JIT)
   if (APPLE)
     message(STATUS "Enoki: building the LLVM JIT backend.")
