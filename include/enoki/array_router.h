@@ -1163,7 +1163,6 @@ void scatter_reduce(ReduceOp op, Target &&target, const Value &value,
                 }
 
                 enoki_raise("Reduce operation not supported");
-                return Value();
             };
 
             if constexpr (is_array_v<Target>)

@@ -340,12 +340,12 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
     #define ENOKI_IMPLEMENT_BINARY(name, op, cond)                           \
         Derived name##_(const Derived &v) const {                            \
             ENOKI_CHKSCALAR(#name "_");                                      \
-            Derived result;                                                  \
                                                                              \
             if constexpr (cond) {                                            \
                 size_t sa = derived().size(), sb = v.size(),                 \
                        sr = sa > sb ? sa : sb;                               \
                                                                              \
+                Derived result;                                              \
                 if constexpr (Derived::Size == Dynamic) {                    \
                     if ((sa != sr && sa != 1) || (sb != sr && sb != 1))      \
                         enoki_raise(#name "_() : mismatched input sizes "    \
@@ -358,11 +358,11 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
                     const Value &b = v.entry(i);                             \
                     result.set_entry(i, op);                                 \
                 }                                                            \
+                                                                             \
+                return result;                                               \
             } else {                                                         \
                 enoki_raise(#name "_(): invalid operand type!");             \
             }                                                                \
-                                                                             \
-            return result;                                                   \
         }
 
     #define ENOKI_IMPLEMENT_BINARY_REC(name, op, cond)                       \
