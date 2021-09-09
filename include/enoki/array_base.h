@@ -243,11 +243,11 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
     #define ENOKI_IMPLEMENT_UNARY(name, op, cond)                            \
         Derived name##_() const {                                            \
             ENOKI_CHKSCALAR(#name "_");                                      \
-            Derived result;                                                  \
                                                                              \
             if constexpr (cond) {                                            \
                 size_t sa = derived().size();                                \
                                                                              \
+               Derived result;                                               \
                 if constexpr (Derived::Size == Dynamic)                      \
                     result = enoki::empty<Derived>(sa);                      \
                                                                              \
@@ -255,11 +255,11 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
                     const Value &a = derived().entry(i);                     \
                     result.set_entry(i, op);                                 \
                 }                                                            \
+                                                                             \
+                return result;                                               \
             } else {                                                         \
                 enoki_raise(#name "_(): invalid operand type!");             \
             }                                                                \
-                                                                             \
-            return result;                                                   \
         }
 
     #define ENOKI_IMPLEMENT_UNARY_REC(name, op, cond)                        \
@@ -269,11 +269,11 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
     #define ENOKI_IMPLEMENT_UNARY_TEMPLATE(name, arg, op, cond)              \
         template <arg> Derived name##_() const {                             \
             ENOKI_CHKSCALAR(#name "_");                                      \
-            Derived result;                                                  \
                                                                              \
             if constexpr (cond) {                                            \
                 size_t sa = derived().size();                                \
                                                                              \
+               Derived result;                                               \
                 if constexpr (Derived::Size == Dynamic)                      \
                     result = enoki::empty<Derived>(sa);                      \
                                                                              \
@@ -281,21 +281,20 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
                     const Value &a = derived().entry(i);                     \
                     result.set_entry(i, op);                                 \
                 }                                                            \
+                                                                             \
+                return result;                                               \
             } else {                                                         \
                 enoki_raise(#name "_(): invalid operand type!");             \
             }                                                                \
-                                                                             \
-            return result;                                                   \
         }
 
     #define ENOKI_IMPLEMENT_UNARY_PAIR_REC(name, op, cond)                   \
         template <typename T = Value, enable_if_array_t<T> = 0>              \
         std::pair<Derived, Derived> name##_() const {                        \
-            Derived result_1, result_2;                                      \
-                                                                             \
             if constexpr (cond) {                                            \
                 size_t sa = derived().size();                                \
                                                                              \
+                Derived result_1, result_2;                                  \
                 if constexpr (Derived::Size == Dynamic) {                    \
                     result_1 = enoki::empty<Derived>(sa);                    \
                     result_2 = enoki::empty<Derived>(sa);                    \
@@ -307,35 +306,35 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
                     result_1.set_entry(i, std::move(result.first));          \
                     result_2.set_entry(i, std::move(result.second));         \
                 }                                                            \
+                                                                             \
+                return std::pair<Derived, Derived>(std::move(result_1),      \
+                                                   std::move(result_2));     \
             } else {                                                         \
                 enoki_raise(#name "_(): invalid operand type!");             \
             }                                                                \
-                                                                             \
-            return std::pair<Derived, Derived>(std::move(result_1),          \
-                                               std::move(result_2));         \
         }
 
     #define ENOKI_IMPLEMENT_ROUND2INT(name)                                  \
         template <typename T> T name##2int_() const {                        \
             ENOKI_CHKSCALAR(#name "_");                                      \
-            T result;                                                        \
                                                                              \
             if constexpr (!IsFloat) {                                        \
                 enoki_raise(#name "_(): invalid operand type!");             \
             } else if constexpr (!std::is_scalar_v<Value>) {                 \
                 size_t sa = derived().size();                                \
                                                                              \
+                T result;                                                    \
                 if constexpr (T::Size == Dynamic)                            \
                     result = enoki::empty<T>(sa);                            \
                                                                              \
                 for (size_t i = 0; i < sa; ++i)                              \
                     result.set_entry(i,                                      \
                         name##2int<value_t<T>>(derived().entry(i)));         \
-            } else {                                                         \
-                result = T(name(derived()));                                 \
-            }                                                                \
                                                                              \
-            return result;                                                   \
+                return result;                                               \
+            } else {                                                         \
+                return T(name(derived()));                                   \
+            }                                                                \
         }
 
     #define ENOKI_IMPLEMENT_BINARY(name, op, cond)                           \
@@ -374,12 +373,12 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
     #define ENOKI_IMPLEMENT_BINARY_BITOP(name, op, cond)                     \
         template <typename Mask> Derived name##_(const Mask &v) const {      \
             ENOKI_CHKSCALAR(#name "_");                                      \
-            Derived result;                                                  \
                                                                              \
             if constexpr (cond) {                                            \
                 size_t sa = derived().size(), sb = v.size(),                 \
                        sr = sa > sb ? sa : sb;                               \
                                                                              \
+                Derived result;                                              \
                 if constexpr (Derived::Size == Dynamic) {                    \
                     if ((sa != sr && sa != 1) || (sb != sr && sb != 1))      \
                         enoki_raise(#name "_() : mismatched input sizes "    \
@@ -392,22 +391,22 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
                     const auto &b = v.entry(i);                              \
                     result.set_entry(i, op);                                 \
                 }                                                            \
+                                                                             \
+                return result;                                               \
             } else {                                                         \
                 enoki_raise(#name "_(): invalid operand type!");             \
             }                                                                \
-                                                                             \
-            return result;                                                   \
         }
 
     #define ENOKI_IMPLEMENT_BINARY_MASK(name, op, cond)                      \
         ENOKI_INLINE auto name##_(const Derived &v) const {                  \
             ENOKI_CHKSCALAR(#name "_");                                      \
-            mask_t<Derived> result;                                          \
                                                                              \
             if constexpr (cond) {                                            \
                 size_t sa = derived().size(), sb = v.size(),                 \
                        sr = sa > sb ? sa : sb;                               \
                                                                              \
+                mask_t<Derived> result;                                      \
                 if constexpr (Derived::Size == Dynamic) {                    \
                     if ((sa != sr && sa != 1) || (sb != sr && sb != 1))      \
                         enoki_raise(#name "_() : mismatched input sizes "    \
@@ -420,17 +419,16 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
                     const Value &b = v.entry(i);                             \
                     result.set_entry(i, op);                                 \
                 }                                                            \
+                                                                             \
+                return result;                                               \
             } else {                                                         \
                 enoki_raise(#name "_(): invalid operand type!");             \
             }                                                                \
-                                                                             \
-            return result;                                                   \
         }
 
     #define ENOKI_IMPLEMENT_TERNARY_ALT(name, op, alt, cond)                 \
         Derived name##_(const Derived &v1, const Derived &v2) const {        \
             ENOKI_CHKSCALAR(#name "_");                                      \
-            Derived result;                                                  \
                                                                              \
             if constexpr (!cond) {                                           \
                 enoki_raise(#name "_(): invalid operand type!");             \
@@ -439,6 +437,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
                 size_t sa = derived().size(), sb = v1.size(), sc = v2.size(),\
                        sd = sa > sb ? sa : sb, sr = sc > sd ? sc : sd;       \
                                                                              \
+                Derived result;                                              \
                 if constexpr (Derived::Size == Dynamic) {                    \
                     if ((sa != sr && sa != 1) || (sb != sr && sb != 1) ||    \
                         (sc != sr && sc != 1))                               \
@@ -453,11 +452,11 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
                     const Value &c = v2.entry(i);                            \
                     result.set_entry(i, op);                                 \
                 }                                                            \
+                                                                             \
+                return result;                                               \
             } else {                                                         \
                 return alt;                                                  \
             }                                                                \
-                                                                             \
-            return result;                                                   \
         }
 
     ENOKI_IMPLEMENT_BINARY(add,   a + b,       IsArithmetic)

@@ -832,7 +832,7 @@ ENOKI_INLINE T opaque(const T2 &value, size_t size = 1) {
         for (size_t i = 0; i < T::Size; ++i)
             result.entry(i) = opaque<typename T::Value>(value, size);
         return result;
-    } if constexpr (is_diff_array_v<T>) {
+    } else if constexpr (is_diff_array_v<T>) {
         return opaque<detached_t<T>>(value, size);
     } else if constexpr (is_jit_array_v<T>) {
         return T::Derived::opaque_(scalar_t<T>(value), size);

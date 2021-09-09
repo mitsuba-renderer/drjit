@@ -47,6 +47,7 @@ py::handle array_base, array_name, array_init, tensor_init, array_configure;
 /// Placeholder base of all Enoki arrays in the Python domain
 struct ArrayBase { };
 
+#if defined(ENOKI_ENABLE_JIT)
 static void log_callback(LogLevel /* level */, const char *msg) {
     if (!_Py_IsFinalizing()) {
         py::gil_scoped_acquire acquire;
@@ -55,6 +56,7 @@ static void log_callback(LogLevel /* level */, const char *msg) {
         fprintf(stderr, "%s\n", msg);
     }
 }
+#endif
 
 PYBIND11_MODULE(enoki_ext, m_) {
 #if defined(ENOKI_ENABLE_JIT)

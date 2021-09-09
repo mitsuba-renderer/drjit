@@ -252,7 +252,7 @@ template <typename T> ENOKI_INLINE T lzcnt_(T v) {
 template <typename T> ENOKI_INLINE T tzcnt_(T v) {
 #if defined(_MSC_VER)
     unsigned long result;
-    if (sizeof(T) <= 4) {
+    if constexpr (sizeof(T) <= 4) {
         _BitScanForward(&result, (unsigned long) v);
         return (v != 0) ? result : 32;
     } else {
@@ -269,7 +269,7 @@ template <typename T> ENOKI_INLINE T tzcnt_(T v) {
 
 template <typename T>
 ENOKI_INLINE T mulhi_(T x, T y) {
-    if (sizeof(T) == 4) {
+    if constexpr (sizeof(T) == 4) {
         using Wide = std::conditional_t<std::is_signed_v<T>, int64_t, uint64_t>;
         return T(((Wide) x * (Wide) y) >> 32);
     } else {

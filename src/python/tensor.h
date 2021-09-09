@@ -36,7 +36,7 @@ template <typename T> auto bind_tensor(py::module m) {
        .def_property_readonly("shape", [](const Tensor &t) {
             PyObject *shape = PyTuple_New(t.ndim());
             for (size_t i = 0; i < t.ndim(); ++i)
-                PyTuple_SET_ITEM(shape, i, PyLong_FromLong(t.shape(i)));
+                PyTuple_SET_ITEM(shape, i, PyLong_FromLong((long) t.shape(i)));
             return py::reinterpret_steal<py::tuple>(shape);
         })
        .def("data_", [](const Tensor &a) {

@@ -22,7 +22,7 @@ NAMESPACE_BEGIN(detail)
 template <typename Index, typename T>
 void tensor_broadcast_impl(const char *op, T &t, const ek_vector<size_t> &shape) {
     ENOKI_MARK_USED(op);
-    int ndim = t.ndim();
+    int ndim = (int) t.ndim();
     if (ndim == 0 || memcmp(t.shape().data(), shape.data(), sizeof(size_t) * ndim) == 0)
         return;
 

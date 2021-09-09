@@ -208,7 +208,7 @@ struct DynamicArray
             uint32_t accum = 0;
             for (size_t i = 0; i < m_size; ++i) {
                 if (m_data[i])
-                    result.m_data[accum++] = i;
+                    result.m_data[accum++] = Value(i);
             }
             result.m_size = accum;
             return result;
