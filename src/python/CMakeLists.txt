@@ -38,6 +38,7 @@ if (ENOKI_ENABLE_PYTHON_PACKET)
 endif()
 
 if (MSVC)
+  target_compile_options(enoki-python PRIVATE /wd4714) # marked as __forceinline not inlined
   set(ENOKI_OUTPUT_DIRECTORY
     LIBRARY_OUTPUT_DIRECTORY_RELEASE        ${CMAKE_CURRENT_BINARY_DIR}/../../enoki
     LIBRARY_OUTPUT_DIRECTORY_DEBUG          ${CMAKE_CURRENT_BINARY_DIR}/../../enoki

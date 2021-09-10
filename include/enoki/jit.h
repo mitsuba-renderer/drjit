@@ -584,14 +584,13 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
 
         Derived output = empty_(block_count);
 
-        jit_block_sum(Derived::Backend, Derived::Type, data(),
-                      output.data(), block_count, block_size);
+        jit_block_sum(Derived::Backend, Derived::Type, data(), output.data(),
+                      (uint32_t) block_count, (uint32_t) block_size);
 
         return output;
     }
 
     Derived copy() const { return steal(jit_var_copy(m_index)); }
-
 
     bool schedule_() const { return jit_var_schedule(m_index) != 0; }
     bool eval_() const { return jit_var_eval(m_index) != 0; }

@@ -70,7 +70,8 @@ template <typename T> auto bind_tensor(py::module m) {
         cls.def("iadd_", [](Tensor *a, const Tensor &b) { *a = a->add_(b); return a; });
         cls.def("isub_", [](Tensor *a, const Tensor &b) { *a = a->sub_(b); return a; });
         cls.def("imul_", [](Tensor *a, const Tensor &b) { *a = a->mul_(b); return a; });
-        cls.def("imod_", [](Tensor *a, const Tensor &b) { *a = a->mod_(b); return a; });
+        if constexpr (Tensor::IsIntegral)
+            cls.def("imod_", [](Tensor *a, const Tensor &b) { *a = a->mod_(b); return a; });
 
         cls.def(Tensor::IsFloat ? "itruediv_" : "ifloordiv_",
                 [](Tensor *a, const Tensor &b) { *a = a->div_(b); return a; });

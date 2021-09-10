@@ -1577,7 +1577,7 @@ template <typename Value> Value lgamma(Value x_) {
     // gamma(x) = sqrt(2*pi) * sum * b^(x + .5) / exp(b)
     Value result = ((log_sqrt2pi + log(sum)) - b) + log(b) * (x + .5f);
 
-    if (is_cuda_array_v<Value> || any_nested(reflect)) {
+    if (any_nested_or<true>(reflect)) {
         masked(result, reflect) = log(abs(Scalar(Pi<Scalar>) / sin(Scalar(Pi<Scalar>) * x_))) - result;
         masked(result, reflect && eq(x_, round(x_))) = Infinity<Scalar>;
     }

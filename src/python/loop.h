@@ -35,7 +35,7 @@ template <typename Value> struct Loop : ek::Loop<Value> {
         process_state(false);
 
         py::int_ i0(0), i1(1);
-        for (uint32_t i = 0, size = m_state_py.size(); i < size; ++i) {
+        for (size_t i = 0, size = m_state_py.size(); i < size; ++i) {
             py::object o = m_state_py[i];
             if (!py::isinstance<py::tuple>(o))
                 continue;
@@ -43,7 +43,7 @@ template <typename Value> struct Loop : ek::Loop<Value> {
             m_indices_py_ad.push_back(py::cast<int32_t>(o[i1]));
         }
 
-        for (uint32_t i = 0; i < m_indices_py.size(); ++i) {
+        for (size_t i = 0; i < m_indices_py.size(); ++i) {
             m_indices.push_back(&m_indices_py[i]);
             m_indices_ad.push_back(&m_indices_py_ad[i]);
         }
@@ -64,7 +64,7 @@ private:
         process_state(false);
 
         py::int_ i0(0), i1(1);
-        for (uint32_t i = 0, j = 0, size = m_state_py.size(); i < size; ++i) {
+        for (size_t i = 0, j = 0, size = m_state_py.size(); i < size; ++i) {
             py::object o = m_state_py[i];
             if (!py::isinstance<py::tuple>(o))
                 continue;
@@ -81,7 +81,7 @@ private:
 
     void write_state() {
         py::int_ i0(0), i1(1);
-        for (uint32_t i = 0, j = 0, size = m_state_py.size(); i < size; ++i) {
+        for (size_t i = 0, j = 0, size = m_state_py.size(); i < size; ++i) {
             py::object o = m_state_py[i];
             if (!py::isinstance<py::tuple>(o))
                 continue;

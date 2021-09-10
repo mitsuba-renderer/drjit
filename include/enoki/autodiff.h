@@ -930,7 +930,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                 if (m_index > 0) {
                     int32_t indices[1] = { m_index };
                     Type weights_s[1] = { c }, weights_c[1] = { s };
-                    uint32_t w = width(s);
+                    size_t w = width(s);
                     index_s =
                         detail::ad_new<Type>("sincosh[s]", w, 1, indices, weights_s);
                     index_c =
