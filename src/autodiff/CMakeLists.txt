@@ -46,7 +46,9 @@ add_library(enoki-autodiff SHARED
 )
 target_link_libraries(enoki-autodiff PUBLIC enoki)
 
-if (NOT MSVC)
+if (MSVC)
+  target_compile_options(enoki-autodiff PRIVATE /wd4714) # marked as __forceinline not inlined
+else()
   target_compile_options(enoki-autodiff PRIVATE -fvisibility=hidden)
 endif()
 
