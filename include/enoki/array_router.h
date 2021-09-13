@@ -1349,9 +1349,8 @@ template <typename T> ENOKI_INLINE bool schedule(const T &value) {
             });
         return result;
     } else {
-        ; // do nothing
+        return false;
     }
-    return false;
 }
 
 ENOKI_INLINE bool schedule() { return false; }

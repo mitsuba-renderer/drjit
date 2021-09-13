@@ -637,135 +637,115 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
     Derived hmin_async_() const  { return hmin_(); }
 
     Value hsum_() const {
-        Value value;
-
         if constexpr (IsArithmetic) {
             if constexpr (Derived::Size == Dynamic) {
                 if (empty())
                     return Value(0);
             }
 
-            value = derived().entry(0);
+            Value value = derived().entry(0);
             for (size_t i = 1; i < derived().size(); ++i)
                 value += derived().entry(i);
+            return value;
         } else {
             enoki_raise("hsum_(): invalid operand type!");
         }
-
-        return value;
     }
 
     Value hprod_() const {
-        Value value;
-
         if constexpr (IsArithmetic) {
             if constexpr (Derived::Size == Dynamic) {
                 if (empty())
                     return Value(1);
             }
 
-            value = derived().entry(0);
+            Value value = derived().entry(0);
             for (size_t i = 1; i < derived().size(); ++i)
                 value *= derived().entry(i);
+            return value;
         } else {
             enoki_raise("hprod_(): invalid operand type!");
         }
-
-        return value;
     }
 
     Value hmin_() const {
-        Value value;
-
         if constexpr (IsArithmetic) {
             if constexpr (Derived::Size == Dynamic) {
                 if (empty())
                     enoki_raise("hmin_(): zero-sized array!");
             }
 
-            value = derived().entry(0);
+            Value value = derived().entry(0);
             for (size_t i = 1; i < derived().size(); ++i)
                 value = min(value, derived().entry(i));
+            return value;
         } else {
             enoki_raise("hmin_(): invalid operand type!");
         }
-
-        return value;
     }
 
     Value hmax_() const {
-        Value value;
-
         if constexpr (IsArithmetic) {
             if constexpr (Derived::Size == Dynamic) {
                 if (empty())
                     enoki_raise("hmax_(): zero-sized array!");
             }
 
-            value = derived().entry(0);
+            Value value = derived().entry(0);
             for (size_t i = 1; i < derived().size(); ++i)
                 value = max(value, derived().entry(i));
+            return value;
         } else {
             enoki_raise("hmax_(): invalid operand type!");
         }
-
-        return value;
     }
 
     mask_t<Value> all_() const {
-        mask_t<Value> value;
-
         if constexpr (IsMask) {
             if constexpr (Derived::Size == Dynamic) {
                 if (empty())
                     return true;
             }
 
-            value = derived().entry(0);
+            mask_t<Value> value = derived().entry(0);
             for (size_t i = 1; i < derived().size(); ++i)
                 value = value && derived().entry(i);
+            return value;
         } else {
             enoki_raise("all_(): invalid operand type!");
         }
-
-        return value;
     }
 
     mask_t<Value> any_() const {
-        mask_t<Value> value;
-
         if constexpr (IsMask) {
             if constexpr (Derived::Size == Dynamic) {
                 if (empty())
                     return false;
             }
 
-            value = derived().entry(0);
+            mask_t<Value> value = derived().entry(0);
             for (size_t i = 1; i < derived().size(); ++i)
                 value = value || derived().entry(i);
+            return value;
         } else {
             enoki_raise("any_(): invalid operand type!");
         }
-
-        return value;
     }
 
     uint32_array_t<array_t<Value>> count_() const {
-        uint32_array_t<array_t<Value>> value;
-
         if constexpr (IsMask) {
             if constexpr (Derived::Size == Dynamic) {
                 if (empty())
                     return 0;
             }
-            value = select(derived().entry(0), 1, 0);
+            uint32_array_t<array_t<Value>> value =
+                select(derived().entry(0), 1, 0);
             for (size_t i = 1; i < derived().size(); ++i)
                 value += select(derived().entry(i), 1, 0);
+            return value;
         } else {
             enoki_raise("count_(): invalid operand type!");
         }
-
-        return value;
     }
 
     template <typename Mask, enable_if_t<Mask::Depth == 1> = 0>
