@@ -2317,23 +2317,23 @@ def replace_grad(a, b):
             return type(a).create_(b.index_ad(), a.detach_())
 
 
-def enqueue(*args):
+def enqueue(mode, *args):
     for a in args:
         if _ek.is_diff_array_v(a):
-            a.enqueue_()
+            a.enqueue_(mode)
         elif _ek.is_enoki_struct_v(a):
             for k in type(a).ENOKI_STRUCT.keys():
-                enqueue(getattr(a, k))
+                enqueue(mode, getattr(a, k))
 
 
-def traverse(t, reverse=True, retain_graph=False):
+def traverse(t, mode=_ek.ADMode.Reverse, retain_graph=False):
     if not _ek.is_diff_array_v(t):
         raise Exception('traverse(): expected a differentiable array type!')
 
     t = _ek.leaf_array_t(t)
     if t.IsTensor:
         t = t.Array
-    t.traverse_(reverse, retain_graph)
+    t.traverse_(mode, retain_graph)
 
 
 def backward(a, retain_graph=False):
@@ -2344,8 +2344,8 @@ def backward(a, retain_graph=False):
                             "the AD backend. Did you forget to call "
                             "enable_grad()?")
         set_grad(a, 1)
-        enqueue(a)
-        traverse(type(a), reverse=True, retain_graph=retain_graph)
+        enqueue(_ek.ADMode.Reverse, a)
+        traverse(type(a), _ek.ADMode.Reverse, retain_graph=retain_graph)
     else:
         raise Exception("Expected a differentiable array type!")
 
@@ -2358,8 +2358,8 @@ def forward(a, retain_graph=False):
                             "the AD backend. Did you forget to call "
                             "enable_grad()?")
         set_grad(a, 1)
-        enqueue(a)
-        traverse(type(a), reverse=False, retain_graph=retain_graph)
+        enqueue(_ek.ADMode.Forward, a)
+        traverse(type(a), _ek.ADMode.Forward, retain_graph=retain_graph)
     else:
         raise Exception("Expected a differentiable array type!")
 

@@ -56,17 +56,45 @@ def test02_add_fwd(m):
         ek.enable_grad(a, b)
         c = 2 * a + b
         ek.set_grad(a, 1.0)
-        ek.enqueue(a)
-        ek.traverse(m.Float, retain_graph=True, reverse=False)
+        ek.enqueue(ek.ADMode.Forward, a)
+        ek.traverse(m.Float, ek.ADMode.Forward, retain_graph=True)
         assert ek.grad(c) == 2
         assert ek.grad(a) == 0
         ek.set_grad(a, 1.0)
-        ek.enqueue(a)
-        ek.traverse(m.Float, retain_graph=False, reverse=False)
+        ek.enqueue(ek.ADMode.Forward, a)
+        ek.traverse(m.Float, ek.ADMode.Forward, retain_graph=True)
         assert ek.grad(c) == 4
 
 
-def test03_sub_mul(m):
+def test03_branch_fwd(m):
+    a = m.Float(1)
+    ek.enable_grad(a)
+
+    b = a + 1
+    c = a + 1
+    d = b + c
+
+    del b, c
+
+    ek.forward(a)
+    assert ek.grad(d) == 2
+
+
+def test04_branch_ref(m):
+    a = m.Float(1)
+    ek.enable_grad(a)
+
+    b = a + 1
+    c = a + 1
+    d = b + c
+
+    del b, c
+
+    ek.backward(d)
+    assert ek.grad(a) == 2
+
+
+def test05_sub_mul(m):
     a, b, c = m.Float(2), m.Float(3), m.Float(4)
     ek.enable_grad(a, b, c)
     d = a * b - c
@@ -76,7 +104,7 @@ def test03_sub_mul(m):
     assert ek.grad(c) == -1
 
 
-def test04_div(m):
+def test06_div(m):
     a, b = m.Float(2), m.Float(3)
     ek.enable_grad(a, b)
     d = a / b
@@ -85,7 +113,7 @@ def test04_div(m):
     assert ek.allclose(ek.grad(b), -2.0 / 9.0)
 
 
-def test05_hsum_0_rev(m):
+def test07_hsum_0_rev(m):
     x = ek.linspace(m.Float, 0, 1, 10)
     ek.enable_grad(x)
     y = ek.hsum_async(x*x)
@@ -94,7 +122,7 @@ def test05_hsum_0_rev(m):
     assert ek.allclose(ek.grad(x), 2 * ek.detach(x))
 
 
-def test06_hsum_0_fwd(m):
+def test08_hsum_0_fwd(m):
     x = ek.linspace(m.Float, 0, 1, 10)
     ek.enable_grad(x)
     y = ek.hsum_async(x*x)
@@ -103,7 +131,7 @@ def test06_hsum_0_fwd(m):
     assert len(ek.grad(y)) == 1 and ek.allclose(ek.grad(y), 10)
 
 
-def test07_hsum_1_rev(m):
+def test09_hsum_1_rev(m):
     x = ek.linspace(m.Float, 0, 1, 11)
     ek.enable_grad(x)
     y = ek.hsum_async(ek.hsum_async(x)*x)
@@ -111,7 +139,7 @@ def test07_hsum_1_rev(m):
     assert ek.allclose(ek.grad(x), 11)
 
 
-def test08_hsum_1_fwd(m):
+def test10_hsum_1_fwd(m):
     x = ek.linspace(m.Float, 0, 1, 10)
     ek.enable_grad(x)
     y = ek.hsum_async(ek.hsum_async(x)*x)
@@ -119,7 +147,7 @@ def test08_hsum_1_fwd(m):
     assert ek.allclose(ek.grad(y), 100)
 
 
-def test09_hsum_2_rev(m):
+def test11_hsum_2_rev(m):
     x = ek.linspace(m.Float, 0, 1, 11)
     ek.enable_grad(x)
     z = ek.hsum_async(ek.hsum_async(x*x)*x*x)
@@ -129,7 +157,7 @@ def test09_hsum_2_rev(m):
                         9.24, 10.78, 12.32, 13.86, 15.4])
 
 
-def test10_hsum_2_fwd(m):
+def test12_hsum_2_fwd(m):
     x = ek.linspace(m.Float, 0, 1, 10)
     ek.enable_grad(x)
     y = ek.hsum_async(ek.hsum_async(x*x)*ek.hsum_async(x*x))
@@ -137,7 +165,7 @@ def test10_hsum_2_fwd(m):
     assert ek.allclose(ek.grad(y), 1900.0 / 27.0)
 
 
-def test11_hprod(m):
+def test13_hprod(m):
     x = m.Float(1, 2, 5, 8)
     ek.enable_grad(x)
     y = ek.hprod_async(x)
@@ -146,7 +174,7 @@ def test11_hprod(m):
     assert ek.allclose(ek.grad(x), [80, 40, 16, 10])
 
 
-def test11_hmax_rev(m):
+def test14_hmax_rev(m):
     x = m.Float(1, 2, 8, 5, 8)
     ek.enable_grad(x)
     y = ek.hmax_async(x)
@@ -155,7 +183,7 @@ def test11_hmax_rev(m):
     assert ek.allclose(ek.grad(x), [0, 0, 1, 0, 1])
 
 
-def test12_hmax_fwd(m):
+def test15_hmax_fwd(m):
     x = m.Float(1, 2, 8, 5, 8)
     ek.enable_grad(x)
     y = ek.hmax_async(x)
@@ -164,7 +192,7 @@ def test12_hmax_fwd(m):
     assert ek.allclose(ek.grad(y), [2])  # Approximation
 
 
-def test13_sqrt(m):
+def test16_sqrt(m):
     x = m.Float(1, 4, 16)
     ek.enable_grad(x)
     y = ek.sqrt(x)
@@ -173,7 +201,7 @@ def test13_sqrt(m):
     assert ek.allclose(ek.grad(x), [.5, .25, .125])
 
 
-def test14_rsqrt(m):
+def test17_rsqrt(m):
     x = m.Float(1, .25, 0.0625)
     ek.enable_grad(x)
     y = ek.rsqrt(x)
@@ -182,7 +210,7 @@ def test14_rsqrt(m):
     assert ek.allclose(ek.grad(x), [-.5, -4, -32])
 
 
-def test15_abs(m):
+def test18_abs(m):
     x = m.Float(-2, 2)
     ek.enable_grad(x)
     y = ek.abs(x)
@@ -191,7 +219,7 @@ def test15_abs(m):
     assert ek.allclose(ek.grad(x), [-1, 1])
 
 
-def test16_sin(m):
+def test19_sin(m):
     x = ek.linspace(m.Float, 0, 10, 10)
     ek.enable_grad(x)
     y = ek.sin(x)
@@ -200,7 +228,7 @@ def test16_sin(m):
     assert ek.allclose(ek.grad(x), ek.cos(ek.detach(x)))
 
 
-def test17_cos(m):
+def test20_cos(m):
     x = ek.linspace(m.Float, 0.01, 10, 10)
     ek.enable_grad(x)
     y = ek.cos(x)
@@ -209,7 +237,7 @@ def test17_cos(m):
     assert ek.allclose(ek.grad(x), -ek.sin(ek.detach(x)))
 
 
-def test18_gather(m):
+def test21_gather(m):
     x = ek.linspace(m.Float, -1, 1, 10)
     ek.enable_grad(x)
     y = ek.gather(m.Float, x*x, m.UInt(1, 1, 2, 3))
@@ -219,7 +247,7 @@ def test18_gather(m):
     assert ek.allclose(ek.grad(x), ref)
 
 
-def test19_gather_fwd(m):
+def test22_gather_fwd(m):
     x = ek.linspace(m.Float, -1, 1, 10)
     ek.enable_grad(x)
     y = ek.gather(m.Float, x*x, m.UInt(1, 1, 2, 3))
@@ -228,7 +256,7 @@ def test19_gather_fwd(m):
     assert ek.allclose(ek.grad(y), ref)
 
 
-def test20_scatter_reduce_rev(m):
+def test23_scatter_reduce_rev(m):
     for i in range(3):
         idx1 = ek.arange(m.UInt, 5)
         idx2 = ek.arange(m.UInt, 4) + 3
@@ -275,7 +303,7 @@ def test20_scatter_reduce_rev(m):
             assert ek.grad(buf) == 0
 
 
-def test21_scatter_reduce_fwd(m):
+def test24_scatter_reduce_fwd(m):
     for i in range(3):
         idx1 = ek.arange(m.UInt, 5)
         idx2 = ek.arange(m.UInt, 4) + 3
@@ -303,11 +331,11 @@ def test21_scatter_reduce_fwd(m):
         s = ek.dot_async(buf2, buf2)
 
         if i % 2 == 0:
-            ek.enqueue(buf)
+            ek.enqueue(ek.ADMode.Forward, buf)
         if i // 2 == 0:
-            ek.enqueue(x, y)
+            ek.enqueue(ek.ADMode.Forward, x, y)
 
-        ek.traverse(m.Float, reverse=False)
+        ek.traverse(m.Float, ek.ADMode.Forward)
 
         # Verified against Mathematica
         assert ek.allclose(ek.detach(s), 15.5972)
@@ -315,7 +343,7 @@ def test21_scatter_reduce_fwd(m):
                            + (17 if i % 2 == 0 else 0))
 
 
-def test22_scatter_rev(m):
+def test25_scatter_rev(m):
     for i in range(3):
         idx1 = ek.arange(m.UInt, 5)
         idx2 = ek.arange(m.UInt, 4) + 3
@@ -363,7 +391,7 @@ def test22_scatter_rev(m):
             assert ek.grad(buf) == 0
 
 
-def test22_scatter_fwd(m):
+def test26_scatter_fwd(m):
     x = m.Float(4.0)
     ek.enable_grad(x)
 
@@ -399,7 +427,7 @@ def test22_scatter_fwd(m):
     assert ek.allclose(grad, ref_grad)
 
 
-def test22_scatter_fwd_permute(m):
+def test27_scatter_fwd_permute(m):
     x = m.Float(4.0)
     ek.enable_grad(x)
 
@@ -424,7 +452,7 @@ def test22_scatter_fwd_permute(m):
     assert ek.allclose(grad, ref_grad)
 
 
-def test23_exp(m):
+def test28_exp(m):
     x = ek.linspace(m.Float, 0, 1, 10)
     ek.enable_grad(x)
     y = ek.exp(x * x)
@@ -434,7 +462,7 @@ def test23_exp(m):
     assert ek.allclose(ek.grad(x), 2 * ek.detach(x) * exp_x)
 
 
-def test24_log(m):
+def test29_log(m):
     x = ek.linspace(m.Float, 0.01, 1, 10)
     ek.enable_grad(x)
     y = ek.log(x * x)
@@ -444,7 +472,7 @@ def test24_log(m):
     assert ek.allclose(ek.grad(x), 2 / ek.detach(x))
 
 
-def test25_pow(m):
+def test30_pow(m):
     x = ek.linspace(m.Float, 1, 10, 10)
     y = ek.full(m.Float, 2.0, 10)
     ek.enable_grad(x, y)
@@ -456,7 +484,7 @@ def test25_pow(m):
                                64.5033, 95.3496, 133.084, 177.975, 230.259))
 
 
-def test26_csc(m):
+def test31_csc(m):
     x = ek.linspace(m.Float, 1, 2, 10)
     ek.enable_grad(x)
     y = ek.csc(x * x)
@@ -469,7 +497,7 @@ def test26_csc(m):
                                4.56495), rtol=5e-5)
 
 
-def test27_sec(m):
+def test32_sec(m):
     x = ek.linspace(m.Float, 1, 2, 10)
     ek.enable_grad(x)
     y = ek.sec(x * x)
@@ -482,7 +510,7 @@ def test27_sec(m):
                                -7.08534))
 
 
-def test28_tan(m):
+def test33_tan(m):
     x = ek.linspace(m.Float, 0, 1, 10)
     ek.enable_grad(x)
     y = ek.tan(x * x)
@@ -494,7 +522,7 @@ def test28_tan(m):
                                1.22406, 1.63572, 2.29919, 3.58948, 6.85104))
 
 
-def test28_cot(m):
+def test34_cot(m):
     x = ek.linspace(m.Float, 1, 2, 10)
     ek.enable_grad(x)
     y = ek.cot(x * x)
@@ -507,7 +535,7 @@ def test28_cot(m):
                                -22.0932, -6.98385), rtol=5e-5)
 
 
-def test29_asin(m):
+def test35_asin(m):
     x = ek.linspace(m.Float, -.8, .8, 10)
     ek.enable_grad(x)
     y = ek.asin(x * x)
@@ -520,7 +548,7 @@ def test29_asin(m):
                                1.3497, 2.08232))
 
 
-def test30_acos(m):
+def test36_acos(m):
     x = ek.linspace(m.Float, -.8, .8, 10)
     ek.enable_grad(x)
     y = ek.acos(x * x)
@@ -533,7 +561,7 @@ def test30_acos(m):
                                -2.08232))
 
 
-def test31_atan(m):
+def test37_atan(m):
     x = ek.linspace(m.Float, -.8, .8, 10)
     ek.enable_grad(x)
     y = ek.atan(x * x)
@@ -546,7 +574,7 @@ def test31_atan(m):
                                1.13507))
 
 
-def test32_atan2(m):
+def test38_atan2(m):
     x = ek.linspace(m.Float, -.8, .8, 10)
     y = m.Float(ek.arange(m.Int, 10) & 1) * 1 - .5
     ek.enable_grad(x, y)
@@ -565,7 +593,7 @@ def test32_atan2(m):
                                0.976555, 0.898876))
 
 
-def test33_cbrt(m):
+def test39_cbrt(m):
     x = ek.linspace(m.Float, -.8, .8, 10)
     ek.enable_grad(x)
     y = ek.cbrt(x)
@@ -578,7 +606,7 @@ def test33_cbrt(m):
                                1.67358, 0.804574, 0.572357, 0.45735, 0.386799))
 
 
-def test34_sinh(m):
+def test40_sinh(m):
     x = ek.linspace(m.Float, -1, 1, 10)
     ek.enable_grad(x)
     y = ek.sinh(x)
@@ -592,7 +620,7 @@ def test34_sinh(m):
                 1.05607, 1.15833, 1.31803, 1.54308))
 
 
-def test35_cosh(m):
+def test41_cosh(m):
     x = ek.linspace(m.Float, -1, 1, 10)
     ek.enable_grad(x)
     y = ek.cosh(x)
@@ -607,7 +635,7 @@ def test35_cosh(m):
                 0.11134, 0.339541, 0.584578, 0.858602, 1.1752))
 
 
-def test36_tanh(m):
+def test42_tanh(m):
     x = ek.linspace(m.Float, -1, 1, 10)
     ek.enable_grad(x)
     y = ek.tanh(x)
@@ -623,7 +651,7 @@ def test36_tanh(m):
     )
 
 
-def test37_asinh(m):
+def test43_asinh(m):
     x = ek.linspace(m.Float, -.9, .9, 10)
     ek.enable_grad(x)
     y = ek.asinh(x)
@@ -639,7 +667,7 @@ def test37_asinh(m):
     )
 
 
-def test38_acosh(m):
+def test44_acosh(m):
     x = ek.linspace(m.Float, 1.01, 2, 10)
     ek.enable_grad(x)
     y = ek.acosh(x)
@@ -655,7 +683,7 @@ def test38_acosh(m):
     )
 
 
-def test39_atanh(m):
+def test45_atanh(m):
     x = ek.linspace(m.Float, -.99, .99, 10)
     ek.enable_grad(x)
     y = ek.atanh(x)
@@ -671,7 +699,7 @@ def test39_atanh(m):
     )
 
 
-def test40_safe_functions(m):
+def test46_safe_functions(m):
     x = ek.linspace(m.Float, 0, 1, 10)
     y = ek.linspace(m.Float, -1, 1, 10)
     z = ek.linspace(m.Float, -1, 1, 10)
@@ -690,7 +718,7 @@ def test40_safe_functions(m):
     assert ek.all(ek.isfinite(ek.grad(z)))
 
 
-def test41_replace_grad(m):
+def test47_replace_grad(m):
     x = m.Array3f(1, 2, 3)
     y = m.Array3f(3, 2, 1)
     ek.enable_grad(x, y)
@@ -704,7 +732,7 @@ def test41_replace_grad(m):
     assert ek.allclose(ek.grad(y), [12, 32, 36])
 
 
-def test42_suspend_resume(m):
+def test48_suspend_resume(m):
     x = m.Array3f(1, 2, 3)
     y = m.Array3f(3, 2, 1)
     ek.enable_grad(x, y)
@@ -746,31 +774,32 @@ class Normalize(ek.CustomOp):
         return "normalize"
 
 
-def test43_custom_reverse(m):
+def test49_custom_reverse(m):
     d = m.Array3f(1, 2, 3)
     ek.enable_grad(d)
     d2 = ek.custom(Normalize, d)
     ek.set_grad(d2, m.Array3f(5, 6, 7))
-    ek.enqueue(d2)
-    ek.traverse(m.Float, reverse=True)
+    ek.enqueue(ek.ADMode.Reverse, d2)
+    ek.traverse(m.Float, ek.ADMode.Reverse)
     assert ek.allclose(ek.grad(d), m.Array3f(0.610883, 0.152721, -0.305441))
 
 
-def test44_custom_forward(m):
+def test50_custom_forward(m):
     d = m.Array3f(1, 2, 3)
     ek.enable_grad(d)
     d2 = ek.custom(Normalize, d)
     ek.set_grad(d, m.Array3f(5, 6, 7))
-    ek.enqueue(d)
-    ek.traverse(m.Float, reverse=False, retain_graph=True)
+    ek.enqueue(ek.ADMode.Forward, d)
+    ek.traverse(m.Float, ek.ADMode.Forward, retain_graph=True)
     assert ek.grad(d) == 0
     ek.set_grad(d, m.Array3f(5, 6, 7))
     assert ek.allclose(ek.grad(d2), m.Array3f(0.610883, 0.152721, -0.305441))
-    ek.enqueue(d)
-    ek.traverse(m.Float, reverse=False, retain_graph=False)
+    ek.enqueue(ek.ADMode.Forward, d)
+    ek.traverse(m.Float, ek.ADMode.Forward, retain_graph=False)
     assert ek.allclose(ek.grad(d2), m.Array3f(0.610883, 0.152721, -0.305441)*2)
 
-def test45_diff_loop(m, do_record):
+
+def test51_diff_loop(m, do_record):
     def mcint(a, b, f, sample_count=100000):
         rng = m.PCG32()
         i = m.UInt32(0)
@@ -820,7 +849,7 @@ def test45_diff_loop(m, do_record):
     assert ek.allclose(ek.grad(y), 0.847213, rtol=5e-4)
 
 
-def test46_loop_ballistic(m, do_record):
+def test52_loop_ballistic(m, do_record):
     class Ballistic(ek.CustomOp):
         def timestep(self, pos, vel, dt=0.02, mu=.1, g=9.81):
             acc = -mu*vel*ek.norm(vel) - m.Array2f(0, g)
@@ -878,8 +907,8 @@ def test46_loop_ballistic(m, do_record):
                 pos_out, vel_out = self.timestep(pos, vel)
                 ek.set_grad(pos_out, grad_pos)
                 ek.set_grad(vel_out, grad_vel)
-                ek.enqueue(pos_out, vel_out)
-                ek.traverse(m.Float, reverse=True)
+                ek.enqueue(ek.ADMode.Reverse, pos_out, vel_out)
+                ek.traverse(m.Float, ek.ADMode.Reverse)
 
                 # Update loop variables
                 grad_pos.assign(ek.grad(pos))
@@ -904,7 +933,7 @@ def test46_loop_ballistic(m, do_record):
     assert ek.allclose(vel_in.x, [3.3516, 2.3789, 0.79156], rtol=1e-3)
 
 
-def test47_loop_ballistic_2(m, do_record):
+def test53_loop_ballistic_2(m, do_record):
     class Ballistic2(ek.CustomOp):
         def timestep(self, pos, vel, dt=0.02, mu=.1, g=9.81):
             acc = -mu*vel*ek.norm(vel) - m.Array2f(0, g)
@@ -948,8 +977,8 @@ def test47_loop_ballistic_2(m, do_record):
 
                 ek.set_grad(pos_fwd, grad_pos)
                 ek.set_grad(vel_fwd, grad_vel)
-                ek.enqueue(pos_fwd, vel_fwd)
-                ek.traverse(m.Float, reverse=True)
+                ek.enqueue(ek.ADMode.Reverse, pos_fwd, vel_fwd)
+                ek.traverse(m.Float, ek.ADMode.Reverse)
 
                 grad_pos = ek.grad(pos_rev)
                 grad_vel = ek.grad(vel_rev)
@@ -974,7 +1003,7 @@ def test47_loop_ballistic_2(m, do_record):
     assert ek.allclose(vel_in.x, [3.3516, 2.3789, 0.79156], atol=1e-3)
 
 
-def test48_nan_propagation(m):
+def test54_nan_propagation(m):
     for i in range(2):
         x = ek.arange(m.Float, 10)
         ek.enable_grad(x)
@@ -1000,131 +1029,7 @@ def test48_nan_propagation(m):
             assert ek.all(ek.isnan(g))
 
 
-class EagerMode:
-    def __enter__(self):
-        ek.set_flag(ek.JitFlag.ADEagerForward, True)
-
-    def __exit__(self, type, value, traceback):
-        ek.set_flag(ek.JitFlag.ADEagerForward, False)
-
-
-def test49_eager_fwd(m):
-    with EagerMode():
-        x = m.Float(1)
-        ek.enable_grad(x)
-        ek.set_grad(x, 10)
-        y = x*x*x
-        assert ek.grad(y) == 30
-
-
-def test50_gather_fwd_eager(m):
-    with EagerMode():
-        x = ek.linspace(m.Float, -1, 1, 10)
-        ek.enable_grad(x)
-        ek.set_grad(x, 1)
-        y = ek.gather(m.Float, x*x, m.UInt(1, 1, 2, 3))
-        ref = [-1.55556, -1.55556, -1.11111, -0.666667]
-        assert ek.allclose(ek.grad(y), ref)
-
-
-def test51_scatter_reduce_fwd_eager(m):
-    with EagerMode():
-        for i in range(3):
-            idx1 = ek.arange(m.UInt, 5)
-            idx2 = ek.arange(m.UInt, 4) + 3
-
-            x = ek.linspace(m.Float, 0, 1, 5)
-            y = ek.linspace(m.Float, 1, 2, 4)
-            buf = ek.zero(m.Float, 10)
-
-            if i % 2 == 0:
-                ek.enable_grad(buf)
-                ek.set_grad(buf, 1)
-            if i // 2 == 0:
-                ek.enable_grad(x, y)
-                ek.set_grad(x, 1)
-                ek.set_grad(y, 1)
-
-            x.label = "x"
-            y.label = "y"
-            buf.label = "buf"
-
-            buf2 = m.Float(buf)
-            ek.scatter_reduce(ek.ReduceOp.Add, buf2, x, idx1)
-            ek.scatter_reduce(ek.ReduceOp.Add, buf2, y, idx2)
-
-            s = ek.dot_async(buf2, buf2)
-
-            # Verified against Mathematica
-            assert ek.allclose(ek.detach(s), 15.5972)
-            assert ek.allclose(ek.grad(s), (25.1667 if i // 2 == 0 else 0)
-                               + (17 if i % 2 == 0 else 0))
-
-
-def test52_scatter_fwd_eager(m):
-    with EagerMode():
-        x = m.Float(4.0)
-        ek.enable_grad(x)
-        ek.set_grad(x, 1)
-
-        values = x * x * ek.linspace(m.Float, 1, 4, 4)
-        idx = 2 * ek.arange(m.UInt32, 4)
-
-        buf = ek.zero(m.Float, 10)
-        ek.scatter(buf, values, idx)
-
-        assert ek.grad_enabled(buf)
-
-        ref = [16.0, 0.0, 32.0, 0.0, 48.0, 0.0, 64.0, 0.0, 0.0, 0.0]
-        assert ek.allclose(buf, ref)
-
-        grad = ek.grad(buf)
-
-        ref_grad = [8.0, 0.0, 16.0, 0.0, 24.0, 0.0, 32.0, 0.0, 0.0, 0.0]
-        assert ek.allclose(grad, ref_grad)
-
-        # Overwrite first value with non-diff value, resulting gradient entry should be 0
-        y = m.Float(3)
-        idx = m.UInt32(0)
-        ek.scatter(buf, y, idx)
-
-        ref = [3.0, 0.0, 32.0, 0.0, 48.0, 0.0, 64.0, 0.0, 0.0, 0.0]
-        assert ek.allclose(buf, ref)
-
-        ek.forward(x)
-        grad = ek.grad(buf)
-
-        ref_grad = [0.0, 0.0, 16.0, 0.0, 24.0, 0.0, 32.0, 0.0, 0.0, 0.0]
-        assert ek.allclose(grad, ref_grad)
-
-
-def test53_scatter_fwd_permute_eager(m):
-    with EagerMode():
-        x = m.Float(4.0)
-        ek.enable_grad(x)
-        ek.set_grad(x, 1)
-
-        values_0 = x * ek.linspace(m.Float, 1, 9, 5)
-        values_1 = x * ek.linspace(m.Float, 11, 19, 5)
-
-        buf = ek.zero(m.Float, 10)
-
-        idx_0 = ek.arange(m.UInt32, 5)
-        idx_1 = ek.arange(m.UInt32, 5) + 5
-
-        ek.scatter(buf, values_0, idx_0, permute=False)
-        ek.scatter(buf, values_1, idx_1, permute=False)
-
-        ref = [4.0, 12.0, 20.0, 28.0, 36.0, 44.0, 52.0, 60.0, 68.0, 76.0]
-        assert ek.allclose(buf, ref)
-
-        grad = ek.grad(buf)
-
-        ref_grad = [1.0, 3.0, 5.0, 7.0, 9.0, 11.0, 13.0, 15.0, 17.0, 19.0]
-        assert ek.allclose(grad, ref_grad)
-
-
-def test54_scatter_implicit_detach(m):
+def test55_scatter_implicit_detach(m):
     x = ek.detach(m.Float(0))
     y = ek.detach(m.Float(1))
     i = m.UInt32(0)
@@ -1132,7 +1037,7 @@ def test54_scatter_implicit_detach(m):
     ek.scatter(x, y, i, m)
 
 
-def test_55_diffloop_simple_fwd(m, no_record):
+def test56_diffloop_simple_fwd(m, no_record):
     fi, fo = m.Float(1, 2, 3), m.Float(0, 0, 0)
     ek.enable_grad(fi)
 
@@ -1143,7 +1048,7 @@ def test_55_diffloop_simple_fwd(m, no_record):
     assert ek.grad(fo) == m.Float(10, 5, 4)
 
 
-def test_56_diffloop_simple_rev(m, no_record):
+def test57_diffloop_simple_rev(m, no_record):
     fi, fo = m.Float(1, 2, 3), m.Float(0, 0, 0)
     ek.enable_grad(fi)
 
@@ -1154,7 +1059,7 @@ def test_56_diffloop_simple_rev(m, no_record):
     assert ek.grad(fi) == m.Float(10, 5, 4)
 
 
-def test_57_diffloop_masking_fwd(m, no_record):
+def test58_diffloop_masking_fwd(m, no_record):
     fo = ek.zero(m.Float, 10)
     fi = m.Float(1, 2)
     i = m.UInt32(0, 5)
@@ -1168,7 +1073,7 @@ def test_57_diffloop_masking_fwd(m, no_record):
     assert ek.grad(fo) == m.Float(1, 1, 1, 1, 1, 0, 0, 0, 0, 0)
 
 
-def test_58_diffloop_masking_rev(m, no_record):
+def test59_diffloop_masking_rev(m, no_record):
     fo = ek.zero(m.Float, 10)
     fi = m.Float(1, 2)
     i = m.UInt32(0, 5)
@@ -1181,7 +1086,7 @@ def test_58_diffloop_masking_rev(m, no_record):
     assert ek.grad(fi) == m.Float(5, 0)
 
 
-def test_59_implicit_dep_customop(m):
+def test60_implicit_dep_customop(m):
     v0 = m.Float(2)
     ek.enable_grad(v0)
     v1 = v0 * 3

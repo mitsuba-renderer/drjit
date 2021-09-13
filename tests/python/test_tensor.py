@@ -260,7 +260,7 @@ def test11_custom_op(pkg):
     tt2 = ek.custom(PowerOfTwo, tt)
 
     ek.set_grad(tt2, 1.0)
-    ek.enqueue(tt2)
-    ek.traverse(f, reverse=True)
+    ek.enqueue(ek.ADMode.Reverse, tt2)
+    ek.traverse(f, ek.ADMode.Reverse)
 
     assert ek.grad(tt).array == [2.0, 4.0, 6.0, 8.0, 10.0, 12.0]

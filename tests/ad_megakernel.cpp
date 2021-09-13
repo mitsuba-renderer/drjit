@@ -8,11 +8,16 @@ namespace ek = enoki;
 
 using Float  = ek::DiffArray<ek::LLVMArray<float>>;
 using UInt32 = ek::uint32_array_t<Float>;
+using FMask  = ek::mask_t<Float>;
 
 struct Test {
-    Float value;
+    Float value, value_2;
     Float f(UInt32 i) {
         return ek::sqr(ek::gather<Float>(value, i));
+    }
+    Float f2(UInt32 i) {
+        ek::gather<Float>(value_2, i); // unused
+        return f(i);
     }
 
     ENOKI_VCALL_REGISTER(Float, Test)
@@ -20,6 +25,7 @@ struct Test {
 
 ENOKI_VCALL_BEGIN(Test)
 ENOKI_VCALL_METHOD(f)
+ENOKI_VCALL_METHOD(f2)
 ENOKI_VCALL_END(Test)
 
 using TestPtr = ek::replace_scalar_t<Float, Test *>;
@@ -83,6 +89,7 @@ ENOKI_TEST(test02_vcall_reduce_and_record_fwd) {
 
                 if (i == 1)
                     y = ek::gather<Float>(x, 9 - ek::arange<UInt32>(10));
+                ek::set_label(y, "y");
 
                 Test *b1 = new Test();
                 Test *b2 = new Test();
@@ -115,7 +122,7 @@ ENOKI_TEST(test03_loop_rev_simple) {
         jit_set_flag(JitFlag::LoopRecord, j);
 
         UInt32 i = ek::arange<UInt32>(10);
-        ek::Loop<ek::mask_t<Float>> loop("MyLoop", i);
+        ek::Loop<FMask> loop("MyLoop", i);
 
         Float x = ek::zero<Float>(11);
         ek::enable_grad(x);
@@ -137,7 +144,7 @@ ENOKI_TEST(test04_loop_rev_complex) {
         jit_set_flag(JitFlag::LoopRecord, j);
 
         UInt32 i = ek::arange<UInt32>(10);
-        ek::Loop<ek::mask_t<Float>> loop("MyLoop", i);
+        ek::Loop<FMask> loop("MyLoop", i);
 
         Float x = ek::zero<Float>(11);
         ek::enable_grad(x);
@@ -220,26 +227,26 @@ ENOKI_TEST(test05_vcall_symbolic_ad_loop_opt) {
 
         A *a = new A();
         B *b = new B();
-        ek::mask_t<Float> m = ek::neq(ek::arange<UInt32>(n) & 1, 0);
+        FMask m = ek::neq(ek::arange<UInt32>(n) & 1, 0);
         BasePtr arr = ek::select(m, (Base *) a, (Base *) b);
         ek::enable_grad(a->x);
         ek::enable_grad(b->x);
 
         UInt32 depth = 0;
-        ek::mask_t<Float> active = ek::full<ek::mask_t<Float>>(true, n);
+        FMask active = ek::full<FMask>(true, n);
         Float unused = 0.f;
 
         {
             // This variable will be out of scope (only consumed by a side effect)
             Float value = 1.f;
 
-            ek::Loop<ek::mask_t<Float>> loop("MyLoop", active, depth, unused, value);
+            ek::Loop<FMask> loop("MyLoop", active, depth, unused, value);
             while (loop(ek::detach(active))) {
                 Float output = arr->f(2.f);
 
-                ek::enqueue(output);
+                ek::enqueue(ADMode::Reverse, output);
                 ek::set_grad(output, value);
-                ek::traverse<Float>(true, false);
+                ek::traverse<Float>(ADMode::Reverse, false);
 
                 value = ek::detach(arr->g(value));
 
@@ -265,7 +272,6 @@ ENOKI_TEST(test06_vcall_symbolic_nested_ad_loop_opt) {
         jit_init((uint32_t) JitBackend::LLVM);
     int n = 20;
     int max_depth = 5;
-    jit_set_log_level_stderr(::LogLevel::InfoSym);
     jit_set_flag(JitFlag::VCallRecord,   true);
     jit_set_flag(JitFlag::VCallOptimize, true);
     jit_set_flag(JitFlag::LoopRecord,    true);
@@ -273,20 +279,20 @@ ENOKI_TEST(test06_vcall_symbolic_nested_ad_loop_opt) {
 
     A *a = new A();
     B *b = new B();
-    ek::mask_t<Float> m = ek::neq(ek::arange<UInt32>(n) & 1, 0);
+    FMask m = ek::neq(ek::arange<UInt32>(n) & 1, 0);
     BasePtr arr = ek::select(m, (Base *) a, (Base *) b);
 
     ek::enable_grad(a->x);
     ek::enable_grad(b->x);
 
     UInt32 depth = 0;
-    ek::mask_t<Float> active = ek::full<ek::mask_t<Float>>(true, n);
+    FMask active = ek::full<FMask>(true, n);
     Float unused = 0.f;
-    ek::Loop<ek::mask_t<Float>> loop("outer", active, depth, unused);
+    ek::Loop<FMask> loop("outer", active, depth, unused);
     while (loop(ek::detach(active))) {
         UInt32 depth2 = 0;
-        ek::mask_t<Float> active2 = ek::full<ek::mask_t<Float>>(true, n);
-        ek::Loop<ek::mask_t<Float>> loop2("inner", active2, depth2);
+        FMask active2 = ek::full<FMask>(true, n);
+        ek::Loop<FMask> loop2("inner", active2, depth2);
         while (loop2(ek::detach(active2))) {
             Float output = arr->f(2.f);
             ek::backward(output);
@@ -306,6 +312,52 @@ ENOKI_TEST(test06_vcall_symbolic_nested_ad_loop_opt) {
     delete b;
 }
 
-// 3. loop *and* vcall
-// 6. test scatter
-//  what if the instance gathers from some type that doesn't even matter?
+ENOKI_TEST(test07_vcall_within_loop_postpone_rev) {
+    /// postponing of AD edges across vcalls/loops, faux dependencies
+
+    if constexpr (ek::is_cuda_array_v<Float>)
+        jit_init((uint32_t) JitBackend::CUDA);
+    else
+        jit_init((uint32_t) JitBackend::LLVM);
+
+    for (int j = 2; j < 3; ++j) {
+        fprintf(stderr, "-------------------------------\nIteration %i\n", j);
+        jit_set_flag(JitFlag::VCallOptimize, j == 2);
+        jit_set_flag(JitFlag::LoopOptimize, j == 2);
+        jit_set_flag(JitFlag::VCallRecord, j >= 1);
+        jit_set_flag(JitFlag::LoopRecord, j >= 1);
+
+        Float x = ek::arange<Float>(10);
+        ek::enable_grad(x);
+        ek::set_label(x, "x");
+
+        Float y = ek::gather<Float>(x, 9 - ek::arange<UInt32>(10));
+        ek::set_label(y, "y");
+
+        Float q = x + 1;
+        ek::set_label(q, "q");
+
+        Test *b1 = new Test();
+        Test *b2 = new Test();
+
+        b1->value = 0;
+        b1->value_2 = 0;
+        b2->value = std::move(y);
+        b2->value_2 = q;
+
+        TestPtr b2p(b2);
+
+        UInt32 i = ek::full<UInt32>(0, 13);
+        ek::Loop<FMask> loop("MyLoop", i);
+        while (loop(i < 10)) {
+            Float z = b2p->f2(arange<UInt32>(13) % 10);
+            ek::backward(z, true);
+            i++;
+        }
+
+        assert(ek::grad(x) == Float(0, 2, 4, 6, 8, 10, 12, 28, 32, 36)*10);
+
+        delete b1;
+        delete b2;
+    }
+}

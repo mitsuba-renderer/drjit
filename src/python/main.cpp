@@ -120,6 +120,10 @@ PYBIND11_MODULE(enoki_ext, m_) {
 #endif
     export_llvm(m);
 #if defined(ENOKI_ENABLE_AUTODIFF)
+    py::enum_<ek::ADMode>(m, "ADMode")
+        .value("Forward", ek::ADMode::Forward)
+        .value("Reverse", ek::ADMode::Reverse);
+
 #if defined(ENOKI_ENABLE_CUDA)
     export_cuda_ad(m);
 #endif
@@ -217,8 +221,6 @@ PYBIND11_MODULE(enoki_ext, m_) {
         .value("Recording",      JitFlag::Recording)
         .value("PrintIR",        JitFlag::PrintIR)
         .value("ADOptimize",     JitFlag::ADOptimize)
-        .value("ADEagerForward", JitFlag::ADEagerForward)
-        .value("ADCheckWeights", JitFlag::ADCheckWeights)
         .value("KernelHistory",  JitFlag::KernelHistory)
         .value("LaunchBlocking", JitFlag::LaunchBlocking)
         .value("Default",        JitFlag::Default);

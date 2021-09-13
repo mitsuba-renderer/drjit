@@ -225,7 +225,6 @@ ENOKI_VCALL_METHOD(g)
 ENOKI_VCALL_METHOD(dummy)
 ENOKI_VCALL_END(BaseD)
 
-#if 1
 ENOKI_TEST(test03_vcall_symbolic_ad_fwd) {
     if constexpr (ek::is_cuda_array_v<Float>)
         jit_init((uint32_t) JitBackend::CUDA);
@@ -256,8 +255,8 @@ ENOKI_TEST(test03_vcall_symbolic_ad_fwd) {
         ek::set_label(input, "input");
         ek::set_label(output, "output");
         ek::set_grad(input, StructF(1, 10));
-        ek::enqueue(input);
-        ek::traverse<FloatD>(false);
+        ek::enqueue(ADMode::Forward, input);
+        ek::traverse<FloatD>(ADMode::Forward);
 
         StructF grad_out = ek::grad(output);
         ek::eval(output, grad_out);
@@ -281,60 +280,53 @@ ENOKI_TEST(test04_vcall_symbolic_ad_fwd_accessing_local) {
     else
         jit_init((uint32_t) JitBackend::LLVM);
 
-    for (int j = 0; j < 2; ++j) {
-        for (int i = 0; i < 3; ++i) {
-            jit_set_flag(JitFlag::VCallRecord, i != 0);
-            jit_set_flag(JitFlag::VCallOptimize, i == 2);
+    for (int i = 0; i < 3; ++i) {
+        jit_set_flag(JitFlag::VCallRecord, i != 0);
+        jit_set_flag(JitFlag::VCallOptimize, i == 2);
 
-            int n = 10;
-            MaskD m = ek::neq(ek::arange<UInt32>(n) & 1, 0);
-            AD *a = new AD();
-            BD *b = new BD();
+        int n = 10;
+        MaskD m = ek::neq(ek::arange<UInt32>(n) & 1, 0);
+        AD *a = new AD();
+        BD *b = new BD();
 
-            ek::enable_grad(a->x);
-            ek::enable_grad(b->x);
-            ek::set_grad(a->x, 100);
-            ek::set_grad(b->x, 1000);
-            if (j == 1) {
-                ek::eval(ek::grad(a->x));
-                ek::eval(ek::grad(b->x));
-            }
+        ek::enable_grad(a->x);
+        ek::enable_grad(b->x);
+        ek::set_grad(a->x, 100);
+        ek::set_grad(b->x, 1000);
 
-            BasePtrD arr = ek::select(m, (BaseD *) a, (BaseD *) b);
-            arr->dummy();
+        BasePtrD arr = ek::select(m, (BaseD *) a, (BaseD *) b);
+        arr->dummy();
 
-            Float o = ek::full<Float>(1, n);
+        Float o = ek::full<Float>(1, n);
 
-            Struct input{ Array3fD(1, 2, 3) * o,
-                          Array3fD(4, 5, 6) };
+        Struct input{ Array3fD(1, 2, 3) * o,
+                      Array3fD(4, 5, 6) };
 
-            ek::enable_grad(input);
+        ek::enable_grad(input);
 
-            StructFD output = arr->g(input);
-            ek::set_label(input, "input");
-            ek::set_label(output, "output");
-            ek::set_grad(input, StructF(2, 10));
-            ek::enqueue(input);
-            ek::enqueue(a->x);
-            ek::enqueue(b->x);
-            ek::traverse<FloatD>(false);
+        StructFD output = arr->g(input);
+        ek::set_label(input, "input");
+        ek::set_label(output, "output");
+        ek::set_grad(input, StructF(2, 10));
 
-            StructF grad_out = ek::grad(output);
-            ek::eval(output, grad_out);
+        ek::enqueue(ADMode::Forward, input, a->x, b->x);
 
-            assert(ek::all_nested(
-                ek::eq(output.a, ek::select(m, input.a * 10, input.b * 4)) &&
-                ek::eq(output.b, ek::select(m, input.b * 3, input.a + 10))));
+        ek::traverse<FloatD>(ADMode::Forward);
 
-            assert(ek::all_nested(
-                ek::eq(grad_out.a, ek::detach(ek::select(m, input.a * 100 + 20, 40))) &&
-                ek::eq(grad_out.b, ek::detach(ek::select(m, 30, 1002)))));
-            delete a;
-            delete b;
-        }
+        StructF grad_out = ek::grad(output);
+        ek::eval(output, grad_out);
+
+        assert(ek::all_nested(
+            ek::eq(output.a, ek::select(m, input.a * 10, input.b * 4)) &&
+            ek::eq(output.b, ek::select(m, input.b * 3, input.a + 10))));
+
+        assert(ek::all_nested(
+            ek::eq(grad_out.a, ek::detach(ek::select(m, input.a * 100 + 20, 40))) &&
+            ek::eq(grad_out.b, ek::detach(ek::select(m, 30, 1002)))));
+        delete a;
+        delete b;
     }
 }
-#endif
 
 ENOKI_TEST(test05_vcall_symbolic_ad_rev_accessing_local) {
     if constexpr (ek::is_cuda_array_v<Float>)
@@ -367,9 +359,10 @@ ENOKI_TEST(test05_vcall_symbolic_ad_rev_accessing_local) {
         StructFD output = arr->g(input);
         ek::set_label(input, "input");
         ek::set_label(output, "output");
-        ek::enqueue(output);
+        ek::enqueue(ADMode::Reverse, output);
+
         ek::set_grad(output, StructF(2, 10));
-        ek::traverse<FloatD>(true);
+        ek::traverse<FloatD>(ADMode::Reverse);
 
         StructF grad_in = ek::grad(input);
         ek::eval(output, ek::grad(a->x), ek::grad(b->x), grad_in);

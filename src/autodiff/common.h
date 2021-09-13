@@ -3,6 +3,7 @@
 #include <string.h>
 #include <cstdlib>
 #include <cstdarg>
+#include <vector>
 #include <enoki/fwd.h>
 #include <enoki-jit/jit.h>
 
@@ -119,6 +120,18 @@ private:
     char *m_start, *m_cur, *m_end;
 };
 
+struct Int32Hasher {
+    size_t operator()(int32_t v) const {
+        // fmix32 from MurmurHash by Austin Appleby (public domain)
+        v ^= v >> 16;
+        v *= 0x85ebca6b;
+        v ^= v >> 13;
+        v *= 0xc2b2ae35;
+        v ^= v >> 16;
+        return (size_t) v;
+    }
+};
+
 extern Buffer buffer;
 static constexpr LogLevel Disable = LogLevel::Disable;
 static constexpr LogLevel Error   = LogLevel::Error;
@@ -127,11 +140,21 @@ static constexpr LogLevel Info    = LogLevel::Info;
 static constexpr LogLevel Debug   = LogLevel::Debug;
 static constexpr LogLevel Trace   = LogLevel::Trace;
 
+#if defined(__GNUC__)
+    __attribute__((__format__ (__printf__, 1, 2)))
+#endif
 extern void ad_fail(const char *fmt, ...);
+
+#if defined(__GNUC__)
+    __attribute__((__format__ (__printf__, 1, 2)))
+#endif
 extern void ad_raise(const char *fmt, ...);
+
+#if defined(__GNUC__)
+    __attribute__((__format__ (__printf__, 2, 3)))
+#endif
 extern void ad_log(LogLevel level, const char *fmt, ...);
 
 namespace enoki {
     extern const char *ad_prefix();
-    ENOKI_EXPORT void ad_check_weights_cb();
 }

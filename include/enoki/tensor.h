@@ -14,7 +14,6 @@
 
 #include <enoki/array.h>
 #include <enoki-jit/containers.h>
-#include <iostream>
 
 NAMESPACE_BEGIN(enoki)
 NAMESPACE_BEGIN(detail)
