@@ -1,9 +1,18 @@
 import sys
+import os
 
 if sys.version_info < (3, 5):
     raise ImportError("Enoki requires Python >= 3.5")
 
-del sys
+if os.name == 'nt':
+    # Specify DLL search path for windows (no rpath on this platform..)
+    d = __file__
+    for i in range(3):
+        d = os.path.dirname(d)
+    os.add_dll_directory(d)
+    del d, i
+
+del sys, os
 
 # Implementation details accessed by both C++ and Python
 import enoki.detail as detail # noqa
