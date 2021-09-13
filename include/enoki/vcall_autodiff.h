@@ -43,6 +43,14 @@ template <typename T, typename... Ts> void ad_copy(T &value, Ts&...values) {
 
 using ConstStr = const char *;
 
+template <typename Type> struct ADProcessPostponedGuard {
+    ~ADProcessPostponedGuard() {
+        if (detail::ad_enqueue_postponed<Type>())
+            detail::ad_traverse<Type>(ADMode::Reverse, true);
+    }
+};
+
+
 template <typename DiffType, typename Self, typename Result, typename Func,
           typename... Args>
 struct DiffVCall : CustomOp<DiffType, Result, ConstStr, Self, Func, Args...> {
@@ -52,30 +60,24 @@ struct DiffVCall : CustomOp<DiffType, Result, ConstStr, Self, Func, Args...> {
 
     static constexpr bool ClearPrimal = false;
 
-    /// Clear cross-domain dependencies after forward/reverse-mode AD callbacks
-    struct ADDependencyGuard {
-        ADDependencyGuard() : pos(ad_cross_deps<Type>()) { }
-        ~ADDependencyGuard() { release(); }
-        void enqueue() { ad_cross_rewind<Type>(pos, true); }
-        void release() { ad_cross_rewind<Type>(pos, false); }
-        size_t pos;
-    };
-
     Result eval(const ConstStr &name, const Self &self, const Func &func,
                 const Args &... args) override {
+        ADProcessPostponedGuard<Type> guard;
+
         using Class = std::decay_t<std::remove_pointer_t<scalar_t<Self>>>;
         m_name_static = name;
         snprintf(m_name_long, sizeof(m_name_long), "VCall: %s::%s()",
                  Class::Domain, m_name_static);
 
         // Perform the function call
-        size_t snapshot = ad_cross_deps<Type>();
+        size_t implicit_snapshot = ad_implicit<Type>();
         Result result = vcall_jit_record<Result>(name, func, self, args...);
 
         /// Capture implicit dependencies of the operation
-        size_t cross_deps = ad_cross_deps<Type>() - snapshot;
-        m_implicit_in = ek_vector<int32_t>(cross_deps, 0);
-        ad_cross_steal<Type>(cross_deps, m_implicit_in.data());
+        m_implicit_in = ek_vector<int32_t>(ad_implicit<Type>() - implicit_snapshot, 0);
+        ad_extract_implicit<Type>(implicit_snapshot, m_implicit_in.data());
+        for (size_t i = 0; i < m_implicit_in.size(); ++i)
+            detail::ad_inc_ref<Type>(m_implicit_in[i]);
 
         return result;
     }
@@ -89,9 +91,9 @@ struct DiffVCall : CustomOp<DiffType, Result, ConstStr, Self, Func, Args...> {
         const Func &func = Base::template value_in<2>();
 
         auto func_fwd = [func](auto *self2, auto... value_grad_pair) {
-            ADDependencyGuard guard;
             ad_copy(value_grad_pair.first...);
             enable_grad(value_grad_pair.first...);
+            size_t implicit_snapshot = ad_implicit<Type>();
             Result result = func(self2, value_grad_pair.first...);
             ad_copy(result);
             (set_grad(value_grad_pair.first, value_grad_pair.second), ...);
@@ -103,9 +105,12 @@ struct DiffVCall : CustomOp<DiffType, Result, ConstStr, Self, Func, Args...> {
             fprintf(stderr, "%s\n", ad_graphviz<Type>());
 #endif
 
-            guard.enqueue();
-            enqueue(value_grad_pair.first...);
-            traverse<DiffType>(false, true);
+            enqueue(ADMode::Forward, value_grad_pair.first...);
+
+            ad_enqueue_implicit<Type>(implicit_snapshot);
+            traverse<DiffType>(ADMode::Forward, true);
+            ad_dequeue_implicit<Type>(implicit_snapshot);
+
             return grad<false>(result);
         };
 
@@ -126,10 +131,10 @@ struct DiffVCall : CustomOp<DiffType, Result, ConstStr, Self, Func, Args...> {
         const Self &self = Base::template value_in<1>();
         const Func &func = Base::template value_in<2>();
         using Inputs = ek_tuple<Args...>;
+        ADProcessPostponedGuard<Type> guard;
 
         auto func_rev = [func](auto *self2, auto &grad_out,
                                auto... args) -> Inputs {
-            ADDependencyGuard guard;
             ad_copy(args...);
             enable_grad(args...);
             Result result = func(self2, args...);
@@ -143,8 +148,8 @@ struct DiffVCall : CustomOp<DiffType, Result, ConstStr, Self, Func, Args...> {
             fprintf(stderr, "%s\n", ad_graphviz<Type>());
 #endif
 
-            enqueue(result);
-            traverse<DiffType>(true, true);
+            enqueue(ADMode::Reverse, result);
+            traverse<DiffType>(ADMode::Reverse, true);
             return Inputs(grad<false>(args)...);
         };
 

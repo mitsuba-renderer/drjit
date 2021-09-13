@@ -1393,14 +1393,14 @@ def accum_grad_(a, grad):
             a[i].accum_grad_(grad[i])
 
 
-def enqueue_(a):
+def enqueue_(a, mode):
     if not a.IsDiff:
         raise Exception("Expected a differentiable array type!")
     if a.IsTensor:
-        a.array.enqueue_()
+        a.array.enqueue_(mode)
     else:
         for i in range(len(a)):
-            a[i].enqueue_()
+            a[i].enqueue_(mode)
 
 
 def migrate_(a, target):

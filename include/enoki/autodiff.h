@@ -31,7 +31,7 @@ NAMESPACE_BEGIN(enoki)
 NAMESPACE_BEGIN(detail)
 
 // -----------------------------------------------------------------------
-//! @{ \name External API compiled as part of libenoki-ad.so
+//! @{ \name External API compiled as part of libenoki-autodiff.so
 // -----------------------------------------------------------------------
 
 /// Increase the external reference count of a given variable
@@ -57,19 +57,25 @@ template <typename Value>
 void ad_accum_grad(int32_t index, const Value &v, bool fail_if_missing);
 
 /// Enqueue a variable for a subsequent ad_traverse() command
-template <typename Value> void ad_enqueue(int32_t index);
+template <typename Value> void ad_enqueue(ADMode mode, int32_t index);
 
 /// Perform a forward or reverse mode traversal of queued variables
-template <typename Value> void ad_traverse(bool reverse, bool retain_graph);
+template <typename Value> void ad_traverse(ADMode mode, bool retain_graph);
 
-/// Return # of cross-domain dependencies between recorded/ordinary computation
-template <typename Value> size_t ad_cross_deps();
+/// Number of observed implicit dependencies
+template <typename Value> size_t ad_implicit();
 
-/// Pop 'count' variables indices from the list of recorded cross-domain deps
-template <typename Value> void ad_cross_steal(size_t count, int32_t *out);
+/// Extract implicit dependencies since 'snapshot' (obtained via ad_implicit())
+template <typename Value> void ad_extract_implicit(size_t snapshot, int32_t *out);
 
-/// Release/enqueue any recorded cross-domain deps beyond position 'pos'
-template <typename Value> void ad_cross_rewind(size_t pos, bool enqueue);
+/// Enqueue implicit dependencies since 'snapshot' (obtained via ad_implicit())
+template <typename Value> void ad_enqueue_implicit(size_t snapshot);
+
+/// Dequeue implicit dependencies since 'snapshot' (obtained via ad_implicit())
+template <typename Value> void ad_dequeue_implicit(size_t snapshot);
+
+/// Re-enqueue postponed AD operations, returns 'false' if not applicable
+template <typename Value> bool ad_enqueue_postponed();
 
 /// Label a variable (useful for debugging via graphviz etc.)
 template <typename Value> void ad_set_label(int32_t index, const char *);
@@ -1637,15 +1643,17 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             return false;
     }
 
-    void enqueue_() const {
+    void enqueue_(ADMode mode) const {
+        ENOKI_MARK_USED(mode);
         if constexpr (IsEnabled)
-            detail::ad_enqueue<Type>(m_index);
+            detail::ad_enqueue<Type>(mode, m_index);
     }
 
-    static void traverse_(bool reverse, bool retain_graph) {
-        ENOKI_MARK_USED(reverse);
+    static void traverse_(ADMode mode, bool retain_graph) {
+        ENOKI_MARK_USED(mode);
+        ENOKI_MARK_USED(retain_graph);
         if constexpr (IsEnabled)
-            detail::ad_traverse<Type>(reverse, retain_graph);
+            detail::ad_traverse<Type>(mode, retain_graph);
     }
 
     void set_label_(const char *label) const {
@@ -1836,8 +1844,8 @@ protected:
                                                          const char *);        \
     extern template ENOKI_AD_EXPORT const char *ad_label<T>(int32_t);          \
     extern template ENOKI_AD_EXPORT const char *ad_graphviz<T>();              \
-    extern template ENOKI_AD_EXPORT void ad_enqueue<T>(int32_t);               \
-    extern template ENOKI_AD_EXPORT void ad_traverse<T>(bool, bool);           \
+    extern template ENOKI_AD_EXPORT void ad_enqueue<T>(ADMode, int32_t);       \
+    extern template ENOKI_AD_EXPORT void ad_traverse<T>(ADMode, bool);         \
     extern template ENOKI_AD_EXPORT int32_t ad_new_select<T, Mask>(            \
         const char *, size_t, const Mask &, int32_t, int32_t);                 \
     extern template ENOKI_AD_EXPORT int32_t ad_new_gather<T, Mask, Index>(     \
@@ -1847,9 +1855,10 @@ protected:
         const Mask &, bool);                                                   \
     extern template ENOKI_AD_EXPORT void ad_add_edge<T>(int32_t, int32_t,      \
                                                         DiffCallback *);       \
-    extern template ENOKI_AD_EXPORT size_t ad_cross_deps<T>();                 \
-    extern template ENOKI_AD_EXPORT void ad_cross_steal<T>(size_t, int32_t *); \
-    extern template ENOKI_AD_EXPORT void ad_cross_rewind<T>(size_t, bool);     \
+    extern template ENOKI_AD_EXPORT size_t ad_implicit<T>();                   \
+    extern template ENOKI_AD_EXPORT void ad_extract_implicit<T>(size_t,         \
+                                                               int32_t *);     \
+    extern template ENOKI_AD_EXPORT bool ad_enqueue_postponed<T>();            \
     }
 
 ENOKI_DECLARE_EXTERN_TEMPLATE(float,  bool, uint32_t)

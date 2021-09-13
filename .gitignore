@@ -54,6 +54,7 @@ Release
 *.ppm
 tests/custom
 tests/vcall
+tests/ad_megakernel
 libenoki-jit.so
 libenoki-jit.dylib
 enoki-jit.dll

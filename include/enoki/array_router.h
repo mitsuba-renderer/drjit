@@ -1733,27 +1733,32 @@ void accum_grad(T &value, const T2 &grad) {
     }
 }
 
-template <typename T> void enqueue(const T &value) {
+/// This library supports two main directions of derivative propagation
+enum class ADMode { Forward, Reverse };
+
+template <typename T> void enqueue(ADMode mode, const T &value) {
     if constexpr (is_diff_array_v<T>) {
         if constexpr (array_depth_v<T> > 1) {
             for (size_t i = 0; i < value.size(); ++i)
-                enqueue(value.entry(i));
+                enqueue(mode, value.entry(i));
         } else {
-            value.derived().enqueue_();
+            value.derived().enqueue_(mode);
         }
     } else if constexpr (is_enoki_struct_v<T>) {
         struct_support_t<T>::apply_1(
             value,
-            [](auto const &x) ENOKI_INLINE_LAMBDA {
-                enqueue(x);
+            [mode](auto const &x) ENOKI_INLINE_LAMBDA {
+                enqueue(mode, x);
             });
     }
+    ENOKI_MARK_USED(mode);
+    ENOKI_MARK_USED(value);
 }
 
 template <typename T1, typename... Ts, enable_if_t<sizeof...(Ts) != 0> = 0>
-void enqueue(const T1 &value, const Ts&... values) {
-    enqueue(value);
-    enqueue(values...);
+void enqueue(ADMode mode, const T1 &value, const Ts&... values) {
+    enqueue(mode, value);
+    enqueue(mode, values...);
 }
 
 ENOKI_INLINE void enqueue() { }
@@ -1774,10 +1779,10 @@ template <typename T> const char *graphviz(const T&) {
     return graphviz<T>();
 }
 
-template <typename...Ts> void traverse(bool reverse = true, bool retain_graph = false) {
+template <typename...Ts> void traverse(ADMode mode, bool retain_graph = false) {
     using Type = leaf_array_t<Ts...>;
     if constexpr (is_diff_array_v<Type> && std::is_floating_point_v<scalar_t<Type>>)
-        Type::traverse_(reverse, retain_graph);
+        Type::traverse_(mode, retain_graph);
 }
 
 template <typename T> void backward(T& value, bool retain_graph = false) {
@@ -1786,8 +1791,8 @@ template <typename T> void backward(T& value, bool retain_graph = false) {
                     "variable that is not registered with the AD backend. Did "
                     "you forget to call enable_grad()?");
     set_grad(value, 1.f);
-    enqueue(value);
-    traverse<T>(true, retain_graph);
+    enqueue(ADMode::Reverse, value);
+    traverse<T>(ADMode::Reverse, retain_graph);
 }
 
 template <typename T> void forward(T& value, bool retain_graph = false) {
@@ -1796,8 +1801,8 @@ template <typename T> void forward(T& value, bool retain_graph = false) {
                     "variable that is not registered with the AD backend. Did "
                     "you forget to call enable_grad()?");
     set_grad(value, 1.f);
-    enqueue(value);
-    traverse<T>(false, retain_graph);
+    enqueue(ADMode::Forward, value);
+    traverse<T>(ADMode::Forward, retain_graph);
 }
 
 //! @}

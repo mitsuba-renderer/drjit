@@ -22,8 +22,8 @@ NAMESPACE_BEGIN(detail)
 // A few forward declarations so that this compiles even without autodiff.h
 template <typename Value> void ad_inc_ref(int32_t) noexcept;
 template <typename Value> void ad_dec_ref(int32_t) noexcept;
-template <typename Value> size_t ad_cross_deps();
-template <typename Value> void ad_cross_rewind(size_t pos, bool enqueue);
+template <typename Value> size_t ad_postponed();
+template <typename Value> void ad_postponed_rewind(size_t size, bool enqueue);
 template <typename Value> void ad_traverse(bool, bool);
 template <typename Value, typename Mask>
 int32_t ad_new_select(const char *, size_t, const Mask &, int32_t, int32_t);
@@ -205,12 +205,6 @@ protected:
                     jit_var_inc_ref_ext(m_indices_prev[i]);
                 }
 
-                if constexpr (IsDiff) {
-                    m_cross_deps = m_ad_float_precision == 64
-                                       ? detail::ad_cross_deps<Float64>()
-                                       : detail::ad_cross_deps<Float32>();
-                }
-
                 // Start recording side effects
                 m_jit_state.begin_recording();
 
@@ -238,12 +232,6 @@ protected:
                 if (rv == (uint32_t) -1) {
                     jit_log(::LogLevel::InfoSym,
                             "Loop(\"%s\"): ----- recording loop body *again* ------", m_name.get());
-                    if constexpr (IsDiff) {
-                        if (m_ad_float_precision == 64)
-                            detail::ad_cross_rewind<Float64>(m_cross_deps, false);
-                        else
-                            detail::ad_cross_rewind<Float32>(m_cross_deps, false);
-                    }
                     return true;
                 } else {
                     jit_log(::LogLevel::InfoSym,
@@ -261,12 +249,17 @@ protected:
                         m_jit_state.clear_mask();
 
                     if constexpr (IsDiff) {
+                        /* During loop recording, we cannot perform reverse-mode
+                           AD steps that fragment into multiple kernel launches.
+                           The end of the loop finally provides an opportunity
+                           to execute such postponed AD steps. */
+
                         if (m_ad_float_precision == 64) {
-                            detail::ad_cross_rewind<Float64>(m_cross_deps, true);
-                            detail::ad_traverse<Float64>(true, true);
+                            if (detail::ad_enqueue_postponed<Float64>())
+                                detail::ad_traverse<Float64>(ADMode::Reverse, true);
                         } else {
-                            detail::ad_cross_rewind<Float32>(m_cross_deps, true);
-                            detail::ad_traverse<Float32>(true, true);
+                            if (detail::ad_enqueue_postponed<Float32>())
+                                detail::ad_traverse<Float32>(ADMode::Reverse, true);
                         }
                     }
 
@@ -404,9 +397,6 @@ protected:
 
     /// Index of the symbolic loop state machine
     uint32_t m_state = 0;
-
-    /// Cross-loop AD dependencies
-    size_t m_cross_deps = 0;
 
     // --------------- Wavefront mode ---------------
 
