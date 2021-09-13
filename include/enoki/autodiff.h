@@ -1615,13 +1615,15 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
     bool schedule_() const {
         if constexpr (is_jit_array_v<Type_>)
             return m_value.schedule_();
-        return false;
+        else
+            return false;
     }
 
     bool eval_() const {
         if constexpr (is_jit_array_v<Type_>)
             return m_value.eval_();
-        return false;
+        else
+            return false;
     }
 
     void enqueue_() const {

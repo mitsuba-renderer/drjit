@@ -42,7 +42,6 @@ NAMESPACE_BEGIN(detail)
 using Value = ENOKI_AUTODIFF_VALUE;
 using Mask = mask_t<Value>;
 using Index = uint32_array_t<Value>;
-using Scalar = scalar_t<Value>;
 constexpr bool IsDouble = std::is_same_v<Value, double>;
 
 struct Variable;
@@ -153,9 +152,9 @@ struct Variable {
 
         const char *prefix = ad_prefix();
         if (prefix) {
-            size_t size = strlen(prefix) + strlen(label) + 2;
-            char *out = (char *) malloc(size);
-            snprintf(out, size, "%s/%s", prefix, label);
+            size_t size_2 = strlen(prefix) + strlen(label) + 2;
+            char *out = (char *) malloc(size_2);
+            snprintf(out, size_2, "%s/%s", prefix, label);
             label = out;
             free_label = 1;
         }
@@ -170,7 +169,7 @@ struct Variable {
             if (size == 1 && src_size != 1) {
                 Value v2;
                 if (v.size() == 1) {
-                    v2 = v * Scalar(src_size);
+                    v2 = v * scalar_t<Value>(src_size);
                 } else {
                     assert(v.size() == src_size);
                     v2 = hsum_async(v);
@@ -216,7 +215,7 @@ struct Variable {
             if (size == 1 && src_size != 1) {
                 T v3 = v1 * v2;
                 if (v3.size() == 1) {
-                    v3 *= Scalar(src_size);
+                    v3 *= scalar_t<Value>(src_size);
                 } else {
                     assert(v3.size() == src_size);
                     v3 = hsum_async(v3);
@@ -1609,7 +1608,7 @@ template <typename T> void ad_accum_grad(int32_t index, const T &value, bool fai
                  size_in, index, v.size);
 
     ad_trace("ad_accum_grad(a%i)", index);
-    v.accum(value, size_in);
+    v.accum(value, (uint32_t) size_in);
 }
 
 template <typename T> void ad_set_label(int32_t index, const char *label) {
