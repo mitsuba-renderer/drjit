@@ -30,7 +30,9 @@ foreach(ENOKI_AUTODIFF_VARIANT ${ENOKI_AUTODIFF_VARIANTS})
     -DENOKI_AUTODIFF_VALUE=${ENOKI_AUTODIFF_VARIANT_VALUE}
     -DENOKI_BUILD_AUTODIFF=1
   )
-  if (NOT MSVC)
+  if (MSVC)
+    target_compile_options(${ENOKI_AUTODIFF_VARIANT_NAME} PRIVATE /wd4714) # marked as __forceinline not inlined
+  else()
     target_compile_options(${ENOKI_AUTODIFF_VARIANT_NAME} PRIVATE -fvisibility=hidden)
   endif()
   target_link_libraries(${ENOKI_AUTODIFF_VARIANT_NAME} PRIVATE enoki)
@@ -46,9 +48,7 @@ add_library(enoki-autodiff SHARED
 )
 target_link_libraries(enoki-autodiff PUBLIC enoki)
 
-if (MSVC)
-  target_compile_options(enoki-autodiff PRIVATE /wd4714) # marked as __forceinline not inlined
-else()
+if (NOT MSVC)
   target_compile_options(enoki-autodiff PRIVATE -fvisibility=hidden)
 endif()
 

@@ -169,6 +169,13 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
 
     ENOKI_INLINE DiffArray() = default;
 
+    #if defined(_MSC_VER)
+    // Static analysis may detect that ad_inc_ref/dec_ref are unnecessary in
+    // some cases. Please don't warn about this..
+    #  pragma warning(push)
+    #  pragma warning(disable: 4702) // unreachable code
+    #endif
+
     ENOKI_INLINE ~DiffArray() noexcept {
         if constexpr (IsEnabled)
             detail::ad_dec_ref<Type>(m_index);
@@ -226,6 +233,10 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             std::swap(m_index, a.m_index);
         return *this;
     }
+
+    #if defined(_MSC_VER)
+    #  pragma warning(pop)
+    #endif
 
     //! @}
     // -----------------------------------------------------------------------
