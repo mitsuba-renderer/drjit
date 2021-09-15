@@ -2628,7 +2628,7 @@ class CustomOp:
             elif _ek.is_enoki_struct_v(o):
                 for k in type(o).ENOKI_STRUCT.keys():
                     ad_clear(getattr(o, k))
-        ad_clear(self.output)
+        ad_clear(getattr(self, 'output', None))
 
     def name(self):
         return "CustomOp[unnamed]"
