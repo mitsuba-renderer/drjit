@@ -2662,7 +2662,7 @@ def custom(cls, *args, **kwargs):
             return type(o)([clear_primal(v, dec_ref) for v in o])
         elif isinstance(o, _Mapping):
             return { k: clear_primal(v, dec_ref) for k, v in o.items() }
-        elif _ek.is_diff_array_v(o):
+        elif _ek.is_diff_array_v(o) and _ek.is_floating_point_v(o):
             ot = type(o)
 
             if _ek.is_tensor_v(ot):
