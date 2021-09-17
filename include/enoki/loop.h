@@ -32,8 +32,8 @@ NAMESPACE_END(detail)
 template <typename Mask, typename SFINAE = int> struct Loop;
 
 /// Scalar fallback, expands into normal C++ loop
-template <typename Value>
-struct Loop<Value, enable_if_t<std::is_scalar_v<Value>>> {
+template <typename Mask>
+struct Loop<Mask, enable_if_t<std::is_scalar_v<Mask>>> {
     Loop(const Loop &) = delete;
     Loop(Loop &&) = delete;
     Loop& operator=(const Loop &) = delete;
@@ -46,13 +46,13 @@ struct Loop<Value, enable_if_t<std::is_scalar_v<Value>>> {
 };
 
 /// Array case, expands into a symbolic or wavefront-style loop
-template <typename Value>
-struct Loop<Value, enable_if_jit_array_t<Value>> {
-    static constexpr JitBackend Backend = backend_v<Value>;
-    static constexpr bool IsDiff = is_diff_array_v<Value> &&
-        std::is_floating_point_v<scalar_t<Value>>;
+template <typename Mask>
+struct Loop<Mask, enable_if_jit_array_t<Mask>> {
+    static constexpr JitBackend Backend = backend_v<Mask>;
+    static constexpr bool IsDiff = is_diff_array_v<Mask>;
 
-    using Mask = mask_t<Value>;
+    using Float32 = float32_array_t<detached_t<Mask>>;
+    using Float64 = float32_array_t<detached_t<Mask>>;
 
     Loop(const Loop &) = delete;
     Loop(Loop &&) = delete;
@@ -92,10 +92,13 @@ struct Loop<Value, enable_if_jit_array_t<Value>> {
             jit_var_dec_ref_ext(m_indices_prev[i]);
 
         if constexpr (IsDiff) {
-            using Type = typename Value::Type;
             for (size_t i = 0; i < m_indices_ad_prev.size(); ++i) {
                 int32_t index = m_indices_ad_prev[i];
-                detail::ad_dec_ref<Type>(index);
+
+                if (m_ad_float_precision == 32)
+                    detail::ad_dec_ref<Float32>(index);
+                else if (m_ad_float_precision == 64)
+                    detail::ad_dec_ref<Float64>(index);
             }
         }
     }
@@ -107,6 +110,15 @@ struct Loop<Value, enable_if_jit_array_t<Value>> {
             if constexpr (array_depth_v<T> == 1) {
                 if constexpr (IsDiff && is_diff_array_v<T> &&
                               std::is_floating_point_v<scalar_t<T>>) {
+                    int ad_float_precision = sizeof(scalar_t<T>) * 8;
+                    if (m_ad_float_precision == 0)
+                        m_ad_float_precision = ad_float_precision;
+                    if (m_ad_float_precision != ad_float_precision)
+                        jit_raise(
+                            "Loop::put(): differentiable loop variables must "
+                            "use the same floating point precision! (either "
+                            "all single or all double precision)");
+
                     if (m_record && grad_enabled(value))
                         jit_raise(
                             "Loop::put(): one of the supplied loop "
@@ -117,6 +129,7 @@ struct Loop<Value, enable_if_jit_array_t<Value>> {
                             "recording via set_flag(JitFlag::LoopRecord, "
                             "false). Alternatively, you could implement the "
                             "adjoint of the loop using ek::CustomOp.");
+
                     put(value.detach_());
                     m_indices_ad[m_indices_ad.size() - 1] = value.index_ad_ptr();
                 } else if constexpr (is_jit_array_v<T>) {
@@ -193,8 +206,9 @@ protected:
                 }
 
                 if constexpr (IsDiff) {
-                    using Type = typename Value::Type;
-                    m_cross_deps = detail::ad_cross_deps<Type>();
+                    m_cross_deps = m_ad_float_precision == 64
+                                       ? detail::ad_cross_deps<Float64>()
+                                       : detail::ad_cross_deps<Float32>();
                 }
 
                 // Start recording side effects
@@ -225,8 +239,10 @@ protected:
                     jit_log(::LogLevel::InfoSym,
                             "Loop(\"%s\"): ----- recording loop body *again* ------", m_name.get());
                     if constexpr (IsDiff) {
-                        using Type = typename Value::Type;
-                        detail::ad_cross_rewind<Type>(m_cross_deps, false);
+                        if (m_ad_float_precision == 64)
+                            detail::ad_cross_rewind<Float64>(m_cross_deps, false);
+                        else
+                            detail::ad_cross_rewind<Float32>(m_cross_deps, false);
                     }
                     return true;
                 } else {
@@ -245,10 +261,12 @@ protected:
                         m_jit_state.clear_mask();
 
                     if constexpr (IsDiff) {
-                        using Type = typename Value::Type;
-                        if (!jit_flag(JitFlag::Recording)) {
-                            detail::ad_cross_rewind<Type>(m_cross_deps, true);
-                            detail::ad_traverse<Type>(true, true);
+                        if (m_ad_float_precision == 64) {
+                            detail::ad_cross_rewind<Float64>(m_cross_deps, true);
+                            detail::ad_traverse<Float64>(true, true);
+                        } else {
+                            detail::ad_cross_rewind<Float32>(m_cross_deps, true);
+                            detail::ad_traverse<Float32>(true, true);
                         }
                     }
 
@@ -286,19 +304,29 @@ protected:
 
             // Likewise, but for AD variables
             if constexpr (IsDiff) {
-                using Type = typename Value::Type;
                 for (uint32_t i = 0; i < m_indices_ad.size(); ++i) {
                     if (!m_indices_ad[i])
                         continue;
                     int32_t i1 = *m_indices_ad[i], i2 = m_indices_ad_prev[i],
                             index_new = 0;
-                    if (i1 > 0 || i2 > 0)
-                        index_new = detail::ad_new_select<Type>(
-                            "ek_loop", jit_var_size(*m_indices[i]),
-                            detach(m_cond), i1, i2);
-                    *m_indices_ad[i] = index_new;
-                    detail::ad_dec_ref<Type>(i1);
-                    detail::ad_dec_ref<Type>(i2);
+
+                    if (m_ad_float_precision == 32) {
+                        if (i1 > 0 || i2 > 0)
+                            index_new = detail::ad_new_select<Float32>(
+                                "ek_loop", jit_var_size(*m_indices[i]),
+                                detach(m_cond), i1, i2);
+                        *m_indices_ad[i] = index_new;
+                        detail::ad_dec_ref<Float32>(i1);
+                        detail::ad_dec_ref<Float32>(i2);
+                    } else if (m_ad_float_precision == 64) {
+                        if (i1 > 0 || i2 > 0)
+                            index_new = detail::ad_new_select<Float64>(
+                                "ek_loop", jit_var_size(*m_indices[i]),
+                                detach(m_cond), i1, i2);
+                        *m_indices_ad[i] = index_new;
+                        detail::ad_dec_ref<Float64>(i1);
+                        detail::ad_dec_ref<Float64>(i2);
+                    }
                 }
                 m_indices_ad_prev.clear();
             }
@@ -319,14 +347,16 @@ protected:
             }
 
             if constexpr (IsDiff) {
-                using Type = typename Value::Type;
                 for (uint32_t i = 0; i < m_indices_ad.size(); ++i) {
                     if (!m_indices_ad[i]) {
                         m_indices_ad_prev.push_back(0);
                         continue;
                     }
                     int32_t index = *m_indices_ad[i];
-                    detail::ad_inc_ref<Type>(index);
+                    if (m_ad_float_precision == 64)
+                        detail::ad_inc_ref<Float64>(index);
+                    else if (m_ad_float_precision == 32)
+                        detail::ad_inc_ref<Float32>(index);
                     m_indices_ad_prev.push_back(index);
                 }
             }
@@ -385,6 +415,9 @@ protected:
 
     /// AD variable state of the previous iteration
     ek_vector<uint32_t> m_indices_ad_prev;
+
+    /// Precision of AD floating point variables
+    int m_ad_float_precision = 0;
 
     /// Stashed mask variable from the previous iteration
     Mask m_cond;

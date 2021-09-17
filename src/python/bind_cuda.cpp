@@ -17,13 +17,16 @@ void export_cuda(py::module_ &m) {
 
     bind_pcg32<Guide>(cuda);
 
-    py::class_<ek::Loop<Guide>>(cuda, "LoopBase");
+    using Mask = ek::mask_t<Guide>;
 
-    py::class_<Loop<Guide>, ek::Loop<Guide>> loop(cuda, "Loop");
+    py::class_<ek::Loop<Mask>>(cuda, "LoopBase");
+
+    py::class_<Loop<Mask>, ek::Loop<Mask>> loop(cuda, "Loop");
+
     loop.def(py::init<const char *, py::handle>(), "name"_a, "vars"_a = py::none())
-        .def("put", &Loop<Guide>::put)
-        .def("init", &Loop<Guide>::init)
-        .def("__call__", &Loop<Guide>::operator());
+        .def("put", &Loop<Mask>::put)
+        .def("init", &Loop<Mask>::init)
+        .def("__call__", &Loop<Mask>::operator());
 
     ENOKI_BIND_TENSOR_TYPES(cuda);
 }

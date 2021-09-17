@@ -22,13 +22,16 @@ void export_llvm_ad(py::module_ &m) {
             src_index, dst_index, cb.is_none() ? nullptr : new CustomOp(cb));
     }, "src_index"_a, "dst_index"_a, "cb"_a = py::none());
 
-    py::class_<ek::Loop<Guide>>(llvm_ad, "LoopBase");
+    using Mask = ek::mask_t<Guide>;
 
-    py::class_<Loop<Guide>, ek::Loop<Guide>> loop(llvm_ad, "Loop");
+    py::class_<ek::Loop<Mask>>(llvm_ad, "LoopBase");
+
+    py::class_<Loop<Mask>, ek::Loop<Mask>> loop(llvm_ad, "Loop");
+
     loop.def(py::init<const char *, py::handle>(), "name"_a, "vars"_a = py::none())
-        .def("put", &Loop<Guide>::put)
-        .def("init", &Loop<Guide>::init)
-        .def("__call__", &Loop<Guide>::operator());
+        .def("put", &Loop<Mask>::put)
+        .def("init", &Loop<Mask>::init)
+        .def("__call__", &Loop<Mask>::operator());
 
     ENOKI_BIND_TENSOR_TYPES(llvm_ad);
 

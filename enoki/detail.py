@@ -504,11 +504,12 @@ def _loop_process_state(value: type, in_state: list, out_state: list,
                     "loop_process_state(): one of the supplied loop state "
                     "variables of type %s is uninitialized!" % t.__name__)
 
-            out_state.append((index, index_ad))
+            ad_float_precision = value.Type.Size * 8 if (t.IsDiff and t.IsFloat) else 0
+            out_state.append((index, index_ad, ad_float_precision))
 
             if in_state:
                 assert len(in_state) > 0
-                index, index_ad = in_state.pop()
+                index, index_ad, _ = in_state.pop()
 
                 if write:
                     value.set_index_(index)

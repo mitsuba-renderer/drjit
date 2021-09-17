@@ -115,7 +115,7 @@ ENOKI_TEST(test03_loop_rev_simple) {
         jit_set_flag(JitFlag::LoopRecord, j);
 
         UInt32 i = ek::arange<UInt32>(10);
-        ek::Loop<Float> loop("MyLoop", i);
+        ek::Loop<ek::mask_t<Float>> loop("MyLoop", i);
 
         Float x = ek::zero<Float>(11);
         ek::enable_grad(x);
@@ -137,7 +137,7 @@ ENOKI_TEST(test04_loop_rev_complex) {
         jit_set_flag(JitFlag::LoopRecord, j);
 
         UInt32 i = ek::arange<UInt32>(10);
-        ek::Loop<Float> loop("MyLoop", i);
+        ek::Loop<ek::mask_t<Float>> loop("MyLoop", i);
 
         Float x = ek::zero<Float>(11);
         ek::enable_grad(x);
@@ -233,7 +233,7 @@ ENOKI_TEST(test05_vcall_symbolic_ad_loop_opt) {
             // This variable will be out of scope (only consumed by a side effect)
             Float value = 1.f;
 
-            ek::Loop<Float> loop("MyLoop", active, depth, unused, value);
+            ek::Loop<ek::mask_t<Float>> loop("MyLoop", active, depth, unused, value);
             while (loop(ek::detach(active))) {
                 Float output = arr->f(2.f);
 
@@ -282,11 +282,11 @@ ENOKI_TEST(test06_vcall_symbolic_nested_ad_loop_opt) {
     UInt32 depth = 0;
     ek::mask_t<Float> active = ek::full<ek::mask_t<Float>>(true, n);
     Float unused = 0.f;
-    ek::Loop<Float> loop("outer", active, depth, unused);
+    ek::Loop<ek::mask_t<Float>> loop("outer", active, depth, unused);
     while (loop(ek::detach(active))) {
         UInt32 depth2 = 0;
         ek::mask_t<Float> active2 = ek::full<ek::mask_t<Float>>(true, n);
-        ek::Loop<Float> loop2("inner", active2, depth2);
+        ek::Loop<ek::mask_t<Float>> loop2("inner", active2, depth2);
         while (loop2(ek::detach(active2))) {
             Float output = arr->f(2.f);
             ek::backward(output);

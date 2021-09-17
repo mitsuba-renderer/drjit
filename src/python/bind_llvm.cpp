@@ -17,13 +17,16 @@ void export_llvm(py::module_ &m) {
 
     bind_pcg32<Guide>(llvm);
 
-    py::class_<ek::Loop<Guide>>(llvm, "LoopBase");
+    using Mask = ek::mask_t<Guide>;
 
-    py::class_<Loop<Guide>, ek::Loop<Guide>> loop(llvm, "Loop");
+    py::class_<ek::Loop<Mask>>(llvm, "LoopBase");
+
+    py::class_<Loop<Mask>, ek::Loop<Mask>> loop(llvm, "Loop");
+
     loop.def(py::init<const char *, py::handle>(), "name"_a, "vars"_a = py::none())
-        .def("put", &Loop<Guide>::put)
-        .def("init", &Loop<Guide>::init)
-        .def("__call__", &Loop<Guide>::operator());
+        .def("put", &Loop<Mask>::put)
+        .def("init", &Loop<Mask>::init)
+        .def("__call__", &Loop<Mask>::operator());
 
     ENOKI_BIND_TENSOR_TYPES(llvm);
 }
