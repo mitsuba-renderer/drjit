@@ -1761,7 +1761,7 @@ void enqueue(ADMode mode, const T1 &value, const Ts&... values) {
     enqueue(mode, values...);
 }
 
-ENOKI_INLINE void enqueue() { }
+ENOKI_INLINE void enqueue(ADMode) { }
 
 
 template <typename T> const char *graphviz() {
