@@ -1626,7 +1626,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         ENOKI_MARK_USED(type);
         if constexpr (is_jit_array_v<Type_>)
             return m_value.migrate_(type);
-        return *this;
+        else
+            return *this;
     }
 
     bool schedule_() const {
