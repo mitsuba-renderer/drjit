@@ -1779,10 +1779,10 @@ template <typename T> const char *graphviz(const T&) {
     return graphviz<T>();
 }
 
-template <typename...Ts> void traverse(ADMode mode, bool retain_graph = false) {
+template <typename...Ts> void traverse(bool retain_graph = false) {
     using Type = leaf_array_t<Ts...>;
     if constexpr (is_diff_array_v<Type> && std::is_floating_point_v<scalar_t<Type>>)
-        Type::traverse_(mode, retain_graph);
+        Type::traverse_(retain_graph);
 }
 
 template <typename T> void backward(T& value, bool retain_graph = false) {
@@ -1792,7 +1792,7 @@ template <typename T> void backward(T& value, bool retain_graph = false) {
                     "you forget to call enable_grad()?");
     set_grad(value, 1.f);
     enqueue(ADMode::Reverse, value);
-    traverse<T>(ADMode::Reverse, retain_graph);
+    traverse<T>(retain_graph);
 }
 
 template <typename T> void forward(T& value, bool retain_graph = false) {
@@ -1802,7 +1802,7 @@ template <typename T> void forward(T& value, bool retain_graph = false) {
                     "you forget to call enable_grad()?");
     set_grad(value, 1.f);
     enqueue(ADMode::Forward, value);
-    traverse<T>(ADMode::Forward, retain_graph);
+    traverse<T>(retain_graph);
 }
 
 //! @}

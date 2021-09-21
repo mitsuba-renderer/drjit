@@ -57,12 +57,12 @@ def test02_add_fwd(m):
         c = 2 * a + b
         ek.set_grad(a, 1.0)
         ek.enqueue(ek.ADMode.Forward, a)
-        ek.traverse(m.Float, ek.ADMode.Forward, retain_graph=True)
+        ek.traverse(m.Float, retain_graph=True)
         assert ek.grad(c) == 2
         assert ek.grad(a) == 0
         ek.set_grad(a, 1.0)
         ek.enqueue(ek.ADMode.Forward, a)
-        ek.traverse(m.Float, ek.ADMode.Forward, retain_graph=True)
+        ek.traverse(m.Float, retain_graph=True)
         assert ek.grad(c) == 4
 
 
@@ -335,7 +335,7 @@ def test24_scatter_reduce_fwd(m):
         if i // 2 == 0:
             ek.enqueue(ek.ADMode.Forward, x, y)
 
-        ek.traverse(m.Float, ek.ADMode.Forward)
+        ek.traverse(m.Float)
 
         # Verified against Mathematica
         assert ek.allclose(ek.detach(s), 15.5972)
@@ -780,7 +780,7 @@ def test49_custom_reverse(m):
     d2 = ek.custom(Normalize, d)
     ek.set_grad(d2, m.Array3f(5, 6, 7))
     ek.enqueue(ek.ADMode.Reverse, d2)
-    ek.traverse(m.Float, ek.ADMode.Reverse)
+    ek.traverse(m.Float)
     assert ek.allclose(ek.grad(d), m.Array3f(0.610883, 0.152721, -0.305441))
 
 
@@ -790,12 +790,12 @@ def test50_custom_forward(m):
     d2 = ek.custom(Normalize, d)
     ek.set_grad(d, m.Array3f(5, 6, 7))
     ek.enqueue(ek.ADMode.Forward, d)
-    ek.traverse(m.Float, ek.ADMode.Forward, retain_graph=True)
+    ek.traverse(m.Float, retain_graph=True)
     assert ek.grad(d) == 0
     ek.set_grad(d, m.Array3f(5, 6, 7))
     assert ek.allclose(ek.grad(d2), m.Array3f(0.610883, 0.152721, -0.305441))
     ek.enqueue(ek.ADMode.Forward, d)
-    ek.traverse(m.Float, ek.ADMode.Forward, retain_graph=False)
+    ek.traverse(m.Float, retain_graph=False)
     assert ek.allclose(ek.grad(d2), m.Array3f(0.610883, 0.152721, -0.305441)*2)
 
 
@@ -908,7 +908,7 @@ def test52_loop_ballistic(m, do_record):
                 ek.set_grad(pos_out, grad_pos)
                 ek.set_grad(vel_out, grad_vel)
                 ek.enqueue(ek.ADMode.Reverse, pos_out, vel_out)
-                ek.traverse(m.Float, ek.ADMode.Reverse)
+                ek.traverse(m.Float)
 
                 # Update loop variables
                 grad_pos.assign(ek.grad(pos))
@@ -978,7 +978,7 @@ def test53_loop_ballistic_2(m, do_record):
                 ek.set_grad(pos_fwd, grad_pos)
                 ek.set_grad(vel_fwd, grad_vel)
                 ek.enqueue(ek.ADMode.Reverse, pos_fwd, vel_fwd)
-                ek.traverse(m.Float, ek.ADMode.Reverse)
+                ek.traverse(m.Float)
 
                 grad_pos = ek.grad(pos_rev)
                 grad_vel = ek.grad(vel_rev)

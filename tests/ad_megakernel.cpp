@@ -246,7 +246,7 @@ ENOKI_TEST(test05_vcall_symbolic_ad_loop_opt) {
 
                 ek::enqueue(ADMode::Reverse, output);
                 ek::set_grad(output, value);
-                ek::traverse<Float>(ADMode::Reverse, false);
+                ek::traverse<Float>(false);
 
                 value = ek::detach(arr->g(value));
 

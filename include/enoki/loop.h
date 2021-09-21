@@ -23,8 +23,8 @@ NAMESPACE_BEGIN(detail)
 template <typename Value> void ad_inc_ref(int32_t) noexcept;
 template <typename Value> void ad_dec_ref(int32_t) noexcept;
 template <typename Value> size_t ad_postponed();
-template <typename Value> void ad_postponed_rewind(size_t size, bool enqueue);
-template <typename Value> void ad_traverse(bool, bool);
+template <typename Value> bool ad_enqueue_postponed();
+template <typename Value> void ad_traverse(bool);
 template <typename Value, typename Mask>
 int32_t ad_new_select(const char *, size_t, const Mask &, int32_t, int32_t);
 NAMESPACE_END(detail)
@@ -256,10 +256,10 @@ protected:
 
                         if (m_ad_float_precision == 64) {
                             if (detail::ad_enqueue_postponed<Float64>())
-                                detail::ad_traverse<Float64>(ADMode::Reverse, true);
+                                detail::ad_traverse<Float64>(true);
                         } else {
                             if (detail::ad_enqueue_postponed<Float32>())
-                                detail::ad_traverse<Float32>(ADMode::Reverse, true);
+                                detail::ad_traverse<Float32>(true);
                         }
                     }
 

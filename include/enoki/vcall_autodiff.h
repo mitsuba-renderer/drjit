@@ -46,7 +46,7 @@ using ConstStr = const char *;
 template <typename Type> struct ADProcessPostponedGuard {
     ~ADProcessPostponedGuard() {
         if (detail::ad_enqueue_postponed<Type>())
-            detail::ad_traverse<Type>(ADMode::Reverse, true);
+            detail::ad_traverse<Type>(true);
     }
 };
 
@@ -108,7 +108,7 @@ struct DiffVCall : CustomOp<DiffType, Result, ConstStr, Self, Func, Args...> {
             enqueue(ADMode::Forward, value_grad_pair.first...);
 
             ad_enqueue_implicit<Type>(implicit_snapshot);
-            traverse<DiffType>(ADMode::Forward, true);
+            traverse<DiffType>(true);
             ad_dequeue_implicit<Type>(implicit_snapshot);
 
             return grad<false>(result);
@@ -149,7 +149,7 @@ struct DiffVCall : CustomOp<DiffType, Result, ConstStr, Self, Func, Args...> {
 #endif
 
             enqueue(ADMode::Reverse, result);
-            traverse<DiffType>(ADMode::Reverse, true);
+            traverse<DiffType>(true);
             return Inputs(grad<false>(args)...);
         };
 

@@ -256,7 +256,7 @@ ENOKI_TEST(test03_vcall_symbolic_ad_fwd) {
         ek::set_label(output, "output");
         ek::set_grad(input, StructF(1, 10));
         ek::enqueue(ADMode::Forward, input);
-        ek::traverse<FloatD>(ADMode::Forward);
+        ek::traverse<FloatD>();
 
         StructF grad_out = ek::grad(output);
         ek::eval(output, grad_out);
@@ -311,7 +311,7 @@ ENOKI_TEST(test04_vcall_symbolic_ad_fwd_accessing_local) {
 
         ek::enqueue(ADMode::Forward, input, a->x, b->x);
 
-        ek::traverse<FloatD>(ADMode::Forward);
+        ek::traverse<FloatD>();
 
         StructF grad_out = ek::grad(output);
         ek::eval(output, grad_out);
@@ -362,7 +362,7 @@ ENOKI_TEST(test05_vcall_symbolic_ad_rev_accessing_local) {
         ek::enqueue(ADMode::Reverse, output);
 
         ek::set_grad(output, StructF(2, 10));
-        ek::traverse<FloatD>(ADMode::Reverse);
+        ek::traverse<FloatD>();
 
         StructF grad_in = ek::grad(input);
         ek::eval(output, ek::grad(a->x), ek::grad(b->x), grad_in);
