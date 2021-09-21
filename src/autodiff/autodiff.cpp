@@ -959,7 +959,7 @@ template <typename Value> struct GatherEdge : Special {
 
     void forward(const Variable *source, Variable *target) const override {
         target->accum(gather<Value>(source->grad, offset, mask),
-                      width(offset));
+                      (uint32_t) width(offset));
     }
 
     Index offset;
@@ -1033,7 +1033,7 @@ template <typename Value> struct ScatterEdge : Special {
 
     void backward(Variable *source, const Variable *target) const override {
         source->accum(gather<Value>(target->grad, offset, mask),
-                      width(offset));
+                      (uint32_t) width(offset));
     }
 
     void forward(const Variable *source, Variable *target) const override {
@@ -1438,7 +1438,7 @@ void ad_traverse(bool retain_graph) {
 
         ad_trace("ad_traverse(): processing edge a%i -> a%i ..", v0i, v1i);
 
-        uint32_t grad_size = width(v0->grad);
+        uint32_t grad_size = (uint32_t) width(v0->grad);
 
         if (unlikely(mode == ADMode::Reverse && rec && !v0->placeholder)) {
             ad_trace("ad_traverse(): postponing edge (must be handled outside of megakernel).");
@@ -1475,7 +1475,7 @@ void ad_traverse(bool retain_graph) {
                 if (edge.source == edge_ref.source && edge.target == edge_ref.target) {
                     Special *special2 = edge2.special;
                     edge2.special = nullptr;
-                    unlock_guard<std::mutex> guard(state.mutex);
+                    unlock_guard<std::mutex> guard2(state.mutex);
                     delete special2;
                 }
             }
