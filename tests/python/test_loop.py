@@ -312,3 +312,24 @@ def test13_failure_state_leak(pkg):
         j[0]
     assert 'placeholder variables are used to record computation symbolically' in str(e.value)
     del l
+
+
+@pytest.mark.parametrize("pkg", pkgs)
+def test14_scalar_side_effect(pkg):
+    # Ensure that a scalar side effect takes place multiple times if the loop processes larger arrays
+    p = get_class(pkg)
+
+    for i in range(2):
+        ek.set_flag(ek.JitFlag.LoopRecord, i == 1)
+
+        active = p.Bool(True)
+        unrelated = ek.arange(p.UInt32, 123)
+
+        loop = p.Loop("Test", lambda: (active, unrelated))
+        target = ek.zero(p.UInt32)
+
+        while loop(active):
+            ek.scatter_reduce(ek.ReduceOp.Add, target, 1, 0)
+            active &= False
+
+        assert target[0] == 123

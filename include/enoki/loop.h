@@ -326,8 +326,13 @@ protected:
         }
 
         // Try to compile loop iteration into a single kernel
-        for (uint32_t i = 0; i < m_indices.size(); ++i)
+        size_t size = cond_.size();
+        for (uint32_t i = 0; i < m_indices.size(); ++i) {
             jit_var_schedule(*m_indices[i]);
+            size_t vsize = jit_var_size(*m_indices[i]);
+            if (vsize > size)
+                size = vsize;
+        }
         jit_var_schedule(cond.index());
         jit_eval();
 
@@ -356,6 +361,7 @@ protected:
 
             // Mask scatters/gathers/vcalls in the next iteration
             m_cond = cond;
+            m_cond.resize(size);
             m_jit_state.set_mask(m_cond.index());
             return true;
         } else {
