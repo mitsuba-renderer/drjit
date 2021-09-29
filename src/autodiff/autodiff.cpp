@@ -1503,8 +1503,11 @@ void ad_traverse(bool retain_graph) {
                         [](EdgeRef e1, EdgeRef e2) { return e1.target == e2.target; }),
             todo.end());
 
-        for (EdgeRef edge_ref : todo)
+        for (EdgeRef edge_ref : todo) {
+            if (state.variables.find(edge_ref.target) == state.variables.end())
+                continue;
             ad_free_edges(edge_ref.target, state[edge_ref.target]);
+        }
     }
 
     ad_log(Debug, "ad_traverse(): done.");
