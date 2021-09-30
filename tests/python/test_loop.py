@@ -318,8 +318,10 @@ def test13_failure_state_leak(pkg):
 def test14_scalar_side_effect(pkg):
     # Ensure that a scalar side effect takes place multiple times if the loop processes larger arrays
     p = get_class(pkg)
+    ek.set_log_level(10)
+    ek.set_flag(ek.JitFlag.PrintIR, True)
 
-    for i in range(2):
+    for i in range(1):
         ek.set_flag(ek.JitFlag.LoopRecord, i == 1)
 
         active = p.Bool(True)
