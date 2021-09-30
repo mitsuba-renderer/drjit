@@ -320,7 +320,7 @@ struct Tensor
         Tensor t_ = t, f_ = f;
         Mask m_ = m;
         Shape shape = detail::tensor_broadcast("select_", m_, t_, f_);
-        return mask_t<Tensor>(select(m_.m_array, t_.m_array, f_.m_array), shape);
+        return Tensor(select(m_.m_array, t_.m_array, f_.m_array), shape);
     }
 
     size_t ndim() const { return m_shape.size(); }

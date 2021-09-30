@@ -264,3 +264,19 @@ def test11_custom_op(pkg):
     ek.traverse(f)
 
     assert ek.grad(tt).array == [2.0, 4.0, 6.0, 8.0, 10.0, 12.0]
+
+
+@pytest.mark.parametrize("pkg", pkgs_ad)
+def test12_select(pkg):
+    for tp in [get_class(pkg + ".TensorXf"), get_class(pkg + ".TensorXu")]:
+        initial = tp([1, 2, 3, 4], shape=(4, 1))
+
+        next = initial + 10
+        valid = initial >= 2.5
+        assert type(valid) == ek.mask_t(initial)
+
+        result = ek.select(valid, next, initial)
+        assert type(result) == tp
+
+        expected = tp([1, 2, 13, 14], shape=ek.shape(initial))
+        assert ek.allclose(result, expected)
