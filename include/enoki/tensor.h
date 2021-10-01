@@ -155,7 +155,7 @@ struct Tensor
         m_array = load<Array>(ptr, size);
     }
 
-    template <typename T, enable_if_scalar_t<T> = 0>
+    template <typename T, enable_if_t<std::is_scalar_v<T> && !std::is_pointer_v<T>> = 0>
     Tensor(T value) : m_array(value), m_shape(1, 1) { }
 
     operator Array() const { return m_array; }
