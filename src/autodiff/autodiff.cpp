@@ -1280,6 +1280,7 @@ static void ad_dfs_fwd(VisitedSet &visited, std::vector<EdgeRef> &todo, int32_t 
         return;
 
     Variable *v = state[index];
+    ad_inc_ref(index, v);
     uint32_t edge_id = v->next_fwd;
     while (edge_id) {
         Edge &edge = state.edges[edge_id];
@@ -1298,6 +1299,7 @@ static void ad_dfs_rev(VisitedSet &visited, std::vector<EdgeRef> &todo, int32_t 
         return;
 
     Variable *v = state[index];
+    ad_inc_ref(index, v);
     uint32_t edge_id = v->next_rev;
     while (edge_id) {
         Edge &edge = state.edges[edge_id];
@@ -1340,8 +1342,6 @@ template <typename T> void ad_enqueue(ADMode mode, int32_t index) {
 template <typename Value>
 void ad_traverse(bool retain_graph) {
     LocalState &ls = local_state;
-
-    ls.visited.clear();
 
     std::vector<EdgeRef> &todo_tls = ls.todo, todo;
     if (todo_tls.empty())
@@ -1417,11 +1417,6 @@ void ad_traverse(bool retain_graph) {
     for (EdgeRef edge_ref : todo) {
         Edge &edge = state.edges[edge_ref.id];
 
-        if (edge.source != edge_ref.source || edge.target != edge_ref.target) {
-            ad_trace("ad_traverse(): skipping edge (garbage collected in the meantime).");
-            continue;
-        }
-
         uint32_t v0i, v1i;
         if (mode == ADMode::Forward) {
             v0i = edge.source;
@@ -1431,10 +1426,13 @@ void ad_traverse(bool retain_graph) {
             v1i = edge.source;
         }
 
+        if (edge.source != edge_ref.source || edge.target != edge_ref.target)
+            ad_fail(
+                "ad_traverse(): internal error: edge a%i -> a%i was garbage "
+                "collected between enqueue and traverse steps!", v0i, v1i);
+
         Variable *v0 = state[v0i],
                  *v1 = state[v1i];
-
-        postprocess(v0i_prev, v0i);
 
         ad_trace("ad_traverse(): processing edge a%i -> a%i ..", v0i, v1i);
 
@@ -1443,6 +1441,7 @@ void ad_traverse(bool retain_graph) {
         if (unlikely(mode == ADMode::Reverse && rec && !v0->placeholder)) {
             ad_trace("ad_traverse(): postponing edge (must be handled outside of megakernel).");
             ls.postponed.push_back(edge_ref);
+            ad_inc_ref(v0i, v0);
             continue;
         } else if (unlikely(grad_size != 1 && v0->size != grad_size)) {
             if (grad_size == 0) {
@@ -1455,6 +1454,9 @@ void ad_traverse(bool retain_graph) {
                          v0i, v0->label ? v0->label : "", v0->size, grad_size);
             }
         }
+
+        postprocess(v0i_prev, v0i);
+        v0i_prev = v0i;
 
         if (unlikely(v0->custom_label)) {
             char tmp[256];
@@ -1485,8 +1487,6 @@ void ad_traverse(bool retain_graph) {
             if (!retain_graph)
                 edge.weight = Value();
         }
-
-        v0i_prev = v0i;
     }
 
     postprocess(v0i_prev, 0);
@@ -1504,11 +1504,18 @@ void ad_traverse(bool retain_graph) {
             todo.end());
 
         for (EdgeRef edge_ref : todo) {
-            if (state.variables.find(edge_ref.target) == state.variables.end())
+            auto it = state.variables.find(edge_ref.target);
+            if (unlikely(it == state.variables.end()))
                 continue;
-            ad_free_edges(edge_ref.target, state[edge_ref.target]);
+            if (unlikely(mode == ADMode::Reverse && rec && !it.value().placeholder))
+                continue;
+            ad_free_edges(edge_ref.target, &it.value());
         }
     }
+
+    for (int32_t index : ls.visited)
+        ad_dec_ref(index, state[index]);
+    ls.visited.clear();
 
     ad_log(Debug, "ad_traverse(): done.");
 
@@ -1628,7 +1635,14 @@ template <typename Value> bool ad_enqueue_postponed() {
         ad_trace("ad_enqueue_postponed(): enqueuing %zu edges.",
                  ls.postponed.size());
 
-        ls.todo.insert(ls.todo.end(), ls.postponed.begin(), ls.postponed.end());
+        std::lock_guard<std::mutex> guard(state.mutex);
+        for (EdgeRef e : ls.postponed) {
+            auto [it, success] = ls.visited.insert(e.target);
+            if (!success)
+                ad_dec_ref(e.target, state[e.target]);
+            ls.todo.push_back(e);
+        }
+
         ls.postponed.clear();
 
         return true;
