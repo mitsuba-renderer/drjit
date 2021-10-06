@@ -1551,7 +1551,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                 uint32_t index_new = detail::ad_new<Type>(
                     "copy", width(m_value), 1, indices, weights);
 
-                return DiffArray::create(index_new, Type(m_value));
+                return DiffArray::create(index_new, std::move(Type(m_value)));
             }
         }
 
