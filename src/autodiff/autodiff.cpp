@@ -1618,11 +1618,11 @@ template <typename Value> bool ad_enqueue_postponed() {
     if (is_jit_array_v<Value>) {
         LocalState &ls = local_state;
 
-        // Use this opportunity to also clear the implicit dependency tracker
-        ls.implicit.clear();
-
         if (jit_flag(JitFlag::Recording) || ls.postponed.empty())
             return false;
+
+        // Use this opportunity to also clear the implicit dependency tracker
+        ls.implicit.clear();
 
         if (ls.visited.empty() && ls.todo.empty()) {
             ls.mode = ADMode::Reverse;
