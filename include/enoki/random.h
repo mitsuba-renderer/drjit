@@ -259,6 +259,11 @@ template <typename T> struct PCG32 {
             return next_uint32_bounded(bound, mask);
     }
 
+#if defined(_MSC_VER)
+  #pragma warning(push)
+  #pragma warning(disable : 4127) /* warning C4127 conditional expression is constant */
+#endif
+
     /**
      * \brief Multi-step advance function (jump-ahead, jump-back)
      *
@@ -300,11 +305,6 @@ template <typename T> struct PCG32 {
 
     PCG32 &operator+=(const Int64 &delta) { *this = operator+(delta); return *this; }
     PCG32 &operator-=(const Int64 &delta) { *this = operator+(-delta); return *this; }
-
-#if defined(_MSC_VER)
-  #pragma warning(push)
-  #pragma warning(disable : 4127) /* warning C4127 conditional expression is constant */
-#endif
 
     /// Compute the distance between two PCG32 pseudorandom number generators
     Int64 operator-(const PCG32 &other) const {
