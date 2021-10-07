@@ -1779,30 +1779,30 @@ template <typename T> const char *graphviz(const T&) {
     return graphviz<T>();
 }
 
-template <typename...Ts> void traverse(bool retain_graph = false) {
+template <typename...Ts> void traverse(bool retain_graph = false, bool retain_grad = false) {
     using Type = leaf_array_t<Ts...>;
     if constexpr (is_diff_array_v<Type> && std::is_floating_point_v<scalar_t<Type>>)
-        Type::traverse_(retain_graph);
+        Type::traverse_(retain_graph, retain_grad);
 }
 
-template <typename T> void backward(T& value, bool retain_graph = false) {
+template <typename T> void backward(T& value, bool retain_graph = false, bool retain_grad = false) {
     if (!grad_enabled(value))
         enoki_raise("backward(): attempted to propagate derivatives through a "
                     "variable that is not registered with the AD backend. Did "
                     "you forget to call enable_grad()?");
     set_grad(value, 1.f);
     enqueue(ADMode::Reverse, value);
-    traverse<T>(retain_graph);
+    traverse<T>(retain_graph, retain_grad);
 }
 
-template <typename T> void forward(T& value, bool retain_graph = false) {
+template <typename T> void forward(T& value, bool retain_graph = false, bool retain_grad = false) {
     if (!grad_enabled(value))
         enoki_raise("forward(): attempted to propagate derivatives through a "
                     "variable that is not registered with the AD backend. Did "
                     "you forget to call enable_grad()?");
     set_grad(value, 1.f);
     enqueue(ADMode::Forward, value);
-    traverse<T>(retain_graph);
+    traverse<T>(retain_graph, retain_grad);
 }
 
 //! @}

@@ -1118,3 +1118,35 @@ def test60_implicit_dep_customop(m):
     assert v3[0] == 123*6
     ek.backward(v3)
     assert ek.grad(v0) == 123*3
+
+@pytest.mark.parametrize("retain_graph", [True, False])
+@pytest.mark.parametrize("retain_grad", [True, False])
+def test61_retain_graph_or_grad(m, retain_graph, retain_grad):
+    v0 = m.Float(2)
+    ek.enable_grad(v0)
+    v1 = v0 * 0.5
+    v2 = v0 + v1
+
+    for i in range(2):
+        ek.accum_grad(v0, 1 if i == 0 else 100)
+        ek.enqueue(ek.ADMode.Forward, v0)
+        ek.traverse(m.Float, retain_graph=retain_graph, retain_grad=retain_grad)
+
+    if retain_graph:
+        if retain_grad:
+            assert ek.grad(v0) == 101
+            assert ek.grad(v1) == 51
+            assert ek.grad(v2) == 153.5
+        else:
+            assert ek.grad(v0) == 0
+            assert ek.grad(v1) == 0
+            assert ek.grad(v2) == 151.5
+    else:
+        if retain_grad:
+            assert ek.grad(v0) == 101
+            assert ek.grad(v1) == 0.5
+            assert ek.grad(v2) == 1.5
+        else:
+            assert ek.grad(v0) == 100
+            assert ek.grad(v1) == 0
+            assert ek.grad(v2) == 1.5

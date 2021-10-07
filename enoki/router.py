@@ -2326,14 +2326,14 @@ def enqueue(mode, *args):
                 enqueue(mode, getattr(a, k))
 
 
-def traverse(t, retain_graph=False):
+def traverse(t, retain_graph=False, retain_grad=False):
     if not _ek.is_diff_array_v(t):
         raise Exception('traverse(): expected a differentiable array type!')
 
     t = _ek.leaf_array_t(t)
     if t.IsTensor:
         t = t.Array
-    t.traverse_(retain_graph)
+    t.traverse_(retain_graph, retain_grad)
 
 
 def backward(a, retain_graph=False):

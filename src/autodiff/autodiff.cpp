@@ -1340,12 +1340,16 @@ template <typename T> void ad_enqueue(ADMode mode, int32_t index) {
 // ==========================================================================
 
 template <typename Value>
-void ad_traverse(bool retain_graph) {
+void ad_traverse(bool retain_graph, bool retain_grad) {
     LocalState &ls = local_state;
 
     std::vector<EdgeRef> &todo_tls = ls.todo, todo;
-    if (todo_tls.empty())
+    if (todo_tls.empty()) {
+        for (int32_t index : ls.visited)
+            ad_dec_ref(index, state[index]);
+        ls.visited.clear();
         return;
+    }
 
     /// Are we currently recording a megakernel?
     bool rec = false;
@@ -1405,7 +1409,7 @@ void ad_traverse(bool retain_graph) {
         }
 
         // Aggressively clear gradients at intermediate nodes
-        if (prev->ref_count_grad == 0) {
+        if (!retain_grad && prev->ref_count_grad == 0) {
             ad_trace("ad_traverse(): clearing gradient at intermediate variable a%i", prev_i);
             prev->grad = Value();
         }
@@ -1860,7 +1864,7 @@ template ENOKI_EXPORT void ad_accum_grad<Value>(int32_t, const Value &, bool);
 template ENOKI_EXPORT void ad_set_label<Value>(int32_t, const char *);
 template ENOKI_EXPORT const char *ad_label<Value>(int32_t);
 template ENOKI_EXPORT void ad_enqueue<Value>(ADMode, int32_t);
-template ENOKI_EXPORT void ad_traverse<Value>(bool);
+template ENOKI_EXPORT void ad_traverse<Value>(bool, bool);
 template ENOKI_EXPORT size_t ad_implicit<Value>();
 template ENOKI_EXPORT void ad_extract_implicit<Value>(size_t, int32_t*);
 template ENOKI_EXPORT void ad_enqueue_implicit<Value>(size_t);
