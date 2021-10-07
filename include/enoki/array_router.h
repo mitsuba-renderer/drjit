@@ -1495,32 +1495,6 @@ template <typename T> bool grad_enabled(const T &value) {
     }
 }
 
-template <typename T> bool grad_suspended(const T &value) {
-    if constexpr (is_diff_array_v<T>) {
-        if constexpr (array_depth_v<T> > 1) {
-            bool result = false;
-            for (size_t i = 0; i < value.size(); ++i)
-                result |= grad_suspended(value.entry(i));
-            return result;
-        } else {
-            return value.derived().index_ad() < 0;
-        }
-    } else if constexpr (is_enoki_struct_v<T>) {
-        bool result = false;
-
-        struct_support_t<T>::apply_1(
-            value,
-            [&](auto const &x) ENOKI_INLINE_LAMBDA {
-                result |= grad_suspended(x);
-            });
-
-        return result;
-    } else {
-        ENOKI_MARK_USED(value);
-        return false;
-    }
-}
-
 template <typename T> T replace_grad(const T &a, const T &b) {
     static_assert(is_diff_array_v<T>, "Type does not support gradients!");
 
@@ -1563,26 +1537,6 @@ template <typename T> void set_grad_enabled(T &value, bool state) {
     }
 }
 
-template <typename T> void set_grad_suspended(T &value, bool state) {
-    ENOKI_MARK_USED(value);
-    ENOKI_MARK_USED(state);
-
-    if constexpr (is_diff_array_v<T>) {
-        if constexpr (array_depth_v<T> > 1) {
-            for (size_t i = 0; i < value.size(); ++i)
-                set_grad_suspended(value.entry(i), state);
-        } else {
-            value.derived().set_grad_suspended_(state);
-        }
-    } else if constexpr (is_enoki_struct_v<T>) {
-        struct_support_t<T>::apply_1(
-            value,
-            [state](auto &x) ENOKI_INLINE_LAMBDA {
-                set_grad_suspended(x, state);
-            });
-    }
-}
-
 template <typename... Ts, enable_if_t<(sizeof...(Ts) > 1)> = 0>
 bool grad_enabled(const Ts& ... ts) {
     return (grad_enabled(ts) || ...);
@@ -1594,14 +1548,6 @@ template <typename... Ts> void enable_grad(Ts&... ts) {
 
 template <typename... Ts> void disable_grad(Ts&... ts) {
     (set_grad_enabled(ts, false), ...);
-}
-
-template <typename... Ts> void suspend_grad(Ts&... ts) {
-    (set_grad_suspended(ts, true), ...);
-}
-
-template <typename... Ts> void resume_grad(Ts&... ts) {
-    (set_grad_suspended(ts, false), ...);
 }
 
 template <bool UnderlyingType, typename T>

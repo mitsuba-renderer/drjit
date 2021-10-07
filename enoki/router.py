@@ -2256,46 +2256,6 @@ def disable_grad(*args):
         set_grad_enabled(v, False)
 
 
-def grad_suspended(a):
-    result = False
-    if _ek.is_diff_array_v(a):
-        result = a.grad_suspended_()
-    elif _ek.is_enoki_struct_v(a):
-        for k in type(a).ENOKI_STRUCT.keys():
-            result |= grad_suspended(getattr(a, k))
-    elif isinstance(a, tuple) or isinstance(a, list):
-        for v in a:
-            result |= grad_suspended(v)
-    elif isinstance(a, _Mapping):
-        for k, v in a.items():
-            result |= grad_suspended(v)
-    return result
-
-
-def set_grad_suspended(a, value):
-    if _ek.is_diff_array_v(a) and a.IsFloat:
-        a.set_grad_suspended_(value)
-    elif _ek.is_enoki_struct_v(a):
-        for k in type(a).ENOKI_STRUCT.keys():
-           set_grad_suspended(getattr(a, k), value)
-    elif isinstance(a, tuple) or isinstance(a, list):
-        for v in a:
-            set_grad_suspended(v, value)
-    elif isinstance(a, _Mapping):
-        for k, v in a.items():
-            set_grad_suspended(v, value)
-
-
-def suspend_grad(*args):
-    for v in args:
-        set_grad_suspended(v, True)
-
-
-def resume_grad(*args):
-    for v in args:
-        set_grad_suspended(v, False)
-
-
 def replace_grad(a, b):
     if type(a) is not type(b) or not _ek.is_diff_array_v(a):
         raise Exception("replace_grad(): unsupported input types!")
@@ -2570,6 +2530,27 @@ def printf_async(mask, fmt, *args):
         indices.append(a.index())
     _ek.detail.printf_async(mask.index(), fmt, indices)
 
+
+# -------------------------------------------------------------------
+#                        Enabling/disabling AD
+# -------------------------------------------------------------------
+
+class ADContextManager:
+    def __init__(self, value):
+        self.backup = _ek.ad_enabled()
+        self.value = value
+
+    def __enter__(self):
+        _ek.ad_set_enabled(self.value)
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        _ek.ad_set_enabled(self.backup)
+
+def suspend_grad():
+    return ADContextManager(False)
+
+def resume_grad():
+    return ADContextManager(True)
 
 # -------------------------------------------------------------------
 #             Automatic differentation of custom fuctions

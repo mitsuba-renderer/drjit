@@ -111,5 +111,5 @@ private:
     py::list m_funcs, m_state_py;
     py::object m_process_state;
     ek::ek_vector<uint32_t> m_indices_py;
-    ek::ek_vector<int32_t> m_indices_py_ad;
+    ek::ek_vector<uint32_t> m_indices_py_ad;
 };

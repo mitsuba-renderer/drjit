@@ -1339,30 +1339,6 @@ def set_grad_enabled_(a, value):
             a.entry_ref_(i).set_grad_enabled_(value)
 
 
-def grad_suspended_(a):
-    if not a.IsDiff:
-        raise Exception("Expected a differentiable array type!")
-
-    if a.Depth > 1:
-        suspended = False
-        for i in range(len(a)):
-            suspended |= a[i].grad_suspended_()
-        return suspended
-    else:
-        return a.index_ad() < 0
-
-
-def set_grad_suspended_(a, value):
-    if not a.IsDiff:
-        raise Exception("Expected a differentiable array type!")
-    if a.IsTensor:
-        a.array.set_grad_suspended_(value)
-    else:
-        for i in range(len(a)):
-            a.entry_ref_(i).set_grad_suspended_(value)
-    return a
-
-
 def set_grad_(a, grad):
     if not a.IsDiff:
         raise Exception("Expected a differentiable array type!")
