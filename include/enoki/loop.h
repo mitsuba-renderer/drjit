@@ -236,6 +236,7 @@ protected:
                 } else {
                     jit_log(::LogLevel::InfoSym,
                             "Loop(\"%s\"): --------- done recording loop ----------", m_name.get());
+                    m_state = 4;
 
                     for (size_t i = 0; i < m_indices_prev.size(); ++i)
                         jit_var_dec_ref_ext(m_indices_prev[i]);
@@ -268,7 +269,9 @@ protected:
                 break;
 
             default:
-                jit_raise("Loop(): invalid state!");
+                jit_raise(m_state == 4 ? "Loop(): attempted to reuse loop "
+                                         "object, which is not permitted."
+                                       : "Loop(): invalid state!");
         }
 
         return false;
@@ -277,6 +280,10 @@ protected:
     /// Unroll a loop using wavefronts
     bool cond_wavefront(const Mask &cond_) {
         Mask cond = cond_;
+
+        if (m_state)
+            jit_raise("Loop(): attempted to reuse loop object, which is not "
+                      "permitted.");
 
         // If this is not the first iteration
         if (m_cond.index()) {
@@ -365,6 +372,7 @@ protected:
             m_jit_state.set_mask(m_cond.index());
             return true;
         } else {
+            m_state = 4;
             return false;
         }
     }
