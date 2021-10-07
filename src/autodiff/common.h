@@ -120,8 +120,8 @@ private:
     char *m_start, *m_cur, *m_end;
 };
 
-struct Int32Hasher {
-    size_t operator()(int32_t v) const {
+struct UInt32Hasher {
+    size_t operator()(uint32_t v) const {
         // fmix32 from MurmurHash by Austin Appleby (public domain)
         v ^= v >> 16;
         v *= 0x85ebca6b;
@@ -157,4 +157,5 @@ extern void ad_log(LogLevel level, const char *fmt, ...);
 
 namespace enoki {
     extern const char *ad_prefix();
+    extern bool ad_enabled() noexcept;
 }

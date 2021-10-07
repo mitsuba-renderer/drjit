@@ -101,7 +101,7 @@ protected:
      * operation has a differentiable dependence on an input that is not an
      * input argument (e.g. a private instance variable).
      */
-    void add_input_index(int32_t index) {
+    void add_input_index(uint32_t index) {
         if (index <= 0)
             return;
         detail::ad_inc_ref<Type>(index);
@@ -131,7 +131,7 @@ protected:
      * operation has a differentiable dependence on an output that is not an
      * return value of the operation (e.g. a private instance variable).
      */
-    void add_output_index(int32_t index) {
+    void add_output_index(uint32_t index) {
         if (index <= 0)
             return;
         detail::ad_inc_ref<Type>(index);
@@ -165,7 +165,7 @@ protected:
 protected:
     ek_unique_ptr<Inputs> m_inputs;
     Output m_output;
-    ek_vector<int32_t> m_implicit_in, m_implicit_out;
+    ek_vector<uint32_t> m_implicit_in, m_implicit_out;
 };
 
 NAMESPACE_BEGIN(detail)
@@ -188,7 +188,7 @@ void clear_diff_vars(T &value) {
 
 // Collect indices of variables that are attached to the AD graph
 template <typename T>
-void diff_vars(const T &value, size_t &counter, int32_t *out) {
+void diff_vars(const T &value, size_t &counter, uint32_t *out) {
     if constexpr (is_array_v<T>) {
         if constexpr (array_depth_v<T> == 1) {
             if constexpr (is_diff_array_v<T>) {
@@ -259,8 +259,8 @@ template <typename Custom, typename... Input> auto custom(const Input&... input)
     (detail::diff_vars(input, diff_vars_in_ctr, nullptr), ...);
 
     if (diff_vars_in_ctr > 0 || custom->m_implicit_in.size() > 0) {
-        int32_t in_var  = detail::ad_new<Type>(nullptr, 0),
-                out_var = detail::ad_new<Type>(nullptr, 0);
+        uint32_t in_var  = detail::ad_new<Type>(nullptr, 0),
+                 out_var = detail::ad_new<Type>(nullptr, 0);
 
         /* Gradients are enabled for at least one input, or the function
            accesses an instance variable with enabled gradients */
@@ -280,8 +280,8 @@ template <typename Custom, typename... Input> auto custom(const Input&... input)
         if (diff_vars_out_ctr + custom->m_implicit_out.size() == 0)
             return output; // Not relevant for AD after all..
 
-        ek_unique_ptr<int32_t[]> diff_vars_in(new int32_t[diff_vars_in_ctr + custom->m_implicit_in.size()]);
-        ek_unique_ptr<int32_t[]> diff_vars_out(new int32_t[diff_vars_out_ctr + custom->m_implicit_out.size()]);
+        ek_unique_ptr<uint32_t[]> diff_vars_in(new uint32_t[diff_vars_in_ctr + custom->m_implicit_in.size()]);
+        ek_unique_ptr<uint32_t[]> diff_vars_out(new uint32_t[diff_vars_out_ctr + custom->m_implicit_out.size()]);
 
         diff_vars_out_ctr = 0;
         diff_vars_in_ctr = 0;

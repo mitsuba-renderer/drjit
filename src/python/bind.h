@@ -444,7 +444,6 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
             cls.def("set_grad_", [](Array &a, ek::detached_t<Array> &value) { a.set_grad_(value); });
             cls.def("accum_grad_", [](Array &a, ek::detached_t<Array> &value) { a.accum_grad_(value); });
             cls.def("set_grad_enabled_", &Array::set_grad_enabled_);
-            cls.def("set_grad_suspended_", &Array::set_grad_suspended_);
             cls.def("enqueue_", &Array::enqueue_);
             cls.def("graphviz_", &Array::graphviz_);
             cls.def_static("traverse_", &Array::traverse_, py::call_guard<py::gil_scoped_release>());

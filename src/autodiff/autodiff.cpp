@@ -10,7 +10,7 @@
  *
  * Forward and reverse-mode traversal build on three main data structures:
  *
- * - 'state.variable': A hash table mapping from variable IDs (int32_t) to
+ * - 'state.variable': A hash table mapping from variable IDs (uint32_t) to
  *   'Variable' instances, which mainly stores the gradient associated with
  *   each variable, as well as links into the 'state.edges' list for
  *   connectivity.
@@ -94,9 +94,9 @@ using Index = uint32_array_t<Value>;
 struct Variable;
 struct Special;
 
-static void ad_free(int32_t index, Variable *v);
+static void ad_free(uint32_t index, Variable *v);
 template <typename Value, typename Mask, typename Index>
-int32_t ad_new_gather_impl(const char *label, size_t size, int32_t src_index,
+uint32_t ad_new_gather_impl(const char *label, size_t size, uint32_t src_index,
                            const Index &offset, const Mask &mask, bool permute);
 
 template <typename T> bool is_valid(const T &value) {
@@ -127,10 +127,10 @@ template <typename T> bool is_valid(const T &value) {
  */
 struct Edge {
     /// Variable index of source operand
-    int32_t source;
+    uint32_t source;
 
     /// Source variable index
-    int32_t target;
+    uint32_t target;
 
     /// Links to the next forward edge
     uint32_t next_fwd;
@@ -349,8 +349,8 @@ struct Variable {
 
 /// Records the (global) state of the AD graph
 struct State {
-    using VariableMap = tsl::robin_map<int32_t, Variable, Int32Hasher,
-                                       std::equal_to<int32_t>>;
+    using VariableMap = tsl::robin_map<uint32_t, Variable, UInt32Hasher,
+                                       std::equal_to<uint32_t>>;
     using EdgeVector  = std::vector<Edge>;
 
     /// std::mutex protecting the state data structure
@@ -366,7 +366,7 @@ struct State {
     std::vector<uint32_t> unused_edges;
 
     /// Counter for variable indices
-    int32_t variable_index = 1;
+    uint32_t variable_index = 1;
 
     State() : edges(1) { }
 
@@ -393,9 +393,9 @@ struct State {
                    "remain in use)!", edges_used);
     }
 
-    Variable *operator[](int32_t index) {
+    Variable *operator[](uint32_t index) {
         auto it = variables.find(index);
-        if (unlikely(index <= 0 || it == variables.end()))
+        if (unlikely(index == 0 || it == variables.end()))
             ad_fail("referenced an unknown variable a%i!", index);
         return &it.value();
     }
@@ -403,15 +403,15 @@ struct State {
 
 struct EdgeRef {
     uint32_t id;
-    int32_t source;
-    int32_t target;
+    uint32_t source;
+    uint32_t target;
 
     EdgeRef() : id(0), source(0), target(0) { }
     EdgeRef(uint32_t id, uint32_t source, uint32_t target)
     : id(id), source(source), target(target) { }
 };
 
-using VisitedSet = tsl::robin_set<int32_t, Int32Hasher, std::equal_to<int32_t>>;
+using VisitedSet = tsl::robin_set<uint32_t, UInt32Hasher, std::equal_to<uint32_t>>;
 
 // Stores per-thread state
 struct LocalState {
@@ -475,13 +475,13 @@ void Edge::reset() {
 // Reference counting and variable cleanup
 // ==========================================================================
 
-static void ad_inc_ref(int32_t index, Variable *v) noexcept (true) {
+static void ad_inc_ref(uint32_t index, Variable *v) noexcept (true) {
     ENOKI_MARK_USED(index);
     ad_trace("ad_inc_ref(a%i): %u", index, v->ref_count + 1);
     v->ref_count++;
 }
 
-static bool ad_dec_ref(int32_t index, Variable *v) noexcept (true) {
+static bool ad_dec_ref(uint32_t index, Variable *v) noexcept (true) {
     ENOKI_MARK_USED(index);
     ad_trace("ad_dec_ref(a%i): %u", index, v->ref_count - 1);
 
@@ -497,24 +497,22 @@ static bool ad_dec_ref(int32_t index, Variable *v) noexcept (true) {
     }
 }
 
-template <typename T> void ad_inc_ref_impl(int32_t index) noexcept(true) {
+template <typename T> void ad_inc_ref_impl(uint32_t index) noexcept(true) {
     if (index == 0)
         return;
-    index = std::abs(index);
     std::lock_guard<std::mutex> guard(state.mutex);
     ad_inc_ref(index, state[index]);
 }
 
-template <typename T> void ad_dec_ref_impl(int32_t index) noexcept(true) {
+template <typename T> void ad_dec_ref_impl(uint32_t index) noexcept(true) {
     if (index == 0)
         return;
-    index = std::abs(index);
     std::lock_guard<std::mutex> guard(state.mutex);
     ad_dec_ref(index, state[index]);
 }
 
 /// Clear backward edges of the given variable and decrease int. ref. counts
-static void ad_free_edges(int32_t index, Variable *v) {
+static void ad_free_edges(uint32_t index, Variable *v) {
     ENOKI_MARK_USED(index);
 
     uint32_t edge_id = v->next_rev;
@@ -527,7 +525,7 @@ static void ad_free_edges(int32_t index, Variable *v) {
         ad_trace("ad_free_edges(): freeing edge a%i -> a%i", edge.source,
                  edge.target);
 
-        int32_t source = edge.source;
+        uint32_t source = edge.source;
         uint32_t next_rev = edge.next_rev,
                  next_fwd = edge.next_fwd;
 
@@ -564,7 +562,7 @@ static void ad_free_edges(int32_t index, Variable *v) {
     }
 }
 
-static void ad_free(int32_t index, Variable *v) {
+static void ad_free(uint32_t index, Variable *v) {
     ad_trace("ad_free(a%i)", index);
     if (v->free_label)
         free(v->label);
@@ -578,12 +576,12 @@ static void ad_free(int32_t index, Variable *v) {
 // ==========================================================================
 
 /// Allocate a new variable
-static std::pair<int32_t, Variable *> ad_var_new(const char *label,
+static std::pair<uint32_t, Variable *> ad_var_new(const char *label,
                                                  size_t size) {
     while (true) {
-        int32_t index = state.variable_index++;
+        uint32_t index = state.variable_index++;
 
-        if (unlikely(index <= 0)) { // overflow
+        if (unlikely(index == 0)) { // overflow
             state.variable_index = 1;
             index = state.variable_index++;
         }
@@ -646,8 +644,8 @@ struct ReleaseOperandHelper {
 };
 
 template <typename T>
-int32_t ad_new(const char *label, size_t size, uint32_t op_count,
-               int32_t *op, T *weights) {
+uint32_t ad_new(const char *label, size_t size, uint32_t op_count,
+               uint32_t *op, T *weights) {
     std::lock_guard<std::mutex> guard(state.mutex);
 
     bool rec = false;
@@ -657,7 +655,7 @@ int32_t ad_new(const char *label, size_t size, uint32_t op_count,
     ReleaseOperandHelper helper;
     if (unlikely(rec)) {
         for (uint32_t i = 0; i < op_count; ++i) {
-            if (op[i] <= 0)
+            if (op[i] == 0)
                 continue;
 
             uint32_t index = op[i];
@@ -708,7 +706,7 @@ int32_t ad_new(const char *label, size_t size, uint32_t op_count,
 
     uint32_t edge_index = 0;
     for (uint32_t i = 0; i < op_count; ++i) {
-        if (op[i] <= 0)
+        if (op[i] == 0)
             continue;
 
         bool weight_is_zero = false;
@@ -838,12 +836,12 @@ template <typename Value> struct SpecialCallback : Special {
 };
 
 template <typename Value, typename Mask>
-int32_t ad_new_select(const char *label, size_t size, const Mask &mask,
-                      int32_t t_index, int32_t f_index) {
+uint32_t ad_new_select(const char *label, size_t size, const Mask &mask,
+                      uint32_t t_index, uint32_t f_index) {
     std::lock_guard<std::mutex> guard(state.mutex);
     if constexpr (is_jit_array_v<Mask>) {
         if (jit_flag(JitFlag::ADOptimize) && mask.is_literal()) {
-            int32_t result = mask[0] ? t_index : f_index;
+            uint32_t result = mask[0] ? t_index : f_index;
             if (result)
                 ad_inc_ref(result, state[result]);
             ad_log(Debug, "ad_new_select(a%i <- a%i, a%i): simplified", result, t_index, f_index);
@@ -862,12 +860,12 @@ int32_t ad_new_select(const char *label, size_t size, const Mask &mask,
     if constexpr (is_jit_array_v<Value>)
         rec = jit_flag(JitFlag::Recording);
 
-    int32_t op[2] = { t_index, f_index };
+    uint32_t op[2] = { t_index, f_index };
     ReleaseOperandHelper helper;
 
     if (rec) {
         for (uint32_t i = 0; i < 2; ++i) {
-            if (op[i] <= 0)
+            if (op[i] == 0)
                 continue;
 
             uint32_t index = op[i];
@@ -903,7 +901,7 @@ int32_t ad_new_select(const char *label, size_t size, const Mask &mask,
     ad_log(Debug, "ad_new_select(a%i <- a%i, a%i)", index, t_index, f_index);
     uint32_t edge_index = 0;
     for (uint32_t i = 0; i < 2; ++i) {
-        if (op[i] <= 0)
+        if (op[i] == 0)
             continue;
 
         uint32_t index2 = op[i];
@@ -968,7 +966,7 @@ template <typename Value> struct GatherEdge : Special {
 };
 
 template <typename Value, typename Mask, typename Index>
-int32_t ad_new_gather_impl(const char *label, size_t size, int32_t src_index,
+uint32_t ad_new_gather_impl(const char *label, size_t size, uint32_t src_index,
                            const Index &offset, const Mask &mask_, bool permute) {
     Mask mask(mask_);
 
@@ -1018,7 +1016,7 @@ int32_t ad_new_gather_impl(const char *label, size_t size, int32_t src_index,
 }
 
 template <typename Value, typename Mask, typename Index>
-int32_t ad_new_gather(const char *label, size_t size, int32_t src_index,
+uint32_t ad_new_gather(const char *label, size_t size, uint32_t src_index,
                       const Index &offset, const Mask &mask, bool permute) {
     std::lock_guard<std::mutex> guard(state.mutex);
     return ad_new_gather_impl<Value>(label, size, src_index, offset, mask, permute);
@@ -1057,8 +1055,8 @@ template <typename Value> struct ScatterEdge : Special {
 };
 
 template <typename Value, typename Mask, typename Index>
-int32_t ad_new_scatter(const char *label, size_t size, ReduceOp op,
-                       int32_t src_index, int32_t dst_index, const Index &offset,
+uint32_t ad_new_scatter(const char *label, size_t size, ReduceOp op,
+                       uint32_t src_index, uint32_t dst_index, const Index &offset,
                        const Mask &mask_, bool permute) {
 
     Mask mask(mask_);
@@ -1088,7 +1086,7 @@ int32_t ad_new_scatter(const char *label, size_t size, ReduceOp op,
 
         uint32_t edge_index = 0;
 
-        if (src_index > 0) {
+        if (src_index != 0) {
             Variable *var2 = state[src_index];
             uint32_t edge_index_new = ad_edge_new();
             Edge &edge = state.edges[edge_index_new];
@@ -1102,7 +1100,7 @@ int32_t ad_new_scatter(const char *label, size_t size, ReduceOp op,
             edge_index = edge_index_new;
         }
 
-        if (dst_index > 0) {
+        if (dst_index != 0) {
             Variable *var2 = state[dst_index];
 
             uint32_t edge_index_new = ad_edge_new();
@@ -1142,8 +1140,7 @@ int32_t ad_new_scatter(const char *label, size_t size, ReduceOp op,
 // Interface for querying and modifying variables
 // ==========================================================================
 
-template <typename T> T ad_grad(int32_t index, bool fail_if_missing) {
-    index = std::abs(index);
+template <typename T> T ad_grad(uint32_t index, bool fail_if_missing) {
     if (unlikely(index == 0))
         return T(0);
 
@@ -1169,8 +1166,8 @@ template <typename T> T ad_grad(int32_t index, bool fail_if_missing) {
 }
 
 template <typename T>
-void ad_set_grad(int32_t index, const T &value, bool fail_if_missing) {
-    if (unlikely(index <= 0))
+void ad_set_grad(uint32_t index, const T &value, bool fail_if_missing) {
+    if (unlikely(index == 0))
         return;
 
     std::lock_guard<std::mutex> guard(state.mutex);
@@ -1197,8 +1194,8 @@ void ad_set_grad(int32_t index, const T &value, bool fail_if_missing) {
 }
 
 template <typename T>
-void ad_accum_grad(int32_t index, const T &value, bool fail_if_missing) {
-    if (unlikely(index <= 0))
+void ad_accum_grad(uint32_t index, const T &value, bool fail_if_missing) {
+    if (unlikely(index == 0))
         return;
 
     std::lock_guard<std::mutex> guard(state.mutex);
@@ -1221,10 +1218,9 @@ void ad_accum_grad(int32_t index, const T &value, bool fail_if_missing) {
     v.accum(value, (uint32_t) size_in);
 }
 
-template <typename T> void ad_set_label(int32_t index, const char *label) {
+template <typename T> void ad_set_label(uint32_t index, const char *label) {
     if (index == 0)
         return;
-    index = std::abs(index);
     std::lock_guard<std::mutex> guard(state.mutex);
     ad_log(Debug, "ad_set_label(a%i, \"%s\")", index, label ? label : "(null)");
     Variable *v = state[index];
@@ -1235,16 +1231,15 @@ template <typename T> void ad_set_label(int32_t index, const char *label) {
     v->custom_label = true;
 }
 
-template <typename T> const char *ad_label(int32_t index) {
+template <typename T> const char *ad_label(uint32_t index) {
     if (index == 0)
         return nullptr;
-    index = std::abs(index);
     std::lock_guard<std::mutex> guard(state.mutex);
     return state[index]->label;
 }
 
 template <typename T>
-void ad_add_edge(int32_t source_idx, int32_t target_idx,
+void ad_add_edge(uint32_t source_idx, uint32_t target_idx,
                  DiffCallback *callback) {
     if (source_idx == 0 || target_idx == 0)
         return;
@@ -1274,7 +1269,7 @@ void ad_add_edge(int32_t source_idx, int32_t target_idx,
 // ==========================================================================
 
 /// Forward-mode DFS starting from 'index'
-static void ad_dfs_fwd(VisitedSet &visited, std::vector<EdgeRef> &todo, int32_t index) {
+static void ad_dfs_fwd(VisitedSet &visited, std::vector<EdgeRef> &todo, uint32_t index) {
     auto [it, success] = visited.insert(index);
     if (!success)
         return;
@@ -1293,7 +1288,7 @@ static void ad_dfs_fwd(VisitedSet &visited, std::vector<EdgeRef> &todo, int32_t 
 }
 
 /// Reverse-mode DFS starting from 'index'
-static void ad_dfs_rev(VisitedSet &visited, std::vector<EdgeRef> &todo, int32_t index) {
+static void ad_dfs_rev(VisitedSet &visited, std::vector<EdgeRef> &todo, uint32_t index) {
     auto [it, success] = visited.insert(index);
     if (!success)
         return;
@@ -1311,8 +1306,8 @@ static void ad_dfs_rev(VisitedSet &visited, std::vector<EdgeRef> &todo, int32_t 
     }
 }
 
-template <typename T> void ad_enqueue(ADMode mode, int32_t index) {
-    if (index <= 0)
+template <typename T> void ad_enqueue(ADMode mode, uint32_t index) {
+    if (index == 0)
         return;
 
     ad_trace("ad_enqueue_node(a%i, mode=%s)", index,
@@ -1345,7 +1340,7 @@ void ad_traverse(bool retain_graph, bool retain_grad) {
 
     std::vector<EdgeRef> &todo_tls = ls.todo, todo;
     if (todo_tls.empty()) {
-        for (int32_t index : ls.visited)
+        for (uint32_t index : ls.visited)
             ad_dec_ref(index, state[index]);
         ls.visited.clear();
         return;
@@ -1517,7 +1512,7 @@ void ad_traverse(bool retain_graph, bool retain_grad) {
         }
     }
 
-    for (int32_t index : ls.visited)
+    for (uint32_t index : ls.visited)
         ad_dec_ref(index, state[index]);
     ls.visited.clear();
 
@@ -1544,7 +1539,7 @@ template <typename Value> size_t ad_implicit() {
     return local_state.implicit.size();
 }
 
-template <typename Value> void ad_extract_implicit(size_t snapshot, int32_t *out) {
+template <typename Value> void ad_extract_implicit(size_t snapshot, uint32_t *out) {
     std::vector<EdgeRef> &implicit = local_state.implicit;
     size_t size = implicit.size();
 
@@ -1564,7 +1559,7 @@ template <typename Value> void ad_extract_implicit(size_t snapshot, int32_t *out
     }
 
     std::sort(out, out + count);
-    int32_t *ptr = std::unique(out, out + count);
+    uint32_t *ptr = std::unique(out, out + count);
     while (ptr != out + count)
         *ptr++ = 0;
 }
@@ -1662,13 +1657,13 @@ template <typename Value> bool ad_enqueue_postponed() {
 extern void RENAME(ad_whos)() {
     std::lock_guard<std::mutex> guard(state.mutex);
 
-    std::vector<int32_t> indices;
+    std::vector<uint32_t> indices;
     indices.reserve(state.variables.size());
     for (auto &kv: state.variables)
         indices.push_back(kv.first);
     std::sort(indices.begin(), indices.end());
 
-    for (int32_t id : indices) {
+    for (uint32_t id : indices) {
         const Variable *v = state[id];
         buffer.fmt("  %-7i ", id);
         size_t sz = buffer.fmt("%u", v->ref_count);
@@ -1680,7 +1675,7 @@ extern void RENAME(ad_whos)() {
 template <typename Value> const char *ad_graphviz() {
     std::lock_guard<std::mutex> guard(state.mutex);
 
-    std::vector<int32_t> indices;
+    std::vector<uint32_t> indices;
     indices.reserve(state.variables.size());
     for (const auto& it : state.variables)
         indices.push_back(it.first);
@@ -1695,7 +1690,7 @@ template <typename Value> const char *ad_graphviz() {
 
     size_t current_hash = 0, current_depth = 1;
 
-    for (int32_t index : indices) {
+    for (uint32_t index : indices) {
         const Variable *v = state[index];
         const char *label = v->label;
         const char *label_without_prefix = label;
@@ -1815,7 +1810,7 @@ template <typename Value> const char *ad_graphviz() {
         buffer.put("}\n");
     }
 
-    for (int32_t index : indices) {
+    for (uint32_t index : indices) {
         const Variable *v = state[index];
 
         uint32_t edge = v->next_rev, edge_count = 0;
@@ -1854,31 +1849,31 @@ template <typename Value> const char *ad_graphviz() {
 // Export declarations
 // ==========================================================================
 
-template ENOKI_EXPORT void ad_inc_ref_impl<Value>(int32_t) noexcept;
-template ENOKI_EXPORT void ad_dec_ref_impl<Value>(int32_t) noexcept;
-template ENOKI_EXPORT int32_t ad_new<Value>(const char *, size_t, uint32_t,
-                                            int32_t *, Value *);
-template ENOKI_EXPORT Value ad_grad<Value>(int32_t, bool);
-template ENOKI_EXPORT void ad_set_grad<Value>(int32_t, const Value &, bool);
-template ENOKI_EXPORT void ad_accum_grad<Value>(int32_t, const Value &, bool);
-template ENOKI_EXPORT void ad_set_label<Value>(int32_t, const char *);
-template ENOKI_EXPORT const char *ad_label<Value>(int32_t);
-template ENOKI_EXPORT void ad_enqueue<Value>(ADMode, int32_t);
+template ENOKI_EXPORT void ad_inc_ref_impl<Value>(uint32_t) noexcept;
+template ENOKI_EXPORT void ad_dec_ref_impl<Value>(uint32_t) noexcept;
+template ENOKI_EXPORT uint32_t ad_new<Value>(const char *, size_t, uint32_t,
+                                            uint32_t *, Value *);
+template ENOKI_EXPORT Value ad_grad<Value>(uint32_t, bool);
+template ENOKI_EXPORT void ad_set_grad<Value>(uint32_t, const Value &, bool);
+template ENOKI_EXPORT void ad_accum_grad<Value>(uint32_t, const Value &, bool);
+template ENOKI_EXPORT void ad_set_label<Value>(uint32_t, const char *);
+template ENOKI_EXPORT const char *ad_label<Value>(uint32_t);
+template ENOKI_EXPORT void ad_enqueue<Value>(ADMode, uint32_t);
 template ENOKI_EXPORT void ad_traverse<Value>(bool, bool);
 template ENOKI_EXPORT size_t ad_implicit<Value>();
-template ENOKI_EXPORT void ad_extract_implicit<Value>(size_t, int32_t*);
+template ENOKI_EXPORT void ad_extract_implicit<Value>(size_t, uint32_t*);
 template ENOKI_EXPORT void ad_enqueue_implicit<Value>(size_t);
 template ENOKI_EXPORT void ad_dequeue_implicit<Value>(size_t);
 template ENOKI_EXPORT bool ad_enqueue_postponed<Value>();
 template ENOKI_EXPORT const char *ad_graphviz<Value>();
-template ENOKI_EXPORT int32_t ad_new_select<Value, Mask>(
-    const char *, size_t, const Mask &, int32_t, int32_t);
-template ENOKI_EXPORT int32_t ad_new_gather<Value, Mask, Index>(
-    const char *, size_t, int32_t, const Index &, const Mask &, bool);
-template ENOKI_EXPORT int32_t
-ad_new_scatter<Value, Mask, Index>(const char *, size_t, ReduceOp, int32_t,
-                                   int32_t, const Index &, const Mask &, bool);
-template ENOKI_EXPORT void ad_add_edge<Value>(int32_t, int32_t,
+template ENOKI_EXPORT uint32_t ad_new_select<Value, Mask>(
+    const char *, size_t, const Mask &, uint32_t, uint32_t);
+template ENOKI_EXPORT uint32_t ad_new_gather<Value, Mask, Index>(
+    const char *, size_t, uint32_t, const Index &, const Mask &, bool);
+template ENOKI_EXPORT uint32_t
+ad_new_scatter<Value, Mask, Index>(const char *, size_t, ReduceOp, uint32_t,
+                                   uint32_t, const Index &, const Mask &, bool);
+template ENOKI_EXPORT void ad_add_edge<Value>(uint32_t, uint32_t,
                                               DiffCallback *);
 NAMESPACE_END(detail)
 

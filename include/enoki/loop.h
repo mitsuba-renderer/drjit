@@ -26,7 +26,7 @@ template <typename Value> size_t ad_postponed();
 template <typename Value> bool ad_enqueue_postponed();
 template <typename Value> void ad_traverse(bool, bool);
 template <typename Value, typename Mask>
-int32_t ad_new_select(const char *, size_t, const Mask &, int32_t, int32_t);
+uint32_t ad_new_select(const char *, size_t, const Mask &, uint32_t, uint32_t);
 NAMESPACE_END(detail)
 
 template <typename Mask, typename SFINAE = int> struct Loop;
@@ -93,7 +93,7 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
 
         if constexpr (IsDiff) {
             for (size_t i = 0; i < m_indices_ad_prev.size(); ++i) {
-                int32_t index = m_indices_ad_prev[i];
+                uint32_t index = m_indices_ad_prev[i];
 
                 if (m_ad_float_precision == 32)
                     detail::ad_dec_ref<Float32>(index);
@@ -307,8 +307,8 @@ protected:
                 for (uint32_t i = 0; i < m_indices_ad.size(); ++i) {
                     if (!m_indices_ad[i])
                         continue;
-                    int32_t i1 = *m_indices_ad[i], i2 = m_indices_ad_prev[i],
-                            index_new = 0;
+                    uint32_t i1 = *m_indices_ad[i], i2 = m_indices_ad_prev[i],
+                             index_new = 0;
 
                     if (m_ad_float_precision == 32) {
                         if (i1 > 0 || i2 > 0)
@@ -357,7 +357,7 @@ protected:
                         m_indices_ad_prev.push_back(0);
                         continue;
                     }
-                    int32_t index = *m_indices_ad[i];
+                    uint32_t index = *m_indices_ad[i];
                     if (m_ad_float_precision == 64)
                         detail::ad_inc_ref<Float64>(index);
                     else if (m_ad_float_precision == 32)
@@ -415,7 +415,7 @@ protected:
     // --------------- Wavefront mode ---------------
 
     /// Pointers to loop variable indices (AD handles)
-    ek_vector<int32_t *> m_indices_ad;
+    ek_vector<uint32_t *> m_indices_ad;
 
     /// AD variable state of the previous iteration
     ek_vector<uint32_t> m_indices_ad_prev;

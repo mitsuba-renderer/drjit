@@ -734,22 +734,27 @@ def test47_replace_grad(m):
 
 def test48_suspend_resume(m):
     x = m.Array3f(1, 2, 3)
-    y = m.Array3f(3, 2, 1)
-    ek.enable_grad(x, y)
-    assert ek.grad_enabled(x) and ek.grad_enabled(y)
-    assert not ek.grad_suspended(x) and not ek.grad_suspended(y)
-    ek.suspend_grad(x, y)
-    assert not ek.grad_enabled(x) and not ek.grad_enabled(y)
-    assert ek.grad_suspended(x) and ek.grad_suspended(y)
-    b = x*y
-    ek.resume_grad(x, y)
-    assert ek.grad_enabled(x) and ek.grad_enabled(y)
-    assert not ek.grad_suspended(x) and not ek.grad_suspended(y)
-    c = x*y
-    ek.backward(c)
-    assert ek.grad(x) == ek.detach(y)
-    assert ek.grad(y) == ek.detach(x)
-    ek.suspend_grad(x, y) # validate reference counting of suspended variables
+    ek.enable_grad(x)
+
+    a = x*x
+
+    with ek.suspend_grad():
+        b = x*x
+        with ek.resume_grad():
+            c = b*x
+        d = a*x
+
+    assert ek.grad_enabled(x) and \
+           ek.grad_enabled(a) and \
+       not ek.grad_enabled(b) and \
+           ek.grad_enabled(c) and \
+       not ek.grad_enabled(d)
+
+    ek.forward(x)
+    assert ek.grad(a) == 2*ek.detach(x)
+    assert ek.grad(b) == 0
+    assert ek.grad(c) == ek.detach(b)
+    assert ek.grad(d) == 0
 
 
 class Normalize(ek.CustomOp):
