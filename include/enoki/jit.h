@@ -570,8 +570,13 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
             eval_();
             uint32_t size_out = jit_compress(Backend, (const uint8_t *) data(),
                                              size_in, indices);
-            return int32_array_t<Derived>::steal(
-                jit_var_mem_map(Backend, VarType::UInt32, indices, size_out, 1));
+            if (size_out > 0) {
+                return int32_array_t<Derived>::steal(
+                    jit_var_mem_map(Backend, VarType::UInt32, indices, size_out, 1));
+            } else {
+                jit_free(indices);
+                return int32_array_t<Derived>();
+            }
         }
     }
 
