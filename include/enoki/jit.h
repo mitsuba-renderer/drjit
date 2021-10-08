@@ -565,7 +565,9 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
         } else {
             uint32_t size_in = (uint32_t) size();
             uint32_t *indices = (uint32_t *) jit_malloc(
-                AllocType::Device, size_in * sizeof(uint32_t));
+                Backend == JitBackend::CUDA ? AllocType::Device
+                                            : AllocType::HostAsync,
+                size_in * sizeof(uint32_t));
 
             eval_();
             uint32_t size_out = jit_compress(Backend, (const uint8_t *) data(),
