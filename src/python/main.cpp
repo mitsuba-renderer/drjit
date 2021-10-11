@@ -132,6 +132,9 @@ PYBIND11_MODULE(enoki_ext, m_) {
     m.def("ad_whos", []() { py::print(ek::ad_whos()); });
     m.def("ad_enabled", &ek::ad_enabled);
     m.def("ad_set_enabled", &ek::ad_set_enabled);
+#else
+    m.def("ad_enabled", []() { return false; });
+    m.def("ad_set_enabled", [](bool) { });
 #endif
 
     struct Scope {
