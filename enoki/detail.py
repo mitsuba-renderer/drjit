@@ -479,7 +479,7 @@ def _loop_process_state(value: type, in_state: list, out_state: list,
             _loop_process_state(entry, in_state, out_state, write, in_struct)
         return
 
-    if enoki.grad_enabled(value) and enoki.flag(enoki.JitFlag.LoopRecord):
+    if enoki.ad_enabled() and enoki.grad_enabled(value) and enoki.flag(enoki.JitFlag.LoopRecord):
         raise enoki.Exception(
             "loop_process_state(): one of the supplied loop state variables "
             "of type %s is attached to the AD graph (i.e., grad_enabled(..) "
