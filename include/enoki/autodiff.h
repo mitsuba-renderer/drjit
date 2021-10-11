@@ -1824,34 +1824,36 @@ protected:
 #define ENOKI_DECLARE_EXTERN_TEMPLATE(T, Mask, Index)                          \
     ENOKI_AD_EXPORT_TEMPLATE(T)                                                \
     namespace detail {                                                         \
-    extern template ENOKI_AD_EXPORT void ad_inc_ref_impl<T>(uint32_t) noexcept; \
-    extern template ENOKI_AD_EXPORT void ad_dec_ref_impl<T>(uint32_t) noexcept; \
-    extern template ENOKI_AD_EXPORT uint32_t ad_new<T>(const char *, size_t,    \
-                                                      uint32_t, uint32_t *,     \
-                                                      T *);                    \
-    extern template ENOKI_AD_EXPORT T ad_grad<T>(uint32_t, bool);               \
-    extern template ENOKI_AD_EXPORT void ad_set_grad<T>(uint32_t, const T &,    \
+    extern template ENOKI_AD_EXPORT void                                       \
+        ad_inc_ref_impl<T>(uint32_t) noexcept;                                 \
+    extern template ENOKI_AD_EXPORT void                                       \
+        ad_dec_ref_impl<T>(uint32_t) noexcept;                                 \
+    extern template ENOKI_AD_EXPORT uint32_t ad_new<T>(const char *, size_t,   \
+                                                       uint32_t, uint32_t *,   \
+                                                       T *);                   \
+    extern template ENOKI_AD_EXPORT T ad_grad<T>(uint32_t, bool);              \
+    extern template ENOKI_AD_EXPORT void ad_set_grad<T>(uint32_t, const T &,   \
                                                         bool);                 \
-    extern template ENOKI_AD_EXPORT void ad_accum_grad<T>(uint32_t, const T &,  \
+    extern template ENOKI_AD_EXPORT void ad_accum_grad<T>(uint32_t, const T &, \
                                                           bool);               \
-    extern template ENOKI_AD_EXPORT void ad_set_label<T>(uint32_t,              \
+    extern template ENOKI_AD_EXPORT void ad_set_label<T>(uint32_t,             \
                                                          const char *);        \
-    extern template ENOKI_AD_EXPORT const char *ad_label<T>(uint32_t);          \
+    extern template ENOKI_AD_EXPORT const char *ad_label<T>(uint32_t);         \
     extern template ENOKI_AD_EXPORT const char *ad_graphviz<T>();              \
-    extern template ENOKI_AD_EXPORT void ad_enqueue<T>(ADMode, uint32_t);       \
+    extern template ENOKI_AD_EXPORT void ad_enqueue<T>(ADMode, uint32_t);      \
     extern template ENOKI_AD_EXPORT void ad_traverse<T>(bool, bool);           \
-    extern template ENOKI_AD_EXPORT uint32_t ad_new_select<T, Mask>(            \
-        const char *, size_t, const Mask &, uint32_t, uint32_t);                 \
-    extern template ENOKI_AD_EXPORT uint32_t ad_new_gather<T, Mask, Index>(     \
-        const char *, size_t, uint32_t, const Index &, const Mask &, bool);     \
-    extern template ENOKI_AD_EXPORT uint32_t ad_new_scatter<T, Mask, Index>(    \
-        const char *, size_t, ReduceOp, uint32_t, uint32_t, const Index &,       \
+    extern template ENOKI_AD_EXPORT uint32_t ad_new_select<T, Mask>(           \
+        const char *, size_t, const Mask &, uint32_t, uint32_t);               \
+    extern template ENOKI_AD_EXPORT uint32_t ad_new_gather<T, Mask, Index>(    \
+        const char *, size_t, uint32_t, const Index &, const Mask &, bool);    \
+    extern template ENOKI_AD_EXPORT uint32_t ad_new_scatter<T, Mask, Index>(   \
+        const char *, size_t, ReduceOp, uint32_t, uint32_t, const Index &,     \
         const Mask &, bool);                                                   \
-    extern template ENOKI_AD_EXPORT void ad_add_edge<T>(uint32_t, uint32_t,      \
+    extern template ENOKI_AD_EXPORT void ad_add_edge<T>(uint32_t, uint32_t,    \
                                                         DiffCallback *);       \
     extern template ENOKI_AD_EXPORT size_t ad_implicit<T>();                   \
-    extern template ENOKI_AD_EXPORT void ad_extract_implicit<T>(size_t,         \
-                                                               uint32_t *);     \
+    extern template ENOKI_AD_EXPORT void ad_extract_implicit<T>(size_t,        \
+                                                                uint32_t *);   \
     extern template ENOKI_AD_EXPORT bool ad_enqueue_postponed<T>();            \
     }
 
