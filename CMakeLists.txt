@@ -23,7 +23,6 @@ if (NOT IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/ext/enoki-jit/ext/enoki-thread
     "by invoking\n$ git submodule update --init --recursive")
 endif()
 
-
 set(ENOKI_VERSION_FILE "${CMAKE_CURRENT_SOURCE_DIR}/include/enoki/fwd.h")
 include(ext/enoki-jit/ext/enoki-thread/ext/cmake-defaults/CMakeLists.txt)
 
@@ -66,6 +65,8 @@ if (ENOKI_ENABLE_JIT)
     install(TARGETS enoki-jit EXPORT enokiTargets)
     install(TARGETS enoki-thread EXPORT enokiTargets)
   endif()
+
+  mark_as_advanced(ENOKI_THREAD_ENABLE_TESTS)
 else()
   message(STATUS "Enoki: *not* building the CUDA & LLVM JIT backend.")
 endif()

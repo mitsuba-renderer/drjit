@@ -58,7 +58,6 @@
 #include <enoki/math.h>
 #include <enoki/autodiff.h>
 #include <tsl/robin_map.h>
-#include <tsl/robin_set.h>
 #include <assert.h>
 #include <mutex>
 #include <xxh3.h>
@@ -136,7 +135,10 @@ struct Edge {
     uint32_t next_fwd;
 
     /// Links to the next backward edge
-    uint32_t next_rev;
+    uint32_t next_rev : 31;
+
+    /// Visited bit
+    uint32_t visited : 1;
 
     /// Pointer to a handler for "special" edges
     Special *special;
@@ -411,8 +413,6 @@ struct EdgeRef {
     : id(id), source(source), target(target) { }
 };
 
-using VisitedSet = tsl::robin_set<uint32_t, UInt32Hasher, std::equal_to<uint32_t>>;
-
 // Stores per-thread state
 struct LocalState {
     /// Thread-local edge list used by ad_enqueue_*() and ad_traverse()
@@ -423,9 +423,6 @@ struct LocalState {
 
     /// List of AD variables that cannot be processed and must be postponed
     std::vector<EdgeRef> postponed;
-
-    /// List of nodes that were visited by ek::enqueue
-    VisitedSet visited;
 
     /// Requested directionality of differentiation
     ADMode mode = ADMode::Reverse;
@@ -511,19 +508,25 @@ template <typename T> void ad_dec_ref_impl(uint32_t index) noexcept(true) {
     ad_dec_ref(index, state[index]);
 }
 
-/// Clear backward edges of the given variable and decrease int. ref. counts
-static void ad_free_edges(uint32_t index, Variable *v) {
-    ENOKI_MARK_USED(index);
+static void ad_free(uint32_t index, Variable *v) {
+    ad_trace("ad_free(a%i)", index);
+
+    if (v->free_label) {
+        free(v->label);
+        v->label = nullptr;
+    }
 
     uint32_t edge_id = v->next_rev;
-    ad_trace("ad_free_edges(a%i)", index);
     v->next_rev = 0;
 
     while (edge_id) {
         Edge &edge = state.edges[edge_id];
 
-        ad_trace("ad_free_edges(): freeing edge a%i -> a%i", edge.source,
+        ad_trace("ad_free(): freeing edge a%i -> a%i", edge.source,
                  edge.target);
+
+        if (unlikely(edge.target != index))
+            ad_fail("ad_free(): invalid edge connectivity!");
 
         uint32_t source = edge.source;
         uint32_t next_rev = edge.next_rev,
@@ -560,14 +563,7 @@ static void ad_free_edges(uint32_t index, Variable *v) {
 
         edge_id = next_rev;
     }
-}
 
-static void ad_free(uint32_t index, Variable *v) {
-    ad_trace("ad_free(a%i)", index);
-    if (v->free_label)
-        free(v->label);
-    if (v->next_rev)
-        ad_free_edges(index, v);
     state.variables.erase(index);
 }
 
@@ -1269,39 +1265,47 @@ void ad_add_edge(uint32_t source_idx, uint32_t target_idx,
 // ==========================================================================
 
 /// Forward-mode DFS starting from 'index'
-static void ad_dfs_fwd(VisitedSet &visited, std::vector<EdgeRef> &todo, uint32_t index) {
-    auto [it, success] = visited.insert(index);
-    if (!success)
-        return;
+static void ad_dfs_fwd(std::vector<EdgeRef> &todo, uint32_t index, Variable *v) {
+    ENOKI_MARK_USED(index);
 
-    Variable *v = state[index];
-    ad_inc_ref(index, v);
     uint32_t edge_id = v->next_fwd;
     while (edge_id) {
         Edge &edge = state.edges[edge_id];
-        todo.emplace_back(edge_id, edge.source, edge.target);
-        ad_trace("ad_dfs_fwd(): enqueuing edge a%i -> a%i", index,
-                 edge.target);
-        ad_dfs_fwd(visited, todo, edge.target);
+
+        if (!edge.visited) {
+            edge.visited = 1;
+
+            ad_trace("ad_dfs_fwd(): enqueuing edge a%i -> a%i", index,
+                     edge.target);
+
+            Variable *v2 = state[edge.target];
+            ad_inc_ref(edge.target, v2);
+            todo.emplace_back(edge_id, edge.source, edge.target);
+            ad_dfs_fwd(todo, edge.target, v2);
+        }
+
         edge_id = edge.next_fwd;
     }
 }
 
 /// Reverse-mode DFS starting from 'index'
-static void ad_dfs_rev(VisitedSet &visited, std::vector<EdgeRef> &todo, uint32_t index) {
-    auto [it, success] = visited.insert(index);
-    if (!success)
-        return;
-
-    Variable *v = state[index];
-    ad_inc_ref(index, v);
+static void ad_dfs_rev(std::vector<EdgeRef> &todo, uint32_t index, Variable *v) {
     uint32_t edge_id = v->next_rev;
     while (edge_id) {
         Edge &edge = state.edges[edge_id];
-        todo.emplace_back(edge_id, edge.source, edge.target);
-        ad_trace("ad_dfs_rev(): enqueuing edge a%i -> a%i", index,
-                 edge.source);
-        ad_dfs_rev(visited, todo, edge.source);
+
+        if (!edge.visited) {
+            edge.visited = 1;
+
+            ad_trace("ad_dfs_rev(): enqueuing edge a%i -> a%i", index,
+                     edge.source);
+
+            Variable *v2 = state[edge.source];
+            ad_inc_ref(index, v);
+            todo.emplace_back(edge_id, edge.source, edge.target);
+            ad_dfs_rev(todo, edge.source, v2);
+        }
+
         edge_id = edge.next_rev;
     }
 }
@@ -1315,7 +1319,7 @@ template <typename T> void ad_enqueue(ADMode mode, uint32_t index) {
 
     LocalState &ls = local_state;
 
-    if (ls.visited.empty() && ls.todo.empty()) {
+    if (ls.todo.empty()) {
         ls.mode = mode;
     } else if (ls.mode != mode) {
         ad_raise("ad_enqueue(): attempted to enqueue nodes using "
@@ -1325,9 +1329,9 @@ template <typename T> void ad_enqueue(ADMode mode, uint32_t index) {
 
     std::lock_guard<std::mutex> guard(state.mutex);
     if (mode == ADMode::Forward)
-        ad_dfs_fwd(ls.visited, ls.todo, index);
+        ad_dfs_fwd(ls.todo, index, state[index]);
     else
-        ad_dfs_rev(ls.visited, ls.todo, index);
+        ad_dfs_rev(ls.todo, index, state[index]);
 }
 
 // ==========================================================================
@@ -1339,12 +1343,8 @@ void ad_traverse(bool retain_graph, bool retain_grad) {
     LocalState &ls = local_state;
 
     std::vector<EdgeRef> &todo_tls = ls.todo, todo;
-    if (todo_tls.empty()) {
-        for (uint32_t index : ls.visited)
-            ad_dec_ref(index, state[index]);
-        ls.visited.clear();
+    if (todo_tls.empty())
         return;
-    }
 
     /// Are we currently recording a megakernel?
     bool rec = false;
@@ -1358,16 +1358,10 @@ void ad_traverse(bool retain_graph, bool retain_grad) {
     ADMode mode = ls.mode;
     std::sort(todo.begin(), todo.end(), [mode](EdgeRef e1, EdgeRef e2) {
         if (mode == ADMode::Reverse)
-            return std::tie(e1.target, e1.source) > std::tie(e2.target, e2.source);
+            return std::tie(e1.target, e1.source, e1.id) > std::tie(e2.target, e2.source, e2.id);
         else
-            return std::tie(e1.source, e1.target) < std::tie(e2.source, e2.target);
+            return std::tie(e1.source, e1.target, e1.id) < std::tie(e2.source, e2.target, e2.id);
     });
-
-    // Remove duplicates
-    todo.erase(
-        std::unique(todo.begin(), todo.end(),
-                    [](EdgeRef e1, EdgeRef e2) { return e1.id == e2.id; }),
-        todo.end());
 
     ad_log(Debug, "ad_traverse(): processing %zu edges in %s mode ..", todo.size(),
            mode == ADMode::Forward ? "forward" : "reverse");
@@ -1411,10 +1405,11 @@ void ad_traverse(bool retain_graph, bool retain_grad) {
     };
 
     uint32_t v0i_prev = 0;
+    uint32_t last_edge_id = 0;
 
     // This is the main AD traversal loop
-    for (EdgeRef edge_ref : todo) {
-        Edge &edge = state.edges[edge_ref.id];
+    for (EdgeRef &er : todo) {
+        Edge &edge = state.edges[er.id];
 
         uint32_t v0i, v1i;
         if (mode == ADMode::Forward) {
@@ -1425,26 +1420,35 @@ void ad_traverse(bool retain_graph, bool retain_grad) {
             v1i = edge.source;
         }
 
-        if (edge.source != edge_ref.source || edge.target != edge_ref.target)
-            ad_fail(
-                "ad_traverse(): internal error: edge a%i -> a%i was garbage "
-                "collected between enqueue and traverse steps!", v0i, v1i);
+        if (unlikely(er.id == last_edge_id))
+            ad_fail("ad_traverse(): internal error: edge a%i -> a%i was "
+                    "enqueued twice!", v0i, v1i);
+        last_edge_id = er.id;
+
+        if (unlikely(!edge.visited))
+            ad_fail("ad_traverse(): internal error: edge a%i -> a%i is not "
+                    "marked as visited! (1)", er.source, er.target);
+
+        if (unlikely(edge.source != er.source || edge.target != er.target))
+            ad_fail("ad_traverse(): internal error: edge a%i -> a%i was "
+                    "garbage collected between enqueuing and traversal steps!",
+                    v0i, v1i);
 
         Variable *v0 = state[v0i],
                  *v1 = state[v1i];
 
-        ad_trace("ad_traverse(): processing edge a%i -> a%i ..", v0i, v1i);
-
         uint32_t grad_size = (uint32_t) width(v0->grad);
 
         if (unlikely(mode == ADMode::Reverse && rec && !v0->placeholder)) {
-            ad_trace("ad_traverse(): postponing edge (must be handled outside of megakernel).");
-            ls.postponed.push_back(edge_ref);
-            ad_inc_ref(v0i, v0);
+            ad_trace("ad_traverse(): postponing edge a%i -> a%i (must be "
+                     "handled outside of megakernel).", v0i, v1i);
+            ls.postponed.push_back(er);
+            er.id = er.source = er.target = 0;
             continue;
         } else if (unlikely(grad_size != 1 && v0->size != grad_size)) {
             if (grad_size == 0) {
-                ad_trace("ad_traverse(): skipping edge (no source gradient).");
+                ad_trace("ad_traverse(): skipping edge a%i -> a%i (no source "
+                         "gradient).", v0i, v1i);
                 continue;
             } else {
                 ad_raise("ad_traverse(): gradient propagation encountered "
@@ -1456,6 +1460,8 @@ void ad_traverse(bool retain_graph, bool retain_grad) {
 
         postprocess(v0i_prev, v0i);
         v0i_prev = v0i;
+
+        ad_trace("ad_traverse(): processing edge a%i -> a%i ..", v0i, v1i);
 
         if (unlikely(v0->custom_label)) {
             char tmp[256];
@@ -1472,8 +1478,8 @@ void ad_traverse(bool retain_graph, bool retain_grad) {
 
             if (!retain_graph) {
                 // Edge may have been invalidated by callback, look up once more
-                Edge &edge2 = state.edges[edge_ref.id];
-                if (edge.source == edge_ref.source && edge.target == edge_ref.target) {
+                Edge &edge2 = state.edges[er.id];
+                if (edge.source == er.source && edge.target == er.target) {
                     Special *special2 = edge2.special;
                     edge2.special = nullptr;
                     unlock_guard<std::mutex> guard2(state.mutex);
@@ -1490,31 +1496,90 @@ void ad_traverse(bool retain_graph, bool retain_grad) {
 
     postprocess(v0i_prev, 0);
 
-    if (!retain_graph) {
-        ad_log(Debug, "ad_traverse(): clearing graph ..");
+    ad_log(Debug, retain_graph ? "ad_traverse(): decreasing reference counts .."
+                               : "ad_traverse(): decreasing reference counts "
+                                 "and removing traversed edges from graph ..");
 
-        std::sort(todo.begin(), todo.end(), [](EdgeRef e1, EdgeRef e2) {
-            return std::tie(e1.target, e1.source) < std::tie(e2.target, e2.source);
-        });
+    // Undo reference count increases performed by ad_enqueue()
+    for (EdgeRef er : todo) {
+        if (!er.target)
+            continue;
 
-        todo.erase(
-            std::unique(todo.begin(), todo.end(),
-                        [](EdgeRef e1, EdgeRef e2) { return e1.target == e2.target; }),
-            todo.end());
+        Edge &edge = state.edges[er.id];
+        if (unlikely(edge.source != er.source || edge.target != er.target))
+            ad_fail(
+                "ad_traverse(): internal error: edge a%i -> a%i was garbage "
+                "collected between enqueue and traverse steps!", er.source, er.target);
+        else if (unlikely(!edge.visited))
+            ad_fail("ad_traverse(): internal error: edge a%i -> a%i is not "
+                    "marked as visited!", er.source, er.target);
 
-        for (EdgeRef edge_ref : todo) {
-            auto it = state.variables.find(edge_ref.target);
-            if (unlikely(it == state.variables.end()))
-                continue;
-            if (unlikely(mode == ADMode::Reverse && rec && !it.value().placeholder))
-                continue;
-            ad_free_edges(edge_ref.target, &it.value());
+        edge.visited = 0;
+
+        Variable *source = state[er.source],
+                 *target = state[er.target];
+
+        if (!retain_graph) {
+            ad_trace("ad_traverse(): removing edge a%i -> a%i", er.source, er.target);
+
+            // Clear out forward edge
+            uint32_t edge_id_prev = 0,
+                     edge_id_cur = source->next_fwd;
+            while (edge_id_cur) {
+                Edge &e2 = state.edges[edge_id_cur];
+                ad_trace("ad_traverse(): visiting forward edge a%i -> a%i", e2.source, e2.target);
+
+                if (edge_id_cur == er.id) {
+                    if (edge_id_prev)
+                        state.edges[edge_id_prev].next_fwd = e2.next_fwd;
+                    else
+                        source->next_fwd = e2.next_fwd;
+                    break;
+                } else if (unlikely(e2.source != er.source)) {
+                    ad_fail("ad_traverse(): invalid forward edge connectivity!");
+                }
+
+                edge_id_prev = edge_id_cur;
+                edge_id_cur = e2.next_fwd;
+            }
+
+            if (unlikely(!edge_id_cur))
+                ad_fail("ad_traverse(): could not find forward edge a%i "
+                        "-> a%i", er.source, er.target);
+
+            // Clear out reverse edge
+            edge_id_prev = 0;
+            edge_id_cur = target->next_rev;
+            while (edge_id_cur) {
+                Edge &e2 = state.edges[edge_id_cur];
+
+                if (edge_id_cur == er.id) {
+                    if (edge_id_prev)
+                        state.edges[edge_id_prev].next_rev = e2.next_rev;
+                    else
+                        target->next_rev = e2.next_rev;
+                    break;
+                } else if (unlikely(e2.target != er.target)) {
+                    ad_fail("ad_traverse(): invalid reverse edge connectivity!");
+                }
+
+                edge_id_prev = edge_id_cur;
+                edge_id_cur = e2.next_rev;
+            }
+
+            if (unlikely(!edge_id_cur))
+                ad_fail("ad_traverse(): could not find reverse edge a%i "
+                        "-> a%i", er.source, er.target);
+
+            edge.reset();
+            state.unused_edges.push_back(er.id);
+
+            ad_dec_ref(er.source, source);
+            target = state[er.target]; // pointer might have changed
         }
-    }
 
-    for (uint32_t index : ls.visited)
-        ad_dec_ref(index, state[index]);
-    ls.visited.clear();
+        ad_dec_ref(er.target, target);
+    }
 
     ad_log(Debug, "ad_traverse(): done.");
 
@@ -1574,7 +1639,7 @@ template <typename Value> void ad_enqueue_implicit(size_t snapshot) {
     else if (unlikely(snapshot > size))
         ad_raise("ad_enqueue_implicit(): invalid input arguments!");
 
-    if (ls.visited.empty() && ls.todo.empty()) {
+    if (ls.todo.empty()) {
         ls.mode = ADMode::Forward;
     } else if (ls.mode != ADMode::Forward) {
         ad_raise("ad_enqueue_implicit(): attempted to enqueue nodes using "
@@ -1587,11 +1652,17 @@ template <typename Value> void ad_enqueue_implicit(size_t snapshot) {
 
     std::lock_guard<std::mutex> guard(state.mutex);
     for (size_t i = snapshot; i < implicit.size(); ++i) {
-        if (state.variables.find(implicit[i].target) == state.variables.end())
+        const EdgeRef &er = implicit[i];
+        Edge &e = state.edges[er.id];
+
+        if (e.source != er.source || e.target != er.target || e.visited)
             continue;
-        ls.todo.push_back(implicit[i]);
-        ad_dfs_fwd(ls.visited, ls.todo, implicit[i].target);
-        state[implicit[i].source]->ref_count_grad++;
+
+        e.visited = 1;
+        ad_inc_ref(er.target, state[er.target]);
+        ls.todo.push_back(er);
+        ad_dfs_fwd(ls.todo, er.target, state[er.target]);
+        state[er.source]->ref_count_grad++;
     }
 }
 
@@ -1608,9 +1679,8 @@ template <typename Value> void ad_dequeue_implicit(size_t snapshot) {
              size - snapshot);
 
     std::lock_guard<std::mutex> guard(state.mutex);
-    for (size_t i = snapshot; i < implicit.size(); ++i) {
+    for (size_t i = snapshot; i < implicit.size(); ++i)
         state[implicit[i].source]->ref_count_grad--;
-    }
 }
 
 template <typename Value> bool ad_enqueue_postponed() {
@@ -1623,7 +1693,7 @@ template <typename Value> bool ad_enqueue_postponed() {
         // Use this opportunity to also clear the implicit dependency tracker
         ls.implicit.clear();
 
-        if (ls.visited.empty() && ls.todo.empty()) {
+        if (ls.todo.empty()) {
             ls.mode = ADMode::Reverse;
         } else if (ls.mode != ADMode::Reverse) {
             ad_raise("ad_enqueue_postponed(): attempted to enqueue nodes using "
@@ -1635,13 +1705,7 @@ template <typename Value> bool ad_enqueue_postponed() {
                  ls.postponed.size());
 
         std::lock_guard<std::mutex> guard(state.mutex);
-        for (EdgeRef e : ls.postponed) {
-            auto [it, success] = ls.visited.insert(e.target);
-            if (!success)
-                ad_dec_ref(e.target, state[e.target]);
-            ls.todo.push_back(e);
-        }
-
+        ls.todo.insert(ls.todo.end(), ls.postponed.begin(), ls.postponed.end());
         ls.postponed.clear();
 
         return true;

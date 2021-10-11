@@ -804,7 +804,46 @@ def test50_custom_forward(m):
     assert ek.allclose(ek.grad(d2), m.Array3f(0.610883, 0.152721, -0.305441)*2)
 
 
-def test51_diff_loop(m, do_record):
+def test51_custom_forward_external_dependency(m):
+    class BuggyOp(ek.CustomOp):
+        def eval(self, value):
+            self.add_input(param)
+            self.value = value
+            return value * ek.detach(param)
+
+        def forward(self):
+            grad_in = self.grad_in('value')
+
+            value = param * 4.0
+            ek.forward(param)
+
+            ek.enqueue(ek.ADMode.Forward, param)
+            ek.traverse(m.Float, retain_graph=False, retain_grad=True)
+
+            self.set_grad_out(ek.grad(value))
+
+        def backward(self):
+            pass
+
+        def name(self):
+            return "buggy-op"
+
+
+    theta = m.Float(2)
+    ek.enable_grad(theta)
+
+    param = theta * 3.0
+
+    ek.set_grad(theta, 1.0)
+    ek.enqueue(ek.ADMode.Forward, theta)
+    ek.traverse(m.Float, retain_graph=False, retain_grad=True)
+
+    v3 = ek.custom(BuggyOp, 123)
+    ek.forward(param)
+    assert ek.grad(v3) == 4
+
+
+def test52_diff_loop(m, do_record):
     def mcint(a, b, f, sample_count=100000):
         rng = m.PCG32()
         i = m.UInt32(0)
@@ -849,12 +888,13 @@ def test51_diff_loop(m, do_record):
     x = m.Float(0.5)
     ek.enable_grad(x)
     y = elliptic_k(x)
-    ek.forward(x)
+    ek.forward(x, retain_graph=True)
+    del x
     assert ek.allclose(y, 1.85407, rtol=5e-4)
     assert ek.allclose(ek.grad(y), 0.847213, rtol=5e-4)
 
 
-def test52_loop_ballistic(m, do_record):
+def test53_loop_ballistic(m, do_record):
     class Ballistic(ek.CustomOp):
         def timestep(self, pos, vel, dt=0.02, mu=.1, g=9.81):
             acc = -mu*vel*ek.norm(vel) - m.Array2f(0, g)
@@ -938,7 +978,7 @@ def test52_loop_ballistic(m, do_record):
     assert ek.allclose(vel_in.x, [3.3516, 2.3789, 0.79156], rtol=1e-3)
 
 
-def test53_loop_ballistic_2(m, do_record):
+def test54_loop_ballistic_2(m, do_record):
     class Ballistic2(ek.CustomOp):
         def timestep(self, pos, vel, dt=0.02, mu=.1, g=9.81):
             acc = -mu*vel*ek.norm(vel) - m.Array2f(0, g)
@@ -1008,7 +1048,7 @@ def test53_loop_ballistic_2(m, do_record):
     assert ek.allclose(vel_in.x, [3.3516, 2.3789, 0.79156], atol=1e-3)
 
 
-def test54_nan_propagation(m):
+def test55_nan_propagation(m):
     for i in range(2):
         x = ek.arange(m.Float, 10)
         ek.enable_grad(x)
@@ -1034,7 +1074,7 @@ def test54_nan_propagation(m):
             assert ek.all(ek.isnan(g))
 
 
-def test55_scatter_implicit_detach(m):
+def test56_scatter_implicit_detach(m):
     x = ek.detach(m.Float(0))
     y = ek.detach(m.Float(1))
     i = m.UInt32(0)
@@ -1042,7 +1082,7 @@ def test55_scatter_implicit_detach(m):
     ek.scatter(x, y, i, m)
 
 
-def test56_diffloop_simple_fwd(m, no_record):
+def test57_diffloop_simple_fwd(m, no_record):
     fi, fo = m.Float(1, 2, 3), m.Float(0, 0, 0)
     ek.enable_grad(fi)
 
@@ -1053,7 +1093,7 @@ def test56_diffloop_simple_fwd(m, no_record):
     assert ek.grad(fo) == m.Float(10, 5, 4)
 
 
-def test57_diffloop_simple_rev(m, no_record):
+def test58_diffloop_simple_rev(m, no_record):
     fi, fo = m.Float(1, 2, 3), m.Float(0, 0, 0)
     ek.enable_grad(fi)
 
@@ -1064,7 +1104,7 @@ def test57_diffloop_simple_rev(m, no_record):
     assert ek.grad(fi) == m.Float(10, 5, 4)
 
 
-def test58_diffloop_masking_fwd(m, no_record):
+def test59_diffloop_masking_fwd(m, no_record):
     fo = ek.zero(m.Float, 10)
     fi = m.Float(1, 2)
     i = m.UInt32(0, 5)
@@ -1078,7 +1118,7 @@ def test58_diffloop_masking_fwd(m, no_record):
     assert ek.grad(fo) == m.Float(1, 1, 1, 1, 1, 0, 0, 0, 0, 0)
 
 
-def test59_diffloop_masking_rev(m, no_record):
+def test60_diffloop_masking_rev(m, no_record):
     fo = ek.zero(m.Float, 10)
     fi = m.Float(1, 2)
     i = m.UInt32(0, 5)
@@ -1091,7 +1131,7 @@ def test59_diffloop_masking_rev(m, no_record):
     assert ek.grad(fi) == m.Float(5, 0)
 
 
-def test60_implicit_dep_customop(m):
+def test61_implicit_dep_customop(m):
     v0 = m.Float(2)
     ek.enable_grad(v0)
     v1 = v0 * 3
@@ -1126,7 +1166,7 @@ def test60_implicit_dep_customop(m):
 
 @pytest.mark.parametrize("retain_graph", [True, False])
 @pytest.mark.parametrize("retain_grad", [True, False])
-def test61_retain_graph_or_grad(m, retain_graph, retain_grad):
+def test62_retain_graph_or_grad(m, retain_graph, retain_grad):
     v0 = m.Float(2)
     ek.enable_grad(v0)
     v1 = v0 * 0.5
