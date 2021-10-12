@@ -1372,6 +1372,9 @@ def label(a):
 def set_label(a, label):
     if _ek.is_jit_array_v(a) or _ek.is_diff_array_v(a):
         a.set_label_(label)
+    elif isinstance(a, _Mapping):
+        for k, v in a.items():
+            set_label(v, label + "_" + k)
     elif _ek.is_enoki_struct_v(a):
         for k in a.ENOKI_STRUCT.keys():
             set_label(getattr(a, k), label + "_" + k)
@@ -2189,6 +2192,12 @@ def set_grad(a, value):
             value = t(value)
 
         a.set_grad_(value)
+    elif isinstance(a, tuple) or isinstance(a, list):
+        for v in a:
+            set_grad(v, value)
+    elif isinstance(a, _Mapping):
+        for k, v in a.items():
+            set_grad(v, value)
     elif _ek.is_enoki_struct_v(a):
         for k in type(a).ENOKI_STRUCT.keys():
             set_grad(getattr(a, k), value)
@@ -2281,6 +2290,12 @@ def enqueue(mode, *args):
     for a in args:
         if _ek.is_diff_array_v(a):
             a.enqueue_(mode)
+        elif isinstance(a, tuple) or isinstance(a, list):
+            for v in a:
+                enqueue(mode, v)
+        elif isinstance(a, _Mapping):
+            for k, v in a.items():
+                enqueue(mode, v)
         elif _ek.is_enoki_struct_v(a):
             for k in type(a).ENOKI_STRUCT.keys():
                 enqueue(mode, getattr(a, k))
@@ -2296,7 +2311,7 @@ def traverse(t, retain_graph=False, retain_grad=False):
     t.traverse_(retain_graph, retain_grad)
 
 
-def backward(a, retain_graph=False):
+def backward(a, retain_graph=False, retain_grad=False):
     if _ek.is_diff_array_v(a):
         if not grad_enabled(a):
             raise Exception("backward(): attempted to propagate derivatives "
@@ -2305,12 +2320,12 @@ def backward(a, retain_graph=False):
                             "enable_grad()?")
         set_grad(a, 1)
         enqueue(_ek.ADMode.Reverse, a)
-        traverse(type(a), retain_graph=retain_graph)
+        traverse(type(a), retain_graph=retain_graph, retain_grad=retain_grad)
     else:
         raise Exception("Expected a differentiable array type!")
 
 
-def forward(a, retain_graph=False):
+def forward(a, retain_graph=False, retain_grad=False):
     if _ek.is_diff_array_v(a):
         if not grad_enabled(a):
             raise Exception("forward(): attempted to propagate derivatives "
@@ -2319,7 +2334,7 @@ def forward(a, retain_graph=False):
                             "enable_grad()?")
         set_grad(a, 1)
         enqueue(_ek.ADMode.Forward, a)
-        traverse(type(a), retain_graph=retain_graph)
+        traverse(type(a), retain_graph=retain_graph, retain_grad=retain_grad)
     else:
         raise Exception("Expected a differentiable array type!")
 
