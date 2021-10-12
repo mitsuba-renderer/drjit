@@ -430,11 +430,14 @@ struct LocalState {
 
 // Special edge (scatter, gather, scatter_reduce, block_sum, etc.)
 struct Special {
-    virtual void backward(Variable * /* source */, const Variable * /* target */) const {
+    virtual void backward(Variable * /* source */,
+                          const Variable * /* target */,
+                          bool /* retain_grad */) const {
         ad_fail("Special::backward(): not implemented!");
     }
 
-    virtual void forward(const Variable * /* source */, Variable * /* target */) const {
+    virtual void forward(const Variable * /* source */, Variable * /* target */,
+                         bool /* retain_grad */) const {
         ad_fail("Special::forward(): not implemented!");
     }
 
@@ -759,13 +762,13 @@ uint32_t ad_new(const char *label, size_t size, uint32_t op_count,
 template <typename Value> struct MaskEdge : Special {
     MaskEdge(const Mask &mask, bool negate) : mask(mask), negate(negate) { }
 
-    void backward(Variable *source, const Variable *target) const override {
+    void backward(Variable *source, const Variable *target, bool) const override {
         source->accum(!negate ? detail::and_(target->grad, mask)
                               : detail::andnot_(target->grad, mask),
                       target->size);
     }
 
-    void forward(const Variable *source, Variable *target) const override {
+    void forward(const Variable *source, Variable *target, bool) const override {
         target->accum(!negate ? detail::and_(source->grad, mask)
                               : detail::andnot_(source->grad, mask),
                       source->size);
@@ -780,7 +783,7 @@ template <typename Value> struct SpecialCallback : Special {
 
     SpecialCallback(DiffCallback* callback) : callback(callback) { }
 
-    void backward(Variable *, const Variable *target) const override {
+    void backward(Variable *, const Variable *target, bool retain_grad) const override {
         uint32_t edge = target->next_fwd;
         if (callback) {
             ad_trace("ad_traverse(): invoking user callback ..");
@@ -792,7 +795,7 @@ template <typename Value> struct SpecialCallback : Special {
                 do {
                     const Edge &e = state.edges[edge];
                     Variable *v = state[e.target];
-                    if (v->ref_count_grad > 0) {
+                    if (v->ref_count_grad > 0 && !retain_grad) {
                         if (--v->ref_count_grad == 0)
                             v->grad = Value();
                     }
@@ -805,7 +808,7 @@ template <typename Value> struct SpecialCallback : Special {
         }
     }
 
-    void forward(const Variable *source, Variable *) const override {
+    void forward(const Variable *source, Variable *, bool retain_grad) const override {
         uint32_t edge = source->next_rev;
         if (callback) {
             ad_trace("ad_traverse(): invoking user callback ..");
@@ -818,7 +821,7 @@ template <typename Value> struct SpecialCallback : Special {
                     const Edge &e = state.edges[edge];
                     Variable *v = state[e.source];
                     if (v->ref_count_grad > 0) {
-                        if (--v->ref_count_grad == 0)
+                        if (--v->ref_count_grad == 0 && !retain_grad)
                             v->grad = Value();
                     }
                     edge = e.next_rev;
@@ -930,7 +933,7 @@ template <typename Value> struct GatherEdge : Special {
     GatherEdge(const Index &offset, const Mask &mask, bool permute)
         : offset(offset), mask(mask), permute(permute) { }
 
-    void backward(Variable *source, const Variable *target) const override {
+    void backward(Variable *source, const Variable *target, bool) const override {
         Value &source_grad = (Value &) source->grad;
         uint32_t size = source->size;
 
@@ -951,7 +954,7 @@ template <typename Value> struct GatherEdge : Special {
             scatter_reduce(ReduceOp::Add, source_grad, target->grad, offset, mask);
     }
 
-    void forward(const Variable *source, Variable *target) const override {
+    void forward(const Variable *source, Variable *target, bool) const override {
         target->accum(gather<Value>(source->grad, offset, mask),
                       (uint32_t) width(offset));
     }
@@ -1025,12 +1028,12 @@ template <typename Value> struct ScatterEdge : Special {
                 enoki_raise("AD only supports ReduceOp::Add in scatter_reduce!");
         }
 
-    void backward(Variable *source, const Variable *target) const override {
+    void backward(Variable *source, const Variable *target, bool) const override {
         source->accum(gather<Value>(target->grad, offset, mask),
                       (uint32_t) width(offset));
     }
 
-    void forward(const Variable *source, Variable *target) const override {
+    void forward(const Variable *source, Variable *target, bool) const override {
         Value &target_grad = (Value &) target->grad;
         uint32_t size = target->size;
 
@@ -1472,9 +1475,9 @@ void ad_traverse(bool retain_graph, bool retain_grad) {
 
         if (unlikely(edge.special)) {
             if (mode == ADMode::Forward)
-                edge.special->forward(v0, v1);
+                edge.special->forward(v0, v1, retain_grad);
             else
-                edge.special->backward(v1, v0);
+                edge.special->backward(v1, v0, retain_grad);
 
             if (!retain_graph) {
                 // Edge may have been invalidated by callback, look up once more
