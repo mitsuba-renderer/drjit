@@ -79,6 +79,8 @@ template <typename T> auto bind_tensor(py::module m) {
         cls.def("abs_", &Tensor::abs_)
            .def("min_", &Tensor::min_)
            .def("max_", &Tensor::max_);
+
+        cls.def("fmod_", &Tensor::fmod_);
     }
 
     if constexpr (ek::is_floating_point_v<Tensor>) {

@@ -196,6 +196,12 @@ struct Tensor
         return Tensor(t0.m_array % t1.m_array, std::move(m_shape));
     }
 
+    Tensor fmod_(const Tensor &b) const {
+        Tensor t0 = *this, t1 = b;
+        Shape shape = detail::tensor_broadcast("fmod_", t0, t1);
+        return Tensor(fmod(t0.m_array, t1.m_array), std::move(m_shape));
+    }
+
     Tensor or_(const Tensor &b) const {
         Tensor t0 = *this, t1 = b;
         Shape shape = detail::tensor_broadcast("or_", t0, t1);

@@ -321,6 +321,11 @@ def imod_(a0, a1):
         a0[i] %= a1[i]
     return a0
 
+def fmod_(a0, a1):
+    ar, sr = _check2(a0, a1)
+    for i in range(sr):
+        ar[i] = _ek.fmod(a0[i], a1[i])
+    return ar
 
 def and_(a0, a1):
     ar, sr = _check2_bitop(a0, a1)

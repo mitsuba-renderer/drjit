@@ -1185,6 +1185,13 @@ def fnmadd(a, b, c):
 def fnmsub(a, b, c):
     return fmadd(-a, b, -c)
 
+def fmod(a, b):
+    if isinstance(a, ArrayBase) or isinstance(b, ArrayBase):
+        if type(a) is not type(b):
+            a, b = _var_promote(a, b)
+        return a.fmod_(b)
+    else:
+        return a % b
 
 def select(m, t, f):
     if isinstance(m, bool):
