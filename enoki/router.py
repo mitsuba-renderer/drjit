@@ -2552,20 +2552,23 @@ def printf_async(mask, fmt, *args):
 
 class ADContextManager:
     def __init__(self, value):
-        self.backup = _ek.ad_enabled()
+        self.backup = _ek.detail.ad_enabled()
         self.value = value
 
     def __enter__(self):
-        _ek.ad_set_enabled(self.value)
+        _ek.detail.ad_set_enabled(self.value)
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        _ek.ad_set_enabled(self.backup)
+        _ek.detail.ad_set_enabled(self.backup)
 
 def suspend_grad():
     return ADContextManager(False)
 
 def resume_grad():
     return ADContextManager(True)
+
+def grad_suspended():
+    return _ek.detail.ad_enabled()
 
 # -------------------------------------------------------------------
 #             Automatic differentation of custom fuctions

@@ -130,11 +130,11 @@ PYBIND11_MODULE(enoki_ext, m_) {
     export_llvm_ad(m);
     m.def("ad_whos_str", &ek::ad_whos);
     m.def("ad_whos", []() { py::print(ek::ad_whos()); });
-    m.def("ad_enabled", &ek::ad_enabled);
-    m.def("ad_set_enabled", &ek::ad_set_enabled);
+    array_detail.def("ad_enabled", &ek::ad_enabled);
+    array_detail.def("ad_set_enabled", &ek::ad_set_enabled);
 #else
-    m.def("ad_enabled", []() { return false; });
-    m.def("ad_set_enabled", [](bool) { });
+    array_detail.def("ad_enabled", []() { return false; });
+    array_detail.def("ad_set_enabled", [](bool) { });
 #endif
 
     struct Scope {
