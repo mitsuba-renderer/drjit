@@ -1197,3 +1197,12 @@ def test62_retain_graph_or_grad(m, retain_graph, retain_grad):
             assert ek.grad(v0) == 100
             assert ek.grad(v1) == 0
             assert ek.grad(v2) == 1.5
+
+
+def test63_broadcasting_set_grad(m):
+    theta = m.Float(1.0)
+    ek.enable_grad(theta)
+    x = 4.0 * theta
+    y = m.Array3f(x)
+    ek.backward(y)
+    assert ek.grad(theta) == 12.0
