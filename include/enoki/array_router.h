@@ -1736,7 +1736,7 @@ template <typename T> void backward(T& value, bool retain_graph = false, bool re
         enoki_raise("backward(): attempted to propagate derivatives through a "
                     "variable that is not registered with the AD backend. Did "
                     "you forget to call enable_grad()?");
-    set_grad(value, 1.f);
+    accum_grad(value, 1.f);
     enqueue(ADMode::Reverse, value);
     traverse<T>(retain_graph, retain_grad);
 }
@@ -1746,7 +1746,7 @@ template <typename T> void forward(T& value, bool retain_graph = false, bool ret
         enoki_raise("forward(): attempted to propagate derivatives through a "
                     "variable that is not registered with the AD backend. Did "
                     "you forget to call enable_grad()?");
-    set_grad(value, 1.f);
+    accum_grad(value, 1.f);
     enqueue(ADMode::Forward, value);
     traverse<T>(retain_graph, retain_grad);
 }

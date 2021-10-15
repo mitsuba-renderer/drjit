@@ -815,7 +815,6 @@ def test51_custom_forward_external_dependency(m):
             grad_in = self.grad_in('value')
 
             value = param * 4.0
-            ek.forward(param)
 
             ek.enqueue(ek.ADMode.Forward, param)
             ek.traverse(m.Float, retain_graph=False, retain_grad=True)
@@ -839,8 +838,11 @@ def test51_custom_forward_external_dependency(m):
     ek.traverse(m.Float, retain_graph=False, retain_grad=True)
 
     v3 = ek.custom(BuggyOp, 123)
-    ek.forward(param)
-    assert ek.grad(v3) == 4
+
+    ek.enqueue(ek.ADMode.Forward, param)
+    ek.traverse(m.Float, retain_graph=False, retain_grad=True)
+
+    assert ek.grad(v3) == 12
 
 
 def test52_diff_loop(m, do_record):

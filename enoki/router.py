@@ -2318,7 +2318,7 @@ def backward(a, retain_graph=False, retain_grad=False):
                             "through a variable that is not registered with "
                             "the AD backend. Did you forget to call "
                             "enable_grad()?")
-        set_grad(a, 1)
+        accum_grad(a, 1)
         enqueue(_ek.ADMode.Reverse, a)
         traverse(type(a), retain_graph=retain_graph, retain_grad=retain_grad)
     else:
@@ -2332,7 +2332,7 @@ def forward(a, retain_graph=False, retain_grad=False):
                             "through a variable that is not registered with "
                             "the AD backend. Did you forget to call "
                             "enable_grad()?")
-        set_grad(a, 1)
+        accum_grad(a, 1)
         enqueue(_ek.ADMode.Forward, a)
         traverse(type(a), retain_graph=retain_graph, retain_grad=retain_grad)
     else:
