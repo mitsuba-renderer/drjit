@@ -2568,7 +2568,7 @@ def resume_grad():
     return ADContextManager(True)
 
 def grad_suspended():
-    return _ek.detail.ad_enabled()
+    return not _ek.detail.ad_enabled()
 
 # -------------------------------------------------------------------
 #             Automatic differentation of custom fuctions
