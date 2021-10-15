@@ -142,9 +142,13 @@ struct Tensor
         size_t size = 1;
         for (size_t i = 0; i < ndim; ++i)
             size *= shape[i];
-        if (size != data.size())
-            enoki_raise("Tensor(): invalid size specified (%zu vs %zu)!",
-                        size, data.size());
+        if (size != m_array.size()) {
+            if (m_array.size() == 1)
+                resize(m_array, size);
+            else
+                enoki_raise("Tensor(): invalid size specified (%zu vs %zu)!",
+                            size, m_array.size());
+        }
     }
 
     Tensor(const void *ptr, size_t ndim, const size_t *shape)
