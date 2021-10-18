@@ -97,6 +97,14 @@ PYBIND11_MODULE(enoki_ext, m_) {
         .def_property_readonly(
             "Size", [](VarType v) { return var_type_size[(int) v]; });
 
+    py::enum_<ek::ADFlag>(m, "ADFlag", py::arithmetic())
+        .value("ClearNone", ek::ADFlag::ClearNone)
+        .value("ClearEdges", ek::ADFlag::ClearEdges)
+        .value("ClearInput", ek::ADFlag::ClearInput)
+        .value("ClearInterior", ek::ADFlag::ClearInterior)
+        .value("ClearVertices", ek::ADFlag::ClearVertices)
+        .value("Default", ek::ADFlag::Default);
+
     py::class_<ek::detail::reinterpret_flag>(array_detail, "reinterpret_flag")
         .def(py::init<>());
 

@@ -1725,32 +1725,65 @@ template <typename T> const char *graphviz(const T&) {
     return graphviz<T>();
 }
 
-template <typename...Ts> void traverse(bool retain_graph = false, bool retain_grad = false) {
+/**
+ * By default, Enoki's AD system destructs the enqueued input graph during
+ * forward/reverse mode traversal. This frees up resources, which is useful
+ * when working with large wavefronts or very complex computation graphs.
+ * However, this also prevents repeated propagation of gradients through a
+ * shared subgraph that is being differentiated multiple times.
+ *
+ * To support more fine-grained use cases that require this, the following
+ * flags can be used to control what should and should not be destructed.
+ */
+enum class ADFlag : uint32_t {
+   /// None: clear nothing.
+   ClearNone = 0,
+
+   /// Delete all traversed edges from the computation graph
+   ClearEdges = 1,
+
+   // Clear the gradients of processed input vertices (in-degree == 0)
+   ClearInput = 2,
+
+   // Clear the gradients of processed interior vertices (out-degree != 0)
+   ClearInterior = 4,
+
+   /// Clear gradients of processed vertices only, but leave edges intact
+   ClearVertices = (uint32_t) ClearInput | (uint32_t) ClearInterior,
+
+   /// Default: clear everything (edges, gradients of processed vertices)
+   Default = (uint32_t) ClearEdges | (uint32_t) ClearVertices
+};
+
+
+template <typename...Ts> void traverse(uint32_t flags = (uint32_t) ADFlag::Default) {
     using Type = leaf_array_t<Ts...>;
+    ENOKI_MARK_USED(flags);
     if constexpr (is_diff_array_v<Type> && std::is_floating_point_v<scalar_t<Type>>)
-        Type::traverse_(retain_graph, retain_grad);
+        Type::traverse_(flags);
 }
 
-template <typename T> void backward(T& value, bool retain_graph = false, bool retain_grad = false) {
+template <typename T> void backward(T& value, uint32_t flags = (uint32_t) ADFlag::Default) {
     if (!grad_enabled(value))
         enoki_raise("backward(): attempted to propagate derivatives through a "
                     "variable that is not registered with the AD backend. Did "
                     "you forget to call enable_grad()?");
+    // Handle case where components of an N-d vector map to the same AD variable
     if constexpr (array_depth_v<T> > 1)
         value = value + T(0);
     set_grad(value, 1.f);
     enqueue(ADMode::Reverse, value);
-    traverse<T>(retain_graph, retain_grad);
+    traverse<T>(flags);
 }
 
-template <typename T> void forward(T& value, bool retain_graph = false, bool retain_grad = false) {
+template <typename T> void forward(T& value, uint32_t flags = (uint32_t) ADFlag::Default) {
     if (!grad_enabled(value))
         enoki_raise("forward(): attempted to propagate derivatives through a "
                     "variable that is not registered with the AD backend. Did "
                     "you forget to call enable_grad()?");
     set_grad(value, 1.f);
     enqueue(ADMode::Forward, value);
-    traverse<T>(retain_graph, retain_grad);
+    traverse<T>(flags);
 }
 
 //! @}

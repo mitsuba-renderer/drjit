@@ -432,12 +432,12 @@ struct LocalState {
 struct Special {
     virtual void backward(Variable * /* source */,
                           const Variable * /* target */,
-                          bool /* retain_grad */) const {
+                          uint32_t /* flags */) const {
         ad_fail("Special::backward(): not implemented!");
     }
 
     virtual void forward(const Variable * /* source */, Variable * /* target */,
-                         bool /* retain_grad */) const {
+                         uint32_t /* flags */) const {
         ad_fail("Special::forward(): not implemented!");
     }
 
@@ -762,13 +762,13 @@ uint32_t ad_new(const char *label, size_t size, uint32_t op_count,
 template <typename Value> struct MaskEdge : Special {
     MaskEdge(const Mask &mask, bool negate) : mask(mask), negate(negate) { }
 
-    void backward(Variable *source, const Variable *target, bool) const override {
+    void backward(Variable *source, const Variable *target, uint32_t) const override {
         source->accum(!negate ? detail::and_(target->grad, mask)
                               : detail::andnot_(target->grad, mask),
                       target->size);
     }
 
-    void forward(const Variable *source, Variable *target, bool) const override {
+    void forward(const Variable *source, Variable *target, uint32_t) const override {
         target->accum(!negate ? detail::and_(source->grad, mask)
                               : detail::andnot_(source->grad, mask),
                       source->size);
@@ -783,7 +783,7 @@ template <typename Value> struct SpecialCallback : Special {
 
     SpecialCallback(DiffCallback* callback) : callback(callback) { }
 
-    void backward(Variable *, const Variable *target, bool retain_grad) const override {
+    void backward(Variable *, const Variable *target, uint32_t flags) const override {
         uint32_t edge = target->next_fwd;
         if (callback) {
             ad_trace("ad_traverse(): invoking user callback ..");
@@ -795,8 +795,10 @@ template <typename Value> struct SpecialCallback : Special {
                 do {
                     const Edge &e = state.edges[edge];
                     Variable *v = state[e.target];
-                    if (v->ref_count_grad > 0 && !retain_grad) {
-                        if (--v->ref_count_grad == 0)
+
+                    if (v->ref_count_grad > 0 && --v->ref_count_grad == 0) {
+                        if (((flags & (uint32_t) ADFlag::ClearInterior) && v->next_fwd != 0) ||
+                            ((flags & (uint32_t) ADFlag::ClearInput) && v->next_fwd == 0))
                             v->grad = Value();
                     }
                     edge = e.next_fwd;
@@ -808,7 +810,7 @@ template <typename Value> struct SpecialCallback : Special {
         }
     }
 
-    void forward(const Variable *source, Variable *, bool retain_grad) const override {
+    void forward(const Variable *source, Variable *, uint32_t flags) const override {
         uint32_t edge = source->next_rev;
         if (callback) {
             ad_trace("ad_traverse(): invoking user callback ..");
@@ -820,10 +822,13 @@ template <typename Value> struct SpecialCallback : Special {
                 do {
                     const Edge &e = state.edges[edge];
                     Variable *v = state[e.source];
-                    if (v->ref_count_grad > 0) {
-                        if (--v->ref_count_grad == 0 && !retain_grad)
+
+                    if (v->ref_count_grad > 0 && --v->ref_count_grad == 0) {
+                        if (((flags & (uint32_t) ADFlag::ClearInterior) && v->next_rev != 0) ||
+                            ((flags & (uint32_t) ADFlag::ClearInput) && v->next_rev == 0))
                             v->grad = Value();
                     }
+
                     edge = e.next_rev;
                 } while (edge);
             }
@@ -933,7 +938,7 @@ template <typename Value> struct GatherEdge : Special {
     GatherEdge(const Index &offset, const Mask &mask, bool permute)
         : offset(offset), mask(mask), permute(permute) { }
 
-    void backward(Variable *source, const Variable *target, bool) const override {
+    void backward(Variable *source, const Variable *target, uint32_t) const override {
         Value &source_grad = (Value &) source->grad;
         uint32_t size = source->size;
 
@@ -954,7 +959,7 @@ template <typename Value> struct GatherEdge : Special {
             scatter_reduce(ReduceOp::Add, source_grad, target->grad, offset, mask);
     }
 
-    void forward(const Variable *source, Variable *target, bool) const override {
+    void forward(const Variable *source, Variable *target, uint32_t) const override {
         target->accum(gather<Value>(source->grad, offset, mask),
                       (uint32_t) width(offset));
     }
@@ -1028,12 +1033,12 @@ template <typename Value> struct ScatterEdge : Special {
                 enoki_raise("AD only supports ReduceOp::Add in scatter_reduce!");
         }
 
-    void backward(Variable *source, const Variable *target, bool) const override {
+    void backward(Variable *source, const Variable *target, uint32_t) const override {
         source->accum(gather<Value>(target->grad, offset, mask),
                       (uint32_t) width(offset));
     }
 
-    void forward(const Variable *source, Variable *target, bool) const override {
+    void forward(const Variable *source, Variable *target, uint32_t) const override {
         Value &target_grad = (Value &) target->grad;
         uint32_t size = target->size;
 
@@ -1342,7 +1347,7 @@ template <typename T> void ad_enqueue(ADMode mode, uint32_t index) {
 // ==========================================================================
 
 template <typename Value>
-void ad_traverse(bool retain_graph, bool retain_grad) {
+void ad_traverse(uint32_t flags) {
     LocalState &ls = local_state;
 
     std::vector<EdgeRef> &todo_tls = ls.todo, todo;
@@ -1400,9 +1405,19 @@ void ad_traverse(bool retain_graph, bool retain_grad) {
             }
         }
 
-        bool clear_grad = !retain_grad && prev->ref_count_grad == 0;
+        bool clear_grad = false;
 
-        if (rec && !prev->placeholder)
+        if (flags & (uint32_t) ADFlag::ClearInterior)
+            clear_grad |= (mode == ADMode::Forward ? prev->next_rev
+                                                   : prev->next_fwd) != 0;
+        if (flags & (uint32_t) ADFlag::ClearInput)
+            clear_grad |= (mode == ADMode::Forward ? prev->next_rev
+                                                   : prev->next_fwd) == 0;
+
+        /* Don't clear the gradient of vertices created *before* entering
+           megakernel mode, or when it is still explicitly referenced by some
+           other part of the computation graph */
+        if ((rec && !prev->placeholder) || prev->ref_count_grad > 0)
             clear_grad = false;
 
         // Aggressively clear gradients at intermediate nodes
@@ -1460,8 +1475,8 @@ void ad_traverse(bool retain_graph, bool retain_grad) {
                     "across edge a%i -> a%i, which lies outside of the "
                     "megakernel currently being recorded. You must "
                     "enqueue the variables being differentiated and call "
-                    "ek.traverse(retain_graph=False, retain_grad=True) *before* "
-                    "entering megakernel mode (i.e. recording virtual function "
+                    "ek.traverse(ek.ADFlag.ClearEdges) *before* entering "
+                    "megakernel mode (i.e. recording virtual function "
                     "calls/loops).", v0i, v1i);
             }
         }
@@ -1493,11 +1508,11 @@ void ad_traverse(bool retain_graph, bool retain_grad) {
 
         if (unlikely(edge.special)) {
             if (mode == ADMode::Forward)
-                edge.special->forward(v0, v1, retain_grad);
+                edge.special->forward(v0, v1, flags);
             else
-                edge.special->backward(v1, v0, retain_grad);
+                edge.special->backward(v1, v0, flags);
 
-            if (!retain_graph) {
+            if (flags & (uint32_t) ADFlag::ClearEdges) {
                 // Edge may have been invalidated by callback, look up once more
                 Edge &edge2 = state.edges[er.id];
                 if (edge.source == er.source && edge.target == er.target) {
@@ -1510,16 +1525,17 @@ void ad_traverse(bool retain_graph, bool retain_grad) {
         } else {
             v1->mul_accum(v0->grad, edge.weight, v0->size);
 
-            if (!retain_graph)
+            if (flags & (uint32_t) ADFlag::ClearEdges)
                 edge.weight = Value();
         }
     }
 
     postprocess(v0i_prev, 0);
 
-    ad_log(Debug, retain_graph ? "ad_traverse(): decreasing reference counts .."
-                               : "ad_traverse(): decreasing reference counts "
-                                 "and removing traversed edges from graph ..");
+    ad_log(Debug, (flags & (uint32_t) ADFlag::ClearEdges)
+                      ? "ad_traverse(): decreasing reference counts .."
+                      : "ad_traverse(): decreasing reference counts "
+                        "and removing traversed edges from graph ..");
 
     // Undo reference count increases performed by ad_enqueue()
     for (EdgeRef er : todo) {
@@ -1540,7 +1556,7 @@ void ad_traverse(bool retain_graph, bool retain_grad) {
         Variable *source = state[er.source],
                  *target = state[er.target];
 
-        if (!retain_graph) {
+        if (flags & (uint32_t) ADFlag::ClearEdges) {
             ad_trace("ad_traverse(): removing edge a%i -> a%i", er.source, er.target);
 
             // Clear out forward edge
@@ -1944,7 +1960,7 @@ template ENOKI_EXPORT void ad_accum_grad<Value>(uint32_t, const Value &, bool);
 template ENOKI_EXPORT void ad_set_label<Value>(uint32_t, const char *);
 template ENOKI_EXPORT const char *ad_label<Value>(uint32_t);
 template ENOKI_EXPORT void ad_enqueue<Value>(ADMode, uint32_t);
-template ENOKI_EXPORT void ad_traverse<Value>(bool, bool);
+template ENOKI_EXPORT void ad_traverse<Value>(uint32_t);
 template ENOKI_EXPORT size_t ad_implicit<Value>();
 template ENOKI_EXPORT void ad_extract_implicit<Value>(size_t, uint32_t*);
 template ENOKI_EXPORT void ad_enqueue_implicit<Value>(size_t);

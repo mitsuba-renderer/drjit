@@ -24,7 +24,7 @@ template <typename Value> void ad_inc_ref(int32_t) noexcept;
 template <typename Value> void ad_dec_ref(int32_t) noexcept;
 template <typename Value> size_t ad_postponed();
 template <typename Value> bool ad_enqueue_postponed();
-template <typename Value> void ad_traverse(bool, bool);
+template <typename Value> void ad_traverse(uint32_t);
 template <typename Value, typename Mask>
 uint32_t ad_new_select(const char *, size_t, const Mask &, uint32_t, uint32_t);
 NAMESPACE_END(detail)
@@ -257,10 +257,10 @@ protected:
 
                         if (m_ad_float_precision == 64) {
                             if (detail::ad_enqueue_postponed<Float64>())
-                                detail::ad_traverse<Float64>(true, false);
+                                detail::ad_traverse<Float64>((uint32_t) ADFlag::ClearVertices);
                         } else {
                             if (detail::ad_enqueue_postponed<Float32>())
-                                detail::ad_traverse<Float32>(true, false);
+                                detail::ad_traverse<Float32>((uint32_t) ADFlag::ClearVertices);
                         }
                     }
 

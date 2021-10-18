@@ -2301,17 +2301,19 @@ def enqueue(mode, *args):
                 enqueue(mode, getattr(a, k))
 
 
-def traverse(t, retain_graph=False, retain_grad=False):
+def traverse(t, flags=_ek.ADFlag.Default):
+    assert not isinstance(flags, bool)
+
     if not _ek.is_diff_array_v(t):
         raise Exception('traverse(): expected a differentiable array type!')
 
     t = _ek.leaf_array_t(t)
     if t.IsTensor:
         t = t.Array
-    t.traverse_(retain_graph, retain_grad)
+    t.traverse_(flags)
 
 
-def backward(a, retain_graph=False, retain_grad=False):
+def backward(a, flags=_ek.ADFlag.Default):
     if _ek.is_diff_array_v(a):
         if not grad_enabled(a):
             raise Exception("backward(): attempted to propagate derivatives "
@@ -2322,12 +2324,12 @@ def backward(a, retain_graph=False, retain_grad=False):
             a = a + type(a)(0)
         set_grad(a, 1)
         enqueue(_ek.ADMode.Reverse, a)
-        traverse(type(a), retain_graph=retain_graph, retain_grad=retain_grad)
+        traverse(type(a), flags)
     else:
         raise Exception("Expected a differentiable array type!")
 
 
-def forward(a, retain_graph=False, retain_grad=False):
+def forward(a, flags=_ek.ADFlag.Default):
     if _ek.is_diff_array_v(a):
         if not grad_enabled(a):
             raise Exception("forward(): attempted to propagate derivatives "
@@ -2336,7 +2338,7 @@ def forward(a, retain_graph=False, retain_grad=False):
                             "enable_grad()?")
         set_grad(a, 1)
         enqueue(_ek.ADMode.Forward, a)
-        traverse(type(a), retain_graph=retain_graph, retain_grad=retain_grad)
+        traverse(type(a), flags)
     else:
         raise Exception("Expected a differentiable array type!")
 

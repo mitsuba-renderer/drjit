@@ -45,7 +45,7 @@ def test02_add_fwd(m):
         a, b = m.Float(1), m.Float(2)
         ek.enable_grad(a, b)
         c = 2 * a + b
-        ek.forward(a, retain_graph=True)
+        ek.forward(a, flags=ek.ADFlag.ClearVertices)
         assert ek.grad(c) == 2
         ek.set_grad(c, 101)
         ek.forward(b)
@@ -57,12 +57,12 @@ def test02_add_fwd(m):
         c = 2 * a + b
         ek.set_grad(a, 1.0)
         ek.enqueue(ek.ADMode.Forward, a)
-        ek.traverse(m.Float, retain_graph=True)
+        ek.traverse(m.Float, flags=ek.ADFlag.ClearVertices)
         assert ek.grad(c) == 2
         assert ek.grad(a) == 0
         ek.set_grad(a, 1.0)
         ek.enqueue(ek.ADMode.Forward, a)
-        ek.traverse(m.Float, retain_graph=True)
+        ek.traverse(m.Float, flags=ek.ADFlag.ClearVertices)
         assert ek.grad(c) == 4
 
 
@@ -406,7 +406,7 @@ def test26_scatter_fwd(m):
     ref = [16.0, 0.0, 32.0, 0.0, 48.0, 0.0, 64.0, 0.0, 0.0, 0.0]
     assert ek.allclose(buf, ref)
 
-    ek.forward(x, retain_graph=True)
+    ek.forward(x, flags=ek.ADFlag.ClearVertices)
     grad = ek.grad(buf)
 
     ref_grad = [8.0, 0.0, 16.0, 0.0, 24.0, 0.0, 32.0, 0.0, 0.0, 0.0]
@@ -795,12 +795,12 @@ def test50_custom_forward(m):
     d2 = ek.custom(Normalize, d)
     ek.set_grad(d, m.Array3f(5, 6, 7))
     ek.enqueue(ek.ADMode.Forward, d)
-    ek.traverse(m.Float, retain_graph=True)
+    ek.traverse(m.Float, flags=ek.ADFlag.ClearVertices)
     assert ek.grad(d) == 0
     ek.set_grad(d, m.Array3f(5, 6, 7))
     assert ek.allclose(ek.grad(d2), m.Array3f(0.610883, 0.152721, -0.305441))
     ek.enqueue(ek.ADMode.Forward, d)
-    ek.traverse(m.Float, retain_graph=False)
+    ek.traverse(m.Float)
     assert ek.allclose(ek.grad(d2), m.Array3f(0.610883, 0.152721, -0.305441)*2)
 
 
@@ -817,7 +817,7 @@ def test51_custom_forward_external_dependency(m):
             value = param * 4.0
 
             ek.enqueue(ek.ADMode.Forward, param)
-            ek.traverse(m.Float, retain_graph=False, retain_grad=True)
+            ek.traverse(m.Float, ek.ADFlag.ClearEdges)
 
             self.set_grad_out(ek.grad(value))
 
@@ -835,12 +835,12 @@ def test51_custom_forward_external_dependency(m):
 
     ek.set_grad(theta, 1.0)
     ek.enqueue(ek.ADMode.Forward, theta)
-    ek.traverse(m.Float, retain_graph=False, retain_grad=True)
+    ek.traverse(m.Float, ek.ADFlag.ClearEdges)
 
     v3 = ek.custom(BuggyOp, 123)
 
     ek.enqueue(ek.ADMode.Forward, param)
-    ek.traverse(m.Float, retain_graph=False, retain_grad=True)
+    ek.traverse(m.Float, ek.ADFlag.ClearEdges)
 
     assert ek.grad(v3) == 12
 
@@ -890,7 +890,7 @@ def test52_diff_loop(m, do_record):
     x = m.Float(0.5)
     ek.enable_grad(x)
     y = elliptic_k(x)
-    ek.forward(x, retain_graph=True)
+    ek.forward(x, flags=ek.ADFlag.ClearVertices)
     del x
     assert ek.allclose(y, 1.85407, rtol=5e-4)
     assert ek.allclose(ek.grad(y), 0.847213, rtol=5e-4)
@@ -1158,7 +1158,7 @@ def test61_implicit_dep_customop(m):
 
     v3 = ek.custom(ImplicitDep, 123)
     assert v3[0] == 123*6
-    ek.forward(v0, retain_graph=True)
+    ek.forward(v0, flags=ek.ADFlag.ClearVertices)
     assert ek.grad(v3) == 123*3
 
     v3 = ek.custom(ImplicitDep, 123)
@@ -1166,9 +1166,10 @@ def test61_implicit_dep_customop(m):
     ek.backward(v3)
     assert ek.grad(v0) == 123*3
 
-@pytest.mark.parametrize("retain_graph", [True, False])
-@pytest.mark.parametrize("retain_grad", [True, False])
-def test62_retain_graph_or_grad(m, retain_graph, retain_grad):
+@pytest.mark.parametrize("f1", [0, ek.ADFlag.ClearEdges])
+@pytest.mark.parametrize("f2", [0, ek.ADFlag.ClearInterior])
+@pytest.mark.parametrize("f3", [0, ek.ADFlag.ClearInput])
+def test62_ad_flags(m, f1, f2, f3):
     v0 = m.Float(2)
     ek.enable_grad(v0)
     v1 = v0 * 0.5
@@ -1177,26 +1178,46 @@ def test62_retain_graph_or_grad(m, retain_graph, retain_grad):
     for i in range(2):
         ek.accum_grad(v0, 1 if i == 0 else 100)
         ek.enqueue(ek.ADMode.Forward, v0)
-        ek.traverse(m.Float, retain_graph=retain_graph, retain_grad=retain_grad)
+        ek.traverse(m.Float, flags=int(f1) | int(f2) | int(f3))
 
-    if retain_graph:
-        if retain_grad:
-            assert ek.grad(v0) == 101
-            assert ek.grad(v1) == 51
-            assert ek.grad(v2) == 153.5
+    if f1 == 0:
+        if f2 == 0:
+            if f3 == 0:
+                assert ek.grad(v0) == 101
+                assert ek.grad(v1) == 51
+                assert ek.grad(v2) == 153.5
+            else:
+                assert ek.grad(v0) == 0
+                assert ek.grad(v1) == 50.5
+                assert ek.grad(v2) == 152
         else:
-            assert ek.grad(v0) == 0
-            assert ek.grad(v1) == 0
-            assert ek.grad(v2) == 151.5
+            if f3 == 0:
+                assert ek.grad(v0) == 101
+                assert ek.grad(v1) == 0
+                assert ek.grad(v2) == 153
+            else:
+                assert ek.grad(v0) == 0
+                assert ek.grad(v1) == 0
+                assert ek.grad(v2) == 151.5
     else:
-        if retain_grad:
-            assert ek.grad(v0) == 101
-            assert ek.grad(v1) == 0.5
-            assert ek.grad(v2) == 1.5
+        if f2 == 0:
+            if f3 == 0:
+                assert ek.grad(v0) == 101
+                assert ek.grad(v1) == 0.5
+                assert ek.grad(v2) == 1.5
+            else:
+                assert ek.grad(v0) == 100
+                assert ek.grad(v1) == 0.5
+                assert ek.grad(v2) == 1.5
         else:
-            assert ek.grad(v0) == 100
-            assert ek.grad(v1) == 0
-            assert ek.grad(v2) == 1.5
+            if f3 == 0:
+                assert ek.grad(v0) == 101
+                assert ek.grad(v1) == 0
+                assert ek.grad(v2) == 1.5
+            else:
+                assert ek.grad(v0) == 100
+                assert ek.grad(v1) == 0
+                assert ek.grad(v2) == 1.5
 
 
 def test63_broadcasting_set_grad(m):

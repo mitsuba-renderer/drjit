@@ -153,7 +153,7 @@ ENOKI_TEST(test04_loop_rev_complex) {
 
         while (loop(i < 10)) {
             Float z = ek::gather<Float>(y, i);
-            ek::backward(z, true);
+            ek::backward(z, (uint32_t) ek::ADFlag::ClearVertices);
             ++i;
         }
 
@@ -246,7 +246,7 @@ ENOKI_TEST(test05_vcall_symbolic_ad_loop_opt) {
 
                 ek::enqueue(ADMode::Reverse, output);
                 ek::set_grad(output, value);
-                ek::traverse<Float>(false);
+                ek::traverse<Float>();
 
                 value = ek::detach(arr->g(value));
 
