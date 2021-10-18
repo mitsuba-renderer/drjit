@@ -1400,8 +1400,13 @@ void ad_traverse(bool retain_graph, bool retain_grad) {
             }
         }
 
+        bool clear_grad = !retain_grad && prev->ref_count_grad == 0;
+
+        if (rec && !prev->placeholder)
+            clear_grad = false;
+
         // Aggressively clear gradients at intermediate nodes
-        if (!retain_grad && prev->ref_count_grad == 0) {
+        if (clear_grad) {
             ad_trace("ad_traverse(): clearing gradient at intermediate variable a%i", prev_i);
             prev->grad = Value();
         }
@@ -1442,13 +1447,26 @@ void ad_traverse(bool retain_graph, bool retain_grad) {
 
         uint32_t grad_size = (uint32_t) width(v0->grad);
 
-        if (unlikely(mode == ADMode::Reverse && rec && !v0->placeholder)) {
-            ad_trace("ad_traverse(): postponing edge a%i -> a%i (must be "
-                     "handled outside of megakernel).", v0i, v1i);
-            ls.postponed.push_back(er);
-            er.id = er.source = er.target = 0;
-            continue;
-        } else if (unlikely(grad_size != 1 && v0->size != grad_size)) {
+        if (unlikely(rec && !v0->placeholder)) {
+            if (mode == ADMode::Reverse) {
+                ad_trace("ad_traverse(): postponing edge a%i -> a%i (must be "
+                         "handled outside of megakernel).", v0i, v1i);
+                ls.postponed.push_back(er);
+                er.id = er.source = er.target = 0;
+                continue;
+            } else if (!v1->placeholder) {
+                ad_raise(
+                    "ad_traverse(): tried to forward-propagate derivatives "
+                    "across edge a%i -> a%i, which lies outside of the "
+                    "megakernel currently being recorded. You must "
+                    "enqueue the variables being differentiated and call "
+                    "ek.traverse(retain_graph=False, retain_grad=True) *before* "
+                    "entering megakernel mode (i.e. recording virtual function "
+                    "calls/loops).", v0i, v1i);
+            }
+        }
+
+        if (unlikely(grad_size != 1 && v0->size != grad_size)) {
             if (grad_size == 0) {
                 ad_trace("ad_traverse(): skipping edge a%i -> a%i (no source "
                          "gradient).", v0i, v1i);
