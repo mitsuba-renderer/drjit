@@ -351,7 +351,7 @@ ENOKI_TEST(test07_vcall_within_loop_postpone_rev) {
         ek::Loop<FMask> loop("MyLoop", i);
         while (loop(i < 10)) {
             Float z = b2p->f2(arange<UInt32>(13) % 10);
-            ek::backward(z, true);
+            ek::backward(z, (uint32_t) ek::ADFlag::ClearVertices);
             i++;
         }
 
