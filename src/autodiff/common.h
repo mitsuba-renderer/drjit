@@ -157,5 +157,5 @@ extern void ad_log(LogLevel level, const char *fmt, ...);
 
 namespace enoki {
     extern const char *ad_prefix();
-    extern bool ad_enabled() noexcept;
+    ENOKI_EXPORT bool ad_enabled() noexcept;
 }
