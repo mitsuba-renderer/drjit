@@ -3,6 +3,7 @@
 #include <enoki/idiv.h>
 #include <enoki/loop.h>
 #include <pybind11/stl.h>
+#include <pybind11/operators.h>
 
 extern void export_scalar(py::module_ &m);
 
@@ -103,7 +104,14 @@ PYBIND11_MODULE(enoki_ext, m_) {
         .value("ClearInput", ek::ADFlag::ClearInput)
         .value("ClearInterior", ek::ADFlag::ClearInterior)
         .value("ClearVertices", ek::ADFlag::ClearVertices)
-        .value("Default", ek::ADFlag::Default);
+        .value("Default", ek::ADFlag::Default)
+        .def(py::self == py::self)
+        .def(py::self | py::self)
+        .def(int() | py::self)
+        .def(py::self & py::self)
+        .def(int() & py::self)
+        .def(+py::self)
+        .def(~py::self);
 
     py::class_<ek::detail::reinterpret_flag>(array_detail, "reinterpret_flag")
         .def(py::init<>());

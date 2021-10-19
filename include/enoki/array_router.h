@@ -1755,6 +1755,13 @@ enum class ADFlag : uint32_t {
    Default = (uint32_t) ClearEdges | (uint32_t) ClearVertices
 };
 
+constexpr uint32_t operator |(ADFlag f1, ADFlag f2)   { return (uint32_t) f1 | (uint32_t) f2; }
+constexpr uint32_t operator |(uint32_t f1, ADFlag f2) { return f1 | (uint32_t) f2; }
+constexpr uint32_t operator &(ADFlag f1, ADFlag f2)   { return (uint32_t) f1 & (uint32_t) f2; }
+constexpr uint32_t operator &(uint32_t f1, ADFlag f2) { return f1 & (uint32_t) f2; }
+constexpr uint32_t operator ~(ADFlag f1)              { return ~(uint32_t) f1; }
+constexpr uint32_t operator +(ADFlag e)               { return (uint32_t) e; }
+
 
 template <typename...Ts> void traverse(uint32_t flags = (uint32_t) ADFlag::Default) {
     using Type = leaf_array_t<Ts...>;
