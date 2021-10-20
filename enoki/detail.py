@@ -303,11 +303,22 @@ def tensor_init(tensor_type, obj):
             info = obj.__array_interface__
             shape = info['shape']
             typestr = str(info['typestr'])[3:-1]
-            if not typestr == tensor_type.Array.Type.NumPy:
-                raise TypeError("TensorXf: unsupported type: %s. Expect an "
-                                "array containing %s values." % (typestr,
-                                tensor_type.Array.Type.NumPy))
-            data = tensor_type.Array.load_(info['data'][0], enoki.hprod(shape))
+            cls = tensor_type.Array
+            if typestr != tensor_type.Array.Type.NumPy:
+                name = None
+                for v in VAR_TYPE_NAME:
+                    t = getattr(enoki.VarType, v, None)
+                    if t and t.NumPy == typestr:
+                        name = array_name('Array', t, [enoki.Dynamic], False)
+                        break
+                if name and hasattr(mod, name):
+                    cls = getattr(mod, name)
+                else:
+                    import numpy as np
+                    np_data = np.array(obj).astype(tensor_type.Array.Type.NumPy)
+                    return tensor_init(tensor_type, np_data)
+
+            data = cls.load_(info['data'][0], enoki.hprod(shape))
             return tensor_type(tensor_type.Array(data), shape)
         else:
             raise TypeError("TensorXf: expect an array that implements the "
