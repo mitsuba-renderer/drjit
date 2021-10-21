@@ -2266,7 +2266,7 @@ def disable_grad(*args):
 
 
 def replace_grad(a, b):
-    if type(a) is not type(b) or not _ek.is_diff_array_v(a):
+    if type(a) is not type(b) or not _ek.is_diff_array_v(a) or not a.IsFloat:
         raise Exception("replace_grad(): unsupported input types!")
 
     if a.Depth > 1:
@@ -2288,7 +2288,7 @@ def replace_grad(a, b):
 
 def enqueue(mode, *args):
     for a in args:
-        if _ek.is_diff_array_v(a):
+        if _ek.is_diff_array_v(a) and a.IsFloat:
             a.enqueue_(mode)
         elif isinstance(a, tuple) or isinstance(a, list):
             for v in a:
@@ -2314,7 +2314,7 @@ def traverse(t, flags=_ek.ADFlag.Default):
 
 
 def backward(a, flags=_ek.ADFlag.Default):
-    if _ek.is_diff_array_v(a):
+    if _ek.is_diff_array_v(a) and a.IsFloat:
         if not grad_enabled(a):
             raise Exception("backward(): attempted to propagate derivatives "
                             "through a variable that is not registered with "
@@ -2330,7 +2330,7 @@ def backward(a, flags=_ek.ADFlag.Default):
 
 
 def forward(a, flags=_ek.ADFlag.Default):
-    if _ek.is_diff_array_v(a):
+    if _ek.is_diff_array_v(a) and a.IsFloat:
         if not grad_enabled(a):
             raise Exception("forward(): attempted to propagate derivatives "
                             "through a variable that is not registered with "
