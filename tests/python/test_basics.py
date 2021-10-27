@@ -612,3 +612,16 @@ def test19_make_opaque():
         assert c[i].is_evaluated_()
     assert not t.array.is_literal_()
     assert t.array.is_evaluated_()
+
+
+def test20_unsigned_negative():
+    UInt32 = get_class('enoki.llvm.UInt32')
+
+    a = UInt32(-1)
+    assert a == 4294967295
+
+    a = UInt32(1)
+    b = -1
+    c = a - b
+
+    assert c == 2

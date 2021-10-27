@@ -75,6 +75,14 @@ void bind_basic_methods(py::class_<Array> &cls) {
            a.set_entry(i, value);
        });
 
+    if constexpr (!Array::IsMask && ek::is_dynamic_array_v<Array> &&
+                  ek::array_depth_v<Array> == 1 && ek::is_unsigned_v<Array>) {
+        cls.def("set_entry_", [](Array &a, size_t i, const
+        std::make_signed_t<ek::scalar_t<Value>> &value) {
+            a.set_entry(i, value);
+        });
+    }
+
     if constexpr (ek::is_dynamic_array_v<Array> ||
                   (!ek::is_jit_array_v<Array> && !ek::is_mask_v<Array>))
         cls.def("data_", [](const Array &a) {
