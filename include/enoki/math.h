@@ -1517,9 +1517,10 @@ template <typename Value> Value erf(const Value &x) {
                   0x1.1c6a194029df4p-12, -0x1.03d1306b29028p-31);
         }
 
+        Value xb = 1.f - exp2(c1 * xa);
         return select(
             xa < 1, x * c0,
-            copysign(select(isfinite(xa), 1.f - exp2(c1 * xa), 1.f), x));
+            copysign(select(isfinite(xb), xb, 1.f), x));
     }
 }
 
