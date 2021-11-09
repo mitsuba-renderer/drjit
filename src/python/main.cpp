@@ -138,7 +138,7 @@ PYBIND11_MODULE(enoki_ext, m_) {
 #if defined(ENOKI_ENABLE_AUTODIFF)
     py::enum_<ek::ADMode>(m, "ADMode")
         .value("Forward", ek::ADMode::Forward)
-        .value("Reverse", ek::ADMode::Reverse);
+        .value("Backward", ek::ADMode::Backward);
 
 #if defined(ENOKI_ENABLE_CUDA)
     export_cuda_ad(m);

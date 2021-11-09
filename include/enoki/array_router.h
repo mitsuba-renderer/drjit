@@ -1680,7 +1680,7 @@ void accum_grad(T &value, const T2 &grad) {
 }
 
 /// This library supports two main directions of derivative propagation
-enum class ADMode { Forward, Reverse };
+enum class ADMode { Forward, Backward };
 
 template <typename T> void enqueue(ADMode mode, const T &value) {
     if constexpr (is_diff_array_v<T>) {
@@ -1727,7 +1727,7 @@ template <typename T> const char *graphviz(const T&) {
 
 /**
  * By default, Enoki's AD system destructs the enqueued input graph during
- * forward/reverse mode traversal. This frees up resources, which is useful
+ * forward/backward mode traversal. This frees up resources, which is useful
  * when working with large wavefronts or very complex computation graphs.
  * However, this also prevents repeated propagation of gradients through a
  * shared subgraph that is being differentiated multiple times.
@@ -1779,7 +1779,7 @@ template <typename T> void backward(T& value, uint32_t flags = (uint32_t) ADFlag
     if constexpr (array_depth_v<T> > 1)
         value = value + T(0);
     set_grad(value, 1.f);
-    enqueue(ADMode::Reverse, value);
+    enqueue(ADMode::Backward, value);
     traverse<T>(flags);
 }
 

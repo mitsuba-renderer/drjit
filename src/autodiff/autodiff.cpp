@@ -8,7 +8,7 @@
  * below only needs to be compiled once instead of adding a heavy compilation
  * burden to any code using the AD types.
  *
- * Forward and reverse-mode traversal build on three main data structures:
+ * Forward and backward-mode traversal build on three main data structures:
  *
  * - 'state.variable': A hash table mapping from variable IDs (uint32_t) to
  *   'Variable' instances, which mainly stores the gradient associated with
@@ -30,7 +30,7 @@
  * and 'ad_traverse()': Arithmetic involving differentiable Enoki arrays
  * triggers various calls to 'ad_new()', which creates the necessary variables
  * and edge connectivity in the above graph data structures. Forward or
- * reverse-mode differentiation with 'ad_traverse()' moves gradients through
+ * backward-mode differentiation with 'ad_traverse()' moves gradients through
  * the desired sub-part of the graph, while executing the derivative
  * transformation encoded along edges.
  *
@@ -120,9 +120,9 @@ template <typename T> bool is_valid(const T &value) {
  *
  * Instead of storing an explicit adjacency list of the AD graph structure, the
  * adjacency information is directly encoded in the edges. In particular, the
- * 'next_fwd' and 'next_rev' indices each implement a singly linked list that
+ * 'next_fwd' and 'next_bwd' indices each implement a singly linked list that
  * can be used to iterate through the forward edges (of the 'source' variable)
- * and reverse edges (of the 'target' variable).
+ * and backward edges (of the 'target' variable).
  */
 struct Edge {
     /// Variable index of source operand
@@ -135,7 +135,7 @@ struct Edge {
     uint32_t next_fwd;
 
     /// Links to the next backward edge
-    uint32_t next_rev : 31;
+    uint32_t next_bwd : 31;
 
     /// Visited bit
     uint32_t visited : 1;
@@ -165,7 +165,7 @@ struct Edge {
  * of the original program variable.
  *
  * Adjacency, i.e. how the variable is connected to other variables in either
- * direction, is represented using linked lists. The 'next_fwd' and 'next_rev'
+ * direction, is represented using linked lists. The 'next_fwd' and 'next_bwd'
  * fields each provide an entry point into such a linked list of edges (see
  * also \ref Edge).
  *
@@ -183,7 +183,7 @@ struct Variable {
     uint32_t next_fwd;
 
     /// Links to the first backward edge at this node
-    uint32_t next_rev;
+    uint32_t next_bwd;
 
     /// Array size of the associated primal variable
     uint32_t size;
@@ -425,7 +425,7 @@ struct LocalState {
     std::vector<EdgeRef> postponed;
 
     /// Requested directionality of differentiation
-    ADMode mode = ADMode::Reverse;
+    ADMode mode = ADMode::Backward;
 };
 
 // Special edge (scatter, gather, scatter_reduce, block_sum, etc.)
@@ -519,8 +519,8 @@ static void ad_free(uint32_t index, Variable *v) {
         v->label = nullptr;
     }
 
-    uint32_t edge_id = v->next_rev;
-    v->next_rev = 0;
+    uint32_t edge_id = v->next_bwd;
+    v->next_bwd = 0;
 
     while (edge_id) {
         Edge &edge = state.edges[edge_id];
@@ -532,7 +532,7 @@ static void ad_free(uint32_t index, Variable *v) {
             ad_fail("ad_free(): invalid edge connectivity!");
 
         uint32_t source = edge.source;
-        uint32_t next_rev = edge.next_rev,
+        uint32_t next_bwd = edge.next_bwd,
                  next_fwd = edge.next_fwd;
 
         assert(edge.target == index);
@@ -564,7 +564,7 @@ static void ad_free(uint32_t index, Variable *v) {
 
         state.unused_edges.push_back(edge_id);
 
-        edge_id = next_rev;
+        edge_id = next_bwd;
     }
 
     state.variables.erase(index);
@@ -611,7 +611,7 @@ static uint32_t ad_edge_new() {
 
 /// Ensure consistent size of placeholder variables to avoid horiz. reductions
 static void ad_propagate_placeholder_size(Variable *v) {
-    uint32_t edge = v->next_rev;
+    uint32_t edge = v->next_bwd;
     while (edge) {
         Edge &e = state.edges[edge];
         Variable *v2 = state[e.source];
@@ -619,7 +619,7 @@ static void ad_propagate_placeholder_size(Variable *v) {
             v2->size = v->size;
             ad_propagate_placeholder_size(v2);
         }
-        edge = e.next_rev;
+        edge = e.next_bwd;
     }
 }
 
@@ -731,7 +731,7 @@ uint32_t ad_new(const char *label, size_t size, uint32_t op_count,
         edge.target = index;
         edge.weight = std::move(weights[i]);
         edge.next_fwd = var2->next_fwd;
-        edge.next_rev = edge_index;
+        edge.next_bwd = edge_index;
         edge_index = edge_index_new;
 
         ad_inc_ref(index2, var2);
@@ -746,7 +746,7 @@ uint32_t ad_new(const char *label, size_t size, uint32_t op_count,
         return 0;
     }
 
-    var->next_rev = edge_index;
+    var->next_bwd = edge_index;
     var->ref_count = 1;
 
     if (var->placeholder)
@@ -811,25 +811,25 @@ template <typename Value> struct SpecialCallback : Special {
     }
 
     void forward(const Variable *source, Variable *, uint32_t flags) const override {
-        uint32_t edge = source->next_rev;
+        uint32_t edge = source->next_bwd;
         if (callback) {
             ad_trace("ad_traverse(): invoking user callback ..");
             /* leave critical section */ {
                 unlock_guard<std::mutex> guard(state.mutex);
                 callback->forward();
             }
-            if (edge && state.edges[edge].next_rev) { // fan-in > 1, update ref counts
+            if (edge && state.edges[edge].next_bwd) { // fan-in > 1, update ref counts
                 do {
                     const Edge &e = state.edges[edge];
                     Variable *v = state[e.source];
 
                     if (v->ref_count_grad > 0 && --v->ref_count_grad == 0) {
-                        if (((flags & (uint32_t) ADFlag::ClearInterior) && v->next_rev != 0) ||
-                            ((flags & (uint32_t) ADFlag::ClearInput) && v->next_rev == 0))
+                        if (((flags & (uint32_t) ADFlag::ClearInterior) && v->next_bwd != 0) ||
+                            ((flags & (uint32_t) ADFlag::ClearInput) && v->next_bwd == 0))
                             v->grad = Value();
                     }
 
-                    edge = e.next_rev;
+                    edge = e.next_bwd;
                 } while (edge);
             }
         } else {
@@ -917,7 +917,7 @@ uint32_t ad_new_select(const char *label, size_t size, const Mask &mask,
         edge.target = index;
         edge.special = new MaskEdge<Value>(mask, i != 0);
         edge.next_fwd = var2->next_fwd;
-        edge.next_rev = edge_index;
+        edge.next_bwd = edge_index;
         edge_index = edge_index_new;
 
         ad_inc_ref(index2, var2);
@@ -925,7 +925,7 @@ uint32_t ad_new_select(const char *label, size_t size, const Mask &mask,
         var2->next_fwd = edge_index_new;
     }
 
-    var->next_rev = edge_index;
+    var->next_bwd = edge_index;
     var->ref_count = 1;
 
     if (var->placeholder)
@@ -996,10 +996,10 @@ uint32_t ad_new_gather_impl(const char *label, size_t size, uint32_t src_index,
         edge.target = index;
         edge.special = new GatherEdge<Value>(offset, mask, permute);
         edge.next_fwd = var2->next_fwd;
-        edge.next_rev = 0;
+        edge.next_bwd = 0;
         ad_inc_ref(src_index, var2);
         var2->next_fwd = edge_index_new;
-        var->next_rev = edge_index_new;
+        var->next_bwd = edge_index_new;
         var->ref_count = 1;
 
         /* Encountered a dependency between recorded/non-recorded computation
@@ -1098,7 +1098,7 @@ uint32_t ad_new_scatter(const char *label, size_t size, ReduceOp op,
             edge.target = index;
             edge.special = new ScatterEdge<Value>(offset, mask, op);
             edge.next_fwd = var2->next_fwd;
-            edge.next_rev = var->next_rev;
+            edge.next_bwd = var->next_bwd;
             ad_inc_ref(src_index, var2);
             var2->next_fwd = edge_index_new;
             edge_index = edge_index_new;
@@ -1112,7 +1112,7 @@ uint32_t ad_new_scatter(const char *label, size_t size, ReduceOp op,
             edge2.source = dst_index;
             edge2.target = index;
             edge2.next_fwd = var2->next_fwd;
-            edge2.next_rev = edge_index;
+            edge2.next_bwd = edge_index;
             if (op != ReduceOp::None || permute) {
                 edge2.weight = 1;
             } else {
@@ -1128,7 +1128,7 @@ uint32_t ad_new_scatter(const char *label, size_t size, ReduceOp op,
         if (edge_index == 0)
             ad_raise("ad_new_scatter(): all inputs were non-differentiable!");
 
-        var->next_rev = edge_index;
+        var->next_bwd = edge_index;
         ad_inc_ref(index, var);
 
         return index;
@@ -1260,11 +1260,11 @@ void ad_add_edge(uint32_t source_idx, uint32_t target_idx,
     edge.target = target_idx;
     edge.special = new SpecialCallback<Value>(callback);
     edge.next_fwd = source->next_fwd;
-    edge.next_rev = target->next_rev;
+    edge.next_bwd = target->next_bwd;
 
     source->next_fwd = edge_index_new;
     ad_inc_ref(source_idx, source);
-    target->next_rev = edge_index_new;
+    target->next_bwd = edge_index_new;
 }
 
 
@@ -1296,25 +1296,25 @@ static void ad_dfs_fwd(std::vector<EdgeRef> &todo, uint32_t index, Variable *v) 
     }
 }
 
-/// Reverse-mode DFS starting from 'index'
-static void ad_dfs_rev(std::vector<EdgeRef> &todo, uint32_t index, Variable *v) {
-    uint32_t edge_id = v->next_rev;
+/// Backward-mode DFS starting from 'index'
+static void ad_dfs_bwd(std::vector<EdgeRef> &todo, uint32_t index, Variable *v) {
+    uint32_t edge_id = v->next_bwd;
     while (edge_id) {
         Edge &edge = state.edges[edge_id];
 
         if (!edge.visited) {
             edge.visited = 1;
 
-            ad_trace("ad_dfs_rev(): enqueuing edge a%i -> a%i", index,
+            ad_trace("ad_dfs_bwd(): enqueuing edge a%i -> a%i", index,
                      edge.source);
 
             Variable *v2 = state[edge.source];
             ad_inc_ref(index, v);
             todo.emplace_back(edge_id, edge.source, edge.target);
-            ad_dfs_rev(todo, edge.source, v2);
+            ad_dfs_bwd(todo, edge.source, v2);
         }
 
-        edge_id = edge.next_rev;
+        edge_id = edge.next_bwd;
     }
 }
 
@@ -1323,7 +1323,7 @@ template <typename T> void ad_enqueue(ADMode mode, uint32_t index) {
         return;
 
     ad_trace("ad_enqueue_node(a%i, mode=%s)", index,
-             mode == ADMode::Forward ? "forward" : "reverse");
+             mode == ADMode::Forward ? "forward" : "backward");
 
     LocalState &ls = local_state;
 
@@ -1332,14 +1332,14 @@ template <typename T> void ad_enqueue(ADMode mode, uint32_t index) {
     } else if (ls.mode != mode) {
         ad_raise("ad_enqueue(): attempted to enqueue nodes using "
                  "incompatible 'ADMode' values (i.e. both forward *and* "
-                 "reverse-mode differentation)");
+                 "backward-mode differentation)");
     }
 
     std::lock_guard<std::mutex> guard(state.mutex);
     if (mode == ADMode::Forward)
         ad_dfs_fwd(ls.todo, index, state[index]);
     else
-        ad_dfs_rev(ls.todo, index, state[index]);
+        ad_dfs_bwd(ls.todo, index, state[index]);
 }
 
 // ==========================================================================
@@ -1365,14 +1365,14 @@ void ad_traverse(uint32_t flags) {
     // Bring into the appropriate order
     ADMode mode = ls.mode;
     std::sort(todo.begin(), todo.end(), [mode](EdgeRef e1, EdgeRef e2) {
-        if (mode == ADMode::Reverse)
+        if (mode == ADMode::Backward)
             return std::tie(e1.target, e1.source, e1.id) > std::tie(e2.target, e2.source, e2.id);
         else
             return std::tie(e1.source, e1.target, e1.id) < std::tie(e2.source, e2.target, e2.id);
     });
 
     ad_log(Debug, "ad_traverse(): processing %zu edges in %s mode ..", todo.size(),
-           mode == ADMode::Forward ? "forward" : "reverse");
+           mode == ADMode::Forward ? "forward" : "backward");
 
     std::vector<Value> ek_loop_todo;
     auto postprocess = [&](uint32_t prev_i, uint32_t cur_i) {
@@ -1408,10 +1408,10 @@ void ad_traverse(uint32_t flags) {
         bool clear_grad = false;
 
         if (flags & (uint32_t) ADFlag::ClearInterior)
-            clear_grad |= (mode == ADMode::Forward ? prev->next_rev
+            clear_grad |= (mode == ADMode::Forward ? prev->next_bwd
                                                    : prev->next_fwd) != 0;
         if (flags & (uint32_t) ADFlag::ClearInput)
-            clear_grad |= (mode == ADMode::Forward ? prev->next_rev
+            clear_grad |= (mode == ADMode::Forward ? prev->next_bwd
                                                    : prev->next_fwd) == 0;
 
         /* Don't clear the gradient of vertices created *before* entering
@@ -1463,7 +1463,7 @@ void ad_traverse(uint32_t flags) {
         uint32_t grad_size = (uint32_t) width(v0->grad);
 
         if (unlikely(rec && !v0->placeholder)) {
-            if (mode == ADMode::Reverse) {
+            if (mode == ADMode::Backward) {
                 ad_trace("ad_traverse(): postponing edge a%i -> a%i (must be "
                          "handled outside of megakernel).", v0i, v1i);
                 ls.postponed.push_back(er);
@@ -1584,28 +1584,28 @@ void ad_traverse(uint32_t flags) {
                 ad_fail("ad_traverse(): could not find forward edge a%i "
                         "-> a%i", er.source, er.target);
 
-            // Clear out reverse edge
+            // Clear out backward edge
             edge_id_prev = 0;
-            edge_id_cur = target->next_rev;
+            edge_id_cur = target->next_bwd;
             while (edge_id_cur) {
                 Edge &e2 = state.edges[edge_id_cur];
 
                 if (edge_id_cur == er.id) {
                     if (edge_id_prev)
-                        state.edges[edge_id_prev].next_rev = e2.next_rev;
+                        state.edges[edge_id_prev].next_bwd = e2.next_bwd;
                     else
-                        target->next_rev = e2.next_rev;
+                        target->next_bwd = e2.next_bwd;
                     break;
                 } else if (unlikely(e2.target != er.target)) {
-                    ad_fail("ad_traverse(): invalid reverse edge connectivity!");
+                    ad_fail("ad_traverse(): invalid backward edge connectivity!");
                 }
 
                 edge_id_prev = edge_id_cur;
-                edge_id_cur = e2.next_rev;
+                edge_id_cur = e2.next_bwd;
             }
 
             if (unlikely(!edge_id_cur))
-                ad_fail("ad_traverse(): could not find reverse edge a%i "
+                ad_fail("ad_traverse(): could not find backward edge a%i "
                         "-> a%i", er.source, er.target);
 
             edge.reset();
@@ -1681,7 +1681,7 @@ template <typename Value> void ad_enqueue_implicit(size_t snapshot) {
     } else if (ls.mode != ADMode::Forward) {
         ad_raise("ad_enqueue_implicit(): attempted to enqueue nodes using "
                  "incompatible 'ADMode' values (i.e. both forward *and* "
-                 "reverse-mode differentation)");
+                 "backward-mode differentation)");
     }
 
     ad_trace("ad_enqueue_implicit(): enqueuing %zu implicit dependencies.",
@@ -1731,11 +1731,11 @@ template <typename Value> bool ad_enqueue_postponed() {
         ls.implicit.clear();
 
         if (ls.todo.empty()) {
-            ls.mode = ADMode::Reverse;
-        } else if (ls.mode != ADMode::Reverse) {
+            ls.mode = ADMode::Backward;
+        } else if (ls.mode != ADMode::Backward) {
             ad_raise("ad_enqueue_postponed(): attempted to enqueue nodes using "
                      "incompatible 'ADMode' values (i.e. both forward *and* "
-                     "reverse-mode differentation)");
+                     "backward-mode differentation)");
         }
 
         ad_trace("ad_enqueue_postponed(): enqueuing %zu edges.",
@@ -1887,7 +1887,7 @@ template <typename Value> const char *ad_graphviz() {
                 buffer.put("\\\"");
         }
 
-        if (v->next_rev == 0)
+        if (v->next_bwd == 0)
             color = "salmon";
         else if (v->next_fwd == 0)
             color = "lightblue2";
@@ -1914,12 +1914,12 @@ template <typename Value> const char *ad_graphviz() {
     for (uint32_t index : indices) {
         const Variable *v = state[index];
 
-        uint32_t edge = v->next_rev, edge_count = 0;
+        uint32_t edge = v->next_bwd, edge_count = 0;
         while (edge) {
-            edge = state.edges[edge].next_rev;
+            edge = state.edges[edge].next_bwd;
             edge_count++;
         }
-        edge = v->next_rev;
+        edge = v->next_bwd;
         uint32_t edge_ctr = edge_count;
         while (edge) {
             const Edge &e = state.edges[edge];
@@ -1929,7 +1929,7 @@ template <typename Value> const char *ad_graphviz() {
             else
                 buffer.fmt("    %i -> %i [label=\" %u\"%s];\n", e.target, e.source,
                            edge_ctr--, e.special ? " color=red" : "");
-            edge = e.next_rev;
+            edge = e.next_bwd;
         }
     }
 

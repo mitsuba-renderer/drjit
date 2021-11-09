@@ -133,7 +133,7 @@ struct DiffVCall : CustomOp<DiffType, Result, ConstStr, Self, Func, Args...> {
         using Inputs = ek_tuple<Args...>;
         ADProcessPostponedGuard<Type> guard;
 
-        auto func_rev = [func](auto *self2, auto &grad_out,
+        auto func_bwd = [func](auto *self2, auto &grad_out,
                                auto... args) -> Inputs {
             ad_copy(args...);
             enable_grad(args...);
@@ -148,17 +148,17 @@ struct DiffVCall : CustomOp<DiffType, Result, ConstStr, Self, Func, Args...> {
             fprintf(stderr, "%s\n", ad_graphviz<Type>());
 #endif
 
-            enqueue(ADMode::Reverse, result);
+            enqueue(ADMode::Backward, result);
             traverse<DiffType>();
             return Inputs(grad<false>(args)...);
         };
 
         size_t name_size = strlen(m_name_static) + 8;
         ek_unique_ptr<char[]> name(new char[name_size]);
-        snprintf(name.get(), name_size, "%s_ad_rev", m_name_static);
+        snprintf(name.get(), name_size, "%s_ad_bwd", m_name_static);
 
         Inputs grad_in = vcall_jit_record<Inputs>(
-            name.get(), func_rev, self, Base::grad_out(),
+            name.get(), func_bwd, self, Base::grad_out(),
             Base::template value_in<3 + Is>()...);
 
         ENOKI_MARK_USED(grad_in);

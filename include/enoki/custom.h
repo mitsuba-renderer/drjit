@@ -51,7 +51,7 @@ public:
     /// Callback to implement forward-mode derivatives
     virtual void forward() = 0;
 
-    /// Callback to implement reverse-mode derivatives
+    /// Callback to implement backward-mode derivatives
     virtual void backward() = 0;
 
     /// Return a descriptive name (used in GraphViz output)
@@ -77,18 +77,18 @@ protected:
         return detach<false>(m_inputs->template get<Index>());
     }
 
-    /// Access the gradient associated with the output argument (rev. mode AD)
+    /// Access the gradient associated with the output argument (backward mode AD)
     Output grad_out() const {
         return grad<false, false>(m_output);
     }
 
-    /// Accumulate a gradient value into an input argument (rev. mode AD)
+    /// Accumulate a gradient value into an input argument (backward mode AD)
     template <size_t Index = 0>
     void set_grad_in(const InputType<Index> &value) {
         accum_grad(m_inputs->template get<Index>(), value);
     }
 
-    /// Accumulate a gradient value into the output argument (fwd. mode AD)
+    /// Accumulate a gradient value into the output argument (forward mode AD)
     void set_grad_out(const Output &value) {
         accum_grad<false>(m_output, value);
     }

@@ -328,7 +328,7 @@ ENOKI_TEST(test04_vcall_symbolic_ad_fwd_accessing_local) {
     }
 }
 
-ENOKI_TEST(test05_vcall_symbolic_ad_rev_accessing_local) {
+ENOKI_TEST(test05_vcall_symbolic_ad_bwd_accessing_local) {
     if constexpr (ek::is_cuda_array_v<Float>)
         jit_init((uint32_t) JitBackend::CUDA);
     else
@@ -359,7 +359,7 @@ ENOKI_TEST(test05_vcall_symbolic_ad_rev_accessing_local) {
         StructFD output = arr->g(input);
         ek::set_label(input, "input");
         ek::set_label(output, "output");
-        ek::enqueue(ADMode::Reverse, output);
+        ek::enqueue(ADMode::Backward, output);
 
         ek::set_grad(output, StructF(2, 10));
         ek::traverse<FloatD>();

@@ -2323,7 +2323,7 @@ def backward(a, flags=_ek.ADFlag.Default):
         if _ek.array_depth_v(a) > 1:
             a = a + type(a)(0)
         set_grad(a, 1)
-        enqueue(_ek.ADMode.Reverse, a)
+        enqueue(_ek.ADMode.Backward, a)
         traverse(type(a), flags)
     else:
         raise Exception("Expected a differentiable array type!")

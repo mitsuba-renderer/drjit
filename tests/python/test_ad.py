@@ -31,7 +31,7 @@ def no_record():
     ek.set_flag(ek.JitFlag.LoopRecord, value_before)
 
 
-def test01_add_rev(m):
+def test01_add_bwd(m):
     a, b = m.Float(1), m.Float(2)
     ek.enable_grad(a, b)
     c = 2 * a + b
@@ -113,7 +113,7 @@ def test06_div(m):
     assert ek.allclose(ek.grad(b), -2.0 / 9.0)
 
 
-def test07_hsum_0_rev(m):
+def test07_hsum_0_bwd(m):
     x = ek.linspace(m.Float, 0, 1, 10)
     ek.enable_grad(x)
     y = ek.hsum_async(x*x)
@@ -131,7 +131,7 @@ def test08_hsum_0_fwd(m):
     assert len(ek.grad(y)) == 1 and ek.allclose(ek.grad(y), 10)
 
 
-def test09_hsum_1_rev(m):
+def test09_hsum_1_bwd(m):
     x = ek.linspace(m.Float, 0, 1, 11)
     ek.enable_grad(x)
     y = ek.hsum_async(ek.hsum_async(x)*x)
@@ -147,7 +147,7 @@ def test10_hsum_1_fwd(m):
     assert ek.allclose(ek.grad(y), 100)
 
 
-def test11_hsum_2_rev(m):
+def test11_hsum_2_bwd(m):
     x = ek.linspace(m.Float, 0, 1, 11)
     ek.enable_grad(x)
     z = ek.hsum_async(ek.hsum_async(x*x)*x*x)
@@ -174,7 +174,7 @@ def test13_hprod(m):
     assert ek.allclose(ek.grad(x), [80, 40, 16, 10])
 
 
-def test14_hmax_rev(m):
+def test14_hmax_bwd(m):
     x = m.Float(1, 2, 8, 5, 8)
     ek.enable_grad(x)
     y = ek.hmax_async(x)
@@ -256,7 +256,7 @@ def test22_gather_fwd(m):
     assert ek.allclose(ek.grad(y), ref)
 
 
-def test23_scatter_reduce_rev(m):
+def test23_scatter_reduce_bwd(m):
     for i in range(3):
         idx1 = ek.arange(m.UInt, 5)
         idx2 = ek.arange(m.UInt, 4) + 3
@@ -343,7 +343,7 @@ def test24_scatter_reduce_fwd(m):
                            + (17 if i % 2 == 0 else 0))
 
 
-def test25_scatter_rev(m):
+def test25_scatter_bwd(m):
     for i in range(3):
         idx1 = ek.arange(m.UInt, 5)
         idx2 = ek.arange(m.UInt, 4) + 3
@@ -779,12 +779,12 @@ class Normalize(ek.CustomOp):
         return "normalize"
 
 
-def test49_custom_reverse(m):
+def test49_custom_backward(m):
     d = m.Array3f(1, 2, 3)
     ek.enable_grad(d)
     d2 = ek.custom(Normalize, d)
     ek.set_grad(d2, m.Array3f(5, 6, 7))
-    ek.enqueue(ek.ADMode.Reverse, d2)
+    ek.enqueue(ek.ADMode.Backward, d2)
     ek.traverse(m.Float)
     assert ek.allclose(ek.grad(d), m.Array3f(0.610883, 0.152721, -0.305441))
 
@@ -871,7 +871,7 @@ def test52_diff_loop(m, do_record):
             ek.forward(m_)
             return ek.grad(y)
 
-        # Monte Carlo integral of dK, used in forward/reverse pass
+        # Monte Carlo integral of dK, used in forward/backward pass
         def eval_grad(self):
             return mcint(a=0, b=ek.Pi/2, f=lambda x: self.dK(x, self.m_))
 
@@ -943,18 +943,18 @@ def test53_loop_ballistic(m, do_record):
             loop = m.Loop("backward", lambda: (it, grad_pos, grad_vel))
             n = ek.width(grad_pos)
             while loop(it > 0):
-                # Retrieve loop variables, reverse chronological order
+                # Retrieve loop variables, backward chronological order
                 it -= 1
                 index = it * n + ek.arange(m.UInt32, n)
                 pos = ek.gather(m.Array2f, self.temp_pos, index)
                 vel = ek.gather(m.Array2f, self.temp_vel, index)
 
-                # Differentiate loop body in reverse mode
+                # Differentiate loop body in backward mode
                 ek.enable_grad(pos, vel)
                 pos_out, vel_out = self.timestep(pos, vel)
                 ek.set_grad(pos_out, grad_pos)
                 ek.set_grad(vel_out, grad_vel)
-                ek.enqueue(ek.ADMode.Reverse, pos_out, vel_out)
+                ek.enqueue(ek.ADMode.Backward, pos_out, vel_out)
                 ek.traverse(m.Float)
 
                 # Update loop variables
@@ -1014,21 +1014,21 @@ def test54_loop_ballistic_2(m, do_record):
 
             loop = m.Loop("backward", lambda: (it, pos, vel, grad_pos, grad_vel))
             while loop(it < 100):
-                # Take reverse step in time
+                # Take backward step in time
                 pos, vel = self.timestep(pos, vel, dt=-0.02)
 
                 # Take a forward step in time, keep track of derivatives
-                pos_rev, vel_rev = m.Array2f(pos), m.Array2f(vel)
-                ek.enable_grad(pos_rev, vel_rev)
-                pos_fwd, vel_fwd = self.timestep(pos_rev, vel_rev, dt=0.02)
+                pos_bwd, vel_bwd = m.Array2f(pos), m.Array2f(vel)
+                ek.enable_grad(pos_bwd, vel_bwd)
+                pos_fwd, vel_fwd = self.timestep(pos_bwd, vel_bwd, dt=0.02)
 
                 ek.set_grad(pos_fwd, grad_pos)
                 ek.set_grad(vel_fwd, grad_vel)
-                ek.enqueue(ek.ADMode.Reverse, pos_fwd, vel_fwd)
+                ek.enqueue(ek.ADMode.Backward, pos_fwd, vel_fwd)
                 ek.traverse(m.Float)
 
-                grad_pos = ek.grad(pos_rev)
-                grad_vel = ek.grad(vel_rev)
+                grad_pos = ek.grad(pos_bwd)
+                grad_vel = ek.grad(vel_bwd)
                 it += 1
 
             self.set_grad_in('pos', grad_pos)
@@ -1095,7 +1095,7 @@ def test57_diffloop_simple_fwd(m, no_record):
     assert ek.grad(fo) == m.Float(10, 5, 4)
 
 
-def test58_diffloop_simple_rev(m, no_record):
+def test58_diffloop_simple_bwd(m, no_record):
     fi, fo = m.Float(1, 2, 3), m.Float(0, 0, 0)
     ek.enable_grad(fi)
 
@@ -1120,7 +1120,7 @@ def test59_diffloop_masking_fwd(m, no_record):
     assert ek.grad(fo) == m.Float(1, 1, 1, 1, 1, 0, 0, 0, 0, 0)
 
 
-def test60_diffloop_masking_rev(m, no_record):
+def test60_diffloop_masking_bwd(m, no_record):
     fo = ek.zero(m.Float, 10)
     fi = m.Float(1, 2)
     i = m.UInt32(0, 5)

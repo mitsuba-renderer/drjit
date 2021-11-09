@@ -30,7 +30,7 @@ ENOKI_VCALL_END(Test)
 
 using TestPtr = ek::replace_scalar_t<Float, Test *>;
 
-ENOKI_TEST(test01_vcall_reduce_and_record_rev) {
+ENOKI_TEST(test01_vcall_reduce_and_record_bwd) {
     jit_init((uint32_t) JitBackend::LLVM);
 
     for (int j = 0; j < 3; ++j) {
@@ -115,7 +115,7 @@ ENOKI_TEST(test02_vcall_reduce_and_record_fwd) {
     }
 }
 
-ENOKI_TEST(test03_loop_rev_simple) {
+ENOKI_TEST(test03_loop_bwd_simple) {
     jit_init((uint32_t) JitBackend::LLVM);
 
     for (int j = 0; j < 2; ++j) {
@@ -137,7 +137,7 @@ ENOKI_TEST(test03_loop_rev_simple) {
     }
 }
 
-ENOKI_TEST(test04_loop_rev_complex) {
+ENOKI_TEST(test04_loop_bwd_complex) {
     jit_init((uint32_t) JitBackend::LLVM);
 
     for (int j = 0; j < 2; ++j) {
@@ -244,7 +244,7 @@ ENOKI_TEST(test05_vcall_symbolic_ad_loop_opt) {
             while (loop(ek::detach(active))) {
                 Float output = arr->f(2.f);
 
-                ek::enqueue(ADMode::Reverse, output);
+                ek::enqueue(ADMode::Backward, output);
                 ek::set_grad(output, value);
                 ek::traverse<Float>();
 
@@ -312,7 +312,7 @@ ENOKI_TEST(test06_vcall_symbolic_nested_ad_loop_opt) {
     delete b;
 }
 
-ENOKI_TEST(test07_vcall_within_loop_postpone_rev) {
+ENOKI_TEST(test07_vcall_within_loop_postpone_bwd) {
     /// postponing of AD edges across vcalls/loops, faux dependencies
 
     if constexpr (ek::is_cuda_array_v<Float>)

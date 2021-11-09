@@ -41,7 +41,7 @@ struct Normalize : ek::CustomOp<Float,      // Underlying differentiable type
     }
 
     /**
-     * Reverse-mode AD callback. Should get input gradients via Base::grad_out()
+     * Backward-mode AD callback. Should get input gradients via Base::grad_out()
      * and must call Base::set_grad_in<..>(..) for each differentiable input
      */
     void backward() override {
@@ -73,7 +73,7 @@ ENOKI_TEST(test01_basic) {
         ek::enable_grad(d);
         Vector3f d2 = ek::custom<Normalize>(d);
         ek::set_grad(d2, Vector3f(5, 6, 7));
-        ek::enqueue(ADMode::Reverse, d2);
+        ek::enqueue(ADMode::Backward, d2);
         ek::traverse<Float>(false);
         assert(ek::allclose(ek::grad(d), Vector3f(0.610883, 0.152721, -0.305441)));
     }
@@ -109,7 +109,7 @@ struct ScaleAdd2 : ek::CustomOp<Float, Vector3f, Vector3f, Vector3f, int> {
     }
 
     void backward() override {
-        fprintf(stderr, "Reverse.\n");
+        fprintf(stderr, "Backward.\n");
         Vector3f grad_out = Base::grad_out();
 
         if (Base::grad_enabled_in<0>())
@@ -135,7 +135,7 @@ ENOKI_TEST(test02_corner_case) {
         ek::enable_grad(d1.y());
         Vector3f d3 = ek::custom<ScaleAdd2>(d1, d2, 5);
         ek::set_grad(d3, Vector3f(5, 6, 7));
-        ek::enqueue(ADMode::Reverse, d3);
+        ek::enqueue(ADMode::Backward, d3);
         ek::traverse<Float>(false);
         assert(ek::allclose(ek::grad(d1), Vector3f(0, 30, 0)));
     }

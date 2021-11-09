@@ -250,7 +250,7 @@ protected:
                         m_jit_state.clear_mask();
 
                     if constexpr (IsDiff) {
-                        /* During loop recording, we cannot perform reverse-mode
+                        /* During loop recording, we cannot perform backward-mode
                            AD steps that fragment into multiple kernel launches.
                            The end of the loop finally provides an opportunity
                            to execute such postponed AD steps. */
