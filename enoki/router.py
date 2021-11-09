@@ -1098,7 +1098,7 @@ def round(a):
     if isinstance(a, ArrayBase):
         return a.round_()
     else:
-        return _math.round(a)
+        return round(a)
 
 
 def trunc(a):
@@ -1476,7 +1476,7 @@ def sec(a):
     if isinstance(a, ArrayBase):
         return a.sec_()
     else:
-        return 1 / _math.sec(a)
+        return 1 / _math.cos(a)
 
 
 def cot(a):
@@ -1580,7 +1580,7 @@ def erfinv(a):
     if isinstance(a, ArrayBase):
         return a.erfinv_()
     else:
-        return _math.erfinv(a)
+        raise Exception("erfinv(): only implemented for enoki types!")
 
 
 def lgamma(a):
