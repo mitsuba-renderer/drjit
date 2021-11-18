@@ -8,7 +8,7 @@
  * below only needs to be compiled once instead of adding a heavy compilation
  * burden to any code using the AD types.
  *
- * Forward and backward-mode traversal build on three main data structures:
+ * Forward and reverse-mode traversal build on three main data structures:
  *
  * - 'state.variable': A hash table mapping from variable IDs (uint32_t) to
  *   'Variable' instances, which mainly stores the gradient associated with
@@ -30,7 +30,7 @@
  * and 'ad_traverse()': Arithmetic involving differentiable Enoki arrays
  * triggers various calls to 'ad_new()', which creates the necessary variables
  * and edge connectivity in the above graph data structures. Forward or
- * backward-mode differentiation with 'ad_traverse()' moves gradients through
+ * reverse-mode differentiation with 'ad_traverse()' moves gradients through
  * the desired sub-part of the graph, while executing the derivative
  * transformation encoded along edges.
  *
@@ -1296,7 +1296,7 @@ static void ad_dfs_fwd(std::vector<EdgeRef> &todo, uint32_t index, Variable *v) 
     }
 }
 
-/// Backward-mode DFS starting from 'index'
+/// Reverse-mode DFS starting from 'index'
 static void ad_dfs_bwd(std::vector<EdgeRef> &todo, uint32_t index, Variable *v) {
     uint32_t edge_id = v->next_bwd;
     while (edge_id) {
@@ -1332,7 +1332,7 @@ template <typename T> void ad_enqueue(ADMode mode, uint32_t index) {
     } else if (ls.mode != mode) {
         ad_raise("ad_enqueue(): attempted to enqueue nodes using "
                  "incompatible 'ADMode' values (i.e. both forward *and* "
-                 "backward-mode differentation)");
+                 "reverse-mode differentation)");
     }
 
     std::lock_guard<std::mutex> guard(state.mutex);
@@ -1681,7 +1681,7 @@ template <typename Value> void ad_enqueue_implicit(size_t snapshot) {
     } else if (ls.mode != ADMode::Forward) {
         ad_raise("ad_enqueue_implicit(): attempted to enqueue nodes using "
                  "incompatible 'ADMode' values (i.e. both forward *and* "
-                 "backward-mode differentation)");
+                 "reverse-mode differentation)");
     }
 
     ad_trace("ad_enqueue_implicit(): enqueuing %zu implicit dependencies.",
@@ -1735,7 +1735,7 @@ template <typename Value> bool ad_enqueue_postponed() {
         } else if (ls.mode != ADMode::Backward) {
             ad_raise("ad_enqueue_postponed(): attempted to enqueue nodes using "
                      "incompatible 'ADMode' values (i.e. both forward *and* "
-                     "backward-mode differentation)");
+                     "reverse-mode differentation)");
         }
 
         ad_trace("ad_enqueue_postponed(): enqueuing %zu edges.",

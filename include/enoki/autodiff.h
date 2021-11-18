@@ -1,5 +1,5 @@
 /*
-    enoki/autodiff.h -- Forward/backward-mode automatic differentiation wrapper
+    enoki/autodiff.h -- Forward/reverse-mode automatic differentiation wrapper
 
     Enoki is a C++ template library for efficient vectorization and
     differentiation of numerical kernels on modern processor architectures.
