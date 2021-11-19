@@ -447,11 +447,16 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
         cls.def("detach_", [](const Array &a) { return ek::detach(a); });
         cls.def("detach_ref_", py::overload_cast<>(&Array::detach_),
                 py::return_value_policy::reference_internal);
+
         if constexpr (Array::IsFloat) {
             cls.def("grad_", [](const Array &a) { return a.grad_(); });
             cls.def("set_grad_", [](Array &a, ek::detached_t<Array> &value) { a.set_grad_(value); });
             cls.def("accum_grad_", [](Array &a, ek::detached_t<Array> &value) { a.accum_grad_(value); });
             cls.def("set_grad_enabled_", &Array::set_grad_enabled_);
+            cls.def("grad_suspended_", [](const Array &a) {
+                return ek::detail::ad_suspended<ek::detached_t<Array>>(
+                    a.index_ad());
+            });
             cls.def("enqueue_", &Array::enqueue_);
             cls.def("graphviz_", &Array::graphviz_);
             cls.def_static("traverse_", &Array::traverse_, py::call_guard<py::gil_scoped_release>());
@@ -460,6 +465,17 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
                                          const ek::detached_t<Array> &value) {
                 ek::detail::ad_inc_ref_impl<ek::detached_t<Array>>(index);
                 return Array::create(index, ek::detached_t<Array>(value));
+            });
+
+            cls.def_static(
+                "scope_enter_",
+                [](bool suspend, const std::vector<uint32_t> &indices) {
+                    ek::detail::ad_scope_enter<ek::detached_t<Array>>(
+                        suspend, indices.data(), indices.size());
+                });
+
+            cls.def_static("scope_leave_", []() {
+                ek::detail::ad_scope_leave<ek::detached_t<Array>>();
             });
         }
     }

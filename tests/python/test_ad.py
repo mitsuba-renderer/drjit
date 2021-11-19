@@ -737,10 +737,13 @@ def test48_suspend_resume(m):
     ek.enable_grad(x)
 
     a = x*x
+    assert not ek.grad_suspended(x)
 
     with ek.suspend_grad():
         b = x*x
+        assert ek.grad_suspended(x)
         with ek.resume_grad():
+            assert not ek.grad_suspended(x)
             c = b*x
         d = a*x
 
@@ -755,6 +758,27 @@ def test48_suspend_resume(m):
     assert ek.grad(b) == 0
     assert ek.grad(c) == ek.detach(b)
     assert ek.grad(d) == 0
+
+
+def test49_suspend_resume_selective(m):
+    x = m.Array2f(1, 1)
+    ek.enable_grad(x)
+
+    with ek.suspend_grad(x[0]):
+        a = x*x
+        with ek.resume_grad():
+            b = x*x
+
+    with ek.suspend_grad():
+        c = x*x
+        with ek.resume_grad(x[0]):
+            d = x*x
+
+    ek.forward(x)
+    assert ek.grad(a) == [0, 2]
+    assert ek.grad(b) == [2, 2]
+    assert ek.grad(c) == [0, 0]
+    assert ek.grad(d) == [2, 0]
 
 
 class Normalize(ek.CustomOp):
@@ -779,7 +803,7 @@ class Normalize(ek.CustomOp):
         return "normalize"
 
 
-def test49_custom_backward(m):
+def test50_custom_backward(m):
     d = m.Array3f(1, 2, 3)
     ek.enable_grad(d)
     d2 = ek.custom(Normalize, d)
@@ -789,7 +813,7 @@ def test49_custom_backward(m):
     assert ek.allclose(ek.grad(d), m.Array3f(0.610883, 0.152721, -0.305441))
 
 
-def test50_custom_forward(m):
+def test51_custom_forward(m):
     d = m.Array3f(1, 2, 3)
     ek.enable_grad(d)
     d2 = ek.custom(Normalize, d)
@@ -804,7 +828,7 @@ def test50_custom_forward(m):
     assert ek.allclose(ek.grad(d2), m.Array3f(0.610883, 0.152721, -0.305441)*2)
 
 
-def test51_custom_forward_external_dependency(m):
+def test52_custom_forward_external_dependency(m):
     class BuggyOp(ek.CustomOp):
         def eval(self, value):
             self.add_input(param)
@@ -845,7 +869,7 @@ def test51_custom_forward_external_dependency(m):
     assert ek.grad(v3) == 12
 
 
-def test52_diff_loop(m, do_record):
+def test53_diff_loop(m, do_record):
     def mcint(a, b, f, sample_count=100000):
         rng = m.PCG32()
         i = m.UInt32(0)
@@ -896,7 +920,7 @@ def test52_diff_loop(m, do_record):
     assert ek.allclose(ek.grad(y), 0.847213, rtol=5e-4)
 
 
-def test53_loop_ballistic(m, do_record):
+def test54_loop_ballistic(m, do_record):
     class Ballistic(ek.CustomOp):
         def timestep(self, pos, vel, dt=0.02, mu=.1, g=9.81):
             acc = -mu*vel*ek.norm(vel) - m.Array2f(0, g)
@@ -980,7 +1004,7 @@ def test53_loop_ballistic(m, do_record):
     assert ek.allclose(vel_in.x, [3.3516, 2.3789, 0.79156], rtol=1e-3)
 
 
-def test54_loop_ballistic_2(m, do_record):
+def test55_loop_ballistic_2(m, do_record):
     class Ballistic2(ek.CustomOp):
         def timestep(self, pos, vel, dt=0.02, mu=.1, g=9.81):
             acc = -mu*vel*ek.norm(vel) - m.Array2f(0, g)
@@ -1050,7 +1074,7 @@ def test54_loop_ballistic_2(m, do_record):
     assert ek.allclose(vel_in.x, [3.3516, 2.3789, 0.79156], atol=1e-3)
 
 
-def test55_nan_propagation(m):
+def test56_nan_propagation(m):
     for i in range(2):
         x = ek.arange(m.Float, 10)
         ek.enable_grad(x)
@@ -1076,7 +1100,7 @@ def test55_nan_propagation(m):
             assert ek.all(ek.isnan(g))
 
 
-def test56_scatter_implicit_detach(m):
+def test57_scatter_implicit_detach(m):
     x = ek.detach(m.Float(0))
     y = ek.detach(m.Float(1))
     i = m.UInt32(0)
@@ -1084,7 +1108,7 @@ def test56_scatter_implicit_detach(m):
     ek.scatter(x, y, i, m)
 
 
-def test57_diffloop_simple_fwd(m, no_record):
+def test58_diffloop_simple_fwd(m, no_record):
     fi, fo = m.Float(1, 2, 3), m.Float(0, 0, 0)
     ek.enable_grad(fi)
 
@@ -1095,7 +1119,7 @@ def test57_diffloop_simple_fwd(m, no_record):
     assert ek.grad(fo) == m.Float(10, 5, 4)
 
 
-def test58_diffloop_simple_bwd(m, no_record):
+def test59_diffloop_simple_bwd(m, no_record):
     fi, fo = m.Float(1, 2, 3), m.Float(0, 0, 0)
     ek.enable_grad(fi)
 
@@ -1106,7 +1130,7 @@ def test58_diffloop_simple_bwd(m, no_record):
     assert ek.grad(fi) == m.Float(10, 5, 4)
 
 
-def test59_diffloop_masking_fwd(m, no_record):
+def test60_diffloop_masking_fwd(m, no_record):
     fo = ek.zero(m.Float, 10)
     fi = m.Float(1, 2)
     i = m.UInt32(0, 5)
@@ -1120,7 +1144,7 @@ def test59_diffloop_masking_fwd(m, no_record):
     assert ek.grad(fo) == m.Float(1, 1, 1, 1, 1, 0, 0, 0, 0, 0)
 
 
-def test60_diffloop_masking_bwd(m, no_record):
+def test61_diffloop_masking_bwd(m, no_record):
     fo = ek.zero(m.Float, 10)
     fi = m.Float(1, 2)
     i = m.UInt32(0, 5)
@@ -1133,7 +1157,7 @@ def test60_diffloop_masking_bwd(m, no_record):
     assert ek.grad(fi) == m.Float(5, 0)
 
 
-def test61_implicit_dep_customop(m):
+def test62_implicit_dep_customop(m):
     v0 = m.Float(2)
     ek.enable_grad(v0)
     v1 = v0 * 3
@@ -1169,7 +1193,7 @@ def test61_implicit_dep_customop(m):
 @pytest.mark.parametrize("f1", [0, ek.ADFlag.ClearEdges])
 @pytest.mark.parametrize("f2", [0, ek.ADFlag.ClearInterior])
 @pytest.mark.parametrize("f3", [0, ek.ADFlag.ClearInput])
-def test62_ad_flags(m, f1, f2, f3):
+def test63_ad_flags(m, f1, f2, f3):
     v0 = m.Float(2)
     ek.enable_grad(v0)
     v1 = v0 * 0.5
@@ -1220,7 +1244,7 @@ def test62_ad_flags(m, f1, f2, f3):
                 assert ek.grad(v2) == 1.5
 
 
-def test63_broadcasting_set_grad(m):
+def test64_broadcasting_set_grad(m):
     theta = m.Float(1.0)
     ek.enable_grad(theta)
     x = 4.0 * theta

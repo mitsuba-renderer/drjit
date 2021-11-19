@@ -2555,24 +2555,61 @@ def printf_async(mask, fmt, *args):
 # -------------------------------------------------------------------
 
 class ADContextManager:
-    def __init__(self, value):
-        self.backup = _ek.detail.ad_enabled()
-        self.value = value
+    def __init__(self, suspend, array_type, array_indices):
+        self.suspend = suspend
+        self.array_type = array_type
+        self.array_indices = array_indices
 
     def __enter__(self):
-        _ek.detail.ad_set_enabled(self.value)
+        if self.array_type is not None:
+            self.array_type.scope_enter_(self.suspend, self.array_indices)
+        else:
+            assert len(self.array_indices) == 0
+            if hasattr(_ek, 'cuda'):
+                _ek.cuda.ad.Float32.scope_enter_(self.suspend, self.array_indices)
+                _ek.cuda.ad.Float64.scope_enter_(self.suspend, self.array_indices)
+            if hasattr(_ek, 'llvm'):
+                _ek.llvm.ad.Float32.scope_enter_(self.suspend, self.array_indices)
+                _ek.llvm.ad.Float64.scope_enter_(self.suspend, self.array_indices)
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        _ek.detail.ad_set_enabled(self.backup)
+        if self.array_type is not None:
+            self.array_type.scope_leave_()
+        else:
+            if hasattr(_ek, 'cuda'):
+                _ek.cuda.ad.Float32.scope_leave_()
+                _ek.cuda.ad.Float64.scope_leave_()
+            if hasattr(_ek, 'llvm'):
+                _ek.llvm.ad.Float32.scope_leave_()
+                _ek.llvm.ad.Float64.scope_leave_()
 
-def suspend_grad():
-    return ADContextManager(False)
 
-def resume_grad():
-    return ADContextManager(True)
+def suspend_grad(*args):
+    array_indices = []
+    array_type = _ek.detail.diff_vars(args, array_indices)
+    return ADContextManager(True, array_type, array_indices)
 
-def grad_suspended():
-    return not _ek.detail.ad_enabled()
+
+def resume_grad(*args):
+    array_indices = []
+    array_type = _ek.detail.diff_vars(args, array_indices)
+    return ADContextManager(False, array_type, array_indices)
+
+
+def grad_suspended(a):
+    result = True
+    if isinstance(a, tuple) or isinstance(a, list) or _ek.array_depth_v(a) > 1:
+        for v in a:
+            result &= grad_suspended(v)
+    elif _ek.is_enoki_struct_v(a):
+        for k in type(a).ENOKI_STRUCT.keys():
+            result &= grad_suspended(getattr(a, k))
+    elif isinstance(a, _Mapping):
+        for k, v in a.items():
+            result &= grad_suspended(v)
+    elif _ek.is_diff_array_v(a) and _ek.is_floating_point_v(a):
+        result = a.grad_suspended_()
+    return result
 
 # -------------------------------------------------------------------
 #             Automatic differentation of custom fuctions
@@ -2638,25 +2675,6 @@ class CustomOp:
 
 
 def custom(cls, *args, **kwargs):
-    # Extract indices of differentiable variables
-    def diff_vars(o, indices):
-        if _ek.array_depth_v(o) > 1 \
-           or isinstance(o, list) \
-           or isinstance(o, tuple):
-            for v in o:
-                diff_vars(v, indices)
-        elif isinstance(o, _Mapping):
-            for k, v in o.items():
-                diff_vars(v, indices)
-        elif _ek.is_diff_array_v(o) and _ek.grad_enabled(o):
-            if _ek.is_tensor_v(o):
-                diff_vars(o.array, indices)
-            else:
-                indices.append(o.index_ad())
-        elif _ek.is_enoki_struct_v(o):
-            for k in type(o).ENOKI_STRUCT.keys():
-                diff_vars(getattr(o, k), indices)
-
     # Clear primal values of a differentiable array
     def clear_primal(o, dec_ref):
         if _ek.array_depth_v(o) > 1 \
@@ -2699,8 +2717,8 @@ def custom(cls, *args, **kwargs):
                         "should not be attached to the AD graph!")
 
     diff_vars_in = []
-    diff_vars(kwargs, diff_vars_in)
-    diff_vars(inst._implicit_in, diff_vars_in)
+    _ek.detail.diff_vars(kwargs, diff_vars_in)
+    _ek.detail.diff_vars(inst._implicit_in, diff_vars_in)
 
     if len(diff_vars_in) > 0:
         output = _ek.diff_array_t(output)
@@ -2712,8 +2730,8 @@ def custom(cls, *args, **kwargs):
         inst.output = clear_primal(output, dec_ref=True)
 
         diff_vars_out = []
-        diff_vars(inst.output, diff_vars_out)
-        diff_vars(inst._implicit_out, diff_vars_out)
+        _ek.detail.diff_vars(inst.output, diff_vars_out)
+        _ek.detail.diff_vars(inst._implicit_out, diff_vars_out)
 
         if len(diff_vars_out) == 0:
             return output # Not relevant for AD after all..

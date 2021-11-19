@@ -1,5 +1,6 @@
 import enoki
 import sys
+from collections.abc import Mapping
 
 VAR_TYPE_NAME = [
     "Void",    "Bool",  "Int8",  "UInt8", "Int16",
@@ -490,9 +491,9 @@ def _loop_process_state(value: type, in_state: list, out_state: list,
             _loop_process_state(entry, in_state, out_state, write, in_struct)
         return
 
-    if not enoki.grad_suspended() \
-       and enoki.grad_enabled(value) \
-       and enoki.flag(enoki.JitFlag.LoopRecord):
+    if enoki.grad_enabled(value) \
+       and enoki.flag(enoki.JitFlag.LoopRecord) \
+       and not enoki.grad_suspended(value):
         raise enoki.Exception(
             "loop_process_state(): one of the supplied loop state variables "
             "of type %s is attached to the AD graph (i.e., grad_enabled(..) "
@@ -673,3 +674,32 @@ def tensor_setitem(tensor, slice_arg, value):
     tensor_t = type(tensor)
     shape, index = slice_tensor(tensor.shape, slice_arg, tensor_t.Index)
     enoki.scatter(target=tensor.array, value=value, index=index)
+
+
+def diff_vars(o, indices):
+    """ Extract indices of differentiable variables, returns the type of the underlying differentiable array """
+    result = None
+    if enoki.array_depth_v(o) > 1 \
+       or isinstance(o, list) \
+       or isinstance(o, tuple):
+        for v in o:
+            t = diff_vars(v, indices)
+            if t is not None:
+                result = t
+    elif isinstance(o, Mapping):
+        for k, v in o.items():
+            t = diff_vars(v, indices)
+            if t is not None:
+                result = t
+    elif enoki.is_diff_array_v(o) and enoki.grad_enabled(o):
+        if enoki.is_tensor_v(o):
+            result = diff_vars(o.array, indices)
+        else:
+            indices.append(o.index_ad())
+            result = type(o)
+    elif enoki.is_enoki_struct_v(o):
+        for k in type(o).ENOKI_STRUCT.keys():
+            t = diff_vars(getattr(o, k), indices)
+            if t is not None:
+                result = t
+    return result

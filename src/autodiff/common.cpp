@@ -159,21 +159,6 @@ namespace enoki {
         return p ? p->value : nullptr;
     }
 
-    /// Thread-local state
-#if !defined(_MSC_VER)
-    static __thread bool ad_enabled_tls = true;
-#else
-    static __declspec(thread) bool ad_enabled_tls = true;
-#endif
-
-    ENOKI_EXPORT void ad_set_enabled(bool value) noexcept {
-        ad_enabled_tls = value;
-    }
-
-    ENOKI_EXPORT bool ad_enabled() noexcept {
-        return ad_enabled_tls;
-    }
-
     ENOKI_EXPORT const char *ad_whos() {
         buffer.clear();
         buffer.put("\n");
@@ -182,8 +167,10 @@ namespace enoki {
         detail::ad_whos_scalar_f32();
         detail::ad_whos_scalar_f64();
         #if defined(ENOKI_ENABLE_JIT)
-            detail::ad_whos_cuda_f32();
-            detail::ad_whos_cuda_f64();
+            #if defined(ENOKI_ENABLE_CUDA)
+                detail::ad_whos_cuda_f32();
+                detail::ad_whos_cuda_f64();
+            #endif
             detail::ad_whos_llvm_f32();
             detail::ad_whos_llvm_f64();
         #endif

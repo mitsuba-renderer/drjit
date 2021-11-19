@@ -77,6 +77,16 @@ template <typename Value> void ad_dequeue_implicit(size_t snapshot);
 /// Re-enqueue postponed AD operations, returns 'false' if not applicable
 template <typename Value> bool ad_enqueue_postponed();
 
+/// Selectively enable/disable differentiation for a subset of the variables
+template <typename Value>
+void ad_scope_enter(bool suspend, const uint32_t *indices, size_t size);
+
+/// Leave a scope created by ad_scope_enter()
+template <typename Value> void ad_scope_leave();
+
+/// Check if a variable is suspended from derivative tracking
+template <typename Value> bool ad_suspended(uint32_t index);
+
 /// Label a variable (useful for debugging via graphviz etc.)
 template <typename Value> void ad_set_label(uint32_t index, const char *);
 
@@ -132,9 +142,6 @@ template <typename T> ENOKI_INLINE void ad_dec_ref(uint32_t index) noexcept {
 #endif
 
 NAMESPACE_END(detail)
-
-extern ENOKI_AD_EXPORT void ad_set_enabled(bool) noexcept;
-extern ENOKI_AD_EXPORT bool ad_enabled() noexcept;
 
 template <typename Type_>
 struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>> {
@@ -261,7 +268,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             Type result = m_value + a.m_value;
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if ((m_index || a.m_index) && ad_enabled()) {
+                if (m_index || a.m_index) {
                     uint32_t indices[2] = { m_index, a.m_index };
                     Type weights[2] = { 1, 1 };
                     index_new = detail::ad_new<Type>(
@@ -279,7 +286,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             Type result = m_value - a.m_value;
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if ((m_index || a.m_index) && ad_enabled()) {
+                if (m_index || a.m_index) {
                     uint32_t indices[2] = { m_index, a.m_index };
                     Type weights[2] = { 1, -1 };
                     index_new = detail::ad_new<Type>(
@@ -297,7 +304,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             Type result = m_value * a.m_value;
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if ((m_index || a.m_index) && ad_enabled()) {
+                if (m_index || a.m_index) {
                     uint32_t indices[2] = { m_index, a.m_index };
                     Type weights[2] = { a.m_value, m_value };
                     index_new = detail::ad_new<Type>(
@@ -315,7 +322,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             Type result = m_value / a.m_value;
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if ((m_index || a.m_index) && ad_enabled()) {
+                if (m_index || a.m_index) {
                     uint32_t indices[2] = { m_index, a.m_index };
                     Type rcp_a = rcp(a.m_value);
                     Type weights[2] = { rcp_a, -m_value * sqr(rcp_a) };
@@ -334,7 +341,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             Type result = -m_value;
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if (m_index && ad_enabled()) {
+                if (m_index) {
                     uint32_t indices[1] = { m_index };
                     Type weights[1] = { -1 };
                     index_new = detail::ad_new<Type>(
@@ -352,7 +359,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             Type result = fmadd(m_value, a.m_value, b.m_value);
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if ((m_index || a.m_index || b.m_index) && ad_enabled()) {
+                if (m_index || a.m_index || b.m_index) {
                     uint32_t indices[3] = { m_index, a.m_index, b.m_index };
                     Type weights[3] = { a.m_value, m_value, 1 };
                     index_new = detail::ad_new<Type>(
@@ -370,7 +377,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             Type result = fmsub(m_value, a.m_value, b.m_value);
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if ((m_index || a.m_index || b.m_index) && ad_enabled()) {
+                if (m_index || a.m_index || b.m_index) {
                     uint32_t indices[3] = { m_index, a.m_index, b.m_index };
                     Type weights[3] = { a.m_value, m_value, -1 };
                     index_new = detail::ad_new<Type>(
@@ -388,7 +395,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             Type result = fnmadd(m_value, a.m_value, b.m_value);
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if ((m_index || a.m_index || b.m_index) && ad_enabled()) {
+                if (m_index || a.m_index || b.m_index) {
                     uint32_t indices[3] = { m_index, a.m_index, b.m_index };
                     Type weights[3] = { -a.m_value, -m_value, 1 };
                     index_new = detail::ad_new<Type>(
@@ -406,7 +413,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             Type result = fnmsub(m_value, a.m_value, b.m_value);
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if ((m_index || a.m_index || b.m_index) && ad_enabled()) {
+                if (m_index || a.m_index || b.m_index) {
                     uint32_t indices[3] = { m_index, a.m_index, b.m_index };
                     Type weights[3] = { -a.m_value, -m_value, -1 };
                     index_new = detail::ad_new<Type>(
@@ -424,7 +431,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             Type result = abs(m_value);
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if (m_index && ad_enabled()) {
+                if (m_index) {
                     uint32_t indices[1] = { m_index };
                     Type weights[1] = { sign(m_value) };
                     index_new = detail::ad_new<Type>(
@@ -442,7 +449,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             Type result = sqrt(m_value);
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if (m_index && ad_enabled()) {
+                if (m_index) {
                     uint32_t indices[1] = { m_index };
                     Type weights[1] = { .5f * rcp(result) };
                     index_new = detail::ad_new<Type>(
@@ -460,7 +467,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             Type result = cbrt(m_value);
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if (m_index && ad_enabled()) {
+                if (m_index) {
                     uint32_t indices[1] = { m_index };
                     Type weights[1] = { (1 / 3.f) * sqr(rcp(result)) };
                     index_new = detail::ad_new<Type>(
@@ -478,7 +485,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             Type result = erf(m_value);
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if (m_index && ad_enabled()) {
+                if (m_index) {
                     uint32_t indices[1] = { m_index };
                     Type weights[1] = { (2.f * InvSqrtPi<Type>) * exp(-sqr(m_value)) };
                     index_new = detail::ad_new<Type>(
@@ -496,7 +503,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             Type result = rcp(m_value);
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if (m_index && ad_enabled()) {
+                if (m_index) {
                     uint32_t indices[1] = { m_index };
                     Type weights[1] = { -sqr(result) };
                     index_new = detail::ad_new<Type>(
@@ -514,7 +521,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             Type result = rsqrt(m_value);
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if (m_index && ad_enabled()) {
+                if (m_index) {
                     Type rsqrt_2 = sqr(result), rsqrt_3 = result * rsqrt_2;
                     uint32_t indices[1] = { m_index };
                     Type weights[1] = { -.5f * rsqrt_3 };
@@ -533,7 +540,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             Type result = min(m_value, a.m_value);
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if ((m_index || a.m_index) && ad_enabled()) {
+                if (m_index || a.m_index) {
                     mask_t<Type> m = m_value <= a.m_value;
                     uint32_t indices[2] = { m_index, a.m_index };
                     Type weights[2] = { select(m, Type(1), Type(0)),
@@ -553,7 +560,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             Type result = max(m_value, a.m_value);
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if ((m_index || a.m_index) && ad_enabled()) {
+                if (m_index || a.m_index) {
                     uint32_t indices[2] = { m_index, a.m_index };
                     mask_t<Type> m = m_value > a.m_value;
                     Type weights[2] = { select(m, Type(1), Type(0)),
@@ -575,7 +582,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             Type result = select(m.m_value, t.m_value, f.m_value);
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if ((t.m_index || f.m_index) && ad_enabled()) {
+                if (t.m_index || f.m_index) {
                     index_new = detail::ad_new_select<Type>(
                         "select", width(result),
                         m.m_value, t.m_index, f.m_index);
@@ -594,7 +601,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
     DiffArray or_(const MaskType &mask) const {
         if constexpr (IsEnabled) {
             const Scalar value = memcpy_cast<Scalar>(int_array_t<Scalar>(-1));
-            if (m_index && ad_enabled())
+            if (m_index)
                 return select(mask, DiffArray(value), *this);
         }
         return DiffArray::create(0, detail::or_(m_value, mask.m_value));
@@ -603,7 +610,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
     template <typename T = Type_, enable_if_t<!is_mask_v<T>> = 0>
     DiffArray xor_(const MaskType &mask) const {
         if constexpr (IsEnabled) {
-            if (m_index && ad_enabled())
+            if (m_index)
                 enoki_raise("xor_(): operation not permitted for "
                             "floating point arrays attached to the AD graph!");
         }
@@ -613,7 +620,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
     template <typename T = Type_, enable_if_t<!is_mask_v<T>> = 0>
     DiffArray andnot_(const MaskType &mask) const {
         if constexpr (IsEnabled) {
-            if (m_index && ad_enabled())
+            if (m_index)
                 enoki_raise("andnot_(): operation not permitted for "
                             "floating point arrays attached to the AD graph!");
         }
@@ -634,7 +641,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             auto [s, c] = sincos(m_value);
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if (m_index && ad_enabled()) {
+                if (m_index) {
                     uint32_t indices[1] = { m_index };
                     Type weights[1] = { std::move(c) };
                     index_new = detail::ad_new<Type>("sin", width(s),
@@ -652,7 +659,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             auto [s, c] = sincos(m_value);
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if (m_index && ad_enabled()) {
+                if (m_index) {
                     uint32_t indices[1] = { m_index };
                     Type weights[1] = { -s };
                     index_new = detail::ad_new<Type>("cos", width(c),
@@ -670,7 +677,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             auto [s, c] = sincos(m_value);
             uint32_t index_s = 0, index_c = 0;
             if constexpr (IsEnabled) {
-                if (m_index && ad_enabled()) {
+                if (m_index) {
                     uint32_t indices[1] = { m_index };
                     Type weights_s[1] = { c }, weights_c[1] = { -s };
                     uint32_t w = (uint32_t) width(s);
@@ -694,7 +701,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             Type result = csc(m_value);
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if (m_index && ad_enabled()) {
+                if (m_index) {
                     uint32_t indices[1] = { m_index };
                     Type weights[1] = { -result * cot(m_value) };
                     index_new = detail::ad_new<Type>(
@@ -712,7 +719,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             Type result = sec(m_value);
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if (m_index && ad_enabled()) {
+                if (m_index) {
                     uint32_t indices[1] = { m_index };
                     Type weights[1] = { result * tan(m_value) };
                     index_new = detail::ad_new<Type>(
@@ -730,7 +737,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             Type result = tan(m_value);
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if (m_index && ad_enabled()) {
+                if (m_index) {
                     uint32_t indices[1] = { m_index };
                     Type weights[1] = { sqr(sec(m_value)) };
                     index_new = detail::ad_new<Type>(
@@ -748,7 +755,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             Type result = cot(m_value);
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if (m_index && ad_enabled()) {
+                if (m_index) {
                     uint32_t indices[1] = { m_index };
                     Type weights[1] = { -sqr(csc(m_value)) };
                     index_new = detail::ad_new<Type>(
@@ -766,7 +773,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             Type result = asin(m_value);
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if (m_index && ad_enabled()) {
+                if (m_index) {
                     uint32_t indices[1] = { m_index };
                     Type weights[1] = { rsqrt(fnmadd(m_value, m_value, 1)) };
                     index_new = detail::ad_new<Type>(
@@ -784,7 +791,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             Type result = acos(m_value);
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if (m_index && ad_enabled()) {
+                if (m_index) {
                     uint32_t indices[1] = { m_index };
                     Type weights[1] = { -rsqrt(fnmadd(m_value, m_value, 1)) };
                     index_new = detail::ad_new<Type>(
@@ -802,7 +809,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             Type result = atan(m_value);
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if (m_index && ad_enabled()) {
+                if (m_index) {
                     uint32_t indices[1] = { m_index };
                     Type weights[1] = { rcp(fmadd(m_value, m_value, 1)) };
                     index_new = detail::ad_new<Type>(
@@ -820,7 +827,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             Type result = atan2(m_value, x.m_value);
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if ((m_index || x.m_index) && ad_enabled()) {
+                if (m_index || x.m_index) {
                     Type il2 = rcp(fmadd(m_value, m_value, sqr(x.m_value)));
                     uint32_t indices[2] = { m_index, x.m_index };
                     Type weights[2] = { il2 * x.m_value, -il2 * m_value };
@@ -839,7 +846,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             Type result = exp(m_value);
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if (m_index && ad_enabled()) {
+                if (m_index) {
                     uint32_t indices[1] = { m_index };
                     Type weights[1] = { result };
                     index_new = detail::ad_new<Type>(
@@ -857,7 +864,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             Type result = exp2(m_value);
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if (m_index && ad_enabled()) {
+                if (m_index) {
                     uint32_t indices[1] = { m_index };
                     Type weights[1] = { result * LogTwo<Value> };
                     index_new = detail::ad_new<Type>(
@@ -875,7 +882,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             Type result = log(m_value);
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if (m_index && ad_enabled()) {
+                if (m_index) {
                     uint32_t indices[1] = { m_index };
                     Type weights[1] = { rcp(m_value) };
                     index_new = detail::ad_new<Type>(
@@ -893,7 +900,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             Type result = log2(m_value);
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if (m_index && ad_enabled()) {
+                if (m_index) {
                     uint32_t indices[1] = { m_index };
                     Type weights[1] = { rcp(m_value) * InvLogTwo<Value> };
                     index_new = detail::ad_new<Type>(
@@ -911,7 +918,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             auto [s, c] = sincosh(m_value);
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if (m_index && ad_enabled()) {
+                if (m_index) {
                     uint32_t indices[1] = { m_index };
                     Type weights[1] = { std::move(c) };
                     index_new = detail::ad_new<Type>("sinh", width(s),
@@ -929,7 +936,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             auto [s, c] = sincosh(m_value);
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if (m_index && ad_enabled()) {
+                if (m_index) {
                     uint32_t indices[1] = { m_index };
                     Type weights[1] = { s };
                     index_new = detail::ad_new<Type>("cosh", width(c),
@@ -947,7 +954,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             auto [s, c] = sincosh(m_value);
             uint32_t index_s = 0, index_c = 0;
             if constexpr (IsEnabled) {
-                if (m_index && ad_enabled()) {
+                if (m_index) {
                     uint32_t indices[1] = { m_index };
                     Type weights_s[1] = { c }, weights_c[1] = { s };
                     size_t w = width(s);
@@ -971,7 +978,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             Type result = tanh(m_value);
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if (m_index && ad_enabled()) {
+                if (m_index) {
                     uint32_t indices[1] = { m_index };
                     Type weights[1] = { sqr(sech(m_value)) };
                     index_new = detail::ad_new<Type>(
@@ -989,7 +996,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             Type result = asinh(m_value);
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if (m_index && ad_enabled()) {
+                if (m_index) {
                     uint32_t indices[1] = { m_index };
                     Type weights[1] = { rsqrt((Scalar) 1 + sqr(m_value)) };
                     index_new = detail::ad_new<Type>(
@@ -1007,7 +1014,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             Type result = acosh(m_value);
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if (m_index && ad_enabled()) {
+                if (m_index) {
                     uint32_t indices[1] = { m_index };
                     Type weights[1] = { rsqrt(sqr(m_value) - (Scalar) 1) };
                     index_new = detail::ad_new<Type>(
@@ -1025,7 +1032,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             Type result = atanh(m_value);
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if (m_index && ad_enabled()) {
+                if (m_index) {
                     uint32_t indices[1] = { m_index };
                     Type weights[1] = { rcp((Scalar) 1 - sqr(m_value)) };
                     index_new = detail::ad_new<Type>(
@@ -1073,7 +1080,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
 
     DiffArray or_(const DiffArray &a) const {
         if constexpr (is_floating_point_v<Scalar>) {
-            if ((m_index || a.m_index) && ad_enabled())
+            if (m_index || a.m_index)
                 enoki_raise("or_(): bit operations are not permitted for "
                             "floating point arrays attached to the AD graph!");
         }
@@ -1082,7 +1089,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
 
     DiffArray and_(const DiffArray &a) const {
         if constexpr (is_floating_point_v<Scalar>) {
-            if ((m_index || a.m_index) && ad_enabled())
+            if (m_index || a.m_index)
                 enoki_raise("and_(): bit operations are not permitted for "
                             "floating point arrays attached to the AD graph!");
         }
@@ -1091,7 +1098,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
 
     DiffArray xor_(const DiffArray &a) const {
         if constexpr (is_floating_point_v<Scalar>) {
-            if ((m_index || a.m_index) && ad_enabled())
+            if (m_index || a.m_index)
                 enoki_raise("xor_(): bit operations are not permitted for "
                             "floating point arrays attached to the AD graph!");
         }
@@ -1100,7 +1107,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
 
     DiffArray andnot_(const DiffArray &a) const {
         if constexpr (is_floating_point_v<Scalar>) {
-            if ((m_index || a.m_index) && ad_enabled())
+            if (m_index || a.m_index)
                 enoki_raise("andnot_(): bit operations are not permitted for "
                             "floating point arrays attached to the AD graph!");
         }
@@ -1246,7 +1253,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         } else {
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if (m_index && ad_enabled()) {
+                if (m_index) {
                     uint32_t indices[1] = { m_index };
                     Type weights[1] = { 1 };
                     index_new = detail::ad_new<Type>(
@@ -1262,7 +1269,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             enoki_raise("hsum_(): invalid operand type!");
         } else {
             if constexpr (IsEnabled) {
-                if (m_index && ad_enabled())
+                if (m_index)
                     enoki_raise("hsum_(): operation returns a detached scalar, "
                                 "which is not permitted for arrays attached to "
                                 "the AD graph! Use hsum_async() instead, which "
@@ -1279,7 +1286,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             Type result = hprod_async(m_value);
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if (m_index && ad_enabled()) {
+                if (m_index) {
                     uint32_t indices[1] = { m_index };
                     Type weights[1] = { select(eq(m_value, (Scalar) 0),
                                                (Scalar) 0, result / m_value) };
@@ -1296,7 +1303,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             enoki_raise("hprod_(): invalid operand type!");
         } else {
             if constexpr (IsEnabled) {
-                if (m_index && ad_enabled())
+                if (m_index)
                     enoki_raise("hprod_(): operation returns a detached scalar, "
                                 "which is not permitted for arrays attached to "
                                 "the AD graph! Use hprod_async() instead, which "
@@ -1313,7 +1320,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             Type result = hmin_async(m_value);
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if (m_index && ad_enabled()) {
+                if (m_index) {
                     /* This gradient has duplicate '1' entries when
                        multiple entries are equal to the minimum , which is
                        strictly speaking not correct (but getting this right
@@ -1335,7 +1342,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             enoki_raise("hmin_(): invalid operand type!");
         } else {
             if constexpr (IsEnabled) {
-                if (m_index && ad_enabled())
+                if (m_index)
                     enoki_raise("hmin_(): operation returns a detached scalar, "
                                 "which is not permitted for arrays attached to "
                                 "the AD graph! Use hmin_async() instead, which "
@@ -1352,7 +1359,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             Type result = hmax_async(m_value);
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if (m_index && ad_enabled()) {
+                if (m_index) {
                     /* This gradient has duplicate '1' entries when
                        multiple entries are equal to the maximum, which is
                        strictly speaking not correct (but getting this right
@@ -1374,7 +1381,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             enoki_raise("hmax_(): invalid operand type!");
         } else {
             if constexpr (IsEnabled) {
-                if (m_index && ad_enabled())
+                if (m_index)
                     enoki_raise("hmax_(): operation returns a detached scalar, "
                                 "which is not permitted for arrays attached to "
                                 "the AD graph! Use hmax_async() instead, which "
@@ -1393,7 +1400,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             enoki_raise("dot_(): invalid operand type!");
         } else {
             if constexpr (IsEnabled) {
-                if ((m_index || a.m_index) && ad_enabled())
+                if (m_index || a.m_index)
                     enoki_raise("dot_(): operation returns a detached scalar, "
                                 "which is not permitted for arrays attached to "
                                 "the AD graph! Use dot_async() instead, which "
@@ -1419,7 +1426,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             Type result = gather<Type>(src.m_value, offset.m_value, mask.m_value);
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
-                if (src.m_index && ad_enabled())
+                if (src.m_index)
                     index_new = detail::ad_new_gather<Type>(
                         Permute ? "gather[permute]" : "gather",
                         width(result), src.m_index, offset.m_value,
@@ -1438,7 +1445,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         } else {
             scatter(dst.m_value, m_value, offset.m_value, mask.m_value);
             if constexpr (IsEnabled) {
-                if ((m_index || (dst.m_index && !Permute)) && ad_enabled()) {
+                if (m_index || (dst.m_index && !Permute)) {
                     uint32_t index = detail::ad_new_scatter<Type>(
                         Permute ? "scatter[permute]" : "scatter", width(dst),
                         ReduceOp::None, m_index, dst.m_index, offset.m_value,
@@ -1458,7 +1465,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
         } else {
             scatter_reduce(op, dst.m_value, m_value, offset.m_value, mask.m_value);
             if constexpr (IsEnabled) {
-                if (m_index && ad_enabled()) { // safe to ignore dst.m_index in the case of scatter_reduce
+                if (m_index) { // safe to ignore dst.m_index in the case of scatter_reduce
                     uint32_t index = detail::ad_new_scatter<Type>(
                         "scatter_reduce", width(dst), op, m_index,
                         dst.m_index, offset.m_value, mask.m_value, false);
@@ -1570,7 +1577,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
 
     DiffArray block_sum_(size_t block_size) {
         if constexpr (is_jit_array_v<Type>) {
-            if (m_index && ad_enabled())
+            if (m_index)
                 enoki_raise("block_sum_(): not supported for attached arrays!");
             return m_value.block_sum_(block_size);
         } else {
@@ -1855,10 +1862,15 @@ protected:
     extern template ENOKI_AD_EXPORT void ad_extract_implicit<T>(size_t,        \
                                                                 uint32_t *);   \
     extern template ENOKI_AD_EXPORT bool ad_enqueue_postponed<T>();            \
+    extern template ENOKI_AD_EXPORT void                                       \
+    ad_scope_enter<T>(bool, const uint32_t *, size_t);                         \
+    extern template ENOKI_AD_EXPORT void ad_scope_leave<T>();                  \
+    extern template ENOKI_AD_EXPORT bool ad_suspended<T>(uint32_t);            \
     }
 
 ENOKI_DECLARE_EXTERN_TEMPLATE(float,  bool, uint32_t)
 ENOKI_DECLARE_EXTERN_TEMPLATE(double, bool, uint32_t)
+
 #if defined(ENOKI_JIT_H)
 ENOKI_DECLARE_EXTERN_TEMPLATE(CUDAArray<float>,  CUDAArray<bool>, CUDAArray<uint32_t>)
 ENOKI_DECLARE_EXTERN_TEMPLATE(CUDAArray<double>, CUDAArray<bool>, CUDAArray<uint32_t>)

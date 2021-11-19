@@ -58,6 +58,7 @@
 #include <enoki/math.h>
 #include <enoki/autodiff.h>
 #include <tsl/robin_map.h>
+#include <tsl/robin_set.h>
 #include <assert.h>
 #include <mutex>
 #include <xxh3.h>
@@ -88,6 +89,7 @@ NAMESPACE_BEGIN(detail)
 using Value = ENOKI_AUTODIFF_VALUE;
 using Mask = mask_t<Value>;
 using Index = uint32_array_t<Value>;
+using IndexSet = tsl::robin_set<uint32_t, UInt32Hasher>;
 
 // Forward declarations
 struct Variable;
@@ -413,6 +415,15 @@ struct EdgeRef {
     : id(id), source(source), target(target) { }
 };
 
+/// AD scope to selectively enable/disable derivative propagation
+struct Scope {
+    bool suspend;
+    IndexSet indices;
+
+    Scope(bool suspend, IndexSet &&indices)
+        : suspend(suspend), indices(std::move(indices)) { }
+};
+
 // Stores per-thread state
 struct LocalState {
     /// Thread-local edge list used by ad_enqueue_*() and ad_traverse()
@@ -426,6 +437,9 @@ struct LocalState {
 
     /// Requested directionality of differentiation
     ADMode mode = ADMode::Backward;
+
+    /// Nested scopes that restrict AD to specific variables
+    std::vector<Scope> scopes;
 };
 
 // Special edge (scatter, gather, scatter_reduce, block_sum, etc.)
@@ -643,9 +657,59 @@ struct ReleaseOperandHelper {
 };
 
 template <typename T>
+void ad_scope_enter(bool suspend, const uint32_t *indices, size_t size) {
+    ad_log(Debug, "ad_scope_enter(suspend=%i, %zu indices)", (int) suspend, size);
+    local_state.scopes.emplace_back(suspend, IndexSet(indices, indices + size));
+}
+
+template <typename T>
+void ad_scope_leave() {
+    if (local_state.scopes.empty())
+        ad_fail("ad_scope_leave(): underflow!");
+    ad_log(Debug, "ad_scope_leave()");
+    local_state.scopes.pop_back();
+}
+
+// Check if derivative tracking is enabled for a variable in the current scope
+static bool ad_check_active(const Scope &scope, uint32_t &index) {
+    if (index) {
+        bool found = scope.indices.empty() ||
+                     scope.indices.find(index) != scope.indices.end();
+        if (( scope.suspend && !found) ||
+            (!scope.suspend &&  found))
+            return true;
+
+        index = 0;
+    }
+    return false;
+}
+
+template <typename T> bool ad_suspended(uint32_t index) {
+    std::vector<Scope> &scopes = local_state.scopes;
+    if (!scopes.empty())
+        (void) ad_check_active(scopes.back(), index);
+    return index == 0;
+}
+
+template <typename T>
 uint32_t ad_new(const char *label, size_t size, uint32_t op_count,
-               uint32_t *op, T *weights) {
+                uint32_t *op, T *weights) {
     std::lock_guard<std::mutex> guard(state.mutex);
+
+    /* Potentially turn off derivative tracking for some of the operands if
+       we're within a scope that enables/disables gradient propagation
+       (globally, or only for specific variables) */
+    std::vector<Scope> &scopes = local_state.scopes;
+    if (unlikely(!scopes.empty())) {
+        const Scope &scope = scopes.back();
+
+        bool active = false;
+        for (uint32_t i = 0; i < op_count; ++i)
+            active |= ad_check_active(scope, op[i]);
+
+        if (!active)
+            return 0;
+    }
 
     bool rec = false;
     if constexpr (is_jit_array_v<Value>)
@@ -658,7 +722,7 @@ uint32_t ad_new(const char *label, size_t size, uint32_t op_count,
                 continue;
 
             uint32_t index = op[i];
-            Variable *var = state[index];
+            const Variable *var = state[index];
 
             /* When recording AD code (e.g. in a virtual function call),
                convert reads from external/private variables into gathers */
@@ -678,7 +742,6 @@ uint32_t ad_new(const char *label, size_t size, uint32_t op_count,
                 index = ad_new_gather_impl<Value>("gather", size, op[i], Index(0),
                                                   Mask(true), false);
 
-                var = state[index];
                 op[i] = index;
                 helper.put(index);
             }
@@ -751,6 +814,12 @@ uint32_t ad_new(const char *label, size_t size, uint32_t op_count,
 
     if (var->placeholder)
         ad_propagate_placeholder_size(var);
+
+    /* If we're selectively tracking gradients and this operation generates a
+       new AD variable, then its index must be added to the index set */
+    if (unlikely(!scopes.empty() && !scopes.back().suspend &&
+                 !scopes.back().indices.empty()))
+        scopes.back().indices.insert(index);
 
     return index;
 }
@@ -841,7 +910,7 @@ template <typename Value> struct SpecialCallback : Special {
 
 template <typename Value, typename Mask>
 uint32_t ad_new_select(const char *label, size_t size, const Mask &mask,
-                      uint32_t t_index, uint32_t f_index) {
+                       uint32_t t_index, uint32_t f_index) {
     std::lock_guard<std::mutex> guard(state.mutex);
     if constexpr (is_jit_array_v<Mask>) {
         if (jit_flag(JitFlag::ADOptimize) && mask.is_literal()) {
@@ -858,6 +927,20 @@ uint32_t ad_new_select(const char *label, size_t size, const Mask &mask,
             ad_log(Debug, "ad_new_select(a%i <- a%i, a%i): simplified", t_index, t_index, f_index);
             return t_index;
         }
+    }
+
+    /* Potentially turn off derivative tracking for some of the operands if
+       we're within a scope that enables/disables gradient propagation
+       (globally, or only for specific variables) */
+    std::vector<Scope> &scopes = local_state.scopes;
+    if (unlikely(!scopes.empty())) {
+        const Scope &scope = scopes.back();
+
+        bool active = ad_check_active(scope, t_index);
+        active |= ad_check_active(scope, f_index);
+
+        if (!active)
+            return 0;
     }
 
     bool rec = false;
@@ -931,6 +1014,12 @@ uint32_t ad_new_select(const char *label, size_t size, const Mask &mask,
     if (var->placeholder)
         ad_propagate_placeholder_size(var);
 
+    /* If we're selectively tracking gradients and this operation generates a
+       new AD variable, then its index must be added to the index set */
+    if (unlikely(!scopes.empty() && !scopes.back().suspend &&
+                 !scopes.back().indices.empty()))
+        scopes.back().indices.insert(index);
+
     return index;
 }
 
@@ -971,7 +1060,7 @@ template <typename Value> struct GatherEdge : Special {
 
 template <typename Value, typename Mask, typename Index>
 uint32_t ad_new_gather_impl(const char *label, size_t size, uint32_t src_index,
-                           const Index &offset, const Mask &mask_, bool permute) {
+                            const Index &offset, const Mask &mask_, bool permute) {
     Mask mask(mask_);
 
     if constexpr (is_array_v<Value>) {
@@ -981,6 +1070,15 @@ uint32_t ad_new_gather_impl(const char *label, size_t size, uint32_t src_index,
             size_t tsize = top.size();
             if (tsize != 1 && tsize == size)
                 mask &= top;
+        }
+
+        /* Potentially turn off derivative tracking for some of the operands if
+           we're within a scope that enables/disables gradient propagation
+           (globally, or only for specific variables) */
+        std::vector<Scope> &scopes = local_state.scopes;
+        if (unlikely(!scopes.empty())) {
+            if (ad_check_active(scopes.back(), src_index))
+                return 0;
         }
 
         auto [index, var] = ad_var_new(label, size);
@@ -1009,6 +1107,12 @@ uint32_t ad_new_gather_impl(const char *label, size_t size, uint32_t src_index,
             ad_trace("ad_new_gather(): recording an implicit dependency (a%i).", src_index);
             local_state.implicit.emplace_back(edge_index_new, src_index, index);
         }
+
+        /* If we're selectively tracking gradients and this operation generates a
+           new AD variable, then its index must be added to the index set */
+        if (unlikely(!scopes.empty() && !scopes.back().suspend &&
+                     !scopes.back().indices.empty()))
+            scopes.back().indices.insert(index);
 
         return index;
     } else {
@@ -1060,8 +1164,8 @@ template <typename Value> struct ScatterEdge : Special {
 
 template <typename Value, typename Mask, typename Index>
 uint32_t ad_new_scatter(const char *label, size_t size, ReduceOp op,
-                       uint32_t src_index, uint32_t dst_index, const Index &offset,
-                       const Mask &mask_, bool permute) {
+                        uint32_t src_index, uint32_t dst_index, const Index &offset,
+                        const Mask &mask_, bool permute) {
 
     Mask mask(mask_);
     ENOKI_MARK_USED(mask);
@@ -1073,13 +1177,22 @@ uint32_t ad_new_scatter(const char *label, size_t size, ReduceOp op,
             // Apply the mask stack (needed for wavefront-mode ek::Loop)
             Mask top = Mask::steal(jit_var_mask_peek(Mask::Backend));
             size_t tsize = top.size(),
-                   ssize = std::max(
-                       std::max(
-                           offset.size(),
-                           (size_t)(src_index ? state[src_index]->size : 0)),
-                       mask_.size());
+                   ssize = (size_t)(src_index ? state[src_index]->size : 0);
+            ssize = std::max(std::max(ssize, offset.size()), mask_.size());
             if (tsize != 1 && tsize == ssize)
                 mask &= top;
+        }
+
+        /* Potentially turn off derivative tracking for some of the operands if
+           we're within a scope that enables/disables gradient propagation
+           (globally, or only for specific variables) */
+        std::vector<Scope> &scopes = local_state.scopes;
+        if (unlikely(!scopes.empty())) {
+            const Scope &scope = scopes.back();
+            bool active = ad_check_active(scope, src_index);
+            active |= ad_check_active(scope, dst_index);
+            if (!active)
+                return 0;
         }
 
         auto [index, var] = ad_var_new(label, size);
@@ -1130,6 +1243,12 @@ uint32_t ad_new_scatter(const char *label, size_t size, ReduceOp op,
 
         var->next_bwd = edge_index;
         ad_inc_ref(index, var);
+
+        /* If we're selectively tracking gradients and this operation generates a
+           new AD variable, then its index must be added to the index set */
+        if (unlikely(!scopes.empty() && !scopes.back().suspend &&
+                     !scopes.back().indices.empty()))
+            scopes.back().indices.insert(index);
 
         return index;
     } else {
@@ -1245,6 +1364,17 @@ template <typename T> const char *ad_label(uint32_t index) {
 template <typename T>
 void ad_add_edge(uint32_t source_idx, uint32_t target_idx,
                  DiffCallback *callback) {
+
+    /* Potentially turn off derivative tracking for some of the operands if
+       we're within a scope that enables/disables gradient propagation
+       (globally, or only for specific variables) */
+    std::vector<Scope> &scopes = local_state.scopes;
+    if (unlikely(!scopes.empty())) {
+        const Scope &scope = scopes.back();
+        (void) ad_check_active(scope, source_idx);
+        (void) ad_check_active(scope, target_idx);
+    }
+
     if (source_idx == 0 || target_idx == 0)
         return;
 
@@ -1406,13 +1536,13 @@ void ad_traverse(uint32_t flags) {
         }
 
         bool clear_grad = false;
+        uint32_t next_edge =
+            mode == ADMode::Forward ? prev->next_bwd : prev->next_fwd;
 
         if (flags & (uint32_t) ADFlag::ClearInterior)
-            clear_grad |= (mode == ADMode::Forward ? prev->next_bwd
-                                                   : prev->next_fwd) != 0;
+            clear_grad |= next_edge != 0;
         if (flags & (uint32_t) ADFlag::ClearInput)
-            clear_grad |= (mode == ADMode::Forward ? prev->next_bwd
-                                                   : prev->next_fwd) == 0;
+            clear_grad |= next_edge == 0;
 
         /* Don't clear the gradient of vertices created *before* entering
            megakernel mode, or when it is still explicitly referenced by some
@@ -1976,6 +2106,10 @@ ad_new_scatter<Value, Mask, Index>(const char *, size_t, ReduceOp, uint32_t,
                                    uint32_t, const Index &, const Mask &, bool);
 template ENOKI_EXPORT void ad_add_edge<Value>(uint32_t, uint32_t,
                                               DiffCallback *);
+template ENOKI_EXPORT void ad_scope_enter<Value>(bool, const uint32_t *,
+                                                 size_t);
+template ENOKI_EXPORT void ad_scope_leave<Value>();
+template ENOKI_EXPORT bool ad_suspended<Value>(uint32_t);
 NAMESPACE_END(detail)
 
 template struct ENOKI_EXPORT DiffArray<detail::Value>;
