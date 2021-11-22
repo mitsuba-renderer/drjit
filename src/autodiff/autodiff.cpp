@@ -704,7 +704,7 @@ uint32_t ad_new(const char *label, size_t size, uint32_t op_count,
         const Scope &scope = scopes.back();
 
         bool active = false;
-        if (scope.indices.empty()) {
+        if (op_count == 0) {
             active = !scope.suspend;
         } else {
             for (uint32_t i = 0; i < op_count; ++i)
