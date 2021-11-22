@@ -780,6 +780,13 @@ def test49_suspend_resume_selective(m):
     assert ek.grad(c) == [0, 0]
     assert ek.grad(d) == [2, 0]
 
+    a = m.Float([1, 2, 3, 4])
+    ek.enable_grad(a)
+
+    with ek.suspend_grad():
+        b = ek.gather(m.Float, a, [0, 2, 2])
+        assert not ek.grad_enabled(b)
+        assert b == [1, 3, 3]
 
 class Normalize(ek.CustomOp):
     def eval(self, value):

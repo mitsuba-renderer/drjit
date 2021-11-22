@@ -1077,7 +1077,7 @@ uint32_t ad_new_gather_impl(const char *label, size_t size, uint32_t src_index,
            (globally, or only for specific variables) */
         std::vector<Scope> &scopes = local_state.scopes;
         if (unlikely(!scopes.empty())) {
-            if (ad_check_active(scopes.back(), src_index))
+            if (!ad_check_active(scopes.back(), src_index))
                 return 0;
         }
 
