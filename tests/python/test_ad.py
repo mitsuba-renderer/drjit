@@ -738,14 +738,28 @@ def test48_suspend_resume(m):
 
     a = x*x
     assert not ek.grad_suspended(x)
+    assert ek.grad_enabled(x)
+
+    with ek.resume_grad():
+        assert ek.grad_enabled(x)
+        y = m.Float(1.0)
+        ek.enable_grad(y)
+        assert not ek.grad_suspended(y)
+        assert ek.grad_enabled(y)
 
     with ek.suspend_grad():
         b = x*x
         assert ek.grad_suspended(x)
+        assert ek.grad_enabled(x)
         with ek.resume_grad():
             assert not ek.grad_suspended(x)
             c = b*x
         d = a*x
+
+        y = m.Float(1.0)
+        ek.enable_grad(y)
+        assert ek.grad_suspended(y)
+        assert not ek.grad_enabled(y)
 
     assert ek.grad_enabled(x) and \
            ek.grad_enabled(a) and \

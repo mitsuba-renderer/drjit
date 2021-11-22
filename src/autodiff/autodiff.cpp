@@ -704,8 +704,12 @@ uint32_t ad_new(const char *label, size_t size, uint32_t op_count,
         const Scope &scope = scopes.back();
 
         bool active = false;
-        for (uint32_t i = 0; i < op_count; ++i)
-            active |= ad_check_active(scope, op[i]);
+        if (scope.indices.empty()) {
+            active = !scope.suspend;
+        } else {
+            for (uint32_t i = 0; i < op_count; ++i)
+                active |= ad_check_active(scope, op[i]);
+        }
 
         if (!active)
             return 0;
