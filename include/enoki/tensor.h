@@ -185,43 +185,43 @@ struct Tensor
     Tensor mulhi_(const Tensor &b) const {
         Tensor t0 = *this, t1 = b;
         Shape shape = detail::tensor_broadcast("mulhi_", t0, t1);
-        return Tensor(mulhi(t0.m_array, t1.m_array), std::move(m_shape));
+        return Tensor(mulhi(t0.m_array, t1.m_array), std::move(shape));
     }
 
     Tensor div_(const Tensor &b) const {
         Tensor t0 = *this, t1 = b;
         Shape shape = detail::tensor_broadcast("div_", t0, t1);
-        return Tensor(t0.m_array / t1.m_array, std::move(m_shape));
+        return Tensor(t0.m_array / t1.m_array, std::move(shape));
     }
 
     Tensor mod_(const Tensor &b) const {
         Tensor t0 = *this, t1 = b;
         Shape shape = detail::tensor_broadcast("mod_", t0, t1);
-        return Tensor(t0.m_array % t1.m_array, std::move(m_shape));
+        return Tensor(t0.m_array % t1.m_array, std::move(shape));
     }
 
     Tensor or_(const Tensor &b) const {
         Tensor t0 = *this, t1 = b;
         Shape shape = detail::tensor_broadcast("or_", t0, t1);
-        return Tensor(t0.m_array | t1.m_array, std::move(m_shape));
+        return Tensor(t0.m_array | t1.m_array, std::move(shape));
     }
 
     Tensor and_(const Tensor &b) const {
         Tensor t0 = *this, t1 = b;
         Shape shape = detail::tensor_broadcast("and_", t0, t1);
-        return Tensor(t0.m_array & t1.m_array, std::move(m_shape));
+        return Tensor(t0.m_array & t1.m_array, std::move(shape));
     }
 
     Tensor andnot_(const Tensor &b) const {
         Tensor t0 = *this, t1 = b;
         Shape shape = detail::tensor_broadcast("andnot_", t0, t1);
-        return Tensor(andnot(t0.m_array, t1.m_array), std::move(m_shape));
+        return Tensor(andnot(t0.m_array, t1.m_array), std::move(shape));
     }
 
     Tensor xor_(const Tensor &b) const {
         Tensor t0 = *this, t1 = b;
         Shape shape = detail::tensor_broadcast("xor_", t0, t1);
-        return Tensor(t0.m_array ^ t1.m_array, std::move(m_shape));
+        return Tensor(t0.m_array ^ t1.m_array, std::move(shape));
     }
 
     Tensor fmadd_(const Tensor &b, const Tensor &c) const {
@@ -247,13 +247,13 @@ struct Tensor
     Tensor min_(const Tensor &b) const {
         Tensor t0 = *this, t1 = b;
         Shape shape = detail::tensor_broadcast("min_", t0, t1);
-        return Tensor(enoki::min(t0.m_array, t1.m_array), std::move(m_shape));
+        return Tensor(enoki::min(t0.m_array, t1.m_array), std::move(shape));
     }
 
     Tensor max_(const Tensor &b) const {
         Tensor t0 = *this, t1 = b;
         Shape shape = detail::tensor_broadcast("max_", t0, t1);
-        return Tensor(enoki::max(t0.m_array, t1.m_array), std::move(m_shape));
+        return Tensor(enoki::max(t0.m_array, t1.m_array), std::move(shape));
     }
 
     auto gt_(const Tensor &b) const {
@@ -315,7 +315,7 @@ struct Tensor
     Tensor atan2_(const Tensor &b) const {
         Tensor t0 = *this, t1 = b;
         Shape shape = detail::tensor_broadcast("atan2_", t0, t1);
-        return Tensor(enoki::atan2(t0.m_array, t1.m_array), std::move(m_shape));
+        return Tensor(enoki::atan2(t0.m_array, t1.m_array), std::move(shape));
     }
 
     template <typename Mask>
