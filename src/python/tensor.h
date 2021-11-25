@@ -17,8 +17,8 @@ template <typename T> auto bind_tensor(py::module m) {
                 strncmp(mod_s, "torch", 5) == 0 ||
                 strncmp(mod_s, "jaxlib", 6) == 0 ||
                 strncmp(mod_s, "tensorflow", 10) == 0 ||
-                (py::hasattr(o, "__array_interface__") &&
-                 strncmp(mod_s, "enoki", 5) != 0)) {
+                (strncmp(mod_s, "enoki", 5) != 0
+                 && py::hasattr(o, "__array_interface__"))) {
                 o = tensor_init(py::type::of<Tensor>(), o);
                 return py::cast<Tensor>(o);
             } else {
