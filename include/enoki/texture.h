@@ -11,6 +11,7 @@
 */
 
 #include <enoki/jit.h>
+#include <enoki/dynamic.h>
 #include <enoki-jit/texture.h>
 
 #pragma once
@@ -21,16 +22,19 @@ template <typename Value, size_t Dimension> class Texture {
 public:
     static constexpr bool IsCUDA = is_cuda_array_v<Value>;
     static constexpr bool IsDiff = is_diff_array_v<Value>;
+    static constexpr bool IsDynamic = is_dynamic_v<Value>;
+
     using UInt32 = uint32_array_t<Value>;
     using UInt64 = uint64_array_t<Value>;
     using Mask = mask_t<Value>;
+
+    using Storage = std::conditional_t<IsDynamic, Value, DynamicArray<Value>>;
 
     Texture(size_t shape[Dimension], size_t channels) : m_handle(nullptr) {
         m_size = channels;
         for (size_t i = 0; i < Dimension; ++i) {
             m_shape[i] = shape[i];
-            m_shape_opaque[i] =
-                opaque<Value>(scalar_t<UInt32>(shape[i]));
+            m_shape_opaque[i] = opaque<Value>(scalar_t<UInt32>(shape[i]));
             m_size *= m_shape[i];
         }
         m_channels = (uint32_t) channels;
@@ -47,7 +51,7 @@ public:
             jit_cuda_tex_destroy(m_handle);
     }
 
-    void set_value(const Value &value) {
+    void set_value(const Storage &value) {
         m_value = value;
         if (value.size() != m_size)
             enoki_raise("Texture::set_value(): unexpected array size!");
@@ -57,12 +61,12 @@ public:
                                 value.data(), m_handle);
     }
 
-    const Value &value() const { return m_value; }
+    const Storage &value() const { return m_value; }
 
     Array<Value, 4> eval_cuda(const Array<Value, Dimension> &pos,
                               Mask active = true) const {
         if constexpr (IsCUDA) {
-            if (!m_value.index())
+            if (m_value.empty())
                 enoki_raise("Texture::eval_cuda(): texture has not been initialized yet!");
 
             uint32_t pos_idx[Dimension], out[4];
@@ -77,14 +81,14 @@ public:
                 Value::steal(out[2]), Value::steal(out[3])
             };
         } else {
-            (void) pos;
+            (void) pos; (void) active;
             return 0;
         }
     }
 
     Array<Value, 4> eval_enoki(const Array<Value, Dimension> &pos,
-                                   Mask active = true) const {
-        if (!m_value.index())
+                               Mask active = true) const {
+        if (m_value.empty())
             enoki_raise("Texture::eval_enoki(): texture has not been initialized yet!");
 
         using PosF = Array<Value, Dimension>;
@@ -174,7 +178,7 @@ private:
     void *m_handle;
     UInt64 m_handle_opaque;
     Array<UInt32, Dimension> m_shape_opaque;
-    Value m_value;
+    Storage m_value;
 };
 
 NAMESPACE_END(enoki)
