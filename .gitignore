@@ -55,6 +55,7 @@ Release
 tests/custom
 tests/vcall
 tests/ad_megakernel
+tests/texture
 libenoki-jit.so
 libenoki-jit.dylib
 enoki-jit.dll

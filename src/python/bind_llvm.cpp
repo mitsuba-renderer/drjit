@@ -3,6 +3,7 @@
 #include "random.h"
 #include "loop.h"
 #include "tensor.h"
+#include "texture.h"
 #include <enoki/jit.h>
 #include <enoki/autodiff.h>
 
@@ -27,6 +28,8 @@ void export_llvm(py::module_ &m) {
         .def("put", &Loop<Mask>::put)
         .def("init", &Loop<Mask>::init)
         .def("__call__", &Loop<Mask>::operator());
+
+    bind_texture_all<Guide>(llvm);
 
     ENOKI_BIND_TENSOR_TYPES(llvm);
 }

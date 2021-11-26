@@ -353,21 +353,17 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
     }
 
     DiffArray fmadd_(const DiffArray &a, const DiffArray &b) const {
-        if constexpr (!std::is_floating_point_v<Scalar>) {
-            enoki_raise("fmadd_(): invalid operand type!");
-        } else {
-            Type result = fmadd(m_value, a.m_value, b.m_value);
-            uint32_t index_new = 0;
-            if constexpr (IsEnabled) {
-                if (m_index || a.m_index || b.m_index) {
-                    uint32_t indices[3] = { m_index, a.m_index, b.m_index };
-                    Type weights[3] = { a.m_value, m_value, 1 };
-                    index_new = detail::ad_new<Type>(
-                        "fmadd", width(result), 3, indices, weights);
-                }
+        Type result = fmadd(m_value, a.m_value, b.m_value);
+        uint32_t index_new = 0;
+        if constexpr (IsEnabled) {
+            if (m_index || a.m_index || b.m_index) {
+                uint32_t indices[3] = { m_index, a.m_index, b.m_index };
+                Type weights[3] = { a.m_value, m_value, 1 };
+                index_new = detail::ad_new<Type>(
+                    "fmadd", width(result), 3, indices, weights);
             }
-            return DiffArray::create(index_new, std::move(result));
         }
+        return DiffArray::create(index_new, std::move(result));
     }
 
     DiffArray fmsub_(const DiffArray &a, const DiffArray &b) const {
