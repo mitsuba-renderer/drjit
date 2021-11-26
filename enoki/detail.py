@@ -300,8 +300,8 @@ def tensor_init(tensor_type, obj):
     elif mod.startswith(('numpy', 'jax', 'torch')):
         return tensor_type(tensor_type.Array(obj.ravel()), obj.shape)
     else:
-        if hasattr(obj, '__array_interface__'):
-            info = obj.__array_interface__
+        info = getattr(obj, '__array_interface__', None)
+        if info is not None:
             shape = info['shape']
             typestr = str(info['typestr'])[3:-1]
             cls = tensor_type.Array
