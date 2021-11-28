@@ -297,7 +297,9 @@ def tensor_init(tensor_type, obj):
     if 'tensorflow' in mod:
         import tensorflow as tf
         return tensor_type(tensor_type.Array(tf.reshape(obj, [-1])), obj.shape)
-    elif mod.startswith(('numpy', 'jax', 'torch')):
+    elif mod.startswith('torch'):
+        return tensor_type(tensor_type.Array(obj.flatten()), obj.shape)
+    elif mod.startswith(('numpy', 'jax')):
         return tensor_type(tensor_type.Array(obj.ravel()), obj.shape)
     else:
         info = getattr(obj, '__array_interface__', None)

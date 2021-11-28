@@ -15,6 +15,7 @@ template <typename T> auto bind_tensor(py::module m) {
             const char *mod_s = mod.c_str();
             if (strncmp(mod_s, "numpy", 5) == 0 ||
                 strncmp(mod_s, "torch", 5) == 0 ||
+                strncmp(mod_s, "jax.interpreters.xla", 20) == 0 ||
                 strncmp(mod_s, "jaxlib", 6) == 0 ||
                 strncmp(mod_s, "tensorflow", 10) == 0 ||
                 (strncmp(mod_s, "enoki", 5) != 0

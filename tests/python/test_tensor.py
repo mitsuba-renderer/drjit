@@ -197,7 +197,7 @@ def test08_pytorch_conversion(pkg):
     value = f(ek.arange(f.Array, 2*3*4), (2, 3, 4))
     value_torch = value.torch()
     assert value_torch.shape == (2, 3, 4)
-    assert torch.all(value_torch.ravel() == value.array.torch())
+    assert torch.all(value_torch.flatten() == value.array.torch())
 
     value_2 = f(value_torch)
     assert value.shape == value_2.shape
