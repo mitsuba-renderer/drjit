@@ -46,3 +46,14 @@ pre {
 div.highlight {
     background: transparent;
 }
+
+.container {
+    margin-left: 0px;
+    padding: 0px;
+    width: auto;
+}
+
+.container pre {
+    margin: 0px;
+    border: none;
+}

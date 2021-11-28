@@ -13,13 +13,19 @@ Basics
 The remainder of this document provides a basic overview of the Enoki library.
 All code snippets assume that the following lines are present:
 
-.. code-block:: cpp
+.. tabs::
 
-    #include <iostream>
-    #include <enoki/array.h>
+    .. code-tab:: python
 
-    // Don't forget to include the 'enoki' namespace
-    using namespace enoki;
+        import enoki as ek
+
+    .. code-tab:: cpp
+
+        #include <iostream>
+        #include <enoki/array.h>
+
+        // Don't forget to include the 'enoki' namespace
+        using namespace enoki;
 
 .. note::
 

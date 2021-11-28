@@ -38,11 +38,6 @@ HTML5Translator.visit_reference = replacement
 # If your documentation needs a minimal Sphinx version, state it here.
 #needs_sphinx = '1.0'
 
-# Add any Sphinx extension module names here, as strings. They can be
-# extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
-# ones.
-# extensions = []
-
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
 
@@ -127,9 +122,12 @@ html_theme = 'guzzle_sphinx_theme'
 html_static_path = ['_static']
 
 # Register the theme as an extension to generate a sitemap.xml
-extensions = []
-extensions.append("guzzle_sphinx_theme")
-extensions.append("sphinxcontrib.katex")
+extensions = [
+    'guzzle_sphinx_theme',
+    'sphinxcontrib.katex',
+    'sphinx_tabs.tabs'
+]
+
 #katex_prerender = True
 
 # Guzzle theme options (see theme.conf for more information)
