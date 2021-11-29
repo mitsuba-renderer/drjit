@@ -86,9 +86,9 @@ public:
             jit_cuda_tex_destroy(m_handle);
             m_handle = nullptr;
         }
-        m_handle = other.handle;
-        other.handle = nullptr;
-        memcpy(m_shape, other.shape, sizeof(size_t) * (Dimension + 1));
+        m_handle = other.m_handle;
+        other.m_handle = nullptr;
+        memcpy(m_shape, other.m_shape, sizeof(size_t) * (Dimension + 1));
         m_size = other.m_size;
         m_handle_opaque = std::move(other.m_handle_opaque);
         m_shape_opaque = std::move(other.m_shape_opaque);
