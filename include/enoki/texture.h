@@ -32,6 +32,9 @@ public:
     using Storage = std::conditional_t<IsDynamic, Value, DynamicArray<Value>>;
     using TensorXf = Tensor<Storage>;
 
+    /// Default constructor: create an invalid texture object
+    Texture() = default;
+
     /**
      * \brief Create a new texture with the specified size and channel count
      *
@@ -280,12 +283,12 @@ protected:
 
 private:
     void *m_handle = nullptr;
-    size_t m_shape[Dimension + 1];
-    size_t m_size;
+    size_t m_shape[Dimension + 1] { };
+    size_t m_size = 0;
     UInt64 m_handle_opaque;
     Array<UInt32, Dimension> m_shape_opaque;
     Storage m_value;
-    bool m_migrate;
+    bool m_migrate = false;
 };
 
 NAMESPACE_END(enoki)
