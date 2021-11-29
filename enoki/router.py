@@ -2539,22 +2539,39 @@ def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
         return True
 
 
-def printf_async(mask, fmt, *args):
-    if not _ek.is_jit_array_v(mask) or not _ek.array_depth_v(mask) == 1 or not _ek.is_mask_v(mask):
-        raise Exception("printf_async(): 'mask' argument must be boolean-valued depth-1 JIT array")
+def printf_async(fmt, *args, active=True):
     indices = []
     for a in args:
-        if not _ek.is_jit_array_v(a) or not _ek.array_depth_v(a) == 1:
-            raise Exception("printf_async(): extra arguments must all be depth-1 JIT arrays")
+        if not _ek.is_cuda_array_v(a) or _ek.array_depth_v(a) != 1 or _ek.is_mask_v(a):
+            raise Exception("printf_async(): array argument of type '%s' not "
+                            "supported (must be a depth-1 CUDA array, "
+                            "cannot be a mask)", type(a).__name__)
         indices.append(a.index())
-    _ek.detail.printf_async(mask.index(), fmt, indices)
+    active = _ek.cuda.Bool(active)
+    _ek.detail.printf_async(active.index(), fmt, indices)
 
+
+# -------------------------------------------------------------------
+#               Context manager for setting JIT flags
+# -------------------------------------------------------------------
+
+class scoped_set_flag:
+    def __init__(self, flag, value):
+        self.flag = flag
+        self.value = value
+
+    def __enter__(self):
+        self.backup = _ek.flag(self.flag)
+        _ek.set_flag(self.flag, self.value)
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        _ek.set_flag(self.flag, self.backup)
 
 # -------------------------------------------------------------------
 #                        Enabling/disabling AD
 # -------------------------------------------------------------------
 
-class ADContextManager:
+class _ADContextManager:
     def __init__(self, suspend, array_type, array_indices):
         self.suspend = suspend
         self.array_type = array_type
@@ -2588,7 +2605,7 @@ def suspend_grad(*args):
     array_type = _ek.detail.diff_vars(args, array_indices, check_grad_enabled=False)
     if len(args) > 0 and len(array_indices) == 0:
         array_indices = [0]
-    return ADContextManager(True, array_type, array_indices)
+    return _ADContextManager(True, array_type, array_indices)
 
 
 def resume_grad(*args):
@@ -2596,7 +2613,7 @@ def resume_grad(*args):
     array_type = _ek.detail.diff_vars(args, array_indices, check_grad_enabled=False)
     if len(args) > 0 and len(array_indices) == 0:
         array_indices = [0]
-    return ADContextManager(False, array_type, array_indices)
+    return _ADContextManager(False, array_type, array_indices)
 
 
 # -------------------------------------------------------------------
