@@ -18,7 +18,7 @@ ENOKI_TEST(test01_interp_1d) {
         jit_set_flag(JitFlag::ForceOptiX, k == 1);
 
         size_t shape[1] = { 2 };
-        ek::Texture<Float, 1> tex(shape, 1);
+        ek::Texture<Float, 1> tex(shape, 1, false);
         tex.set_value(Float(0.f, 1.f));
 
         size_t N = 11;
@@ -51,7 +51,7 @@ ENOKI_TEST(test02_interp_1d) {
         PCG32<Float> rng_1(shape[0] * ch);
         PCG32<Float> rng_2(1024);
 
-        Texture<Float, 1> tex(shape, ch);
+        Texture<Float, 1> tex(shape, ch, false);
         for (int i = 0; i < 4; ++i) {
             tex.set_value(rng_1.next_float32());
 
@@ -74,7 +74,7 @@ ENOKI_TEST(test03_interp_2d) {
         PCG32<Float> rng_1(shape[0] * shape[1] * ch);
         PCG32<Float> rng_2(1024);
 
-        Texture<Float, 2> tex(shape, ch);
+        Texture<Float, 2> tex(shape, ch, false);
         for (int i = 0; i < 4; ++i) {
             tex.set_value(rng_1.next_float32());
 
@@ -97,7 +97,7 @@ ENOKI_TEST(test04_interp_3d) {
         PCG32<Float> rng_1(shape[0] * shape[1] * shape[2] * ch);
         PCG32<Float> rng_2(1024);
 
-        Texture<Float, 3> tex(shape, ch);
+        Texture<Float, 3> tex(shape, ch, false);
         for (int i = 0; i < 4; ++i) {
             tex.set_value(rng_1.next_float32());
 
@@ -116,15 +116,21 @@ ENOKI_TEST(test04_interp_3d) {
 ENOKI_TEST(test05_grad) {
     using DFloat = ek::DiffArray<Float>;
     size_t shape[] = { 3 };
-    Texture<DFloat, 1> tex(shape, 1);
+    Texture<DFloat, 1> tex(shape, 1, true);
 
     DFloat value(3, 5, 8);
     ek::enable_grad(value);
     tex.set_value(value);
 
-    auto out = tex.eval(ek::Array<DFloat, 1>(1/6.f*0.25f + (1/6.f+1/3.f)*0.75f));
+    ek::Array<DFloat, 1> pos(1/6.f*0.25f + (1/6.f+1/3.f)*0.75f);
+    // check migration
+    auto out2 = tex.eval_enoki(pos);
+    assert(ek::allclose(out2.x(), 0));
+
+    auto out = tex.eval(pos);
     ek::backward(out.x());
 
     assert(ek::allclose(ek::grad(value), DFloat(.25f, .75f, 0)));
     assert(ek::allclose(out.x(), DFloat(0.25f * 3 + 0.75f * 5), 5e-3, 5e-3f));
+    assert(ek::allclose(tex.value(), value));
 }

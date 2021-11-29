@@ -11,6 +11,7 @@
 */
 
 #include <enoki/jit.h>
+#include <enoki/tensor.h>
 #include <enoki/dynamic.h>
 #include <enoki-jit/texture.h>
 
@@ -29,21 +30,41 @@ public:
     using Mask = mask_t<Value>;
 
     using Storage = std::conditional_t<IsDynamic, Value, DynamicArray<Value>>;
+    using TensorXf = Tensor<Storage>;
 
-    Texture(size_t shape[Dimension], size_t channels) : m_handle(nullptr) {
-        m_size = channels;
-        for (size_t i = 0; i < Dimension; ++i) {
-            m_shape[i] = shape[i];
-            m_shape_opaque[i] = opaque<Value>(scalar_t<UInt32>(shape[i]));
-            m_size *= m_shape[i];
-        }
-        m_channels = (uint32_t) channels;
+    /**
+     * \brief Create a new texture with the specified size and channel count
+     *
+     * On CUDA, this is a slow operation that synchronizes the GPU pipeline, so
+     * texture objects should be reused/updated via \ref set_value() and \ref
+     * set_tensor() as much as possible.
+     *
+     * When \c migrate is set to \c true on CUDA mode, the texture information
+     * is *fully* migrated to GPU texture memory to avoid redundant storage. In
+     * this case, the fallback evaluation routine \ref eval_enoki() is not
+     * usable anymore (it will return zero.) and only \ref eval() or \ref
+     * eval_cuda() should be used. Note that the texture is still
+     * differentiable even when migrated. The \ref value() and \ref tensor()
+     * operations need to perform a reverse migration in this mode.
+     */
+    Texture(size_t shape[Dimension], size_t channels, bool migrate = true) {
+        init(shape, channels, migrate);
+    }
 
-        if constexpr (IsCUDA) {
-            m_handle = jit_cuda_tex_create(Dimension, shape, channels);
-            m_handle_opaque = UInt64::steal(
-                jit_var_new_pointer(JitBackend::CUDA, m_handle, 0, 0));
-        }
+    /**
+     * \brief Construct a new texture from a given tensor
+     *
+     * This constructor allocates texture memory just like the previous
+     * constructor, though shape information is instead extracted from \c
+     * tensor. It then also invokes <tt>set_tensor(tensor)</tt> to fill
+     * the texture memory with the provided tensor.
+     */
+    Texture(const TensorXf &tensor, bool migrate = true) {
+        if (tensor.ndim() != Dimension + 1)
+            enoki_raise("Texture::Texture(): tensor dimension must equal "
+                        "texture dimension plus one.");
+        init(tensor.shape().data(), tensor.shape(Dimension), migrate);
+        set_tensor(tensor);
     }
 
     ~Texture() {
@@ -51,24 +72,61 @@ public:
             jit_cuda_tex_destroy(m_handle);
     }
 
+    /// Return the CUDA handle (cudaTextureObject_t). NULL on all other backends
+    const void *handle() const { return m_handle; }
+
     void set_value(const Storage &value) {
-        m_value = value;
         if (value.size() != m_size)
             enoki_raise("Texture::set_value(): unexpected array size!");
 
-        if constexpr (IsCUDA)
-            jit_cuda_tex_memcpy(Dimension, m_shape, m_channels,
-                                value.data(), m_handle);
+        if constexpr (IsCUDA) {
+            jit_cuda_tex_memcpy_d2t(Dimension, m_shape, m_shape[Dimension],
+                                    value.data(), m_handle);
+
+            if (m_migrate) {
+                // Fully migrate to texture memory, set m_value to zero
+                if constexpr (IsDiff)
+                    m_value = replace_grad(Storage(0), value);
+                else
+                    m_value = Storage(0);
+
+                return;
+            }
+        }
+
+        m_value = value;
     }
 
-    const Storage &value() const { return m_value; }
+    void set_tensor(const TensorXf &tensor) {
+        if (tensor.ndim() != Dimension + 1)
+            enoki_raise("Texture::set_tensor(): tensor dimension must equal "
+                        "texture dimension plus one.");
+        for (size_t i = 0; i < Dimension + 1; ++i) {
+            if (tensor.shape(i) != m_shape[i])
+                enoki_raise("Texture::set_tensor(): tensor shape mismatch!");
+        }
+        set_value(tensor.array());
+    }
+
+    Storage value() const {
+        if constexpr (IsCUDA) {
+            if (m_migrate) {
+                Storage result = empty<Storage>(m_size);
+                jit_cuda_tex_memcpy_t2d(Dimension, m_shape, m_shape[Dimension],
+                                        m_handle, result.data());
+                return result;
+            }
+        }
+        return m_value;
+    }
+
+    TensorXf tensor() const {
+        return TensorXf(value(), Dimension + 1, m_shape);
+    }
 
     Array<Value, 4> eval_cuda(const Array<Value, Dimension> &pos,
                               Mask active = true) const {
         if constexpr (IsCUDA) {
-            if (m_value.empty())
-                enoki_raise("Texture::eval_cuda(): texture has not been initialized yet!");
-
             uint32_t pos_idx[Dimension], out[4];
             for (size_t i = 0; i < Dimension; ++i)
                 pos_idx[i] = pos[i].index();
@@ -88,9 +146,6 @@ public:
 
     Array<Value, 4> eval_enoki(const Array<Value, Dimension> &pos,
                                Mask active = true) const {
-        if (m_value.empty())
-            enoki_raise("Texture::eval_enoki(): texture has not been initialized yet!");
-
         using PosF = Array<Value, Dimension>;
         using PosI = uint32_array_t<PosF>;
 
@@ -117,13 +172,14 @@ public:
             step.z() *= m_shape_opaque.x() * m_shape_opaque.y();
         }
 
-        index *= m_channels;
-        step *= m_channels;
+        const size_t channels = m_shape[Dimension];
+        index *= channels;
+        step *= channels;
 
         #define EK_TEX_ACCUM(index, weight) {                                   \
             UInt32 index_ = index;                                              \
             Value weight_ = weight;                                             \
-            for (uint32_t ch = 0; ch < m_channels; ++ch)                        \
+            for (uint32_t ch = 0; ch < channels; ++ch)                        \
                 result[ch] = fmadd(gather<Value>(m_value, index_ + ch, active), \
                                    weight_, result[ch]);                        \
         }
@@ -171,14 +227,35 @@ public:
         return eval_enoki(pos, active);
     }
 
+protected:
+    void init(const size_t *shape, size_t channels, bool migrate) {
+        if (channels != 1 && channels != 2 && channels != 4)
+            enoki_raise("Texture::Texture(): must have 1, 2, or 4 channels!");
+
+        m_size = channels;
+        for (size_t i = 0; i < Dimension; ++i) {
+            m_shape[i] = shape[i];
+            m_shape_opaque[i] = opaque<Value>(scalar_t<UInt32>(shape[i]));
+            m_size *= m_shape[i];
+        }
+        m_shape[Dimension] = (uint32_t) channels;
+        m_migrate = migrate;
+
+        if constexpr (IsCUDA) {
+            m_handle = jit_cuda_tex_create(Dimension, shape, channels);
+            m_handle_opaque = UInt64::steal(
+                jit_var_new_pointer(JitBackend::CUDA, m_handle, 0, 0));
+        }
+    }
+
 private:
-    size_t m_shape[Dimension];
-    uint32_t m_channels;
+    void *m_handle = nullptr;
+    size_t m_shape[Dimension + 1];
     size_t m_size;
-    void *m_handle;
     UInt64 m_handle_opaque;
     Array<UInt32, Dimension> m_shape_opaque;
     Storage m_value;
+    bool m_migrate;
 };
 
 NAMESPACE_END(enoki)
