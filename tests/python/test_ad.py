@@ -732,76 +732,6 @@ def test47_replace_grad(m):
     assert ek.allclose(ek.grad(y), [12, 32, 36])
 
 
-def test48_suspend_resume(m):
-    x = m.Array3f(1, 2, 3)
-    ek.enable_grad(x)
-
-    a = x*x
-    assert not ek.grad_suspended(x)
-    assert ek.grad_enabled(x)
-
-    with ek.resume_grad():
-        assert ek.grad_enabled(x)
-        y = m.Float(1.0)
-        ek.enable_grad(y)
-        assert not ek.grad_suspended(y)
-        assert ek.grad_enabled(y)
-
-    with ek.suspend_grad():
-        b = x*x
-        assert ek.grad_suspended(x)
-        assert ek.grad_enabled(x)
-        with ek.resume_grad():
-            assert not ek.grad_suspended(x)
-            c = b*x
-        d = a*x
-
-        y = m.Float(1.0)
-        ek.enable_grad(y)
-        assert ek.grad_suspended(y)
-        assert not ek.grad_enabled(y)
-
-    assert ek.grad_enabled(x) and \
-           ek.grad_enabled(a) and \
-       not ek.grad_enabled(b) and \
-           ek.grad_enabled(c) and \
-       not ek.grad_enabled(d)
-
-    ek.forward(x)
-    assert ek.grad(a) == 2*ek.detach(x)
-    assert ek.grad(b) == 0
-    assert ek.grad(c) == ek.detach(b)
-    assert ek.grad(d) == 0
-
-
-def test49_suspend_resume_selective(m):
-    x = m.Array2f(1, 1)
-    ek.enable_grad(x)
-
-    with ek.suspend_grad(x[0]):
-        a = x*x
-        with ek.resume_grad():
-            b = x*x
-
-    with ek.suspend_grad():
-        c = x*x
-        with ek.resume_grad(x[0]):
-            d = x*x
-
-    ek.forward(x)
-    assert ek.grad(a) == [0, 2]
-    assert ek.grad(b) == [2, 2]
-    assert ek.grad(c) == [0, 0]
-    assert ek.grad(d) == [2, 0]
-
-    a = m.Float([1, 2, 3, 4])
-    ek.enable_grad(a)
-
-    with ek.suspend_grad():
-        b = ek.gather(m.Float, a, [0, 2, 2])
-        assert not ek.grad_enabled(b)
-        assert b == [1, 3, 3]
-
 class Normalize(ek.CustomOp):
     def eval(self, value):
         self.value = value
@@ -824,7 +754,7 @@ class Normalize(ek.CustomOp):
         return "normalize"
 
 
-def test50_custom_backward(m):
+def test48_custom_backward(m):
     d = m.Array3f(1, 2, 3)
     ek.enable_grad(d)
     d2 = ek.custom(Normalize, d)
@@ -834,7 +764,7 @@ def test50_custom_backward(m):
     assert ek.allclose(ek.grad(d), m.Array3f(0.610883, 0.152721, -0.305441))
 
 
-def test51_custom_forward(m):
+def test49_custom_forward(m):
     d = m.Array3f(1, 2, 3)
     ek.enable_grad(d)
     d2 = ek.custom(Normalize, d)
@@ -849,7 +779,7 @@ def test51_custom_forward(m):
     assert ek.allclose(ek.grad(d2), m.Array3f(0.610883, 0.152721, -0.305441)*2)
 
 
-def test52_custom_forward_external_dependency(m):
+def test50_custom_forward_external_dependency(m):
     class BuggyOp(ek.CustomOp):
         def eval(self, value):
             self.add_input(param)
@@ -890,7 +820,7 @@ def test52_custom_forward_external_dependency(m):
     assert ek.grad(v3) == 12
 
 
-def test53_diff_loop(m, do_record):
+def test51_diff_loop(m, do_record):
     def mcint(a, b, f, sample_count=100000):
         rng = m.PCG32()
         i = m.UInt32(0)
@@ -941,7 +871,7 @@ def test53_diff_loop(m, do_record):
     assert ek.allclose(ek.grad(y), 0.847213, rtol=5e-4)
 
 
-def test54_loop_ballistic(m, do_record):
+def test52_loop_ballistic(m, do_record):
     class Ballistic(ek.CustomOp):
         def timestep(self, pos, vel, dt=0.02, mu=.1, g=9.81):
             acc = -mu*vel*ek.norm(vel) - m.Array2f(0, g)
@@ -1025,7 +955,7 @@ def test54_loop_ballistic(m, do_record):
     assert ek.allclose(vel_in.x, [3.3516, 2.3789, 0.79156], rtol=1e-3)
 
 
-def test55_loop_ballistic_2(m, do_record):
+def test53_loop_ballistic_2(m, do_record):
     class Ballistic2(ek.CustomOp):
         def timestep(self, pos, vel, dt=0.02, mu=.1, g=9.81):
             acc = -mu*vel*ek.norm(vel) - m.Array2f(0, g)
@@ -1095,7 +1025,7 @@ def test55_loop_ballistic_2(m, do_record):
     assert ek.allclose(vel_in.x, [3.3516, 2.3789, 0.79156], atol=1e-3)
 
 
-def test56_nan_propagation(m):
+def test54_nan_propagation(m):
     for i in range(2):
         x = ek.arange(m.Float, 10)
         ek.enable_grad(x)
@@ -1121,7 +1051,7 @@ def test56_nan_propagation(m):
             assert ek.all(ek.isnan(g))
 
 
-def test57_scatter_implicit_detach(m):
+def test55_scatter_implicit_detach(m):
     x = ek.detach(m.Float(0))
     y = ek.detach(m.Float(1))
     i = m.UInt32(0)
@@ -1129,7 +1059,7 @@ def test57_scatter_implicit_detach(m):
     ek.scatter(x, y, i, m)
 
 
-def test58_diffloop_simple_fwd(m, no_record):
+def test56_diffloop_simple_fwd(m, no_record):
     fi, fo = m.Float(1, 2, 3), m.Float(0, 0, 0)
     ek.enable_grad(fi)
 
@@ -1140,7 +1070,7 @@ def test58_diffloop_simple_fwd(m, no_record):
     assert ek.grad(fo) == m.Float(10, 5, 4)
 
 
-def test59_diffloop_simple_bwd(m, no_record):
+def test57_diffloop_simple_bwd(m, no_record):
     fi, fo = m.Float(1, 2, 3), m.Float(0, 0, 0)
     ek.enable_grad(fi)
 
@@ -1151,7 +1081,7 @@ def test59_diffloop_simple_bwd(m, no_record):
     assert ek.grad(fi) == m.Float(10, 5, 4)
 
 
-def test60_diffloop_masking_fwd(m, no_record):
+def test58_diffloop_masking_fwd(m, no_record):
     fo = ek.zero(m.Float, 10)
     fi = m.Float(1, 2)
     i = m.UInt32(0, 5)
@@ -1165,7 +1095,7 @@ def test60_diffloop_masking_fwd(m, no_record):
     assert ek.grad(fo) == m.Float(1, 1, 1, 1, 1, 0, 0, 0, 0, 0)
 
 
-def test61_diffloop_masking_bwd(m, no_record):
+def test59_diffloop_masking_bwd(m, no_record):
     fo = ek.zero(m.Float, 10)
     fi = m.Float(1, 2)
     i = m.UInt32(0, 5)
@@ -1178,7 +1108,7 @@ def test61_diffloop_masking_bwd(m, no_record):
     assert ek.grad(fi) == m.Float(5, 0)
 
 
-def test62_implicit_dep_customop(m):
+def test60_implicit_dep_customop(m):
     v0 = m.Float(2)
     ek.enable_grad(v0)
     v1 = v0 * 3
@@ -1214,7 +1144,7 @@ def test62_implicit_dep_customop(m):
 @pytest.mark.parametrize("f1", [0, ek.ADFlag.ClearEdges])
 @pytest.mark.parametrize("f2", [0, ek.ADFlag.ClearInterior])
 @pytest.mark.parametrize("f3", [0, ek.ADFlag.ClearInput])
-def test63_ad_flags(m, f1, f2, f3):
+def test61_ad_flags(m, f1, f2, f3):
     v0 = m.Float(2)
     ek.enable_grad(v0)
     v1 = v0 * 0.5
@@ -1265,10 +1195,143 @@ def test63_ad_flags(m, f1, f2, f3):
                 assert ek.grad(v2) == 1.5
 
 
-def test64_broadcasting_set_grad(m):
+def test62_broadcasting_set_grad(m):
     theta = m.Float(1.0)
     ek.enable_grad(theta)
     x = 4.0 * theta
     y = m.Array3f(x)
     ek.backward(y)
     assert ek.grad(theta) == 12.0
+
+
+def test63_suspend_resume(m):
+    a = m.Float(1)
+    b = m.Float(1)
+    c = m.Float(1)
+    ek.enable_grad(a, b, c)
+
+    with ek.suspend_grad():
+        assert not ek.grad_enabled(a) and \
+               not ek.grad_enabled(b) and \
+               not ek.grad_enabled(c) and \
+               not ek.grad_enabled(a, b, c)
+        d = a + b + c
+        assert not ek.grad_enabled(d)
+
+        with ek.resume_grad():
+            assert ek.grad_enabled(a) and \
+                   ek.grad_enabled(b) and \
+                   ek.grad_enabled(c) and \
+                   ek.grad_enabled(a, b, c)
+            e = a + b + c
+            assert ek.grad_enabled(e)
+
+        f = m.Float(1)
+        ek.enable_grad(f)
+        g = f + 1
+        assert ek.grad_enabled(f) and \
+               ek.grad_enabled(g) and \
+               not ek.grad_enabled(a, b, c, d)
+
+def test64_suspend_resume_selective(m):
+    a = m.Float(1)
+    b = m.Float(1)
+    c = m.Float(1)
+    ek.enable_grad(a, b, c)
+
+    with ek.suspend_grad():
+        print(ek.grad_enabled(c))
+        with ek.resume_grad(a, b):
+            print(ek.grad_enabled(c))
+            assert ek.grad_enabled(a) and \
+                   ek.grad_enabled(b) and \
+                   not ek.grad_enabled(c)
+            with ek.suspend_grad(b):
+                assert ek.grad_enabled(a) and \
+                       not ek.grad_enabled(b) and \
+                       not ek.grad_enabled(c)
+
+    with ek.suspend_grad(a, b):
+        assert not ek.grad_enabled(a) and \
+               not ek.grad_enabled(b) and \
+               ek.grad_enabled(c)
+        with ek.resume_grad(b):
+            assert not ek.grad_enabled(a) and \
+                   ek.grad_enabled(b) and \
+                   ek.grad_enabled(c)
+        with ek.resume_grad():
+            assert ek.grad_enabled(a) and \
+                   ek.grad_enabled(b) and \
+                   ek.grad_enabled(c)
+
+
+def test65_suspend_resume_custom_fwd(m):
+    v_implicit, v_input = m.Float(1), m.Float(1)
+    check = [0]
+
+    class TestOp(ek.CustomOp):
+        def eval(self, value):
+            self.add_input(v_implicit)
+            assert ek.grad_enabled(v_implicit) == check[0]
+            return value + ek.detach(v_implicit)
+
+        def forward(self):
+            assert ek.grad_enabled(v_implicit) == check[0]
+            self.set_grad_out(self.grad_in('value') + ek.grad(v_implicit))
+
+    for i in range(4):
+        ek.disable_grad(v_implicit, v_input)
+        ek.enable_grad(v_implicit, v_input)
+        ek.set_grad(v_implicit, 1)
+        ek.set_grad(v_input, 1)
+        check[0] = (i & 1) == 0
+
+        with ek.suspend_grad(
+                v_implicit if i & 1 else None,
+                v_input if i & 2 else None):
+            output = ek.custom(TestOp, v_input)
+            assert ek.detach(output) == 2
+            assert (i == 3 and not ek.grad_enabled(output)) or \
+                   (i <  3 and ek.grad_enabled(output))
+
+            ek.enqueue(ek.ADMode.Forward, v_implicit, v_input)
+            ek.traverse(m.Float)
+            assert ek.grad(output) == 2 - (i & 1) - ((i & 2) >> 1)
+
+
+def test66_suspend_resume_custom_bwd(m):
+    v_implicit, v_input = m.Float(1), m.Float(1)
+    check = [0]
+
+    class TestOp(ek.CustomOp):
+        def eval(self, value):
+            self.add_input(v_implicit)
+            assert ek.grad_enabled(v_implicit) == check[0]
+            return value + ek.detach(v_implicit)
+
+        def backward(self):
+            assert ek.grad_enabled(v_implicit) == check[0]
+            g = self.grad_out()
+            ek.accum_grad(v_implicit, g)
+            self.set_grad_in('value', g)
+
+
+    for i in range(4):
+        ek.disable_grad(v_implicit, v_input)
+        ek.enable_grad(v_implicit, v_input)
+        check[0] = (i & 1) == 0
+
+        with ek.suspend_grad(
+                v_implicit if i & 1 else None,
+                v_input if i & 2 else None):
+            output = ek.custom(TestOp, v_input)
+            assert ek.detach(output) == 2
+            assert (i == 3 and not ek.grad_enabled(output)) or \
+                   (i <  3 and ek.grad_enabled(output))
+
+            ek.enqueue(ek.ADMode.Backward, output)
+            ek.set_grad(output, 1)
+            ek.traverse(m.Float)
+            print(ek.grad(v_implicit))
+            assert ek.grad(v_implicit) == ((i & 1) == 0)
+            assert ek.grad(v_input) == ((i & 2) == 0)

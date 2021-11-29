@@ -85,7 +85,7 @@ void ad_scope_enter(bool suspend, const uint32_t *indices, size_t size);
 template <typename Value> void ad_scope_leave();
 
 /// Check if a variable is suspended from derivative tracking
-template <typename Value> bool ad_suspended(uint32_t index);
+template <typename Value> bool ad_grad_enabled(uint32_t index);
 
 /// Label a variable (useful for debugging via graphviz etc.)
 template <typename Value> void ad_set_label(uint32_t index, const char *);
@@ -1598,6 +1598,17 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             enoki_raise("borrow(): not supported in scalar mode!");
     }
 
+    bool grad_enabled_() const {
+        if constexpr (IsEnabled) {
+            if (!m_index)
+                return false;
+            else
+                return detail::ad_grad_enabled<Type>(m_index);
+        } else {
+            return false;
+        }
+    }
+
     void set_grad_enabled_(bool value) {
         ENOKI_MARK_USED(value);
         if constexpr (IsEnabled) {
@@ -1861,7 +1872,7 @@ protected:
     extern template ENOKI_AD_EXPORT void                                       \
     ad_scope_enter<T>(bool, const uint32_t *, size_t);                         \
     extern template ENOKI_AD_EXPORT void ad_scope_leave<T>();                  \
-    extern template ENOKI_AD_EXPORT bool ad_suspended<T>(uint32_t);            \
+    extern template ENOKI_AD_EXPORT bool ad_grad_enabled<T>(uint32_t);         \
     }
 
 ENOKI_DECLARE_EXTERN_TEMPLATE(float,  bool, uint32_t)

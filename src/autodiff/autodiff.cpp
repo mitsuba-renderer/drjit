@@ -1,4 +1,4 @@
-/** Enoki automatic differentiation library
+/** Enoki automatic differentiatiotruen library
  *
  * This file implements the AD data structures and traversal routines
  * underlying templated Enoki types like 'DiffArray<CUDAArray<float>>'. The
@@ -415,13 +415,61 @@ struct EdgeRef {
     : id(id), source(source), target(target) { }
 };
 
-/// AD scope to selectively enable/disable derivative propagation
+/**
+ * This data structure encodes an AD scope that can be used to selectively
+ * enable/disable derivative propagation for certain variables
+ *
+ * When 'complement' is set to 'false', the variable 'indices' stores the set
+ * of variables that track gradients. When 'complement' is set to 'true', it
+ * stores the set of variables that do not.
+ */
 struct Scope {
-    bool suspend;
+    bool complement = true;
     IndexSet indices;
 
-    Scope(bool suspend, IndexSet &&indices)
-        : suspend(suspend), indices(std::move(indices)) { }
+    Scope() = default;
+    Scope(Scope&&) = default;
+    Scope(const Scope&) = default;
+    Scope& operator=(Scope&&) = default;
+    Scope& operator=(const Scope&) = default;
+
+    Scope(bool complement, IndexSet &&indices)
+        : complement(complement), indices(std::move(indices)) { }
+
+
+    /// Check if a variable has gradients enabled
+    bool enabled(uint32_t index) const {
+        return (indices.find(index) != indices.end()) != complement;
+    }
+
+    /// Potentially zero out 'index' if the variable has gradients disabled
+    bool maybe_disable(uint32_t &index) const {
+        if (index && !enabled(index))
+            index = 0;
+        return index != 0;
+    }
+
+    /// Track gradients for the given variable
+    void enable(uint32_t index) {
+        if (!index)
+            return;
+
+        if (complement)
+            indices.erase(index);
+        else
+            indices.insert(index);
+    }
+
+    /// Disable gradients for the given variable
+    void disable(uint32_t index) {
+        if (!index)
+            return;
+
+        if (complement)
+            indices.insert(index);
+        else
+            indices.erase(index);
+    }
 };
 
 // Stores per-thread state
@@ -659,7 +707,29 @@ struct ReleaseOperandHelper {
 template <typename T>
 void ad_scope_enter(bool suspend, const uint32_t *indices, size_t size) {
     ad_log(Debug, "ad_scope_enter(suspend=%i, %zu indices)", (int) suspend, size);
-    local_state.scopes.emplace_back(suspend, IndexSet(indices, indices + size));
+    auto &scopes = local_state.scopes;
+    Scope scope;
+
+    if (suspend) {
+        if (size) {
+            if (!scopes.empty())
+                scope = scopes.back();
+            for (size_t i = 0; i < size; ++i)
+                scope.disable(indices[i]);
+        } else {
+            scope.complement = false;
+        }
+    } else {
+        if (size) {
+            if (!scopes.empty())
+                scope = scopes.back();
+            for (size_t i = 0; i < size; ++i)
+                scope.enable(indices[i]);
+        } else {
+            scope.complement = true;
+        }
+    }
+    scopes.push_back(std::move(scope));
 }
 
 template <typename T>
@@ -670,25 +740,12 @@ void ad_scope_leave() {
     local_state.scopes.pop_back();
 }
 
-// Check if derivative tracking is enabled for a variable in the current scope
-static bool ad_check_active(const Scope &scope, uint32_t &index) {
-    if (index) {
-        bool found = scope.indices.empty() ||
-                     scope.indices.find(index) != scope.indices.end();
-        if (( scope.suspend && !found) ||
-            (!scope.suspend &&  found))
-            return true;
-
-        index = 0;
-    }
-    return false;
-}
-
-template <typename T> bool ad_suspended(uint32_t index) {
-    std::vector<Scope> &scopes = local_state.scopes;
+template <typename T>
+bool ad_grad_enabled(uint32_t index) {
+    auto const &scopes = local_state.scopes;
     if (!scopes.empty())
-        (void) ad_check_active(scopes.back(), index);
-    return index == 0;
+        scopes.back().maybe_disable(index);
+    return index != 0;
 }
 
 template <typename T>
@@ -705,10 +762,10 @@ uint32_t ad_new(const char *label, size_t size, uint32_t op_count,
 
         bool active = false;
         if (op_count == 0) {
-            active = !scope.suspend;
+            active = true;
         } else {
             for (uint32_t i = 0; i < op_count; ++i)
-                active |= ad_check_active(scope, op[i]);
+                active |= scope.maybe_disable(op[i]);
         }
 
         if (!active)
@@ -821,9 +878,8 @@ uint32_t ad_new(const char *label, size_t size, uint32_t op_count,
 
     /* If we're selectively tracking gradients and this operation generates a
        new AD variable, then its index must be added to the index set */
-    if (unlikely(!scopes.empty() && !scopes.back().suspend &&
-                 !scopes.back().indices.empty()))
-        scopes.back().indices.insert(index);
+    if (unlikely(!scopes.empty()))
+        scopes.back().enable(index);
 
     return index;
 }
@@ -851,63 +907,78 @@ template <typename Value> struct MaskEdge : Special {
     bool negate;
 };
 
+template <typename Value> struct SpecialConnection : Special {
+    void backward(Variable *, const Variable *target, uint32_t) const override {
+        if (target->size)
+            const_cast<Variable *>(target)->ref_count_grad++;
+    }
+    void forward(const Variable *source, Variable *, uint32_t) const override {
+        if (source->size)
+            const_cast<Variable *>(source)->ref_count_grad++;
+    }
+};
+
 template <typename Value> struct SpecialCallback : Special {
     std::unique_ptr<DiffCallback> callback;
+    Scope scope;
 
-    SpecialCallback(DiffCallback* callback) : callback(callback) { }
+    struct PushScope {
+        PushScope(const Scope &scope) {
+            local_state.scopes.push_back(scope);
+        }
+        ~PushScope() {
+            local_state.scopes.pop_back();
+        }
+    };
+
+    SpecialCallback(DiffCallback *callback, Scope &&scope)
+        : callback(callback), scope(std::move(scope)) { }
 
     void backward(Variable *, const Variable *target, uint32_t flags) const override {
+        ad_trace("ad_traverse(): invoking user callback ..");
         uint32_t edge = target->next_fwd;
-        if (callback) {
-            ad_trace("ad_traverse(): invoking user callback ..");
-            /* leave critical section */ {
-                unlock_guard<std::mutex> guard(state.mutex);
-                callback->backward();
-            }
-            if (edge && state.edges[edge].next_fwd) { // fan-in > 1, update ref counts
-                do {
-                    const Edge &e = state.edges[edge];
-                    Variable *v = state[e.target];
 
-                    if (v->ref_count_grad > 0 && --v->ref_count_grad == 0) {
-                        if (((flags & (uint32_t) ADFlag::ClearInterior) && v->next_fwd != 0) ||
-                            ((flags & (uint32_t) ADFlag::ClearInput) && v->next_fwd == 0))
-                            v->grad = Value();
-                    }
-                    edge = e.next_fwd;
-                } while (edge);
-            }
-        } else {
-            if (target->size != 0)
-                const_cast<Variable *>(target)->ref_count_grad++;
+        /* leave critical section */ {
+            unlock_guard<std::mutex> guard(state.mutex);
+            PushScope push(scope);
+            callback->backward();
+        }
+        if (edge && state.edges[edge].next_fwd) { // fan-in > 1, update ref counts
+            do {
+                const Edge &e = state.edges[edge];
+                Variable *v = state[e.target];
+
+                if (v->ref_count_grad > 0 && --v->ref_count_grad == 0) {
+                    if (((flags & (uint32_t) ADFlag::ClearInterior) && v->next_fwd != 0) ||
+                        ((flags & (uint32_t) ADFlag::ClearInput) && v->next_fwd == 0))
+                        v->grad = Value();
+                }
+                edge = e.next_fwd;
+            } while (edge);
         }
     }
 
     void forward(const Variable *source, Variable *, uint32_t flags) const override {
+        ad_trace("ad_traverse(): invoking user callback ..");
         uint32_t edge = source->next_bwd;
-        if (callback) {
-            ad_trace("ad_traverse(): invoking user callback ..");
-            /* leave critical section */ {
-                unlock_guard<std::mutex> guard(state.mutex);
-                callback->forward();
-            }
-            if (edge && state.edges[edge].next_bwd) { // fan-in > 1, update ref counts
-                do {
-                    const Edge &e = state.edges[edge];
-                    Variable *v = state[e.source];
+        /* leave critical section */ {
+            unlock_guard<std::mutex> guard(state.mutex);
+            PushScope push(scope);
+            callback->forward();
+        }
+        if (edge && state.edges[edge].next_bwd) { // fan-in > 1, update ref counts
+            do {
+                const Edge &e = state.edges[edge];
+                Variable *v = state[e.source];
 
-                    if (v->ref_count_grad > 0 && --v->ref_count_grad == 0) {
-                        if (((flags & (uint32_t) ADFlag::ClearInterior) && v->next_bwd != 0) ||
-                            ((flags & (uint32_t) ADFlag::ClearInput) && v->next_bwd == 0))
-                            v->grad = Value();
-                    }
+                if (v->ref_count_grad > 0 && --v->ref_count_grad == 0) {
+                    if (((flags & (uint32_t) ADFlag::ClearInterior) && v->next_bwd != 0) ||
+                        ((flags & (uint32_t) ADFlag::ClearInput) && v->next_bwd == 0))
+                        v->grad = Value();
+                }
 
-                    edge = e.next_bwd;
-                } while (edge);
-            }
-        } else {
-            if (source->size != 0)
-                const_cast<Variable *>(source)->ref_count_grad++;
+                edge = e.next_bwd;
+            } while (edge);
         }
     }
 };
@@ -940,8 +1011,8 @@ uint32_t ad_new_select(const char *label, size_t size, const Mask &mask,
     if (unlikely(!scopes.empty())) {
         const Scope &scope = scopes.back();
 
-        bool active = ad_check_active(scope, t_index);
-        active |= ad_check_active(scope, f_index);
+        bool active = scope.maybe_disable(t_index);
+        active |= scope.maybe_disable(f_index);
 
         if (!active)
             return 0;
@@ -971,7 +1042,7 @@ uint32_t ad_new_select(const char *label, size_t size, const Mask &mask,
                         "implicit read of variable (a%i), which has size %u! "
                         "However, only scalar (size == 1) accesses are "
                         "permitted in this manner. You will likely want to "
-                        "conver the read into an enoki::gather() operation.",
+                        "convert the read into an enoki::gather() operation.",
                         index, var->size);
 
                 ad_trace("ad_new_select(): implicit read of variable a%i, inserting a "
@@ -1020,9 +1091,8 @@ uint32_t ad_new_select(const char *label, size_t size, const Mask &mask,
 
     /* If we're selectively tracking gradients and this operation generates a
        new AD variable, then its index must be added to the index set */
-    if (unlikely(!scopes.empty() && !scopes.back().suspend &&
-                 !scopes.back().indices.empty()))
-        scopes.back().indices.insert(index);
+    if (unlikely(!scopes.empty()))
+        scopes.back().enable(index);
 
     return index;
 }
@@ -1081,7 +1151,7 @@ uint32_t ad_new_gather_impl(const char *label, size_t size, uint32_t src_index,
            (globally, or only for specific variables) */
         std::vector<Scope> &scopes = local_state.scopes;
         if (unlikely(!scopes.empty())) {
-            if (!ad_check_active(scopes.back(), src_index))
+            if (!scopes.back().maybe_disable(src_index))
                 return 0;
         }
 
@@ -1114,9 +1184,8 @@ uint32_t ad_new_gather_impl(const char *label, size_t size, uint32_t src_index,
 
         /* If we're selectively tracking gradients and this operation generates a
            new AD variable, then its index must be added to the index set */
-        if (unlikely(!scopes.empty() && !scopes.back().suspend &&
-                     !scopes.back().indices.empty()))
-            scopes.back().indices.insert(index);
+        if (unlikely(!scopes.empty()))
+            scopes.back().enable(index);
 
         return index;
     } else {
@@ -1193,8 +1262,8 @@ uint32_t ad_new_scatter(const char *label, size_t size, ReduceOp op,
         std::vector<Scope> &scopes = local_state.scopes;
         if (unlikely(!scopes.empty())) {
             const Scope &scope = scopes.back();
-            bool active = ad_check_active(scope, src_index);
-            active |= ad_check_active(scope, dst_index);
+            bool active = scope.maybe_disable(src_index);
+            active |= scope.maybe_disable(dst_index);
             if (!active)
                 return 0;
         }
@@ -1250,9 +1319,8 @@ uint32_t ad_new_scatter(const char *label, size_t size, ReduceOp op,
 
         /* If we're selectively tracking gradients and this operation generates a
            new AD variable, then its index must be added to the index set */
-        if (unlikely(!scopes.empty() && !scopes.back().suspend &&
-                     !scopes.back().indices.empty()))
-            scopes.back().indices.insert(index);
+        if (unlikely(!scopes.empty()))
+            scopes.back().enable(index);
 
         return index;
     } else {
@@ -1268,6 +1336,9 @@ uint32_t ad_new_scatter(const char *label, size_t size, ReduceOp op,
 // ==========================================================================
 
 template <typename T> T ad_grad(uint32_t index, bool fail_if_missing) {
+    auto const &scopes = local_state.scopes;
+    if (unlikely(!scopes.empty()))
+        scopes.back().maybe_disable(index);
     if (unlikely(index == 0))
         return T(0);
 
@@ -1294,6 +1365,9 @@ template <typename T> T ad_grad(uint32_t index, bool fail_if_missing) {
 
 template <typename T>
 void ad_set_grad(uint32_t index, const T &value, bool fail_if_missing) {
+    auto const &scopes = local_state.scopes;
+    if (unlikely(!scopes.empty()))
+        scopes.back().maybe_disable(index);
     if (unlikely(index == 0))
         return;
 
@@ -1322,6 +1396,9 @@ void ad_set_grad(uint32_t index, const T &value, bool fail_if_missing) {
 
 template <typename T>
 void ad_accum_grad(uint32_t index, const T &value, bool fail_if_missing) {
+    auto const &scopes = local_state.scopes;
+    if (unlikely(!scopes.empty()))
+        scopes.back().maybe_disable(index);
     if (unlikely(index == 0))
         return;
 
@@ -1373,10 +1450,12 @@ void ad_add_edge(uint32_t source_idx, uint32_t target_idx,
        we're within a scope that enables/disables gradient propagation
        (globally, or only for specific variables) */
     std::vector<Scope> &scopes = local_state.scopes;
+    Scope scope;
+
     if (unlikely(!scopes.empty())) {
-        const Scope &scope = scopes.back();
-        (void) ad_check_active(scope, source_idx);
-        (void) ad_check_active(scope, target_idx);
+        scope = scopes.back();
+        (void) scope.maybe_disable(source_idx);
+        (void) scope.maybe_disable(target_idx);
     }
 
     if (source_idx == 0 || target_idx == 0)
@@ -1392,7 +1471,12 @@ void ad_add_edge(uint32_t source_idx, uint32_t target_idx,
     Edge &edge = state.edges[edge_index_new];
     edge.source = source_idx;
     edge.target = target_idx;
-    edge.special = new SpecialCallback<Value>(callback);
+
+    if (callback)
+        edge.special = new SpecialCallback<Value>(callback, std::move(scope));
+    else
+        edge.special = new SpecialConnection<Value>();
+
     edge.next_fwd = source->next_fwd;
     edge.next_bwd = target->next_bwd;
 
@@ -2113,7 +2197,7 @@ template ENOKI_EXPORT void ad_add_edge<Value>(uint32_t, uint32_t,
 template ENOKI_EXPORT void ad_scope_enter<Value>(bool, const uint32_t *,
                                                  size_t);
 template ENOKI_EXPORT void ad_scope_leave<Value>();
-template ENOKI_EXPORT bool ad_suspended<Value>(uint32_t);
+template ENOKI_EXPORT bool ad_grad_enabled<Value>(uint32_t);
 NAMESPACE_END(detail)
 
 template struct ENOKI_EXPORT DiffArray<detail::Value>;

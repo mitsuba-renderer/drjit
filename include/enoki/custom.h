@@ -102,7 +102,7 @@ protected:
      * input argument (e.g. a private instance variable).
      */
     void add_input_index(uint32_t index) {
-        if (index <= 0)
+        if (!detail::ad_grad_enabled<Type>(index))
             return;
         detail::ad_inc_ref<Type>(index);
         m_implicit_in.push_back(index);
@@ -132,7 +132,7 @@ protected:
      * return value of the operation (e.g. a private instance variable).
      */
     void add_output_index(uint32_t index) {
-        if (index <= 0)
+        if (!detail::ad_grad_enabled<Type>(index))
             return;
         detail::ad_inc_ref<Type>(index);
         m_implicit_out.push_back(index);
@@ -192,7 +192,7 @@ void diff_vars(const T &value, size_t &counter, uint32_t *out) {
     if constexpr (is_array_v<T>) {
         if constexpr (array_depth_v<T> == 1) {
             if constexpr (is_diff_array_v<T>) {
-                if (value.index_ad() > 0) {
+                if (grad_enabled(value)) {
                     if (out)
                         out[counter] = value.index_ad();
                     counter++;
@@ -280,8 +280,10 @@ template <typename Custom, typename... Input> auto custom(const Input&... input)
         if (diff_vars_out_ctr + custom->m_implicit_out.size() == 0)
             return output; // Not relevant for AD after all..
 
-        ek_unique_ptr<uint32_t[]> diff_vars_in(new uint32_t[diff_vars_in_ctr + custom->m_implicit_in.size()]);
-        ek_unique_ptr<uint32_t[]> diff_vars_out(new uint32_t[diff_vars_out_ctr + custom->m_implicit_out.size()]);
+        ek_unique_ptr<uint32_t[]> diff_vars_in(
+            new uint32_t[diff_vars_in_ctr + custom->m_implicit_in.size()]);
+        ek_unique_ptr<uint32_t[]> diff_vars_out(
+            new uint32_t[diff_vars_out_ctr + custom->m_implicit_out.size()]);
 
         diff_vars_out_ctr = 0;
         diff_vars_in_ctr = 0;

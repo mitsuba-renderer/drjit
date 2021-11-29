@@ -2225,19 +2225,20 @@ def accum_grad(a, value):
                 accum_grad(a[i], value)
 
 
-def grad_enabled(a):
+def grad_enabled(*args):
     result = False
-    if _ek.is_diff_array_v(a):
-        result = a.grad_enabled_()
-    elif _ek.is_enoki_struct_v(a):
-        for k in type(a).ENOKI_STRUCT.keys():
-            result |= grad_enabled(getattr(a, k))
-    elif isinstance(a, tuple) or isinstance(a, list):
-        for v in a:
-            result |= grad_enabled(v)
-    elif isinstance(a, _Mapping):
-        for k, v in a.items():
-            result |= grad_enabled(v)
+    for a in args:
+        if _ek.is_diff_array_v(a):
+            result |= a.grad_enabled_()
+        elif _ek.is_enoki_struct_v(a):
+            for k in type(a).ENOKI_STRUCT.keys():
+                result |= grad_enabled(getattr(a, k))
+        elif isinstance(a, tuple) or isinstance(a, list):
+            for v in a:
+                result |= grad_enabled(v)
+        elif isinstance(a, _Mapping):
+            for k, v in a.items():
+                result |= grad_enabled(v)
     return result
 
 
@@ -2316,31 +2317,30 @@ def traverse(t, flags=_ek.ADFlag.Default):
 def backward(a, flags=_ek.ADFlag.Default):
     if _ek.is_diff_array_v(a) and a.IsFloat:
         if not grad_enabled(a):
-            raise Exception("backward(): attempted to propagate derivatives "
-                            "through a variable that is not registered with "
-                            "the AD backend. Did you forget to call "
-                            "enable_grad()?")
+            raise Exception("backward(): the provided variable has gradient tracking "
+                            "disabled (it is suspended or not at all registered with "
+                            "the AD backend).  Did you forget to call enable_grad()?");
+        # Deduplicate components if 'a' is a vector
         if _ek.array_depth_v(a) > 1:
             a = a + type(a)(0)
         set_grad(a, 1)
         enqueue(_ek.ADMode.Backward, a)
         traverse(type(a), flags)
     else:
-        raise Exception("Expected a differentiable array type!")
+        raise Exception("backward(): expected a differentiable array type!")
 
 
 def forward(a, flags=_ek.ADFlag.Default):
     if _ek.is_diff_array_v(a) and a.IsFloat:
         if not grad_enabled(a):
-            raise Exception("forward(): attempted to propagate derivatives "
-                            "through a variable that is not registered with "
-                            "the AD backend. Did you forget to call "
-                            "enable_grad()?")
+            raise Exception("forward(): the provided variable has gradient tracking "
+                            "disabled (it is suspended or not at all registered with "
+                            "the AD backend).  Did you forget to call enable_grad()?");
         set_grad(a, 1)
         enqueue(_ek.ADMode.Forward, a)
         traverse(type(a), flags)
     else:
-        raise Exception("Expected a differentiable array type!")
+        raise Exception("forward(): expected a differentiable array type!")
 
 # -------------------------------------------------------------------
 #                      Initialization operations
@@ -2564,7 +2564,6 @@ class ADContextManager:
         if self.array_type is not None:
             self.array_type.scope_enter_(self.suspend, self.array_indices)
         else:
-            assert len(self.array_indices) == 0
             if hasattr(_ek, 'cuda'):
                 _ek.cuda.ad.Float32.scope_enter_(self.suspend, self.array_indices)
                 _ek.cuda.ad.Float64.scope_enter_(self.suspend, self.array_indices)
@@ -2586,30 +2585,19 @@ class ADContextManager:
 
 def suspend_grad(*args):
     array_indices = []
-    array_type = _ek.detail.diff_vars(args, array_indices)
+    array_type = _ek.detail.diff_vars(args, array_indices, check_grad_enabled=False)
+    if len(args) > 0 and len(array_indices) == 0:
+        array_indices = [0]
     return ADContextManager(True, array_type, array_indices)
 
 
 def resume_grad(*args):
     array_indices = []
-    array_type = _ek.detail.diff_vars(args, array_indices)
+    array_type = _ek.detail.diff_vars(args, array_indices, check_grad_enabled=False)
+    if len(args) > 0 and len(array_indices) == 0:
+        array_indices = [0]
     return ADContextManager(False, array_type, array_indices)
 
-
-def grad_suspended(a):
-    result = True
-    if isinstance(a, tuple) or isinstance(a, list) or _ek.array_depth_v(a) > 1:
-        for v in a:
-            result &= grad_suspended(v)
-    elif _ek.is_enoki_struct_v(a):
-        for k in type(a).ENOKI_STRUCT.keys():
-            result &= grad_suspended(getattr(a, k))
-    elif isinstance(a, _Mapping):
-        for k, v in a.items():
-            result &= grad_suspended(v)
-    elif _ek.is_diff_array_v(a) and _ek.is_floating_point_v(a):
-        result = a.grad_suspended_()
-    return result
 
 # -------------------------------------------------------------------
 #             Automatic differentation of custom fuctions

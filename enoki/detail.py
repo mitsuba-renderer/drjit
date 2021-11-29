@@ -494,8 +494,7 @@ def _loop_process_state(value: type, in_state: list, out_state: list,
         return
 
     if enoki.grad_enabled(value) \
-       and enoki.flag(enoki.JitFlag.LoopRecord) \
-       and not enoki.grad_suspended(value):
+       and enoki.flag(enoki.JitFlag.LoopRecord):
         raise enoki.Exception(
             "loop_process_state(): one of the supplied loop state variables "
             "of type %s is attached to the AD graph (i.e., grad_enabled(..) "
@@ -678,30 +677,28 @@ def tensor_setitem(tensor, slice_arg, value):
     enoki.scatter(target=tensor.array, value=value, index=index)
 
 
-def diff_vars(o, indices):
+def diff_vars(o, indices, check_grad_enabled=True):
     """ Extract indices of differentiable variables, returns the type of the underlying differentiable array """
     result = None
-    if enoki.array_depth_v(o) > 1 \
-       or isinstance(o, list) \
-       or isinstance(o, tuple):
+    if enoki.array_depth_v(o) > 1 or isinstance(o, list) or isinstance(o, tuple):
         for v in o:
-            t = diff_vars(v, indices)
+            t = diff_vars(v, indices, check_grad_enabled)
             if t is not None:
                 result = t
     elif isinstance(o, Mapping):
         for k, v in o.items():
-            t = diff_vars(v, indices)
+            t = diff_vars(v, indices, check_grad_enabled)
             if t is not None:
                 result = t
-    elif enoki.is_diff_array_v(o) and enoki.grad_enabled(o):
+    elif enoki.is_diff_array_v(o) and o.IsFloat:
         if enoki.is_tensor_v(o):
-            result = diff_vars(o.array, indices)
-        else:
+            result = diff_vars(o.array, indices, check_grad_enabled)
+        elif o.index_ad() != 0 and (not check_grad_enabled or o.grad_enabled_()):
             indices.append(o.index_ad())
             result = type(o)
     elif enoki.is_enoki_struct_v(o):
         for k in type(o).ENOKI_STRUCT.keys():
-            t = diff_vars(getattr(o, k), indices)
+            t = diff_vars(getattr(o, k), indices, check_grad_enabled)
             if t is not None:
                 result = t
     return result

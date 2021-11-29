@@ -1477,7 +1477,7 @@ template <typename T> bool grad_enabled(const T &value) {
                 result |= grad_enabled(value.entry(i));
             return result;
         } else {
-            return value.derived().index_ad() > 0;
+            return value.derived().grad_enabled_();
         }
     } else if constexpr (is_enoki_struct_v<T>) {
         bool result = false;
@@ -1772,9 +1772,9 @@ template <typename...Ts> void traverse(uint32_t flags = (uint32_t) ADFlag::Defau
 
 template <typename T> void backward(T& value, uint32_t flags = (uint32_t) ADFlag::Default) {
     if (!grad_enabled(value))
-        enoki_raise("backward(): attempted to propagate derivatives through a "
-                    "variable that is not registered with the AD backend. Did "
-                    "you forget to call enable_grad()?");
+        enoki_raise("backward(): the provided variable has gradient tracking "
+                    "disabled (it is suspended or not at all registered with "
+                    "the AD backend).  Did you forget to call enable_grad()?");
     // Handle case where components of an N-d vector map to the same AD variable
     if constexpr (array_depth_v<T> > 1)
         value = value + T(0);
@@ -1785,9 +1785,9 @@ template <typename T> void backward(T& value, uint32_t flags = (uint32_t) ADFlag
 
 template <typename T> void forward(T& value, uint32_t flags = (uint32_t) ADFlag::Default) {
     if (!grad_enabled(value))
-        enoki_raise("forward(): attempted to propagate derivatives through a "
-                    "variable that is not registered with the AD backend. Did "
-                    "you forget to call enable_grad()?");
+        enoki_raise("forward(): the provided variable has gradient tracking "
+                    "disabled (it is suspended or not at all registered with "
+                    "the AD backend).  Did you forget to call enable_grad()?");
     set_grad(value, 1.f);
     enqueue(ADMode::Forward, value);
     traverse<T>(flags);

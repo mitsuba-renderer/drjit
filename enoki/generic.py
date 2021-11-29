@@ -1317,8 +1317,9 @@ def grad_(a):
 def grad_enabled_(a):
     if not a.IsDiff:
         raise Exception("Expected a differentiable array type!")
-
-    if a.Depth > 1:
+    if a.IsTensor:
+        return a.array.grad_enabled_()
+    elif a.IsFloat:
         enabled = False
         for i in range(len(a)):
             # ek.Loop requires entry_ref_ here to avoid creating copies
@@ -1326,7 +1327,7 @@ def grad_enabled_(a):
             enabled |= a.entry_ref_(i).grad_enabled_()
         return enabled
     else:
-        return a.index_ad() > 0
+        return False
 
 
 def set_grad_enabled_(a, value):
