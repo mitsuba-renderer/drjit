@@ -124,6 +124,12 @@ PYBIND11_MODULE(enoki_ext, m_) {
         return std::fma(a, b, c);
     });
 
+#if defined(ENOKI_ENABLE_CUDA)
+    array_detail.def("cuda_context", []() { return reinterpret_cast<std::uintptr_t>(jit_cuda_context()); });
+    array_detail.def("cuda_device", &jit_cuda_device_raw);
+    array_detail.def("cuda_stream", []() { return reinterpret_cast<std::uintptr_t>(jit_cuda_stream()); });
+#endif
+
     export_scalar(m);
 
 #if defined(ENOKI_ENABLE_PYTHON_PACKET)
