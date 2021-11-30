@@ -44,6 +44,7 @@ target_include_directories(enoki
   INTERFACE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ext/enoki-jit/include>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ext/enoki-jit/ext/enoki-thread/include>
   $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
