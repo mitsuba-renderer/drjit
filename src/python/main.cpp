@@ -259,7 +259,8 @@ PYBIND11_MODULE(enoki_ext, m_) {
     m.def("sync_all_devices", &jit_sync_all_devices);
     m.def("whos_str", &jit_var_whos);
     m.def("whos", []() { py::print(jit_var_whos()); });
-    m.def("malloc_trim", &jit_malloc_trim);
+    m.def("flush_kernel_cache", &jit_flush_kernel_cache);
+    m.def("flush_malloc_cache", &jit_flush_malloc_cache);
     m.def("malloc_clear_statistics", &jit_malloc_clear_statistics);
     m.def("set_log_level", [](LogLevel level) { jit_set_log_level_callback(level, log_callback); });
     m.def("log_level", &jit_log_level_stderr);

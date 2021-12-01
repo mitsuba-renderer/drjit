@@ -13,7 +13,7 @@
 #         ek.set_requires_gradient(ctx.in2, arg2.requires_grad)
 #         ctx.out = ek.atan2(ctx.in1, ctx.in2)
 #         out_torch = ctx.out.torch()
-#         ek.cuda_malloc_trim()
+#         ek.cuda_flush_malloc_cache()
 #         return out_torch
 
 #     @staticmethod
@@ -25,7 +25,7 @@
 #                   ek.gradient(ctx.in2).torch()
 #                   if ek.requires_gradient(ctx.in2) else None)
 #         del ctx.out, ctx.in1, ctx.in2
-#         ek.cuda_malloc_trim()
+#         ek.cuda_flush_malloc_cache()
 #         return result
 
 
