@@ -327,6 +327,10 @@ struct Tensor
         return Tensor(select(m_.m_array, t_.m_array, f_.m_array), shape);
     }
 
+    static Tensor zero_(size_t size) {
+        return Tensor(zero<Array>(size));
+    }
+
     size_t ndim() const { return m_shape.size(); }
     size_t size() const { return m_array.size(); }
     size_t shape(size_t i) const {

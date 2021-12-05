@@ -1476,6 +1476,8 @@ template <typename T> bool grad_enabled(const T &value) {
             for (size_t i = 0; i < value.size(); ++i)
                 result |= grad_enabled(value.entry(i));
             return result;
+        } else if constexpr (is_tensor_v<T>) {
+            return grad_enabled(value.array());
         } else {
             return value.derived().grad_enabled_();
         }
@@ -1525,6 +1527,8 @@ template <typename T> void set_grad_enabled(T &value, bool state) {
         if constexpr (array_depth_v<T> > 1) {
             for (size_t i = 0; i < value.size(); ++i)
                 set_grad_enabled(value.entry(i), state);
+        } else if constexpr (is_tensor_v<T>) {
+            set_grad_enabled(value.array(), state);
         } else {
             value.set_grad_enabled_(state);
         }
