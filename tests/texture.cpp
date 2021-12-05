@@ -112,7 +112,6 @@ ENOKI_TEST(test04_interp_3d) {
     }
 }
 
-
 ENOKI_TEST(test05_grad) {
     using DFloat = ek::DiffArray<Float>;
     size_t shape[] = { 3 };
@@ -133,4 +132,14 @@ ENOKI_TEST(test05_grad) {
     assert(ek::allclose(ek::grad(value), DFloat(.25f, .75f, 0)));
     assert(ek::allclose(out.x(), DFloat(0.25f * 3 + 0.75f * 5), 5e-3, 5e-3f));
     assert(ek::allclose(tex.value(), value));
+}
+
+
+ENOKI_TEST(test06_nearest) {
+    size_t shape[1] = { 3 };
+    ek::Texture<Float, 1> tex(shape, 1, false, ek::FilterMode::Nearest);
+    tex.set_value(Float(0.f, 0.5f, 1.f));
+
+    Float pos = ek::linspace<Float>(0, 1, 80);
+    assert(ek::allclose(tex.eval_cuda(pos).x(), tex.eval_enoki(pos).x()));
 }

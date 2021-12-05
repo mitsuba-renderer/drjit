@@ -5,15 +5,21 @@ void bind_texture(py::module &m, const char *name) {
     using Tex = ek::Texture<Type, Dimension>;
 
     py::class_<Tex>(m, name)
-        .def(py::init([](std::array<size_t, Dimension> shape, size_t channels,
-                         bool) { return new Tex(shape.data(), channels); }),
-             "shape"_a, "channels"_a, "migrate"_a = true)
-        .def(py::init<const typename Tex::TensorXf &, bool>(), "tensor"_a,
-             "migrate"_a = true)
+        .def(py::init([](const std::array<size_t, Dimension> &shape,
+                         size_t channels, bool migrate,
+                         ek::FilterMode filter_mode) {
+                 return new Tex(shape.data(), channels, migrate, filter_mode);
+             }),
+             "shape"_a, "channels"_a, "migrate"_a = true,
+             "filter_mode"_a = ek::FilterMode::Linear)
+        .def(py::init<const typename Tex::TensorXf &, bool, ek::FilterMode>(),
+             "tensor"_a, "migrate"_a = true,
+             "filter_mode"_a = ek::FilterMode::Linear)
         .def("set_value", &Tex::set_value, "value"_a)
         .def("set_tensor", &Tex::set_tensor, "tensor"_a)
         .def("value", &Tex::value)
         .def("tensor", &Tex::tensor)
+        .def("filter_mode", &Tex::filter_mode)
         .def("eval_cuda", &Tex::eval_cuda, "pos"_a, "active"_a = true)
         .def("eval_enoki", &Tex::eval_enoki, "pos"_a, "active"_a = true)
         .def("eval", &Tex::eval, "pos"_a, "active"_a = true);

@@ -2,6 +2,7 @@
 #include <enoki/autodiff.h>
 #include <enoki/idiv.h>
 #include <enoki/loop.h>
+#include <enoki/texture.h>
 #include <pybind11/stl.h>
 #include <pybind11/operators.h>
 
@@ -112,6 +113,10 @@ PYBIND11_MODULE(enoki_ext, m_) {
         .def(int() & py::self)
         .def(+py::self)
         .def(~py::self);
+
+    py::enum_<ek::FilterMode>(m, "FilterMode")
+        .value("Nearest", ek::FilterMode::Nearest)
+        .value("Linear", ek::FilterMode::Linear);
 
     py::class_<ek::detail::reinterpret_flag>(array_detail, "reinterpret_flag")
         .def(py::init<>());

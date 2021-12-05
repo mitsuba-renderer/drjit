@@ -19,6 +19,11 @@
 
 NAMESPACE_BEGIN(enoki)
 
+enum class FilterMode : uint32_t {
+    Nearest = 0,
+    Linear = 1
+};
+
 template <typename Value, size_t Dimension> class Texture {
 public:
     static constexpr bool IsCUDA = is_cuda_array_v<Value>;
@@ -50,8 +55,9 @@ public:
      * differentiable even when migrated. The \ref value() and \ref tensor()
      * operations need to perform a reverse migration in this mode.
      */
-    Texture(size_t shape[Dimension], size_t channels, bool migrate = true) {
-        init(shape, channels, migrate);
+    Texture(const size_t shape[Dimension], size_t channels, bool migrate = true,
+            FilterMode filter_mode = FilterMode::Linear) {
+        init(shape, channels, migrate, filter_mode);
     }
 
     /**
@@ -62,11 +68,13 @@ public:
      * tensor. It then also invokes <tt>set_tensor(tensor)</tt> to fill
      * the texture memory with the provided tensor.
      */
-    Texture(const TensorXf &tensor, bool migrate = true) {
+    Texture(const TensorXf &tensor, bool migrate = true,
+            FilterMode filter_mode = FilterMode::Linear) {
         if (tensor.ndim() != Dimension + 1)
             enoki_raise("Texture::Texture(): tensor dimension must equal "
                         "texture dimension plus one.");
-        init(tensor.shape().data(), tensor.shape(Dimension), migrate);
+        init(tensor.shape().data(), tensor.shape(Dimension), migrate,
+             filter_mode);
         set_tensor(tensor);
     }
 
@@ -107,6 +115,8 @@ public:
 
     /// Return the CUDA handle (cudaTextureObject_t). NULL on all other backends
     const void *handle() const { return m_handle; }
+
+    FilterMode filter_mode() const { return m_filter_mode; }
 
     void set_value(const Storage &value) {
         if (value.size() != m_size)
@@ -182,7 +192,11 @@ public:
         using PosF = Array<Value, Dimension>;
         using PosI = uint32_array_t<PosF>;
 
-        PosF pos_f = fmadd(pos, m_shape_opaque, -.5f);
+        PosF pos_f;
+        if (ENOKI_UNLIKELY(m_filter_mode == FilterMode::Nearest))
+            pos_f = pos * m_shape_opaque;
+        else
+            pos_f = fmadd(pos, m_shape_opaque, -.5f);
 
         PosI pos_i = clamp(PosI(pos_f), 0u, m_shape_opaque - 1u),
              step = select(pos_f >= 0.f && pos_i < m_shape_opaque - 1u, 1u, 0u);
@@ -212,12 +226,18 @@ public:
         #define EK_TEX_ACCUM(index, weight) {                                   \
             UInt32 index_ = index;                                              \
             Value weight_ = weight;                                             \
-            for (uint32_t ch = 0; ch < channels; ++ch)                        \
+            for (uint32_t ch = 0; ch < channels; ++ch)                          \
                 result[ch] = fmadd(gather<Value>(m_value, index_ + ch, active), \
                                    weight_, result[ch]);                        \
         }
 
         Array<Value, 4> result(0);
+
+        if (ENOKI_UNLIKELY(m_filter_mode == FilterMode::Nearest)) {
+            for (uint32_t ch = 0; ch < channels; ++ch)
+                result[ch] = gather<Value>(m_value, index + ch, active);
+            return result;
+        }
 
         if constexpr (Dimension == 1) {
             EK_TEX_ACCUM(index,            w0.x());
@@ -261,7 +281,8 @@ public:
     }
 
 protected:
-    void init(const size_t *shape, size_t channels, bool migrate) {
+    void init(const size_t *shape, size_t channels, bool migrate,
+              FilterMode filter_mode) {
         if (channels != 1 && channels != 2 && channels != 4)
             enoki_raise("Texture::Texture(): must have 1, 2, or 4 channels!");
 
@@ -273,9 +294,11 @@ protected:
         }
         m_shape[Dimension] = (uint32_t) channels;
         m_migrate = migrate;
+        m_filter_mode = filter_mode;
 
         if constexpr (IsCUDA) {
-            m_handle = jit_cuda_tex_create(Dimension, shape, channels);
+            m_handle = jit_cuda_tex_create(Dimension, shape, channels,
+                                           (int) filter_mode);
             m_handle_opaque = UInt64::steal(
                 jit_var_new_pointer(JitBackend::CUDA, m_handle, 0, 0));
         }
@@ -288,6 +311,7 @@ private:
     UInt64 m_handle_opaque;
     Array<UInt32, Dimension> m_shape_opaque;
     Storage m_value;
+    FilterMode m_filter_mode;
     bool m_migrate = false;
 };
 
