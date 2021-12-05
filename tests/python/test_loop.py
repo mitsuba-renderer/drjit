@@ -45,7 +45,7 @@ def test01_ctr(pkg):
 
 
 @pytest.mark.parametrize("pkg", pkgs)
-def test01_record_loop(pkg):
+def test02_record_loop(pkg):
     p = get_class(pkg)
 
     for i in range(3):
@@ -73,7 +73,7 @@ def test01_record_loop(pkg):
 
 @pytest.mark.parametrize("variant", [0, 1])
 @pytest.mark.parametrize("pkg", pkgs)
-def test02_multiple_values(pkg, variant):
+def test03_multiple_values(pkg, variant):
     p = get_class(pkg)
 
     i = ek.arange(p.Int, 0, 10)
@@ -103,7 +103,7 @@ def test02_multiple_values(pkg, variant):
 
 
 @pytest.mark.parametrize("pkg", pkgs)
-def test03_side_effect(pkg):
+def test04_side_effect(pkg):
     p = get_class(pkg)
 
     i = ek.zero(p.Int, 10)
@@ -123,7 +123,7 @@ def test03_side_effect(pkg):
 
 
 @pytest.mark.parametrize("pkg", pkgs)
-def test04_side_effect_noloop(pkg):
+def test05_side_effect_noloop(pkg):
     p = get_class(pkg)
 
     i = ek.zero(p.Int, 10)
@@ -144,7 +144,7 @@ def test04_side_effect_noloop(pkg):
 
 @pytest.mark.parametrize("variant", [0, 1, 2])
 @pytest.mark.parametrize("pkg", pkgs)
-def test05_test_collatz(pkg, variant):
+def test06_test_collatz(pkg, variant):
     p = get_class(pkg)
 
     def collatz(value: p.Int):
@@ -174,7 +174,7 @@ def test05_test_collatz(pkg, variant):
                                  "enoki.cuda.ad",
                                  "enoki.llvm",
                                  "enoki.llvm.ad"])
-def test06_loop_nest(pkg, variant):
+def test07_loop_nest(pkg, variant):
     p = get_class(pkg)
 
     def collatz(value: p.Int):
@@ -205,7 +205,7 @@ def test06_loop_nest(pkg, variant):
 
 
 @pytest.mark.parametrize("pkg", pkgs)
-def test07_loop_simplification(pkg):
+def test08_loop_simplification(pkg):
     # Test a regression where most loop variables are optimized away
     p = get_class(pkg)
     res = ek.zero(p.Float, 10)
@@ -226,7 +226,7 @@ def test07_loop_simplification(pkg):
 
 
 @pytest.mark.parametrize("pkg", pkgs)
-def test08_failure_invalid_loop_arg(pkg):
+def test09_failure_invalid_loop_arg(pkg):
     p = get_class(pkg)
     i = p.Int(1)
     with pytest.raises(RuntimeError) as e:
@@ -242,7 +242,7 @@ def test08_failure_invalid_loop_arg(pkg):
 
 
 @pytest.mark.parametrize("pkg", pkgs_ad)
-def test09_failure_invalid_type(pkg):
+def test10_failure_invalid_type(pkg):
     p = get_class(pkg)
     i = 1
     with pytest.raises(ek.Exception) as e:
@@ -252,7 +252,7 @@ def test09_failure_invalid_type(pkg):
 
 @pytest.mark.parametrize("variant", [0, 1])
 @pytest.mark.parametrize("pkg", pkgs)
-def test10_failure_unitialized(pkg, variant):
+def test11_failure_unitialized(pkg, variant):
     p = get_class(pkg)
     i = p.Int(0)
     j = p.Int() if variant == 0 else p.Int(1)
@@ -268,7 +268,7 @@ def test10_failure_unitialized(pkg, variant):
 
 
 @pytest.mark.parametrize("pkg", pkgs)
-def test11_failure_changing_type(pkg):
+def test12_failure_changing_type(pkg):
     p = get_class(pkg)
     i = p.Int(0)
     with pytest.raises(ek.Exception) as e:
@@ -281,7 +281,7 @@ def test11_failure_changing_type(pkg):
 
 @pytest.mark.parametrize("variant", [0, 1])
 @pytest.mark.parametrize("pkg", pkgs_ad)
-def test12_failures_ad(pkg, variant):
+def test13_failures_ad(pkg, variant):
     p = get_class(pkg)
     i = p.Int(0)
     v = p.Array3f(1,2,2)
@@ -299,7 +299,7 @@ def test12_failures_ad(pkg, variant):
 
 
 @pytest.mark.parametrize("pkg", pkgs)
-def test13_failure_state_leak(pkg):
+def test14_failure_state_leak(pkg):
     p = get_class(pkg)
     i, j = p.Int(0), p.Int(0)
 
@@ -315,7 +315,7 @@ def test13_failure_state_leak(pkg):
 
 
 @pytest.mark.parametrize("pkg", pkgs)
-def test14_scalar_side_effect(pkg):
+def test15_scalar_side_effect(pkg):
     # Ensure that a scalar side effect takes place multiple times if the loop processes larger arrays
     p = get_class(pkg)
 
