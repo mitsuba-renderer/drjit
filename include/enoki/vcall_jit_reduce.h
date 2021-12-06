@@ -87,9 +87,19 @@ Result vcall_jit_reduce_impl(Func func, const Self &self_,
     SetSelfHelper self_helper;
     if (n_inst > 0 && self_size > 0) {
         result = empty<Result>(self_size);
+        size_t last_size = 0;
+
         for (size_t i = 0; i < n_inst ; ++i) {
             UInt32 perm        = UInt32::borrow(buckets[i].index),
                    instance_id = gather<UInt32>(self, perm);
+
+            size_t wavefront_size = perm.size();
+
+            // Avoid merging multiple vcall launches if size repeats..
+            if (wavefront_size != last_size)
+                last_size = wavefront_size;
+            else
+                eval(result);
 
             if (buckets[i].ptr) {
                 self_helper.set(buckets[i].id, instance_id.index());
