@@ -114,11 +114,13 @@ Result vcall_jit_record_impl(const char *name, uint32_t n_inst,
         jit_state.set_self(i);
 
         Mask vcall_mask = true;
-        if constexpr (Backend == JitBackend::LLVM)
+        if constexpr (Backend == JitBackend::LLVM) {
+            // no-op to copy the mask into a local parameter
             vcall_mask = Mask::steal(jit_var_new_stmt(
                 Backend, VarType::Bool,
-                "$r0 = or <$w x i1> %mask, zeroinitializer", 1, 0,
+                "$r0 = bitcast <$w x i1> %mask to <$w x i1>", 1, 0,
                 nullptr));
+        }
 
         jit_state.set_mask(vcall_mask.index(), false);
 
