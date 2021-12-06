@@ -249,7 +249,6 @@ PYBIND11_MODULE(enoki_ext, m_) {
         .value("PrintIR",        JitFlag::PrintIR)
         .value("ADOptimize",     JitFlag::ADOptimize)
         .value("KernelHistory",  JitFlag::KernelHistory)
-        .value("LaunchBlocking", JitFlag::LaunchBlocking)
         .value("Default",        JitFlag::Default);
 
 #if defined(ENOKI_ENABLE_CUDA)
