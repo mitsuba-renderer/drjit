@@ -58,6 +58,7 @@ public:
     Texture(const size_t shape[Dimension], size_t channels, bool migrate = true,
             FilterMode filter_mode = FilterMode::Linear) {
         init(shape, channels, migrate, filter_mode);
+        m_value.array() = Storage(0);
     }
 
     /**
@@ -116,6 +117,8 @@ public:
     /// Return the CUDA handle (cudaTextureObject_t). NULL on all other backends
     const void *handle() const { return m_handle; }
 
+    size_t ndim() const { return Dimension + 1; }
+    const size_t *shape() const { return m_shape; }
     FilterMode filter_mode() const { return m_filter_mode; }
 
     void set_value(const Storage &value) {
@@ -129,21 +132,21 @@ public:
             if (m_migrate) {
                 // Fully migrate to texture memory, set m_value to zero
                 if constexpr (IsDiff)
-                    m_value = replace_grad(Storage(0), value);
+                    m_value.array() = replace_grad(Storage(0), value);
                 else
-                    m_value = Storage(0);
+                    m_value.array() = Storage(0);
 
                 return;
             }
         }
 
-        m_value = value;
+        m_value.array() = value;
     }
 
     void set_tensor(const TensorXf &tensor) {
         if (tensor.ndim() != Dimension + 1)
             enoki_raise("Texture::set_tensor(): tensor dimension must equal "
-                        "texture dimension plus one.");
+                        "texture dimension plus one (channels).");
         for (size_t i = 0; i < Dimension + 1; ++i) {
             if (tensor.shape(i) != m_shape[i])
                 enoki_raise("Texture::set_tensor(): tensor shape mismatch!");
@@ -151,20 +154,25 @@ public:
         set_value(tensor.array());
     }
 
-    Storage value() const {
+    Storage &value() const {
+        return tensor().array();
+    }
+
+    TensorXf &tensor() const {
         if constexpr (IsCUDA) {
             if (m_migrate) {
-                Storage result = empty<Storage>(m_size);
-                jit_cuda_tex_memcpy_t2d(Dimension, m_shape, m_shape[Dimension],
-                                        m_handle, result.data());
-                return result;
+                if (m_value.array().size() != m_size) {
+                    Storage primal = empty<Storage>(m_size);
+                    jit_cuda_tex_memcpy_t2d(Dimension, m_shape, m_shape[Dimension],
+                                            m_handle, primal.data());
+                    if constexpr (IsDiff)
+                        m_value.array() = replace_grad(primal, m_value.array());
+                    else
+                        m_value.array() = primal;
+                }
             }
         }
         return m_value;
-    }
-
-    TensorXf tensor() const {
-        return TensorXf(value(), Dimension + 1, m_shape);
     }
 
     Array<Value, 4> eval_cuda(const Array<Value, Dimension> &pos,
@@ -223,19 +231,21 @@ public:
         index *= channels;
         step *= channels;
 
-        #define EK_TEX_ACCUM(index, weight) {                                   \
-            UInt32 index_ = index;                                              \
-            Value weight_ = weight;                                             \
-            for (uint32_t ch = 0; ch < channels; ++ch)                          \
-                result[ch] = fmadd(gather<Value>(m_value, index_ + ch, active), \
-                                   weight_, result[ch]);                        \
-        }
+        #define EK_TEX_ACCUM(index, weight)                                        \
+            {                                                                      \
+                UInt32 index_ = index;                                             \
+                Value weight_ = weight;                                            \
+                for (uint32_t ch = 0; ch < channels; ++ch)                         \
+                    result[ch] =                                                   \
+                        fmadd(gather<Value>(m_value.array(), index_ + ch, active), \
+                            weight_, result[ch]);                                  \
+            }
 
         Array<Value, 4> result(0);
 
         if (ENOKI_UNLIKELY(m_filter_mode == FilterMode::Nearest)) {
             for (uint32_t ch = 0; ch < channels; ++ch)
-                result[ch] = gather<Value>(m_value, index + ch, active);
+                result[ch] = gather<Value>(m_value.array(), index + ch, active);
             return result;
         }
 
@@ -274,9 +284,9 @@ public:
                     result = replace_grad(result, result_diff);
                 }
             }
-
             return result;
         }
+
         return eval_enoki(pos, active);
     }
 
@@ -293,6 +303,8 @@ protected:
             m_size *= m_shape[i];
         }
         m_shape[Dimension] = (uint32_t) channels;
+        m_value = TensorXf(zero<Storage>(m_size), Dimension + 1, m_shape);
+        m_value.array() = Storage(0);
         m_migrate = migrate;
         m_filter_mode = filter_mode;
 
@@ -310,7 +322,7 @@ private:
     size_t m_size = 0;
     UInt64 m_handle_opaque;
     Array<UInt32, Dimension> m_shape_opaque;
-    Storage m_value;
+    mutable TensorXf m_value;
     FilterMode m_filter_mode;
     bool m_migrate = false;
 };
