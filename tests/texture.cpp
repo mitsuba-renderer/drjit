@@ -112,28 +112,36 @@ ENOKI_TEST(test04_interp_3d) {
     }
 }
 
-ENOKI_TEST(test05_grad) {
+void test_grad(bool migrate) {
     using DFloat = ek::DiffArray<Float>;
     size_t shape[] = { 3 };
-    Texture<DFloat, 1> tex(shape, 1, true);
+    Texture<DFloat, 1> tex(shape, 1, migrate);
 
     DFloat value(3, 5, 8);
     ek::enable_grad(value);
     tex.set_value(value);
 
     ek::Array<DFloat, 1> pos(1/6.f*0.25f + (1/6.f+1/3.f)*0.75f);
+    DFloat expected(0.25f * 3 + 0.75f * 5);
     // check migration
     auto out2 = tex.eval_enoki(pos);
-    assert(ek::allclose(out2.x(), 0));
+    if (migrate)
+        assert(ek::allclose(out2.x(), 0));
+    else
+        assert(ek::allclose(out2.x(), expected, 5e-3, 5e-3f));
 
     auto out = tex.eval(pos);
     ek::backward(out.x());
 
     assert(ek::allclose(ek::grad(value), DFloat(.25f, .75f, 0)));
-    assert(ek::allclose(out.x(), DFloat(0.25f * 3 + 0.75f * 5), 5e-3, 5e-3f));
+    assert(ek::allclose(out.x(), expected, 5e-3, 5e-3f));
     assert(ek::allclose(tex.value(), value));
 }
 
+ENOKI_TEST(test05_grad) {
+    test_grad(true);
+    test_grad(false);
+}
 
 ENOKI_TEST(test06_nearest) {
     size_t shape[1] = { 3 };
