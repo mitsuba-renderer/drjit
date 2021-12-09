@@ -4,7 +4,8 @@ from enoki.detail import array_name as _array_name
 from sys import modules as _modules
 import math as _math
 import builtins as _builtins
-from collections.abc import Mapping as _Mapping
+from collections.abc import Mapping as _Mapping, \
+                            Sequence as _Sequence
 
 # -------------------------------------------------------------------
 #                        Type promotion logic
@@ -1389,7 +1390,7 @@ def schedule(*args):
         elif _ek.is_enoki_struct_v(t):
             for k in t.ENOKI_STRUCT.keys():
                 result |= schedule(getattr(a, k))
-        elif issubclass(t, tuple) or issubclass(t, list):
+        elif issubclass(t, _Sequence):
             for v in a:
                 result |= schedule(v)
         elif issubclass(t, _Mapping):
@@ -2174,7 +2175,7 @@ def grad(a):
         for k in type(a).ENOKI_STRUCT.keys():
             setattr(result, k, grad(getattr(a, k)))
         return result
-    elif isinstance(a, tuple) or isinstance(a, list):
+    elif isinstance(a, _Sequence):
         return type(a)([grad(v) for v in a])
     elif isinstance(a, _Mapping):
         return {k : grad(v) for k, v in a.items()}
@@ -2192,15 +2193,21 @@ def set_grad(a, value):
             value = t(value)
 
         a.set_grad_(value)
-    elif isinstance(a, tuple) or isinstance(a, list):
-        for v in a:
-            set_grad(v, value)
+    elif isinstance(a, _Sequence):
+        vs = isinstance(value, _Sequence)
+        assert not vs or len(a) == len(value)
+        for i in range(len(a)):
+            set_grad(v[i], value[i] if vs else value)
     elif isinstance(a, _Mapping):
+        vm = isinstance(value, _Mapping)
+        assert not vm or a.keys() == value.keys()
         for k, v in a.items():
-            set_grad(v, value)
+            set_grad(v, value[k] if vm else value)
     elif _ek.is_enoki_struct_v(a):
+        ve = _ek.is_enoki_struct_v(value)
+        assert not ve or type(value) is type(a)
         for k in type(a).ENOKI_STRUCT.keys():
-            set_grad(getattr(a, k), value)
+            set_grad(getattr(a, k), getattr(value, k) if ve else value)
 
 
 def accum_grad(a, value):
@@ -2213,16 +2220,21 @@ def accum_grad(a, value):
             value = t(value)
 
         a.accum_grad_(value)
-    elif _ek.is_enoki_struct_v(a):
-        for k in type(a).ENOKI_STRUCT.keys():
-            accum_grad(getattr(a, k), value)
-    elif isinstance(a, tuple) or isinstance(a, list):
+    elif isinstance(a, _Sequence):
+        vs = isinstance(value, _Sequence)
+        assert not vs or len(a) == len(value)
         for i in range(len(a)):
-            if isinstance(value, tuple) or isinstance(value, list):
-                assert len(value) == len(a)
-                accum_grad(a[i], value[i])
-            else:
-                accum_grad(a[i], value)
+            accum_grad(v[i], value[i] if vs else value)
+    elif isinstance(a, _Mapping):
+        vm = isinstance(value, _Mapping)
+        assert not vm or a.keys() == value.keys()
+        for k, v in a.items():
+            accum_grad(v, value[k] if vm else value)
+    elif _ek.is_enoki_struct_v(a):
+        ve = _ek.is_enoki_struct_v(value)
+        assert not ve or type(value) is type(a)
+        for k in type(a).ENOKI_STRUCT.keys():
+            accum_grad(getattr(a, k), getattr(value, k) if ve else value)
 
 
 def grad_enabled(*args):
