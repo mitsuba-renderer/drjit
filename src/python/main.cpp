@@ -247,6 +247,7 @@ PYBIND11_MODULE(enoki_ext, m_) {
         .value("ForceOptiX",     JitFlag::ForceOptiX)
         .value("Recording",      JitFlag::Recording)
         .value("PrintIR",        JitFlag::PrintIR)
+        .value("LaunchBlocking", JitFlag::LaunchBlocking)
         .value("ADOptimize",     JitFlag::ADOptimize)
         .value("KernelHistory",  JitFlag::KernelHistory)
         .value("Default",        JitFlag::Default);
