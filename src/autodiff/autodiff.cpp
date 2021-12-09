@@ -484,7 +484,7 @@ struct LocalState {
     std::vector<EdgeRef> postponed;
 
     /// Requested directionality of differentiation
-    ADMode mode = ADMode::Backward;
+    ADMode mode = ADMode::Primal;
 
     /// Nested scopes that restrict AD to specific variables
     std::vector<Scope> scopes;
@@ -1554,10 +1554,18 @@ template <typename T> void ad_enqueue(ADMode mode, uint32_t index) {
     }
 
     std::lock_guard<std::mutex> guard(state.mutex);
-    if (mode == ADMode::Forward)
-        ad_dfs_fwd(ls.todo, index, state[index]);
-    else
-        ad_dfs_bwd(ls.todo, index, state[index]);
+    switch (mode) {
+        case ADMode::Forward:
+            ad_dfs_fwd(ls.todo, index, state[index]);
+            break;
+
+        case ADMode::Backward:
+            ad_dfs_bwd(ls.todo, index, state[index]);
+            break;
+
+        default:
+            ad_raise("ad_enqueue(): invalid mode specified!");
+    }
 }
 
 // ==========================================================================
@@ -1582,6 +1590,10 @@ void ad_traverse(uint32_t flags) {
 
     // Bring into the appropriate order
     ADMode mode = ls.mode;
+
+    if (mode != ADMode::Forward && mode != ADMode::Backward)
+        ad_raise("ad_traverse(): invalid mode specified!");
+
     std::sort(todo.begin(), todo.end(), [mode](EdgeRef e1, EdgeRef e2) {
         if (mode == ADMode::Backward)
             return std::tie(e1.target, e1.source, e1.id) > std::tie(e2.target, e2.source, e2.id);
@@ -1840,6 +1852,8 @@ void ad_traverse(uint32_t flags) {
 
     todo.clear();
     todo_tls.swap(todo);
+
+    ls.mode = ADMode::Primal;
 }
 
 // ==========================================================================

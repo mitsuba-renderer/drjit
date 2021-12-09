@@ -1684,7 +1684,7 @@ void accum_grad(T &value, const T2 &grad) {
 }
 
 /// This library supports two main directions of derivative propagation
-enum class ADMode { Forward, Backward };
+enum class ADMode { Primal, Forward, Backward };
 
 template <typename T> void enqueue(ADMode mode, const T &value) {
     if constexpr (is_diff_array_v<T>) {

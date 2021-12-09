@@ -148,6 +148,7 @@ PYBIND11_MODULE(enoki_ext, m_) {
     export_llvm(m);
 #if defined(ENOKI_ENABLE_AUTODIFF)
     py::enum_<ek::ADMode>(m, "ADMode")
+        .value("Primal", ek::ADMode::Primal)
         .value("Forward", ek::ADMode::Forward)
         .value("Backward", ek::ADMode::Backward);
 
