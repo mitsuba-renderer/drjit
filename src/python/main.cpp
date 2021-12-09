@@ -276,8 +276,8 @@ PYBIND11_MODULE(enoki_ext, m_) {
     m.def("kernel_history", [io]() {
         KernelHistoryEntry* data = jit_kernel_history();
         KernelHistoryEntry* entry = data;
-        std::vector<py::dict> history;
-        while ((uint32_t) entry->backend) {
+        py::list history;
+        while (entry && (uint32_t) entry->backend) {
             py::dict dict;
             dict["backend"] = entry->backend;
             char kernel_hash[33];
@@ -297,7 +297,7 @@ PYBIND11_MODULE(enoki_ext, m_) {
             dict["codegen_time"] = entry->codegen_time;
             dict["backend_time"] = entry->backend_time;
             dict["execution_time"] = entry->execution_time;
-            history.push_back(dict);
+            history.append(dict);
             entry++;
         }
         free(data);
