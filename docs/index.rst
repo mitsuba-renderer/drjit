@@ -21,6 +21,7 @@ Enoki: structured vectorization and differentiation on modern processor architec
    :maxdepth: 1
    :caption: Optional features
 
+   autodiff
    cuda
    python
    random

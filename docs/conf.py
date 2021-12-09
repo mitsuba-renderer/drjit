@@ -128,7 +128,7 @@ extensions = [
     'sphinx_tabs.tabs'
 ]
 
-#katex_prerender = True
+katex_prerender = True
 
 # Guzzle theme options (see theme.conf for more information)
 html_theme_options = {
