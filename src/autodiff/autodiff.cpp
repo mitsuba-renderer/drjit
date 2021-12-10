@@ -304,7 +304,7 @@ struct Variable {
                 v2 = v2_;
             } else {
                 /* Only use this if absolutely necessary (also because it
-                   triggers a forced evalution in case any of the input
+                   triggers a forced evaluation in case any of the input
                    variables have pending scatter operations) */
                 v2 = select(eq(v1, z), z, v2_);
             }
