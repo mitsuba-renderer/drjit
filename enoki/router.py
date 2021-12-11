@@ -2197,7 +2197,7 @@ def set_grad(a, value):
         vs = isinstance(value, _Sequence)
         assert not vs or len(a) == len(value)
         for i in range(len(a)):
-            set_grad(v[i], value[i] if vs else value)
+            set_grad(a[i], value[i] if vs else value)
     elif isinstance(a, _Mapping):
         vm = isinstance(value, _Mapping)
         assert not vm or a.keys() == value.keys()
@@ -2224,7 +2224,7 @@ def accum_grad(a, value):
         vs = isinstance(value, _Sequence)
         assert not vs or len(a) == len(value)
         for i in range(len(a)):
-            accum_grad(v[i], value[i] if vs else value)
+            accum_grad(a[i], value[i] if vs else value)
     elif isinstance(a, _Mapping):
         vm = isinstance(value, _Mapping)
         assert not vm or a.keys() == value.keys()
