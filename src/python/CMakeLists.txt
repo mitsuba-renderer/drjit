@@ -37,31 +37,8 @@ if (ENOKI_ENABLE_PYTHON_PACKET)
   target_compile_definitions(enoki-python PRIVATE -DENOKI_ENABLE_PYTHON_PACKET=1)
 endif()
 
-if (MSVC)
-  target_compile_options(enoki-python PRIVATE /wd4714) # marked as __forceinline not inlined
-  set(ENOKI_OUTPUT_DIRECTORY
-    LIBRARY_OUTPUT_DIRECTORY_RELEASE        ${CMAKE_CURRENT_BINARY_DIR}/../../enoki
-    LIBRARY_OUTPUT_DIRECTORY_DEBUG          ${CMAKE_CURRENT_BINARY_DIR}/../../enoki
-    LIBRARY_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_CURRENT_BINARY_DIR}/../../enoki
-    LIBRARY_OUTPUT_DIRECTORY_MINSIZEREL     ${CMAKE_CURRENT_BINARY_DIR}/../../enoki)
-else()
-  set(ENOKI_OUTPUT_DIRECTORY
-    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/../../enoki)
-endif()
-
 set_target_properties(enoki-python PROPERTIES
   OUTPUT_NAME enoki_ext ${ENOKI_OUTPUT_DIRECTORY})
-
-if (MSVC)
-  set_target_properties(enoki-thread PROPERTIES ${ENOKI_OUTPUT_DIRECTORY})
-  if (ENOKI_ENABLE_JIT)
-    set_target_properties(enoki-jit PROPERTIES ${ENOKI_OUTPUT_DIRECTORY})
-  endif()
-
-  if (ENOKI_ENABLE_AUTODIFF)
-    set_target_properties(enoki-autodiff PROPERTIES ${ENOKI_OUTPUT_DIRECTORY})
-  endif()
-endif()
 
 target_compile_options(enoki-python PRIVATE ${ENOKI_NATIVE_FLAGS})
 
