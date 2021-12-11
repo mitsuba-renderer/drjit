@@ -130,11 +130,11 @@ struct DiffVCall : CustomOp<DiffType, Result, ConstStr, Self, Func, Args...> {
     void backward_impl(std::index_sequence<Is...>) {
         const Self &self = Base::template value_in<1>();
         const Func &func = Base::template value_in<2>();
-        using Inputs = ek_tuple<Args...>;
+        using Input = ek_tuple<Args...>;
         ADProcessPostponedGuard<Type> guard;
 
         auto func_bwd = [func](auto *self2, auto &grad_out,
-                               auto... args) -> Inputs {
+                               auto... args) -> Input {
             ad_copy(args...);
             enable_grad(args...);
             Result result = func(self2, args...);
@@ -150,14 +150,14 @@ struct DiffVCall : CustomOp<DiffType, Result, ConstStr, Self, Func, Args...> {
 
             enqueue(ADMode::Backward, result);
             traverse<DiffType>();
-            return Inputs(grad<false>(args)...);
+            return Input(grad<false>(args)...);
         };
 
         size_t name_size = strlen(m_name_static) + 8;
         ek_unique_ptr<char[]> name(new char[name_size]);
         snprintf(name.get(), name_size, "%s_ad_bwd", m_name_static);
 
-        Inputs grad_in = vcall_jit_record<Inputs>(
+        Input grad_in = vcall_jit_record<Input>(
             name.get(), func_bwd, self, Base::grad_out(),
             Base::template value_in<3 + Is>()...);
 

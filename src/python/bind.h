@@ -133,7 +133,7 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
        });
 
     if constexpr (Array::IsFloat)
-        cls.def(py::init([](ssize_t value) { return new Array((Scalar) value); }));
+        cls.def(py::init([](ek::ssize_t value) { return new Array((Scalar) value); }));
 
     if constexpr (!Array::IsMask) {
         cls.def(py::init<const ek::  int32_array_t<Array> &>(), py::arg().noconvert());

@@ -54,7 +54,7 @@ ENOKI_TEST_FLOAT(test01_div_fp) {
 #if !defined(ENOKI_X86_AVX512F)
     /* In AVX512 mode, the approximate reciprocal function is
        considerably more accurate and this test fails */
-    if (std::is_same<Value, float>::value && has_sse42) {
+    if constexpr (std::is_same<Value, float>::value && has_sse42) {
         // Make sure that division optimization is used
         assert(T (123.f) / 123.f != T (1.f));
     }

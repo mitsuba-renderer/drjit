@@ -1217,7 +1217,7 @@ decltype(auto) slice(const T &value, size_t index = -1) {
         using Value = std::decay_t<decltype(slice(value.entry(0), index))>;
         using Result = typename T::template ReplaceValue<Value>;
         Result result;
-        if (Result::Size == Dynamic)
+        if constexpr (Result::Size == Dynamic)
             result = empty<Result>(value.size());
         for (size_t i = 0; i < value.size(); ++i)
             result.set_entry(i, slice(value.entry(i), index));
@@ -1305,7 +1305,7 @@ template <typename T> T erfinv(const T &a);
             using Value = decltype(red##_inner<true>(a.entry(0)));             \
             using Result = typename Array::template ReplaceValue<Value>;       \
             Result result;                                                     \
-            if (Result::Size == Dynamic)                                       \
+            if constexpr (Result::Size == Dynamic)                             \
                 result = enoki::empty<Result>(a.size());                       \
             for (size_t i = 0; i < a.size(); ++i)                              \
                 result.set_entry(i, red##_inner<true>(a.entry(i)));            \

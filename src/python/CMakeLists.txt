@@ -52,6 +52,17 @@ endif()
 set_target_properties(enoki-python PROPERTIES
   OUTPUT_NAME enoki_ext ${ENOKI_OUTPUT_DIRECTORY})
 
+if (MSVC)
+  set_target_properties(enoki-thread PROPERTIES ${ENOKI_OUTPUT_DIRECTORY})
+  if (ENOKI_ENABLE_JIT)
+    set_target_properties(enoki-jit PROPERTIES ${ENOKI_OUTPUT_DIRECTORY})
+  endif()
+
+  if (ENOKI_ENABLE_AUTODIFF)
+    set_target_properties(enoki-autodiff PROPERTIES ${ENOKI_OUTPUT_DIRECTORY})
+  endif()
+endif()
+
 target_compile_options(enoki-python PRIVATE ${ENOKI_NATIVE_FLAGS})
 
 if (ENOKI_MASTER_PROJECT)

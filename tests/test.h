@@ -421,8 +421,8 @@ void validate_ternary(const std::vector<value_t<T>> &args,
 
                 if (idx == value1.size()) {
                     auto &&result = func(value1, value2, value3);
-                    for (size_t k = 0; k < idx; ++k)
-                        assert_close(result[k], result_ref[k], eps);
+                    for (size_t l = 0; l < idx; ++l)
+                        assert_close(result[l], result_ref[l], eps);
                     idx = 0;
                 }
             }
@@ -445,9 +445,9 @@ void validate_horizontal(const std::vector<value_t<T>> &args,
     std::uniform_int_distribution<> dis(0, (int) args.size()-1);
     T value;
 
-    for (int i=0; i<1000; ++i) {
-        for (size_t i=0; i<value.size(); ++i)
-            value[i] = args[(size_t) dis(gen)];
+    for (int i = 0; i < 1000; ++i) {
+        for (size_t j = 0; j < value.size(); ++j)
+            value[j] = args[(size_t) dis(gen)];
 
         assert_close(func(value), refFunc(value), eps);
     }

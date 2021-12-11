@@ -227,7 +227,7 @@ public:
             step.z() *= m_shape_opaque.x() * m_shape_opaque.y();
         }
 
-        const size_t channels = m_shape[Dimension];
+        const uint32_t channels = (uint32_t) m_shape[Dimension];
         index *= channels;
         step *= channels;
 
@@ -284,10 +284,11 @@ public:
                     result = replace_grad(result, result_diff);
                 }
             }
-            return result;
-        }
 
-        return eval_enoki(pos, active);
+            return result;
+        } else {
+            return eval_enoki(pos, active);
+        }
     }
 
 protected:
@@ -299,7 +300,7 @@ protected:
         m_size = channels;
         for (size_t i = 0; i < Dimension; ++i) {
             m_shape[i] = shape[i];
-            m_shape_opaque[i] = opaque<Value>(scalar_t<UInt32>(shape[i]));
+            m_shape_opaque[i] = opaque<UInt32>((uint32_t) shape[i]);
             m_size *= m_shape[i];
         }
         m_shape[Dimension] = (uint32_t) channels;

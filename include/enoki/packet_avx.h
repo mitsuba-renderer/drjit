@@ -377,8 +377,8 @@ template <bool IsMask_, typename Derived_> struct alignas(32)
         __m256 dp = _mm256_dp_ps(m, a.m, 0b11110001);
         __m128 m0 = _mm256_castps256_ps128(dp);
         __m128 m1 = _mm256_extractf128_ps(dp, 1);
-        __m128 m = _mm_add_ss(m0, m1);
-        return _mm_cvtss_f32(m);
+        __m128 mr = _mm_add_ss(m0, m1);
+        return _mm_cvtss_f32(mr);
     }
 
     //! @}
