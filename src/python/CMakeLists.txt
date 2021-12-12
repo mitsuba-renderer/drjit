@@ -39,6 +39,8 @@ endif()
 
 set_target_properties(enoki-python PROPERTIES
   OUTPUT_NAME enoki_ext ${ENOKI_OUTPUT_DIRECTORY})
+message(STATUS
+  OUTPUT_NAME enoki_ext ${ENOKI_OUTPUT_DIRECTORY})
 
 target_compile_options(enoki-python PRIVATE ${ENOKI_NATIVE_FLAGS})
 
@@ -69,10 +71,7 @@ if (ENOKI_MASTER_PROJECT AND NOT "${CMAKE_CURRENT_SOURCE_DIR}" STREQUAL "${CMAKE
       OUTPUT ${OUT_FILE} DEPENDS ${IN_FILE}
       COMMAND ${CMAKE_COMMAND} -E copy ${IN_FILE} ${OUT_FILE})
     list(APPEND ENOKI_COPY_FILES ${OUT_FILE})
-
-    if (ENOKI_MASTER_PROJECT)
-      install(FILES ${IN_FILE} DESTINATION enoki)
-    endif()
+    install(FILES ${IN_FILE} DESTINATION enoki)
   endforeach(file)
 
   add_custom_target(copy-python-files ALL DEPENDS ${ENOKI_COPY_FILES})
