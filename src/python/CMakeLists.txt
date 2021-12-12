@@ -16,12 +16,17 @@ pybind11_add_module(
 
 target_link_libraries(enoki-python PRIVATE enoki)
 
+if (MSVC)
+  target_compile_options(enoki-python PRIVATE /wd4714) # function marked as __forceinline not inlined
+endif()
+
 # macOS: Avoid warnings about loop unrolling being disabled with -Os
 target_compile_definitions(enoki-python PRIVATE "-DENOKI_UNROLL= ")
 
 if (ENOKI_ENABLE_JIT)
   target_link_libraries(enoki-python PRIVATE enoki-jit)
   target_compile_definitions(enoki-python PRIVATE -DENOKI_ENABLE_JIT=1)
+
   if (NOT APPLE)
     target_compile_definitions(enoki-python PRIVATE -DENOKI_ENABLE_CUDA=1)
   endif()
