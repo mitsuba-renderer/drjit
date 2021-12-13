@@ -59,7 +59,7 @@ def _var_type(a, preferred=VarType.Void):
                   VarType.Int32, VarType.Int64, VarType.UInt32, VarType.UInt64]:
             if t.NumPy == a.dtype:
                 return t
-    elif isinstance(a, tuple) or isinstance(a, list):
+    elif isinstance(a, _Sequence):
         return _builtins.max([_var_type(v, preferred) for v in a])
     elif isinstance(a, type(None)) or 'pybind11' in type(type(a)).__name__:
         return VarType.Pointer
@@ -679,7 +679,7 @@ def unravel(target_class, array):
 
 def slice(value, index=-1, return_type=None):
     t = type(value)
-    if _ek.array_depth_v(t) > 1 or issubclass(t, tuple) or issubclass(t, list):
+    if _ek.array_depth_v(t) > 1 or issubclass(t, _Sequence):
         size = len(value)
         result = [None] * size
         for i in range(size):
@@ -2245,7 +2245,7 @@ def grad_enabled(*args):
         elif _ek.is_enoki_struct_v(a):
             for k in type(a).ENOKI_STRUCT.keys():
                 result |= grad_enabled(getattr(a, k))
-        elif isinstance(a, tuple) or isinstance(a, list):
+        elif isinstance(a, _Sequence):
             for v in a:
                 result |= grad_enabled(v)
         elif isinstance(a, _Mapping):
@@ -2260,7 +2260,7 @@ def set_grad_enabled(a, value):
     elif _ek.is_enoki_struct_v(a):
         for k in type(a).ENOKI_STRUCT.keys():
             set_grad_enabled(getattr(a, k), value)
-    elif isinstance(a, tuple) or isinstance(a, list):
+    elif isinstance(a, _Sequence):
         for v in a:
             set_grad_enabled(v, value)
     elif isinstance(a, _Mapping):
@@ -2303,7 +2303,7 @@ def enqueue(mode, *args):
     for a in args:
         if _ek.is_diff_array_v(a) and a.IsFloat:
             a.enqueue_(mode)
-        elif isinstance(a, tuple) or isinstance(a, list):
+        elif isinstance(a, _Sequence):
             for v in a:
                 enqueue(mode, v)
         elif isinstance(a, _Mapping):
@@ -2443,7 +2443,7 @@ def make_opaque(*args):
         elif _ek.is_enoki_struct_v(t):
             for k in t.ENOKI_STRUCT.keys():
                 make_opaque(getattr(a, k))
-        elif issubclass(t, tuple) or issubclass(t, list):
+        elif issubclass(t, _Sequence):
             for v in a:
                 make_opaque(v)
         elif issubclass(t, _Mapping):
@@ -2670,8 +2670,7 @@ class CustomOp:
     def __del__(self):
         def ad_clear(o):
             if _ek.array_depth_v(o) > 1 \
-               or isinstance(o, list) \
-               or isinstance(o, tuple):
+               or isinstance(o, _Sequence):
                 for v in o:
                     ad_clear(v)
             elif isinstance(o, _Mapping):
@@ -2695,8 +2694,7 @@ def custom(cls, *args, **kwargs):
     # Clear primal values of a differentiable array
     def clear_primal(o, dec_ref):
         if _ek.array_depth_v(o) > 1 \
-           or isinstance(o, list) \
-           or isinstance(o, tuple):
+           or isinstance(o, _Sequence):
             return type(o)([clear_primal(v, dec_ref) for v in o])
         elif isinstance(o, _Mapping):
             return { k: clear_primal(v, dec_ref) for k, v in o.items() }
