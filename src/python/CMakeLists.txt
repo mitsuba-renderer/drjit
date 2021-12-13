@@ -44,8 +44,6 @@ endif()
 
 set_target_properties(enoki-python PROPERTIES
   OUTPUT_NAME enoki_ext ${ENOKI_OUTPUT_DIRECTORY})
-message(STATUS
-  OUTPUT_NAME enoki_ext ${ENOKI_OUTPUT_DIRECTORY})
 
 target_compile_options(enoki-python PRIVATE ${ENOKI_NATIVE_FLAGS})
 
