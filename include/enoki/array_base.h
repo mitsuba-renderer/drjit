@@ -506,10 +506,10 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
     ENOKI_IMPLEMENT_UNARY(rcp, rcp(a), IsFloat)
     ENOKI_IMPLEMENT_UNARY(rsqrt, rsqrt(a), IsFloat)
 
-    ENOKI_IMPLEMENT_TERNARY_ALT(fmadd,  fmadd(a, b, c),   derived()*v1+v2, IsFloat)
-    ENOKI_IMPLEMENT_TERNARY_ALT(fmsub,  fmsub(a, b, c),   derived()*v1-v2, IsFloat)
-    ENOKI_IMPLEMENT_TERNARY_ALT(fnmadd, fnmadd(a, b, c), -derived()*v1+v2, IsFloat)
-    ENOKI_IMPLEMENT_TERNARY_ALT(fnmsub, fnmsub(a, b, c), -derived()*v1-v2, IsFloat)
+    ENOKI_IMPLEMENT_TERNARY_ALT(fmadd,  fmadd(a, b, c),   derived()*v1+v2, IsArithmetic)
+    ENOKI_IMPLEMENT_TERNARY_ALT(fmsub,  fmsub(a, b, c),   derived()*v1-v2, IsArithmetic)
+    ENOKI_IMPLEMENT_TERNARY_ALT(fnmadd, fnmadd(a, b, c), -derived()*v1+v2, IsArithmetic)
+    ENOKI_IMPLEMENT_TERNARY_ALT(fnmsub, fnmsub(a, b, c), -derived()*v1-v2, IsArithmetic)
 
     ENOKI_IMPLEMENT_UNARY_REC(cbrt, cbrt(a), IsFloat)
     ENOKI_IMPLEMENT_UNARY_REC(erf, erf(a), IsFloat)

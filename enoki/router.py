@@ -2087,22 +2087,22 @@ def meshgrid(*args, indexing='xy'):
     t = type(args[0])
     for v in args:
         if not _ek.is_dynamic_array_v(v) or \
-           _ek.array_depth_v(v) != 1 or \
-           type(v) is not t:
+           _ek.array_depth_v(v) != 1 or type(v) is not t:
             raise Exception("meshgrid(): consistent 1D dynamic arrays expected!")
 
     size = _ek.hprod((len(v) for v in args))
-    index_t = _ek.uint32_array_t(t)
-    index = _ek.arange(index_t, size)
+    index = _ek.arange(_ek.uint32_array_t(t), size)
 
     result = []
+
+    # This seems non-symmetric but is necessary to be consistent with NumPy
     if indexing == "xy":
         args = (args[1], args[0], *args[2:])
 
     for v in args:
         size //= len(v)
         index_v = index // size
-        index = index - index_v * size
+        index = fnmadd(index_v, size, index)
         result.append(_ek.gather(t, v, index_v))
 
     if indexing == "xy":
