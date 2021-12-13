@@ -2433,7 +2433,7 @@ def make_opaque(*args):
                 for i in range(len(a)):
                     make_opaque(a.entry_ref_(i))
             elif _ek.is_diff_array_v(t):
-                make_opaque(a.detach_())
+                make_opaque(a.detach_ref_())
             elif _ek.is_tensor_v(t):
                 make_opaque(a.array)
             elif _ek.is_jit_array_v(t):
