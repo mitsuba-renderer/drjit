@@ -26,6 +26,7 @@ void export_cuda_ad(py::module_ &m) {
     loop.def(py::init<const char *, py::handle>(), "name"_a, "vars"_a = py::none())
         .def("put", &Loop<Mask>::put)
         .def("init", &Loop<Mask>::init)
+        .def("set_coherent", &Loop<Mask>::set_coherent)
         .def("__call__", &Loop<Mask>::operator());
 
     ENOKI_BIND_TENSOR_TYPES(cuda_ad);

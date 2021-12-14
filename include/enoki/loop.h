@@ -174,6 +174,14 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
                 "Loop(\"%s\"): --------- begin recording loop ---------", m_name.get());
     }
 
+    void set_coherent(bool value) {
+        m_coherent = value;
+
+        if (m_state != 1)
+            jit_raise("Loop(\"%s\"): set_coherent() can only be called before "
+                      "entering the loop!", m_name.get());
+    }
+
     bool operator()(const Mask &cond) {
         if (m_record)
             return cond_record(cond);
@@ -209,8 +217,10 @@ protected:
                 m_jit_state.begin_recording();
 
                 // Mask deactivated SIMD lanes
-                if constexpr (Backend == JitBackend::LLVM)
-                    m_jit_state.set_mask(cond.index());
+                if constexpr (Backend == JitBackend::LLVM) {
+                    if (!m_coherent)
+                        m_jit_state.set_mask(cond.index());
+                }
 
                 m_state++;
 
@@ -222,7 +232,7 @@ protected:
                 rv = jit_var_loop(m_name.get(), m_loop_init, m_loop_cond,
                                   m_indices.size(), m_indices_prev.data(),
                                   m_indices.data(), m_jit_state.checkpoint(),
-                                  m_state == 2);
+                                  m_state == 2, m_coherent);
 
                 m_state++;
 
@@ -246,8 +256,10 @@ protected:
                     m_jit_state.clear_scope();
                     jit_var_mark_side_effect(rv);
 
-                    if constexpr (Backend == JitBackend::LLVM)
-                        m_jit_state.clear_mask();
+                    if constexpr (Backend == JitBackend::LLVM) {
+                        if (!m_coherent)
+                            m_jit_state.clear_mask();
+                    }
 
                     if constexpr (IsDiff) {
                         /* During loop recording, we cannot perform backward-mode
@@ -411,6 +423,9 @@ protected:
 
     /// Index of the symbolic loop state machine
     uint32_t m_state = 0;
+
+    /// Indicates to the JIT that this loop is fully coherent
+    bool m_coherent = false;
 
     // --------------- Wavefront mode ---------------
 
