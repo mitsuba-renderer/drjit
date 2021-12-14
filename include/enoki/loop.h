@@ -43,6 +43,7 @@ struct Loop<Mask, enable_if_t<std::is_scalar_v<Mask>>> {
     template <typename... Ts> void put(Ts&...) { }
     bool operator()(bool mask) { return mask; }
     template <typename... Args> Loop(const char*, Args&...) { }
+    void set_uniform(bool = true) { }
 };
 
 /// Array case, expands into a symbolic or wavefront-style loop
@@ -174,11 +175,22 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
                 "Loop(\"%s\"): --------- begin recording loop ---------", m_name.get());
     }
 
-    void set_coherent(bool value) {
-        m_coherent = value;
+    /**
+     * \brief Use uniform loop branching?
+     *
+     * Invoke this function with <tt>value=true</tt> if all loop iterations
+     * terminate simultaneously, which enables slightly better code generation.
+     *
+     * This feature is only used in recorded loop mode, but could be
+     * generalized to wavefront loops in the future.
+     *
+     * The default state is \c false.
+     */
+    void set_uniform(bool value = true) {
+        m_uniform = value;
 
         if (m_state > 1)
-            jit_raise("Loop(\"%s\"): set_coherent() can only be called before "
+            jit_raise("Loop(\"%s\"): set_uniform() can only be called before "
                       "entering the loop!", m_name.get());
     }
 
@@ -218,7 +230,7 @@ protected:
 
                 // Mask deactivated SIMD lanes
                 if constexpr (Backend == JitBackend::LLVM) {
-                    if (!m_coherent)
+                    if (!m_uniform)
                         m_jit_state.set_mask(cond.index());
                 }
 
@@ -232,7 +244,7 @@ protected:
                 rv = jit_var_loop(m_name.get(), m_loop_init, m_loop_cond,
                                   m_indices.size(), m_indices_prev.data(),
                                   m_indices.data(), m_jit_state.checkpoint(),
-                                  m_state == 2, m_coherent);
+                                  m_state == 2, m_uniform);
 
                 m_state++;
 
@@ -257,7 +269,7 @@ protected:
                     jit_var_mark_side_effect(rv);
 
                     if constexpr (Backend == JitBackend::LLVM) {
-                        if (!m_coherent)
+                        if (!m_uniform)
                             m_jit_state.clear_mask();
                     }
 
@@ -424,8 +436,8 @@ protected:
     /// Index of the symbolic loop state machine
     uint32_t m_state = 0;
 
-    /// Indicates to the JIT that this loop is fully coherent
-    bool m_coherent = false;
+    /// Indicates that all threads exit the loop at the same time
+    bool m_uniform = false;
 
     // --------------- Wavefront mode ---------------
 
