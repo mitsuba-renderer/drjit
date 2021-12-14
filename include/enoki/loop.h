@@ -177,7 +177,7 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
     void set_coherent(bool value) {
         m_coherent = value;
 
-        if (m_state != 1)
+        if (m_state > 1)
             jit_raise("Loop(\"%s\"): set_coherent() can only be called before "
                       "entering the loop!", m_name.get());
     }
