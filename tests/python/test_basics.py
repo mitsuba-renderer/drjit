@@ -618,10 +618,12 @@ def test20_unsigned_negative():
     UInt32 = get_class('enoki.llvm.UInt32')
 
     a = UInt32(-1)
+    assert a.is_literal_()
     assert a == 4294967295
 
     a = UInt32(1)
     b = -1
     c = a - b
 
+    assert c.is_literal_()
     assert c == 2

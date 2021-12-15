@@ -1,6 +1,6 @@
 import enoki
 import sys
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 
 VAR_TYPE_NAME = [
     "Void",    "Bool",  "Int8",  "UInt8", "Int16",
@@ -147,7 +147,7 @@ def array_init(self, args):
             name = t.__name__
             is_array = issubclass(t, enoki.ArrayBase)
             is_static_array = is_array and not o.Size == enoki.Dynamic
-            is_sequence = issubclass(t, list) or issubclass(t, tuple)
+            is_sequence = issubclass(t, Sequence)
 
             # Matrix initialization from nested list
             if is_sequence and self.IsMatrix and \
@@ -197,7 +197,7 @@ def array_init(self, args):
                     else:
                         for i in range(size):
                             self.set_entry_(i, value_type(o[i]))
-            elif issubclass(t, (int, float)):
+            elif issubclass(t, (int, float)) and (not self.IsJIT or self.Depth > 1):
                 if dynamic:
                     size = 1
                     self.init_(size)
@@ -595,7 +595,7 @@ def slice_tensor(shape, indices, uint32):
             if enoki.is_signed_v(v):
                 v = uint32(enoki.select(v >= 0, v, v + size))
             components.append(v)
-        elif isinstance(v, list) or isinstance(v, tuple):
+        elif isinstance(v, Sequence):
             components.append(uint32([v2 if v2 >= 0 else v2 + size for v2 in v]))
         elif v is Ellipsis:
             if ellipsis:
@@ -678,9 +678,13 @@ def tensor_setitem(tensor, slice_arg, value):
 
 
 def diff_vars(o, indices, check_grad_enabled=True):
-    """ Extract indices of differentiable variables, returns the type of the underlying differentiable array """
+    """
+    Extract indices of differentiable variables, returns
+    the type of the underlying differentiable array
+    """
+
     result = None
-    if enoki.array_depth_v(o) > 1 or isinstance(o, list) or isinstance(o, tuple):
+    if enoki.array_depth_v(o) > 1 or isinstance(o, Sequence):
         for v in o:
             t = diff_vars(v, indices, check_grad_enabled)
             if t is not None:

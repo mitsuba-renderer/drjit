@@ -132,8 +132,14 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
                a = b;
        });
 
-    if constexpr (Array::IsFloat)
+    if constexpr (Array::IsFloat) {
         cls.def(py::init([](ek::ssize_t value) { return new Array((Scalar) value); }));
+    } else if constexpr (Array::IsIntegral) {
+        if constexpr (std::is_unsigned_v<Scalar>)
+            cls.def(py::init<std::make_signed_t<Scalar>>());
+        else
+            cls.def(py::init<std::make_unsigned_t<Scalar>>());
+    }
 
     if constexpr (!Array::IsMask) {
         cls.def(py::init<const ek::  int32_array_t<Array> &>(), py::arg().noconvert());
