@@ -193,8 +193,8 @@ ENOKI_INLINE Result vcall_autodiff(const char *name, const Func &func,
         auto [base, n_inst] = vcall_registry_get(backend_v<Self>, Base::Domain);
 
         // CustomOp only needed if > 1 instance and AD is enabled
-        if (unlikely((n_inst > 1 || !jit_flag(JitFlag::VCallInline) &&
-                                        detail::ad_enabled<Type>())))
+        if (ENOKI_UNLIKELY((n_inst > 1 || !jit_flag(JitFlag::VCallInline)) &&
+                           detail::ad_enabled<Type>()))
             return custom<DiffVCall<DiffType, Self, Result, Func, Args...>>(
                 name, self, func, args...);
     }
