@@ -13,6 +13,7 @@
 #pragma once
 
 #include <enoki/idiv.h>
+#include <enoki/loop.h>
 
 NAMESPACE_BEGIN(enoki)
 
@@ -120,15 +121,47 @@ template <typename T> std::pair<T, T> meshgrid(const T &x, const T &y) {
 template <typename Index, typename Predicate>
 Index binary_search(scalar_t<Index> start_, scalar_t<Index> end_,
                     const Predicate &pred) {
-    Index start(start_), end(end_);
-
     scalar_t<Index> iterations = (start_ < end_) ?
         (log2i(end_ - start_) + 1) : 0;
+
+    Index start(start_), end(end_);
+
+    using Mask = mask_t<Index>;
+
+    if constexpr (is_jit_array_v<Index>) {
+        // We might be running multiple binary searches in parallel..
+        using Index1 =
+            std::conditional_t<is_static_array_v<Index>, value_t<Index>, Index>;
+        using Mask1 = mask_t<Index1>;
+
+        if (jit_flag(JitFlag::LoopRecord) && iterations > 0) {
+            char title[80];
+            snprintf(title, sizeof(title),
+                     "ek::binary_search(size=%zu, iterations=%zu)",
+                     (size_t)(end_ - start_), (size_t) iterations);
+
+            Index1 index = zero<Index1>(width(pred(start)));
+            Loop<Mask1> loop(title, start, end, index);
+            loop.set_uniform(true);
+
+            while (loop(index < iterations)) {
+                Index middle = sr<1>(start + end);
+                Mask cond = detach(pred(middle));
+
+                start = select(cond, min(middle + 1, end), start);
+                end   = select(cond, end, middle);
+
+                index++;
+            }
+
+            return Index(start);
+        }
+    }
 
     for (size_t i = 0; i < iterations; ++i) {
         Index middle = sr<1>(start + end);
 
-        mask_t<Index> cond = pred(middle);
+        Mask cond = pred(middle);
 
         masked(start,  cond) = min(middle + 1, end);
         masked(end,   !cond) = middle;
