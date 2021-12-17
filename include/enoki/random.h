@@ -65,7 +65,11 @@ template <typename T> struct PCG32 {
     /// Generate a uniformly distributed unsigned 32-bit random number
     ENOKI_INLINE UInt32 next_uint32() {
         UInt64 oldstate = state;
-        state = fmadd(oldstate, uint64_t(PCG32_MULT), inc);
+
+        // temporarily disable (unsupported on OptiX 7.4)
+        // state = fmadd(oldstate, uint64_t(PCG32_MULT), inc);
+
+        state = oldstate * uint64_t(PCG32_MULT) + inc;
 
         UInt32 xorshifted = UInt32(sr<27>(sr<18>(oldstate) ^ oldstate)),
                rot = UInt32(sr<59>(oldstate));
@@ -77,7 +81,10 @@ template <typename T> struct PCG32 {
     ENOKI_INLINE UInt32 next_uint32(const Mask &mask) {
         UInt64 oldstate = state;
 
-        masked(state, mask) = fmadd(oldstate, uint64_t(PCG32_MULT), inc);
+        // temporarily disable (unsupported on OptiX 7.4)
+        // masked(state, mask) = fmadd(oldstate, uint64_t(PCG32_MULT), inc);
+
+        masked(state, mask) = oldstate * uint64_t(PCG32_MULT) + inc;
 
         UInt32 xorshifted = UInt32(sr<27>(sr<18>(oldstate) ^ oldstate)),
                rot = UInt32(sr<59>(oldstate));
@@ -299,7 +306,7 @@ template <typename T> struct PCG32 {
         while (is_jit_array_v<T> || delta != zero<UInt64>()) {
             Mask mask = neq(delta & 1, zero<UInt64>());
             masked(acc_mult, mask) = acc_mult * cur_mult;
-            masked(acc_plus, mask) = fmadd(acc_plus, cur_mult, cur_plus);
+            masked(acc_plus, mask) = acc_plus * cur_mult + cur_plus;
             cur_plus = (cur_mult + 1) * cur_plus;
             cur_mult *= cur_mult;
             delta = sr<1>(delta);
