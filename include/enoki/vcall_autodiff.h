@@ -182,17 +182,20 @@ inline std::pair<void *, uint32_t> vcall_registry_get(JitBackend Backend,
 template <typename Result, typename Func, typename Self, typename... Args>
 ENOKI_INLINE Result vcall_autodiff(const char *name, const Func &func,
                                    const Self &self, const Args &... args) {
-    using Type = leaf_array_t<Result, Args...>;
+    using DiffType = leaf_array_t<Result, Args...>;
     using Base = std::remove_const_t<std::remove_pointer_t<value_t<Self>>>;
 
     /* Only perform a differentiable vcall if there is a differentiable
        float type somewhere within the argument or return values */
-    if constexpr (is_diff_array_v<Type> && std::is_floating_point_v<scalar_t<Type>>) {
+    if constexpr (is_diff_array_v<DiffType> && std::is_floating_point_v<scalar_t<DiffType>>) {
+        using Type = typename DiffType::Type;
+
         auto [base, n_inst] = vcall_registry_get(backend_v<Self>, Base::Domain);
 
-        // Complex approach in this header file only needed if > 1 instance
-        if (n_inst > 1)
-            return custom<DiffVCall<Type, Self, Result, Func, Args...>>(
+        // CustomOp only needed if > 1 instance and AD is enabled
+        if (unlikely((n_inst > 1 || !jit_flag(JitFlag::VCallInline) &&
+                                        detail::ad_enabled<Type>())))
+            return custom<DiffVCall<DiffType, Self, Result, Func, Args...>>(
                 name, self, func, args...);
     }
 

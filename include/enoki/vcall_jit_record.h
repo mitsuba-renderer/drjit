@@ -215,7 +215,8 @@ Result vcall_jit_record(const char *name, const Func &func, Self &self,
 
     size_t self_size = width(self, args...);
     Mask mask = extract_mask<Mask>(args...) && neq(self, nullptr);
-    bool masked = mask.is_literal() && mask[0] == false;
+    bool masked = mask.is_literal() && mask[0] == false,
+         vcall_inline = jit_flag(JitFlag::VCallInline);
 
     if (n_inst == 0 || self_size == 0 || masked) {
         jit_log(::LogLevel::InfoSym,
@@ -224,7 +225,7 @@ Result vcall_jit_record(const char *name, const Func &func, Self &self,
                 n_inst == 0 ? "no instances"
                             : (masked ? "masked" : "self.size == 0"));
         return zero<Result>(self_size);
-    } else if (n_inst == 1) {
+    } else if (n_inst == 1 && vcall_inline) {
         jit_log(::LogLevel::InfoSym,
                 "jit_var_vcall(self=r%u): call (\"%s::%s()\") inlined (only 1 "
                 "instance exists.)", self.index(), Base::Domain, name);
@@ -234,6 +235,7 @@ Result vcall_jit_record(const char *name, const Func &func, Self &self,
     } else {
         // Also check the mask stack to constrain side effects in recorded computation
         Mask mask_combined = mask && Mask::steal(jit_var_mask_peek(Backend));
+
         return vcall_jit_record_impl<Result, Base>(
             name, n_inst, func, self, mask_combined,
             std::make_index_sequence<sizeof...(Args)>(),

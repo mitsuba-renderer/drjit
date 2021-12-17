@@ -245,6 +245,7 @@ PYBIND11_MODULE(enoki_ext, m_) {
         .value("LoopOptimize",   JitFlag::LoopOptimize)
         .value("VCallRecord",    JitFlag::VCallRecord)
         .value("VCallOptimize",  JitFlag::VCallOptimize)
+        .value("VCallInline",    JitFlag::VCallInline)
         .value("ForceOptiX",     JitFlag::ForceOptiX)
         .value("Recording",      JitFlag::Recording)
         .value("PrintIR",        JitFlag::PrintIR)
