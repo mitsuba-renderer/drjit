@@ -732,20 +732,33 @@ void ad_scope_enter(bool suspend, const uint32_t *indices, size_t size) {
     scopes.push_back(std::move(scope));
 }
 
-template <typename T>
-void ad_scope_leave() {
+template <typename T> void ad_scope_leave() {
     if (local_state.scopes.empty())
         ad_fail("ad_scope_leave(): underflow!");
     ad_log(Debug, "ad_scope_leave()");
     local_state.scopes.pop_back();
 }
 
-template <typename T>
-bool ad_grad_enabled(uint32_t index) {
+template <typename T> bool ad_grad_enabled(uint32_t index) {
     auto const &scopes = local_state.scopes;
     if (!scopes.empty())
         scopes.back().maybe_disable(index);
     return index != 0;
+}
+
+template <typename T> bool ad_enabled() noexcept(true) {
+    auto const &scopes = local_state.scopes;
+
+    if (!scopes.empty()) {
+        const Scope &scope = scopes.back();
+
+        // Check if AD is disabled on the current thread
+        if (scope.complement && scope.indices.empty())
+            return false;
+    }
+
+    std::lock_guard<std::mutex> guard(state.mutex);
+    return !state.variables.empty();
 }
 
 template <typename T>
@@ -2212,6 +2225,7 @@ template ENOKI_EXPORT void ad_scope_enter<Value>(bool, const uint32_t *,
                                                  size_t);
 template ENOKI_EXPORT void ad_scope_leave<Value>();
 template ENOKI_EXPORT bool ad_grad_enabled<Value>(uint32_t);
+template ENOKI_EXPORT bool ad_enabled<Value>() noexcept;
 NAMESPACE_END(detail)
 
 template struct ENOKI_EXPORT DiffArray<detail::Value>;

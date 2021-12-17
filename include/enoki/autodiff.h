@@ -112,6 +112,9 @@ uint32_t ad_new_scatter(const char *label, size_t size, ReduceOp op,
                         uint32_t src_index, uint32_t dst_index,
                         const Index &offset, const Mask &mask, bool permute);
 
+/// Check if AD is enabled, and whether there are any AD-attaced variables
+template <typename Value> bool ad_enabled() noexcept(true);
+
 /// Custom graph edge for implementing custom differentiable operations
 struct ENOKI_AD_EXPORT DiffCallback {
     virtual void forward() = 0;
@@ -1877,6 +1880,7 @@ protected:
     ad_scope_enter<T>(bool, const uint32_t *, size_t);                         \
     extern template ENOKI_AD_EXPORT void ad_scope_leave<T>();                  \
     extern template ENOKI_AD_EXPORT bool ad_grad_enabled<T>(uint32_t);         \
+    extern template ENOKI_AD_EXPORT bool ad_enabled<T>();                      \
     }
 
 ENOKI_DECLARE_EXTERN_TEMPLATE(float,  bool, uint32_t)
