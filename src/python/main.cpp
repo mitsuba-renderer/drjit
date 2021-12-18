@@ -241,6 +241,8 @@ PYBIND11_MODULE(enoki_ext, m_) {
         .value("Or",   ReduceOp::Or);
 
     py::enum_<JitFlag>(m, "JitFlag", py::arithmetic())
+        .value("ConstProp",      JitFlag::ConstProp)
+        .value("ValueNumbering", JitFlag::ValueNumbering)
         .value("LoopRecord",     JitFlag::LoopRecord)
         .value("LoopOptimize",   JitFlag::LoopOptimize)
         .value("VCallRecord",    JitFlag::VCallRecord)
