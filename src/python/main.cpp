@@ -241,20 +241,21 @@ PYBIND11_MODULE(enoki_ext, m_) {
         .value("Or",   ReduceOp::Or);
 
     py::enum_<JitFlag>(m, "JitFlag", py::arithmetic())
-        .value("ConstProp",      JitFlag::ConstProp)
-        .value("ValueNumbering", JitFlag::ValueNumbering)
-        .value("LoopRecord",     JitFlag::LoopRecord)
-        .value("LoopOptimize",   JitFlag::LoopOptimize)
-        .value("VCallRecord",    JitFlag::VCallRecord)
-        .value("VCallOptimize",  JitFlag::VCallOptimize)
-        .value("VCallInline",    JitFlag::VCallInline)
-        .value("ForceOptiX",     JitFlag::ForceOptiX)
-        .value("Recording",      JitFlag::Recording)
-        .value("PrintIR",        JitFlag::PrintIR)
-        .value("LaunchBlocking", JitFlag::LaunchBlocking)
-        .value("ADOptimize",     JitFlag::ADOptimize)
-        .value("KernelHistory",  JitFlag::KernelHistory)
-        .value("Default",        JitFlag::Default);
+        .value("ConstProp",        JitFlag::ConstProp)
+        .value("ValueNumbering",   JitFlag::ValueNumbering)
+        .value("LoopRecord",       JitFlag::LoopRecord)
+        .value("LoopOptimize",     JitFlag::LoopOptimize)
+        .value("VCallRecord",      JitFlag::VCallRecord)
+        .value("VCallDeduplicate", JitFlag::VCallDeduplicate)
+        .value("VCallOptimize",    JitFlag::VCallOptimize)
+        .value("VCallInline",      JitFlag::VCallInline)
+        .value("ForceOptiX",       JitFlag::ForceOptiX)
+        .value("Recording",        JitFlag::Recording)
+        .value("PrintIR",          JitFlag::PrintIR)
+        .value("LaunchBlocking",   JitFlag::LaunchBlocking)
+        .value("ADOptimize",       JitFlag::ADOptimize)
+        .value("KernelHistory",    JitFlag::KernelHistory)
+        .value("Default",          JitFlag::Default);
 
 #if defined(ENOKI_ENABLE_CUDA)
     m.def("device_count", &jit_cuda_device_count);
