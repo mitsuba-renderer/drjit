@@ -2329,9 +2329,14 @@ def traverse(t, flags=_ek.ADFlag.Default):
 def backward(a, flags=_ek.ADFlag.Default):
     if _ek.is_diff_array_v(a) and a.IsFloat:
         if not grad_enabled(a):
-            raise Exception("backward(): the provided variable has gradient tracking "
-                            "disabled (it is suspended or not at all registered with "
-                            "the AD backend).  Did you forget to call enable_grad()?");
+            raise Exception("backward(): the argument does not depend on the "
+                            "input variable(s) being differentiated. Throwing "
+                            "an exception since this is usually indicative of a "
+                            "bug (for example, you may have forgotten to call "
+                            "ek.enable_grad(..)). If this is expected "
+                            "behavior, skip the call to ek.backward(..) if "
+                            "ek.grad_enabled(..) returns False.")
+
         # Deduplicate components if 'a' is a vector
         if _ek.array_depth_v(a) > 1:
             a = a + type(a)(0)
@@ -2345,9 +2350,14 @@ def backward(a, flags=_ek.ADFlag.Default):
 def forward(a, flags=_ek.ADFlag.Default):
     if _ek.is_diff_array_v(a) and a.IsFloat:
         if not grad_enabled(a):
-            raise Exception("forward(): the provided variable has gradient tracking "
-                            "disabled (it is suspended or not at all registered with "
-                            "the AD backend).  Did you forget to call enable_grad()?");
+            raise Exception("forward(): the argument does not have gradient "
+                            "tracking enabled. Throwing an exception since "
+                            "this is usually indicative of a bug (for "
+                            "example, you may have forgotten to call "
+                            "ek.enable_grad(..)). If this is expected "
+                            "behavior, skip the call to ek.forward(..) if "
+                            "ek.grad_enabled(..) returns False.")
+
         set_grad(a, 1)
         enqueue(_ek.ADMode.Forward, a)
         traverse(type(a), flags)
