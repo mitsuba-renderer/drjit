@@ -464,7 +464,7 @@ def array_configure(cls, shape, type_, value):
         array_name(mask_name, enoki.VarType.Bool, cls.Shape, cls.IsScalar))
 
 
-def _loop_process_state(loop, value: type, in_state: list, out_state: list,
+def _loop_process_state(value: type, in_state: list, out_state: list,
                         write: bool, in_struct: bool = False):
     '''
     This helper function is used by ``enoki.*.Loop`` to collect the set of loop
@@ -490,7 +490,7 @@ def _loop_process_state(loop, value: type, in_state: list, out_state: list,
 
     if issubclass(t, tuple) or issubclass(t, list):
         for entry in value:
-            _loop_process_state(loop, entry, in_state, out_state, write, in_struct)
+            _loop_process_state(entry, in_state, out_state, write, in_struct)
         return
 
     if enoki.grad_enabled(value) \
@@ -508,7 +508,7 @@ def _loop_process_state(loop, value: type, in_state: list, out_state: list,
     elif enoki.is_jit_array_v(t):
         if t.Depth > 1:
             for i in range(len(value)):
-                _loop_process_state(loop, value.entry_ref_(i), in_state,
+                _loop_process_state(value.entry_ref_(i), in_state,
                                     out_state, write, in_struct)
         else:
             index = value.index()
@@ -532,10 +532,9 @@ def _loop_process_state(loop, value: type, in_state: list, out_state: list,
                         value.set_index_ad_(index_ad)
     elif enoki.is_enoki_struct_v(t):
         for k, v in t.ENOKI_STRUCT.items():
-            _loop_process_state(loop, getattr(value, k), in_state, out_state, True)
+            _loop_process_state(getattr(value, k), in_state, out_state, True)
     elif hasattr(value, 'loop_put'):
-        if in_state is None:
-            value.loop_put(loop)
+        pass
     elif not in_struct:
         raise enoki.Exception(
             "loop_process_state(): one of the provided loop state variables "
@@ -547,13 +546,27 @@ def _loop_process_state(loop, value: type, in_state: list, out_state: list,
 def loop_process_state(loop, funcs, state, write):
     if len(state) == 0:
         old_state = None
+
+        for func in funcs:
+            values = func()
+            if isinstance(values, Sequence):
+                for value in values:
+                    if hasattr(value, 'loop_put'):
+                        value.loop_put(loop)
+            del values
+
+        assert old_state is None or len(old_state) == 0
     else:
         old_state = list(state)
         old_state.reverse()
+
+    del loop # Keep 'loop' out of the garbage collector's reach
+
     state.clear()
 
     for func in funcs:
-        _loop_process_state(loop, func(), old_state, state, write)
+        _loop_process_state(func(), old_state, state, write)
+
     assert old_state is None or len(old_state) == 0
 
 
