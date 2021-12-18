@@ -104,7 +104,7 @@ private:
     }
 
     void process_state(bool write) {
-        m_process_state(m_funcs, m_state_py, write);
+        m_process_state(this, m_funcs, m_state_py, write);
     }
 
 private:

@@ -29,7 +29,7 @@ void export_llvm_ad(py::module_ &m) {
 
     py::class_<Loop<Mask>, ek::Loop<Mask>> loop(llvm_ad, "Loop");
 
-    loop.def(py::init<const char *, py::handle>(), "name"_a, "vars"_a = py::none())
+    loop.def(py::init<const char *, py::handle>(), "name"_a, "state"_a = py::none())
         .def("put", &Loop<Mask>::put)
         .def("init", &Loop<Mask>::init)
         .def("set_uniform", &Loop<Mask>::set_uniform, "value"_a = true)

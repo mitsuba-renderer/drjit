@@ -150,9 +150,16 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
             }
         } else if constexpr (is_enoki_struct_v<T>) {
             struct_support_t<T>::apply_1(value, [&](auto &x) { put(x); });
+        } else if constexpr (is_detected_v<loop_put_detector, T>) {
+            value->loop_put(*this);
         }
         put(args...);
     }
+
+    template <typename T>
+    using loop_put_detector = std::enable_if_t<std::is_same_v<
+        bool,
+        decltype(std::declval<T>()->loop_put(std::declval<Loop &>()), true)>>;
 
     void put() { }
 
