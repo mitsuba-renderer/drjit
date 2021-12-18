@@ -753,7 +753,7 @@ template <typename T> bool ad_enabled() noexcept(true) {
         const Scope &scope = scopes.back();
 
         // Check if AD is disabled on the current thread
-        if (scope.complement && scope.indices.empty())
+        if (!scope.complement && scope.indices.empty())
             return false;
     }
 
