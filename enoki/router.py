@@ -2593,6 +2593,13 @@ class scoped_set_flag:
 #                        Enabling/disabling AD
 # -------------------------------------------------------------------
 
+class _DummyContextManager:
+    def __enter__(self):
+        pass
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
+
 class _ADContextManager:
     def __init__(self, suspend, array_type, array_indices):
         self.suspend = suspend
@@ -2622,7 +2629,10 @@ class _ADContextManager:
                 _ek.llvm.ad.Float64.scope_leave_()
 
 
-def suspend_grad(*args):
+def suspend_grad(*args, condition = True):
+    if not condition:
+        return _DummyContextManager()
+
     array_indices = []
     array_type = _ek.detail.diff_vars(args, array_indices, check_grad_enabled=False)
     if len(args) > 0 and len(array_indices) == 0:
@@ -2630,7 +2640,10 @@ def suspend_grad(*args):
     return _ADContextManager(True, array_type, array_indices)
 
 
-def resume_grad(*args):
+def resume_grad(*args, condition = True):
+    if not condition:
+        return _DummyContextManager()
+
     array_indices = []
     array_type = _ek.detail.diff_vars(args, array_indices, check_grad_enabled=False)
     if len(args) > 0 and len(array_indices) == 0:
