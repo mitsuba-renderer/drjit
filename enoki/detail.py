@@ -533,7 +533,7 @@ def _loop_process_state(value: type, in_state: list, out_state: list,
     elif enoki.is_enoki_struct_v(t):
         for k, v in t.ENOKI_STRUCT.items():
             _loop_process_state(getattr(value, k), in_state, out_state, True)
-    elif hasattr(value, 'loop_put'):
+    elif hasattr(value, 'loop_put') or value is None:
         pass
     elif not in_struct:
         raise enoki.Exception(
