@@ -134,7 +134,7 @@ Index binary_search(scalar_t<Index> start_, scalar_t<Index> end_,
             std::conditional_t<is_static_array_v<Index>, value_t<Index>, Index>;
         using Mask1 = mask_t<Index1>;
 
-        if (jit_flag(JitFlag::LoopRecord) && iterations > 0) {
+        if (iterations >= 2 && jit_flag(JitFlag::LoopRecord)) {
             char title[80];
             snprintf(title, sizeof(title),
                      "ek::binary_search(size=%zu, iterations=%zu)",
