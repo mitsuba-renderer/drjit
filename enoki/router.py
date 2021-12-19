@@ -1370,15 +1370,24 @@ def label(a):
         return None
 
 
-def set_label(a, label):
-    if _ek.is_jit_array_v(a) or _ek.is_diff_array_v(a):
-        a.set_label_(label)
-    elif isinstance(a, _Mapping):
-        for k, v in a.items():
-            set_label(v, label + "_" + k)
-    elif _ek.is_enoki_struct_v(a):
-        for k in a.ENOKI_STRUCT.keys():
-            set_label(getattr(a, k), label + "_" + k)
+def set_label(*args, **kwargs):
+    n_args, n_kwargs = len(args), len(kwargs)
+    if (n_kwargs and n_args) or (n_args and n_args != 2):
+        raise Exception('set_label(): invalid input arguments')
+
+    if n_args:
+        a, label = args
+        if _ek.is_jit_array_v(a) or _ek.is_diff_array_v(a):
+            a.set_label_(label)
+        elif isinstance(a, _Mapping):
+            for k, v in a.items():
+                set_label(v, label + "_" + k)
+        elif _ek.is_enoki_struct_v(a):
+            for k in a.ENOKI_STRUCT.keys():
+                set_label(getattr(a, k), label + "_" + k)
+    elif n_kwargs:
+        for k, v in kwargs.items():
+            set_label(v, k)
 
 
 def schedule(*args):
