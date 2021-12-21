@@ -483,9 +483,6 @@ struct LocalState {
     /// List of AD variables that cannot be processed and must be postponed
     std::vector<EdgeRef> postponed;
 
-    /// Requested directionality of differentiation
-    ADMode mode = ADMode::Primal;
-
     /// Nested scopes that restrict AD to specific variables
     std::vector<Scope> scopes;
 };
@@ -638,7 +635,7 @@ static void ad_free(uint32_t index, Variable *v) {
 
 /// Allocate a new variable
 static std::pair<uint32_t, Variable *> ad_var_new(const char *label,
-                                                 size_t size) {
+                                                  size_t size) {
     while (true) {
         uint32_t index = state.variable_index++;
 
@@ -1558,14 +1555,6 @@ template <typename T> void ad_enqueue(ADMode mode, uint32_t index) {
 
     LocalState &ls = local_state;
 
-    if (ls.todo.empty()) {
-        ls.mode = mode;
-    } else if (ls.mode != mode) {
-        ad_raise("ad_enqueue(): attempted to enqueue nodes using "
-                 "incompatible 'ADMode' values (i.e. both forward *and* "
-                 "reverse-mode differentation)");
-    }
-
     std::lock_guard<std::mutex> guard(state.mutex);
     switch (mode) {
         case ADMode::Forward:
@@ -1586,14 +1575,14 @@ template <typename T> void ad_enqueue(ADMode mode, uint32_t index) {
 // ==========================================================================
 
 template <typename Value>
-void ad_traverse(uint32_t flags) {
+void ad_traverse(ADMode mode, uint32_t flags) {
     LocalState &ls = local_state;
 
     std::vector<EdgeRef> &todo_tls = ls.todo, todo;
     if (todo_tls.empty())
         return;
 
-    /// Are we currently recording a megakernel?
+    // Are we currently recording a megakernel?
     bool rec = false;
     if (is_jit_array_v<Value>)
         rec = jit_flag(JitFlag::Recording);
@@ -1601,17 +1590,17 @@ void ad_traverse(uint32_t flags) {
     std::lock_guard<std::mutex> guard(state.mutex);
     todo_tls.swap(todo);
 
-    // Bring into the appropriate order
-    ADMode mode = ls.mode;
-
     if (mode != ADMode::Forward && mode != ADMode::Backward)
         ad_raise("ad_traverse(): invalid mode specified!");
 
+    // Bring the edges into the appropriate order
     std::sort(todo.begin(), todo.end(), [mode](EdgeRef e1, EdgeRef e2) {
         if (mode == ADMode::Backward)
-            return std::tie(e1.target, e1.source, e1.id) > std::tie(e2.target, e2.source, e2.id);
+            return std::tie(e1.target, e1.source, e1.id) >
+                   std::tie(e2.target, e2.source, e2.id);
         else
-            return std::tie(e1.source, e1.target, e1.id) < std::tie(e2.source, e2.target, e2.id);
+            return std::tie(e1.source, e1.target, e1.id) <
+                   std::tie(e2.source, e2.target, e2.id);
     });
 
     ad_log(Debug, "ad_traverse(): processing %zu edges in %s mode ..", todo.size(),
@@ -1865,8 +1854,6 @@ void ad_traverse(uint32_t flags) {
 
     todo.clear();
     todo_tls.swap(todo);
-
-    ls.mode = ADMode::Primal;
 }
 
 // ==========================================================================
@@ -1921,14 +1908,6 @@ template <typename Value> void ad_enqueue_implicit(size_t snapshot) {
     else if (unlikely(snapshot > size))
         ad_raise("ad_enqueue_implicit(): invalid input arguments!");
 
-    if (ls.todo.empty()) {
-        ls.mode = ADMode::Forward;
-    } else if (ls.mode != ADMode::Forward) {
-        ad_raise("ad_enqueue_implicit(): attempted to enqueue nodes using "
-                 "incompatible 'ADMode' values (i.e. both forward *and* "
-                 "reverse-mode differentation)");
-    }
-
     ad_trace("ad_enqueue_implicit(): enqueuing %zu implicit dependencies.",
              size - snapshot);
 
@@ -1965,34 +1944,27 @@ template <typename Value> void ad_dequeue_implicit(size_t snapshot) {
         state[implicit[i].source]->ref_count_grad--;
 }
 
-template <typename Value> bool ad_enqueue_postponed() {
+template <typename Value> void ad_process_postponed() {
     if (is_jit_array_v<Value>) {
         LocalState &ls = local_state;
 
         if (jit_flag(JitFlag::Recording) || ls.postponed.empty())
-            return false;
+            return;
 
         // Use this opportunity to also clear the implicit dependency tracker
         ls.implicit.clear();
 
-        if (ls.todo.empty()) {
-            ls.mode = ADMode::Backward;
-        } else if (ls.mode != ADMode::Backward) {
-            ad_raise("ad_enqueue_postponed(): attempted to enqueue nodes using "
-                     "incompatible 'ADMode' values (i.e. both forward *and* "
-                     "reverse-mode differentation)");
-        }
+        if (unlikely(!ls.todo.empty()))
+            ad_raise("ad_process_postponed(): internal error: todo list is "
+                     "nonempty!");
 
-        ad_trace("ad_enqueue_postponed(): enqueuing %zu edges.",
+        ad_trace("ad_process_postponed(): enqueuing %zu edges.",
                  ls.postponed.size());
 
-        std::lock_guard<std::mutex> guard(state.mutex);
         ls.todo.insert(ls.todo.end(), ls.postponed.begin(), ls.postponed.end());
         ls.postponed.clear();
 
-        return true;
-    } else {
-        return false;
+        ad_traverse<Value>(ADMode::Backward, (uint32_t) ADFlag::ClearVertices);
     }
 }
 
@@ -2205,12 +2177,12 @@ template ENOKI_EXPORT void ad_accum_grad<Value>(uint32_t, const Value &, bool);
 template ENOKI_EXPORT void ad_set_label<Value>(uint32_t, const char *);
 template ENOKI_EXPORT const char *ad_label<Value>(uint32_t);
 template ENOKI_EXPORT void ad_enqueue<Value>(ADMode, uint32_t);
-template ENOKI_EXPORT void ad_traverse<Value>(uint32_t);
+template ENOKI_EXPORT void ad_traverse<Value>(ADMode, uint32_t);
 template ENOKI_EXPORT size_t ad_implicit<Value>();
 template ENOKI_EXPORT void ad_extract_implicit<Value>(size_t, uint32_t*);
 template ENOKI_EXPORT void ad_enqueue_implicit<Value>(size_t);
 template ENOKI_EXPORT void ad_dequeue_implicit<Value>(size_t);
-template ENOKI_EXPORT bool ad_enqueue_postponed<Value>();
+template ENOKI_EXPORT void ad_process_postponed<Value>();
 template ENOKI_EXPORT const char *ad_graphviz<Value>();
 template ENOKI_EXPORT uint32_t ad_new_select<Value, Mask>(
     const char *, size_t, const Mask &, uint32_t, uint32_t);

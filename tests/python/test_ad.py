@@ -57,12 +57,12 @@ def test02_add_fwd(m):
         c = 2 * a + b
         ek.set_grad(a, 1.0)
         ek.enqueue(ek.ADMode.Forward, a)
-        ek.traverse(m.Float, flags=ek.ADFlag.ClearVertices)
+        ek.traverse(m.Float, ek.ADMode.Forward, flags=ek.ADFlag.ClearVertices)
         assert ek.grad(c) == 2
         assert ek.grad(a) == 0
         ek.set_grad(a, 1.0)
         ek.enqueue(ek.ADMode.Forward, a)
-        ek.traverse(m.Float, flags=ek.ADFlag.ClearVertices)
+        ek.traverse(m.Float, ek.ADMode.Forward, flags=ek.ADFlag.ClearVertices)
         assert ek.grad(c) == 4
 
 
@@ -335,7 +335,7 @@ def test24_scatter_reduce_fwd(m):
         if i // 2 == 0:
             ek.enqueue(ek.ADMode.Forward, x, y)
 
-        ek.traverse(m.Float)
+        ek.traverse(m.Float, ek.ADMode.Forward)
 
         # Verified against Mathematica
         assert ek.allclose(ek.detach(s), 15.5972)
@@ -760,7 +760,7 @@ def test48_custom_backward(m):
     d2 = ek.custom(Normalize, d)
     ek.set_grad(d2, m.Array3f(5, 6, 7))
     ek.enqueue(ek.ADMode.Backward, d2)
-    ek.traverse(m.Float)
+    ek.traverse(m.Float, ek.ADMode.Backward)
     assert ek.allclose(ek.grad(d), m.Array3f(0.610883, 0.152721, -0.305441))
 
 
@@ -770,12 +770,12 @@ def test49_custom_forward(m):
     d2 = ek.custom(Normalize, d)
     ek.set_grad(d, m.Array3f(5, 6, 7))
     ek.enqueue(ek.ADMode.Forward, d)
-    ek.traverse(m.Float, flags=ek.ADFlag.ClearVertices)
+    ek.traverse(m.Float, ek.ADMode.Forward, flags=ek.ADFlag.ClearVertices)
     assert ek.grad(d) == 0
     ek.set_grad(d, m.Array3f(5, 6, 7))
     assert ek.allclose(ek.grad(d2), m.Array3f(0.610883, 0.152721, -0.305441))
     ek.enqueue(ek.ADMode.Forward, d)
-    ek.traverse(m.Float)
+    ek.traverse(m.Float, ek.ADMode.Forward)
     assert ek.allclose(ek.grad(d2), m.Array3f(0.610883, 0.152721, -0.305441)*2)
 
 
@@ -792,7 +792,7 @@ def test50_custom_forward_external_dependency(m):
             value = param * 4.0
 
             ek.enqueue(ek.ADMode.Forward, param)
-            ek.traverse(m.Float, ek.ADFlag.ClearEdges)
+            ek.traverse(m.Float, ek.ADMode.Forward, ek.ADFlag.ClearEdges)
 
             self.set_grad_out(ek.grad(value))
 
@@ -810,12 +810,12 @@ def test50_custom_forward_external_dependency(m):
 
     ek.set_grad(theta, 1.0)
     ek.enqueue(ek.ADMode.Forward, theta)
-    ek.traverse(m.Float, ek.ADFlag.ClearEdges)
+    ek.traverse(m.Float, ek.ADMode.Forward, ek.ADFlag.ClearEdges)
 
     v3 = ek.custom(BuggyOp, 123)
 
     ek.enqueue(ek.ADMode.Forward, param)
-    ek.traverse(m.Float, ek.ADFlag.ClearEdges)
+    ek.traverse(m.Float, ek.ADMode.Forward, ek.ADFlag.ClearEdges)
 
     assert ek.grad(v3) == 12
 
@@ -930,7 +930,7 @@ def test52_loop_ballistic(m, do_record):
                 ek.set_grad(pos_out, grad_pos)
                 ek.set_grad(vel_out, grad_vel)
                 ek.enqueue(ek.ADMode.Backward, pos_out, vel_out)
-                ek.traverse(m.Float)
+                ek.traverse(m.Float, ek.ADMode.Backward)
 
                 # Update loop variables
                 grad_pos.assign(ek.grad(pos))
@@ -1000,7 +1000,7 @@ def test53_loop_ballistic_2(m, do_record):
                 ek.set_grad(pos_fwd, grad_pos)
                 ek.set_grad(vel_fwd, grad_vel)
                 ek.enqueue(ek.ADMode.Backward, pos_fwd, vel_fwd)
-                ek.traverse(m.Float)
+                ek.traverse(m.Float, ek.ADMode.Backward)
 
                 grad_pos = ek.grad(pos_bwd)
                 grad_vel = ek.grad(vel_bwd)
@@ -1153,7 +1153,7 @@ def test61_ad_flags(m, f1, f2, f3):
     for i in range(2):
         ek.accum_grad(v0, 1 if i == 0 else 100)
         ek.enqueue(ek.ADMode.Forward, v0)
-        ek.traverse(m.Float, flags=int(f1) | int(f2) | int(f3))
+        ek.traverse(m.Float, ek.ADMode.Forward, flags=int(f1) | int(f2) | int(f3))
 
     if f1 == 0:
         if f2 == 0:
@@ -1295,7 +1295,7 @@ def test65_suspend_resume_custom_fwd(m):
                    (i <  3 and ek.grad_enabled(output))
 
             ek.enqueue(ek.ADMode.Forward, v_implicit, v_input)
-            ek.traverse(m.Float)
+            ek.traverse(m.Float, ek.ADMode.Forward)
             assert ek.grad(output) == 2 - (i & 1) - ((i & 2) >> 1)
 
 
@@ -1331,7 +1331,48 @@ def test66_suspend_resume_custom_bwd(m):
 
             ek.enqueue(ek.ADMode.Backward, output)
             ek.set_grad(output, 1)
-            ek.traverse(m.Float)
+            ek.traverse(m.Float, ek.ADMode.Backward)
             print(ek.grad(v_implicit))
             assert ek.grad(v_implicit) == ((i & 1) == 0)
             assert ek.grad(v_input) == ((i & 2) == 0)
+
+
+def test67_forward_to(m):
+    a, b, c = m.Float(1), m.Float(2), m.Float(3)
+    ek.enable_grad(a, b, c)
+    ek.set_grad(a, 10)
+    ek.set_grad(b, 100)
+    ek.set_grad(c, 1000)
+
+    d, e, f = a + b, a + c, b + c
+    g, h, i = d*d, e*e, f*f
+
+    for k in range(2):
+        for j, v in enumerate([g, h, i]):
+            ek.set_grad(v, 0)
+            ek.forward_to(v, ek.ADFlag.ClearInterior)
+            assert v == [9, 16, 25][j]
+            assert ek.grad(v) == [660, 8080, 11000][j]
+            assert ek.grad([g, h, i][(j + 1)%3]) == 0
+            assert ek.grad([g, h, i][(j + 2)%3]) == 0
+            ek.set_grad(v, m.Float())
+
+
+def test68_backward_to(m):
+    a, b, c = m.Float(1), m.Float(2), m.Float(3)
+    ek.enable_grad(a, b, c)
+
+    d, e, f = a + b, a + c, b + c
+    g, h, i = d*d, e*e, f*f
+
+    ek.set_grad(g, 10)
+    ek.set_grad(h, 100)
+    ek.set_grad(i, 1000)
+
+    for k in range(2):
+        for j, v in enumerate([a, b, c]):
+            ek.backward_to(v, ek.ADFlag.ClearInterior)
+            assert ek.grad(v) == [860, 10060, 10800][j]
+            assert ek.grad([a, b, c][(j + 1)%3]) == 0
+            assert ek.grad([a, b, c][(j + 2)%3]) == 0
+            ek.set_grad(v, m.Float())

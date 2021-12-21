@@ -74,7 +74,7 @@ ENOKI_TEST(test01_basic) {
         Vector3f d2 = ek::custom<Normalize>(d);
         ek::set_grad(d2, Vector3f(5, 6, 7));
         ek::enqueue(ADMode::Backward, d2);
-        ek::traverse<Float>(false);
+        ek::traverse<Float>(ADMode::Backward);
         assert(ek::allclose(ek::grad(d), Vector3f(0.610883, 0.152721, -0.305441)));
     }
 
@@ -84,7 +84,7 @@ ENOKI_TEST(test01_basic) {
         Vector3f d2 = ek::custom<Normalize>(d);
         ek::set_grad(d, Vector3f(5, 6, 7));
         ek::enqueue(ADMode::Forward, d);
-        ek::traverse<Float>(false);
+        ek::traverse<Float>(ADMode::Forward);
         assert(ek::allclose(ek::grad(d2), Vector3f(0.610883, 0.152721, -0.305441)));
     }
 
@@ -136,7 +136,7 @@ ENOKI_TEST(test02_corner_case) {
         Vector3f d3 = ek::custom<ScaleAdd2>(d1, d2, 5);
         ek::set_grad(d3, Vector3f(5, 6, 7));
         ek::enqueue(ADMode::Backward, d3);
-        ek::traverse<Float>(false);
+        ek::traverse<Float>(ADMode::Backward);
         assert(ek::allclose(ek::grad(d1), Vector3f(0, 30, 0)));
     }
 
@@ -147,7 +147,7 @@ ENOKI_TEST(test02_corner_case) {
         Vector3f d3 = ek::custom<ScaleAdd2>(d1, d2, 5);
         ek::set_grad(d1, Vector3f(5, 6, 7));
         ek::enqueue(ADMode::Forward, d1, d2);
-        ek::traverse<Float>(false);
+        ek::traverse<Float>(ADMode::Forward);
         assert(ek::allclose(ek::grad(d3), Vector3f(0, 30, 0)));
     }
 

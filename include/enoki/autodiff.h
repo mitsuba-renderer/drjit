@@ -59,8 +59,8 @@ void ad_accum_grad(uint32_t index, const Value &v, bool fail_if_missing);
 /// Enqueue a variable for a subsequent ad_traverse() command
 template <typename Value> void ad_enqueue(ADMode mode, uint32_t index);
 
-/// Propagate derivatives through the qneueued set of edges
-template <typename Value> void ad_traverse(uint32_t flags);
+/// Propagate derivatives through the eneueued set of edges
+template <typename Value> void ad_traverse(ADMode mode, uint32_t flags);
 
 /// Number of observed implicit dependencies
 template <typename Value> size_t ad_implicit();
@@ -74,8 +74,8 @@ template <typename Value> void ad_enqueue_implicit(size_t snapshot);
 /// Dequeue implicit dependencies since 'snapshot' (obtained via ad_implicit())
 template <typename Value> void ad_dequeue_implicit(size_t snapshot);
 
-/// Re-enqueue postponed AD operations, returns 'false' if not applicable
-template <typename Value> bool ad_enqueue_postponed();
+/// Process any postponed AD operations
+template <typename Value> void ad_process_postponed();
 
 /// Selectively enable/disable differentiation for a subset of the variables
 template <typename Value>
@@ -1665,10 +1665,10 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             detail::ad_enqueue<Type>(mode, m_index);
     }
 
-    static void traverse_(uint32_t flags) {
+    static void traverse_(ADMode mode, uint32_t flags) {
         ENOKI_MARK_USED(flags);
         if constexpr (IsEnabled)
-            detail::ad_traverse<Type>(flags);
+            detail::ad_traverse<Type>(mode, flags);
     }
 
     void set_label_(const char *label) const {
@@ -1862,7 +1862,7 @@ protected:
     extern template ENOKI_AD_EXPORT const char *ad_label<T>(uint32_t);         \
     extern template ENOKI_AD_EXPORT const char *ad_graphviz<T>();              \
     extern template ENOKI_AD_EXPORT void ad_enqueue<T>(ADMode, uint32_t);      \
-    extern template ENOKI_AD_EXPORT void ad_traverse<T>(uint32_t);             \
+    extern template ENOKI_AD_EXPORT void ad_traverse<T>(ADMode, uint32_t);     \
     extern template ENOKI_AD_EXPORT uint32_t ad_new_select<T, Mask>(           \
         const char *, size_t, const Mask &, uint32_t, uint32_t);               \
     extern template ENOKI_AD_EXPORT uint32_t ad_new_gather<T, Mask, Index>(    \
@@ -1875,7 +1875,7 @@ protected:
     extern template ENOKI_AD_EXPORT size_t ad_implicit<T>();                   \
     extern template ENOKI_AD_EXPORT void ad_extract_implicit<T>(size_t,        \
                                                                 uint32_t *);   \
-    extern template ENOKI_AD_EXPORT bool ad_enqueue_postponed<T>();            \
+    extern template ENOKI_AD_EXPORT void ad_process_postponed<T>();            \
     extern template ENOKI_AD_EXPORT void                                       \
     ad_scope_enter<T>(bool, const uint32_t *, size_t);                         \
     extern template ENOKI_AD_EXPORT void ad_scope_leave<T>();                  \

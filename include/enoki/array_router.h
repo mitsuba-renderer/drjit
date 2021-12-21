@@ -1767,34 +1767,70 @@ constexpr uint32_t operator ~(ADFlag f1)              { return ~(uint32_t) f1; }
 constexpr uint32_t operator +(ADFlag e)               { return (uint32_t) e; }
 
 
-template <typename...Ts> void traverse(uint32_t flags = (uint32_t) ADFlag::Default) {
+template <typename...Ts> void traverse(ADMode mode, uint32_t flags = (uint32_t) ADFlag::Default) {
     using Type = leaf_array_t<Ts...>;
     ENOKI_MARK_USED(flags);
     if constexpr (is_diff_array_v<Type> && std::is_floating_point_v<scalar_t<Type>>)
-        Type::traverse_(flags);
+        Type::traverse_(mode, flags);
 }
 
-template <typename T> void backward(T& value, uint32_t flags = (uint32_t) ADFlag::Default) {
-    if (!grad_enabled(value))
-        enoki_raise("backward(): the provided variable has gradient tracking "
-                    "disabled (it is suspended or not at all registered with "
-                    "the AD backend).  Did you forget to call enable_grad()?");
+namespace detail {
+    template <typename T>
+    void check_grad_enabled(const char *name, const T &value) {
+        if (!grad_enabled(value))
+            enoki_raise(
+                "enoki::%s(): the argument does not depend on the input "
+                "variable(s) being differentiated. Throwing an exception since "
+                "this is usually indicative of a bug (for example, you may "
+                "have forgotten to call enoki::enable_grad(..)). If this is "
+                "expected behavior, skip the call to enoki::%s(..) if "
+                "enoki::grad_enabled(..) returns 'false'.", name, name);
+    }
+}
+
+template <typename T>
+void backward_from(T &value, uint32_t flags = (uint32_t) ADFlag::Default) {
+    detail::check_grad_enabled("backward_from", value);
+
     // Handle case where components of an N-d vector map to the same AD variable
     if constexpr (array_depth_v<T> > 1)
         value = value + T(0);
+
     set_grad(value, 1.f);
     enqueue(ADMode::Backward, value);
-    traverse<T>(flags);
+    traverse<T>(ADMode::Backward, flags);
 }
 
-template <typename T> void forward(T& value, uint32_t flags = (uint32_t) ADFlag::Default) {
-    if (!grad_enabled(value))
-        enoki_raise("forward(): the provided variable has gradient tracking "
-                    "disabled (it is suspended or not at all registered with "
-                    "the AD backend).  Did you forget to call enable_grad()?");
+template <typename T>
+void backward_to(const T &value, uint32_t flags = (uint32_t) ADFlag::Default) {
+    detail::check_grad_enabled("backward_to", value);
+    enqueue(ADMode::Forward, value);
+    traverse<T>(ADMode::Backward, flags);
+}
+
+template <typename T>
+void forward_from(T &value, uint32_t flags = (uint32_t) ADFlag::Default) {
+    detail::check_grad_enabled("forward_from", value);
     set_grad(value, 1.f);
     enqueue(ADMode::Forward, value);
-    traverse<T>(flags);
+    traverse<T>(ADMode::Forward, flags);
+}
+
+template <typename T>
+void forward_to(T &value, uint32_t flags = (uint32_t) ADFlag::Default) {
+    detail::check_grad_enabled("forward_to", value);
+    enqueue(ADMode::Backward, value);
+    traverse<T>(ADMode::Forward, flags);
+}
+
+template <typename T>
+void backward(T &value, uint32_t flags = (uint32_t) ADFlag::Default) {
+    backward_from(value, flags);
+}
+
+template <typename T>
+void forward(T &value, uint32_t flags = (uint32_t) ADFlag::Default) {
+    forward_from(value, flags);
 }
 
 //! @}

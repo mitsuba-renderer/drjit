@@ -2323,55 +2323,69 @@ def enqueue(mode, *args):
                 enqueue(mode, getattr(a, k))
 
 
-def traverse(t, flags=_ek.ADFlag.Default):
-    assert not isinstance(flags, bool)
+def traverse(t, mode, flags=_ek.ADFlag.Default):
+    t = _ek.leaf_array_t(t)
+    if t.IsTensor:
+        t = t.Array
 
     if not _ek.is_diff_array_v(t):
         raise Exception('traverse(): expected a differentiable array type!')
 
-    t = _ek.leaf_array_t(t)
-    if t.IsTensor:
-        t = t.Array
-    t.traverse_(flags)
+    t.traverse_(mode, flags)
 
 
-def backward(a, flags=_ek.ADFlag.Default):
+def _check_grad_enabled(name, a):
     if _ek.is_diff_array_v(a) and a.IsFloat:
         if not grad_enabled(a):
-            raise Exception("backward(): the argument does not depend on the "
-                            "input variable(s) being differentiated. Throwing "
-                            "an exception since this is usually indicative of a "
-                            "bug (for example, you may have forgotten to call "
-                            "ek.enable_grad(..)). If this is expected "
-                            "behavior, skip the call to ek.backward(..) if "
-                            "ek.grad_enabled(..) returns False.")
-
-        # Deduplicate components if 'a' is a vector
-        if _ek.array_depth_v(a) > 1:
-            a = a + type(a)(0)
-        set_grad(a, 1)
-        enqueue(_ek.ADMode.Backward, a)
-        traverse(type(a), flags)
+            raise Exception(
+                f'{name}(): the argument does not depend on the input '
+                'variable(s) being differentiated. Throwing an exception '
+                'since this is usually indicative of a bug (for example, '
+                'you may have forgotten to call ek.enable_grad(..)). If '
+                f'this is expected behavior, skip the call to {name}(..) '
+                'if ek.grad_enabled(..) returns False.')
     else:
-        raise Exception("backward(): expected a differentiable array type!")
+        raise Exception(f'{name}(): expected a differentiable array type!')
+
+
+def forward_from(a, flags=_ek.ADFlag.Default):
+    _check_grad_enabled('forward_from', a)
+    set_grad(a, 1)
+    enqueue(_ek.ADMode.Forward, a)
+    traverse(type(a), _ek.ADMode.Forward, flags)
+
+
+def forward_to(a, flags=_ek.ADFlag.Default):
+    _check_grad_enabled('forward_to', a)
+    enqueue(_ek.ADMode.Backward, a)
+    traverse(type(a), _ek.ADMode.Forward, flags)
 
 
 def forward(a, flags=_ek.ADFlag.Default):
-    if _ek.is_diff_array_v(a) and a.IsFloat:
-        if not grad_enabled(a):
-            raise Exception("forward(): the argument does not have gradient "
-                            "tracking enabled. Throwing an exception since "
-                            "this is usually indicative of a bug (for "
-                            "example, you may have forgotten to call "
-                            "ek.enable_grad(..)). If this is expected "
-                            "behavior, skip the call to ek.forward(..) if "
-                            "ek.grad_enabled(..) returns False.")
+    forward_from(a, flags)
 
-        set_grad(a, 1)
-        enqueue(_ek.ADMode.Forward, a)
-        traverse(type(a), flags)
-    else:
-        raise Exception("forward(): expected a differentiable array type!")
+
+def backward_from(a, flags=_ek.ADFlag.Default):
+    _check_grad_enabled('backward_from', a)
+
+    # Deduplicate components if 'a' is a vector
+    if _ek.array_depth_v(a) > 1:
+        a = a + type(a)(0)
+
+    set_grad(a, 1)
+    enqueue(_ek.ADMode.Backward, a)
+    traverse(type(a), _ek.ADMode.Backward, flags)
+
+
+def backward_to(a, flags=_ek.ADFlag.Default):
+    _check_grad_enabled('backward_to', a)
+    enqueue(_ek.ADMode.Forward, a)
+    traverse(type(a), _ek.ADMode.Backward, flags)
+
+
+def backward(a, flags=_ek.ADFlag.Default):
+    backward_from(a, flags)
+
 
 # -------------------------------------------------------------------
 #                      Initialization operations

@@ -286,13 +286,10 @@ protected:
                            The end of the loop finally provides an opportunity
                            to execute such postponed AD steps. */
 
-                        if (m_ad_float_precision == 64) {
-                            if (detail::ad_enqueue_postponed<Float64>())
-                                detail::ad_traverse<Float64>((uint32_t) ADFlag::ClearVertices);
-                        } else {
-                            if (detail::ad_enqueue_postponed<Float32>())
-                                detail::ad_traverse<Float32>((uint32_t) ADFlag::ClearVertices);
-                        }
+                        if (m_ad_float_precision == 64)
+                            detail::ad_process_postponed<Float64>();
+                        else
+                            detail::ad_process_postponed<Float32>();
                     }
 
                     return false;
