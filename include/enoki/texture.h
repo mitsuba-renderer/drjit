@@ -10,20 +10,19 @@
     license that can be found in the LICENSE file.
 */
 
+#include <array>
+#include <enoki-jit/texture.h>
+#include <enoki/dynamic.h>
 #include <enoki/jit.h>
 #include <enoki/tensor.h>
-#include <enoki/dynamic.h>
-#include <enoki-jit/texture.h>
-#include <array>
 
 #pragma once
 
 NAMESPACE_BEGIN(enoki)
 
-enum class FilterMode : uint32_t {
-    Nearest = 0,
-    Linear = 1
-};
+enum class FilterMode : uint32_t { Nearest = 0, Linear = 1 };
+
+enum class WrapMode : uint32_t { Repeat = 0, Mirror = 1, Clamp = 2 };
 
 template <typename Value, size_t Dimension> class Texture {
 public:
@@ -58,8 +57,9 @@ public:
      * operations need to perform a reverse migration in this mode.
      */
     Texture(const size_t shape[Dimension], size_t channels, bool migrate = true,
-            FilterMode filter_mode = FilterMode::Linear) {
-        init(shape, channels, migrate, filter_mode);
+            FilterMode filter_mode = FilterMode::Linear,
+            WrapMode wrap_mode = WrapMode::Repeat) {
+        init(shape, channels, migrate, filter_mode, wrap_mode);
         m_value.array() = Storage(0);
     }
 
@@ -72,12 +72,13 @@ public:
      * the texture memory with the provided tensor.
      */
     Texture(const TensorXf &tensor, bool migrate = true,
-            FilterMode filter_mode = FilterMode::Linear) {
+            FilterMode filter_mode = FilterMode::Linear,
+            WrapMode wrap_mode = WrapMode::Repeat) {
         if (tensor.ndim() != Dimension + 1)
             enoki_raise("Texture::Texture(): tensor dimension must equal "
                         "texture dimension plus one.");
         init(tensor.shape().data(), tensor.shape(Dimension), migrate,
-             filter_mode);
+             filter_mode, wrap_mode);
         set_tensor(tensor);
     }
 
@@ -128,7 +129,7 @@ public:
             enoki_raise("Texture::set_value(): unexpected array size!");
 
         if constexpr (IsCUDA) {
-            value.eval_();  // Sync the value before copying to texture memory
+            value.eval_(); // Sync the value before copying to texture memory
             jit_cuda_tex_memcpy_d2t(Dimension, m_shape, m_shape[Dimension],
                                     value.data(), m_handle);
 
@@ -157,17 +158,16 @@ public:
         set_value(tensor.array());
     }
 
-    Storage &value() const {
-        return tensor().array();
-    }
+    Storage &value() const { return tensor().array(); }
 
     TensorXf &tensor() const {
         if constexpr (IsCUDA) {
             if (m_migrate) {
                 if (m_value.array().size() != m_size) {
                     Storage primal = empty<Storage>(m_size);
-                    jit_cuda_tex_memcpy_t2d(Dimension, m_shape, m_shape[Dimension],
-                                            m_handle, primal.data());
+                    jit_cuda_tex_memcpy_t2d(Dimension, m_shape,
+                                            m_shape[Dimension], m_handle,
+                                            primal.data());
                     if constexpr (IsDiff)
                         m_value.array() = replace_grad(primal, m_value.array());
                     else
@@ -191,15 +191,14 @@ public:
             for (size_t i = 0; i < Dimension; ++i)
                 pos_idx[i] = pos[i].index();
 
-            jit_cuda_tex_lookup(Dimension, m_handle_opaque.index(),
-                                pos_idx, active.index(), out);
+            jit_cuda_tex_lookup(Dimension, m_handle_opaque.index(), pos_idx,
+                                active.index(), out);
 
-            return {
-                Value::steal(out[0]), Value::steal(out[1]),
-                Value::steal(out[2]), Value::steal(out[3])
-            };
+            return { Value::steal(out[0]), Value::steal(out[1]),
+                     Value::steal(out[2]), Value::steal(out[3]) };
         } else {
-            (void) pos; (void) active;
+            (void) pos;
+            (void) active;
             return 0;
         }
     }
@@ -222,11 +221,11 @@ public:
         else
             pos_f = fmadd(pos, m_shape_opaque, -.5f);
 
-        PosU pos_i = PosU(clamp(floor2int<PosI>(pos_f), 0, PosI(m_shape_opaque) - 1)),
+        PosU pos_i = PosU(
+                 clamp(floor2int<PosI>(pos_f), 0, PosI(m_shape_opaque) - 1)),
              step = select(pos_f >= 0.f && pos_i < m_shape_opaque - 1u, 1u, 0u);
 
-        PosF w1 = pos_f - floor2int<PosI>(pos_f),
-             w0 = 1.f - w1;
+        PosF w1 = pos_f - floor2int<PosI>(pos_f), w0 = 1.f - w1;
 
         UInt32 index;
         if constexpr (Dimension == 1) {
@@ -235,10 +234,8 @@ public:
             index = fmadd(pos_i.y(), m_shape_opaque.x(), pos_i.x());
             step.y() *= m_shape_opaque.x();
         } else if constexpr (Dimension == 3) {
-            index = fmadd(
-                fmadd(pos_i.z(), m_shape_opaque.y(), pos_i.y()),
-                m_shape_opaque.x(),
-                pos_i.x());
+            index = fmadd(fmadd(pos_i.z(), m_shape_opaque.y(), pos_i.y()),
+                          m_shape_opaque.x(), pos_i.x());
             step.y() *= m_shape_opaque.x();
             step.z() *= m_shape_opaque.x() * m_shape_opaque.y();
         }
@@ -246,16 +243,6 @@ public:
         const uint32_t channels = (uint32_t) m_shape[Dimension];
         index *= channels;
         step *= channels;
-
-        #define EK_TEX_ACCUM(index, weight)                                        \
-            {                                                                      \
-                UInt32 index_ = index;                                             \
-                Value weight_ = weight;                                            \
-                for (uint32_t ch = 0; ch < channels; ++ch)                         \
-                    result[ch] =                                                   \
-                        fmadd(gather<Value>(m_value.array(), index_ + ch, active), \
-                            weight_, result[ch]);                                  \
-            }
 
         Array<Value, 4> result(0);
 
@@ -265,26 +252,37 @@ public:
             return result;
         }
 
+#define EK_TEX_ACCUM(index, weight)                                            \
+    {                                                                          \
+        UInt32 index_ = index;                                                 \
+        Value weight_ = weight;                                                \
+        for (uint32_t ch = 0; ch < channels; ++ch)                             \
+            result[ch] =                                                       \
+                fmadd(gather<Value>(m_value.array(), index_ + ch, active),     \
+                      weight_, result[ch]);                                    \
+    }
+
         if constexpr (Dimension == 1) {
-            EK_TEX_ACCUM(index,            w0.x());
+            EK_TEX_ACCUM(index, w0.x());
             EK_TEX_ACCUM(index + step.x(), w1.x());
         } else if constexpr (Dimension == 2) {
-            EK_TEX_ACCUM(index,                       w0.x() * w0.y());
-            EK_TEX_ACCUM(index + step.x(),            w1.x() * w0.y());
-            EK_TEX_ACCUM(index + step.y(),            w0.x() * w1.y());
+            EK_TEX_ACCUM(index, w0.x() * w0.y());
+            EK_TEX_ACCUM(index + step.x(), w1.x() * w0.y());
+            EK_TEX_ACCUM(index + step.y(), w0.x() * w1.y());
             EK_TEX_ACCUM(index + step.x() + step.y(), w1.x() * w1.y());
         } else if constexpr (Dimension == 3) {
-            EK_TEX_ACCUM(index,                                  w0.x() * w0.y() * w0.z());
-            EK_TEX_ACCUM(index + step.x(),                       w1.x() * w0.y() * w0.z());
-            EK_TEX_ACCUM(index + step.y(),                       w0.x() * w1.y() * w0.z());
-            EK_TEX_ACCUM(index + step.x() + step.y(),            w1.x() * w1.y() * w0.z());
-            EK_TEX_ACCUM(index + step.z(),                       w0.x() * w0.y() * w1.z());
-            EK_TEX_ACCUM(index + step.x() + step.z(),            w1.x() * w0.y() * w1.z());
-            EK_TEX_ACCUM(index + step.y() + step.z(),            w0.x() * w1.y() * w1.z());
-            EK_TEX_ACCUM(index + step.x() + step.y() + step.z(), w1.x() * w1.y() * w1.z());
+            EK_TEX_ACCUM(index, w0.x() * w0.y() * w0.z());
+            EK_TEX_ACCUM(index + step.x(), w1.x() * w0.y() * w0.z());
+            EK_TEX_ACCUM(index + step.y(), w0.x() * w1.y() * w0.z());
+            EK_TEX_ACCUM(index + step.x() + step.y(), w1.x() * w1.y() * w0.z());
+            EK_TEX_ACCUM(index + step.z(), w0.x() * w0.y() * w1.z());
+            EK_TEX_ACCUM(index + step.x() + step.z(), w1.x() * w0.y() * w1.z());
+            EK_TEX_ACCUM(index + step.y() + step.z(), w0.x() * w1.y() * w1.z());
+            EK_TEX_ACCUM(index + step.x() + step.y() + step.z(),
+                         w1.x() * w1.y() * w1.z());
         }
 
-        #undef EK_TEX_ACCUM
+#undef EK_TEX_ACCUM
 
         return result;
     }
@@ -338,29 +336,30 @@ public:
                 pos_f = replace_grad(pos_f, pos_);
         PosI pos_i = floor2int<PosI>(pos_f);
         // `step[k][d]` controls the k-th offset in the d-th dimension.
-        // With cubic B-Spline, it is by default [-1, 0, 1, 2] for all dimensions.
-        // When the query point gets too close to (or exceeds) the border, it needs
-        // to be cut down to the correct value to achieve the 'clamping' goal
+        // With cubic B-Spline, it is by default [-1, 0, 1, 2] for all
+        // dimensions. When the query point gets too close to (or exceeds) the
+        // border, it needs to be cut down to the correct value to achieve the
+        // 'clamping' goal
         Array<PosI, 4> step(0);
         step[0] = select(pos_f >= 1.f && pos_i <= m_shape_opaque - 1, -1, 0);
-        step[2] = select(pos_f >= 0.f && pos_i <  m_shape_opaque - 1, 1,  0);
-        step[3] = select(pos_f >= -1.f && pos_i < m_shape_opaque - 2, 2,  0);
-        step[3] = select(pos_f >= -1.f && pos_f < 0.f,                1,  step[3]);
-        step[3] = select(pos_f >= m_shape_opaque - 2 && pos_i <= m_shape_opaque - 2, 1, step[3]);
+        step[2] = select(pos_f >= 0.f && pos_i < m_shape_opaque - 1, 1, 0);
+        step[3] = select(pos_f >= -1.f && pos_i < m_shape_opaque - 2, 2, 0);
+        step[3] = select(pos_f >= -1.f && pos_f < 0.f, 1, step[3]);
+        step[3] =
+            select(pos_f >= m_shape_opaque - 2 && pos_i <= m_shape_opaque - 2,
+                   1, step[3]);
         PosF pos_a = pos_f - pos_i;
         pos_i = clamp(pos_i, 0, PosI(m_shape_opaque) - 1);
 
         const auto compute_weight = [&pos_a](uint32_t dim) -> Array4 {
             const Value &alpha = pos_a[dim];
-            Value alpha2 = alpha * alpha,
-                  alpha3 = alpha2 * alpha;
+            Value alpha2 = alpha * alpha, alpha3 = alpha2 * alpha;
             Value multiplier = rcp(6.f);
-            return multiplier * Array4(
-                - alpha3 + 3.f * alpha2 - 3.f * alpha + 1.f,
-                3.f * alpha3 - 6.f * alpha2 + 4.f,
-                -3.f * alpha3 + 3.f * alpha2 + 3.f * alpha + 1.f,
-                alpha3
-            );
+            return multiplier *
+                   Array4(-alpha3 + 3.f * alpha2 - 3.f * alpha + 1.f,
+                          3.f * alpha3 - 6.f * alpha2 + 4.f,
+                          -3.f * alpha3 + 3.f * alpha2 + 3.f * alpha + 1.f,
+                          alpha3);
         };
 
         UInt32 index;
@@ -371,10 +370,8 @@ public:
             for (uint32_t idx = 0; idx < 4; ++idx)
                 step[idx][1] *= m_shape_opaque.x();
         } else if constexpr (Dimension == 3) {
-            index = fmadd(
-                fmadd(pos_i.z(), m_shape_opaque.y(), pos_i.y()),
-                m_shape_opaque.x(),
-                pos_i.x());
+            index = fmadd(fmadd(pos_i.z(), m_shape_opaque.y(), pos_i.y()),
+                          m_shape_opaque.x(), pos_i.x());
             for (uint32_t idx = 0; idx < 4; ++idx) {
                 step[idx][1] *= m_shape_opaque.x();
                 step[idx][2] *= m_shape_opaque.x() * m_shape_opaque.y();
@@ -385,39 +382,40 @@ public:
         index *= channels;
         step *= channels;
 
-        #define EK_TEX_CUBIC_ACCUM(index, weight)                                  \
-            {                                                                      \
-                UInt32 index_ = index;                                             \
-                Value weight_ = weight;                                            \
-                for (uint32_t ch = 0; ch < channels; ++ch)                         \
-                    result[ch] =                                                   \
-                        fmadd(gather<Value>(m_value.array(), index_ + ch, active), \
-                            weight_, result[ch]);                                  \
-            }
+#define EK_TEX_CUBIC_ACCUM(index, weight)                                      \
+    {                                                                          \
+        UInt32 index_ = index;                                                 \
+        Value weight_ = weight;                                                \
+        for (uint32_t ch = 0; ch < channels; ++ch)                             \
+            result[ch] =                                                       \
+                fmadd(gather<Value>(m_value.array(), index_ + ch, active),     \
+                      weight_, result[ch]);                                    \
+    }
 
         Array<Value, 4> result(0);
 
         if constexpr (Dimension == 1) {
             Array4 wx = compute_weight(0);
-            for (uint32_t ix=0; ix<4; ix++)
+            for (uint32_t ix = 0; ix < 4; ix++)
                 EK_TEX_CUBIC_ACCUM(index + step[ix].x(), wx[ix]);
         } else if constexpr (Dimension == 2) {
-            Array4 wx = compute_weight(0),
-                   wy = compute_weight(1);
-            for (uint32_t ix=0; ix<4; ix++)
-                for (uint32_t iy=0; iy<4; iy++)
-                    EK_TEX_CUBIC_ACCUM(index + step[ix].x() + step[iy].y(), wx[ix] * wy[iy]);
+            Array4 wx = compute_weight(0), wy = compute_weight(1);
+            for (uint32_t ix = 0; ix < 4; ix++)
+                for (uint32_t iy = 0; iy < 4; iy++)
+                    EK_TEX_CUBIC_ACCUM(index + step[ix].x() + step[iy].y(),
+                                       wx[ix] * wy[iy]);
         } else if constexpr (Dimension == 3) {
-            Array4 wx = compute_weight(0),
-                   wy = compute_weight(1),
+            Array4 wx = compute_weight(0), wy = compute_weight(1),
                    wz = compute_weight(2);
-            for (uint32_t ix=0; ix<4; ix++)
-                for (uint32_t iy=0; iy<4; iy++)
-                    for (uint32_t iz=0; iz<4; iz++)
-                        EK_TEX_CUBIC_ACCUM(index + step[ix].x() + step[iy].y() + step[iz].z(), wx[ix] * wy[iy] * wz[iz]);
+            for (uint32_t ix = 0; ix < 4; ix++)
+                for (uint32_t iy = 0; iy < 4; iy++)
+                    for (uint32_t iz = 0; iz < 4; iz++)
+                        EK_TEX_CUBIC_ACCUM(index + step[ix].x() + step[iy].y() +
+                                               step[iz].z(),
+                                           wx[ix] * wy[iy] * wz[iz]);
         }
 
-        #undef EK_TEX_CUBIC_ACCUM
+#undef EK_TEX_CUBIC_ACCUM
 
         return result;
     }
@@ -437,9 +435,9 @@ public:
      *
      * When the underlying grid data and the query `pos` are differentiable,
      * this transformation cannot be used as it is not linear w.r.t. `pos`
-     * (thus the default AD graph gives incorrect results). The implementation calls
-     * \ref eval_cubic_helper() function to replace the AD graph with a direct
-     * evaluation of the B-Spline basis functions in that case.
+     * (thus the default AD graph gives incorrect results). The implementation
+     * calls \ref eval_cubic_helper() function to replace the AD graph with a
+     * direct evaluation of the B-Spline basis functions in that case.
      */
     Array<Value, 4> eval_cubic(const Array<Value, Dimension> &pos,
                                Mask active = true,
@@ -467,19 +465,18 @@ public:
         auto compute_weight_coord = [&](uint32_t dim) -> Array3 {
             const Value integ = (Value) pos_i[dim];
             const Value alpha = pos_a[dim];
-            Value alpha2 = sqr(alpha),
-                  alpha3 = alpha2 * alpha;
+            Value alpha2 = sqr(alpha), alpha3 = alpha2 * alpha;
             Value multiplier = 1.f / 6.f;
-            // four basis functions, transformed to take as input the fractional part
-            Value w0 = (- alpha3 + 3.f * alpha2 - 3.f * alpha + 1.f) * multiplier,
+            // four basis functions, transformed to take as input the fractional
+            // part
+            Value w0 =
+                      (-alpha3 + 3.f * alpha2 - 3.f * alpha + 1.f) * multiplier,
                   w1 = (3.f * alpha3 - 6.f * alpha2 + 4.f) * multiplier,
-                  w3 = ( alpha3) * multiplier;
-            Value w01 = w0 + w1,
-                  w23 = 1.f - w01;
-            return Array3(
-                w01,
-                (integ - 0.5f + w1 / w01) * inv_shape[dim],
-                (integ + 1.5f + w3 / w23) * inv_shape[dim]);  // (integ + 0.5) +- 1 + weight
+                  w3 = (alpha3) *multiplier;
+            Value w01 = w0 + w1, w23 = 1.f - w01;
+            return Array3(w01, (integ - 0.5f + w1 / w01) * inv_shape[dim],
+                          (integ + 1.5f + w3 / w23) *
+                              inv_shape[dim]); // (integ + 0.5) +- 1 + weight
         };
 
         auto eval_helper = [&force_enoki, this](const PosF &pos,
@@ -500,18 +497,15 @@ public:
                    f1 = eval_helper(PosF(cx[2]), active);
             result = lerp(f1, f0, cx[0]);
         } else if constexpr (Dimension == 2) {
-            Array3 cx = compute_weight_coord(0),
-                   cy = compute_weight_coord(1);
+            Array3 cx = compute_weight_coord(0), cy = compute_weight_coord(1);
             Array4 f00 = eval_helper(PosF(cx[1], cy[1]), active),
                    f01 = eval_helper(PosF(cx[1], cy[2]), active),
                    f10 = eval_helper(PosF(cx[2], cy[1]), active),
                    f11 = eval_helper(PosF(cx[2], cy[2]), active);
-            Array4 f0 = lerp(f01, f00, cy[0]),
-                   f1 = lerp(f11, f10, cy[0]);
+            Array4 f0 = lerp(f01, f00, cy[0]), f1 = lerp(f11, f10, cy[0]);
             result = lerp(f1, f0, cx[0]);
         } else if constexpr (Dimension == 3) {
-            Array3 cx = compute_weight_coord(0),
-                   cy = compute_weight_coord(1),
+            Array3 cx = compute_weight_coord(0), cy = compute_weight_coord(1),
                    cz = compute_weight_coord(2);
             Array4 f000 = eval_helper(PosF(cx[1], cy[1], cz[1]), active),
                    f001 = eval_helper(PosF(cx[1], cy[1], cz[2]), active),
@@ -521,12 +515,9 @@ public:
                    f101 = eval_helper(PosF(cx[2], cy[1], cz[2]), active),
                    f110 = eval_helper(PosF(cx[2], cy[2], cz[1]), active),
                    f111 = eval_helper(PosF(cx[2], cy[2], cz[2]), active);
-            Array4 f00 = lerp(f001, f000, cz[0]),
-                   f01 = lerp(f011, f010, cz[0]),
-                   f10 = lerp(f101, f100, cz[0]),
-                   f11 = lerp(f111, f110, cz[0]);
-            Array4 f0 = lerp(f01, f00, cy[0]),
-                   f1 = lerp(f11, f10, cy[0]);
+            Array4 f00 = lerp(f001, f000, cz[0]), f01 = lerp(f011, f010, cz[0]),
+                   f10 = lerp(f101, f100, cz[0]), f11 = lerp(f111, f110, cz[0]);
+            Array4 f0 = lerp(f01, f00, cy[0]), f1 = lerp(f11, f10, cy[0]);
             result = lerp(f1, f0, cx[0]);
         }
 
@@ -535,7 +526,8 @@ public:
                replace the AD graph. The result is unused (and never computed)
                and only the AD graph is replaced. */
             if (grad_enabled(m_value, pos)) {
-                Array4 result_diff = eval_cubic_helper(pos, active);  // AD graph only
+                Array4 result_diff =
+                    eval_cubic_helper(pos, active); // AD graph only
                 result = replace_grad(result, result_diff);
             }
         }
@@ -543,10 +535,11 @@ public:
         return result;
     }
 
-    /// Evaluate the positional gradient of clamped cubic B-Spline from the explicit
-    /// differentiated basis functions
-    std::array<Array<Value, 4>, Dimension> eval_cubic_grad(const Array<Value, Dimension> &pos,
-                                                           Mask active = true) const {
+    /// Evaluate the positional gradient of clamped cubic B-Spline from the
+    /// explicit differentiated basis functions
+    std::array<Array<Value, 4>, Dimension>
+    eval_cubic_grad(const Array<Value, Dimension> &pos,
+                    Mask active = true) const {
         using PosF = Array<Value, Dimension>;
         using PosI = int32_array_t<PosF>;
         using Array4 = Array<Value, 4>;
@@ -555,32 +548,32 @@ public:
         PosI pos_i = floor2int<PosI>(pos_f);
         Array<PosI, 4> step(0);
         step[0] = select(pos_f >= 1.f && pos_i <= m_shape_opaque - 1, -1, 0);
-        step[2] = select(pos_f >= 0.f && pos_i <  m_shape_opaque - 1, 1,  0);
-        step[3] = select(pos_f >= -1.f && pos_i < m_shape_opaque - 2, 2,  0);
-        step[3] = select(pos_f >= -1.f && pos_f < 0.f,                1,  step[3]);
-        step[3] = select(pos_f >= m_shape_opaque - 2 && pos_i <= m_shape_opaque - 2, 1, step[3]);
+        step[2] = select(pos_f >= 0.f && pos_i < m_shape_opaque - 1, 1, 0);
+        step[3] = select(pos_f >= -1.f && pos_i < m_shape_opaque - 2, 2, 0);
+        step[3] = select(pos_f >= -1.f && pos_f < 0.f, 1, step[3]);
+        step[3] =
+            select(pos_f >= m_shape_opaque - 2 && pos_i <= m_shape_opaque - 2,
+                   1, step[3]);
         PosF pos_a = pos_f - pos_i;
         pos_i = clamp(pos_i, 0, PosI(m_shape_opaque) - 1);
 
-        const auto compute_weight = [&pos_a](uint32_t dim, bool is_grad) -> Array4 {
+        const auto compute_weight = [&pos_a](uint32_t dim,
+                                             bool is_grad) -> Array4 {
             const Value &alpha = pos_a[dim];
             Value alpha2 = alpha * alpha;
             Value multiplier = rcp(6.f);
             if (!is_grad) {
                 Value alpha3 = alpha2 * alpha;
-                return multiplier * Array4(
-                    - alpha3 + 3.f * alpha2 - 3.f * alpha + 1.f,
-                    3.f * alpha3 - 6.f * alpha2 + 4.f,
-                    -3.f * alpha3 + 3.f * alpha2 + 3.f * alpha + 1.f,
-                    alpha3
-                );
+                return multiplier *
+                       Array4(-alpha3 + 3.f * alpha2 - 3.f * alpha + 1.f,
+                              3.f * alpha3 - 6.f * alpha2 + 4.f,
+                              -3.f * alpha3 + 3.f * alpha2 + 3.f * alpha + 1.f,
+                              alpha3);
             } else {
-                return multiplier * Array4(
-                    -3.f * alpha2 +  6.f * alpha - 3.f,
-                     9.f * alpha2 - 12.f * alpha,
-                    -9.f * alpha2 +  6.f * alpha + 3.f,
-                     3.f * alpha2
-                );
+                return multiplier * Array4(-3.f * alpha2 + 6.f * alpha - 3.f,
+                                           9.f * alpha2 - 12.f * alpha,
+                                           -9.f * alpha2 + 6.f * alpha + 3.f,
+                                           3.f * alpha2);
             }
         };
 
@@ -592,10 +585,8 @@ public:
             for (uint32_t idx = 0; idx < 4; ++idx)
                 step[idx][1] *= m_shape_opaque.x();
         } else if constexpr (Dimension == 3) {
-            index = fmadd(
-                fmadd(pos_i.z(), m_shape_opaque.y(), pos_i.y()),
-                m_shape_opaque.x(),
-                pos_i.x());
+            index = fmadd(fmadd(pos_i.z(), m_shape_opaque.y(), pos_i.y()),
+                          m_shape_opaque.x(), pos_i.x());
             for (uint32_t idx = 0; idx < 4; ++idx) {
                 step[idx][1] *= m_shape_opaque.x();
                 step[idx][2] *= m_shape_opaque.x() * m_shape_opaque.y();
@@ -606,19 +597,19 @@ public:
         index *= channels;
         step *= channels;
 
-        #define EK_TEX_CUBIC_GATHER(index)                                            \
-            {                                                                         \
-                UInt32 index_ = index;                                                \
-                for (uint32_t ch = 0; ch < channels; ++ch)                            \
-                    values[ch] = gather<Value>(m_value.array(), index_ + ch, active); \
-            }
-        #define EK_TEX_CUBIC_ACCUM(dim, weight)                                      \
-            {                                                                        \
-                uint32_t dim_ = dim;                                                 \
-                Value weight_ = weight;                                              \
-                for (uint32_t ch = 0; ch < channels; ++ch)                           \
-                    result[dim_][ch] = fmadd(values[ch], weight_, result[dim_][ch]); \
-            }
+#define EK_TEX_CUBIC_GATHER(index)                                             \
+    {                                                                          \
+        UInt32 index_ = index;                                                 \
+        for (uint32_t ch = 0; ch < channels; ++ch)                             \
+            values[ch] = gather<Value>(m_value.array(), index_ + ch, active);  \
+    }
+#define EK_TEX_CUBIC_ACCUM(dim, weight)                                        \
+    {                                                                          \
+        uint32_t dim_ = dim;                                                   \
+        Value weight_ = weight;                                                \
+        for (uint32_t ch = 0; ch < channels; ++ch)                             \
+            result[dim_][ch] = fmadd(values[ch], weight_, result[dim_][ch]);   \
+    }
 
         std::array<Array4, Dimension> result;
         for (uint32_t dim = 0; dim < Dimension; ++dim)
@@ -632,10 +623,8 @@ public:
                 EK_TEX_CUBIC_ACCUM(0, gx[ix]);
             }
         } else if constexpr (Dimension == 2) {
-            Array4 wx = compute_weight(0, false),
-                   wy = compute_weight(1, false),
-                   gx = compute_weight(0, true),
-                   gy = compute_weight(1, true);
+            Array4 wx = compute_weight(0, false), wy = compute_weight(1, false),
+                   gx = compute_weight(0, true), gy = compute_weight(1, true);
             for (uint32_t ix = 0; ix < 4; ++ix)
                 for (uint32_t iy = 0; iy < 4; ++iy) {
                     EK_TEX_CUBIC_GATHER(index + step[ix].x() + step[iy].y());
@@ -643,31 +632,29 @@ public:
                     EK_TEX_CUBIC_ACCUM(1, wx[ix] * gy[iy]);
                 }
         } else if constexpr (Dimension == 3) {
-            Array4 wx = compute_weight(0, false),
-                   wy = compute_weight(1, false),
-                   wz = compute_weight(2, false),
-                   gx = compute_weight(0, true),
-                   gy = compute_weight(1, true),
-                   gz = compute_weight(2, true);
+            Array4 wx = compute_weight(0, false), wy = compute_weight(1, false),
+                   wz = compute_weight(2, false), gx = compute_weight(0, true),
+                   gy = compute_weight(1, true), gz = compute_weight(2, true);
             for (uint32_t ix = 0; ix < 4; ++ix)
                 for (uint32_t iy = 0; iy < 4; ++iy)
                     for (uint32_t iz = 0; iz < 4; ++iz) {
-                        EK_TEX_CUBIC_GATHER(index + step[ix].x() + step[iy].y() + step[iz].z());
+                        EK_TEX_CUBIC_GATHER(index + step[ix].x() +
+                                            step[iy].y() + step[iz].z());
                         EK_TEX_CUBIC_ACCUM(0, gx[ix] * wy[iy] * wz[iz]);
                         EK_TEX_CUBIC_ACCUM(1, wx[ix] * gy[iy] * wz[iz]);
                         EK_TEX_CUBIC_ACCUM(2, wx[ix] * wy[iy] * gz[iz]);
                     }
         }
 
-        #undef EK_TEX_CUBIC_GATHER
-        #undef EK_TEX_CUBIC_ACCUM
+#undef EK_TEX_CUBIC_GATHER
+#undef EK_TEX_CUBIC_ACCUM
 
         return result;
     }
 
 protected:
     void init(const size_t *shape, size_t channels, bool migrate,
-              FilterMode filter_mode) {
+              FilterMode filter_mode, WrapMode wrap_mode) {
         if (channels != 1 && channels != 2 && channels != 4)
             enoki_raise("Texture::Texture(): must have 1, 2, or 4 channels!");
 
@@ -682,6 +669,7 @@ protected:
         m_value.array() = Storage(0);
         m_migrate = migrate;
         m_filter_mode = filter_mode;
+        m_wrap_mode = wrap_mode;
 
         if constexpr (IsCUDA) {
             m_handle = jit_cuda_tex_create(Dimension, shape, channels,
@@ -693,12 +681,13 @@ protected:
 
 private:
     void *m_handle = nullptr;
-    size_t m_shape[Dimension + 1] { };
+    size_t m_shape[Dimension + 1]{};
     size_t m_size = 0;
     UInt64 m_handle_opaque;
     Array<UInt32, Dimension> m_shape_opaque;
     mutable TensorXf m_value;
     FilterMode m_filter_mode;
+    WrapMode m_wrap_mode;
     bool m_migrate = false;
 };
 

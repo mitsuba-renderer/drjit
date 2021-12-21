@@ -1,3 +1,6 @@
+#pragma once
+
+#include "common.h"
 #include <enoki/texture.h>
 
 template <typename Type, size_t Dimension>
