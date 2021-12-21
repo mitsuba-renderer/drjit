@@ -420,8 +420,7 @@ def op_getitem(self, index):
             result[i] = op_getitem(self, indices[i])
         return result
     elif _ek.is_mask_v(index):
-        raise Exception("Indexing via masks is only allowed in the case of "
-                        "assignments, e.g.: array[mask] = value")
+        return self
     else:
         raise Exception("Invalid array index! (must be an integer or a tuple "
                         "of integers!)")
