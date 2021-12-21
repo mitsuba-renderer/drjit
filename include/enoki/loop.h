@@ -23,7 +23,7 @@ NAMESPACE_BEGIN(detail)
 template <typename Value> void ad_inc_ref(int32_t) noexcept;
 template <typename Value> void ad_dec_ref(int32_t) noexcept;
 template <typename Value> size_t ad_postponed();
-template <typename Value> bool ad_enqueue_postponed();
+template <typename Value> void ad_process_postponed();
 template <typename Value> void ad_traverse(uint32_t);
 template <typename Value, typename Mask>
 uint32_t ad_new_select(const char *, size_t, const Mask &, uint32_t, uint32_t);
