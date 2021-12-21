@@ -4,7 +4,7 @@ template <typename Type, size_t Dimension>
 void bind_texture(py::module &m, const char *name) {
     using Tex = ek::Texture<Type, Dimension>;
 
-    py::class_<Tex>(m, name)
+    auto tex = py::class_<Tex>(m, name)
         .def(py::init([](const std::array<size_t, Dimension> &shape,
                          size_t channels, bool migrate,
                          ek::FilterMode filter_mode) {
@@ -23,6 +23,8 @@ void bind_texture(py::module &m, const char *name) {
         .def("eval_cuda", &Tex::eval_cuda, "pos"_a, "active"_a = true)
         .def("eval_enoki", &Tex::eval_enoki, "pos"_a, "active"_a = true)
         .def("eval", &Tex::eval, "pos"_a, "active"_a = true);
+
+    tex.attr("IsTexture") = true;
 }
 
 template <typename Type>

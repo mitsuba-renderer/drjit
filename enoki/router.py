@@ -420,7 +420,7 @@ def op_getitem(self, index):
             result[i] = op_getitem(self, indices[i])
         return result
     elif _ek.is_mask_v(index):
-        return self
+        return type(self)(self)
     else:
         raise Exception("Invalid array index! (must be an integer or a tuple "
                         "of integers!)")

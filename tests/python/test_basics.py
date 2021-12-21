@@ -189,6 +189,7 @@ def all_arrays(cond=lambda x: True):
     return [v for k, v in a if isinstance(v, type) and cond(v)
             and not ek.is_special_v(v)
             and not ek.is_tensor_v(v)
+            and not ek.is_texture_v(v)
             and not ek.array_depth_v(v) >= 3
             and not (ek.array_depth_v(v) >= 2 and 'scalar' in v.__module__)]
 
@@ -627,3 +628,19 @@ def test20_unsigned_negative():
 
     assert c.is_literal_()
     assert c == 2
+
+@pytest.mark.parametrize("t", all_arrays())
+def test21_masked_update(t):
+    if ek.is_array_v(t) and not ek.is_mask_v(t):
+        v1, v2 = t(1), t(5)
+        v1[v1 < 2] = 3
+        v2[v2 < 2] = 3
+
+        assert v1 == t(3) and v2 == t(5)
+
+        if t.IsJIT and t.Depth == 1:
+            x = ek.arange(t, 100)
+            x[x < 5] += 5
+            y = ek.arange(t, 100)
+            y = ek.select(y < 5, y + 5, y)
+            assert x == y

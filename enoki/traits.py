@@ -80,6 +80,10 @@ def is_tensor_v(a):
     return getattr(a, 'IsTensor', False)
 
 
+def is_texture_v(a):
+    return getattr(a, 'IsTexture', False)
+
+
 def is_vector_v(a):
     return getattr(a, 'IsVector', False)
 
