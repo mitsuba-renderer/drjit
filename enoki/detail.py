@@ -1,5 +1,6 @@
 import enoki
 import sys
+import inspect
 from collections.abc import Mapping, Sequence
 
 VAR_TYPE_NAME = [
@@ -549,10 +550,17 @@ def loop_process_state(loop, funcs, state, write):
 
         for func in funcs:
             values = func()
+
             if isinstance(values, Sequence):
                 for value in values:
                     if hasattr(value, 'loop_put'):
                         value.loop_put(loop)
+
+            # Automatically label loop variables
+            cv = inspect.getclosurevars(func)
+            enoki.set_label(**cv.globals)
+            enoki.set_label(**cv.nonlocals)
+
             del values
 
         assert old_state is None or len(old_state) == 0
