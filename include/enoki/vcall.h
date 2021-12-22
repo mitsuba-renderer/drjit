@@ -32,6 +32,7 @@ extern ENOKI_IMPORT uint32_t jit_var_registry_attr(JitBackend backend,
                                                    const char *domain,
                                                    const char *name);
 extern ENOKI_IMPORT uint32_t jit_flags();
+enum class JitFlags : uint32_t;
 };
 
 NAMESPACE_BEGIN(enoki)
@@ -108,7 +109,7 @@ auto vcall(const char *name, const Func &func, const Self &self,
 
     ENOKI_MARK_USED(name);
     if constexpr (is_jit_array_v<Self>) {
-        if ((jit_flags() & 4 /* RecordVCall */) == 0) {
+        if ((jit_flags() & (uint32_t) JitFlag::VCallRecord) == 0) {
             return detail::vcall_jit_reduce<Result>(func, self, copy_diff(args)...);
         } else {
             if constexpr (is_diff_array_v<Self>)
