@@ -2585,14 +2585,23 @@ def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
 
 def printf_async(fmt, *args, active=True):
     indices = []
+    is_cuda, is_llvm = _ek.is_cuda_array_v(active), _ek.is_llvm_array_v(active)
+
     for a in args:
-        if not _ek.is_cuda_array_v(a) or _ek.array_depth_v(a) != 1 or _ek.is_mask_v(a):
+        cuda, llvm = _ek.is_cuda_array_v(a), _ek.is_llvm_array_v(a)
+        if not (cuda or llvm) or _ek.array_depth_v(a) != 1 or _ek.is_mask_v(a):
             raise Exception("printf_async(): array argument of type '%s' not "
-                            "supported (must be a depth-1 CUDA array, "
-                            "cannot be a mask)", type(a).__name__)
+                            "supported (must be a depth-1 JIT (LLVM/CUDA) array, "
+                            "and cannot be a mask)", type(a).__name__)
         indices.append(a.index())
-    active = _ek.cuda.Bool(active)
-    _ek.detail.printf_async(active.index(), fmt, indices)
+        is_cuda |= cuda
+        is_llvm |= llvm
+
+    if is_cuda == is_llvm:
+        raise Exception("printf_async(): invalid input: must specify LLVM or CUDA arrays.")
+
+    active = _ek.cuda.Bool(active) if is_cuda else _ek.llvm.Bool(active)
+    _ek.detail.printf_async(is_cuda, active.index(), fmt, indices)
 
 
 # -------------------------------------------------------------------
