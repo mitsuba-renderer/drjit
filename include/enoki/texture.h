@@ -229,7 +229,6 @@ public:
         }
     }
 
-
     /**
      * \brief Evaluate linear interpolant using explicit arithmetic
      *
