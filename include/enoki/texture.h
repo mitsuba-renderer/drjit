@@ -13,6 +13,7 @@
 #include <array>
 #include <enoki-jit/texture.h>
 #include <enoki/dynamic.h>
+#include <enoki/idiv.h>
 #include <enoki/jit.h>
 #include <enoki/tensor.h>
 
@@ -22,7 +23,7 @@ NAMESPACE_BEGIN(enoki)
 
 enum class FilterMode : uint32_t { Nearest = 0, Linear = 1 };
 
-enum class WrapMode : uint32_t { Repeat = 0, Mirror = 1, Clamp = 2 };
+enum class WrapMode : uint32_t { Repeat = 0, Clamp = 1, Mirror = 2 };
 
 template <typename Value, size_t Dimension> class Texture {
 public:
@@ -30,8 +31,8 @@ public:
     static constexpr bool IsDiff = is_diff_array_v<Value>;
     static constexpr bool IsDynamic = is_dynamic_v<Value>;
 
+    using Int32  = int32_array_t<Value>;
     using UInt32 = uint32_array_t<Value>;
-    using Int32 = int32_array_t<Value>;
     using UInt64 = uint64_array_t<Value>;
     using Mask = mask_t<Value>;
 
@@ -86,11 +87,14 @@ public:
         m_handle = other.handle;
         other.handle = nullptr;
         memcpy(m_shape, other.shape, sizeof(size_t) * (Dimension + 1));
-        m_size = other.m_size;
-        m_handle_opaque = std::move(other.m_handle_opaque);
-        m_shape_opaque = std::move(other.m_shape_opaque);
-        m_value = std::move(other.m_value);
-        m_migrate = other.m_migrate;
+        m_size           = other.m_size;
+        m_handle_opaque  = std::move(other.m_handle_opaque);
+        m_shape_opaque   = std::move(other.m_shape_opaque);
+        m_value          = std::move(other.m_value);
+        m_migrate        = other.m_migrate;
+        m_inv_resolution = std::move(other.m_inv_resolution);
+        m_filter_mode    = other.m_filter_mode;
+        m_wrap_mode      = other.m_wrap_mode;
     }
 
     Texture &operator=(Texture &&other) {
@@ -101,11 +105,14 @@ public:
         m_handle = other.m_handle;
         other.m_handle = nullptr;
         memcpy(m_shape, other.m_shape, sizeof(size_t) * (Dimension + 1));
-        m_size = other.m_size;
-        m_handle_opaque = std::move(other.m_handle_opaque);
-        m_shape_opaque = std::move(other.m_shape_opaque);
-        m_value = std::move(other.m_value);
-        m_migrate = other.m_migrate;
+        m_size           = other.m_size;
+        m_handle_opaque  = std::move(other.m_handle_opaque);
+        m_shape_opaque   = std::move(other.m_shape_opaque);
+        m_value          = std::move(other.m_value);
+        m_migrate        = other.m_migrate;
+        m_inv_resolution = std::move(other.m_inv_resolution);
+        m_filter_mode    = other.m_filter_mode;
+        m_wrap_mode      = other.m_wrap_mode;
         return *this;
     }
 
@@ -123,6 +130,7 @@ public:
     size_t ndim() const { return Dimension + 1; }
     const size_t *shape() const { return m_shape; }
     FilterMode filter_mode() const { return m_filter_mode; }
+    WrapMode wrap_mode() const { return m_wrap_mode; }
 
     void set_value(const Storage &value) {
         if (value.size() != m_size)
@@ -203,6 +211,29 @@ public:
         }
     }
 
+    template <typename T> T wrap(const T &value) const {
+        const Array<Int32, Dimension> shape = m_shape_opaque;
+        if (m_wrap_mode == WrapMode::Clamp) {
+            return clamp(value, 0, shape - 1);
+        } else {
+            const T value_shift_neg = select(value < 0, value + 1, value);
+
+            T div;
+            for (size_t i = 0; i < Dimension; ++i) {
+                div[i] = m_inv_resolution[i](value_shift_neg[i]);
+            }
+
+            T mod = value - div * shape;
+            masked(mod, mod < 0) += T(shape);
+
+            if (m_wrap_mode == WrapMode::Mirror)
+                mod =
+                    select(eq(div & 1, 0) ^ (value < 0), mod, shape - 1 - mod);
+
+            return mod;
+        }
+    }
+
     /**
      * \brief Evaluate linear interpolant using explicit arithmetic
      *
@@ -212,79 +243,129 @@ public:
     Array<Value, 4> eval_enoki(const Array<Value, Dimension> &pos,
                                Mask active = true) const {
         using PosF = Array<Value, Dimension>;
-        using PosU = uint32_array_t<PosF>;
         using PosI = int32_array_t<PosF>;
 
-        PosF pos_f;
-        if (ENOKI_UNLIKELY(m_filter_mode == FilterMode::Nearest))
-            pos_f = pos * m_shape_opaque;
-        else
-            pos_f = fmadd(pos, m_shape_opaque, -.5f);
-
-        PosU pos_i = PosU(
-                 clamp(floor2int<PosI>(pos_f), 0, PosI(m_shape_opaque) - 1)),
-             step = select(pos_f >= 0.f && pos_i < m_shape_opaque - 1u, 1u, 0u);
-
-        PosF w1 = pos_f - floor2int<PosI>(pos_f), w0 = 1.f - w1;
-
-        UInt32 index;
-        if constexpr (Dimension == 1) {
-            index = pos_i.x();
-        } else if constexpr (Dimension == 2) {
-            index = fmadd(pos_i.y(), m_shape_opaque.x(), pos_i.x());
-            step.y() *= m_shape_opaque.x();
-        } else if constexpr (Dimension == 3) {
-            index = fmadd(fmadd(pos_i.z(), m_shape_opaque.y(), pos_i.y()),
-                          m_shape_opaque.x(), pos_i.x());
-            step.y() *= m_shape_opaque.x();
-            step.z() *= m_shape_opaque.x() * m_shape_opaque.y();
-        }
-
-        const uint32_t channels = (uint32_t) m_shape[Dimension];
-        index *= channels;
-        step *= channels;
-
-        Array<Value, 4> result(0);
-
         if (ENOKI_UNLIKELY(m_filter_mode == FilterMode::Nearest)) {
+            const PosF pos_f   = pos * m_shape_opaque;
+            const PosI pos_i   = floor2int<PosI>(pos_f);
+            const PosI pos_i_w = wrap(pos_i);
+
+            UInt32 index;
+            if constexpr (Dimension == 1) {
+                index = pos_i_w.x();
+            } else if constexpr (Dimension == 2) {
+                index = fmadd(pos_i_w.y(), m_shape_opaque.x(), pos_i_w.x());
+            } else if constexpr (Dimension == 3) {
+                index =
+                    fmadd(fmadd(pos_i_w.z(), m_shape_opaque.y(), pos_i_w.y()),
+                          m_shape_opaque.x(), pos_i_w.x());
+            }
+
+            const uint32_t channels = (uint32_t) m_shape[Dimension];
+            index *= channels;
+
+            Array<Value, 4> result(0);
             for (uint32_t ch = 0; ch < channels; ++ch)
                 result[ch] = gather<Value>(m_value.array(), index + ch, active);
+
+            return result;
+        } else {
+            using LerpIdx  = Array<Int32, 1 << Dimension>;
+            using LerpPosI = Array<LerpIdx, Dimension>;
+
+            const PosF pos_f = fmadd(pos, m_shape_opaque, -.5f);
+            const PosI pos_i = floor2int<PosI>(pos_f);
+
+            LerpPosI pos_i_w;
+            if constexpr (Dimension == 1) {
+                using Int2 = Array<Int32, 2>;
+                pos_i_w    = wrap(LerpPosI(Int2(0, 1) + pos_i.x()));
+            } else if constexpr (Dimension == 2) {
+                using Int4 = Array<Int32, 4>;
+                pos_i_w    = wrap(LerpPosI(Int4(0, 1, 0, 1) + pos_i.x(),
+                                        Int4(0, 0, 1, 1) + pos_i.y()));
+            } else if constexpr (Dimension == 3) {
+                using Int8 = Array<Int32, 8>;
+                pos_i_w =
+                    wrap(LerpPosI(Int8(0, 1, 0, 1, 0, 1, 0, 1) + pos_i.x(),
+                                  Int8(0, 0, 0, 0, 1, 1, 1, 1) + pos_i.y(),
+                                  Int8(0, 0, 1, 1, 0, 0, 1, 1) + pos_i.z()));
+            }
+
+            LerpIdx index;
+            if constexpr (Dimension == 1)
+                index = pos_i_w.x();
+            else if constexpr (Dimension == 2)
+                index = fmadd(pos_i_w.y(), m_shape_opaque.x(), pos_i_w.x());
+            else if constexpr (Dimension == 3)
+                index =
+                    fmadd(fmadd(pos_i_w.z(), m_shape_opaque.y(), pos_i_w.y()),
+                          m_shape_opaque.x(), pos_i_w.x());
+
+            const uint32_t channels = (uint32_t) m_shape[Dimension];
+            index *= channels;
+
+            Array<Value, 4> result(0);
+            const PosF w1 = pos_f - floor(pos_f), w0 = 1.f - w1;
+
+            if constexpr (Dimension == 1) {
+                for (size_t ch = 0; ch < channels; ++ch) {
+                    const Value v0 = gather<Value>(m_value.array(),
+                                                   index.x() + ch, active),
+                                v1 = gather<Value>(m_value.array(),
+                                                   index.y() + ch, active);
+
+                    result[ch] = fmadd(w0.x(), v0, w1.x() * v1);
+                }
+            } else if constexpr (Dimension == 2) {
+                for (size_t ch = 0; ch < channels; ++ch) {
+                    const Value v00 = gather<Value>(m_value.array(),
+                                                    index.x() + ch, active),
+                                v10 = gather<Value>(m_value.array(),
+                                                    index.y() + ch, active),
+                                v01 = gather<Value>(m_value.array(),
+                                                    index.z() + ch, active),
+                                v11 = gather<Value>(m_value.array(),
+                                                    index.w() + ch, active);
+
+                    const Value v0 = fmadd(w0.x(), v00, w1.x() * v10),
+                                v1 = fmadd(w0.x(), v01, w1.x() * v11);
+
+                    result[ch] = fmadd(w0.y(), v0, w1.y() * v1);
+                }
+            } else if constexpr (Dimension == 3) {
+                for (size_t ch = 0; ch < channels; ++ch) {
+                    const Value v000 = gather<Value>(m_value.array(),
+                                                     index[0] + ch, active),
+                                v100 = gather<Value>(m_value.array(),
+                                                     index[1] + ch, active),
+                                v001 = gather<Value>(m_value.array(),
+                                                     index[2] + ch, active),
+                                v101 = gather<Value>(m_value.array(),
+                                                     index[3] + ch, active),
+                                v010 = gather<Value>(m_value.array(),
+                                                     index[4] + ch, active),
+                                v110 = gather<Value>(m_value.array(),
+                                                     index[5] + ch, active),
+                                v011 = gather<Value>(m_value.array(),
+                                                     index[6] + ch, active),
+                                v111 = gather<Value>(m_value.array(),
+                                                     index[7] + ch, active);
+
+                    const Value v00 = fmadd(w0.x(), v000, w1.x() * v100),
+                                v10 = fmadd(w0.x(), v010, w1.x() * v110),
+                                v01 = fmadd(w0.x(), v001, w1.x() * v101),
+                                v11 = fmadd(w0.x(), v011, w1.x() * v111);
+
+                    const Value v0 = fmadd(w0.y(), v00, w1.y() * v10),
+                                v1 = fmadd(w0.y(), v01, w1.y() * v11);
+
+                    result[ch] = fmadd(w0.z(), v0, w1.z() * v1);
+                }
+            }
+
             return result;
         }
-
-#define EK_TEX_ACCUM(index, weight)                                            \
-    {                                                                          \
-        UInt32 index_ = index;                                                 \
-        Value weight_ = weight;                                                \
-        for (uint32_t ch = 0; ch < channels; ++ch)                             \
-            result[ch] =                                                       \
-                fmadd(gather<Value>(m_value.array(), index_ + ch, active),     \
-                      weight_, result[ch]);                                    \
-    }
-
-        if constexpr (Dimension == 1) {
-            EK_TEX_ACCUM(index, w0.x());
-            EK_TEX_ACCUM(index + step.x(), w1.x());
-        } else if constexpr (Dimension == 2) {
-            EK_TEX_ACCUM(index, w0.x() * w0.y());
-            EK_TEX_ACCUM(index + step.x(), w1.x() * w0.y());
-            EK_TEX_ACCUM(index + step.y(), w0.x() * w1.y());
-            EK_TEX_ACCUM(index + step.x() + step.y(), w1.x() * w1.y());
-        } else if constexpr (Dimension == 3) {
-            EK_TEX_ACCUM(index, w0.x() * w0.y() * w0.z());
-            EK_TEX_ACCUM(index + step.x(), w1.x() * w0.y() * w0.z());
-            EK_TEX_ACCUM(index + step.y(), w0.x() * w1.y() * w0.z());
-            EK_TEX_ACCUM(index + step.x() + step.y(), w1.x() * w1.y() * w0.z());
-            EK_TEX_ACCUM(index + step.z(), w0.x() * w0.y() * w1.z());
-            EK_TEX_ACCUM(index + step.x() + step.z(), w1.x() * w0.y() * w1.z());
-            EK_TEX_ACCUM(index + step.y() + step.z(), w0.x() * w1.y() * w1.z());
-            EK_TEX_ACCUM(index + step.x() + step.y() + step.z(),
-                         w1.x() * w1.y() * w1.z());
-        }
-
-#undef EK_TEX_ACCUM
-
-        return result;
     }
 
     /**
@@ -660,8 +741,9 @@ protected:
 
         m_size = channels;
         for (size_t i = 0; i < Dimension; ++i) {
-            m_shape[i] = shape[i];
-            m_shape_opaque[i] = opaque<UInt32>((uint32_t) shape[i]);
+            m_shape[i]          = shape[i];
+            m_shape_opaque[i]   = opaque<UInt32>((uint32_t) shape[i]);
+            m_inv_resolution[i] = divisor<int32_t>((int32_t) shape[i]);
             m_size *= m_shape[i];
         }
         m_shape[Dimension] = (uint32_t) channels;
@@ -673,7 +755,7 @@ protected:
 
         if constexpr (IsCUDA) {
             m_handle = jit_cuda_tex_create(Dimension, shape, channels,
-                                           (int) filter_mode, 1);
+                                           (int) filter_mode, (int) wrap_mode);
             m_handle_opaque = UInt64::steal(
                 jit_var_new_pointer(JitBackend::CUDA, m_handle, 0, 0));
         }
@@ -686,6 +768,7 @@ private:
     UInt64 m_handle_opaque;
     Array<UInt32, Dimension> m_shape_opaque;
     mutable TensorXf m_value;
+    Array<divisor<int32_t>, Dimension> m_inv_resolution;
     FilterMode m_filter_mode;
     WrapMode m_wrap_mode;
     bool m_migrate = false;

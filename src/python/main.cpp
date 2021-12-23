@@ -118,6 +118,11 @@ PYBIND11_MODULE(enoki_ext, m_) {
         .value("Nearest", ek::FilterMode::Nearest)
         .value("Linear", ek::FilterMode::Linear);
 
+    py::enum_<ek::WrapMode>(m, "WrapMode")
+        .value("Repeat", ek::WrapMode::Repeat)
+        .value("Clamp", ek::WrapMode::Clamp)
+        .value("Mirror", ek::WrapMode::Mirror);
+
     py::class_<ek::detail::reinterpret_flag>(array_detail, "reinterpret_flag")
         .def(py::init<>());
 
