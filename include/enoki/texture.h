@@ -178,7 +178,12 @@ public:
         return m_value;
     }
 
-    /// Evaluate linear interpolation using CUDA texture lookup
+    /**
+     * \brief Evaluate linear interpolant using a CUDA texture lookup
+     *
+     * This is an implementation detail, please use \ref eval() that may
+     * dispatch to this function depending on its inputs.
+     */
     Array<Value, 4> eval_cuda(const Array<Value, Dimension> &pos,
                               Mask active = true) const {
         if constexpr (IsCUDA) {
@@ -199,7 +204,12 @@ public:
         }
     }
 
-    /// Evaluate linear interpolation by formula
+    /**
+     * \brief Evaluate linear interpolant using explicit arithmetic
+     *
+     * This is an implementation detail, please use \ref eval() that may
+     * dispatch to this function depending on its inputs.
+     */
     Array<Value, 4> eval_enoki(const Array<Value, Dimension> &pos,
                                Mask active = true) const {
         using PosF = Array<Value, Dimension>;
@@ -279,7 +289,15 @@ public:
         return result;
     }
 
-    /// Evaluate linear interpolation with the correct version of code
+    /**
+     * \brief Evaluate the linear interpolant represented by this texture
+     *
+     * This function dispatches to \ref eval_enoki() or \ref eval_cuda()
+     * depending on whether or not CUDA is available. If invoked with CUDA
+     * arrays that track derivative information, the function records the AD
+     * graph of \ref eval_enoki() and combines it with the primal result of
+     * \ref eval_cuda().
+     */
     Array<Value, 4> eval(const Array<Value, Dimension> &pos,
                          Mask active = true) const {
         if constexpr (IsCUDA) {
@@ -299,11 +317,12 @@ public:
     }
 
     /**
-     * \brief Helper function to evaluate clamped cubic B-Spline by formula
+     * \brief Helper function to evaluate a clamped cubic B-Spline interpolant
      *
-     * This should only be called by the \ref eval_cubic() function to construct the
-     * AD graph. When only the cubic evaluation result is desired, the \ref eval_cubic() 
-     * function is faster than this simple implementation
+     * This is an implementation detail and should only be called by the \ref
+     * eval_cubic() function to construct an AD graph. When only the cubic
+     * evaluation result is desired, the \ref eval_cubic() function is faster
+     * than this simple implementation
      */
     Array<Value, 4> eval_cubic_helper(const Array<Value, Dimension> &pos,
                                       Mask active = true) const {
@@ -375,7 +394,7 @@ public:
                         fmadd(gather<Value>(m_value.array(), index_ + ch, active), \
                             weight_, result[ch]);                                  \
             }
-        
+
         Array<Value, 4> result(0);
 
         if constexpr (Dimension == 1) {
@@ -404,18 +423,23 @@ public:
     }
 
     /**
-     * \brief Evaluate clamped cubic B-Spline with the correct version of code
+     * \brief Evaluate a clamped cubic B-Spline interpolant represented by this
+     * texture
      *
-     * This implementation transforms the cubic B-Spline formula to be a sum of several linear 
-     * interpolations. In CUDA mode, the linear interpolation is accelarated by CUDA Texture lookups
-     * and is faster than the naive implementation. More info can be found at 
-     * https://developer.nvidia.com/gpugems/gpugems2/part-iii-high-quality-rendering/chapter-20-fast-third-order-texture-filtering
-     * by Christian Sigg.
-     * 
-     * Especially, both the underlying grid data and the query `pos` are differentiable. Unfortunately
-     * the transformation is not linear w.r.t. `pos` and thus the default AD graph gives incorrect
-     * results. This function calls \ref eval_cubic_helper() function to replace its AD graph when
-     * `pos` has gradients attached.
+     * Intead of interpolating the texture via B-Spline basis functions, the
+     * implementation transforms this calculation into an equivalent weighted
+     * sum of several linear interpolant evaluations. In CUDA mode, this can
+     * then be accelerated by hardware texture units, which runs faster than
+     * a naive implementation. More information can be found in
+     *
+     *   GPU Gems 2, Chapter 20, "Fast Third-Order Texture Filtering"
+     *   by Christian Sigg.
+     *
+     * When the underlying grid data and the query `pos` are differentiable,
+     * this transformation cannot be used as it is not linear w.r.t. `pos`
+     * (thus the default AD graph gives incorrect results). The implementation calls
+     * \ref eval_cubic_helper() function to replace the AD graph with a direct
+     * evaluation of the B-Spline basis functions in that case.
      */
     Array<Value, 4> eval_cubic(const Array<Value, Dimension> &pos,
                                Mask active = true,
@@ -427,17 +451,20 @@ public:
 
         if (m_migrate && force_enoki)
             jit_log(::LogLevel::Warn,
-                "\"force_enoki\" is used while the data has been fully migrated to CUDA texture memory");
+                    "\"force_enoki\" is used while the data has been fully "
+                    "migrated to CUDA texture memory");
 
         PosF pos_f = fmadd(pos, m_shape_opaque, -.5f);
         PosI pos_i = floor2int<PosI>(pos_f);
         PosF pos_a = pos_f - pos_i;
 
-        // With cubic B-Spline, normally we have 4 query points and 4 weights for each dimension.
-        // After the linear interpolation transformation, they are reduced to 2 query points and 
-        // 2 weights. This function returns the two weights and query coordinates.
-        // Note: the two weights sum to be 1.0 so only `w01` is returned.
-        const auto compute_weight_coord = [&pos_i, &pos_a, this](uint32_t dim) -> Array3 {
+        /* With cubic B-Spline, normally we have 4 query points and 4 weights
+           for each dimension. After the linear interpolation transformation,
+           they are reduced to 2 query points and 2 weights. This function
+           returns the two weights and query coordinates.
+           Note: the two weights sum to be 1.0 so only `w01` is returned. */
+        auto compute_weight_coord = [&pos_i, &pos_a,
+                                     this](uint32_t dim) -> Array3 {
             const Value &integ = pos_i[dim];
             const Value &alpha = pos_a[dim];
             Value alpha2 = alpha * alpha,
@@ -456,11 +483,12 @@ public:
                 (integ + 1.5f + w3 / w23) * inv_shape[dim]);  // (integ + 0.5) +- 1 + weight
         };
 
-        const auto eval_helper = [&force_enoki, this](const PosF &pos, const Mask &active) -> Array4 {
+        auto eval_helper = [&force_enoki, this](const PosF &pos,
+                                                const Mask &active) -> Array4 {
             if constexpr (IsCUDA) {
                 if (!force_enoki)
                     return eval_cuda(pos, active);
-            }            
+            }
             ENOKI_MARK_USED(force_enoki);
             return eval_enoki(pos, active);
         };
@@ -504,8 +532,9 @@ public:
         }
 
         if constexpr (IsDiff) {
-            // When `pos` has gradient enabled, call a helper function to replace the AD
-            // graph. The result is unused (and never computed) and only the AD graph is replaced.
+            /* When `pos` has gradient enabled, call a helper function to
+               replace the AD graph. The result is unused (and never computed)
+               and only the AD graph is replaced. */
             if (grad_enabled(m_value, pos)) {
                 Array4 result_diff = eval_cubic_helper(pos, active);  // AD graph only
                 result = replace_grad(result, result_diff);
@@ -515,7 +544,7 @@ public:
         return result;
     }
 
-    /// Evaluate the positional gradient of clamped cubic B-Spline from the explicit 
+    /// Evaluate the positional gradient of clamped cubic B-Spline from the explicit
     /// differentiated basis functions
     std::array<Array<Value, 4>, Dimension> eval_cubic_grad(const Array<Value, Dimension> &pos,
                                                            Mask active = true) const {
