@@ -22,6 +22,8 @@ void bind_texture(py::module &m, const char *name) {
         .def("filter_mode", &Tex::filter_mode)
         .def("eval_cuda", &Tex::eval_cuda, "pos"_a, "active"_a = true)
         .def("eval_enoki", &Tex::eval_enoki, "pos"_a, "active"_a = true)
+        .def("eval_cubic", &Tex::eval_cubic, "pos"_a, "active"_a = true, "force_enoki"_a = false)
+        .def("eval_cubic_grad", &Tex::eval_cubic_grad, "pos"_a, "active"_a = true)
         .def("eval", &Tex::eval, "pos"_a, "active"_a = true);
 }
 
