@@ -257,6 +257,12 @@ PYBIND11_MODULE(enoki_ext, m_) {
         .value("KernelHistory",    JitFlag::KernelHistory)
         .value("Default",          JitFlag::Default);
 
+    py::enum_<KernelType>(m, "KernelType")
+        .value("JIT", KernelType::JIT)
+        .value("Reduce", KernelType::Reduce)
+        .value("VCallReduce", KernelType::VCallReduce)
+        .value("Other", KernelType::Other);
+
 #if defined(ENOKI_ENABLE_CUDA)
     m.def("device_count", &jit_cuda_device_count);
     m.def("set_device", &jit_cuda_set_device, "device"_a);
@@ -285,20 +291,24 @@ PYBIND11_MODULE(enoki_ext, m_) {
         while (entry && (uint32_t) entry->backend) {
             py::dict dict;
             dict["backend"] = entry->backend;
-            char kernel_hash[33];
-            snprintf(kernel_hash, sizeof(kernel_hash), "%016llx%016llx",
-                     (unsigned long long) entry->hash[1],
-                     (unsigned long long) entry->hash[0]);
-            dict["hash"] = kernel_hash;
-            dict["ir"] = io.attr("StringIO")(entry->ir);
-            free(entry->ir);
-            dict["uses_optix"] = entry->uses_optix;
-            dict["cache_hit"] = entry->cache_hit;
-            dict["cache_disk"] = entry->cache_disk;
+            dict["type"] = entry->type;
+            if (entry->type == KernelType::JIT) {
+                char kernel_hash[33];
+                snprintf(kernel_hash, sizeof(kernel_hash), "%016llx%016llx",
+                        (unsigned long long) entry->hash[1],
+                        (unsigned long long) entry->hash[0]);
+                dict["hash"] = kernel_hash;
+                dict["ir"] = io.attr("StringIO")(entry->ir);
+                free(entry->ir);
+                dict["uses_optix"] = entry->uses_optix;
+                dict["cache_hit"] = entry->cache_hit;
+                dict["cache_disk"] = entry->cache_disk;
+            }
             dict["size"] = entry->size;
             dict["input_count"] = entry->input_count;
             dict["output_count"] = entry->output_count;
-            dict["operation_count"] = entry->operation_count;
+            if (entry->type == KernelType::JIT)
+                dict["operation_count"] = entry->operation_count;
             dict["codegen_time"] = entry->codegen_time;
             dict["backend_time"] = entry->backend_time;
             dict["execution_time"] = entry->execution_time;
