@@ -284,40 +284,52 @@ PYBIND11_MODULE(enoki_ext, m_) {
     m.def("set_thread_count", &jit_llvm_set_thread_count);
 
     py::object io = py::module_::import("io");
-    m.def("kernel_history", [io]() {
-        KernelHistoryEntry* data = jit_kernel_history();
-        KernelHistoryEntry* entry = data;
-        py::list history;
-        while (entry && (uint32_t) entry->backend) {
-            py::dict dict;
-            dict["backend"] = entry->backend;
-            dict["type"] = entry->type;
-            if (entry->type == KernelType::JIT) {
-                char kernel_hash[33];
-                snprintf(kernel_hash, sizeof(kernel_hash), "%016llx%016llx",
-                        (unsigned long long) entry->hash[1],
-                        (unsigned long long) entry->hash[0]);
-                dict["hash"] = kernel_hash;
-                dict["ir"] = io.attr("StringIO")(entry->ir);
-                free(entry->ir);
-                dict["uses_optix"] = entry->uses_optix;
-                dict["cache_hit"] = entry->cache_hit;
-                dict["cache_disk"] = entry->cache_disk;
+    m.def(
+        "kernel_history",
+        [io](py::list types) {
+            KernelHistoryEntry *data  = jit_kernel_history();
+            KernelHistoryEntry *entry = data;
+            py::list history;
+            while (entry && (uint32_t) entry->backend) {
+                py::dict dict;
+                dict["backend"] = entry->backend;
+                dict["type"]    = entry->type;
+                if (entry->type == KernelType::JIT) {
+                    char kernel_hash[33];
+                    snprintf(kernel_hash, sizeof(kernel_hash), "%016llx%016llx",
+                             (unsigned long long) entry->hash[1],
+                             (unsigned long long) entry->hash[0]);
+                    dict["hash"] = kernel_hash;
+                    dict["ir"]   = io.attr("StringIO")(entry->ir);
+                    free(entry->ir);
+                    dict["uses_optix"] = entry->uses_optix;
+                    dict["cache_hit"]  = entry->cache_hit;
+                    dict["cache_disk"] = entry->cache_disk;
+                }
+                dict["size"]         = entry->size;
+                dict["input_count"]  = entry->input_count;
+                dict["output_count"] = entry->output_count;
+                if (entry->type == KernelType::JIT)
+                    dict["operation_count"] = entry->operation_count;
+                dict["codegen_time"]   = entry->codegen_time;
+                dict["backend_time"]   = entry->backend_time;
+                dict["execution_time"] = entry->execution_time;
+
+                bool queried_type = types.empty();
+                for (size_t i = 0; i < types.size(); ++i) {
+                    KernelType t = types[i].template cast<KernelType>();
+                    queried_type |= (t == entry->type);
+                }
+
+                if (queried_type)
+                    history.append(dict);
+
+                entry++;
             }
-            dict["size"] = entry->size;
-            dict["input_count"] = entry->input_count;
-            dict["output_count"] = entry->output_count;
-            if (entry->type == KernelType::JIT)
-                dict["operation_count"] = entry->operation_count;
-            dict["codegen_time"] = entry->codegen_time;
-            dict["backend_time"] = entry->backend_time;
-            dict["execution_time"] = entry->execution_time;
-            history.append(dict);
-            entry++;
-        }
-        free(data);
-        return history;
-    });
+            free(data);
+            return history;
+        },
+        "types"_a = py::list());
     m.def("kernel_history_clear", &jit_kernel_history_clear);
 
     array_detail.def("graphviz", &jit_var_graphviz);
