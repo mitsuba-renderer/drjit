@@ -303,62 +303,37 @@ public:
             index *= channels;
 
             Array<Value, 4> result(0);
-            const PosF w1 = pos_f - floor(pos_f), w0 = 1.f - w1;
+
+            #define EK_TEX_ACCUM(index, weight)                                        \
+                {                                                                      \
+                    UInt32 index_ = index;                                             \
+                    Value weight_ = weight;                                            \
+                    for (uint32_t ch = 0; ch < channels; ++ch)                         \
+                        result[ch] =                                                   \
+                            fmadd(gather<Value>(m_value.array(), index_ + ch, active), \
+                                weight_, result[ch]);                                  \
+                }
+
+            const PosF w1 = pos_f - floor2int<PosI>(pos_f),
+                       w0 = 1.f - w1;
 
             if constexpr (Dimension == 1) {
-                for (size_t ch = 0; ch < channels; ++ch) {
-                    const Value v0 = gather<Value>(m_value.array(),
-                                                   index.x() + ch, active),
-                                v1 = gather<Value>(m_value.array(),
-                                                   index.y() + ch, active);
-
-                    result[ch] = fmadd(w0.x(), v0, w1.x() * v1);
-                }
+                EK_TEX_ACCUM(index.x(), w0.x());
+                EK_TEX_ACCUM(index.y(), w1.x());
             } else if constexpr (Dimension == 2) {
-                for (size_t ch = 0; ch < channels; ++ch) {
-                    const Value v00 = gather<Value>(m_value.array(),
-                                                    index.x() + ch, active),
-                                v10 = gather<Value>(m_value.array(),
-                                                    index.y() + ch, active),
-                                v01 = gather<Value>(m_value.array(),
-                                                    index.z() + ch, active),
-                                v11 = gather<Value>(m_value.array(),
-                                                    index.w() + ch, active);
-
-                    const Value v0 = fmadd(w0.x(), v00, w1.x() * v10),
-                                v1 = fmadd(w0.x(), v01, w1.x() * v11);
-
-                    result[ch] = fmadd(w0.y(), v0, w1.y() * v1);
-                }
+                EK_TEX_ACCUM(index.x(), w0.x() * w0.y());
+                EK_TEX_ACCUM(index.y(), w1.x() * w0.y());
+                EK_TEX_ACCUM(index.z(), w0.x() * w1.y());
+                EK_TEX_ACCUM(index.w(), w1.x() * w1.y());
             } else if constexpr (Dimension == 3) {
-                for (size_t ch = 0; ch < channels; ++ch) {
-                    const Value v000 = gather<Value>(m_value.array(),
-                                                     index[0] + ch, active),
-                                v100 = gather<Value>(m_value.array(),
-                                                     index[1] + ch, active),
-                                v001 = gather<Value>(m_value.array(),
-                                                     index[2] + ch, active),
-                                v101 = gather<Value>(m_value.array(),
-                                                     index[3] + ch, active),
-                                v010 = gather<Value>(m_value.array(),
-                                                     index[4] + ch, active),
-                                v110 = gather<Value>(m_value.array(),
-                                                     index[5] + ch, active),
-                                v011 = gather<Value>(m_value.array(),
-                                                     index[6] + ch, active),
-                                v111 = gather<Value>(m_value.array(),
-                                                     index[7] + ch, active);
-
-                    const Value v00 = fmadd(w0.x(), v000, w1.x() * v100),
-                                v10 = fmadd(w0.x(), v010, w1.x() * v110),
-                                v01 = fmadd(w0.x(), v001, w1.x() * v101),
-                                v11 = fmadd(w0.x(), v011, w1.x() * v111);
-
-                    const Value v0 = fmadd(w0.y(), v00, w1.y() * v10),
-                                v1 = fmadd(w0.y(), v01, w1.y() * v11);
-
-                    result[ch] = fmadd(w0.z(), v0, w1.z() * v1);
-                }
+                EK_TEX_ACCUM(index[0], w0.x() * w0.y() * w0.z());
+                EK_TEX_ACCUM(index[1], w1.x() * w0.y() * w0.z());
+                EK_TEX_ACCUM(index[2], w0.x() * w0.y() * w1.z());
+                EK_TEX_ACCUM(index[3], w1.x() * w0.y() * w1.z());
+                EK_TEX_ACCUM(index[4], w0.x() * w1.y() * w0.z());
+                EK_TEX_ACCUM(index[5], w1.x() * w1.y() * w0.z());
+                EK_TEX_ACCUM(index[6], w0.x() * w1.y() * w1.z());
+                EK_TEX_ACCUM(index[7], w1.x() * w1.y() * w1.z());
             }
 
             return result;

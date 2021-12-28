@@ -189,7 +189,8 @@ ENOKI_TEST(test06_nearest) {
 
 ENOKI_TEST(test07_cubic_analytic) {
     size_t shape[1] = { 4 };
-    ek::Texture<DFloat, 1> tex(shape, 1, false);
+    ek::Texture<DFloat, 1> tex(shape, 1, false, FilterMode::Linear,
+                               WrapMode::Clamp);
     tex.set_value(DFloat(0.f, 1.f, 0.f, 0.f));
 
     ArrayD1f pos(0.5f);
@@ -212,7 +213,8 @@ ENOKI_TEST(test07_cubic_analytic) {
 
 ENOKI_TEST(test08_cubic_interp_1d) {
     size_t shape[1] = { 5 };
-    ek::Texture<Float, 1> tex(shape, 1, false);
+    ek::Texture<Float, 1> tex(shape, 1, false, FilterMode::Linear,
+                              WrapMode::Clamp);
     tex.set_value(Float(2.f, 1.f, 3.f, 4.f, 7.f));
 
     size_t N = 20;
@@ -228,7 +230,8 @@ ENOKI_TEST(test08_cubic_interp_1d) {
 
 ENOKI_TEST(test09_cubic_interp_2d) {
     size_t shape[2] = { 5, 4 };
-    ek::Texture<Float, 2> tex(shape, 1, false);
+    ek::Texture<Float, 2> tex(shape, 1, false, FilterMode::Linear,
+                              WrapMode::Clamp);
     tex.set_value(ek::linspace<Float>(0.f, 20.f, 20));
 
     size_t N = 30;
@@ -257,7 +260,8 @@ ENOKI_TEST(test10_cubic_interp_3d) {
     ek::scatter(tensor.array(), Float(2.0),  Uint32(546));  // tensor[3, 3, 3, 0] = 2.0
     ek::scatter(tensor.array(), Float(10.0), Uint32(727));  // tensor[4, 4, 3, 1] = 10.0
 
-    ek::Texture<Float, 3> tex(shape, 2, false);
+    ek::Texture<Float, 3> tex(shape, 2, false, FilterMode::Linear,
+                              WrapMode::Clamp);
     tex.set_tensor(tensor);
 
     Array4f ref(0.71312, 1.86141, 0.0, 0.0);
@@ -288,7 +292,8 @@ ENOKI_TEST(test11_cubic_grad_pos) {
     ek::scatter(tensor.array(), Float(3.0f), Uint32(41));  // data[2, 2, 1] = 3.0
     ek::scatter(tensor.array(), Float(4.0f), Uint32(22));  // data[1, 1, 2] = 4.0
 
-    ek::Texture<DFloat, 3> tex(shape, 1, false);
+    ek::Texture<DFloat, 3> tex(shape, 1, false, FilterMode::Linear,
+                               WrapMode::Clamp);
     tex.set_tensor(tensor);
 
     ArrayD3f pos(.5f, .5f, .5f);
