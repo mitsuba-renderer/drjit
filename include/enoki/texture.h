@@ -268,25 +268,25 @@ public:
 
             return result;
         } else {
-            using LerpIdx  = Array<Int32, 1 << Dimension>;
-            using LerpPosI = Array<LerpIdx, Dimension>;
+            using InterpIdx  = Array<Int32, 1 << Dimension>;
+            using InterpPosI = Array<InterpIdx, Dimension>;
 
             const PosF pos_f = fmadd(pos, m_shape_opaque, -.5f);
             const PosI pos_i = floor2int<PosI>(pos_f);
 
-            LerpPosI pos_i_w;
+            InterpPosI pos_i_w;
             if constexpr (Dimension == 1)
-                pos_i_w = wrap(LerpPosI(LerpIdx(0, 1) + pos_i.x()));
+                pos_i_w = wrap(InterpPosI(InterpIdx(0, 1) + pos_i.x()));
             else if constexpr (Dimension == 2)
-                pos_i_w = wrap(LerpPosI(LerpIdx(0, 1, 0, 1) + pos_i.x(),
-                                        LerpIdx(0, 0, 1, 1) + pos_i.y()));
+                pos_i_w = wrap(InterpPosI(InterpIdx(0, 1, 0, 1) + pos_i.x(),
+                                          InterpIdx(0, 0, 1, 1) + pos_i.y()));
             else if constexpr (Dimension == 3)
-                pos_i_w =
-                    wrap(LerpPosI(LerpIdx(0, 1, 0, 1, 0, 1, 0, 1) + pos_i.x(),
-                                  LerpIdx(0, 0, 0, 0, 1, 1, 1, 1) + pos_i.y(),
-                                  LerpIdx(0, 0, 1, 1, 0, 0, 1, 1) + pos_i.z()));
+                pos_i_w = wrap(
+                    InterpPosI(InterpIdx(0, 1, 0, 1, 0, 1, 0, 1) + pos_i.x(),
+                               InterpIdx(0, 0, 0, 0, 1, 1, 1, 1) + pos_i.y(),
+                               InterpIdx(0, 0, 1, 1, 0, 0, 1, 1) + pos_i.z()));
 
-            LerpIdx index;
+            InterpIdx index;
             if constexpr (Dimension == 1)
                 index = pos_i_w.x();
             else if constexpr (Dimension == 2)
@@ -309,8 +309,7 @@ public:
                                 weight_, result[ch]);                                  \
                 }
 
-            const PosF w1 = pos_f - floor2int<PosI>(pos_f),
-                       w0 = 1.f - w1;
+            const PosF w1 = pos_f - floor2int<PosI>(pos_f), w0 = 1.f - w1;
 
             if constexpr (Dimension == 1) {
                 EK_TEX_ACCUM(index.x(), w0.x());
@@ -372,11 +371,11 @@ public:
      */
     Array<Value, 4> eval_cubic_helper(const Array<Value, Dimension> &pos,
                                       Mask active = true) const {
-        using PosF     = Array<Value, Dimension>;
-        using PosI     = int32_array_t<PosF>;
-        using Array4   = Array<Value, 4>;
-        using InterpolIdx  = Array<Int32, 1 << (1 << Dimension)>;
-        using InterpolPosI = Array<InterpolIdx, Dimension>;
+        using PosF       = Array<Value, Dimension>;
+        using PosI       = int32_array_t<PosF>;
+        using Array4     = Array<Value, 4>;
+        using InterpIdx  = Array<Int32, 1 << (1 << Dimension)>;
+        using InterpPosI = Array<InterpIdx, Dimension>;
 
         PosF pos_(pos);
         // This multiplication should not be recorded in the AD graph
@@ -394,7 +393,7 @@ public:
         offset[2] = 1;
         offset[3] = 2;
 
-        InterpolPosI pos_i_w(0);
+        InterpPosI pos_i_w(0);
         if constexpr (Dimension == 1) {
             for (uint32_t ix = 0; ix < 4; ix++) {
                 pos_i_w[0][ix] = offset[ix] + pos_i.x();
@@ -402,7 +401,7 @@ public:
         } else if constexpr (Dimension == 2) {
             for (uint32_t ix = 0; ix < 4; ix++) {
                 for (uint32_t iy = 0; iy < 4; iy++) {
-                    pos_i_w[0][ix + iy * 4] = offset[iy] + pos_i.x();
+                    pos_i_w[0][iy * 4 + ix] = offset[iy] + pos_i.x();
                     pos_i_w[1][ix * 4 + iy] = offset[iy] + pos_i.y();
                 }
             }
@@ -410,9 +409,12 @@ public:
             for (uint32_t ix = 0; ix < 4; ix++) {
                 for (uint32_t iy = 0; iy < 4; iy++) {
                     for (uint32_t iz = 0; iz < 4; iz++) {
-                        pos_i_w[0][ix + iy * 4 + iz * 16] = offset[iz] + pos_i.x();
-                        pos_i_w[1][ix * 16 + iy + iz * 4] = offset[iz] + pos_i.y();
-                        pos_i_w[2][ix * 4 + iy * 16 + iz] = offset[iz] + pos_i.z();
+                        pos_i_w[0][iz * 16 + iy * 4 + ix] =
+                            offset[iz] + pos_i.x();
+                        pos_i_w[1][ix * 16 + iz * 4 + iy] =
+                            offset[iz] + pos_i.y();
+                        pos_i_w[2][iy * 16 + ix * 4 + iz] =
+                            offset[iz] + pos_i.z();
                     }
                 }
             }
@@ -432,7 +434,7 @@ public:
                           alpha3);
         };
 
-        InterpolIdx index;
+        InterpIdx index;
         if constexpr (Dimension == 1)
             index = pos_i_w.x();
         else if constexpr (Dimension == 2)
@@ -599,11 +601,11 @@ public:
     std::array<Array<Value, 4>, Dimension>
     eval_cubic_grad(const Array<Value, Dimension> &pos,
                     Mask active = true) const {
-        using PosF = Array<Value, Dimension>;
-        using PosI = int32_array_t<PosF>;
-        using Array4 = Array<Value, 4>;
-        using InterpolIdx  = Array<Int32, 1 << (1 << Dimension)>;
-        using InterpolPosI = Array<InterpolIdx, Dimension>;
+        using PosF       = Array<Value, Dimension>;
+        using PosI       = int32_array_t<PosF>;
+        using Array4     = Array<Value, 4>;
+        using InterpIdx  = Array<Int32, 1 << (1 << Dimension)>;
+        using InterpPosI = Array<InterpIdx, Dimension>;
 
         PosF pos_f = fmadd(pos, m_shape_opaque, -.5f);
         PosI pos_i = floor2int<PosI>(pos_f);
@@ -614,7 +616,7 @@ public:
         offset[2] = 1;
         offset[3] = 2;
 
-        InterpolPosI pos_i_w(0);
+        InterpPosI pos_i_w(0);
         if constexpr (Dimension == 1) {
             for (uint32_t ix = 0; ix < 4; ix++) {
                 pos_i_w[0][ix] = offset[ix] + pos_i.x();
@@ -622,7 +624,7 @@ public:
         } else if constexpr (Dimension == 2) {
             for (uint32_t ix = 0; ix < 4; ix++) {
                 for (uint32_t iy = 0; iy < 4; iy++) {
-                    pos_i_w[0][ix + iy * 4] = offset[iy] + pos_i.x();
+                    pos_i_w[0][iy * 4 + ix] = offset[iy] + pos_i.x();
                     pos_i_w[1][ix * 4 + iy] = offset[iy] + pos_i.y();
                 }
             }
@@ -630,9 +632,12 @@ public:
             for (uint32_t ix = 0; ix < 4; ix++) {
                 for (uint32_t iy = 0; iy < 4; iy++) {
                     for (uint32_t iz = 0; iz < 4; iz++) {
-                        pos_i_w[0][ix + iy * 4 + iz * 16] = offset[iz] + pos_i.x();
-                        pos_i_w[1][ix * 16 + iy + iz * 4] = offset[iz] + pos_i.y();
-                        pos_i_w[2][ix * 4 + iy * 16 + iz] = offset[iz] + pos_i.z();
+                        pos_i_w[0][iz * 16 + iy * 4 + ix] =
+                            offset[iz] + pos_i.x();
+                        pos_i_w[1][ix * 16 + iz * 4 + iy] =
+                            offset[iz] + pos_i.y();
+                        pos_i_w[2][iy * 16 + ix * 4 + iz] =
+                            offset[iz] + pos_i.z();
                     }
                 }
             }
@@ -661,7 +666,7 @@ public:
             }
         };
 
-        InterpolIdx index;
+        InterpIdx index;
         if constexpr (Dimension == 1)
             index = pos_i_w.x();
         else if constexpr (Dimension == 2)
