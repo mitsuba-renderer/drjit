@@ -1769,6 +1769,7 @@ constexpr uint32_t operator +(ADFlag e)               { return (uint32_t) e; }
 
 template <typename...Ts> void traverse(ADMode mode, uint32_t flags = (uint32_t) ADFlag::Default) {
     using Type = leaf_array_t<Ts...>;
+    ENOKI_MARK_USED(mode);
     ENOKI_MARK_USED(flags);
     if constexpr (is_diff_array_v<Type> && std::is_floating_point_v<scalar_t<Type>>)
         Type::traverse_(mode, flags);

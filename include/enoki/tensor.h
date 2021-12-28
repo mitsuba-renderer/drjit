@@ -52,9 +52,14 @@ ek_vector<size_t> tensor_broadcast(const char *op, T0 &t0, T1 &t1) {
                     "(%zu and %zu)!", op, t0d, t1d);
 
     ek_vector<size_t> shape(ndim, 0);
-    for (size_t i = 0; i < ndim; ++i)
-        shape[i] = enoki::max(t0d > 0 ? t0.shape(i) : 0,
-                              t1d > 0 ? t1.shape(i) : 0);
+    for (size_t i = 0; i < ndim; ++i) {
+        size_t t0_i = t0d > 0 ? t0.shape(i) : 0;
+        size_t t1_i = t1d > 0 ? t1.shape(i) : 0;
+        shape[i] = enoki::max(t0_i, t1_i);
+        if ((t0_i > 1 && t1_i > 1 && t0_i != t1_i))
+            enoki_raise("enoki::Tensor::%s(): incompatible tensor shapes "
+                        "for dimension %zu (%zu and %zu)!", op, i, t0_i, t1_i);
+    }
 
     using Index = typename T0::Index;
     tensor_broadcast_impl<Index>(op, t0, shape);

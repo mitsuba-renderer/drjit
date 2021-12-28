@@ -1,4 +1,4 @@
-/** Enoki automatic differentiatiotruen library
+/** Enoki automatic differentiation library
  *
  * This file implements the AD data structures and traversal routines
  * underlying templated Enoki types like 'DiffArray<CUDAArray<float>>'. The

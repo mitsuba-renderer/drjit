@@ -112,6 +112,11 @@ def test04_broadcasting(pkg):
                     assert np.all(out_n.ravel() == out_e.array.numpy())
                     assert np.all((array_n1 * 2).ravel() == (array_e1 * 2).array.numpy())
 
+    with pytest.raises(Exception) as e:
+        a = ek.full(t, 1, (3, 3))
+        b = ek.full(t, 1, (2, 2))
+        c = a + b
+    e.match('incompatible tensor shapes for dimension')
 
 
 @pytest.mark.parametrize("pkg", pkgs)
