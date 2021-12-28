@@ -218,9 +218,8 @@ public:
             const T value_shift_neg = select(value < 0, value + 1, value);
 
             T div;
-            for (size_t i = 0; i < Dimension; ++i) {
+            for (size_t i = 0; i < Dimension; ++i)
                 div[i] = m_inv_resolution[i](value_shift_neg[i]);
-            }
 
             T mod = value - div * shape;
             masked(mod, mod < 0) += T(shape);
@@ -276,20 +275,16 @@ public:
             const PosI pos_i = floor2int<PosI>(pos_f);
 
             LerpPosI pos_i_w;
-            if constexpr (Dimension == 1) {
-                using Int2 = Array<Int32, 2>;
-                pos_i_w    = wrap(LerpPosI(Int2(0, 1) + pos_i.x()));
-            } else if constexpr (Dimension == 2) {
-                using Int4 = Array<Int32, 4>;
-                pos_i_w    = wrap(LerpPosI(Int4(0, 1, 0, 1) + pos_i.x(),
-                                        Int4(0, 0, 1, 1) + pos_i.y()));
-            } else if constexpr (Dimension == 3) {
-                using Int8 = Array<Int32, 8>;
+            if constexpr (Dimension == 1)
+                pos_i_w = wrap(LerpPosI(LerpIdx(0, 1) + pos_i.x()));
+            else if constexpr (Dimension == 2)
+                pos_i_w = wrap(LerpPosI(LerpIdx(0, 1, 0, 1) + pos_i.x(),
+                                        LerpIdx(0, 0, 1, 1) + pos_i.y()));
+            else if constexpr (Dimension == 3)
                 pos_i_w =
-                    wrap(LerpPosI(Int8(0, 1, 0, 1, 0, 1, 0, 1) + pos_i.x(),
-                                  Int8(0, 0, 0, 0, 1, 1, 1, 1) + pos_i.y(),
-                                  Int8(0, 0, 1, 1, 0, 0, 1, 1) + pos_i.z()));
-            }
+                    wrap(LerpPosI(LerpIdx(0, 1, 0, 1, 0, 1, 0, 1) + pos_i.x(),
+                                  LerpIdx(0, 0, 0, 0, 1, 1, 1, 1) + pos_i.y(),
+                                  LerpIdx(0, 0, 1, 1, 0, 0, 1, 1) + pos_i.z()));
 
             LerpIdx index;
             if constexpr (Dimension == 1)
@@ -368,7 +363,7 @@ public:
     }
 
     /**
-     * \brief Helper function to evaluate a clamped cubic B-Spline interpolant
+     * \brief Helper function to evaluate a cubic B-Spline interpolant
      *
      * This is an implementation detail and should only be called by the \ref
      * eval_cubic() function to construct an AD graph. When only the cubic
@@ -377,9 +372,11 @@ public:
      */
     Array<Value, 4> eval_cubic_helper(const Array<Value, Dimension> &pos,
                                       Mask active = true) const {
-        using PosF = Array<Value, Dimension>;
-        using PosI = int32_array_t<PosF>;
-        using Array4 = Array<Value, 4>;
+        using PosF     = Array<Value, Dimension>;
+        using PosI     = int32_array_t<PosF>;
+        using Array4   = Array<Value, 4>;
+        using InterpolIdx  = Array<Int32, 1 << (1 << Dimension)>;
+        using InterpolPosI = Array<InterpolIdx, Dimension>;
 
         PosF pos_(pos);
         // This multiplication should not be recorded in the AD graph
@@ -388,21 +385,41 @@ public:
             if (grad_enabled(pos))
                 pos_f = replace_grad(pos_f, pos_);
         PosI pos_i = floor2int<PosI>(pos_f);
-        // `step[k][d]` controls the k-th offset in the d-th dimension.
-        // With cubic B-Spline, it is by default [-1, 0, 1, 2] for all
-        // dimensions. When the query point gets too close to (or exceeds) the
-        // border, it needs to be cut down to the correct value to achieve the
-        // 'clamping' goal
-        Array<PosI, 4> step(0);
-        step[0] = select(pos_f >= 1.f && pos_i <= m_shape_opaque - 1, -1, 0);
-        step[2] = select(pos_f >= 0.f && pos_i < m_shape_opaque - 1, 1, 0);
-        step[3] = select(pos_f >= -1.f && pos_i < m_shape_opaque - 2, 2, 0);
-        step[3] = select(pos_f >= -1.f && pos_f < 0.f, 1, step[3]);
-        step[3] =
-            select(pos_f >= m_shape_opaque - 2 && pos_i <= m_shape_opaque - 2,
-                   1, step[3]);
+
+        // `offset[k]` controls the k-th offset for any dimension.
+        // With cubic B-Spline, it is by default [-1, 0, 1, 2].
+        Array4 offset;
+        offset[0] = -1;
+        offset[1] = 0;
+        offset[2] = 1;
+        offset[3] = 2;
+
+        InterpolPosI pos_i_w(0);
+        if constexpr (Dimension == 1) {
+            for (uint32_t ix = 0; ix < 4; ix++) {
+                pos_i_w[0][ix] = offset[ix] + pos_i.x();
+            }
+        } else if constexpr (Dimension == 2) {
+            for (uint32_t ix = 0; ix < 4; ix++) {
+                for (uint32_t iy = 0; iy < 4; iy++) {
+                    pos_i_w[0][ix + iy * 4] = offset[iy] + pos_i.x();
+                    pos_i_w[1][ix * 4 + iy] = offset[iy] + pos_i.y();
+                }
+            }
+        } else if constexpr (Dimension == 3) {
+            for (uint32_t ix = 0; ix < 4; ix++) {
+                for (uint32_t iy = 0; iy < 4; iy++) {
+                    for (uint32_t iz = 0; iz < 4; iz++) {
+                        pos_i_w[0][ix + iy * 4 + iz * 16] = offset[iz] + pos_i.x();
+                        pos_i_w[1][ix * 16 + iy + iz * 4] = offset[iz] + pos_i.y();
+                        pos_i_w[2][ix * 4 + iy * 16 + iz] = offset[iz] + pos_i.z();
+                    }
+                }
+            }
+        }
+        pos_i_w = wrap(pos_i_w);
+
         PosF pos_a = pos_f - pos_i;
-        pos_i = clamp(pos_i, 0, PosI(m_shape_opaque) - 1);
 
         const auto compute_weight = [&pos_a](uint32_t dim) -> Array4 {
             const Value &alpha = pos_a[dim];
@@ -415,25 +432,17 @@ public:
                           alpha3);
         };
 
-        UInt32 index;
-        if constexpr (Dimension == 1) {
-            index = pos_i.x();
-        } else if constexpr (Dimension == 2) {
-            index = fmadd(pos_i.y(), m_shape_opaque.x(), pos_i.x());
-            for (uint32_t idx = 0; idx < 4; ++idx)
-                step[idx][1] *= m_shape_opaque.x();
-        } else if constexpr (Dimension == 3) {
-            index = fmadd(fmadd(pos_i.z(), m_shape_opaque.y(), pos_i.y()),
-                          m_shape_opaque.x(), pos_i.x());
-            for (uint32_t idx = 0; idx < 4; ++idx) {
-                step[idx][1] *= m_shape_opaque.x();
-                step[idx][2] *= m_shape_opaque.x() * m_shape_opaque.y();
-            }
-        }
+        InterpolIdx index;
+        if constexpr (Dimension == 1)
+            index = pos_i_w.x();
+        else if constexpr (Dimension == 2)
+            index = fmadd(pos_i_w.y(), m_shape_opaque.x(), pos_i_w.x());
+        else if constexpr (Dimension == 3)
+            index = fmadd(fmadd(pos_i_w.z(), m_shape_opaque.y(), pos_i_w.y()),
+                          m_shape_opaque.x(), pos_i_w.x());
 
         const uint32_t channels = (uint32_t) m_value.shape(Dimension);
         index *= channels;
-        step *= channels;
 
         #define EK_TEX_CUBIC_ACCUM(index, weight)                                      \
             {                                                                          \
@@ -450,21 +459,19 @@ public:
         if constexpr (Dimension == 1) {
             Array4 wx = compute_weight(0);
             for (uint32_t ix = 0; ix < 4; ix++)
-                EK_TEX_CUBIC_ACCUM(index + step[ix].x(), wx[ix]);
+                EK_TEX_CUBIC_ACCUM(index[ix], wx[ix]);
         } else if constexpr (Dimension == 2) {
             Array4 wx = compute_weight(0), wy = compute_weight(1);
             for (uint32_t ix = 0; ix < 4; ix++)
                 for (uint32_t iy = 0; iy < 4; iy++)
-                    EK_TEX_CUBIC_ACCUM(index + step[ix].x() + step[iy].y(),
-                                       wx[ix] * wy[iy]);
+                    EK_TEX_CUBIC_ACCUM(index[ix * 4 + iy], wx[ix] * wy[iy]);
         } else if constexpr (Dimension == 3) {
             Array4 wx = compute_weight(0), wy = compute_weight(1),
                    wz = compute_weight(2);
             for (uint32_t ix = 0; ix < 4; ix++)
                 for (uint32_t iy = 0; iy < 4; iy++)
                     for (uint32_t iz = 0; iz < 4; iz++)
-                        EK_TEX_CUBIC_ACCUM(index + step[ix].x() + step[iy].y() +
-                                               step[iz].z(),
+                        EK_TEX_CUBIC_ACCUM(index[ix * 16 + iy * 4 + iz],
                                            wx[ix] * wy[iy] * wz[iz]);
         }
 
@@ -474,8 +481,7 @@ public:
     }
 
     /**
-     * \brief Evaluate a clamped cubic B-Spline interpolant represented by this
-     * texture
+     * \brief Evaluate a cubic B-Spline interpolant represented by this texture
      *
      * Intead of interpolating the texture via B-Spline basis functions, the
      * implementation transforms this calculation into an equivalent weighted
@@ -588,7 +594,7 @@ public:
         return result;
     }
 
-    /// Evaluate the positional gradient of clamped cubic B-Spline from the
+    /// Evaluate the positional gradient of a cubic B-Spline from the
     /// explicit differentiated basis functions
     std::array<Array<Value, 4>, Dimension>
     eval_cubic_grad(const Array<Value, Dimension> &pos,
