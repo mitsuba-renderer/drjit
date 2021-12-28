@@ -2,6 +2,12 @@ pybind11_add_module(
   enoki-python
   THIN_LTO OPT_SIZE
 
+  bind.h
+  common.h
+  loop.h
+  random.h
+  tensor.h
+  texture.h
   main.cpp
   implicit.cpp
   reinterpret.cpp
