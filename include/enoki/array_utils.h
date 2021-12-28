@@ -315,22 +315,27 @@ ENOKI_INLINE T mulhi_(T x, T y) {
 
 NAMESPACE_END(detail)
 
-
 #if defined(__cpp_exceptions)
+#  if defined(_MSC_VER)
+#    define ENOKI_STRDUP _strdup
+#  else
+#    define ENOKI_STRDUP strdup
+#  endif
+
 class Exception : public std::exception {
 public:
-    Exception(const char *msg) {
-#if defined(_MSC_VER)
-        m_msg = _strdup(msg);
-#else
-        m_msg = strdup(msg);
-#endif
-    }
-    virtual const char *what() const noexcept { return m_msg; }
+    Exception(const char* msg) : m_msg(ENOKI_STRDUP(msg)) { }
+    Exception(const Exception& e) : m_msg(ENOKI_STRDUP(e.m_msg)) { }
+    Exception(Exception&& e) : m_msg(e.m_msg) { e.m_msg = nullptr; }
+    Exception& operator=(const Exception&) = delete;
+    Exception& operator=(Exception&&) = delete;
+    virtual const char* what() const noexcept { return m_msg; }
     virtual ~Exception() { free(m_msg); }
 private:
     char *m_msg;
 };
+
+#  undef ENOKI_STRDUP
 #endif
 
 #if !defined(_MSC_VER)
