@@ -460,15 +460,15 @@ public:
         index *= channels;
         step *= channels;
 
-#define EK_TEX_CUBIC_ACCUM(index, weight)                                      \
-    {                                                                          \
-        UInt32 index_ = index;                                                 \
-        Value weight_ = weight;                                                \
-        for (uint32_t ch = 0; ch < channels; ++ch)                             \
-            result[ch] =                                                       \
-                fmadd(gather<Value>(m_value.array(), index_ + ch, active),     \
-                      weight_, result[ch]);                                    \
-    }
+        #define EK_TEX_CUBIC_ACCUM(index, weight)                                      \
+            {                                                                          \
+                UInt32 index_ = index;                                                 \
+                Value weight_ = weight;                                                \
+                for (uint32_t ch = 0; ch < channels; ++ch)                             \
+                    result[ch] =                                                       \
+                        fmadd(gather<Value>(m_value.array(), index_ + ch, active),     \
+                              weight_, result[ch]);                                    \
+            }
 
         Array<Value, 4> result(0);
 
@@ -493,7 +493,7 @@ public:
                                            wx[ix] * wy[iy] * wz[iz]);
         }
 
-#undef EK_TEX_CUBIC_ACCUM
+        #undef EK_TEX_CUBIC_ACCUM
 
         return result;
     }
@@ -675,19 +675,19 @@ public:
         index *= channels;
         step *= channels;
 
-#define EK_TEX_CUBIC_GATHER(index)                                             \
-    {                                                                          \
-        UInt32 index_ = index;                                                 \
-        for (uint32_t ch = 0; ch < channels; ++ch)                             \
-            values[ch] = gather<Value>(m_value.array(), index_ + ch, active);  \
-    }
-#define EK_TEX_CUBIC_ACCUM(dim, weight)                                        \
-    {                                                                          \
-        uint32_t dim_ = dim;                                                   \
-        Value weight_ = weight;                                                \
-        for (uint32_t ch = 0; ch < channels; ++ch)                             \
-            result[dim_][ch] = fmadd(values[ch], weight_, result[dim_][ch]);   \
-    }
+        #define EK_TEX_CUBIC_GATHER(index)                                             \
+            {                                                                          \
+                UInt32 index_ = index;                                                 \
+                for (uint32_t ch = 0; ch < channels; ++ch)                             \
+                    values[ch] = gather<Value>(m_value.array(), index_ + ch, active);  \
+            }
+        #define EK_TEX_CUBIC_ACCUM(dim, weight)                                        \
+            {                                                                          \
+                uint32_t dim_ = dim;                                                   \
+                Value weight_ = weight;                                                \
+                for (uint32_t ch = 0; ch < channels; ++ch)                             \
+                    result[dim_][ch] = fmadd(values[ch], weight_, result[dim_][ch]);   \
+            }
 
         std::array<Array4, Dimension> result;
         for (uint32_t dim = 0; dim < Dimension; ++dim)
@@ -724,8 +724,8 @@ public:
                     }
         }
 
-#undef EK_TEX_CUBIC_GATHER
-#undef EK_TEX_CUBIC_ACCUM
+        #undef EK_TEX_CUBIC_GATHER
+        #undef EK_TEX_CUBIC_ACCUM
 
         return result;
     }
