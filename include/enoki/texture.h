@@ -84,9 +84,8 @@ public:
     }
 
     Texture(Texture &&other) {
-        m_handle = other.handle;
-        other.handle = nullptr;
-        memcpy(m_shape, other.shape, sizeof(size_t) * (Dimension + 1));
+        m_handle         = other.handle;
+        other.handle     = nullptr;
         m_size           = other.m_size;
         m_handle_opaque  = std::move(other.m_handle_opaque);
         m_shape_opaque   = std::move(other.m_shape_opaque);
@@ -102,9 +101,8 @@ public:
             jit_cuda_tex_destroy(m_handle);
             m_handle = nullptr;
         }
-        m_handle = other.m_handle;
-        other.m_handle = nullptr;
-        memcpy(m_shape, other.m_shape, sizeof(size_t) * (Dimension + 1));
+        m_handle         = other.m_handle;
+        other.m_handle   = nullptr;
         m_size           = other.m_size;
         m_handle_opaque  = std::move(other.m_handle_opaque);
         m_shape_opaque   = std::move(other.m_shape_opaque);
@@ -128,7 +126,7 @@ public:
     const void *handle() const { return m_handle; }
 
     size_t ndim() const { return Dimension + 1; }
-    const size_t *shape() const { return m_shape; }
+    const size_t *shape() const { return m_value.shape().data(); }
     FilterMode filter_mode() const { return m_filter_mode; }
     WrapMode wrap_mode() const { return m_wrap_mode; }
 
@@ -138,8 +136,9 @@ public:
 
         if constexpr (IsCUDA) {
             value.eval_(); // Sync the value before copying to texture memory
-            jit_cuda_tex_memcpy_d2t(Dimension, m_shape, m_shape[Dimension],
-                                    value.data(), m_handle);
+            jit_cuda_tex_memcpy_d2t(Dimension, m_value.shape().data(),
+                                    m_value.shape(Dimension), value.data(),
+                                    m_handle);
 
             if (m_migrate) {
                 // Fully migrate to texture memory, set m_value to zero
@@ -160,7 +159,7 @@ public:
             enoki_raise("Texture::set_tensor(): tensor dimension must equal "
                         "texture dimension plus one (channels).");
         for (size_t i = 0; i < Dimension + 1; ++i) {
-            if (tensor.shape(i) != m_shape[i])
+            if (tensor.shape(i) != m_value.shape(i))
                 enoki_raise("Texture::set_tensor(): tensor shape mismatch!");
         }
         set_value(tensor.array());
@@ -173,8 +172,8 @@ public:
             if (m_migrate) {
                 if (m_value.array().size() != m_size) {
                     Storage primal = empty<Storage>(m_size);
-                    jit_cuda_tex_memcpy_t2d(Dimension, m_shape,
-                                            m_shape[Dimension], m_handle,
+                    jit_cuda_tex_memcpy_t2d(Dimension, m_value.shape().data(),
+                                            m_value.shape(Dimension), m_handle,
                                             primal.data());
                     if constexpr (IsDiff)
                         m_value.array() = replace_grad(primal, m_value.array());
@@ -245,6 +244,8 @@ public:
         using PosF = Array<Value, Dimension>;
         using PosI = int32_array_t<PosF>;
 
+        const uint32_t channels = (uint32_t) m_value.shape(Dimension);
+
         if (ENOKI_UNLIKELY(m_filter_mode == FilterMode::Nearest)) {
             const PosF pos_f   = pos * m_shape_opaque;
             const PosI pos_i   = floor2int<PosI>(pos_f);
@@ -260,8 +261,6 @@ public:
                     fmadd(fmadd(pos_i_w.z(), m_shape_opaque.y(), pos_i_w.y()),
                           m_shape_opaque.x(), pos_i_w.x());
             }
-
-            const uint32_t channels = (uint32_t) m_shape[Dimension];
             index *= channels;
 
             Array<Value, 4> result(0);
@@ -301,8 +300,6 @@ public:
                 index =
                     fmadd(fmadd(pos_i_w.z(), m_shape_opaque.y(), pos_i_w.y()),
                           m_shape_opaque.x(), pos_i_w.x());
-
-            const uint32_t channels = (uint32_t) m_shape[Dimension];
             index *= channels;
 
             Array<Value, 4> result(0);
@@ -459,7 +456,7 @@ public:
             }
         }
 
-        const uint32_t channels = (uint32_t) m_shape[Dimension];
+        const uint32_t channels = (uint32_t) m_value.shape(Dimension);
         index *= channels;
         step *= channels;
 
@@ -674,7 +671,7 @@ public:
             }
         }
 
-        const uint32_t channels = (uint32_t) m_shape[Dimension];
+        const uint32_t channels = (uint32_t) m_value.shape(Dimension);
         index *= channels;
         step *= channels;
 
@@ -740,14 +737,17 @@ protected:
             enoki_raise("Texture::Texture(): must have 1, 2, or 4 channels!");
 
         m_size = channels;
+        size_t tensor_shape[Dimension + 1]{};
+
         for (size_t i = 0; i < Dimension; ++i) {
-            m_shape[i]          = shape[i];
+            tensor_shape[i]     = shape[i];
             m_shape_opaque[i]   = opaque<UInt32>((uint32_t) shape[i]);
             m_inv_resolution[i] = divisor<int32_t>((int32_t) shape[i]);
-            m_size *= m_shape[i];
+            m_size *= shape[i];
         }
-        m_shape[Dimension] = (uint32_t) channels;
-        m_value = TensorXf(zero<Storage>(m_size), Dimension + 1, m_shape);
+
+        tensor_shape[Dimension] = channels;
+        m_value = TensorXf(zero<Storage>(m_size), Dimension + 1, tensor_shape);
         m_value.array() = Storage(0);
         m_migrate = migrate;
         m_filter_mode = filter_mode;
@@ -763,8 +763,7 @@ protected:
 
 private:
     void *m_handle = nullptr;
-    size_t m_shape[Dimension + 1]{};
-    size_t m_size = 0;
+    size_t m_size  = 0;
     UInt64 m_handle_opaque;
     Array<UInt32, Dimension> m_shape_opaque;
     mutable TensorXf m_value;
