@@ -1,4 +1,7 @@
 #pragma once
+#if defined(_WIN32)
+#  include <corecrt.h>
+#endif
 
 #include <pybind11/pybind11.h>
 #include <enoki/array.h>
