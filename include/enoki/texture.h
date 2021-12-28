@@ -457,20 +457,19 @@ public:
         PosF pos_f = fmadd(pos, m_shape_opaque, -.5f);
         PosI pos_i = floor2int<PosI>(pos_f);
         PosF pos_a = pos_f - pos_i;
+        PosF inv_shape = rcp(PosF(m_shape_opaque));
 
         /* With cubic B-Spline, normally we have 4 query points and 4 weights
            for each dimension. After the linear interpolation transformation,
            they are reduced to 2 query points and 2 weights. This function
            returns the two weights and query coordinates.
            Note: the two weights sum to be 1.0 so only `w01` is returned. */
-        auto compute_weight_coord = [&pos_i, &pos_a,
-                                     this](uint32_t dim) -> Array3 {
-            const Value &integ = pos_i[dim];
-            const Value &alpha = pos_a[dim];
-            Value alpha2 = alpha * alpha,
+        auto compute_weight_coord = [&](uint32_t dim) -> Array3 {
+            const Value integ = (Value) pos_i[dim];
+            const Value alpha = pos_a[dim];
+            Value alpha2 = sqr(alpha),
                   alpha3 = alpha2 * alpha;
-            Value multiplier = rcp(6.f);
-            PosF inv_shape = rcp(PosF(m_shape_opaque));
+            Value multiplier = 1.f / 6.f;
             // four basis functions, transformed to take as input the fractional part
             Value w0 = (- alpha3 + 3.f * alpha2 - 3.f * alpha + 1.f) * multiplier,
                   w1 = (3.f * alpha3 - 6.f * alpha2 + 4.f) * multiplier,
