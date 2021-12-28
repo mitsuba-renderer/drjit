@@ -18,8 +18,6 @@ using ArrayD4f = ek::Array<DFloat, 4>;
 
 void test_interp_1d_wrap(WrapMode wrap_mode) {
     for (int k = 0; k < 2; ++k) {
-        jit_set_flag(JitFlag::ForceOptiX, k == 1);
-
         size_t shape[1] = { 2 };
         ek::Texture<Float, 1> tex(shape, 1, false, FilterMode::Linear,
                                   wrap_mode);
@@ -68,6 +66,14 @@ void test_interp_1d_wrap(WrapMode wrap_mode) {
             }
         }
     }
+}
+
+ENOKI_TEST(test01_interp_1d) {
+    jit_init(JitBackend::CUDA);
+
+    test_interp_1d_wrap(WrapMode::Repeat);
+    test_interp_1d_wrap(WrapMode::Clamp);
+    test_interp_1d_wrap(WrapMode::Mirror);
 
     jit_set_flag(JitFlag::ForceOptiX, false);
 }
