@@ -87,18 +87,23 @@ ENOKI_TEST(test02_interp_1d) {
         size_t shape[] = { 123 };
         PCG32<Float> rng_1(shape[0] * ch);
         PCG32<Float> rng_2(1024);
+        Array<WrapMode, 3> wrap_modes(WrapMode::Repeat, WrapMode::Clamp,
+                                      WrapMode::Mirror);
 
-        Texture<Float, 1> tex(shape, ch, false);
-        for (int i = 0; i < 4; ++i) {
-            tex.set_value(rng_1.next_float32());
+        for (size_t i = 0; i < wrap_modes.size(); ++i) {
+            Texture<Float, 1> tex(shape, ch, false, FilterMode::Linear,
+                                  wrap_modes[i]);
 
-            Array1f pos(rng_2.next_float32());
-            Array4f result_enoki = tex.eval_enoki(pos);
-            ek::eval(result_enoki);
-            Array4f result_cuda = tex.eval_cuda(pos);
-            ek::eval(result_cuda);
+            for (int i = 0; i < 4; ++i) {
+                tex.set_value(rng_1.next_float32());
+                Array1f pos(rng_2.next_float32());
+                Array4f result_enoki = tex.eval_enoki(pos);
+                ek::eval(result_enoki);
+                Array4f result_cuda = tex.eval_cuda(pos);
+                ek::eval(result_cuda);
 
-            assert(ek::allclose(result_enoki, result_cuda, 5e-3f, 5e-3f));
+                assert(ek::allclose(result_enoki, result_cuda, 5e-3f, 5e-3f));
+            }
         }
     }
 }
@@ -110,17 +115,22 @@ ENOKI_TEST(test03_interp_2d) {
         size_t shape[] = { 123, 456 };
         PCG32<Float> rng_1(shape[0] * shape[1] * ch);
         PCG32<Float> rng_2(1024);
+        Array<WrapMode, 3> wrap_modes(WrapMode::Repeat, WrapMode::Clamp,
+                                      WrapMode::Mirror);
 
-        Texture<Float, 2> tex(shape, ch, false);
-        for (int i = 0; i < 4; ++i) {
-            tex.set_value(rng_1.next_float32());
+        for (size_t i = 0; i < wrap_modes.size(); ++i) {
+            Texture<Float, 2> tex(shape, ch, false, FilterMode::Linear,
+                                  wrap_modes[i]);
 
-            Array2f pos(rng_2.next_float32(), rng_2.next_float32());
-            Array4f result_enoki = tex.eval_enoki(pos);
-            ek::eval(result_enoki);
-            Array4f result_cuda = tex.eval_cuda(pos);
-            ek::eval(result_cuda);
-            assert(ek::allclose(result_enoki, result_cuda, 5e-3f, 5e-3f));
+            for (int i = 0; i < 4; ++i) {
+                tex.set_value(rng_1.next_float32());
+                Array2f pos(rng_2.next_float32(), rng_2.next_float32());
+                Array4f result_enoki = tex.eval_enoki(pos);
+                ek::eval(result_enoki);
+                Array4f result_cuda = tex.eval_cuda(pos);
+                ek::eval(result_cuda);
+                assert(ek::allclose(result_enoki, result_cuda, 5e-3f, 5e-3f));
+            }
         }
     }
 }
@@ -132,18 +142,24 @@ ENOKI_TEST(test04_interp_3d) {
         size_t shape[] = { 123, 456, 12 };
         PCG32<Float> rng_1(shape[0] * shape[1] * shape[2] * ch);
         PCG32<Float> rng_2(1024);
+        Array<WrapMode, 3> wrap_modes(WrapMode::Repeat, WrapMode::Clamp,
+                                      WrapMode::Mirror);
 
-        Texture<Float, 3> tex(shape, ch, false);
-        for (int i = 0; i < 4; ++i) {
-            tex.set_value(rng_1.next_float32());
+        for (size_t i = 0; i < wrap_modes.size(); ++i) {
+            Texture<Float, 3> tex(shape, ch, false, FilterMode::Linear,
+                                  wrap_modes[i]);
 
-            Array3f pos(rng_2.next_float32(), rng_2.next_float32(),
-                        rng_2.next_float32());
-            Array4f result_enoki = tex.eval_enoki(pos);
-            ek::eval(result_enoki);
-            Array4f result_cuda = tex.eval_cuda(pos);
-            ek::eval(result_cuda);
-            assert(ek::allclose(result_enoki, result_cuda, 5e-3f, 5e-3f));
+            for (int i = 0; i < 4; ++i) {
+                tex.set_value(rng_1.next_float32());
+
+                Array3f pos(rng_2.next_float32(), rng_2.next_float32(),
+                            rng_2.next_float32());
+                Array4f result_enoki = tex.eval_enoki(pos);
+                ek::eval(result_enoki);
+                Array4f result_cuda = tex.eval_cuda(pos);
+                ek::eval(result_cuda);
+                assert(ek::allclose(result_enoki, result_cuda, 5e-3f, 5e-3f));
+            }
         }
     }
 }

@@ -454,7 +454,7 @@ public:
                               weight_, result[ch]);                                    \
             }
 
-        Array<Value, 4> result(0);
+        Array4 result(0);
 
         if constexpr (Dimension == 1) {
             Array4 wx = compute_weight(0);
@@ -602,19 +602,44 @@ public:
         using PosF = Array<Value, Dimension>;
         using PosI = int32_array_t<PosF>;
         using Array4 = Array<Value, 4>;
+        using InterpolIdx  = Array<Int32, 1 << (1 << Dimension)>;
+        using InterpolPosI = Array<InterpolIdx, Dimension>;
 
         PosF pos_f = fmadd(pos, m_shape_opaque, -.5f);
         PosI pos_i = floor2int<PosI>(pos_f);
-        Array<PosI, 4> step(0);
-        step[0] = select(pos_f >= 1.f && pos_i <= m_shape_opaque - 1, -1, 0);
-        step[2] = select(pos_f >= 0.f && pos_i < m_shape_opaque - 1, 1, 0);
-        step[3] = select(pos_f >= -1.f && pos_i < m_shape_opaque - 2, 2, 0);
-        step[3] = select(pos_f >= -1.f && pos_f < 0.f, 1, step[3]);
-        step[3] =
-            select(pos_f >= m_shape_opaque - 2 && pos_i <= m_shape_opaque - 2,
-                   1, step[3]);
+
+        Array4 offset;
+        offset[0] = -1;
+        offset[1] = 0;
+        offset[2] = 1;
+        offset[3] = 2;
+
+        InterpolPosI pos_i_w(0);
+        if constexpr (Dimension == 1) {
+            for (uint32_t ix = 0; ix < 4; ix++) {
+                pos_i_w[0][ix] = offset[ix] + pos_i.x();
+            }
+        } else if constexpr (Dimension == 2) {
+            for (uint32_t ix = 0; ix < 4; ix++) {
+                for (uint32_t iy = 0; iy < 4; iy++) {
+                    pos_i_w[0][ix + iy * 4] = offset[iy] + pos_i.x();
+                    pos_i_w[1][ix * 4 + iy] = offset[iy] + pos_i.y();
+                }
+            }
+        } else if constexpr (Dimension == 3) {
+            for (uint32_t ix = 0; ix < 4; ix++) {
+                for (uint32_t iy = 0; iy < 4; iy++) {
+                    for (uint32_t iz = 0; iz < 4; iz++) {
+                        pos_i_w[0][ix + iy * 4 + iz * 16] = offset[iz] + pos_i.x();
+                        pos_i_w[1][ix * 16 + iy + iz * 4] = offset[iz] + pos_i.y();
+                        pos_i_w[2][ix * 4 + iy * 16 + iz] = offset[iz] + pos_i.z();
+                    }
+                }
+            }
+        }
+        pos_i_w = wrap(pos_i_w);
+
         PosF pos_a = pos_f - pos_i;
-        pos_i = clamp(pos_i, 0, PosI(m_shape_opaque) - 1);
 
         const auto compute_weight = [&pos_a](uint32_t dim,
                                              bool is_grad) -> Array4 {
@@ -636,25 +661,17 @@ public:
             }
         };
 
-        UInt32 index;
-        if constexpr (Dimension == 1) {
-            index = pos_i.x();
-        } else if constexpr (Dimension == 2) {
-            index = fmadd(pos_i.y(), m_shape_opaque.x(), pos_i.x());
-            for (uint32_t idx = 0; idx < 4; ++idx)
-                step[idx][1] *= m_shape_opaque.x();
-        } else if constexpr (Dimension == 3) {
-            index = fmadd(fmadd(pos_i.z(), m_shape_opaque.y(), pos_i.y()),
-                          m_shape_opaque.x(), pos_i.x());
-            for (uint32_t idx = 0; idx < 4; ++idx) {
-                step[idx][1] *= m_shape_opaque.x();
-                step[idx][2] *= m_shape_opaque.x() * m_shape_opaque.y();
-            }
-        }
+        InterpolIdx index;
+        if constexpr (Dimension == 1)
+            index = pos_i_w.x();
+        else if constexpr (Dimension == 2)
+            index = fmadd(pos_i_w.y(), m_shape_opaque.x(), pos_i_w.x());
+        else if constexpr (Dimension == 3)
+            index = fmadd(fmadd(pos_i_w.z(), m_shape_opaque.y(), pos_i_w.y()),
+                          m_shape_opaque.x(), pos_i_w.x());
 
         const uint32_t channels = (uint32_t) m_value.shape(Dimension);
         index *= channels;
-        step *= channels;
 
         #define EK_TEX_CUBIC_GATHER(index)                                             \
             {                                                                          \
@@ -678,7 +695,7 @@ public:
         if constexpr (Dimension == 1) {
             Array4 gx = compute_weight(0, true);
             for (uint32_t ix = 0; ix < 4; ++ix) {
-                EK_TEX_CUBIC_GATHER(index + step[ix].x());
+                EK_TEX_CUBIC_GATHER(index[ix]);
                 EK_TEX_CUBIC_ACCUM(0, gx[ix]);
             }
         } else if constexpr (Dimension == 2) {
@@ -686,7 +703,7 @@ public:
                    gx = compute_weight(0, true), gy = compute_weight(1, true);
             for (uint32_t ix = 0; ix < 4; ++ix)
                 for (uint32_t iy = 0; iy < 4; ++iy) {
-                    EK_TEX_CUBIC_GATHER(index + step[ix].x() + step[iy].y());
+                    EK_TEX_CUBIC_GATHER(index[ix * 4 + iy]);
                     EK_TEX_CUBIC_ACCUM(0, gx[ix] * wy[iy]);
                     EK_TEX_CUBIC_ACCUM(1, wx[ix] * gy[iy]);
                 }
@@ -697,8 +714,7 @@ public:
             for (uint32_t ix = 0; ix < 4; ++ix)
                 for (uint32_t iy = 0; iy < 4; ++iy)
                     for (uint32_t iz = 0; iz < 4; ++iz) {
-                        EK_TEX_CUBIC_GATHER(index + step[ix].x() +
-                                            step[iy].y() + step[iz].z());
+                        EK_TEX_CUBIC_GATHER(index[ix * 16 + iy * 4 + iz]);
                         EK_TEX_CUBIC_ACCUM(0, gx[ix] * wy[iy] * wz[iz]);
                         EK_TEX_CUBIC_ACCUM(1, wx[ix] * gy[iy] * wz[iz]);
                         EK_TEX_CUBIC_ACCUM(2, wx[ix] * wy[iy] * gz[iz]);
