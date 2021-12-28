@@ -161,13 +161,13 @@ void test_grad(bool migrate) {
     if (migrate)
         assert(ek::allclose(out2.x(), 0));
     else
-        assert(ek::allclose(out2.x(), expected, 5e-3, 5e-3f));
+        assert(ek::allclose(out2.x(), expected, 5e-3f, 5e-3f));
 
     auto out = tex.eval(pos);
     ek::backward(out.x());
 
     assert(ek::allclose(ek::grad(value), DFloat(.25f, .75f, 0)));
-    assert(ek::allclose(out.x(), expected, 5e-3, 5e-3f));
+    assert(ek::allclose(out.x(), expected, 5e-3f, 5e-3f));
     assert(ek::allclose(tex.value(), value));
 }
 
