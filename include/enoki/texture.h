@@ -31,7 +31,7 @@ public:
     static constexpr bool IsDiff = is_diff_array_v<Value>;
     static constexpr bool IsDynamic = is_dynamic_v<Value>;
 
-    using Int32  = int32_array_t<Value>;
+    using Int32 = int32_array_t<Value>;
     using UInt32 = uint32_array_t<Value>;
     using UInt64 = uint64_array_t<Value>;
     using Mask = mask_t<Value>;
@@ -84,16 +84,16 @@ public:
     }
 
     Texture(Texture &&other) {
-        m_handle         = other.handle;
-        other.handle     = nullptr;
-        m_size           = other.m_size;
-        m_handle_opaque  = std::move(other.m_handle_opaque);
-        m_shape_opaque   = std::move(other.m_shape_opaque);
-        m_value          = std::move(other.m_value);
-        m_migrate        = other.m_migrate;
+        m_handle = other.handle;
+        other.handle = nullptr;
+        m_size = other.m_size;
+        m_handle_opaque = std::move(other.m_handle_opaque);
+        m_shape_opaque = std::move(other.m_shape_opaque);
+        m_value = std::move(other.m_value);
+        m_migrate = other.m_migrate;
         m_inv_resolution = std::move(other.m_inv_resolution);
-        m_filter_mode    = other.m_filter_mode;
-        m_wrap_mode      = other.m_wrap_mode;
+        m_filter_mode = other.m_filter_mode;
+        m_wrap_mode = other.m_wrap_mode;
     }
 
     Texture &operator=(Texture &&other) {
@@ -101,16 +101,16 @@ public:
             jit_cuda_tex_destroy(m_handle);
             m_handle = nullptr;
         }
-        m_handle         = other.m_handle;
-        other.m_handle   = nullptr;
-        m_size           = other.m_size;
-        m_handle_opaque  = std::move(other.m_handle_opaque);
-        m_shape_opaque   = std::move(other.m_shape_opaque);
-        m_value          = std::move(other.m_value);
-        m_migrate        = other.m_migrate;
+        m_handle = other.m_handle;
+        other.m_handle = nullptr;
+        m_size = other.m_size;
+        m_handle_opaque = std::move(other.m_handle_opaque);
+        m_shape_opaque = std::move(other.m_shape_opaque);
+        m_value = std::move(other.m_value);
+        m_migrate = other.m_migrate;
         m_inv_resolution = std::move(other.m_inv_resolution);
-        m_filter_mode    = other.m_filter_mode;
-        m_wrap_mode      = other.m_wrap_mode;
+        m_filter_mode = other.m_filter_mode;
+        m_wrap_mode = other.m_wrap_mode;
         return *this;
     }
 
@@ -246,8 +246,8 @@ public:
         const uint32_t channels = (uint32_t) m_value.shape(Dimension);
 
         if (ENOKI_UNLIKELY(m_filter_mode == FilterMode::Nearest)) {
-            const PosF pos_f   = pos * m_shape_opaque;
-            const PosI pos_i   = floor2int<PosI>(pos_f);
+            const PosF pos_f = pos * m_shape_opaque;
+            const PosI pos_i = floor2int<PosI>(pos_f);
             const PosI pos_i_w = wrap(pos_i);
 
             UInt32 index;
@@ -268,7 +268,7 @@ public:
 
             return result;
         } else {
-            using InterpIdx  = Array<Int32, 1 << Dimension>;
+            using InterpIdx = Array<Int32, 1 << Dimension>;
             using InterpPosI = Array<InterpIdx, Dimension>;
 
             const PosF pos_f = fmadd(pos, m_shape_opaque, -.5f);
@@ -330,6 +330,8 @@ public:
                 EK_TEX_ACCUM(index[7], w1.x() * w1.y() * w1.z());
             }
 
+            #undef EK_TEX_ACCUM
+
             return result;
         }
     }
@@ -371,10 +373,10 @@ public:
      */
     Array<Value, 4> eval_cubic_helper(const Array<Value, Dimension> &pos,
                                       Mask active = true) const {
-        using PosF       = Array<Value, Dimension>;
-        using PosI       = int32_array_t<PosF>;
-        using Array4     = Array<Value, 4>;
-        using InterpIdx  = Array<Int32, 1 << (1 << Dimension)>;
+        using PosF = Array<Value, Dimension>;
+        using PosI = int32_array_t<PosF>;
+        using Array4 = Array<Value, 4>;
+        using InterpIdx = Array<Int32, 1 << (1 << Dimension)>;
         using InterpPosI = Array<InterpIdx, Dimension>;
 
         PosF pos_(pos);
@@ -601,10 +603,10 @@ public:
     std::array<Array<Value, 4>, Dimension>
     eval_cubic_grad(const Array<Value, Dimension> &pos,
                     Mask active = true) const {
-        using PosF       = Array<Value, Dimension>;
-        using PosI       = int32_array_t<PosF>;
-        using Array4     = Array<Value, 4>;
-        using InterpIdx  = Array<Int32, 1 << (1 << Dimension)>;
+        using PosF = Array<Value, Dimension>;
+        using PosI = int32_array_t<PosF>;
+        using Array4 = Array<Value, 4>;
+        using InterpIdx = Array<Int32, 1 << (1 << Dimension)>;
         using InterpPosI = Array<InterpIdx, Dimension>;
 
         PosF pos_f = fmadd(pos, m_shape_opaque, -.5f);
@@ -742,8 +744,8 @@ protected:
         size_t tensor_shape[Dimension + 1]{};
 
         for (size_t i = 0; i < Dimension; ++i) {
-            tensor_shape[i]     = shape[i];
-            m_shape_opaque[i]   = opaque<UInt32>((uint32_t) shape[i]);
+            tensor_shape[i] = shape[i];
+            m_shape_opaque[i] = opaque<UInt32>((uint32_t) shape[i]);
             m_inv_resolution[i] = divisor<int32_t>((int32_t) shape[i]);
             m_size *= shape[i];
         }
@@ -765,7 +767,7 @@ protected:
 
 private:
     void *m_handle = nullptr;
-    size_t m_size  = 0;
+    size_t m_size = 0;
     UInt64 m_handle_opaque;
     Array<UInt32, Dimension> m_shape_opaque;
     mutable TensorXf m_value;
