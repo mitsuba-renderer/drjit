@@ -535,7 +535,7 @@ public:
         return result;
     }
 
-    /// Evaluate the positional gradient of clamped cubic B-Spline from the
+    /// Evaluate the positional gradient of a clamped cubic B-Spline from the
     /// explicit differentiated basis functions
     std::array<Array<Value, 4>, Dimension>
     eval_cubic_grad(const Array<Value, Dimension> &pos,
