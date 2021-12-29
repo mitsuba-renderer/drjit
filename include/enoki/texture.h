@@ -223,8 +223,7 @@ public:
             return { Value::steal(out[0]), Value::steal(out[1]),
                      Value::steal(out[2]), Value::steal(out[3]) };
         } else {
-            (void) pos;
-            (void) active;
+            (void) pos; (void) active;
             return 0;
         }
     }
@@ -465,7 +464,8 @@ public:
         auto compute_weight_coord = [&](uint32_t dim) -> Array3 {
             const Value integ = (Value) pos_i[dim];
             const Value alpha = pos_a[dim];
-            Value alpha2 = sqr(alpha), alpha3 = alpha2 * alpha;
+            Value alpha2 = sqr(alpha),
+                  alpha3 = alpha2 * alpha;
             Value multiplier = 1.f / 6.f;
             // four basis functions, transformed to take as input the fractional part
             Value w0 =
@@ -498,15 +498,18 @@ public:
                    f1 = eval_helper(PosF(cx[2]), active);
             result = lerp(f1, f0, cx[0]);
         } else if constexpr (Dimension == 2) {
-            Array3 cx = compute_weight_coord(0), cy = compute_weight_coord(1);
+            Array3 cx = compute_weight_coord(0),
+                   cy = compute_weight_coord(1);
             Array4 f00 = eval_helper(PosF(cx[1], cy[1]), active),
                    f01 = eval_helper(PosF(cx[1], cy[2]), active),
                    f10 = eval_helper(PosF(cx[2], cy[1]), active),
                    f11 = eval_helper(PosF(cx[2], cy[2]), active);
-            Array4 f0 = lerp(f01, f00, cy[0]), f1 = lerp(f11, f10, cy[0]);
+            Array4 f0 = lerp(f01, f00, cy[0]),
+                   f1 = lerp(f11, f10, cy[0]);
             result = lerp(f1, f0, cx[0]);
         } else if constexpr (Dimension == 3) {
-            Array3 cx = compute_weight_coord(0), cy = compute_weight_coord(1),
+            Array3 cx = compute_weight_coord(0),
+                   cy = compute_weight_coord(1),
                    cz = compute_weight_coord(2);
             Array4 f000 = eval_helper(PosF(cx[1], cy[1], cz[1]), active),
                    f001 = eval_helper(PosF(cx[1], cy[1], cz[2]), active),
@@ -516,9 +519,12 @@ public:
                    f101 = eval_helper(PosF(cx[2], cy[1], cz[2]), active),
                    f110 = eval_helper(PosF(cx[2], cy[2], cz[1]), active),
                    f111 = eval_helper(PosF(cx[2], cy[2], cz[2]), active);
-            Array4 f00 = lerp(f001, f000, cz[0]), f01 = lerp(f011, f010, cz[0]),
-                   f10 = lerp(f101, f100, cz[0]), f11 = lerp(f111, f110, cz[0]);
-            Array4 f0 = lerp(f01, f00, cy[0]), f1 = lerp(f11, f10, cy[0]);
+            Array4 f00 = lerp(f001, f000, cz[0]),
+                   f01 = lerp(f011, f010, cz[0]),
+                   f10 = lerp(f101, f100, cz[0]),
+                   f11 = lerp(f111, f110, cz[0]);
+            Array4 f0 = lerp(f01, f00, cy[0]),
+                   f1 = lerp(f11, f10, cy[0]);
             result = lerp(f1, f0, cx[0]);
         }
 
@@ -581,18 +587,18 @@ public:
 
         const uint32_t channels = (uint32_t) m_value.shape(Dimension);
 
-        #define EK_TEX_CUBIC_GATHER(index)                                             \
-            {                                                                          \
-                UInt32 index_ = index;                                                 \
-                for (uint32_t ch = 0; ch < channels; ++ch)                             \
-                    values[ch] = gather<Value>(m_value.array(), index_ + ch, active);  \
+        #define EK_TEX_CUBIC_GATHER(index)                                            \
+            {                                                                         \
+                UInt32 index_ = index;                                                \
+                for (uint32_t ch = 0; ch < channels; ++ch)                            \
+                    values[ch] = gather<Value>(m_value.array(), index_ + ch, active); \
             }
-        #define EK_TEX_CUBIC_ACCUM(dim, weight)                                        \
-            {                                                                          \
-                uint32_t dim_ = dim;                                                   \
-                Value weight_ = weight;                                                \
-                for (uint32_t ch = 0; ch < channels; ++ch)                             \
-                    result[dim_][ch] = fmadd(values[ch], weight_, result[dim_][ch]);   \
+        #define EK_TEX_CUBIC_ACCUM(dim, weight)                                      \
+            {                                                                        \
+                uint32_t dim_ = dim;                                                 \
+                Value weight_ = weight;                                              \
+                for (uint32_t ch = 0; ch < channels; ++ch)                           \
+                    result[dim_][ch] = fmadd(values[ch], weight_, result[dim_][ch]); \
             }
 
         std::array<Array4, Dimension> result;
@@ -607,8 +613,10 @@ public:
                 EK_TEX_CUBIC_ACCUM(0, gx[ix]);
             }
         } else if constexpr (Dimension == 2) {
-            Array4 wx = compute_weight(0, false), wy = compute_weight(1, false),
-                   gx = compute_weight(0, true), gy = compute_weight(1, true);
+            Array4 wx = compute_weight(0, false),
+                   wy = compute_weight(1, false),
+                   gx = compute_weight(0, true),
+                   gy = compute_weight(1, true);
             for (uint32_t ix = 0; ix < 4; ++ix)
                 for (uint32_t iy = 0; iy < 4; ++iy) {
                     EK_TEX_CUBIC_GATHER(idx[ix * 4 + iy]);
@@ -616,9 +624,12 @@ public:
                     EK_TEX_CUBIC_ACCUM(1, wx[ix] * gy[iy]);
                 }
         } else if constexpr (Dimension == 3) {
-            Array4 wx = compute_weight(0, false), wy = compute_weight(1, false),
-                   wz = compute_weight(2, false), gx = compute_weight(0, true),
-                   gy = compute_weight(1, true), gz = compute_weight(2, true);
+            Array4 wx = compute_weight(0, false),
+                   wy = compute_weight(1, false),
+                   wz = compute_weight(2, false),
+                   gx = compute_weight(0, true),
+                   gy = compute_weight(1, true),
+                   gz = compute_weight(2, true);
             for (uint32_t ix = 0; ix < 4; ++ix)
                 for (uint32_t iy = 0; iy < 4; ++iy)
                     for (uint32_t iz = 0; iz < 4; ++iz) {
