@@ -227,21 +227,83 @@ ENOKI_TEST(test07_cubic_analytic) {
     assert(ek::allclose(grad_ad[0], ref_grad, 1e-5f, 1e-5f));
 }
 
-ENOKI_TEST(test08_cubic_interp_1d) {
+void test08_cubic_interp_1d(WrapMode wrap_mode) {
     size_t shape[1] = { 5 };
-    ek::Texture<Float, 1> tex(shape, 1, false, FilterMode::Linear,
-                              WrapMode::Clamp);
+    ek::Texture<Float, 1> tex(shape, 1, false, FilterMode::Linear, wrap_mode);
     tex.set_value(Float(2.f, 1.f, 3.f, 4.f, 7.f));
 
     size_t N = 20;
 
-    Array1f pos(ek::linspace<Float>(0.f, 1.f, N));
-    auto res = tex.eval_cubic(pos, true, true).x();
-    auto res2 = tex.eval_cubic_helper(pos).x();
+    Array1f pos(ek::linspace<Float>(0.25f, 0.75f, N));
+    Float ref = tex.eval_cubic_helper(pos).x();
 
-    Float ref = Float(1.9792, 1.9259, 1.8198, 1.6629, 1.5168, 1.4546, 1.5485, 1.8199, 2.2043, 2.6288, 3.0232, 3.3783, 3.7461, 4.1814, 4.7305, 5.3536, 5.9603, 6.4595, 6.7778, 6.9375);
-    assert(ek::allclose(res, ref, 5e-4f, 5e-4f));
-    assert(ek::allclose(res2, ref, 5e-4f, 5e-4f));
+    assert(ek::allclose(tex.eval_cubic(pos).x(), ref));
+
+    switch (wrap_mode) {
+        case WrapMode::Repeat: {
+            pos.x() = ek::linspace<Float>(-0.75f, -0.25f, N);
+            auto res = tex.eval_cubic(pos, true, true).x();
+            auto res2 = tex.eval_cubic_helper(pos).x();
+            assert(ek::allclose(res, ref));
+            assert(ek::allclose(res2, ref));
+
+            pos.x() = ek::linspace<Float>(1.25f, 1.75f, N);
+            auto res_ = tex.eval_cubic(pos, true, true).x();
+            auto res2_ = tex.eval_cubic_helper(pos).x();
+            assert(ek::allclose(res_, ref));
+            assert(ek::allclose(res2_, ref));
+            break;
+        }
+        case WrapMode::Clamp: {
+            {
+                Array1f pos(ek::linspace<Float>(0.f, 1.f, N));
+                auto res = tex.eval_cubic(pos, true, true).x();
+                auto res2 = tex.eval_cubic_helper(pos).x();
+
+                Float ref = Float(1.9792, 1.9259, 1.8198, 1.6629, 1.5168,
+                                  1.4546, 1.5485, 1.8199, 2.2043, 2.6288,
+                                  3.0232, 3.3783, 3.7461, 4.1814, 4.7305,
+                                  5.3536, 5.9603, 6.4595, 6.7778, 6.9375);
+                assert(ek::allclose(res, ref, 5e-4f, 5e-4f));
+                assert(ek::allclose(res2, ref, 5e-4f, 5e-4f));
+            }
+
+            ref = ek::opaque<Float>(ref[0], N);
+            pos.x() = ek::linspace<Float>(-0.25f, 0.25f, N);
+            auto res = tex.eval_cubic(pos, true, true).x();
+            auto res2 = tex.eval_cubic_helper(pos).x();
+            assert(ek::allclose(res, ref));
+            assert(ek::allclose(res2, ref, 5e-3f, 5e-3f));
+
+            ref = ek::opaque<Float>(ref[N - 1], N);
+            pos.x() = ek::linspace<Float>(0.75f, 1.25f, N);
+            auto res_ = tex.eval_cubic(pos, true, true).x();
+            auto res2_ = tex.eval_cubic_helper(pos).x();
+            assert(ek::allclose(res_, ref));
+            assert(ek::allclose(res2_, ref));
+            break;
+        }
+        case WrapMode::Mirror: {
+            pos.x() = ek::linspace<Float>(-0.25f, -0.75f, N);
+            auto res = tex.eval_cubic(pos, true, true).x();
+            auto res2 = tex.eval_cubic_helper(pos).x();
+            assert(ek::allclose(res, ref));
+            assert(ek::allclose(res2, ref, 5e-3f, 5e-3f));
+
+            pos.x() = ek::linspace<Float>(1.75f, 1.25f, N);
+            auto res_ = tex.eval_cubic(pos, true, true).x();
+            auto res2_ = tex.eval_cubic_helper(pos).x();
+            assert(ek::allclose(res_, ref));
+            assert(ek::allclose(res2_, ref));
+            break;
+        }
+    }
+}
+
+ENOKI_TEST(test08_cubic_interp_1d) {
+    test_interp_1d_wrap(WrapMode::Repeat);
+    test_interp_1d_wrap(WrapMode::Clamp);
+    test_interp_1d_wrap(WrapMode::Mirror);
 }
 
 ENOKI_TEST(test09_cubic_interp_2d) {
@@ -250,17 +312,25 @@ ENOKI_TEST(test09_cubic_interp_2d) {
                               WrapMode::Clamp);
     tex.set_value(ek::linspace<Float>(0.f, 20.f, 20));
 
-    size_t N = 30;
-    Array2f pos(ek::linspace<Float>(0.f, 1.f, N), ek::linspace<Float>(0.f, 1.f, N));
-    auto res = tex.eval_cubic(pos, true, true);
-    auto res2 = tex.eval_cubic_helper(pos);
-    assert(ek::allclose(res, res2, 1e-4f, 1e-4f));
+    Array<WrapMode, 3> wrap_modes(WrapMode::Repeat, WrapMode::Clamp,
+                                  WrapMode::Mirror);
 
-    PCG32<Float> rng(1024);
-    Array2f pos_(rng.next_float32(), rng.next_float32());
-    auto res_ = tex.eval_cubic(pos, true, true);
-    auto res2_ = tex.eval_cubic_helper(pos);
-    assert(ek::allclose(res_, res2_, 1e-4f, 1e-4f));
+    for (size_t i = 0; i < wrap_modes.size(); ++i) {
+        Texture<Float, 2> tex(shape, 1, false, FilterMode::Linear,
+                              wrap_modes[i]);
+        size_t N = 30;
+        Array2f pos(ek::linspace<Float>(0.f, 1.f, N),
+                    ek::linspace<Float>(0.f, 1.f, N));
+        auto res = tex.eval_cubic(pos, true, true);
+        auto res2 = tex.eval_cubic_helper(pos);
+        assert(ek::allclose(res, res2, 1e-4f, 1e-4f));
+
+        PCG32<Float> rng(1024);
+        Array2f pos_(rng.next_float32(), rng.next_float32());
+        auto res_ = tex.eval_cubic(pos, true, true);
+        auto res2_ = tex.eval_cubic_helper(pos);
+        assert(ek::allclose(res_, res2_, 1e-4f, 1e-4f));
+    }
 }
 
 ENOKI_TEST(test10_cubic_interp_3d) {
