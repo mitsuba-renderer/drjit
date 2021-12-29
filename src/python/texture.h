@@ -25,8 +25,7 @@ void bind_texture(py::module &m, const char *name) {
         .def("set_value", &Tex::set_value, "value"_a)
         .def("set_tensor", &Tex::set_tensor, "tensor"_a)
         .def("value", &Tex::value, py::return_value_policy::reference_internal)
-        .def("tensor", &Tex::tensor,
-             py::return_value_policy::reference_internal)
+        .def("tensor", &Tex::tensor, py::return_value_policy::reference_internal)
         .def("filter_mode", &Tex::filter_mode)
         .def("wrap_mode", &Tex::wrap_mode)
         .def("eval_cuda", &Tex::eval_cuda, "pos"_a, "active"_a = true)
@@ -38,7 +37,8 @@ void bind_texture(py::module &m, const char *name) {
     tex.attr("IsTexture") = true;
 }
 
-template <typename Type> void bind_texture_all(py::module &m) {
+template <typename Type>
+void bind_texture_all(py::module &m) {
     bind_texture<Type, 1>(m, "Texture1f");
     bind_texture<Type, 2>(m, "Texture2f");
     bind_texture<Type, 3>(m, "Texture3f");
