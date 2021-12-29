@@ -42,6 +42,7 @@ struct Loop<Mask, enable_if_t<std::is_scalar_v<Mask>>> {
     bool operator()(bool mask) { return mask; }
     template <typename... Args> Loop(const char*, Args&...) { }
     void set_uniform(bool = true) { }
+    void set_max_iterations(uint32_t) { }
 };
 
 /// Array case, expands into a symbolic or wavefront-style loop
@@ -192,11 +193,25 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
      * The default state is \c false.
      */
     void set_uniform(bool value = true) {
-        m_uniform = value;
-
         if (m_state > 1)
-            jit_raise("Loop(\"%s\"): set_uniform() can only be called before "
-                      "entering the loop!", m_name.get());
+            jit_raise("Loop(\"%s\"): set_uniform() can only be called "
+                      "before entering the loop!", m_name.get());
+        m_uniform = value;
+    }
+
+    /**
+     * \brief Set a fixed iteration count
+     *
+     * Only applies to wavefront-style loops. When the total number of loop
+     * iterations is known, call this function to avoid a costly horizontal
+     * reduction after each iteration.
+     */
+    void set_max_iterations(uint32_t iterations) {
+        if (m_state > 1)
+            jit_raise("Loop(\"%s\"): set_max_iterations() can only be called "
+                      "before entering the loop!", m_name.get());
+
+        m_max_iterations = iterations;
     }
 
     bool operator()(const Mask &cond) {
@@ -370,7 +385,14 @@ protected:
         jit_eval();
 
         // Do we run another iteration?
-        if (jit_var_any(cond.index())) {
+        bool do_continue;
+
+        if (m_max_iterations != (uint32_t) -1)
+            do_continue = m_iteration++ < m_max_iterations;
+        else
+            do_continue = jit_var_any(cond.index());
+
+        if (do_continue) {
             for (uint32_t i = 0; i < m_indices.size(); ++i) {
                 uint32_t index = *m_indices[i];
                 jit_var_inc_ref_ext(index);
@@ -451,6 +473,10 @@ protected:
 
     /// Precision of AD floating point variables
     int m_ad_float_precision = 0;
+
+    /// In case the iteration count is known
+    uint32_t m_iteration = 0;
+    uint32_t m_max_iterations = (uint32_t) -1;
 
     /// Stashed mask variable from the previous iteration
     Mask m_cond;

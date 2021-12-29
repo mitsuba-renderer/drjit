@@ -31,7 +31,8 @@ void export_scalar(py::module_ &m) {
         .def(py::init<const char*, py::args>())
         .def("put", [](LoopDummy&, py::args) {})
         .def("init", [](LoopDummy&) {})
-        .def("__call__", [](LoopDummy&) { return false; })
+        .def("set_uniform", [](LoopDummy&, bool) { })
+        .def("set_max_iterations", [](LoopDummy&, bool) { })
         .def("__call__", [](LoopDummy&, bool value) { return value; });
 
     bind_texture_all<float>(scalar);
