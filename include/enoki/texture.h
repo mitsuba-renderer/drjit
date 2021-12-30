@@ -264,7 +264,7 @@ public:
             const PosF pos_f = fmadd(pos, PosF(m_shape_opaque), -.5f);
             const PosI pos_i = floor2int<PosI>(pos_f);
 
-            int offset[2] = { 0, 1 };
+            int32_t offset[2] = { 0, 1 };
 
             InterpPosI pos_i_w = interp_positions<PosI, 2>(offset, pos_i);
             pos_i_w = wrap(pos_i_w);
