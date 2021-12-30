@@ -220,8 +220,10 @@ public:
             jit_cuda_tex_lookup(Dimension, m_handle_opaque.index(), pos_idx,
                                 active.index(), out);
 
-            return { Value::steal(out[0]), Value::steal(out[1]),
-                     Value::steal(out[2]), Value::steal(out[3]) };
+            return {
+                Value::steal(out[0]), Value::steal(out[1]),
+                Value::steal(out[2]), Value::steal(out[3])
+            };
         } else {
             (void) pos; (void) active;
             return 0;
@@ -405,7 +407,8 @@ public:
                 for (uint32_t iy = 0; iy < 4; iy++)
                     EK_TEX_CUBIC_ACCUM(idx[ix * 4 + iy], wx[ix] * wy[iy]);
         } else if constexpr (Dimension == 3) {
-            Array4 wx = compute_weight(0), wy = compute_weight(1),
+            Array4 wx = compute_weight(0),
+                   wy = compute_weight(1),
                    wz = compute_weight(2);
             for (uint32_t ix = 0; ix < 4; ix++)
                 for (uint32_t iy = 0; iy < 4; iy++)
