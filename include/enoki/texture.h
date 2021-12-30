@@ -376,7 +376,7 @@ public:
             const Value &alpha = pos_a[dim];
             Value alpha2 = alpha * alpha,
                   alpha3 = alpha2 * alpha;
-            Value multiplier = rcp(6.f);
+            Value multiplier = 1.f / 6.f;
             return multiplier *
                    Array4(-alpha3 + 3.f * alpha2 - 3.f * alpha + 1.f,
                            3.f * alpha3 - 6.f * alpha2 + 4.f,
@@ -777,12 +777,12 @@ private:
         if constexpr (Dimension == 1)
             index = Index(pos.x());
         else if constexpr (Dimension == 2)
-            index =
-                Index(fmadd(pos.y(), (Int32) m_shape_opaque.x(), pos.x()));
-        else if constexpr (Dimension == 3)
             index = Index(
-                fmadd(fmadd(pos.z(), (Int32) m_shape_opaque.y(), pos.y()),
-                      (Int32) m_shape_opaque.x(), pos.x()));
+                fmadd(Index(pos.y()), m_shape_opaque.x(), Index(pos.x())));
+        else if constexpr (Dimension == 3)
+            index = Index(fmadd(
+                fmadd(Index(pos.z()), m_shape_opaque.y(), Index(pos.y())),
+                m_shape_opaque.x(), Index(pos.x())));
 
         const uint32_t channels = (uint32_t) m_value.shape(Dimension);
 
