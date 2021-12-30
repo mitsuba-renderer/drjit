@@ -21,9 +21,18 @@
 
 NAMESPACE_BEGIN(enoki)
 
-enum class FilterMode : uint32_t { Nearest = 0, Linear = 1 };
+/// Texture interpolation methods
+enum class FilterMode : uint32_t {
+    Nearest = 0, /// Nearest-neighbor interpolation
+    Linear = 1 /// Linear interpolation
+};
 
-enum class WrapMode : uint32_t { Repeat = 0, Clamp = 1, Mirror = 2 };
+/// Texture wrapping methods
+enum class WrapMode : uint32_t {
+    Repeat = 0, /// Repeats the texture
+    Clamp = 1, /// Replicates the edge color
+    Mirror = 2 /// Mirrors the texture wrt. each edge
+};
 
 template <typename Value, size_t Dimension> class Texture {
 public:
@@ -56,6 +65,13 @@ public:
      * eval_cuda() should be used. Note that the texture is still
      * differentiable even when migrated. The \ref value() and \ref tensor()
      * operations need to perform a reverse migration in this mode.
+     *
+     * The \c filter_mode defines the interpolation method to be used in all
+     * evaluation routines. By default, the texture is linearly interpolated.
+     *
+     * When evaluating the texture outside of its boundaries, the \c wrap_mode
+     * defines the wrapping method. The default behavior is to repeat the
+     * texture in each dimension infinitely.
      */
     Texture(const size_t shape[Dimension], size_t channels, bool migrate = true,
             FilterMode filter_mode = FilterMode::Linear,
@@ -71,6 +87,9 @@ public:
      * constructor, though shape information is instead extracted from \c
      * tensor. It then also invokes <tt>set_tensor(tensor)</tt> to fill
      * the texture memory with the provided tensor.
+     *
+     * Both the \c filter_mode and \c wrap_mode have the same defaults and
+     * behaviors as for the previous constructor.
      */
     Texture(const TensorXf &tensor, bool migrate = true,
             FilterMode filter_mode = FilterMode::Linear,
@@ -201,35 +220,16 @@ public:
             jit_cuda_tex_lookup(Dimension, m_handle_opaque.index(), pos_idx,
                                 active.index(), out);
 
-            return { Value::steal(out[0]), Value::steal(out[1]),
-                     Value::steal(out[2]), Value::steal(out[3]) };
+            return {
+                Value::steal(out[0]), Value::steal(out[1]),
+                Value::steal(out[2]), Value::steal(out[3])
+            };
         } else {
             (void) pos; (void) active;
             return 0;
         }
     }
 
-    template <typename T> T wrap(const T &value) const {
-        const Array<Int32, Dimension> shape = m_shape_opaque;
-        if (m_wrap_mode == WrapMode::Clamp) {
-            return clamp(value, 0, shape - 1);
-        } else {
-            const T value_shift_neg = select(value < 0, value + 1, value);
-
-            T div;
-            for (size_t i = 0; i < Dimension; ++i)
-                div[i] = m_inv_resolution[i](value_shift_neg[i]);
-
-            T mod = value - div * shape;
-            masked(mod, mod < 0) += T(shape);
-
-            if (m_wrap_mode == WrapMode::Mirror)
-                mod =
-                    select(eq(div & 1, 0) ^ (value < 0), mod, shape - 1 - mod);
-
-            return mod;
-        }
-    }
 
     /**
      * \brief Evaluate linear interpolant using explicit arithmetic
@@ -274,16 +274,17 @@ public:
             const PosI pos_i = floor2int<PosI>(pos_f);
 
             InterpPosI pos_i_w;
-            if constexpr (Dimension == 1)
+            if constexpr (Dimension == 1) {
                 pos_i_w = wrap(InterpPosI(InterpIdx(0, 1) + pos_i.x()));
-            else if constexpr (Dimension == 2)
+            } else if constexpr (Dimension == 2) {
                 pos_i_w = wrap(InterpPosI(InterpIdx(0, 1, 0, 1) + pos_i.x(),
                                           InterpIdx(0, 0, 1, 1) + pos_i.y()));
-            else if constexpr (Dimension == 3)
+            } else if constexpr (Dimension == 3) {
                 pos_i_w = wrap(
                     InterpPosI(InterpIdx(0, 1, 0, 1, 0, 1, 0, 1) + pos_i.x(),
                                InterpIdx(0, 0, 0, 0, 1, 1, 1, 1) + pos_i.y(),
                                InterpIdx(0, 0, 1, 1, 0, 0, 1, 1) + pos_i.z()));
+            }
 
             InterpIdx index;
             if constexpr (Dimension == 1)
@@ -416,19 +417,21 @@ public:
                 }
             }
         }
+
         pos_i_w = wrap(pos_i_w);
 
         PosF pos_a = pos_f - pos_i;
 
         const auto compute_weight = [&pos_a](uint32_t dim) -> Array4 {
             const Value &alpha = pos_a[dim];
-            Value alpha2 = alpha * alpha, alpha3 = alpha2 * alpha;
+            Value alpha2 = alpha * alpha,
+                  alpha3 = alpha2 * alpha;
             Value multiplier = rcp(6.f);
             return multiplier *
                    Array4(-alpha3 + 3.f * alpha2 - 3.f * alpha + 1.f,
-                          3.f * alpha3 - 6.f * alpha2 + 4.f,
+                           3.f * alpha3 - 6.f * alpha2 + 4.f,
                           -3.f * alpha3 + 3.f * alpha2 + 3.f * alpha + 1.f,
-                          alpha3);
+                           alpha3);
         };
 
         InterpIdx index;
@@ -465,7 +468,8 @@ public:
                 for (uint32_t iy = 0; iy < 4; iy++)
                     EK_TEX_CUBIC_ACCUM(index[ix * 4 + iy], wx[ix] * wy[iy]);
         } else if constexpr (Dimension == 3) {
-            Array4 wx = compute_weight(0), wy = compute_weight(1),
+            Array4 wx = compute_weight(0),
+                   wy = compute_weight(1),
                    wz = compute_weight(2);
             for (uint32_t ix = 0; ix < 4; ix++)
                 for (uint32_t iy = 0; iy < 4; iy++)
@@ -526,8 +530,7 @@ public:
             Value alpha2 = sqr(alpha),
                   alpha3 = alpha2 * alpha;
             Value multiplier = 1.f / 6.f;
-            // four basis functions, transformed to take as input the fractional
-            // part
+            // four basis functions, transformed to take as input the fractional part
             Value w0 =
                       (-alpha3 + 3.f * alpha2 - 3.f * alpha + 1.f) * multiplier,
                   w1 = (3.f * alpha3 - 6.f * alpha2 + 4.f) * multiplier,
@@ -535,9 +538,9 @@ public:
             Value w01 = w0 + w1,
                   w23 = 1.f - w01;
             return Array3(
-               w01,
-               (integ - 0.5f + w1 / w01) * inv_shape[dim],
-               (integ + 1.5f + w3 / w23) * inv_shape[dim]); // (integ + 0.5) +- 1 + weight
+                w01,
+                (integ - 0.5f + w1 / w01) * inv_shape[dim],
+                (integ + 1.5f + w3 / w23) * inv_shape[dim]); // (integ + 0.5) +- 1 + weight
         };
 
         auto eval_helper = [&force_enoki, this](const PosF &pos,
@@ -593,8 +596,7 @@ public:
                replace the AD graph. The result is unused (and never computed)
                and only the AD graph is replaced. */
             if (grad_enabled(m_value, pos)) {
-                Array4 result_diff =
-                    eval_cubic_helper(pos, active); // AD graph only
+                Array4 result_diff = eval_cubic_helper(pos, active); // AD graph only
                 result = replace_grad(result, result_diff);
             }
         }
@@ -644,6 +646,7 @@ public:
                 }
             }
         }
+
         pos_i_w = wrap(pos_i_w);
 
         PosF pos_a = pos_f - pos_i;
@@ -657,15 +660,15 @@ public:
                 Value alpha3 = alpha2 * alpha;
                 return multiplier * Array4(
                     -alpha3 + 3.f * alpha2 - 3.f * alpha + 1.f,
-                    3.f * alpha3 - 6.f * alpha2 + 4.f,
+                     3.f * alpha3 - 6.f * alpha2 + 4.f,
                     -3.f * alpha3 + 3.f * alpha2 + 3.f * alpha + 1.f,
                     alpha3);
             } else {
                 return multiplier * Array4(
                     -3.f * alpha2 + 6.f * alpha - 3.f,
-                    9.f * alpha2 - 12.f * alpha,
+                     9.f * alpha2 - 12.f * alpha,
                     -9.f * alpha2 + 6.f * alpha + 3.f,
-                    3.f * alpha2);
+                     3.f * alpha2);
             }
         };
 
@@ -772,12 +775,44 @@ protected:
     }
 
 private:
+    template <typename T> T wrap(const T &value) const {
+        using Scalar = scalar_t<T>;
+        static_assert(
+                array_size_v<T> == Dimension &&
+                std::is_integral_v<Scalar> &&
+                std::is_signed_v<Scalar>
+        );
+
+        const Array<Int32, Dimension> shape = m_shape_opaque;
+        if (m_wrap_mode == WrapMode::Clamp) {
+            return clamp(value, 0, shape - 1);
+        } else {
+            const T value_shift_neg = select(value < 0, value + 1, value);
+
+            T div;
+            for (size_t i = 0; i < Dimension; ++i)
+                div[i] = m_inv_resolution[i](value_shift_neg[i]);
+
+            T mod = value - div * shape;
+            masked(mod, mod < 0) += T(shape);
+
+            if (m_wrap_mode == WrapMode::Mirror)
+                // Starting at 0, flip the texture every other repetition
+                // (flip when: even number of repetitions in negative direction,
+                // or odd number of repetions in positive direction)
+                mod =
+                    select(eq(div & 1, 0) ^ (value < 0), mod, shape - 1 - mod);
+
+            return mod;
+        }
+    }
+
     void *m_handle = nullptr;
     size_t m_size = 0;
     UInt64 m_handle_opaque;
     Array<UInt32, Dimension> m_shape_opaque;
     mutable TensorXf m_value;
-    Array<divisor<int32_t>, Dimension> m_inv_resolution;
+    divisor<int32_t> m_inv_resolution[Dimension] { };
     FilterMode m_filter_mode;
     WrapMode m_wrap_mode;
     bool m_migrate = false;

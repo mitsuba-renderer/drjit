@@ -16,12 +16,12 @@ void bind_texture(py::module &m, const char *name) {
              }),
              "shape"_a, "channels"_a, "migrate"_a = true,
              "filter_mode"_a = ek::FilterMode::Linear,
-             "wrap_mode"_a   = ek::WrapMode::Repeat)
+             "wrap_mode"_a = ek::WrapMode::Repeat)
         .def(py::init<const typename Tex::TensorXf &, bool, ek::FilterMode,
                       ek::WrapMode>(),
              "tensor"_a, "migrate"_a = true,
              "filter_mode"_a = ek::FilterMode::Linear,
-             "wrap_mode"_a   = ek::WrapMode::Repeat)
+             "wrap_mode"_a = ek::WrapMode::Repeat)
         .def("set_value", &Tex::set_value, "value"_a)
         .def("set_tensor", &Tex::set_tensor, "tensor"_a)
         .def("value", &Tex::value, py::return_value_policy::reference_internal)
