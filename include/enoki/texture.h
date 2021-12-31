@@ -685,7 +685,7 @@ protected:
 
         if constexpr (IsCUDA) {
             m_handle = jit_cuda_tex_create(Dimension, shape, channels,
-                                           (int) filter_mode);
+                                           (int) filter_mode, 1);
             m_handle_opaque = UInt64::steal(
                 jit_var_new_pointer(JitBackend::CUDA, m_handle, 0, 0));
         }

@@ -2043,7 +2043,7 @@ auto concat(const T1 &a1, const T2 &a2) {
 
     using Result = Array<value_t<expr_t<T1, T2>>, Size1 + Size2>;
 
-    if constexpr (Result::Size1 == T1::Size && Result::Size2 == T2::Size2) {
+    if constexpr (Result::Size1 == Size1 && Result::Size2 == Size2) {
         return Result(a1, a2);
     } else {
         Result result;
