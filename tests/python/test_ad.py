@@ -1233,6 +1233,12 @@ def test63_suspend_resume(m):
                ek.grad_enabled(g) and \
                not ek.grad_enabled(a, b, c, d)
 
+        h = m.Float(a)
+        with ek.resume_grad():
+            assert ek.grad_enabled(a) and \
+                   not ek.grad_enabled(h)
+
+
 def test64_suspend_resume_selective(m):
     a = m.Float(1)
     b = m.Float(1)

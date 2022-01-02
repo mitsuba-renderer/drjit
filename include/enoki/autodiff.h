@@ -37,6 +37,9 @@ NAMESPACE_BEGIN(detail)
 /// Increase the external reference count of a given variable
 template <typename Value> void ad_inc_ref_impl(uint32_t index) noexcept (true);
 
+/// .. like above, but do nothing and return zero if AD is disabled for 'index'
+template <typename Value> uint32_t ad_inc_ref_cond_impl(uint32_t index) noexcept (true);
+
 /// Decrease the external reference count of a given variable
 template <typename Value> void ad_dec_ref_impl(uint32_t index) noexcept (true);
 
@@ -135,12 +138,21 @@ template <typename T> ENOKI_INLINE void ad_inc_ref(uint32_t index) noexcept {
     if (!__builtin_constant_p(index) || index != 0)
         ad_inc_ref_impl<T>(index);
 }
+
+template <typename T> ENOKI_INLINE uint32_t ad_inc_ref_cond(uint32_t index) noexcept {
+    if (__builtin_constant_p(index) && index == 0)
+        return 0;
+    else
+        return ad_inc_ref_cond_impl<T>(index);
+}
+
 template <typename T> ENOKI_INLINE void ad_dec_ref(uint32_t index) noexcept {
     if (!__builtin_constant_p(index) || index != 0)
         ad_dec_ref_impl<T>(index);
 }
 #else
 #define ad_inc_ref ad_inc_ref_impl
+#define ad_inc_ref_cond ad_inc_ref_cond_impl
 #define ad_dec_ref ad_dec_ref_impl
 #endif
 
@@ -201,10 +213,8 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
     }
 
     ENOKI_INLINE DiffArray(const DiffArray &a) : m_value(a.m_value) {
-        if constexpr (IsEnabled) {
-            m_index = a.m_index;
-            detail::ad_inc_ref<Type>(m_index);
-        }
+        if constexpr (IsEnabled)
+            m_index = detail::ad_inc_ref_cond<Type>(a.m_index);
     }
 
     ENOKI_INLINE DiffArray(DiffArray &&a) noexcept
@@ -239,9 +249,9 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
     ENOKI_INLINE DiffArray &operator=(const DiffArray &a) {
         m_value = a.m_value;
         if constexpr (IsEnabled) {
-            detail::ad_inc_ref<Type>(a.m_index);
-            detail::ad_dec_ref<Type>(m_index);
-            m_index = a.m_index;
+            uint32_t old_index = m_index;
+            m_index = detail::ad_inc_ref_cond<Type>(a.m_index);
+            detail::ad_dec_ref<Type>(old_index);
         }
         return *this;
     }
@@ -1847,6 +1857,8 @@ protected:
     namespace detail {                                                         \
     extern template ENOKI_AD_EXPORT void                                       \
         ad_inc_ref_impl<T>(uint32_t) noexcept;                                 \
+    extern template ENOKI_AD_EXPORT uint32_t                                   \
+        ad_inc_ref_cond_impl<T>(uint32_t) noexcept;                            \
     extern template ENOKI_AD_EXPORT void                                       \
         ad_dec_ref_impl<T>(uint32_t) noexcept;                                 \
     extern template ENOKI_AD_EXPORT uint32_t ad_new<T>(const char *, size_t,   \

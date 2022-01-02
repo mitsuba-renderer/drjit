@@ -557,10 +557,26 @@ static bool ad_dec_ref(uint32_t index, Variable *v) noexcept (true) {
 }
 
 template <typename T> void ad_inc_ref_impl(uint32_t index) noexcept(true) {
-    if (index == 0)
+    if (likely(index == 0))
         return;
     std::lock_guard<std::mutex> guard(state.mutex);
     ad_inc_ref(index, state[index]);
+}
+
+template <typename T> uint32_t ad_inc_ref_cond_impl(uint32_t index) noexcept(true) {
+    if (likely(index == 0))
+        return 0;
+
+    auto const &scopes = local_state.scopes;
+    if (!scopes.empty()) {
+        scopes.back().maybe_disable(index);
+        if (index == 0)
+            return 0;
+    }
+
+    std::lock_guard<std::mutex> guard(state.mutex);
+    ad_inc_ref(index, state[index]);
+    return index;
 }
 
 template <typename T> void ad_dec_ref_impl(uint32_t index) noexcept(true) {
@@ -2168,6 +2184,7 @@ template <typename Value> const char *ad_graphviz() {
 // ==========================================================================
 
 template ENOKI_EXPORT void ad_inc_ref_impl<Value>(uint32_t) noexcept;
+template ENOKI_EXPORT uint32_t ad_inc_ref_cond_impl<Value>(uint32_t) noexcept;
 template ENOKI_EXPORT void ad_dec_ref_impl<Value>(uint32_t) noexcept;
 template ENOKI_EXPORT uint32_t ad_new<Value>(const char *, size_t, uint32_t,
                                             uint32_t *, Value *);

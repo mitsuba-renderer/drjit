@@ -2338,7 +2338,7 @@ def _check_grad_enabled(name, a):
         if not grad_enabled(a):
             raise Exception(
                 f'{name}(): the argument does not depend on the input '
-                'variable(s) being differentiated. Throwing an exception '
+                'variable(s) being differentiated. Raising an exception '
                 'since this is usually indicative of a bug (for example, '
                 'you may have forgotten to call ek.enable_grad(..)). If '
                 f'this is expected behavior, skip the call to {name}(..) '
