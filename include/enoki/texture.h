@@ -767,9 +767,9 @@ private:
         using Scalar = scalar_t<T>;
         using Index = uint32_array_t<value_t<T>>;
         static_assert(
-                array_size_v<T> == Dimension &&
-                std::is_integral_v<Scalar> &&
-                std::is_signed_v<Scalar>
+            array_size_v<T> == Dimension &&
+            std::is_integral_v<Scalar> &&
+            std::is_signed_v<Scalar>
         );
 
         Index index;
