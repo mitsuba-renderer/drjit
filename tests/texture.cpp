@@ -399,3 +399,38 @@ ENOKI_TEST(test11_cubic_grad_pos) {
     assert(ek::allclose(grad_64[2][0], ref_grad[2], 1e-5f, 1e-5f));
     assert(ek::allclose(grad_ad, ref_grad, 1e-5f, 1e-5f));
 }
+
+ENOKI_TEST(test12_move_assignment) {
+    size_t shape[1] = { 2 };
+    ek::Texture<Float, 1> move_from(shape, 1, false, FilterMode::Nearest,
+                              WrapMode::Repeat);
+    move_from.set_value(Float(0.f, 1.f));
+    const void *from_handle = move_from.handle();
+
+    ek::Texture<Float, 1> move_to;
+    move_to = std::move(move_from);
+
+    assert(move_to.ndim() == 2);
+    assert(move_to.handle() == from_handle);
+    assert(move_from.handle() == nullptr);
+    assert(move_to.shape()[0] == shape[0]);
+    assert(move_to.wrap_mode() == WrapMode::Repeat);
+    assert(move_to.filter_mode() == FilterMode::Nearest);
+}
+
+ENOKI_TEST(test13_move_constructor) {
+    size_t shape[1] = { 2 };
+    ek::Texture<Float, 1> move_from(shape, 1, false, FilterMode::Nearest,
+                              WrapMode::Repeat);
+    move_from.set_value(Float(0.f, 1.f));
+    const void *from_handle = move_from.handle();
+
+    ek::Texture<Float, 1> move_to(std::move(move_from));
+
+    assert(move_to.ndim() == 2);
+    assert(move_to.handle() == from_handle);
+    assert(move_from.handle() == nullptr);
+    assert(move_to.shape()[0] == shape[0]);
+    assert(move_to.wrap_mode() == WrapMode::Repeat);
+    assert(move_to.filter_mode() == FilterMode::Nearest);
+}

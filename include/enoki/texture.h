@@ -103,14 +103,15 @@ public:
     }
 
     Texture(Texture &&other) {
-        m_handle = other.handle;
-        other.handle = nullptr;
+        m_handle = other.m_handle;
+        other.m_handle = nullptr;
         m_size = other.m_size;
         m_handle_opaque = std::move(other.m_handle_opaque);
         m_shape_opaque = std::move(other.m_shape_opaque);
         m_value = std::move(other.m_value);
         m_migrate = other.m_migrate;
-        m_inv_resolution = std::move(other.m_inv_resolution);
+        for (size_t i = 0; i < Dimension; ++i)
+            m_inv_resolution[i] = std::move(other.m_inv_resolution[i]);
         m_filter_mode = other.m_filter_mode;
         m_wrap_mode = other.m_wrap_mode;
     }
@@ -127,7 +128,8 @@ public:
         m_shape_opaque = std::move(other.m_shape_opaque);
         m_value = std::move(other.m_value);
         m_migrate = other.m_migrate;
-        m_inv_resolution = std::move(other.m_inv_resolution);
+        for (size_t i = 0; i < Dimension; ++i)
+            m_inv_resolution[i] = std::move(other.m_inv_resolution[i]);
         m_filter_mode = other.m_filter_mode;
         m_wrap_mode = other.m_wrap_mode;
         return *this;
