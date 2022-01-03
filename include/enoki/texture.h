@@ -11,6 +11,7 @@
 */
 
 #include <array>
+#include <utility>
 #include <enoki-jit/texture.h>
 #include <enoki/dynamic.h>
 #include <enoki/idiv.h>
@@ -339,7 +340,7 @@ public:
     }
 
     /**
-     * \brief Helper function to evaluate a clamped cubic B-Spline interpolant
+     * \brief Helper function to evaluate a cubic B-Spline interpolant
      *
      * This is an implementation detail and should only be called by the \ref
      * eval_cubic() function to construct an AD graph. When only the cubic
@@ -356,11 +357,7 @@ public:
         using InterpIdx = uint32_array_t<InterpOffset>;
 
         PosF pos_(pos);
-        // This multiplication should not be recorded in the AD graph
         PosF pos_f = fmadd(pos_, PosF(m_shape_opaque), -.5f);
-        if constexpr (IsDiff)
-            if (grad_enabled(pos))
-                pos_f = replace_grad(pos_f, pos_);
         PosI pos_i = floor2int<PosI>(pos_f);
 
         // `offset[k]` controls the k-th offset for any dimension.
@@ -425,8 +422,7 @@ public:
     }
 
     /**
-     * \brief Evaluate a clamped cubic B-Spline interpolant represented by this
-     * texture
+     * \brief Evaluate a cubic B-Spline interpolant represented by this texture
      *
      * Intead of interpolating the texture via B-Spline basis functions, the
      * implementation transforms this calculation into an equivalent weighted
@@ -456,10 +452,11 @@ public:
                     "\"force_enoki\" is used while the data has been fully "
                     "migrated to CUDA texture memory");
 
-        PosF pos_f = fmadd(pos, PosF(m_shape_opaque), -.5f);
+        PosF res_f = PosF(m_shape_opaque);
+        PosF pos_f = fmadd(pos, res_f, -.5f);
         PosI pos_i = floor2int<PosI>(pos_f);
         PosF pos_a = pos_f - PosF(pos_i);
-        PosF inv_shape = rcp(PosF(m_shape_opaque));
+        PosF inv_shape = rcp(res_f);
 
         /* With cubic B-Spline, normally we have 4 query points and 4 weights
            for each dimension. After the linear interpolation transformation,
@@ -546,8 +543,16 @@ public:
         return result;
     }
 
-    /// Evaluate the positional gradient of a clamped cubic B-Spline from the
-    /// explicit differentiated basis functions
+    /**
+     * \brief Evaluate the positional gradient of a cubic B-Spline
+     *
+     * This implementation computes the result directly from explicit
+     * differentiated basis functions. It has no autodiff support.
+     * 
+     * The resulting gradient and hessian have been multiplied by the spatial extents
+     * to count for the transformation from the unit size volume to the size of its
+     * shape.
+     */
     std::array<Array<Value, 4>, Dimension>
     eval_cubic_grad(const Array<Value, Dimension> &pos,
                     Mask active = true) const {
@@ -558,7 +563,8 @@ public:
         using InterpPosI = Array<InterpOffset, Dimension>;
         using InterpIdx = uint32_array_t<InterpOffset>;
 
-        PosF pos_f = fmadd(pos, PosF(m_shape_opaque), -.5f);
+        PosF res_f = PosF(m_shape_opaque);
+        PosF pos_f = fmadd(pos, res_f, -.5f);
         PosI pos_i = floor2int<PosI>(pos_f);
 
         int32_t offset[4] = {-1, 0, 1, 2};
@@ -572,7 +578,7 @@ public:
         const auto compute_weight = [&pos_a](uint32_t dim,
                                              bool is_grad) -> Array4 {
             const Value &alpha = pos_a[dim];
-            Value alpha2 = alpha * alpha;
+            Value alpha2 = sqr(alpha);
             Value multiplier = 1.f / 6.f;
             if (!is_grad) {
                 Value alpha3 = alpha2 * alpha;
@@ -648,7 +654,184 @@ public:
         #undef EK_TEX_CUBIC_GATHER
         #undef EK_TEX_CUBIC_ACCUM
 
+        // transform volume from unit size to its resolution
+        for (uint32_t dim = 0; dim < Dimension; ++dim)
+            result[dim] *= res_f[dim];
+
         return result;
+    }
+
+    /**
+     * \brief Evaluate the positional gradient and hessian matrix of a cubic B-Spline
+     *
+     * This implementation computes the result directly from explicit
+     * differentiated basis functions. It has no autodiff support.
+     * 
+     * The resulting gradient and hessian have been multiplied by the spatial extents
+     * to count for the transformation from the unit size volume to the size of its
+     * shape.
+     */
+    std::pair<std::array<Array<Value, 4>, Dimension>, std::array<std::array<Array<Value, 4>, Dimension>, Dimension> >
+    eval_cubic_hessian(const Array<Value, Dimension> &pos,
+                       Mask active = true) const {
+        using PosF = Array<Value, Dimension>;
+        using PosI = int32_array_t<PosF>;
+        using Array4 = Array<Value, 4>;
+        using InterpOffset = Array<Int32, ipow(4, Dimension)>;
+        using InterpPosI = Array<InterpOffset, Dimension>;
+        using InterpIdx = uint32_array_t<InterpOffset>;
+
+        PosF res_f = PosF(m_shape_opaque);
+        PosF pos_f = fmadd(pos, res_f, -.5f);
+        PosI pos_i = floor2int<PosI>(pos_f);
+
+        int32_t offset[4] = {-1, 0, 1, 2};
+
+        InterpPosI pos_i_w = interp_positions<PosI, 4>(offset, pos_i);
+        pos_i_w = wrap(pos_i_w);
+        InterpIdx idx = index(pos_i_w);
+
+        PosF pos_a = pos_f - PosF(pos_i);
+
+        const auto compute_weight = [&pos_a](uint32_t dim) -> Array4 {
+            const Value &alpha = pos_a[dim];
+            Value alpha2 = sqr(alpha),
+                  alpha3 = alpha2 * alpha;
+            Value multiplier = 1.f / 6.f;
+            return multiplier * Array4(
+                -alpha3 + 3.f * alpha2 - 3.f * alpha + 1.f,
+                    3.f * alpha3 - 6.f * alpha2 + 4.f,
+                -3.f * alpha3 + 3.f * alpha2 + 3.f * alpha + 1.f,
+                alpha3);
+        };
+        const auto compute_weight_gradient = [&pos_a](uint32_t dim) -> Array4 {
+            const Value &alpha = pos_a[dim];
+            Value alpha2 = sqr(alpha);
+            Value multiplier = 1.f / 6.f;
+            return multiplier * Array4(
+                    -3.f * alpha2 + 6.f * alpha - 3.f,
+                     9.f * alpha2 - 12.f * alpha,
+                    -9.f * alpha2 + 6.f * alpha + 3.f,
+                     3.f * alpha2);
+        };
+        const auto compute_weight_heissian = [&pos_a](uint32_t dim) -> Array4 {
+            const Value &alpha = pos_a[dim];
+            return Array4(
+                - alpha + 1.f,
+                3.f * alpha - 2.f,
+                -3.f * alpha + 1.f,
+                alpha
+            );
+        };
+
+        const uint32_t channels = (uint32_t) m_value.shape(Dimension);
+
+        // Make sure channel related operations are executed together
+        #define EK_TEX_CUBIC_GATHER(index)                                            \
+            {                                                                         \
+                UInt32 index_ = index;                                                \
+                for (uint32_t ch = 0; ch < channels; ++ch)                            \
+                    values[ch] = gather<Value>(m_value.array(), index_ + ch, active); \
+            }
+        #define EK_TEX_CUBIC_ACCUM_GRAD(dim, weight_grad)                                     \
+            {                                                                                 \
+                uint32_t dim_ = dim;                                                          \
+                Value weight_grad_ = weight_grad;                                             \
+                for (uint32_t ch = 0; ch < channels; ++ch)                                    \
+                    gradient[dim_][ch] = fmadd(values[ch], weight_grad_, gradient[dim_][ch]); \
+            }
+        #define EK_TEX_CUBIC_ACCUM_HESSIAN(dim1, dim2, weight_hessian)                                         \
+            {                                                                                                  \
+                uint32_t dim1_ = dim1,                                                                         \
+                         dim2_ = dim2;                                                                         \
+                Value weight_hessian_ = weight_hessian;                                                        \
+                for (uint32_t ch = 0; ch < channels; ++ch)                                                     \
+                    hessian[dim1_][dim2_][ch] = fmadd(values[ch], weight_hessian_, hessian[dim1_][dim2_][ch]); \
+            }
+        #define EK_TEX_CUBIC_HESSIAN_SYMM(dim1, dim2)                      \
+            {                                                              \
+                uint32_t dim1_ = dim1,                                     \
+                         dim2_ = dim2;                                     \
+                for (uint32_t ch = 0; ch < channels; ++ch)                 \
+                    hessian[dim2_][dim1_][ch] = hessian[dim1_][dim2_][ch]; \
+            }
+
+        std::array<Array4, Dimension> gradient;
+        std::array<std::array<Array4, Dimension>, Dimension> hessian;
+        for (uint32_t dim1 = 0; dim1 < Dimension; ++dim1) {
+            gradient[dim1] = Array4(0.f);
+            for (uint32_t dim2 = 0; dim2 < Dimension; ++dim2)
+                hessian[dim1][dim2] = Array4(0.f);
+        }
+        Array4 values;
+
+        if constexpr (Dimension == 1) {
+            Array4 gx  = compute_weight_gradient(0),
+                   ggx = compute_weight_heissian(0);
+            for (uint32_t ix = 0; ix < 4; ++ix) {
+                EK_TEX_CUBIC_GATHER(idx[ix]);
+                EK_TEX_CUBIC_ACCUM_GRAD(0, gx[ix]);
+                EK_TEX_CUBIC_ACCUM_HESSIAN(0, 0, ggx[ix]);
+            }
+        } else if constexpr (Dimension == 2) {
+            Array4 wx  = compute_weight(0),
+                   wy  = compute_weight(1),
+                   gx  = compute_weight_gradient(0),
+                   gy  = compute_weight_gradient(1),
+                   ggx = compute_weight_heissian(0),
+                   ggy = compute_weight_heissian(1);
+            for (uint32_t ix = 0; ix < 4; ++ix)
+                for (uint32_t iy = 0; iy < 4; ++iy) {
+                    EK_TEX_CUBIC_GATHER(idx[ix * 4 + iy]);
+                    EK_TEX_CUBIC_ACCUM_GRAD(0, gx[ix] * wy[iy]);
+                    EK_TEX_CUBIC_ACCUM_GRAD(1, wx[ix] * gy[iy]);
+                    EK_TEX_CUBIC_ACCUM_HESSIAN(0, 0, ggx[ix] * wy[iy]);
+                    EK_TEX_CUBIC_ACCUM_HESSIAN(0, 1, gx[ix] * gy[iy]);
+                    EK_TEX_CUBIC_ACCUM_HESSIAN(1, 1, wx[ix] * ggy[iy]);
+                }
+            EK_TEX_CUBIC_HESSIAN_SYMM(0, 1);
+        } else if constexpr (Dimension == 3) {
+            Array4 wx = compute_weight(0),
+                   wy = compute_weight(1),
+                   wz = compute_weight(2),
+                   gx = compute_weight_gradient(0),
+                   gy = compute_weight_gradient(1),
+                   gz = compute_weight_gradient(2),
+                   ggx = compute_weight_heissian(0),
+                   ggy = compute_weight_heissian(1),
+                   ggz = compute_weight_heissian(2);
+            for (uint32_t ix = 0; ix < 4; ++ix)
+                for (uint32_t iy = 0; iy < 4; ++iy)
+                    for (uint32_t iz = 0; iz < 4; ++iz) {
+                        EK_TEX_CUBIC_GATHER(idx[ix * 16 + iy * 4 + iz]);
+                        EK_TEX_CUBIC_ACCUM_GRAD(0, gx[ix] * wy[iy] * wz[iz]);
+                        EK_TEX_CUBIC_ACCUM_GRAD(1, wx[ix] * gy[iy] * wz[iz]);
+                        EK_TEX_CUBIC_ACCUM_GRAD(2, wx[ix] * wy[iy] * gz[iz]);
+                        EK_TEX_CUBIC_ACCUM_HESSIAN(0, 0, ggx[ix] * wy[iy] * wz[iz]);
+                        EK_TEX_CUBIC_ACCUM_HESSIAN(1, 1, wx[ix] * ggy[iy] * wz[iz]);
+                        EK_TEX_CUBIC_ACCUM_HESSIAN(2, 2, wx[ix] * wy[iy] * ggz[iz]);
+                        EK_TEX_CUBIC_ACCUM_HESSIAN(0, 1, gx[ix] * gy[iy] * wz[iz]);
+                        EK_TEX_CUBIC_ACCUM_HESSIAN(0, 2, gx[ix] * wy[iy] * gz[iz]);
+                        EK_TEX_CUBIC_ACCUM_HESSIAN(1, 2, wx[ix] * gy[iy] * gz[iz]);
+                    }
+            EK_TEX_CUBIC_HESSIAN_SYMM(0, 1);
+            EK_TEX_CUBIC_HESSIAN_SYMM(0, 2);
+            EK_TEX_CUBIC_HESSIAN_SYMM(1, 2);
+        }
+
+        #undef EK_TEX_CUBIC_GATHER
+        #undef EK_TEX_CUBIC_ACCUM_GRAD
+        #undef EK_TEX_CUBIC_ACCUM_HESSIAN
+        #undef EK_TEX_CUBIC_HESSIAN_SYMM
+
+        // transform volume from unit size to its resolution
+        for (uint32_t dim1 = 0; dim1 < Dimension; ++dim1) {
+            gradient[dim1] *= res_f[dim1];
+            for (uint32_t dim2 = 0; dim2 < Dimension; ++dim2)
+                hessian[dim1][dim2] *= res_f[dim1] * res_f[dim2];
+        }
+
+        return std::make_pair(gradient, hessian);
     }
 
 protected:

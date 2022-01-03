@@ -222,7 +222,7 @@ ENOKI_TEST(test07_cubic_analytic) {
     assert(ek::allclose(res, ref_res, 1e-5f, 1e-5f));
     assert(ek::allclose(res2, ref_res, 1e-5f, 1e-5f));
     // 1/6 * (9*a^2 - 12*a) with a=0.5
-    Float ref_grad(-0.625f);
+    Float ref_grad(-0.625f * 4.0f);
     assert(ek::allclose(grad_64[0][0], ref_grad, 1e-5f, 1e-5f));
     assert(ek::allclose(grad_ad[0], ref_grad, 1e-5f, 1e-5f));
 }
@@ -335,16 +335,16 @@ ENOKI_TEST(test09_cubic_interp_2d) {
 
 ENOKI_TEST(test10_cubic_interp_3d) {
     using TensorXf = Tensor<Float>;
-    using Uint32 = ek::uint32_array_t<Float>;
+    using UInt32 = ek::uint32_array_t<Float>;
     const int s = 9;
     size_t shape[3] = { s, s, s };
     size_t shape_[] = { s, s, s, 2 };  // 2 channels
     
     auto data = ek::full<Float>((1.0), s*s*s*2);
     TensorXf tensor(data, 4, shape_);
-    ek::scatter(tensor.array(), Float(0.0),  Uint32(728));  // tensor[4, 4, 4, 0] = 0.0
-    ek::scatter(tensor.array(), Float(2.0),  Uint32(546));  // tensor[3, 3, 3, 0] = 2.0
-    ek::scatter(tensor.array(), Float(10.0), Uint32(727));  // tensor[4, 4, 3, 1] = 10.0
+    ek::scatter(tensor.array(), Float(0.0),  UInt32(728));  // tensor[4, 4, 4, 0] = 0.0
+    ek::scatter(tensor.array(), Float(2.0),  UInt32(546));  // tensor[3, 3, 3, 0] = 2.0
+    ek::scatter(tensor.array(), Float(10.0), UInt32(727));  // tensor[4, 4, 3, 1] = 10.0
 
     ek::Texture<Float, 3> tex(shape, 2, false, FilterMode::Linear,
                               WrapMode::Clamp);
@@ -367,16 +367,16 @@ ENOKI_TEST(test10_cubic_interp_3d) {
 
 ENOKI_TEST(test11_cubic_grad_pos) {
     using TensorXf = Tensor<Float>;
-    using Uint32 = ek::uint32_array_t<Float>;
+    using UInt32 = ek::uint32_array_t<Float>;
     size_t shape[3] = { 4, 4, 4 };
 
     auto data = ek::full<Float>((1.0), 4*4*4);
     size_t shape_[] = { 4, 4, 4, 1 };
     TensorXf tensor(data, 4, shape_);
-    ek::scatter(tensor.array(), Float(0.5f),  Uint32(21));  // data[1, 1, 1] = 0.5
-    ek::scatter(tensor.array(), Float(2.0f),  Uint32(25));  // data[1, 2, 1] = 2.0
-    ek::scatter(tensor.array(), Float(3.0f), Uint32(41));  // data[2, 2, 1] = 3.0
-    ek::scatter(tensor.array(), Float(4.0f), Uint32(22));  // data[1, 1, 2] = 4.0
+    ek::scatter(tensor.array(), Float(0.5f), UInt32(21));  // data[1, 1, 1] = 0.5
+    ek::scatter(tensor.array(), Float(2.0f), UInt32(25));  // data[1, 2, 1] = 2.0
+    ek::scatter(tensor.array(), Float(3.0f), UInt32(41));  // data[2, 2, 1] = 3.0
+    ek::scatter(tensor.array(), Float(4.0f), UInt32(22));  // data[1, 1, 2] = 4.0
 
     ek::Texture<DFloat, 3> tex(shape, 1, false, FilterMode::Linear,
                                WrapMode::Clamp);
@@ -394,13 +394,52 @@ ENOKI_TEST(test11_cubic_grad_pos) {
     assert(ek::allclose(res, ref_res, 1e-5f, 1e-5f));
     assert(ek::allclose(res2, ref_res, 1e-5f, 1e-5f));
     Array3f ref_grad(0.07175f, 0.07175f, -0.21525f);
+    ref_grad *= 4.0f;
     assert(ek::allclose(grad_64[0][0], ref_grad[0], 1e-5f, 1e-5f));
     assert(ek::allclose(grad_64[1][0], ref_grad[1], 1e-5f, 1e-5f));
     assert(ek::allclose(grad_64[2][0], ref_grad[2], 1e-5f, 1e-5f));
     assert(ek::allclose(grad_ad, ref_grad, 1e-5f, 1e-5f));
 }
 
-ENOKI_TEST(test12_move_assignment) {
+ENOKI_TEST(test12_cubic_hessian_pos) {
+    using TensorXf = Tensor<Float>;
+    using UInt32 = ek::uint32_array_t<Float>;
+    size_t shape[3] = { 4, 4, 4 };
+
+    auto data = ek::full<Float>((0.0), 4*4*4);
+    size_t shape_[] = { 4, 4, 4, 1 };
+    TensorXf tensor(data, 4, shape_);
+    ek::scatter(tensor.array(), Float(1.0f), UInt32(21));  // data[1, 1, 1] = 1.0
+    ek::scatter(tensor.array(), Float(2.0f), UInt32(37));  // data[2, 1, 1] = 2.0
+    // NOTE: Tensor has different index convention with Texture
+    //       [2, 1, 1] is equivalent to (x=1, y=1, z=2) in the texture
+
+    ek::Texture<DFloat, 3> tex(shape, 1, false, FilterMode::Linear,
+                               WrapMode::Clamp);
+    tex.set_tensor(tensor);
+
+    ArrayD3f pos(.5f, .5f, .5f);
+    auto grad_64 = tex.eval_cubic_grad(pos, true);
+    auto [grad_h, hessian] = tex.eval_cubic_hessian(pos, true);
+
+    assert(ek::allclose(grad_64[0], grad_h[0]));
+    assert(ek::allclose(grad_64[1], grad_h[1]));
+    assert(ek::allclose(grad_64[2], grad_h[2]));
+    // compare with analytical solution
+    // note: hessian[grad1][grad2][ch]
+    // note: multiply analytical result by 16.0f=4.f*4.f to account for the resolution transformation
+    assert(ek::allclose(hessian[0][0][0], -0.344401f * 16.0f, 1e-5f, 1e-5f));
+    assert(ek::allclose(hessian[0][1][0],  0.561523f * 16.0f, 1e-5f, 1e-5f));
+    assert(ek::allclose(hessian[0][2][0], -0.187174f * 16.0f, 1e-5f, 1e-5f));
+    assert(ek::allclose(hessian[1][1][0], -0.344401f * 16.0f, 1e-5f, 1e-5f));
+    assert(ek::allclose(hessian[1][2][0], -0.187174f * 16.0f, 1e-5f, 1e-5f));
+    assert(ek::allclose(hessian[2][2][0], -0.344401f * 16.0f, 1e-5f, 1e-5f));
+    assert(hessian[0][1] == hessian[1][0]);
+    assert(hessian[0][2] == hessian[2][0]);
+    assert(hessian[1][2] == hessian[2][1]);
+}
+
+ENOKI_TEST(test13_move_assignment) {
     size_t shape[1] = { 2 };
     ek::Texture<Float, 1> move_from(shape, 1, false, FilterMode::Nearest,
                               WrapMode::Repeat);
@@ -418,7 +457,7 @@ ENOKI_TEST(test12_move_assignment) {
     assert(move_to.filter_mode() == FilterMode::Nearest);
 }
 
-ENOKI_TEST(test13_move_constructor) {
+ENOKI_TEST(test14_move_constructor) {
     size_t shape[1] = { 2 };
     ek::Texture<Float, 1> move_from(shape, 1, false, FilterMode::Nearest,
                               WrapMode::Repeat);
