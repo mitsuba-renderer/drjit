@@ -80,14 +80,6 @@ ENOKI_TEST(test01_interp_1d) {
     test_interp_1d_wrap(WrapMode::Mirror);
 }
 
-ENOKI_TEST(test01_interp_1d) {
-    jit_init(JitBackend::CUDA);
-
-    test_interp_1d_wrap(WrapMode::Repeat);
-    test_interp_1d_wrap(WrapMode::Clamp);
-    test_interp_1d_wrap(WrapMode::Mirror);
-}
-
 ENOKI_TEST(test02_interp_1d) {
     for (int ch = 1; ch <= 4; ++ch) {
         if (ch == 3)
