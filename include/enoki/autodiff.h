@@ -135,7 +135,7 @@ void ad_add_edge(uint32_t src_index, uint32_t dst_index,
 
 #if defined(__GNUC__)
 template <typename T> ENOKI_INLINE void ad_inc_ref(uint32_t index) noexcept {
-    if (!__builtin_constant_p(index) || index != 0)
+    if (!(__builtin_constant_p(index) && index == 0))
         ad_inc_ref_impl<T>(index);
 }
 
@@ -147,7 +147,7 @@ template <typename T> ENOKI_INLINE uint32_t ad_inc_ref_cond(uint32_t index) noex
 }
 
 template <typename T> ENOKI_INLINE void ad_dec_ref(uint32_t index) noexcept {
-    if (!__builtin_constant_p(index) || index != 0)
+    if (!(__builtin_constant_p(index) && index == 0))
         ad_dec_ref_impl<T>(index);
 }
 #else
@@ -1856,11 +1856,11 @@ protected:
     ENOKI_AD_EXPORT_TEMPLATE(T)                                                \
     namespace detail {                                                         \
     extern template ENOKI_AD_EXPORT void                                       \
-        ad_inc_ref_impl<T>(uint32_t) noexcept;                                 \
+        ad_inc_ref_impl<T>(uint32_t) noexcept (true);                          \
     extern template ENOKI_AD_EXPORT uint32_t                                   \
-        ad_inc_ref_cond_impl<T>(uint32_t) noexcept;                            \
+        ad_inc_ref_cond_impl<T>(uint32_t) noexcept (true);                     \
     extern template ENOKI_AD_EXPORT void                                       \
-        ad_dec_ref_impl<T>(uint32_t) noexcept;                                 \
+        ad_dec_ref_impl<T>(uint32_t) noexcept (true);                          \
     extern template ENOKI_AD_EXPORT uint32_t ad_new<T>(const char *, size_t,   \
                                                        uint32_t, uint32_t *,   \
                                                        T *);                   \

@@ -130,8 +130,8 @@ Index binary_search(scalar_t<Index> start_, scalar_t<Index> end_,
 
     if constexpr (is_jit_array_v<Index>) {
         // We might be running multiple binary searches in parallel..
-        using Index1 =
-            std::conditional_t<is_static_array_v<Index>, value_t<Index>, Index>;
+        using Index1 = detached_t<std::conditional_t<is_static_array_v<Index>,
+                                                     value_t<Index>, Index>>;
         using Mask1 = mask_t<Index1>;
 
         if (iterations >= 2 && jit_flag(JitFlag::LoopRecord)) {

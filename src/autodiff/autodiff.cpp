@@ -957,6 +957,13 @@ template <typename Value> struct SpecialCallback : Special {
         }
     };
 
+    virtual ~SpecialCallback() {
+        /* leave critical section */ {
+            unlock_guard<std::mutex> guard(state.mutex);
+            callback.reset();
+        }
+    }
+
     SpecialCallback(DiffCallback *callback, Scope &&scope)
         : callback(callback), scope(std::move(scope)) { }
 
@@ -1766,7 +1773,6 @@ void ad_traverse(ADMode mode, uint32_t flags) {
                 if (edge.source == er.source && edge.target == er.target) {
                     Special *special2 = edge2.special;
                     edge2.special = nullptr;
-                    unlock_guard<std::mutex> guard2(state.mutex);
                     delete special2;
                 }
             }
