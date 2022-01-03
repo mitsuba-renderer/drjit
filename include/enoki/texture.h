@@ -682,7 +682,7 @@ protected:
 
 private:
     template <typename T>
-        constexpr static T ipow(T num, unsigned int pow) {
+    constexpr static T ipow(T num, unsigned int pow) {
         return pow == 0 ? 1 : num * ipow(num, pow - 1);
     }
 
@@ -694,9 +694,9 @@ private:
         using InterpPosI = Array<InterpOffset, Dimension>;
 
         static_assert(
-                array_size_v<T> == Dimension &&
-                std::is_integral_v<Scalar> &&
-                std::is_signed_v<Scalar>
+            array_size_v<T> == Dimension &&
+            std::is_integral_v<Scalar> &&
+            std::is_signed_v<Scalar>
         );
 
         InterpPosI pos_i(0);
@@ -733,9 +733,9 @@ private:
     template <typename T> T wrap(const T &pos) const {
         using Scalar = scalar_t<T>;
         static_assert(
-                array_size_v<T> == Dimension &&
-                std::is_integral_v<Scalar> &&
-                std::is_signed_v<Scalar>
+            array_size_v<T> == Dimension &&
+            std::is_integral_v<Scalar> &&
+            std::is_signed_v<Scalar>
         );
 
         const Array<Int32, Dimension> shape = m_shape_opaque;
@@ -773,15 +773,16 @@ private:
         );
 
         Index index;
-        if constexpr (Dimension == 1)
+        if constexpr (Dimension == 1) {
             index = Index(pos.x());
-        else if constexpr (Dimension == 2)
+        } else if constexpr (Dimension == 2) {
             index = Index(
                 fmadd(Index(pos.y()), m_shape_opaque.x(), Index(pos.x())));
-        else if constexpr (Dimension == 3)
+        } else if constexpr (Dimension == 3) {
             index = Index(fmadd(
                 fmadd(Index(pos.z()), m_shape_opaque.y(), Index(pos.y())),
                 m_shape_opaque.x(), Index(pos.x())));
+        }
 
         const uint32_t channels = (uint32_t) m_value.shape(Dimension);
 
