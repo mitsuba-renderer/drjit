@@ -471,21 +471,6 @@ struct Scope {
     }
 };
 
-// Stores per-thread state
-struct LocalState {
-    /// Thread-local edge list used by ad_enqueue_*() and ad_traverse()
-    std::vector<EdgeRef> todo;
-
-    /// Keeps track of implicit input dependencies of recorded computation
-    std::vector<EdgeRef> implicit;
-
-    /// List of AD variables that cannot be processed and must be postponed
-    std::vector<EdgeRef> postponed;
-
-    /// Nested scopes that restrict AD to specific variables
-    std::vector<Scope> scopes;
-};
-
 // Special edge (scatter, gather, scatter_reduce, block_sum, etc.)
 struct Special {
     virtual void backward(Variable * /* source */,
@@ -500,6 +485,29 @@ struct Special {
     }
 
     virtual ~Special() = default;
+};
+
+// Stores per-thread state
+struct LocalState {
+    /// Thread-local edge list used by ad_enqueue_*() and ad_traverse()
+    std::vector<EdgeRef> todo;
+
+    /// Keeps track of implicit input dependencies of recorded computation
+    std::vector<EdgeRef> implicit;
+
+    /// List of AD variables that cannot be processed and must be postponed
+    std::vector<EdgeRef> postponed;
+
+    /// Nested scopes that restrict AD to specific variables
+    std::vector<Scope> scopes;
+
+    /// List of special edges that should be cleaned up
+    std::vector<Special *> cleanup;
+
+    ~LocalState() {
+        for (Special *s : cleanup)
+            delete s;
+    }
 };
 
 constexpr bool IsDouble = std::is_same_v<Value, double>;
@@ -520,13 +528,8 @@ static State state;
 static thread_local LocalState local_state;
 
 void Edge::reset() {
-    Special *special_copy = special;
     memset(this, 0, sizeof(uint32_t) * 4 + sizeof(Special *));
     weight = Value();
-    if (special_copy) {
-        unlock_guard<std::mutex> guard(state.mutex);
-        delete special_copy;
-    }
 }
 
 // ==========================================================================
@@ -624,6 +627,10 @@ static void ad_free(uint32_t index, Variable *v) {
                  next_fwd = edge.next_fwd;
 
         assert(edge.target == index);
+
+        // Postpone deallocation of the edge callback, if there is one
+        if (unlikely(edge.special))
+            local_state.cleanup.push_back(edge.special);
         edge.reset();
 
         Variable *v2 = state[source];
@@ -1873,9 +1880,12 @@ void ad_traverse(ADMode mode, uint32_t flags) {
             }
 
             if (unlikely(!edge_id_cur))
-                ad_fail("ad_traverse(): could not find backward edge a%i "
-                        "-> a%i", er.source, er.target);
+                ad_fail("ad_traverse(): could not find backward edge a%u "
+                        "-> a%u", er.source, er.target);
 
+            // Postpone deallocation of the edge callback, if there is one
+            if (unlikely(edge.special))
+                ls.cleanup.push_back(edge.special);
             edge.reset();
             state.unused_edges.push_back(er.id);
 
@@ -1887,6 +1897,18 @@ void ad_traverse(ADMode mode, uint32_t flags) {
     }
 
     ad_log(Debug, "ad_traverse(): done.");
+
+    std::vector<Special *> temp, &cleanup = ls.cleanup;
+    if (!cleanup.empty()) {
+        /* Extra-careful here: deallocate cleanup queue of
+           custom AD edge callbacks (reentrant!) */
+
+        temp.swap(cleanup);
+        for (Special *special : temp)
+            delete special;
+        temp.clear();
+        temp.swap(cleanup);
+    }
 
     todo.clear();
     todo_tls.swap(todo);
