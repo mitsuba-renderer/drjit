@@ -381,7 +381,7 @@ struct State {
                    "remain in use)!", variables.size());
             uint32_t counter = 0;
             for (auto kv : variables) {
-                ad_log(Warn, " - variable a%i (%u references)", kv.first,
+                ad_log(Warn, " - variable a%u (%u references)", kv.first,
                        kv.second.ref_count);
                 if (++counter == 10) {
                     ad_log(Warn, " - (skipping the rest)");
@@ -400,7 +400,7 @@ struct State {
     Variable *operator[](uint32_t index) {
         auto it = variables.find(index);
         if (unlikely(index == 0 || it == variables.end()))
-            ad_fail("referenced an unknown variable a%i!", index);
+            ad_fail("referenced an unknown variable a%u!", index);
         return &it.value();
     }
 };
@@ -435,7 +435,6 @@ struct Scope {
 
     Scope(bool complement, IndexSet &&indices)
         : complement(complement), indices(std::move(indices)) { }
-
 
     /// Check if a variable has gradients enabled
     bool enabled(uint32_t index) const {
@@ -536,23 +535,23 @@ void Edge::reset() {
 
 static void ad_inc_ref(uint32_t index, Variable *v) noexcept (true) {
     ENOKI_MARK_USED(index);
-    ad_trace("ad_inc_ref(a%i): %u", index, v->ref_count + 1);
+    ad_trace("ad_inc_ref(a%u): %u", index, v->ref_count + 1);
     v->ref_count++;
 }
 
 static bool ad_dec_ref(uint32_t index, Variable *v) noexcept (true) {
     ENOKI_MARK_USED(index);
-    ad_trace("ad_dec_ref(a%i): %u", index, v->ref_count - 1);
+    ad_trace("ad_dec_ref(a%u): %u", index, v->ref_count - 1);
 
     if (unlikely(v->ref_count == 0))
         ad_fail("enoki-autodiff: fatal error: external reference count of "
-                "variable a%i became negative!", index);
+                "variable a%u became negative!", index);
 
-    if (--v->ref_count == 0) {
+    if (--v->ref_count > 0) {
+        return false;
+    } else {
         ad_free(index, v);
         return true;
-    } else {
-        return false;
     }
 }
 
@@ -583,11 +582,25 @@ template <typename T> void ad_dec_ref_impl(uint32_t index) noexcept(true) {
     if (index == 0)
         return;
     std::lock_guard<std::mutex> guard(state.mutex);
-    ad_dec_ref(index, state[index]);
+
+    if (unlikely(ad_dec_ref(index, state[index]))) {
+        /* Extra-careful here: deallocate cleanup queue of
+           custom AD edge callbacks (reentrant!) */
+
+        std::vector<Special *> temp, &cleanup = local_state.cleanup;
+
+        if (!cleanup.empty()) {
+            temp.swap(cleanup);
+            for (Special *special : temp)
+                delete special;
+            temp.clear();
+            temp.swap(cleanup);
+        }
+    }
 }
 
 static void ad_free(uint32_t index, Variable *v) {
-    ad_trace("ad_free(a%i)", index);
+    ad_trace("ad_free(a%u)", index);
 
     if (v->free_label) {
         free(v->label);
@@ -600,14 +613,14 @@ static void ad_free(uint32_t index, Variable *v) {
     while (edge_id) {
         Edge &edge = state.edges[edge_id];
 
-        ad_trace("ad_free(): freeing edge a%i -> a%i", edge.source,
+        ad_trace("ad_free(): freeing edge a%u -> a%u", edge.source,
                  edge.target);
 
         if (unlikely(edge.target != index))
             ad_fail("ad_free(): invalid edge connectivity!");
 
-        uint32_t source = edge.source;
-        uint32_t next_bwd = edge.next_bwd,
+        uint32_t source = edge.source,
+                 next_bwd = edge.next_bwd,
                  next_fwd = edge.next_fwd;
 
         assert(edge.target == index);
@@ -617,7 +630,7 @@ static void ad_free(uint32_t index, Variable *v) {
 
         if (unlikely(v2->ref_count == 0))
             ad_fail("enoki-autodiff: fatal error: reference count of variable "
-                    "a%i became negative!", source);
+                    "a%u became negative!", source);
 
         if (!ad_dec_ref(source, v2)) {
             uint32_t fwd = v2->next_fwd;
@@ -817,13 +830,13 @@ uint32_t ad_new(const char *label, size_t size, uint32_t op_count,
                 if (var->size != 1)
                     ad_raise(
                         "ad_new(): recorded computation performs an implicit "
-                        "read of variable (a%i), which has size %u! However, "
+                        "read of variable (a%u), which has size %u! However, "
                         "only scalar (size == 1) accesses are permitted in "
                         "this manner. You will likely want to convert the "
                         "read into an enoki::gather() operation.",
                         index, var->size);
 
-                ad_trace("ad_new(): implicit read of variable a%i, inserting a "
+                ad_trace("ad_new(): implicit read of variable a%u, inserting a "
                          "gather operation..", op[i]);
 
                 index = ad_new_gather_impl<Value>("gather", size, op[i], Index(0),
@@ -842,13 +855,13 @@ uint32_t ad_new(const char *label, size_t size, uint32_t op_count,
         const char *l2 = label ? label : "";
         switch (op_count) {
             case 0:
-                ad_log(Debug, "ad_new(a%i, size=%zu%s%s)", index, size, l1, l2); break;
+                ad_log(Debug, "ad_new(a%u, size=%zu%s%s)", index, size, l1, l2); break;
             case 1:
-                ad_log(Debug, "ad_new(a%i <- a%i, size=%zu%s%s)", index, op[0], size, l1, l2); break;
+                ad_log(Debug, "ad_new(a%u <- a%u, size=%zu%s%s)", index, op[0], size, l1, l2); break;
             case 2:
-                ad_log(Debug, "ad_new(a%i <- a%i, a%i, size=%zu%s%s)", index, op[0], op[1], size, l1, l2); break;
+                ad_log(Debug, "ad_new(a%u <- a%u, a%u, size=%zu%s%s)", index, op[0], op[1], size, l1, l2); break;
             case 3:
-                ad_log(Debug, "ad_new(a%i <- a%i, a%i, a%i, size=%zu%s%s)", index, op[0], op[1], op[2], size, l1, l2); break;
+                ad_log(Debug, "ad_new(a%u <- a%u, a%u, a%u, size=%zu%s%s)", index, op[0], op[1], op[2], size, l1, l2); break;
             default: break;
         }
     }
@@ -867,7 +880,7 @@ uint32_t ad_new(const char *label, size_t size, uint32_t op_count,
 
         if (weight_is_zero) {
             ad_trace(
-                "ad_new(a%i <- a%i): weight of edge %i is zero, skipping!",
+                "ad_new(a%u <- a%u): weight of edge %i is zero, skipping!",
                 index, op[i], i);
             continue;
         }
@@ -891,7 +904,7 @@ uint32_t ad_new(const char *label, size_t size, uint32_t op_count,
     if (op_count > 0 && edge_index == 0) {
         // All edges were pruned, don't create the node after all
         ad_trace(
-            "ad_new(a%i): all nodes were pruned, removing variable from graph", index);
+            "ad_new(a%u): all nodes were pruned, removing variable from graph", index);
         ad_free(index, var);
         return 0;
     }
@@ -958,7 +971,7 @@ template <typename Value> struct SpecialCallback : Special {
     };
 
     virtual ~SpecialCallback() {
-        /* leave critical section */ {
+        /* outside of critical section */ {
             unlock_guard<std::mutex> guard(state.mutex);
             callback.reset();
         }
@@ -1025,14 +1038,14 @@ uint32_t ad_new_select(const char *label, size_t size, const Mask &mask,
             uint32_t result = mask[0] ? t_index : f_index;
             if (result)
                 ad_inc_ref(result, state[result]);
-            ad_log(Debug, "ad_new_select(a%i <- a%i, a%i): simplified", result, t_index, f_index);
+            ad_log(Debug, "ad_new_select(a%u <- a%u, a%u): simplified", result, t_index, f_index);
             return result;
         }
 
         if (jit_flag(JitFlag::ADOptimize) && f_index == t_index) {
             if (t_index)
                 ad_inc_ref(t_index, state[t_index]);
-            ad_log(Debug, "ad_new_select(a%i <- a%i, a%i): simplified", t_index, t_index, f_index);
+            ad_log(Debug, "ad_new_select(a%u <- a%u, a%u): simplified", t_index, t_index, f_index);
             return t_index;
         }
     }
@@ -1072,13 +1085,13 @@ uint32_t ad_new_select(const char *label, size_t size, const Mask &mask,
                 if (var->size != 1)
                     ad_raise(
                         "ad_new_select(): recorded computation performs an "
-                        "implicit read of variable (a%i), which has size %u! "
+                        "implicit read of variable (a%u), which has size %u! "
                         "However, only scalar (size == 1) accesses are "
                         "permitted in this manner. You will likely want to "
                         "convert the read into an enoki::gather() operation.",
                         index, var->size);
 
-                ad_trace("ad_new_select(): implicit read of variable a%i, inserting a "
+                ad_trace("ad_new_select(): implicit read of variable a%u, inserting a "
                          "gather operation..", op[i]);
 
                 index = ad_new_gather_impl<Value>("gather", size, op[i], Index(0),
@@ -1093,7 +1106,7 @@ uint32_t ad_new_select(const char *label, size_t size, const Mask &mask,
 
     auto [index, var] = ad_var_new(label, size);
 
-    ad_log(Debug, "ad_new_select(a%i <- a%i, a%i)", index, t_index, f_index);
+    ad_log(Debug, "ad_new_select(a%u <- a%u, a%u)", index, t_index, f_index);
     uint32_t edge_index = 0;
     for (uint32_t i = 0; i < 2; ++i) {
         if (op[i] == 0)
@@ -1190,7 +1203,7 @@ uint32_t ad_new_gather_impl(const char *label, size_t size, uint32_t src_index,
 
         auto [index, var] = ad_var_new(label, size);
 
-        ad_log(Debug, "ad_new_gather(a%i <- a%i, size=%zu, permute=%i)", index,
+        ad_log(Debug, "ad_new_gather(a%u <- a%u, size=%zu, permute=%i)", index,
                src_index, size, (int) permute);
 
         Variable *var2 = state[src_index];
@@ -1211,7 +1224,7 @@ uint32_t ad_new_gather_impl(const char *label, size_t size, uint32_t src_index,
            that will need special handling when the AD graph is traversed at
            some later point. For now, just keep track of this event. */
         if (unlikely(var->placeholder && !var2->placeholder)) {
-            ad_trace("ad_new_gather(): recording an implicit dependency (a%i).", src_index);
+            ad_trace("ad_new_gather(): recording an implicit dependency (a%u).", src_index);
             local_state.implicit.emplace_back(edge_index_new, src_index, index);
         }
 
@@ -1304,7 +1317,7 @@ uint32_t ad_new_scatter(const char *label, size_t size, ReduceOp op,
         auto [index, var] = ad_var_new(label, size);
 
         ad_log(Debug,
-               "ad_new_scatter(op=%i, a%i <- a%i, a%i, permute=%i)",
+               "ad_new_scatter(op=%i, a%u <- a%u, a%u, permute=%i)",
                (int) op, index, src_index, dst_index, (int) permute);
 
         uint32_t edge_index = 0;
@@ -1379,7 +1392,7 @@ template <typename T> T ad_grad(uint32_t index, bool fail_if_missing) {
     auto it = state.variables.find(index);
     if (it == state.variables.end()) {
         if (fail_if_missing)
-            ad_raise("ad_grad(): referenced an unknown variable a%i!", index);
+            ad_raise("ad_grad(): referenced an unknown variable a%u!", index);
         return T(0);
     }
 
@@ -1408,7 +1421,7 @@ void ad_set_grad(uint32_t index, const T &value, bool fail_if_missing) {
     auto it = state.variables.find(index);
     if (it == state.variables.end()) {
         if (fail_if_missing)
-            ad_raise("ad_set_grad(): referenced an unknown variable a%i!", index);
+            ad_raise("ad_set_grad(): referenced an unknown variable a%u!", index);
         return;
     }
 
@@ -1417,10 +1430,10 @@ void ad_set_grad(uint32_t index, const T &value, bool fail_if_missing) {
 
     if (v.size != size_in && size_in != 1 && v.size != 1)
         ad_raise("ad_set_grad(): attempted to assign a gradient of size "
-                 "%zu to AD variable a%i, which has size %u!",
+                 "%zu to AD variable a%u, which has size %u!",
                  size_in, index, v.size);
 
-    ad_trace("ad_set_grad(a%i)", index);
+    ad_trace("ad_set_grad(a%u)", index);
     if (v.size != 1 || size_in == 1)
         v.grad = value;
     else
@@ -1439,7 +1452,7 @@ void ad_accum_grad(uint32_t index, const T &value, bool fail_if_missing) {
     auto it = state.variables.find(index);
     if (it == state.variables.end()) {
         if (fail_if_missing)
-            ad_raise("ad_accum_grad(): referenced an unknown variable a%i!", index);
+            ad_raise("ad_accum_grad(): referenced an unknown variable a%u!", index);
         return;
     }
 
@@ -1448,10 +1461,10 @@ void ad_accum_grad(uint32_t index, const T &value, bool fail_if_missing) {
 
     if (v.size != size_in && size_in != 1 && v.size != 1)
         ad_raise("ad_accum_grad(): attempted to accumulate a gradient of size "
-                 "%zu into AD variable a%i, which has size %u!",
+                 "%zu into AD variable a%u, which has size %u!",
                  size_in, index, v.size);
 
-    ad_trace("ad_accum_grad(a%i)", index);
+    ad_trace("ad_accum_grad(a%u)", index);
     v.accum(value, (uint32_t) size_in);
 }
 
@@ -1459,7 +1472,7 @@ template <typename T> void ad_set_label(uint32_t index, const char *label) {
     if (index == 0)
         return;
     std::lock_guard<std::mutex> guard(state.mutex);
-    ad_log(Debug, "ad_set_label(a%i, \"%s\")", index, label ? label : "(null)");
+    ad_log(Debug, "ad_set_label(a%u, \"%s\")", index, label ? label : "(null)");
     Variable *v = state[index];
     if (v->free_label)
         free(v->label);
@@ -1495,7 +1508,8 @@ void ad_add_edge(uint32_t source_idx, uint32_t target_idx,
         return;
 
     std::lock_guard<std::mutex> guard(state.mutex);
-    ad_log(Debug, "ad_add_edge(a%i -> a%i)", source_idx, target_idx);
+    ad_log(Debug, "ad_add_edge(a%u -> a%u)", source_idx, target_idx);
+    assert(source_idx < target_idx);
 
     Variable *source = state[source_idx],
              *target = state[target_idx];
@@ -1514,8 +1528,8 @@ void ad_add_edge(uint32_t source_idx, uint32_t target_idx,
     edge.next_bwd = target->next_bwd;
 
     source->next_fwd = edge_index_new;
-    ad_inc_ref(source_idx, source);
     target->next_bwd = edge_index_new;
+    ad_inc_ref(source_idx, source);
 }
 
 
@@ -1534,7 +1548,7 @@ static void ad_dfs_fwd(std::vector<EdgeRef> &todo, uint32_t index, Variable *v) 
         if (!edge.visited) {
             edge.visited = 1;
 
-            ad_trace("ad_dfs_fwd(): enqueuing edge a%i -> a%i", index,
+            ad_trace("ad_dfs_fwd(): enqueuing edge a%u -> a%u", index,
                      edge.target);
 
             Variable *v2 = state[edge.target];
@@ -1556,7 +1570,7 @@ static void ad_dfs_bwd(std::vector<EdgeRef> &todo, uint32_t index, Variable *v) 
         if (!edge.visited) {
             edge.visited = 1;
 
-            ad_trace("ad_dfs_bwd(): enqueuing edge a%i -> a%i", index,
+            ad_trace("ad_dfs_bwd(): enqueuing edge a%u -> a%u", index,
                      edge.source);
 
             Variable *v2 = state[edge.source];
@@ -1573,7 +1587,7 @@ template <typename T> void ad_enqueue(ADMode mode, uint32_t index) {
     if (index == 0)
         return;
 
-    ad_trace("ad_enqueue_node(a%i, mode=%s)", index,
+    ad_trace("ad_enqueue_node(a%u, mode=%s)", index,
              mode == ADMode::Forward ? "forward" : "backward");
 
     LocalState &ls = local_state;
@@ -1677,7 +1691,7 @@ void ad_traverse(ADMode mode, uint32_t flags) {
 
         // Aggressively clear gradients at intermediate nodes
         if (clear_grad) {
-            ad_trace("ad_traverse(): clearing gradient at intermediate variable a%i", prev_i);
+            ad_trace("ad_traverse(): clearing gradient at intermediate variable a%u", prev_i);
             prev->grad = Value();
         }
     };
@@ -1699,16 +1713,16 @@ void ad_traverse(ADMode mode, uint32_t flags) {
         }
 
         if (unlikely(er.id == last_edge_id))
-            ad_fail("ad_traverse(): internal error: edge a%i -> a%i was "
+            ad_fail("ad_traverse(): internal error: edge a%u -> a%u was "
                     "enqueued twice!", v0i, v1i);
         last_edge_id = er.id;
 
         if (unlikely(!edge.visited))
-            ad_fail("ad_traverse(): internal error: edge a%i -> a%i is not "
+            ad_fail("ad_traverse(): internal error: edge a%u -> a%u is not "
                     "marked as visited! (1)", er.source, er.target);
 
         if (unlikely(edge.source != er.source || edge.target != er.target))
-            ad_fail("ad_traverse(): internal error: edge a%i -> a%i was "
+            ad_fail("ad_traverse(): internal error: edge a%u -> a%u was "
                     "garbage collected between enqueuing and traversal steps!",
                     v0i, v1i);
 
@@ -1719,7 +1733,7 @@ void ad_traverse(ADMode mode, uint32_t flags) {
 
         if (unlikely(rec && !v0->placeholder)) {
             if (mode == ADMode::Backward) {
-                ad_trace("ad_traverse(): postponing edge a%i -> a%i (must be "
+                ad_trace("ad_traverse(): postponing edge a%u -> a%u (must be "
                          "handled outside of megakernel).", v0i, v1i);
                 ls.postponed.push_back(er);
                 er.id = er.source = er.target = 0;
@@ -1727,7 +1741,7 @@ void ad_traverse(ADMode mode, uint32_t flags) {
             } else if (!v1->placeholder) {
                 ad_raise(
                     "ad_traverse(): tried to forward-propagate derivatives "
-                    "across edge a%i -> a%i, which lies outside of the "
+                    "across edge a%u -> a%u, which lies outside of the "
                     "megakernel currently being recorded. You must "
                     "enqueue the variables being differentiated and call "
                     "ek.traverse(ek.ADFlag.ClearEdges) *before* entering "
@@ -1738,12 +1752,12 @@ void ad_traverse(ADMode mode, uint32_t flags) {
 
         if (unlikely(grad_size != 1 && v0->size != grad_size)) {
             if (grad_size == 0) {
-                ad_trace("ad_traverse(): skipping edge a%i -> a%i (no source "
+                ad_trace("ad_traverse(): skipping edge a%u -> a%u (no source "
                          "gradient).", v0i, v1i);
                 continue;
             } else {
                 ad_raise("ad_traverse(): gradient propagation encountered "
-                         "variable a%i (\"%s\") with an invalid gradient size "
+                         "variable a%u (\"%s\") with an invalid gradient size "
                          "(expected size %u, actual size %u)!",
                          v0i, v0->label ? v0->label : "", v0->size, grad_size);
             }
@@ -1752,7 +1766,7 @@ void ad_traverse(ADMode mode, uint32_t flags) {
         postprocess(v0i_prev, v0i);
         v0i_prev = v0i;
 
-        ad_trace("ad_traverse(): processing edge a%i -> a%i ..", v0i, v1i);
+        ad_trace("ad_traverse(): processing edge a%u -> a%u ..", v0i, v1i);
 
         if (unlikely(v0->custom_label)) {
             char tmp[256];
@@ -1799,10 +1813,10 @@ void ad_traverse(ADMode mode, uint32_t flags) {
         Edge &edge = state.edges[er.id];
         if (unlikely(edge.source != er.source || edge.target != er.target))
             ad_fail(
-                "ad_traverse(): internal error: edge a%i -> a%i was garbage "
+                "ad_traverse(): internal error: edge a%u -> a%u was garbage "
                 "collected between enqueue and traverse steps!", er.source, er.target);
         else if (unlikely(!edge.visited))
-            ad_fail("ad_traverse(): internal error: edge a%i -> a%i is not "
+            ad_fail("ad_traverse(): internal error: edge a%u -> a%u is not "
                     "marked as visited!", er.source, er.target);
 
         edge.visited = 0;
@@ -1811,14 +1825,14 @@ void ad_traverse(ADMode mode, uint32_t flags) {
                  *target = state[er.target];
 
         if (flags & (uint32_t) ADFlag::ClearEdges) {
-            ad_trace("ad_traverse(): removing edge a%i -> a%i", er.source, er.target);
+            ad_trace("ad_traverse(): removing edge a%u -> a%u", er.source, er.target);
 
             // Clear out forward edge
             uint32_t edge_id_prev = 0,
                      edge_id_cur = source->next_fwd;
             while (edge_id_cur) {
                 Edge &e2 = state.edges[edge_id_cur];
-                ad_trace("ad_traverse(): visiting forward edge a%i -> a%i", e2.source, e2.target);
+                ad_trace("ad_traverse(): visiting forward edge a%u -> a%u", e2.source, e2.target);
 
                 if (edge_id_cur == er.id) {
                     if (edge_id_prev)
@@ -1835,8 +1849,8 @@ void ad_traverse(ADMode mode, uint32_t flags) {
             }
 
             if (unlikely(!edge_id_cur))
-                ad_fail("ad_traverse(): could not find forward edge a%i "
-                        "-> a%i", er.source, er.target);
+                ad_fail("ad_traverse(): could not find forward edge a%u "
+                        "-> a%u", er.source, er.target);
 
             // Clear out backward edge
             edge_id_prev = 0;
@@ -2135,7 +2149,7 @@ template <typename Value> const char *ad_graphviz() {
         if (is_valid(v->grad))
             color = "yellowgreen";
 
-        buffer.fmt("|{a%i|S:%u|R:%u%s}",
+        buffer.fmt("|{a%u|S:%u|R:%u%s}",
             index, v->size, v->ref_count,
             v->placeholder ? "|P" : "");
 
