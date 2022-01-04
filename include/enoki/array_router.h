@@ -2033,38 +2033,75 @@ template <size_t Size, typename T> ENOKI_INLINE Array<value_t<T>, Size> tail(con
 
 template <typename T1, typename T2, enable_if_array_any_t<T1, T2> = 0>
 auto concat(const T1 &a1, const T2 &a2) {
+    constexpr size_t Size1 = array_size_v<T1>,
+                     Size2 = array_size_v<T2>;
+
     static_assert(is_array_any_v<T1, T2>,
                   "concat(): at least one of the inputs must be an array!");
     static_assert(std::is_same_v<scalar_t<T1>, scalar_t<T2>>,
                   "concat(): Scalar types must be identical");
+    static_assert((Size1 == Dynamic) == (Size2 == Dynamic),
+                  "concat(): cannot mix dynamic and static arrays");
 
-    constexpr size_t Size1 = array_size_v<T1>,
-                     Size2 = array_size_v<T2>;
+    if constexpr (Size1 != Dynamic) {
+        using Result = Array<value_t<expr_t<T1, T2>>, Size1 + Size2>;
 
-    using Result = Array<value_t<expr_t<T1, T2>>, Size1 + Size2>;
+        if constexpr (Result::Size1 == Size1 && Result::Size2 == Size2) {
+            return Result(a1, a2);
+        } else {
+            Result result;
 
-    if constexpr (Result::Size1 == Size1 && Result::Size2 == Size2) {
-        return Result(a1, a2);
-    } else {
-        Result result;
-
-        if constexpr (is_array_v<T1>) {
-            if constexpr (Result::Size == T1::ActualSize) {
-                result = a1.derived();
+            if constexpr (is_array_v<T1>) {
+                if constexpr (Result::Size == T1::ActualSize) {
+                    result = a1.derived();
+                } else {
+                    for (size_t i = 0; i < Size1; ++i)
+                        result.entry(i) = a1.derived().entry(i);
+                }
             } else {
-                for (size_t i = 0; i < Size1; ++i)
-                    result.entry(i) = a1.derived().entry(i);
+                result.entry(0) = a1;
             }
-        } else {
-            result.entry(0) = a1;
+
+            if constexpr (is_array_v<T2>) {
+                for (size_t i = 0; i < Size2; ++i)
+                    result.entry(i + Size1) = a2.derived().entry(i);
+            } else {
+                result.entry(Size1) = a2;
+            }
+
+            return result;
+        }
+    } else {
+        static_assert(std::is_same_v<T1, T2> && array_depth_v<T1> == 1);
+        using Result = T1;
+        using UInt32 = uint32_array_t<T1>;
+
+        size_t s1 = a1.size(), s2 = a2.size();
+        Result result = empty<Result>(s1 + s2);
+
+        if (!grad_enabled(a1, a2)) {
+            constexpr size_t ScalarSize = sizeof(scalar_t<Result>);
+            uint8_t *ptr = (uint8_t *) result.data();
+
+            if constexpr (is_jit_array_v<Result>) {
+                constexpr JitBackend backend = detached_t<Result>::Backend;
+                jit_memcpy_async(backend, ptr, a1.data(), s1 * ScalarSize);
+                jit_memcpy_async(backend, ptr + s1 * ScalarSize, a2.data(), s2 * ScalarSize);
+
+            } else {
+                memcpy(ptr, a1.data(), s1 * ScalarSize);
+                memcpy(ptr + s1 * ScalarSize, a2.data(), s2 * ScalarSize);
+            }
+
+            return result;
         }
 
-        if constexpr (is_array_v<T2>) {
-            for (size_t i = 0; i < Size2; ++i)
-                result.entry(i + Size1) = a2.derived().entry(i);
-        } else {
-            result.entry(Size1) = a2;
-        }
+        UInt32 offset = opaque<UInt32>((uint32_t) s1),
+               index1 = arange<UInt32>(s1),
+               index2 = arange<UInt32>(s2) + offset;
+
+        scatter(result, a1, index1);
+        scatter(result, a2, index2);
 
         return result;
     }
