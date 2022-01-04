@@ -2087,7 +2087,6 @@ auto concat(const T1 &a1, const T2 &a2) {
                 constexpr JitBackend backend = detached_t<Result>::Backend;
                 jit_memcpy_async(backend, ptr, a1.data(), s1 * ScalarSize);
                 jit_memcpy_async(backend, ptr + s1 * ScalarSize, a2.data(), s2 * ScalarSize);
-
             } else {
                 memcpy(ptr, a1.data(), s1 * ScalarSize);
                 memcpy(ptr + s1 * ScalarSize, a2.data(), s2 * ScalarSize);

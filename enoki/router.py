@@ -2323,8 +2323,10 @@ def enqueue(mode, *args):
 
 
 def traverse(t, mode, flags=_ek.ADFlag.Default):
+    assert isinstance(mode, _ek.ADMode)
+
     t = _ek.leaf_array_t(t)
-    if t.IsTensor:
+    if _ek.is_tensor_v(t):
         t = t.Array
 
     if not _ek.is_diff_array_v(t):
