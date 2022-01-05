@@ -482,4 +482,25 @@ protected:
     Mask m_cond;
 };
 
+#define ENOKI_DECLARE_EXTERN_AD_TEMPLATE(T, Mask)                              \
+    namespace detail {                                                         \
+    extern template ENOKI_IMPORT void ad_inc_ref<T>(uint32_t) noexcept (true); \
+    extern template ENOKI_IMPORT void ad_dec_ref<T>(uint32_t) noexcept (true); \
+    extern template ENOKI_IMPORT void ad_process_postponed<T>();               \
+    extern template ENOKI_IMPORT uint32_t ad_new_select<T, Mask>(              \
+        const char *, size_t, const Mask &, uint32_t, uint32_t);               \
+    }
+
+ENOKI_DECLARE_EXTERN_AD_TEMPLATE(float,  bool)
+ENOKI_DECLARE_EXTERN_AD_TEMPLATE(double, bool)
+
+#if defined(ENOKI_JIT_H)
+ENOKI_DECLARE_EXTERN_AD_TEMPLATE(CUDAArray<float>,  CUDAArray<bool>)
+ENOKI_DECLARE_EXTERN_AD_TEMPLATE(CUDAArray<double>, CUDAArray<bool>)
+ENOKI_DECLARE_EXTERN_AD_TEMPLATE(LLVMArray<float>,  LLVMArray<bool>)
+ENOKI_DECLARE_EXTERN_AD_TEMPLATE(LLVMArray<double>, LLVMArray<bool>)
+#endif
+
+#undef ENOKI_DECLARE_EXTERN_AD_TEMPLATE
+
 NAMESPACE_END(enoki)
