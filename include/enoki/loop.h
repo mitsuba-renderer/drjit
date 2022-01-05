@@ -20,8 +20,8 @@
 NAMESPACE_BEGIN(enoki)
 NAMESPACE_BEGIN(detail)
 // A few forward declarations so that this compiles even without autodiff.h
-template <typename Value> void ad_inc_ref(uint32_t) noexcept;
-template <typename Value> void ad_dec_ref(uint32_t) noexcept;
+template <typename Value> void ad_inc_ref_impl(uint32_t) noexcept;
+template <typename Value> void ad_dec_ref_impl(uint32_t) noexcept;
 template <typename Value> void ad_process_postponed();
 template <typename Value, typename Mask>
 uint32_t ad_new_select(const char *, size_t, const Mask &, uint32_t, uint32_t);
@@ -96,9 +96,9 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
                 uint32_t index = m_indices_ad_prev[i];
 
                 if (m_ad_float_precision == 32)
-                    detail::ad_dec_ref<Float32>(index);
+                    detail::ad_dec_ref_impl<Float32>(index);
                 else if (m_ad_float_precision == 64)
-                    detail::ad_dec_ref<Float64>(index);
+                    detail::ad_dec_ref_impl<Float64>(index);
             }
         }
     }
@@ -357,16 +357,16 @@ protected:
                                 "ek_loop", jit_var_size(*m_indices[i]),
                                 detach(m_cond), i1, i2);
                         *m_indices_ad[i] = index_new;
-                        detail::ad_dec_ref<Float32>(i1);
-                        detail::ad_dec_ref<Float32>(i2);
+                        detail::ad_dec_ref_impl<Float32>(i1);
+                        detail::ad_dec_ref_impl<Float32>(i2);
                     } else if (m_ad_float_precision == 64) {
                         if (i1 > 0 || i2 > 0)
                             index_new = detail::ad_new_select<Float64>(
                                 "ek_loop", jit_var_size(*m_indices[i]),
                                 detach(m_cond), i1, i2);
                         *m_indices_ad[i] = index_new;
-                        detail::ad_dec_ref<Float64>(i1);
-                        detail::ad_dec_ref<Float64>(i2);
+                        detail::ad_dec_ref_impl<Float64>(i1);
+                        detail::ad_dec_ref_impl<Float64>(i2);
                     }
                 }
                 m_indices_ad_prev.clear();
@@ -407,9 +407,9 @@ protected:
                     }
                     uint32_t index = *m_indices_ad[i];
                     if (m_ad_float_precision == 64)
-                        detail::ad_inc_ref<Float64>(index);
+                        detail::ad_inc_ref_impl<Float64>(index);
                     else if (m_ad_float_precision == 32)
-                        detail::ad_inc_ref<Float32>(index);
+                        detail::ad_inc_ref_impl<Float32>(index);
                     m_indices_ad_prev.push_back(index);
                 }
             }
@@ -482,13 +482,13 @@ protected:
     Mask m_cond;
 };
 
-#define ENOKI_DECLARE_EXTERN_AD_TEMPLATE(T, Mask)                              \
-    namespace detail {                                                         \
-    extern template ENOKI_IMPORT void ad_inc_ref<T>(uint32_t) noexcept (true); \
-    extern template ENOKI_IMPORT void ad_dec_ref<T>(uint32_t) noexcept (true); \
-    extern template ENOKI_IMPORT void ad_process_postponed<T>();               \
-    extern template ENOKI_IMPORT uint32_t ad_new_select<T, Mask>(              \
-        const char *, size_t, const Mask &, uint32_t, uint32_t);               \
+#define ENOKI_DECLARE_EXTERN_AD_TEMPLATE(T, Mask)                                   \
+    namespace detail {                                                              \
+    extern template ENOKI_IMPORT void ad_inc_ref_impl<T>(uint32_t) noexcept (true); \
+    extern template ENOKI_IMPORT void ad_dec_ref_impl<T>(uint32_t) noexcept (true); \
+    extern template ENOKI_IMPORT void ad_process_postponed<T>();                    \
+    extern template ENOKI_IMPORT uint32_t ad_new_select<T, Mask>(                   \
+        const char *, size_t, const Mask &, uint32_t, uint32_t);                    \
     }
 
 ENOKI_DECLARE_EXTERN_AD_TEMPLATE(float,  bool)
