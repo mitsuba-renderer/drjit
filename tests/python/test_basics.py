@@ -21,17 +21,6 @@ def get_class(name):
     return value
 
 
-@pytest.fixture(autouse=True)
-def run_gc():
-    """
-    Run the garbage collector after each test to avoid LLVM <-> CUDA
-    allocate/free sequences, which cause test failures.
-    """
-    yield
-    gc.collect()
-    gc.collect()
-
-
 def test01_construct():
     a = ek.scalar.Array3f(1, 2, 3)
     assert(repr(a) == "[1.0, 2.0, 3.0]")
@@ -70,23 +59,23 @@ def test02_basic_ops(cname):
     nc = r._entry_evals
     v1 = t(4)
     v2 = t(2)
-    assert v1.x == 4
-    assert v2.x == 2
+    assert v1[0] == 4
+    assert v2[0] == 2
     v3 = v1 + v2
-    assert v3.x == 6
+    assert v3[0] == 6
     v3 = v1 - v2
-    assert v3.x == 2
+    assert v3[0] == 2
     v3 = v1 * v2
-    assert v3.x == 8
+    assert v3[0] == 8
 
     if ek.scalar_t(t) is int:
         v3 = v1 // v2
-        assert v3.x == 2
+        assert v3[0] == 2
         with pytest.raises(ek.Exception):
             v3 = v1 / v2
     else:
         v3 = v1 / v2
-        assert v3.x == 2.0
+        assert v3[0] == 2.0
         with pytest.raises(ek.Exception):
             v3 = v1 // v2
 
@@ -115,6 +104,7 @@ def test02_basic_ops(cname):
         entry_evals = 39 if ek.scalar_t(t) is int else 30
 
     assert r._entry_evals == nc + entry_evals
+    assert not t.IsDynamic == hasattr(v3, 'x')
 
 
 @pytest.mark.parametrize("pkg", ['enoki.packet', 'enoki.cuda', 'enoki.llvm'])

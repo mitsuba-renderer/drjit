@@ -450,7 +450,8 @@ def array_configure(cls, shape, type_, value):
         cls.__getitem__ = enoki.detail.tensor_getitem
         cls.__setitem__ = enoki.detail.tensor_setitem
 
-    elif not cls.IsSpecial or cls.IsQuaternion:
+    elif (not cls.IsSpecial or cls.IsQuaternion) \
+            and not cls.Size == enoki.Dynamic:
         if cls.Size > 0:
             cls.x = prop_x
         if cls.Size > 1:
