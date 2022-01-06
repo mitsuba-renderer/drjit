@@ -1499,23 +1499,33 @@ template <typename T> bool grad_enabled(const T &value) {
 
 template <typename T> T replace_grad(const T &a, const T &b) {
     static_assert(is_diff_array_v<T>, "Type does not support gradients!");
+    size_t sa = a.size(), sb = b.size(), sr = sa > sb ? sa : sb;
+
+    if ((sa != sr && sa != 1) || (sb != sr && sb != 1))
+        enoki_raise("replace_grad() : mismatched input sizes "
+                    "(%zu and %zu)", sa, sb);
 
     if constexpr (array_depth_v<T> > 1) {
-        size_t sa = a.size(), sb = b.size(), sr = sa > sb ? sa : sb;
         T result;
-        if constexpr (T::Size == Dynamic) {
+        if constexpr (T::Size == Dynamic)
             result = enoki::empty<T>(sr);
-            if ((sa != sr && sa != 1) || (sb != sr && sb != 1))
-                enoki_raise("replace_grad() : mismatched input sizes "
-                            "(%zu and %zu)", sa, sb);
-        }
 
         for (size_t i = 0; i < sr; ++i)
             result.entry(i) = replace_grad(a.entry(i), b.entry(i));
 
         return result;
     } else {
-        return T::create_borrow(b.index_ad(), a.detach_());
+        T va = a, vb = b;
+        if (sa != sb) {
+            if (sa == 1)
+                va += zero<T>(sb);
+            else if (sb == 1)
+                vb += zero<T>(sa);
+            else
+                enoki_raise("replace_grad(): internal error!");
+        }
+
+        return T::create_borrow(va.index_ad(), vb.detach_());
     }
 }
 

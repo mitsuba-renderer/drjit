@@ -2287,24 +2287,36 @@ def disable_grad(*args):
 
 
 def replace_grad(a, b):
-    if type(a) is not type(b) or not _ek.is_diff_array_v(a) or not a.IsFloat:
+    ta, tb = type(a), type(b)
+
+    if ta is not tb or not _ek.is_diff_array_v(a) or not a.IsFloat:
         raise Exception("replace_grad(): unsupported input types!")
 
-    if a.Depth > 1:
-        size = _builtins.max(len(a), len(b))
-        result = type(a)()
+    la, lb = len(a), len(b)
+    depth = a.Depth # matches b.Depth
+
+    if la != lb:
+        if la == 1 and depth == 1:
+            a = a + zero(ta, lb)
+        elif lb == 1 and depth == 1:
+            b = b + zero(tb, la)
+        else:
+            raise Exeption("replace_grad(): input arguments have "
+                           "incompatible sizes (%i vs %i)!"
+                           % (la, lb))
+
+    if depth > 1:
+        result = ta()
         if a.Size == Dynamic:
-            result.init_(size)
-        for i in range(size):
+            result.init_(la)
+        for i in range(la):
             result[i] = replace_grad(a[i], b[i])
         return result
     else:
         if _ek.is_tensor_v(a):
-            if not _ek.is_tensor_v(b):
-                raise Exception('replace_grad(): both arguments should be Tensors')
-            return type(a)(replace_grad(a.array, b.array), a.shape)
+            return ta(replace_grad(a.array, b.array), a.shape)
         else:
-            return type(a).create_(b.index_ad(), a.detach_())
+            return ta.create_(b.index_ad(), a.detach_())
 
 
 def enqueue(mode, *args):
