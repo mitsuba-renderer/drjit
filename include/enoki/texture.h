@@ -114,11 +114,12 @@ public:
         m_handle_opaque = std::move(other.m_handle_opaque);
         m_shape_opaque = std::move(other.m_shape_opaque);
         m_value = std::move(other.m_value);
-        m_migrate = other.m_migrate;
         for (size_t i = 0; i < Dimension; ++i)
             m_inv_resolution[i] = std::move(other.m_inv_resolution[i]);
         m_filter_mode = other.m_filter_mode;
         m_wrap_mode = other.m_wrap_mode;
+        m_migrate = other.m_migrate;
+        m_migrated = other.m_migrated;
     }
 
     Texture &operator=(Texture &&other) {
@@ -132,11 +133,12 @@ public:
         m_handle_opaque = std::move(other.m_handle_opaque);
         m_shape_opaque = std::move(other.m_shape_opaque);
         m_value = std::move(other.m_value);
-        m_migrate = other.m_migrate;
         for (size_t i = 0; i < Dimension; ++i)
             m_inv_resolution[i] = std::move(other.m_inv_resolution[i]);
         m_filter_mode = other.m_filter_mode;
         m_wrap_mode = other.m_wrap_mode;
+        m_migrate = other.m_migrate;
+        m_migrated = other.m_migrated;
         return *this;
     }
 
@@ -170,12 +172,15 @@ public:
                                     m_handle);
 
             if (m_migrate) {
+                Storage dummy = zero<Storage>(m_size);
+
                 // Fully migrate to texture memory, set m_value to zero
                 if constexpr (IsDiff)
-                    m_value.array() = replace_grad(Storage(0), value);
+                    m_value.array() = replace_grad(dummy, value);
                 else
-                    m_value.array() = Storage(0);
+                    m_value.array() = dummy;
 
+                m_migrated = true;
                 return;
             }
         }
@@ -195,23 +200,24 @@ public:
         set_value(tensor.array());
     }
 
-    Storage &value() const { return tensor().array(); }
+    const Storage &value() const { return tensor().array(); }
 
-    TensorXf &tensor() const {
+    const TensorXf &tensor() const {
         if constexpr (IsCUDA) {
-            if (m_migrate) {
-                if (m_value.array().size() != m_size) {
-                    Storage primal = empty<Storage>(m_size);
-                    jit_cuda_tex_memcpy_t2d(Dimension, m_value.shape().data(),
-                                            m_value.shape(Dimension), m_handle,
-                                            primal.data());
-                    if constexpr (IsDiff)
-                        m_value.array() = replace_grad(primal, m_value.array());
-                    else
-                        m_value.array() = primal;
-                }
+            if (m_migrated) {
+                Storage primal = empty<Storage>(m_size);
+                jit_cuda_tex_memcpy_t2d(Dimension, m_value.shape().data(),
+                                        m_value.shape(Dimension), m_handle,
+                                        primal.data());
+                if constexpr (IsDiff)
+                    m_value.array() = replace_grad(primal, m_value.array());
+                else
+                    m_value.array() = primal;
+
+                m_migrated = false;
             }
         }
+
         return m_value;
     }
 
@@ -812,6 +818,7 @@ private:
     FilterMode m_filter_mode;
     WrapMode m_wrap_mode;
     bool m_migrate = false;
+    mutable bool m_migrated = false;
 };
 
 NAMESPACE_END(enoki)
