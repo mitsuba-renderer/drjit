@@ -1525,7 +1525,7 @@ template <typename T> T replace_grad(const T &a, const T &b) {
                 enoki_raise("replace_grad(): internal error!");
         }
 
-        return T::create_borrow(va.index_ad(), vb.detach_());
+        return T::create_borrow(vb.index_ad(), va.detach_());
     }
 }
 
