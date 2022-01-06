@@ -61,17 +61,22 @@ public:
      * When \c migrate is set to \c true on CUDA mode, the texture information
      * is *fully* migrated to GPU texture memory to avoid redundant storage. In
      * this case, the fallback evaluation routine \ref eval_enoki() is not
-     * usable anymore (it will return zero.) and only \ref eval() or \ref
+     * usable anymore (it will return zero) and only \ref eval() or \ref
      * eval_cuda() should be used. Note that the texture is still
      * differentiable even when migrated. The \ref value() and \ref tensor()
-     * operations need to perform a reverse migration in this mode.
+     * operations will perform a reverse migration in this caes.
      *
-     * The \c filter_mode defines the interpolation method to be used in all
-     * evaluation routines. By default, the texture is linearly interpolated.
+     * The \c filter_mode parameter defines the interpolation method to be used
+     * in all evaluation routines. By default, the texture is linearly
+     * interpolated. Besides nearest/linear filtering, the implementation also
+     * provides a clamped cubic B-spline interpolation scheme in case a
+     * higher-order interpolation is needed. In CUDA mode, this is done using a
+     * series of linear lookups to optimally use the hardwrae (hence, linear
+     * filtering must be enabled to use this feature).
      *
      * When evaluating the texture outside of its boundaries, the \c wrap_mode
-     * defines the wrapping method. The default behavior is to replicate the
-     * edge color in each dimension infinitely.
+     * defines the wrapping method. The default behavior is \ref WrapMode::Clamp,
+     * which indefinitely extends the colors on the boundary along each dimension.
      */
     Texture(const size_t shape[Dimension], size_t channels, bool migrate = true,
             FilterMode filter_mode = FilterMode::Linear,
@@ -146,11 +151,14 @@ public:
     /// Return the CUDA handle (cudaTextureObject_t). NULL on all other backends
     const void *handle() const { return m_handle; }
 
+    /// Return the texture dimension plus one (for the "channel dimension")
     size_t ndim() const { return Dimension + 1; }
+
     const size_t *shape() const { return m_value.shape().data(); }
     FilterMode filter_mode() const { return m_filter_mode; }
     WrapMode wrap_mode() const { return m_wrap_mode; }
 
+    /// Override the texture contents with the provided linearized 1D array
     void set_value(const Storage &value) {
         if (value.size() != m_size)
             enoki_raise("Texture::set_value(): unexpected array size!");
@@ -175,6 +183,7 @@ public:
         m_value.array() = value;
     }
 
+    /// Override the texture contents with the provided tensor
     void set_tensor(const TensorXf &tensor) {
         if (tensor.ndim() != Dimension + 1)
             enoki_raise("Texture::set_tensor(): tensor dimension must equal "
@@ -732,6 +741,7 @@ private:
         return pos_i;
     }
 
+    /// Apply the configured texture wrapping mode to an integer position
     template <typename T> T wrap(const T &pos) const {
         using Scalar = scalar_t<T>;
         static_assert(
@@ -764,6 +774,7 @@ private:
         }
     }
 
+    /// Helper function to compute the array index for a given N-D position
     template <typename T>
     uint32_array_t<value_t<T>> index(const T &pos) const {
         using Scalar = scalar_t<T>;
@@ -791,6 +802,7 @@ private:
         return index * channels;
     }
 
+private:
     void *m_handle = nullptr;
     size_t m_size = 0;
     UInt64 m_handle_opaque;
