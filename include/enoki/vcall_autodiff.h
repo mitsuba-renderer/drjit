@@ -43,13 +43,6 @@ template <typename T, typename... Ts> void ad_copy(T &value, Ts&...values) {
 
 using ConstStr = const char *;
 
-template <typename Type> struct ADProcessPostponedGuard {
-    ~ADProcessPostponedGuard() {
-        detail::ad_process_postponed<Type>();
-    }
-};
-
-
 template <typename DiffType, typename Self, typename Result, typename Func,
           typename... Args>
 struct DiffVCall : CustomOp<DiffType, Result, ConstStr, Self, Func, Args...> {
@@ -61,8 +54,6 @@ struct DiffVCall : CustomOp<DiffType, Result, ConstStr, Self, Func, Args...> {
 
     Result eval(const ConstStr &name, const Self &self, const Func &func,
                 const Args &... args) override {
-        ADProcessPostponedGuard<Type> guard;
-
         using Class = std::decay_t<std::remove_pointer_t<scalar_t<Self>>>;
         m_name_static = name;
         snprintf(m_name_long, sizeof(m_name_long), "VCall: %s::%s()",
@@ -130,7 +121,6 @@ struct DiffVCall : CustomOp<DiffType, Result, ConstStr, Self, Func, Args...> {
         const Self &self = Base::template value_in<1>();
         const Func &func = Base::template value_in<2>();
         using Input = ek_tuple<Args...>;
-        ADProcessPostponedGuard<Type> guard;
 
         auto func_bwd = [func](auto *self2, auto &grad_out,
                                auto... args) -> Input {

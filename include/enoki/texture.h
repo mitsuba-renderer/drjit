@@ -563,7 +563,7 @@ public:
      *
      * This implementation computes the result directly from explicit
      * differentiated basis functions. It has no autodiff support.
-     * 
+     *
      * The resulting gradient and hessian have been multiplied by the spatial extents
      * to count for the transformation from the unit size volume to the size of its
      * shape.
@@ -681,7 +681,7 @@ public:
      *
      * This implementation computes the result directly from explicit
      * differentiated basis functions. It has no autodiff support.
-     * 
+     *
      * The resulting gradient and hessian have been multiplied by the spatial extents
      * to count for the transformation from the unit size volume to the size of its
      * shape.

@@ -2646,21 +2646,21 @@ class _DummyContextManager:
         pass
 
 class _ADContextManager:
-    def __init__(self, suspend, array_type, array_indices):
-        self.suspend = suspend
+    def __init__(self, scope_type, array_type, array_indices):
+        self.scope_type = scope_type
         self.array_type = array_type
         self.array_indices = array_indices
 
     def __enter__(self):
         if self.array_type is not None:
-            self.array_type.scope_enter_(self.suspend, self.array_indices)
+            self.array_type.scope_enter_(self.scope_type, self.array_indices)
         else:
             if hasattr(_ek, 'cuda'):
-                _ek.cuda.ad.Float32.scope_enter_(self.suspend, self.array_indices)
-                _ek.cuda.ad.Float64.scope_enter_(self.suspend, self.array_indices)
+                _ek.cuda.ad.Float32.scope_enter_(self.scope_type, self.array_indices)
+                _ek.cuda.ad.Float64.scope_enter_(self.scope_type, self.array_indices)
             if hasattr(_ek, 'llvm'):
-                _ek.llvm.ad.Float32.scope_enter_(self.suspend, self.array_indices)
-                _ek.llvm.ad.Float64.scope_enter_(self.suspend, self.array_indices)
+                _ek.llvm.ad.Float32.scope_enter_(self.scope_type, self.array_indices)
+                _ek.llvm.ad.Float64.scope_enter_(self.scope_type, self.array_indices)
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self.array_type is not None:
@@ -2682,7 +2682,7 @@ def suspend_grad(*args, condition = True):
     array_type = _ek.detail.diff_vars(args, array_indices, check_grad_enabled=False)
     if len(args) > 0 and len(array_indices) == 0:
         array_indices = [0]
-    return _ADContextManager(True, array_type, array_indices)
+    return _ADContextManager(_ek.detail.ADScope.Suspend, array_type, array_indices)
 
 
 def resume_grad(*args, condition = True):
@@ -2693,7 +2693,13 @@ def resume_grad(*args, condition = True):
     array_type = _ek.detail.diff_vars(args, array_indices, check_grad_enabled=False)
     if len(args) > 0 and len(array_indices) == 0:
         array_indices = [0]
-    return _ADContextManager(False, array_type, array_indices)
+    return _ADContextManager(_ek.detail.ADScope.Resume, array_type, array_indices)
+
+
+def isolate_grad(condition = True):
+    if not condition:
+        return _DummyContextManager()
+    return _ADContextManager(_ek.detail.ADScope.Isolate, None, [])
 
 
 # -------------------------------------------------------------------

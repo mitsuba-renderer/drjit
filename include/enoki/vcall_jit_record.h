@@ -208,6 +208,7 @@ template <typename Result, typename Func, typename Self, typename... Args>
 Result vcall_jit_record(const char *name, const Func &func, Self &self,
                         const Args &... args) {
     using Base = std::remove_const_t<std::remove_pointer_t<value_t<Self>>>;
+    using DiffType = leaf_array_t<Result, Args...>;
     static constexpr JitBackend Backend = detached_t<Self>::Backend;
     using Mask = mask_t<Self>;
 
@@ -235,6 +236,7 @@ Result vcall_jit_record(const char *name, const Func &func, Self &self,
     } else {
         // Also check the mask stack to constrain side effects in recorded computation
         Mask mask_combined = mask && Mask::steal(jit_var_mask_peek(Backend));
+        isolate_grad<DiffType> guard;
 
         return vcall_jit_record_impl<Result, Base>(
             name, n_inst, func, self, mask_combined,

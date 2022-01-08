@@ -144,13 +144,13 @@ ENOKI_TEST(test04_loop_bwd_complex) {
         jit_set_flag(JitFlag::LoopRecord, j);
 
         UInt32 i = ek::arange<UInt32>(10);
-        ek::Loop<FMask> loop("MyLoop", i);
 
         Float x = ek::zero<Float>(11);
         ek::enable_grad(x);
 
         Float y = ek::gather<Float>(x, 10 - ek::arange<UInt32>(11));
 
+        ek::Loop<FMask> loop("MyLoop", i);
         while (loop(i < 10)) {
             Float z = ek::gather<Float>(y, i);
             ek::backward(z, (uint32_t) ek::ADFlag::ClearVertices);
@@ -160,7 +160,6 @@ ENOKI_TEST(test04_loop_bwd_complex) {
         assert(ek::grad(x) == Float(0, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1));
     }
 }
-
 
 struct Base {
     Base() {

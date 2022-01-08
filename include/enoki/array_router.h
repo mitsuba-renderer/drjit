@@ -21,24 +21,6 @@
 #  error min/max are defined as preprocessor symbols! Define NOMINMAX on MSVC.
 #endif
 
-extern "C" {
-    enum class JitFlag : uint32_t;
-    /// Evaluate all computation that is scheduled on the current stream
-    extern ENOKI_IMPORT void jit_eval();
-    /// Set the active CUDA device
-    extern ENOKI_IMPORT void jit_cuda_set_device(int32_t device);
-    /// Wait for all computation on the current stream to finish
-    extern ENOKI_IMPORT void jit_sync_thread();
-    /// Wait for all computation on the current device to finish
-    extern ENOKI_IMPORT void jit_sync_device();
-    /// Wait for all computation on the *all devices* to finish
-    extern ENOKI_IMPORT void jit_sync_all_devices();
-    /// Return a GraphViz representation of queued computation
-    extern ENOKI_IMPORT const char *jit_var_graphviz();
-    /// Retrieve the JIT compiler status flags (see \ref JitFlags)
-    extern ENOKI_IMPORT uint32_t jit_flags();
-};
-
 NAMESPACE_BEGIN(enoki)
 
 /// Define an unary operation
@@ -1693,9 +1675,6 @@ void accum_grad(T &value, const T2 &grad) {
     }
 }
 
-/// This library supports two main directions of derivative propagation
-enum class ADMode { Primal, Forward, Backward };
-
 template <typename T> void enqueue(ADMode mode, const T &value) {
     if constexpr (is_diff_array_v<T>) {
         if constexpr (array_depth_v<T> > 1) {
@@ -1723,6 +1702,25 @@ void enqueue(ADMode mode, const T1 &value, const Ts&... values) {
 
 ENOKI_INLINE void enqueue(ADMode) { }
 
+/**
+ * \brief RAII helper to push/pop an isolation scope that postpones traversal
+ * of operations across the scope boundary
+ */
+template <typename T> struct isolate_grad {
+    static constexpr bool Enabled =
+        is_diff_array_v<T> && std::is_floating_point_v<scalar_t<T>>;
+
+    isolate_grad() {
+        if constexpr (Enabled)
+            detail::ad_scope_enter<typename T::Type>(
+                detail::ADScope::Isolate, 0, nullptr);
+    }
+
+    ~isolate_grad() {
+        if constexpr (Enabled)
+            detail::ad_scope_leave<typename T::Type>();
+    }
+};
 
 template <typename T> const char *graphviz() {
     using Type = leaf_array_t<T>;

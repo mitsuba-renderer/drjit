@@ -77,12 +77,9 @@ template <typename Value> void ad_enqueue_implicit(size_t snapshot);
 /// Dequeue implicit dependencies since 'snapshot' (obtained via ad_implicit())
 template <typename Value> void ad_dequeue_implicit(size_t snapshot);
 
-/// Process any postponed AD operations
-template <typename Value> void ad_process_postponed();
-
 /// Selectively enable/disable differentiation for a subset of the variables
 template <typename Value>
-void ad_scope_enter(bool suspend, const uint32_t *indices, size_t size);
+void ad_scope_enter(ADScope type, size_t size, const uint32_t *indices);
 
 /// Leave a scope created by ad_scope_enter()
 template <typename Value> void ad_scope_leave();
@@ -1887,9 +1884,8 @@ protected:
     extern template ENOKI_AD_EXPORT size_t ad_implicit<T>();                   \
     extern template ENOKI_AD_EXPORT void ad_extract_implicit<T>(size_t,        \
                                                                 uint32_t *);   \
-    extern template ENOKI_AD_EXPORT void ad_process_postponed<T>();            \
     extern template ENOKI_AD_EXPORT void                                       \
-    ad_scope_enter<T>(bool, const uint32_t *, size_t);                         \
+    ad_scope_enter<T>(ADScope, size_t, const uint32_t *);                      \
     extern template ENOKI_AD_EXPORT void ad_scope_leave<T>();                  \
     extern template ENOKI_AD_EXPORT bool ad_grad_enabled<T>(uint32_t);         \
     extern template ENOKI_AD_EXPORT bool ad_enabled<T>();                      \

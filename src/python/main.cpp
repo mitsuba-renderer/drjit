@@ -157,6 +157,11 @@ PYBIND11_MODULE(enoki_ext, m_) {
         .value("Forward", ek::ADMode::Forward)
         .value("Backward", ek::ADMode::Backward);
 
+    py::enum_<ek::detail::ADScope>(array_detail, "ADScope")
+        .value("Suspend", ek::detail::ADScope::Suspend)
+        .value("Resume", ek::detail::ADScope::Resume)
+        .value("Isolate", ek::detail::ADScope::Isolate);
+
 #if defined(ENOKI_ENABLE_CUDA)
     export_cuda_ad(m);
 #endif

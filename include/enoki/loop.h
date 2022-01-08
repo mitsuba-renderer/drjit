@@ -18,16 +18,6 @@
 #include <enoki/array.h>
 
 NAMESPACE_BEGIN(enoki)
-NAMESPACE_BEGIN(detail)
-// A few forward declarations so that this compiles even without autodiff.h
-template <typename Value> void ad_inc_ref_impl(uint32_t) noexcept;
-template <typename Value> void ad_dec_ref_impl(uint32_t) noexcept;
-template <typename Value> void ad_process_postponed();
-template <typename Value, typename Mask>
-uint32_t ad_new_select(const char *, size_t, const Mask &, uint32_t, uint32_t);
-NAMESPACE_END(detail)
-
-template <typename Mask, typename SFINAE = int> struct Loop;
 
 /// Scalar fallback, expands into normal C++ loop
 template <typename Mask>
@@ -100,6 +90,12 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
                 else if (m_ad_float_precision == 64)
                     detail::ad_dec_ref_impl<Float64>(index);
             }
+
+            if (m_ad_scope) {
+                detail::ad_scope_leave<Float64>();
+                detail::ad_scope_leave<Float32>();
+                m_ad_scope = false;
+            }
         }
     }
 
@@ -169,6 +165,13 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
 
         if (m_state)
             jit_raise("Loop(\"%s\"): was already initialized!", m_name.get());
+
+        if constexpr (IsDiff) {
+            detail::ad_scope_enter<Float64>(detail::ADScope::Isolate, 0, nullptr);
+            detail::ad_scope_enter<Float32>(detail::ADScope::Isolate, 0, nullptr);
+            m_ad_scope = true;
+        }
+
 
         // Capture JIT state and begin recording session
         m_jit_state.new_scope();
@@ -294,15 +297,11 @@ protected:
                     }
 
                     if constexpr (IsDiff) {
-                        /* During loop recording, we cannot perform backward-mode
-                           AD steps that fragment into multiple kernel launches.
-                           The end of the loop finally provides an opportunity
-                           to execute such postponed AD steps. */
-
-                        if (m_ad_float_precision == 64)
-                            detail::ad_process_postponed<Float64>();
-                        else
-                            detail::ad_process_postponed<Float32>();
+                        if (m_ad_scope) {
+                            detail::ad_scope_leave<Float64>();
+                            detail::ad_scope_leave<Float32>();
+                            m_ad_scope = false;
+                        }
                     }
 
                     return false;
@@ -421,6 +420,15 @@ protected:
             return true;
         } else {
             m_state = 4;
+
+            if constexpr (IsDiff) {
+                if (m_ad_scope) {
+                    detail::ad_scope_leave<Float64>();
+                    detail::ad_scope_leave<Float32>();
+                    m_ad_scope = false;
+                }
+            }
+
             return false;
         }
     }
@@ -473,6 +481,7 @@ protected:
 
     /// Precision of AD floating point variables
     int m_ad_float_precision = 0;
+    bool m_ad_scope = false;
 
     /// In case the iteration count is known
     uint32_t m_iteration = 0;
@@ -481,26 +490,5 @@ protected:
     /// Stashed mask variable from the previous iteration
     Mask m_cond;
 };
-
-#define ENOKI_DECLARE_EXTERN_AD_TEMPLATE(T, Mask)                                   \
-    namespace detail {                                                              \
-    extern template ENOKI_IMPORT void ad_inc_ref_impl<T>(uint32_t) noexcept (true); \
-    extern template ENOKI_IMPORT void ad_dec_ref_impl<T>(uint32_t) noexcept (true); \
-    extern template ENOKI_IMPORT void ad_process_postponed<T>();                    \
-    extern template ENOKI_IMPORT uint32_t ad_new_select<T, Mask>(                   \
-        const char *, size_t, const Mask &, uint32_t, uint32_t);                    \
-    }
-
-ENOKI_DECLARE_EXTERN_AD_TEMPLATE(float,  bool)
-ENOKI_DECLARE_EXTERN_AD_TEMPLATE(double, bool)
-
-#if defined(ENOKI_JIT_H)
-ENOKI_DECLARE_EXTERN_AD_TEMPLATE(CUDAArray<float>,  CUDAArray<bool>)
-ENOKI_DECLARE_EXTERN_AD_TEMPLATE(CUDAArray<double>, CUDAArray<bool>)
-ENOKI_DECLARE_EXTERN_AD_TEMPLATE(LLVMArray<float>,  LLVMArray<bool>)
-ENOKI_DECLARE_EXTERN_AD_TEMPLATE(LLVMArray<double>, LLVMArray<bool>)
-#endif
-
-#undef ENOKI_DECLARE_EXTERN_AD_TEMPLATE
 
 NAMESPACE_END(enoki)

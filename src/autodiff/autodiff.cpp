@@ -173,9 +173,7 @@ struct Edge {
  *
  * The 'placeholder' bit is used to track variables that were created while
  * recording a megakernel (i.e., inside a symbolic loop, virtual function call,
- * etc.). This is a highly restricted execution context where certain
- * operations (e.g. computation that must be partitioned into multiple kernel
- * launches) must be postponed.
+ * etc.).
  */
 struct Variable {
     /// Number of references to this variable
@@ -418,23 +416,42 @@ struct EdgeRef {
 /**
  * This data structure encodes an AD scope that can be used to selectively
  * enable/disable derivative propagation for certain variables
- *
- * When 'complement' is set to 'false', the variable 'indices' stores the set
- * of variables that track gradients. When 'complement' is set to 'true', it
- * stores the set of variables that do not.
  */
 struct Scope {
+    /**
+     * \brief Controls the interpretation of the 'indices' field
+     *
+     * If <tt>complement=false</tt> gradients are enabled for variables that
+     * members of the \c indices set.
+     *
+     * If <tt>complement=true</tt> gradients are enabled for variables that
+     * are <b>not</b> members of the 'indices' set.
+     */
     bool complement = true;
+
+    /**
+     * \brief Should AD operations leaving this scope be postponed (edges
+     * will be added to the 'postponed' list)
+     */
+    bool isolate = false;
+
+    // Current variable index when entering this scope
+    uint32_t variable_index = 0;
+
+    /**
+     * \brief Depending on the value of 'complement', this set specifies
+     * variables for which AD is enabled or disabled.
+     */
     IndexSet indices;
+
+    /// List of AD postponed edges that will be traversed when leaving the scope
+    std::vector<EdgeRef> postponed;
 
     Scope() = default;
     Scope(Scope&&) = default;
     Scope(const Scope&) = default;
     Scope& operator=(Scope&&) = default;
     Scope& operator=(const Scope&) = default;
-
-    Scope(bool complement, IndexSet &&indices)
-        : complement(complement), indices(std::move(indices)) { }
 
     /// Check if a variable has gradients enabled
     bool enabled(uint32_t index) const {
@@ -494,9 +511,6 @@ struct LocalState {
 
     /// Keeps track of implicit input dependencies of recorded computation
     std::vector<EdgeRef> implicit;
-
-    /// List of AD variables that cannot be processed and must be postponed
-    std::vector<EdgeRef> postponed;
 
     /// Nested scopes that restrict AD to specific variables
     std::vector<Scope> scopes;
@@ -738,38 +752,96 @@ struct ReleaseOperandHelper {
 };
 
 template <typename T>
-void ad_scope_enter(bool suspend, const uint32_t *indices, size_t size) {
-    ad_log(Debug, "ad_scope_enter(suspend=%i, %zu indices)", (int) suspend, size);
+void ad_scope_enter(ADScope type, size_t size, const uint32_t *indices) {
     auto &scopes = local_state.scopes;
     Scope scope;
 
-    if (suspend) {
-        if (size) {
-            if (!scopes.empty())
-                scope = scopes.back();
-            for (size_t i = 0; i < size; ++i)
-                scope.disable(indices[i]);
-        } else {
-            scope.complement = false;
-        }
-    } else {
-        if (size) {
-            if (!scopes.empty())
-                scope = scopes.back();
-            for (size_t i = 0; i < size; ++i)
-                scope.enable(indices[i]);
-        } else {
-            scope.complement = true;
-        }
+    if (!scopes.empty())
+        scope = scopes.back();
+
+    scope.postponed.clear();
+
+    const char *type_name = nullptr;
+    switch (type) {
+        case ADScope::Suspend:
+            type_name = "suspend";
+
+            if (size) {
+                for (size_t i = 0; i < size; ++i)
+                    scope.disable(indices[i]);
+            } else {
+                scope.complement = false;
+                scope.indices.clear();
+            }
+            break;
+
+        case ADScope::Resume:
+            type_name = "resume";
+
+            if (size) {
+                for (size_t i = 0; i < size; ++i)
+                    scope.enable(indices[i]);
+            } else {
+                scope.complement = true;
+                scope.indices.clear();
+            }
+            break;
+
+        case ADScope::Isolate:
+            type_name = "isolate";
+            scope.isolate = true;
+            /* access state data structure */ {
+                std::lock_guard<std::mutex> guard(state.mutex);
+                scope.variable_index = state.variable_index;
+            }
+            break;
+
+        default:
+            ad_fail("ad_scope_enter(): unknown scope type!");
     }
+
     scopes.push_back(std::move(scope));
+
+    if (size)
+        ad_log(Debug, "ad_scope_enter(%s, %zu indices)", type_name, size);
+    else
+        ad_log(Debug, "ad_scope_enter(%s)", type_name);
 }
 
 template <typename T> void ad_scope_leave() {
-    if (local_state.scopes.empty())
-        ad_fail("ad_scope_leave(): underflow!");
+    LocalState &ls = local_state;
+    auto &scopes = local_state.scopes;
+
+    if (scopes.empty())
+        ad_raise("ad_scope_leave(): underflow!");
+
     ad_log(Debug, "ad_scope_leave()");
-    local_state.scopes.pop_back();
+    Scope &scope = scopes.back();
+
+    if (scope.isolate && !scope.postponed.empty()) {
+        // Need to process postponed edges now..
+        if (unlikely(!ls.todo.empty()))
+            ad_raise("ad_scope_leave(): internal error: wanted to process "
+                     "postponed AD edges, but other edges were already "
+                     "enqueued. Did you forget to call ek.traverse() to "
+                     "process them?");
+
+        ad_trace("ad_scope_leave(): enqueuing %zu postponed edges.",
+                 scope.postponed.size());
+
+        ls.todo.insert(ls.todo.end(), scope.postponed.begin(),
+                       scope.postponed.end());
+
+        scopes.pop_back();
+
+        ad_traverse<Value>(ADMode::Backward,
+                           (uint32_t) ADFlag::ClearVertices);
+    } else {
+        scopes.pop_back();
+    }
+
+    // Use this opportunity to also clear the implicit dependency tracker
+    // ls.implicit.clear();
 }
 
 template <typename T> bool ad_grad_enabled(uint32_t index) {
@@ -958,6 +1030,7 @@ template <typename Value> struct SpecialConnection : Special {
         if (target->size)
             const_cast<Variable *>(target)->ref_count_grad++;
     }
+
     void forward(const Variable *source, Variable *, uint32_t) const override {
         if (source->size)
             const_cast<Variable *>(source)->ref_count_grad++;
@@ -968,12 +1041,40 @@ template <typename Value> struct SpecialCallback : Special {
     std::unique_ptr<DiffCallback> callback;
     Scope scope;
 
+    /// Recreate the suspend/resume status in place when this callback edge was created
     struct PushScope {
         PushScope(const Scope &scope) {
-            local_state.scopes.push_back(scope);
+            auto &scopes = local_state.scopes;
+
+            if (!scopes.empty()) {
+                bool isolate = scopes.back().isolate;
+                scopes.push_back(scope);
+                scopes.back().isolate = isolate;
+            } else {
+                scopes.push_back(scope);
+            }
         }
+
         ~PushScope() {
-            local_state.scopes.pop_back();
+            auto &scopes = local_state.scopes;
+            if (scopes.size() > 1) {
+                Scope &scope_child  = scopes[scopes.size() - 1];
+                Scope &scope_parent = scopes[scopes.size() - 2];
+
+                if (unlikely(scope_child.isolate != scope_parent.isolate))
+                    ad_fail("SpecialCallback: inconsistent 'isolate' field in "
+                            "AD scopes!");
+
+                scope_parent.postponed.insert(
+                    scope_parent.postponed.end(),
+                    scope_child.postponed.begin(),
+                    scope_child.postponed.end()
+                );
+            } else if (scopes.size() == 0) {
+                ad_fail("SpecialCallback::PushScope::~PushScope(): underflow!");
+            }
+
+            scopes.pop_back();
         }
     };
 
@@ -985,7 +1086,9 @@ template <typename Value> struct SpecialCallback : Special {
     }
 
     SpecialCallback(DiffCallback *callback, Scope &&scope)
-        : callback(callback), scope(std::move(scope)) { }
+        : callback(callback), scope(std::move(scope)) {
+        scope.postponed.clear();
+    }
 
     void backward(Variable *, const Variable *target, uint32_t flags) const override {
         ad_trace("ad_traverse(): invoking user callback ..");
@@ -1650,6 +1753,11 @@ void ad_traverse(ADMode mode, uint32_t flags) {
     ad_log(Debug, "ad_traverse(): processing %zu edges in %s mode ..", todo.size(),
            mode == ADMode::Forward ? "forward" : "backward");
 
+    /// Any edges with an ID less than this value will be postponed
+    uint32_t postpone_before = 0;
+    if (!ls.scopes.empty() && ls.scopes.back().isolate)
+        postpone_before = ls.scopes.back().variable_index;
+
     std::vector<Value> ek_loop_todo;
     auto postprocess = [&](uint32_t prev_i, uint32_t cur_i) {
         if (!prev_i || prev_i == cur_i)
@@ -1691,9 +1799,9 @@ void ad_traverse(ADMode mode, uint32_t flags) {
             clear_grad |= next_edge == 0;
 
         /* Don't clear the gradient of vertices created *before* entering
-           megakernel mode, or when it is still explicitly referenced by some
-           other part of the computation graph */
-        if ((rec && !prev->placeholder) || prev->ref_count_grad > 0)
+           an ek.isolation() scope, or when their gradient is still explicitly
+           referenced by some other part of the computation graph */
+        if (prev_i < postpone_before || prev->ref_count_grad > 0)
             clear_grad = false;
 
         // Aggressively clear gradients at intermediate nodes
@@ -1738,22 +1846,20 @@ void ad_traverse(ADMode mode, uint32_t flags) {
 
         uint32_t grad_size = (uint32_t) width(v0->grad);
 
-        if (unlikely(rec && !v0->placeholder)) {
+        if (unlikely(v0i < postpone_before)) {
             if (mode == ADMode::Backward) {
-                ad_trace("ad_traverse(): postponing edge a%u -> a%u (must be "
-                         "handled outside of megakernel).", v0i, v1i);
-                ls.postponed.push_back(er);
+                ad_trace("ad_traverse(): postponing edge a%u -> a%u due "
+                         "ek.isolate_grad() scope.", v0i, v1i);
+                ls.scopes.back().postponed.push_back(er);
                 er.id = er.source = er.target = 0;
                 continue;
-            } else if (!v1->placeholder) {
-                ad_raise(
-                    "ad_traverse(): tried to forward-propagate derivatives "
-                    "across edge a%u -> a%u, which lies outside of the "
-                    "megakernel currently being recorded. You must "
-                    "enqueue the variables being differentiated and call "
-                    "ek.traverse(ek.ADFlag.ClearEdges) *before* entering "
-                    "megakernel mode (i.e. recording virtual function "
-                    "calls/loops).", v0i, v1i);
+            } else if (v1i < postpone_before) {
+                ad_raise("ad_traverse(): tried to forward-propagate "
+                         "derivatives across edge a%u -> a%u, which lies "
+                         "outside of the ek.isolate_grad() scope. You must "
+                         "enqueue the variables being differentiated and call "
+                         "ek.traverse(ek.ADFlag.ClearEdges) *before* entering "
+                         "this scope.", v0i, v1i);
             }
         }
 
@@ -2002,30 +2108,6 @@ template <typename Value> void ad_dequeue_implicit(size_t snapshot) {
         state[implicit[i].source]->ref_count_grad--;
 }
 
-template <typename Value> void ad_process_postponed() {
-    if (is_jit_array_v<Value>) {
-        LocalState &ls = local_state;
-
-        if (jit_flag(JitFlag::Recording) || ls.postponed.empty())
-            return;
-
-        // Use this opportunity to also clear the implicit dependency tracker
-        ls.implicit.clear();
-
-        if (unlikely(!ls.todo.empty()))
-            ad_raise("ad_process_postponed(): internal error: todo list is "
-                     "nonempty!");
-
-        ad_trace("ad_process_postponed(): enqueuing %zu edges.",
-                 ls.postponed.size());
-
-        ls.todo.insert(ls.todo.end(), ls.postponed.begin(), ls.postponed.end());
-        ls.postponed.clear();
-
-        ad_traverse<Value>(ADMode::Backward, (uint32_t) ADFlag::ClearVertices);
-    }
-}
-
 // ==========================================================================
 // Debugging: GraphViz, variable listing
 // ==========================================================================
@@ -2241,7 +2323,6 @@ template ENOKI_EXPORT size_t ad_implicit<Value>();
 template ENOKI_EXPORT void ad_extract_implicit<Value>(size_t, uint32_t*);
 template ENOKI_EXPORT void ad_enqueue_implicit<Value>(size_t);
 template ENOKI_EXPORT void ad_dequeue_implicit<Value>(size_t);
-template ENOKI_EXPORT void ad_process_postponed<Value>();
 template ENOKI_EXPORT const char *ad_graphviz<Value>();
 template ENOKI_EXPORT uint32_t ad_new_select<Value, Mask>(
     const char *, size_t, const Mask &, uint32_t, uint32_t);
@@ -2252,8 +2333,7 @@ ad_new_scatter<Value, Mask, Index>(const char *, size_t, ReduceOp, uint32_t,
                                    uint32_t, const Index &, const Mask &, bool);
 template ENOKI_EXPORT void ad_add_edge<Value>(uint32_t, uint32_t,
                                               DiffCallback *);
-template ENOKI_EXPORT void ad_scope_enter<Value>(bool, const uint32_t *,
-                                                 size_t);
+template ENOKI_EXPORT void ad_scope_enter<Value>(ADScope, size_t, const uint32_t *);
 template ENOKI_EXPORT void ad_scope_leave<Value>();
 template ENOKI_EXPORT bool ad_grad_enabled<Value>(uint32_t);
 template ENOKI_EXPORT bool ad_enabled<Value>() noexcept;

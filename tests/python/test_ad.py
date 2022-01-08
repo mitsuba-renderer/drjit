@@ -1382,3 +1382,32 @@ def test68_backward_to(m):
             assert ek.grad([a, b, c][(j + 1)%3]) == 0
             assert ek.grad([a, b, c][(j + 2)%3]) == 0
             ek.set_grad(v, m.Float())
+
+
+def test69_isolate(m):
+    a = m.Float(1)
+    ek.enable_grad(a)
+
+    b = a * 2
+
+    with ek.isolate_grad():
+        c = b * 2
+
+        with ek.isolate_grad():
+            d = c * 2
+            ek.backward(d)
+
+            assert ek.grad(d) == 0 and \
+                   ek.grad(c) == 2 and \
+                   ek.grad(b) == 0 and \
+                   ek.grad(a) == 0
+
+        assert ek.grad(d) == 0 and \
+               ek.grad(c) == 0 and \
+               ek.grad(b) == 4 and \
+               ek.grad(a) == 0
+
+    assert ek.grad(d) == 0 and \
+           ek.grad(c) == 0 and \
+           ek.grad(b) == 0 and \
+           ek.grad(a) == 8

@@ -249,6 +249,9 @@ template <typename Array_> struct Tensor;
 template <typename T>
 struct struct_support;
 
+/// Recorded/wavefront loops
+template <typename Mask, typename SFINAE = int> struct Loop;
+
 template <typename T, typename Array>
 struct call_support {
     call_support(const Array &) { }
@@ -265,5 +268,62 @@ namespace detail {
     template <typename T> struct MaskedArray;
     template <typename T> struct MaskBit;
 }
+/// This library supports two main directions of derivative propagation
+enum class ADMode { Primal, Forward, Backward };
+
+NAMESPACE_BEGIN(detail)
+enum class ADScope { Suspend = 1, Resume = 2, Isolate = 3 };
+// A few forward declarations so that this compiles even without autodiff.h
+template <typename Value> void ad_inc_ref_impl(uint32_t) noexcept;
+template <typename Value> void ad_dec_ref_impl(uint32_t) noexcept;
+template <typename Value, typename Mask>
+uint32_t ad_new_select(const char *, size_t, const Mask &, uint32_t, uint32_t);
+template <typename Value>
+void ad_scope_enter(ADScope type, size_t size, const uint32_t *indices);
+template <typename Value> void ad_scope_leave();
+NAMESPACE_END(detail)
+
+#define ENOKI_DECLARE_EXTERN_AD_TEMPLATE(T, Mask)                              \
+    namespace detail {                                                         \
+    extern template ENOKI_IMPORT void                                          \
+        ad_inc_ref_impl<T>(uint32_t) noexcept(true);                           \
+    extern template ENOKI_IMPORT void                                          \
+        ad_dec_ref_impl<T>(uint32_t) noexcept(true);                           \
+    extern template ENOKI_IMPORT void ad_scope_enter<T>(ADScope type, size_t,  \
+                                                        const uint32_t *);     \
+    extern template ENOKI_IMPORT void ad_scope_leave<T>();                     \
+    extern template ENOKI_IMPORT uint32_t ad_new_select<T, Mask>(              \
+        const char *, size_t, const Mask &, uint32_t, uint32_t);               \
+    }
+
+ENOKI_DECLARE_EXTERN_AD_TEMPLATE(float,  bool)
+ENOKI_DECLARE_EXTERN_AD_TEMPLATE(double, bool)
+ENOKI_DECLARE_EXTERN_AD_TEMPLATE(CUDAArray<float>,  CUDAArray<bool>)
+ENOKI_DECLARE_EXTERN_AD_TEMPLATE(CUDAArray<double>, CUDAArray<bool>)
+ENOKI_DECLARE_EXTERN_AD_TEMPLATE(LLVMArray<float>,  LLVMArray<bool>)
+ENOKI_DECLARE_EXTERN_AD_TEMPLATE(LLVMArray<double>, LLVMArray<bool>)
+
+#undef ENOKI_DECLARE_EXTERN_AD_TEMPLATE
 
 NAMESPACE_END(enoki)
+
+// Common JIT functions that are called from Enoki headers besides jit.h
+
+extern "C" {
+    enum class JitFlag : uint32_t;
+
+    /// Evaluate all computation that is scheduled on the current stream
+    extern ENOKI_IMPORT void jit_eval();
+    /// Set the active CUDA device
+    extern ENOKI_IMPORT void jit_cuda_set_device(int32_t device);
+    /// Wait for all computation on the current stream to finish
+    extern ENOKI_IMPORT void jit_sync_thread();
+    /// Wait for all computation on the current device to finish
+    extern ENOKI_IMPORT void jit_sync_device();
+    /// Wait for all computation on the *all devices* to finish
+    extern ENOKI_IMPORT void jit_sync_all_devices();
+    /// Return a GraphViz representation of queued computation
+    extern ENOKI_IMPORT const char *jit_var_graphviz();
+    /// Retrieve the JIT compiler status flags (see \ref JitFlags)
+    extern ENOKI_IMPORT uint32_t jit_flags();
+};

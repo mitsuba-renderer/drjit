@@ -3,7 +3,6 @@
 #include <enoki/jit.h>
 #include <enoki/autodiff.h>
 #include <enoki/struct.h>
-#include <enoki/loop.h>
 
 namespace ek = enoki;
 

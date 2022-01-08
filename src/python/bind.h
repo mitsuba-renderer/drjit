@@ -474,9 +474,9 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
 
             cls.def_static(
                 "scope_enter_",
-                [](bool suspend, const std::vector<uint32_t> &indices) {
+                [](ek::detail::ADScope type, const std::vector<uint32_t> &indices) {
                     ek::detail::ad_scope_enter<ek::detached_t<Array>>(
-                        suspend, indices.data(), indices.size());
+                        type, indices.size(), indices.data());
                 });
 
             cls.def_static("scope_leave_", []() {
