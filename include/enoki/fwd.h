@@ -272,7 +272,7 @@ namespace detail {
 enum class ADMode { Primal, Forward, Backward };
 
 NAMESPACE_BEGIN(detail)
-enum class ADScope { Suspend = 1, Resume = 2, Isolate = 3 };
+enum class ADScope { Invalid = 0, Suspend = 1, Resume = 2, Isolate = 3 };
 // A few forward declarations so that this compiles even without autodiff.h
 template <typename Value> void ad_inc_ref_impl(uint32_t) noexcept;
 template <typename Value> void ad_dec_ref_impl(uint32_t) noexcept;

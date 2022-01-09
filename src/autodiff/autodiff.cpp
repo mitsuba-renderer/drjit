@@ -418,6 +418,8 @@ struct EdgeRef {
  * enable/disable derivative propagation for certain variables
  */
 struct Scope {
+    ADScope type = ADScope::Invalid;
+
     /**
      * \brief Controls the interpretation of the 'indices' field
      *
@@ -521,6 +523,11 @@ struct LocalState {
     ~LocalState() {
         for (Special *s : cleanup)
             delete s;
+
+        if (!scopes.empty())
+            ad_log(Warn,
+                   "enoki-autodiff: scope leak detected (%zu scopes "
+                   "remain in use)!", scopes.size());
     }
 };
 
@@ -760,11 +767,11 @@ void ad_scope_enter(ADScope type, size_t size, const uint32_t *indices) {
         scope = scopes.back();
 
     scope.postponed.clear();
+    scope.type = type;
 
-    const char *type_name = nullptr;
     switch (type) {
         case ADScope::Suspend:
-            type_name = "suspend";
+            ad_log(Debug, "ad_scope_enter(suspend, %zu indices)", size);
 
             if (size) {
                 for (size_t i = 0; i < size; ++i)
@@ -776,7 +783,7 @@ void ad_scope_enter(ADScope type, size_t size, const uint32_t *indices) {
             break;
 
         case ADScope::Resume:
-            type_name = "resume";
+            ad_log(Debug, "ad_scope_enter(resume, %zu indices)", size);
 
             if (size) {
                 for (size_t i = 0; i < size; ++i)
@@ -788,12 +795,16 @@ void ad_scope_enter(ADScope type, size_t size, const uint32_t *indices) {
             break;
 
         case ADScope::Isolate:
-            type_name = "isolate";
+            if (unlikely(size))
+                ad_fail("ad_scope_enter(isolate): variables cannot be "
+                        "specified for this scope type!");
+
             scope.isolate = true;
             /* access state data structure */ {
                 std::lock_guard<std::mutex> guard(state.mutex);
                 scope.variable_index = state.variable_index;
             }
+            ad_log(Debug, "ad_scope_enter(isolate, a%u...)", scope.variable_index);
             break;
 
         default:
@@ -801,22 +812,26 @@ void ad_scope_enter(ADScope type, size_t size, const uint32_t *indices) {
     }
 
     scopes.push_back(std::move(scope));
-
-    if (size)
-        ad_log(Debug, "ad_scope_enter(%s, %zu indices)", type_name, size);
-    else
-        ad_log(Debug, "ad_scope_enter(%s)", type_name);
 }
 
 template <typename T> void ad_scope_leave() {
     LocalState &ls = local_state;
     auto &scopes = local_state.scopes;
-
     if (scopes.empty())
         ad_raise("ad_scope_leave(): underflow!");
 
-    ad_log(Debug, "ad_scope_leave()");
     Scope &scope = scopes.back();
+
+    const char *type_name = nullptr;
+
+    switch (scope.type) {
+        case ADScope::Suspend: type_name = "suspend"; break;
+        case ADScope::Resume:  type_name = "resume"; break;
+        case ADScope::Isolate: type_name = "isolate"; break;
+        default: type_name = "unknown"; break;
+    }
+
+    ad_log(Debug, "ad_scope_leave(%s)", type_name);
 
     if (scope.isolate && !scope.postponed.empty()) {
         // Need to process postponed edges now..
@@ -1053,6 +1068,7 @@ template <typename Value> struct SpecialCallback : Special {
             } else {
                 scopes.push_back(scope);
             }
+            scopes.back().postponed.clear();
         }
 
         ~PushScope() {
@@ -1086,9 +1102,7 @@ template <typename Value> struct SpecialCallback : Special {
     }
 
     SpecialCallback(DiffCallback *callback, Scope &&scope)
-        : callback(callback), scope(std::move(scope)) {
-        scope.postponed.clear();
-    }
+        : callback(callback), scope(std::move(scope)) { }
 
     void backward(Variable *, const Variable *target, uint32_t flags) const override {
         ad_trace("ad_traverse(): invoking user callback ..");
@@ -1881,12 +1895,14 @@ void ad_traverse(ADMode mode, uint32_t flags) {
                 er.id = er.source = er.target = 0;
                 continue;
             } else if (v1i < postpone_before) {
-                ad_raise("ad_traverse(): tried to forward-propagate "
-                         "derivatives across edge a%u -> a%u, which lies "
-                         "outside of the ek.isolate_grad() scope. You must "
-                         "enqueue the variables being differentiated and call "
-                         "ek.traverse(ek.ADFlag.ClearEdges) *before* entering "
-                         "this scope.", v0i, v1i);
+                ad_raise(
+                    "ad_traverse(): tried to forward-propagate derivatives "
+                    "across edge a%u -> a%u, which lies outside of the current "
+                    "ek.isolate_grad() scope (a%u .. a%u). You must enqueue "
+                    "the variables being differentiated and call "
+                    "ek.traverse(ek.ADFlag.ClearEdges) *before* entering this "
+                    "scope.",
+                    v0i, v1i, postpone_before, state.variable_index);
             }
         }
 

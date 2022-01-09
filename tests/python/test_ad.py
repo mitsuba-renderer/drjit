@@ -1356,7 +1356,7 @@ def test67_forward_to(m):
     for k in range(2):
         for j, v in enumerate([g, h, i]):
             ek.set_grad(v, 0)
-            ek.forward_to(v, ek.ADFlag.ClearInterior)
+            ek.forward_to(v, flags=ek.ADFlag.ClearInterior)
             assert v == [9, 16, 25][j]
             assert ek.grad(v) == [660, 8080, 11000][j]
             assert ek.grad([g, h, i][(j + 1)%3]) == 0
@@ -1377,7 +1377,7 @@ def test68_backward_to(m):
 
     for k in range(2):
         for j, v in enumerate([a, b, c]):
-            ek.backward_to(v, ek.ADFlag.ClearInterior)
+            ek.backward_to(v, flags=ek.ADFlag.ClearInterior)
             assert ek.grad(v) == [860, 10060, 10800][j]
             assert ek.grad([a, b, c][(j + 1)%3]) == 0
             assert ek.grad([a, b, c][(j + 2)%3]) == 0

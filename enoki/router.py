@@ -2389,7 +2389,7 @@ def backward_from(a, flags=_ek.ADFlag.Default):
 
     # Deduplicate components if 'a' is a vector
     if _ek.array_depth_v(a) > 1:
-        a = a + t(0)
+        a = a + ta(0)
 
     set_grad(a, 1)
     enqueue(_ek.ADMode.Backward, a)

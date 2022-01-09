@@ -63,7 +63,7 @@ struct DiffVCall : CustomOp<DiffType, Result, ConstStr, Self, Func, Args...> {
         size_t implicit_snapshot = ad_implicit<Type>();
         Result result = vcall_jit_record<Result>(name, func, self, args...);
 
-        /// Capture implicit dependencies of the operation
+        // Capture implicit dependencies of the operation
         m_implicit_in = ek_vector<uint32_t>(ad_implicit<Type>() - implicit_snapshot, 0);
         ad_extract_implicit<Type>(implicit_snapshot, m_implicit_in.data());
         for (size_t i = 0; i < m_implicit_in.size(); ++i)

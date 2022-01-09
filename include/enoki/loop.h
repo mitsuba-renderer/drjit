@@ -94,7 +94,6 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
             if (m_ad_scope) {
                 detail::ad_scope_leave<Float64>();
                 detail::ad_scope_leave<Float32>();
-                m_ad_scope = false;
             }
         }
     }
