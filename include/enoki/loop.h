@@ -33,6 +33,7 @@ struct Loop<Mask, enable_if_t<std::is_scalar_v<Mask>>> {
     template <typename... Args> Loop(const char*, Args&...) { }
     void set_uniform(bool = true) { }
     void set_max_iterations(uint32_t) { }
+    void set_eval_stride(uint32_t) { }
 };
 
 /// Array case, expands into a symbolic or wavefront-style loop
@@ -216,6 +217,23 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
         m_max_iterations = iterations;
     }
 
+    /**
+     * \brief Evaluate the loop state variables after every iteration?
+     *
+     * By default, Enoki-JIT will evaluate all loop state of wave-front-style
+     * loops after each iteration. This variable can be used to increase the
+     * stride to a higher value (in the extreme case to the maximum loop
+     * iteration count, in which case the entire loop will be unrolled into a
+     * single kernel).
+     */
+    void set_eval_stride(uint32_t stride) {
+        if (m_state > 1)
+            jit_raise("Loop(\"%s\"): set_eval_stride() can only be called "
+                      "before entering the loop!", m_name.get());
+
+        m_eval_stride = stride;
+    }
+
     bool operator()(const Mask &cond) {
         if (m_record)
             return cond_record(cond);
@@ -379,11 +397,15 @@ protected:
             if (vsize > size)
                 size = vsize;
         }
-        jit_var_schedule(cond.index());
-        jit_eval();
 
-        // Do we run another iteration?
-        bool do_continue;
+        jit_var_schedule(cond.index());
+
+        // Should we evaluate the loop & run another iteration?
+        bool do_eval = m_iteration % m_eval_stride == 0,
+             do_continue = false;
+
+        if (do_eval)
+            jit_eval();
 
         if (m_max_iterations != (uint32_t) -1)
             do_continue = m_iteration++ < m_max_iterations;
@@ -484,6 +506,7 @@ protected:
 
     /// In case the iteration count is known
     uint32_t m_iteration = 0;
+    uint32_t m_eval_stride = 1;
     uint32_t m_max_iterations = (uint32_t) -1;
 
     /// Stashed mask variable from the previous iteration

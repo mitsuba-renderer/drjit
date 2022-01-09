@@ -28,6 +28,7 @@ void export_cuda_ad(py::module_ &m) {
         .def("init", &Loop<Mask>::init)
         .def("set_uniform", &Loop<Mask>::set_uniform)
         .def("set_max_iterations", &Loop<Mask>::set_max_iterations)
+        .def("set_eval_stride", &Loop<Mask>::set_eval_stride)
         .def("__call__", &Loop<Mask>::operator());
 
     ENOKI_BIND_TENSOR_TYPES(cuda_ad);
