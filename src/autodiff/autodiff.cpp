@@ -1253,9 +1253,28 @@ uint32_t ad_new_select(const char *label, size_t size, const Mask &mask,
     return index;
 }
 
+
+template <typename Mask> struct MaskGuard {
+    MaskGuard(const Mask &mask) {
+        if constexpr (is_jit_array_v<Mask>)
+            jit_var_mask_push(Mask::Backend, mask.index(), false);
+        else
+            ENOKI_MARK_USED(mask);
+    }
+
+    ~MaskGuard() {
+        if constexpr (is_jit_array_v<Value>)
+            jit_var_mask_pop(Mask::Backend);
+    }
+};
+
+
 template <typename Value> struct GatherEdge : Special {
     GatherEdge(const Index &offset, const Mask &mask, bool permute)
-        : offset(offset), mask(mask), permute(permute) { }
+        : offset(offset), mask(mask), permute(permute) {
+        if constexpr (is_jit_array_v<Value>)
+            mask_stack = mask_t<Value>::steal(jit_var_mask_peek(Value::Backend));
+    }
 
     void backward(Variable *source, const Variable *target, uint32_t) const override {
         Value &source_grad = (Value &) source->grad;
@@ -1272,6 +1291,7 @@ template <typename Value> struct GatherEdge : Special {
         else if ((uint32_t) source_grad.size() != size)
             source_grad.resize(size);
 
+        MaskGuard guard(mask_stack);
         if (permute)
             scatter(source_grad, target->grad, offset, mask);
         else
@@ -1279,12 +1299,14 @@ template <typename Value> struct GatherEdge : Special {
     }
 
     void forward(const Variable *source, Variable *target, uint32_t) const override {
+        MaskGuard guard(mask_stack);
         target->accum(gather<Value>(source->grad, offset, mask),
                       (uint32_t) width(offset));
     }
 
     Index offset;
     Mask mask;
+    Mask mask_stack;
     bool permute;
 };
 
@@ -1364,9 +1386,12 @@ template <typename Value> struct ScatterEdge : Special {
         : offset(offset), mask(mask), op(op) {
             if (op != ReduceOp::None && op != ReduceOp::Add)
                 enoki_raise("AD only supports ReduceOp::Add in scatter_reduce!");
-        }
+        if constexpr (is_jit_array_v<Value>)
+            mask_stack = mask_t<Value>::steal(jit_var_mask_peek(Value::Backend));
+    }
 
     void backward(Variable *source, const Variable *target, uint32_t) const override {
+        MaskGuard guard(mask_stack);
         source->accum(gather<Value>(target->grad, offset, mask),
                       (uint32_t) width(offset));
     }
@@ -1380,6 +1405,7 @@ template <typename Value> struct ScatterEdge : Special {
         else if ((uint32_t) target_grad.size() != size)
             target_grad.resize(size);
 
+        MaskGuard guard(mask_stack);
         if (op != ReduceOp::None)
             scatter_reduce(op, target_grad, source->grad, offset, mask);
         else
@@ -1388,6 +1414,7 @@ template <typename Value> struct ScatterEdge : Special {
 
     Index offset;
     Mask mask;
+    Mask mask_stack;
     ReduceOp op;
 };
 

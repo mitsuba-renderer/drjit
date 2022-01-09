@@ -39,7 +39,9 @@ struct MaskScope {
     MaskScope(const Mask &mask) {
         jit_var_mask_push(Backend, mask.index(), 0);
     }
-    ~MaskScope() { jit_var_mask_pop(Backend); }
+    ~MaskScope() {
+        jit_var_mask_pop(Backend);
+    }
 };
 
 template <typename Result, typename Func, typename Self, size_t... Is,
