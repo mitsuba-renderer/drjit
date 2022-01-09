@@ -1,5 +1,7 @@
 from enoki import VarType, Exception, Dynamic
 import sys as _sys
+from collections.abc import Mapping as _Mapping, \
+                            Sequence as _Sequence
 
 
 def is_array_v(a):
@@ -244,17 +246,41 @@ def detached_t(a):
         return a.ReplaceScalar(a.Type, diff=False)
 
 
-def leaf_array_t(t):
-    if isinstance(t, tuple) or isinstance(t, list):
-        return leaf_array_t(t[0])
-    elif not isinstance(t, type):
-        return leaf_array_t(type(t))
-    while is_array_v(value_t(t)):
-        t = t.Value
-    if is_tensor_v(t):
-        t = t.Array
+def is_enoki_struct_v(a):
+    return hasattr(a, 'ENOKI_STRUCT')
+
+
+def leaf_array_t(a):
+    """
+    Extract a leaf array type underlying a Python object tree, with
+    a preference for differentiable arrays.
+    """
+    t = None
+
+    if isinstance(a, _Sequence):
+        for e in a:
+            t = leaf_array_t(e)
+            if is_diff_array_v(t) and is_floating_point_v(t):
+                break
+    elif isinstance(a, _Mapping):
+        for k, v in a:
+            t = leaf_array_t(v)
+            if is_diff_array_v(t) and is_floating_point_v(t):
+                break
+    elif is_enoki_struct_v(a):
+        for k in type(a).ENOKI_STRUCT.keys():
+            t = leaf_array_t(getattr(a, k))
+            if is_diff_array_v(t) and is_floating_point_v(t):
+                break
+    elif is_tensor_v(a):
+        t = leaf_array_t(a.Array)
+    elif is_array_v(a):
+        t = a
+        if not isinstance(t, type):
+            t = type(t)
+        while is_array_v(value_t(t)):
+            t = t.Value
+
     return t
 
 
-def is_enoki_struct_v(a):
-    return hasattr(a, 'ENOKI_STRUCT')

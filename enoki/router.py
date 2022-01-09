@@ -2338,8 +2338,6 @@ def traverse(t, mode, flags=_ek.ADFlag.Default):
     assert isinstance(mode, _ek.ADMode)
 
     t = _ek.leaf_array_t(t)
-    if _ek.is_tensor_v(t):
-        t = t.Array
 
     if not _ek.is_diff_array_v(t):
         raise Exception('traverse(): expected a differentiable array type!')
@@ -2347,8 +2345,8 @@ def traverse(t, mode, flags=_ek.ADFlag.Default):
     t.traverse_(mode, flags)
 
 
-def _check_grad_enabled(name, a):
-    if _ek.is_diff_array_v(a) and a.IsFloat:
+def _check_grad_enabled(name, t, a):
+    if _ek.is_diff_array_v(t) and t.IsFloat:
         if not grad_enabled(a):
             raise Exception(
                 f'{name}(): the argument does not depend on the input '
@@ -2362,16 +2360,23 @@ def _check_grad_enabled(name, a):
 
 
 def forward_from(a, flags=_ek.ADFlag.Default):
-    _check_grad_enabled('forward_from', a)
+    ta = type(a)
+    _check_grad_enabled('forward_from', ta, a)
     set_grad(a, 1)
     enqueue(_ek.ADMode.Forward, a)
-    traverse(type(a), _ek.ADMode.Forward, flags)
+    traverse(ta, _ek.ADMode.Forward, flags)
 
 
-def forward_to(a, flags=_ek.ADFlag.Default):
-    _check_grad_enabled('forward_to', a)
-    enqueue(_ek.ADMode.Backward, a)
-    traverse(type(a), _ek.ADMode.Forward, flags)
+def forward_to(*args, flags=_ek.ADFlag.Default):
+    for a in args:
+        if isinstance(a, (int, _ek.ADFlag)):
+            raise Exception('forward_to(): AD flags should be passed via '
+                            'the "flags=.." keyword argument')
+
+    ta = _ek.leaf_array_t(args)
+    _check_grad_enabled('forward_to', ta, args)
+    enqueue(_ek.ADMode.Backward, *args)
+    traverse(ta, _ek.ADMode.Forward, flags)
 
 
 def forward(a, flags=_ek.ADFlag.Default):
@@ -2379,21 +2384,28 @@ def forward(a, flags=_ek.ADFlag.Default):
 
 
 def backward_from(a, flags=_ek.ADFlag.Default):
-    _check_grad_enabled('backward_from', a)
+    ta = type(a)
+    _check_grad_enabled('backward_from', ta, a)
 
     # Deduplicate components if 'a' is a vector
     if _ek.array_depth_v(a) > 1:
-        a = a + type(a)(0)
+        a = a + t(0)
 
     set_grad(a, 1)
     enqueue(_ek.ADMode.Backward, a)
-    traverse(type(a), _ek.ADMode.Backward, flags)
+    traverse(ta, _ek.ADMode.Backward, flags)
 
 
-def backward_to(a, flags=_ek.ADFlag.Default):
-    _check_grad_enabled('backward_to', a)
-    enqueue(_ek.ADMode.Forward, a)
-    traverse(type(a), _ek.ADMode.Backward, flags)
+def backward_to(*args, flags=_ek.ADFlag.Default):
+    for a in args:
+        if isinstance(a, (int, _ek.ADFlag)):
+            raise Exception('backward_to(): AD flags should be passed via '
+                            'the "flags=.." keyword argument')
+
+    ta = _ek.leaf_array_t(args)
+    _check_grad_enabled('backward_to', ta, args)
+    enqueue(_ek.ADMode.Forward, *args)
+    traverse(ta, _ek.ADMode.Backward, flags)
 
 
 def backward(a, flags=_ek.ADFlag.Default):
