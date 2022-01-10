@@ -1556,7 +1556,7 @@ def log2(a):
 
 def pow(a, b):
     if _ek.is_tensor_v(a):
-        return a.array.pow_(b if not _ek.is_tensor_v(b) else b.array)
+        return type(a)(a.array.pow_(b if not _ek.is_tensor_v(b) else b.array), a.shape)
     if isinstance(a, ArrayBase) or \
        isinstance(b, ArrayBase):
         if type(a) is not type(b) and not \
