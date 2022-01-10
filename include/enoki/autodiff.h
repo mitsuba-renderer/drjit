@@ -1678,7 +1678,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             detail::ad_traverse<Type>(mode, flags);
     }
 
-    void set_label_(const char *label) const {
+    void set_label_(const char *label) {
         set_label(m_value, label);
 
         if constexpr (IsEnabled) {

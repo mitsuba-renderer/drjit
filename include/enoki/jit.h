@@ -653,8 +653,10 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
             jit_var_new_counter(Backend, size));
     }
 
-	void set_label_(const char *label) const {
-		jit_var_set_label(m_index, label);
+	void set_label_(const char *label) {
+        uint32_t index = jit_var_set_label(m_index, label);
+        jit_var_dec_ref_ext(m_index);
+        m_index = index;
 	}
 
 	const char *label_() const {
