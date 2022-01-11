@@ -2692,8 +2692,8 @@ class _ADContextManager:
                 _ek.llvm.ad.Float64.scope_leave_(success)
 
 
-def suspend_grad(*args, condition = True):
-    if not condition:
+def suspend_grad(*args, when=True):
+    if not when:
         return _DummyContextManager()
 
     array_indices = []
@@ -2703,8 +2703,8 @@ def suspend_grad(*args, condition = True):
     return _ADContextManager(_ek.detail.ADScope.Suspend, array_type, array_indices)
 
 
-def resume_grad(*args, condition = True):
-    if not condition:
+def resume_grad(*args, when=True):
+    if not when:
         return _DummyContextManager()
 
     array_indices = []
@@ -2714,8 +2714,8 @@ def resume_grad(*args, condition = True):
     return _ADContextManager(_ek.detail.ADScope.Resume, array_type, array_indices)
 
 
-def isolate_grad(condition = True):
-    if not condition:
+def isolate_grad(when=True):
+    if not when:
         return _DummyContextManager()
     return _ADContextManager(_ek.detail.ADScope.Isolate, None, [])
 
