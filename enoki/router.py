@@ -2378,6 +2378,8 @@ def forward_to(*args, flags=_ek.ADFlag.Default):
     enqueue(_ek.ADMode.Backward, *args)
     traverse(ta, _ek.ADMode.Forward, flags)
 
+    return grad(args) if len(args) > 1 else grad(*args)
+
 
 def forward(a, flags=_ek.ADFlag.Default):
     forward_from(a, flags)
@@ -2406,6 +2408,8 @@ def backward_to(*args, flags=_ek.ADFlag.Default):
     _check_grad_enabled('backward_to', ta, args)
     enqueue(_ek.ADMode.Forward, *args)
     traverse(ta, _ek.ADMode.Backward, flags)
+
+    return grad(args) if len(args) > 1 else grad(*args)
 
 
 def backward(a, flags=_ek.ADFlag.Default):

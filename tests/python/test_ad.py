@@ -1411,3 +1411,34 @@ def test69_isolate(m):
            ek.grad(c) == 0 and \
            ek.grad(b) == 0 and \
            ek.grad(a) == 8
+
+def test70_isolate_fwd():
+    # Tests the impact of repeatedly propagating
+    # when an isolation boundary is present
+
+    if True:
+        a = Float(0)
+        ek.enable_grad(a)
+        ek.set_grad(a, 2)
+
+        b = a * 2
+        db = ek.forward_to(b)
+        assert db == 4
+
+        c = a * 3
+        dc = ek.forward_to(c)
+        assert dc == 0
+
+    if True:
+        a = Float(0)
+        ek.enable_grad(a)
+        ek.set_grad(a, 2)
+
+        with ek.isolate_grad():
+            b = a * 2
+            db = ek.forward_to(b)
+            assert db == 4
+
+            c = a * 3
+            dc = ek.forward_to(c)
+            assert dc == 6
