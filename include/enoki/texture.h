@@ -40,12 +40,16 @@ public:
     static constexpr bool IsCUDA = is_cuda_array_v<Value>;
     static constexpr bool IsDiff = is_diff_array_v<Value>;
     static constexpr bool IsDynamic = is_dynamic_v<Value>;
+    // Only single-precision floating-point CUDA textures are supported
+    static constexpr bool HasCudaTexture =
+        std::is_same_v<scalar_t<Value>, float>;
 
     using Int32 = int32_array_t<Value>;
     using UInt32 = uint32_array_t<Value>;
-    using UInt64 = uint64_array_t<Value>;
     using Mask = mask_t<Value>;
-
+    using PosF = Array<Value, Dimension>;
+    using PosI = int32_array_t<PosF>;
+    using ArrayX = DynamicArray<Value>;
     using Storage = std::conditional_t<IsDynamic, Value, DynamicArray<Value>>;
     using TensorXf = Tensor<Storage>;
 
@@ -112,7 +116,6 @@ public:
         m_handle = other.m_handle;
         other.m_handle = nullptr;
         m_size = other.m_size;
-        m_handle_opaque = std::move(other.m_handle_opaque);
         m_shape_opaque = std::move(other.m_shape_opaque);
         m_value = std::move(other.m_value);
         for (size_t i = 0; i < Dimension; ++i)
@@ -124,14 +127,11 @@ public:
     }
 
     Texture &operator=(Texture &&other) {
-        if constexpr (IsCUDA) {
+        if constexpr (IsCUDA)
             jit_cuda_tex_destroy(m_handle);
-            m_handle = nullptr;
-        }
         m_handle = other.m_handle;
         other.m_handle = nullptr;
         m_size = other.m_size;
-        m_handle_opaque = std::move(other.m_handle_opaque);
         m_shape_opaque = std::move(other.m_shape_opaque);
         m_value = std::move(other.m_value);
         for (size_t i = 0; i < Dimension; ++i)
@@ -151,7 +151,7 @@ public:
             jit_cuda_tex_destroy(m_handle);
     }
 
-    /// Return the CUDA handle (cudaTextureObject_t). NULL on all other backends
+    /// Return the CUDA handle (EnokiCudaTexture*). NULL on all other backends
     const void *handle() const { return m_handle; }
 
     /// Return the texture dimension plus one (for the "channel dimension")
@@ -166,11 +166,10 @@ public:
         if (value.size() != m_size)
             enoki_raise("Texture::set_value(): unexpected array size!");
 
-        if constexpr (IsCUDA) {
+        if constexpr (IsCUDA && HasCudaTexture) {
             value.eval_(); // Sync the value before copying to texture memory
             jit_cuda_tex_memcpy_d2t(Dimension, m_value.shape().data(),
-                                    m_value.shape(Dimension), value.data(),
-                                    m_handle);
+                                    value.data(), m_handle);
 
             if (m_migrate) {
                 Storage dummy = zero<Storage>(m_size);
@@ -204,12 +203,12 @@ public:
     const Storage &value() const { return tensor().array(); }
 
     const TensorXf &tensor() const {
-        if constexpr (IsCUDA) {
+        if constexpr (IsCUDA && HasCudaTexture) {
             if (m_migrated) {
                 Storage primal = empty<Storage>(m_size);
                 jit_cuda_tex_memcpy_t2d(Dimension, m_value.shape().data(),
-                                        m_value.shape(Dimension), m_handle,
-                                        primal.data());
+                                        m_handle, primal.data());
+
                 if constexpr (IsDiff)
                     m_value.array() = replace_grad(primal, m_value.array());
                 else
@@ -228,23 +227,24 @@ public:
      * This is an implementation detail, please use \ref eval() that may
      * dispatch to this function depending on its inputs.
      */
-    Array<Value, 4> eval_cuda(const Array<Value, Dimension> &pos,
-                              Mask active = true) const {
-        if constexpr (IsCUDA) {
-            uint32_t pos_idx[Dimension], out[4];
+    void eval_cuda(const Array<Value, Dimension> &pos, Value *out,
+                   Mask active = true) const {
+        const size_t channels = m_value.shape(Dimension);
+
+        if constexpr (IsCUDA && HasCudaTexture) {
+            uint32_t pos_idx[Dimension], out_idx[channels];
             for (size_t i = 0; i < Dimension; ++i)
                 pos_idx[i] = pos[i].index();
 
-            jit_cuda_tex_lookup(Dimension, m_handle_opaque.index(), pos_idx,
-                                active.index(), out);
+            jit_cuda_tex_lookup(Dimension, m_handle, pos_idx, active.index(),
+                                out_idx);
 
-            return {
-                Value::steal(out[0]), Value::steal(out[1]),
-                Value::steal(out[2]), Value::steal(out[3])
-            };
+            for (size_t ch = 0; ch < channels; ++ch)
+                out[ch] = Value::steal(out_idx[ch]);
         } else {
             (void) pos; (void) active;
-            return 0;
+            for (size_t ch = 0; ch < channels; ++ch)
+                out[ch] = zero<Value>();
         }
     }
 
@@ -254,11 +254,8 @@ public:
      * This is an implementation detail, please use \ref eval() that may
      * dispatch to this function depending on its inputs.
      */
-    Array<Value, 4> eval_enoki(const Array<Value, Dimension> &pos,
-                               Mask active = true) const {
-        using PosF = Array<Value, Dimension>;
-        using PosI = int32_array_t<PosF>;
-
+    void eval_enoki(const Array<Value, Dimension> &pos, Value *out,
+                    Mask active = true) const {
         const uint32_t channels = (uint32_t) m_value.shape(Dimension);
 
         if (ENOKI_UNLIKELY(m_filter_mode == FilterMode::Nearest)) {
@@ -268,11 +265,8 @@ public:
 
             UInt32 idx = index(pos_i_w);
 
-            Array<Value, 4> result(0);
             for (uint32_t ch = 0; ch < channels; ++ch)
-                result[ch] = gather<Value>(m_value.array(), idx + ch, active);
-
-            return result;
+                out[ch] = gather<Value>(m_value.array(), idx + ch, active);
         } else {
             using InterpOffset = Array<Int32, ipow(2, Dimension)>;
             using InterpPosI = Array<InterpOffset, Dimension>;
@@ -287,16 +281,17 @@ public:
             pos_i_w = wrap(pos_i_w);
             InterpIdx idx = index(pos_i_w);
 
-            Array<Value, 4> result(0);
+            for (uint32_t ch = 0; ch < channels; ++ch)
+                out[ch] = zero<Value>();
 
             #define EK_TEX_ACCUM(index, weight)                                        \
                 {                                                                      \
                     UInt32 index_ = index;                                             \
                     Value weight_ = weight;                                            \
                     for (uint32_t ch = 0; ch < channels; ++ch)                         \
-                        result[ch] =                                                   \
+                        out[ch] =                                                      \
                             fmadd(gather<Value>(m_value.array(), index_ + ch, active), \
-                                weight_, result[ch]);                                  \
+                                weight_, out[ch]);                                     \
                 }
 
             const PosF w1 = pos_f - floor2int<PosI>(pos_f),
@@ -322,8 +317,6 @@ public:
             }
 
             #undef EK_TEX_ACCUM
-
-            return result;
         }
     }
 
@@ -336,36 +329,37 @@ public:
      * graph of \ref eval_enoki() and combines it with the primal result of
      * \ref eval_cuda().
      */
-    Array<Value, 4> eval(const Array<Value, Dimension> &pos,
-                         Mask active = true) const {
-        if constexpr (IsCUDA) {
-            Array<Value, 4> result = eval_cuda(pos, active);
+    void eval(const Array<Value, Dimension> &pos, Value *out,
+              Mask active = true) const {
+        if constexpr (IsCUDA && HasCudaTexture) {
+            eval_cuda(pos, out, active);
 
             if constexpr (IsDiff) {
                 if (grad_enabled(m_value, pos)) {
-                    Array<Value, 4> result_diff = eval_enoki(pos, active);
-                    result = replace_grad(result, result_diff);
+                    const size_t channels = m_value.shape(Dimension);
+
+                    ArrayX out_enoki = empty<ArrayX>(channels);
+                    eval_enoki(pos, out_enoki.data(), active);
+
+                    for (size_t ch = 0; ch < channels; ++ch)
+                        out[ch] = replace_grad(out[ch], out_enoki[ch]);
                 }
             }
-
-            return result;
         } else {
-            return eval_enoki(pos, active);
+            eval_enoki(pos, out, active);
         }
     }
 
     /**
-     * \brief Helper function to evaluate a cubic B-Spline interpolant
+     * \brief Helper function to evaluate a clamped cubic B-Spline interpolant
      *
      * This is an implementation detail and should only be called by the \ref
      * eval_cubic() function to construct an AD graph. When only the cubic
      * evaluation result is desired, the \ref eval_cubic() function is faster
      * than this simple implementation
      */
-    Array<Value, 4> eval_cubic_helper(const Array<Value, Dimension> &pos,
-                                      Mask active = true) const {
-        using PosF = Array<Value, Dimension>;
-        using PosI = int32_array_t<PosF>;
+    void eval_cubic_helper(const Array<Value, Dimension> &pos, Value *out,
+                           Mask active = true) const {
         using Array4 = Array<Value, 4>;
         using InterpOffset = Array<Int32, ipow(4, Dimension)>;
         using InterpPosI = Array<InterpOffset, Dimension>;
@@ -398,18 +392,18 @@ public:
         };
 
         const uint32_t channels = (uint32_t) m_value.shape(Dimension);
+        for (uint32_t ch = 0; ch < channels; ++ch)
+            out[ch] = zero<Value>();
 
         #define EK_TEX_CUBIC_ACCUM(index, weight)                                  \
             {                                                                      \
                 UInt32 index_ = index;                                             \
                 Value weight_ = weight;                                            \
                 for (uint32_t ch = 0; ch < channels; ++ch)                         \
-                    result[ch] =                                                   \
+                    out[ch] =                                                      \
                         fmadd(gather<Value>(m_value.array(), index_ + ch, active), \
-                              weight_, result[ch]);                                \
+                              weight_, out[ch]);                                   \
             }
-
-        Array4 result(0);
 
         if constexpr (Dimension == 1) {
             Array4 wx = compute_weight(0);
@@ -432,12 +426,11 @@ public:
         }
 
         #undef EK_TEX_CUBIC_ACCUM
-
-        return result;
     }
 
     /**
-     * \brief Evaluate a cubic B-Spline interpolant represented by this texture
+     * \brief Evaluate a clamped cubic B-Spline interpolant represented by this
+     * texture
      *
      * Intead of interpolating the texture via B-Spline basis functions, the
      * implementation transforms this calculation into an equivalent weighted
@@ -454,13 +447,9 @@ public:
      * calls \ref eval_cubic_helper() function to replace the AD graph with a
      * direct evaluation of the B-Spline basis functions in that case.
      */
-    Array<Value, 4> eval_cubic(const Array<Value, Dimension> &pos,
-                               Mask active = true,
-                               bool force_enoki = false) const {
-        using PosF = Array<Value, Dimension>;
-        using PosI = int32_array_t<PosF>;
+    void eval_cubic(const Array<Value, Dimension> &pos, Value *out,
+                    Mask active = true, bool force_enoki = false) const {
         using Array3 = Array<Value, 3>;
-        using Array4 = Array<Value, 4>;
 
         if (m_migrate && force_enoki)
             jit_log(::LogLevel::Warn,
@@ -497,38 +486,45 @@ public:
                 (integ + 1.5f + w3 / w23) * inv_shape[dim]); // (integ + 0.5) +- 1 + weight
         };
 
-        auto eval_helper = [&force_enoki, this](const PosF &pos,
-                                                const Mask &active) -> Array4 {
-            if constexpr (IsCUDA) {
-                if (!force_enoki)
-                    return eval_cuda(pos, active);
+        const size_t channels = m_value.shape(Dimension);
+
+        auto eval_helper = [&](const PosF &pos,
+                               const Mask &active) -> ArrayX {
+            ArrayX out = empty<ArrayX>(channels);
+            if constexpr (IsCUDA && HasCudaTexture) {
+                if (!force_enoki) {
+                    eval_cuda(pos, out.data(), active);
+                    return out;
+                }
             }
             ENOKI_MARK_USED(force_enoki);
-            return eval_enoki(pos, active);
+            eval_enoki(pos, out.data(), active);
+            return out;
         };
 
-        Array4 result(0);
+
+        ArrayX result = empty<ArrayX>(channels);
 
         if constexpr (Dimension == 1) {
             Array3 cx = compute_weight_coord(0);
-            Array4 f0 = eval_helper(PosF(cx[1]), active),
+            ArrayX f0 = eval_helper(PosF(cx[1]), active),
                    f1 = eval_helper(PosF(cx[2]), active);
             result = lerp(f1, f0, cx[0]);
         } else if constexpr (Dimension == 2) {
             Array3 cx = compute_weight_coord(0),
                    cy = compute_weight_coord(1);
-            Array4 f00 = eval_helper(PosF(cx[1], cy[1]), active),
+            ArrayX f00 = eval_helper(PosF(cx[1], cy[1]), active),
                    f01 = eval_helper(PosF(cx[1], cy[2]), active),
                    f10 = eval_helper(PosF(cx[2], cy[1]), active),
                    f11 = eval_helper(PosF(cx[2], cy[2]), active);
-            Array4 f0 = lerp(f01, f00, cy[0]),
+            ArrayX f0 = lerp(f01, f00, cy[0]),
                    f1 = lerp(f11, f10, cy[0]);
             result = lerp(f1, f0, cx[0]);
         } else if constexpr (Dimension == 3) {
             Array3 cx = compute_weight_coord(0),
                    cy = compute_weight_coord(1),
                    cz = compute_weight_coord(2);
-            Array4 f000 = eval_helper(PosF(cx[1], cy[1], cz[1]), active),
+            ArrayX f000 = eval_helper(PosF(cx[1], cy[1], cz[1]), active),
                    f001 = eval_helper(PosF(cx[1], cy[1], cz[2]), active),
                    f010 = eval_helper(PosF(cx[1], cy[2], cz[1]), active),
                    f011 = eval_helper(PosF(cx[1], cy[2], cz[2]), active),
@@ -536,26 +532,29 @@ public:
                    f101 = eval_helper(PosF(cx[2], cy[1], cz[2]), active),
                    f110 = eval_helper(PosF(cx[2], cy[2], cz[1]), active),
                    f111 = eval_helper(PosF(cx[2], cy[2], cz[2]), active);
-            Array4 f00 = lerp(f001, f000, cz[0]),
+            ArrayX f00 = lerp(f001, f000, cz[0]),
                    f01 = lerp(f011, f010, cz[0]),
                    f10 = lerp(f101, f100, cz[0]),
                    f11 = lerp(f111, f110, cz[0]);
-            Array4 f0 = lerp(f01, f00, cy[0]),
+            ArrayX f0 = lerp(f01, f00, cy[0]),
                    f1 = lerp(f11, f10, cy[0]);
             result = lerp(f1, f0, cx[0]);
         }
+
+        for (size_t ch = 0; ch < channels; ++ch)
+            out[ch] = std::move(result[ch]);
 
         if constexpr (IsDiff) {
             /* When `pos` has gradient enabled, call a helper function to
                replace the AD graph. The result is unused (and never computed)
                and only the AD graph is replaced. */
             if (grad_enabled(m_value, pos)) {
-                Array4 result_diff = eval_cubic_helper(pos, active); // AD graph only
-                result = replace_grad(result, result_diff);
+                ArrayX result_diff = empty<ArrayX>(channels);
+                eval_cubic_helper(pos, result_diff.data(), active); // AD graph only
+                for (size_t ch = 0; ch < channels; ++ch)
+                    out[ch] = replace_grad(out[ch], result_diff[ch]);
             }
         }
-
-        return result;
     }
 
     /**
@@ -568,11 +567,9 @@ public:
      * to count for the transformation from the unit size volume to the size of its
      * shape.
      */
-    std::array<Array<Value, 4>, Dimension>
-    eval_cubic_grad(const Array<Value, Dimension> &pos,
-                    Mask active = true) const {
-        using PosF = Array<Value, Dimension>;
-        using PosI = int32_array_t<PosF>;
+    void eval_cubic_grad(const Array<Value, Dimension> &pos,
+                         Array<Value, Dimension> *out,
+                         Mask active = true) const {
         using Array4 = Array<Value, 4>;
         using InterpOffset = Array<Int32, ipow(4, Dimension)>;
         using InterpPosI = Array<InterpOffset, Dimension>;
@@ -613,24 +610,23 @@ public:
 
         const uint32_t channels = (uint32_t) m_value.shape(Dimension);
 
+        for (uint32_t ch = 0; ch < channels; ++ch)
+            out[ch] = zero<PosF>();
+        ArrayX values = empty<ArrayX>(channels);
+
         #define EK_TEX_CUBIC_GATHER(index)                                            \
             {                                                                         \
                 UInt32 index_ = index;                                                \
                 for (uint32_t ch = 0; ch < channels; ++ch)                            \
                     values[ch] = gather<Value>(m_value.array(), index_ + ch, active); \
             }
-        #define EK_TEX_CUBIC_ACCUM(dim, weight)                                      \
-            {                                                                        \
-                uint32_t dim_ = dim;                                                 \
-                Value weight_ = weight;                                              \
-                for (uint32_t ch = 0; ch < channels; ++ch)                           \
-                    result[dim_][ch] = fmadd(values[ch], weight_, result[dim_][ch]); \
+        #define EK_TEX_CUBIC_ACCUM(dim, weight)                                \
+            {                                                                  \
+                uint32_t dim_ = dim;                                           \
+                Value weight_ = weight;                                        \
+                for (uint32_t ch = 0; ch < channels; ++ch)                     \
+                    out[ch][dim_] = fmadd(values[ch], weight_, out[ch][dim_]); \
             }
-
-        std::array<Array4, Dimension> result;
-        for (uint32_t dim = 0; dim < Dimension; ++dim)
-            result[dim] = Array4(0.f);
-        Array4 values;
 
         if constexpr (Dimension == 1) {
             Array4 gx = compute_weight(0, true);
@@ -670,10 +666,9 @@ public:
         #undef EK_TEX_CUBIC_ACCUM
 
         // transform volume from unit size to its resolution
-        for (uint32_t dim = 0; dim < Dimension; ++dim)
-            result[dim] *= res_f[dim];
-
-        return result;
+        for (uint32_t ch = 0; ch < channels; ++ch)
+            for (uint32_t dim = 0; dim < Dimension; ++dim)
+                out[ch][dim] *= res_f[dim];
     }
 
     /**
@@ -686,11 +681,10 @@ public:
      * to count for the transformation from the unit size volume to the size of its
      * shape.
      */
-    std::pair<std::array<Array<Value, 4>, Dimension>, std::array<std::array<Array<Value, 4>, Dimension>, Dimension> >
-    eval_cubic_hessian(const Array<Value, Dimension> &pos,
-                       Mask active = true) const {
-        using PosF = Array<Value, Dimension>;
-        using PosI = int32_array_t<PosF>;
+    void eval_cubic_hessian(const Array<Value, Dimension> &pos,
+                            Array<Value, Dimension> *out_gradient,
+                            Matrix<Value, Dimension> *out_hessian,
+                            Mask active = true) const {
         using Array4 = Array<Value, 4>;
         using InterpOffset = Array<Int32, ipow(4, Dimension)>;
         using InterpPosI = Array<InterpOffset, Dimension>;
@@ -740,6 +734,12 @@ public:
         };
 
         const uint32_t channels = (uint32_t) m_value.shape(Dimension);
+        for (uint32_t ch = 0; ch < channels; ++ch) {
+            out_gradient[ch] = zero<PosF>();
+            for (uint32_t dim1 = 0; dim1 < Dimension; ++dim1)
+                out_hessian[ch][dim1] = zero<PosF>();
+        }
+        ArrayX values = empty<ArrayX>(channels);
 
         // Make sure channel related operations are executed together
         #define EK_TEX_CUBIC_GATHER(index)                                            \
@@ -748,37 +748,28 @@ public:
                 for (uint32_t ch = 0; ch < channels; ++ch)                            \
                     values[ch] = gather<Value>(m_value.array(), index_ + ch, active); \
             }
-        #define EK_TEX_CUBIC_ACCUM_GRAD(dim, weight_grad)                                     \
-            {                                                                                 \
-                uint32_t dim_ = dim;                                                          \
-                Value weight_grad_ = weight_grad;                                             \
-                for (uint32_t ch = 0; ch < channels; ++ch)                                    \
-                    gradient[dim_][ch] = fmadd(values[ch], weight_grad_, gradient[dim_][ch]); \
+        #define EK_TEX_CUBIC_ACCUM_GRAD(dim, weight_grad)                                             \
+            {                                                                                         \
+                uint32_t dim_ = dim;                                                                  \
+                Value weight_grad_ = weight_grad;                                                     \
+                for (uint32_t ch = 0; ch < channels; ++ch)                                            \
+                    out_gradient[ch][dim_] = fmadd(values[ch], weight_grad_, out_gradient[ch][dim_]); \
             }
-        #define EK_TEX_CUBIC_ACCUM_HESSIAN(dim1, dim2, weight_hessian)                                         \
-            {                                                                                                  \
-                uint32_t dim1_ = dim1,                                                                         \
-                         dim2_ = dim2;                                                                         \
-                Value weight_hessian_ = weight_hessian;                                                        \
-                for (uint32_t ch = 0; ch < channels; ++ch)                                                     \
-                    hessian[dim1_][dim2_][ch] = fmadd(values[ch], weight_hessian_, hessian[dim1_][dim2_][ch]); \
+        #define EK_TEX_CUBIC_ACCUM_HESSIAN(dim1, dim2, weight_hessian)                                                 \
+            {                                                                                                          \
+                uint32_t dim1_ = dim1,                                                                                 \
+                         dim2_ = dim2;                                                                                 \
+                Value weight_hessian_ = weight_hessian;                                                                \
+                for (uint32_t ch = 0; ch < channels; ++ch)                                                             \
+                    out_hessian[ch][dim1_][dim2_] = fmadd(values[ch], weight_hessian_, out_hessian[ch][dim1_][dim2_]); \
             }
-        #define EK_TEX_CUBIC_HESSIAN_SYMM(dim1, dim2)                      \
-            {                                                              \
-                uint32_t dim1_ = dim1,                                     \
-                         dim2_ = dim2;                                     \
-                for (uint32_t ch = 0; ch < channels; ++ch)                 \
-                    hessian[dim2_][dim1_][ch] = hessian[dim1_][dim2_][ch]; \
+        #define EK_TEX_CUBIC_HESSIAN_SYMM(dim1, dim2)                              \
+            {                                                                      \
+                uint32_t dim1_ = dim1,                                             \
+                         dim2_ = dim2;                                             \
+                for (uint32_t ch = 0; ch < channels; ++ch)                         \
+                    out_hessian[ch][dim2_][dim1_] = out_hessian[ch][dim1_][dim2_]; \
             }
-
-        std::array<Array4, Dimension> gradient;
-        std::array<std::array<Array4, Dimension>, Dimension> hessian;
-        for (uint32_t dim1 = 0; dim1 < Dimension; ++dim1) {
-            gradient[dim1] = Array4(0.f);
-            for (uint32_t dim2 = 0; dim2 < Dimension; ++dim2)
-                hessian[dim1][dim2] = Array4(0.f);
-        }
-        Array4 values;
 
         if constexpr (Dimension == 1) {
             Array4 gx  = compute_weight_gradient(0),
@@ -840,20 +831,19 @@ public:
         #undef EK_TEX_CUBIC_HESSIAN_SYMM
 
         // transform volume from unit size to its resolution
-        for (uint32_t dim1 = 0; dim1 < Dimension; ++dim1) {
-            gradient[dim1] *= res_f[dim1];
-            for (uint32_t dim2 = 0; dim2 < Dimension; ++dim2)
-                hessian[dim1][dim2] *= res_f[dim1] * res_f[dim2];
-        }
-
-        return std::make_pair(gradient, hessian);
+        for (uint32_t ch = 0; ch < channels; ++ch)
+            for (uint32_t dim1 = 0; dim1 < Dimension; ++dim1) {
+                out_gradient[ch][dim1] *= res_f[dim1];
+                for (uint32_t dim2 = 0; dim2 < Dimension; ++dim2)
+                    out_hessian[ch][dim1][dim2] *= res_f[dim1] * res_f[dim2];
+            }
     }
 
 protected:
     void init(const size_t *shape, size_t channels, bool migrate,
               FilterMode filter_mode, WrapMode wrap_mode) {
-        if (channels != 1 && channels != 2 && channels != 4)
-            enoki_raise("Texture::Texture(): must have 1, 2, or 4 channels!");
+        if (channels == 0)
+            enoki_raise("Texture::Texture(): must have at least 1 channel!");
 
         m_size = channels;
         size_t tensor_shape[Dimension + 1]{};
@@ -872,34 +862,32 @@ protected:
         m_filter_mode = filter_mode;
         m_wrap_mode = wrap_mode;
 
-        if constexpr (IsCUDA) {
+        if constexpr (IsCUDA && HasCudaTexture)
             m_handle = jit_cuda_tex_create(Dimension, shape, channels,
                                            (int) filter_mode, (int) wrap_mode);
-            m_handle_opaque = UInt64::steal(
-                jit_var_new_pointer(JitBackend::CUDA, m_handle, 0, 0));
-        }
     }
 
 private:
+    /// Helper function to compmute integer powers of numbers
     template <typename T>
     constexpr static T ipow(T num, unsigned int pow) {
         return pow == 0 ? 1 : num * ipow(num, pow - 1);
     }
 
+    /// Builds the set of integer positions necessary for the interpolation
     template <typename T, size_t Length>
-    Array<Array<Int32, ipow(Length, Dimension)>, Dimension>
-    interp_positions(const int *offset, const T &pos) const {
+    static Array<Array<Int32, ipow(Length, Dimension)>, Dimension>
+    interp_positions(const int *offset, const T &pos) {
         using Scalar = scalar_t<T>;
         using InterpOffset = Array<Int32, ipow(Length, Dimension)>;
         using InterpPosI = Array<InterpOffset, Dimension>;
-
         static_assert(
             array_size_v<T> == Dimension &&
             std::is_integral_v<Scalar> &&
             std::is_signed_v<Scalar>
         );
 
-        InterpPosI pos_i(0);
+        InterpPosI pos_i;
         if constexpr (Dimension == 1) {
             for (uint32_t ix = 0; ix < Length; ix++) {
                 pos_i[0][ix] = offset[ix] + pos.x();
@@ -994,7 +982,6 @@ private:
 private:
     void *m_handle = nullptr;
     size_t m_size = 0;
-    UInt64 m_handle_opaque;
     Array<UInt32, Dimension> m_shape_opaque;
     mutable TensorXf m_value;
     divisor<int32_t> m_inv_resolution[Dimension] { };

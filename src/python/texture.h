@@ -28,12 +28,63 @@ void bind_texture(py::module &m, const char *name) {
         .def("tensor", &Tex::tensor, py::return_value_policy::reference_internal)
         .def("filter_mode", &Tex::filter_mode)
         .def("wrap_mode", &Tex::wrap_mode)
-        .def("eval_cuda", &Tex::eval_cuda, "pos"_a, "active"_a = true)
-        .def("eval_enoki", &Tex::eval_enoki, "pos"_a, "active"_a = true)
-        .def("eval_cubic", &Tex::eval_cubic, "pos"_a, "active"_a = true, "force_enoki"_a = false)
-        .def("eval_cubic_grad", &Tex::eval_cubic_grad, "pos"_a, "active"_a = true)
-        .def("eval_cubic_hessian", &Tex::eval_cubic_hessian, "pos"_a, "active"_a = true)
-        .def("eval", &Tex::eval, "pos"_a, "active"_a = true);
+        .def("eval_cuda",
+                [](const Tex &texture, const ek::Array<Type, Dimension> &pos,
+                   const ek::mask_t<Type> active) {
+                    size_t channels = texture.shape()[Dimension];
+                    std::vector<Type> result(channels);
+                    texture.eval_cuda(pos, result.data(), active);
+
+                    return result;
+                }, "pos"_a, "active"_a = true)
+        .def("eval_enoki",
+                [](const Tex &texture, const ek::Array<Type, Dimension> &pos,
+                   const ek::mask_t<Type> active) {
+                    size_t channels = texture.shape()[Dimension];
+                    std::vector<Type> result(channels);
+                    texture.eval_enoki(pos, result.data(), active);
+
+                    return result;
+                }, "pos"_a, "active"_a = true)
+        .def("eval_cubic",
+                [](const Tex &texture, const ek::Array<Type, Dimension> &pos,
+                   const ek::mask_t<Type> active, bool force_enoki) {
+                    size_t channels = texture.shape()[Dimension];
+                    std::vector<Type> result(channels);
+                    texture.eval_cubic(pos, result.data(), active, force_enoki);
+
+                    return result;
+                }, "pos"_a, "active"_a = true, "force_enoki"_a = false)
+        .def("eval_cubic_grad",
+                [](const Tex &texture, const ek::Array<Type, Dimension> &pos,
+                   const ek::mask_t<Type> active) {
+
+                    size_t channels = texture.shape()[Dimension];
+                    std::vector<ek::Array<Type, Dimension>> result(channels);
+                    texture.eval_cubic_grad(pos, result.data(), active);
+
+                    return result;
+                }, "pos"_a, "active"_a = true)
+        .def("eval_cubic_hessian",
+                [](const Tex &texture, const ek::Array<Type, Dimension> &pos,
+                   const ek::mask_t<Type> active) {
+                    size_t channels = texture.shape()[Dimension];
+                    std::vector<ek::Array<Type, Dimension>> gradient(channels);
+                    std::vector<ek::Matrix<Type, Dimension>> hessian(channels);
+                    texture.eval_cubic_hessian(pos, gradient.data(),
+                                               hessian.data(), active);
+
+                    return std::make_tuple(gradient, hessian);
+                }, "pos"_a, "active"_a = true)
+        .def("eval",
+                [](const Tex &texture, const ek::Array<Type, Dimension> &pos,
+                   const ek::mask_t<Type> active) {
+                    size_t channels = texture.shape()[Dimension];
+                    std::vector<Type> result(channels);
+                    texture.eval(pos, result.data(), active);
+
+                    return result;
+                }, "pos"_a, "active"_a = true);
 
     tex.attr("IsTexture") = true;
 }
