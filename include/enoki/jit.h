@@ -509,6 +509,28 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
             jit_var_new_gather(src.index(), index.index(), mask.index()));
     }
 
+    template <size_t Width, typename Out, typename Index, typename Mask>
+    static void gather_wide_(const Derived &src, const Index &index,
+                             const Mask &mask, Out &out) {
+        static_assert(
+            std::is_same_v<detached_t<Mask>, detached_t<mask_t<Derived>>> &&
+            (Width == 2 || Width == 4));
+
+        Derived temp = steal(jit_var_new_gather(
+            src.index(), index.index(), mask.index(), (uint32_t) Width));
+
+        out[0] = steal(jit_var_new_stmt_1(
+            Backend, Type, "mov.$t0 $r0, $r1_0", temp.index()));
+        out[1] = steal(jit_var_new_stmt_1(
+            Backend, Type, "mov.$t0 $r0, $r1_1", temp.index()));
+        if (Width == 4) {
+            out[2] = steal(jit_var_new_stmt_1(
+                Backend, Type, "mov.$t0 $r0, $r1_2", temp.index()));
+            out[3] = steal(jit_var_new_stmt_1(
+                Backend, Type, "mov.$t0 $r0, $r1_3", temp.index()));
+        }
+    }
+
     template <bool, typename Index, typename Mask>
     void scatter_(void * /* dst */, const Index & /*index*/,
                   const Mask & /*mask*/) const {

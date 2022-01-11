@@ -1022,6 +1022,16 @@ Target gather(Source &&source, const Index &index, const Mask &mask_ = true) {
             // Case 2.2: gather<Vector3fC>(const FloatC & / const void *, ...)
             using TargetIndex = replace_scalar_t<Target, scalar_t<Index>>;
 
+            if constexpr (is_cuda_array_v<Target> && Target::Depth == 2 &&
+                          (Target::Size == 4 || Target::Size == 2)) {
+                if constexpr (!is_diff_array_v<Target>) {
+                    Target result;
+                    std::decay_t<Source>::template gather_wide_<Target::Size>(
+                        source, index, mask, result);
+                    return result;
+                }
+            }
+
             return gather<Target, Permute>(
                 source, detail::broadcast_index<TargetIndex>(index), mask);
         }
