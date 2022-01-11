@@ -93,8 +93,9 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
             }
 
             if (m_ad_scope) {
-                detail::ad_scope_leave<Float64>();
-                detail::ad_scope_leave<Float32>();
+                m_ad_scope = false;
+                detail::ad_scope_leave<Float64>(false);
+                detail::ad_scope_leave<Float32>(false);
             }
         }
     }
@@ -315,9 +316,9 @@ protected:
 
                     if constexpr (IsDiff) {
                         if (m_ad_scope) {
-                            detail::ad_scope_leave<Float64>();
-                            detail::ad_scope_leave<Float32>();
                             m_ad_scope = false;
+                            detail::ad_scope_leave<Float64>(true);
+                            detail::ad_scope_leave<Float32>(true);
                         }
                     }
 
@@ -444,9 +445,9 @@ protected:
 
             if constexpr (IsDiff) {
                 if (m_ad_scope) {
-                    detail::ad_scope_leave<Float64>();
-                    detail::ad_scope_leave<Float32>();
                     m_ad_scope = false;
+                    detail::ad_scope_leave<Float64>(true);
+                    detail::ad_scope_leave<Float32>(true);
                 }
             }
 

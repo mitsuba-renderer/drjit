@@ -814,7 +814,7 @@ void ad_scope_enter(ADScope type, size_t size, const uint32_t *indices) {
     scopes.push_back(std::move(scope));
 }
 
-template <typename T> void ad_scope_leave() {
+template <typename T> void ad_scope_leave(bool process_postponed) {
     LocalState &ls = local_state;
     auto &scopes = local_state.scopes;
     if (scopes.empty())
@@ -841,16 +841,20 @@ template <typename T> void ad_scope_leave() {
                      "enqueued. Did you forget to call ek.traverse() to "
                      "process them?");
 
-        ad_trace("ad_scope_leave(): enqueuing %zu postponed edges.",
-                 scope.postponed.size());
+        if (process_postponed) {
+            ad_trace("ad_scope_leave(): enqueuing %zu postponed edges.",
+                     scope.postponed.size());
 
-        ls.todo.insert(ls.todo.end(), scope.postponed.begin(),
-                       scope.postponed.end());
+            ls.todo.insert(ls.todo.end(), scope.postponed.begin(),
+                           scope.postponed.end());
 
-        scopes.pop_back();
+            scopes.pop_back();
 
-        ad_traverse<Value>(ADMode::Backward,
-                           (uint32_t) ADFlag::ClearVertices);
+            ad_traverse<Value>(ADMode::Backward,
+                               (uint32_t) ADFlag::ClearVertices);
+        } else {
+            scopes.pop_back();
+        }
     } else {
         scopes.pop_back();
     }
@@ -1068,6 +1072,7 @@ template <typename Value> struct SpecialCallback : Special {
             } else {
                 scopes.push_back(scope);
             }
+
             scopes.back().postponed.clear();
         }
 
@@ -1077,15 +1082,13 @@ template <typename Value> struct SpecialCallback : Special {
                 Scope &scope_child  = scopes[scopes.size() - 1];
                 Scope &scope_parent = scopes[scopes.size() - 2];
 
-                if (unlikely(scope_child.isolate != scope_parent.isolate))
-                    ad_fail("SpecialCallback: inconsistent 'isolate' field in "
-                            "AD scopes!");
-
-                scope_parent.postponed.insert(
-                    scope_parent.postponed.end(),
-                    scope_child.postponed.begin(),
-                    scope_child.postponed.end()
-                );
+                if (unlikely(scope_child.isolate == scope_parent.isolate)) {
+                    scope_parent.postponed.insert(
+                        scope_parent.postponed.end(),
+                        scope_child.postponed.begin(),
+                        scope_child.postponed.end()
+                    );
+                }
             } else if (scopes.size() == 0) {
                 ad_fail("SpecialCallback::PushScope::~PushScope(): underflow!");
             }
@@ -2377,7 +2380,7 @@ ad_new_scatter<Value, Mask, Index>(const char *, size_t, ReduceOp, uint32_t,
 template ENOKI_EXPORT void ad_add_edge<Value>(uint32_t, uint32_t,
                                               DiffCallback *);
 template ENOKI_EXPORT void ad_scope_enter<Value>(ADScope, size_t, const uint32_t *);
-template ENOKI_EXPORT void ad_scope_leave<Value>();
+template ENOKI_EXPORT void ad_scope_leave<Value>(bool);
 template ENOKI_EXPORT bool ad_grad_enabled<Value>(uint32_t);
 template ENOKI_EXPORT bool ad_enabled<Value>() noexcept;
 NAMESPACE_END(detail)

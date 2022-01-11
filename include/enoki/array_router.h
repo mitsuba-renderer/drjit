@@ -1718,7 +1718,7 @@ template <typename T> struct isolate_grad {
 
     ~isolate_grad() {
         if constexpr (Enabled)
-            detail::ad_scope_leave<typename T::Type>();
+            detail::ad_scope_leave<typename T::Type>(true);
     }
 };
 

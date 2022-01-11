@@ -82,7 +82,7 @@ template <typename Value>
 void ad_scope_enter(ADScope type, size_t size, const uint32_t *indices);
 
 /// Leave a scope created by ad_scope_enter()
-template <typename Value> void ad_scope_leave();
+template <typename Value> void ad_scope_leave(bool process_postponed);
 
 /// Check if a variable is suspended from derivative tracking
 template <typename Value> bool ad_grad_enabled(uint32_t index);
@@ -1886,7 +1886,7 @@ protected:
                                                                 uint32_t *);   \
     extern template ENOKI_AD_EXPORT void                                       \
     ad_scope_enter<T>(ADScope, size_t, const uint32_t *);                      \
-    extern template ENOKI_AD_EXPORT void ad_scope_leave<T>();                  \
+    extern template ENOKI_AD_EXPORT void ad_scope_leave<T>(bool);              \
     extern template ENOKI_AD_EXPORT bool ad_grad_enabled<T>(uint32_t);         \
     extern template ENOKI_AD_EXPORT bool ad_enabled<T>();                      \
     }

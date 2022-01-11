@@ -479,8 +479,8 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
                         type, indices.size(), indices.data());
                 });
 
-            cls.def_static("scope_leave_", []() {
-                ek::detail::ad_scope_leave<ek::detached_t<Array>>();
+            cls.def_static("scope_leave_", [](bool process_postoned) {
+                ek::detail::ad_scope_leave<ek::detached_t<Array>>(process_postoned);
             });
         }
     }

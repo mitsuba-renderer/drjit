@@ -2675,15 +2675,17 @@ class _ADContextManager:
                 _ek.llvm.ad.Float64.scope_enter_(self.scope_type, self.array_indices)
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        success = exc_type is None
+
         if self.array_type is not None:
-            self.array_type.scope_leave_()
+            self.array_type.scope_leave_(success)
         else:
             if hasattr(_ek, 'cuda'):
-                _ek.cuda.ad.Float32.scope_leave_()
-                _ek.cuda.ad.Float64.scope_leave_()
+                _ek.cuda.ad.Float32.scope_leave_(success)
+                _ek.cuda.ad.Float64.scope_leave_(success)
             if hasattr(_ek, 'llvm'):
-                _ek.llvm.ad.Float32.scope_leave_()
-                _ek.llvm.ad.Float64.scope_leave_()
+                _ek.llvm.ad.Float32.scope_leave_(success)
+                _ek.llvm.ad.Float64.scope_leave_(success)
 
 
 def suspend_grad(*args, condition = True):
