@@ -1329,7 +1329,7 @@ def safe_sqrt(a):
     result = sqrt(max(a, 0))
     if _ek.is_diff_array_v(a) and _ek.grad_enabled(a):
         alt = sqrt(max(a, _ek.Epsilon(a)))
-        result = _ek.replace_grad(result, alt)
+        result = replace_grad(result, alt)
     return result
 
 
@@ -1337,7 +1337,7 @@ def safe_cbrt(a):
     result = cbrt(max(a, 0))
     if _ek.is_diff_array_v(a) and _ek.grad_enabled(a):
         alt = cbrt(max(a, _ek.Epsilon(a)))
-        result = _ek.replace_grad(result, alt)
+        result = replace_grad(result, alt)
     return result
 
 
@@ -1345,7 +1345,7 @@ def safe_asin(a):
     result = asin(clamp(a, -1, 1))
     if _ek.is_diff_array_v(a) and _ek.grad_enabled(a):
         alt = asin(clamp(a, -_ek.OneMinusEpsilon(a), _ek.OneMinusEpsilon(a)))
-        result = _ek.replace_grad(result, alt)
+        result = replace_grad(result, alt)
     return result
 
 
@@ -1353,7 +1353,7 @@ def safe_acos(a):
     result = acos(clamp(a, -1, 1))
     if _ek.is_diff_array_v(a) and _ek.grad_enabled(a):
         alt = acos(clamp(a, -_ek.OneMinusEpsilon(a), _ek.OneMinusEpsilon(a)))
-        result = _ek.replace_grad(result, alt)
+        result = replace_grad(result, alt)
     return result
 
 
@@ -2287,9 +2287,13 @@ def disable_grad(*args):
 
 
 def replace_grad(a, b):
+    if type(a) is not type(b):
+        a, b = _var_promote(a, b)
+
     ta, tb = type(a), type(b)
 
-    if ta is not tb or not _ek.is_diff_array_v(a) or not a.IsFloat:
+    if not (_ek.is_diff_array_v(ta) and ta.IsFloat and
+            _ek.is_diff_array_v(tb) and tb.IsFloat):
         raise Exception("replace_grad(): unsupported input types!")
 
     la, lb = len(a), len(b)
