@@ -1496,7 +1496,7 @@ def linspace_(cls, min, max, size=1, endpoint=True):
     if cls.IsTensor:
         raise Exception("linspace_(): Tensor type not supported!")
     result = cls.empty_(size)
-    step = (max - min) / (len(result) - (1 if endpoint else 0))
+    step = (max - min) / (len(result) - (1 if endpoint and (size > 1) else 0))
     if cls.IsFloat:
         for i in range(len(result)):
             result[i] = min + step * i

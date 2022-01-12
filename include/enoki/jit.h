@@ -446,7 +446,7 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
     }
 
     static Derived linspace_(Value min, Value max, size_t size, bool endpoint) {
-        Value step = (max - min) / Value(size - (endpoint ? 1 : 0));
+        Value step = (max - min) / Value(size - ((endpoint && size > 1) ? 1 : 0));
         return fmadd(Derived(uint32_array_t<Derived>::counter(size)),
                      Derived(step),
                      Derived(min));
