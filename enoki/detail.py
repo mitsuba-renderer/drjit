@@ -495,16 +495,6 @@ def _loop_process_state(value: type, in_state: list, out_state: list,
             _loop_process_state(entry, in_state, out_state, write, in_struct)
         return
 
-    if enoki.grad_enabled(value) \
-       and enoki.flag(enoki.JitFlag.LoopRecord):
-        raise enoki.Exception(
-            "loop_process_state(): one of the supplied loop state variables "
-            "of type %s is attached to the AD graph (i.e., grad_enabled(..) "
-            "is true). However, propagating derivatives through multiple "
-            "iterations of a recorded loop is not supported (and never "
-            "will be). Please see the documentation on differentiating loops "
-            "for details and suggested alternatives." % t.__name__)
-
     if enoki.is_tensor_v(t):
         _loop_process_state(value.array, in_state, out_state, in_struct)
     elif enoki.is_jit_array_v(t):
@@ -515,6 +505,15 @@ def _loop_process_state(value: type, in_state: list, out_state: list,
         else:
             index = value.index()
             index_ad = value.index_ad() if t.IsDiff else 0
+
+            if index_ad != 0 and enoki.flag(enoki.JitFlag.LoopRecord):
+                raise enoki.Exception(
+                    "loop_process_state(): one of the supplied loop state variables "
+                    "of type %s is attached to the AD graph (i.e., grad_enabled(..) "
+                    "is true). However, propagating derivatives through multiple "
+                    "iterations of a recorded loop is not supported (and never "
+                    "will be). Please see the documentation on differentiating loops "
+                    "for details and suggested alternatives." % t.__name__)
 
             if index == 0:
                 raise enoki.Exception(

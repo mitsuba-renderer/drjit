@@ -116,7 +116,7 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
                             "use the same floating point precision! (either "
                             "all single or all double precision)");
 
-                    if (m_record && grad_enabled(value))
+                    if (m_record && value.index_ad())
                         jit_raise(
                             "Loop::put(): one of the supplied loop "
                             "variables is attached to the AD graph (i.e. "
@@ -136,7 +136,7 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
                     if (value.index() == 0)
                         jit_raise("Loop::put(): a loop variable (or "
                                   "an element of a data structure provided "
-                                  "as a loop variable) is unintialized!");
+                                  "as a loop variable) is uninitialized!");
                     m_indices.push_back(value.index_ptr());
                     m_indices_ad.push_back(nullptr);
                 }
@@ -172,7 +172,6 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
             detail::ad_scope_enter<Float32>(detail::ADScope::Isolate, 0, nullptr);
             m_ad_scope = true;
         }
-
 
         // Capture JIT state and begin recording session
         m_jit_state.new_scope();
