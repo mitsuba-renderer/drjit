@@ -1943,7 +1943,7 @@ void ad_traverse(ADMode mode, uint32_t flags) {
             if (flags & (uint32_t) ADFlag::ClearEdges) {
                 // Edge may have been invalidated by callback, look up once more
                 Edge &edge2 = state.edges[er.id];
-                if (edge.source == er.source && edge.target == er.target) {
+                if (edge2.source == er.source && edge2.target == er.target) {
                     Special *special2 = edge2.special;
                     edge2.special = nullptr;
                     delete special2;
