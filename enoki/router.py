@@ -2626,7 +2626,7 @@ def printf_async(fmt, *args, active=True):
         if not (cuda or llvm) or _ek.array_depth_v(a) != 1 or _ek.is_mask_v(a):
             raise Exception("printf_async(): array argument of type '%s' not "
                             "supported (must be a depth-1 JIT (LLVM/CUDA) array, "
-                            "and cannot be a mask)", type(a).__name__)
+                            "and cannot be a mask)" % type(a).__name__)
         indices.append(a.index())
         is_cuda |= cuda
         is_llvm |= llvm
