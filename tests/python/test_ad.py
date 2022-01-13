@@ -1412,12 +1412,12 @@ def test69_isolate(m):
            ek.grad(b) == 0 and \
            ek.grad(a) == 8
 
-def test70_isolate_fwd():
+def test70_isolate_fwd(m):
     # Tests the impact of repeatedly propagating
     # when an isolation boundary is present
 
     if True:
-        a = Float(0)
+        a = m.Float(0)
         ek.enable_grad(a)
         ek.set_grad(a, 2)
 
@@ -1430,7 +1430,7 @@ def test70_isolate_fwd():
         assert dc == 0
 
     if True:
-        a = Float(0)
+        a = m.Float(0)
         ek.enable_grad(a)
         ek.set_grad(a, 2)
 

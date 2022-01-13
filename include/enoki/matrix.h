@@ -42,17 +42,17 @@ struct Matrix : StaticArrayImpl<Array<Value_, Size_>, Size_, false,
 
     template <typename T, enable_if_t<is_matrix_v<T> || array_depth_v<T> == Base::Depth> = 0>
     ENOKI_INLINE Matrix(T&& m) {
-        constexpr size_t Size2 = array_size_v<T>;
-        if constexpr (Size2 >= Size) {
+        constexpr size_t ArgSize = array_size_v<T>;
+        if constexpr (ArgSize >= Size) {
             /// Other matrix is equal or bigger -- retain the top left part
             for (size_t i = 0; i < Size; ++i)
                 entry(i) = head<Size>(m.entry(i));
         } else {
             /// Other matrix is smaller -- copy the top left part and set remainder to identity
-            using Remainder = Array<Value_, Size - Size2>;
-            for (size_t i = 0; i < Size2; ++i)
+            using Remainder = Array<Value_, Size - ArgSize>;
+            for (size_t i = 0; i < ArgSize; ++i)
                 entry(i) = concat(m.entry(i), zero<Remainder>());
-            for (size_t i = Size2; i < Size; ++i) {
+            for (size_t i = ArgSize; i < Size; ++i) {
                 Column col = zero<Column>();
                 col.entry(i) = 1;
                 entry(i) = col;

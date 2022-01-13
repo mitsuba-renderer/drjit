@@ -283,16 +283,22 @@ void ad_scope_enter(ADScope type, size_t size, const uint32_t *indices);
 template <typename Value> void ad_scope_leave(bool);
 NAMESPACE_END(detail)
 
+#if defined(ENOKI_BUILD_AUTODIFF)
+#  define ENOKI_AD_EXPORT
+#else
+#  define ENOKI_AD_EXPORT ENOKI_IMPORT
+#endif
+
 #define ENOKI_DECLARE_EXTERN_AD_TEMPLATE(T, Mask)                              \
     namespace detail {                                                         \
-    extern template ENOKI_IMPORT void                                          \
+    extern template ENOKI_AD_EXPORT void                                       \
         ad_inc_ref_impl<T>(uint32_t) noexcept(true);                           \
-    extern template ENOKI_IMPORT void                                          \
+    extern template ENOKI_AD_EXPORT void                                       \
         ad_dec_ref_impl<T>(uint32_t) noexcept(true);                           \
-    extern template ENOKI_IMPORT void ad_scope_enter<T>(ADScope type, size_t,  \
-                                                        const uint32_t *);     \
-    extern template ENOKI_IMPORT void ad_scope_leave<T>(bool);                 \
-    extern template ENOKI_IMPORT uint32_t ad_new_select<T, Mask>(              \
+    extern template ENOKI_AD_EXPORT void ad_scope_enter<T>(                    \
+        ADScope type, size_t, const uint32_t *);                               \
+    extern template ENOKI_AD_EXPORT void ad_scope_leave<T>(bool);              \
+    extern template ENOKI_AD_EXPORT uint32_t ad_new_select<T, Mask>(           \
         const char *, size_t, const Mask &, uint32_t, uint32_t);               \
     }
 

@@ -15,11 +15,9 @@
 #define ENOKI_AUTODIFF_H
 
 #if defined(ENOKI_BUILD_AUTODIFF)
-#  define ENOKI_AD_EXPORT
 #  define ENOKI_AD_EXPORT_TEMPLATE(T)
 #else
-#  define ENOKI_AD_EXPORT ENOKI_IMPORT
-#  define ENOKI_AD_EXPORT_TEMPLATE(T)                                    \
+#  define ENOKI_AD_EXPORT_TEMPLATE(T)                      \
      extern template ENOKI_AD_EXPORT struct DiffArray<T>;
 #endif
 

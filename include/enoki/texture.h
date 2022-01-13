@@ -232,7 +232,9 @@ public:
         const size_t channels = m_value.shape(Dimension);
 
         if constexpr (IsCUDA && HasCudaTexture) {
-            uint32_t pos_idx[Dimension], out_idx[channels];
+            uint32_t pos_idx[Dimension];
+            uint32_t *out_idx = (uint32_t *) alloca(channels * sizeof(uint32_t));
+
             for (size_t i = 0; i < Dimension; ++i)
                 pos_idx[i] = pos[i].index();
 
