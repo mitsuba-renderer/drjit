@@ -294,7 +294,8 @@ def test13_failures_ad(pkg, variant):
             i = i + 1
             if variant == 1:
                 ek.enable_grad(v)
-    assert 'one of the supplied loop state variables of type Array3f is attached to the AD graph' in str(e.value)
+    print(str(e.value))
+    assert 'one of the supplied loop state variables of type Float is attached to the AD graph' in str(e.value)
     del l
 
 

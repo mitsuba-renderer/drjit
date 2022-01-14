@@ -1226,32 +1226,33 @@ def test63_suspend_resume(m):
             e = a + b + c
             assert ek.grad_enabled(e)
 
-        f = m.Float(1)
-        ek.enable_grad(f)
-        g = f + 1
-        assert ek.grad_enabled(f) and \
-               ek.grad_enabled(g) and \
-               not ek.grad_enabled(a, b, c, d)
+        # ek.enable_grad() is ignored in a full ek.suspend_grad() session
+        e = m.Float(1)
+        ek.enable_grad(e)
+        assert not ek.grad_enabled(a, b, c, d, e)
 
-        h = m.Float(a)
+        # Replicating suspended variables creates detached copies
+        f = m.Float(a)
         with ek.resume_grad():
             assert ek.grad_enabled(a) and \
-                   not ek.grad_enabled(h)
+                   not ek.grad_enabled(f)
 
 
 def test64_suspend_resume_selective(m):
     a = m.Float(1)
     b = m.Float(1)
     c = m.Float(1)
+    d = m.Float(1)
     ek.enable_grad(a, b, c)
 
     with ek.suspend_grad():
         print(ek.grad_enabled(c))
         with ek.resume_grad(a, b):
-            print(ek.grad_enabled(c))
+            ek.enable_grad(d)
             assert ek.grad_enabled(a) and \
                    ek.grad_enabled(b) and \
-                   not ek.grad_enabled(c)
+                   not ek.grad_enabled(c) and \
+                   ek.grad_enabled(d)
             with ek.suspend_grad(b):
                 assert ek.grad_enabled(a) and \
                        not ek.grad_enabled(b) and \
