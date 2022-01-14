@@ -1061,6 +1061,7 @@ template <typename Value> struct SpecialConnection : Special {
 template <typename Value> struct SpecialCallback : Special {
     std::unique_ptr<DiffCallback> callback;
     Scope scope;
+    bool clear;
 
     /// Recreate the suspend/resume status in place when this callback edge was created
     struct PushScope {
@@ -1146,10 +1147,14 @@ template <typename Value> struct SpecialCallback : Special {
                 const Edge &e = state.edges[edge];
                 Variable *v = state[e.source];
 
+
                 if (v->ref_count_grad > 0 && --v->ref_count_grad == 0) {
                     if (((flags & (uint32_t) ADFlag::ClearInterior) && v->next_bwd != 0) ||
-                        ((flags & (uint32_t) ADFlag::ClearInput) && v->next_bwd == 0))
-                        v->grad = Value();
+                        ((flags & (uint32_t) ADFlag::ClearInput) && v->next_bwd == 0)) {
+
+                        if (!(scope.isolate && e.source < scope.variable_index))
+                            v->grad = Value();
+                    }
                 }
 
                 edge = e.next_bwd;
