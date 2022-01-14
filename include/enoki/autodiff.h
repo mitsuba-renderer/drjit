@@ -60,7 +60,7 @@ void ad_accum_grad(uint32_t index, const Value &v, bool fail_if_missing);
 /// Enqueue a variable for a subsequent ad_traverse() command
 template <typename Value> void ad_enqueue(ADMode mode, uint32_t index);
 
-/// Propagate derivatives through the eneueued set of edges
+/// Propagate derivatives through the enqueued set of edges
 template <typename Value> void ad_traverse(ADMode mode, uint32_t flags);
 
 /// Number of observed implicit dependencies

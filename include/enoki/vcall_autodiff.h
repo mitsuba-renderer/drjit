@@ -20,27 +20,6 @@
 NAMESPACE_BEGIN(enoki)
 NAMESPACE_BEGIN(detail)
 
-inline void ad_copy() { }
-
-template <typename T, typename... Ts> void ad_copy(T &value, Ts&...values) {
-    ENOKI_MARK_USED(value);
-    if constexpr (is_diff_array_v<T>) {
-        if constexpr (array_depth_v<T> > 1) {
-            for (size_t i = 0; i < value.size(); ++i)
-                ad_copy(value.entry(i));
-        } else {
-            if (value.index_ad())
-                value = value.derived().copy();
-        }
-    } else if constexpr (is_enoki_struct_v<T>) {
-        struct_support_t<T>::apply_1(
-            value, [](auto &x1) ENOKI_INLINE_LAMBDA { ad_copy(x1); });
-    }
-
-    if constexpr (sizeof...(Ts) > 0)
-        ad_copy(values...);
-}
-
 using ConstStr = const char *;
 
 template <typename DiffType, typename Self, typename Result, typename Func,
@@ -85,7 +64,6 @@ struct DiffVCall : CustomOp<DiffType, Result, ConstStr, Self, Func, Args...> {
             enable_grad(value_grad_pair.first...);
             size_t implicit_snapshot = ad_implicit<Type>();
             Result result = func(self2, value_grad_pair.first...);
-            ad_copy(result);
             (set_grad(value_grad_pair.first, value_grad_pair.second), ...);
 
 #if defined(ENOKI_VCALL_DEBUG)
@@ -127,7 +105,6 @@ struct DiffVCall : CustomOp<DiffType, Result, ConstStr, Self, Func, Args...> {
             ad_copy(args...);
             enable_grad(args...);
             Result result = func(self2, args...);
-            ad_copy(result);
             set_grad(result, grad_out);
 
 #if defined(ENOKI_VCALL_DEBUG)

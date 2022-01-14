@@ -80,6 +80,27 @@ decltype(auto) set_mask_true(const T &v) {
         return (const T &) v;
 }
 
+inline void ad_copy() { }
+
+template <typename T, typename... Ts> void ad_copy(T &value, Ts&...values) {
+    ENOKI_MARK_USED(value);
+    if constexpr (is_diff_array_v<T>) {
+        if constexpr (array_depth_v<T> > 1) {
+            for (size_t i = 0; i < value.size(); ++i)
+                ad_copy(value.entry(i));
+        } else {
+            if (value.index_ad())
+                value = value.derived().copy();
+        }
+    } else if constexpr (is_enoki_struct_v<T>) {
+        struct_support_t<T>::apply_1(
+            value, [](auto &x1) ENOKI_INLINE_LAMBDA { ad_copy(x1); });
+    }
+
+    if constexpr (sizeof...(Ts) > 0)
+        ad_copy(values...);
+}
+
 template <typename Guide, typename Type, typename = int> struct vectorize_type {
     using type = Type;
 };
@@ -179,7 +200,9 @@ NAMESPACE_END(enoki)
                     self->name(args...);                                       \
                     return nullptr;                                            \
                 } else {                                                       \
-                    return self->name(args...);                                \
+                    auto result = self->name(args...);                         \
+                    detail::ad_copy(result);                                   \
+                    return result;                                             \
                 }                                                              \
             },                                                                 \
             array, args_...);                                                  \
