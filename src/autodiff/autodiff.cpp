@@ -899,7 +899,9 @@ uint32_t ad_new(const char *label, size_t size, uint32_t op_count,
 
         bool active = false;
         if (op_count == 0) {
-            active = true;
+            // If AD is completely disabled (i.e. this is an ek.suspend_grad()
+            // region), don't allow creating new AD variables
+            active = scope.complement || !scope.indices.empty();
         } else {
             for (uint32_t i = 0; i < op_count; ++i)
                 active |= scope.maybe_disable(op[i]);
