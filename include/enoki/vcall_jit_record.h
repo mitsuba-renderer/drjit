@@ -96,6 +96,7 @@ Result vcall_jit_record_impl(const char *name, uint32_t n_inst,
 
     detail::JitState<Backend> jit_state;
     jit_state.begin_recording();
+    jit_state.new_scope();
 
     state[0] = jit_record_checkpoint(Backend);
 
