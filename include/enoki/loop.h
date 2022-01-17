@@ -161,9 +161,6 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
 
     /// Configure the loop variables for recording
     void init() {
-        if (!m_record)
-            return;
-
         if (m_state)
             jit_raise("Loop(\"%s\"): was already initialized!", m_name.get());
 
@@ -172,6 +169,9 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
             detail::ad_scope_enter<Float32>(detail::ADScope::Isolate, 0, nullptr);
             m_ad_scope = true;
         }
+
+        if (!m_record)
+            return;
 
         // Capture JIT state and begin recording session
         m_jit_state.new_scope();
