@@ -2351,7 +2351,7 @@ def traverse(t, mode, flags=_ek.ADFlag.Default):
 
 def _check_grad_enabled(name, t, a):
     if _ek.is_diff_array_v(t) and t.IsFloat:
-        if not grad_enabled(a):
+        if _ek.flag(_ek.JitFlag.VCallRecord) and not grad_enabled(a):
             raise Exception(
                 f'{name}(): the argument does not depend on the input '
                 'variable(s) being differentiated. Raising an exception '
