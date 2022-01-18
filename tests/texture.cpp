@@ -18,6 +18,7 @@ using ArrayD3f = ek::Array<DFloat, 3>;
 using ArrayD4f = ek::Array<DFloat, 4>;
 using MatrixD3f = ek::Matrix<DFloat, 3>;
 using FloatX = ek::DynamicArray<Float>;
+using FloatDX = ek::DynamicArray<DFloat>;
 
 void test_interp_1d_wrap(WrapMode wrap_mode) {
     for (int k = 0; k < 2; ++k) {
@@ -114,7 +115,7 @@ ENOKI_TEST(test02_interp_1d) {
             for (int j = 0; j < 4; ++j) {
                 Float values = rng_1.next_float32();
                 tex.set_value(values);
-                //assert(allclose(tex.value(), values));
+                assert(allclose(tex.value(), values));
                 Array1f pos(rng_2.next_float32());
                 FloatX result_enoki = empty<FloatX>(ch);
                 tex.eval_enoki(pos, result_enoki.data());
@@ -261,19 +262,19 @@ ENOKI_TEST(test07_cubic_analytic) {
     assert(ek::allclose(grad_ad[0], ref_grad, 1e-5f, 1e-5f));
 }
 
-void test08_cubic_interp_1d(WrapMode wrap_mode) {
+void test_cubic_interp_1d(WrapMode wrap_mode) {
     size_t shape[1] = { 5 };
     ek::Texture<Float, 1> tex(shape, 1, false, FilterMode::Linear, wrap_mode);
     tex.set_value(Float(2.f, 1.f, 3.f, 4.f, 7.f));
 
     size_t N = 20;
 
-    Array1f pos(ek::linspace<Float>(0.25f, 0.75f, N));
+    Array1f pos(ek::linspace<Float>(0.1f, 0.9f, N));
     Array1f out = empty<Array1f>();
     tex.eval_cubic_helper(pos, out.data());
     Float ref = out.x();
 
-    tex.eval_cubic(pos, out.data());
+    tex.eval_cubic(pos, out.data(), true, true);
     assert(ek::allclose(out.x(), ref));
 
     switch (wrap_mode) {
@@ -281,13 +282,13 @@ void test08_cubic_interp_1d(WrapMode wrap_mode) {
             Array1f res = empty<Array1f>();
             Array1f res2 = empty<Array1f>();
 
-            pos.x() = ek::linspace<Float>(-0.75f, -0.25f, N);
+            pos.x() = ek::linspace<Float>(-0.9f, -0.1f, N);
             tex.eval_cubic(pos, res.data(), true, true);
             tex.eval_cubic_helper(pos, res2.data());
             assert(ek::allclose(res.x(), ref));
             assert(ek::allclose(res2.x(), ref));
 
-            pos.x() = ek::linspace<Float>(1.25f, 1.75f, N);
+            pos.x() = ek::linspace<Float>(1.1f, 1.9f, N);
             tex.eval_cubic(pos, res.data(), true, true);
             tex.eval_cubic_helper(pos, res2.data());
             assert(ek::allclose(res.x(), ref));
@@ -307,19 +308,19 @@ void test08_cubic_interp_1d(WrapMode wrap_mode) {
                                   1.4546, 1.5485, 1.8199, 2.2043, 2.6288,
                                   3.0232, 3.3783, 3.7461, 4.1814, 4.7305,
                                   5.3536, 5.9603, 6.4595, 6.7778, 6.9375);
-                assert(ek::allclose(res, ref));
-                assert(ek::allclose(res2, ref));
+                assert(ek::allclose(res.x(), ref, 5e-3f, 5e-3f));
+                assert(ek::allclose(res2.x(), ref, 5e-3f, 5e-3f));
             }
 
-            ref = ek::opaque<Float>(ref[0], N);
-            pos.x() = ek::linspace<Float>(-0.25f, 0.25f, N);
+            ref = ek::opaque<Float>(2.f, N);
+            pos.x() = ek::linspace<Float>(-1.f, -0.1f, N);
             tex.eval_cubic(pos, res.data(), true, true);
             tex.eval_cubic_helper(pos, res2.data());
             assert(ek::allclose(res.x(), ref));
             assert(ek::allclose(res2.x(), ref));
 
-            ref = ek::opaque<Float>(ref[N - 1], N);
-            pos.x() = ek::linspace<Float>(0.75f, 1.25f, N);
+            ref = ek::opaque<Float>(7.f, N);
+            pos.x() = ek::linspace<Float>(1.1f, 2.f, N);
             tex.eval_cubic(pos, res.data(), true, true);
             tex.eval_cubic_helper(pos, res2.data());
             assert(ek::allclose(res.x(), ref));
@@ -330,13 +331,13 @@ void test08_cubic_interp_1d(WrapMode wrap_mode) {
             Array1f res = empty<Array1f>();
             Array1f res2 = empty<Array1f>();
 
-            pos.x() = ek::linspace<Float>(-0.25f, -0.75f, N);
+            pos.x() = ek::linspace<Float>(-0.1f, -0.9f, N);
             tex.eval_cubic(pos, res.data(), true, true);
             tex.eval_cubic_helper(pos, res2.data());
             assert(ek::allclose(res.x(), ref));
             assert(ek::allclose(res2.x(), ref));
 
-            pos.x() = ek::linspace<Float>(1.75f, 1.25f, N);
+            pos.x() = ek::linspace<Float>(1.9f, 1.1, N);
             tex.eval_cubic(pos, res.data(), true, true);
             tex.eval_cubic_helper(pos, res2.data());
             assert(ek::allclose(res.x(), ref));
@@ -347,37 +348,29 @@ void test08_cubic_interp_1d(WrapMode wrap_mode) {
 }
 
 ENOKI_TEST(test08_cubic_interp_1d) {
-    test_interp_1d_wrap(WrapMode::Repeat);
-    test_interp_1d_wrap(WrapMode::Clamp);
-    test_interp_1d_wrap(WrapMode::Mirror);
+    test_cubic_interp_1d(WrapMode::Clamp);
+    test_cubic_interp_1d(WrapMode::Repeat);
+    test_cubic_interp_1d(WrapMode::Mirror);
 }
 
 ENOKI_TEST(test09_cubic_interp_2d) {
     size_t shape[2] = { 5, 4 };
-    ek::Texture<Float, 2> tex(shape, 1, false, FilterMode::Linear,
-                              WrapMode::Clamp);
-    tex.set_value(ek::linspace<Float>(0.f, 20.f, 20));
-
     Array<WrapMode, 3> wrap_modes(WrapMode::Repeat, WrapMode::Clamp,
                                   WrapMode::Mirror);
 
     for (size_t i = 0; i < wrap_modes.size(); ++i) {
         Texture<Float, 2> tex(shape, 1, false, FilterMode::Linear,
                               wrap_modes[i]);
-        size_t N = 30;
-        Array2f pos(ek::linspace<Float>(0.f, 1.f, N),
-                    ek::linspace<Float>(0.f, 1.f, N));
+        PCG32<Float> rng1(shape[0] * shape[1]);
+        tex.set_value(rng1.next_float32());
+
         Array1f res = empty<Array1f>();
         Array1f res2 = empty<Array1f>();
 
+        PCG32<Float> rng2(1024);
+        Array2f pos(rng2.next_float32(), rng2.next_float32());
         tex.eval_cubic(pos, res.data(), true, true);
         tex.eval_cubic_helper(pos, res2.data());
-        assert(ek::allclose(res, res2));
-
-        PCG32<Float> rng(1024);
-        Array2f pos_(rng.next_float32(), rng.next_float32());
-        tex.eval_cubic(pos_, res.data(), true, true);
-        tex.eval_cubic_helper(pos_, res2.data());
         assert(ek::allclose(res, res2));
     }
 }
@@ -386,11 +379,10 @@ ENOKI_TEST(test10_cubic_interp_3d) {
     using TensorXf = Tensor<Float>;
     using UInt32 = ek::uint32_array_t<Float>;
     const int s = 9;
-    size_t shape[3] = { s, s, s };
-    size_t shape_[] = { s, s, s, 2 };  // 2 channels
+    size_t shape[4] = { s, s, s, 2 };  // 2 channels
 
     auto data = ek::full<Float>((1.0), s*s*s*2);
-    TensorXf tensor(data, 4, shape_);
+    TensorXf tensor(data, 4, shape);
     ek::scatter(tensor.array(), Float(0.0),  UInt32(728));  // tensor[4, 4, 4, 0] = 0.0
     ek::scatter(tensor.array(), Float(2.0),  UInt32(546));  // tensor[3, 3, 3, 0] = 2.0
     ek::scatter(tensor.array(), Float(10.0), UInt32(727));  // tensor[4, 4, 3, 1] = 10.0
@@ -420,11 +412,10 @@ ENOKI_TEST(test10_cubic_interp_3d) {
 ENOKI_TEST(test11_cubic_grad_pos) {
     using TensorXf = Tensor<Float>;
     using UInt32 = ek::uint32_array_t<Float>;
-    size_t shape[3] = { 4, 4, 4 };
+    size_t shape[4] = { 4, 4, 4, 1 };
 
     auto data = ek::full<Float>((1.0), 4*4*4);
-    size_t shape_[] = { 4, 4, 4, 1 };
-    TensorXf tensor(data, 4, shape_);
+    TensorXf tensor(data, 4, shape);
     ek::scatter(tensor.array(), Float(0.5f), UInt32(21));  // data[1, 1, 1] = 0.5
     ek::scatter(tensor.array(), Float(2.0f), UInt32(25));  // data[1, 2, 1] = 2.0
     ek::scatter(tensor.array(), Float(3.0f), UInt32(41));  // data[2, 2, 1] = 3.0
@@ -461,11 +452,10 @@ ENOKI_TEST(test11_cubic_grad_pos) {
 ENOKI_TEST(test12_cubic_hessian_pos) {
     using TensorXf = Tensor<Float>;
     using UInt32 = ek::uint32_array_t<Float>;
-    size_t shape[3] = { 4, 4, 4 };
+    size_t shape[4] = { 4, 4, 4, 1 };
 
     auto data = ek::full<Float>((0.0), 4*4*4);
-    size_t shape_[] = { 4, 4, 4, 1 };
-    TensorXf tensor(data, 4, shape_);
+    TensorXf tensor(data, 4, shape);
     ek::scatter(tensor.array(), Float(1.0f), UInt32(21));  // data[1, 1, 1] = 1.0
     ek::scatter(tensor.array(), Float(2.0f), UInt32(37));  // data[2, 1, 1] = 2.0
     // NOTE: Tensor has different index convention with Texture
@@ -588,4 +578,223 @@ void test_tensor_value_3d(bool migrate) {
 ENOKI_TEST(test17_tensor_value_3d) {
     test_tensor_value_3d(true);
     test_tensor_value_3d(false);
+}
+
+ENOKI_TEST(test18_fetch_1d) {
+    size_t shape[1] = { 2 };
+    for (size_t ch = 1; ch <= 8; ++ch) {
+        ek::Texture<Float, 1> tex(shape, ch, false);
+        PCG32<Float> rng(shape[0] * ch);
+        Float tex_data = rng.next_float32();
+        ek::enable_grad(tex_data);
+        tex.set_value(tex_data);
+
+        Array1f pos(0.5f);
+        Array<Float *, 2> out_enoki;
+        Array<Float *, 2> out_cuda;
+        FloatX out0_enoki = empty<FloatX>(ch);
+        FloatX out1_enoki = empty<FloatX>(ch);
+        FloatX out0_cuda = empty<FloatX>(ch);
+        FloatX out1_cuda = empty<FloatX>(ch);
+        out_enoki[0] = out0_enoki.data();
+        out_enoki[1] = out1_enoki.data();
+        out_cuda[0] = out0_cuda.data();
+        out_cuda[1] = out1_cuda.data();
+
+        tex.eval_fetch_enoki(pos, out_enoki);
+        tex.eval_fetch_cuda(pos, out_cuda);
+        for (size_t k = 0; k < ch; ++k) {
+            assert(allclose(tex_data[k], out0_enoki[k]));
+            assert(allclose(tex_data[k], out0_cuda[k]));
+            assert(allclose(tex_data[ch + k], out1_enoki[k]));
+            assert(allclose(tex_data[ch + k], out1_cuda[k]));
+        }
+    }
+}
+
+ENOKI_TEST(test19_fetch_2d) {
+    size_t shape[2] = { 2, 2 };
+    for (size_t ch = 1; ch <= 8; ++ch) {
+        ek::Texture<Float, 2> tex(shape, ch, false);
+        PCG32<Float> rng(shape[0] * shape[1] * ch);
+        rng.next_float32();
+        Float tex_data = rng.next_float32();
+        tex.set_value(tex_data);
+
+        Array2f pos(0.5f, 0.5f);
+        Array<Float *, 4> out_enoki;
+        Array<Float *, 4> out_cuda;
+        FloatX out00_enoki = empty<FloatX>(ch);
+        FloatX out01_enoki = empty<FloatX>(ch);
+        FloatX out10_enoki = empty<FloatX>(ch);
+        FloatX out11_enoki = empty<FloatX>(ch);
+        FloatX out00_cuda = empty<FloatX>(ch);
+        FloatX out01_cuda = empty<FloatX>(ch);
+        FloatX out10_cuda = empty<FloatX>(ch);
+        FloatX out11_cuda = empty<FloatX>(ch);
+        out_enoki[0] = out00_enoki.data();
+        out_enoki[1] = out01_enoki.data();
+        out_enoki[2] = out10_enoki.data();
+        out_enoki[3] = out11_enoki.data();
+        out_cuda[0] = out00_cuda.data();
+        out_cuda[1] = out01_cuda.data();
+        out_cuda[2] = out10_cuda.data();
+        out_cuda[3] = out11_cuda.data();
+
+        tex.eval_fetch_enoki(pos, out_enoki);
+        tex.eval_fetch_cuda(pos, out_cuda);
+        for (size_t k = 0; k < ch; ++k) {
+            assert(allclose(tex_data[k], out00_enoki[k]));
+            assert(allclose(tex_data[k], out00_cuda[k]));
+            assert(allclose(tex_data[ch + k], out01_enoki[k]));
+            assert(allclose(tex_data[ch + k], out01_cuda[k]));
+            assert(allclose(tex_data[2 * ch + k], out10_enoki[k]));
+            assert(allclose(tex_data[2 * ch + k], out10_cuda[k]));
+            assert(allclose(tex_data[3 * ch + k], out11_enoki[k]));
+            assert(allclose(tex_data[3 * ch + k], out11_cuda[k]));
+        }
+    }
+}
+
+ENOKI_TEST(test20_fetch_3d) {
+    size_t shape[3] = { 2, 2, 2 };
+    for (size_t ch = 1; ch <= 8; ++ch) {
+        ek::Texture<Float, 3> tex(shape, ch, false);
+        PCG32<Float> rng(shape[0] * shape[1] * shape[2] * ch);
+        Float tex_data = rng.next_float32();
+        tex.set_value(tex_data);
+
+        Array3f pos(0.3f, 0.3f, 0.3f);
+        Array<Float *, 8> out_enoki;
+        Array<Float *, 8> out_cuda;
+        FloatX out000_enoki = empty<FloatX>(ch);
+        FloatX out001_enoki = empty<FloatX>(ch);
+        FloatX out010_enoki = empty<FloatX>(ch);
+        FloatX out011_enoki = empty<FloatX>(ch);
+        FloatX out100_enoki = empty<FloatX>(ch);
+        FloatX out101_enoki = empty<FloatX>(ch);
+        FloatX out110_enoki = empty<FloatX>(ch);
+        FloatX out111_enoki = empty<FloatX>(ch);
+
+        FloatX out000_cuda = empty<FloatX>(ch);
+        FloatX out001_cuda = empty<FloatX>(ch);
+        FloatX out010_cuda = empty<FloatX>(ch);
+        FloatX out011_cuda = empty<FloatX>(ch);
+        FloatX out100_cuda = empty<FloatX>(ch);
+        FloatX out101_cuda = empty<FloatX>(ch);
+        FloatX out110_cuda = empty<FloatX>(ch);
+        FloatX out111_cuda = empty<FloatX>(ch);
+
+        out_enoki[0] = out000_enoki.data();
+        out_enoki[1] = out001_enoki.data();
+        out_enoki[2] = out010_enoki.data();
+        out_enoki[3] = out011_enoki.data();
+        out_enoki[4] = out100_enoki.data();
+        out_enoki[5] = out101_enoki.data();
+        out_enoki[6] = out110_enoki.data();
+        out_enoki[7] = out111_enoki.data();
+
+        out_cuda[0] = out000_cuda.data();
+        out_cuda[1] = out001_cuda.data();
+        out_cuda[2] = out010_cuda.data();
+        out_cuda[3] = out011_cuda.data();
+        out_cuda[4] = out100_cuda.data();
+        out_cuda[5] = out101_cuda.data();
+        out_cuda[6] = out110_cuda.data();
+        out_cuda[7] = out111_cuda.data();
+
+        tex.eval_fetch_enoki(pos, out_enoki);
+        tex.eval_fetch_cuda(pos, out_cuda);
+        for (size_t k = 0; k < ch; ++k) {
+            assert(allclose(tex_data[k], out000_enoki[k]));
+            assert(allclose(tex_data[k], out000_cuda[k]));
+            assert(allclose(tex_data[ch + k], out001_enoki[k]));
+            assert(allclose(tex_data[ch + k], out001_cuda[k]));
+            assert(allclose(tex_data[2 * ch + k], out010_enoki[k]));
+            assert(allclose(tex_data[2 * ch + k], out010_cuda[k]));
+            assert(allclose(tex_data[3 * ch + k], out011_enoki[k]));
+            assert(allclose(tex_data[3 * ch + k], out011_cuda[k]));
+            assert(allclose(tex_data[4 * ch + k], out100_enoki[k]));
+            assert(allclose(tex_data[4 * ch + k], out100_cuda[k]));
+            assert(allclose(tex_data[5 * ch + k], out101_enoki[k]));
+            assert(allclose(tex_data[5 * ch + k], out101_cuda[k]));
+            assert(allclose(tex_data[6 * ch + k], out110_enoki[k]));
+            assert(allclose(tex_data[6 * ch + k], out110_cuda[k]));
+            assert(allclose(tex_data[7 * ch + k], out111_enoki[k]));
+            assert(allclose(tex_data[7 * ch + k], out111_cuda[k]));
+        }
+    }
+}
+
+void test_fetch_migrate(bool migrate) {
+    size_t shape[1] = { 2 };
+    ek::Texture<Float, 1> tex(shape, 1, migrate);
+    Float tex_data(1.0f, 2.0f);
+    tex.set_value(tex_data);
+
+    Array1f pos(0.5f);
+    Array<Float *, 2> out;
+    FloatX out0 = empty<FloatX>(1);
+    FloatX out1 = empty<FloatX>(1);
+    out[0] = out0.data();
+    out[1] = out1.data();
+
+    tex.eval_fetch_enoki(pos, out);
+    if (migrate) {
+        assert(allclose(out[0][0], 0));
+        assert(allclose(out[1][0], 0));
+    } else {
+        assert(allclose(out[0][0], 1.0f));
+        assert(allclose(out[1][0], 2.0f));
+    }
+}
+
+ENOKI_TEST(test21_fetch_migrate) {
+    test_fetch_migrate(true);
+    test_fetch_migrate(false);
+}
+
+ENOKI_TEST(test22_fetch_grad) {
+    size_t shape[2] = { 2, 2 };
+    Texture<DFloat, 2> tex(shape, 1, true);
+
+    DFloat tex_data(1.f, 2.f, 3.f, 4.f);
+    ek::enable_grad(tex_data);
+    tex.set_value(tex_data);
+
+    ArrayD2f pos(0.5f, 0.5f);
+    Array<DFloat *, 4> out;
+    FloatDX out00 = empty<FloatDX>(1);
+    FloatDX out01 = empty<FloatDX>(1);
+    FloatDX out10 = empty<FloatDX>(1);
+    FloatDX out11 = empty<FloatDX>(1);
+    out[0] = out00.data();
+    out[1] = out01.data();
+    out[2] = out10.data();
+    out[3] = out11.data();
+    tex.eval_fetch_enoki(pos, out);
+    assert(allclose(0.f, out[0][0]));
+    assert(allclose(0.f, out[1][0]));
+    assert(allclose(0.f, out[2][0]));
+    assert(allclose(0.f, out[3][0]));
+
+    tex.eval_fetch(pos, out);
+    assert(allclose(1.f, out[0][0]));
+    assert(allclose(2.f, out[1][0]));
+    assert(allclose(3.f, out[2][0]));
+    assert(allclose(4.f, out[3][0]));
+
+    for (size_t i = 0; i < 4; ++i) {
+        ek::backward(out[i][0]);
+        Float grad = ek::grad(tex_data);
+        Float expected(
+                i == 0 ? 1.f : 0.f,
+                i == 1 ? 1.f : 0.f,
+                i == 2 ? 1.f : 0.f,
+                i == 3 ? 1.f : 0.f
+        );
+
+        assert(allclose(expected, grad));
+        ek::set_grad(tex_data, Float(0, 0, 0, 0));
+    }
 }

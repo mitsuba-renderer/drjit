@@ -233,8 +233,8 @@ public:
 
         if constexpr (IsCUDA && HasCudaTexture) {
             uint32_t pos_idx[Dimension];
-            uint32_t *out_idx = (uint32_t *) alloca(channels * sizeof(uint32_t));
-
+            uint32_t *out_idx =
+                (uint32_t *) alloca(channels * sizeof(uint32_t));
             for (size_t i = 0; i < Dimension; ++i)
                 pos_idx[i] = pos[i].index();
 
@@ -304,17 +304,17 @@ public:
                 EK_TEX_ACCUM(idx.y(), w1.x());
             } else if constexpr (Dimension == 2) {
                 EK_TEX_ACCUM(idx.x(), w0.x() * w0.y());
-                EK_TEX_ACCUM(idx.y(), w0.x() * w1.y());
-                EK_TEX_ACCUM(idx.z(), w1.x() * w0.y());
+                EK_TEX_ACCUM(idx.y(), w1.x() * w0.y());
+                EK_TEX_ACCUM(idx.z(), w0.x() * w1.y());
                 EK_TEX_ACCUM(idx.w(), w1.x() * w1.y());
             } else if constexpr (Dimension == 3) {
                 EK_TEX_ACCUM(idx[0], w0.x() * w0.y() * w0.z());
-                EK_TEX_ACCUM(idx[1], w0.x() * w0.y() * w1.z());
+                EK_TEX_ACCUM(idx[1], w1.x() * w0.y() * w0.z());
                 EK_TEX_ACCUM(idx[2], w0.x() * w1.y() * w0.z());
-                EK_TEX_ACCUM(idx[3], w0.x() * w1.y() * w1.z());
-                EK_TEX_ACCUM(idx[4], w1.x() * w0.y() * w0.z());
+                EK_TEX_ACCUM(idx[3], w1.x() * w1.y() * w0.z());
+                EK_TEX_ACCUM(idx[4], w0.x() * w0.y() * w1.z());
                 EK_TEX_ACCUM(idx[5], w1.x() * w0.y() * w1.z());
-                EK_TEX_ACCUM(idx[6], w1.x() * w1.y() * w0.z());
+                EK_TEX_ACCUM(idx[6], w0.x() * w1.y() * w1.z());
                 EK_TEX_ACCUM(idx[7], w1.x() * w1.y() * w1.z());
             }
 
@@ -349,6 +349,145 @@ public:
             }
         } else {
             eval_enoki(pos, out, active);
+        }
+    }
+
+    /**
+     * \brief Fetch the texels that would be referenced in a CUDA texture lookup
+     * with linear interpolation without actually performing this interpolation.
+     *
+     * This is an implementation detail, please use \ref eval_fetch() that may
+     * dispatch to this function depending on its inputs.
+     */
+    void eval_fetch_cuda(const Array<Value, Dimension> &pos,
+                         Array<Value *, 1 << Dimension> &out,
+                         Mask active = true) const {
+        const size_t channels = m_value.shape(Dimension);
+
+        if constexpr (IsCUDA && HasCudaTexture) {
+            if constexpr (Dimension == 1) {
+                const PosF res_f = PosF(m_shape_opaque);
+                const PosF pos_f = floor(fmadd(pos, res_f, -.5f)) + .5f;
+
+                PosF fetch_pos;
+                PosF inv_shape = rcp(res_f);
+                for (size_t ix = 0; ix < 2; ix++) {
+                    fetch_pos = pos_f + PosF(ix);
+                    fetch_pos *= inv_shape;
+
+                    eval_cuda(fetch_pos, out[ix], active);
+                }
+            } else if constexpr (Dimension == 2) {
+                uint32_t pos_idx[Dimension];
+                uint32_t *out_idx =
+                    (uint32_t *) alloca(4 * channels * sizeof(uint32_t));
+                for (size_t i = 0; i < Dimension; ++i)
+                    pos_idx[i] = pos[i].index();
+
+                jit_cuda_tex_bilerp_fetch(Dimension, m_handle, pos_idx,
+                                          active.index(), out_idx);
+
+                for (size_t ch = 0; ch < channels; ++ch) {
+                    out[2][ch] = Value::steal(out_idx[ch]);
+                    out[3][ch] = Value::steal(out_idx[channels + ch]);
+                    out[1][ch] = Value::steal(out_idx[2 * channels + ch]);
+                    out[0][ch] = Value::steal(out_idx[3 * channels + ch]);
+                }
+            } else if constexpr (Dimension == 3) {
+                const PosF res_f = PosF(m_shape_opaque);
+                const PosF pos_f = floor(fmadd(pos, res_f, -.5f)) + .5f;
+
+                PosF fetch_pos;
+                PosF inv_shape = rcp(res_f);
+                for (size_t iz = 0; iz < 2; iz++) {
+                    for (size_t iy = 0; iy < 2; iy++) {
+                        for (size_t ix = 0; ix < 2; ix++) {
+                            size_t index = iz * 4 + iy * 2 + ix;
+                            fetch_pos = pos_f + PosF(ix, iy, iz);
+                            fetch_pos *= inv_shape;
+
+                            eval_cuda(fetch_pos, out[index], active);
+                        }
+                    }
+                }
+            }
+        } else {
+            (void) pos; (void) active;
+            for (size_t i = 0; i < ipow(2, Dimension); ++i)
+                for (size_t ch = 0; ch < channels; ++ch)
+                    out[i][ch] = zero<Value>();
+        }
+    }
+
+    /**
+     * \brief Fetch the texels that would be referenced in a texture lookup with
+     * linear interpolation without actually performing this interpolation.
+     *
+     * If the texture data is fully migrated to the GPU, this method will return
+     * zeroes.
+     *
+     * This is an implementation detail, please use \ref eval_fetch() that may
+     * dispatch to this function depending on its inputs.
+     */
+    void eval_fetch_enoki(const Array<Value, Dimension> &pos,
+                          Array<Value *, 1 << Dimension> &out,
+                          Mask active = true) const {
+        using InterpOffset = Array<Int32, 1 << Dimension>;
+        using InterpPosI = Array<InterpOffset, Dimension>;
+        using InterpIdx = uint32_array_t<InterpOffset>;
+
+        const PosF pos_f = fmadd(pos, PosF(m_shape_opaque), -.5f);
+        const PosI pos_i = floor2int<PosI>(pos_f);
+
+        int32_t offset[2] = { 0, 1 };
+
+        InterpPosI pos_i_w = interp_positions<PosI, 2>(offset, pos_i);
+        pos_i_w = wrap(pos_i_w);
+        InterpIdx idx = index(pos_i_w);
+
+        const uint32_t channels = (uint32_t) m_value.shape(Dimension);
+        for (size_t i = 0; i < InterpOffset::Size; ++i)
+            for (uint32_t ch = 0; ch < channels; ++ch)
+                out[i][ch] =
+                    gather<Value>(m_value.array(), idx[i] + ch, active);
+    }
+
+    /**
+     * \brief Fetch the texels that would be referenced in a texture lookup with
+     * linear interpolation without actually performing this interpolation.
+     *
+     * This function dispatches to \ref eval_fetch_enoki() or \ref
+     * eval_fecth_cuda() depending on whether or not CUDA is available. If
+     * invoked with CUDA arrays that track derivative information, the function
+     * records the AD graph of \ref eval_fetch_enoki() and combines it with the
+     * primal result of \ref eval_fetch_cuda().
+     */
+    void eval_fetch(const Array<Value, Dimension> &pos,
+                    Array<Value *, 1 << Dimension> &out,
+                    Mask active = true) const {
+        if constexpr (IsCUDA && HasCudaTexture) {
+            eval_fetch_cuda(pos, out, active);
+
+            if constexpr (IsDiff) {
+                if (grad_enabled(m_value, pos)) {
+                    const size_t channels = m_value.shape(Dimension);
+                    constexpr size_t out_size = 1 << Dimension;
+
+                    Array<Value *, out_size> out_enoki;
+                    ArrayX out_enoki_values =
+                        empty<ArrayX>(out_size * channels);
+                    for (size_t i = 0; i < out_size; ++i)
+                        out_enoki[i] = out_enoki_values.data() + i * channels;
+                    eval_fetch_enoki(pos, out_enoki, active);
+
+                    for (size_t i = 0; i < out_size; ++i)
+                        for (size_t ch = 0; ch < channels; ++ch)
+                            out[i][ch] =
+                                replace_grad(out[i][ch], out_enoki[i][ch]);
+                }
+            }
+        } else {
+            eval_fetch_enoki(pos, out, active);
         }
     }
 
@@ -412,18 +551,19 @@ public:
             for (uint32_t ix = 0; ix < 4; ix++)
                 EK_TEX_CUBIC_ACCUM(idx[ix], wx[ix]);
         } else if constexpr (Dimension == 2) {
-            Array4 wx = compute_weight(0), wy = compute_weight(1);
-            for (uint32_t ix = 0; ix < 4; ix++)
-                for (uint32_t iy = 0; iy < 4; iy++)
-                    EK_TEX_CUBIC_ACCUM(idx[ix * 4 + iy], wx[ix] * wy[iy]);
+            Array4 wx = compute_weight(0),
+                   wy = compute_weight(1);
+            for (uint32_t iy = 0; iy < 4; iy++)
+                for (uint32_t ix = 0; ix < 4; ix++)
+                    EK_TEX_CUBIC_ACCUM(idx[iy * 4 + ix], wx[ix] * wy[iy]);
         } else if constexpr (Dimension == 3) {
             Array4 wx = compute_weight(0),
                    wy = compute_weight(1),
                    wz = compute_weight(2);
-            for (uint32_t ix = 0; ix < 4; ix++)
+            for (uint32_t iz = 0; iz < 4; iz++)
                 for (uint32_t iy = 0; iy < 4; iy++)
-                    for (uint32_t iz = 0; iz < 4; iz++)
-                        EK_TEX_CUBIC_ACCUM(idx[ix * 16 + iy * 4 + iz],
+                    for (uint32_t ix = 0; ix < 4; ix++)
+                        EK_TEX_CUBIC_ACCUM(idx[iz * 16 + iy * 4 + ix],
                                            wx[ix] * wy[iy] * wz[iz]);
         }
 
@@ -504,14 +644,15 @@ public:
             return out;
         };
 
-
         ArrayX result = empty<ArrayX>(channels);
 
         if constexpr (Dimension == 1) {
             Array3 cx = compute_weight_coord(0);
             ArrayX f0 = eval_helper(PosF(cx[1]), active),
                    f1 = eval_helper(PosF(cx[2]), active);
-            result = lerp(f1, f0, cx[0]);
+
+            for (size_t ch = 0; ch < channels; ++ch)
+                out[ch] = lerp(f1[ch], f0[ch], cx[0]);
         } else if constexpr (Dimension == 2) {
             Array3 cx = compute_weight_coord(0),
                    cy = compute_weight_coord(1);
@@ -519,9 +660,14 @@ public:
                    f01 = eval_helper(PosF(cx[1], cy[2]), active),
                    f10 = eval_helper(PosF(cx[2], cy[1]), active),
                    f11 = eval_helper(PosF(cx[2], cy[2]), active);
-            ArrayX f0 = lerp(f01, f00, cy[0]),
-                   f1 = lerp(f11, f10, cy[0]);
-            result = lerp(f1, f0, cx[0]);
+
+            Value f0, f1;
+            for (size_t ch = 0; ch < channels; ++ch) {
+                f0 = lerp(f01[ch], f00[ch], cy[0]);
+                f1 = lerp(f11[ch], f10[ch], cy[0]);
+
+                out[ch] = lerp(f1, f0, cx[0]);
+            }
         } else if constexpr (Dimension == 3) {
             Array3 cx = compute_weight_coord(0),
                    cy = compute_weight_coord(1),
@@ -534,17 +680,19 @@ public:
                    f101 = eval_helper(PosF(cx[2], cy[1], cz[2]), active),
                    f110 = eval_helper(PosF(cx[2], cy[2], cz[1]), active),
                    f111 = eval_helper(PosF(cx[2], cy[2], cz[2]), active);
-            ArrayX f00 = lerp(f001, f000, cz[0]),
-                   f01 = lerp(f011, f010, cz[0]),
-                   f10 = lerp(f101, f100, cz[0]),
-                   f11 = lerp(f111, f110, cz[0]);
-            ArrayX f0 = lerp(f01, f00, cy[0]),
-                   f1 = lerp(f11, f10, cy[0]);
-            result = lerp(f1, f0, cx[0]);
-        }
 
-        for (size_t ch = 0; ch < channels; ++ch)
-            out[ch] = std::move(result[ch]);
+            Value f00, f01, f10, f11, f0, f1;
+            for (size_t ch = 0; ch < channels; ++ch) {
+                f00 = lerp(f001[ch], f000[ch], cz[0]);
+                f01 = lerp(f011[ch], f010[ch], cz[0]);
+                f10 = lerp(f101[ch], f100[ch], cz[0]);
+                f11 = lerp(f111[ch], f110[ch], cz[0]);
+                f0 = lerp(f01, f00, cy[0]);
+                f1 = lerp(f11, f10, cy[0]);
+
+                out[ch] = lerp(f1, f0, cx[0]);
+            }
+        }
 
         if constexpr (IsDiff) {
             /* When `pos` has gradient enabled, call a helper function to
@@ -641,9 +789,9 @@ public:
                    wy = compute_weight(1, false),
                    gx = compute_weight(0, true),
                    gy = compute_weight(1, true);
-            for (uint32_t ix = 0; ix < 4; ++ix)
-                for (uint32_t iy = 0; iy < 4; ++iy) {
-                    EK_TEX_CUBIC_GATHER(idx[ix * 4 + iy]);
+            for (uint32_t iy = 0; iy < 4; ++iy)
+                for (uint32_t ix = 0; ix < 4; ++ix) {
+                    EK_TEX_CUBIC_GATHER(idx[iy * 4 + ix]);
                     EK_TEX_CUBIC_ACCUM(0, gx[ix] * wy[iy]);
                     EK_TEX_CUBIC_ACCUM(1, wx[ix] * gy[iy]);
                 }
@@ -654,10 +802,10 @@ public:
                    gx = compute_weight(0, true),
                    gy = compute_weight(1, true),
                    gz = compute_weight(2, true);
-            for (uint32_t ix = 0; ix < 4; ++ix)
+            for (uint32_t iz = 0; iz < 4; ++iz)
                 for (uint32_t iy = 0; iy < 4; ++iy)
-                    for (uint32_t iz = 0; iz < 4; ++iz) {
-                        EK_TEX_CUBIC_GATHER(idx[ix * 16 + iy * 4 + iz]);
+                    for (uint32_t ix = 0; ix < 4; ++ix) {
+                        EK_TEX_CUBIC_GATHER(idx[iz * 16 + iy * 4 + ix]);
                         EK_TEX_CUBIC_ACCUM(0, gx[ix] * wy[iy] * wz[iz]);
                         EK_TEX_CUBIC_ACCUM(1, wx[ix] * gy[iy] * wz[iz]);
                         EK_TEX_CUBIC_ACCUM(2, wx[ix] * wy[iy] * gz[iz]);
@@ -788,9 +936,9 @@ public:
                    gy  = compute_weight_gradient(1),
                    ggx = compute_weight_heissian(0),
                    ggy = compute_weight_heissian(1);
-            for (uint32_t ix = 0; ix < 4; ++ix)
-                for (uint32_t iy = 0; iy < 4; ++iy) {
-                    EK_TEX_CUBIC_GATHER(idx[ix * 4 + iy]);
+            for (uint32_t iy = 0; iy < 4; ++iy)
+                for (uint32_t ix = 0; ix < 4; ++ix) {
+                    EK_TEX_CUBIC_GATHER(idx[iy * 4 + ix]);
                     EK_TEX_CUBIC_ACCUM_GRAD(0, gx[ix] * wy[iy]);
                     EK_TEX_CUBIC_ACCUM_GRAD(1, wx[ix] * gy[iy]);
                     EK_TEX_CUBIC_ACCUM_HESSIAN(0, 0, ggx[ix] * wy[iy]);
@@ -808,10 +956,10 @@ public:
                    ggx = compute_weight_heissian(0),
                    ggy = compute_weight_heissian(1),
                    ggz = compute_weight_heissian(2);
-            for (uint32_t ix = 0; ix < 4; ++ix)
+            for (uint32_t iz = 0; iz < 4; ++iz)
                 for (uint32_t iy = 0; iy < 4; ++iy)
-                    for (uint32_t iz = 0; iz < 4; ++iz) {
-                        EK_TEX_CUBIC_GATHER(idx[ix * 16 + iy * 4 + iz]);
+                    for (uint32_t ix = 0; ix < 4; ++ix) {
+                        EK_TEX_CUBIC_GATHER(idx[iz * 16 + iy * 4 + ix]);
                         EK_TEX_CUBIC_ACCUM_GRAD(0, gx[ix] * wy[iy] * wz[iz]);
                         EK_TEX_CUBIC_ACCUM_GRAD(1, wx[ix] * gy[iy] * wz[iz]);
                         EK_TEX_CUBIC_ACCUM_GRAD(2, wx[ix] * wy[iy] * gz[iz]);
@@ -895,23 +1043,23 @@ private:
                 pos_i[0][ix] = offset[ix] + pos.x();
             }
         } else if constexpr (Dimension == 2) {
-            for (uint32_t ix = 0; ix < Length; ix++) {
-                for (uint32_t iy = 0; iy < Length; iy++) {
-                    pos_i[0][iy * Length + ix] = offset[iy] + pos.x();
-                    pos_i[1][ix * Length + iy] = offset[iy] + pos.y();
+            for (uint32_t iy = 0; iy < Length; iy++) {
+                for (uint32_t ix = 0; ix < Length; ix++) {
+                    pos_i[0][iy * Length + ix] = offset[ix] + pos.x();
+                    pos_i[1][ix * Length + iy] = offset[ix] + pos.y();
                 }
             }
         } else if constexpr (Dimension == 3) {
             constexpr size_t LengthSqr = Length * Length;
-            for (uint32_t ix = 0; ix < Length; ix++) {
+            for (uint32_t iz = 0; iz < Length; iz++) {
                 for (uint32_t iy = 0; iy < Length; iy++) {
-                    for (uint32_t iz = 0; iz < Length; iz++) {
+                    for (uint32_t ix = 0; ix < Length; ix++) {
                         pos_i[0][iz * LengthSqr + iy * Length + ix] =
-                            offset[iz] + pos.x();
-                        pos_i[1][ix * LengthSqr + iz * Length + iy] =
-                            offset[iz] + pos.y();
-                        pos_i[2][iy * LengthSqr + ix * Length + iz] =
-                            offset[iz] + pos.z();
+                            offset[ix] + pos.x();
+                        pos_i[1][iz * LengthSqr + ix * Length + iy] =
+                            offset[ix] + pos.y();
+                        pos_i[2][ix * LengthSqr + iy * Length + iz] =
+                            offset[ix] + pos.z();
                     }
                 }
             }
