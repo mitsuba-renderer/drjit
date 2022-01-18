@@ -353,8 +353,8 @@ public:
     }
 
     /**
-     * \brief Fetch the texels that would be reference in a CUDA texture lookup
-     * with linear interpolation without actually performing this interpolation
+     * \brief Fetch the texels that would be referenced in a CUDA texture lookup
+     * with linear interpolation without actually performing this interpolation.
      *
      * This is an implementation detail, please use \ref eval_fetch() that may
      * dispatch to this function depending on its inputs.
@@ -375,7 +375,7 @@ public:
                     fetch_pos = pos_f + PosF(ix);
                     fetch_pos *= inv_shape;
 
-                    eval_cuda(fetch_pos, out[ix]);
+                    eval_cuda(fetch_pos, out[ix], active);
                 }
             } else if constexpr (Dimension == 2) {
                 uint32_t pos_idx[Dimension];
@@ -406,7 +406,7 @@ public:
                             fetch_pos = pos_f + PosF(ix, iy, iz);
                             fetch_pos *= inv_shape;
 
-                            eval_cuda(fetch_pos, out[index]);
+                            eval_cuda(fetch_pos, out[index], active);
                         }
                     }
                 }
@@ -420,8 +420,8 @@ public:
     }
 
     /**
-     * \brief Fetch the texels that would be reference in a texture lookup with
-     * linear interpolation without actually performing this interpolation
+     * \brief Fetch the texels that would be referenced in a texture lookup with
+     * linear interpolation without actually performing this interpolation.
      *
      * If the texture data is fully migrated to the GPU, this method will return
      * zeroes.
@@ -453,8 +453,8 @@ public:
     }
 
     /**
-     * \brief Fetch the texels that would be reference in a texture lookup with
-     * linear interpolation without actually performing this interpolation
+     * \brief Fetch the texels that would be referenced in a texture lookup with
+     * linear interpolation without actually performing this interpolation.
      *
      * This function dispatches to \ref eval_fetch_enoki() or \ref
      * eval_fecth_cuda() depending on whether or not CUDA is available. If
