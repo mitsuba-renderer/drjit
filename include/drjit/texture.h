@@ -296,7 +296,7 @@ public:
                                 weight_, out[ch]);                                     \
                 }
 
-            const PosF w1 = pos_f - floor2int<PosI>(pos_f),
+            const PosF w1 = pos_f - pos_i,
                        w0 = 1.f - w1;
 
             if constexpr (Dimension == 1) {
@@ -992,6 +992,39 @@ public:
             }
     }
 
+    /// Apply the configured texture wrapping mode to an integer position
+    template <typename T> T wrap(const T &pos) const {
+        using Scalar = scalar_t<T>;
+        static_assert(
+            array_size_v<T> == Dimension &&
+            std::is_integral_v<Scalar> &&
+            std::is_signed_v<Scalar>
+        );
+
+        const Array<Int32, Dimension> shape = m_shape_opaque;
+        if (m_wrap_mode == WrapMode::Clamp) {
+            return clamp(pos, 0, shape - 1);
+        } else {
+            const T value_shift_neg = select(pos < 0, pos + 1, pos);
+
+            T div;
+            for (size_t i = 0; i < Dimension; ++i)
+                div[i] = m_inv_resolution[i](value_shift_neg[i]);
+
+            T mod = pos - div * shape;
+            mod[mod < 0] += T(shape);
+
+            if (m_wrap_mode == WrapMode::Mirror)
+                // Starting at 0, flip the texture every other repetition
+                // (flip when: even number of repetitions in negative direction,
+                // or odd number of repetions in positive direction)
+                mod =
+                    select(eq(div & 1, 0) ^ (pos < 0), mod, shape - 1 - mod);
+
+            return mod;
+        }
+    }
+
 protected:
     void init(const size_t *shape, size_t channels, bool migrate,
               FilterMode filter_mode, WrapMode wrap_mode) {
@@ -1069,39 +1102,6 @@ private:
         }
 
         return pos_i;
-    }
-
-    /// Apply the configured texture wrapping mode to an integer position
-    template <typename T> T wrap(const T &pos) const {
-        using Scalar = scalar_t<T>;
-        static_assert(
-            array_size_v<T> == Dimension &&
-            std::is_integral_v<Scalar> &&
-            std::is_signed_v<Scalar>
-        );
-
-        const Array<Int32, Dimension> shape = m_shape_opaque;
-        if (m_wrap_mode == WrapMode::Clamp) {
-            return clamp(pos, 0, shape - 1);
-        } else {
-            const T value_shift_neg = select(pos < 0, pos + 1, pos);
-
-            T div;
-            for (size_t i = 0; i < Dimension; ++i)
-                div[i] = m_inv_resolution[i](value_shift_neg[i]);
-
-            T mod = pos - div * shape;
-            mod[mod < 0] += T(shape);
-
-            if (m_wrap_mode == WrapMode::Mirror)
-                // Starting at 0, flip the texture every other repetition
-                // (flip when: even number of repetitions in negative direction,
-                // or odd number of repetions in positive direction)
-                mod =
-                    select(eq(div & 1, 0) ^ (pos < 0), mod, shape - 1 - mod);
-
-            return mod;
-        }
     }
 
     /// Helper function to compute the array index for a given N-D position
