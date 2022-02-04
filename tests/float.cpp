@@ -1,7 +1,7 @@
 /*
     tests/basic.cpp -- tests basic floating point operations
 
-    Enoki is a C++ template library that enables transparent vectorization
+    Dr.Jit is a C++ template library that enables transparent vectorization
     of numerical kernels using SIMD instruction sets available on current
     processor architectures.
 
@@ -13,13 +13,13 @@
 
 #include "test.h"
 
-ENOKI_TEST_FLOAT(test01_div_fp) {
+DRJIT_TEST_FLOAT(test01_div_fp) {
     auto sample = test::sample_values<Value>();
 
     test::validate_binary<T>(sample,
         [](const T &a, const T &b) -> T { return a / b; },
         [](Value a, Value b) -> Value { return a / b; },
-#if !defined(ENOKI_ARM_32)
+#if !defined(DRJIT_ARM_32)
         0.f
 #else
         1e-6f
@@ -29,7 +29,7 @@ ENOKI_TEST_FLOAT(test01_div_fp) {
     test::validate_binary<T>(sample,
         [](const T &a, const T &b) -> T { T x(a); x /= b; return x; },
         [](Value a, Value b) -> Value { return a / b; },
-#if !defined(ENOKI_ARM_32)
+#if !defined(DRJIT_ARM_32)
         0.f
 #else
         1e-6f
@@ -51,7 +51,7 @@ ENOKI_TEST_FLOAT(test01_div_fp) {
         [](Value a) -> Value { return Value(3) / a; }, 1e-6f
     );
 
-#if !defined(ENOKI_X86_AVX512F)
+#if !defined(DRJIT_X86_AVX512F)
     /* In AVX512 mode, the approximate reciprocal function is
        considerably more accurate and this test fails */
     if constexpr (std::is_same<Value, float>::value && has_sse42) {
@@ -61,7 +61,7 @@ ENOKI_TEST_FLOAT(test01_div_fp) {
 #endif
 }
 
-ENOKI_TEST_FLOAT(test02_ceil) {
+DRJIT_TEST_FLOAT(test02_ceil) {
     auto sample = test::sample_values<Value>();
 
     test::validate_unary<T>(sample,
@@ -70,7 +70,7 @@ ENOKI_TEST_FLOAT(test02_ceil) {
     );
 }
 
-ENOKI_TEST_FLOAT(test03_floor) {
+DRJIT_TEST_FLOAT(test03_floor) {
     auto sample = test::sample_values<Value>();
 
     test::validate_unary<T>(sample,
@@ -79,7 +79,7 @@ ENOKI_TEST_FLOAT(test03_floor) {
     );
 }
 
-ENOKI_TEST_FLOAT(test04_round) {
+DRJIT_TEST_FLOAT(test04_round) {
     auto sample = test::sample_values<Value>();
 
     test::validate_unary<T>(sample,
@@ -88,7 +88,7 @@ ENOKI_TEST_FLOAT(test04_round) {
     );
 }
 
-ENOKI_TEST_FLOAT(test05_trunc) {
+DRJIT_TEST_FLOAT(test05_trunc) {
     auto sample = test::sample_values<Value>();
 
     test::validate_unary<T>(sample,
@@ -97,13 +97,13 @@ ENOKI_TEST_FLOAT(test05_trunc) {
     );
 }
 
-ENOKI_TEST_FLOAT(test06_sqrt) {
+DRJIT_TEST_FLOAT(test06_sqrt) {
     auto sample = test::sample_values<Value>();
 
     test::validate_unary<T>(sample,
         [](const T &a) -> T { return sqrt(a); },
         [](Value a) -> Value { return std::sqrt(a); },
-#if !defined(ENOKI_ARM_32)
+#if !defined(DRJIT_ARM_32)
         0.f
 #else
         1e-6f
@@ -111,7 +111,7 @@ ENOKI_TEST_FLOAT(test06_sqrt) {
     );
 }
 
-ENOKI_TEST_FLOAT(test07_rsqrt) {
+DRJIT_TEST_FLOAT(test07_rsqrt) {
     test::probe_accuracy<T>(
         [](const T &a) -> T { return rsqrt(a); },
         [](double a) { return 1 / std::sqrt(a); },
@@ -119,7 +119,7 @@ ENOKI_TEST_FLOAT(test07_rsqrt) {
     );
 }
 
-ENOKI_TEST_FLOAT(test08_rcp) {
+DRJIT_TEST_FLOAT(test08_rcp) {
     test::probe_accuracy<T>(
         [](const T &a) -> T { return rcp(a); },
         [](double a) { return 1 / a; },
@@ -127,57 +127,57 @@ ENOKI_TEST_FLOAT(test08_rcp) {
     );
 }
 
-ENOKI_TEST_FLOAT(test09_sign) {
+DRJIT_TEST_FLOAT(test09_sign) {
     auto sample = test::sample_values<Value>();
 
     test::validate_unary<T>(sample,
-        [](const T &a) -> T { return enoki::sign(a); },
+        [](const T &a) -> T { return drjit::sign(a); },
         [](Value a) -> Value { return std::copysign(1.f, a); }
     );
 }
 
-ENOKI_TEST_FLOAT(test10_isinf) {
+DRJIT_TEST_FLOAT(test10_isinf) {
     auto sample = test::sample_values<Value>();
 
-    using enoki::isinf;
+    using drjit::isinf;
     test::validate_unary<T>(sample,
-        [](const T &a) -> T { return select(enoki::isinf(a), T(1), T(0)); },
+        [](const T &a) -> T { return select(drjit::isinf(a), T(1), T(0)); },
         [](Value a) -> Value { return Value(std::isinf(a) ? 1 : 0); }
     );
 }
 
-ENOKI_TEST_FLOAT(test11_isnan) {
+DRJIT_TEST_FLOAT(test11_isnan) {
     auto sample = test::sample_values<Value>();
 
-    using enoki::isnan;
+    using drjit::isnan;
     test::validate_unary<T>(sample,
-        [](const T &a) -> T { return select(enoki::isnan(a), T(1), T(0)); },
+        [](const T &a) -> T { return select(drjit::isnan(a), T(1), T(0)); },
         [](Value a) -> Value { return Value(std::isnan(a) ? 1 : 0); }
     );
 }
 
-ENOKI_TEST_FLOAT(test12_isfinite) {
+DRJIT_TEST_FLOAT(test12_isfinite) {
     auto sample = test::sample_values<Value>();
 
-    using enoki::isfinite;
+    using drjit::isfinite;
     test::validate_unary<T>(sample,
-        [](const T &a) -> T { return select(enoki::isfinite(a), T(1), T(0)); },
+        [](const T &a) -> T { return select(drjit::isfinite(a), T(1), T(0)); },
         [](Value a) -> Value { return Value(std::isfinite(a) ? 1 : 0); }
     );
 }
 
-ENOKI_TEST_FLOAT(test13_nan_initialization) {
+DRJIT_TEST_FLOAT(test13_nan_initialization) {
     T x;
     for (size_t i = 0; i < Size; ++i)
         assert(std::isnan(x[i]));
 }
 
-ENOKI_TEST_FLOAT(test16_hypot) {
+DRJIT_TEST_FLOAT(test16_hypot) {
     auto sample = test::sample_values<Value>();
 
     test::validate_binary<T>(sample,
                              [](const T &a, const T &b) -> T {
-                                 return enoki::hypot(a, b);
+                                 return drjit::hypot(a, b);
                              },
                              [](Value a, Value b) -> Value {
                                  if (std::isnan(a) || std::isnan(b))
@@ -190,7 +190,7 @@ ENOKI_TEST_FLOAT(test16_hypot) {
                              1e-6f);
 }
 
-ENOKI_TEST_FLOAT(test17_next_float) {
+DRJIT_TEST_FLOAT(test17_next_float) {
     Value inf = std::numeric_limits<Value>::infinity();
     Value nan = std::numeric_limits<Value>::quiet_NaN();
     Value zero = Value(0), one = Value(1.f);
@@ -201,7 +201,7 @@ ENOKI_TEST_FLOAT(test17_next_float) {
     assert(next_float(T(-one)) == T(std::nextafter(-one, inf)));
     assert(next_float(T( inf))  == inf);
     assert(next_float(T(-inf)) == -inf);
-    assert(all(enoki::isnan(next_float(T(nan)))));
+    assert(all(drjit::isnan(next_float(T(nan)))));
 
     assert(prev_float(T( zero))  == T(std::nextafter(zero, -inf)));
     assert(prev_float(T(-zero)) == T(std::nextafter(-zero, -inf)));
@@ -209,28 +209,28 @@ ENOKI_TEST_FLOAT(test17_next_float) {
     assert(prev_float(T(-one)) == T(std::nextafter(-one, -inf)));
     assert(prev_float(T( inf))  == inf);
     assert(prev_float(T(-inf)) == -inf);
-    assert(all(enoki::isnan(prev_float(T(nan)))));
+    assert(all(drjit::isnan(prev_float(T(nan)))));
 }
 
-ENOKI_TEST_FLOAT(test18_fmod) {
+DRJIT_TEST_FLOAT(test18_fmod) {
     T a = Value(5.1);
     T b = Value(3.0);
     T c = Value(2.1);
 
-    assert(abs(enoki::fmod( a,  b) - c)[0] < 1e-12f);
-    assert(abs(enoki::fmod(-a,  b) + c)[0] < 1e-12f);
-    assert(abs(enoki::fmod( a, -b) - c)[0] < 1e-12f);
-    assert(abs(enoki::fmod(-a, -b) + c)[0] < 1e-12f);
+    assert(abs(drjit::fmod( a,  b) - c)[0] < 1e-12f);
+    assert(abs(drjit::fmod(-a,  b) + c)[0] < 1e-12f);
+    assert(abs(drjit::fmod( a, -b) - c)[0] < 1e-12f);
+    assert(abs(drjit::fmod(-a, -b) + c)[0] < 1e-12f);
 }
 
-ENOKI_TEST_FLOAT(test19_ceil2int) {
+DRJIT_TEST_FLOAT(test19_ceil2int) {
     T a = Value(-5.1);
     using Int = int_array_t<T>;
     assert(floor2int<Int>(a) == Int(-6));
     assert(ceil2int<Int>(a) == Int(-5));
 }
 
-ENOKI_TEST_FLOAT(test20_cbrt) {
+DRJIT_TEST_FLOAT(test20_cbrt) {
     test::probe_accuracy<T>(
         [](const T &a) -> T { return cbrt(a); },
         [](double a) { return std::cbrt(a); },

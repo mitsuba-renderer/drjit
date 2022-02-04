@@ -1,9 +1,9 @@
-Enoki: structured vectorization and differentiation on modern processor architectures
+Dr.Jit: structured vectorization and differentiation on modern processor architectures
 ======================================================================================
 
 .. only:: not latex
 
-    .. image:: enoki-logo.svg
+    .. image:: drjit-logo.svg
         :width: 400px
         :align: center
 
@@ -14,7 +14,7 @@ Enoki: structured vectorization and differentiation on modern processor architec
    intro
    demo
    building
-   → GitHub <https://github.com/mitsuba-renderer/enoki>
+   → GitHub <https://github.com/mitsuba-renderer/drjit>
 
 
 .. toctree::

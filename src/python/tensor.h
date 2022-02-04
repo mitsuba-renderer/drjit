@@ -1,8 +1,8 @@
-#include <enoki/tensor.h>
+#include <drjit/tensor.h>
 #include <pybind11/stl.h>
 
 template <typename T> auto bind_tensor(py::module m) {
-    using Tensor = ek::Tensor<T>;
+    using Tensor = dr::Tensor<T>;
 
     auto cls = bind_type<Tensor>(m);
 
@@ -18,7 +18,7 @@ template <typename T> auto bind_tensor(py::module m) {
                 strncmp(mod_s, "jax.interpreters.xla", 20) == 0 ||
                 strncmp(mod_s, "jaxlib", 6) == 0 ||
                 strncmp(mod_s, "tensorflow", 10) == 0 ||
-                (strncmp(mod_s, "enoki", 5) != 0
+                (strncmp(mod_s, "drjit", 5) != 0
                  && py::hasattr(o, "__array_interface__"))) {
                 o = tensor_init(py::type::of<Tensor>(), o);
                 return py::cast<Tensor>(o);
@@ -54,7 +54,7 @@ template <typename T> auto bind_tensor(py::module m) {
     cls.def("iand_",   [](Tensor *a, const Tensor &b) { *a = a->and_(b); return a;});
     cls.def("ixor_",   [](Tensor *a, const Tensor &b) { *a = a->xor_(b); return a;});
 
-    if constexpr (!ek::is_mask_v<T>) {
+    if constexpr (!dr::is_mask_v<T>) {
         cls.def("add_", &Tensor::add_)
         .def("sub_", &Tensor::sub_)
         .def("mul_", &Tensor::mul_)
@@ -82,13 +82,13 @@ template <typename T> auto bind_tensor(py::module m) {
            .def("max_", &Tensor::max_);
     }
 
-    if constexpr (ek::is_floating_point_v<Tensor>) {
+    if constexpr (dr::is_floating_point_v<Tensor>) {
         cls.def("rcp_", &Tensor::rcp_);
         cls.def("sqrt_", &Tensor::sqrt_);
         cls.def("rsqrt_", &Tensor::rsqrt_);
     }
 
-    if constexpr (ek::is_floating_point_v<Tensor>) {
+    if constexpr (dr::is_floating_point_v<Tensor>) {
         cls.def("sin_", &Tensor::sin_);
         cls.def("cos_", &Tensor::cos_);
         cls.def("tan_", &Tensor::tan_);
@@ -118,12 +118,12 @@ template <typename T> auto bind_tensor(py::module m) {
         cls.def("sincosh_", &Tensor::sincosh_);
     }
 
-    if constexpr (ek::is_integral_v<Tensor>) {
+    if constexpr (dr::is_integral_v<Tensor>) {
         cls.def("mod_", &Tensor::mod_);
         cls.def("mulhi_", &Tensor::mulhi_);
     }
 
-    cls.attr("select_") = py::cpp_function([](const ek::mask_t<Tensor> &m,
+    cls.attr("select_") = py::cpp_function([](const dr::mask_t<Tensor> &m,
                                               const Tensor &t,
                                               const Tensor &f) {
         return Tensor::select_(m, t, f);
@@ -150,58 +150,58 @@ template <typename T> auto bind_tensor(py::module m) {
 }
 
 template <typename Tensor> auto bind_tensor_conversions(py::class_<Tensor> &cls) {
-    if constexpr (!ek::is_mask_v<Tensor>) {
-        cls.def(py::init<const ek::int32_array_t<Tensor> &>(), py::arg().noconvert())
-           .def(py::init<const ek::uint32_array_t<Tensor> &>(), py::arg().noconvert())
-           .def(py::init<const ek::int64_array_t<Tensor> &>(), py::arg().noconvert())
-           .def(py::init<const ek::uint64_array_t<Tensor> &>(), py::arg().noconvert())
-           .def(py::init<const ek::float32_array_t<Tensor> &>(), py::arg().noconvert())
-           .def(py::init<const ek::float64_array_t<Tensor> &>(), py::arg().noconvert());
+    if constexpr (!dr::is_mask_v<Tensor>) {
+        cls.def(py::init<const dr::int32_array_t<Tensor> &>(), py::arg().noconvert())
+           .def(py::init<const dr::uint32_array_t<Tensor> &>(), py::arg().noconvert())
+           .def(py::init<const dr::int64_array_t<Tensor> &>(), py::arg().noconvert())
+           .def(py::init<const dr::uint64_array_t<Tensor> &>(), py::arg().noconvert())
+           .def(py::init<const dr::float32_array_t<Tensor> &>(), py::arg().noconvert())
+           .def(py::init<const dr::float64_array_t<Tensor> &>(), py::arg().noconvert());
     } else {
         cls.def(py::init<const Tensor &>(), py::arg().noconvert());
     }
 
-    if constexpr (ek::is_diff_array_v<Tensor>)
-        cls.def(py::init<const ek::detached_t<Tensor> &>(), py::arg().noconvert());
+    if constexpr (dr::is_diff_array_v<Tensor>)
+        cls.def(py::init<const dr::detached_t<Tensor> &>(), py::arg().noconvert());
 
-    using Scalar = ek::scalar_t<Tensor>;
+    using Scalar = dr::scalar_t<Tensor>;
     if constexpr (sizeof(Scalar) == 4) {
         cls.def_static("reinterpret_array_",
-                       [](const ek::int32_array_t<Tensor> &a) {
-                           return ek::reinterpret_array<Tensor>(a);
+                       [](const dr::int32_array_t<Tensor> &a) {
+                           return dr::reinterpret_array<Tensor>(a);
                        });
         cls.def_static("reinterpret_array_",
-                       [](const ek::uint32_array_t<Tensor> &a) {
-                           return ek::reinterpret_array<Tensor>(a);
+                       [](const dr::uint32_array_t<Tensor> &a) {
+                           return dr::reinterpret_array<Tensor>(a);
                        });
         cls.def_static("reinterpret_array_",
-                       [](const ek::float32_array_t<Tensor> &a) {
-                           return ek::reinterpret_array<Tensor>(a);
+                       [](const dr::float32_array_t<Tensor> &a) {
+                           return dr::reinterpret_array<Tensor>(a);
                        });
     } else if constexpr (sizeof(Scalar) == 8) {
         cls.def_static("reinterpret_array_",
-                       [](const ek::int64_array_t<Tensor> &a) {
-                           return ek::reinterpret_array<Tensor>(a);
+                       [](const dr::int64_array_t<Tensor> &a) {
+                           return dr::reinterpret_array<Tensor>(a);
                        });
         cls.def_static("reinterpret_array_",
-                       [](const ek::uint64_array_t<Tensor> &a) {
-                           return ek::reinterpret_array<Tensor>(a);
+                       [](const dr::uint64_array_t<Tensor> &a) {
+                           return dr::reinterpret_array<Tensor>(a);
                        });
         cls.def_static("reinterpret_array_",
-                       [](const ek::float64_array_t<Tensor> &a) {
-                           return ek::reinterpret_array<Tensor>(a);
+                       [](const dr::float64_array_t<Tensor> &a) {
+                           return dr::reinterpret_array<Tensor>(a);
                        });
     }
 }
 
-#define ENOKI_BIND_TENSOR_TYPES(module)                                        \
-    auto tensor_b = bind_tensor<ek::mask_t<Guide>>(module);                    \
-    auto tensor_f32 = bind_tensor<ek::float32_array_t<Guide>>(module);         \
-    auto tensor_f64 = bind_tensor<ek::float64_array_t<Guide>>(module);         \
-    auto tensor_u32 = bind_tensor<ek::uint32_array_t<Guide>>(module);          \
-    auto tensor_i32 = bind_tensor<ek::int32_array_t<Guide>>(module);           \
-    auto tensor_u64 = bind_tensor<ek::uint64_array_t<Guide>>(module);          \
-    auto tensor_i64 = bind_tensor<ek::int64_array_t<Guide>>(module);           \
+#define DRJIT_BIND_TENSOR_TYPES(module)                                        \
+    auto tensor_b = bind_tensor<dr::mask_t<Guide>>(module);                    \
+    auto tensor_f32 = bind_tensor<dr::float32_array_t<Guide>>(module);         \
+    auto tensor_f64 = bind_tensor<dr::float64_array_t<Guide>>(module);         \
+    auto tensor_u32 = bind_tensor<dr::uint32_array_t<Guide>>(module);          \
+    auto tensor_i32 = bind_tensor<dr::int32_array_t<Guide>>(module);           \
+    auto tensor_u64 = bind_tensor<dr::uint64_array_t<Guide>>(module);          \
+    auto tensor_i64 = bind_tensor<dr::int64_array_t<Guide>>(module);           \
     bind_tensor_conversions(tensor_b);                                         \
     bind_tensor_conversions(tensor_f32);                                       \
     bind_tensor_conversions(tensor_f64);                                       \

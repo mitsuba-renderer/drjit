@@ -10,7 +10,7 @@ or billions of data points. The remainder of this document discusses
 infrastructure that can be used to realize computations on the CPU involving
 dynamically allocated arrays of arbitrary length.
 
-One of the core ingredients is :cpp:class:`enoki::DynamicArray`, which is a
+One of the core ingredients is :cpp:class:`drjit::DynamicArray`, which is a
 smart pointer that manages the lifetime of a dynamically allocated memory
 region. It is the exclusive owner of this data and is also responsible for its
 destruction when the dynamic array goes out of scope (similar to
@@ -22,10 +22,10 @@ Note that its implementation is contained in a separate header file that must be
 
 .. code-block:: cpp
 
-    #include <enoki/dynamic.h>
+    #include <drjit/dynamic.h>
 
 The class requires a single template argument, which can be any kind of
-:cpp:class:`enoki::Array`. This is the *packet type* that will be used to used
+:cpp:class:`drjit::Array`. This is the *packet type* that will be used to used
 to realize vectorized computations involving the array contents. The following
 code snippet illustrates the creation of a dynamic floating point array that
 vectorizes using 4-wide SSE arithmetic.
@@ -41,7 +41,7 @@ vectorizes using 4-wide SSE arithmetic.
 .. note::
 
     In contrast to all array types discussed so far, a
-    :cpp:class:`enoki::DynamicArray` instance *should not* be part of an
+    :cpp:class:`drjit::DynamicArray` instance *should not* be part of an
     arithmetic expression. For instance, the following will compile and yield
     the expected result, but this style of using dynamic arrays is disouraged.
 
@@ -79,14 +79,14 @@ vectorizes using 4-wide SSE arithmetic.
        tends to produce intermediate code with an extremely large number of
        common subexpressions that exceeds the capabilities of the *common
        subexpression elimination* (CSE) stage of current compilers. The
-       first version of Enoki in fact used expression templates, and it was
+       first version of Dr.Jit in fact used expression templates, and it was
        due to the difficulties with them that an alternative was developed.
 
-    The key idea of vectorizing over dynamic Enoki arrays is to iterate over
+    The key idea of vectorizing over dynamic Dr.Jit arrays is to iterate over
     packets (i.e. static arrays) that represent a sliding window into the
     dynamic array's contents. Packets, in turn, are easily supported using the
-    tools discussed in the previous sections. Enoki provides a powerful
-    operation named :cpp:func:`enoki::vectorize`, discussed later, that
+    tools discussed in the previous sections. Dr.Jit provides a powerful
+    operation named :cpp:func:`drjit::vectorize`, discussed later, that
     implements this sliding window technique automatically.
 
     That said, for convenience, arithmetic operations like ``operator+`` *are*
@@ -99,7 +99,7 @@ Allocating dynamic arrays
 -------------------------
 
 When allocating dynamic arrays, the underlying memory region is always fully
-aligned according to the requirements of the packet type. Enoki may sometimes
+aligned according to the requirements of the packet type. Dr.Jit may sometimes
 allocate a partially used packet at the end, which eliminates the need for
 special end-of-array handling. The following code snippet allocates an array of
 size 5 using 4-wide packets, which means that 3 entries at the end are unused.
@@ -144,7 +144,7 @@ Custom dynamic data structures
 ------------------------------
 
 The :ref:`previous section <custom-structures>` used the example of a GPS
-record to show how Enoki can create packet versions of a type. The same
+record to show how Dr.Jit can create packet versions of a type. The same
 approach also generalizes to dynamic arrays, allowing an arbitrarily long
 sequence of records to be represented. This requires two small additions to the
 original type declaration:
@@ -162,18 +162,18 @@ original type declaration:
         Vector2 pos;
         Bool reliable;
 
-        ENOKI_STRUCT(GPSCoord2,           /* <- name of this class */
+        DRJIT_STRUCT(GPSCoord2,           /* <- name of this class */
                      time, pos, reliable  /* <- list of all attributes in layout order */)
     };
 
-    ENOKI_STRUCT_SUPPORT(GPSCoord2, time, pos, reliable)
+    DRJIT_STRUCT_SUPPORT(GPSCoord2, time, pos, reliable)
 
 The two highlighted additions do the following:
 
 1. The macro on lines 10 and 11 declares copy and assignment constructors that
    are able to convert between different types of records.
 
-2. The macro on line 14 makes Enoki aware of ``GPSCoord2`` for the purposes of
+2. The macro on line 14 makes Dr.Jit aware of ``GPSCoord2`` for the purposes of
    dynamic vectorization.
 
 It is possible but fairly tedious to write these declarations by hand, hence
@@ -202,7 +202,7 @@ the contents in a SoA organization.
 Accessing array packets
 -----------------------
 
-The :cpp:func:`enoki::packet` function can be used to create a reference to the
+The :cpp:func:`drjit::packet` function can be used to create a reference to the
 :math:`i`-th packet of a dynamic array or a custom dynamic data structure.
 For instance, the following code iterates over all packets and resets their
 time values:
@@ -254,8 +254,8 @@ References can also be cast into their associated packet types and vice versa:
 Accessing array slices
 ----------------------
 
-Enoki provides a second way of indexing into dynamic arrays: the
-:cpp:func:`enoki::slice` function creates a reference to the
+Dr.Jit provides a second way of indexing into dynamic arrays: the
+:cpp:func:`drjit::slice` function creates a reference to the
 :math:`i`-th *slice* of a dynamic array or a custom dynamic data
 structure. Elements of a slice store references to *scalar*
 elements representing a vertical slice through the data structure.
@@ -271,7 +271,7 @@ an increasing sequence:
         ref.time = i;
     }
 
-Here, the :cpp:func:`enoki::slice()` function returns an instance
+Here, the :cpp:func:`drjit::slice()` function returns an instance
 of a new type ``GPSRecord2<float&>`` (again, note the ampersand),
 Conceptually, this looks as follows:
 
@@ -339,7 +339,7 @@ function is required:
         );
     }
 
-The modified version above uses the :cpp:type:`enoki::expr_t` type trait to
+The modified version above uses the :cpp:type:`drjit::expr_t` type trait to
 determine a suitable type that is able to hold the result of an expression
 involving its argument (which turns ``FloatP&`` into ``FloatP`` in this case).
 
@@ -365,8 +365,8 @@ Shorthand notation
 ------------------
 
 Extracting individual packets as shown in the snippet above can become fairly
-tedious when a function takes many arguments. Enoki offers a convenient helper
-function named :cpp:func:`enoki::vectorize` that automates this process. It
+tedious when a function takes many arguments. Dr.Jit offers a convenient helper
+function named :cpp:func:`drjit::vectorize` that automates this process. It
 takes a function and a number of dynamic arrays as input and calls the function
 once for each set of input packets.
 
@@ -384,7 +384,7 @@ Here, the returned float packets are stored in a dynamic array of type
 
 When the output array is already allocated, it is also possible to write the
 results directly into the array. The snippet below shows how to do this by
-calling call :cpp:func:`enoki::vectorize` with a lambda function.
+calling call :cpp:func:`drjit::vectorize` with a lambda function.
 
 .. code-block:: cpp
 
@@ -432,7 +432,7 @@ Naturally, we could also perform the complete calculation within the lambda func
     );
 
 It is not necessary to "route" all parameters through
-:cpp:func:`enoki::vectorize`. Auxiliary data structures or constants are easily
+:cpp:func:`drjit::vectorize`. Auxiliary data structures or constants are easily
 accessible via the lambda capture object using the standard ``[&]`` notation.
 
 A benchmark
@@ -456,11 +456,11 @@ entries.
                      -march=native -fomit-frame-pointer -fno-stack-protector -DNDEBUG
          */
 
-        #include <enoki/array.h>
-        #include <enoki/random.h>
+        #include <drjit/array.h>
+        #include <drjit/random.h>
         #include <chrono>
 
-        using namespace enoki;
+        using namespace drjit;
 
         auto clk() { return std::chrono::high_resolution_clock::now(); }
 
@@ -477,10 +477,10 @@ entries.
             Vector2 pos;
             Bool reliable;
 
-            ENOKI_STRUCT(GPSCoord2, time, pos, reliable)
+            DRJIT_STRUCT(GPSCoord2, time, pos, reliable)
         };
 
-        ENOKI_STRUCT_SUPPORT(GPSCoord2, time, pos, reliable)
+        DRJIT_STRUCT_SUPPORT(GPSCoord2, time, pos, reliable)
 
         using FloatP       = Packet<float, SIMD_WIDTH>;
         using FloatX       = DynamicArray<FloatP>;
@@ -492,7 +492,7 @@ entries.
 
         /// Calculate the distance in kilometers between 'r1' and 'r2' using the haversine formula
         template <typename Value_, typename Value = expr_t<Value_>>
-        ENOKI_INLINE Value distance(const GPSCoord2<Value_> &r1, const GPSCoord2<Value_> &r2) {
+        DRJIT_INLINE Value distance(const GPSCoord2<Value_> &r1, const GPSCoord2<Value_> &r2) {
             using Scalar = scalar_t<Value>;
 
             const Value deg_to_rad = Scalar(M_PI / 180.0);
@@ -571,9 +571,9 @@ independent instructions in flight for each arithmetic operation leads to a
 total speedup of 23.5x (i.e. considerably exceeding the expected maximum
 speedup of 16 from the vectorized instructions alone!).
 
-Relative to the C math library, Enoki obtains an even larger speedup of
+Relative to the C math library, Dr.Jit obtains an even larger speedup of
 **38.7x**. Using the standard C math library on this platform is fairly
-expensive, presumably because of function call penalties on Xeon Phi (Enoki
+expensive, presumably because of function call penalties on Xeon Phi (Dr.Jit
 generally inlines functions), and because it is compiled for a generic x86_64
 machine rather than the native architecture.
 
@@ -590,7 +590,7 @@ The Skylake architecture provides hardware support for SIMD arithmetic using 8
 single precision point values. Significant speedups are observed for packets of
 8 and 16 entries. It is likely that more involved functions (i.e. with a higher
 register pressure) will have a sharper performance drop after :math:`n=16` due
-to the relatively small number of registers on this platform. Enoki
+to the relatively small number of registers on this platform. Dr.Jit
 single-precision transcendentals are only slightly faster than the standard C math
 library on this platform. The max. speedup relative to the standard C math
 library is **10.0x**.

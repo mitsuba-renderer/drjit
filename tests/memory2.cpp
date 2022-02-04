@@ -1,7 +1,7 @@
 /*
     tests/memory2.cpp -- tests for more complex memory operations
 
-    Enoki is a C++ template library that enables transparent vectorization
+    Dr.Jit is a C++ template library that enables transparent vectorization
     of numerical kernels using SIMD instruction sets available on current
     processor architectures.
 
@@ -12,9 +12,9 @@
 */
 
 #include "test.h"
-#include <enoki/matrix.h>
-#include <enoki/dynamic.h>
-#include <enoki/util.h>
+#include <drjit/matrix.h>
+#include <drjit/dynamic.h>
+#include <drjit/util.h>
 
 #if defined(_MSC_VER)
 #  define NOMINMAX
@@ -26,13 +26,13 @@
 #  define MEMORY_BARRIER()
 #endif
 
-ENOKI_TEST_ALL(test01_extract) {
+DRJIT_TEST_ALL(test01_extract) {
     auto idx = arange<T>();
     for (size_t i = 0; i < Size; ++i)
         assert(extract(idx, eq(idx, Value(i))) == Value(i));
 }
 
-ENOKI_TEST_ALL(test03_scatter_reduce) {
+DRJIT_TEST_ALL(test03_scatter_reduce) {
     Value tmp[T::ActualSize] = { 0 };
     auto index = arange<uint_array_t<T>>();
     auto index2 = uint_array_t<T>(0u);
@@ -132,7 +132,7 @@ void test04_nested_gather_packed_impl() {
 #endif
 void test04_nested_gather_packed_impl() { }
 
-ENOKI_TEST_ALL(test04_nested_gather_packed) {
+DRJIT_TEST_ALL(test04_nested_gather_packed) {
     test04_nested_gather_packed_impl<T>();
 }
 
@@ -218,11 +218,11 @@ void test05_nested_gather_nonpacked_impl() {
 #endif
 void test05_nested_gather_nonpacked_impl() { }
 
-ENOKI_TEST_ALL(test05_nested_gather_nonpacked) {
+DRJIT_TEST_ALL(test05_nested_gather_nonpacked) {
     test05_nested_gather_nonpacked_impl<T>();
 }
 
-ENOKI_TEST_ALL(test06_range) {
+DRJIT_TEST_ALL(test06_range) {
     alignas(alignof(T)) Value mem[Size*10];
     for (size_t i = 0; i < Size*10; ++i)
         mem[i] = 1;
@@ -234,7 +234,7 @@ ENOKI_TEST_ALL(test06_range) {
     assert(((10*Size)/3) == hsum(sum));
 }
 
-ENOKI_TEST_ALL(test07_range_2d) {
+DRJIT_TEST_ALL(test07_range_2d) {
     alignas(alignof(T)) Value mem[4*5*6];
     for (size_t i = 0; i < 4*5*6; ++i)
         mem[i] = 0;
@@ -250,7 +250,7 @@ ENOKI_TEST_ALL(test07_range_2d) {
     }
 }
 
-ENOKI_TEST_ALL(test08_nested_gather_strides) {
+DRJIT_TEST_ALL(test08_nested_gather_strides) {
     using Vector4x = Array<Value, 4>;
     using Vector4xP = Array<T, 4>;
     using Int = int_array_t<T>;
@@ -271,7 +271,7 @@ ENOKI_TEST_ALL(test08_nested_gather_strides) {
     assert((gather<Vector4xP, 60*sizeof(Value)>(x, Int(1)) == Vector4xP(10, 11, 12, 13)));
 }
 
-ENOKI_TEST_INT(test09_gather_mask) {
+DRJIT_TEST_INT(test09_gather_mask) {
     if ((T::Size & (T::Size - 1)) != 0)
         return;
     using Scalar = scalar_t<T>;

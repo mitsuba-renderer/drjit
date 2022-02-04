@@ -1,4 +1,4 @@
-.. cpp:namespace:: enoki
+.. cpp:namespace:: drjit
 .. _calls:
 
 Method calls
@@ -8,11 +8,11 @@ Method calls and virtual method calls are important building blocks of
 object-oriented C++ and Python applications. 
 When vectorization enters the picture, it is
 not immediately clear how they should be dealt with. This section introduces
-Enoki's method call vectorization support, focusing on a hypothetical
+Dr.Jit's method call vectorization support, focusing on a hypothetical
 ``Sensor`` class that decodes a measurement performed by a sensor.
 
 Note that the examples will refer to CPU SIMD-style vectorization, but
-everything in this section also applies to other kinds of Enoki arrays (GPU
+everything in this section also applies to other kinds of Dr.Jit arrays (GPU
 arrays, differentiable arrays).
 
 Suppose that the interface of the ``Sensor`` class originally looks as follows:
@@ -68,15 +68,15 @@ is clearly not supported by standard C++.
 
     data = sensor->decode(data);
 
-Enoki provides a support layer that can handle such vectorized method calls. It
+Dr.Jit provides a support layer that can handle such vectorized method calls. It
 performs as many method calls as there are unique instances in the ``sensor``
 array, and an optional mask is forwarded to the callee indicating the
 associated active SIMD lanes. Null pointers in the ``data`` array are legal and
 are considered as masked entries. The return value of masked entries is always
 zero (or a zero-filled array/structure, depending on the method's return type).
 
-The :c:macro:`ENOKI_CALL_SUPPORT_METHOD` macro is required to support the
-above syntax. This generates the Enoki support layer that intercepts and
+The :c:macro:`DRJIT_CALL_SUPPORT_METHOD` macro is required to support the
+above syntax. This generates the Dr.Jit support layer that intercepts and
 carries out the function call:
 
 .. code-block:: cpp
@@ -94,11 +94,11 @@ carries out the function call:
         virtual uint32_t serial_number() = 0;
     };
 
-    ENOKI_CALL_SUPPORT_BEGIN(Sensor)
-    ENOKI_CALL_SUPPORT_METHOD(decode)
-    ENOKI_CALL_SUPPORT_METHOD(serial_number)
+    DRJIT_CALL_SUPPORT_BEGIN(Sensor)
+    DRJIT_CALL_SUPPORT_METHOD(decode)
+    DRJIT_CALL_SUPPORT_METHOD(serial_number)
     /// .. potentially other methods ..
-    ENOKI_CALL_SUPPORT_END(Sensor)
+    DRJIT_CALL_SUPPORT_END(Sensor)
 
 The macro supports functions taking an arbitrary number of arguments but
 assumes that results are provided to the caller via the return value only
@@ -165,17 +165,17 @@ Supporting scalar *getter* functions
 
 The above way of vectorizing a scalar *getter* function may involve multiple
 virtual method calls, which is not particularly efficient when the invoked
-function is very simple (e.g. a *getter*). Enoki provides an alternative macro
-:c:macro:`ENOKI_CALL_SUPPORT_GETTER` that turns any such attribute lookup into
+function is very simple (e.g. a *getter*). Dr.Jit provides an alternative macro
+:c:macro:`DRJIT_CALL_SUPPORT_GETTER` that turns any such attribute lookup into
 a *gather* operation. The macro takes the getter name and field name as
-arguments. The macro :c:macro:`ENOKI_CALL_SUPPORT_FRIEND` is needed if the
+arguments. The macro :c:macro:`DRJIT_CALL_SUPPORT_FRIEND` is needed if the
 field in question is a private member.
 
 .. code-block:: cpp
     :emphasize-lines: 2, 14
 
     class Sensor {
-        ENOKI_CALL_SUPPORT_FRIEND()
+        DRJIT_CALL_SUPPORT_FRIEND()
     public:
         /// ...
 
@@ -186,9 +186,9 @@ field in question is a private member.
         uint32_t m_serial_number;
     };
 
-    ENOKI_CALL_SUPPORT_BEGIN(Sensor)
-    ENOKI_CALL_SUPPORT_GETTER(serial_number, m_serial_number)
-    ENOKI_CALL_SUPPORT_END(Sensor)
+    DRJIT_CALL_SUPPORT_BEGIN(Sensor)
+    DRJIT_CALL_SUPPORT_GETTER(serial_number, m_serial_number)
+    DRJIT_CALL_SUPPORT_END(Sensor)
 
 The usage is identical to before, i.e.:
 
@@ -203,15 +203,15 @@ Note that this trick even works for GPU arrays! In this case, the GPU will
 directly fetch the value of the ``m_serial_number`` field from the CPU via
 shared memory. However, this only works when the ``Sensor`` instance has been
 allocated in *host-pinned* address space that will be reachable on the GPU. To
-do so, add the :c:macro:`ENOKI_PINNED_OPERATOR_NEW` annotation that will
+do so, add the :c:macro:`DRJIT_PINNED_OPERATOR_NEW` annotation that will
 override the ``new`` and ``delete`` operator to ensure that this is always the
 case for `Sensor` instances.
 
 .. code-block:: cpp
 
     class Sensor {
-        ENOKI_CALL_SUPPORT_FRIEND()
-        ENOKI_PINNED_OPERATOR_NEW(UInt32P)
+        DRJIT_CALL_SUPPORT_FRIEND()
+        DRJIT_PINNED_OPERATOR_NEW(UInt32P)
     public:
         // ...
     };

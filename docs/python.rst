@@ -1,4 +1,4 @@
-.. cpp:namespace:: enoki
+.. cpp:namespace:: drjit
 .. _python:
 
 Python interface
@@ -7,7 +7,7 @@ Python interface
 Motivation
 ----------
 
-Enoki is internally a C++ library. The reason for providing an additional
+Dr.Jit is internally a C++ library. The reason for providing an additional
 Python interface is two-fold:
 
 1. It enables fast prototyping of numerical code in a Python environment
@@ -20,15 +20,15 @@ Python interface is two-fold:
 Installation
 ------------
 
-The Enoki Python bindings are available on `PyPI
-<https://pypi.org/project/enoki/>`_ and can be installed via
+The Dr.Jit Python bindings are available on `PyPI
+<https://pypi.org/project/drjit/>`_ and can be installed via
 
 .. code-block:: cpp
 
-   python -m pip install enoki
+   python -m pip install drjit
 
-It is also possible to compile these bindings manually for a specific Enoki
-release. See the section on :ref:`building Enoki <building-enoki>` for details.
+It is also possible to compile these bindings manually for a specific Dr.Jit
+release. See the section on :ref:`building Dr.Jit <building-drjit>` for details.
 
 The remainder of this section discusses conventions relating the C++ and Python
 interfaces, followed by an example that combines code written in both languages.
@@ -39,7 +39,7 @@ interfaces, followed by an example that combines code written in both languages.
 C++ ↔ Python differences
 ------------------------
 
-Most Enoki functionality is accessible from both C++ and Python, and these
+Most Dr.Jit functionality is accessible from both C++ and Python, and these
 interfaces are also designed to yield similar-looking code. A few simple rules
 suffice to translate from one to the other.
 
@@ -51,13 +51,13 @@ alias ``ek``. To declare this alias, specify (in C++)
 
 .. code-block:: cpp
 
-   namespace ek = enoki;
+   namespace dr = drjit;
 
 and in Python:
 
 .. code-block:: cpp
 
-   import enoki as ek
+   import drjit as dr
 
 .. _python-types:
 
@@ -68,26 +68,26 @@ In C++, new array types can be created on the fly by instantiating a template, e
 
 .. code-block:: cpp
 
-   using Float = ek::CUDAArray<float>;
-   using Array2f = ek::Array<Float, 2>;
+   using Float = dr::CUDAArray<float>;
+   using Array2f = dr::Array<Float, 2>;
 
 However, this mechanism is not portable to Python, which lacks a notion of
-templates. Enoki's bindings instead expose a large variety of specific template
+templates. Dr.Jit's bindings instead expose a large variety of specific template
 variants, which leads to the following equivalent Python code:
 
 .. code-block:: cpp
 
-   from enoki.cuda import Float
-   from enoki.cuda import Array2f
+   from drjit.cuda import Float
+   from drjit.cuda import Array2f
 
 Altogether, there are six top-level packages:
 
-- ``enoki.scalar``: Arrays built on top of scalars (``float``, ``int``, etc.)
-- ``enoki.packet``: Arrays built on top of ``Packet<T>``
-- ``enoki.llvm``: Arrays built on top of ``LLVMArray<T>``
-- ``enoki.cuda``: Arrays built on top of ``CUDAArray<T>``
-- ``enoki.llvm.ad``: Arrays built on top of ``DiffArray<LLVMArray<T>>``
-- ``enoki.cuda.ad``: Arrays built on top of ``DiffArray<CUDAArray<T>>``
+- ``drjit.scalar``: Arrays built on top of scalars (``float``, ``int``, etc.)
+- ``drjit.packet``: Arrays built on top of ``Packet<T>``
+- ``drjit.llvm``: Arrays built on top of ``LLVMArray<T>``
+- ``drjit.cuda``: Arrays built on top of ``CUDAArray<T>``
+- ``drjit.llvm.ad``: Arrays built on top of ``DiffArray<LLVMArray<T>>``
+- ``drjit.cuda.ad``: Arrays built on top of ``DiffArray<CUDAArray<T>>``
 
 Each of these six namespaces contains the following
 
@@ -109,47 +109,47 @@ Each of these six namespaces contains the following
 
 - A pseudorandom number generator: ``PCG32``.
 
-Using this naming convention, ``enoki.llvm.ad.Array3f`` e.g. corresponds to
+Using this naming convention, ``drjit.llvm.ad.Array3f`` e.g. corresponds to
 ``Array<DiffArray<LLVMArray<float>>, 3>``.
 
 This approach is convenient because it enables straightforward porting between
-Enoki's different computational backends simply by changing an import
+Dr.Jit's different computational backends simply by changing an import
 directive.
 
 Functions
 ~~~~~~~~~
 
-All Enoki functions are part of the ``enoki`` namespace in both languages, and
+All Dr.Jit functions are part of the ``drjit`` namespace in both languages, and
 they generally have the same signature. One exception are functions that take
 a template type parameter:
 
 .. code-block:: cpp
 
-    Float x = ek::zero<Float>(100);
-    Float y = ek::gather<Float>(x, ek::arange<UInt32>(100));
+    Float x = dr::zero<Float>(100);
+    Float y = dr::gather<Float>(x, dr::arange<UInt32>(100));
 
 In the Python interface, the template parameters are simply specified as the
 first argument of the function:
 
 .. code-block:: python
 
-    x = ek.zero(Float, 100)
-    y = ek.gather(Float, x, ek.arange(UInt32, 100))
+    x = dr.zero(Float, 100)
+    y = dr.gather(Float, x, dr.arange(UInt32, 100))
 
 
 Conversion from/to other frameworks
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Enoki arrays are interoperable with `NumPy <https://numpy.org/>`_ `PyTorch
+Dr.Jit arrays are interoperable with `NumPy <https://numpy.org/>`_ `PyTorch
 <https://pytorch.org/>`_, `TensorFlow <https://www.tensorflow.org/>`_, and `JAX
 <https://github.com/google/jax>`_, which are widely used frameworks for
 scientific computing and machine learning. Whenever applicable and possible,
-Enoki uses a zero-copy approach that wraps the existing data in device (GPU)
+Dr.Jit uses a zero-copy approach that wraps the existing data in device (GPU)
 memory.
 
 .. code-block:: python
 
-   x = Array3f(..) # Calculation producing an Enoki array
+   x = Array3f(..) # Calculation producing an Dr.Jit array
 
    # Convert to a NumPy array
    x_np = x.numpy()
@@ -175,25 +175,25 @@ The example below details the creation of bindings for a simple computation
 that converts spherical to Cartesian coordinates.
 
 The full project including a tiny build system is available `on GitHub
-<https://github.com/wjakob/ek_python_test>`_.
+<https://github.com/wjakob/dr_python_test>`_.
 
 .. code-block:: cpp
 
-    #include <enoki/array.h>
-    #include <enoki/math.h>
-    #include <enoki/cuda.h>
+    #include <drjit/array.h>
+    #include <drjit/math.h>
+    #include <drjit/cuda.h>
 
     #include <pybind11/pybind11.h>
 
-    // Import pybind11 and Enoki namespaces
+    // Import pybind11 and Dr.Jit namespaces
     namespace py = pybind11;
-    namespace ek = enoki;
+    namespace dr = drjit;
 
     // The function we want to expose in Python
     template <typename Float>
-    ek::Array<Float, 3> sph_to_cartesian(Float theta, Float phi) {
-        auto [sin_theta, cos_theta ] = ek::sincos(theta);
-        auto [sin_phi,   cos_phi   ] = ek::sincos(phi);
+    dr::Array<Float, 3> sph_to_cartesian(Float theta, Float phi) {
+        auto [sin_theta, cos_theta ] = dr::sincos(theta);
+        auto [sin_phi,   cos_phi   ] = dr::sincos(phi);
 
         return { sin_theta * cos_phi,
                  sin_theta * sin_phi,
@@ -202,8 +202,8 @@ The full project including a tiny build system is available `on GitHub
 
     /* The function below is called when the extension module is loaded. It performs a
        sequence of m.def(...) calls which define functions in the module namespace 'm' */
-    PYBIND11_MODULE(ek_python_test /* <- name of extension module */, m) {
-        m.doc() = "Enoki & pybind11 test plugin"; // Set a docstring
+    PYBIND11_MODULE(dr_python_test /* <- name of extension module */, m) {
+        m.doc() = "Dr.Jit & pybind11 test plugin"; // Set a docstring
 
         // 1. Bind the scalar version of the function
         m.def("sph_to_cartesian",      // Function name in Python
@@ -217,7 +217,7 @@ The full project including a tiny build system is available `on GitHub
 
         // 2. Bind the GPU version of the function
         m.def("sph_to_cartesian",
-              sph_to_cartesian<ek::CUDAArray<float>>,
+              sph_to_cartesian<dr::CUDAArray<float>>,
               "Convert from spherical to cartesian coordinates [GPU version]",
               py::arg("theta"), py::arg("phi"));
     }
@@ -237,36 +237,36 @@ query its automatically generated help page.
     [GCC 9.3.0] on linux
     Type "help", "copyright", "credits" or "license" for more information.
 
-    >>> import ek_python_test
-    >>> help(ek_python_test)
+    >>> import dr_python_test
+    >>> help(dr_python_test)
 
-    Help on module ek_python_test:
+    Help on module dr_python_test:
 
     NAME
-        ek_python_test - Enoki & pybind11 test plugin
+        dr_python_test - Dr.Jit & pybind11 test plugin
 
     FUNCTIONS
         sph_to_cartesian(...) method of builtins.PyCapsule instance
             sph_to_cartesian(*args, **kwargs)
             Overloaded function.
 
-            1. sph_to_cartesian(theta: float, phi: float) -> enoki.scalar.Array3f
+            1. sph_to_cartesian(theta: float, phi: float) -> drjit.scalar.Array3f
 
             Convert from spherical to cartesian coordinates [scalar version]
 
-            2. sph_to_cartesian(theta: enoki.cuda.Float, phi: enoki.cuda.Float) -> enoki.cuda.Array3f
+            2. sph_to_cartesian(theta: drjit.cuda.Float, phi: drjit.cuda.Float) -> drjit.cuda.Array3f
 
             Convert from spherical to cartesian coordinates [GPU version]
 
     FILE
-        /home/wjakob/ek_python_test/ek_python_test.cpython-38-x86_64-linux-gnu.so
+        /home/wjakob/dr_python_test/dr_python_test.cpython-38-x86_64-linux-gnu.so
 
 As can be seen, the help describes the overloads along with the name and shape
 of their input arguments. Let's try calling one of them:
 
 .. code-block:: python
 
-    >>> from ek_python_test import sph_to_cartesian
+    >>> from dr_python_test import sph_to_cartesian
 
     >>> r = sph_to_cartesian(theta=1, phi=2)
 
@@ -274,19 +274,19 @@ of their input arguments. Let's try calling one of them:
     [-0.3501754701137543, 0.7651473879814148, 0.5403022766113281]
 
     >>> type(r)
-    <class 'enoki.scalar.Array3f'>
+    <class 'drjit.scalar.Array3f'>
 
-Let's now call the CUDA version of the function. We will use ``ek.linspace`` to
+Let's now call the CUDA version of the function. We will use ``dr.linspace`` to
 generate generate a few example inputs:
 
 .. code-block:: python
 
-    >>> import enoki as ek
-    >>> from enoki.cuda import Float
-    >>> from ek_python_test import sph_to_cartesian
+    >>> import drjit as dr
+    >>> from drjit.cuda import Float
+    >>> from dr_python_test import sph_to_cartesian
 
-    >>> sph_to_cartesian(theta=ek.linspace(Float, 0.0, 1.0, 100),
-    ...                  phi=ek.linspace(Float, 1.0, 2.0, 100))
+    >>> sph_to_cartesian(theta=dr.linspace(Float, 0.0, 1.0, 100),
+    ...                  phi=dr.linspace(Float, 1.0, 2.0, 100))
 
     [[0.0, 0.0, 1.0],
      [0.00537129258736968, 0.008554124273359776, 0.999949038028717],
@@ -300,9 +300,9 @@ generate generate a few example inputs:
      [-0.340190589427948, 0.763620913028717, 0.5487741827964783],
      [-0.3501753807067871, 0.7651472687721252, 0.5403023362159729]]
 
-Note how the C++ code was able to process an Enoki array created via the Python
+Note how the C++ code was able to process an Dr.Jit array created via the Python
 bindings. All features like JIT compilation and automatic differentiation work
 seamlessly across language boundaries: in this case, a single CUDA kernel was
 compiled to produce the output, and that kernel contains both the arithmetic
 from the ``sph_to_cartesian`` function, and the computation of the inputs via
-``ek.linspace`` done on the Python side.
+``dr.linspace`` done on the Python side.

@@ -4,8 +4,8 @@
 #include <cstdlib>
 #include <cstdarg>
 #include <vector>
-#include <enoki/fwd.h>
-#include <enoki-jit/jit.h>
+#include <drjit/fwd.h>
+#include <drjit-core/jit.h>
 
 #if !defined(likely)
 #  if !defined(_MSC_VER)
@@ -155,7 +155,7 @@ extern void ad_raise(const char *fmt, ...);
 #endif
 extern void ad_log(LogLevel level, const char *fmt, ...);
 
-namespace enoki {
+namespace drjit {
     extern const char *ad_prefix();
-    ENOKI_EXPORT bool ad_enabled() noexcept;
+    DRJIT_EXPORT bool ad_enabled() noexcept;
 }

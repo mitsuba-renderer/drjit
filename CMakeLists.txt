@@ -1,79 +1,79 @@
 cmake_minimum_required(VERSION 3.13...3.18)
 
-project(enoki
+project(drjit
   DESCRIPTION
-    "Enoki"
+    "Dr.Jit"
   LANGUAGES
     CXX
 )
 
-option(ENOKI_ENABLE_JIT           "Build Enoki just in time compilation library?" OFF)
-option(ENOKI_ENABLE_AUTODIFF      "Build Enoki automatic differentation library?" OFF)
-option(ENOKI_ENABLE_PYTHON        "Build Python extension library?" OFF)
-option(ENOKI_ENABLE_PYTHON_PACKET "Enable packet mode in Python extension library?" OFF)
-option(ENOKI_ENABLE_TESTS         "Build Enoki test suite? (Warning, this takes *very* long to compile)" OFF)
+option(DRJIT_ENABLE_JIT           "Build Dr.Jit just in time compilation library?" OFF)
+option(DRJIT_ENABLE_AUTODIFF      "Build Dr.Jit automatic differentation library?" OFF)
+option(DRJIT_ENABLE_PYTHON        "Build Python extension library?" OFF)
+option(DRJIT_ENABLE_PYTHON_PACKET "Enable packet mode in Python extension library?" OFF)
+option(DRJIT_ENABLE_TESTS         "Build Dr.Jit test suite? (Warning, this takes *very* long to compile)" OFF)
 
 # ----------------------------------------------------------
 #  Check if submodules have been checked out, or fail early
 # ----------------------------------------------------------
 
-if (NOT IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/ext/enoki-jit/ext/enoki-thread/ext/cmake-defaults")
-  message(FATAL_ERROR "The Enoki dependencies are missing! "
+if (NOT IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/ext/drjit-core/ext/drjit-thread/ext/cmake-defaults")
+  message(FATAL_ERROR "The Dr.Jit dependencies are missing! "
     "You probably did not clone the project with --recursive. It is possible to recover "
     "by invoking\n$ git submodule update --init --recursive")
 endif()
 
-set(ENOKI_VERSION_FILE "${CMAKE_CURRENT_SOURCE_DIR}/include/enoki/fwd.h")
-include(ext/enoki-jit/ext/enoki-thread/ext/cmake-defaults/CMakeLists.txt)
+set(DRJIT_VERSION_FILE "${CMAKE_CURRENT_SOURCE_DIR}/include/drjit/fwd.h")
+include(ext/drjit-core/ext/drjit-thread/ext/cmake-defaults/CMakeLists.txt)
 
 if (MSVC)
-  set(ENOKI_OUTPUT_DIRECTORY
-    RUNTIME_OUTPUT_DIRECTORY_RELEASE        ${CMAKE_CURRENT_BINARY_DIR}/enoki
-    RUNTIME_OUTPUT_DIRECTORY_DEBUG          ${CMAKE_CURRENT_BINARY_DIR}/enoki
-    RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_CURRENT_BINARY_DIR}/enoki
-    RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL     ${CMAKE_CURRENT_BINARY_DIR}/enoki
-    LIBRARY_OUTPUT_DIRECTORY_RELEASE        ${CMAKE_CURRENT_BINARY_DIR}/enoki
-    LIBRARY_OUTPUT_DIRECTORY_DEBUG          ${CMAKE_CURRENT_BINARY_DIR}/enoki
-    LIBRARY_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_CURRENT_BINARY_DIR}/enoki
-    LIBRARY_OUTPUT_DIRECTORY_MINSIZEREL     ${CMAKE_CURRENT_BINARY_DIR}/enoki
+  set(DRJIT_OUTPUT_DIRECTORY
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE        ${CMAKE_CURRENT_BINARY_DIR}/drjit
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG          ${CMAKE_CURRENT_BINARY_DIR}/drjit
+    RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_CURRENT_BINARY_DIR}/drjit
+    RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL     ${CMAKE_CURRENT_BINARY_DIR}/drjit
+    LIBRARY_OUTPUT_DIRECTORY_RELEASE        ${CMAKE_CURRENT_BINARY_DIR}/drjit
+    LIBRARY_OUTPUT_DIRECTORY_DEBUG          ${CMAKE_CURRENT_BINARY_DIR}/drjit
+    LIBRARY_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_CURRENT_BINARY_DIR}/drjit
+    LIBRARY_OUTPUT_DIRECTORY_MINSIZEREL     ${CMAKE_CURRENT_BINARY_DIR}/drjit
   )
 else()
-  set(ENOKI_OUTPUT_DIRECTORY
-    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/enoki)
+  set(DRJIT_OUTPUT_DIRECTORY
+    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/drjit)
 endif()
 
-add_library(enoki INTERFACE)
-target_compile_features(enoki INTERFACE cxx_std_17)
-target_include_directories(enoki
+add_library(drjit INTERFACE)
+target_compile_features(drjit INTERFACE cxx_std_17)
+target_include_directories(drjit
   INTERFACE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ext/enoki-jit/include>
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ext/enoki-jit/ext/enoki-thread/include>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ext/drjit-core/include>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ext/drjit-core/ext/drjit-thread/include>
   $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
-  target_compile_options(enoki INTERFACE -fno-strict-aliasing)
+  target_compile_options(drjit INTERFACE -fno-strict-aliasing)
 endif()
 
-if (ENOKI_ENABLE_JIT)
+if (DRJIT_ENABLE_JIT)
   if (APPLE)
-    message(STATUS "Enoki: building the LLVM JIT backend.")
+    message(STATUS "Dr.Jit: building the LLVM JIT backend.")
   else()
-    message(STATUS "Enoki: building the CUDA & LLVM JIT backend.")
+    message(STATUS "Dr.Jit: building the CUDA & LLVM JIT backend.")
   endif()
-  add_subdirectory(ext/enoki-jit)
-  set_target_properties(enoki-jit PROPERTIES ${ENOKI_OUTPUT_DIRECTORY})
-  set_target_properties(enoki-thread PROPERTIES ${ENOKI_OUTPUT_DIRECTORY})
+  add_subdirectory(ext/drjit-core)
+  set_target_properties(drjit-core PROPERTIES ${DRJIT_OUTPUT_DIRECTORY})
+  set_target_properties(drjit-thread PROPERTIES ${DRJIT_OUTPUT_DIRECTORY})
 
-  if (ENOKI_MASTER_PROJECT)
-    install(TARGETS enoki-jit EXPORT enokiTargets)
-    install(TARGETS enoki-thread EXPORT enokiTargets)
+  if (DRJIT_MASTER_PROJECT)
+    install(TARGETS drjit-core EXPORT drjitTargets)
+    install(TARGETS drjit-thread EXPORT drjitTargets)
   endif()
 
-  mark_as_advanced(ENOKI_THREAD_ENABLE_TESTS)
+  mark_as_advanced(DRJIT_THREAD_ENABLE_TESTS)
 else()
-  message(STATUS "Enoki: *not* building the CUDA & LLVM JIT backend.")
+  message(STATUS "Dr.Jit: *not* building the CUDA & LLVM JIT backend.")
 endif()
 
 if (MSVC)
@@ -81,33 +81,33 @@ if (MSVC)
    add_compile_options(/wd4251) # 'warning C4251: X needs to have dll-interface to be used by clients of struct Y
 endif()
 
-if (ENOKI_ENABLE_AUTODIFF)
-  message(STATUS "Enoki: building the autodiff backend.")
+if (DRJIT_ENABLE_AUTODIFF)
+  message(STATUS "Dr.Jit: building the autodiff backend.")
   add_subdirectory(src/autodiff)
-  set_target_properties(enoki-autodiff PROPERTIES ${ENOKI_OUTPUT_DIRECTORY})
+  set_target_properties(drjit-autodiff PROPERTIES ${DRJIT_OUTPUT_DIRECTORY})
 
-  if (ENOKI_MASTER_PROJECT)
-    install(TARGETS enoki-autodiff EXPORT enokiTargets)
+  if (DRJIT_MASTER_PROJECT)
+    install(TARGETS drjit-autodiff EXPORT drjitTargets)
   endif()
 else()
-  message(STATUS "Enoki: *not* building the autodiff backend.")
+  message(STATUS "Dr.Jit: *not* building the autodiff backend.")
 endif()
 
-if (ENOKI_ENABLE_PYTHON)
-  message(STATUS "Enoki: building the Python plugin.")
+if (DRJIT_ENABLE_PYTHON)
+  message(STATUS "Dr.Jit: building the Python plugin.")
   add_subdirectory(src/python)
 else()
-  message(STATUS "Enoki: *not* building the Python plugin.")
+  message(STATUS "Dr.Jit: *not* building the Python plugin.")
 endif()
 
-if (ENOKI_ENABLE_TESTS)
-  message(STATUS "Enoki: building the test suite (Warning, this takes *very* long to compile).")
+if (DRJIT_ENABLE_TESTS)
+  message(STATUS "Dr.Jit: building the test suite (Warning, this takes *very* long to compile).")
   enable_testing()
   add_subdirectory(tests)
 endif()
 
 # Build the documentation
-if (ENOKI_MASTER_PROJECT)
+if (DRJIT_MASTER_PROJECT)
   set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/resources)
   find_package(Sphinx)
 
@@ -122,38 +122,37 @@ if (ENOKI_MASTER_PROJECT)
   endif()
 endif()
 
-if (ENOKI_MASTER_PROJECT)
-  install(DIRECTORY include/enoki DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-  if (ENOKI_ENABLE_JIT)
-    install(DIRECTORY ext/enoki-jit/include/enoki-jit DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-    install(DIRECTORY ext/enoki-jit/ext/enoki-thread/include/enoki-thread DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+if (DRJIT_MASTER_PROJECT)
+  install(DIRECTORY include/drjit DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+  if (DRJIT_ENABLE_JIT)
+    install(DIRECTORY ext/drjit-core/include/drjit-core DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+    install(DIRECTORY ext/drjit-core/ext/drjit-thread/include/drjit-thread DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
   endif()
 
-  install(TARGETS enoki EXPORT enokiTargets)
+  install(TARGETS drjit EXPORT drjitTargets)
 
-  set(ENOKI_CMAKECONFIG_INSTALL_DIR "${CMAKE_INSTALL_DATAROOTDIR}/cmake/enoki")
+  set(DRJIT_CMAKECONFIG_INSTALL_DIR "${CMAKE_INSTALL_DATAROOTDIR}/cmake/drjit")
 
   configure_package_config_file(
-    resources/enokiConfig.cmake.in enokiConfig.cmake
-    INSTALL_DESTINATION ${ENOKI_CMAKECONFIG_INSTALL_DIR})
+    resources/drjitConfig.cmake.in drjitConfig.cmake
+    INSTALL_DESTINATION ${DRJIT_CMAKECONFIG_INSTALL_DIR})
 
   write_basic_package_version_file(
-    enokiConfigVersion.cmake
-    VERSION ${ENOKI_VERSION}
+    drjitConfigVersion.cmake
+    VERSION ${DRJIT_VERSION}
     COMPATIBILITY AnyNewerVersion ARCH_INDEPENDENT)
 
   install(
-    EXPORT enokiTargets
-    DESTINATION ${ENOKI_CMAKECONFIG_INSTALL_DIR})
+    EXPORT drjitTargets
+    DESTINATION ${DRJIT_CMAKECONFIG_INSTALL_DIR})
 
   install(
     FILES
-    ${CMAKE_CURRENT_BINARY_DIR}/enokiConfigVersion.cmake
-    ${CMAKE_CURRENT_BINARY_DIR}/enokiConfig.cmake
-    DESTINATION ${ENOKI_CMAKECONFIG_INSTALL_DIR})
+    ${CMAKE_CURRENT_BINARY_DIR}/drjitConfigVersion.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/drjitConfig.cmake
+    DESTINATION ${DRJIT_CMAKECONFIG_INSTALL_DIR})
 endif()
 
 mark_as_advanced(
   CMAKE_EXECUTABLE_FORMAT CMAKE_OSX_ARCHITECTURES
-  ENOKI_JIT_ENABLE_TESTS
 )

@@ -1,7 +1,7 @@
 #include "test.h"
-#include <enoki/color.h>
+#include <drjit/color.h>
 
-ENOKI_TEST_FLOAT(test01_linear_to_srgb) {
+DRJIT_TEST_FLOAT(test01_linear_to_srgb) {
     test::probe_accuracy<T>(
         [](const T &a) -> T { return linear_to_srgb(a); },
         [](double value) {
@@ -15,7 +15,7 @@ ENOKI_TEST_FLOAT(test01_linear_to_srgb) {
     );
 }
 
-ENOKI_TEST_FLOAT(test02_srgb_to_linear) {
+DRJIT_TEST_FLOAT(test02_srgb_to_linear) {
     test::probe_accuracy<T>(
         [](const T &a) -> T { return srgb_to_linear(a); },
         [](double value) {

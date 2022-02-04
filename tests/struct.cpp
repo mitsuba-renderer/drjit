@@ -1,7 +1,7 @@
 /*
     tests/custom.cpp -- tests operations involving custom data structures
 
-    Enoki is a C++ template library that enables transparent vectorization
+    Dr.Jit is a C++ template library that enables transparent vectorization
     of numerical kernels using SIMD instruction sets available on current
     processor architectures.
 
@@ -12,8 +12,8 @@
 */
 
 #include "test.h"
-#include <enoki/dynamic.h>
-#include <enoki/struct.h>
+#include <drjit/dynamic.h>
+#include <drjit/struct.h>
 
 template <typename Value_> struct Custom {
     using Value = Value_;
@@ -32,7 +32,7 @@ template <typename Value_> struct Custom {
         return o == c.o && d == c.d && i == c.i;
     }
 
-    ENOKI_STRUCT(Custom, o, d, i)
+    DRJIT_STRUCT(Custom, o, d, i)
 };
 
 using FloatX = DynamicArray<float>;
@@ -42,7 +42,7 @@ using Vector3f = Array<float, 3>;
 using Custom3f = Custom<float>;
 using Custom3fX = Custom<FloatX>;
 
-ENOKI_TEST(test01_init) {
+DRJIT_TEST(test01_init) {
     auto v = zero<Custom3fX>();
 
     auto a = empty<std::pair<Custom3f, Custom3fX>>(100);
@@ -54,7 +54,7 @@ ENOKI_TEST(test01_init) {
     set_label(b, "asdf"); // this doesn't do anything, but it should compile
 }
 
-ENOKI_TEST(test02_masked_assignment) {
+DRJIT_TEST(test02_masked_assignment) {
     Custom3fX c = zero<Custom3fX>(5);
     c.o.x() = linspace<FloatX>(0, 1, 5);
     c.i = arange<Int32X>(5);
@@ -63,7 +63,7 @@ ENOKI_TEST(test02_masked_assignment) {
     assert(c.o.x() == FloatX(0.f, 0.f, 0.f, 0.75f, 1.f));
 }
 
-ENOKI_TEST(test03_scatter_gather) {
+DRJIT_TEST(test03_scatter_gather) {
     Custom3fX c1 = zero<Custom3fX>(5);
     Custom3f c2(1, 2, 3);
 
@@ -80,7 +80,7 @@ ENOKI_TEST(test03_scatter_gather) {
     assert(c1.o.x() == FloatX(0, 0, 1, 0, 0));
 }
 
-ENOKI_TEST(test04_slice) {
+DRJIT_TEST(test04_slice) {
     Custom3fX c = zero<Custom3fX>(5);
     c.o.x() = linspace<FloatX>(0, 1, 5);
     c.i = arange<Int32X>(5);

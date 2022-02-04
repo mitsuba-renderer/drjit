@@ -1,8 +1,8 @@
-#include <enoki/python.h>
-#include <enoki/complex.h>
-#include <enoki/dynamic.h>
+#include <drjit/python.h>
+#include <drjit/complex.h>
+#include <drjit/dynamic.h>
 
-using namespace enoki;
+using namespace drjit;
 
 Array<float, 4> a1() {
     auto result = Array<float, 4>(1, 2, 3, 4);
@@ -52,7 +52,7 @@ void c4(Complex<Packet<float>> value) {
 }
 
 template <typename Float> Float atan(Float x) {
-    return enoki::atan(x);
+    return drjit::atan(x);
 }
 
 PYBIND11_MODULE(test, m) {
@@ -70,6 +70,6 @@ PYBIND11_MODULE(test, m) {
     m.def("c4", &c4);
 
     using FloatP = Packet<float>;
-    m.def("atan", enoki::vectorize_wrapper(&atan<FloatP>));
+    m.def("atan", drjit::vectorize_wrapper(&atan<FloatP>));
 }
 

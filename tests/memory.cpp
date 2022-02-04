@@ -1,7 +1,7 @@
 /*
     tests/memory.cpp -- tests for load/store/gather/scatter, etc.
 
-    Enoki is a C++ template library that enables transparent vectorization
+    Dr.Jit is a C++ template library that enables transparent vectorization
     of numerical kernels using SIMD instruction sets available on current
     processor architectures.
 
@@ -16,35 +16,35 @@
 #  include <windows.h>
 #endif
 
-ENOKI_TEST_ALL(test01_load) {
+DRJIT_TEST_ALL(test01_load) {
     alignas(alignof(T)) Value mem[Size];
     for (size_t i = 0; i < Size; ++i)
         mem[i] = (Value) i;
     assert(load_aligned<T>(mem) == arange<T>());
 }
 
-ENOKI_TEST_ALL(test02_load) {
+DRJIT_TEST_ALL(test02_load) {
     Value mem[Size];
     for (size_t i = 0; i < Size; ++i)
         mem[i] = (Value) i;
     assert(load<T>(mem) == arange<T>());
 }
 
-ENOKI_TEST_ALL(test03_store) {
+DRJIT_TEST_ALL(test03_store) {
     alignas(alignof(T)) Value mem[Size];
     store_aligned(mem, arange<T>());
     for (size_t i = 0; i < Size; ++i)
         assert(mem[i] == (Value) i);
 }
 
-ENOKI_TEST_ALL(test04_store) {
+DRJIT_TEST_ALL(test04_store) {
     Value mem[Size];
     store(mem, arange<T>());
     for (size_t i = 0; i < Size; ++i)
         assert(mem[i] == (Value) i);
 }
 
-ENOKI_TEST_ALL(test05_gather) {
+DRJIT_TEST_ALL(test05_gather) {
     alignas(alignof(T)) Value mem[Size], dst[Size];
     uint32_t indices32[Size];
     uint64_t indices64[Size];
@@ -79,7 +79,7 @@ ENOKI_TEST_ALL(test05_gather) {
     memset(dst, 0, sizeof(Value) * Size);
 }
 
-ENOKI_TEST_ALL(test06_gather_pointers) {
+DRJIT_TEST_ALL(test06_gather_pointers) {
     using Scalar   = scalar_t<T>;
     using ValuePtr = replace_scalar_t<T, const Scalar *>;
     using UInt32P  = replace_scalar_t<T, uint32_t>;
@@ -112,7 +112,7 @@ ENOKI_TEST_ALL(test06_gather_pointers) {
         assert(all(gathered == &v1));
 }
 
-ENOKI_TEST_ALL(test07_gather_mask) {
+DRJIT_TEST_ALL(test07_gather_mask) {
     alignas(alignof(T)) Value mem[Size], dst[Size];
     uint32_t indices32[Size];
     uint64_t indices64[Size];
@@ -148,7 +148,7 @@ ENOKI_TEST_ALL(test07_gather_mask) {
         assert(dst[i] == ((i % 2 == 0) ? Value(Size - 1 - i) : 0));
 }
 
-ENOKI_TEST_ALL(test08_scatter) {
+DRJIT_TEST_ALL(test08_scatter) {
     alignas(alignof(T)) Value mem[Size], dst[Size];
     uint32_t indices32[Size];
     uint64_t indices64[Size];
@@ -173,7 +173,7 @@ ENOKI_TEST_ALL(test08_scatter) {
     memset(dst, 0, sizeof(Value) * Size);
 }
 
-ENOKI_TEST_ALL(test09_scatter_mask) {
+DRJIT_TEST_ALL(test09_scatter_mask) {
     alignas(alignof(T)) Value mem[Size], dst[Size];
     uint32_t indices32[Size];
     uint64_t indices64[Size];

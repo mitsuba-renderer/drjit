@@ -1,13 +1,13 @@
-.. cpp:namespace:: enoki
+.. cpp:namespace:: drjit
 .. _gpu:
 
 GPU Arrays
 ==========
 
 We will now switch gears to GPU arrays, whose operation is markedly different
-from that of the other previously discussed Enoki array types.
+from that of the other previously discussed Dr.Jit array types.
 
-The first major change when working with GPU arrays is that Enoki is no longer
+The first major change when working with GPU arrays is that Dr.Jit is no longer
 a pure header file library. A compilation step becomes necessary, which
 produces shared libraries against which applications must be linked. The reason
 for this is to minimize template bloat: GPU arrays involve a certain amount of
@@ -15,62 +15,62 @@ additional machinery, and it would be wasteful to have to include the
 underlying implementation in every file of an application that relies on GPU
 arrays.
 
-Compiling Enoki produces up to three libraries that are potentially of interest:
+Compiling Dr.Jit produces up to three libraries that are potentially of interest:
 
-1. ``libenoki-cuda.so``: a just-in-time compiler that is used to realize the
-   Enoki backend of the ``CUDAArray<T>`` array type discussed in this section.
+1. ``libdrjit-cuda.so``: a just-in-time compiler that is used to realize the
+   Dr.Jit backend of the ``CUDAArray<T>`` array type discussed in this section.
 
-2. ``libenoki-autodiff.so``: a library for maintaining a computation graph for
+2. ``libdrjit-autodiff.so``: a library for maintaining a computation graph for
    automatic differentiation discussed in the next section.
 
-3. ``enoki.cpyhon-37m-x86_64-linux-gnu.so`` (platform-dependent filename): a
-   Python binding library that provides interoperability with Enoki's GPU
+3. ``drjit.cpyhon-37m-x86_64-linux-gnu.so`` (platform-dependent filename): a
+   Python binding library that provides interoperability with Dr.Jit's GPU
    arrays and differentiable GPU arrays.
 
 Enter the following CMake command to compile all of them:
 
 .. code-block:: bash
 
-   cd <path-to-enoki>
+   cd <path-to-drjit>
    mkdir build
-   cmake -DENOKI_CUDA=ON -DENOKI_AUTODIFF=ON -DENOKI_PYTHON=ON ..
+   cmake -DDRJIT_CUDA=ON -DDRJIT_AUTODIFF=ON -DDRJIT_PYTHON=ON ..
    make
 
-For educational reasons, it is instructive to compile in Enoki in debug mode,
+For educational reasons, it is instructive to compile in Dr.Jit in debug mode,
 which enables a number of log messages that we will refer to in the remainder
 of this section. Use the following CMake command to do so:
 
 .. code-block:: bash
 
-   cmake -DCMAKE_BUILD_TYPE=Debug -DENOKI_CUDA=ON -DENOKI_AUTODIFF=ON -DENOKI_PYTHON=ON ..
+   cmake -DCMAKE_BUILD_TYPE=Debug -DDRJIT_CUDA=ON -DDRJIT_AUTODIFF=ON -DDRJIT_PYTHON=ON ..
 
 Using GPU Arrays in Python
 --------------------------
 
-We find it easiest to introduce Enoki's GPU arrays from within an interactive
+We find it easiest to introduce Dr.Jit's GPU arrays from within an interactive
 Python interpreter and postpone the discussion of the C++ interface to the end
-of this section. We'll start by importing the Enoki extension into an
+of this section. We'll start by importing the Dr.Jit extension into an
 interactive Python session and set the log level to a high value via
 :cpp:func:`cuda_set_log_level`, which will be helpful in the subsequent
 discussion.
 
 .. code-block:: python
 
-   >>> from enoki import *
+   >>> from drjit import *
    >>> cuda_set_log_level(4)
 
 .. note::
 
-    The first time that Enoki is imported on a new machine, it will trigger a
+    The first time that Dr.Jit is imported on a new machine, it will trigger a
     kernel pre-compilation step that takes a few seconds.
 
-The Enoki python bindings expose a number of types in the `enoki.cuda` submodule that
+The Dr.Jit python bindings expose a number of types in the `drjit.cuda` submodule that
 correspond to GPU-resident arrays. The following example initializes such an array with a
 constant followed by a simple addition operation.
 
 .. code-block:: python
 
-   >>> from enoki.cuda import Float32 as FloatC
+   >>> from drjit.cuda import Float32 as FloatC
    >>> a = FloatC(1)
    cuda_trace_append(10): mov.$t1 $r1, 0f3f800000
 
@@ -79,7 +79,7 @@ constant followed by a simple addition operation.
 
 Observe the two ``cuda_trace_append`` log messages, which begin to reveal the
 mechanics underlying the GPU backend: neither of these two operations has
-actually occurred at this point. Instead, Enoki simply queued this computation
+actually occurred at this point. Instead, Dr.Jit simply queued this computation
 for later execution using an assembly-like intermediate language named `NVIDIA
 PTX <https://docs.nvidia.com/cuda/parallel-thread-execution/index.html>`_.
 
@@ -113,7 +113,7 @@ to print the array contents:
    cuda_jit_run(): cache miss, jit: 541 us, ptx compilation: 43.534, 10 registers
    [0.964028]
 
-At this point, Enoki's JIT backend compiles and launches a kernel that contains
+At this point, Dr.Jit's JIT backend compiles and launches a kernel that contains
 all of the computation queued thus far.
 
 .. container:: toggle
@@ -128,7 +128,7 @@ all of the computation queued thus far.
       .target sm_75
       .address_size 64
 
-      .visible .entry enoki_8a163272(.param .u64 ptr,
+      .visible .entry drjit_8a163272(.param .u64 ptr,
                                      .param .u32 size) {
           .reg.b8 %b<41>;
           .reg.b16 %w<41>;
@@ -199,7 +199,7 @@ all of the computation queued thus far.
           ret;
       }
 
-Internally, Enoki hands the PTX code over to CUDA's runtime compiler (`NVRTC
+Internally, Dr.Jit hands the PTX code over to CUDA's runtime compiler (`NVRTC
 <https://docs.nvidia.com/cuda/nvrtc/index.html>`_), which performs a second
 pass that translates from PTX to the native GPU instruction set *SASS*.
 
@@ -211,7 +211,7 @@ pass that translates from PTX to the native GPU instruction set *SASS*.
 
     .. code-block:: bash
 
-        enoki_8a163272:
+        drjit_8a163272:
             MOV R1, c[0x0][0x28];
             S2R R0, SR_TID.X;
             S2R R3, SR_CTAID.X;
@@ -240,10 +240,10 @@ previous example because the second snippet is *much smaller*---in fact, almost
 all of the computation was optimized away and replaced by a simple constant
 (:math:`\tanh(2)\approx 0.964028`).
 
-Enoki's approach is motivated by efficiency considerations: most array
+Dr.Jit's approach is motivated by efficiency considerations: most array
 operations are individually very simple and do not involve a sufficient amount
 of computation to outweigh overheads related to memory accesses and GPU kernel
-launches. Enoki therefore accumulates larger amounts of work (potentially
+launches. Dr.Jit therefore accumulates larger amounts of work (potentially
 hundreds of thousands of individual operations) before creating and launching
 an optimized GPU kernel. Once evaluated, array contents can be accessed without
 triggering further computation:
@@ -289,7 +289,7 @@ generator RNG that will generate 1 million samples:
 
 .. code-block:: python
 
-    >>> from enoki.cuda import PCG32 as PCG32C, UInt64 as UInt64C
+    >>> from drjit.cuda import PCG32 as PCG32C, UInt64 as UInt64C
     >>> rng = PCG32C(UInt64C.arange(1000000))
 
 Here, *PCG32* refers to a linear congruential generator from the section on
@@ -299,7 +299,7 @@ number vectors from the RNG and create a dynamic array of 3D vectors
 
 .. code-block:: python
 
-    >>> from enoki.cuda import Vector3f as Vector3fC
+    >>> from drjit.cuda import Vector3f as Vector3fC
     >>> v = Vector3fC([rng.next_float32() * 2 - 1 for _ in range(3)])
 
 Finally, we compute a mask that determines which of the uniformly distributed
@@ -352,7 +352,7 @@ are automatically purged from the list.
 Most of the variables are only referenced *internally*---these correspond to
 temporaries created during a computation. Because they can no longer be
 "reached" through external references, it would be impossible to ask the system
-for the contents of such a temporary variable. Enoki relies on this observation
+for the contents of such a temporary variable. Dr.Jit relies on this observation
 to perform an important optimization: rather than storing temporaries in
 global GPU memory, their contents can be represented using cheap temporary GPU
 registers. This yields significant storage and memory traffic savings: over 350
@@ -360,7 +360,7 @@ MiB of storage can be elided in the last example, leaving only roughly 20 MiB
 of required storage.
 
 In fact, these numbers can still change: we have not actually executed the
-computation yet, and Enoki currently conservatively assumes that we plan to
+computation yet, and Dr.Jit currently conservatively assumes that we plan to
 continue using the random number generator ``rng`` and list of 3D vectors ``v``
 later on. If we instruct Python to garbage-collect these two variables, the
 required storage drops to less than a megabyte:
@@ -399,7 +399,7 @@ points that lie within the sphere, which approximates the expected value
 Manually triggering JIT compilation
 -----------------------------------
 
-It is sometimes desirable to manually force Enoki's JIT compiler to generate a
+It is sometimes desirable to manually force Dr.Jit's JIT compiler to generate a
 kernel containing the computation queued thus far. For instance, rather than
 compiling a long-running iterative algorithm into a single huge kernel, a
 single kernel per iteration may be preferable. This can be accomplished by
@@ -407,7 +407,7 @@ explicitly invoking the :cpp:func:`cuda_eval` function periodically. An example:
 
 .. code-block:: python
 
-    >>> from enoki.cuda import UInt32 as UInt32C
+    >>> from drjit.cuda import UInt32 as UInt32C
     >>> a = UInt32C.arange(1234)
 
     >>> cuda_eval()
@@ -450,13 +450,13 @@ Parallelization and horizontal operations
 Recall the difference between :ref:`vertical <vertical>` and :ref:`horizontal
 <horizontal>` operations: vertical operations are applied independently to each
 element of a vector, while horizontal ones combine the different elements of a
-vector. Enoki's GPU arrays are designed to operate very efficiently when
+vector. Dr.Jit's GPU arrays are designed to operate very efficiently when
 working with vertical operations that can be parallelized over the entire chip.
 
 Horizontal operations (e.g. :cpp:func:`hsum`, :cpp:func:`all`,
 :cpp:func:`count`, etc.) are best avoided whenever possible, because they
 require that all prior computation has finished. In other words: each time
-Enoki encounters a horizontal operation involving an unevaluated array, it
+Dr.Jit encounters a horizontal operation involving an unevaluated array, it
 triggers a call to :cpp:func:`cuda_eval`. That said, horizontal reductions are
 executed in parallel using NVIDIA's `CUB <https://nvlabs.github.io/cub/>`_
 library, which is a highly performant implementation of these primitives.
@@ -464,14 +464,14 @@ library, which is a highly performant implementation of these primitives.
 Interfacing with NumPy
 ----------------------
 
-Enoki GPU arrays support bidirectional conversion from/to NumPy arrays, which
+Dr.Jit GPU arrays support bidirectional conversion from/to NumPy arrays, which
 will of course involve some communication between the CPU and GPU:
 
 .. code-block:: python
 
    >>> x = FloatC.linspace(0, 1, 5)
 
-   >>> # Enoki -> NumPy
+   >>> # Dr.Jit -> NumPy
    >>> y = Vector3fC(x, x*2, x*3).numpy()
    cuda_eval(): launching kernel (n=5, in=1, out=6, ops=36)
 
@@ -482,7 +482,7 @@ will of course involve some communication between the CPU and GPU:
           [0.75, 1.5 , 2.25],
           [1.  , 2.  , 3.  ]], dtype=float32)
 
-   >>> # NumPy -> Enoki
+   >>> # NumPy -> Dr.Jit
    >>> Vector3fC(y)
    cuda_eval(): launching kernel (n=5, in=1, out=3, ops=27)
    [[0, 0, 0],
@@ -502,7 +502,7 @@ use different memory layouts for tensors).
 
    >>> x = FloatC.linspace(0, 1, 5)
 
-   >>> # Enoki -> PyTorch
+   >>> # Dr.Jit -> PyTorch
    >>> y = Vector3fC(x, x*2, x*3).torch()
    cuda_eval(): launching kernel (n=5, in=2, out=5, ops=31)
 
@@ -513,7 +513,7 @@ use different memory layouts for tensors).
            [0.7500, 1.5000, 2.2500],
            [1.0000, 2.0000, 3.0000]], device='cuda:0')
 
-   >>> # PyTorch -> Enoki
+   >>> # PyTorch -> Dr.Jit
    >>> Vector3fC(y)
    cuda_eval(): launching kernel (n=5, in=1, out=3, ops=27)
    [[0, 0, 0],
@@ -529,7 +529,7 @@ when converting many variables at an interface between two frameworks. For this
 reason, both ``.numpy()`` and ``.torch()`` functions take an optional ``eval``
 argument that is set to ``True`` by default. Passing ``False`` causes the
 operation to return an uninitialized NumPy or PyTorch array, while at the same
-time scheduling Enoki code that will eventually fill this memory with valid
+time scheduling Dr.Jit code that will eventually fill this memory with valid
 contents the next time that :cpp:func:`cuda_eval` is triggered. An example is
 shown below. This feature is to be used with caution.
 
@@ -571,7 +571,7 @@ involving GPU arrays as targets.
     cuda_eval(): launching kernel (n=5, in=1, out=2, ops=9)
     [0, 0, 1, 0, 2, 0, 3, 0, 4, 0]
 
-Note that gathering from an unevaluated Enoki array is not guaranteed to be a
+Note that gathering from an unevaluated Dr.Jit array is not guaranteed to be a
 vertical operation, hence it triggers a call to :cpp:func:`cuda_eval`.
 
 Caching memory allocations
@@ -579,13 +579,13 @@ Caching memory allocations
 
 Similar to the `PyTorch memory allocator
 <https://pytorch.org/docs/stable/notes/cuda.html#cuda-memory-management>`_,
-Enoki uses a caching scheme to avoid very costly device synchronizations when
+Dr.Jit uses a caching scheme to avoid very costly device synchronizations when
 releasing memory. This means that freeing a large GPU variable doesn't cause
 the associated memory region to become available for use by the operating
 system or other frameworks like Tensorflow or PyTorch. Use the function
 :cpp:func:`cuda_malloc_trim` to fully purge all unused memory. The function is
 only relevant when working with other frameworks and does not need to be called
-to free up memory for use by Enoki itself.
+to free up memory for use by Dr.Jit itself.
 
 C++ interface
 -------------
@@ -596,18 +596,18 @@ include the header
 
 .. code-block:: cpp
 
-    #include <enoki/cuda.h>
+    #include <drjit/cuda.h>
 
 Furthermore, applications must be linked against the ``cuda`` and
-``enoki-cuda`` libraries. The following snippet contains a C++ translation of
+``drjit-cuda`` libraries. The following snippet contains a C++ translation of
 the Monte Carlo integration Python example shown earlier.
 
 .. code-block:: cpp
 
-    #include <enoki/cuda.h>
-    #include <enoki/random.h>
+    #include <drjit/cuda.h>
+    #include <drjit/random.h>
 
-    using namespace enoki;
+    using namespace drjit;
 
     using FloatC    = CUDAArray<float>;
     using Vector3fC = Array<FloatC, 3>;
@@ -655,7 +655,7 @@ larger, and from a probabilistic viewpoint it is often likely that the
 reasons, skipping test and always evaluating the expression often leads to
 better performance on the GPU.
 
-Enoki provides alternative horizontal reductions of masks named
+Dr.Jit provides alternative horizontal reductions of masks named
 :cpp:func:`any_or`, :cpp:func:`all_or`, :cpp:func:`none_or` that do exactly
 this: they skip evaluation when compiling for GPU targets and simply return the
 supplied template argument. For other targets, they behave as usual. With this
@@ -668,9 +668,9 @@ change, the example looks as follows:
         result[condition] = /* expensive-to-evaluate expression */;
 
 
-Differences between Enoki and existing frameworks
+Differences between Dr.Jit and existing frameworks
 -------------------------------------------------
-Enoki was designed as a numerical foundation for differentiable physical
+Dr.Jit was designed as a numerical foundation for differentiable physical
 simulations, specifically the `Mitsuba renderer
 <https://github.com/mitsuba-renderer/mitsuba2>`_, though it is significantly
 more general and should be a trusty tool for a variety of simulation and
@@ -680,7 +680,7 @@ Its GPU and Autodiff backends are related to well-known frameworks like
 `TensorFlow <https://www.tensorflow.org/>`_ and `PyTorch
 <https://pytorch.org/>`_ that have become standard tools for training and
 evaluating neural networks. In the following, we outline the main differences
-between these frameworks and Enoki.
+between these frameworks and Dr.Jit.
 
 Both PyTorch and Tensorflow provide two main operational modes: *eager mode*
 directly evaluates arithmetic operations on the GPU, which yields excellent
@@ -689,7 +689,7 @@ convolutions and large matrix-vector multiplications, both of which are
 building blocks of neural networks. When evaluating typical simulation code
 that mainly consists of much simpler arithmetic (e.g. additions,
 multiplications, etc.), the resulting memory traffic and scheduling overheads
-induce severe bottlenecks. An early prototype of Enoki provided a
+induce severe bottlenecks. An early prototype of Dr.Jit provided a
 ``TorchArray<T>`` type that carried out operations using PyTorch's eager mode,
 and the low performance of this combination eventually motivated us to develop
 the technique based on JIT compilation introduced in the previous section.
@@ -704,7 +704,7 @@ randomness, which could cause jumps to almost any part of the system. The full
 computation graph would simply be the entire codebase (potentially on the order
 of hundreds of thousands lines of code), which is of course far too big.
 
-Enoki's approach could be interpreted as a middle ground between the two
+Dr.Jit's approach could be interpreted as a middle ground between the two
 extremes discussed above. Graphs are created on the fly during a simulation,
 and can be several orders of magnitude larger compared to typical neural
 networks. They consist mostly of unstructured and comparably simple arithmetic
@@ -715,6 +715,6 @@ simultaneously branch to multiple different implementations. The details of
 this are described in the section on :ref:`function calls <calls>`.
 
 Note that that there are of of course many use cases where PyTorch, Tensorflow,
-etc. are vastly superior to Enoki, and it is often a good idea to combine the
+etc. are vastly superior to Dr.Jit, and it is often a good idea to combine the
 two in such cases (e.g. to feed the output of a differentiable simulation into
 a neural network).

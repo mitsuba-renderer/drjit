@@ -1,15 +1,15 @@
-.. cpp:namespace:: enoki
+.. cpp:namespace:: drjit
 
 Spherical harmonics
 ===================
 
-Enoki can efficiently evaluate real spherical harmonics basis functions for
+Dr.Jit can efficiently evaluate real spherical harmonics basis functions for
 both scalar and vector arguments. To use this feature, include the following
 header file:
 
 .. code-block:: cpp
 
-    #include <enoki/sh.h>
+    #include <drjit/sh.h>
 
 The evaluation routines rely on efficient pre-generated branch-free code
 processed using aggressive constant folding and common subexpression
@@ -26,7 +26,7 @@ Graphics Techniques (JCGT)*, vol. 2, no. 2, 84-90, 2013 by `Peter-Pike Sloan
     (i.e. using Cartesian instead of spherical coordinates).
 
     The Mathematica equivalent of the real spherical harmonic basis implemented
-    in :file:`enoki/sh.h` is given by the following definition:
+    in :file:`drjit/sh.h` is given by the following definition:
 
     .. code-block:: wolfram-language
 

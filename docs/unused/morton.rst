@@ -1,9 +1,9 @@
-.. cpp:namespace:: enoki
+.. cpp:namespace:: drjit
 
 Morton/Z-order indexing
 =======================
 
-Enoki provides efficient support for encoding and decoding of Morton/Z-order
+Dr.Jit provides efficient support for encoding and decoding of Morton/Z-order
 indices of arbitrary dimension. Both scalar indices and index vectors are
 supported. Z-order indexing can improve the locality accesses when two- or
 higher-dimensional data is arranged in memory.
@@ -18,7 +18,7 @@ To use this feature, include the following header:
 
 .. code-block:: cpp
 
-    #include <enoki/morton.h>
+    #include <drjit/morton.h>
 
 
 Usage
@@ -45,7 +45,7 @@ and decoding it again.
         Decoded  : [123, 456]
     */
 
-Depending on hardware support, Enoki implements these operations using BMI2
+Depending on hardware support, Dr.Jit implements these operations using BMI2
 instructions or bit shifts with precomputed magic constants.
 
 The same also works for nested vectors:

@@ -1,16 +1,16 @@
-.. cpp:namespace:: enoki
+.. cpp:namespace:: drjit
 
 Half-precision floats
 =====================
 
-Enoki provides a compact implementation of a 16 bit *half-precision* floating
+Dr.Jit provides a compact implementation of a 16 bit *half-precision* floating
 point type that is compatible with the FP16 format on GPUs and high dynamic
 range image libraries such as OpenEXR. To use this feature, include the
 following header:
 
 .. code-block:: cpp
 
-    #include <enoki/half.h>
+    #include <drjit/half.h>
 
 
 Current processors don't natively implement half precision arithmetic, hence
@@ -18,14 +18,14 @@ mathematical operations involving this type always involve a
 ``half``:math:`\to` ``float``:math:`\to` ``half`` roundtrip. For this reason,
 it is unwise to rely on it for expensive parts of a computation.
 
-The main reason for including a dedicated half precision type in Enoki is that
+The main reason for including a dedicated half precision type in Dr.Jit is that
 it provides an ideal storage format for floating point data that does not
 require the full accuracy of the single precision representation, which leads
 to an immediate storage savings of :math:`2\times`.
 
 .. note::
 
-    If supported by the target architecture, Enoki uses the *F16C* instruction
+    If supported by the target architecture, Dr.Jit uses the *F16C* instruction
     set to perform efficient vectorized conversion between half and single
     precision variables (however, this only affects conversion and no other
     arithmetic operations). ARM NEON also provides native conversion
@@ -34,7 +34,7 @@ to an immediate storage savings of :math:`2\times`.
 Usage
 -----
 
-The following example shows how to use the :cpp:class:`enoki::half` type in a
+The following example shows how to use the :cpp:class:`drjit::half` type in a
 typical use case.
 
 .. code-block:: cpp

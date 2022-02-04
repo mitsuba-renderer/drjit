@@ -1,30 +1,30 @@
 #pragma once
 
 #include "common.h"
-#include <enoki/math.h>
-#include <enoki/complex.h>
-#include <enoki/matrix.h>
-#include <enoki/quaternion.h>
-#include <enoki/autodiff.h>
+#include <drjit/math.h>
+#include <drjit/complex.h>
+#include <drjit/matrix.h>
+#include <drjit/quaternion.h>
+#include <drjit/autodiff.h>
 #include <pybind11/functional.h>
 
 extern py::handle array_base, array_name, array_init, tensor_init, array_configure;
 
 template <typename Array>
 auto bind_type(py::module_ &m, bool scalar_mode = false) {
-    using Scalar = std::conditional_t<Array::IsMask, bool, ek::scalar_t<Array>>;
-    using Value = std::conditional_t<Array::IsMask, ek::mask_t<ek::value_t<Array>>,
-                                     ek::value_t<Array>>;
-    constexpr VarType Type = ek::var_type_v<Scalar>;
+    using Scalar = std::conditional_t<Array::IsMask, bool, dr::scalar_t<Array>>;
+    using Value = std::conditional_t<Array::IsMask, dr::mask_t<dr::value_t<Array>>,
+                                     dr::value_t<Array>>;
+    constexpr VarType Type = dr::var_type_v<Scalar>;
 
     const char *prefix = "Array";
-    if constexpr (ek::is_complex_v<Array>)
+    if constexpr (dr::is_complex_v<Array>)
         prefix = "Complex";
-    else if constexpr (ek::is_quaternion_v<Array>)
+    else if constexpr (dr::is_quaternion_v<Array>)
         prefix = "Quaternion";
-    else if constexpr (ek::is_matrix_v<Array>)
+    else if constexpr (dr::is_matrix_v<Array>)
         prefix = "Matrix";
-    else if constexpr (ek::is_tensor_v<Array>)
+    else if constexpr (dr::is_tensor_v<Array>)
         prefix = "Tensor";
 
     py::tuple shape;
@@ -50,7 +50,7 @@ auto bind_type(py::module_ &m, bool scalar_mode = false) {
         auto &reg_types = py::detail::get_internals().registered_types_cpp;
         auto it = reg_types.find(std::type_index(typeid(Value)));
         if (it == reg_types.end())
-            ek::enoki_raise("bind_type(): value type was not bound!");
+            dr::drjit_raise("bind_type(): value type was not bound!");
         value_obj = it->second->type;
     }
 
@@ -68,33 +68,33 @@ auto bind_type(py::module_ &m, bool scalar_mode = false) {
 
 template <typename Array>
 void bind_basic_methods(py::class_<Array> &cls) {
-    using Value = std::conditional_t<Array::IsMask, ek::mask_t<ek::value_t<Array>>,
-                                     ek::value_t<Array>>;
+    using Value = std::conditional_t<Array::IsMask, dr::mask_t<dr::value_t<Array>>,
+                                     dr::value_t<Array>>;
     cls.def("entry_", [](const Array &a, size_t i) -> Value { return a.entry(i); })
        .def("set_entry_", [](Array &a, size_t i, const Value &value) {
            a.set_entry(i, value);
        });
 
-    if constexpr (!Array::IsMask && ek::is_dynamic_array_v<Array> &&
-                  ek::array_depth_v<Array> == 1 && ek::is_unsigned_v<Array>) {
+    if constexpr (!Array::IsMask && dr::is_dynamic_array_v<Array> &&
+                  dr::array_depth_v<Array> == 1 && dr::is_unsigned_v<Array>) {
         cls.def("set_entry_", [](Array &a, size_t i, const
-        std::make_signed_t<ek::scalar_t<Value>> &value) {
+        std::make_signed_t<dr::scalar_t<Value>> &value) {
             a.set_entry(i, value);
         });
     }
 
-    if constexpr (ek::is_dynamic_array_v<Array> ||
-                  (!ek::is_jit_array_v<Array> && !ek::is_mask_v<Array>))
+    if constexpr (dr::is_dynamic_array_v<Array> ||
+                  (!dr::is_jit_array_v<Array> && !dr::is_mask_v<Array>))
         cls.def("data_", [](const Array &a) {
             return (uintptr_t) a.data();
         });
 
-    if constexpr (ek::is_dynamic_array_v<Array>) {
+    if constexpr (dr::is_dynamic_array_v<Array>) {
         cls.def("__len__", &Array::size);
         cls.def("init_", [](Array &a, size_t size) { a.init_(size); });
     }
 
-    if constexpr (ek::array_depth_v<Array> > 1)
+    if constexpr (dr::array_depth_v<Array> > 1)
         cls.def(
             "entry_ref_",
             [](Array &a, size_t i) -> Value & { return a.entry(i); },
@@ -120,11 +120,11 @@ template <typename Array> auto bind(py::module_ &m, bool scalar_mode = false) {
 
 template <typename Array>
 auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
-    static_assert(ek::array_depth_v<Array> == 1);
+    static_assert(dr::array_depth_v<Array> == 1);
     bind_basic_methods(cls);
 
-    using Scalar = std::conditional_t<Array::IsMask, bool, ek::scalar_t<Array>>;
-    using Mask = ek::mask_t<ek::float32_array_t<Array>>;
+    using Scalar = std::conditional_t<Array::IsMask, bool, dr::scalar_t<Array>>;
+    using Mask = dr::mask_t<dr::float32_array_t<Array>>;
 
     cls.def(py::init<Scalar>())
        .def("assign", [](Array &a, const Array &b) {
@@ -133,7 +133,7 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
        });
 
     if constexpr (Array::IsFloat) {
-        cls.def(py::init([](ek::ssize_t value) { return new Array((Scalar) value); }));
+        cls.def(py::init([](dr::ssize_t value) { return new Array((Scalar) value); }));
     } else if constexpr (Array::IsIntegral) {
         if constexpr (std::is_unsigned_v<Scalar>)
             cls.def(py::init<std::make_signed_t<Scalar>>());
@@ -142,20 +142,20 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
     }
 
     if constexpr (!Array::IsMask) {
-        cls.def(py::init<const ek::  int32_array_t<Array> &>(), py::arg().noconvert());
-        cls.def(py::init<const ek:: uint32_array_t<Array> &>(), py::arg().noconvert());
-        cls.def(py::init<const ek::  int64_array_t<Array> &>(), py::arg().noconvert());
-        cls.def(py::init<const ek:: uint64_array_t<Array> &>(), py::arg().noconvert());
-        cls.def(py::init<const ek::float32_array_t<Array> &>(), py::arg().noconvert());
-        cls.def(py::init<const ek::float64_array_t<Array> &>(), py::arg().noconvert());
+        cls.def(py::init<const dr::  int32_array_t<Array> &>(), py::arg().noconvert());
+        cls.def(py::init<const dr:: uint32_array_t<Array> &>(), py::arg().noconvert());
+        cls.def(py::init<const dr::  int64_array_t<Array> &>(), py::arg().noconvert());
+        cls.def(py::init<const dr:: uint64_array_t<Array> &>(), py::arg().noconvert());
+        cls.def(py::init<const dr::float32_array_t<Array> &>(), py::arg().noconvert());
+        cls.def(py::init<const dr::float64_array_t<Array> &>(), py::arg().noconvert());
     } else {
-        cls.def(py::init<const ek::bool_array_t<Array> &>(), py::arg().noconvert());
+        cls.def(py::init<const dr::bool_array_t<Array> &>(), py::arg().noconvert());
     }
 
-#if defined(ENOKI_ENABLE_AUTODIFF)
+#if defined(DRJIT_ENABLE_AUTODIFF)
     if constexpr (Array::IsJIT && !Array::IsFloat && !Array::IsDiff) {
-        cls.def(py::init([](const ek::DiffArray<Array> &value) {
-            return new Array(ek::detach(value)); }));
+        cls.def(py::init([](const dr::DiffArray<Array> &value) {
+            return new Array(dr::detach(value)); }));
     }
 #endif
 
@@ -169,7 +169,7 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
     cls.def("iand_",   [](Array *a, const Array &b) { *a = a->and_(b); return a;});
     cls.def("ixor_",   [](Array *a, const Array &b) { *a = a->xor_(b); return a;});
 
-    if constexpr (std::is_same_v<Mask, ek::mask_t<Array>>) {
+    if constexpr (std::is_same_v<Mask, dr::mask_t<Array>>) {
         cls.def("eq_", &Array::eq_);
         cls.def("neq_", &Array::neq_);
     } else {
@@ -179,9 +179,9 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
 
     cls.attr("zero_") = py::cpp_function(&Array::zero_);
     cls.attr("full_") = py::cpp_function(
-        [](Scalar v, size_t size) { return ek::full<Array>(v, size); });
+        [](Scalar v, size_t size) { return dr::full<Array>(v, size); });
     cls.attr("opaque_") = py::cpp_function(
-        [](Scalar v, size_t size) { return ek::opaque<Array>(v, size); });
+        [](Scalar v, size_t size) { return dr::opaque<Array>(v, size); });
 
     if constexpr (!Array::IsMask) {
         cls.attr("arange_") = py::cpp_function(&Array::arange_);
@@ -190,7 +190,7 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
 
     cls.attr("select_") = py::cpp_function([](const Mask &m, const Array &t,
                                               const Array &f) {
-        return Array::select_(static_cast<const ek::mask_t<Array>>(m), t, f);
+        return Array::select_(static_cast<const dr::mask_t<Array>>(m), t, f);
     });
 
     if constexpr (Array::IsMask) {
@@ -200,29 +200,29 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
     } else {
         if constexpr (sizeof(Scalar) == 4) {
             cls.def_static("reinterpret_array_",
-                           [](const ek::int32_array_t<Array> &a) {
-                               return ek::reinterpret_array<Array>(a);
+                           [](const dr::int32_array_t<Array> &a) {
+                               return dr::reinterpret_array<Array>(a);
                            });
             cls.def_static("reinterpret_array_",
-                           [](const ek::uint32_array_t<Array> &a) {
-                               return ek::reinterpret_array<Array>(a);
+                           [](const dr::uint32_array_t<Array> &a) {
+                               return dr::reinterpret_array<Array>(a);
                            });
             cls.def_static("reinterpret_array_",
-                           [](const ek::float32_array_t<Array> &a) {
-                               return ek::reinterpret_array<Array>(a);
+                           [](const dr::float32_array_t<Array> &a) {
+                               return dr::reinterpret_array<Array>(a);
                            });
         } else {
             cls.def_static("reinterpret_array_",
-                           [](const ek::int64_array_t<Array> &a) {
-                               return ek::reinterpret_array<Array>(a);
+                           [](const dr::int64_array_t<Array> &a) {
+                               return dr::reinterpret_array<Array>(a);
                            });
             cls.def_static("reinterpret_array_",
-                           [](const ek::uint64_array_t<Array> &a) {
-                               return ek::reinterpret_array<Array>(a);
+                           [](const dr::uint64_array_t<Array> &a) {
+                               return dr::reinterpret_array<Array>(a);
                            });
             cls.def_static("reinterpret_array_",
-                           [](const ek::float64_array_t<Array> &a) {
-                               return ek::reinterpret_array<Array>(a);
+                           [](const dr::float64_array_t<Array> &a) {
+                               return dr::reinterpret_array<Array>(a);
                            });
         }
 
@@ -246,9 +246,9 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
         cls.def("hmin_", &Array::hmin_);
         cls.def("hmax_", &Array::hmax_);
 
-        if constexpr (ek::is_dynamic_v<Array> &&
-                      ek::array_depth_v<Array> == 1) {
-            if constexpr (ek::is_jit_array_v<Array>) {
+        if constexpr (dr::is_dynamic_v<Array> &&
+                      dr::array_depth_v<Array> == 1) {
+            if constexpr (dr::is_jit_array_v<Array>) {
                 cls.def("dot_async_", &Array::dot_async_);
                 cls.def("hsum_async_", &Array::hsum_async_);
                 cls.def("hprod_async_", &Array::hprod_async_);
@@ -258,41 +258,41 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
         }
 
         cls.def("and_", [](const Array &a, const Mask &b) {
-            return a.and_(static_cast<const ek::mask_t<Array> &>(b));
+            return a.and_(static_cast<const dr::mask_t<Array> &>(b));
         });
 
         cls.def("iand_", [](Array *a, const Mask &b) {
-            *a = a->and_(static_cast<const ek::mask_t<Array> &>(b));
+            *a = a->and_(static_cast<const dr::mask_t<Array> &>(b));
             return a;
         });
 
         cls.def("or_", [](const Array &a, const Mask &b) {
-            return a.or_(static_cast<const ek::mask_t<Array> &>(b));
+            return a.or_(static_cast<const dr::mask_t<Array> &>(b));
         });
 
         cls.def("ior_", [](Array *a, const Mask &b) {
-            *a = a->or_(static_cast<const ek::mask_t<Array> &>(b));
+            *a = a->or_(static_cast<const dr::mask_t<Array> &>(b));
             return a;
         });
 
         cls.def("xor_", [](const Array &a, const Mask &b) {
-            return a.xor_(static_cast<const ek::mask_t<Array> &>(b));
+            return a.xor_(static_cast<const dr::mask_t<Array> &>(b));
         });
 
         cls.def("ixor_", [](Array *a, const Mask &b) {
-            *a = a->xor_(static_cast<const ek::mask_t<Array> &>(b));
+            *a = a->xor_(static_cast<const dr::mask_t<Array> &>(b));
             return a;
         });
 
         cls.def("andnot_", [](const Array &a, const Mask &b) {
-            return a.andnot_(static_cast<const ek::mask_t<Array> &>(b));
+            return a.andnot_(static_cast<const dr::mask_t<Array> &>(b));
         });
 
         cls.def("abs_", &Array::abs_);
         cls.def("min_", &Array::min_);
         cls.def("max_", &Array::max_);
 
-        if constexpr (std::is_same_v<Mask, ek::mask_t<Array>>) {
+        if constexpr (std::is_same_v<Mask, dr::mask_t<Array>>) {
             cls.def("lt_", &Array::lt_);
             cls.def("le_", &Array::le_);
             cls.def("gt_", &Array::gt_);
@@ -313,36 +313,36 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
         cls.def("hmin_", &Array::hmin_);
     }
 
-    if constexpr (ek::is_dynamic_v<Array>) {
-        using UInt32 = ek::uint32_array_t<Array>;
+    if constexpr (dr::is_dynamic_v<Array>) {
+        using UInt32 = dr::uint32_array_t<Array>;
         cls.def_static("gather_",
                 [](const Array &source, const UInt32 &index, const Mask &mask, bool permute) {
                     if (permute)
-                        return ek::gather<Array, true>(source, index, mask);
+                        return dr::gather<Array, true>(source, index, mask);
                     else
-                        return ek::gather<Array, false>(source, index, mask);
+                        return dr::gather<Array, false>(source, index, mask);
                 });
         cls.def("scatter_",
                 [](const Array &value, Array &target, const UInt32 &index, const Mask &mask, bool permute) {
                     if (permute)
-                        ek::scatter<true>(target, value, index, mask);
+                        dr::scatter<true>(target, value, index, mask);
                     else
-                        ek::scatter<false>(target, value, index, mask);
+                        dr::scatter<false>(target, value, index, mask);
                 }, "target"_a.noconvert(), "index"_a, "mask"_a, "permute"_a);
 
         if constexpr (Array::IsMask) {
             cls.def("compress_", [](const Array &source) {
-                return ek::compress(source);
+                return dr::compress(source);
             });
         } else {
             cls.def("scatter_reduce_",
                     [](const Array& value, ReduceOp op, Array& target, const UInt32& index, const Mask& mask) {
-                        ek::scatter_reduce(op, target, value, index, mask);
+                        dr::scatter_reduce(op, target, value, index, mask);
                     }, "op"_a, "target"_a.noconvert(), "index"_a, "mask"_a);
         }
     }
 
-    if constexpr (ek::is_jit_array_v<Array>) {
+    if constexpr (dr::is_jit_array_v<Array>) {
         cls.def("resize_", [](Array &value, size_t size) { value.resize(size); });
         cls.def("is_literal_", [](Array &value) { return value.is_literal(); });
         cls.def("is_evaluated_", [](Array &value) { return value.is_evaluated(); });
@@ -351,7 +351,7 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
             cls.def("block_sum_", &Array::block_sum_);
     }
 
-    if constexpr (ek::is_dynamic_array_v<Array>)
+    if constexpr (dr::is_dynamic_array_v<Array>)
         cls.def("copy_", [](Array &value) { return value.copy(); });
 
     if constexpr (Array::IsFloat) {
@@ -364,9 +364,9 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
         cls.def("rsqrt_", &Array::rsqrt_);
     } else if constexpr(Array::IsIntegral) {
         cls.def("mulhi_", &Array::mulhi_);
-        cls.def("tzcnt_", [](const Array &a) { return ek::tzcnt(a); });
-        cls.def("lzcnt_", [](const Array &a) { return ek::lzcnt(a); });
-        cls.def("popcnt_", [](const Array &a) { return ek::popcnt(a); });
+        cls.def("tzcnt_", [](const Array &a) { return dr::tzcnt(a); });
+        cls.def("lzcnt_", [](const Array &a) { return dr::lzcnt(a); });
+        cls.def("popcnt_", [](const Array &a) { return dr::popcnt(a); });
         cls.def("sl_", [](const Array &a, const Array &b) { return a.sl_(b); });
         cls.def("sr_", [](const Array &a, const Array &b) { return a.sr_(b); });
         cls.def("isl_", [](Array *a, const Array &b) { *a = a->sl_(b); return a; });
@@ -374,35 +374,35 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
     }
 
     if constexpr (Array::IsFloat) {
-        cls.def("sin_", [](const Array &a) { return ek::sin(a); });
-        cls.def("cos_", [](const Array &a) { return ek::cos(a); });
-        cls.def("sincos_", [](const Array &a) { return ek::sincos(a); });
-        cls.def("tan_", [](const Array &a) { return ek::tan(a); });
-        cls.def("csc_", [](const Array &a) { return ek::csc(a); });
-        cls.def("sec_", [](const Array &a) { return ek::sec(a); });
-        cls.def("cot_", [](const Array &a) { return ek::cot(a); });
-        cls.def("asin_", [](const Array &a) { return ek::asin(a); });
-        cls.def("acos_", [](const Array &a) { return ek::acos(a); });
-        cls.def("atan_", [](const Array &a) { return ek::atan(a); });
-        cls.def("atan2_", [](const Array &y, const Array &x) { return ek::atan2(y, x); });
-        cls.def("exp_", [](const Array &a) { return ek::exp(a); });
-        cls.def("exp2_", [](const Array &a) { return ek::exp2(a); });
-        cls.def("log_", [](const Array &a) { return ek::log(a); });
-        cls.def("log2_", [](const Array &a) { return ek::log2(a); });
-        cls.def("pow_", [](const Array &x, Scalar y) { return ek::pow(x, y); });
-        cls.def("pow_", [](const Array &x, const Array &y) { return ek::pow(x, y); });
-        cls.def("sinh_", [](const Array &a) { return ek::sinh(a); });
-        cls.def("cosh_", [](const Array &a) { return ek::cosh(a); });
-        cls.def("sincosh_", [](const Array &a) { return ek::sincosh(a); });
-        cls.def("tanh_", [](const Array &a) { return ek::tanh(a); });
-        cls.def("asinh_", [](const Array &a) { return ek::asinh(a); });
-        cls.def("acosh_", [](const Array &a) { return ek::acosh(a); });
-        cls.def("atanh_", [](const Array &a) { return ek::atanh(a); });
-        cls.def("cbrt_", [](const Array &a) { return ek::cbrt(a); });
-        cls.def("erf_", [](const Array &a) { return ek::erf(a); });
-        cls.def("erfinv_", [](const Array &a) { return ek::erfinv(a); });
-        cls.def("lgamma_", [](const Array &a) { return ek::lgamma(a); });
-        cls.def("tgamma_", [](const Array &a) { return ek::tgamma(a); });
+        cls.def("sin_", [](const Array &a) { return dr::sin(a); });
+        cls.def("cos_", [](const Array &a) { return dr::cos(a); });
+        cls.def("sincos_", [](const Array &a) { return dr::sincos(a); });
+        cls.def("tan_", [](const Array &a) { return dr::tan(a); });
+        cls.def("csc_", [](const Array &a) { return dr::csc(a); });
+        cls.def("sec_", [](const Array &a) { return dr::sec(a); });
+        cls.def("cot_", [](const Array &a) { return dr::cot(a); });
+        cls.def("asin_", [](const Array &a) { return dr::asin(a); });
+        cls.def("acos_", [](const Array &a) { return dr::acos(a); });
+        cls.def("atan_", [](const Array &a) { return dr::atan(a); });
+        cls.def("atan2_", [](const Array &y, const Array &x) { return dr::atan2(y, x); });
+        cls.def("exp_", [](const Array &a) { return dr::exp(a); });
+        cls.def("exp2_", [](const Array &a) { return dr::exp2(a); });
+        cls.def("log_", [](const Array &a) { return dr::log(a); });
+        cls.def("log2_", [](const Array &a) { return dr::log2(a); });
+        cls.def("pow_", [](const Array &x, Scalar y) { return dr::pow(x, y); });
+        cls.def("pow_", [](const Array &x, const Array &y) { return dr::pow(x, y); });
+        cls.def("sinh_", [](const Array &a) { return dr::sinh(a); });
+        cls.def("cosh_", [](const Array &a) { return dr::cosh(a); });
+        cls.def("sincosh_", [](const Array &a) { return dr::sincosh(a); });
+        cls.def("tanh_", [](const Array &a) { return dr::tanh(a); });
+        cls.def("asinh_", [](const Array &a) { return dr::asinh(a); });
+        cls.def("acosh_", [](const Array &a) { return dr::acosh(a); });
+        cls.def("atanh_", [](const Array &a) { return dr::atanh(a); });
+        cls.def("cbrt_", [](const Array &a) { return dr::cbrt(a); });
+        cls.def("erf_", [](const Array &a) { return dr::erf(a); });
+        cls.def("erfinv_", [](const Array &a) { return dr::erfinv(a); });
+        cls.def("lgamma_", [](const Array &a) { return dr::lgamma(a); });
+        cls.def("tgamma_", [](const Array &a) { return dr::tgamma(a); });
     }
 
     if constexpr (Array::IsJIT || Array::IsDiff) {
@@ -410,13 +410,13 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
         cls.def("label_", [](const Array &a) { return a.label_(); });
     }
 
-    if constexpr (!ek::is_mask_v<Array> || ek::is_dynamic_v<Array>) {
+    if constexpr (!dr::is_mask_v<Array> || dr::is_dynamic_v<Array>) {
         cls.def_static("load_", [](uintptr_t ptr, size_t size) {
-            return enoki::load<Array>((const void *) ptr, size);
+            return drjit::load<Array>((const void *) ptr, size);
         });
     }
 
-    if constexpr (ek::is_jit_array_v<Array>) {
+    if constexpr (dr::is_jit_array_v<Array>) {
         cls.def_static("map_", [](uintptr_t ptr, size_t size, std::function<void (void)> callback) {
             Array result = Array::map_((void *) ptr, size, false);
             if (callback) {
@@ -449,15 +449,15 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
     }
 
     if constexpr (Array::IsDiff) {
-        cls.def(py::init<ek::detached_t<Array>>(), py::arg().noconvert());
-        cls.def("detach_", [](const Array &a) { return ek::detach(a); });
+        cls.def(py::init<dr::detached_t<Array>>(), py::arg().noconvert());
+        cls.def("detach_", [](const Array &a) { return dr::detach(a); });
         cls.def("detach_ref_", py::overload_cast<>(&Array::detach_),
                 py::return_value_policy::reference_internal);
 
         if constexpr (Array::IsFloat) {
             cls.def("grad_", [](const Array &a) { return a.grad_(); });
-            cls.def("set_grad_", [](Array &a, ek::detached_t<Array> &value) { a.set_grad_(value); });
-            cls.def("accum_grad_", [](Array &a, ek::detached_t<Array> &value) { a.accum_grad_(value); });
+            cls.def("set_grad_", [](Array &a, dr::detached_t<Array> &value) { a.set_grad_(value); });
+            cls.def("accum_grad_", [](Array &a, dr::detached_t<Array> &value) { a.accum_grad_(value); });
             cls.def("set_grad_enabled_", &Array::set_grad_enabled_);
             cls.def("grad_enabled_", &Array::grad_enabled_);
             cls.def("enqueue_", &Array::enqueue_);
@@ -467,20 +467,20 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
                            py::call_guard<py::gil_scoped_release>());
 
             cls.def_static("create_", [](uint32_t index,
-                                         const ek::detached_t<Array> &value) {
-                ek::detail::ad_inc_ref_impl<ek::detached_t<Array>>(index);
-                return Array::create(index, ek::detached_t<Array>(value));
+                                         const dr::detached_t<Array> &value) {
+                dr::detail::ad_inc_ref_impl<dr::detached_t<Array>>(index);
+                return Array::create(index, dr::detached_t<Array>(value));
             });
 
             cls.def_static(
                 "scope_enter_",
-                [](ek::detail::ADScope type, const std::vector<uint32_t> &indices) {
-                    ek::detail::ad_scope_enter<ek::detached_t<Array>>(
+                [](dr::detail::ADScope type, const std::vector<uint32_t> &indices) {
+                    dr::detail::ad_scope_enter<dr::detached_t<Array>>(
                         type, indices.size(), indices.data());
                 });
 
             cls.def_static("scope_leave_", [](bool process_postoned) {
-                ek::detail::ad_scope_leave<ek::detached_t<Array>>(process_postoned);
+                dr::detail::ad_scope_leave<dr::detached_t<Array>>(process_postoned);
             });
         }
     }
@@ -490,7 +490,7 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
     return cls;
 }
 
-struct CustomOp : ek::detail::DiffCallback {
+struct CustomOp : dr::detail::DiffCallback {
     CustomOp(py::handle handle) : m_handle(handle) {
         m_handle.inc_ref();
     }
@@ -514,121 +514,121 @@ struct CustomOp : ek::detail::DiffCallback {
 };
 
 template <typename T>
-void bind_ad_details(py::class_<ek::DiffArray<T>> &cls) {
+void bind_ad_details(py::class_<dr::DiffArray<T>> &cls) {
     cls.def_static(
         "add_edge_",
         [](int32_t src_index, int32_t dst_index, py::handle cb) {
-            ek::detail::ad_add_edge<T>(
+            dr::detail::ad_add_edge<T>(
                 src_index, dst_index,
                 cb.is_none() ? nullptr : new CustomOp(cb));
         },
         "src_index"_a, "dst_index"_a, "cb"_a = py::none());
 
-    cls.def("dec_ref_", [](ek::DiffArray<T> &v) {
-        ek::detail::ad_dec_ref<T>(v.index_ad());
+    cls.def("dec_ref_", [](dr::DiffArray<T> &v) {
+        dr::detail::ad_dec_ref<T>(v.index_ad());
     });
 }
 
-#define ENOKI_BIND_ARRAY_TYPES_DYN(Module, Guide, Scalar)                      \
-    auto d_b = bind<ek::mask_t<ek::DynamicArray<ek::float32_array_t<Guide>>>>( \
+#define DRJIT_BIND_ARRAY_TYPES_DYN(Module, Guide, Scalar)                      \
+    auto d_b = bind<dr::mask_t<dr::DynamicArray<dr::float32_array_t<Guide>>>>( \
         Module, Scalar);                                                       \
     auto d_i32 =                                                               \
-        bind<ek::DynamicArray<ek::int32_array_t<Guide>>>(Module, Scalar);      \
+        bind<dr::DynamicArray<dr::int32_array_t<Guide>>>(Module, Scalar);      \
     auto d_u32 =                                                               \
-        bind<ek::DynamicArray<ek::uint32_array_t<Guide>>>(Module, Scalar);     \
+        bind<dr::DynamicArray<dr::uint32_array_t<Guide>>>(Module, Scalar);     \
     auto d_i64 =                                                               \
-        bind<ek::DynamicArray<ek::int64_array_t<Guide>>>(Module, Scalar);      \
+        bind<dr::DynamicArray<dr::int64_array_t<Guide>>>(Module, Scalar);      \
     auto d_u64 =                                                               \
-        bind<ek::DynamicArray<ek::uint64_array_t<Guide>>>(Module, Scalar);     \
+        bind<dr::DynamicArray<dr::uint64_array_t<Guide>>>(Module, Scalar);     \
     auto d_f32 =                                                               \
-        bind<ek::DynamicArray<ek::float32_array_t<Guide>>>(Module, Scalar);    \
+        bind<dr::DynamicArray<dr::float32_array_t<Guide>>>(Module, Scalar);    \
     auto d_f64 =                                                               \
-        bind<ek::DynamicArray<ek::float64_array_t<Guide>>>(Module, Scalar);    \
+        bind<dr::DynamicArray<dr::float64_array_t<Guide>>>(Module, Scalar);    \
     (void) d_i32; (void) d_u32; (void) d_i64; (void) d_u64; (void) d_f32;      \
     (void) d_f64; (void) d_b;
 
-#define ENOKI_BIND_ARRAY_TYPES_DIM(Module, Guide, Scalar, Dim)                 \
-    bind<ek::mask_t<ek::Array<ek::float32_array_t<Guide>, Dim>>>(Module,       \
+#define DRJIT_BIND_ARRAY_TYPES_DIM(Module, Guide, Scalar, Dim)                 \
+    bind<dr::mask_t<dr::Array<dr::float32_array_t<Guide>, Dim>>>(Module,       \
                                                                  Scalar);      \
-    bind<ek::Array<ek::int32_array_t<Guide>, Dim>>(Module, Scalar);            \
-    bind<ek::Array<ek::uint32_array_t<Guide>, Dim>>(Module, Scalar);           \
-    bind<ek::Array<ek::int64_array_t<Guide>, Dim>>(Module, Scalar);            \
-    bind<ek::Array<ek::uint64_array_t<Guide>, Dim>>(Module, Scalar);           \
-    bind<ek::Array<ek::float32_array_t<Guide>, Dim>>(Module, Scalar);          \
-    bind<ek::Array<ek::float64_array_t<Guide>, Dim>>(Module, Scalar);
+    bind<dr::Array<dr::int32_array_t<Guide>, Dim>>(Module, Scalar);            \
+    bind<dr::Array<dr::uint32_array_t<Guide>, Dim>>(Module, Scalar);           \
+    bind<dr::Array<dr::int64_array_t<Guide>, Dim>>(Module, Scalar);            \
+    bind<dr::Array<dr::uint64_array_t<Guide>, Dim>>(Module, Scalar);           \
+    bind<dr::Array<dr::float32_array_t<Guide>, Dim>>(Module, Scalar);          \
+    bind<dr::Array<dr::float64_array_t<Guide>, Dim>>(Module, Scalar);
 
-#define ENOKI_BIND_COMPLEX_TYPES(Module, Guide, Scalar)                        \
-    bind<ek::Complex<ek::float32_array_t<Guide>>>(Module, Scalar);             \
-    bind<ek::Complex<ek::float64_array_t<Guide>>>(Module, Scalar);             \
+#define DRJIT_BIND_COMPLEX_TYPES(Module, Guide, Scalar)                        \
+    bind<dr::Complex<dr::float32_array_t<Guide>>>(Module, Scalar);             \
+    bind<dr::Complex<dr::float64_array_t<Guide>>>(Module, Scalar);             \
 
-#define ENOKI_BIND_QUATERNION_TYPES(Module, Guide, Scalar)                     \
-    bind<ek::Quaternion<ek::float32_array_t<Guide>>>(Module, Scalar);          \
-    bind<ek::Quaternion<ek::float64_array_t<Guide>>>(Module, Scalar);
+#define DRJIT_BIND_QUATERNION_TYPES(Module, Guide, Scalar)                     \
+    bind<dr::Quaternion<dr::float32_array_t<Guide>>>(Module, Scalar);          \
+    bind<dr::Quaternion<dr::float64_array_t<Guide>>>(Module, Scalar);
 
-#define ENOKI_BIND_MATRIX_TYPES_DIM(Module, Guide, Scalar, Dim)                \
-    bind<ek::Matrix<ek::int32_array_t<Guide>, Dim>>(Module, Scalar);           \
-    bind<ek::Matrix<ek::uint32_array_t<Guide>, Dim>>(Module, Scalar);          \
-    bind<ek::Matrix<ek::float32_array_t<Guide>, Dim>>(Module, Scalar);         \
-    bind<ek::Matrix<ek::float64_array_t<Guide>, Dim>>(Module, Scalar);
+#define DRJIT_BIND_MATRIX_TYPES_DIM(Module, Guide, Scalar, Dim)                \
+    bind<dr::Matrix<dr::int32_array_t<Guide>, Dim>>(Module, Scalar);           \
+    bind<dr::Matrix<dr::uint32_array_t<Guide>, Dim>>(Module, Scalar);          \
+    bind<dr::Matrix<dr::float32_array_t<Guide>, Dim>>(Module, Scalar);         \
+    bind<dr::Matrix<dr::float64_array_t<Guide>, Dim>>(Module, Scalar);
 
-#define ENOKI_BIND_ARRAY_TYPES(Module, Guide, Scalar)                          \
-    ENOKI_BIND_ARRAY_TYPES_DIM(Module, Guide, Scalar, 0)                       \
-    ENOKI_BIND_ARRAY_TYPES_DIM(Module, Guide, Scalar, 1)                       \
-    ENOKI_BIND_ARRAY_TYPES_DIM(Module, Guide, Scalar, 2)                       \
-    ENOKI_BIND_ARRAY_TYPES_DIM(Module, Guide, Scalar, 3)                       \
-    ENOKI_BIND_ARRAY_TYPES_DIM(Module, Guide, Scalar, 4)                       \
-    ENOKI_BIND_ARRAY_TYPES_DYN(Module, Guide, Scalar)                          \
-    bind<ek::mask_t<ek::Array<ek::Array<Guide, 2>, 2>>>(Module, Scalar);       \
-    bind<ek::mask_t<ek::Array<ek::Array<Guide, 3>, 3>>>(Module, Scalar);       \
-    bind<ek::mask_t<ek::Array<ek::Array<Guide, 4>, 4>>>(Module, Scalar);       \
-    ENOKI_BIND_COMPLEX_TYPES(Module, Guide, Scalar)                            \
-    ENOKI_BIND_QUATERNION_TYPES(Module, Guide, Scalar)                         \
-    ENOKI_BIND_MATRIX_TYPES_DIM(Module, Guide, Scalar, 2)                      \
-    ENOKI_BIND_MATRIX_TYPES_DIM(Module, Guide, Scalar, 3)                      \
-    ENOKI_BIND_MATRIX_TYPES_DIM(Module, Guide, Scalar, 4)                      \
+#define DRJIT_BIND_ARRAY_TYPES(Module, Guide, Scalar)                          \
+    DRJIT_BIND_ARRAY_TYPES_DIM(Module, Guide, Scalar, 0)                       \
+    DRJIT_BIND_ARRAY_TYPES_DIM(Module, Guide, Scalar, 1)                       \
+    DRJIT_BIND_ARRAY_TYPES_DIM(Module, Guide, Scalar, 2)                       \
+    DRJIT_BIND_ARRAY_TYPES_DIM(Module, Guide, Scalar, 3)                       \
+    DRJIT_BIND_ARRAY_TYPES_DIM(Module, Guide, Scalar, 4)                       \
+    DRJIT_BIND_ARRAY_TYPES_DYN(Module, Guide, Scalar)                          \
+    bind<dr::mask_t<dr::Array<dr::Array<Guide, 2>, 2>>>(Module, Scalar);       \
+    bind<dr::mask_t<dr::Array<dr::Array<Guide, 3>, 3>>>(Module, Scalar);       \
+    bind<dr::mask_t<dr::Array<dr::Array<Guide, 4>, 4>>>(Module, Scalar);       \
+    DRJIT_BIND_COMPLEX_TYPES(Module, Guide, Scalar)                            \
+    DRJIT_BIND_QUATERNION_TYPES(Module, Guide, Scalar)                         \
+    DRJIT_BIND_MATRIX_TYPES_DIM(Module, Guide, Scalar, 2)                      \
+    DRJIT_BIND_MATRIX_TYPES_DIM(Module, Guide, Scalar, 3)                      \
+    DRJIT_BIND_MATRIX_TYPES_DIM(Module, Guide, Scalar, 4)                      \
                                                                                \
-    using Guide1 = ek::Array<Guide, 1>;                                        \
-    using Guide3 = ek::Array<Guide, 3>;                                        \
-    using Guide4 = ek::Array<Guide, 4>;                                        \
-    bind<ek::mask_t<ek::Array<ek::float32_array_t<Guide1>, 2>>>(Module,        \
+    using Guide1 = dr::Array<Guide, 1>;                                        \
+    using Guide3 = dr::Array<Guide, 3>;                                        \
+    using Guide4 = dr::Array<Guide, 4>;                                        \
+    bind<dr::mask_t<dr::Array<dr::float32_array_t<Guide1>, 2>>>(Module,        \
                                                                 Scalar);       \
-    bind<ek::mask_t<ek::Array<ek::float32_array_t<Guide3>, 2>>>(Module,        \
+    bind<dr::mask_t<dr::Array<dr::float32_array_t<Guide3>, 2>>>(Module,        \
                                                                 Scalar);       \
-    bind<ek::mask_t<ek::Array<ek::float32_array_t<Guide4>, 2>>>(Module,        \
+    bind<dr::mask_t<dr::Array<dr::float32_array_t<Guide4>, 2>>>(Module,        \
                                                                 Scalar);       \
-    bind<ek::mask_t<ek::Array<Guide1, 4>>>(Module, Scalar);                    \
-    bind<ek::mask_t<ek::Array<Guide3, 4>>>(Module, Scalar);                    \
-    bind<ek::mask_t<ek::Array<ek::Array<Guide1, 4>, 4>>>(Module, Scalar);      \
-    bind<ek::mask_t<ek::Array<ek::Array<Guide3, 4>, 4>>>(Module, Scalar);      \
-    bind<ek::mask_t<ek::Array<ek::Array<Guide4, 4>, 4>>>(Module, Scalar);      \
-    bind<ek::Array<ek::int32_array_t<Guide1>,   4>>(Module, Scalar);           \
-    bind<ek::Array<ek::uint32_array_t<Guide1>,  4>>(Module, Scalar);           \
-    bind<ek::Array<ek::float32_array_t<Guide1>, 4>>(Module, Scalar);           \
-    bind<ek::Array<ek::float64_array_t<Guide1>, 4>>(Module, Scalar);           \
-    bind<ek::Array<ek::int32_array_t<Guide3>,   4>>(Module, Scalar);           \
-    bind<ek::Array<ek::uint32_array_t<Guide3>,  4>>(Module, Scalar);           \
-    bind<ek::Array<ek::float32_array_t<Guide3>, 4>>(Module, Scalar);           \
-    bind<ek::Array<ek::float64_array_t<Guide3>, 4>>(Module, Scalar);           \
-    bind<ek::Array<ek::int32_array_t<Guide4>,   4>>(Module, Scalar);           \
-    bind<ek::Array<ek::uint32_array_t<Guide4>,  4>>(Module, Scalar);           \
-    bind<ek::Array<ek::float32_array_t<Guide4>, 4>>(Module, Scalar);           \
-    bind<ek::Array<ek::float64_array_t<Guide4>, 4>>(Module, Scalar);           \
-    ENOKI_BIND_COMPLEX_TYPES(Module, Guide1, Scalar)                           \
-    ENOKI_BIND_COMPLEX_TYPES(Module, Guide3, Scalar)                           \
-    ENOKI_BIND_COMPLEX_TYPES(Module, Guide4, Scalar)                           \
-    ENOKI_BIND_MATRIX_TYPES_DIM(Module, Guide1, Scalar, 4)                     \
-    ENOKI_BIND_MATRIX_TYPES_DIM(Module, Guide3, Scalar, 4)                     \
-    ENOKI_BIND_MATRIX_TYPES_DIM(Module, Guide4, Scalar, 4)                     \
+    bind<dr::mask_t<dr::Array<Guide1, 4>>>(Module, Scalar);                    \
+    bind<dr::mask_t<dr::Array<Guide3, 4>>>(Module, Scalar);                    \
+    bind<dr::mask_t<dr::Array<dr::Array<Guide1, 4>, 4>>>(Module, Scalar);      \
+    bind<dr::mask_t<dr::Array<dr::Array<Guide3, 4>, 4>>>(Module, Scalar);      \
+    bind<dr::mask_t<dr::Array<dr::Array<Guide4, 4>, 4>>>(Module, Scalar);      \
+    bind<dr::Array<dr::int32_array_t<Guide1>,   4>>(Module, Scalar);           \
+    bind<dr::Array<dr::uint32_array_t<Guide1>,  4>>(Module, Scalar);           \
+    bind<dr::Array<dr::float32_array_t<Guide1>, 4>>(Module, Scalar);           \
+    bind<dr::Array<dr::float64_array_t<Guide1>, 4>>(Module, Scalar);           \
+    bind<dr::Array<dr::int32_array_t<Guide3>,   4>>(Module, Scalar);           \
+    bind<dr::Array<dr::uint32_array_t<Guide3>,  4>>(Module, Scalar);           \
+    bind<dr::Array<dr::float32_array_t<Guide3>, 4>>(Module, Scalar);           \
+    bind<dr::Array<dr::float64_array_t<Guide3>, 4>>(Module, Scalar);           \
+    bind<dr::Array<dr::int32_array_t<Guide4>,   4>>(Module, Scalar);           \
+    bind<dr::Array<dr::uint32_array_t<Guide4>,  4>>(Module, Scalar);           \
+    bind<dr::Array<dr::float32_array_t<Guide4>, 4>>(Module, Scalar);           \
+    bind<dr::Array<dr::float64_array_t<Guide4>, 4>>(Module, Scalar);           \
+    DRJIT_BIND_COMPLEX_TYPES(Module, Guide1, Scalar)                           \
+    DRJIT_BIND_COMPLEX_TYPES(Module, Guide3, Scalar)                           \
+    DRJIT_BIND_COMPLEX_TYPES(Module, Guide4, Scalar)                           \
+    DRJIT_BIND_MATRIX_TYPES_DIM(Module, Guide1, Scalar, 4)                     \
+    DRJIT_BIND_MATRIX_TYPES_DIM(Module, Guide3, Scalar, 4)                     \
+    DRJIT_BIND_MATRIX_TYPES_DIM(Module, Guide4, Scalar, 4)                     \
 
-#define ENOKI_BIND_ARRAY_BASE(Module, Guide, Scalar)                           \
+#define DRJIT_BIND_ARRAY_BASE(Module, Guide, Scalar)                           \
     auto a_msk =                                                               \
-        bind_type<ek::mask_t<ek::float32_array_t<Guide>>>(Module, Scalar);     \
-    auto a_i32 = bind_type<ek::int32_array_t<Guide>>(Module, Scalar);          \
-    auto a_u32 = bind_type<ek::uint32_array_t<Guide>>(Module, Scalar);         \
-    auto a_i64 = bind_type<ek::int64_array_t<Guide>>(Module, Scalar);          \
-    auto a_u64 = bind_type<ek::uint64_array_t<Guide>>(Module, Scalar);         \
-    auto a_f32 = bind_type<ek::float32_array_t<Guide>>(Module, Scalar);        \
-    auto a_f64 = bind_type<ek::float64_array_t<Guide>>(Module, Scalar);        \
+        bind_type<dr::mask_t<dr::float32_array_t<Guide>>>(Module, Scalar);     \
+    auto a_i32 = bind_type<dr::int32_array_t<Guide>>(Module, Scalar);          \
+    auto a_u32 = bind_type<dr::uint32_array_t<Guide>>(Module, Scalar);         \
+    auto a_i64 = bind_type<dr::int64_array_t<Guide>>(Module, Scalar);          \
+    auto a_u64 = bind_type<dr::uint64_array_t<Guide>>(Module, Scalar);         \
+    auto a_f32 = bind_type<dr::float32_array_t<Guide>>(Module, Scalar);        \
+    auto a_f64 = bind_type<dr::float64_array_t<Guide>>(Module, Scalar);        \
     Module.attr("Int32") = Module.attr("Int");                                 \
     Module.attr("UInt32") = Module.attr("UInt");                               \
     Module.attr("Float32") = Module.attr("Float");                             \

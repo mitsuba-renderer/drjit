@@ -1,7 +1,7 @@
 /*
     tests/basic.cpp -- tests dynamic heap-allocated arrays
 
-    Enoki is a C++ template library that enables transparent vectorization
+    Dr.Jit is a C++ template library that enables transparent vectorization
     of numerical kernels using SIMD instruction sets available on current
     processor architectures.
 
@@ -12,9 +12,9 @@
 */
 
 #include "test.h"
-#include <enoki/dynamic.h>
+#include <drjit/dynamic.h>
 
-ENOKI_TEST(test01_alloc)  {
+DRJIT_TEST(test01_alloc)  {
     using T = Array<float, 4>;
     using D = DynamicArray<T>;
 
@@ -38,11 +38,11 @@ ENOKI_TEST(test01_alloc)  {
     assert(packets(y) == 3);
     assert(!y.is_mapped());
 
-    assert(!all(enoki::isnan(packet(y, 0))));
-    assert( any(enoki::isnan(packet(y, 0))));
-    assert( all(enoki::isnan(packet(y, 1))));
-    assert( any(enoki::isnan(packet(y, 2))));
-    assert(!all(enoki::isnan(packet(y, 2))));
+    assert(!all(drjit::isnan(packet(y, 0))));
+    assert( any(drjit::isnan(packet(y, 0))));
+    assert( all(drjit::isnan(packet(y, 1))));
+    assert( any(drjit::isnan(packet(y, 2))));
+    assert(!all(drjit::isnan(packet(y, 2))));
 
     y.entry(2) = 2.f;
     assert(to_string(y) == "[-nan, 1, 2, -nan, -nan, -nan, -nan, -nan, -nan, -nan]" ||
@@ -51,7 +51,7 @@ ENOKI_TEST(test01_alloc)  {
     assert(to_string(y) == "[-nan, 1, 2]" || to_string(y) == "[nan, 1, 2]");
 }
 
-ENOKI_TEST(test02_map)  {
+DRJIT_TEST(test02_map)  {
     alignas(16) float f[8];
     for (int i = 0; i < 8; ++i)
         f[i] = float(i);
@@ -66,7 +66,7 @@ ENOKI_TEST(test02_map)  {
     assert(to_string(x) == "[0, 1, 2, 3, 4, 5]");
 }
 
-ENOKI_TEST(test03_alloc_nested)  {
+DRJIT_TEST(test03_alloc_nested)  {
     using Float     = float;
     using FloatP    = Array<Float, 4>;
     using FloatX    = DynamicArray<FloatP>;
@@ -107,7 +107,7 @@ ENOKI_TEST(test03_alloc_nested)  {
     assert(to_string(z) == "[[3, 9, 6],\n [4, 10, 17]]");
 }
 
-ENOKI_TEST(test04_init)  {
+DRJIT_TEST(test04_init)  {
     using FloatP = Array<float, 4>;
     using FloatX = DynamicArray<FloatP>;
 
@@ -128,7 +128,7 @@ ENOKI_TEST(test04_init)  {
     }
 }
 
-ENOKI_TEST(test05_meshgrid) {
+DRJIT_TEST(test05_meshgrid) {
     using FloatP = Array<float, 4>;
     using FloatX = DynamicArray<FloatP>;
 
@@ -161,19 +161,19 @@ template <typename Value> struct GPSCoord2 {
     Vector2 pos;
     Bool reliable;
 
-    ENOKI_STRUCT(GPSCoord2, time, pos, reliable)
+    DRJIT_STRUCT(GPSCoord2, time, pos, reliable)
 };
 
-ENOKI_STRUCT_SUPPORT(GPSCoord2, time, pos, reliable)
+DRJIT_STRUCT_SUPPORT(GPSCoord2, time, pos, reliable)
 
 
 /// Calculate the distance in kilometers between 'r1' and 'r2' using the haversine formula
 template <typename Value_, typename Value = expr_t<Value_>>
-ENOKI_INLINE Value distance(const GPSCoord2<Value_> &r1, const GPSCoord2<Value_> &r2) {
+DRJIT_INLINE Value distance(const GPSCoord2<Value_> &r1, const GPSCoord2<Value_> &r2) {
     using Scalar = scalar_t<Value>;
     using Mask = mask_t<Value>;
 
-    const Value deg_to_rad = enoki::Pi<Scalar> / 180.f;
+    const Value deg_to_rad = drjit::Pi<Scalar> / 180.f;
 
     auto sin_diff_h = sin(deg_to_rad * Scalar(.5) * (r2.pos - r1.pos));
     sin_diff_h *= sin_diff_h;
@@ -219,10 +219,10 @@ template <size_t PacketSize> void test06_haversine() {
     assert(std::abs(slice(result, 0) - 5918.18f) < 1e-2f);
 }
 
-ENOKI_TEST(array_float_04_test06_haversine) { test06_haversine<4>();  }
-ENOKI_TEST(array_float_08_test06_haversine) { test06_haversine<8>();  }
-ENOKI_TEST(array_float_16_test06_haversine) { test06_haversine<16>(); }
-ENOKI_TEST(array_float_32_test06_haversine) { test06_haversine<32>(); }
+DRJIT_TEST(array_float_04_test06_haversine) { test06_haversine<4>();  }
+DRJIT_TEST(array_float_08_test06_haversine) { test06_haversine<8>();  }
+DRJIT_TEST(array_float_16_test06_haversine) { test06_haversine<16>(); }
+DRJIT_TEST(array_float_32_test06_haversine) { test06_haversine<32>(); }
 
 template <size_t PacketSize> void test07_compress() {
     using FloatP       = Array<float, PacketSize>;
@@ -266,10 +266,10 @@ template <size_t PacketSize> void test07_compress() {
     }
 }
 
-ENOKI_TEST(array_float_04_test07_compress) { test07_compress<4>();  }
-ENOKI_TEST(array_float_08_test07_compress) { test07_compress<8>();  }
-ENOKI_TEST(array_float_16_test07_compress) { test07_compress<16>(); }
-ENOKI_TEST(array_float_32_test07_compress) { test07_compress<32>(); }
+DRJIT_TEST(array_float_04_test07_compress) { test07_compress<4>();  }
+DRJIT_TEST(array_float_08_test07_compress) { test07_compress<8>();  }
+DRJIT_TEST(array_float_16_test07_compress) { test07_compress<16>(); }
+DRJIT_TEST(array_float_32_test07_compress) { test07_compress<32>(); }
 
 template <typename T, size_t PacketSize> void test09_packet_from_struct() {
     using ValueX       = DynamicArray<Array<T, PacketSize>>;
@@ -308,11 +308,11 @@ template <typename T, size_t PacketSize> void test09_packet_from_struct() {
     }
 }
 
-ENOKI_TEST(array_int32_04_test09_mask_packet) { test09_packet_from_struct<int32_t, 4>();  }
-ENOKI_TEST(array_int32_08_test09_mask_packet) { test09_packet_from_struct<int32_t, 8>();  }
-ENOKI_TEST(array_int32_16_test09_mask_packet) { test09_packet_from_struct<int32_t, 16>(); }
-ENOKI_TEST(array_int32_32_test09_mask_packet) { test09_packet_from_struct<int32_t, 32>(); }
-ENOKI_TEST(array_float_04_test09_mask_packet) { test09_packet_from_struct<float,   4>();  }
-ENOKI_TEST(array_float_08_test09_mask_packet) { test09_packet_from_struct<float,   8>();  }
-ENOKI_TEST(array_float_16_test09_mask_packet) { test09_packet_from_struct<float,   16>();  }
-ENOKI_TEST(array_float_32_test09_mask_packet) { test09_packet_from_struct<float,   32>();  }
+DRJIT_TEST(array_int32_04_test09_mask_packet) { test09_packet_from_struct<int32_t, 4>();  }
+DRJIT_TEST(array_int32_08_test09_mask_packet) { test09_packet_from_struct<int32_t, 8>();  }
+DRJIT_TEST(array_int32_16_test09_mask_packet) { test09_packet_from_struct<int32_t, 16>(); }
+DRJIT_TEST(array_int32_32_test09_mask_packet) { test09_packet_from_struct<int32_t, 32>(); }
+DRJIT_TEST(array_float_04_test09_mask_packet) { test09_packet_from_struct<float,   4>();  }
+DRJIT_TEST(array_float_08_test09_mask_packet) { test09_packet_from_struct<float,   8>();  }
+DRJIT_TEST(array_float_16_test09_mask_packet) { test09_packet_from_struct<float,   16>();  }
+DRJIT_TEST(array_float_32_test09_mask_packet) { test09_packet_from_struct<float,   32>();  }

@@ -4,7 +4,7 @@ py::object reinterpret_scalar(const py::object &source,
                               VarType vt_source,
                               VarType vt_target) {
     if (var_type_size[(int) vt_source] != var_type_size[(int) vt_target])
-        ek::enoki_raise("reinterpret_scalar(): input/output size mismatch!");
+        dr::drjit_raise("reinterpret_scalar(): input/output size mismatch!");
 
     uint64_t temp = 0;
 
@@ -17,8 +17,8 @@ py::object reinterpret_scalar(const py::object &source,
         case VarType::Int32:    temp = (uint64_t) (uint32_t) py::cast<int32_t>(source); break;
         case VarType::UInt64:   temp = (uint64_t) py::cast<uint64_t>(source); break;
         case VarType::Int64:    temp = (uint64_t) py::cast<int64_t>(source); break;
-        case VarType::Float32:  temp = (uint64_t) ek::memcpy_cast<uint32_t>(py::cast<float>(source)); break;
-        case VarType::Float64:  temp = (uint64_t) ek::memcpy_cast<uint64_t>(py::cast<double>(source)); break;
+        case VarType::Float32:  temp = (uint64_t) dr::memcpy_cast<uint32_t>(py::cast<float>(source)); break;
+        case VarType::Float64:  temp = (uint64_t) dr::memcpy_cast<uint64_t>(py::cast<double>(source)); break;
         default: throw py::type_error("reinterpret_scalar(): unsupported input type!");
     }
 
@@ -31,8 +31,8 @@ py::object reinterpret_scalar(const py::object &source,
         case VarType::Int32:   return py::cast((int32_t) temp);
         case VarType::UInt64:  return py::cast((uint64_t) temp);
         case VarType::Int64:   return py::cast((int64_t) temp);
-        case VarType::Float32: return py::cast(ek::memcpy_cast<float>((uint32_t) temp));
-        case VarType::Float64: return py::cast(ek::memcpy_cast<double>((uint64_t) temp));
+        case VarType::Float32: return py::cast(dr::memcpy_cast<float>((uint32_t) temp));
+        case VarType::Float64: return py::cast(dr::memcpy_cast<double>((uint64_t) temp));
         default: throw py::type_error("reinterpret_scalar(): unsupported output type!");
     }
 }

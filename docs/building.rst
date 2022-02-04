@@ -1,6 +1,6 @@
-.. _building-enoki:
+.. _building-drjit:
 
-Building Enoki
+Building Dr.Jit
 --------------
 
 The core parts of this library are of the *header-only* type requiring no
@@ -18,12 +18,12 @@ tools like GNU Make also work:
 
 .. code-block:: text
 
-    $ git clone --recursive https://github.com/mitsuba-renderer/enoki
-    $ mkdir enoki/build
-    $ cd enoki/build
-    $ cmake -GNinja -DENOKI_ENABLE_JIT=1 -DENOKI_ENABLE_AUTODIFF=1 -DENOKI_ENABLE_PYTHON=1 ..
+    $ git clone --recursive https://github.com/mitsuba-renderer/drjit
+    $ mkdir drjit/build
+    $ cd drjit/build
+    $ cmake -GNinja -DDRJIT_ENABLE_JIT=1 -DDRJIT_ENABLE_AUTODIFF=1 -DDRJIT_ENABLE_PYTHON=1 ..
     $ ninja
 
 A visual frontend like `cmake-gui <https://cmake.org/runningcmake/>`_ can be
-also used to enable the `ENOKI_ENABLE_JIT`, `ENOKI_ENABLE_AUTODIFF`, and
-`ENOKI_ENABLE_PYTHON` flags as desired.
+also used to enable the `DRJIT_ENABLE_JIT`, `DRJIT_ENABLE_AUTODIFF`, and
+`DRJIT_ENABLE_PYTHON` flags as desired.

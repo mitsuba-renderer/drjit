@@ -1,7 +1,7 @@
 /*
     test/test.h -- Rudimentary test runner framework
 
-    Enoki is a C++ template library that enables transparent vectorization
+    Dr.Jit is a C++ template library that enables transparent vectorization
     of numerical kernels using SIMD instruction sets available on current
     processor architectures.
 
@@ -26,15 +26,15 @@ namespace test {
     static int dealloc_count = 0;
 }
 
-//#define ENOKI_TRACK_SCALAR(reason) { printf("[%s] ", reason); ++test::nonvectorized_count; }
-#define ENOKI_TRACK_SCALAR(reason) { ++test::nonvectorized_count; }
-#define ENOKI_TRACK_ALLOC(ptr, size) { ++test::alloc_count; }
-#define ENOKI_TRACK_DEALLOC(ptr, size) { ++test::dealloc_count; }
-#define ENOKI_TEST(name) void name(); static test::Test name##_test{#name, &name}; void name()
+//#define DRJIT_TRACK_SCALAR(reason) { printf("[%s] ", reason); ++test::nonvectorized_count; }
+#define DRJIT_TRACK_SCALAR(reason) { ++test::nonvectorized_count; }
+#define DRJIT_TRACK_ALLOC(ptr, size) { ++test::alloc_count; }
+#define DRJIT_TRACK_DEALLOC(ptr, size) { ++test::dealloc_count; }
+#define DRJIT_TEST(name) void name(); static test::Test name##_test{#name, &name}; void name()
 
 #include <cmath>
-#include <enoki/packet.h>
-#include <enoki/math.h>
+#include <drjit/packet.h>
+#include <drjit/math.h>
 #include <vector>
 #include <algorithm>
 #include <iostream>
@@ -49,7 +49,7 @@ template <typename T> inline std::string to_string(const T& value) {
     return oss.str();
 }
 
-using namespace enoki;
+using namespace drjit;
 
 NAMESPACE_BEGIN(test)
 
@@ -387,7 +387,7 @@ template <typename Value> std::vector<Value> sample_values(bool has_nan = true) 
         }
     } else if (std::is_floating_point<Value>::value) {
         args = { Value(0), Value(0.5), Value(0.6), Value(1), Value(2),
-                 Value(3), enoki::Pi<Value>, Value(-0), Value(-0.5), Value(-0.6),
+                 Value(3), drjit::Pi<Value>, Value(-0), Value(-0.5), Value(-0.6),
                  Value(-1), Value(-2), Value(-3),
                  Value(std::numeric_limits<float>::infinity()),
                  Value(-std::numeric_limits<float>::infinity())
@@ -457,75 +457,75 @@ NAMESPACE_END(test)
 
 #if defined(_MSC_VER)
     /* Don't build the large 31x/32x tests to reduce compilation time on AppVeyor */
-#define ENOKI_TEST_HELPER(name, type)                                           \
-    ENOKI_TEST(array_##type##_01##_##name) { name<type, 1>();  }                \
-    ENOKI_TEST(array_##type##_02##_##name) { name<type, 2>();  }                \
-    ENOKI_TEST(array_##type##_03##_##name) { name<type, 3>();  }                \
-    ENOKI_TEST(array_##type##_04##_##name) { name<type, 4>();  }                \
-    ENOKI_TEST(array_##type##_08##_##name) { name<type, 8>();  }                \
-    ENOKI_TEST(array_##type##_16##_##name) { name<type, 16>(); }
-#elif defined(ENOKI_ARM_32) || defined(ENOKI_ARM_64)
-#define ENOKI_TEST_HELPER(name, type)                                           \
-    ENOKI_TEST(array_##type##_01##_##name) { name<type, 1>();  }                \
-    ENOKI_TEST(array_##type##_02##_##name) { name<type, 2>();  }                \
-    ENOKI_TEST(array_##type##_03##_##name) { name<type, 3>();  }                \
-    ENOKI_TEST(array_##type##_04##_##name) { name<type, 4>();  }                \
-    ENOKI_TEST(array_##type##_08##_##name) { name<type, 8>();  }
+#define DRJIT_TEST_HELPER(name, type)                                           \
+    DRJIT_TEST(array_##type##_01##_##name) { name<type, 1>();  }                \
+    DRJIT_TEST(array_##type##_02##_##name) { name<type, 2>();  }                \
+    DRJIT_TEST(array_##type##_03##_##name) { name<type, 3>();  }                \
+    DRJIT_TEST(array_##type##_04##_##name) { name<type, 4>();  }                \
+    DRJIT_TEST(array_##type##_08##_##name) { name<type, 8>();  }                \
+    DRJIT_TEST(array_##type##_16##_##name) { name<type, 16>(); }
+#elif defined(DRJIT_ARM_32) || defined(DRJIT_ARM_64)
+#define DRJIT_TEST_HELPER(name, type)                                           \
+    DRJIT_TEST(array_##type##_01##_##name) { name<type, 1>();  }                \
+    DRJIT_TEST(array_##type##_02##_##name) { name<type, 2>();  }                \
+    DRJIT_TEST(array_##type##_03##_##name) { name<type, 3>();  }                \
+    DRJIT_TEST(array_##type##_04##_##name) { name<type, 4>();  }                \
+    DRJIT_TEST(array_##type##_08##_##name) { name<type, 8>();  }
 #else
-#define ENOKI_TEST_HELPER(name, type)                                           \
-    ENOKI_TEST(array_##type##_01##_##name) { name<type, 1>();  }                \
-    ENOKI_TEST(array_##type##_02##_##name) { name<type, 2>();  }                \
-    ENOKI_TEST(array_##type##_03##_##name) { name<type, 3>();  }                \
-    ENOKI_TEST(array_##type##_04##_##name) { name<type, 4>();  }                \
-    ENOKI_TEST(array_##type##_08##_##name) { name<type, 8>();  }                \
-    ENOKI_TEST(array_##type##_16##_##name) { name<type, 16>(); }                \
-    ENOKI_TEST(array_##type##_31##_##name) { name<type, 31>(); }                \
-    ENOKI_TEST(array_##type##_32##_##name) { name<type, 32>(); }
+#define DRJIT_TEST_HELPER(name, type)                                           \
+    DRJIT_TEST(array_##type##_01##_##name) { name<type, 1>();  }                \
+    DRJIT_TEST(array_##type##_02##_##name) { name<type, 2>();  }                \
+    DRJIT_TEST(array_##type##_03##_##name) { name<type, 3>();  }                \
+    DRJIT_TEST(array_##type##_04##_##name) { name<type, 4>();  }                \
+    DRJIT_TEST(array_##type##_08##_##name) { name<type, 8>();  }                \
+    DRJIT_TEST(array_##type##_16##_##name) { name<type, 16>(); }                \
+    DRJIT_TEST(array_##type##_31##_##name) { name<type, 31>(); }                \
+    DRJIT_TEST(array_##type##_32##_##name) { name<type, 32>(); }
 #endif
 
-#define ENOKI_TEST_TYPE(name, type)                                             \
+#define DRJIT_TEST_TYPE(name, type)                                             \
     template <typename Value, size_t Size,                                      \
-              typename T = enoki::Array<Value, Size>>                           \
+              typename T = drjit::Array<Value, Size>>                           \
     void name##_##type();                                                       \
-    ENOKI_TEST_HELPER(name##_##type, type)                                      \
+    DRJIT_TEST_HELPER(name##_##type, type)                                      \
     template <typename Value, size_t Size, typename T>                          \
     void name##_##type()
 
-#define ENOKI_TEST_FLOAT(name)                                                  \
+#define DRJIT_TEST_FLOAT(name)                                                  \
     template <typename Value, size_t Size,                                      \
-              typename T = enoki::Array<Value, Size>>                           \
+              typename T = drjit::Array<Value, Size>>                           \
     void name();                                                                \
-    ENOKI_TEST_HELPER(name, float)                                              \
-    ENOKI_TEST_HELPER(name, double)                                             \
+    DRJIT_TEST_HELPER(name, float)                                              \
+    DRJIT_TEST_HELPER(name, double)                                             \
     template <typename Value, size_t Size, typename T>                          \
     void name()
 
-#define ENOKI_TEST_INT(name)                                                    \
+#define DRJIT_TEST_INT(name)                                                    \
     template <typename Value, size_t Size,                                      \
-              typename T = enoki::Array<Value, Size>>                           \
+              typename T = drjit::Array<Value, Size>>                           \
     void name();                                                                \
-    ENOKI_TEST_HELPER(name, int32_t)                                            \
-    ENOKI_TEST_HELPER(name, uint32_t)                                           \
-    ENOKI_TEST_HELPER(name, int64_t)                                            \
-    ENOKI_TEST_HELPER(name, uint64_t)                                           \
+    DRJIT_TEST_HELPER(name, int32_t)                                            \
+    DRJIT_TEST_HELPER(name, uint32_t)                                           \
+    DRJIT_TEST_HELPER(name, int64_t)                                            \
+    DRJIT_TEST_HELPER(name, uint64_t)                                           \
     template <typename Value, size_t Size, typename T>                          \
     void name()
 
-#define ENOKI_TEST_ALL(name)                                                    \
+#define DRJIT_TEST_ALL(name)                                                    \
     template <typename Value, size_t Size,                                      \
-              typename T = enoki::Array<Value, Size>>                           \
+              typename T = drjit::Array<Value, Size>>                           \
     void name();                                                                \
-    ENOKI_TEST_HELPER(name, float)                                              \
-    ENOKI_TEST_HELPER(name, double)                                             \
-    ENOKI_TEST_HELPER(name, int32_t)                                            \
-    ENOKI_TEST_HELPER(name, uint32_t)                                           \
-    ENOKI_TEST_HELPER(name, int64_t)                                            \
-    ENOKI_TEST_HELPER(name, uint64_t)                                           \
+    DRJIT_TEST_HELPER(name, float)                                              \
+    DRJIT_TEST_HELPER(name, double)                                             \
+    DRJIT_TEST_HELPER(name, int32_t)                                            \
+    DRJIT_TEST_HELPER(name, uint32_t)                                           \
+    DRJIT_TEST_HELPER(name, int64_t)                                            \
+    DRJIT_TEST_HELPER(name, uint64_t)                                           \
     template <typename Value, size_t Size, typename T>                          \
     void name()
 
 int main(int argc, char** argv) {
-    std::cout << "=== Enoki test suite (version " << ENOKI_VERSION << ") ===" << std::endl;
+    std::cout << "=== Dr.Jit test suite (version " << DRJIT_VERSION << ") ===" << std::endl;
     std::cout << "Enabled compiler features: ";
 
     if (has_avx512)          std::cout << "avx512 ";

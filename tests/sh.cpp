@@ -1,7 +1,7 @@
 /*
     tests/sh.cpp -- tests spherical harmonics evaluation code
 
-    Enoki is a C++ template library that enables transparent vectorization
+    Dr.Jit is a C++ template library that enables transparent vectorization
     of numerical kernels using SIMD instruction sets available on current
     processor architectures.
 
@@ -12,9 +12,9 @@
 */
 
 #include "test.h"
-#include <enoki/sh.h>
+#include <drjit/sh.h>
 
-ENOKI_TEST(test00_sh) {
+DRJIT_TEST(test00_sh) {
     using T = Array<float>;
 
     /* From mathematica */

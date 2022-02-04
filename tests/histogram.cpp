@@ -2,7 +2,7 @@
     test/histogram.cpp -- Test which uses transform_<> to build a histogram
     of a set of normally distributed pseudorandom samples
 
-    Enoki is a C++ template library that enables transparent vectorization
+    Dr.Jit is a C++ template library that enables transparent vectorization
     of numerical kernels using SIMD instruction sets available on current
     processor architectures.
 
@@ -16,10 +16,10 @@
 #  undef NDEBUG
 #endif
 
-#include <enoki/random.h>
-#include <enoki/special.h>
+#include <drjit/random.h>
+#include <drjit/special.h>
 
-using namespace enoki;
+using namespace drjit;
 
 int main(int /* argc */, char * /* argv */[]) {
     using UInt32      = Packet<uint32_t>;

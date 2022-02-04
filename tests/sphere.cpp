@@ -1,7 +1,7 @@
 /*
     tests/sphere.cpp -- a simple sphere ray tracer
 
-    Enoki is a C++ template library that enables transparent vectorization
+    Dr.Jit is a C++ template library that enables transparent vectorization
     of numerical kernels using SIMD instruction sets available on current
     processor architectures.
 
@@ -15,7 +15,7 @@
 #  pragma warning(disable: 4723) /// potential divide by 0
 #endif
 
-#include <enoki/dynamic.h>
+#include <drjit/dynamic.h>
 #include <fstream>
 #include "ray.h"
 #include <chrono>
@@ -64,7 +64,7 @@ template <typename Vector2f> ray3f_t<Vector2f> make_rays(const Vector2f &p) {
 }
 
 /// "Shape": intersect against sphere
-template <typename Ray> ENOKI_INLINE typename Ray::Vector intersect_rays(const Ray &r) {
+template <typename Ray> DRJIT_INLINE typename Ray::Vector intersect_rays(const Ray &r) {
     /* Coefficients of quadratic */
     auto a = dot(r.d, r.d);
     auto b = 2.f * dot(r.o, r.d);
@@ -78,12 +78,12 @@ template <typename Ray> ENOKI_INLINE typename Ray::Vector intersect_rays(const R
 }
 
 /// "Shader": directional illumination
-template <typename Vector3f> ENOKI_INLINE typename Vector3f::Value shade_hits(Vector3f n) {
+template <typename Vector3f> DRJIT_INLINE typename Vector3f::Value shade_hits(Vector3f n) {
     return 0.2f + max(dot(n, Vector3f(-1.f, -1.f, 2.f)), 0.f) * 90.f;
 }
 
 /// All three kernels combined into one
-template <typename Vector2> ENOKI_INLINE typename Vector2::Value combined(Vector2 n) {
+template <typename Vector2> DRJIT_INLINE typename Vector2::Value combined(Vector2 n) {
     return shade_hits(intersect_rays(make_rays(n)));
 }
 

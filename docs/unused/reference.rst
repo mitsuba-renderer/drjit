@@ -1,4 +1,4 @@
-.. cpp:namespace:: enoki
+.. cpp:namespace:: drjit
 
 Reference
 =========
@@ -32,7 +32,7 @@ hides the fact that
    :ref:`broadcasting rules <broadcasting>` for details.
 
 2. The operator uses SFINAE (``std::enable_if``) so that it only becomes active
-   when ``x`` or ``y`` are Enoki arrays.
+   when ``x`` or ``y`` are Dr.Jit arrays.
 
 3. The operator replicates the C++ typing rules. Recall that adding two
    ``float&`` references in standard C++ produces a ``float`` temporary (i.e.
@@ -49,28 +49,28 @@ hides the fact that
 
 Writing out these type transformation rules in every function definition would
 make for tedious reading, hence the simplifications. If in doubt, please look
-at the source code of Enoki.
+at the source code of Dr.Jit.
 
 Global macro definitions
 ------------------------
 
-.. c:macro:: ENOKI_VERSION_MAJOR
+.. c:macro:: DRJIT_VERSION_MAJOR
 
-    Integer value denoting the major version of the Enoki release.
+    Integer value denoting the major version of the Dr.Jit release.
 
-.. c:macro:: ENOKI_VERSION_MINOR
+.. c:macro:: DRJIT_VERSION_MINOR
 
-    Integer value denoting the minor version of the Enoki release.
+    Integer value denoting the minor version of the Dr.Jit release.
 
-.. c:macro:: ENOKI_VERSION_PATCH
+.. c:macro:: DRJIT_VERSION_PATCH
 
-    Integer value denoting the patch version of the Enoki release.
+    Integer value denoting the patch version of the Dr.Jit release.
 
-.. c:macro:: ENOKI_VERSION
+.. c:macro:: DRJIT_VERSION
 
-    Enoki version string (e.g. ``"0.1.2"``).
+    Dr.Jit version string (e.g. ``"0.1.2"``).
 
-.. c:macro:: ENOKI_LIKELY(condition)
+.. c:macro:: DRJIT_LIKELY(condition)
 
     Signals that the branch is almost always taken, which can be used for
     improved code layout if supported by the compiler. An example is shown
@@ -78,38 +78,38 @@ Global macro definitions
 
     .. code-block:: cpp
 
-        if (ENOKI_LIKELY(x > 0)) {
+        if (DRJIT_LIKELY(x > 0)) {
             /// ....
          }
 
-.. c:macro:: ENOKI_UNLIKELY(condition)
+.. c:macro:: DRJIT_UNLIKELY(condition)
 
     Signals that the branch is rarely taken analogous to
-    :cpp:func:`ENOKI_LIKELY`.
+    :cpp:func:`DRJIT_LIKELY`.
 
-.. c:macro:: ENOKI_UNROLL
+.. c:macro:: DRJIT_UNROLL
 
     Cross-platform mechanism for asking the compiler to unroll a loop. The
     macro should be placed before the ``for`` statement.
 
-.. c:macro:: ENOKI_NOUNROLL
+.. c:macro:: DRJIT_NOUNROLL
 
     Cross-platform mechanism for asking the compiler to *never* unroll a loop
-    analogous to :cpp:func:`ENOKI_UNROLL`.
+    analogous to :cpp:func:`DRJIT_UNROLL`.
 
-.. c:macro:: ENOKI_INLINE
+.. c:macro:: DRJIT_INLINE
 
     Cross-platform mechanism for asking the compiler to *always* inline a
     function. The macro should be placed in front of the function declaration.
 
     .. code-block:: cpp
 
-        ENOKI_INLINE void foo() { ... }
+        DRJIT_INLINE void foo() { ... }
 
-.. c:macro:: ENOKI_NOINLINE
+.. c:macro:: DRJIT_NOINLINE
 
     Cross-platform mechanism for asking the compiler to *never* inline a
-    function analogous to :cpp:func:`ENOKI_INLINE`.
+    function analogous to :cpp:func:`DRJIT_INLINE`.
 
 
 Global variable definitions
@@ -192,7 +192,7 @@ Global variable definitions
 
 .. cpp:var:: static constexpr size_t array_default_size
 
-   Denotes the default size of Enoki arrays. Equal to ``max_packet_size / 4``.
+   Denotes the default size of Dr.Jit arrays. Equal to ``max_packet_size / 4``.
 
 Static arrays
 -------------
@@ -200,10 +200,10 @@ Static arrays
 .. cpp:class:: template <typename Value, size_t Size = array_default_size>
                Array : StaticArrayImpl<Value, Size, Array<Value, Size>>
 
-    The default Enoki array class -- a generic container that stores a
+    The default Dr.Jit array class -- a generic container that stores a
     fixed-size array of an arbitrary data type similar to the standard template
     library class ``std::array``. The main distinction between the two is that
-    :cpp:class:`enoki::Array` forwards all arithmetic operations (and other
+    :cpp:class:`drjit::Array` forwards all arithmetic operations (and other
     standard mathematical functions) to the contained elements.
 
     It has several template parameters:
@@ -213,19 +213,19 @@ Static arrays
     * ``size_t Size``: the number of packed array entries.
 
     This class is just a small wrapper that instantiates
-    :cpp:class:`enoki::StaticArrayImpl` using the Curiously Recurring Template
+    :cpp:class:`drjit::StaticArrayImpl` using the Curiously Recurring Template
     Pattern (CRTP). The latter provides the actual machinery that is needed to
     evaluate array expressions. See :ref:`custom-arrays` for details.
 
 .. cpp:class:: template <typename Value, size_t Size = array_default_size>
                Packet : StaticArrayImpl<Value, Size, Array<Value, Size>>
 
-    The ``Packet`` type is identical to :cpp:class:`enoki::Array` except for
+    The ``Packet`` type is identical to :cpp:class:`drjit::Array` except for
     its :ref:`broadcasting behavior <broadcasting>`.
 
 .. cpp:class:: template <typename Value, size_t Size, typename Derived> StaticArrayImpl
 
-    This base class provides the core implementation of an Enoki array. It
+    This base class provides the core implementation of an Dr.Jit array. It
     cannot be instantiated directly and is used via the Curiously Recurring
     Template Pattern (CRTP). See :cpp:class:`Array` and :ref:`custom-arrays`
     for details on how to create custom array types.
@@ -249,7 +249,7 @@ Static arrays
                       StaticArrayImpl(const StaticArrayImpl<Value2, Size, Derived2> &other)
 
         Initialize the array with the contents of another given array that
-        potentially has a different underlying type. Enoki will perform a
+        potentially has a different underlying type. Dr.Jit will perform a
         vectorized type conversion if this is supported by the target
         processor.
 
@@ -263,14 +263,14 @@ Static arrays
         application is compiled in debug mode, the function performs a range
         check and throws ``std::out_of_range`` in case of an out-of-range
         access. This behavior can be disabled by defining
-        ``ENOKI_DISABLE_RANGE_CHECK``.
+        ``DRJIT_DISABLE_RANGE_CHECK``.
 
     .. cpp:function:: Value& operator[](size_t index)
 
         Return a reference to an array element. When the application is
         compiled in debug mode, the function performs a range check and throws
         ``std::out_of_range`` in case of an out-of-range access. This behavior
-        can be disabled by defining ``ENOKI_DISABLE_RANGE_CHECK``.
+        can be disabled by defining ``DRJIT_DISABLE_RANGE_CHECK``.
 
     .. cpp:function:: const Value& coeff(size_t index) const
 
@@ -319,12 +319,12 @@ Memory allocation
 .. cpp:function:: void *alloc(size_t size)
 
     Allocates ``size`` bytes of memory that are sufficiently aligned so that
-    any Enoki array can be safely stored at the returned address.
+    any Dr.Jit array can be safely stored at the returned address.
 
 .. cpp:function:: template <typename T> T *alloc(size_t count)
 
     Typed convenience alias for :cpp:func:`alloc`. Allocates ``count *
-    sizeof(T)`` bytes of memory that are sufficiently aligned so that any Enoki
+    sizeof(T)`` bytes of memory that are sufficiently aligned so that any Dr.Jit
     array can be safely stored at the returned address.
 
 .. cpp:function:: void dealloc(void *ptr)
@@ -955,7 +955,7 @@ Horizontal operations
     .. warning::
 
         Following the principle of least surprise,
-        :cpp:func:`enoki::operator==` is a horizontal operations that returns a
+        :cpp:func:`drjit::operator==` is a horizontal operations that returns a
         boolean value; a vertical alternatives named :cpp:func:`eq` is also
         available. The following pair of operations is equivalent:
 
@@ -969,7 +969,7 @@ Horizontal operations
     .. warning::
 
         Following the principle of least surprise,
-        :cpp:func:`enoki::operator!=` is a horizontal operations that returns a
+        :cpp:func:`drjit::operator!=` is a horizontal operations that returns a
         boolean value; a vertical alternatives named :cpp:func:`neq` is also
         available. The following pair of operations is equivalent:
 
@@ -1667,7 +1667,7 @@ Special functions
 -----------------
 
 The following special functions require including the header
-:file:`enoki/special.h`.
+:file:`drjit/special.h`.
 
 .. cpp:function:: template <typename Array> Array erf(Array x)
 
@@ -1873,7 +1873,7 @@ Miscellaneous operations
     This function can be used to specify whether denormalized floating point
     values are simply flushed to zero, which sidesteps the performance issues.
 
-    Enoki also provides a tiny a RAII wrapper named `scoped_flush_denormals`
+    Dr.Jit also provides a tiny a RAII wrapper named `scoped_flush_denormals`
     which sets (and later resets) this parameter.
 
 .. cpp:function:: bool flush_denormals()
@@ -2063,12 +2063,12 @@ Type traits
 The following type traits are available to query the properties of arrays at
 compile time.
 
-Accessing types related to Enoki arrays
+Accessing types related to Dr.Jit arrays
 ***************************************
 
 .. cpp:type:: template <typename T> value_t
 
-    Given an Enoki array ``T``, :cpp:type:`value_t\<T>` provides access to the
+    Given an Dr.Jit array ``T``, :cpp:type:`value_t\<T>` provides access to the
     type of the individual array entries. For non-array types ``T``,
     :cpp:type:`value_t\<T>` equals to the input template parameter ``T``.
 
@@ -2137,7 +2137,7 @@ Accessing types related to Enoki arrays
 
 .. cpp:type:: template <typename T> scalar_t
 
-    Given a (potentially nested) Enoki array ``T``, this trait class provides
+    Given a (potentially nested) Dr.Jit array ``T``, this trait class provides
     access to the scalar type underlying the array.
     For non-array
     types ``T``, :cpp:type:`scalar_t\<T>` is simply set to the template parameter ``T``.
@@ -2166,7 +2166,7 @@ Accessing types related to Enoki arrays
 
 .. cpp:type:: template <typename T> mask_t
 
-    Given an Enoki array ``T``, :cpp:type:`mask_t\<T>` provides access to the
+    Given an Dr.Jit array ``T``, :cpp:type:`mask_t\<T>` provides access to the
     underlying mask type (i.e. the type that would result from a comparison
     operation such as ``array < 0``). For non-array types ``T``,
     :cpp:type:`mask_t\<T>` is set to ``bool``.
@@ -2176,7 +2176,7 @@ Accessing types related to Enoki arrays
 
     .. cpp:member:: static constexpr size_t value
 
-        Given a type :cpp:any:`T` (which could be a nested Enoki array),
+        Given a type :cpp:any:`T` (which could be a nested Dr.Jit array),
         :cpp:member:`value` specifies the nesting level and stores it in the
         :cpp:var:`value` member. Non-array types (e.g. ``int32_t``) have a
         nesting level of 0, a type such as ``Array<float>`` has nesting level
@@ -2185,7 +2185,7 @@ Accessing types related to Enoki arrays
 Replacing the scalar type of an array
 *************************************
 
-The :cpp:type:`enoki::replace_scalar_t` type trait and various aliases construct arrays
+The :cpp:type:`drjit::replace_scalar_t` type trait and various aliases construct arrays
 matching a certain layout, but with different-flavored data. This is often
 helpful when defining custom data structures or function inputs. See the
 section on :ref:`custom data structures <custom-structures>` for an example
@@ -2260,103 +2260,103 @@ SFINAE helper types
 -------------------
 
 The following section discusses helper types that can be used to selectively
-enable or disable template functions for Enoki arrays, e.g. like so:
+enable or disable template functions for Dr.Jit arrays, e.g. like so:
 
 .. code-block:: cpp
 
     template <typename Value, enable_if_array_t<Value> = 0>
     void f(Value value) {
-        /* Invoked if 'Value' is an Enoki array */
+        /* Invoked if 'Value' is an Dr.Jit array */
     }
 
     template <typename Value, enable_if_not_array_t<Value> = 0>
     void f(Value value) {
-        /* Invoked if 'Value' is *not* an Enoki array */
+        /* Invoked if 'Value' is *not* an Dr.Jit array */
     }
 
 
-Detecting Enoki arrays
+Detecting Dr.Jit arrays
 **********************
 
 .. cpp:class:: template <typename T> is_array
 
     .. cpp:member:: static constexpr bool value
 
-        Equal to ``true`` iff ``T`` is a static or dynamic Enoki array type.
+        Equal to ``true`` iff ``T`` is a static or dynamic Dr.Jit array type.
 
 .. cpp:type:: template <typename T> enable_if_array_t = std::enable_if_t<is_array_v<T>, int>
 
-    SFINAE alias to selectively enable a class or function definition for Enoki
+    SFINAE alias to selectively enable a class or function definition for Dr.Jit
     array types.
 
 .. cpp:type:: template <typename T> enable_if_not_array_t = std::enable_if_t<!is_array_v<T>, int>
 
     SFINAE alias to selectively enable a class or function definition for types
-    that are not Enoki arrays.
+    that are not Dr.Jit arrays.
 
 
-Detecting Enoki masks
+Detecting Dr.Jit masks
 *********************
 
 .. cpp:class:: template <typename T> is_mask
 
     .. cpp:member:: static constexpr bool value
 
-        Equal to ``true`` iff ``T`` is a static or dynamic Enoki mask type.
+        Equal to ``true`` iff ``T`` is a static or dynamic Dr.Jit mask type.
 
 .. cpp:type:: template <typename T> enable_if_mask_t = std::enable_if_t<is_mask_v<T>, int>
 
-    SFINAE alias to selectively enable a class or function definition for Enoki
+    SFINAE alias to selectively enable a class or function definition for Dr.Jit
     mask types.
 
 .. cpp:type:: template <typename T> enable_if_not_mask_t = std::enable_if_t<!is_mask_v<T>, int>
 
     SFINAE alias to selectively enable a class or function definition for types
-    that are not Enoki masks.
+    that are not Dr.Jit masks.
 
-Detecting static Enoki arrays
+Detecting static Dr.Jit arrays
 *****************************
 
 .. cpp:class:: template <typename T> is_static_array
 
     .. cpp:member:: static constexpr bool value
 
-        Equal to ``true`` iff ``T`` is a static Enoki array type.
+        Equal to ``true`` iff ``T`` is a static Dr.Jit array type.
 
 .. cpp:type:: template <typename T> enable_if_static_array_t = std::enable_if_t<is_static_array_v<T>, int>
 
     SFINAE alias to selectively enable a class or function definition for
-    static Enoki array types.
+    static Dr.Jit array types.
 
 .. cpp:type:: template <typename T> enable_if_not_static_array_t = std::enable_if_t<!is_static_array_v<T>, int>
 
     SFINAE alias to selectively enable a class or function definition for
-    static Enoki array types.
+    static Dr.Jit array types.
 
-Detecting dynamic Enoki arrays
+Detecting dynamic Dr.Jit arrays
 ******************************
 
 .. cpp:class:: template <typename T> is_dynamic_array
 
     .. cpp:member:: static constexpr bool value
 
-        Equal to ``true`` iff ``T`` is a dynamic Enoki array type.
+        Equal to ``true`` iff ``T`` is a dynamic Dr.Jit array type.
 
 .. cpp:type:: template <typename T> enable_if_dynamic_array_t = std::enable_if_t<is_dynamic_array_v<T>, int>
 
     SFINAE alias to selectively enable a class or function definition for
-    dynamic Enoki array types.
+    dynamic Dr.Jit array types.
 
 .. cpp:type:: template <typename T> enable_if_not_dynamic_array_t = std::enable_if_t<!is_dynamic_array_v<T>, int>
 
     SFINAE alias to selectively enable a class or function definition for
-    dynamic Enoki array types.
+    dynamic Dr.Jit array types.
 
 .. cpp:class:: template <typename T> is_dynamic
 
     .. cpp:member:: static constexpr bool value
 
-        Equal to ``true`` iff ``T`` (which could be a nested Enoki array) contains
+        Equal to ``true`` iff ``T`` (which could be a nested Dr.Jit array) contains
         a dynamic array at *any* level.
 
         This is different from :cpp:class:`is_dynamic_array`, which only cares

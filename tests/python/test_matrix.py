@@ -1,20 +1,20 @@
-import enoki as ek
+import drjit as dr
 import numpy as np
 import pytest
 import importlib
 
-from enoki.scalar import Matrix2f as M2
-from enoki.scalar import Matrix3f as M3
-from enoki.scalar import Matrix4f as M4
-from enoki.scalar import Float
+from drjit.scalar import Matrix2f as M2
+from drjit.scalar import Matrix3f as M3
+from drjit.scalar import Matrix4f as M4
+from drjit.scalar import Float
 M = M4
 
 def prepare(pkg):
     if 'cuda' in pkg:
-        if not ek.has_backend(ek.JitBackend.CUDA):
+        if not dr.has_backend(dr.JitBackend.CUDA):
             pytest.skip('CUDA mode is unsupported')
     elif 'llvm' in pkg:
-        if not ek.has_backend(ek.JitBackend.LLVM):
+        if not dr.has_backend(dr.JitBackend.LLVM):
             pytest.skip('LLVM mode is unsupported')
     return importlib.import_module(pkg)
 
@@ -36,7 +36,7 @@ def test01_init_broadcast_mul():
 
 
 def test02_transpose_diag():
-    m = ek.transpose(M(*range(1, 17)))
+    m = dr.transpose(M(*range(1, 17)))
     assert m == M(
         [1, 2, 3, 4],
         [5, 6, 7, 8],
@@ -44,8 +44,8 @@ def test02_transpose_diag():
         [13, 14, 15, 16]
     )
 
-    assert ek.diag(m) == [1, 6, 11, 16]
-    assert ek.diag(ek.diag(m)) == M(
+    assert dr.diag(m) == [1, 6, 11, 16]
+    assert dr.diag(dr.diag(m)) == M(
         [1, 0, 0, 0],
         [0, 6, 0, 0],
         [0, 0, 11, 0],
@@ -55,26 +55,26 @@ def test02_transpose_diag():
 
 def test03_roundtrip():
     pytest.importorskip("numpy")
-    m = M(*range(1, 17)) + ek.full(M, ek.arange(ek.scalar.Float))
+    m = M(*range(1, 17)) + dr.full(M, dr.arange(dr.scalar.Float))
     m2 = M(m.numpy())
     assert m == m2
 
 
 def test04_trace_frob():
     m = M(*range(1, 17))
-    assert ek.trace(m) == 34
-    assert ek.frob(m) == 1496
+    assert dr.trace(m) == 34
+    assert dr.frob(m) == 1496
 
 
 def test05_allclose():
-    m = ek.full(M, 1)
-    assert ek.allclose(m, ek.full(M, 1))
+    m = dr.full(M, 1)
+    assert dr.allclose(m, dr.full(M, 1))
     m[1, 0] = 0
-    assert not ek.allclose(m, ek.full(M, 1))
-    m = ek.identity(M)
-    assert ek.allclose(m, 1)
+    assert not dr.allclose(m, dr.full(M, 1))
+    m = dr.identity(M)
+    assert dr.allclose(m, 1)
     m[1, 0] = 1
-    assert not ek.allclose(m, 1)
+    assert not dr.allclose(m, 1)
 
 
 @pytest.mark.parametrize('M', [M2, M3, M4])
@@ -86,8 +86,8 @@ def test06_det(M):
         m1 = np.float32(np.random.normal(size=list(reversed(M.Shape))))
         m2 = M(m1)
         det1 = Float(np.linalg.det(m1))
-        det2 = ek.det(m2)
-        assert ek.allclose(det1, det2, atol=1e-6)
+        det2 = dr.det(m2)
+        assert dr.allclose(det1, det2, atol=1e-6)
 
 
 @pytest.mark.parametrize('M', [M2, M3, M4])
@@ -98,43 +98,43 @@ def test07_inverse(M):
     for i in range(100):
         m1 = np.float32(np.random.normal(size=list(reversed(M.Shape))))
         m2 = M(m1)
-        inv1 = M(np.linalg.inv(m1))@m2 - ek.identity(M)
-        inv2 = ek.inverse(m2)@m2 - ek.identity(M)
-        assert ek.allclose(inv1, 0, atol=1e-3)
-        assert ek.allclose(inv2, 0, atol=1e-3)
+        inv1 = M(np.linalg.inv(m1))@m2 - dr.identity(M)
+        inv2 = dr.inverse(m2)@m2 - dr.identity(M)
+        assert dr.allclose(inv1, 0, atol=1e-3)
+        assert dr.allclose(inv2, 0, atol=1e-3)
 
 
 def test08_polar():
-    m = M(*range(1, 17)) + ek.identity(M)
-    q, r = ek.polar_decomp(m)
-    assert ek.allclose(q@r, m)
-    assert ek.allclose(q@ek.transpose(q), ek.identity(M), atol=1e-6)
+    m = M(*range(1, 17)) + dr.identity(M)
+    q, r = dr.polar_decomp(m)
+    assert dr.allclose(q@r, m)
+    assert dr.allclose(q@dr.transpose(q), dr.identity(M), atol=1e-6)
 
 
 def test09_transform_decompose():
-    m = ek.scalar.Matrix4f([[1, 0, 0, 8], [0, 2, 0, 7], [0, 0, 9, 6], [0, 0, 0, 1]])
-    s, q, t = ek.transform_decompose(m)
+    m = dr.scalar.Matrix4f([[1, 0, 0, 8], [0, 2, 0, 7], [0, 0, 9, 6], [0, 0, 0, 1]])
+    s, q, t = dr.transform_decompose(m)
 
-    assert ek.allclose(s, ek.scalar.Matrix3f(m))
-    assert ek.allclose(q, ek.scalar.Quaternion4f(1))
-    assert ek.allclose(t, [8, 7, 6])
-    assert ek.allclose(m, ek.transform_compose(s, q, t))
+    assert dr.allclose(s, dr.scalar.Matrix3f(m))
+    assert dr.allclose(q, dr.scalar.Quaternion4f(1))
+    assert dr.allclose(t, [8, 7, 6])
+    assert dr.allclose(m, dr.transform_compose(s, q, t))
 
-    q2 = ek.rotate(ek.scalar.Quaternion4f, ek.scalar.Array3f(0, 0, 1), 15.0)
-    m @= ek.quat_to_matrix(q2)
-    s, q, t = ek.transform_decompose(m)
+    q2 = dr.rotate(dr.scalar.Quaternion4f, dr.scalar.Array3f(0, 0, 1), 15.0)
+    m @= dr.quat_to_matrix(q2)
+    s, q, t = dr.transform_decompose(m)
 
-    assert ek.allclose(q, q2)
+    assert dr.allclose(q, q2)
 
 
 def test10_matrix_to_quat():
-    q = ek.rotate(ek.scalar.Quaternion4f, ek.scalar.Array3f(0, 0, 1), 15.0)
-    m = ek.quat_to_matrix(q)
-    q2 = ek.matrix_to_quat(m)
-    assert ek.allclose(q, q2)
+    q = dr.rotate(dr.scalar.Quaternion4f, dr.scalar.Array3f(0, 0, 1), 15.0)
+    m = dr.quat_to_matrix(q)
+    q2 = dr.matrix_to_quat(m)
+    assert dr.allclose(q, q2)
 
 
-@pytest.mark.parametrize("package", ["enoki.scalar", "enoki.cuda", "enoki.llvm"])
+@pytest.mark.parametrize("package", ["drjit.scalar", "drjit.cuda", "drjit.llvm"])
 def test11_constructor(package):
     """
     Check Matrix construction from Python array and Numpy array
@@ -147,20 +147,20 @@ def test11_constructor(package):
     m3 = Matrix3f(m1)
     m4 = Matrix3f(m2)
 
-    assert ek.allclose(m3, m1)
-    assert ek.allclose(m3, m2)
-    assert ek.allclose(m3, m4)
-    assert ek.allclose(m4, m2)
+    assert dr.allclose(m3, m1)
+    assert dr.allclose(m3, m2)
+    assert dr.allclose(m3, m4)
+    assert dr.allclose(m4, m2)
 
-    if ek.is_jit_array_v(Float):
+    if dr.is_jit_array_v(Float):
         np.random.seed(1)
         for i in range(1, 4):
             values = np.random.random((i, 3, 3)).astype('float32')
             m5 = Matrix3f(values)
-            assert ek.allclose(m5, values)
+            assert dr.allclose(m5, values)
 
 
-@pytest.mark.parametrize("package", ["enoki.scalar", "enoki.cuda", "enoki.llvm"])
+@pytest.mark.parametrize("package", ["drjit.scalar", "drjit.cuda", "drjit.llvm"])
 def test12_matrix_scale(package):
     package = prepare(package)
     Float, Matrix3f = package.Float, package.Matrix3f
@@ -176,7 +176,7 @@ def test12_matrix_scale(package):
     assert package.Float(2) * package.Matrix3f(m) == package.Matrix3f(m2)
 
 
-@pytest.mark.parametrize("package", ["enoki.scalar", "enoki.cuda", "enoki.llvm"])
+@pytest.mark.parametrize("package", ["drjit.scalar", "drjit.cuda", "drjit.llvm"])
 def test12_matrix_vector(package):
     m_ = np.array([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6], [0.7, 0.8, 0.9]], dtype=np.float32)
     package = prepare(package)
@@ -184,27 +184,27 @@ def test12_matrix_vector(package):
     m = Matrix3f(m_)
     v1 = m @ Array3f(1, 0, 0)
     v2 = m @ Array3f(1, 1, 0)
-    assert ek.allclose(v1, [0.1, 0.4, 0.7])
-    assert ek.allclose(v2, [0.3, 0.9, 1.5])
-    v1 = m @ ek.scalar.Array3f(1, 0, 0)
-    v2 = m @ ek.scalar.Array3f(1, 1, 0)
-    assert ek.allclose(v1, [0.1, 0.4, 0.7])
-    assert ek.allclose(v2, [0.3, 0.9, 1.5])
+    assert dr.allclose(v1, [0.1, 0.4, 0.7])
+    assert dr.allclose(v2, [0.3, 0.9, 1.5])
+    v1 = m @ dr.scalar.Array3f(1, 0, 0)
+    v2 = m @ dr.scalar.Array3f(1, 1, 0)
+    assert dr.allclose(v1, [0.1, 0.4, 0.7])
+    assert dr.allclose(v2, [0.3, 0.9, 1.5])
 
-    with pytest.raises(ek.Exception):
+    with pytest.raises(dr.Exception):
         m * Array3f(1, 0, 0)
 
-    with pytest.raises(ek.Exception):
-        m * ek.scalar.Array3f(1, 0, 0)
+    with pytest.raises(dr.Exception):
+        m * dr.scalar.Array3f(1, 0, 0)
 
-    with pytest.raises(ek.Exception):
+    with pytest.raises(dr.Exception):
         m * m
 
-    with pytest.raises(ek.Exception):
-        m * ek.scalar.Matrix3f(m_)
+    with pytest.raises(dr.Exception):
+        m * dr.scalar.Matrix3f(m_)
 
 
-@pytest.mark.parametrize("package", ["enoki.scalar", "enoki.cuda", "enoki.llvm"])
+@pytest.mark.parametrize("package", ["drjit.scalar", "drjit.cuda", "drjit.llvm"])
 def test13_matmul_other(package):
     package = prepare(package)
     Float, Matrix3f, Array3f = package.Float, package.Matrix3f, package.Array3f
@@ -212,13 +212,13 @@ def test13_matmul_other(package):
     m = Matrix3f(1,2,3,4,5,6,7,8,9)
     m2 = Matrix3f(30, 36, 42, 66, 81, 96, 102, 126, 150)
     v = Array3f(5,2,1)
-    assert ek.allclose(m @ m, m2)
-    assert ek.allclose(m @ v, Array3f(12, 36, 60))
-    assert ek.allclose(v @ m, Array3f(20, 28, 36))
-    assert ek.allclose(v @ v, Float(30))
+    assert dr.allclose(m @ m, m2)
+    assert dr.allclose(m @ v, Array3f(12, 36, 60))
+    assert dr.allclose(v @ m, Array3f(20, 28, 36))
+    assert dr.allclose(v @ v, Float(30))
 
 
-@pytest.mark.parametrize("package", ["enoki.cuda", "enoki.llvm"])
+@pytest.mark.parametrize("package", ["drjit.cuda", "drjit.llvm"])
 @pytest.mark.parametrize("dest", ['numpy', 'torch', 'jax'])
 def test14_roundtrip(package, dest):
     pytest.importorskip(dest)
@@ -235,9 +235,9 @@ def test14_roundtrip(package, dest):
             return a.jax()
 
     v = Array3f(
-        (1.0 + ek.arange(Float, 5)),
-        (1.0 + ek.arange(Float, 5)) * 2,
-        (1.0 + ek.arange(Float, 5)) * 3,
+        (1.0 + dr.arange(Float, 5)),
+        (1.0 + dr.arange(Float, 5)) * 2,
+        (1.0 + dr.arange(Float, 5)) * 3,
     )
     assert(v == Array3f(to_dest(v)))
 
@@ -265,22 +265,22 @@ def test14_roundtrip(package, dest):
     assert(m == Matrix44f(to_dest(m)))
 
 
-@pytest.mark.parametrize("package", ["enoki.scalar"])
+@pytest.mark.parametrize("package", ["drjit.scalar"])
 def test15_quat_to_euler(package):
     package = prepare(package)
     Quaternion4f, Array3f, Float = package.Quaternion4f, package.Array3f, package.Float
 
     # Gimbal lock at +pi/2
     q = Quaternion4f(0, 1.0 / np.sqrt(2), 0, 1.0 / np.sqrt(2))
-    assert(ek.allclose(ek.quat_to_euler(q), Array3f(0, np.pi / 2, 0)))
+    assert(dr.allclose(dr.quat_to_euler(q), Array3f(0, np.pi / 2, 0)))
     # Gimbal lock at -pi/2
     q = Quaternion4f(0, -1.0 / np.sqrt(2), 0, 1.0 / np.sqrt(2))
-    assert(ek.allclose(ek.quat_to_euler(q), Array3f(0, -np.pi / 2, 0)))
+    assert(dr.allclose(dr.quat_to_euler(q), Array3f(0, -np.pi / 2, 0)))
     # Quaternion without gimbal lock
     q = Quaternion4f(0.15849363803863525, 0.5915063619613647, 0.15849363803863525, 0.7745190262794495)
     e = Array3f(np.pi / 3, np.pi / 3, np.pi / 3)
-    assert(ek.allclose(ek.quat_to_euler(q), e))
+    assert(dr.allclose(dr.quat_to_euler(q), e))
     # Round trip
-    assert(ek.allclose(e, ek.quat_to_euler(ek.euler_to_quat(e))))
+    assert(dr.allclose(e, dr.quat_to_euler(dr.euler_to_quat(e))))
     # Euler -> Quat
-    assert(ek.allclose(q, ek.euler_to_quat(e)))
+    assert(dr.allclose(q, dr.euler_to_quat(e)))

@@ -1,0 +1,13 @@
+@PACKAGE_INIT@
+
+set(drjit_INCLUDE_DIR "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_INCLUDEDIR@")
+set(drjit_VERSION_TYPE "@DRJIT_VERSION_TYPE@")
+set(drjit_LIBRARY "")
+
+check_required_components(drjit)
+
+include("${CMAKE_CURRENT_LIST_DIR}/drjitTargets.cmake")
+
+if(NOT drjit_FIND_QUIETLY)
+  message(STATUS "Found Dr.Jit: ${drjit_INCLUDE_DIR} (found version \"${drjit_VERSION}\" ${drjit_VERSION_TYPE})")
+endif()

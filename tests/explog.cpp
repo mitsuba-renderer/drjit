@@ -1,6 +1,6 @@
 #include "test.h"
 
-ENOKI_TEST_FLOAT(test01_ldexp) {
+DRJIT_TEST_FLOAT(test01_ldexp) {
     const Value inf = std::numeric_limits<Value>::infinity();
     const Value nan = std::numeric_limits<Value>::quiet_NaN();
 
@@ -14,15 +14,15 @@ ENOKI_TEST_FLOAT(test01_ldexp) {
 
     assert(T(ldexp(T(inf), T(Value(2)))) == T(inf));
     assert(T(ldexp(T(-inf), T(Value(2)))) == T(-inf));
-    assert(all(enoki::isnan(ldexp(T(nan), T(Value(2))))));
+    assert(all(drjit::isnan(ldexp(T(nan), T(Value(2))))));
 }
 
 // AVX512F frexp() uses slightly different conventions
 // It is used by log() where this is not a problem though
-ENOKI_TEST_FLOAT(test02_frexp) {
+DRJIT_TEST_FLOAT(test02_frexp) {
    const Value inf = std::numeric_limits<Value>::infinity();
    const Value nan = std::numeric_limits<Value>::quiet_NaN();
-   using int_array_t = enoki::int_array_t<T>;
+   using int_array_t = drjit::int_array_t<T>;
    using Int = typename int_array_t::Value;
 
    for (int i = -10; i < 10; ++i) {
@@ -62,7 +62,7 @@ ENOKI_TEST_FLOAT(test02_frexp) {
    assert(std::isnan(f[0]) || std::isnan(e[0]));
 }
 
-ENOKI_TEST_FLOAT(test03_exp) {
+DRJIT_TEST_FLOAT(test03_exp) {
    test::probe_accuracy<T>(
        [](const T &a) -> T { return exp(a); },
        [](double a) { return std::exp(a); },
@@ -71,7 +71,7 @@ ENOKI_TEST_FLOAT(test03_exp) {
    );
 }
 
-ENOKI_TEST_FLOAT(test03_exp2) {
+DRJIT_TEST_FLOAT(test03_exp2) {
    test::probe_accuracy<T>(
        [](const T &a) -> T { return exp2(a); },
        [](double a) { return std::exp2(a); },
@@ -80,7 +80,7 @@ ENOKI_TEST_FLOAT(test03_exp2) {
    );
 }
 
-ENOKI_TEST_FLOAT(test04_log) {
+DRJIT_TEST_FLOAT(test04_log) {
    test::probe_accuracy<T>(
        [](const T &a) -> T { return log(a); },
        [](double a) { return std::log(a); },
@@ -89,7 +89,7 @@ ENOKI_TEST_FLOAT(test04_log) {
    );
 }
 
-ENOKI_TEST_FLOAT(test04_log2) {
+DRJIT_TEST_FLOAT(test04_log2) {
    test::probe_accuracy<T>(
        [](const T &a) -> T { return log2(a); },
        [](double a) { return std::log2(a); },
@@ -98,7 +98,7 @@ ENOKI_TEST_FLOAT(test04_log2) {
    );
 }
 
-ENOKI_TEST_FLOAT(test05_pow) {
+DRJIT_TEST_FLOAT(test05_pow) {
    assert(T(abs(pow(T(Pi<Value>), T(Value(-2))) -
               T(Value(0.101321183642338))))[0] < 1e-6f);
 }

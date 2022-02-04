@@ -1,7 +1,7 @@
 /*
     tests/horiz.cpp -- tests horizontal operators involving different types
 
-    Enoki is a C++ template library that enables transparent vectorization
+    Dr.Jit is a C++ template library that enables transparent vectorization
     of numerical kernels using SIMD instruction sets available on current
     processor architectures.
 
@@ -13,7 +13,7 @@
 
 #include "test.h"
 
-ENOKI_TEST_ALL(test01_hsum) {
+DRJIT_TEST_ALL(test01_hsum) {
     auto sample = test::sample_values<Value>();
 
     test::validate_horizontal<T>(sample,
@@ -27,7 +27,7 @@ ENOKI_TEST_ALL(test01_hsum) {
         Value(1e-5f));
 }
 
-ENOKI_TEST_ALL(test02_hprod) {
+DRJIT_TEST_ALL(test02_hprod) {
     auto sample = test::sample_values<Value>();
 
     test::validate_horizontal<T>(sample,
@@ -41,7 +41,7 @@ ENOKI_TEST_ALL(test02_hprod) {
         Value(1e-5f));
 }
 
-ENOKI_TEST_ALL(test03_hmin) {
+DRJIT_TEST_ALL(test03_hmin) {
     auto sample = test::sample_values<Value>(false);
 
     test::validate_horizontal<T>(sample,
@@ -55,7 +55,7 @@ ENOKI_TEST_ALL(test03_hmin) {
     );
 }
 
-ENOKI_TEST_ALL(test04_hmax) {
+DRJIT_TEST_ALL(test04_hmax) {
     auto sample = test::sample_values<Value>(false);
 
     test::validate_horizontal<T>(sample,
@@ -69,7 +69,7 @@ ENOKI_TEST_ALL(test04_hmax) {
     );
 }
 
-ENOKI_TEST_ALL(test05_all) {
+DRJIT_TEST_ALL(test05_all) {
     auto sample = test::sample_values<Value>(false);
 
     test::validate_horizontal<T>(sample,
@@ -86,7 +86,7 @@ ENOKI_TEST_ALL(test05_all) {
     assert(!all(mask_t<T>(false)));
 }
 
-ENOKI_TEST_ALL(test06_none) {
+DRJIT_TEST_ALL(test06_none) {
     auto sample = test::sample_values<Value>(false);
 
     test::validate_horizontal<T>(sample,
@@ -103,7 +103,7 @@ ENOKI_TEST_ALL(test06_none) {
     assert(none(mask_t<T>(false)));
 }
 
-ENOKI_TEST_ALL(test07_any) {
+DRJIT_TEST_ALL(test07_any) {
     auto sample = test::sample_values<Value>(false);
 
     test::validate_horizontal<T>(sample,
@@ -119,7 +119,7 @@ ENOKI_TEST_ALL(test07_any) {
     assert(!any(mask_t<T>(false)));
 }
 
-ENOKI_TEST_ALL(test08_count) {
+DRJIT_TEST_ALL(test08_count) {
     auto sample = test::sample_values<Value>(false);
 
     test::validate_horizontal<T>(sample,
@@ -135,7 +135,7 @@ ENOKI_TEST_ALL(test08_count) {
     assert(0 == count(mask_t<T>(false)));
 }
 
-ENOKI_TEST_ALL(test09_dot) {
+DRJIT_TEST_ALL(test09_dot) {
     auto sample = test::sample_values<Value>();
     T value1, value2;
     Value ref = 0;
@@ -168,7 +168,7 @@ ENOKI_TEST_ALL(test09_dot) {
     }
 }
 
-ENOKI_TEST_ALL(test10_hsum_inner_nested) {
+DRJIT_TEST_ALL(test10_hsum_inner_nested) {
     using Array3 = Array<T, 3>;
 
     Array3 x(
@@ -187,7 +187,7 @@ ENOKI_TEST_ALL(test10_hsum_inner_nested) {
     assert(hsum_nested(x) == hsum(y));
 }
 
-ENOKI_TEST_ALL(test11_hprod_inner_nested) {
+DRJIT_TEST_ALL(test11_hprod_inner_nested) {
     using Array3 = Array<T, 3>;
 
     Array3 x(
@@ -206,7 +206,7 @@ ENOKI_TEST_ALL(test11_hprod_inner_nested) {
     assert(hprod_nested(x) == hprod(y) || T::Size > 4);
 }
 
-ENOKI_TEST_ALL(test12_hmin_inner_nested) {
+DRJIT_TEST_ALL(test12_hmin_inner_nested) {
     using Array3 = Array<T, 3>;
 
     Array3 x(
@@ -225,7 +225,7 @@ ENOKI_TEST_ALL(test12_hmin_inner_nested) {
     assert(hmin_nested(x) == hmin(y));
 }
 
-ENOKI_TEST_ALL(test13_hmax_inner_nested) {
+DRJIT_TEST_ALL(test13_hmax_inner_nested) {
     using Array3 = Array<T, 3>;
 
     Array3 x(

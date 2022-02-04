@@ -1,10 +1,10 @@
 #pragma once
 
 #include "common.h"
-#include <enoki/loop.h>
+#include <drjit/loop.h>
 
-template <typename Value> struct Loop : ek::Loop<Value> {
-    using Base = ek::Loop<Value>;
+template <typename Value> struct Loop : dr::Loop<Value> {
+    using Base = dr::Loop<Value>;
     using Base::m_indices;
     using Base::m_indices_ad;
     using Base::m_ad_float_precision;
@@ -12,7 +12,7 @@ template <typename Value> struct Loop : ek::Loop<Value> {
     using Base::m_state;
 
     Loop(const char *name, py::handle func) : Base(name) {
-        py::object detail = py::module_::import("enoki").attr("detail");
+        py::object detail = py::module_::import("drjit").attr("detail");
         m_process_state = detail.attr("loop_process_state");
         if (!func.is_none()) {
             if (!py::isinstance<py::function>(func)) {
@@ -63,7 +63,7 @@ template <typename Value> struct Loop : ek::Loop<Value> {
         write_state();
     }
 
-    bool operator()(const ek::mask_t<Value> &mask) {
+    bool operator()(const dr::mask_t<Value> &mask) {
         read_state();
         bool result = Base::operator()(mask);
         write_state();
@@ -110,6 +110,6 @@ private:
 private:
     py::list m_funcs, m_state_py;
     py::object m_process_state;
-    ek::ek_vector<uint32_t> m_indices_py;
-    ek::ek_vector<uint32_t> m_indices_py_ad;
+    dr::dr_vector<uint32_t> m_indices_py;
+    dr::dr_vector<uint32_t> m_indices_py_ad;
 };

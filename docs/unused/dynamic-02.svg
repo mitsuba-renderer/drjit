@@ -13,7 +13,7 @@
 	.st7{fill:#FCD9FF;stroke:#000000;stroke-width:3;stroke-miterlimit:10;}
 	.st8{fill:none;stroke:#000000;stroke-width:4;stroke-miterlimit:10;}
 </style>
-<title>enoki_dynamic_struct</title>
+<title>drjit_dynamic_struct</title>
 <rect x="593.14" y="10.53" class="st0" width="105.57" height="104.74"/>
 <rect x="698.71" y="10.53" class="st0" width="105.57" height="104.74"/>
 <rect x="804.29" y="10.53" class="st0" width="105.57" height="104.74"/>

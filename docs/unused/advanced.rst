@@ -2,12 +2,12 @@ Advanced topics
 ===============
 
 This section discusses a number of advanced operations and ways of extending
-Enoki.
+Dr.Jit.
 
-Improving introspection of Enoki types in LLDB/GDB
+Improving introspection of Dr.Jit types in LLDB/GDB
 --------------------------------------------------
 
-When debugging programs built on top of Enoki using `LLDB
+When debugging programs built on top of Dr.Jit using `LLDB
 <https://lldb.llvm.org/>`_ or `GDB <https://www.gnu.org/software/gdb/>`_, the
 stringified versions of arrays are needlessly verbose and reveal private
 implementation details. For instance, printing a simple statically sized 3D
@@ -16,8 +16,8 @@ vectors like ``Array<float, 3>(1, 2, 3)`` in LLDB yields
 .. code-block:: text
 
     $0 = {
-      enoki::StaticArrayImpl<float, 3, false, enoki::Array<float, 3>, int> = {
-        enoki::StaticArrayImpl<float, 4, false, enoki::Array<float, 3>, int> = {
+      drjit::StaticArrayImpl<float, 3, false, drjit::Array<float, 3>, int> = {
+        drjit::StaticArrayImpl<float, 4, false, drjit::Array<float, 3>, int> = {
           m = (1, 2, 3, 0)
         }
       }
@@ -29,10 +29,10 @@ obscured behind a pointer:
 .. code-block:: text
 
     $0 = {
-      enoki::DynamicArrayImpl<enoki::Packet<float, 8>, enoki::DynamicArray<enoki::Packet<float, 8> > > = summary {
+      drjit::DynamicArrayImpl<drjit::Packet<float, 8>, drjit::DynamicArray<drjit::Packet<float, 8> > > = summary {
         m_packets = {
           __ptr_ = {
-            std::__1::__compressed_pair_elem<enoki::Packet<float, 8> *, 0, false> = {
+            std::__1::__compressed_pair_elem<drjit::Packet<float, 8> *, 0, false> = {
               __value_ = 0x0000000100300200
             }
           }
@@ -43,28 +43,28 @@ obscured behind a pointer:
     }
 
 To improve readability, this repository includes scripts that improve GDB and LLDB's
-understanding of Enoki types. With this script, both of the above turn into
+understanding of Dr.Jit types. With this script, both of the above turn into
 
 .. code-block:: text
 
     $0 = [1, 2, 3]
 
-To install it in LLDB, copy the file ``resources/enoki_lldb.py`` to ``~/.lldb``
+To install it in LLDB, copy the file ``resources/drjit_lldb.py`` to ``~/.lldb``
 (creating the directory, if not present) and then apppend the following line to
 the file ``~/.lldbinit`` (again, creating it if, not already present):
 
 .. code-block:: text
 
-    command script import ~/.lldb/enoki_lldb.py
+    command script import ~/.lldb/drjit_lldb.py
 
-To install it in GDB, copy the file ``resources/enoki_gdb.py`` to ``~/.gdb``
+To install it in GDB, copy the file ``resources/drjit_gdb.py`` to ``~/.gdb``
 (creating the directory, if not present) and then apppend the following two lines to
 the file ``~/.gdbinit`` (again, creating it if, not already present):
 
 .. code-block:: text
 
     set print pretty
-    source ~/.gdb/enoki_gdb.py
+    source ~/.gdb/drjit_gdb.py
 
 .. _compression:
 
@@ -76,7 +76,7 @@ selectively writing only masked parts of an array so that the selected entries
 become densely packed in memory (e.g. to improve resource usage when only parts
 of an array participate in a computation).
 
-The function :cpp:func:`enoki::compress` efficiently maps this operation onto
+The function :cpp:func:`drjit::compress` efficiently maps this operation onto
 the targeted hardware (SSE4.2, AVX2, and AVX512 implementations are provided).
 The function also automatically advances the pointer by the amount of written
 entries.
@@ -92,7 +92,7 @@ entries.
     ...
 
 Custom data structures such as the GPS record class discussed in previous
-chapters are transparently supported by :cpp:func:`enoki::compress`---in this
+chapters are transparently supported by :cpp:func:`drjit::compress`---in this
 case, the mask applies to each vertical slice through the data structure as
 illustrated in the following figure:
 
@@ -133,7 +133,7 @@ of records can be compressed:
 
 .. warning::
 
-    The writes performed by :cpp:func:`enoki::compress` are at the granularity
+    The writes performed by :cpp:func:`drjit::compress` are at the granularity
     of entire packets, which means that some extra scratch space generally
     needs to be allocated at the end of the output array.
 
@@ -141,14 +141,14 @@ of records can be compressed:
     exactly ``N`` elements, you are required to reserve memory for ``N +
     Packet::Size`` elements to avoid undefined behavior.
 
-    Note that :cpp:func:`enoki::compress` will never require more memory than
+    Note that :cpp:func:`drjit::compress` will never require more memory than
     the input array, hence this provides a safe upper bound.
 
 
 Vectorized for loops
 --------------------
 
-Enoki provides a powerful :cpp:func:`enoki::range` iterator that enables for
+Dr.Jit provides a powerful :cpp:func:`drjit::range` iterator that enables for
 loops with index vectors. The following somewhat contrived piece of code
 computes :math:`\sum_{i=0}^{1000}i^2` using brute force addition (but with only
 :math:`1000/16\approx 63` loop iterations).
@@ -201,7 +201,7 @@ Here, it is assumed that the range along each dimension starts from zero.
 Scatter, gather, and prefetches for SoA ↔ AoS conversion
 ----------------------------------------------------------
 
-Enoki's :cpp:func:`scatter` and :cpp:func:`gather` functions can transparently
+Dr.Jit's :cpp:func:`scatter` and :cpp:func:`gather` functions can transparently
 convert between SoA and AoS representations. This case is triggered when the
 supplied index array has a smaller nesting level than that of the data array.
 For instance, consider the following example:
@@ -235,7 +235,7 @@ hundred cycles before the actual usage).
     /* Prefetch into L2 cache for write access */
     prefetch<Matrix3fP, /* Write = */ true, /* Level = */ 2>(data, indices);
 
-Enoki is smart enough to realize that the non-vectorized form of gather and
+Dr.Jit is smart enough to realize that the non-vectorized form of gather and
 scatter statements can be reduced to standard loads and stores, e.g.
 
 .. code-block:: cpp
@@ -276,7 +276,7 @@ Given the challenges of efficiently realizing integer division in hardware,
 current processors don't even provide an vector instruction to perform multiple
 divisions at once.
 
-Although Enoki can't do anything clever to provide an efficient array division
+Although Dr.Jit can't do anything clever to provide an efficient array division
 instruction given these constraints, it does provide a highly efficient
 division operation for a special case that is often applicable: *dividing by an
 integer constant*. The following snippet falls under this special case because
@@ -285,7 +285,7 @@ at compile time.
 
 .. code-block:: cpp
 
-    using Int32 = enoki::Array<uint32_t, 8>;
+    using Int32 = drjit::Array<uint32_t, 8>;
 
     Int32 div_43(Int32 a) {
         return a / 43;
@@ -318,12 +318,12 @@ shifts, and 2 additions/subtractions. Needless to say, this is going to be much
 faster than sequence of high-latency/low-througput scalar divisions.
 
 In cases where the constant is not known at compile time, a
-:cpp:class:`enoki::divisor` instance can be precomputed and efficiently applied
-using :cpp:func:`enoki::divisor::operator()`, as shown in the following example:
+:cpp:class:`drjit::divisor` instance can be precomputed and efficiently applied
+using :cpp:func:`drjit::divisor::operator()`, as shown in the following example:
 
 .. code-block:: cpp
 
-    using Int32P = enoki::Packet<uint32_t, 8>;
+    using Int32P = drjit::Packet<uint32_t, 8>;
 
     void divide(Int32P *a, int32_t b, size_t n) {
         // Precompute magic constants
@@ -348,7 +348,7 @@ seen, the difference is fairly significant on consumer processors (up to
     :width: 600px
     :align: center
 
-Enoki's implementation of division by constants is based on the excellent
+Dr.Jit's implementation of division by constants is based on the excellent
 `libdivide <https://github.com/ridiculousfish/libdivide>`_ library.
 
 .. note::
@@ -360,10 +360,10 @@ Enoki's implementation of division by constants is based on the excellent
 
 .. warning::
 
-    Enoki's integer precomputed division operator does not support dividends
+    Dr.Jit's integer precomputed division operator does not support dividends
     equal to :math:`\pm 1` (all other values are permissible). This is an
     inherent limitation of the magic number & shift-based algorithm used
-    internally, which simply cannot represent this dividend. Enoki will throw
+    internally, which simply cannot represent this dividend. Dr.Jit will throw
     an exception when a dividend equal to :math:`\pm 1` is detected in an
     application compiled in debug mode.
 
@@ -409,7 +409,7 @@ updates occur whenever the ``indices`` array contains an index multiple times:
     /* Ooops, don't do this. Some entries may have to be incremented multiple times.. */
     scatter(hist, gather<FloatP>(hist, indices) + 1, indices);
 
-Enoki provides a function named :cpp:func:`enoki::transform`, which modifies an
+Dr.Jit provides a function named :cpp:func:`drjit::transform`, which modifies an
 indirect memory location in a way that is not susceptible to conflicts. The
 function takes an arbitrary function as parameter and applies it to the
 specified memory location, which allows this approach to generalize to
@@ -441,7 +441,7 @@ extra arguments will also be passed to the lambda function:
                       [](auto& x, auto&y, auto& /* mask */) { x += y; },
                       amount, mask);
 
-Internally, :cpp:func:`enoki::transform` detects and processes conflicts using
+Internally, :cpp:func:`drjit::transform` detects and processes conflicts using
 the AVX512CDI instruction set. When conflicts are present, the function
 provided as an argument may be invoked multiple times in a row. When AVX512CDI
 is not available, a slower scalar fallback implementation is used.
@@ -465,37 +465,37 @@ special short-hand notation exists:
 Defining custom array types
 ---------------------------
 
-Enoki provides a mechanism for declaring custom array types using the
+Dr.Jit provides a mechanism for declaring custom array types using the
 `Curiously recurring template pattern
 <https://en.wikipedia.org/wiki/Curiously_recurring_template_pattern>`_. The
 following snippet shows a declaration of a hypothetical type named ``Spectrum``
 representing a discretized color spectrum. ``Spectrum`` generally behaves the
-same way as :cpp:class:`Array` and supports all regular Enoki operations.
+same way as :cpp:class:`Array` and supports all regular Dr.Jit operations.
 
 .. code-block:: cpp
 
     template <typename Value, size_t Size>
-    struct Spectrum : enoki::StaticArrayImpl<Value, Size, false,
+    struct Spectrum : drjit::StaticArrayImpl<Value, Size, false,
                                              Spectrum<Value, Size>> {
 
         /// Base class
-        using Base = enoki::StaticArrayImpl<Value, Size, false,
+        using Base = drjit::StaticArrayImpl<Value, Size, false,
                                             Spectrum<Value, Size>>;
 
         /// Helper alias used to implement type promotion rules
         template <typename T> using ReplaceValue = Spectrum<T, Size>;
 
         /// Mask type associated with this custom type
-        using MaskType = enoki::Mask<Value, Size>;
+        using MaskType = drjit::Mask<Value, Size>;
 
         /// Import constructors, assignment operators, etc.
-        ENOKI_IMPORT_ARRAY(Base, Spectrum)
+        DRJIT_IMPORT_ARRAY(Base, Spectrum)
     };
 
 The main reason for declaring custom arrays is to tag (and preserve) the type
 of arrays within expressions. For instance, the type of ``value2`` in the
 following snippet is ``Spectrum<float, 8>`` rather than a generic
-``enoki::Array<...>``.
+``drjit::Array<...>``.
 
 .. code-block:: cpp
 
@@ -521,9 +521,9 @@ following snippet is ``Spectrum<float, 8>`` rather than a generic
             using Spectrum8 = Spectrum<Value, 8>;
             Spectrum8 r_s;
             Spectrum8 r_p;
-            ENOKI_STRUCT(PolarizedSpectrum, r_s, r_p)
+            DRJIT_STRUCT(PolarizedSpectrum, r_s, r_p)
         };
-        ENOKI_STRUCT_SUPPORT(PolarizedSpectrum, r_s, r_p)
+        DRJIT_STRUCT_SUPPORT(PolarizedSpectrum, r_s, r_p)
 
         using PolarizedSpectrumfP = PolarizedSpectrum<FloatP>;
 
@@ -539,24 +539,24 @@ following snippet is ``Spectrum<float, 8>`` rather than a generic
     .. code-block:: cpp
 
         template <typename Value, size_t Size>
-        struct Spectrum<enoki::detail::MaskedArray<Value>, Size> : enoki::detail::MaskedArray<Spectrum<Value, Size>> {
-            using Base = enoki::detail::MaskedArray<Spectrum<Value, Size>>;
+        struct Spectrum<drjit::detail::MaskedArray<Value>, Size> : drjit::detail::MaskedArray<Spectrum<Value, Size>> {
+            using Base = drjit::detail::MaskedArray<Spectrum<Value, Size>>;
             using Base::Base;
             using Base::operator=;
             Spectrum(const Base &b) : Base(b) { }
         };
 
-    This partial overload has the purpose of propagating an internal Enoki
+    This partial overload has the purpose of propagating an internal Dr.Jit
     masking data structure to the top level (so that ``Spectrum<MaskedArray>``
     becomes ``MaskedArray<Spectrum>``).
 
 .. _platform-differences:
 
-Architectural differences handled by Enoki
+Architectural differences handled by Dr.Jit
 ------------------------------------------
 
 In addition to mapping vector operations on the available instruction sets,
-Enoki's abstractions hide a number of tedious platform-related details. This is
+Dr.Jit's abstractions hide a number of tedious platform-related details. This is
 a partial list:
 
 1. The representation of masks is highly platform-dependent. For instance, the
@@ -574,21 +574,21 @@ a partial list:
 
 3. Vector instruction sets are generally fairly incomplete in the sense that
    they are missing many entries in the full *data type* / *operation* matrix.
-   Enoki emulates such operations using other vector instructions whenever
+   Dr.Jit emulates such operations using other vector instructions whenever
    possible.
 
 4. Various operations that work with 64 bit registers aren't available
-   when Enoki is compiled on a 32-bit platform and must be emulated.
+   when Dr.Jit is compiled on a 32-bit platform and must be emulated.
 
 Adding backends for new instruction sets
 ----------------------------------------
 
-Adding a new Enoki array type involves creating a new partial overload of the
+Adding a new Dr.Jit array type involves creating a new partial overload of the
 ``StaticArrayImpl<>`` template that derives from ``StaticArrayBase``. To
-support the full feature set of Enoki, overloads must provide at least a set of
+support the full feature set of Dr.Jit, overloads must provide at least a set of
 core methods shown below. The underscores in the function names indicate that
 this is considered non-public API that should only be accessed indirectly via
-the routing templates in ``enoki/enoki_router.h``.
+the routing templates in ``drjit/drjit_router.h``.
 
 * The following core operations must be provided by every implementation.
 
@@ -618,7 +618,7 @@ the routing templates in ``enoki/enoki_router.h``.
 
   * Zero-valued array creation: ``zero_``.
 
-* The following operations all have default implementations in Enoki's
+* The following operations all have default implementations in Dr.Jit's
   mathematical support library, hence overriding them is optional.
 
   However, doing so may be worthwile if efficient hardware-level support exists

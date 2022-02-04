@@ -1,24 +1,24 @@
 #include "bind.h"
-#include <enoki/autodiff.h>
-#include <enoki/idiv.h>
-#include <enoki/loop.h>
-#include <enoki/texture.h>
+#include <drjit/autodiff.h>
+#include <drjit/idiv.h>
+#include <drjit/loop.h>
+#include <drjit/texture.h>
 #include <pybind11/stl.h>
 #include <pybind11/operators.h>
 
 extern void export_scalar(py::module_ &m);
 
-#if defined(ENOKI_ENABLE_PYTHON_PACKET)
+#if defined(DRJIT_ENABLE_PYTHON_PACKET)
 extern void export_packet(py::module_ &m);
 #endif
 
-#if defined(ENOKI_ENABLE_JIT)
-#if defined(ENOKI_ENABLE_CUDA)
+#if defined(DRJIT_ENABLE_JIT)
+#if defined(DRJIT_ENABLE_CUDA)
 extern void export_cuda(py::module_ &m);
 #endif
 extern void export_llvm(py::module_ &m);
-#if defined(ENOKI_ENABLE_AUTODIFF)
-#if defined(ENOKI_ENABLE_CUDA)
+#if defined(DRJIT_ENABLE_AUTODIFF)
+#if defined(DRJIT_ENABLE_CUDA)
 extern void export_cuda_ad(py::module_ &m);
 #endif
 extern void export_llvm_ad(py::module_ &m);
@@ -46,10 +46,10 @@ const char* var_type_numpy[(int) VarType::Count] {
 
 py::handle array_base, array_name, array_init, tensor_init, array_configure;
 
-/// Placeholder base of all Enoki arrays in the Python domain
+/// Placeholder base of all DrJit arrays in the Python domain
 struct ArrayBase { };
 
-#if defined(ENOKI_ENABLE_JIT)
+#if defined(DRJIT_ENABLE_JIT)
 static void log_callback(LogLevel /* level */, const char *msg) {
     if (!_Py_IsFinalizing()) {
         py::gil_scoped_acquire acquire;
@@ -60,15 +60,15 @@ static void log_callback(LogLevel /* level */, const char *msg) {
 }
 #endif
 
-PYBIND11_MODULE(enoki_ext, m_) {
-#if defined(ENOKI_ENABLE_JIT)
+PYBIND11_MODULE(drjit_ext, m_) {
+#if defined(DRJIT_ENABLE_JIT)
     jit_set_log_level_stderr(LogLevel::Disable);
     jit_set_log_level_callback(LogLevel::Warn, log_callback);
     jit_init_async((uint32_t) JitBackend::CUDA | (uint32_t) JitBackend::LLVM);
 #endif
 
     (void) m_;
-    py::module_ m = py::module_::import("enoki");
+    py::module_ m = py::module_::import("drjit");
 
     // Look up some variables from the detail namespace
     py::module_ array_detail = (py::module_) m.attr("detail");
@@ -77,7 +77,7 @@ PYBIND11_MODULE(enoki_ext, m_) {
     tensor_init = array_detail.attr("tensor_init");
     array_configure = array_detail.attr("array_configure");
 
-    m.attr("Dynamic") = ek::Dynamic;
+    m.attr("Dynamic") = dr::Dynamic;
 
     py::enum_<VarType>(m, "VarType", py::arithmetic())
         .value("Void", VarType::Void)
@@ -99,13 +99,13 @@ PYBIND11_MODULE(enoki_ext, m_) {
         .def_property_readonly(
             "Size", [](VarType v) { return var_type_size[(int) v]; });
 
-    py::enum_<ek::ADFlag>(m, "ADFlag", py::arithmetic())
-        .value("ClearNone", ek::ADFlag::ClearNone)
-        .value("ClearEdges", ek::ADFlag::ClearEdges)
-        .value("ClearInput", ek::ADFlag::ClearInput)
-        .value("ClearInterior", ek::ADFlag::ClearInterior)
-        .value("ClearVertices", ek::ADFlag::ClearVertices)
-        .value("Default", ek::ADFlag::Default)
+    py::enum_<dr::ADFlag>(m, "ADFlag", py::arithmetic())
+        .value("ClearNone", dr::ADFlag::ClearNone)
+        .value("ClearEdges", dr::ADFlag::ClearEdges)
+        .value("ClearInput", dr::ADFlag::ClearInput)
+        .value("ClearInterior", dr::ADFlag::ClearInterior)
+        .value("ClearVertices", dr::ADFlag::ClearVertices)
+        .value("Default", dr::ADFlag::Default)
         .def(py::self == py::self)
         .def(py::self | py::self)
         .def(int() | py::self)
@@ -114,27 +114,27 @@ PYBIND11_MODULE(enoki_ext, m_) {
         .def(+py::self)
         .def(~py::self);
 
-    py::enum_<ek::FilterMode>(m, "FilterMode")
-        .value("Nearest", ek::FilterMode::Nearest)
-        .value("Linear", ek::FilterMode::Linear);
+    py::enum_<dr::FilterMode>(m, "FilterMode")
+        .value("Nearest", dr::FilterMode::Nearest)
+        .value("Linear", dr::FilterMode::Linear);
 
-    py::enum_<ek::WrapMode>(m, "WrapMode")
-        .value("Repeat", ek::WrapMode::Repeat)
-        .value("Clamp", ek::WrapMode::Clamp)
-        .value("Mirror", ek::WrapMode::Mirror);
+    py::enum_<dr::WrapMode>(m, "WrapMode")
+        .value("Repeat", dr::WrapMode::Repeat)
+        .value("Clamp", dr::WrapMode::Clamp)
+        .value("Mirror", dr::WrapMode::Mirror);
 
-    py::class_<ek::detail::reinterpret_flag>(array_detail, "reinterpret_flag")
+    py::class_<dr::detail::reinterpret_flag>(array_detail, "reinterpret_flag")
         .def(py::init<>());
 
     array_base = py::class_<ArrayBase>(m, "ArrayBase");
 
-    py::register_exception<enoki::Exception>(m, "Exception");
+    py::register_exception<drjit::Exception>(m, "Exception");
     array_detail.def("reinterpret_scalar", &reinterpret_scalar);
     array_detail.def("fmadd_scalar", [](double a, double b, double c) {
         return std::fma(a, b, c);
     });
 
-#if defined(ENOKI_ENABLE_CUDA)
+#if defined(DRJIT_ENABLE_CUDA)
     array_detail.def("cuda_context", []() { return reinterpret_cast<std::uintptr_t>(jit_cuda_context()); });
     array_detail.def("cuda_device", &jit_cuda_device_raw);
     array_detail.def("cuda_stream", []() { return reinterpret_cast<std::uintptr_t>(jit_cuda_stream()); });
@@ -142,40 +142,40 @@ PYBIND11_MODULE(enoki_ext, m_) {
 
     export_scalar(m);
 
-#if defined(ENOKI_ENABLE_PYTHON_PACKET)
+#if defined(DRJIT_ENABLE_PYTHON_PACKET)
     export_packet(m);
 #endif
 
-#if defined(ENOKI_ENABLE_JIT)
-#if defined(ENOKI_ENABLE_CUDA)
+#if defined(DRJIT_ENABLE_JIT)
+#if defined(DRJIT_ENABLE_CUDA)
     export_cuda(m);
 #endif
     export_llvm(m);
-#if defined(ENOKI_ENABLE_AUTODIFF)
-    py::enum_<ek::ADMode>(m, "ADMode")
-        .value("Primal", ek::ADMode::Primal)
-        .value("Forward", ek::ADMode::Forward)
-        .value("Backward", ek::ADMode::Backward);
+#if defined(DRJIT_ENABLE_AUTODIFF)
+    py::enum_<dr::ADMode>(m, "ADMode")
+        .value("Primal", dr::ADMode::Primal)
+        .value("Forward", dr::ADMode::Forward)
+        .value("Backward", dr::ADMode::Backward);
 
-    py::enum_<ek::detail::ADScope>(array_detail, "ADScope")
-        .value("Suspend", ek::detail::ADScope::Suspend)
-        .value("Resume", ek::detail::ADScope::Resume)
-        .value("Isolate", ek::detail::ADScope::Isolate);
+    py::enum_<dr::detail::ADScope>(array_detail, "ADScope")
+        .value("Suspend", dr::detail::ADScope::Suspend)
+        .value("Resume", dr::detail::ADScope::Resume)
+        .value("Isolate", dr::detail::ADScope::Isolate);
 
-#if defined(ENOKI_ENABLE_CUDA)
+#if defined(DRJIT_ENABLE_CUDA)
     export_cuda_ad(m);
 #endif
     export_llvm_ad(m);
-    m.def("ad_whos_str", &ek::ad_whos);
-    m.def("ad_whos", []() { py::print(ek::ad_whos()); });
+    m.def("ad_whos_str", &dr::ad_whos);
+    m.def("ad_whos", []() { py::print(dr::ad_whos()); });
 #endif
 
     struct Scope {
         Scope(const std::string &name) : name(name) { }
 
         void enter() {
-            #if defined(ENOKI_ENABLE_JIT)
-                #if defined(ENOKI_ENABLE_CUDA)
+            #if defined(DRJIT_ENABLE_JIT)
+                #if defined(DRJIT_ENABLE_CUDA)
                     if (jit_has_backend(JitBackend::CUDA)) {
                         jit_prefix_push(JitBackend::CUDA, name.c_str());
                         pushed_cuda = true;
@@ -186,28 +186,28 @@ PYBIND11_MODULE(enoki_ext, m_) {
                     pushed_llvm = true;
                 }
             #endif
-            #if defined(ENOKI_ENABLE_AUTODIFF)
-                ek::ad_prefix_push(name.c_str());
+            #if defined(DRJIT_ENABLE_AUTODIFF)
+                dr::ad_prefix_push(name.c_str());
             #endif
         }
 
         void exit(py::handle, py::handle, py::handle) {
-            #if defined(ENOKI_ENABLE_JIT)
-                #if defined(ENOKI_ENABLE_CUDA)
+            #if defined(DRJIT_ENABLE_JIT)
+                #if defined(DRJIT_ENABLE_CUDA)
                     if (pushed_cuda)
                         jit_prefix_pop(JitBackend::CUDA);
                 #endif
                 if (pushed_llvm)
                     jit_prefix_pop(JitBackend::LLVM);
             #endif
-            #if defined(ENOKI_ENABLE_AUTODIFF)
-                ek::ad_prefix_pop();
+            #if defined(DRJIT_ENABLE_AUTODIFF)
+                dr::ad_prefix_pop();
             #endif
         }
 
         std::string name;
-        #if defined(ENOKI_ENABLE_JIT)
-        #if defined(ENOKI_ENABLE_CUDA)
+        #if defined(DRJIT_ENABLE_JIT)
+        #if defined(DRJIT_ENABLE_CUDA)
             bool pushed_cuda = false;
         #endif
             bool pushed_llvm = false;
@@ -273,7 +273,7 @@ PYBIND11_MODULE(enoki_ext, m_) {
         .value("VCallReduce", KernelType::VCallReduce)
         .value("Other", KernelType::Other);
 
-#if defined(ENOKI_ENABLE_CUDA)
+#if defined(DRJIT_ENABLE_CUDA)
     m.def("device_count", &jit_cuda_device_count);
     m.def("set_device", &jit_cuda_set_device, "device"_a);
     m.def("device", &jit_cuda_device);
@@ -350,7 +350,7 @@ PYBIND11_MODULE(enoki_ext, m_) {
                      "type"_a, "device"_a, "shape"_a, "strides"_a);
     array_detail.def("from_dlpack", &from_dlpack);
 
-#if defined(ENOKI_ENABLE_CUDA)
+#if defined(DRJIT_ENABLE_CUDA)
     array_detail.def("device", &jit_cuda_device);
 #endif
     array_detail.def("device", &jit_var_device);
@@ -368,7 +368,7 @@ PYBIND11_MODULE(enoki_ext, m_) {
     m.def("flag", [](JitFlag f) { return jit_flag(f); });
 
     /* Register a cleanup callback function that is invoked when
-       the 'enoki::ArrayBase' Python type is garbage collected */
+       the 'drjit::ArrayBase' Python type is garbage collected */
     py::cpp_function cleanup_callback([](py::handle /* weakref */) {
         py::gil_scoped_release gsr;
         jit_set_log_level_stderr(LogLevel::Warn);
@@ -386,31 +386,31 @@ PYBIND11_MODULE(enoki_ext, m_) {
     array_detail.def("idiv", [](VarType t, py::object value) -> py::object {
         switch (t) {
             case VarType::Int32: {
-                    enoki::divisor<int32_t> div(py::cast<int32_t>(value));
+                    drjit::divisor<int32_t> div(py::cast<int32_t>(value));
                     return py::make_tuple((int32_t) div.multiplier, div.shift);
                 }
                 break;
 
             case VarType::UInt32: {
-                    enoki::divisor<uint32_t> div(py::cast<uint32_t>(value));
+                    drjit::divisor<uint32_t> div(py::cast<uint32_t>(value));
                     return py::make_tuple((uint32_t) div.multiplier, div.shift);
                 }
                 break;
 
             case VarType::Int64: {
-                    enoki::divisor<int64_t> div(py::cast<int64_t>(value));
+                    drjit::divisor<int64_t> div(py::cast<int64_t>(value));
                     return py::make_tuple((int64_t) div.multiplier, div.shift);
                 }
                 break;
 
             case VarType::UInt64: {
-                    enoki::divisor<uint64_t> div(py::cast<uint64_t>(value));
+                    drjit::divisor<uint64_t> div(py::cast<uint64_t>(value));
                     return py::make_tuple((uint64_t) div.multiplier, div.shift);
                 }
                 break;
 
             default:
-                throw enoki::Exception("Unsupported integer type!");
+                throw drjit::Exception("Unsupported integer type!");
         }
     });
 }

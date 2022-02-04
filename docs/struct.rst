@@ -1,24 +1,24 @@
-.. cpp:namespace:: enoki
+.. cpp:namespace:: drjit
 
 Custom data structures
 ======================
 
-Many Enoki operations can be applied to custom data structures, causing them to
+Many Dr.Jit operations can be applied to custom data structures, causing them to
 recursively propagate through all of the data structure's fields. The remainder
 of this sections explains several use cases of this functionality, and how to
-enable it via a suitable :c:macro:`ENOKI_STRUCT` declaration. This feature
+enable it via a suitable :c:macro:`DRJIT_STRUCT` declaration. This feature
 requires the following optional header file:
 
 .. code-block:: cpp
 
-    #include <enoki/struct.h>
+    #include <drjit/struct.h>
 
 Motivation
 ----------
 
-One of the main purposes of Enoki is to convert a piece of software into a
+One of the main purposes of Dr.Jit is to convert a piece of software into a
 corresponding "wide" vectorized version that processes many inputs at once.
-Simply replacing all scalar types (e.g. ``float``, ``int32_t``) by Enoki arrays
+Simply replacing all scalar types (e.g. ``float``, ``int32_t``) by Dr.Jit arrays
 may be enough to accomplish this goal in some cases. However, this strategy
 tends to fail when the program relies on more complex types. Consider the
 following example:
@@ -49,7 +49,7 @@ an array:
 After vectorization, ``index`` turns into an array of indices, and the element
 access needs to be converted into an equivalent *gather* operation that fetches
 many entries in parallel. Of course, all of this could be accomplished by
-inserting numerous calls (one *per field*) to Enoki's :cpp:func:`select()` and
+inserting numerous calls (one *per field*) to Dr.Jit's :cpp:func:`select()` and
 :cpp:func:`gather()` functions, but this would be *tedious*.
 
 
@@ -64,16 +64,16 @@ declared as follows:
     // MyStruct parameterized by representative element
     template <typename Float> struct MyStruct {
         // Derive suitable types from 'Float'
-        using Array3f = ek::Array<Float, 3>;
-        using UInt32  = ek::uint32_array_t<Float>;
+        using Array3f = dr::Array<Float, 3>;
+        using UInt32  = dr::uint32_array_t<Float>;
 
         // Field declarations
         Array3f a;
         UInt32 b;
         SomeOtherStruct<Float> c;
 
-        // Inform Enoki about the members of 'MyStruct'
-        ENOKI_STRUCT(MyStruct, a, b, c)
+        // Inform Dr.Jit about the members of 'MyStruct'
+        DRJIT_STRUCT(MyStruct, a, b, c)
     };
 
 
@@ -93,7 +93,7 @@ Note in particular the following changes:
    - instantiating other custom types (``SomeOtherStruct<Float>``) following
      the same pattern.
 
-2. The :c:macro:`ENOKI_STRUCT` declaration at the end informs Enoki about the
+2. The :c:macro:`DRJIT_STRUCT` declaration at the end informs Dr.Jit about the
    data structure's fields.
 
 Benefits
@@ -101,7 +101,7 @@ Benefits
 
 This new template version of ``MyStruct`` is slightly longer, but it is also
 significantly more general. First, it adds compatibility for the various
-backends of Enoki. For example,
+backends of Dr.Jit. For example,
 
 - ``MyStruct<float>`` reproduces the original behavior.
 
@@ -111,7 +111,7 @@ backends of Enoki. For example,
 - ``MyStruct<DiffArray<CUDAArray<<float>>>`` will JIT-compile kernels
   that run on CUDA-capable GPUs, while keeping track of derivatives.
 
-Second, the :c:macro:`ENOKI_STRUCT` declaration at the end makes the type
+Second, the :c:macro:`DRJIT_STRUCT` declaration at the end makes the type
 transparent to :ref:`various standard operations <struct-supported>`.
 
 For instance, consider the previous ``if``-guarded assignment that only made
@@ -136,8 +136,8 @@ sequence of equivalent assignments of the form
 .. code-block:: cpp
 
     MyStruct temp = func(data);
-    data.a = ek::select(condition, data.a, temp.a);
-    data.b = ek::select(condition, data.b, temp.b);
+    data.a = dr::select(condition, data.a, temp.a);
+    data.b = dr::select(condition, data.b, temp.b);
     // ... (one per field) ...
 
 
@@ -146,8 +146,8 @@ sequence of equivalent assignments of the form
     **Loops and virtual function calls**: When a custom data structure is an
     argument or return value of a :ref:`virtual function call
     <virtual-functions>`, or when it is a loop variable of a :ref:`symbolic
-    loop <recording-loops>`, then Enoki must inspect the data structure's
-    individual fields. In such cases, an :c:macro:`ENOKI_STRUCT` declaration is
+    loop <recording-loops>`, then Dr.Jit must inspect the data structure's
+    individual fields. In such cases, an :c:macro:`DRJIT_STRUCT` declaration is
     mandatory.
 
 .. _struct-supported:
@@ -159,9 +159,9 @@ In the following, suppose that the following declarations are available:
 
 .. code-block:: cpp
 
-   using Float    = ek::CUDAArray<float>;
-   using UInt32   = ek::CUDAArray<uint32_t>;
-   using Mask     = ek::CUDAArray<bool>;
+   using Float    = dr::CUDAArray<float>;
+   using UInt32   = dr::CUDAArray<uint32_t>;
+   using Mask     = dr::CUDAArray<bool>;
    using MyStruct = ::MyStruct<Float>;
 
    Mask mask;
@@ -176,29 +176,29 @@ structures.
 
    .. code-block:: cpp
 
-       x = ek::empty<MyStruct>(1000);
+       x = dr::empty<MyStruct>(1000);
 
 2. **Mask-based selection**: The function :cpp:func:`select()` can blend
    the fields of two data structures based on a provided mask.
 
    .. code-block:: cpp
 
-       z = ek::select(mask, x, y);
+       z = dr::select(mask, x, y);
 
 3. **Masked assignment**: :cpp:func:`masked()` and the indexing operator.
 
-   The :c:macro:`ENOKI_STRUCT` macro installs a convenient ``operator[]`` overload
+   The :c:macro:`DRJIT_STRUCT` macro installs a convenient ``operator[]`` overload
    that can be used to perform mask-based assignment
 
    .. code-block:: cpp
 
-       x[x.b < 0] = ek::zero<MyStruct>();
+       x[x.b < 0] = dr::zero<MyStruct>();
 
    The following alternative syntax is also provided.
 
    .. code-block:: cpp
 
-       ek::masked(x, x.b < 0) = ek::zero<MyStruct>();
+       dr::masked(x, x.b < 0) = dr::zero<MyStruct>();
 
    This second variant is more portable to other situations: for example
    ``var[mask] = ..`` does not compile when ``var`` is a builtin C++ type like
@@ -211,9 +211,9 @@ structures.
 
     .. code-block:: cpp
 
-        y = ek::gather<MyStruct>(/* source = */ x, index, mask);
+        y = dr::gather<MyStruct>(/* source = */ x, index, mask);
 
-        ek::scatter(/* target = */ x, /* source = */ y, index, mask);
+        dr::scatter(/* target = */ x, /* source = */ y, index, mask);
 
 5. **Operations specific to dynamic arrays**:
 
@@ -267,17 +267,17 @@ Interface (Python)
 ------------------
 
 Custom data structures are also supported in the Python bindings, though the
-:c:macro:`ENOKI_STRUCT` specification takes on a different form here. In a
+:c:macro:`DRJIT_STRUCT` specification takes on a different form here. In a
 class defined within Python, you will need to specify a top-level static
 attribute documenting the fields and their types. It is also important for that
 class to be constructible using the default constructor (e.g. no arguments).
 
 .. code-block:: python
 
-    from enoki.cuda import UInt32, Array3f
+    from drjit.cuda import UInt32, Array3f
 
     class MyStruct:
-        ENOKI_STRUCT = { 'a' : Array3f, 'b' : UInt32 }
+        DRJIT_STRUCT = { 'a' : Array3f, 'b' : UInt32 }
 
         def __init__(self, a=Array3f(), b=UInt32()):
             self.a = a
@@ -297,7 +297,7 @@ the following pattern:
     fields["a"] = py::type::of<Array3f>();
     fields["b"] = py::type::of<Float>();
 
-    mystruct.attr("ENOKI_STRUCT") = fields;
+    mystruct.attr("DRJIT_STRUCT") = fields;
 
 The set of compatible operations is currently much smaller than in the C++
 interface.
@@ -330,9 +330,9 @@ welcomed.
 C++ Reference
 -------------
 
-.. c:macro:: ENOKI_STRUCT(Name, ...)
+.. c:macro:: DRJIT_STRUCT(Name, ...)
 
-    This macro makes a data structure transparent to Enoki so that operations
+    This macro makes a data structure transparent to Dr.Jit so that operations
     can propagate through the various fields. It must be specified *within* a
     templated ``struct`` or ``class`` declaration, and its first argument
     (``Name``) must repeat the data structure's name. The remaining arguments
@@ -341,7 +341,7 @@ C++ Reference
 
     .. warning::
 
-        Enoki assumes that the data structure can be moved and copied like
+        Dr.Jit assumes that the data structure can be moved and copied like
         ordinary data, and it explicitly specifies that default variants of
 
         - default constructor

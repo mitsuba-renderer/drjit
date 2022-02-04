@@ -1,15 +1,15 @@
-.. cpp:namespace:: enoki
+.. cpp:namespace:: drjit
 
 Color space transformations
 ===========================
 
-Enoki provides a set of helper functions for color space transformations. For
+Dr.Jit provides a set of helper functions for color space transformations. For
 now, only sRGB and inverse sRGB gamma correction are available. To use them,
 include the following header file:
 
 .. code-block:: cpp
 
-    #include <enoki/color.h>
+    #include <drjit/color.h>
 
 
 Functions

@@ -4,7 +4,7 @@ Demonstration
 =============
 
 This section contains a quick and somewhat contrived demonstration that
-illustrates a number of basic Enoki features. The remainder of the
+illustrates a number of basic Dr.Jit features. The remainder of the
 documentation contains a more systematic introduction of this functionality.
 
 Consider the function
@@ -31,24 +31,24 @@ of this function might look as follows:
          return std::pow(x * 1.055f, 1.f / 2.4f) - 0.055f;
    }
 
-A Enoki implementation of the same computation first replaces ``float`` by a
+A Dr.Jit implementation of the same computation first replaces ``float`` by a
 generic ``Value`` type. The second difference is that scalar conditionals are
 replaced by generalized expressions involving masks.
 
 .. code-block:: cpp
 
    template <typename Value> Value srgb_gamma(Value x) {
-      return enoki::select(
+      return drjit::select(
          x <= 0.0031308f,
          x * 12.92f,
-         enoki::pow(x * 1.055f, 1.f / 2.4f) - 0.055f
+         drjit::pow(x * 1.055f, 1.f / 2.4f) - 0.055f
       );
    }
 
 Vectorization
 -------------
 
-The simple generalization from normal C++ code to an Enoki function template
+The simple generalization from normal C++ code to an Dr.Jit function template
 enables a number of interesting applications. For instance, the function
 automatically extends to cases where ``Value`` is a color type with three
 components, in which case the arithmetic operations recursively thread through
@@ -56,7 +56,7 @@ the array.
 
 .. code-block:: cpp
 
-   using Color3f = enoki::Array<float, 3>;
+   using Color3f = drjit::Array<float, 3>;
 
    Color3f input = /* ... */;
    Color3f output = srgb_gamma(input);
@@ -67,8 +67,8 @@ a new type storing 16 colors that will all be processed in parallel.
 
 .. code-block:: cpp
 
-   using FloatP   = enoki::Array<float, 16>;
-   using Color3fP = enoki::Array<FloatP, 3>;
+   using FloatP   = drjit::Array<float, 16>;
+   using Color3fP = drjit::Array<FloatP, 3>;
 
    Color3fP input = /* ... */;
    Color3fP output = srgb_gamma(input);
@@ -83,25 +83,25 @@ Execution on the GPU
 
 Vectorization is not restricted to the CPU---for instance, the following type
 declarations create a special array that is resident in GPU memory. In this mode
-of operation, Enoki relies on an internal just-in-time compiler to generate
+of operation, Dr.Jit relies on an internal just-in-time compiler to generate
 efficient CUDA kernels on the fly.
 
 .. code-block:: cpp
 
-   using FloatC   = enoki::CUDAArray<float>;
-   using Color3fC = enoki::Array<FloatC, 3>;
+   using FloatC   = drjit::CUDAArray<float>;
+   using Color3fC = drjit::Array<FloatC, 3>;
 
    Color3fC input = /* ... */;
    Color3fC output = srgb_gamma(input);
 
-Enoki's ``CUDAArray<T>`` type applies an important optimization that leads to
+Dr.Jit's ``CUDAArray<T>`` type applies an important optimization that leads to
 significantly improved performance: in contrast to the previous examples, the
 function call ``srgb_gamma(input)`` now merely records the sequence of
 computations that is needed to determine the value of ``output`` but does not
 yet execute it.
 
 Eventually, this evaluation can no longer be postponed (e.g. when we try to
-access or print the array contents). At this point, Enoki's JIT backend
+access or print the array contents). At this point, Dr.Jit's JIT backend
 compiles and executes a kernel that contains all queued computations using
 NVIDIA's PTX intermediate representation. All of this happens automatically: in
 particular, no CUDA-specific rewrite (e.g. to ``nvcc`` compatible kernels) of
@@ -110,36 +110,36 @@ the program is necessary!
 Automatic differentiation
 -------------------------
 
-Enoki can also apply transparent forward or reverse-mode automatic
-differentiation to a program using a special ``enoki::DiffArray<T>`` array that
-wraps a number type or another Enoki array ``T``.
+Dr.Jit can also apply transparent forward or reverse-mode automatic
+differentiation to a program using a special ``drjit::DiffArray<T>`` array that
+wraps a number type or another Dr.Jit array ``T``.
 
 For instance, the following example computes the gradient of a loss function
 that measures L2 distance from a given gamma-corrected color value. Both primal
 and gradient-related computations involve GPU-resident arrays, and the
-resulting computation is queued up as in the previously example using Enoki's
+resulting computation is queued up as in the previously example using Dr.Jit's
 just-in-time compiler.
 
 .. code-block:: cpp
 
-   using FloatC   = enoki::CUDAArray<float>;
-   using FloatD   = enoki::DiffArray<FloatC>;
-   using Color3fD = enoki::Array<FloatD, 3>;
+   using FloatC   = drjit::CUDAArray<float>;
+   using FloatD   = drjit::DiffArray<FloatC>;
+   using Color3fD = drjit::Array<FloatD, 3>;
 
    Color3fD input = /* ... */;
-   enoki::set_requires_gradient(input);
+   drjit::set_requires_gradient(input);
 
    Color3fD output = srgb_gamma(input);
 
-   FloatD loss = enoki::norm(output - Color3fD(.1f, .2f, .3f));
-   enoki::backward(loss);
+   FloatD loss = drjit::norm(output - Color3fD(.1f, .2f, .3f));
+   drjit::backward(loss);
 
-   std::cout << enoki::gradient(input) << std::endl;
+   std::cout << drjit::gradient(input) << std::endl;
 
 The scalar case
 ---------------
 
-All Enoki functions also accept non-array arguments, hence the original scalar
+All Dr.Jit functions also accept non-array arguments, hence the original scalar
 implementation remains available:
 
 .. code-block:: cpp
@@ -151,10 +151,10 @@ Python bindings
 ---------------
 
 Modern C++ systems often strive to provide fine-grained Python bindings to
-facilitate rapid prototyping and interoperability with other software. Enoki is
+facilitate rapid prototyping and interoperability with other software. Dr.Jit is
 designed to work with the widely used `pybind11
 <https://github.com/pybind/pybind11>`_ library (itself based on template
-metaprogramming) to facilitate this. Exposing an Enoki function on the Python
+metaprogramming) to facilitate this. Exposing an Dr.Jit function on the Python
 side is usually a 1-liner, even for the "fancy" GPU+autodiff variants, as in the
 following example:
 
@@ -168,7 +168,7 @@ following example:
 Summary
 -------
 
-In summary: Enoki, along with a generalized template implementation of a
+In summary: Dr.Jit, along with a generalized template implementation of a
 computation enables several powerful transformations:
 
 1. A simple type substitution yields an equivalent vectorized computation that

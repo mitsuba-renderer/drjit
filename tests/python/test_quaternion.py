@@ -1,7 +1,7 @@
 import math
-import enoki as ek
-from enoki.scalar import Quaternion4f as Q
-from enoki.scalar import Float, Array4f
+import drjit as dr
+from drjit.scalar import Quaternion4f as Q
+from drjit.scalar import Float, Array4f
 
 
 def test01_bcast():
@@ -36,28 +36,28 @@ def test03_div():
     b = Q(11, 13, 19, 21)
     c = a / b
     d = Q(-4/91, -16/273, -2/273, 73/273)
-    assert ek.allclose(c, d)
+    assert dr.allclose(c, d)
 
 
 def test04_abs():
-    assert ek.allclose(abs(Q(1, 3, 5, 7)), math.sqrt(84))
+    assert dr.allclose(abs(Q(1, 3, 5, 7)), math.sqrt(84))
 
 
 def test05_sqrt():
-    assert ek.allclose(ek.sqrt(Q(1, 2, 3, 4)),
+    assert dr.allclose(dr.sqrt(Q(1, 2, 3, 4)),
                        Q(0.229691, 0.459382, 0.689074, 2.17684))
 
 
 def test06_log():
-    assert ek.allclose(ek.log(Q(1, 2, 3, 4)),
+    assert dr.allclose(dr.log(Q(1, 2, 3, 4)),
                        Q(0.200991, 0.401982, 0.602974, 1.7006))
 
 
 def test06_exp():
-    assert ek.allclose(ek.exp(Q(1, 2, 3, 4)),
+    assert dr.allclose(dr.exp(Q(1, 2, 3, 4)),
                        Q(-8.24003, -16.4801, -24.7201, -45.0598))
 
 
 def test07_pow():
-    assert ek.allclose(Q(1, 2, 3, 4) ** Q(0.11, 0.13, 0.19, 0.21),
+    assert dr.allclose(Q(1, 2, 3, 4) ** Q(0.11, 0.13, 0.19, 0.21),
                        Q(0.253509, 0.372162, 0.481497, 0.982482))

@@ -1,10 +1,10 @@
-/** Enoki automatic differentiation library
+/** Dr.Jit automatic differentiation library
  *
  * This file implements the AD data structures and traversal routines
- * underlying templated Enoki types like 'DiffArray<CUDAArray<float>>'. The
+ * underlying templated Dr.Jit types like 'DiffArray<CUDAArray<float>>'. The
  * compilation process explicitly instantiates these templates for
  * scalar/LLVM/CUDA arrays in both single and double precision and merges them
- * into a shared library "enoki-autodiff.so/dll". In this way, the machinery
+ * into a shared library "drjit-autodiff.so/dll". In this way, the machinery
  * below only needs to be compiled once instead of adding a heavy compilation
  * burden to any code using the AD types.
  *
@@ -27,7 +27,7 @@
  *   previous two data structures that are shared by all threads.
  *
  * To understand how everything fits together, start by looking at 'ad_new()'
- * and 'ad_traverse()': Arithmetic involving differentiable Enoki arrays
+ * and 'ad_traverse()': Arithmetic involving differentiable Dr.Jit arrays
  * triggers various calls to 'ad_new()', which creates the necessary variables
  * and edge connectivity in the above graph data structures. Forward or
  * reverse-mode differentiation with 'ad_traverse()' moves gradients through
@@ -40,7 +40,7 @@
  *
  * The combination with JITted (CUDA/LLVM) array types is quite interesting: in
  * this case, AD traversal generates code that can be executed at some later
- * point. While Enoki's AD backend is principally tape-based, this combination
+ * point. While Dr.Jit's AD backend is principally tape-based, this combination
  * then begins to resemble classical AD via code transformation. The JITted
  * modes also exploit their ability to peek into literal constant arrays to
  * optimize generated derivative code.
@@ -54,16 +54,16 @@
  */
 
 #include "common.h"
-#include <enoki/jit.h>
-#include <enoki/math.h>
-#include <enoki/autodiff.h>
+#include <drjit/jit.h>
+#include <drjit/math.h>
+#include <drjit/autodiff.h>
 #include <tsl/robin_map.h>
 #include <tsl/robin_set.h>
 #include <assert.h>
 #include <mutex>
 #include <xxh3.h>
 
-NAMESPACE_BEGIN(enoki)
+NAMESPACE_BEGIN(drjit)
 NAMESPACE_BEGIN(detail)
 
 // ==========================================================================
@@ -76,7 +76,7 @@ NAMESPACE_BEGIN(detail)
 
 #define CONCAT(x,y) x ## _ ## y
 #define EVAL(x,y) CONCAT(x,y)
-#define RENAME(fun) EVAL(fun, ENOKI_AUTODIFF_NAME)
+#define RENAME(fun) EVAL(fun, DRJIT_AUTODIFF_NAME)
 
 // Rename various things to avoid symbol clashes
 #define Special              RENAME(Special)
@@ -86,7 +86,7 @@ NAMESPACE_BEGIN(detail)
 #define ReleaseQueueHelper   RENAME(ReleaseQueueHelper)
 #define ReleaseOperandHelper RENAME(ReleaseOperandHelper)
 
-using Value = ENOKI_AUTODIFF_VALUE;
+using Value = DRJIT_AUTODIFF_VALUE;
 using Mask = mask_t<Value>;
 using Index = uint32_array_t<Value>;
 using IndexSet = tsl::robin_set<uint32_t, UInt32Hasher>;
@@ -148,7 +148,7 @@ struct Edge {
     /// Weight value (zero/empty for "special" edges)
     Value weight{};
 
-    ENOKI_ARRAY_DEFAULTS(Edge);
+    DRJIT_ARRAY_DEFAULTS(Edge);
 
     Edge() {
         memset(this, 0, sizeof(uint32_t) * 4 + sizeof(Special *));
@@ -346,7 +346,7 @@ struct Variable {
 
     bool is_scalar() const { return size == 1; }
 
-    ENOKI_ARRAY_DEFAULTS(Variable);
+    DRJIT_ARRAY_DEFAULTS(Variable);
 };
 
 /// Records the (global) state of the AD graph
@@ -375,7 +375,7 @@ struct State {
     ~State() {
         if (!variables.empty()) {
             ad_log(Warn,
-                   "enoki-autodiff: variable leak detected (%zu variables "
+                   "drjit-autodiff: variable leak detected (%zu variables "
                    "remain in use)!", variables.size());
             uint32_t counter = 0;
             for (auto kv : variables) {
@@ -391,7 +391,7 @@ struct State {
         size_t edges_used = edges.size() - unused_edges.size() - 1;
         if (edges_used != 0)
             ad_log(Warn,
-                   "enoki-autodiff: edge leak detected (%zu edges "
+                   "drjit-autodiff: edge leak detected (%zu edges "
                    "remain in use)!", edges_used);
     }
 
@@ -526,7 +526,7 @@ struct LocalState {
 
         if (!scopes.empty())
             ad_log(Warn,
-                   "enoki-autodiff: scope leak detected (%zu scopes "
+                   "drjit-autodiff: scope leak detected (%zu scopes "
                    "remain in use)!", scopes.size());
     }
 };
@@ -558,17 +558,17 @@ void Edge::reset() {
 // ==========================================================================
 
 static void ad_inc_ref(uint32_t index, Variable *v) noexcept (true) {
-    ENOKI_MARK_USED(index);
+    DRJIT_MARK_USED(index);
     ad_trace("ad_inc_ref(a%u): %u", index, v->ref_count + 1);
     v->ref_count++;
 }
 
 static bool ad_dec_ref(uint32_t index, Variable *v) noexcept (true) {
-    ENOKI_MARK_USED(index);
+    DRJIT_MARK_USED(index);
     ad_trace("ad_dec_ref(a%u): %u", index, v->ref_count - 1);
 
     if (unlikely(v->ref_count == 0))
-        ad_fail("enoki-autodiff: fatal error: external reference count of "
+        ad_fail("drjit-autodiff: fatal error: external reference count of "
                 "variable a%u became negative!", index);
 
     if (--v->ref_count > 0) {
@@ -657,7 +657,7 @@ static void ad_free(uint32_t index, Variable *v) {
         Variable *v2 = state[source];
 
         if (unlikely(v2->ref_count == 0))
-            ad_fail("enoki-autodiff: fatal error: reference count of variable "
+            ad_fail("drjit-autodiff: fatal error: reference count of variable "
                     "a%u became negative!", source);
 
         if (!ad_dec_ref(source, v2)) {
@@ -838,7 +838,7 @@ template <typename T> void ad_scope_leave(bool process_postponed) {
         if (unlikely(!ls.todo.empty()))
             ad_raise("ad_scope_leave(): internal error: wanted to process "
                      "postponed AD edges, but other edges were already "
-                     "enqueued. Did you forget to call ek.traverse() to "
+                     "enqueued. Did you forget to call dr.traverse() to "
                      "process them?");
 
         if (process_postponed) {
@@ -899,7 +899,7 @@ uint32_t ad_new(const char *label, size_t size, uint32_t op_count,
 
         bool active = false;
         if (op_count == 0) {
-            // If AD is completely disabled (i.e. this is an ek.suspend_grad()
+            // If AD is completely disabled (i.e. this is an dr.suspend_grad()
             // region), don't allow creating new AD variables
             active = scope.complement || !scope.indices.empty();
         } else {
@@ -933,7 +933,7 @@ uint32_t ad_new(const char *label, size_t size, uint32_t op_count,
                         "read of variable (a%u), which has size %u! However, "
                         "only scalar (size == 1) accesses are permitted in "
                         "this manner. You will likely want to convert the "
-                        "read into an enoki::gather() operation.",
+                        "read into an drjit::gather() operation.",
                         index, var->size);
 
                 ad_trace("ad_new(): implicit read of variable a%u, inserting a "
@@ -1222,7 +1222,7 @@ uint32_t ad_new_select(const char *label, size_t size, const Mask &mask,
                         "implicit read of variable (a%u), which has size %u! "
                         "However, only scalar (size == 1) accesses are "
                         "permitted in this manner. You will likely want to "
-                        "convert the read into an enoki::gather() operation.",
+                        "convert the read into an drjit::gather() operation.",
                         index, var->size);
 
                 ad_trace("ad_new_select(): implicit read of variable a%u, inserting a "
@@ -1283,7 +1283,7 @@ template <typename Mask> struct MaskGuard {
         if constexpr (is_jit_array_v<Mask>)
             jit_var_mask_push(Mask::Backend, mask.index(), false);
         else
-            ENOKI_MARK_USED(mask);
+            DRJIT_MARK_USED(mask);
     }
 
     ~MaskGuard() {
@@ -1341,7 +1341,7 @@ uint32_t ad_new_gather_impl(const char *label, size_t size, uint32_t src_index,
 
     if constexpr (is_array_v<Value>) {
         if (is_jit_array_v<Value>) {
-            // Apply the mask stack (needed for wavefront-mode ek::Loop)
+            // Apply the mask stack (needed for wavefront-mode dr::Loop)
             Mask top = Mask::steal(jit_var_mask_peek(Mask::Backend));
             size_t tsize = top.size();
             if (tsize != 1 && tsize == size)
@@ -1393,7 +1393,7 @@ uint32_t ad_new_gather_impl(const char *label, size_t size, uint32_t src_index,
     } else {
         (void) mask; (void) label; (void) size;
         (void) src_index; (void) offset; (void) permute;
-        enoki_raise("ad_new_gather(): differentiable gathers not supported by "
+        drjit_raise("ad_new_gather(): differentiable gathers not supported by "
                     "this backend!");
     }
 }
@@ -1409,7 +1409,7 @@ template <typename Value> struct ScatterEdge : Special {
     ScatterEdge(const Index &offset, const Mask &mask, ReduceOp op)
         : offset(offset), mask(mask), op(op) {
             if (op != ReduceOp::None && op != ReduceOp::Add)
-                enoki_raise("AD only supports ReduceOp::Add in scatter_reduce!");
+                drjit_raise("AD only supports ReduceOp::Add in scatter_reduce!");
         if constexpr (is_jit_array_v<Value>)
             mask_stack = mask_t<Value>::steal(jit_var_mask_peek(Value::Backend));
     }
@@ -1448,13 +1448,13 @@ uint32_t ad_new_scatter(const char *label, size_t size, ReduceOp op,
                         const Mask &mask_, bool permute) {
 
     Mask mask(mask_);
-    ENOKI_MARK_USED(mask);
+    DRJIT_MARK_USED(mask);
 
     if constexpr (is_array_v<Value>) {
         std::lock_guard<std::mutex> guard(state.mutex);
 
         if (is_jit_array_v<Value>) {
-            // Apply the mask stack (needed for wavefront-mode ek::Loop)
+            // Apply the mask stack (needed for wavefront-mode dr::Loop)
             Mask top = Mask::steal(jit_var_mask_peek(Mask::Backend));
             size_t tsize = top.size(),
                    ssize = (size_t)(src_index ? state[src_index]->size : 0);
@@ -1533,7 +1533,7 @@ uint32_t ad_new_scatter(const char *label, size_t size, ReduceOp op,
     } else {
         (void) label; (void) size; (void) op; (void) src_index;
         (void) dst_index; (void) offset; (void) permute;
-        enoki_raise("ad_new_scatter(): differentiable scatters not supported "
+        drjit_raise("ad_new_scatter(): differentiable scatters not supported "
                     "by this backend!");
     }
 }
@@ -1700,7 +1700,7 @@ void ad_add_edge(uint32_t source_idx, uint32_t target_idx,
 
 /// Forward-mode DFS starting from 'index'
 static void ad_dfs_fwd(std::vector<EdgeRef> &todo, uint32_t index, Variable *v) {
-    ENOKI_MARK_USED(index);
+    DRJIT_MARK_USED(index);
 
     uint32_t edge_id = v->next_fwd;
     while (edge_id) {
@@ -1784,6 +1784,7 @@ void ad_traverse(ADMode mode, uint32_t flags) {
     bool rec = false;
     if (is_jit_array_v<Value>)
         rec = jit_flag(JitFlag::Recording);
+    DRJIT_MARK_USED(rec);
 
     std::lock_guard<std::mutex> guard(state.mutex);
     todo_tls.swap(todo);
@@ -1809,7 +1810,7 @@ void ad_traverse(ADMode mode, uint32_t flags) {
     if (!ls.scopes.empty() && ls.scopes.back().isolate)
         postpone_before = ls.scopes.back().variable_index;
 
-    std::vector<Value> ek_loop_todo;
+    std::vector<Value> dr_loop_todo;
     auto postprocess = [&](uint32_t prev_i, uint32_t cur_i) {
         if (!prev_i || prev_i == cur_i)
             return;
@@ -1817,26 +1818,26 @@ void ad_traverse(ADMode mode, uint32_t flags) {
         Variable *cur  = cur_i ? state[cur_i] : nullptr,
                  *prev = state[prev_i];
 
-        /* Wave-front style evaluation of ek.Loop with differentiable
-           variables produces nodes with label 'ek_loop' at the boundary of
-           each iteration. It's good if we ek::schedule() and then finally
+        /* Wave-front style evaluation of dr.Loop with differentiable
+           variables produces nodes with label 'dr_loop' at the boundary of
+           each iteration. It's good if we dr::schedule() and then finally
            evaluate the gradient of all such variables at once so that AD
            tarversal produces reasonably sized kernels (i.e. with an evaluation
            granularity matching the loop iterations of the original/primal
            evaluation). The code below does just that. */
 
-        bool ek_loop_prev = prev->label && strstr(prev->label, "ek_loop"),
-             ek_loop_cur  = cur && cur->label && strstr(cur->label, "ek_loop");
+        bool dr_loop_prev = prev->label && strstr(prev->label, "dr_loop"),
+             dr_loop_cur  = cur && cur->label && strstr(cur->label, "dr_loop");
 
-        if (ek_loop_prev) {
-            ek_loop_todo.push_back(prev->grad);
+        if (dr_loop_prev) {
+            dr_loop_todo.push_back(prev->grad);
             schedule(prev->grad);
 
-            if (!ek_loop_cur) {
+            if (!dr_loop_cur) {
                 ad_trace("ad_traverse(): evaluating %zi loop variables",
-                         ek_loop_todo.size());
+                         dr_loop_todo.size());
                 eval();
-                ek_loop_todo.clear();
+                dr_loop_todo.clear();
             }
         }
 
@@ -1850,7 +1851,7 @@ void ad_traverse(ADMode mode, uint32_t flags) {
             clear_grad |= next_edge == 0;
 
         /* Don't clear the gradient of vertices created *before* entering
-           an ek.isolation() scope, or when their gradient is still explicitly
+           an dr.isolation() scope, or when their gradient is still explicitly
            referenced by some other part of the computation graph */
         if (prev_i < postpone_before || prev->ref_count_grad > 0)
             clear_grad = false;
@@ -1900,7 +1901,7 @@ void ad_traverse(ADMode mode, uint32_t flags) {
         if (unlikely(v0i < postpone_before)) {
             if (mode == ADMode::Backward) {
                 ad_trace("ad_traverse(): postponing edge a%u -> a%u due "
-                         "ek.isolate_grad() scope.", v0i, v1i);
+                         "dr.isolate_grad() scope.", v0i, v1i);
                 ls.scopes.back().postponed.push_back(er);
                 er.id = er.source = er.target = 0;
                 continue;
@@ -1908,9 +1909,9 @@ void ad_traverse(ADMode mode, uint32_t flags) {
                 ad_raise(
                     "ad_traverse(): tried to forward-propagate derivatives "
                     "across edge a%u -> a%u, which lies outside of the current "
-                    "ek.isolate_grad() scope (a%u .. a%u). You must enqueue "
+                    "dr.isolate_grad() scope (a%u .. a%u). You must enqueue "
                     "the variables being differentiated and call "
-                    "ek.traverse(ek.ADFlag.ClearEdges) *before* entering this "
+                    "dr.traverse(dr.ADFlag.ClearEdges) *before* entering this "
                     "scope.",
                     v0i, v1i, postpone_before, state.variable_index);
             }
@@ -2360,38 +2361,38 @@ template <typename Value> const char *ad_graphviz() {
 // Export declarations
 // ==========================================================================
 
-template ENOKI_EXPORT void ad_inc_ref_impl<Value>(uint32_t) noexcept;
-template ENOKI_EXPORT uint32_t ad_inc_ref_cond_impl<Value>(uint32_t) noexcept;
-template ENOKI_EXPORT void ad_dec_ref_impl<Value>(uint32_t) noexcept;
-template ENOKI_EXPORT uint32_t ad_new<Value>(const char *, size_t, uint32_t,
+template DRJIT_EXPORT void ad_inc_ref_impl<Value>(uint32_t) noexcept;
+template DRJIT_EXPORT uint32_t ad_inc_ref_cond_impl<Value>(uint32_t) noexcept;
+template DRJIT_EXPORT void ad_dec_ref_impl<Value>(uint32_t) noexcept;
+template DRJIT_EXPORT uint32_t ad_new<Value>(const char *, size_t, uint32_t,
                                             uint32_t *, Value *);
-template ENOKI_EXPORT Value ad_grad<Value>(uint32_t, bool);
-template ENOKI_EXPORT void ad_set_grad<Value>(uint32_t, const Value &, bool);
-template ENOKI_EXPORT void ad_accum_grad<Value>(uint32_t, const Value &, bool);
-template ENOKI_EXPORT void ad_set_label<Value>(uint32_t, const char *);
-template ENOKI_EXPORT const char *ad_label<Value>(uint32_t);
-template ENOKI_EXPORT void ad_enqueue<Value>(ADMode, uint32_t);
-template ENOKI_EXPORT void ad_traverse<Value>(ADMode, uint32_t);
-template ENOKI_EXPORT size_t ad_implicit<Value>();
-template ENOKI_EXPORT void ad_extract_implicit<Value>(size_t, uint32_t*);
-template ENOKI_EXPORT void ad_enqueue_implicit<Value>(size_t);
-template ENOKI_EXPORT void ad_dequeue_implicit<Value>(size_t);
-template ENOKI_EXPORT const char *ad_graphviz<Value>();
-template ENOKI_EXPORT uint32_t ad_new_select<Value, Mask>(
+template DRJIT_EXPORT Value ad_grad<Value>(uint32_t, bool);
+template DRJIT_EXPORT void ad_set_grad<Value>(uint32_t, const Value &, bool);
+template DRJIT_EXPORT void ad_accum_grad<Value>(uint32_t, const Value &, bool);
+template DRJIT_EXPORT void ad_set_label<Value>(uint32_t, const char *);
+template DRJIT_EXPORT const char *ad_label<Value>(uint32_t);
+template DRJIT_EXPORT void ad_enqueue<Value>(ADMode, uint32_t);
+template DRJIT_EXPORT void ad_traverse<Value>(ADMode, uint32_t);
+template DRJIT_EXPORT size_t ad_implicit<Value>();
+template DRJIT_EXPORT void ad_extract_implicit<Value>(size_t, uint32_t*);
+template DRJIT_EXPORT void ad_enqueue_implicit<Value>(size_t);
+template DRJIT_EXPORT void ad_dequeue_implicit<Value>(size_t);
+template DRJIT_EXPORT const char *ad_graphviz<Value>();
+template DRJIT_EXPORT uint32_t ad_new_select<Value, Mask>(
     const char *, size_t, const Mask &, uint32_t, uint32_t);
-template ENOKI_EXPORT uint32_t ad_new_gather<Value, Mask, Index>(
+template DRJIT_EXPORT uint32_t ad_new_gather<Value, Mask, Index>(
     const char *, size_t, uint32_t, const Index &, const Mask &, bool);
-template ENOKI_EXPORT uint32_t
+template DRJIT_EXPORT uint32_t
 ad_new_scatter<Value, Mask, Index>(const char *, size_t, ReduceOp, uint32_t,
                                    uint32_t, const Index &, const Mask &, bool);
-template ENOKI_EXPORT void ad_add_edge<Value>(uint32_t, uint32_t,
+template DRJIT_EXPORT void ad_add_edge<Value>(uint32_t, uint32_t,
                                               DiffCallback *);
-template ENOKI_EXPORT void ad_scope_enter<Value>(ADScope, size_t, const uint32_t *);
-template ENOKI_EXPORT void ad_scope_leave<Value>(bool);
-template ENOKI_EXPORT bool ad_grad_enabled<Value>(uint32_t);
-template ENOKI_EXPORT bool ad_enabled<Value>() noexcept;
+template DRJIT_EXPORT void ad_scope_enter<Value>(ADScope, size_t, const uint32_t *);
+template DRJIT_EXPORT void ad_scope_leave<Value>(bool);
+template DRJIT_EXPORT bool ad_grad_enabled<Value>(uint32_t);
+template DRJIT_EXPORT bool ad_enabled<Value>() noexcept;
 NAMESPACE_END(detail)
 
-template struct ENOKI_EXPORT DiffArray<detail::Value>;
+template struct DRJIT_EXPORT DiffArray<detail::Value>;
 
-NAMESPACE_END(enoki)
+NAMESPACE_END(drjit)

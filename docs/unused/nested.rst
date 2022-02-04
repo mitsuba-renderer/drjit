@@ -16,7 +16,7 @@ utilize all SIMD lanes.
 
 To understand the fundamental problem, consider the following basic example
 code, which computes the normalized cross product of a pair of 3D vectors.
-Without Enoki, this might be done as follows:
+Without Dr.Jit, this might be done as follows:
 
 .. code-block:: cpp
 
@@ -80,11 +80,11 @@ spent on unpacking and re-shuffling data.
 A first attempt
 ---------------
 
-Simply rewriting this code using Enoki leads to considerable improvements:
+Simply rewriting this code using Dr.Jit leads to considerable improvements:
 
 .. code-block:: cpp
 
-    /* Enoki version */
+    /* Dr.Jit version */
     using Vector3f = Array<float, 3>;
 
     Vector3f normalized_cross(Vector3f a, Vector3f b) {
@@ -93,7 +93,7 @@ Simply rewriting this code using Enoki leads to considerable improvements:
 
 .. code-block:: nasm
 
-    ; Assembly for Enoki version
+    ; Assembly for Dr.Jit version
     __Z16normalized_cross8Vector3fS_:
         vpermilps   xmm2, xmm0, 201 ; xmm2 = xmm0[1, 2, 0, 3]
         vpermilps   xmm3, xmm1, 210 ; xmm3 = xmm1[2, 0, 1, 3]
@@ -109,7 +109,7 @@ Simply rewriting this code using Enoki leads to considerable improvements:
         vmulps      xmm0, xmm0, xmm1
         ret
 
-Here, Enoki has organized the 3D vectors as :ref:`4D arrays that "waste" the
+Here, Dr.Jit has organized the 3D vectors as :ref:`4D arrays that "waste" the
 last component <3d-arrays>`, allowing for more compact sequence of SSE4.2
 instructions with fewer shuffles. This is better but still not ideal: of the 12
 instructions (a reduction by 50% compared to the previous example), 3 are
@@ -124,7 +124,7 @@ arrays, whose components are themselves arrays. This is known as SoA-style data
 organization. One group of multiple 3D vectors represented in this way is
 referred to as a *packet*.
 
-Since Enoki arrays support arbitrary nesting, it's straightforward to wrap an
+Since Dr.Jit arrays support arbitrary nesting, it's straightforward to wrap an
 existing ``Array`` representing a packet of data into another array while
 preserving the semantics of an 3-dimensional vector at the top level.
 
@@ -133,7 +133,7 @@ preserving the semantics of an 3-dimensional vector at the top level.
     :align: center
 
 As before, all mathematical operations discussed so far are trivially supported
-due to the fundamental behavior of an Enoki array: all operations are simply
+due to the fundamental behavior of an Dr.Jit array: all operations are simply
 forwarded to the contained entries (which are themselves arrays now: the
 procedure continues recursively). The following snippet demonstrates the basic
 usage of such an approach.
@@ -152,7 +152,7 @@ usage of such an approach.
        FloatP(9, 10, 11, 12)  /* Z components */
     );
 
-    /* Enoki's stream insertion operator detects the recursive array and
+    /* Dr.Jit's stream insertion operator detects the recursive array and
        prints the contents as a list of 3D vectors
        "[[1, 5, 9],
          [2, 6, 10],
@@ -223,7 +223,7 @@ the same time, while fully utilizing the underlying SSE4.2 vector units. If
 wider arithmetic is available, it's of course possible to process many more
 vectors at the same time.
 
-Enoki will also avoid costly high-latency operations like division and square
+Dr.Jit will also avoid costly high-latency operations like division and square
 root if the user indicates that minor approximations are tolerable. The
 following snippet demonstrates code generation on an ARMv8 NEON machine. Note
 the use of the ``frsqrte`` and ``frsqrts`` instructions for the reciprocal
@@ -270,7 +270,7 @@ performance noticeably.
 
     using FloatP = Array<float, 32>;
 
-With the above type definition on an AVX512-capable machine, Enoki would e.g.
+With the above type definition on an AVX512-capable machine, Dr.Jit would e.g.
 unroll every 32-wide operation into a pair of 16-wide instructions.
 
 Nested horizontal operations
@@ -281,7 +281,7 @@ outermost dimension, which means that they return arrays instead of scalars
 when given a nested array as input (the same is also true for horizontal mask
 operations such as :cpp:func:`any`).
 
-Sometimes this is not desirable, and Enoki thus also provides nested versions
+Sometimes this is not desirable, and Dr.Jit thus also provides nested versions
 all of horizontal operations that can be accessed via the ``_nested`` suffix.
 These functions recursively apply horizontal reductions until the result ceases
 to be an array. For instance, the following function ensures that no element of
@@ -298,7 +298,7 @@ a packet of 3-vectors contains a *Not-a-Number* floating point value.
 Broadcasting
 ------------
 
-Enoki performs an automatic broadcast operation whenever a higher-dimensional
+Dr.Jit performs an automatic broadcast operation whenever a higher-dimensional
 array is initialized from a lower-dimensional array, or when types of mixed
 dimension occur in an arithmetic expression.
 
@@ -309,13 +309,13 @@ during an arithmetic operation involving both (e.g. addition).
     :width: 700px
     :align: center
 
-Enoki works its way through the shape descriptors of both arrays, moving from
+Dr.Jit works its way through the shape descriptors of both arrays, moving from
 right to left in the above figure (i.e. from the outermost to the innermost
 nesting level). At each iteration, it checks if the current pair of shape
 entries match -- if they do, the iteration advances to the next entry.
 Otherwise, a broadcast is performed over that dimension, which is analogous to
 inserting a ``1`` into the lower-dimensional array's shape. When the dimensions
-of the lower-dimensional array are exhausted, Enoki appends further ones until
+of the lower-dimensional array are exhausted, Dr.Jit appends further ones until
 the dimensions match. In the above example, the array is thus copied to the
 second dimension, with a broadcast taking place over the last and first two
 dimensions.
@@ -383,10 +383,10 @@ the array contents should be replicated across the *first dimension*. This
 leads to a nonsensical operation that divides the :math:`i`-th coordinate (of
 all vectors) by the norm of the :math:`i`-th vector.
 
-Enoki provides the ``enoki::Packet<...>`` type to resolve any such
-platform-dependent ambiguities. It is identical to the ``enoki::Array<...>``
+Dr.Jit provides the ``drjit::Packet<...>`` type to resolve any such
+platform-dependent ambiguities. It is identical to the ``drjit::Array<...>``
 class except for its behavior in a broadcast: the rules for a packet operate in
-the reverse direction---that is, Enoki tries to copy the packet to the leading
+the reverse direction---that is, Dr.Jit tries to copy the packet to the leading
 dimensions instead of the trailing ones if possible:
 
 .. image:: nested-04.svg
@@ -396,7 +396,7 @@ dimensions instead of the trailing ones if possible:
 .. note::
 
     Generally, packet types such as ``FloatP`` should be defined using the
-    ``enoki::Packet`` type to benefit from this behavior.
+    ``drjit::Packet`` type to benefit from this behavior.
 
 The difference in the broadcasting behavior is demonstrated below:
 

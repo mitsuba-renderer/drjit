@@ -1,7 +1,7 @@
 /*
     tests/basic.cpp -- tests linear algebra-related routines
 
-    Enoki is a C++ template library that enables transparent vectorization
+    Dr.Jit is a C++ template library that enables transparent vectorization
     of numerical kernels using SIMD instruction sets available on current
     processor architectures.
 
@@ -12,10 +12,10 @@
 */
 
 #include "test.h"
-#include <enoki/matrix.h>
-#include <enoki/transform.h>
-#include <enoki/random.h>
-#include <enoki/dynamic.h>
+#include <drjit/matrix.h>
+#include <drjit/transform.h>
+#include <drjit/random.h>
+#include <drjit/dynamic.h>
 
 template <typename T, std::enable_if_t<std::is_signed<typename T::Value>::value, int> = 0>
 void test01_dot_signed() {
@@ -34,7 +34,7 @@ void test01_dot_signed() {
 template <typename T, std::enable_if_t<!std::is_signed<typename T::Value>::value, int> = 0>
 void test01_dot_signed() { }
 
-ENOKI_TEST_ALL(test01_dot) {
+DRJIT_TEST_ALL(test01_dot) {
     Value expected1 = Value((Size * (2 * Size - 1) * (Size - 1)) / 6);
     Value expected2 = Value((Size * (Size - 1)) / 2);
     T value = arange<T>();
@@ -89,15 +89,15 @@ template <typename T> void test02_vecops_float() {
     assert(v != T(3, 2, 5));
 }
 
-ENOKI_TEST(test02_vecops_float) {
+DRJIT_TEST(test02_vecops_float) {
     test02_vecops_float<Array<float, 3>>();
 }
 
-ENOKI_TEST(test02_vecops_double) {
+DRJIT_TEST(test02_vecops_double) {
     test02_vecops_float<Array<double, 3>>();
 }
 
-ENOKI_TEST(array_float_04_transpose) {
+DRJIT_TEST(array_float_04_transpose) {
     using T  = Array<float, 4>;
     using T2 = Array<T, 4>;
 
@@ -106,7 +106,7 @@ ENOKI_TEST(array_float_04_transpose) {
         T2(T(1, 5, 9, 13), T(2, 6, 10, 14), T(3, 7, 11, 15), T(4, 8, 12, 16)));
 }
 
-ENOKI_TEST(array_double_04_transpose) {
+DRJIT_TEST(array_double_04_transpose) {
     using T  = Array<double, 4>;
     using T2 = Array<T, 4>;
 
@@ -115,7 +115,7 @@ ENOKI_TEST(array_double_04_transpose) {
         T2(T(1, 5, 9, 13), T(2, 6, 10, 14), T(3, 7, 11, 15), T(4, 8, 12, 16)));
 }
 
-ENOKI_TEST(array_float_05_outer_product) {
+DRJIT_TEST(array_float_05_outer_product) {
     using Vector4f = Array<float, 4>;
     using Vector3f = Array<float, 3>;
 
@@ -124,7 +124,7 @@ ENOKI_TEST(array_float_05_outer_product) {
     assert(to_string(full<Vector3f>(3.f) * Vector3f(1, 2, 3)) == "[3, 6, 9]");
 }
 
-ENOKI_TEST(array_float_06_head_tail) {
+DRJIT_TEST(array_float_06_head_tail) {
     using T  = Array<float, 4>;
 
     auto t = T(1, 2, 3, 4);
@@ -132,7 +132,7 @@ ENOKI_TEST(array_float_06_head_tail) {
     assert(to_string(tail<2>(t)) == "[3, 4]");
 }
 
-ENOKI_TEST(array_float_02_test07_matrix) {
+DRJIT_TEST(array_float_02_test07_matrix) {
     using M2f = Matrix<float, 2>;
     using V2f = Array<float, 2>;
 
@@ -181,16 +181,16 @@ template <typename T> void test_concat() {
             Array<T, 4>((T) 1, (T) 2, (T) 3, (T) 4)));
 }
 
-ENOKI_TEST(array_float_04_concat) { test_concat<float>(); }
-ENOKI_TEST(array_uint32_04_concat) { test_concat<uint32_t>(); }
-ENOKI_TEST(array_double_04_concat) { test_concat<double>(); }
-ENOKI_TEST(array_uint64_t_04_concat) { test_concat<uint64_t>(); }
+DRJIT_TEST(array_float_04_concat) { test_concat<float>(); }
+DRJIT_TEST(array_uint32_04_concat) { test_concat<uint32_t>(); }
+DRJIT_TEST(array_double_04_concat) { test_concat<double>(); }
+DRJIT_TEST(array_uint64_t_04_concat) { test_concat<uint64_t>(); }
 
 template <typename Type, size_t Size_>
-struct Vector : enoki::StaticArrayImpl<Type, Size_, false, Vector<Type, Size_>> {
+struct Vector : drjit::StaticArrayImpl<Type, Size_, false, Vector<Type, Size_>> {
 
-    using Base = enoki::StaticArrayImpl<Type, Size_, false, Vector<Type, Size_>>;
-    ENOKI_ARRAY_IMPORT(Vector, Base)
+    using Base = drjit::StaticArrayImpl<Type, Size_, false, Vector<Type, Size_>>;
+    DRJIT_ARRAY_IMPORT(Vector, Base)
 
     using ArrayType = Vector;
     using MaskType = Mask<Type, Size_>;
@@ -201,7 +201,7 @@ struct Vector : enoki::StaticArrayImpl<Type, Size_, false, Vector<Type, Size_>> 
 
 
 template <typename T> void test_bcast() {
-    using Packet = enoki::Packet<T, 4>;
+    using Packet = drjit::Packet<T, 4>;
     using Vector4 = Vector<T, 4>;
     using Vector4P = Vector<Packet, 4>;
 
@@ -213,13 +213,13 @@ template <typename T> void test_bcast() {
     assert(count(mask_t<Vector4P>(Packet(T(1), T(2), T(3), T(4)) < value_t<T>(3))) == Array4s(4u, 4u, 0u, 0u));
 }
 
-ENOKI_TEST(array_float_04_bcast) { test_bcast<float>(); }
-ENOKI_TEST(array_uint32_04_bcast) { test_bcast<uint32_t>(); }
-ENOKI_TEST(array_double_04_bcast) { test_bcast<double>(); }
-ENOKI_TEST(array_uint64_t_04_bcast) { test_bcast<uint64_t>(); }
+DRJIT_TEST(array_float_04_bcast) { test_bcast<float>(); }
+DRJIT_TEST(array_uint32_04_bcast) { test_bcast<uint32_t>(); }
+DRJIT_TEST(array_double_04_bcast) { test_bcast<double>(); }
+DRJIT_TEST(array_uint64_t_04_bcast) { test_bcast<uint64_t>(); }
 
 
-ENOKI_TEST(transform_decompose) {
+DRJIT_TEST(transform_decompose) {
     using Matrix4f = Matrix<float, 4>;
     using Matrix3f = Matrix<float, 3>;
     using Vector3f = Array<float, 3>;
@@ -239,8 +239,8 @@ ENOKI_TEST(transform_decompose) {
     assert(frob(A - result2) < 1e-6f);
 }
 
-ENOKI_TEST(transform_compose_inverse) {
-    using Matrix = enoki::Matrix<float, 4>;
+DRJIT_TEST(transform_compose_inverse) {
+    using Matrix = drjit::Matrix<float, 4>;
     auto rng = PCG32<float>();
 
     for (int k = 0; k<10; ++k) {
@@ -250,9 +250,9 @@ ENOKI_TEST(transform_compose_inverse) {
                 m(i, j) = rng.next_float32();
         m(3, 3) = 1.f;
 
-        auto x = enoki::transform_decompose(m);
-        auto m2 = enoki::transform_compose(std::get<0>(x), std::get<1>(x), std::get<2>(x));
-        auto m3 = enoki::transform_compose_inverse(std::get<0>(x), std::get<1>(x), std::get<2>(x));
+        auto x = drjit::transform_decompose(m);
+        auto m2 = drjit::transform_compose(std::get<0>(x), std::get<1>(x), std::get<2>(x));
+        auto m3 = drjit::transform_compose_inverse(std::get<0>(x), std::get<1>(x), std::get<2>(x));
 
         auto diff1 = frob(m-m2)/frob(m);
         auto diff2 = frob(inverse(m)-m3)/frob(inverse(m));
@@ -262,7 +262,7 @@ ENOKI_TEST(transform_compose_inverse) {
     }
 }
 
-ENOKI_TEST(test_unit_angle) {
+DRJIT_TEST(test_unit_angle) {
     using Vector3f = Array<float, 3>;
     using Random = PCG32<Vector3f>;
 
@@ -276,7 +276,7 @@ ENOKI_TEST(test_unit_angle) {
     }
 }
 
-ENOKI_TEST(full) {
+DRJIT_TEST(full) {
     using Vector4f  = Array<float, 4>;
     using MyMatrix = Array<Vector4f, 4>;
     MyMatrix result = full<MyMatrix>(10.f);
@@ -290,7 +290,7 @@ ENOKI_TEST(full) {
     assert(to_string(result2) == "[[10, 10, 10, 10],\n [10, 10, 10, 10],\n [10, 10, 10, 10],\n [10, 10, 10, 10]]");
 }
 
-ENOKI_TEST(masked_assignment) {
+DRJIT_TEST(masked_assignment) {
     using FloatP = Packet<float>;
     using Matrix4f = Matrix<float, 4>;
     using Matrix4fP = Matrix<FloatP, 4>;

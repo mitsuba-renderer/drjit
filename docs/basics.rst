@@ -1,6 +1,6 @@
-.. cpp:namespace:: enoki
+.. cpp:namespace:: drjit
 
-.. _building-enoki:
+.. _building-drjit:
 
 Building
 --------
@@ -10,26 +10,26 @@ Building
 Basics
 ======
 
-The remainder of this document provides a basic overview of the Enoki library.
+The remainder of this document provides a basic overview of the Dr.Jit library.
 All code snippets assume that the following lines are present:
 
 .. tabs::
 
     .. code-tab:: python
 
-        import enoki as ek
+        import drjit as dr
 
     .. code-tab:: cpp
 
         #include <iostream>
-        #include <enoki/array.h>
+        #include <drjit/array.h>
 
-        // Don't forget to include the 'enoki' namespace
-        using namespace enoki;
+        // Don't forget to include the 'drjit' namespace
+        using namespace drjit;
 
 .. note::
 
-    The next few sections will introduce the basics of Enoki in the context of
+    The next few sections will introduce the basics of Dr.Jit in the context of
     vectorization for CPUs. Later sections will discuss vectorization via
     :ref:`GPU arrays <gpu>` and :ref:`Automatic differentiation <autodiff>`. It
     is recommended that you read the following sections even if you are mainly
@@ -38,10 +38,10 @@ All code snippets assume that the following lines are present:
 Static arrays
 -------------
 
-The most important data structure in this library is :cpp:struct:`enoki::Array`,
+The most important data structure in this library is :cpp:struct:`drjit::Array`,
 a generic container that stores a fixed-size array of an arbitrary data type.
 This is somewhat similar to the standard template library class ``std::array``.
-The main distinction between the two is that :cpp:struct:`enoki::Array` forwards
+The main distinction between the two is that :cpp:struct:`drjit::Array` forwards
 all C++ operators (and other standard mathematical functions) to the contained
 elements.
 
@@ -65,7 +65,7 @@ is valid because ``Array::operator+()`` can carry out the addition by invoking
 ``std::string::operator+()`` (this would not compile if ``std::array`` was used,
 since it has no such semantics).
 
-Enoki arrays also have support for a convenient feature that is commonly known
+Dr.Jit arrays also have support for a convenient feature that is commonly known
 as *broadcasting*---in this simple example, broadcasting is triggered if we add
 a raw string corresponding to an array of dimension zero. Fancier applications
 of broadcasting are discussed later.
@@ -75,12 +75,12 @@ of broadcasting are discussed later.
     // Prints: "[Hello you,  How are you]"
     std::cout << x + "you" << std::endl;
 
-The real use case of Enoki arrays, however, involves arrays of integer
+The real use case of Dr.Jit arrays, however, involves arrays of integer
 or floating point values, for which arithmetic operations can often be reduced
 to fast vectorized instructions provided by current processor architectures.
 
 The library ships with partial template overloads that become active when the
-``Type`` and ``Size`` parameters supplied to the ``enoki::Array<Type, Size>``
+``Type`` and ``Size`` parameters supplied to the ``drjit::Array<Type, Size>``
 template correspond to combinations that are natively supported by the targeted
 hardware. For instance, the template overloads for single precision arrays look
 as follows:
@@ -89,14 +89,14 @@ as follows:
     :width: 500px
     :align: center
 
-Altogether, Enoki currently supports the ARM NEON, SSE4.2, AVX, AVX2,
+Altogether, Dr.Jit currently supports the ARM NEON, SSE4.2, AVX, AVX2,
 and AVX512 instruction sets and vectorizes arithmetic involving single and
 double precision floating point values as well as signed and unsigned 32-bit
 and 64-bit integers.
 
-It is worth pointing out that that :cpp:struct:`enoki::Array` does *not* require
+It is worth pointing out that that :cpp:struct:`drjit::Array` does *not* require
 ``Size`` to exactly match what is supported by the hardware to benefit from
-vectorization. Enoki relies on template metaprogramming techniques to ensure
+vectorization. Dr.Jit relies on template metaprogramming techniques to ensure
 optimal code generation even in such challenging situations. For instance,
 arithmetic operations involving a hypothetical ``Array<float, 27>`` type will
 generate one AVX512 instruction [#f1]_, one AVX instruction, and one 4-wide SSE
@@ -126,9 +126,9 @@ values of individual entries.
     /* Initialize the entries individually */
     MyFloat f2(1.f, 2.f, 3.f, 4.f);
 
-The ``enoki`` namespace also contains a large number of global functions that
-create or manipulate Enoki arrays in various ways. One example is the
-:cpp:func:`enoki::load()` function, which is the method of choice to
+The ``drjit`` namespace also contains a large number of global functions that
+create or manipulate Dr.Jit arrays in various ways. One example is the
+:cpp:func:`drjit::load()` function, which is the method of choice to
 initialize an array with data that is currently stored in memory:
 
 .. code-block:: cpp
@@ -140,7 +140,7 @@ initialize an array with data that is currently stored in memory:
     f3 = load<MyFloat>(mem);           /* if known that 'mem' is aligned */
     f3 = load_unaligned<MyFloat>(mem); /* otherwise */
 
-Both :cpp:func:`enoki::load()` and :cpp:func:`enoki::load_unaligned()`  are
+Both :cpp:func:`drjit::load()` and :cpp:func:`drjit::load_unaligned()`  are
 template functions that load an array of the specified type (``MyFloat`` in
 this case) from a given address in memory. The first indicates that the memory
 address is aligned to a multiple of ``alignof(MyFloat)``, which is equal to 16
@@ -155,8 +155,8 @@ accessed.
 
 .. note::
 
-    It is generally desirable to use high-level Enoki template functions like
-    :cpp:func:`enoki::load()` whenever possible since they are designed to
+    It is generally desirable to use high-level Dr.Jit template functions like
+    :cpp:func:`drjit::load()` whenever possible since they are designed to
     produce the most efficient instruction sequences for the specified target
     architecture. In this case, we could also have written
 
@@ -241,7 +241,7 @@ Components of a vector can be efficiently reordered using the following syntax:
     f2 = shuffle<0, 2, 1, 3>(f1);
     // f2: [0, 20, 10, 30]
 
-Finally, Enoki provides an overloaded ``operator<<(std::ostream&, ...)`` stream
+Finally, Dr.Jit provides an overloaded ``operator<<(std::ostream&, ...)`` stream
 insertion operator to facilitate the inspection of array contents:
 
 .. code-block:: cpp
@@ -254,7 +254,7 @@ insertion operator to facilitate the inspection of array contents:
 Vertical operations
 -------------------
 
-Enoki provides the following *vertical* operations. The word vertical implies
+Dr.Jit provides the following *vertical* operations. The word vertical implies
 that they are independently applied to all array elements.
 
 .. code-block:: cpp
@@ -316,7 +316,7 @@ that they are independently applied to all array elements.
 Casting
 *******
 
-A cast is another type of vertical operation. Enoki performs efficient
+A cast is another type of vertical operation. Dr.Jit performs efficient
 conversion between any pair of types using native conversion instructions
 whenever possible:
 
@@ -381,7 +381,7 @@ The following linear algebra primitives are also realized in terms of horizontal
 Working with masks
 ------------------
 
-Comparisons involving Enoki types are generally applied component-wise and
+Comparisons involving Dr.Jit types are generally applied component-wise and
 produce a *mask* representing the outcome of the comparison. The internal
 representation of a mask is an implementation detail that varies widely from
 architecture to architecture -- an overview is given in the section
@@ -417,8 +417,8 @@ The following range tests also generate masks
     Using the ``-ffast-math`` compiler option may break detection of NaN values, and
     so is typically not recommended.
 
-Enoki provides a number of helpful trait classes to access array-related types.
-For instance, :cpp:type:`enoki::mask_t` determines the mask type associated
+Dr.Jit provides a number of helpful trait classes to access array-related types.
+For instance, :cpp:type:`drjit::mask_t` determines the mask type associated
 with an array, which permits replacing the ``auto`` statement above.
 
 .. code-block:: cpp
@@ -448,8 +448,8 @@ horizontal operations:
 .. note::
 
     *The special case of the equality and inequality comparison operators*:
-    following the principle of least surprise, :cpp:func:`enoki::operator==`
-    and :cpp:func:`enoki::operator!=` return a boolean value (i.e. they
+    following the principle of least surprise, :cpp:func:`drjit::operator==`
+    and :cpp:func:`drjit::operator!=` return a boolean value (i.e. they
     internally perform a horizontal reduction). *Vertical* comparison operators
     named :cpp:func:`eq` and :cpp:func:`neq()` are also available. The
     following pairs of operations are thus equivalent:
@@ -477,7 +477,7 @@ true_value, false_value)``.
     /* The above select() statement is equivalent to the following less efficient expression */
     f1 = ((f1 < 0.f) & f1) | (~(f1 < 0.f) & f2);
 
-Enoki also provides a special masked assignment operator, which updates entries
+Dr.Jit also provides a special masked assignment operator, which updates entries
 of an array matching the given mask:
 
 .. code-block:: cpp
@@ -488,7 +488,7 @@ of an array matching the given mask:
 Compared to ``select()``, a masked update may generate slightly more efficient
 code on some platforms. Apart from this, the two approaches can be used
 interchangeably. An alternative syntax involving the function
-:cpp:func:`enoki::masked` also exists:
+:cpp:func:`drjit::masked` also exists:
 
 .. code-block:: cpp
 
@@ -496,8 +496,8 @@ interchangeably. An alternative syntax involving the function
     masked(f1, f1 < 0.f) += 1.f;
 
 This is functionally equivalent to the previous example. The
-:cpp:func:`enoki::masked` syntax exists because it extends to cases where
-``f1`` is *scalar*, i.e. not an Enoki array. Using Enoki functions with scalar
+:cpp:func:`drjit::masked` syntax exists because it extends to cases where
+``f1`` is *scalar*, i.e. not an Dr.Jit array. Using Dr.Jit functions with scalar
 arguments will be discussed later.
 
 .. _3d-arrays:
@@ -507,7 +507,7 @@ The special case of 3D arrays
 
 Because information of dimension 3 occurs frequently (spatial coordinates,
 color information, ...) and generally also benefits very slightly from
-vectorization, Enoki represents 3-vectors in packed arrays of size 4, leaving
+vectorization, Dr.Jit represents 3-vectors in packed arrays of size 4, leaving
 the last component unused. Any vertical operations are applied to the entire
 array including the fourth component, while horizontal operations skip the
 last component.

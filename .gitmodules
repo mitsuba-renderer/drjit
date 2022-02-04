@@ -1,6 +1,6 @@
 [submodule "ext/pybind11"]
     path = ext/pybind11
     url = https://github.com/pybind/pybind11
-[submodule "ext/enoki-jit"]
-	path = ext/enoki-jit
-	url = https://github.com/mitsuba-renderer/enoki-jit
+[submodule "ext/drjit-core"]
+    path = ext/drjit-core
+    url = https://github.com/mitsuba-renderer/drjit-core

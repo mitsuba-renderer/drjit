@@ -1,20 +1,20 @@
-.. cpp:namespace:: enoki
+.. cpp:namespace:: drjit
 
 Quaternions
 ===========
 
-Enoki provides a vectorizable type for quaternion arithmetic.
+Dr.Jit provides a vectorizable type for quaternion arithmetic.
 To use it, include the following header:
 
 .. code-block:: cpp
 
-    #include <enoki/quaternion.h>
+    #include <drjit/quaternion.h>
 
 Usage
 -----
 
 The following example shows how to define and perform basic arithmetic using
-:cpp:class:`enoki::Quaternion` vectorized over 4-wide packets.
+:cpp:class:`drjit::Quaternion` vectorized over 4-wide packets.
 
 .. code-block:: cpp
 
@@ -83,14 +83,14 @@ Reference
 
 .. cpp:class:: template <typename Type> Quaternion : StaticArrayImpl<Type, 4>
 
-    The class :cpp:class:`enoki::Quaternion` is a 4D Enoki array whose
+    The class :cpp:class:`drjit::Quaternion` is a 4D Dr.Jit array whose
     components are of type ``Type``. Various arithmetic operators (e.g.
     multiplication) and transcendental functions are overloaded so that they
     provide the correct behavior for quaternion-valued inputs.
 
     .. cpp:function:: Quaternion(Type x, Type y, Type z, Type w)
 
-        Initialize a new :cpp:class:`enoki::Quaternion` instance with the value
+        Initialize a new :cpp:class:`drjit::Quaternion` instance with the value
         :math:`x\mathbf{i} + y\mathbf{j} + z\mathbf{k} + w`
 
         .. warning::
@@ -100,7 +100,7 @@ Reference
 
     .. cpp:function:: Quaternion(Array<Type, 3> imag, Type real)
 
-        Creates a :cpp:class:`enoki::Quaternion` instance from the given
+        Creates a :cpp:class:`drjit::Quaternion` instance from the given
         imaginary and real inputs.
 
         .. warning::
@@ -110,7 +110,7 @@ Reference
 
     .. cpp:function:: Quaternion(Type f)
 
-        Creates a real-valued :cpp:class:`enoki::Quaternion` instance from ``f``.
+        Creates a real-valued :cpp:class:`drjit::Quaternion` instance from ``f``.
         This constructor effectively changes the broadcasting behavior of
         non-quaternion inputs---for instance, the snippet
 
@@ -124,7 +124,7 @@ Reference
             std::cout << "value_a = "<< value_a << ", value_q = " << value_q << std::endl;
 
         prints ``value_a = [1, 1, 1, 1], value_q = 1 + 0i + 0j + 0k``, which is
-        the desired behavior for quaternions. For standard Enoki arrays, the
+        the desired behavior for quaternions. For standard Dr.Jit arrays, the
         number ``1.f`` is broadcast to all four components.
 
 Elementary operations
@@ -162,7 +162,7 @@ Arithmetic operators
 ********************
 
 Only a few arithmetic operators need to be overridden to support quaternion
-arithmetic. The rest are automatically provided by Enoki's existing operators
+arithmetic. The rest are automatically provided by Dr.Jit's existing operators
 and broadcasting rules.
 
 .. cpp:function:: template <typename T> Quaternion<T> operator*(Quaternion<T> q0, Quaternion<T> q1)

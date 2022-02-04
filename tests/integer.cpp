@@ -1,7 +1,7 @@
 /*
     tests/basic.cpp -- tests basic operators involving different types
 
-    Enoki is a C++ template library that enables transparent vectorization
+    Dr.Jit is a C++ template library that enables transparent vectorization
     of numerical kernels using SIMD instruction sets available on current
     processor architectures.
 
@@ -13,7 +13,7 @@
 
 #include "test.h"
 
-ENOKI_TEST_INT(test01_or) {
+DRJIT_TEST_INT(test01_or) {
     auto sample = test::sample_values<Value>();
 
     test::validate_binary<T>(sample,
@@ -32,7 +32,7 @@ ENOKI_TEST_INT(test01_or) {
     );
 }
 
-ENOKI_TEST_INT(test02_and) {
+DRJIT_TEST_INT(test02_and) {
     auto sample = test::sample_values<Value>();
 
     test::validate_binary<T>(sample,
@@ -51,7 +51,7 @@ ENOKI_TEST_INT(test02_and) {
     );
 }
 
-ENOKI_TEST_INT(test03_xor) {
+DRJIT_TEST_INT(test03_xor) {
     auto sample = test::sample_values<Value>();
 
     test::validate_binary<T>(sample,
@@ -65,7 +65,7 @@ ENOKI_TEST_INT(test03_xor) {
     );
 }
 
-ENOKI_TEST_INT(test04_not) {
+DRJIT_TEST_INT(test04_not) {
     auto sample = test::sample_values<Value>();
 
     test::validate_unary<T>(sample,
@@ -79,44 +79,44 @@ ENOKI_TEST_INT(test04_not) {
     );
 }
 
-ENOKI_TEST_INT(test05_sign) {
+DRJIT_TEST_INT(test05_sign) {
     auto sample = test::sample_values<Value>();
 
     test::validate_unary<T>(sample,
-        [](const T &a) -> T { return enoki::sign(a); },
+        [](const T &a) -> T { return drjit::sign(a); },
         [](Value a) -> Value { return a >= 0 ? Value(1) : Value(-1); }
     );
 }
 
-ENOKI_TEST_TYPE(test06_shift, uint32_t) {
+DRJIT_TEST_TYPE(test06_shift, uint32_t) {
     assert((T(0xDEADBEEFu) >> 4u) == T(0x0DEADBEEu));
     assert((T(0xDEADBEEFu) << 4u) == T(0xEADBEEF0u));
     assert((sr<4>(T(0xDEADBEEFu)) == T(0x0DEADBEEu)));
     assert((sl<4>(T(0xDEADBEEFu)) == T(0xEADBEEF0u)));
 }
 
-ENOKI_TEST_TYPE(test06_shift, int32_t) {
+DRJIT_TEST_TYPE(test06_shift, int32_t) {
     assert((T((int32_t) 0xDEADBEEF) >> 4) == T((int32_t) 0xFDEADBEE));
     assert((T((int32_t) 0xDEADBEEF) << 4) == T((int32_t) 0xEADBEEF0));
     assert((sr<4>(T((int32_t) 0xDEADBEEF)) == T((int32_t) 0xFDEADBEE)));
     assert((sl<4>(T((int32_t) 0xDEADBEEF)) == T((int32_t) 0xEADBEEF0)));
 }
 
-ENOKI_TEST_TYPE(test06_shift, uint64_t) {
+DRJIT_TEST_TYPE(test06_shift, uint64_t) {
     assert((T(0xCAFEBABEDEADBEEFull) >> 4u) == T(0x0CAFEBABEDEADBEEull));
     assert((T(0xCAFEBABEDEADBEEFull) << 4u) == T(0xAFEBABEDEADBEEF0ull));
     assert((sr<4>(T(0xCAFEBABEDEADBEEFull)) == T(0x0CAFEBABEDEADBEEull)));
     assert((sl<4>(T(0xCAFEBABEDEADBEEFull)) == T(0xAFEBABEDEADBEEF0ull)));
 }
 
-ENOKI_TEST_TYPE(test06_shift, int64_t) {
+DRJIT_TEST_TYPE(test06_shift, int64_t) {
     assert((T((int64_t) 0xDEADBEEFCAFEBABEll) >> 4) == T((int64_t) 0xFDEADBEEFCAFEBABll));
     assert((T((int64_t) 0xDEADBEEFCAFEBABEll) << 4) == T((int64_t) 0xEADBEEFCAFEBABE0ll));
     assert((sr<4>(T((int64_t) 0xDEADBEEFCAFEBABEll)) == T((int64_t) 0xFDEADBEEFCAFEBABll)));
     assert((sl<4>(T((int64_t) 0xDEADBEEFCAFEBABEll)) == T((int64_t) 0xEADBEEFCAFEBABE0ll)));
 }
 
-ENOKI_TEST_INT(test07_bmi) {
+DRJIT_TEST_INT(test07_bmi) {
     if (std::is_signed<Value>::value)
         return;
     Value lzcnt_ref[] = { 32, 31, 30, 30, 29, 29, 29, 29, 28, 28, 28, 28, 28 };

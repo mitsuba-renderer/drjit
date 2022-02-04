@@ -15,7 +15,7 @@
 	.st9{fill:#F68FFF;stroke:#000000;stroke-width:3;stroke-miterlimit:10;}
 	.st10{fill:none;stroke:#000000;stroke-width:4;stroke-miterlimit:10;}
 </style>
-<title>enoki_dynamic_struct</title>
+<title>drjit_dynamic_struct</title>
 <circle class="st0" cx="1620.29" cy="444.98" r="13.2"/>
 <circle class="st0" cx="1663.79" cy="444.98" r="13.2"/>
 <circle class="st0" cx="1620.29" cy="317.89" r="13.2"/>

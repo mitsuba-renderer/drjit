@@ -1,7 +1,7 @@
 /*
     tests/conv.cpp -- tests value and mask conversion routines
 
-    Enoki is a C++ template library that enables transparent vectorization
+    Dr.Jit is a C++ template library that enables transparent vectorization
     of numerical kernels using SIMD instruction sets available on current
     processor architectures.
 
@@ -39,23 +39,23 @@ template <typename T, typename Value2> void masktest() {
     }
 }
 
-ENOKI_TEST_ALL(test01_conv_int32_t)  { convtest<T, int32_t>();  }
-ENOKI_TEST_ALL(test02_conv_uint32_t) { convtest<T, uint32_t>(); }
-ENOKI_TEST_ALL(test03_conv_int64_t)  { convtest<T, int64_t>();  }
-ENOKI_TEST_ALL(test04_conv_uint64_t) { convtest<T, uint64_t>(); }
-ENOKI_TEST_ALL(test05_conv_half)     { convtest<T, half>();     }
-ENOKI_TEST_ALL(test06_conv_float)    { convtest<T, float>();    }
-ENOKI_TEST_ALL(test07_conv_double)   { convtest<T, double>();   }
+DRJIT_TEST_ALL(test01_conv_int32_t)  { convtest<T, int32_t>();  }
+DRJIT_TEST_ALL(test02_conv_uint32_t) { convtest<T, uint32_t>(); }
+DRJIT_TEST_ALL(test03_conv_int64_t)  { convtest<T, int64_t>();  }
+DRJIT_TEST_ALL(test04_conv_uint64_t) { convtest<T, uint64_t>(); }
+DRJIT_TEST_ALL(test05_conv_half)     { convtest<T, half>();     }
+DRJIT_TEST_ALL(test06_conv_float)    { convtest<T, float>();    }
+DRJIT_TEST_ALL(test07_conv_double)   { convtest<T, double>();   }
 
-ENOKI_TEST_ALL(test08_mask_int32_t)  { masktest<T, int32_t>();  }
-ENOKI_TEST_ALL(test09_mask_uint32_t) { masktest<T, uint32_t>(); }
-ENOKI_TEST_ALL(test10_mask_int64_t)  { masktest<T, int64_t>();  }
-ENOKI_TEST_ALL(test11_mask_uint64_t) { masktest<T, uint64_t>(); }
-ENOKI_TEST_ALL(test12_mask_float)    { masktest<T, float>();    }
-ENOKI_TEST_ALL(test13_mask_double)   { masktest<T, double>();   }
-ENOKI_TEST_ALL(test14_mask_half)     { masktest<T, half>();     }
+DRJIT_TEST_ALL(test08_mask_int32_t)  { masktest<T, int32_t>();  }
+DRJIT_TEST_ALL(test09_mask_uint32_t) { masktest<T, uint32_t>(); }
+DRJIT_TEST_ALL(test10_mask_int64_t)  { masktest<T, int64_t>();  }
+DRJIT_TEST_ALL(test11_mask_uint64_t) { masktest<T, uint64_t>(); }
+DRJIT_TEST_ALL(test12_mask_float)    { masktest<T, float>();    }
+DRJIT_TEST_ALL(test13_mask_double)   { masktest<T, double>();   }
+DRJIT_TEST_ALL(test14_mask_half)     { masktest<T, half>();     }
 
-ENOKI_TEST_ALL(test15_bool_conv) {
+DRJIT_TEST_ALL(test15_bool_conv) {
     for (size_t i = 0; i < T::Size; ++i) {
         mask_t<T> mask = eq(arange<T>() - T(Value(i)), T(0));
         bool_array_t<T> mask3(mask);

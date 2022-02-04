@@ -1,14 +1,14 @@
-.. cpp:namespace:: enoki
-.. py:module:: enoki
+.. cpp:namespace:: drjit
+.. py:module:: drjit
 .. _autodiff:
 
 Automatic differentiation
 =========================
 
 *Automatic differentiation* (AD) refers to a set of techniques to numerically
-evaluate the gradient of a computer program. Enoki realizes such differentiable
+evaluate the gradient of a computer program. Dr.Jit realizes such differentiable
 computations using the :cpp:struct:`DiffArray` C++ template class and Python
-bindings in the :py:mod:`enoki.cuda.ad` and :py:mod:`enoki.llvm.ad` modules.
+bindings in the :py:mod:`drjit.cuda.ad` and :py:mod:`drjit.llvm.ad` modules.
 
 The remainder of this section assumes the following import declarations:
 
@@ -17,23 +17,23 @@ The remainder of this section assumes the following import declarations:
     .. code-tab:: python
 
         # Differentiable float type, which performs computations on the GPU
-        from enoki.cuda.ad import Float
+        from drjit.cuda.ad import Float
 
         # ... alternatively, the LLVM backend performs computations on the CPU
-        # from enoki.llvm.ad import Float
+        # from drjit.llvm.ad import Float
 
     .. code-tab:: cpp
 
-        #include <enoki/autodiff.h>
+        #include <drjit/autodiff.h>
 
         // Declare a base type that performs computation on the GPU
-        using BaseFloat = ek::CUDAArray<float>;
+        using BaseFloat = dr::CUDAArray<float>;
 
         // Alternatively, the following base type performs computation on the CPU
-        // using BaseFloat = ek::LLVMArray<float>;
+        // using BaseFloat = dr::LLVMArray<float>;
 
         // The differentiable array wraps the base type
-        using Float = ek::DiffArray<BaseFloat>;
+        using Float = dr::DiffArray<BaseFloat>;
 
 
 Basics
@@ -50,7 +50,7 @@ of the original computation). Many flavors and specializations of AD have been
 proposed in the past, we refer to the excellent book by Griewank and Walther
 [GrWa08]_ for a thorough overview of this topic.
 
-Enoki implements two symmetrically opposite modes of AD:
+Dr.Jit implements two symmetrically opposite modes of AD:
 
 1. **Forward mode**. Given computation with certain inputs and outputs, forward
    mode propagates derivatives *from the inputs towards the outputs*.
@@ -62,7 +62,7 @@ Enoki implements two symmetrically opposite modes of AD:
 
    For example, suppose we want to differentiate both outputs of the function
    :math:`\mathrm{sincos}(\theta)=(\sin\theta, \cos\theta)` with respect to a
-   single input :math:`\theta` at :math:`\theta=1`. Using Enoki, this can be
+   single input :math:`\theta` at :math:`\theta=1`. Using Dr.Jit, this can be
    done as follows:
 
    .. tabs::
@@ -70,19 +70,19 @@ Enoki implements two symmetrically opposite modes of AD:
        .. code-tab:: python
 
            theta = Float(1.0)       # Declare input value and enable gradient tracking
-           ek.enable_grad(theta)
-           s, c = ek.sincos(theta)  # The computation to be differentiated
-           ek.forward(theta)        # Forward-propagate derivatives through the computation
-           grad_s, grad_c = ek.grad(s), ek.grad(c) # Extract derivatives wrt. both outputs
+           dr.enable_grad(theta)
+           s, c = dr.sincos(theta)  # The computation to be differentiated
+           dr.forward(theta)        # Forward-propagate derivatives through the computation
+           grad_s, grad_c = dr.grad(s), dr.grad(c) # Extract derivatives wrt. both outputs
 
        .. code-tab:: cpp
 
            Float theta = 1.f;               // Declare input value and enable gradient tracking
-           ek::enable_grad(theta);
-           auto [s, c] = ek::sincos(theta); // The computation to be differentiated
-           ek::forward(theta);              // Forward-propagate derivates through the computation
-           BaseFloat grad_s = ek::grad(s),  // Extract derivatives wrt. both outputs
-                     grad_c = ek::grad(c);
+           dr::enable_grad(theta);
+           auto [s, c] = dr::sincos(theta); // The computation to be differentiated
+           dr::forward(theta);              // Forward-propagate derivates through the computation
+           BaseFloat grad_s = dr::grad(s),  // Extract derivatives wrt. both outputs
+                     grad_c = dr::grad(c);
 
    Forward-mode AD simultaneously computes derivatives with respect to all
    outputs. There were only two in this example (``grad_s`` and ``grad_c``)
@@ -99,28 +99,28 @@ Enoki implements two symmetrically opposite modes of AD:
 
    For example, suppose we want to differentiate both inputs of the function
    :math:`\theta=\mathrm{atan2}(y, x)` with respect to a single output
-   :math:`\theta`. Using Enoki, this can be done as follows:
+   :math:`\theta`. Using Dr.Jit, this can be done as follows:
 
    .. tabs::
 
        .. code-tab:: python
 
-           from enoki.cuda.ad import Array2f # Array composed of 2 differentiable Floats
+           from drjit.cuda.ad import Array2f # Array composed of 2 differentiable Floats
            p = Array2f(1, 2) # Declare the input value and enable gradient tracking
-           ek.enable_grad(p)
-           theta = ek.atan2(p.y, p.x) # The computation to be differentiated
-           ek.backward(theta) # Reverse-propagate derivatives through the computation
-           grad_x, grad_y = ek.grad(p.x), ek.grad(p.y) # Extract derivatives wrt. both inputs
+           dr.enable_grad(p)
+           theta = dr.atan2(p.y, p.x) # The computation to be differentiated
+           dr.backward(theta) # Reverse-propagate derivatives through the computation
+           grad_x, grad_y = dr.grad(p.x), dr.grad(p.y) # Extract derivatives wrt. both inputs
 
        .. code-tab:: cpp
 
-           using Array2f = ek::Array<Float, 2>; // Array composed of 2 differentiable Floats
+           using Array2f = dr::Array<Float, 2>; // Array composed of 2 differentiable Floats
            Array2f p = Array2f(1, 2); // Declare the input value and enable gradient tracking
-           ek::enable_grad(p);
-           Float theta = ek::sincos(p.y(), p.x()); // The computation to be differentiated
-           ek::backward(theta); // Reverse-propagate derivates through the computation
-           BaseFloat grad_x = ek::grad(p.x()), // Extract derivatives wrt. both inputs
-                     grad_y = ek::grad(p.y());
+           dr::enable_grad(p);
+           Float theta = dr::sincos(p.y(), p.x()); // The computation to be differentiated
+           dr::backward(theta); // Reverse-propagate derivates through the computation
+           BaseFloat grad_x = dr::grad(p.x()), // Extract derivatives wrt. both inputs
+                     grad_y = dr::grad(p.y());
 
    Reverse-mode AD simultaneously computes derivatives with respect to all
    inputs and remains efficient even when there are vast numbers of them.
@@ -153,7 +153,7 @@ API reference (Python)
 Functions that operate on general python object trees
 -----------------------------------------------------
 
-Many Enoki operations support arbitrary
+Many Dr.Jit operations support arbitrary
 (tuples, lists, dicts, custom data
 structures).
 
@@ -161,7 +161,7 @@ structures).
 How does it work?
 -----------------
 
-Enoki
+Dr.Jit
 
 There is one major catch with reverse mode: derivative propagation proceeds in
 the opposite direction (i.e. ) A partial record of intermediate computations
@@ -172,15 +172,15 @@ computations.
 
    .. code-tab:: python
 
-       ek::graphviz(f);
-       from enoki.cuda.ad import Array2f # Array composed of 2 differentiable Floats
+       dr::graphviz(f);
+       from drjit.cuda.ad import Array2f # Array composed of 2 differentiable Floats
        p = Array2f(1, 2) # Declare the input value and enable gradient tracking
 
    .. code-tab:: cpp
 
-       using Array2f = ek::Array<Float, 2>; // Array composed of 2 differentiable Floats
+       using Array2f = dr::Array<Float, 2>; // Array composed of 2 differentiable Floats
        Array2f p = Array2f(1, 2); // Declare the input value and enable gradient tracking
-       ek::enable_grad(p);
+       dr::enable_grad(p);
 
 Visualizing computation graphs
 ------------------------------

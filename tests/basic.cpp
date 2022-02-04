@@ -1,7 +1,7 @@
 /*
     tests/basic.cpp -- tests basic operators involving different types
 
-    Enoki is a C++ template library that enables transparent vectorization
+    Dr.Jit is a C++ template library that enables transparent vectorization
     of numerical kernels using SIMD instruction sets available on current
     processor architectures.
 
@@ -17,18 +17,18 @@
 #  pragma warning(disable: 4146) //  warning C4146: unary minus operator applied to unsigned type, result still unsigned
 #endif
 
-ENOKI_TEST_ALL(test00_align) {
-#if defined(ENOKI_X86_SSE42)
+DRJIT_TEST_ALL(test00_align) {
+#if defined(DRJIT_X86_SSE42)
     if (sizeof(Value)*Size == 16) {
         assert(sizeof(T) == 16);
         assert(alignof(T) == 16);
     }
-#elif defined(ENOKI_X86_AVX)
+#elif defined(DRJIT_X86_AVX)
     if (sizeof(Value)*Size == 32) {
         assert(sizeof(T) == 32);
         assert(alignof(T) == 32);
     }
-#elif defined(ENOKI_X86_AVX512F)
+#elif defined(DRJIT_X86_AVX512F)
     if (sizeof(Value)*Size == 64) {
         assert(sizeof(T) == 64);
         assert(alignof(T) == 64);
@@ -75,7 +75,7 @@ ENOKI_TEST_ALL(test00_align) {
     static_assert(std::is_same<Test*, expr_t<std::nullptr_t, Test*>>::value, "expr_t failure");
 }
 
-ENOKI_TEST_ALL(test01_add) {
+DRJIT_TEST_ALL(test01_add) {
     auto sample = test::sample_values<Value>();
 
     test::validate_binary<T>(sample,
@@ -99,7 +99,7 @@ ENOKI_TEST_ALL(test01_add) {
     );
 }
 
-ENOKI_TEST_ALL(test02_sub) {
+DRJIT_TEST_ALL(test02_sub) {
     auto sample = test::sample_values<Value>();
 
     test::validate_binary<T>(sample,
@@ -123,7 +123,7 @@ ENOKI_TEST_ALL(test02_sub) {
     );
 }
 
-ENOKI_TEST_ALL(test03_mul) {
+DRJIT_TEST_ALL(test03_mul) {
     auto sample = test::sample_values<Value>();
 
     test::validate_binary<T>(sample,
@@ -147,7 +147,7 @@ ENOKI_TEST_ALL(test03_mul) {
     );
 }
 
-ENOKI_TEST_ALL(test05_neg) {
+DRJIT_TEST_ALL(test05_neg) {
     auto sample = test::sample_values<Value>();
 
     test::validate_unary<T>(sample,
@@ -156,7 +156,7 @@ ENOKI_TEST_ALL(test05_neg) {
     );
 }
 
-ENOKI_TEST_ALL(test06_lt) {
+DRJIT_TEST_ALL(test06_lt) {
     auto sample = test::sample_values<Value>();
 
     test::validate_binary<T>(sample,
@@ -168,7 +168,7 @@ ENOKI_TEST_ALL(test06_lt) {
     assert(select(T(1) > T(2), T(1), T(2)) == T(2));
 }
 
-ENOKI_TEST_ALL(test07_le) {
+DRJIT_TEST_ALL(test07_le) {
     auto sample = test::sample_values<Value>();
 
     test::validate_binary<T>(sample,
@@ -177,7 +177,7 @@ ENOKI_TEST_ALL(test07_le) {
     );
 }
 
-ENOKI_TEST_ALL(test08_gt) {
+DRJIT_TEST_ALL(test08_gt) {
     auto sample = test::sample_values<Value>();
 
     test::validate_binary<T>(sample,
@@ -186,7 +186,7 @@ ENOKI_TEST_ALL(test08_gt) {
     );
 }
 
-ENOKI_TEST_ALL(test09_ge) {
+DRJIT_TEST_ALL(test09_ge) {
     auto sample = test::sample_values<Value>();
 
     test::validate_binary<T>(sample,
@@ -195,7 +195,7 @@ ENOKI_TEST_ALL(test09_ge) {
     );
 }
 
-ENOKI_TEST_ALL(test10_eq) {
+DRJIT_TEST_ALL(test10_eq) {
     auto sample = test::sample_values<Value>();
 
     test::validate_binary<T>(sample,
@@ -210,7 +210,7 @@ ENOKI_TEST_ALL(test10_eq) {
            && none_nested(eq(m3, m2)) && all_nested(eq(m3, m3)));
 }
 
-ENOKI_TEST_ALL(test11_neq) {
+DRJIT_TEST_ALL(test11_neq) {
     auto sample = test::sample_values<Value>();
 
     test::validate_binary<T>(sample,
@@ -224,8 +224,8 @@ ENOKI_TEST_ALL(test11_neq) {
            && none_nested(m3 & m2)  && none_nested(eq(m3, m2)));
 }
 
-ENOKI_TEST_ALL(test12_min) {
-#if !defined(ENOKI_ARM_NEON)
+DRJIT_TEST_ALL(test12_min) {
+#if !defined(DRJIT_ARM_NEON)
     auto sample = test::sample_values<Value>();
 #else
     // ARM NEON propagates NaN more aggressively than x86..
@@ -238,8 +238,8 @@ ENOKI_TEST_ALL(test12_min) {
     );
 }
 
-ENOKI_TEST_ALL(test13_max) {
-#if !defined(ENOKI_ARM_NEON)
+DRJIT_TEST_ALL(test13_max) {
+#if !defined(DRJIT_ARM_NEON)
     auto sample = test::sample_values<Value>();
 #else
     // ARM NEON propagates NaN more aggressively than x86..
@@ -252,16 +252,16 @@ ENOKI_TEST_ALL(test13_max) {
     );
 }
 
-ENOKI_TEST_ALL(test14_abs) {
+DRJIT_TEST_ALL(test14_abs) {
     auto sample = test::sample_values<Value>();
 
     test::validate_unary<T>(sample,
         [](const T &a) -> T { return abs(a); },
-        [](Value a) -> Value { return enoki::abs(a); }
+        [](Value a) -> Value { return drjit::abs(a); }
     );
 }
 
-ENOKI_TEST_ALL(test15_fmadd) {
+DRJIT_TEST_ALL(test15_fmadd) {
     if (!T::IsFloat)
         return;
     auto sample = test::sample_values<Value>();
@@ -275,7 +275,7 @@ ENOKI_TEST_ALL(test15_fmadd) {
     );
 }
 
-ENOKI_TEST_ALL(test16_fmsub) {
+DRJIT_TEST_ALL(test16_fmsub) {
     if (!T::IsFloat)
         return;
     auto sample = test::sample_values<Value>();
@@ -289,7 +289,7 @@ ENOKI_TEST_ALL(test16_fmsub) {
     );
 }
 
-ENOKI_TEST_ALL(test17_select) {
+DRJIT_TEST_ALL(test17_select) {
     auto sample = test::sample_values<Value>();
 
     test::validate_ternary<T>(sample,
@@ -301,22 +301,22 @@ ENOKI_TEST_ALL(test17_select) {
 }
 
 template <typename T, std::enable_if_t<T::Size == 1, int> = 0> void test18_shuffle_impl() {
-    assert((enoki::shuffle<0>(T(1)) == T(1)));
+    assert((drjit::shuffle<0>(T(1)) == T(1)));
 }
 
 template <typename T, std::enable_if_t<T::Size == 2, int> = 0> void test18_shuffle_impl() {
-    assert((enoki::shuffle<0, 1>(T(1, 2)) == T(1, 2)));
-    assert((enoki::shuffle<1, 0>(T(1, 2)) == T(2, 1)));
+    assert((drjit::shuffle<0, 1>(T(1, 2)) == T(1, 2)));
+    assert((drjit::shuffle<1, 0>(T(1, 2)) == T(2, 1)));
 }
 
 template <typename T, std::enable_if_t<T::Size == 3, int> = 0> void test18_shuffle_impl() {
-    assert((enoki::shuffle<0, 1, 2>(T(1, 2, 3)) == T(1, 2, 3)));
-    assert((enoki::shuffle<2, 1, 0>(T(1, 2, 3)) == T(3, 2, 1)));
+    assert((drjit::shuffle<0, 1, 2>(T(1, 2, 3)) == T(1, 2, 3)));
+    assert((drjit::shuffle<2, 1, 0>(T(1, 2, 3)) == T(3, 2, 1)));
 }
 
 template <typename T, std::enable_if_t<T::Size == 4, int> = 0> void test18_shuffle_impl() {
-    assert((enoki::shuffle<0, 1, 2, 3>(T(1, 2, 3, 4)) == T(1, 2, 3, 4)));
-    assert((enoki::shuffle<3, 2, 1, 0>(T(1, 2, 3, 4)) == T(4, 3, 2, 1)));
+    assert((drjit::shuffle<0, 1, 2, 3>(T(1, 2, 3, 4)) == T(1, 2, 3, 4)));
+    assert((drjit::shuffle<3, 2, 1, 0>(T(1, 2, 3, 4)) == T(4, 3, 2, 1)));
 }
 
 template <typename T, std::enable_if_t<T::Size == 8, int> = 0> void test18_shuffle_impl() {
@@ -341,7 +341,7 @@ template <typename T, std::enable_if_t<(T::Size > 16), int> = 0> void test18_shu
     std::cout << "[skipped] ";
 }
 
-ENOKI_TEST_ALL(test18_shuffle) {
+DRJIT_TEST_ALL(test18_shuffle) {
     test18_shuffle_impl<T>();
 }
 
@@ -357,9 +357,9 @@ void test19_lowhi_impl() {
     assert(T(low(value), high(value)) == value);
     assert(concat(low(value), high(value)) == value);
 }
-ENOKI_TEST_ALL(test19_lowhi) { test19_lowhi_impl<T>(); }
+DRJIT_TEST_ALL(test19_lowhi) { test19_lowhi_impl<T>(); }
 
-ENOKI_TEST_ALL(test20_iterator) {
+DRJIT_TEST_ALL(test20_iterator) {
     Value j(0);
     for (Value i : arange<T>()) {
         assert(i == j);
@@ -367,7 +367,7 @@ ENOKI_TEST_ALL(test20_iterator) {
     }
 }
 
-ENOKI_TEST_ALL(test21_mask_assign) {
+DRJIT_TEST_ALL(test21_mask_assign) {
     T x = arange<T>();
     x[x > Value(0)] = x + Value(1);
     if (Size >= 2) {
@@ -381,42 +381,42 @@ ENOKI_TEST_ALL(test21_mask_assign) {
     }
 }
 
-ENOKI_TEST_FLOAT(test22_copysign) {
+DRJIT_TEST_FLOAT(test22_copysign) {
     auto sample = test::sample_values<Value>(false);
 
     test::validate_binary<T>(sample,
-        [](const T &a, const T &b) -> T { return enoki::copysign(a, b); },
+        [](const T &a, const T &b) -> T { return drjit::copysign(a, b); },
         [](Value a, Value b) -> Value { return std::copysign(a, b); }
     );
 
     test::validate_binary<T>(sample,
-        [](const T &a, const T &b) -> T { return enoki::copysign_neg(a, b); },
+        [](const T &a, const T &b) -> T { return drjit::copysign_neg(a, b); },
         [](Value a, Value b) -> Value { return std::copysign(a, -b); }
     );
 }
 
-ENOKI_TEST_FLOAT(test23_mulsign) {
+DRJIT_TEST_FLOAT(test23_mulsign) {
     auto sample = test::sample_values<Value>(false);
 
     test::validate_binary<T>(sample,
-        [](const T &a, const T &b) -> T { return enoki::mulsign(a, b); },
+        [](const T &a, const T &b) -> T { return drjit::mulsign(a, b); },
         [](Value a, Value b) -> Value { return a*std::copysign(Value(1), b); }
     );
 
     test::validate_binary<T>(sample,
-        [](const T &a, const T &b) -> T { return enoki::mulsign_neg(a, b); },
+        [](const T &a, const T &b) -> T { return drjit::mulsign_neg(a, b); },
         [](Value a, Value b) -> Value { return a*std::copysign(Value(1), -b); }
     );
 }
 
-ENOKI_TEST_ALL(test25_rorl_array) {
+DRJIT_TEST_ALL(test25_rorl_array) {
     auto a = arange<T>();
     auto b = rotate_left<2>(a);
     auto c = rotate_right<2>(b);
     assert(a == c);
 }
 
-ENOKI_TEST_ALL(test26_mask_op) {
+DRJIT_TEST_ALL(test26_mask_op) {
     auto sample = test::sample_values<Value>();
 
     test::validate_binary<T>(sample,
@@ -430,8 +430,8 @@ ENOKI_TEST_ALL(test26_mask_op) {
     );
 }
 
-#if defined(ENOKI_X86_SSE42)
-ENOKI_TEST(test27_flush_denormals) {
+#if defined(DRJIT_X86_SSE42)
+DRJIT_TEST(test27_flush_denormals) {
     bool prev = flush_denormals();
     set_flush_denormals(false);
     assert(!flush_denormals());
@@ -441,7 +441,7 @@ ENOKI_TEST(test27_flush_denormals) {
 }
 #endif
 
-ENOKI_TEST_ALL(test28_mask_from_int) {
+DRJIT_TEST_ALL(test28_mask_from_int) {
     using Mask = mask_t<T>;
     // Mask construction, select
     Mask m1(true), m2(true | true), m3(true & false);

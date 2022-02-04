@@ -1,7 +1,7 @@
 /*
     tests/morton.cpp -- tests Morton/Z-order curve encoding and decoding
 
-    Enoki is a C++ template library that enables transparent vectorization
+    Dr.Jit is a C++ template library that enables transparent vectorization
     of numerical kernels using SIMD instruction sets available on current
     processor architectures.
 
@@ -12,11 +12,11 @@
 */
 
 #include "test.h"
-#include <enoki/morton.h>
+#include <drjit/morton.h>
 
-ENOKI_TEST(test01_morton_u32_2d_scalar) {
+DRJIT_TEST(test01_morton_u32_2d_scalar) {
     using T = uint32_t;
-    using T2 = enoki::Array<T, 2>;
+    using T2 = drjit::Array<T, 2>;
 
     T2 value = T2(123u, 456u);
     T value2 = morton_encode(value);
@@ -25,9 +25,9 @@ ENOKI_TEST(test01_morton_u32_2d_scalar) {
     assert(value == value3);
 }
 
-ENOKI_TEST(test02_morton_u32_2d_array) {
-    using T = enoki::Array<uint32_t>;
-    using T2 = enoki::Array<T, 2>;
+DRJIT_TEST(test02_morton_u32_2d_array) {
+    using T = drjit::Array<uint32_t>;
+    using T2 = drjit::Array<T, 2>;
 
     T2 value = T2(123u, 456u);
     T value2 = morton_encode(value);
@@ -36,9 +36,9 @@ ENOKI_TEST(test02_morton_u32_2d_array) {
     assert(value == value3);
 }
 
-ENOKI_TEST(test03_morton_u32_3d_scalar) {
+DRJIT_TEST(test03_morton_u32_3d_scalar) {
     using T = uint32_t;
-    using T2 = enoki::Array<T, 3>;
+    using T2 = drjit::Array<T, 3>;
 
     T2 value = T2(123u, 456u, 789u);
     T value2 = morton_encode(value);
@@ -47,9 +47,9 @@ ENOKI_TEST(test03_morton_u32_3d_scalar) {
     assert(value == value3);
 }
 
-ENOKI_TEST(test04_morton_u32_3d_array) {
-    using T = enoki::Array<uint32_t>;
-    using T2 = enoki::Array<T, 3>;
+DRJIT_TEST(test04_morton_u32_3d_array) {
+    using T = drjit::Array<uint32_t>;
+    using T2 = drjit::Array<T, 3>;
 
     T2 value = T2(123u, 456u, 789u);
     T value2 = morton_encode(value);
@@ -58,9 +58,9 @@ ENOKI_TEST(test04_morton_u32_3d_array) {
     assert(value == value3);
 }
 
-ENOKI_TEST(test05_morton_u64_2d_scalar) {
+DRJIT_TEST(test05_morton_u64_2d_scalar) {
     using T = uint64_t;
-    using T2 = enoki::Array<T, 2>;
+    using T2 = drjit::Array<T, 2>;
 
     T2 value = T2(123u, 456u);
     T value2 = morton_encode(value);
@@ -69,9 +69,9 @@ ENOKI_TEST(test05_morton_u64_2d_scalar) {
     assert(value == value3);
 }
 
-ENOKI_TEST(test06_morton_u64_2d_array) {
-    using T = enoki::Array<uint64_t>;
-    using T2 = enoki::Array<T, 2>;
+DRJIT_TEST(test06_morton_u64_2d_array) {
+    using T = drjit::Array<uint64_t>;
+    using T2 = drjit::Array<T, 2>;
 
     T2 value = T2(123u, 456u);
     T value2 = morton_encode(value);
@@ -80,9 +80,9 @@ ENOKI_TEST(test06_morton_u64_2d_array) {
     assert(value == value3);
 }
 
-ENOKI_TEST(test07_morton_u64_3d_scalar) {
+DRJIT_TEST(test07_morton_u64_3d_scalar) {
     using T = uint64_t;
-    using T2 = enoki::Array<T, 3>;
+    using T2 = drjit::Array<T, 3>;
 
     T2 value = T2(123u, 456u, 789u);
     T value2 = morton_encode(value);
@@ -91,9 +91,9 @@ ENOKI_TEST(test07_morton_u64_3d_scalar) {
     assert(value == value3);
 }
 
-ENOKI_TEST(test08_morton_u64_3d_array) {
-    using T = enoki::Array<uint64_t>;
-    using T2 = enoki::Array<T, 3>;
+DRJIT_TEST(test08_morton_u64_3d_array) {
+    using T = drjit::Array<uint64_t>;
+    using T2 = drjit::Array<T, 3>;
 
     T2 value = T2(123u, 456u, 789u);
     T value2 = morton_encode(value);

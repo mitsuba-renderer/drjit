@@ -8,7 +8,7 @@
 Buffer buffer{0};
 
 void ad_fail(const char *fmt, ...) {
-    fprintf(stderr, "\n\nCritical failure in Enoki AD backend: ");
+    fprintf(stderr, "\n\nCritical failure in Dr.Jit AD backend: ");
     va_list args;
     va_start(args, fmt);
     vfprintf(stderr, fmt, args);
@@ -21,7 +21,7 @@ void ad_raise(const char* fmt, ...) {
     va_list args;
     va_start(args, fmt);
     buffer.clear();
-    buffer.put("enoki-autodiff: ");
+    buffer.put("drjit-autodiff: ");
     buffer.vfmt(fmt, args);
     va_end(args);
 
@@ -111,11 +111,11 @@ void Buffer::expand(size_t minval) {
     m_cur = m_start + used_size;
 }
 
-namespace enoki {
+namespace drjit {
     namespace detail {
         extern void ad_whos_scalar_f32();
         extern void ad_whos_scalar_f64();
-#if defined(ENOKI_ENABLE_JIT)
+#if defined(DRJIT_ENABLE_JIT)
         extern void ad_whos_cuda_f32();
         extern void ad_whos_cuda_f64();
         extern void ad_whos_llvm_f32();
@@ -134,7 +134,7 @@ namespace enoki {
     static __declspec(thread) PrefixEntry *prefix = nullptr;
 #endif
 
-    ENOKI_EXPORT void ad_prefix_push(const char *value) {
+    DRJIT_EXPORT void ad_prefix_push(const char *value) {
         if (strchr(value, '/'))
             throw std::runtime_error(
                 "ad_prefix_push(): may not contain a '/' character!");
@@ -145,7 +145,7 @@ namespace enoki {
         prefix = new PrefixEntry{ prefix, out };
     }
 
-    ENOKI_EXPORT void ad_prefix_pop() {
+    DRJIT_EXPORT void ad_prefix_pop() {
         PrefixEntry *p = prefix;
         if (p) {
             prefix = p->prev;
@@ -159,15 +159,15 @@ namespace enoki {
         return p ? p->value : nullptr;
     }
 
-    ENOKI_EXPORT const char *ad_whos() {
+    DRJIT_EXPORT const char *ad_whos() {
         buffer.clear();
         buffer.put("\n");
         buffer.put("  ID      E/I Refs   Size        Label\n");
         buffer.put("  =========================================\n");
         detail::ad_whos_scalar_f32();
         detail::ad_whos_scalar_f64();
-        #if defined(ENOKI_ENABLE_JIT)
-            #if defined(ENOKI_ENABLE_CUDA)
+        #if defined(DRJIT_ENABLE_JIT)
+            #if defined(DRJIT_ENABLE_CUDA)
                 detail::ad_whos_cuda_f32();
                 detail::ad_whos_cuda_f64();
             #endif
@@ -180,7 +180,7 @@ namespace enoki {
 
     namespace detail {
         /// Custom graph edge for implementing custom differentiable operations
-        struct ENOKI_EXPORT DiffCallback {
+        struct DRJIT_EXPORT DiffCallback {
             virtual void forward() = 0;
             virtual void backward() = 0;
             virtual ~DiffCallback();

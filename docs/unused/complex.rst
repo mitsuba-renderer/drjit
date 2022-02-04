@@ -1,20 +1,20 @@
-.. cpp:namespace:: enoki
+.. cpp:namespace:: drjit
 
 Complex numbers
 ===============
 
-Enoki provides a vectorizable type for complex number arithmetic analogous to
+Dr.Jit provides a vectorizable type for complex number arithmetic analogous to
 ``std::complex<T>``. To use it, include the following header file:
 
 .. code-block:: cpp
 
-    #include <enoki/complex.h>
+    #include <drjit/complex.h>
 
 Usage
 -----
 
 The following example shows how to define and perform basic arithmetic using
-:cpp:class:`enoki::Complex` vectorized over 4-wide packets.
+:cpp:class:`drjit::Complex` vectorized over 4-wide packets.
 
 .. code-block:: cpp
 
@@ -52,19 +52,19 @@ Reference
 
 .. cpp:class:: template <typename Type> Complex : StaticArrayImpl<Type, 2>
 
-    The class :cpp:class:`enoki::Complex` is a 2D Enoki array whose components
+    The class :cpp:class:`drjit::Complex` is a 2D Dr.Jit array whose components
     are of type ``Type``. Various arithmetic operators (e.g. multiplication)
     and transcendental functions are overloaded so that they provide the
     correct behavior for complex-valued inputs.
 
     .. cpp:function:: Complex(Type real, Type imag)
 
-        Creates a :cpp:class:`enoki::Complex` instance from the given real and
+        Creates a :cpp:class:`drjit::Complex` instance from the given real and
         imaginary inputs.
 
     .. cpp:function:: Complex(Type f)
 
-        Creates a real-valued :cpp:class:`enoki::Complex` instance from ``f``.
+        Creates a real-valued :cpp:class:`drjit::Complex` instance from ``f``.
         This constructor effectively changes the broadcasting behavior of
         non-complex inputs---for instance, the snippet
 
@@ -78,7 +78,7 @@ Reference
             std::cout << "value_a = "<< value_a << ", value_c = " << value_c << std::endl;
 
         prints ``value_a = [1, 1], value_c = 1 + 0i``, which is the desired
-        behavior for complex numbers. For standard Enoki arrays, the number
+        behavior for complex numbers. For standard Dr.Jit arrays, the number
         ``1.f`` is broadcast to both components.
 
 Elementary operations
@@ -116,7 +116,7 @@ Arithmetic operators
 ********************
 
 Only a few arithmetic operators need to be overridden to support complex
-arithmetic. The rest are automatically provided by Enoki's existing operators
+arithmetic. The rest are automatically provided by Dr.Jit's existing operators
 and broadcasting rules.
 
 .. cpp:function:: template <typename T> Complex<T> operator*(Complex<T> z0, Complex<T> z1)

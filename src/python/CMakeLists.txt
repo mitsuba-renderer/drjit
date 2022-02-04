@@ -1,5 +1,5 @@
 pybind11_add_module(
-  enoki-python
+  drjit-python
   THIN_LTO OPT_SIZE
 
   bind.h
@@ -20,68 +20,68 @@ pybind11_add_module(
   dlpack.cpp
 )
 
-target_link_libraries(enoki-python PRIVATE enoki)
+target_link_libraries(drjit-python PRIVATE drjit)
 
 if (MSVC)
-  target_compile_options(enoki-python PRIVATE /wd4714) # function marked as __forceinline not inlined
+  target_compile_options(drjit-python PRIVATE /wd4714) # function marked as __forceinline not inlined
 endif()
 
 # macOS: Avoid warnings about loop unrolling being disabled with -Os
-target_compile_definitions(enoki-python PRIVATE "-DENOKI_UNROLL= ")
+target_compile_definitions(drjit-python PRIVATE "-DDRJIT_UNROLL= ")
 
-if (ENOKI_ENABLE_JIT)
-  target_link_libraries(enoki-python PRIVATE enoki-jit)
-  target_compile_definitions(enoki-python PRIVATE -DENOKI_ENABLE_JIT=1)
+if (DRJIT_ENABLE_JIT)
+  target_link_libraries(drjit-python PRIVATE drjit-core)
+  target_compile_definitions(drjit-python PRIVATE -DDRJIT_ENABLE_JIT=1)
 
   if (NOT APPLE)
-    target_compile_definitions(enoki-python PRIVATE -DENOKI_ENABLE_CUDA=1)
+    target_compile_definitions(drjit-python PRIVATE -DDRJIT_ENABLE_CUDA=1)
   endif()
 endif()
 
-if (ENOKI_ENABLE_AUTODIFF)
-  target_link_libraries(enoki-python PRIVATE enoki-autodiff)
-  target_compile_definitions(enoki-python PRIVATE -DENOKI_ENABLE_AUTODIFF=1)
+if (DRJIT_ENABLE_AUTODIFF)
+  target_link_libraries(drjit-python PRIVATE drjit-autodiff)
+  target_compile_definitions(drjit-python PRIVATE -DDRJIT_ENABLE_AUTODIFF=1)
 endif()
 
 
-if (ENOKI_ENABLE_PYTHON_PACKET)
-  target_compile_definitions(enoki-python PRIVATE -DENOKI_ENABLE_PYTHON_PACKET=1)
+if (DRJIT_ENABLE_PYTHON_PACKET)
+  target_compile_definitions(drjit-python PRIVATE -DDRJIT_ENABLE_PYTHON_PACKET=1)
 endif()
 
-set_target_properties(enoki-python PROPERTIES
-  OUTPUT_NAME enoki_ext ${ENOKI_OUTPUT_DIRECTORY})
+set_target_properties(drjit-python PROPERTIES
+  OUTPUT_NAME drjit_ext ${DRJIT_OUTPUT_DIRECTORY})
 
-target_compile_options(enoki-python PRIVATE ${ENOKI_NATIVE_FLAGS})
+target_compile_options(drjit-python PRIVATE ${DRJIT_NATIVE_FLAGS})
 
-if (ENOKI_MASTER_PROJECT)
+if (DRJIT_MASTER_PROJECT)
   # Adapt to variations in rpath handling on Linux and macOS
   if (APPLE)
-    set(ENOKI_ORIGIN "@loader_path")
+    set(DRJIT_ORIGIN "@loader_path")
   elseif(UNIX)
-    set(ENOKI_ORIGIN "$ORIGIN")
+    set(DRJIT_ORIGIN "$ORIGIN")
   endif()
 
-  install(TARGETS enoki-python LIBRARY DESTINATION enoki)
-  set_target_properties(enoki-python PROPERTIES INSTALL_RPATH "${ENOKI_ORIGIN}")
+  install(TARGETS drjit-python LIBRARY DESTINATION drjit)
+  set_target_properties(drjit-python PROPERTIES INSTALL_RPATH "${DRJIT_ORIGIN}")
 endif()
 
-if (ENOKI_MASTER_PROJECT AND NOT "${CMAKE_CURRENT_SOURCE_DIR}" STREQUAL "${CMAKE_CURRENT_BINARY_DIR}")
-  set(ENOKI_PYTHON_FILES
+if (DRJIT_MASTER_PROJECT AND NOT "${CMAKE_CURRENT_SOURCE_DIR}" STREQUAL "${CMAKE_CURRENT_BINARY_DIR}")
+  set(DRJIT_PYTHON_FILES
      __init__.py const.py detail.py generic.py
      matrix.py router.py traits.py
   )
 
-  set(ENOKI_COPY_FILES "")
-  foreach(file ${ENOKI_PYTHON_FILES})
-    set(IN_FILE ${CMAKE_CURRENT_SOURCE_DIR}/../../enoki/${file})
-    set(OUT_FILE ${CMAKE_CURRENT_BINARY_DIR}/../../enoki/${file})
+  set(DRJIT_COPY_FILES "")
+  foreach(file ${DRJIT_PYTHON_FILES})
+    set(IN_FILE ${CMAKE_CURRENT_SOURCE_DIR}/../../drjit/${file})
+    set(OUT_FILE ${CMAKE_CURRENT_BINARY_DIR}/../../drjit/${file})
 
     add_custom_command(
       OUTPUT ${OUT_FILE} DEPENDS ${IN_FILE}
       COMMAND ${CMAKE_COMMAND} -E copy ${IN_FILE} ${OUT_FILE})
-    list(APPEND ENOKI_COPY_FILES ${OUT_FILE})
-    install(FILES ${IN_FILE} DESTINATION enoki)
+    list(APPEND DRJIT_COPY_FILES ${OUT_FILE})
+    install(FILES ${IN_FILE} DESTINATION drjit)
   endforeach(file)
 
-  add_custom_target(copy-python-files ALL DEPENDS ${ENOKI_COPY_FILES})
+  add_custom_target(copy-python-files ALL DEPENDS ${DRJIT_COPY_FILES})
 endif()

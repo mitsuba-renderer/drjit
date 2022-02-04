@@ -1,7 +1,7 @@
 /*
     tests/conv.cpp -- tests special functions
 
-    Enoki is a C++ template library that enables transparent vectorization
+    Dr.Jit is a C++ template library that enables transparent vectorization
     of numerical kernels using SIMD instruction sets available on current
     processor architectures.
 
@@ -12,9 +12,9 @@
 */
 
 #include "test.h"
-#include <enoki/special.h>
+#include <drjit/special.h>
 
-ENOKI_TEST_FLOAT(test01_i0e)  {
+DRJIT_TEST_FLOAT(test01_i0e)  {
     using Scalar = scalar_t<T>;
 
     double results[] = {
@@ -28,7 +28,7 @@ ENOKI_TEST_FLOAT(test01_i0e)  {
         assert(hmax(abs(i0e(T(Scalar(i))) - T(Scalar(results[i])))) < 1e-6);
 }
 
-ENOKI_TEST_FLOAT(test02_erf) {
+DRJIT_TEST_FLOAT(test02_erf) {
     test::probe_accuracy<T>(
         [](const T &a) -> T { return erf(a); },
         [](double a) { return std::erf(a); },
@@ -40,7 +40,7 @@ ENOKI_TEST_FLOAT(test02_erf) {
     assert(erf(x) == erf(y));
 }
 
-ENOKI_TEST_FLOAT(test02_erfc) {
+DRJIT_TEST_FLOAT(test02_erfc) {
     test::probe_accuracy<T>(
         [](const T &a) -> T { return erfc(a); },
         [](double a) { return std::erfc(a); },
@@ -52,7 +52,7 @@ ENOKI_TEST_FLOAT(test02_erfc) {
     assert(erfc(x) == erfc(y));
 }
 
-ENOKI_TEST_FLOAT(test04_erfinv) {
+DRJIT_TEST_FLOAT(test04_erfinv) {
     for (int i = 0; i < 1000; ++i) {
         auto f = T((float) i / 1000.0f * 2 - 1 + 1e-6f);
         auto inv = erfinv(f);
@@ -61,7 +61,7 @@ ENOKI_TEST_FLOAT(test04_erfinv) {
     }
 }
 
-ENOKI_TEST_FLOAT(test05_dawson)  {
+DRJIT_TEST_FLOAT(test05_dawson)  {
     using Scalar = scalar_t<T>;
 
     double results[] = { 0.0,
@@ -83,7 +83,7 @@ ENOKI_TEST_FLOAT(test05_dawson)  {
     }
 }
 
-ENOKI_TEST_FLOAT(test06_ellint_1) {
+DRJIT_TEST_FLOAT(test06_ellint_1) {
     double result[] = { -14.28566868, -13.24785552, -11.73287659, -9.893205471,
         -8.835904570, -7.468259577, -5.516159896, -4.419121129, -3.170330916,
         -1.159661071, 0, 1.159661071, 3.170330916, 4.419121129, 5.516159896,
@@ -94,7 +94,7 @@ ENOKI_TEST_FLOAT(test06_ellint_1) {
         assert((ellint_1(T((float) i), T(.9f))[0] - result[i+10]) < 2e-6);
 }
 
-ENOKI_TEST_FLOAT(test07_comp_ellint_1) {
+DRJIT_TEST_FLOAT(test07_comp_ellint_1) {
     double result[] = { 1.570796327, 1.574745562, 1.586867847, 1.608048620,
                         1.639999866, 1.685750355, 1.750753803, 1.845693998,
                         1.995302778, 2.280549138 };
@@ -103,7 +103,7 @@ ENOKI_TEST_FLOAT(test07_comp_ellint_1) {
         assert((comp_ellint_1(T((float) i/10.f))[0] - result[i]) < 1e-6);
 }
 
-ENOKI_TEST_FLOAT(test08_ellint_2) {
+DRJIT_TEST_FLOAT(test08_ellint_2) {
     double result[] = { -7.580388582, -6.615603622, -5.923080706, -5.355941680,
         -4.406649345, -3.647370231, -3.121560380, -2.202184075, -1.380263348,
         -0.8762622200, 0, 0.8762622200, 1.380263348, 2.202184075, 3.121560380,
@@ -114,7 +114,7 @@ ENOKI_TEST_FLOAT(test08_ellint_2) {
         assert((ellint_2(scalar_t<T>(i), T(.9f))[0] - result[i+10]) < 3e-6);
 }
 
-ENOKI_TEST_FLOAT(test09_comp_ellint_2) {
+DRJIT_TEST_FLOAT(test09_comp_ellint_2) {
     double result[] = { 1.570796327, 1.566861942, 1.554968546, 1.534833465,
                         1.505941612, 1.467462209, 1.418083394, 1.355661136,
                         1.276349943, 1.171697053 };
@@ -123,7 +123,7 @@ ENOKI_TEST_FLOAT(test09_comp_ellint_2) {
         assert((comp_ellint_2(T((float) i/10.f))[0] - result[i]) < 1e-6);
 }
 
-ENOKI_TEST_FLOAT(test10_ellint_3) {
+DRJIT_TEST_FLOAT(test10_ellint_3) {
     double values[] = {
         1.000000000,  1.001368050,  1.005529262,  1.012662720,  1.023095616,
         1.037356120,  1.056273110,  1.081169466,  1.114267715,  1.159661071,
@@ -164,7 +164,7 @@ ENOKI_TEST_FLOAT(test10_ellint_3) {
         assert(std::abs(ellint_3(T((float) i), 0.9f, 0.5f)[0] - values2[k++]) < 5e-5f);
 }
 
-ENOKI_TEST_FLOAT(test11_comp_ellint_3) {
+DRJIT_TEST_FLOAT(test11_comp_ellint_3) {
     double values[] = {
         1.570796327, 1.574745562, 1.586867847, 1.608048620, 1.639999866,
         1.685750355, 1.750753803, 1.845693998, 1.995302778, 2.280549138,

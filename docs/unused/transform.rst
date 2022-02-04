@@ -1,15 +1,15 @@
-.. cpp:namespace:: enoki
+.. cpp:namespace:: drjit
 
 Homogeneous transformations
 ===========================
 
-Enoki provides a number of convenience functions to construct 3D homogeneous
+Dr.Jit provides a number of convenience functions to construct 3D homogeneous
 coordinate transformations (rotations, translations, scales, perspective
 transformation matrices, etc.). To use them, include the following header file:
 
 .. code-block:: cpp
 
-    #include <enoki/transform.h>
+    #include <drjit/transform.h>
 
 Reference
 ---------

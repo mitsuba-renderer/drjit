@@ -1,7 +1,7 @@
 /*
     tests/complex.cpp -- tests vectorized function calls
 
-    Enoki is a C++ template library that enables transparent vectorization
+    Dr.Jit is a C++ template library that enables transparent vectorization
     of numerical kernels using SIMD instruction sets available on current
     processor architectures.
 
@@ -12,9 +12,9 @@
 */
 
 #include "test.h"
-#include <enoki/dynamic.h>
+#include <drjit/dynamic.h>
 #include "ray.h"
-#include <enoki/stl.h>
+#include <drjit/stl.h>
 
 struct Test;
 struct TestChild;
@@ -36,7 +36,7 @@ using Ray3fP    = Ray<Vector3fP>;
 
 
 struct Test {
-    ENOKI_CALL_SUPPORT_FRIEND()
+    DRJIT_CALL_SUPPORT_FRIEND()
 
     Test(int32_t value) : value(value) { }
     virtual ~Test() { }
@@ -64,23 +64,23 @@ struct TestChild : public Test {
     bool is_child() const { return value == 42; }
 };
 
-// Allow Enoki arrays containing pointers to transparently forward function
+// Allow Dr.Jit arrays containing pointers to transparently forward function
 // calls (with the appropriate masks).
-ENOKI_CALL_SUPPORT_BEGIN(Test)
-ENOKI_CALL_SUPPORT_METHOD(func1)
-ENOKI_CALL_SUPPORT_METHOD(func2)
-ENOKI_CALL_SUPPORT_METHOD(func3)
-ENOKI_CALL_SUPPORT_GETTER(get_value, value)
-ENOKI_CALL_SUPPORT_METHOD(func4)
-ENOKI_CALL_SUPPORT_METHOD(make_ray)
-ENOKI_CALL_SUPPORT_END(Test)
+DRJIT_CALL_SUPPORT_BEGIN(Test)
+DRJIT_CALL_SUPPORT_METHOD(func1)
+DRJIT_CALL_SUPPORT_METHOD(func2)
+DRJIT_CALL_SUPPORT_METHOD(func3)
+DRJIT_CALL_SUPPORT_GETTER(get_value, value)
+DRJIT_CALL_SUPPORT_METHOD(func4)
+DRJIT_CALL_SUPPORT_METHOD(make_ray)
+DRJIT_CALL_SUPPORT_END(Test)
 
-ENOKI_CALL_SUPPORT_BEGIN(TestChild)
-ENOKI_CALL_SUPPORT_METHOD(is_child)
-ENOKI_CALL_SUPPORT_END(TestChild)
+DRJIT_CALL_SUPPORT_BEGIN(TestChild)
+DRJIT_CALL_SUPPORT_METHOD(is_child)
+DRJIT_CALL_SUPPORT_END(TestChild)
 
 
-ENOKI_TEST(test01_call) {
+DRJIT_TEST(test01_call) {
     size_t offset = std::min((size_t) 2, TestP::Size-1);
     Test *a = new Test(10);
     Test *b = new Test(20);
@@ -130,7 +130,7 @@ ENOKI_TEST(test01_call) {
 }
 
 
-ENOKI_TEST(test02_reinterpret_pointer_array) {
+DRJIT_TEST(test02_reinterpret_pointer_array) {
     using Mask = mask_t<ChildP>;
     Test *a = new Test(1);
     Test *b = new TestChild();
@@ -147,7 +147,7 @@ ENOKI_TEST(test02_reinterpret_pointer_array) {
     delete b;
 }
 
-ENOKI_TEST(test03_call_with_structure) {
+DRJIT_TEST(test03_call_with_structure) {
     Test *a = new Test(1);
     TestP objects(a);
     Vector3fP t = objects->make_ray()(1);

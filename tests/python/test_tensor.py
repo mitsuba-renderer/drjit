@@ -1,20 +1,20 @@
-import enoki as ek
+import drjit as dr
 import pytest
 import numpy as np
 
-#  pkgs = ["enoki.cuda", "enoki.cuda.ad",
-#          "enoki.llvm", "enoki.llvm.ad"]
+#  pkgs = ["drjit.cuda", "drjit.cuda.ad",
+#          "drjit.llvm", "drjit.llvm.ad"]
 
-pkgs = ["enoki.llvm", "enoki.llvm.ad"]
-pkgs_ad = ["enoki.llvm.ad"]
+pkgs = ["drjit.llvm", "drjit.llvm.ad"]
+pkgs_ad = ["drjit.llvm.ad"]
 
 def get_class(name):
     """Resolve a package+class name into the corresponding type"""
     if 'cuda' in name:
-        if not ek.has_backend(ek.JitBackend.CUDA):
+        if not dr.has_backend(dr.JitBackend.CUDA):
             pytest.skip('CUDA mode is unsupported')
     elif 'llvm' in name:
-        if not ek.has_backend(ek.JitBackend.LLVM):
+        if not dr.has_backend(dr.JitBackend.LLVM):
             pytest.skip('LLVM mode is unsupported')
 
     name = name.split('.')
@@ -34,7 +34,7 @@ class Checker:
         self.shape = shape
         size = np.prod(shape)
         self.array_n = np.arange(size, dtype=np.uint32).reshape(shape)
-        self.array_e = tensor_type(ek.arange(tensor_type.Array, size), shape)
+        self.array_e = tensor_type(dr.arange(tensor_type.Array, size), shape)
 
     def __getitem__(self, args):
         import numpy as np
@@ -102,8 +102,8 @@ def test04_broadcasting(pkg):
                     array_n1 = np.arange(np.prod(shape),   dtype=np.uint32).reshape(shape)
                     array_n2 = np.arange(np.prod(shape_2), dtype=np.uint32).reshape(shape_2)
 
-                    array_e1 = t(ek.arange(t.Index, np.prod(shape)),   shape)
-                    array_e2 = t(ek.arange(t.Index, np.prod(shape_2)), shape_2)
+                    array_e1 = t(dr.arange(t.Index, np.prod(shape)),   shape)
+                    array_e2 = t(dr.arange(t.Index, np.prod(shape_2)), shape_2)
 
                     out_n = array_n1 + array_n2
                     out_e = array_e1 + array_e2
@@ -113,8 +113,8 @@ def test04_broadcasting(pkg):
                     assert np.all((array_n1 * 2).ravel() == (array_e1 * 2).array.numpy())
 
     with pytest.raises(Exception) as e:
-        a = ek.full(t, 1, (3, 3))
-        b = ek.full(t, 1, (2, 2))
+        a = dr.full(t, 1, (3, 3))
+        b = dr.full(t, 1, (2, 2))
         c = a + b
     e.match('incompatible tensor shapes for dimension')
 
@@ -125,17 +125,17 @@ def test05_initialization_casting(pkg):
     tf = get_class(pkg + ".TensorXf")
     tf64 = get_class(pkg + ".TensorXf")
 
-    t0 = ek.full(tu, 1, (2, 3, 4))
-    t1 = ek.full(tf, 2, (2, 3, 4))
-    t2 = ek.zero(tf64, (2, 3, 4))
+    t0 = dr.full(tu, 1, (2, 3, 4))
+    t1 = dr.full(tf, 2, (2, 3, 4))
+    t2 = dr.zero(tf64, (2, 3, 4))
 
-    assert ek.shape(t0) == (2, 3, 4)
+    assert dr.shape(t0) == (2, 3, 4)
 
     t3 = t0 + t1 + t2
     assert type(t3) is tf64
 
     assert t3.shape == (2, 3, 4)
-    assert t3.array == ek.full(t3.Array, 3, 2*3*4)
+    assert t3.array == dr.full(t3.Array, 3, 2*3*4)
 
     t3[:, 1, :] = 12
     assert t3[:, 0, :] == 3
@@ -145,16 +145,16 @@ def test05_initialization_casting(pkg):
 @pytest.mark.parametrize("pkg", pkgs_ad)
 def test05_ad(pkg):
     f = get_class(pkg + ".TensorXf")
-    z0 = ek.full(f, 1, (2, 3, 4))
-    assert not ek.grad_enabled(z0)
-    ek.enable_grad(z0)
-    assert ek.grad_enabled(z0)
-    assert not ek.grad_enabled(ek.detach(z0))
-    assert ek.ravel(z0) is z0.array
+    z0 = dr.full(f, 1, (2, 3, 4))
+    assert not dr.grad_enabled(z0)
+    dr.enable_grad(z0)
+    assert dr.grad_enabled(z0)
+    assert not dr.grad_enabled(dr.detach(z0))
+    assert dr.ravel(z0) is z0.array
 
     z1 = z0 + z0
-    ek.backward(z1)
-    g = ek.grad(z0)
+    dr.backward(z1)
+    g = dr.grad(z0)
     assert g.shape == (2, 3, 4)
     assert len(g.array) == 2*3*4
     assert g.array == 2
@@ -164,7 +164,7 @@ def test05_ad(pkg):
 def test06_numpy_conversion(pkg):
     f = get_class(pkg + ".TensorXf")
 
-    value = f(ek.arange(f.Array, 2*3*4), (2, 3, 4))
+    value = f(dr.arange(f.Array, 2*3*4), (2, 3, 4))
     value_np = value.numpy()
     assert value_np.shape == (2, 3, 4)
     assert np.all(value_np.ravel() == value.array.numpy())
@@ -184,7 +184,7 @@ def test07_jax_conversion(pkg):
     jax = pytest.importorskip("jax")
     f = get_class(pkg + ".TensorXf")
 
-    value = f(ek.arange(f.Array, 2*3*4), (2, 3, 4))
+    value = f(dr.arange(f.Array, 2*3*4), (2, 3, 4))
     value_jax = value.jax()
     assert value_jax.shape == (2, 3, 4)
     assert jax.numpy.all(value_jax.ravel() == value.array.jax())
@@ -199,7 +199,7 @@ def test08_pytorch_conversion(pkg):
     torch = pytest.importorskip("torch")
     f = get_class(pkg + ".TensorXf")
 
-    value = f(ek.arange(f.Array, 2*3*4), (2, 3, 4))
+    value = f(dr.arange(f.Array, 2*3*4), (2, 3, 4))
     value_torch = value.torch()
     assert value_torch.shape == (2, 3, 4)
     assert torch.all(value_torch.flatten() == value.array.torch())
@@ -215,7 +215,7 @@ def test09_tensorflow_conversion(pkg):
     f = get_class(pkg + ".TensorXf")
     tf.constant(0)
 
-    value = f(ek.arange(f.Array, 2*3*4), (2, 3, 4))
+    value = f(dr.arange(f.Array, 2*3*4), (2, 3, 4))
     value_tf = value.tf()
     assert value_tf.shape == (2, 3, 4)
     assert tf.reduce_all(tf.equal(tf.reshape(value_tf, (2*3*4,)), value.array.tf()))
@@ -237,7 +237,7 @@ def test10_tensorflow_arithmetic(pkg):
     assert ff * tt == t([2, 4, 6, 8, 10, 12], [2, 3])
 
 
-class PowerOfTwo(ek.CustomOp):
+class PowerOfTwo(dr.CustomOp):
     def eval(self, value):
         self.value = value
         return value * value
@@ -254,21 +254,21 @@ class PowerOfTwo(ek.CustomOp):
         return "power of two"
 
 
-@pytest.mark.parametrize("pkg", ["enoki.llvm.ad", "enoki.cuda.ad"])
+@pytest.mark.parametrize("pkg", ["drjit.llvm.ad", "drjit.cuda.ad"])
 def test11_custom_op(pkg):
     t = get_class(pkg + ".TensorXf")
     f = get_class(pkg + ".Float32")
 
     tt = t([1, 2, 3, 4, 5, 6], [2, 3])
-    ek.enable_grad(tt)
+    dr.enable_grad(tt)
 
-    tt2 = ek.custom(PowerOfTwo, tt)
+    tt2 = dr.custom(PowerOfTwo, tt)
 
-    ek.set_grad(tt2, 1.0)
-    ek.enqueue(ek.ADMode.Backward, tt2)
-    ek.traverse(f, ek.ADMode.Backward)
+    dr.set_grad(tt2, 1.0)
+    dr.enqueue(dr.ADMode.Backward, tt2)
+    dr.traverse(f, dr.ADMode.Backward)
 
-    assert ek.grad(tt).array == [2.0, 4.0, 6.0, 8.0, 10.0, 12.0]
+    assert dr.grad(tt).array == [2.0, 4.0, 6.0, 8.0, 10.0, 12.0]
 
 
 @pytest.mark.parametrize("pkg", pkgs_ad)
@@ -278,10 +278,10 @@ def test12_select(pkg):
 
         next = initial + 10
         valid = initial >= 2.5
-        assert type(valid) == ek.mask_t(initial)
+        assert type(valid) == dr.mask_t(initial)
 
-        result = ek.select(valid, next, initial)
+        result = dr.select(valid, next, initial)
         assert type(result) == tp
 
-        expected = tp([1, 2, 13, 14], shape=ek.shape(initial))
-        assert ek.allclose(result, expected)
+        expected = tp([1, 2, 13, 14], shape=dr.shape(initial))
+        assert dr.allclose(result, expected)

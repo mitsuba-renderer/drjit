@@ -1,8 +1,8 @@
 /*
-    tests/ray.h -- showcases how to extend Enoki vectorization to custom
+    tests/ray.h -- showcases how to extend Dr.Jit vectorization to custom
     data types
 
-    Enoki is a C++ template library that enables transparent vectorization
+    Dr.Jit is a C++ template library that enables transparent vectorization
     of numerical kernels using SIMD instruction sets available on current
     processor architectures.
 
@@ -12,9 +12,9 @@
     license that can be found in the LICENSE file.
 */
 
-#include <enoki/array.h>
+#include <drjit/array.h>
 
-using namespace enoki;
+using namespace drjit;
 
 /**
  * Generic 3D ray class: can represent either a single ray, a static ray
@@ -30,8 +30,8 @@ template <typename Vector_> struct Ray {
     /// Compute a position along a ray
     Vector operator()(const Value &t) const { return o + t*d; }
 
-    ENOKI_STRUCT(Ray, o, d)
+    DRJIT_STRUCT(Ray, o, d)
 };
 
-ENOKI_STRUCT_SUPPORT(Ray, o, d)
+DRJIT_STRUCT_SUPPORT(Ray, o, d)
 

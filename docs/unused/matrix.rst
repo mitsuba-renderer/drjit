@@ -1,15 +1,15 @@
-.. cpp:namespace:: enoki
+.. cpp:namespace:: drjit
 
 Fixed-size matrices
 ===================
 
-Enoki provides a vectorizable type for small fixed-size square matrices (e.g.
+Dr.Jit provides a vectorizable type for small fixed-size square matrices (e.g.
 :math:`2\times 2`, :math:`3\times 3`, or :math:`4\times 4`) that are commonly
 found in computer graphics and vision applications.
 
 .. note::
 
-    Enoki attempts to store matrix entries in processor registers---it is
+    Dr.Jit attempts to store matrix entries in processor registers---it is
     unwise to work with large matrices since this will cause considerable
     pressure on the register allocator. Instead, consider using specialized
     libraries for large-scale linear algebra (e.g. Eigen or Intel MKL) in
@@ -19,13 +19,13 @@ To use this feature, include the following header:
 
 .. code-block:: cpp
 
-    #include <enoki/matrix.h>
+    #include <drjit/matrix.h>
 
 Usage
 -----
 
 The following example shows how to define and perform basic arithmetic using
-:cpp:class:`enoki::Matrix` to construct a :math:`4\times 4` homogeneous
+:cpp:class:`drjit::Matrix` to construct a :math:`4\times 4` homogeneous
 coordinate "look-at" camera matrix and its inverse:
 
 .. code-block:: cpp
@@ -65,7 +65,7 @@ coordinate "look-at" camera matrix and its inverse:
         return std::make_pair(result, inverse);
     }
 
-Enoki can also work with fixed-size packets and dynamic arrays of matrices. The
+Dr.Jit can also work with fixed-size packets and dynamic arrays of matrices. The
 following example shows how to compute the inverse of a matrix array.
 
 .. code-block:: cpp
@@ -94,8 +94,8 @@ Reference
 
 .. cpp:class:: template <typename Value, size_t Size> Matrix : StaticArrayImpl<Array<Value, Size>, Size>
 
-    The class :cpp:class:`enoki::Matrix` represents a dense square matrix of
-    fixed size as a ``Size`` :math:`\times` ``Size`` Enoki array whose
+    The class :cpp:class:`drjit::Matrix` represents a dense square matrix of
+    fixed size as a ``Size`` :math:`\times` ``Size`` Dr.Jit array whose
     components are of type ``Value``. The implementation relies on a
     column-major storage order to enable a particularly efficient
     implementation of vectorized matrix multiplication.
@@ -106,16 +106,16 @@ Reference
 
     .. cpp:type:: Column
 
-        Denotes the Enoki array type of a matrix column.
+        Denotes the Dr.Jit array type of a matrix column.
 
     .. cpp:function:: template <typename... Values> Matrix(Values... values)
 
-        Creates a new :cpp:class:`enoki::Matrix` instance with the
+        Creates a new :cpp:class:`drjit::Matrix` instance with the
         given set of entries (where ``sizeof...(Values) == Size*Size``)
 
     .. cpp:function:: template <typename... Columns> Matrix(Columns... columns)
 
-        Creates a new :cpp:class:`enoki::Matrix` instance with the
+        Creates a new :cpp:class:`drjit::Matrix` instance with the
         given set of columns (where ``sizeof...(Columns) == Size``)
 
     .. cpp:function:: template <size_t Size2> Matrix(Matrix<Value, Size2> m)
@@ -127,7 +127,7 @@ Reference
 
     .. cpp:function:: Matrix(Value f)
 
-        Creates a :cpp:class:`enoki::Matrix` instance which has the value ``f``
+        Creates a :cpp:class:`drjit::Matrix` instance which has the value ``f``
         on the diagonal and zeroes elsewhere.
 
     .. cpp:function:: Value& operator()(size_t i, size_t j)
@@ -152,14 +152,14 @@ Reference
 
     .. cpp:function:: template <typename... Columns> static Matrix from_columns(Columns... columns)
 
-        Creates a new :cpp:class:`enoki::Matrix` instance with the given set of
+        Creates a new :cpp:class:`drjit::Matrix` instance with the given set of
         columns (where ``Size == sizeof...(Columns)``). This is identical to
         the :cpp:func:`Matrix::Matrix()` constructor but makes it more explicit
         that the input are columns.
 
     .. cpp:function:: template <typename... Rows> static Matrix from_rows(Rows... rows)
 
-        Creates a new :cpp:class:`enoki::Matrix` instance with the given set of
+        Creates a new :cpp:class:`drjit::Matrix` instance with the given set of
         rows (where ``Size == sizeof...(Rows)``).
 
 Supported operations

@@ -4,13 +4,13 @@
 #endif
 
 #include <pybind11/pybind11.h>
-#include <enoki/array.h>
-#include <enoki/packet.h>
-#include <enoki/dynamic.h>
-#include <enoki-jit/traits.h>
+#include <drjit/array.h>
+#include <drjit/packet.h>
+#include <drjit/dynamic.h>
+#include <drjit-core/traits.h>
 
 namespace py = pybind11;
-namespace ek = enoki;
+namespace dr = drjit;
 
 using namespace py::literals;
 

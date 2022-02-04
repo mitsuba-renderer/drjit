@@ -1,4 +1,4 @@
-.. cpp:namespace:: enoki
+.. cpp:namespace:: drjit
 
 .. _recording-loops:
 
@@ -8,7 +8,7 @@ Recording loops
 Numerical software frequently involves iterative root-finding or optimization
 steps that present challenges during vectorization, especially when working
 with backends processing millions of entries at once. This section presents
-Enoki's facilities for recording loop constructs to considerably improve
+Dr.Jit's facilities for recording loop constructs to considerably improve
 performance in many such situations. You can skip this section if you are not
 using JIT-compiled types (i.e., :cpp:struct:`CUDAArray` or
 :cpp:struct:`LLVMArray`)
@@ -26,13 +26,13 @@ example uses CUDA arrays, but everything applies equally to the LLVM case.
 
    .. code-block:: cpp
 
-       ek::CUDAArray<float> value = ...;
-       ek::CUDAArray<bool> done = false;
+       dr::CUDAArray<float> value = ...;
+       dr::CUDAArray<bool> done = false;
 
-       while (!ek::all(done)) {
+       while (!dr::all(done)) {
            value = f(value); // f() is a placeholder for some complex calculation
            done = stopping_criterion(value); // Are we done yet?
-           ek::eval(value, done);
+           dr::eval(value, done);
        }
 
    In this example, each loop iteration will launch a CUDA kernel that reads in
@@ -58,7 +58,7 @@ example uses CUDA arrays, but everything applies equally to the LLVM case.
 
    .. code-block:: cpp
 
-       ek::CUDAArray<float> value = ...;
+       dr::CUDAArray<float> value = ...;
 
        for (int i = 0; i < 50; ++i)
            value = f(value); // f() is a placeholder for some complex calculation
@@ -87,13 +87,13 @@ example uses CUDA arrays, but everything applies equally to the LLVM case.
 
    .. code-block:: cpp
 
-       ek::enable_flag(JitFlag::LoopRecord);
+       dr::enable_flag(JitFlag::LoopRecord);
 
    To record loops, you must also include an extra header file
 
    .. code-block:: cpp
 
-       #include <enoki/loop.h>
+       #include <drjit/loop.h>
 
    providing the :cpp:struct:`Loop` class. The class must be instantiated with
    the list of variables that are modified by the loop iteration, and the loop
@@ -102,10 +102,10 @@ example uses CUDA arrays, but everything applies equally to the LLVM case.
 
    .. code-block:: cpp
 
-       ek::CUDAArray<float> value = ...;
-       ek::CUDAArray<bool> done = false;
+       dr::CUDAArray<float> value = ...;
+       dr::CUDAArray<bool> done = false;
 
-       ek::Loop loop(value, done);
+       dr::Loop loop(value, done);
        while (loop.cond(!done)) {
            value = f(value); // f() is a placeholder for some complex calculation
            done = stopping_criterion(value); // Are we done yet?
@@ -130,7 +130,7 @@ example uses CUDA arrays, but everything applies equally to the LLVM case.
 Usage and limitations
 ---------------------
 
-Enoki's :cpp:struct:`Loop` primitive will run your loop once, record everything
+Dr.Jit's :cpp:struct:`Loop` primitive will run your loop once, record everything
 that it does, and then surround the captured instruction sequence
 with additional loop instructions (branch statements, `Phi functions
 <https://en.wikipedia.org/wiki/Static_single_assignment_form>`_ in SSA form).
@@ -153,24 +153,24 @@ potentially also crashes or incorrect results.
 
   - **Loop variables**: Variables that propagate state between iterations, or
     from inside to outside of the loop are called *loop variables*. They must
-    be passed to the :cpp:struct:`Loop` constructor so that Enoki can insert
+    be passed to the :cpp:struct:`Loop` constructor so that Dr.Jit can insert
     instructions that ensure the correct flow of computed information.
 
     Loop variables must be LLVM or CUDA arrays or more complex types built from
     them. Builtin C++ or Python types (e.g. an ``int``) do not work, because
-    writes to such variables cannot be intercepted by Enoki.
+    writes to such variables cannot be intercepted by Dr.Jit.
 
   - **Scatter operations**: the target of a scatter operation
     (:cpp:func:`scatter` and :cpp:func:`scatter_add`) is a special case: it
     does not count as a loop variable despite being the target of a write, and
     it should not be passed to the :cpp:struct:`Loop` constructor.
 
-- **No automatic differentiation**: Enoki will raise an exception when your loop involves
+- **No automatic differentiation**: Dr.Jit will raise an exception when your loop involves
   differentiable variables for which :cpp:func:`grad_enabled()` evaluates to
   ``true``. See the section on :ref:`differentiating loops <diff-loop>` to see
   how to work around this limitation.
 
-- **No eval()**: certain Enoki operations trigger an immediate kernel
+- **No eval()**: certain Dr.Jit operations trigger an immediate kernel
   evaluation. These include
 
   - Horizontal operations: :cpp:func:`all`, :cpp:func:`hsum`, etc..
@@ -183,7 +183,7 @@ potentially also crashes or incorrect results.
   - Other access to unevaluated array contents, e.g. a ``print()`` statement.
 
   You are not allowed to do any of the above, both within the :cpp:struct:`Loop`
-  condition and the body. Enoki will raise an exception when a kernel
+  condition and the body. Dr.Jit will raise an exception when a kernel
   evaluation is triggered while recording a loop.
 
 - **No side effects in condition**: the following loop is okay:
@@ -216,8 +216,8 @@ potentially also crashes or incorrect results.
   .. code-block:: cpp
      :emphasize-lines: 2, 3
 
-      ek::Loop loop(x);
-      x += 1; // Do not  modify loop variables between ek::Loop and the loop body
+      dr::Loop loop(x);
+      x += 1; // Do not  modify loop variables between dr::Loop and the loop body
       while (!loop.cond(x > 0)) { // Negate argument (x > 0) instead of loop.cond()
           //...
       }
@@ -235,16 +235,16 @@ need to be provided to the :cpp:struct:`Loop` constructor.
 
 .. code-block:: cpp
 
-    using UInt32 = ek::CUDAArray<uint32_t>;
+    using UInt32 = dr::CUDAArray<uint32_t>;
 
     // Collatz conjecture: count # of iterations to reach 1
     UInt32 collatz(UInt32 value) {
         UInt32 counter = 0;
 
-        ek::Loop loop(value, counter);
-        while (loop.cond(ek::neq(value, 1))) {
-            ek::mask_t<UInt32> is_even = ek::eq(value & 1, 0);
-            value = ek::select(is_even, value / 2, 3*value + 1);
+        dr::Loop loop(value, counter);
+        while (loop.cond(dr::neq(value, 1))) {
+            dr::mask_t<UInt32> is_even = dr::eq(value & 1, 0);
+            value = dr::select(is_even, value / 2, 3*value + 1);
             counter++;
         }
 
@@ -265,24 +265,24 @@ reference counts. This is normally perfectly fine, but here it interferes with
 symbolically executed loop iteration (the original ``a`` will appear
 unchanged!)
 
-To avoid this issue in Python, you can use the ``.assign()`` member of the Enoki
+To avoid this issue in Python, you can use the ``.assign()`` member of the Dr.Jit
 array class. It is not needed for in-place updates like ``+=``.
 
 .. code-block:: python
    :emphasize-lines: 6, 11, 12
 
-    import enoki as ek
-    from enoki.cuda import UInt32, Loop
+    import drjit as dr
+    from drjit.cuda import UInt32, Loop
 
     def collatz(value: UInt32):
         counter = UInt32(0)
         value = UInt32(value) # Copy input to avoid modifying array of caller
 
         loop = Loop(value, counter)
-        while loop.cond(ek.neq(value, 1)):
-            is_even = ek.eq(value & 1, 0)
+        while loop.cond(dr.neq(value, 1)):
+            is_even = dr.eq(value & 1, 0)
             # Use .assign() to update 'value' array instead of creating a new array
-            value.assign(ek.select(is_even, value // 2, 3*value + 1))
+            value.assign(dr.select(is_even, value // 2, 3*value + 1))
             counter += 1
 
         return counter
@@ -301,17 +301,17 @@ example by builtin scalar types:
     uint32_t collatz(uint32_t value) {
         uint32_t counter = 0;
 
-        ek::Loop loop(value, counter);
-        while (loop.cond(ek::neq(value, 1))) {
-            ek::mask_t<uint32_t> is_even = ek::eq(value & 1, 0);
-            value = ek::select(is_even, value / 2, 3*value + 1);
+        dr::Loop loop(value, counter);
+        while (loop.cond(dr::neq(value, 1))) {
+            dr::mask_t<uint32_t> is_even = dr::eq(value & 1, 0);
+            value = dr::select(is_even, value / 2, 3*value + 1);
             counter++;
         }
 
         return counter;
     }
 
-In this case, ``ek::Loop()`` turns into a no-op, and ``loop.cond()`` simply returns
+In this case, ``dr::Loop()`` turns into a no-op, and ``loop.cond()`` simply returns
 its input argument. This is useful in template programs that support
 compilation to several different backends.
 
@@ -327,14 +327,14 @@ C++ Reference
       Captures the supplied loop variables and modifies them to intercept
       modifications. Loop variables must be LLVM or CUDA arrays, or nested arrays
       thereof. The C++ interface also permits passing custom data structures
-      here, as long as their contents were exposed to Enoki via a
-      :c:macro:`ENOKI_STRUCT` declaration.
+      here, as long as their contents were exposed to Dr.Jit via a
+      :c:macro:`DRJIT_STRUCT` declaration.
 
       Construction can occur either in one step:
 
       .. code-block:: cpp
 
-          ek::Loop loop(arg_1, arg_2);
+          dr::Loop loop(arg_1, arg_2);
 
       Alternative, the class can also be constructed in multiple steps. In this
       case the type of one of the loop variables (does not matter which one)
@@ -342,7 +342,7 @@ C++ Reference
 
       .. code-block:: cpp
 
-          ek::Loop<Float> loop;
+          dr::Loop<Float> loop;
           look.put(arg_1);
           look.put(arg_2);
           loop.init();

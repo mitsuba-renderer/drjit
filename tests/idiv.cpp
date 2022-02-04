@@ -1,7 +1,7 @@
 /*
     tests/idiv.cpp -- tests integer division by constants
 
-    Enoki is a C++ template library that enables transparent vectorization
+    Dr.Jit is a C++ template library that enables transparent vectorization
     of numerical kernels using SIMD instruction sets available on current
     processor architectures.
 
@@ -13,11 +13,11 @@
 
 #include "test.h"
 #include <random>
-#include <enoki/idiv.h>
+#include <drjit/idiv.h>
 
 #define ITERATIONS 1000000
 
-ENOKI_TEST(test01_idiv_u64) {
+DRJIT_TEST(test01_idiv_u64) {
     std::mt19937_64 mt;
 
     for (uint64_t i = 2; i < ITERATIONS; ++i) {
@@ -40,7 +40,7 @@ ENOKI_TEST(test01_idiv_u64) {
     }
 }
 
-ENOKI_TEST(test02_idiv_u32) {
+DRJIT_TEST(test02_idiv_u32) {
     std::mt19937 mt;
 
     for (uint32_t i = 2; i < ITERATIONS; ++i) {
@@ -63,7 +63,7 @@ ENOKI_TEST(test02_idiv_u32) {
     }
 }
 
-ENOKI_TEST(test03_idiv_s64) {
+DRJIT_TEST(test03_idiv_s64) {
     std::mt19937_64 mt;
 
     for (uint64_t i = 2; i < ITERATIONS; ++i) {
@@ -94,7 +94,7 @@ ENOKI_TEST(test03_idiv_s64) {
     }
 }
 
-ENOKI_TEST(test03_idiv_s32) {
+DRJIT_TEST(test03_idiv_s32) {
     std::mt19937 mt;
 
     for (uint32_t i = 2; i < ITERATIONS; ++i) {
@@ -125,7 +125,7 @@ ENOKI_TEST(test03_idiv_s32) {
     }
 }
 
-ENOKI_TEST_INT(test04_idiv_vector) {
+DRJIT_TEST_INT(test04_idiv_vector) {
     std::mt19937_64 mt;
     for (Value i = 2; i < 1000; ++i) {
         Value x = (Value) mt(), y = (Value) mt();

@@ -1,11 +1,11 @@
-.. cpp:namespace:: enoki
+.. cpp:namespace:: drjit
 
 .. _custom-autodiff:
 
 Custom differentiable ops
 =========================
 
-Enoki offers several escape hatches to implement custom features that are
+Dr.Jit offers several escape hatches to implement custom features that are
 difficult to express using builtin functionality. This section explains such
 extension mechanisms related to automatic differentiation.
 
@@ -14,23 +14,23 @@ extension mechanisms related to automatic differentiation.
 In C++
 ------
 
-Enoki can compute derivatives of builtin operations in both forward and reverse
-mode. In rare cases, it may be useful or even necessary to tell Enoki how a
+Dr.Jit can compute derivatives of builtin operations in both forward and reverse
+mode. In rare cases, it may be useful or even necessary to tell Dr.Jit how a
 particular operation should be differentiated. Reasons for this may include:
 
 1. The automatic differentiation backend cannot keep track of computation that
-   is performed outside of Enoki (e.g. using a highly optimized :ref:`CUDA
+   is performed outside of Dr.Jit (e.g. using a highly optimized :ref:`CUDA
    kernel <custom-cuda>`), or when :cpp:struct:`DiffArray` is not used for other
    reasons.
 
-2. Multiple frameworks (e.g. PyTorch/TensorFlow and Enoki) may be involved in
+2. Multiple frameworks (e.g. PyTorch/TensorFlow and Dr.Jit) may be involved in
    larger projects, in which case gradient propagation requires a clear
    interface between them.
 
 3. The derivative may admit a simplified analytic expression that is superior
    to what direct application of automatic differentiation would produce.
 
-4. Automatic derivative propagation through Enoki's :ref:`symbolic loops
+4. Automatic derivative propagation through Dr.Jit's :ref:`symbolic loops
    <recording-loops>` is not supported. They will always require extra steps as
    outlined here and in the section on :ref:`differentiating loops
    <diff-loop>`.
@@ -45,7 +45,7 @@ To start, make sure to include the extra header file
 
 .. code-block:: cpp
 
-    #include <enoki/custom.h>
+    #include <drjit/custom.h>
 
 which provides all necessary infrastructure. Suppose, that we are working with
 the following type:
@@ -53,7 +53,7 @@ the following type:
 .. code-block:: cpp
 
     // JIT-compiled array that furthermore tracks derivatives
-    using Float = ek::DiffArray<ek::CUDAArray<float>>;
+    using Float = dr::DiffArray<dr::CUDAArray<float>>;
 
 We must define the aforementioned callback class deriving from
 :cpp:struct:`CustomOp`, which is a variadic template class parameterized by the
@@ -62,7 +62,7 @@ function output and input(s).
 
 .. code-block:: cpp
 
-    struct MyOp : ek::CustomOp<Float, /* <-- type underlying AD backend */,
+    struct MyOp : dr::CustomOp<Float, /* <-- type underlying AD backend */,
                                ...,   /* output type */,
                                ...    /* one or more input type (s) */> { ... };
 
@@ -91,14 +91,14 @@ Let's define non-differentiable and differentiable 3D vector types first:
 
 .. code-block:: cpp
 
-    using Array3f  = ek::Array<Float, 3>;
+    using Array3f  = dr::Array<Float, 3>;
 
 The basic structure of the ``Normalize`` class then looks as follows:
 
 .. code-block:: cpp
 
-    struct Normalize : ek::CustomOp<Float, Array3f, Array3f> {
-        using Base = ek::CustomOp<Float, Array3f, Array3f>;
+    struct Normalize : dr::CustomOp<Float, Array3f, Array3f> {
+        using Base = dr::CustomOp<Float, Array3f, Array3f>;
 
         // Return a descriptive name that used in GraphViz output
         const char *name() override { return "normalize"; }
@@ -116,7 +116,7 @@ methods: the first, ``eval()``, performs an ordinary (non-differentiable)
 function evaluation. In particular, the function will be called with inputs
 that are *detached* from the computation graph, and it must also return a
 result with the same property (you don't need to worry about this unless your
-function accesses some kind of global variable ``x`` with ``ek::grad_enabled(x)
+function accesses some kind of global variable ``x`` with ``dr::grad_enabled(x)
 == true``, in which case the function result must be passed through
 :cpp:func:`detach()`). Finally, note the inputs must be specified as ``const``
 references (see the following note).
@@ -127,9 +127,9 @@ references (see the following note).
    arguments is read-only, and that it produces all output via a single return
    value. Returning data via parameter references is not allowed.
 
-   Returning multiple things is fine: the return type can be an Enoki array,
+   Returning multiple things is fine: the return type can be an Dr.Jit array,
    ``std::pair``, ``std::tuple`` or custom data structure exposed via
-   :c:macro:`ENOKI_STRUCT`.
+   :c:macro:`DRJIT_STRUCT`.
 
 Here, our ``eval()`` implementation also stores two temporary variables
 (``m_input`` and ``m_inv_norm``) since they are going to be useful in both
@@ -139,7 +139,7 @@ forward and reverse-mode derivative propagation.
 
    Array3f eval(const Array3f &input) override {
        m_input = input;
-       m_inv_norm = ek::rcp(ek::norm(input));
+       m_inv_norm = dr::rcp(dr::norm(input));
        return input * m_inv_norm;
    }
 
@@ -155,8 +155,8 @@ be omitted. Before returning, the function must call
     void forward() override {
         Array3f grad_in = Base::grad_in<0>(),
                 grad_out = grad_in * m_inv_norm;
-        grad_out -= m_input * (ek::dot(m_input, grad_out) *
-                               ek::sqr(m_inv_norm));
+        grad_out -= m_input * (dr::dot(m_input, grad_out) *
+                               dr::sqr(m_inv_norm));
         Base::set_grad_out(grad_out);
     }
 
@@ -172,8 +172,8 @@ not the case.
     void backward() override {
         Array3f grad_out = Base::grad_out(),
                 grad_in = grad_out * m_inv_norm;
-        grad_in -= m_input * (ek::dot(m_input, grad_in) *
-                              ek::sqr(m_inv_norm));
+        grad_in -= m_input * (dr::dot(m_input, grad_in) *
+                              dr::sqr(m_inv_norm));
         Base::set_grad_in<0>(grad_in);
     }
 
@@ -182,7 +182,7 @@ Once defined, the custom operation can be invoked as follows:
 .. code-block:: cpp
 
    Array3f d = /* ... */;
-   Array3f d2 = ek::custom<Normalize>(d);
+   Array3f d2 = dr::custom<Normalize>(d);
 
 .. _custom-autodiff-py:
 
@@ -196,24 +196,24 @@ arguments are referenced by name instead of index.
 .. code-block:: python
     :emphasize-lines: 8, 19
 
-    class Normalize(ek.CustomOp):
+    class Normalize(dr.CustomOp):
         def eval(self, value):
             self.value = value
-            self.inv_norm = ek.rcp(ek.norm(value))
+            self.inv_norm = dr.rcp(dr.norm(value))
             return value * self.inv_norm
 
         def forward(self):
             grad_in = self.grad_in('value')
             grad_out = grad_in * self.inv_norm
-            grad_out -= self.value * (ek.dot(self.value, grad_out) *
-                                      ek.sqr(self.inv_norm))
+            grad_out -= self.value * (dr.dot(self.value, grad_out) *
+                                      dr.sqr(self.inv_norm))
             self.set_grad_out(grad_out)
 
         def backward(self):
             grad_out = self.grad_out()
             grad_in = grad_out * self.inv_norm
-            grad_in -= self.value * (ek.dot(self.value, grad_in) *
-                                     ek.sqr(self.inv_norm))
+            grad_in -= self.value * (dr.dot(self.value, grad_in) *
+                                     dr.sqr(self.inv_norm))
             self.set_grad_in('value', grad_in)
 
         def name(self):
@@ -223,11 +223,11 @@ Once defined, a custom operation can be invoked as follows:
 
 .. code-block:: python
 
-   import enoki as ek
-   from enoki.cuda.ad import Array3f
+   import drjit as dr
+   from drjit.cuda.ad import Array3f
 
    d = Array3f(...)
-   d2 = ek.custom(Normalize, d)
+   d2 = dr.custom(Normalize, d)
 
 .. _diff-loop:
 
@@ -242,7 +242,7 @@ supported.
 
 As the name indicates, reverse-mode differentiation traverses the computation
 graph from outputs to inputs, which requires suitable reversed loop constructs
-that are not available by default. While Enoki could likely be modified to
+that are not available by default. While Dr.Jit could likely be modified to
 generate them automatically, this would not produce an efficient result, as
 each loop iteration would need to store copies of all loop variables to enable
 a reversal under general conditions. For this reason, symbolic loops must
@@ -268,7 +268,7 @@ interval :math:`[0, \frac{\pi}{2}]` and adding up evaluations of the integrand:
        \approx& \frac{1}{n}\sum_{i=1}^n\frac{1}{\sqrt{1-m\sin^2 \theta_i}}\mathrm{d}\theta\\
    \end{aligned}
 
-As a side note, please do not compute elliptic integrals that way. Enoki
+As a side note, please do not compute elliptic integrals that way. Dr.Jit
 includes vastly more efficient implementations in its special function library.
 Nonetheless, we shall stick with this example here.
 
@@ -277,7 +277,7 @@ function ``mcint`` that relies on a symbolic loop.
 
 .. code-block:: python
 
-    from enoki.cuda.ad import PCG32, Loop, UInt32, Float
+    from drjit.cuda.ad import PCG32, Loop, UInt32, Float
 
     def mcint(a, b, f, n=1000000):
         ''' Integrate the function 'f' from 'a' to 'b', using 'n' samples. '''
@@ -286,7 +286,7 @@ function ``mcint`` that relies on a symbolic loop.
         result = Float(0)
         l = Loop(i, rng, result)
         while l.cond(i < n):
-            result += f(ek.lerp(a, b, rng.next_float32()))
+            result += f(dr.lerp(a, b, rng.next_float32()))
             i += 1
         return result * (b - a) / n
 
@@ -295,15 +295,15 @@ With this functionality at hand, :math:`K(m)` becomes simple to express:
 .. code-block:: python
 
     def elliptic_k(m):
-        return mcint(a=0, b=ek.Pi/2,
-                     f=lambda x: ek.rsqrt(1 - m * ek.sqr(ek.sin(x))))
+        return mcint(a=0, b=dr.Pi/2,
+                     f=lambda x: dr.rsqrt(1 - m * dr.sqr(dr.sin(x))))
 
 However, attempting to differentiate ``elliptic_k`` will yield an error message
 of the form
 
 .. code-block:: text
 
-    enoki.Exception: Symbolic loop encountered a differentiable array with
+    drjit.Exception: Symbolic loop encountered a differentiable array with
     enabled gradients! This is not supported.
 
 The function :math:`K` has a simple analytic derivative given by
@@ -318,28 +318,28 @@ subclass. This leads to the following customized differentiable operation:
 .. code-block:: python
    :emphasize-lines: 9-12
 
-    class EllipticK(ek.CustomOp):
+    class EllipticK(dr.CustomOp):
         # --- Internally used utility methods ---
 
         # Integrand of the 'K' function
         def K(self, x, m):
-            return ek.rsqrt(1 - m * ek.sqr(ek.sin(x)))
+            return dr.rsqrt(1 - m * dr.sqr(dr.sin(x)))
 
         # Derivative of the above with respect to 'm'
         def dK(self, x, m):
-            sin_x = ek.sin(x)
-            tmp = ek.rsqrt(1 - m * ek.sqr(sin_x))
-            return 0.5 * ek.sqr(tmp * sin_x) * tmp
+            sin_x = dr.sin(x)
+            tmp = dr.rsqrt(1 - m * dr.sqr(sin_x))
+            return 0.5 * dr.sqr(tmp * sin_x) * tmp
 
         # Monte Carlo integral of dK, used in forward/reverse pass
         def eval_grad(self):
-            return mcint(a=0, b=ek.Pi/2, f=lambda x: self.dK(x, self.m))
+            return mcint(a=0, b=dr.Pi/2, f=lambda x: self.dK(x, self.m))
 
         # --- CustomOp interface ---
 
         def eval(self, m):
             self.m = m # Stash 'm' for later
-            return mcint(a=0, b=ek.Pi/2, f=lambda x: self.K(x, self.m))
+            return mcint(a=0, b=dr.Pi/2, f=lambda x: self.K(x, self.m))
 
         def forward(self):
             self.set_grad_out(self.grad_in('m') * self.eval_grad())
@@ -351,7 +351,7 @@ subclass. This leads to the following customized differentiable operation:
             return "EllipticK"
 
     def elliptic_k(m):
-        return ek.custom(EllipticK, m)
+        return dr.custom(EllipticK, m)
 
 
 AD all the way down
@@ -365,20 +365,20 @@ the following snippet:
 .. code-block:: python
 
     def dK(self, x, m):
-        m = Float(m) # Convert 'm' to differentiable type (enoki.cuda.ad.Float)
-        ek.enable_grad(m)
+        m = Float(m) # Convert 'm' to differentiable type (drjit.cuda.ad.Float)
+        dr.enable_grad(m)
         y = self.K(x, m)
-        ek.forward(m)
-        return ek.grad(y)
+        dr.forward(m)
+        return dr.grad(y)
 
 The Monte Carlo integration procedure will evaluate ``dK`` 1 million times,
 hence you may be wondering whether repetitive function calls like
-``ek.forward()`` that propagate derivatives through the AD computation graph
-could lead to inefficiencies? This is not the case: Enoki performs a single
+``dr.forward()`` that propagate derivatives through the AD computation graph
+could lead to inefficiencies? This is not the case: Dr.Jit performs a single
 symbolic evaluation of the loop on the host, during which time it records all
 operations that take place within. Only operations involving CUDA/LLVM arrays
-are of interest, which means that Enoki only will only "see" the final
-computation needed to evaluate ``ek.grad(y)``. The mechanical process of
+are of interest, which means that Dr.Jit only will only "see" the final
+computation needed to evaluate ``dr.grad(y)``. The mechanical process of
 actually obtaining this code---a topologically sorted graph traversal involving
 several different hash tables---evaporates along the way, and the end result is
 generally equivalent to hand-written derivative code. This nesting can be
@@ -389,15 +389,15 @@ Finally, we can visualize the fruits of this work:
 
 .. code-block:: python
 
-    x = ek.linspace(Float, 0, 0.9, 100)
-    ek.enable_grad(x)
+    x = dr.linspace(Float, 0, 0.9, 100)
+    dr.enable_grad(x)
     y = elliptic_k(x)
-    ek.backward(y)
-    ek.eval(x, y, ek.grad(x))
+    dr.backward(y)
+    dr.eval(x, y, dr.grad(x))
 
     import matplotlib.pyplot as plt
     plt.plot(x, y, label="$K(m)$")
-    plt.plot(x, ek.grad(x), label="$K'(m)$")
+    plt.plot(x, dr.grad(x), label="$K'(m)$")
     plt.legend()
     plt.show()
 
@@ -421,7 +421,7 @@ details, click on the following link to see the resulting PTX code.
         .version 6.3
         .target sm_75
         .address_size 64
-        .entry enoki_b457ffb74bef12bc(.param .u32 size,
+        .entry drjit_b457ffb74bef12bc(.param .u32 size,
                                       .param .u64 arg0,
                                       .param .u64 arg1,
                                       .param .u64 arg2) {
@@ -651,9 +651,9 @@ takes the current position and velocity and takes a step of size ``dt``:
 
 .. code-block:: python
 
-    class Ballistic(ek.CustomOp):
+    class Ballistic(dr.CustomOp):
         def timestep(self, pos, vel, dt=0.02, mu=0.1, g=9.81):
-            acc = -mu*vel*ek.norm(vel) - Array2f(0, g)
+            acc = -mu*vel*dr.norm(vel) - Array2f(0, g)
             pos_out = pos + dt * vel
             vel_out = vel + dt * acc
             return pos_out, vel_out
@@ -672,16 +672,16 @@ arrays (``temp_pos``, ``temp_vel``).
         it, max_it = UInt32(0), 100
 
         # Allocate scratch space: (# of particles) * (# of iterations)
-        n = max(ek.width(pos), ek.width(vel))
-        self.temp_pos = ek.empty(Array2f, n * max_it)
-        self.temp_vel = ek.empty(Array2f, n * max_it)
+        n = max(dr.width(pos), dr.width(vel))
+        self.temp_pos = dr.empty(Array2f, n * max_it)
+        self.temp_vel = dr.empty(Array2f, n * max_it)
 
         loop = Loop(pos, vel, it)
         while loop.cond(it < max_it):
             # Store current loop variables
-            index = it * n + ek.arange(UInt32, n)
-            ek.scatter(self.temp_pos, pos, index)
-            ek.scatter(self.temp_vel, vel, index)
+            index = it * n + dr.arange(UInt32, n)
+            dr.scatter(self.temp_pos, pos, index)
+            dr.scatter(self.temp_vel, vel, index)
 
             # Run simulation step, update loop variables
             pos_out, vel_out = self.timestep(pos, vel)
@@ -691,7 +691,7 @@ arrays (``temp_pos``, ``temp_vel``).
             it += 1
 
         # Ensure output and temp. arrays are evaluated at this point
-        ek.eval(pos, vel)
+        dr.eval(pos, vel)
 
         return pos, vel, self.temp_pos
 
@@ -712,25 +712,25 @@ the loop body via :cpp:func:`set_grad()`, :cpp:func:`enqueue()`, and
         it = UInt32(100)
 
         loop = Loop(it, grad_pos, grad_vel)
-        n = ek.width(grad_pos)
+        n = dr.width(grad_pos)
         while loop.cond(it > 0):
             # Retrieve loop variables, reverse chronological order
             it -= 1
-            index = it * n + ek.arange(UInt32, n)
-            pos = ek.gather(Array2f, self.temp_pos, index)
-            vel = ek.gather(Array2f, self.temp_vel, index)
+            index = it * n + dr.arange(UInt32, n)
+            pos = dr.gather(Array2f, self.temp_pos, index)
+            vel = dr.gather(Array2f, self.temp_vel, index)
 
             # Differentiate time step in reverse mode
-            ek.enable_grad(pos, vel)
+            dr.enable_grad(pos, vel)
             pos_out, vel_out = self.timestep(pos, vel)
-            ek.set_grad(pos_out, grad_pos)
-            ek.set_grad(vel_out, grad_vel)
-            ek.enqueue(pos_out, vel_out)
-            ek.traverse(Float, reverse=True)
+            dr.set_grad(pos_out, grad_pos)
+            dr.set_grad(vel_out, grad_vel)
+            dr.enqueue(pos_out, vel_out)
+            dr.traverse(Float, reverse=True)
 
             # Update loop variables
-            grad_pos.assign(ek.grad(pos))
-            grad_vel.assign(ek.grad(vel))
+            grad_pos.assign(dr.grad(pos))
+            grad_vel.assign(dr.grad(vel))
 
         self.set_grad_in('pos', grad_pos)
         self.set_grad_in('vel', grad_vel)
@@ -758,11 +758,11 @@ point.
         vel_in = Array2f([10, 9, 4], [5, 3, 6])
 
         for i in range(15):
-            ek.enable_grad(vel_in)
-            pos_out, vel_out, traj = ek.custom(Ballistic, pos_in, vel_in)
+            dr.enable_grad(vel_in)
+            pos_out, vel_out, traj = dr.custom(Ballistic, pos_in, vel_in)
 
-            loss = ek.squared_norm(pos_out - Array2f(5, 0))
-            ek.backward(loss)
+            loss = dr.squared_norm(pos_out - Array2f(5, 0))
+            dr.backward(loss)
 
             plt.clf()
             traj = np.array(traj).reshape(100, 3, 2)
@@ -775,7 +775,7 @@ point.
             plt.title('Iteration %i' % i)
             plt.savefig('frame_%02i.png' % i)
 
-            vel_in = Array2f(ek.detach(vel_in) - 0.2 * ek.grad(vel_in))
+            vel_in = Array2f(dr.detach(vel_in) - 0.2 * dr.grad(vel_in))
 
 Finally, let's discuss an alternative way of differentiating this loop in
 reverse mode, while avoiding the costly storage of intermediate states. We
@@ -827,15 +827,15 @@ time-reversal may be possible using a more advanced ODE integrator.
             vel.assign(vel_rev)
 
             # Take a forward step in time, keep track of derivatives
-            ek.enable_grad(pos_rev, vel_rev)
+            dr.enable_grad(pos_rev, vel_rev)
             pos_fwd, vel_fwd = self.timestep(pos_rev, vel_rev, dt=0.02)
-            ek.set_grad(pos_fwd, grad_pos)
-            ek.set_grad(vel_fwd, grad_vel)
-            ek.enqueue(pos_fwd, vel_fwd)
-            ek.traverse(Float, reverse=True)
+            dr.set_grad(pos_fwd, grad_pos)
+            dr.set_grad(vel_fwd, grad_vel)
+            dr.enqueue(pos_fwd, vel_fwd)
+            dr.traverse(Float, reverse=True)
 
-            grad_pos.assign(ek.grad(pos_rev))
-            grad_vel.assign(ek.grad(vel_rev))
+            grad_pos.assign(dr.grad(pos_rev))
+            grad_vel.assign(dr.grad(vel_rev))
             it += 1
 
         self.set_grad_in('pos', grad_pos)
@@ -846,7 +846,7 @@ Reference
 
 .. cpp:struct:: template <typename Type, typename Result, typename... Args> CustomOp
 
-   Callback interface used to integrate custom operations into Enoki's
+   Callback interface used to integrate custom operations into Dr.Jit's
    graph-based AD implementation.
 
    .. cpp:function:: virtual Result eval(const Args& ... args) = 0

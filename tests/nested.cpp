@@ -1,7 +1,7 @@
 /*
     tests/nested.cpp -- tests nested arrays and other fancy scalar types
 
-    Enoki is a C++ template library that enables transparent vectorization
+    Dr.Jit is a C++ template library that enables transparent vectorization
     of numerical kernels using SIMD instruction sets available on current
     processor architectures.
 
@@ -13,7 +13,7 @@
 
 #include "test.h"
 
-ENOKI_TEST(test02_float_array) {
+DRJIT_TEST(test02_float_array) {
     /* Value initialization */
     Array<float, 4> a(1.f);
     assert(to_string(a) == "[1, 1, 1, 1]");
@@ -37,7 +37,7 @@ ENOKI_TEST(test02_float_array) {
     assert(to_string(c + c) == "[2, 4, 6, 8]");
 }
 
-ENOKI_TEST(test04_array_of_arrays) {
+DRJIT_TEST(test04_array_of_arrays) {
     using Vector4f = Array<float, 4>;
     using Vector4fP = Array<Vector4f, 2>;
 
@@ -55,13 +55,13 @@ ENOKI_TEST(test04_array_of_arrays) {
     assert((std::is_same<scalar_t<Vector4fP>, float>::value));
 }
 
-ENOKI_TEST(test05_mask_types) {
+DRJIT_TEST(test05_mask_types) {
     assert((std::is_same<mask_t<bool>, bool>::value));
     assert((std::is_same<value_t<float>, float>::value));
     assert((std::is_same<value_t<Array<float, 1>>, float>::value));
 }
 
-ENOKI_TEST(test06_nested_reductions) {
+DRJIT_TEST(test06_nested_reductions) {
     using FloatP = Array<float, 16>;
     using IntP = Array<int, 16>;
     using Vector3fP = Array<FloatP, 3>;

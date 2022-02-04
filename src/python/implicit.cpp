@@ -8,17 +8,17 @@ PyObject *implicit_conversion_handler(PyObject *obj, PyTypeObject *type_) {
 
     bool pass = false;
     if (PyList_CheckExact(obj)) {
-        pass = Size == ek::Dynamic || Size == (size_t) PyList_GET_SIZE(obj);
+        pass = Size == dr::Dynamic || Size == (size_t) PyList_GET_SIZE(obj);
     } else if (PyTuple_CheckExact(obj)) {
-        pass = Size == ek::Dynamic || Size == (size_t) PyTuple_GET_SIZE(obj);
+        pass = Size == dr::Dynamic || Size == (size_t) PyTuple_GET_SIZE(obj);
     } else if (Size > 0 && PyNumber_Check(obj)) {
         pass = true;
     } else if (Size > 0 &&
                 (strcmp(tp_name_src, "numpy.ndarray") == 0 ||
                  strcmp(tp_name_src, "Tensor") == 0)) {
         pass = true;
-    } else if (strncmp(tp_name_src, "enoki.", 6) == 0 ||
-               PyObject_HasAttrString(obj, "IsEnoki")) {
+    } else if (strncmp(tp_name_src, "drjit.", 6) == 0 ||
+               PyObject_HasAttrString(obj, "IsDrJit")) {
         if (py::cast<size_t>(py::handle(obj).attr("Size")) == Size) {
             pass = true;
         } else if (py::handle(obj).get_type().is(type.attr("Value"))) {

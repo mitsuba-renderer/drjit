@@ -1,16 +1,16 @@
 .. _random:
-.. cpp:namespace:: enoki
+.. cpp:namespace:: drjit
 
 Random number generation
 ========================
 
-Enoki includes a fully vectorized implementation of the `PCG32 pseudorandom
+Dr.Jit includes a fully vectorized implementation of the `PCG32 pseudorandom
 number generator <http://www.pcg-random.org/>`_ developed by `Melissa O'Neill
 <https://www.cs.hmc.edu/~oneill>`_. To use it, include the following header:
 
 .. code-block:: cpp
 
-    #include <enoki/random.h>
+    #include <drjit/random.h>
 
 The following reference is partly based on the original `PCG32 documentation
 <http://www.pcg-random.org/using-pcg-c.html>`_.
@@ -36,7 +36,7 @@ scalar variates:
     float value_f    = my_rng.next_float32(); // uniform on the interval [0, 1)
     uint32_t value_u = my_rng.next_uint32();  // uniform integer on [0, 2^32 - 1]
 
-Specifying an Enoki array type leads to a vectorized random number generator
+Specifying an Dr.Jit array type leads to a vectorized random number generator
 that generates arrays of pseudorandom variates in parallel.
 
 .. code-block:: cpp
@@ -77,7 +77,7 @@ Bindings of PCG32 are provided for all backends, see the discussion on
 
 .. code-block:: pycon
 
-    >>> from enoki.llvm import PCG32
+    >>> from drjit.llvm import PCG32
 
     >>> rng = PCG32(size=100)
 
@@ -97,7 +97,7 @@ C++ Reference
 Member types
 ************
 
-.. cpp:namespace:: template <typename T> enoki::PCG32
+.. cpp:namespace:: template <typename T> drjit::PCG32
 
 .. cpp:type:: Int64 = int64_array_t<T>
 
@@ -269,7 +269,7 @@ Methods
 Macros
 ******
 
-The following macros are defined in :file:`enoki/random.h`:
+The following macros are defined in :file:`drjit/random.h`:
 
 .. cpp:var:: uint64_t PCG32_DEFAULT_STATE = 0x853c49e6748fea9bULL
 

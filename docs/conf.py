@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# enoki documentation build configuration file, created by
+# drjit documentation build configuration file, created by
 # sphinx-quickstart on Sun Oct 11 19:23:48 2015.
 #
 # This file is execfile()d with the current directory set to its
@@ -53,7 +53,7 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = 'enoki'
+project = 'drjit'
 copyright = '2019, Wenzel Jakob'
 author = 'Wenzel Jakob'
 
@@ -133,7 +133,7 @@ katex_prerender = True
 # Guzzle theme options (see theme.conf for more information)
 html_theme_options = {
     # Set the name of the project to appear in the sidebar
-    "project_nav_name": "Enoki"
+    "project_nav_name": "Dr.Jit"
 }
 
 # Custom sidebar templates, maps document names to template names.
@@ -230,7 +230,7 @@ html_show_sourcelink = False
 #html_search_scorer = 'scorer.js'
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = 'enokidoc'
+htmlhelp_basename = 'drjitdoc'
 
 # -- Options for LaTeX output ---------------------------------------------
 
@@ -252,13 +252,13 @@ latex_elements = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-  (master_doc, 'enoki.tex', 'enoki Documentation',
+  (master_doc, 'drjit.tex', 'drjit Documentation',
    'Wenzel Jakob', 'manual'),
 ]
 
 # The name of an image file (relative to this directory) to place at the top of
 # the title page.
-# latex_logo = 'enoki-logo.png'
+# latex_logo = 'drjit-logo.png'
 
 # For "manual" documents, if this is true, then toplevel headings are parts,
 # not chapters.
@@ -282,7 +282,7 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    (master_doc, 'enoki', 'enoki Documentation',
+    (master_doc, 'drjit', 'drjit Documentation',
      [author], 1)
 ]
 
@@ -296,8 +296,8 @@ man_pages = [
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
 texinfo_documents = [
-  (master_doc, 'enoki', 'enoki Documentation',
-   author, 'enoki', 'One line description of project.',
+  (master_doc, 'drjit', 'drjit Documentation',
+   author, 'drjit', 'One line description of project.',
    'Miscellaneous'),
 ]
 
