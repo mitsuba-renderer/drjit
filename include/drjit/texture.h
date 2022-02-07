@@ -219,6 +219,9 @@ public:
 
     const Storage &value() const { return tensor().array(); }
 
+    /**
+     * \brief Return the texture data as a tensor object
+     */
     const TensorXf &tensor() const {
         if constexpr (IsCUDA && HasCudaTexture) {
             if (m_migrated) {
@@ -238,6 +241,13 @@ public:
         return m_value;
     }
 
+    /**
+     * \brief Return the texture data as a tensor object
+     *
+     * Although the returned object is not const, changes to it are only fully
+     * propagated to the Texture instance when a subsequent call to
+     * \ref set_tensor() is made.
+     */
     TensorXf &tensor() {
         if constexpr (IsCUDA && HasCudaTexture) {
             if (m_migrated) {
