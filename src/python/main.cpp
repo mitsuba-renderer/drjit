@@ -51,12 +51,13 @@ struct ArrayBase { };
 
 #if defined(DRJIT_ENABLE_JIT)
 static void log_callback(LogLevel /* level */, const char *msg) {
-    if (!_Py_IsFinalizing()) {
-        py::gil_scoped_acquire acquire;
+    /* Try to print to the Python console if possible, but *never* risk
+       deadlock over this. Calling py::print() with an almost-finalized
+       CPython interpreter can also fail. */
+    if (PyGILState_Check() && !_Py_IsFinalizing())
         py::print(msg);
-    } else {
+    else
         fprintf(stderr, "%s\n", msg);
-    }
 }
 #endif
 
