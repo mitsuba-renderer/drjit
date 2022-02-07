@@ -28,15 +28,17 @@ endif()
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
-add_custom_target(check
-        ${CMAKE_COMMAND} -E echo CWD=${CMAKE_BINARY_DIR}
-        COMMAND ${CMAKE_COMMAND} -E echo CMD=${CMAKE_CTEST_COMMAND} -C $<CONFIG>
-        COMMAND ${CMAKE_COMMAND} -E echo ----------------------------------
-        COMMAND ${CMAKE_COMMAND} -E env CTEST_OUTPUT_ON_FAILURE=1
-            ${CMAKE_CTEST_COMMAND} -C $<CONFIG>
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-    USES_TERMINAL
-)
+if (NOT TARGET check)
+  add_custom_target(check
+          ${CMAKE_COMMAND} -E echo CWD=${CMAKE_BINARY_DIR}
+          COMMAND ${CMAKE_COMMAND} -E echo CMD=${CMAKE_CTEST_COMMAND} -C $<CONFIG>
+          COMMAND ${CMAKE_COMMAND} -E echo ----------------------------------
+          COMMAND ${CMAKE_COMMAND} -E env CTEST_OUTPUT_ON_FAILURE=1
+              ${CMAKE_CTEST_COMMAND} -C $<CONFIG>
+      WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+      USES_TERMINAL
+  )
+endif()
 
 function(drjit_test NAME)
   if (DRJIT_TEST_NAME)
