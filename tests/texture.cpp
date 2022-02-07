@@ -221,7 +221,7 @@ DRJIT_TEST(test05_grad) {
 
 DRJIT_TEST(test06_nearest) {
     size_t shape[1] = { 3 };
-    dr::Texture<Float, 1> tex(shape, 1, false, dr::FilterMode::Nearest);
+    dr::Texture<Float, 1> tex(shape, 1, false, FilterMode::Nearest);
     tex.set_value(Float(0.f, 0.5f, 1.f));
 
     Float pos = dr::linspace<Float>(0, 1, 80);
@@ -797,4 +797,54 @@ DRJIT_TEST(test22_fetch_grad) {
         assert(allclose(expected, grad));
         dr::set_grad(tex_data, Float(0, 0, 0, 0));
     }
+}
+
+DRJIT_TEST(test23_set_tensor) {
+    using TensorXf = Tensor<Float>;
+    size_t shape[2] = { 2, 2 };
+    Texture<Float, 2> tex(shape, 1, false);
+
+    Float tex_data(1.f, 2.f, 3.f, 4.f);
+    dr::enable_grad(tex_data);
+    tex.set_value(tex_data);
+
+    size_t new_shape[3] = { 3, 2, 2 };
+    Float new_tex_data(6.5f, 6.f, 5.5f, 5.f, 4.5f, 4.f, 3.5f, 3.f, 2.5f, 2.f,
+                       1.5f, 1.f);
+    TensorXf new_tensor(new_tex_data, 3, new_shape);
+    tex.set_tensor(new_tensor);
+
+    Array2f pos(0.f, 0.f);
+    Array2f result_drjit;
+    tex.eval_drjit(pos, result_drjit.data());
+    dr::eval(result_drjit);
+    Array2f result_cuda;
+    tex.eval_cuda(pos, result_cuda.data());
+    dr::eval(result_cuda);
+    assert(dr::allclose(result_drjit, result_cuda, 5e-3f, 5e-3f));
+    assert(dr::allclose(result_drjit, Array2f(6.5, 6.f)));
+
+    pos = Array2f(1.f, 1.f);
+    tex.eval_drjit(pos, result_drjit.data());
+    dr::eval(result_drjit);
+    tex.eval_cuda(pos, result_cuda.data());
+    dr::eval(result_cuda);
+    assert(dr::allclose(result_drjit, result_cuda, 5e-3f, 5e-3f));
+    assert(dr::allclose(result_drjit, Array2f(1.5, 1.f)));
+
+    pos = Array2f(0.f, 1.f);
+    tex.eval_drjit(pos, result_drjit.data());
+    dr::eval(result_drjit);
+    tex.eval_cuda(pos, result_cuda.data());
+    dr::eval(result_cuda);
+    assert(dr::allclose(result_drjit, result_cuda, 5e-3f, 5e-3f));
+    assert(dr::allclose(result_drjit, Array2f(3.5, 3.f)));
+
+    pos = Array2f(1.f, 0.f);
+    tex.eval_drjit(pos, result_drjit.data());
+    dr::eval(result_drjit);
+    tex.eval_cuda(pos, result_cuda.data());
+    dr::eval(result_cuda);
+    assert(dr::allclose(result_drjit, result_cuda, 5e-3f, 5e-3f));
+    assert(dr::allclose(result_drjit, Array2f(4.5, 4.f)));
 }

@@ -188,14 +188,31 @@ public:
         m_value.array() = value;
     }
 
-    /// Override the texture contents with the provided tensor
+    /*
+     * \brief Override the texture contents with the provided tensor
+     *
+     * This method updates the values of all texels. Changing the texture
+     * resolution or its number of channels is also supported. However, on CUDA,
+     * such operations have a significantly larger overhead (the GPU pipeline
+     * needs to be synchronized for new texture objects to be created).
+     */
     void set_tensor(const TensorXf &tensor) {
         if (tensor.ndim() != Dimension + 1)
             drjit_raise("Texture::set_tensor(): tensor dimension must equal "
                         "texture dimension plus one (channels).");
+
+        bool shape_changed = false;
         for (size_t i = 0; i < Dimension + 1; ++i) {
-            if (tensor.shape(i) != m_value.shape(i))
-                drjit_raise("Texture::set_tensor(): tensor shape mismatch!");
+            if (tensor.shape(i) != m_value.shape(i)) {
+                shape_changed = true;
+                break;
+            }
+        }
+
+        if (shape_changed) {
+            jit_cuda_tex_destroy(m_handle);
+            init(tensor.shape().data(), tensor.shape(Dimension), m_migrate,
+                 m_filter_mode, m_wrap_mode);
         }
         set_value(tensor.array());
     }
@@ -203,6 +220,25 @@ public:
     const Storage &value() const { return tensor().array(); }
 
     const TensorXf &tensor() const {
+        if constexpr (IsCUDA && HasCudaTexture) {
+            if (m_migrated) {
+                Storage primal = empty<Storage>(m_size);
+                jit_cuda_tex_memcpy_t2d(Dimension, m_value.shape().data(),
+                                        m_handle, primal.data());
+
+                if constexpr (IsDiff)
+                    m_value.array() = replace_grad(primal, m_value.array());
+                else
+                    m_value.array() = primal;
+
+                m_migrated = false;
+            }
+        }
+
+        return m_value;
+    }
+
+    TensorXf &tensor() {
         if constexpr (IsCUDA && HasCudaTexture) {
             if (m_migrated) {
                 Storage primal = empty<Storage>(m_size);
@@ -258,8 +294,10 @@ public:
      */
     void eval_drjit(const Array<Value, Dimension> &pos, Value *out,
                     Mask active = true) const {
-        const uint32_t channels = (uint32_t) m_value.shape(Dimension);
+        if constexpr (!is_array_v<Mask>)
+            active = true;
 
+        const uint32_t channels = (uint32_t) m_value.shape(Dimension);
         if (DRJIT_UNLIKELY(m_filter_mode == FilterMode::Nearest)) {
             const PosF pos_f = pos * PosF(m_shape_opaque);
             const PosI pos_i = floor2int<PosI>(pos_f);
@@ -436,6 +474,9 @@ public:
         using InterpPosI = Array<InterpOffset, Dimension>;
         using InterpIdx = uint32_array_t<InterpOffset>;
 
+        if constexpr (!is_array_v<Mask>)
+            active = true;
+
         const PosF pos_f = fmadd(pos, PosF(m_shape_opaque), -.5f);
         const PosI pos_i = floor2int<PosI>(pos_f);
 
@@ -505,6 +546,9 @@ public:
         using InterpOffset = Array<Int32, ipow(4, Dimension)>;
         using InterpPosI = Array<InterpOffset, Dimension>;
         using InterpIdx = uint32_array_t<InterpOffset>;
+
+        if constexpr (!is_array_v<Mask>)
+            active = true;
 
         PosF pos_(pos);
         PosF pos_f = fmadd(pos_, PosF(m_shape_opaque), -.5f);
@@ -592,6 +636,9 @@ public:
     void eval_cubic(const Array<Value, Dimension> &pos, Value *out,
                     Mask active = true, bool force_drjit = false) const {
         using Array3 = Array<Value, 3>;
+
+        if constexpr (!is_array_v<Mask>)
+            active = true;
 
         if (m_migrate && force_drjit)
             jit_log(::LogLevel::Warn,
@@ -725,6 +772,9 @@ public:
         using InterpPosI = Array<InterpOffset, Dimension>;
         using InterpIdx = uint32_array_t<InterpOffset>;
 
+        if constexpr (!is_array_v<Mask>)
+            active = true;
+
         PosF res_f = PosF(m_shape_opaque);
         PosF pos_f = fmadd(pos, res_f, -.5f);
         PosI pos_i = floor2int<PosI>(pos_f);
@@ -839,6 +889,9 @@ public:
         using InterpOffset = Array<Int32, ipow(4, Dimension)>;
         using InterpPosI = Array<InterpOffset, Dimension>;
         using InterpIdx = uint32_array_t<InterpOffset>;
+
+        if constexpr (!is_array_v<Mask>)
+            active = true;
 
         PosF res_f = PosF(m_shape_opaque);
         PosF pos_f = fmadd(pos, res_f, -.5f);
@@ -992,7 +1045,10 @@ public:
             }
     }
 
-    /// Apply the configured texture wrapping mode to an integer position
+    /**
+     * \brief Applies the configured texture wrapping mode to an integer
+     * position
+     */
     template <typename T> T wrap(const T &pos) const {
         using Scalar = scalar_t<T>;
         static_assert(
