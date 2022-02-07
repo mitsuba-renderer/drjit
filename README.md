@@ -10,10 +10,10 @@
 | [![docs][1]][2] |    [![rgl-ci][3]][4]   | [![pypi][5]][6] |
 
 
-[1]: https://readthedocs.org/projects/drjit-wjakob/badge/?version=latest
-[2]: http://drjit-wjakob.readthedocs.org/en/latest
-[3]: https://rgl-ci.epfl.ch/app/rest/builds/buildType(id:DrJit_Build)/statusIcon.svg
-[4]: https://rgl-ci.epfl.ch/viewType.html?buildTypeId=DrJit_Build&guest=1
+[1]: https://readthedocs.org/projects/drjit/badge/?version=latest
+[2]: http://drjit.readthedocs.org/en/latest
+[3]: https://rgl-ci.epfl.ch/app/rest/builds/aggregated/strob:(buildType:(project:(id:DrJit)))/statusIcon.svg
+[4]: https://rgl-ci.epfl.ch/project/DrJit?mode=trends&guest=1
 [5]: https://img.shields.io/pypi/v/drjit.svg
 [6]: https://pypi.org/pypi/drjit
 
