@@ -26,8 +26,8 @@ void bind_texture(py::module &m, const char *name) {
         .def("set_tensor", &Tex::set_tensor, "tensor"_a)
         .def("value", &Tex::value, py::return_value_policy::reference_internal)
         .def("tensor",
-                py::overload_cast<>(&Tex::tensor, py::const_),
-                py::return_value_policy::reference_internal)
+             py::overload_cast<>(&Tex::tensor, py::const_),
+             py::return_value_policy::reference_internal)
         .def("filter_mode", &Tex::filter_mode)
         .def("wrap_mode", &Tex::wrap_mode)
         .def("eval_cuda",

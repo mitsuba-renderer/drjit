@@ -249,22 +249,8 @@ public:
      * \ref set_tensor() is made.
      */
     TensorXf &tensor() {
-        if constexpr (IsCUDA && HasCudaTexture) {
-            if (m_migrated) {
-                Storage primal = empty<Storage>(m_size);
-                jit_cuda_tex_memcpy_t2d(Dimension, m_value.shape().data(),
-                                        m_handle, primal.data());
-
-                if constexpr (IsDiff)
-                    m_value.array() = replace_grad(primal, m_value.array());
-                else
-                    m_value.array() = primal;
-
-                m_migrated = false;
-            }
-        }
-
-        return m_value;
+        return const_cast<TensorXf &>(
+            const_cast<const Texture<Value, Dimension> *>(this)->tensor());
     }
 
     /**
@@ -1067,11 +1053,11 @@ public:
             std::is_signed_v<Scalar>
         );
 
-        const Array<Int32, Dimension> shape = m_shape_opaque;
+        Array<Int32, Dimension> shape = m_shape_opaque;
         if (m_wrap_mode == WrapMode::Clamp) {
             return clamp(pos, 0, shape - 1);
         } else {
-            const T value_shift_neg = select(pos < 0, pos + 1, pos);
+            T value_shift_neg = select(pos < 0, pos + 1, pos);
 
             T div;
             for (size_t i = 0; i < Dimension; ++i)
@@ -1193,7 +1179,7 @@ private:
                 m_shape_opaque.x(), Index(pos.x())));
         }
 
-        const uint32_t channels = (uint32_t) m_value.shape(Dimension);
+        uint32_t channels = (uint32_t) m_value.shape(Dimension);
 
         return index * channels;
     }
