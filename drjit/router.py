@@ -1708,9 +1708,9 @@ def count(a):
         result = 0
         for index, value in enumerate(a):
             if index == 0:
-                result = ek.select(value, 0, 1)
+                result = _ek.select(value, 0, 1)
             else:
-                result = result + ek.select(value, 1, 0)
+                result = result + _ek.select(value, 1, 0)
         return result
     else:
         raise Exception("count(): input must be a boolean or an "
