@@ -64,6 +64,14 @@
 #    include <avx512dqintrin.h>
 #    include <avx512vldqintrin.h>
 #    include <avx512vlbwintrin.h>
+#    if defined(DRJIT_X86_AVX512VPOPCNTDQ)
+#        include <avx512vpopcntdqintrin.h>
+#        include <avx512vpopcntdqvlintrin.h>
+#    endif
+#    if defined(DRJIT_X86_AVX512VBMI)
+#        include <avx512vbmiintrin.h>
+#        include <avx512vbmivlintrin.h>
+#    endif
 #    if defined(__clang__)
 #      include <avx512vlcdintrin.h>
 #    endif
