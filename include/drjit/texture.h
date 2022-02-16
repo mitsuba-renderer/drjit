@@ -65,7 +65,7 @@ public:
      *
      * When \c migrate is set to \c true on CUDA mode, the texture information
      * is *fully* migrated to GPU texture memory to avoid redundant storage. In
-     * this case, the fallback evaluation routine \ref eval_drjit() is not
+     * this case, the fallback evaluation routine \ref eval_nonaccel() is not
      * usable anymore (it will return zero) and only \ref eval() or \ref
      * eval_cuda() should be used. Note that the texture is still
      * differentiable even when migrated. The \ref value() and \ref tensor()
@@ -288,7 +288,7 @@ public:
      * This is an implementation detail, please use \ref eval() that may
      * dispatch to this function depending on its inputs.
      */
-    void eval_drjit(const Array<Value, Dimension> &pos, Value *out,
+    void eval_nonaccel(const Array<Value, Dimension> &pos, Value *out,
                     Mask active = true) const {
         if constexpr (!is_array_v<Mask>)
             active = true;
@@ -359,10 +359,10 @@ public:
     /**
      * \brief Evaluate the linear interpolant represented by this texture
      *
-     * This function dispatches to \ref eval_drjit() or \ref eval_cuda()
+     * This function dispatches to \ref eval_nonaccel() or \ref eval_cuda()
      * depending on whether or not CUDA is available. If invoked with CUDA
      * arrays that track derivative information, the function records the AD
-     * graph of \ref eval_drjit() and combines it with the primal result of
+     * graph of \ref eval_nonaccel() and combines it with the primal result of
      * \ref eval_cuda().
      */
     void eval(const Array<Value, Dimension> &pos, Value *out,
@@ -374,15 +374,15 @@ public:
                 if (grad_enabled(m_value, pos)) {
                     const size_t channels = m_value.shape(Dimension);
 
-                    ArrayX out_drjit = empty<ArrayX>(channels);
-                    eval_drjit(pos, out_drjit.data(), active);
+                    ArrayX out_nonaccel = empty<ArrayX>(channels);
+                    eval_nonaccel(pos, out_nonaccel.data(), active);
 
                     for (size_t ch = 0; ch < channels; ++ch)
-                        out[ch] = replace_grad(out[ch], out_drjit[ch]);
+                        out[ch] = replace_grad(out[ch], out_nonaccel[ch]);
                 }
             }
         } else {
-            eval_drjit(pos, out, active);
+            eval_nonaccel(pos, out, active);
         }
     }
 
@@ -463,7 +463,7 @@ public:
      * This is an implementation detail, please use \ref eval_fetch() that may
      * dispatch to this function depending on its inputs.
      */
-    void eval_fetch_drjit(const Array<Value, Dimension> &pos,
+    void eval_fetch_nonaccel(const Array<Value, Dimension> &pos,
                           Array<Value *, 1 << Dimension> &out,
                           Mask active = true) const {
         using InterpOffset = Array<Int32, 1 << Dimension>;
@@ -493,11 +493,11 @@ public:
      * \brief Fetch the texels that would be referenced in a texture lookup with
      * linear interpolation without actually performing this interpolation.
      *
-     * This function dispatches to \ref eval_fetch_drjit() or \ref
+     * This function dispatches to \ref eval_fetch_nonaccel() or \ref
      * eval_fecth_cuda() depending on whether or not CUDA is available. If
      * invoked with CUDA arrays that track derivative information, the function
-     * records the AD graph of \ref eval_fetch_drjit() and combines it with the
-     * primal result of \ref eval_fetch_cuda().
+     * records the AD graph of \ref eval_fetch_nonacel() and combines it with
+     * the primal result of \ref eval_fetch_cuda().
      */
     void eval_fetch(const Array<Value, Dimension> &pos,
                     Array<Value *, 1 << Dimension> &out,
@@ -510,21 +510,22 @@ public:
                     const size_t channels = m_value.shape(Dimension);
                     constexpr size_t out_size = 1 << Dimension;
 
-                    Array<Value *, out_size> out_drjit;
-                    ArrayX out_drjit_values =
+                    Array<Value *, out_size> out_nonaccel;
+                    ArrayX out_nonaccel_values =
                         empty<ArrayX>(out_size * channels);
                     for (size_t i = 0; i < out_size; ++i)
-                        out_drjit[i] = out_drjit_values.data() + i * channels;
-                    eval_fetch_drjit(pos, out_drjit, active);
+                        out_nonaccel[i] =
+                            out_nonaccel_values.data() + i * channels;
+                    eval_fetch_nonaccel(pos, out_nonaccel, active);
 
                     for (size_t i = 0; i < out_size; ++i)
                         for (size_t ch = 0; ch < channels; ++ch)
                             out[i][ch] =
-                                replace_grad(out[i][ch], out_drjit[i][ch]);
+                                replace_grad(out[i][ch], out_nonaccel[i][ch]);
                 }
             }
         } else {
-            eval_fetch_drjit(pos, out, active);
+            eval_fetch_nonaccel(pos, out, active);
         }
     }
 
@@ -630,15 +631,15 @@ public:
      * direct evaluation of the B-Spline basis functions in that case.
      */
     void eval_cubic(const Array<Value, Dimension> &pos, Value *out,
-                    Mask active = true, bool force_drjit = false) const {
+                    Mask active = true, bool force_nonaccel = false) const {
         using Array3 = Array<Value, 3>;
 
         if constexpr (!is_array_v<Mask>)
             active = true;
 
-        if (m_migrate && force_drjit)
+        if (m_migrate && force_nonaccel)
             jit_log(::LogLevel::Warn,
-                    "\"force_drjit\" is used while the data has been fully "
+                    "\"force_nonaccel\" is used while the data has been fully "
                     "migrated to CUDA texture memory");
 
         PosF res_f = PosF(m_shape_opaque);
@@ -677,13 +678,13 @@ public:
                                const Mask &active) -> ArrayX {
             ArrayX out = empty<ArrayX>(channels);
             if constexpr (IsCUDA && HasCudaTexture) {
-                if (!force_drjit) {
+                if (!force_nonaccel) {
                     eval_cuda(pos, out.data(), active);
                     return out;
                 }
             }
-            DRJIT_MARK_USED(force_drjit);
-            eval_drjit(pos, out.data(), active);
+            DRJIT_MARK_USED(force_nonaccel);
+            eval_nonaccel(pos, out.data(), active);
             return out;
         };
 

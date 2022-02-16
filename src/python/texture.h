@@ -44,7 +44,7 @@ void bind_texture(py::module &m, const char *name) {
                    const dr::mask_t<Type> active) {
                     size_t channels = texture.shape()[Dimension];
                     std::vector<Type> result(channels);
-                    texture.eval_drjit(pos, result.data(), active);
+                    texture.eval_nonaccel(pos, result.data(), active);
 
                     return result;
                 }, "pos"_a, "active"_a = true)
@@ -87,7 +87,7 @@ void bind_texture(py::module &m, const char *name) {
                         result[i] = std::move(result_i);
                         result_ptrs[i] = result[i].data();
                     }
-                    texture.eval_fetch_drjit(pos, result_ptrs, active);
+                    texture.eval_fetch_nonaccel(pos, result_ptrs, active);
 
                     return result;
                 }, "pos"_a, "active"_a = true)
