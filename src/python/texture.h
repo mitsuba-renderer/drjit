@@ -25,7 +25,9 @@ void bind_texture(py::module &m, const char *name) {
         .def("set_value", &Tex::set_value, "value"_a)
         .def("set_tensor", &Tex::set_tensor, "tensor"_a)
         .def("value", &Tex::value, py::return_value_policy::reference_internal)
-        .def("tensor", &Tex::tensor, py::return_value_policy::reference_internal)
+        .def("tensor",
+             py::overload_cast<>(&Tex::tensor, py::const_),
+             py::return_value_policy::reference_internal)
         .def("filter_mode", &Tex::filter_mode)
         .def("wrap_mode", &Tex::wrap_mode)
         .def("eval_cuda",
@@ -42,7 +44,7 @@ void bind_texture(py::module &m, const char *name) {
                    const dr::mask_t<Type> active) {
                     size_t channels = texture.shape()[Dimension];
                     std::vector<Type> result(channels);
-                    texture.eval_drjit(pos, result.data(), active);
+                    texture.eval_nonaccel(pos, result.data(), active);
 
                     return result;
                 }, "pos"_a, "active"_a = true)
@@ -85,7 +87,7 @@ void bind_texture(py::module &m, const char *name) {
                         result[i] = std::move(result_i);
                         result_ptrs[i] = result[i].data();
                     }
-                    texture.eval_fetch_drjit(pos, result_ptrs, active);
+                    texture.eval_fetch_nonaccel(pos, result_ptrs, active);
 
                     return result;
                 }, "pos"_a, "active"_a = true)

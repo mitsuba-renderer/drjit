@@ -245,6 +245,9 @@ template <typename Value_> struct Quaternion;
 /// Generic tensor type
 template <typename Array_> struct Tensor;
 
+/// Generic texture type
+template <typename Value_, size_t Dimension_> class Texture;
+
 /// Helper class for custom data structures
 template <typename T>
 struct struct_support;

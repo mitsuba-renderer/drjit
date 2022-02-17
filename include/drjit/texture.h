@@ -65,7 +65,7 @@ public:
      *
      * When \c migrate is set to \c true on CUDA mode, the texture information
      * is *fully* migrated to GPU texture memory to avoid redundant storage. In
-     * this case, the fallback evaluation routine \ref eval_drjit() is not
+     * this case, the fallback evaluation routine \ref eval_nonaccel() is not
      * usable anymore (it will return zero) and only \ref eval() or \ref
      * eval_cuda() should be used. Note that the texture is still
      * differentiable even when migrated. The \ref value() and \ref tensor()
@@ -188,20 +188,40 @@ public:
         m_value.array() = value;
     }
 
-    /// Override the texture contents with the provided tensor
+    /*
+     * \brief Override the texture contents with the provided tensor
+     *
+     * This method updates the values of all texels. Changing the texture
+     * resolution or its number of channels is also supported. However, on CUDA,
+     * such operations have a significantly larger overhead (the GPU pipeline
+     * needs to be synchronized for new texture objects to be created).
+     */
     void set_tensor(const TensorXf &tensor) {
         if (tensor.ndim() != Dimension + 1)
             drjit_raise("Texture::set_tensor(): tensor dimension must equal "
                         "texture dimension plus one (channels).");
+
+        bool shape_changed = false;
         for (size_t i = 0; i < Dimension + 1; ++i) {
-            if (tensor.shape(i) != m_value.shape(i))
-                drjit_raise("Texture::set_tensor(): tensor shape mismatch!");
+            if (tensor.shape(i) != m_value.shape(i)) {
+                shape_changed = true;
+                break;
+            }
+        }
+
+        if (shape_changed) {
+            jit_cuda_tex_destroy(m_handle);
+            init(tensor.shape().data(), tensor.shape(Dimension), m_migrate,
+                 m_filter_mode, m_wrap_mode);
         }
         set_value(tensor.array());
     }
 
     const Storage &value() const { return tensor().array(); }
 
+    /**
+     * \brief Return the texture data as a tensor object
+     */
     const TensorXf &tensor() const {
         if constexpr (IsCUDA && HasCudaTexture) {
             if (m_migrated) {
@@ -219,6 +239,18 @@ public:
         }
 
         return m_value;
+    }
+
+    /**
+     * \brief Return the texture data as a tensor object
+     *
+     * Although the returned object is not const, changes to it are only fully
+     * propagated to the Texture instance when a subsequent call to
+     * \ref set_tensor() is made.
+     */
+    TensorXf &tensor() {
+        return const_cast<TensorXf &>(
+            const_cast<const Texture<Value, Dimension> *>(this)->tensor());
     }
 
     /**
@@ -256,10 +288,12 @@ public:
      * This is an implementation detail, please use \ref eval() that may
      * dispatch to this function depending on its inputs.
      */
-    void eval_drjit(const Array<Value, Dimension> &pos, Value *out,
+    void eval_nonaccel(const Array<Value, Dimension> &pos, Value *out,
                     Mask active = true) const {
-        const uint32_t channels = (uint32_t) m_value.shape(Dimension);
+        if constexpr (!is_array_v<Mask>)
+            active = true;
 
+        const uint32_t channels = (uint32_t) m_value.shape(Dimension);
         if (DRJIT_UNLIKELY(m_filter_mode == FilterMode::Nearest)) {
             const PosF pos_f = pos * PosF(m_shape_opaque);
             const PosI pos_i = floor2int<PosI>(pos_f);
@@ -296,7 +330,7 @@ public:
                                 weight_, out[ch]);                                     \
                 }
 
-            const PosF w1 = pos_f - floor2int<PosI>(pos_f),
+            const PosF w1 = pos_f - pos_i,
                        w0 = 1.f - w1;
 
             if constexpr (Dimension == 1) {
@@ -325,10 +359,10 @@ public:
     /**
      * \brief Evaluate the linear interpolant represented by this texture
      *
-     * This function dispatches to \ref eval_drjit() or \ref eval_cuda()
+     * This function dispatches to \ref eval_nonaccel() or \ref eval_cuda()
      * depending on whether or not CUDA is available. If invoked with CUDA
      * arrays that track derivative information, the function records the AD
-     * graph of \ref eval_drjit() and combines it with the primal result of
+     * graph of \ref eval_nonaccel() and combines it with the primal result of
      * \ref eval_cuda().
      */
     void eval(const Array<Value, Dimension> &pos, Value *out,
@@ -340,15 +374,15 @@ public:
                 if (grad_enabled(m_value, pos)) {
                     const size_t channels = m_value.shape(Dimension);
 
-                    ArrayX out_drjit = empty<ArrayX>(channels);
-                    eval_drjit(pos, out_drjit.data(), active);
+                    ArrayX out_nonaccel = empty<ArrayX>(channels);
+                    eval_nonaccel(pos, out_nonaccel.data(), active);
 
                     for (size_t ch = 0; ch < channels; ++ch)
-                        out[ch] = replace_grad(out[ch], out_drjit[ch]);
+                        out[ch] = replace_grad(out[ch], out_nonaccel[ch]);
                 }
             }
         } else {
-            eval_drjit(pos, out, active);
+            eval_nonaccel(pos, out, active);
         }
     }
 
@@ -429,12 +463,15 @@ public:
      * This is an implementation detail, please use \ref eval_fetch() that may
      * dispatch to this function depending on its inputs.
      */
-    void eval_fetch_drjit(const Array<Value, Dimension> &pos,
+    void eval_fetch_nonaccel(const Array<Value, Dimension> &pos,
                           Array<Value *, 1 << Dimension> &out,
                           Mask active = true) const {
         using InterpOffset = Array<Int32, 1 << Dimension>;
         using InterpPosI = Array<InterpOffset, Dimension>;
         using InterpIdx = uint32_array_t<InterpOffset>;
+
+        if constexpr (!is_array_v<Mask>)
+            active = true;
 
         const PosF pos_f = fmadd(pos, PosF(m_shape_opaque), -.5f);
         const PosI pos_i = floor2int<PosI>(pos_f);
@@ -456,11 +493,11 @@ public:
      * \brief Fetch the texels that would be referenced in a texture lookup with
      * linear interpolation without actually performing this interpolation.
      *
-     * This function dispatches to \ref eval_fetch_drjit() or \ref
+     * This function dispatches to \ref eval_fetch_nonaccel() or \ref
      * eval_fecth_cuda() depending on whether or not CUDA is available. If
      * invoked with CUDA arrays that track derivative information, the function
-     * records the AD graph of \ref eval_fetch_drjit() and combines it with the
-     * primal result of \ref eval_fetch_cuda().
+     * records the AD graph of \ref eval_fetch_nonacel() and combines it with
+     * the primal result of \ref eval_fetch_cuda().
      */
     void eval_fetch(const Array<Value, Dimension> &pos,
                     Array<Value *, 1 << Dimension> &out,
@@ -473,21 +510,22 @@ public:
                     const size_t channels = m_value.shape(Dimension);
                     constexpr size_t out_size = 1 << Dimension;
 
-                    Array<Value *, out_size> out_drjit;
-                    ArrayX out_drjit_values =
+                    Array<Value *, out_size> out_nonaccel;
+                    ArrayX out_nonaccel_values =
                         empty<ArrayX>(out_size * channels);
                     for (size_t i = 0; i < out_size; ++i)
-                        out_drjit[i] = out_drjit_values.data() + i * channels;
-                    eval_fetch_drjit(pos, out_drjit, active);
+                        out_nonaccel[i] =
+                            out_nonaccel_values.data() + i * channels;
+                    eval_fetch_nonaccel(pos, out_nonaccel, active);
 
                     for (size_t i = 0; i < out_size; ++i)
                         for (size_t ch = 0; ch < channels; ++ch)
                             out[i][ch] =
-                                replace_grad(out[i][ch], out_drjit[i][ch]);
+                                replace_grad(out[i][ch], out_nonaccel[i][ch]);
                 }
             }
         } else {
-            eval_fetch_drjit(pos, out, active);
+            eval_fetch_nonaccel(pos, out, active);
         }
     }
 
@@ -505,6 +543,9 @@ public:
         using InterpOffset = Array<Int32, ipow(4, Dimension)>;
         using InterpPosI = Array<InterpOffset, Dimension>;
         using InterpIdx = uint32_array_t<InterpOffset>;
+
+        if constexpr (!is_array_v<Mask>)
+            active = true;
 
         PosF pos_(pos);
         PosF pos_f = fmadd(pos_, PosF(m_shape_opaque), -.5f);
@@ -590,12 +631,15 @@ public:
      * direct evaluation of the B-Spline basis functions in that case.
      */
     void eval_cubic(const Array<Value, Dimension> &pos, Value *out,
-                    Mask active = true, bool force_drjit = false) const {
+                    Mask active = true, bool force_nonaccel = false) const {
         using Array3 = Array<Value, 3>;
 
-        if (m_migrate && force_drjit)
+        if constexpr (!is_array_v<Mask>)
+            active = true;
+
+        if (m_migrate && force_nonaccel)
             jit_log(::LogLevel::Warn,
-                    "\"force_drjit\" is used while the data has been fully "
+                    "\"force_nonaccel\" is used while the data has been fully "
                     "migrated to CUDA texture memory");
 
         PosF res_f = PosF(m_shape_opaque);
@@ -634,13 +678,13 @@ public:
                                const Mask &active) -> ArrayX {
             ArrayX out = empty<ArrayX>(channels);
             if constexpr (IsCUDA && HasCudaTexture) {
-                if (!force_drjit) {
+                if (!force_nonaccel) {
                     eval_cuda(pos, out.data(), active);
                     return out;
                 }
             }
-            DRJIT_MARK_USED(force_drjit);
-            eval_drjit(pos, out.data(), active);
+            DRJIT_MARK_USED(force_nonaccel);
+            eval_nonaccel(pos, out.data(), active);
             return out;
         };
 
@@ -724,6 +768,9 @@ public:
         using InterpOffset = Array<Int32, ipow(4, Dimension)>;
         using InterpPosI = Array<InterpOffset, Dimension>;
         using InterpIdx = uint32_array_t<InterpOffset>;
+
+        if constexpr (!is_array_v<Mask>)
+            active = true;
 
         PosF res_f = PosF(m_shape_opaque);
         PosF pos_f = fmadd(pos, res_f, -.5f);
@@ -839,6 +886,9 @@ public:
         using InterpOffset = Array<Int32, ipow(4, Dimension)>;
         using InterpPosI = Array<InterpOffset, Dimension>;
         using InterpIdx = uint32_array_t<InterpOffset>;
+
+        if constexpr (!is_array_v<Mask>)
+            active = true;
 
         PosF res_f = PosF(m_shape_opaque);
         PosF pos_f = fmadd(pos, res_f, -.5f);
@@ -992,6 +1042,42 @@ public:
             }
     }
 
+    /**
+     * \brief Applies the configured texture wrapping mode to an integer
+     * position
+     */
+    template <typename T> T wrap(const T &pos) const {
+        using Scalar = scalar_t<T>;
+        static_assert(
+            array_size_v<T> == Dimension &&
+            std::is_integral_v<Scalar> &&
+            std::is_signed_v<Scalar>
+        );
+
+        Array<Int32, Dimension> shape = m_shape_opaque;
+        if (m_wrap_mode == WrapMode::Clamp) {
+            return clamp(pos, 0, shape - 1);
+        } else {
+            T value_shift_neg = select(pos < 0, pos + 1, pos);
+
+            T div;
+            for (size_t i = 0; i < Dimension; ++i)
+                div[i] = m_inv_resolution[i](value_shift_neg[i]);
+
+            T mod = pos - div * shape;
+            mod[mod < 0] += T(shape);
+
+            if (m_wrap_mode == WrapMode::Mirror)
+                // Starting at 0, flip the texture every other repetition
+                // (flip when: even number of repetitions in negative direction,
+                // or odd number of repetions in positive direction)
+                mod =
+                    select(eq(div & 1, 0) ^ (pos < 0), mod, shape - 1 - mod);
+
+            return mod;
+        }
+    }
+
 protected:
     void init(const size_t *shape, size_t channels, bool migrate,
               FilterMode filter_mode, WrapMode wrap_mode) {
@@ -1071,39 +1157,6 @@ private:
         return pos_i;
     }
 
-    /// Apply the configured texture wrapping mode to an integer position
-    template <typename T> T wrap(const T &pos) const {
-        using Scalar = scalar_t<T>;
-        static_assert(
-            array_size_v<T> == Dimension &&
-            std::is_integral_v<Scalar> &&
-            std::is_signed_v<Scalar>
-        );
-
-        const Array<Int32, Dimension> shape = m_shape_opaque;
-        if (m_wrap_mode == WrapMode::Clamp) {
-            return clamp(pos, 0, shape - 1);
-        } else {
-            const T value_shift_neg = select(pos < 0, pos + 1, pos);
-
-            T div;
-            for (size_t i = 0; i < Dimension; ++i)
-                div[i] = m_inv_resolution[i](value_shift_neg[i]);
-
-            T mod = pos - div * shape;
-            mod[mod < 0] += T(shape);
-
-            if (m_wrap_mode == WrapMode::Mirror)
-                // Starting at 0, flip the texture every other repetition
-                // (flip when: even number of repetitions in negative direction,
-                // or odd number of repetions in positive direction)
-                mod =
-                    select(eq(div & 1, 0) ^ (pos < 0), mod, shape - 1 - mod);
-
-            return mod;
-        }
-    }
-
     /// Helper function to compute the array index for a given N-D position
     template <typename T>
     uint32_array_t<value_t<T>> index(const T &pos) const {
@@ -1127,7 +1180,7 @@ private:
                 m_shape_opaque.x(), Index(pos.x())));
         }
 
-        const uint32_t channels = (uint32_t) m_value.shape(Dimension);
+        uint32_t channels = (uint32_t) m_value.shape(Dimension);
 
         return index * channels;
     }

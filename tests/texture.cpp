@@ -36,7 +36,7 @@ void test_interp_1d_wrap(WrapMode wrap_mode) {
 
         Array1f output = empty<Array1f>(N);
 
-        tex.eval_drjit(pos, output.data());
+        tex.eval_nonaccel(pos, output.data());
         assert(dr::allclose(output.x(), ref));
         tex.eval_cuda(pos, output.data());
         assert(dr::allclose(output.x(), ref, 5e-3f, 5e-3f));
@@ -44,13 +44,13 @@ void test_interp_1d_wrap(WrapMode wrap_mode) {
         switch (wrap_mode) {
             case WrapMode::Repeat: {
                 pos.x() = dr::linspace<Float>(-0.75f, -0.25f, N);
-                tex.eval_drjit(pos, output.data());
+                tex.eval_nonaccel(pos, output.data());
                 assert(dr::allclose(output.x(), ref));
                 tex.eval_cuda(pos, output.data());
                 assert(dr::allclose(output.x(), ref, 5e-3f, 5e-3f));
 
                 pos.x() = dr::linspace<Float>(1.25f, 1.75f, N);
-                tex.eval_drjit(pos, output.data());
+                tex.eval_nonaccel(pos, output.data());
                 assert(dr::allclose(output.x(), ref));
                 tex.eval_cuda(pos, output.data());
                 assert(dr::allclose(output.x(), ref, 5e-3f, 5e-3f));
@@ -59,14 +59,14 @@ void test_interp_1d_wrap(WrapMode wrap_mode) {
             case WrapMode::Clamp: {
                 ref = dr::opaque<Float>(0.f, N);
                 pos.x() = dr::linspace<Float>(-0.25f, 0.25f, N);
-                tex.eval_drjit(pos, output.data());
+                tex.eval_nonaccel(pos, output.data());
                 assert(dr::allclose(output.x(), ref));
                 tex.eval_cuda(pos, output.data());
                 assert(dr::allclose(output.x(), ref, 5e-3f, 5e-3f));
 
                 ref = dr::opaque<Float>(1.f, N);
                 pos.x() = dr::linspace<Float>(0.75f, 1.25f, N);
-                tex.eval_drjit(pos, output.data());
+                tex.eval_nonaccel(pos, output.data());
                 assert(dr::allclose(output.x(), ref));
                 tex.eval_cuda(pos, output.data());
                 assert(dr::allclose(output.x(), ref, 5e-3f, 5e-3f));
@@ -74,13 +74,13 @@ void test_interp_1d_wrap(WrapMode wrap_mode) {
             }
             case WrapMode::Mirror: {
                 pos.x() = dr::linspace<Float>(-0.25f, -0.75f, N);
-                tex.eval_drjit(pos, output.data());
+                tex.eval_nonaccel(pos, output.data());
                 assert(dr::allclose(output.x(), ref));
                 tex.eval_cuda(pos, output.data());
                 assert(dr::allclose(output.x(), ref, 5e-3f, 5e-3f));
 
                 pos.x() = dr::linspace<Float>(1.75f, 1.25f, N);
-                tex.eval_drjit(pos, output.data());
+                tex.eval_nonaccel(pos, output.data());
                 assert(dr::allclose(output.x(), ref));
                 tex.eval_cuda(pos, output.data());
                 assert(dr::allclose(output.x(), ref, 5e-3f, 5e-3f));
@@ -118,7 +118,7 @@ DRJIT_TEST(test02_interp_1d) {
                 assert(allclose(tex.value(), values));
                 Array1f pos(rng_2.next_float32());
                 FloatX result_drjit = empty<FloatX>(ch);
-                tex.eval_drjit(pos, result_drjit.data());
+                tex.eval_nonaccel(pos, result_drjit.data());
                 dr::eval(result_drjit);
                 FloatX result_cuda = empty<FloatX>(ch);
                 tex.eval_cuda(pos, result_cuda.data());
@@ -146,7 +146,7 @@ DRJIT_TEST(test03_interp_2d) {
                 tex.set_value(rng_1.next_float32());
                 Array2f pos(rng_2.next_float32(), rng_2.next_float32());
                 FloatX result_drjit = empty<FloatX>(ch);
-                tex.eval_drjit(pos, result_drjit.data());
+                tex.eval_nonaccel(pos, result_drjit.data());
                 dr::eval(result_drjit);
                 FloatX result_cuda = empty<FloatX>(ch);
                 tex.eval_cuda(pos, result_cuda.data());
@@ -175,7 +175,7 @@ DRJIT_TEST(test04_interp_3d) {
                 Array3f pos(rng_2.next_float32(), rng_2.next_float32(),
                             rng_2.next_float32());
                 FloatX result_drjit = empty<FloatX>(ch);
-                tex.eval_drjit(pos, result_drjit.data());
+                tex.eval_nonaccel(pos, result_drjit.data());
                 dr::eval(result_drjit);
                 FloatX result_cuda = empty<FloatX>(ch);
                 tex.eval_cuda(pos, result_cuda.data());
@@ -199,7 +199,7 @@ void test_grad(bool migrate) {
     DFloat expected(0.25f * 3 + 0.75f * 5);
     // check migration
     ArrayD1f out2 = empty<ArrayD1f>();
-    tex.eval_drjit(pos, out2.data());
+    tex.eval_nonaccel(pos, out2.data());
     if (migrate) {
         assert(dr::allclose(out2.x(), 0));
     } else
@@ -221,14 +221,14 @@ DRJIT_TEST(test05_grad) {
 
 DRJIT_TEST(test06_nearest) {
     size_t shape[1] = { 3 };
-    dr::Texture<Float, 1> tex(shape, 1, false, dr::FilterMode::Nearest);
+    dr::Texture<Float, 1> tex(shape, 1, false, FilterMode::Nearest);
     tex.set_value(Float(0.f, 0.5f, 1.f));
 
     Float pos = dr::linspace<Float>(0, 1, 80);
     Array1f out_cuda = empty<Array1f>();
     tex.eval_cuda(pos, out_cuda.data());
     Array1f out_drjit = empty<Array1f>();
-    tex.eval_drjit(pos, out_drjit.data());
+    tex.eval_nonaccel(pos, out_drjit.data());
     assert(dr::allclose(out_cuda.x(), out_drjit.x()));
 }
 
@@ -601,7 +601,7 @@ DRJIT_TEST(test18_fetch_1d) {
         out_cuda[0] = out0_cuda.data();
         out_cuda[1] = out1_cuda.data();
 
-        tex.eval_fetch_drjit(pos, out_drjit);
+        tex.eval_fetch_nonaccel(pos, out_drjit);
         tex.eval_fetch_cuda(pos, out_cuda);
         for (size_t k = 0; k < ch; ++k) {
             assert(allclose(tex_data[k], out0_drjit[k]));
@@ -641,7 +641,7 @@ DRJIT_TEST(test19_fetch_2d) {
         out_cuda[2] = out10_cuda.data();
         out_cuda[3] = out11_cuda.data();
 
-        tex.eval_fetch_drjit(pos, out_drjit);
+        tex.eval_fetch_nonaccel(pos, out_drjit);
         tex.eval_fetch_cuda(pos, out_cuda);
         for (size_t k = 0; k < ch; ++k) {
             assert(allclose(tex_data[k], out00_drjit[k]));
@@ -703,7 +703,7 @@ DRJIT_TEST(test20_fetch_3d) {
         out_cuda[6] = out110_cuda.data();
         out_cuda[7] = out111_cuda.data();
 
-        tex.eval_fetch_drjit(pos, out_drjit);
+        tex.eval_fetch_nonaccel(pos, out_drjit);
         tex.eval_fetch_cuda(pos, out_cuda);
         for (size_t k = 0; k < ch; ++k) {
             assert(allclose(tex_data[k], out000_drjit[k]));
@@ -739,7 +739,7 @@ void test_fetch_migrate(bool migrate) {
     out[0] = out0.data();
     out[1] = out1.data();
 
-    tex.eval_fetch_drjit(pos, out);
+    tex.eval_fetch_nonaccel(pos, out);
     if (migrate) {
         assert(allclose(out[0][0], 0));
         assert(allclose(out[1][0], 0));
@@ -772,7 +772,7 @@ DRJIT_TEST(test22_fetch_grad) {
     out[1] = out01.data();
     out[2] = out10.data();
     out[3] = out11.data();
-    tex.eval_fetch_drjit(pos, out);
+    tex.eval_fetch_nonaccel(pos, out);
     assert(allclose(0.f, out[0][0]));
     assert(allclose(0.f, out[1][0]));
     assert(allclose(0.f, out[2][0]));
@@ -797,4 +797,53 @@ DRJIT_TEST(test22_fetch_grad) {
         assert(allclose(expected, grad));
         dr::set_grad(tex_data, Float(0, 0, 0, 0));
     }
+}
+
+DRJIT_TEST(test23_set_tensor) {
+    using TensorXf = Tensor<Float>;
+    size_t shape[2] = { 2, 2 };
+    Texture<Float, 2> tex(shape, 1, false);
+
+    Float tex_data(1.f, 2.f, 3.f, 4.f);
+    tex.set_value(tex_data);
+
+    size_t new_shape[3] = { 3, 2, 2 };
+    Float new_tex_data(6.5f, 6.f, 5.5f, 5.f, 4.5f, 4.f, 3.5f, 3.f, 2.5f, 2.f,
+                       1.5f, 1.f);
+    TensorXf new_tensor(new_tex_data, 3, new_shape);
+    tex.set_tensor(new_tensor);
+
+    Array2f pos(0.f, 0.f);
+    Array2f result_drjit;
+    tex.eval_nonaccel(pos, result_drjit.data());
+    dr::eval(result_drjit);
+    Array2f result_cuda;
+    tex.eval_cuda(pos, result_cuda.data());
+    dr::eval(result_cuda);
+    assert(dr::allclose(result_drjit, result_cuda, 5e-3f, 5e-3f));
+    assert(dr::allclose(result_drjit, Array2f(6.5, 6.f)));
+
+    pos = Array2f(1.f, 1.f);
+    tex.eval_nonaccel(pos, result_drjit.data());
+    dr::eval(result_drjit);
+    tex.eval_cuda(pos, result_cuda.data());
+    dr::eval(result_cuda);
+    assert(dr::allclose(result_drjit, result_cuda, 5e-3f, 5e-3f));
+    assert(dr::allclose(result_drjit, Array2f(1.5, 1.f)));
+
+    pos = Array2f(0.f, 1.f);
+    tex.eval_nonaccel(pos, result_drjit.data());
+    dr::eval(result_drjit);
+    tex.eval_cuda(pos, result_cuda.data());
+    dr::eval(result_cuda);
+    assert(dr::allclose(result_drjit, result_cuda, 5e-3f, 5e-3f));
+    assert(dr::allclose(result_drjit, Array2f(3.5, 3.f)));
+
+    pos = Array2f(1.f, 0.f);
+    tex.eval_nonaccel(pos, result_drjit.data());
+    dr::eval(result_drjit);
+    tex.eval_cuda(pos, result_cuda.data());
+    dr::eval(result_cuda);
+    assert(dr::allclose(result_drjit, result_cuda, 5e-3f, 5e-3f));
+    assert(dr::allclose(result_drjit, Array2f(4.5, 4.f)));
 }
