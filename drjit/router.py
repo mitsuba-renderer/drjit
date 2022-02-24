@@ -2305,7 +2305,7 @@ def replace_grad(a, b):
         elif lb == 1 and depth == 1:
             b = b + zero(tb, la)
         else:
-            raise Exeption("replace_grad(): input arguments have "
+            raise Exception("replace_grad(): input arguments have "
                            "incompatible sizes (%i vs %i)!"
                            % (la, lb))
 
