@@ -210,7 +210,9 @@ public:
         }
 
         if (shape_changed) {
-            jit_cuda_tex_destroy(m_handle);
+            if constexpr (IsCUDA && HasCudaTexture)
+                jit_cuda_tex_destroy(m_handle);
+
             init(tensor.shape().data(), tensor.shape(Dimension), m_migrate,
                  m_filter_mode, m_wrap_mode);
         }
@@ -637,7 +639,7 @@ public:
         if constexpr (!is_array_v<Mask>)
             active = true;
 
-        if (m_migrate && force_nonaccel)
+        if (IsCUDA && HasCudaTexture && m_migrate && force_nonaccel)
             jit_log(::LogLevel::Warn,
                     "\"force_nonaccel\" is used while the data has been fully "
                     "migrated to CUDA texture memory");
