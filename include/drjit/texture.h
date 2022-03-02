@@ -449,7 +449,7 @@ public:
             }
         } else {
             (void) pos; (void) active;
-            for (size_t i = 0; i < ipow(2, Dimension); ++i)
+            for (size_t i = 0; i < ipow(2ul, Dimension); ++i)
                 for (size_t ch = 0; ch < channels; ++ch)
                     out[i][ch] = zero<Value>();
         }
