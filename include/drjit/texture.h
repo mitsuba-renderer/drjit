@@ -87,7 +87,6 @@ public:
             FilterMode filter_mode = FilterMode::Linear,
             WrapMode wrap_mode = WrapMode::Clamp) {
         init(shape, channels, migrate, filter_mode, wrap_mode);
-        m_value.array() = Storage(0);
     }
 
     /**
@@ -112,7 +111,7 @@ public:
         set_tensor(tensor);
     }
 
-    Texture(Texture &&other) {
+    Texture(Texture &&other) noexcept {
         m_handle = other.m_handle;
         other.m_handle = nullptr;
         m_size = other.m_size;
@@ -126,7 +125,7 @@ public:
         m_migrated = other.m_migrated;
     }
 
-    Texture &operator=(Texture &&other) {
+    Texture &operator=(Texture &&other) noexcept {
         if constexpr (IsCUDA)
             jit_cuda_tex_destroy(m_handle);
         m_handle = other.m_handle;
@@ -201,21 +200,32 @@ public:
             drjit_raise("Texture::set_tensor(): tensor dimension must equal "
                         "texture dimension plus one (channels).");
 
-        bool shape_changed = false;
-        for (size_t i = 0; i < Dimension + 1; ++i) {
-            if (tensor.shape(i) != m_value.shape(i)) {
-                shape_changed = true;
-                break;
+        if constexpr (HasCudaTexture) {
+            bool is_inplace_update = (&tensor == &m_value);
+            size_t current_shape[Dimension + 1];
+
+            if (is_inplace_update) {
+                jit_cuda_tex_get_shape(Dimension, m_handle, current_shape);
+            } else {
+                for (size_t i = 0; i < Dimension + 1; ++i)
+                    current_shape[i] = m_value.shape(i);
+            }
+
+            bool shape_changed = false;
+            for (size_t i = 0; i < Dimension + 1; ++i) {
+                if (current_shape[i] != tensor.shape(i)) {
+                    shape_changed = true;
+                    break;
+                }
+            }
+
+            if (shape_changed) {
+                jit_cuda_tex_destroy(m_handle);
+                init(tensor.shape().data(), tensor.shape(Dimension), m_migrate,
+                     m_filter_mode, m_wrap_mode, !is_inplace_update);
             }
         }
 
-        if (shape_changed) {
-            if constexpr (IsCUDA && HasCudaTexture)
-                jit_cuda_tex_destroy(m_handle);
-
-            init(tensor.shape().data(), tensor.shape(Dimension), m_migrate,
-                 m_filter_mode, m_wrap_mode);
-        }
         set_value(tensor.array());
     }
 
@@ -1082,7 +1092,8 @@ public:
 
 protected:
     void init(const size_t *shape, size_t channels, bool migrate,
-              FilterMode filter_mode, WrapMode wrap_mode) {
+              FilterMode filter_mode, WrapMode wrap_mode,
+              bool init_tensor = true) {
         if (channels == 0)
             drjit_raise("Texture::Texture(): must have at least 1 channel!");
 
@@ -1095,10 +1106,11 @@ protected:
             m_inv_resolution[i] = divisor<int32_t>((int32_t) shape[i]);
             m_size *= shape[i];
         }
-
         tensor_shape[Dimension] = channels;
-        m_value = TensorXf(zero<Storage>(m_size), Dimension + 1, tensor_shape);
-        m_value.array() = Storage(0);
+
+        if (init_tensor)
+            m_value = TensorXf(zero<Storage>(m_size), Dimension + 1, tensor_shape);
+
         m_migrate = migrate;
         m_filter_mode = filter_mode;
         m_wrap_mode = wrap_mode;
