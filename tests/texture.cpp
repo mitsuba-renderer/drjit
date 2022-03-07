@@ -847,3 +847,55 @@ DRJIT_TEST(test23_set_tensor) {
     assert(dr::allclose(result_drjit, result_cuda, 5e-3f, 5e-3f));
     assert(dr::allclose(result_drjit, Array2f(4.5, 4.f)));
 }
+
+DRJIT_TEST(test24_set_tensor_inplace) {
+    using TensorXf = Tensor<Float>;
+    size_t shape[2] = { 2, 2 };
+    Texture<Float, 2> tex(shape, 1, false);
+
+    Float tex_data(1.f, 2.f, 3.f, 4.f);
+    tex.set_value(tex_data);
+    TensorXf &tex_tensor = tex.tensor();
+
+    size_t new_shape1[3] = { 3, 2, 2 };
+    Float new_tex_data1(6.5f, 6.f, 5.5f, 5.f, 4.5f, 4.f, 3.5f, 3.f, 2.5f, 2.f,
+                       1.5f, 1.f);
+    TensorXf new_tensor(new_tex_data1, 3, new_shape1);
+
+    tex_tensor = std::move(new_tensor);
+    tex.set_tensor(tex_tensor);
+
+    Array2f pos(0.f, 0.f);
+    Array2f result_drjit;
+    tex.eval_nonaccel(pos, result_drjit.data());
+    dr::eval(result_drjit);
+    Array2f result_cuda;
+    tex.eval_cuda(pos, result_cuda.data());
+    dr::eval(result_cuda);
+    assert(dr::allclose(result_drjit, result_cuda, 5e-3f, 5e-3f));
+    assert(dr::allclose(result_drjit, Array2f(6.5, 6.f)));
+
+    pos = Array2f(1.f, 1.f);
+    tex.eval_nonaccel(pos, result_drjit.data());
+    dr::eval(result_drjit);
+    tex.eval_cuda(pos, result_cuda.data());
+    dr::eval(result_cuda);
+    assert(dr::allclose(result_drjit, result_cuda, 5e-3f, 5e-3f));
+    assert(dr::allclose(result_drjit, Array2f(1.5, 1.f)));
+
+    pos = Array2f(0.f, 1.f);
+    tex.eval_nonaccel(pos, result_drjit.data());
+    dr::eval(result_drjit);
+    tex.eval_cuda(pos, result_cuda.data());
+    dr::eval(result_cuda);
+    assert(dr::allclose(result_drjit, result_cuda, 5e-3f, 5e-3f));
+    assert(dr::allclose(result_drjit, Array2f(3.5, 3.f)));
+
+    pos = Array2f(1.f, 0.f);
+    tex.eval_nonaccel(pos, result_drjit.data());
+    dr::eval(result_drjit);
+    tex.eval_cuda(pos, result_cuda.data());
+    dr::eval(result_cuda);
+    assert(dr::allclose(result_drjit, result_cuda, 5e-3f, 5e-3f));
+    assert(dr::allclose(result_drjit, Array2f(4.5, 4.f)));
+}
