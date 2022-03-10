@@ -271,7 +271,8 @@ def quat_to_euler(q):
     module = _modules.get(q.__module__)
     Array3f = getattr(module, name)
 
-    sinp = 2 * _ek.fmsub(q.w, q.y, q.z * q.x)
+    # Clamp the result to stay in the valid range for asin
+    sinp = _ek.clamp(2 * _ek.fmsub(q.w, q.y, q.z * q.x), -1.0, 1.0)
     gimbal_lock = _ek.abs(sinp) > (1.0 - 5e-8)
 
     # roll (x-axis rotation)

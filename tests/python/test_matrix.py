@@ -276,6 +276,12 @@ def test15_quat_to_euler(package):
     # Gimbal lock at -pi/2
     q = Quaternion4f(0, -1.0 / np.sqrt(2), 0, 1.0 / np.sqrt(2))
     assert(dr.allclose(dr.quat_to_euler(q), Array3f(0, -np.pi / 2, 0)))
+    # Gimbal lock at +pi/2, such that computed sinp > 1
+    q = Quaternion4f(0, 1.0 / np.sqrt(2) + 1e-6, 0, 1.0 / np.sqrt(2))
+    assert(dr.allclose(dr.quat_to_euler(q), Array3f(0, np.pi / 2, 0)))
+    # Gimbal lock at -pi/2, such that computed sinp < -1
+    q = Quaternion4f(0, -1.0 / np.sqrt(2) - 1e-6, 0, 1.0 / np.sqrt(2))
+    assert(dr.allclose(dr.quat_to_euler(q), Array3f(0, -np.pi / 2, 0)))
     # Quaternion without gimbal lock
     q = Quaternion4f(0.15849363803863525, 0.5915063619613647, 0.15849363803863525, 0.7745190262794495)
     e = Array3f(np.pi / 3, np.pi / 3, np.pi / 3)
