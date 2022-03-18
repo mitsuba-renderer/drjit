@@ -10,8 +10,8 @@
 using Guide = dr::LLVMArray<float>;
 using Mask = dr::LLVMArray<bool>;
 
-void export_llvm(py::module_ &m) {
-    py::module_ llvm = m.def_submodule("llvm");
+void export_llvm(nb::module_ &m) {
+    nb::module_ llvm = m.def_submodule("llvm");
 
     DRJIT_BIND_ARRAY_BASE(llvm, Guide, false);
     DRJIT_BIND_ARRAY_TYPES(llvm, Guide, false);
@@ -20,11 +20,11 @@ void export_llvm(py::module_ &m) {
 
     using Mask = dr::mask_t<Guide>;
 
-    py::class_<dr::Loop<Mask>>(llvm, "LoopBase");
+    nb::class_<dr::Loop<Mask>>(llvm, "LoopBase");
 
-    py::class_<Loop<Mask>, dr::Loop<Mask>> loop(llvm, "Loop");
+    nb::class_<Loop<Mask>, dr::Loop<Mask>> loop(llvm, "Loop");
 
-    loop.def(py::init<const char *, py::handle>(), "name"_a, "state"_a = py::none())
+    loop.def(nb::init<const char *, nb::handle>(), "name"_a, "state"_a = nb::none())
         .def("put", &Loop<Mask>::put)
         .def("init", &Loop<Mask>::init)
         .def("set_max_iterations", &Loop<Mask>::set_max_iterations)

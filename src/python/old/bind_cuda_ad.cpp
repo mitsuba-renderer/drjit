@@ -8,8 +8,8 @@
 #include <drjit/jit.h>
 
 
-void export_cuda_ad(py::module_ &m) {
-    py::module_ cuda_ad = m.def_submodule("cuda").def_submodule("ad");
+void export_cuda_ad(nb::module_ &m) {
+    nb::module_ cuda_ad = m.def_submodule("cuda").def_submodule("ad");
 
     using Guide = dr::DiffArray<dr::CUDAArray<float>>;
     DRJIT_BIND_ARRAY_BASE(cuda_ad, Guide, false);
@@ -19,11 +19,11 @@ void export_cuda_ad(py::module_ &m) {
 
     using Mask = dr::mask_t<Guide>;
 
-    py::class_<dr::Loop<Mask>>(cuda_ad, "LoopBase");
+    nb::class_<dr::Loop<Mask>>(cuda_ad, "LoopBase");
 
-    py::class_<Loop<Mask>, dr::Loop<Mask>> loop(cuda_ad, "Loop");
+    nb::class_<Loop<Mask>, dr::Loop<Mask>> loop(cuda_ad, "Loop");
 
-    loop.def(py::init<const char *, py::handle>(), "name"_a, "state"_a = py::none())
+    loop.def(nb::init<const char *, nb::handle>(), "name"_a, "state"_a = nb::none())
         .def("put", &Loop<Mask>::put)
         .def("init", &Loop<Mask>::init)
         .def("set_max_iterations", &Loop<Mask>::set_max_iterations)

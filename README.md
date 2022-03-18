@@ -19,8 +19,65 @@
 
 ## Introduction
 
-**Dr.Jit** is a C++17 template library that dramatically simplifies several
-types of program transformations that are often applied to numerical software:
+**Dr.Jit** is a _just-in-time_ (JIT) compiler for ordinary and differentiable
+computation. It was originally created as the numerical foundation of [Mitsuba
+3](https://github.com/mitsuba-renderer/mitsuba3), a differentiable [Monte
+Carlo](https://en.wikipedia.org/wiki/Monte_Carlo_method) renderer. However,
+_Dr.Jit_ is highly general and can also efficiently perform various other types
+of embarrassingly parallel computation.
+
+_Dr.Jit_ principally facilitates three steps
+
+- **Vectorization and tracing**: Each step of a typical computation done using
+  _Dr.Jit_ types updates many (~millions) values at once. _Dr.Jit_ uses
+  _tracing_ to transparently record these steps into a graph representation
+  that is later compiled into an _fused_ computational kernel using
+  [LLVM](https://en.wikipedia.org/wiki/LLVM) for CPUs and
+  [CUDA](https://en.wikipedia.org/wiki/CUDA) for GPUs. The word _fused_ means
+  that this kernel combines many operations, which removes the need to store
+  intermediate results in memory. Further processing of the graph enables
+  powerful optimizations. Alternatively, Dr.Jit can be used without JIT, which
+  turns the project into a header library without extra dependencies.
+  Computation on the CPU uses vector instruction set extensions like
+  [AVX512](https://en.wikipedia.org/wiki/AVX-512) or [ARM
+  Neon](https://developer.arm.com/architectures/instruction-sets/simd-isas/neon).
+
+- **Differentiation**: If desired, _Dr.Jit_ can compute derivatives using
+  _automatic differentiation_ (AD), using either [forward or reverse-mode
+  accumulation](https://en.wikipedia.org/wiki/Automatic_differentiation).
+
+- **Python**: _Dr.Jit_ types are accessible within C++17 and Python. Code can be
+  developed in either language, or even both at once. Combinations of Python
+  and C++ code can be jointly traced and differentiated.
+
+## Difference to existing tools
+
+Tools with a superficially similar feature set are also available in the
+machine learning community, for example in the form [XLA](https://www.tensorflow.org/xla),
+a Just-In-Time compiler underlying [JAX](https://github.com/google/jax) and
+[Tensorflow](https://www.tensorflow.org), or
+[TorchScript](https://pytorch.org/docs/stable/jit.html) used by
+[PyTorch](https://github.com/pytorch/pytorch). How is _Dr.Jit_ different?
+
+## About this project
+
+The _Dr.Jit_ logo was generously created by [Otto
+Jakob](https://ottojakob.com). The "_Dr_" prefix simultaneously abbreviates
+_differentiable rendering_ with the stylized partial derivative _D_, while also
+conveying a medical connotation that is emphasized by the [Rod of
+Asclepius](https://en.wikipedia.org/wiki/Rod_of_Asclepius). Anybody who has
+personally developed differentiable rendering algorithms can attest to the fact
+that they are starting to grow beyond our control in terms of conceptual and
+implementation-level complexity. A doctor is a person, who can offer help in
+such a time of great need. _Dr.Jit_ tries to fill this role to to improve the
+well-being of differentiable rendering researchers.
+
+_Dr.Jit_ is the successor of the
+[Enoki](https://github.com/mitsuba-renderer/enoki) project, and its high-level
+API still somewhat resembles that of Enoki. The underlying implementation
+underwent a full rewrite/redesign with substantially different characteristics,
+hence the decision to fork the project and give it a different name.
+
 
 * **Vectorization**. Converting a scalar program into into one that
   simultaneously processes many inputs to leverage parallelism on modern

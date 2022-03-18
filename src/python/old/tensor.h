@@ -1,17 +1,17 @@
 #include <drjit/tensor.h>
-#include <pybind11/stl.h>
+#include <nanobind/stl.h>
 
-template <typename T> auto bind_tensor(py::module m) {
+template <typename T> auto bind_tensor(nb::module m) {
     using Tensor = dr::Tensor<T>;
 
     auto cls = bind_type<Tensor>(m);
 
-    cls.attr("Index") = py::type::of<typename Tensor::Index>();
-    cls.attr("Array") = py::type::of<typename Tensor::Array>();
+    cls.attr("Index") = nb::type::of<typename Tensor::Index>();
+    cls.attr("Array") = nb::type::of<typename Tensor::Array>();
 
-    cls.def(py::init<>())
-       .def(py::init([](py::object o) -> Tensor {
-            std::string mod = py::cast<std::string>(o.get_type().attr("__module__"));
+    cls.def(nb::init<>())
+       .def(nb::init([](nb::object o) -> Tensor {
+            std::string mod = nb::cast<std::string>(o.get_type().attr("__module__"));
             const char *mod_s = mod.c_str();
             if (strncmp(mod_s, "numpy", 5) == 0 ||
                 strncmp(mod_s, "torch", 5) == 0 ||
@@ -19,16 +19,16 @@ template <typename T> auto bind_tensor(py::module m) {
                 strncmp(mod_s, "jaxlib", 6) == 0 ||
                 strncmp(mod_s, "tensorflow", 10) == 0 ||
                 (strncmp(mod_s, "drjit", 5) != 0
-                 && py::hasattr(o, "__array_interface__"))) {
-                o = tensor_init(py::type::of<Tensor>(), o);
-                return py::cast<Tensor>(o);
+                 && nb::hasattr(o, "__array_interface__"))) {
+                o = tensor_init(nb::type::of<Tensor>(), o);
+                return nb::cast<Tensor>(o);
             } else {
-                // trick to get pybind11 to ignore this overload
-                throw py::reference_cast_error();
+                // trick to get nanobind to ignore this overload
+                throw nb::reference_cast_error();
             }
        }), "array"_a)
-       .def(py::init<T>(), "array"_a)
-       .def(py::init([](const T &array, const std::vector<size_t> &shape) {
+       .def(nb::init<T>(), "array"_a)
+       .def(nb::init([](const T &array, const std::vector<size_t> &shape) {
                return Tensor(array, shape.size(), shape.data());
             }), "array"_a, "shape"_a)
        .def("__len__", &Tensor::size)
@@ -38,7 +38,7 @@ template <typename T> auto bind_tensor(py::module m) {
             PyObject *shape = PyTuple_New(t.ndim());
             for (size_t i = 0; i < t.ndim(); ++i)
                 PyTuple_SET_ITEM(shape, i, PyLong_FromLong((long) t.shape(i)));
-            return py::reinterpret_steal<py::tuple>(shape);
+            return nb::reinterpret_steal<nb::tuple>(shape);
         })
        .def("data_", [](const Tensor &a) {
             return (uintptr_t) a.data();
@@ -123,7 +123,7 @@ template <typename T> auto bind_tensor(py::module m) {
         cls.def("mulhi_", &Tensor::mulhi_);
     }
 
-    cls.attr("select_") = py::cpp_function([](const dr::mask_t<Tensor> &m,
+    cls.attr("select_") = nb::cpp_function([](const dr::mask_t<Tensor> &m,
                                               const Tensor &t,
                                               const Tensor &f) {
         return Tensor::select_(m, t, f);
@@ -149,20 +149,20 @@ template <typename T> auto bind_tensor(py::module m) {
     return cls;
 }
 
-template <typename Tensor> auto bind_tensor_conversions(py::class_<Tensor> &cls) {
+template <typename Tensor> auto bind_tensor_conversions(nb::class_<Tensor> &cls) {
     if constexpr (!dr::is_mask_v<Tensor>) {
-        cls.def(py::init<const dr::int32_array_t<Tensor> &>(), py::arg().noconvert())
-           .def(py::init<const dr::uint32_array_t<Tensor> &>(), py::arg().noconvert())
-           .def(py::init<const dr::int64_array_t<Tensor> &>(), py::arg().noconvert())
-           .def(py::init<const dr::uint64_array_t<Tensor> &>(), py::arg().noconvert())
-           .def(py::init<const dr::float32_array_t<Tensor> &>(), py::arg().noconvert())
-           .def(py::init<const dr::float64_array_t<Tensor> &>(), py::arg().noconvert());
+        cls.def(nb::init<const dr::int32_array_t<Tensor> &>(), nb::arg().noconvert())
+           .def(nb::init<const dr::uint32_array_t<Tensor> &>(), nb::arg().noconvert())
+           .def(nb::init<const dr::int64_array_t<Tensor> &>(), nb::arg().noconvert())
+           .def(nb::init<const dr::uint64_array_t<Tensor> &>(), nb::arg().noconvert())
+           .def(nb::init<const dr::float32_array_t<Tensor> &>(), nb::arg().noconvert())
+           .def(nb::init<const dr::float64_array_t<Tensor> &>(), nb::arg().noconvert());
     } else {
-        cls.def(py::init<const Tensor &>(), py::arg().noconvert());
+        cls.def(nb::init<const Tensor &>(), nb::arg().noconvert());
     }
 
     if constexpr (dr::is_diff_array_v<Tensor>)
-        cls.def(py::init<const dr::detached_t<Tensor> &>(), py::arg().noconvert());
+        cls.def(nb::init<const dr::detached_t<Tensor> &>(), nb::arg().noconvert());
 
     using Scalar = dr::scalar_t<Tensor>;
     if constexpr (sizeof(Scalar) == 4) {

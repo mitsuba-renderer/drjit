@@ -1,10 +1,10 @@
 #include "common.h"
 
 PyObject *implicit_conversion_handler(PyObject *obj, PyTypeObject *type_) {
-    py::handle type((PyObject *) type_);
+    nb::handle type((PyObject *) type_);
 
     const char *tp_name_src = obj->ob_type->tp_name;
-    size_t Size = py::cast<size_t>(type.attr("Size"));
+    size_t Size = nb::cast<size_t>(type.attr("Size"));
 
     bool pass = false;
     if (PyList_CheckExact(obj)) {
@@ -19,9 +19,9 @@ PyObject *implicit_conversion_handler(PyObject *obj, PyTypeObject *type_) {
         pass = true;
     } else if (strncmp(tp_name_src, "drjit.", 6) == 0 ||
                PyObject_HasAttrString(obj, "IsDrJit")) {
-        if (py::cast<size_t>(py::handle(obj).attr("Size")) == Size) {
+        if (nb::cast<size_t>(nb::handle(obj).attr("Size")) == Size) {
             pass = true;
-        } else if (py::handle(obj).get_type().is(type.attr("Value"))) {
+        } else if (nb::handle(obj).get_type().is(type.attr("Value"))) {
             pass = true;
         }
     }
@@ -40,6 +40,6 @@ PyObject *implicit_conversion_handler(PyObject *obj, PyTypeObject *type_) {
 }
 
 void register_implicit_conversions(const std::type_info &type) {
-    auto tinfo = py::detail::get_type_info(type);
+    auto tinfo = nb::detail::get_type_info(type);
     tinfo->implicit_conversions.push_back(implicit_conversion_handler);
 }

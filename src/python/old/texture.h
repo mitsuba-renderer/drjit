@@ -4,11 +4,11 @@
 #include <drjit/texture.h>
 
 template <typename Type, size_t Dimension>
-void bind_texture(py::module &m, const char *name) {
+void bind_texture(nb::module &m, const char *name) {
     using Tex = dr::Texture<Type, Dimension>;
 
-    auto tex = py::class_<Tex>(m, name)
-        .def(py::init([](const std::array<size_t, Dimension> &shape,
+    auto tex = nb::class_<Tex>(m, name)
+        .def(nb::init([](const std::array<size_t, Dimension> &shape,
                          size_t channels, bool migrate,
                          dr::FilterMode filter_mode, dr::WrapMode wrap_mode) {
                  return new Tex(shape.data(), channels, migrate, filter_mode,
@@ -17,17 +17,17 @@ void bind_texture(py::module &m, const char *name) {
              "shape"_a, "channels"_a, "migrate"_a = true,
              "filter_mode"_a = dr::FilterMode::Linear,
              "wrap_mode"_a = dr::WrapMode::Clamp)
-        .def(py::init<const typename Tex::TensorXf &, bool, dr::FilterMode,
+        .def(nb::init<const typename Tex::TensorXf &, bool, dr::FilterMode,
                       dr::WrapMode>(),
              "tensor"_a, "migrate"_a = true,
              "filter_mode"_a = dr::FilterMode::Linear,
              "wrap_mode"_a = dr::WrapMode::Clamp)
         .def("set_value", &Tex::set_value, "value"_a)
         .def("set_tensor", &Tex::set_tensor, "tensor"_a)
-        .def("value", &Tex::value, py::return_value_policy::reference_internal)
+        .def("value", &Tex::value, nb::return_value_policy::reference_internal)
         .def("tensor",
-             py::overload_cast<>(&Tex::tensor, py::const_),
-             py::return_value_policy::reference_internal)
+             nb::overload_cast<>(&Tex::tensor, nb::const_),
+             nb::return_value_policy::reference_internal)
         .def("filter_mode", &Tex::filter_mode)
         .def("wrap_mode", &Tex::wrap_mode)
         .def("eval_cuda",
@@ -142,7 +142,7 @@ void bind_texture(py::module &m, const char *name) {
 }
 
 template <typename Type>
-void bind_texture_all(py::module &m) {
+void bind_texture_all(nb::module &m) {
     bind_texture<Type, 1>(m, "Texture1f");
     bind_texture<Type, 2>(m, "Texture2f");
     bind_texture<Type, 3>(m, "Texture3f");

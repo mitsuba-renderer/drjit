@@ -1,73 +1,5 @@
-#pragma once
-
-#include "common.h"
-#include <drjit/math.h>
-#include <drjit/complex.h>
-#include <drjit/matrix.h>
-#include <drjit/quaternion.h>
-#include <drjit/autodiff.h>
-#include <pybind11/functional.h>
-
-extern py::handle array_base, array_name, array_init, tensor_init, array_configure;
-
 template <typename Array>
-auto bind_type(py::module_ &m, bool scalar_mode = false) {
-    using Scalar = std::conditional_t<Array::IsMask, bool, dr::scalar_t<Array>>;
-    using Value = std::conditional_t<Array::IsMask, dr::mask_t<dr::value_t<Array>>,
-                                     dr::value_t<Array>>;
-    constexpr VarType Type = dr::var_type_v<Scalar>;
-
-    const char *prefix = "Array";
-    if constexpr (dr::is_complex_v<Array>)
-        prefix = "Complex";
-    else if constexpr (dr::is_quaternion_v<Array>)
-        prefix = "Quaternion";
-    else if constexpr (dr::is_matrix_v<Array>)
-        prefix = "Matrix";
-    else if constexpr (dr::is_tensor_v<Array>)
-        prefix = "Tensor";
-
-    py::tuple shape;
-    if constexpr (Array::Depth == 1)
-        shape = py::make_tuple(Array::Size);
-    else if constexpr (Array::Depth == 2)
-        shape = py::make_tuple(Array::Size, Value::Size);
-    else if constexpr (Array::Depth == 3)
-        shape = py::make_tuple(Array::Size, Value::Size, Value::Value::Size);
-    else if constexpr (Array::Depth == 4)
-        shape = py::make_tuple(Array::Size, Value::Size, Value::Value::Size,
-                               Value::Value::Value::Size);
-
-    PyTypeObject *value_obj;
-    if constexpr (std::is_scalar_v<Value>) {
-        if constexpr (std::is_same_v<bool, Value>)
-            value_obj = &PyBool_Type;
-        else if constexpr (std::is_integral_v<Value>)
-            value_obj = &PyLong_Type;
-        else
-            value_obj = &PyFloat_Type;
-    } else {
-        auto &reg_types = py::detail::get_internals().registered_types_cpp;
-        auto it = reg_types.find(std::type_index(typeid(Value)));
-        if (it == reg_types.end())
-            dr::drjit_raise("bind_type(): value type was not bound!");
-        value_obj = it->second->type;
-    }
-
-    py::object type = py::cast(Type),
-               name = array_name(prefix, type, shape, scalar_mode);
-
-    auto cls = py::class_<Array>(
-        m, PyUnicode_AsUTF8AndSize(name.ptr(), nullptr), array_base);
-
-    array_configure(cls, shape, type, py::handle((PyObject *) value_obj));
-    register_implicit_conversions(typeid(Array));
-
-    return cls;
-}
-
-template <typename Array>
-void bind_basic_methods(py::class_<Array> &cls) {
+void bind_basic_methods(nb::class_<Array> &cls) {
     using Value = std::conditional_t<Array::IsMask, dr::mask_t<dr::value_t<Array>>,
                                      dr::value_t<Array>>;
     cls.def("entry_", [](const Array &a, size_t i) -> Value { return a.entry(i); })
@@ -98,20 +30,20 @@ void bind_basic_methods(py::class_<Array> &cls) {
         cls.def(
             "entry_ref_",
             [](Array &a, size_t i) -> Value & { return a.entry(i); },
-            py::return_value_policy::reference_internal);
+            nb::return_value_policy::reference_internal);
 }
 
 template <typename Array>
-void bind_generic_constructor(py::class_<Array> &cls) {
+void bind_generic_constructor(nb::class_<Array> &cls) {
     cls.def(
         "__init__",
-        [](py::detail::value_and_holder &v_h, py::args args) {
+        [](nb::detail::value_and_holder &v_h, nb::args args) {
             v_h.value_ptr() = new Array();
-            array_init(py::handle((PyObject *) v_h.inst), args);
-        }, py::detail::is_new_style_constructor());
+            array_init(nb::handle((PyObject *) v_h.inst), args);
+        }, nb::detail::is_new_style_constructor());
 }
 
-template <typename Array> auto bind(py::module_ &m, bool scalar_mode = false) {
+template <typename Array> auto bind(nb::module_ &m, bool scalar_mode = false) {
     auto cls = bind_type<Array>(m, scalar_mode);
     bind_generic_constructor(cls);
     bind_basic_methods(cls);
@@ -119,42 +51,43 @@ template <typename Array> auto bind(py::module_ &m, bool scalar_mode = false) {
 };
 
 template <typename Array>
-auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
+auto bind_full(nb::class_<Array> &cls, bool /* scalar_mode */ = false) {
     static_assert(dr::array_depth_v<Array> == 1);
     bind_basic_methods(cls);
 
     using Scalar = std::conditional_t<Array::IsMask, bool, dr::scalar_t<Array>>;
     using Mask = dr::mask_t<dr::float32_array_t<Array>>;
 
-    cls.def(py::init<Scalar>())
+    cls.def(nb::init<Scalar>())
        .def("assign", [](Array &a, const Array &b) {
            if (&a != &b)
                a = b;
        });
 
     if constexpr (Array::IsFloat) {
-        cls.def(py::init([](dr::ssize_t value) { return new Array((Scalar) value); }));
+        cls.def_implicit(nb::init(
+            [](dr::ssize_t value) { return new Array((Scalar) value); }));
     } else if constexpr (Array::IsIntegral) {
         if constexpr (std::is_unsigned_v<Scalar>)
-            cls.def(py::init<std::make_signed_t<Scalar>>());
+            cls.def(nb::init_implicit<std::make_signed_t<Scalar>>());
         else
-            cls.def(py::init<std::make_unsigned_t<Scalar>>());
+            cls.def(nb::init_implicit<std::make_unsigned_t<Scalar>>());
     }
 
     if constexpr (!Array::IsMask) {
-        cls.def(py::init<const dr::  int32_array_t<Array> &>(), py::arg().noconvert());
-        cls.def(py::init<const dr:: uint32_array_t<Array> &>(), py::arg().noconvert());
-        cls.def(py::init<const dr::  int64_array_t<Array> &>(), py::arg().noconvert());
-        cls.def(py::init<const dr:: uint64_array_t<Array> &>(), py::arg().noconvert());
-        cls.def(py::init<const dr::float32_array_t<Array> &>(), py::arg().noconvert());
-        cls.def(py::init<const dr::float64_array_t<Array> &>(), py::arg().noconvert());
+        cls.def(nb::init_implicit<const dr::  int32_array_t<Array> &>());
+        cls.def(nb::init_implicit<const dr:: uint32_array_t<Array> &>());
+        cls.def(nb::init_implicit<const dr::  int64_array_t<Array> &>());
+        cls.def(nb::init_implicit<const dr:: uint64_array_t<Array> &>());
+        cls.def(nb::init_implicit<const dr::float32_array_t<Array> &>());
+        cls.def(nb::init_implicit<const dr::float64_array_t<Array> &>());
     } else {
-        cls.def(py::init<const dr::bool_array_t<Array> &>(), py::arg().noconvert());
+        cls.def(nb::init<const dr::bool_array_t<Array> &>(), nb::arg().noconvert());
     }
 
 #if defined(DRJIT_ENABLE_AUTODIFF)
     if constexpr (Array::IsJIT && !Array::IsFloat && !Array::IsDiff) {
-        cls.def(py::init([](const dr::DiffArray<Array> &value) {
+        cls.def(nb::init([](const dr::DiffArray<Array> &value) {
             return new Array(dr::detach(value)); }));
     }
 #endif
@@ -177,18 +110,18 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
         cls.def("neq_", [](const Array &a, const Array &b) -> Mask { return a.neq_(b); });
     }
 
-    cls.attr("zero_") = py::cpp_function(&Array::zero_);
-    cls.attr("full_") = py::cpp_function(
+    cls.attr("zero_") = nb::cpp_function(&Array::zero_);
+    cls.attr("full_") = nb::cpp_function(
         [](Scalar v, size_t size) { return dr::full<Array>(v, size); });
-    cls.attr("opaque_") = py::cpp_function(
+    cls.attr("opaque_") = nb::cpp_function(
         [](Scalar v, size_t size) { return dr::opaque<Array>(v, size); });
 
     if constexpr (!Array::IsMask) {
-        cls.attr("arange_") = py::cpp_function(&Array::arange_);
-        cls.attr("linspace_") = py::cpp_function(&Array::linspace_);
+        cls.attr("arange_") = nb::cpp_function(&Array::arange_);
+        cls.attr("linspace_") = nb::cpp_function(&Array::linspace_);
     }
 
-    cls.attr("select_") = py::cpp_function([](const Mask &m, const Array &t,
+    cls.attr("select_") = nb::cpp_function([](const Mask &m, const Array &t,
                                               const Array &f) {
         return Array::select_(static_cast<const dr::mask_t<Array>>(m), t, f);
     });
@@ -430,7 +363,7 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
                 }, func);
             }
             return result;
-        }, "ptr"_a, "size"_a, "callback"_a = py::none());
+        }, "ptr"_a, "size"_a, "callback"_a = nb::none());
     }
 
     if constexpr (Array::IsJIT)
@@ -449,10 +382,10 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
     }
 
     if constexpr (Array::IsDiff) {
-        cls.def(py::init<dr::detached_t<Array>>(), py::arg().noconvert());
+        cls.def(nb::init<dr::detached_t<Array>>(), nb::arg().noconvert());
         cls.def("detach_", [](const Array &a) { return dr::detach(a); });
-        cls.def("detach_ref_", py::overload_cast<>(&Array::detach_),
-                py::return_value_policy::reference_internal);
+        cls.def("detach_ref_", nb::overload_cast<>(&Array::detach_),
+                nb::return_value_policy::reference_internal);
 
         if constexpr (Array::IsFloat) {
             cls.def("grad_", [](const Array &a) { return a.grad_(); });
@@ -464,7 +397,7 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
             cls.def("graphviz_", &Array::graphviz_);
 
             cls.def_static("traverse_", &Array::traverse_,
-                           py::call_guard<py::gil_scoped_release>());
+                           nb::call_guard<nb::gil_scoped_release>());
 
             cls.def_static("create_", [](uint32_t index,
                                          const dr::detached_t<Array> &value) {
@@ -491,38 +424,38 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
 }
 
 struct CustomOp : dr::detail::DiffCallback {
-    CustomOp(py::handle handle) : m_handle(handle) {
+    CustomOp(nb::handle handle) : m_handle(handle) {
         m_handle.inc_ref();
     }
 
     virtual void forward() override {
-        py::gil_scoped_acquire gsa;
+        nb::gil_scoped_acquire gsa;
         m_handle.attr("forward")();
     }
 
     virtual void backward() override {
-        py::gil_scoped_acquire gsa;
+        nb::gil_scoped_acquire gsa;
         m_handle.attr("backward")();
     }
 
     ~CustomOp() {
-        py::gil_scoped_acquire gsa;
+        nb::gil_scoped_acquire gsa;
         m_handle.dec_ref();
     }
 
-    py::handle m_handle;
+    nb::handle m_handle;
 };
 
 template <typename T>
-void bind_ad_details(py::class_<dr::DiffArray<T>> &cls) {
+void bind_ad_details(nb::class_<dr::DiffArray<T>> &cls) {
     cls.def_static(
         "add_edge_",
-        [](int32_t src_index, int32_t dst_index, py::handle cb) {
+        [](int32_t src_index, int32_t dst_index, nb::handle cb) {
             dr::detail::ad_add_edge<T>(
                 src_index, dst_index,
                 cb.is_none() ? nullptr : new CustomOp(cb));
         },
-        "src_index"_a, "dst_index"_a, "cb"_a = py::none());
+        "src_index"_a, "dst_index"_a, "cb"_a = nb::none());
 
     cls.def("dec_ref_", [](dr::DiffArray<T> &v) {
         dr::detail::ad_dec_ref<T>(v.index_ad());

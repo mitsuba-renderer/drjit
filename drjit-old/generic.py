@@ -9,17 +9,6 @@ def _check1(a0):
     return (ar, s0)
 
 
-def _check2(a0, a1):
-    """Validate the inputs of a binary generic array operation"""
-    s0, s1 = len(a0), len(a1)
-    sr = max(s0, s1)
-    if (s0 != sr and s0 != 1) or (s1 != sr and s1 != 1):
-        raise Exception("Incompatible argument sizes: %i and %i" % (s0, s1))
-    elif type(a0) is not type(a1):  # noqa
-        raise Exception("Type mismatch!")
-    ar = a0.empty_(sr if a0.Size == Dynamic else 0)
-    return (ar, sr)
-
 
 def _check2_inplace(a0, a1):
     """Validate the inputs of a binary generic array operation (in-place)"""

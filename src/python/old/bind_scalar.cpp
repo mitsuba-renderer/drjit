@@ -3,16 +3,16 @@
 #include "tensor.h"
 #include "texture.h"
 
-void export_scalar(py::module_ &m) {
-    py::module_ scalar = m.def_submodule("scalar");
+void export_scalar(nb::module_ &m) {
+    nb::module_ scalar = m.def_submodule("scalar");
 
-    scalar.attr("Bool")    = py::handle((PyObject *) &PyBool_Type);
-    scalar.attr("Float32") = py::handle((PyObject *) &PyFloat_Type);
-    scalar.attr("Float64") = py::handle((PyObject *) &PyFloat_Type);
-    scalar.attr("Int32")   = py::handle((PyObject *) &PyLong_Type);
-    scalar.attr("Int64")   = py::handle((PyObject *) &PyLong_Type);
-    scalar.attr("UInt32")  = py::handle((PyObject *) &PyLong_Type);
-    scalar.attr("UInt64")  = py::handle((PyObject *) &PyLong_Type);
+    scalar.attr("Bool")    = nb::handle((PyObject *) &PyBool_Type);
+    scalar.attr("Float32") = nb::handle((PyObject *) &PyFloat_Type);
+    scalar.attr("Float64") = nb::handle((PyObject *) &PyFloat_Type);
+    scalar.attr("Int32")   = nb::handle((PyObject *) &PyLong_Type);
+    scalar.attr("Int64")   = nb::handle((PyObject *) &PyLong_Type);
+    scalar.attr("UInt32")  = nb::handle((PyObject *) &PyLong_Type);
+    scalar.attr("UInt64")  = nb::handle((PyObject *) &PyLong_Type);
 
     scalar.attr("Float")   = scalar.attr("Float32");
     scalar.attr("Int")     = scalar.attr("Int32");
@@ -26,10 +26,10 @@ void export_scalar(py::module_ &m) {
 
     bind_pcg32<uint64_t>(scalar);
 
-    struct LoopDummy { LoopDummy(const char*, py::args) { }};
-    py::class_<LoopDummy>(scalar, "Loop")
-        .def(py::init<const char*, py::args>())
-        .def("put", [](LoopDummy&, py::args) {})
+    struct LoopDummy { LoopDummy(const char*, nb::args) { }};
+    nb::class_<LoopDummy>(scalar, "Loop")
+        .def(nb::init<const char*, nb::args>())
+        .def("put", [](LoopDummy&, nb::args) {})
         .def("init", [](LoopDummy&) {})
         .def("set_uniform", [](LoopDummy&, bool) { })
         .def("set_max_iterations", [](LoopDummy&, bool) { })

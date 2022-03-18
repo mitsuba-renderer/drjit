@@ -716,22 +716,6 @@ def op_invert(a):
     return a.not_()
 
 
-def op_add(a, b):
-    if type(a) is not type(b):
-        a, b = _var_promote(a, b)
-    return a.add_(b)
-
-
-def op_radd(a, b):
-    if type(a) is not type(b):
-        a, b = _var_promote(a, b)
-    return b.add_(a)
-
-
-def op_iadd(a, b):
-    if type(a) is not type(b):
-        a, b = _var_promote(a, b)
-    return a.iadd_(b)
 
 
 def op_sub(a, b):

@@ -1,57 +1,90 @@
-pybind11_add_module(
+Python_add_library(
   drjit-python
-  THIN_LTO OPT_SIZE
-
-  bind.h
-  common.h
-  loop.h
-  random.h
-  tensor.h
-  texture.h
-  main.cpp
-  implicit.cpp
-  reinterpret.cpp
-  bind_scalar.cpp
-  bind_packet.cpp
-  bind_cuda.cpp
-  bind_cuda_ad.cpp
-  bind_llvm.cpp
-  bind_llvm_ad.cpp
-  dlpack.cpp
+  SHARED
+  ../../include/drjit/python.h
+  python.cpp
 )
 
+nanobind_cpp17(drjit-python)
+nanobind_msvc(drjit-python)
+nanobind_headers(drjit-python)
+nanobuild_build_library(nanobind SHARED)
+target_link_libraries(drjit-python PUBLIC nanobind)
+nanobind_disable_stack_protector(drjit-python)
+nanobind_lto(drjit-python)
+
+nanobind_add_module(
+  drjit-python-ext
+  # bind.h
+  main.cpp
+  base.cpp
+  init.cpp
+  repr.cpp
+  ops.cpp
+  shape.cpp
+  # implicit.cpp
+  # reinterpret.cpp
+  # bind_scalar.cpp
+  # bind_packet.cpp
+  # bind_cuda.cpp
+  # bind_cuda_ad.cpp
+  # bind_llvm.cpp
+  # bind_llvm_ad.cpp
+  # dlpack.cpp
+  # bind.h
+  # common.h
+  # loop.h
+  # random.h
+  # tensor.h
+  # texture.h
+)
+
+set_target_properties(drjit-python
+  PROPERTIES
+  OUTPUT_NAME drjit-python ${DRJIT_OUTPUT_DIRECTORY})
+
+set_target_properties(nanobind
+  PROPERTIES
+  OUTPUT_NAME drjit-nanobind ${DRJIT_OUTPUT_DIRECTORY})
+
+set_target_properties(nanothread
+  PROPERTIES
+  OUTPUT_NAME drjit-nanothread ${DRJIT_OUTPUT_DIRECTORY})
+
 target_link_libraries(drjit-python PRIVATE drjit)
+target_compile_definitions(drjit-python PRIVATE -DDRJIT_PYTHON_BUILD)
+target_link_libraries(drjit-python-ext PRIVATE drjit-python drjit)
 
 if (MSVC)
-  target_compile_options(drjit-python PRIVATE /wd4714) # function marked as __forceinline not inlined
+  target_compile_options(drjit-python-ext PRIVATE /wd4714) # function marked as __forceinline not inlined
 endif()
 
 # macOS: Avoid warnings about loop unrolling being disabled with -Os
-target_compile_definitions(drjit-python PRIVATE "-DDRJIT_UNROLL= ")
+target_compile_definitions(drjit-python-ext PRIVATE "-DDRJIT_UNROLL= ")
 
 if (DRJIT_ENABLE_JIT)
-  target_link_libraries(drjit-python PRIVATE drjit-core)
-  target_compile_definitions(drjit-python PRIVATE -DDRJIT_ENABLE_JIT=1)
+  target_link_libraries(drjit-python-ext PRIVATE drjit-core)
+  target_compile_definitions(drjit-python-ext PRIVATE -DDRJIT_ENABLE_JIT=1)
 
   if (NOT APPLE)
-    target_compile_definitions(drjit-python PRIVATE -DDRJIT_ENABLE_CUDA=1)
+    target_compile_definitions(drjit-python-ext PRIVATE -DDRJIT_ENABLE_CUDA=1)
   endif()
 endif()
 
 if (DRJIT_ENABLE_AUTODIFF)
-  target_link_libraries(drjit-python PRIVATE drjit-autodiff)
-  target_compile_definitions(drjit-python PRIVATE -DDRJIT_ENABLE_AUTODIFF=1)
+  target_link_libraries(drjit-python-ext PRIVATE drjit-autodiff)
+  target_compile_definitions(drjit-python-ext PRIVATE -DDRJIT_ENABLE_AUTODIFF=1)
 endif()
 
 
 if (DRJIT_ENABLE_PYTHON_PACKET)
-  target_compile_definitions(drjit-python PRIVATE -DDRJIT_ENABLE_PYTHON_PACKET=1)
+  target_compile_definitions(drjit-python-ext PRIVATE -DDRJIT_ENABLE_PYTHON_PACKET=1)
 endif()
 
-set_target_properties(drjit-python PROPERTIES
+set_target_properties(drjit-python-ext PROPERTIES
   OUTPUT_NAME drjit_ext ${DRJIT_OUTPUT_DIRECTORY})
 
-target_compile_options(drjit-python PRIVATE ${DRJIT_NATIVE_FLAGS})
+target_compile_options(drjit-python-ext PRIVATE ${DRJIT_NATIVE_FLAGS})
 
 if (DRJIT_MASTER_PROJECT)
   # Adapt to variations in rpath handling on Linux and macOS
@@ -61,8 +94,8 @@ if (DRJIT_MASTER_PROJECT)
     set(DRJIT_ORIGIN "$ORIGIN")
   endif()
 
-  install(TARGETS drjit-python LIBRARY DESTINATION drjit)
-  set_target_properties(drjit-python PROPERTIES INSTALL_RPATH "${DRJIT_ORIGIN}")
+  install(TARGETS drjit-python-ext LIBRARY DESTINATION drjit)
+  set_target_properties(drjit-python-ext PROPERTIES INSTALL_RPATH "${DRJIT_ORIGIN}")
 endif()
 
 if (DRJIT_MASTER_PROJECT AND NOT "${CMAKE_CURRENT_SOURCE_DIR}" STREQUAL "${CMAKE_CURRENT_BINARY_DIR}")
