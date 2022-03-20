@@ -343,6 +343,9 @@ PYBIND11_MODULE(drjit_ext, m_) {
         "types"_a = py::list());
     m.def("kernel_history_clear", &jit_kernel_history_clear);
 
+	m.def("kernel", [](py::object obj) { return obj; });
+    m.def("run_last_kernel", &jit_run_last_kernel);
+
     array_detail.def("graphviz", &jit_var_graphviz);
     array_detail.def("schedule", &jit_var_schedule);
     array_detail.def("eval", &jit_var_eval, py::call_guard<py::gil_scoped_release>());
