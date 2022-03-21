@@ -1,7 +1,7 @@
 #pragma once
 
+#include "python.h"
 #include <drjit/random.h>
-#include "common.h"
 
 template <typename Guide>
 void bind_pcg32(nb::module_ &m) {
@@ -44,7 +44,7 @@ void bind_pcg32(nb::module_ &m) {
 
     nb::handle u64;
     if constexpr (dr::is_array_v<UInt64>)
-        u64 = nb::type::of<UInt64>();
+        u64 = nb::type<UInt64>();
     else
         u64 = nb::handle((PyObject *) &PyLong_Type);
     nb::dict fields;

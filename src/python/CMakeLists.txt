@@ -15,28 +15,21 @@ nanobind_lto(drjit-python)
 
 nanobind_add_module(
   drjit-python-ext
-  # bind.h
+  common.h
+  random.h
+  python.h
   main.cpp
   base.cpp
   init.cpp
   repr.cpp
   ops.cpp
   shape.cpp
-  # implicit.cpp
-  # reinterpret.cpp
-  # bind_scalar.cpp
-  # bind_packet.cpp
-  # bind_cuda.cpp
-  # bind_cuda_ad.cpp
-  # bind_llvm.cpp
-  # bind_llvm_ad.cpp
-  # dlpack.cpp
-  # bind.h
-  # common.h
-  # loop.h
-  # random.h
-  # tensor.h
-  # texture.h
+  scalar.cpp
+  cuda.cpp
+  cuda_ad.cpp
+  llvm.cpp
+  llvm_ad.cpp
+  traits.cpp
 )
 
 set_target_properties(drjit-python

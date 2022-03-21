@@ -4,18 +4,6 @@ from collections.abc import Mapping as _Mapping, \
                             Sequence as _Sequence
 
 
-def is_array_v(a):
-    return getattr(a, 'IsDrJit', False)
-
-
-def array_size_v(a):
-    return getattr(a, 'Size', 1)
-
-
-def array_depth_v(a):
-    return getattr(a, 'Depth', 0)
-
-
 def scalar_t(a):
     if not isinstance(a, type):
         a = type(a)

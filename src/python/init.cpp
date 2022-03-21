@@ -9,7 +9,14 @@ namespace nb = nanobind;
 bool array_resize(PyObject *self, const detail::array_supplement &supp,
                   Py_ssize_t len) {
     if (supp.meta.shape[0] == 0xFF) {
-        supp.ops.init(nb::inst_ptr<void>(self), (size_t) len);
+        try {
+            supp.ops.init(nb::inst_ptr<void>(self), (size_t) len);
+        } catch (const std::exception &e) {
+            PyErr_Format(PyExc_TypeError, "%s.__init__(): %s",
+                         Py_TYPE(self)->tp_name, e.what());
+            return false;
+        }
+
         return true;
     } else {
         if (supp.meta.shape[0] != len) {
@@ -109,7 +116,20 @@ int array_init(PyObject *self, PyObject *args, PyObject *kwds) {
                 }
                 return 0;
             }
+
         }
+
+        if (arg_tp->tp_iter && arg_tp != supp.value) {
+            PyObject *list = PySequence_List(arg);
+            if (!list)
+                return -1;
+            PyObject *sub_args = PyTuple_New(1);
+            PyTuple_SET_ITEM(sub_args, 0, list);
+            int rv = array_init(self, sub_args, kwds);
+            Py_DECREF(sub_args);
+            return rv;
+        }
+
 
         PyObject *result = PyObject_CallOneArg((PyObject *) supp.value, arg);
         if (!result)

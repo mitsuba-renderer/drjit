@@ -17,6 +17,7 @@ NAMESPACE_BEGIN(detail)
 
 using array_unop = void (*) (const void *, void *);
 using array_binop = void (*) (const void *, const void *, void *);
+using array_ternop = void (*) (const void *, const void *, const void *, void *);
 using array_richcmp = void (*) (const void *, const void *, int, void *);
 using array_reduce_mask = void (*) (const void *, void *);
 
@@ -38,7 +39,7 @@ struct array_metadata {
 };
 
 struct array_ops {
-    size_t (*len)(const void *);
+    size_t (*len)(const void *) noexcept;
     void (*init)(void *, size_t);
 
     array_binop op_add;
@@ -58,6 +59,8 @@ struct array_ops {
     array_reduce_mask op_all;
     array_reduce_mask op_any;
     array_richcmp op_richcmp;
+    array_ternop op_fmadd;
+    array_ternop op_select;
 
     array_unop op_sqrt, op_cbrt;
     array_unop op_sin, op_cos, op_tan;
@@ -65,6 +68,9 @@ struct array_ops {
     array_unop op_asin, op_acos, op_atan;
     array_unop op_asinh, op_acosh, op_atanh;
     array_unop op_exp, op_exp2, op_log, op_log2;
+    array_unop op_floor, op_ceil, op_round, op_trunc;
+    array_unop op_rcp, op_rsqrt;
+    array_binop op_min, op_max, op_atan2, op_ldexp;
 };
 
 struct array_supplement {
@@ -206,12 +212,16 @@ template <typename T> nanobind::class_<T> bind(const char *name = nullptr) {
             return ((const T *) a)->size();
         };
 
-        s.ops.init = [](void *a, size_t size) noexcept {
+        s.ops.init = [](void *a, size_t size) {
             ((T *) a)->init_(size);
         };
     }
 
     if constexpr (T::Depth == 1 && T::Size == Dynamic) {
+        s.ops.op_select = [](const void *a, const void *b, const void *c, void *d) {
+            new ((T *) d) T(select(*(const mask_t<T> *) a, *(const T *) b, *(const T *) c));
+        };
+
         if constexpr (T::IsArithmetic) {
             s.ops.op_add = [](const void *a, const void *b, void *c) {
                 new ((T *) c) T(*(const T *) a + *(const T *) b);
@@ -223,6 +233,18 @@ template <typename T> nanobind::class_<T> bind(const char *name = nullptr) {
 
             s.ops.op_multiply = [](const void *a, const void *b, void *c) {
                 new ((T *) c) T(*(const T *) a * *(const T *) b);
+            };
+
+            s.ops.op_min = [](const void *a, const void *b, void *c) {
+                new ((T *) c) T(drjit::min(*(const T *) a, *(const T *) b));
+            };
+
+            s.ops.op_max = [](const void *a, const void *b, void *c) {
+                new ((T *) c) T(drjit::max(*(const T *) a, *(const T *) b));
+            };
+
+            s.ops.op_fmadd = [](const void *a, const void *b, const void *c, void *d) {
+                new ((T *) d) T(fmadd(*(const T *) a, *(const T *) b, *(const T *) c));
             };
 
             if constexpr (std::is_signed_v<scalar_t<T>>) {
@@ -325,6 +347,14 @@ template <typename T> nanobind::class_<T> bind(const char *name = nullptr) {
             s.ops.op_exp2  = [](const void *a, void *b) { new ((T *) b) T(exp2(*(const T *) a)); };
             s.ops.op_log   = [](const void *a, void *b) { new ((T *) b) T(log(*(const T *) a)); };
             s.ops.op_log2  = [](const void *a, void *b) { new ((T *) b) T(log2(*(const T *) a)); };
+            s.ops.op_floor = [](const void *a, void *b) { new ((T *) b) T(floor(*(const T *) a)); };
+            s.ops.op_ceil  = [](const void *a, void *b) { new ((T *) b) T(ceil(*(const T *) a)); };
+            s.ops.op_round = [](const void *a, void *b) { new ((T *) b) T(round(*(const T *) a)); };
+            s.ops.op_trunc = [](const void *a, void *b) { new ((T *) b) T(trunc(*(const T *) a)); };
+            s.ops.op_rcp   = [](const void *a, void *b) { new ((T *) b) T(rcp(*(const T *) a)); };
+            s.ops.op_rsqrt = [](const void *a, void *b) { new ((T *) b) T(rsqrt(*(const T *) a)); };
+            s.ops.op_ldexp = [](const void *a, const void *b, void *c) { new ((T *) c) T(drjit::ldexp(*(const T *) a, *(const T *) b)); };
+            s.ops.op_atan2 = [](const void *a, const void *b, void *c) { new ((T *) c) T(drjit::atan2(*(const T *) a, *(const T *) b)); };
         }
     } else {
         // Default implementations of everything
@@ -332,11 +362,18 @@ template <typename T> nanobind::class_<T> bind(const char *name = nullptr) {
             (detail::array_unop) uintptr_t(1);
         const detail::array_binop default_binop =
             (detail::array_binop) uintptr_t(1);
+        const detail::array_ternop default_ternop =
+            (detail::array_ternop) uintptr_t(1);
+
+        s.ops.op_select = default_ternop;
 
         if constexpr (T::IsArithmetic) {
             s.ops.op_add = default_binop;
             s.ops.op_subtract = default_binop;
             s.ops.op_multiply = default_binop;
+            s.ops.op_min = default_binop;
+            s.ops.op_max = default_binop;
+            s.ops.op_fmadd = default_ternop;
 
             if constexpr (std::is_signed_v<scalar_t<T>>) {
                 s.ops.op_absolute = default_unop;
@@ -382,6 +419,14 @@ template <typename T> nanobind::class_<T> bind(const char *name = nullptr) {
             s.ops.op_exp2  = default_unop;
             s.ops.op_log   = default_unop;
             s.ops.op_log2  = default_unop;
+            s.ops.op_floor = default_unop;
+            s.ops.op_ceil  = default_unop;
+            s.ops.op_round = default_unop;
+            s.ops.op_trunc = default_unop;
+            s.ops.op_rcp   = default_unop;
+            s.ops.op_rsqrt = default_unop;
+            s.ops.op_ldexp = default_binop;
+            s.ops.op_atan2 = default_binop;
         }
     }
 

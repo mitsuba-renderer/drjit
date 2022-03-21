@@ -1046,7 +1046,7 @@ template <typename Value> Value sinh(const Value &x) {
 
 
         Value xa = abs(x),
-              r_small, r_big;
+              r_small = 0, r_big = 0;
 
         Mask mask_big = xa > Scalar(1);
 
