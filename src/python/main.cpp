@@ -50,14 +50,10 @@ NB_MODULE(drjit_ext, m_) {
     m.def("shape", &shape);
 
     // Type aliases
-    scalar.attr("Int32") = nb::handle(&PyLong_Type);
-    scalar.attr("UInt32") = nb::handle(&PyLong_Type);
+    scalar.attr("Int") = nb::handle(&PyLong_Type);
+    scalar.attr("UInt") = nb::handle(&PyLong_Type);
     scalar.attr("Int64") = nb::handle(&PyLong_Type);
     scalar.attr("UInt64") = nb::handle(&PyLong_Type);
     scalar.attr("Float") = nb::handle(&PyFloat_Type);
-    scalar.attr("Float32") = nb::handle(&PyFloat_Type);
     scalar.attr("Float64") = nb::handle(&PyFloat_Type);
-    llvm.attr("Int32") = llvm.attr("Int");
-    llvm.attr("UInt32") = llvm.attr("UInt");
-    llvm.attr("Float32") = llvm.attr("Float");
 }

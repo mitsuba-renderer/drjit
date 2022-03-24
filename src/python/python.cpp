@@ -168,7 +168,7 @@ extern nb::handle bind(const char *name, array_supplement &supp,
     nb::tuple shape = nb::steal<nb::tuple>(PyTuple_New(depth));
     for (int i = 0; i < depth; ++i) {
         uint8_t value = supp.meta.shape[i];
-        size_t value_sz = value == 0xFF ? (size_t) -1 : (size_t) value;
+        Py_ssize_t value_sz = value == 0xFF ? -1 : value;
         PyTuple_SET_ITEM(shape.ptr(), i, PyLong_FromSize_t(value_sz));
     }
 

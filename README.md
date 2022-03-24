@@ -34,17 +34,19 @@ _Dr.Jit_ principally facilitates three steps
   that is later compiled into an _fused_ computational kernel using
   [LLVM](https://en.wikipedia.org/wiki/LLVM) for CPUs and
   [CUDA](https://en.wikipedia.org/wiki/CUDA) for GPUs. The word _fused_ means
-  that this kernel combines many operations, which removes the need to store
-  intermediate results in memory. Further processing of the graph enables
-  powerful optimizations. Alternatively, Dr.Jit can be used without JIT, which
-  turns the project into a header library without extra dependencies.
-  Computation on the CPU uses vector instruction set extensions like
-  [AVX512](https://en.wikipedia.org/wiki/AVX-512) or [ARM
+  that this kernel performs many operations in a combined parallel pass, which
+  removes the need of storing intermediate results in memory. Further
+  processing of the graph enables powerful optimizations. Alternatively, Dr.Jit
+  can be used without JIT, which turns the project into a header library
+  without extra dependencies. Computation on the CPU uses vector instruction
+  set extensions like [AVX512](https://en.wikipedia.org/wiki/AVX-512) or [ARM
   Neon](https://developer.arm.com/architectures/instruction-sets/simd-isas/neon).
 
 - **Differentiation**: If desired, _Dr.Jit_ can compute derivatives using
   _automatic differentiation_ (AD), using either [forward or reverse-mode
   accumulation](https://en.wikipedia.org/wiki/Automatic_differentiation).
+  Differentiation and tracing go hand-in-hand with each other to produce
+  highly optimized derivative code.
 
 - **Python**: _Dr.Jit_ types are accessible within C++17 and Python. Code can be
   developed in either language, or even both at once. Combinations of Python
@@ -77,20 +79,6 @@ _Dr.Jit_ is the successor of the
 API still somewhat resembles that of Enoki. The underlying implementation
 underwent a full rewrite/redesign with substantially different characteristics,
 hence the decision to fork the project and give it a different name.
-
-
-* **Vectorization**. Converting a scalar program into into one that
-  simultaneously processes many inputs to leverage parallelism on modern
-  processor architectures. Here, "many" could refer to a packet with 16 values
-  (AVX512) or millions of entries processed on a GPU.
-
-* **Forward and reverse-mode automatic differentiation (AD)**. Computing
-  derivatives of an arbitrary computation with respect to its inputs or
-  outputs.
-
-* **Python bindings**. Exposing C++ code within a Python environment so that it
-  becomes usable along widely used software from this ecosystem (NumPy,
-  Matplotlib, PyTorch, etc).
 
 All features are "opt-in" and activated by including specific header files,
 keeping compilation times short.
@@ -150,11 +138,6 @@ In addition to the above, Dr.Jit is designed to be
   matrices, complex numbers, quaternions, etc.).
 
 * **Non-viral**. Dr.Jit is licensed under the terms of the 3-clause BSD license.
-
-To the author's knowledge, nothing quite like it exists, although there are of
-course many vectorization techniques (Autovectorization, expression templates),
-frameworks (Eigen, XLA, Numba, Agner Fog's vector classes) and AD tools
-(PyTorch, Tensorflow, Jax) that provide subsets of the above functionality.
 
 ## Cloning
 

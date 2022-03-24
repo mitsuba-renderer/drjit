@@ -5,6 +5,7 @@
 #include <drjit/dynamic.h>
 #include <drjit/math.h>
 #include <nanobind/nanobind.h>
+#include <nanobind/stl/pair.h>
 
 #if defined(DRJIT_PYTHON_BUILD)
 #  define DRJIT_PYTHON_EXPORT DRJIT_EXPORT
@@ -16,6 +17,7 @@ NAMESPACE_BEGIN(drjit)
 NAMESPACE_BEGIN(detail)
 
 using array_unop = void (*) (const void *, void *);
+using array_unop_2 = void (*) (const void *, void *, void *);
 using array_binop = void (*) (const void *, const void *, void *);
 using array_ternop = void (*) (const void *, const void *, const void *, void *);
 using array_richcmp = void (*) (const void *, const void *, int, void *);
@@ -59,7 +61,7 @@ struct array_ops {
     array_reduce_mask op_all;
     array_reduce_mask op_any;
     array_richcmp op_richcmp;
-    array_ternop op_fmadd;
+    array_ternop op_fma;
     array_ternop op_select;
 
     array_unop op_sqrt, op_cbrt;
@@ -71,6 +73,7 @@ struct array_ops {
     array_unop op_floor, op_ceil, op_round, op_trunc;
     array_unop op_rcp, op_rsqrt;
     array_binop op_min, op_max, op_atan2, op_ldexp;
+    array_unop_2 op_sincos, op_sincosh, op_frexp;
 };
 
 struct array_supplement {
@@ -243,7 +246,7 @@ template <typename T> nanobind::class_<T> bind(const char *name = nullptr) {
                 new ((T *) c) T(drjit::max(*(const T *) a, *(const T *) b));
             };
 
-            s.ops.op_fmadd = [](const void *a, const void *b, const void *c, void *d) {
+            s.ops.op_fma = [](const void *a, const void *b, const void *c, void *d) {
                 new ((T *) d) T(fmadd(*(const T *) a, *(const T *) b, *(const T *) c));
             };
 
@@ -355,11 +358,28 @@ template <typename T> nanobind::class_<T> bind(const char *name = nullptr) {
             s.ops.op_rsqrt = [](const void *a, void *b) { new ((T *) b) T(rsqrt(*(const T *) a)); };
             s.ops.op_ldexp = [](const void *a, const void *b, void *c) { new ((T *) c) T(drjit::ldexp(*(const T *) a, *(const T *) b)); };
             s.ops.op_atan2 = [](const void *a, const void *b, void *c) { new ((T *) c) T(drjit::atan2(*(const T *) a, *(const T *) b)); };
+            s.ops.op_sincos = [](const void *a, void *b, void *c) {
+                auto [b_, c_] = sincos(*(const T *) a);
+                new ((T *) b) T(b_);
+                new ((T *) c) T(c_);
+            };
+            s.ops.op_sincosh = [](const void *a, void *b, void *c) {
+                auto [b_, c_] = sincosh(*(const T *) a);
+                new ((T *) b) T(b_);
+                new ((T *) c) T(c_);
+            };
+            s.ops.op_frexp = [](const void *a, void *b, void *c) {
+                auto [b_, c_] = frexp(*(const T *) a);
+                new ((T *) b) T(b_);
+                new ((T *) c) T(c_);
+            };
         }
     } else {
         // Default implementations of everything
         const detail::array_unop default_unop =
             (detail::array_unop) uintptr_t(1);
+        const detail::array_unop_2 default_unop_2 =
+            (detail::array_unop_2) uintptr_t(1);
         const detail::array_binop default_binop =
             (detail::array_binop) uintptr_t(1);
         const detail::array_ternop default_ternop =
@@ -373,7 +393,7 @@ template <typename T> nanobind::class_<T> bind(const char *name = nullptr) {
             s.ops.op_multiply = default_binop;
             s.ops.op_min = default_binop;
             s.ops.op_max = default_binop;
-            s.ops.op_fmadd = default_ternop;
+            s.ops.op_fma = default_ternop;
 
             if constexpr (std::is_signed_v<scalar_t<T>>) {
                 s.ops.op_absolute = default_unop;
@@ -427,6 +447,9 @@ template <typename T> nanobind::class_<T> bind(const char *name = nullptr) {
             s.ops.op_rsqrt = default_unop;
             s.ops.op_ldexp = default_binop;
             s.ops.op_atan2 = default_binop;
+            s.ops.op_sincos = default_unop_2;
+            s.ops.op_sincosh = default_unop_2;
+            s.ops.op_frexp = default_unop_2;
         }
     }
 

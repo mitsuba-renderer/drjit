@@ -1,4 +1,11 @@
 #include "python.h"
+#include "docstr.h"
+
+namespace drjit {
+    template <typename T> T fma(const T &a, const T &b, const T &c) {
+        return fmadd(a, b, c);
+    }
+};
 
 nb::handle array_base;
 nb::handle array_module;
@@ -82,7 +89,7 @@ static meta meta_promote(meta a, meta b) {
   Given a list of Dr.Jit arrays and scalars, determine the flavor and shape of
   the result array and broadcast/convert everything into this form.
  */
-static bool promote(const char *op, PyObject **o, size_t n) {
+static bool promote(const char *op, PyObject **o, size_t n, bool select = false) {
     meta m;
     memset(&m, 0, sizeof(meta));
     m.is_valid = 1;
@@ -112,6 +119,8 @@ static bool promote(const char *op, PyObject **o, size_t n) {
 
         } else if (tp == &PyBool_Type) {
             type = (uint8_t) VarType::Bool;
+        } else if (tp == &PyFloat_Type) {
+            type = (uint8_t) VarType::Float32;
         } else {
             PyErr_Format(PyExc_TypeError,
                          "%s.%s(): encountered an unsupported argument of type "
@@ -130,10 +139,20 @@ static bool promote(const char *op, PyObject **o, size_t n) {
         return false;
     }
 
-    nb::handle h = drjit::detail::array_get(m);
+    auto m_type = m.type;
+    nb::handle h;
+
+    if (!select)
+        h = drjit::detail::array_get(m);
+
     PyObject *args[2];
 
     for (size_t i = 0; i < n; ++i) {
+        if (select) {
+            m.type = (i == 0) ? (uint16_t) VarType::Bool : m_type;
+            h = drjit::detail::array_get(m);
+        }
+
         if (Py_TYPE(o[i]) == (PyTypeObject *) h.ptr()) {
             Py_INCREF(o[i]);
         } else {
@@ -178,7 +197,7 @@ static PyObject *nb_math_unop(const char *name, size_t ops_offset,
                nb::inst_ptr<void>(result));
             nb::inst_mark_ready(result);
         } catch (const std::exception &e) {
-            PyErr_Format(PyExc_RuntimeError, "%s.%s(): %s!", tp->tp_name, name,
+            PyErr_Format(PyExc_RuntimeError, "drjit.%s(): %s!", name,
                          e.what());
             result.clear();
         }
@@ -194,9 +213,7 @@ static PyObject *nb_math_unop(const char *name, size_t ops_offset,
 
     if (!sq_length || !sq_item || !sq_ass_item) {
         PyErr_Format(PyExc_RuntimeError,
-                     "%s.%s(): cannot perform operation (missing "
-                     "number/sequence protocol operations)!",
-                     tp->tp_name, name);
+                     "drjit.%s(): cannot perform operation!", name);
         return nullptr;
     }
 
@@ -207,20 +224,102 @@ static PyObject *nb_math_unop(const char *name, size_t ops_offset,
     if (s.meta.shape[0] == 0xFF)
         s.ops.init(nb::inst_ptr<void>(result), size);
 
-    for (Py_ssize_t i = 0; i < size; ++i) {
-        nb::object v = nb::steal(sq_item(o, i));
+    try {
+        for (Py_ssize_t i = 0; i < size; ++i) {
+            nb::object v = nb::steal(sq_item(o, i));
 
-        if (!v.is_valid()) {
-            result.clear();
-            break;
-        }
+            if (!v.is_valid()) {
+                result.clear();
+                break;
+            }
 
-        nb::object vr = py_op(v);
-        if (!vr.is_valid() || sq_ass_item(result.ptr(), i, vr.ptr())) {
-            result.clear();
-            break;
+            nb::object vr = py_op(v);
+            if (!vr.is_valid() || sq_ass_item(result.ptr(), i, vr.ptr())) {
+                result.clear();
+                break;
+            }
         }
+    } catch (const std::exception &e) {
+        PyErr_Format(PyExc_RuntimeError, "drjit.%s(): %s!", name, e.what());
+        result.clear();
     }
+
+
+    return result.release().ptr();
+}
+
+static PyObject *nb_math_unop_2(const char *name, size_t ops_offset,
+                                PyObject *o) noexcept {
+    PyTypeObject *tp = (PyTypeObject *) Py_TYPE(o);
+    const supp &s = nb::type_supplement<supp>(tp);
+
+    using UnOp2 = void (*) (const void *, void *, void *);
+    UnOp2 op;
+    memcpy(&op, (uint8_t *) &s.ops + ops_offset, sizeof(UnOp2));
+    if (!op)
+        return nb::handle(Py_NotImplemented).inc_ref().ptr();
+
+    nb::object result_1 = nb::inst_alloc(tp),
+               result_2 = nb::inst_alloc(tp),
+               result = nb::make_tuple(result_1, result_2);
+
+    if ((uintptr_t) op != 1) {
+        try {
+            op(nb::inst_ptr<void>(o),
+               nb::inst_ptr<void>(result_1),
+               nb::inst_ptr<void>(result_2));
+            nb::inst_mark_ready(result_1);
+            nb::inst_mark_ready(result_2);
+        } catch (const std::exception &e) {
+            PyErr_Format(PyExc_RuntimeError, "drjit.%s(): %s!", name,
+                         e.what());
+            result.clear();
+        }
+
+        return result.release().ptr();
+    }
+
+    nb::object py_op = array_module.attr(name);
+
+    auto sq_length = tp->tp_as_sequence->sq_length;
+    auto sq_item = tp->tp_as_sequence->sq_item;
+    auto sq_ass_item = tp->tp_as_sequence->sq_ass_item;
+
+    if (!sq_length || !sq_item || !sq_ass_item) {
+        PyErr_Format(PyExc_RuntimeError,
+                     "drjit.%s(): cannot perform operation!", name);
+        return nullptr;
+    }
+
+    Py_ssize_t size = sq_length(o);
+
+    nb::inst_zero(result_1);
+    nb::inst_zero(result_2);
+
+    if (s.meta.shape[0] == 0xFF)
+        s.ops.init(nb::inst_ptr<void>(result), size);
+
+    try {
+        for (Py_ssize_t i = 0; i < size; ++i) {
+            nb::object v = nb::steal(sq_item(o, i));
+
+            if (!v.is_valid()) {
+                result.clear();
+                break;
+            }
+
+            nb::object vr = py_op(v);
+            if (!vr.is_valid() || sq_ass_item(result_1.ptr(), i, vr[0].ptr()) ||
+                sq_ass_item(result_2.ptr(), i, vr[1].ptr())) {
+                result.clear();
+                break;
+            }
+        }
+    } catch (const std::exception &e) {
+        PyErr_Format(PyExc_RuntimeError, "drjit.%s(): %s!", name, e.what());
+        result.clear();
+    }
+
 
     return result.release().ptr();
 }
@@ -563,8 +662,7 @@ static PyObject *nb_math_binop(const char *name, size_t ops_offset,
                nb::inst_ptr<void>(result));
             nb::inst_mark_ready(result);
         } catch (const std::exception &e) {
-            PyErr_Format(PyExc_RuntimeError, "%s.%s(): %s!", tp->tp_name, name,
-                         e.what());
+            PyErr_Format(PyExc_RuntimeError, "drjit.%s(): %s!", name, e.what());
             result.clear();
         }
 
@@ -579,8 +677,7 @@ static PyObject *nb_math_binop(const char *name, size_t ops_offset,
 
     if (!sq_length || !sq_item || !sq_ass_item) {
         PyErr_Format(PyExc_RuntimeError,
-                     "%s.%s(): cannot perform operation (missing "
-                     "number/sequence protocol operations)!",
+                     "drjit.%s(): cannot perform operation!",
                      tp->tp_name, name);
         return nullptr;
     }
@@ -591,9 +688,9 @@ static PyObject *nb_math_binop(const char *name, size_t ops_offset,
 
     if ((s0 != sr && s0 != 1) || (s1 != sr && s1 != 1)) {
         PyErr_Format(PyExc_IndexError,
-                     "%s.%s(): binary operation involving arrays of "
+                     "drjit.%s(): binary operation involving arrays of "
                      "incompatible size: %zd and %zd!",
-                     tp->tp_name, name, s0, s1);
+                     name, s0, s1);
         return nullptr;
     }
 
@@ -607,22 +704,27 @@ static PyObject *nb_math_binop(const char *name, size_t ops_offset,
                k0 = s0 == 1 ? 0 : 1,
                k1 = s1 == 1 ? 0 : 1;
 
-    for (Py_ssize_t i = 0; i < sr; ++i) {
-        nb::object v0 = nb::steal(sq_item(o0.ptr(), i0)),
-                   v1 = nb::steal(sq_item(o1.ptr(), i1));
+    try {
+        for (Py_ssize_t i = 0; i < sr; ++i) {
+            nb::object v0 = nb::steal(sq_item(o0.ptr(), i0)),
+                       v1 = nb::steal(sq_item(o1.ptr(), i1));
 
-        if (!v0.is_valid() || !v1.is_valid()) {
-            result.clear();
-            break;
+            if (!v0.is_valid() || !v1.is_valid()) {
+                result.clear();
+                break;
+            }
+
+            nb::object vr = py_op(v0, v1);
+            if (!vr.is_valid() || sq_ass_item(result.ptr(), i, vr.ptr())) {
+                result.clear();
+                break;
+            }
+
+            i0 += k0; i1 += k1;
         }
-
-        nb::object vr = py_op(v0, v1);
-        if (!vr.is_valid() || sq_ass_item(result.ptr(), i, vr.ptr())) {
-            result.clear();
-            break;
-        }
-
-        i0 += k0; i1 += k1;
+    } catch (const std::exception &e) {
+        PyErr_Format(PyExc_RuntimeError, "drjit.%s(): %s!", name, e.what());
+        result.clear();
     }
 
     return result.release().ptr();
@@ -666,7 +768,7 @@ static PyObject *nb_math_ternop(const char *name, size_t ops_offset,
                nb::inst_ptr<void>(result));
             nb::inst_mark_ready(result);
         } catch (const std::exception &e) {
-            PyErr_Format(PyExc_RuntimeError, "%s.%s(): %s!", tp->tp_name, name,
+            PyErr_Format(PyExc_RuntimeError, "drjit.%s(): %s!", name,
                          e.what());
             result.clear();
         }
@@ -682,9 +784,7 @@ static PyObject *nb_math_ternop(const char *name, size_t ops_offset,
 
     if (!sq_length || !sq_item || !sq_ass_item) {
         PyErr_Format(PyExc_RuntimeError,
-                     "%s.%s(): cannot perform operation (missing "
-                     "number/sequence protocol operations)!",
-                     tp->tp_name, name);
+                     "drjit.%s(): cannot perform operation!", name);
         return nullptr;
     }
 
@@ -697,9 +797,9 @@ static PyObject *nb_math_ternop(const char *name, size_t ops_offset,
     if ((s0 != sr && s0 != 1) || (s1 != sr && s1 != 1) ||
         (s2 != sr && s2 != 1)) {
         PyErr_Format(PyExc_IndexError,
-                     "%s.%s(): binary operation involving arrays of "
+                     "drjit.%s(): ternary operation involving arrays of "
                      "incompatible size: %zd, %zd, and %zd!",
-                     tp->tp_name, name, s0, s1, s2);
+                     name, s0, s1, s2);
         return nullptr;
     }
 
@@ -713,25 +813,133 @@ static PyObject *nb_math_ternop(const char *name, size_t ops_offset,
                i2 = 0,
                k0 = s0 == 1 ? 0 : 1,
                k1 = s1 == 1 ? 0 : 1,
-               k2 = s2 == 2 ? 0 : 1;
+               k2 = s2 == 1 ? 0 : 1;
 
-    for (Py_ssize_t i = 0; i < sr; ++i) {
-        nb::object v0 = nb::steal(sq_item(o0.ptr(), i0)),
-                   v1 = nb::steal(sq_item(o1.ptr(), i1)),
-                   v2 = nb::steal(sq_item(o2.ptr(), i2));
+    try {
+        for (Py_ssize_t i = 0; i < sr; ++i) {
+            nb::object v0 = nb::steal(sq_item(o0.ptr(), i0)),
+                       v1 = nb::steal(sq_item(o1.ptr(), i1)),
+                       v2 = nb::steal(sq_item(o2.ptr(), i2));
 
-        if (!v0.is_valid() || !v1.is_valid() || !v2.is_valid()) {
+            if (!v0.is_valid() || !v1.is_valid() || !v2.is_valid()) {
+                result.clear();
+                break;
+            }
+
+            nb::object vr = py_op(v0, v1, v2);
+            if (!vr.is_valid() || sq_ass_item(result.ptr(), i, vr.ptr())) {
+                result.clear();
+                break;
+            }
+
+            i0 += k0; i1 += k1; i2 += k2;
+        }
+    } catch (const std::exception &e) {
+        PyErr_Format(PyExc_RuntimeError, "drjit.%s(): %s!", name, e.what());
+        result.clear();
+    }
+
+    return result.release().ptr();
+}
+
+static PyObject *nb_select(PyObject *h0, PyObject *h1, PyObject *h2) noexcept {
+    PyObject *o[3] = { h0, h1, h2 };
+    if (!promote("select", o, 3, true))
+        return nullptr;
+
+    nb::object o0 = nb::steal(o[0]),
+               o1 = nb::steal(o[1]),
+               o2 = nb::steal(o[2]);
+
+    PyTypeObject *tpm = (PyTypeObject *) o0.type().ptr();
+    PyTypeObject *tp = (PyTypeObject *) o1.type().ptr();
+    const supp &s = nb::type_supplement<supp>(tp);
+
+    using TernOp = void (*)(const void *, const void *, const void *, void *);
+
+    TernOp op = s.ops.op_select;
+    if (!op)
+        return nb::handle(Py_NotImplemented).inc_ref().ptr();
+
+    nb::object result = nb::inst_alloc(tp);
+
+    if ((uintptr_t) op != 1) {
+        try {
+            op(nb::inst_ptr<void>(o0),
+               nb::inst_ptr<void>(o1),
+               nb::inst_ptr<void>(o2),
+               nb::inst_ptr<void>(result));
+            nb::inst_mark_ready(result);
+        } catch (const std::exception &e) {
+            PyErr_Format(PyExc_RuntimeError, "drjit.select(): %s!", e.what());
             result.clear();
-            break;
         }
 
-        nb::object vr = py_op(v0, v1, v2);
-        if (!vr.is_valid() || sq_ass_item(result.ptr(), i, vr.ptr())) {
-            result.clear();
-            break;
-        }
+        return result.release().ptr();
+    }
 
-        i0 += k0; i1 += k1; i2 += k2;
+    nb::object py_op = array_module.attr("select");
+
+    auto sq_length_mask = tpm->tp_as_sequence->sq_length;
+    auto sq_length = tp->tp_as_sequence->sq_length;
+    auto sq_item_mask = tpm->tp_as_sequence->sq_item;
+    auto sq_item = tp->tp_as_sequence->sq_item;
+    auto sq_ass_item = tp->tp_as_sequence->sq_ass_item;
+
+    if (!sq_length || !sq_length_mask || !sq_item || !sq_item_mask || !sq_ass_item) {
+        PyErr_Format(PyExc_RuntimeError,
+                     "drjit.select(): cannot perform operation!");
+        return nullptr;
+    }
+
+    Py_ssize_t s0 = sq_length_mask(o0.ptr()),
+               s1 = sq_length(o1.ptr()),
+               s2 = sq_length(o2.ptr()),
+               st = s0 > s1 ? s0 : s1,
+               sr = s2 > st ? s2 : st;
+
+    if ((s0 != sr && s0 != 1) || (s1 != sr && s1 != 1) ||
+        (s2 != sr && s2 != 1)) {
+        PyErr_Format(PyExc_IndexError,
+                     "drjit.select(): operation involving arrays of "
+                     "incompatible size: %zd, %zd, and %zd!", s0, s1, s2);
+        return nullptr;
+    }
+
+    nb::inst_zero(result);
+
+    if (s.meta.shape[0] == 0xFF)
+        s.ops.init(nb::inst_ptr<void>(result), sr);
+
+    Py_ssize_t i0 = 0,
+               i1 = 0,
+               i2 = 0,
+               k0 = s0 == 1 ? 0 : 1,
+               k1 = s1 == 1 ? 0 : 1,
+               k2 = s2 == 1 ? 0 : 1;
+
+    try {
+        for (Py_ssize_t i = 0; i < sr; ++i) {
+            nb::object v0 = nb::steal(sq_item_mask(o0.ptr(), i0)),
+                       v1 = nb::steal(sq_item(o1.ptr(), i1)),
+                       v2 = nb::steal(sq_item(o2.ptr(), i2));
+
+            if (!v0.is_valid() || !v1.is_valid() || !v2.is_valid()) {
+                result.clear();
+                break;
+            }
+
+            nb::object vr = py_op(v0, v1, v2);
+            if (!vr.is_valid() || sq_ass_item(result.ptr(), i, vr.ptr())) {
+                result.clear();
+                break;
+            }
+
+            i0 += k0; i1 += k1; i2 += k2;
+        }
+    } catch (const std::exception &e) {
+        PyErr_Format(PyExc_RuntimeError, "drjit.select(): %s!", e.what());
+        result.clear();
     }
 
     return result.release().ptr();
@@ -923,14 +1131,25 @@ static PyObject *nb_invert(PyObject *o) noexcept {
 extern PyObject *tp_repr(PyObject *self);
 
 #define DR_MATH_UNOP(name)                                                     \
-    m.def(#name, [](double d) { return dr::name(d); });                        \
+    m.def(                                                                     \
+        #name, [](double d) { return dr::name(d); }, nb::raw_doc(doc_##name)); \
     m.def(#name, [](nb::handle_of<dr::ArrayBase> h) {                          \
         return nb::steal(                                                      \
             nb_math_unop(#name, offsetof(ops, op_##name), h.ptr()));           \
     });
 
+#define DR_MATH_UNOP_2(name)                                                   \
+    m.def(                                                                     \
+        #name, [](double d) { return dr::name(d); }, nb::raw_doc(doc_##name)); \
+    m.def(#name, [](nb::handle_of<dr::ArrayBase> h) {                          \
+        return nb::steal(                                                      \
+            nb_math_unop_2(#name, offsetof(ops, op_##name), h.ptr()));         \
+    });
+
 #define DR_MATH_BINOP(name)                                                    \
-    m.def(#name, [](double d1, double d2) { return dr::name(d1, d2); });       \
+    m.def(                                                                     \
+        #name, [](double d1, double d2) { return dr::name(d1, d2); },          \
+        nb::raw_doc(doc_##name));                                              \
     m.def(#name, [](nb::handle h1, nb::handle h2) {                            \
         if (!is_drjit_array(h1) && !is_drjit_array(h2))                        \
             throw nb::next_overload();                                         \
@@ -939,9 +1158,10 @@ extern PyObject *tp_repr(PyObject *self);
     });
 
 #define DR_MATH_TERNOP(name)                                                   \
-    m.def(#name, [](double d1, double d2, double d3) {                         \
-        return dr::name(d1, d2, d3);                                           \
-    });                                                                        \
+    m.def(                                                                     \
+        #name,                                                                 \
+        [](double d1, double d2, double d3) { return dr::name(d1, d2, d3); },  \
+        nb::raw_doc(doc_##name));                                              \
     m.def(#name, [](nb::handle h1, nb::handle h2, nb::handle h3) {             \
         if (!is_drjit_array(h1) && !is_drjit_array(h2) && !is_drjit_array(h3)) \
             throw nb::next_overload();                                         \
@@ -1011,11 +1231,54 @@ void bind_arraybase(nb::module_ m) {
     DR_MATH_UNOP(trunc);
     DR_MATH_UNOP(rcp);
     DR_MATH_UNOP(rsqrt);
-    DR_MATH_BINOP(max);
-    DR_MATH_BINOP(min);
     DR_MATH_BINOP(atan2);
     DR_MATH_BINOP(ldexp);
-    DR_MATH_TERNOP(fmadd);
+    DR_MATH_TERNOP(fma);
+    DR_MATH_UNOP_2(sincos);
+    DR_MATH_UNOP_2(sincosh);
+    DR_MATH_UNOP_2(frexp);
+
+    m.def("abs", [](double d) { return dr::abs(d); }, nb::raw_doc(doc_abs));
+    m.def("abs", [](Py_ssize_t i) { return dr::abs(i); });
+    m.def("abs", [](nb::handle_of<dr::ArrayBase> h) {
+        return nb::steal(
+            nb_math_unop("abs", offsetof(ops, op_absolute), h.ptr()));
+    });
+
+    m.def(
+        "min", [](double d1, double d2) { return dr::min(d1, d2); },
+        nb::raw_doc(doc_min));
+    m.def("min", [](Py_ssize_t d1, Py_ssize_t d2) { return dr::min(d1, d2); });
+    m.def("min", [](nb::handle h1, nb::handle h2) {
+        if (!is_drjit_array(h1) && !is_drjit_array(h2))
+            throw nb::next_overload();
+        return nb::steal(
+            nb_math_binop("min", offsetof(ops, op_min), h1.ptr(), h2.ptr()));
+    });
+
+    m.def(
+        "max", [](double d1, double d2) { return dr::max(d1, d2); },
+        nb::raw_doc(doc_max));
+    m.def("max", [](Py_ssize_t d1, Py_ssize_t d2) { return dr::max(d1, d2); });
+    m.def("max", [](nb::handle h1, nb::handle h2) {
+        if (!is_drjit_array(h1) && !is_drjit_array(h2))
+            throw nb::next_overload();
+        return nb::steal(
+            nb_math_binop("max", offsetof(ops, op_max), h1.ptr(), h2.ptr()));
+    });
+
+    m.def(
+        "select",
+        [](bool condition, nb::handle x, nb::handle y) -> nb::object {
+            return borrow(condition ? x : y);
+        },
+        nb::raw_doc(doc_select), "condition"_a, "x"_a, "y"_a);
+
+    m.def("select", [](nb::handle condition, nb::handle x, nb::handle y) {
+        if (!is_drjit_array(condition) && !is_drjit_array(x) && !is_drjit_array(y))
+            throw nb::next_overload();
+        return nb::steal(nb_select(condition.ptr(), x.ptr(), y.ptr()));
+    }, "condition"_a, "x"_a, "y"_a);
 }
 
 // def zero(type_, shape=1):
