@@ -618,7 +618,18 @@ def test21_zero_or_full():
     assert type(dr.zero(l.ArrayXf, shape=(8, 5))) is l.ArrayXf and dr.shape(dr.zero(l.ArrayXf, shape=(8, 5))) == (8, 5)
     assert type(dr.zero(l.Array3b, shape=10)) is l.Array3b and dr.shape(dr.zero(l.Array3b, shape=10)) == (3, 10)
     assert type(dr.zero(l.ArrayXb, shape=(8, 5))) is l.ArrayXb and dr.shape(dr.zero(l.ArrayXb, shape=(8, 5))) == (8, 5)
-    assert type(dr.full(l.ArrayXf, value=123, shape=(8, 5))) is l.ArrayXf and dr.all_nested(dr.zero(l.ArrayXf, value=123, shape=(8, 5)) == 123)
+    assert type(dr.full(l.ArrayXf, value=123, shape=(8, 5))) is l.ArrayXf and dr.all_nested(dr.full(l.ArrayXf, value=123, shape=(8, 5)) == 123)
+
+    class Ray:
+        DRJIT_STRUCT = { 'o': l.Array3f, 'd': l.Array3f, 'maxt' : l.Float }
+
+    ray = dr.zero(Ray, 10)
+    assert isinstance(ray, Ray)
+    assert isinstance(ray.o, l.Array3f) and isinstance(ray.d, l.Array3f) \
+        and isinstance(ray.maxt, l.Float)
+
+    assert ray.o.shape == (3, 10) and ray.d.shape == (3, 10) and ray.maxt.shape == (10,)
+    assert dr.all_nested(ray.o == 0) and dr.all_nested(ray.d == 0) and dr.all(ray.maxt == 0)
 
 
 #@pytest.mark.parametrize('name', ['sqrt', 'cbrt', 'sin', 'cos', 'tan', 'asin',

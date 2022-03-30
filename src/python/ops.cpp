@@ -3,6 +3,8 @@
 #include <nanobind/stl/vector.h>
 #include <iostream>
 
+
+nb::object full_alt(nb::type_object dtype, nb::handle value, size_t size);
 nb::object full(nb::type_object dtype, nb::handle value,
                 const std::vector<size_t> &shape) {
     if (is_drjit_type(dtype)) {
@@ -41,8 +43,27 @@ nb::object full(nb::type_object dtype, nb::handle value,
         if (shape.empty() || (shape.size() == 1 && shape[0] == 1))
             return dtype(value);
     } else {
-        nb::object dstruct =  nb::getattr(dtype, "DRJIT_STRUCT", nb::handle());
-        if (dstruct.is_valid()) {
+        nb::object dstruct = nb::getattr(dtype, "DRJIT_STRUCT", nb::handle());
+        if (dstruct.is_valid() && nb::isinstance<nb::dict>(dstruct)) {
+            nb::dict dstruct_dict = nb::borrow<nb::dict>(dstruct);
+            nb::object result = dtype();
+
+            for (auto [k, v] : dstruct_dict) {
+                nb::object entry;
+                if (!v.is_type())
+                    throw nb::type_error("DRJIT_STRUCT invalid, expected types!");
+
+                nb::type_object sub_dtype = nb::borrow<nb::type_object>(v);
+
+                if (is_drjit_type(v) && shape.size() == 1)
+                    entry = full_alt(sub_dtype, value, shape[0]);
+                else
+                    entry = full(sub_dtype, value, shape);
+
+                nb::setattr(result, k, entry);
+            }
+
+            return result;
         }
 
         throw nb::type_error("Unsupported dtype!");
