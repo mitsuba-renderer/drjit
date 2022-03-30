@@ -13,7 +13,7 @@ using ops = dr::detail::array_ops;
 using supp = dr::detail::array_supplement;
 
 extern nb::handle array_base;
-extern nb::handle array_type;
+extern nb::handle array_module;
 
 inline bool is_drjit_type(nb::handle h) {
     return PyType_IsSubtype((PyTypeObject *) h.ptr(),

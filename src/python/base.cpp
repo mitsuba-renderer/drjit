@@ -42,6 +42,8 @@ static void meta_print(meta m) {
 
 /// Compute the metadata type of an operation combinining 'a' and 'b'
 static meta meta_promote(meta a, meta b) {
+    int ndim_a = a.ndim, ndim_b = b.ndim;
+
     meta r;
     r.is_vector = a.is_vector | b.is_vector;
     r.is_complex = a.is_complex | b.is_complex;
@@ -53,20 +55,12 @@ static meta meta_promote(meta a, meta b) {
     r.is_cuda = a.is_cuda | b.is_cuda;
     r.is_valid = a.is_valid & b.is_valid;
     r.type = a.type > b.type ? a.type : b.type;
-    r.unused = 0;
     r.tsize_rel = r.talign = 0;
+    r.ndim = ndim_a > ndim_b ? ndim_a : ndim_b;
 
-    int ndim_a = -1, ndim_b = -1;
-    for (int i = 0; i < 4; ++i) {
-        r.shape[i] = 0;
-        if (a.shape[i])
-            ndim_a = i;
-        if (b.shape[i])
-            ndim_b = i;
-    }
+    memset(r.shape, 0, sizeof(r.shape));
 
-    int ndim = ndim_a > ndim_b ? ndim_a : ndim_b;
-    for (int i = ndim; i >= 0; --i) {
+    for (int i = r.ndim; i >= 0; --i) {
         int value_a = 1, value_b = 1;
 
         if (ndim_a >= 0)
@@ -353,11 +347,8 @@ static PyObject *nb_unop(const char *name, size_t ops_offset,
     }
 
     unaryfunc nb_op = nullptr;
-    PyObject *tp_value = PyDict_GetItemString(tp->tp_dict, "Value"); // borrowed
-    if (tp_value && PyType_Check(tp_value))
-        memcpy(&nb_op,
-               (uint8_t *) ((PyTypeObject *) tp_value)->tp_as_number + nb_offset,
-               sizeof(unaryfunc));
+    memcpy(&nb_op, (uint8_t *) s.value->tp_as_number + nb_offset,
+           sizeof(unaryfunc));
 
     auto sq_length = tp->tp_as_sequence->sq_length;
     auto sq_item = tp->tp_as_sequence->sq_item;
@@ -447,11 +438,8 @@ static PyObject *nb_binop(const char *name, size_t ops_offset, size_t nb_offset,
     }
 
     binaryfunc nb_op = nullptr;
-    PyObject *tp_value = PyDict_GetItemString(tp->tp_dict, "Value"); // borrowed
-    if (tp_value && PyType_Check(tp_value))
-        memcpy(&nb_op,
-               (uint8_t *) ((PyTypeObject *) tp_value)->tp_as_number + nb_offset,
-               sizeof(binaryfunc));
+    memcpy(&nb_op, (uint8_t *) s.value->tp_as_number + nb_offset,
+           sizeof(binaryfunc));
 
     auto sq_length = tp->tp_as_sequence->sq_length;
     auto sq_item = tp->tp_as_sequence->sq_item;
@@ -556,11 +544,8 @@ static PyObject *nb_inplace_binop(const char *name, size_t ops_offset,
     }
 
     binaryfunc nb_op = nullptr;
-    PyObject *tp_value = PyDict_GetItemString(tp->tp_dict, "Value"); // borrowed
-    if (tp_value && PyType_Check(tp_value))
-        memcpy(&nb_op,
-               (uint8_t *) ((PyTypeObject *) tp_value)->tp_as_number + nb_offset,
-               sizeof(binaryfunc));
+    memcpy(&nb_op, (uint8_t *) s.value->tp_as_number + nb_offset,
+           sizeof(binaryfunc));
 
     auto sq_length = tp->tp_as_sequence->sq_length;
     auto sq_item = tp->tp_as_sequence->sq_item;
@@ -1169,8 +1154,82 @@ extern PyObject *tp_repr(PyObject *self);
                                         h1.ptr(), h2.ptr(), h3.ptr()));        \
     });
 
+struct dr_iter {
+    PyObject_HEAD
+    PyObject *o;
+    Py_ssize_t i, size;
+};
+
+static PyObject *tp_iter_next(PyObject *o) {
+    dr_iter *it = (dr_iter *) o;
+    if (it->i >= it->size)
+        return nullptr;
+    PyObject *result = Py_TYPE(it->o)->tp_as_sequence->sq_item(it->o, it->i);
+    it->i++;
+    return result;
+}
+
+static void tp_iter_dealloc(PyObject *self) {
+    dr_iter *it = (dr_iter *) self;
+    PyTypeObject *tp = Py_TYPE(self);
+    Py_DECREF(it->o);
+    tp->tp_free(self);
+}
+
+PyTypeObject dr_iter_type = {
+    .tp_name = "dr_iter",
+    .tp_basicsize = sizeof(dr_iter),
+    .tp_dealloc = tp_iter_dealloc,
+    .tp_flags = Py_TPFLAGS_DEFAULT,
+    .tp_doc = "Dr.Jit iterator",
+    .tp_iternext = tp_iter_next
+};
+
+static PyObject *tp_iter(PyObject *o) {
+    dr_iter *iter = PyObject_NEW(dr_iter, &dr_iter_type);
+    iter->o = o;
+    Py_INCREF(o);
+    iter->i = 0;
+    iter->size = len(o);
+    return (PyObject *) iter;
+}
+
+template <int Index> nb::object ab_getter(nb::handle_of<dr::ArrayBase> h) {
+    PyTypeObject *tp = (PyTypeObject *) h.type().ptr();
+    auto &s = nb::type_supplement<supp>(tp);
+
+    if (s.meta.shape[0] == 0xFF || Index >= s.meta.shape[0]) {
+        char tmp[128];
+        snprintf(tmp, sizeof(tmp), "%s: array does not have a '%c' component!",
+                 tp->tp_name, "xyzw"[Index]);
+        throw nb::type_error(tmp);
+    }
+
+    return nb::steal(tp->tp_as_sequence->sq_item(h.ptr(), (Py_ssize_t) Index));
+}
+
+template <int Index> void ab_setter(nb::handle_of<dr::ArrayBase> h, nb::handle value) {
+    PyTypeObject *tp = (PyTypeObject *) h.type().ptr();
+    auto &s = nb::type_supplement<supp>(tp);
+
+    if (s.meta.shape[0] == 0xFF || Index >= s.meta.shape[0]) {
+        char tmp[128];
+        snprintf(tmp, sizeof(tmp), "%s: array does not have a '%c' component!",
+                 tp->tp_name, "xyzw"[Index]);
+        throw nb::type_error(tmp);
+    }
+
+    if (tp->tp_as_sequence->sq_ass_item(h.ptr(), (Py_ssize_t) Index,
+                                        value.ptr()))
+        nb::detail::raise_python_error();
+}
+
 void bind_arraybase(nb::module_ m) {
+    if (PyType_Ready(&dr_iter_type))
+        nb::detail::fail("Issue initializing iterator type");
+
     auto callback = [](PyTypeObject *tp) noexcept {
+        tp->tp_iter = tp_iter;
         tp->tp_as_sequence->sq_length = len;
         tp->tp_as_number->nb_add = nb_add;
         tp->tp_as_number->nb_inplace_add = nb_inplace_add;
@@ -1204,6 +1263,36 @@ void bind_arraybase(nb::module_ m) {
     };
 
     nb::class_<dr::ArrayBase> ab(m, "ArrayBase", nb::type_callback(callback));
+
+    m.def("shape", &shape, nb::raw_doc(doc_shape));
+
+    ab.def_property_readonly("shape", shape, nb::raw_doc(doc_ArrayBase_shape));
+    ab.def_property("x", ab_getter<0>, ab_setter<0>, nb::raw_doc(doc_ArrayBase_x));
+    ab.def_property("y", ab_getter<1>, ab_setter<1>, nb::raw_doc(doc_ArrayBase_y));
+    ab.def_property("z", ab_getter<2>, ab_setter<2>, nb::raw_doc(doc_ArrayBase_z));
+    ab.def_property("w", ab_getter<3>, ab_setter<3>, nb::raw_doc(doc_ArrayBase_w));
+    ab.def_property_readonly(
+        "index",
+        [](nb::handle_of<dr::ArrayBase> h) -> uint32_t {
+            PyTypeObject *tp = (PyTypeObject *) h.type().ptr();
+            auto &s = nb::type_supplement<supp>(tp);
+            if (!s.ops.op_index)
+                return 0;
+            return s.ops.op_index(nb::inst_ptr<void>(h));
+        },
+        nb::raw_doc(doc_ArrayBase_index));
+
+    ab.def_property_readonly(
+        "index_ad",
+        [](nb::handle_of<dr::ArrayBase> h) -> uint32_t {
+            PyTypeObject *tp = (PyTypeObject *) h.type().ptr();
+            auto &s = nb::type_supplement<supp>(tp);
+            if (!s.ops.op_index_ad)
+                return 0;
+            return s.ops.op_index_ad(nb::inst_ptr<void>(h));
+        },
+        nb::raw_doc(doc_ArrayBase_index_ad));
+
     array_base = ab;
     array_module = m;
 
@@ -1280,20 +1369,3 @@ void bind_arraybase(nb::module_ m) {
         return nb::steal(nb_select(condition.ptr(), x.ptr(), y.ptr()));
     }, "condition"_a, "x"_a, "y"_a);
 }
-
-// def zero(type_, shape=1):
-//     if not isinstance(type_, type):
-//         raise Exception('zero(): Type expected as first argument')
-//     elif issubclass(type_, ArrayBase):
-//         return type_.zero_(shape)
-//     elif _ek.is_drjit_struct_v(type_):
-//         result = type_()
-//         for k, v in type_.DRJIT_STRUCT.items():
-//             setattr(result, k, zero(v, shape))
-//         if hasattr(type_, 'zero_'):
-//             result.zero_(shape)
-//         return result
-//     elif not type_ in (int, float, complex, bool):
-//         return None
-//     else:
-//         return type_(0)

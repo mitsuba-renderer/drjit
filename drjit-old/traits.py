@@ -4,71 +4,6 @@ from collections.abc import Mapping as _Mapping, \
                             Sequence as _Sequence
 
 
-def scalar_t(a):
-    if not isinstance(a, type):
-        a = type(a)
-    return getattr(a, 'Scalar', a)
-
-
-def value_t(a):
-    if not isinstance(a, type):
-        a = type(a)
-    return getattr(a, 'Value', a)
-
-
-def mask_t(a):
-    if not isinstance(a, type):
-        a = type(a)
-    return getattr(a, 'MaskType', bool)
-
-
-def is_mask_v(a):
-    return scalar_t(a) is bool
-
-
-def is_floating_point_v(a):
-    return scalar_t(a) is float
-
-
-def is_integral_v(a):
-    return scalar_t(a) is int
-
-
-def is_arithmetic_v(a):
-    return scalar_t(a) is not bool
-
-
-def is_cuda_array_v(a):
-    return getattr(a, 'IsCUDA', False)
-
-
-def is_llvm_array_v(a):
-    return getattr(a, 'IsLLVM', False)
-
-
-def is_jit_array_v(a):
-    return getattr(a, 'IsJIT', False)
-
-
-def is_diff_array_v(a):
-    return getattr(a, 'IsDiff', False)
-
-
-def is_complex_v(a):
-    return getattr(a, 'IsComplex', False) or isinstance(a, complex)
-
-
-def is_matrix_v(a):
-    return getattr(a, 'IsMatrix', False)
-
-
-def is_quaternion_v(a):
-    return getattr(a, 'IsQuaternion', False)
-
-
-def is_tensor_v(a):
-    return getattr(a, 'IsTensor', False)
-
 
 def is_texture_v(a):
     return getattr(a, 'IsTexture', False)
@@ -76,10 +11,6 @@ def is_texture_v(a):
 
 def is_vector_v(a):
     return getattr(a, 'IsVector', False)
-
-
-def is_special_v(a):
-    return getattr(a, 'IsSpecial', False)
 
 
 def is_static_array_v(a):

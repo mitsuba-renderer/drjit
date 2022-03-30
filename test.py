@@ -217,6 +217,11 @@ def test08_all_any():
     assert dr.any(ArrayXb(True, False))[0] == True
     assert dr.any(ArrayXb(False, False))[0] == False
 
+    assert type(dr.all(dr.llvm.Array1b(dr.llvm.Bool([True, False, False])))) is dr.llvm.Bool
+    assert len(dr.all(dr.llvm.Array1b(dr.llvm.Bool([True, False, False])))) == 3
+    assert type(dr.all_nested(dr.llvm.Array1b(dr.llvm.Bool([True, False, False])))) is dr.llvm.Bool
+    assert len(dr.all_nested(dr.llvm.Array1b(dr.llvm.Bool([True, False, False])))) == 1
+
     with pytest.raises(TypeError) as ei:
         dr.all((True, "hello"))
     assert "unsupported operand type(s)" in str(ei.value)
@@ -240,9 +245,9 @@ def test09_implicit_to_bool():
     assert not bool(ArrayXb(False))
 
 
-@pytest.mark.parametrize('c', [dr.scalar.Array3f, dr.scalar.ArrayXf])
-def test10_comparison(c):
-    m = c.Mask
+@pytest.mark.parametrize('value', [(dr.scalar.Array3f, dr.scalar.Array3b), (dr.scalar.ArrayXf, dr.scalar.ArrayXb)])
+def test10_comparison(value):
+    c, m = value
     assert dr.all(c(1, 2, 3) == c(1, 2, 3))
     assert not dr.all(c(1, 2, 3) == c(1, 3, 3))
     assert dr.all(c(1, 2, 3) != c(4, 5, 6))
@@ -264,16 +269,19 @@ def test11_shape():
     import drjit.scalar as s
     import drjit.llvm as l
 
-    assert dr.shape(s.Array0f()) == (0,)
-    assert dr.shape(s.Array2f()) == (2,)
-    assert dr.shape(l.Float()) == (0,)
-    assert dr.shape(l.Float(1, 2, 3)) == (3,)
-    assert dr.shape(l.Array2f()) == (2, 0)
-    assert dr.shape(l.Array2f(l.Float(1, 2, 3))) == (2,3)
+    assert dr.shape(s.Array0f()) == (0,) and s.Array0f().shape == (0,)
+    assert dr.shape(s.Array2f()) == (2,) and s.Array2f().shape == (2,)
+    assert dr.shape(l.Float()) == (0,) and l.Float().shape == (0,)
+    assert dr.shape(l.Float(1, 2, 3)) == (3,) and l.Float(1, 2, 3).shape == (3,)
+    assert dr.shape(l.Array2f()) == (2, 0) and l.Array2f().shape == (2, 0)
+    assert dr.shape(l.Array2f(l.Float(1, 2, 3))) == (2,3) and \
+           l.Array2f(l.Float(1, 2, 3)).shape == (2,3)
     assert dr.shape(l.Array2f(l.Float(1, 2, 3),
-                              l.Float(2, 3, 4))) == (2,3)
+                              l.Float(2, 3, 4))) == (2,3) and \
+            l.Array2f(l.Float(1, 2, 3), l.Float(2, 3, 4)).shape == (2,3)
     assert dr.shape(l.Array2f(l.Float(1, 2, 3),
-                              l.Float(2, 3))) is None
+                              l.Float(2, 3))) is None and \
+           l.Array2f(l.Float(1, 2, 3), l.Float(2, 3)).shape is None
 
 def test11_repr():
   import drjit.scalar as s
@@ -422,38 +430,6 @@ def test16_type_promotion_errors():
     assert "integer overflow during type promotion" in str(ei.value)
 
 
-@pytest.mark.parametrize('name', ['sqrt', 'cbrt', 'sin', 'cos', 'tan', 'asin',
-                                  'acos', 'atan', 'sinh', 'cosh', 'tanh',
-                                  'asinh', 'acosh', 'atanh', 'exp', 'exp2',
-                                  'log', 'log2', 'floor', 'ceil', 'trunc',
-                                  'round', 'rcp', 'rsqrt'])
-def test17_spotcheck_unary_math(name):
-    from drjit.scalar import ArrayXf, PCG32
-    import math
-    func_ref = getattr(math, name, None)
-    if name == 'cbrt':
-        func_ref = lambda x: x**(1/3)
-    elif name == 'exp2':
-        func_ref = lambda x: 2**x
-    elif name == 'log2':
-        log2 = lambda x: math.log(x) / math.log(2)
-    elif name == 'round':
-        func_ref = round
-    elif name == 'rcp':
-        func_ref = lambda x : 1/x
-    elif name == 'rsqrt':
-        func_ref = lambda x : math.sqrt(1/x)
-
-    rng = PCG32()
-    x = ArrayXf((rng.next_float32() for i in range(10)))
-    if name == 'acosh':
-        x += 1
-    ref = ArrayXf([func_ref(y) for y in x])
-    func = getattr(dr, name)
-    value = func(x)
-    value_2 = ArrayXf(func(y) for y in x)
-    assert dr.allclose(value, func)
-
 def test18_traits():
     import drjit.scalar as s
     import drjit.llvm as l
@@ -465,16 +441,90 @@ def test18_traits():
     assert dr.is_array_v(l.Array3f) and dr.is_array_v(l.Array3f())
     assert dr.is_array_v(l.ArrayXf) and dr.is_array_v(l.ArrayXf())
     assert dr.array_size_v(1) == 1
+    assert dr.array_size_v("test") == 1
     assert dr.array_size_v(s.Array3f) == 3 and dr.array_size_v(s.Array3f()) == 3 
     assert dr.array_size_v(l.Array3f) == 3 and dr.array_size_v(l.Array3f()) == 3 
     assert dr.array_size_v(s.ArrayXf) == Dynamic and dr.array_size_v(s.ArrayXf()) == Dynamic 
     assert dr.array_size_v(l.ArrayXf) == Dynamic and dr.array_size_v(l.ArrayXf()) == Dynamic 
 
     assert dr.array_depth_v(1) == 0
+    assert dr.array_depth_v("test") == 0
     assert dr.array_depth_v(s.Array3f) == 1 and dr.array_depth_v(s.Array3f()) == 1
     assert dr.array_depth_v(s.ArrayXf) == 1 and dr.array_depth_v(s.ArrayXf()) == 1
+    assert dr.array_depth_v(l.Float) == 1 and dr.array_depth_v(l.Float()) == 1
     assert dr.array_depth_v(l.Array3f) == 2 and dr.array_depth_v(l.Array3f()) == 2
     assert dr.array_depth_v(l.ArrayXf) == 2 and dr.array_depth_v(l.ArrayXf()) == 2
+
+    assert dr.scalar_t(1) is int
+    assert dr.scalar_t("test") is str
+    assert dr.scalar_t(s.Array3f) is float and dr.scalar_t(s.Array3f()) is float
+    assert dr.scalar_t(s.Array3b) is bool and dr.scalar_t(s.Array3b()) is bool
+    assert dr.scalar_t(s.ArrayXf) is float and dr.scalar_t(s.ArrayXf()) is float
+    assert dr.scalar_t(s.ArrayXb) is bool and dr.scalar_t(s.ArrayXb()) is bool
+    assert dr.scalar_t(l.Float) is float and dr.scalar_t(l.Float()) is float
+    assert dr.scalar_t(l.Bool) is bool and dr.scalar_t(l.Bool()) is bool
+    assert dr.scalar_t(l.Array3f) is float and dr.scalar_t(l.Array3f()) is float
+    assert dr.scalar_t(l.Array3b) is bool and dr.scalar_t(l.Array3b()) is bool
+    assert dr.scalar_t(l.ArrayXf) is float and dr.scalar_t(l.ArrayXf()) is float
+    assert dr.scalar_t(l.ArrayXb) is bool and dr.scalar_t(l.ArrayXb()) is bool
+
+    assert dr.value_t(1) is int
+    assert dr.value_t("test") is str
+    assert dr.value_t(s.Array3f) is float and dr.value_t(s.Array3f()) is float
+    assert dr.value_t(s.Array3b) is bool and dr.value_t(s.Array3b()) is bool
+    assert dr.value_t(s.ArrayXf) is float and dr.value_t(s.ArrayXf()) is float
+    assert dr.value_t(s.ArrayXb) is bool and dr.value_t(s.ArrayXb()) is bool
+    assert dr.value_t(l.Float) is float and dr.value_t(l.Float()) is float
+    assert dr.value_t(l.Bool) is bool and dr.value_t(l.Bool()) is bool
+    assert dr.value_t(l.Array3f) is l.Float and dr.value_t(l.Array3f()) is l.Float
+    assert dr.value_t(l.Array3b) is l.Bool and dr.value_t(l.Array3b()) is l.Bool
+    assert dr.value_t(l.ArrayXf) is l.Float and dr.value_t(l.ArrayXf()) is l.Float
+    assert dr.value_t(l.ArrayXb) is l.Bool and dr.value_t(l.ArrayXb()) is l.Bool
+
+    assert dr.mask_t(1) is bool
+    assert dr.mask_t("test") is bool
+    assert dr.mask_t(s.Array3f) is s.Array3b and dr.mask_t(s.Array3f()) is s.Array3b
+    assert dr.mask_t(s.Array3b) is s.Array3b and dr.mask_t(s.Array3b()) is s.Array3b
+    assert dr.mask_t(s.ArrayXf) is s.ArrayXb and dr.mask_t(s.ArrayXf()) is s.ArrayXb
+    assert dr.mask_t(s.ArrayXb) is s.ArrayXb and dr.mask_t(s.ArrayXb()) is s.ArrayXb
+    assert dr.mask_t(l.Float) is l.Bool and dr.mask_t(l.Float()) is l.Bool
+    assert dr.mask_t(l.Bool) is l.Bool and dr.mask_t(l.Bool()) is l.Bool
+    assert dr.mask_t(l.Array3f) is l.Array3b and dr.mask_t(l.Array3f()) is l.Array3b
+    assert dr.mask_t(l.Array3b) is l.Array3b and dr.mask_t(l.Array3b()) is l.Array3b
+    assert dr.mask_t(l.ArrayXf) is l.ArrayXb and dr.mask_t(l.ArrayXf()) is l.ArrayXb
+    assert dr.mask_t(l.ArrayXb) is l.ArrayXb and dr.mask_t(l.ArrayXb()) is l.ArrayXb
+
+    assert dr.is_integral_v(1) and dr.is_integral_v(int)
+    assert dr.is_integral_v(s.Array3i()) and dr.is_integral_v(s.Array3i)
+    assert not dr.is_integral_v(1.0) and not dr.is_integral_v(float)
+    assert not dr.is_integral_v(s.Array3f()) and not dr.is_integral_v(s.Array3f)
+    assert not dr.is_integral_v("str") and not dr.is_integral_v(str)
+    assert not dr.is_integral_v(False) and not dr.is_integral_v(bool)
+    assert not dr.is_integral_v(s.Array3b()) and not dr.is_integral_v(s.Array3b)
+
+    assert not dr.is_float_v(1) and not dr.is_float_v(int)
+    assert not dr.is_float_v(s.Array3i()) and not dr.is_float_v(s.Array3i)
+    assert dr.is_float_v(1.0) and dr.is_float_v(float)
+    assert dr.is_float_v(s.Array3f()) and dr.is_float_v(s.Array3f)
+    assert not dr.is_float_v("str") and not dr.is_float_v(str)
+    assert not dr.is_float_v(False) and not dr.is_float_v(bool)
+    assert not dr.is_float_v(s.Array3b()) and not dr.is_float_v(s.Array3b)
+
+    assert dr.is_arithmetic_v(1) and dr.is_arithmetic_v(int)
+    assert dr.is_arithmetic_v(s.Array3i()) and dr.is_arithmetic_v(s.Array3i)
+    assert dr.is_arithmetic_v(1.0) and dr.is_arithmetic_v(float)
+    assert dr.is_arithmetic_v(s.Array3f()) and dr.is_arithmetic_v(s.Array3f)
+    assert not dr.is_arithmetic_v("str") and not dr.is_arithmetic_v(str)
+    assert not dr.is_arithmetic_v(False) and not dr.is_arithmetic_v(bool)
+    assert not dr.is_arithmetic_v(s.Array3b()) and not dr.is_arithmetic_v(s.Array3b)
+
+    assert not dr.is_mask_v(1) and not dr.is_mask_v(int)
+    assert not dr.is_mask_v(s.Array3i()) and not dr.is_mask_v(s.Array3i)
+    assert not dr.is_mask_v(1.0) and not dr.is_mask_v(float)
+    assert not dr.is_mask_v(s.Array3f()) and not dr.is_mask_v(s.Array3f)
+    assert not dr.is_mask_v("str") and not dr.is_mask_v(str)
+    assert dr.is_mask_v(False) and dr.is_mask_v(bool)
+    assert dr.is_mask_v(s.Array3b()) and dr.is_mask_v(s.Array3b)
 
 
 def test19_select():
@@ -516,3 +566,90 @@ def test19_select():
     assert isinstance(result, l.ArrayXi) and dr.all(result == l.ArrayXi(3, 6))
     result = dr.select(l.ArrayXb(True, False), l.ArrayXi(3, 4), l.ArrayXf(5, 6))
     assert isinstance(result, l.ArrayXf) and dr.all(result == l.ArrayXf(3, 6))
+
+
+def test20_component_access():
+    from drjit.scalar import Array3f, Array4f
+    from drjit.llvm import Array3f as Array3fL
+
+    a = Array4f(4, 5, 6, 7)
+    assert a.x == 4 and a.y == 5 and a.z == 6 and a.w == 7
+    a.x, a.y, a.z, a.w = 1, 2, 3, 4
+    assert a.x == 1 and a.y == 2 and a.z == 3 and a.w == 4
+    a = Array3f(1, 2, 3)
+    assert a.x == 1 and a.y == 2 and a.z == 3
+
+    assert a.index == 0 and a.index_ad == 0
+
+    with pytest.raises(TypeError) as ei:
+        a.w == 4
+    assert "Array3f: array does not have a 'w' component!" in str(ei.value)
+
+    a = Array3fL(1, 2, 3)
+    assert a.index == 0 and a.index_ad == 0
+    assert a.x.index != 0 and a.y.index != 0 and a.z.index != 0
+
+
+def test21_zero_or_full():
+    import drjit.scalar as s
+    import drjit.llvm as l
+    assert type(dr.zero(dtype=int)) is int and dr.zero(dtype=int) == 0
+    assert type(dr.zero(dtype=int, shape=(1,))) is int and dr.zero(dtype=int, shape=(1,)) == 0
+    assert type(dr.zero(float)) is float and dr.zero(float) == 0.0
+    assert type(dr.zero(float, shape=(1,))) is float and dr.zero(float, shape=(1,)) == 0.0
+    with pytest.raises(TypeError) as ei:
+        dr.zero(str)
+    assert "Unsupported dtype!" in str(ei.value)
+
+    with pytest.raises(TypeError) as ei:
+        dr.zero(5)
+    assert "incompatible function arguments" in str(ei.value)
+
+    with pytest.raises(RuntimeError) as ei:
+        dr.zero(int, shape=(2,))
+    with pytest.raises(RuntimeError) as ei:
+        dr.zero(int, shape=(1,1))
+
+    assert type(dr.zero(s.Array3f)) is s.Array3f and dr.all(dr.zero(s.Array3f) == s.Array3f(0))
+    assert type(dr.zero(s.Array3f, shape=(3,))) is s.Array3f and dr.all(dr.zero(s.Array3f, shape=(3,)) == s.Array3f(0))
+    assert type(dr.zero(l.Array3f)) is l.Array3f and dr.all(dr.zero(l.Array3f) == l.Array3f(0))
+    assert type(dr.zero(l.Array3f, shape=(3, 5))) is l.Array3f and dr.shape(dr.zero(l.Array3f, shape=(3, 5))) == (3, 5)
+    assert type(dr.zero(l.Array3f, shape=10)) is l.Array3f and dr.shape(dr.zero(l.Array3f, shape=10)) == (3, 10)
+    assert type(dr.zero(l.ArrayXf, shape=(8, 5))) is l.ArrayXf and dr.shape(dr.zero(l.ArrayXf, shape=(8, 5))) == (8, 5)
+    assert type(dr.zero(l.Array3b, shape=10)) is l.Array3b and dr.shape(dr.zero(l.Array3b, shape=10)) == (3, 10)
+    assert type(dr.zero(l.ArrayXb, shape=(8, 5))) is l.ArrayXb and dr.shape(dr.zero(l.ArrayXb, shape=(8, 5))) == (8, 5)
+    assert type(dr.full(l.ArrayXf, value=123, shape=(8, 5))) is l.ArrayXf and dr.all_nested(dr.zero(l.ArrayXf, value=123, shape=(8, 5)) == 123)
+
+
+#@pytest.mark.parametrize('name', ['sqrt', 'cbrt', 'sin', 'cos', 'tan', 'asin',
+#                                  'acos', 'atan', 'sinh', 'cosh', 'tanh',
+#                                  'asinh', 'acosh', 'atanh', 'exp', 'exp2',
+#                                  'log', 'log2', 'floor', 'ceil', 'trunc',
+#                                  'round', 'rcp', 'rsqrt'])
+#def test17_spotcheck_unary_math(name):
+#    from drjit.scalar import ArrayXf, PCG32
+#    import math
+#    func_ref = getattr(math, name, None)
+#    if name == 'cbrt':
+#        func_ref = lambda x: x**(1/3)
+#    elif name == 'exp2':
+#        func_ref = lambda x: 2**x
+#    elif name == 'log2':
+#        log2 = lambda x: math.log(x) / math.log(2)
+#    elif name == 'round':
+#        func_ref = round
+#    elif name == 'rcp':
+#        func_ref = lambda x : 1/x
+#    elif name == 'rsqrt':
+#        func_ref = lambda x : math.sqrt(1/x)
+#
+#    rng = PCG32()
+#    x = ArrayXf((rng.next_float32() for i in range(10)))
+#    if name == 'acosh':
+#        x += 1
+#    ref = ArrayXf([func_ref(y) for y in x])
+#    func = getattr(dr, name)
+#    value = func(x)
+#    value_2 = ArrayXf(func(y) for y in x)
+#    assert dr.allclose(value, func)
+#

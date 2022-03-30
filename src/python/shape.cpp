@@ -47,10 +47,6 @@ bool shape_impl(nb::handle h, int i, Py_ssize_t *shape) noexcept {
 }
 
 nb::object shape(nb::handle_of<dr::ArrayBase> h) noexcept {
-    const supp &s = nb::type_supplement<supp>(h.type());
-    if (s.meta.is_tensor)
-        return h.attr("shape");
-
     Py_ssize_t shape[4] { -1, -1, -1, -1 };
     if (!shape_impl(h, 0, shape))
         return nb::none();
@@ -65,5 +61,6 @@ nb::object shape(nb::handle_of<dr::ArrayBase> h) noexcept {
     PyObject *result = PyTuple_New(ndim);
     for (Py_ssize_t i = 0; i < ndim; ++i)
         PyTuple_SET_ITEM(result, i, PyLong_FromSize_t(shape[i]));
+
     return nb::steal(result);
 }

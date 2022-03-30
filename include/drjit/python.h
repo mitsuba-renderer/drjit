@@ -22,6 +22,8 @@ using array_binop = void (*) (const void *, const void *, void *);
 using array_ternop = void (*) (const void *, const void *, const void *, void *);
 using array_richcmp = void (*) (const void *, const void *, int, void *);
 using array_reduce_mask = void (*) (const void *, void *);
+using array_id = uint32_t (*) (const void *);
+using array_sized_init = void (*) (void *, size_t);
 
 struct array_metadata {
     uint16_t is_vector     : 1;
@@ -34,7 +36,7 @@ struct array_metadata {
     uint16_t is_cuda       : 1;
     uint16_t is_valid      : 1;
     uint16_t type          : 4;
-    uint16_t unused        : 3;
+    uint16_t ndim          : 3;
     uint8_t tsize_rel;  // type size as multiple of 'talign'
     uint8_t talign;     // type alignment
     uint8_t shape[4];
@@ -44,6 +46,7 @@ struct array_ops {
     size_t (*len)(const void *) noexcept;
     void (*init)(void *, size_t);
 
+    array_sized_init op_zero, op_empty, op_arange;
     array_binop op_add;
     array_binop op_subtract;
     array_binop op_multiply;
@@ -63,6 +66,7 @@ struct array_ops {
     array_richcmp op_richcmp;
     array_ternop op_fma;
     array_ternop op_select;
+    array_id op_index, op_index_ad;
 
     array_unop op_sqrt, op_cbrt;
     array_unop op_sin, op_cos, op_tan;
@@ -200,7 +204,7 @@ template <typename T> nanobind::class_<T> bind(const char *name = nullptr) {
     else
         s.meta.type = (uint16_t) var_type_v<scalar_t<T>>;
 
-    s.meta.unused = 0;
+    s.meta.ndim = (uint16_t) array_depth_v<T>;
     s.meta.tsize_rel = (uint8_t) RelSize;
     s.meta.talign = (uint8_t) alignof(T);
     s.meta.shape[0] = detail::size_or_zero_v<T>;
@@ -221,6 +225,14 @@ template <typename T> nanobind::class_<T> bind(const char *name = nullptr) {
     }
 
     if constexpr (T::Depth == 1 && T::Size == Dynamic) {
+        s.ops.op_zero = [](void *a, size_t size) {
+            new ((T *) a) T(zero<T>(size));
+        };
+
+        s.ops.op_empty = [](void *a, size_t size) {
+            new ((T *) a) T(empty<T>(size));
+        };
+
         s.ops.op_select = [](const void *a, const void *b, const void *c, void *d) {
             new ((T *) d) T(select(*(const mask_t<T> *) a, *(const T *) b, *(const T *) c));
         };
@@ -470,6 +482,12 @@ template <typename T> nanobind::class_<T> bind(const char *name = nullptr) {
         };
     }
 
+    if constexpr (T::IsJIT && T::Depth == 1)
+        s.ops.op_index = [](const void *a) { return ((const T *) a)->index(); };
+
+    if constexpr (T::IsDiff && T::Depth == 1 && T::IsFloat)
+        s.ops.op_index_ad = [](const void *a) { return ((const T *) a)->index_ad(); };
+
     void (*copy)(void *, const void *) = nullptr;
     void (*move)(void *, void *) noexcept = nullptr;
     void (*destruct)(void *) noexcept = nullptr;
@@ -492,7 +510,11 @@ template <typename T> nanobind::class_<T> bind(const char *name = nullptr) {
 
 // Run bind() for many types
 template <typename T> void bind_1() {
-    bind<mask_t<T>>();
+    if constexpr (is_jit_array_v<T>)
+        bind<bool_array_t<T>>();
+    else
+        bind<mask_t<T>>();
+
     bind<float32_array_t<T>>();
     bind<float64_array_t<T>>();
     bind<uint32_array_t<T>>();
@@ -505,6 +527,7 @@ template <typename T> void bind_1() {
 template <typename T> void bind_2() {
     if constexpr (!std::is_scalar_v<T>)
         bind_1<T>();
+
     bind_1<Array<T, 0>>();
     bind_1<Array<T, 1>>();
     bind_1<Array<T, 2>>();

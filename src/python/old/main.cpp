@@ -220,16 +220,6 @@ NB_MODULE(drjit_ext, m_) {
         .def("__enter__", &Scope::enter)
         .def("__exit__", &Scope::exit);
 
-    nb::enum_<LogLevel>(m, "LogLevel")
-        .value("Disable", LogLevel::Disable)
-        .value("Error", LogLevel::Error)
-        .value("Warn", LogLevel::Warn)
-        .value("Info", LogLevel::Info)
-        .value("InfoSym", LogLevel::InfoSym)
-        .value("Debug", LogLevel::Debug)
-        .value("Trace", LogLevel::Trace);
-    nb::implicitly_convertible<unsigned, LogLevel>();
-
     nb::enum_<AllocType>(m, "AllocType")
         .value("Host", AllocType::Host)
         .value("HostAsync", AllocType::HostAsync)
@@ -289,8 +279,6 @@ NB_MODULE(drjit_ext, m_) {
     m.def("flush_kernel_cache", &jit_flush_kernel_cache);
     m.def("flush_malloc_cache", &jit_flush_malloc_cache);
     m.def("malloc_clear_statistics", &jit_malloc_clear_statistics);
-    m.def("set_log_level", [](LogLevel level) { jit_set_log_level_callback(level, log_callback); });
-    m.def("log_level", &jit_log_level_stderr);
     m.def("registry_trim", &jit_registry_trim);
     m.def("set_thread_count", &jit_llvm_set_thread_count);
 

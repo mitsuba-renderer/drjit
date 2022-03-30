@@ -47,8 +47,6 @@ NB_MODULE(drjit_ext, m_) {
     bind_llvm(llvm);
     bind_llvm_ad(cuda_ad);
 
-    m.def("shape", &shape);
-
     // Type aliases
     scalar.attr("Int") = nb::handle(&PyLong_Type);
     scalar.attr("UInt") = nb::handle(&PyLong_Type);
@@ -56,4 +54,21 @@ NB_MODULE(drjit_ext, m_) {
     scalar.attr("UInt64") = nb::handle(&PyLong_Type);
     scalar.attr("Float") = nb::handle(&PyFloat_Type);
     scalar.attr("Float64") = nb::handle(&PyFloat_Type);
+
+    nb::enum_<LogLevel>(m, "LogLevel")
+        .value("Disable", LogLevel::Disable)
+        .value("Error", LogLevel::Error)
+        .value("Warn", LogLevel::Warn)
+        .value("Info", LogLevel::Info)
+        .value("InfoSym", LogLevel::InfoSym)
+        .value("Debug", LogLevel::Debug)
+        .value("Trace", LogLevel::Trace);
+
+    m.def("set_log_level", [](LogLevel level) {
+        jit_set_log_level_callback(level, log_callback);
+    });
+    m.def("set_log_level", [](int level) {
+        jit_set_log_level_callback((LogLevel) level, log_callback);
+    });
+    m.def("log_level", &jit_log_level_stderr);
 }

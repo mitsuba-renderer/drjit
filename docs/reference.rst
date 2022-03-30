@@ -13,7 +13,26 @@ Python. The naming convention with a trailing ``_v`` or ``_t`` indicates
 whether a function returns a value or a type.
 
 .. autofunction:: is_array_v
+.. autofunction:: is_mask_v
+.. autofunction:: is_float_v
+.. autofunction:: is_integral_v
+.. autofunction:: is_arithmetic_v
+.. autofunction:: is_jit_v
+.. autofunction:: is_llvm_v
+.. autofunction:: is_diff_v
+.. autofunction:: is_complex_v
+.. autofunction:: is_matrix_v
+.. autofunction:: is_quaternion_v
+.. autofunction:: is_tensor_v
+.. autofunction:: is_special_v
+.. autofunction:: is_struct_v
+
 .. autofunction:: array_size_v
+.. autofunction:: array_depth_v
+
+.. autofunction:: mask_t
+.. autofunction:: value_t
+.. autofunction:: scalar_t
 
 .. py:data:: Dynamic
     :type: int
@@ -22,7 +41,17 @@ whether a function returns a value or a type.
     Special size value used to identify dynamic arrays in
     :py:func:`array_size_v`.
 
-.. autofunction:: array_depth_v
+
+Miscellaneous operations
+------------------------
+
+.. autofunction:: shape
+
+Array initialization
+--------------------
+
+.. autofunction:: zero
+.. autofunction:: full
 
 Operations involving masks
 --------------------------
@@ -30,6 +59,12 @@ Operations involving masks
 .. autofunction:: select
 .. autofunction:: all
 .. autofunction:: any
+.. autofunction:: all_nested
+.. autofunction:: any_nested
+.. autofunction:: isinf
+.. autofunction:: isnan
+.. autofunction:: isfinite
+.. autofunction:: allclose
 
 Standard mathematical functions
 -------------------------------
@@ -73,8 +108,8 @@ Hyperbolic functions
 .. autofunction:: acosh
 .. autofunction:: atanh
 
-Exponentials and logarithms
----------------------------
+Exponentials, logarithms, power function
+----------------------------------------
 
 .. autofunction:: log2
 .. autofunction:: log
@@ -336,7 +371,15 @@ Array base class
 
 .. autoclass:: ArrayBase
 
+    .. autoproperty:: shape
+    .. autoproperty:: x
+    .. autoproperty:: y
+    .. autoproperty:: z
+    .. autoproperty:: w
+    .. autoproperty:: index
+    .. autoproperty:: index_ad
     .. automethod:: __len__
+    .. automethod:: __iter__
     .. automethod:: __repr__
     .. automethod:: __bool__
 
@@ -390,6 +433,7 @@ Concrete array classes
 
 Scalar array namespace (``drjit.scalar``)
 _________________________________________
+
 .. py:data:: Bool
     :type: type
     :value: bool

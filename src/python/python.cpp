@@ -21,19 +21,14 @@ static const char *type_suffix[] = {
 const char *array_name(array_metadata meta) {
     buffer.clear();
 
-    int depth = 1;
-    for (size_t i = 1; i < 4; ++i) {
-        if (!meta.shape[i])
-            break;
-        depth++;
-    }
+    int ndim = meta.ndim;
 
     if (meta.is_llvm || meta.is_cuda)
-        depth--;
+        ndim--;
 
     const char *suffix = nullptr;
 
-    if (depth == 0) {
+    if (ndim == 0) {
         buffer.put_dstr(type_name[meta.type]);
     } else {
         const char *prefix = "Array";
@@ -49,7 +44,7 @@ const char *array_name(array_metadata meta) {
         suffix = type_suffix[meta.type];
     }
 
-    for (int i = 0; i < depth; ++i) {
+    for (int i = 0; i < ndim; ++i) {
         if (meta.shape[i] == 0xFF)
             buffer.put('X');
         else
@@ -141,40 +136,6 @@ extern nb::handle bind(const char *name, array_supplement &supp,
     bool is_float    = vt == VarType::Float16 || vt == VarType::Float32 ||
                        vt == VarType::Float64;
 
-    bool is_integral = vt == VarType::Int8 || vt == VarType::UInt8 ||
-                       vt == VarType::Int16 || vt == VarType::UInt16 ||
-                       vt == VarType::Int32 || vt == VarType::UInt32 ||
-                       vt == VarType::Int64 || vt == VarType::UInt64;
-
-    h.attr("IsMask") = is_mask;
-    h.attr("IsFloat") = is_float;
-    h.attr("IsIntegral") = is_integral;
-    h.attr("IsArithmetic") = is_float || is_integral;
-    h.attr("IsVector") = (bool) supp.meta.is_vector;
-    h.attr("IsComplex") = (bool) supp.meta.is_complex;
-    h.attr("IsQuaternion") = (bool) supp.meta.is_quaternion;
-    h.attr("IsMatrix") = (bool) supp.meta.is_matrix;
-    h.attr("IsTensor") = (bool) supp.meta.is_tensor;
-
-    int depth = 1;
-    for (size_t i = 1; i < 4; ++i) {
-        uint8_t value = supp.meta.shape[i];
-        if (!value)
-            break;
-        depth++;
-    }
-    h.attr("Depth") = depth;
-
-    nb::tuple shape = nb::steal<nb::tuple>(PyTuple_New(depth));
-    for (int i = 0; i < depth; ++i) {
-        uint8_t value = supp.meta.shape[i];
-        Py_ssize_t value_sz = value == 0xFF ? -1 : value;
-        PyTuple_SET_ITEM(shape.ptr(), i, PyLong_FromSize_t(value_sz));
-    }
-
-    h.attr("Shape") = shape;
-    h.attr("Size") = shape[0];
-
     nb::handle value_type_py;
     if (!value_type) {
         if (is_mask)
@@ -221,8 +182,6 @@ extern nb::handle bind(const char *name, array_supplement &supp,
         mask_type_py = array_get(mask_meta);
     }
 
-    h.attr("Value") = value_type_py;
-    h.attr("Mask") = mask_type_py;
     supp.value = (PyTypeObject *) value_type_py.ptr();
     supp.mask = (PyTypeObject *) mask_type_py.ptr();
 

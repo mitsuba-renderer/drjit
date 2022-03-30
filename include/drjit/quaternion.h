@@ -22,6 +22,7 @@ struct Quaternion : StaticArrayImpl<Value_, 4, false, Quaternion<Value_>> {
     DRJIT_ARRAY_DEFAULTS(Quaternion)
 
     static constexpr bool IsQuaternion = true;
+    static constexpr bool IsSpecial = true;
     static constexpr bool IsVector = false;
 
     using ArrayType = Quaternion;

@@ -21,73 +21,84 @@ del sys, os
 import drjit.drjit_ext as drjit_ext  # noqa
 
 
-def sqr(a):
-    return a * a
+def sqr(arg, /):
+    return arg * arg
 
-def isnan(a):
-    result = a == a
+
+def isnan(arg, /):
+    result = arg == arg
     if isinstance(result, bool):
         return not result
     else:
         return ~result
 
-def isinf(a):
-    return abs(a) == float('inf')
 
-def isfinite(a):
-    return abs(a) < float('inf')
+def isinf(arg, /):
+    return abs(arg) == float('inf')
 
-#def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
-#    Fast path for Dr.Jit arrays, avoid for special array types
-#    due to their non-standard broadcasting behavior
-#    if _ek.is_array_v(a) or _ek.is_array_v(b):
-#        if _ek.is_diff_array_v(a):
-#            a = _ek.detach(a)
-#        if _ek.is_diff_array_v(b):
-#            b = _ek.detach(b)
-#
-#        if _ek.is_array_v(a) and not _ek.is_floating_point_v(a):
-#            a += 0.0
-#        if _ek.is_array_v(b) and not _ek.is_floating_point_v(b):
-#            b += 0.0
-#
-#        diff = abs(a - b)
-#        a = type(diff)(a)
-#        b = type(diff)(b)
-#
-#        shape = 1
-#        if _ek.is_tensor_v(diff):
-#            shape = diff.shape
-#        cond = diff <= abs(b) * rtol + _ek.full(type(diff), atol, shape)
-#        if _ek.is_floating_point_v(a):
-#            cond |= _ek.eq(a, b)  # plus/minus infinity
-#        if equal_nan:
-#            cond |= _ek.isnan(a) & _ek.isnan(b)
-#        return _ek.all_nested(cond)
-#
-#    def safe_len(x):
-#        try:
-#            return len(x)
-#        except TypeError:
-#            return 0
-#
-#    def safe_getitem(x, xl, i):
-#        return x[i if xl > 1 else 0] if xl > 0 else x
-#
-#    la, lb = safe_len(a), safe_len(b)
-#    size = max(la, lb)
-#
-#    if la != size and la > 1 or lb != size and lb > 1:
-#        raise Exception("allclose(): size mismatch (%i vs %i)!" % (la, lb))
-#    elif size == 0:
-#        if equal_nan and _math.isnan(a) and _math.isnan(b):
-#            return True
-#        return abs(a - b) <= abs(b) * rtol + atol
-#    else:
-#        for i in range(size):
-#            ia = safe_getitem(a, la, i)
-#            ib = safe_getitem(b, lb, i)
-#            if not allclose(ia, ib, rtol, atol, equal_nan):
-#                return False
-#        return True
+
+def isfinite(arg, /):
+    return abs(arg) < float('inf')
+
+
+def all_nested(arg, /):
+    """
+    Iterates :py:func:`all` until the type of the return value no longer
+    changes. This can be used to reduce a nested mask array into a single
+    value.
+    """
+    while True:
+        arg_t = type(arg)
+        arg = all(arg)
+        if type(arg) is arg_t:
+            break;
+    return arg
+
+
+def any_nested(arg, /):
+    """
+    Iterates :py:func:`any` until the type of the return value no longer
+    changes. This can be used to reduce a nested mask array into a single
+    value.
+    """
+    while True:
+        arg_t = type(arg)
+        arg = any(arg)
+        if type(arg) is arg_t:
+            break;
+    return arg
+
+
+def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
+    if is_array_v(a) or is_array_v(b):
+        # No derivative tracking in the following
+        a, b = detach(a), detach(b)
+
+        if not is_floating_point_v(a):
+            a = float_array_t(type(a))(a)
+        if not is_floating_point_v(b):
+            b = float_array_t(type(b))(a)
+
+        diff = abs(a - b)
+        cond = diff <= abs(b) * rtol + atol
+        cond |= eq(a, b)  # plus/minus infinity
+
+        if equal_nan:
+            cond |= isnan(a) & isnan(b)
+
+        return all_nested(cond)
+
+def detach(a, preserve_type=False):
+    if _ek.is_diff_array_v(a):
+        if preserve_type:
+            return type(a)(a.detach_())
+        else:
+            return a.detach_()
+    elif _ek.is_drjit_struct_v(a):
+        result = type(a)()
+        for k in type(a).DRJIT_STRUCT.keys():
+            setattr(result, k, detach(getattr(a, k), preserve_type=preserve_type))
+        return result
+    else:
+        return a
 
