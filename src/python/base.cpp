@@ -1,3 +1,7 @@
+#if defined(__GNUC__) && !defined(__clang__)
+#  pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+#endif
+
 #include "python.h"
 #include "docstr.h"
 

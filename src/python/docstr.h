@@ -1,3 +1,8 @@
+#if defined(__GNUC__)
+#  pragma GCC diagnostic push
+#  pragma GCC diagnostic ignored "-Wunused-variable"
+#endif
+
 static const char *doc_is_array_v = R"(
 is_array_v(arg, /)
 Check if the input is a Dr.Jit array instance or type
@@ -978,3 +983,7 @@ differentiation* (AD). The index :py:attr:`index` keeps track of the
 variable index within the raw computation graph, if applicable.
 
 :type: int)";
+
+#if defined(__GNUC__)
+#  pragma GCC diagnostic pop
+#endif

@@ -131,7 +131,10 @@ int array_init(PyObject *self, PyObject *args, PyObject *kwds) {
         }
 
 
-        PyObject *result = PyObject_CallOneArg((PyObject *) supp.value, arg);
+        PyObject *args[2] = { nullptr, arg };
+        PyObject *result =
+            NB_VECTORCALL((PyObject *) supp.value, args + 1,
+                          1 | PY_VECTORCALL_ARGUMENTS_OFFSET, nullptr);
         if (!result)
             return -1;
 

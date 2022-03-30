@@ -396,6 +396,8 @@ template <typename T> nanobind::class_<T> bind(const char *name = nullptr) {
             (detail::array_binop) uintptr_t(1);
         const detail::array_ternop default_ternop =
             (detail::array_ternop) uintptr_t(1);
+        (void) default_unop; (void) default_unop_2;
+        (void) default_binop; (void) default_ternop;
 
         s.ops.op_select = default_ternop;
 
