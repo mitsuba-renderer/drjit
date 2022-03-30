@@ -822,20 +822,24 @@ Args:
 Returns:
     float | drjit.ArrayBase: Result of the FMA operation)";
 
-static const char *doc_zero = R"(
-Return a zero-valued Dr.Jit array of the desired shape. 
+static const char *doc_zeros = R"(
+Return a zero-valued Dr.Jit array of the desired shape.
 
-When ``dtype`` refers to a tensorial type (e.g.,
-:py:class:`drjit.cuda.TensorXf`), ``shape`` must be a tuple that determines the
-tensor rank and shape. 
+When **dtype** refers to a tensorial type (e.g.,
+:py:class:`drjit.cuda.TensorXf`), **shape** must be a tuple that determines the
+tensor rank and shape.
 
 For simpler vectorized types (e.g., :py:class:`drjit.cuda.Array2f`), it can be
-an integer that specifies the size along the last (dynamic) dimension. 
+an integer that specifies the size along the last (dynamic) dimension.
 
 When a tuple is specified, its must be compatible with static dimensions of the
-``dtype``. For example, ``dr.zero(dr.cuda.Array2f, shape=(3, 100))`` fails,
+**dtype**. For example, ``dr.zeros(dr.cuda.Array2f, shape=(3, 100))`` fails,
 since the leading dimension is incompatible with
 :py:class:`drjit.cuda.Array2f`.
+
+When **dtype** refers to a mask array, the resulting array entries are
+initialized to ``False``.
+
 
 Args:
     dtype (type): Desired Dr.Jit array type, Python scalar type, or :ref:`custom data structure <custom-struct>`.
@@ -845,19 +849,46 @@ Returns:
     object: A zero-initialized instance of type `dtype`
 )";
 
-static const char *doc_full = R"(
-Return a constant-valued Dr.Jit array of the desired shape. 
+static const char *doc_ones = R"(
+Return a Dr.Jit array of the desired shape initialized with the value 1.
 
-When ``dtype`` refers to a tensorial type (e.g.,
-:py:class:`drjit.cuda.TensorXf`), ``shape`` must be a tuple that determines the
-tensor rank and shape. 
+When **dtype** refers to a tensorial type (e.g.,
+:py:class:`drjit.cuda.TensorXf`), **shape** must be a tuple that determines the
+tensor rank and shape.
 
 For simpler vectorized types (e.g., :py:class:`drjit.cuda.Array2f`), it can be
-an integer that specifies the size along the last (dynamic) dimension. 
+an integer that specifies the size along the last (dynamic) dimension.
+
+When a tuple is specified, its must be compatible with static dimensions of the
+``dtype``. For example, ``dr.ones(dr.cuda.Array2f, shape=(3, 100))`` fails,
+since the leading dimension is incompatible with
+:py:class:`drjit.cuda.Array2f`.
+
+When **dtype** refers to a mask array, the resulting array entries are
+initialized to ``True``.
+
+Args:
+    dtype (type): Desired Dr.Jit array type, Python scalar type, or :ref:`custom data structure <custom-struct>`.
+    shape (tuple | int): Shape of the desired array
+
+Returns:
+    object: A zero-initialized instance of type `dtype`
+)";
+
+
+static const char *doc_full = R"(
+Return a constant-valued Dr.Jit array of the desired shape.
+
+When **dtype** refers to a tensorial type (e.g.,
+:py:class:`drjit.cuda.TensorXf`), **shape** must be a tuple that determines the
+tensor rank and shape.
+
+For simpler vectorized types (e.g., :py:class:`drjit.cuda.Array2f`), it can be
+an integer that specifies the size along the last (dynamic) dimension.
 
 When a tuple is specified, its must be compatible with static dimensions of the
 ``dtype``. For example, ``dr.full(dr.cuda.Array2f, value=123.0, shape=(3, 100))`` fails,
-since the leading dimension is incompatible with 
+since the leading dimension is incompatible with
 :py:class:`drjit.cuda.Array2f`.
 
 Args:
@@ -872,14 +903,14 @@ Returns:
 
 
 static const char *doc_empty = R"(
-Return a empty Dr.Jit array of the desired shape. 
+Return a empty Dr.Jit array of the desired shape.
 
 When ``dtype`` refers to a tensorial type (e.g.,
 :py:class:`drjit.cuda.TensorXf`), ``shape`` must be a tuple that determines the
-tensor rank and shape. 
+tensor rank and shape.
 
 For simpler vectorized types (e.g., :py:class:`drjit.cuda.Array2f`), it can be
-an integer that specifies the size along the last (dynamic) dimension. 
+an integer that specifies the size along the last (dynamic) dimension.
 
 When a tuple is specified, its must be compatible with static dimensions of the
 ``dtype``. For example, ``dr.empty(dr.cuda.Array2f, shape=(3, 100))`` fails,

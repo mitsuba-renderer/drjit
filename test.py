@@ -593,43 +593,48 @@ def test20_component_access():
 def test21_zero_or_full():
     import drjit.scalar as s
     import drjit.llvm as l
-    assert type(dr.zero(dtype=int)) is int and dr.zero(dtype=int) == 0
-    assert type(dr.zero(dtype=int, shape=(1,))) is int and dr.zero(dtype=int, shape=(1,)) == 0
-    assert type(dr.zero(float)) is float and dr.zero(float) == 0.0
-    assert type(dr.zero(float, shape=(1,))) is float and dr.zero(float, shape=(1,)) == 0.0
+    assert type(dr.zeros(dtype=int)) is int and dr.zeros(dtype=int) == 0
+    assert type(dr.zeros(dtype=int, shape=(1,))) is int and dr.zeros(dtype=int, shape=(1,)) == 0
+    assert type(dr.zeros(float)) is float and dr.zeros(float) == 0.0
+    assert type(dr.zeros(float, shape=(1,))) is float and dr.zeros(float, shape=(1,)) == 0.0
     with pytest.raises(TypeError) as ei:
-        dr.zero(str)
+        dr.zeros(str)
     assert "Unsupported dtype!" in str(ei.value)
 
     with pytest.raises(TypeError) as ei:
-        dr.zero(5)
+        dr.zeros(5)
     assert "incompatible function arguments" in str(ei.value)
 
     with pytest.raises(RuntimeError) as ei:
-        dr.zero(int, shape=(2,))
+        dr.zeros(int, shape=(2,))
     with pytest.raises(RuntimeError) as ei:
-        dr.zero(int, shape=(1,1))
+        dr.zeros(int, shape=(1,1))
 
-    assert type(dr.zero(s.Array3f)) is s.Array3f and dr.all(dr.zero(s.Array3f) == s.Array3f(0))
-    assert type(dr.zero(s.Array3f, shape=(3,))) is s.Array3f and dr.all(dr.zero(s.Array3f, shape=(3,)) == s.Array3f(0))
-    assert type(dr.zero(l.Array3f)) is l.Array3f and dr.all(dr.zero(l.Array3f) == l.Array3f(0))
-    assert type(dr.zero(l.Array3f, shape=(3, 5))) is l.Array3f and dr.shape(dr.zero(l.Array3f, shape=(3, 5))) == (3, 5)
-    assert type(dr.zero(l.Array3f, shape=10)) is l.Array3f and dr.shape(dr.zero(l.Array3f, shape=10)) == (3, 10)
-    assert type(dr.zero(l.ArrayXf, shape=(8, 5))) is l.ArrayXf and dr.shape(dr.zero(l.ArrayXf, shape=(8, 5))) == (8, 5)
-    assert type(dr.zero(l.Array3b, shape=10)) is l.Array3b and dr.shape(dr.zero(l.Array3b, shape=10)) == (3, 10)
-    assert type(dr.zero(l.ArrayXb, shape=(8, 5))) is l.ArrayXb and dr.shape(dr.zero(l.ArrayXb, shape=(8, 5))) == (8, 5)
+    assert type(dr.zeros(s.Array3f)) is s.Array3f and dr.all(dr.zeros(s.Array3f) == s.Array3f(0))
+    assert type(dr.zeros(s.Array3f, shape=(3,))) is s.Array3f and dr.all(dr.zeros(s.Array3f, shape=(3,)) == s.Array3f(0))
+    assert type(dr.zeros(l.Array3f)) is l.Array3f and dr.all(dr.zeros(l.Array3f) == l.Array3f(0))
+    assert type(dr.zeros(l.Array3f, shape=(3, 5))) is l.Array3f and dr.shape(dr.zeros(l.Array3f, shape=(3, 5))) == (3, 5)
+    assert type(dr.zeros(l.Array3f, shape=10)) is l.Array3f and dr.shape(dr.zeros(l.Array3f, shape=10)) == (3, 10)
+    assert type(dr.zeros(l.ArrayXf, shape=(8, 5))) is l.ArrayXf and dr.shape(dr.zeros(l.ArrayXf, shape=(8, 5))) == (8, 5)
+    assert type(dr.zeros(l.Array3b, shape=10)) is l.Array3b and dr.shape(dr.zeros(l.Array3b, shape=10)) == (3, 10)
+    assert type(dr.zeros(l.ArrayXb, shape=(8, 5))) is l.ArrayXb and dr.shape(dr.zeros(l.ArrayXb, shape=(8, 5))) == (8, 5)
     assert type(dr.full(l.ArrayXf, value=123, shape=(8, 5))) is l.ArrayXf and dr.all_nested(dr.full(l.ArrayXf, value=123, shape=(8, 5)) == 123)
 
     class Ray:
-        DRJIT_STRUCT = { 'o': l.Array3f, 'd': l.Array3f, 'maxt' : l.Float }
+        DRJIT_STRUCT = { 'o': l.Array3f, 'd': l.Array3f, 'maxt' : l.Float, 'hit' : l.Bool }
 
-    ray = dr.zero(Ray, 10)
+    ray = dr.zeros(Ray, 10)
     assert isinstance(ray, Ray)
     assert isinstance(ray.o, l.Array3f) and isinstance(ray.d, l.Array3f) \
-        and isinstance(ray.maxt, l.Float)
+        and isinstance(ray.maxt, l.Float) and isinstance(ray.hit , l.Bool)
 
     assert ray.o.shape == (3, 10) and ray.d.shape == (3, 10) and ray.maxt.shape == (10,)
-    assert dr.all_nested(ray.o == 0) and dr.all_nested(ray.d == 0) and dr.all(ray.maxt == 0)
+    assert dr.all_nested(ray.o == 0) and dr.all_nested(ray.d == 0) and dr.all(ray.maxt == 0) \
+        and dr.all(ray.hit == False)
+
+    ray = dr.ones(Ray, 10)
+    assert dr.all_nested(ray.o == 1) and dr.all_nested(ray.d == 1) and dr.all(ray.maxt == 1) \
+        and dr.all(ray.hit == True)
 
 
 #@pytest.mark.parametrize('name', ['sqrt', 'cbrt', 'sin', 'cos', 'tan', 'asin',

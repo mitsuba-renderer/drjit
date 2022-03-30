@@ -141,6 +141,13 @@ int array_init(PyObject *self, PyObject *args, PyObject *kwds) {
         Py_ssize_t len = supp.meta.shape[0];
         if (len == 0xFF) {
             len = 1;
+
+            if (supp.ops.op_full) {
+                supp.ops.op_full(result, len, nb::inst_ptr<void>(self));
+                Py_DECREF(result);
+                return 0;
+            }
+
             if (!array_resize(self, supp, len)) {
                 Py_DECREF(result);
                 return -1;

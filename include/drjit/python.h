@@ -23,7 +23,7 @@ using array_ternop = void (*) (const void *, const void *, const void *, void *)
 using array_richcmp = void (*) (const void *, const void *, int, void *);
 using array_reduce_mask = void (*) (const void *, void *);
 using array_id = uint32_t (*) (const void *);
-using array_sized_init = void (*) (void *, size_t);
+using array_full = void (*) (nanobind::handle, size_t, void *);
 
 struct array_metadata {
     uint16_t is_vector     : 1;
@@ -46,7 +46,7 @@ struct array_ops {
     size_t (*len)(const void *) noexcept;
     void (*init)(void *, size_t);
 
-    array_sized_init op_zero, op_empty, op_arange;
+    array_full op_full;
     array_binop op_add;
     array_binop op_subtract;
     array_binop op_multiply;
@@ -225,12 +225,8 @@ template <typename T> nanobind::class_<T> bind(const char *name = nullptr) {
     }
 
     if constexpr (T::Depth == 1 && T::Size == Dynamic) {
-        s.ops.op_zero = [](void *a, size_t size) {
-            new ((T *) a) T(zero<T>(size));
-        };
-
-        s.ops.op_empty = [](void *a, size_t size) {
-            new ((T *) a) T(empty<T>(size));
+        s.ops.op_full = [](nb::handle a, size_t b, void *c) {
+            new ((T *) c) T(full<T>(nb::cast<scalar_t<T>>(a), b));
         };
 
         s.ops.op_select = [](const void *a, const void *b, const void *c, void *d) {

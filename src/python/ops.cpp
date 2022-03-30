@@ -22,8 +22,17 @@ nb::object full(nb::type_object dtype, nb::handle value,
         if (!fail) {
             const supp &s = nb::type_supplement<supp>(dtype);
             nb::object result = nb::inst_alloc(dtype);
-            nb::inst_zero(result);
 
+            if (s.ops.op_full && shape.size() == 1) {
+                if ((VarType) s.meta.type == VarType::Bool && value.type().is(&PyLong_Type))
+                    value = nb::cast<int>(value) ? Py_True : Py_False;
+
+                s.ops.op_full(value, shape[0], nb::inst_ptr<void>(result));
+                nb::inst_mark_ready(result);
+                return result;
+            }
+
+            nb::inst_zero(result);
             if (s.meta.shape[0] == 0xFF)
                 s.ops.init(nb::inst_ptr<void>(result), shape[0]);
 
@@ -167,16 +176,30 @@ extern void bind_ops(nb::module_ m) {
     m.def("full", full_alt, "dtype"_a, "value"_a, "shape"_a = 1);
 
     m.def(
-        "zero",
+        "zeros",
         [](nb::type_object dtype, const std::vector<size_t> &shape) {
             return full(dtype, nb::cast(0), shape);
         },
-        "dtype"_a, "shape"_a, doc_zero);
+        "dtype"_a, "shape"_a, doc_zeros);
 
     m.def(
-        "zero",
+        "zeros",
         [](nb::type_object dtype, size_t size) {
             return full_alt(dtype, nb::cast(0), size);
+        },
+        "dtype"_a, "shape"_a = 1);
+
+    m.def(
+        "ones",
+        [](nb::type_object dtype, const std::vector<size_t> &shape) {
+            return full(dtype, nb::cast(1), shape);
+        },
+        "dtype"_a, "shape"_a, doc_ones);
+
+    m.def(
+        "ones",
+        [](nb::type_object dtype, size_t size) {
+            return full_alt(dtype, nb::cast(1), size);
         },
         "dtype"_a, "shape"_a = 1);
 }

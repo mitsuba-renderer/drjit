@@ -47,10 +47,11 @@ Miscellaneous operations
 
 .. autofunction:: shape
 
-Array initialization
---------------------
+Array creation
+--------------
 
-.. autofunction:: zero
+.. autofunction:: zeros
+.. autofunction:: ones
 .. autofunction:: full
 
 Operations involving masks
