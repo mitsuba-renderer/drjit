@@ -21,38 +21,41 @@ static const char *type_suffix[] = {
 const char *array_name(array_metadata meta) {
     buffer.clear();
 
-    int ndim = meta.ndim;
+    if (!meta.is_tensor) {
+        int ndim = meta.ndim;
 
-    if (meta.is_llvm || meta.is_cuda)
-        ndim--;
+        if (meta.is_llvm || meta.is_cuda)
+            ndim--;
 
-    const char *suffix = nullptr;
+        const char *suffix = nullptr;
 
-    if (ndim == 0) {
-        buffer.put_dstr(type_name[meta.type]);
+        if (ndim == 0) {
+            buffer.put_dstr(type_name[meta.type]);
+        } else {
+            const char *prefix = "Array";
+            if (meta.is_complex)
+                prefix = "Complex";
+            else if (meta.is_quaternion)
+                prefix = "Quaternion";
+            else if (meta.is_matrix)
+                prefix = "Matrix";
+            buffer.put_dstr(prefix);
+            suffix = type_suffix[meta.type];
+        }
+
+        for (int i = 0; i < ndim; ++i) {
+            if (meta.shape[i] == 0xFF)
+                buffer.put('X');
+            else
+                buffer.put_uint32(meta.shape[i]);
+        }
+
+        if (suffix)
+            buffer.put_dstr(suffix);
     } else {
-        const char *prefix = "Array";
-        if (meta.is_complex)
-            prefix = "Complex";
-        else if (meta.is_quaternion)
-            prefix = "Quaternion";
-        else if (meta.is_matrix)
-            prefix = "Matrix";
-        else if (meta.is_tensor)
-            prefix = "Tensor";
-        buffer.put_dstr(prefix);
-        suffix = type_suffix[meta.type];
+        buffer.put_dstr("TensorX");
+        buffer.put_dstr(type_suffix[meta.type]);
     }
-
-    for (int i = 0; i < ndim; ++i) {
-        if (meta.shape[i] == 0xFF)
-            buffer.put('X');
-        else
-            buffer.put_uint32(meta.shape[i]);
-    }
-
-    if (suffix)
-        buffer.put_dstr(suffix);
 
     return buffer.get();
 }
@@ -99,10 +102,12 @@ extern nb::handle bind(const char *name, array_supplement &supp,
     nb::detail::type_data d;
     d.flags = (uint32_t) nb::detail::type_flags::has_scope |
               (uint32_t) nb::detail::type_flags::has_base_py |
-              (uint32_t) nb::detail::type_flags::has_type_callback |
               (uint32_t) nb::detail::type_flags::is_destructible |
               (uint32_t) nb::detail::type_flags::is_copy_constructible |
               (uint32_t) nb::detail::type_flags::is_move_constructible;
+
+    if (type_callback)
+        d.flags |= (uint32_t) nb::detail::type_flags::has_type_callback;
 
     if (move) {
         d.flags |= (uint32_t) nb::detail::type_flags::has_move;
@@ -139,15 +144,16 @@ extern nb::handle bind(const char *name, array_supplement &supp,
     nb::handle value_type_py;
     if (!value_type) {
         if (is_mask)
-            value_type_py = (PyObject *) &PyBool_Type;
+            value_type_py = &PyBool_Type;
         else if (is_float)
-            value_type_py = (PyObject *) &PyFloat_Type;
+            value_type_py = &PyFloat_Type;
         else
-            value_type_py = (PyObject *) &PyLong_Type;
+            value_type_py = &PyLong_Type;
     } else {
         value_type_py = nb::detail::nb_type_lookup(value_type);
         if (!value_type_py.is_valid())
-            nb::detail::fail("bind(): element type not found!");
+            nb::detail::fail("bind(): element type '%s' not found!",
+                             value_type->name());
     }
 
     auto pred = [](PyTypeObject *tp, PyObject *o,

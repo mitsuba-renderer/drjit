@@ -6,7 +6,7 @@ Py_ssize_t len(PyObject *o) noexcept {
     Py_ssize_t length = s.meta.shape[0];
 
     if (length == 0xFF)
-        length = (Py_ssize_t) s.ops.len(nb::inst_ptr<void>(o));
+        length = (Py_ssize_t) s.len(nb::inst_ptr<void>(o));
 
     return length;
 }
@@ -20,7 +20,7 @@ bool shape_impl(nb::handle h, int i, Py_ssize_t *shape) noexcept {
     Py_ssize_t size = s.meta.shape[0], cur = shape[i];
 
     if (size == 0xFF)
-        size = (Py_ssize_t) s.ops.len(nb::inst_ptr<void>(h));
+        size = (Py_ssize_t) s.len(nb::inst_ptr<void>(h));
 
     Py_ssize_t max_size = size > cur ? size : cur;
     if (max_size != size && size != 1)

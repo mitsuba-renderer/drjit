@@ -177,7 +177,7 @@ struct Tensor
 
     Tensor sub_(const Tensor &b) const {
         Tensor t0 = *this, t1 = b;
-        auto shape = detail::tensor_broadcast("add_", t0, t1);
+        auto shape = detail::tensor_broadcast("sub_", t0, t1);
         return Tensor(t0.m_array - t1.m_array, std::move(shape));
     }
 

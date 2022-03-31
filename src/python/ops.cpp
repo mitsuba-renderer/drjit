@@ -23,18 +23,18 @@ nb::object full(nb::type_object dtype, nb::handle value,
             const supp &s = nb::type_supplement<supp>(dtype);
             nb::object result = nb::inst_alloc(dtype);
 
-            if (s.ops.op_full && shape.size() == 1) {
+            if (s.op_full && shape.size() == 1) {
                 if ((VarType) s.meta.type == VarType::Bool && value.type().is(&PyLong_Type))
                     value = nb::cast<int>(value) ? Py_True : Py_False;
 
-                s.ops.op_full(value, shape[0], nb::inst_ptr<void>(result));
+                s.op_full(value, shape[0], nb::inst_ptr<void>(result));
                 nb::inst_mark_ready(result);
                 return result;
             }
 
             nb::inst_zero(result);
             if (s.meta.shape[0] == 0xFF)
-                s.ops.init(nb::inst_ptr<void>(result), shape[0]);
+                s.init(nb::inst_ptr<void>(result), shape[0]);
 
             nb::type_object sub_type = nb::borrow<nb::type_object>(s.value);
             std::vector<size_t> sub_shape = shape;
@@ -111,7 +111,7 @@ extern void bind_ops(nb::module_ m) {
 
         if (is_drjit_array(h)) {
             const supp &s = nb::type_supplement<supp>(tp);
-            dr::detail::array_reduce_mask op = s.ops.op_all;
+            dr::detail::array_reduce_mask op = s.op_all;
             if (!op)
                 throw nb::type_error(
                     "drjit.all(): requires a Dr.Jit mask array or Python "
@@ -145,7 +145,7 @@ extern void bind_ops(nb::module_ m) {
 
         if (is_drjit_type(tp)) {
             const supp &s = nb::type_supplement<supp>(tp);
-            dr::detail::array_reduce_mask op = s.ops.op_any;
+            dr::detail::array_reduce_mask op = s.op_any;
             if (!op)
                 throw nb::type_error(
                     "drjit.any(): requires a Dr.Jit mask array or Python "

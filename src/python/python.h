@@ -9,7 +9,6 @@ namespace dr = drjit;
 using namespace nb::literals;
 
 using meta = dr::detail::array_metadata;
-using ops = dr::detail::array_ops;
 using supp = dr::detail::array_supplement;
 
 extern nb::handle array_base;

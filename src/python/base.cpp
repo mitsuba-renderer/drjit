@@ -80,6 +80,11 @@ static meta meta_promote(meta a, meta b) {
             r.is_valid = 0;
     }
 
+    if (r.is_tensor) {
+        r.ndim = 0;
+        memset(r.shape, 0, sizeof(r.shape));
+    }
+
     return r;
 }
 
@@ -176,55 +181,126 @@ static bool promote(const char *op, PyObject **o, size_t n, bool select = false)
     return true;
 }
 
-static PyObject *nb_math_unop(const char *name, size_t ops_offset,
-                              PyObject *o) noexcept {
-    PyTypeObject *tp = (PyTypeObject *) Py_TYPE(o);
+// Return sequence protocol access methods for the given type
+nb::detail::tuple<lenfunc, ssizeargfunc, ssizeobjargproc>
+get_sq(nb::handle tp, const char *name, void *check) {
+    PySequenceMethods *seq = ((PyTypeObject *) tp.ptr())->tp_as_sequence;
+    if (!seq || !seq->sq_length || !seq->sq_item || !seq->sq_ass_item || !check) {
+        PyErr_Format(PyExc_RuntimeError,
+                     "%s(): type %s lacks required operations!", name,
+                     ((PyTypeObject *) tp.ptr())->tp_name);
+        return { nullptr, nullptr, nullptr };
+    }
+    return { seq->sq_length, seq->sq_item, seq->sq_ass_item };
+}
+
+static nb::object nb_unop(const char *name, size_t ops_offset, size_t nb_offset,
+                          nb::handle h) noexcept {
+    nb::handle tp = h.type();
     const supp &s = nb::type_supplement<supp>(tp);
 
     using UnOp = void (*) (const void *, void *);
     UnOp op;
-    memcpy(&op, (uint8_t *) &s.ops + ops_offset, sizeof(UnOp));
+    memcpy(&op, (uint8_t *) &s + ops_offset, sizeof(UnOp));
     if (!op)
-        return nb::handle(Py_NotImplemented).inc_ref().ptr();
+        return nb::borrow<nb::object>(Py_NotImplemented);
 
     nb::object result = nb::inst_alloc(tp);
 
     if ((uintptr_t) op != 1) {
         try {
-            op(nb::inst_ptr<void>(o),
+            op(nb::inst_ptr<void>(h.ptr()),
                nb::inst_ptr<void>(result));
             nb::inst_mark_ready(result);
         } catch (const std::exception &e) {
-            PyErr_Format(PyExc_RuntimeError, "drjit.%s(): %s!", name,
-                         e.what());
+            PyErr_Format(PyExc_RuntimeError, "%s.%s(): %s!",
+                         ((PyTypeObject *) tp.ptr())->tp_name, name, e.what());
             result.clear();
         }
 
-        return result.release().ptr();
+        return result;
     }
 
-    nb::object py_op = array_module.attr(name);
+    unaryfunc nb_op = nullptr;
+    memcpy(&nb_op, (uint8_t *) s.value->tp_as_number + nb_offset,
+           sizeof(unaryfunc));
 
-    auto sq_length = tp->tp_as_sequence->sq_length;
-    auto sq_item = tp->tp_as_sequence->sq_item;
-    auto sq_ass_item = tp->tp_as_sequence->sq_ass_item;
+    auto [sq_length, sq_item, sq_ass_item] = get_sq(tp, name, (void *) nb_op);
+    if (!sq_length)
+        return nb::object();
 
-    if (!sq_length || !sq_item || !sq_ass_item) {
-        PyErr_Format(PyExc_RuntimeError,
-                     "drjit.%s(): cannot perform operation!", name);
-        return nullptr;
-    }
-
-    Py_ssize_t size = sq_length(o);
-
+    Py_ssize_t size = sq_length(h.ptr());
     nb::inst_zero(result);
 
     if (s.meta.shape[0] == 0xFF)
-        s.ops.init(nb::inst_ptr<void>(result), size);
+        s.init(nb::inst_ptr<void>(result), size);
+
+    for (Py_ssize_t i = 0; i < size; ++i) {
+        nb::object v = nb::steal(sq_item(h.ptr(), i));
+
+        if (!v.is_valid()) {
+            result.clear();
+            break;
+        }
+
+        nb::object vr = nb::steal(nb_op(v.ptr()));
+        if (!vr.is_valid() || sq_ass_item(result.ptr(), i, vr.ptr())) {
+            result.clear();
+            break;
+        }
+    }
+
+    return result;
+}
+
+
+static nb::object nb_math_unop(const char *name, size_t ops_offset,
+                               nb::handle h) noexcept {
+    nb::handle tp = h.type();
+    const supp &s = nb::type_supplement<supp>(tp);
+
+    // if (s.is_tensor) {
+    //     void *ptr = nb::inst_ptr(h);
+    //
+    //     return tp(
+    //         nb_math_unop(name, ops_offset, s.op_tensor_array(ptr)),
+    //         s.op_tensor_shape(ptr)
+    //     );
+    // }
+
+    using UnOp = void (*) (const void *, void *);
+    UnOp op;
+    memcpy(&op, (uint8_t *) &s + ops_offset, sizeof(UnOp));
+    if (!op) {
+        PyErr_Format(PyExc_TypeError, "drjit.%s(): unsupported type %s.", name,
+                     ((PyTypeObject *) tp.ptr())->tp_name);
+        return nb::object();
+    }
+
+    nb::object result = nb::inst_alloc(tp);
 
     try {
+        if ((uintptr_t) op != 1) {
+            op(nb::inst_ptr<void>(h), nb::inst_ptr<void>(result));
+            nb::inst_mark_ready(result);
+            return result;
+        }
+
+        nb::object py_op = array_module.attr(name);
+
+        auto [sq_length, sq_item, sq_ass_item] = get_sq(tp, name, py_op.ptr());
+        if (!sq_length)
+            return nb::object();
+
+        Py_ssize_t size = sq_length(h.ptr());
+
+        nb::inst_zero(result);
+
+        if (s.meta.shape[0] == 0xFF)
+            s.init(nb::inst_ptr<void>(result), size);
+
         for (Py_ssize_t i = 0; i < size; ++i) {
-            nb::object v = nb::steal(sq_item(o, i));
+            nb::object v = nb::steal(sq_item(h.ptr(), i));
 
             if (!v.is_valid()) {
                 result.clear();
@@ -242,8 +318,7 @@ static PyObject *nb_math_unop(const char *name, size_t ops_offset,
         result.clear();
     }
 
-
-    return result.release().ptr();
+    return result;
 }
 
 static PyObject *nb_math_unop_2(const char *name, size_t ops_offset,
@@ -253,7 +328,7 @@ static PyObject *nb_math_unop_2(const char *name, size_t ops_offset,
 
     using UnOp2 = void (*) (const void *, void *, void *);
     UnOp2 op;
-    memcpy(&op, (uint8_t *) &s.ops + ops_offset, sizeof(UnOp2));
+    memcpy(&op, (uint8_t *) &s + ops_offset, sizeof(UnOp2));
     if (!op)
         return nb::handle(Py_NotImplemented).inc_ref().ptr();
 
@@ -295,7 +370,7 @@ static PyObject *nb_math_unop_2(const char *name, size_t ops_offset,
     nb::inst_zero(result_2);
 
     if (s.meta.shape[0] == 0xFF)
-        s.ops.init(nb::inst_ptr<void>(result), size);
+        s.init(nb::inst_ptr<void>(result), size);
 
     try {
         for (Py_ssize_t i = 0; i < size; ++i) {
@@ -322,75 +397,6 @@ static PyObject *nb_math_unop_2(const char *name, size_t ops_offset,
     return result.release().ptr();
 }
 
-static PyObject *nb_unop(const char *name, size_t ops_offset,
-                         size_t nb_offset, PyObject *o) noexcept {
-    PyTypeObject *tp = (PyTypeObject *) Py_TYPE(o);
-    const supp &s = nb::type_supplement<supp>(tp);
-
-    using UnOp = void (*) (const void *, void *);
-
-    UnOp op;
-    memcpy(&op, (uint8_t *) &s.ops + ops_offset, sizeof(UnOp));
-    if (!op)
-        return nb::handle(Py_NotImplemented).inc_ref().ptr();
-
-    nb::object result = nb::inst_alloc(tp);
-
-    if ((uintptr_t) op != 1) {
-        try {
-            op(nb::inst_ptr<void>(o),
-               nb::inst_ptr<void>(result));
-            nb::inst_mark_ready(result);
-        } catch (const std::exception &e) {
-            PyErr_Format(PyExc_RuntimeError, "%s.%s(): %s!", tp->tp_name, name,
-                         e.what());
-            result.clear();
-        }
-
-        return result.release().ptr();
-    }
-
-    unaryfunc nb_op = nullptr;
-    memcpy(&nb_op, (uint8_t *) s.value->tp_as_number + nb_offset,
-           sizeof(unaryfunc));
-
-    auto sq_length = tp->tp_as_sequence->sq_length;
-    auto sq_item = tp->tp_as_sequence->sq_item;
-    auto sq_ass_item = tp->tp_as_sequence->sq_ass_item;
-
-    if (!nb_op || !sq_length || !sq_item || !sq_ass_item) {
-        PyErr_Format(PyExc_RuntimeError,
-                     "%s.%s(): cannot perform operation (missing "
-                     "number/sequence protocol operations)!",
-                     tp->tp_name, name);
-        return nullptr;
-    }
-
-    Py_ssize_t size = sq_length(o);
-
-    nb::inst_zero(result);
-
-    if (s.meta.shape[0] == 0xFF)
-        s.ops.init(nb::inst_ptr<void>(result), size);
-
-    for (Py_ssize_t i = 0; i < size; ++i) {
-        nb::object v = nb::steal(sq_item(o, i));
-
-        if (!v.is_valid()) {
-            result.clear();
-            break;
-        }
-
-        nb::object vr = nb::steal(nb_op(v.ptr()));
-        if (!vr.is_valid() || sq_ass_item(result.ptr(), i, vr.ptr())) {
-            result.clear();
-            break;
-        }
-    }
-
-    return result.release().ptr();
-}
-
 static PyObject *nb_binop(const char *name, size_t ops_offset, size_t nb_offset,
                           PyObject *h0, PyObject *h1) noexcept {
     nb::object o0, o1;
@@ -409,7 +415,7 @@ static PyObject *nb_binop(const char *name, size_t ops_offset, size_t nb_offset,
 
     /* Three possibilities must be handled:
         1. The requested operation is unsupported by the given array type
-        2. The array type provides an implementation of the requested operation in s.ops.
+        2. The array type provides an implementation of the requested operation in s.
         3. The operation is supported, but no implementation is provided. Fall back
            to a generic operation that recurses
     */
@@ -420,7 +426,7 @@ static PyObject *nb_binop(const char *name, size_t ops_offset, size_t nb_offset,
     using BinOp = void (*) (const void *, const void *, void *);
 
     BinOp op;
-    memcpy(&op, (uint8_t *) &s.ops + ops_offset, sizeof(BinOp));
+    memcpy(&op, (uint8_t *) &s + ops_offset, sizeof(BinOp));
     if (!op)
         return nb::handle(Py_NotImplemented).inc_ref().ptr();
 
@@ -472,7 +478,7 @@ static PyObject *nb_binop(const char *name, size_t ops_offset, size_t nb_offset,
     nb::inst_zero(result);
 
     if (s.meta.shape[0] == 0xFF)
-        s.ops.init(nb::inst_ptr<void>(result), sr);
+        s.init(nb::inst_ptr<void>(result), sr);
 
     Py_ssize_t i0 = 0,
                i1 = 0,
@@ -523,7 +529,7 @@ static PyObject *nb_inplace_binop(const char *name, size_t ops_offset,
     using BinOp = void (*) (const void *, const void *, void *);
 
     BinOp op;
-    memcpy(&op, (uint8_t *) &s.ops + ops_offset, sizeof(BinOp));
+    memcpy(&op, (uint8_t *) &s + ops_offset, sizeof(BinOp));
     if (!op)
         return nb::handle(Py_NotImplemented).inc_ref().ptr();
 
@@ -580,7 +586,7 @@ static PyObject *nb_inplace_binop(const char *name, size_t ops_offset,
         nb::inst_zero(result);
 
         if (s.meta.shape[0] == 0xFF)
-            s.ops.init(nb::inst_ptr<void>(result), sr);
+            s.init(nb::inst_ptr<void>(result), sr);
 
         nb::object v = nb::steal(sq_item(o0.ptr(), 0));
         if (!v.is_valid())
@@ -638,7 +644,7 @@ static PyObject *nb_math_binop(const char *name, size_t ops_offset,
     using BinOp = void (*) (const void *, const void *, void *);
 
     BinOp op;
-    memcpy(&op, (uint8_t *) &s.ops + ops_offset, sizeof(BinOp));
+    memcpy(&op, (uint8_t *) &s + ops_offset, sizeof(BinOp));
     if (!op)
         return nb::handle(Py_NotImplemented).inc_ref().ptr();
 
@@ -686,7 +692,7 @@ static PyObject *nb_math_binop(const char *name, size_t ops_offset,
     nb::inst_zero(result);
 
     if (s.meta.shape[0] == 0xFF)
-        s.ops.init(nb::inst_ptr<void>(result), sr);
+        s.init(nb::inst_ptr<void>(result), sr);
 
     Py_ssize_t i0 = 0,
                i1 = 0,
@@ -743,7 +749,7 @@ static PyObject *nb_math_ternop(const char *name, size_t ops_offset,
     using TernOp = void (*) (const void *, const void *, const void *, void *);
 
     TernOp op;
-    memcpy(&op, (uint8_t *) &s.ops + ops_offset, sizeof(TernOp));
+    memcpy(&op, (uint8_t *) &s + ops_offset, sizeof(TernOp));
     if (!op)
         return nb::handle(Py_NotImplemented).inc_ref().ptr();
 
@@ -795,7 +801,7 @@ static PyObject *nb_math_ternop(const char *name, size_t ops_offset,
     nb::inst_zero(result);
 
     if (s.meta.shape[0] == 0xFF)
-        s.ops.init(nb::inst_ptr<void>(result), sr);
+        s.init(nb::inst_ptr<void>(result), sr);
 
     Py_ssize_t i0 = 0,
                i1 = 0,
@@ -846,7 +852,7 @@ static PyObject *nb_select(PyObject *h0, PyObject *h1, PyObject *h2) noexcept {
 
     using TernOp = void (*)(const void *, const void *, const void *, void *);
 
-    TernOp op = s.ops.op_select;
+    TernOp op = s.op_select;
     if (!op)
         return nb::handle(Py_NotImplemented).inc_ref().ptr();
 
@@ -898,7 +904,7 @@ static PyObject *nb_select(PyObject *h0, PyObject *h1, PyObject *h2) noexcept {
     nb::inst_zero(result);
 
     if (s.meta.shape[0] == 0xFF)
-        s.ops.init(nb::inst_ptr<void>(result), sr);
+        s.init(nb::inst_ptr<void>(result), sr);
 
     Py_ssize_t i0 = 0,
                i1 = 0,
@@ -951,7 +957,7 @@ static PyObject *tp_richcompare(PyObject *h0, PyObject *h1, int op) noexcept {
 
     /* Three possibilities must be handled:
         1. The requested operation is unsupported by the given array type
-        2. The array type provides an implementation of the requested operation in s.ops.
+        2. The array type provides an implementation of the requested operation in s.
         3. The operation is supported, but no implementation is provided. Fall back
            to a generic operation that recurses
     */
@@ -959,14 +965,14 @@ static PyObject *tp_richcompare(PyObject *h0, PyObject *h1, int op) noexcept {
     PyTypeObject *tp = (PyTypeObject *) o0.type().ptr();
     const supp &s = nb::type_supplement<supp>(tp);
 
-    if (!s.ops.op_richcmp)
+    if (!s.op_richcmp)
         return nb::handle(Py_NotImplemented).inc_ref().ptr();
 
     nb::object result = nb::inst_alloc(s.mask);
 
-    if ((uintptr_t) s.ops.op_richcmp != 1) {
+    if ((uintptr_t) s.op_richcmp != 1) {
         try {
-            s.ops.op_richcmp(nb::inst_ptr<void>(o0),
+            s.op_richcmp(nb::inst_ptr<void>(o0),
                              nb::inst_ptr<void>(o1),
                              op,
                              nb::inst_ptr<void>(result));
@@ -1008,7 +1014,7 @@ static PyObject *tp_richcompare(PyObject *h0, PyObject *h1, int op) noexcept {
     nb::inst_zero(result);
 
     if (s.meta.shape[0] == 0xFF)
-        s.ops.init(nb::inst_ptr<void>(result), sr);
+        s.init(nb::inst_ptr<void>(result), sr);
 
     Py_ssize_t i0 = 0,
                i1 = 0,
@@ -1038,11 +1044,11 @@ static PyObject *tp_richcompare(PyObject *h0, PyObject *h1, int op) noexcept {
 
 #define DRJIT_BINOP(name, label, ilabel)                                       \
     static PyObject *nb_##name(PyObject *h0, PyObject *h1) noexcept {          \
-        return nb_binop(label, offsetof(ops, op_##name),                       \
+        return nb_binop(label, offsetof(supp, op_##name),                       \
                         offsetof(PyNumberMethods, nb_##name), h0, h1);         \
     }                                                                          \
     static PyObject *nb_inplace_##name(PyObject *h0, PyObject *h1) noexcept {  \
-        return nb_inplace_binop(ilabel, offsetof(ops, op_##name),              \
+        return nb_inplace_binop(ilabel, offsetof(supp, op_##name),              \
                                 offsetof(PyNumberMethods, nb_##name), h0, h1); \
     }
 
@@ -1073,7 +1079,7 @@ static int nb_bool(PyObject *o) noexcept {
 
     Py_ssize_t length = s.meta.shape[0];
     if (length == 0xFF)
-        length = (Py_ssize_t) s.ops.len(nb::inst_ptr<void>(o));
+        length = (Py_ssize_t) s.len(nb::inst_ptr<void>(o));
 
     if (length != 1) {
         PyErr_Format(PyExc_RuntimeError,
@@ -1103,18 +1109,18 @@ static PyObject *nb_positive(PyObject *o) noexcept {
 }
 
 static PyObject *nb_negative(PyObject *o) noexcept {
-    return nb_unop("__neg__", offsetof(ops, op_negative),
-                   offsetof(PyNumberMethods, nb_negative), o);
+    return nb_unop("__neg__", offsetof(supp, op_negative),
+                   offsetof(PyNumberMethods, nb_negative), o).release().ptr();
 }
 
 static PyObject *nb_absolute(PyObject *o) noexcept {
-    return nb_unop("__abs__", offsetof(ops, op_absolute),
-                   offsetof(PyNumberMethods, nb_absolute), o);
+    return nb_unop("__abs__", offsetof(supp, op_absolute),
+                   offsetof(PyNumberMethods, nb_absolute), o).release().ptr();
 }
 
 static PyObject *nb_invert(PyObject *o) noexcept {
-    return nb_unop("__invert__", offsetof(ops, op_invert),
-                   offsetof(PyNumberMethods, nb_invert), o);
+    return nb_unop("__invert__", offsetof(supp, op_invert),
+                   offsetof(PyNumberMethods, nb_invert), o).release().ptr();
 }
 
 extern PyObject *tp_repr(PyObject *self);
@@ -1123,8 +1129,7 @@ extern PyObject *tp_repr(PyObject *self);
     m.def(                                                                     \
         #name, [](double d) { return dr::name(d); }, nb::raw_doc(doc_##name)); \
     m.def(#name, [](nb::handle_of<dr::ArrayBase> h) {                          \
-        return nb::steal(                                                      \
-            nb_math_unop(#name, offsetof(ops, op_##name), h.ptr()));           \
+        return nb_math_unop(#name, offsetof(supp, op_##name), h);               \
     });
 
 #define DR_MATH_UNOP_2(name)                                                   \
@@ -1132,7 +1137,7 @@ extern PyObject *tp_repr(PyObject *self);
         #name, [](double d) { return dr::name(d); }, nb::raw_doc(doc_##name)); \
     m.def(#name, [](nb::handle_of<dr::ArrayBase> h) {                          \
         return nb::steal(                                                      \
-            nb_math_unop_2(#name, offsetof(ops, op_##name), h.ptr()));         \
+            nb_math_unop_2(#name, offsetof(supp, op_##name), h.ptr()));         \
     });
 
 #define DR_MATH_BINOP(name)                                                    \
@@ -1142,7 +1147,7 @@ extern PyObject *tp_repr(PyObject *self);
     m.def(#name, [](nb::handle h1, nb::handle h2) {                            \
         if (!is_drjit_array(h1) && !is_drjit_array(h2))                        \
             throw nb::next_overload();                                         \
-        return nb::steal(nb_math_binop(#name, offsetof(ops, op_##name),        \
+        return nb::steal(nb_math_binop(#name, offsetof(supp, op_##name),        \
                                        h1.ptr(), h2.ptr()));                   \
     });
 
@@ -1154,7 +1159,7 @@ extern PyObject *tp_repr(PyObject *self);
     m.def(#name, [](nb::handle h1, nb::handle h2, nb::handle h3) {             \
         if (!is_drjit_array(h1) && !is_drjit_array(h2) && !is_drjit_array(h3)) \
             throw nb::next_overload();                                         \
-        return nb::steal(nb_math_ternop(#name, offsetof(ops, op_##name),       \
+        return nb::steal(nb_math_ternop(#name, offsetof(supp, op_##name),       \
                                         h1.ptr(), h2.ptr(), h3.ptr()));        \
     });
 
@@ -1280,9 +1285,9 @@ void bind_arraybase(nb::module_ m) {
         [](nb::handle_of<dr::ArrayBase> h) -> uint32_t {
             PyTypeObject *tp = (PyTypeObject *) h.type().ptr();
             auto &s = nb::type_supplement<supp>(tp);
-            if (!s.ops.op_index)
+            if (!s.op_index)
                 return 0;
-            return s.ops.op_index(nb::inst_ptr<void>(h));
+            return s.op_index(nb::inst_ptr<void>(h));
         },
         nb::raw_doc(doc_ArrayBase_index));
 
@@ -1291,9 +1296,9 @@ void bind_arraybase(nb::module_ m) {
         [](nb::handle_of<dr::ArrayBase> h) -> uint32_t {
             PyTypeObject *tp = (PyTypeObject *) h.type().ptr();
             auto &s = nb::type_supplement<supp>(tp);
-            if (!s.ops.op_index_ad)
+            if (!s.op_index_ad)
                 return 0;
-            return s.ops.op_index_ad(nb::inst_ptr<void>(h));
+            return s.op_index_ad(nb::inst_ptr<void>(h));
         },
         nb::raw_doc(doc_ArrayBase_index_ad));
 
@@ -1334,8 +1339,7 @@ void bind_arraybase(nb::module_ m) {
     m.def("abs", [](double d) { return dr::abs(d); }, nb::raw_doc(doc_abs));
     m.def("abs", [](Py_ssize_t i) { return dr::abs(i); });
     m.def("abs", [](nb::handle_of<dr::ArrayBase> h) {
-        return nb::steal(
-            nb_math_unop("abs", offsetof(ops, op_absolute), h.ptr()));
+        return nb_math_unop("abs", offsetof(supp, op_absolute), h);
     });
 
     m.def(
@@ -1346,7 +1350,7 @@ void bind_arraybase(nb::module_ m) {
         if (!is_drjit_array(h1) && !is_drjit_array(h2))
             throw nb::next_overload();
         return nb::steal(
-            nb_math_binop("min", offsetof(ops, op_min), h1.ptr(), h2.ptr()));
+            nb_math_binop("min", offsetof(supp, op_min), h1.ptr(), h2.ptr()));
     });
 
     m.def(
@@ -1357,7 +1361,7 @@ void bind_arraybase(nb::module_ m) {
         if (!is_drjit_array(h1) && !is_drjit_array(h2))
             throw nb::next_overload();
         return nb::steal(
-            nb_math_binop("max", offsetof(ops, op_max), h1.ptr(), h2.ptr()));
+            nb_math_binop("max", offsetof(supp, op_max), h1.ptr(), h2.ptr()));
     });
 
     m.def(

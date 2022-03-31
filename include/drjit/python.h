@@ -3,6 +3,7 @@
 #include <drjit/array.h>
 #include <drjit/jit.h>
 #include <drjit/dynamic.h>
+#include <drjit/tensor.h>
 #include <drjit/math.h>
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/pair.h>
@@ -42,7 +43,11 @@ struct array_metadata {
     uint8_t shape[4];
 };
 
-struct array_ops {
+struct array_supplement {
+    array_metadata meta;
+    PyTypeObject *value;
+    PyTypeObject *mask;
+
     size_t (*len)(const void *) noexcept;
     void (*init)(void *, size_t);
 
@@ -80,17 +85,8 @@ struct array_ops {
     array_unop_2 op_sincos, op_sincosh, op_frexp;
 };
 
-struct array_supplement {
-    array_metadata meta;
-    PyTypeObject *value;
-    PyTypeObject *mask;
-    array_ops ops;
-};
-
 static_assert(sizeof(array_metadata) == 8);
-// static_assert(sizeof(array_supplement) == 8 + sizeof(void *) * 4);
 
-extern DRJIT_PYTHON_EXPORT const char *array_name(array_metadata meta);
 extern DRJIT_PYTHON_EXPORT const nanobind::handle array_get(array_metadata meta);
 
 extern DRJIT_PYTHON_EXPORT nanobind::handle
@@ -173,7 +169,6 @@ NAMESPACE_END(detail)
 
 template <typename T> nanobind::class_<T> bind(const char *name = nullptr) {
     namespace nb = nanobind;
-    using Mask = mask_t<T>;
 
     static_assert(
         std::is_copy_constructible_v<T> &&
@@ -188,6 +183,7 @@ template <typename T> nanobind::class_<T> bind(const char *name = nullptr) {
                   "drjit::bind(): type is too large!");
 
     detail::array_supplement s;
+    memset(&s, 0, sizeof(detail::array_supplement));
 
     s.meta.is_vector = T::IsVector;
     s.meta.is_complex = T::IsComplex;
@@ -204,109 +200,143 @@ template <typename T> nanobind::class_<T> bind(const char *name = nullptr) {
     else
         s.meta.type = (uint16_t) var_type_v<scalar_t<T>>;
 
-    s.meta.ndim = (uint16_t) array_depth_v<T>;
     s.meta.tsize_rel = (uint8_t) RelSize;
     s.meta.talign = (uint8_t) alignof(T);
-    s.meta.shape[0] = detail::size_or_zero_v<T>;
-    s.meta.shape[1] = detail::size_or_zero_v<value_t<T>>;
-    s.meta.shape[2] = detail::size_or_zero_v<value_t<value_t<T>>>;
-    s.meta.shape[3] = detail::size_or_zero_v<value_t<value_t<value_t<T>>>>;
 
-    memset(&s.ops, 0, sizeof(detail::array_ops));
+    if constexpr (!T::IsTensor) {
+        s.meta.ndim = (uint16_t) array_depth_v<T>;
+        s.meta.shape[0] = detail::size_or_zero_v<T>;
+        s.meta.shape[1] = detail::size_or_zero_v<value_t<T>>;
+        s.meta.shape[2] = detail::size_or_zero_v<value_t<value_t<T>>>;
+        s.meta.shape[3] = detail::size_or_zero_v<value_t<value_t<value_t<T>>>>;
+    }
+
+    void (*copy)(void *, const void *) = nullptr;
+    void (*move)(void *, void *) noexcept = nullptr;
+    void (*destruct)(void *) noexcept = nullptr;
+    void (*type_callback)(PyTypeObject *) noexcept = nullptr;
+
+    if constexpr (!std::is_trivially_copy_constructible_v<T>)
+        copy = nb::detail::wrap_copy<T>;
+
+    if constexpr (!std::is_trivially_move_constructible_v<T>)
+        move = nb::detail::wrap_move<T>;
+
+    if constexpr (!std::is_trivially_destructible_v<T>)
+        destruct = nb::detail::wrap_destruct<T>;
+
+    using Value = typename T::Value;
+
+    if constexpr (!T::IsTensor)
+        type_callback = detail::type_callback<T>;
+
+    return nb::steal<nb::class_<T>>(detail::bind(
+        name, s, &typeid(T), std::is_scalar_v<Value> ? nullptr : &typeid(Value),
+        copy, move, destruct, type_callback));
+}
+
+template <typename T> nanobind::class_<T> bind_array(const char *name = nullptr) {
+    namespace nb = nanobind;
+    using Mask = mask_t<T>;
+
+    nb::class_<T> tp = bind<T>(name);
+
+    detail::array_supplement &s =
+        nb::type_supplement<detail::array_supplement>(tp);
 
     if constexpr (T::Size == Dynamic) {
-        s.ops.len = [](const void *a) noexcept -> size_t {
+        s.len = [](const void *a) noexcept -> size_t {
             return ((const T *) a)->size();
         };
 
-        s.ops.init = [](void *a, size_t size) {
+        s.init = [](void *a, size_t size) {
             ((T *) a)->init_(size);
         };
     }
 
     if constexpr (T::Depth == 1 && T::Size == Dynamic) {
-        s.ops.op_full = [](nb::handle a, size_t b, void *c) {
+        s.op_full = [](nb::handle a, size_t b, void *c) {
             new ((T *) c) T(full<T>(nb::cast<scalar_t<T>>(a), b));
         };
 
-        s.ops.op_select = [](const void *a, const void *b, const void *c, void *d) {
+        s.op_select = [](const void *a, const void *b, const void *c, void *d) {
             new ((T *) d) T(select(*(const mask_t<T> *) a, *(const T *) b, *(const T *) c));
         };
 
         if constexpr (T::IsArithmetic) {
-            s.ops.op_add = [](const void *a, const void *b, void *c) {
+            s.op_add = [](const void *a, const void *b, void *c) {
                 new ((T *) c) T(*(const T *) a + *(const T *) b);
             };
 
-            s.ops.op_subtract = [](const void *a, const void *b, void *c) {
+            s.op_subtract = [](const void *a, const void *b, void *c) {
                 new ((T *) c) T(*(const T *) a - *(const T *) b);
             };
 
-            s.ops.op_multiply = [](const void *a, const void *b, void *c) {
+            s.op_multiply = [](const void *a, const void *b, void *c) {
                 new ((T *) c) T(*(const T *) a * *(const T *) b);
             };
 
-            s.ops.op_min = [](const void *a, const void *b, void *c) {
+            s.op_min = [](const void *a, const void *b, void *c) {
                 new ((T *) c) T(drjit::min(*(const T *) a, *(const T *) b));
             };
 
-            s.ops.op_max = [](const void *a, const void *b, void *c) {
+            s.op_max = [](const void *a, const void *b, void *c) {
                 new ((T *) c) T(drjit::max(*(const T *) a, *(const T *) b));
             };
 
-            s.ops.op_fma = [](const void *a, const void *b, const void *c, void *d) {
+            s.op_fma = [](const void *a, const void *b, const void *c, void *d) {
                 new ((T *) d) T(fmadd(*(const T *) a, *(const T *) b, *(const T *) c));
             };
 
             if constexpr (std::is_signed_v<scalar_t<T>>) {
-                s.ops.op_absolute = [](const void *a, void *b) {
+                s.op_absolute = [](const void *a, void *b) {
                     new ((T *) b) T(((const T *) a)->abs_());
                 };
-                s.ops.op_negative = [](const void *a, void *b) {
+                s.op_negative = [](const void *a, void *b) {
                     new ((T *) b) T(-*(const T *) a);
                 };
             }
         }
 
         if constexpr (T::IsIntegral) {
-            s.ops.op_remainder = [](const void *a, const void *b, void *c) {
+            s.op_remainder = [](const void *a, const void *b, void *c) {
                 new ((T *) c) T(*(const T *) a % *(const T *) b);
             };
 
-            s.ops.op_floor_divide = [](const void *a, const void *b, void *c) {
+            s.op_floor_divide = [](const void *a, const void *b, void *c) {
                 new ((T *) c) T(*(const T *) a / *(const T *) b);
             };
 
-            s.ops.op_lshift = [](const void *a, const void *b, void *c) {
+            s.op_lshift = [](const void *a, const void *b, void *c) {
                 new ((T *) c) T((*(const T *) a) << (*(const T *) b));
             };
 
-            s.ops.op_rshift = [](const void *a, const void *b, void *c) {
+            s.op_rshift = [](const void *a, const void *b, void *c) {
                 new ((T *) c) T((*(const T *) a) >> (*(const T *) b));
             };
         } else {
-            s.ops.op_true_divide = [](const void *a, const void *b, void *c) {
+            s.op_true_divide = [](const void *a, const void *b, void *c) {
                 new ((T *) c) T(*(const T *) a / *(const T *) b);
             };
         }
 
         if constexpr (T::IsIntegral || T::IsMask) {
-            s.ops.op_and = [](const void *a, const void *b, void *c) {
+            s.op_and = [](const void *a, const void *b, void *c) {
                 new ((T *) c) T(*(const T *) a & *(const T *) b);
             };
 
-            s.ops.op_or = [](const void *a, const void *b, void *c) {
+            s.op_or = [](const void *a, const void *b, void *c) {
                 new ((T *) c) T(*(const T *) a | *(const T *) b);
             };
 
-            s.ops.op_xor = [](const void *a, const void *b, void *c) {
+            s.op_xor = [](const void *a, const void *b, void *c) {
                 if constexpr (T::IsIntegral)
                     new ((T *) c) T(*(const T *) a ^ *(const T *) b);
                 else
                     new ((T *) c) T(neq(*(const T *) a, *(const T *) b));
             };
 
-            s.ops.op_invert = [](const void *a, void *b) {
+            s.op_invert = [](const void *a, void *b) {
                 if constexpr (T::IsIntegral)
                     new ((T *) b) T(~*(const T *) a);
                 else
@@ -315,7 +345,7 @@ template <typename T> nanobind::class_<T> bind(const char *name = nullptr) {
         }
 
         if constexpr (T::IsArithmetic || T::IsMask) {
-            s.ops.op_richcmp = [](const void *a, const void *b, int op, void *c) {
+            s.op_richcmp = [](const void *a, const void *b, int op, void *c) {
                 switch (op) {
                     case Py_LT:
                         new ((Mask *) c) Mask((*(const T *) a) < (*(const T *) b));
@@ -340,43 +370,43 @@ template <typename T> nanobind::class_<T> bind(const char *name = nullptr) {
         }
 
         if constexpr (T::IsFloat) {
-            s.ops.op_sqrt  = [](const void *a, void *b) { new ((T *) b) T(sqrt(*(const T *) a)); };
-            s.ops.op_cbrt  = [](const void *a, void *b) { new ((T *) b) T(cbrt(*(const T *) a)); };
-            s.ops.op_sin   = [](const void *a, void *b) { new ((T *) b) T(sin(*(const T *) a)); };
-            s.ops.op_cos   = [](const void *a, void *b) { new ((T *) b) T(cos(*(const T *) a)); };
-            s.ops.op_tan   = [](const void *a, void *b) { new ((T *) b) T(tan(*(const T *) a)); };
-            s.ops.op_asin  = [](const void *a, void *b) { new ((T *) b) T(asin(*(const T *) a)); };
-            s.ops.op_acos  = [](const void *a, void *b) { new ((T *) b) T(acos(*(const T *) a)); };
-            s.ops.op_atan  = [](const void *a, void *b) { new ((T *) b) T(atan(*(const T *) a)); };
-            s.ops.op_sinh  = [](const void *a, void *b) { new ((T *) b) T(sinh(*(const T *) a)); };
-            s.ops.op_cosh  = [](const void *a, void *b) { new ((T *) b) T(cosh(*(const T *) a)); };
-            s.ops.op_tanh  = [](const void *a, void *b) { new ((T *) b) T(tanh(*(const T *) a)); };
-            s.ops.op_asinh = [](const void *a, void *b) { new ((T *) b) T(asinh(*(const T *) a)); };
-            s.ops.op_acosh = [](const void *a, void *b) { new ((T *) b) T(acosh(*(const T *) a)); };
-            s.ops.op_atanh = [](const void *a, void *b) { new ((T *) b) T(atanh(*(const T *) a)); };
-            s.ops.op_exp   = [](const void *a, void *b) { new ((T *) b) T(exp(*(const T *) a)); };
-            s.ops.op_exp2  = [](const void *a, void *b) { new ((T *) b) T(exp2(*(const T *) a)); };
-            s.ops.op_log   = [](const void *a, void *b) { new ((T *) b) T(log(*(const T *) a)); };
-            s.ops.op_log2  = [](const void *a, void *b) { new ((T *) b) T(log2(*(const T *) a)); };
-            s.ops.op_floor = [](const void *a, void *b) { new ((T *) b) T(floor(*(const T *) a)); };
-            s.ops.op_ceil  = [](const void *a, void *b) { new ((T *) b) T(ceil(*(const T *) a)); };
-            s.ops.op_round = [](const void *a, void *b) { new ((T *) b) T(round(*(const T *) a)); };
-            s.ops.op_trunc = [](const void *a, void *b) { new ((T *) b) T(trunc(*(const T *) a)); };
-            s.ops.op_rcp   = [](const void *a, void *b) { new ((T *) b) T(rcp(*(const T *) a)); };
-            s.ops.op_rsqrt = [](const void *a, void *b) { new ((T *) b) T(rsqrt(*(const T *) a)); };
-            s.ops.op_ldexp = [](const void *a, const void *b, void *c) { new ((T *) c) T(drjit::ldexp(*(const T *) a, *(const T *) b)); };
-            s.ops.op_atan2 = [](const void *a, const void *b, void *c) { new ((T *) c) T(drjit::atan2(*(const T *) a, *(const T *) b)); };
-            s.ops.op_sincos = [](const void *a, void *b, void *c) {
+            s.op_sqrt  = [](const void *a, void *b) { new ((T *) b) T(sqrt(*(const T *) a)); };
+            s.op_cbrt  = [](const void *a, void *b) { new ((T *) b) T(cbrt(*(const T *) a)); };
+            s.op_sin   = [](const void *a, void *b) { new ((T *) b) T(sin(*(const T *) a)); };
+            s.op_cos   = [](const void *a, void *b) { new ((T *) b) T(cos(*(const T *) a)); };
+            s.op_tan   = [](const void *a, void *b) { new ((T *) b) T(tan(*(const T *) a)); };
+            s.op_asin  = [](const void *a, void *b) { new ((T *) b) T(asin(*(const T *) a)); };
+            s.op_acos  = [](const void *a, void *b) { new ((T *) b) T(acos(*(const T *) a)); };
+            s.op_atan  = [](const void *a, void *b) { new ((T *) b) T(atan(*(const T *) a)); };
+            s.op_sinh  = [](const void *a, void *b) { new ((T *) b) T(sinh(*(const T *) a)); };
+            s.op_cosh  = [](const void *a, void *b) { new ((T *) b) T(cosh(*(const T *) a)); };
+            s.op_tanh  = [](const void *a, void *b) { new ((T *) b) T(tanh(*(const T *) a)); };
+            s.op_asinh = [](const void *a, void *b) { new ((T *) b) T(asinh(*(const T *) a)); };
+            s.op_acosh = [](const void *a, void *b) { new ((T *) b) T(acosh(*(const T *) a)); };
+            s.op_atanh = [](const void *a, void *b) { new ((T *) b) T(atanh(*(const T *) a)); };
+            s.op_exp   = [](const void *a, void *b) { new ((T *) b) T(exp(*(const T *) a)); };
+            s.op_exp2  = [](const void *a, void *b) { new ((T *) b) T(exp2(*(const T *) a)); };
+            s.op_log   = [](const void *a, void *b) { new ((T *) b) T(log(*(const T *) a)); };
+            s.op_log2  = [](const void *a, void *b) { new ((T *) b) T(log2(*(const T *) a)); };
+            s.op_floor = [](const void *a, void *b) { new ((T *) b) T(floor(*(const T *) a)); };
+            s.op_ceil  = [](const void *a, void *b) { new ((T *) b) T(ceil(*(const T *) a)); };
+            s.op_round = [](const void *a, void *b) { new ((T *) b) T(round(*(const T *) a)); };
+            s.op_trunc = [](const void *a, void *b) { new ((T *) b) T(trunc(*(const T *) a)); };
+            s.op_rcp   = [](const void *a, void *b) { new ((T *) b) T(rcp(*(const T *) a)); };
+            s.op_rsqrt = [](const void *a, void *b) { new ((T *) b) T(rsqrt(*(const T *) a)); };
+            s.op_ldexp = [](const void *a, const void *b, void *c) { new ((T *) c) T(drjit::ldexp(*(const T *) a, *(const T *) b)); };
+            s.op_atan2 = [](const void *a, const void *b, void *c) { new ((T *) c) T(drjit::atan2(*(const T *) a, *(const T *) b)); };
+            s.op_sincos = [](const void *a, void *b, void *c) {
                 auto [b_, c_] = sincos(*(const T *) a);
                 new ((T *) b) T(b_);
                 new ((T *) c) T(c_);
             };
-            s.ops.op_sincosh = [](const void *a, void *b, void *c) {
+            s.op_sincosh = [](const void *a, void *b, void *c) {
                 auto [b_, c_] = sincosh(*(const T *) a);
                 new ((T *) b) T(b_);
                 new ((T *) c) T(c_);
             };
-            s.ops.op_frexp = [](const void *a, void *b, void *c) {
+            s.op_frexp = [](const void *a, void *b, void *c) {
                 auto [b_, c_] = frexp(*(const T *) a);
                 new ((T *) b) T(b_);
                 new ((T *) c) T(c_);
@@ -395,143 +425,141 @@ template <typename T> nanobind::class_<T> bind(const char *name = nullptr) {
         (void) default_unop; (void) default_unop_2;
         (void) default_binop; (void) default_ternop;
 
-        s.ops.op_select = default_ternop;
+        s.op_select = default_ternop;
 
         if constexpr (T::IsArithmetic) {
-            s.ops.op_add = default_binop;
-            s.ops.op_subtract = default_binop;
-            s.ops.op_multiply = default_binop;
-            s.ops.op_min = default_binop;
-            s.ops.op_max = default_binop;
-            s.ops.op_fma = default_ternop;
+            s.op_add = default_binop;
+            s.op_subtract = default_binop;
+            s.op_multiply = default_binop;
+            s.op_min = default_binop;
+            s.op_max = default_binop;
+            s.op_fma = default_ternop;
 
             if constexpr (std::is_signed_v<scalar_t<T>>) {
-                s.ops.op_absolute = default_unop;
-                s.ops.op_negative = default_unop;
+                s.op_absolute = default_unop;
+                s.op_negative = default_unop;
             }
         }
 
         if constexpr (T::IsIntegral) {
-            s.ops.op_remainder = default_binop;
-            s.ops.op_floor_divide = default_binop;
-            s.ops.op_lshift = default_binop;
-            s.ops.op_rshift = default_binop;
+            s.op_remainder = default_binop;
+            s.op_floor_divide = default_binop;
+            s.op_lshift = default_binop;
+            s.op_rshift = default_binop;
         } else {
-            s.ops.op_true_divide = default_binop;
+            s.op_true_divide = default_binop;
         }
 
         if constexpr (T::IsIntegral || T::IsMask) {
-            s.ops.op_and = default_binop;
-            s.ops.op_or = default_binop;
-            s.ops.op_xor = default_binop;
-            s.ops.op_invert = default_unop;
+            s.op_and = default_binop;
+            s.op_or = default_binop;
+            s.op_xor = default_binop;
+            s.op_invert = default_unop;
         }
 
         if constexpr (T::IsArithmetic || T::IsMask)
-            s.ops.op_richcmp = (detail::array_richcmp) uintptr_t(1);
+            s.op_richcmp = (detail::array_richcmp) uintptr_t(1);
 
         if constexpr (T::IsFloat) {
-            s.ops.op_sqrt  = default_unop;
-            s.ops.op_cbrt  = default_unop;
-            s.ops.op_sin   = default_unop;
-            s.ops.op_cos   = default_unop;
-            s.ops.op_tan   = default_unop;
-            s.ops.op_asin  = default_unop;
-            s.ops.op_acos  = default_unop;
-            s.ops.op_atan  = default_unop;
-            s.ops.op_sinh  = default_unop;
-            s.ops.op_cosh  = default_unop;
-            s.ops.op_tanh  = default_unop;
-            s.ops.op_asinh = default_unop;
-            s.ops.op_acosh = default_unop;
-            s.ops.op_atanh = default_unop;
-            s.ops.op_exp   = default_unop;
-            s.ops.op_exp2  = default_unop;
-            s.ops.op_log   = default_unop;
-            s.ops.op_log2  = default_unop;
-            s.ops.op_floor = default_unop;
-            s.ops.op_ceil  = default_unop;
-            s.ops.op_round = default_unop;
-            s.ops.op_trunc = default_unop;
-            s.ops.op_rcp   = default_unop;
-            s.ops.op_rsqrt = default_unop;
-            s.ops.op_ldexp = default_binop;
-            s.ops.op_atan2 = default_binop;
-            s.ops.op_sincos = default_unop_2;
-            s.ops.op_sincosh = default_unop_2;
-            s.ops.op_frexp = default_unop_2;
+            s.op_sqrt  = default_unop;
+            s.op_cbrt  = default_unop;
+            s.op_sin   = default_unop;
+            s.op_cos   = default_unop;
+            s.op_tan   = default_unop;
+            s.op_asin  = default_unop;
+            s.op_acos  = default_unop;
+            s.op_atan  = default_unop;
+            s.op_sinh  = default_unop;
+            s.op_cosh  = default_unop;
+            s.op_tanh  = default_unop;
+            s.op_asinh = default_unop;
+            s.op_acosh = default_unop;
+            s.op_atanh = default_unop;
+            s.op_exp   = default_unop;
+            s.op_exp2  = default_unop;
+            s.op_log   = default_unop;
+            s.op_log2  = default_unop;
+            s.op_floor = default_unop;
+            s.op_ceil  = default_unop;
+            s.op_round = default_unop;
+            s.op_trunc = default_unop;
+            s.op_rcp   = default_unop;
+            s.op_rsqrt = default_unop;
+            s.op_ldexp = default_binop;
+            s.op_atan2 = default_binop;
+            s.op_sincos = default_unop_2;
+            s.op_sincosh = default_unop_2;
+            s.op_frexp = default_unop_2;
         }
     }
 
     if constexpr (T::Depth == 1 && T::IsDynamic && T::IsMask) {
-        s.ops.op_all = [](const void *a, void *b) { new (b) T(((const T *) a)->all_()); };
-        s.ops.op_any = [](const void *a, void *b) { new (b) T(((const T *) a)->any_()); };
+        s.op_all = [](const void *a, void *b) { new (b) T(((const T *) a)->all_()); };
+        s.op_any = [](const void *a, void *b) { new (b) T(((const T *) a)->any_()); };
     } else {
         const detail::array_reduce_mask default_reduce_mask =
             (detail::array_reduce_mask) uintptr_t(1);
 
-        s.ops.op_all = default_reduce_mask;
-        s.ops.op_any = default_reduce_mask;
+        s.op_all = default_reduce_mask;
+        s.op_any = default_reduce_mask;
     }
 
     if (T::IsMask && T::Depth == 1 && T::Size != Dynamic) {
-        s.ops.op_invert = [](const void *a, void *b) {
+        s.op_invert = [](const void *a, void *b) {
             new ((T *) b) T(!*(const T *) a);
         };
     }
 
     if constexpr (T::IsJIT && T::Depth == 1)
-        s.ops.op_index = [](const void *a) { return ((const T *) a)->index(); };
+        s.op_index = [](const void *a) { return ((const T *) a)->index(); };
 
     if constexpr (T::IsDiff && T::Depth == 1 && T::IsFloat)
-        s.ops.op_index_ad = [](const void *a) { return ((const T *) a)->index_ad(); };
+        s.op_index_ad = [](const void *a) { return ((const T *) a)->index_ad(); };
 
-    void (*copy)(void *, const void *) = nullptr;
-    void (*move)(void *, void *) noexcept = nullptr;
-    void (*destruct)(void *) noexcept = nullptr;
-
-    if constexpr (!std::is_trivially_copy_constructible_v<T>)
-        copy = nb::detail::wrap_copy<T>;
-
-    if constexpr (!std::is_trivially_move_constructible_v<T>)
-        move = nb::detail::wrap_move<T>;
-
-    if constexpr (!std::is_trivially_destructible_v<T>)
-        destruct = nb::detail::wrap_destruct<T>;
-
-    using Value = typename T::Value;
-
-    return nb::steal<nb::class_<T>>(detail::bind(
-        name, s, &typeid(T), std::is_scalar_v<Value> ? nullptr : &typeid(Value),
-        copy, move, destruct, detail::type_callback<T>));
+    return tp;
 }
 
-// Run bind() for many types
-template <typename T> void bind_1() {
+template <typename T> nanobind::class_<T> bind_tensor(const char *name = nullptr) {
+    namespace nb = nanobind;
+    nb::class_<T> tp = bind<T>(name);
+
+    tp.def(nb::init<const typename T::Array &>());
+
+
+    return tp;
+}
+
+// Run bind_array() and bind_tensor() for many different types
+template <typename T> void bind_all() {
     if constexpr (is_jit_array_v<T>)
-        bind<bool_array_t<T>>();
+        bind_array<bool_array_t<T>>();
     else
-        bind<mask_t<T>>();
+        bind_array<mask_t<T>>();
 
-    bind<float32_array_t<T>>();
-    bind<float64_array_t<T>>();
-    bind<uint32_array_t<T>>();
-    bind<int32_array_t<T>>();
-    bind<uint64_array_t<T>>();
-    bind<int64_array_t<T>>();
+    bind_array<float32_array_t<T>>();
+    bind_array<float64_array_t<T>>();
+    bind_array<uint32_array_t<T>>();
+    bind_array<int32_array_t<T>>();
+    bind_array<uint64_array_t<T>>();
+    bind_array<int64_array_t<T>>();
+
+    if constexpr (T::Size == Dynamic && T::Depth == 1) {
+        bind_tensor<Tensor<mask_t<T>>>();
+        bind_tensor<Tensor<float32_array_t<T>>>();
+    }
 }
 
-// .. and for many dimensions
-template <typename T> void bind_2() {
+// .. and for many different types
+template <typename T> void bind_all_types() {
     if constexpr (!std::is_scalar_v<T>)
-        bind_1<T>();
+        bind_all<T>();
 
-    bind_1<Array<T, 0>>();
-    bind_1<Array<T, 1>>();
-    bind_1<Array<T, 2>>();
-    bind_1<Array<T, 3>>();
-    bind_1<Array<T, 4>>();
-    bind_1<DynamicArray<T>>();
+    bind_all<Array<T, 0>>();
+    bind_all<Array<T, 1>>();
+    bind_all<Array<T, 2>>();
+    bind_all<Array<T, 3>>();
+    bind_all<Array<T, 4>>();
+    bind_all<DynamicArray<T>>();
 }
 
 NAMESPACE_END(drjit)

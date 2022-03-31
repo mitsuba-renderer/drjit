@@ -10,7 +10,7 @@ bool array_resize(PyObject *self, const detail::array_supplement &supp,
                   Py_ssize_t len) {
     if (supp.meta.shape[0] == 0xFF) {
         try {
-            supp.ops.init(nb::inst_ptr<void>(self), (size_t) len);
+            supp.init(nb::inst_ptr<void>(self), (size_t) len);
         } catch (const std::exception &e) {
             PyErr_Format(PyExc_TypeError, "%s.__init__(): %s",
                          Py_TYPE(self)->tp_name, e.what());
@@ -142,8 +142,8 @@ int array_init(PyObject *self, PyObject *args, PyObject *kwds) {
         if (len == 0xFF) {
             len = 1;
 
-            if (supp.ops.op_full) {
-                supp.ops.op_full(result, len, nb::inst_ptr<void>(self));
+            if (supp.op_full) {
+                supp.op_full(result, len, nb::inst_ptr<void>(self));
                 Py_DECREF(result);
                 return 0;
             }
