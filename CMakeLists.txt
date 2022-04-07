@@ -17,14 +17,14 @@ option(DRJIT_ENABLE_TESTS         "Build Dr.Jit test suite? (Warning, this takes
 #  Check if submodules have been checked out, or fail early
 # ----------------------------------------------------------
 
-if (NOT IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/ext/drjit-core/ext/drjit-thread/ext/cmake-defaults")
+if (NOT IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/ext/drjit-core/ext/nanothread/ext/cmake-defaults")
   message(FATAL_ERROR "The Dr.Jit dependencies are missing! "
     "You probably did not clone the project with --recursive. It is possible to recover "
     "by invoking\n$ git submodule update --init --recursive")
 endif()
 
 set(DRJIT_VERSION_FILE "${CMAKE_CURRENT_SOURCE_DIR}/include/drjit/fwd.h")
-include(ext/drjit-core/ext/drjit-thread/ext/cmake-defaults/CMakeLists.txt)
+include(ext/drjit-core/ext/nanothread/ext/cmake-defaults/CMakeLists.txt)
 
 if (MSVC)
   set(DRJIT_OUTPUT_DIRECTORY
@@ -48,7 +48,7 @@ target_include_directories(drjit
   INTERFACE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ext/drjit-core/include>
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ext/drjit-core/ext/drjit-thread/include>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ext/drjit-core/ext/nanothread/include>
   $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
 
@@ -64,11 +64,11 @@ if (DRJIT_ENABLE_JIT)
   endif()
   add_subdirectory(ext/drjit-core)
   set_target_properties(drjit-core PROPERTIES ${DRJIT_OUTPUT_DIRECTORY})
-  set_target_properties(drjit-thread PROPERTIES ${DRJIT_OUTPUT_DIRECTORY})
+  set_target_properties(nanothread PROPERTIES ${DRJIT_OUTPUT_DIRECTORY})
 
   if (DRJIT_MASTER_PROJECT)
     install(TARGETS drjit-core EXPORT drjitTargets)
-    install(TARGETS drjit-thread EXPORT drjitTargets)
+    install(TARGETS nanothread EXPORT drjitTargets)
   endif()
 
   mark_as_advanced(DRJIT_THREAD_ENABLE_TESTS)
@@ -126,7 +126,7 @@ if (DRJIT_MASTER_PROJECT)
   install(DIRECTORY include/drjit DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
   if (DRJIT_ENABLE_JIT)
     install(DIRECTORY ext/drjit-core/include/drjit-core DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
-    install(DIRECTORY ext/drjit-core/ext/drjit-thread/include/drjit-thread DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+    install(DIRECTORY ext/drjit-core/ext/nanothread/include/nanothread DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
   endif()
 
   install(TARGETS drjit EXPORT drjitTargets)

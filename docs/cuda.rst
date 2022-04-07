@@ -16,7 +16,7 @@ Available backends
 Dr.Jit provides three different array backends for this purpose:
 
 1. :cpp:struct:`DynamicArray` represents a heap-allocated memory region on the
-   CPU not unlike a ``std::vector<T>``. 
+   CPU not unlike a ``std::vector<T>``.
 
    It performs arithmetic in an *eager* fashion, which is simple but generally
    leads to extremely poor performance. This is because each and every
@@ -105,7 +105,7 @@ intermediate representation, a kind of assembly language that is portable
 across NVIDIA GPUs. When the print statement starts to access the array
 contents in line 4, this type of lazy execution is no longer possible, at which
 point Dr.Jit must *evaluate* the array by compiling and executing a CUDA kernel
-containing these three operations. 
+containing these three operations.
 
 Other parts of Dr.Jit work hand-in-hand with these JIT-compiled arrays and lazy
 evaluation. For example, evaluating a transcendental function operation from
@@ -123,7 +123,7 @@ operations (click to magnify):
 
 Fusing multiple operations can greatly improve performance because the
 intermediate results of a larger calculation can be represented in GPU
-registers instead of having access them through global memory. 
+registers instead of having access them through global memory.
 
 Kernel cache
 ------------
@@ -178,7 +178,7 @@ Low level details
 
 CUDA: Grid-stride loop
 
-LLVM: drjit-thread
+LLVM: nanothread
 
 Usage in C++
 ------------
