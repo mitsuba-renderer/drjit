@@ -42,7 +42,7 @@ public:
     static constexpr bool IsDynamic = is_dynamic_v<Value>;
     // Only single-precision floating-point CUDA textures are supported
     static constexpr bool HasCudaTexture =
-        std::is_same_v<scalar_t<Value>, float>;
+        std::is_same_v<scalar_t<Value>, float> && IsCUDA;
 
     using Int32 = int32_array_t<Value>;
     using UInt32 = uint32_array_t<Value>;
@@ -165,7 +165,7 @@ public:
         if (value.size() != m_size)
             drjit_raise("Texture::set_value(): unexpected array size!");
 
-        if constexpr (IsCUDA && HasCudaTexture) {
+        if constexpr (HasCudaTexture) {
             value.eval_(); // Sync the value before copying to texture memory
             jit_cuda_tex_memcpy_d2t(Dimension, m_value.shape().data(),
                                     value.data(), m_handle);
@@ -235,7 +235,7 @@ public:
      * \brief Return the texture data as a tensor object
      */
     const TensorXf &tensor() const {
-        if constexpr (IsCUDA && HasCudaTexture) {
+        if constexpr (HasCudaTexture) {
             if (m_migrated) {
                 Storage primal = empty<Storage>(m_size);
                 jit_cuda_tex_memcpy_t2d(Dimension, m_value.shape().data(),
@@ -275,7 +275,7 @@ public:
                    Mask active = true) const {
         const size_t channels = m_value.shape(Dimension);
 
-        if constexpr (IsCUDA && HasCudaTexture) {
+        if constexpr (HasCudaTexture) {
             uint32_t pos_idx[Dimension];
             uint32_t *out_idx =
                 (uint32_t *) alloca(channels * sizeof(uint32_t));
@@ -379,7 +379,7 @@ public:
      */
     void eval(const Array<Value, Dimension> &pos, Value *out,
               Mask active = true) const {
-        if constexpr (IsCUDA && HasCudaTexture) {
+        if constexpr (HasCudaTexture) {
             eval_cuda(pos, out, active);
 
             if constexpr (IsDiff) {
@@ -410,7 +410,7 @@ public:
                          Mask active = true) const {
         const size_t channels = m_value.shape(Dimension);
 
-        if constexpr (IsCUDA && HasCudaTexture) {
+        if constexpr (HasCudaTexture) {
             if constexpr (Dimension == 1) {
                 const PosF res_f = PosF(m_shape_opaque);
                 const PosF pos_f = floor(fmadd(pos, res_f, -.5f)) + .5f;
@@ -514,7 +514,7 @@ public:
     void eval_fetch(const Array<Value, Dimension> &pos,
                     Array<Value *, 1 << Dimension> &out,
                     Mask active = true) const {
-        if constexpr (IsCUDA && HasCudaTexture) {
+        if constexpr (HasCudaTexture) {
             eval_fetch_cuda(pos, out, active);
 
             if constexpr (IsDiff) {
@@ -649,7 +649,7 @@ public:
         if constexpr (!is_array_v<Mask>)
             active = true;
 
-        if (IsCUDA && HasCudaTexture && m_migrate && force_nonaccel)
+        if (HasCudaTexture && m_migrate && force_nonaccel)
             jit_log(::LogLevel::Warn,
                     "\"force_nonaccel\" is used while the data has been fully "
                     "migrated to CUDA texture memory");
@@ -689,7 +689,7 @@ public:
         auto eval_helper = [&](const PosF &pos,
                                const Mask &active) -> ArrayX {
             ArrayX out = empty<ArrayX>(channels);
-            if constexpr (IsCUDA && HasCudaTexture) {
+            if constexpr (HasCudaTexture) {
                 if (!force_nonaccel) {
                     eval_cuda(pos, out.data(), active);
                     return out;
@@ -1115,7 +1115,7 @@ protected:
         m_filter_mode = filter_mode;
         m_wrap_mode = wrap_mode;
 
-        if constexpr (IsCUDA && HasCudaTexture)
+        if constexpr (HasCudaTexture)
             m_handle = jit_cuda_tex_create(Dimension, shape, channels,
                                            (int) filter_mode, (int) wrap_mode);
     }
