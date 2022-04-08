@@ -224,6 +224,9 @@ public:
                 init(tensor.shape().data(), tensor.shape(Dimension), m_migrate,
                      m_filter_mode, m_wrap_mode, !is_inplace_update);
             }
+        } else {
+            init(tensor.shape().data(), tensor.shape(Dimension), m_migrate,
+                 m_filter_mode, m_wrap_mode, false);
         }
 
         set_value(tensor.array());
@@ -1082,7 +1085,7 @@ public:
             if (m_wrap_mode == WrapMode::Mirror)
                 // Starting at 0, flip the texture every other repetition
                 // (flip when: even number of repetitions in negative direction,
-                // or odd number of repetions in positive direction)
+                // or odd number of repetitions in positive direction)
                 mod =
                     select(eq(div & 1, 0) ^ (pos < 0), mod, shape - 1 - mod);
 
