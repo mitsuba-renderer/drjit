@@ -47,20 +47,27 @@ bool shape_impl(nb::handle h, int i, Py_ssize_t *shape) noexcept {
 }
 
 nb::object shape(nb::handle_of<dr::ArrayBase> h) noexcept {
-    Py_ssize_t shape[4] { -1, -1, -1, -1 };
-    if (!shape_impl(h, 0, shape))
-        return nb::none();
+    const supp &s = nb::type_supplement<supp>(h.type());
+    PyObject *result;
 
-    Py_ssize_t ndim = 0;
-    for (Py_ssize_t i = 0; i < 4; ++i) {
-        if (shape[i] == -1)
-            break;
-        ndim++;
+    if (!s.meta.is_tensor) {
+        Py_ssize_t shape[4] { -1, -1, -1, -1 };
+        if (!shape_impl(h, 0, shape))
+            return nb::none();
+
+        result = PyTuple_New(s.meta.ndim);
+        for (Py_ssize_t i = 0; i < s.meta.ndim; ++i)
+            PyTuple_SET_ITEM(result, i, PyLong_FromSize_t(shape[i] < 0 ? 0 : shape[i]));
+
+        return nb::steal(result);
+    } else {
+        const drjit::dr_vector<size_t> &shape =
+            s.op_tensor_shape(nb::inst_ptr<void>(h));
+
+        result = PyTuple_New((Py_ssize_t) shape.size());
+        for (size_t i = 0; i < shape.size(); ++i)
+            PyTuple_SET_ITEM(result, i, PyLong_FromSize_t(shape[i]));
     }
-
-    PyObject *result = PyTuple_New(ndim);
-    for (Py_ssize_t i = 0; i < ndim; ++i)
-        PyTuple_SET_ITEM(result, i, PyLong_FromSize_t(shape[i]));
 
     return nb::steal(result);
 }

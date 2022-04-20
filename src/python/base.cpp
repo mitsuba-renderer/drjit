@@ -23,27 +23,6 @@ static bool meta_check(meta m) {
            (m.is_cuda + m.is_llvm <= 1);
 }
 
-#if 0
-static void meta_print(meta m) {
-    printf("meta[\n"
-           "  is_vector=%u,\n"
-           "  is_complex=%u,\n"
-           "  is_quaternion=%u,\n"
-           "  is_matrix=%u,\n"
-           "  is_tensor=%u,\n"
-           "  is_diff=%u,\n"
-           "  is_llvm=%u,\n"
-           "  is_cuda=%u,\n"
-           "  is_valid=%u,\n"
-           "  type=%u,\n"
-           "  shape=(%u, %u, %u, %u)\n"
-           "]\n",
-           m.is_vector, m.is_complex, m.is_quaternion, m.is_matrix, m.is_tensor,
-           m.is_diff, m.is_llvm, m.is_cuda, m.is_valid, m.type, m.shape[0],
-           m.shape[1], m.shape[2], m.shape[3]);
-}
-#endif
-
 /// Compute the metadata type of an operation combinining 'a' and 'b'
 static meta meta_promote(meta a, meta b) {
     int ndim_a = a.ndim, ndim_b = b.ndim;
@@ -1044,11 +1023,11 @@ static PyObject *tp_richcompare(PyObject *h0, PyObject *h1, int op) noexcept {
 
 #define DRJIT_BINOP(name, label, ilabel)                                       \
     static PyObject *nb_##name(PyObject *h0, PyObject *h1) noexcept {          \
-        return nb_binop(label, offsetof(supp, op_##name),                       \
+        return nb_binop(label, offsetof(supp, op_##name),                      \
                         offsetof(PyNumberMethods, nb_##name), h0, h1);         \
     }                                                                          \
     static PyObject *nb_inplace_##name(PyObject *h0, PyObject *h1) noexcept {  \
-        return nb_inplace_binop(ilabel, offsetof(supp, op_##name),              \
+        return nb_inplace_binop(ilabel, offsetof(supp, op_##name),             \
                                 offsetof(PyNumberMethods, nb_##name), h0, h1); \
     }
 
@@ -1276,15 +1255,26 @@ void bind_arraybase(nb::module_ m) {
     m.def("shape", &shape, nb::raw_doc(doc_shape));
 
     ab.def_property_readonly("shape", shape, nb::raw_doc(doc_ArrayBase_shape));
+    ab.def_property_readonly(
+        "array",
+        [](nb::handle_of<dr::ArrayBase> h) -> nb::object {
+            const supp &s = nb::type_supplement<supp>(h.type());
+            if (s.meta.is_tensor)
+                return nb::steal(s.op_tensor_array(h.ptr()));
+            else
+                return nb::borrow(h);
+        },
+        nb::raw_doc(doc_ArrayBase_array));
+
     ab.def_property("x", ab_getter<0>, ab_setter<0>, nb::raw_doc(doc_ArrayBase_x));
     ab.def_property("y", ab_getter<1>, ab_setter<1>, nb::raw_doc(doc_ArrayBase_y));
     ab.def_property("z", ab_getter<2>, ab_setter<2>, nb::raw_doc(doc_ArrayBase_z));
     ab.def_property("w", ab_getter<3>, ab_setter<3>, nb::raw_doc(doc_ArrayBase_w));
+
     ab.def_property_readonly(
         "index",
         [](nb::handle_of<dr::ArrayBase> h) -> uint32_t {
-            PyTypeObject *tp = (PyTypeObject *) h.type().ptr();
-            auto &s = nb::type_supplement<supp>(tp);
+            const supp &s = nb::type_supplement<supp>(h.type());
             if (!s.op_index)
                 return 0;
             return s.op_index(nb::inst_ptr<void>(h));

@@ -788,6 +788,8 @@ void ad_scope_enter(ADScope type, size_t size, const uint32_t *indices) {
             if (size) {
                 for (size_t i = 0; i < size; ++i)
                     scope.enable(indices[i]);
+                if (!scope.complement && scope.indices.empty())
+                    scope.indices.insert(0);
             } else {
                 scope.complement = true;
                 scope.indices.clear();

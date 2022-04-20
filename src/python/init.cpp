@@ -1,4 +1,4 @@
-#include <drjit/python.h>
+#include "python.h"
 #include "../ext/nanobind/src/buffer.h"
 
 NAMESPACE_BEGIN(drjit)
@@ -34,7 +34,6 @@ int array_init(PyObject *self, PyObject *args, PyObject *kwds) {
     PyTypeObject *self_tp = Py_TYPE(self);
     const detail::array_supplement &supp =
         nb::type_supplement<detail::array_supplement>(self_tp);
-    auto assign_item = self_tp->tp_as_sequence->sq_ass_item;
 
     if (kwds) {
         PyErr_Format(
@@ -44,7 +43,9 @@ int array_init(PyObject *self, PyObject *args, PyObject *kwds) {
         return -1;
     }
 
+    auto assign_item = self_tp->tp_as_sequence->sq_ass_item;
     size_t argc = (size_t) PyTuple_GET_SIZE(args);
+
     if (argc == 0) {
         // Zero-initialize
         nb::detail::nb_inst_zero(self);
@@ -116,9 +117,9 @@ int array_init(PyObject *self, PyObject *args, PyObject *kwds) {
                 }
                 return 0;
             }
-
         }
 
+        // Catch-all case for iterable types
         if (arg_tp->tp_iter && arg_tp != supp.value) {
             PyObject *list = PySequence_List(arg);
             if (!list)
@@ -130,13 +131,18 @@ int array_init(PyObject *self, PyObject *args, PyObject *kwds) {
             return rv;
         }
 
-
-        PyObject *args[2] = { nullptr, arg };
-        PyObject *result =
-            NB_VECTORCALL((PyObject *) supp.value, args + 1,
-                          1 | PY_VECTORCALL_ARGUMENTS_OFFSET, nullptr);
-        if (!result)
-            return -1;
+        // No sequence/iterable type, broadcast to elements
+        PyObject *result;
+        if (arg_tp == supp.value) {
+            result = arg;
+            Py_INCREF(result);
+        } else {
+            PyObject *args[2] = { nullptr, arg };
+            result = NB_VECTORCALL((PyObject *) supp.value, args + 1,
+                                   1 | PY_VECTORCALL_ARGUMENTS_OFFSET, nullptr);
+            if (!result)
+                return -1;
+        }
 
         Py_ssize_t len = supp.meta.shape[0];
         if (len == 0xFF) {
@@ -181,6 +187,52 @@ int array_init(PyObject *self, PyObject *args, PyObject *kwds) {
     }
 }
 
+int tensor_init(PyObject *self, PyObject *args, PyObject *kwds) {
+    PyTypeObject *self_tp = Py_TYPE(self);
+    const detail::array_supplement &supp =
+        nb::type_supplement<detail::array_supplement>(self_tp);
+
+    if (kwds) {
+        PyErr_Format(
+            PyExc_TypeError,
+            "%s.__init__(): constructor does not take keyword arguments!",
+            self_tp->tp_name);
+        return -1;
+    }
+
+    size_t argc = (size_t) PyTuple_GET_SIZE(args);
+
+    if (argc == 0) {
+        // Zero-initialize
+        nb::detail::nb_inst_zero(self);
+        supp.op_tensor_shape(nb::inst_ptr<void>(self)).push_back(0);
+        return 0;
+    }
+
+    if (argc == 1) {
+        PyObject *arg = PyTuple_GET_ITEM(args, 0);
+        PyTypeObject *arg_tp = Py_TYPE(arg);
+
+        // Same type -> copy constructor
+        if (arg_tp == self_tp) {
+            nb::detail::nb_inst_copy(self, arg);
+            return 0;
+        }
+
+        nb::detail::nb_inst_zero(self);
+        PyObject *value = supp.op_tensor_array(self);
+        if (array_init(value, args, kwds)) {
+            Py_DECREF(value);
+            return -1;
+        }
+
+        supp.op_tensor_shape(nb::inst_ptr<void>(self)).push_back(len(value));
+        Py_DECREF(value);
+        return 0;
+    }
+
+    return -1;
+}
 
 NAMESPACE_END(detail)
 NAMESPACE_END(drjit)

@@ -7,16 +7,23 @@ Type traits
 -----------
 
 The functions in this section can be used to infer properties or types of
-Dr.Jit arrays. In C++, these expressions are all  ``constexpr`` (i.e.,
-evaluated at compile time), while evaluation takes place at runtime within
-Python. The naming convention with a trailing ``_v`` or ``_t`` indicates
-whether a function returns a value or a type.
+Dr.Jit arrays.
+
+The naming convention with a trailing ``_v`` or ``_t`` indicates whether a
+function returns a value or a type. Evaluation takes place at runtime within
+Python. In C++, these expressions are all  ``constexpr`` (i.e., evaluated at
+compile time.).
+
+Array type tests
+________________
 
 .. autofunction:: is_array_v
 .. autofunction:: is_mask_v
 .. autofunction:: is_float_v
 .. autofunction:: is_integral_v
 .. autofunction:: is_arithmetic_v
+.. autofunction:: is_signed_v
+.. autofunction:: is_unsigned_v
 .. autofunction:: is_jit_v
 .. autofunction:: is_llvm_v
 .. autofunction:: is_diff_v
@@ -27,12 +34,10 @@ whether a function returns a value or a type.
 .. autofunction:: is_special_v
 .. autofunction:: is_struct_v
 
+Array shape
+___________
 .. autofunction:: array_size_v
 .. autofunction:: array_depth_v
-
-.. autofunction:: mask_t
-.. autofunction:: value_t
-.. autofunction:: scalar_t
 
 .. py:data:: Dynamic
     :type: int
@@ -40,6 +45,13 @@ whether a function returns a value or a type.
 
     Special size value used to identify dynamic arrays in
     :py:func:`array_size_v`.
+
+Related types
+_____________
+.. autofunction:: mask_t
+.. autofunction:: value_t
+.. autofunction:: scalar_t
+.. autofunction:: array_t
 
 
 Miscellaneous operations

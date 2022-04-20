@@ -5,10 +5,19 @@
 
 
 nb::object full_alt(nb::type_object dtype, nb::handle value, size_t size);
+
 nb::object full(nb::type_object dtype, nb::handle value,
                 const std::vector<size_t> &shape) {
     if (is_drjit_type(dtype)) {
         const supp &s = nb::type_supplement<supp>(dtype);
+
+        // if (s.meta.is_tensor) {
+        //     size_t size = 1;
+        //     for (size_t s : shape)
+        //         size *= s;
+        //     return dtype(full_alt(s.array_type, value, size), shape);
+        // }
+        //
         bool fail = false;
         if (s.meta.ndim == shape.size()) {
             for (uint16_t i = 0; i < s.meta.ndim; ++i) {

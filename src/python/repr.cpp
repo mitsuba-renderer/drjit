@@ -7,6 +7,10 @@ namespace dr = drjit;
 
 static nanobind::detail::Buffer buffer;
 
+// Skip output when there are more than 20 elements. Must be
+// divisible by 4
+static size_t repr_threshold = 20;
+
 void tp_repr_impl(PyObject *self,
                   const std::vector<size_t> &shape,
                   std::vector<size_t> &index,
@@ -16,9 +20,13 @@ void tp_repr_impl(PyObject *self,
 
     buffer.put('[');
     for (size_t j = 0; j < size; ++j) {
+
         index[i] = j;
 
-        if (i > 0) {
+        if (size >= repr_threshold && j * 4 == repr_threshold) {
+            buffer.fmt(".. %zu skipped ..", size - repr_threshold / 2);
+            j = size - repr_threshold / 4 - 1;
+        } else if (i > 0) {
             tp_repr_impl(self, shape, index, depth + 1);
         } else {
             nb::object o = nb::borrow(self);
@@ -44,6 +52,7 @@ void tp_repr_impl(PyObject *self,
             }
         }
     }
+
     buffer.put(']');
 }
 
@@ -53,7 +62,7 @@ PyObject *tp_repr(PyObject *self) {
 
     nb::object shape_obj = shape(self);
     if (shape_obj.is_none()) {
-        buffer.put("[ragged array[");
+        buffer.put("[ragged array]");
     } else {
         std::vector<size_t> shape = nb::cast<std::vector<size_t>>(shape_obj),
                             index(shape.size(), 0);

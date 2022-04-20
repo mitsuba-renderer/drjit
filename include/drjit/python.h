@@ -7,6 +7,7 @@
 #include <drjit/math.h>
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/pair.h>
+#include <nanobind/stl/detail/nb_list.h>
 
 #if defined(DRJIT_PYTHON_BUILD)
 #  define DRJIT_PYTHON_EXPORT DRJIT_EXPORT
@@ -47,9 +48,12 @@ struct array_supplement {
     array_metadata meta;
     PyTypeObject *value;
     PyTypeObject *mask;
+    PyTypeObject *array;
 
     size_t (*len)(const void *) noexcept;
     void (*init)(void *, size_t);
+    dr_vector<size_t> & (*op_tensor_shape)(void *) noexcept;
+    PyObject *(*op_tensor_array)(PyObject *) noexcept;
 
     array_full op_full;
     array_binop op_add;
@@ -97,18 +101,19 @@ bind(const char *name, array_supplement &supp, const std::type_info *type,
 
 extern DRJIT_PYTHON_EXPORT int array_init(PyObject *self, PyObject *args,
                                           PyObject *kwds);
+extern DRJIT_PYTHON_EXPORT int tensor_init(PyObject *self, PyObject *args,
+                                           PyObject *kwds);
 
 template <typename T>
 constexpr uint8_t size_or_zero_v = std::is_scalar_v<T> ? 0 : (uint8_t) array_size_v<T>;
 
-template <typename T> void type_callback(PyTypeObject *tp) noexcept {
+template <typename T> void type_callback_array(PyTypeObject *tp) noexcept {
     namespace nb = nanobind;
     using Value = std::decay_t<decltype(std::declval<T>().entry(0))>;
 
-    PySequenceMethods *sm = tp->tp_as_sequence;
-
     tp->tp_init = array_init;
 
+    PySequenceMethods *sm = tp->tp_as_sequence;
     sm->sq_item = [](PyObject *o, Py_ssize_t i_) noexcept -> PyObject * {
         T *inst = nb::inst_ptr<T>(o);
         size_t i = (size_t) i_, size = inst->size();
@@ -162,6 +167,10 @@ template <typename T> void type_callback(PyTypeObject *tp) noexcept {
             return -1;
         }
     };
+}
+
+template <typename T> void type_callback_tensor(PyTypeObject *tp) noexcept {
+    tp->tp_init = tensor_init;
 }
 
 NAMESPACE_END(detail)
@@ -228,7 +237,9 @@ template <typename T> nanobind::class_<T> bind(const char *name = nullptr) {
     using Value = typename T::Value;
 
     if constexpr (!T::IsTensor)
-        type_callback = detail::type_callback<T>;
+        type_callback = detail::type_callback_array<T>;
+    else
+        type_callback = detail::type_callback_tensor<T>;
 
     return nb::steal<nb::class_<T>>(detail::bind(
         name, s, &typeid(T), std::is_scalar_v<Value> ? nullptr : &typeid(Value),
@@ -394,8 +405,12 @@ template <typename T> nanobind::class_<T> bind_array(const char *name = nullptr)
             s.op_trunc = [](const void *a, void *b) { new ((T *) b) T(trunc(*(const T *) a)); };
             s.op_rcp   = [](const void *a, void *b) { new ((T *) b) T(rcp(*(const T *) a)); };
             s.op_rsqrt = [](const void *a, void *b) { new ((T *) b) T(rsqrt(*(const T *) a)); };
-            s.op_ldexp = [](const void *a, const void *b, void *c) { new ((T *) c) T(drjit::ldexp(*(const T *) a, *(const T *) b)); };
-            s.op_atan2 = [](const void *a, const void *b, void *c) { new ((T *) c) T(drjit::atan2(*(const T *) a, *(const T *) b)); };
+            s.op_ldexp = [](const void *a, const void *b, void *c) {
+                new ((T *) c) T(drjit::ldexp(*(const T *) a, *(const T *) b));
+            };
+            s.op_atan2 = [](const void *a, const void *b, void *c) {
+                new ((T *) c) T(drjit::atan2(*(const T *) a, *(const T *) b));
+            };
             s.op_sincos = [](const void *a, void *b, void *c) {
                 auto [b_, c_] = sincos(*(const T *) a);
                 new ((T *) b) T(b_);
@@ -494,8 +509,12 @@ template <typename T> nanobind::class_<T> bind_array(const char *name = nullptr)
     }
 
     if constexpr (T::Depth == 1 && T::IsDynamic && T::IsMask) {
-        s.op_all = [](const void *a, void *b) { new (b) T(((const T *) a)->all_()); };
-        s.op_any = [](const void *a, void *b) { new (b) T(((const T *) a)->any_()); };
+        s.op_all = [](const void *a, void *b) {
+            new (b) T(((const T *) a)->all_());
+        };
+        s.op_any = [](const void *a, void *b) {
+            new (b) T(((const T *) a)->any_());
+        };
     } else {
         const detail::array_reduce_mask default_reduce_mask =
             (detail::array_reduce_mask) uintptr_t(1);
@@ -521,10 +540,27 @@ template <typename T> nanobind::class_<T> bind_array(const char *name = nullptr)
 
 template <typename T> nanobind::class_<T> bind_tensor(const char *name = nullptr) {
     namespace nb = nanobind;
+    using Array = typename T::Array;
+
     nb::class_<T> tp = bind<T>(name);
 
-    tp.def(nb::init<const typename T::Array &>());
+    detail::array_supplement &s =
+        nb::type_supplement<detail::array_supplement>(tp);
 
+    s.op_tensor_shape = [](void *o) noexcept -> dr_vector<size_t> & {
+        return ((T *) o)->shape();
+    };
+
+    s.op_tensor_array = [](PyObject *o) noexcept -> PyObject * {
+        T *inst = nb::inst_ptr<T>(o);
+        nb::detail::cleanup_list cleanup(o);
+        PyObject *result = nb::detail::make_caster<typename T::Array>::from_cpp(
+                     inst->array(),
+                     nb::rv_policy::reference_internal,
+                     &cleanup).ptr();
+        cleanup.release();
+        return result;
+    };
 
     return tp;
 }
@@ -546,6 +582,11 @@ template <typename T> void bind_all() {
     if constexpr (T::Size == Dynamic && T::Depth == 1) {
         bind_tensor<Tensor<mask_t<T>>>();
         bind_tensor<Tensor<float32_array_t<T>>>();
+        bind_tensor<Tensor<float64_array_t<T>>>();
+        bind_tensor<Tensor<int32_array_t<T>>>();
+        bind_tensor<Tensor<int64_array_t<T>>>();
+        bind_tensor<Tensor<uint32_array_t<T>>>();
+        bind_tensor<Tensor<uint64_array_t<T>>>();
     }
 }
 

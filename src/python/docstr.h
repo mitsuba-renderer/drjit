@@ -30,7 +30,8 @@ Returns:
 
 static const char *doc_array_size_v = R"(
 array_size_v(arg, /)
-Return the (static) size of the provided Dr.Jit array instance or type
+Return the (static) size of the outermost dimension of the provided Dr.Jit
+array instance or type
 
 Note that this function mainly exists to query type-level information. Use the
 Python ``len()`` function to query the size in a way that does not distinguish
@@ -72,23 +73,60 @@ unchanged. The following code fragment shows several example uses of
     assert dr.value_t(dr.scalar.Array3f) is float
     assert dr.value_t(dr.cuda.Array3f) is dr.cuda.Float
     assert dr.value_t(dr.cuda.Matrix4f) is dr.cuda.Array4f
+    assert dr.value_t(dr.cuda.TensorXf) is float
     assert dr.value_t("test") is str
 
 Args:
     arg (object): An arbitrary Python object
 
 Returns:
-    int: Returns the value type of the provided Dr.Jit array, or the type of
+    type: Returns the value type of the provided Dr.Jit array, or the type of
     the input.
+)";
+
+static const char *doc_array_t = R"(
+array_t(arg, /)
+Return the *array form* of the provided Dr.Jit array or type.
+
+There are several different cases:
+
+- When `self` is a tensor, this property returns the storage representation
+  of the tensor in the form of a linarized dynamic 1D array. For example,
+  the following hold:
+
+  .. code-block::
+
+    assert dr.array_t(dr.scalar.TensorXf) is dr.scalar.ArrayXf
+    assert dr.array_t(dr.cuda.TensorXf) is dr.cuda.Float
+
+- When `arg` represents a special arithmetic object (matrix, quaternion, or
+  complex number), `array_t` returns a similarly-shaped type with ordinary array
+  semantics. For example, the following hold
+
+  .. code-block::
+
+    assert dr.array_t(dr.scalar.Complex2f) is dr.scalar.Array2f
+    assert dr.array_t(dr.scalar.Matrix4f) is dr.scalar.Array44f
+
+- In all other cases, the function returns the input type.
+
+The property :py:func:`ArrayBase.array` returns a result with this the
+type computed by this function.
+
+Args:
+    arg (object): An arbitrary Python object
+
+Returns:
+    type: Returns the array form as per the above description.
 )";
 
 static const char *doc_mask_t = R"(
 mask_t(arg, /)
 Return the *mask type* associated with the provided Dr.Jit array or type (i.e., the
-type of comparisons involving the argument).
+type produced by comparisons involving the argument).
 
 When the input is not a Dr.Jit array or type, the function returns the scalar
-Python ``bool`` type. The following code fragment shows several example uses of
+Python ``bool`` type. The following assertions illustrate the behavior of
 :py:func:`mask_t`.
 
 
@@ -103,7 +141,7 @@ Args:
     arg (object): An arbitrary Python object
 
 Returns:
-    int: Returns the mask type associated with the input or ``bool`` when the
+    type: Returns the mask type associated with the input or ``bool`` when the
     input is not a Dr.Jit array.
 )";
 
@@ -113,8 +151,9 @@ Return the *scalar type* associated with the provided Dr.Jit array or type (i.e.
 representation of elements at the lowest level)
 
 When the input is not a Dr.Jit array or type, the function returns the input
-unchanged. The following code fragment shows several example uses of
+unchanged. The following assertions illustrate the behavior of
 :py:func:`scalar_t`.
+
 
 .. code-block::
 
@@ -187,6 +226,35 @@ Args:
 Returns:
     bool: ``True`` if **arg** represents an arithmetic Dr.Jit array or
     Python ``int`` or ``float`` instance or type.
+)";
+
+
+static const char *doc_is_signed_v = R"(
+is_signed_v(arg, /)
+Check whether the input array instance or type is an signed Dr.Jit array
+or a Python ``int`` or ``float`` value/type.
+
+Args:
+    arg (object): An arbitrary Python object
+
+Returns:
+    bool: ``True`` if **arg** represents an signed Dr.Jit array or
+    Python ``int`` or ``float`` instance or type.
+)";
+
+
+static const char *doc_is_unsigned_v = R"(
+is_unsigned_v(arg, /)
+Check whether the input array instance or type is an unsigned integer Dr.Jit
+array or a Python ``bool`` value/type (masks and boolean values are also
+considered to be unsigned).
+
+Args:
+    arg (object): An arbitrary Python object
+
+Returns:
+    bool: ``True`` if **arg** represents an unsigned Dr.Jit array or
+    Python ``bool`` instance or type.
 )";
 
 static const char *doc_is_jit_v = R"(
@@ -288,7 +356,7 @@ Returns:
 
 static const char *doc_is_special_v = R"(
 is_special_v(arg, /)
-Check whether the input is a _special_ Dr.Jit array instance or type.
+Check whether the input is a *special* Dr.Jit array instance or type.
 
 A *special* array type requires precautions when performing arithmetic
 operations like multiplications (complex numbers, quaternions, matrices).
@@ -983,7 +1051,23 @@ provided Dr.Jit array or tensor. When the input array is *ragged*
 (i.e., when it contains components with mismatched sizes), the
 property equals ``None``.
 
+The expressions ``drjit.shape(arg)`` and ``arg.shape`` are equivalent.
+
 :type: tuple | NoneType)";
+
+static const char *doc_ArrayBase_array = R"(
+This member plays multiple roles:
+
+- When `self` is a tensor, this property returns the storage representation
+  of the tensor in the form of a linarized dynamic 1D array.
+
+- When `self` is a special arithmetic object (matrix, quaternion, or complex
+  number), `array` provides an ordinary copy of the same data with ordinary
+  array semantics.
+
+- In all other cases, `array` is simply a reference to `self`.
+
+:type: :py:func:`array_t(self) <array_t>`)";
 
 static const char *doc_ArrayBase_index = R"(
 If ``self`` is a *leaf* Dr.Jit array managed by a just-in-time compiled backend
@@ -1014,6 +1098,26 @@ differentiation* (AD). The index :py:attr:`index` keeps track of the
 variable index within the raw computation graph, if applicable.
 
 :type: int)";
+
+
+static const char *doc_slice_index = R"(
+slice_index(dtype, shape, slice)
+
+This function takes an array shape (integer tuple) and a tuple containing
+slice indices. 
+
+It is used to implement tensor assignment.
+
+Args:
+    dtype (type): Desired Dr.Jit unsigned integer array type (e.g., :py:class:`drjit.cuda.UInt`)
+    shape (tuple[int, ...]): Shape of the input array
+    slice (tuple[int|slice|dr.ArrayBase, ...]): Tuple that is used to slice the input array
+
+Returns:
+    tuple[tuple[int, ...], dr.ArrayBase]: Tuple consisting of the output array
+    shape and a flattened unsigned integer array of type **dtype** containing
+    element indices.
+)";
 
 #if defined(__GNUC__)
 #  pragma GCC diagnostic pop

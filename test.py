@@ -302,6 +302,7 @@ def test11_repr():
   assert repr(l.Array2f(1, [2, 3])) == '[[1, 2],\n' \
                                        ' [1, 3]]'
   assert repr(l.ArrayXf(1, 2)) == '[[1, 2]]'
+  assert repr(l.Float(range(1000))) == '[0, 1, 2, 3, 4, .. 990 skipped .., 995, 996, 997, 998, 999]'
 
 
 def test12_binop_simple():

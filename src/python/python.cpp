@@ -181,15 +181,31 @@ extern nb::handle bind(const char *name, array_supplement &supp,
     if (is_mask) {
         mask_type_py = h.ptr();
     } else {
-        array_metadata mask_meta = supp.meta;
-        mask_meta.type = (uint16_t) VarType::Bool;
-        mask_meta.is_vector = mask_meta.is_complex = mask_meta.is_quaternion =
-            mask_meta.is_matrix = false;
-        mask_type_py = array_get(mask_meta);
+        array_metadata m2 = supp.meta;
+        m2.type = (uint16_t) VarType::Bool;
+        m2.is_vector = m2.is_complex = m2.is_quaternion =
+            m2.is_matrix = false;
+        mask_type_py = array_get(m2);
+    }
+
+    nb::handle array_type_py;
+    if (!supp.meta.is_tensor && !supp.meta.is_complex &&
+        !supp.meta.is_quaternion && !supp.meta.is_matrix) {
+        array_type_py = h.ptr();
+    } else {
+        array_metadata m2 = supp.meta;
+        if (supp.meta.is_tensor) {
+            m2.shape[0] = 0xFF;
+            m2.ndim = 1;
+        }
+        m2.is_vector = m2.is_complex = m2.is_quaternion = m2.is_matrix =
+            m2.is_tensor = false;
+        array_type_py = array_get(m2);
     }
 
     supp.value = (PyTypeObject *) value_type_py.ptr();
     supp.mask = (PyTypeObject *) mask_type_py.ptr();
+    supp.array = (PyTypeObject *) array_type_py.ptr();
 
     nb::type_supplement<detail::array_supplement>(h.ptr()) = supp;
 

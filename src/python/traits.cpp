@@ -59,6 +59,13 @@ extern void bind_traits(nb::module_ m) {
             return &PyBool_Type;
     }, nb::raw_doc(doc_mask_t));
 
+    m.def("array_t", [](nb::handle h) -> nb::handle {
+        nb::handle tp = h.is_type() ? h : h.type();
+        if (is_drjit_type(tp))
+            return nb::type_supplement<supp>(tp).array;
+        else
+            return tp;
+    }, nb::raw_doc(doc_array_t));
 
     m.def("scalar_t", scalar_t, nb::raw_doc(doc_scalar_t));
 
@@ -90,6 +97,37 @@ extern void bind_traits(nb::module_ m) {
             return s == &PyLong_Type || s == &PyFloat_Type;
         },
         nb::raw_doc(doc_is_arithmetic_v));
+
+    m.def(
+        "is_signed_v",
+        [](nb::handle h) -> bool {
+            nb::handle tp = h.is_type() ? h : h.type();
+            if (is_drjit_type(tp)) {
+                VarType vt = (VarType) nb::type_supplement<supp>(tp).meta.type;
+                return vt == VarType::Int8 || vt == VarType::Int16 ||
+                       vt == VarType::Int32 || vt == VarType::Int64 ||
+                       vt == VarType::Float16 || vt == VarType::Float32 ||
+                       vt == VarType::Float64;
+            } else {
+                return tp.is(&PyLong_Type) || tp.is(&PyFloat_Type);
+            }
+        },
+        nb::raw_doc(doc_is_signed_v));
+
+    m.def(
+        "is_unsigned_v",
+        [](nb::handle h) -> bool {
+            nb::handle tp = h.is_type() ? h : h.type();
+            if (is_drjit_type(tp)) {
+                VarType vt = (VarType) nb::type_supplement<supp>(tp).meta.type;
+                return vt == VarType::UInt8 || vt == VarType::UInt16 ||
+                       vt == VarType::UInt32 || vt == VarType::UInt64 ||
+                       vt == VarType::Bool;
+            } else {
+                return tp.is(&PyBool_Type);
+            }
+        },
+        nb::raw_doc(doc_is_unsigned_v));
 
     m.def("is_jit_v", [](nb::handle h) -> bool {
         nb::handle tp = h.is_type() ? h : h.type();
