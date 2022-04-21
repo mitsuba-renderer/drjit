@@ -1519,6 +1519,13 @@ struct DiffArray : ArrayBaseT<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>
         return drjit::empty<Type>(size);
     }
 
+    static DiffArray counter(size_t size) {
+        if constexpr (is_dynamic_v<Type>)
+            return create(0, Type::counter(size));
+        else
+            return 0;
+    }
+
     static DiffArray zero_(size_t size) {
         return zero<Type>(size);
     }

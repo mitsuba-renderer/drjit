@@ -171,6 +171,14 @@ struct DynamicArray
         return result;
     }
 
+    static DynamicArray counter(size_t size) {
+        DynamicArray result;
+        result.init_(size);
+        for (size_t i = 0; i < size; ++i)
+            result.entry(i) = i;
+        return result;
+    }
+
     static DynamicArray arange_(ssize_t start, ssize_t stop, ssize_t step) {
         size_t size = size_t((stop - start + step - (step > 0 ? 1 : -1)) / step);
         DynamicArray result;

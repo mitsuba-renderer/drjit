@@ -3,7 +3,6 @@
 #include <nanobind/stl/vector.h>
 #include <iostream>
 
-
 nb::object full_alt(nb::type_object dtype, nb::handle value, size_t size);
 
 nb::object full(nb::type_object dtype, nb::handle value,
@@ -87,7 +86,7 @@ nb::object full(nb::type_object dtype, nb::handle value,
         throw nb::type_error("Unsupported dtype!");
     }
 
-    throw std::runtime_error(
+    nb::detail::raise(
         "The provided 'shape' and 'dtype' parameters are incompatible!");
 }
 
@@ -110,6 +109,35 @@ nb::object full_alt(nb::type_object dtype, nb::handle value, size_t size) {
     }
 
     return full(dtype, value, shape);
+}
+
+nb::object arange(nb::handle dtype, Py_ssize_t start, Py_ssize_t end, Py_ssize_t step) {
+    if (is_drjit_type(dtype)) {
+        const supp &s = nb::type_supplement<supp>(dtype);
+
+        if (s.meta.ndim != 1 || s.meta.shape[0] != 0xFF)
+            throw nb::type_error("drjit.arange(): unsupported 'dtype' -- must "
+                                 "be a dynamically sized 1D array!");
+
+        Py_ssize_t size = (end - start + step - (step > 0 ? 1 : -1)) / step;
+        auto counter_meta = s.meta;
+        counter_meta.type = (uint16_t) VarType::UInt32;
+        nb::handle counter_tp = drjit::detail::array_get(counter_meta);
+        const supp &counter_supp = nb::type_supplement<supp>(counter_tp);
+        if (counter_supp.op_counter) {
+            if (size == 0)
+                return dtype();
+            else if (size < 0)
+                nb::detail::raise("drjit.arange(): size cannot be negative!");
+
+            nb::object result = nb::inst_alloc(counter_tp);
+            counter_supp.op_counter((size_t) size, nb::inst_ptr<void>(result));
+            nb::inst_ready(result);
+
+            return array_module.attr("fma")(dtype(result), dtype(step), dtype(start));
+        }
+    }
+    throw nb::type_error("Unsupported dtype!");
 }
 
 extern void bind_ops(nb::module_ m) {
@@ -211,4 +239,18 @@ extern void bind_ops(nb::module_ m) {
             return full_alt(dtype, nb::cast(1), size);
         },
         "dtype"_a, "shape"_a = 1);
+
+    m.def(
+        "arange",
+        [](nb::type_object dtype, Py_ssize_t size) {
+            return arange(dtype, 0, size, 1);
+        },
+        "dtype"_a, "size"_a, doc_arange);
+
+    m.def(
+        "arange",
+        [](nb::type_object dtype, Py_ssize_t start, Py_ssize_t end, Py_ssize_t step) {
+            return arange(dtype, start, end, step);
+        },
+        "dtype"_a, "start"_a, "end"_a, "step"_a = 1);
 }

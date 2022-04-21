@@ -1108,7 +1108,7 @@ extern PyObject *tp_repr(PyObject *self);
     m.def(                                                                     \
         #name, [](double d) { return dr::name(d); }, nb::raw_doc(doc_##name)); \
     m.def(#name, [](nb::handle_of<dr::ArrayBase> h) {                          \
-        return nb_math_unop(#name, offsetof(supp, op_##name), h);               \
+        return nb_math_unop(#name, offsetof(supp, op_##name), h);              \
     });
 
 #define DR_MATH_UNOP_2(name)                                                   \
@@ -1116,7 +1116,7 @@ extern PyObject *tp_repr(PyObject *self);
         #name, [](double d) { return dr::name(d); }, nb::raw_doc(doc_##name)); \
     m.def(#name, [](nb::handle_of<dr::ArrayBase> h) {                          \
         return nb::steal(                                                      \
-            nb_math_unop_2(#name, offsetof(supp, op_##name), h.ptr()));         \
+            nb_math_unop_2(#name, offsetof(supp, op_##name), h.ptr()));        \
     });
 
 #define DR_MATH_BINOP(name)                                                    \
@@ -1126,7 +1126,7 @@ extern PyObject *tp_repr(PyObject *self);
     m.def(#name, [](nb::handle h1, nb::handle h2) {                            \
         if (!is_drjit_array(h1) && !is_drjit_array(h2))                        \
             throw nb::next_overload();                                         \
-        return nb::steal(nb_math_binop(#name, offsetof(supp, op_##name),        \
+        return nb::steal(nb_math_binop(#name, offsetof(supp, op_##name),       \
                                        h1.ptr(), h2.ptr()));                   \
     });
 
@@ -1138,7 +1138,7 @@ extern PyObject *tp_repr(PyObject *self);
     m.def(#name, [](nb::handle h1, nb::handle h2, nb::handle h3) {             \
         if (!is_drjit_array(h1) && !is_drjit_array(h2) && !is_drjit_array(h3)) \
             throw nb::next_overload();                                         \
-        return nb::steal(nb_math_ternop(#name, offsetof(supp, op_##name),       \
+        return nb::steal(nb_math_ternop(#name, offsetof(supp, op_##name),      \
                                         h1.ptr(), h2.ptr(), h3.ptr()));        \
     });
 

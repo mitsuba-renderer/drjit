@@ -26,6 +26,7 @@ using array_richcmp = void (*) (const void *, const void *, int, void *);
 using array_reduce_mask = void (*) (const void *, void *);
 using array_id = uint32_t (*) (const void *);
 using array_full = void (*) (nanobind::handle, size_t, void *);
+using array_counter = void (*) (uint32_t size, void *);
 
 struct array_metadata {
     uint16_t is_vector     : 1;
@@ -56,6 +57,7 @@ struct array_supplement {
     PyObject *(*op_tensor_array)(PyObject *) noexcept;
 
     array_full op_full;
+    array_counter op_counter;
     array_binop op_add;
     array_binop op_subtract;
     array_binop op_multiply;
@@ -269,6 +271,12 @@ template <typename T> nanobind::class_<T> bind_array(const char *name = nullptr)
         s.op_full = [](nb::handle a, size_t b, void *c) {
             new ((T *) c) T(full<T>(nb::cast<scalar_t<T>>(a), b));
         };
+
+        if constexpr (std::is_same_v<scalar_t<T>, uint32_t>) {
+            s.op_counter = [](uint32_t size, void *a) {
+                new ((T *) a) T(T::counter(size));
+            };
+        }
 
         s.op_select = [](const void *a, const void *b, const void *c, void *d) {
             new ((T *) d) T(select(*(const mask_t<T> *) a, *(const T *) b, *(const T *) c));

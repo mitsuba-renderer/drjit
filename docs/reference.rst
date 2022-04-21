@@ -65,6 +65,7 @@ Array creation
 .. autofunction:: zeros
 .. autofunction:: ones
 .. autofunction:: full
+.. autofunction:: arange
 
 Operations involving masks
 --------------------------

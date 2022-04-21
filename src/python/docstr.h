@@ -914,7 +914,7 @@ Args:
     shape (tuple | int): Shape of the desired array
 
 Returns:
-    object: A zero-initialized instance of type `dtype`
+    object: A zero-initialized instance of type **dtype**.
 )";
 
 static const char *doc_ones = R"(
@@ -928,7 +928,7 @@ For simpler vectorized types (e.g., :py:class:`drjit.cuda.Array2f`), it can be
 an integer that specifies the size along the last (dynamic) dimension.
 
 When a tuple is specified, its must be compatible with static dimensions of the
-``dtype``. For example, ``dr.ones(dr.cuda.Array2f, shape=(3, 100))`` fails,
+**dtype**. For example, ``dr.ones(dr.cuda.Array2f, shape=(3, 100))`` fails,
 since the leading dimension is incompatible with
 :py:class:`drjit.cuda.Array2f`.
 
@@ -940,7 +940,7 @@ Args:
     shape (tuple | int): Shape of the desired array
 
 Returns:
-    object: A zero-initialized instance of type `dtype`
+    object: A zero-initialized instance of type **dtype**.
 )";
 
 
@@ -955,7 +955,7 @@ For simpler vectorized types (e.g., :py:class:`drjit.cuda.Array2f`), it can be
 an integer that specifies the size along the last (dynamic) dimension.
 
 When a tuple is specified, its must be compatible with static dimensions of the
-``dtype``. For example, ``dr.full(dr.cuda.Array2f, value=123.0, shape=(3, 100))`` fails,
+**dtype**. For example, ``dr.full(dr.cuda.Array2f, value=123.0, shape=(3, 100))`` fails,
 since the leading dimension is incompatible with
 :py:class:`drjit.cuda.Array2f`.
 
@@ -966,22 +966,40 @@ Args:
     shape (tuple | int): Shape of the desired array
 
 Returns:
-    object: A constant-initialized instance of type `dtype`
+    object: A constant-initialized instance of type **dtype**.
 )";
 
+static const char *doc_arange = R"(
+This function generates an integer sequence on the interval [**start**,
+**end**) with step size **step**, where **start** = 0 and **step** = 1 if not
+specified. 
+
+Args:
+    dtype (type): Desired Dr.Jit array type. The **dtype** must refer to a
+                  dynamically sized 1D Dr.Jit array such as
+                  :py:class:`drjit.scalar.ArrayXf` or
+                  :py:class:`drjit.cuda.Float`.
+    start (int): Start of the interval. The default value is 0.
+    end/size (int): End of the interval (not included). The name of this parameter
+                    differs between the two provided overloads.
+    step (int): Spacing between values.
+
+Returns:
+    object: The computed sequence of type **dtype**.
+)";
 
 static const char *doc_empty = R"(
 Return a empty Dr.Jit array of the desired shape.
 
-When ``dtype`` refers to a tensorial type (e.g.,
-:py:class:`drjit.cuda.TensorXf`), ``shape`` must be a tuple that determines the
+When **dtype** refers to a tensorial type (e.g.,
+:py:class:`drjit.cuda.TensorXf`), **shape** must be a tuple that determines the
 tensor rank and shape.
 
 For simpler vectorized types (e.g., :py:class:`drjit.cuda.Array2f`), it can be
 an integer that specifies the size along the last (dynamic) dimension.
 
 When a tuple is specified, its must be compatible with static dimensions of the
-``dtype``. For example, ``dr.empty(dr.cuda.Array2f, shape=(3, 100))`` fails,
+**dtype**. For example, ``dr.empty(dr.cuda.Array2f, shape=(3, 100))`` fails,
 since the leading dimension is incompatible with
 :py:class:`drjit.cuda.Array2f`.
 
@@ -990,7 +1008,7 @@ Args:
     shape (tuple | int): Shape of the desired array
 
 Returns:
-    object: An empty instance of type `dtype`
+    object: An empty instance of type **dtype**.
 )";
 
 

@@ -654,6 +654,21 @@ def test22_masked_assignment():
     a[a <= 2] = 10
     assert dr.all(a == l.Array3f(10, 10, 3))
 
+
+def test23_arange():
+    import drjit.scalar as s
+    import drjit.llvm as l
+
+    assert dr.all(dr.arange(s.ArrayXu, 5) == s.ArrayXu(0, 1, 2, 3, 4))
+    assert dr.all(dr.arange(s.ArrayXf, 5) == s.ArrayXf(0, 1, 2, 3, 4))
+    assert dr.all(dr.arange(s.ArrayXi, start=-2, end=5, step=2) == s.ArrayXi(-2, 0, 2, 4))
+    assert dr.all(dr.arange(s.ArrayXf, start=-2, end=5, step=2) == s.ArrayXf(-2, 0, 2, 4))
+
+    assert dr.all(dr.arange(l.UInt, 5) == l.UInt(0, 1, 2, 3, 4))
+    assert dr.all(dr.arange(l.Float, 5) == l.Float(0, 1, 2, 3, 4))
+    assert dr.all(dr.arange(l.Int, start=-2, end=5, step=2) == l.Int(-2, 0, 2, 4))
+    assert dr.all(dr.arange(l.Float, start=-2, end=5, step=2) == l.Float(-2, 0, 2, 4))
+
 #@pytest.mark.parametrize('name', ['sqrt', 'cbrt', 'sin', 'cos', 'tan', 'asin',
 #                                  'acos', 'atan', 'sinh', 'cosh', 'tanh',
 #                                  'asinh', 'acosh', 'atanh', 'exp', 'exp2',
