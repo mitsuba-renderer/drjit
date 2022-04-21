@@ -66,6 +66,7 @@ Array creation
 .. autofunction:: ones
 .. autofunction:: full
 .. autofunction:: arange
+.. autofunction:: linspace
 
 Operations involving masks
 --------------------------

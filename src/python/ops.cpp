@@ -119,6 +119,11 @@ nb::object arange(nb::handle dtype, Py_ssize_t start, Py_ssize_t end, Py_ssize_t
             throw nb::type_error("drjit.arange(): unsupported 'dtype' -- must "
                                  "be a dynamically sized 1D array!");
 
+        VarType vt = (VarType) s.meta.type;
+        if (vt == VarType::Bool || vt == VarType::Pointer)
+            throw nb::type_error("drjit.arange(): unsupported 'dtype' -- must "
+                                 "be an integral type!");
+
         Py_ssize_t size = (end - start + step - (step > 0 ? 1 : -1)) / step;
         auto counter_meta = s.meta;
         counter_meta.type = (uint16_t) VarType::UInt32;
@@ -137,7 +142,44 @@ nb::object arange(nb::handle dtype, Py_ssize_t start, Py_ssize_t end, Py_ssize_t
             return array_module.attr("fma")(dtype(result), dtype(step), dtype(start));
         }
     }
-    throw nb::type_error("Unsupported dtype!");
+    throw nb::type_error("drjit.arange(): unsupported dtype!");
+}
+
+nb::object linspace(nb::handle dtype, double start, double end, size_t size, bool endpoint) {
+    if (is_drjit_type(dtype)) {
+        const supp &s = nb::type_supplement<supp>(dtype);
+
+        if (s.meta.ndim != 1 || s.meta.shape[0] != 0xFF)
+            throw nb::type_error("drjit.linspace(): unsupported 'dtype' -- must "
+                                 "be a dynamically sized 1D array!");
+
+        VarType vt = (VarType) s.meta.type;
+        if (vt != VarType::Float16 && vt != VarType::Float32 && vt != VarType::Float64)
+            throw nb::type_error("drjit.linspace(): unsupported 'dtype' -- must "
+                                 "be a floating point array!");
+
+        auto counter_meta = s.meta;
+        counter_meta.type = (uint16_t) VarType::UInt32;
+        nb::handle counter_tp = drjit::detail::array_get(counter_meta);
+        const supp &counter_supp = nb::type_supplement<supp>(counter_tp);
+
+        if (counter_supp.op_counter) {
+            if (size == 0)
+                return dtype();
+            else if (size < 0)
+                nb::detail::raise("drjit.linspace(): size cannot be negative!");
+
+            double step = (end - start) / (size - ((endpoint && size > 0) ? 1 : 0));
+
+            nb::object result = nb::inst_alloc(counter_tp);
+            counter_supp.op_counter((size_t) size, nb::inst_ptr<void>(result));
+            nb::inst_ready(result);
+
+            return array_module.attr("fma")(dtype(result), dtype(step), dtype(start));
+        }
+    }
+
+    throw nb::type_error("drjit.linspace(): unsupported dtype!");
 }
 
 extern void bind_ops(nb::module_ m) {
@@ -249,8 +291,16 @@ extern void bind_ops(nb::module_ m) {
 
     m.def(
         "arange",
-        [](nb::type_object dtype, Py_ssize_t start, Py_ssize_t end, Py_ssize_t step) {
-            return arange(dtype, start, end, step);
+        [](nb::type_object dtype, Py_ssize_t start, Py_ssize_t stop, Py_ssize_t step) {
+            return arange(dtype, start, stop, step);
         },
-        "dtype"_a, "start"_a, "end"_a, "step"_a = 1);
+        "dtype"_a, "start"_a, "stop"_a, "step"_a = 1);
+
+    m.def(
+        "linspace",
+        [](nb::type_object dtype, double start, double stop, size_t num, bool endpoint) {
+            return linspace(dtype, start, stop, num, endpoint);
+        },
+        "dtype"_a, "start"_a, "stop"_a, "num"_a, "endpoint"_a = true,
+        doc_linspace);
 }

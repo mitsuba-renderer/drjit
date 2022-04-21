@@ -661,13 +661,25 @@ def test23_arange():
 
     assert dr.all(dr.arange(s.ArrayXu, 5) == s.ArrayXu(0, 1, 2, 3, 4))
     assert dr.all(dr.arange(s.ArrayXf, 5) == s.ArrayXf(0, 1, 2, 3, 4))
-    assert dr.all(dr.arange(s.ArrayXi, start=-2, end=5, step=2) == s.ArrayXi(-2, 0, 2, 4))
-    assert dr.all(dr.arange(s.ArrayXf, start=-2, end=5, step=2) == s.ArrayXf(-2, 0, 2, 4))
+    assert dr.all(dr.arange(s.ArrayXi, -2, 5, 2) == s.ArrayXi(-2, 0, 2, 4))
+    assert dr.all(dr.arange(dtype=s.ArrayXf, start=-2, stop=5, step=2) == s.ArrayXf(-2, 0, 2, 4))
 
     assert dr.all(dr.arange(l.UInt, 5) == l.UInt(0, 1, 2, 3, 4))
     assert dr.all(dr.arange(l.Float, 5) == l.Float(0, 1, 2, 3, 4))
-    assert dr.all(dr.arange(l.Int, start=-2, end=5, step=2) == l.Int(-2, 0, 2, 4))
-    assert dr.all(dr.arange(l.Float, start=-2, end=5, step=2) == l.Float(-2, 0, 2, 4))
+    assert dr.all(dr.arange(l.Int, -2, 5, 2) == l.Int(-2, 0, 2, 4))
+    assert dr.all(dr.arange(dtype=l.Float, start=-2, stop=5, step=2) == l.Float(-2, 0, 2, 4))
+
+
+def test24_linspace():
+    import drjit.scalar as s
+    import drjit.llvm as l
+
+    assert dr.allclose(dr.linspace(s.ArrayXf, -2, 4, 4), s.ArrayXf(-2, 0, 2, 4))
+    assert dr.allclose(dr.linspace(s.ArrayXf, start=-2, stop=5, num=4), s.ArrayXf(-2, 1/3, 8/3, 5))
+    assert dr.allclose(dr.linspace(s.ArrayXf, start=-2, stop=4, num=4, endpoint=False), s.ArrayXf(-2, -0.5, 1, 2.5))
+    assert dr.allclose(dr.linspace(l.Float, -2, 4, 4), l.Float(-2, 0, 2, 4))
+    assert dr.allclose(dr.linspace(l.Float, start=-2, stop=5, num=4), l.Float(-2, 1/3, 8/3, 5))
+    assert dr.allclose(dr.linspace(l.Float, start=-2, stop=4, num=4, endpoint=False), l.Float(-2, -0.5, 1, 2.5))
 
 #@pytest.mark.parametrize('name', ['sqrt', 'cbrt', 'sin', 'cos', 'tan', 'asin',
 #                                  'acos', 'atan', 'sinh', 'cosh', 'tanh',

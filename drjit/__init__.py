@@ -70,31 +70,54 @@ def any_nested(arg, /):
 
 
 def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
+    r'''
+    Returns ``True`` if two arrays are element-wise equal within a given error
+    tolerance.
+
+    The function considers both absolute and relative error thresholds. Specifically
+    **a** and **b** are considered equal if all elements satisfy
+
+    .. math::
+        | a - b | \le b \cdot \mathrm{rtol} + \mathrm{atol}.
+
+    Args:
+        a (object): A Dr.Jit array or other kind of numeric sequence type.
+        b (object): A Dr.Jit array or other kind of numeric sequence type.
+        rtol (float): A relative error threshold. The default is :math:`10^{-5}`.
+        atol (float): An absolute error threshold. The default is :math:`10^{-8}`.
+        equal_nan (bool): If **a** and **b** *both* contain a *NaN* (Not a Number) entry,
+                          should they be considered equal? The default is ``False``.
+
+    Returns:
+        bool: The result of the comparison.
+    '''
+
     if is_array_v(a) or is_array_v(b):
         # No derivative tracking in the following
         a, b = detach(a), detach(b)
 
-        if not is_floating_point_v(a):
+        if not is_float_v(a):
             a = float_array_t(type(a))(a)
-        if not is_floating_point_v(b):
+        if not is_float_v(b):
             b = float_array_t(type(b))(a)
 
         diff = abs(a - b)
         cond = diff <= abs(b) * rtol + atol
-        cond |= eq(a, b)  # plus/minus infinity
 
         if equal_nan:
             cond |= isnan(a) & isnan(b)
 
         return all_nested(cond)
 
+    return False
+
 def detach(a, preserve_type=False):
-    if _ek.is_diff_array_v(a):
+    if is_diff_v(a):
         if preserve_type:
             return type(a)(a.detach_())
         else:
             return a.detach_()
-    elif _ek.is_drjit_struct_v(a):
+    elif is_struct_v(a):
         result = type(a)()
         for k in type(a).DRJIT_STRUCT.keys():
             setattr(result, k, detach(getattr(a, k), preserve_type=preserve_type))

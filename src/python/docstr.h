@@ -971,18 +971,37 @@ Returns:
 
 static const char *doc_arange = R"(
 This function generates an integer sequence on the interval [**start**,
-**end**) with step size **step**, where **start** = 0 and **step** = 1 if not
+**stop**) with step size **step**, where **start** = 0 and **step** = 1 if not
 specified. 
 
 Args:
     dtype (type): Desired Dr.Jit array type. The **dtype** must refer to a
                   dynamically sized 1D Dr.Jit array such as
+                  :py:class:`drjit.scalar.ArrayXu` or
+                  :py:class:`drjit.cuda.Float`.
+    start (int): Start of the interval. The default value is `0`.
+    stop/size (int): End of the interval (not included). The name of this parameter
+                     differs between the two provided overloads.
+    step (int): Spacing between values. The default value is `1`.
+
+Returns:
+    object: The computed sequence of type **dtype**.
+)";
+
+
+static const char *doc_linspace = R"(
+This function generates an evenly spaced floating point sequence of size
+**num** covering the interval [**start**, **stop**].
+
+Args:
+    dtype (type): Desired Dr.Jit array type. The **dtype** must refer to a
+                  dynamically sized 1D Dr.Jit floating point array, such as
                   :py:class:`drjit.scalar.ArrayXf` or
                   :py:class:`drjit.cuda.Float`.
-    start (int): Start of the interval. The default value is 0.
-    end/size (int): End of the interval (not included). The name of this parameter
-                    differs between the two provided overloads.
-    step (int): Spacing between values.
+    start (float): Start of the interval.
+    stop (float): End of the interval.
+    num (int): Number of samples to generate.
+    endpoint (bool): Should the interval endpoint be included? The default is `True`.
 
 Returns:
     object: The computed sequence of type **dtype**.
