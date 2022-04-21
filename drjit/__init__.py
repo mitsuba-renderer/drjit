@@ -26,6 +26,15 @@ def sqr(arg, /):
 
 
 def isnan(arg, /):
+    """
+    Performs an elementwise test for *NaN* (Not a Number) values
+
+    Args:
+        arg (object): A Dr.Jit array or other kind of numeric sequence type.
+
+    Returns:
+        :py:func:`mask_t(arg) <mask_t>`: A mask value describing the result of the test.
+    """
     result = arg == arg
     if isinstance(result, bool):
         return not result
@@ -34,10 +43,29 @@ def isnan(arg, /):
 
 
 def isinf(arg, /):
+    """
+    Performs an elementwise test for positive or negative infinity
+
+    Args:
+        arg (object): A Dr.Jit array or other kind of numeric sequence type.
+
+    Returns:
+        :py:func:`mask_t(arg) <mask_t>`: A mask value describing the result of the test
+    """
     return abs(arg) == float('inf')
 
 
 def isfinite(arg, /):
+    """
+    Performs an elementwise test that checks whether values are finite and not
+    equal to *NaN* (Not a Number)
+
+    Args:
+        arg (object): A Dr.Jit array or other kind of numeric sequence type.
+
+    Returns:
+        :py:func:`mask_t(arg) <mask_t>`: A mask value describing the result of the test
+    """
     return abs(arg) < float('inf')
 
 
@@ -78,7 +106,7 @@ def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
     **a** and **b** are considered equal if all elements satisfy
 
     .. math::
-        | a - b | \le b \cdot \mathrm{rtol} + \mathrm{atol}.
+        |a - b| \le |b| \cdot \mathrm{rtol} + \mathrm{atol}.
 
     Args:
         a (object): A Dr.Jit array or other kind of numeric sequence type.
@@ -97,19 +125,50 @@ def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
         a, b = detach(a), detach(b)
 
         if not is_float_v(a):
-            a = float_array_t(type(a))(a)
+            a = float32_array_t(type(a))(a)
         if not is_float_v(b):
-            b = float_array_t(type(b))(a)
+            b = float32_array_t(type(b))(a)
 
-        diff = abs(a - b)
-        cond = diff <= abs(b) * rtol + atol
+        cond = abs(a - b) <= abs(b) * rtol + atol
 
         if equal_nan:
             cond |= isnan(a) & isnan(b)
 
         return all_nested(cond)
 
-    return False
+    def safe_len(x):
+        try:
+            return len(x)
+        except TypeError:
+            return 0
+
+    def safe_getitem(x, len_x, i):
+        if len_x == 0:
+            return x
+        elif len_x == 1:
+            return x[0]
+        else:
+            return x[i]
+
+    len_a, len_b = safe_len(a), safe_len(b)
+    len_ab = max(len_a, len_b)
+
+    if len_a != len_ab and len_a > 1 or \
+       len_b != len_ab and len_b > 1:
+        raise RuntimeError('drjit.allclose(): incompatible sizes '
+                           '(%i and %i)!' % (len_a, len_b))
+    elif len_ab == 0:
+        if equal_nan and isnan(a) and isnan(b):
+            return True
+        return abs(a - b) <= abs(b) * rtol + atol
+    else:
+        for i in range(len_ab):
+            ia = safe_getitem(a, len_a, i)
+            ib = safe_getitem(b, len_b, i)
+            if not allclose(ia, ib, rtol, atol, equal_nan):
+                return False
+        return True
+
 
 def detach(a, preserve_type=False):
     if is_diff_v(a):

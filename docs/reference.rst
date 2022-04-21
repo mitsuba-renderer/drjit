@@ -36,8 +36,10 @@ ________________
 
 Array shape
 ___________
-.. autofunction:: array_size_v
-.. autofunction:: array_depth_v
+
+.. autofunction:: size_v
+.. autofunction:: depth_v
+.. autofunction:: itemsize_v
 
 .. py:data:: Dynamic
     :type: int
@@ -46,12 +48,23 @@ ___________
     Special size value used to identify dynamic arrays in
     :py:func:`array_size_v`.
 
-Related types
-_____________
+Access to related types
+_______________________
+
 .. autofunction:: mask_t
 .. autofunction:: value_t
 .. autofunction:: scalar_t
 .. autofunction:: array_t
+.. autofunction:: bool_array_t
+.. autofunction:: int_array_t
+.. autofunction:: uint_array_t
+.. autofunction:: int32_array_t
+.. autofunction:: uint32_array_t
+.. autofunction:: int64_array_t
+.. autofunction:: uint64_array_t
+.. autofunction:: float_array_t
+.. autofunction:: float32_array_t
+.. autofunction:: float64_array_t
 
 
 Miscellaneous operations

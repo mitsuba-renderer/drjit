@@ -64,15 +64,15 @@ a Just-In-Time compiler underlying [JAX](https://github.com/google/jax) and
 ## About this project
 
 The _Dr.Jit_ logo was generously created by [Otto
-Jakob](https://ottojakob.com). The "_Dr_" prefix simultaneously abbreviates
+Jakob](https://ottojakob.com). The "_Dr_." prefix simultaneously abbreviates
 _differentiable rendering_ with the stylized partial derivative _D_, while also
 conveying a medical connotation that is emphasized by the [Rod of
 Asclepius](https://en.wikipedia.org/wiki/Rod_of_Asclepius). Anybody who has
-personally developed differentiable rendering algorithms can attest to the fact
-that they are starting to grow beyond our control in terms of conceptual and
-implementation-level complexity. A doctor is a person, who can offer help in
-such a time of great need. _Dr.Jit_ tries to fill this role to to improve the
-well-being of differentiable rendering researchers.
+developed differentiable rendering algorithms can attest that they are growing
+beyond our control in terms of conceptual and implementation-level complexity.
+A doctor is a person, who can offer help in such a time of great need. _Dr.Jit_
+tries to fill this role to to improve the well-being of differentiable
+rendering researchers.
 
 _Dr.Jit_ is the successor of the
 [Enoki](https://github.com/mitsuba-renderer/enoki) project, and its high-level

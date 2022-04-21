@@ -441,20 +441,20 @@ def test18_traits():
     assert dr.is_array_v(s.ArrayXf) and dr.is_array_v(s.ArrayXf())
     assert dr.is_array_v(l.Array3f) and dr.is_array_v(l.Array3f())
     assert dr.is_array_v(l.ArrayXf) and dr.is_array_v(l.ArrayXf())
-    assert dr.array_size_v(1) == 1
-    assert dr.array_size_v("test") == 1
-    assert dr.array_size_v(s.Array3f) == 3 and dr.array_size_v(s.Array3f()) == 3 
-    assert dr.array_size_v(l.Array3f) == 3 and dr.array_size_v(l.Array3f()) == 3 
-    assert dr.array_size_v(s.ArrayXf) == Dynamic and dr.array_size_v(s.ArrayXf()) == Dynamic 
-    assert dr.array_size_v(l.ArrayXf) == Dynamic and dr.array_size_v(l.ArrayXf()) == Dynamic 
+    assert dr.size_v(1) == 1
+    assert dr.size_v("test") == 1
+    assert dr.size_v(s.Array3f) == 3 and dr.size_v(s.Array3f()) == 3
+    assert dr.size_v(l.Array3f) == 3 and dr.size_v(l.Array3f()) == 3
+    assert dr.size_v(s.ArrayXf) == Dynamic and dr.size_v(s.ArrayXf()) == Dynamic
+    assert dr.size_v(l.ArrayXf) == Dynamic and dr.size_v(l.ArrayXf()) == Dynamic
 
-    assert dr.array_depth_v(1) == 0
-    assert dr.array_depth_v("test") == 0
-    assert dr.array_depth_v(s.Array3f) == 1 and dr.array_depth_v(s.Array3f()) == 1
-    assert dr.array_depth_v(s.ArrayXf) == 1 and dr.array_depth_v(s.ArrayXf()) == 1
-    assert dr.array_depth_v(l.Float) == 1 and dr.array_depth_v(l.Float()) == 1
-    assert dr.array_depth_v(l.Array3f) == 2 and dr.array_depth_v(l.Array3f()) == 2
-    assert dr.array_depth_v(l.ArrayXf) == 2 and dr.array_depth_v(l.ArrayXf()) == 2
+    assert dr.depth_v(1) == 0
+    assert dr.depth_v("test") == 0
+    assert dr.depth_v(s.Array3f) == 1 and dr.depth_v(s.Array3f()) == 1
+    assert dr.depth_v(s.ArrayXf) == 1 and dr.depth_v(s.ArrayXf()) == 1
+    assert dr.depth_v(l.Float) == 1 and dr.depth_v(l.Float()) == 1
+    assert dr.depth_v(l.Array3f) == 2 and dr.depth_v(l.Array3f()) == 2
+    assert dr.depth_v(l.ArrayXf) == 2 and dr.depth_v(l.ArrayXf()) == 2
 
     assert dr.scalar_t(1) is int
     assert dr.scalar_t("test") is str
@@ -526,6 +526,25 @@ def test18_traits():
     assert not dr.is_mask_v("str") and not dr.is_mask_v(str)
     assert dr.is_mask_v(False) and dr.is_mask_v(bool)
     assert dr.is_mask_v(s.Array3b()) and dr.is_mask_v(s.Array3b)
+
+    assert dr.uint32_array_t(float) is int
+    assert dr.bool_array_t(float) is bool
+    assert dr.float32_array_t(int) is float
+
+    assert dr.bool_array_t(dr.scalar.Array3f) is dr.scalar.Array3b
+    assert dr.int32_array_t(dr.scalar.Array3f) is dr.scalar.Array3i
+    assert dr.uint32_array_t(dr.scalar.Array3f64) is dr.scalar.Array3u
+    assert dr.int64_array_t(dr.scalar.Array3f) is dr.scalar.Array3i64
+    assert dr.uint64_array_t(dr.scalar.Array3f) is dr.scalar.Array3u64
+    assert dr.uint_array_t(dr.scalar.Array3f) is dr.scalar.Array3u
+    assert dr.int_array_t(dr.scalar.Array3f) is dr.scalar.Array3i
+    assert dr.uint_array_t(dr.scalar.Array3f64) is dr.scalar.Array3u64
+    assert dr.int_array_t(dr.scalar.Array3f64) is dr.scalar.Array3i64
+    assert dr.float_array_t(dr.scalar.Array3u) is dr.scalar.Array3f
+    assert dr.float32_array_t(dr.scalar.Array3u) is dr.scalar.Array3f
+    assert dr.float_array_t(dr.scalar.Array3u64) is dr.scalar.Array3f64
+    assert dr.float32_array_t(dr.scalar.Array3u64) is dr.scalar.Array3f
+    assert dr.float_array_t(dr.scalar.TensorXu64) is dr.scalar.TensorXf64
 
 
 def test19_select():
@@ -655,7 +674,28 @@ def test22_masked_assignment():
     assert dr.all(a == l.Array3f(10, 10, 3))
 
 
-def test23_arange():
+def test23_linspace():
+    assert dr.allclose(2, 2)
+    assert dr.allclose([1, 2, 3], [1, 2, 3])
+    assert dr.allclose([1, 1, 1], 1)
+    assert dr.allclose([[1, 1], [1, 1], [1, 1]], 1)
+    assert not dr.allclose(2, 3)
+    assert not dr.allclose([1, 2, 3], [1, 4, 3])
+    assert not dr.allclose([1, 1, 1], 2)
+    assert not dr.allclose(float('nan'), float('nan'))
+    assert dr.allclose(float('nan'), float('nan'), equal_nan=True)
+
+    with pytest.raises(RuntimeError) as ei:
+        assert not dr.allclose([1,2,3], [1,4])
+    assert 'incompatible sizes' in str(ei.value)
+
+    import numpy as np
+    assert dr.allclose(np.array([1, 2, 3]), [1, 2, 3])
+    assert dr.allclose(np.array([1, 2, 3]), dr.scalar.Array3f(1, 2, 3))
+    assert dr.allclose(np.array([1, float('nan'), 3.0]), [1, float('nan'), 3], equal_nan=True)
+
+
+def test24_arange():
     import drjit.scalar as s
     import drjit.llvm as l
 
@@ -670,7 +710,7 @@ def test23_arange():
     assert dr.all(dr.arange(dtype=l.Float, start=-2, stop=5, step=2) == l.Float(-2, 0, 2, 4))
 
 
-def test24_linspace():
+def test25_linspace():
     import drjit.scalar as s
     import drjit.llvm as l
 

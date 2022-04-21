@@ -8,6 +8,52 @@ static nb::handle scalar_t(nb::handle h) {
     return tp;
 }
 
+static nb::object reinterpret_array_t(nb::handle h, VarType vt) {
+    nb::handle tp = h.is_type() ? h : h.type();
+    if (is_drjit_type(tp)) {
+        meta m = nb::type_supplement<supp>(tp).meta;
+        m.type = (uint16_t) vt;
+        tp = drjit::detail::array_get(m);
+    } else {
+        if (vt == VarType::Bool)
+            tp = &PyBool_Type;
+        else if (vt == VarType::Float16 ||
+                 vt == VarType::Float32 ||
+                 vt == VarType::Float64)
+            tp = &PyFloat_Type;
+        else
+            tp = &PyLong_Type;
+    }
+    return h.is_type() ? borrow(tp) : tp(h);
+}
+
+static int itemsize_v(nb::handle h) {
+    nb::handle tp = h.is_type() ? h : h.type();
+    if (is_drjit_type(tp)) {
+        switch ((VarType) nb::type_supplement<supp>(tp).meta.type) {
+            case VarType::Bool:
+            case VarType::Int8:
+            case VarType::UInt8:
+                return 1;
+            case VarType::Int16:
+            case VarType::UInt16:
+            case VarType::Float16:
+                return 2;
+            case VarType::Int32:
+            case VarType::UInt32:
+            case VarType::Float32:
+                return 4;
+            case VarType::Int64:
+            case VarType::UInt64:
+            case VarType::Float64:
+                return 8;
+            default:
+                break;
+        }
+    }
+    throw nb::type_error("Unsupported input type!");
+}
+
 extern void bind_traits(nb::module_ m) {
     m.attr("Dynamic") = (Py_ssize_t) -1;
 
@@ -15,7 +61,7 @@ extern void bind_traits(nb::module_ m) {
         return is_drjit_type(h.is_type() ? h : h.type());
     }, nb::raw_doc(doc_is_array_v));
 
-    m.def("array_size_v", [](nb::handle h) -> Py_ssize_t {
+    m.def("size_v", [](nb::handle h) -> Py_ssize_t {
         nb::handle tp = h.is_type() ? h : h.type();
         if (is_drjit_type(tp)) {
             Py_ssize_t shape = nb::type_supplement<supp>(tp).meta.shape[0];
@@ -25,9 +71,9 @@ extern void bind_traits(nb::module_ m) {
         } else {
             return 1;
         }
-    }, nb::raw_doc(doc_array_size_v));
+    }, nb::raw_doc(doc_size_v));
 
-    m.def("array_depth_v", [](nb::handle h) -> size_t {
+    m.def("depth_v", [](nb::handle h) -> size_t {
         nb::handle tp = h.is_type() ? h : h.type();
         if (is_drjit_type(tp)) {
             const uint8_t *shape = nb::type_supplement<supp>(tp).meta.shape;
@@ -41,7 +87,9 @@ extern void bind_traits(nb::module_ m) {
         } else {
             return 0;
         }
-    }, nb::raw_doc(doc_array_depth_v));
+    }, nb::raw_doc(doc_depth_v));
+
+    m.def("itemsize_v", itemsize_v, nb::raw_doc(doc_itemsize_v));
 
     m.def("value_t", [](nb::handle h) -> nb::handle {
         nb::handle tp = h.is_type() ? h : h.type();
@@ -200,4 +248,85 @@ extern void bind_traits(nb::module_ m) {
         nb::handle tp = h.is_type() ? h : h.type();
         return nb::hasattr(tp, "DRJIT_STRUCT");
     }, nb::raw_doc(doc_is_struct_v));
+
+    m.def(
+        "bool_array_t",
+        [](nb::handle h) { return reinterpret_array_t(h, VarType::Bool); },
+        doc_uint32_array_t);
+
+    m.def(
+        "uint32_array_t",
+        [](nb::handle h) { return reinterpret_array_t(h, VarType::UInt32); },
+        doc_uint32_array_t);
+
+    m.def(
+        "int32_array_t",
+        [](nb::handle h) { return reinterpret_array_t(h, VarType::Int32); },
+        doc_int32_array_t);
+
+    m.def(
+        "uint64_array_t",
+        [](nb::handle h) { return reinterpret_array_t(h, VarType::UInt64); },
+        doc_uint64_array_t);
+
+    m.def(
+        "int64_array_t",
+        [](nb::handle h) { return reinterpret_array_t(h, VarType::Int64); },
+        doc_int64_array_t);
+
+    m.def(
+        "float32_array_t",
+        [](nb::handle h) { return reinterpret_array_t(h, VarType::Float32); },
+        doc_float32_array_t);
+
+    m.def(
+        "float64_array_t",
+        [](nb::handle h) { return reinterpret_array_t(h, VarType::Float64); },
+        doc_float64_array_t);
+
+    m.def(
+        "uint_array_t",
+        [](nb::handle h) {
+            VarType vt;
+            switch (itemsize_v(h)) {
+                case 1: vt = VarType::UInt8; break;
+                case 2: vt = VarType::UInt16; break;
+                case 4: vt = VarType::UInt32; break;
+                case 8: vt = VarType::UInt64; break;
+                default: throw nb::type_error("Unsupported input type!");
+            }
+            return reinterpret_array_t(h, vt);
+        },
+        doc_uint_array_t);
+
+
+    m.def(
+        "int_array_t",
+        [](nb::handle h) {
+            VarType vt;
+            switch (itemsize_v(h)) {
+                case 1: vt = VarType::Int8; break;
+                case 2: vt = VarType::Int16; break;
+                case 4: vt = VarType::Int32; break;
+                case 8: vt = VarType::Int64; break;
+                default: throw nb::type_error("Unsupported input type!");
+            }
+            return reinterpret_array_t(h, vt);
+        },
+        doc_int_array_t);
+
+
+    m.def(
+        "float_array_t",
+        [](nb::handle h) {
+            VarType vt;
+            switch (itemsize_v(h)) {
+                case 2: vt = VarType::Float16; break;
+                case 4: vt = VarType::Float32; break;
+                case 8: vt = VarType::Float64; break;
+                default: throw nb::type_error("Unsupported input type!");
+            }
+            return reinterpret_array_t(h, vt);
+        },
+        doc_float_array_t);
 }
