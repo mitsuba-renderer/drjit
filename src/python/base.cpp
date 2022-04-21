@@ -1212,12 +1212,64 @@ template <int Index> void ab_setter(nb::handle_of<dr::ArrayBase> h, nb::handle v
         nb::detail::raise_python_error();
 }
 
+static PyObject *mp_subscript(PyObject *self, PyObject *key) {
+    if (PyLong_Check(key)) {
+        Py_ssize_t size = PyLong_AsSsize_t(key);
+        if (size < 0) {
+            if (size == -1 && PyErr_Occurred())
+                return nullptr;
+            size = len(self) + size;
+        }
+        return Py_TYPE(self)->tp_as_sequence->sq_item(self, size);
+    } else if (is_drjit_array(key)) {
+        const supp &s = nb::type_supplement<supp>(Py_TYPE(key));
+        if ((VarType) s.meta.type == VarType::Bool) {
+            Py_INCREF(self);
+            return self;
+        }
+    }
+    PyErr_Format(PyExc_TypeError,
+                 "%s.__getitem__(): invalid key of type '%s' specified!",
+                 Py_TYPE(self)->tp_name, Py_TYPE(key)->tp_name);
+    return nullptr;
+}
+
+static int mp_ass_subscript(PyObject *self, PyObject *key, PyObject *value) {
+    if (PyLong_Check(key)) {
+        Py_ssize_t size = PyLong_AsSsize_t(key);
+        if (size < 0) {
+            if (size == -1 && PyErr_Occurred())
+                return -1;
+            size = len(self) + size;
+        }
+        return Py_TYPE(self)->tp_as_sequence->sq_ass_item(self, size, value);
+    } else if (is_drjit_array(key)) {
+        const supp &s = nb::type_supplement<supp>(Py_TYPE(key));
+        if ((VarType) s.meta.type == VarType::Bool) {
+            PyObject *result = nb_select(key, value, self);
+            if (!result)
+                return -1;
+            nb::inst_destruct(self);
+            nb::inst_move(self, result);
+            Py_DECREF(result);
+            return 0;
+        }
+    }
+    PyErr_Format(PyExc_TypeError,
+                 "%s.__getitem__(): invalid key of type '%s' specified!",
+                 Py_TYPE(self)->tp_name, Py_TYPE(key)->tp_name);
+    return -1;
+}
+
 void bind_arraybase(nb::module_ m) {
     if (PyType_Ready(&dr_iter_type))
         nb::detail::fail("Issue initializing iterator type");
 
     auto callback = [](PyTypeObject *tp) noexcept {
         tp->tp_iter = tp_iter;
+        tp->tp_as_mapping->mp_subscript = mp_subscript;
+        tp->tp_as_mapping->mp_ass_subscript = mp_ass_subscript;
+        tp->tp_as_mapping->mp_length = len;
         tp->tp_as_sequence->sq_length = len;
         tp->tp_as_number->nb_add = nb_add;
         tp->tp_as_number->nb_inplace_add = nb_inplace_add;

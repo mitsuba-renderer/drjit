@@ -638,6 +638,22 @@ def test21_zero_or_full():
         and dr.all(ray.hit == True)
 
 
+def test22_masked_assignment():
+    import drjit.scalar as s
+    import drjit.llvm as l
+
+    a = s.Array3f(1,2,3)
+    a[a <= 2] = 10
+    assert dr.all(a == s.Array3f(10, 10, 3))
+
+    a = l.Float(1,2,3)
+    a[a <= 2] = 10
+    assert dr.all(a == l.Float(10, 10, 3))
+
+    a = l.Array3f(1,2,3)
+    a[a <= 2] = 10
+    assert dr.all(a == l.Array3f(10, 10, 3))
+
 #@pytest.mark.parametrize('name', ['sqrt', 'cbrt', 'sin', 'cos', 'tan', 'asin',
 #                                  'acos', 'atan', 'sinh', 'cosh', 'tanh',
 #                                  'asinh', 'acosh', 'atanh', 'exp', 'exp2',
