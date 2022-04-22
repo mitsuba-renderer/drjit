@@ -156,7 +156,9 @@ public:
     /// Return the texture dimension plus one (for the "channel dimension")
     size_t ndim() const { return Dimension + 1; }
 
+    // Return the texture shape
     const size_t *shape() const { return m_value.shape().data(); }
+
     FilterMode filter_mode() const { return m_filter_mode; }
     WrapMode wrap_mode() const { return m_wrap_mode; }
 
@@ -167,8 +169,10 @@ public:
 
         if constexpr (HasCudaTexture) {
             value.eval_(); // Sync the value before copying to texture memory
-            jit_cuda_tex_memcpy_d2t(Dimension, m_value.shape().data(),
-                                    value.data(), m_handle);
+
+            size_t tex_shape[Dimension + 1];
+            reverse_tensor_shape(tex_shape, true);
+            jit_cuda_tex_memcpy_d2t(Dimension, tex_shape, value.data(), m_handle);
 
             if (m_migrate) {
                 Storage dummy = zero<Storage>(m_size);
@@ -241,8 +245,11 @@ public:
         if constexpr (HasCudaTexture) {
             if (m_migrated) {
                 Storage primal = empty<Storage>(m_size);
-                jit_cuda_tex_memcpy_t2d(Dimension, m_value.shape().data(),
-                                        m_handle, primal.data());
+
+                size_t tex_shape[Dimension + 1];
+                reverse_tensor_shape(tex_shape, true);
+                jit_cuda_tex_memcpy_t2d(Dimension, tex_shape, m_handle,
+                                        primal.data());
 
                 if constexpr (IsDiff)
                     m_value.array() = replace_grad(primal, m_value.array());
@@ -1105,8 +1112,8 @@ protected:
 
         for (size_t i = 0; i < Dimension; ++i) {
             tensor_shape[i] = shape[i];
-            m_shape_opaque[i] = opaque<UInt32>((uint32_t) shape[i]);
-            m_inv_resolution[i] = divisor<int32_t>((int32_t) shape[i]);
+            m_shape_opaque[Dimension - 1 - i] = opaque<UInt32>((uint32_t) shape[i]);
+            m_inv_resolution[Dimension - 1 - i] = divisor<int32_t>((int32_t) shape[i]);
             m_size *= shape[i];
         }
         tensor_shape[Dimension] = channels;
@@ -1118,12 +1125,23 @@ protected:
         m_filter_mode = filter_mode;
         m_wrap_mode = wrap_mode;
 
-        if constexpr (HasCudaTexture)
-            m_handle = jit_cuda_tex_create(Dimension, shape, channels,
+        if constexpr (HasCudaTexture) {
+            size_t tex_shape[Dimension];
+            reverse_tensor_shape(tex_shape, false);
+            m_handle = jit_cuda_tex_create(Dimension, tex_shape, channels,
                                            (int) filter_mode, (int) wrap_mode);
+        }
     }
 
 private:
+    /// Helper function to reverse the tensor (\ref Texture.m_value) shape
+    void reverse_tensor_shape(size_t *output, bool include_channels) const {
+        for (size_t i = 0; i < Dimension; ++i)
+            output[i] = m_value.shape(Dimension - 1 - i);
+        if (include_channels)
+            output[Dimension] = m_value.shape(Dimension);
+    }
+
     /// Helper function to compmute integer powers of numbers
     template <typename T>
     constexpr static T ipow(T num, unsigned int pow) {
@@ -1205,9 +1223,12 @@ private:
 private:
     void *m_handle = nullptr;
     size_t m_size = 0;
-    Array<UInt32, Dimension> m_shape_opaque;
     mutable TensorXf m_value;
+
+    // Stored in this order: width, height, depth
+    Array<UInt32, Dimension> m_shape_opaque;
     divisor<int32_t> m_inv_resolution[Dimension] { };
+
     FilterMode m_filter_mode;
     WrapMode m_wrap_mode;
     bool m_migrate = false;
