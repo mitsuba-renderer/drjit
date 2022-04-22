@@ -387,9 +387,7 @@ DRJIT_TEST(test10_cubic_interp_3d) {
     dr::scatter(tensor.array(), Float(2.0),  UInt32(546));  // tensor[3, 3, 3, 0] = 2.0
     dr::scatter(tensor.array(), Float(10.0), UInt32(727));  // tensor[4, 4, 3, 1] = 10.0
 
-    dr::Texture<Float, 3> tex(shape, 2, false, FilterMode::Linear,
-                              WrapMode::Clamp);
-    tex.set_tensor(tensor);
+    dr::Texture<Float, 3> tex(tensor, false, FilterMode::Linear, WrapMode::Clamp);
 
     Array2f res = empty<Array2f>();
     Array2f res2 = empty<Array2f>();
@@ -421,9 +419,8 @@ DRJIT_TEST(test11_cubic_grad_pos) {
     dr::scatter(tensor.array(), Float(3.0f), UInt32(41));  // data[2, 2, 1] = 3.0
     dr::scatter(tensor.array(), Float(4.0f), UInt32(22));  // data[1, 1, 2] = 4.0
 
-    dr::Texture<DFloat, 3> tex(shape, 1, false, FilterMode::Linear,
+    dr::Texture<DFloat, 3> tex(tensor, false, FilterMode::Linear,
                                WrapMode::Clamp);
-    tex.set_tensor(tensor);
 
     ArrayD3f pos(.5f, .5f, .5f);
     dr::Array<ArrayD3f, 1> grad_64 = empty<dr::Array<ArrayD3f, 1>>();
@@ -461,9 +458,8 @@ DRJIT_TEST(test12_cubic_hessian_pos) {
     // NOTE: Tensor has different index convention with Texture
     //       [2, 1, 1] is equivalent to (x=1, y=1, z=2) in the texture
 
-    dr::Texture<DFloat, 3> tex(shape, 1, false, FilterMode::Linear,
+    dr::Texture<DFloat, 3> tex(tensor, false, FilterMode::Linear,
                                WrapMode::Clamp);
-    tex.set_tensor(tensor);
 
     ArrayD3f pos(.5f, .5f, .5f);
     dr::Array<ArrayD3f, 1> grad_64 = empty<dr::Array<ArrayD3f, 1>>();
@@ -807,7 +803,7 @@ DRJIT_TEST(test23_set_tensor) {
     Float tex_data(1.f, 2.f, 3.f, 4.f);
     tex.set_value(tex_data);
 
-    size_t new_shape[3] = { 3, 2, 2 };
+    size_t new_shape[3] = { 2, 3, 2 };
     Float new_tex_data(6.5f, 6.f, 5.5f, 5.f, 4.5f, 4.f, 3.5f, 3.f, 2.5f, 2.f,
                        1.5f, 1.f);
     TensorXf new_tensor(new_tex_data, 3, new_shape);
@@ -857,7 +853,7 @@ DRJIT_TEST(test24_set_tensor_inplace) {
     tex.set_value(tex_data);
     TensorXf &tex_tensor = tex.tensor();
 
-    size_t new_shape1[3] = { 3, 2, 2 };
+    size_t new_shape1[3] = { 2, 3, 2 };
     Float new_tex_data1(6.5f, 6.f, 5.5f, 5.f, 4.5f, 4.f, 3.5f, 3.f, 2.5f, 2.f,
                        1.5f, 1.f);
     TensorXf new_tensor(new_tex_data1, 3, new_shape1);
