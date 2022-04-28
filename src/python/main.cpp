@@ -1,9 +1,28 @@
+/*
+    main.cpp -- main entry point of the Dr.Jit Python bindings
+
+    Dr.Jit: A Just-In-Time-Compiler for Differentiable Rendering
+    Copyright 2022, Realistic Graphics Lab, EPFL.
+
+    All rights reserved. Use of this source code is governed by a
+    BSD-style license that can be found in the LICENSE.txt file.
+*/
+
 #include "python.h"
 
-static void log_callback(LogLevel /* level */, const char *msg) {
-    /* Try to print to the Python console if possible, but *never*
-       acquire the GIL and risk deadlock over this. */
+// Stores a reference to 'drjit.ArrayBase'
+nb::handle array_base;
 
+// Stores a reference to the 'drjit' namespace
+nb::handle array_module;
+
+/**
+ * \brief Log callback that tries to print to the Python console if possible.
+ *
+ * It *never* tries to acquire the GIL to avoid deadlocks and instead falls
+ * back to 'stderr' if needed.
+ */
+static void log_callback(LogLevel /* level */, const char *msg) {
     if (_Py_IsFinalizing()) {
         fprintf(stderr, "%s\n", msg);
     } else if (PyGILState_Check()) {
@@ -37,7 +56,8 @@ NB_MODULE(drjit_ext, m_) {
                 llvm = m.def_submodule("llvm"),
                 llvm_ad = llvm.def_submodule("ad");
 
-    bind_arraybase(m);
+    bind_array_builtin(m);
+    bind_array_math(m);
     bind_ops(m);
     bind_traits(m);
 

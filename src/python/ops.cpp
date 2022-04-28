@@ -1,7 +1,5 @@
 #include "python.h"
-#include "docstr.h"
 #include <nanobind/stl/vector.h>
-#include <iostream>
 
 nb::object full_alt(nb::type_object dtype, nb::handle value, size_t size);
 

@@ -1,5 +1,15 @@
+/*
+    traits.cpp -- implementation of Dr.Jit type traits such as
+    is_array_v, uint32_array_t, etc.
+
+    Dr.Jit: A Just-In-Time-Compiler for Differentiable Rendering
+    Copyright 2022, Realistic Graphics Lab, EPFL.
+
+    All rights reserved. Use of this source code is governed by a
+    BSD-style license that can be found in the LICENSE.txt file.
+*/
+
 #include "python.h"
-#include "docstr.h"
 
 static nb::handle scalar_t(nb::handle h) {
     nb::handle tp = h.is_type() ? h : h.type();

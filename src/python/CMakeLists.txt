@@ -19,7 +19,8 @@ nanobind_add_module(
   random.h
   python.h
   main.cpp
-  base.cpp
+  array_builtin.cpp
+  array_math.cpp
   init.cpp
   repr.cpp
   ops.cpp
@@ -30,6 +31,7 @@ nanobind_add_module(
   llvm.cpp
   llvm_ad.cpp
   traits.cpp
+  promote.cpp
 )
 
 set_target_properties(drjit-python
