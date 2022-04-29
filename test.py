@@ -721,6 +721,24 @@ def test25_linspace():
     assert dr.allclose(dr.linspace(l.Float, start=-2, stop=5, num=4), l.Float(-2, 1/3, 8/3, 5))
     assert dr.allclose(dr.linspace(l.Float, start=-2, stop=4, num=4, endpoint=False), l.Float(-2, -0.5, 1, 2.5))
 
+
+def test26_fast_cast(capsys):
+    import drjit.llvm as l
+    try:
+        dr.set_log_level(5)
+        x = l.Int(0, 1, 2)
+        y = l.Float(x)
+        z = x + 0.0
+
+        a = l.Array3f(y, y, y)
+        b = l.Array3u(a)
+
+        out, err = capsys.readouterr()
+        assert out.count('jit_var_new_cast') == 5
+        assert out.count('jit_poke') == 3
+    finally:
+        dr.set_log_level(0)
+
 #@pytest.mark.parametrize('name', ['sqrt', 'cbrt', 'sin', 'cos', 'tan', 'asin',
 #                                  'acos', 'atan', 'sinh', 'cosh', 'tanh',
 #                                  'asinh', 'acosh', 'atanh', 'exp', 'exp2',

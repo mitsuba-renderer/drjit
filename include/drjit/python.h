@@ -27,6 +27,7 @@ using array_reduce_mask = void (*) (const void *, void *);
 using array_id = uint32_t (*) (const void *);
 using array_full = void (*) (nanobind::handle, size_t, void *);
 using array_counter = void (*) (uint32_t size, void *);
+using array_cast = int (*) (const void *, VarType, void *);
 
 struct array_metadata {
     uint16_t is_vector     : 1;
@@ -45,6 +46,7 @@ struct array_metadata {
     uint8_t shape[4];
 };
 
+
 struct array_supplement {
     array_metadata meta;
     PyTypeObject *value;
@@ -55,6 +57,7 @@ struct array_supplement {
     void (*init)(void *, size_t);
     dr_vector<size_t> & (*op_tensor_shape)(void *) noexcept;
     PyObject *(*op_tensor_array)(PyObject *) noexcept;
+    array_cast op_cast;
 
     array_full op_full;
     array_counter op_counter;
@@ -283,6 +286,26 @@ template <typename T> nanobind::class_<T> bind_array(const char *name = nullptr)
         };
 
         if constexpr (T::IsArithmetic) {
+            using UInt32 = uint32_array_t<T>;
+            using Int32  = int32_array_t<T>;
+            using UInt64 = uint64_array_t<T>;
+            using Int64  = int64_array_t<T>;
+            using Float32 = float32_array_t<T>;
+            using Float64 = float64_array_t<T>;
+
+            s.op_cast = [](const void *a, VarType vt, void *b) {
+                switch (vt) {
+                    case VarType::Int32:   new (b) T(*(const Int32 *)   a); break;
+                    case VarType::UInt32:  new (b) T(*(const UInt32 *)  a); break;
+                    case VarType::Int64:   new (b) T(*(const Int64 *)   a); break;
+                    case VarType::UInt64:  new (b) T(*(const UInt64 *)  a); break;
+                    case VarType::Float32: new (b) T(*(const Float32 *) a); break;
+                    case VarType::Float64: new (b) T(*(const Float64 *) a); break;
+                    default: return -1;
+                }
+                return 0;
+            };
+
             s.op_add = [](const void *a, const void *b, void *c) {
                 new ((T *) c) T(*(const T *) a + *(const T *) b);
             };

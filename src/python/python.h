@@ -51,7 +51,6 @@ extern nb::object shape(nb::handle_of<dr::ArrayBase> h) noexcept;
  */
 extern bool promote(const char *op, PyObject **o, size_t n, bool select = false);
 
-
 // Entry points of various parts of the bindings
 extern void bind_array_builtin(nb::module_ m);
 extern void bind_array_math(nb::module_ m);

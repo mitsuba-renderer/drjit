@@ -17,11 +17,14 @@ NAMESPACE_BEGIN(detail)
 
 namespace nb = nanobind;
 
-bool array_resize(PyObject *self, const detail::array_supplement &supp,
-                  Py_ssize_t len) {
-    if (supp.meta.shape[0] == 0xFF) {
+inline bool operator==(const meta &a, const meta &b) {
+    return memcmp(&a, &b, sizeof(meta)) == 0;
+}
+
+bool array_resize(PyObject *self, const supp &s, Py_ssize_t len) {
+    if (s.meta.shape[0] == 0xFF) {
         try {
-            supp.init(nb::inst_ptr<void>(self), (size_t) len);
+            s.init(nb::inst_ptr<void>(self), (size_t) len);
         } catch (const std::exception &e) {
             PyErr_Format(PyExc_TypeError, "%s.__init__(): %s",
                          Py_TYPE(self)->tp_name, e.what());
@@ -30,11 +33,11 @@ bool array_resize(PyObject *self, const detail::array_supplement &supp,
 
         return true;
     } else {
-        if (supp.meta.shape[0] != len) {
+        if (s.meta.shape[0] != len) {
             PyErr_Format(
                 PyExc_TypeError,
                 "%s.__init__(): input sequence has wrong size (expected %u, got %zd)!",
-                Py_TYPE(self)->tp_name, (unsigned) supp.meta.shape[0], len);
+                Py_TYPE(self)->tp_name, (unsigned) s.meta.shape[0], len);
             return false;
         }
         return true;
@@ -43,8 +46,7 @@ bool array_resize(PyObject *self, const detail::array_supplement &supp,
 
 int array_init(PyObject *self, PyObject *args, PyObject *kwds) {
     PyTypeObject *self_tp = Py_TYPE(self);
-    const detail::array_supplement &supp =
-        nb::type_supplement<detail::array_supplement>(self_tp);
+    const supp &s = nb::type_supplement<supp>(self_tp);
 
     if (kwds) {
         PyErr_Format(
@@ -61,7 +63,7 @@ int array_init(PyObject *self, PyObject *args, PyObject *kwds) {
         // Zero-initialize
         nb::detail::nb_inst_zero(self);
         return 0;
-    } else if (supp.meta.shape[0] == 0) {
+    } else if (s.meta.shape[0] == 0) {
         PyErr_Format(
             PyExc_TypeError,
             "%s.__init__(): too many arguments provided (expected 0, got %zu)!",
@@ -73,10 +75,24 @@ int array_init(PyObject *self, PyObject *args, PyObject *kwds) {
         PyObject *arg = PyTuple_GET_ITEM(args, 0);
         PyTypeObject *arg_tp = Py_TYPE(arg);
 
-        // Same type -> copy constructor
-        if (arg_tp == self_tp) {
-            nb::detail::nb_inst_copy(self, arg);
-            return 0;
+        // Copy/conversion from a compatible Dr.Jit array
+        if (is_drjit_type(arg_tp)) {
+            if (arg_tp == self_tp) {
+                nb::detail::nb_inst_copy(self, arg);
+                return 0;
+            }
+
+            meta arg_meta    = nb::type_supplement<supp>(arg_tp).meta,
+                 arg_meta_cp = arg_meta;
+            arg_meta_cp.type = s.meta.type;
+
+            if (arg_meta_cp == s.meta && s.op_cast) {
+                if (s.op_cast(nb::inst_ptr<void>(arg), (VarType) arg_meta.type,
+                              nb::inst_ptr<void>(self)) == 0) {
+                    nb::inst_mark_ready(self);
+                    return 0;
+                }
+            }
         }
 
         nb::detail::nb_inst_zero(self);
@@ -84,7 +100,7 @@ int array_init(PyObject *self, PyObject *args, PyObject *kwds) {
         // Fast path for tuples/list instances
         if (arg_tp == &PyTuple_Type) {
             Py_ssize_t len = PyTuple_GET_SIZE(arg);
-            if (!array_resize(self, supp, len))
+            if (!array_resize(self, s, len))
                 return -1;
 
             for (Py_ssize_t i = 0; i < len; ++i) {
@@ -95,7 +111,7 @@ int array_init(PyObject *self, PyObject *args, PyObject *kwds) {
             return 0;
         } else if (arg_tp == &PyList_Type) {
             Py_ssize_t len = PyList_GET_SIZE(arg);
-            if (!array_resize(self, supp, len))
+            if (!array_resize(self, s, len))
                 return -1;
 
             for (Py_ssize_t i = 0; i < len; ++i) {
@@ -106,14 +122,14 @@ int array_init(PyObject *self, PyObject *args, PyObject *kwds) {
             return 0;
         }
 
-        if (arg_tp->tp_as_sequence && arg_tp != supp.value) {
+        if (arg_tp->tp_as_sequence && arg_tp != s.value) {
             // General path for all sequence types
             auto arg_item = arg_tp->tp_as_sequence->sq_item;
             auto arg_length = arg_tp->tp_as_sequence->sq_length;
 
             if (arg_length && arg_item) {
                 Py_ssize_t len = arg_length(arg);
-                if (!array_resize(self, supp, len))
+                if (!array_resize(self, s, len))
                     return -1;
 
                 for (Py_ssize_t i = 0; i < len; ++i) {
@@ -131,7 +147,7 @@ int array_init(PyObject *self, PyObject *args, PyObject *kwds) {
         }
 
         // Catch-all case for iterable types
-        if (arg_tp->tp_iter && arg_tp != supp.value) {
+        if (arg_tp->tp_iter && arg_tp != s.value) {
             PyObject *list = PySequence_List(arg);
             if (!list)
                 return -1;
@@ -144,28 +160,28 @@ int array_init(PyObject *self, PyObject *args, PyObject *kwds) {
 
         // No sequence/iterable type, broadcast to elements
         PyObject *result;
-        if (arg_tp == supp.value) {
+        if (arg_tp == s.value) {
             result = arg;
             Py_INCREF(result);
         } else {
             PyObject *args[2] = { nullptr, arg };
-            result = NB_VECTORCALL((PyObject *) supp.value, args + 1,
+            result = NB_VECTORCALL((PyObject *) s.value, args + 1,
                                    1 | PY_VECTORCALL_ARGUMENTS_OFFSET, nullptr);
             if (!result)
                 return -1;
         }
 
-        Py_ssize_t len = supp.meta.shape[0];
+        Py_ssize_t len = s.meta.shape[0];
         if (len == 0xFF) {
             len = 1;
 
-            if (supp.op_full) {
-                supp.op_full(result, len, nb::inst_ptr<void>(self));
+            if (s.op_full) {
+                s.op_full(result, len, nb::inst_ptr<void>(self));
                 Py_DECREF(result);
                 return 0;
             }
 
-            if (!array_resize(self, supp, len)) {
+            if (!array_resize(self, s, len)) {
                 Py_DECREF(result);
                 return -1;
             }
@@ -186,7 +202,7 @@ int array_init(PyObject *self, PyObject *args, PyObject *kwds) {
         nb::detail::nb_inst_zero(self);
 
         Py_ssize_t len = PyTuple_GET_SIZE(args);
-        if (!array_resize(self, supp, len))
+        if (!array_resize(self, s, len))
             return -1;
 
         for (Py_ssize_t i = 0; i < len; ++i) {
@@ -200,8 +216,7 @@ int array_init(PyObject *self, PyObject *args, PyObject *kwds) {
 
 int tensor_init(PyObject *self, PyObject *args, PyObject *kwds) {
     PyTypeObject *self_tp = Py_TYPE(self);
-    const detail::array_supplement &supp =
-        nb::type_supplement<detail::array_supplement>(self_tp);
+    const supp &s = nb::type_supplement<supp>(self_tp);
 
     if (kwds) {
         PyErr_Format(
@@ -216,7 +231,7 @@ int tensor_init(PyObject *self, PyObject *args, PyObject *kwds) {
     if (argc == 0) {
         // Zero-initialize
         nb::detail::nb_inst_zero(self);
-        supp.op_tensor_shape(nb::inst_ptr<void>(self)).push_back(0);
+        s.op_tensor_shape(nb::inst_ptr<void>(self)).push_back(0);
         return 0;
     }
 
@@ -231,13 +246,13 @@ int tensor_init(PyObject *self, PyObject *args, PyObject *kwds) {
         }
 
         nb::detail::nb_inst_zero(self);
-        PyObject *value = supp.op_tensor_array(self);
+        PyObject *value = s.op_tensor_array(self);
         if (array_init(value, args, kwds)) {
             Py_DECREF(value);
             return -1;
         }
 
-        supp.op_tensor_shape(nb::inst_ptr<void>(self)).push_back(len(value));
+        s.op_tensor_shape(nb::inst_ptr<void>(self)).push_back(len(value));
         Py_DECREF(value);
         return 0;
     }
