@@ -1655,7 +1655,7 @@ def numpy(a):
     return arr
 
 
-def dlpack(a):
+def op_dlpack(a):
     struct = a.export_(migrate_to_host=False, version=2)
     isize = a.Type.Size
     strides = tuple(k // isize for k in struct["strides"])
@@ -1671,7 +1671,7 @@ def dlpack(a):
 
 def torch(a):
     from torch.utils.dlpack import from_dlpack
-    return from_dlpack(a.dlpack())
+    return from_dlpack(a.__dlpack__())
 
 
 def jax(a):
@@ -1680,14 +1680,14 @@ def jax(a):
     if a.IsLLVM:
         try:
             # Not all Jax versions accept the 'backend' parameter
-            return from_dlpack(a.dlpack(), backend=devices(backend="cpu")[0])
+            return from_dlpack(a.__dlpack__(), backend=devices(backend="cpu")[0])
         except:
             pass
-    return from_dlpack(a.dlpack())
+    return from_dlpack(a.__dlpack__())
 
 
 def tf(a):
     from tensorflow.experimental.dlpack import from_dlpack
     from tensorflow import constant
     constant(0) # Dummy op to ensure that the Tensorflow context is initialized
-    return from_dlpack(a.dlpack())
+    return from_dlpack(a.__dlpack__())
