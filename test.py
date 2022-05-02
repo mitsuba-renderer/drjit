@@ -739,6 +739,7 @@ def test26_fast_cast(capsys):
     finally:
         dr.set_log_level(0)
 
+
 def test27_gather_simple():
     import drjit.llvm as l
     import drjit.scalar as s
@@ -768,6 +769,31 @@ def test27_gather_simple():
         index=l.UInt(0, 5, 3),
         active=l.Bool(True, False, True)
     ) == l.Float(0, 0, 3))
+
+
+def test28_gather_complex():
+    import drjit.llvm as l
+
+    assert dr.all_nested(dr.gather(
+        dtype=l.Array3f,
+        source=dr.arange(l.Float, 12),
+        index=l.UInt(0, 2, 3)
+    ) == l.Array3f(
+        l.Float(0, 6, 9),
+        l.Float(1, 7, 10),
+        l.Float(2, 8, 11),
+    ))
+
+    assert dr.all_nested(dr.gather(
+        dtype=l.Array3f,
+        source=dr.arange(l.Float, 12),
+        index=l.UInt(0, 2, 3),
+        active=l.Bool(True, False, True)
+    ) == l.Array3f(
+        l.Float(0, 0, 9),
+        l.Float(1, 0, 10),
+        l.Float(2, 0, 11),
+    ))
 
 #@pytest.mark.parametrize('name', ['sqrt', 'cbrt', 'sin', 'cos', 'tan', 'asin',
 #                                  'acos', 'atan', 'sinh', 'cosh', 'tanh',

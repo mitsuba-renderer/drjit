@@ -183,13 +183,19 @@ nb::object linspace(nb::handle dtype, double start, double end, size_t size, boo
 nb::object gather_impl(nb::type_object dtype,
                        nb::handle_of<dr::ArrayBase> source,
                        nb::object index, nb::object active) {
+    if (!is_drjit_type(dtype))
+        throw nb::type_error(
+            "drjit.gather(): 'dtype' argument must be a Dr.Jit array!");
+
     const supp &source_s = nb::type_supplement<supp>(source.type());
+
     if (source_s.meta.ndim != 1 || source_s.meta.shape[0] != 0xFF)
         throw nb::type_error(
             "drjit.gather(): 'source' argument must be a dynamic 1D array!");
 
-    meta active_meta = source_s.meta,
-         index_meta = source_s.meta;
+    meta source_meta = source_s.meta,
+         active_meta = source_meta,
+         index_meta = source_meta;
 
     active_meta.type = (uint16_t) VarType::Bool;
     index_meta.type = (uint16_t) VarType::UInt32;
@@ -215,7 +221,10 @@ nb::object gather_impl(nb::type_object dtype,
                              "is convertible into drjit.mask_t(index).");
     }
 
-    if (dtype.is(source.type())) {
+    const supp &dtype_s = nb::type_supplement<supp>(dtype);
+    meta dtype_meta = dtype_s.meta;
+
+    if (dtype_meta == source_meta) {
         nb::object result = nb::inst_alloc(dtype);
 
         source_s.op_gather(
@@ -227,9 +236,29 @@ nb::object gather_impl(nb::type_object dtype,
 
         nb::inst_mark_ready(result);
         return result;
-    } else {
-        return nb::none();
     }
+
+    meta m = source_meta;
+    m.is_vector = dtype_meta.is_vector;
+    m.is_complex = dtype_meta.is_complex;
+    m.is_matrix = dtype_meta.is_matrix;
+    m.is_quaternion = dtype_meta.is_quaternion;
+    m.ndim = dtype_meta.ndim;
+    for (int i = 0; i < 4; ++i)
+        m.shape[i] = dtype_meta.shape[i];
+
+    if (m == dtype_meta && m.ndim > 0 && m.shape[m.ndim - 1] == 0xFF &&
+        m.shape[0] != 0xFF) {
+        nb::object result = dtype();
+        for (size_t i = 0; i < m.shape[0]; ++i) {
+            result[i] = gather_impl(nb::borrow<nb::type_object>(dtype_s.value),
+                    source, index * nb::cast(m.shape[0]) + nb::cast(i),
+                    active);
+        }
+        return result;
+    }
+
+    throw nb::type_error("drjit.gather(): 'dtype' unsupported!");
 }
 
 extern void bind_array_misc(nb::module_ m) {

@@ -51,6 +51,24 @@ extern nb::object shape(nb::handle_of<dr::ArrayBase> h) noexcept;
  */
 extern bool promote(const char *op, PyObject **o, size_t n, bool select = false);
 
+inline bool operator==(const dr::detail::array_metadata &a,
+                       const dr::detail::array_metadata &b) {
+    if (a.is_vector != b.is_vector && a.is_complex != b.is_complex &&
+        a.is_quaternion != b.is_quaternion && a.is_matrix != b.is_matrix &&
+        a.is_tensor != b.is_tensor && a.is_diff != b.is_diff &&
+        a.is_llvm != b.is_llvm && a.is_cuda != b.is_cuda &&
+        a.is_valid != b.is_valid && a.type != b.type && a.ndim != b.ndim &&
+        a.tsize_rel != b.tsize_rel && a.talign != b.talign)
+        return false;
+
+    for (int i = 0; i < a.ndim; ++i) {
+        if (a.shape[i] != b.shape[i])
+            return false;
+    }
+
+    return true;
+}
+
 // Entry points of various parts of the bindings
 extern void bind_array_builtin(nb::module_ m);
 extern void bind_array_math(nb::module_ m);

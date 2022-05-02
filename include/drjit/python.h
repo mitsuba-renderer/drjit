@@ -46,7 +46,6 @@ struct array_metadata {
     uint8_t shape[4];
 };
 
-
 struct array_supplement {
     array_metadata meta;
     PyTypeObject *value;
