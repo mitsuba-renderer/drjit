@@ -46,13 +46,13 @@ def test02_slice_index():
 
     with pytest.raises(RuntimeError) as ei:
         shape, index = dr.slice_index(dtype=tp, shape=(10,), indices=(20,))
-    assert "index 20 is out of bounds for axis 0 with size 10!" in str(ei.value)
+    assert "index 20 is out of bounds for axis 0 with size 10" in str(ei.value)
 
     def check(shape, indices, shape_out, index_out):
         shape, index = dr.slice_index(dtype=tp, shape=shape, indices=indices)
         assert shape == shape_out and dr.all(index == index_out)
 
-    # 1D arrays, simple slice and integer-based indexing
+    # 1D arrays, simple slice, integer-based, and array-based indexing
     check(shape=(10,), indices=(5,), shape_out=(), index_out=tp(5))
     check(shape=(10,), indices=(-2,), shape_out=(), index_out=tp(8))
     check(shape=(10,), indices=(slice(0, 10, 2),),
@@ -63,8 +63,20 @@ def test02_slice_index():
           shape_out=(5,), index_out=tp(9, 7, 5, 3, 1))
     check(shape=(10,), indices=(slice(None, None, None),),
           shape_out=(10,), index_out=tp(0, 1, 2, 3, 4, 5, 6, 7, 8, 9))
+    check(shape=(10,), indices=(tp(0, 2, 4),),
+          shape_out=(3,), index_out=tp(0, 2, 4))
+    check(shape=(10,), indices=(None, tp(0, 2, 4), None),
+          shape_out=(1, 3, 1), index_out=tp(0, 2, 4))
+    check(shape=(10,), indices=(),
+          shape_out=(10,), index_out=dr.arange(tp, 10))
+    check(shape=(10,), indices=(Ellipsis,),
+          shape_out=(10,), index_out=dr.arange(tp, 10))
+    check(shape=(10,), indices=(None, Ellipsis),
+          shape_out=(1, 10,), index_out=dr.arange(tp, 10))
+    check(shape=(10,), indices=(Ellipsis, None),
+          shape_out=(10, 1), index_out=dr.arange(tp, 10))
 
-    # 2D arrays, simple slice and integer-based indexing
+    # 2D arrays, simple slice and integer-based, and array-based indexing
     check(shape=(3, 7), indices=(2, 5), shape_out=(), index_out=tp(7*2 + 5))
     check(shape=(3, 7), indices=(-2, -5), shape_out=(), index_out=tp(7*1 + 2))
     check(shape=(3, 7), indices=(slice(None, None, None), 1),
@@ -75,6 +87,28 @@ def test02_slice_index():
           shape_out=(7,), index_out=tp(7, 8, 9, 10, 11, 12, 13))
     check(shape=(3, 7), indices=(slice(0, 3, 3), slice(0, 7, 3)),
           shape_out=(1, 3), index_out=tp(0, 3, 6))
+    check(shape=(3, 7), indices=(tp(0), slice(0, 7, 3)),
+          shape_out=(1, 3), index_out=tp(0, 3, 6))
+    check(shape=(3, 7), indices=(tp(0), tp(0, 3, 6)),
+          shape_out=(1, 3), index_out=tp(0, 3, 6))
+    check(shape=(3, 7), indices=(2, slice(None, None, None)),
+          shape_out=(7,), index_out=tp(14, 15, 16, 17, 18, 19, 20))
+    check(shape=(3, 7), indices=(slice(None, None, None), 2),
+          shape_out=(3,), index_out=tp(2, 9, 16))
+    check(shape=(3, 7), indices=(slice(None, None, None), tp(2)),
+          shape_out=(3, 1), index_out=tp(2, 9, 16))
+    check(shape=(3, 7), indices=(slice(0, 0, 1), tp(2)),
+          shape_out=(0, 1), index_out=tp())
+    check(shape=(3, 7), indices=(),
+          shape_out=(3, 7), index_out=dr.arange(tp, 7*3))
+    check(shape=(3, 7), indices=(1,),
+          shape_out=(7,), index_out=dr.arange(tp, 7)+7)
+    check(shape=(3, 7), indices=(1, ...),
+          shape_out=(7,), index_out=dr.arange(tp, 7)+7)
+    check(shape=(3, 7), indices=(...,),
+          shape_out=(3, 7), index_out=dr.arange(tp, 7*3))
+    check(shape=(3, 7), indices=(None, ..., None, 1, None),
+          shape_out=(1, 3, 1, 1), index_out=tp(1, 8, 15))
 
 
 #def test02_tensor_init_basic():
