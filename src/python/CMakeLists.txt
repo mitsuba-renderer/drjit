@@ -15,23 +15,25 @@ nanobind_lto(drjit-python)
 
 nanobind_add_module(
   drjit-python-ext
-  common.h
   random.h
   python.h
   main.cpp
   array_builtin.cpp
   array_math.cpp
-  init.cpp
+  array_misc.cpp
+  array_init.cpp
   repr.cpp
-  ops.cpp
   shape.cpp
+  traits.cpp
+  promote.cpp
+  tensor.cpp
+
+  # Specific backends
   scalar.cpp
   cuda.cpp
   cuda_ad.cpp
   llvm.cpp
   llvm_ad.cpp
-  traits.cpp
-  promote.cpp
 )
 
 set_target_properties(drjit-python

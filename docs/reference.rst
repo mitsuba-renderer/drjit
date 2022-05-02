@@ -3,6 +3,41 @@ Reference
 
 .. py:module:: drjit
 
+Array creation
+--------------
+
+.. autofunction:: zeros
+.. autofunction:: ones
+.. autofunction:: full
+.. autofunction:: arange
+.. autofunction:: linspace
+
+Memory operations
+-----------------
+
+.. autofunction:: gather
+
+Mask operations
+---------------
+
+.. autofunction:: select
+.. autofunction:: all
+.. autofunction:: any
+.. autofunction:: all_nested
+.. autofunction:: any_nested
+.. autofunction:: isinf
+.. autofunction:: isnan
+.. autofunction:: isfinite
+.. autofunction:: allclose
+
+.. _horizontal-reductions:
+
+Horizontal reductions
+---------------------
+
+TBD
+
+
 Type traits
 -----------
 
@@ -71,28 +106,7 @@ Miscellaneous operations
 ------------------------
 
 .. autofunction:: shape
-
-Array creation
---------------
-
-.. autofunction:: zeros
-.. autofunction:: ones
-.. autofunction:: full
-.. autofunction:: arange
-.. autofunction:: linspace
-
-Operations involving masks
---------------------------
-
-.. autofunction:: select
-.. autofunction:: all
-.. autofunction:: any
-.. autofunction:: all_nested
-.. autofunction:: any_nested
-.. autofunction:: isinf
-.. autofunction:: isnan
-.. autofunction:: isfinite
-.. autofunction:: allclose
+.. autofunction:: slice_index
 
 Standard mathematical functions
 -------------------------------
@@ -143,13 +157,6 @@ Exponentials, logarithms, power function
 .. autofunction:: log
 .. autofunction:: exp2
 .. autofunction:: exp
-
-.. _horizontal-reductions:
-
-Horizontal reductions
----------------------
-
-TBD
 
 .. _transcendental-accuracy:
 

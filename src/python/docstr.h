@@ -1147,24 +1147,6 @@ variable index within the raw computation graph, if applicable.
 :type: int)";
 
 
-static const char *doc_slice_index = R"(
-slice_index(dtype, shape, slice)
-
-This function takes an array shape (integer tuple) and a tuple containing
-slice indices.
-
-It is used to implement tensor assignment.
-
-Args:
-    dtype (type): Desired Dr.Jit unsigned integer array type (e.g., :py:class:`drjit.cuda.UInt`)
-    shape (tuple[int, ...]): Shape of the input array
-    slice (tuple[int|slice|dr.ArrayBase, ...]): Tuple that is used to slice the input array
-
-Returns:
-    tuple[tuple[int, ...], dr.ArrayBase]: Tuple consisting of the output array
-    shape and a flattened unsigned integer array of type **dtype** containing
-    element indices.
-)";
 
 static const char *doc_bool_array_t = R"(
 Converts the provided Dr.Jit array/tensor, or type into a boolean version.
@@ -1386,6 +1368,98 @@ Args:
 
 Returns:
     object: Result of the conversion as described above.
+)";
+
+static const char *doc_slice_index = R"(
+Computes an index array that can be used to slice a tensor. It is used
+internally by Dr.Jit to implement complex cases of the ``__getitem__``
+operation.
+
+It must be called with the desired output **dtype**, which must be a dynamic
+32-bit integer array. The **shape** parameter specifies the dimensions of the
+input tensor, and **indices** contains the entries that would appear in a
+complex slicing operation, but as a tuple. For example, ``[5:10:2, ..., None]``
+would be specified as ``(slice(5, 10, 2), Ellipsis, None)``.
+
+An example is shown below:
+
+.. code-block:: pycon
+
+    >>> dr.slice_index(dtype=dr.scalar.ArrayXu,
+                       shape=(10, 1),
+                       indices=(slice(0, 10, 2), 0))
+    [0, 2, 4, 6, 8]
+
+Args:
+    dtype (type): A dynamic 32-bit unsigned integer Dr.Jit array type,
+                  such as :py:class:`dr.scalar.ArrayXu` or
+                  :py:class:`dr.cuda.UInt`.
+
+    shape (tuple[int, ...]): The shape of the tensor to be sliced.
+
+    indices (tuple[int|slice|ellipsis|NoneType|dr.ArrayBase, ...]):
+        A set of indices used to slice the tensor. Its entries can be ``slice``
+        instances, integers, integer arrays, ``...`` (ellipsis) or ``None``.
+
+Returns:
+    tuple[tuple[int, ...], drjit.ArrayBase]: Tuple consisting of the output array
+    shape and a flattened unsigned integer array of type **dtype** containing
+    element indices.
+)";
+
+static const char *doc_gather = R"(
+Gather values from a flat array
+
+This operation performs a *gather* (i.e., indirect memory read) from the
+**source** array at position **index**. The optional **active** argument can be
+used to disable some of the components, which is useful when not all indices
+are valid; the corresponding output is zero in this case.
+
+The provided **dtype** is often equal to ``type(source)``, in which case this
+operation resembles the Python expression ``source[index]`` with optional
+masking and no handling of negative indices.
+
+It can also be used to fetch multiple values at once to populate vectors,
+matrices, etc., from a flat input array. For example, the following operation
+loads 3D vectors
+
+.. code-block::
+
+    result = dr.gather(dr.cuda.Vector3f, source, index)
+
+and is equivalent to
+
+.. code-block::
+
+    result = dr.Vector3f(
+        dr.cuda.Float, source, index*3 + 0),
+        dr.cuda.Float, source, index*3 + 1),
+        dr.cuda.Float, source, index*3 + 2)
+    )
+
+.. danger::
+
+    The indices provided to this operation are unchecked. Out-of-bounds reads
+    are undefined behavior (if not disabled via the **active** parameter) and may
+    crash the application. Negative indices are not permitted.
+
+Args:
+    dtype (type): The desired output type (typically equal to ``type(source)``,
+      but other variations are possible as well, see the description above.)
+    source (drjit.ArrayBase): a 1D dynamic Dr.Jit array from which data
+      should be read.
+    index (object): a 1D dynamic unsigned 32-bit Dr.Jit array (e.g.,
+      :py:class:`drjit.scalar.ArrayXu` or :py:class:`drjit.cuda.UInt`)
+      specifying gather indices. Dr.Jit will attempt an implicit conversion if
+      another type is provided.
+    active (object): an optional 1D dynamic Dr.Jit mask array (e.g.,
+      :py:class:`drjit.scalar.ArrayXb` or :py:class:`drjit.cuda.Bool`)
+      specifying active components. Dr.Jit will attempt an implicit conversion
+      if another type is provided. The default is `True`.
+
+Returns:
+    object: An instance of type **dtype** containing the result of the gather
+    operation.
 )";
 
 #if defined(__GNUC__)

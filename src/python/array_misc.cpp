@@ -135,7 +135,7 @@ nb::object arange(nb::handle dtype, Py_ssize_t start, Py_ssize_t end, Py_ssize_t
 
             nb::object result = nb::inst_alloc(counter_tp);
             counter_supp.op_counter((size_t) size, nb::inst_ptr<void>(result));
-            nb::inst_ready(result);
+            nb::inst_mark_ready(result);
 
             return array_module.attr("fma")(dtype(result), dtype(step), dtype(start));
         }
@@ -171,7 +171,7 @@ nb::object linspace(nb::handle dtype, double start, double end, size_t size, boo
 
             nb::object result = nb::inst_alloc(counter_tp);
             counter_supp.op_counter((size_t) size, nb::inst_ptr<void>(result));
-            nb::inst_ready(result);
+            nb::inst_mark_ready(result);
 
             return array_module.attr("fma")(dtype(result), dtype(step), dtype(start));
         }
@@ -180,7 +180,59 @@ nb::object linspace(nb::handle dtype, double start, double end, size_t size, boo
     throw nb::type_error("drjit.linspace(): unsupported dtype!");
 }
 
-extern void bind_ops(nb::module_ m) {
+nb::object gather_impl(nb::type_object dtype,
+                       nb::handle_of<dr::ArrayBase> source,
+                       nb::object index, nb::object active) {
+    const supp &source_s = nb::type_supplement<supp>(source.type());
+    if (source_s.meta.ndim != 1 || source_s.meta.shape[0] != 0xFF)
+        throw nb::type_error(
+            "drjit.gather(): 'source' argument must be a dynamic 1D array!");
+
+    meta active_meta = source_s.meta,
+         index_meta = source_s.meta;
+
+    active_meta.type = (uint16_t) VarType::Bool;
+    index_meta.type = (uint16_t) VarType::UInt32;
+
+    nb::handle active_t = drjit::detail::array_get(active_meta),
+               index_t = drjit::detail::array_get(index_meta);
+
+    try {
+        if (!index.type().is(index_t))
+            index = index_t(index);
+    } catch (...) {
+        throw nb::type_error("drjit.gather(): 'index' argument has an "
+                             "unsupported type, please provide an instance "
+                             "that is convertible into drjit.mask_t(index).");
+    }
+
+    try {
+        if (!active.type().is(active_t))
+            active = active_t(active);
+    } catch (...) {
+        throw nb::type_error("drjit.gather(): 'active' argument has an "
+                             "unsupported type, please provide an instance that "
+                             "is convertible into drjit.mask_t(index).");
+    }
+
+    if (dtype.is(source.type())) {
+        nb::object result = nb::inst_alloc(dtype);
+
+        source_s.op_gather(
+            nb::inst_ptr<void>(source),
+            nb::inst_ptr<void>(index),
+            nb::inst_ptr<void>(active),
+            nb::inst_ptr<void>(result)
+        );
+
+        nb::inst_mark_ready(result);
+        return result;
+    } else {
+        return nb::none();
+    }
+}
+
+extern void bind_array_misc(nb::module_ m) {
     m.def("all", [](nb::handle h) -> nb::object {
         nb::handle tp = h.type();
         if (tp.is(&PyBool_Type))
@@ -197,7 +249,7 @@ extern void bind_ops(nb::module_ m) {
             if ((uintptr_t) op != 1) {
                 nb::object result = nb::inst_alloc(tp);
                 op(nb::inst_ptr<void>(h), nb::inst_ptr<void>(result));
-                nb::inst_ready(result);
+                nb::inst_mark_ready(result);
                 return result;
             }
         }
@@ -231,7 +283,7 @@ extern void bind_ops(nb::module_ m) {
             if ((uintptr_t) op != 1) {
                 nb::object result = nb::inst_alloc(tp);
                 op(nb::inst_ptr<void>(h), nb::inst_ptr<void>(result));
-                nb::inst_ready(result);
+                nb::inst_mark_ready(result);
                 return result;
             }
         }
@@ -301,4 +353,7 @@ extern void bind_ops(nb::module_ m) {
         },
         "dtype"_a, "start"_a, "stop"_a, "num"_a, "endpoint"_a = true,
         doc_linspace);
+
+    m.def("gather", &gather_impl, "dtype"_a, "source"_a, "index"_a,
+          "active"_a = true, doc_gather);
 }

@@ -81,6 +81,7 @@ struct array_supplement {
     array_ternop op_fma;
     array_ternop op_select;
     array_id op_index, op_index_ad;
+    array_ternop op_gather;
 
     array_unop op_sqrt, op_cbrt;
     array_unop op_sin, op_cos, op_tan;
@@ -285,8 +286,15 @@ template <typename T> nanobind::class_<T> bind_array(const char *name = nullptr)
             new ((T *) d) T(select(*(const mask_t<T> *) a, *(const T *) b, *(const T *) c));
         };
 
+        using UInt32 = uint32_array_t<T>;
+
+        s.op_gather = [](const void *a, const void *b, const void *c, void *d) {
+            new ((T *) d) T(gather<T>(*(const T *) a,
+                                      *(const UInt32 *) b,
+                                      *(const Mask *) c));
+        };
+
         if constexpr (T::IsArithmetic) {
-            using UInt32 = uint32_array_t<T>;
             using Int32  = int32_array_t<T>;
             using UInt64 = uint64_array_t<T>;
             using Int64  = int64_array_t<T>;

@@ -58,8 +58,9 @@ NB_MODULE(drjit_ext, m_) {
 
     bind_array_builtin(m);
     bind_array_math(m);
-    bind_ops(m);
+    bind_array_misc(m);
     bind_traits(m);
+    bind_tensor(m);
 
     bind_scalar(scalar);
     bind_cuda(cuda);
@@ -75,6 +76,8 @@ NB_MODULE(drjit_ext, m_) {
     scalar.attr("Float") = nb::handle(&PyFloat_Type);
     scalar.attr("Float64") = nb::handle(&PyFloat_Type);
 
+    scalar.attr("newaxis") = nb::none();
+
     nb::enum_<LogLevel>(m, "LogLevel")
         .value("Disable", LogLevel::Disable)
         .value("Error", LogLevel::Error)
@@ -87,8 +90,10 @@ NB_MODULE(drjit_ext, m_) {
     m.def("set_log_level", [](LogLevel level) {
         jit_set_log_level_callback(level, log_callback);
     });
+
     m.def("set_log_level", [](int level) {
         jit_set_log_level_callback((LogLevel) level, log_callback);
     });
+
     m.def("log_level", &jit_log_level_stderr);
 }

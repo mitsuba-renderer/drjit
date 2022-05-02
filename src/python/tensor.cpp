@@ -1,93 +1,156 @@
+#include "python.h"
+#include <vector>
+#include <iostream>
+
+/// Holds metadata about slicing component
 struct Component {
-    Py_ssize_t start, end, step, size;
+    Py_ssize_t start, step, slice_size, size;
     nb::object object;
 
-    Component(Py_ssize_t start, Py_ssize_t end, Py_ssize_t step, Py_ssize_t size)
-        : start(start), end(end), step(step), size(size) { }
+    Component(Py_ssize_t start, Py_ssize_t step, Py_ssize_t slice_size,
+              Py_ssize_t size)
+        : start(start), step(step), slice_size(slice_size), size(size) { }
 
-    Component(nb::handle h) : object(nb::borrow(h)) {
-        if (h.is_none())
-            size = 1;
-        else
-            size = nb::len(h);
-    }
+    Component(nb::handle h, Py_ssize_t slice_size, Py_ssize_t size)
+        : start(0), step(1), slice_size(slice_size), size(size),
+          object(nb::borrow(h)) { }
 };
 
-void slice_index(const nb::type_object &dtype, const nb::tuple &shape,
-                 const nb::tuple &indices) {
-    size_t none_count = 0, shape_offset = 0;
-    bool ellipsis = false;
+std::pair<nb::tuple, nb::object> slice_index(const nb::type_object &dtype,
+                                             const nb::tuple &shape,
+                                             const nb::tuple &indices) {
+    bool dtype_fail = true;
+    if (is_drjit_type(dtype)) {
+        meta m = nb::type_supplement<supp>(dtype).meta;
 
-    if (!is_drjit_type(dtype))
-        nb::detail::raise("slice_index(): dtype must be a Dr.Jit array!");
-
-    meta dtype_meta = get_meta(dtype);
-    if (dtype_meta.ndim != 1 || dtype_meta.shape[0] != 0xFF ||
-        (VarType) dtype_meta.type != VarType::UInt32)
-        nb::detail::raise("slice_index(): dtype must be a dynamically sized "
-                          "unsigned 32 bit Dr.Jit array!");
-
-    std::vector<Component> components;
-    components.reserve(shape.size());
-
-    for (nb::handle h : shape) {
-        if (h.is_none())
-            none_count++;
+        if (m.ndim == 1 && m.shape[0] == 0xFF &&
+            (VarType) m.type == VarType::UInt32)
+            dtype_fail = false;
     }
+
+    if (dtype_fail)
+        throw nb::type_error("slice_index(): dtype must be a dynamically "
+                             "sized unsigned 32 bit Dr.Jit array!");
+
+    size_t shape_offset = 0;
+    size_t size_out = 1;
+    nb::list shape_out;
+
+    // Preallocate memory for computed slicing components
+    size_t shape_len = nb::len(shape);
+    std::vector<Component> components;
+    components.reserve(shape_len);
 
     for (nb::handle h : indices) {
         if (h.is_none()) {
-            components.emplace_back(h);
+            shape_out.append(1);
             continue;
         }
 
-        if (shape_offset >= nb::len(shape))
-            nb::raise("slice_index(): too many indices specified!");
+        if (shape_offset >= shape_len)
+            nb::detail::raise("too many indices");
 
-        Py_ssize_t size = nb::cast<Py_ssize_t>(shape[shape_offset]);
+        Py_ssize_t size = nb::cast<Py_ssize_t>(shape[shape_offset++]);
         nb::handle tp = h.type();
 
         if (tp.is(&PyLong_Type)) {
-            // Simple integer index, handle wrap-around
             Py_ssize_t v = nb::cast<Py_ssize_t>(h);
             if (v < 0)
                 v += size;
 
             if (v < 0 || v >= size)
-                nb::detail::raise("slice_tensor(): index %zd for dimension "
-                                  "%zu is out of range (size = %zd)!" %
-                                  (v, nb::len(components), size));
+                nb::detail::raise(
+                    "index %zd is out of bounds for axis %zu with size %zd", v,
+                    components.size(), size);
 
-            components.emplace_back(v, v + 1, 1, 1);
-            ++shape_offset;
+            components.emplace_back(v, 1, 1, size);
             continue;
-        }
-
-        if (tp.is(&PySlice_Type)) {
+        } else if (tp.is(&PySlice_Type)) {
             Py_ssize_t start, stop, step;
             if (PySlice_Unpack(h.ptr(), &start, &stop, &step) < 0)
                 nb::detail::raise_python_error();
-            Py_ssize_t size = PySlice_AdjustIndices(size, &start, &stop, step);
-            components.emplace_back(start, stop, step, size);
-            ++shape_offset;
+            Py_ssize_t slice_size =
+                PySlice_AdjustIndices(size, &start, &stop, step);
+            components.emplace_back(start, step, slice_size, size);
+            shape_out.append(slice_size);
+            size_out *= slice_size;
             continue;
-        }
+        } else if (is_drjit_type(tp)) {
+            meta m = nb::type_supplement<supp>(tp).meta;
 
-        if (is_drjit_type(tp)) {
-            const supp &s = get_supp(tp);
-            if (s.ndim == 1 && s.shape[0] == 0xFF && s.value == &PyLong_Type) {
-                nb::object o = borrow(h);
-                VarType vt = (VarType) s.meta.type;
+            if (m.ndim == 1 && m.shape[0] == 0xFF) {
+                VarType vt = (VarType) m.type;
+                nb::object o = nb::borrow(h);
 
+                size_t slice_size = nb::len(h);
                 if (vt == VarType::Int8 || vt == VarType::Int16 ||
-                    vt == VarType::Int32 || vt == VarType::Int64)
-                    o[o < 0] += size;
+                    vt == VarType::Int32 || vt == VarType::Int64) {
+                    o[o < nb::cast(0)] += nb::cast(size);
+                }
 
-                components.append(o);
-                ++shape_offset;
+                if (!o.type().is(dtype))
+                    o = dtype(o);
+
+                components.emplace_back(o, slice_size, size);
+                shape_out.append(slice_size);
+                size_out *= slice_size;
                 continue;
             }
         }
+
+        nb::detail::raise("unsupported type \"%s\" in slice",
+                          ((PyTypeObject *) tp.ptr())->tp_name);
+    }
+
+    nb::object fma    = array_module.attr("fma"),
+               arange = array_module.attr("arange"),
+               gather = array_module.attr("gather");
+
+    nb::object index = arange(dtype, size_out),
+               index_out = dtype(0);
+
+    size_out = 1;
+
+    for (auto it = components.rbegin(); it != components.rend(); ++it) {
+        const Component &c = *it;
+        nb::object index_next, index_rem;
+
+        if (it + 1 != components.rend()) {
+            index_next = index.floor_div(dtype(c.slice_size));
+            index_rem = fma(index_next, dtype(uint32_t(-c.slice_size)), index);
+        } else {
+            index_rem = index;
+        }
+
+        nb::object index_val;
+        if (c.object.is_none())
+            index_val = fma(index_rem, dtype(uint32_t(c.step * size_out)),
+                            dtype(uint32_t(c.start * size_out)));
+        else
+            index_val =
+                gather(dtype, c.object, index_rem) * dtype(uint32_t(size_out));
+
+        index_out += index_val;
+
+        index = std::move(index_next);
+        size_out *= c.size;
+    }
+
+    return { nb::steal<nb::tuple>(PySequence_Tuple(shape_out.ptr())),
+             index_out };
+}
+
+void bind_tensor(nb::module_ m) {
+    m.def("slice_index", &slice_index, doc_slice_index, "dtype"_a, "shape"_a,
+          "indices"_a);
+}
+
+#if 0
+
+void slice_index(const nb::type_object &dtype, const nb::tuple &shape,
+                 const nb::tuple &indices) {
+
+
 
         if (tp.is(&PyEllipsis_Type)) {
             if (ellipsis)
@@ -101,10 +164,6 @@ void slice_index(const nb::type_object &dtype, const nb::tuple &shape,
             ellipsis = true;
             continue;
         }
-
-        nb::detail::raise(
-            "slice_tensor(): type '%s' cannot be used to index into a tensor!",
-            ((PyTypeObject *) tp.ptr())->tp_name);
     }
 
     // # Implicit ellipsis
@@ -112,16 +171,8 @@ void slice_index(const nb::type_object &dtype, const nb::tuple &shape,
     //     components.append((0, shape[shape_offset], 1))
     //     shape_offset += 1
 
-    Py_ssize_t size_out = 1;
-    nb::tuple shape_out = steal<nb::tuple>(PyTuple_New(components.size()));
-
-    for (const Component &c : components) {
-        size_out *= c.size; // XXX oops
-        PyTuple_SET_ITEM(shape_out, i, PyLong_From_Ssize_t(c.size));
-    }
 }
 
-#if 0
 def slice_tensor(shape, indices, uint32):
     """
     """
@@ -129,21 +180,6 @@ def slice_tensor(shape, indices, uint32):
             components.append(uint32([v2 if v2 >= 0 else v2 + size for v2 in v]))
         else:
 
-    # Compute total index size
-    size_out = 1
-    shape_out = []
-    for comp in components:
-        if comp is None:
-            shape_out.append(1)
-        else:
-            size = len(comp if isinstance(comp, uint32) else range(*comp))
-            if size != 1:
-                shape_out.append(size)
-                size_out *= shape_out[-1]
-    shape_out = tuple(shape_out)
-
-    index_tmp = drjit.arange(uint32, size_out)
-    index_out = uint32()
 
     if size_out > 0:
         size_out = 1

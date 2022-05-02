@@ -35,17 +35,59 @@ def test01_tensor_traits():
     assert not dr.is_integral_v(dr.llvm.TensorXf) and dr.is_integral_v(dr.llvm.TensorXu)
 
 
-def test02_tensor_init_basic():
-    t = dr.scalar.TensorXf()
-    assert t.shape == (0,) and dr.all(t.array == dr.scalar.ArrayXf())
-    t = dr.scalar.TensorXf(123)
-    assert t.shape == (1,) and dr.all(t.array == dr.scalar.ArrayXf([123]))
-    t = dr.scalar.TensorXf([123, 456])
-    assert t.shape == (2,) and dr.all(t.array == dr.scalar.ArrayXf([123, 456]))
+def test02_slice_index():
+    with pytest.raises(TypeError):
+        dr.slice_index(dtype=int, shape=(1,), indices=(0,))
 
-    t = dr.llvm.TensorXf()
-    assert t.shape == (0,) and dr.all(t.array == dr.llvm.Float())
-    t = dr.llvm.TensorXf(123)
-    assert t.shape == (1,) and dr.all(t.array == dr.llvm.Float([123]))
-    t = dr.llvm.TensorXf([123, 456])
-    assert t.shape == (2,) and dr.all(t.array == dr.llvm.Float([123, 456]))
+    with pytest.raises(TypeError):
+        dr.slice_index(dtype=dr.scalar.ArrayXi, shape=(1,), indices=(0,))
+
+    tp = dr.scalar.ArrayXu
+
+    with pytest.raises(RuntimeError) as ei:
+        shape, index = dr.slice_index(dtype=tp, shape=(10,), indices=(20,))
+    assert "index 20 is out of bounds for axis 0 with size 10!" in str(ei.value)
+
+    def check(shape, indices, shape_out, index_out):
+        shape, index = dr.slice_index(dtype=tp, shape=shape, indices=indices)
+        assert shape == shape_out and dr.all(index == index_out)
+
+    # 1D arrays, simple slice and integer-based indexing
+    check(shape=(10,), indices=(5,), shape_out=(), index_out=tp(5))
+    check(shape=(10,), indices=(-2,), shape_out=(), index_out=tp(8))
+    check(shape=(10,), indices=(slice(0, 10, 2),),
+          shape_out=(5,), index_out=tp(0, 2, 4, 6, 8))
+    check(shape=(10,), indices=(slice(-100, -2, 2),),
+          shape_out=(4,), index_out=tp(0, 2, 4, 6))
+    check(shape=(10,), indices=(slice(100, 0, -2),),
+          shape_out=(5,), index_out=tp(9, 7, 5, 3, 1))
+    check(shape=(10,), indices=(slice(None, None, None),),
+          shape_out=(10,), index_out=tp(0, 1, 2, 3, 4, 5, 6, 7, 8, 9))
+
+    # 2D arrays, simple slice and integer-based indexing
+    check(shape=(3, 7), indices=(2, 5), shape_out=(), index_out=tp(7*2 + 5))
+    check(shape=(3, 7), indices=(-2, -5), shape_out=(), index_out=tp(7*1 + 2))
+    check(shape=(3, 7), indices=(slice(None, None, None), 1),
+          shape_out=(3,), index_out=tp(1, 8, 15))
+    check(shape=(3, 7), indices=(slice(None, None, None), 1),
+          shape_out=(3,), index_out=tp(1, 8, 15))
+    check(shape=(3, 7), indices=(1, slice(None, None, None)),
+          shape_out=(7,), index_out=tp(7, 8, 9, 10, 11, 12, 13))
+    check(shape=(3, 7), indices=(slice(0, 3, 3), slice(0, 7, 3)),
+          shape_out=(1, 3), index_out=tp(0, 3, 6))
+
+
+#def test02_tensor_init_basic():
+#    t = dr.scalar.tensorXf()
+#    assert t.shape == (0,) and dr.all(t.array == dr.scalar.ArrayXf())
+#    t = dr.scalar.tensorXf(123)
+#    assert t.shape == (1,) and dr.all(t.array == dr.scalar.ArrayXf([123]))
+#    t = dr.scalar.TensorXf([123, 456])
+#    assert t.shape == (2,) and dr.all(t.array == dr.scalar.ArrayXf([123, 456]))
+#
+#    t = dr.llvm.TensorXf()
+#    assert t.shape == (0,) and dr.all(t.array == dr.llvm.Float())
+#    t = dr.llvm.TensorXf(123)
+#    assert t.shape == (1,) and dr.all(t.array == dr.llvm.Float([123]))
+#    t = dr.llvm.TensorXf([123, 456])
+#    assert t.shape == (2,) and dr.all(t.array == dr.llvm.Float([123, 456]))

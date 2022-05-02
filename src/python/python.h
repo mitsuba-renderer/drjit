@@ -54,8 +54,10 @@ extern bool promote(const char *op, PyObject **o, size_t n, bool select = false)
 // Entry points of various parts of the bindings
 extern void bind_array_builtin(nb::module_ m);
 extern void bind_array_math(nb::module_ m);
-extern void bind_ops(nb::module_ m);
+extern void bind_array_misc(nb::module_ m);
 extern void bind_traits(nb::module_ m);
+extern void bind_tensor(nb::module_ m);
+
 extern void bind_scalar(nb::module_ &m);
 extern void bind_cuda(nb::module_ &m);
 extern void bind_cuda_ad(nb::module_ &m);

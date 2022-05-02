@@ -739,6 +739,36 @@ def test26_fast_cast(capsys):
     finally:
         dr.set_log_level(0)
 
+def test27_gather_simple():
+    import drjit.llvm as l
+    import drjit.scalar as s
+
+    assert dr.all(dr.gather(
+        dtype=s.ArrayXf,
+        source=dr.arange(s.ArrayXf, 10),
+        index=s.ArrayXu(0, 5, 3)
+    ) == s.ArrayXf(0, 5, 3))
+
+    assert dr.all(dr.gather(
+        dtype=s.ArrayXf,
+        source=dr.arange(s.ArrayXf, 10),
+        index=s.ArrayXu(0, 5, 3),
+        active=s.ArrayXb(True, False, True)
+    ) == s.ArrayXf(0, 0, 3))
+
+    assert dr.all(dr.gather(
+        dtype=l.Float,
+        source=dr.arange(l.Float, 10),
+        index=l.UInt(0, 5, 3)
+    ) == l.Float(0, 5, 3))
+
+    assert dr.all(dr.gather(
+        dtype=l.Float,
+        source=dr.arange(l.Float, 10),
+        index=l.UInt(0, 5, 3),
+        active=l.Bool(True, False, True)
+    ) == l.Float(0, 0, 3))
+
 #@pytest.mark.parametrize('name', ['sqrt', 'cbrt', 'sin', 'cos', 'tan', 'asin',
 #                                  'acos', 'atan', 'sinh', 'cosh', 'tanh',
 #                                  'asinh', 'acosh', 'atanh', 'exp', 'exp2',
