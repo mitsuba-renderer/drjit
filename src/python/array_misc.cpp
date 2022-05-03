@@ -2,6 +2,7 @@
 #include <nanobind/stl/vector.h>
 
 nb::object full_alt(nb::type_object dtype, nb::handle value, size_t size);
+nb::object empty_alt(nb::type_object dtype, size_t size);
 
 nb::object full(nb::type_object dtype, nb::handle value,
                 const std::vector<size_t> &shape) {
@@ -14,7 +15,7 @@ nb::object full(nb::type_object dtype, nb::handle value,
         //         size *= s;
         //     return dtype(full_alt(s.array_type, value, size), shape);
         // }
-        //
+
         bool fail = false;
         if (s.meta.ndim == shape.size()) {
             for (uint16_t i = 0; i < s.meta.ndim; ++i) {
@@ -109,6 +110,109 @@ nb::object full_alt(nb::type_object dtype, nb::handle value, size_t size) {
     return full(dtype, value, shape);
 }
 
+nb::object empty(nb::type_object dtype, const std::vector<size_t> &shape) {
+    if (is_drjit_type(dtype)) {
+        const supp &s = nb::type_supplement<supp>(dtype);
+
+        // if (s.meta.is_tensor) {
+        //     size_t size = 1;
+        //     for (size_t s : shape)
+        //         size *= s;
+        //     return dtype(empty_alt(s.array_type, size), shape);
+        // }
+
+        bool fail = false;
+        if (s.meta.ndim == shape.size()) {
+            for (uint16_t i = 0; i < s.meta.ndim; ++i) {
+                if (s.meta.shape[i] != 0xFF && s.meta.shape[i] != shape[i])
+                    fail = true;
+            }
+        } else {
+            fail = true;
+        }
+
+        if (!fail) {
+            const supp &s = nb::type_supplement<supp>(dtype);
+            nb::object result = nb::inst_alloc(dtype);
+
+            if (s.op_empty && shape.size() == 1) {
+                s.op_empty(shape[0], nb::inst_ptr<void>(result));
+                nb::inst_mark_ready(result);
+                return result;
+            }
+
+            nb::inst_zero(result);
+            if (s.meta.shape[0] == 0xFF)
+                s.init(nb::inst_ptr<void>(result), shape[0]);
+
+            nb::type_object sub_type = nb::borrow<nb::type_object>(s.value);
+            std::vector<size_t> sub_shape = shape;
+            sub_shape.erase(sub_shape.begin());
+
+            auto sq_ass_item =
+                ((PyTypeObject *) dtype.ptr())->tp_as_sequence->sq_ass_item;
+
+            for (size_t i = 0; i < shape[0]; ++i)
+                sq_ass_item(result.ptr(), i, empty(sub_type, sub_shape).ptr());
+
+            return result;
+        }
+    } else if (dtype.is(&PyLong_Type) || dtype.is(&PyFloat_Type) || dtype.is(&PyBool_Type)) {
+        if (shape.empty() || (shape.size() == 1 && shape[0] == 1))
+            return dtype(0);
+    } else {
+        nb::object dstruct = nb::getattr(dtype, "DRJIT_STRUCT", nb::handle());
+        if (dstruct.is_valid() && nb::isinstance<nb::dict>(dstruct)) {
+            nb::dict dstruct_dict = nb::borrow<nb::dict>(dstruct);
+            nb::object result = dtype();
+
+            for (auto [k, v] : dstruct_dict) {
+                nb::object entry;
+                if (!v.is_type())
+                    throw nb::type_error("DRJIT_STRUCT invalid, expected types!");
+
+                nb::type_object sub_dtype = nb::borrow<nb::type_object>(v);
+
+                if (is_drjit_type(v) && shape.size() == 1)
+                    entry = empty_alt(sub_dtype, shape[0]);
+                else
+                    entry = empty(sub_dtype, shape);
+
+                nb::setattr(result, k, entry);
+            }
+
+            return result;
+        }
+
+        throw nb::type_error("Unsupported dtype!");
+    }
+
+    nb::detail::raise(
+        "The provided 'shape' and 'dtype' parameters are incompatible!");
+}
+
+
+nb::object empty_alt(nb::type_object dtype, size_t size) {
+    std::vector<size_t> shape;
+
+    if (is_drjit_type(dtype)) {
+        const supp &s = nb::type_supplement<supp>(dtype);
+        shape.reserve(s.meta.ndim);
+        for (uint16_t i = 0; i < s.meta.ndim; ++i) {
+            if (s.meta.shape[i] == 0xFF) {
+                shape.push_back(size);
+                break;
+            } else {
+                shape.push_back(s.meta.shape[i]);
+            }
+        }
+    } else {
+        shape.push_back(size);
+    }
+
+    return empty(dtype, shape);
+}
+
 nb::object arange(nb::handle dtype, Py_ssize_t start, Py_ssize_t end, Py_ssize_t step) {
     if (is_drjit_type(dtype)) {
         const supp &s = nb::type_supplement<supp>(dtype);
@@ -180,9 +284,8 @@ nb::object linspace(nb::handle dtype, double start, double end, size_t size, boo
     throw nb::type_error("drjit.linspace(): unsupported dtype!");
 }
 
-nb::object gather_impl(nb::type_object dtype,
-                       nb::handle_of<dr::ArrayBase> source,
-                       nb::object index, nb::object active) {
+nb::object gather(nb::type_object dtype, nb::handle_of<dr::ArrayBase> source,
+                  nb::object index, nb::object active) {
     if (!is_drjit_type(dtype))
         throw nb::type_error(
             "drjit.gather(): 'dtype' argument must be a Dr.Jit array!");
@@ -203,22 +306,26 @@ nb::object gather_impl(nb::type_object dtype,
     nb::handle active_t = drjit::detail::array_get(active_meta),
                index_t = drjit::detail::array_get(index_meta);
 
-    try {
-        if (!index.type().is(index_t))
+    if (!index.type().is(index_t)) {
+        try {
             index = index_t(index);
-    } catch (...) {
-        throw nb::type_error("drjit.gather(): 'index' argument has an "
-                             "unsupported type, please provide an instance "
-                             "that is convertible into drjit.mask_t(index).");
+        } catch (...) {
+            throw nb::type_error(
+                "drjit.gather(): 'index' argument has an unsupported type, "
+                "please provide an instance that is convertible into "
+                "drjit.uint32_array_t(type(source)).");
+        }
     }
 
-    try {
-        if (!active.type().is(active_t))
+    if (!active.type().is(active_t)) {
+        try {
             active = active_t(active);
-    } catch (...) {
-        throw nb::type_error("drjit.gather(): 'active' argument has an "
-                             "unsupported type, please provide an instance that "
-                             "is convertible into drjit.mask_t(index).");
+        } catch (...) {
+            throw nb::type_error(
+                "drjit.gather(): 'active' argument has an unsupported type, "
+                "please provide an instance that is convertible into "
+                "drjit.mask_t(type(source)).");
+        }
     }
 
     const supp &dtype_s = nb::type_supplement<supp>(dtype);
@@ -244,21 +351,130 @@ nb::object gather_impl(nb::type_object dtype,
     m.is_matrix = dtype_meta.is_matrix;
     m.is_quaternion = dtype_meta.is_quaternion;
     m.ndim = dtype_meta.ndim;
-    for (int i = 0; i < 4; ++i)
+    for (int i = 0; i < m.ndim; ++i)
         m.shape[i] = dtype_meta.shape[i];
 
     if (m == dtype_meta && m.ndim > 0 && m.shape[m.ndim - 1] == 0xFF &&
         m.shape[0] != 0xFF) {
         nb::object result = dtype();
         for (size_t i = 0; i < m.shape[0]; ++i) {
-            result[i] = gather_impl(nb::borrow<nb::type_object>(dtype_s.value),
-                    source, index * nb::cast(m.shape[0]) + nb::cast(i),
-                    active);
+            result[i] =
+                gather(nb::borrow<nb::type_object>(dtype_s.value), source,
+                       index * nb::cast(m.shape[0]) + nb::cast(i), active);
         }
         return result;
     }
 
     throw nb::type_error("drjit.gather(): 'dtype' unsupported!");
+}
+
+void scatter(nb::handle_of<dr::ArrayBase> target,
+             nb::object value,
+             nb::object index,
+             nb::object active) {
+    const supp &target_s = nb::type_supplement<supp>(target.type());
+
+    if (target_s.meta.ndim != 1 || target_s.meta.shape[0] != 0xFF)
+        throw nb::type_error(
+            "drjit.scatter(): 'target' argument must be a dynamic 1D array!");
+
+    meta target_meta = target_s.meta,
+         active_meta = target_meta,
+         index_meta = target_meta;
+
+    active_meta.type = (uint16_t) VarType::Bool;
+    index_meta.type = (uint16_t) VarType::UInt32;
+
+    nb::handle active_t = drjit::detail::array_get(active_meta),
+               index_t = drjit::detail::array_get(index_meta);
+
+    if (!index.type().is(index_t)) {
+        try {
+            index = index_t(index);
+        } catch (...) {
+            throw nb::type_error(
+                "drjit.scatter(): 'index' argument has an unsupported type, "
+                "please provide an instance that is convertible into "
+                "drjit.uint32_array_t(type(target)).");
+        }
+    }
+
+    if (!active.type().is(active_t)) {
+        try {
+            active = active_t(active);
+        } catch (...) {
+            throw nb::type_error(
+                "drjit.scatter(): 'active' argument has an unsupported type, "
+                "please provide an instance that is convertible into "
+                "drjit.mask_t(type(target)).");
+        }
+    }
+
+    if (!is_drjit_type(value.type())) {
+        try {
+            value = target.type()(value);
+        } catch (...) {
+            throw nb::type_error(
+                "drjit.scatter(): 'value' argument has an unsupported type! "
+                "Please provide an instance that is convertible into "
+                "type(target).");
+        }
+    }
+
+    const supp &value_s = nb::type_supplement<supp>(value.type());
+    meta value_meta = value_s.meta;
+
+    if (value_meta == target_meta) {
+        target_s.op_scatter(
+            nb::inst_ptr<void>(value),
+            nb::inst_ptr<void>(index),
+            nb::inst_ptr<void>(active),
+            nb::inst_ptr<void>(target)
+        );
+        return;
+    }
+
+    meta m = target_meta;
+    m.is_vector = value_meta.is_vector;
+    m.is_complex = value_meta.is_complex;
+    m.is_matrix = value_meta.is_matrix;
+    m.is_quaternion = value_meta.is_quaternion;
+    m.ndim = value_meta.ndim;
+    for (int i = 0; i < m.ndim; ++i)
+        m.shape[i] = value_meta.shape[i];
+
+    if (m == value_meta && m.ndim > 0 && m.shape[m.ndim - 1] == 0xFF &&
+        m.shape[0] != 0xFF) {
+        for (size_t i = 0; i < m.shape[0]; ++i)
+            ::scatter(target, value[i],
+                      index * nb::cast(m.shape[0]) + nb::cast(i), active);
+        return;
+    }
+
+    throw nb::type_error("drjit.scatter(): 'value' type is unsupported!");
+}
+
+nb::object ravel(nb::handle_of<dr::ArrayBase> h) {
+    const supp &s = nb::type_supplement<supp>(h.type());
+
+    if (s.meta.is_tensor)
+        return nb::steal(s.op_tensor_array(h.ptr()));
+
+    size_t size = 1;
+    for (nb::handle h : shape(h))
+        size *= nb::cast<Py_ssize_t>(h);
+
+    meta m = s.meta;
+    m.ndim = 1;
+    m.shape[0] = 0xFF;
+
+    nb::handle tp = drjit::detail::array_get(m);
+    nb::object result = empty_alt(nb::borrow<nb::type_object>(tp), size);
+
+    for (size_t i = 0; i < m.shape[0]; ++i) {
+    }
+
+    return result;
 }
 
 extern void bind_array_misc(nb::module_ m) {
@@ -330,6 +546,9 @@ extern void bind_array_misc(nb::module_ m) {
         return result;
     });
 
+    m.def("empty", empty, "dtype"_a, "shape"_a, doc_empty);
+    m.def("empty", empty_alt, "dtype"_a, "shape"_a = 1);
+
     m.def("full", full, "dtype"_a, "value"_a, "shape"_a, doc_full);
     m.def("full", full_alt, "dtype"_a, "value"_a, "shape"_a = 1);
 
@@ -383,6 +602,11 @@ extern void bind_array_misc(nb::module_ m) {
         "dtype"_a, "start"_a, "stop"_a, "num"_a, "endpoint"_a = true,
         doc_linspace);
 
-    m.def("gather", &gather_impl, "dtype"_a, "source"_a, "index"_a,
+    m.def("gather", &gather, "dtype"_a, "source"_a, "index"_a,
           "active"_a = true, doc_gather);
+
+    m.def("scatter", &scatter, "target"_a, "value"_a, "index"_a,
+          "active"_a = true, doc_scatter);
+
+    m.def("ravel", &ravel, doc_ravel);
 }

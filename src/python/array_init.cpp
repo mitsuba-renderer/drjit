@@ -215,35 +215,32 @@ int array_init(PyObject *self, PyObject *args, PyObject *kwds) {
 }
 
 int tensor_init(PyObject *self, PyObject *args, PyObject *kwds) {
+    PyObject *array = nullptr, *shape = nullptr;
+    const char *kwlist[3] = { "array", "shape", nullptr };
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "|OO!", (char **) kwlist,
+                                     &array, &PyTuple_Type, &shape))
+        return -1;
+
     PyTypeObject *self_tp = Py_TYPE(self);
     const supp &s = nb::type_supplement<supp>(self_tp);
 
-    if (kwds) {
-        PyErr_Format(
-            PyExc_TypeError,
-            "%s.__init__(): constructor does not take keyword arguments!",
-            self_tp->tp_name);
-        return -1;
-    }
-
-    size_t argc = (size_t) PyTuple_GET_SIZE(args);
-
-    if (argc == 0) {
+    if (!shape && !array) {
         // Zero-initialize
         nb::detail::nb_inst_zero(self);
         s.op_tensor_shape(nb::inst_ptr<void>(self)).push_back(0);
         return 0;
     }
 
-    if (argc == 1) {
-        PyObject *arg = PyTuple_GET_ITEM(args, 0);
-        PyTypeObject *arg_tp = Py_TYPE(arg);
+    if (!shape) {
+        PyTypeObject *array_tp = Py_TYPE(array);
 
         // Same type -> copy constructor
-        if (arg_tp == self_tp) {
-            nb::detail::nb_inst_copy(self, arg);
+        if (array_tp == self_tp) {
+            nb::detail::nb_inst_copy(self, array);
             return 0;
         }
+
+        /// XXX need dr.ravel(), and initialize shape here..
 
         nb::detail::nb_inst_zero(self);
         PyObject *value = s.op_tensor_array(self);

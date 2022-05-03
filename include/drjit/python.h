@@ -26,6 +26,7 @@ using array_richcmp = void (*) (const void *, const void *, int, void *);
 using array_reduce_mask = void (*) (const void *, void *);
 using array_id = uint32_t (*) (const void *);
 using array_full = void (*) (nanobind::handle, size_t, void *);
+using array_empty = void (*) (size_t, void *);
 using array_counter = void (*) (uint32_t size, void *);
 using array_cast = int (*) (const void *, VarType, void *);
 
@@ -59,6 +60,7 @@ struct array_supplement {
     array_cast op_cast;
 
     array_full op_full;
+    array_empty op_empty;
     array_counter op_counter;
     array_binop op_add;
     array_binop op_subtract;
@@ -81,6 +83,7 @@ struct array_supplement {
     array_ternop op_select;
     array_id op_index, op_index_ad;
     array_ternop op_gather;
+    array_ternop op_scatter;
 
     array_unop op_sqrt, op_cbrt;
     array_unop op_sin, op_cos, op_tan;
@@ -275,6 +278,10 @@ template <typename T> nanobind::class_<T> bind_array(const char *name = nullptr)
             new ((T *) c) T(full<T>(nb::cast<scalar_t<T>>(a), b));
         };
 
+        s.op_empty = [](size_t b, void *c) {
+            new ((T *) c) T(empty<T>(b));
+        };
+
         if constexpr (std::is_same_v<scalar_t<T>, uint32_t>) {
             s.op_counter = [](uint32_t size, void *a) {
                 new ((T *) a) T(T::counter(size));
@@ -291,6 +298,12 @@ template <typename T> nanobind::class_<T> bind_array(const char *name = nullptr)
             new ((T *) d) T(gather<T>(*(const T *) a,
                                       *(const UInt32 *) b,
                                       *(const Mask *) c));
+        };
+
+        s.op_scatter = [](const void *a, const void *b, const void *c,
+                          void *d) {
+            scatter(*(T *) d, *(const T *) a, *(const UInt32 *) b,
+                    *(const Mask *) c);
         };
 
         if constexpr (T::IsArithmetic) {

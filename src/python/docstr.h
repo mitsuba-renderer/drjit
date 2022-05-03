@@ -1413,15 +1413,17 @@ Gather values from a flat array
 This operation performs a *gather* (i.e., indirect memory read) from the
 **source** array at position **index**. The optional **active** argument can be
 used to disable some of the components, which is useful when not all indices
-are valid; the corresponding output is zero in this case.
+are valid; the corresponding output will be zero in this case.
 
-The provided **dtype** is often equal to ``type(source)``, in which case this
-operation resembles the Python expression ``source[index]`` with optional
-masking and no handling of negative indices.
+The provided **dtype** is typically equal to ``type(source)``, in which case
+this operation can be interpreted as a parallelized version of the Python array
+indexing expression ``source[index]`` with optional masking (however, in
+contrast to array indexing, negative indices are not handled).
 
-It can also be used to fetch multiple values at once to populate vectors,
-matrices, etc., from a flat input array. For example, the following operation
-loads 3D vectors
+This function can also be used to gather *nested* arrays like
+:py:class:`drjit.cuda.Vector3f`, which represents a sequence of 3D vectors.
+This is useful for populating populate vectors, matrices, etc., from a flat
+input array. For example, the following operation loads 3D vectors
 
 .. code-block::
 
@@ -1460,6 +1462,73 @@ Args:
 Returns:
     object: An instance of type **dtype** containing the result of the gather
     operation.
+)";
+
+static const char *doc_scatter = R"(
+Scatter values into a flat array
+
+This operation performs a *scatter* (i.e., indirect memory write) of the
+**value** parameter to the **target** array at position **index**. The optional
+**active** argument can be used to disable some of the individual write
+operations, which is useful when not all provided values or indices are valid.
+
+When **source** and **target** have the same types, this operation can be
+interpreted as a parallelized version of the Python array indexing expression
+``target[index] = value`` with optional masking. In contrast to array
+indexing, negative indices are not handled, and conflicting writes to the
+same location are considered undefined behavior.
+
+This function can also be used to scatter *nested* arrays like
+:py:class:`drjit.cuda.Vector3f`, which represents a sequence of 3D vectors.
+This is useful for storing vectors, matrices, etc., into a flat
+output array. For example, the following operation stores 3D vectors
+
+.. code-block::
+
+    target = dr.empty(dr.Float, 1024*3)
+    dr.scatter(target, value, index)
+
+and is equivalent to
+
+.. code-block::
+
+    dr.scatter(target, value[0], index*3 + 0)
+    dr.scatter(target, value[1], index*3 + 1)
+    dr.scatter(target, value[2], index*3 + 2)
+
+.. danger::
+
+    The indices provided to this operation are unchecked. Out-of-bounds writes
+    are undefined behavior (if not disabled via the **active** parameter) and may
+    crash the application. Negative indices are not permitted.
+
+Args:
+    target (drjit.ArrayBase): a 1D dynamic Dr.Jit array into which data
+      should be written.
+    value (object): The values to be written (typically of type ``type(target)``,
+      but other variations are possible as well, see the description above.)
+      Dr.Jit will attempt an implicit conversion if the the input is not an
+      array type.
+    index (object): a 1D dynamic unsigned 32-bit Dr.Jit array (e.g.,
+      :py:class:`drjit.scalar.ArrayXu` or :py:class:`drjit.cuda.UInt`)
+      specifying gather indices. Dr.Jit will attempt an implicit conversion if
+      another type is provided.
+    active (object): an optional 1D dynamic Dr.Jit mask array (e.g.,
+      :py:class:`drjit.scalar.ArrayXb` or :py:class:`drjit.cuda.Bool`)
+      specifying active components. Dr.Jit will attempt an implicit conversion
+      if another type is provided. The default is `True`.
+)";
+
+static const char *doc_ravel = R"(
+Convert the input into a contiguous flat array
+
+Args:
+    arg (drjit.ArrayBase): An arbitrary Dr.Jit array or tensor
+
+Returns:
+    object: A dynamic 1D array containing the flattened representation of
+    **arg** in C-style ordering. The type of the return value depends on the
+    type of the input.
 )";
 
 #if defined(__GNUC__)

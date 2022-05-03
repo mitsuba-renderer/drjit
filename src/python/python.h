@@ -69,6 +69,15 @@ inline bool operator==(const dr::detail::array_metadata &a,
     return true;
 }
 
+extern std::pair<nb::tuple, nb::object>
+slice_index(const nb::type_object &dtype, const nb::tuple &shape,
+            const nb::tuple &indices);
+
+extern nb::object gather(nb::type_object dtype,
+                         nb::handle_of<dr::ArrayBase> source,
+                         nb::object index,
+                         nb::object active);
+
 // Entry points of various parts of the bindings
 extern void bind_array_builtin(nb::module_ m);
 extern void bind_array_math(nb::module_ m);

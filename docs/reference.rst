@@ -12,10 +12,14 @@ Array creation
 .. autofunction:: arange
 .. autofunction:: linspace
 
-Memory operations
------------------
+Horizontal operations
+---------------------
+
+These operations are *horizontal* in the sense that [..]
 
 .. autofunction:: gather
+.. autofunction:: scatter
+.. autofunction:: ravel
 
 Mask operations
 ---------------
@@ -36,6 +40,12 @@ Horizontal reductions
 ---------------------
 
 TBD
+
+Miscellaneous operations
+------------------------
+
+.. autofunction:: shape
+.. autofunction:: slice_index
 
 
 Type traits
@@ -101,13 +111,6 @@ _______________________
 .. autofunction:: float32_array_t
 .. autofunction:: float64_array_t
 
-
-Miscellaneous operations
-------------------------
-
-.. autofunction:: shape
-.. autofunction:: slice_index
-
 Standard mathematical functions
 -------------------------------
 
@@ -126,9 +129,15 @@ Standard mathematical functions
 .. autofunction:: frexp
 .. autofunction:: ldexp
 
+Transcendental functions
+------------------------
+
+Dr.Jit implements the most common transcendental functions using methods that
+are based on the CEPHES math library. The accuracy of these approximations is
+documented in a set of :ref:`tables <transcendental-accuracy>` below.
 
 Trigonometric functions
------------------------
+_______________________
 
 .. autofunction:: sin
 .. autofunction:: cos
@@ -140,7 +149,7 @@ Trigonometric functions
 .. autofunction:: atan2
 
 Hyperbolic functions
---------------------
+____________________
 
 .. autofunction:: sinh
 .. autofunction:: cosh
@@ -151,7 +160,7 @@ Hyperbolic functions
 .. autofunction:: atanh
 
 Exponentials, logarithms, power function
-----------------------------------------
+________________________________________
 
 .. autofunction:: log2
 .. autofunction:: log
@@ -160,21 +169,14 @@ Exponentials, logarithms, power function
 
 .. _transcendental-accuracy:
 
-Accuracy of transcendental function approximations
---------------------------------------------------
-
-Most approximations of transcendental functions are based on routines in the
-CEPHES math library. The table below provides some statistics on their absolute
-and relative error.
+Accuracy (single precision)
+___________________________
 
 .. note::
 
     The trigonometric functions *sin*, *cos*, and *tan* are optimized for low
     error on the domain :math:`|x| < 8192` and don't perform as well beyond
     this range.
-
-Single precision
-________________
 
 .. list-table::
     :widths: 5 8 8 10 8 10
@@ -284,8 +286,8 @@ ________________
       - :math:`6.4 \cdot 10^{-8}\,(0.79\,\text{ulp})`
       - :math:`1 \cdot 10^{-6}\,(11\,\text{ulp})`
 
-Double precision
-________________
+Accuracy (double precision)
+___________________________
 
 .. list-table::
     :widths: 5 8 8 10 8 10
@@ -401,11 +403,13 @@ ________________
       - :math:`9.6 \cdot 10^{-17}\,(0.64\,\text{ulp})`
       - :math:`2.5 \cdot 10^{-15}\,(16\,\text{ulp})`
 
+
 Array base class
 ----------------
 
 .. autoclass:: ArrayBase
 
+    .. autoproperty:: array
     .. autoproperty:: shape
     .. autoproperty:: x
     .. autoproperty:: y

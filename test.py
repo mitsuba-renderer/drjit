@@ -603,7 +603,7 @@ def test20_component_access():
 
     with pytest.raises(TypeError) as ei:
         a.w == 4
-    assert "Array3f: array does not have a 'w' component!" in str(ei.value)
+    assert "Array3f: does not have a 'w' component!" in str(ei.value)
 
     a = Array3fL(1, 2, 3)
     assert a.index == 0 and a.index_ad == 0
@@ -771,7 +771,33 @@ def test27_gather_simple():
     ) == l.Float(0, 0, 3))
 
 
-def test28_gather_complex():
+
+def test28_scatter_simple():
+    import drjit.llvm as l
+    import drjit.scalar as s
+
+    target = dr.empty(s.ArrayXf, 3)
+    dr.scatter(target, 1, [0, 1])
+    dr.scatter(target, 2, 2)
+    assert dr.all(target == s.ArrayXf([1, 1, 2]))
+
+    target = dr.full(s.ArrayXf, shape=(3,), value=5)
+    dr.scatter(target, [10, 12], [0, 1], [True, False])
+    dr.scatter(target, 2, 2)
+    assert dr.all(target == s.ArrayXf([10, 5, 2]))
+
+    target = dr.empty(l.Float, 3)
+    dr.scatter(target, 1, [0, 1])
+    dr.scatter(target, 2, 2)
+    assert dr.all(target == l.Float([1, 1, 2]))
+
+    target = dr.full(l.Float, shape=(3,), value=5)
+    dr.scatter(target, [10, 12], [0, 1], [True, False])
+    dr.scatter(target, 2, 2)
+    assert dr.all(target == l.Float([10, 5, 2]))
+
+
+def test29_gather_complex():
     import drjit.llvm as l
 
     assert dr.all_nested(dr.gather(

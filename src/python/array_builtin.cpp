@@ -633,11 +633,11 @@ static PyObject *tp_iter(PyObject *o) {
 
 template <int Index> nb::object ab_getter(nb::handle_of<dr::ArrayBase> h) {
     PyTypeObject *tp = (PyTypeObject *) h.type().ptr();
-    auto &s = nb::type_supplement<supp>(tp);
+    const supp &s = nb::type_supplement<supp>(tp);
 
-    if (s.meta.shape[0] == 0xFF || Index >= s.meta.shape[0]) {
+    if (s.meta.is_tensor || s.meta.shape[0] == 0xFF || Index >= s.meta.shape[0]) {
         char tmp[128];
-        snprintf(tmp, sizeof(tmp), "%s: array does not have a '%c' component!",
+        snprintf(tmp, sizeof(tmp), "%s: does not have a '%c' component!",
                  tp->tp_name, "xyzw"[Index]);
         throw nb::type_error(tmp);
     }
@@ -647,11 +647,11 @@ template <int Index> nb::object ab_getter(nb::handle_of<dr::ArrayBase> h) {
 
 template <int Index> void ab_setter(nb::handle_of<dr::ArrayBase> h, nb::handle value) {
     PyTypeObject *tp = (PyTypeObject *) h.type().ptr();
-    auto &s = nb::type_supplement<supp>(tp);
+    const supp &s = nb::type_supplement<supp>(tp);
 
-    if (s.meta.shape[0] == 0xFF || Index >= s.meta.shape[0]) {
+    if (s.meta.is_tensor || s.meta.shape[0] == 0xFF || Index >= s.meta.shape[0]) {
         char tmp[128];
-        snprintf(tmp, sizeof(tmp), "%s: array does not have a '%c' component!",
+        snprintf(tmp, sizeof(tmp), "%s: does not have a '%c' component!",
                  tp->tp_name, "xyzw"[Index]);
         throw nb::type_error(tmp);
     }
@@ -662,39 +662,106 @@ template <int Index> void ab_setter(nb::handle_of<dr::ArrayBase> h, nb::handle v
 }
 
 static PyObject *mp_subscript(PyObject *self, PyObject *key) {
-    if (PyLong_Check(key)) {
+    PyTypeObject *self_tp = Py_TYPE(self),
+                 *key_tp = Py_TYPE(key);
+
+    const supp &s = nb::type_supplement<supp>(self_tp);
+
+    if (s.meta.is_tensor) {
+        nb::tuple key2;
+
+        if (key_tp == &PyTuple_Type)
+            key2 = nb::borrow<nb::tuple>(key);
+        else
+            key2 = nb::make_tuple(key);
+
+        nb::object result;
+        try {
+            nb::tuple tensor_shape = nb::borrow<nb::tuple>(shape(self));
+            nb::object source = nb::steal(s.op_tensor_array(self));
+
+            auto [shape, index] = slice_index(nb::borrow<nb::type_object>(self_tp),
+                                              tensor_shape, key2);
+
+            result = nb::handle(self_tp)(
+                gather(nb::borrow<nb::type_object>(source.type()),
+                       nb::handle_of<dr::ArrayBase>(source.ptr()),
+                       index, nb::borrow(Py_True)));
+        } catch (const std::exception &e) {
+            PyErr_Format(PyExc_RuntimeError, "%s.__getitem__(): %s!",
+                         self_tp->tp_name, e.what());
+            result.clear();
+        }
+
+        return result.release().ptr();
+    }
+
+    bool cast_to_tensor = false;
+    if (key_tp == &PyLong_Type) {
         Py_ssize_t size = PyLong_AsSsize_t(key);
         if (size < 0) {
             if (size == -1 && PyErr_Occurred())
                 return nullptr;
             size = len(self) + size;
         }
-        return Py_TYPE(self)->tp_as_sequence->sq_item(self, size);
-    } else if (is_drjit_array(key)) {
-        const supp &s = nb::type_supplement<supp>(Py_TYPE(key));
-        if ((VarType) s.meta.type == VarType::Bool) {
+        return self_tp->tp_as_sequence->sq_item(self, size);
+    } else if (key_tp == &PyTuple_Type) {
+        PyObject *o = self;
+        Py_INCREF(o);
+        for (Py_ssize_t i = 0; i < PyTuple_GET_SIZE(key); ++i) {
+            PyObject *key2 = PyTuple_GET_ITEM(key, i),
+                     *o2 = PyObject_GetItem(o, key2);
+            if (!o2) {
+                Py_DECREF(o);
+                return nullptr;
+            }
+            Py_DECREF(o);
+            o = o2;
+        }
+        return o;
+    } else if (is_drjit_type(key_tp)) {
+        const supp &sk = nb::type_supplement<supp>(key_tp);
+        if ((VarType) sk.meta.type == VarType::Bool) {
             Py_INCREF(self);
             return self;
         }
+        cast_to_tensor = true;
+    } else if (key == Py_None || key_tp == &PyEllipsis_Type || key_tp == &PySlice_Type) {
+        cast_to_tensor = true;
     }
-    PyErr_Format(PyExc_TypeError,
-                 "%s.__getitem__(): invalid key of type '%s' specified!",
-                 Py_TYPE(self)->tp_name, Py_TYPE(key)->tp_name);
+
+    if (cast_to_tensor)
+        PyErr_Format(PyExc_TypeError,
+                     "%s.__getitem__(): complex slicing operations are only "
+                     "supported on tensors.", self_tp->tp_name);
+    else
+        PyErr_Format(PyExc_TypeError,
+                     "%s.__getitem__(): invalid key of type '%s' specified!",
+                     self_tp->tp_name, key_tp->tp_name);
     return nullptr;
 }
 
 static int mp_ass_subscript(PyObject *self, PyObject *key, PyObject *value) {
-    if (PyLong_Check(key)) {
+    PyTypeObject *self_tp = Py_TYPE(self),
+                 *key_tp = Py_TYPE(key);
+
+    const supp &s = nb::type_supplement<supp>(self_tp);
+
+    if (s.meta.is_tensor) {
+    }
+
+    bool cast_to_tensor = false;
+    if (key_tp == &PyLong_Type) {
         Py_ssize_t size = PyLong_AsSsize_t(key);
         if (size < 0) {
             if (size == -1 && PyErr_Occurred())
                 return -1;
             size = len(self) + size;
         }
-        return Py_TYPE(self)->tp_as_sequence->sq_ass_item(self, size, value);
-    } else if (is_drjit_array(key)) {
-        const supp &s = nb::type_supplement<supp>(Py_TYPE(key));
-        if ((VarType) s.meta.type == VarType::Bool) {
+        return self_tp->tp_as_sequence->sq_ass_item(self, size, value);
+    } else if (is_drjit_type(key_tp)) {
+        const supp &sk = nb::type_supplement<supp>(key_tp);
+        if ((VarType) sk.meta.type == VarType::Bool) {
             PyObject *result = nb_select(key, value, self);
             if (!result)
                 return -1;
@@ -703,10 +770,19 @@ static int mp_ass_subscript(PyObject *self, PyObject *key, PyObject *value) {
             Py_DECREF(result);
             return 0;
         }
+        cast_to_tensor = true;
+    } else if (key == Py_None || key_tp == &PyEllipsis_Type || key_tp == &PySlice_Type) {
+        cast_to_tensor = true;
     }
-    PyErr_Format(PyExc_TypeError,
-                 "%s.__getitem__(): invalid key of type '%s' specified!",
-                 Py_TYPE(self)->tp_name, Py_TYPE(key)->tp_name);
+
+    if (cast_to_tensor)
+        PyErr_Format(PyExc_TypeError,
+                     "%s.__setitem__(): complex slicing operations are only "
+                     "supported on tensors.", self_tp->tp_name);
+    else
+        PyErr_Format(PyExc_TypeError,
+                     "%s.__setitem__(): invalid key of type '%s' specified!",
+                     self_tp->tp_name, key_tp->tp_name);
     return -1;
 }
 
@@ -793,9 +869,6 @@ void bind_array_builtin(nb::module_ m) {
         },
         nb::raw_doc(doc_ArrayBase_index_ad));
 
-    array_base = ab;
-    array_module = m;
-
     m.def(
         "select",
         [](bool condition, nb::handle x, nb::handle y) -> nb::object {
@@ -803,9 +876,16 @@ void bind_array_builtin(nb::module_ m) {
         },
         nb::raw_doc(doc_select), "condition"_a, "x"_a, "y"_a);
 
-    m.def("select", [](nb::handle condition, nb::handle x, nb::handle y) {
-        if (!is_drjit_array(condition) && !is_drjit_array(x) && !is_drjit_array(y))
-            throw nb::next_overload();
-        return nb::steal(nb_select(condition.ptr(), x.ptr(), y.ptr()));
-    }, "condition"_a, "x"_a, "y"_a);
+    m.def(
+        "select",
+        [](nb::handle condition, nb::handle x, nb::handle y) {
+            if (!is_drjit_array(condition) && !is_drjit_array(x) &&
+                !is_drjit_array(y))
+                throw nb::next_overload();
+            return nb::steal(nb_select(condition.ptr(), x.ptr(), y.ptr()));
+        },
+        "condition"_a, "x"_a, "y"_a);
+
+    array_base = ab;
+    array_module = m;
 }
