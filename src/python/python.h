@@ -78,6 +78,8 @@ extern nb::object gather(nb::type_object dtype,
                          nb::object index,
                          nb::object active);
 
+extern nb::object reinterpret_array_t(nb::handle h, VarType vt);
+
 // Entry points of various parts of the bindings
 extern void bind_array_builtin(nb::module_ m);
 extern void bind_array_math(nb::module_ m);

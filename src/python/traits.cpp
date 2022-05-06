@@ -18,7 +18,7 @@ static nb::handle scalar_t(nb::handle h) {
     return tp;
 }
 
-static nb::object reinterpret_array_t(nb::handle h, VarType vt) {
+nb::object reinterpret_array_t(nb::handle h, VarType vt) {
     nb::handle tp = h.is_type() ? h : h.type();
     if (is_drjit_type(tp)) {
         meta m = nb::type_supplement<supp>(tp).meta;

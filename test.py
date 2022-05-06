@@ -309,6 +309,10 @@ def test12_binop_simple():
     from drjit.scalar import Array3f, ArrayXf, Array3u, ArrayXb
     a = Array3f(1, 2, 3)
     assert dr.all(a + a == Array3f(2, 4, 6))
+    assert dr.all(a + (1, 2, 3) == Array3f(2, 4, 6))
+    assert dr.all(a + [1, 2, 3] == Array3f(2, 4, 6))
+    assert dr.all((1, 2, 3) + a == Array3f(2, 4, 6))
+    assert dr.all([1, 2, 3] + a == Array3f(2, 4, 6))
     assert dr.all(a - a == Array3f(0, 0, 0))
     assert dr.all(a * a == Array3f(1, 4, 9))
     assert dr.all(a / a == Array3f(1, 1, 1))
@@ -322,6 +326,7 @@ def test12_binop_simple():
     assert dr.all(a - a == ArrayXf(0, 0, 0))
     assert dr.all(a * a == ArrayXf(1, 4, 9))
     assert dr.all(a / a == ArrayXf(1, 1, 1))
+
     a = Array3u(1, 2, 3)
     assert dr.all(a + a == Array3u(2, 4, 6))
     assert dr.all(a - a == Array3u(0, 0, 0))
@@ -349,6 +354,16 @@ def test13_binop_broadcast():
     b = a + 1
     assert dr.all(a + 1 == ArrayXf(2, 3, 4))
     assert dr.all(1 + a == ArrayXf(2, 3, 4))
+
+    import drjit.llvm as l
+    x = l.Array3f(1) + Array3f(1, 2, 3)
+    assert dr.all(x == l.Array3f(2, 3, 4))
+
+    x = l.Array3f(1) + (1, 2, 3)
+    assert dr.all(x == l.Array3f(2, 3, 4))
+
+    x = Array3f(1, 2, 3) + l.Float(1, 2, 3)
+    assert dr.all(x == l.Array3f([2, 3, 4], [3, 4, 5], [4, 5, 6]))
 
 
 def test14_binop_inplace():
@@ -424,11 +439,11 @@ def test16_type_promotion_errors():
     a = Array3f()
     with pytest.raises(TypeError) as ei:
         a + "asdf"
-    assert "Array3f.__add__(): encountered an unsupported argument of type 'str' (must be a Dr.Jit array or a Python scalar)" in str(ei.value)
+    assert "Array3f.__add__(): encountered an unsupported argument of type 'str' (must be a Dr.Jit array or a type that can be converted into one)" in str(ei.value)
 
-    with pytest.raises(RuntimeError) as ei:
+    a + 2**10
+    with pytest.raises(TypeError):
         a + 2**100
-    assert "integer overflow during type promotion" in str(ei.value)
 
 
 def test18_traits():
@@ -798,6 +813,7 @@ def test28_scatter_simple():
 
 
 def test29_gather_complex():
+    import drjit.scalar as s
     import drjit.llvm as l
 
     assert dr.all_nested(dr.gather(
@@ -820,6 +836,20 @@ def test29_gather_complex():
         l.Float(1, 0, 10),
         l.Float(2, 0, 11),
     ))
+
+
+def test30_scatter_complex():
+    import drjit.llvm as l
+    import drjit.scalar as s
+
+    target = dr.empty(l.Float, 6)
+    dr.scatter(target, l.Array3f([[1, 4], [2, 5], [3, 6]]), [0, 1])
+    assert dr.all(target == l.Float([1, 2, 3, 4, 5, 6]))
+
+
+def test31_ravel():
+    import drjit.llvm as l
+    assert dr.all(dr.ravel(l.Array3f(1, 2, 3)) == l.Float([1, 2, 3]))
 
 #@pytest.mark.parametrize('name', ['sqrt', 'cbrt', 'sin', 'cos', 'tan', 'asin',
 #                                  'acos', 'atan', 'sinh', 'cosh', 'tanh',

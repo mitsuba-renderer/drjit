@@ -241,7 +241,10 @@ nb::object arange(nb::handle dtype, Py_ssize_t start, Py_ssize_t end, Py_ssize_t
             counter_supp.op_counter((size_t) size, nb::inst_ptr<void>(result));
             nb::inst_mark_ready(result);
 
-            return array_module.attr("fma")(dtype(result), dtype(step), dtype(start));
+            if (start == 0 && step == 1)
+                return dtype(result);
+            else
+                return array_module.attr("fma")(dtype(result), dtype(step), dtype(start));
         }
     }
     throw nb::type_error("drjit.arange(): unsupported dtype!");
@@ -443,15 +446,42 @@ void scatter(nb::handle_of<dr::ArrayBase> target,
     for (int i = 0; i < m.ndim; ++i)
         m.shape[i] = value_meta.shape[i];
 
-    if (m == value_meta && m.ndim > 0 && m.shape[m.ndim - 1] == 0xFF &&
-        m.shape[0] != 0xFF) {
-        for (size_t i = 0; i < m.shape[0]; ++i)
-            ::scatter(target, value[i],
-                      index * nb::cast(m.shape[0]) + nb::cast(i), active);
+    if (m == value_meta && m.ndim > 0 && m.shape[0] != 0xFF) {
+        if (m.shape[m.ndim - 1] != 0xFF || m.ndim > 1) {
+            for (size_t i = 0; i < m.shape[0]; ++i)
+                ::scatter(target, value[i],
+                          index * nb::cast(m.shape[0]) + nb::cast(i), active);
+        } else {
+            for (size_t i = 0; i < m.shape[0]; ++i)
+                if (nb::cast<bool>(active[i]))
+                    target[index * nb::cast(m.shape[0]) + nb::cast(i)] = value[i];
+        }
         return;
     }
 
-    throw nb::type_error("drjit.scatter(): 'value' type is unsupported!");
+    throw nb::type_error("drjit.scatter(): 'value' type is unsupported.");
+}
+
+static void ravel_recursive(nb::handle result, nb::handle value,
+                            nb::handle index_dtype, const Py_ssize_t *shape,
+                            const Py_ssize_t *strides, Py_ssize_t offset,
+                            int depth, int stop_depth) {
+    if (depth == stop_depth) {
+        if (index_dtype.is_valid()) {
+            nb::object index =
+                arange(index_dtype, offset,
+                       offset + strides[depth] * shape[depth], strides[depth]);
+            scatter(result, nb::borrow(value), index, nb::cast(true));
+        } else {
+            result[offset] = value;
+        }
+    } else {
+        for (Py_ssize_t i = 0; i < shape[depth]; ++i) {
+            ravel_recursive(result, value[i], index_dtype, shape, strides,
+                            offset, depth + 1, stop_depth);
+            offset += strides[depth] * i;
+        }
+    }
 }
 
 nb::object ravel(nb::handle_of<dr::ArrayBase> h) {
@@ -460,19 +490,40 @@ nb::object ravel(nb::handle_of<dr::ArrayBase> h) {
     if (s.meta.is_tensor)
         return nb::steal(s.op_tensor_array(h.ptr()));
 
-    size_t size = 1;
-    for (nb::handle h : shape(h))
-        size *= nb::cast<Py_ssize_t>(h);
+    nb::object shape_tuple = shape(h);
+    if (shape_tuple.is_none())
+        throw std::runtime_error("drjit.ravel(): ragged input not allowed.");
 
-    meta m = s.meta;
+    Py_ssize_t shape[4] { }, strides[4] { }, stride = 1;
+
+    size_t ndim = nb::len(shape_tuple);
+    for (size_t i = ndim - 1; ; --i) {
+        shape[i] = nb::cast<Py_ssize_t>(shape_tuple[i]);
+        strides[i] = stride;
+        stride *= shape[i];
+        if (i == 0)
+            break;
+    }
+
+    meta m { };
+    m.is_llvm = s.meta.is_llvm;
+    m.is_cuda = s.meta.is_cuda;
+    m.is_diff = s.meta.is_diff;
+    m.type = s.meta.type;
     m.ndim = 1;
     m.shape[0] = 0xFF;
 
-    nb::handle tp = drjit::detail::array_get(m);
-    nb::object result = empty_alt(nb::borrow<nb::type_object>(tp), size);
+    nb::object result = empty_alt(
+        nb::borrow<nb::type_object>(drjit::detail::array_get(m)), stride);
 
-    for (size_t i = 0; i < m.shape[0]; ++i) {
+    nb::handle index_dtype;
+    if (s.meta.shape[s.meta.ndim - 1] == 0xFF) {
+        m.type = (uint16_t) VarType::UInt32;
+        index_dtype = drjit::detail::array_get(m);
     }
+
+    ravel_recursive(result, h, index_dtype, shape, strides, 0, 0,
+                    (int) ndim - 1);
 
     return result;
 }
