@@ -1406,6 +1406,62 @@ def schedule(*args):
                 result |= schedule(v)
     return result
 
+def flatten_indices(*args):
+    results = []
+    for a in args:
+        t = type(a)
+        if issubclass(t, ArrayBase):
+            if a.Depth == 1:
+                if a.IsDiff:
+                    a = a.detach_()
+                results.append(a.index())
+            else:
+                for i in range(len(a)):
+                    results += flatten_indices(a[i])
+        elif _ek.is_drjit_struct_v(t):
+            for k in t.DRJIT_STRUCT.keys():
+                results += flatten_indices(getattr(a, k))
+        elif issubclass(t, _Sequence):
+            for v in a:
+                results += flatten_indices(v)
+        elif issubclass(t, _Mapping):
+            for k, v in a.items():
+                results += flatten_indices(v)
+    return results
+
+
+def kernel(fn):
+    cached_kernel = None
+    output_type = None
+    output_shape = None
+
+
+    def wrapper(*args):
+        nonlocal cached_kernel 
+        nonlocal output_type
+        nonlocal output_shape
+        eval(*args)
+        param_slots = flatten_indices(*args)
+        if cached_kernel is None:
+            cached_kernel = _ek.detail.start_cached_kernel_recording(param_slots)
+
+            output = fn(*args)
+            schedule(output)
+
+            param_slots += flatten_indices(output)
+            cached_kernel = _ek.detail.end_cached_kernel_recording(cached_kernel, param_slots)
+            output_type = type(output)
+            output_shape = width(output)
+        else:
+            output = empty(output_type, output_shape)
+            param_slots += flatten_indices(output)
+
+            _ek.detail.run_cached_kernel(cached_kernel, param_slots)
+        return output
+
+
+    return wrapper
+
 
 def eval(*args):
     if schedule(*args) or len(args) == 0:

@@ -343,8 +343,17 @@ PYBIND11_MODULE(drjit_ext, m_) {
         "types"_a = py::list());
     m.def("kernel_history_clear", &jit_kernel_history_clear);
 
-	m.def("kernel", [](py::object obj) { return obj; });
-    m.def("run_last_kernel", &jit_run_last_kernel);
+    py::class_<CachedKernelHandle>(m, "CachedKernelHandle");
+	array_detail.def("start_cached_kernel_recording", [](const std::vector<uint32_t>& input_vars) {
+			return jit_start_cached_kernel_recording(input_vars.data(), (uint32_t)input_vars.size());
+	});
+	array_detail.def("end_cached_kernel_recording", [](CachedKernelHandle handle, const std::vector<uint32_t>& input_vars) {
+			jit_end_cached_kernel_recording(&handle, input_vars.data(), (uint32_t)input_vars.size());
+			return handle;
+	});
+	array_detail.def("run_cached_kernel", [](const CachedKernelHandle& handle, const std::vector<uint32_t>& input_vars) {
+			return jit_run_cached_kernel(&handle, input_vars.data(), (uint32_t)input_vars.size());
+	});
 
     array_detail.def("graphviz", &jit_var_graphviz);
     array_detail.def("schedule", &jit_var_schedule);
