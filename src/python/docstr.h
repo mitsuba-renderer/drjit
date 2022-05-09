@@ -1525,10 +1525,129 @@ Convert the input into a contiguous flat array
 Args:
     arg (drjit.ArrayBase): An arbitrary Dr.Jit array or tensor
 
+    order (str): A single character indicating the index order. ``'C'`` (the
+        default) specifies row-major/C-style ordering, in which case the last
+        index changes at the highest frequency. The other option ``'F'``
+        indicates column-major/Fortran-style ordering, in which case the 
+        first index changes at the highest frequency.
+
+
 Returns:
     object: A dynamic 1D array containing the flattened representation of
-    **arg** in C-style ordering. The type of the return value depends on the
-    type of the input.
+    **arg** with the desired ordering. The type of the return value depends on
+    the type of the input. When **arg** is already contiguous/flattened, this
+    function returns it without making a copy.
+)";
+
+
+static const char *doc_schedule = R"(
+Schedule the provided JIT variable(s) for later evaluation
+
+This function causes **args** to be evaluated by the next kernel launch. In
+other words, the effect of this operation is deferred: the next time that
+Dr.Jit's LLVM or CUDA backends compile and execute code, they will include the
+*trace* of the specified variables in the generated kernel and turn them into
+an explicit memory-based representation.
+
+Scheduling and evaluation of traced computation happens automatically, hence it
+is rare that a user would need to call this function explicitly. Explicit
+scheduling can improve performance in certain cases---for example, consider the
+following code:
+
+.. code-block::
+
+    # Computation that produces Dr.Jit arrays
+    a, b = ...
+
+    # The following line launches a kernel that computes 'a'
+    print(a)
+
+    # The following line launches a kernel that computes 'b'
+    print(b)
+
+If the traces of ``a`` and ``b`` overlap (perhaps they reference computation
+from an earlier step not shown here), then this is inefficient as these steps
+will be executed twice. It is preferable to launch bigger kernels that leverage
+common subexpressions, which is what :py:func:`drjit.schedule()` enables:
+
+.. code-block::
+
+    a, b = ... # Computation that produces Dr.Jit arrays
+
+    # Schedule both arrays for deferred evaluation, but don't evaluate yet
+    dr.schedule(a, b)
+
+    # The following line launches a kernel that computes both 'a' and 'b'
+    print(a)
+
+    # References the stored array, no kernel launch
+    print(b)
+
+Note that :py:func:`drjit.eval()` would also have been a suitable alternative 
+in the above example; the main difference to :py:func:`drjit.schedule()` is
+that it does the evaluation immediately without deferring the kernel launch.
+
+This function accepts a variable-length keyword argument and processes it
+as follows:
+
+- It recurses into sequences (``tuple``, ``list``, etc.)
+- It recurses into the values of mappings (``dict``, etc.)
+- It recurses into the fields of :ref:`custom data structures <custom-struct>`.
+
+During recursion, the function gathers all unevaluated Dr.Jit arrays. Evaluated
+arrays and incompatible types are ignored. Multiple variables can be
+equivalently scheduled with a single :py:func:`drjit.schedule()` call or a
+sequence of calls to :py:func:`drjit.schedule()`. Variables that are garbage
+collected between the original :py:func:`drjit.schedule()` call and the next
+kernel launch are ignored and will not be stored in memory.
+
+Args:
+    *args (tuple): A variable-length list of Dr.Jit array instances,
+      :ref:`custom data structures <custom-struct>`, sequences, or mappings.
+      The function will recursively traverse data structures to discover all
+      Dr.Jit arrays.
+)";
+
+static const char *doc_eval = R"(
+Immediately evaluate the provided JIT variable(s)
+
+This function immediately invokes Dr.Jit's LLVM or CUDA backends to compile and
+then execute a kernel containing the *trace* of the specified variables,
+turning them into an explicit memory-based representation. The generated
+kernel(s) will also include previously scheduled computation. The function
+:py:func:`drjit.eval()` internally calls :py:func:`drjit.schedule()`---specifically,
+
+.. code-block::
+
+    dr.eval(arg_1, arg_2, ...)
+
+is equivalent to
+
+.. code-block::
+
+    dr.schedule(arg_1, arg_2, ...)
+    dr.eval()
+
+Variable evaluation happens automatically as needed, hence it is rare that a
+user would need to call this function explicitly. Explicit evaluation can
+slightly improve performance in certain cases (the documentation of
+:py:func:`drjit.schedule()` shows an example of such a use case.)
+
+This function accepts a variable-length keyword argument and processes it
+as follows:
+
+- It recurses into sequences (``tuple``, ``list``, etc.)
+- It recurses into the values of mappings (``dict``, etc.)
+- It recurses into the fields of :ref:`custom data structures <custom-struct>`.
+
+During recursion, the function gathers all unevaluated Dr.Jit arrays. Evaluated
+arrays and incompatible types are ignored.
+
+Args:
+    *args (tuple): A variable-length list of Dr.Jit array instances,
+      :ref:`custom data structures <custom-struct>`, sequences, or mappings.
+      The function will recursively traverse data structures to discover all
+      Dr.Jit arrays.
 )";
 
 #if defined(__GNUC__)

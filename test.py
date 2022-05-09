@@ -356,14 +356,12 @@ def test13_binop_broadcast():
     assert dr.all(1 + a == ArrayXf(2, 3, 4))
 
     import drjit.llvm as l
-    x = l.Array3f(1) + Array3f(1, 2, 3)
-    assert dr.all(x == l.Array3f(2, 3, 4))
+
+    x = Array3f(1, 2, 3) + l.Array3f(l.Float(1, 2, 3))
+    assert dr.all_nested(x == l.Array3f([2, 3, 4], [3, 4, 5], [4, 5, 6]))
 
     x = l.Array3f(1) + (1, 2, 3)
     assert dr.all(x == l.Array3f(2, 3, 4))
-
-    x = Array3f(1, 2, 3) + l.Float(1, 2, 3)
-    assert dr.all(x == l.Array3f([2, 3, 4], [3, 4, 5], [4, 5, 6]))
 
 
 def test14_binop_inplace():
@@ -839,17 +837,55 @@ def test29_gather_complex():
 
 
 def test30_scatter_complex():
-    import drjit.llvm as l
     import drjit.scalar as s
+    import drjit.llvm as l
 
     target = dr.empty(l.Float, 6)
     dr.scatter(target, l.Array3f([[1, 4], [2, 5], [3, 6]]), [0, 1])
     assert dr.all(target == l.Float([1, 2, 3, 4, 5, 6]))
 
 
-def test31_ravel():
+def test31_ravel(capsys):
+    import drjit.scalar as s
     import drjit.llvm as l
-    assert dr.all(dr.ravel(l.Array3f(1, 2, 3)) == l.Float([1, 2, 3]))
+
+    try:
+        dr.set_log_level(5)
+
+        assert dr.all(dr.ravel(s.Array3f(1, 2, 3)) == s.ArrayXf([1, 2, 3]))
+        assert dr.all(dr.ravel(s.Array3f(1, 2, 3), order='F') == s.ArrayXf([1, 2, 3]))
+
+        x = l.Array3f([1, 2], [3, 4], [5, 6])
+        assert dr.all(dr.ravel(x.x) is x.x)
+        assert dr.all(dr.ravel(x) == l.Float([1, 2, 3, 4, 5, 6]))
+        assert dr.all(dr.ravel(x, order='F') == l.Float([1, 3, 5, 2, 4, 6]))
+
+        out, err = capsys.readouterr()
+        print(out)
+        assert out.count('jit_var_new_scatter') == 6
+        assert out.count('jit_poke') == 18
+    finally:
+        dr.set_log_level(0)
+
+
+def test32_dlpack():
+    import drjit.llvm as l
+    from_dlpack = None
+    try:
+        import numpy as np
+        from_dlpack = getattr(np, '_from_dlpack', None)
+        from_dlpack = getattr(np, 'from_dlpack', from_dlpack)
+    except:
+        pass
+
+    if from_dlpack is None:
+        pytest.skip('NumPy is missing/too old')
+
+    x = l.Array3f([1, 2], [3, 4], [5, 6])
+    assert x.__dlpack_device__() == (1, 0)
+    print(from_dlpack(x))
+    assert np.all(from_dlpack(x) == np.array([[1, 2], [3, 4], [5, 6]]))
+
 
 #@pytest.mark.parametrize('name', ['sqrt', 'cbrt', 'sin', 'cos', 'tan', 'asin',
 #                                  'acos', 'atan', 'sinh', 'cosh', 'tanh',

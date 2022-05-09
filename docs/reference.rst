@@ -12,6 +12,8 @@ Array creation
 .. autofunction:: arange
 .. autofunction:: linspace
 
+.. _horizontal-reductions:
+
 Horizontal operations
 ---------------------
 
@@ -34,12 +36,6 @@ Mask operations
 .. autofunction:: isfinite
 .. autofunction:: allclose
 
-.. _horizontal-reductions:
-
-Horizontal reductions
----------------------
-
-TBD
 
 Miscellaneous operations
 ------------------------
@@ -47,6 +43,11 @@ Miscellaneous operations
 .. autofunction:: shape
 .. autofunction:: slice_index
 
+Just-in-time compilation
+------------------------
+
+.. autofunction:: schedule
+.. autofunction:: eval
 
 Type traits
 -----------

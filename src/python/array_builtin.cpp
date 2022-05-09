@@ -3,6 +3,7 @@
 #endif
 
 #include "python.h"
+#include <vector>
 
 // Return sequence protocol access methods for the given type
 nb::detail::tuple<lenfunc, ssizeargfunc, ssizeobjargproc>
@@ -868,6 +869,65 @@ void bind_array_builtin(nb::module_ m) {
             return s.op_index_ad(nb::inst_ptr<void>(h));
         },
         nb::raw_doc(doc_ArrayBase_index_ad));
+
+    ab.def("__dlpack__",
+        [](nb::handle_of<dr::ArrayBase> h) -> nb::tensor<> {
+            const supp &s = nb::type_supplement<supp>(h.type());
+
+            if (s.meta.is_cuda || s.meta.is_llvm) {
+                std::vector<size_t> shape;
+                std::vector<int64_t> strides;
+
+                nb::object raveled = ravel(h, 'F', &shape, &strides);
+
+                const supp &s2 = nb::type_supplement<supp>(raveled.type());
+                uint32_t index = s2.op_index(nb::inst_ptr<void>(raveled));
+                nb::dlpack::dtype dtype;
+
+                switch ((VarType) s2.meta.type) {
+                    case VarType::Bool:
+                    case VarType::UInt8:   dtype = nb::dtype<uint8_t>(); break;
+                    case VarType::Int8:    dtype = nb::dtype<int8_t>(); break;
+                    case VarType::UInt16:  dtype = nb::dtype<uint16_t>(); break;
+                    case VarType::Int16:   dtype = nb::dtype<int16_t>(); break;
+                    case VarType::UInt32:  dtype = nb::dtype<uint32_t>(); break;
+                    case VarType::Int32:   dtype = nb::dtype<int32_t>(); break;
+                    case VarType::UInt64:  dtype = nb::dtype<uint64_t>(); break;
+                    case VarType::Int64:   dtype = nb::dtype<int64_t>(); break;
+                    case VarType::Float32: dtype = nb::dtype<float>(); break;
+                    case VarType::Float64: dtype = nb::dtype<double>(); break;
+                    default:
+                        throw std::runtime_error(
+                            "__dlpack__(): dtype is not understood by the "
+                            "DLPack protocol");
+                }
+
+                return {
+                    jit_var_ptr(index),
+                    shape.size(),
+                    shape.data(),
+                    raveled,
+                    strides.data(),
+                    dtype,
+                    s.meta.is_cuda ? nb::device::cuda::value
+                                   : nb::device::cpu::value,
+                    s.meta.is_cuda ? jit_var_device(index) : 0
+                };
+            } else {
+                return { };
+            }
+        });
+
+    ab.def("__dlpack_device__",
+        [](nb::handle_of<dr::ArrayBase> h) -> std::pair<int, int> {
+            const supp &s = nb::type_supplement<supp>(h.type());
+            if (s.meta.is_cuda) {
+                uint32_t index = s.op_index(nb::inst_ptr<void>(h));
+                return { nb::device::cuda::value, jit_var_device(index) };
+            } else {
+                return { nb::device::cpu::value, 0 };
+            }
+        });
 
     m.def(
         "select",

@@ -2,6 +2,7 @@
 
 #include <drjit/python.h>
 #include <drjit/autodiff.h>
+#include <nanobind/tensor.h>
 #include "docstr.h"
 
 namespace nb = nanobind;
@@ -77,6 +78,10 @@ extern nb::object gather(nb::type_object dtype,
                          nb::handle_of<dr::ArrayBase> source,
                          nb::object index,
                          nb::object active);
+
+extern nb::object ravel(nb::handle_of<dr::ArrayBase> h, char order,
+                        std::vector<size_t> *shape_out = nullptr,
+                        std::vector<int64_t> *strides_out = nullptr);
 
 extern nb::object reinterpret_array_t(nb::handle h, VarType vt);
 

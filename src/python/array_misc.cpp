@@ -213,7 +213,8 @@ nb::object empty_alt(nb::type_object dtype, size_t size) {
     return empty(dtype, shape);
 }
 
-nb::object arange(nb::handle dtype, Py_ssize_t start, Py_ssize_t end, Py_ssize_t step) {
+nb::object arange(nb::handle dtype, Py_ssize_t start, Py_ssize_t end,
+                  Py_ssize_t step) {
     if (is_drjit_type(dtype)) {
         const supp &s = nb::type_supplement<supp>(dtype);
 
@@ -479,16 +480,26 @@ static void ravel_recursive(nb::handle result, nb::handle value,
         for (Py_ssize_t i = 0; i < shape[depth]; ++i) {
             ravel_recursive(result, value[i], index_dtype, shape, strides,
                             offset, depth + 1, stop_depth);
-            offset += strides[depth] * i;
+            offset += strides[depth];
         }
     }
 }
 
-nb::object ravel(nb::handle_of<dr::ArrayBase> h) {
+nb::object ravel(nb::handle_of<dr::ArrayBase> h, char order,
+                 std::vector<size_t> *shape_out,
+                 std::vector<int64_t> *strides_out) {
     const supp &s = nb::type_supplement<supp>(h.type());
 
-    if (s.meta.is_tensor)
+    if (s.meta.is_tensor) {
+        if (order != 'C')
+            throw std::runtime_error("drjit.ravel(): tensors only support "
+                                     "C-style ordering for now.");
+
         return nb::steal(s.op_tensor_array(h.ptr()));
+    }
+
+    if (s.meta.ndim == 1 && s.meta.shape[0] == 0xFF)
+        return borrow(h);
 
     nb::object shape_tuple = shape(h);
     if (shape_tuple.is_none())
@@ -497,12 +508,24 @@ nb::object ravel(nb::handle_of<dr::ArrayBase> h) {
     Py_ssize_t shape[4] { }, strides[4] { }, stride = 1;
 
     size_t ndim = nb::len(shape_tuple);
-    for (size_t i = ndim - 1; ; --i) {
+    for (size_t i = 0; i < ndim; ++i)
         shape[i] = nb::cast<Py_ssize_t>(shape_tuple[i]);
-        strides[i] = stride;
-        stride *= shape[i];
-        if (i == 0)
-            break;
+
+    if (order == 'C') {
+        for (size_t i = ndim - 1; ; --i) {
+            strides[i] = stride;
+            stride *= shape[i];
+            if (i == 0)
+                break;
+        }
+    } else if (order == 'F') {
+        for (size_t i = 0; i < ndim; ++i) {
+            strides[i] = stride;
+            stride *= shape[i];
+        }
+    } else {
+        throw std::runtime_error(
+            "drjit.ravel(): order parameter must equal 'C' or 'F'.");
     }
 
     meta m { };
@@ -523,9 +546,24 @@ nb::object ravel(nb::handle_of<dr::ArrayBase> h) {
     }
 
     ravel_recursive(result, h, index_dtype, shape, strides, 0, 0,
-                    (int) ndim - 1);
+                    (int) ndim - index_dtype.is_valid());
+
+    if (shape_out && strides_out) {
+        shape_out->resize(ndim);
+        strides_out->resize(ndim);
+        for (size_t i = 0; i < ndim; ++i) {
+            shape_out->operator[](i) = (size_t) shape[i];
+            strides_out->operator[](i) = (int64_t) strides[i];
+        }
+    }
 
     return result;
+}
+
+void eval(nb::args args) {
+}
+
+void schedule(nb::args args) {
 }
 
 extern void bind_array_misc(nb::module_ m) {
@@ -659,5 +697,13 @@ extern void bind_array_misc(nb::module_ m) {
     m.def("scatter", &scatter, "target"_a, "value"_a, "index"_a,
           "active"_a = true, doc_scatter);
 
-    m.def("ravel", &ravel, doc_ravel);
+    m.def(
+        "ravel",
+        [](nb::handle_of<dr::ArrayBase> a, char order) {
+            return ravel(a, order);
+        },
+        "arg"_a, "order"_a = 'C', doc_ravel);
+
+    m.def("schedule", &schedule, doc_schedule);
+    m.def("eval", &eval, doc_eval);
 }
