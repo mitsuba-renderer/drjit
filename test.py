@@ -861,9 +861,32 @@ def test31_ravel(capsys):
         assert dr.all(dr.ravel(x, order='F') == l.Float([1, 3, 5, 2, 4, 6]))
 
         out, err = capsys.readouterr()
-        print(out)
         assert out.count('jit_var_new_scatter') == 6
         assert out.count('jit_poke') == 18
+    finally:
+        dr.set_log_level(0)
+
+
+def test32_schedule(capsys):
+    import drjit.llvm as l
+    try:
+        class MyStruct:
+            DRJIT_STRUCT = { 'a' : l.Float }
+            def __init__(self, a: l.Float):
+                self.a = a
+
+        dr.set_log_level(5)
+        assert dr.schedule() is False
+        assert dr.schedule(123, [], [123], (), (123,), {123: 456}) is False
+        x = l.Float([1, 2]) + 3
+        assert dr.schedule(x) is True
+
+        y = l.Array3f(x + 1, x + 2, x + 3)
+        assert dr.schedule({'hello': [(y, 4)]}) is True
+        z = MyStruct(x + 4)
+        dr.schedule(z)
+        out, err = capsys.readouterr()
+        assert out.count('jit_var_schedule') == 5
     finally:
         dr.set_log_level(0)
 

@@ -24,7 +24,8 @@ using array_binop = void (*) (const void *, const void *, void *);
 using array_ternop = void (*) (const void *, const void *, const void *, void *);
 using array_richcmp = void (*) (const void *, const void *, int, void *);
 using array_reduce_mask = void (*) (const void *, void *);
-using array_id = uint32_t (*) (const void *);
+using array_index = uint32_t (*) (const void *);
+using array_set_index = void (*) (void *, uint32_t);
 using array_full = void (*) (nanobind::handle, size_t, void *);
 using array_empty = void (*) (size_t, void *);
 using array_counter = void (*) (uint32_t size, void *);
@@ -81,7 +82,8 @@ struct array_supplement {
     array_richcmp op_richcmp;
     array_ternop op_fma;
     array_ternop op_select;
-    array_id op_index, op_index_ad;
+    array_index op_index, op_index_ad;
+    array_set_index op_set_index;
     array_ternop op_gather;
     array_ternop op_scatter;
 
@@ -580,8 +582,10 @@ template <typename T> nanobind::class_<T> bind_array(const char *name = nullptr)
         };
     }
 
-    if constexpr (T::IsJIT && T::Depth == 1)
+    if constexpr (T::IsJIT && T::Depth == 1) {
         s.op_index = [](const void *a) { return ((const T *) a)->index(); };
+        s.op_set_index = [](void *a, uint32_t index) { *(((T *) a)->index_ptr()) = index; };
+    }
 
     if constexpr (T::IsDiff && T::Depth == 1 && T::IsFloat)
         s.op_index_ad = [](const void *a) { return ((const T *) a)->index_ad(); };

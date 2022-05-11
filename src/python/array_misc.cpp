@@ -272,8 +272,6 @@ nb::object linspace(nb::handle dtype, double start, double end, size_t size, boo
         if (counter_supp.op_counter) {
             if (size == 0)
                 return dtype();
-            else if (size < 0)
-                nb::detail::raise("drjit.linspace(): size cannot be negative!");
 
             double step = (end - start) / (size - ((endpoint && size > 0) ? 1 : 0));
 
@@ -560,10 +558,57 @@ nb::object ravel(nb::handle_of<dr::ArrayBase> h, char order,
     return result;
 }
 
-void eval(nb::args args) {
+bool schedule(nb::handle h) {
+    if (is_drjit_array(h)) {
+        const supp &s = nb::type_supplement<supp>(h.type());
+        if (!s.meta.is_cuda && !s.meta.is_llvm)
+            return false;
+
+        if (s.meta.ndim == 1)
+            return jit_var_schedule(s.op_index(nb::inst_ptr<void>(h)));
+    }
+
+
+    if (nb::isinstance<nb::sequence>(h)) {
+        bool result = false;
+        for (nb::handle h2 : h)
+            result |= schedule(h2);
+        return result;
+    } else if (nb::isinstance<nb::mapping>(h)) {
+        return schedule(nb::borrow<nb::mapping>(h).values());
+    }
+
+    nb::object dstruct = nb::getattr(h.type(), "DRJIT_STRUCT", nb::handle());
+    if (dstruct.is_valid() && nb::isinstance<nb::dict>(dstruct)) {
+        nb::dict dstruct_dict = nb::borrow<nb::dict>(dstruct);
+        bool result = false;
+        for (auto [k, v] : dstruct_dict)
+            result |= schedule(nb::getattr(h, k));
+        return result;
+    }
+
+    return false;
 }
 
-void schedule(nb::args args) {
+bool eval(nb::handle h) {
+    bool rv = schedule(h);
+    if (rv)
+        jit_eval();
+    return rv;
+}
+
+static bool eval(nb::args args) {
+    bool rv = schedule(args);
+    if (rv || nb::len(args) == 0)
+        jit_eval();
+    return rv;
+}
+
+static bool schedule(nb::args args) {
+    bool rv = false;
+    for (nb::handle h : args)
+        rv |= schedule(h);
+    return rv;
 }
 
 extern void bind_array_misc(nb::module_ m) {
@@ -704,6 +749,6 @@ extern void bind_array_misc(nb::module_ m) {
         },
         "arg"_a, "order"_a = 'C', doc_ravel);
 
-    m.def("schedule", &schedule, doc_schedule);
-    m.def("eval", &eval, doc_eval);
+    m.def("schedule", nb::overload_cast<nb::args>(schedule), doc_schedule);
+    m.def("eval", nb::overload_cast<nb::args>(eval), doc_eval);
 }

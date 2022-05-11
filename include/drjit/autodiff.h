@@ -1520,10 +1520,12 @@ struct DiffArray : ArrayBaseT<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>
     }
 
     static DiffArray counter(size_t size) {
-        if constexpr (is_dynamic_v<Type>)
+        if constexpr (is_dynamic_v<Type>) {
             return create(0, Type::counter(size));
-        else
+        } else {
+            DRJIT_MARK_USED(size);
             return 0;
+        }
     }
 
     static DiffArray zero_(size_t size) {

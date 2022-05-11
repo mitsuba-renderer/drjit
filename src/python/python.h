@@ -3,6 +3,7 @@
 #include <drjit/python.h>
 #include <drjit/autodiff.h>
 #include <nanobind/tensor.h>
+#include <vector>
 #include "docstr.h"
 
 namespace nb = nanobind;

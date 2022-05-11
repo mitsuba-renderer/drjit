@@ -1,5 +1,4 @@
 #include "python.h"
-#include <vector>
 
 /// Holds metadata about slicing component
 struct Component {

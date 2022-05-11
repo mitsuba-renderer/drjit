@@ -1606,6 +1606,10 @@ Args:
       :ref:`custom data structures <custom-struct>`, sequences, or mappings.
       The function will recursively traverse data structures to discover all
       Dr.Jit arrays.
+
+Returns:
+    bool: ``True`` if a variable was scheduled, ``False`` if the operation did
+    not do anything.
 )";
 
 static const char *doc_eval = R"(
@@ -1648,7 +1652,37 @@ Args:
       :ref:`custom data structures <custom-struct>`, sequences, or mappings.
       The function will recursively traverse data structures to discover all
       Dr.Jit arrays.
+
+Returns:
+    bool: ``True`` if a variable was evaluated, ``False`` if the operation did
+    not do anything.
 )";
+
+static const char *doc_dlpack_device = R"(
+Returns a tuple containing the DLPack device type and device ID associated with
+the given array)";
+
+static const char *doc_dlpack = R"(
+Returns a DLPack capsule representing the data in this array.
+
+This operation may potentially perform a copy. For example, nested arrays like
+:py:class:`drjit.llvm.Array3f` or :py:class:`drjit.cuda.Matrix4f` need to be
+rearranged into a contiguous memory representation before they can be exposed.
+
+In other case, e.g. for :py:class:`drjit.llvm.Float`,
+:py:class:`drjit.scalar.Array3f`, or :py:class:`drjit.scalar.ArrayXf`, the data
+is already contiguous and a zero-copy approach is used instead.)";
+
+static const char *doc_array = R"(
+Returns a NumPy array representing the data in this array.
+
+This operation may potentially perform a copy. For example, nested arrays like
+:py:class:`drjit.llvm.Array3f` or :py:class:`drjit.cuda.Matrix4f` need to be
+rearranged into a contiguous memory representation before they can be wrapped.
+
+In other case, e.g. for :py:class:`drjit.llvm.Float`,
+:py:class:`drjit.scalar.Array3f`, or :py:class:`drjit.scalar.ArrayXf`, the data
+is already contiguous and a zero-copy approach is used instead.)";
 
 #if defined(__GNUC__)
 #  pragma GCC diagnostic pop

@@ -466,6 +466,9 @@ Array base class
     .. automethod:: __gt__
     .. automethod:: __ne__
     .. automethod:: __eq__
+    .. automethod:: __dlpack__
+    .. automethod:: __dlpack_device__
+    .. automethod:: __array__
 
 
 Concrete array classes
