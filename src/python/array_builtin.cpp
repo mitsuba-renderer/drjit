@@ -798,15 +798,15 @@ nb::tensor<Ts...> dlpack(nb::handle_of<dr::ArrayBase> h) {
 
         const supp &s2 = nb::type_supplement<supp>(raveled.type());
         uint32_t index = s2.op_index(nb::inst_ptr<void>(raveled));
-        bool sync_thread = s2.meta.is_llvm;
 
+        bool is_cuda = s.meta.is_cuda;
         if constexpr (ForceCPU) {
-            if (s.meta.is_cuda) {
+            if (is_cuda) {
                 nb::object tmp = raveled.type()();
                 index = jit_var_migrate(index, AllocType::Host);
                 s2.op_set_index(nb::inst_ptr<void>(tmp), index);
                 raveled = std::move(tmp);
-                sync_thread = true;
+                is_cuda = false;
             }
         }
 
@@ -831,7 +831,7 @@ nb::tensor<Ts...> dlpack(nb::handle_of<dr::ArrayBase> h) {
         }
 
         void *ptr = jit_var_ptr(index);
-        if (sync_thread)
+        if (!is_cuda)
             jit_sync_thread();
 
         return {
@@ -841,9 +841,9 @@ nb::tensor<Ts...> dlpack(nb::handle_of<dr::ArrayBase> h) {
             raveled,
             strides.data(),
             dtype,
-            s.meta.is_cuda ? nb::device::cuda::value
-                           : nb::device::cpu::value,
-            s.meta.is_cuda ? jit_var_device(index) : 0
+            is_cuda ? nb::device::cuda::value
+                    : nb::device::cpu::value,
+            is_cuda ? jit_var_device(index) : 0
         };
     } else {
         return { };
