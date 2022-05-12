@@ -789,50 +789,69 @@ static int mp_ass_subscript(PyObject *self, PyObject *key, PyObject *value) {
 template <bool ForceCPU, typename... Ts>
 nb::tensor<Ts...> dlpack(nb::handle_of<dr::ArrayBase> h) {
     const supp &s = nb::type_supplement<supp>(h.type());
+    bool is_dynamic = false;
 
-    if (s.meta.is_cuda || s.meta.is_llvm) {
-        std::vector<size_t> shape;
-        std::vector<int64_t> strides;
+    if (s.meta.is_tensor) {
+        is_dynamic = true;
+    } else {
+        for (int i = 0; i < s.meta.ndim; ++i)
+            is_dynamic |= s.meta.shape[i] == 0xFF;
+    }
 
-        nb::object raveled = ravel(h, 'F', &shape, &strides);
+    nb::dlpack::dtype dtype;
+    switch ((VarType) s.meta.type) {
+        case VarType::Bool:
+        case VarType::UInt8:   dtype = nb::dtype<uint8_t>(); break;
+        case VarType::Int8:    dtype = nb::dtype<int8_t>(); break;
+        case VarType::UInt16:  dtype = nb::dtype<uint16_t>(); break;
+        case VarType::Int16:   dtype = nb::dtype<int16_t>(); break;
+        case VarType::UInt32:  dtype = nb::dtype<uint32_t>(); break;
+        case VarType::Int32:   dtype = nb::dtype<int32_t>(); break;
+        case VarType::UInt64:  dtype = nb::dtype<uint64_t>(); break;
+        case VarType::Int64:   dtype = nb::dtype<int64_t>(); break;
+        case VarType::Float32: dtype = nb::dtype<float>(); break;
+        case VarType::Float64: dtype = nb::dtype<double>(); break;
+        default:
+            throw std::runtime_error(
+                "__dlpack__(): dtype is not understood by the "
+                "DLPack protocol");
+    }
+
+    std::vector<size_t> shape;
+    std::vector<int64_t> strides;
+    int32_t device_id = 0, device_type = nb::device::cpu::value;
+
+    void *ptr;
+    if (is_dynamic) {
+        nb::object raveled = ravel(h, 'C', &shape, &strides);
 
         const supp &s2 = nb::type_supplement<supp>(raveled.type());
-        uint32_t index = s2.op_index(nb::inst_ptr<void>(raveled));
 
-        bool is_cuda = s.meta.is_cuda;
-        if constexpr (ForceCPU) {
-            if (is_cuda) {
-                nb::object tmp = raveled.type()();
-                index = jit_var_migrate(index, AllocType::Host);
-                s2.op_set_index(nb::inst_ptr<void>(tmp), index);
-                raveled = std::move(tmp);
-                is_cuda = false;
+        if (s2.op_index) {
+            uint32_t index = s2.op_index(nb::inst_ptr<void>(raveled));
+
+            bool is_cuda = s.meta.is_cuda;
+            if constexpr (ForceCPU) {
+                if (is_cuda) {
+                    nb::object tmp = raveled.type()();
+                    index = jit_var_migrate(index, AllocType::Host);
+                    s2.op_set_index(nb::inst_ptr<void>(tmp), index);
+                    raveled = std::move(tmp);
+                    is_cuda = false;
+                }
             }
+
+            jit_var_eval(index);
+            ptr = jit_var_ptr(index);
+            if (is_cuda) {
+                device_type = nb::device::cuda::value;
+                device_id = jit_var_device(index);
+            } else {
+                jit_sync_thread();
+            }
+        } else {
+            ptr = s2.ptr(nb::inst_ptr<void>(h));
         }
-
-        nb::dlpack::dtype dtype;
-
-        switch ((VarType) s2.meta.type) {
-            case VarType::Bool:
-            case VarType::UInt8:   dtype = nb::dtype<uint8_t>(); break;
-            case VarType::Int8:    dtype = nb::dtype<int8_t>(); break;
-            case VarType::UInt16:  dtype = nb::dtype<uint16_t>(); break;
-            case VarType::Int16:   dtype = nb::dtype<int16_t>(); break;
-            case VarType::UInt32:  dtype = nb::dtype<uint32_t>(); break;
-            case VarType::Int32:   dtype = nb::dtype<int32_t>(); break;
-            case VarType::UInt64:  dtype = nb::dtype<uint64_t>(); break;
-            case VarType::Int64:   dtype = nb::dtype<int64_t>(); break;
-            case VarType::Float32: dtype = nb::dtype<float>(); break;
-            case VarType::Float64: dtype = nb::dtype<double>(); break;
-            default:
-                throw std::runtime_error(
-                    "__dlpack__(): dtype is not understood by the "
-                    "DLPack protocol");
-        }
-
-        void *ptr = jit_var_ptr(index);
-        if (!is_cuda)
-            jit_sync_thread();
 
         return {
             ptr,
@@ -841,12 +860,29 @@ nb::tensor<Ts...> dlpack(nb::handle_of<dr::ArrayBase> h) {
             raveled,
             strides.data(),
             dtype,
-            is_cuda ? nb::device::cuda::value
-                    : nb::device::cpu::value,
-            is_cuda ? jit_var_device(index) : 0
+            device_type,
+            device_id
         };
     } else {
-        return { };
+        int64_t stride = 1;
+        for (int i = s.meta.ndim - 1; ; --i) {
+            shape.push_back(s.meta.shape[i]);
+            strides.push_back(stride);
+            stride *= s.meta.shape[i];
+            if (i == 0)
+                break;
+        }
+
+        return {
+            nb::inst_ptr<void>(h),
+            s.meta.ndim,
+            shape.data(),
+            nb::borrow(h),
+            strides.data(),
+            dtype,
+            device_type,
+            device_id
+        };
     }
 }
 

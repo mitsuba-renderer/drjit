@@ -56,6 +56,7 @@ struct array_supplement {
 
     size_t (*len)(const void *) noexcept;
     void (*init)(void *, size_t);
+    void *(*ptr)(void *);
     dr_vector<size_t> & (*op_tensor_shape)(void *) noexcept;
     PyObject *(*op_tensor_array)(PyObject *) noexcept;
     array_cast op_cast;
@@ -273,6 +274,9 @@ template <typename T> nanobind::class_<T> bind_array(const char *name = nullptr)
         s.init = [](void *a, size_t size) {
             ((T *) a)->init_(size);
         };
+
+        if constexpr (T::Depth == 1 && !T::IsJIT)
+            s.ptr = [](void *a) -> void * { return ((T *) a)->data(); };
     }
 
     if constexpr (T::Depth == 1 && T::Size == Dynamic) {

@@ -496,8 +496,13 @@ nb::object ravel(nb::handle_of<dr::ArrayBase> h, char order,
         return nb::steal(s.op_tensor_array(h.ptr()));
     }
 
-    if (s.meta.ndim == 1 && s.meta.shape[0] == 0xFF)
+    if (s.meta.ndim == 1 && s.meta.shape[0] == 0xFF) {
+        if (shape_out && strides_out) {
+            shape_out->push_back(len(h));
+            strides_out->push_back(1);
+        }
         return borrow(h);
+    }
 
     nb::object shape_tuple = shape(h);
     if (shape_tuple.is_none())

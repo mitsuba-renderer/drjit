@@ -892,6 +892,7 @@ def test32_schedule(capsys):
 
 
 def test32_dlpack():
+    import drjit.scalar as s
     import drjit.llvm as l
     from_dlpack = None
     try:
@@ -906,8 +907,13 @@ def test32_dlpack():
 
     x = l.Array3f([1, 2], [3, 4], [5, 6])
     assert x.__dlpack_device__() == (1, 0)
-    print(from_dlpack(x))
     assert np.all(from_dlpack(x) == np.array([[1, 2], [3, 4], [5, 6]]))
+    assert np.all(x.__array__() == np.array([[1, 2], [3, 4], [5, 6]]))
+
+    x = s.ArrayXf(1, 2, 3, 4)
+    assert np.all(x.__array__() == np.array([1, 2, 3, 4]))
+    x = s.Array3f(1, 2, 3)
+    assert np.all(x.__array__() == np.array([1, 2, 3]))
 
 
 #@pytest.mark.parametrize('name', ['sqrt', 'cbrt', 'sin', 'cos', 'tan', 'asin',

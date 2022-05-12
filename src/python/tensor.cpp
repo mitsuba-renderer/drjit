@@ -159,8 +159,8 @@ std::pair<nb::tuple, nb::object> slice_index(const nb::type_object &dtype,
                 index_val = fma(index_rem, dtype(uint32_t(c.step * size_out)),
                                 dtype(uint32_t(c.start * size_out)));
             else
-                index_val =
-                    gather(dtype, c.object, index_rem) * dtype(uint32_t(size_out));
+                index_val = gather(dtype, c.object, index_rem) *
+                            dtype(uint32_t(size_out));
 
             index_out += index_val;
 
