@@ -369,14 +369,14 @@ static PyObject *nb_math_ternop(const char *name, size_t ops_offset,
 #define DR_MATH_UNOP(name)                                                     \
     m.def(                                                                     \
         #name, [](double d) { return dr::name(d); }, nb::raw_doc(doc_##name)); \
-    m.def(#name, [](nb::handle_of<dr::ArrayBase> h) {                          \
+    m.def(#name, [](nb::handle_t<dr::ArrayBase> h) {                           \
         return nb_math_unop(#name, offsetof(supp, op_##name), h);              \
     });
 
 #define DR_MATH_UNOP_2(name)                                                   \
     m.def(                                                                     \
         #name, [](double d) { return dr::name(d); }, nb::raw_doc(doc_##name)); \
-    m.def(#name, [](nb::handle_of<dr::ArrayBase> h) {                          \
+    m.def(#name, [](nb::handle_t<dr::ArrayBase> h) {                           \
         return nb::steal(                                                      \
             nb_math_unop_2(#name, offsetof(supp, op_##name), h.ptr()));        \
     });
@@ -439,7 +439,7 @@ void bind_array_math(nb::module_ m) {
 
     m.def("abs", [](double d) { return dr::abs(d); }, nb::raw_doc(doc_abs));
     m.def("abs", [](Py_ssize_t i) { return dr::abs(i); });
-    m.def("abs", [](nb::handle_of<dr::ArrayBase> h) {
+    m.def("abs", [](nb::handle_t<dr::ArrayBase> h) {
         return nb_math_unop("abs", offsetof(supp, op_absolute), h);
     });
 

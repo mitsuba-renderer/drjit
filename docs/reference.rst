@@ -22,6 +22,7 @@ These operations are *horizontal* in the sense that [..]
 .. autofunction:: gather
 .. autofunction:: scatter
 .. autofunction:: ravel
+.. autofunction:: unravel
 
 Mask operations
 ---------------

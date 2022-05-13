@@ -57,7 +57,7 @@ bool shape_impl(nb::handle h, int i, Py_ssize_t *shape) noexcept {
     return true;
 }
 
-nb::object shape(nb::handle_of<dr::ArrayBase> h) noexcept {
+nb::object shape(nb::handle_t<dr::ArrayBase> h) noexcept {
     const supp &s = nb::type_supplement<supp>(h.type());
     PyObject *result;
 

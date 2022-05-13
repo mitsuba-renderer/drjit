@@ -31,7 +31,7 @@ nb::detail::tuple<lenfunc, ssizeargfunc, ssizeobjargproc>
 get_sq(nb::handle tp, const char *name, void *check);
 
 extern Py_ssize_t len(PyObject *o) noexcept;
-extern nb::object shape(nb::handle_of<dr::ArrayBase> h) noexcept;
+extern nb::object shape(nb::handle_t<dr::ArrayBase> h) noexcept;
 
 
 /**
@@ -76,11 +76,11 @@ slice_index(const nb::type_object &dtype, const nb::tuple &shape,
             const nb::tuple &indices);
 
 extern nb::object gather(nb::type_object dtype,
-                         nb::handle_of<dr::ArrayBase> source,
+                         nb::handle_t<dr::ArrayBase> source,
                          nb::object index,
                          nb::object active);
 
-extern nb::object ravel(nb::handle_of<dr::ArrayBase> h, char order,
+extern nb::object ravel(nb::handle_t<dr::ArrayBase> h, char order,
                         std::vector<size_t> *shape_out = nullptr,
                         std::vector<int64_t> *strides_out = nullptr);
 

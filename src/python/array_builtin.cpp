@@ -631,7 +631,7 @@ static PyObject *tp_iter(PyObject *o) {
     return (PyObject *) iter;
 }
 
-template <int Index> nb::object ab_getter(nb::handle_of<dr::ArrayBase> h) {
+template <int Index> nb::object ab_getter(nb::handle_t<dr::ArrayBase> h) {
     PyTypeObject *tp = (PyTypeObject *) h.type().ptr();
     const supp &s = nb::type_supplement<supp>(tp);
 
@@ -645,7 +645,7 @@ template <int Index> nb::object ab_getter(nb::handle_of<dr::ArrayBase> h) {
     return nb::steal(tp->tp_as_sequence->sq_item(h.ptr(), (Py_ssize_t) Index));
 }
 
-template <int Index> void ab_setter(nb::handle_of<dr::ArrayBase> h, nb::handle value) {
+template <int Index> void ab_setter(nb::handle_t<dr::ArrayBase> h, nb::handle value) {
     PyTypeObject *tp = (PyTypeObject *) h.type().ptr();
     const supp &s = nb::type_supplement<supp>(tp);
 
@@ -685,7 +685,7 @@ static PyObject *mp_subscript(PyObject *self, PyObject *key) {
 
             result = nb::handle(self_tp)(
                 gather(nb::borrow<nb::type_object>(source.type()),
-                       nb::handle_of<dr::ArrayBase>(source.ptr()),
+                       nb::handle_t<dr::ArrayBase>(source.ptr()),
                        index, nb::borrow(Py_True)));
         } catch (const std::exception &e) {
             PyErr_Format(PyExc_RuntimeError, "%s.__getitem__(): %s!",
@@ -787,7 +787,7 @@ static int mp_ass_subscript(PyObject *self, PyObject *key, PyObject *value) {
 }
 
 template <bool ForceCPU, typename... Ts>
-nb::tensor<Ts...> dlpack(nb::handle_of<dr::ArrayBase> h) {
+nb::tensor<Ts...> dlpack(nb::handle_t<dr::ArrayBase> h) {
     const supp &s = nb::type_supplement<supp>(h.type());
     bool is_dynamic = false;
 
@@ -934,7 +934,7 @@ void bind_array_builtin(nb::module_ m) {
     ab.def_property_readonly("shape", shape, nb::raw_doc(doc_ArrayBase_shape));
     ab.def_property_readonly(
         "array",
-        [](nb::handle_of<dr::ArrayBase> h) -> nb::object {
+        [](nb::handle_t<dr::ArrayBase> h) -> nb::object {
             const supp &s = nb::type_supplement<supp>(h.type());
             if (s.meta.is_tensor)
                 return nb::steal(s.op_tensor_array(h.ptr()));
@@ -950,7 +950,7 @@ void bind_array_builtin(nb::module_ m) {
 
     ab.def_property_readonly(
         "index",
-        [](nb::handle_of<dr::ArrayBase> h) -> uint32_t {
+        [](nb::handle_t<dr::ArrayBase> h) -> uint32_t {
             const supp &s = nb::type_supplement<supp>(h.type());
             if (!s.op_index)
                 return 0;
@@ -960,7 +960,7 @@ void bind_array_builtin(nb::module_ m) {
 
     ab.def_property_readonly(
         "index_ad",
-        [](nb::handle_of<dr::ArrayBase> h) -> uint32_t {
+        [](nb::handle_t<dr::ArrayBase> h) -> uint32_t {
             PyTypeObject *tp = (PyTypeObject *) h.type().ptr();
             auto &s = nb::type_supplement<supp>(tp);
             if (!s.op_index_ad)
@@ -970,7 +970,7 @@ void bind_array_builtin(nb::module_ m) {
         nb::raw_doc(doc_ArrayBase_index_ad));
 
     ab.def("__dlpack_device__",
-        [](nb::handle_of<dr::ArrayBase> h) -> std::pair<int, int> {
+        [](nb::handle_t<dr::ArrayBase> h) -> std::pair<int, int> {
             const supp &s = nb::type_supplement<supp>(h.type());
             if (s.meta.is_cuda) {
                 uint32_t device;

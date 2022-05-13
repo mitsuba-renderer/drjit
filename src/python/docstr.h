@@ -901,83 +901,158 @@ Returns:
     float | drjit.ArrayBase: Result of the FMA operation)";
 
 static const char *doc_zeros = R"(
-Return a zero-valued Dr.Jit array of the desired shape.
+Return a zero-initialized instance of the desired type and shape
 
-When **dtype** refers to a tensorial type (e.g.,
-:py:class:`drjit.cuda.TensorXf`), **shape** must be a tuple that determines the
-tensor rank and shape.
+This function can create zero-initialized instances of various types. In
+particular, **dtype** can be:
 
-For simpler vectorized types (e.g., :py:class:`drjit.cuda.Array2f`), it can be
-an integer that specifies the size along the last (dynamic) dimension.
+- A Dr.Jit array type like :py:class:`drjit.cuda.Array2f`. When **shape**
+  specifies a sequence, it must be compatible with static dimensions of the
+  **dtype**. For example, ``dr.zeros(dr.cuda.Array2f, shape=(3, 100))`` fails,
+  since the leading dimension is incompatible with
+  :py:class:`drjit.cuda.Array2f`. When **shape** is an integer, it specifies
+  the size of the last (dynamic) dimension, if available.
 
-When a tuple is specified, its must be compatible with static dimensions of the
-**dtype**. For example, ``dr.zeros(dr.cuda.Array2f, shape=(3, 100))`` fails,
-since the leading dimension is incompatible with
-:py:class:`drjit.cuda.Array2f`.
+- A tensorial type like :py:class:`drjit.scalar.TensorXf`. When **shape**
+  specifies a sequence (list/tuple/..), it determines the tensor rank and
+  shape. When **shape** is an integer, the function creates a rank-1 tensor of
+  the specified size.
 
-When **dtype** refers to a mask array, the resulting array entries are
-initialized to ``False``.
+- A :ref:`custom data structure <custom-struct>`. In this case,
+  :py:func:`drjit.zero()` will invoke itself recursively to zero-initialize
+  each field of the data structure.
 
+- A scalar Python type like ``int``, ``float``, or ``bool``. The **shape**
+  parameter is ignored in this case.
+
+Note that when **dtype** refers to a scalar mask or a mask array, it will be
+initialized to ``False`` as opposed to zero.
 
 Args:
-    dtype (type): Desired Dr.Jit array type, Python scalar type, or :ref:`custom data structure <custom-struct>`.
-    shape (tuple | int): Shape of the desired array
+    dtype (type): Desired Dr.Jit array type, Python scalar type, or
+      :ref:`custom data structure <custom-struct>`.
+    shape (Sequence[int] | int): Shape of the desired array
 
 Returns:
     object: A zero-initialized instance of type **dtype**.
 )";
 
 static const char *doc_ones = R"(
-Return a Dr.Jit array of the desired shape initialized with the value 1.
+Return an instance of the desired type and shape filled with ones
 
-When **dtype** refers to a tensorial type (e.g.,
-:py:class:`drjit.cuda.TensorXf`), **shape** must be a tuple that determines the
-tensor rank and shape.
+This function can create one-initialized instances of various types. In
+particular, **dtype** can be:
 
-For simpler vectorized types (e.g., :py:class:`drjit.cuda.Array2f`), it can be
-an integer that specifies the size along the last (dynamic) dimension.
+- A Dr.Jit array type like :py:class:`drjit.cuda.Array2f`. When **shape**
+  specifies a sequence, it must be compatible with static dimensions of the
+  **dtype**. For example, ``dr.ones(dr.cuda.Array2f, shape=(3, 100))`` fails,
+  since the leading dimension is incompatible with
+  :py:class:`drjit.cuda.Array2f`. When **shape** is an integer, it specifies
+  the size of the last (dynamic) dimension, if available.
 
-When a tuple is specified, its must be compatible with static dimensions of the
-**dtype**. For example, ``dr.ones(dr.cuda.Array2f, shape=(3, 100))`` fails,
-since the leading dimension is incompatible with
-:py:class:`drjit.cuda.Array2f`.
+- A tensorial type like :py:class:`drjit.scalar.TensorXf`. When **shape**
+  specifies a sequence (list/tuple/..), it determines the tensor rank and
+  shape. When **shape** is an integer, the function creates a rank-1 tensor of
+  the specified size.
 
-When **dtype** refers to a mask array, the resulting array entries are
-initialized to ``True``.
+- A :ref:`custom data structure <custom-struct>`. In this case,
+  :py:func:`drjit.ones()` will invoke itself recursively to initialize
+  each field of the data structure.
+
+- A scalar Python type like ``int``, ``float``, or ``bool``. The **shape**
+  parameter is ignored in this case.
+
+Note that when **dtype** refers to a scalar mask or a mask array, it will be
+initialized to ``True`` as opposed to one.
 
 Args:
-    dtype (type): Desired Dr.Jit array type, Python scalar type, or :ref:`custom data structure <custom-struct>`.
-    shape (tuple | int): Shape of the desired array
+    dtype (type): Desired Dr.Jit array type, Python scalar type, or
+      :ref:`custom data structure <custom-struct>`.
+    shape (Sequence[int] | int): Shape of the desired array
 
 Returns:
-    object: A zero-initialized instance of type **dtype**.
+    object: A instance of type **dtype** filled with ones.
 )";
 
 
 static const char *doc_full = R"(
-Return a constant-valued Dr.Jit array of the desired shape.
+Return an constant-valued instance of the desired type and shape
 
-When **dtype** refers to a tensorial type (e.g.,
-:py:class:`drjit.cuda.TensorXf`), **shape** must be a tuple that determines the
-tensor rank and shape.
+This function can create constant-valued instances of various types. In
+particular, **dtype** can be:
 
-For simpler vectorized types (e.g., :py:class:`drjit.cuda.Array2f`), it can be
-an integer that specifies the size along the last (dynamic) dimension.
+- A Dr.Jit array type like :py:class:`drjit.cuda.Array2f`. When **shape**
+  specifies a sequence, it must be compatible with static dimensions of the
+  **dtype**. For example, ``dr.full(dr.cuda.Array2f, value=1.0, shape=(3,
+  100))`` fails, since the leading dimension is incompatible with
+  :py:class:`drjit.cuda.Array2f`. When **shape** is an integer, it specifies
+  the size of the last (dynamic) dimension, if available.
 
-When a tuple is specified, its must be compatible with static dimensions of the
-**dtype**. For example, ``dr.full(dr.cuda.Array2f, value=123.0, shape=(3, 100))`` fails,
-since the leading dimension is incompatible with
-:py:class:`drjit.cuda.Array2f`.
+- A tensorial type like :py:class:`drjit.scalar.TensorXf`. When **shape**
+  specifies a sequence (list/tuple/..), it determines the tensor rank and
+  shape. When **shape** is an integer, the function creates a rank-1 tensor of
+  the specified size.
+
+- A :ref:`custom data structure <custom-struct>`. In this case,
+  :py:func:`drjit.full()` will invoke itself recursively to initialize
+  each field of the data structure.
+
+- A scalar Python type like ``int``, ``float``, or ``bool``. The **shape**
+  parameter is ignored in this case.
 
 Args:
-    dtype (type): Desired Dr.Jit array type, Python scalar type, or :ref:`custom data structure <custom-struct>`.
-    value (object): An instance of the underlying scalar type (``float``/``int``/``bool``, etc.)
-                    that will be used to initialize the array contents.
-    shape (tuple | int): Shape of the desired array
+    dtype (type): Desired Dr.Jit array type, Python scalar type, or
+      :ref:`custom data structure <custom-struct>`.
+    value (object): An instance of the underlying scalar type
+      (``float``/``int``/``bool``, etc.) that will be used to initialize the
+      array contents.
+    shape (Sequence[int] | int): Shape of the desired array
 
 Returns:
-    object: A constant-initialized instance of type **dtype**.
+    object: A instance of type **dtype** filled with **value**
 )";
+
+static const char *doc_empty = R"(
+Return an uninitialized Dr.Jit array of the desired type and shape.
+
+This function can create uninitialized buffers of various types. It is
+essentially a wrapper around CPU/GPU variants of ``malloc()`` and produces
+arrays filled with uninitialized/undefined data. It should only be used in
+combination with a subsequent call to an operation like
+:py:func:`drjit.scatter()` that overwrites the array contents with valid data.
+
+The **dtype** parameter can be used to request:
+
+- A Dr.Jit array type like :py:class:`drjit.cuda.Array2f`. When **shape**
+  specifies a sequence, it must be compatible with static dimensions of the
+  **dtype**. For example, ``dr.empty(dr.cuda.Array2f, shape=(3, 100))`` fails,
+  since the leading dimension is incompatible with
+  :py:class:`drjit.cuda.Array2f`. When **shape** is an integer, it specifies
+  the size of the last (dynamic) dimension, if available.
+
+- A tensorial type like :py:class:`drjit.scalar.TensorXf`. When **shape**
+  specifies a sequence (list/tuple/..), it determines the tensor rank and
+  shape. When **shape** is an integer, the function creates a rank-1 tensor of
+  the specified size.
+
+- A :ref:`custom data structure <custom-struct>`. In this case,
+  :py:func:`drjit.empty()` will invoke itself recursively to allocate memory
+  for each field of the data structure.
+
+- A scalar Python type like ``int``, ``float``, or ``bool``. The **shape**
+  parameter is ignored in this case, and the function returns a
+  zero-initialized result (there is little point in instantiating uninitialized
+  versions of scalar Python types).
+
+Args:
+    dtype (type): Desired Dr.Jit array type, Python scalar type, or
+      :ref:`custom data structure <custom-struct>`.
+    shape (Sequence[int] | int): Shape of the desired array
+
+Returns:
+    object: An instance of type **dtype** with arbitrary/undefined contents.
+)";
+
 
 static const char *doc_arange = R"(
 This function generates an integer sequence on the interval [**start**,
@@ -986,12 +1061,11 @@ specified.
 
 Args:
     dtype (type): Desired Dr.Jit array type. The **dtype** must refer to a
-                  dynamically sized 1D Dr.Jit array such as
-                  :py:class:`drjit.scalar.ArrayXu` or
-                  :py:class:`drjit.cuda.Float`.
+      dynamically sized 1D Dr.Jit array such as :py:class:`drjit.scalar.ArrayXu`
+      or :py:class:`drjit.cuda.Float`.
     start (int): Start of the interval. The default value is `0`.
-    stop/size (int): End of the interval (not included). The name of this parameter
-                     differs between the two provided overloads.
+    stop/size (int): End of the interval (not included). The name of this
+      parameter differs between the two provided overloads.
     step (int): Spacing between values. The default value is `1`.
 
 Returns:
@@ -1005,9 +1079,8 @@ This function generates an evenly spaced floating point sequence of size
 
 Args:
     dtype (type): Desired Dr.Jit array type. The **dtype** must refer to a
-                  dynamically sized 1D Dr.Jit floating point array, such as
-                  :py:class:`drjit.scalar.ArrayXf` or
-                  :py:class:`drjit.cuda.Float`.
+      dynamically sized 1D Dr.Jit floating point array, such as
+      :py:class:`drjit.scalar.ArrayXf` or :py:class:`drjit.cuda.Float`.
     start (float): Start of the interval.
     stop (float): End of the interval.
     num (int): Number of samples to generate.
@@ -1016,30 +1089,6 @@ Args:
 Returns:
     object: The computed sequence of type **dtype**.
 )";
-
-static const char *doc_empty = R"(
-Return a empty Dr.Jit array of the desired shape.
-
-When **dtype** refers to a tensorial type (e.g.,
-:py:class:`drjit.cuda.TensorXf`), **shape** must be a tuple that determines the
-tensor rank and shape.
-
-For simpler vectorized types (e.g., :py:class:`drjit.cuda.Array2f`), it can be
-an integer that specifies the size along the last (dynamic) dimension.
-
-When a tuple is specified, its must be compatible with static dimensions of the
-**dtype**. For example, ``dr.empty(dr.cuda.Array2f, shape=(3, 100))`` fails,
-since the leading dimension is incompatible with
-:py:class:`drjit.cuda.Array2f`.
-
-Args:
-    dtype (type): Desired Dr.Jit array type, Python scalar type, or :ref:`custom data structure <custom-struct>`.
-    shape (tuple | int): Shape of the desired array
-
-Returns:
-    object: An empty instance of type **dtype**.
-)";
-
 
 static const char *doc_shape = R"(
 shape(arg, /)
@@ -1522,21 +1571,84 @@ Args:
 static const char *doc_ravel = R"(
 Convert the input into a contiguous flat array
 
+This operation takes a Dr.Jit array, typically with some static and some
+dynamic dimensions (e.g., :py:class:`drjit.cuda.Array3f` with shape
+`3xN`), and converts it into a flattened 1D dynamically sized array (e.g.,
+:py:class:`drjit.cuda.Float`) using either a C or Fortran-style ordering
+convention.
+
+It can also convert Dr.Jit tensors into a flat representation, though only
+C-style ordering is supported in this case.
+
+For example,
+
+.. code-block::
+
+    x = dr.cuda.Array3f([1, 2], [3, 4], [5, 6])
+    y = dr.ravel(x, order=...)
+
+will produce
+
+- ``[1, 3, 5, 2, 4, 6]`` with ``order='F'`` (the default for Dr.Jit arrays),
+  which means that X/Y/Z components alternate.
+- ``[1, 2, 3, 4, 5, 6]`` with ``order='C'``, in which case all X coordinates
+  are written as a contiguous block followed by the Y- and then Z-coordinates.
+
 Args:
-    arg (drjit.ArrayBase): An arbitrary Dr.Jit array or tensor
+    array (drjit.ArrayBase): An arbitrary Dr.Jit array or tensor
 
-    order (str): A single character indicating the index order. ``'C'`` (the
-        default) specifies row-major/C-style ordering, in which case the last
-        index changes at the highest frequency. The other option ``'F'``
-        indicates column-major/Fortran-style ordering, in which case the 
-        first index changes at the highest frequency.
-
+    order (str): A single character indicating the index order. ``'F'``
+      indicates column-major/Fortran-style ordering, in which case the first
+      index changes at the highest frequency. The alternative ``'C'`` specifies
+      row-major/C-style ordering, in which case the last index changes at the
+      highest frequency. The default value ``'A'`` (automatic) will use F-style
+      ordering for arrays and C-style ordering for tensors.
 
 Returns:
     object: A dynamic 1D array containing the flattened representation of
-    **arg** with the desired ordering. The type of the return value depends on
-    the type of the input. When **arg** is already contiguous/flattened, this
-    function returns it without making a copy.
+    **array** with the desired ordering. The type of the return value depends
+    on the type of the input. When **array** is already contiguous/flattened,
+    this function returns it without making a copy.
+)";
+
+
+static const char *doc_unravel = R"(
+Load a sequence of Dr.Jit vectors/matrices/etc. from a contiguous flat array
+
+This operation implements the inverse of :py:func:`drjit.ravel()`. In contrast
+to :py:func:`drjit.ravel()`, it requires one additional parameter (**dtype**)
+specifying type of the return value. For example,
+
+.. code-block::
+
+    x = dr.cuda.Float([1, 2, 3, 4, 5, 6])
+    y = dr.unravel(dr.cuda.Array3f, x, order=...)
+
+will produce an array of two 3D vectors with different contents depending
+on the indexing convention:
+
+- ``[1, 2, 3]`` and ``[4, 5, 6]`` when unraveled with ``order='F'`` (the
+  default for Dr.Jit arrays), and
+- ``[1, 3, 5]`` and ``[2, 4, 6]`` when unraveled with ``order='C'``
+
+Args:
+    dtype (type): An arbitrary Dr.Jit array type
+
+    array (drjit.ArrayBase): A dynamically sized 1D Dr.Jit array instance
+       that is compatible with **dtype**. In other words, both must have the
+       same underlying scalar type and be located imported in the same package
+       (e.g., ``drjit.llvm.ad``).
+
+    order (str): A single character indicating the index order. ``'F'`` (the
+       default) indicates column-major/Fortran-style ordering, in which case
+       the first index changes at the highest frequency. The alternative
+       ``'C'`` specifies row-major/C-style ordering, in which case the last
+       index changes at the highest frequency.
+
+
+Returns:
+    object: An instance of type **dtype** containing the result of the unravel
+    operation.
 )";
 
 
@@ -1583,7 +1695,7 @@ common subexpressions, which is what :py:func:`drjit.schedule()` enables:
     # References the stored array, no kernel launch
     print(b)
 
-Note that :py:func:`drjit.eval()` would also have been a suitable alternative 
+Note that :py:func:`drjit.eval()` would also have been a suitable alternative
 in the above example; the main difference to :py:func:`drjit.schedule()` is
 that it does the evaluation immediately without deferring the kernel launch.
 

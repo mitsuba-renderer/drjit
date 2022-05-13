@@ -630,6 +630,7 @@ def test21_zero_or_full():
     assert type(dr.zeros(dtype=int, shape=(1,))) is int and dr.zeros(dtype=int, shape=(1,)) == 0
     assert type(dr.zeros(float)) is float and dr.zeros(float) == 0.0
     assert type(dr.zeros(float, shape=(1,))) is float and dr.zeros(float, shape=(1,)) == 0.0
+    assert type(dr.zeros(float, shape=(100,))) is float and dr.zeros(float, shape=(100,)) == 0.0
     with pytest.raises(TypeError) as ei:
         dr.zeros(str)
     assert "Unsupported dtype!" in str(ei.value)
@@ -637,11 +638,6 @@ def test21_zero_or_full():
     with pytest.raises(TypeError) as ei:
         dr.zeros(5)
     assert "incompatible function arguments" in str(ei.value)
-
-    with pytest.raises(RuntimeError) as ei:
-        dr.zeros(int, shape=(2,))
-    with pytest.raises(RuntimeError) as ei:
-        dr.zeros(int, shape=(1,1))
 
     assert type(dr.zeros(s.Array3f)) is s.Array3f and dr.all(dr.zeros(s.Array3f) == s.Array3f(0))
     assert type(dr.zeros(s.Array3f, shape=(3,))) is s.Array3f and dr.all(dr.zeros(s.Array3f, shape=(3,)) == s.Array3f(0))
@@ -852,13 +848,13 @@ def test31_ravel(capsys):
     try:
         dr.set_log_level(5)
 
-        assert dr.all(dr.ravel(s.Array3f(1, 2, 3)) == s.ArrayXf([1, 2, 3]))
+        assert dr.all(dr.ravel(s.Array3f(1, 2, 3), order='C') == s.ArrayXf([1, 2, 3]))
         assert dr.all(dr.ravel(s.Array3f(1, 2, 3), order='F') == s.ArrayXf([1, 2, 3]))
 
         x = l.Array3f([1, 2], [3, 4], [5, 6])
         assert dr.all(dr.ravel(x.x) is x.x)
-        assert dr.all(dr.ravel(x) == l.Float([1, 2, 3, 4, 5, 6]))
-        assert dr.all(dr.ravel(x, order='F') == l.Float([1, 3, 5, 2, 4, 6]))
+        assert dr.all(dr.ravel(x, order='C') == l.Float([1, 2, 3, 4, 5, 6]))
+        assert dr.all(dr.ravel(x) == l.Float([1, 3, 5, 2, 4, 6]))
 
         out, err = capsys.readouterr()
         assert out.count('jit_var_new_scatter') == 6
@@ -867,7 +863,29 @@ def test31_ravel(capsys):
         dr.set_log_level(0)
 
 
-def test32_schedule(capsys):
+def test32_unravel(capsys):
+    import drjit.scalar as s
+    import drjit.llvm as l
+
+    try:
+        dr.set_log_level(5)
+
+        assert dr.all(dr.unravel(s.Array3f, s.ArrayXf([1, 2, 3]), order='C') == s.Array3f(1, 2, 3))
+        assert dr.all(dr.unravel(s.Array3f, s.ArrayXf([1, 2, 3]), order='F') == s.Array3f(1, 2, 3))
+
+        x = l.Float([1, 2, 3, 4, 5, 6])
+        assert dr.all(dr.unravel(l.Float, x) is x)
+        assert dr.all_nested(dr.unravel(l.Array3f, x, order='C') == l.Array3f([1, 2], [3, 4], [5, 6]))
+        assert dr.all_nested(dr.unravel(l.Array3f, x) == l.Array3f([1, 4], [2, 5], [3, 6]))
+
+        out, err = capsys.readouterr()
+        assert out.count('jit_var_new_gather') == 6
+        assert out.count('jit_poke') == 18
+    finally:
+        dr.set_log_level(0)
+
+
+def test33_schedule(capsys):
     import drjit.llvm as l
     try:
         class MyStruct:
@@ -891,7 +909,7 @@ def test32_schedule(capsys):
         dr.set_log_level(0)
 
 
-def test32_dlpack():
+def test34_dlpack():
     import drjit.scalar as s
     import drjit.llvm as l
     from_dlpack = None

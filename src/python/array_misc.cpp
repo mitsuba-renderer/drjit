@@ -56,8 +56,7 @@ nb::object full(nb::type_object dtype, nb::handle value,
             return result;
         }
     } else if (dtype.is(&PyLong_Type) || dtype.is(&PyFloat_Type) || dtype.is(&PyBool_Type)) {
-        if (shape.empty() || (shape.size() == 1 && shape[0] == 1))
-            return dtype(value);
+        return dtype(value);
     } else {
         nb::object dstruct = nb::getattr(dtype, "DRJIT_STRUCT", nb::handle());
         if (dstruct.is_valid() && nb::isinstance<nb::dict>(dstruct)) {
@@ -158,8 +157,7 @@ nb::object empty(nb::type_object dtype, const std::vector<size_t> &shape) {
             return result;
         }
     } else if (dtype.is(&PyLong_Type) || dtype.is(&PyFloat_Type) || dtype.is(&PyBool_Type)) {
-        if (shape.empty() || (shape.size() == 1 && shape[0] == 1))
-            return dtype(0);
+        return dtype(0);
     } else {
         nb::object dstruct = nb::getattr(dtype, "DRJIT_STRUCT", nb::handle());
         if (dstruct.is_valid() && nb::isinstance<nb::dict>(dstruct)) {
@@ -213,80 +211,78 @@ nb::object empty_alt(nb::type_object dtype, size_t size) {
     return empty(dtype, shape);
 }
 
-nb::object arange(nb::handle dtype, Py_ssize_t start, Py_ssize_t end,
-                  Py_ssize_t step) {
-    if (is_drjit_type(dtype)) {
-        const supp &s = nb::type_supplement<supp>(dtype);
+nb::object arange(const nb::type_object_t<dr::ArrayBase> &dtype, Py_ssize_t start,
+                  Py_ssize_t end, Py_ssize_t step) {
+    const supp &s = nb::type_supplement<supp>(dtype);
 
-        if (s.meta.ndim != 1 || s.meta.shape[0] != 0xFF)
-            throw nb::type_error("drjit.arange(): unsupported 'dtype' -- must "
-                                 "be a dynamically sized 1D array!");
+    if (s.meta.ndim != 1 || s.meta.shape[0] != 0xFF)
+        throw nb::type_error("drjit.arange(): unsupported 'dtype' -- must "
+                             "be a dynamically sized 1D array!");
 
-        VarType vt = (VarType) s.meta.type;
-        if (vt == VarType::Bool || vt == VarType::Pointer)
-            throw nb::type_error("drjit.arange(): unsupported 'dtype' -- must "
-                                 "be an integral type!");
+    VarType vt = (VarType) s.meta.type;
+    if (vt == VarType::Bool || vt == VarType::Pointer)
+        throw nb::type_error("drjit.arange(): unsupported 'dtype' -- must "
+                             "be an integral type!");
 
-        Py_ssize_t size = (end - start + step - (step > 0 ? 1 : -1)) / step;
-        auto counter_meta = s.meta;
-        counter_meta.type = (uint16_t) VarType::UInt32;
-        nb::handle counter_tp = drjit::detail::array_get(counter_meta);
-        const supp &counter_supp = nb::type_supplement<supp>(counter_tp);
-        if (counter_supp.op_counter) {
-            if (size == 0)
-                return dtype();
-            else if (size < 0)
-                nb::detail::raise("drjit.arange(): size cannot be negative!");
+    Py_ssize_t size = (end - start + step - (step > 0 ? 1 : -1)) / step;
+    auto counter_meta = s.meta;
+    counter_meta.type = (uint16_t) VarType::UInt32;
+    nb::handle counter_tp = drjit::detail::array_get(counter_meta);
+    const supp &counter_supp = nb::type_supplement<supp>(counter_tp);
+    if (counter_supp.op_counter) {
+        if (size == 0)
+            return dtype();
+        else if (size < 0)
+            nb::detail::raise("drjit.arange(): size cannot be negative!");
 
-            nb::object result = nb::inst_alloc(counter_tp);
-            counter_supp.op_counter((size_t) size, nb::inst_ptr<void>(result));
-            nb::inst_mark_ready(result);
+        nb::object result = nb::inst_alloc(counter_tp);
+        counter_supp.op_counter((size_t) size, nb::inst_ptr<void>(result));
+        nb::inst_mark_ready(result);
 
-            if (start == 0 && step == 1)
-                return dtype(result);
-            else
-                return array_module.attr("fma")(dtype(result), dtype(step), dtype(start));
-        }
+        if (start == 0 && step == 1)
+            return dtype(result);
+        else
+            return array_module.attr("fma")(dtype(result), dtype(step), dtype(start));
     }
+
     throw nb::type_error("drjit.arange(): unsupported dtype!");
 }
 
-nb::object linspace(nb::handle dtype, double start, double end, size_t size, bool endpoint) {
-    if (is_drjit_type(dtype)) {
-        const supp &s = nb::type_supplement<supp>(dtype);
+nb::object linspace(const nb::type_object_t<dr::ArrayBase> &dtype, double start,
+                    double end, size_t size, bool endpoint) {
+    const supp &s = nb::type_supplement<supp>(dtype);
 
-        if (s.meta.ndim != 1 || s.meta.shape[0] != 0xFF)
-            throw nb::type_error("drjit.linspace(): unsupported 'dtype' -- must "
-                                 "be a dynamically sized 1D array!");
+    if (s.meta.ndim != 1 || s.meta.shape[0] != 0xFF)
+        throw nb::type_error("drjit.linspace(): unsupported 'dtype' -- must "
+                             "be a dynamically sized 1D array!");
 
-        VarType vt = (VarType) s.meta.type;
-        if (vt != VarType::Float16 && vt != VarType::Float32 && vt != VarType::Float64)
-            throw nb::type_error("drjit.linspace(): unsupported 'dtype' -- must "
-                                 "be a floating point array!");
+    VarType vt = (VarType) s.meta.type;
+    if (vt != VarType::Float16 && vt != VarType::Float32 && vt != VarType::Float64)
+        throw nb::type_error("drjit.linspace(): unsupported 'dtype' -- must "
+                             "be a floating point array!");
 
-        auto counter_meta = s.meta;
-        counter_meta.type = (uint16_t) VarType::UInt32;
-        nb::handle counter_tp = drjit::detail::array_get(counter_meta);
-        const supp &counter_supp = nb::type_supplement<supp>(counter_tp);
+    auto counter_meta = s.meta;
+    counter_meta.type = (uint16_t) VarType::UInt32;
+    nb::handle counter_tp = drjit::detail::array_get(counter_meta);
+    const supp &counter_supp = nb::type_supplement<supp>(counter_tp);
 
-        if (counter_supp.op_counter) {
-            if (size == 0)
-                return dtype();
+    if (counter_supp.op_counter) {
+        if (size == 0)
+            return dtype();
 
-            double step = (end - start) / (size - ((endpoint && size > 0) ? 1 : 0));
+        double step = (end - start) / (size - ((endpoint && size > 0) ? 1 : 0));
 
-            nb::object result = nb::inst_alloc(counter_tp);
-            counter_supp.op_counter((size_t) size, nb::inst_ptr<void>(result));
-            nb::inst_mark_ready(result);
+        nb::object result = nb::inst_alloc(counter_tp);
+        counter_supp.op_counter((size_t) size, nb::inst_ptr<void>(result));
+        nb::inst_mark_ready(result);
 
-            return array_module.attr("fma")(dtype(result), dtype(step), dtype(start));
-        }
+        return array_module.attr("fma")(dtype(result), dtype(step), dtype(start));
     }
 
     throw nb::type_error("drjit.linspace(): unsupported dtype!");
 }
 
-nb::object gather(nb::type_object dtype, nb::handle_of<dr::ArrayBase> source,
+nb::object gather(nb::type_object dtype, nb::handle_t<dr::ArrayBase> source,
                   nb::object index, nb::object active) {
     if (!is_drjit_type(dtype))
         throw nb::type_error(
@@ -370,7 +366,7 @@ nb::object gather(nb::type_object dtype, nb::handle_of<dr::ArrayBase> source,
     throw nb::type_error("drjit.gather(): 'dtype' unsupported!");
 }
 
-void scatter(nb::handle_of<dr::ArrayBase> target,
+void scatter(nb::handle_t<dr::ArrayBase> target,
              nb::object value,
              nb::object index,
              nb::object active) {
@@ -468,7 +464,7 @@ static void ravel_recursive(nb::handle result, nb::handle value,
     if (depth == stop_depth) {
         if (index_dtype.is_valid()) {
             nb::object index =
-                arange(index_dtype, offset,
+                arange(nb::borrow<nb::type_object_t<dr::ArrayBase>>(index_dtype), offset,
                        offset + strides[depth] * shape[depth], strides[depth]);
             scatter(result, nb::borrow(value), index, nb::cast(true));
         } else {
@@ -483,15 +479,15 @@ static void ravel_recursive(nb::handle result, nb::handle value,
     }
 }
 
-nb::object ravel(nb::handle_of<dr::ArrayBase> h, char order,
+nb::object ravel(nb::handle_t<dr::ArrayBase> h, char order,
                  std::vector<size_t> *shape_out,
                  std::vector<int64_t> *strides_out) {
     const supp &s = nb::type_supplement<supp>(h.type());
 
     if (s.meta.is_tensor) {
-        if (order != 'C')
-            throw std::runtime_error("drjit.ravel(): tensors only support "
-                                     "C-style ordering for now.");
+        if (order != 'C' && order != 'A')
+            throw std::runtime_error("drjit.ravel(): tensors do not support "
+                                     "F-style ordering for now.");
 
         return nb::steal(s.op_tensor_array(h.ptr()));
     }
@@ -521,14 +517,14 @@ nb::object ravel(nb::handle_of<dr::ArrayBase> h, char order,
             if (i == 0)
                 break;
         }
-    } else if (order == 'F') {
+    } else if (order == 'F' || order == 'A') {
         for (size_t i = 0; i < ndim; ++i) {
             strides[i] = stride;
             stride *= shape[i];
         }
     } else {
         throw std::runtime_error(
-            "drjit.ravel(): order parameter must equal 'C' or 'F'.");
+            "drjit.ravel(): order parameter must equal 'A', 'C', or 'F'.");
     }
 
     meta m { };
@@ -561,6 +557,111 @@ nb::object ravel(nb::handle_of<dr::ArrayBase> h, char order,
     }
 
     return result;
+}
+
+static nb::object unravel_recursive(nb::handle dtype,
+                                    nb::handle value, nb::handle index_dtype,
+                                    const Py_ssize_t *shape,
+                                    const Py_ssize_t *strides,
+                                    Py_ssize_t offset, int depth,
+                                    int stop_depth) {
+    if (depth == stop_depth) {
+        if (index_dtype.is_valid()) {
+            nb::object index =
+                arange(nb::borrow<nb::type_object_t<dr::ArrayBase>>(index_dtype), offset,
+                       offset + strides[depth] * shape[depth], strides[depth]);
+            return gather(nb::borrow<nb::type_object>(dtype), value, index,
+                          nb::cast(true));
+        } else {
+            return value[offset];
+        }
+    } else {
+        const supp &s = nb::type_supplement<supp>(dtype);
+
+        nb::object result = dtype();
+        for (Py_ssize_t i = 0; i < shape[depth]; ++i) {
+            result[i] =
+                unravel_recursive(s.value, value, index_dtype, shape, strides,
+                                  offset, depth + 1, stop_depth);
+            offset += strides[depth];
+        }
+
+        return result;
+    }
+}
+
+nb::object unravel(const nb::type_object_t<dr::ArrayBase> &dtype,
+                   nb::handle_t<dr::ArrayBase> array, char order) {
+    const supp &s = nb::type_supplement<supp>(dtype);
+    if (s.meta.is_tensor)
+        throw nb::type_error(
+            "drjit.unravel(): 'dtype' cannot be a tensorial type!");
+
+    meta m { };
+    m.is_llvm = s.meta.is_llvm;
+    m.is_cuda = s.meta.is_cuda;
+    m.is_diff = s.meta.is_diff;
+    m.type = s.meta.type;
+    m.ndim = 1;
+    m.shape[0] = 0xFF;
+
+    nb::handle flat = drjit::detail::array_get(m);
+    if (!flat.is(array.type())) {
+        nb::detail::raise(
+            "drjit.unravel(): expected 'array' of type '%s', but got '%s'!",
+            ((PyTypeObject *) flat.ptr())->tp_name,
+            ((PyTypeObject *) array.type().ptr())->tp_name);
+    }
+
+    if (array.type().is(dtype))
+        return nb::borrow(array);
+
+    Py_ssize_t size = (Py_ssize_t) len(array);
+
+    Py_ssize_t shape[4] { }, strides[4] { }, stride = 1;
+    int ndim = s.meta.ndim;
+    for (int i = 0; i < ndim; ++i) {
+        if (s.meta.shape[i] == 0xFF) {
+            if (i != s.meta.ndim - 1)
+                throw nb::type_error("drjit.unravel(): only the last dimension "
+                                     "of 'dtype' may be dynamic!");
+            shape[i] = size / stride;
+        } else {
+            shape[i] = s.meta.shape[i];
+        }
+        stride *= shape[i];
+    }
+
+    if (size != stride)
+        throw std::runtime_error("dtype.unravel(): input array size is not "
+                                 "divisible by 'dtype' shape!");
+
+    stride = 1;
+    if (order == 'C') {
+        for (int i = ndim - 1; ; --i) {
+            strides[i] = stride;
+            stride *= shape[i];
+            if (i == 0)
+                break;
+        }
+    } else if (order == 'F' || order == 'A') {
+        for (int i = 0; i < ndim; ++i) {
+            strides[i] = stride;
+            stride *= shape[i];
+        }
+    } else {
+        throw std::runtime_error(
+            "drjit.unravel(): order parameter must equal 'C' or 'F'.");
+    }
+
+    nb::handle index_dtype;
+    if (s.meta.shape[s.meta.ndim - 1] == 0xFF) {
+        m.type = (uint16_t) VarType::UInt32;
+        index_dtype = drjit::detail::array_get(m);
+    }
+
+    return unravel_recursive(dtype, array, index_dtype, shape, strides, 0, 0,
+                             (int) ndim - index_dtype.is_valid());
 }
 
 bool schedule(nb::handle h) {
@@ -721,21 +822,22 @@ extern void bind_array_misc(nb::module_ m) {
 
     m.def(
         "arange",
-        [](nb::type_object dtype, Py_ssize_t size) {
+        [](const nb::type_object_t<dr::ArrayBase> &dtype, Py_ssize_t size) {
             return arange(dtype, 0, size, 1);
         },
         "dtype"_a, "size"_a, doc_arange);
 
     m.def(
         "arange",
-        [](nb::type_object dtype, Py_ssize_t start, Py_ssize_t stop, Py_ssize_t step) {
-            return arange(dtype, start, stop, step);
-        },
+        [](const nb::type_object_t<dr::ArrayBase> &dtype, Py_ssize_t start,
+           Py_ssize_t stop,
+           Py_ssize_t step) { return arange(dtype, start, stop, step); },
         "dtype"_a, "start"_a, "stop"_a, "step"_a = 1);
 
     m.def(
         "linspace",
-        [](nb::type_object dtype, double start, double stop, size_t num, bool endpoint) {
+        [](const nb::type_object_t<dr::ArrayBase> &dtype, double start,
+           double stop, size_t num, bool endpoint) {
             return linspace(dtype, start, stop, num, endpoint);
         },
         "dtype"_a, "start"_a, "stop"_a, "num"_a, "endpoint"_a = true,
@@ -749,10 +851,17 @@ extern void bind_array_misc(nb::module_ m) {
 
     m.def(
         "ravel",
-        [](nb::handle_of<dr::ArrayBase> a, char order) {
-            return ravel(a, order);
+        [](nb::handle_t<dr::ArrayBase> array, char order) {
+            return ravel(array, order);
         },
-        "arg"_a, "order"_a = 'C', doc_ravel);
+        "array"_a, "order"_a = 'A', doc_ravel);
+
+    m.def(
+        "unravel",
+        [](const nb::type_object_t<dr::ArrayBase> &dtype,
+           nb::handle_t<dr::ArrayBase> array,
+           char order) { return unravel(dtype, array, order); },
+        "dtype"_a, "array"_a, "order"_a = 'A', doc_unravel);
 
     m.def("schedule", nb::overload_cast<nb::args>(schedule), doc_schedule);
     m.def("eval", nb::overload_cast<nb::args>(eval), doc_eval);
