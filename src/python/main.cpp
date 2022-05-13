@@ -59,6 +59,7 @@ NB_MODULE(drjit_ext, m_) {
     bind_array_builtin(m);
     bind_array_math(m);
     bind_array_misc(m);
+    bind_array_autodiff(m);
     bind_traits(m);
     bind_tensor(m);
 

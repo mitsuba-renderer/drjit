@@ -95,6 +95,7 @@ extern nb::dlpack::dtype dlpack_dtype(VarType vt);
 extern void bind_array_builtin(nb::module_ m);
 extern void bind_array_math(nb::module_ m);
 extern void bind_array_misc(nb::module_ m);
+extern void bind_array_autodiff(nb::module_ m);
 extern void bind_traits(nb::module_ m);
 extern void bind_tensor(nb::module_ m);
 
