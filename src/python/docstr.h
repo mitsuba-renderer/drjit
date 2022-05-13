@@ -1656,7 +1656,11 @@ For example,
     x = dr.cuda.Array3f([1, 2], [3, 4], [5, 6])
     y = dr.ravel(x, order=...)
 
-will produce
+    order (str): A single character indicating the index order. ``'C'`` (the
+        default) specifies row-major/C-style ordering, in which case the last
+        index changes at the highest frequency. The other option ``'F'``
+        indicates column-major/Fortran-style ordering, in which case the
+        first index changes at the highest frequency.
 
 - ``[1, 3, 5, 2, 4, 6]`` with ``order='F'`` (the default for Dr.Jit arrays),
   which means that X/Y/Z components alternate.
@@ -1864,6 +1868,91 @@ rearranged into a contiguous memory representation before they can be wrapped.
 In other case, e.g. for :py:class:`drjit.llvm.Float`,
 :py:class:`drjit.scalar.Array3f`, or :py:class:`drjit.scalar.ArrayXf`, the data
 is already contiguous and a zero-copy approach is used instead.)";
+
+static const char *doc_set_grad_enabled =R"(
+Enable or disable gradient tracking.
+
+Args:
+    arg (object): An arbitrary Dr.Jit array, tensor,
+        :ref:`custom data structure <custom-struct>`, sequences, or mapping.
+
+    value (bool): Defines whether gradient tracking should be enabled or
+        disabled.
+)";
+
+static const char *doc_enable_grad =R"(
+Enable gradient tracking.
+
+Args:
+    arg (object): An arbitrary Dr.Jit array, tensor,
+        :ref:`custom data structure <custom-struct>`, sequences, or mapping.
+)";
+
+static const char *doc_disable_grad =R"(
+Disable gradient tracking.
+
+Args:
+    arg (object): An arbitrary Dr.Jit array, tensor,
+        :ref:`custom data structure <custom-struct>`, sequences, or mapping.
+)";
+
+static const char *doc_grad_enabled =R"(
+Return whether gradient tracking is enabled on any of the given variables.
+
+Args:
+    *args (tuple): A variable-length list of Dr.Jit array instances,
+      :ref:`custom data structures <custom-struct>`, sequences, or mappings.
+      The function will recursively traverse data structures to discover all
+      Dr.Jit arrays.
+
+Returns:
+    bool: ``True`` if a variable has gradient tracking enabled, ``False`` otherwise.
+)";
+
+static const char *doc_grad =R"(
+Return the gradient value associated to a given variable.
+
+Args:
+    arg (object): An arbitrary Dr.Jit array, tensor,
+        :ref:`custom data structure <custom-struct>`, sequences, or mapping.
+
+Returns:
+    object: the gradient value associated to the input variable.
+)";
+
+static const char *doc_set_grad =R"(
+Set the gradient value to a given variable.
+
+Args:
+    arg (object): An arbitrary Dr.Jit array, tensor,
+        :ref:`custom data structure <custom-struct>`, sequences, or mapping.
+
+    value (object): An arbitrary Dr.Jit array, tensor,
+        :ref:`custom data structure <custom-struct>`, sequences, or mapping.
+)";
+
+static const char *doc_accum_grad =R"(
+Accumulate the gradient value to a given variable.
+
+Args:
+    arg (object): An arbitrary Dr.Jit array, tensor,
+        :ref:`custom data structure <custom-struct>`, sequences, or mapping.
+
+    value (object): An arbitrary Dr.Jit array, tensor,
+        :ref:`custom data structure <custom-struct>`, sequences, or mapping.
+)";
+
+static const char *doc_enqueue =R"(
+Enqueue variable for the next AD traverse
+
+Args:
+    mode (ADFlag): flags to control what should and should not be destructed
+        during forward/backward mode traversal
+
+    value (object): An arbitrary Dr.Jit array, tensor,
+        :ref:`custom data structure <custom-struct>`, sequences, or mapping to
+        be enqueued.
+)";
 
 #if defined(__GNUC__)
 #  pragma GCC diagnostic pop

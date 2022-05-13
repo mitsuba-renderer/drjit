@@ -33,6 +33,9 @@ using array_cast = int (*) (const void *, VarType, void *);
 using array_ad_create = void (*) (void *, uint32_t, void *);
 using array_set_label = void (*) (void *, const char *);
 
+using array_set_bool = void (*) (void *, bool);
+using array_get_bool = bool (*) (const void *);
+using array_set_grad = void (*) (void *, const void *);
 
 struct array_metadata {
     uint16_t is_vector     : 1;
@@ -105,6 +108,13 @@ struct array_supplement {
     array_unop_2 op_sincos, op_sincosh, op_frexp;
     array_unop op_detach;
     array_ad_create op_ad_create;
+
+    array_set_bool op_set_grad_enabled;
+    array_get_bool op_grad_enabled;
+    array_unop op_grad;
+    array_unop op_detach;
+    array_set_grad op_set_grad, op_accum_grad;
+    void (*op_enqueue) (const void *, const void *);
 };
 
 static_assert(sizeof(array_metadata) == 8);
@@ -598,8 +608,17 @@ template <typename T> nanobind::class_<T> bind_array(const char *name = nullptr)
         s.op_set_index = [](void *a, uint32_t index) { *(((T *) a)->index_ptr()) = index; };
     }
 
-    if constexpr (T::IsDiff && T::Depth == 1 && T::IsFloat)
+    if constexpr (T::IsDiff && T::Depth == 1 && T::IsFloat) {
         s.op_index_ad = [](const void *a) { return ((const T *) a)->index_ad(); };
+        s.op_set_grad_enabled = [](void *a, bool v) { set_grad_enabled(*(T *) a, v); };
+        s.op_grad_enabled = [](const void *a) { return grad_enabled(*(const T *) a); };
+        s.op_grad = [](const void *a, void *b) { new (b) T(grad(*(const T *) a)); };
+        s.op_set_grad = [](void *a, const void *b) { set_grad(*(T *) a, *(const T *) b); };
+        s.op_accum_grad = [](void *a, const void *b) { accum_grad(*(T *) a, *(const T *) b); };
+        s.op_detach = [](const void *a, void *b) { new (b) detached_t<T>(detach(*(const T *) a)); };
+        s.op_enqueue = [](const void *a, const void *b) { enqueue(*(drjit::ADMode *) a, *(const T *) b); };
+    }
+
     if constexpr (T::IsDiff && T::Depth == 1) {
         s.op_detach = [](const void *a, void *b) {
             new (b) detached_t<T>(((const T *) a)->detach_());

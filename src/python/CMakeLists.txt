@@ -26,6 +26,7 @@ nanobind_add_module(
   array_math.cpp
   array_misc.cpp
   array_init.cpp
+  array_autodiff.cpp
   repr.cpp
   shape.cpp
   traits.cpp
