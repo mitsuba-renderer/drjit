@@ -684,8 +684,7 @@ static PyObject *mp_subscript(PyObject *self, PyObject *key) {
                                               tensor_shape, key2);
 
             result = nb::handle(self_tp)(
-                gather(nb::borrow<nb::type_object>(source.type()),
-                       nb::handle_t<dr::ArrayBase>(source.ptr()),
+                gather(nb::borrow<nb::type_object>(source.type()), source,
                        index, nb::borrow(Py_True)));
         } catch (const std::exception &e) {
             PyErr_Format(PyExc_RuntimeError, "%s.__getitem__(): %s!",

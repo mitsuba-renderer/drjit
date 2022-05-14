@@ -1457,36 +1457,66 @@ Returns:
 )";
 
 static const char *doc_gather = R"(
-Gather values from a flat array
+Gather values from a flat array or nested data structure
 
-This operation performs a *gather* (i.e., indirect memory read) from the
-**source** array at position **index**. The optional **active** argument can be
-used to disable some of the components, which is useful when not all indices
-are valid; the corresponding output will be zero in this case.
+This function performs a *gather* (i.e., indirect memory read) from **source**
+at position **index**. It expects a **dtype** argument and will return an
+instance of this type. The optional **active** argument can be used to disable
+some of the components, which is useful when not all indices are valid; the
+corresponding output will be zero in this case.
 
-The provided **dtype** is typically equal to ``type(source)``, in which case
-this operation can be interpreted as a parallelized version of the Python array
-indexing expression ``source[index]`` with optional masking (however, in
-contrast to array indexing, negative indices are not handled).
+This operation can be used in the following different ways:
 
-This function can also be used to gather *nested* arrays like
-:py:class:`drjit.cuda.Vector3f`, which represents a sequence of 3D vectors.
-This is useful for populating populate vectors, matrices, etc., from a flat
-input array. For example, the following operation loads 3D vectors
+1. When **dtype** is a 1D Dr.Jit array like :py:class:`drjit.llvm.ad.Float`,
+   this operation implements a parallelized version of the Python array
+   indexing expression ``source[index]`` with optional masking. Example:
 
-.. code-block::
+   .. code-block::
 
-    result = dr.gather(dr.cuda.Vector3f, source, index)
+       source = dr.cuda.Float([...])
+       index = dr.cuda.UInt([...]) # Note: negative indices not supported
+       result = dr.gather(dtype=type(source), source=source, index=index)
 
-and is equivalent to
+2. When **dtype** is a more complex type (e.g. a :ref:`custom source structure
+   <custom-struct>`, nested Dr.Jit array, tuple, list, dictionary, etc.), the
+   behavior depends:
 
-.. code-block::
+   - When ``type(source)`` matches **dtype**, the the gather operation threads
+     through entries and invokes itself recursively. For example, the
+     gather operation in
 
-    result = dr.Vector3f(
-        dr.cuda.Float, source, index*3 + 0),
-        dr.cuda.Float, source, index*3 + 1),
-        dr.cuda.Float, source, index*3 + 2)
-    )
+     .. code-block::
+
+         result = dr.cuda.Array3f(...)
+         index = dr.cuda.UInt([...])
+         result = dr.gather(dr.cuda.Array3f, source, index)
+
+     is equivalent to
+
+     .. code-block::
+
+         result = dr.cuda.Array3f(
+             dr.gather(dr.cuda.Float, source.x, index),
+             dr.gather(dr.cuda.Float, source.y, index),
+             dr.gather(dr.cuda.Float, source.z, index))
+
+   - Otherwise, the operation loads the requested information from a flat input
+     array. For example, the gather below loads 3D vectors from a 1D array.
+
+     .. code-block::
+
+         result = dr.cuda.Float([...])
+         index = dr.cuda.UInt([...])
+         result = dr.gather(dr.cuda.Array3f, source, index)
+
+     and is equivalent to
+
+     .. code-block::
+
+         result = dr.cuda.Vector3f(
+             dr.gather(dr.cuda.Float, source, index*3 + 0),
+             dr.gather(dr.cuda.Float, source, index*3 + 1),
+             dr.gather(dr.cuda.Float, source, index*3 + 2))
 
 .. danger::
 

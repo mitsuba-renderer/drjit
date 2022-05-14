@@ -75,10 +75,8 @@ extern std::pair<nb::tuple, nb::object>
 slice_index(const nb::type_object &dtype, const nb::tuple &shape,
             const nb::tuple &indices);
 
-extern nb::object gather(nb::type_object dtype,
-                         nb::handle_t<dr::ArrayBase> source,
-                         nb::object index,
-                         nb::object active);
+extern nb::object gather(nb::type_object dtype, nb::object source,
+                         nb::object index, nb::object active);
 
 extern nb::object ravel(nb::handle_t<dr::ArrayBase> h, char order,
                         std::vector<size_t> *shape_out = nullptr,

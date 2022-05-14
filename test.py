@@ -832,7 +832,26 @@ def test29_gather_complex():
     ))
 
 
-def test30_scatter_complex():
+def test30_gather_complex_2():
+    x = dr.scalar.ArrayXf([1, 2, 3, 4])
+    y = dr.scalar.ArrayXf([5, 6, 7, 8])
+    i = dr.scalar.ArrayXu([1, 0])
+    r = dr.gather(tuple, (x, y), i)
+    assert type(r) is tuple and len(r) == 2
+    assert dr.all(r[0] == dr.scalar.ArrayXf([2, 1]))
+    assert dr.all(r[1] == dr.scalar.ArrayXf([6, 5]))
+
+    class MyStruct:
+        DRJIT_STRUCT = { 'a' : dr.scalar.ArrayXf }
+        def __init__(self, a: dr.scalar.ArrayXf):
+            self.a = a
+
+    x = MyStruct(x)
+    r = dr.gather(MyStruct, x, i)
+    assert type(r) is MyStruct
+    assert dr.all(r.a == dr.scalar.ArrayXf([2, 1]))
+
+def test31_scatter_complex():
     import drjit.scalar as s
     import drjit.llvm as l
 
@@ -841,7 +860,7 @@ def test30_scatter_complex():
     assert dr.all(target == l.Float([1, 2, 3, 4, 5, 6]))
 
 
-def test31_ravel(capsys):
+def test32_ravel(capsys):
     import drjit.scalar as s
     import drjit.llvm as l
 
@@ -863,7 +882,7 @@ def test31_ravel(capsys):
         dr.set_log_level(0)
 
 
-def test32_unravel(capsys):
+def test33_unravel(capsys):
     import drjit.scalar as s
     import drjit.llvm as l
 
@@ -885,7 +904,7 @@ def test32_unravel(capsys):
         dr.set_log_level(0)
 
 
-def test33_schedule(capsys):
+def test34_schedule(capsys):
     import drjit.llvm as l
     try:
         class MyStruct:
@@ -909,7 +928,7 @@ def test33_schedule(capsys):
         dr.set_log_level(0)
 
 
-def test34_dlpack():
+def test35_dlpack():
     import drjit.scalar as s
     import drjit.llvm as l
     from_dlpack = None
@@ -932,6 +951,7 @@ def test34_dlpack():
     assert np.all(x.__array__() == np.array([1, 2, 3, 4]))
     x = s.Array3f(1, 2, 3)
     assert np.all(x.__array__() == np.array([1, 2, 3]))
+
 
 
 #@pytest.mark.parametrize('name', ['sqrt', 'cbrt', 'sin', 'cos', 'tan', 'asin',
@@ -966,3 +986,4 @@ def test34_dlpack():
 #    value_2 = ArrayXf(func(y) for y in x)
 #    assert dr.allclose(value, func)
 #
+

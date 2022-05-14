@@ -282,17 +282,64 @@ nb::object linspace(const nb::type_object_t<dr::ArrayBase> &dtype, double start,
     throw nb::type_error("drjit.linspace(): unsupported dtype!");
 }
 
-nb::object gather(nb::type_object dtype, nb::handle_t<dr::ArrayBase> source,
+nb::object gather(nb::type_object dtype, nb::object source,
                   nb::object index, nb::object active) {
+    bool is_drjit_source_1d = is_drjit_type(source.type());
+
+    if (is_drjit_source_1d) {
+        const meta &m = nb::type_supplement<supp>(source.type()).meta;
+        is_drjit_source_1d = m.ndim == 1 && m.shape[0] == 0xFF;
+    }
+
+    if (source.type().is(dtype) & !is_drjit_source_1d) {
+        if (nb::isinstance<nb::sequence>(source)) {
+            nb::list result;
+            for (nb::handle value : source)
+                result.append(gather(nb::borrow<nb::type_object>(value.type()),
+                                     nb::borrow(value), index, active));
+            if (!dtype.is(result.type()))
+                return dtype(result);
+            else
+                return result;
+        }
+
+        if (nb::isinstance<nb::mapping>(source)) {
+            nb::dict result;
+            for (nb::handle p : nb::borrow<nb::mapping>(source).items()) {
+                nb::handle key = p[0], value = p[1];
+                result[key] = gather(nb::borrow<nb::type_object>(value.type()),
+                                     nb::borrow(value), index, active);
+            }
+            if (!dtype.is(result.type()))
+                return dtype(result);
+            else
+                return result;
+        }
+
+        nb::object dstruct = nb::getattr(dtype, "DRJIT_STRUCT", nb::handle());
+        if (dstruct.is_valid() && nb::isinstance<nb::dict>(dstruct)) {
+            nb::dict dstruct_dict = nb::borrow<nb::dict>(dstruct);
+            nb::dict d;
+
+            for (auto [k, v] : dstruct_dict) {
+                if (!v.is_type())
+                    throw nb::type_error("DRJIT_STRUCT invalid, expected types!");
+                nb::type_object sub_dtype = nb::borrow<nb::type_object>(v);
+                d[k] = gather(sub_dtype, nb::getattr(source, k), index, active);
+            }
+
+            return dtype(**d);
+        }
+    }
+
     if (!is_drjit_type(dtype))
-        throw nb::type_error(
-            "drjit.gather(): 'dtype' argument must be a Dr.Jit array!");
+        throw nb::type_error("drjit.gather(): unsupported dtype!");
 
-    const supp &source_s = nb::type_supplement<supp>(source.type());
-
-    if (source_s.meta.ndim != 1 || source_s.meta.shape[0] != 0xFF)
+    if (!is_drjit_source_1d)
         throw nb::type_error(
             "drjit.gather(): 'source' argument must be a dynamic 1D array!");
+
+    const supp &source_s = nb::type_supplement<supp>(source.type());
 
     meta source_meta = source_s.meta,
          active_meta = source_meta,
@@ -363,7 +410,7 @@ nb::object gather(nb::type_object dtype, nb::handle_t<dr::ArrayBase> source,
         return result;
     }
 
-    throw nb::type_error("drjit.gather(): 'dtype' unsupported!");
+    throw nb::type_error("drjit.gather(): unsupported dtype!");
 }
 
 void scatter(nb::handle_t<dr::ArrayBase> target,
@@ -567,11 +614,11 @@ static nb::object unravel_recursive(nb::handle dtype,
                                     int stop_depth) {
     if (depth == stop_depth) {
         if (index_dtype.is_valid()) {
-            nb::object index =
-                arange(nb::borrow<nb::type_object_t<dr::ArrayBase>>(index_dtype), offset,
-                       offset + strides[depth] * shape[depth], strides[depth]);
-            return gather(nb::borrow<nb::type_object>(dtype), value, index,
-                          nb::cast(true));
+            nb::object index = arange(
+                nb::borrow<nb::type_object_t<dr::ArrayBase>>(index_dtype),
+                offset, offset + strides[depth] * shape[depth], strides[depth]);
+            return gather(nb::borrow<nb::type_object>(dtype), nb::borrow(value),
+                          index, nb::cast(true));
         } else {
             return value[offset];
         }
@@ -673,7 +720,6 @@ bool schedule(nb::handle h) {
         if (s.meta.ndim == 1)
             return jit_var_schedule(s.op_index(nb::inst_ptr<void>(h)));
     }
-
 
     if (nb::isinstance<nb::sequence>(h)) {
         bool result = false;
