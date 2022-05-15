@@ -1,4 +1,4 @@
-#include <drjit/python.h>
+#include "python.h"
 #include "../ext/nanobind/src/buffer.h"
 
 NAMESPACE_BEGIN(drjit)
@@ -14,7 +14,7 @@ static const char *type_name[] = {
 };
 
 static const char *type_suffix[] = {
-    "v", "b", "i8", "u8", "i16", "u16", "i", "u",
+    "?", "b", "i8", "u8", "i16", "u16", "i", "u",
     "i64", "u64", "p", "f16", "f", "f64"
 };
 
@@ -44,7 +44,7 @@ const char *array_name(array_metadata meta) {
         }
 
         for (int i = 0; i < ndim; ++i) {
-            if (meta.shape[i] == 0xFF)
+            if (meta.shape[i] == DRJIT_DYNAMIC)
                 buffer.put('X');
             else
                 buffer.put_uint32(meta.shape[i]);
@@ -165,7 +165,7 @@ extern nb::handle bind(const char *name, array_supplement &supp,
             Py_ssize_t size = s.meta.shape[0], len = PySequence_Length(o);
             if (len == -1)
                 PyErr_Clear();
-            return size == 0xFF || len == size;
+            return size == DRJIT_DYNAMIC || len == size;
         } else if (s.value == Py_TYPE(o)) {
             return true;
         } else {
@@ -195,7 +195,7 @@ extern nb::handle bind(const char *name, array_supplement &supp,
     } else {
         array_metadata m2 = supp.meta;
         if (supp.meta.is_tensor) {
-            m2.shape[0] = 0xFF;
+            m2.shape[0] = DRJIT_DYNAMIC;
             m2.ndim = 1;
         }
         m2.is_vector = m2.is_complex = m2.is_quaternion = m2.is_matrix =

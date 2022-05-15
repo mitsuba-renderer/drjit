@@ -6,6 +6,8 @@
 #include <vector>
 #include "docstr.h"
 
+#define DRJIT_DYNAMIC 0xFF
+
 namespace nb = nanobind;
 namespace dr = drjit;
 
@@ -82,7 +84,12 @@ extern nb::object ravel(nb::handle_t<dr::ArrayBase> h, char order,
                         std::vector<size_t> *shape_out = nullptr,
                         std::vector<int64_t> *strides_out = nullptr);
 
+extern nb::object unravel(const nb::type_object_t<dr::ArrayBase> &dtype,
+                          nb::handle_t<dr::ArrayBase> array, char order);
+
 extern nb::object reinterpret_array_t(nb::handle h, VarType vt);
+
+extern nb::dlpack::dtype dlpack_dtype(VarType vt);
 
 // Entry points of various parts of the bindings
 extern void bind_array_builtin(nb::module_ m);

@@ -55,7 +55,7 @@ static nb::object nb_unop(const char *name, size_t ops_offset, size_t nb_offset,
     Py_ssize_t size = sq_length(h.ptr());
     nb::inst_zero(result);
 
-    if (s.meta.shape[0] == 0xFF)
+    if (s.meta.shape[0] == DRJIT_DYNAMIC)
         s.init(nb::inst_ptr<void>(result), size);
 
     for (Py_ssize_t i = 0; i < size; ++i) {
@@ -157,7 +157,7 @@ static PyObject *nb_binop(const char *name, size_t ops_offset, size_t nb_offset,
 
     nb::inst_zero(result);
 
-    if (s.meta.shape[0] == 0xFF)
+    if (s.meta.shape[0] == DRJIT_DYNAMIC)
         s.init(nb::inst_ptr<void>(result), sr);
 
     Py_ssize_t i0 = 0,
@@ -265,7 +265,7 @@ static PyObject *nb_inplace_binop(const char *name, size_t ops_offset,
         nb::object result = nb::inst_alloc(tp);
         nb::inst_zero(result);
 
-        if (s.meta.shape[0] == 0xFF)
+        if (s.meta.shape[0] == DRJIT_DYNAMIC)
             s.init(nb::inst_ptr<void>(result), sr);
 
         nb::object v = nb::steal(sq_item(o0.ptr(), 0));
@@ -369,7 +369,7 @@ static PyObject *nb_select(PyObject *h0, PyObject *h1, PyObject *h2) noexcept {
 
     nb::inst_zero(result);
 
-    if (s.meta.shape[0] == 0xFF)
+    if (s.meta.shape[0] == DRJIT_DYNAMIC)
         s.init(nb::inst_ptr<void>(result), sr);
 
     Py_ssize_t i0 = 0,
@@ -479,7 +479,7 @@ static PyObject *tp_richcompare(PyObject *h0, PyObject *h1, int op) noexcept {
 
     nb::inst_zero(result);
 
-    if (s.meta.shape[0] == 0xFF)
+    if (s.meta.shape[0] == DRJIT_DYNAMIC)
         s.init(nb::inst_ptr<void>(result), sr);
 
     Py_ssize_t i0 = 0,
@@ -544,7 +544,7 @@ static int nb_bool(PyObject *o) noexcept {
     }
 
     Py_ssize_t length = s.meta.shape[0];
-    if (length == 0xFF)
+    if (length == DRJIT_DYNAMIC)
         length = (Py_ssize_t) s.len(nb::inst_ptr<void>(o));
 
     if (length != 1) {
@@ -635,7 +635,7 @@ template <int Index> nb::object ab_getter(nb::handle_t<dr::ArrayBase> h) {
     PyTypeObject *tp = (PyTypeObject *) h.type().ptr();
     const supp &s = nb::type_supplement<supp>(tp);
 
-    if (s.meta.is_tensor || s.meta.shape[0] == 0xFF || Index >= s.meta.shape[0]) {
+    if (s.meta.is_tensor || s.meta.shape[0] == DRJIT_DYNAMIC || Index >= s.meta.shape[0]) {
         char tmp[128];
         snprintf(tmp, sizeof(tmp), "%s: does not have a '%c' component!",
                  tp->tp_name, "xyzw"[Index]);
@@ -649,7 +649,7 @@ template <int Index> void ab_setter(nb::handle_t<dr::ArrayBase> h, nb::handle va
     PyTypeObject *tp = (PyTypeObject *) h.type().ptr();
     const supp &s = nb::type_supplement<supp>(tp);
 
-    if (s.meta.is_tensor || s.meta.shape[0] == 0xFF || Index >= s.meta.shape[0]) {
+    if (s.meta.is_tensor || s.meta.shape[0] == DRJIT_DYNAMIC || Index >= s.meta.shape[0]) {
         char tmp[128];
         snprintf(tmp, sizeof(tmp), "%s: does not have a '%c' component!",
                  tp->tp_name, "xyzw"[Index]);
@@ -785,6 +785,26 @@ static int mp_ass_subscript(PyObject *self, PyObject *key, PyObject *value) {
     return -1;
 }
 
+nb::dlpack::dtype dlpack_dtype(VarType vt) {
+    switch (vt) {
+        case VarType::Bool:
+        case VarType::UInt8:   return nb::dtype<uint8_t>(); break;
+        case VarType::Int8:    return nb::dtype<int8_t>(); break;
+        case VarType::UInt16:  return nb::dtype<uint16_t>(); break;
+        case VarType::Int16:   return nb::dtype<int16_t>(); break;
+        case VarType::UInt32:  return nb::dtype<uint32_t>(); break;
+        case VarType::Int32:   return nb::dtype<int32_t>(); break;
+        case VarType::UInt64:  return nb::dtype<uint64_t>(); break;
+        case VarType::Int64:   return nb::dtype<int64_t>(); break;
+        case VarType::Float32: return nb::dtype<float>(); break;
+        case VarType::Float64: return nb::dtype<double>(); break;
+        default:
+            throw nb::type_error(
+                "dtype is not understood by the DLPack protocol");
+    }
+}
+
+
 template <bool ForceCPU, typename... Ts>
 nb::tensor<Ts...> dlpack(nb::handle_t<dr::ArrayBase> h) {
     const supp &s = nb::type_supplement<supp>(h.type());
@@ -794,27 +814,10 @@ nb::tensor<Ts...> dlpack(nb::handle_t<dr::ArrayBase> h) {
         is_dynamic = true;
     } else {
         for (int i = 0; i < s.meta.ndim; ++i)
-            is_dynamic |= s.meta.shape[i] == 0xFF;
+            is_dynamic |= s.meta.shape[i] == DRJIT_DYNAMIC;
     }
 
-    nb::dlpack::dtype dtype;
-    switch ((VarType) s.meta.type) {
-        case VarType::Bool:
-        case VarType::UInt8:   dtype = nb::dtype<uint8_t>(); break;
-        case VarType::Int8:    dtype = nb::dtype<int8_t>(); break;
-        case VarType::UInt16:  dtype = nb::dtype<uint16_t>(); break;
-        case VarType::Int16:   dtype = nb::dtype<int16_t>(); break;
-        case VarType::UInt32:  dtype = nb::dtype<uint32_t>(); break;
-        case VarType::Int32:   dtype = nb::dtype<int32_t>(); break;
-        case VarType::UInt64:  dtype = nb::dtype<uint64_t>(); break;
-        case VarType::Int64:   dtype = nb::dtype<int64_t>(); break;
-        case VarType::Float32: dtype = nb::dtype<float>(); break;
-        case VarType::Float64: dtype = nb::dtype<double>(); break;
-        default:
-            throw std::runtime_error(
-                "__dlpack__(): dtype is not understood by the "
-                "DLPack protocol");
-    }
+    nb::dlpack::dtype dtype = dlpack_dtype((VarType) s.meta.type);
 
     std::vector<size_t> shape;
     std::vector<int64_t> strides;

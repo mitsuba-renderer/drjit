@@ -21,7 +21,7 @@ std::pair<nb::tuple, nb::object> slice_index(const nb::type_object &dtype,
     if (is_drjit_type(dtype)) {
         meta m = nb::type_supplement<supp>(dtype).meta;
 
-        if (m.ndim == 1 && m.shape[0] == 0xFF &&
+        if (m.ndim == 1 && m.shape[0] == DRJIT_DYNAMIC &&
             (VarType) m.type == VarType::UInt32)
             dtype_fail = false;
     }
@@ -87,7 +87,7 @@ std::pair<nb::tuple, nb::object> slice_index(const nb::type_object &dtype,
         } else if (is_drjit_type(tp)) {
             meta m = nb::type_supplement<supp>(tp).meta;
 
-            if (m.ndim == 1 && m.shape[0] == 0xFF) {
+            if (m.ndim == 1 && m.shape[0] == DRJIT_DYNAMIC) {
                 VarType vt = (VarType) m.type;
                 nb::object o = nb::borrow(h);
 

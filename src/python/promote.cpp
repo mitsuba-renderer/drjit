@@ -110,7 +110,7 @@ static meta meta_from_builtin(PyObject *o) {
 
                 for (int j = 0; j < m2.ndim; ++j)
                     m2.shape[j + 1] = m2.shape[j];
-                m2.shape[0] = len > 4 ? 0xFF : (uint8_t) len;
+                m2.shape[0] = len > 4 ? DRJIT_DYNAMIC : (uint8_t) len;
                 m2.ndim++;
 
                 m = meta_promote(m, m2);

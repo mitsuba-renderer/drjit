@@ -19,7 +19,7 @@ nb::object full(nb::type_object dtype, nb::handle value,
         bool fail = false;
         if (s.meta.ndim == shape.size()) {
             for (uint16_t i = 0; i < s.meta.ndim; ++i) {
-                if (s.meta.shape[i] != 0xFF && s.meta.shape[i] != shape[i])
+                if (s.meta.shape[i] != DRJIT_DYNAMIC && s.meta.shape[i] != shape[i])
                     fail = true;
             }
         } else {
@@ -40,7 +40,7 @@ nb::object full(nb::type_object dtype, nb::handle value,
             }
 
             nb::inst_zero(result);
-            if (s.meta.shape[0] == 0xFF)
+            if (s.meta.shape[0] == DRJIT_DYNAMIC)
                 s.init(nb::inst_ptr<void>(result), shape[0]);
 
             nb::type_object sub_type = nb::borrow<nb::type_object>(s.value);
@@ -95,7 +95,7 @@ nb::object full_alt(nb::type_object dtype, nb::handle value, size_t size) {
         const supp &s = nb::type_supplement<supp>(dtype);
         shape.reserve(s.meta.ndim);
         for (uint16_t i = 0; i < s.meta.ndim; ++i) {
-            if (s.meta.shape[i] == 0xFF) {
+            if (s.meta.shape[i] == DRJIT_DYNAMIC) {
                 shape.push_back(size);
                 break;
             } else {
@@ -123,7 +123,7 @@ nb::object empty(nb::type_object dtype, const std::vector<size_t> &shape) {
         bool fail = false;
         if (s.meta.ndim == shape.size()) {
             for (uint16_t i = 0; i < s.meta.ndim; ++i) {
-                if (s.meta.shape[i] != 0xFF && s.meta.shape[i] != shape[i])
+                if (s.meta.shape[i] != DRJIT_DYNAMIC && s.meta.shape[i] != shape[i])
                     fail = true;
             }
         } else {
@@ -141,7 +141,7 @@ nb::object empty(nb::type_object dtype, const std::vector<size_t> &shape) {
             }
 
             nb::inst_zero(result);
-            if (s.meta.shape[0] == 0xFF)
+            if (s.meta.shape[0] == DRJIT_DYNAMIC)
                 s.init(nb::inst_ptr<void>(result), shape[0]);
 
             nb::type_object sub_type = nb::borrow<nb::type_object>(s.value);
@@ -197,7 +197,7 @@ nb::object empty_alt(nb::type_object dtype, size_t size) {
         const supp &s = nb::type_supplement<supp>(dtype);
         shape.reserve(s.meta.ndim);
         for (uint16_t i = 0; i < s.meta.ndim; ++i) {
-            if (s.meta.shape[i] == 0xFF) {
+            if (s.meta.shape[i] == DRJIT_DYNAMIC) {
                 shape.push_back(size);
                 break;
             } else {
@@ -215,7 +215,7 @@ nb::object arange(const nb::type_object_t<dr::ArrayBase> &dtype, Py_ssize_t star
                   Py_ssize_t end, Py_ssize_t step) {
     const supp &s = nb::type_supplement<supp>(dtype);
 
-    if (s.meta.ndim != 1 || s.meta.shape[0] != 0xFF)
+    if (s.meta.ndim != 1 || s.meta.shape[0] != DRJIT_DYNAMIC)
         throw nb::type_error("drjit.arange(): unsupported 'dtype' -- must "
                              "be a dynamically sized 1D array!");
 
@@ -252,7 +252,7 @@ nb::object linspace(const nb::type_object_t<dr::ArrayBase> &dtype, double start,
                     double end, size_t size, bool endpoint) {
     const supp &s = nb::type_supplement<supp>(dtype);
 
-    if (s.meta.ndim != 1 || s.meta.shape[0] != 0xFF)
+    if (s.meta.ndim != 1 || s.meta.shape[0] != DRJIT_DYNAMIC)
         throw nb::type_error("drjit.linspace(): unsupported 'dtype' -- must "
                              "be a dynamically sized 1D array!");
 
@@ -288,7 +288,7 @@ nb::object gather(nb::type_object dtype, nb::object source,
 
     if (is_drjit_source_1d) {
         const meta &m = nb::type_supplement<supp>(source.type()).meta;
-        is_drjit_source_1d = m.ndim == 1 && m.shape[0] == 0xFF;
+        is_drjit_source_1d = m.ndim == 1 && m.shape[0] == DRJIT_DYNAMIC;
     }
 
     if (source.type().is(dtype) & !is_drjit_source_1d) {
@@ -399,8 +399,8 @@ nb::object gather(nb::type_object dtype, nb::object source,
     for (int i = 0; i < m.ndim; ++i)
         m.shape[i] = dtype_meta.shape[i];
 
-    if (m == dtype_meta && m.ndim > 0 && m.shape[m.ndim - 1] == 0xFF &&
-        m.shape[0] != 0xFF) {
+    if (m == dtype_meta && m.ndim > 0 && m.shape[m.ndim - 1] == DRJIT_DYNAMIC &&
+        m.shape[0] != DRJIT_DYNAMIC) {
         nb::object result = dtype();
         for (size_t i = 0; i < m.shape[0]; ++i) {
             result[i] =
@@ -419,7 +419,7 @@ void scatter(nb::object target, nb::object value, nb::object index,
 
     if (is_drjit_target_1d) {
         const meta &m = nb::type_supplement<supp>(target.type()).meta;
-        is_drjit_target_1d = m.ndim == 1 && m.shape[0] == 0xFF;
+        is_drjit_target_1d = m.ndim == 1 && m.shape[0] == DRJIT_DYNAMIC;
     }
 
     if (target.type().is(value.type()) & !is_drjit_target_1d) {
@@ -530,8 +530,8 @@ void scatter(nb::object target, nb::object value, nb::object index,
     for (int i = 0; i < m.ndim; ++i)
         m.shape[i] = value_meta.shape[i];
 
-    if (m == value_meta && m.ndim > 0 && m.shape[0] != 0xFF) {
-        if (m.shape[m.ndim - 1] != 0xFF || m.ndim > 1) {
+    if (m == value_meta && m.ndim > 0 && m.shape[0] != DRJIT_DYNAMIC) {
+        if (m.shape[m.ndim - 1] != DRJIT_DYNAMIC || m.ndim > 1) {
             for (size_t i = 0; i < m.shape[0]; ++i)
                 ::scatter(target, value[i],
                           index * nb::cast(m.shape[0]) + nb::cast(i), active);
@@ -581,7 +581,7 @@ nb::object ravel(nb::handle_t<dr::ArrayBase> h, char order,
         return nb::steal(s.op_tensor_array(h.ptr()));
     }
 
-    if (s.meta.ndim == 1 && s.meta.shape[0] == 0xFF) {
+    if (s.meta.ndim == 1 && s.meta.shape[0] == DRJIT_DYNAMIC) {
         if (shape_out && strides_out) {
             shape_out->push_back(len(h));
             strides_out->push_back(1);
@@ -622,13 +622,13 @@ nb::object ravel(nb::handle_t<dr::ArrayBase> h, char order,
     m.is_diff = s.meta.is_diff;
     m.type = s.meta.type;
     m.ndim = 1;
-    m.shape[0] = 0xFF;
+    m.shape[0] = DRJIT_DYNAMIC;
 
     nb::object result = empty_alt(
         nb::borrow<nb::type_object>(drjit::detail::array_get(m)), stride);
 
     nb::handle index_dtype;
-    if (s.meta.shape[s.meta.ndim - 1] == 0xFF) {
+    if (s.meta.shape[s.meta.ndim - 1] == DRJIT_DYNAMIC) {
         m.type = (uint16_t) VarType::UInt32;
         index_dtype = drjit::detail::array_get(m);
     }
@@ -692,7 +692,7 @@ nb::object unravel(const nb::type_object_t<dr::ArrayBase> &dtype,
     m.is_diff = s.meta.is_diff;
     m.type = s.meta.type;
     m.ndim = 1;
-    m.shape[0] = 0xFF;
+    m.shape[0] = DRJIT_DYNAMIC;
 
     nb::handle flat = drjit::detail::array_get(m);
     if (!flat.is(array.type())) {
@@ -710,7 +710,7 @@ nb::object unravel(const nb::type_object_t<dr::ArrayBase> &dtype,
     Py_ssize_t shape[4] { }, strides[4] { }, stride = 1;
     int ndim = s.meta.ndim;
     for (int i = 0; i < ndim; ++i) {
-        if (s.meta.shape[i] == 0xFF) {
+        if (s.meta.shape[i] == DRJIT_DYNAMIC) {
             if (i != s.meta.ndim - 1)
                 throw nb::type_error("drjit.unravel(): only the last dimension "
                                      "of 'dtype' may be dynamic!");
@@ -744,7 +744,7 @@ nb::object unravel(const nb::type_object_t<dr::ArrayBase> &dtype,
     }
 
     nb::handle index_dtype;
-    if (s.meta.shape[s.meta.ndim - 1] == 0xFF) {
+    if (s.meta.shape[s.meta.ndim - 1] == DRJIT_DYNAMIC) {
         m.type = (uint16_t) VarType::UInt32;
         index_dtype = drjit::detail::array_get(m);
     }

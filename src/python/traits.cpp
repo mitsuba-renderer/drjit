@@ -75,7 +75,7 @@ extern void bind_traits(nb::module_ m) {
         nb::handle tp = h.is_type() ? h : h.type();
         if (is_drjit_type(tp)) {
             Py_ssize_t shape = nb::type_supplement<supp>(tp).meta.shape[0];
-            if (shape == 0xFF)
+            if (shape == DRJIT_DYNAMIC)
                 shape = -1;
             return shape;
         } else {

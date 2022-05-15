@@ -22,7 +22,7 @@ inline bool operator==(const meta &a, const meta &b) {
 }
 
 bool array_resize(PyObject *self, const supp &s, Py_ssize_t len) {
-    if (s.meta.shape[0] == 0xFF) {
+    if (s.meta.shape[0] == DRJIT_DYNAMIC) {
         try {
             s.init(nb::inst_ptr<void>(self), (size_t) len);
         } catch (const std::exception &e) {
@@ -42,6 +42,130 @@ bool array_resize(PyObject *self, const supp &s, Py_ssize_t len) {
         }
         return true;
     }
+}
+
+static void print_dtype(nb::detail::Buffer &buf, nb::dlpack::dtype dtype) {
+    switch ((nb::dlpack::dtype_code) dtype.code) {
+        case nb::dlpack::dtype_code::Int: buf.put("int"); break;
+        case nb::dlpack::dtype_code::UInt: buf.put("uint"); break;
+        case nb::dlpack::dtype_code::Float: buf.put("float"); break;
+        case nb::dlpack::dtype_code::Bfloat: buf.put("bfloat"); break;
+        case nb::dlpack::dtype_code::Complex: buf.put("complex"); break;
+    }
+    buf.put_uint32(dtype.bits);
+    if (dtype.lanes != 1) {
+        buf.put('x');
+        buf.put_uint32(dtype.lanes);
+    }
+}
+
+void array_init_from_tensor(nb::handle self, nb::handle arg) {
+    const supp &s = nb::type_supplement<supp>(self.type());
+    auto tensor = nb::cast<nb::tensor<nb::c_contig>>(arg);
+
+    bool dim_match = tensor.ndim() == s.meta.ndim;
+    size_t size = 1;
+    if (dim_match) {
+        for (int i = 0; i < s.meta.ndim; ++i) {
+            size_t value = s.meta.shape[i];
+            size *= tensor.shape(i);
+            if (value == DRJIT_DYNAMIC)
+                continue;
+            if (value != tensor.shape(i)) {
+                dim_match = false;
+                break;
+            }
+        }
+    }
+
+    if (!dim_match) {
+        nb::detail::Buffer buf(64);
+        buf.fmt("%s.__init__(): expected a tensor of shape (",
+                   Py_TYPE(self.ptr())->tp_name);
+        for (int i = 0; i < s.meta.ndim; ++i) {
+            if (s.meta.shape[i] == DRJIT_DYNAMIC)
+                buf.put('*');
+            else
+                buf.put_uint32((uint32_t) s.meta.shape[i]);
+            if (i + 1 < s.meta.ndim)
+                buf.put(", ");
+        }
+        buf.put("), got (");
+        for (size_t i = 0; i < tensor.ndim(); ++i) {
+            buf.put_uint32((uint32_t) tensor.shape(i));
+            if (i + 1 < tensor.ndim())
+                buf.put(", ");
+        }
+        buf.put(")");
+        throw nb::type_error(buf.get());
+    }
+
+    nb::dlpack::dtype dtype = dlpack_dtype((VarType) s.meta.type),
+                      dtype_2 = tensor.dtype();
+    if (dtype != dtype_2) {
+        nb::detail::Buffer buf(64);
+        buf.fmt("%s.__init__(): mismatched dtype: expected '",
+                   Py_TYPE(self.ptr())->tp_name);
+        print_dtype(buf, dtype);
+        buf.put("', got '");
+        print_dtype(buf, dtype_2);
+        buf.put("'!");
+        throw nb::type_error(buf.get());
+    }
+
+    meta temp_meta { };
+    temp_meta.is_llvm = s.meta.is_llvm;
+    temp_meta.is_cuda = s.meta.is_cuda;
+    temp_meta.is_diff = s.meta.is_diff;
+    temp_meta.type = s.meta.type;
+    temp_meta.ndim = 1;
+    temp_meta.shape[0] = DRJIT_DYNAMIC;
+    nb::handle temp_t = drjit::detail::array_get(temp_meta);
+    nb::object temp = temp_t();
+
+    if (s.meta.is_cuda || s.meta.is_llvm) {
+        JitBackend backend =
+            s.meta.is_cuda ? JitBackend::CUDA : JitBackend::LLVM;
+        int32_t device_type =
+            s.meta.is_cuda ? nb::device::cuda::value : nb::device::cpu::value;
+
+        uint32_t index = 0;
+        if (device_type == tensor.device_type()) {
+            index = jit_var_mem_map(backend, (VarType) s.meta.type, tensor.data(), size, 0);
+
+            arg.inc_ref();
+            jit_var_set_callback(index, [](uint32_t /* i */, int free, void *o) {
+                if (free)
+                    Py_DECREF((PyObject *) o);
+            }, arg.ptr());
+        } else {
+            AllocType at;
+            switch (tensor.device_type()) {
+                case nb::device::cuda::value: at = AllocType::Device; break;
+                case nb::device::cpu::value:  at = AllocType::Host; break;
+                default: throw std::runtime_error("Unsupported source device!");
+            }
+
+            index = jit_var_mem_copy(backend, at, (VarType) s.meta.type,
+                                     tensor.data(), size);
+        }
+
+        nb::type_supplement<supp>(temp_t).op_set_index(nb::inst_ptr<void>(temp), index);
+    } else {
+        if (tensor.device_type() != nb::device::cpu::value)
+            throw std::runtime_error("Unsupported source device!");
+
+        nb::type_supplement<supp>(temp_t).init(nb::inst_ptr<void>(temp), size);
+        size *= dtype.bits / 8;
+        memcpy(s.ptr(nb::inst_ptr<void>(temp)), tensor.data(), size);
+    }
+
+    nb::object unraveled = unravel(
+        nb::borrow<nb::type_object_t<dr::ArrayBase>>(self.type()),
+        nb::handle_t<dr::ArrayBase>(temp), 'C');
+
+    nb::inst_destruct(self);
+    nb::inst_move(self, unraveled);
 }
 
 int array_init(PyObject *self, PyObject *args, PyObject *kwds) {
@@ -122,6 +246,23 @@ int array_init(PyObject *self, PyObject *args, PyObject *kwds) {
             return 0;
         }
 
+        bool is_dynamic = s.meta.is_tensor;
+        for (int i = 0; i < s.meta.ndim; ++i)
+            is_dynamic |= s.meta.shape[i] == DRJIT_DYNAMIC;
+
+        if (is_dynamic && strcmp(arg_tp->tp_name, "numpy.ndarray") == 0) {
+            try {
+                array_init_from_tensor(self, arg);
+                nb::inst_mark_ready(self);
+            } catch (const std::exception &e) {
+                PyErr_Format(PyExc_TypeError, "%s.__init__(): %s",
+                             Py_TYPE(self)->tp_name, e.what());
+                return -1;
+            }
+
+            return 0;
+        }
+
         if (arg_tp->tp_as_sequence && arg_tp != s.value) {
             // General path for all sequence types
             auto arg_item = arg_tp->tp_as_sequence->sq_item;
@@ -172,7 +313,7 @@ int array_init(PyObject *self, PyObject *args, PyObject *kwds) {
         }
 
         Py_ssize_t len = s.meta.shape[0];
-        if (len == 0xFF) {
+        if (len == DRJIT_DYNAMIC) {
             len = 1;
 
             if (s.op_full) {

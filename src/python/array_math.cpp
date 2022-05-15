@@ -1,6 +1,5 @@
 #include "python.h"
 
-
 namespace drjit {
     template <typename T> T fma(const T &a, const T &b, const T &c) {
         return fmadd(a, b, c);
@@ -50,7 +49,7 @@ static nb::object nb_math_unop(const char *name, size_t ops_offset,
 
         nb::inst_zero(result);
 
-        if (s.meta.shape[0] == 0xFF)
+        if (s.meta.shape[0] == DRJIT_DYNAMIC)
             s.init(nb::inst_ptr<void>(result), size);
 
         for (Py_ssize_t i = 0; i < size; ++i) {
@@ -123,7 +122,7 @@ static PyObject *nb_math_unop_2(const char *name, size_t ops_offset,
     nb::inst_zero(result_1);
     nb::inst_zero(result_2);
 
-    if (s.meta.shape[0] == 0xFF)
+    if (s.meta.shape[0] == DRJIT_DYNAMIC)
         s.init(nb::inst_ptr<void>(result), size);
 
     try {
@@ -220,7 +219,7 @@ static PyObject *nb_math_binop(const char *name, size_t ops_offset,
 
     nb::inst_zero(result);
 
-    if (s.meta.shape[0] == 0xFF)
+    if (s.meta.shape[0] == DRJIT_DYNAMIC)
         s.init(nb::inst_ptr<void>(result), sr);
 
     Py_ssize_t i0 = 0,
@@ -329,7 +328,7 @@ static PyObject *nb_math_ternop(const char *name, size_t ops_offset,
 
     nb::inst_zero(result);
 
-    if (s.meta.shape[0] == 0xFF)
+    if (s.meta.shape[0] == DRJIT_DYNAMIC)
         s.init(nb::inst_ptr<void>(result), sr);
 
     Py_ssize_t i0 = 0,

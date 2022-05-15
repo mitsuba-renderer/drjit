@@ -16,7 +16,7 @@ Py_ssize_t len(PyObject *o) noexcept {
     const supp &s = nb::type_supplement<supp>(tp);
     Py_ssize_t length = s.meta.shape[0];
 
-    if (length == 0xFF)
+    if (length == DRJIT_DYNAMIC)
         length = (Py_ssize_t) s.len(nb::inst_ptr<void>(o));
 
     return length;
@@ -30,7 +30,7 @@ bool shape_impl(nb::handle h, int i, Py_ssize_t *shape) noexcept {
     const supp &s = nb::type_supplement<supp>(tp);
     Py_ssize_t size = s.meta.shape[0], cur = shape[i];
 
-    if (size == 0xFF)
+    if (size == DRJIT_DYNAMIC)
         size = (Py_ssize_t) s.len(nb::inst_ptr<void>(h));
 
     Py_ssize_t max_size = size > cur ? size : cur;
