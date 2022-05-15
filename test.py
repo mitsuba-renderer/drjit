@@ -851,6 +851,7 @@ def test30_gather_complex_2():
     assert type(r) is MyStruct
     assert dr.all(r.a == dr.scalar.ArrayXf([2, 1]))
 
+
 def test31_scatter_complex():
     import drjit.scalar as s
     import drjit.llvm as l
@@ -858,6 +859,27 @@ def test31_scatter_complex():
     target = dr.empty(l.Float, 6)
     dr.scatter(target, l.Array3f([[1, 4], [2, 5], [3, 6]]), [0, 1])
     assert dr.all(target == l.Float([1, 2, 3, 4, 5, 6]))
+
+
+def test31_scatter_complex_2():
+    x = dr.scalar.ArrayXf([1, 2, 3, 4])
+    y = dr.scalar.ArrayXf([5, 6, 7, 8])
+    a = dr.scalar.ArrayXf([10, 11])
+    b = dr.scalar.ArrayXf([20, 21])
+    i = dr.scalar.ArrayXu([1, 0])
+    dr.scatter((x, y), (a, b), i)
+    assert dr.all(x == dr.scalar.ArrayXf([11, 10, 3, 4]))
+    assert dr.all(y == dr.scalar.ArrayXf([21, 20, 7, 8]))
+
+    class MyStruct:
+        DRJIT_STRUCT = { 'a' : dr.scalar.ArrayXf }
+        def __init__(self, a: dr.scalar.ArrayXf):
+            self.a = a
+
+    x = MyStruct(x)
+    y = MyStruct(b)
+    dr.scatter(x, y, i)
+    assert dr.all(x.a == dr.scalar.ArrayXf(21, 20, 3, 4))
 
 
 def test32_ravel(capsys):

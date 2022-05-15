@@ -413,15 +413,57 @@ nb::object gather(nb::type_object dtype, nb::object source,
     throw nb::type_error("drjit.gather(): unsupported dtype!");
 }
 
-void scatter(nb::handle_t<dr::ArrayBase> target,
-             nb::object value,
-             nb::object index,
+void scatter(nb::object target, nb::object value, nb::object index,
              nb::object active) {
-    const supp &target_s = nb::type_supplement<supp>(target.type());
+    bool is_drjit_target_1d = is_drjit_type(target.type());
 
-    if (target_s.meta.ndim != 1 || target_s.meta.shape[0] != 0xFF)
+    if (is_drjit_target_1d) {
+        const meta &m = nb::type_supplement<supp>(target.type()).meta;
+        is_drjit_target_1d = m.ndim == 1 && m.shape[0] == 0xFF;
+    }
+
+    if (target.type().is(value.type()) & !is_drjit_target_1d) {
+        bool is_sequence = nb::isinstance<nb::sequence>(value);
+        bool is_mapping = nb::isinstance<nb::mapping>(value);
+
+        if (is_sequence || is_mapping) {
+            size_t len_value = nb::len(value),
+                   len_target = nb::len(target);
+
+            if (len_value != len_target)
+                throw std::runtime_error("drjit.scatter(): 'target' and 'value' "
+                                         "have incompatible lengths!");
+        }
+
+        if (is_sequence) {
+            for (size_t i = 0, l = nb::len(value); i < l; ++i)
+                scatter(target[i], value[i], index, active);
+            return;
+        }
+
+        if (is_mapping) {
+            for (nb::handle k : nb::borrow<nb::mapping>(value).keys())
+                scatter(target[k], value[k], index, active);
+            return;
+        }
+
+        nb::object dstruct = nb::getattr(target.type(), "DRJIT_STRUCT", nb::handle());
+        if (dstruct.is_valid() && nb::isinstance<nb::dict>(dstruct)) {
+            nb::dict dstruct_dict = nb::borrow<nb::dict>(dstruct);
+
+            for (auto [k, v] : dstruct_dict)
+                scatter(nb::getattr(target, k), nb::getattr(value, k),
+                        index, active);
+
+            return;
+        }
+    }
+
+    if (!is_drjit_target_1d)
         throw nb::type_error(
             "drjit.scatter(): 'target' argument must be a dynamic 1D array!");
+
+    const supp &target_s = nb::type_supplement<supp>(target.type());
 
     meta target_meta = target_s.meta,
          active_meta = target_meta,
@@ -513,7 +555,7 @@ static void ravel_recursive(nb::handle result, nb::handle value,
             nb::object index =
                 arange(nb::borrow<nb::type_object_t<dr::ArrayBase>>(index_dtype), offset,
                        offset + strides[depth] * shape[depth], strides[depth]);
-            scatter(result, nb::borrow(value), index, nb::cast(true));
+            scatter(nb::borrow(result), nb::borrow(value), index, nb::cast(true));
         } else {
             result[offset] = value;
         }
