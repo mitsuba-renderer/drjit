@@ -11,7 +11,7 @@ Args:
     arg (object): An arbitrary Python object
 
 Returns:
-    bool: ``True`` if **arg** or type(**arg**) is a Dr.Jit array type, and ``False`` otherwise)";
+    bool: ``True`` if ``arg`` or type(``arg``) is a Dr.Jit array type, and ``False`` otherwise)";
 
 static const char *doc_is_struct_v = R"(
 is_struct_v(arg, /)
@@ -26,7 +26,7 @@ Args:
     arg (object): An arbitrary Python object
 
 Returns:
-    bool: ``True`` if **arg** has a ``DRJIT_STRUCT`` member)";
+    bool: ``True`` if ``arg`` has a ``DRJIT_STRUCT`` member)";
 
 static const char *doc_size_v = R"(
 size_v(arg, /)
@@ -42,7 +42,7 @@ Args:
 
 Returns:
     int: Returns either the static size or :py:data:`drjit.Dynamic` when
-    **arg** is a dynamic Dr.Jit array. Returns ``1`` for all other types.)";
+    ``arg`` is a dynamic Dr.Jit array. Returns ``1`` for all other types.)";
 
 static const char *doc_depth_v = R"(
 depth_v(arg, /)
@@ -189,7 +189,7 @@ Args:
     arg (object): An arbitrary Python object
 
 Returns:
-    bool: ``True`` if **arg** represents a Dr.Jit mask array or Python ``bool``
+    bool: ``True`` if ``arg`` represents a Dr.Jit mask array or Python ``bool``
     instance or type.
 )";
 
@@ -204,7 +204,7 @@ Args:
     arg (object): An arbitrary Python object
 
 Returns:
-    bool: ``True`` if **arg** represents an integral Dr.Jit array or
+    bool: ``True`` if ``arg`` represents an integral Dr.Jit array or
     Python ``int`` instance or type.
 )";
 
@@ -217,7 +217,7 @@ Args:
     arg (object): An arbitrary Python object
 
 Returns:
-    bool: ``True`` if **arg** represents a Dr.Jit floating point array or
+    bool: ``True`` if ``arg`` represents a Dr.Jit floating point array or
     Python ``float`` instance or type.
 )";
 
@@ -234,7 +234,7 @@ Args:
     arg (object): An arbitrary Python object
 
 Returns:
-    bool: ``True`` if **arg** represents an arithmetic Dr.Jit array or
+    bool: ``True`` if ``arg`` represents an arithmetic Dr.Jit array or
     Python ``int`` or ``float`` instance or type.
 )";
 
@@ -248,7 +248,7 @@ Args:
     arg (object): An arbitrary Python object
 
 Returns:
-    bool: ``True`` if **arg** represents an signed Dr.Jit array or
+    bool: ``True`` if ``arg`` represents an signed Dr.Jit array or
     Python ``int`` or ``float`` instance or type.
 )";
 
@@ -263,7 +263,7 @@ Args:
     arg (object): An arbitrary Python object
 
 Returns:
-    bool: ``True`` if **arg** represents an unsigned Dr.Jit array or
+    bool: ``True`` if ``arg`` represents an unsigned Dr.Jit array or
     Python ``bool`` instance or type.
 )";
 
@@ -276,7 +276,7 @@ Args:
     arg (object): An arbitrary Python object
 
 Returns:
-    bool: ``True`` if **arg** represents an array type from the
+    bool: ``True`` if ``arg`` represents an array type from the
     ``drjit.cuda.*`` or ``drjit.llvm.*`` namespaces, and ``False`` otherwise.
 )";
 
@@ -288,7 +288,7 @@ Args:
     arg (object): An arbitrary Python object
 
 Returns:
-    bool: ``True`` if **arg** represents an array type from the
+    bool: ``True`` if ``arg`` represents an array type from the
     ``drjit.cuda.*`` namespace, and ``False`` otherwise.
 )";
 
@@ -300,7 +300,7 @@ Args:
     arg (object): An arbitrary Python object
 
 Returns:
-    bool: ``True`` if **arg** represents an array type from the
+    bool: ``True`` if ``arg`` represents an array type from the
     ``drjit.llvm.*`` namespace, and ``False`` otherwise.
 )";
 
@@ -316,7 +316,7 @@ Args:
     arg (object): An arbitrary Python object
 
 Returns:
-    bool: ``True`` if **arg** represents an array type from the
+    bool: ``True`` if ``arg`` represents an array type from the
     ``drjit.[cuda/llvm].ad.*`` namespace, and ``False`` otherwise.
 )";
 
@@ -480,7 +480,7 @@ static const char *doc_rcp = R"(
 rcp(arg, /)
 Evaluate the reciprocal (1 / arg) of the provided input.
 
-When **arg** is a CUDA single precision array, the operation is implemented
+When ``arg`` is a CUDA single precision array, the operation is implemented
 using the native multi-function unit ("MUFU"). The result is slightly
 approximate in this case (refer to the documentation of the instruction
 `rcp.approx.ftz.f32` in the NVIDIA PTX manual for details).
@@ -495,7 +495,7 @@ static const char *doc_rsqrt = R"(
 rsqrt(arg, /)
 Evaluate the reciprocal square root (1 / sqrt(arg)) of the provided input.
 
-When **arg** is a CUDA single precision array, the operation is implemented
+When ``arg`` is a CUDA single precision array, the operation is implemented
 using the native multi-function unit ("MUFU"). The result is slightly
 approximate in this case (refer to the documentation of the instruction
 `rsqrt.approx.ftz.f32` in the NVIDIA PTX manual for details).
@@ -573,7 +573,7 @@ Natural exponential approximation based on the CEPHES library.
 See the section on :ref:`transcendental function approximations
 <transcendental-accuracy>` for details regarding accuracy.
 
-When **arg** is a CUDA single precision array, the operation is implemented
+When ``arg`` is a CUDA single precision array, the operation is implemented
 using the native multi-function unit ("MUFU").
 
 Args:
@@ -589,7 +589,7 @@ Base-2 exponential approximation based on the CEPHES library.
 See the section on :ref:`transcendental function approximations
 <transcendental-accuracy>` for details regarding accuracy.
 
-When **arg** is a CUDA single precision array, the operation is implemented
+When ``arg`` is a CUDA single precision array, the operation is implemented
 using the native multi-function unit ("MUFU").
 
 Args:
@@ -605,7 +605,7 @@ Natural exponential approximation based on the CEPHES library.
 See the section on :ref:`transcendental function approximations
 <transcendental-accuracy>` for details regarding accuracy.
 
-When **arg** is a CUDA single precision array, the operation is implemented
+When ``arg`` is a CUDA single precision array, the operation is implemented
 using the native multi-function unit ("MUFU").
 
 Args:
@@ -621,7 +621,7 @@ Base-2 exponential approximation based on the CEPHES library.
 See the section on :ref:`transcendental function approximations
 <transcendental-accuracy>` for details regarding accuracy.
 
-When **arg** is a CUDA single precision array, the operation is implemented
+When ``arg`` is a CUDA single precision array, the operation is implemented
 using the native multi-function unit ("MUFU").
 
 Args:
@@ -639,7 +639,7 @@ The implementation of this function is designed to achieve low error on the doma
 section on :ref:`transcendental function approximations
 <transcendental-accuracy>` for details regarding accuracy.
 
-When **arg** is a CUDA single precision array, the operation is implemented
+When ``arg`` is a CUDA single precision array, the operation is implemented
 using the native multi-function unit ("MUFU").
 
 Args:
@@ -657,7 +657,7 @@ domain :math:`|x| < 8192` and will not perform as well beyond this range. See
 the section on :ref:`transcendental function approximations
 <transcendental-accuracy>` for details regarding accuracy.
 
-When **arg** is a CUDA single precision array, the operation is implemented
+When ``arg`` is a CUDA single precision array, the operation is implemented
 using the native multi-function unit ("MUFU").
 
 Args:
@@ -676,7 +676,7 @@ domain :math:`|x| < 8192` and will not perform as well beyond this range. See
 the section on :ref:`transcendental function approximations
 <transcendental-accuracy>` for details regarding accuracy.
 
-When **arg** is a CUDA single precision array, the operation is implemented
+When ``arg`` is a CUDA single precision array, the operation is implemented
 using two operations involving the native multi-function unit ("MUFU").
 
 Args:
@@ -694,7 +694,7 @@ domain :math:`|x| < 8192` and will not perform as well beyond this range. See
 the section on :ref:`transcendental function approximations
 <transcendental-accuracy>` for details regarding accuracy.
 
-When **arg** is a CUDA single precision array, the operation is implemented
+When ``arg`` is a CUDA single precision array, the operation is implemented
 using the native multi-function unit ("MUFU").
 
 Args:
@@ -756,7 +756,7 @@ Args:
     x (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
 
 Returns:
-    float | drjit.ArrayBase: Arctangent of **y**/**x**, using the argument signs to
+    float | drjit.ArrayBase: Arctangent of ``y``/``x``, using the argument signs to
     determine the quadrant of the return value)";
 
 static const char *doc_ldexp = R"(
@@ -768,7 +768,7 @@ Args:
     n (float | drjit.ArrayBase): A Python or Dr.Jit floating point type *without fractional component*
 
 Returns:
-    float | drjit.ArrayBase: The result of **x** multipled by 2 taken to the power **n**.)";
+    float | drjit.ArrayBase: The result of ``x`` multipled by 2 taken to the power ``n``.)";
 
 static const char *doc_sinh = R"(
 sinh(arg, /)
@@ -876,15 +876,15 @@ Args:
 Returns:
     (float, float) | (drjit.ArrayBase, drjit.ArrayBase): Normalized fraction
     ``frac`` on the interval :math:`[\frac{1}{2}, 1)` and an exponent ``exp``
-    so that ``frac * 2**(exp + 1)`` equals **arg**.)";
+    so that ``frac * 2**(exp + 1)`` equals ``arg``.)";
 
 
 static const char *doc_fma = R"(
 fma(arg0, arg1, arg2, /)
 Perform a *fused multiply-add* (FMA) operation.
 
-Given arguments **arg0**, **arg1**, and **arg2**, this operation computes
-**arg0** * **arg1** + **arg2** using only one final rounding step. The
+Given arguments ``arg0``, ``arg1``, and ``arg2``, this operation computes
+``arg0`` * ``arg1`` + ``arg2`` using only one final rounding step. The
 operation is not only more accurate, but also more efficient, since FMA maps to
 a native machine instruction on platforms targeted by Dr.Jit.
 
@@ -904,28 +904,28 @@ static const char *doc_zeros = R"(
 Return a zero-initialized instance of the desired type and shape
 
 This function can create zero-initialized instances of various types. In
-particular, **dtype** can be:
+particular, ``dtype`` can be:
 
-- A Dr.Jit array type like :py:class:`drjit.cuda.Array2f`. When **shape**
+- A Dr.Jit array type like :py:class:`drjit.cuda.Array2f`. When ``shape``
   specifies a sequence, it must be compatible with static dimensions of the
-  **dtype**. For example, ``dr.zeros(dr.cuda.Array2f, shape=(3, 100))`` fails,
+  ``dtype``. For example, ``dr.zeros(dr.cuda.Array2f, shape=(3, 100))`` fails,
   since the leading dimension is incompatible with
-  :py:class:`drjit.cuda.Array2f`. When **shape** is an integer, it specifies
+  :py:class:`drjit.cuda.Array2f`. When ``shape`` is an integer, it specifies
   the size of the last (dynamic) dimension, if available.
 
-- A tensorial type like :py:class:`drjit.scalar.TensorXf`. When **shape**
+- A tensorial type like :py:class:`drjit.scalar.TensorXf`. When ``shape``
   specifies a sequence (list/tuple/..), it determines the tensor rank and
-  shape. When **shape** is an integer, the function creates a rank-1 tensor of
+  shape. When ``shape`` is an integer, the function creates a rank-1 tensor of
   the specified size.
 
 - A :ref:`custom data structure <custom-struct>`. In this case,
   :py:func:`drjit.zero()` will invoke itself recursively to zero-initialize
   each field of the data structure.
 
-- A scalar Python type like ``int``, ``float``, or ``bool``. The **shape**
+- A scalar Python type like ``int``, ``float``, or ``bool``. The ``shape``
   parameter is ignored in this case.
 
-Note that when **dtype** refers to a scalar mask or a mask array, it will be
+Note that when ``dtype`` refers to a scalar mask or a mask array, it will be
 initialized to ``False`` as opposed to zero.
 
 Args:
@@ -934,35 +934,35 @@ Args:
     shape (Sequence[int] | int): Shape of the desired array
 
 Returns:
-    object: A zero-initialized instance of type **dtype**.
+    object: A zero-initialized instance of type ``dtype``.
 )";
 
 static const char *doc_ones = R"(
 Return an instance of the desired type and shape filled with ones
 
 This function can create one-initialized instances of various types. In
-particular, **dtype** can be:
+particular, ``dtype`` can be:
 
-- A Dr.Jit array type like :py:class:`drjit.cuda.Array2f`. When **shape**
+- A Dr.Jit array type like :py:class:`drjit.cuda.Array2f`. When ``shape``
   specifies a sequence, it must be compatible with static dimensions of the
-  **dtype**. For example, ``dr.ones(dr.cuda.Array2f, shape=(3, 100))`` fails,
+  ``dtype``. For example, ``dr.ones(dr.cuda.Array2f, shape=(3, 100))`` fails,
   since the leading dimension is incompatible with
-  :py:class:`drjit.cuda.Array2f`. When **shape** is an integer, it specifies
+  :py:class:`drjit.cuda.Array2f`. When ``shape`` is an integer, it specifies
   the size of the last (dynamic) dimension, if available.
 
-- A tensorial type like :py:class:`drjit.scalar.TensorXf`. When **shape**
+- A tensorial type like :py:class:`drjit.scalar.TensorXf`. When ``shape``
   specifies a sequence (list/tuple/..), it determines the tensor rank and
-  shape. When **shape** is an integer, the function creates a rank-1 tensor of
+  shape. When ``shape`` is an integer, the function creates a rank-1 tensor of
   the specified size.
 
 - A :ref:`custom data structure <custom-struct>`. In this case,
   :py:func:`drjit.ones()` will invoke itself recursively to initialize
   each field of the data structure.
 
-- A scalar Python type like ``int``, ``float``, or ``bool``. The **shape**
+- A scalar Python type like ``int``, ``float``, or ``bool``. The ``shape``
   parameter is ignored in this case.
 
-Note that when **dtype** refers to a scalar mask or a mask array, it will be
+Note that when ``dtype`` refers to a scalar mask or a mask array, it will be
 initialized to ``True`` as opposed to one.
 
 Args:
@@ -971,7 +971,7 @@ Args:
     shape (Sequence[int] | int): Shape of the desired array
 
 Returns:
-    object: A instance of type **dtype** filled with ones.
+    object: A instance of type ``dtype`` filled with ones.
 )";
 
 
@@ -979,25 +979,25 @@ static const char *doc_full = R"(
 Return an constant-valued instance of the desired type and shape
 
 This function can create constant-valued instances of various types. In
-particular, **dtype** can be:
+particular, ``dtype`` can be:
 
-- A Dr.Jit array type like :py:class:`drjit.cuda.Array2f`. When **shape**
+- A Dr.Jit array type like :py:class:`drjit.cuda.Array2f`. When ``shape``
   specifies a sequence, it must be compatible with static dimensions of the
-  **dtype**. For example, ``dr.full(dr.cuda.Array2f, value=1.0, shape=(3,
+  ``dtype``. For example, ``dr.full(dr.cuda.Array2f, value=1.0, shape=(3,
   100))`` fails, since the leading dimension is incompatible with
-  :py:class:`drjit.cuda.Array2f`. When **shape** is an integer, it specifies
+  :py:class:`drjit.cuda.Array2f`. When ``shape`` is an integer, it specifies
   the size of the last (dynamic) dimension, if available.
 
-- A tensorial type like :py:class:`drjit.scalar.TensorXf`. When **shape**
+- A tensorial type like :py:class:`drjit.scalar.TensorXf`. When ``shape``
   specifies a sequence (list/tuple/..), it determines the tensor rank and
-  shape. When **shape** is an integer, the function creates a rank-1 tensor of
+  shape. When ``shape`` is an integer, the function creates a rank-1 tensor of
   the specified size.
 
 - A :ref:`custom data structure <custom-struct>`. In this case,
   :py:func:`drjit.full()` will invoke itself recursively to initialize
   each field of the data structure.
 
-- A scalar Python type like ``int``, ``float``, or ``bool``. The **shape**
+- A scalar Python type like ``int``, ``float``, or ``bool``. The ``shape``
   parameter is ignored in this case.
 
 Args:
@@ -1009,7 +1009,7 @@ Args:
     shape (Sequence[int] | int): Shape of the desired array
 
 Returns:
-    object: A instance of type **dtype** filled with **value**
+    object: A instance of type ``dtype`` filled with ``value``
 )";
 
 static const char *doc_empty = R"(
@@ -1021,25 +1021,25 @@ arrays filled with uninitialized/undefined data. It should only be used in
 combination with a subsequent call to an operation like
 :py:func:`drjit.scatter()` that overwrites the array contents with valid data.
 
-The **dtype** parameter can be used to request:
+The ``dtype`` parameter can be used to request:
 
-- A Dr.Jit array type like :py:class:`drjit.cuda.Array2f`. When **shape**
+- A Dr.Jit array type like :py:class:`drjit.cuda.Array2f`. When ``shape``
   specifies a sequence, it must be compatible with static dimensions of the
-  **dtype**. For example, ``dr.empty(dr.cuda.Array2f, shape=(3, 100))`` fails,
+  ``dtype``. For example, ``dr.empty(dr.cuda.Array2f, shape=(3, 100))`` fails,
   since the leading dimension is incompatible with
-  :py:class:`drjit.cuda.Array2f`. When **shape** is an integer, it specifies
+  :py:class:`drjit.cuda.Array2f`. When ``shape`` is an integer, it specifies
   the size of the last (dynamic) dimension, if available.
 
-- A tensorial type like :py:class:`drjit.scalar.TensorXf`. When **shape**
+- A tensorial type like :py:class:`drjit.scalar.TensorXf`. When ``shape``
   specifies a sequence (list/tuple/..), it determines the tensor rank and
-  shape. When **shape** is an integer, the function creates a rank-1 tensor of
+  shape. When ``shape`` is an integer, the function creates a rank-1 tensor of
   the specified size.
 
 - A :ref:`custom data structure <custom-struct>`. In this case,
   :py:func:`drjit.empty()` will invoke itself recursively to allocate memory
   for each field of the data structure.
 
-- A scalar Python type like ``int``, ``float``, or ``bool``. The **shape**
+- A scalar Python type like ``int``, ``float``, or ``bool``. The ``shape``
   parameter is ignored in this case, and the function returns a
   zero-initialized result (there is little point in instantiating uninitialized
   versions of scalar Python types).
@@ -1050,17 +1050,17 @@ Args:
     shape (Sequence[int] | int): Shape of the desired array
 
 Returns:
-    object: An instance of type **dtype** with arbitrary/undefined contents.
+    object: An instance of type ``dtype`` with arbitrary/undefined contents.
 )";
 
 
 static const char *doc_arange = R"(
-This function generates an integer sequence on the interval [**start**,
-**stop**) with step size **step**, where **start** = 0 and **step** = 1 if not
+This function generates an integer sequence on the interval [``start``,
+``stop``) with step size ``step``, where ``start`` = 0 and ``step`` = 1 if not
 specified.
 
 Args:
-    dtype (type): Desired Dr.Jit array type. The **dtype** must refer to a
+    dtype (type): Desired Dr.Jit array type. The ``dtype`` must refer to a
       dynamically sized 1D Dr.Jit array such as :py:class:`drjit.scalar.ArrayXu`
       or :py:class:`drjit.cuda.Float`.
     start (int): Start of the interval. The default value is `0`.
@@ -1069,16 +1069,16 @@ Args:
     step (int): Spacing between values. The default value is `1`.
 
 Returns:
-    object: The computed sequence of type **dtype**.
+    object: The computed sequence of type ``dtype``.
 )";
 
 
 static const char *doc_linspace = R"(
 This function generates an evenly spaced floating point sequence of size
-**num** covering the interval [**start**, **stop**].
+``num`` covering the interval [``start``, ``stop``].
 
 Args:
-    dtype (type): Desired Dr.Jit array type. The **dtype** must refer to a
+    dtype (type): Desired Dr.Jit array type. The ``dtype`` must refer to a
       dynamically sized 1D Dr.Jit floating point array, such as
       :py:class:`drjit.scalar.ArrayXf` or :py:class:`drjit.cuda.Float`.
     start (float): Start of the interval.
@@ -1087,7 +1087,7 @@ Args:
     endpoint (bool): Should the interval endpoint be included? The default is `True`.
 
 Returns:
-    object: The computed sequence of type **dtype**.
+    object: The computed sequence of type ``dtype``.
 )";
 
 static const char *doc_shape = R"(
@@ -1424,9 +1424,9 @@ Computes an index array that can be used to slice a tensor. It is used
 internally by Dr.Jit to implement complex cases of the ``__getitem__``
 operation.
 
-It must be called with the desired output **dtype**, which must be a dynamic
-32-bit integer array. The **shape** parameter specifies the dimensions of the
-input tensor, and **indices** contains the entries that would appear in a
+It must be called with the desired output ``dtype``, which must be a dynamic
+32-bit integer array. The ``shape`` parameter specifies the dimensions of the
+input tensor, and ``indices`` contains the entries that would appear in a
 complex slicing operation, but as a tuple. For example, ``[5:10:2, ..., None]``
 would be specified as ``(slice(5, 10, 2), Ellipsis, None)``.
 
@@ -1452,36 +1452,36 @@ Args:
 
 Returns:
     tuple[tuple[int, ...], drjit.ArrayBase]: Tuple consisting of the output array
-    shape and a flattened unsigned integer array of type **dtype** containing
+    shape and a flattened unsigned integer array of type ``dtype`` containing
     element indices.
 )";
 
 static const char *doc_gather = R"(
 Gather values from a flat array or nested data structure
 
-This function performs a *gather* (i.e., indirect memory read) from **source**
-at position **index**. It expects a **dtype** argument and will return an
-instance of this type. The optional **active** argument can be used to disable
+This function performs a *gather* (i.e., indirect memory read) from ``source``
+at position ``index``. It expects a ``dtype`` argument and will return an
+instance of this type. The optional ``active`` argument can be used to disable
 some of the components, which is useful when not all indices are valid; the
 corresponding output will be zero in this case.
 
 This operation can be used in the following different ways:
 
-1. When **dtype** is a 1D Dr.Jit array like :py:class:`drjit.llvm.ad.Float`,
+1. When ``dtype`` is a 1D Dr.Jit array like :py:class:`drjit.llvm.ad.Float`,
    this operation implements a parallelized version of the Python array
    indexing expression ``source[index]`` with optional masking. Example:
 
    .. code-block::
 
        source = dr.cuda.Float([...])
-       index = dr.cuda.UInt([...]) # Note: negative indices not supported
+       index = dr.cuda.UInt([...]) # Note: negative indices are not permitted
        result = dr.gather(dtype=type(source), source=source, index=index)
 
-2. When **dtype** is a more complex type (e.g. a :ref:`custom source structure
+2. When ``dtype`` is a more complex type (e.g. a :ref:`custom source structure
    <custom-struct>`, nested Dr.Jit array, tuple, list, dictionary, etc.), the
    behavior depends:
 
-   - When ``type(source)`` matches **dtype**, the the gather operation threads
+   - When ``type(source)`` matches ``dtype``, the the gather operation threads
      through entries and invokes itself recursively. For example, the
      gather operation in
 
@@ -1500,12 +1500,14 @@ This operation can be used in the following different ways:
              dr.gather(dr.cuda.Float, source.y, index),
              dr.gather(dr.cuda.Float, source.z, index))
 
-   - Otherwise, the operation loads the requested information from a flat input
-     array. For example, the gather below loads 3D vectors from a 1D array.
+   - Otherwise, the operation reconstructs the requested ``dtype`` from a flat
+     ``source`` array, using C-style ordering with a suitably modified
+     ``index``. For example, the gather below reads 3D vectors from a 1D array.
+
 
      .. code-block::
 
-         result = dr.cuda.Float([...])
+         source = dr.cuda.Float([...])
          index = dr.cuda.UInt([...])
          result = dr.gather(dr.cuda.Array3f, source, index)
 
@@ -1521,14 +1523,15 @@ This operation can be used in the following different ways:
 .. danger::
 
     The indices provided to this operation are unchecked. Out-of-bounds reads
-    are undefined behavior (if not disabled via the **active** parameter) and may
+    are undefined behavior (if not disabled via the ``active`` parameter) and may
     crash the application. Negative indices are not permitted.
 
 Args:
     dtype (type): The desired output type (typically equal to ``type(source)``,
       but other variations are possible as well, see the description above.)
-    source (drjit.ArrayBase): a 1D dynamic Dr.Jit array from which data
-      should be read.
+    source (object): The object from which data should be read (typically a 1D
+      Dr.Jit array, but other variations are possible as well, see the
+      description above.)
     index (object): a 1D dynamic unsigned 32-bit Dr.Jit array (e.g.,
       :py:class:`drjit.scalar.ArrayXu` or :py:class:`drjit.cuda.UInt`)
       specifying gather indices. Dr.Jit will attempt an implicit conversion if
@@ -1539,51 +1542,87 @@ Args:
       if another type is provided. The default is `True`.
 
 Returns:
-    object: An instance of type **dtype** containing the result of the gather
+    object: An instance of type ``dtype`` containing the result of the gather
     operation.
 )";
 
 static const char *doc_scatter = R"(
-Scatter values into a flat array
+Scatter values into a flat array or nested data structure
 
 This operation performs a *scatter* (i.e., indirect memory write) of the
-**value** parameter to the **target** array at position **index**. The optional
-**active** argument can be used to disable some of the individual write
+``value`` parameter to the ``target`` array at position ``index``. The optional
+``active`` argument can be used to disable some of the individual write
 operations, which is useful when not all provided values or indices are valid.
 
-When **source** and **target** have the same types, this operation can be
-interpreted as a parallelized version of the Python array indexing expression
-``target[index] = value`` with optional masking. In contrast to array
-indexing, negative indices are not handled, and conflicting writes to the
-same location are considered undefined behavior.
+This operation can be used in the following different ways:
 
-This function can also be used to scatter *nested* arrays like
-:py:class:`drjit.cuda.Vector3f`, which represents a sequence of 3D vectors.
-This is useful for storing vectors, matrices, etc., into a flat
-output array. For example, the following operation stores 3D vectors
+1. When ``target`` is a 1D Dr.Jit array like :py:class:`drjit.llvm.ad.Float`,
+   this operation implements a parallelized version of the Python array
+   indexing expression ``target[index] = value`` with optional masking. Example:
 
-.. code-block::
+   .. code-block::
 
-    target = dr.empty(dr.Float, 1024*3)
-    dr.scatter(target, value, index)
+       target = dr.empty(dr.cuda.Float, 1024*1024)
+       value = dr.cuda.Float([...])
+       index = dr.cuda.UInt([...]) # Note: negative indices are not permitted
+       dr.scatter(target, value=value, index=index)
 
-and is equivalent to
+2. When ``target`` is a more complex type (e.g. a :ref:`custom source structure
+   <custom-struct>`, nested Dr.Jit array, tuple, list, dictionary, etc.), the
+   behavior depends:
 
-.. code-block::
+   - When ``target`` and ``value`` are of the same type, the scatter operation
+     threads through entries and invokes itself recursively. For example, the
+     scatter operation in
 
-    dr.scatter(target, value[0], index*3 + 0)
-    dr.scatter(target, value[1], index*3 + 1)
-    dr.scatter(target, value[2], index*3 + 2)
+     .. code-block::
+
+         target = dr.cuda.Array3f(...)
+         value = dr.cuda.Array3f(...)
+         index = dr.cuda.UInt([...])
+         dr.scatter(target, value, index)
+
+     is equivalent to
+
+     .. code-block::
+
+         dr.scatter(target.x, value.x, index)
+         dr.scatter(target.y, value.y, index)
+         dr.scatter(target.z, value.z, index)
+
+   - Otherwise, the operation flattens the ``value`` array and writes it using
+     C-style ordering with a suitably modified ``index``. For example, the
+     scatter below writes 3D vectors into a 1D array.
+
+     .. code-block::
+
+         target = dr.cuda.Float(...)
+         value = dr.cuda.Array3f(...)
+         index = dr.cuda.UInt([...])
+         dr.scatter(target, value, index)
+
+     and is equivalent to
+
+     .. code-block::
+
+         dr.scatter(target, value.x, index*3 + 0)
+         dr.scatter(target, value.y, index*3 + 1)
+         dr.scatter(target, value.z, index*3 + 2)
 
 .. danger::
 
     The indices provided to this operation are unchecked. Out-of-bounds writes
-    are undefined behavior (if not disabled via the **active** parameter) and may
+    are undefined behavior (if not disabled via the ``active`` parameter) and may
     crash the application. Negative indices are not permitted.
 
+    Dr.Jit makes no guarantees about the expected behavior when a scatter
+    operation has *conflicts*, i.e., when a specific position is written
+    multiple times by a single :py:func:`drjit.scatter()` operation.
+
 Args:
-    target (drjit.ArrayBase): a 1D dynamic Dr.Jit array into which data
-      should be written.
+    target (object): The object into which data should be written (typically a
+      1D Dr.Jit array, but other variations are possible as well, see the
+    description above.)
     value (object): The values to be written (typically of type ``type(target)``,
       but other variations are possible as well, see the description above.)
       Dr.Jit will attempt an implicit conversion if the the input is not an
@@ -1636,8 +1675,8 @@ Args:
 
 Returns:
     object: A dynamic 1D array containing the flattened representation of
-    **array** with the desired ordering. The type of the return value depends
-    on the type of the input. When **array** is already contiguous/flattened,
+    ``array`` with the desired ordering. The type of the return value depends
+    on the type of the input. When ``array`` is already contiguous/flattened,
     this function returns it without making a copy.
 )";
 
@@ -1646,7 +1685,7 @@ static const char *doc_unravel = R"(
 Load a sequence of Dr.Jit vectors/matrices/etc. from a contiguous flat array
 
 This operation implements the inverse of :py:func:`drjit.ravel()`. In contrast
-to :py:func:`drjit.ravel()`, it requires one additional parameter (**dtype**)
+to :py:func:`drjit.ravel()`, it requires one additional parameter (``dtype``)
 specifying type of the return value. For example,
 
 .. code-block::
@@ -1665,7 +1704,7 @@ Args:
     dtype (type): An arbitrary Dr.Jit array type
 
     array (drjit.ArrayBase): A dynamically sized 1D Dr.Jit array instance
-       that is compatible with **dtype**. In other words, both must have the
+       that is compatible with ``dtype``. In other words, both must have the
        same underlying scalar type and be located imported in the same package
        (e.g., ``drjit.llvm.ad``).
 
@@ -1677,7 +1716,7 @@ Args:
 
 
 Returns:
-    object: An instance of type **dtype** containing the result of the unravel
+    object: An instance of type ``dtype`` containing the result of the unravel
     operation.
 )";
 
@@ -1685,7 +1724,7 @@ Returns:
 static const char *doc_schedule = R"(
 Schedule the provided JIT variable(s) for later evaluation
 
-This function causes **args** to be evaluated by the next kernel launch. In
+This function causes ``args`` to be evaluated by the next kernel launch. In
 other words, the effect of this operation is deferred: the next time that
 Dr.Jit's LLVM or CUDA backends compile and execute code, they will include the
 *trace* of the specified variables in the generated kernel and turn them into
