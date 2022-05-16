@@ -45,11 +45,20 @@ nb::object detach(nb::handle h, bool preserve_type=false) {
                 result_meta.is_diff &= preserve_type;
                 nb::handle result_tp = drjit::detail::array_get(result_meta);
                 nb::object result = nb::inst_alloc(result_tp);
-                PySequenceMethods *sm = ((PyTypeObject *) h.type().ptr())->tp_as_sequence;
+                PySequenceMethods *sm  = ((PyTypeObject *) h.type().ptr())->tp_as_sequence;
+                PySequenceMethods *sm2 = ((PyTypeObject *) result.type().ptr())->tp_as_sequence;
                 for (Py_ssize_t i = 0, l = sm->sq_length(h.ptr()); i < l; ++i) {
-                  sm->sq_ass_item(
-                      result.ptr(), i,
-                      detach(nb::steal(sm->sq_item(h.ptr(), i)), preserve_type).ptr());
+                    nb::object v = nb::steal(sm->sq_item(h.ptr(), i));
+                    if (!v.is_valid()) {
+                        result.clear();
+                        break;
+                    }
+
+                    nb::object v2 = detach(v, preserve_type);
+                    if (!v2.is_valid() || sm2->sq_ass_item(result.ptr(), i, v2.ptr())) {
+                        result.clear();
+                        break;
+                    }
                 }
                 return result;
             }
@@ -364,6 +373,7 @@ void enqueue(drjit::ADMode mode, nb::args args) {
 }
 
 extern void bind_array_autodiff(nb::module_ m) {
+    m.def("detach", &detach, "arg"_a, "preserve_type"_a=false, doc_detach);
     m.def("set_grad_enabled", &set_grad_enabled, "arg"_a, "value"_a, doc_set_grad_enabled);
     m.def("enable_grad", &enable_grad, "arg"_a, doc_enable_grad);
     m.def("disable_grad", &disable_grad, "arg"_a, doc_disable_grad);

@@ -1869,6 +1869,18 @@ In other case, e.g. for :py:class:`drjit.llvm.Float`,
 :py:class:`drjit.scalar.Array3f`, or :py:class:`drjit.scalar.ArrayXf`, the data
 is already contiguous and a zero-copy approach is used instead.)";
 
+static const char *doc_detach =R"(
+Detach the given variable from the AD backend.
+
+Args:
+    arg (object): An arbitrary Dr.Jit array, tensor or :ref:`custom data structure <custom-struct>`.
+
+    preserve_type (bool): Defines whether the returned variable should preserve
+        the type of the input variable.
+Returns:
+    object: The detached variable.
+)";
+
 static const char *doc_set_grad_enabled =R"(
 Enable or disable gradient tracking.
 
