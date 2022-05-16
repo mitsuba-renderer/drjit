@@ -1,4 +1,4 @@
-Python_add_library(
+add_library(
   drjit-python
   SHARED
   ../../include/drjit/python.h
