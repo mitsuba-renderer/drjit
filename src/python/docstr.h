@@ -1966,6 +1966,43 @@ Args:
         be enqueued.
 )";
 
+
+static const char *doc_traverse =R"(
+Traverse automatic differentiation graph
+
+Args:
+    type (type): defines the Dr.JIT array type used to build the AD graph
+
+    mode (ADMode): defines the mode traversal (e.g. backward, forward)
+
+    flags (ADFlag): flags to control what should and should not be destructed
+        during forward/backward mode traversal
+)";
+
+static const char *doc_forward_from =R"(
+TODO
+)";
+
+static const char *doc_forward =R"(
+TODO
+)";
+
+static const char *doc_forward_to =R"(
+TODO
+)";
+
+static const char *doc_backward_from =R"(
+TODO
+)";
+
+static const char *doc_backward =R"(
+TODO
+)";
+
+static const char *doc_backward_to =R"(
+TODO
+)";
+
 #if defined(__GNUC__)
 #  pragma GCC diagnostic pop
 #endif

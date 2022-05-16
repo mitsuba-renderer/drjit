@@ -113,6 +113,8 @@ def test03_set_accum_grad(m):
     dr.accum_grad(a, 2.0)
     assert dr.allclose(dr.grad(a), 4.0)
 
+    dr.set_grad(a, [3.0, 2.0, 1.0])
+    assert dr.allclose(dr.grad(a), m.Float([3.0, 2.0, 1.0]))
 
 
 if __name__ == "__main__":
