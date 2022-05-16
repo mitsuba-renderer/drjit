@@ -10,7 +10,7 @@
 
 #include "python.h"
 
-bool is_float(meta m) {
+static bool is_float(meta m) {
     VarType vt = (VarType) m.type;
     return vt == VarType::Float16 || vt == VarType::Float32 ||
            vt == VarType::Float64;
@@ -19,11 +19,11 @@ bool is_float(meta m) {
 nb::handle detach_t(nb::handle h) {
     if (is_drjit_array(h)) {
         const supp &s = nb::type_supplement<supp>(h.type());
-        auto detached_meta = s.meta;
+        meta detached_meta = s.meta;
         detached_meta.is_diff = false;
         return drjit::detail::array_get(detached_meta);
     }
-    return nb::handle();
+    return h;
 }
 
 nb::object detach(nb::handle h, bool preserve_type=false) {
@@ -31,7 +31,7 @@ nb::object detach(nb::handle h, bool preserve_type=false) {
         const supp &s = nb::type_supplement<supp>(h.type());
         if (s.meta.is_diff) {
             if (s.meta.ndim == 1) {
-                auto detached_meta = s.meta;
+                meta detached_meta = s.meta;
                 detached_meta.is_diff = false;
                 nb::handle detached_tp = drjit::detail::array_get(detached_meta);
                 nb::object detached = nb::inst_alloc(detached_tp);
@@ -41,12 +41,12 @@ nb::object detach(nb::handle h, bool preserve_type=false) {
                 else
                     return detached;
             } else {
-                auto result_meta = s.meta;
+                meta result_meta = s.meta;
                 result_meta.is_diff &= preserve_type;
                 nb::handle result_tp = drjit::detail::array_get(result_meta);
                 nb::object result = nb::inst_alloc(result_tp);
-                auto *sm = ((PyTypeObject *) result.type().ptr())->tp_as_sequence;
-                for (Py_ssize_t i = 0; i < sm->sq_length(h.ptr()); ++i) {
+                PySequenceMethods *sm = ((PyTypeObject *) h.type().ptr())->tp_as_sequence;
+                for (Py_ssize_t i = 0, l = sm->sq_length(h.ptr()); i < l; ++i) {
                   sm->sq_ass_item(
                       result.ptr(), i,
                       detach(nb::steal(sm->sq_item(h.ptr(), i)), preserve_type).ptr());
@@ -75,9 +75,13 @@ void set_grad_enabled(nb::handle h, bool value) {
             if (s.meta.ndim == 1) {
                 s.op_set_grad_enabled(nb::inst_ptr<void>(h), value);
             } else {
-                auto *sm = ((PyTypeObject *) h.type().ptr())->tp_as_sequence;
-                for (Py_ssize_t i = 0; i < sm->sq_length(h.ptr()); ++i)
-                    set_grad_enabled(nb::steal(sm->sq_item(h.ptr(), i)), value);
+                PySequenceMethods *sm = ((PyTypeObject *) h.type().ptr())->tp_as_sequence;
+                for (Py_ssize_t i = 0, l = sm->sq_length(h.ptr()); i < l; ++i) {
+                    nb::object v = nb::steal(sm->sq_item(h.ptr(), i));
+                    if (!v.is_valid())
+                        nb::detail::raise_python_error();
+                    set_grad_enabled(v, value);
+                }
             }
         }
     } else if (nb::isinstance<nb::sequence>(h)) {
@@ -106,9 +110,13 @@ bool grad_enabled(nb::handle h) {
             if (s.meta.ndim == 1) {
                 return s.op_grad_enabled(nb::inst_ptr<void>(h));
             } else {
-                auto *sm = ((PyTypeObject *) h.type().ptr())->tp_as_sequence;
-                for (Py_ssize_t i = 0; i < sm->sq_length(h.ptr()); ++i)
-                    result |= grad_enabled(nb::steal(sm->sq_item(h.ptr(), i)));
+                PySequenceMethods *sm = ((PyTypeObject *) h.type().ptr())->tp_as_sequence;
+                for (Py_ssize_t i = 0, l = sm->sq_length(h.ptr()); i < l; ++i) {
+                    nb::object v = nb::steal(sm->sq_item(h.ptr(), i));
+                    if (!v.is_valid())
+                        nb::detail::raise_python_error();
+                    result |= grad_enabled(v);
+                }
             }
         }
     } else if (nb::isinstance<nb::sequence>(h)) {
@@ -144,10 +152,20 @@ nb::object grad(nb::handle h) {
                 s.op_grad(nb::inst_ptr<void>(h), nb::inst_ptr<void>(result));
                 return result;
             } else {
-                auto *sm = ((PyTypeObject *) h.type().ptr())->tp_as_sequence;
-                for (Py_ssize_t i = 0; i < sm->sq_length(h.ptr()); ++i)
-                    sm->sq_ass_item(result.ptr(), i,
-                                    grad(nb::steal(sm->sq_item(h.ptr(), i))).ptr());
+                PySequenceMethods *sm = ((PyTypeObject *) h.type().ptr())->tp_as_sequence;
+                for (Py_ssize_t i = 0, l = sm->sq_length(h.ptr()); i < l; ++i) {
+                    nb::object v = nb::steal(sm->sq_item(h.ptr(), i));
+                    if (!v.is_valid()) {
+                        result.clear();
+                        break;
+                    }
+
+                    nb::object vr = grad(v);
+                    if (!vr.is_valid() || sm->sq_ass_item(result.ptr(), i, vr.ptr())) {
+                        result.clear();
+                        break;
+                    }
+                }
                 return result;
             }
         }
@@ -162,7 +180,7 @@ nb::object grad(nb::handle h) {
     }
 
     if (nb::isinstance<nb::mapping>(h)) {
-        auto m = nb::borrow<nb::mapping>(h);
+        nb::mapping m = nb::borrow<nb::mapping>(h);
         for (auto k : m.keys())
             result[k] = grad(m[k]);
         return result;
@@ -191,30 +209,39 @@ void set_grad(nb::handle h, nb::handle value) {
                 PyObject *o[2] = { grad_tmp.ptr(), value.ptr() };
                 if (!promote("set_grad", o, 2))
                     return;
-                value = nb::steal(o[1]);
+                // value = nb::steal(o[1]);
                 s.op_set_grad(nb::inst_ptr<void>(h), nb::inst_ptr<void>(value));
             } else {
-                auto *sm = ((PyTypeObject *) h.type().ptr())->tp_as_sequence;
+                PySequenceMethods *sm = ((PyTypeObject *) h.type().ptr())->tp_as_sequence;
                 bool value_sq =
                     is_drjit_array(value) &&
                     nb::type_supplement<supp>(value.type()).meta.ndim > 1;
-                for (Py_ssize_t i = 0; i < sm->sq_length(h.ptr()); ++i) {
-                    if (value_sq)
-                        set_grad(nb::steal(sm->sq_item(h.ptr(), i)),
-                                 nb::steal(sm->sq_item(value.ptr(), i)));
-                    else
-                        set_grad(nb::steal(sm->sq_item(h.ptr(), i)), value);
+                for (Py_ssize_t i = 0, l = sm->sq_length(h.ptr()); i < l; ++i) {
+                    nb::object v  = nb::steal(sm->sq_item(h.ptr(), i));
+                    if (!v.is_valid())
+                        nb::detail::raise_python_error();
+
+                    if (value_sq) {
+                        PySequenceMethods *sm2 = ((PyTypeObject *) value.type().ptr())->tp_as_sequence;
+                        nb::object v2 = nb::steal(sm2->sq_item(value.ptr(), i));
+                        if (!v2.is_valid())
+                            nb::detail::raise_python_error();
+                        set_grad(v, v2);
+                    } else {
+                        set_grad(v, value);
+                    }
                 }
             }
         }
     } else if (nb::isinstance<nb::sequence>(h)) {
-        for (Py_ssize_t i = 0; i < PySequence_Length((PyObject *)h.ptr()); i++)
+        for (Py_ssize_t i = 0; i < PySequence_Length((PyObject *)h.ptr()); i++) {
             if (nb::isinstance<nb::sequence>(value))
                 set_grad(h[i], value[i]);
             else
                 set_grad(h[i], value);
+        }
     } else if (nb::isinstance<nb::mapping>(h)) {
-        auto m = nb::borrow<nb::mapping>(h);
+        nb::mapping m = nb::borrow<nb::mapping>(h);
         for (auto k : m.keys()) {
             if (nb::isinstance<nb::mapping>(value))
                 set_grad(m[k], value[k]);
@@ -249,25 +276,34 @@ void accum_grad(nb::handle h, nb::handle value) {
             if (s.meta.ndim == 1) {
                 s.op_accum_grad(nb::inst_ptr<void>(h), nb::inst_ptr<void>(value));
             } else {
-                auto *sm = ((PyTypeObject *) h.type().ptr())->tp_as_sequence;
+                PySequenceMethods *sm = ((PyTypeObject *) h.type().ptr())->tp_as_sequence;
                 bool value_sq = is_drjit_array(value) && s_value.meta.ndim > 1;
-                for (Py_ssize_t i = 0; i < sm->sq_length(h.ptr()); ++i) {
-                    if (value_sq)
-                        accum_grad(nb::steal(sm->sq_item(h.ptr(), i)),
-                                   nb::steal(sm->sq_item(value.ptr(), i)));
-                    else
-                        accum_grad(nb::steal(sm->sq_item(h.ptr(), i)), value);
+                for (Py_ssize_t i = 0, l = sm->sq_length(h.ptr()); i < l; ++i) {
+                    nb::object v  = nb::steal(sm->sq_item(h.ptr(), i));
+                    if (!v.is_valid())
+                        nb::detail::raise_python_error();
+
+                    if (value_sq) {
+                        PySequenceMethods *sm2 = ((PyTypeObject *) value.type().ptr())->tp_as_sequence;
+                        nb::object v2 = nb::steal(sm2->sq_item(value.ptr(), i));
+                        if (!v2.is_valid())
+                            nb::detail::raise_python_error();
+                        accum_grad(v, v2);
+                    } else {
+                        accum_grad(v, value);
+                    }
                 }
             }
         }
     } else if (nb::isinstance<nb::sequence>(h)) {
-        for (Py_ssize_t i = 0; i < PySequence_Length((PyObject *)h.ptr()); i++)
+        for (Py_ssize_t i = 0; i < PySequence_Length((PyObject *)h.ptr()); i++) {
             if (nb::isinstance<nb::sequence>(value))
                 accum_grad(h[i], value[i]);
             else
                 accum_grad(h[i], value);
+        }
     } else if (nb::isinstance<nb::mapping>(h)) {
-        auto m = nb::borrow<nb::mapping>(h);
+        nb::mapping m = nb::borrow<nb::mapping>(h);
         for (auto k : m.keys()) {
             if (nb::isinstance<nb::mapping>(value))
                 accum_grad(m[k], value[k]);
@@ -292,16 +328,20 @@ void accum_grad(nb::handle h, nb::handle value) {
     }
 }
 
-void enqueue(nb::handle_of<drjit::ADMode> mode, nb::handle h) {
+void enqueue(drjit::ADMode mode, nb::handle h) {
     if (is_drjit_array(h)) {
         const supp &s = nb::type_supplement<supp>(h.type());
         if (s.meta.is_diff && is_float(s.meta)) {
             if (s.meta.ndim == 1) {
-                s.op_enqueue(nb::inst_ptr<void>(mode), nb::inst_ptr<void>(h));
+                s.op_enqueue(mode, nb::inst_ptr<void>(h));
             } else {
-                auto *sm = ((PyTypeObject *) h.type().ptr())->tp_as_sequence;
-                for (Py_ssize_t i = 0; i < sm->sq_length(h.ptr()); ++i)
-                    enqueue(mode, nb::steal(sm->sq_item(h.ptr(), i)));
+                PySequenceMethods *sm = ((PyTypeObject *) h.type().ptr())->tp_as_sequence;
+                for (Py_ssize_t i = 0; i < sm->sq_length(h.ptr()); ++i) {
+                    nb::object v = nb::steal(sm->sq_item(h.ptr(), i));
+                    if (!v.is_valid())
+                        nb::detail::raise_python_error();
+                    enqueue(mode, v);
+                }
             }
         }
     } else if (nb::isinstance<nb::sequence>(h)) {
@@ -318,7 +358,7 @@ void enqueue(nb::handle_of<drjit::ADMode> mode, nb::handle h) {
     }
 }
 
-void enqueue(nb::handle_of<drjit::ADMode> mode, nb::args args) {
+void enqueue(drjit::ADMode mode, nb::args args) {
     for (nb::handle h : args)
         enqueue(mode, h);
 }
@@ -331,7 +371,7 @@ extern void bind_array_autodiff(nb::module_ m) {
     m.def("grad", &grad, "arg"_a, doc_grad);
     m.def("set_grad", &set_grad, "arg"_a, "value"_a, doc_set_grad);
     m.def("accum_grad", &accum_grad, "arg"_a, "value"_a, doc_accum_grad);
-    m.def("enqueue", nb::overload_cast<nb::handle_of<drjit::ADMode>, nb::args>(enqueue), "mode"_a, "args"_a, doc_enqueue);
+    m.def("enqueue", nb::overload_cast<drjit::ADMode, nb::args>(enqueue), "mode"_a, "args"_a, doc_enqueue);
 }
 
 // TODO: replace_grad
