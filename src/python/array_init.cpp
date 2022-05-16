@@ -44,44 +44,28 @@ bool array_resize(PyObject *self, const supp &s, Py_ssize_t len) {
     }
 }
 
-static void print_dtype(nb::detail::Buffer &buf, nb::dlpack::dtype dtype) {
-    switch ((nb::dlpack::dtype_code) dtype.code) {
-        case nb::dlpack::dtype_code::Int: buf.put("int"); break;
-        case nb::dlpack::dtype_code::UInt: buf.put("uint"); break;
-        case nb::dlpack::dtype_code::Float: buf.put("float"); break;
-        case nb::dlpack::dtype_code::Bfloat: buf.put("bfloat"); break;
-        case nb::dlpack::dtype_code::Complex: buf.put("complex"); break;
-    }
-    buf.put_uint32(dtype.bits);
-    if (dtype.lanes != 1) {
-        buf.put('x');
-        buf.put_uint32(dtype.lanes);
-    }
-}
-
 void array_init_from_tensor(nb::handle self, nb::handle arg) {
     const supp &s = nb::type_supplement<supp>(self.type());
-    auto tensor = nb::cast<nb::tensor<nb::c_contig>>(arg);
+    size_t shape[4];
 
-    bool dim_match = tensor.ndim() == s.meta.ndim;
-    size_t size = 1;
-    if (dim_match) {
-        for (int i = 0; i < s.meta.ndim; ++i) {
-            size_t value = s.meta.shape[i];
-            size *= tensor.shape(i);
-            if (value == DRJIT_DYNAMIC)
-                continue;
-            if (value != tensor.shape(i)) {
-                dim_match = false;
-                break;
-            }
-        }
-    }
+    nb::detail::tensor_req tr;
+    tr.ndim = s.meta.ndim;
+    tr.req_order = 'C';
+    tr.req_dtype = true;
+    tr.req_shape = true;
+    tr.shape = shape;
+    tr.dtype = dlpack_dtype((VarType) s.meta.type);
 
-    if (!dim_match) {
+    nb::tensor<> tensor(nb::detail::tensor_import(
+        self.ptr(), &tr, (uint8_t) nb::detail::cast_flags::convert));
+
+    if (!tensor.is_valid()) {
         nb::detail::Buffer buf(64);
-        buf.fmt("%s.__init__(): expected a tensor of shape (",
-                   Py_TYPE(self.ptr())->tp_name);
+        buf.fmt("%s.__init__(): unable to initialize from another tensor of "
+                "type '%s'. The input must have the following configuration "
+                "for this to succeed: shape=(",
+                Py_TYPE(self.ptr())->tp_name,
+                ((PyTypeObject *) self.type().ptr())->tp_name);
         for (int i = 0; i < s.meta.ndim; ++i) {
             if (s.meta.shape[i] == DRJIT_DYNAMIC)
                 buf.put('*');
@@ -90,28 +74,23 @@ void array_init_from_tensor(nb::handle self, nb::handle arg) {
             if (i + 1 < s.meta.ndim)
                 buf.put(", ");
         }
-        buf.put("), got (");
-        for (size_t i = 0; i < tensor.ndim(); ++i) {
-            buf.put_uint32((uint32_t) tensor.shape(i));
-            if (i + 1 < tensor.ndim())
-                buf.put(", ");
+        buf.put("), dtype=");
+        switch ((nb::dlpack::dtype_code) tr.dtype.code) {
+            case nb::dlpack::dtype_code::Int: buf.put("int"); break;
+            case nb::dlpack::dtype_code::UInt: buf.put("uint"); break;
+            case nb::dlpack::dtype_code::Float: buf.put("float"); break;
+            case nb::dlpack::dtype_code::Bfloat: buf.put("bfloat"); break;
+            case nb::dlpack::dtype_code::Complex: buf.put("complex"); break;
         }
-        buf.put(")");
+        buf.put_uint32(tr.dtype.bits);
+        buf.put(", order='C'.");
+
         throw nb::type_error(buf.get());
     }
 
-    nb::dlpack::dtype dtype = dlpack_dtype((VarType) s.meta.type),
-                      dtype_2 = tensor.dtype();
-    if (dtype != dtype_2) {
-        nb::detail::Buffer buf(64);
-        buf.fmt("%s.__init__(): mismatched dtype: expected '",
-                   Py_TYPE(self.ptr())->tp_name);
-        print_dtype(buf, dtype);
-        buf.put("', got '");
-        print_dtype(buf, dtype_2);
-        buf.put("'!");
-        throw nb::type_error(buf.get());
-    }
+    size_t size = 1;
+    for (size_t i = 0; i < tensor.ndim(); ++i)
+        size *= tensor.shape(i);
 
     meta temp_meta { };
     temp_meta.is_llvm = s.meta.is_llvm;
@@ -129,14 +108,19 @@ void array_init_from_tensor(nb::handle self, nb::handle arg) {
         int32_t device_type =
             s.meta.is_cuda ? nb::device::cuda::value : nb::device::cpu::value;
 
-        uint32_t index = 0;
+        uint32_t index;
+
         if (device_type == tensor.device_type()) {
-            index = jit_var_mem_map(backend, (VarType) s.meta.type, tensor.data(), size, 0);
+            index = jit_var_mem_map(
+                s.meta.is_cuda ? JitBackend::CUDA : JitBackend::LLVM,
+                (VarType) s.meta.type, tensor.data(), size, 0);
 
             arg.inc_ref();
             jit_var_set_callback(index, [](uint32_t /* i */, int free, void *o) {
-                if (free)
+                if (free) {
+                    nb::gil_scoped_acquire gsa;
                     Py_DECREF((PyObject *) o);
+                }
             }, arg.ptr());
         } else {
             AllocType at;
@@ -156,7 +140,7 @@ void array_init_from_tensor(nb::handle self, nb::handle arg) {
             throw std::runtime_error("Unsupported source device!");
 
         nb::type_supplement<supp>(temp_t).init(nb::inst_ptr<void>(temp), size);
-        size *= dtype.bits / 8;
+        size *= tensor.dtype().bits / 8;
         memcpy(s.ptr(nb::inst_ptr<void>(temp)), tensor.data(), size);
     }
 

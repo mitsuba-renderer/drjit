@@ -62,9 +62,66 @@ static meta meta_promote(meta a, meta b) {
     return r;
 }
 
-static meta meta_from_builtin(PyObject *o) {
+static meta meta_from_builtin(PyObject *o) noexcept {
     meta m { };
     m.is_valid = true;
+
+    if (strcmp(Py_TYPE(o)->tp_name, "numpy.ndarray") == 0) {
+        try {
+            nb::object dt = nb::handle(o).attr("dtype");
+            nb::tuple shape = nb::borrow<nb::tuple>(nb::handle(o).attr("shape"));
+            char kind = nb::cast<const char *>(dt.attr("kind"))[0];
+            size_t size = nb::cast<size_t>(dt.attr("itemsize"));
+            size_t ndim = nb::len(shape);
+            VarType vt = VarType::Void;
+
+            switch (kind) {
+                case 'b':
+                    if (size == 1)
+                        vt = VarType::Bool;
+                    break;
+                case 'i':
+                    switch (size) {
+                        case 1: vt = VarType::Int8; break;
+                        case 2: vt = VarType::Int16; break;
+                        case 4: vt = VarType::Int32; break;
+                        case 8: vt = VarType::Int64; break;
+                    }
+                    break;
+                case 'u':
+                    switch (size) {
+                        case 1: vt = VarType::UInt8; break;
+                        case 2: vt = VarType::UInt16; break;
+                        case 4: vt = VarType::UInt32; break;
+                        case 8: vt = VarType::UInt64; break;
+                    }
+                    break;
+                case 'f':
+                    switch (size) {
+                        case 2: vt = VarType::Float16; break;
+                        case 4: vt = VarType::Float32; break;
+                        case 8: vt = VarType::Float64; break;
+                    }
+                    break;
+            }
+
+            if (ndim >= 1 && ndim <= 4 && vt != VarType::Void) {
+                m.ndim = ndim;
+                m.type = (uint16_t) vt;
+
+                for (size_t i = 0; i < ndim; ++i) {
+                    Py_ssize_t value = nb::cast<Py_ssize_t>(shape[i]);
+                    if (value > 4)
+                        m.shape[i] = DRJIT_DYNAMIC;
+                    else
+                        m.shape[i] = value;
+                }
+
+                return m;
+            }
+        } catch (...) { }
+    }
+
 
     if (PyNumber_Check(o)) {
         if (PyBool_Check(o)) {

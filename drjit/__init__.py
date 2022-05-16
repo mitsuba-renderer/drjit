@@ -124,12 +124,15 @@ def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
         # No derivative tracking in the following
         a, b = detach(a), detach(b)
 
-        if not is_float_v(a):
-            a = float32_array_t(type(a))(a)
-        if not is_float_v(b):
-            b = float32_array_t(type(b))(a)
+        if is_array_v(a):
+            diff = a - b
+        else:
+            diff = b - a
 
-        cond = abs(a - b) <= abs(b) * rtol + atol
+        a = type(diff)(a)
+        b = type(diff)(b)
+
+        cond = abs(diff) <= abs(b) * rtol + atol
 
         if equal_nan:
             cond |= isnan(a) & isnan(b)
