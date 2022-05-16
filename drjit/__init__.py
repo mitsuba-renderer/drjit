@@ -171,19 +171,3 @@ def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
             if not allclose(ia, ib, rtol, atol, equal_nan):
                 return False
         return True
-
-
-def detach(a, preserve_type=False):
-    if is_diff_v(a):
-        if preserve_type:
-            return type(a)(a.detach_())
-        else:
-            return a.detach_()
-    elif is_struct_v(a):
-        result = type(a)()
-        for k in type(a).DRJIT_STRUCT.keys():
-            setattr(result, k, detach(getattr(a, k), preserve_type=preserve_type))
-        return result
-    else:
-        return a
-

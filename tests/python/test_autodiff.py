@@ -23,7 +23,7 @@ def struct_class(m):
 
 def test01_enable_grad(m):
     # Test on single float variable
-    a = m.Float([4.0])
+    a = m.Float(4.0)
     assert not dr.grad_enabled(a)
     dr.enable_grad(a)
     assert dr.grad_enabled(a)
@@ -31,13 +31,13 @@ def test01_enable_grad(m):
     assert not dr.grad_enabled(a)
 
     # Test on non-float variable
-    b = m.UInt([1])
+    b = m.UInt(1)
     assert not dr.grad_enabled(b)
     dr.enable_grad(b)
     assert not dr.grad_enabled(b)
 
     # Test with sequence and mapping
-    c = m.Float([2.0])
+    c = m.Float(2.0)
 
     l = [a, b, c]
     assert not dr.grad_enabled(l)
@@ -58,7 +58,7 @@ def test01_enable_grad(m):
     assert dr.grad_enabled(a, b, c)
 
     # Test with static array
-    a = m.Array3f([1.0], [2.0], [3.0])
+    a = m.Array3f(1.0, 2.0, 3.0)
     assert not dr.grad_enabled(a)
     dr.enable_grad(a)
     assert dr.grad_enabled(a)
@@ -73,40 +73,52 @@ def test01_enable_grad(m):
 
 
 def test02_detach(m):
-    # types = [m.Float]
-    types = [m.Float, m.Array3f]
-    types = [m.Float, m.Array3f, struct_class(m)]
-    for t in types:
-        print(f"t: {t}")
-        a = t()
-        dr.enable_grad(a)
+    a = m.Float([1, 2, 3])
+    dr.enable_grad(a)
+    b = dr.detach(a, preserve_type=False)
+    c = dr.detach(a, preserve_type=True)
+    assert not type(a) == type(b)
+    assert type(a) == type(c)
+    assert dr.grad_enabled(a)
+    assert not dr.grad_enabled(b)
+    assert not dr.grad_enabled(c)
 
-        # b = dr.detach(a, preserve_type=False)
-        c = dr.detach(a, preserve_type=True)
+    a = m.Array3f()
+    dr.enable_grad(a)
+    b = dr.detach(a, preserve_type=False)
+    c = dr.detach(a, preserve_type=True)
+    assert not type(a) == type(b)
+    assert type(a) == type(c)
+    assert dr.grad_enabled(a)
+    assert not dr.grad_enabled(b)
+    assert not dr.grad_enabled(c)
 
-        # assert not type(a) == type(b)
-        assert type(a) == type(c)
-        assert dr.grad_enabled(a)
-        # assert not dr.grad_enabled(b)
-        assert not dr.grad_enabled(c)
+    a = struct_class(m)()
+    dr.enable_grad(a)
+    c = dr.detach(a)
+    assert type(a) == type(c)
+    assert dr.grad_enabled(a)
+    assert not dr.grad_enabled(c)
 
 
 def test03_set_accum_grad(m):
-    a = m.Float([4.0])
-    assert dr.grad(a) == [0.0]
+    a = m.Float([1, 2, 3])
+
+    dr.enable_grad(a)
+    assert dr.allclose(dr.grad(a), 0.0)
 
     dr.set_grad(a, 2.0)
-    assert dr.grad(a) == [2.0]
+    assert dr.allclose(dr.grad(a), 2.0)
 
     dr.accum_grad(a, 2.0)
-    assert dr.grad(a) == [4.0]
+    assert dr.allclose(dr.grad(a), 4.0)
 
 
 
 if __name__ == "__main__":
     from drjit.llvm.ad import Float
 
-    a = Float([4.0])
+    a = Float(4.0)
 
     print(a)
 

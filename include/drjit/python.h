@@ -613,9 +613,9 @@ template <typename T> nanobind::class_<T> bind_array(const char *name = nullptr)
         s.op_index_ad = [](const void *a) { return ((const T *) a)->index_ad(); };
         s.op_set_grad_enabled = [](void *a, bool v) { ((T *) a)->set_grad_enabled_(v); };
         s.op_grad_enabled = [](const void *a) { return ((const T *) a)->grad_enabled_(); };
-        s.op_grad = [](const void *a, void *b) { new (b) detached_t<T>(((const T *) a)->grad_()); };
-        s.op_set_grad = [](void *a, const void *b) { ((T *) a)->set_grad_(*(const detached_t<T> *) b); };
-        s.op_accum_grad = [](void *a, const void *b) { ((T *) a)->accum_grad_(*(const detached_t<T> *) b); };
+        s.op_grad = [](const void *a, void *b) { new (b) T(((const T *) a)->grad_()); };
+        s.op_set_grad = [](void *a, const void *b) { ((T *) a)->set_grad_(((const T *) b)->detach_()); };
+        s.op_accum_grad = [](void *a, const void *b) { ((T *) a)->accum_grad_(((const T *) b)->detach_()); };
         s.op_detach = [](const void *a, void *b) { new (b) detached_t<T>(((const T *) a)->detach_()); };
         s.op_enqueue = [](drjit::ADMode mode, const void *b) { ((const T *) b)->enqueue_(mode); };
     }
