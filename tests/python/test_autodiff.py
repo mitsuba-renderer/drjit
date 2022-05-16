@@ -13,13 +13,13 @@ def m(request):
     yield importlib.import_module(request.param)
 
 
-def instantiate_struct(m):
+def struct_class(m):
     class MyStruct:
         def __init__(self) -> None:
             self.x = m.Float()
             self.y = m.Float()
         DRJIT_STRUCT = { 'x': m.Float, 'y': m.Float }
-    return MyStruct()
+    return MyStruct
 
 def test01_enable_grad(m):
     # Test on single float variable
@@ -64,7 +64,7 @@ def test01_enable_grad(m):
     assert dr.grad_enabled(a)
     assert dr.grad_enabled(a[0])
 
-    s = instantiate_struct(m)
+    s = struct_class(m)()
     assert not dr.grad_enabled(s)
     dr.enable_grad(s.x)
     assert dr.grad_enabled(s)
@@ -72,7 +72,26 @@ def test01_enable_grad(m):
     assert dr.grad_enabled(s.y)
 
 
-def test02_set_accum_grad(m):
+def test02_detach(m):
+    # types = [m.Float]
+    types = [m.Float, m.Array3f]
+    types = [m.Float, m.Array3f, struct_class(m)]
+    for t in types:
+        print(f"t: {t}")
+        a = t()
+        dr.enable_grad(a)
+
+        # b = dr.detach(a, preserve_type=False)
+        c = dr.detach(a, preserve_type=True)
+
+        # assert not type(a) == type(b)
+        assert type(a) == type(c)
+        assert dr.grad_enabled(a)
+        # assert not dr.grad_enabled(b)
+        assert not dr.grad_enabled(c)
+
+
+def test03_set_accum_grad(m):
     a = m.Float([4.0])
     assert dr.grad(a) == [0.0]
 
