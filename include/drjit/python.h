@@ -37,6 +37,7 @@ using array_set_bool = void (*) (void *, bool);
 using array_get_bool = bool (*) (const void *);
 using array_set_grad = void (*) (void *, const void *);
 using array_enqueue = void (*) (drjit::ADMode mode, const void *);
+using array_traverse = void (*) (drjit::ADMode mode, uint32_t flags);
 
 struct array_metadata {
     uint16_t is_vector     : 1;
@@ -116,6 +117,7 @@ struct array_supplement {
     array_unop op_detach;
     array_set_grad op_set_grad, op_accum_grad;
     array_enqueue op_enqueue;
+    array_traverse op_traverse;
 };
 
 static_assert(sizeof(array_metadata) == 8);
@@ -618,6 +620,7 @@ template <typename T> nanobind::class_<T> bind_array(const char *name = nullptr)
         s.op_accum_grad = [](void *a, const void *b) { ((T *) a)->accum_grad_(((const T *) b)->detach_()); };
         s.op_detach = [](const void *a, void *b) { new (b) detached_t<T>(((const T *) a)->detach_()); };
         s.op_enqueue = [](drjit::ADMode mode, const void *b) { ((const T *) b)->enqueue_(mode); };
+        s.op_traverse = [](drjit::ADMode mode, uint32_t flags) { T::traverse_(mode, flags); };
     }
 
     if constexpr (T::IsDiff && T::Depth == 1) {

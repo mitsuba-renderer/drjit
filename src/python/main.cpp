@@ -59,15 +59,18 @@ NB_MODULE(drjit_ext, m_) {
     bind_array_builtin(m);
     bind_array_math(m);
     bind_array_misc(m);
-    bind_array_autodiff(m);
     bind_traits(m);
     bind_tensor(m);
 
     bind_scalar(scalar);
     bind_cuda(cuda);
-    bind_cuda_ad(cuda_ad);
     bind_llvm(llvm);
+
+#if defined(DRJIT_ENABLE_AUTODIFF)
+    bind_array_autodiff(m);
+    bind_cuda_ad(cuda_ad);
     bind_llvm_ad(cuda_ad);
+#endif
 
     // Type aliases
     scalar.attr("Int") = nb::handle(&PyLong_Type);
