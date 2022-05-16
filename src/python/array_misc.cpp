@@ -300,7 +300,7 @@ nb::object gather(nb::type_object dtype, nb::object source,
             if (!dtype.is(result.type()))
                 return dtype(result);
             else
-                return result;
+                return std::move(result);
         }
 
         if (nb::isinstance<nb::mapping>(source)) {
@@ -313,7 +313,7 @@ nb::object gather(nb::type_object dtype, nb::object source,
             if (!dtype.is(result.type()))
                 return dtype(result);
             else
-                return result;
+                return std::move(result);
         }
 
         nb::object dstruct = nb::getattr(dtype, "DRJIT_STRUCT", nb::handle());

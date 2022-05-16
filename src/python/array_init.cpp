@@ -50,11 +50,17 @@ void array_init_from_tensor(nb::handle self, nb::handle arg) {
 
     nb::detail::tensor_req tr;
     tr.ndim = s.meta.ndim;
+    tr.shape = shape;
+    tr.dtype = dlpack_dtype((VarType) s.meta.type);
     tr.req_order = 'C';
     tr.req_dtype = true;
     tr.req_shape = true;
-    tr.shape = shape;
-    tr.dtype = dlpack_dtype((VarType) s.meta.type);
+
+    for (size_t i = 0; i < s.meta.ndim; ++i) {
+        shape[i] = s.meta.shape[i];
+        if (shape[i] == DRJIT_DYNAMIC)
+            shape[i] = nb::any;
+    }
 
     nb::tensor<> tensor(nb::detail::tensor_import(
         self.ptr(), &tr, (uint8_t) nb::detail::cast_flags::convert));
@@ -89,8 +95,10 @@ void array_init_from_tensor(nb::handle self, nb::handle arg) {
     }
 
     size_t size = 1;
-    for (size_t i = 0; i < tensor.ndim(); ++i)
+    for (size_t i = 0; i < tensor.ndim(); ++i) {
+        printf("%zu %zu\n", i, tensor.shape(i));
         size *= tensor.shape(i);
+    }
 
     meta temp_meta { };
     temp_meta.is_llvm = s.meta.is_llvm;
@@ -115,13 +123,15 @@ void array_init_from_tensor(nb::handle self, nb::handle arg) {
                 s.meta.is_cuda ? JitBackend::CUDA : JitBackend::LLVM,
                 (VarType) s.meta.type, tensor.data(), size, 0);
 
-            arg.inc_ref();
-            jit_var_set_callback(index, [](uint32_t /* i */, int free, void *o) {
-                if (free) {
-                    nb::gil_scoped_acquire gsa;
-                    Py_DECREF((PyObject *) o);
-                }
-            }, arg.ptr());
+            if (index) {
+                arg.inc_ref();
+                jit_var_set_callback(index, [](uint32_t /* i */, int free, void *o) {
+                    if (free) {
+                        nb::gil_scoped_acquire gsa;
+                        Py_DECREF((PyObject *) o);
+                    }
+                }, arg.ptr());
+            }
         } else {
             AllocType at;
             switch (tensor.device_type()) {

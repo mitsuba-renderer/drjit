@@ -950,9 +950,10 @@ def test34_schedule(capsys):
         dr.set_log_level(0)
 
 
-def test35_dlpack():
+def test35_to_dlpack_numpy_cpu():
     import drjit.scalar as s
     import drjit.llvm as l
+
     from_dlpack = None
     try:
         import numpy as np
@@ -975,6 +976,84 @@ def test35_dlpack():
     assert np.all(x.__array__() == np.array([1, 2, 3]))
 
 
+def test36_to_dlpack_numpy_gpu():
+    import drjit.cuda as c
+    try:
+        import numpy as np
+        x = c.Array3f([1, 2], [3, 4], [5, 6])
+    except Exception as e:
+        pytest.skip('Dependencies not satisfied')
+    assert np.all(x.__array__() == np.array([[1, 2], [3, 4], [5, 6]]))
+
+
+def test38_construct_from_numpy_1():
+    import drjit.scalar as s
+
+    try:
+        import numpy as np
+    except:
+        pytest.skip('NumPy is missing')
+
+    # Simple scalar conversions, different types
+    assert dr.all(s.Array3f(np.array([1, 2, 3], dtype=np.float32)) == s.Array3f(1, 2, 3))
+    assert dr.all(s.Array3f(np.array([1, 2, 3], dtype=np.float64)) == s.Array3f(1, 2, 3))
+    assert dr.all(s.Array3f(np.array([1, 2, 3], dtype=np.int32)) == s.Array3f(1, 2, 3))
+    
+    with pytest.raises(TypeError):
+        # Size mismatch
+        s.Array3f(np.array([1, 2, 3, 4], dtype=np.float32))
+
+
+def test39_construct_from_numpy_2():
+    import drjit.scalar as s
+    import drjit.llvm as l
+
+    try:
+        import numpy as np
+    except:
+        pytest.skip('NumPy is missing')
+
+    p = np.array([1, 2, 3, 4], dtype=np.float32)
+    r = s.ArrayXf(p)
+    assert dr.all(r == s.ArrayXf(1, 2, 3, 4))
+
+    p = np.array([1, 2, 3, 4], dtype=np.float32)
+    r = l.Float(p)
+    assert dr.all(r == l.Float(1, 2, 3, 4))
+
+    # Check if zero-copy constructor works
+    p[0] = 5
+    assert dr.all(r == l.Float(5, 2, 3, 4))
+
+    with pytest.raises(TypeError) as ei:
+        l.Float64(p)
+    assert "mismatched dtype: expected 'float64', got 'float32'" in str(ei)
+
+    with pytest.raises(TypeError) as ei:
+        l.Array4f(p)
+    assert "expected a tensor of shape (4, *), got (4)" in str(ei)
+
+
+def test40_construct_from_numpy_3():
+    import drjit.llvm as l
+
+    try:
+        import numpy as np
+    except:
+        pytest.skip('NumPy is missing')
+
+    p = np.array([[1, 2], [4, 5], [6, 7]], dtype=np.float32)
+
+    with pytest.raises(TypeError) as ei:
+        r = l.Float(p)
+    assert "expected a tensor of shape (*), got (3, 2)" in str(ei)
+
+    r = l.Array3f(p)
+    assert dr.all_nested(
+        r == l.Array3f(
+            [1, 2],
+            [4, 5],
+            [6, 7]))
 
 #@pytest.mark.parametrize('name', ['sqrt', 'cbrt', 'sin', 'cos', 'tan', 'asin',
 #                                  'acos', 'atan', 'sinh', 'cosh', 'tanh',
