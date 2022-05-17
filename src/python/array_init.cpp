@@ -62,9 +62,10 @@ void array_init_from_tensor(nb::handle self, nb::handle arg) {
             shape[i] = nb::any;
     }
 
-    nb::tensor<> tensor(nb::detail::tensor_import(
-        arg.ptr(), &tr, (uint8_t) nb::detail::cast_flags::convert));
+    nb::detail::tensor_handle *th = nb::detail::tensor_import(
+        arg.ptr(), &tr, (uint8_t) nb::detail::cast_flags::convert);
 
+    nb::tensor<> tensor(th);
     if (!tensor.is_valid()) {
         nb::detail::Buffer buf(64);
         buf.fmt("%s.__init__(): unable to initialize from tensor of "
@@ -122,13 +123,11 @@ void array_init_from_tensor(nb::handle self, nb::handle arg) {
                 (VarType) s.meta.type, tensor.data(), size, 0);
 
             if (index) {
-                arg.inc_ref();
+                nb::detail::tensor_inc_ref(th);
                 jit_var_set_callback(index, [](uint32_t /* i */, int free, void *o) {
-                    if (free) {
-                        nb::gil_scoped_acquire gsa;
-                        Py_DECREF((PyObject *) o);
-                    }
-                }, arg.ptr());
+                    if (free)
+                        nb::detail::tensor_dec_ref((nb::detail::tensor_handle *) o);
+                }, th);
             }
         } else {
             AllocType at;
@@ -245,17 +244,30 @@ int array_init(PyObject *self, PyObject *args, PyObject *kwds) {
         for (int i = 0; i < s.meta.ndim; ++i)
             is_dynamic |= s.meta.shape[i] == DRJIT_DYNAMIC;
 
-        if (is_dynamic && strcmp(arg_tp->tp_name, "numpy.ndarray") == 0) {
-            try {
-                array_init_from_tensor(self, arg);
-                nb::inst_mark_ready(self);
-            } catch (const std::exception &e) {
-                PyErr_Format(PyExc_TypeError, "%s.__init__(): %s",
-                             Py_TYPE(self)->tp_name, e.what());
-                return -1;
-            }
+        if (is_dynamic) {
+            const char *module_name =
+                nb::borrow<nb::str>(nb::handle(arg_tp).attr("__module__")).c_str();
 
-            return 0;
+            bool is_numpy = strcmp(arg_tp->tp_name, "numpy.ndarray") == 0,
+                 is_pytorch = strcmp(arg_tp->tp_name, "Tensor") == 0 &&
+                              strcmp(module_name, "torch") == 0,
+                 is_jax = strcmp(arg_tp->tp_name, "DeviceArray") == 0 &&
+                          strncmp(module_name, "jaxlib", 6) == 0,
+                 is_tf = strstr(arg_tp->tp_name, "Tensor") != nullptr &&
+                         strncmp(module_name, "tensorflow", 10) == 0;
+
+            if (is_numpy || is_pytorch || is_jax || is_tf) {
+                try {
+                    array_init_from_tensor(self, arg);
+                    nb::inst_mark_ready(self);
+                } catch (const std::exception &e) {
+                    PyErr_Format(PyExc_TypeError, "%s.__init__(): %s",
+                                 Py_TYPE(self)->tp_name, e.what());
+                    return -1;
+                }
+
+                return 0;
+            }
         }
 
         if (try_sequence_import && arg_tp->tp_as_sequence) {

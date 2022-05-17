@@ -1025,6 +1025,8 @@ def test36_to_dlpack_numpy_gpu():
 
 
 def test38_construct_from_numpy_1():
+    # Simple scalar conversions, different types, static sizes
+
     import drjit.scalar as s
 
     try:
@@ -1032,7 +1034,6 @@ def test38_construct_from_numpy_1():
     except:
         pytest.skip('NumPy is missing')
 
-    # Simple scalar conversions, different types
     assert dr.all(s.Array3f(np.array([1, 2, 3], dtype=np.float32)) == s.Array3f(1, 2, 3))
     assert dr.all(s.Array3f(np.array([1, 2, 3], dtype=np.float64)) == s.Array3f(1, 2, 3))
     assert dr.all(s.Array3f(np.array([1, 2, 3], dtype=np.int32)) == s.Array3f(1, 2, 3))
@@ -1043,6 +1044,8 @@ def test38_construct_from_numpy_1():
 
 
 def test39_construct_from_numpy_2():
+    # Dynamically allocated arrays + implicit casts
+
     import drjit.scalar as s
     import drjit.llvm as l
 
@@ -1074,6 +1077,7 @@ def test39_construct_from_numpy_2():
 
 
 def test40_construct_from_numpy_3():
+    # Nested arrays, CPU-only
     import drjit.llvm as l
 
     try:
@@ -1091,7 +1095,25 @@ def test40_construct_from_numpy_3():
     assert dr.all_nested(r == l.Array3f([1, 2], [4, 5], [6, 7]))
 
 
-def test41_prevent_inefficient_cast(capsys):
+def test41_construct_from_numpy_4():
+    # Nested arrays, copy to CUDA Dr.Jit array
+    import drjit.cuda as c
+
+    try:
+        c.Float(1)
+        import numpy as np
+    except:
+        pytest.skip('NumPy/CUDA support missing')
+
+    p = np.array([[1, 2], [4, 5], [6, 7]], dtype=np.float32)
+
+    r = c.Array3f(p)
+    assert dr.all_nested(r == c.Array3f([1, 2], [4, 5], [6, 7]))
+    r = c.Array3i64(p)
+    assert dr.all_nested(r == c.Array3i64([1, 2], [4, 5], [6, 7]))
+
+
+def test42_prevent_inefficient_cast(capsys):
     import drjit.scalar as s
     import drjit.llvm as l
     import drjit.llvm.ad as la
@@ -1108,6 +1130,7 @@ def test41_prevent_inefficient_cast(capsys):
     with pytest.warns(RuntimeWarning, match=r"implicit conversion"):
         with pytest.raises(TypeError) as ei:
             print(l.Array3f(la.Array3f(1)))
+
 
 #@pytest.mark.parametrize('name', ['sqrt', 'cbrt', 'sin', 'cos', 'tan', 'asin',
 #                                  'acos', 'atan', 'sinh', 'cosh', 'tanh',
