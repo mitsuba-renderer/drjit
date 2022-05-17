@@ -34,7 +34,7 @@ static meta meta_promote(meta a, meta b) {
     r.is_valid = a.is_valid & b.is_valid;
     r.type = a.type > b.type ? a.type : b.type;
     r.tsize_rel = r.talign = 0;
-    r.ndim = a.ndim > b.ndim ? a.ndim : b.ndim ;
+    r.ndim = a.ndim > b.ndim ? a.ndim : b.ndim;
 
     memset(r.shape, 0, sizeof(r.shape));
 
@@ -54,6 +54,8 @@ static meta meta_promote(meta a, meta b) {
                 r.shape[i] = value_a;
             else if (value_a == 1 || value_b == 1)
                 r.shape[i] = value_a > value_b ? value_a : value_b;
+            else if (value_a == DRJIT_DYNAMIC || value_b == DRJIT_DYNAMIC)
+                r.shape[i] = DRJIT_DYNAMIC;
             else
                 r.is_valid = 0;
         }
@@ -61,6 +63,30 @@ static meta meta_promote(meta a, meta b) {
 
     return r;
 }
+
+#if 0
+static void meta_print(meta m) {
+    printf("meta[\n"
+           "  is_vector=%u,\n"
+           "  is_complex=%u,\n"
+           "  is_quaternion=%u,\n"
+           "  is_matrix=%u,\n"
+           "  is_tensor=%u,\n"
+           "  is_diff=%u,\n"
+           "  is_llvm=%u,\n"
+           "  is_cuda=%u,\n"
+           "  is_valid=%u,\n"
+           "  type=%u,\n"
+           "  shape=(%u, %u, %u, %u)\n"
+           "]\n",
+           m.is_vector, m.is_complex, m.is_quaternion, m.is_matrix, m.is_tensor,
+           m.is_diff, m.is_llvm, m.is_cuda, m.is_valid, m.type,
+           m.ndim > 0 ? m.shape[0] : 0,
+           m.ndim > 1 ? m.shape[1] : 0,
+           m.ndim > 2 ? m.shape[2] : 0,
+           m.ndim > 3 ? m.shape[3] : 0);
+}
+#endif
 
 static meta meta_from_builtin(PyObject *o) noexcept {
     meta m { };
@@ -80,6 +106,7 @@ static meta meta_from_builtin(PyObject *o) noexcept {
                     if (size == 1)
                         vt = VarType::Bool;
                     break;
+
                 case 'i':
                     switch (size) {
                         case 1: vt = VarType::Int8; break;
@@ -88,6 +115,7 @@ static meta meta_from_builtin(PyObject *o) noexcept {
                         case 8: vt = VarType::Int64; break;
                     }
                     break;
+
                 case 'u':
                     switch (size) {
                         case 1: vt = VarType::UInt8; break;
@@ -96,6 +124,7 @@ static meta meta_from_builtin(PyObject *o) noexcept {
                         case 8: vt = VarType::UInt64; break;
                     }
                     break;
+
                 case 'f':
                     switch (size) {
                         case 2: vt = VarType::Float16; break;
