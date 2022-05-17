@@ -384,8 +384,9 @@ static nb::object replace_grad(nb::handle h0, nb::handle h1) {
 
     nb::object result = nb::inst_alloc(result_tp);
     if (s0.meta.ndim == 1) {
-        s0.op_create(nb::inst_ptr<void>(o0), nb::inst_ptr<void>(o1),
-                     nb::inst_ptr<void>(result));
+        s0.op_ad_create(nb::inst_ptr<void>(o0),
+                        s1.op_index_ad(nb::inst_ptr<void>(o1)),
+                        nb::inst_ptr<void>(result));
         nb::inst_mark_ready(result);
         return result;
     } else {
@@ -490,11 +491,8 @@ static nb::object backward_to(nb::handle h, drjit::ADFlag flags) {
 
 static void backward_from(nb::handle h, drjit::ADFlag flags) {
     // Deduplicate components if `h` is a vector
-    if (is_drjit_array(h)) {
-        const supp &s = nb::type_supplement<supp>(h);
-        if (s.meta.ndim > 1)
-            h += nb::handle(PyFloat_FromDouble(0.0));
-    }
+    if (is_drjit_array(h) && nb::type_supplement<supp>(h).meta.ndim > 1)
+        h += nb::handle(PyFloat_FromDouble(0.0));
 
     set_grad(h, PyFloat_FromDouble(1.0));
     enqueue(drjit::ADMode::Backward, h);

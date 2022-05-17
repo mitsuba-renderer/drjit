@@ -36,9 +36,9 @@ using array_set_label = void (*) (void *, const char *);
 using array_set_bool = void (*) (void *, bool);
 using array_get_bool = bool (*) (const void *);
 using array_set_grad = void (*) (void *, const void *);
-using array_enqueue = void (*) (drjit::ADMode mode, const void *);
-using array_traverse = void (*) (drjit::ADMode mode, uint32_t flags);
-using array_create = void (*) (void *, const void *, void *);
+using array_enqueue = void (*) (drjit::ADMode, const void *);
+using array_traverse = void (*) (drjit::ADMode, uint32_t);
+using array_ad_create = void (*) (void *, uint32_t, void *);
 using array_set_label = void (*) (void *, const char *);
 
 
@@ -121,7 +121,7 @@ struct array_supplement {
     array_set_grad op_set_grad, op_accum_grad;
     array_enqueue op_enqueue;
     array_traverse op_traverse;
-    array_create op_create;
+    array_ad_create op_ad_create;
 };
 
 static_assert(sizeof(array_metadata) == 8);
@@ -622,11 +622,16 @@ template <typename T> nanobind::class_<T> bind_array(const char *name = nullptr)
         s.op_grad = [](const void *a, void *b) { new (b) T(((const T *) a)->grad_()); };
         s.op_set_grad = [](void *a, const void *b) { ((T *) a)->set_grad_(((const T *) b)->detach_()); };
         s.op_accum_grad = [](void *a, const void *b) { ((T *) a)->accum_grad_(((const T *) b)->detach_()); };
-        s.op_detach = [](const void *a, void *b) { new (b) detached_t<T>(((const T *) a)->detach_()); };
         s.op_enqueue = [](drjit::ADMode mode, const void *b) { ((const T *) b)->enqueue_(mode); };
         s.op_traverse = [](drjit::ADMode mode, uint32_t flags) { T::traverse_(mode, flags); };
-        s.op_create = [](void *a, const void *b, void *c) {
-            uint32_t index = ((const T *) b)->index_ad();
+
+    }
+
+    if constexpr (T::IsDiff && T::Depth == 1) {
+        s.op_detach = [](const void *a, void *b) {
+            new (b) detached_t<T>(((const T *) a)->detach_());
+        };
+        s.op_ad_create = [](void *a, uint32_t index, void *c) {
             detail::ad_inc_ref_impl<detached_t<T>>(index);
             new (c) T(T::create(index, detached_t<T>(((T *) a)->detach_())));
         };
