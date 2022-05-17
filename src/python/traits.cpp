@@ -341,10 +341,10 @@ extern void bind_traits(nb::module_ m) {
         doc_float_array_t);
 
     m.def(
-        "detach_t",
+        "detached_t",
         [](nb::handle h) {
-            if (is_drjit_array(h)) {
-                const supp &s = nb::type_supplement<supp>(h.type());
+            if (is_drjit_type(h)) {
+                const supp &s = nb::type_supplement<supp>(h);
                 meta detached_meta = s.meta;
                 detached_meta.is_diff = false;
                 return drjit::detail::array_get(detached_meta);
