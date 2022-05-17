@@ -149,12 +149,12 @@ def test47_replace_grad(m):
     assert z.y.index_ad == y2.y.index_ad
 
     z2 = z*z
-    assert dr.allclose(z2, m.Array3f(1, 16, 81))
+    assert dr.allclose(z2, [1, 16, 81])
 
     dr.backward(z2)
 
     assert dr.allclose(dr.grad(x), 0)
-    assert dr.allclose(dr.grad(y), m.Array3f(12, 32, 36))
+    assert dr.allclose(dr.grad(y), [12, 32, 36])
 
 
 if __name__ == "__main__":
