@@ -63,15 +63,15 @@ void array_init_from_tensor(nb::handle self, nb::handle arg) {
     }
 
     nb::tensor<> tensor(nb::detail::tensor_import(
-        self.ptr(), &tr, (uint8_t) nb::detail::cast_flags::convert));
+        arg.ptr(), &tr, (uint8_t) nb::detail::cast_flags::convert));
 
     if (!tensor.is_valid()) {
         nb::detail::Buffer buf(64);
-        buf.fmt("%s.__init__(): unable to initialize from another tensor of "
+        buf.fmt("%s.__init__(): unable to initialize from tensor of "
                 "type '%s'. The input must have the following configuration "
                 "for this to succeed: shape=(",
                 Py_TYPE(self.ptr())->tp_name,
-                ((PyTypeObject *) self.type().ptr())->tp_name);
+                ((PyTypeObject *) arg.type().ptr())->tp_name);
         for (int i = 0; i < s.meta.ndim; ++i) {
             if (s.meta.shape[i] == DRJIT_DYNAMIC)
                 buf.put('*');
@@ -95,10 +95,8 @@ void array_init_from_tensor(nb::handle self, nb::handle arg) {
     }
 
     size_t size = 1;
-    for (size_t i = 0; i < tensor.ndim(); ++i) {
-        printf("%zu %zu\n", i, tensor.shape(i));
+    for (size_t i = 0; i < tensor.ndim(); ++i)
         size *= tensor.shape(i);
-    }
 
     meta temp_meta { };
     temp_meta.is_llvm = s.meta.is_llvm;
@@ -181,15 +179,7 @@ int array_init(PyObject *self, PyObject *args, PyObject *kwds) {
         // Zero-initialize
         nb::detail::nb_inst_zero(self);
         return 0;
-    } else if (s.meta.shape[0] == 0) {
-        PyErr_Format(
-            PyExc_TypeError,
-            "%s.__init__(): too many arguments provided (expected 0, got %zu)!",
-            Py_TYPE(self)->tp_name, argc);
-        return -1;
-    }
-
-    if (argc == 1) {
+    } else if (argc == 1) {
         PyObject *arg = PyTuple_GET_ITEM(args, 0);
         PyTypeObject *arg_tp = Py_TYPE(arg);
 
@@ -205,10 +195,16 @@ int array_init(PyObject *self, PyObject *args, PyObject *kwds) {
             arg_meta_cp.type = s.meta.type;
 
             if (arg_meta_cp == s.meta && s.op_cast) {
-                if (s.op_cast(nb::inst_ptr<void>(arg), (VarType) arg_meta.type,
-                              nb::inst_ptr<void>(self)) == 0) {
-                    nb::inst_mark_ready(self);
-                    return 0;
+                try {
+                    if (s.op_cast(nb::inst_ptr<void>(arg), (VarType) arg_meta.type,
+                                  nb::inst_ptr<void>(self)) == 0) {
+                        nb::inst_mark_ready(self);
+                        return 0;
+                    }
+                } catch (const std::exception &e) {
+                    PyErr_Format(PyExc_RuntimeError, "%s.__init__(): %s",
+                                 Py_TYPE(self)->tp_name, e.what());
+                    return -1;
                 }
             }
         }
@@ -307,16 +303,30 @@ int array_init(PyObject *self, PyObject *args, PyObject *kwds) {
         }
 
         Py_ssize_t len = s.meta.shape[0];
+
+        if (len == 0) {
+            PyErr_Format(
+                PyExc_TypeError,
+                "%s.__init__(): too many arguments provided (expected 0, got 1)!",
+                Py_TYPE(self)->tp_name);
+            return -1;
+        }
+
         if (len == DRJIT_DYNAMIC) {
             len = 1;
 
             if (s.op_full) {
-                s.op_full(result, len, nb::inst_ptr<void>(self));
+                try {
+                    s.op_full(result, len, nb::inst_ptr<void>(self));
+                } catch (const std::exception &e) {
+                    Py_DECREF(result);
+                    PyErr_Format(PyExc_RuntimeError, "%s.__init__(): %s",
+                                 Py_TYPE(self)->tp_name, e.what());
+                    return -1;
+                }
                 Py_DECREF(result);
                 return 0;
-            }
-
-            if (!array_resize(self, s, len)) {
+            } else if (!array_resize(self, s, len)) {
                 Py_DECREF(result);
                 return -1;
             }

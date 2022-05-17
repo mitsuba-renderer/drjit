@@ -980,7 +980,7 @@ def test36_to_dlpack_numpy_gpu():
     import drjit.cuda as c
     try:
         import numpy as np
-        x = c.Array3f([1, 2], [3, 4], [5, 6])
+        c.Float(1)
     except Exception as e:
         pytest.skip('Dependencies not satisfied')
     assert np.all(x.__array__() == np.array([[1, 2], [3, 4], [5, 6]]))
@@ -1025,13 +1025,15 @@ def test39_construct_from_numpy_2():
     p[0] = 5
     assert dr.all(r == l.Float(5, 2, 3, 4))
 
-    with pytest.raises(TypeError) as ei:
-        l.Float64(p)
-    assert "mismatched dtype: expected 'float64', got 'float32'" in str(ei)
+    r = l.Float64(p)
+    assert dr.all(r == l.Float64(5, 2, 3, 4))
+    p[0] = 1
+    assert dr.all(r == l.Float64(5, 2, 3, 4))
 
     with pytest.raises(TypeError) as ei:
         l.Array4f(p)
-    assert "expected a tensor of shape (4, *), got (4)" in str(ei)
+    print(str(ei))
+    assert "unable to initialize from tensor of type 'numpy.ndarray'. The input must have the following configuration for this to succeed: shape=(4, *), dtype=float32, order='C'" in str(ei)
 
 
 def test40_construct_from_numpy_3():
@@ -1046,7 +1048,7 @@ def test40_construct_from_numpy_3():
 
     with pytest.raises(TypeError) as ei:
         r = l.Float(p)
-    assert "expected a tensor of shape (*), got (3, 2)" in str(ei)
+    assert "The input must have the following configuration for this to succeed: shape=(*), dtype=float32, order='C'" in str(ei)
 
     r = l.Array3f(p)
     assert dr.all_nested(
