@@ -182,6 +182,7 @@ int array_init(PyObject *self, PyObject *args, PyObject *kwds) {
     } else if (argc == 1) {
         PyObject *arg = PyTuple_GET_ITEM(args, 0);
         PyTypeObject *arg_tp = Py_TYPE(arg);
+        bool try_sequence_import = arg_tp != s.value;
 
         // Copy/conversion from a compatible Dr.Jit array
         if (is_drjit_type(arg_tp)) {
@@ -207,6 +208,10 @@ int array_init(PyObject *self, PyObject *args, PyObject *kwds) {
                     return -1;
                 }
             }
+
+            // Disallow inefficient element-by-element imports of JIT arrays
+            if (arg_meta.ndim == 1 && arg_meta.shape[0] == DRJIT_DYNAMIC)
+                try_sequence_import = false;
         }
 
         nb::detail::nb_inst_zero(self);
@@ -253,7 +258,7 @@ int array_init(PyObject *self, PyObject *args, PyObject *kwds) {
             return 0;
         }
 
-        if (arg_tp->tp_as_sequence && arg_tp != s.value) {
+        if (try_sequence_import && arg_tp->tp_as_sequence) {
             // General path for all sequence types
             auto arg_item = arg_tp->tp_as_sequence->sq_item;
             auto arg_length = arg_tp->tp_as_sequence->sq_length;
@@ -278,7 +283,7 @@ int array_init(PyObject *self, PyObject *args, PyObject *kwds) {
         }
 
         // Catch-all case for iterable types
-        if (arg_tp->tp_iter && arg_tp != s.value) {
+        if (try_sequence_import && arg_tp->tp_iter) {
             PyObject *list = PySequence_List(arg);
             if (!list)
                 return -1;
@@ -298,8 +303,14 @@ int array_init(PyObject *self, PyObject *args, PyObject *kwds) {
             PyObject *args[2] = { nullptr, arg };
             result = NB_VECTORCALL((PyObject *) s.value, args + 1,
                                    1 | PY_VECTORCALL_ARGUMENTS_OFFSET, nullptr);
-            if (!result)
+            if (!result) {
+                PyErr_Clear();
+                PyErr_Format(
+                    PyExc_TypeError,
+                    "%s.__init__(): initialization from type '%s' failed!",
+                    Py_TYPE(self)->tp_name, arg_tp->tp_name);
                 return -1;
+            }
         }
 
         Py_ssize_t len = s.meta.shape[0];

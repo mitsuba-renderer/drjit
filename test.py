@@ -983,6 +983,7 @@ def test36_to_dlpack_numpy_gpu():
         c.Float(1)
     except Exception as e:
         pytest.skip('Dependencies not satisfied')
+    x = c.Array3f([1, 2], [3, 4], [5, 6])
     assert np.all(x.__array__() == np.array([[1, 2], [3, 4], [5, 6]]))
 
 
@@ -1032,8 +1033,7 @@ def test39_construct_from_numpy_2():
 
     with pytest.raises(TypeError) as ei:
         l.Array4f(p)
-    print(str(ei))
-    assert "unable to initialize from tensor of type 'numpy.ndarray'. The input must have the following configuration for this to succeed: shape=(4, *), dtype=float32, order='C'" in str(ei)
+    assert "unable to initialize from tensor of type 'numpy.ndarray'. The input must have the following configuration for this to succeed: shape=(4, *), dtype=float32, order='C'" in str(ei.value)
 
 
 def test40_construct_from_numpy_3():
@@ -1048,7 +1048,7 @@ def test40_construct_from_numpy_3():
 
     with pytest.raises(TypeError) as ei:
         r = l.Float(p)
-    assert "The input must have the following configuration for this to succeed: shape=(*), dtype=float32, order='C'" in str(ei)
+    assert "The input must have the following configuration for this to succeed: shape=(*), dtype=float32, order='C'" in str(ei.value)
 
     r = l.Array3f(p)
     assert dr.all_nested(
@@ -1056,6 +1056,25 @@ def test40_construct_from_numpy_3():
             [1, 2],
             [4, 5],
             [6, 7]))
+
+
+def test41_prevent_inefficient_cast(capsys):
+    import drjit.scalar as s
+    import drjit.llvm as l
+    import drjit.llvm.ad as la
+
+    with pytest.raises(TypeError) as ei:
+        print(s.ArrayXf(la.Float([1, 2, 3, 4])))
+
+    with pytest.raises(TypeError) as ei:
+        print(l.Float(s.ArrayXf([1, 2, 3, 4])))
+
+    with pytest.raises(TypeError) as ei:
+        print(l.Float(la.Float([1, 2, 3, 4])))
+
+    with pytest.warns(RuntimeWarning, match=r"implicit conversion"):
+        with pytest.raises(TypeError) as ei:
+            print(l.Array3f(la.Array3f(1)))
 
 #@pytest.mark.parametrize('name', ['sqrt', 'cbrt', 'sin', 'cos', 'tan', 'asin',
 #                                  'acos', 'atan', 'sinh', 'cosh', 'tanh',
