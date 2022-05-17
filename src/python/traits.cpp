@@ -339,4 +339,17 @@ extern void bind_traits(nb::module_ m) {
             return reinterpret_array_t(h, vt);
         },
         doc_float_array_t);
+
+    m.def(
+        "detach_t",
+        [](nb::handle h) {
+            if (is_drjit_array(h)) {
+                const supp &s = nb::type_supplement<supp>(h.type());
+                meta detached_meta = s.meta;
+                detached_meta.is_diff = false;
+                return drjit::detail::array_get(detached_meta);
+            }
+            return h;
+        },
+        doc_detach_t);
 }

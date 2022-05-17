@@ -805,6 +805,76 @@ static bool schedule(nb::args args) {
     return rv;
 }
 
+static nb::object graphviz(bool as_str = false) {
+    nb::str string = nb::str(jit_var_graphviz());
+
+    if (as_str)
+        return std::move(string);
+
+    try {
+        return nb::module_::import_("graphviz").attr("Source")(string);
+    } catch (...) {
+        throw nb::type_error(
+            "drjit.graphviz(): The 'graphviz' Python package not available! "
+            "Install via 'python -m pip install graphviz'. Alternatively, "
+            "you can call drjit.graphviz_str() function to obtain a string "
+            "representation..");
+    }
+}
+
+static void set_label_impl(nb::handle h, nb::handle label) {
+    nb::str label_str = nb::str(label);
+    if (is_drjit_array(h)) {
+        const supp &s = nb::type_supplement<supp>(h.type());
+        if (s.meta.is_diff || s.meta.is_llvm || s.meta.is_cuda) {
+            if (s.meta.ndim == 1) {
+                s.op_set_label(nb::inst_ptr<void>(h), label_str.c_str());
+            } else {
+                PySequenceMethods *sm = ((PyTypeObject *) h.type().ptr())->tp_as_sequence;
+                for (Py_ssize_t i = 0, l = sm->sq_length(h.ptr()); i < l; ++i) {
+                    nb::object v = nb::steal(sm->sq_item(h.ptr(), i));
+                    if (!v.is_valid())
+                        nb::detail::raise_python_error();
+                    char ii[2];
+                    sprintf(ii, "%zu", i);
+                    set_label_impl(v, label_str + nb::str("_") + nb::str(ii));
+                }
+            }
+        }
+    } else if (nb::isinstance<nb::sequence>(h)) {
+        for (Py_ssize_t i = 0, l = PySequence_Length((PyObject *)h.ptr()); i < l; i++) {
+            char ii[2];
+            sprintf(ii, "%zd", i);
+            set_label_impl(h[i], label_str + nb::str("_") + nb::str(ii));
+        }
+    } else if (nb::isinstance<nb::mapping>(h)) {
+        nb::mapping m = nb::borrow<nb::mapping>(h);
+        for (auto k : m.keys())
+            set_label_impl(m[k], label_str + nb::str("_") + k);
+    } else {
+        nb::object dstruct = nb::getattr(h.type(), "DRJIT_STRUCT", nb::handle());
+        if (dstruct.is_valid() && nb::isinstance<nb::dict>(dstruct)) {
+            nb::dict dstruct_dict = nb::borrow<nb::dict>(dstruct);
+            for (auto [k, v] : dstruct_dict)
+                set_label_impl(nb::getattr(h, k), label_str + nb::str("_") + k);
+        }
+    }
+}
+
+static void set_label(nb::args args, nb::kwargs kwargs) {
+    size_t n_args = nb::len(args),
+           n_kwargs = nb::len(kwargs);
+
+    if ((n_kwargs && n_args) || (n_args && n_args != 2))
+        throw nb::type_error(
+            "drjit.set_label(): invalid input arguments.");
+
+    if (n_args)
+        set_label_impl(args[0], args[1]);
+    for (auto [k, v] : kwargs)
+        set_label_impl(v, k);
+}
+
 extern void bind_array_misc(nb::module_ m) {
     m.def("all", [](nb::handle h) -> nb::object {
         nb::handle tp = h.type();
@@ -953,4 +1023,7 @@ extern void bind_array_misc(nb::module_ m) {
 
     m.def("schedule", nb::overload_cast<nb::args>(schedule), doc_schedule);
     m.def("eval", nb::overload_cast<nb::args>(eval), doc_eval);
+
+    m.def("set_label", &set_label, doc_set_label);
+    m.def("graphviz", &graphviz, "as_str"_a=false, doc_graphviz);
 }
