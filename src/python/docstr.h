@@ -1954,6 +1954,10 @@ Args:
         :ref:`custom data structure <custom-struct>`, sequences, or mapping.
 )";
 
+static const char *doc_replace_grad =R"(
+TODO
+)";
+
 static const char *doc_enqueue =R"(
 Enqueue variable for the next AD traverse
 
@@ -2000,6 +2004,22 @@ TODO
 )";
 
 static const char *doc_backward_to =R"(
+TODO
+)";
+
+static const char *doc_graphviz =R"(
+TODO
+)";
+
+static const char *doc_graphviz_ad =R"(
+TODO
+)";
+
+static const char *doc_set_label =R"(
+TODO
+)";
+
+static const char *doc_detach_t =R"(
 TODO
 )";
 
