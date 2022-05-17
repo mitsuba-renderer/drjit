@@ -151,16 +151,11 @@ def test47_replace_grad(m):
     z2 = z*z
     assert dr.allclose(z2, m.Array3f(1, 16, 81))
 
-    dr.set_label(z2=z2, x=x, y=y)
-
     dr.backward(z2)
 
-    print(dr.graphviz_ad(True))
+    assert dr.allclose(dr.grad(x), 0)
+    assert dr.allclose(dr.grad(y), m.Array3f(12, 32, 36))
 
-    print(dr.grad(z2))
-
-    # assert dr.all(dr.grad(x) == 0)
-    # assert dr.allclose(dr.grad(y), m.Array3f(12, 32, 36))
 
 if __name__ == "__main__":
     from drjit.llvm.ad import Float

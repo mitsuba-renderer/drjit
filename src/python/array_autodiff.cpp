@@ -492,10 +492,8 @@ static void backward_from(nb::handle h, drjit::ADFlag flags) {
     // Deduplicate components if `h` is a vector
     if (is_drjit_array(h)) {
         const supp &s = nb::type_supplement<supp>(h);
-        if (s.meta.ndim > 1) {
-          s.op_add(nb::inst_ptr<void>(h), (void *)PyFloat_FromDouble(0.0),
-                   nb::inst_ptr<void>(h));
-        }
+        if (s.meta.ndim > 1)
+            h += nb::handle(PyFloat_FromDouble(0.0));
     }
 
     set_grad(h, PyFloat_FromDouble(1.0));
