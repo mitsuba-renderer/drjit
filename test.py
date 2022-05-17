@@ -344,24 +344,61 @@ def test12_binop_simple():
     assert dr.all(ArrayXb([True, True, False, False]) ^ ArrayXb([True, False, True, False]) == ArrayXb(False, True, True, False))
 
 
-def test13_binop_broadcast():
-    from drjit.scalar import Array3f, ArrayXf
-    a = Array3f(1, 2, 3)
-    b = a + 1
-    assert dr.all(a + 1 == Array3f(2, 3, 4))
-    assert dr.all(1 + a == Array3f(2, 3, 4))
-    a = ArrayXf(1, 2, 3)
-    b = a + 1
-    assert dr.all(a + 1 == ArrayXf(2, 3, 4))
-    assert dr.all(1 + a == ArrayXf(2, 3, 4))
-
+def test13_binop_promote_broadcast():
     import drjit.llvm as l
+    import drjit.scalar as s
 
-    x = Array3f(1, 2, 3) + l.Array3f(l.Float(1, 2, 3))
-    assert dr.all_nested(x == l.Array3f([2, 3, 4], [3, 4, 5], [4, 5, 6]))
+    x = s.ArrayXf(10, 100, 1000) + 1
+    assert type(x) is s.ArrayXf and dr.all(x == s.ArrayXf(11, 101, 1001))
+    x = 1 + s.ArrayXf(10, 100, 1000)
+    assert type(x) is s.ArrayXf and dr.all(x == s.ArrayXf(11, 101, 1001))
+    x = s.ArrayXf(10, 100, 1000) + (1, 2, 3)
+    assert type(x) is s.ArrayXf and dr.all(x == s.ArrayXf(11, 102, 1003))
+    x = (1, 2, 3) + s.ArrayXf(10, 100, 1000)
+    assert type(x) is s.ArrayXf and dr.all(x == s.ArrayXf(11, 102, 1003))
+    x = [1, 2, 3] + s.ArrayXf(10, 100, 1000)
+    assert type(x) is s.ArrayXf and dr.all(x == s.ArrayXf(11, 102, 1003))
+    x = s.ArrayXf(10, 100, 1000) + [1, 2, 3]
+    assert type(x) is s.ArrayXf and dr.all(x == s.ArrayXf(11, 102, 1003))
 
-    x = l.Array3f(1) + (1, 2, 3)
-    assert dr.all(x == l.Array3f(2, 3, 4))
+    x = s.Array3f(10, 100, 1000) + 1
+    assert type(x) is s.Array3f and dr.all(x == s.Array3f(11, 101, 1001))
+    x = 1 + s.Array3f(10, 100, 1000)
+    assert type(x) is s.Array3f and dr.all(x == s.Array3f(11, 101, 1001))
+    x = s.Array3f(10, 100, 1000) + (1, 2, 3)
+    assert type(x) is s.Array3f and dr.all(x == s.Array3f(11, 102, 1003))
+    x = (1, 2, 3) + s.Array3f(10, 100, 1000)
+    assert type(x) is s.Array3f and dr.all(x == s.Array3f(11, 102, 1003))
+    x = [1, 2, 3] + s.Array3f(10, 100, 1000)
+    assert type(x) is s.Array3f and dr.all(x == s.Array3f(11, 102, 1003))
+    x = s.Array3f(10, 100, 1000) + [1, 2, 3]
+    assert type(x) is s.Array3f and dr.all(x == s.Array3f(11, 102, 1003))
+
+    x = l.Float(10, 100, 1000) + 1
+    assert type(x) is l.Float and dr.all(x == l.Float(11, 101, 1001))
+    x = 1 + l.Float(10, 100, 1000)
+    assert type(x) is l.Float and dr.all(x == l.Float(11, 101, 1001))
+    x = l.Float(10, 100, 1000) + (1, 2, 3)
+    assert type(x) is l.Float and dr.all(x == l.Float(11, 102, 1003))
+    x = (1, 2, 3) + l.Float(10, 100, 1000)
+    assert type(x) is l.Float and dr.all(x == l.Float(11, 102, 1003))
+    x = [1, 2, 3] + l.Float(10, 100, 1000)
+    assert type(x) is l.Float and dr.all(x == l.Float(11, 102, 1003))
+    x = l.Float(10, 100, 1000) + [1, 2, 3]
+    assert type(x) is l.Float and dr.all(x == l.Float(11, 102, 1003))
+
+    x = l.Array3f(10, 100, 1000) + 1
+    assert type(x) is l.Array3f and dr.all_nested(x == l.Array3f(11, 101, 1001))
+    x = 1 + l.Array3f(10, 100, 1000)
+    assert type(x) is l.Array3f and dr.all_nested(x == l.Array3f(11, 101, 1001))
+    x = l.Array3f(10, 100, 1000) + (1, 2, 3)
+    assert type(x) is l.Array3f and dr.all_nested(x == l.Array3f(11, 102, 1003))
+    x = (1, 2, 3) + l.Array3f(10, 100, 1000)
+    assert type(x) is l.Array3f and dr.all_nested(x == l.Array3f(11, 102, 1003))
+    x = [1, 2, 3] + l.Array3f(10, 100, 1000)
+    assert type(x) is l.Array3f and dr.all_nested(x == l.Array3f(11, 102, 1003))
+    x = l.Array3f(10, 100, 1000) + [1, 2, 3]
+    assert type(x) is l.Array3f and dr.all_nested(x == l.Array3f(11, 102, 1003))
 
 
 def test14_binop_inplace():
@@ -999,7 +1036,7 @@ def test38_construct_from_numpy_1():
     assert dr.all(s.Array3f(np.array([1, 2, 3], dtype=np.float32)) == s.Array3f(1, 2, 3))
     assert dr.all(s.Array3f(np.array([1, 2, 3], dtype=np.float64)) == s.Array3f(1, 2, 3))
     assert dr.all(s.Array3f(np.array([1, 2, 3], dtype=np.int32)) == s.Array3f(1, 2, 3))
-    
+
     with pytest.raises(TypeError):
         # Size mismatch
         s.Array3f(np.array([1, 2, 3, 4], dtype=np.float32))
@@ -1051,11 +1088,7 @@ def test40_construct_from_numpy_3():
     assert "The input must have the following configuration for this to succeed: shape=(*), dtype=float32, order='C'" in str(ei.value)
 
     r = l.Array3f(p)
-    assert dr.all_nested(
-        r == l.Array3f(
-            [1, 2],
-            [4, 5],
-            [6, 7]))
+    assert dr.all_nested(r == l.Array3f([1, 2], [4, 5], [6, 7]))
 
 
 def test41_prevent_inefficient_cast(capsys):
