@@ -1710,6 +1710,8 @@ struct DiffArray : ArrayBaseT<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>
     static const char *graphviz_() {
         if constexpr (IsEnabled)
             return detail::ad_graphviz<Type>();
+        else
+            return nullptr;
     }
 
     const Type &detach_() const {

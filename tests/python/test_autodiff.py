@@ -116,6 +116,51 @@ def test03_set_accum_grad(m):
     dr.set_grad(a, [3.0, 2.0, 1.0])
     assert dr.allclose(dr.grad(a), m.Float([3.0, 2.0, 1.0]))
 
+def test04_forward_from(m):
+    a = m.Float(1.0)
+    dr.enable_grad(a)
+    b = a * a * 2
+    dr.forward(a)
+    assert dr.allclose(dr.grad(b), 4.0)
+
+def test05_backward_from(m):
+    a = m.Float(1.0)
+    dr.enable_grad(a)
+    b = a * a * 2
+    dr.backward(b)
+    assert dr.allclose(dr.grad(a), 4.0)
+
+    a = m.Array3f(1, 2, 3)
+    dr.enable_grad(a)
+    b = a * 2
+    dr.backward(b)
+    assert dr.allclose(dr.grad(a), 2.0)
+
+def test47_replace_grad(m):
+    x = m.Array3f(1, 2, 3)
+    y = m.Array3f(3, 2, 1)
+    dr.enable_grad(x, y)
+    x2 = x*x
+    y2 = y*y
+
+    z = dr.replace_grad(x2, y2)
+
+    assert z.x.index_ad == y2.x.index_ad
+    assert z.y.index_ad == y2.y.index_ad
+
+    z2 = z*z
+    assert dr.allclose(z2, m.Array3f(1, 16, 81))
+
+    dr.set_label(z2=z2, x=x, y=y)
+
+    dr.backward(z2)
+
+    print(dr.graphviz_ad(True))
+
+    print(dr.grad(z2))
+
+    # assert dr.all(dr.grad(x) == 0)
+    # assert dr.allclose(dr.grad(y), m.Array3f(12, 32, 36))
 
 if __name__ == "__main__":
     from drjit.llvm.ad import Float

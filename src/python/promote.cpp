@@ -21,7 +21,7 @@ static bool meta_check(meta m) {
 }
 
 /// Compute the metadata type of an operation combinining 'a' and 'b'
-static meta meta_promote(meta a, meta b) {
+meta meta_promote(meta a, meta b) {
     meta r;
     r.is_vector = a.is_vector | b.is_vector;
     r.is_complex = a.is_complex | b.is_complex;

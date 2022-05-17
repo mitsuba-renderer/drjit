@@ -35,6 +35,8 @@ get_sq(nb::handle tp, const char *name, void *check);
 extern Py_ssize_t len(PyObject *o) noexcept;
 extern nb::object shape(nb::handle_t<dr::ArrayBase> h) noexcept;
 
+/// Compute the metadata type of an operation combinining 'a' and 'b'
+extern meta meta_promote(meta a, meta b);
 
 /**
  * \brief Given a list of Dr.Jit arrays and scalars, determine the flavor and
