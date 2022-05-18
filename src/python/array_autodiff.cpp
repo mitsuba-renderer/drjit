@@ -307,56 +307,45 @@ static void accum_grad(nb::handle h, nb::handle value) {
 }
 
 static nb::object replace_grad(nb::handle h0, nb::handle h1) {
-    if (!(is_drjit_array(h0) && is_drjit_array(h1))) {
+    if (!is_drjit_array(h1)) {
         PyErr_Format(PyExc_TypeError,
                      "replace_grad(): unsupported input types!");
         return nb::object();
     }
 
-    const supp &s0 = nb::type_supplement<supp>(h0.type());
     const supp &s1 = nb::type_supplement<supp>(h1.type());
-
-    if (!(s1.meta.is_diff && is_float(s0.meta) &&
-          s0.meta.is_diff && is_float(s1.meta))) {
+    if (!(s1.meta.is_diff && is_float(s1.meta))) {
         PyErr_Format(PyExc_TypeError,
                      "replace_grad(): unsupported input types!");
         return nb::object();
     }
 
-    meta result_meta = meta_promote(s0.meta, s1.meta);
-    auto result_tp = drjit::detail::array_get(result_meta);
+    nb::object o0, o1;
 
     // All arguments must be promoted to the same type first
-    nb::object o0 = result_tp(h0);
-    nb::object o1 = result_tp(h1);
+    if (Py_TYPE(h0.ptr()) == Py_TYPE(h1.ptr())) {
+        o0 = nb::borrow(h0);
+        o1 = nb::borrow(h1);
+    } else {
+        PyObject *o[2] = { h0.ptr(), h1.ptr() };
+        if (!promote("replace_grad", o, 2))
+            return nb::object();
+        o0 = nb::steal(o[0]);
+        o1 = nb::steal(o[1]);
+    }
 
-    // Py_ssize_t l0 = len(o0.ptr()),
-    //            l1 = len(o1.ptr());
-    // size_t depth = s0.meta.ndim;
+    const supp &s = nb::type_supplement<supp>(o0.type());
 
-    // if (l0 != l1) {
-    //     if (l0 == 1 && depth == 1) {
-    //         // a = a + zero(ta, lb)
-    //     } else if (l1 == 1 && depth == 1) {
-    //         // b = b + zero(tb, la)
-    //     } else {
-    //         PyErr_Format(PyExc_TypeError,
-    //                      "replace_grad(): input arguments have "
-    //                      "incompatible sizes (%i vs %i)!", l0, l1);
-    //         nb::detail::raise_python_error();
-    //     }
-    // }
-
-    nb::object result = nb::inst_alloc(result_tp);
-    if (s0.meta.ndim == 1) {
-        s0.op_ad_create(nb::inst_ptr<void>(o0),
-                        s1.op_index_ad(nb::inst_ptr<void>(o1)),
-                        nb::inst_ptr<void>(result));
+    nb::object result = nb::inst_alloc(o0.type());
+    if (s.meta.ndim == 1) {
+        s.op_ad_create(nb::inst_ptr<void>(o0),
+                       s.op_index_ad(nb::inst_ptr<void>(o1)),
+                       nb::inst_ptr<void>(result));
         nb::inst_mark_ready(result);
         return result;
     } else {
         nb::inst_zero(result);
-        PySequenceMethods *sm = ((PyTypeObject *) result_tp.ptr())->tp_as_sequence;
+        PySequenceMethods *sm = ((PyTypeObject *) result.type().ptr())->tp_as_sequence;
         for (Py_ssize_t i = 0, l = sm->sq_length(o0.ptr()); i < l; ++i) {
             nb::object v0 = nb::steal(sm->sq_item(o0.ptr(), i));
             if (!v0.is_valid()) {
