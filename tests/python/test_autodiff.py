@@ -266,6 +266,31 @@ def test05_replace_grad(m):
     assert dr.allclose(b, 4.0)
 
 
+def test06_set_label(m):
+    a = m.Float(1.0)
+    b = [m.Float(1.0), m.Float(2.0)]
+    c = m.Array3f(1.0, 2.0, 3.0)
+    d = struct_class(m)()
+    dr.enable_grad(a, b, c, d)
+
+    assert dr.label(a) == 'unnamed'
+
+    dr.set_label(a, 'aa')
+    assert dr.label(a) == 'aa'
+
+    dr.set_label(a=a, b=b, c=c, d=d)
+    assert dr.label(a) == 'a'
+    assert dr.label(b[0]) == 'b_0'
+    assert dr.label(b[1]) == 'b_1'
+    assert dr.label(c.x) == 'c_0'
+    assert dr.label(c.y) == 'c_1'
+    assert dr.label(c.z) == 'c_2'
+    assert dr.label(d.x) == 'd_x'
+    assert dr.label(d.y) == 'd_y'
+
+    with pytest.raises(TypeError) as ei:
+        dr.set_label(a, 'aa', b=b)
+    assert "invalid input arguments" in str(ei.value)
 
 
 # TODO ------------
@@ -297,6 +322,4 @@ def test15_backward_from(m):
 # TODO test dr.backward
 # TODO test dr.backward_to
 # TODO test dr.backward_from
-# TODO test dr.set_label
-# TODO test dr.graphviz_ad
 # TODO test all ad derivatives (math arithmetic) -> see test_ad.py

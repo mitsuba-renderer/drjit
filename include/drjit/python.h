@@ -32,6 +32,7 @@ using array_counter = void (*) (uint32_t size, void *);
 using array_cast = int (*) (const void *, VarType, void *);
 using array_ad_create = void (*) (void *, uint32_t, void *);
 using array_set_label = void (*) (void *, const char *);
+using array_label = const char * (*) (const void *);
 using array_set_bool = void (*) (void *, bool);
 using array_get_bool = bool (*) (const void *);
 using array_set_grad = void (*) (void *, const void *);
@@ -96,6 +97,7 @@ struct array_supplement {
     array_ternop op_scatter;
 
     array_set_label op_set_label;
+    array_label op_label;
 
     array_unop op_sqrt, op_cbrt;
     array_unop op_sin, op_cos, op_tan;
@@ -631,8 +633,10 @@ template <typename T> nanobind::class_<T> bind_array(const char *name = nullptr)
         };
     }
 
-    if constexpr (T::Depth == 1 && (T::IsDiff || T::IsJIT))
-        s.op_set_label = [](void *a, const char *b) { return ((T *) a)->set_label_(b); };
+    if constexpr (T::Depth == 1 && (T::IsDiff || T::IsJIT)) {
+        s.op_set_label = [](void *a, const char *b) { ((T *) a)->set_label_(b); };
+        s.op_label = [](const void *a) { return ((const T *) a)->label_(); };
+    }
 
     return tp;
 }
