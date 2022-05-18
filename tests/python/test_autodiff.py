@@ -222,9 +222,55 @@ def test04_accum_grad(m):
     assert dr.allclose(dr.grad(a).y, 3.0)
 
 
+def test05_replace_grad(m):
+    with pytest.raises(TypeError) as ei:
+        dr.replace_grad(1.0, m.UInt(1))
+    assert "unsupported input types" in str(ei.value)
+
+    with pytest.raises(TypeError) as ei:
+        dr.replace_grad(1.0, dr.detached_t(m.Float)(2.0))
+    assert "unsupported input types" in str(ei.value)
+
+    with pytest.raises(TypeError) as ei:
+        dr.replace_grad(1.0, 2.0)
+    assert "unsupported input types" in str(ei.value)
+
+    x = m.Array3f(1, 2, 3)
+    y = m.Array3f(3, 2, 1)
+    dr.enable_grad(x, y)
+    x2 = x*x
+    y2 = y*y
+    z = dr.replace_grad(x2, y2)
+    assert z.x.index_ad == y2.x.index_ad
+    assert z.y.index_ad == y2.y.index_ad
+    assert z.z.index_ad == y2.z.index_ad
+    z2 = z*z
+    assert dr.allclose(z2, [1, 16, 81])
+    dr.backward(z2)
+    assert dr.allclose(dr.grad(x), 0)
+    assert dr.allclose(dr.grad(y), [12, 32, 36])
+
+    x = m.Array3f(1, 2, 3)
+    y = m.Float(1)
+    dr.enable_grad(x, y)
+    z = dr.replace_grad(x, y)
+    assert z.x.index_ad == y.index_ad
+    assert z.y.index_ad == y.index_ad
+    assert z.z.index_ad == y.index_ad
+
+    a = m.Float(1.0)
+    dr.enable_grad(a)
+    b = dr.replace_grad(4.0, a)
+    assert type(b) == type(a)
+    assert b.index_ad == a.index_ad
+    assert dr.allclose(b, 4.0)
+
+
+
+
 # TODO ------------
 
-def test04_forward_from(m):
+def test14_forward_from(m):
     a = m.Float(1.0)
     dr.enable_grad(a)
     b = a * a * 2
@@ -232,7 +278,7 @@ def test04_forward_from(m):
     assert dr.allclose(dr.grad(b), 4.0)
 
 
-def test05_backward_from(m):
+def test15_backward_from(m):
     a = m.Float(1.0)
     dr.enable_grad(a)
     b = a * a * 2
@@ -245,29 +291,6 @@ def test05_backward_from(m):
     dr.backward(b)
     assert dr.allclose(dr.grad(a), 2.0)
 
-def test47_replace_grad(m):
-    x = m.Array3f(1, 2, 3)
-    y = m.Array3f(3, 2, 1)
-    dr.enable_grad(x, y)
-    x2 = x*x
-    y2 = y*y
-
-    z = dr.replace_grad(x2, y2)
-
-    assert z.x.index_ad == y2.x.index_ad
-    assert z.y.index_ad == y2.y.index_ad
-
-    z2 = z*z
-    assert dr.allclose(z2, [1, 16, 81])
-
-    dr.backward(z2)
-
-    assert dr.allclose(dr.grad(x), 0)
-    assert dr.allclose(dr.grad(y), [12, 32, 36])
-
-# TODO test dr.detach
-# TODO test dr.grad
-# TODO test dr.replace_grad
 # TODO test dr.forward_to
 # TODO test dr.forward_from
 # TODO test dr.forward
