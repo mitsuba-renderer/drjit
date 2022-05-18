@@ -293,33 +293,518 @@ def test06_set_label(m):
     assert "invalid input arguments" in str(ei.value)
 
 
-# TODO ------------
-
-def test14_forward_from(m):
+def test07_forward_to(m):
     a = m.Float(1.0)
     dr.enable_grad(a)
     b = a * a * 2
-    dr.forward(a)
+    c = a * 2
+    dr.set_grad(a, 1.0)
+    d = m.Float(4.0) # some detached variable
+    grad_b, grad_c, grad_d = dr.forward_to(b, c, d)
+    assert dr.allclose(dr.grad(a), 0.0)
+    assert dr.allclose(grad_b, 4.0)
+    assert dr.allclose(grad_c, 2.0)
+    assert dr.allclose(grad_d, 0.0)
+
+    with pytest.raises(TypeError) as ei:
+        dr.forward_to(b, c, dr.ADFlag.Default)
+    assert "AD flags should be passed via the" in str(ei.value)
+
+    with pytest.raises(TypeError) as ei:
+        dr.forward_to(b, c, flags=d)
+    assert "AD flags should be passed via the" in str(ei.value)
+
+    with pytest.raises(TypeError) as ei:
+        dr.forward_to(b, c, flags=dr.ADFlag.Default, test='test')
+    assert "only AD flags should be passed" in str(ei.value)
+
+    with pytest.raises(TypeError) as ei:
+        dr.forward_to(b, c, test='test')
+    assert "only AD flags should be passed" in str(ei.value)
+
+    # Error because the input isn't attached to the AD graph
+    with pytest.raises(TypeError) as ei:
+        dr.forward_to(m.Float(2.0))
+    assert "the argument does not depend on the input" in str(ei.value)
+
+    # Error because the input isn't a diff array
+    with pytest.raises(TypeError) as ei:
+        dr.forward_to(dr.detached_t(m.Float)(2.0))
+    assert "expected a differentiable array type" in str(ei.value)
+
+    # Error because the input isn't a drjit array
+    with pytest.raises(TypeError) as ei:
+        dr.forward_to([2.0])
+    assert "expected a Dr.JIT array type" in str(ei.value)
+
+    # Trying to call with a different flag
+    dr.set_grad(a, 1.0)
+    b = a * a * 2
+    grad_b = dr.forward_to(b, flags=dr.ADFlag.ClearInterior)
+    assert dr.allclose(dr.grad(a), 1.0)
+    assert dr.allclose(grad_b, 4.0)
+
+
+def test08_forward_from(m):
+    with pytest.raises(TypeError) as ei:
+        dr.forward_from(1.0)
+    assert "expected a Dr.JIT array type" in str(ei.value)
+
+    with pytest.raises(TypeError) as ei:
+        dr.forward_from(dr.detached_t(m.Float)(1.0))
+    assert "expected a differentiable array type" in str(ei.value)
+
+    a = m.Float(1.0)
+
+    with pytest.raises(TypeError) as ei:
+        dr.forward_from(a)
+    assert "the argument does not depend on the input" in str(ei.value)
+
+    dr.enable_grad(a)
+    b = a * a * 2
+    dr.forward_from(a)
+    assert dr.allclose(dr.grad(a), 0.0)
     assert dr.allclose(dr.grad(b), 4.0)
 
+    b = a * a * 2
+    dr.forward_from(a, dr.ADFlag.ClearInterior)
+    assert dr.allclose(dr.grad(a), 1.0)
+    assert dr.allclose(dr.grad(b), 4.0)
 
-def test15_backward_from(m):
+    # Interior gradients are cleared, forwarding again will accumulate gradients
+    dr.forward_from(a, dr.ADFlag.ClearEdges)
+    assert dr.allclose(dr.grad(b), 8.0)
+
+    # Edges are cleared, forwarding again will do nothing
+    dr.forward_from(a, dr.ADFlag.ClearEdges)
+    assert dr.allclose(dr.grad(a), 1.0)
+    assert dr.allclose(dr.grad(b), 8.0)
+
+
+def test09_backward_to(m):
+    with pytest.raises(TypeError) as ei:
+        dr.backward_to(1.0)
+    assert "expected a Dr.JIT array type" in str(ei.value)
+
+    with pytest.raises(TypeError) as ei:
+        dr.backward_from(dr.detached_t(m.Float)(1.0))
+    assert "expected a differentiable array type" in str(ei.value)
+
     a = m.Float(1.0)
+
+    with pytest.raises(TypeError) as ei:
+        dr.backward_to(a)
+    assert "the argument does not depend on the input" in str(ei.value)
+
+    b = m.Float(3.0)
+    dr.enable_grad(a, b)
+    c = a * b * 2
+
+    dr.set_grad(c, 1.0)
+    dr.backward_to(a, flags=dr.ADFlag.ClearVertices)
+    assert dr.allclose(dr.grad(a), 6.0)
+    assert dr.allclose(dr.grad(b), 0.0)
+    assert dr.allclose(dr.grad(c), 0.0)
+
+    dr.set_grad(c, 1.0)
+    dr.backward_to(a, b, flags=dr.ADFlag.ClearVertices)
+    assert dr.allclose(dr.grad(a), 12.0) # accumulates
+    assert dr.allclose(dr.grad(b), 2.0)
+    assert dr.allclose(dr.grad(c), 0.0)
+
+
+def test10_backward_from(m):
+    with pytest.raises(TypeError) as ei:
+        dr.backward_from(1.0)
+    assert "expected a Dr.JIT array type" in str(ei.value)
+
+    with pytest.raises(TypeError) as ei:
+        dr.backward_from(dr.detached_t(m.Float)(1.0))
+    assert "expected a differentiable array type" in str(ei.value)
+
+    a = m.Float(1.0)
+
+    with pytest.raises(TypeError) as ei:
+        dr.backward_from(a)
+    assert "the argument does not depend on the input" in str(ei.value)
+
     dr.enable_grad(a)
     b = a * a * 2
-    dr.backward(b)
+    dr.backward_from(b)
     assert dr.allclose(dr.grad(a), 4.0)
+    assert dr.allclose(dr.grad(b), 0.0)
 
-    a = m.Array3f(1, 2, 3)
+    a = m.Float(1.0)
     dr.enable_grad(a)
-    b = a * 2
-    dr.backward(b)
-    assert dr.allclose(dr.grad(a), 2.0)
+    c = m.Array3f(a)
+    dr.backward_from(c)
+    assert dr.allclose(dr.grad(a), 3.0)
 
-# TODO test dr.forward_to
-# TODO test dr.forward_from
-# TODO test dr.forward
-# TODO test dr.backward
-# TODO test dr.backward_to
-# TODO test dr.backward_from
-# TODO test all ad derivatives (math arithmetic) -> see test_ad.py
+# ------------------------------------------------------------------------------
+
+def test_ad_01_add_bwd(m):
+    a, b = m.Float(1), m.Float(2)
+    dr.enable_grad(a, b)
+    c = 2 * a + b
+    dr.backward(c)
+    assert dr.grad(a) == 2
+    assert dr.grad(b) == 1
+
+
+def test_ad_02_add_fwd(m):
+    if True:
+        a, b = m.Float(1), m.Float(2)
+        dr.enable_grad(a, b)
+        c = 2 * a + b
+        dr.forward(a, flags=dr.ADFlag.ClearVertices)
+        assert dr.grad(c) == 2
+        dr.set_grad(c, 101)
+        dr.forward(b)
+        assert dr.grad(c) == 102
+
+    if True:
+        a, b = m.Float(1), m.Float(2)
+        dr.enable_grad(a, b)
+        c = 2 * a + b
+        dr.set_grad(a, 1.0)
+        dr.enqueue(dr.ADMode.Forward, a)
+        dr.traverse(m.Float, dr.ADMode.Forward, flags=dr.ADFlag.ClearVertices)
+        assert dr.grad(c) == 2
+        assert dr.grad(a) == 0
+        dr.set_grad(a, 1.0)
+        dr.enqueue(dr.ADMode.Forward, a)
+        dr.traverse(m.Float, dr.ADMode.Forward, flags=dr.ADFlag.ClearVertices)
+        assert dr.grad(c) == 4
+
+
+def test_ad_03_branch_fwd(m):
+    a = m.Float(1)
+    dr.enable_grad(a)
+
+    b = a + 1
+    c = a + 1
+    d = b + c
+
+    del b, c
+
+    dr.forward(a)
+    assert dr.grad(d) == 2
+
+
+def test_ad_04_branch_ref(m):
+    a = m.Float(1)
+    dr.enable_grad(a)
+
+    b = a + 1
+    c = a + 1
+    d = b + c
+
+    del b, c
+
+    dr.backward(d)
+    assert dr.grad(a) == 2
+
+
+def test_ad_05_sub_mul(m):
+    a, b, c = m.Float(2), m.Float(3), m.Float(4)
+    dr.enable_grad(a, b, c)
+    d = a * b - c
+    dr.backward(d)
+    assert dr.grad(a) == dr.detach(b)
+    assert dr.grad(b) == dr.detach(a)
+    assert dr.grad(c) == -1
+
+
+def test_ad_06_div(m):
+    a, b = m.Float(2), m.Float(3)
+    dr.enable_grad(a, b)
+    d = a / b
+    dr.backward(d)
+    assert dr.allclose(dr.grad(a),  1.0 / 3.0)
+    assert dr.allclose(dr.grad(b), -2.0 / 9.0)
+
+
+def test_ad_16_sqrt(m):
+    x = m.Float(1, 4, 16)
+    dr.enable_grad(x)
+    y = dr.sqrt(x)
+    dr.backward(y)
+    assert dr.allclose(dr.detach(y), [1, 2, 4])
+    assert dr.allclose(dr.grad(x), [.5, .25, .125])
+
+
+def test_ad_17_rsqrt(m):
+    x = m.Float(1, .25, 0.0625)
+    dr.enable_grad(x)
+    y = dr.rsqrt(x)
+    dr.backward(y)
+    assert dr.allclose(dr.detach(y), [1, 2, 4])
+    assert dr.allclose(dr.grad(x), [-.5, -4, -32])
+
+
+def test_ad_18_abs(m):
+    x = m.Float(-2, 2)
+    dr.enable_grad(x)
+    y = dr.abs(x)
+    dr.backward(y)
+    assert dr.allclose(dr.detach(y), [2, 2])
+    assert dr.allclose(dr.grad(x), [-1, 1])
+
+
+def test_ad_19_sin(m):
+    x = dr.linspace(m.Float, 0, 10, 10)
+    dr.enable_grad(x)
+    y = dr.sin(x)
+    dr.backward(y)
+    assert dr.allclose(dr.detach(y), dr.sin(dr.detach(x)))
+    assert dr.allclose(dr.grad(x), dr.cos(dr.detach(x)))
+
+
+def test_ad_20_cos(m):
+    x = dr.linspace(m.Float, 0.01, 10, 10)
+    dr.enable_grad(x)
+    y = dr.cos(x)
+    dr.backward(y)
+    assert dr.allclose(dr.detach(y), dr.cos(dr.detach(x)))
+    assert dr.allclose(dr.grad(x), -dr.sin(dr.detach(x)))
+
+
+def test_ad_29_log(m):
+    x = dr.linspace(m.Float, 0.01, 1, 10)
+    dr.enable_grad(x)
+    y = dr.log(x * x)
+    dr.backward(y)
+    log_x = dr.log(dr.sqr(dr.detach(x)))
+    assert dr.allclose(y, log_x)
+    assert dr.allclose(dr.grad(x), 2 / dr.detach(x))
+
+
+@pytest.mark.skip("TODO")
+def test_ad_30_pow(m):
+    x = dr.linspace(m.Float, 1, 10, 10)
+    y = dr.full(m.Float, 2.0, 10)
+    dr.enable_grad(x, y)
+    z = x**y
+    dr.backward(z)
+    assert dr.allclose(dr.grad(x), dr.detach(x)*2)
+    assert dr.allclose(dr.grad(y),
+                       m.Float(0., 2.77259, 9.88751, 22.1807, 40.2359,
+                               64.5033, 95.3496, 133.084, 177.975, 230.259))
+
+
+@pytest.mark.skip("TODO")
+def test_ad_31_csc(m):
+    x = dr.linspace(m.Float, 1, 2, 10)
+    dr.enable_grad(x)
+    y = dr.csc(x * x)
+    dr.backward(y)
+    csc_x = dr.csc(dr.sqr(dr.detach(x)))
+    assert dr.allclose(y, csc_x)
+    assert dr.allclose(dr.grad(x),
+                       m.Float(-1.52612, -0.822733, -0.189079, 0.572183,
+                               1.88201, 5.34839, 24.6017, 9951.86, 20.1158,
+                               4.56495), rtol=5e-5)
+
+
+@pytest.mark.skip("TODO")
+def test_ad_32_sec(m):
+    x = dr.linspace(m.Float, 1, 2, 10)
+    dr.enable_grad(x)
+    y = dr.sec(x * x)
+    dr.backward(y)
+    sec_x = dr.sec(dr.sqr(dr.detach(x)))
+    assert dr.allclose(y, sec_x)
+    assert dr.allclose(dr.grad(x),
+                       m.Float(5.76495, 19.2717, 412.208, 61.794, 10.3374,
+                               3.64885, 1.35811,  -0.0672242, -1.88437,
+                               -7.08534))
+
+
+def test_ad_33_tan(m):
+    x = dr.linspace(m.Float, 0, 1, 10)
+    dr.enable_grad(x)
+    y = dr.tan(x * x)
+    dr.backward(y)
+    tan_x = dr.tan(dr.sqr(dr.detach(x)))
+    assert dr.allclose(y, tan_x)
+    assert dr.allclose(dr.grad(x),
+                       m.Float(0., 0.222256, 0.44553, 0.674965, 0.924494,
+                               1.22406, 1.63572, 2.29919, 3.58948, 6.85104))
+
+
+@pytest.mark.skip("TODO")
+def test_ad_34_cot(m):
+    x = dr.linspace(m.Float, 1, 2, 10)
+    dr.enable_grad(x)
+    y = dr.cot(x * x)
+    dr.backward(y)
+    cot_x = dr.cot(dr.sqr(dr.detach(x)))
+    assert dr.allclose(y, cot_x)
+    assert dr.allclose(dr.grad(x),
+                       m.Float(-2.82457, -2.49367, -2.45898, -2.78425,
+                               -3.81687, -7.12557, -26.3248, -9953.63,
+                               -22.0932, -6.98385), rtol=5e-5)
+
+
+def test_ad_35_asin(m):
+    x = dr.linspace(m.Float, -.8, .8, 10)
+    dr.enable_grad(x)
+    y = dr.asin(x * x)
+    dr.backward(y)
+    asin_x = dr.asin(dr.sqr(dr.detach(x)))
+    assert dr.allclose(y, asin_x)
+    assert dr.allclose(dr.grad(x),
+                       m.Float(-2.08232, -1.3497, -0.906755, -0.534687,
+                               -0.177783, 0.177783, 0.534687, 0.906755,
+                               1.3497, 2.08232))
+
+
+def test_ad_36_acos(m):
+    x = dr.linspace(m.Float, -.8, .8, 10)
+    dr.enable_grad(x)
+    y = dr.acos(x * x)
+    dr.backward(y)
+    acos_x = dr.acos(dr.sqr(dr.detach(x)))
+    assert dr.allclose(y, acos_x)
+    assert dr.allclose(dr.grad(x),
+                       m.Float(2.08232, 1.3497, 0.906755, 0.534687, 0.177783,
+                               -0.177783, -0.534687, -0.906755, -1.3497,
+                               -2.08232))
+
+
+def test_ad_37_atan(m):
+    x = dr.linspace(m.Float, -.8, .8, 10)
+    dr.enable_grad(x)
+    y = dr.atan(x * x)
+    dr.backward(y)
+    atan_x = dr.atan(dr.sqr(dr.detach(x)))
+    assert dr.allclose(y, atan_x)
+    assert dr.allclose(dr.grad(x),
+                       m.Float(-1.13507, -1.08223, -0.855508, -0.53065,
+                               -0.177767, 0.177767, 0.53065, 0.855508, 1.08223,
+                               1.13507))
+
+
+def test_ad_38_atan2(m):
+    x = dr.linspace(m.Float, -.8, .8, 10)
+    y = m.Float(dr.arange(m.Int, 10) & 1) * 1 - .5
+    dr.enable_grad(x, y)
+    z = dr.atan2(y, x)
+    dr.backward(z)
+    assert dr.allclose(z, m.Float(-2.58299, 2.46468, -2.29744, 2.06075,
+                                  -1.74674, 1.39486, -1.08084, 0.844154,
+                                  -0.676915, 0.558599))
+    assert dr.allclose(dr.grad(x),
+                       m.Float(0.561798, -0.784732, 1.11724, -1.55709, 1.93873,
+                               -1.93873, 1.55709, -1.11724, 0.784732,
+                               -0.561798))
+    assert dr.allclose(dr.grad(y),
+                       m.Float(-0.898876, -0.976555, -0.993103, -0.83045,
+                               -0.344663, 0.344663, 0.83045, 0.993103,
+                               0.976555, 0.898876))
+
+
+def test_ad_39_cbrt(m):
+    x = dr.linspace(m.Float, -.8, .8, 10)
+    dr.enable_grad(x)
+    y = dr.cbrt(x)
+    dr.backward(y)
+    assert dr.allclose(y, m.Float(-0.928318, -0.853719, -0.763143, -0.64366,
+                                  -0.446289, 0.446289, 0.64366, 0.763143,
+                                  0.853719, 0.928318))
+    assert dr.allclose(dr.grad(x),
+                       m.Float(0.386799, 0.45735, 0.572357, 0.804574, 1.67358,
+                               1.67358, 0.804574, 0.572357, 0.45735, 0.386799))
+
+
+def test_ad_40_sinh(m):
+    x = dr.linspace(m.Float, -1, 1, 10)
+    dr.enable_grad(x)
+    y = dr.sinh(x)
+    dr.backward(y)
+    assert dr.allclose(
+        y, m.Float(-1.1752, -0.858602, -0.584578, -0.339541, -0.11134,
+                   0.11134, 0.339541, 0.584578, 0.858602, 1.1752))
+    assert dr.allclose(
+        dr.grad(x),
+        m.Float(1.54308, 1.31803, 1.15833, 1.05607, 1.00618, 1.00618,
+                1.05607, 1.15833, 1.31803, 1.54308))
+
+
+def test_ad_41_cosh(m):
+    x = dr.linspace(m.Float, -1, 1, 10)
+    dr.enable_grad(x)
+    y = dr.cosh(x)
+    dr.backward(y)
+    assert dr.allclose(
+        y,
+        m.Float(1.54308, 1.31803, 1.15833, 1.05607, 1.00618, 1.00618,
+                1.05607, 1.15833, 1.31803, 1.54308))
+    assert dr.allclose(
+        dr.grad(x),
+        m.Float(-1.1752, -0.858602, -0.584578, -0.339541, -0.11134,
+                0.11134, 0.339541, 0.584578, 0.858602, 1.1752))
+
+
+def test_ad_42_tanh(m):
+    x = dr.linspace(m.Float, -1, 1, 10)
+    dr.enable_grad(x)
+    y = dr.tanh(x)
+    dr.backward(y)
+    assert dr.allclose(
+        y,
+        m.Float(-0.761594, -0.651429, -0.504672, -0.321513, -0.110656,
+                0.110656, 0.321513, 0.504672, 0.651429, 0.761594))
+    assert dr.allclose(
+        dr.grad(x),
+        m.Float(0.419974, 0.57564, 0.745306, 0.89663, 0.987755, 0.987755,
+                0.89663, 0.745306, 0.57564, 0.419974)
+    )
+
+
+def test_ad_43_asinh(m):
+    x = dr.linspace(m.Float, -.9, .9, 10)
+    dr.enable_grad(x)
+    y = dr.asinh(x)
+    dr.backward(y)
+    assert dr.allclose(
+        y,
+        m.Float(-0.808867, -0.652667, -0.481212, -0.295673, -0.0998341,
+                0.0998341, 0.295673, 0.481212, 0.652667, 0.808867))
+    assert dr.allclose(
+        dr.grad(x),
+        m.Float(0.743294, 0.819232, 0.894427, 0.957826, 0.995037,
+                0.995037, 0.957826, 0.894427, 0.819232, 0.743294)
+    )
+
+
+def test_ad_44_acosh(m):
+    x = dr.linspace(m.Float, 1.01, 2, 10)
+    dr.enable_grad(x)
+    y = dr.acosh(x)
+    dr.backward(y)
+    assert dr.allclose(
+        y,
+        m.Float(0.141304, 0.485127, 0.665864, 0.802882, 0.916291,
+                1.01426, 1.10111, 1.17944, 1.25098, 1.31696))
+    assert dr.allclose(
+        dr.grad(x),
+        m.Float(7.05346, 1.98263, 1.39632, 1.12112, 0.952381,
+                0.835191, 0.747665, 0.679095, 0.623528, 0.57735)
+    )
+
+
+def test_ad_45_atanh(m):
+    x = dr.linspace(m.Float, -.99, .99, 10)
+    dr.enable_grad(x)
+    y = dr.atanh(x)
+    dr.backward(y)
+    assert dr.allclose(
+        y,
+        m.Float(-2.64665, -1.02033, -0.618381, -0.342828, -0.110447, 0.110447,
+                0.342828, 0.618381, 1.02033, 2.64665))
+    assert dr.allclose(
+        dr.grad(x),
+        m.Float(50.2513, 2.4564, 1.43369, 1.12221, 1.01225, 1.01225, 1.12221,
+                1.43369, 2.4564, 50.2513)
+    )

@@ -12,12 +12,6 @@
 #include <nanobind/operators.h>
 #include <drjit/jit.h>
 
-static bool is_float(meta m) {
-    VarType vt = (VarType) m.type;
-    return vt == VarType::Float16 || vt == VarType::Float32 ||
-           vt == VarType::Float64;
-}
-
 static nb::object detach(nb::handle h, bool preserve_type=true) {
     if (is_drjit_array(h)) {
         const supp &s = nb::type_supplement<supp>(h.type());
@@ -82,7 +76,7 @@ static nb::object detach(nb::handle h, bool preserve_type=true) {
 static void set_grad_enabled(nb::handle h, bool value) {
     if (is_drjit_array(h)) {
         const supp &s = nb::type_supplement<supp>(h.type());
-        if (s.meta.is_diff && is_float(s.meta)) {
+        if (s.meta.is_diff && is_float_v(h.type())) {
             if (s.meta.ndim == 1) {
                 s.op_set_grad_enabled(nb::inst_ptr<void>(h), value);
             } else {
@@ -124,7 +118,7 @@ static bool grad_enabled(nb::handle h) {
     bool result = false;
     if (is_drjit_array(h)) {
         const supp &s = nb::type_supplement<supp>(h.type());
-        if (s.meta.is_diff && is_float(s.meta)) {
+        if (s.meta.is_diff && is_float_v(h.type())) {
             if (s.meta.ndim == 1) {
                 return s.op_grad_enabled(nb::inst_ptr<void>(h));
             } else {
@@ -165,7 +159,7 @@ static nb::object grad(nb::handle h) {
         const supp &s = nb::type_supplement<supp>(h.type());
         nb::object result = nb::inst_alloc(h.type());
 
-        if (s.meta.is_diff && is_float(s.meta)) {
+        if (s.meta.is_diff && is_float_v(h.type())) {
             if (s.meta.ndim == 1) {
                 s.op_grad(nb::inst_ptr<void>(h), nb::inst_ptr<void>(result));
                 nb::inst_mark_ready(result);
@@ -226,7 +220,7 @@ template <typename T>
 static void grad_setter(nb::handle h, nb::handle value, T op) {
     if (is_drjit_array(h)) {
         const supp &s = nb::type_supplement<supp>(h.type());
-        if (s.meta.is_diff && is_float(s.meta)) {
+        if (s.meta.is_diff && is_float_v(h.type())) {
             if (s.meta.ndim == 1) {
                 nb::object v2 = nb::borrow(value);
                 if (h.type().ptr() != v2.type().ptr())
@@ -314,7 +308,7 @@ static nb::object replace_grad(nb::handle h0, nb::handle h1) {
     }
 
     const supp &s1 = nb::type_supplement<supp>(h1.type());
-    if (!(s1.meta.is_diff && is_float(s1.meta))) {
+    if (!(s1.meta.is_diff && is_float_v(h1.type()))) {
         PyErr_Format(PyExc_TypeError,
                      "replace_grad(): unsupported input types!");
         return nb::object();
@@ -372,7 +366,7 @@ static nb::object replace_grad(nb::handle h0, nb::handle h1) {
 static void enqueue(drjit::ADMode mode, nb::handle h) {
     if (is_drjit_array(h)) {
         const supp &s = nb::type_supplement<supp>(h.type());
-        if (s.meta.is_diff && is_float(s.meta)) {
+        if (s.meta.is_diff && is_float_v(h.type())) {
             if (s.meta.ndim == 1) {
                 s.op_enqueue(mode, nb::inst_ptr<void>(h));
             } else {
@@ -411,42 +405,121 @@ static void traverse(nb::handle type, drjit::ADMode mode, drjit::ADFlag flags) {
         nb::detail::raise_python_error();
     }
 
-    // Find leaf array type
-    supp *s = (supp *) nb::detail::nb_type_supplement(type.ptr());
-    while (s->meta.ndim > 1)
-        s = (supp *) nb::detail::nb_type_supplement((PyObject *)s->value);
+    type = leaf_array_t(type);
+    const supp &s = nb::type_supplement<supp>(type);
 
-    if (!s->meta.is_diff) {
+    if (!s.meta.is_diff) {
         PyErr_Format(PyExc_TypeError,
                      "traverse(): expected a differentiable array type!");
         nb::detail::raise_python_error();
     }
 
-    s->op_traverse(mode, +flags);
+    s.op_traverse(mode, +flags);
 }
 
-static nb::object forward_to(nb::handle h, drjit::ADFlag flags) {
-    enqueue(drjit::ADMode::Backward, h);
-    traverse(h.type(), drjit::ADMode::Forward, flags);
-    return grad(h);
+static void _check_grad_enabled(const char *name, nb::handle tp, nb::handle a) {
+    if (is_drjit_type(tp)) {
+        const supp &s = nb::type_supplement<supp>(tp);
+        if (s.meta.is_diff && is_float_v(tp)) {
+            if (!::grad_enabled(a)) {
+                PyErr_Format(PyExc_TypeError,
+                            "%s(): the argument does not depend on the input "
+                            "variable(s) being differentiated. Raising an exception "
+                            "since this is usually indicative of a bug (for example, "
+                            "you may have forgotten to call ek.enable_grad(..)). If "
+                            "this is expected behavior, skip the call to %s(..) "
+                            "if ek.grad_enabled(..) returns False.", name, name);
+                nb::detail::raise_python_error();
+            }
+        } else {
+            PyErr_Format(PyExc_TypeError,
+                            "%s(): expected a differentiable array type!", name);
+            nb::detail::raise_python_error();
+        }
+    } else {
+        PyErr_Format(PyExc_TypeError,
+                        "%s(): expected a Dr.JIT array type!", name);
+        nb::detail::raise_python_error();
+    }
+}
+
+static drjit::ADFlag _ad_flags_from_kwargs(const char *name, nb::args args, nb::kwargs kwargs) {
+    drjit::ADFlag flags = drjit::ADFlag::Default;
+    if (nb::len(kwargs) > 1) {
+        PyErr_Format(PyExc_TypeError,
+                     "%s(): only AD flags should be passed via the "
+                     "'flags=..' keyword argument!", name);
+        nb::detail::raise_python_error();
+    }
+
+    if (nb::len(kwargs) == 1) {
+        try {
+            flags = nb::cast<drjit::ADFlag>(kwargs["flags"]);
+        } catch (...) {
+            PyErr_Format(PyExc_TypeError,
+                         "%s(): only AD flags should be passed via the "
+                         "'flags=..' keyword argument!", name);
+            nb::detail::raise_python_error();
+        }
+    }
+
+    for (auto h : args) {
+        if (nb::isinstance<drjit::ADFlag>(h)) {
+            PyErr_Format(PyExc_TypeError,
+                         "%s(): AD flags should be passed via the "
+                         "'flags=..' keyword argument!", name);
+            nb::detail::raise_python_error();
+        }
+    }
+
+    return flags;
+}
+
+static nb::object forward_to(nb::args args, nb::kwargs kwargs) {
+    drjit::ADFlag flags = _ad_flags_from_kwargs("forward_to", args, kwargs);
+    nb::handle tp = leaf_array_t(args);
+    _check_grad_enabled("forward_to", tp, args);
+    enqueue(drjit::ADMode::Backward, args);
+    traverse(tp, drjit::ADMode::Forward, flags);
+
+    if (nb::len(args) == 1)
+        return grad(args[0]);
+    else
+        return grad(args);
 }
 
 static void forward_from(nb::handle h, drjit::ADFlag flags) {
+    _check_grad_enabled("forward_from", leaf_array_t(h), h);
     set_grad(h, PyFloat_FromDouble(1.0));
     enqueue(drjit::ADMode::Forward, h);
     traverse(h.type(), drjit::ADMode::Forward, flags);
 }
 
-static nb::object backward_to(nb::handle h, drjit::ADFlag flags) {
-    enqueue(drjit::ADMode::Forward, h);
-    traverse(h.type(), drjit::ADMode::Backward, flags);
-    return grad(h);
+static nb::object backward_to(nb::args args, nb::kwargs kwargs) {
+    drjit::ADFlag flags = _ad_flags_from_kwargs("backward_to", args, kwargs);
+    nb::handle tp = leaf_array_t(args);
+    _check_grad_enabled("backward_to", tp, args);
+    enqueue(drjit::ADMode::Forward, args);
+    traverse(tp, drjit::ADMode::Backward, flags);
+    return grad(args);
 }
 
 static void backward_from(nb::handle h, drjit::ADFlag flags) {
+    _check_grad_enabled("backward_from", leaf_array_t(h), h);
+
     // Deduplicate components if `h` is a vector
-    if (is_drjit_array(h) && nb::type_supplement<supp>(h).meta.ndim > 1)
-        h += nb::handle(PyFloat_FromDouble(0.0));
+    const supp &s = nb::type_supplement<supp>(h.type());
+    if (s.meta.ndim > 1) {
+        PySequenceMethods *sm = ((PyTypeObject *) h.type().ptr())->tp_as_sequence;
+        for (Py_ssize_t i = 0, l = sm->sq_length(h.ptr()); i < l; ++i) {
+            nb::object v = nb::steal(sm->sq_item(h.ptr(), i));
+            if (!v.is_valid())
+                nb::detail::raise_python_error();
+            v = v + nb::handle(PyFloat_FromDouble(0.0));
+            if (sm->sq_ass_item(h.ptr(), i, v.ptr()))
+                nb::detail::raise_python_error();
+        }
+    }
 
     set_grad(h, PyFloat_FromDouble(1.0));
     enqueue(drjit::ADMode::Backward, h);
@@ -523,10 +596,10 @@ extern void bind_array_autodiff(nb::module_ m) {
     m.def("replace_grad", &replace_grad, "a"_a, "b"_a, doc_replace_grad);
     m.def("enqueue", nb::overload_cast<drjit::ADMode, nb::args>(enqueue), "mode"_a, "args"_a, doc_enqueue);
     m.def("traverse", &traverse, "type"_a, "mode"_a, "flags"_a=drjit::ADFlag::Default, doc_traverse);
-    m.def("forward_to",    &forward_to,    "args"_a, "flags"_a=drjit::ADFlag::Default, doc_forward_to);
+    m.def("forward_to",    &forward_to,    "args"_a, "flags"_a, doc_forward_to);
     m.def("forward_from",  &forward_from,  "args"_a, "flags"_a=drjit::ADFlag::Default, doc_forward_from);
     m.def("forward",       &forward_from,  "args"_a, "flags"_a=drjit::ADFlag::Default, doc_forward);
-    m.def("backward_to",   &backward_to,   "args"_a, "flags"_a=drjit::ADFlag::Default, doc_backward_to);
+    m.def("backward_to",   &backward_to,   "args"_a, "flags"_a, doc_backward_to);
     m.def("backward_from", &backward_from, "args"_a, "flags"_a=drjit::ADFlag::Default, doc_backward_from);
     m.def("backward",      &backward_from, "args"_a, "flags"_a=drjit::ADFlag::Default, doc_backward);
     m.def("graphviz_ad", &graphviz_ad, "as_str"_a=false, doc_graphviz_ad);

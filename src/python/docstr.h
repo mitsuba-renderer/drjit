@@ -2023,7 +2023,11 @@ static const char *doc_set_label =R"(
 TODO
 )";
 
-static const char *doc_detach_t =R"(
+static const char *doc_detached_t =R"(
+TODO
+)";
+
+static const char *doc_leaf_array_t =R"(
 TODO
 )";
 
