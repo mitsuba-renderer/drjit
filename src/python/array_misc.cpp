@@ -875,6 +875,16 @@ static void set_label(nb::args args, nb::kwargs kwargs) {
         set_label_impl(v, k);
 }
 
+static nb::object label(nb::handle h) {
+    if (is_drjit_array(h)) {
+        const supp &s = nb::type_supplement<supp>(h.type());
+        const char * string = s.op_label(nb::inst_ptr<void>(h));
+        if (string)
+            return nb::str(string);
+    }
+    return nb::none();
+}
+
 extern void bind_array_misc(nb::module_ m) {
     m.def("all", [](nb::handle h) -> nb::object {
         nb::handle tp = h.type();
@@ -1024,6 +1034,7 @@ extern void bind_array_misc(nb::module_ m) {
     m.def("schedule", nb::overload_cast<nb::args>(schedule), doc_schedule);
     m.def("eval", nb::overload_cast<nb::args>(eval), doc_eval);
 
+    m.def("label", &label, doc_label);
     m.def("set_label", &set_label, doc_set_label);
     m.def("graphviz", &graphviz, "as_str"_a=false, doc_graphviz);
 }

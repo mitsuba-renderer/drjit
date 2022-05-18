@@ -2015,6 +2015,10 @@ static const char *doc_graphviz_ad =R"(
 TODO
 )";
 
+static const char *doc_label =R"(
+TODO
+)";
+
 static const char *doc_set_label =R"(
 TODO
 )";
