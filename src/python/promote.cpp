@@ -41,24 +41,29 @@ static meta meta_promote(meta a, meta b) {
     if (r.is_tensor || !r.is_valid) {
         r.ndim = 0;
     } else {
+        bool is_jit_a = a.is_llvm || a.is_cuda,
+             is_jit_b = b.is_llvm || b.is_cuda;
 		int ndim_a = 0, ndim_b = 0;
         for (int i = 0; i < r.ndim; ++i) {
             int value_a = 1, value_b = 1;
 
-            if (ndim_a < a.ndim)
+            if (ndim_a < a.ndim - (is_jit_a ? 1 : 0))
                 value_a = a.shape[ndim_a++];
-            if (ndim_b < b.ndim)
+            if (ndim_b < b.ndim - (is_jit_b ? 1 : 0))
                 value_b = b.shape[ndim_b++];
 
             if (value_a == value_b)
                 r.shape[i] = value_a;
-            else if (value_a == 1 || value_b == 1)
-                r.shape[i] = value_a > value_b ? value_a : value_b;
             else if (value_a == DRJIT_DYNAMIC || value_b == DRJIT_DYNAMIC)
                 r.shape[i] = DRJIT_DYNAMIC;
+            else if (value_a == 1 || value_b == 1)
+                r.shape[i] = value_a > value_b ? value_a : value_b;
             else
                 r.is_valid = 0;
         }
+
+        if (is_jit_a || is_jit_b)
+            r.shape[r.ndim - 1] = DRJIT_DYNAMIC;
     }
 
     return r;
