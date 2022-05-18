@@ -30,6 +30,9 @@ using array_full = void (*) (nanobind::handle, size_t, void *);
 using array_empty = void (*) (size_t, void *);
 using array_counter = void (*) (uint32_t size, void *);
 using array_cast = int (*) (const void *, VarType, void *);
+using array_ad_create = void (*) (void *, uint32_t, void *);
+using array_set_label = void (*) (void *, const char *);
+
 
 struct array_metadata {
     uint16_t is_vector     : 1;
@@ -88,6 +91,8 @@ struct array_supplement {
     array_ternop op_gather;
     array_ternop op_scatter;
 
+    array_set_label op_set_label;
+
     array_unop op_sqrt, op_cbrt;
     array_unop op_sin, op_cos, op_tan;
     array_unop op_sinh, op_cosh, op_tanh;
@@ -98,6 +103,8 @@ struct array_supplement {
     array_unop op_rcp, op_rsqrt;
     array_binop op_min, op_max, op_atan2, op_ldexp;
     array_unop_2 op_sincos, op_sincosh, op_frexp;
+    array_unop op_detach;
+    array_ad_create op_ad_create;
 };
 
 static_assert(sizeof(array_metadata) == 8);
@@ -593,6 +600,19 @@ template <typename T> nanobind::class_<T> bind_array(const char *name = nullptr)
 
     if constexpr (T::IsDiff && T::Depth == 1 && T::IsFloat)
         s.op_index_ad = [](const void *a) { return ((const T *) a)->index_ad(); };
+    if constexpr (T::IsDiff && T::Depth == 1) {
+        s.op_detach = [](const void *a, void *b) {
+            new (b) detached_t<T>(((const T *) a)->detach_());
+        };
+        s.op_ad_create = [](void *a, uint32_t index, void *c) {
+            if constexpr (T::IsFloat)
+                detail::ad_inc_ref_impl<detached_t<T>>(index);
+            new (c) T(T::create(index, detached_t<T>(((T *) a)->detach_())));
+        };
+    }
+
+    if constexpr (T::Depth == 1 && (T::IsDiff || T::IsJIT))
+        s.op_set_label = [](void *a, const char *b) { return ((T *) a)->set_label_(b); };
 
     return tp;
 }

@@ -96,4 +96,10 @@ NB_MODULE(drjit_ext, m_) {
     });
 
     m.def("log_level", &jit_log_level_stderr);
+
+    nb::enum_<JitBackend>(m, "JitBackend")
+        .value("CUDA", JitBackend::CUDA)
+        .value("LLVM", JitBackend::LLVM);
+
+    m.def("has_backend", &jit_has_backend);
 }

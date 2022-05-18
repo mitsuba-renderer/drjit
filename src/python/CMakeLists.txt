@@ -10,6 +10,10 @@ nanobind_msvc(drjit-python)
 nanobind_headers(drjit-python)
 nanobuild_build_library(nanobind SHARED)
 target_link_libraries(drjit-python PUBLIC nanobind)
+target_include_directories(drjit-python PUBLIC ${Python_INCLUDE_DIRS})
+if (APPLE)
+  target_link_options(drjit-python PRIVATE -undefined dynamic_lookup)
+endif()
 nanobind_disable_stack_protector(drjit-python)
 nanobind_lto(drjit-python)
 
@@ -96,10 +100,7 @@ if (DRJIT_MASTER_PROJECT)
 endif()
 
 if (DRJIT_MASTER_PROJECT AND NOT "${CMAKE_CURRENT_SOURCE_DIR}" STREQUAL "${CMAKE_CURRENT_BINARY_DIR}")
-  set(DRJIT_PYTHON_FILES
-     __init__.py const.py detail.py generic.py
-     matrix.py router.py traits.py
-  )
+  set(DRJIT_PYTHON_FILES __init__.py)
 
   set(DRJIT_COPY_FILES "")
   foreach(file ${DRJIT_PYTHON_FILES})
