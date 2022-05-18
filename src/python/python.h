@@ -28,6 +28,10 @@ inline bool is_drjit_type(nb::handle h) {
 /// Is 'type(h)' a Dr.Jit array type?
 inline bool is_drjit_array(nb::handle h) { return is_drjit_type(h.type()); }
 
+extern bool is_float_v(nb::handle h);
+extern nb::handle detached_t(nb::handle h);
+extern nb::handle leaf_array_t(nb::handle h);
+
 // Return sequence protocol access methods for the given type
 nb::detail::tuple<lenfunc, ssizeargfunc, ssizeobjargproc>
 get_sq(nb::handle tp, const char *name, void *check);

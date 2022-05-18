@@ -64,6 +64,68 @@ static int itemsize_v(nb::handle h) {
     throw nb::type_error("Unsupported input type!");
 }
 
+bool is_float_v(nb::handle h) {
+    return (PyTypeObject *) scalar_t(h).ptr() == &PyFloat_Type;
+}
+
+nb::handle leaf_array_t(nb::handle h) {
+    if (h.is_type()) {
+        if (is_drjit_type(h)) {
+            supp *s = (supp *) nb::detail::nb_type_supplement(h.ptr());
+            while (s->meta.ndim > 1)
+                s = (supp *) nb::detail::nb_type_supplement((PyObject *)s->value);
+            return drjit::detail::array_get(s->meta);
+        } else {
+            return nb::none();
+        }
+    }
+
+    nb::handle tp = h.type();
+
+    if (is_drjit_array(h)) {
+        return leaf_array_t(h.type());
+    } else if (nb::isinstance<nb::sequence>(h)) {
+        for (auto h2 : h) {
+            tp = leaf_array_t(h2);
+            if (is_drjit_type(tp)) {
+                const supp &s = nb::type_supplement<supp>(tp);
+                if (s.meta.is_diff && is_float_v(tp))
+                    break;
+            }
+        }
+    } else if (nb::isinstance<nb::mapping>(h)) {
+        return leaf_array_t(nb::borrow<nb::mapping>(h).values());
+    } else {
+        nb::object dstruct = nb::getattr(h.type(), "DRJIT_STRUCT", nb::handle());
+        if (dstruct.is_valid() && nb::isinstance<nb::dict>(dstruct)) {
+            for (auto [k, v] : nb::borrow<nb::dict>(dstruct)) {
+                tp = leaf_array_t(v);
+                if (is_drjit_type(tp)) {
+                    const supp &s = nb::type_supplement<supp>(tp);
+                    if (s.meta.is_diff && is_float_v(tp))
+                        break;
+                }
+            }
+        }
+    }
+
+    return tp;
+}
+
+nb::handle detached_t(nb::handle h) {
+    if (!h.is_type())
+        return detached_t(h.type());
+
+    if (is_drjit_type(h)) {
+        const supp &s = nb::type_supplement<supp>(h);
+        meta detached_meta = s.meta;
+        detached_meta.is_diff = false;
+        return drjit::detail::array_get(detached_meta);
+    }
+
+    return h;
+}
+
 extern void bind_traits(nb::module_ m) {
     m.attr("Dynamic") = (Py_ssize_t) -1;
 
@@ -134,12 +196,7 @@ extern void bind_traits(nb::module_ m) {
         },
         nb::raw_doc(doc_is_mask_v));
 
-    m.def(
-        "is_float_v",
-        [](nb::handle h) -> bool {
-            return (PyTypeObject *) scalar_t(h).ptr() == &PyFloat_Type;
-        },
-        nb::raw_doc(doc_is_float_v));
+    m.def("is_float_v", &is_float_v, nb::raw_doc(doc_is_float_v));
 
     m.def(
         "is_integral_v",
@@ -340,16 +397,6 @@ extern void bind_traits(nb::module_ m) {
         },
         doc_float_array_t);
 
-    m.def(
-        "detached_t",
-        [](nb::handle h) {
-            if (is_drjit_type(h)) {
-                const supp &s = nb::type_supplement<supp>(h);
-                meta detached_meta = s.meta;
-                detached_meta.is_diff = false;
-                return drjit::detail::array_get(detached_meta);
-            }
-            return h;
-        },
-        doc_detach_t);
+    m.def("detached_t", &detached_t, doc_detached_t);
+    m.def("leaf_array_t", &leaf_array_t, doc_leaf_array_t);
 }
