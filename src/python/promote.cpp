@@ -11,7 +11,7 @@
 #include "python.h"
 
 /// Check if the given metadata record is valid
-static bool meta_check(meta m) {
+bool meta_check(meta m) {
     return m.is_valid &&
            (m.type > (uint8_t) VarType::Void &&
             m.type < (uint8_t) VarType::Count) &&
@@ -20,7 +20,7 @@ static bool meta_check(meta m) {
            (m.is_cuda + m.is_llvm <= 1);
 }
 
-/// Compute the metadata type of an operation combinining 'a' and 'b'
+/// Compute the metadata type of an operation combining 'a' and 'b'
 meta meta_promote(meta a, meta b) {
     meta r;
     r.is_vector = a.is_vector | b.is_vector;
@@ -93,7 +93,7 @@ static void meta_print(meta m) {
 }
 #endif
 
-static meta meta_from_builtin(PyObject *o) noexcept {
+meta meta_from_builtin(PyObject *o) noexcept {
     meta m { };
     m.is_valid = true;
 

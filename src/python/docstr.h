@@ -101,7 +101,7 @@ Return the *array form* of the provided Dr.Jit array or type.
 There are several different cases:
 
 - When `self` is a tensor, this property returns the storage representation
-  of the tensor in the form of a linarized dynamic 1D array. For example,
+  of the tensor in the form of a linearized dynamic 1D array. For example,
   the following hold:
 
   .. code-block::
@@ -1198,18 +1198,17 @@ variable index within the raw computation graph, if applicable.
 
 
 static const char *doc_bool_array_t = R"(
-Converts the provided Dr.Jit array/tensor, or type into a boolean version.
+Converts the provided Dr.Jit array/tensor type into a boolean version.
 
 This function implements the following set of behaviors:
 
 1. When invoked with a Dr.Jit array *type* (e.g. :py:class:`drjit.cuda.Array3i`), it
    returns a *boolean* version (e.g. :py:class:`drjit.cuda.Array3b`).
 
-2. When invoked with a Dr.Jit array *value*, it casts the input into the
-   type ``bool_array_t(type(arg))``
+2. When invoked with a Dr.Jit array *value*, it returns a *boolean* version of
+   its type.
 
-3. When the input is not a Dr.Jit array or type, the function returns ``bool``
-   (when called with a type) or it tries to convert the input into a ``bool``.
+3. When the input is not a Dr.Jit array or type, the function returns ``bool``.
 
 Args:
     arg (object): An arbitrary Python object
@@ -1219,7 +1218,7 @@ Returns:
 )";
 
 static const char *doc_uint_array_t = R"(
-Converts the provided Dr.Jit array/tensor, or type into a *unsigned integer*
+Converts the provided Dr.Jit array/tensor type into a *unsigned integer*
 version with the same element size.
 
 This function implements the following set of behaviors:
@@ -1227,11 +1226,10 @@ This function implements the following set of behaviors:
 1. When invoked with a Dr.Jit array *type* (e.g. :py:class:`drjit.cuda.Array3f64`), it
    returns an *unsigned integer* version (e.g. :py:class:`drjit.cuda.Array3u64`).
 
-2. When invoked with a Dr.Jit array *value*, it casts the input into the
-   type ``uint_array_t(type(arg))``
+2. When invoked with a Dr.Jit array *value*, it returns a *unsigned integer*
+   version of its type.
 
-3. When the input is not a Dr.Jit array or type, the function returns ``int``
-   (when called with a type) or it tries to convert the input into an ``int``.
+3. When the input is not a Dr.Jit array or type, the function returns ``int``.
 
 Args:
     arg (object): An arbitrary Python object
@@ -1242,7 +1240,7 @@ Returns:
 
 
 static const char *doc_int_array_t = R"(
-Converts the provided Dr.Jit array/tensor, or type into a *signed integer*
+Converts the provided Dr.Jit array/tensor type into a *signed integer*
 version with the same element size.
 
 This function implements the following set of behaviors:
@@ -1250,11 +1248,10 @@ This function implements the following set of behaviors:
 1. When invoked with a Dr.Jit array *type* (e.g. :py:class:`drjit.cuda.Array3f64`), it
    returns an *signed integer* version (e.g. :py:class:`drjit.cuda.Array3u64`).
 
-2. When invoked with a Dr.Jit array *value*, it casts the input into the
-   type ``int_array_t(type(arg))``
+2. When invoked with a Dr.Jit array *value*, it returns a *signed integer*
+   version of its type.
 
-3. When the input is not a Dr.Jit array or type, the function returns ``int``
-   (when called with a type) or it tries to convert the input into an ``int``.
+3. When the input is not a Dr.Jit array or type, the function returns ``int``.
 
 Args:
     arg (object): An arbitrary Python object
@@ -1265,7 +1262,7 @@ Returns:
 
 
 static const char *doc_float_array_t = R"(
-Converts the provided Dr.Jit array/tensor, or type into a *floating point*
+Converts the provided Dr.Jit array/tensor type into a *floating point*
 version with the same element size.
 
 This function implements the following set of behaviors:
@@ -1273,11 +1270,10 @@ This function implements the following set of behaviors:
 1. When invoked with a Dr.Jit array *type* (e.g. :py:class:`drjit.cuda.Array3u64`), it
    returns an *floating point* version (e.g. :py:class:`drjit.cuda.Array3f64`).
 
-2. When invoked with a Dr.Jit array *value*, it casts the input into the
-   type ``float_array_t(type(arg))``
+2. When invoked with a Dr.Jit array *value*, it returns a *floating point*
+   version of its type.
 
-3. When the input is not a Dr.Jit array or type, the function returns ``float``
-   (when called with a type) or it tries to convert the input into a ``float``.
+3. When the input is not a Dr.Jit array or type, the function returns ``float``.
 
 Args:
     arg (object): An arbitrary Python object
@@ -1287,7 +1283,7 @@ Returns:
 )";
 
 static const char *doc_uint32_array_t = R"(
-Converts the provided Dr.Jit array/tensor, or type into an *unsigned 32 bit*
+Converts the provided Dr.Jit array/tensor type into a *unsigned 32 bit*
 version.
 
 This function implements the following set of behaviors:
@@ -1295,11 +1291,10 @@ This function implements the following set of behaviors:
 1. When invoked with a Dr.Jit array *type* (e.g. :py:class:`drjit.cuda.Array3f`), it
    returns an *unsigned 32 bit* version (e.g. :py:class:`drjit.cuda.Array3u`).
 
-2. When invoked with a Dr.Jit array *value*, it casts the input into the
-   type ``uint32_array_t(type(arg))``
+2. When invoked with a Dr.Jit array *value*, it returns a *unsigned 32 bit*
+   version of its type.
 
-3. When the input is not a Dr.Jit array or type, the function returns ``int``
-   (when called with a type) or it tries to convert the input into an ``int``.
+3. When the input is not a Dr.Jit array or type, the function returns ``int``.
 
 Args:
     arg (object): An arbitrary Python object
@@ -1309,7 +1304,7 @@ Returns:
 )";
 
 static const char *doc_int32_array_t = R"(
-Converts the provided Dr.Jit array/tensor, or type into an *signed 32 bit*
+Converts the provided Dr.Jit array/tensor type into a *signed 32 bit*
 version.
 
 This function implements the following set of behaviors:
@@ -1317,11 +1312,10 @@ This function implements the following set of behaviors:
 1. When invoked with a Dr.Jit array *type* (e.g. :py:class:`drjit.cuda.Array3f`), it
    returns an *signed 32 bit* version (e.g. :py:class:`drjit.cuda.Array3i`).
 
-2. When invoked with a Dr.Jit array *value*, it casts the input into the
-   type ``int32_array_t(type(arg))``
+2. When invoked with a Dr.Jit array *value*, it returns a *signed 32 bit*
+   version of its type.
 
-3. When the input is not a Dr.Jit array or type, the function returns ``int``
-   (when called with a type) or it tries to convert the input into an ``int``.
+3. When the input is not a Dr.Jit array or type, the function returns ``int``.
 
 Args:
     arg (object): An arbitrary Python object
@@ -1331,7 +1325,7 @@ Returns:
 )";
 
 static const char *doc_uint64_array_t = R"(
-Converts the provided Dr.Jit array/tensor, or type into an *unsigned 64 bit*
+Converts the provided Dr.Jit array/tensor type into an *unsigned 64 bit*
 version.
 
 This function implements the following set of behaviors:
@@ -1339,11 +1333,10 @@ This function implements the following set of behaviors:
 1. When invoked with a Dr.Jit array *type* (e.g. :py:class:`drjit.cuda.Array3f`), it
    returns an *unsigned 64 bit* version (e.g. :py:class:`drjit.cuda.Array3u64`).
 
-2. When invoked with a Dr.Jit array *value*, it casts the input into the
-   type ``uint64_array_t(type(arg))``
+2. When invoked with a Dr.Jit array *value*, it returns a *unsigned 64 bit*
+   version of its type.
 
-3. When the input is not a Dr.Jit array or type, the function returns ``int``
-   (when called with a type) or it tries to convert the input into an ``int``.
+3. When the input is not a Dr.Jit array or type, the function returns ``int``.
 
 Args:
     arg (object): An arbitrary Python object
@@ -1353,19 +1346,17 @@ Returns:
 )";
 
 static const char *doc_int64_array_t = R"(
-Converts the provided Dr.Jit array/tensor, or type into an *signed 64 bit*
-version.
+Converts the provided Dr.Jit array/tensor type into an *signed 64 bit* version.
 
 This function implements the following set of behaviors:
 
 1. When invoked with a Dr.Jit array *type* (e.g. :py:class:`drjit.cuda.Array3f`), it
    returns an *signed 64 bit* version (e.g. :py:class:`drjit.cuda.Array3i64`).
 
-2. When invoked with a Dr.Jit array *value*, it casts the input into the
-   type ``int64_array_t(type(arg))``
+2. When invoked with a Dr.Jit array *value*, it returns a *signed 64 bit*
+   version of its type.
 
-3. When the input is not a Dr.Jit array or type, the function returns ``int``
-   (when called with a type) or it tries to convert the input into an ``int``.
+3. When the input is not a Dr.Jit array or type, the function returns ``int``.
 
 Args:
     arg (object): An arbitrary Python object
@@ -1375,19 +1366,16 @@ Returns:
 )";
 
 static const char *doc_float32_array_t = R"(
-Converts the provided Dr.Jit array/tensor, or type into an 32 bit floating
-point version.
+Converts the provided Dr.Jit array/tensor type into an 32 bit floating point version.
 
 This function implements the following set of behaviors:
 
 1. When invoked with a Dr.Jit array *type* (e.g. :py:class:`drjit.cuda.Array3u`), it
    returns a *32 bit floating point* version (e.g. :py:class:`drjit.cuda.Array3f`).
 
-2. When invoked with a Dr.Jit array *value*, it casts the input into the
-   type ``float32_array_t(type(arg))``
+2. When invoked with a Dr.Jit array *value*, it returns ``float32_array_t(type(arg))``
 
-3. When the input is not a Dr.Jit array or type, the function returns ``float``
-   (when called with a type) or it tries to convert the input into a ``float``.
+3. When the input is not a Dr.Jit array or type, the function returns ``float``.
 
 Args:
     arg (object): An arbitrary Python object
@@ -1398,19 +1386,16 @@ Returns:
 
 
 static const char *doc_float64_array_t = R"(
-Converts the provided Dr.Jit array/tensor, or type into an 64 bit floating
-point version.
+Converts the provided Dr.Jit array/tensor type into an 64 bit floating point version.
 
 This function implements the following set of behaviors:
 
 1. When invoked with a Dr.Jit array *type* (e.g. :py:class:`drjit.cuda.Array3u`), it
    returns a *64 bit floating point* version (e.g. :py:class:`drjit.cuda.Array3f64`).
 
-2. When invoked with a Dr.Jit array *value*, it casts the input into the
-   type ``float64_array_t(type(arg))``
+2. When invoked with a Dr.Jit array *value*, it returns ``float64_array_t(type(arg))``
 
-3. When the input is not a Dr.Jit array or type, the function returns ``float``
-   (when called with a type) or it tries to convert the input into a ``float``.
+3. When the input is not a Dr.Jit array or type, the function returns ``float``.
 
 Args:
     arg (object): An arbitrary Python object
@@ -2028,6 +2013,10 @@ TODO
 )";
 
 static const char *doc_leaf_array_t =R"(
+TODO
+)";
+
+static const char *doc_expr_t =R"(
 TODO
 )";
 

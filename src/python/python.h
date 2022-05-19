@@ -31,6 +31,7 @@ inline bool is_drjit_array(nb::handle h) { return is_drjit_type(h.type()); }
 extern bool is_float_v(nb::handle h);
 extern nb::handle detached_t(nb::handle h);
 extern nb::handle leaf_array_t(nb::handle h);
+extern nb::handle expr_t(nb::handle h0, nb::handle h1);
 
 // Return sequence protocol access methods for the given type
 nb::detail::tuple<lenfunc, ssizeargfunc, ssizeobjargproc>
@@ -39,8 +40,13 @@ get_sq(nb::handle tp, const char *name, void *check);
 extern Py_ssize_t len(PyObject *o) noexcept;
 extern nb::object shape(nb::handle_t<dr::ArrayBase> h) noexcept;
 
-/// Compute the metadata type of an operation combinining 'a' and 'b'
+
+/// Check if the given metadata record is valid
+bool meta_check(meta m);
+
+/// Compute the metadata type of an operation combining 'a' and 'b'
 extern meta meta_promote(meta a, meta b);
+extern meta meta_from_builtin(PyObject *o) noexcept;
 
 /**
  * \brief Given a list of Dr.Jit arrays and scalars, determine the flavor and
@@ -93,7 +99,7 @@ extern nb::object ravel(nb::handle_t<dr::ArrayBase> h, char order,
 extern nb::object unravel(const nb::type_object_t<dr::ArrayBase> &dtype,
                           nb::handle_t<dr::ArrayBase> array, char order);
 
-extern nb::object reinterpret_array_t(nb::handle h, VarType vt);
+extern nb::handle reinterpret_array_t(nb::handle h, VarType vt);
 
 extern nb::dlpack::dtype dlpack_dtype(VarType vt);
 
