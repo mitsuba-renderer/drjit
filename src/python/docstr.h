@@ -1214,7 +1214,7 @@ Args:
     arg (object): An arbitrary Python object
 
 Returns:
-    object: Result of the conversion as described above.
+    type: Result of the conversion as described above.
 )";
 
 static const char *doc_uint_array_t = R"(
@@ -1235,7 +1235,7 @@ Args:
     arg (object): An arbitrary Python object
 
 Returns:
-    object: Result of the conversion as described above.
+    type: Result of the conversion as described above.
 )";
 
 
@@ -1257,7 +1257,7 @@ Args:
     arg (object): An arbitrary Python object
 
 Returns:
-    object: Result of the conversion as described above.
+    type: Result of the conversion as described above.
 )";
 
 
@@ -1279,7 +1279,7 @@ Args:
     arg (object): An arbitrary Python object
 
 Returns:
-    object: Result of the conversion as described above.
+    type: Result of the conversion as described above.
 )";
 
 static const char *doc_uint32_array_t = R"(
@@ -1300,7 +1300,7 @@ Args:
     arg (object): An arbitrary Python object
 
 Returns:
-    object: Result of the conversion as described above.
+    type: Result of the conversion as described above.
 )";
 
 static const char *doc_int32_array_t = R"(
@@ -1321,7 +1321,7 @@ Args:
     arg (object): An arbitrary Python object
 
 Returns:
-    object: Result of the conversion as described above.
+    type: Result of the conversion as described above.
 )";
 
 static const char *doc_uint64_array_t = R"(
@@ -1342,7 +1342,7 @@ Args:
     arg (object): An arbitrary Python object
 
 Returns:
-    object: Result of the conversion as described above.
+    type: Result of the conversion as described above.
 )";
 
 static const char *doc_int64_array_t = R"(
@@ -1362,7 +1362,7 @@ Args:
     arg (object): An arbitrary Python object
 
 Returns:
-    object: Result of the conversion as described above.
+    type: Result of the conversion as described above.
 )";
 
 static const char *doc_float32_array_t = R"(
@@ -1381,9 +1381,8 @@ Args:
     arg (object): An arbitrary Python object
 
 Returns:
-    object: Result of the conversion as described above.
+    type: Result of the conversion as described above.
 )";
-
 
 static const char *doc_float64_array_t = R"(
 Converts the provided Dr.Jit array/tensor type into an 64 bit floating point version.
@@ -1401,7 +1400,64 @@ Args:
     arg (object): An arbitrary Python object
 
 Returns:
-    object: Result of the conversion as described above.
+    type: Result of the conversion as described above.
+)";
+
+static const char *doc_detached_t =R"(
+Converts the provided Dr.Jit array/tensor type into an non-differentiable version.
+
+This function implements the following set of behaviors:
+
+1. When invoked with a differentiable Dr.Jit array *type* (e.g. :py:class:`drjit.cuda.ad.Array3f`), it
+   returns a non-differentiable version (e.g. :py:class:`drjit.cuda.Array3f`).
+
+2. When the input isn't a type, it returns ``detached_t(type(arg))``.
+
+3. When the input type is non-differentiable or not a Dr.Jit array type, the function returns it unchanged.
+
+Args:
+    arg (object): An arbitrary Python object
+
+Returns:
+    type: Result of the conversion as described above.
+)";
+
+static const char *doc_leaf_array_t =R"(
+Extracts a leaf array type underlying a Python object tree, with a preference
+for differentiable arrays.
+
+This function implements the following set of behaviors:
+
+1. When the input isn't a type, it returns ``leaf_array_t(type(arg))``.
+
+2. When invoked with a Dr.Jit array type, returns the lowest-level array type
+   underlying a potentially nested array.
+
+3. When invoked with a sequence, mapping or custom data structure made of Dr.Jit arrays,
+   examines underlying Dr.Jit array types and returns the lowest-level array type with
+   a preference for differentiable arrays and floating points arrays.
+   E.g. when passing a list containing arrays of type :py:class:`drjit.cuda.ad.Float` and :py:class:`drjit.cuda.UInt`,
+   the function will return :py:class:`drjit.cuda.ad.Float`.
+
+4. Otherwise returns ``None``.
+
+Args:
+    arg (object): An arbitrary Python object
+
+Returns:
+    type: Result of the extraction as described above.
+)";
+
+static const char *doc_expr_t =R"(
+Computes the type of an arithmetic expression involving the provided Dr.Jit arrays
+(instances or types), or builtin Python objects.
+
+Args:
+    *args (tuple): A variable-length list of Dr.Jit arrays, builtin Python
+      objects, or types.
+
+Returns:
+    type: Result type of an arithmetic expression involving the provided variables.
 )";
 
 static const char *doc_slice_index = R"(
@@ -2005,18 +2061,6 @@ TODO
 )";
 
 static const char *doc_set_label =R"(
-TODO
-)";
-
-static const char *doc_detached_t =R"(
-TODO
-)";
-
-static const char *doc_leaf_array_t =R"(
-TODO
-)";
-
-static const char *doc_expr_t =R"(
 TODO
 )";
 
