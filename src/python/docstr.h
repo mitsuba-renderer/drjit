@@ -1911,10 +1911,22 @@ In other case, e.g. for :py:class:`drjit.llvm.Float`,
 is already contiguous and a zero-copy approach is used instead.)";
 
 static const char *doc_detach =R"(
-Detach the given variable from the AD backend.
+Transforms the input variable into its non-differentiable version (*detaches* it
+from the AD computational graph).
+
+This function is able to traverse data-structures such a sequences, mappings or
+:ref:`custom data structure <custom-struct>` and applies the transformation to the
+underlying variables.
+
+When the input variable isn't a Dr.Jit differentiable array, it is returned as it is.
+
+While the type of the returned array is preserved by default, it is possible to
+set the ``preserve_type`` argument to false to force the returned type to be
+non-differentiable.
 
 Args:
-    arg (object): An arbitrary Dr.Jit array, tensor or :ref:`custom data structure <custom-struct>`.
+    arg (object): An arbitrary Dr.Jit array, tensor,
+        :ref:`custom data structure <custom-struct>`, sequence, or mapping.
 
     preserve_type (bool): Defines whether the returned variable should preserve
         the type of the input variable.
@@ -1923,30 +1935,30 @@ Returns:
 )";
 
 static const char *doc_set_grad_enabled =R"(
-Enable or disable gradient tracking.
+Enable or disable gradient tracking on the provided variables.
 
 Args:
-    arg (object): An arbitrary Dr.Jit array, tensor,
-        :ref:`custom data structure <custom-struct>`, sequences, or mapping.
+    *args (tuple): A variable-length list of Dr.Jit array instances,
+        :ref:`custom data structures <custom-struct>`, sequences, or mappings.
 
     value (bool): Defines whether gradient tracking should be enabled or
         disabled.
 )";
 
 static const char *doc_enable_grad =R"(
-Enable gradient tracking.
+Enable gradient tracking on the provided variables.
 
 Args:
-    arg (object): An arbitrary Dr.Jit array, tensor,
-        :ref:`custom data structure <custom-struct>`, sequences, or mapping.
+    *args (tuple): A variable-length list of Dr.Jit array instances,
+        :ref:`custom data structures <custom-struct>`, sequences, or mappings.
 )";
 
 static const char *doc_disable_grad =R"(
-Disable gradient tracking.
+Disable gradient tracking on the provided variables.
 
 Args:
-    arg (object): An arbitrary Dr.Jit array, tensor,
-        :ref:`custom data structure <custom-struct>`, sequences, or mapping.
+    *args (tuple): A variable-length list of Dr.Jit array instances,
+        :ref:`custom data structures <custom-struct>`, sequences, or mappings.
 )";
 
 static const char *doc_grad_enabled =R"(
@@ -1959,11 +1971,13 @@ Args:
       Dr.Jit arrays.
 
 Returns:
-    bool: ``True`` if a variable has gradient tracking enabled, ``False`` otherwise.
+    bool: ``True`` if any variable has gradient tracking enabled, ``False`` otherwise.
 )";
 
 static const char *doc_grad =R"(
 Return the gradient value associated to a given variable.
+
+When the variable doesn't have gradient tracking enabled, this function returns ``0``.
 
 Args:
     arg (object): An arbitrary Dr.Jit array, tensor,
@@ -1974,7 +1988,10 @@ Returns:
 )";
 
 static const char *doc_set_grad =R"(
-Set the gradient value to a given variable.
+Set the gradient value to the provided variable.
+
+Broadcasting is applied to the gradient value if necessary and possible to match
+the type of the input variable.
 
 Args:
     arg (object): An arbitrary Dr.Jit array, tensor,
@@ -1985,7 +2002,10 @@ Args:
 )";
 
 static const char *doc_accum_grad =R"(
-Accumulate the gradient value to a given variable.
+Accumulate the gradient value into the provided variable.
+
+Broadcasting is applied to the gradient value if necessary and possible to match
+the type of the input variable.
 
 Args:
     arg (object): An arbitrary Dr.Jit array, tensor,
@@ -1996,72 +2016,198 @@ Args:
 )";
 
 static const char *doc_replace_grad =R"(
-TODO
+Replace the gradient value of ``target`` with the one of ``source``.
+
+Broadcasting is applied to ``target`` if necessary to match the type of ``source``.
+
+Args:
+    target (object): An arbitrary Dr.Jit array, tensor, or scalar builtin instance.
+
+    source (object): An differentiable Dr.Jit array or tensor.
+
+Returns:
+    object: the variable with the replaced gradients.
 )";
 
 static const char *doc_enqueue =R"(
-Enqueue variable for the next AD traverse
+Enqueues variable for the subsequent AD traversal.
 
 Args:
     mode (ADFlag): flags to control what should and should not be destructed
         during forward/backward mode traversal
 
     value (object): An arbitrary Dr.Jit array, tensor,
-        :ref:`custom data structure <custom-struct>`, sequences, or mapping to
-        be enqueued.
+        :ref:`custom data structure <custom-struct>`, sequences, or mapping.
 )";
 
-
 static const char *doc_traverse =R"(
-Traverse automatic differentiation graph
+Propagate derivatives through the enqueued set of edges in the AD computational
+graph.
 
 Args:
     type (type): defines the Dr.JIT array type used to build the AD graph
 
-    mode (ADMode): defines the mode traversal (e.g. backward, forward)
+    mode (ADMode): defines the mode traversal (backward or forward)
 
     flags (ADFlag): flags to control what should and should not be destructed
-        during forward/backward mode traversal
+        during forward/backward mode traversal.
 )";
 
 static const char *doc_forward_from =R"(
-TODO
+Forward propagates gradients from a provided Dr.Jit differentiable array.
+
+This function will first see the gradient value of the provided variable to ``1.0``
+before executing the AD computational graph traversal.
+
+An exception will be raised when the provided array doesn't have gradient tracking
+enabled or if it isn't an instance of a Dr.Jit differentiable array type.
+
+Args:
+    arg (object): A Dr.Jit differentiable array instance.
+
+    flags (ADFlag): flags to control what should and should not be destructed
+        during the traversal.
 )";
 
 static const char *doc_forward =R"(
-TODO
+Forward propagates gradients from a provided Dr.Jit differentiable array.
+
+This function will first see the gradient value of the provided variable to ``1.0``
+before executing the AD computational graph traversal.
+
+An exception will be raised when the provided array doesn't have gradient tracking
+enabled or if it isn't an instance of a Dr.Jit differentiable array type.
+
+This function is an alias of :py:func:`drjit.forward_from`.
+
+Args:
+    arg (object): A Dr.Jit differentiable array instance.
+
+    flags (ADFlag): flags to control what should and should not be destructed
+        during the traversal.
 )";
 
 static const char *doc_forward_to =R"(
-TODO
+Forward propagates gradients to a set of provided Dr.Jit differentiable arrays.
+
+Internally, the AD computational graph will be first traversed backward to find
+all potential source of gradient for the provided array. Then only the forward
+gradient propagation traversal takes place.
+
+The ``flags`` argument should be provided as a keyword argument for this function.
+
+An exception will be raised when the provided array doesn't have gradient tracking
+enabled or if it isn't an instance of a Dr.Jit differentiable array type.
+
+Args:
+    *args (tuple): A variable-length list of Dr.Jit differentiable array, tensor,
+        :ref:`custom data structure <custom-struct>`, sequences, or mapping.
+
+    flags (ADFlag): flags to control what should and should not be destructed
+        during the traversal.
+
+Returns:
+    object: the gradient value associated to the output variables.
 )";
 
 static const char *doc_backward_from =R"(
-TODO
+Backward propagates gradients from a provided Dr.Jit differentiable array.
+
+An exception will be raised when the provided array doesn't have gradient tracking
+enabled or if it isn't an instance of a Dr.Jit differentiable array type.
+
+Args:
+    arg (object): A Dr.Jit differentiable array instance.
+
+    flags (ADFlag): flags to control what should and should not be destructed
+        during the traversal.
 )";
 
 static const char *doc_backward =R"(
-TODO
+Backward propagate gradients from a provided Dr.Jit differentiable array.
+
+An exception will be raised when the provided array doesn't have gradient tracking
+enabled or if it isn't an instance of a Dr.Jit differentiable array type.
+
+This function is an alias of :py:func:`drjit.backward_from`.
+
+Args:
+    arg (object): A Dr.Jit differentiable array instance.
+
+    flags (ADFlag): flags to control what should and should not be destructed
+        during the traversal.
 )";
 
 static const char *doc_backward_to =R"(
-TODO
+Backward propagate gradients to a set of provided Dr.Jit differentiable arrays.
+
+Internally, the AD computational graph will be first traversed *forward* to find
+all potential source of gradient for the provided array. Then only the backward
+gradient propagation traversal takes place.
+
+The ``flags`` argument should be provided as a keyword argument for this function.
+
+An exception will be raised when the provided array doesn't have gradient tracking
+enabled or if it isn't an instance of a Dr.Jit differentiable array type.
+
+Args:
+    *args (tuple): A variable-length list of Dr.Jit differentiable array, tensor,
+        :ref:`custom data structure <custom-struct>`, sequences, or mapping.
+
+    flags (ADFlag): flags to control what should and should not be destructed
+        during the traversal.
+
+Returns:
+    object: the gradient value associated to the output variables.
 )";
 
 static const char *doc_graphviz =R"(
-TODO
+Assembles a graphviz diagram for the computational graph trace by the JIT.
+
+Args:
+    as_str (bool): whether the function should return the graphviz object as
+        a string representation or not.
+
+Returns:
+    object: the graphviz obj (or its string representation).
 )";
 
 static const char *doc_graphviz_ad =R"(
-TODO
+Assembles a graphviz diagram for the computational graph trace by the AD system.
+
+Args:
+    as_str (bool): whether the function should return the graphviz object as
+        a string representation or not.
+
+Returns:
+    object: the graphviz obj (or its string representation).
 )";
 
 static const char *doc_label =R"(
-TODO
+Returns the label of a given Dr.Jit array.
+
+Args:
+    arg (object): a Dr.Jit array instance.
+
+Returns:
+    str: the label of the given variable.
 )";
 
 static const char *doc_set_label =R"(
-TODO
+Sets the label of a provided Dr.Jit array, either in the JIT or the AD system.
+
+When a :ref:`custom data structure <custom-struct>` is provided, the field names
+will be used as suffix for the variables labels.
+
+When a sequence or static array is provided, the item's indices will be appended
+to the label.
+
+When a mapping is provided, the item's key will be appended to the label.
+
+Args:
+    *arg (tuple): a Dr.Jit array instance and its corresponding label ``str`` value.
+
+    **kwarg (dict): A set of (keyword, object) pairs.
 )";
 
 #if defined(__GNUC__)

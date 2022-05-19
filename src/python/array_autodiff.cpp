@@ -54,6 +54,21 @@ static nb::object detach(nb::handle h, bool preserve_type=true) {
         }
     }
 
+    if (nb::isinstance<nb::sequence>(h)) {
+        nb::list result;
+        for (Py_ssize_t i = 0, l = nb::len(h); i < l; i++)
+            result.append(detach(h[i], preserve_type));
+        return std::move(result);
+    }
+
+    if (nb::isinstance<nb::mapping>(h)) {
+        nb::object result = nb::inst_alloc(h.type());
+        nb::mapping m = nb::borrow<nb::mapping>(h);
+        for (auto k : m.keys())
+            result[k] = detach(m[k], preserve_type);
+        return result;
+    }
+
     nb::object dstruct = nb::getattr(h.type(), "DRJIT_STRUCT", nb::handle());
     if (dstruct.is_valid() && nb::isinstance<nb::dict>(dstruct)) {
         if (!preserve_type) {
@@ -191,7 +206,6 @@ static nb::object grad(nb::handle h) {
             result.append(grad(h[i]));
         return std::move(result);
     }
-
 
     if (nb::isinstance<nb::mapping>(h)) {
         nb::object result = nb::inst_alloc(h.type());
@@ -593,7 +607,7 @@ extern void bind_array_autodiff(nb::module_ m) {
     m.def("grad", &grad, "arg"_a, doc_grad);
     m.def("set_grad",   &set_grad,   "arg"_a, "value"_a, doc_set_grad);
     m.def("accum_grad", &accum_grad, "arg"_a, "value"_a, doc_accum_grad);
-    m.def("replace_grad", &replace_grad, "a"_a, "b"_a, doc_replace_grad);
+    m.def("replace_grad", &replace_grad, "target"_a, "source"_a, doc_replace_grad);
     m.def("enqueue", nb::overload_cast<drjit::ADMode, nb::args>(enqueue), "mode"_a, "args"_a, doc_enqueue);
     m.def("traverse", &traverse, "type"_a, "mode"_a, "flags"_a=drjit::ADFlag::Default, doc_traverse);
     m.def("forward_to",    &forward_to,    "args"_a, "flags"_a, doc_forward_to);
