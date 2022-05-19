@@ -18,7 +18,7 @@ static nb::handle scalar_t(nb::handle h) {
     return tp;
 }
 
-nb::object reinterpret_array_t(nb::handle h, VarType vt) {
+nb::handle reinterpret_array_t(nb::handle h, VarType vt) {
     nb::handle tp = h.is_type() ? h : h.type();
     if (is_drjit_type(tp)) {
         meta m = nb::type_supplement<supp>(tp).meta;
@@ -34,7 +34,7 @@ nb::object reinterpret_array_t(nb::handle h, VarType vt) {
         else
             tp = &PyLong_Type;
     }
-    return h.is_type() ? borrow(tp) : tp(h);
+    return tp;
 }
 
 static int itemsize_v(nb::handle h) {
@@ -112,9 +112,46 @@ nb::handle leaf_array_t(nb::handle h) {
     return tp;
 }
 
+nb::handle expr_t(nb::handle h0, nb::handle h1) {
+    h0 = h0.is_type() ? h0 : h0.type();
+    h1 = h1.is_type() ? h1 : h1.type();
+
+    if (h0.ptr() == h1.ptr())
+        return h0;
+
+    meta m0;
+    if (is_drjit_type(h0))
+        m0 = nb::type_supplement<supp>(h0).meta;
+    else
+        m0 = meta_from_builtin(h0().ptr());
+
+    meta m1;
+    if (is_drjit_type(h1))
+        m1 = nb::type_supplement<supp>(h1).meta;
+    else
+        m1 = meta_from_builtin(h1().ptr());
+
+    meta m = meta_promote(m0, m1);
+
+    if (!meta_check(m)) {
+        PyErr_Format(PyExc_RuntimeError, "expr_t(): incompatible types  (%s, %s)!",
+                     ((PyTypeObject *)h0.ptr())->tp_name,
+                     ((PyTypeObject *)h1.ptr())->tp_name);
+        return nb::handle();
+    }
+
+    return drjit::detail::array_get(m);
+}
+
+nb::handle expr_t(nb::args args) {
+    nb::handle tp = args[0];
+    for (auto h : args)
+        tp = expr_t(tp, h);
+    return tp;
+}
+
 nb::handle detached_t(nb::handle h) {
-    if (!h.is_type())
-        return detached_t(h.type());
+    h = h.is_type() ? h : h.type();
 
     if (is_drjit_type(h)) {
         const supp &s = nb::type_supplement<supp>(h);
@@ -399,4 +436,5 @@ extern void bind_traits(nb::module_ m) {
 
     m.def("detached_t", &detached_t, doc_detached_t);
     m.def("leaf_array_t", &leaf_array_t, doc_leaf_array_t);
+    m.def("expr_t", nb::overload_cast<nb::args>(expr_t), doc_expr_t);
 }
