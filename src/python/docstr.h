@@ -650,7 +650,7 @@ Returns:
 
 static const char *doc_cos = R"(
 cos(arg, /)
-Sine approximation based on the CEPHES library.
+Cosine approximation based on the CEPHES library.
 
 The implementation of this function is designed to achieve low error on the
 domain :math:`|x| < 8192` and will not perform as well beyond this range. See
@@ -719,7 +719,7 @@ Returns:
 
 static const char *doc_acos = R"(
 acos(arg, /)
-Arcsine approximation based on the CEPHES library.
+Arccosine approximation based on the CEPHES library.
 
 See the section on :ref:`transcendental function approximations
 <transcendental-accuracy>` for details regarding accuracy.
