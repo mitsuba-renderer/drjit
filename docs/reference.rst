@@ -112,6 +112,9 @@ _______________________
 .. autofunction:: float_array_t
 .. autofunction:: float32_array_t
 .. autofunction:: float64_array_t
+.. autofunction:: detached_t
+.. autofunction:: leaf_array_t
+.. autofunction:: expr_t
 
 Standard mathematical functions
 -------------------------------
