@@ -475,6 +475,30 @@ Array base class
     .. automethod:: __array__
 
 
+
+Automatic differentiation
+-------------------------
+
+.. autofunction:: detach
+.. autofunction:: enable_grad
+.. autofunction:: disable_grad
+.. autofunction:: set_grad_enabled
+.. autofunction:: grad_enabled
+.. autofunction:: grad
+.. autofunction:: set_grad
+.. autofunction:: accum_grad
+.. autofunction:: replace_grad
+.. autofunction:: traverse
+.. autofunction:: enqueue
+.. autofunction:: forward_from
+.. autofunction:: forward
+.. autofunction:: forward_to
+.. autofunction:: backward_from
+.. autofunction:: backward
+.. autofunction:: backward_to
+.. autofunction:: graphviz_ad
+
+
 Concrete array classes
 ----------------------
 
@@ -994,3 +1018,10 @@ _______________________________________________________________________
     :show-inheritance:
 .. autoclass:: drjit.llvm.ad.ArrayXi64
     :show-inheritance:
+
+Miscellaneous
+-------------
+
+.. autofunction:: graphviz
+.. autofunction:: label
+.. autofunction:: set_label
