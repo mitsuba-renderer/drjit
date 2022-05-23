@@ -30,7 +30,7 @@ using array_full = void (*) (nanobind::handle, size_t, void *);
 using array_empty = void (*) (size_t, void *);
 using array_counter = void (*) (uint32_t size, void *);
 using array_cast = int (*) (const void *, VarType, void *);
-using array_ad_create = void (*) (void *, uint32_t, void *);
+using array_ad_create = void (*) (void *, uint32_t, void *, bool);
 using array_set_label = void (*) (void *, const char *);
 using array_label = const char * (*) (const void *);
 using array_set_bool = void (*) (void *, bool);
@@ -615,7 +615,7 @@ template <typename T> nanobind::class_<T> bind_array(const char *name = nullptr)
         s.op_index_ad = [](const void *a) { return ((const T *) a)->index_ad(); };
         s.op_set_grad_enabled = [](void *a, bool v) { ((T *) a)->set_grad_enabled_(v); };
         s.op_grad_enabled = [](const void *a) { return ((const T *) a)->grad_enabled_(); };
-        s.op_grad = [](const void *a, void *b) { new (b) T(((const T *) a)->grad_()); };
+        s.op_grad = [](const void *a, void *b) { new (b) detached_t<T>(((const T *) a)->grad_()); };
         s.op_set_grad = [](void *a, const void *b) { ((T *) a)->set_grad_(((const T *) b)->detach_()); };
         s.op_accum_grad = [](void *a, const void *b) { ((T *) a)->accum_grad_(((const T *) b)->detach_()); };
         s.op_enqueue = [](drjit::ADMode mode, const void *b) { ((const T *) b)->enqueue_(mode); };
@@ -626,10 +626,13 @@ template <typename T> nanobind::class_<T> bind_array(const char *name = nullptr)
         s.op_detach = [](const void *a, void *b) {
             new (b) detached_t<T>(((const T *) a)->detach_());
         };
-        s.op_ad_create = [](void *a, uint32_t index, void *c) {
+        s.op_ad_create = [](void *source, uint32_t index, void *result, bool source_detached=false) {
             if constexpr (T::IsFloat)
                 detail::ad_inc_ref_impl<detached_t<T>>(index);
-            new (c) T(T::create(index, detached_t<T>(((T *) a)->detach_())));
+            if (source_detached)
+                new (result) T(T::create(index, std::move(*((detached_t<T> *) source))));
+            else
+                new (result) T(T::create(index, detached_t<T>(((T *) source)->detach_())));
         };
     }
 

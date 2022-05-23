@@ -20,7 +20,7 @@ static nb::object detach(nb::handle h, bool preserve_type=true) {
                 nb::object result;
                 if (preserve_type) {
                     result = nb::inst_alloc(h.type());
-                    s.op_ad_create(nb::inst_ptr<void>(h), 0, nb::inst_ptr<void>(result));
+                    s.op_ad_create(nb::inst_ptr<void>(h), 0, nb::inst_ptr<void>(result), false);
                 } else {
                     meta result_meta = s.meta;
                     result_meta.is_diff = false;
@@ -31,11 +31,17 @@ static nb::object detach(nb::handle h, bool preserve_type=true) {
                 return result;
             } else {
                 meta result_meta = s.meta;
-                result_meta.is_diff &= preserve_type;
+                result_meta.is_diff = preserve_type;
                 nb::object result = nb::inst_alloc(drjit::detail::array_get(result_meta));
                 nb::inst_zero(result);
+
                 PySequenceMethods *sm  = ((PyTypeObject *) h.type().ptr())->tp_as_sequence;
                 PySequenceMethods *sm2 = ((PyTypeObject *) result.type().ptr())->tp_as_sequence;
+
+                const supp &s2 = nb::type_supplement<supp>(result.type());
+                if (s2.meta.shape[0] == DRJIT_DYNAMIC)
+                    s2.init(nb::inst_ptr<void>(result), sm->sq_length(h.ptr()));
+
                 for (Py_ssize_t i = 0, l = sm->sq_length(h.ptr()); i < l; ++i) {
                     nb::object v = nb::steal(sm->sq_item(h.ptr(), i));
                     if (!v.is_valid()) {
@@ -52,6 +58,8 @@ static nb::object detach(nb::handle h, bool preserve_type=true) {
                 return result;
             }
         }
+
+        return nb::borrow(h);
     }
 
     if (nb::isinstance<nb::sequence>(h)) {
@@ -62,7 +70,7 @@ static nb::object detach(nb::handle h, bool preserve_type=true) {
     }
 
     if (nb::isinstance<nb::mapping>(h)) {
-        nb::object result = nb::inst_alloc(h.type());
+        nb::object result = h.type()();
         nb::mapping m = nb::borrow<nb::mapping>(h);
         for (auto k : m.keys())
             result[k] = detach(m[k], preserve_type);
@@ -72,10 +80,10 @@ static nb::object detach(nb::handle h, bool preserve_type=true) {
     nb::object dstruct = nb::getattr(h.type(), "DRJIT_STRUCT", nb::handle());
     if (dstruct.is_valid() && nb::isinstance<nb::dict>(dstruct)) {
         if (!preserve_type) {
-            PyErr_Format(PyExc_TypeError,
-                         "detach(): it is required to preserve the input type when "
-                         "detaching a custom struct object.");
-            return nb::object();
+          PyErr_Format(PyExc_TypeError,
+                       "detach(): preserve_type=True is required when "
+                       "detaching custom data structures.");
+          return nb::object();
         }
 
         nb::object result = h.type()();
@@ -169,19 +177,38 @@ static bool grad_enabled(nb::args args) {
     return result;
 }
 
-static nb::object grad(nb::handle h) {
+static nb::object grad(nb::handle h, bool preserve_type=true) {
     if (is_drjit_array(h)) {
         const supp &s = nb::type_supplement<supp>(h.type());
-        nb::object result = nb::inst_alloc(h.type());
-
         if (s.meta.is_diff && is_float_v(h.type())) {
             if (s.meta.ndim == 1) {
-                s.op_grad(nb::inst_ptr<void>(h), nb::inst_ptr<void>(result));
-                nb::inst_mark_ready(result);
-                return result;
+                meta grad_meta = s.meta;
+                grad_meta.is_diff = false;
+                nb::object gradient = nb::inst_alloc(drjit::detail::array_get(grad_meta));
+                s.op_grad(nb::inst_ptr<void>(h), nb::inst_ptr<void>(gradient));
+                nb::inst_mark_ready(gradient);
+
+                if (preserve_type) {
+                    nb::object result = nb::inst_alloc(h.type());
+                    s.op_ad_create(nb::inst_ptr<void>(gradient), 0, nb::inst_ptr<void>(result), true);
+                    nb::inst_mark_ready(result);
+                    return result;
+                } else {
+                    return gradient;
+                }
             } else {
+                meta result_meta = s.meta;
+                result_meta.is_diff = preserve_type;
+                nb::object result = nb::inst_alloc(drjit::detail::array_get(result_meta));
                 nb::inst_zero(result);
-                PySequenceMethods *sm = ((PyTypeObject *) h.type().ptr())->tp_as_sequence;
+
+                PySequenceMethods *sm  = ((PyTypeObject *) h.type().ptr())->tp_as_sequence;
+                PySequenceMethods *sm2 = ((PyTypeObject *) result.type().ptr())->tp_as_sequence;
+
+                const supp &s2 = nb::type_supplement<supp>(result.type());
+                if (s2.meta.shape[0] == DRJIT_DYNAMIC)
+                    s2.init(nb::inst_ptr<void>(result), sm->sq_length(h.ptr()));
+
                 for (Py_ssize_t i = 0, l = sm->sq_length(h.ptr()); i < l; ++i) {
                     nb::object v = nb::steal(sm->sq_item(h.ptr(), i));
                     if (!v.is_valid()) {
@@ -189,8 +216,8 @@ static nb::object grad(nb::handle h) {
                         break;
                     }
 
-                    nb::object vr = grad(v);
-                    if (!vr.is_valid() || sm->sq_ass_item(result.ptr(), i, vr.ptr())) {
+                    nb::object vr = grad(v, preserve_type);
+                    if (!vr.is_valid() || sm2->sq_ass_item(result.ptr(), i, vr.ptr())) {
                         result.clear();
                         break;
                     }
@@ -203,31 +230,36 @@ static nb::object grad(nb::handle h) {
     if (nb::isinstance<nb::sequence>(h)) {
         nb::list result;
         for (Py_ssize_t i = 0, l = nb::len(h); i < l; i++)
-            result.append(grad(h[i]));
+            result.append(grad(h[i], preserve_type));
         return std::move(result);
     }
 
     if (nb::isinstance<nb::mapping>(h)) {
-        nb::object result = nb::inst_alloc(h.type());
-        nb::mapping m = nb::borrow<nb::mapping>(h);
-        for (auto k : m.keys())
-            result[k] = grad(m[k]);
+        nb::object result = h.type()();
+        for (nb::handle p : nb::borrow<nb::mapping>(h).items()) {
+            nb::handle k = p[0], v = p[1];
+            result[k] = grad(v, preserve_type);
+        }
         return result;
     }
 
     nb::object dstruct = nb::getattr(h.type(), "DRJIT_STRUCT", nb::handle());
     if (dstruct.is_valid() && nb::isinstance<nb::dict>(dstruct)) {
+        if (!preserve_type) {
+            PyErr_Format(PyExc_TypeError,
+                         "grad(): preserve_type=True is required when getting "
+                         "the gradient of a custom data structures.");
+            return nb::object();
+        }
         nb::object result = h.type()();
         nb::dict dstruct_dict = nb::borrow<nb::dict>(dstruct);
         for (auto [k, v] : dstruct_dict) {
-            nb::setattr(result, k, grad(nb::getattr(h, k)));
+            nb::setattr(result, k, grad(nb::getattr(h, k), preserve_type));
         }
         return result;
     }
 
-    nb::object result = nb::inst_alloc(h.type());
-    nb::inst_zero(result);
-    return result;
+    return h.type()();
 }
 
 template <typename T>
@@ -348,12 +380,17 @@ static nb::object replace_grad(nb::handle h0, nb::handle h1) {
     if (s.meta.ndim == 1) {
         s.op_ad_create(nb::inst_ptr<void>(o0),
                        s.op_index_ad(nb::inst_ptr<void>(o1)),
-                       nb::inst_ptr<void>(result));
+                       nb::inst_ptr<void>(result),
+                       false);
         nb::inst_mark_ready(result);
         return result;
     } else {
         nb::inst_zero(result);
         PySequenceMethods *sm = ((PyTypeObject *) result.type().ptr())->tp_as_sequence;
+
+        if (s.meta.shape[0] == DRJIT_DYNAMIC)
+            s.init(nb::inst_ptr<void>(result), sm->sq_length(o0.ptr()));
+
         for (Py_ssize_t i = 0, l = sm->sq_length(o0.ptr()); i < l; ++i) {
             nb::object v0 = nb::steal(sm->sq_item(o0.ptr(), i));
             if (!v0.is_valid()) {
@@ -604,10 +641,10 @@ extern void bind_array_autodiff(nb::module_ m) {
     m.def("enable_grad",  &enable_grad,  "args"_a, doc_enable_grad);
     m.def("disable_grad", &disable_grad, "args"_a, doc_disable_grad);
     m.def("grad_enabled", nb::overload_cast<nb::args>(grad_enabled), doc_grad_enabled);
-    m.def("grad", &grad, "arg"_a, doc_grad);
-    m.def("set_grad",   &set_grad,   "arg"_a, "value"_a, doc_set_grad);
-    m.def("accum_grad", &accum_grad, "arg"_a, "value"_a, doc_accum_grad);
-    m.def("replace_grad", &replace_grad, "target"_a, "source"_a, doc_replace_grad);
+    m.def("grad", &grad, "arg"_a, "preserve_type"_a=true, doc_grad);
+    m.def("set_grad",   &set_grad,   "dst"_a, "src"_a, doc_set_grad);
+    m.def("accum_grad", &accum_grad, "dst"_a, "src"_a, doc_accum_grad);
+    m.def("replace_grad", &replace_grad, "dst"_a, "src"_a, doc_replace_grad);
     m.def("enqueue", nb::overload_cast<drjit::ADMode, nb::args>(enqueue), "mode"_a, "args"_a, doc_enqueue);
     m.def("traverse", &traverse, "type"_a, "mode"_a, "flags"_a=drjit::ADFlag::Default, doc_traverse);
     m.def("forward_to",    &forward_to,    "args"_a, "flags"_a, doc_forward_to);

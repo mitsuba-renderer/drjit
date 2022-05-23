@@ -496,7 +496,6 @@ Automatic differentiation
 .. autofunction:: backward_from
 .. autofunction:: backward
 .. autofunction:: backward_to
-.. autofunction:: graphviz_ad
 
 
 Concrete array classes
@@ -1023,5 +1022,6 @@ Miscellaneous
 -------------
 
 .. autofunction:: graphviz
+.. autofunction:: graphviz_ad
 .. autofunction:: label
 .. autofunction:: set_label
