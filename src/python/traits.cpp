@@ -76,15 +76,26 @@ nb::handle leaf_array_t(nb::handle h) {
                 s = (supp *) nb::detail::nb_type_supplement((PyObject *)s->value);
             return drjit::detail::array_get(s->meta);
         } else {
-            return nb::none();
+            nb::handle tp = nb::none();
+            nb::object dstruct = nb::getattr(h, "DRJIT_STRUCT", nb::handle());
+            if (dstruct.is_valid() && nb::isinstance<nb::dict>(dstruct)) {
+                for (auto [k, v] : nb::borrow<nb::dict>(dstruct)) {
+                    tp = leaf_array_t(v);
+                    if (is_drjit_type(tp)) {
+                        const supp &s = nb::type_supplement<supp>(tp);
+                        if (s.meta.is_diff && is_float_v(tp))
+                            break;
+                    }
+                }
+            }
+            return tp;
         }
     }
-
-    nb::handle tp = h.type();
 
     if (is_drjit_array(h)) {
         return leaf_array_t(h.type());
     } else if (nb::isinstance<nb::sequence>(h)) {
+        nb::handle tp = nb::none();
         for (auto h2 : h) {
             tp = leaf_array_t(h2);
             if (is_drjit_type(tp)) {
@@ -93,23 +104,12 @@ nb::handle leaf_array_t(nb::handle h) {
                     break;
             }
         }
+        return tp;
     } else if (nb::isinstance<nb::mapping>(h)) {
         return leaf_array_t(nb::borrow<nb::mapping>(h).values());
     } else {
-        nb::object dstruct = nb::getattr(h.type(), "DRJIT_STRUCT", nb::handle());
-        if (dstruct.is_valid() && nb::isinstance<nb::dict>(dstruct)) {
-            for (auto [k, v] : nb::borrow<nb::dict>(dstruct)) {
-                tp = leaf_array_t(v);
-                if (is_drjit_type(tp)) {
-                    const supp &s = nb::type_supplement<supp>(tp);
-                    if (s.meta.is_diff && is_float_v(tp))
-                        break;
-                }
-            }
-        }
+        return leaf_array_t(h.type());
     }
-
-    return tp;
 }
 
 nb::handle expr_t(nb::handle h0, nb::handle h1) {
@@ -134,7 +134,7 @@ nb::handle expr_t(nb::handle h0, nb::handle h1) {
     meta m = meta_promote(m0, m1);
 
     if (!meta_check(m)) {
-        PyErr_Format(PyExc_RuntimeError, "expr_t(): incompatible types  (%s, %s)!",
+        PyErr_Format(PyExc_TypeError, "expr_t(): incompatible types  (%s, %s)!",
                      ((PyTypeObject *)h0.ptr())->tp_name,
                      ((PyTypeObject *)h1.ptr())->tp_name);
         return nb::handle();

@@ -1205,8 +1205,7 @@ This function implements the following set of behaviors:
 1. When invoked with a Dr.Jit array *type* (e.g. :py:class:`drjit.cuda.Array3i`), it
    returns a *boolean* version (e.g. :py:class:`drjit.cuda.Array3b`).
 
-2. When invoked with a Dr.Jit array *value*, it returns a *boolean* version of
-   its type.
+2. When the input isn't a type, it returns ``bool_array_t(type(arg))``.
 
 3. When the input is not a Dr.Jit array or type, the function returns ``bool``.
 
@@ -1226,8 +1225,7 @@ This function implements the following set of behaviors:
 1. When invoked with a Dr.Jit array *type* (e.g. :py:class:`drjit.cuda.Array3f64`), it
    returns an *unsigned integer* version (e.g. :py:class:`drjit.cuda.Array3u64`).
 
-2. When invoked with a Dr.Jit array *value*, it returns a *unsigned integer*
-   version of its type.
+2. When the input isn't a type, it returns ``uint_array_t(type(arg))``.
 
 3. When the input is not a Dr.Jit array or type, the function returns ``int``.
 
@@ -1248,8 +1246,7 @@ This function implements the following set of behaviors:
 1. When invoked with a Dr.Jit array *type* (e.g. :py:class:`drjit.cuda.Array3f64`), it
    returns an *signed integer* version (e.g. :py:class:`drjit.cuda.Array3u64`).
 
-2. When invoked with a Dr.Jit array *value*, it returns a *signed integer*
-   version of its type.
+2. When the input isn't a type, it returns ``int_array_t(type(arg))``.
 
 3. When the input is not a Dr.Jit array or type, the function returns ``int``.
 
@@ -1270,8 +1267,7 @@ This function implements the following set of behaviors:
 1. When invoked with a Dr.Jit array *type* (e.g. :py:class:`drjit.cuda.Array3u64`), it
    returns an *floating point* version (e.g. :py:class:`drjit.cuda.Array3f64`).
 
-2. When invoked with a Dr.Jit array *value*, it returns a *floating point*
-   version of its type.
+2. When the input isn't a type, it returns ``float_array_t(type(arg))``.
 
 3. When the input is not a Dr.Jit array or type, the function returns ``float``.
 
@@ -1291,8 +1287,7 @@ This function implements the following set of behaviors:
 1. When invoked with a Dr.Jit array *type* (e.g. :py:class:`drjit.cuda.Array3f`), it
    returns an *unsigned 32 bit* version (e.g. :py:class:`drjit.cuda.Array3u`).
 
-2. When invoked with a Dr.Jit array *value*, it returns a *unsigned 32 bit*
-   version of its type.
+2. When the input isn't a type, it returns ``uint32_array_t(type(arg))``.
 
 3. When the input is not a Dr.Jit array or type, the function returns ``int``.
 
@@ -1312,8 +1307,7 @@ This function implements the following set of behaviors:
 1. When invoked with a Dr.Jit array *type* (e.g. :py:class:`drjit.cuda.Array3f`), it
    returns an *signed 32 bit* version (e.g. :py:class:`drjit.cuda.Array3i`).
 
-2. When invoked with a Dr.Jit array *value*, it returns a *signed 32 bit*
-   version of its type.
+2. When the input isn't a type, it returns ``int32_array_t(type(arg))``.
 
 3. When the input is not a Dr.Jit array or type, the function returns ``int``.
 
@@ -1333,8 +1327,7 @@ This function implements the following set of behaviors:
 1. When invoked with a Dr.Jit array *type* (e.g. :py:class:`drjit.cuda.Array3f`), it
    returns an *unsigned 64 bit* version (e.g. :py:class:`drjit.cuda.Array3u64`).
 
-2. When invoked with a Dr.Jit array *value*, it returns a *unsigned 64 bit*
-   version of its type.
+2. When the input isn't a type, it returns ``uint64_array_t(type(arg))``.
 
 3. When the input is not a Dr.Jit array or type, the function returns ``int``.
 
@@ -1353,8 +1346,7 @@ This function implements the following set of behaviors:
 1. When invoked with a Dr.Jit array *type* (e.g. :py:class:`drjit.cuda.Array3f`), it
    returns an *signed 64 bit* version (e.g. :py:class:`drjit.cuda.Array3i64`).
 
-2. When invoked with a Dr.Jit array *value*, it returns a *signed 64 bit*
-   version of its type.
+2. When the input isn't a type, it returns ``int64_array_t(type(arg))``.
 
 3. When the input is not a Dr.Jit array or type, the function returns ``int``.
 
@@ -1373,7 +1365,7 @@ This function implements the following set of behaviors:
 1. When invoked with a Dr.Jit array *type* (e.g. :py:class:`drjit.cuda.Array3u`), it
    returns a *32 bit floating point* version (e.g. :py:class:`drjit.cuda.Array3f`).
 
-2. When invoked with a Dr.Jit array *value*, it returns ``float32_array_t(type(arg))``
+2. When the input isn't a type, it returns ``float32_array_t(type(arg))``.
 
 3. When the input is not a Dr.Jit array or type, the function returns ``float``.
 
@@ -1392,7 +1384,7 @@ This function implements the following set of behaviors:
 1. When invoked with a Dr.Jit array *type* (e.g. :py:class:`drjit.cuda.Array3u`), it
    returns a *64 bit floating point* version (e.g. :py:class:`drjit.cuda.Array3f64`).
 
-2. When invoked with a Dr.Jit array *value*, it returns ``float64_array_t(type(arg))``
+2. When the input isn't a type, it returns ``float64_array_t(type(arg))``.
 
 3. When the input is not a Dr.Jit array or type, the function returns ``float``.
 
@@ -1449,8 +1441,21 @@ Returns:
 )";
 
 static const char *doc_expr_t =R"(
-Computes the type of an arithmetic expression involving the provided Dr.Jit arrays
-(instances or types), or builtin Python objects.
+Computes the type of an arithmetic expression involving the provided Dr.Jit
+arrays (instances or types), or builtin Python objects.
+
+An exception will be raised when an invalid combination of types is provided.
+
+For instance, this function can be used to compute the return type of the
+addition of several Dr.Jit array:
+
+.. code-block::
+
+    a = drjit.llvm.Float(1.0)
+    b = drjit.llvm.Array3f(1, 2, 3)
+    c = drjit.llvm.ArrayXf(4, 5, 6)
+
+    # type(a + b + c) == dr.expr_t(a, b, c) == drjit.llvm.ArrayXf
 
 Args:
     *args (tuple): A variable-length list of Dr.Jit arrays, builtin Python
@@ -1697,11 +1702,7 @@ For example,
     x = dr.cuda.Array3f([1, 2], [3, 4], [5, 6])
     y = dr.ravel(x, order=...)
 
-    order (str): A single character indicating the index order. ``'C'`` (the
-        default) specifies row-major/C-style ordering, in which case the last
-        index changes at the highest frequency. The other option ``'F'``
-        indicates column-major/Fortran-style ordering, in which case the
-        first index changes at the highest frequency.
+will produce
 
 - ``[1, 3, 5, 2, 4, 6]`` with ``order='F'`` (the default for Dr.Jit arrays),
   which means that X/Y/Z components alternate.
@@ -1945,8 +1946,18 @@ Args:
         disabled.
 )";
 
-static const char *doc_enable_grad =R"(
-Enable gradient tracking on the provided variables.
+static const char *doc_enable_grad = R"(
+Enable gradient tracking for the provided variables.
+
+This function accepts a variable-length list of arguments and processes it
+as follows:
+
+- It recurses into sequences (``tuple``, ``list``, etc.)
+- It recurses into the values of mappings (``dict``, etc.)
+- It recurses into the fields of :ref:`custom data structures <custom-struct>`.
+
+During recursion, the function enables gradient tracking for all Dr.Jit arrays.
+For every other types, this function won't do anything.
 
 Args:
     *args (tuple): A variable-length list of Dr.Jit array instances,
@@ -1954,7 +1965,17 @@ Args:
 )";
 
 static const char *doc_disable_grad =R"(
-Disable gradient tracking on the provided variables.
+Disable gradient tracking for the provided variables.
+
+This function accepts a variable-length list of arguments and processes it
+as follows:
+
+- It recurses into sequences (``tuple``, ``list``, etc.)
+- It recurses into the values of mappings (``dict``, etc.)
+- It recurses into the fields of :ref:`custom data structures <custom-struct>`.
+
+During recursion, the function disables gradient tracking for all Dr.Jit arrays.
+For every other types, this function won't do anything.
 
 Args:
     *args (tuple): A variable-length list of Dr.Jit array instances,
@@ -1983,6 +2004,9 @@ Args:
     arg (object): An arbitrary Dr.Jit array, tensor,
         :ref:`custom data structure <custom-struct>`, sequences, or mapping.
 
+    preserve_type (bool): Defines whether the returned variable should preserve
+        the type of the input variable.
+
 Returns:
     object: the gradient value associated to the input variable.
 )";
@@ -1994,36 +2018,36 @@ Broadcasting is applied to the gradient value if necessary and possible to match
 the type of the input variable.
 
 Args:
-    arg (object): An arbitrary Dr.Jit array, tensor,
+    dst (object): An arbitrary Dr.Jit array, tensor,
         :ref:`custom data structure <custom-struct>`, sequences, or mapping.
 
-    value (object): An arbitrary Dr.Jit array, tensor,
+    src (object): An arbitrary Dr.Jit array, tensor,
         :ref:`custom data structure <custom-struct>`, sequences, or mapping.
 )";
 
 static const char *doc_accum_grad =R"(
-Accumulate the gradient value into the provided variable.
+Accumulate into the gradient of a variable.
 
 Broadcasting is applied to the gradient value if necessary and possible to match
 the type of the input variable.
 
 Args:
-    arg (object): An arbitrary Dr.Jit array, tensor,
+    dst (object): An arbitrary Dr.Jit array, tensor,
         :ref:`custom data structure <custom-struct>`, sequences, or mapping.
 
-    value (object): An arbitrary Dr.Jit array, tensor,
+    src (object): An arbitrary Dr.Jit array, tensor,
         :ref:`custom data structure <custom-struct>`, sequences, or mapping.
 )";
 
 static const char *doc_replace_grad =R"(
-Replace the gradient value of ``target`` with the one of ``source``.
+Replace the gradient value of ``dst`` with the one of ``src``.
 
-Broadcasting is applied to ``target`` if necessary to match the type of ``source``.
+Broadcasting is applied to ``dst`` if necessary to match the type of ``src``.
 
 Args:
-    target (object): An arbitrary Dr.Jit array, tensor, or scalar builtin instance.
+    dst (object): An arbitrary Dr.Jit array, tensor, or scalar builtin instance.
 
-    source (object): An differentiable Dr.Jit array or tensor.
+    src (object): An differentiable Dr.Jit array or tensor.
 
 Returns:
     object: the variable with the replaced gradients.
@@ -2032,17 +2056,83 @@ Returns:
 static const char *doc_enqueue =R"(
 Enqueues variable for the subsequent AD traversal.
 
+In Dr.Jit, the process of automatic differentiation is split into two parts:
+
+1. Discover and enqueue the variables to be considered as inputs during the
+   subsequent AD traversal.
+2. Traverse the AD graph starting from the enqueued variables to propagate the
+   gradients towards the output variables (e.g. leaf in the AD graph).
+
+
+This function handles the first part can operate in different modes depending on
+the specified ``mode``:
+
+- ``ADMode.Forward``: the provided ``value`` will be considered as input during
+  the subsequent AD traversal.
+
+- ``ADMode.Backward``: a traversal of the AD graph starting from the provided
+  ``value`` will take place to find all potential source of gradients and
+  enqueue them.
+
+For example, a typical chain of operations to forward propagate the gradients
+from ``a`` to ``b`` would look as follow:
+
+.. code-block::
+
+    a = dr.llvm.ad.Float(1.0)
+    dr.enable_grad(a)
+    b = f(a) # some computation involving `a`
+    dr.set_gradient(a, 1.0)
+    dr.enqueue(dr.ADMode.Forward, a)
+    dr.traverse(dr.llvm.ad.Float, dr.ADMode.Forward)
+    grad = dr.grad(b)
+
+It could be the case that ``f(a)`` involves other differentiable variables that
+already contain some gradients. In this situation we can use ``ADMode.Backward``
+to discover and enqueue them before the traversal.
+
+.. code-block::
+
+    a = dr.llvm.ad.Float(1.0)
+    dr.enable_grad(a)
+    b = f(a, ...) # some computation involving `a` and some hidden variables
+    dr.set_gradient(a, 1.0)
+    dr.enqueue(dr.ADMode.Backward, b)
+    dr.traverse(dr.llvm.ad.Float, dr.ADMode.Forward)
+    grad = dr.grad(b)
+
+Dr.Jit also provides a higher level API that encapsulate this logic in a few
+different functions:
+
+- :py:func:`drjit.forward_from`, :py:func:`drjit.forward`, :py:func:`drjit.forward_to`
+- :py:func:`drjit.backward_from`, :py:func:`drjit.backward`, :py:func:`drjit.backward_to`
+
 Args:
-    mode (ADFlag): flags to control what should and should not be destructed
-        during forward/backward mode traversal
+    mode (ADMode): defines the enqueuing mode (backward or forward)
 
     value (object): An arbitrary Dr.Jit array, tensor,
         :ref:`custom data structure <custom-struct>`, sequences, or mapping.
 )";
 
-static const char *doc_traverse =R"(
+static const char *doc_traverse = R"(
 Propagate derivatives through the enqueued set of edges in the AD computational
-graph.
+graph in the direction specified by ``mode``.
+
+By default, Dr.Jit's AD system destructs the enqueued input graph during AD
+traversal. This frees up resources, which is useful when working with large
+wavefronts or very complex computation graphs. However, this also prevents
+repeated propagation of gradients through a shared subgraph that is being
+differentiated multiple times.
+
+To support more fine-grained use cases that require this, the following flags
+can be used to control what should and should not be destructed:
+
+- ``ADFlag.ClearNone``: clear nothing
+- ``ADFlag.ClearEdges``: delete all traversed edges from the computation graph
+- ``ADFlag.ClearInput``: clear the gradients of processed input vertices (in-degree == 0)
+- ``ADFlag.ClearInterior``: clear the gradients of processed interior vertices (out-degree != 0)
+- ``ADFlag.ClearVertices``: clear gradients of processed vertices only, but leave edges intact
+- ``ADFlag.Default``: clear everything (default behaviour)
 
 Args:
     type (type): defines the Dr.JIT array type used to build the AD graph
@@ -2057,7 +2147,7 @@ static const char *doc_forward_from =R"(
 Forward propagates gradients from a provided Dr.Jit differentiable array.
 
 This function will first see the gradient value of the provided variable to ``1.0``
-before executing the AD computational graph traversal.
+before executing the AD graph traversal.
 
 An exception will be raised when the provided array doesn't have gradient tracking
 enabled or if it isn't an instance of a Dr.Jit differentiable array type.
@@ -2073,7 +2163,7 @@ static const char *doc_forward =R"(
 Forward propagates gradients from a provided Dr.Jit differentiable array.
 
 This function will first see the gradient value of the provided variable to ``1.0``
-before executing the AD computational graph traversal.
+before executing the AD graph traversal.
 
 An exception will be raised when the provided array doesn't have gradient tracking
 enabled or if it isn't an instance of a Dr.Jit differentiable array type.

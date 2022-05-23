@@ -94,6 +94,13 @@ def test02_detach(m):
     assert not dr.grad_enabled(b)
     assert not dr.grad_enabled(c)
 
+    a = m.ArrayXf(1, 2, 3)
+    dr.enable_grad(a)
+    b = dr.detach(a, preserve_type=False)
+    c = dr.detach(a, preserve_type=True)
+    assert dr.detached_t(type(a)) == type(b)
+    assert type(a) == type(c)
+
     a = struct_class(m)()
     dr.enable_grad(a)
     c = dr.detach(a)
@@ -103,7 +110,7 @@ def test02_detach(m):
 
     with pytest.raises(TypeError) as ei:
         dr.detach(a, preserve_type=False)
-    assert "required to preserve the input type" in str(ei.value)
+    assert "preserve_type=True is required" in str(ei.value)
 
 
 def test03_set_grad(m):
@@ -119,6 +126,8 @@ def test03_set_grad(m):
     assert "attempted to assign a gradient of size 4" in str(ei.value)
     dr.set_grad(a, [3.0, 2.0, 1.0])
     assert dr.allclose(dr.grad(a), [3.0, 2.0, 1.0])
+    assert type(dr.grad(a)) == type(a)
+    assert type(dr.grad(a, False)) == dr.detached_t(type(a))
 
     a = m.Array3f([1, 2, 3], [2, 3, 4], [3, 4, 5])
     dr.enable_grad(a)
@@ -134,6 +143,18 @@ def test03_set_grad(m):
     assert dr.allclose(dr.grad(a.y), [2, 2, 2])
     dr.set_grad(a, m.Array3f([1, 2, 3], [2, 3, 4], [3, 4, 5]))
     assert dr.allclose(dr.grad(a), [[1, 2, 3], [2, 3, 4], [3, 4, 5]])
+    assert type(dr.grad(a)) == type(a)
+    assert type(dr.grad(a, False)) == dr.detached_t(type(a))
+
+    a = m.ArrayXf(1, 2, 3)
+    dr.enable_grad(a)
+    assert dr.allclose(dr.grad(a), 0.0)
+    dr.set_grad(a, 2.0)
+    assert dr.allclose(dr.grad(a), 2.0)
+    dr.set_grad(a, m.ArrayXf([3, 2, 1]))
+    assert dr.allclose(dr.grad(a[1]), [2, 2, 2])
+    assert type(dr.grad(a)) == type(a)
+    assert type(dr.grad(a, False)) == dr.detached_t(type(a))
 
     args = [m.Float(1.0), m.Float(2.0), m.Float(3.0)]
     dr.enable_grad(args)
@@ -162,6 +183,10 @@ def test03_set_grad(m):
     dr.set_grad(a, struct_class(m)())
     assert dr.allclose(dr.grad(a).x, 1.0)
     assert dr.allclose(dr.grad(a).y, 2.0)
+
+    with pytest.raises(TypeError) as ei:
+        dr.grad(a, preserve_type=False)
+    assert "preserve_type=True is required" in str(ei.value)
 
 
 def test04_accum_grad(m):
@@ -265,6 +290,13 @@ def test05_replace_grad(m):
     assert b.index_ad == a.index_ad
     assert dr.allclose(b, 4.0)
 
+    a = m.ArrayXf(1, 2, 3)
+    y = m.Float(1)
+    dr.enable_grad(x, y)
+    z = dr.replace_grad(x, y)
+    assert z[0].index_ad == y.index_ad
+    assert z[1].index_ad == y.index_ad
+    assert z[2].index_ad == y.index_ad
 
 def test06_set_label(m):
     a = m.Float(1.0)
