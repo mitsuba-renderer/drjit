@@ -483,6 +483,111 @@ static nb::object maximum(nb::handle h0, nb::handle h1) {
         nb_math_binop("maximum", offsetof(supp, op_maximum), h0.ptr(), h1.ptr()));
 }
 
+static nb::object sum(nb::handle h) {
+    nb::handle tp = h.type();
+    if (tp.is(&PyFloat_Type) || tp.is(&PyLong_Type) || tp.is(&PyBool_Type))
+        return borrow(h);
+
+    if (is_drjit_type(tp)) {
+        const supp &s = nb::type_supplement<supp>(tp);
+        dr::detail::array_reduce op = s.op_sum;
+        if (!op)
+            throw nb::type_error(
+                "drjit.sum(): requires a Dr.Jit array or Python "
+                "sequence as input.");
+
+        if ((uintptr_t) op != 1) {
+            nb::object result = nb::inst_alloc(tp);
+            op(nb::inst_ptr<void>(h), nb::inst_ptr<void>(result));
+            nb::inst_mark_ready(result);
+            return result;
+        }
+    }
+
+    nb::object result = nb::borrow(PyFloat_FromDouble(0.0));
+    for (nb::handle h2 : h)
+        result = result + h2;
+    return result;
+}
+
+static nb::object prod(nb::handle h) {
+    nb::handle tp = h.type();
+    if (tp.is(&PyFloat_Type) || tp.is(&PyLong_Type) || tp.is(&PyBool_Type))
+        return borrow(h);
+
+    if (is_drjit_type(tp)) {
+        const supp &s = nb::type_supplement<supp>(tp);
+        dr::detail::array_reduce op = s.op_prod;
+        if (!op)
+            throw nb::type_error(
+                "drjit.prod(): requires a Dr.Jit array or Python "
+                "sequence as input.");
+
+        if ((uintptr_t) op != 1) {
+            nb::object result = nb::inst_alloc(tp);
+            op(nb::inst_ptr<void>(h), nb::inst_ptr<void>(result));
+            nb::inst_mark_ready(result);
+            return result;
+        }
+    }
+
+    nb::object result = nb::borrow(PyFloat_FromDouble(1.0));
+    for (nb::handle h2 : h)
+        result = result * h2;
+    return result;
+}
+
+static nb::object dot(nb::handle h0, nb::handle h1) {
+    if (!is_drjit_array(h0) && !is_drjit_array(h1)) {
+        try {
+            nb::list a = nb::cast<nb::list>(h0);
+            nb::list b = nb::cast<nb::list>(h1);
+
+            nb::object result;
+            for (size_t i = 0, l = nb::len(a); i < l; i++) {
+                if (i == 0)
+                    result = h0[i] * h1[i];
+                else
+                    result = result + h0[i] * h1[i];
+            }
+            return result;
+        } catch (...) {}
+
+        PyErr_Format(PyExc_TypeError, "dot(): invalid arguments!");
+        return nb::object();
+    }
+
+    nb::object o0, o1;
+
+    // All arguments must be promoted to the same type first
+    if (Py_TYPE(h0.ptr()) == Py_TYPE(h1.ptr())) {
+        o0 = nb::borrow(h0);
+        o1 = nb::borrow(h1);
+    } else {
+        PyObject *o[2] = { h0.ptr(), h1.ptr() };
+        if (!promote("maximum", o, 2))
+            return nb::object();
+        o0 = nb::steal(o[0]);
+        o1 = nb::steal(o[1]);
+    }
+
+    const supp &s = nb::type_supplement<supp>(o0.type());
+    if (s.meta.ndim == 1) {
+        return sum(h0 * h1);
+    } else {
+        PySequenceMethods *sm = ((PyTypeObject *) o0.type().ptr())->tp_as_sequence;
+        nb::object result = o0[0] * o1[0];
+        if (is_float_v(o0.type())) {
+            for (Py_ssize_t i = 1; i < sm->sq_length(o0.ptr()); ++i)
+                result = drjit::fmadd(o0[i], o1[i], result);
+        } else {
+            for (Py_ssize_t i = 1; i < sm->sq_length(o0.ptr()); ++i)
+                result = result + o0[i] * o1[i];
+        }
+        return result;
+    }
+}
+
 
 void bind_array_math(nb::module_ m) {
     DR_MATH_UNOP(sin);
@@ -665,57 +770,10 @@ void bind_array_math(nb::module_ m) {
         return result;
     }, nb::raw_doc(doc_max));
 
-    m.def("sum", [](nb::handle h) -> nb::object {
-        nb::handle tp = h.type();
-        if (tp.is(&PyFloat_Type) || tp.is(&PyLong_Type) || tp.is(&PyBool_Type))
-            return borrow(h);
-
-        if (is_drjit_type(tp)) {
-            const supp &s = nb::type_supplement<supp>(tp);
-            dr::detail::array_reduce op = s.op_sum;
-            if (!op)
-                throw nb::type_error(
-                    "drjit.sum(): requires a Dr.Jit array or Python "
-                    "sequence as input.");
-
-            if ((uintptr_t) op != 1) {
-                nb::object result = nb::inst_alloc(tp);
-                op(nb::inst_ptr<void>(h), nb::inst_ptr<void>(result));
-                nb::inst_mark_ready(result);
-                return result;
-            }
-        }
-
-        nb::object result = nb::borrow(PyFloat_FromDouble(0.0));
-        for (nb::handle h2 : h)
-            result = result + h2;
-        return result;
-    }, nb::raw_doc(doc_sum));
-
-    m.def("prod", [](nb::handle h) -> nb::object {
-        nb::handle tp = h.type();
-        if (tp.is(&PyFloat_Type) || tp.is(&PyLong_Type) || tp.is(&PyBool_Type))
-            return borrow(h);
-
-        if (is_drjit_type(tp)) {
-            const supp &s = nb::type_supplement<supp>(tp);
-            dr::detail::array_reduce op = s.op_prod;
-            if (!op)
-                throw nb::type_error(
-                    "drjit.prod(): requires a Dr.Jit array or Python "
-                    "sequence as input.");
-
-            if ((uintptr_t) op != 1) {
-                nb::object result = nb::inst_alloc(tp);
-                op(nb::inst_ptr<void>(h), nb::inst_ptr<void>(result));
-                nb::inst_mark_ready(result);
-                return result;
-            }
-        }
-
-        nb::object result = nb::borrow(PyFloat_FromDouble(1.0));
-        for (nb::handle h2 : h)
-            result = result * h2;
-        return result;
-    }, nb::raw_doc(doc_prod));
+    m.def("sum", &sum, nb::raw_doc(doc_sum));
+    m.def("prod", &prod, nb::raw_doc(doc_prod));
+    m.def("dot", &dot, nb::raw_doc(doc_dot));
+    m.def("norm", [](nb::handle h) -> nb::object {
+        return nb_math_unop("sqrt", offsetof(supp, op_sqrt), dot(h, h));
+    }, nb::raw_doc(doc_norm));
 }

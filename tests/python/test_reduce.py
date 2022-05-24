@@ -171,3 +171,35 @@ def test05_maximum(m):
     a = dr.maximum(m.ArrayXf([1, 2, 5], [2, 1, 4], [3, 4, 3]), m.Array3f(1, 2, 3))
     assert dr.allclose(a, [[1, 2, 5], [2, 2, 4], [3, 4, 3]])
     assert type(a) == m.ArrayXf
+
+
+def test06_dot(m):
+    a = dr.dot(m.Float(1, 2, 3), m.Float(2, 1, 1))
+    assert dr.allclose(a, 7)
+    assert type(a) == m.Float
+
+    a = dr.dot(m.Float(1, 2, 3), m.Float(2))
+    assert dr.allclose(a, 12)
+    assert type(a) == m.Float
+
+    a = dr.dot([1, 2, 3], [2, 1, 1])
+    assert dr.allclose(a, 7)
+    assert type(a) == int
+
+    a = dr.dot(m.Array3f(1, 2, 3), m.Array3f([2, 1, 1]))
+    assert dr.allclose(a, 7)
+    assert type(a) == m.Float
+
+    a = dr.dot(m.ArrayXf([1, 2, 5], [2, 1, 4], [3, 4, 3]), m.ArrayXf([[1, 2, 5], [2, 2, 4], [3, 4, 3]]))
+    assert dr.allclose(a, [14, 22, 50])
+    assert type(a) == m.Float
+
+
+def test07_norm(m):
+    a = dr.norm(m.Float(1, 2, 3))
+    assert dr.allclose(a, 3.74166)
+    assert type(a) == m.Float
+
+    a = dr.norm(m.Array3f(1, 2, 3))
+    assert dr.allclose(a, 3.74166)
+    assert type(a) == m.Float

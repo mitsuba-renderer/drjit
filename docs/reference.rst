@@ -31,6 +31,8 @@ These operations are *horizontal* in the sense that [..]
 .. autofunction:: prod
 .. autofunction:: all
 .. autofunction:: any
+.. autofunction:: dot
+.. autofunction:: norm
 
 Mask operations
 ---------------

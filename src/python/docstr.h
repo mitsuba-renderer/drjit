@@ -530,6 +530,38 @@ Returns:
     Boolean array)";
 
 
+static const char *doc_dot = R"(
+dot(arg0, arg1, /) -> float | int | drjit.ArrayBase
+Computes the dot product of two arrays.
+
+When the argument is a dynamic array, function performs a horizontal reduction.
+Please see the section on :ref:`horizontal reductions <horizontal-reductions>`
+for details.
+
+Args:
+    arg0 (list | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+    arg1 (list | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+Returns:
+    Dot product of inputs)";
+
+
+static const char *doc_norm = R"(
+norm(arg, /) -> float | int | drjit.ArrayBase
+Computes the norm of an array.
+
+When the argument is a dynamic array, function performs a horizontal reduction.
+Please see the section on :ref:`horizontal reductions <horizontal-reductions>`
+for details.
+
+Args:
+    arg (list | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+Returns:
+    Norm of the input)";
+
+
 static const char *doc_sqrt = R"(
 sqrt(arg, /)
 Evaluate the square root of the provided input.
