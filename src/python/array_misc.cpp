@@ -292,7 +292,7 @@ nb::object gather(nb::type_object dtype, nb::object source,
     }
 
     if (source.type().is(dtype) & !is_drjit_source_1d) {
-        if (nb::isinstance<nb::sequence>(source)) {
+        if (nb::isinstance<nb::tuple>(source) || nb::isinstance<nb::list>(source)) {
             nb::list result;
             for (nb::handle value : source)
                 result.append(gather(nb::borrow<nb::type_object>(value.type()),
@@ -303,13 +303,12 @@ nb::object gather(nb::type_object dtype, nb::object source,
                 return std::move(result);
         }
 
-        if (nb::isinstance<nb::mapping>(source)) {
+        if (nb::isinstance<nb::dict>(source)) {
             nb::dict result;
-            for (nb::handle p : nb::borrow<nb::mapping>(source).items()) {
-                nb::handle key = p[0], value = p[1];
-                result[key] = gather(nb::borrow<nb::type_object>(value.type()),
-                                     nb::borrow(value), index, active);
-            }
+            for (auto [k, v] : nb::borrow<nb::dict>(source))
+                result[k] = gather(nb::borrow<nb::type_object>(v.type()),
+                                   nb::borrow(v), index, active);
+
             if (!dtype.is(result.type()))
                 return dtype(result);
             else
@@ -423,10 +422,10 @@ void scatter(nb::object target, nb::object value, nb::object index,
     }
 
     if (target.type().is(value.type()) & !is_drjit_target_1d) {
-        bool is_sequence = nb::isinstance<nb::sequence>(value);
-        bool is_mapping = nb::isinstance<nb::mapping>(value);
+        bool is_sequence = nb::isinstance<nb::tuple>(value) || nb::isinstance<nb::list>(value);
+        bool is_dict = nb::isinstance<nb::dict>(value);
 
-        if (is_sequence || is_mapping) {
+        if (is_sequence || is_dict) {
             size_t len_value = nb::len(value),
                    len_target = nb::len(target);
 
@@ -441,8 +440,8 @@ void scatter(nb::object target, nb::object value, nb::object index,
             return;
         }
 
-        if (is_mapping) {
-            for (nb::handle k : nb::borrow<nb::mapping>(value).keys())
+        if (is_dict) {
+            for (nb::handle k : nb::borrow<nb::dict>(value).keys())
                 scatter(target[k], value[k], index, active);
             return;
         }
@@ -754,6 +753,8 @@ nb::object unravel(const nb::type_object_t<dr::ArrayBase> &dtype,
 }
 
 bool schedule(nb::handle h) {
+    bool recurse = false;
+
     if (is_drjit_array(h)) {
         const supp &s = nb::type_supplement<supp>(h.type());
         if (!s.meta.is_cuda && !s.meta.is_llvm)
@@ -761,15 +762,17 @@ bool schedule(nb::handle h) {
 
         if (s.meta.ndim == 1)
             return jit_var_schedule(s.op_index(nb::inst_ptr<void>(h)));
+
+        recurse = true;
     }
 
-    if (nb::isinstance<nb::sequence>(h)) {
+    if (recurse || nb::isinstance<nb::list>(h) || nb::isinstance<nb::tuple>(h)) {
         bool result = false;
         for (nb::handle h2 : h)
             result |= schedule(h2);
         return result;
-    } else if (nb::isinstance<nb::mapping>(h)) {
-        return schedule(nb::borrow<nb::mapping>(h).values());
+    } else if (nb::isinstance<nb::dict>(h)) {
+        return schedule(nb::borrow<nb::dict>(h).values());
     }
 
     nb::object dstruct = nb::getattr(h.type(), "DRJIT_STRUCT", nb::handle());
@@ -841,16 +844,15 @@ static void set_label_impl(nb::handle h, nb::handle label) {
                 }
             }
         }
-    } else if (nb::isinstance<nb::sequence>(h)) {
-        for (Py_ssize_t i = 0, l = PySequence_Length((PyObject *)h.ptr()); i < l; i++) {
+    } else if (nb::isinstance<nb::list>(h) || nb::isinstance<nb::tuple>(h)) {
+        for (size_t i = 0, l = nb::len(h); i < l; i++) {
             char ii[2];
             sprintf(ii, "%zd", i);
             set_label_impl(h[i], label_str + nb::str("_") + nb::str(ii));
         }
-    } else if (nb::isinstance<nb::mapping>(h)) {
-        nb::mapping m = nb::borrow<nb::mapping>(h);
-        for (auto k : m.keys())
-            set_label_impl(m[k], label_str + nb::str("_") + k);
+    } else if (nb::isinstance<nb::dict>(h)) {
+        for (auto [k, v] : nb::borrow<nb::dict>(h))
+            set_label_impl(v, label_str + nb::str("_") + k);
     } else {
         nb::object dstruct = nb::getattr(h.type(), "DRJIT_STRUCT", nb::handle());
         if (dstruct.is_valid() && nb::isinstance<nb::dict>(dstruct)) {

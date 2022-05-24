@@ -94,7 +94,7 @@ nb::handle leaf_array_t(nb::handle h) {
 
     if (is_drjit_array(h)) {
         return leaf_array_t(h.type());
-    } else if (nb::isinstance<nb::sequence>(h)) {
+    } else if (nb::isinstance<nb::list>(h) || nb::isinstance<nb::tuple>(h)) {
         nb::handle tp = nb::none();
         for (auto h2 : h) {
             tp = leaf_array_t(h2);

@@ -20,7 +20,30 @@ bool meta_check(meta m) {
            (m.is_cuda + m.is_llvm <= 1);
 }
 
-/// Compute the metadata type of an operation combining 'a' and 'b'
+void meta_print(meta m) {
+    printf("meta[\n"
+           "  is_vector=%u,\n"
+           "  is_complex=%u,\n"
+           "  is_quaternion=%u,\n"
+           "  is_matrix=%u,\n"
+           "  is_tensor=%u,\n"
+           "  is_diff=%u,\n"
+           "  is_llvm=%u,\n"
+           "  is_cuda=%u,\n"
+           "  is_sequence=%u,\n"
+           "  is_valid=%u,\n"
+           "  type=%u,\n"
+           "  shape=(%u, %u, %u, %u)\n"
+           "]\n",
+           m.is_vector, m.is_complex, m.is_quaternion, m.is_matrix, m.is_tensor,
+           m.is_diff, m.is_llvm, m.is_cuda, m.is_sequence, m.is_valid, m.type,
+           m.ndim > 0 ? m.shape[0] : 0,
+           m.ndim > 1 ? m.shape[1] : 0,
+           m.ndim > 2 ? m.shape[2] : 0,
+           m.ndim > 3 ? m.shape[3] : 0);
+}
+
+/// Compute the metadata type of an operation combinining 'a' and 'b'
 meta meta_promote(meta a, meta b) {
     meta r;
     r.is_vector = a.is_vector | b.is_vector;
@@ -34,64 +57,42 @@ meta meta_promote(meta a, meta b) {
     r.is_valid = a.is_valid & b.is_valid;
     r.type = a.type > b.type ? a.type : b.type;
     r.tsize_rel = r.talign = 0;
-    r.ndim = a.ndim > b.ndim ? a.ndim : b.ndim;
 
     memset(r.shape, 0, sizeof(r.shape));
 
     if (r.is_tensor || !r.is_valid) {
         r.ndim = 0;
     } else {
-        bool is_jit_a = a.is_llvm || a.is_cuda,
-             is_jit_b = b.is_llvm || b.is_cuda;
-		int ndim_a = 0, ndim_b = 0;
+        bool a_is_jit = a.is_llvm || a.is_cuda,
+             b_is_jit = b.is_llvm || b.is_cuda,
+             r_is_jit = r.is_llvm || r.is_cuda;
+
+        int ndim_a = a.ndim - (a_is_jit || (r_is_jit && a.is_sequence)),
+            ndim_b = b.ndim - (b_is_jit || (r_is_jit && b.is_sequence)),
+            ndim_max = ndim_a > ndim_b ? ndim_a : ndim_b;
+
+        r.ndim = ndim_max;
+
         for (int i = 0; i < r.ndim; ++i) {
-            int value_a = 1, value_b = 1;
+            int size_a = (i < ndim_a) ? a.shape[i] : 1,
+                size_b = (i < ndim_b) ? b.shape[i] : 1;
 
-            if (ndim_a < a.ndim - (is_jit_a ? 1 : 0))
-                value_a = a.shape[ndim_a++];
-            if (ndim_b < b.ndim - (is_jit_b ? 1 : 0))
-                value_b = b.shape[ndim_b++];
-
-            if (value_a == value_b)
-                r.shape[i] = value_a;
-            else if (value_a == DRJIT_DYNAMIC || value_b == DRJIT_DYNAMIC)
+            if (size_a == size_b)
+                r.shape[i] = size_a;
+            else if (size_a == DRJIT_DYNAMIC || size_b == DRJIT_DYNAMIC)
                 r.shape[i] = DRJIT_DYNAMIC;
-            else if (value_a == 1 || value_b == 1)
-                r.shape[i] = value_a > value_b ? value_a : value_b;
+            else if (size_a == 1 || size_b == 1)
+                r.shape[i] = size_a > size_b ? size_a : size_b;
             else
                 r.is_valid = 0;
         }
 
-        if (is_jit_a || is_jit_b)
-            r.shape[r.ndim - 1] = DRJIT_DYNAMIC;
+        if (r_is_jit)
+            r.shape[r.ndim++] = DRJIT_DYNAMIC;
     }
 
     return r;
 }
-
-#if 0
-static void meta_print(meta m) {
-    printf("meta[\n"
-           "  is_vector=%u,\n"
-           "  is_complex=%u,\n"
-           "  is_quaternion=%u,\n"
-           "  is_matrix=%u,\n"
-           "  is_tensor=%u,\n"
-           "  is_diff=%u,\n"
-           "  is_llvm=%u,\n"
-           "  is_cuda=%u,\n"
-           "  is_valid=%u,\n"
-           "  type=%u,\n"
-           "  shape=(%u, %u, %u, %u)\n"
-           "]\n",
-           m.is_vector, m.is_complex, m.is_quaternion, m.is_matrix, m.is_tensor,
-           m.is_diff, m.is_llvm, m.is_cuda, m.is_valid, m.type,
-           m.ndim > 0 ? m.shape[0] : 0,
-           m.ndim > 1 ? m.shape[1] : 0,
-           m.ndim > 2 ? m.shape[2] : 0,
-           m.ndim > 3 ? m.shape[3] : 0);
-}
-#endif
 
 meta meta_from_builtin(PyObject *o) noexcept {
     meta m { };
@@ -151,6 +152,7 @@ meta meta_from_builtin(PyObject *o) noexcept {
                         m.shape[i] = value;
                 }
 
+                m.is_sequence = true;
                 return m;
             }
         } catch (...) { }
@@ -160,7 +162,7 @@ meta meta_from_builtin(PyObject *o) noexcept {
     if (PyNumber_Check(o)) {
         if (PyBool_Check(o)) {
             m.type = (uint8_t) VarType::Bool;
-        } else if (PyLong_Check(o)) {
+        } else if (PyIndex_Check(o)) {
             long long result = PyLong_AsLongLong(o);
 
             if (result == -1 && PyErr_Occurred()) {
@@ -194,7 +196,7 @@ meta meta_from_builtin(PyObject *o) noexcept {
                 meta m2 = meta_from_builtin(o2);
                 Py_DECREF(o2);
 
-                if (m2.ndim >= 3) {
+                if (m2.ndim >= 3 || !m2.is_valid) {
                     m.is_valid = false;
                     break;
                 }
@@ -204,8 +206,11 @@ meta meta_from_builtin(PyObject *o) noexcept {
                 m2.shape[0] = len > 4 ? DRJIT_DYNAMIC : (uint8_t) len;
                 m2.ndim++;
 
-                m = meta_promote(m, m2);
+                if (m != m2)
+                    m = meta_promote(m, m2);
             }
+
+            m.is_sequence = true;
         }
     } else {
         m.is_valid = false;
@@ -234,8 +239,6 @@ meta meta_from_builtin(PyObject *o) noexcept {
 bool promote(const char *op, PyObject **o, size_t n, bool select) {
     PyTypeObject * base = (PyTypeObject *) array_base.ptr();
     meta m;
-    memset(&m, 0, sizeof(meta));
-    m.is_valid = 1;
 
     nb::handle h;
     for (size_t i = 0; i < n; ++i) {
@@ -257,7 +260,11 @@ bool promote(const char *op, PyObject **o, size_t n, bool select) {
             return false;
         }
 
-        m = meta_promote(m, m2);
+
+        if (i == 0)
+            m = m2;
+        else
+            m = meta_promote(m, m2);
 
         if (m == m2) {
             if (is_drjit_array)

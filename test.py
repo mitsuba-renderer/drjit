@@ -400,6 +400,11 @@ def test13_binop_promote_broadcast():
     x = l.Array3f(10, 100, 1000) + [1, 2, 3]
     assert type(x) is l.Array3f and dr.all_nested(x == l.Array3f(11, 102, 1003))
 
+    x = s.Array3i(10, 100, 1000) + l.Float(1)
+    assert type(x) is l.Array3f and dr.all_nested(x == l.Array3f(11, 101, 1001))
+    x = s.Array3f(10, 100, 1000) + l.Float(1)
+    assert type(x) is l.Array3f and dr.all_nested(x == l.Array3f(11, 101, 1001))
+
 
 def test14_binop_inplace():
     import drjit.scalar as s
@@ -1119,17 +1124,19 @@ def test42_prevent_inefficient_cast(capsys):
     import drjit.llvm.ad as la
 
     with pytest.raises(TypeError) as ei:
-        print(s.ArrayXf(la.Float([1, 2, 3, 4])))
+        s.ArrayXf(la.Float([1, 2, 3, 4]))
 
     with pytest.raises(TypeError) as ei:
-        print(l.Float(s.ArrayXf([1, 2, 3, 4])))
+        l.Float(s.ArrayXf([1, 2, 3, 4]))
 
     with pytest.raises(TypeError) as ei:
-        print(l.Float(la.Float([1, 2, 3, 4])))
+        l.Float(la.Float([1, 2, 3, 4]))
 
     with pytest.warns(RuntimeWarning, match=r"implicit conversion"):
         with pytest.raises(TypeError) as ei:
-            print(l.Array3f(la.Array3f(1)))
+            l.Array3f(la.Array3f(1))
+
+    #  la.Float(l.Float([1, 2, 3, 4]))
 
 
 #@pytest.mark.parametrize('name', ['sqrt', 'cbrt', 'sin', 'cos', 'tan', 'asin',

@@ -208,6 +208,8 @@ int array_init(PyObject *self, PyObject *args, PyObject *kwds) {
                 }
             }
 
+            arg_meta_cp.is_diff = s.meta.is_diff;
+
             // Disallow inefficient element-by-element imports of JIT arrays
             if (arg_meta.ndim == 1 && arg_meta.shape[0] == DRJIT_DYNAMIC)
                 try_sequence_import = false;

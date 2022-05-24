@@ -62,18 +62,17 @@ static nb::object detach(nb::handle h, bool preserve_type=true) {
         return nb::borrow(h);
     }
 
-    if (nb::isinstance<nb::sequence>(h)) {
+    if (nb::isinstance<nb::list>(h) || nb::isinstance<nb::tuple>(h)) {
         nb::list result;
-        for (Py_ssize_t i = 0, l = nb::len(h); i < l; i++)
+        for (size_t i = 0, l = nb::len(h); i < l; i++)
             result.append(detach(h[i], preserve_type));
         return std::move(result);
     }
 
-    if (nb::isinstance<nb::mapping>(h)) {
-        nb::object result = h.type()();
-        nb::mapping m = nb::borrow<nb::mapping>(h);
-        for (auto k : m.keys())
-            result[k] = detach(m[k], preserve_type);
+    if (nb::isinstance<nb::dict>(h)) {
+        nb::dict result;
+        for (auto [k, v] : nb::borrow<nb::dict>(h))
+            result[k] = detach(v, preserve_type);
         return result;
     }
 
@@ -112,11 +111,11 @@ static void set_grad_enabled(nb::handle h, bool value) {
                 }
             }
         }
-    } else if (nb::isinstance<nb::sequence>(h)) {
+    } else if (nb::isinstance<nb::list>(h) || nb::isinstance<nb::tuple>(h)) {
         for (nb::handle h2 : h)
             set_grad_enabled(h2, value);
-    } else if (nb::isinstance<nb::mapping>(h)) {
-        set_grad_enabled(nb::borrow<nb::mapping>(h).values(), value);
+    } else if (nb::isinstance<nb::dict>(h)) {
+        set_grad_enabled(nb::borrow<nb::dict>(h).values(), value);
     } else {
         nb::object dstruct = nb::getattr(h.type(), "DRJIT_STRUCT", nb::handle());
         if (dstruct.is_valid() && nb::isinstance<nb::dict>(dstruct)) {
@@ -154,11 +153,11 @@ static bool grad_enabled(nb::handle h) {
                 }
             }
         }
-    } else if (nb::isinstance<nb::sequence>(h)) {
+    } else if (nb::isinstance<nb::list>(h) || nb::isinstance<nb::tuple>(h)) {
         for (nb::handle h2 : h)
             result |= grad_enabled(h2);
-    } else if (nb::isinstance<nb::mapping>(h)) {
-        result = grad_enabled(nb::borrow<nb::mapping>(h).values());
+    } else if (nb::isinstance<nb::dict>(h)) {
+        result = grad_enabled(nb::borrow<nb::dict>(h).values());
     } else {
         nb::object dstruct = nb::getattr(h.type(), "DRJIT_STRUCT", nb::handle());
         if (dstruct.is_valid() && nb::isinstance<nb::dict>(dstruct)) {
@@ -227,20 +226,18 @@ static nb::object grad(nb::handle h, bool preserve_type=true) {
         }
     }
 
-    if (nb::isinstance<nb::sequence>(h)) {
+    if (nb::isinstance<nb::list>(h) || nb::isinstance<nb::tuple>(h)) {
         nb::list result;
-        for (Py_ssize_t i = 0, l = nb::len(h); i < l; i++)
+        for (size_t i = 0, l = nb::len(h); i < l; i++)
             result.append(grad(h[i], preserve_type));
         return std::move(result);
     }
 
-    if (nb::isinstance<nb::mapping>(h)) {
-        nb::object result = h.type()();
-        for (nb::handle p : nb::borrow<nb::mapping>(h).items()) {
-            nb::handle k = p[0], v = p[1];
+    if (nb::isinstance<nb::dict>(h)) {
+        nb::dict result;
+        for (auto [k, v] : nb::borrow<nb::dict>(h))
             result[k] = grad(v, preserve_type);
-        }
-        return result;
+        return std::move(result);
     }
 
     nb::object dstruct = nb::getattr(h.type(), "DRJIT_STRUCT", nb::handle());
@@ -275,9 +272,11 @@ static void grad_setter(nb::handle h, nb::handle value, T op) {
             } else {
                 PySequenceMethods *sm  = ((PyTypeObject *) h.type().ptr())->tp_as_sequence;
                 PySequenceMethods *sm2 = ((PyTypeObject *) value.type().ptr())->tp_as_sequence;
+
                 bool value_sq =
                     is_drjit_array(value) &&
                     nb::type_supplement<supp>(value.type()).meta.ndim > 1;
+
                 for (Py_ssize_t i = 0, l = sm->sq_length(h.ptr()); i < l; ++i) {
                     nb::object v  = nb::steal(sm->sq_item(h.ptr(), i));
                     if (!v.is_valid())
@@ -293,7 +292,7 @@ static void grad_setter(nb::handle h, nb::handle value, T op) {
                 }
             }
         }
-    } else if (nb::isinstance<nb::sequence>(h)) {
+    } else if (nb::isinstance<nb::list>(h) || nb::isinstance<nb::tuple>(h)) {
         if (nb::isinstance<nb::sequence>(value)) {
             if (nb::len(h) != nb::len(value)) {
                 PyErr_Format(
@@ -302,19 +301,19 @@ static void grad_setter(nb::handle h, nb::handle value, T op) {
                     nb::len(h), nb::len(value));
                 nb::detail::raise_python_error();
             }
-            for (Py_ssize_t i = 0, l = nb::len(h); i < l; i++)
+            for (size_t i = 0, l = nb::len(h); i < l; i++)
                 grad_setter(h[i], value[i], op);
         } else {
-            for (Py_ssize_t i = 0, l = nb::len(h); i < l; i++)
+            for (size_t i = 0, l = nb::len(h); i < l; i++)
                 grad_setter(h[i], value, op);
         }
-    } else if (nb::isinstance<nb::mapping>(h)) {
-        nb::mapping m = nb::borrow<nb::mapping>(h);
-        for (auto k : m.keys()) {
-            if (nb::isinstance<nb::mapping>(value))
-                grad_setter(m[k], value[k], op);
-            else
-                grad_setter(m[k], value, op);
+    } else if (nb::isinstance<nb::dict>(h)) {
+        if (nb::isinstance<nb::dict>(value)) {
+            for (auto [k, v] : nb::borrow<nb::dict>(h))
+                grad_setter(v, value[k], op);
+        } else {
+            for (auto [k, v] : nb::borrow<nb::dict>(h))
+                grad_setter(v, value, op);
         }
     } else {
         nb::object dstruct = nb::getattr(h.type(), "DRJIT_STRUCT", nb::handle());
@@ -430,11 +429,11 @@ static void enqueue(drjit::ADMode mode, nb::handle h) {
                 }
             }
         }
-    } else if (nb::isinstance<nb::sequence>(h)) {
+    } else if (nb::isinstance<nb::list>(h) || nb::isinstance<nb::tuple>(h)) {
         for (auto h2 : h)
             ::enqueue(mode, h2);
-    } else if (nb::isinstance<nb::mapping>(h)) {
-        return ::enqueue(mode, nb::borrow<nb::mapping>(h).values());
+    } else if (nb::isinstance<nb::dict>(h)) {
+        return ::enqueue(mode, nb::borrow<nb::dict>(h).values());
     } else {
         nb::object dstruct = nb::getattr(h.type(), "DRJIT_STRUCT", nb::handle());
         if (dstruct.is_valid() && nb::isinstance<nb::dict>(dstruct)) {

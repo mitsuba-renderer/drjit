@@ -69,12 +69,12 @@ extern bool promote(const char *op, PyObject **o, size_t n, bool select = false)
 
 inline bool operator==(const dr::detail::array_metadata &a,
                        const dr::detail::array_metadata &b) {
-    if (a.is_vector != b.is_vector && a.is_complex != b.is_complex &&
-        a.is_quaternion != b.is_quaternion && a.is_matrix != b.is_matrix &&
-        a.is_tensor != b.is_tensor && a.is_diff != b.is_diff &&
-        a.is_llvm != b.is_llvm && a.is_cuda != b.is_cuda &&
-        a.is_valid != b.is_valid && a.type != b.type && a.ndim != b.ndim &&
-        a.tsize_rel != b.tsize_rel && a.talign != b.talign)
+    if (a.is_vector != b.is_vector || a.is_complex != b.is_complex ||
+        a.is_quaternion != b.is_quaternion || a.is_matrix != b.is_matrix ||
+        a.is_tensor != b.is_tensor || a.is_diff != b.is_diff ||
+        a.is_llvm != b.is_llvm || a.is_cuda != b.is_cuda ||
+        a.is_sequence != b.is_sequence || a.is_valid != b.is_valid ||
+        a.type != b.type || a.ndim != b.ndim)
         return false;
 
     for (int i = 0; i < a.ndim; ++i) {
@@ -83,6 +83,11 @@ inline bool operator==(const dr::detail::array_metadata &a,
     }
 
     return true;
+}
+
+inline bool operator!=(const dr::detail::array_metadata &a,
+                       const dr::detail::array_metadata &b) {
+    return !operator==(a, b);
 }
 
 extern std::pair<nb::tuple, nb::object>
@@ -102,6 +107,8 @@ extern nb::object unravel(const nb::type_object_t<dr::ArrayBase> &dtype,
 extern nb::handle reinterpret_array_t(nb::handle h, VarType vt);
 
 extern nb::dlpack::dtype dlpack_dtype(VarType vt);
+
+extern void meta_print(meta m);
 
 // Entry points of various parts of the bindings
 extern void bind_array_builtin(nb::module_ m);

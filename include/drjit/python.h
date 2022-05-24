@@ -41,6 +41,7 @@ using array_traverse = void (*) (drjit::ADMode, uint32_t);
 
 struct array_metadata {
     uint16_t is_vector     : 1;
+    uint16_t is_sequence   : 1;
     uint16_t is_complex    : 1;
     uint16_t is_quaternion : 1;
     uint16_t is_matrix     : 1;
@@ -48,11 +49,11 @@ struct array_metadata {
     uint16_t is_diff       : 1;
     uint16_t is_llvm       : 1;
     uint16_t is_cuda       : 1;
-    uint16_t is_valid      : 1;
     uint16_t type          : 4;
     uint16_t ndim          : 3;
-    uint8_t tsize_rel;  // type size as multiple of 'talign'
-    uint8_t talign;     // type alignment
+    uint8_t is_valid       : 1;
+    uint8_t tsize_rel      : 7;  // type size as multiple of 'talign'
+    uint8_t talign;              // type alignment
     uint8_t shape[4];
 };
 
@@ -219,7 +220,7 @@ template <typename T> nanobind::class_<T> bind(const char *name = nullptr) {
 
     constexpr uint8_t RelSize = (uint8_t) (sizeof(T) / alignof(T));
 
-    static_assert(alignof(T) <= 0xFF && RelSize * alignof(T) == sizeof(T),
+    static_assert(alignof(T) <= 0x7F && RelSize * alignof(T) == sizeof(T),
                   "drjit::bind(): type is too large!");
 
     detail::array_supplement s;
@@ -608,7 +609,9 @@ template <typename T> nanobind::class_<T> bind_array(const char *name = nullptr)
 
     if constexpr (T::IsJIT && T::Depth == 1) {
         s.op_index = [](const void *a) { return ((const T *) a)->index(); };
-        s.op_set_index = [](void *a, uint32_t index) { *(((T *) a)->index_ptr()) = index; };
+        s.op_set_index = [](void *a, uint32_t index) {
+            *(((T *) a)->index_ptr()) = index;
+        };
     }
 
     if constexpr (T::IsDiff && T::Depth == 1 && T::IsFloat) {
@@ -634,6 +637,12 @@ template <typename T> nanobind::class_<T> bind_array(const char *name = nullptr)
             else
                 new (result) T(T::create(index, detached_t<T>(((T *) source)->detach_())));
         };
+
+        if constexpr (T::IsFloat) {
+            s.op_index_ad = [](const void *a) {
+                return ((const T *) a)->index_ad();
+            };
+        }
     }
 
     if constexpr (T::Depth == 1 && (T::IsDiff || T::IsJIT)) {
