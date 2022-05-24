@@ -825,7 +825,7 @@ static nb::object graphviz(bool as_str = false) {
     }
 }
 
-static void set_label_impl(nb::handle h, nb::handle label) {
+void set_label(nb::handle h, nb::handle label) {
     nb::str label_str = nb::str(label);
     if (is_drjit_array(h)) {
         const supp &s = nb::type_supplement<supp>(h.type());
@@ -840,7 +840,7 @@ static void set_label_impl(nb::handle h, nb::handle label) {
                         nb::detail::raise_python_error();
                     char ii[2];
                     sprintf(ii, "%zu", i);
-                    set_label_impl(v, label_str + nb::str("_") + nb::str(ii));
+                    set_label(v, label_str + nb::str("_") + nb::str(ii));
                 }
             }
         }
@@ -848,33 +848,24 @@ static void set_label_impl(nb::handle h, nb::handle label) {
         for (size_t i = 0, l = nb::len(h); i < l; i++) {
             char ii[2];
             sprintf(ii, "%zd", i);
-            set_label_impl(h[i], label_str + nb::str("_") + nb::str(ii));
+            set_label(h[i], label_str + nb::str("_") + nb::str(ii));
         }
     } else if (nb::isinstance<nb::dict>(h)) {
         for (auto [k, v] : nb::borrow<nb::dict>(h))
-            set_label_impl(v, label_str + nb::str("_") + k);
+            set_label(v, label_str + nb::str("_") + k);
     } else {
         nb::object dstruct = nb::getattr(h.type(), "DRJIT_STRUCT", nb::handle());
         if (dstruct.is_valid() && nb::isinstance<nb::dict>(dstruct)) {
             nb::dict dstruct_dict = nb::borrow<nb::dict>(dstruct);
             for (auto [k, v] : dstruct_dict)
-                set_label_impl(nb::getattr(h, k), label_str + nb::str("_") + k);
+                set_label(nb::getattr(h, k), label_str + nb::str("_") + k);
         }
     }
 }
 
-static void set_label(nb::args args, nb::kwargs kwargs) {
-    size_t n_args = nb::len(args),
-           n_kwargs = nb::len(kwargs);
-
-    if ((n_kwargs && n_args) || (n_args && n_args != 2))
-        throw nb::type_error(
-            "drjit.set_label(): invalid input arguments.");
-
-    if (n_args)
-        set_label_impl(args[0], args[1]);
+void set_label(nb::kwargs kwargs) {
     for (auto [k, v] : kwargs)
-        set_label_impl(v, k);
+        set_label(v, k);
 }
 
 static nb::object label(nb::handle h) {
@@ -1037,6 +1028,7 @@ extern void bind_array_misc(nb::module_ m) {
     m.def("eval", nb::overload_cast<nb::args>(eval), doc_eval);
 
     m.def("label", &label, doc_label);
-    m.def("set_label", &set_label, doc_set_label);
+    m.def("set_label", nb::overload_cast<nb::kwargs>(set_label), doc_set_label);
+    m.def("set_label", nb::overload_cast<nb::handle, nb::handle>(set_label), doc_set_label);
     m.def("graphviz", &graphviz, "as_str"_a=false, doc_graphviz);
 }

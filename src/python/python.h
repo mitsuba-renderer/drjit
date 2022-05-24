@@ -40,7 +40,6 @@ get_sq(nb::handle tp, const char *name, void *check);
 extern Py_ssize_t len(PyObject *o) noexcept;
 extern nb::object shape(nb::handle_t<dr::ArrayBase> h) noexcept;
 
-
 /// Check if the given metadata record is valid
 bool meta_check(meta m);
 
@@ -90,6 +89,9 @@ inline bool operator!=(const dr::detail::array_metadata &a,
     return !operator==(a, b);
 }
 
+extern nb::object full(nb::type_object dtype, nb::handle value,
+                       const std::vector<size_t> &shape);
+
 extern std::pair<nb::tuple, nb::object>
 slice_index(const nb::type_object &dtype, const nb::tuple &shape,
             const nb::tuple &indices);
@@ -103,6 +105,8 @@ extern nb::object ravel(nb::handle_t<dr::ArrayBase> h, char order,
 
 extern nb::object unravel(const nb::type_object_t<dr::ArrayBase> &dtype,
                           nb::handle_t<dr::ArrayBase> array, char order);
+
+extern void set_label(nb::handle h, nb::handle label);
 
 extern nb::handle reinterpret_array_t(nb::handle h, VarType vt);
 
