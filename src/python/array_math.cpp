@@ -403,6 +403,86 @@ static PyObject *nb_math_ternop(const char *name, size_t ops_offset,
                                         h1.ptr(), h2.ptr(), h3.ptr()));        \
     });
 
+static nb::object minimum(nb::handle h0, nb::handle h1) {
+    if (!is_drjit_array(h0) && !is_drjit_array(h1)) {
+        try {
+            double a = nb::cast<double>(h0);
+            double b = nb::cast<double>(h1);
+            return a > b ? nb::borrow(h1) : nb::borrow(h0);
+        } catch (...) {}
+
+        try {
+            nb::list a = nb::cast<nb::list>(h0);
+            nb::list b = nb::cast<nb::list>(h1);
+
+            nb::list result;
+            for (size_t i = 0, l = nb::len(a); i < l; i++)
+                result.append(minimum(h0[i], h1[i]));
+            return std::move(result);
+        } catch (...) {}
+
+        PyErr_Format(PyExc_TypeError, "minimum(): invalid arguments!");
+        return nb::object();
+    }
+
+    nb::object o0, o1;
+
+    // All arguments must be promoted to the same type first
+    if (Py_TYPE(h0.ptr()) == Py_TYPE(h1.ptr())) {
+        o0 = nb::borrow(h0);
+        o1 = nb::borrow(h1);
+    } else {
+        PyObject *o[2] = { h0.ptr(), h1.ptr() };
+        if (!promote("minimum", o, 2))
+            return nb::object();
+        o0 = nb::steal(o[0]);
+        o1 = nb::steal(o[1]);
+    }
+
+    return nb::steal(
+        nb_math_binop("minimum", offsetof(supp, op_minimum), h0.ptr(), h1.ptr()));
+}
+
+static nb::object maximum(nb::handle h0, nb::handle h1) {
+    if (!is_drjit_array(h0) && !is_drjit_array(h1)) {
+        try {
+            double a = nb::cast<double>(h0);
+            double b = nb::cast<double>(h1);
+            return a > b ? nb::borrow(h0) : nb::borrow(h1);
+        } catch (...) {}
+
+        try {
+            nb::list a = nb::cast<nb::list>(h0);
+            nb::list b = nb::cast<nb::list>(h1);
+
+            nb::list result;
+            for (size_t i = 0, l = nb::len(a); i < l; i++)
+                result.append(maximum(h0[i], h1[i]));
+            return std::move(result);
+        } catch (...) {}
+
+        PyErr_Format(PyExc_TypeError, "maximum(): invalid arguments!");
+        return nb::object();
+    }
+
+    nb::object o0, o1;
+
+    // All arguments must be promoted to the same type first
+    if (Py_TYPE(h0.ptr()) == Py_TYPE(h1.ptr())) {
+        o0 = nb::borrow(h0);
+        o1 = nb::borrow(h1);
+    } else {
+        PyObject *o[2] = { h0.ptr(), h1.ptr() };
+        if (!promote("maximum", o, 2))
+            return nb::object();
+        o0 = nb::steal(o[0]);
+        o1 = nb::steal(o[1]);
+    }
+
+    return nb::steal(
+        nb_math_binop("maximum", offsetof(supp, op_maximum), h0.ptr(), h1.ptr()));
+}
+
 
 void bind_array_math(nb::module_ m) {
     DR_MATH_UNOP(sin);
@@ -442,25 +522,200 @@ void bind_array_math(nb::module_ m) {
         return nb_math_unop("abs", offsetof(supp, op_absolute), h);
     });
 
-    m.def(
-        "min", [](double d1, double d2) { return dr::min(d1, d2); },
-        nb::raw_doc(doc_min));
-    m.def("min", [](Py_ssize_t d1, Py_ssize_t d2) { return dr::min(d1, d2); });
-    m.def("min", [](nb::handle h1, nb::handle h2) {
-        if (!is_drjit_array(h1) && !is_drjit_array(h2))
-            throw nb::next_overload();
-        return nb::steal(
-            nb_math_binop("min", offsetof(supp, op_min), h1.ptr(), h2.ptr()));
-    });
+    m.def("minimum", [](double d1, double d2) { return dr::min(d1, d2); }, nb::raw_doc(doc_minimum));
+    m.def("minimum", [](Py_ssize_t d1, Py_ssize_t d2) { return dr::min(d1, d2); });
+    m.def("minimum", [](nb::handle h1, nb::handle h2) { return minimum(h1, h2); });
 
-    m.def(
-        "max", [](double d1, double d2) { return dr::max(d1, d2); },
-        nb::raw_doc(doc_max));
-    m.def("max", [](Py_ssize_t d1, Py_ssize_t d2) { return dr::max(d1, d2); });
-    m.def("max", [](nb::handle h1, nb::handle h2) {
-        if (!is_drjit_array(h1) && !is_drjit_array(h2))
-            throw nb::next_overload();
-        return nb::steal(
-            nb_math_binop("max", offsetof(supp, op_max), h1.ptr(), h2.ptr()));
-    });
+    m.def("maximum", [](double d1, double d2) { return dr::max(d1, d2); }, nb::raw_doc(doc_maximum));
+    m.def("maximum", [](Py_ssize_t d1, Py_ssize_t d2) { return dr::max(d1, d2); });
+    m.def("maximum", [](nb::handle h1, nb::handle h2) { return maximum(h1, h2); });
+
+    m.def("all", [](nb::handle h) -> nb::object {
+        nb::handle tp = h.type();
+        if (tp.is(&PyBool_Type))
+            return borrow(h);
+
+        if (is_drjit_array(h)) {
+            const supp &s = nb::type_supplement<supp>(tp);
+            dr::detail::array_reduce op = s.op_all;
+            if (!op)
+                throw nb::type_error(
+                    "drjit.all(): requires a Dr.Jit mask array or Python "
+                    "boolean sequence as input.");
+
+            if ((uintptr_t) op != 1) {
+                nb::object result = nb::inst_alloc(tp);
+                op(nb::inst_ptr<void>(h), nb::inst_ptr<void>(result));
+                nb::inst_mark_ready(result);
+                return result;
+            }
+        }
+
+        nb::object result = nb::borrow(Py_True);
+
+        size_t it = 0;
+        for (nb::handle h2 : h) {
+            if (it++ == 0)
+                result = borrow(h2);
+            else
+                result = result & h2;
+        }
+
+        return result;
+    }, nb::raw_doc(doc_all));
+
+    m.def("any", [](nb::handle h) -> nb::object {
+        nb::handle tp = h.type();
+        if (tp.is(&PyBool_Type))
+            return borrow(h);
+
+        if (is_drjit_type(tp)) {
+            const supp &s = nb::type_supplement<supp>(tp);
+            dr::detail::array_reduce op = s.op_any;
+            if (!op)
+                throw nb::type_error(
+                    "drjit.any(): requires a Dr.Jit mask array or Python "
+                    "boolean sequence as input.");
+
+            if ((uintptr_t) op != 1) {
+                nb::object result = nb::inst_alloc(tp);
+                op(nb::inst_ptr<void>(h), nb::inst_ptr<void>(result));
+                nb::inst_mark_ready(result);
+                return result;
+            }
+        }
+
+        nb::object result = nb::borrow(Py_False);
+
+        size_t it = 0;
+        for (nb::handle h2 : h) {
+            if (it++ == 0)
+                result = borrow(h2);
+            else
+                result = result | h2;
+        }
+
+        return result;
+    }, nb::raw_doc(doc_any));
+
+    m.def("min", [](nb::handle h) -> nb::object {
+        nb::handle tp = h.type();
+        if (tp.is(&PyFloat_Type) || tp.is(&PyLong_Type) || tp.is(&PyBool_Type))
+            return borrow(h);
+
+        if (is_drjit_type(tp)) {
+            const supp &s = nb::type_supplement<supp>(tp);
+            dr::detail::array_reduce op = s.op_min;
+            if (!op)
+                throw nb::type_error(
+                    "drjit.min(): requires a Dr.Jit array or Python "
+                    "sequence as input.");
+
+            if ((uintptr_t) op != 1) {
+                nb::object result = nb::inst_alloc(tp);
+                op(nb::inst_ptr<void>(h), nb::inst_ptr<void>(result));
+                nb::inst_mark_ready(result);
+                return result;
+            }
+        }
+
+        nb::object result;
+
+        size_t it = 0;
+        for (nb::handle h2 : h) {
+            if (it++ == 0)
+                result = borrow(h2);
+            else
+                result = minimum(result, h2);
+        }
+        return result;
+    }, nb::raw_doc(doc_min));
+
+    m.def("max", [](nb::handle h) -> nb::object {
+        nb::handle tp = h.type();
+        if (tp.is(&PyFloat_Type) || tp.is(&PyLong_Type) || tp.is(&PyBool_Type))
+            return borrow(h);
+
+        if (is_drjit_type(tp)) {
+            const supp &s = nb::type_supplement<supp>(tp);
+            dr::detail::array_reduce op = s.op_max;
+            if (!op)
+                throw nb::type_error(
+                    "drjit.max(): requires a Dr.Jit array or Python "
+                    "sequence as input.");
+
+            if ((uintptr_t) op != 1) {
+                nb::object result = nb::inst_alloc(tp);
+                op(nb::inst_ptr<void>(h), nb::inst_ptr<void>(result));
+                nb::inst_mark_ready(result);
+                return result;
+            }
+        }
+
+        nb::object result;
+
+        size_t it = 0;
+        for (nb::handle h2 : h) {
+            if (it++ == 0)
+                result = borrow(h2);
+            else
+                result = maximum(result, h2);
+        }
+
+        return result;
+    }, nb::raw_doc(doc_max));
+
+    m.def("sum", [](nb::handle h) -> nb::object {
+        nb::handle tp = h.type();
+        if (tp.is(&PyFloat_Type) || tp.is(&PyLong_Type) || tp.is(&PyBool_Type))
+            return borrow(h);
+
+        if (is_drjit_type(tp)) {
+            const supp &s = nb::type_supplement<supp>(tp);
+            dr::detail::array_reduce op = s.op_sum;
+            if (!op)
+                throw nb::type_error(
+                    "drjit.sum(): requires a Dr.Jit array or Python "
+                    "sequence as input.");
+
+            if ((uintptr_t) op != 1) {
+                nb::object result = nb::inst_alloc(tp);
+                op(nb::inst_ptr<void>(h), nb::inst_ptr<void>(result));
+                nb::inst_mark_ready(result);
+                return result;
+            }
+        }
+
+        nb::object result = nb::borrow(PyFloat_FromDouble(0.0));
+        for (nb::handle h2 : h)
+            result = result + h2;
+        return result;
+    }, nb::raw_doc(doc_sum));
+
+    m.def("prod", [](nb::handle h) -> nb::object {
+        nb::handle tp = h.type();
+        if (tp.is(&PyFloat_Type) || tp.is(&PyLong_Type) || tp.is(&PyBool_Type))
+            return borrow(h);
+
+        if (is_drjit_type(tp)) {
+            const supp &s = nb::type_supplement<supp>(tp);
+            dr::detail::array_reduce op = s.op_prod;
+            if (!op)
+                throw nb::type_error(
+                    "drjit.prod(): requires a Dr.Jit array or Python "
+                    "sequence as input.");
+
+            if ((uintptr_t) op != 1) {
+                nb::object result = nb::inst_alloc(tp);
+                op(nb::inst_ptr<void>(h), nb::inst_ptr<void>(result));
+                nb::inst_mark_ready(result);
+                return result;
+            }
+        }
+
+        nb::object result = nb::borrow(PyFloat_FromDouble(1.0));
+        for (nb::handle h2 : h)
+            result = result * h2;
+        return result;
+    }, nb::raw_doc(doc_prod));
 }

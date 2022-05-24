@@ -23,7 +23,7 @@ using array_unop_2 = void (*) (const void *, void *, void *);
 using array_binop = void (*) (const void *, const void *, void *);
 using array_ternop = void (*) (const void *, const void *, const void *, void *);
 using array_richcmp = void (*) (const void *, const void *, int, void *);
-using array_reduce_mask = void (*) (const void *, void *);
+using array_reduce = void (*) (const void *, void *);
 using array_index = uint32_t (*) (const void *);
 using array_set_index = void (*) (void *, uint32_t);
 using array_full = void (*) (nanobind::handle, size_t, void *);
@@ -87,8 +87,9 @@ struct array_supplement {
     array_unop op_negative;
     array_unop op_invert;
     array_unop op_absolute;
-    array_reduce_mask op_all;
-    array_reduce_mask op_any;
+    array_reduce op_all;
+    array_reduce op_any;
+    array_reduce op_sum, op_prod, op_min, op_max;
     array_richcmp op_richcmp;
     array_ternop op_fma;
     array_ternop op_select;
@@ -108,7 +109,7 @@ struct array_supplement {
     array_unop op_exp, op_exp2, op_log, op_log2;
     array_unop op_floor, op_ceil, op_round, op_trunc;
     array_unop op_rcp, op_rsqrt;
-    array_binop op_min, op_max, op_atan2, op_ldexp;
+    array_binop op_minimum, op_maximum, op_atan2, op_ldexp;
     array_unop_2 op_sincos, op_sincosh, op_frexp;
 
     array_unop op_detach;
@@ -365,11 +366,11 @@ template <typename T> nanobind::class_<T> bind_array(const char *name = nullptr)
                 new ((T *) c) T(*(const T *) a * *(const T *) b);
             };
 
-            s.op_min = [](const void *a, const void *b, void *c) {
+            s.op_minimum = [](const void *a, const void *b, void *c) {
                 new ((T *) c) T(drjit::min(*(const T *) a, *(const T *) b));
             };
 
-            s.op_max = [](const void *a, const void *b, void *c) {
+            s.op_maximum = [](const void *a, const void *b, void *c) {
                 new ((T *) c) T(drjit::max(*(const T *) a, *(const T *) b));
             };
 
@@ -385,6 +386,22 @@ template <typename T> nanobind::class_<T> bind_array(const char *name = nullptr)
                     new ((T *) b) T(-*(const T *) a);
                 };
             }
+
+            s.op_sum = [](const void *a, void *b) {
+                new ((T *) b) T(((const T *) a)->hsum_async_());
+            };
+
+            s.op_prod = [](const void *a, void *b) {
+                new ((T *) b) T(((const T *) a)->hprod_async_());
+            };
+
+            s.op_min = [](const void *a, void *b) {
+                new ((T *) b) T(((const T *) a)->hmin_async_());
+            };
+
+            s.op_max = [](const void *a, void *b) {
+                new ((T *) b) T(((const T *) a)->hmax_async_());
+            };
         }
 
         if constexpr (T::IsIntegral) {
@@ -517,6 +534,8 @@ template <typename T> nanobind::class_<T> bind_array(const char *name = nullptr)
             (detail::array_ternop) uintptr_t(1);
         (void) default_unop; (void) default_unop_2;
         (void) default_binop; (void) default_ternop;
+        const detail::array_reduce default_reduce =
+            (detail::array_reduce) uintptr_t(1);
 
         s.op_select = default_ternop;
 
@@ -524,14 +543,19 @@ template <typename T> nanobind::class_<T> bind_array(const char *name = nullptr)
             s.op_add = default_binop;
             s.op_subtract = default_binop;
             s.op_multiply = default_binop;
-            s.op_min = default_binop;
-            s.op_max = default_binop;
+            s.op_minimum = default_binop;
+            s.op_maximum = default_binop;
             s.op_fma = default_ternop;
 
             if constexpr (std::is_signed_v<scalar_t<T>>) {
                 s.op_absolute = default_unop;
                 s.op_negative = default_unop;
             }
+
+            s.op_sum = default_reduce;
+            s.op_prod = default_reduce;
+            s.op_min = default_reduce;
+            s.op_max = default_reduce;
         }
 
         if constexpr (T::IsIntegral) {
@@ -594,11 +618,11 @@ template <typename T> nanobind::class_<T> bind_array(const char *name = nullptr)
             new (b) T(((const T *) a)->any_());
         };
     } else {
-        const detail::array_reduce_mask default_reduce_mask =
-            (detail::array_reduce_mask) uintptr_t(1);
+        const detail::array_reduce default_reduce =
+            (detail::array_reduce) uintptr_t(1);
 
-        s.op_all = default_reduce_mask;
-        s.op_any = default_reduce_mask;
+        s.op_all = default_reduce;
+        s.op_any = default_reduce;
     }
 
     if (T::IsMask && T::Depth == 1 && T::Size != Dynamic) {

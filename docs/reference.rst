@@ -23,6 +23,14 @@ These operations are *horizontal* in the sense that [..]
 .. autofunction:: scatter
 .. autofunction:: ravel
 .. autofunction:: unravel
+.. autofunction:: minimum
+.. autofunction:: maximum
+.. autofunction:: min
+.. autofunction:: max
+.. autofunction:: sum
+.. autofunction:: prod
+.. autofunction:: all
+.. autofunction:: any
 
 Mask operations
 ---------------

@@ -409,48 +409,126 @@ Args:
 Returns:
     float | int | drjit.ArrayBase: Absolute value of the input)";
 
-static const char *doc_max = R"(
-max(arg0, /) -> float | int | drjit.ArrayBase
-max(arg0, arg1, /) -> float | int | drjit.ArrayBase
-Compute the maximum value of the provided inputs.
+static const char *doc_maximum = R"(
+maximum(arg0, arg1, /) -> float | int | drjit.ArrayBase
+Compute the element-wise maximum value of the provided inputs.
 
-This function can be used in two different ways: when invoked with two inputs,
-it computes the componentwise maximum and returns a result of the type
-``type(arg0 + arg1)`` (i.e., according to the usual implicit type conversion
-rules).
-
-When invoked with a single argument, it performs a horizontal reduction. Please
-see the section on :ref:`horizontal reductions <horizontal-reductions>` for
-details.
+This function returns a result of the type ``type(arg0 + arg1)`` (i.e.,
+according to the usual implicit type conversion rules).
 
 Args:
     arg0 (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
-    arg1 (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type (optional)
+    arg1 (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
 
 Returns:
     Maximum of the input(s))";
 
 
-static const char *doc_min = R"(
-min(arg0, /) -> float | int | drjit.ArrayBase
-min(arg0, arg1, /) -> float | int | drjit.ArrayBase
-Compute the minimum value of the provided inputs.
+static const char *doc_minimum = R"(
+minimum(arg0, arg1, /) -> float | int | drjit.ArrayBase
+Compute the element-wise minimum value of the provided inputs.
 
-This function can be used in two different ways: when invoked with two inputs,
-it computes the componentwise minimum and returns a result of the type
-``type(arg0 + arg1)`` (i.e., according to the usual implicit type conversion
-rules).
-
-When invoked with a single argument, it performs a horizontal reduction. Please
-see the section on :ref:`horizontal reductions <horizontal-reductions>` for
-details.
+This function returns a result of the type ``type(arg0 + arg1)`` (i.e.,
+according to the usual implicit type conversion rules).
 
 Args:
     arg0 (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
-    arg1 (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type (optional)
+    arg1 (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
 
 Returns:
     Minimum of the input(s))";
+
+
+static const char *doc_max = R"(
+max(arg, /) -> float | int | drjit.ArrayBase
+Compute the maximum value in the provided input.
+
+When the argument is a dynamic array, function performs a horizontal reduction.
+Please see the section on :ref:`horizontal reductions <horizontal-reductions>`
+for details.
+
+Args:
+    arg (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+Returns:
+    Maximum of the input)";
+
+
+static const char *doc_min = R"(
+min(arg, /) -> float | int | drjit.ArrayBase
+Compute the minimum value in the provided input.
+
+When the argument is a dynamic array, function performs a horizontal reduction.
+Please see the section on :ref:`horizontal reductions <horizontal-reductions>`
+for details.
+
+Args:
+    arg (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+Returns:
+    Minimum of the input)";
+
+
+static const char *doc_sum = R"(
+sum(arg, /) -> float | int | drjit.ArrayBase
+Compute the sum of all array elements.
+
+When the argument is a dynamic array, function performs a horizontal reduction.
+Please see the section on :ref:`horizontal reductions <horizontal-reductions>`
+for details.
+
+Args:
+    arg (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+Returns:
+    Sum of the input)";
+
+
+static const char *doc_prod = R"(
+prod(arg, /) -> float | int | drjit.ArrayBase
+Compute the product of all array elements.
+
+When the argument is a dynamic array, function performs a horizontal reduction.
+Please see the section on :ref:`horizontal reductions <horizontal-reductions>`
+for details.
+
+Args:
+    arg (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+Returns:
+    Product of the input)";
+
+
+static const char *doc_all = R"(
+all(arg, /) -> float | int | drjit.ArrayBase
+Computes whether all input elements evaluate to ``True``.
+
+When the argument is a dynamic array, function performs a horizontal reduction.
+Please see the section on :ref:`horizontal reductions <horizontal-reductions>`
+for details.
+
+Args:
+    arg (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+Returns:
+    Boolean array)";
+
+
+static const char *doc_any = R"(
+any(arg, /) -> float | int | drjit.ArrayBase
+Computes whether any of the input elements evaluate to ``True``.
+
+When the argument is a dynamic array, function performs a horizontal reduction.
+Please see the section on :ref:`horizontal reductions <horizontal-reductions>`
+for details.
+
+
+Args:
+    arg (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+Returns:
+    Boolean array)";
+
 
 static const char *doc_sqrt = R"(
 sqrt(arg, /)

@@ -154,7 +154,7 @@ def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
             return x[i]
 
     len_a, len_b = safe_len(a), safe_len(b)
-    len_ab = max(len_a, len_b)
+    len_ab = maximum(len_a, len_b)
 
     if len_a != len_ab and len_a > 1 or \
        len_b != len_ab and len_b > 1:
