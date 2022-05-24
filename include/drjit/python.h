@@ -5,6 +5,7 @@
 #include <drjit/dynamic.h>
 #include <drjit/tensor.h>
 #include <drjit/math.h>
+#include <drjit/autodiff.h>
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/pair.h>
 #include <nanobind/stl/detail/nb_list.h>
@@ -38,6 +39,8 @@ using array_get_bool = bool (*) (const void *);
 using array_set_grad = void (*) (void *, const void *);
 using array_enqueue = void (*) (drjit::ADMode, const void *);
 using array_traverse = void (*) (drjit::ADMode, uint32_t);
+using array_ad_dec_ref = void (*) (const void *);
+using array_ad_add_edge = void (*) (int32_t, int32_t, void *);
 
 struct array_metadata {
     uint16_t is_vector     : 1;
@@ -76,6 +79,7 @@ struct array_supplement {
     array_binop op_add;
     array_binop op_subtract;
     array_binop op_multiply;
+    array_binop op_power;
     array_binop op_remainder;
     array_binop op_floor_divide;
     array_binop op_true_divide;
@@ -94,7 +98,7 @@ struct array_supplement {
     array_ternop op_fma;
     array_ternop op_select;
     array_index op_index, op_index_ad;
-    array_set_index op_set_index;
+    array_set_index op_set_index, op_set_index_ad;
     array_ternop op_gather;
     array_ternop op_scatter;
 
@@ -120,6 +124,8 @@ struct array_supplement {
     array_set_grad op_set_grad, op_accum_grad;
     array_enqueue op_enqueue;
     array_traverse op_traverse;
+    array_ad_dec_ref op_ad_dec_ref;
+    array_ad_add_edge op_ad_add_edge;
 };
 
 static_assert(sizeof(array_metadata) == 8);
@@ -521,6 +527,10 @@ template <typename T> nanobind::class_<T> bind_array(const char *name = nullptr)
                 new ((T *) b) T(b_);
                 new ((T *) c) T(c_);
             };
+
+            s.op_power = [](const void *a, const void *b, void *c) {
+                new ((T *) c) T(drjit::pow(*(const T *) a, *(const T *) b));
+            };
         }
     } else {
         // Default implementations of everything
@@ -607,6 +617,7 @@ template <typename T> nanobind::class_<T> bind_array(const char *name = nullptr)
             s.op_sincos = default_unop_2;
             s.op_sincosh = default_unop_2;
             s.op_frexp = default_unop_2;
+            s.op_power = default_binop;
         }
     }
 
@@ -640,6 +651,7 @@ template <typename T> nanobind::class_<T> bind_array(const char *name = nullptr)
 
     if constexpr (T::IsDiff && T::Depth == 1 && T::IsFloat) {
         s.op_index_ad = [](const void *a) { return ((const T *) a)->index_ad(); };
+        s.op_set_index_ad = [](void *a, uint32_t index) { *(((T *) a)->index_ad_ptr()) = index; };
         s.op_set_grad_enabled = [](void *a, bool v) { ((T *) a)->set_grad_enabled_(v); };
         s.op_grad_enabled = [](const void *a) { return ((const T *) a)->grad_enabled_(); };
         s.op_grad = [](const void *a, void *b) { new (b) detached_t<T>(((const T *) a)->grad_()); };
@@ -647,6 +659,11 @@ template <typename T> nanobind::class_<T> bind_array(const char *name = nullptr)
         s.op_accum_grad = [](void *a, const void *b) { ((T *) a)->accum_grad_(((const T *) b)->detach_()); };
         s.op_enqueue = [](drjit::ADMode mode, const void *b) { ((const T *) b)->enqueue_(mode); };
         s.op_traverse = [](drjit::ADMode mode, uint32_t flags) { T::traverse_(mode, flags); };
+        s.op_ad_dec_ref = [](const void *a) { detail::ad_dec_ref_impl<detached_t<T>>(((const T *) a)->index_ad()); };
+        s.op_ad_add_edge = [](int32_t src_index, int32_t dst_index, void *cb) {
+            drjit::detail::ad_add_edge<detached_t<T>>(
+                src_index, dst_index, (drjit::detail::DiffCallback *) cb);
+        };
     }
 
     if constexpr (T::IsDiff && T::Depth == 1) {

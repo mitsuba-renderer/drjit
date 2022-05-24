@@ -1,5 +1,6 @@
 #include "python.h"
 #include <nanobind/stl/vector.h>
+#include <string>
 
 nb::object full_alt(nb::type_object dtype, nb::handle value, size_t size);
 nb::object empty_alt(nb::type_object dtype, size_t size);
@@ -838,21 +839,13 @@ void set_label(nb::handle h, nb::handle label) {
                     nb::object v = nb::steal(sm->sq_item(h.ptr(), i));
                     if (!v.is_valid())
                         nb::detail::raise_python_error();
-                    char ii[2];
-                    sprintf(ii, "%zu", i);
-                    set_label(v, label_str + nb::str("_") + nb::str(ii));
+                    set_label(v, label_str + nb::str("_") + nb::str(std::to_string(i).c_str()));
                 }
             }
         }
     } else if (nb::isinstance<nb::list>(h) || nb::isinstance<nb::tuple>(h)) {
-        for (size_t i = 0, l = nb::len(h); i < l; i++) {
-            char ii[2];
-            sprintf(ii, "%zd", i);
-            set_label(h[i], label_str + nb::str("_") + nb::str(ii));
-        }
-    } else if (nb::isinstance<nb::dict>(h)) {
-        for (auto [k, v] : nb::borrow<nb::dict>(h))
-            set_label(v, label_str + nb::str("_") + k);
+        for (size_t i = 0, l = nb::len(h); i < l; i++)
+            set_label(h[i], label_str + nb::str("_") + nb::str(std::to_string(i).c_str()));
     } else {
         nb::object dstruct = nb::getattr(h.type(), "DRJIT_STRUCT", nb::handle());
         if (dstruct.is_valid() && nb::isinstance<nb::dict>(dstruct)) {

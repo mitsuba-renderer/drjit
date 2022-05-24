@@ -323,7 +323,7 @@ def test06_set_label(m):
 
     with pytest.raises(TypeError) as ei:
         dr.set_label(a, 'aa', b=b)
-    assert "invalid input arguments" in str(ei.value)
+    assert "incompatible function arguments" in str(ei.value)
 
 
 def test07_forward_to(m):
@@ -556,6 +556,84 @@ def test_ad_06_div(m):
     assert dr.allclose(dr.grad(a),  1.0 / 3.0)
     assert dr.allclose(dr.grad(b), -2.0 / 9.0)
 
+def test07_sum_0_bwd(m):
+    x = dr.linspace(m.Float, 0, 1, 10)
+    dr.enable_grad(x)
+    y = dr.sum(x*x)
+    dr.backward(y)
+    assert len(y) == 1 and dr.allclose(y, 95.0/27.0)
+    assert dr.allclose(dr.grad(x), 2 * dr.detach(x))
+
+
+def test08_sum_0_fwd(m):
+    x = dr.linspace(m.Float, 0, 1, 10)
+    dr.enable_grad(x)
+    y = dr.sum(x*x)
+    dr.forward(x)
+    assert len(y) == 1 and dr.allclose(dr.detach(y), 95.0/27.0)
+    assert len(dr.grad(y)) == 1 and dr.allclose(dr.grad(y), 10)
+
+
+def test09_sum_1_bwd(m):
+    x = dr.linspace(m.Float, 0, 1, 11)
+    dr.enable_grad(x)
+    y = dr.sum(dr.sum(x)*x)
+    dr.backward(y)
+    assert dr.allclose(dr.grad(x), 11)
+
+
+def test10_sum_1_fwd(m):
+    x = dr.linspace(m.Float, 0, 1, 10)
+    dr.enable_grad(x)
+    y = dr.sum(dr.sum(x)*x)
+    dr.forward(x)
+    assert dr.allclose(dr.grad(y), 100)
+
+
+def test11_sum_2_bwd(m):
+    x = dr.linspace(m.Float, 0, 1, 11)
+    dr.enable_grad(x)
+    z = dr.sum(dr.sum(x*x)*x*x)
+    dr.backward(z)
+    assert dr.allclose(dr.grad(x),
+                       [0., 1.54, 3.08, 4.62, 6.16, 7.7,
+                        9.24, 10.78, 12.32, 13.86, 15.4])
+
+
+def test12_sum_2_fwd(m):
+    x = dr.linspace(m.Float, 0, 1, 10)
+    dr.enable_grad(x)
+    y = dr.sum(dr.sum(x*x)*dr.sum(x*x))
+    dr.forward(x)
+    assert dr.allclose(dr.grad(y), 1900.0 / 27.0)
+
+
+def test13_prod(m):
+    x = m.Float(1, 2, 5, 8)
+    dr.enable_grad(x)
+    y = dr.prod(x)
+    dr.backward(y)
+    assert len(y) == 1 and dr.allclose(y[0], 80)
+    assert dr.allclose(dr.grad(x), [80, 40, 16, 10])
+
+
+def test14_max_bwd(m):
+    x = m.Float(1, 2, 8, 5, 8)
+    dr.enable_grad(x)
+    y = dr.max(x)
+    dr.backward(y)
+    assert len(y) == 1 and dr.allclose(y[0], 8)
+    assert dr.allclose(dr.grad(x), [0, 0, 1, 0, 1])
+
+
+def test15_max_fwd(m):
+    x = m.Float(1, 2, 8, 5, 8)
+    dr.enable_grad(x)
+    y = dr.max(x)
+    dr.forward(x)
+    assert len(y) == 1 and dr.allclose(y[0], 8)
+    assert dr.allclose(dr.grad(y), [2])  # Approximation
+
 
 def test_ad_16_sqrt(m):
     x = m.Float(1, 4, 16)
@@ -612,7 +690,6 @@ def test_ad_29_log(m):
     assert dr.allclose(dr.grad(x), 2 / dr.detach(x))
 
 
-@pytest.mark.skip("TODO")
 def test_ad_30_pow(m):
     x = dr.linspace(m.Float, 1, 10, 10)
     y = dr.full(m.Float, 2.0, 10)
@@ -625,34 +702,6 @@ def test_ad_30_pow(m):
                                64.5033, 95.3496, 133.084, 177.975, 230.259))
 
 
-@pytest.mark.skip("TODO")
-def test_ad_31_csc(m):
-    x = dr.linspace(m.Float, 1, 2, 10)
-    dr.enable_grad(x)
-    y = dr.csc(x * x)
-    dr.backward(y)
-    csc_x = dr.csc(dr.sqr(dr.detach(x)))
-    assert dr.allclose(y, csc_x)
-    assert dr.allclose(dr.grad(x),
-                       m.Float(-1.52612, -0.822733, -0.189079, 0.572183,
-                               1.88201, 5.34839, 24.6017, 9951.86, 20.1158,
-                               4.56495), rtol=5e-5)
-
-
-@pytest.mark.skip("TODO")
-def test_ad_32_sec(m):
-    x = dr.linspace(m.Float, 1, 2, 10)
-    dr.enable_grad(x)
-    y = dr.sec(x * x)
-    dr.backward(y)
-    sec_x = dr.sec(dr.sqr(dr.detach(x)))
-    assert dr.allclose(y, sec_x)
-    assert dr.allclose(dr.grad(x),
-                       m.Float(5.76495, 19.2717, 412.208, 61.794, 10.3374,
-                               3.64885, 1.35811,  -0.0672242, -1.88437,
-                               -7.08534))
-
-
 def test_ad_33_tan(m):
     x = dr.linspace(m.Float, 0, 1, 10)
     dr.enable_grad(x)
@@ -663,20 +712,6 @@ def test_ad_33_tan(m):
     assert dr.allclose(dr.grad(x),
                        m.Float(0., 0.222256, 0.44553, 0.674965, 0.924494,
                                1.22406, 1.63572, 2.29919, 3.58948, 6.85104))
-
-
-@pytest.mark.skip("TODO")
-def test_ad_34_cot(m):
-    x = dr.linspace(m.Float, 1, 2, 10)
-    dr.enable_grad(x)
-    y = dr.cot(x * x)
-    dr.backward(y)
-    cot_x = dr.cot(dr.sqr(dr.detach(x)))
-    assert dr.allclose(y, cot_x)
-    assert dr.allclose(dr.grad(x),
-                       m.Float(-2.82457, -2.49367, -2.45898, -2.78425,
-                               -3.81687, -7.12557, -26.3248, -9953.63,
-                               -22.0932, -6.98385), rtol=5e-5)
 
 
 def test_ad_35_asin(m):
@@ -841,3 +876,131 @@ def test_ad_45_atanh(m):
         m.Float(50.2513, 2.4564, 1.43369, 1.12221, 1.01225, 1.01225, 1.12221,
                 1.43369, 2.4564, 50.2513)
     )
+
+# ------------------------------------------------------------------------------
+
+class Normalize(dr.CustomOp):
+    def eval(self, value):
+        print('eval in')
+        self.value = value
+        self.inv_norm = dr.rcp(dr.norm(value))
+        # print('eval out')
+        return value * self.inv_norm
+        # return value
+
+    def forward(self):
+        print('forward!')
+        grad_in = self.grad_in('value')
+        grad_out = grad_in * self.inv_norm
+        grad_out -= self.value * (dr.dot(self.value, grad_out) * dr.sqr(self.inv_norm))
+        self.set_grad_out(grad_out)
+
+    def backward(self):
+        print('backward!')
+        grad_out = self.grad_out()
+        grad_in = grad_out * self.inv_norm
+        grad_in -= self.value * (dr.dot(self.value, grad_in) * dr.sqr(self.inv_norm))
+        self.set_grad_in('value', grad_in)
+
+    def name(self):
+        return "normalize"
+
+
+def test48_custom_backward(m):
+    d = m.Array3f(1, 2, 3)
+    dr.enable_grad(d)
+    d2 = dr.custom(Normalize, d)
+    dr.set_grad(d2, m.Array3f(5, 6, 7))
+    dr.enqueue(dr.ADMode.Backward, d2)
+    dr.traverse(m.Float, dr.ADMode.Backward)
+    assert dr.allclose(dr.grad(d), m.Array3f(0.610883, 0.152721, -0.305441))
+
+
+def test49_custom_forward(m):
+    d = m.Array3f(1, 2, 3)
+    dr.enable_grad(d)
+    d2 = dr.custom(Normalize, d)
+    dr.set_grad(d, m.Array3f(5, 6, 7))
+    dr.enqueue(dr.ADMode.Forward, d)
+    dr.traverse(m.Float, dr.ADMode.Forward, flags=dr.ADFlag.ClearVertices)
+    assert dr.allclose(dr.grad(d), 0)
+    dr.set_grad(d, m.Array3f(5, 6, 7))
+    assert dr.allclose(dr.grad(d2), m.Array3f(0.610883, 0.152721, -0.305441))
+    dr.enqueue(dr.ADMode.Forward, d)
+    dr.traverse(m.Float, dr.ADMode.Forward)
+    assert dr.allclose(dr.grad(d2), m.Array3f(0.610883, 0.152721, -0.305441)*2)
+
+
+def test50_custom_forward_external_dependency(m):
+    class BuggyOp(dr.CustomOp):
+        def eval(self, value):
+            self.add_input(param)
+            self.value = value
+            return value * dr.detach(param)
+
+        def forward(self):
+            grad_in = self.grad_in('value')
+
+            value = param * 4.0
+
+            dr.enqueue(dr.ADMode.Forward, param)
+            dr.traverse(m.Float, dr.ADMode.Forward, dr.ADFlag.ClearEdges)
+
+            self.set_grad_out(dr.grad(value))
+
+        def backward(self):
+            pass
+
+        def name(self):
+            return "buggy-op"
+
+    theta = m.Float(2)
+    dr.enable_grad(theta)
+
+    param = theta * 3.0
+
+    dr.set_grad(theta, 1.0)
+    dr.enqueue(dr.ADMode.Forward, theta)
+    dr.traverse(m.Float, dr.ADMode.Forward, dr.ADFlag.ClearEdges)
+
+    v3 = dr.custom(BuggyOp, 123)
+
+    dr.enqueue(dr.ADMode.Forward, param)
+    dr.traverse(m.Float, dr.ADMode.Forward, dr.ADFlag.ClearEdges)
+
+    assert dr.allclose(dr.grad(v3), 12)
+
+
+def test60_implicit_dep_customop(m):
+    v0 = m.Float(2)
+    dr.enable_grad(v0)
+    v1 = v0 * 3
+
+    class ImplicitDep(dr.CustomOp):
+        def eval(self, value):
+            self.add_input(v1)
+            self.value = value
+            return value * dr.detach(v1)
+
+        def forward(self):
+            grad_in = self.grad_in('value')
+            self.set_grad_out(grad_in * dr.detach(v1) + self.value * dr.grad(v1))
+
+        def backward(self):
+            grad_out = self.grad_out()
+            self.set_grad_in('value', grad_out * dr.detach(v1))
+            dr.accum_grad(v1, grad_out * self.value)
+
+        def name(self):
+            return "implicit-dep"
+
+    v3 = dr.custom(ImplicitDep, 123)
+    assert v3[0] == 123*6
+
+    dr.forward(v0, flags=dr.ADFlag.ClearVertices)
+    assert dr.grad(v3) == 123*3
+
+    v3 = dr.custom(ImplicitDep, 123)
+    assert v3[0] == 123*6
+    dr.backward(v3)
+    assert dr.grad(v0) == 123*3

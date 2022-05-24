@@ -2383,6 +2383,14 @@ Returns:
     object: the graphviz obj (or its string representation).
 )";
 
+static const char *doc_ad_scope_enter =R"(
+TODO
+)";
+
+static const char *doc_ad_scope_leave =R"(
+TODO
+)";
+
 static const char *doc_label =R"(
 Returns the label of a given Dr.Jit array.
 

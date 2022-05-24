@@ -10,6 +10,7 @@
 
 #include "python.h"
 #include <nanobind/operators.h>
+#include <nanobind/trampoline.h>
 #include <drjit/jit.h>
 
 static nb::object detach(nb::handle h, bool preserve_type=true) {
@@ -250,9 +251,8 @@ static nb::object grad(nb::handle h, bool preserve_type=true) {
         }
         nb::object result = h.type()();
         nb::dict dstruct_dict = nb::borrow<nb::dict>(dstruct);
-        for (auto [k, v] : dstruct_dict) {
+        for (auto [k, v] : dstruct_dict)
             nb::setattr(result, k, grad(nb::getattr(h, k), preserve_type));
-        }
         return result;
     }
 
@@ -278,7 +278,7 @@ static void grad_setter(nb::handle h, nb::handle value, T op) {
                     nb::type_supplement<supp>(value.type()).meta.ndim > 1;
 
                 for (Py_ssize_t i = 0, l = sm->sq_length(h.ptr()); i < l; ++i) {
-                    nb::object v  = nb::steal(sm->sq_item(h.ptr(), i));
+                    nb::object v = nb::steal(sm->sq_item(h.ptr(), i));
                     if (!v.is_valid())
                         nb::detail::raise_python_error();
 
@@ -611,6 +611,591 @@ static nb::object graphviz_ad(bool as_str = false) {
     }
 }
 
+// -----------------------------------------------------------------------------
+
+// Extract indices of differentiable variables, returns
+// the type of the underlying differentiable array
+nb::handle diff_vars(nb::handle h, std::vector<uint32_t> &indices) {
+    nb::handle result = nb::none();
+    if (is_drjit_array(h)) {
+        const supp &s = nb::type_supplement<supp>(h.type());
+        if (s.meta.is_diff && is_float_v(h.type())) {
+            if (s.meta.ndim == 1) {
+                if (s.op_grad_enabled(nb::inst_ptr<void>(h))) {
+                    indices.push_back(s.op_index_ad(nb::inst_ptr<void>(h)));
+                    result = h.type();
+                }
+            } else {
+                PySequenceMethods *sm = ((PyTypeObject *) h.type().ptr())->tp_as_sequence;
+                for (Py_ssize_t i = 0, l = sm->sq_length(h.ptr()); i < l; ++i) {
+                    nb::object v = nb::steal(sm->sq_item(h.ptr(), i));
+                    if (!v.is_valid())
+                        nb::detail::raise_python_error();
+                    nb::handle result2 = diff_vars(v, indices);
+                    if (!result2.is_none())
+                        result = result2;
+                }
+            }
+        }
+    } else if (nb::isinstance<nb::sequence>(h)) {
+        for (nb::handle h2 : h) {
+            nb::handle result2 = diff_vars(h2, indices);
+            if (!result2.is_none())
+                result = result2;
+        }
+    } else if (nb::isinstance<nb::mapping>(h)) {
+        nb::handle result2 = diff_vars(nb::borrow<nb::mapping>(h).values(), indices);
+        if (!result2.is_none())
+            result = result2;
+    } else {
+        nb::object dstruct = nb::getattr(h.type(), "DRJIT_STRUCT", nb::handle());
+        if (dstruct.is_valid() && nb::isinstance<nb::dict>(dstruct)) {
+            nb::dict dstruct_dict = nb::borrow<nb::dict>(dstruct);
+            for (auto [k, v] : dstruct_dict) {
+                nb::handle result2 = diff_vars(nb::getattr(h, k), indices);
+                if (!result2.is_none())
+                    result = result2;
+            }
+        }
+    }
+    return result;
+}
+
+nb::handle diff_vars(nb::args args, std::vector<uint32_t> indices) {
+    nb::handle result = nb::none();
+    for (nb::handle h : args) {
+        nb::handle result2 = diff_vars(h, indices);
+        if (!result2.is_none())
+            result = result2;
+    }
+    return result;
+}
+
+// Helper function to clear (in-place) the AD part of a Dr.Jit array, sequence, struct, ...
+void clear_ad(nb::handle h) {
+    if (is_drjit_array(h)) {
+        const supp &s = nb::type_supplement<supp>(h.type());
+        if (s.meta.is_diff && is_float_v(h.type())) {
+            if (s.meta.ndim == 1) {
+                s.op_set_index_ad(nb::inst_ptr<void>(h), 0);
+            } else {
+                PySequenceMethods *sm = ((PyTypeObject *) h.type().ptr())->tp_as_sequence;
+                for (Py_ssize_t i = 0, l = sm->sq_length(h.ptr()); i < l; ++i) {
+                    nb::object v = nb::steal(sm->sq_item(h.ptr(), i));
+                    if (!v.is_valid())
+                        nb::detail::raise_python_error();
+                    clear_ad(v);
+                }
+            }
+        }
+    } else if (nb::isinstance<nb::sequence>(h)) {
+        for (nb::handle h2 : h)
+            clear_ad(h2);
+    } else if (nb::isinstance<nb::mapping>(h)) {
+        clear_ad(nb::borrow<nb::mapping>(h).values());
+    } else {
+        nb::object dstruct = nb::getattr(h.type(), "DRJIT_STRUCT", nb::handle());
+        if (dstruct.is_valid() && nb::isinstance<nb::dict>(dstruct)) {
+            nb::dict dstruct_dict = nb::borrow<nb::dict>(dstruct);
+            for (auto [k, v] : dstruct_dict)
+                clear_ad(nb::getattr(h, k));
+        }
+    }
+}
+
+// Helper function to clear primal part of a Dr.Jit array, sequence, struct, ...
+// and return it.
+nb::object clear_primal(nb::handle h, bool dec_ref) {
+    if (is_drjit_array(h)) {
+        const supp &s = nb::type_supplement<supp>(h.type());
+        if (s.meta.is_diff && is_float_v(h.type())) {
+            if (s.meta.ndim == 1) {
+                nb::object result = nb::inst_alloc(h.type());
+                nb::object zero = full(nb::borrow<nb::type_object>(h.type()),
+                                       PyFloat_FromDouble(0.0), {1});
+                s.op_ad_create(nb::inst_ptr<void>(zero),
+                               s.op_index_ad(nb::inst_ptr<void>(h)),
+                               nb::inst_ptr<void>(result),
+                               false);
+
+                if (dec_ref)
+                    s.op_ad_dec_ref(nb::inst_ptr<void>(result));
+
+                nb::inst_mark_ready(result);
+                return result;
+            } else {
+                nb::object result = nb::inst_alloc(h.type());
+                nb::inst_zero(result);
+
+                PySequenceMethods *sm = ((PyTypeObject *) h.type().ptr())->tp_as_sequence;
+                if (s.meta.shape[0] == DRJIT_DYNAMIC)
+                    s.init(nb::inst_ptr<void>(result), sm->sq_length(h.ptr()));
+
+                for (Py_ssize_t i = 0, l = sm->sq_length(h.ptr()); i < l; ++i) {
+                    nb::object v = nb::steal(sm->sq_item(h.ptr(), i));
+                    if (!v.is_valid()) {
+                        result.clear();
+                        break;
+                    }
+
+                    nb::object vr = clear_primal(v, dec_ref);
+                    if (!vr.is_valid() || sm->sq_ass_item(result.ptr(), i, vr.ptr())) {
+                        result.clear();
+                        break;
+                    }
+                }
+                return result;
+            }
+        }
+    } else if (nb::isinstance<nb::sequence>(h)) {
+        nb::list result;
+        for (nb::handle h2 : h)
+            result.append(clear_primal(h2, dec_ref));
+        return std::move(result);
+    } else if (nb::isinstance<nb::mapping>(h)) {
+        nb::object result = h.type()();
+        for (nb::handle p : nb::borrow<nb::mapping>(h).items()) {
+            nb::handle k = p[0], v = p[1];
+            result[k] = clear_primal(v, dec_ref);
+        }
+        return result;
+    } else {
+        nb::object dstruct = nb::getattr(h.type(), "DRJIT_STRUCT", nb::handle());
+        if (dstruct.is_valid() && nb::isinstance<nb::dict>(dstruct)) {
+            nb::object result = h.type()();
+            nb::dict dstruct_dict = nb::borrow<nb::dict>(dstruct);
+            for (auto [k, v] : dstruct_dict)
+                nb::setattr(result, k, clear_primal(nb::getattr(h, k), dec_ref));
+            return result;
+        }
+    }
+
+    return nb::borrow(h);
+}
+
+// Helper function to convert all input instances into their differentiable version
+nb::object diff_array(nb::handle h) {
+    if (is_drjit_array(h)) {
+        const supp &s = nb::type_supplement<supp>(h.type());
+        if (s.meta.is_diff) {
+            return nb::borrow(h);
+        } else {
+            meta result_meta = s.meta;
+            result_meta.is_diff = true;
+            nb::object result = nb::inst_alloc(drjit::detail::array_get(result_meta));
+
+            if (s.meta.ndim == 1) {
+                s.op_ad_create(nb::inst_ptr<void>(h), 0, nb::inst_ptr<void>(result), true);
+                nb::inst_mark_ready(result);
+                return result;
+            } else {
+                nb::inst_zero(result);
+
+                PySequenceMethods *sm = ((PyTypeObject *) h.type().ptr())->tp_as_sequence;
+                PySequenceMethods *sm2 = ((PyTypeObject *) result.type().ptr())->tp_as_sequence;
+
+                if (s.meta.shape[0] == DRJIT_DYNAMIC)
+                    s.init(nb::inst_ptr<void>(result), sm->sq_length(h.ptr()));
+
+                for (Py_ssize_t i = 0, l = sm->sq_length(h.ptr()); i < l; ++i) {
+                    nb::object v = nb::steal(sm->sq_item(h.ptr(), i));
+                    if (!v.is_valid()) {
+                        result.clear();
+                        break;
+                    }
+
+                    nb::object vr = diff_array(v);
+                    if (!vr.is_valid() || sm2->sq_ass_item(result.ptr(), i, vr.ptr())) {
+                        result.clear();
+                        break;
+                    }
+                }
+                return result;
+            }
+        }
+    } else if (nb::isinstance<nb::sequence>(h)) {
+        nb::list result;
+        for (nb::handle h2 : h)
+            result.append(diff_array(h2));
+        return std::move(result);
+    } else if (nb::isinstance<nb::mapping>(h)) {
+        nb::object result = h.type()();
+        for (nb::handle p : nb::borrow<nb::mapping>(h).items()) {
+            nb::handle k = p[0], v = p[1];
+            result[k] = diff_array(v);
+        }
+        return result;
+    }
+
+    return nb::borrow(h);
+}
+
+void ad_scope_enter(nb::handle tp, drjit::detail::ADScope scope_type,
+                    const std::vector<uint32_t> &indices) {
+    if (tp.is_none()) {
+#if defined(DRJIT_ENABLE_CUDA)
+        drjit::detail::ad_scope_enter<drjit::CUDAArray<float>>(scope_type,  indices.size(), indices.data());
+        drjit::detail::ad_scope_enter<drjit::CUDAArray<double>>(scope_type, indices.size(), indices.data());
+#endif
+        drjit::detail::ad_scope_enter<drjit::LLVMArray<float>>(scope_type,  indices.size(), indices.data());
+        drjit::detail::ad_scope_enter<drjit::LLVMArray<double>>(scope_type, indices.size(), indices.data());
+        return;
+    }
+
+    if (!is_drjit_type(tp)) {
+        PyErr_Format(PyExc_TypeError,
+                     "ad_scope_enter(): expected a Dr.JIT array type!");
+        nb::detail::raise_python_error();
+    }
+
+    const supp &s = nb::type_supplement<supp>(tp);
+
+    if (!s.meta.is_diff) {
+        PyErr_Format(PyExc_TypeError,
+                     "ad_scope_enter(): expected a differentiable Dr.JIT array type!");
+        nb::detail::raise_python_error();
+    }
+
+    if (s.meta.is_cuda) {
+        if ((VarType) s.meta.type == VarType::Float32) {
+            drjit::detail::ad_scope_enter<drjit::CUDAArray<float>>(scope_type, indices.size(), indices.data());
+        } else if ((VarType) s.meta.type == VarType::Float64) {
+            drjit::detail::ad_scope_enter<drjit::CUDAArray<double>>(scope_type, indices.size(), indices.data());
+        } else  {
+            PyErr_Format(PyExc_TypeError,
+                         "ad_scope_enter(): expected a floating point Dr.JIT array type!");
+            nb::detail::raise_python_error();
+        }
+    } else if (s.meta.is_llvm) {
+        if ((VarType) s.meta.type == VarType::Float32) {
+            drjit::detail::ad_scope_enter<drjit::LLVMArray<float>>(scope_type, indices.size(), indices.data());
+        } else if ((VarType) s.meta.type == VarType::Float64) {
+            drjit::detail::ad_scope_enter<drjit::LLVMArray<double>>(scope_type, indices.size(), indices.data());
+        } else  {
+            PyErr_Format(PyExc_TypeError,
+                         "ad_scope_enter(): expected a floating point Dr.JIT array type!");
+            nb::detail::raise_python_error();
+        }
+    }
+}
+
+void ad_scope_leave(nb::handle tp, bool process_postoned) {
+    if (tp.is_none()) {
+#if defined(DRJIT_ENABLE_CUDA)
+        drjit::detail::ad_scope_leave<drjit::CUDAArray<float>>(process_postoned);
+        drjit::detail::ad_scope_leave<drjit::CUDAArray<double>>(process_postoned);
+#endif
+        drjit::detail::ad_scope_leave<drjit::LLVMArray<float>>(process_postoned);
+        drjit::detail::ad_scope_leave<drjit::LLVMArray<double>>(process_postoned);
+        return;
+    }
+
+    if (!is_drjit_type(tp)) {
+        PyErr_Format(PyExc_TypeError,
+                     "ad_scope_leave(): expected a Dr.JIT array type!");
+        nb::detail::raise_python_error();
+    }
+
+    const supp &s = nb::type_supplement<supp>(tp);
+
+    if (!s.meta.is_diff) {
+        PyErr_Format(PyExc_TypeError,
+                     "ad_scope_leave(): expected a differentiable Dr.JIT array type!");
+        nb::detail::raise_python_error();
+    }
+
+    if (s.meta.is_cuda) {
+        if ((VarType) s.meta.type == VarType::Float32) {
+            drjit::detail::ad_scope_leave<drjit::CUDAArray<float>>(process_postoned);
+        } else if ((VarType) s.meta.type == VarType::Float64) {
+            drjit::detail::ad_scope_leave<drjit::CUDAArray<double>>(process_postoned);
+        } else  {
+            PyErr_Format(PyExc_TypeError,
+                         "ad_scope_leave(): expected a floating point Dr.JIT array type!");
+            nb::detail::raise_python_error();
+        }
+    } else if (s.meta.is_llvm) {
+        if ((VarType) s.meta.type == VarType::Float32) {
+            drjit::detail::ad_scope_leave<drjit::LLVMArray<float>>(process_postoned);
+        } else if ((VarType) s.meta.type == VarType::Float64) {
+            drjit::detail::ad_scope_leave<drjit::LLVMArray<double>>(process_postoned);
+        } else  {
+            PyErr_Format(PyExc_TypeError,
+                         "ad_scope_leave(): expected a floating point Dr.JIT array type!");
+            nb::detail::raise_python_error();
+        }
+    }
+}
+
+class ADContextManager {
+    drjit::detail::ADScope m_scope_type;
+    nb::handle m_array_type;
+    std::vector<uint32_t> m_indices;
+public:
+    ADContextManager() {
+        m_scope_type = drjit::detail::ADScope::Invalid;
+    }
+
+    ADContextManager(drjit::detail::ADScope scope_type, nb::handle array_type, const std::vector<uint32_t> &indices) {
+        m_scope_type = scope_type;
+        m_array_type = array_type;
+        m_indices = indices;
+    }
+
+    void __enter__() {
+        if (m_scope_type != drjit::detail::ADScope::Invalid)
+            ad_scope_enter(m_array_type, m_scope_type, m_indices);
+    }
+
+    void __exit__(nb::handle exc_type, nb::handle /*exc_val*/, nb::handle /*exc_tb*/) {
+        if (m_scope_type != drjit::detail::ADScope::Invalid)
+            ad_scope_leave(m_array_type, exc_type.is_none());
+    }
+};
+
+bool __check_when_kwargs(const char *name, nb::kwargs kwargs) {
+    bool when = true;
+    if (nb::len(kwargs) > 1) {
+        PyErr_Format(PyExc_TypeError,
+                    "%s(): only boolean 'when' should be passed via keyword argument!", name);
+        nb::detail::raise_python_error();
+    }
+
+    if (nb::len(kwargs) == 1) {
+        try {
+            when = nb::cast<bool>(kwargs["when"]);
+        } catch (...) {
+            PyErr_Format(PyExc_TypeError,
+                            "%s(): only boolean 'when' should be passed via keyword argument!", name);
+            nb::detail::raise_python_error();
+        }
+    }
+    return when;
+}
+
+ADContextManager suspend_grad(nb::args args, nb::kwargs kwargs) {
+    bool when = __check_when_kwargs("suspend_grad", kwargs);
+    if (!when)
+        return ADContextManager();
+
+    std::vector<uint32_t> indices;
+    nb::handle array_type = diff_vars(args, indices);
+    if (nb::len(args) > 0 && indices.empty())
+        indices = { 0 };
+
+    return ADContextManager(drjit::detail::ADScope::Suspend, array_type, indices);
+}
+
+ADContextManager resume_grad(nb::args args, nb::kwargs kwargs) {
+    bool when = __check_when_kwargs("resume_grad", kwargs);
+    if (!when)
+        return ADContextManager();
+
+    std::vector<uint32_t> indices;
+    nb::handle array_type = diff_vars(args, indices);
+    if (nb::len(args) > 0 && indices.empty())
+        indices = { 0 };
+
+    return ADContextManager(drjit::detail::ADScope::Resume, array_type, indices);
+}
+
+ADContextManager isolate_grad(bool when) {
+    if (!when)
+        return ADContextManager();
+
+    return ADContextManager(drjit::detail::ADScope::Isolate, nb::none(), {});
+}
+
+// -----------------------------------------------------------------------------
+
+struct CustomOp {
+    friend nb::object custom(nb::handle cls, nb::args args, nb::kwargs kwargs);
+
+public:
+    CustomOp() { }
+    virtual ~CustomOp() {
+        if (m_output.is_valid())
+            clear_ad(m_output);
+    }
+
+    virtual nb::object eval(nb::handle /*inputs*/) {
+        PyErr_Format(PyExc_RuntimeError, "CustomOp.eval(): not implemented!");
+        return nb::object();
+    };
+    virtual void forward() {
+        PyErr_Format(PyExc_RuntimeError, "CustomOp.forward(): not implemented!!");
+        nb::detail::raise_python_error();
+    };
+    virtual void backward() {
+        PyErr_Format(PyExc_RuntimeError, "CustomOp.backward(): not implemented!");
+        nb::detail::raise_python_error();
+    };
+    virtual const char *name() const { return "CustomOp[unnamed]"; };
+
+    nb::object grad_out() {
+        return ::grad(m_output);
+    }
+
+    void set_grad_out(nb::handle value) {
+        ::accum_grad(m_output, value);
+    }
+
+    nb::object grad_in(nb::str name) const {
+        nb::handle input;
+        try {
+            input = m_inputs[name];
+        } catch (...) {
+            PyErr_Format(PyExc_RuntimeError,
+                         "CustomOp.grad_in(): Could not find "
+                         "input argument named \"%s\"!", name.c_str());
+            return nb::object();
+        }
+        return ::grad(input);
+    }
+
+    void set_grad_in(nb::str name, nb::handle value) {
+        nb::handle input;
+        try {
+            input = m_inputs[name];
+        } catch (...) {
+            PyErr_Format(PyExc_RuntimeError,
+                         "CustomOp.set_grad_in(): Could not find "
+                         "input argument named \"%s\"!", name.c_str());
+            nb::detail::raise_python_error();
+        }
+        ::accum_grad(input, value);
+    }
+
+    void add_input(nb::handle value) {
+        m_implicit_in.append(value);
+    }
+
+    void add_output(nb::handle value) {
+        m_implicit_out.append(value);
+    }
+
+protected:
+    nb::list m_implicit_in;
+    nb::list m_implicit_out;
+    nb::dict m_inputs;
+    nb::object m_output;
+};
+
+class PyCustomOp : public CustomOp {
+    NB_TRAMPOLINE(CustomOp, 4);
+    virtual nb::object eval(nb::handle inputs) override {
+        NB_OVERRIDE(nb::object, CustomOp, eval, inputs);
+    };
+    virtual void forward() override {
+        NB_OVERRIDE(void, CustomOp, forward);
+    };
+    virtual void backward() override {
+        NB_OVERRIDE(void, CustomOp, backward);
+    };
+    virtual const char *name() const override {
+        NB_OVERRIDE(const char *, CustomOp, name);
+    };
+};
+
+struct CppCustomOp : drjit::detail::DiffCallback {
+    CppCustomOp(nb::handle handle) : m_handle(handle) {
+        m_handle.inc_ref();
+    }
+
+    virtual void forward() override {
+        nb::gil_scoped_acquire gsa;
+        m_handle.attr("forward")();
+    }
+
+    virtual void backward() override {
+        nb::gil_scoped_acquire gsa;
+        m_handle.attr("backward")();
+    }
+
+    ~CppCustomOp() {
+        nb::gil_scoped_acquire gsa;
+        m_handle.dec_ref();
+    }
+
+    nb::handle m_handle;
+};
+
+nb::object custom(nb::handle cls, nb::args args, nb::kwargs kwargs) {
+    nb::object inst = cls();
+    CustomOp *inst_ptr = nb::inst_ptr<CustomOp>(inst);
+
+    // Convert args to kwargs
+    auto varnames = inst.attr("eval").attr("__code__").attr("co_varnames");
+    for (Py_ssize_t i = 0, l = nb::len(args); i < l; i++)
+        kwargs[varnames[i+1]] = args[i];
+
+    // Detach all kwargs
+    nb::kwargs eval_kwargs;
+    for (auto [k, v] : kwargs)
+        eval_kwargs[k] = ::detach(v);
+
+    nb::object output = inst.attr("eval")(**eval_kwargs);
+
+    if (::grad_enabled(output)) {
+        PyErr_Format(PyExc_RuntimeError,
+                     "drjit.custom(): the return value of CustomOp.eval() "
+                     "should not be attached to the AD graph!");
+        nb::detail::raise_python_error();
+    }
+
+    std::vector<uint32_t> diff_vars_in;
+    ::diff_vars(kwargs, diff_vars_in);
+    ::diff_vars(inst_ptr->m_implicit_in, diff_vars_in);
+
+    if (!diff_vars_in.empty()) {
+        output = diff_array(output);
+        nb::handle type = leaf_array_t(output);
+        const supp &s = nb::type_supplement<supp>(type);
+
+        nb::object tmp_in = nb::inst_alloc(type);
+        nb::object tmp_out = nb::inst_alloc(type);
+        nb::inst_zero(tmp_in);
+        nb::inst_zero(tmp_out);
+
+        ::set_grad_enabled(tmp_in,  true);
+        ::set_grad_enabled(tmp_out, true);
+        ::set_grad_enabled(output,  true);
+
+        inst_ptr->m_inputs = nb::cast<nb::dict>(clear_primal(kwargs, false));
+        inst_ptr->m_output = clear_primal(output, true);
+
+        std::vector<uint32_t> diff_vars_out;
+        ::diff_vars(inst_ptr->m_output, diff_vars_out);
+        ::diff_vars(inst_ptr->m_implicit_out, diff_vars_out);
+
+        if (diff_vars_out.empty())
+            return output; // Not relevant for AD after all..
+
+        if (diff_vars_in.size() > 1) {
+            set_label(tmp_in, nb::str(inst_ptr->name()) + nb::str("_in"));
+            for (uint32_t index : diff_vars_in)
+                s.op_ad_add_edge(index, s.op_index_ad(nb::inst_ptr<void>(tmp_in)), nullptr);
+        }
+
+        if (diff_vars_out.size() > 1) {
+            set_label(tmp_out, nb::str(inst_ptr->name()) + nb::str("_out"));
+            for (uint32_t index : diff_vars_out)
+                s.op_ad_add_edge(s.op_index_ad(nb::inst_ptr<void>(tmp_out)), index, nullptr);
+        }
+
+        s.op_ad_add_edge(
+            diff_vars_in.size() == 1  ? diff_vars_in[0]  : s.op_index_ad(nb::inst_ptr<void>(tmp_in)),
+            diff_vars_out.size() == 1 ? diff_vars_out[0] : s.op_index_ad(nb::inst_ptr<void>(tmp_out)),
+            new CppCustomOp(inst)
+        );
+
+        inst_ptr->m_implicit_in = {};
+        inst_ptr->m_implicit_out = {};
+    }
+
+    return output;
+}
+
 extern void bind_array_autodiff(nb::module_ m) {
     nb::enum_<dr::ADFlag>(m, "ADFlag", nb::is_arithmetic())
         .value("ClearNone", dr::ADFlag::ClearNone)
@@ -641,8 +1226,8 @@ extern void bind_array_autodiff(nb::module_ m) {
     m.def("disable_grad", &disable_grad, "args"_a, doc_disable_grad);
     m.def("grad_enabled", nb::overload_cast<nb::args>(grad_enabled), doc_grad_enabled);
     m.def("grad", &grad, "arg"_a, "preserve_type"_a=true, doc_grad);
-    m.def("set_grad",   &set_grad,   "dst"_a, "src"_a, doc_set_grad);
-    m.def("accum_grad", &accum_grad, "dst"_a, "src"_a, doc_accum_grad);
+    m.def("set_grad",     &set_grad,     "dst"_a, "src"_a, doc_set_grad);
+    m.def("accum_grad",   &accum_grad,   "dst"_a, "src"_a, doc_accum_grad);
     m.def("replace_grad", &replace_grad, "dst"_a, "src"_a, doc_replace_grad);
     m.def("enqueue", nb::overload_cast<drjit::ADMode, nb::args>(enqueue), "mode"_a, "args"_a, doc_enqueue);
     m.def("traverse", &traverse, "type"_a, "mode"_a, "flags"_a=drjit::ADFlag::Default, doc_traverse);
@@ -653,4 +1238,38 @@ extern void bind_array_autodiff(nb::module_ m) {
     m.def("backward_from", &backward_from, "args"_a, "flags"_a=drjit::ADFlag::Default, doc_backward_from);
     m.def("backward",      &backward_from, "args"_a, "flags"_a=drjit::ADFlag::Default, doc_backward);
     m.def("graphviz_ad", &graphviz_ad, "as_str"_a=false, doc_graphviz_ad);
+
+    // Enabling/disabling AD
+
+    nb::class_<ADContextManager>(m, "__ADContextManager")
+        .def("__enter__", &ADContextManager::__enter__)
+        .def("__exit__", &ADContextManager::__exit__);
+
+    m.def("ad_scope_enter", [](drjit::detail::ADScope scope_type, nb::args args) {
+        std::vector<uint32_t> indices;
+        nb::handle array_type = diff_vars(args, indices);
+        ad_scope_enter(array_type, scope_type, indices);
+    }, doc_ad_scope_enter);
+    m.def("ad_scope_leave", &ad_scope_leave, doc_ad_scope_leave);
+
+    m.def("suspend_grad", &suspend_grad); // TODO docstring
+    m.def("resume_grad",  &resume_grad); // TODO docstring
+    m.def("isolate_grad", &isolate_grad); // TODO docstring
+
+    // CustomOp
+
+    nb::class_<CustomOp, PyCustomOp>(m, "CustomOp") // TODO docstring
+        .def(nb::init<>())
+        .def("eval",     &CustomOp::eval)
+        .def("forward",  &CustomOp::forward)
+        .def("backward", &CustomOp::backward)
+        .def("name",     &CustomOp::name)
+        .def("grad_out",     &CustomOp::grad_out)
+        .def("set_grad_out", &CustomOp::set_grad_out)
+        .def("grad_in",      &CustomOp::grad_in)
+        .def("set_grad_in",  &CustomOp::set_grad_in)
+        .def("add_input",    &CustomOp::add_input)
+        .def("add_output",   &CustomOp::add_output);
+
+    m.def("custom", &custom); // TODO docstring
 }
