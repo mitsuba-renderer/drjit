@@ -106,4 +106,8 @@ NB_MODULE(drjit_ext, m_) {
         .value("LLVM", JitBackend::LLVM);
 
     m.def("has_backend", &jit_has_backend);
+
+    m.def("whos_str", &jit_var_whos);
+    m.def("whos", []() { nb::print(jit_var_whos()); });
+
 }
