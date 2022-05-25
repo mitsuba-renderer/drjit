@@ -20,10 +20,19 @@ del sys, os
 # Native extension defining low-level arrays
 import drjit.drjit_ext as drjit_ext  # noqa
 
+self = vars()
+
+# Install constants in global scope
+import drjit.const as const  # noqa
+for k, v in const.__dict__.items():
+    if k.startswith('_'):
+        continue
+    self[k] = v
+
+# ------------------------------------------------------------------------------
 
 def sqr(arg, /):
     return arg * arg
-
 
 def isnan(arg, /):
     """
@@ -171,3 +180,107 @@ def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
             if not allclose(ia, ib, rtol, atol, equal_nan):
                 return False
         return True
+
+
+def clip(value, min, max):
+    r'''
+    Clip the provided input to the given interval.
+
+    This function is equivalent to
+
+    .. code-block::
+
+        dr.maximum(dr.minimum(value, max), min)
+
+    Args:
+        value (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+        min (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+        max (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Clipped input
+    '''
+    return maximum(minimum(value, max), min)
+
+
+# -------------------------------------------------------------------
+#   "Safe" functions that avoid domain errors due to rounding
+# -------------------------------------------------------------------
+
+
+def safe_sqrt(a):
+    r'''
+    Safely evaluate the square root of the provided input avoiding domain errors.
+
+    Negative inputs produce a ``0.0`` output value.
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Square root of the input
+    '''
+    result = sqrt(maximum(a, 0))
+    if is_diff_v(a) and grad_enabled(a):
+        alt = sqrt(maximum(a, Epsilon(a)))
+        result = replace_grad(result, alt)
+    return result
+
+
+def safe_cbrt(a):
+    r'''
+    Safely evaluate the cube root of the provided input avoiding domain errors.
+
+    Negative inputs produce a ``0.0`` output value.
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Cubic root of the input
+    '''
+    result = cbrt(maximum(a, 0))
+    if is_diff_v(a) and grad_enabled(a):
+        alt = cbrt(maximum(a, Epsilon(a)))
+        result = replace_grad(result, alt)
+    return result
+
+
+def safe_asin(a):
+    r'''
+    Safely evaluate an arcsine approximation based on the CEPHES library avoiding
+    domain errors.
+
+    Input values are clipped to the :math:`[-1, 1]` domain.
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Arcsine approximation
+    '''
+    result = asin(clip(a, -1, 1))
+    if is_diff_v(a) and grad_enabled(a):
+        alt = asin(clip(a, -OneMinusEpsilon(a), OneMinusEpsilon(a)))
+        result = replace_grad(result, alt)
+    return result
+
+
+def safe_acos(a):
+    r'''
+    Safely evaluate an arccosine approximation based on the CEPHES library
+    avoiding domain errors.
+
+    Input values are clipped to the :math:`[-1, 1]` domain.
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Arccosine approximation
+    '''
+    result = acos(clip(a, -1, 1))
+    if is_diff_v(a) and grad_enabled(a):
+        alt = acos(clip(a, -OneMinusEpsilon(a), OneMinusEpsilon(a)))
+        result = replace_grad(result, alt)
+    return result

@@ -132,13 +132,16 @@ Standard mathematical functions
 .. autofunction:: abs
 .. autofunction:: min
 .. autofunction:: max
+.. autofunction:: clip
 .. autofunction:: fma
 .. autofunction:: ceil
 .. autofunction:: floor
 .. autofunction:: trunc
 .. autofunction:: round
 .. autofunction:: sqrt
+.. autofunction:: safe_sqrt
 .. autofunction:: cbrt
+.. autofunction:: safe_cbrt
 .. autofunction:: rcp
 .. autofunction:: rsqrt
 .. autofunction:: frexp
@@ -159,7 +162,9 @@ _______________________
 .. autofunction:: sincos
 .. autofunction:: tan
 .. autofunction:: asin
+.. autofunction:: safe_asin
 .. autofunction:: acos
+.. autofunction:: safe_acos
 .. autofunction:: atan
 .. autofunction:: atan2
 
