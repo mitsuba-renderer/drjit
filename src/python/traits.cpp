@@ -105,8 +105,8 @@ nb::handle leaf_array_t(nb::handle h) {
             }
         }
         return tp;
-    } else if (nb::isinstance<nb::mapping>(h)) {
-        return leaf_array_t(nb::borrow<nb::mapping>(h).values());
+    } else if (nb::isinstance<nb::dict>(h)) {
+        return leaf_array_t(nb::borrow<nb::dict>(h).values());
     } else {
         return leaf_array_t(h.type());
     }

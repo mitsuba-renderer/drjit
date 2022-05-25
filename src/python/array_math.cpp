@@ -404,27 +404,6 @@ static PyObject *nb_math_ternop(const char *name, size_t ops_offset,
     });
 
 static nb::object minimum(nb::handle h0, nb::handle h1) {
-    if (!is_drjit_array(h0) && !is_drjit_array(h1)) {
-        try {
-            double a = nb::cast<double>(h0);
-            double b = nb::cast<double>(h1);
-            return a > b ? nb::borrow(h1) : nb::borrow(h0);
-        } catch (...) {}
-
-        try {
-            nb::list a = nb::cast<nb::list>(h0);
-            nb::list b = nb::cast<nb::list>(h1);
-
-            nb::list result;
-            for (size_t i = 0, l = nb::len(a); i < l; i++)
-                result.append(minimum(h0[i], h1[i]));
-            return std::move(result);
-        } catch (...) {}
-
-        PyErr_Format(PyExc_TypeError, "minimum(): invalid arguments!");
-        return nb::object();
-    }
-
     nb::object o0, o1;
 
     // All arguments must be promoted to the same type first
@@ -444,27 +423,6 @@ static nb::object minimum(nb::handle h0, nb::handle h1) {
 }
 
 static nb::object maximum(nb::handle h0, nb::handle h1) {
-    if (!is_drjit_array(h0) && !is_drjit_array(h1)) {
-        try {
-            double a = nb::cast<double>(h0);
-            double b = nb::cast<double>(h1);
-            return a > b ? nb::borrow(h0) : nb::borrow(h1);
-        } catch (...) {}
-
-        try {
-            nb::list a = nb::cast<nb::list>(h0);
-            nb::list b = nb::cast<nb::list>(h1);
-
-            nb::list result;
-            for (size_t i = 0, l = nb::len(a); i < l; i++)
-                result.append(maximum(h0[i], h1[i]));
-            return std::move(result);
-        } catch (...) {}
-
-        PyErr_Format(PyExc_TypeError, "maximum(): invalid arguments!");
-        return nb::object();
-    }
-
     nb::object o0, o1;
 
     // All arguments must be promoted to the same type first
@@ -493,7 +451,7 @@ static nb::object sum(nb::handle h) {
         dr::detail::array_reduce op = s.op_sum;
         if (!op)
             throw nb::type_error(
-                "drjit.sum(): requires a Dr.Jit array or Python "
+                "drjit.sum(): requires an arithmetic Dr.Jit array or Python "
                 "sequence as input.");
 
         if ((uintptr_t) op != 1) {
@@ -504,9 +462,16 @@ static nb::object sum(nb::handle h) {
         }
     }
 
-    nb::object result = nb::borrow(PyFloat_FromDouble(0.0));
-    for (nb::handle h2 : h)
-        result = result + h2;
+    nb::object result;
+
+    size_t i = 0;
+    for (nb::handle h2 : h) {
+        if (i++ == 0)
+            result = borrow(h2);
+        else
+            result = result + h2;
+    }
+
     return result;
 }
 
@@ -520,7 +485,7 @@ static nb::object prod(nb::handle h) {
         dr::detail::array_reduce op = s.op_prod;
         if (!op)
             throw nb::type_error(
-                "drjit.prod(): requires a Dr.Jit array or Python "
+                "drjit.prod(): requires an arithmetic Dr.Jit array or Python "
                 "sequence as input.");
 
         if ((uintptr_t) op != 1) {
@@ -531,32 +496,20 @@ static nb::object prod(nb::handle h) {
         }
     }
 
-    nb::object result = nb::borrow(PyFloat_FromDouble(1.0));
-    for (nb::handle h2 : h)
-        result = result * h2;
+    nb::object result;
+
+    size_t i = 0;
+    for (nb::handle h2 : h) {
+        if (i++ == 0)
+            result = borrow(h2);
+        else
+            result = result * h2;
+    }
+
     return result;
 }
 
 static nb::object dot(nb::handle h0, nb::handle h1) {
-    if (!is_drjit_array(h0) && !is_drjit_array(h1)) {
-        try {
-            nb::list a = nb::cast<nb::list>(h0);
-            nb::list b = nb::cast<nb::list>(h1);
-
-            nb::object result;
-            for (size_t i = 0, l = nb::len(a); i < l; i++) {
-                if (i == 0)
-                    result = h0[i] * h1[i];
-                else
-                    result = result + h0[i] * h1[i];
-            }
-            return result;
-        } catch (...) {}
-
-        PyErr_Format(PyExc_TypeError, "dot(): invalid arguments!");
-        return nb::object();
-    }
-
     nb::object o0, o1;
 
     // All arguments must be promoted to the same type first
@@ -713,7 +666,7 @@ void bind_array_math(nb::module_ m) {
             dr::detail::array_reduce op = s.op_min;
             if (!op)
                 throw nb::type_error(
-                    "drjit.min(): requires a Dr.Jit array or Python "
+                    "drjit.min(): requires an arithmetic Dr.Jit array or Python "
                     "sequence as input.");
 
             if ((uintptr_t) op != 1) {
@@ -724,6 +677,8 @@ void bind_array_math(nb::module_ m) {
             }
         }
 
+        nb::object py_op = array_module.attr("minimum");
+
         nb::object result;
 
         size_t it = 0;
@@ -731,8 +686,9 @@ void bind_array_math(nb::module_ m) {
             if (it++ == 0)
                 result = borrow(h2);
             else
-                result = minimum(result, h2);
+                result = py_op(result, h2);
         }
+
         return result;
     }, nb::raw_doc(doc_min));
 
@@ -746,7 +702,7 @@ void bind_array_math(nb::module_ m) {
             dr::detail::array_reduce op = s.op_max;
             if (!op)
                 throw nb::type_error(
-                    "drjit.max(): requires a Dr.Jit array or Python "
+                    "drjit.max(): requires an arithmetic Dr.Jit array or Python "
                     "sequence as input.");
 
             if ((uintptr_t) op != 1) {
@@ -757,6 +713,8 @@ void bind_array_math(nb::module_ m) {
             }
         }
 
+        nb::object py_op = array_module.attr("maximum");
+
         nb::object result;
 
         size_t it = 0;
@@ -764,7 +722,7 @@ void bind_array_math(nb::module_ m) {
             if (it++ == 0)
                 result = borrow(h2);
             else
-                result = maximum(result, h2);
+                result = py_op(result, h2);
         }
 
         return result;
@@ -773,6 +731,8 @@ void bind_array_math(nb::module_ m) {
     m.def("sum", &sum, nb::raw_doc(doc_sum));
     m.def("prod", &prod, nb::raw_doc(doc_prod));
     m.def("dot", &dot, nb::raw_doc(doc_dot));
+    m.def("dot", [](double d1, double d2) { return d1 * d2; });
+    m.def("dot", [](Py_ssize_t d1, Py_ssize_t d2) { return d1 * d2; });
     m.def("norm", [](nb::handle h) -> nb::object {
         return nb_math_unop("sqrt", offsetof(supp, op_sqrt), dot(h, h));
     }, nb::raw_doc(doc_norm));

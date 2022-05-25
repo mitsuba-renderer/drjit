@@ -41,6 +41,8 @@ using array_enqueue = void (*) (drjit::ADMode, const void *);
 using array_traverse = void (*) (drjit::ADMode, uint32_t);
 using array_ad_dec_ref = void (*) (const void *);
 using array_ad_add_edge = void (*) (int32_t, int32_t, void *);
+using array_ad_scope_enter = void (*) (drjit::detail::ADScope, size_t, const uint32_t *);
+using array_ad_scope_leave = void (*) (bool);
 
 struct array_metadata {
     uint16_t is_vector     : 1;
@@ -79,7 +81,6 @@ struct array_supplement {
     array_binop op_add;
     array_binop op_subtract;
     array_binop op_multiply;
-    array_binop op_power;
     array_binop op_remainder;
     array_binop op_floor_divide;
     array_binop op_true_divide;
@@ -126,6 +127,8 @@ struct array_supplement {
     array_traverse op_traverse;
     array_ad_dec_ref op_ad_dec_ref;
     array_ad_add_edge op_ad_add_edge;
+    array_ad_scope_enter op_ad_scope_enter;
+    array_ad_scope_leave op_ad_scope_leave;
 };
 
 static_assert(sizeof(array_metadata) == 8);
@@ -288,6 +291,7 @@ template <typename T> nanobind::class_<T> bind(const char *name = nullptr) {
 template <typename T> nanobind::class_<T> bind_array(const char *name = nullptr) {
     namespace nb = nanobind;
     using Mask = mask_t<T>;
+    using Detached = detached_t<T>;
 
     nb::class_<T> tp = bind<T>(name);
 
@@ -527,10 +531,6 @@ template <typename T> nanobind::class_<T> bind_array(const char *name = nullptr)
                 new ((T *) b) T(b_);
                 new ((T *) c) T(c_);
             };
-
-            s.op_power = [](const void *a, const void *b, void *c) {
-                new ((T *) c) T(drjit::pow(*(const T *) a, *(const T *) b));
-            };
         }
     } else {
         // Default implementations of everything
@@ -617,7 +617,6 @@ template <typename T> nanobind::class_<T> bind_array(const char *name = nullptr)
             s.op_sincos = default_unop_2;
             s.op_sincosh = default_unop_2;
             s.op_frexp = default_unop_2;
-            s.op_power = default_binop;
         }
     }
 
@@ -654,29 +653,36 @@ template <typename T> nanobind::class_<T> bind_array(const char *name = nullptr)
         s.op_set_index_ad = [](void *a, uint32_t index) { *(((T *) a)->index_ad_ptr()) = index; };
         s.op_set_grad_enabled = [](void *a, bool v) { ((T *) a)->set_grad_enabled_(v); };
         s.op_grad_enabled = [](const void *a) { return ((const T *) a)->grad_enabled_(); };
-        s.op_grad = [](const void *a, void *b) { new (b) detached_t<T>(((const T *) a)->grad_()); };
+        s.op_grad = [](const void *a, void *b) { new (b) Detached(((const T *) a)->grad_()); };
         s.op_set_grad = [](void *a, const void *b) { ((T *) a)->set_grad_(((const T *) b)->detach_()); };
         s.op_accum_grad = [](void *a, const void *b) { ((T *) a)->accum_grad_(((const T *) b)->detach_()); };
         s.op_enqueue = [](drjit::ADMode mode, const void *b) { ((const T *) b)->enqueue_(mode); };
         s.op_traverse = [](drjit::ADMode mode, uint32_t flags) { T::traverse_(mode, flags); };
-        s.op_ad_dec_ref = [](const void *a) { detail::ad_dec_ref_impl<detached_t<T>>(((const T *) a)->index_ad()); };
+        s.op_ad_dec_ref = [](const void *a) { detail::ad_dec_ref_impl<Detached>(((const T *) a)->index_ad()); };
         s.op_ad_add_edge = [](int32_t src_index, int32_t dst_index, void *cb) {
-            drjit::detail::ad_add_edge<detached_t<T>>(
+            drjit::detail::ad_add_edge<Detached>(
                 src_index, dst_index, (drjit::detail::DiffCallback *) cb);
+        };
+        s.op_ad_scope_enter = [](drjit::detail::ADScope scope_type, size_t size, const uint32_t *indices) {
+
+            drjit::detail::ad_scope_enter<Detached>(scope_type, size, indices);
+        };
+        s.op_ad_scope_leave = [](bool process_postoned) {
+            drjit::detail::ad_scope_leave<Detached>(process_postoned);
         };
     }
 
     if constexpr (T::IsDiff && T::Depth == 1) {
         s.op_detach = [](const void *a, void *b) {
-            new (b) detached_t<T>(((const T *) a)->detach_());
+            new (b) Detached(((const T *) a)->detach_());
         };
         s.op_ad_create = [](void *source, uint32_t index, void *result, bool source_detached=false) {
             if constexpr (T::IsFloat)
-                detail::ad_inc_ref_impl<detached_t<T>>(index);
+                detail::ad_inc_ref_impl<Detached>(index);
             if (source_detached)
-                new (result) T(T::create(index, std::move(*((detached_t<T> *) source))));
+                new (result) T(T::create(index, std::move(*((Detached *) source))));
             else
-                new (result) T(T::create(index, detached_t<T>(((T *) source)->detach_())));
+                new (result) T(T::create(index, Detached(((T *) source)->detach_())));
         };
 
         if constexpr (T::IsFloat) {

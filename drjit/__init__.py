@@ -193,14 +193,43 @@ def clip(value, min, max):
         dr.maximum(dr.minimum(value, max), min)
 
     Args:
-        value (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
-        min (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
-        max (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+        value (int | float | drjit.ArrayBase): A Python or Dr.Jit type
+        min (int | float | drjit.ArrayBase): A Python or Dr.Jit type
+        max (int | float | drjit.ArrayBase): A Python or Dr.Jit type
 
     Returns:
         float | drjit.ArrayBase: Clipped input
     '''
     return maximum(minimum(value, max), min)
+
+
+def power(x, y):
+    r'''
+    Raise the first input value to the power given as second input value.
+
+    This function handles both the case of integer and floating-point exponents.
+    Moreover, when the exponent is an array, the function will calculate the
+    element-wise powers of the input values.
+
+    Args:
+        x (int | float | drjit.ArrayBase): A Python or Dr.Jit array type as input value
+        y (int | float | drjit.ArrayBase): A Python or Dr.Jit array type as exponent
+
+    Returns:
+        int | float | drjit.ArrayBase: input value raised to the power
+    '''
+    if type(y) is int:
+        n = abs(y)
+        result = type(x)(1)
+        x = type(x)(x)
+        while n:
+            if n & 1:
+                result *= x
+            x *= x
+            n >>= 1
+        return result if y >= 0 else rcp(result)
+    else:
+        return exp2(log2(x) * y)
 
 
 # -------------------------------------------------------------------
@@ -222,36 +251,16 @@ def safe_sqrt(a):
     '''
     result = sqrt(maximum(a, 0))
     if is_diff_v(a) and grad_enabled(a):
-        alt = sqrt(maximum(a, Epsilon(a)))
-        result = replace_grad(result, alt)
-    return result
-
-
-def safe_cbrt(a):
-    r'''
-    Safely evaluate the cube root of the provided input avoiding domain errors.
-
-    Negative inputs produce a ``0.0`` output value.
-
-    Args:
-        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
-
-    Returns:
-        float | drjit.ArrayBase: Cubic root of the input
-    '''
-    result = cbrt(maximum(a, 0))
-    if is_diff_v(a) and grad_enabled(a):
-        alt = cbrt(maximum(a, Epsilon(a)))
+        alt = sqrt(maximum(a, epsilon(a)))
         result = replace_grad(result, alt)
     return result
 
 
 def safe_asin(a):
     r'''
-    Safely evaluate an arcsine approximation based on the CEPHES library avoiding
-    domain errors.
+    Safe wrapper around :py:func:`drjit.asin` that avoids domain errors.
 
-    Input values are clipped to the :math:`[-1, 1]` domain.
+    Input values are clipped to the :math:`(-1, 1)` domain.
 
     Args:
         arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
@@ -261,17 +270,16 @@ def safe_asin(a):
     '''
     result = asin(clip(a, -1, 1))
     if is_diff_v(a) and grad_enabled(a):
-        alt = asin(clip(a, -OneMinusEpsilon(a), OneMinusEpsilon(a)))
+        alt = asin(clip(a, -one_minus_epsilon(a), one_minus_epsilon(a)))
         result = replace_grad(result, alt)
     return result
 
 
 def safe_acos(a):
     r'''
-    Safely evaluate an arccosine approximation based on the CEPHES library
-    avoiding domain errors.
+    Safe wrapper around :py:func:`drjit.acos` that avoids domain errors.
 
-    Input values are clipped to the :math:`[-1, 1]` domain.
+    Input values are clipped to the :math:`(-1, 1)` domain.
 
     Args:
         arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
@@ -281,6 +289,6 @@ def safe_acos(a):
     '''
     result = acos(clip(a, -1, 1))
     if is_diff_v(a) and grad_enabled(a):
-        alt = acos(clip(a, -OneMinusEpsilon(a), OneMinusEpsilon(a)))
+        alt = acos(clip(a, -one_minus_epsilon(a), one_minus_epsilon(a)))
         result = replace_grad(result, alt)
     return result

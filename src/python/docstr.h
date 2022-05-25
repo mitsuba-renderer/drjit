@@ -2249,8 +2249,8 @@ Args:
 
     mode (ADMode): defines the mode traversal (backward or forward)
 
-    flags (ADFlag): flags to control what should and should not be destructed
-        during forward/backward mode traversal.
+    flags (ADFlag | int): flags to control what should and should not be
+    destructed during forward/backward mode traversal.
 )";
 
 static const char *doc_forward_from =R"(
@@ -2265,8 +2265,8 @@ enabled or if it isn't an instance of a Dr.Jit differentiable array type.
 Args:
     arg (object): A Dr.Jit differentiable array instance.
 
-    flags (ADFlag): flags to control what should and should not be destructed
-        during the traversal.
+    flags (ADFlag | int): flags to control what should and should not be
+    destructed during the traversal.
 )";
 
 static const char *doc_forward =R"(
@@ -2283,8 +2283,8 @@ This function is an alias of :py:func:`drjit.forward_from`.
 Args:
     arg (object): A Dr.Jit differentiable array instance.
 
-    flags (ADFlag): flags to control what should and should not be destructed
-        during the traversal.
+    flags (ADFlag | int): flags to control what should and should not be
+    destructed during the traversal.
 )";
 
 static const char *doc_forward_to =R"(
@@ -2303,8 +2303,8 @@ Args:
     *args (tuple): A variable-length list of Dr.Jit differentiable array, tensor,
         :ref:`custom data structure <custom-struct>`, sequences, or mapping.
 
-    flags (ADFlag): flags to control what should and should not be destructed
-        during the traversal.
+    flags (ADFlag | int): flags to control what should and should not be
+    destructed during the traversal.
 
 Returns:
     object: the gradient value associated to the output variables.
@@ -2319,8 +2319,8 @@ enabled or if it isn't an instance of a Dr.Jit differentiable array type.
 Args:
     arg (object): A Dr.Jit differentiable array instance.
 
-    flags (ADFlag): flags to control what should and should not be destructed
-        during the traversal.
+    flags (ADFlag | int): flags to control what should and should not be
+    destructed during the traversal.
 )";
 
 static const char *doc_backward =R"(
@@ -2334,8 +2334,8 @@ This function is an alias of :py:func:`drjit.backward_from`.
 Args:
     arg (object): A Dr.Jit differentiable array instance.
 
-    flags (ADFlag): flags to control what should and should not be destructed
-        during the traversal.
+    flags (ADFlag | int): flags to control what should and should not be
+    destructed during the traversal.
 )";
 
 static const char *doc_backward_to =R"(
@@ -2354,8 +2354,8 @@ Args:
     *args (tuple): A variable-length list of Dr.Jit differentiable array, tensor,
         :ref:`custom data structure <custom-struct>`, sequences, or mapping.
 
-    flags (ADFlag): flags to control what should and should not be destructed
-        during the traversal.
+    flags (ADFlag | int): flags to control what should and should not be
+    destructed during the traversal.
 
 Returns:
     object: the gradient value associated to the output variables.
@@ -2389,6 +2389,279 @@ TODO
 
 static const char *doc_ad_scope_leave =R"(
 TODO
+)";
+
+static const char *doc_suspend_grad =R"(
+suspend_grad(*args, when = True)
+Context manager for temporally suspending derivative tracking.
+
+Dr.Jit's AD layer keeps track of a set of variables for which derivative
+tracking is currently enabled. Using this context manager is it possible to
+define a scope in which variables will be subtracted from that set, thereby
+controlling what derivative terms shouldn't be generated in that scope.
+
+The variables to be subtracted from the current set of enabled variables can be
+provided as function arguments. If none are provided, the scope defined by this
+context manager will temporally disable all derivative tracking.
+
+.. code-block::
+
+    a = dr.llvm.ad.Float(1.0)
+    b = dr.llvm.ad.Float(2.0)
+    dr.enable_grad(a, b)
+
+    with suspend_grad(): # suspend all derivative tracking
+        c = a + b
+
+    assert not dr.grad_enabled(c)
+
+    with suspend_grad(a): # only suspend derivative tracking on `a`
+        d = 2.0 * a
+        e = 4.0 * b
+
+    assert not dr.grad_enabled(d)
+    assert dr.grad_enabled(e)
+
+In a scope where derivative tracking is completely suspended, the AD layer will
+ignore any attempt to enable gradient tracking on a variable:
+
+.. code-block::
+
+    a = dr.llvm.ad.Float(1.0)
+
+    with suspend_grad():
+        dr.enable_grad(a) # <-- ignored
+        assert not dr.grad_enabled(a)
+
+    assert not dr.grad_enabled(a)
+
+The optional ``when`` boolean keyword argument can be defined to specifed a
+condition determining whether to suspend the tracking of derivatives or not.
+
+.. code-block::
+
+    a = dr.llvm.ad.Float(1.0)
+    dr.enable_grad(a)
+
+    cond = condition()
+
+    with suspend_grad(when=cond):
+        b = 4.0 * a
+
+    assert dr.grad_enabled(b) == not cond
+
+Args:
+    *args (tuple): A variable-length list of differentiable Dr.Jit array
+      instances, :ref:`custom data structures <custom-struct>`, sequences, or
+      mappings. The function will recursively traverse data structures to
+      discover all Dr.Jit arrays.
+
+    when (bool): An optional Python boolean determining whether to suspend
+      derivative tracking.
+)";
+
+static const char *doc_resume_grad =R"(
+resume_grad(*args, when = True)
+Context manager for temporally resume derivative tracking.
+
+Dr.Jit's AD layer keeps track of a set of variables for which derivative
+tracking is currently enabled. Using this context manager is it possible to
+define a scope in which variables will be added to that set, thereby controlling
+what derivative terms should be generated in that scope.
+
+The variables to be added to the current set of enabled variables can be
+provided as function arguments. If none are provided, the scope defined by this
+context manager will temporally resume derivative tracking for all variables.
+
+.. code-block::
+
+    a = dr.llvm.ad.Float(1.0)
+    b = dr.llvm.ad.Float(2.0)
+    dr.enable_grad(a, b)
+
+    with suspend_grad():
+        c = a + b
+
+        with resume_grad():
+            d = a + b
+
+        with resume_grad(a):
+            e = 2.0 * a
+            f = 4.0 * b
+
+    assert not dr.grad_enabled(c)
+    assert dr.grad_enabled(d)
+    assert dr.grad_enabled(e)
+    assert not dr.grad_enabled(f)
+
+The optional ``when`` boolean keyword argument can be defined to specifed a
+condition determining whether to resume the tracking of derivatives or not.
+
+.. code-block::
+
+    a = dr.llvm.ad.Float(1.0)
+    dr.enable_grad(a)
+
+    cond = condition()
+
+    with suspend_grad():
+        with resume_grad(when=cond):
+            b = 4.0 * a
+
+    assert dr.grad_enabled(b) == cond
+
+Args:
+    *args (tuple): A variable-length list of differentiable Dr.Jit array
+      instances, :ref:`custom data structures <custom-struct>`, sequences, or
+      mappings. The function will recursively traverse data structures to
+      discover all Dr.Jit arrays.
+
+    when (bool): An optional Python boolean determining whether to resume
+      derivative tracking.
+)";
+
+static const char *doc_isolate_grad =R"(
+Context manager to temporarily isolate outside world from AD traversals.
+
+Dr.Jit provides isolation boundaries to postpone AD traversals steps leaving a
+specific scope. For instance this function is used internally to implement
+differentiable loops and polymorphic calls.
+
+)";
+
+static const char *doc_custom =R"(
+Evaluate a custom differentiable operation (see :py:class:`CustomOp`).
+
+Look at the section on :ref:`AD custom operations <custom-op>` for more detailed
+information.
+)";
+
+static const char *doc_CustomOp = R"(
+Base class to implement custom differentiable operations.
+
+Dr.Jit can compute derivatives of builtin operations in both forward and reverse
+mode. In some cases, it may be useful or even necessary to tell Dr.Jit how a
+particular operation should be differentiated.
+
+This can be achieved by extending this class, overwriting callback functions
+that will later be invoked when the AD backend traverses the associated node in
+the computation graph. This class also provides a convenient way of stashing
+temporary results during the original function evaluation that can be accessed
+later on as part of forward or reverse-mode differentiation.
+
+Look at the section on :ref:`AD custom operations <custom-op>` for more detailed
+information.
+
+A class that inherits from this class should override a few methods as done in
+the code snippet below. :py:func:`dr.custom` can then be used to evaluate the
+custom operation and properly attach it to the AD graph.
+
+.. code-block::
+
+    class MyCustomOp(dr.CustomOp):
+        def eval(self, *args):
+            # .. evaluate operation ..
+
+        def forward(self):
+            # .. compute forward-mode derivatives ..
+
+        def backward(self):
+            # .. compute backward-mode derivatives ..
+
+        def name(self):
+            return "MyCustomOp[]"
+
+    dr.custom(MyCustomOp, *args)
+)";
+
+static const char *doc_CustomOp_eval =R"(
+eval(self, *args) -> object
+Evaluate the custom function in primal mode.
+
+The inputs will be detached from the AD graph, and the output *must* also be
+detached.
+
+.. danger::
+
+    This method must be overriden, no default implementation provided.
+)";
+
+static const char *doc_CustomOp_forward =R"(
+Evaluated forward-mode derivatives.
+
+.. danger::
+
+    This method must be overriden, no default implementation provided.
+)";
+
+static const char *doc_CustomOp_backward =R"(
+Evaluated backward-mode derivatives.
+
+.. danger::
+
+    This method must be overriden, no default implementation provided.
+)";
+
+static const char *doc_CustomOp_name =R"(
+Return a descriptive name of the ``CustomOp`` instance.
+
+The name returned by this method is used in the GraphViz output.
+
+If not overriden, this method returns ``"CustomOp[unnamed]"``.
+)";
+
+static const char *doc_CustomOp_grad_out =R"(
+Access the gradient associated with the output argument (backward mode AD).
+
+Returns:
+    object: the gradient value associated with the output argument.
+)";
+
+static const char *doc_CustomOp_set_grad_out =R"(
+Accumulate a gradient value into the output argument (forward mode AD).
+
+Args:
+    value (object): gradient value to accumulate.
+)";
+
+static const char *doc_CustomOp_grad_in =R"(
+Access the gradient associated with the input argument ``name`` (fwd. mode AD).
+
+Args:
+    name (str): name associated to an input variable (e.g. keyword argument).
+
+Returns:
+    object: the gradient value associated with the input argument.
+)";
+
+static const char *doc_CustomOp_set_grad_in =R"(
+Accumulate a gradient value into an input argument (backward mode AD).
+
+Args:
+    name (str): name associated to the input variable (e.g. keyword argument).
+    value (object): gradient value to accumulate.
+)";
+
+static const char *doc_CustomOp_add_input =R"(
+Register an implicit input dependency of the operation on an AD variable.
+
+This function should be called by the ``eval()`` implementation when an
+operation has a differentiable dependence on an input that is not an
+input argument (e.g. a private instance variable).
+
+Args:
+    value (object): variable this operation depends on implicitly.
+)";
+
+static const char *doc_CustomOp_add_output =R"(
+Register an implicit output dependency of the operation on an AD variable.
+
+This function should be called by the \ref eval() implementation when an
+operation has a differentiable dependence on an output that is not an
+return value of the operation (e.g. a private instance variable).
+
+Args:
+    value (object): variable this operation depends on implicitly.
 )";
 
 static const char *doc_label =R"(

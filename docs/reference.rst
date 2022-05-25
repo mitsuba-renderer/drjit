@@ -23,14 +23,10 @@ These operations are *horizontal* in the sense that [..]
 .. autofunction:: scatter
 .. autofunction:: ravel
 .. autofunction:: unravel
-.. autofunction:: minimum
-.. autofunction:: maximum
 .. autofunction:: min
 .. autofunction:: max
 .. autofunction:: sum
 .. autofunction:: prod
-.. autofunction:: all
-.. autofunction:: any
 .. autofunction:: dot
 .. autofunction:: norm
 
@@ -130,8 +126,8 @@ Standard mathematical functions
 -------------------------------
 
 .. autofunction:: abs
-.. autofunction:: min
-.. autofunction:: max
+.. autofunction:: minimum
+.. autofunction:: maximum
 .. autofunction:: clip
 .. autofunction:: fma
 .. autofunction:: ceil
@@ -139,9 +135,7 @@ Standard mathematical functions
 .. autofunction:: trunc
 .. autofunction:: round
 .. autofunction:: sqrt
-.. autofunction:: safe_sqrt
 .. autofunction:: cbrt
-.. autofunction:: safe_cbrt
 .. autofunction:: rcp
 .. autofunction:: rsqrt
 .. autofunction:: frexp
@@ -162,9 +156,7 @@ _______________________
 .. autofunction:: sincos
 .. autofunction:: tan
 .. autofunction:: asin
-.. autofunction:: safe_asin
 .. autofunction:: acos
-.. autofunction:: safe_acos
 .. autofunction:: atan
 .. autofunction:: atan2
 
@@ -423,6 +415,39 @@ ___________________________
       - :math:`9.6 \cdot 10^{-17}\,(0.64\,\text{ulp})`
       - :math:`2.5 \cdot 10^{-15}\,(16\,\text{ulp})`
 
+Safe mathematical functions
+---------------------------
+
+.. autofunction:: safe_sqrt
+.. autofunction:: safe_asin
+.. autofunction:: safe_acos
+
+Constants
+---------
+
+.. autoattribute:: const.e
+.. autoattribute:: const.log_two
+.. autoattribute:: const.inv_log_two
+.. autoattribute:: const.pi
+.. autoattribute:: const.inv_pi
+.. autoattribute:: const.sqrt_pi
+.. autoattribute:: const.inv_sqrt_pi
+.. autoattribute:: const.two_pi
+.. autoattribute:: const.inv_two_pi
+.. autoattribute:: const.sqrt_two_pi
+.. autoattribute:: const.inv_sqrt_two_pi
+.. autoattribute:: const.four_pi
+.. autoattribute:: const.inv_four_pi
+.. autoattribute:: const.sqrt_four_pi
+.. autoattribute:: const.sqrt_two
+.. autoattribute:: const.inv_sqrt_two
+.. autoattribute:: const.inf
+.. autoattribute:: const.nan
+.. autofunction:: epsilon
+.. autofunction:: one_minus_epsilon
+.. autofunction:: recip_overflow
+.. autofunction:: smallest
+.. autofunction:: largest
 
 Array base class
 ----------------
@@ -512,6 +537,26 @@ Automatic differentiation
 .. autofunction:: backward
 .. autofunction:: backward_to
 
+.. .. autofunction:: ad_scope_enter
+.. .. autofunction:: ad_scope_leave
+.. autofunction:: suspend_grad
+.. autofunction:: resume_grad
+.. autofunction:: isolate_grad
+
+.. autoclass:: CustomOp
+
+    .. automethod:: eval
+    .. automethod:: forward
+    .. automethod:: backward
+    .. automethod:: name
+    .. automethod:: grad_out
+    .. automethod:: set_grad_out
+    .. automethod:: grad_in
+    .. automethod:: set_grad_in
+    .. automethod:: add_input
+    .. automethod:: add_output
+
+.. autofunction:: custom
 
 Concrete array classes
 ----------------------

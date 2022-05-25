@@ -530,12 +530,6 @@ DRJIT_BINOP(xor, "__xor__", "__ixor__")
 DRJIT_BINOP(lshift, "__lshift__", "__ilshift__")
 DRJIT_BINOP(rshift, "__rshift__", "__irshift__")
 
-
-static PyObject *nb_power(PyObject *h0, PyObject *h1, PyObject * /*modulus*/) noexcept {
-    return nb_binop("__pow__", offsetof(supp, op_power),
-                    offsetof(PyNumberMethods, nb_power), h0, h1);
-}
-
 static int nb_bool(PyObject *o) noexcept {
     PyTypeObject *tp = Py_TYPE(o);
     const supp &s = nb::type_supplement<supp>(tp);
@@ -909,7 +903,6 @@ void bind_array_builtin(nb::module_ m) {
         tp->tp_as_number->nb_inplace_subtract = nb_inplace_subtract;
         tp->tp_as_number->nb_multiply = nb_multiply;
         tp->tp_as_number->nb_inplace_multiply = nb_inplace_multiply;
-        tp->tp_as_number->nb_power = nb_power;
         tp->tp_as_number->nb_remainder = nb_remainder;
         tp->tp_as_number->nb_inplace_remainder = nb_inplace_remainder;
         tp->tp_as_number->nb_floor_divide = nb_floor_divide;

@@ -74,7 +74,7 @@ static nb::object detach(nb::handle h, bool preserve_type=true) {
         nb::dict result;
         for (auto [k, v] : nb::borrow<nb::dict>(h))
             result[k] = detach(v, preserve_type);
-        return result;
+        return std::move(result);
     }
 
     nb::object dstruct = nb::getattr(h.type(), "DRJIT_STRUCT", nb::handle());
@@ -293,7 +293,7 @@ static void grad_setter(nb::handle h, nb::handle value, T op) {
             }
         }
     } else if (nb::isinstance<nb::list>(h) || nb::isinstance<nb::tuple>(h)) {
-        if (nb::isinstance<nb::sequence>(value)) {
+        if (nb::isinstance<nb::list>(value) || nb::isinstance<nb::tuple>(value)) {
             if (nb::len(h) != nb::len(value)) {
                 PyErr_Format(
                     PyExc_RuntimeError,
@@ -448,7 +448,7 @@ static void enqueue(drjit::ADMode mode, nb::args args) {
         ::enqueue(mode, h);
 }
 
-static void traverse(nb::handle type, drjit::ADMode mode, drjit::ADFlag flags) {
+static void traverse(nb::handle type, drjit::ADMode mode, nb::handle flags) {
     if (!type.is_type() || !is_drjit_type(type)) {
         PyErr_Format(PyExc_TypeError,
                      "traverse(): first argument should be a Dr.JIT type!");
@@ -464,7 +464,7 @@ static void traverse(nb::handle type, drjit::ADMode mode, drjit::ADFlag flags) {
         nb::detail::raise_python_error();
     }
 
-    s.op_traverse(mode, +flags);
+    s.op_traverse(mode, flags.is_none() ? +drjit::ADFlag::Default : nb::cast<uint32_t>(flags));
 }
 
 static void _check_grad_enabled(const char *name, nb::handle tp, nb::handle a) {
@@ -493,8 +493,17 @@ static void _check_grad_enabled(const char *name, nb::handle tp, nb::handle a) {
     }
 }
 
-static drjit::ADFlag _ad_flags_from_kwargs(const char *name, nb::args args, nb::kwargs kwargs) {
-    drjit::ADFlag flags = drjit::ADFlag::Default;
+static nb::handle check_flags_kwargs(const char *name, nb::args args, nb::kwargs kwargs) {
+    for (auto h : args) {
+        if (nb::isinstance<drjit::ADFlag>(h) || nb::isinstance<uint32_t>(h)) {
+            PyErr_Format(PyExc_TypeError,
+                         "%s(): AD flags should be passed via the "
+                         "'flags=..' keyword argument!", name);
+            nb::detail::raise_python_error();
+        }
+    }
+
+    nb::handle flags = nb::none();
     if (nb::len(kwargs) > 1) {
         PyErr_Format(PyExc_TypeError,
                      "%s(): only AD flags should be passed via the "
@@ -504,19 +513,10 @@ static drjit::ADFlag _ad_flags_from_kwargs(const char *name, nb::args args, nb::
 
     if (nb::len(kwargs) == 1) {
         try {
-            flags = nb::cast<drjit::ADFlag>(kwargs["flags"]);
+            flags = kwargs["flags"];
         } catch (...) {
             PyErr_Format(PyExc_TypeError,
                          "%s(): only AD flags should be passed via the "
-                         "'flags=..' keyword argument!", name);
-            nb::detail::raise_python_error();
-        }
-    }
-
-    for (auto h : args) {
-        if (nb::isinstance<drjit::ADFlag>(h)) {
-            PyErr_Format(PyExc_TypeError,
-                         "%s(): AD flags should be passed via the "
                          "'flags=..' keyword argument!", name);
             nb::detail::raise_python_error();
         }
@@ -526,7 +526,7 @@ static drjit::ADFlag _ad_flags_from_kwargs(const char *name, nb::args args, nb::
 }
 
 static nb::object forward_to(nb::args args, nb::kwargs kwargs) {
-    drjit::ADFlag flags = _ad_flags_from_kwargs("forward_to", args, kwargs);
+    nb::handle flags = check_flags_kwargs("forward_to", args, kwargs);
     nb::handle tp = leaf_array_t(args);
     _check_grad_enabled("forward_to", tp, args);
     enqueue(drjit::ADMode::Backward, args);
@@ -538,7 +538,7 @@ static nb::object forward_to(nb::args args, nb::kwargs kwargs) {
         return grad(args);
 }
 
-static void forward_from(nb::handle h, drjit::ADFlag flags) {
+static void forward_from(nb::handle h, nb::handle flags) {
     _check_grad_enabled("forward_from", leaf_array_t(h), h);
     set_grad(h, PyFloat_FromDouble(1.0));
     enqueue(drjit::ADMode::Forward, h);
@@ -546,7 +546,7 @@ static void forward_from(nb::handle h, drjit::ADFlag flags) {
 }
 
 static nb::object backward_to(nb::args args, nb::kwargs kwargs) {
-    drjit::ADFlag flags = _ad_flags_from_kwargs("backward_to", args, kwargs);
+    nb::handle flags = check_flags_kwargs("backward_to", args, kwargs);
     nb::handle tp = leaf_array_t(args);
     _check_grad_enabled("backward_to", tp, args);
     enqueue(drjit::ADMode::Forward, args);
@@ -554,7 +554,7 @@ static nb::object backward_to(nb::args args, nb::kwargs kwargs) {
     return grad(args);
 }
 
-static void backward_from(nb::handle h, drjit::ADFlag flags) {
+static void backward_from(nb::handle h, nb::handle flags) {
     _check_grad_enabled("backward_from", leaf_array_t(h), h);
 
     // Deduplicate components if `h` is a vector
@@ -612,17 +612,20 @@ static nb::object graphviz_ad(bool as_str = false) {
 }
 
 // -----------------------------------------------------------------------------
+//  Helper functions to implement CustomOp and suspend/resume gradient features
+// -----------------------------------------------------------------------------
 
-// Extract indices of differentiable variables, returns
-// the type of the underlying differentiable array
-nb::handle diff_vars(nb::handle h, std::vector<uint32_t> &indices) {
+// Extracts indices of differentiable variables, returns type of the underlying differentiable array
+static nb::handle diff_vars(nb::handle h, std::vector<uint32_t> &indices,
+                            bool check_grad_enabled) {
     nb::handle result = nb::none();
     if (is_drjit_array(h)) {
         const supp &s = nb::type_supplement<supp>(h.type());
         if (s.meta.is_diff && is_float_v(h.type())) {
             if (s.meta.ndim == 1) {
-                if (s.op_grad_enabled(nb::inst_ptr<void>(h))) {
-                    indices.push_back(s.op_index_ad(nb::inst_ptr<void>(h)));
+                uint32_t ad_index = s.op_index_ad(nb::inst_ptr<void>(h));
+                if ((ad_index != 0) && (!check_grad_enabled || s.op_grad_enabled(nb::inst_ptr<void>(h)))) {
+                    indices.push_back(ad_index);
                     result = h.type();
                 }
             } else {
@@ -631,20 +634,20 @@ nb::handle diff_vars(nb::handle h, std::vector<uint32_t> &indices) {
                     nb::object v = nb::steal(sm->sq_item(h.ptr(), i));
                     if (!v.is_valid())
                         nb::detail::raise_python_error();
-                    nb::handle result2 = diff_vars(v, indices);
+                    nb::handle result2 = diff_vars(v, indices, check_grad_enabled);
                     if (!result2.is_none())
                         result = result2;
                 }
             }
         }
-    } else if (nb::isinstance<nb::sequence>(h)) {
+    } else if (nb::isinstance<nb::list>(h) || nb::isinstance<nb::tuple>(h)) {
         for (nb::handle h2 : h) {
-            nb::handle result2 = diff_vars(h2, indices);
+            nb::handle result2 = diff_vars(h2, indices, check_grad_enabled);
             if (!result2.is_none())
                 result = result2;
         }
-    } else if (nb::isinstance<nb::mapping>(h)) {
-        nb::handle result2 = diff_vars(nb::borrow<nb::mapping>(h).values(), indices);
+    } else if (nb::isinstance<nb::dict>(h)) {
+        nb::handle result2 = diff_vars(nb::borrow<nb::dict>(h).values(), indices, check_grad_enabled);
         if (!result2.is_none())
             result = result2;
     } else {
@@ -652,7 +655,7 @@ nb::handle diff_vars(nb::handle h, std::vector<uint32_t> &indices) {
         if (dstruct.is_valid() && nb::isinstance<nb::dict>(dstruct)) {
             nb::dict dstruct_dict = nb::borrow<nb::dict>(dstruct);
             for (auto [k, v] : dstruct_dict) {
-                nb::handle result2 = diff_vars(nb::getattr(h, k), indices);
+                nb::handle result2 = diff_vars(nb::getattr(h, k), indices, check_grad_enabled);
                 if (!result2.is_none())
                     result = result2;
             }
@@ -661,18 +664,19 @@ nb::handle diff_vars(nb::handle h, std::vector<uint32_t> &indices) {
     return result;
 }
 
-nb::handle diff_vars(nb::args args, std::vector<uint32_t> indices) {
+static nb::handle diff_vars(nb::args args, std::vector<uint32_t> &indices,
+                            bool check_grad_enabled) {
     nb::handle result = nb::none();
     for (nb::handle h : args) {
-        nb::handle result2 = diff_vars(h, indices);
+        nb::handle result2 = diff_vars(h, indices, check_grad_enabled);
         if (!result2.is_none())
             result = result2;
     }
     return result;
 }
 
-// Helper function to clear (in-place) the AD part of a Dr.Jit array, sequence, struct, ...
-void clear_ad(nb::handle h) {
+/// Clears (in-place) the differentiable part of a Dr.Jit array, sequence, struct, ...
+static void clear_ad(nb::handle h) {
     if (is_drjit_array(h)) {
         const supp &s = nb::type_supplement<supp>(h.type());
         if (s.meta.is_diff && is_float_v(h.type())) {
@@ -688,11 +692,11 @@ void clear_ad(nb::handle h) {
                 }
             }
         }
-    } else if (nb::isinstance<nb::sequence>(h)) {
+    } else if (nb::isinstance<nb::list>(h) || nb::isinstance<nb::tuple>(h)) {
         for (nb::handle h2 : h)
             clear_ad(h2);
-    } else if (nb::isinstance<nb::mapping>(h)) {
-        clear_ad(nb::borrow<nb::mapping>(h).values());
+    } else if (nb::isinstance<nb::dict>(h)) {
+        clear_ad(nb::borrow<nb::dict>(h).values());
     } else {
         nb::object dstruct = nb::getattr(h.type(), "DRJIT_STRUCT", nb::handle());
         if (dstruct.is_valid() && nb::isinstance<nb::dict>(dstruct)) {
@@ -703,9 +707,8 @@ void clear_ad(nb::handle h) {
     }
 }
 
-// Helper function to clear primal part of a Dr.Jit array, sequence, struct, ...
-// and return it.
-nb::object clear_primal(nb::handle h, bool dec_ref) {
+/// Clears primal part of a Dr.Jit array, sequence, struct, ... and return it.
+static nb::object clear_primal(nb::handle h, bool dec_ref) {
     if (is_drjit_array(h)) {
         const supp &s = nb::type_supplement<supp>(h.type());
         if (s.meta.is_diff && is_float_v(h.type())) {
@@ -747,14 +750,14 @@ nb::object clear_primal(nb::handle h, bool dec_ref) {
                 return result;
             }
         }
-    } else if (nb::isinstance<nb::sequence>(h)) {
+    } else if (nb::isinstance<nb::list>(h) || nb::isinstance<nb::tuple>(h)) {
         nb::list result;
         for (nb::handle h2 : h)
             result.append(clear_primal(h2, dec_ref));
         return std::move(result);
-    } else if (nb::isinstance<nb::mapping>(h)) {
+    } else if (nb::isinstance<nb::dict>(h)) {
         nb::object result = h.type()();
-        for (nb::handle p : nb::borrow<nb::mapping>(h).items()) {
+        for (nb::handle p : nb::borrow<nb::dict>(h).items()) {
             nb::handle k = p[0], v = p[1];
             result[k] = clear_primal(v, dec_ref);
         }
@@ -773,8 +776,8 @@ nb::object clear_primal(nb::handle h, bool dec_ref) {
     return nb::borrow(h);
 }
 
-// Helper function to convert all input instances into their differentiable version
-nb::object diff_array(nb::handle h) {
+/// Converts inputs into their differentiable version.
+static nb::object diff_array(nb::handle h) {
     if (is_drjit_array(h)) {
         const supp &s = nb::type_supplement<supp>(h.type());
         if (s.meta.is_diff) {
@@ -813,14 +816,14 @@ nb::object diff_array(nb::handle h) {
                 return result;
             }
         }
-    } else if (nb::isinstance<nb::sequence>(h)) {
+    } else if (nb::isinstance<nb::list>(h) || nb::isinstance<nb::tuple>(h)) {
         nb::list result;
         for (nb::handle h2 : h)
             result.append(diff_array(h2));
         return std::move(result);
-    } else if (nb::isinstance<nb::mapping>(h)) {
+    } else if (nb::isinstance<nb::dict>(h)) {
         nb::object result = h.type()();
-        for (nb::handle p : nb::borrow<nb::mapping>(h).items()) {
+        for (nb::handle p : nb::borrow<nb::dict>(h).items()) {
             nb::handle k = p[0], v = p[1];
             result[k] = diff_array(v);
         }
@@ -830,8 +833,12 @@ nb::object diff_array(nb::handle h) {
     return nb::borrow(h);
 }
 
-void ad_scope_enter(nb::handle tp, drjit::detail::ADScope scope_type,
-                    const std::vector<uint32_t> &indices) {
+// -----------------------------------------------------------------------------
+//                      Suspend/resume gradient bindings
+// -----------------------------------------------------------------------------
+
+static void ad_scope_enter(nb::handle tp, drjit::detail::ADScope scope_type,
+                           const std::vector<uint32_t> &indices) {
     if (tp.is_none()) {
 #if defined(DRJIT_ENABLE_CUDA)
         drjit::detail::ad_scope_enter<drjit::CUDAArray<float>>(scope_type,  indices.size(), indices.data());
@@ -856,30 +863,10 @@ void ad_scope_enter(nb::handle tp, drjit::detail::ADScope scope_type,
         nb::detail::raise_python_error();
     }
 
-    if (s.meta.is_cuda) {
-        if ((VarType) s.meta.type == VarType::Float32) {
-            drjit::detail::ad_scope_enter<drjit::CUDAArray<float>>(scope_type, indices.size(), indices.data());
-        } else if ((VarType) s.meta.type == VarType::Float64) {
-            drjit::detail::ad_scope_enter<drjit::CUDAArray<double>>(scope_type, indices.size(), indices.data());
-        } else  {
-            PyErr_Format(PyExc_TypeError,
-                         "ad_scope_enter(): expected a floating point Dr.JIT array type!");
-            nb::detail::raise_python_error();
-        }
-    } else if (s.meta.is_llvm) {
-        if ((VarType) s.meta.type == VarType::Float32) {
-            drjit::detail::ad_scope_enter<drjit::LLVMArray<float>>(scope_type, indices.size(), indices.data());
-        } else if ((VarType) s.meta.type == VarType::Float64) {
-            drjit::detail::ad_scope_enter<drjit::LLVMArray<double>>(scope_type, indices.size(), indices.data());
-        } else  {
-            PyErr_Format(PyExc_TypeError,
-                         "ad_scope_enter(): expected a floating point Dr.JIT array type!");
-            nb::detail::raise_python_error();
-        }
-    }
+    s.op_ad_scope_enter(scope_type, indices.size(), indices.data());
 }
 
-void ad_scope_leave(nb::handle tp, bool process_postoned) {
+static void ad_scope_leave(nb::handle tp, bool process_postoned) {
     if (tp.is_none()) {
 #if defined(DRJIT_ENABLE_CUDA)
         drjit::detail::ad_scope_leave<drjit::CUDAArray<float>>(process_postoned);
@@ -904,39 +891,17 @@ void ad_scope_leave(nb::handle tp, bool process_postoned) {
         nb::detail::raise_python_error();
     }
 
-    if (s.meta.is_cuda) {
-        if ((VarType) s.meta.type == VarType::Float32) {
-            drjit::detail::ad_scope_leave<drjit::CUDAArray<float>>(process_postoned);
-        } else if ((VarType) s.meta.type == VarType::Float64) {
-            drjit::detail::ad_scope_leave<drjit::CUDAArray<double>>(process_postoned);
-        } else  {
-            PyErr_Format(PyExc_TypeError,
-                         "ad_scope_leave(): expected a floating point Dr.JIT array type!");
-            nb::detail::raise_python_error();
-        }
-    } else if (s.meta.is_llvm) {
-        if ((VarType) s.meta.type == VarType::Float32) {
-            drjit::detail::ad_scope_leave<drjit::LLVMArray<float>>(process_postoned);
-        } else if ((VarType) s.meta.type == VarType::Float64) {
-            drjit::detail::ad_scope_leave<drjit::LLVMArray<double>>(process_postoned);
-        } else  {
-            PyErr_Format(PyExc_TypeError,
-                         "ad_scope_leave(): expected a floating point Dr.JIT array type!");
-            nb::detail::raise_python_error();
-        }
-    }
+    s.op_ad_scope_leave(process_postoned);
 }
 
 class ADContextManager {
-    drjit::detail::ADScope m_scope_type;
-    nb::handle m_array_type;
-    std::vector<uint32_t> m_indices;
 public:
     ADContextManager() {
         m_scope_type = drjit::detail::ADScope::Invalid;
     }
 
-    ADContextManager(drjit::detail::ADScope scope_type, nb::handle array_type, const std::vector<uint32_t> &indices) {
+    ADContextManager(drjit::detail::ADScope scope_type, nb::handle array_type,
+                     const std::vector<uint32_t> &indices) {
         m_scope_type = scope_type;
         m_array_type = array_type;
         m_indices = indices;
@@ -947,20 +912,24 @@ public:
             ad_scope_enter(m_array_type, m_scope_type, m_indices);
     }
 
-    void __exit__(nb::handle exc_type, nb::handle /*exc_val*/, nb::handle /*exc_tb*/) {
+    void __exit__(nb::args args) {
+        nb::handle exc_type = args[0];
         if (m_scope_type != drjit::detail::ADScope::Invalid)
             ad_scope_leave(m_array_type, exc_type.is_none());
     }
+private:
+    drjit::detail::ADScope m_scope_type;
+    nb::handle m_array_type;
+    std::vector<uint32_t> m_indices;
 };
 
-bool __check_when_kwargs(const char *name, nb::kwargs kwargs) {
+static bool check_when_kwargs(const char *name, nb::kwargs kwargs) {
     bool when = true;
     if (nb::len(kwargs) > 1) {
         PyErr_Format(PyExc_TypeError,
                     "%s(): only boolean 'when' should be passed via keyword argument!", name);
         nb::detail::raise_python_error();
     }
-
     if (nb::len(kwargs) == 1) {
         try {
             when = nb::cast<bool>(kwargs["when"]);
@@ -973,39 +942,41 @@ bool __check_when_kwargs(const char *name, nb::kwargs kwargs) {
     return when;
 }
 
-ADContextManager suspend_grad(nb::args args, nb::kwargs kwargs) {
-    bool when = __check_when_kwargs("suspend_grad", kwargs);
+static ADContextManager suspend_grad(nb::args args, nb::kwargs kwargs) {
+    bool when = check_when_kwargs("suspend_grad", kwargs);
     if (!when)
         return ADContextManager();
 
     std::vector<uint32_t> indices;
-    nb::handle array_type = diff_vars(args, indices);
+    nb::handle array_type = diff_vars(args, indices, false);
     if (nb::len(args) > 0 && indices.empty())
         indices = { 0 };
 
     return ADContextManager(drjit::detail::ADScope::Suspend, array_type, indices);
 }
 
-ADContextManager resume_grad(nb::args args, nb::kwargs kwargs) {
-    bool when = __check_when_kwargs("resume_grad", kwargs);
+static ADContextManager resume_grad(nb::args args, nb::kwargs kwargs) {
+    bool when = check_when_kwargs("resume_grad", kwargs);
     if (!when)
         return ADContextManager();
 
     std::vector<uint32_t> indices;
-    nb::handle array_type = diff_vars(args, indices);
+    nb::handle array_type = diff_vars(args, indices, false);
     if (nb::len(args) > 0 && indices.empty())
         indices = { 0 };
 
     return ADContextManager(drjit::detail::ADScope::Resume, array_type, indices);
 }
 
-ADContextManager isolate_grad(bool when) {
+static ADContextManager isolate_grad(bool when) {
     if (!when)
         return ADContextManager();
 
     return ADContextManager(drjit::detail::ADScope::Isolate, nb::none(), {});
 }
 
+// -----------------------------------------------------------------------------
+//                  Custom differentiable operation bindings
 // -----------------------------------------------------------------------------
 
 struct CustomOp {
@@ -1144,8 +1115,8 @@ nb::object custom(nb::handle cls, nb::args args, nb::kwargs kwargs) {
     }
 
     std::vector<uint32_t> diff_vars_in;
-    ::diff_vars(kwargs, diff_vars_in);
-    ::diff_vars(inst_ptr->m_implicit_in, diff_vars_in);
+    ::diff_vars(kwargs, diff_vars_in, true);
+    ::diff_vars(inst_ptr->m_implicit_in, diff_vars_in, true);
 
     if (!diff_vars_in.empty()) {
         output = diff_array(output);
@@ -1165,8 +1136,8 @@ nb::object custom(nb::handle cls, nb::args args, nb::kwargs kwargs) {
         inst_ptr->m_output = clear_primal(output, true);
 
         std::vector<uint32_t> diff_vars_out;
-        ::diff_vars(inst_ptr->m_output, diff_vars_out);
-        ::diff_vars(inst_ptr->m_implicit_out, diff_vars_out);
+        ::diff_vars(inst_ptr->m_output, diff_vars_out, true);
+        ::diff_vars(inst_ptr->m_implicit_out, diff_vars_out, true);
 
         if (diff_vars_out.empty())
             return output; // Not relevant for AD after all..
@@ -1239,7 +1210,7 @@ extern void bind_array_autodiff(nb::module_ m) {
     m.def("backward",      &backward_from, "args"_a, "flags"_a=drjit::ADFlag::Default, doc_backward);
     m.def("graphviz_ad", &graphviz_ad, "as_str"_a=false, doc_graphviz_ad);
 
-    // Enabling/disabling AD
+    // Suspend/resume AD bindings ----------------------------------------------
 
     nb::class_<ADContextManager>(m, "__ADContextManager")
         .def("__enter__", &ADContextManager::__enter__)
@@ -1247,29 +1218,29 @@ extern void bind_array_autodiff(nb::module_ m) {
 
     m.def("ad_scope_enter", [](drjit::detail::ADScope scope_type, nb::args args) {
         std::vector<uint32_t> indices;
-        nb::handle array_type = diff_vars(args, indices);
+        nb::handle array_type = diff_vars(args, indices, false);
         ad_scope_enter(array_type, scope_type, indices);
     }, doc_ad_scope_enter);
     m.def("ad_scope_leave", &ad_scope_leave, doc_ad_scope_leave);
 
-    m.def("suspend_grad", &suspend_grad); // TODO docstring
-    m.def("resume_grad",  &resume_grad); // TODO docstring
-    m.def("isolate_grad", &isolate_grad); // TODO docstring
+    m.def("suspend_grad", &suspend_grad, "args"_a, "when"_a = true, nb::raw_doc(doc_suspend_grad));
+    m.def("resume_grad",  &resume_grad,  "args"_a, "when"_a = true, nb::raw_doc(doc_resume_grad));
+    m.def("isolate_grad", &isolate_grad, "when"_a = true, nb::raw_doc(doc_isolate_grad));
 
-    // CustomOp
+    // Custom differentiable operation bindings --------------------------------
 
-    nb::class_<CustomOp, PyCustomOp>(m, "CustomOp") // TODO docstring
+    nb::class_<CustomOp, PyCustomOp>(m, "CustomOp", doc_CustomOp)
         .def(nb::init<>())
-        .def("eval",     &CustomOp::eval)
-        .def("forward",  &CustomOp::forward)
-        .def("backward", &CustomOp::backward)
-        .def("name",     &CustomOp::name)
-        .def("grad_out",     &CustomOp::grad_out)
-        .def("set_grad_out", &CustomOp::set_grad_out)
-        .def("grad_in",      &CustomOp::grad_in)
-        .def("set_grad_in",  &CustomOp::set_grad_in)
-        .def("add_input",    &CustomOp::add_input)
-        .def("add_output",   &CustomOp::add_output);
+        .def("eval",     &CustomOp::eval, nb::raw_doc(doc_CustomOp_eval))
+        .def("forward",  &CustomOp::forward, doc_CustomOp_forward)
+        .def("backward", &CustomOp::backward, doc_CustomOp_backward)
+        .def("name",     &CustomOp::name, doc_CustomOp_name)
+        .def("grad_out",     &CustomOp::grad_out, doc_CustomOp_grad_out)
+        .def("set_grad_out", &CustomOp::set_grad_out, doc_CustomOp_set_grad_out)
+        .def("grad_in",      &CustomOp::grad_in, doc_CustomOp_grad_in)
+        .def("set_grad_in",  &CustomOp::set_grad_in, doc_CustomOp_set_grad_in)
+        .def("add_input",    &CustomOp::add_input, doc_CustomOp_add_input)
+        .def("add_output",   &CustomOp::add_output, doc_CustomOp_add_output);
 
-    m.def("custom", &custom); // TODO docstring
+    m.def("custom", &custom, doc_custom);
 }
