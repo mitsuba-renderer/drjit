@@ -188,7 +188,7 @@ def frob(a):
     for i in range(1, a.Size):
         value = a[i]
         result = _dr.fmadd(value, value, result)
-    return _dr.hsum(result)
+    return _dr.sum(result)
 
 
 def polar_decomp(a, it=10):

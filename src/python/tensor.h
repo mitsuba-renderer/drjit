@@ -78,8 +78,8 @@ template <typename T> auto bind_tensor(py::module m) {
                 [](Tensor *a, const Tensor &b) { *a = a->div_(b); return a; });
 
         cls.def("abs_", &Tensor::abs_)
-           .def("min_", &Tensor::min_)
-           .def("max_", &Tensor::max_);
+           .def("minimum_", &Tensor::min_)
+           .def("maximum_", &Tensor::max_);
     }
 
     if constexpr (dr::is_floating_point_v<Tensor>) {

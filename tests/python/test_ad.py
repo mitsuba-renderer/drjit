@@ -113,62 +113,62 @@ def test06_div(m):
     assert dr.allclose(dr.grad(b), -2.0 / 9.0)
 
 
-def test07_hsum_0_bwd(m):
+def test07_sum_0_bwd(m):
     x = dr.linspace(m.Float, 0, 1, 10)
     dr.enable_grad(x)
-    y = dr.hsum_async(x*x)
+    y = dr.sum(x*x)
     dr.backward(y)
     assert len(y) == 1 and dr.allclose(y, 95.0/27.0)
     assert dr.allclose(dr.grad(x), 2 * dr.detach(x))
 
 
-def test08_hsum_0_fwd(m):
+def test08_sum_0_fwd(m):
     x = dr.linspace(m.Float, 0, 1, 10)
     dr.enable_grad(x)
-    y = dr.hsum_async(x*x)
+    y = dr.sum(x*x)
     dr.forward(x)
     assert len(y) == 1 and dr.allclose(dr.detach(y), 95.0/27.0)
     assert len(dr.grad(y)) == 1 and dr.allclose(dr.grad(y), 10)
 
 
-def test09_hsum_1_bwd(m):
+def test09_sum_1_bwd(m):
     x = dr.linspace(m.Float, 0, 1, 11)
     dr.enable_grad(x)
-    y = dr.hsum_async(dr.hsum_async(x)*x)
+    y = dr.sum(dr.sum(x)*x)
     dr.backward(y)
     assert dr.allclose(dr.grad(x), 11)
 
 
-def test10_hsum_1_fwd(m):
+def test10_sum_1_fwd(m):
     x = dr.linspace(m.Float, 0, 1, 10)
     dr.enable_grad(x)
-    y = dr.hsum_async(dr.hsum_async(x)*x)
+    y = dr.sum(dr.sum(x)*x)
     dr.forward(x)
     assert dr.allclose(dr.grad(y), 100)
 
 
-def test11_hsum_2_bwd(m):
+def test11_sum_2_bwd(m):
     x = dr.linspace(m.Float, 0, 1, 11)
     dr.enable_grad(x)
-    z = dr.hsum_async(dr.hsum_async(x*x)*x*x)
+    z = dr.sum(dr.sum(x*x)*x*x)
     dr.backward(z)
     assert dr.allclose(dr.grad(x),
                        [0., 1.54, 3.08, 4.62, 6.16, 7.7,
                         9.24, 10.78, 12.32, 13.86, 15.4])
 
 
-def test12_hsum_2_fwd(m):
+def test12_sum_2_fwd(m):
     x = dr.linspace(m.Float, 0, 1, 10)
     dr.enable_grad(x)
-    y = dr.hsum_async(dr.hsum_async(x*x)*dr.hsum_async(x*x))
+    y = dr.sum(dr.sum(x*x)*dr.sum(x*x))
     dr.forward(x)
     assert dr.allclose(dr.grad(y), 1900.0 / 27.0)
 
 
-def test13_hprod(m):
+def test13_prod(m):
     x = m.Float(1, 2, 5, 8)
     dr.enable_grad(x)
-    y = dr.hprod_async(x)
+    y = dr.prod(x)
     dr.backward(y)
     assert len(y) == 1 and dr.allclose(y[0], 80)
     assert dr.allclose(dr.grad(x), [80, 40, 16, 10])
@@ -241,7 +241,7 @@ def test21_gather(m):
     x = dr.linspace(m.Float, -1, 1, 10)
     dr.enable_grad(x)
     y = dr.gather(m.Float, x*x, m.UInt(1, 1, 2, 3))
-    z = dr.hsum_async(y)
+    z = dr.sum(y)
     dr.backward(z)
     ref = [0, -1.55556*2, -1.11111, -0.666667, 0, 0, 0, 0, 0, 0]
     assert dr.allclose(dr.grad(x), ref)
