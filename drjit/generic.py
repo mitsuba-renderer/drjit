@@ -1,5 +1,5 @@
 from drjit import Dynamic, Exception, VarType
-import drjit as _ek
+import drjit as _dr
 import weakref as _wr
 
 
@@ -106,16 +106,16 @@ def _binary_op(a, b, fn):
 
     if convert:
         src, dst = VarType.Float64, VarType.Int64
-        a = _ek.detail.reinterpret_scalar(a, src, dst)
+        a = _dr.detail.reinterpret_scalar(a, src, dst)
         if isinstance(b, bool):
             b = -1 if b else 0
         else:
-            b = _ek.detail.reinterpret_scalar(b, src, dst)
+            b = _dr.detail.reinterpret_scalar(b, src, dst)
 
     c = fn(a, b)
 
     if convert:
-        c = _ek.detail.reinterpret_scalar(c, dst, src)
+        c = _dr.detail.reinterpret_scalar(c, dst, src)
 
     return c
 
@@ -185,7 +185,7 @@ def mul_(a0, a1):
     if not a0.IsArithmetic:
         raise Exception("mul(): requires arithmetic operands!")
 
-    if _ek.array_depth_v(a1) < _ek.array_depth_v(a0):
+    if _dr.array_depth_v(a1) < _dr.array_depth_v(a0):
         # Avoid type promotion in scalars multiplication, which would
         # be costly for special types (matrices, quaternions, etc.)
         sr = len(a0)
@@ -199,8 +199,8 @@ def mul_(a0, a1):
         for i in range(sr):
             ar[i] = a0[i] * a1[i]
     elif a0.IsComplex:
-        ar.real = _ek.fmsub(a0.real, a1.real, a0.imag * a1.imag)
-        ar.imag = _ek.fmadd(a0.real, a1.imag, a0.imag * a1.real)
+        ar.real = _dr.fmsub(a0.real, a1.real, a0.imag * a1.imag)
+        ar.imag = _dr.fmadd(a0.real, a1.imag, a0.imag * a1.real)
     elif a0.IsQuaternion:
         tbl = (4, 3, -2, 1, -3, 4, 1, 2, 2, -1, 4, 3, -1, -2, -3, 4)
         for i in range(4):
@@ -208,7 +208,7 @@ def mul_(a0, a1):
             for j in range(4):
                 idx = tbl[i*4 + j]
                 value = a1[abs(idx) - 1]
-                accum = _ek.fmadd(a0[j], value if idx > 0 else -value, accum)
+                accum = _dr.fmadd(a0[j], value if idx > 0 else -value, accum)
             ar[i] = accum
     elif a0.IsMatrix:
         raise Exception("mul(): please use the matrix multiplication operator '@' instead.")
@@ -235,23 +235,23 @@ def matmul_(a0, a1):
         raise Exception("matmul(): unsupported operand shape!")
 
     if a0.IsVector and a1.IsVector:
-        return _ek.dot(a0, a1)
+        return _dr.dot(a0, a1)
     elif a0.IsMatrix and a1.IsVector:
         ar = a0[0] * a1[0]
         for i in range(1, a1.Size):
-            ar = _ek.fmadd(a0[i], a1[i], ar)
+            ar = _dr.fmadd(a0[i], a1[i], ar)
         return ar
     elif a0.IsVector and a1.IsMatrix:
         ar = a1.Value()
         for i in range(a1.Size):
-            ar[i] = _ek.dot(a0, a1[i])
+            ar[i] = _dr.dot(a0, a1[i])
         return ar
     else: # matrix @ matrix
         ar, sr = _check2(a0, a1)
         for j in range(a0.Size):
-            accum = a0[0] * _ek.full(a0.Value, a1[0, j])
+            accum = a0[0] * _dr.full(a0.Value, a1[0, j])
             for i in range(1, a0.Size):
-                accum = _ek.fmadd(a0[i], _ek.full(a0.Value, a1[i, j]), accum)
+                accum = _dr.fmadd(a0[i], _dr.full(a0.Value, a1[i, j]), accum)
             ar[j] = accum
         return ar
 
@@ -475,14 +475,14 @@ def ge_(a0, a1):
 def eq_(a0, a1):
     ar, sr = _check2_mask(a0, a1)
     for i in range(sr):
-        ar[i] = _ek.eq(a0[i], a1[i])
+        ar[i] = _dr.eq(a0[i], a1[i])
     return ar
 
 
 def neq_(a0, a1):
     ar, sr = _check2_mask(a0, a1)
     for i in range(sr):
-        ar[i] = _ek.neq(a0[i], a1[i])
+        ar[i] = _dr.neq(a0[i], a1[i])
     return ar
 
 
@@ -492,20 +492,20 @@ def sqrt_(a0):
     ar, sr = _check1(a0)
     if not a0.IsSpecial:
         for i in range(sr):
-            ar[i] = _ek.sqrt(a0[i])
+            ar[i] = _dr.sqrt(a0[i])
     elif a0.IsComplex:
         n = abs(a0)
         m = a0.real >= 0
-        zero = _ek.eq(n, 0)
-        t1 = _ek.sqrt(.5 * (n + abs(a0.real)))
+        zero = _dr.eq(n, 0)
+        t1 = _dr.sqrt(.5 * (n + abs(a0.real)))
         t2 = .5 * a0.imag / t1
-        im = _ek.select(m, t2, _ek.copysign(t1, a0.imag))
-        ar.real = _ek.select(m, t1, abs(t2))
-        ar.imag = _ek.select(zero, 0, im)
+        im = _dr.select(m, t2, _dr.copysign(t1, a0.imag))
+        ar.real = _dr.select(m, t1, abs(t2))
+        ar.imag = _dr.select(zero, 0, im)
     elif a0.IsQuaternion:
-        ri = _ek.norm(a0.imag)
-        cs = _ek.sqrt(a0.Complex(a0.real, ri))
-        ar.imag = a0.imag * (_ek.rcp(ri) * cs.imag)
+        ri = _dr.norm(a0.imag)
+        cs = _dr.sqrt(a0.Complex(a0.real, ri))
+        ar.imag = a0.imag * (_dr.rcp(ri) * cs.imag)
         ar.real = cs.real
     else:
         raise Exception("sqrt(): unsupported array type!")
@@ -518,10 +518,10 @@ def rsqrt_(a0):
     if not a0.IsSpecial:
         ar, sr = _check1(a0)
         for i in range(sr):
-            ar[i] = _ek.rsqrt(a0[i])
+            ar[i] = _dr.rsqrt(a0[i])
         return ar
     else:
-        return _ek.rcp(_ek.sqrt(a0))
+        return _dr.rcp(_dr.sqrt(a0))
 
 
 def rcp_(a0):
@@ -530,9 +530,9 @@ def rcp_(a0):
     ar, sr = _check1(a0)
     if not a0.IsSpecial:
         for i in range(sr):
-            ar[i] = _ek.rcp(a0[i])
+            ar[i] = _dr.rcp(a0[i])
     elif a0.IsComplex or a0.IsQuaternion:
-        return _ek.conj(a0) * _ek.rcp(_ek.squared_norm(a0))
+        return _dr.conj(a0) * _dr.rcp(_dr.squared_norm(a0))
     else:
         raise Exception("rcp(): unsupported array type!")
     return ar
@@ -544,10 +544,10 @@ def abs_(a0):
     if not a0.IsSpecial or a0.IsMatrix:
         ar, sr = _check1(a0)
         for i in range(sr):
-            ar[i] = _ek.abs(a0[i])
+            ar[i] = _dr.abs(a0[i])
         return ar
     elif a0.IsSpecial:
-        return _ek.norm(a0)
+        return _dr.norm(a0)
     else:
         raise Exception("abs(): unsupported array type!")
 
@@ -557,7 +557,7 @@ def mulhi_(a0, a1):
     if not a0.IsIntegral:
         raise Exception("mulhi(): requires integral operands!")
     for i in range(sr):
-        ar[i] = _ek.mulhi(a0[i], a1[i])
+        ar[i] = _dr.mulhi(a0[i], a1[i])
     return ar
 
 
@@ -566,7 +566,7 @@ def max_(a0, a1):
     if not a0.IsArithmetic:
         raise Exception("max(): requires arithmetic operands!")
     for i in range(sr):
-        ar[i] = _ek.max(a0[i], a1[i])
+        ar[i] = _dr.max(a0[i], a1[i])
     return ar
 
 
@@ -575,7 +575,7 @@ def min_(a0, a1):
         raise Exception("min(): requires arithmetic operands!")
     ar, sr = _check2(a0, a1)
     for i in range(sr):
-        ar[i] = _ek.min(a0[i], a1[i])
+        ar[i] = _dr.min(a0[i], a1[i])
     return ar
 
 
@@ -585,7 +585,7 @@ def fmadd_(a0, a1, a2):
     if not a0.IsSpecial:
         ar, sr = _check3(a0, a1, a2)
         for i in range(sr):
-            ar[i] = _ek.fmadd(a0[i], a1[i], a2[i])
+            ar[i] = _dr.fmadd(a0[i], a1[i], a2[i])
         return ar
     else:
         return a0 * a1 + a2
@@ -596,7 +596,7 @@ def tzcnt_(a0):
         raise Exception("tzcnt(): requires integral operands!")
     ar, sr = _check1(a0)
     for i in range(sr):
-        ar[i] = _ek.tzcnt(a0[i])
+        ar[i] = _dr.tzcnt(a0[i])
     return ar
 
 
@@ -605,7 +605,7 @@ def lzcnt_(a0):
         raise Exception("lzcnt(): requires integral operands!")
     ar, sr = _check1(a0)
     for i in range(sr):
-        ar[i] = _ek.lzcnt(a0[i])
+        ar[i] = _dr.lzcnt(a0[i])
     return ar
 
 
@@ -614,7 +614,7 @@ def popcnt_(a0):
         raise Exception("popcnt(): requires integral operands!")
     ar, sr = _check1(a0)
     for i in range(sr):
-        ar[i] = _ek.popcnt(a0[i])
+        ar[i] = _dr.popcnt(a0[i])
     return ar
 
 
@@ -623,7 +623,7 @@ def floor_(a0):
         raise Exception("floor(): requires arithmetic operands!")
     ar, sr = _check1(a0)
     for i in range(sr):
-        ar[i] = _ek.floor(a0[i])
+        ar[i] = _dr.floor(a0[i])
     return ar
 
 
@@ -632,7 +632,7 @@ def ceil_(a0):
         raise Exception("ceil(): requires arithmetic operands!")
     ar, sr = _check1(a0)
     for i in range(sr):
-        ar[i] = _ek.ceil(a0[i])
+        ar[i] = _dr.ceil(a0[i])
     return ar
 
 
@@ -641,7 +641,7 @@ def round_(a0):
         raise Exception("round(): requires arithmetic operands!")
     ar, sr = _check1(a0)
     for i in range(sr):
-        ar[i] = _ek.round(a0[i])
+        ar[i] = _dr.round(a0[i])
     return ar
 
 
@@ -650,7 +650,7 @@ def trunc_(a0):
         raise Exception("trunc(): requires arithmetic operands!")
     ar, sr = _check1(a0)
     for i in range(sr):
-        ar[i] = _ek.trunc(a0[i])
+        ar[i] = _dr.trunc(a0[i])
     return ar
 
 
@@ -658,7 +658,7 @@ def trunc_(a0):
 def select_(a0, a1, a2):
     ar, sr = _check3_select(a0, a1, a2)
     for i in range(sr):
-        ar[i] = _ek.select(a0[i], a1[i], a2[i])
+        ar[i] = _dr.select(a0[i], a1[i], a2[i])
     return ar
 
 # -------------------------------------------------------------------
@@ -706,7 +706,7 @@ def schedule_(a0):
         if a0.Depth == 1:
             if a0.IsDiff:
                 a0 = a0.detach_()
-            result |= _ek.detail.schedule(a0.index())
+            result |= _dr.detail.schedule(a0.index())
         else:
             for i in range(len(a0)):
                 result |= a0[i].schedule_()
@@ -724,10 +724,10 @@ def sin_(a0):
     ar, sr = _check1(a0)
     if not a0.IsSpecial:
         for i in range(sr):
-            ar[i] = _ek.sin(a0[i])
+            ar[i] = _dr.sin(a0[i])
     elif a0.IsComplex:
-        s, c = _ek.sincos(a0.real)
-        sh, ch = _ek.sincosh(a0.imag)
+        s, c = _dr.sincos(a0.real)
+        sh, ch = _dr.sincosh(a0.imag)
         ar.real = s * ch
         ar.imag = c * sh
     else:
@@ -741,10 +741,10 @@ def cos_(a0):
     ar, sr = _check1(a0)
     if not a0.IsSpecial:
         for i in range(sr):
-            ar[i] = _ek.cos(a0[i])
+            ar[i] = _dr.cos(a0[i])
     elif a0.IsComplex:
-        s, c = _ek.sincos(a0.real)
-        sh, ch = _ek.sincosh(a0.imag)
+        s, c = _dr.sincos(a0.real)
+        sh, ch = _dr.sincosh(a0.imag)
         ar.real = c * ch
         ar.imag = -s * sh
     else:
@@ -760,12 +760,12 @@ def sincos_(a0):
     ar1 = a0.empty_(sr0 if a0.Size == Dynamic else 0)
     if not a0.IsSpecial:
         for i in range(sr0):
-            result = _ek.sincos(a0[i])
+            result = _dr.sincos(a0[i])
             ar0[i] = result[0]
             ar1[i] = result[1]
     elif a0.IsComplex:
-        s, c = _ek.sincos(a0.real)
-        sh, ch = _ek.sincosh(a0.imag)
+        s, c = _dr.sincos(a0.real)
+        sh, ch = _dr.sincosh(a0.imag)
         ar0.real = s * ch
         ar0.imag = c * sh
         ar1.real = c * ch
@@ -781,9 +781,9 @@ def csc_(a0):
     if not a0.IsSpecial:
         ar, sr = _check1(a0)
         for i in range(sr):
-            ar[i] = _ek.csc(a0[i])
+            ar[i] = _dr.csc(a0[i])
     else:
-        return 1 / _ek.sin(a0)
+        return 1 / _dr.sin(a0)
     return ar
 
 
@@ -793,9 +793,9 @@ def sec_(a0):
     if not a0.IsSpecial:
         ar, sr = _check1(a0)
         for i in range(sr):
-            ar[i] = _ek.sec(a0[i])
+            ar[i] = _dr.sec(a0[i])
     else:
-        return 1 / _ek.cos(a0)
+        return 1 / _dr.cos(a0)
     return ar
 
 
@@ -805,9 +805,9 @@ def tan_(a0):
     if not a0.IsSpecial:
         ar, sr = _check1(a0)
         for i in range(sr):
-            ar[i] = _ek.tan(a0[i])
+            ar[i] = _dr.tan(a0[i])
     elif a0.IsComplex:
-        s, c = _ek.sincos(a0)
+        s, c = _dr.sincos(a0)
         return s / c
     else:
         raise Exception("tan(): unsupported array type!")
@@ -820,9 +820,9 @@ def cot_(a0):
     if not a0.IsSpecial:
         ar, sr = _check1(a0)
         for i in range(sr):
-            ar[i] = _ek.cot(a0[i])
+            ar[i] = _dr.cot(a0[i])
     elif a0.IsComplex:
-        s, c = _ek.sincos(a0)
+        s, c = _dr.sincos(a0)
         return c / s
     else:
         raise Exception("cot(): unsupported array type!")
@@ -835,9 +835,9 @@ def asin_(a0):
     ar, sr = _check1(a0)
     if not a0.IsSpecial:
         for i in range(sr):
-            ar[i] = _ek.asin(a0[i])
+            ar[i] = _dr.asin(a0[i])
     elif a0.IsSpecial:
-        tmp = _ek.log(type(a0)(-a0.imag, a0.real) + _ek.sqrt(1 - _ek.sqr(a0)))
+        tmp = _dr.log(type(a0)(-a0.imag, a0.real) + _dr.sqrt(1 - _dr.sqr(a0)))
         ar.real = tmp.imag
         ar.imag = -tmp.real
     else:
@@ -851,10 +851,10 @@ def acos_(a0):
     ar, sr = _check1(a0)
     if not a0.IsSpecial:
         for i in range(sr):
-            ar[i] = _ek.acos(a0[i])
+            ar[i] = _dr.acos(a0[i])
     elif a0.IsSpecial:
-        tmp = _ek.sqrt(1 - _ek.sqr(a0))
-        tmp = _ek.log(a0 + type(a0)(-tmp.imag, tmp.real))
+        tmp = _dr.sqrt(1 - _dr.sqr(a0))
+        tmp = _dr.log(a0 + type(a0)(-tmp.imag, tmp.real))
         ar.real = tmp.imag
         ar.imag = -tmp.real
     else:
@@ -868,10 +868,10 @@ def atan_(a0):
     ar, sr = _check1(a0)
     if not a0.IsSpecial:
         for i in range(sr):
-            ar[i] = _ek.atan(a0[i])
+            ar[i] = _dr.atan(a0[i])
     elif a0.IsSpecial:
         im = type(a0)(0, 1)
-        tmp = _ek.log((im - a0) / (im + a0))
+        tmp = _dr.log((im - a0) / (im + a0))
         return type(a0)(tmp.imag * .5, -tmp.real * 0.5)
     else:
         raise Exception("atan(): unsupported array type!")
@@ -884,7 +884,7 @@ def atan2_(a0, a1):
     ar, sr = _check2(a0, a1)
     if not a0.IsSpecial:
         for i in range(sr):
-            ar[i] = _ek.atan2(a0[i], a1[i])
+            ar[i] = _dr.atan2(a0[i], a1[i])
     else:
         raise Exception("atan2(): unsupported array type!")
     return ar
@@ -896,17 +896,17 @@ def exp_(a0):
     ar, sr = _check1(a0)
     if not a0.IsSpecial:
         for i in range(sr):
-            ar[i] = _ek.exp(a0[i])
+            ar[i] = _dr.exp(a0[i])
     elif a0.IsComplex:
-        s, c = _ek.sincos(a0.imag)
-        exp_r = _ek.exp(a0.real)
+        s, c = _dr.sincos(a0.imag)
+        exp_r = _dr.exp(a0.real)
         ar.real = exp_r * c
         ar.imag = exp_r * s
     elif a0.IsQuaternion:
         qi = a0.imag
-        ri = _ek.norm(qi)
-        exp_w = _ek.exp(a0.real)
-        s, c = _ek.sincos(ri)
+        ri = _dr.norm(qi)
+        exp_w = _dr.exp(a0.real)
+        s, c = _dr.sincos(ri)
         ar.imag = qi * (s * exp_w / ri)
         ar.real = c * exp_w
     else:
@@ -920,10 +920,10 @@ def exp2_(a0):
     ar, sr = _check1(a0)
     if not a0.IsSpecial:
         for i in range(sr):
-            ar[i] = _ek.exp2(a0[i])
+            ar[i] = _dr.exp2(a0[i])
     elif a0.IsComplex:
-        s, c = _ek.sincos(a0.imag * _ek.LogTwo)
-        exp_r = _ek.exp2(a0.real)
+        s, c = _dr.sincos(a0.imag * _dr.LogTwo)
+        exp_r = _dr.exp2(a0.real)
         ar.real = exp_r * c
         ar.imag = exp_r * s
     else:
@@ -937,15 +937,15 @@ def log_(a0):
     ar, sr = _check1(a0)
     if not a0.IsSpecial:
         for i in range(sr):
-            ar[i] = _ek.log(a0[i])
+            ar[i] = _dr.log(a0[i])
     elif a0.IsComplex:
-        ar.real = .5 * _ek.log(_ek.squared_norm(a0))
-        ar.imag = _ek.arg(a0)
+        ar.real = .5 * _dr.log(_dr.squared_norm(a0))
+        ar.imag = _dr.arg(a0)
     elif a0.IsQuaternion:
-        qi_n = _ek.normalize(a0.imag)
-        rq = _ek.norm(a0)
-        acos_rq = _ek.acos(a0.real / rq)
-        log_rq = _ek.log(rq)
+        qi_n = _dr.normalize(a0.imag)
+        rq = _dr.norm(a0)
+        acos_rq = _dr.acos(a0.real / rq)
+        log_rq = _dr.log(rq)
         ar.imag = qi_n * acos_rq
         ar.real = log_rq
     else:
@@ -959,10 +959,10 @@ def log2_(a0):
     ar, sr = _check1(a0)
     if not a0.IsSpecial:
         for i in range(sr):
-            ar[i] = _ek.log2(a0[i])
+            ar[i] = _dr.log2(a0[i])
     elif a0.IsComplex:
-        ar.real = .5 * _ek.log2(_ek.squared_norm(a0))
-        ar.imag = _ek.arg(a0) * _ek.InvLogTwo
+        ar.real = .5 * _dr.log2(_dr.squared_norm(a0))
+        ar.imag = _dr.arg(a0) * _dr.InvLogTwo
     else:
         raise Exception("log2(): unsupported array type!")
     return ar
@@ -975,13 +975,13 @@ def pow_(a0, a1):
         if isinstance(a1, int) or isinstance(a1, float):
             ar, sr = _check1(a0)
             for i in range(sr):
-                ar[i] = _ek.pow(a0[i], a1)
+                ar[i] = _dr.pow(a0[i], a1)
         else:
             ar, sr = _check2(a0, a1)
             for i in range(sr):
-                ar[i] = _ek.pow(a0[i], a1[i])
+                ar[i] = _dr.pow(a0[i], a1[i])
     else:
-        return _ek.exp(_ek.log(a0) * a1)
+        return _dr.exp(_dr.log(a0) * a1)
     return ar
 
 
@@ -991,10 +991,10 @@ def sinh_(a0):
     ar, sr = _check1(a0)
     if not a0.IsSpecial:
         for i in range(sr):
-            ar[i] = _ek.sinh(a0[i])
+            ar[i] = _dr.sinh(a0[i])
     elif a0.IsComplex:
-        s, c = _ek.sincos(a0.imag)
-        sh, ch = _ek.sincosh(a0.real)
+        s, c = _dr.sincos(a0.imag)
+        sh, ch = _dr.sincosh(a0.real)
         ar.real = sh * c
         ar.imag = ch * s
     else:
@@ -1008,10 +1008,10 @@ def cosh_(a0):
     ar, sr = _check1(a0)
     if not a0.IsSpecial:
         for i in range(sr):
-            ar[i] = _ek.cosh(a0[i])
+            ar[i] = _dr.cosh(a0[i])
     elif a0.IsComplex:
-        s, c = _ek.sincos(a0.imag)
-        sh, ch = _ek.sincosh(a0.real)
+        s, c = _dr.sincos(a0.imag)
+        sh, ch = _dr.sincosh(a0.real)
         ar.real = ch * c
         ar.imag = sh * s
     else:
@@ -1026,12 +1026,12 @@ def sincosh_(a0):
     ar1 = a0.empty_(sr0 if a0.Size == Dynamic else 0)
     if not a0.IsSpecial:
         for i in range(sr0):
-            result = _ek.sincosh(a0[i])
+            result = _dr.sincosh(a0[i])
             ar0[i] = result[0]
             ar1[i] = result[1]
     elif a0.IsComplex:
-        s, c = _ek.sincos(a0.imag)
-        sh, ch = _ek.sincosh(a0.real)
+        s, c = _dr.sincos(a0.imag)
+        sh, ch = _dr.sincosh(a0.real)
         ar0.real = sh * c
         ar0.imag = ch * s
         ar1.real = ch * c
@@ -1047,9 +1047,9 @@ def asinh_(a0):
     ar, sr = _check1(a0)
     if not a0.IsSpecial:
         for i in range(sr):
-            ar[i] = _ek.asinh(a0[i])
+            ar[i] = _dr.asinh(a0[i])
     elif a0.IsComplex:
-        return _ek.log(a0 + _ek.sqrt(_ek.sqr(a0) + 1))
+        return _dr.log(a0 + _dr.sqrt(_dr.sqr(a0) + 1))
     else:
         raise Exception("asinh(): unsupported array type!")
     return ar
@@ -1061,9 +1061,9 @@ def acosh_(a0):
     ar, sr = _check1(a0)
     if not a0.IsSpecial:
         for i in range(sr):
-            ar[i] = _ek.acosh(a0[i])
+            ar[i] = _dr.acosh(a0[i])
     elif a0.IsComplex:
-        return 2 * _ek.log(_ek.sqrt(.5 * (a0 + 1)) + _ek.sqrt(.5 * (a0 - 1)))
+        return 2 * _dr.log(_dr.sqrt(.5 * (a0 + 1)) + _dr.sqrt(.5 * (a0 - 1)))
     else:
         raise Exception("acosh(): unsupported array type!")
     return ar
@@ -1075,9 +1075,9 @@ def atanh_(a0):
     ar, sr = _check1(a0)
     if not a0.IsSpecial:
         for i in range(sr):
-            ar[i] = _ek.atanh(a0[i])
+            ar[i] = _dr.atanh(a0[i])
     elif a0.IsComplex:
-        return _ek.log((1 + a0) / (1 - a0)) * .5
+        return _dr.log((1 + a0) / (1 - a0)) * .5
     else:
         raise Exception("atanh(): unsupported array type!")
     return ar
@@ -1089,7 +1089,7 @@ def cbrt_(a0):
     ar, sr = _check1(a0)
     if not a0.IsSpecial:
         for i in range(sr):
-            ar[i] = _ek.cbrt(a0[i])
+            ar[i] = _dr.cbrt(a0[i])
     else:
         raise Exception("cbrt(): unsupported array type!")
     return ar
@@ -1101,7 +1101,7 @@ def erf_(a0):
     ar, sr = _check1(a0)
     if not a0.IsSpecial:
         for i in range(sr):
-            ar[i] = _ek.erf(a0[i])
+            ar[i] = _dr.erf(a0[i])
     else:
         raise Exception("erf(): unsupported array type!")
     return ar
@@ -1113,7 +1113,7 @@ def erfinv_(a0):
     ar, sr = _check1(a0)
     if not a0.IsSpecial:
         for i in range(sr):
-            ar[i] = _ek.erfinv(a0[i])
+            ar[i] = _dr.erfinv(a0[i])
     else:
         raise Exception("erfinv(): unsupported array type!")
     return ar
@@ -1125,7 +1125,7 @@ def lgamma_(a0):
     ar, sr = _check1(a0)
     if not a0.IsSpecial:
         for i in range(sr):
-            ar[i] = _ek.lgamma(a0[i])
+            ar[i] = _dr.lgamma(a0[i])
     else:
         raise Exception("lgamma(): unsupported array type!")
     return ar
@@ -1137,7 +1137,7 @@ def tgamma_(a0):
     ar, sr = _check1(a0)
     if not a0.IsSpecial:
         for i in range(sr):
-            ar[i] = _ek.tgamma(a0[i])
+            ar[i] = _dr.tgamma(a0[i])
     else:
         raise Exception("tgamma(): unsupported array type!")
     return ar
@@ -1219,7 +1219,7 @@ def hmin_(a0):
 
     value = a0[0]
     for i in range(1, size):
-        value = _ek.min(value, a0[i])
+        value = _dr.min(value, a0[i])
     return value
 
 
@@ -1240,7 +1240,7 @@ def hmax_(a0):
 
     value = a0[0]
     for i in range(1, size):
-        value = _ek.max(value, a0[i])
+        value = _dr.max(value, a0[i])
     return value
 
 
@@ -1263,7 +1263,7 @@ def dot_(a0, a1):
     value = a0[0] * a1[0]
     if a0.IsFloat:
         for i in range(1, size):
-            value = _ek.fmadd(a0[i], a1[i], value)
+            value = _dr.fmadd(a0[i], a1[i], value)
     else:
         for i in range(1, size):
             value += a0[i] * a1[i]
@@ -1275,7 +1275,7 @@ def block_sum_(a0, block_size):
         raise Exception("block_sum(): requires arithmetic operands!")
     ar, sr = _check1(a0)
     for i in range(sr):
-        ar[i] = _ek.block_sum(a0[i], block_size)
+        ar[i] = _dr.block_sum(a0[i], block_size)
     return ar
 
 # -------------------------------------------------------------------
@@ -1287,7 +1287,7 @@ def detach_(a):
     if not a.IsDiff:
         return a
 
-    t = _ek.detached_t(type(a))
+    t = _dr.detached_t(type(a))
 
     if a.IsTensor:
         return t(a.array.detach_(), a.shape)
@@ -1302,7 +1302,7 @@ def grad_(a):
     if not a.IsDiff:
         return None
 
-    t = _ek.detached_t(type(a))
+    t = _dr.detached_t(type(a))
 
     if a.IsTensor:
         return t(a.array.grad_(), a.shape)
@@ -1345,7 +1345,7 @@ def set_grad_(a, grad):
         raise Exception("Expected a differentiable array type!")
 
     if a.IsTensor:
-        if _ek.is_tensor_v(grad):
+        if _dr.is_tensor_v(grad):
             a.array.set_grad_(grad.array)
         else:
             a.array.set_grad_(grad)
@@ -1360,7 +1360,7 @@ def accum_grad_(a, grad):
         raise Exception("Expected a differentiable array type!")
 
     if a.IsTensor:
-        if _ek.is_tensor_v(grad):
+        if _dr.is_tensor_v(grad):
             a.array.accum_grad_(grad.array)
         else:
             a.array.accum_grad_(grad)
@@ -1432,7 +1432,7 @@ def broadcast_(self, value):
     elif self.IsMatrix:
         t = self.Value
         for i in range(len(self)):
-            c = _ek.zero(t)
+            c = _dr.zero(t)
             c.set_entry_(i, t.Value(value))
             self.set_entry_(i, c)
     else:
@@ -1443,14 +1443,14 @@ def broadcast_(self, value):
 def empty_(cls, shape):
     if cls.IsTensor:
         shape = [shape] if type(shape) is int else shape
-        return cls(_ek.empty(cls.Array, _ek.hprod(shape)), shape)
+        return cls(_dr.empty(cls.Array, _dr.hprod(shape)), shape)
 
     result = cls()
     if cls.Size == Dynamic:
         result.init_(shape)
     elif cls.IsDynamic:
         for i in range(len(result)):
-            result.set_entry_(i, _ek.empty(cls.Value, shape))
+            result.set_entry_(i, _dr.empty(cls.Value, shape))
     return result
 
 
@@ -1458,7 +1458,7 @@ def empty_(cls, shape):
 def zero_(cls, shape=1):
     if cls.IsTensor:
         shape = [shape] if type(shape) is int else shape
-        return cls(_ek.zero(cls.Array, _ek.hprod(shape)), shape)
+        return cls(_dr.zero(cls.Array, _dr.hprod(shape)), shape)
 
     result = cls()
     if cls.Size == Dynamic:
@@ -1467,7 +1467,7 @@ def zero_(cls, shape=1):
             result.set_entry_(i, 0)
     else:
         for i in range(cls.Size):
-            result.set_entry_(i, _ek.zero(cls.Value, shape))
+            result.set_entry_(i, _dr.zero(cls.Value, shape))
     return result
 
 
@@ -1475,7 +1475,7 @@ def zero_(cls, shape=1):
 def full_(cls, value, shape):
     if cls.IsTensor:
         shape = [shape] if type(shape) is int else shape
-        return cls(_ek.full(cls.Array, value, _ek.hprod(shape)), shape)
+        return cls(_dr.full(cls.Array, value, _dr.hprod(shape)), shape)
 
     result = cls()
     if cls.Size == Dynamic:
@@ -1483,8 +1483,8 @@ def full_(cls, value, shape):
         for i in range(shape):
             result.set_entry_(i, value)
     else:
-        if _ek.array_depth_v(value) != cls.Depth - 1:
-            value = _ek.full(cls.Value, value, shape)
+        if _dr.array_depth_v(value) != cls.Depth - 1:
+            value = _dr.full(cls.Value, value, shape)
 
         for i in range(cls.Size):
             result.set_entry_(i, value)
@@ -1502,7 +1502,7 @@ def linspace_(cls, min, max, size=1, endpoint=True):
             result[i] = min + step * i
     else:
         for i in range(len(result)):
-            result[i] = _ek.fmadd(step, i, min)
+            result[i] = _dr.fmadd(step, i, min)
     return result
 
 
@@ -1523,7 +1523,7 @@ def gather_(cls, source, index, mask, permute):
     sr = max(len(index), len(mask))
     result = cls.empty_(sr if cls.Size == Dynamic else 0)
     for i in range(sr):
-        result[i] = _ek.gather(cls.Value, source, index[i], mask[i], permute)
+        result[i] = _dr.gather(cls.Value, source, index[i], mask[i], permute)
     return result
 
 
@@ -1531,14 +1531,14 @@ def scatter_(self, target, index, mask, permute):
     assert target.Depth == 1
     sr = max(len(self), len(index), len(mask))
     for i in range(sr):
-        _ek.scatter(target, self[i], index[i], mask[i], permute)
+        _dr.scatter(target, self[i], index[i], mask[i], permute)
 
 
 def scatter_reduce_(self, op, target, index, mask):
     assert target.Depth == 1
     sr = max(len(self), len(index), len(mask))
     for i in range(sr):
-        _ek.scatter_reduce(op, target, self[i], index[i], mask[i])
+        _dr.scatter_reduce(op, target, self[i], index[i], mask[i])
 
 
 # -------------------------------------------------------------------
@@ -1547,7 +1547,7 @@ def scatter_reduce_(self, op, target, index, mask):
 
 
 def export_(a, migrate_to_host, version, owner_supported=True):
-    shape = _ek.shape(a)
+    shape = _dr.shape(a)
     ndim = len(shape)
     if not a.IsTensor:
         shape = tuple(reversed(shape))
@@ -1590,16 +1590,16 @@ def export_(a, migrate_to_host, version, owner_supported=True):
         strides[0] = temp
 
         # JIT array -- requires extra transformations
-        b = _ek.ravel(_ek.detach(a) if a.IsDiff else a)
-        _ek.eval(b)
+        b = _dr.ravel(_dr.detach(a) if a.IsDiff else a)
+        _dr.eval(b)
 
         if b.IsCUDA and migrate_to_host:
             if b is a:
                 b = type(a)(b)
-            b = b.migrate_(_ek.AllocType.Host)
-            _ek.sync_thread()
+            b = b.migrate_(_dr.AllocType.Host)
+            _dr.sync_thread()
         elif b.IsLLVM:
-            _ek.sync_thread()
+            _dr.sync_thread()
 
         if not owner_supported and a is not b:
             # If the caller cannot deal with the 'owner' field, use
@@ -1617,7 +1617,7 @@ def export_(a, migrate_to_host, version, owner_supported=True):
             "typestr": "<" + a.Type.NumPy,
             "data": (data_ptr, False),
             "version": version,
-            "device": _ek.device(b),
+            "device": _dr.device(b),
             "owner": b
         }
 
@@ -1659,7 +1659,7 @@ def op_dlpack(a):
     struct = a.export_(migrate_to_host=False, version=2)
     isize = a.Type.Size
     strides = tuple(k // isize for k in struct["strides"])
-    return _ek.detail.to_dlpack(
+    return _dr.detail.to_dlpack(
         owner=struct["owner"],
         data=struct["data"][0],
         type=a.Type,
