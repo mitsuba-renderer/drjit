@@ -263,8 +263,8 @@ def test06_reinterpret_cast():
     assert dr.float_array_t(LI3) is LF3
     assert dr.int_array_t(LF3) is LI3
 
-    assert dr.reinterpret_array(I3, F3(1)).x == 0x3f800000
-    assert dr.reinterpret_array(F3, I3(0x3f800000)).x == 1.0
+    assert dr.reinterpret_array_v(I3, F3(1)).x == 0x3f800000
+    assert dr.reinterpret_array_v(F3, I3(0x3f800000)).x == 1.0
 
 
 @pytest.mark.parametrize("pkg", ['drjit.cuda', 'drjit.llvm'])
@@ -303,8 +303,8 @@ def test07_sincos(t):
 
         Shift = Float.Type.Size * 8 - 3
 
-        sign_sin = dr.reinterpret_array(Float, j << Shift) ^ x
-        sign_cos = dr.reinterpret_array(Float, (~(j - Int(2)) << Shift))
+        sign_sin = dr.reinterpret_array_v(Float, j << Shift) ^ x
+        sign_cos = dr.reinterpret_array_v(Float, (~(j - Int(2)) << Shift))
 
         y = xa - y * 0.78515625 \
                - y * 2.4187564849853515625e-4 \

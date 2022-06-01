@@ -389,8 +389,8 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
         cls.def("exp2_", [](const Array &a) { return dr::exp2(a); });
         cls.def("log_", [](const Array &a) { return dr::log(a); });
         cls.def("log2_", [](const Array &a) { return dr::log2(a); });
-        cls.def("pow_", [](const Array &x, Scalar y) { return dr::pow(x, y); });
-        cls.def("pow_", [](const Array &x, const Array &y) { return dr::pow(x, y); });
+        cls.def("power_", [](const Array &x, Scalar y) { return dr::pow(x, y); });
+        cls.def("power_", [](const Array &x, const Array &y) { return dr::pow(x, y); });
         cls.def("sinh_", [](const Array &a) { return dr::sinh(a); });
         cls.def("cosh_", [](const Array &a) { return dr::cosh(a); });
         cls.def("sincosh_", [](const Array &a) { return dr::sincosh(a); });

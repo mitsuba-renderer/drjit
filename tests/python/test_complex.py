@@ -141,7 +141,7 @@ def test10_math_explog(C):
             b = C(cmath.exp(complex(i, j) * cmath.log(2)))
             assert dr.allclose(a, b)
 
-            a = dr.pow(C(2, 3), C(i, j))
+            a = dr.power(C(2, 3), C(i, j))
             b = C(complex(2, 3) ** complex(i, j))
             assert dr.allclose(a, b)
 
