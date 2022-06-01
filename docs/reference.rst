@@ -21,8 +21,10 @@ These operations are *horizontal* in the sense that [..]
 
 .. autofunction:: gather
 .. autofunction:: scatter
+.. autofunction:: scatter_reduce
 .. autofunction:: ravel
 .. autofunction:: unravel
+.. autofunction:: slice
 .. autofunction:: min
 .. autofunction:: max
 .. autofunction:: sum
@@ -48,6 +50,8 @@ Miscellaneous operations
 ------------------------
 
 .. autofunction:: shape
+.. autofunction:: width
+.. autofunction:: resize
 .. autofunction:: slice_index
 .. autofunction:: meshgrid
 
@@ -122,6 +126,11 @@ _______________________
 .. autofunction:: detached_t
 .. autofunction:: leaf_array_t
 .. autofunction:: expr_t
+
+Others
+______
+
+.. autofunction:: reinterpret_array_v
 
 Standard mathematical functions
 -------------------------------
