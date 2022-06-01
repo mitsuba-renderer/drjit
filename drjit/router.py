@@ -1,4 +1,4 @@
-import drjit as _ek
+import drjit as _dr
 from drjit import ArrayBase, VarType, Exception, Dynamic
 from drjit.detail import array_name as _array_name
 from sys import modules as _modules
@@ -244,7 +244,7 @@ def shape(a):
     any size.
 
     """
-    if _ek.is_tensor_v(a):
+    if _dr.is_tensor_v(a):
         return a.shape
     s = []
     if not _shape_impl(a, 0, s):
@@ -254,12 +254,12 @@ def shape(a):
 
 
 def width(value):
-    if _ek.is_array_v(value):
-        if _ek.is_tensor_v(value):
+    if _dr.is_array_v(value):
+        if _dr.is_tensor_v(value):
             return width(value.array)
         else:
             return shape(value)[-1]
-    elif _ek.is_drjit_struct_v(value):
+    elif _dr.is_drjit_struct_v(value):
         result = 0
         for k in type(value).DRJIT_STRUCT.keys():
             result = max(result, width(getattr(value, k)))
@@ -269,25 +269,25 @@ def width(value):
 
 
 def resize(value, size):
-    if _ek.array_depth_v(value) > 1:
+    if _dr.array_depth_v(value) > 1:
         for i in range(value.Size):
             resize(value[i], size)
-    elif _ek.is_jit_array_v(value):
+    elif _dr.is_jit_array_v(value):
         value.resize_(size)
-    elif _ek.is_drjit_struct_v(value):
+    elif _dr.is_drjit_struct_v(value):
         for k in type(value).DRJIT_STRUCT.keys():
             resize(getattr(value, k), size)
 
 
 def device(value=None):
     if value is None:
-        return _ek.detail.device()
-    elif _ek.array_depth_v(value) > 1:
+        return _dr.detail.device()
+    elif _dr.array_depth_v(value) > 1:
         return device(value[0])
-    elif _ek.is_diff_array_v(value):
-        return device(_ek.detach(value))
-    elif _ek.is_jit_array_v(value):
-        return _ek.detail.device(value.index())
+    elif _dr.is_diff_array_v(value):
+        return device(_dr.detach(value))
+    elif _dr.is_jit_array_v(value):
+        return _dr.detail.device(value.index())
     else:
         return -1
 
@@ -415,11 +415,11 @@ def op_getitem(self, index):
             raise Exception("Indexing via slice is only allowed in the case of "
                             "dynamic arrays")
         indices = tuple(range(len(self)))[index]
-        result = _ek.empty(type(self), len(indices))
+        result = _dr.empty(type(self), len(indices))
         for i in range(len(indices)):
             result[i] = op_getitem(self, indices[i])
         return result
-    elif _ek.is_mask_v(index):
+    elif _dr.is_mask_v(index):
         return type(self)(self)
     else:
         raise Exception("Invalid array index! (must be an integer or a tuple "
@@ -457,8 +457,8 @@ def op_setitem(self, index, value):
                 op_setitem(self, index[0], value2)
         else:
             op_setitem(self, index[0], value)
-    elif _ek.is_mask_v(index):
-        self.assign(_ek.select(index, value, self))
+    elif _dr.is_mask_v(index):
+        self.assign(_dr.select(index, value, self))
     elif isinstance(index, _builtins.slice):
         indices = tuple(range(len(self)))[index]
         for i in range(len(indices)):
@@ -491,7 +491,7 @@ def reinterpret_array(target_type, value,
 
             return result
     else:
-        return _ek.detail.reinterpret_scalar(value, vt_value, vt_target)
+        return _dr.detail.reinterpret_scalar(value, vt_value, vt_target)
 
 
 # -------------------------------------------------------------------
@@ -500,7 +500,7 @@ def reinterpret_array(target_type, value,
 
 def _broadcast_index(target_type, index):
     size = target_type.Size
-    if _ek.array_size_v(index) <= 1 and size == Dynamic:
+    if _dr.array_size_v(index) <= 1 and size == Dynamic:
         return target_type(index)
     elif target_type.Depth > index.Depth:
         assert size != Dynamic
@@ -517,7 +517,7 @@ def gather(target_type, source, index, mask=True, permute=False):
     if not isinstance(target_type, type):
         raise Exception('gather(): Type expected as first argument')
     elif not issubclass(target_type, ArrayBase):
-        if _ek.is_drjit_struct_v(target_type):
+        if _dr.is_drjit_struct_v(target_type):
             if type(source) is not target_type:
                 raise Exception('gather(): type mismatch involving custom data structure!')
             result = target_type()
@@ -529,7 +529,7 @@ def gather(target_type, source, index, mask=True, permute=False):
             assert isinstance(index, int) and isinstance(mask, bool)
             return source[index] if mask else 0
     else:
-        if _ek.is_tensor_v(target_type) or _ek.is_tensor_v(source):
+        if _dr.is_tensor_v(target_type) or _dr.is_tensor_v(source):
             raise Exception("gather(): Tensor type not supported! Should work "
                             "with the underlying array instead. (e.g. tensor.array)")
         if source.Depth != 1:
@@ -541,7 +541,7 @@ def gather(target_type, source, index, mask=True, permute=False):
                 result[i] = gather(target_type.Value, source[i], index, mask, permute)
             return result
         else:
-            index_type = _ek.uint32_array_t(target_type)
+            index_type = _dr.uint32_array_t(target_type)
             if not isinstance(index, index_type):
                 index = _broadcast_index(index_type, index)
 
@@ -555,7 +555,7 @@ def gather(target_type, source, index, mask=True, permute=False):
 def scatter(target, value, index, mask=True, permute=False):
     target_type = type(target)
     if not issubclass(target_type, ArrayBase):
-        if _ek.is_drjit_struct_v(target_type):
+        if _dr.is_drjit_struct_v(target_type):
             if type(value) is not target_type:
                 raise Exception('scatter(): type mismatch involving custom data structure!')
             for k in target_type.DRJIT_STRUCT.keys():
@@ -566,20 +566,20 @@ def scatter(target, value, index, mask=True, permute=False):
             if mask:
                 target[index] = value
     else:
-        if _ek.is_tensor_v(target) or _ek.is_tensor_v(value):
+        if _dr.is_tensor_v(target) or _dr.is_tensor_v(value):
             raise Exception("scatter(): Tensor type not supported! Should work "
                             "with the underlying array instead. (e.g. tensor.array)")
         if target.Depth != 1:
-            if _ek.array_size_v(target) != _ek.array_size_v(value):
+            if _dr.array_size_v(target) != _dr.array_size_v(value):
                 raise Exception("scatter(): mismatched source/target configuration!")
 
             for i in range(len(target)):
                 scatter(target.entry_ref_(i), value[i], index, mask, permute)
         else:
-            if not _ek.is_array_v(value):
+            if not _dr.is_array_v(value):
                 value = target_type(value)
 
-            index_type = _ek.uint32_array_t(type(value))
+            index_type = _dr.uint32_array_t(type(value))
             if not isinstance(index, index_type):
                 index = _broadcast_index(index_type, index)
 
@@ -593,7 +593,7 @@ def scatter(target, value, index, mask=True, permute=False):
 def scatter_reduce(op, target, value, index, mask=True):
     target_type = type(target)
     if not issubclass(target_type, ArrayBase):
-        if _ek.is_drjit_struct_v(target_type):
+        if _dr.is_drjit_struct_v(target_type):
             if type(value) is not target_type:
                 raise Exception('scatter_reduce(): type mismatch involving custom data structure!')
             for k in target_type.DRJIT_STRUCT.keys():
@@ -604,20 +604,20 @@ def scatter_reduce(op, target, value, index, mask=True):
             if mask:
                 target[index] += value
     else:
-        if _ek.is_tensor_v(target) or _ek.is_tensor_v(value):
+        if _dr.is_tensor_v(target) or _dr.is_tensor_v(value):
             raise Exception("scatter_reduce(): Tensor type not supported! "
                             "Should work with the underlying array instead. (e.g. tensor.array)")
         if target.Depth != 1:
-            if _ek.array_size_v(target) != _ek.array_size_v(value):
+            if _dr.array_size_v(target) != _dr.array_size_v(value):
                 raise Exception("scatter_reduce(): mismatched source/target configuration!")
 
             for i in range(len(target)):
                 scatter_reduce(op, target.entry_ref_(i), value[i], index, mask)
         else:
-            if not _ek.is_array_v(value):
+            if not _dr.is_array_v(value):
                 value = target_type(value)
 
-            index_type = _ek.uint32_array_t(type(value))
+            index_type = _dr.uint32_array_t(type(value))
             if not isinstance(index, index_type):
                 index = _broadcast_index(index_type, index)
 
@@ -639,7 +639,7 @@ def ravel(array):
     s = shape(array)
 
     if array.IsSpecial and not array.IsMatrix:
-        name = _ek.detail.array_name('Array', array.Type, s, array.IsScalar)
+        name = _dr.detail.array_name('Array', array.Type, s, array.IsScalar)
         t = getattr(_modules.get(array.__module__), name)
         array = t(array)
 
@@ -649,7 +649,7 @@ def ravel(array):
     target_type = type(array)
     while target_type.Depth > 1:
         target_type = target_type.Value
-    index_type = _ek.uint32_array_t(target_type)
+    index_type = _dr.uint32_array_t(target_type)
 
     target = empty(target_type, hprod(s))
     scatter(target, array, arange(index_type, s[-1]))
@@ -672,28 +672,28 @@ def unravel(target_class, array):
         raise Exception('unravel(): input array length must be '
                         'divisible by %i!' % size)
 
-    indices = arange(_ek.uint32_array_t(type(array)), len(array) // size)
+    indices = arange(_dr.uint32_array_t(type(array)), len(array) // size)
     return gather(target_class, array, indices)
 
 
 def slice(value, index=-1, return_type=None):
     t = type(value)
-    if _ek.array_depth_v(t) > 1 or issubclass(t, _Sequence):
+    if _dr.array_depth_v(t) > 1 or issubclass(t, _Sequence):
         size = len(value)
         result = [None] * size
         for i in range(size):
-            result[i] = _ek.slice(value[i], index)
+            result[i] = _dr.slice(value[i], index)
         return result
-    elif _ek.is_drjit_struct_v(value):
+    elif _dr.is_drjit_struct_v(value):
         if return_type == None:
             raise Exception('slice(): return type should be specified for drjit struct!')
         result = return_type()
         for k in type(value).DRJIT_STRUCT.keys():
-            setattr(result, k, _ek.slice(getattr(value, k), index))
+            setattr(result, k, _dr.slice(getattr(value, k), index))
         return result
-    elif _ek.is_dynamic_array_v(value):
+    elif _dr.is_dynamic_array_v(value):
         if index == -1:
-            if _ek.width(value) > 1:
+            if _dr.width(value) > 1:
                 raise Exception('slice(): variable contains more than a single entry!')
             index = 0
         return value.entry_(index)
@@ -758,7 +758,7 @@ def op_mul(a, b):
         value_type_a = a.Value.Value if a.IsMatrix else a.Value
         value_type_b = None
 
-        if _ek.is_array_v(b):
+        if _dr.is_array_v(b):
             value_type_b = b.Value.Value if b.IsMatrix else b.Value
 
         if scalar_multp or value_type_a is type(b):
@@ -781,7 +781,7 @@ def op_rmul(a, b):
 
 
 def op_matmul(a, b):
-    if a.IsMatrix and not (_ek.is_vector_v(b) or _ek.is_matrix_v(b)):
+    if a.IsMatrix and not (_dr.is_vector_v(b) or _dr.is_matrix_v(b)):
         return a * b
     else:
         return a.matmul_(b)
@@ -840,7 +840,7 @@ def op_floordiv(a, b):
             return a
 
         # Division via multiplication by magic number + shift
-        multiplier, shift = _ek.detail.idiv(a.Type, b)
+        multiplier, shift = _dr.detail.idiv(a.Type, b)
 
         if a.IsSigned:
             q = mulhi(multiplier, a) + a
@@ -852,7 +852,7 @@ def op_floordiv(a, b):
             if multiplier == 0:
                 return a >> (shift + 1)
 
-            q = _ek.mulhi(multiplier, a)
+            q = _dr.mulhi(multiplier, a)
             t = ((a - q) >> 1) + q
             return t >> shift
 
@@ -911,20 +911,20 @@ def op_imod(a, b):
 
 
 def op_and(a, b):
-    if type(a) is not type(b) and type(b) is not _ek.mask_t(a):
+    if type(a) is not type(b) and type(b) is not _dr.mask_t(a):
         a, b = _var_promote_mask(a, b)
 
     return a.and_(b)
 
 
 def op_rand(a, b):
-    if type(a) is not type(b) and type(a) is not _ek.mask_t(b):
+    if type(a) is not type(b) and type(a) is not _dr.mask_t(b):
         b, a = _var_promote_mask(b, a)
     return b.and_(a)
 
 
 def op_iand(a, b):
-    if type(a) is not type(b) and type(b) is not _ek.mask_t(a):
+    if type(a) is not type(b) and type(b) is not _dr.mask_t(a):
         a, b = _var_promote_mask(a, b)
 
     return a.iand_(b)
@@ -938,19 +938,19 @@ def and_(a, b):
 
 
 def op_or(a, b):
-    if type(a) is not type(b) and type(b) is not _ek.mask_t(a):
+    if type(a) is not type(b) and type(b) is not _dr.mask_t(a):
         a, b = _var_promote_mask(a, b)
     return a.or_(b)
 
 
 def op_ror(a, b):
-    if type(a) is not type(b) and type(a) is not _ek.mask_t(b):
+    if type(a) is not type(b) and type(a) is not _dr.mask_t(b):
         b, a = _var_promote_mask(b, a)
     return b.or_(a)
 
 
 def op_ior(a, b):
-    if type(a) is not type(b) and type(b) is not _ek.mask_t(a):
+    if type(a) is not type(b) and type(b) is not _dr.mask_t(a):
         a, b = _var_promote_mask(a, b)
     return a.ior_(b)
 
@@ -963,19 +963,19 @@ def or_(a, b):
 
 
 def op_xor(a, b):
-    if type(a) is not type(b) and type(b) is not _ek.mask_t(a):
+    if type(a) is not type(b) and type(b) is not _dr.mask_t(a):
         a, b = _var_promote_mask(a, b)
     return a.xor_(b)
 
 
 def op_rxor(a, b):
-    if type(a) is not type(b) and type(a) is not _ek.mask_t(b):
+    if type(a) is not type(b) and type(a) is not _dr.mask_t(b):
         b, a = _var_promote_mask(b, a)
     return b.xor_(a)
 
 
 def op_ixor(a, b):
-    if type(a) is not type(b) and type(b) is not _ek.mask_t(a):
+    if type(a) is not type(b) and type(b) is not _dr.mask_t(a):
         a, b = _var_promote_mask(a, b)
     return a.ixor_(b)
 
@@ -1171,7 +1171,7 @@ def fmadd(a, b, c):
             a, b, c = _var_promote(a, b, c)
         return a.fmadd_(b, c)
     else:
-        return _ek.detail.fmadd_scalar(a, b, c)
+        return _dr.detail.fmadd_scalar(a, b, c)
 
 
 def fmsub(a, b, c):
@@ -1191,8 +1191,8 @@ def select(m, t, f):
         return t if m else f
     type_t, type_f, type_m = type(t), type(f), type(m)
 
-    if type_t is not type_f or type_m is not _ek.mask_t(t):
-        if type_t is type_f and _ek.is_drjit_struct_v(type_t):
+    if type_t is not type_f or type_m is not _dr.mask_t(t):
+        if type_t is type_f and _dr.is_drjit_struct_v(type_t):
             result = type_t()
             for k in type_t.DRJIT_STRUCT.keys():
                 setattr(result, k, select(m, getattr(t, k), getattr(f, k)))
@@ -1227,18 +1227,18 @@ def mulsign_neg(a, b):
 
 
 def isnan(a):
-    if _ek.is_array_v(a):
+    if _dr.is_array_v(a):
         return ~eq(a, a)
     else:
         return not (a == a)
 
 
 def isinf(a):
-    return eq(abs(a), _ek.Infinity)
+    return eq(abs(a), _dr.Infinity)
 
 
 def isfinite(a):
-    return abs(a) < _ek.Infinity
+    return abs(a) < _dr.Infinity
 
 
 def lerp(a, b, t):
@@ -1246,30 +1246,30 @@ def lerp(a, b, t):
 
 
 def clamp(value, min, max):
-    return _ek.max(_ek.min(value, max), min)
+    return _dr.max(_dr.min(value, max), min)
 
 
 def arg(value):
-    if _ek.is_complex_v(value):
-        return _ek.atan2(value.imag, value.real)
+    if _dr.is_complex_v(value):
+        return _dr.atan2(value.imag, value.real)
     else:
-        return _ek.select(value >= 0, 0, -_ek.Pi)
+        return _dr.select(value >= 0, 0, -_dr.Pi)
 
 
 def real(value):
-    if _ek.is_complex_v(value):
+    if _dr.is_complex_v(value):
         return value[0]
-    elif _ek.is_quaternion_v(value):
+    elif _dr.is_quaternion_v(value):
         return value[3]
     else:
         return value
 
 
 def imag(value):
-    if _ek.is_complex_v(value):
+    if _dr.is_complex_v(value):
         return value[1]
-    elif _ek.is_quaternion_v(value):
-        name = _ek.detail.array_name('Array', value.Type, (3), value.IsScalar)
+    elif _dr.is_quaternion_v(value):
+        name = _dr.detail.array_name('Array', value.Type, (3), value.IsScalar)
         Array3f = getattr(_modules.get(value.__module__), name)
         return Array3f(value[0], value[1], value[2])
     else:
@@ -1327,32 +1327,32 @@ def log2i(a):
 
 def safe_sqrt(a):
     result = sqrt(max(a, 0))
-    if _ek.is_diff_array_v(a) and _ek.grad_enabled(a):
-        alt = sqrt(max(a, _ek.Epsilon(a)))
+    if _dr.is_diff_array_v(a) and _dr.grad_enabled(a):
+        alt = sqrt(max(a, _dr.Epsilon(a)))
         result = replace_grad(result, alt)
     return result
 
 
 def safe_cbrt(a):
     result = cbrt(max(a, 0))
-    if _ek.is_diff_array_v(a) and _ek.grad_enabled(a):
-        alt = cbrt(max(a, _ek.Epsilon(a)))
+    if _dr.is_diff_array_v(a) and _dr.grad_enabled(a):
+        alt = cbrt(max(a, _dr.Epsilon(a)))
         result = replace_grad(result, alt)
     return result
 
 
 def safe_asin(a):
     result = asin(clamp(a, -1, 1))
-    if _ek.is_diff_array_v(a) and _ek.grad_enabled(a):
-        alt = asin(clamp(a, -_ek.OneMinusEpsilon(a), _ek.OneMinusEpsilon(a)))
+    if _dr.is_diff_array_v(a) and _dr.grad_enabled(a):
+        alt = asin(clamp(a, -_dr.OneMinusEpsilon(a), _dr.OneMinusEpsilon(a)))
         result = replace_grad(result, alt)
     return result
 
 
 def safe_acos(a):
     result = acos(clamp(a, -1, 1))
-    if _ek.is_diff_array_v(a) and _ek.grad_enabled(a):
-        alt = acos(clamp(a, -_ek.OneMinusEpsilon(a), _ek.OneMinusEpsilon(a)))
+    if _dr.is_diff_array_v(a) and _dr.grad_enabled(a):
+        alt = acos(clamp(a, -_dr.OneMinusEpsilon(a), _dr.OneMinusEpsilon(a)))
         result = replace_grad(result, alt)
     return result
 
@@ -1376,12 +1376,12 @@ def set_label(*args, **kwargs):
 
     if n_args:
         a, label = args
-        if _ek.is_jit_array_v(a) or _ek.is_diff_array_v(a):
+        if _dr.is_jit_array_v(a) or _dr.is_diff_array_v(a):
             a.set_label_(label)
         elif isinstance(a, _Mapping):
             for k, v in a.items():
                 set_label(v, label + "_" + k)
-        elif _ek.is_drjit_struct_v(a):
+        elif _dr.is_drjit_struct_v(a):
             for k in a.DRJIT_STRUCT.keys():
                 set_label(getattr(a, k), label + "_" + k)
     elif n_kwargs:
@@ -1395,7 +1395,7 @@ def schedule(*args):
         t = type(a)
         if issubclass(t, ArrayBase):
             result |= a.schedule_()
-        elif _ek.is_drjit_struct_v(t):
+        elif _dr.is_drjit_struct_v(t):
             for k in t.DRJIT_STRUCT.keys():
                 result |= schedule(getattr(a, k))
         elif issubclass(t, _Sequence):
@@ -1409,16 +1409,16 @@ def schedule(*args):
 
 def eval(*args):
     if schedule(*args) or len(args) == 0:
-        _ek.detail.eval()
+        _dr.detail.eval()
 
 
 def graphviz_str(arg):
-    base = _ek.leaf_array_t(arg)
+    base = _dr.leaf_array_t(arg)
 
-    if _ek.is_diff_array_v(base):
+    if _dr.is_diff_array_v(base):
         return base.graphviz_()
-    elif _ek.is_jit_array_v(base):
-        return _ek.detail.graphviz()
+    elif _dr.is_jit_array_v(base):
+        return _dr.detail.graphviz()
     else:
         raise Exception('graphviz_str(): only variables registered with '
                         'the JIT (LLVM/CUDA) or AD backend are supported!')
@@ -1436,7 +1436,7 @@ def graphviz(arg):
 
 
 def migrate(a, type_):
-    if _ek.is_jit_array_v(a):
+    if _dr.is_jit_array_v(a):
         return a.migrate_(type_)
     else:
         return a
@@ -1555,8 +1555,8 @@ def log2(a):
 
 
 def pow(a, b):
-    if _ek.is_tensor_v(a):
-        return type(a)(a.array.pow_(b if not _ek.is_tensor_v(b) else b.array), a.shape)
+    if _dr.is_tensor_v(a):
+        return type(a)(a.array.pow_(b if not _dr.is_tensor_v(b) else b.array), a.shape)
     if isinstance(a, ArrayBase) or \
        isinstance(b, ArrayBase):
         if type(a) is not type(b) and not \
@@ -1668,11 +1668,11 @@ def atanh(a):
 
 
 def rad_to_deg(a):
-    return a * (180.0 / _ek.Pi)
+    return a * (180.0 / _dr.Pi)
 
 
 def deg_to_rad(a):
-    return a * (_ek.Pi / 180.0)
+    return a * (_dr.Pi / 180.0)
 
 
 # -------------------------------------------------------------------
@@ -1681,7 +1681,7 @@ def deg_to_rad(a):
 
 
 def shuffle(perm, value):
-    if not _ek.is_array_v(value) or len(perm) != value.Size:
+    if not _dr.is_array_v(value) or len(perm) != value.Size:
         raise Exception("shuffle(): incompatible input!")
 
     result = type(value)()
@@ -1692,7 +1692,7 @@ def shuffle(perm, value):
 
 
 def compress(mask):
-    if not _ek.is_mask_v(mask) or not mask.IsDynamic:
+    if not _dr.is_mask_v(mask) or not mask.IsDynamic:
         raise Exception("compress(): incompatible input!")
     return mask.compress_()
 
@@ -1704,13 +1704,13 @@ def count(a):
         return a.count_()
     elif isinstance(a, bool):
         return 1 if a else 0
-    elif _ek.is_iterable_v(a):
+    elif _dr.is_iterable_v(a):
         result = 0
         for index, value in enumerate(a):
             if index == 0:
-                result = _ek.select(value, 0, 1)
+                result = _dr.select(value, 0, 1)
             else:
-                result = result + _ek.select(value, 1, 0)
+                result = result + _dr.select(value, 1, 0)
         return result
     else:
         raise Exception("count(): input must be a boolean or an "
@@ -1724,7 +1724,7 @@ def all(a):
         return a.all_()
     elif isinstance(a, bool):
         return a
-    elif _ek.is_iterable_v(a):
+    elif _dr.is_iterable_v(a):
         result = True
         for index, value in enumerate(a):
             if index == 0:
@@ -1748,10 +1748,10 @@ def all_nested(a):
 
 def all_or(value, a):
     assert isinstance(value, bool)
-    if _ek.is_jit_array_v(a) and a.Depth == 1:
+    if _dr.is_jit_array_v(a) and a.Depth == 1:
         return value
     else:
-        return _ek.all(a)
+        return _dr.all(a)
 
 
 def any(a):
@@ -1761,7 +1761,7 @@ def any(a):
         return a.any_()
     elif isinstance(a, bool):
         return a
-    elif _ek.is_iterable_v(a):
+    elif _dr.is_iterable_v(a):
         result = False
         for index, value in enumerate(a):
             if index == 0:
@@ -1785,10 +1785,10 @@ def any_nested(a):
 
 def any_or(value, a):
     assert isinstance(value, bool)
-    if _ek.is_jit_array_v(a) and a.Depth == 1:
+    if _dr.is_jit_array_v(a) and a.Depth == 1:
         return value
     else:
-        return _ek.any(a)
+        return _dr.any(a)
 
 
 def none(a):
@@ -1803,10 +1803,10 @@ def none_nested(a):
 
 def none_or(value, a):
     assert isinstance(value, bool)
-    if _ek.is_jit_array_v(a) and a.Depth == 1:
+    if _dr.is_jit_array_v(a) and a.Depth == 1:
         return value
     else:
-        return _ek.none(a)
+        return _dr.none(a)
 
 
 def hsum(a):
@@ -1814,7 +1814,7 @@ def hsum(a):
         return a.hsum_()
     elif isinstance(a, float) or isinstance(a, int):
         return a
-    elif _ek.is_iterable_v(a):
+    elif _dr.is_iterable_v(a):
         result = 0
         for index, value in enumerate(a):
             if index == 0:
@@ -1842,14 +1842,14 @@ def hsum_nested(a):
 
 def hmean(a):
     if hasattr(a, '__len__'):
-        return _ek.hsum(a) / len(a)
+        return _dr.hsum(a) / len(a)
     else:
         return a
 
 
 def hmean_async(a):
     if hasattr(a, '__len__'):
-        return _ek.hsum_async(a) / len(a)
+        return _dr.hsum_async(a) / len(a)
     else:
         return a
 
@@ -1868,7 +1868,7 @@ def hprod(a):
         return a.hprod_()
     elif isinstance(a, float) or isinstance(a, int):
         return a
-    elif _ek.is_iterable_v(a):
+    elif _dr.is_iterable_v(a):
         result = 1
         for index, value in enumerate(a):
             if index == 0:
@@ -1899,13 +1899,13 @@ def hmax(a):
         return a.hmax_()
     elif isinstance(a, float) or isinstance(a, int):
         return a
-    elif _ek.is_iterable_v(a):
+    elif _dr.is_iterable_v(a):
         result = None
         for index, value in enumerate(a):
             if index == 0:
                 result = value
             else:
-                result = _ek.max(result, value)
+                result = _dr.max(result, value)
         if result is None:
             raise Exception("hmax(): zero-sized array!")
         return result
@@ -1931,13 +1931,13 @@ def hmin(a):
         return a.hmin_()
     elif isinstance(a, float) or isinstance(a, int):
         return a
-    elif _ek.is_iterable_v(a):
+    elif _dr.is_iterable_v(a):
         result = None
         for index, value in enumerate(a):
             if index == 0:
                 result = value
             else:
-                result = _ek.min(result, value)
+                result = _dr.min(result, value)
         if result is None:
             raise Exception("hmin(): zero-sized array!")
         return result
@@ -1960,7 +1960,7 @@ def hmin_nested(a):
 
 
 def dot(a, b):
-    if _ek.is_matrix_v(a) or _ek.is_matrix_v(b):
+    if _dr.is_matrix_v(a) or _dr.is_matrix_v(b):
         raise Exception("dot(): input shouldn't be a Matrix!"
                         "The @ operator should be used instead.")
 
@@ -1970,7 +1970,7 @@ def dot(a, b):
 
 
 def dot_async(a, b):
-    if _ek.is_matrix_v(a) or _ek.is_matrix_v(b):
+    if _dr.is_matrix_v(a) or _dr.is_matrix_v(b):
         raise Exception("dot_async(): input shouldn't be a Matrix!"
                         "The @ operator should be used instead.")
 
@@ -1984,7 +1984,7 @@ def dot_async(a, b):
 
 
 def abs_dot(a, b):
-    if _ek.is_matrix_v(a) or _ek.is_matrix_v(b):
+    if _dr.is_matrix_v(a) or _dr.is_matrix_v(b):
         raise Exception("abs_dot(): input shouldn't be a Matrix!"
                         "The @ operator should be used instead.")
 
@@ -1992,7 +1992,7 @@ def abs_dot(a, b):
 
 
 def abs_dot_async(a, b):
-    if _ek.is_matrix_v(a) or _ek.is_matrix_v(b):
+    if _dr.is_matrix_v(a) or _dr.is_matrix_v(b):
         raise Exception("abs_dot_async(): input shouldn't be a Matrix!"
                         "The @ operator should be used instead.")
 
@@ -2012,9 +2012,9 @@ def normalize(a):
 
 
 def conj(a):
-    if _ek.is_complex_v(a):
+    if _dr.is_complex_v(a):
         return type(a)(a.real, -a.imag)
-    elif _ek.is_quaternion_v(a):
+    elif _dr.is_quaternion_v(a):
         return type(a)(-a.x, -a.y, -a.z, a.w)
     else:
         return a
@@ -2022,20 +2022,20 @@ def conj(a):
 
 def hypot(a, b):
     a, b = abs(a), abs(b)
-    maxval = _ek.max(a, b)
-    minval = _ek.min(a, b)
+    maxval = _dr.max(a, b)
+    minval = _dr.min(a, b)
     ratio = minval / maxval
-    inf = _ek.Infinity
+    inf = _dr.Infinity
 
-    return _ek.select(
+    return _dr.select(
         (a < inf) & (b < inf) & (ratio < inf),
-        maxval * _ek.sqrt(_ek.fmadd(ratio, ratio, 1)),
+        maxval * _dr.sqrt(_dr.fmadd(ratio, ratio, 1)),
         a + b
     )
 
 
 def tile(array, count: int):
-    if not _ek.is_array_v(array) or not isinstance(count, int):
+    if not _dr.is_array_v(array) or not isinstance(count, int):
         raise("tile(): invalid input types!")
     elif not array.IsDynamic:
         raise("tile(): first input argument must be a dynamic Dr.Jit array!")
@@ -2054,12 +2054,12 @@ def tile(array, count: int):
 
         return result
     else:
-        index = _ek.arange(_ek.uint_array_t(t), size * count) % size
-        return _ek.gather(t, array, index)
+        index = _dr.arange(_dr.uint_array_t(t), size * count) % size
+        return _dr.gather(t, array, index)
 
 
 def repeat(array, count: int):
-    if not _ek.is_array_v(array) or not isinstance(count, int):
+    if not _dr.is_array_v(array) or not isinstance(count, int):
         raise("tile(): invalid input types!")
     elif not array.IsDynamic:
         raise("tile(): first input argument must be a dynamic Dr.Jit array!")
@@ -2078,8 +2078,8 @@ def repeat(array, count: int):
 
         return result
     else:
-        index = _ek.arange(_ek.uint_array_t(t), size * count) // count
-        return _ek.gather(t, array, index)
+        index = _dr.arange(_dr.uint_array_t(t), size * count) // count
+        return _dr.gather(t, array, index)
 
 
 def meshgrid(*args, indexing='xy'):
@@ -2094,12 +2094,12 @@ def meshgrid(*args, indexing='xy'):
 
     t = type(args[0])
     for v in args:
-        if not _ek.is_dynamic_array_v(v) or \
-           _ek.array_depth_v(v) != 1 or type(v) is not t:
+        if not _dr.is_dynamic_array_v(v) or \
+           _dr.array_depth_v(v) != 1 or type(v) is not t:
             raise Exception("meshgrid(): consistent 1D dynamic arrays expected!")
 
-    size = _ek.hprod((len(v) for v in args))
-    index = _ek.arange(_ek.uint32_array_t(t), size)
+    size = _dr.hprod((len(v) for v in args))
+    index = _dr.arange(_dr.uint32_array_t(t), size)
 
     result = []
 
@@ -2111,7 +2111,7 @@ def meshgrid(*args, indexing='xy'):
         size //= len(v)
         index_v = index // size
         index = fnmadd(index_v, size, index)
-        result.append(_ek.gather(t, v, index_v))
+        result.append(_dr.gather(t, v, index_v))
 
     if indexing == "xy":
         result[0], result[1] = result[1], result[0]
@@ -2120,7 +2120,7 @@ def meshgrid(*args, indexing='xy'):
 
 
 def block_sum(value, block_size):
-    if _ek.is_jit_array_v(value):
+    if _dr.is_jit_array_v(value):
         return value.block_sum_(block_size)
     else:
         raise Exception("block_sum(): requires a JIT array!")
@@ -2135,8 +2135,8 @@ def binary_search(start, end, pred):
         middle = (start + end) >> 1
 
         cond = pred(middle)
-        start = _ek.select(cond, _ek.min(middle + 1, end), start)
-        end = _ek.select(cond, end, middle)
+        start = _dr.select(cond, _dr.min(middle + 1, end), start)
+        end = _dr.select(cond, end, middle)
 
     return start
 
@@ -2146,7 +2146,7 @@ def binary_search(start, end, pred):
 # -------------------------------------------------------------------
 
 def cross(a, b):
-    if _ek.array_size_v(a) != 3 or _ek.array_size_v(a) != 3:
+    if _dr.array_size_v(a) != 3 or _dr.array_size_v(a) != 3:
         raise Exception("cross(): requires 3D input arrays!")
 
     ta, tb = type(a), type(b)
@@ -2161,12 +2161,12 @@ def cross(a, b):
 
 
 def detach(a, preserve_type=False):
-    if _ek.is_diff_array_v(a):
+    if _dr.is_diff_array_v(a):
         if preserve_type:
             return type(a)(a.detach_())
         else:
             return a.detach_()
-    elif _ek.is_drjit_struct_v(a):
+    elif _dr.is_drjit_struct_v(a):
         result = type(a)()
         for k in type(a).DRJIT_STRUCT.keys():
             setattr(result, k, detach(getattr(a, k), preserve_type=preserve_type))
@@ -2176,9 +2176,9 @@ def detach(a, preserve_type=False):
 
 
 def grad(a):
-    if _ek.is_diff_array_v(a):
+    if _dr.is_diff_array_v(a):
         return a.grad_()
-    elif _ek.is_drjit_struct_v(a):
+    elif _dr.is_drjit_struct_v(a):
         result = type(a)()
         for k in type(a).DRJIT_STRUCT.keys():
             setattr(result, k, grad(getattr(a, k)))
@@ -2188,15 +2188,15 @@ def grad(a):
     elif isinstance(a, _Mapping):
         return {k : grad(v) for k, v in a.items()}
     else:
-        return _ek.zero(type(a))
+        return _dr.zero(type(a))
 
 
 def set_grad(a, value):
-    if _ek.is_diff_array_v(a) and a.IsFloat:
-        if _ek.is_diff_array_v(value):
-            value = _ek.detach(value)
+    if _dr.is_diff_array_v(a) and a.IsFloat:
+        if _dr.is_diff_array_v(value):
+            value = _dr.detach(value)
 
-        t = _ek.detached_t(a)
+        t = _dr.detached_t(a)
         if type(value) is not t:
             value = t(value)
 
@@ -2211,19 +2211,19 @@ def set_grad(a, value):
         assert not vm or a.keys() == value.keys()
         for k, v in a.items():
             set_grad(v, value[k] if vm else value)
-    elif _ek.is_drjit_struct_v(a):
-        ve = _ek.is_drjit_struct_v(value)
+    elif _dr.is_drjit_struct_v(a):
+        ve = _dr.is_drjit_struct_v(value)
         assert not ve or type(value) is type(a)
         for k in type(a).DRJIT_STRUCT.keys():
             set_grad(getattr(a, k), getattr(value, k) if ve else value)
 
 
 def accum_grad(a, value):
-    if _ek.is_diff_array_v(a) and a.IsFloat:
-        if _ek.is_diff_array_v(value):
-            value = _ek.detach(value)
+    if _dr.is_diff_array_v(a) and a.IsFloat:
+        if _dr.is_diff_array_v(value):
+            value = _dr.detach(value)
 
-        t = _ek.detached_t(a)
+        t = _dr.detached_t(a)
         if type(value) is not t:
             value = t(value)
 
@@ -2238,8 +2238,8 @@ def accum_grad(a, value):
         assert not vm or a.keys() == value.keys()
         for k, v in a.items():
             accum_grad(v, value[k] if vm else value)
-    elif _ek.is_drjit_struct_v(a):
-        ve = _ek.is_drjit_struct_v(value)
+    elif _dr.is_drjit_struct_v(a):
+        ve = _dr.is_drjit_struct_v(value)
         assert not ve or type(value) is type(a)
         for k in type(a).DRJIT_STRUCT.keys():
             accum_grad(getattr(a, k), getattr(value, k) if ve else value)
@@ -2248,9 +2248,9 @@ def accum_grad(a, value):
 def grad_enabled(*args):
     result = False
     for a in args:
-        if _ek.is_diff_array_v(a):
+        if _dr.is_diff_array_v(a):
             result |= a.grad_enabled_()
-        elif _ek.is_drjit_struct_v(a):
+        elif _dr.is_drjit_struct_v(a):
             for k in type(a).DRJIT_STRUCT.keys():
                 result |= grad_enabled(getattr(a, k))
         elif isinstance(a, _Sequence):
@@ -2263,9 +2263,9 @@ def grad_enabled(*args):
 
 
 def set_grad_enabled(a, value):
-    if _ek.is_diff_array_v(a) and a.IsFloat:
+    if _dr.is_diff_array_v(a) and a.IsFloat:
         a.set_grad_enabled_(value)
-    elif _ek.is_drjit_struct_v(a):
+    elif _dr.is_drjit_struct_v(a):
         for k in type(a).DRJIT_STRUCT.keys():
             set_grad_enabled(getattr(a, k), value)
     elif isinstance(a, _Sequence):
@@ -2292,8 +2292,8 @@ def replace_grad(a, b):
 
     ta, tb = type(a), type(b)
 
-    if not (_ek.is_diff_array_v(ta) and ta.IsFloat and
-            _ek.is_diff_array_v(tb) and tb.IsFloat):
+    if not (_dr.is_diff_array_v(ta) and ta.IsFloat and
+            _dr.is_diff_array_v(tb) and tb.IsFloat):
         raise Exception("replace_grad(): unsupported input types!")
 
     la, lb = len(a), len(b)
@@ -2317,7 +2317,7 @@ def replace_grad(a, b):
             result[i] = replace_grad(a[i], b[i])
         return result
     else:
-        if _ek.is_tensor_v(a):
+        if _dr.is_tensor_v(a):
             return ta(replace_grad(a.array, b.array), a.shape)
         else:
             return ta.create_(b.index_ad(), a.detach_())
@@ -2325,7 +2325,7 @@ def replace_grad(a, b):
 
 def enqueue(mode, *args):
     for a in args:
-        if _ek.is_diff_array_v(a) and a.IsFloat:
+        if _dr.is_diff_array_v(a) and a.IsFloat:
             a.enqueue_(mode)
         elif isinstance(a, _Sequence):
             for v in a:
@@ -2333,25 +2333,25 @@ def enqueue(mode, *args):
         elif isinstance(a, _Mapping):
             for k, v in a.items():
                 enqueue(mode, v)
-        elif _ek.is_drjit_struct_v(a):
+        elif _dr.is_drjit_struct_v(a):
             for k in type(a).DRJIT_STRUCT.keys():
                 enqueue(mode, getattr(a, k))
 
 
-def traverse(t, mode, flags=_ek.ADFlag.Default):
-    assert isinstance(mode, _ek.ADMode)
+def traverse(t, mode, flags=_dr.ADFlag.Default):
+    assert isinstance(mode, _dr.ADMode)
 
-    t = _ek.leaf_array_t(t)
+    t = _dr.leaf_array_t(t)
 
-    if not _ek.is_diff_array_v(t):
+    if not _dr.is_diff_array_v(t):
         raise Exception('traverse(): expected a differentiable array type!')
 
     t.traverse_(mode, flags)
 
 
 def _check_grad_enabled(name, t, a):
-    if _ek.is_diff_array_v(t) and t.IsFloat:
-        if _ek.flag(_ek.JitFlag.VCallRecord) and not grad_enabled(a):
+    if _dr.is_diff_array_v(t) and t.IsFloat:
+        if _dr.flag(_dr.JitFlag.VCallRecord) and not grad_enabled(a):
             raise Exception(
                 f'{name}(): the argument does not depend on the input '
                 'variable(s) being differentiated. Raising an exception '
@@ -2363,60 +2363,60 @@ def _check_grad_enabled(name, t, a):
         raise Exception(f'{name}(): expected a differentiable array type!')
 
 
-def forward_from(a, flags=_ek.ADFlag.Default):
+def forward_from(a, flags=_dr.ADFlag.Default):
     ta = type(a)
     _check_grad_enabled('forward_from', ta, a)
     set_grad(a, 1)
-    enqueue(_ek.ADMode.Forward, a)
-    traverse(ta, _ek.ADMode.Forward, flags)
+    enqueue(_dr.ADMode.Forward, a)
+    traverse(ta, _dr.ADMode.Forward, flags)
 
 
-def forward_to(*args, flags=_ek.ADFlag.Default):
+def forward_to(*args, flags=_dr.ADFlag.Default):
     for a in args:
-        if isinstance(a, (int, _ek.ADFlag)):
+        if isinstance(a, (int, _dr.ADFlag)):
             raise Exception('forward_to(): AD flags should be passed via '
                             'the "flags=.." keyword argument')
 
-    ta = _ek.leaf_array_t(args)
+    ta = _dr.leaf_array_t(args)
     _check_grad_enabled('forward_to', ta, args)
-    enqueue(_ek.ADMode.Backward, *args)
-    traverse(ta, _ek.ADMode.Forward, flags)
+    enqueue(_dr.ADMode.Backward, *args)
+    traverse(ta, _dr.ADMode.Forward, flags)
 
     return grad(args) if len(args) > 1 else grad(*args)
 
 
-def forward(a, flags=_ek.ADFlag.Default):
+def forward(a, flags=_dr.ADFlag.Default):
     forward_from(a, flags)
 
 
-def backward_from(a, flags=_ek.ADFlag.Default):
+def backward_from(a, flags=_dr.ADFlag.Default):
     ta = type(a)
     _check_grad_enabled('backward_from', ta, a)
 
     # Deduplicate components if 'a' is a vector
-    if _ek.array_depth_v(a) > 1:
+    if _dr.array_depth_v(a) > 1:
         a = a + ta(0)
 
     set_grad(a, 1)
-    enqueue(_ek.ADMode.Backward, a)
-    traverse(ta, _ek.ADMode.Backward, flags)
+    enqueue(_dr.ADMode.Backward, a)
+    traverse(ta, _dr.ADMode.Backward, flags)
 
 
-def backward_to(*args, flags=_ek.ADFlag.Default):
+def backward_to(*args, flags=_dr.ADFlag.Default):
     for a in args:
-        if isinstance(a, (int, _ek.ADFlag)):
+        if isinstance(a, (int, _dr.ADFlag)):
             raise Exception('backward_to(): AD flags should be passed via '
                             'the "flags=.." keyword argument')
 
-    ta = _ek.leaf_array_t(args)
+    ta = _dr.leaf_array_t(args)
     _check_grad_enabled('backward_to', ta, args)
-    enqueue(_ek.ADMode.Forward, *args)
-    traverse(ta, _ek.ADMode.Backward, flags)
+    enqueue(_dr.ADMode.Forward, *args)
+    traverse(ta, _dr.ADMode.Backward, flags)
 
     return grad(args) if len(args) > 1 else grad(*args)
 
 
-def backward(a, flags=_ek.ADFlag.Default):
+def backward(a, flags=_dr.ADFlag.Default):
     backward_from(a, flags)
 
 
@@ -2430,7 +2430,7 @@ def zero(type_, shape=1):
         raise Exception('zero(): Type expected as first argument')
     elif issubclass(type_, ArrayBase):
         return type_.zero_(shape)
-    elif _ek.is_drjit_struct_v(type_):
+    elif _dr.is_drjit_struct_v(type_):
         result = type_()
         for k, v in type_.DRJIT_STRUCT.items():
             setattr(result, k, zero(v, shape))
@@ -2448,7 +2448,7 @@ def empty(type_, shape=1):
         raise Exception('empty(): Type expected as first argument')
     elif issubclass(type_, ArrayBase):
         return type_.empty_(shape)
-    elif _ek.is_drjit_struct_v(type_):
+    elif _dr.is_drjit_struct_v(type_):
         result = type_()
         for k, v in type_.DRJIT_STRUCT.items():
             setattr(result, k, empty(v, shape))
@@ -2469,20 +2469,20 @@ def full(type_, value, shape=1):
 def opaque(type_, value, shape=1):
     if not isinstance(type_, type):
         raise Exception('opaque(): Type expected as first argument')
-    if not _ek.is_jit_array_v(type_):
-        return _ek.full(type_, value, shape)
-    if _ek.is_static_array_v(type_):
+    if not _dr.is_jit_array_v(type_):
+        return _dr.full(type_, value, shape)
+    if _dr.is_static_array_v(type_):
         result = type_()
         for i in range(len(result)):
             result[i] = opaque(type_.Value, value, shape)
         return result
-    if _ek.is_diff_array_v(type_):
-        return _ek.opaque(_ek.detached_t(type_), value, shape)
-    if _ek.is_jit_array_v(type_):
-        if _ek.is_tensor_v(type_):
-            return type_(_ek.opaque(type_.Array, value, _ek.hprod(shape)), shape)
+    if _dr.is_diff_array_v(type_):
+        return _dr.opaque(_dr.detached_t(type_), value, shape)
+    if _dr.is_jit_array_v(type_):
+        if _dr.is_tensor_v(type_):
+            return type_(_dr.opaque(type_.Array, value, _dr.hprod(shape)), shape)
         return type_.opaque_(value, shape)
-    elif _ek.is_drjit_struct_v(type_):
+    elif _dr.is_drjit_struct_v(type_):
         result = type_()
         for k, v in type_.DRJIT_STRUCT.items():
             setattr(result, k, opaque(v, getattr(value, k), shape))
@@ -2495,18 +2495,18 @@ def make_opaque(*args):
     for a in args:
         t = type(a)
         if issubclass(t, ArrayBase):
-            if _ek.array_depth_v(t) > 1:
+            if _dr.array_depth_v(t) > 1:
                 for i in range(len(a)):
                     make_opaque(a.entry_ref_(i))
-            elif _ek.is_diff_array_v(t):
+            elif _dr.is_diff_array_v(t):
                 make_opaque(a.detach_ref_())
-            elif _ek.is_tensor_v(t):
+            elif _dr.is_tensor_v(t):
                 make_opaque(a.array)
-            elif _ek.is_jit_array_v(t):
+            elif _dr.is_jit_array_v(t):
                 if not a.is_evaluated_():
                     a.assign(a.copy_())
                     a.data_()
-        elif _ek.is_drjit_struct_v(t):
+        elif _dr.is_drjit_struct_v(t):
             for k in t.DRJIT_STRUCT.keys():
                 make_opaque(getattr(a, k))
         elif issubclass(t, _Sequence):
@@ -2543,7 +2543,7 @@ def arange(type_, start=None, end=None, step=1):
 
 
 def identity(type_, size=1):
-    if _ek.is_special_v(type_):
+    if _dr.is_special_v(type_):
         result = zero(type_, size)
 
         if type_.IsComplex or type_.IsQuaternion:
@@ -2553,7 +2553,7 @@ def identity(type_, size=1):
             for i in range(type_.Size):
                 result[i, i] = one
         return result
-    elif _ek.is_array_v(type_):
+    elif _dr.is_array_v(type_):
         return full(type_, 1, size)
     else:
         return type_(1)
@@ -2565,15 +2565,15 @@ def identity(type_, size=1):
 def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
     # Fast path for Dr.Jit arrays, avoid for special array types
     # due to their non-standard broadcasting behavior
-    if _ek.is_array_v(a) or _ek.is_array_v(b):
-        if _ek.is_diff_array_v(a):
-            a = _ek.detach(a)
-        if _ek.is_diff_array_v(b):
-            b = _ek.detach(b)
+    if _dr.is_array_v(a) or _dr.is_array_v(b):
+        if _dr.is_diff_array_v(a):
+            a = _dr.detach(a)
+        if _dr.is_diff_array_v(b):
+            b = _dr.detach(b)
 
-        if _ek.is_array_v(a) and not _ek.is_floating_point_v(a):
+        if _dr.is_array_v(a) and not _dr.is_floating_point_v(a):
             a, _ = _var_promote(a, 1.0)
-        if _ek.is_array_v(b) and not _ek.is_floating_point_v(b):
+        if _dr.is_array_v(b) and not _dr.is_floating_point_v(b):
             b, _ = _var_promote(b, 1.0)
 
         if type(a) is not type(b):
@@ -2581,14 +2581,14 @@ def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
 
         diff = abs(a - b)
         shape = 1
-        if _ek.is_tensor_v(diff):
+        if _dr.is_tensor_v(diff):
             shape = diff.shape
-        cond = diff <= abs(b) * rtol + _ek.full(type(diff), atol, shape)
-        if _ek.is_floating_point_v(a):
-            cond |= _ek.eq(a, b)  # plus/minus infinity
+        cond = diff <= abs(b) * rtol + _dr.full(type(diff), atol, shape)
+        if _dr.is_floating_point_v(a):
+            cond |= _dr.eq(a, b)  # plus/minus infinity
         if equal_nan:
-            cond |= _ek.isnan(a) & _ek.isnan(b)
-        return _ek.all_nested(cond)
+            cond |= _dr.isnan(a) & _dr.isnan(b)
+        return _dr.all_nested(cond)
 
     def safe_len(x):
         try:
@@ -2619,11 +2619,11 @@ def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
 
 def printf_async(fmt, *args, active=True):
     indices = []
-    is_cuda, is_llvm = _ek.is_cuda_array_v(active), _ek.is_llvm_array_v(active)
+    is_cuda, is_llvm = _dr.is_cuda_array_v(active), _dr.is_llvm_array_v(active)
 
     for a in args:
-        cuda, llvm = _ek.is_cuda_array_v(a), _ek.is_llvm_array_v(a)
-        if not (cuda or llvm) or _ek.array_depth_v(a) != 1 or _ek.is_mask_v(a):
+        cuda, llvm = _dr.is_cuda_array_v(a), _dr.is_llvm_array_v(a)
+        if not (cuda or llvm) or _dr.array_depth_v(a) != 1 or _dr.is_mask_v(a):
             raise Exception("printf_async(): array argument of type '%s' not "
                             "supported (must be a depth-1 JIT (LLVM/CUDA) array, "
                             "and cannot be a mask)" % type(a).__name__)
@@ -2634,8 +2634,8 @@ def printf_async(fmt, *args, active=True):
     if is_cuda == is_llvm:
         raise Exception("printf_async(): invalid input: must specify LLVM or CUDA arrays.")
 
-    active = _ek.cuda.Bool(active) if is_cuda else _ek.llvm.Bool(active)
-    _ek.detail.printf_async(is_cuda, active.index(), fmt, indices)
+    active = _dr.cuda.Bool(active) if is_cuda else _dr.llvm.Bool(active)
+    _dr.detail.printf_async(is_cuda, active.index(), fmt, indices)
 
 
 # -------------------------------------------------------------------
@@ -2648,11 +2648,11 @@ class scoped_set_flag:
         self.value = value
 
     def __enter__(self):
-        self.backup = _ek.flag(self.flag)
-        _ek.set_flag(self.flag, self.value)
+        self.backup = _dr.flag(self.flag)
+        _dr.set_flag(self.flag, self.value)
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        _ek.set_flag(self.flag, self.backup)
+        _dr.set_flag(self.flag, self.backup)
 
 # -------------------------------------------------------------------
 #                        Enabling/disabling AD
@@ -2675,12 +2675,12 @@ class _ADContextManager:
         if self.array_type is not None:
             self.array_type.scope_enter_(self.scope_type, self.array_indices)
         else:
-            if hasattr(_ek, 'cuda'):
-                _ek.cuda.ad.Float32.scope_enter_(self.scope_type, self.array_indices)
-                _ek.cuda.ad.Float64.scope_enter_(self.scope_type, self.array_indices)
-            if hasattr(_ek, 'llvm'):
-                _ek.llvm.ad.Float32.scope_enter_(self.scope_type, self.array_indices)
-                _ek.llvm.ad.Float64.scope_enter_(self.scope_type, self.array_indices)
+            if hasattr(_dr, 'cuda'):
+                _dr.cuda.ad.Float32.scope_enter_(self.scope_type, self.array_indices)
+                _dr.cuda.ad.Float64.scope_enter_(self.scope_type, self.array_indices)
+            if hasattr(_dr, 'llvm'):
+                _dr.llvm.ad.Float32.scope_enter_(self.scope_type, self.array_indices)
+                _dr.llvm.ad.Float64.scope_enter_(self.scope_type, self.array_indices)
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         success = exc_type is None
@@ -2688,12 +2688,12 @@ class _ADContextManager:
         if self.array_type is not None:
             self.array_type.scope_leave_(success)
         else:
-            if hasattr(_ek, 'cuda'):
-                _ek.cuda.ad.Float32.scope_leave_(success)
-                _ek.cuda.ad.Float64.scope_leave_(success)
-            if hasattr(_ek, 'llvm'):
-                _ek.llvm.ad.Float32.scope_leave_(success)
-                _ek.llvm.ad.Float64.scope_leave_(success)
+            if hasattr(_dr, 'cuda'):
+                _dr.cuda.ad.Float32.scope_leave_(success)
+                _dr.cuda.ad.Float64.scope_leave_(success)
+            if hasattr(_dr, 'llvm'):
+                _dr.llvm.ad.Float32.scope_leave_(success)
+                _dr.llvm.ad.Float64.scope_leave_(success)
 
 
 def suspend_grad(*args, when=True):
@@ -2701,10 +2701,10 @@ def suspend_grad(*args, when=True):
         return _DummyContextManager()
 
     array_indices = []
-    array_type = _ek.detail.diff_vars(args, array_indices, check_grad_enabled=False)
+    array_type = _dr.detail.diff_vars(args, array_indices, check_grad_enabled=False)
     if len(args) > 0 and len(array_indices) == 0:
         array_indices = [0]
-    return _ADContextManager(_ek.detail.ADScope.Suspend, array_type, array_indices)
+    return _ADContextManager(_dr.detail.ADScope.Suspend, array_type, array_indices)
 
 
 def resume_grad(*args, when=True):
@@ -2712,16 +2712,16 @@ def resume_grad(*args, when=True):
         return _DummyContextManager()
 
     array_indices = []
-    array_type = _ek.detail.diff_vars(args, array_indices, check_grad_enabled=False)
+    array_type = _dr.detail.diff_vars(args, array_indices, check_grad_enabled=False)
     if len(args) > 0 and len(array_indices) == 0:
         array_indices = [0]
-    return _ADContextManager(_ek.detail.ADScope.Resume, array_type, array_indices)
+    return _ADContextManager(_dr.detail.ADScope.Resume, array_type, array_indices)
 
 
 def isolate_grad(when=True):
     if not when:
         return _DummyContextManager()
-    return _ADContextManager(_ek.detail.ADScope.Isolate, None, [])
+    return _ADContextManager(_dr.detail.ADScope.Isolate, None, [])
 
 
 # -------------------------------------------------------------------
@@ -2740,22 +2740,22 @@ class CustomOp:
         raise Exception("CustomOp.backward(): not implemented")
 
     def grad_out(self):
-        return _ek.grad(self.output)
+        return _dr.grad(self.output)
 
     def set_grad_out(self, value):
-        _ek.accum_grad(self.output, value)
+        _dr.accum_grad(self.output, value)
 
     def grad_in(self, name):
         if name not in self.inputs:
             raise Exception("CustomOp.grad_in(): Could not find "
                             "input argument named \"%s\"!" % name)
-        return _ek.grad(self.inputs[name])
+        return _dr.grad(self.inputs[name])
 
     def set_grad_in(self, name, value):
         if name not in self.inputs:
             raise Exception("CustomOp.set_grad_in(): Could not find "
                             "input argument named \"%s\"!" % name)
-        _ek.accum_grad(self.inputs[name], value)
+        _dr.accum_grad(self.inputs[name], value)
 
     def add_input(self, value):
         self._implicit_in.append(value)
@@ -2765,19 +2765,19 @@ class CustomOp:
 
     def __del__(self):
         def ad_clear(o):
-            if _ek.array_depth_v(o) > 1 \
+            if _dr.array_depth_v(o) > 1 \
                or isinstance(o, _Sequence):
                 for v in o:
                     ad_clear(v)
             elif isinstance(o, _Mapping):
                 for k, v in o.items():
                     ad_clear(v)
-            elif _ek.is_diff_array_v(o):
-                if _ek.is_tensor_v(o):
+            elif _dr.is_diff_array_v(o):
+                if _dr.is_tensor_v(o):
                     ad_clear(o.array)
                 else:
                     o.set_index_ad_(0)
-            elif _ek.is_drjit_struct_v(o):
+            elif _dr.is_drjit_struct_v(o):
                 for k in type(o).DRJIT_STRUCT.keys():
                     ad_clear(getattr(o, k))
         ad_clear(getattr(self, 'output', None))
@@ -2789,27 +2789,27 @@ class CustomOp:
 def custom(cls, *args, **kwargs):
     # Clear primal values of a differentiable array
     def clear_primal(o, dec_ref):
-        if _ek.array_depth_v(o) > 1 \
+        if _dr.array_depth_v(o) > 1 \
            or isinstance(o, _Sequence):
             return type(o)([clear_primal(v, dec_ref) for v in o])
         elif isinstance(o, _Mapping):
             return { k: clear_primal(v, dec_ref) for k, v in o.items() }
-        elif _ek.is_diff_array_v(o) and _ek.is_floating_point_v(o):
+        elif _dr.is_diff_array_v(o) and _dr.is_floating_point_v(o):
             ot = type(o)
 
-            if _ek.is_tensor_v(ot):
+            if _dr.is_tensor_v(ot):
                 value = ot.Array.create_(
                     o.array.index_ad(),
-                    zero(_ek.detached_t(ot.Array), hprod(o.shape)))
+                    zero(_dr.detached_t(ot.Array), hprod(o.shape)))
                 result = ot(value, o.shape)
             else:
                 result = value = ot.create_(
                     o.index_ad(),
-                    _ek.detached_t(ot)())
+                    _dr.detached_t(ot)())
             if dec_ref:
                 value.dec_ref_()
             return result
-        elif _ek.is_drjit_struct_v(o):
+        elif _dr.is_drjit_struct_v(o):
             res = type(o)()
             for k in type(o).DRJIT_STRUCT.keys():
                 setattr(res, k, clear_primal(getattr(o, k), dec_ref))
@@ -2822,27 +2822,27 @@ def custom(cls, *args, **kwargs):
     # Convert args to kwargs
     kwargs.update(zip(inst.eval.__code__.co_varnames[1:], args))
 
-    output = inst.eval(**{ k: _ek.detach(v) for k, v in kwargs.items() })
-    if _ek.grad_enabled(output):
+    output = inst.eval(**{ k: _dr.detach(v) for k, v in kwargs.items() })
+    if _dr.grad_enabled(output):
         raise Exception("drjit.custom(): the return value of CustomOp.eval() "
                         "should not be attached to the AD graph!")
 
     diff_vars_in = []
-    _ek.detail.diff_vars(kwargs, diff_vars_in)
-    _ek.detail.diff_vars(inst._implicit_in, diff_vars_in)
+    _dr.detail.diff_vars(kwargs, diff_vars_in)
+    _dr.detail.diff_vars(inst._implicit_in, diff_vars_in)
 
     if len(diff_vars_in) > 0:
-        output = _ek.diff_array_t(output)
-        Type = _ek.leaf_array_t(output)
+        output = _dr.diff_array_t(output)
+        Type = _dr.leaf_array_t(output)
         tmp_in, tmp_out = Type(), Type()
-        _ek.enable_grad(tmp_in, tmp_out, output)
+        _dr.enable_grad(tmp_in, tmp_out, output)
 
         inst.inputs = clear_primal(kwargs, dec_ref=False)
         inst.output = clear_primal(output, dec_ref=True)
 
         diff_vars_out = []
-        _ek.detail.diff_vars(inst.output, diff_vars_out)
-        _ek.detail.diff_vars(inst._implicit_out, diff_vars_out)
+        _dr.detail.diff_vars(inst.output, diff_vars_out)
+        _dr.detail.diff_vars(inst._implicit_out, diff_vars_out)
 
         if len(diff_vars_out) == 0:
             return output # Not relevant for AD after all..
@@ -2850,12 +2850,12 @@ def custom(cls, *args, **kwargs):
         detail = _modules.get(Type.__module__ + ".detail")
 
         if len(diff_vars_in) > 1:
-            _ek.set_label(tmp_in, inst.name() + "_in")
+            _dr.set_label(tmp_in, inst.name() + "_in")
             for index in diff_vars_in:
                 Type.add_edge_(index, tmp_in.index_ad())
 
         if len(diff_vars_out) > 1:
-            _ek.set_label(tmp_out, inst.name() + "_out")
+            _dr.set_label(tmp_out, inst.name() + "_out")
             for index in diff_vars_out:
                 Type.add_edge_(tmp_out.index_ad(), index)
 
