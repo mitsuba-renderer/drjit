@@ -17,11 +17,11 @@ def _var_is_drjit(a):
 
 
 def _var_type(a, preferred=VarType.Void):
-    """
+    '''
     Return the VarType of a given Dr.Jit object or plain Python type. Return
     'preferred' when there is sufficient room for interpretation (e.g. when
     given an 'int').
-    """
+    '''
     if isinstance(a, ArrayBase):
         return a.Type
     elif isinstance(a, float):
@@ -68,10 +68,10 @@ def _var_type(a, preferred=VarType.Void):
 
 
 def _var_promote(*args):
-    """
+    '''
     Given a list of Dr.Jit arrays and scalars, determine the flavor and shape of
     the result array and broadcast/convert everything into this form.
-    """
+    '''
     n = len(args)
     vt = [None] * n
     base = None
@@ -111,9 +111,9 @@ def _var_promote(*args):
 
 
 def _var_promote_mask(a0, a1):
-    """
+    '''
     Like _var_promote(), but has a special case where 'a1' can be a mask.
-    """
+    '''
     vt0 = _var_type(a0)
     vt1 = _var_type(a1)
     diff = getattr(a0, 'IsDiff', False) | getattr(a1, 'IsDiff', False)
@@ -138,9 +138,9 @@ def _var_promote_mask(a0, a1):
 
 
 def _var_promote_select(a0, a1, a2):
-    """
+    '''
     Like _var_promote(), but specially adapted to the select() operation
-    """
+    '''
     vt0 = _var_type(a0)
     vt1 = _var_type(a1)
     vt2 = _var_type(a2)
@@ -232,28 +232,54 @@ def _shape_impl(a, i, shape):
     return True
 
 
-def shape(a):
-    """
-    Return the shape of an N-dimensional Dr.Jit input array, or an empty list
-    when the provided argument is not an Dr.Jit array.
+def shape(arg):
+    '''
+    shape(arg, /)
+    Return a tuple describing dimension and shape of the provided Dr.Jit array
+    or tensor.
 
-    When the arrays is ragged, the implementation signals a failure by
-    returning ``None``. A ragged array has entries of incompatible size, e.g.
-    ``[[1, 2], [3, 4, 5]]``. Note that an scalar entries (e.g. ``[[1, 2],
-    [3]]``) are acceptable, since broadcasting can effectively convert them to
-    any size.
+    When the arrays is ragged, the implementation signals a failure by returning
+    ``None``. A ragged array has entries of incompatible size, e.g. ``[[1, 2],
+    [3, 4, 5]]``. Note that an scalar entries (e.g. ``[[1, 2], [3]]``) are
+    acceptable, since broadcasting can effectively convert them to any size.
 
-    """
-    if _dr.is_tensor_v(a):
-        return a.shape
+    The expressions ``drjit.shape(arg)`` and ``arg.shape`` are equivalent.
+
+    Args:
+        arg (drjit.ArrayBase): An arbitrary Dr.Jit array or tensor
+
+    Returns:
+        tuple | NoneType: A tuple describing the dimension and shape of the
+        provided Dr.Jit input array or tensor. When the input array is *ragged*
+        (i.e., when it contains components with mismatched sizes), the function
+        returns ``None``.
+    '''
+    if _dr.is_tensor_v(arg):
+        return arg.shape
+
     s = []
-    if not _shape_impl(a, 0, s):
+    if not _shape_impl(arg, 0, s):
         return None
     else:
         return s
 
 
-def width(value):
+def width(arg):
+    r'''
+    width(arg, /)
+    Return the width of the provided dynamic Dr.Jit array, tensor, or
+    :ref:`custom data structure <custom-struct>`.
+
+    The function returns ``1`` if the input variable isn't a Dr.Jit array,
+    tensor, or :ref:`custom data structure <custom-struct>`.
+
+    Args:
+        arg (drjit.ArrayBase): An arbitrary Dr.Jit array, tensor, or
+          :ref:`custom data structure <custom-struct>`
+
+    Returns:
+        int: The dynamic width of the provided variable.
+    '''
     if _dr.is_array_v(value):
         if _dr.is_tensor_v(value):
             return width(value.array)
@@ -261,22 +287,39 @@ def width(value):
             return shape(value)[-1]
     elif _dr.is_drjit_struct_v(value):
         result = 0
-        for k in type(value).DRJIT_STRUCT.keys():
-            result = max(result, width(getattr(value, k)))
+        for k in type(arg).DRJIT_STRUCT.keys():
+            result = max(result, width(getattr(arg, k)))
         return result
     else:
         return 1
 
 
-def resize(value, size):
-    if _dr.array_depth_v(value) > 1:
-        for i in range(value.Size):
-            resize(value[i], size)
-    elif _dr.is_jit_array_v(value):
-        value.resize_(size)
-    elif _dr.is_drjit_struct_v(value):
-        for k in type(value).DRJIT_STRUCT.keys():
-            resize(getattr(value, k), size)
+def resize(arg, size):
+    r'''
+    resize(arg, size)
+    Resize in-place the provided Dr.Jit array, tensor, or
+    :ref:`custom data structure <custom-struct>` to a new size.
+
+    The provided variable must have a size of zero or one originally otherwise
+    this function will fail.
+
+    When the provided variable doesn't have a size of 1 and its size exactly
+    matches ``size`` the function does nothing. Otherwise, it fails.
+
+    Args:
+        arg (drjit.ArrayBase): An arbitrary Dr.Jit array, tensor, or
+          :ref:`custom data structure <custom-struct>` to be resized
+
+        size (int): The new size
+    '''
+    if _dr.array_depth_v(arg) > 1:
+        for i in range(arg.Size):
+            resize(arg[i], size)
+    elif _dr.is_jit_array_v(arg):
+        arg.resize_(size)
+    elif _dr.is_drjit_struct_v(arg):
+        for k in type(arg).DRJIT_STRUCT.keys():
+            resize(getattr(arg, k), size)
 
 
 def device(value=None):
@@ -297,7 +340,7 @@ _print_threshold = 20
 
 
 def _repr_impl(self, shape, buf, *idx):
-    """Implementation detail of op_repr()"""
+    '''Implementation detail of op_repr()'''
     k = len(shape) - len(idx)
     if k == 0:
         el = idx[0]
@@ -472,26 +515,38 @@ def op_setitem(self, index, value):
     return self
 
 
-def reinterpret_array(target_type, value,
-                      vt_target=VarType.Void,
-                      vt_value=VarType.Void):
-    assert isinstance(target_type, type)
+def reinterpret_array_v(dtype, value):
+    '''
+    Reinterpret the provided Dr.Jit array/tensor into a specified type.
 
-    if issubclass(target_type, ArrayBase):
-        if hasattr(target_type, "reinterpret_array_"):
-            return target_type.reinterpret_array_(value)
+    Args:
+        dtype (type): Target type for the reinterpretation.
+
+        value (object): Dr.Jit array or tensor to reinterpret.
+
+    Returns:
+        object: Result of the conversion as described above.
+    '''
+    assert isinstance(dtype, type)
+
+    def reinterpret_array(dtype, value, vt_target, vt_value):
+        if issubclass(dtype, ArrayBase):
+            if hasattr(dtype, "reinterpret_array_"):
+                return dtype.reinterpret_array_(value)
+            else:
+                result = dtype()
+                if result.Size == Dynamic:
+                    result.init_(len(value))
+
+                for i in range(len(value)):
+                    result[i] = reinterpret_array(dtype.Value, value[i],
+                                                       dtype.Type, value.Type)
+
+                return result
         else:
-            result = target_type()
-            if result.Size == Dynamic:
-                result.init_(len(value))
+            return _dr.detail.reinterpret_scalar(value, vt_value, vt_target)
 
-            for i in range(len(value)):
-                result[i] = reinterpret_array(target_type.Value, value[i],
-                                              target_type.Type, value.Type)
-
-            return result
-    else:
-        return _dr.detail.reinterpret_scalar(value, vt_value, vt_target)
+    return reinterpret_array(dtype, value, _dr.VarType.Void,  _dr.VarType.Void)
 
 
 # -------------------------------------------------------------------
@@ -513,46 +568,233 @@ def _broadcast_index(target_type, index):
         return index
 
 
-def gather(target_type, source, index, mask=True, permute=False):
-    if not isinstance(target_type, type):
+def gather(dtype, source, index, active=True):
+    '''
+    Gather values from a flat array or nested data structure
+
+    This function performs a *gather* (i.e., indirect memory read) from
+    ``source`` at position ``index``. It expects a ``dtype`` argument and will
+    return an instance of this type. The optional ``active`` argument can be
+    used to disable some of the components, which is useful when not all indices
+    are valid; the corresponding output will be zero in this case.
+
+    This operation can be used in the following different ways:
+
+    1. When ``dtype`` is a 1D Dr.Jit array like :py:class:`drjit.llvm.ad.Float`,
+    this operation implements a parallelized version of the Python array
+    indexing expression ``source[index]`` with optional masking. Example:
+
+    .. code-block::
+
+        source = dr.cuda.Float([...])
+        index = dr.cuda.UInt([...]) # Note: negative indices are not permitted
+        result = dr.gather(dtype=type(source), source=source, index=index)
+
+    2. When ``dtype`` is a more complex type (e.g. a :ref:`custom source structure <custom-struct>`,
+        nested Dr.Jit array, tuple, list, dictionary, etc.), the behavior depends:
+
+    - When ``type(source)`` matches ``dtype``, the the gather operation threads
+        through entries and invokes itself recursively. For example, the gather
+        operation in
+
+        .. code-block::
+
+            result = dr.cuda.Array3f(...)
+            index = dr.cuda.UInt([...])
+            result = dr.gather(dr.cuda.Array3f, source, index)
+
+        is equivalent to
+
+        .. code-block::
+
+            result = dr.cuda.Array3f(
+                dr.gather(dr.cuda.Float, source.x, index),
+                dr.gather(dr.cuda.Float, source.y, index),
+                dr.gather(dr.cuda.Float, source.z, index)
+            )
+
+    - Otherwise, the operation reconstructs the requested ``dtype`` from a flat
+        ``source`` array, using C-style ordering with a suitably modified
+        ``index``. For example, the gather below reads 3D vectors from a 1D
+        array.
+
+
+        .. code-block::
+
+            source = dr.cuda.Float([...])
+            index = dr.cuda.UInt([...])
+            result = dr.gather(dr.cuda.Array3f, source, index)
+
+        and is equivalent to
+
+        .. code-block::
+
+            result = dr.cuda.Vector3f(
+                dr.gather(dr.cuda.Float, source, index*3 + 0),
+                dr.gather(dr.cuda.Float, source, index*3 + 1),
+                dr.gather(dr.cuda.Float, source, index*3 + 2)
+            )
+
+    .. danger::
+
+        The indices provided to this operation are unchecked. Out-of-bounds
+        reads are undefined behavior (if not disabled via the ``active``
+        parameter) and may crash the application. Negative indices are not
+        permitted.
+
+    Args:
+        dtype (type): The desired output type (typically equal to ``type(source)``,
+          but other variations are possible as well, see the description above.)
+
+        source (object): The object from which data should be read (typically a
+          1D Dr.Jit array, but other variations are possible as well, see the
+          description above.)
+
+        index (object): a 1D dynamic unsigned 32-bit Dr.Jit array (e.g.,
+          :py:class:`drjit.scalar.ArrayXu` or :py:class:`drjit.cuda.UInt`)
+          specifying gather indices. Dr.Jit will attempt an implicit conversion
+          if another type is provided. active
+
+        (object): an optional 1D dynamic Dr.Jit mask array (e.g.,
+          :py:class:`drjit.scalar.ArrayXb` or :py:class:`drjit.cuda.Bool`)
+          specifying active components. Dr.Jit will attempt an implicit
+          conversion if another type is provided. The default is `True`.
+
+    Returns:
+        object: An instance of type ``dtype`` containing the result of the gather operation.
+    '''
+    if not isinstance(dtype, type):
         raise Exception('gather(): Type expected as first argument')
-    elif not issubclass(target_type, ArrayBase):
-        if _dr.is_drjit_struct_v(target_type):
-            if type(source) is not target_type:
+    elif not issubclass(dtype, ArrayBase):
+        if _dr.is_drjit_struct_v(dtype):
+            if type(source) is not dtype:
                 raise Exception('gather(): type mismatch involving custom data structure!')
-            result = target_type()
-            for k, v in target_type.DRJIT_STRUCT.items():
+            result = dtype()
+            for k, v in dtype.DRJIT_STRUCT.items():
                 setattr(result, k,
-                        gather(v, getattr(source, k), index, mask, permute))
+                        gather(v, getattr(source, k), index, active))
             return result
         else:
-            assert isinstance(index, int) and isinstance(mask, bool)
-            return source[index] if mask else 0
+            assert isinstance(index, int) and isinstance(active, bool)
+            return source[index] if active else 0
     else:
-        if _dr.is_tensor_v(target_type) or _dr.is_tensor_v(source):
+        if _dr.is_tensor_v(dtype) or _dr.is_tensor_v(source):
             raise Exception("gather(): Tensor type not supported! Should work "
                             "with the underlying array instead. (e.g. tensor.array)")
         if source.Depth != 1:
-            if source.Size != target_type.Size:
+            if source.Size != dtype.Size:
                 raise Exception("gather(): mismatched source/target configuration!")
 
-            result = target_type()
-            for i in range(target_type.Size):
-                result[i] = gather(target_type.Value, source[i], index, mask, permute)
+            result = dtype()
+            for i in range(dtype.Size):
+                result[i] = gather(dtype.Value, source[i], index, active)
             return result
         else:
-            index_type = _dr.uint32_array_t(target_type)
+            index_type = _dr.uint32_array_t(dtype)
             if not isinstance(index, index_type):
                 index = _broadcast_index(index_type, index)
 
-            mask_type = index_type.MaskType
-            if not isinstance(mask, mask_type):
-                mask = mask_type(mask)
+            active_type = index_type.MaskType
+            if not isinstance(active, active_type):
+                active = active_type(active)
 
-            return target_type.gather_(source, index, mask, permute)
+            return dtype.gather_(source, index, active)
 
 
-def scatter(target, value, index, mask=True, permute=False):
+def scatter(target, value, index, active=True):
+    '''
+    Scatter values into a flat array or nested data structure
+
+    This operation performs a *scatter* (i.e., indirect memory write) of the
+    ``value`` parameter to the ``target`` array at position ``index``. The optional
+    ``active`` argument can be used to disable some of the individual write
+    operations, which is useful when not all provided values or indices are valid.
+
+    This operation can be used in the following different ways:
+
+    1. When ``target`` is a 1D Dr.Jit array like :py:class:`drjit.llvm.ad.Float`,
+    this operation implements a parallelized version of the Python array
+    indexing expression ``target[index] = value`` with optional masking. Example:
+
+    .. code-block::
+
+        target = dr.empty(dr.cuda.Float, 1024*1024)
+        value = dr.cuda.Float([...])
+        index = dr.cuda.UInt([...]) # Note: negative indices are not permitted
+        dr.scatter(target, value=value, index=index)
+
+    2. When ``target`` is a more complex type (e.g. a :ref:`custom source structure
+    <custom-struct>`, nested Dr.Jit array, tuple, list, dictionary, etc.), the
+    behavior depends:
+
+    - When ``target`` and ``value`` are of the same type, the scatter operation
+        threads through entries and invokes itself recursively. For example, the
+        scatter operation in
+
+        .. code-block::
+
+            target = dr.cuda.Array3f(...)
+            value = dr.cuda.Array3f(...)
+            index = dr.cuda.UInt([...])
+            dr.scatter(target, value, index)
+
+        is equivalent to
+
+        .. code-block::
+
+            dr.scatter(target.x, value.x, index)
+            dr.scatter(target.y, value.y, index)
+            dr.scatter(target.z, value.z, index)
+
+    - Otherwise, the operation flattens the ``value`` array and writes it using
+        C-style ordering with a suitably modified ``index``. For example, the
+        scatter below writes 3D vectors into a 1D array.
+
+        .. code-block::
+
+            target = dr.cuda.Float(...)
+            value = dr.cuda.Array3f(...)
+            index = dr.cuda.UInt([...])
+            dr.scatter(target, value, index)
+
+        and is equivalent to
+
+        .. code-block::
+
+            dr.scatter(target, value.x, index*3 + 0)
+            dr.scatter(target, value.y, index*3 + 1)
+            dr.scatter(target, value.z, index*3 + 2)
+
+    .. danger::
+
+        The indices provided to this operation are unchecked. Out-of-bounds writes
+        are undefined behavior (if not disabled via the ``active`` parameter) and
+        may crash the application. Negative indices are not permitted.
+
+        Dr.Jit makes no guarantees about the expected behavior when a scatter
+        operation has *conflicts*, i.e., when a specific position is written
+        multiple times by a single :py:func:`drjit.scatter()` operation.
+
+    Args:
+        target (object): The object into which data should be written (typically
+          a 1D Dr.Jit array, but other variations are possible as well, see the
+          description above.)
+
+        value (object): The values to be written (typically of type ``type(target)``,
+          but other variations are possible as well, see the description above.)
+          Dr.Jit will attempt an implicit conversion if the the input is not an
+          array type.
+
+        index (object): a 1D dynamic unsigned 32-bit Dr.Jit array (e.g.,
+          :py:class:`drjit.scalar.ArrayXu` or :py:class:`drjit.cuda.UInt`)
+          specifying gather indices. Dr.Jit will attempt an implicit conversion
+          if another type is provided.
+
+        active (object): an optional 1D dynamic Dr.Jit mask array (e.g.,
+          :py:class:`drjit.scalar.ArrayXb` or :py:class:`drjit.cuda.Bool`)
+          specifying active components. Dr.Jit will attempt an implicit
+          conversion if another type is provided. The default is `True`.
+    '''
     target_type = type(target)
     if not issubclass(target_type, ArrayBase):
         if _dr.is_drjit_struct_v(target_type):
@@ -560,10 +802,10 @@ def scatter(target, value, index, mask=True, permute=False):
                 raise Exception('scatter(): type mismatch involving custom data structure!')
             for k in target_type.DRJIT_STRUCT.keys():
                 scatter(getattr(target, k), getattr(value, k),
-                        index, mask, permute)
+                        index, active)
         else:
-            assert isinstance(index, int) and isinstance(mask, bool)
-            if mask:
+            assert isinstance(index, int) and isinstance(active, bool)
+            if active:
                 target[index] = value
     else:
         if _dr.is_tensor_v(target) or _dr.is_tensor_v(value):
@@ -574,7 +816,7 @@ def scatter(target, value, index, mask=True, permute=False):
                 raise Exception("scatter(): mismatched source/target configuration!")
 
             for i in range(len(target)):
-                scatter(target.entry_ref_(i), value[i], index, mask, permute)
+                scatter(target.entry_ref_(i), value[i], index, active)
         else:
             if not _dr.is_array_v(value):
                 value = target_type(value)
@@ -583,14 +825,86 @@ def scatter(target, value, index, mask=True, permute=False):
             if not isinstance(index, index_type):
                 index = _broadcast_index(index_type, index)
 
-            mask_type = index_type.MaskType
-            if not isinstance(mask, mask_type):
-                mask = mask_type(mask)
+            active_type = index_type.MaskType
+            if not isinstance(active, active_type):
+                active = active_type(active)
 
-            return value.scatter_(target, index, mask, permute)
+            return value.scatter_(target, index, active)
 
 
-def scatter_reduce(op, target, value, index, mask=True):
+def scatter_reduce(op, target, value, index, active=True):
+    '''
+    Perform a read-modify-write operation on a flat array or nested data structure
+
+    This function performs a read-modify-write operation of the ``value``
+    parameter to the ``target`` array at position ``index``. The optional
+    ``active`` argument can be used to disable some of the individual write
+    operations, which is useful when not all provided values or indices are valid.
+
+    The operation to be applied is defined by tje ``op`` argument (see
+    :py:class:`drjit.ReduceOp`).
+
+    This operation can be used in the following different ways:
+
+    1. When ``target`` is a 1D Dr.Jit array like :py:class:`drjit.llvm.ad.Float`,
+    this operation implements a parallelized version of the expression
+    ``target[index] = op(value, target[index])`` with optional masking. Example:
+
+    .. code-block::
+
+        target = dr.cuda.Float([...])
+        value = dr.cuda.Float([...])
+        index = dr.cuda.UInt([...]) # Note: negative indices are not permitted
+        dr.scatter_reduce(dr.ReduceOp.Add, target, value=value, index=index)
+
+    2. When ``target`` is a more complex type (e.g. a :ref:`custom source structure
+    <custom-struct>`, nested Dr.Jit array, tuple, list, dictionary, etc.), then
+    ``target`` and ``value`` must be of the same type. The scatter reduce operation
+    threads through entries and invokes itself recursively. For example, the
+    scatter operation in
+
+        .. code-block::
+
+            target = dr.cuda.Array3f(...)
+            value = dr.cuda.Array3f(...)
+            index = dr.cuda.UInt([...])
+            dr.scatter_reduce(dr.ReduceOp.Add, target, value, index)
+
+        is equivalent to
+
+        .. code-block::
+
+            dr.scatter_reduce(dr.ReduceOp.Add, target.x, value.x, index)
+            dr.scatter_reduce(dr.ReduceOp.Add, target.y, value.y, index)
+            dr.scatter_reduce(dr.ReduceOp.Add, target.z, value.z, index)
+
+    .. danger::
+
+        The indices provided to this operation are unchecked. Out-of-bounds writes
+        are undefined behavior (if not disabled via the ``active`` parameter) and
+        may crash the application. Negative indices are not permitted.
+
+    Args:
+        op (drjit.ReduceOp): Operation to be perform in the reduction.
+        target (object): The object into which data should be written (typically
+          a 1D Dr.Jit array, but other variations are possible as well, see the
+          description above.)
+
+        value (object): The values to be written (typically of type ``type(target)``,
+          but other variations are possible as well, see the description above.)
+          Dr.Jit will attempt an implicit conversion if the the input is not an
+          array type.
+
+        index (object): a 1D dynamic unsigned 32-bit Dr.Jit array (e.g.,
+          :py:class:`drjit.scalar.ArrayXu` or :py:class:`drjit.cuda.UInt`)
+          specifying gather indices. Dr.Jit will attempt an implicit conversion
+          if another type is provided.
+
+        active (object): an optional 1D dynamic Dr.Jit mask array (e.g.,
+          :py:class:`drjit.scalar.ArrayXb` or :py:class:`drjit.cuda.Bool`)
+          specifying active components. Dr.Jit will attempt an implicit
+          conversion if another type is provided. The default is `True`.
+    '''
     target_type = type(target)
     if not issubclass(target_type, ArrayBase):
         if _dr.is_drjit_struct_v(target_type):
@@ -598,10 +912,11 @@ def scatter_reduce(op, target, value, index, mask=True):
                 raise Exception('scatter_reduce(): type mismatch involving custom data structure!')
             for k in target_type.DRJIT_STRUCT.keys():
                 scatter_reduce(op, getattr(target, k), getattr(value, k),
-                               index, mask)
+                               index, active)
         else:
-            assert isinstance(index, int) and isinstance(mask, bool)
-            if mask:
+            assert isinstance(index, int) and isinstance(active, bool)
+            assert op == _dr.ReduceOp.Add
+            if active:
                 target[index] += value
     else:
         if _dr.is_tensor_v(target) or _dr.is_tensor_v(value):
@@ -612,7 +927,7 @@ def scatter_reduce(op, target, value, index, mask=True):
                 raise Exception("scatter_reduce(): mismatched source/target configuration!")
 
             for i in range(len(target)):
-                scatter_reduce(op, target.entry_ref_(i), value[i], index, mask)
+                scatter_reduce(op, target.entry_ref_(i), value[i], index, active)
         else:
             if not _dr.is_array_v(value):
                 value = target_type(value)
@@ -621,17 +936,65 @@ def scatter_reduce(op, target, value, index, mask=True):
             if not isinstance(index, index_type):
                 index = _broadcast_index(index_type, index)
 
-            mask_type = index_type.MaskType
-            if not isinstance(mask, mask_type):
-                mask = mask_type(mask)
+            active_type = index_type.MaskType
+            if not isinstance(active, active_type):
+                active = active_type(active)
 
-            return value.scatter_reduce_(op, target, index, mask)
+            return value.scatter_reduce_(op, target, index, active)
 
 
-def ravel(array):
+def ravel(array, order='A'):
+    '''
+    Convert the input into a contiguous flat array
+
+    This operation takes a Dr.Jit array, typically with some static and some
+    dynamic dimensions (e.g., :py:class:`drjit.cuda.Array3f` with shape `3xN`),
+    and converts it into a flattened 1D dynamically sized array (e.g.,
+    :py:class:`drjit.cuda.Float`) using either a C or Fortran-style ordering
+    convention.
+
+    It can also convert Dr.Jit tensors into a flat representation, though only
+    C-style ordering is supported in this case.
+
+    For example,
+
+    .. code-block::
+
+        x = dr.cuda.Array3f([1, 2], [3, 4], [5, 6])
+        y = dr.ravel(x, order=...)
+
+    will produce
+
+    - ``[1, 3, 5, 2, 4, 6]`` with ``order='F'`` (the default for Dr.Jit arrays),
+    which means that X/Y/Z components alternate.
+    - ``[1, 2, 3, 4, 5, 6]`` with ``order='C'``, in which case all X coordinates
+    are written as a contiguous block followed by the Y- and then Z-coordinates.
+
+    .. danger::
+
+        Currently C-style ordering is not implemented for tensor types.
+
+    Args:
+        array (drjit.ArrayBase): An arbitrary Dr.Jit array or tensor
+
+        order (str): A single character indicating the index order. ``'F'``
+          indicates column-major/Fortran-style ordering, in which case the first
+          index changes at the highest frequency. The alternative ``'C'`` specifies
+          row-major/C-style ordering, in which case the last index changes at the
+          highest frequency. The default value ``'A'`` (automatic) will use F-style
+          ordering for arrays and C-style ordering for tensors.
+
+    Returns:
+        object: A dynamic 1D array containing the flattened representation of
+        ``array`` with the desired ordering. The type of the return value depends
+        on the type of the input. When ``array`` is already contiguous/flattened,
+        this function returns it without making a copy.
+    '''
     if not _var_is_drjit(array):
         return array
     elif array.IsTensor:
+        if order == 'C':
+            raise Exception('ravel(): C-style ordering not implemented for tensors!')
         return array.array
     elif array.Depth == 1:
         return array
@@ -652,31 +1015,122 @@ def ravel(array):
     index_type = _dr.uint32_array_t(target_type)
 
     target = empty(target_type, hprod(s))
-    scatter(target, array, arange(index_type, s[-1]))
+
+    if order == 'A':
+        order = 'C' if target_type.IsTensor else 'F'
+
+    if order == 'F':
+        scatter(target, array, arange(index_type, s[-1]))
+    elif order == 'C':
+        n = len(array)
+        for i in range(n):
+            scatter(target, array[i], arange(index_type, s[-1]) + s[-1] * i)
+    else:
+        raise Exception('ravel(): invalid order argument, must be \'A\', \'F\' or \'C\'!')
+
     return target
 
 
-def unravel(target_class, array):
+def unravel(dtype, array, order='F'):
+    """
+    Load a sequence of Dr.Jit vectors/matrices/etc. from a contiguous flat array
+
+    This operation implements the inverse of :py:func:`drjit.ravel()`. In contrast
+    to :py:func:`drjit.ravel()`, it requires one additional parameter (``dtype``)
+    specifying type of the return value. For example,
+
+    .. code-block::
+
+        x = dr.cuda.Float([1, 2, 3, 4, 5, 6])
+        y = dr.unravel(dr.cuda.Array3f, x, order=...)
+
+    will produce an array of two 3D vectors with different contents depending
+    on the indexing convention:
+
+    - ``[1, 2, 3]`` and ``[4, 5, 6]`` when unraveled with ``order='F'`` (the default for Dr.Jit arrays), and
+    - ``[1, 3, 5]`` and ``[2, 4, 6]`` when unraveled with ``order='C'``
+
+    Args:
+        dtype (type): An arbitrary Dr.Jit array type
+
+        array (drjit.ArrayBase): A dynamically sized 1D Dr.Jit array instance
+          that is compatible with ``dtype``. In other words, both must have the
+          same underlying scalar type and be located imported in the same package
+          (e.g., ``drjit.llvm.ad``).
+
+        order (str): A single character indicating the index order. ``'F'`` (the
+          default) indicates column-major/Fortran-style ordering, in which case
+          the first index changes at the highest frequency. The alternative
+          ``'C'`` specifies row-major/C-style ordering, in which case the last
+          index changes at the highest frequency.
+
+
+    Returns:
+        object: An instance of type ``dtype`` containing the result of the unravel
+        operation.
+    """
     if not isinstance(array, ArrayBase) or array.Depth != 1:
         raise Exception('unravel(): array input must be a flat array!')
-    elif not issubclass(target_class, ArrayBase) or target_class.Depth == 1:
+    elif not issubclass(dtype, ArrayBase) or dtype.Depth == 1:
         raise Exception("unravel(): expected a nested array as target type!")
 
     size = 1
-    t = target_class
+    t = dtype
     while t.Size != Dynamic:
         size *= t.Size
         t = t.Value
+    index_type = _dr.uint32_array_t(t)
 
     if len(array) % size != 0:
         raise Exception('unravel(): input array length must be '
                         'divisible by %i!' % size)
 
-    indices = arange(_dr.uint32_array_t(type(array)), len(array) // size)
-    return gather(target_class, array, indices)
+    n = len(array) // size
+    if order == 'F':
+        indices = arange(index_type, n)
+        return gather(dtype, array, indices)
+    elif order == 'C':
+        result = dtype()
+        for i in range(len(result)):
+            indices = arange(index_type, n) + i * n
+            result[i] = gather(dtype.Value, array, indices)
+        return result
+    else:
+        raise Exception('unravel(): invalid order argument, must be \'F\' or \'C\'!')
 
 
-def slice(value, index=-1, return_type=None):
+def slice(value, index=None, return_type=None):
+    """
+    Slice a structure of arrays to return a single entry for a given index
+
+    This function is the equivalent to ``__getitem__(index)`` for the *dynamic
+    dimension* of a Dr.Jit array or :ref:`custom source structure <custom-struct>`.
+    It can be used to access a single element out a structure of arrays for a
+    given index.
+
+    The returned object type will differ from the type of the input value as its
+    *dynamic dimension* will be removed. For static arrays (e.g.
+    :py:class:`drjit.cuda.Array3f`) the function will return a Python ``list``.
+    For :ref:`custom source structure <custom-struct>` the returned type needs
+    to be specified through the argument ``return_type``.
+
+    Args:
+        value (object): A dynamically sized 1D Dr.Jit array instance
+          that is compatible with ``dtype``. In other words, both must have the
+          same underlying scalar type and be located imported in the same package
+          (e.g., ``drjit.llvm.ad``).
+
+        index (int): Index of the entry to be returned in the structure of arrays.
+          When not specified (or ``None``), the provided object must have a
+          dynamic width of ``1`` and this function will *remove* the dynamic
+          dimension to this object by casting it into the appropriate type.
+
+        return_type (type): A return type must be specified when slicing through
+          a :ref:`custom source structure <custom-struct>`. Otherwise set to ``None``.
+
+    Returns:
+        object: Single entry of the structure of arrays.
+    """
     t = type(value)
     if _dr.array_depth_v(t) > 1 or issubclass(t, _Sequence):
         size = len(value)
@@ -692,7 +1146,7 @@ def slice(value, index=-1, return_type=None):
             setattr(result, k, _dr.slice(getattr(value, k), index))
         return result
     elif _dr.is_dynamic_array_v(value):
-        if index == -1:
+        if index is None:
             if _dr.width(value) > 1:
                 raise Exception('slice(): variable contains more than a single entry!')
             index = 0

@@ -321,14 +321,14 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
                         return dr::gather<Array, true>(source, index, mask);
                     else
                         return dr::gather<Array, false>(source, index, mask);
-                });
+                }, "source"_a, "index"_a, "mask"_a, "permute"_a=false);
         cls.def("scatter_",
                 [](const Array &value, Array &target, const UInt32 &index, const Mask &mask, bool permute) {
                     if (permute)
                         dr::scatter<true>(target, value, index, mask);
                     else
                         dr::scatter<false>(target, value, index, mask);
-                }, "target"_a.noconvert(), "index"_a, "mask"_a, "permute"_a);
+                }, "target"_a.noconvert(), "index"_a, "mask"_a, "permute"_a=false);
 
         if constexpr (Array::IsMask) {
             cls.def("compress_", [](const Array &source) {

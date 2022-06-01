@@ -1518,20 +1518,20 @@ def arange_(cls, start, end, step):
 
 
 @classmethod
-def gather_(cls, source, index, mask, permute):
+def gather_(cls, source, index, mask):
     assert source.Depth == 1
     sr = max(len(index), len(mask))
     result = cls.empty_(sr if cls.Size == Dynamic else 0)
     for i in range(sr):
-        result[i] = _dr.gather(cls.Value, source, index[i], mask[i], permute)
+        result[i] = _dr.gather(cls.Value, source, index[i], mask[i])
     return result
 
 
-def scatter_(self, target, index, mask, permute):
+def scatter_(self, target, index, mask):
     assert target.Depth == 1
     sr = max(len(self), len(index), len(mask))
     for i in range(sr):
-        _dr.scatter(target, self[i], index[i], mask[i], permute)
+        _dr.scatter(target, self[i], index[i], mask[i])
 
 
 def scatter_reduce_(self, op, target, index, mask):
