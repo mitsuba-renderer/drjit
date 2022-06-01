@@ -1,37 +1,15 @@
-Dr.Jit: structured vectorization and differentiation on modern processor architectures
-======================================================================================
-
-.. only:: not latex
-
-    .. image:: drjit-logo.svg
-        :width: 400px
-        :align: center
+Dr.Jit — A Just-In-Time-Compiler for Differentiable Rendering
+=============================================================
 
 .. toctree::
-   :maxdepth: 1
-   :caption: Core
+   :maxdepth: 2
+   :caption: Contents:
 
-   intro
-   demo
-   building
-   → GitHub <https://github.com/mitsuba-renderer/drjit>
+   reference
 
+Indices and tables
+==================
 
-.. toctree::
-   :maxdepth: 1
-   :caption: Optional features
-
-   autodiff
-   cuda
-   python
-   random
-
-.. toctree::
-   :maxdepth: 1
-   :caption: Advanced optional features
-
-   vcall
-   struct
-   loops
-   custom
-
+* :ref:`genindex`
+* :ref:`modindex`
+* :ref:`search`
