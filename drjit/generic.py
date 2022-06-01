@@ -922,7 +922,7 @@ def exp2_(a0):
         for i in range(sr):
             ar[i] = _dr.exp2(a0[i])
     elif a0.IsComplex:
-        s, c = _dr.sincos(a0.imag * _dr.LogTwo)
+        s, c = _dr.sincos(a0.imag * _dr.log_two)
         exp_r = _dr.exp2(a0.real)
         ar.real = exp_r * c
         ar.imag = exp_r * s
@@ -962,7 +962,7 @@ def log2_(a0):
             ar[i] = _dr.log2(a0[i])
     elif a0.IsComplex:
         ar.real = .5 * _dr.log2(_dr.squared_norm(a0))
-        ar.imag = _dr.arg(a0) * _dr.InvLogTwo
+        ar.imag = _dr.arg(a0) * _dr.inv_log_two
     else:
         raise Exception("log2(): unsupported array type!")
     return ar

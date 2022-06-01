@@ -1688,11 +1688,11 @@ def isnan(a):
 
 
 def isinf(a):
-    return eq(abs(a), _dr.Infinity)
+    return eq(abs(a), _dr.inf)
 
 
 def isfinite(a):
-    return abs(a) < _dr.Infinity
+    return abs(a) < _dr.inf
 
 
 def lerp(a, b, t):
@@ -1707,7 +1707,7 @@ def arg(value):
     if _dr.is_complex_v(value):
         return _dr.atan2(value.imag, value.real)
     else:
-        return _dr.select(value >= 0, 0, -_dr.Pi)
+        return _dr.select(value >= 0, 0, -_dr.pi)
 
 
 def real(value):
@@ -1780,33 +1780,58 @@ def log2i(a):
 
 
 def safe_sqrt(a):
+    '''
+    Safely evaluate the square root of the provided input avoiding domain errors.
+
+    Negative inputs produce a ``0.0`` output value.
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Square root of the input
+    '''
     result = sqrt(max(a, 0))
     if _dr.is_diff_array_v(a) and _dr.grad_enabled(a):
-        alt = sqrt(max(a, _dr.Epsilon(a)))
-        result = replace_grad(result, alt)
-    return result
-
-
-def safe_cbrt(a):
-    result = cbrt(max(a, 0))
-    if _dr.is_diff_array_v(a) and _dr.grad_enabled(a):
-        alt = cbrt(max(a, _dr.Epsilon(a)))
+        alt = sqrt(max(a, _dr.epsilon(a)))
         result = replace_grad(result, alt)
     return result
 
 
 def safe_asin(a):
+    '''
+    Safe wrapper around :py:func:`drjit.asin` that avoids domain errors.
+
+    Input values are clipped to the :math:`(-1, 1)` domain.
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Arcsine approximation
+    '''
     result = asin(clamp(a, -1, 1))
     if _dr.is_diff_array_v(a) and _dr.grad_enabled(a):
-        alt = asin(clamp(a, -_dr.OneMinusEpsilon(a), _dr.OneMinusEpsilon(a)))
+        alt = asin(clamp(a, -_dr.one_minus_epsilon(a), _dr.one_minus_epsilon(a)))
         result = replace_grad(result, alt)
     return result
 
 
 def safe_acos(a):
+    '''
+    Safe wrapper around :py:func:`drjit.acos` that avoids domain errors.
+
+    Input values are clipped to the :math:`(-1, 1)` domain.
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Arccosine approximation
+    '''
     result = acos(clamp(a, -1, 1))
     if _dr.is_diff_array_v(a) and _dr.grad_enabled(a):
-        alt = acos(clamp(a, -_dr.OneMinusEpsilon(a), _dr.OneMinusEpsilon(a)))
+        alt = acos(clamp(a, -_dr.one_minus_epsilon(a), _dr.one_minus_epsilon(a)))
         result = replace_grad(result, alt)
     return result
 
@@ -2122,11 +2147,11 @@ def atanh(a):
 
 
 def rad_to_deg(a):
-    return a * (180.0 / _dr.Pi)
+    return a * (180.0 / _dr.pi)
 
 
 def deg_to_rad(a):
-    return a * (_dr.Pi / 180.0)
+    return a * (_dr.pi / 180.0)
 
 
 # -------------------------------------------------------------------
@@ -2479,7 +2504,7 @@ def hypot(a, b):
     maxval = _dr.max(a, b)
     minval = _dr.min(a, b)
     ratio = minval / maxval
-    inf = _dr.Infinity
+    inf = _dr.inf
 
     return _dr.select(
         (a < inf) & (b < inf) & (ratio < inf),
