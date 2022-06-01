@@ -23,10 +23,10 @@ def test_roundtrip_dlpack_all(package):
         dr.arange(Float, 10)+100,
         dr.arange(Float, 10)+1000,
     )
-    a2 = a1.dlpack()
+    a2 = a1.__dlpack__()
     a3 = Array3f(a2)
     assert a1 == a3
-    assert a1.x == Float(a1.x.dlpack())
+    assert a1.x == Float(a1.x.__dlpack__())
 
 
 @pytest.mark.parametrize("package", ["drjit.cuda", "drjit.cuda.ad",

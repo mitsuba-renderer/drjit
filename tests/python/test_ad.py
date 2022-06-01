@@ -439,8 +439,8 @@ def test27_scatter_fwd_permute(m):
     idx_0 = dr.arange(m.UInt32, 5)
     idx_1 = dr.arange(m.UInt32, 5) + 5
 
-    dr.scatter(buf, values_0, idx_0, permute=False)
-    dr.scatter(buf, values_1, idx_1, permute=False)
+    dr.scatter(buf, values_0, idx_0)
+    dr.scatter(buf, values_1, idx_1)
 
     ref = [4.0, 12.0, 20.0, 28.0, 36.0, 44.0, 52.0, 60.0, 68.0, 76.0]
     assert dr.allclose(buf, ref)
@@ -472,7 +472,7 @@ def test29_log(m):
     assert dr.allclose(dr.grad(x), 2 / dr.detach(x))
 
 
-def test30_pow(m):
+def test30_power(m):
     x = dr.linspace(m.Float, 1, 10, 10)
     y = dr.full(m.Float, 2.0, 10)
     dr.enable_grad(x, y)

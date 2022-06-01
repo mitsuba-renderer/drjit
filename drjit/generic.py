@@ -968,18 +968,18 @@ def log2_(a0):
     return ar
 
 
-def pow_(a0, a1):
+def power_(a0, a1):
     if not a0.IsFloat:
-        raise Exception("pow(): requires floating point operands!")
+        raise Exception("power(): requires floating point operands!")
     if not a0.IsSpecial:
         if isinstance(a1, int) or isinstance(a1, float):
             ar, sr = _check1(a0)
             for i in range(sr):
-                ar[i] = _dr.pow(a0[i], a1)
+                ar[i] = _dr.power(a0[i], a1)
         else:
             ar, sr = _check2(a0, a1)
             for i in range(sr):
-                ar[i] = _dr.pow(a0[i], a1[i])
+                ar[i] = _dr.power(a0[i], a1[i])
     else:
         return _dr.exp(_dr.log(a0) * a1)
     return ar

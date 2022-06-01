@@ -280,12 +280,12 @@ def width(arg):
     Returns:
         int: The dynamic width of the provided variable.
     '''
-    if _dr.is_array_v(value):
-        if _dr.is_tensor_v(value):
-            return width(value.array)
+    if _dr.is_array_v(arg):
+        if _dr.is_tensor_v(arg):
+            return width(arg.array)
         else:
-            return shape(value)[-1]
-    elif _dr.is_drjit_struct_v(value):
+            return shape(arg)[-1]
+    elif _dr.is_drjit_struct_v(arg):
         result = 0
         for k in type(arg).DRJIT_STRUCT.keys():
             result = max(result, width(getattr(arg, k)))
@@ -2033,21 +2033,35 @@ def log2(a):
         return _math.log2(a)
 
 
-def pow(a, b):
+def power(a, b):
+    '''
+    Raise the first input value to the power given as second input value.
+
+    This function handles both the case of integer and floating-point exponents.
+    Moreover, when the exponent is an array, the function will calculate the
+    element-wise powers of the input values.
+
+    Args:
+        x (int | float | drjit.ArrayBase): A Python or Dr.Jit array type as input value
+        y (int | float | drjit.ArrayBase): A Python or Dr.Jit array type as exponent
+
+    Returns:
+        int | float | drjit.ArrayBase: input value raised to the power
+    '''
     if _dr.is_tensor_v(a):
-        return type(a)(a.array.pow_(b if not _dr.is_tensor_v(b) else b.array), a.shape)
+        return type(a)(a.array.power_(b if not _dr.is_tensor_v(b) else b.array), a.shape)
     if isinstance(a, ArrayBase) or \
        isinstance(b, ArrayBase):
         if type(a) is not type(b) and not \
            (isinstance(b, int) or isinstance(b, float)):
             a, b = _var_promote(a, b)
-        return a.pow_(b)
+        return a.power_(b)
     else:
         return _math.pow(a, b)
 
 
 def op_pow(a, b):
-    return pow(a, b)
+    return power(a, b)
 
 
 def cbrt(a):
