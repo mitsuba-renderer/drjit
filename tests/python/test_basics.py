@@ -311,7 +311,7 @@ def test07_sincos(t):
                - y * 3.77489497744594108e-8
 
         z = y * y
-        z |= dr.eq(xa, dr.Infinity)
+        z |= dr.eq(xa, dr.inf)
 
         s = poly2(z, -1.6666654611e-1,
                   8.3321608736e-3,

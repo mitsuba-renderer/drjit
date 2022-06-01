@@ -210,7 +210,7 @@ def quat_to_matrix(q, size = 4):
     module = _modules.get(q.__module__)
     Matrix = getattr(module, name)
 
-    q = q * _dr.SqrtTwo
+    q = q * _dr.sqrt_two
 
     xx = q.x * q.x; yy = q.y * q.y; zz = q.z * q.z
     xy = q.x * q.y; xz = q.x * q.z; yz = q.y * q.z
@@ -282,7 +282,7 @@ def quat_to_euler(q):
     roll = _dr.select(gimbal_lock, 2 * _dr.atan2(q.x, q.w), _dr.atan2(sinr_cosp, cosr_cosp))
 
     # pitch (y-axis rotation)
-    pitch = _dr.select(gimbal_lock, _dr.copysign(0.5 * _dr.Pi, sinp), _dr.asin(sinp))
+    pitch = _dr.select(gimbal_lock, _dr.copysign(0.5 * _dr.pi, sinp), _dr.asin(sinp))
 
     # yaw (z-axis rotation)
     siny_cosp = 2 * _dr.fmadd(q.w, q.z, q.x * q.y)

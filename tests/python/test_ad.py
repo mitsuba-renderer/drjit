@@ -848,13 +848,13 @@ def test51_diff_loop(m, do_record):
 
         # Monte Carlo integral of dK, used in forward/backward pass
         def eval_grad(self):
-            return mcint(a=0, b=dr.Pi/2, f=lambda x: self.dK(x, self.m_))
+            return mcint(a=0, b=dr.pi/2, f=lambda x: self.dK(x, self.m_))
 
         # --- CustomOp interface ---
 
         def eval(self, m_):
             self.m_ = m_ # Stash 'm' for later
-            return mcint(a=0, b=dr.Pi/2, f=lambda x: self.K(x, self.m_))
+            return mcint(a=0, b=dr.pi/2, f=lambda x: self.K(x, self.m_))
 
         def forward(self):
             self.set_grad_out(self.grad_in('m_') * self.eval_grad())
