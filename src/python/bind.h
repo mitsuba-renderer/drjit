@@ -241,20 +241,20 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
                 [](Array *a, const Array &b) { *a = a->div_(b); return a; });
 
         cls.def("dot_", &Array::dot_);
-        cls.def("hsum_", &Array::hsum_);
-        cls.def("hprod_", &Array::hprod_);
-        cls.def("hmin_", &Array::hmin_);
-        cls.def("hmax_", &Array::hmax_);
+        cls.def("min_", &Array::hmin_);
+        cls.def("max_", &Array::hmax_);
 
         if constexpr (dr::is_dynamic_v<Array> &&
-                      dr::array_depth_v<Array> == 1) {
-            if constexpr (dr::is_jit_array_v<Array>) {
-                cls.def("dot_async_", &Array::dot_async_);
-                cls.def("hsum_async_", &Array::hsum_async_);
-                cls.def("hprod_async_", &Array::hprod_async_);
-                cls.def("hmin_async_", &Array::hmin_async_);
-                cls.def("hmax_async_", &Array::hmax_async_);
-            }
+                      dr::array_depth_v<Array> == 1 &&
+                      dr::is_jit_array_v<Array>) {
+            cls.def("dot_async_", &Array::dot_async_);
+            cls.def("sum_", &Array::hsum_async_);
+            cls.def("prod_", &Array::hprod_async_);
+            cls.def("hmin_async_", &Array::hmin_async_);
+            cls.def("hmax_async_", &Array::hmax_async_);
+        } else {
+            cls.def("sum_",  &Array::hsum_);
+            cls.def("prod_", &Array::hprod_);
         }
 
         cls.def("and_", [](const Array &a, const Mask &b) {
@@ -289,8 +289,8 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
         });
 
         cls.def("abs_", &Array::abs_);
-        cls.def("min_", &Array::min_);
-        cls.def("max_", &Array::max_);
+        cls.def("minimum_", &Array::min_);
+        cls.def("maximum_", &Array::max_);
 
         if constexpr (std::is_same_v<Mask, dr::mask_t<Array>>) {
             cls.def("lt_", &Array::lt_);
@@ -306,11 +306,7 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
 
         cls.def("fmadd_", &Array::fmadd_);
 
-        cls.def("neg_", &Array::neg_);
-        cls.def("hsum_", &Array::hsum_);
-        cls.def("hprod_", &Array::hprod_);
-        cls.def("hmax_", &Array::hmax_);
-        cls.def("hmin_", &Array::hmin_);
+        cls.def("neg_",  &Array::neg_);
     }
 
     if constexpr (dr::is_dynamic_v<Array>) {

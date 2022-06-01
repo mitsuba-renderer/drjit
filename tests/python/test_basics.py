@@ -203,8 +203,8 @@ def test05_scalar(t):
         assert t(1) + t(1) == t(2)
         assert t(3) - t(1) == t(2)
         assert t(2) * t(2) == t(4)
-        assert dr.min(t(2), t(3)) == t(2)
-        assert dr.max(t(2), t(3)) == t(3)
+        assert dr.minimum(t(2), t(3)) == t(2)
+        assert dr.maximum(t(2), t(3)) == t(3)
 
         if dr.is_signed_v(t):
             assert t(2) * t(-2) == t(-4)
@@ -238,7 +238,7 @@ def test05_scalar(t):
         assert dr.select(dr.eq(t(2), t(2)), t(4), t(5)) == t(4)
         assert dr.select(dr.eq(t(3), t(2)), t(4), t(5)) == t(5)
         t2 = t(2)
-        assert dr.hsum(t2) == t.Value(2 * len(t2))
+        assert dr.sum(t2) == t.Value(2 * len(t2))
         assert dr.dot(t2, t2) == t.Value(4 * len(t2))
         assert dr.dot_async(t2, t2) == t(4 * len(t2))
 

@@ -1,4 +1,4 @@
-import drjit
+import drjit as _dr
 import sys
 import inspect
 from collections.abc import Mapping, Sequence
@@ -39,7 +39,7 @@ def array_name(prefix, vt, shape, scalar):
     if not scalar and not prefix == 'Tensor':
         shape = shape[:-1]
     if prefix == "Matrix":
-        if vt != drjit.VarType.Bool:
+        if vt != _dr.VarType.Bool:
             shape = shape[1:]
         else:
             prefix = "Array"
@@ -49,13 +49,13 @@ def array_name(prefix, vt, shape, scalar):
 
     return "%s%s%s" % (
         prefix,
-        "".join(repr(s) if s != drjit.Dynamic else "X" for s in shape),
+        "".join(repr(s) if s != _dr.Dynamic else "X" for s in shape),
         VAR_TYPE_SUFFIX[int(vt)]
     )
 
 
 def array_from_dlpack(t, capsule):
-    descr = drjit.detail.from_dlpack(capsule)
+    descr = _dr.detail.from_dlpack(capsule)
 
     device_type = descr["device_type"]
     data = descr["data"]
@@ -72,28 +72,28 @@ def array_from_dlpack(t, capsule):
             tmp *= shape[i]
 
     if t.IsCUDA and device_type != 2:
-        raise drjit.Exception("Cannot create an Dr.Jit GPU array from a "
+        raise _dr.Exception("Cannot create an Dr.Jit GPU array from a "
                               "DLPack CPU tensor!")
     elif not t.IsCUDA and device_type != 1:
-        raise drjit.Exception("Cannot create an Dr.Jit CPU array from a "
+        raise _dr.Exception("Cannot create an Dr.Jit CPU array from a "
                               "DLPack GPU tensor!")
 
     if dtype != t.Type:
-        raise drjit.Exception("Incompatible type!")
+        raise _dr.Exception("Incompatible type!")
 
-    shape_target = list(reversed(drjit.shape(t())))
+    shape_target = list(reversed(_dr.shape(t())))
     if len(shape_target) != ndim:
-        raise drjit.Exception("Incompatible dimension!")
+        raise _dr.Exception("Incompatible dimension!")
     for i in range(ndim):
         if shape_target[i] != shape[i] and shape_target[i] != 0:
-            raise drjit.Exception("Incompatible shape!")
+            raise _dr.Exception("Incompatible shape!")
 
     value = t
-    while issubclass(value.Value, drjit.ArrayBase):
+    while issubclass(value.Value, _dr.ArrayBase):
         value = value.Value
 
     descr["consume"](capsule)
-    data = value.map_(data, drjit.hprod(shape), descr["release"])
+    data = value.map_(data, _dr.prod(shape), descr["release"])
 
     def load(t, i, offset):
         size = shape[-1 - i]
@@ -103,7 +103,7 @@ def array_from_dlpack(t, capsule):
             if type(offset) is int and stride == 1:
                 return data
             else:
-                i = drjit.arange(drjit.int32_array_t(t), size)
+                i = _dr.arange(_dr.int32_array_t(t), size)
                 return t.gather_(data, offset + stride * i, True, False)
         else:
             result = t()
@@ -137,7 +137,7 @@ def array_init(self, args):
 
     size = self.Size
     value_type = self.Value
-    dynamic = size == drjit.Dynamic
+    dynamic = size == _dr.Dynamic
     err = None
 
     try:
@@ -146,8 +146,8 @@ def array_init(self, args):
             t = type(o)
             mod = t.__module__
             name = t.__name__
-            is_array = issubclass(t, drjit.ArrayBase)
-            is_static_array = is_array and not o.Size == drjit.Dynamic
+            is_array = issubclass(t, _dr.ArrayBase)
+            is_static_array = is_array and not o.Size == _dr.Dynamic
             is_sequence = issubclass(t, Sequence)
 
             # Matrix initialization from nested list
@@ -186,7 +186,7 @@ def array_init(self, args):
                     # Size matches, copy element by element
                     if self.IsJIT and getattr(t, "IsJIT", False) and \
                        self.Depth == 1 and t.Depth == 1:
-                        raise drjit.Exception(
+                        raise _dr.Exception(
                             "Refusing to do an extremely inefficient "
                             "element-by-element array conversion from type %s "
                             "to %s. Did you forget a cast or detach operation?"
@@ -209,7 +209,7 @@ def array_init(self, args):
             elif mod == "numpy":
                 import numpy as np
 
-                s1 = tuple(reversed(drjit.shape(self)))
+                s1 = tuple(reversed(_dr.shape(self)))
                 s2 = o.shape
 
                 # Remove unnecessary outer dimension is possible
@@ -232,10 +232,10 @@ def array_init(self, args):
 
                 # Numpy array might have one dimension less when initializing dynamic arrays
                 if not dim1 == dim2 and not (dim1 == dim2 + 1 and self.IsDynamic):
-                    raise drjit.Exception("Incompatible dimension!")
+                    raise _dr.Exception("Incompatible dimension!")
                 for i in reversed(range(dim2)):
                     if s1[i] != s2[i] and s1[i] != 0:
-                        raise drjit.Exception("Incompatible shape!")
+                        raise _dr.Exception("Incompatible shape!")
 
                 if dim1 == 0:
                     pass
@@ -262,7 +262,7 @@ def array_init(self, args):
                 from jax.dlpack import to_dlpack
                 self.assign(array_from_dlpack(type(self), to_dlpack(o)))
             else:
-                raise drjit.Exception("Don\"t know how to create an Dr.Jit array "
+                raise _dr.Exception("Don\"t know how to create an Dr.Jit array "
                                       "from type \"%s.%s\"!" % (mod, name))
         elif n == size or dynamic:
             if dynamic:
@@ -275,7 +275,7 @@ def array_init(self, args):
                    for j in range(self.Size)]
             array_init(self, tbl)
         else:
-            raise drjit.Exception("Invalid size!")
+            raise _dr.Exception("Invalid size!")
     except Exception as e:
         err = e
 
@@ -311,9 +311,9 @@ def tensor_init(tensor_type, obj):
             if typestr != tensor_type.Array.Type.NumPy:
                 name = None
                 for v in VAR_TYPE_NAME:
-                    t = getattr(drjit.VarType, v, None)
+                    t = getattr(_dr.VarType, v, None)
                     if t and t.NumPy == typestr:
-                        name = array_name('Array', t, [drjit.Dynamic], False)
+                        name = array_name('Array', t, [_dr.Dynamic], False)
                         break
                 if name and hasattr(mod, name):
                     cls = getattr(mod, name)
@@ -322,7 +322,7 @@ def tensor_init(tensor_type, obj):
                     np_data = np.array(obj).astype(tensor_type.Array.Type.NumPy)
                     return tensor_init(tensor_type, np_data)
 
-            data = cls.load_(info['data'][0], drjit.hprod(shape))
+            data = cls.load_(info['data'][0], _dr.prod(shape))
             return tensor_type(tensor_type.Array(data), shape)
         else:
             raise TypeError("TensorXf: expect an array that implements the "
@@ -390,10 +390,10 @@ def array_configure(cls, shape, type_, value):
     cls.Type = type_
     cls.Shape = shape
     cls.Size = shape[0]
-    cls.IsDynamic = cls.Size == drjit.Dynamic or \
+    cls.IsDynamic = cls.Size == _dr.Dynamic or \
         getattr(value, "IsDynamic", False)
 
-    while issubclass(value, drjit.ArrayBase):
+    while issubclass(value, _dr.ArrayBase):
         value = value.Value
         depth += 1
 
@@ -420,7 +420,7 @@ def array_configure(cls, shape, type_, value):
     cls.IsQuaternion = "Quaternion" in name
     cls.IsTensor = "Tensor" in name
     cls.IsSpecial = cls.IsMatrix or cls.IsComplex or cls.IsQuaternion
-    cls.IsVector = cls.Size != drjit.Dynamic and not \
+    cls.IsVector = cls.Size != _dr.Dynamic and not \
         (cls.IsPacket and cls.Depth == 1) and not cls.IsSpecial
 
     prefix = name
@@ -447,11 +447,11 @@ def array_configure(cls, shape, type_, value):
                                   name.replace("Quaternion4", "Complex2"))
 
     if cls.IsTensor:
-        cls.__getitem__ = drjit.detail.tensor_getitem
-        cls.__setitem__ = drjit.detail.tensor_setitem
+        cls.__getitem__ = _dr.detail.tensor_getitem
+        cls.__setitem__ = _dr.detail.tensor_setitem
 
     elif (not cls.IsSpecial or cls.IsQuaternion) \
-            and not cls.Size == drjit.Dynamic:
+            and not cls.Size == _dr.Dynamic:
         if cls.Size > 0:
             cls.x = prop_x
         if cls.Size > 1:
@@ -463,7 +463,7 @@ def array_configure(cls, shape, type_, value):
 
     cls.MaskType = getattr(
         sys.modules.get(mod),
-        array_name(mask_name, drjit.VarType.Bool, cls.Shape, cls.IsScalar))
+        array_name(mask_name, _dr.VarType.Bool, cls.Shape, cls.IsScalar))
 
 
 def _loop_process_state(value: type, in_state: list, out_state: list,
@@ -484,7 +484,7 @@ def _loop_process_state(value: type, in_state: list, out_state: list,
         assert len(in_state) > 0
         t_old = in_state.pop()
         if t is not t_old:
-            raise drjit.Exception(
+            raise _dr.Exception(
                 "loop_process_state(): the type of loop state variables must "
                 "remain the same throughout the loop. However, one of the "
                 "supplied variables changed from type %s to %s!"
@@ -495,9 +495,9 @@ def _loop_process_state(value: type, in_state: list, out_state: list,
             _loop_process_state(entry, in_state, out_state, write, in_struct)
         return
 
-    if drjit.is_tensor_v(t):
+    if _dr.is_tensor_v(t):
         _loop_process_state(value.array, in_state, out_state, in_struct)
-    elif drjit.is_jit_array_v(t):
+    elif _dr.is_jit_array_v(t):
         if t.Depth > 1:
             for i in range(len(value)):
                 _loop_process_state(value.entry_ref_(i), in_state,
@@ -506,8 +506,8 @@ def _loop_process_state(value: type, in_state: list, out_state: list,
             index = value.index()
             index_ad = value.index_ad() if t.IsDiff else 0
 
-            if index_ad != 0 and drjit.flag(drjit.JitFlag.LoopRecord):
-                raise drjit.Exception(
+            if index_ad != 0 and _dr.flag(_dr.JitFlag.LoopRecord):
+                raise _dr.Exception(
                     "loop_process_state(): one of the supplied loop state variables "
                     "of type %s is attached to the AD graph (i.e., grad_enabled(..) "
                     "is true). However, propagating derivatives through multiple "
@@ -516,7 +516,7 @@ def _loop_process_state(value: type, in_state: list, out_state: list,
                     "for details and suggested alternatives." % t.__name__)
 
             if index == 0:
-                raise drjit.Exception(
+                raise _dr.Exception(
                     "loop_process_state(): one of the supplied loop state "
                     "variables of type %s is uninitialized!" % t.__name__)
 
@@ -531,13 +531,13 @@ def _loop_process_state(value: type, in_state: list, out_state: list,
                     value.set_index_(index)
                     if t.IsDiff:
                         value.set_index_ad_(index_ad)
-    elif drjit.is_drjit_struct_v(t):
+    elif _dr.is_drjit_struct_v(t):
         for k, v in t.DRJIT_STRUCT.items():
             _loop_process_state(getattr(value, k), in_state, out_state, True)
     elif hasattr(value, 'loop_put') or value is None:
         pass
     elif not in_struct:
-        raise drjit.Exception(
+        raise _dr.Exception(
             "loop_process_state(): one of the provided loop state variables "
             "was of type '%s', which is not allowed (you must use Dr.Jit "
             "arrays/structs that are managed by the JIT compiler)"
@@ -558,8 +558,8 @@ def loop_process_state(loop, funcs, state, write):
 
             # Automatically label loop variables
             cv = inspect.getclosurevars(func)
-            drjit.set_label(**cv.globals)
-            drjit.set_label(**cv.nonlocals)
+            _dr.set_label(**cv.globals)
+            _dr.set_label(**cv.nonlocals)
 
             del values
 
@@ -615,9 +615,9 @@ def slice_tensor(shape, indices, uint32):
         elif isinstance(v, slice):
             # Rely on Python's slice.indices() function to determine everything
             components.append(v.indices(size))
-        elif drjit.is_dynamic_array_v(v) and drjit.is_integral_v(v):
-            if drjit.is_signed_v(v):
-                v = uint32(drjit.select(v >= 0, v, v + size))
+        elif _dr.is_dynamic_array_v(v) and _dr.is_integral_v(v):
+            if _dr.is_signed_v(v):
+                v = uint32(_dr.select(v >= 0, v, v + size))
             components.append(v)
         elif isinstance(v, Sequence):
             components.append(uint32([v2 if v2 >= 0 else v2 + size for v2 in v]))
@@ -653,7 +653,7 @@ def slice_tensor(shape, indices, uint32):
                 size_out *= shape_out[-1]
     shape_out = tuple(shape_out)
 
-    index_tmp = drjit.arange(uint32, size_out)
+    index_tmp = _dr.arange(uint32, size_out)
     index_out = uint32()
 
     if size_out > 0:
@@ -670,12 +670,12 @@ def slice_tensor(shape, indices, uint32):
             index_rem = index_tmp - index_next * size
 
             if isinstance(comp, uint32):
-                index_val = drjit.gather(uint32, comp, index_rem)
+                index_val = _dr.gather(uint32, comp, index_rem)
             else:
                 if comp[0] >= 0 and comp[2] >= 0:
                     index_val = comp[0] + comp[2] * index_rem
                 else:
-                    index_val = uint32(comp[0] + comp[2] * drjit.int32_array_t(index_rem))
+                    index_val = uint32(comp[0] + comp[2] * _dr.int32_array_t(index_rem))
 
             index_out += index_val * size_out
             index_tmp = index_next
@@ -690,7 +690,7 @@ def tensor_getitem(tensor, slice_arg):
         slice_arg = (slice_arg,)
     tensor_t = type(tensor)
     shape, index = slice_tensor(tensor.shape, slice_arg, tensor_t.Index)
-    return tensor_t(drjit.gather(tensor_t.Array, tensor.array, index), shape)
+    return tensor_t(_dr.gather(tensor_t.Array, tensor.array, index), shape)
 
 
 def tensor_setitem(tensor, slice_arg, value):
@@ -698,7 +698,7 @@ def tensor_setitem(tensor, slice_arg, value):
         slice_arg = (slice_arg,)
     tensor_t = type(tensor)
     shape, index = slice_tensor(tensor.shape, slice_arg, tensor_t.Index)
-    drjit.scatter(target=tensor.array, value=value, index=index)
+    _dr.scatter(target=tensor.array, value=value, index=index)
 
 
 def diff_vars(o, indices, check_grad_enabled=True):
@@ -708,7 +708,7 @@ def diff_vars(o, indices, check_grad_enabled=True):
     """
 
     result = None
-    if drjit.array_depth_v(o) > 1 or isinstance(o, Sequence):
+    if _dr.array_depth_v(o) > 1 or isinstance(o, Sequence):
         for v in o:
             t = diff_vars(v, indices, check_grad_enabled)
             if t is not None:
@@ -718,13 +718,13 @@ def diff_vars(o, indices, check_grad_enabled=True):
             t = diff_vars(v, indices, check_grad_enabled)
             if t is not None:
                 result = t
-    elif drjit.is_diff_array_v(o) and o.IsFloat:
-        if drjit.is_tensor_v(o):
+    elif _dr.is_diff_array_v(o) and o.IsFloat:
+        if _dr.is_tensor_v(o):
             result = diff_vars(o.array, indices, check_grad_enabled)
         elif o.index_ad() != 0 and (not check_grad_enabled or o.grad_enabled_()):
             indices.append(o.index_ad())
             result = type(o)
-    elif drjit.is_drjit_struct_v(o):
+    elif _dr.is_drjit_struct_v(o):
         for k in type(o).DRJIT_STRUCT.keys():
             t = diff_vars(getattr(o, k), indices, check_grad_enabled)
             if t is not None:

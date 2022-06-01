@@ -561,21 +561,21 @@ def mulhi_(a0, a1):
     return ar
 
 
-def max_(a0, a1):
+def maximum_(a0, a1):
     ar, sr = _check2(a0, a1)
     if not a0.IsArithmetic:
-        raise Exception("max(): requires arithmetic operands!")
+        raise Exception("maximum(): requires arithmetic operands!")
     for i in range(sr):
-        ar[i] = _dr.max(a0[i], a1[i])
+        ar[i] = _dr.maximum(a0[i], a1[i])
     return ar
 
 
-def min_(a0, a1):
+def minimum_(a0, a1):
     if not a0.IsArithmetic:
-        raise Exception("min(): requires arithmetic operands!")
+        raise Exception("minimum(): requires arithmetic operands!")
     ar, sr = _check2(a0, a1)
     for i in range(sr):
-        ar[i] = _dr.min(a0[i], a1[i])
+        ar[i] = _dr.minimum(a0[i], a1[i])
     return ar
 
 
@@ -1172,9 +1172,9 @@ def any_(a0):
     return value
 
 
-def hsum_(a0):
+def sum_(a0):
     if a0.IsTensor:
-        return a0.array.hsum_()
+        return a0.array.sum_()
     size = len(a0)
     if size == 0:
         return 0
@@ -1184,16 +1184,9 @@ def hsum_(a0):
     return value
 
 
-def hsum_async_(a0):
+def prod_(a0):
     if a0.IsTensor:
-        return a0.array.hsum_async_()
-    else:
-        return type(a0)([a0.hsum_()])
-
-
-def hprod_(a0):
-    if a0.IsTensor:
-        return a0.array.hprod_()
+        return a0.array.prod_()
     size = len(a0)
     if size == 0:
         return 1
@@ -1201,13 +1194,6 @@ def hprod_(a0):
     for i in range(1, size):
         value = value * a0[i]
     return value
-
-
-def hprod_async_(a0):
-    if a0.IsTensor:
-        return a0.array.hprod_async_()
-    else:
-        return type(a0)([a0.hprod_()])
 
 
 def hmin_(a0):
@@ -1219,7 +1205,7 @@ def hmin_(a0):
 
     value = a0[0]
     for i in range(1, size):
-        value = _dr.min(value, a0[i])
+        value = _dr.minimum(value, a0[i])
     return value
 
 
@@ -1240,7 +1226,7 @@ def hmax_(a0):
 
     value = a0[0]
     for i in range(1, size):
-        value = _dr.max(value, a0[i])
+        value = _dr.maximum(value, a0[i])
     return value
 
 
@@ -1443,7 +1429,7 @@ def broadcast_(self, value):
 def empty_(cls, shape):
     if cls.IsTensor:
         shape = [shape] if type(shape) is int else shape
-        return cls(_dr.empty(cls.Array, _dr.hprod(shape)), shape)
+        return cls(_dr.empty(cls.Array, _dr.prod(shape)), shape)
 
     result = cls()
     if cls.Size == Dynamic:
@@ -1458,7 +1444,7 @@ def empty_(cls, shape):
 def zero_(cls, shape=1):
     if cls.IsTensor:
         shape = [shape] if type(shape) is int else shape
-        return cls(_dr.zero(cls.Array, _dr.hprod(shape)), shape)
+        return cls(_dr.zero(cls.Array, _dr.prod(shape)), shape)
 
     result = cls()
     if cls.Size == Dynamic:
@@ -1475,7 +1461,7 @@ def zero_(cls, shape=1):
 def full_(cls, value, shape):
     if cls.IsTensor:
         shape = [shape] if type(shape) is int else shape
-        return cls(_dr.full(cls.Array, value, _dr.hprod(shape)), shape)
+        return cls(_dr.full(cls.Array, value, _dr.prod(shape)), shape)
 
     result = cls()
     if cls.Size == Dynamic:

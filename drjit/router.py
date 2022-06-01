@@ -265,7 +265,7 @@ def shape(arg):
 
 
 def width(arg):
-    r'''
+    '''
     width(arg, /)
     Return the width of the provided dynamic Dr.Jit array, tensor, or
     :ref:`custom data structure <custom-struct>`.
@@ -288,7 +288,7 @@ def width(arg):
     elif _dr.is_drjit_struct_v(arg):
         result = 0
         for k in type(arg).DRJIT_STRUCT.keys():
-            result = max(result, width(getattr(arg, k)))
+            result = _builtins.max(result, width(getattr(arg, k)))
         return result
     else:
         return 1
@@ -323,6 +323,9 @@ def resize(arg, size):
 
 
 def device(value=None):
+    '''
+    Return the CUDA device ID associated with the current thread.
+    '''
     if value is None:
         return _dr.detail.device()
     elif _dr.array_depth_v(value) > 1:
@@ -1014,7 +1017,7 @@ def ravel(array, order='A'):
         target_type = target_type.Value
     index_type = _dr.uint32_array_t(target_type)
 
-    target = empty(target_type, hprod(s))
+    target = empty(target_type, prod(s))
 
     if order == 'A':
         order = 'C' if target_type.IsTensor else 'F'
@@ -1503,6 +1506,20 @@ def op_neq(a, b):
 
 
 def eq(a, b):
+    '''
+    Return the element-wise comparison of the two arguments
+
+    This function falls back to ``==`` when none of the arguments are Dr.Jit
+    arrays.
+
+    Args:
+        a (object): Input array.
+
+        b (object): Input array.
+
+    Returns:
+        object: Output array, element-wise comparison of ``a`` and ``b``
+    '''
     if isinstance(a, ArrayBase) or isinstance(b, ArrayBase):
         if type(a) is not type(b):
             a, b = _var_promote(a, b)
@@ -1512,6 +1529,20 @@ def eq(a, b):
 
 
 def neq(a, b):
+    '''
+    Return the element-wise not-equal comparison of the two arguments
+
+    This function falls back to ``!=`` when none of the arguments are Dr.Jit
+    arrays.
+
+    Args:
+        a (object): Input array.
+
+        b (object): Input array.
+
+    Returns:
+        object: Output array, element-wise comparison of ``a != b``
+    '''
     if isinstance(a, ArrayBase) or isinstance(b, ArrayBase):
         if type(a) is not type(b):
             a, b = _var_promote(a, b)
@@ -1528,6 +1559,16 @@ def op_abs(a):
 
 
 def abs(a):
+    '''
+    abs(arg, /)
+    Compute the absolute value of the provided input.
+
+    Args:
+        arg (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+    Returns:
+        float | int | drjit.ArrayBase: Absolute value of the input)
+    '''
     if isinstance(a, ArrayBase):
         return a.abs_()
     else:
@@ -1597,22 +1638,50 @@ def rsqrt(a):
         return 1.0 / _math.sqrt(a)
 
 
-def max(a, b):
+def maximum(a, b):
+    '''
+    maximum(arg0, arg1, /) -> float | int | drjit.ArrayBase
+    Compute the element-wise maximum value of the provided inputs.
+
+    This function returns a result of the type ``type(arg0 + arg1)`` (i.e.,
+    according to the usual implicit type conversion rules).
+
+    Args:
+        arg0 (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+        arg1 (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+    Returns:
+        Maximum of the input(s)
+    '''
     if isinstance(a, ArrayBase) or \
        isinstance(b, ArrayBase):
         if type(a) is not type(b):
             a, b = _var_promote(a, b)
-        return a.max_(b)
+        return a.maximum_(b)
     else:
         return _builtins.max(a, b)
 
 
-def min(a, b):
+def minimum(a, b):
+    '''
+    minimum(arg0, arg1, /) -> float | int | drjit.ArrayBase
+    Compute the element-wise minimum value of the provided inputs.
+
+    This function returns a result of the type ``type(arg0 + arg1)`` (i.e.,
+    according to the usual implicit type conversion rules).
+
+    Args:
+        arg0 (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+        arg1 (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+    Returns:
+        Minimum of the input(s)
+    '''
     if isinstance(a, ArrayBase) or \
        isinstance(b, ArrayBase):
         if type(a) is not type(b):
             a, b = _var_promote(a, b)
-        return a.min_(b)
+        return a.minimum_(b)
     else:
         return _builtins.min(a, b)
 
@@ -1700,7 +1769,7 @@ def lerp(a, b, t):
 
 
 def clamp(value, min, max):
-    return _dr.max(_dr.min(value, max), min)
+    return _dr.maximum(_dr.minimum(value, max), min)
 
 
 def arg(value):
@@ -1791,10 +1860,10 @@ def safe_sqrt(a):
     Returns:
         float | drjit.ArrayBase: Square root of the input
     '''
-    result = sqrt(max(a, 0))
+    result = _dr.sqrt(_dr.maximum(a, 0))
     if _dr.is_diff_array_v(a) and _dr.grad_enabled(a):
-        alt = sqrt(max(a, _dr.epsilon(a)))
-        result = replace_grad(result, alt)
+        alt = _dr.sqrt(_dr.maximum(a, _dr.epsilon(a)))
+        result = _dr.replace_grad(result, alt)
     return result
 
 
@@ -1810,10 +1879,10 @@ def safe_asin(a):
     Returns:
         float | drjit.ArrayBase: Arcsine approximation
     '''
-    result = asin(clamp(a, -1, 1))
+    result = _dr.asin(_dr.clamp(a, -1, 1))
     if _dr.is_diff_array_v(a) and _dr.grad_enabled(a):
-        alt = asin(clamp(a, -_dr.one_minus_epsilon(a), _dr.one_minus_epsilon(a)))
-        result = replace_grad(result, alt)
+        alt = _dr.asin(_dr.clamp(a, -_dr.one_minus_epsilon(a), _dr.one_minus_epsilon(a)))
+        result = _dr.replace_grad(result, alt)
     return result
 
 
@@ -1829,10 +1898,10 @@ def safe_acos(a):
     Returns:
         float | drjit.ArrayBase: Arccosine approximation
     '''
-    result = acos(clamp(a, -1, 1))
+    result = _dr.acos(_dr.clamp(a, -1, 1))
     if _dr.is_diff_array_v(a) and _dr.grad_enabled(a):
-        alt = acos(clamp(a, -_dr.one_minus_epsilon(a), _dr.one_minus_epsilon(a)))
-        result = replace_grad(result, alt)
+        alt = _dr.acos(_dr.clamp(a, -_dr.one_minus_epsilon(a), _dr.one_minus_epsilon(a)))
+        result = _dr.replace_grad(result, alt)
     return result
 
 
@@ -2302,9 +2371,23 @@ def none_or(value, a):
         return _dr.none(a)
 
 
-def hsum(a):
+def sum(a):
+    '''
+    sum(arg, /) -> float | int | drjit.ArrayBase
+    Compute the sum of all array elements.
+
+    When the argument is a dynamic array, function performs a horizontal reduction.
+    Please see the section on :ref:`horizontal reductions <horizontal-reductions>`
+    for details.
+
+    Args:
+        arg (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+    Returns:
+        Sum of the input
+    '''
     if _var_is_drjit(a):
-        return a.hsum_()
+        return a.sum_()
     elif isinstance(a, float) or isinstance(a, int):
         return a
     elif _dr.is_iterable_v(a):
@@ -2316,49 +2399,52 @@ def hsum(a):
                 result = result + value
         return result
     else:
-        raise Exception("hsum(): input must be a boolean or an iterable "
+        raise Exception("sum(): input must be a boolean or an iterable "
                         "containing arithmetic types!")
 
 
-def hsum_async(a):
-    return a.hsum_async_()
-
-
-def hsum_nested(a):
+def sum_nested(a):
     while True:
-        b = hsum(a)
+        b = _dr.sum(a)
         if b is a:
             break
         a = b
     return a
 
 
-def hmean(a):
+def mean(a):
     if hasattr(a, '__len__'):
-        return _dr.hsum(a) / len(a)
+        return _dr.sum(a) / len(a)
     else:
         return a
 
 
-def hmean_async(a):
-    if hasattr(a, '__len__'):
-        return _dr.hsum_async(a) / len(a)
-    else:
-        return a
-
-
-def hmean_nested(a):
+def mean_nested(a):
     while True:
-        b = hmean(a)
+        b = _dr.mean(a)
         if b is a:
             break
         a = b
     return a
 
 
-def hprod(a):
+def prod(a):
+    '''
+    prod(arg, /) -> float | int | drjit.ArrayBase
+    Compute the product of all array elements.
+
+    When the argument is a dynamic array, function performs a horizontal reduction.
+    Please see the section on :ref:`horizontal reductions <horizontal-reductions>`
+    for details.
+
+    Args:
+        arg (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+    Returns:
+        Product of the input
+    '''
     if _var_is_drjit(a):
-        return a.hprod_()
+        return a.prod_()
     elif isinstance(a, float) or isinstance(a, int):
         return a
     elif _dr.is_iterable_v(a):
@@ -2370,17 +2456,13 @@ def hprod(a):
                 result = result * value
         return result
     else:
-        raise Exception("hprod(): input must be a boolean or an iterable "
+        raise Exception("prod(): input must be a boolean or an iterable "
                         "containing arithmetic types!")
 
 
-def hprod_async(a):
-    return a.hprod_async_()
-
-
-def hprod_nested(a):
+def prod_nested(a):
     while True:
-        b = hprod(a)
+        b = _dr.prod(a)
         if b is a:
             break
         a = b
@@ -2398,7 +2480,7 @@ def hmax(a):
             if index == 0:
                 result = value
             else:
-                result = _dr.max(result, value)
+                result = _dr.maximum(result, value)
         if result is None:
             raise Exception("hmax(): zero-sized array!")
         return result
@@ -2430,7 +2512,7 @@ def hmin(a):
             if index == 0:
                 result = value
             else:
-                result = _dr.min(result, value)
+                result = _dr.miniumum(result, value)
         if result is None:
             raise Exception("hmin(): zero-sized array!")
         return result
@@ -2515,8 +2597,8 @@ def conj(a):
 
 def hypot(a, b):
     a, b = abs(a), abs(b)
-    maxval = _dr.max(a, b)
-    minval = _dr.min(a, b)
+    maxval = _dr.maximum(a, b)
+    minval = _dr.minimum(a, b)
     ratio = minval / maxval
     inf = _dr.inf
 
@@ -2591,7 +2673,7 @@ def meshgrid(*args, indexing='xy'):
            _dr.array_depth_v(v) != 1 or type(v) is not t:
             raise Exception("meshgrid(): consistent 1D dynamic arrays expected!")
 
-    size = _dr.hprod((len(v) for v in args))
+    size = _dr.prod((len(v) for v in args))
     index = _dr.arange(_dr.uint32_array_t(t), size)
 
     result = []
@@ -2628,7 +2710,7 @@ def binary_search(start, end, pred):
         middle = (start + end) >> 1
 
         cond = pred(middle)
-        start = _dr.select(cond, _dr.min(middle + 1, end), start)
+        start = _dr.select(cond, _dr.minimum(middle + 1, end), start)
         end = _dr.select(cond, end, middle)
 
     return start
@@ -2973,7 +3055,7 @@ def opaque(type_, value, shape=1):
         return _dr.opaque(_dr.detached_t(type_), value, shape)
     if _dr.is_jit_array_v(type_):
         if _dr.is_tensor_v(type_):
-            return type_(_dr.opaque(type_.Array, value, _dr.hprod(shape)), shape)
+            return type_(_dr.opaque(type_.Array, value, _dr.prod(shape)), shape)
         return type_.opaque_(value, shape)
     elif _dr.is_drjit_struct_v(type_):
         result = type_()
@@ -3293,7 +3375,7 @@ def custom(cls, *args, **kwargs):
             if _dr.is_tensor_v(ot):
                 value = ot.Array.create_(
                     o.array.index_ad(),
-                    zero(_dr.detached_t(ot.Array), hprod(o.shape)))
+                    zero(_dr.detached_t(ot.Array), prod(o.shape)))
                 result = ot(value, o.shape)
             else:
                 result = value = ot.create_(
