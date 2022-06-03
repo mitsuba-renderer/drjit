@@ -497,7 +497,7 @@ def _loop_process_state(value: type, in_state: list, out_state: list,
 
     if _dr.is_tensor_v(t):
         _loop_process_state(value.array, in_state, out_state, in_struct)
-    elif _dr.is_jit_array_v(t):
+    elif _dr.is_jit_v(t):
         if t.Depth > 1:
             for i in range(len(value)):
                 _loop_process_state(value.entry_ref_(i), in_state,
@@ -531,7 +531,7 @@ def _loop_process_state(value: type, in_state: list, out_state: list,
                     value.set_index_(index)
                     if t.IsDiff:
                         value.set_index_ad_(index_ad)
-    elif _dr.is_drjit_struct_v(t):
+    elif _dr.is_struct_v(t):
         for k, v in t.DRJIT_STRUCT.items():
             _loop_process_state(getattr(value, k), in_state, out_state, True)
     elif hasattr(value, 'loop_put') or value is None:
@@ -708,7 +708,7 @@ def diff_vars(o, indices, check_grad_enabled=True):
     """
 
     result = None
-    if _dr.array_depth_v(o) > 1 or isinstance(o, Sequence):
+    if _dr.depth_v(o) > 1 or isinstance(o, Sequence):
         for v in o:
             t = diff_vars(v, indices, check_grad_enabled)
             if t is not None:
@@ -718,13 +718,13 @@ def diff_vars(o, indices, check_grad_enabled=True):
             t = diff_vars(v, indices, check_grad_enabled)
             if t is not None:
                 result = t
-    elif _dr.is_diff_array_v(o) and o.IsFloat:
+    elif _dr.is_diff_v(o) and o.IsFloat:
         if _dr.is_tensor_v(o):
             result = diff_vars(o.array, indices, check_grad_enabled)
         elif o.index_ad() != 0 and (not check_grad_enabled or o.grad_enabled_()):
             indices.append(o.index_ad())
             result = type(o)
-    elif _dr.is_drjit_struct_v(o):
+    elif _dr.is_struct_v(o):
         for k in type(o).DRJIT_STRUCT.keys():
             t = diff_vars(getattr(o, k), indices, check_grad_enabled)
             if t is not None:

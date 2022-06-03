@@ -285,7 +285,7 @@ def width(arg, /):
             return width(arg.array)
         else:
             return shape(arg)[-1]
-    elif _dr.is_drjit_struct_v(arg):
+    elif _dr.is_struct_v(arg):
         result = 0
         for k in type(arg).DRJIT_STRUCT.keys():
             result = _builtins.max(result, width(getattr(arg, k)))
@@ -312,12 +312,12 @@ def resize(arg, size):
 
         size (int): The new size
     '''
-    if _dr.array_depth_v(arg) > 1:
+    if _dr.depth_v(arg) > 1:
         for i in range(arg.Size):
             resize(arg[i], size)
-    elif _dr.is_jit_array_v(arg):
+    elif _dr.is_jit_v(arg):
         arg.resize_(size)
-    elif _dr.is_drjit_struct_v(arg):
+    elif _dr.is_struct_v(arg):
         for k in type(arg).DRJIT_STRUCT.keys():
             resize(getattr(arg, k), size)
 
@@ -328,11 +328,11 @@ def device(value=None):
     '''
     if value is None:
         return _dr.detail.device()
-    elif _dr.array_depth_v(value) > 1:
+    elif _dr.depth_v(value) > 1:
         return device(value[0])
-    elif _dr.is_diff_array_v(value):
+    elif _dr.is_diff_v(value):
         return device(_dr.detach(value))
-    elif _dr.is_jit_array_v(value):
+    elif _dr.is_jit_v(value):
         return _dr.detail.device(value.index())
     else:
         return -1
@@ -558,7 +558,7 @@ def reinterpret_array_v(dtype, value):
 
 def _broadcast_index(target_type, index):
     size = target_type.Size
-    if _dr.array_size_v(index) <= 1 and size == Dynamic:
+    if _dr.size_v(index) <= 1 and size == Dynamic:
         return target_type(index)
     elif target_type.Depth > index.Depth:
         assert size != Dynamic
@@ -669,7 +669,7 @@ def gather(dtype, source, index, active=True):
     if not isinstance(dtype, type):
         raise Exception('gather(): Type expected as first argument')
     elif not issubclass(dtype, ArrayBase):
-        if _dr.is_drjit_struct_v(dtype):
+        if _dr.is_struct_v(dtype):
             if type(source) is not dtype:
                 raise Exception('gather(): type mismatch involving custom data structure!')
             result = dtype()
@@ -800,7 +800,7 @@ def scatter(target, value, index, active=True):
     '''
     target_type = type(target)
     if not issubclass(target_type, ArrayBase):
-        if _dr.is_drjit_struct_v(target_type):
+        if _dr.is_struct_v(target_type):
             if type(value) is not target_type:
                 raise Exception('scatter(): type mismatch involving custom data structure!')
             for k in target_type.DRJIT_STRUCT.keys():
@@ -815,7 +815,7 @@ def scatter(target, value, index, active=True):
             raise Exception("scatter(): Tensor type not supported! Should work "
                             "with the underlying array instead. (e.g. tensor.array)")
         if target.Depth != 1:
-            if _dr.array_size_v(target) != _dr.array_size_v(value):
+            if _dr.size_v(target) != _dr.size_v(value):
                 raise Exception("scatter(): mismatched source/target configuration!")
 
             for i in range(len(target)):
@@ -910,7 +910,7 @@ def scatter_reduce(op, target, value, index, active=True):
     '''
     target_type = type(target)
     if not issubclass(target_type, ArrayBase):
-        if _dr.is_drjit_struct_v(target_type):
+        if _dr.is_struct_v(target_type):
             if type(value) is not target_type:
                 raise Exception('scatter_reduce(): type mismatch involving custom data structure!')
             for k in target_type.DRJIT_STRUCT.keys():
@@ -926,7 +926,7 @@ def scatter_reduce(op, target, value, index, active=True):
             raise Exception("scatter_reduce(): Tensor type not supported! "
                             "Should work with the underlying array instead. (e.g. tensor.array)")
         if target.Depth != 1:
-            if _dr.array_size_v(target) != _dr.array_size_v(value):
+            if _dr.size_v(target) != _dr.size_v(value):
                 raise Exception("scatter_reduce(): mismatched source/target configuration!")
 
             for i in range(len(target)):
@@ -1135,13 +1135,13 @@ def slice(value, index=None, return_type=None):
         object: Single entry of the structure of arrays.
     """
     t = type(value)
-    if _dr.array_depth_v(t) > 1 or issubclass(t, _Sequence):
+    if _dr.depth_v(t) > 1 or issubclass(t, _Sequence):
         size = len(value)
         result = [None] * size
         for i in range(size):
             result[i] = _dr.slice(value[i], index)
         return result
-    elif _dr.is_drjit_struct_v(value):
+    elif _dr.is_struct_v(value):
         if return_type == None:
             raise Exception('slice(): return type should be specified for drjit struct!')
         result = return_type()
@@ -1812,7 +1812,7 @@ def select(m, t, f):
     type_t, type_f, type_m = type(t), type(f), type(m)
 
     if type_t is not type_f or type_m is not _dr.mask_t(t):
-        if type_t is type_f and _dr.is_drjit_struct_v(type_t):
+        if type_t is type_f and _dr.is_struct_v(type_t):
             result = type_t()
             for k in type_t.DRJIT_STRUCT.keys():
                 setattr(result, k, select(m, getattr(t, k), getattr(f, k)))
@@ -1958,7 +1958,7 @@ def safe_sqrt(a):
         float | drjit.ArrayBase: Square root of the input
     '''
     result = _dr.sqrt(_dr.maximum(a, 0))
-    if _dr.is_diff_array_v(a) and _dr.grad_enabled(a):
+    if _dr.is_diff_v(a) and _dr.grad_enabled(a):
         alt = _dr.sqrt(_dr.maximum(a, _dr.epsilon(a)))
         result = _dr.replace_grad(result, alt)
     return result
@@ -1977,7 +1977,7 @@ def safe_asin(a):
         float | drjit.ArrayBase: Arcsine approximation
     '''
     result = _dr.asin(_dr.clamp(a, -1, 1))
-    if _dr.is_diff_array_v(a) and _dr.grad_enabled(a):
+    if _dr.is_diff_v(a) and _dr.grad_enabled(a):
         alt = _dr.asin(_dr.clamp(a, -_dr.one_minus_epsilon(a), _dr.one_minus_epsilon(a)))
         result = _dr.replace_grad(result, alt)
     return result
@@ -1996,7 +1996,7 @@ def safe_acos(a):
         float | drjit.ArrayBase: Arccosine approximation
     '''
     result = _dr.acos(_dr.clamp(a, -1, 1))
-    if _dr.is_diff_array_v(a) and _dr.grad_enabled(a):
+    if _dr.is_diff_v(a) and _dr.grad_enabled(a):
         alt = _dr.acos(_dr.clamp(a, -_dr.one_minus_epsilon(a), _dr.one_minus_epsilon(a)))
         result = _dr.replace_grad(result, alt)
     return result
@@ -2021,12 +2021,12 @@ def set_label(*args, **kwargs):
 
     if n_args:
         a, label = args
-        if _dr.is_jit_array_v(a) or _dr.is_diff_array_v(a):
+        if _dr.is_jit_v(a) or _dr.is_diff_v(a):
             a.set_label_(label)
         elif isinstance(a, _Mapping):
             for k, v in a.items():
                 set_label(v, label + "_" + k)
-        elif _dr.is_drjit_struct_v(a):
+        elif _dr.is_struct_v(a):
             for k in a.DRJIT_STRUCT.keys():
                 set_label(getattr(a, k), label + "_" + k)
     elif n_kwargs:
@@ -2040,7 +2040,7 @@ def schedule(*args):
         t = type(a)
         if issubclass(t, ArrayBase):
             result |= a.schedule_()
-        elif _dr.is_drjit_struct_v(t):
+        elif _dr.is_struct_v(t):
             for k in t.DRJIT_STRUCT.keys():
                 result |= schedule(getattr(a, k))
         elif issubclass(t, _Sequence):
@@ -2060,9 +2060,9 @@ def eval(*args):
 def graphviz_str(arg):
     base = _dr.leaf_array_t(arg)
 
-    if _dr.is_diff_array_v(base):
+    if _dr.is_diff_v(base):
         return base.graphviz_()
-    elif _dr.is_jit_array_v(base):
+    elif _dr.is_jit_v(base):
         return _dr.detail.graphviz()
     else:
         raise Exception('graphviz_str(): only variables registered with '
@@ -2081,7 +2081,7 @@ def graphviz(arg):
 
 
 def migrate(a, type_):
-    if _dr.is_jit_array_v(a):
+    if _dr.is_jit_v(a):
         return a.migrate_(type_)
     else:
         return a
@@ -2712,7 +2712,7 @@ def all_nested(a):
 
 def all_or(value, a):
     assert isinstance(value, bool)
-    if _dr.is_jit_array_v(a) and a.Depth == 1:
+    if _dr.is_jit_v(a) and a.Depth == 1:
         return value
     else:
         return _dr.all(a)
@@ -2764,7 +2764,7 @@ def any_nested(a):
 
 def any_or(value, a):
     assert isinstance(value, bool)
-    if _dr.is_jit_array_v(a) and a.Depth == 1:
+    if _dr.is_jit_v(a) and a.Depth == 1:
         return value
     else:
         return _dr.any(a)
@@ -2782,7 +2782,7 @@ def none_nested(a):
 
 def none_or(value, a):
     assert isinstance(value, bool)
-    if _dr.is_jit_array_v(a) and a.Depth == 1:
+    if _dr.is_jit_v(a) and a.Depth == 1:
         return value
     else:
         return _dr.none(a)
@@ -3117,7 +3117,7 @@ def meshgrid(*args, indexing='xy'):
     t = type(args[0])
     for v in args:
         if not _dr.is_dynamic_array_v(v) or \
-           _dr.array_depth_v(v) != 1 or type(v) is not t:
+           _dr.depth_v(v) != 1 or type(v) is not t:
             raise Exception("meshgrid(): consistent 1D dynamic arrays expected!")
 
     size = _dr.prod((len(v) for v in args))
@@ -3142,7 +3142,7 @@ def meshgrid(*args, indexing='xy'):
 
 
 def block_sum(value, block_size):
-    if _dr.is_jit_array_v(value):
+    if _dr.is_jit_v(value):
         return value.block_sum_(block_size)
     else:
         raise Exception("block_sum(): requires a JIT array!")
@@ -3168,7 +3168,7 @@ def binary_search(start, end, pred):
 # -------------------------------------------------------------------
 
 def cross(a, b):
-    if _dr.array_size_v(a) != 3 or _dr.array_size_v(a) != 3:
+    if _dr.size_v(a) != 3 or _dr.size_v(a) != 3:
         raise Exception("cross(): requires 3D input arrays!")
 
     ta, tb = type(a), type(b)
@@ -3183,12 +3183,12 @@ def cross(a, b):
 
 
 def detach(a, preserve_type=False):
-    if _dr.is_diff_array_v(a):
+    if _dr.is_diff_v(a):
         if preserve_type:
             return type(a)(a.detach_())
         else:
             return a.detach_()
-    elif _dr.is_drjit_struct_v(a):
+    elif _dr.is_struct_v(a):
         result = type(a)()
         for k in type(a).DRJIT_STRUCT.keys():
             setattr(result, k, detach(getattr(a, k), preserve_type=preserve_type))
@@ -3198,9 +3198,9 @@ def detach(a, preserve_type=False):
 
 
 def grad(a):
-    if _dr.is_diff_array_v(a):
+    if _dr.is_diff_v(a):
         return a.grad_()
-    elif _dr.is_drjit_struct_v(a):
+    elif _dr.is_struct_v(a):
         result = type(a)()
         for k in type(a).DRJIT_STRUCT.keys():
             setattr(result, k, grad(getattr(a, k)))
@@ -3214,8 +3214,8 @@ def grad(a):
 
 
 def set_grad(a, value):
-    if _dr.is_diff_array_v(a) and a.IsFloat:
-        if _dr.is_diff_array_v(value):
+    if _dr.is_diff_v(a) and a.IsFloat:
+        if _dr.is_diff_v(value):
             value = _dr.detach(value)
 
         t = _dr.detached_t(a)
@@ -3233,16 +3233,16 @@ def set_grad(a, value):
         assert not vm or a.keys() == value.keys()
         for k, v in a.items():
             set_grad(v, value[k] if vm else value)
-    elif _dr.is_drjit_struct_v(a):
-        ve = _dr.is_drjit_struct_v(value)
+    elif _dr.is_struct_v(a):
+        ve = _dr.is_struct_v(value)
         assert not ve or type(value) is type(a)
         for k in type(a).DRJIT_STRUCT.keys():
             set_grad(getattr(a, k), getattr(value, k) if ve else value)
 
 
 def accum_grad(a, value):
-    if _dr.is_diff_array_v(a) and a.IsFloat:
-        if _dr.is_diff_array_v(value):
+    if _dr.is_diff_v(a) and a.IsFloat:
+        if _dr.is_diff_v(value):
             value = _dr.detach(value)
 
         t = _dr.detached_t(a)
@@ -3260,8 +3260,8 @@ def accum_grad(a, value):
         assert not vm or a.keys() == value.keys()
         for k, v in a.items():
             accum_grad(v, value[k] if vm else value)
-    elif _dr.is_drjit_struct_v(a):
-        ve = _dr.is_drjit_struct_v(value)
+    elif _dr.is_struct_v(a):
+        ve = _dr.is_struct_v(value)
         assert not ve or type(value) is type(a)
         for k in type(a).DRJIT_STRUCT.keys():
             accum_grad(getattr(a, k), getattr(value, k) if ve else value)
@@ -3270,9 +3270,9 @@ def accum_grad(a, value):
 def grad_enabled(*args):
     result = False
     for a in args:
-        if _dr.is_diff_array_v(a):
+        if _dr.is_diff_v(a):
             result |= a.grad_enabled_()
-        elif _dr.is_drjit_struct_v(a):
+        elif _dr.is_struct_v(a):
             for k in type(a).DRJIT_STRUCT.keys():
                 result |= grad_enabled(getattr(a, k))
         elif isinstance(a, _Sequence):
@@ -3285,9 +3285,9 @@ def grad_enabled(*args):
 
 
 def set_grad_enabled(a, value):
-    if _dr.is_diff_array_v(a) and a.IsFloat:
+    if _dr.is_diff_v(a) and a.IsFloat:
         a.set_grad_enabled_(value)
-    elif _dr.is_drjit_struct_v(a):
+    elif _dr.is_struct_v(a):
         for k in type(a).DRJIT_STRUCT.keys():
             set_grad_enabled(getattr(a, k), value)
     elif isinstance(a, _Sequence):
@@ -3314,8 +3314,8 @@ def replace_grad(a, b):
 
     ta, tb = type(a), type(b)
 
-    if not (_dr.is_diff_array_v(ta) and ta.IsFloat and
-            _dr.is_diff_array_v(tb) and tb.IsFloat):
+    if not (_dr.is_diff_v(ta) and ta.IsFloat and
+            _dr.is_diff_v(tb) and tb.IsFloat):
         raise Exception("replace_grad(): unsupported input types!")
 
     la, lb = len(a), len(b)
@@ -3347,7 +3347,7 @@ def replace_grad(a, b):
 
 def enqueue(mode, *args):
     for a in args:
-        if _dr.is_diff_array_v(a) and a.IsFloat:
+        if _dr.is_diff_v(a) and a.IsFloat:
             a.enqueue_(mode)
         elif isinstance(a, _Sequence):
             for v in a:
@@ -3355,7 +3355,7 @@ def enqueue(mode, *args):
         elif isinstance(a, _Mapping):
             for k, v in a.items():
                 enqueue(mode, v)
-        elif _dr.is_drjit_struct_v(a):
+        elif _dr.is_struct_v(a):
             for k in type(a).DRJIT_STRUCT.keys():
                 enqueue(mode, getattr(a, k))
 
@@ -3365,14 +3365,14 @@ def traverse(t, mode, flags=_dr.ADFlag.Default):
 
     t = _dr.leaf_array_t(t)
 
-    if not _dr.is_diff_array_v(t):
+    if not _dr.is_diff_v(t):
         raise Exception('traverse(): expected a differentiable array type!')
 
     t.traverse_(mode, flags)
 
 
 def _check_grad_enabled(name, t, a):
-    if _dr.is_diff_array_v(t) and t.IsFloat:
+    if _dr.is_diff_v(t) and t.IsFloat:
         if _dr.flag(_dr.JitFlag.VCallRecord) and not grad_enabled(a):
             raise Exception(
                 f'{name}(): the argument does not depend on the input '
@@ -3416,7 +3416,7 @@ def backward_from(a, flags=_dr.ADFlag.Default):
     _check_grad_enabled('backward_from', ta, a)
 
     # Deduplicate components if 'a' is a vector
-    if _dr.array_depth_v(a) > 1:
+    if _dr.depth_v(a) > 1:
         a = a + ta(0)
 
     set_grad(a, 1)
@@ -3488,7 +3488,7 @@ def zeros(dtype, shape=1):
         raise Exception('zeros(): Type expected as first argument')
     elif issubclass(dtype, ArrayBase):
         return dtype.zero_(shape)
-    elif _dr.is_drjit_struct_v(dtype):
+    elif _dr.is_struct_v(dtype):
         result = dtype()
         for k, v in dtype.DRJIT_STRUCT.items():
             setattr(result, k, zeros(v, shape))
@@ -3546,7 +3546,7 @@ def empty(dtype, shape=1):
         raise Exception('empty(): Type expected as first argument')
     elif issubclass(dtype, ArrayBase):
         return dtype.empty_(shape)
-    elif _dr.is_drjit_struct_v(dtype):
+    elif _dr.is_struct_v(dtype):
         result = dtype()
         for k, v in dtype.DRJIT_STRUCT.items():
             setattr(result, k, empty(v, shape))
@@ -3567,20 +3567,20 @@ def full(type_, value, shape=1):
 def opaque(type_, value, shape=1):
     if not isinstance(type_, type):
         raise Exception('opaque(): Type expected as first argument')
-    if not _dr.is_jit_array_v(type_):
+    if not _dr.is_jit_v(type_):
         return _dr.full(type_, value, shape)
     if _dr.is_static_array_v(type_):
         result = type_()
         for i in range(len(result)):
             result[i] = opaque(type_.Value, value, shape)
         return result
-    if _dr.is_diff_array_v(type_):
+    if _dr.is_diff_v(type_):
         return _dr.opaque(_dr.detached_t(type_), value, shape)
-    if _dr.is_jit_array_v(type_):
+    if _dr.is_jit_v(type_):
         if _dr.is_tensor_v(type_):
             return type_(_dr.opaque(type_.Array, value, _dr.prod(shape)), shape)
         return type_.opaque_(value, shape)
-    elif _dr.is_drjit_struct_v(type_):
+    elif _dr.is_struct_v(type_):
         result = type_()
         for k, v in type_.DRJIT_STRUCT.items():
             setattr(result, k, opaque(v, getattr(value, k), shape))
@@ -3593,18 +3593,18 @@ def make_opaque(*args):
     for a in args:
         t = type(a)
         if issubclass(t, ArrayBase):
-            if _dr.array_depth_v(t) > 1:
+            if _dr.depth_v(t) > 1:
                 for i in range(len(a)):
                     make_opaque(a.entry_ref_(i))
-            elif _dr.is_diff_array_v(t):
+            elif _dr.is_diff_v(t):
                 make_opaque(a.detach_ref_())
             elif _dr.is_tensor_v(t):
                 make_opaque(a.array)
-            elif _dr.is_jit_array_v(t):
+            elif _dr.is_jit_v(t):
                 if not a.is_evaluated_():
                     a.assign(a.copy_())
                     a.data_()
-        elif _dr.is_drjit_struct_v(t):
+        elif _dr.is_struct_v(t):
             for k in t.DRJIT_STRUCT.keys():
                 make_opaque(getattr(a, k))
         elif issubclass(t, _Sequence):
@@ -3697,14 +3697,14 @@ def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
     # Fast path for Dr.Jit arrays, avoid for special array types
     # due to their non-standard broadcasting behavior
     if _dr.is_array_v(a) or _dr.is_array_v(b):
-        if _dr.is_diff_array_v(a):
+        if _dr.is_diff_v(a):
             a = _dr.detach(a)
-        if _dr.is_diff_array_v(b):
+        if _dr.is_diff_v(b):
             b = _dr.detach(b)
 
-        if _dr.is_array_v(a) and not _dr.is_floating_point_v(a):
+        if _dr.is_array_v(a) and not _dr.is_float_v(a):
             a, _ = _var_promote(a, 1.0)
-        if _dr.is_array_v(b) and not _dr.is_floating_point_v(b):
+        if _dr.is_array_v(b) and not _dr.is_float_v(b):
             b, _ = _var_promote(b, 1.0)
 
         if type(a) is not type(b):
@@ -3715,7 +3715,7 @@ def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
         if _dr.is_tensor_v(diff):
             shape = diff.shape
         cond = diff <= abs(b) * rtol + _dr.full(type(diff), atol, shape)
-        if _dr.is_floating_point_v(a):
+        if _dr.is_float_v(a):
             cond |= _dr.eq(a, b)  # plus/minus infinity
         if equal_nan:
             cond |= _dr.isnan(a) & _dr.isnan(b)
@@ -3750,11 +3750,11 @@ def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
 
 def printf_async(fmt, *args, active=True):
     indices = []
-    is_cuda, is_llvm = _dr.is_cuda_array_v(active), _dr.is_llvm_array_v(active)
+    is_cuda, is_llvm = _dr.is_cuda_v(active), _dr.is_llvm_v(active)
 
     for a in args:
-        cuda, llvm = _dr.is_cuda_array_v(a), _dr.is_llvm_array_v(a)
-        if not (cuda or llvm) or _dr.array_depth_v(a) != 1 or _dr.is_mask_v(a):
+        cuda, llvm = _dr.is_cuda_v(a), _dr.is_llvm_v(a)
+        if not (cuda or llvm) or _dr.depth_v(a) != 1 or _dr.is_mask_v(a):
             raise Exception("printf_async(): array argument of type '%s' not "
                             "supported (must be a depth-1 JIT (LLVM/CUDA) array, "
                             "and cannot be a mask)" % type(a).__name__)
@@ -3896,19 +3896,19 @@ class CustomOp:
 
     def __del__(self):
         def ad_clear(o):
-            if _dr.array_depth_v(o) > 1 \
+            if _dr.depth_v(o) > 1 \
                or isinstance(o, _Sequence):
                 for v in o:
                     ad_clear(v)
             elif isinstance(o, _Mapping):
                 for k, v in o.items():
                     ad_clear(v)
-            elif _dr.is_diff_array_v(o):
+            elif _dr.is_diff_v(o):
                 if _dr.is_tensor_v(o):
                     ad_clear(o.array)
                 else:
                     o.set_index_ad_(0)
-            elif _dr.is_drjit_struct_v(o):
+            elif _dr.is_struct_v(o):
                 for k in type(o).DRJIT_STRUCT.keys():
                     ad_clear(getattr(o, k))
         ad_clear(getattr(self, 'output', None))
@@ -3920,12 +3920,12 @@ class CustomOp:
 def custom(cls, *args, **kwargs):
     # Clear primal values of a differentiable array
     def clear_primal(o, dec_ref):
-        if _dr.array_depth_v(o) > 1 \
+        if _dr.depth_v(o) > 1 \
            or isinstance(o, _Sequence):
             return type(o)([clear_primal(v, dec_ref) for v in o])
         elif isinstance(o, _Mapping):
             return { k: clear_primal(v, dec_ref) for k, v in o.items() }
-        elif _dr.is_diff_array_v(o) and _dr.is_floating_point_v(o):
+        elif _dr.is_diff_v(o) and _dr.is_float_v(o):
             ot = type(o)
 
             if _dr.is_tensor_v(ot):
@@ -3940,7 +3940,7 @@ def custom(cls, *args, **kwargs):
             if dec_ref:
                 value.dec_ref_()
             return result
-        elif _dr.is_drjit_struct_v(o):
+        elif _dr.is_struct_v(o):
             res = type(o)()
             for k in type(o).DRJIT_STRUCT.keys():
                 setattr(res, k, clear_primal(getattr(o, k), dec_ref))
