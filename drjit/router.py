@@ -1558,7 +1558,7 @@ def op_abs(a):
         return _builtins.abs(a)
 
 
-def abs(a, /):
+def abs(arg, /):
     '''
     abs(arg, /)
     Compute the absolute value of the provided input.
@@ -1569,13 +1569,13 @@ def abs(a, /):
     Returns:
         float | int | drjit.ArrayBase: Absolute value of the input)
     '''
-    if isinstance(a, ArrayBase):
-        return a.abs_()
+    if isinstance(arg, ArrayBase):
+        return arg.abs_()
     else:
-        return _builtins.abs(a)
+        return _builtins.abs(arg)
 
 
-def floor(a, /):
+def floor(arg, /):
     '''
     floor(arg, /)
     Evaluate the floor, i.e. the largest integer <= arg.
@@ -1589,13 +1589,13 @@ def floor(a, /):
     Returns:
         float | drjit.ArrayBase: Floor of the input
     '''
-    if isinstance(a, ArrayBase):
-        return a.floor_()
+    if isinstance(arg, ArrayBase):
+        return arg.floor_()
     else:
-        return _math.floor(a)
+        return _math.floor(arg)
 
 
-def ceil(a, /):
+def ceil(arg, /):
     '''
     ceil(arg, /)
     Evaluate the ceiling, i.e. the smallest integer >= arg.
@@ -1609,13 +1609,13 @@ def ceil(a, /):
     Returns:
         float | drjit.ArrayBase: Ceiling of the input
     '''
-    if isinstance(a, ArrayBase):
-        return a.ceil_()
+    if isinstance(arg, ArrayBase):
+        return arg.ceil_()
     else:
-        return _math.ceil(a)
+        return _math.ceil(arg)
 
 
-def round(a, /):
+def round(arg, /):
     '''
     round(arg, /)
 
@@ -1632,13 +1632,13 @@ def round(a, /):
     Returns:
         float | drjit.ArrayBase: Rounded result
     '''
-    if isinstance(a, ArrayBase):
-        return a.round_()
+    if isinstance(arg, ArrayBase):
+        return arg.round_()
     else:
-        return round(a)
+        return round(arg)
 
 
-def trunc(a, /):
+def trunc(arg, /):
     '''
     trunc(arg, /)
     Truncates arg to the nearest integer by towards zero.
@@ -1652,10 +1652,10 @@ def trunc(a, /):
     Returns:
         float | drjit.ArrayBase: Truncated result
     '''
-    if isinstance(a, ArrayBase):
-        return a.trunc_()
+    if isinstance(arg, ArrayBase):
+        return arg.trunc_()
     else:
-        return _math.trunc(a)
+        return _math.trunc(arg)
 
 
 def mulhi(a, b):
@@ -1672,7 +1672,7 @@ def sqr(a):
     return a * a
 
 
-def sqrt(a, /):
+def sqrt(arg, /):
     '''
     sqrt(arg, /)
     Evaluate the square root of the provided input.
@@ -1685,13 +1685,13 @@ def sqrt(a, /):
     Returns:
         float | drjit.ArrayBase: Square root of the input
     '''
-    if isinstance(a, ArrayBase):
-        return a.sqrt_()
+    if isinstance(arg, ArrayBase):
+        return arg.sqrt_()
     else:
-        return _math.sqrt(a)
+        return _math.sqrt(arg)
 
 
-def rcp(a, /):
+def rcp(arg, /):
     '''
     rcp(arg, /)
     Evaluate the reciprocal (1 / arg) of the provided input.
@@ -1707,13 +1707,13 @@ def rcp(a, /):
     Returns:
         float | drjit.ArrayBase: Reciprocal of the input
     '''
-    if isinstance(a, ArrayBase):
-        return a.rcp_()
+    if isinstance(arg, ArrayBase):
+        return arg.rcp_()
     else:
-        return 1.0 / a
+        return 1.0 / arg
 
 
-def rsqrt(a, /):
+def rsqrt(arg, /):
     '''
     rsqrt(arg, /)
     Evaluate the reciprocal square root (1 / sqrt(arg)) of the provided input.
@@ -1729,10 +1729,10 @@ def rsqrt(a, /):
     Returns:
         float | drjit.ArrayBase: Reciprocal square root of the input
     '''
-    if isinstance(a, ArrayBase):
-        return a.rsqrt_()
+    if isinstance(arg, ArrayBase):
+        return arg.rsqrt_()
     else:
-        return 1.0 / _math.sqrt(a)
+        return 1.0 / _math.sqrt(arg)
 
 
 def maximum(a, b, /):
@@ -1945,7 +1945,7 @@ def log2i(a):
 # -------------------------------------------------------------------
 
 
-def safe_sqrt(a):
+def safe_sqrt(arg):
     '''
     Safely evaluate the square root of the provided input avoiding domain errors.
 
@@ -1957,14 +1957,14 @@ def safe_sqrt(a):
     Returns:
         float | drjit.ArrayBase: Square root of the input
     '''
-    result = _dr.sqrt(_dr.maximum(a, 0))
-    if _dr.is_diff_v(a) and _dr.grad_enabled(a):
-        alt = _dr.sqrt(_dr.maximum(a, _dr.epsilon(a)))
+    result = _dr.sqrt(_dr.maximum(arg, 0))
+    if _dr.is_diff_v(arg) and _dr.grad_enabled(arg):
+        alt = _dr.sqrt(_dr.maximum(arg, _dr.epsilon(arg)))
         result = _dr.replace_grad(result, alt)
     return result
 
 
-def safe_asin(a):
+def safe_asin(arg):
     '''
     Safe wrapper around :py:func:`drjit.asin` that avoids domain errors.
 
@@ -1976,14 +1976,14 @@ def safe_asin(a):
     Returns:
         float | drjit.ArrayBase: Arcsine approximation
     '''
-    result = _dr.asin(_dr.clamp(a, -1, 1))
-    if _dr.is_diff_v(a) and _dr.grad_enabled(a):
-        alt = _dr.asin(_dr.clamp(a, -_dr.one_minus_epsilon(a), _dr.one_minus_epsilon(a)))
+    result = _dr.asin(_dr.clamp(arg, -1, 1))
+    if _dr.is_diff_v(arg) and _dr.grad_enabled(arg):
+        alt = _dr.asin(_dr.clamp(arg, -_dr.one_minus_epsilon(arg), _dr.one_minus_epsilon(arg)))
         result = _dr.replace_grad(result, alt)
     return result
 
 
-def safe_acos(a):
+def safe_acos(arg):
     '''
     Safe wrapper around :py:func:`drjit.acos` that avoids domain errors.
 
@@ -1995,9 +1995,9 @@ def safe_acos(a):
     Returns:
         float | drjit.ArrayBase: Arccosine approximation
     '''
-    result = _dr.acos(_dr.clamp(a, -1, 1))
-    if _dr.is_diff_v(a) and _dr.grad_enabled(a):
-        alt = _dr.acos(_dr.clamp(a, -_dr.one_minus_epsilon(a), _dr.one_minus_epsilon(a)))
+    result = _dr.acos(_dr.clamp(arg, -1, 1))
+    if _dr.is_diff_v(arg) and _dr.grad_enabled(arg):
+        alt = _dr.acos(_dr.clamp(arg, -_dr.one_minus_epsilon(arg), _dr.one_minus_epsilon(arg)))
         result = _dr.replace_grad(result, alt)
     return result
 
@@ -2007,14 +2007,39 @@ def safe_acos(a):
 # -------------------------------------------------------------------
 
 
-def label(a):
-    if isinstance(a, ArrayBase):
-        return a.label_()
+def label(arg):
+    '''
+    Returns the label of a given Dr.Jit array.
+
+    Args:
+        arg (object): a Dr.Jit array instance.
+
+    Returns:
+        str: the label of the given variable.
+    '''
+    if isinstance(arg, ArrayBase):
+        return arg.label_()
     else:
         return None
 
 
 def set_label(*args, **kwargs):
+    '''
+    Sets the label of a provided Dr.Jit array, either in the JIT or the AD system.
+
+    When a :ref:`custom data structure <custom-struct>` is provided, the field names
+    will be used as suffix for the variables labels.
+
+    When a sequence or static array is provided, the item's indices will be appended
+    to the label.
+
+    When a mapping is provided, the item's key will be appended to the label.
+
+    Args:
+        *arg (tuple): a Dr.Jit array instance and its corresponding label ``str`` value.
+
+        **kwarg (dict): A set of (keyword, object) pairs.
+    '''
     n_args, n_kwargs = len(args), len(kwargs)
     if (n_kwargs and n_args) or (n_args and n_args != 2):
         raise Exception('set_label(): invalid input arguments')
@@ -2035,6 +2060,77 @@ def set_label(*args, **kwargs):
 
 
 def schedule(*args):
+    '''
+    Schedule the provided JIT variable(s) for later evaluation
+
+    This function causes ``args`` to be evaluated by the next kernel launch. In
+    other words, the effect of this operation is deferred: the next time that
+    Dr.Jit's LLVM or CUDA backends compile and execute code, they will include the
+    *trace* of the specified variables in the generated kernel and turn them into
+    an explicit memory-based representation.
+
+    Scheduling and evaluation of traced computation happens automatically, hence it
+    is rare that a user would need to call this function explicitly. Explicit
+    scheduling can improve performance in certain cases---for example, consider the
+    following code:
+
+    .. code-block::
+
+        # Computation that produces Dr.Jit arrays
+        a, b = ...
+
+        # The following line launches a kernel that computes 'a'
+        print(a)
+
+        # The following line launches a kernel that computes 'b'
+        print(b)
+
+    If the traces of ``a`` and ``b`` overlap (perhaps they reference computation
+    from an earlier step not shown here), then this is inefficient as these steps
+    will be executed twice. It is preferable to launch bigger kernels that leverage
+    common subexpressions, which is what :py:func:`drjit.schedule()` enables:
+
+    .. code-block::
+
+        a, b = ... # Computation that produces Dr.Jit arrays
+
+        # Schedule both arrays for deferred evaluation, but don't evaluate yet
+        dr.schedule(a, b)
+
+        # The following line launches a kernel that computes both 'a' and 'b'
+        print(a)
+
+        # References the stored array, no kernel launch
+        print(b)
+
+    Note that :py:func:`drjit.eval()` would also have been a suitable alternative
+    in the above example; the main difference to :py:func:`drjit.schedule()` is
+    that it does the evaluation immediately without deferring the kernel launch.
+
+    This function accepts a variable-length keyword argument and processes it
+    as follows:
+
+    - It recurses into sequences (``tuple``, ``list``, etc.)
+    - It recurses into the values of mappings (``dict``, etc.)
+    - It recurses into the fields of :ref:`custom data structures <custom-struct>`.
+
+    During recursion, the function gathers all unevaluated Dr.Jit arrays. Evaluated
+    arrays and incompatible types are ignored. Multiple variables can be
+    equivalently scheduled with a single :py:func:`drjit.schedule()` call or a
+    sequence of calls to :py:func:`drjit.schedule()`. Variables that are garbage
+    collected between the original :py:func:`drjit.schedule()` call and the next
+    kernel launch are ignored and will not be stored in memory.
+
+    Args:
+        *args (tuple): A variable-length list of Dr.Jit array instances,
+          :ref:`custom data structures <custom-struct>`, sequences, or mappings.
+          The function will recursively traverse data structures to discover all
+          Dr.Jit arrays.
+
+    Returns:
+        bool: ``True`` if a variable was scheduled, ``False`` if the operation did
+        not do anything.
+    '''
     result = False
     for a in args:
         t = type(a)
@@ -2053,31 +2149,102 @@ def schedule(*args):
 
 
 def eval(*args):
+    '''
+    Immediately evaluate the provided JIT variable(s)
+
+    This function immediately invokes Dr.Jit's LLVM or CUDA backends to compile and
+    then execute a kernel containing the *trace* of the specified variables,
+    turning them into an explicit memory-based representation. The generated
+    kernel(s) will also include previously scheduled computation. The function
+    :py:func:`drjit.eval()` internally calls :py:func:`drjit.schedule()`---specifically,
+
+    .. code-block::
+
+        dr.eval(arg_1, arg_2, ...)
+
+    is equivalent to
+
+    .. code-block::
+
+        dr.schedule(arg_1, arg_2, ...)
+        dr.eval()
+
+    Variable evaluation happens automatically as needed, hence it is rare that a
+    user would need to call this function explicitly. Explicit evaluation can
+    slightly improve performance in certain cases (the documentation of
+    :py:func:`drjit.schedule()` shows an example of such a use case.)
+
+    This function accepts a variable-length keyword argument and processes it
+    as follows:
+
+    - It recurses into sequences (``tuple``, ``list``, etc.)
+    - It recurses into the values of mappings (``dict``, etc.)
+    - It recurses into the fields of :ref:`custom data structures <custom-struct>`.
+
+    During recursion, the function gathers all unevaluated Dr.Jit arrays. Evaluated
+    arrays and incompatible types are ignored.
+
+    Args:
+        *args (tuple): A variable-length list of Dr.Jit array instances,
+          :ref:`custom data structures <custom-struct>`, sequences, or mappings.
+          The function will recursively traverse data structures to discover all
+          Dr.Jit arrays.
+
+    Returns:
+        bool: ``True`` if a variable was evaluated, ``False`` if the operation did
+        not do anything.
+    '''
     if schedule(*args) or len(args) == 0:
         _dr.detail.eval()
 
 
-def graphviz_str(arg):
-    base = _dr.leaf_array_t(arg)
-
-    if _dr.is_diff_v(base):
-        return base.graphviz_()
-    elif _dr.is_jit_v(base):
-        return _dr.detail.graphviz()
-    else:
-        raise Exception('graphviz_str(): only variables registered with '
-                        'the JIT (LLVM/CUDA) or AD backend are supported!')
-
-
-def graphviz(arg):
+def _graphviz_obj(graphviz_str):
+    '''
+    Tries to convert the string representation of a graphviz object into a
+    graphviz object.
+    '''
     try:
         from graphviz import Source
         return Source(graphviz_str(arg))
     except ImportError:
-        raise Exception('The "graphviz" Python package not available! Install '
-                        'via "python -m pip install graphviz". Alternatively, '
-                        'you can call drjit.graphviz_str() function to obtain '
-                        'a string representation.')
+        raise Exception('The "graphviz" Python package is not available! '
+                        'Install it via "python -m pip install graphviz".')
+
+
+def graphviz(as_str):
+    '''
+    Assembles a graphviz diagram for the computational graph trace by the JIT.
+
+    Args:
+        as_str (bool): whether the function should return the graphviz object as
+            a string representation or not.
+
+    Returns:
+        object: the graphviz obj (or its string representation).
+    '''
+    graphviz_str = _dr.detail.graphviz()
+    if as_str:
+        return graphviz_str
+
+    return _graphviz_obj(graphviz_str)
+
+
+def graphviz_ad(as_str):
+    '''
+    Assembles a graphviz diagram for the computational graph trace by the AD system.
+
+    Args:
+        as_str (bool): whether the function should return the graphviz object as
+            a string representation or not.
+
+    Returns:
+        object: the graphviz obj (or its string representation).
+    '''
+    graphviz_str = _dr.detail.ad_graphviz()
+    if as_str:
+        return graphviz_str
+
+    return _graphviz_obj(graphviz_str)
 
 
 def migrate(a, type_):
@@ -2091,7 +2258,7 @@ def migrate(a, type_):
 # -------------------------------------------------------------------
 
 
-def sin(a, /):
+def sin(arg, /):
     '''
     sin(arg, /)
     Sine approximation based on the CEPHES library.
@@ -2110,13 +2277,13 @@ def sin(a, /):
     Returns:
         float | drjit.ArrayBase: Sine of the input
     '''
-    if isinstance(a, ArrayBase):
-        return a.sin_()
+    if isinstance(arg, ArrayBase):
+        return arg.sin_()
     else:
-        return _math.sin(a)
+        return _math.sin(arg)
 
 
-def cos(a, /):
+def cos(arg, /):
     '''
     cos(arg, /)
     Cosine approximation based on the CEPHES library.
@@ -2135,13 +2302,13 @@ def cos(a, /):
     Returns:
         float | drjit.ArrayBase: Cosine of the input
     '''
-    if isinstance(a, ArrayBase):
-        return a.cos_()
+    if isinstance(arg, ArrayBase):
+        return arg.cos_()
     else:
-        return _math.cos(a)
+        return _math.cos(arg)
 
 
-def sincos(a, /):
+def sincos(arg, /):
     '''
     sincos(arg, /)
     Sine/cosine approximation based on the CEPHES library.
@@ -2160,13 +2327,13 @@ def sincos(a, /):
     Returns:
         (float, float) | (drjit.ArrayBase, drjit.ArrayBase): Sine and cosine of the input
     '''
-    if isinstance(a, ArrayBase):
-        return a.sincos_()
+    if isinstance(arg, ArrayBase):
+        return arg.sincos_()
     else:
-        return (_math.sin(a), _math.cos(a))
+        return (_math.sin(arg), _math.cos(arg))
 
 
-def tan(a, /):
+def tan(arg, /):
     '''
     tan(arg, /)
     Tangent approximation based on the CEPHES library.
@@ -2185,10 +2352,10 @@ def tan(a, /):
     Returns:
         float | drjit.ArrayBase: Tangent of the input
     '''
-    if isinstance(a, ArrayBase):
-        return a.tan_()
+    if isinstance(arg, ArrayBase):
+        return arg.tan_()
     else:
-        return _math.tan(a)
+        return _math.tan(arg)
 
 
 def csc(a):
@@ -2212,7 +2379,7 @@ def cot(a):
         return 1.0 / _math.tan(a)
 
 
-def asin(a, /):
+def asin(arg, /):
     '''
     asin(arg, /)
     Arcsine approximation based on the CEPHES library.
@@ -2226,13 +2393,13 @@ def asin(a, /):
     Returns:
         float | drjit.ArrayBase: Arcsine of the input
     '''
-    if isinstance(a, ArrayBase):
-        return a.asin_()
+    if isinstance(arg, ArrayBase):
+        return arg.asin_()
     else:
-        return _math.asin(a)
+        return _math.asin(arg)
 
 
-def acos(a, /):
+def acos(arg, /):
     '''
     acos(arg, /)
     Arccosine approximation based on the CEPHES library.
@@ -2246,13 +2413,13 @@ def acos(a, /):
     Returns:
         float | drjit.ArrayBase: Arccosine of the input
     '''
-    if isinstance(a, ArrayBase):
-        return a.acos_()
+    if isinstance(arg, ArrayBase):
+        return arg.acos_()
     else:
-        return _math.acos(a)
+        return _math.acos(arg)
 
 
-def atan(a, /):
+def atan(arg, /):
     '''
     atan(arg, /)
     Arctangent approximation
@@ -2266,10 +2433,10 @@ def atan(a, /):
     Returns:
         float | drjit.ArrayBase: Arctangent of the input
     '''
-    if isinstance(a, ArrayBase):
-        return a.atan_()
+    if isinstance(arg, ArrayBase):
+        return arg.atan_()
     else:
-        return _math.atan(a)
+        return _math.atan(arg)
 
 
 def atan2(a, b, /):
@@ -2297,7 +2464,7 @@ def atan2(a, b, /):
         return _math.atan2(a, b)
 
 
-def exp(a, /):
+def exp(arg, /):
     '''
     exp(arg, /)
     Natural exponential approximation based on the CEPHES library.
@@ -2314,13 +2481,13 @@ def exp(a, /):
     Returns:
         float | drjit.ArrayBase: Natural exponential of the input
     '''
-    if isinstance(a, ArrayBase):
-        return a.exp_()
+    if isinstance(arg, ArrayBase):
+        return arg.exp_()
     else:
-        return _math.exp(a)
+        return _math.exp(arg)
 
 
-def exp2(a, /):
+def exp2(arg, /):
     '''
     exp2(arg, /)
     Base-2 exponential approximation based on the CEPHES library.
@@ -2337,13 +2504,13 @@ def exp2(a, /):
     Returns:
         float | drjit.ArrayBase: Base-2 exponential of the input
     '''
-    if isinstance(a, ArrayBase):
-        return a.exp2_()
+    if isinstance(arg, ArrayBase):
+        return arg.exp2_()
     else:
-        return _math.exp(a * _math.log(2.0))
+        return _math.exp(arg * _math.log(2.0))
 
 
-def log(a, /):
+def log(arg, /):
     '''
     log(arg, /)
     Natural exponential approximation based on the CEPHES library.
@@ -2360,13 +2527,13 @@ def log(a, /):
     Returns:
         float | drjit.ArrayBase: Natural logarithm of the input
     '''
-    if isinstance(a, ArrayBase):
-        return a.log_()
+    if isinstance(arg, ArrayBase):
+        return arg.log_()
     else:
-        return _math.log(a)
+        return _math.log(arg)
 
 
-def log2(a, /):
+def log2(arg, /):
     '''
     log2(arg, /)
     Base-2 exponential approximation based on the CEPHES library.
@@ -2383,10 +2550,10 @@ def log2(a, /):
     Returns:
         float | drjit.ArrayBase: Base-2 logarithm of the input
     '''
-    if isinstance(a, ArrayBase):
-        return a.log2_()
+    if isinstance(arg, ArrayBase):
+        return arg.log2_()
     else:
-        return _math.log2(a)
+        return _math.log2(arg)
 
 
 def power(a, b):
@@ -2420,7 +2587,7 @@ def op_pow(a, b):
     return power(a, b)
 
 
-def cbrt(a, /):
+def cbrt(arg, /):
     '''
     cbrt(arg, /)
     Evaluate the cube root of the provided input.
@@ -2431,10 +2598,10 @@ def cbrt(a, /):
     Returns:
         float | drjit.ArrayBase: Cube root of the input
     '''
-    if isinstance(a, ArrayBase):
-        return a.cbrt_()
+    if isinstance(arg, ArrayBase):
+        return arg.cbrt_()
     else:
-        return _math.pow(a, 1.0 / 3.0)
+        return _math.pow(arg, 1.0 / 3.0)
 
 
 def erf(a):
@@ -2465,7 +2632,7 @@ def tgamma(a):
         return _math.gamma(a)
 
 
-def sinh(a, /):
+def sinh(arg, /):
     '''
     sinh(arg, /)
     Hyperbolic sine approximation based on the CEPHES library.
@@ -2479,13 +2646,13 @@ def sinh(a, /):
     Returns:
         float | drjit.ArrayBase: Hyperbolic sine of the input
     '''
-    if isinstance(a, ArrayBase):
-        return a.sinh_()
+    if isinstance(arg, ArrayBase):
+        return arg.sinh_()
     else:
-        return _math.sinh(a)
+        return _math.sinh(arg)
 
 
-def cosh(a, /):
+def cosh(arg, /):
     '''
     cosh(arg, /)
     Hyperbolic cosine approximation based on the CEPHES library.
@@ -2499,13 +2666,13 @@ def cosh(a, /):
     Returns:
         float | drjit.ArrayBase: Hyperbolic cosine of the input
     '''
-    if isinstance(a, ArrayBase):
-        return a.cosh_()
+    if isinstance(arg, ArrayBase):
+        return arg.cosh_()
     else:
-        return _math.cosh(a)
+        return _math.cosh(arg)
 
 
-def sincosh(a, /):
+def sincosh(arg, /):
     '''
     sincosh(arg, /)
     Hyperbolic sine/cosine approximation based on the CEPHES library.
@@ -2519,13 +2686,13 @@ def sincosh(a, /):
     Returns:
         (float, float) | (drjit.ArrayBase, drjit.ArrayBase): Hyperbolic sine and cosine of the input
     '''
-    if isinstance(a, ArrayBase):
-        return a.sincosh_()
+    if isinstance(arg, ArrayBase):
+        return arg.sincosh_()
     else:
-        return (_math.sinh(a), _math.cosh(a))
+        return (_math.sinh(arg), _math.cosh(arg))
 
 
-def tanh(a, /):
+def tanh(arg, /):
     '''
     tanh(arg, /)
     Hyperbolic tangent approximation based on the CEPHES library.
@@ -2539,10 +2706,10 @@ def tanh(a, /):
     Returns:
         float | drjit.ArrayBase: Hyperbolic tangent of the input
     '''
-    if isinstance(a, ArrayBase):
-        return a.tanh_()
+    if isinstance(arg, ArrayBase):
+        return arg.tanh_()
     else:
-        return _math.tanh(a)
+        return _math.tanh(arg)
 
 
 def csch(a):
@@ -2557,7 +2724,7 @@ def coth(a):
     return 1 / tanh(a)
 
 
-def asinh(a, /):
+def asinh(arg, /):
     '''
     asinh(arg, /)
     Hyperbolic arcsine approximation based on the CEPHES library.
@@ -2571,13 +2738,13 @@ def asinh(a, /):
     Returns:
         float | drjit.ArrayBase: Hyperbolic arcsine of the input
     '''
-    if isinstance(a, ArrayBase):
-        return a.asinh_()
+    if isinstance(arg, ArrayBase):
+        return arg.asinh_()
     else:
-        return _math.asinh(a)
+        return _math.asinh(arg)
 
 
-def acosh(a, /):
+def acosh(arg, /):
     '''
     acosh(arg, /)
     Hyperbolic arccosine approximation based on the CEPHES library.
@@ -2591,13 +2758,13 @@ def acosh(a, /):
     Returns:
         float | drjit.ArrayBase: Hyperbolic arccosine of the input
     '''
-    if isinstance(a, ArrayBase):
-        return a.acosh_()
+    if isinstance(arg, ArrayBase):
+        return arg.acosh_()
     else:
-        return _math.acosh(a)
+        return _math.acosh(arg)
 
 
-def atanh(a, /):
+def atanh(arg, /):
     '''
     atanh(arg, /)
     Hyperbolic arctangent approximation based on the CEPHES library.
@@ -2611,10 +2778,10 @@ def atanh(a, /):
     Returns:
         float | drjit.ArrayBase: Hyperbolic arctangent of the input
     '''
-    if isinstance(a, ArrayBase):
-        return a.atanh_()
+    if isinstance(arg, ArrayBase):
+        return arg.atanh_()
     else:
-        return _math.atanh(a)
+        return _math.atanh(arg)
 
 
 def rad_to_deg(a):
@@ -2667,7 +2834,7 @@ def count(a):
                         "iterable containing masks!")
 
 
-def all(a, /):
+def all(arg, /):
     '''
     all(arg, /) -> float | int | drjit.ArrayBase
     Computes whether all input elements evaluate to ``True``.
@@ -2682,15 +2849,15 @@ def all(a, /):
     Returns:
         Boolean array
     '''
-    if _var_is_drjit(a):
-        if a.Type != VarType.Bool:
+    if _var_is_drjit(arg):
+        if arg.Type != VarType.Bool:
             raise Exception("all(): input array must be a mask!")
-        return a.all_()
-    elif isinstance(a, bool):
-        return a
-    elif _dr.is_iterable_v(a):
+        return arg.all_()
+    elif isinstance(arg, bool):
+        return arg
+    elif _dr.is_iterable_v(arg):
         result = True
-        for index, value in enumerate(a):
+        for index, value in enumerate(arg):
             if index == 0:
                 result = value
             else:
@@ -2718,7 +2885,7 @@ def all_or(value, a):
         return _dr.all(a)
 
 
-def any(a, /):
+def any(arg, /):
     '''
     any(arg, /) -> float | int | drjit.ArrayBase
     Computes whether any of the input elements evaluate to ``True``.
@@ -2734,15 +2901,15 @@ def any(a, /):
     Returns:
         Boolean array
     '''
-    if _var_is_drjit(a):
-        if a.Type != VarType.Bool:
+    if _var_is_drjit(arg):
+        if arg.Type != VarType.Bool:
             raise Exception("any(): input array must be a mask!")
-        return a.any_()
-    elif isinstance(a, bool):
-        return a
-    elif _dr.is_iterable_v(a):
+        return arg.any_()
+    elif isinstance(arg, bool):
+        return arg
+    elif _dr.is_iterable_v(arg):
         result = False
-        for index, value in enumerate(a):
+        for index, value in enumerate(arg):
             if index == 0:
                 result = value
             else:
@@ -2788,7 +2955,7 @@ def none_or(value, a):
         return _dr.none(a)
 
 
-def sum(a, /):
+def sum(arg, /):
     '''
     sum(arg, /) -> float | int | drjit.ArrayBase
     Compute the sum of all array elements.
@@ -2803,13 +2970,13 @@ def sum(a, /):
     Returns:
         Sum of the input
     '''
-    if _var_is_drjit(a):
-        return a.sum_()
-    elif isinstance(a, float) or isinstance(a, int):
-        return a
-    elif _dr.is_iterable_v(a):
+    if _var_is_drjit(arg):
+        return arg.sum_()
+    elif isinstance(arg, float) or isinstance(arg, int):
+        return arg
+    elif _dr.is_iterable_v(arg):
         result = 0
-        for index, value in enumerate(a):
+        for index, value in enumerate(arg):
             if index == 0:
                 result = value
             else:
@@ -2845,7 +3012,7 @@ def mean_nested(a):
     return a
 
 
-def prod(a, /):
+def prod(arg, /):
     '''
     prod(arg, /) -> float | int | drjit.ArrayBase
     Compute the product of all array elements.
@@ -2860,13 +3027,13 @@ def prod(a, /):
     Returns:
         Product of the input
     '''
-    if _var_is_drjit(a):
-        return a.prod_()
-    elif isinstance(a, float) or isinstance(a, int):
-        return a
-    elif _dr.is_iterable_v(a):
+    if _var_is_drjit(arg):
+        return arg.prod_()
+    elif isinstance(arg, float) or isinstance(arg, int):
+        return arg
+    elif _dr.is_iterable_v(arg):
         result = 1
-        for index, value in enumerate(a):
+        for index, value in enumerate(arg):
             if index == 0:
                 result = value
             else:
@@ -3011,7 +3178,7 @@ def squared_norm(a):
     return dot(a, a)
 
 
-def norm(a, /):
+def norm(arg, /):
     '''
     norm(arg, /) -> float | int | drjit.ArrayBase
     Computes the norm of an array.
@@ -3026,7 +3193,7 @@ def norm(a, /):
     Returns:
         Norm of the input
     '''
-    return sqrt(dot(a, a))
+    return sqrt(dot(arg, arg))
 
 
 def normalize(a):
