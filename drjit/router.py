@@ -3447,7 +3447,7 @@ def backward(a, flags=_dr.ADFlag.Default):
 # -------------------------------------------------------------------
 
 
-def zeros(type_, shape=1):
+def zeros(dtype, shape=1):
     '''
     Return a zero-initialized instance of the desired type and shape
 
@@ -3484,35 +3484,75 @@ def zeros(type_, shape=1):
     Returns:
         object: A zero-initialized instance of type ``dtype``.
     '''
-    if not isinstance(type_, type):
+    if not isinstance(dtype, type):
         raise Exception('zeros(): Type expected as first argument')
-    elif issubclass(type_, ArrayBase):
-        return type_.zero_(shape)
-    elif _dr.is_drjit_struct_v(type_):
-        result = type_()
-        for k, v in type_.DRJIT_STRUCT.items():
+    elif issubclass(dtype, ArrayBase):
+        return dtype.zero_(shape)
+    elif _dr.is_drjit_struct_v(dtype):
+        result = dtype()
+        for k, v in dtype.DRJIT_STRUCT.items():
             setattr(result, k, zeros(v, shape))
-        if hasattr(type_, 'zero_'):
+        if hasattr(dtype, 'zero_'):
             result.zero_(shape)
         return result
-    elif not type_ in (int, float, complex, bool):
+    elif not dtype in (int, float, complex, bool):
         return None
     else:
-        return type_(0)
+        return dtype(0)
 
 
-def empty(type_, shape=1):
-    if not isinstance(type_, type):
+def empty(dtype, shape=1):
+    '''
+    Return an uninitialized Dr.Jit array of the desired type and shape.
+
+    This function can create uninitialized buffers of various types. It is
+    essentially a wrapper around CPU/GPU variants of ``malloc()`` and produces
+    arrays filled with uninitialized/undefined data. It should only be used in
+    combination with a subsequent call to an operation like
+    :py:func:`drjit.scatter()` that overwrites the array contents with valid data.
+
+    The ``dtype`` parameter can be used to request:
+
+    - A Dr.Jit array type like :py:class:`drjit.cuda.Array2f`. When ``shape``
+      specifies a sequence, it must be compatible with static dimensions of the
+      ``dtype``. For example, ``dr.empty(dr.cuda.Array2f, shape=(3, 100))`` fails,
+      since the leading dimension is incompatible with
+      :py:class:`drjit.cuda.Array2f`. When ``shape`` is an integer, it specifies
+      the size of the last (dynamic) dimension, if available.
+
+    - A tensorial type like :py:class:`drjit.scalar.TensorXf`. When ``shape``
+      specifies a sequence (list/tuple/..), it determines the tensor rank and
+      shape. When ``shape`` is an integer, the function creates a rank-1 tensor of
+      the specified size.
+
+    - A :ref:`custom data structure <custom-struct>`. In this case,
+      :py:func:`drjit.empty()` will invoke itself recursively to allocate memory
+      for each field of the data structure.
+
+    - A scalar Python type like ``int``, ``float``, or ``bool``. The ``shape``
+      parameter is ignored in this case, and the function returns a
+      zero-initialized result (there is little point in instantiating uninitialized
+      versions of scalar Python types).
+
+    Args:
+        dtype (type): Desired Dr.Jit array type, Python scalar type, or
+          :ref:`custom data structure <custom-struct>`.
+        shape (Sequence[int] | int): Shape of the desired array
+
+    Returns:
+        object: An instance of type ``dtype`` with arbitrary/undefined contents.
+    '''
+    if not isinstance(dtype, type):
         raise Exception('empty(): Type expected as first argument')
-    elif issubclass(type_, ArrayBase):
-        return type_.empty_(shape)
-    elif _dr.is_drjit_struct_v(type_):
-        result = type_()
-        for k, v in type_.DRJIT_STRUCT.items():
+    elif issubclass(dtype, ArrayBase):
+        return dtype.empty_(shape)
+    elif _dr.is_drjit_struct_v(dtype):
+        result = dtype()
+        for k, v in dtype.DRJIT_STRUCT.items():
             setattr(result, k, empty(v, shape))
         return result
     else:
-        return type_(0)
+        return dtype(0)
 
 
 def full(type_, value, shape=1):
@@ -3575,16 +3615,49 @@ def make_opaque(*args):
                 make_opaque(v)
 
 
-def linspace(type_, min, max, size=1, endpoint=True):
-    if not isinstance(type_, type):
+def linspace(dtype, start, stop, num=1, endpoint=True):
+    '''
+    This function generates an evenly spaced floating point sequence of size
+    ``num`` covering the interval [``start``, ``stop``].
+
+    Args:
+        dtype (type): Desired Dr.Jit array type. The ``dtype`` must refer to a
+          dynamically sized 1D Dr.Jit floating point array, such as
+          :py:class:`drjit.scalar.ArrayXf` or :py:class:`drjit.cuda.Float`.
+        start (float): Start of the interval.
+        stop (float): End of the interval.
+        num (int): Number of samples to generate.
+        endpoint (bool): Should the interval endpoint be included? The default is `True`.
+
+    Returns:
+        object: The computed sequence of type ``dtype``.
+    '''
+    if not isinstance(dtype, type):
         raise Exception('linspace(): Type expected as first argument')
-    elif issubclass(type_, ArrayBase):
-        return type_.linspace_(min, max, size, endpoint)
+    elif issubclass(dtype, ArrayBase):
+        return dtype.linspace_(start, stop, num, endpoint)
     else:
-        return type_(min)
+        return dtype(start)
 
 
-def arange(type_, start=None, end=None, step=1):
+def arange(dtype, start=None, end=None, step=1):
+    '''
+    This function generates an integer sequence on the interval [``start``,
+    ``stop``) with step size ``step``, where ``start`` = 0 and ``step`` = 1 if not
+    specified.
+
+    Args:
+        dtype (type): Desired Dr.Jit array type. The ``dtype`` must refer to a
+          dynamically sized 1D Dr.Jit array such as :py:class:`drjit.scalar.ArrayXu`
+          or :py:class:`drjit.cuda.Float`.
+        start (int): Start of the interval. The default value is `0`.
+        stop/size (int): End of the interval (not included). The name of this
+          parameter differs between the two provided overloads.
+        step (int): Spacing between values. The default value is `1`.
+
+    Returns:
+        object: The computed sequence of type ``dtype``.
+    '''
     if start is None:
         start = 0
         end = 1
@@ -3592,12 +3665,12 @@ def arange(type_, start=None, end=None, step=1):
         end = start
         start = 0
 
-    if not isinstance(type_, type):
+    if not isinstance(dtype, type):
         raise Exception('arange(): Type expected as first argument')
-    elif issubclass(type_, ArrayBase):
-        return type_.arange_(start, end, step)
+    elif issubclass(dtype, ArrayBase):
+        return dtype.arange_(start, end, step)
     else:
-        return type_(start)
+        return dtype(start)
 
 
 def identity(type_, size=1):
