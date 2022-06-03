@@ -127,7 +127,7 @@ def test05_initialization_casting(pkg):
 
     t0 = dr.full(tu, 1, (2, 3, 4))
     t1 = dr.full(tf, 2, (2, 3, 4))
-    t2 = dr.zero(tf64, (2, 3, 4))
+    t2 = dr.zeros(tf64, (2, 3, 4))
 
     assert dr.shape(t0) == (2, 3, 4)
 
