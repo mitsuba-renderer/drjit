@@ -232,7 +232,7 @@ def _shape_impl(a, i, shape):
     return True
 
 
-def shape(arg):
+def shape(arg, /):
     '''
     shape(arg, /)
     Return a tuple describing dimension and shape of the provided Dr.Jit array
@@ -264,7 +264,7 @@ def shape(arg):
         return s
 
 
-def width(arg):
+def width(arg, /):
     '''
     width(arg, /)
     Return the width of the provided dynamic Dr.Jit array, tensor, or
@@ -1558,7 +1558,7 @@ def op_abs(a):
         return _builtins.abs(a)
 
 
-def abs(a):
+def abs(a, /):
     '''
     abs(arg, /)
     Compute the absolute value of the provided input.
@@ -1575,28 +1575,83 @@ def abs(a):
         return _builtins.abs(a)
 
 
-def floor(a):
+def floor(a, /):
+    '''
+    floor(arg, /)
+    Evaluate the floor, i.e. the largest integer <= arg.
+
+    The function does not convert the type of the input array. A separate
+    cast is necessary when integer output is desired.
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Floor of the input
+    '''
     if isinstance(a, ArrayBase):
         return a.floor_()
     else:
         return _math.floor(a)
 
 
-def ceil(a):
+def ceil(a, /):
+    '''
+    ceil(arg, /)
+    Evaluate the ceiling, i.e. the smallest integer >= arg.
+
+    The function does not convert the type of the input array. A separate
+    cast is necessary when integer output is desired.
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Ceiling of the input
+    '''
     if isinstance(a, ArrayBase):
         return a.ceil_()
     else:
         return _math.ceil(a)
 
 
-def round(a):
+def round(a, /):
+    '''
+    round(arg, /)
+
+    Rounds arg to the nearest integer using Banker's rounding for
+    half-way values.
+
+    This function is equivalent to ``std::rint`` in C++. It does not convert the
+    type of the input array. A separate cast is necessary when integer output is
+    desired.
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Rounded result
+    '''
     if isinstance(a, ArrayBase):
         return a.round_()
     else:
         return round(a)
 
 
-def trunc(a):
+def trunc(a, /):
+    '''
+    trunc(arg, /)
+    Truncates arg to the nearest integer by towards zero.
+
+    The function does not convert the type of the input array. A separate
+    cast is necessary when integer output is desired.
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Truncated result
+    '''
     if isinstance(a, ArrayBase):
         return a.trunc_()
     else:
@@ -1617,28 +1672,70 @@ def sqr(a):
     return a * a
 
 
-def sqrt(a):
+def sqrt(a, /):
+    '''
+    sqrt(arg, /)
+    Evaluate the square root of the provided input.
+
+    Negative inputs produce a *NaN* output value.
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Square root of the input
+    '''
     if isinstance(a, ArrayBase):
         return a.sqrt_()
     else:
         return _math.sqrt(a)
 
 
-def rcp(a):
+def rcp(a, /):
+    '''
+    rcp(arg, /)
+    Evaluate the reciprocal (1 / arg) of the provided input.
+
+    When ``arg`` is a CUDA single precision array, the operation is implemented
+    using the native multi-function unit ("MUFU"). The result is slightly
+    approximate in this case (refer to the documentation of the instruction
+    `rcp.approx.ftz.f32` in the NVIDIA PTX manual for details).
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Reciprocal of the input
+    '''
     if isinstance(a, ArrayBase):
         return a.rcp_()
     else:
         return 1.0 / a
 
 
-def rsqrt(a):
+def rsqrt(a, /):
+    '''
+    rsqrt(arg, /)
+    Evaluate the reciprocal square root (1 / sqrt(arg)) of the provided input.
+
+    When ``arg`` is a CUDA single precision array, the operation is implemented
+    using the native multi-function unit ("MUFU"). The result is slightly
+    approximate in this case (refer to the documentation of the instruction
+    `rsqrt.approx.ftz.f32` in the NVIDIA PTX manual for details).
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Reciprocal square root of the input
+    '''
     if isinstance(a, ArrayBase):
         return a.rsqrt_()
     else:
         return 1.0 / _math.sqrt(a)
 
 
-def maximum(a, b):
+def maximum(a, b, /):
     '''
     maximum(arg0, arg1, /) -> float | int | drjit.ArrayBase
     Compute the element-wise maximum value of the provided inputs.
@@ -1662,7 +1759,7 @@ def maximum(a, b):
         return _builtins.max(a, b)
 
 
-def minimum(a, b):
+def minimum(a, b, /):
     '''
     minimum(arg0, arg1, /) -> float | int | drjit.ArrayBase
     Compute the element-wise minimum value of the provided inputs.
@@ -1994,28 +2091,100 @@ def migrate(a, type_):
 # -------------------------------------------------------------------
 
 
-def sin(a):
+def sin(a, /):
+    '''
+    sin(arg, /)
+    Sine approximation based on the CEPHES library.
+
+    The implementation of this function is designed to achieve low error on the domain
+    :math:`|x| < 8192` and will not perform as well beyond this range. See the
+    section on :ref:`transcendental function approximations
+    <transcendental-accuracy>` for details regarding accuracy.
+
+    When ``arg`` is a CUDA single precision array, the operation is implemented
+    using the native multi-function unit ("MUFU").
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Sine of the input
+    '''
     if isinstance(a, ArrayBase):
         return a.sin_()
     else:
         return _math.sin(a)
 
 
-def cos(a):
+def cos(a, /):
+    '''
+    cos(arg, /)
+    Cosine approximation based on the CEPHES library.
+
+    The implementation of this function is designed to achieve low error on the
+    domain :math:`|x| < 8192` and will not perform as well beyond this range. See
+    the section on :ref:`transcendental function approximations
+    <transcendental-accuracy>` for details regarding accuracy.
+
+    When ``arg`` is a CUDA single precision array, the operation is implemented
+    using the native multi-function unit ("MUFU").
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Cosine of the input
+    '''
     if isinstance(a, ArrayBase):
         return a.cos_()
     else:
         return _math.cos(a)
 
 
-def sincos(a):
+def sincos(a, /):
+    '''
+    sincos(arg, /)
+    Sine/cosine approximation based on the CEPHES library.
+
+    The implementation of this function is designed to achieve low error on the
+    domain :math:`|x| < 8192` and will not perform as well beyond this range. See
+    the section on :ref:`transcendental function approximations
+    <transcendental-accuracy>` for details regarding accuracy.
+
+    When ``arg`` is a CUDA single precision array, the operation is implemented
+    using two operations involving the native multi-function unit ("MUFU").
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        (float, float) | (drjit.ArrayBase, drjit.ArrayBase): Sine and cosine of the input
+    '''
     if isinstance(a, ArrayBase):
         return a.sincos_()
     else:
         return (_math.sin(a), _math.cos(a))
 
 
-def tan(a):
+def tan(a, /):
+    '''
+    tan(arg, /)
+    Tangent approximation based on the CEPHES library.
+
+    The implementation of this function is designed to achieve low error on the
+    domain :math:`|x| < 8192` and will not perform as well beyond this range. See
+    the section on :ref:`transcendental function approximations
+    <transcendental-accuracy>` for details regarding accuracy.
+
+    When ``arg`` is a CUDA single precision array, the operation is implemented
+    using the native multi-function unit ("MUFU").
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Tangent of the input
+    '''
     if isinstance(a, ArrayBase):
         return a.tan_()
     else:
@@ -2043,28 +2212,82 @@ def cot(a):
         return 1.0 / _math.tan(a)
 
 
-def asin(a):
+def asin(a, /):
+    '''
+    asin(arg, /)
+    Arcsine approximation based on the CEPHES library.
+
+    See the section on :ref:`transcendental function approximations
+    <transcendental-accuracy>` for details regarding accuracy.
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Arcsine of the input
+    '''
     if isinstance(a, ArrayBase):
         return a.asin_()
     else:
         return _math.asin(a)
 
 
-def acos(a):
+def acos(a, /):
+    '''
+    acos(arg, /)
+    Arccosine approximation based on the CEPHES library.
+
+    See the section on :ref:`transcendental function approximations
+    <transcendental-accuracy>` for details regarding accuracy.
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Arccosine of the input
+    '''
     if isinstance(a, ArrayBase):
         return a.acos_()
     else:
         return _math.acos(a)
 
 
-def atan(a):
+def atan(a, /):
+    '''
+    atan(arg, /)
+    Arctangent approximation
+
+    See the section on :ref:`transcendental function approximations
+    <transcendental-accuracy>` for details regarding accuracy.
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Arctangent of the input
+    '''
     if isinstance(a, ArrayBase):
         return a.atan_()
     else:
         return _math.atan(a)
 
 
-def atan2(a, b):
+def atan2(a, b, /):
+    '''
+    atan2(y, x, /)
+    Arctangent of two values
+
+    See the section on :ref:`transcendental function approximations
+    <transcendental-accuracy>` for details regarding accuracy.
+
+    Args:
+        y (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+        x (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Arctangent of ``y``/``x``, using the argument signs to
+        determine the quadrant of the return value
+    '''
     if isinstance(a, ArrayBase) or \
        isinstance(b, ArrayBase):
         if type(a) is not type(b):
@@ -2074,28 +2297,92 @@ def atan2(a, b):
         return _math.atan2(a, b)
 
 
-def exp(a):
+def exp(a, /):
+    '''
+    exp(arg, /)
+    Natural exponential approximation based on the CEPHES library.
+
+    See the section on :ref:`transcendental function approximations
+    <transcendental-accuracy>` for details regarding accuracy.
+
+    When ``arg`` is a CUDA single precision array, the operation is implemented
+    using the native multi-function unit ("MUFU").
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Natural exponential of the input
+    '''
     if isinstance(a, ArrayBase):
         return a.exp_()
     else:
         return _math.exp(a)
 
 
-def exp2(a):
+def exp2(a, /):
+    '''
+    exp2(arg, /)
+    Base-2 exponential approximation based on the CEPHES library.
+
+    See the section on :ref:`transcendental function approximations
+    <transcendental-accuracy>` for details regarding accuracy.
+
+    When ``arg`` is a CUDA single precision array, the operation is implemented
+    using the native multi-function unit ("MUFU").
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Base-2 exponential of the input
+    '''
     if isinstance(a, ArrayBase):
         return a.exp2_()
     else:
         return _math.exp(a * _math.log(2.0))
 
 
-def log(a):
+def log(a, /):
+    '''
+    log(arg, /)
+    Natural exponential approximation based on the CEPHES library.
+
+    See the section on :ref:`transcendental function approximations
+    <transcendental-accuracy>` for details regarding accuracy.
+
+    When ``arg`` is a CUDA single precision array, the operation is implemented
+    using the native multi-function unit ("MUFU").
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Natural logarithm of the input
+    '''
     if isinstance(a, ArrayBase):
         return a.log_()
     else:
         return _math.log(a)
 
 
-def log2(a):
+def log2(a, /):
+    '''
+    log2(arg, /)
+    Base-2 exponential approximation based on the CEPHES library.
+
+    See the section on :ref:`transcendental function approximations
+    <transcendental-accuracy>` for details regarding accuracy.
+
+    When ``arg`` is a CUDA single precision array, the operation is implemented
+    using the native multi-function unit ("MUFU").
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Base-2 logarithm of the input
+    '''
     if isinstance(a, ArrayBase):
         return a.log2_()
     else:
@@ -2133,7 +2420,17 @@ def op_pow(a, b):
     return power(a, b)
 
 
-def cbrt(a):
+def cbrt(a, /):
+    '''
+    cbrt(arg, /)
+    Evaluate the cube root of the provided input.
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Cube root of the input
+    '''
     if isinstance(a, ArrayBase):
         return a.cbrt_()
     else:
@@ -2168,28 +2465,80 @@ def tgamma(a):
         return _math.gamma(a)
 
 
-def sinh(a):
+def sinh(a, /):
+    '''
+    sinh(arg, /)
+    Hyperbolic sine approximation based on the CEPHES library.
+
+    See the section on :ref:`transcendental function approximations
+    <transcendental-accuracy>` for details regarding accuracy.
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Hyperbolic sine of the input
+    '''
     if isinstance(a, ArrayBase):
         return a.sinh_()
     else:
         return _math.sinh(a)
 
 
-def cosh(a):
+def cosh(a, /):
+    '''
+    cosh(arg, /)
+    Hyperbolic cosine approximation based on the CEPHES library.
+
+    See the section on :ref:`transcendental function approximations
+    <transcendental-accuracy>` for details regarding accuracy.
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Hyperbolic cosine of the input
+    '''
     if isinstance(a, ArrayBase):
         return a.cosh_()
     else:
         return _math.cosh(a)
 
 
-def sincosh(a):
+def sincosh(a, /):
+    '''
+    sincosh(arg, /)
+    Hyperbolic sine/cosine approximation based on the CEPHES library.
+
+    See the section on :ref:`transcendental function approximations
+    <transcendental-accuracy>` for details regarding accuracy.
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        (float, float) | (drjit.ArrayBase, drjit.ArrayBase): Hyperbolic sine and cosine of the input
+    '''
     if isinstance(a, ArrayBase):
         return a.sincosh_()
     else:
         return (_math.sinh(a), _math.cosh(a))
 
 
-def tanh(a):
+def tanh(a, /):
+    '''
+    tanh(arg, /)
+    Hyperbolic tangent approximation based on the CEPHES library.
+
+    See the section on :ref:`transcendental function approximations
+    <transcendental-accuracy>` for details regarding accuracy.
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Hyperbolic tangent of the input
+    '''
     if isinstance(a, ArrayBase):
         return a.tanh_()
     else:
@@ -2208,21 +2557,60 @@ def coth(a):
     return 1 / tanh(a)
 
 
-def asinh(a):
+def asinh(a, /):
+    '''
+    asinh(arg, /)
+    Hyperbolic arcsine approximation based on the CEPHES library.
+
+    See the section on :ref:`transcendental function approximations
+    <transcendental-accuracy>` for details regarding accuracy.
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Hyperbolic arcsine of the input
+    '''
     if isinstance(a, ArrayBase):
         return a.asinh_()
     else:
         return _math.asinh(a)
 
 
-def acosh(a):
+def acosh(a, /):
+    '''
+    acosh(arg, /)
+    Hyperbolic arccosine approximation based on the CEPHES library.
+
+    See the section on :ref:`transcendental function approximations
+    <transcendental-accuracy>` for details regarding accuracy.
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Hyperbolic arccosine of the input
+    '''
     if isinstance(a, ArrayBase):
         return a.acosh_()
     else:
         return _math.acosh(a)
 
 
-def atanh(a):
+def atanh(a, /):
+    '''
+    atanh(arg, /)
+    Hyperbolic arctangent approximation based on the CEPHES library.
+
+    See the section on :ref:`transcendental function approximations
+    <transcendental-accuracy>` for details regarding accuracy.
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Hyperbolic arctangent of the input
+    '''
     if isinstance(a, ArrayBase):
         return a.atanh_()
     else:
@@ -2279,7 +2667,21 @@ def count(a):
                         "iterable containing masks!")
 
 
-def all(a):
+def all(a, /):
+    '''
+    all(arg, /) -> float | int | drjit.ArrayBase
+    Computes whether all input elements evaluate to ``True``.
+
+    When the argument is a dynamic array, function performs a horizontal reduction.
+    Please see the section on :ref:`horizontal reductions <horizontal-reductions>`
+    for details.
+
+    Args:
+        arg (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+    Returns:
+        Boolean array
+    '''
     if _var_is_drjit(a):
         if a.Type != VarType.Bool:
             raise Exception("all(): input array must be a mask!")
@@ -2316,7 +2718,22 @@ def all_or(value, a):
         return _dr.all(a)
 
 
-def any(a):
+def any(a, /):
+    '''
+    any(arg, /) -> float | int | drjit.ArrayBase
+    Computes whether any of the input elements evaluate to ``True``.
+
+    When the argument is a dynamic array, function performs a horizontal reduction.
+    Please see the section on :ref:`horizontal reductions <horizontal-reductions>`
+    for details.
+
+
+    Args:
+        arg (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+    Returns:
+        Boolean array
+    '''
     if _var_is_drjit(a):
         if a.Type != VarType.Bool:
             raise Exception("any(): input array must be a mask!")
@@ -2371,7 +2788,7 @@ def none_or(value, a):
         return _dr.none(a)
 
 
-def sum(a):
+def sum(a, /):
     '''
     sum(arg, /) -> float | int | drjit.ArrayBase
     Compute the sum of all array elements.
@@ -2428,7 +2845,7 @@ def mean_nested(a):
     return a
 
 
-def prod(a):
+def prod(a, /):
     '''
     prod(arg, /) -> float | int | drjit.ArrayBase
     Compute the product of all array elements.
@@ -2534,7 +2951,23 @@ def hmin_nested(a):
     return a
 
 
-def dot(a, b):
+def dot(a, b, /):
+    '''
+    dot(arg0, arg1, /) -> float | int | drjit.ArrayBase
+    Computes the dot product of two arrays.
+
+    When the argument is a dynamic array, function performs a horizontal reduction.
+    Please see the section on :ref:`horizontal reductions <horizontal-reductions>`
+    for details.
+
+    Args:
+        arg0 (list | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+        arg1 (list | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+    Returns:
+        Dot product of inputs
+    '''
     if _dr.is_matrix_v(a) or _dr.is_matrix_v(b):
         raise Exception("dot(): input shouldn't be a Matrix!"
                         "The @ operator should be used instead.")
@@ -2578,7 +3011,21 @@ def squared_norm(a):
     return dot(a, a)
 
 
-def norm(a):
+def norm(a, /):
+    '''
+    norm(arg, /) -> float | int | drjit.ArrayBase
+    Computes the norm of an array.
+
+    When the argument is a dynamic array, function performs a horizontal reduction.
+    Please see the section on :ref:`horizontal reductions <horizontal-reductions>`
+    for details.
+
+    Args:
+        arg (list | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+    Returns:
+        Norm of the input
+    '''
     return sqrt(dot(a, a))
 
 
