@@ -2198,53 +2198,27 @@ def eval(*args):
         _dr.detail.eval()
 
 
-def _graphviz_obj(graphviz_str):
-    '''
-    Tries to convert the string representation of a graphviz object into a
-    graphviz object.
-    '''
+def graphviz_str(arg):
+    base = _ek.leaf_array_t(arg)
+
+    if _ek.is_diff_array_v(base):
+        return base.graphviz_()
+    elif _ek.is_jit_array_v(base):
+        return _ek.detail.graphviz()
+    else:
+        raise Exception('graphviz_str(): only variables registered with '
+                        'the JIT (LLVM/CUDA) or AD backend are supported!')
+
+
+def graphviz(arg):
     try:
         from graphviz import Source
         return Source(graphviz_str(arg))
     except ImportError:
-        raise Exception('The "graphviz" Python package is not available! '
-                        'Install it via "python -m pip install graphviz".')
-
-
-def graphviz(as_str):
-    '''
-    Assembles a graphviz diagram for the computational graph trace by the JIT.
-
-    Args:
-        as_str (bool): whether the function should return the graphviz object as
-            a string representation or not.
-
-    Returns:
-        object: the graphviz obj (or its string representation).
-    '''
-    graphviz_str = _dr.detail.graphviz()
-    if as_str:
-        return graphviz_str
-
-    return _graphviz_obj(graphviz_str)
-
-
-def graphviz_ad(as_str):
-    '''
-    Assembles a graphviz diagram for the computational graph trace by the AD system.
-
-    Args:
-        as_str (bool): whether the function should return the graphviz object as
-            a string representation or not.
-
-    Returns:
-        object: the graphviz obj (or its string representation).
-    '''
-    graphviz_str = _dr.detail.ad_graphviz()
-    if as_str:
-        return graphviz_str
-
-    return _graphviz_obj(graphviz_str)
+        raise Exception('The "graphviz" Python package not available! Install '
+                        'via "python -m pip install graphviz". Alternatively, '
+                        'you can call drjit.graphviz_str() function to obtain '
+                        'a string representation.')
 
 
 def migrate(a, type_):
