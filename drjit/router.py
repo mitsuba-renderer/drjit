@@ -4294,6 +4294,74 @@ class _ADContextManager:
 
 
 def suspend_grad(*args, when=True):
+    '''
+    suspend_grad(*args, when = True)
+    Context manager for temporally suspending derivative tracking.
+
+    Dr.Jit's AD layer keeps track of a set of variables for which derivative
+    tracking is currently enabled. Using this context manager is it possible to
+    define a scope in which variables will be subtracted from that set, thereby
+    controlling what derivative terms shouldn't be generated in that scope.
+
+    The variables to be subtracted from the current set of enabled variables can be
+    provided as function arguments. If none are provided, the scope defined by this
+    context manager will temporally disable all derivative tracking.
+
+    .. code-block::
+
+        a = dr.llvm.ad.Float(1.0)
+        b = dr.llvm.ad.Float(2.0)
+        dr.enable_grad(a, b)
+
+        with suspend_grad(): # suspend all derivative tracking
+            c = a + b
+
+        assert not dr.grad_enabled(c)
+
+        with suspend_grad(a): # only suspend derivative tracking on `a`
+            d = 2.0 * a
+            e = 4.0 * b
+
+        assert not dr.grad_enabled(d)
+        assert dr.grad_enabled(e)
+
+    In a scope where derivative tracking is completely suspended, the AD layer will
+    ignore any attempt to enable gradient tracking on a variable:
+
+    .. code-block::
+
+        a = dr.llvm.ad.Float(1.0)
+
+        with suspend_grad():
+            dr.enable_grad(a) # <-- ignored
+            assert not dr.grad_enabled(a)
+
+        assert not dr.grad_enabled(a)
+
+    The optional ``when`` boolean keyword argument can be defined to specifed a
+    condition determining whether to suspend the tracking of derivatives or not.
+
+    .. code-block::
+
+        a = dr.llvm.ad.Float(1.0)
+        dr.enable_grad(a)
+
+        cond = condition()
+
+        with suspend_grad(when=cond):
+            b = 4.0 * a
+
+        assert dr.grad_enabled(b) == not cond
+
+    Args:
+        *args (tuple): A variable-length list of differentiable Dr.Jit array
+          instances, :ref:`custom data structures <custom-struct>`, sequences, or
+          mappings. The function will recursively traverse data structures to
+          discover all Dr.Jit arrays.
+
+        when (bool): An optional Python boolean determining whether to suspend
+          derivative tracking.
+    '''
     if not when:
         return _DummyContextManager()
 
@@ -4305,6 +4373,65 @@ def suspend_grad(*args, when=True):
 
 
 def resume_grad(*args, when=True):
+    '''
+    resume_grad(*args, when = True)
+    Context manager for temporally resume derivative tracking.
+
+    Dr.Jit's AD layer keeps track of a set of variables for which derivative
+    tracking is currently enabled. Using this context manager is it possible to
+    define a scope in which variables will be added to that set, thereby controlling
+    what derivative terms should be generated in that scope.
+
+    The variables to be added to the current set of enabled variables can be
+    provided as function arguments. If none are provided, the scope defined by this
+    context manager will temporally resume derivative tracking for all variables.
+
+    .. code-block::
+
+        a = dr.llvm.ad.Float(1.0)
+        b = dr.llvm.ad.Float(2.0)
+        dr.enable_grad(a, b)
+
+        with suspend_grad():
+            c = a + b
+
+            with resume_grad():
+                d = a + b
+
+            with resume_grad(a):
+                e = 2.0 * a
+                f = 4.0 * b
+
+        assert not dr.grad_enabled(c)
+        assert dr.grad_enabled(d)
+        assert dr.grad_enabled(e)
+        assert not dr.grad_enabled(f)
+
+    The optional ``when`` boolean keyword argument can be defined to specifed a
+    condition determining whether to resume the tracking of derivatives or not.
+
+    .. code-block::
+
+        a = dr.llvm.ad.Float(1.0)
+        dr.enable_grad(a)
+
+        cond = condition()
+
+        with suspend_grad():
+            with resume_grad(when=cond):
+                b = 4.0 * a
+
+        assert dr.grad_enabled(b) == cond
+
+    Args:
+        *args (tuple): A variable-length list of differentiable Dr.Jit array
+          instances, :ref:`custom data structures <custom-struct>`, sequences, or
+          mappings. The function will recursively traverse data structures to
+          discover all Dr.Jit arrays.
+
+        when (bool): An optional Python boolean determining whether to resume
+          derivative tracking.
+    '''
     if not when:
         return _DummyContextManager()
 
@@ -4316,6 +4443,13 @@ def resume_grad(*args, when=True):
 
 
 def isolate_grad(when=True):
+    '''
+    Context manager to temporarily isolate outside world from AD traversals.
+
+    Dr.Jit provides isolation boundaries to postpone AD traversals steps leaving a
+    specific scope. For instance this function is used internally to implement
+    differentiable loops and polymorphic calls.
+    '''
     if not when:
         return _DummyContextManager()
     return _ADContextManager(_dr.detail.ADScope.Isolate, None, [])
@@ -4326,6 +4460,44 @@ def isolate_grad(when=True):
 # -------------------------------------------------------------------
 
 class CustomOp:
+    '''
+    Base class to implement custom differentiable operations.
+
+    Dr.Jit can compute derivatives of builtin operations in both forward and reverse
+    mode. In some cases, it may be useful or even necessary to tell Dr.Jit how a
+    particular operation should be differentiated.
+
+    This can be achieved by extending this class, overwriting callback functions
+    that will later be invoked when the AD backend traverses the associated node in
+    the computation graph. This class also provides a convenient way of stashing
+    temporary results during the original function evaluation that can be accessed
+    later on as part of forward or reverse-mode differentiation.
+
+    Look at the section on :ref:`AD custom operations <custom-op>` for more detailed
+    information.
+
+    A class that inherits from this class should override a few methods as done in
+    the code snippet below. :py:func:`dr.custom` can then be used to evaluate the
+    custom operation and properly attach it to the AD graph.
+
+    .. code-block::
+
+        class MyCustomOp(dr.CustomOp):
+            def eval(self, *args):
+                # .. evaluate operation ..
+
+            def forward(self):
+                # .. compute forward-mode derivatives ..
+
+            def backward(self):
+                # .. compute backward-mode derivatives ..
+
+            def name(self):
+                return "MyCustomOp[]"
+
+        dr.custom(MyCustomOp, *args)
+    '''
+    # TODO: Add CustomOp.eval() 
     def __init__(self):
         self._implicit_in = []
         self._implicit_out = []
@@ -4334,30 +4506,85 @@ class CustomOp:
         raise Exception("CustomOp.forward(): not implemented")
 
     def backward(self):
+        '''
+        Evaluated backward-mode derivatives.
+
+        .. danger::
+
+            This method must be overriden, no default implementation provided.
+        '''
         raise Exception("CustomOp.backward(): not implemented")
 
     def grad_out(self):
+        '''
+        Access the gradient associated with the output argument (backward mode AD).
+
+        Returns:
+            object: the gradient value associated with the output argument.
+        '''
         return _dr.grad(self.output)
 
     def set_grad_out(self, value):
+        '''
+        Accumulate a gradient value into the output argument (forward mode AD).
+
+        Args:
+            value (object): gradient value to accumulate.
+        '''
         _dr.accum_grad(self.output, value)
 
     def grad_in(self, name):
+        '''
+        Access the gradient associated with the input argument ``name`` (fwd. mode AD).
+
+        Args:
+            name (str): name associated to an input variable (e.g. keyword argument).
+
+        Returns:
+            object: the gradient value associated with the input argument.
+        '''
         if name not in self.inputs:
             raise Exception("CustomOp.grad_in(): Could not find "
                             "input argument named \"%s\"!" % name)
         return _dr.grad(self.inputs[name])
 
     def set_grad_in(self, name, value):
+        '''
+        Accumulate a gradient value into an input argument (backward mode AD).
+
+        Args:
+            name (str): name associated to the input variable (e.g. keyword argument).
+            value (object): gradient value to accumulate.
+        '''
         if name not in self.inputs:
             raise Exception("CustomOp.set_grad_in(): Could not find "
                             "input argument named \"%s\"!" % name)
         _dr.accum_grad(self.inputs[name], value)
 
     def add_input(self, value):
+        '''
+        Register an implicit input dependency of the operation on an AD variable.
+
+        This function should be called by the ``eval()`` implementation when an
+        operation has a differentiable dependence on an input that is not an
+        input argument (e.g. a private instance variable).
+
+        Args:
+            value (object): variable this operation depends on implicitly.
+        '''
         self._implicit_in.append(value)
 
     def add_output(self, value):
+        '''
+        Register an implicit output dependency of the operation on an AD variable.
+
+        This function should be called by the \ref eval() implementation when an
+        operation has a differentiable dependence on an output that is not an
+        return value of the operation (e.g. a private instance variable).
+
+        Args:
+            value (object): variable this operation depends on implicitly.
+        '''
         self._implicit_out.append(value)
 
     def __del__(self):
@@ -4380,10 +4607,23 @@ class CustomOp:
         ad_clear(getattr(self, 'output', None))
 
     def name(self):
+        '''
+        Return a descriptive name of the ``CustomOp`` instance.
+
+        The name returned by this method is used in the GraphViz output.
+
+        If not overriden, this method returns ``"CustomOp[unnamed]"``.
+        '''
         return "CustomOp[unnamed]"
 
 
 def custom(cls, *args, **kwargs):
+    '''
+    Evaluate a custom differentiable operation (see :py:class:`CustomOp`).
+
+    Look at the section on :ref:`AD custom operations <custom-op>` for more detailed
+    information.
+    '''
     # Clear primal values of a differentiable array
     def clear_primal(o, dec_ref):
         if _dr.depth_v(o) > 1 \
