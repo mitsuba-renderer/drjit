@@ -1418,7 +1418,7 @@ def broadcast_(self, value):
     elif self.IsMatrix:
         t = self.Value
         for i in range(len(self)):
-            c = _dr.zero(t)
+            c = _dr.zeros(t)
             c.set_entry_(i, t.Value(value))
             self.set_entry_(i, c)
     else:
@@ -1444,7 +1444,7 @@ def empty_(cls, shape):
 def zero_(cls, shape=1):
     if cls.IsTensor:
         shape = [shape] if type(shape) is int else shape
-        return cls(_dr.zero(cls.Array, _dr.prod(shape)), shape)
+        return cls(_dr.zeros(cls.Array, _dr.prod(shape)), shape)
 
     result = cls()
     if cls.Size == Dynamic:
@@ -1453,7 +1453,7 @@ def zero_(cls, shape=1):
             result.set_entry_(i, 0)
     else:
         for i in range(cls.Size):
-            result.set_entry_(i, _dr.zero(cls.Value, shape))
+            result.set_entry_(i, _dr.zeros(cls.Value, shape))
     return result
 
 

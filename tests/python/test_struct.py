@@ -30,12 +30,12 @@ def test_zero_initialization(package):
         def zero_(self, size):
             self.a += 1
 
-    foo = dr.zero(MyStruct, 4)
+    foo = dr.zeros(MyStruct, 4)
     assert dr.width(foo) == 4
     assert foo.a == 1
     assert foo.b == 0
 
-    foo = dr.zero(MyStruct, 1)
+    foo = dr.zeros(MyStruct, 1)
     dr.resize(foo, 8)
     assert dr.width(foo) == 8
 
@@ -52,7 +52,7 @@ def test_ad_operations(package):
             self.a = Array3f()
             self.b = Float()
 
-    foo = dr.zero(MyStruct, 4)
+    foo = dr.zeros(MyStruct, 4)
     assert not dr.grad_enabled(foo.a)
     assert not dr.grad_enabled(foo.b)
     assert not dr.grad_enabled(foo)

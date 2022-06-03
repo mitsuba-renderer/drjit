@@ -3210,7 +3210,7 @@ def grad(a):
     elif isinstance(a, _Mapping):
         return {k : grad(v) for k, v in a.items()}
     else:
-        return _dr.zero(type(a))
+        return _dr.zeros(type(a))
 
 
 def set_grad(a, value):
@@ -3323,9 +3323,9 @@ def replace_grad(a, b):
 
     if la != lb:
         if la == 1 and depth == 1:
-            a = a + zero(ta, lb)
+            a = a + _dr.zeros(ta, lb)
         elif lb == 1 and depth == 1:
-            b = b + zero(tb, la)
+            b = b + _dr.zeros(tb, la)
         else:
             raise Exception("replace_grad(): input arguments have "
                            "incompatible sizes (%i vs %i)!"
@@ -3447,15 +3447,51 @@ def backward(a, flags=_dr.ADFlag.Default):
 # -------------------------------------------------------------------
 
 
-def zero(type_, shape=1):
+def zeros(type_, shape=1):
+    '''
+    Return a zero-initialized instance of the desired type and shape
+
+    This function can create zero-initialized instances of various types. In
+    particular, ``dtype`` can be:
+
+    - A Dr.Jit array type like :py:class:`drjit.cuda.Array2f`. When ``shape``
+      specifies a sequence, it must be compatible with static dimensions of the
+      ``dtype``. For example, ``dr.zeros(dr.cuda.Array2f, shape=(3, 100))`` fails,
+      since the leading dimension is incompatible with
+      :py:class:`drjit.cuda.Array2f`. When ``shape`` is an integer, it specifies
+      the size of the last (dynamic) dimension, if available.
+
+    - A tensorial type like :py:class:`drjit.scalar.TensorXf`. When ``shape``
+      specifies a sequence (list/tuple/..), it determines the tensor rank and
+      shape. When ``shape`` is an integer, the function creates a rank-1 tensor of
+      the specified size.
+
+    - A :ref:`custom data structure <custom-struct>`. In this case,
+      :py:func:`drjit.zeros()` will invoke itself recursively to zero-initialize
+      each field of the data structure.
+
+    - A scalar Python type like ``int``, ``float``, or ``bool``. The ``shape``
+      parameter is ignored in this case.
+
+    Note that when ``dtype`` refers to a scalar mask or a mask array, it will be
+    initialized to ``False`` as opposed to zero.
+
+    Args:
+        dtype (type): Desired Dr.Jit array type, Python scalar type, or
+          :ref:`custom data structure <custom-struct>`.
+        shape (Sequence[int] | int): Shape of the desired array
+
+    Returns:
+        object: A zero-initialized instance of type ``dtype``.
+    '''
     if not isinstance(type_, type):
-        raise Exception('zero(): Type expected as first argument')
+        raise Exception('zeros(): Type expected as first argument')
     elif issubclass(type_, ArrayBase):
         return type_.zero_(shape)
     elif _dr.is_drjit_struct_v(type_):
         result = type_()
         for k, v in type_.DRJIT_STRUCT.items():
-            setattr(result, k, zero(v, shape))
+            setattr(result, k, zeros(v, shape))
         if hasattr(type_, 'zero_'):
             result.zero_(shape)
         return result
@@ -3566,7 +3602,7 @@ def arange(type_, start=None, end=None, step=1):
 
 def identity(type_, size=1):
     if _dr.is_special_v(type_):
-        result = zero(type_, size)
+        result = _dr.zeros(type_, size)
 
         if type_.IsComplex or type_.IsQuaternion:
             result.real = identity(type_.Value, size)
@@ -3822,7 +3858,7 @@ def custom(cls, *args, **kwargs):
             if _dr.is_tensor_v(ot):
                 value = ot.Array.create_(
                     o.array.index_ad(),
-                    zero(_dr.detached_t(ot.Array), prod(o.shape)))
+                    _dr.zeros(_dr.detached_t(ot.Array), prod(o.shape)))
                 result = ot(value, o.shape)
             else:
                 result = value = ot.create_(

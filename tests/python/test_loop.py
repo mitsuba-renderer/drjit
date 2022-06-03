@@ -54,7 +54,7 @@ def test02_record_loop(pkg):
 
         for j in range(2):
             x = dr.arange(p.Int, 0, 10)
-            y = dr.zero(p.Float, 1)
+            y = dr.zeros(p.Float, 1)
             z = p.Float(1)
 
             loop = p.Loop("MyLoop", lambda: (x, y, z))
@@ -77,7 +77,7 @@ def test03_multiple_values(pkg, variant):
     p = get_class(pkg)
 
     i = dr.arange(p.Int, 0, 10)
-    v = dr.zero(p.Array3f, 10)
+    v = dr.zeros(p.Array3f, 10)
 
     if variant == 1:
         v.y = p.Float(0)
@@ -106,9 +106,9 @@ def test03_multiple_values(pkg, variant):
 def test04_side_effect(pkg):
     p = get_class(pkg)
 
-    i = dr.zero(p.Int, 10)
-    j = dr.zero(p.Int, 10)
-    buf = dr.zero(p.Float, 10)
+    i = dr.zeros(p.Int, 10)
+    j = dr.zeros(p.Int, 10)
+    buf = dr.zeros(p.Float, 10)
 
     loop = p.Loop("MyLoop", lambda: (i, j))
     while loop(i < 10):
@@ -126,9 +126,9 @@ def test04_side_effect(pkg):
 def test05_side_effect_noloop(pkg):
     p = get_class(pkg)
 
-    i = dr.zero(p.Int, 10)
-    j = dr.zero(p.Int, 10)
-    buf = dr.zero(p.Float, 10)
+    i = dr.zeros(p.Int, 10)
+    j = dr.zeros(p.Int, 10)
+    buf = dr.zeros(p.Float, 10)
     dr.set_flag(dr.JitFlag.LoopRecord, False)
 
     loop = p.Loop("MyLoop", lambda: (i, j))
@@ -208,7 +208,7 @@ def test07_loop_nest(pkg, variant):
 def test08_loop_simplification(pkg):
     # Test a regression where most loop variables are optimized away
     p = get_class(pkg)
-    res = dr.zero(p.Float, 10)
+    res = dr.zeros(p.Float, 10)
     active = p.Bool(True)
     depth = p.UInt32(1000)
 
@@ -327,7 +327,7 @@ def test15_scalar_side_effect(pkg):
         unrelated = dr.arange(p.UInt32, 123)
 
         loop = p.Loop("Test", lambda: (active, unrelated))
-        target = dr.zero(p.UInt32)
+        target = dr.zeros(p.UInt32)
 
         while loop(active):
             dr.scatter_reduce(dr.ReduceOp.Add, target, 1, 0)

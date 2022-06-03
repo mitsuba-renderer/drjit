@@ -263,7 +263,7 @@ def test23_scatter_reduce_bwd(m):
 
         x = dr.linspace(m.Float, 0, 1, 5)
         y = dr.linspace(m.Float, 1, 2, 4)
-        buf = dr.zero(m.Float, 10)
+        buf = dr.zeros(m.Float, 10)
 
         if i % 2 == 0:
             dr.enable_grad(buf)
@@ -310,7 +310,7 @@ def test24_scatter_reduce_fwd(m):
 
         x = dr.linspace(m.Float, 0, 1, 5)
         y = dr.linspace(m.Float, 1, 2, 4)
-        buf = dr.zero(m.Float, 10)
+        buf = dr.zeros(m.Float, 10)
 
         if i % 2 == 0:
             dr.enable_grad(buf)
@@ -350,7 +350,7 @@ def test25_scatter_bwd(m):
 
         x = dr.linspace(m.Float, 0, 1, 5)
         y = dr.linspace(m.Float, 1, 2, 4)
-        buf = dr.zero(m.Float, 10)
+        buf = dr.zeros(m.Float, 10)
 
         if i % 2 == 0:
             dr.enable_grad(buf)
@@ -398,7 +398,7 @@ def test26_scatter_fwd(m):
     values = x * x * dr.linspace(m.Float, 1, 4, 4)
     idx = 2 * dr.arange(m.UInt32, 4)
 
-    buf = dr.zero(m.Float, 10)
+    buf = dr.zeros(m.Float, 10)
     dr.scatter(buf, values, idx)
 
     assert dr.grad_enabled(buf)
@@ -434,7 +434,7 @@ def test27_scatter_fwd_permute(m):
     values_0 = x * dr.linspace(m.Float, 1, 9, 5)
     values_1 = x * dr.linspace(m.Float, 11, 19, 5)
 
-    buf = dr.zero(m.Float, 10)
+    buf = dr.zeros(m.Float, 10)
 
     idx_0 = dr.arange(m.UInt32, 5)
     idx_1 = dr.arange(m.UInt32, 5) + 5
@@ -1082,7 +1082,7 @@ def test57_diffloop_simple_bwd(m, no_record):
 
 
 def test58_diffloop_masking_fwd(m, no_record):
-    fo = dr.zero(m.Float, 10)
+    fo = dr.zeros(m.Float, 10)
     fi = m.Float(1, 2)
     i = m.UInt32(0, 5)
     dr.enable_grad(fi)
@@ -1096,7 +1096,7 @@ def test58_diffloop_masking_fwd(m, no_record):
 
 
 def test59_diffloop_masking_bwd(m, no_record):
-    fo = dr.zero(m.Float, 10)
+    fo = dr.zeros(m.Float, 10)
     fi = m.Float(1, 2)
     i = m.UInt32(0, 5)
     dr.enable_grad(fi)

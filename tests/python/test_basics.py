@@ -324,7 +324,7 @@ def test07_sincos(t):
         s = dr.fmadd(s, y, y)
         c = dr.fmadd(c, z, dr.fmadd(z, -0.5, 1))
 
-        polymask = dr.eq(j & Int(2), dr.zero(Int))
+        polymask = dr.eq(j & Int(2), dr.zeros(Int))
 
         return (
             dr.mulsign(dr.select(polymask, s, c), sign_sin),
@@ -458,7 +458,7 @@ def test12_binary_search(cname):
 
 
 def test13_slice_setitem():
-    a = dr.zero(dr.scalar.ArrayXf, 5)
+    a = dr.zeros(dr.scalar.ArrayXf, 5)
     a[2] = 1.0
     assert dr.allclose(a, [0, 0, 1, 0, 0])
     a[2:] = [2.0, 1.0, 1.0]
@@ -504,7 +504,7 @@ def test15_test_avx512_approx():
 def test16_custom(cname):
     t = get_class(cname)
 
-    v1 = dr.zero(t, 100)
+    v1 = dr.zeros(t, 100)
     v2 = dr.empty(t, 100)
     assert len(v1.state) == 100
     assert len(v2.inc) == 100
@@ -516,13 +516,13 @@ def test16_custom(cname):
     assert v3.state[11] == 0
 
     assert dr.width(v3) == 100
-    v4 = dr.zero(t, 1)
+    v4 = dr.zeros(t, 1)
     dr.schedule(v4)
     dr.resize(v4, 200)
     assert dr.width(v4) == 200
 
     assert dr.width(v3) == 100
-    v4 = dr.zero(t, 1)
+    v4 = dr.zeros(t, 1)
     dr.resize(v4, 200)
     assert dr.width(v4) == 200
 

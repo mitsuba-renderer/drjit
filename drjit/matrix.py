@@ -163,7 +163,7 @@ def diag(a):
                                      (a.Size, *a.Shape), a.IsScalar)
         module = _modules.get(a.__module__)
         cls = getattr(module, name)
-        result = _dr.zero(cls)
+        result = _dr.zeros(cls)
         for i in range(a.Size):
             result[i, i] = a[i]
         return result
