@@ -3323,92 +3323,170 @@ def cross(a, b):
 # -------------------------------------------------------------------
 
 
-def detach(a, preserve_type=False):
-    if _dr.is_diff_v(a):
+def detach(arg, preserve_type=False):
+    '''
+    Transforms the input variable into its non-differentiable version (*detaches* it
+    from the AD computational graph).
+
+    This function is able to traverse data-structures such a sequences, mappings or
+    :ref:`custom data structure <custom-struct>` and applies the transformation to the
+    underlying variables.
+
+    When the input variable isn't a Dr.Jit differentiable array, it is returned as it is.
+
+    While the type of the returned array is preserved by default, it is possible to
+    set the ``preserve_type`` argument to false to force the returned type to be
+    non-differentiable.
+
+    Args:
+        arg (object): An arbitrary Dr.Jit array, tensor,
+            :ref:`custom data structure <custom-struct>`, sequence, or mapping.
+
+        preserve_type (bool): Defines whether the returned variable should preserve
+            the type of the input variable.
+    Returns:
+        object: The detached variable.
+    '''
+    # TODO: Switch `preserve_type` default to `False`
+    if _dr.is_diff_v(arg):
         if preserve_type:
-            return type(a)(a.detach_())
+            return type(arg)(arg.detach_())
         else:
-            return a.detach_()
-    elif _dr.is_struct_v(a):
-        result = type(a)()
-        for k in type(a).DRJIT_STRUCT.keys():
-            setattr(result, k, detach(getattr(a, k), preserve_type=preserve_type))
+            return arg.detach_()
+    elif _dr.is_struct_v(arg):
+        result = type(arg)()
+        for k in type(arg).DRJIT_STRUCT.keys():
+            setattr(result, k, detach(getattr(arg, k), preserve_type=preserve_type))
         return result
     else:
-        return a
+        return arg
 
 
-def grad(a):
-    if _dr.is_diff_v(a):
-        return a.grad_()
-    elif _dr.is_struct_v(a):
-        result = type(a)()
-        for k in type(a).DRJIT_STRUCT.keys():
-            setattr(result, k, grad(getattr(a, k)))
+def grad(arg, preserve_type=True):
+    '''
+    Return the gradient value associated to a given variable.
+
+    When the variable doesn't have gradient tracking enabled, this function returns ``0``.
+
+    Args:
+        arg (object): An arbitrary Dr.Jit array, tensor,
+            :ref:`custom data structure <custom-struct>`, sequences, or mapping.
+
+        preserve_type (bool): Defines whether the returned variable should preserve
+            the type of the input variable.
+
+    Returns:
+        object: the gradient value associated to the input variable.
+    '''
+    # TODO: Properly deal with `preserve_type` set to `False`
+    if _dr.is_diff_v(arg):
+        return arg.grad_()
+    elif _dr.is_struct_v(arg):
+        result = type(arg)()
+        for k in type(arg).DRJIT_STRUCT.keys():
+            setattr(result, k, grad(getattr(arg, k), preserve_type))
         return result
-    elif isinstance(a, _Sequence):
-        return type(a)([grad(v) for v in a])
-    elif isinstance(a, _Mapping):
-        return {k : grad(v) for k, v in a.items()}
+    elif isinstance(arg, _Sequence):
+        return type(arg)([grad(v, preserve_type) for v in arg])
+    elif isinstance(arg, _Mapping):
+        return {k : grad(v, preserve_type) for k, v in arg.items()}
     else:
-        return _dr.zeros(type(a))
+        return _dr.zeros(type(arg))
 
 
-def set_grad(a, value):
-    if _dr.is_diff_v(a) and a.IsFloat:
-        if _dr.is_diff_v(value):
-            value = _dr.detach(value)
+def set_grad(dst, src):
+    '''
+    Set the gradient value to the provided variable.
 
-        t = _dr.detached_t(a)
-        if type(value) is not t:
-            value = t(value)
+    Broadcasting is applied to the gradient value if necessary and possible to match
+    the type of the input variable.
 
-        a.set_grad_(value)
-    elif isinstance(a, _Sequence):
-        vs = isinstance(value, _Sequence)
-        assert not vs or len(a) == len(value)
-        for i in range(len(a)):
-            set_grad(a[i], value[i] if vs else value)
-    elif isinstance(a, _Mapping):
-        vm = isinstance(value, _Mapping)
-        assert not vm or a.keys() == value.keys()
-        for k, v in a.items():
-            set_grad(v, value[k] if vm else value)
-    elif _dr.is_struct_v(a):
-        ve = _dr.is_struct_v(value)
-        assert not ve or type(value) is type(a)
-        for k in type(a).DRJIT_STRUCT.keys():
-            set_grad(getattr(a, k), getattr(value, k) if ve else value)
+    Args:
+        dst (object): An arbitrary Dr.Jit array, tensor,
+            :ref:`custom data structure <custom-struct>`, sequences, or mapping.
+
+        src (object): An arbitrary Dr.Jit array, tensor,
+            :ref:`custom data structure <custom-struct>`, sequences, or mapping.
+    '''
+    if _dr.is_diff_v(dst) and dst.IsFloat:
+        if _dr.is_diff_v(src):
+            src = _dr.detach(src)
+
+        t = _dr.detached_t(dst)
+        if type(src) is not t:
+            src = t(src)
+
+        dst.set_grad_(src)
+    elif isinstance(dst, _Sequence):
+        vs = isinstance(src, _Sequence)
+        assert not vs or len(dst) == len(src)
+        for i in range(len(dst)):
+            set_grad(dst[i], src[i] if vs else src)
+    elif isinstance(dst, _Mapping):
+        vm = isinstance(src, _Mapping)
+        assert not vm or dst.keys() == src.keys()
+        for k, v in dst.items():
+            set_grad(v, src[k] if vm else src)
+    elif _dr.is_struct_v(dst):
+        ve = _dr.is_struct_v(src)
+        assert not ve or type(src) is type(dst)
+        for k in type(dst).DRJIT_STRUCT.keys():
+            set_grad(getattr(dst, k), getattr(src, k) if ve else src)
 
 
-def accum_grad(a, value):
-    if _dr.is_diff_v(a) and a.IsFloat:
-        if _dr.is_diff_v(value):
-            value = _dr.detach(value)
+def accum_grad(dst, src):
+    '''
+    Accumulate into the gradient of a variable.
 
-        t = _dr.detached_t(a)
-        if type(value) is not t:
-            value = t(value)
+    Broadcasting is applied to the gradient value if necessary and possible to match
+    the type of the input variable.
 
-        a.accum_grad_(value)
-    elif isinstance(a, _Sequence):
-        vs = isinstance(value, _Sequence)
-        assert not vs or len(a) == len(value)
-        for i in range(len(a)):
-            accum_grad(a[i], value[i] if vs else value)
-    elif isinstance(a, _Mapping):
-        vm = isinstance(value, _Mapping)
-        assert not vm or a.keys() == value.keys()
-        for k, v in a.items():
-            accum_grad(v, value[k] if vm else value)
-    elif _dr.is_struct_v(a):
-        ve = _dr.is_struct_v(value)
-        assert not ve or type(value) is type(a)
-        for k in type(a).DRJIT_STRUCT.keys():
-            accum_grad(getattr(a, k), getattr(value, k) if ve else value)
+    Args:
+        dst (object): An arbitrary Dr.Jit array, tensor,
+            :ref:`custom data structure <custom-struct>`, sequences, or mapping.
+
+        src (object): An arbitrary Dr.Jit array, tensor,
+            :ref:`custom data structure <custom-struct>`, sequences, or mapping.
+    '''
+    if _dr.is_diff_v(dst) and dst.IsFloat:
+        if _dr.is_diff_v(src):
+            src = _dr.detach(src)
+
+        t = _dr.detached_t(dst)
+        if type(src) is not t:
+            src = t(src)
+
+        dst.accum_grad_(src)
+    elif isinstance(dst, _Sequence):
+        vs = isinstance(src, _Sequence)
+        assert not vs or len(dst) == len(src)
+        for i in range(len(dst)):
+            accum_grad(dst[i], src[i] if vs else src)
+    elif isinstance(dst, _Mapping):
+        vm = isinstance(src, _Mapping)
+        assert not vm or dst.keys() == src.keys()
+        for k, v in dst.items():
+            accum_grad(v, src[k] if vm else src)
+    elif _dr.is_struct_v(dst):
+        ve = _dr.is_struct_v(src)
+        assert not ve or type(src) is type(dst)
+        for k in type(dst).DRJIT_STRUCT.keys():
+            accum_grad(getattr(dst, k), getattr(src, k) if ve else src)
 
 
 def grad_enabled(*args):
+    '''
+    Return whether gradient tracking is enabled on any of the given variables.
+
+    Args:
+        *args (tuple): A variable-length list of Dr.Jit array instances,
+          :ref:`custom data structures <custom-struct>`, sequences, or mappings.
+          The function will recursively traverse data structures to discover all
+          Dr.Jit arrays.
+
+    Returns:
+        bool: ``True`` if any variable has gradient tracking enabled, ``False`` otherwise.
+    '''
     result = False
     for a in args:
         if _dr.is_diff_v(a):
@@ -3425,48 +3503,105 @@ def grad_enabled(*args):
     return result
 
 
-def set_grad_enabled(a, value):
-    if _dr.is_diff_v(a) and a.IsFloat:
-        a.set_grad_enabled_(value)
-    elif _dr.is_struct_v(a):
-        for k in type(a).DRJIT_STRUCT.keys():
-            set_grad_enabled(getattr(a, k), value)
-    elif isinstance(a, _Sequence):
-        for v in a:
+def set_grad_enabled(arg, value):
+    '''
+    Enable or disable gradient tracking on the provided variables.
+
+    Args:
+        arg (object): An arbitrary Dr.Jit array, tensor,
+            :ref:`custom data structure <custom-struct>`, sequence, or mapping.
+
+        value (bool): Defines whether gradient tracking should be enabled or
+            disabled.
+    '''
+    if _dr.is_diff_v(arg) and arg.IsFloat:
+        arg.set_grad_enabled_(value)
+    elif _dr.is_struct_v(arg):
+        for k in type(arg).DRJIT_STRUCT.keys():
+            set_grad_enabled(getattr(arg, k), value)
+    elif isinstance(arg, _Sequence):
+        for v in arg:
             set_grad_enabled(v, value)
-    elif isinstance(a, _Mapping):
-        for k, v in a.items():
+    elif isinstance(arg, _Mapping):
+        for k, v in arg.items():
             set_grad_enabled(v, value)
 
 
 def enable_grad(*args):
-    for v in args:
-        set_grad_enabled(v, True)
+    '''
+    Enable gradient tracking for the provided variables.
+
+    This function accepts a variable-length list of arguments and processes it
+    as follows:
+
+    - It recurses into sequences (``tuple``, ``list``, etc.)
+    - It recurses into the values of mappings (``dict``, etc.)
+    - It recurses into the fields of :ref:`custom data structures <custom-struct>`.
+
+    During recursion, the function enables gradient tracking for all Dr.Jit arrays.
+    For every other types, this function won't do anything.
+
+    Args:
+        *args (tuple): A variable-length list of Dr.Jit array instances,
+            :ref:`custom data structures <custom-struct>`, sequences, or mappings.
+    '''
+    for arg in args:
+        set_grad_enabled(arg, True)
 
 
 def disable_grad(*args):
-    for v in args:
-        set_grad_enabled(v, False)
+    '''
+    Disable gradient tracking for the provided variables.
+
+    This function accepts a variable-length list of arguments and processes it
+    as follows:
+
+    - It recurses into sequences (``tuple``, ``list``, etc.)
+    - It recurses into the values of mappings (``dict``, etc.)
+    - It recurses into the fields of :ref:`custom data structures <custom-struct>`.
+
+    During recursion, the function disables gradient tracking for all Dr.Jit arrays.
+    For every other types, this function won't do anything.
+
+    Args:
+        *args (tuple): A variable-length list of Dr.Jit array instances,
+            :ref:`custom data structures <custom-struct>`, sequences, or mappings.
+    '''
+    for arg in args:
+        set_grad_enabled(arg, False)
 
 
-def replace_grad(a, b):
-    if type(a) is not type(b):
-        a, b = _var_promote(a, b)
+def replace_grad(dst, src):
+    '''
+    Replace the gradient value of ``dst`` with the one of ``src``.
 
-    ta, tb = type(a), type(b)
+    Broadcasting is applied to ``dst`` if necessary to match the type of ``src``.
+
+    Args:
+        dst (object): An arbitrary Dr.Jit array, tensor, or scalar builtin instance.
+
+        src (object): An differentiable Dr.Jit array or tensor.
+
+    Returns:
+        object: the variable with the replaced gradients.
+    '''
+    if type(dst) is not type(src):
+        dst, src = _var_promote(dst, src)
+
+    ta, tb = type(dst), type(src)
 
     if not (_dr.is_diff_v(ta) and ta.IsFloat and
             _dr.is_diff_v(tb) and tb.IsFloat):
         raise Exception("replace_grad(): unsupported input types!")
 
-    la, lb = len(a), len(b)
-    depth = a.Depth # matches b.Depth
+    la, lb = len(dst), len(src)
+    depth = dst.Depth # matches b.Depth
 
     if la != lb:
         if la == 1 and depth == 1:
-            a = a + _dr.zeros(ta, lb)
+            dst = dst + _dr.zeros(ta, lb)
         elif lb == 1 and depth == 1:
-            b = b + _dr.zeros(tb, la)
+            src = src + _dr.zeros(tb, la)
         else:
             raise Exception("replace_grad(): input arguments have "
                            "incompatible sizes (%i vs %i)!"
@@ -3474,19 +3609,79 @@ def replace_grad(a, b):
 
     if depth > 1:
         result = ta()
-        if a.Size == Dynamic:
+        if dst.Size == Dynamic:
             result.init_(la)
         for i in range(la):
-            result[i] = replace_grad(a[i], b[i])
+            result[i] = replace_grad(dst[i], src[i])
         return result
     else:
-        if _dr.is_tensor_v(a):
-            return ta(replace_grad(a.array, b.array), a.shape)
+        if _dr.is_tensor_v(dst):
+            return ta(replace_grad(dst.array, src.array), dst.shape)
         else:
-            return ta.create_(b.index_ad(), a.detach_())
+            return ta.create_(src.index_ad(), dst.detach_())
 
 
 def enqueue(mode, *args):
+    '''
+    Enqueues variable for the subsequent AD traversal.
+
+    In Dr.Jit, the process of automatic differentiation is split into two parts:
+
+    1. Discover and enqueue the variables to be considered as inputs during the
+       subsequent AD traversal.
+    2. Traverse the AD graph starting from the enqueued variables to propagate the
+       gradients towards the output variables (e.g. leaf in the AD graph).
+
+
+    This function handles the first part can operate in different modes depending on
+    the specified ``mode``:
+
+    - ``ADMode.Forward``: the provided ``value`` will be considered as input during
+      the subsequent AD traversal.
+
+    - ``ADMode.Backward``: a traversal of the AD graph starting from the provided
+      ``value`` will take place to find all potential source of gradients and
+      enqueue them.
+
+    For example, a typical chain of operations to forward propagate the gradients
+    from ``a`` to ``b`` would look as follow:
+
+    .. code-block::
+
+        a = dr.llvm.ad.Float(1.0)
+        dr.enable_grad(a)
+        b = f(a) # some computation involving `a`
+        dr.set_gradient(a, 1.0)
+        dr.enqueue(dr.ADMode.Forward, a)
+        dr.traverse(dr.llvm.ad.Float, dr.ADMode.Forward)
+        grad = dr.grad(b)
+
+    It could be the case that ``f(a)`` involves other differentiable variables that
+    already contain some gradients. In this situation we can use ``ADMode.Backward``
+    to discover and enqueue them before the traversal.
+
+    .. code-block::
+
+        a = dr.llvm.ad.Float(1.0)
+        dr.enable_grad(a)
+        b = f(a, ...) # some computation involving `a` and some hidden variables
+        dr.set_gradient(a, 1.0)
+        dr.enqueue(dr.ADMode.Backward, b)
+        dr.traverse(dr.llvm.ad.Float, dr.ADMode.Forward)
+        grad = dr.grad(b)
+
+    Dr.Jit also provides a higher level API that encapsulate this logic in a few
+    different functions:
+
+    - :py:func:`drjit.forward_from`, :py:func:`drjit.forward`, :py:func:`drjit.forward_to`
+    - :py:func:`drjit.backward_from`, :py:func:`drjit.backward`, :py:func:`drjit.backward_to`
+
+    Args:
+        mode (ADMode): defines the enqueuing mode (backward or forward)
+
+        *args (tuple): A variable-length list of Dr.Jit array instances, tensors,
+            :ref:`custom data structures <custom-struct>`, sequences, or mappings.
+    '''
     for a in args:
         if _dr.is_diff_v(a) and a.IsFloat:
             a.enqueue_(mode)
@@ -3501,15 +3696,43 @@ def enqueue(mode, *args):
                 enqueue(mode, getattr(a, k))
 
 
-def traverse(t, mode, flags=_dr.ADFlag.Default):
+def traverse(dtype, mode, flags=_dr.ADFlag.Default):
+    '''
+    Propagate derivatives through the enqueued set of edges in the AD computational
+    graph in the direction specified by ``mode``.
+
+    By default, Dr.Jit's AD system destructs the enqueued input graph during AD
+    traversal. This frees up resources, which is useful when working with large
+    wavefronts or very complex computation graphs. However, this also prevents
+    repeated propagation of gradients through a shared subgraph that is being
+    differentiated multiple times.
+
+    To support more fine-grained use cases that require this, the following flags
+    can be used to control what should and should not be destructed:
+
+    - ``ADFlag.ClearNone``: clear nothing
+    - ``ADFlag.ClearEdges``: delete all traversed edges from the computation graph
+    - ``ADFlag.ClearInput``: clear the gradients of processed input vertices (in-degree == 0)
+    - ``ADFlag.ClearInterior``: clear the gradients of processed interior vertices (out-degree != 0)
+    - ``ADFlag.ClearVertices``: clear gradients of processed vertices only, but leave edges intact
+    - ``ADFlag.Default``: clear everything (default behaviour)
+
+    Args:
+        dtype (type): defines the Dr.JIT array type used to build the AD graph
+
+        mode (ADMode): defines the mode traversal (backward or forward)
+
+        flags (ADFlag | int): flags to control what should and should not be
+        destructed during forward/backward mode traversal.
+    '''
     assert isinstance(mode, _dr.ADMode)
 
-    t = _dr.leaf_array_t(t)
+    dtype = _dr.leaf_array_t(dtype)
 
-    if not _dr.is_diff_v(t):
+    if not _dr.is_diff_v(dtype):
         raise Exception('traverse(): expected a differentiable array type!')
 
-    t.traverse_(mode, flags)
+    dtype.traverse_(mode, flags)
 
 
 def _check_grad_enabled(name, t, a):
@@ -3526,15 +3749,52 @@ def _check_grad_enabled(name, t, a):
         raise Exception(f'{name}(): expected a differentiable array type!')
 
 
-def forward_from(a, flags=_dr.ADFlag.Default):
-    ta = type(a)
-    _check_grad_enabled('forward_from', ta, a)
-    set_grad(a, 1)
-    enqueue(_dr.ADMode.Forward, a)
+def forward_from(arg, flags=_dr.ADFlag.Default):
+    '''
+    Forward propagates gradients from a provided Dr.Jit differentiable array.
+
+    This function will first see the gradient value of the provided variable to ``1.0``
+    before executing the AD graph traversal.
+
+    An exception will be raised when the provided array doesn't have gradient tracking
+    enabled or if it isn't an instance of a Dr.Jit differentiable array type.
+
+    Args:
+        arg (object): A Dr.Jit differentiable array instance.
+
+        flags (ADFlag | int): flags to control what should and should not be
+        destructed during the traversal. The default value is ``ADFlag.Default``.
+    '''
+    ta = type(arg)
+    _check_grad_enabled('forward_from', ta, arg)
+    set_grad(arg, 1)
+    enqueue(_dr.ADMode.Forward, arg)
     traverse(ta, _dr.ADMode.Forward, flags)
 
 
 def forward_to(*args, flags=_dr.ADFlag.Default):
+    '''
+    Forward propagates gradients to a set of provided Dr.Jit differentiable arrays.
+
+    Internally, the AD computational graph will be first traversed backward to find
+    all potential source of gradient for the provided array. Then only the forward
+    gradient propagation traversal takes place.
+
+    The ``flags`` argument should be provided as a keyword argument for this function.
+
+    An exception will be raised when the provided array doesn't have gradient tracking
+    enabled or if it isn't an instance of a Dr.Jit differentiable array type.
+
+    Args:
+        *args (tuple): A variable-length list of Dr.Jit differentiable array, tensor,
+            :ref:`custom data structure <custom-struct>`, sequences, or mapping.
+
+        flags (ADFlag | int): flags to control what should and should not be
+        destructed during the traversal. The default value is ``ADFlag.Default``.
+
+    Returns:
+        object: the gradient value associated to the output variables.
+    '''
     for a in args:
         if isinstance(a, (int, _dr.ADFlag)):
             raise Exception('forward_to(): AD flags should be passed via '
@@ -3548,24 +3808,75 @@ def forward_to(*args, flags=_dr.ADFlag.Default):
     return grad(args) if len(args) > 1 else grad(*args)
 
 
-def forward(a, flags=_dr.ADFlag.Default):
-    forward_from(a, flags)
+def forward(arg, flags=_dr.ADFlag.Default):
+    '''
+    Forward propagates gradients from a provided Dr.Jit differentiable array.
+
+    This function will first see the gradient value of the provided variable to ``1.0``
+    before executing the AD graph traversal.
+
+    An exception will be raised when the provided array doesn't have gradient tracking
+    enabled or if it isn't an instance of a Dr.Jit differentiable array type.
+
+    This function is an alias of :py:func:`drjit.forward_from`.
+
+    Args:
+        arg (object): A Dr.Jit differentiable array instance.
+
+        flags (ADFlag | int): flags to control what should and should not be
+        destructed during the traversal. The default value is ``ADFlag.Default``.
+    '''
+    forward_from(arg, flags)
 
 
-def backward_from(a, flags=_dr.ADFlag.Default):
-    ta = type(a)
-    _check_grad_enabled('backward_from', ta, a)
+def backward_from(arg, flags=_dr.ADFlag.Default):
+    '''
+    Backward propagates gradients from a provided Dr.Jit differentiable array.
+
+    An exception will be raised when the provided array doesn't have gradient tracking
+    enabled or if it isn't an instance of a Dr.Jit differentiable array type.
+
+    Args:
+        arg (object): A Dr.Jit differentiable array instance.
+
+        flags (ADFlag | int): flags to control what should and should not be
+        destructed during the traversal. The default value is ``ADFlag.Default``.
+    '''
+    ta = type(arg)
+    _check_grad_enabled('backward_from', ta, arg)
 
     # Deduplicate components if 'a' is a vector
-    if _dr.depth_v(a) > 1:
-        a = a + ta(0)
+    if _dr.depth_v(arg) > 1:
+        arg = arg + ta(0)
 
-    set_grad(a, 1)
-    enqueue(_dr.ADMode.Backward, a)
+    set_grad(arg, 1)
+    enqueue(_dr.ADMode.Backward, arg)
     traverse(ta, _dr.ADMode.Backward, flags)
 
 
 def backward_to(*args, flags=_dr.ADFlag.Default):
+    '''
+    Backward propagate gradients to a set of provided Dr.Jit differentiable arrays.
+
+    Internally, the AD computational graph will be first traversed *forward* to find
+    all potential source of gradient for the provided array. Then only the backward
+    gradient propagation traversal takes place.
+
+    The ``flags`` argument should be provided as a keyword argument for this function.
+
+    An exception will be raised when the provided array doesn't have gradient tracking
+    enabled or if it isn't an instance of a Dr.Jit differentiable array type.
+
+    Args:
+        *args (tuple): A variable-length list of Dr.Jit differentiable array, tensor,
+            :ref:`custom data structure <custom-struct>`, sequences, or mapping.
+
+        flags (ADFlag | int): flags to control what should and should not be
+        destructed during the traversal. The default value is ``ADFlag.Default``.
+
+    Returns:
+        object: the gradient value associated to the output variables.
+    '''
     for a in args:
         if isinstance(a, (int, _dr.ADFlag)):
             raise Exception('backward_to(): AD flags should be passed via '
@@ -3579,8 +3890,22 @@ def backward_to(*args, flags=_dr.ADFlag.Default):
     return grad(args) if len(args) > 1 else grad(*args)
 
 
-def backward(a, flags=_dr.ADFlag.Default):
-    backward_from(a, flags)
+def backward(arg, flags=_dr.ADFlag.Default):
+    '''
+    Backward propagate gradients from a provided Dr.Jit differentiable array.
+
+    An exception will be raised when the provided array doesn't have gradient tracking
+    enabled or if it isn't an instance of a Dr.Jit differentiable array type.
+
+    This function is an alias of :py:func:`drjit.backward_from`.
+
+    Args:
+        arg (object): A Dr.Jit differentiable array instance.
+
+        flags (ADFlag | int): flags to control what should and should not be
+        destructed during the traversal. The default value is ``ADFlag.Default``.
+    '''
+    backward_from(arg, flags)
 
 
 # -------------------------------------------------------------------
