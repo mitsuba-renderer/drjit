@@ -185,7 +185,7 @@ def mul_(a0, a1):
     if not a0.IsArithmetic:
         raise Exception("mul(): requires arithmetic operands!")
 
-    if _dr.array_depth_v(a1) < _dr.array_depth_v(a0):
+    if _dr.depth_v(a1) < _dr.depth_v(a0):
         # Avoid type promotion in scalars multiplication, which would
         # be costly for special types (matrices, quaternions, etc.)
         sr = len(a0)
@@ -1469,7 +1469,7 @@ def full_(cls, value, shape):
         for i in range(shape):
             result.set_entry_(i, value)
     else:
-        if _dr.array_depth_v(value) != cls.Depth - 1:
+        if _dr.depth_v(value) != cls.Depth - 1:
             value = _dr.full(cls.Value, value, shape)
 
         for i in range(cls.Size):

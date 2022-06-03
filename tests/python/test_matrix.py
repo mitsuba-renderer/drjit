@@ -152,7 +152,7 @@ def test11_constructor(package):
     assert dr.allclose(m3, m4)
     assert dr.allclose(m4, m2)
 
-    if dr.is_jit_array_v(Float):
+    if dr.is_jit_v(Float):
         np.random.seed(1)
         for i in range(1, 4):
             values = np.random.random((i, 3, 3)).astype('float32')

@@ -180,14 +180,14 @@ def all_arrays(cond=lambda x: True):
             and not dr.is_special_v(v)
             and not dr.is_tensor_v(v)
             and not dr.is_texture_v(v)
-            and not dr.array_depth_v(v) >= 3
-            and not (dr.array_depth_v(v) >= 2 and 'scalar' in v.__module__)]
+            and not dr.depth_v(v) >= 3
+            and not (dr.depth_v(v) >= 2 and 'scalar' in v.__module__)]
 
 
 # Run various standard operations on *every available* type
 @pytest.mark.parametrize("t", all_arrays())
 def test05_scalar(t):
-    if not dr.is_array_v(t) or dr.array_size_v(t) == 0:
+    if not dr.is_array_v(t) or dr.size_v(t) == 0:
         return
     get_class(t.__module__)
 
