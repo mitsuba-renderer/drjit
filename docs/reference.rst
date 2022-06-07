@@ -9,8 +9,12 @@ Array creation
 .. autofunction:: zeros
 .. autofunction:: ones
 .. autofunction:: full
+.. autofunction:: identity
 .. autofunction:: arange
 .. autofunction:: linspace
+.. autofunction:: tile
+.. autofunction:: repeat
+.. autofunction:: meshgrid
 
 .. _horizontal-reductions:
 
@@ -31,6 +35,10 @@ These operations are *horizontal* in the sense that [..]
 .. autofunction:: prod
 .. autofunction:: dot
 .. autofunction:: norm
+.. autofunction:: shuffle
+.. autofunction:: compress
+.. autofunction:: count
+.. autofunction:: block_sum
 
 Mask operations
 ---------------
@@ -53,23 +61,17 @@ Miscellaneous operations
 .. autofunction:: width
 .. autofunction:: resize
 .. autofunction:: slice_index
-.. autofunction:: meshgrid
-.. autofunction:: sign
-.. autofunction:: copysign
-.. autofunction:: mulsign
-.. autofunction:: arg
-.. autofunction:: real
-.. autofunction:: imag
+.. autofunction:: binary_search
 .. autofunction:: tzcnt
 .. autofunction:: lzcnt
 .. autofunction:: popcnt
-.. autofunction:: log2i
 
 Just-in-time compilation
 ------------------------
 
 .. autofunction:: schedule
 .. autofunction:: eval
+.. autofunction:: printf_async
 
 Type traits
 -----------
@@ -162,6 +164,21 @@ Standard mathematical functions
 .. autofunction:: frexp
 .. autofunction:: ldexp
 .. autofunction:: lerp
+.. autofunction:: normalize
+.. autofunction:: log2i
+.. autofunction:: erf
+.. autofunction:: erfinv
+.. autofunction:: lgamma
+.. autofunction:: tgamma
+.. autofunction:: hypot
+.. autofunction:: sign
+.. autofunction:: copysign
+.. autofunction:: mulsign
+.. autofunction:: arg
+.. autofunction:: real
+.. autofunction:: imag
+.. autofunction:: conj
+.. autofunction:: cross
 
 Transcendental functions
 ------------------------
@@ -200,6 +217,7 @@ ________________________________________
 .. autofunction:: log
 .. autofunction:: exp2
 .. autofunction:: exp
+.. autofunction:: power
 
 .. _transcendental-accuracy:
 
