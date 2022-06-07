@@ -66,7 +66,7 @@ def test06_from_builtin(C):
 @pytest.mark.parametrize('C', classes)
 def test07_from_builtin(C):
     # Fmadd should fallback to regular multiply (complex)-add
-    assert dr.fmadd(C(2, 2), C(5, 5), C(5, 6)) == C(5, 26)
+    assert dr.fma(C(2, 2), C(5, 5), C(5, 6)) == C(5, 26)
 
 
 @pytest.mark.parametrize('C', classes)

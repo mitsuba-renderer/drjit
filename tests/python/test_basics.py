@@ -162,10 +162,7 @@ def test04_operators():
     assert(dr.abs(I3(1, -2, 3)) == I3(1, 2, 3))
     assert(abs(I3(1, -2, 3)) == I3(1, 2, 3))
     assert(dr.abs(I3(1, -2, 3)) == I3(1, 2, 3))
-    assert(dr.fmadd(F3(1, 2, 3), F3(2, 3, 1), F3(1, 1, 1)) == F3(3, 7, 4))
-    assert(dr.fmsub(F3(1, 2, 3), F3(2, 3, 1), F3(1, 1, 1)) == F3(1, 5, 2))
-    assert(dr.fnmadd(F3(1, 2, 3), F3(2, 3, 1), F3(1, 1, 1)) == F3(-1, -5, -2))
-    assert(dr.fnmsub(F3(1, 2, 3), F3(2, 3, 1), F3(1, 1, 1)) == F3(-3, -7, -4))
+    assert(dr.fma(F3(1, 2, 3), F3(2, 3, 1), F3(1, 1, 1)) == F3(3, 7, 4))
 
 
 def all_arrays(cond=lambda x: True):
@@ -221,10 +218,7 @@ def test05_scalar(t):
         else:
             assert t(6) / t(2) == t(3)
             assert dr.sqrt(t(4)) == t(2)
-            assert dr.fmadd(t(1), t(2), t(3)) == t(5)
-            assert dr.fmsub(t(1), t(2), t(3)) == t(-1)
-            assert dr.fnmadd(t(1), t(2), t(3)) == t(1)
-            assert dr.fnmsub(t(1), t(2), t(3)) == t(-5)
+            assert dr.fma(t(1), t(2), t(3)) == t(5)
             assert (t(1) & True) == t(1)
             assert (t(1) & False) == t(0)
             assert (t(1) | False) == t(1)
@@ -286,7 +280,7 @@ def test07_gather_ravel_unravel(pkg):
 def test07_sincos(t):
     def poly2(x, c0, c1, c2):
         x2 = dr.sqr(x)
-        return dr.fmadd(x2, c2, dr.fmadd(x, c1, c0))
+        return dr.fma(x2, c2, dr.fma(x, c1, c0))
 
     def sincos(x):
         Float = type(x)
@@ -320,8 +314,8 @@ def test07_sincos(t):
                   -1.388731625493765e-3,
                   2.443315711809948e-5) * z
 
-        s = dr.fmadd(s, y, y)
-        c = dr.fmadd(c, z, dr.fmadd(z, -0.5, 1))
+        s = dr.fma(s, y, y)
+        c = dr.fma(c, z, dr.fma(z, -0.5, 1))
 
         polymask = dr.eq(j & Int(2), dr.zeros(Int))
 
