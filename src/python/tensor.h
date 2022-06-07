@@ -133,14 +133,14 @@ template <typename T> auto bind_tensor(py::module m) {
        .def("eq_", &Tensor::eq_);
 
     if constexpr (Tensor::IsJIT) {
-        cls.def("index", [](Tensor &a) { return a.array().index(); });
+        cls.def_property_readonly("index", [](Tensor &a) { return a.array().index(); });
         cls.def("set_index_", [](Tensor &a, uint32_t index) {
             *a.array().index_ptr() = index;
         });
     }
 
     if constexpr (Tensor::IsDiff) {
-        cls.def("index_ad", [](Tensor &a) { return a.array().index_ad(); });
+        cls.def_property_readonly("index_ad", [](Tensor &a) { return a.array().index_ad(); });
         cls.def("set_index_ad_", [](Tensor &a, int32_t index) {
             *a.array().index_ad_ptr() = index;
         });

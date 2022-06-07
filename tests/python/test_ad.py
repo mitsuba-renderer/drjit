@@ -282,9 +282,9 @@ def test06_replace_grad(m):
     print(f"{x2=}")
     print(f"{y2=}")
     print(f"{z=}")
-    assert z.x.index_ad() == y2.x.index_ad()
-    assert z.y.index_ad() == y2.y.index_ad()
-    assert z.z.index_ad() == y2.z.index_ad()
+    assert z.x.index_ad == y2.x.index_ad
+    assert z.y.index_ad == y2.y.index_ad
+    assert z.z.index_ad == y2.z.index_ad
     z2 = z*z
     assert dr.allclose(z2, [1, 16, 81])
     dr.backward(z2)
@@ -295,24 +295,24 @@ def test06_replace_grad(m):
     y = m.Float(1)
     dr.enable_grad(x, y)
     z = dr.replace_grad(x, y)
-    assert z.x.index_ad() == y.index_ad()
-    assert z.y.index_ad() == y.index_ad()
-    assert z.z.index_ad() == y.index_ad()
+    assert z.x.index_ad == y.index_ad
+    assert z.y.index_ad == y.index_ad
+    assert z.z.index_ad == y.index_ad
 
     a = m.Float(1.0)
     dr.enable_grad(a)
     b = dr.replace_grad(4.0, a)
     assert type(b) is type(a)
-    assert b.index_ad() == a.index_ad()
+    assert b.index_ad == a.index_ad
     assert dr.allclose(b, 4.0)
 
     a = m.ArrayXf(1, 2, 3)
     y = m.Float(1)
     dr.enable_grad(x, y)
     z = dr.replace_grad(x, y)
-    assert z[0].index_ad() == y.index_ad()
-    assert z[1].index_ad() == y.index_ad()
-    assert z[2].index_ad() == y.index_ad()
+    assert z[0].index_ad == y.index_ad
+    assert z[1].index_ad == y.index_ad
+    assert z[2].index_ad == y.index_ad
 
 
 def test07_set_label(m):

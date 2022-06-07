@@ -335,7 +335,7 @@ def device(value=None):
     elif _dr.is_diff_v(value):
         return device(_dr.detach(value, preserve_type=False))
     elif _dr.is_jit_v(value):
-        return _dr.detail.device(value.index())
+        return _dr.detail.device(value.index)
     else:
         return -1
 
@@ -4163,7 +4163,7 @@ def replace_grad(dst, src):
         if _dr.is_tensor_v(dst):
             return tdst(replace_grad(dst.array, src.array), dst.shape)
         else:
-            return tdst.create_(src.index_ad(), dst.detach_())
+            return tdst.create_(src.index_ad, dst.detach_())
 
 
 def enqueue(mode, *args):
@@ -5028,7 +5028,7 @@ def printf_async(fmt, *args, active=True):
             raise Exception("printf_async(): array argument of type '%s' not "
                             "supported (must be a depth-1 JIT (LLVM/CUDA) array, "
                             "and cannot be a mask)" % type(a).__name__)
-        indices.append(a.index())
+        indices.append(a.index)
         is_cuda |= cuda
         is_llvm |= llvm
 
@@ -5036,7 +5036,7 @@ def printf_async(fmt, *args, active=True):
         raise Exception("printf_async(): invalid input: must specify LLVM or CUDA arrays.")
 
     active = _dr.cuda.Bool(active) if is_cuda else _dr.llvm.Bool(active)
-    _dr.detail.printf_async(is_cuda, active.index(), fmt, indices)
+    _dr.detail.printf_async(is_cuda, active.index, fmt, indices)
 
 
 # -------------------------------------------------------------------
@@ -5460,12 +5460,12 @@ def custom(cls, *args, **kwargs):
 
             if _dr.is_tensor_v(ot):
                 value = ot.Array.create_(
-                    o.array.index_ad(),
+                    o.array.index_ad,
                     _dr.zeros(_dr.detached_t(ot.Array), prod(o.shape)))
                 result = ot(value, o.shape)
             else:
                 result = value = ot.create_(
-                    o.index_ad(),
+                    o.index_ad,
                     _dr.detached_t(ot)())
             if dec_ref:
                 value.dec_ref_()
@@ -5513,16 +5513,16 @@ def custom(cls, *args, **kwargs):
         if len(diff_vars_in) > 1:
             _dr.set_label(tmp_in, inst.name() + "_in")
             for index in diff_vars_in:
-                Type.add_edge_(index, tmp_in.index_ad())
+                Type.add_edge_(index, tmp_in.index_ad)
 
         if len(diff_vars_out) > 1:
             _dr.set_label(tmp_out, inst.name() + "_out")
             for index in diff_vars_out:
-                Type.add_edge_(tmp_out.index_ad(), index)
+                Type.add_edge_(tmp_out.index_ad, index)
 
         Type.add_edge_(
-            diff_vars_in[0]  if len(diff_vars_in)  == 1 else tmp_in.index_ad(),
-            diff_vars_out[0] if len(diff_vars_out) == 1 else tmp_out.index_ad(),
+            diff_vars_in[0]  if len(diff_vars_in)  == 1 else tmp_in.index_ad,
+            diff_vars_out[0] if len(diff_vars_out) == 1 else tmp_out.index_ad,
             inst
         )
 
