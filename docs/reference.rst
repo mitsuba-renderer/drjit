@@ -72,6 +72,9 @@ Just-in-time compilation
 .. autofunction:: schedule
 .. autofunction:: eval
 .. autofunction:: printf_async
+.. autofunction:: graphviz
+.. autofunction:: label
+.. autofunction:: set_label
 
 Type traits
 -----------
@@ -582,6 +585,7 @@ Automatic differentiation
 .. autofunction:: suspend_grad
 .. autofunction:: resume_grad
 .. autofunction:: isolate_grad
+.. autofunction:: graphviz_ad
 
 .. autoclass:: CustomOp
 
@@ -1117,11 +1121,3 @@ _______________________________________________________________________
     :show-inheritance:
 .. autoclass:: drjit.llvm.ad.ArrayXi64
     :show-inheritance:
-
-Miscellaneous
--------------
-
-.. autofunction:: graphviz
-.. autofunction:: graphviz_ad
-.. autofunction:: label
-.. autofunction:: set_label
