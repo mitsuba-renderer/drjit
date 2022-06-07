@@ -1845,10 +1845,10 @@ def select(m, t, f, /):
 
     .. math::
 
-    \mathrm{result}_i = \begin{cases}
-        x_i,\quad&\text{if condition}_i,\\
-        y_i,\quad&\text{otherwise.}
-    \end{cases}
+    \\mathrm{result}_i = \\begin{cases}
+        x_i,\\quad&\\text{if condition}_i,\\\\
+        y_i,\\quad&\\text{otherwise.}
+    \\end{cases}
 
     Args:
         condition (bool | drjit.ArrayBase): A Python or Dr.Jit mask/boolean array
@@ -1972,7 +1972,7 @@ def isfinite(arg, /):
 def lerp(a, b, t, /):
     '''
     lerp(a, b, t, /)
-    Blends between the values ``a`` and ``b`` using the expression :math:`a \cdot (1 - t) + b \cdot t`
+    Blends between the values ``a`` and ``b`` using the expression :math:`a \\cdot (1 - t) + b \\cdot t`
 
     Args:
         a (int | float | drjit.ArrayBase): A Python or Dr.Jit array
@@ -2087,6 +2087,28 @@ def imag(arg, /):
         return Array3f(arg[0], arg[1], arg[2])
     else:
         return type(arg)(0)
+
+
+def conj(arg, /):
+    '''
+    Return the complex conjugate of a provided Dr.Jit array.
+
+    When the provided array isn't an instance of :py:class:`drjit.Complex` or
+    :py:class:`drjit.Quaternion`, this function returns the input unchanged.
+
+    Args:
+        arg (int | float | drjit.ArrayBase): A Python or Dr.Jit array
+
+    Returns:
+        float | drjit.ArrayBase: Real part of the input array
+    '''
+
+    if _dr.is_complex_v(arg):
+        return type(arg)(arg.real, -arg.imag)
+    elif _dr.is_quaternion_v(arg):
+        return type(arg)(-arg.x, -arg.y, -arg.z, arg.w)
+    else:
+        return arg
 
 
 def tzcnt(arg, /):
@@ -2858,30 +2880,76 @@ def cbrt(arg, /):
         return _math.pow(arg, 1.0 / 3.0)
 
 
-def erf(a):
-    if isinstance(a, ArrayBase):
-        return a.erf_()
+def erf(arg, /):
+    '''
+    Evaluates the error function defined as
+
+    .. math::
+
+        \\mathrm{erf}(x)=\\frac{2}{\\sqrt{\\pi}}\\int_0^x e^{-t^2}\\,\\mathrm{d}t.
+
+    Requires a real-valued input array ``x``.
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Value of the error function at the input value
+    '''
+    if isinstance(arg, ArrayBase):
+        return arg.erf_()
     else:
         return _math.erf(a)
 
 
-def erfinv(a):
-    if isinstance(a, ArrayBase):
-        return a.erfinv_()
+def erfinv(arg, /):
+    '''
+    Evaluates the inverse of the error function :py:func:`drjit.erf`.
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Value of the inverse of the error function at the input value
+    '''
+    if isinstance(arg, ArrayBase):
+        return arg.erfinv_()
     else:
         raise Exception("erfinv(): only implemented for drjit types!")
 
 
-def lgamma(a):
-    if isinstance(a, ArrayBase):
-        return a.lgamma_()
+def lgamma(arg, /):
+    '''
+    Evaluates the natural logarithm of the Gamma function.
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Value of the natural logarithm of the Gamma function at the input value
+    '''
+    if isinstance(arg, ArrayBase):
+        return arg.lgamma_()
     else:
         return _math.lgamma(a)
 
 
-def tgamma(a):
-    if isinstance(a, ArrayBase):
-        return a.tgamma_()
+def tgamma(arg, /):
+    '''
+    Evaluates the Gamma function defined as
+
+    .. math::
+
+        \\Gamma(x)=\\int_0^\\infty t^{x-1} e^{-t}\\,\\mathrm{d}t.
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Value of the Gamma function at the input value
+    '''
+    if isinstance(arg, ArrayBase):
+        return arg.tgamma_()
     else:
         return _math.gamma(a)
 
@@ -3060,6 +3128,22 @@ def deg2rad(arg, /):
 
 
 def shuffle(perm, value):
+    '''
+    Permute the entries of the provided Dr.Jit array for the indices given in ``perm``.
+
+    The pseudocode for this operation is
+
+    .. code-block:: python
+
+        out = [value[p] for p in perm]
+
+    Args:
+        perm (drjit.ArrayBase): A Python list of integers
+        value (drjit.ArrayBase): A Dr.Jit array type
+
+    Returns:
+        Shuffled input array
+    '''
     if not _dr.is_array_v(value) or len(perm) != value.Size:
         raise Exception("shuffle(): incompatible input!")
 
@@ -3070,22 +3154,57 @@ def shuffle(perm, value):
     return result
 
 
-def compress(mask):
+def compress(mask, /):
+    '''
+    compress(arg, /) -> int | drjit.ArrayBase
+    Compress a mask into a array of nonzero indices.
+
+    This function takes an boolean array as input and then returns the
+    indices of nonzero entries.
+
+    .. danger::
+        This function internally performs a synchronization step.
+
+    Args:
+        arg (bool | drjit.ArrayBase): A Python or Dr.Jit boolean type
+
+    Returns:
+        Array of nonzero indices
+    '''
     if not _dr.is_mask_v(mask) or not mask.IsDynamic:
         raise Exception("compress(): incompatible input!")
     return mask.compress_()
 
 
-def count(a):
-    if _var_is_drjit(a):
-        if a.Type != VarType.Bool:
+def count(arg, /):
+    '''
+    count(arg, /) -> int | drjit.ArrayBase
+    Efficiently computes the number of entries whose boolean values
+    are ``True``, i.e.
+
+    .. code-block:: python
+
+        (value[0] ? 1 : 0) + ... (value[Size - 1] ? 1 : 0)
+
+    For 1D arrays, ``count()`` returns a result of type ``int``. For
+    multidimensional arrays, the horizontal reduction is performed over the
+    *outermost* dimension.
+
+    Args:
+        arg (float | int | drjit.ArrayBase): A Python or Dr.Jit boolean type
+
+    Returns:
+        Number of entries whose mask bits are turned on
+    '''
+    if _var_is_drjit(arg):
+        if arg.Type != VarType.Bool:
             raise Exception("count(): input array must be a mask!")
-        return a.count_()
-    elif isinstance(a, bool):
-        return 1 if a else 0
-    elif _dr.is_iterable_v(a):
+        return arg.count_()
+    elif isinstance(arg, bool):
+        return 1 if arg else 0
+    elif _dr.is_iterable_v(arg):
         result = 0
-        for index, value in enumerate(a):
+        for index, value in enumerate(arg):
             if index == 0:
                 result = _dr.select(value, 0, 1)
             else:
@@ -3603,16 +3722,16 @@ def normalize(arg, /):
     return arg * _dr.rsqrt(_dr.squared_norm(arg))
 
 
-def conj(a):
-    if _dr.is_complex_v(a):
-        return type(a)(a.real, -a.imag)
-    elif _dr.is_quaternion_v(a):
-        return type(a)(-a.x, -a.y, -a.z, a.w)
-    else:
-        return a
-
-
 def hypot(a, b):
+    '''
+    Computes :math:`\\sqrt{x^2+y^2}` while avoiding overflow and underflow.
+
+    Args:
+        arg (list | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+    Returns:
+        Hypotenuse value
+    '''
     a, b = _dr.abs(a), _dr.abs(b)
     maxval = _dr.maximum(a, b)
     minval = _dr.minimum(a, b)
@@ -3626,128 +3745,67 @@ def hypot(a, b):
     )
 
 
-def tile(array, count: int):
-    if not _dr.is_array_v(array) or not isinstance(count, int):
-        raise("tile(): invalid input types!")
-    elif not array.IsDynamic:
-        raise("tile(): first input argument must be a dynamic Dr.Jit array!")
-
-    size = len(array)
-    t = type(array)
-
-    if array.Depth > 1:
-        result = t()
-
-        if array.Size == Dynamic:
-            result.init_(size)
-
-        for i in range(size):
-            result[i] = _dr.tile(array[i], count)
-
-        return result
-    else:
-        index = _dr.arange(_dr.uint_array_t(t), size * count) % size
-        return _dr.gather(t, array, index)
-
-
-def repeat(array, count: int):
-    if not _dr.is_array_v(array) or not isinstance(count, int):
-        raise("tile(): invalid input types!")
-    elif not array.IsDynamic:
-        raise("tile(): first input argument must be a dynamic Dr.Jit array!")
-
-    size = len(array)
-    t = type(array)
-
-    if array.Depth > 1:
-        result = t()
-
-        if array.Size == Dynamic:
-            result.init_(size)
-
-        for i in range(size):
-            result[i] = _dr.repeat(array[i], count)
-
-        return result
-    else:
-        index = _dr.arange(_dr.uint_array_t(t), size * count) // count
-        return _dr.gather(t, array, index)
-
-
-def meshgrid(*args, indexing='xy'):
+def block_sum(value, size):
     '''
-    Creates a grid coordinates based on the coordinates contained in the
-    provided one-dimensional arrays.
+    Sum over elements within blocks
 
-    The indexing keyword argument allows this function to support both matrix
-    and Cartesian indexing conventions. If given the string 'ij', it will return
-    a grid coordinates with matrix indexing. If given 'xy', it will return a
-    grid coordinates with Cartesian indexing.
-
-    .. codeblock::
-
-        import drjit as dr
-
-        x, y = dr.meshgrid(
-            dr.arange(dr.llvm.UInt, 4),
-            dr.arange(dr.llvm.UInt, 4)
-        )
-
-        # x = [0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3]
-        # y = [0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3]
+    This function adds all elements of contiguous blocks of size ``size``
+    in the input array ``value`` and writes them to the returned array.
+    For example, ``a, b, c, d, e, f`` turns into ``a+b, c+d, e+f`` when
+    ``size == 2``. The length of the input array must be a multiple of ``size``.
 
     Args:
-        args (drjit.ArrayBase): Dr.Jit one-dimensional coordinate arrays
-
-        indexing (str): Specifies the indexing conventions
+        arg (drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+        size (int): size of the block
 
     Returns:
-        tuple: Grid coordinates
+        Sum over elements within blocks
     '''
-    if indexing != "ij" and indexing != "xy":
-        raise Exception("meshgrid(): 'indexing' argument must equal"
-                        " 'ij' or 'xy'!")
-
-    if len(args) == 0:
-        return ()
-    elif len(args) == 1:
-        return args[0]
-
-    t = type(args[0])
-    for v in args:
-        if not _dr.is_dynamic_array_v(v) or \
-           _dr.depth_v(v) != 1 or type(v) is not t:
-            raise Exception("meshgrid(): consistent 1D dynamic arrays expected!")
-
-    size = _dr.prod((len(v) for v in args))
-    index = _dr.arange(_dr.uint32_array_t(t), size)
-
-    result = []
-
-    # This seems non-symmetric but is necessary to be consistent with NumPy
-    if indexing == "xy":
-        args = (args[1], args[0], *args[2:])
-
-    for v in args:
-        size //= len(v)
-        index_v = index // size
-        index = _dr.fma(-index_v, size, index)
-        result.append(_dr.gather(t, v, index_v))
-
-    if indexing == "xy":
-        result[0], result[1] = result[1], result[0]
-
-    return tuple(result)
-
-
-def block_sum(value, block_size):
     if _dr.is_jit_v(value):
-        return value.block_sum_(block_size)
+        return value.block_sum_(size)
     else:
         raise Exception("block_sum(): requires a JIT array!")
 
 
 def binary_search(start, end, pred):
+    '''
+    Perform binary search over a range given a predicate ``pred``, which
+    monotonically decreases over this range (i.e. max one ``True`` -> ``False``
+    transition).
+
+    Given a (scalar) ``start`` and ``end`` index of a range, this function
+    evaluates a predicate ``floor(log2(end-start) + 1)`` times with index
+    values on the interval [start, end] (inclusive) to find the first index
+    that no longer satisfies it. Note that the template parameter ``Index`` is
+    automatically inferred from the supplied predicate. Specifically, the
+    predicate takes an index array as input argument. When ``pred`` is ``False``
+    for all entries, the function returns ``start``, and when it is ``True`` for
+    all cases, it returns ``end``.
+
+    The following code example shows a typical use case: ``data`` contains a
+    sorted list of floating point numbers, and the goal is to map floating
+    point entries of ``x`` to the first index ``j`` such that ``data[j] >= threshold``
+    (and all of this of course in parallel for each vector element).
+
+    .. code-block::
+
+        dtype = dr.llvm.Float
+        data = dtype(...)
+        threshold = dtype(...)
+
+        index = dr.binary_search(
+            0, len(data) - 1,
+            lambda index: dr.gather(dtype, data, index) < threshold
+        )
+
+    Args:
+        start (int): Starting index for the search range
+        end (int): Ending index for the search range
+        pred (function): The predicate function to be evaluated
+
+    Returns:
+        Index array resulting from the binary search
+    '''
     assert isinstance(start, int) and isinstance(end, int)
 
     iterations = _dr.log2i(end - start) + 1 if start < end else 0
@@ -3766,14 +3824,24 @@ def binary_search(start, end, pred):
 #    Transformations, matrices, operations for 3D vector spaces
 # -------------------------------------------------------------------
 
-def cross(a, b):
+def cross(a, b, /):
+    '''
+    Returns the cross-product of the two input 3D arrays
+
+    Args:
+        arg0 (list | drjit.ArrayBase): A Python or Dr.Jit 3D type
+        arg1 (list | drjit.ArrayBase): A Python or Dr.Jit 3D type
+
+    Returns:
+        Cross-product of the two input 3D arrays
+    '''
     if _dr.size_v(a) != 3 or _dr.size_v(a) != 3:
         raise Exception("cross(): requires 3D input arrays!")
 
     ta, tb = type(a), type(b)
 
     return _dr.fma(ta(a.y, a.z, a.x), tb(b.z, b.x, b.y),
-                     -ta(a.z, a.x, a.y) * tb(b.y, b.z, b.x))
+                   -ta(a.z, a.x, a.y) * tb(b.y, b.z, b.x))
 
 
 # -------------------------------------------------------------------
@@ -3798,10 +3866,10 @@ def detach(arg, preserve_type=True):
 
     Args:
         arg (object): An arbitrary Dr.Jit array, tensor,
-            :ref:`custom data structure <custom-struct>`, sequence, or mapping.
+          :ref:`custom data structure <custom-struct>`, sequence, or mapping.
 
         preserve_type (bool): Defines whether the returned variable should preserve
-            the type of the input variable.
+          the type of the input variable.
     Returns:
         object: The detached variable.
     '''
@@ -3828,10 +3896,10 @@ def grad(arg, preserve_type=True):
 
     Args:
         arg (object): An arbitrary Dr.Jit array, tensor,
-            :ref:`custom data structure <custom-struct>`, sequences, or mapping.
+          :ref:`custom data structure <custom-struct>`, sequences, or mapping.
 
         preserve_type (bool): Defines whether the returned variable should preserve
-            the type of the input variable.
+          the type of the input variable.
 
     Returns:
         object: the gradient value associated to the input variable.
@@ -3866,10 +3934,10 @@ def set_grad(dst, src):
 
     Args:
         dst (object): An arbitrary Dr.Jit array, tensor,
-            :ref:`custom data structure <custom-struct>`, sequences, or mapping.
+          :ref:`custom data structure <custom-struct>`, sequences, or mapping.
 
         src (object): An arbitrary Dr.Jit array, tensor,
-            :ref:`custom data structure <custom-struct>`, sequences, or mapping.
+          :ref:`custom data structure <custom-struct>`, sequences, or mapping.
     '''
     if _dr.is_diff_v(dst) and dst.IsFloat:
         if _dr.is_diff_v(src):
@@ -3906,10 +3974,10 @@ def accum_grad(dst, src):
 
     Args:
         dst (object): An arbitrary Dr.Jit array, tensor,
-            :ref:`custom data structure <custom-struct>`, sequences, or mapping.
+          :ref:`custom data structure <custom-struct>`, sequences, or mapping.
 
         src (object): An arbitrary Dr.Jit array, tensor,
-            :ref:`custom data structure <custom-struct>`, sequences, or mapping.
+          :ref:`custom data structure <custom-struct>`, sequences, or mapping.
     '''
     if _dr.is_diff_v(dst) and dst.IsFloat:
         if _dr.is_diff_v(src):
@@ -3972,10 +4040,10 @@ def set_grad_enabled(arg, value):
 
     Args:
         arg (object): An arbitrary Dr.Jit array, tensor,
-            :ref:`custom data structure <custom-struct>`, sequence, or mapping.
+          :ref:`custom data structure <custom-struct>`, sequence, or mapping.
 
         value (bool): Defines whether gradient tracking should be enabled or
-            disabled.
+          disabled.
     '''
     if _dr.is_diff_v(arg) and arg.IsFloat:
         arg.set_grad_enabled_(value)
@@ -4006,7 +4074,7 @@ def enable_grad(*args):
 
     Args:
         *args (tuple): A variable-length list of Dr.Jit array instances,
-            :ref:`custom data structures <custom-struct>`, sequences, or mappings.
+          :ref:`custom data structures <custom-struct>`, sequences, or mappings.
     '''
     for arg in args:
         set_grad_enabled(arg, True)
@@ -4028,7 +4096,7 @@ def disable_grad(*args):
 
     Args:
         *args (tuple): A variable-length list of Dr.Jit array instances,
-            :ref:`custom data structures <custom-struct>`, sequences, or mappings.
+          :ref:`custom data structures <custom-struct>`, sequences, or mappings.
     '''
     for arg in args:
         set_grad_enabled(arg, False)
@@ -4143,7 +4211,7 @@ def enqueue(mode, *args):
         mode (ADMode): defines the enqueuing mode (backward or forward)
 
         *args (tuple): A variable-length list of Dr.Jit array instances, tensors,
-            :ref:`custom data structures <custom-struct>`, sequences, or mappings.
+          :ref:`custom data structures <custom-struct>`, sequences, or mappings.
     '''
     for a in args:
         if _dr.is_diff_v(a) and a.IsFloat:
@@ -4186,7 +4254,7 @@ def traverse(dtype, mode, flags=_dr.ADFlag.Default):
         mode (ADMode): defines the mode traversal (backward or forward)
 
         flags (ADFlag | int): flags to control what should and should not be
-        destructed during forward/backward mode traversal.
+          destructed during forward/backward mode traversal.
     '''
     assert isinstance(mode, _dr.ADMode)
 
@@ -4226,7 +4294,7 @@ def forward_from(arg, flags=_dr.ADFlag.Default):
         arg (object): A Dr.Jit differentiable array instance.
 
         flags (ADFlag | int): flags to control what should and should not be
-        destructed during the traversal. The default value is ``ADFlag.Default``.
+          destructed during the traversal. The default value is ``ADFlag.Default``.
     '''
     ta = type(arg)
     _check_grad_enabled('forward_from', ta, arg)
@@ -4253,7 +4321,7 @@ def forward_to(*args, flags=_dr.ADFlag.Default):
             :ref:`custom data structure <custom-struct>`, sequences, or mapping.
 
         flags (ADFlag | int): flags to control what should and should not be
-        destructed during the traversal. The default value is ``ADFlag.Default``.
+          destructed during the traversal. The default value is ``ADFlag.Default``.
 
     Returns:
         object: the gradient value associated to the output variables.
@@ -4287,7 +4355,7 @@ def forward(arg, flags=_dr.ADFlag.Default):
         arg (object): A Dr.Jit differentiable array instance.
 
         flags (ADFlag | int): flags to control what should and should not be
-        destructed during the traversal. The default value is ``ADFlag.Default``.
+          destructed during the traversal. The default value is ``ADFlag.Default``.
     '''
     forward_from(arg, flags)
 
@@ -4303,7 +4371,7 @@ def backward_from(arg, flags=_dr.ADFlag.Default):
         arg (object): A Dr.Jit differentiable array instance.
 
         flags (ADFlag | int): flags to control what should and should not be
-        destructed during the traversal. The default value is ``ADFlag.Default``.
+          destructed during the traversal. The default value is ``ADFlag.Default``.
     '''
     ta = type(arg)
     _check_grad_enabled('backward_from', ta, arg)
@@ -4332,10 +4400,10 @@ def backward_to(*args, flags=_dr.ADFlag.Default):
 
     Args:
         *args (tuple): A variable-length list of Dr.Jit differentiable array, tensor,
-            :ref:`custom data structure <custom-struct>`, sequences, or mapping.
+          :ref:`custom data structure <custom-struct>`, sequences, or mapping.
 
         flags (ADFlag | int): flags to control what should and should not be
-        destructed during the traversal. The default value is ``ADFlag.Default``.
+          destructed during the traversal. The default value is ``ADFlag.Default``.
 
     Returns:
         object: the gradient value associated to the output variables.
@@ -4366,7 +4434,7 @@ def backward(arg, flags=_dr.ADFlag.Default):
         arg (object): A Dr.Jit differentiable array instance.
 
         flags (ADFlag | int): flags to control what should and should not be
-        destructed during the traversal. The default value is ``ADFlag.Default``.
+          destructed during the traversal. The default value is ``ADFlag.Default``.
     '''
     backward_from(arg, flags)
 
@@ -4408,6 +4476,7 @@ def zeros(dtype, shape=1):
     Args:
         dtype (type): Desired Dr.Jit array type, Python scalar type, or
           :ref:`custom data structure <custom-struct>`.
+
         shape (Sequence[int] | int): Shape of the desired array
 
     Returns:
@@ -4466,6 +4535,7 @@ def empty(dtype, shape=1):
     Args:
         dtype (type): Desired Dr.Jit array type, Python scalar type, or
           :ref:`custom data structure <custom-struct>`.
+
         shape (Sequence[int] | int): Shape of the desired array
 
     Returns:
@@ -4484,13 +4554,296 @@ def empty(dtype, shape=1):
         return dtype(0)
 
 
-def full(type_, value, shape=1):
-    if not isinstance(type_, type):
+def full(dtype, value, shape=1):
+    '''
+    Return an constant-valued instance of the desired type and shape
+
+    This function can create constant-valued instances of various types. In
+    particular, ``dtype`` can be:
+
+    - A Dr.Jit array type like :py:class:`drjit.cuda.Array2f`. When ``shape``
+    specifies a sequence, it must be compatible with static dimensions of the
+    ``dtype``. For example, ``dr.full(dr.cuda.Array2f, value=1.0, shape=(3,
+    100))`` fails, since the leading dimension is incompatible with
+    :py:class:`drjit.cuda.Array2f`. When ``shape`` is an integer, it specifies
+    the size of the last (dynamic) dimension, if available.
+
+    - A tensorial type like :py:class:`drjit.scalar.TensorXf`. When ``shape``
+    specifies a sequence (list/tuple/..), it determines the tensor rank and
+    shape. When ``shape`` is an integer, the function creates a rank-1 tensor of
+    the specified size.
+
+    - A :ref:`custom data structure <custom-struct>`. In this case,
+    :py:func:`drjit.full()` will invoke itself recursively to initialize
+    each field of the data structure.
+
+    - A scalar Python type like ``int``, ``float``, or ``bool``. The ``shape``
+    parameter is ignored in this case.
+
+    Args:
+        dtype (type): Desired Dr.Jit array type, Python scalar type, or
+          :ref:`custom data structure <custom-struct>`.
+
+        value (object): An instance of the underlying scalar type
+          (``float``/``int``/``bool``, etc.) that will be used to initialize the
+          array contents.
+
+        shape (Sequence[int] | int): Shape of the desired array
+
+    Returns:
+        object: A instance of type ``dtype`` filled with ``value``
+    '''
+    if not isinstance(dtype, type):
         raise Exception('full(): Type expected as first argument')
-    elif issubclass(type_, ArrayBase):
-        return type_.full_(value, shape)
+    elif issubclass(dtype, ArrayBase):
+        return dtype.full_(value, shape)
     else:
-        return type_(value)
+        return dtype(value)
+
+
+def linspace(dtype, start, stop, num=1, endpoint=True):
+    '''
+    This function generates an evenly spaced floating point sequence of size
+    ``num`` covering the interval [``start``, ``stop``].
+
+    Args:
+        dtype (type): Desired Dr.Jit array type. The ``dtype`` must refer to a
+          dynamically sized 1D Dr.Jit floating point array, such as
+          :py:class:`drjit.scalar.ArrayXf` or :py:class:`drjit.cuda.Float`.
+
+        start (float): Start of the interval.
+
+        stop (float): End of the interval.
+
+        num (int): Number of samples to generate.
+
+        endpoint (bool): Should the interval endpoint be included? The default is `True`.
+
+    Returns:
+        object: The computed sequence of type ``dtype``.
+    '''
+    if not isinstance(dtype, type):
+        raise Exception('linspace(): Type expected as first argument')
+    elif issubclass(dtype, ArrayBase):
+        return dtype.linspace_(start, stop, num, endpoint)
+    else:
+        return dtype(start)
+
+
+def arange(dtype, start=None, end=None, step=1):
+    '''
+    This function generates an integer sequence on the interval [``start``,
+    ``stop``) with step size ``step``, where ``start`` = 0 and ``step`` = 1 if not
+    specified.
+
+    Args:
+        dtype (type): Desired Dr.Jit array type. The ``dtype`` must refer to a
+          dynamically sized 1D Dr.Jit array such as :py:class:`drjit.scalar.ArrayXu`
+          or :py:class:`drjit.cuda.Float`.
+
+        start (int): Start of the interval. The default value is `0`.
+
+        stop/size (int): End of the interval (not included). The name of this
+          parameter differs between the two provided overloads.
+
+        step (int): Spacing between values. The default value is `1`.
+
+    Returns:
+        object: The computed sequence of type ``dtype``.
+    '''
+    if start is None:
+        start = 0
+        end = 1
+    elif end is None:
+        end = start
+        start = 0
+
+    if not isinstance(dtype, type):
+        raise Exception('arange(): Type expected as first argument')
+    elif issubclass(dtype, ArrayBase):
+        return dtype.arange_(start, end, step)
+    else:
+        return dtype(start)
+
+
+def identity(dtype, size=1):
+    '''
+    Return the identity array of the desired type and size
+
+    This function can create identity instances of various types. In
+    particular, ``dtype`` can be:
+
+    - A Dr.Jit matrix type (like :py:class:`drjit.cuda.Matrix4f`).
+
+    - A Dr.Jit complex type (like :py:class:`drjit.cuda.Quaternion4f`).
+
+    - Any other Dr.Jit array type. In this case this function is equivalent to ``full(dtype, 1, size)``
+
+    - A scalar Python type like ``int``, ``float``, or ``bool``. The ``size``
+      parameter is ignored in this case.
+
+    Args:
+        dtype (type): Desired Dr.Jit array type, Python scalar type, or
+          :ref:`custom data structure <custom-struct>`.
+
+        value (object): An instance of the underlying scalar type
+          (``float``/``int``/``bool``, etc.) that will be used to initialize the
+          array contents.
+
+        size (int): Size of the desired array | matrix
+
+    Returns:
+        object: The identity array of type ``dtype`` of size ``size``
+    '''
+    if _dr.is_special_v(dtype):
+        result = _dr.zeros(dtype, size)
+
+        if dtype.IsComplex or dtype.IsQuaternion:
+            result.real = identity(dtype.Value, size)
+        elif dtype.IsMatrix:
+            one = identity(dtype.Value.Value, size)
+            for i in range(dtype.Size):
+                result[i, i] = one
+        return result
+    elif _dr.is_array_v(dtype):
+        return full(dtype, 1, size)
+    else:
+        return dtype(1)
+
+
+def tile(arg, count: int):
+    '''
+    This function constructs an Dr.Jit array by repeating ``arg`` ``count`` times.
+
+    Args:
+        arg (drjit.ArrayBase): A Dr.Jit type
+        count (int): Number of repetitions
+
+    Returns:
+        object: The tiled output array.
+    '''
+    if not _dr.is_array_v(arg) or not isinstance(count, int):
+        raise("tile(): invalid input types!")
+    elif not arg.IsDynamic:
+        raise("tile(): first input argument must be a dynamic Dr.Jit array!")
+
+    size = len(arg)
+    t = type(arg)
+
+    if arg.Depth > 1:
+        result = t()
+
+        if arg.Size == Dynamic:
+            result.init_(size)
+
+        for i in range(size):
+            result[i] = _dr.tile(arg[i], count)
+
+        return result
+    else:
+        index = _dr.arange(_dr.uint_array_t(t), size * count) % size
+        return _dr.gather(t, arg, index)
+
+
+def repeat(array, count: int):
+    '''
+    This function constructs an Dr.Jit array by repeating the elements of ``arg``
+    ``count`` times.
+
+    Args:
+        arg (drjit.ArrayBase): A Dr.Jit type
+        count (int): Number of repetitions for the elements
+
+    Returns:
+        object: Output array where the elements where repeated.
+    '''
+    if not _dr.is_array_v(array) or not isinstance(count, int):
+        raise("tile(): invalid input types!")
+    elif not array.IsDynamic:
+        raise("tile(): first input argument must be a dynamic Dr.Jit array!")
+
+    size = len(array)
+    t = type(array)
+
+    if array.Depth > 1:
+        result = t()
+
+        if array.Size == Dynamic:
+            result.init_(size)
+
+        for i in range(size):
+            result[i] = _dr.repeat(array[i], count)
+
+        return result
+    else:
+        index = _dr.arange(_dr.uint_array_t(t), size * count) // count
+        return _dr.gather(t, array, index)
+
+
+def meshgrid(*args, indexing='xy'):
+    '''
+    Creates a grid coordinates based on the coordinates contained in the
+    provided one-dimensional arrays.
+
+    The indexing keyword argument allows this function to support both matrix
+    and Cartesian indexing conventions. If given the string 'ij', it will return
+    a grid coordinates with matrix indexing. If given 'xy', it will return a
+    grid coordinates with Cartesian indexing.
+
+    .. codeblock::
+
+        import drjit as dr
+
+        x, y = dr.meshgrid(
+            dr.arange(dr.llvm.UInt, 4),
+            dr.arange(dr.llvm.UInt, 4)
+        )
+
+        # x = [0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3]
+        # y = [0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3]
+
+    Args:
+        args (drjit.ArrayBase): Dr.Jit one-dimensional coordinate arrays
+
+        indexing (str): Specifies the indexing conventions
+
+    Returns:
+        tuple: Grid coordinates
+    '''
+    if indexing != "ij" and indexing != "xy":
+        raise Exception("meshgrid(): 'indexing' argument must equal"
+                        " 'ij' or 'xy'!")
+
+    if len(args) == 0:
+        return ()
+    elif len(args) == 1:
+        return args[0]
+
+    t = type(args[0])
+    for v in args:
+        if not _dr.is_dynamic_array_v(v) or \
+           _dr.depth_v(v) != 1 or type(v) is not t:
+            raise Exception("meshgrid(): consistent 1D dynamic arrays expected!")
+
+    size = _dr.prod((len(v) for v in args))
+    index = _dr.arange(_dr.uint32_array_t(t), size)
+
+    result = []
+
+    # This seems non-symmetric but is necessary to be consistent with NumPy
+    if indexing == "xy":
+        args = (args[1], args[0], *args[2:])
+
+    for v in args:
+        size //= len(v)
+        index_v = index // size
+        index = _dr.fma(-index_v, size, index)
+        result.append(_dr.gather(t, v, index_v))
+
+    if indexing == "xy":
+        result[0], result[1] = result[1], result[0]
+
+    return tuple(result)
 
 
 def opaque(type_, value, shape=1):
@@ -4544,80 +4897,6 @@ def make_opaque(*args):
                 make_opaque(v)
 
 
-def linspace(dtype, start, stop, num=1, endpoint=True):
-    '''
-    This function generates an evenly spaced floating point sequence of size
-    ``num`` covering the interval [``start``, ``stop``].
-
-    Args:
-        dtype (type): Desired Dr.Jit array type. The ``dtype`` must refer to a
-          dynamically sized 1D Dr.Jit floating point array, such as
-          :py:class:`drjit.scalar.ArrayXf` or :py:class:`drjit.cuda.Float`.
-        start (float): Start of the interval.
-        stop (float): End of the interval.
-        num (int): Number of samples to generate.
-        endpoint (bool): Should the interval endpoint be included? The default is `True`.
-
-    Returns:
-        object: The computed sequence of type ``dtype``.
-    '''
-    if not isinstance(dtype, type):
-        raise Exception('linspace(): Type expected as first argument')
-    elif issubclass(dtype, ArrayBase):
-        return dtype.linspace_(start, stop, num, endpoint)
-    else:
-        return dtype(start)
-
-
-def arange(dtype, start=None, end=None, step=1):
-    '''
-    This function generates an integer sequence on the interval [``start``,
-    ``stop``) with step size ``step``, where ``start`` = 0 and ``step`` = 1 if not
-    specified.
-
-    Args:
-        dtype (type): Desired Dr.Jit array type. The ``dtype`` must refer to a
-          dynamically sized 1D Dr.Jit array such as :py:class:`drjit.scalar.ArrayXu`
-          or :py:class:`drjit.cuda.Float`.
-        start (int): Start of the interval. The default value is `0`.
-        stop/size (int): End of the interval (not included). The name of this
-          parameter differs between the two provided overloads.
-        step (int): Spacing between values. The default value is `1`.
-
-    Returns:
-        object: The computed sequence of type ``dtype``.
-    '''
-    if start is None:
-        start = 0
-        end = 1
-    elif end is None:
-        end = start
-        start = 0
-
-    if not isinstance(dtype, type):
-        raise Exception('arange(): Type expected as first argument')
-    elif issubclass(dtype, ArrayBase):
-        return dtype.arange_(start, end, step)
-    else:
-        return dtype(start)
-
-
-def identity(type_, size=1):
-    if _dr.is_special_v(type_):
-        result = _dr.zeros(type_, size)
-
-        if type_.IsComplex or type_.IsQuaternion:
-            result.real = identity(type_.Value, size)
-        elif type_.IsMatrix:
-            one = identity(type_.Value.Value, size)
-            for i in range(type_.Size):
-                result[i, i] = one
-        return result
-    elif _dr.is_array_v(type_):
-        return full(type_, 1, size)
-    else:
-        return type_(1)
-
 # -------------------------------------------------------------------
 #                  Higher-level utility functions
 # -------------------------------------------------------------------
@@ -4635,9 +4914,13 @@ def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
 
     Args:
         a (object): A Dr.Jit array or other kind of numeric sequence type.
+
         b (object): A Dr.Jit array or other kind of numeric sequence type.
+
         rtol (float): A relative error threshold. The default is :math:`10^{-5}`.
+
         atol (float): An absolute error threshold. The default is :math:`10^{-8}`.
+
         equal_nan (bool): If **a** and **b** *both* contain a *NaN* (Not a Number) entry,
                           should they be considered equal? The default is ``False``.
 
@@ -4704,6 +4987,24 @@ def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
 
 
 def printf_async(fmt, *args, active=True):
+    '''
+    Print the specified variable contents from the kernel asynchronously.
+
+    This function inserts a print statement directly into the kernel being
+    generated. Note that this may produce a very large volume of output,
+    and a nonzero ``active`` parameter can be supplied to suppress it based
+    on condition.
+
+    Args:
+        fmt (str): The string to be printed. It might contain *format specifiers*
+          (e.g. subsequences beginning with %)
+
+        *args (tuple): Additional array arguments to be formatted and inserted
+          in the printed string replacing their respective specifiers.
+
+        active (bool | drjit.ArrayBase): Mask array to suppress printing specific
+          elements in the supplied additional arrays.
+    '''
     indices = []
     is_cuda, is_llvm = _dr.is_cuda_v(active), _dr.is_llvm_v(active)
 
