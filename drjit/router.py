@@ -172,6 +172,9 @@ def _var_promote_select(a0, a1, a2):
 
 
 def _replace_scalar(cls, vt, diff=None):
+    '''
+    Replace the scalar type associated to a Dr.Jit type, specified by a VarType
+    '''
     name = _array_name(cls.Prefix, vt, cls.Shape, cls.IsScalar)
     modname = cls.__module__
 
@@ -208,30 +211,6 @@ ArrayBase.ReplaceScalar = classmethod(_replace_scalar)
 # -------------------------------------------------------------------
 
 
-def _shape_impl(a, i, shape):
-    if not isinstance(a, ArrayBase):
-        return
-
-    size = len(a)
-    if i < len(shape):
-        cur = shape[i]
-        maxval = _builtins.max(cur, size)
-
-        if maxval != size and size != 1:
-            return False
-
-        shape[i] = maxval
-    else:
-        shape.append(size)
-
-    if issubclass(a.Value, ArrayBase):
-        for j in range(size):
-            if not _shape_impl(a[j], i + 1, shape):
-                return False
-
-    return True
-
-
 def shape(arg, /):
     '''
     shape(arg, /)
@@ -256,6 +235,29 @@ def shape(arg, /):
     '''
     if _dr.is_tensor_v(arg):
         return arg.shape
+
+    def _shape_impl(a, i, shape):
+        if not isinstance(a, ArrayBase):
+            return
+
+        size = len(a)
+        if i < len(shape):
+            cur = shape[i]
+            maxval = _builtins.max(cur, size)
+
+            if maxval != size and size != 1:
+                return False
+
+            shape[i] = maxval
+        else:
+            shape.append(size)
+
+        if issubclass(a.Value, ArrayBase):
+            for j in range(size):
+                if not _shape_impl(a[j], i + 1, shape):
+                    return False
+
+        return True
 
     s = []
     if not _shape_impl(arg, 0, s):
@@ -295,7 +297,7 @@ def width(arg, /):
 
 
 def resize(arg, size):
-    r'''
+    '''
     resize(arg, size)
     Resize in-place the provided Dr.Jit array, tensor, or
     :ref:`custom data structure <custom-struct>` to a new size.
@@ -343,7 +345,9 @@ _print_threshold = 20
 
 
 def _repr_impl(self, shape, buf, *idx):
-    '''Implementation detail of op_repr()'''
+    '''
+    Implementation detail of op_repr()
+    '''
     k = len(shape) - len(idx)
     if k == 0:
         el = idx[0]
@@ -388,10 +392,16 @@ def _repr_impl(self, shape, buf, *idx):
 
 
 def print_threshold():
+    '''
+    Return the maximum number of entries displayed when printing an array
+    '''
     return _print_threshold
 
 
 def set_print_threshold(size):
+    '''
+    Set the maximum number of entries displayed when printing an array
+    '''
     global _print_threshold
     _print_threshold = _builtins.max(size, 11)
 
@@ -555,6 +565,7 @@ def reinterpret_array_v(dtype, value):
 # -------------------------------------------------------------------
 #                      Scatter/gather operations
 # -------------------------------------------------------------------
+
 
 def _broadcast_index(target_type, index):
     size = target_type.Size
@@ -1035,7 +1046,7 @@ def ravel(array, order='A'):
 
 
 def unravel(dtype, array, order='F'):
-    """
+    '''
     Load a sequence of Dr.Jit vectors/matrices/etc. from a contiguous flat array
 
     This operation implements the inverse of :py:func:`drjit.ravel()`. In contrast
@@ -1071,7 +1082,7 @@ def unravel(dtype, array, order='F'):
     Returns:
         object: An instance of type ``dtype`` containing the result of the unravel
         operation.
-    """
+    '''
     if not isinstance(array, ArrayBase) or array.Depth != 1:
         raise Exception('unravel(): array input must be a flat array!')
     elif not issubclass(dtype, ArrayBase) or dtype.Depth == 1:
@@ -1103,7 +1114,7 @@ def unravel(dtype, array, order='F'):
 
 
 def slice(value, index=None, return_type=None):
-    """
+    '''
     Slice a structure of arrays to return a single entry for a given index
 
     This function is the equivalent to ``__getitem__(index)`` for the *dynamic
@@ -1133,7 +1144,7 @@ def slice(value, index=None, return_type=None):
 
     Returns:
         object: Single entry of the structure of arrays.
-    """
+    '''
     t = type(value)
     if _dr.depth_v(t) > 1 or issubclass(t, _Sequence):
         size = len(value)
@@ -1669,6 +1680,16 @@ def mulhi(a, b):
 
 
 def sqr(a):
+    '''
+    sqr(arg, /)
+    Evaluate the square of the provided input.
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Square of the input
+    '''
     return a * a
 
 
@@ -2226,6 +2247,7 @@ def migrate(a, type_):
         return a.migrate_(type_)
     else:
         return a
+
 
 # -------------------------------------------------------------------
 #           Vertical operations -- transcendental functions
@@ -4497,7 +4519,7 @@ class CustomOp:
 
         dr.custom(MyCustomOp, *args)
     '''
-    # TODO: Add CustomOp.eval() 
+    # TODO: Add CustomOp.eval()
     def __init__(self):
         self._implicit_in = []
         self._implicit_out = []

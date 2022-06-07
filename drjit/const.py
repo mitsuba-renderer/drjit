@@ -42,7 +42,7 @@ _largest_64           = float.fromhex('0x1.fffffffffffffp+1023')  # noqa
 
 
 def epsilon(t):
-    r'''
+    '''
     Returns the machine epsilon.
 
     The machine epsilon gives an upper bound on the relative approximation
@@ -60,7 +60,7 @@ def epsilon(t):
 
 
 def one_minus_epsilon(t):
-    r'''
+    '''
     Returns one minus machine epsilon value.
 
     Args:
@@ -75,7 +75,7 @@ def one_minus_epsilon(t):
 
 
 def recip_overflow(t):
-    r'''
+    '''
     Returns the reciprocal overflow threshold value.
 
     Any numbers below this threshold will overflow to infinity when a reciprocal
@@ -93,7 +93,7 @@ def recip_overflow(t):
 
 
 def smallest(t):
-    r'''
+    '''
     Returns the smallest normalized floating point value.
 
     Args:
@@ -107,7 +107,7 @@ def smallest(t):
     return _smallest_64 if double_precision else _smallest_32
 
 def largest(t):
-    r'''
+    '''
     Returns the largest normalized floating point value.
 
     Args:
