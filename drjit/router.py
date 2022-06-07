@@ -3577,7 +3577,8 @@ def detach(arg, preserve_type=True):
     elif _dr.is_struct_v(arg):
         result = type(arg)()
         for k in type(arg).DRJIT_STRUCT.keys():
-            setattr(result, k, detach(getattr(arg, k), preserve_type=preserve_type))
+            setattr(result, k, detach(getattr(arg, k),
+                preserve_type=preserve_type))
         return result
     else:
         return arg
@@ -3599,11 +3600,16 @@ def grad(arg, preserve_type=True):
     Returns:
         object: the gradient value associated to the input variable.
     '''
-    # TODO: Properly deal with `preserve_type` set to `False`
     if _dr.is_diff_v(arg):
-        return arg.grad_()
+        if preserve_type:
+            return type(arg)(arg.grad_())
+        else:
+            return arg.grad_()
     elif _dr.is_struct_v(arg):
         result = type(arg)()
+        if not preserve_type:
+            raise Exception("grad(): preserve_type=True is required when "
+                            "getting the gradient of a custom data structure!")
         for k in type(arg).DRJIT_STRUCT.keys():
             setattr(result, k, grad(getattr(arg, k), preserve_type))
         return result
@@ -4744,12 +4750,32 @@ class CustomOp:
 
         dr.custom(MyCustomOp, *args)
     '''
-    # TODO: Add CustomOp.eval()
     def __init__(self):
         self._implicit_in = []
         self._implicit_out = []
 
+    def eval(self, *args):
+        '''
+        eval(self, *args) -> object
+        Evaluate the custom function in primal mode.
+
+        The inputs will be detached from the AD graph, and the output *must* also be
+        detached.
+
+        .. danger::
+
+            This method must be overriden, no default implementation provided.
+        '''
+        raise Exception("CustomOp.eval(): not implemented")
+
     def forward(self):
+        '''
+        Evaluated forward-mode derivatives.
+
+        .. danger::
+
+            This method must be overriden, no default implementation provided.
+        '''
         raise Exception("CustomOp.forward(): not implemented")
 
     def backward(self):
