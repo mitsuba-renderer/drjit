@@ -54,6 +54,16 @@ Miscellaneous operations
 .. autofunction:: resize
 .. autofunction:: slice_index
 .. autofunction:: meshgrid
+.. autofunction:: sign
+.. autofunction:: copysign
+.. autofunction:: mulsign
+.. autofunction:: arg
+.. autofunction:: real
+.. autofunction:: imag
+.. autofunction:: tzcnt
+.. autofunction:: lzcnt
+.. autofunction:: popcnt
+.. autofunction:: log2i
 
 Just-in-time compilation
 ------------------------
@@ -139,6 +149,7 @@ Standard mathematical functions
 .. autofunction:: minimum
 .. autofunction:: maximum
 .. autofunction:: clip
+.. autofunction:: clamp
 .. autofunction:: fma
 .. autofunction:: ceil
 .. autofunction:: floor
@@ -150,6 +161,7 @@ Standard mathematical functions
 .. autofunction:: rsqrt
 .. autofunction:: frexp
 .. autofunction:: ldexp
+.. autofunction:: lerp
 
 Transcendental functions
 ------------------------
