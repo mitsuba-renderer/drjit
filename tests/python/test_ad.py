@@ -279,9 +279,6 @@ def test06_replace_grad(m):
     x2 = x*x
     y2 = y*y
     z = dr.replace_grad(x2, y2)
-    print(f"{x2=}")
-    print(f"{y2=}")
-    print(f"{z=}")
     assert z.x.index_ad == y2.x.index_ad
     assert z.y.index_ad == y2.y.index_ad
     assert z.z.index_ad == y2.z.index_ad
@@ -1272,20 +1269,17 @@ def test58_custom_error(m):
 
 class Normalize(dr.CustomOp):
     def eval(self, value):
-        print('eval in')
         self.value = value
         self.inv_norm = dr.rcp(dr.norm(value))
         return value * self.inv_norm
 
     def forward(self):
-        print('forward!')
         grad_in = self.grad_in('value')
         grad_out = grad_in * self.inv_norm
         grad_out -= self.value * (dr.dot(self.value, grad_out) * dr.sqr(self.inv_norm))
         self.set_grad_out(grad_out)
 
     def backward(self):
-        print('backward!')
         grad_out = self.grad_out()
         grad_in = grad_out * self.inv_norm
         grad_in -= self.value * (dr.dot(self.value, grad_in) * dr.sqr(self.inv_norm))
