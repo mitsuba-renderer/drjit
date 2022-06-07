@@ -706,7 +706,7 @@ def schedule_(a0):
         if a0.Depth == 1:
             if a0.IsDiff:
                 a0 = a0.detach_()
-            result |= _dr.detail.schedule(a0.index())
+            result |= _dr.detail.schedule(a0.index)
         else:
             for i in range(len(a0)):
                 result |= a0[i].schedule_()
@@ -1367,13 +1367,13 @@ def migrate_(a, target):
 def index_(a):
     if not a.IsJIT:
         raise Exception("Expected a JIT array type!")
-    return tuple(v.index() for v in a)
+    return tuple(v.index for v in a)
 
 
 def index_ad_(a):
     if not a.IsDiff:
         raise Exception("Expected a differentiable array type!")
-    return tuple(v.index_ad() for v in a)
+    return tuple(v.index_ad for v in a)
 
 
 # -------------------------------------------------------------------

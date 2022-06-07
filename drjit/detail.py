@@ -503,8 +503,8 @@ def _loop_process_state(value: type, in_state: list, out_state: list,
                 _loop_process_state(value.entry_ref_(i), in_state,
                                     out_state, write, in_struct)
         else:
-            index = value.index()
-            index_ad = value.index_ad() if t.IsDiff else 0
+            index = value.index
+            index_ad = value.index_ad if t.IsDiff else 0
 
             if index_ad != 0 and _dr.flag(_dr.JitFlag.LoopRecord):
                 raise _dr.Exception(
@@ -721,8 +721,8 @@ def diff_vars(o, indices, check_grad_enabled=True):
     elif _dr.is_diff_v(o) and o.IsFloat:
         if _dr.is_tensor_v(o):
             result = diff_vars(o.array, indices, check_grad_enabled)
-        elif o.index_ad() != 0 and (not check_grad_enabled or o.grad_enabled_()):
-            indices.append(o.index_ad())
+        elif o.index_ad != 0 and (not check_grad_enabled or o.grad_enabled_()):
+            indices.append(o.index_ad)
             result = type(o)
     elif _dr.is_struct_v(o):
         for k in type(o).DRJIT_STRUCT.keys():
