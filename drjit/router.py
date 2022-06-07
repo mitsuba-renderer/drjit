@@ -4323,13 +4323,30 @@ def identity(type_, size=1):
 # -------------------------------------------------------------------
 
 def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
-    # Fast path for Dr.Jit arrays, avoid for special array types
-    # due to their non-standard broadcasting behavior
+    r'''
+    Returns ``True`` if two arrays are element-wise equal within a given error
+    tolerance.
+
+    The function considers both absolute and relative error thresholds. Specifically
+    **a** and **b** are considered equal if all elements satisfy
+
+    .. math::
+        |a - b| \le |b| \cdot \mathrm{rtol} + \mathrm{atol}.
+
+    Args:
+        a (object): A Dr.Jit array or other kind of numeric sequence type.
+        b (object): A Dr.Jit array or other kind of numeric sequence type.
+        rtol (float): A relative error threshold. The default is :math:`10^{-5}`.
+        atol (float): An absolute error threshold. The default is :math:`10^{-8}`.
+        equal_nan (bool): If **a** and **b** *both* contain a *NaN* (Not a Number) entry,
+                          should they be considered equal? The default is ``False``.
+
+    Returns:
+        bool: The result of the comparison.
+    '''
     if _dr.is_array_v(a) or _dr.is_array_v(b):
-        if _dr.is_diff_v(a):
-            a = _dr.detach(a)
-        if _dr.is_diff_v(b):
-            b = _dr.detach(b)
+        # No derivative tracking in the following
+        a, b = _dr.detach(a), _dr.detach(b)
 
         if _dr.is_array_v(a) and not _dr.is_float_v(a):
             a, _ = _var_promote(a, 1.0)
@@ -4346,8 +4363,10 @@ def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
         cond = diff <= abs(b) * rtol + _dr.full(type(diff), atol, shape)
         if _dr.is_float_v(a):
             cond |= _dr.eq(a, b)  # plus/minus infinity
+
         if equal_nan:
             cond |= _dr.isnan(a) & _dr.isnan(b)
+
         return _dr.all_nested(cond)
 
     def safe_len(x):
@@ -4356,22 +4375,29 @@ def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
         except TypeError:
             return 0
 
-    def safe_getitem(x, xl, i):
-        return x[i if xl > 1 else 0] if xl > 0 else x
+    def safe_getitem(x, len_x, i):
+        if len_x == 0:
+            return x
+        elif len_x == 1:
+            return x[0]
+        else:
+            return x[i]
 
-    la, lb = safe_len(a), safe_len(b)
-    size = _builtins.max(la, lb)
+    len_a, len_b = safe_len(a), safe_len(b)
+    len_ab = _builtins.max(len_a, len_b)
 
-    if la != size and la > 1 or lb != size and lb > 1:
-        raise Exception("allclose(): size mismatch (%i vs %i)!" % (la, lb))
-    elif size == 0:
+    if len_a != len_ab and len_a > 1 or \
+       len_b != len_ab and len_b > 1:
+        raise RuntimeError('drjit.allclose(): incompatible sizes '
+                           '(%i and %i)!' % (len_a, len_b))
+    elif len_ab == 0:
         if equal_nan and _math.isnan(a) and _math.isnan(b):
             return True
-        return abs(a - b) <= abs(b) * rtol + atol
+        return _dr.abs(a - b) <= _dr.abs(b) * rtol + atol
     else:
-        for i in range(size):
-            ia = safe_getitem(a, la, i)
-            ib = safe_getitem(b, lb, i)
+        for i in range(len_ab):
+            ia = safe_getitem(a, len_a, i)
+            ib = safe_getitem(b, len_b, i)
             if not allclose(ia, ib, rtol, atol, equal_nan):
                 return False
         return True
