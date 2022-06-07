@@ -2903,7 +2903,7 @@ def erf(arg, /):
     if isinstance(arg, ArrayBase):
         return arg.erf_()
     else:
-        return _math.erf(a)
+        return _math.erf(arg)
 
 
 def erfinv(arg, /):
@@ -2935,7 +2935,7 @@ def lgamma(arg, /):
     if isinstance(arg, ArrayBase):
         return arg.lgamma_()
     else:
-        return _math.lgamma(a)
+        return _math.lgamma(arg)
 
 
 def tgamma(arg, /):
@@ -2955,7 +2955,7 @@ def tgamma(arg, /):
     if isinstance(arg, ArrayBase):
         return arg.tgamma_()
     else:
-        return _math.gamma(a)
+        return _math.gamma(arg)
 
 
 def sinh(arg, /):
