@@ -2366,25 +2366,64 @@ def tan(arg, /):
         return _math.tan(arg)
 
 
-def csc(a):
-    if isinstance(a, ArrayBase):
-        return a.csc_()
+def csc(arg, /):
+    '''
+    csc(arg, /)
+    Cosecant approximation based on the CEPHES library.
+
+    See the section on :ref:`transcendental function approximations
+    <transcendental-accuracy>` for details regarding accuracy.
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Cosecant of the input
+    '''
+    if isinstance(arg, ArrayBase):
+        return arg.csc_()
     else:
-        return 1 / _math.sin(a)
+        return 1 / _math.sin(arg)
 
 
-def sec(a):
-    if isinstance(a, ArrayBase):
-        return a.sec_()
+def sec(arg):
+    '''
+    sec(arg, /)
+    Secant approximation based on the CEPHES library.
+
+    See the section on :ref:`transcendental function approximations
+    <transcendental-accuracy>` for details regarding accuracy.
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Secant of the input
+    '''
+    if isinstance(arg, ArrayBase):
+        return arg.sec_()
     else:
-        return 1 / _math.cos(a)
+        return 1 / _math.cos(arg)
 
 
-def cot(a):
-    if isinstance(a, ArrayBase):
-        return a.cot_()
+def cot(arg):
+    '''
+    cot(arg, /)
+    Cotangent approximation based on the CEPHES library.
+
+    See the section on :ref:`transcendental function approximations
+    <transcendental-accuracy>` for details regarding accuracy.
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: Cotangent of the input
+    '''
+    if isinstance(arg, ArrayBase):
+        return arg.cot_()
     else:
-        return 1.0 / _math.tan(a)
+        return 1.0 / _math.tan(arg)
 
 
 def asin(arg, /):
@@ -2720,18 +2759,6 @@ def tanh(arg, /):
         return _math.tanh(arg)
 
 
-def csch(a):
-    return 1 / sinh(a)
-
-
-def sech(a):
-    return 1 / cosh(a)
-
-
-def coth(a):
-    return 1 / tanh(a)
-
-
 def asinh(arg, /):
     '''
     asinh(arg, /)
@@ -2792,12 +2819,32 @@ def atanh(arg, /):
         return _math.atanh(arg)
 
 
-def rad_to_deg(a):
-    return a * (180.0 / _dr.pi)
+def rad2deg(arg, /):
+    '''
+    rad2deg(arg, /) -> float | drjit.ArrayBase
+    Convert angles from radians to degrees.
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        The equivalent angle in degrees.
+    '''
+    return arg * (180.0 / _dr.pi)
 
 
-def deg_to_rad(a):
-    return a * (_dr.pi / 180.0)
+def deg2rad(arg, /):
+    '''
+    deg2rad(arg, /) -> float | drjit.ArrayBase
+    Convert angles from degrees to radians.
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        The equivalent angle in radians.
+    '''
+    return arg * (_dr.pi / 180.0)
 
 
 # -------------------------------------------------------------------
