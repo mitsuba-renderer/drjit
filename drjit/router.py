@@ -333,7 +333,7 @@ def device(value=None):
     elif _dr.depth_v(value) > 1:
         return device(value[0])
     elif _dr.is_diff_v(value):
-        return device(_dr.detach(value))
+        return device(_dr.detach(value, preserve_type=False))
     elif _dr.is_jit_v(value):
         return _dr.detail.device(value.index())
     else:
@@ -3545,7 +3545,7 @@ def cross(a, b):
 # -------------------------------------------------------------------
 
 
-def detach(arg, preserve_type=False):
+def detach(arg, preserve_type=True):
     '''
     Transforms the input variable into its non-differentiable version (*detaches* it
     from the AD computational graph).
@@ -3569,7 +3569,6 @@ def detach(arg, preserve_type=False):
     Returns:
         object: The detached variable.
     '''
-    # TODO: Switch `preserve_type` default to `False`
     if _dr.is_diff_v(arg):
         if preserve_type:
             return type(arg)(arg.detach_())
@@ -3632,7 +3631,7 @@ def set_grad(dst, src):
     '''
     if _dr.is_diff_v(dst) and dst.IsFloat:
         if _dr.is_diff_v(src):
-            src = _dr.detach(src)
+            src = _dr.detach(src, preserve_type=False)
 
         t = _dr.detached_t(dst)
         if type(src) is not t:
@@ -3672,7 +3671,7 @@ def accum_grad(dst, src):
     '''
     if _dr.is_diff_v(dst) and dst.IsFloat:
         if _dr.is_diff_v(src):
-            src = _dr.detach(src)
+            src = _dr.detach(src, preserve_type=False)
 
         t = _dr.detached_t(dst)
         if type(src) is not t:
