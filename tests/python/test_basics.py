@@ -71,12 +71,12 @@ def test02_basic_ops(cname):
     if dr.scalar_t(t) is int:
         v3 = v1 // v2
         assert v3[0] == 2
-        with pytest.raises(dr.Exception):
+        with pytest.raises(TypeError):
             v3 = v1 / v2
     else:
         v3 = v1 / v2
         assert v3[0] == 2.0
-        with pytest.raises(dr.Exception):
+        with pytest.raises(TypeError):
             v3 = v1 // v2
 
     # Make sure that in-place ops are truly in-place

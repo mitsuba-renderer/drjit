@@ -213,7 +213,7 @@ def is_arithmetic_v(arg, /):
         bool: ``True`` if ``arg`` represents an arithmetic Dr.Jit array or
         Python ``int`` or ``float`` instance or type.
     '''
-    return scalar_t(arg) is not bool
+    return scalar_t(arg) in [int, float]
 
 
 def is_cuda_v(arg, /):
@@ -424,6 +424,28 @@ def is_iterable_v(a):
     except TypeError:
         return False
 
+
+def bool_array_t(arg):
+    '''
+    Converts the provided Dr.Jit array/tensor type into a *boolean* version with
+    the same element size.
+
+    This function implements the following set of behaviors:
+
+    1. When invoked with a Dr.Jit array *type* (e.g. :py:class:`drjit.cuda.Array3i64`), it
+       returns an *boolean* version (e.g. :py:class:`drjit.cuda.Array3b64`).
+
+    2. When the input isn't a type, it returns ``bool_array_t(type(arg))``.
+
+    3. When the input is not a Dr.Jit array or type, the function returns ``bool``.
+
+    Args:
+        arg (object): An arbitrary Python object
+
+    Returns:
+        type: Result of the conversion as described above.
+    '''
+    return mask_t(arg)
 
 def int_array_t(arg):
     '''
