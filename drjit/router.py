@@ -5485,8 +5485,8 @@ def custom(cls, *args, **kwargs):
 
     output = inst.eval(**{ k: _dr.detach(v) for k, v in kwargs.items() })
     if _dr.grad_enabled(output):
-        raise Exception("drjit.custom(): the return value of CustomOp.eval() "
-                        "should not be attached to the AD graph!")
+        raise RuntimeError("drjit.custom(): the return value of CustomOp.eval() "
+                           "should not be attached to the AD graph!")
 
     diff_vars_in = []
     _dr.detail.diff_vars(kwargs, diff_vars_in)
