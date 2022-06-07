@@ -304,7 +304,7 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
             cls.def("ge_", [](const Array &a, const Array &b) -> Mask { return a.ge_(b); });
         }
 
-        cls.def("fmadd_", &Array::fmadd_);
+        cls.def("fma_", &Array::fmadd_);
 
         cls.def("neg_",  &Array::neg_);
     }

@@ -199,8 +199,8 @@ def mul_(a0, a1):
         for i in range(sr):
             ar[i] = a0[i] * a1[i]
     elif a0.IsComplex:
-        ar.real = _dr.fmsub(a0.real, a1.real, a0.imag * a1.imag)
-        ar.imag = _dr.fmadd(a0.real, a1.imag, a0.imag * a1.real)
+        ar.real = _dr.fma(a0.real, a1.real, -a0.imag * a1.imag)
+        ar.imag = _dr.fma(a0.real, a1.imag, a0.imag * a1.real)
     elif a0.IsQuaternion:
         tbl = (4, 3, -2, 1, -3, 4, 1, 2, 2, -1, 4, 3, -1, -2, -3, 4)
         for i in range(4):
@@ -208,7 +208,7 @@ def mul_(a0, a1):
             for j in range(4):
                 idx = tbl[i*4 + j]
                 value = a1[abs(idx) - 1]
-                accum = _dr.fmadd(a0[j], value if idx > 0 else -value, accum)
+                accum = _dr.fma(a0[j], value if idx > 0 else -value, accum)
             ar[i] = accum
     elif a0.IsMatrix:
         raise Exception("mul(): please use the matrix multiplication operator '@' instead.")
@@ -239,7 +239,7 @@ def matmul_(a0, a1):
     elif a0.IsMatrix and a1.IsVector:
         ar = a0[0] * a1[0]
         for i in range(1, a1.Size):
-            ar = _dr.fmadd(a0[i], a1[i], ar)
+            ar = _dr.fma(a0[i], a1[i], ar)
         return ar
     elif a0.IsVector and a1.IsMatrix:
         ar = a1.Value()
@@ -251,7 +251,7 @@ def matmul_(a0, a1):
         for j in range(a0.Size):
             accum = a0[0] * _dr.full(a0.Value, a1[0, j])
             for i in range(1, a0.Size):
-                accum = _dr.fmadd(a0[i], _dr.full(a0.Value, a1[i, j]), accum)
+                accum = _dr.fma(a0[i], _dr.full(a0.Value, a1[i, j]), accum)
             ar[j] = accum
         return ar
 
@@ -579,13 +579,13 @@ def minimum_(a0, a1):
     return ar
 
 
-def fmadd_(a0, a1, a2):
+def fma_(a0, a1, a2):
     if not a0.IsFloat:
-        raise Exception("fmadd(): requires floating point operands!")
+        raise Exception("fma(): requires floating point operands!")
     if not a0.IsSpecial:
         ar, sr = _check3(a0, a1, a2)
         for i in range(sr):
-            ar[i] = _dr.fmadd(a0[i], a1[i], a2[i])
+            ar[i] = _dr.fma(a0[i], a1[i], a2[i])
         return ar
     else:
         return a0 * a1 + a2
@@ -1235,7 +1235,7 @@ def dot_(a0, a1):
     value = a0[0] * a1[0]
     if a0.IsFloat:
         for i in range(1, size):
-            value = _dr.fmadd(a0[i], a1[i], value)
+            value = _dr.fma(a0[i], a1[i], value)
     else:
         for i in range(1, size):
             value += a0[i] * a1[i]
@@ -1474,7 +1474,7 @@ def linspace_(cls, min, max, size=1, endpoint=True):
             result[i] = min + step * i
     else:
         for i in range(len(result)):
-            result[i] = _dr.fmadd(step, i, min)
+            result[i] = _dr.fma(step, i, min)
     return result
 
 

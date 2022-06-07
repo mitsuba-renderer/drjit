@@ -1804,30 +1804,39 @@ def minimum(a, b, /):
         return _builtins.min(a, b)
 
 
-def fmadd(a, b, c):
+def fma(a, b, c, /):
+    '''
+    fma(arg0, arg1, arg2, /)
+    Perform a *fused multiply-add* (FMA) operation.
+
+    Given arguments ``arg0``, ``arg1``, and ``arg2``, this operation computes
+    ``arg0`` * ``arg1`` + ``arg2`` using only one final rounding step. The
+    operation is not only more accurate, but also more efficient, since FMA maps to
+    a native machine instruction on platforms targeted by Dr.Jit.
+
+    While FMA is traditionally a floating point operation, Dr.Jit also implements
+    FMA for integer arrays and maps it onto dedicated instructions provided by the
+    backend if possible (e.g. ``mad.lo.*`` for CUDA/PTX).
+
+    Args:
+        arg0 (float | drjit.ArrayBase): First multiplication operand
+        arg1 (float | drjit.ArrayBase): Second multiplication operand
+        arg2 (float | drjit.ArrayBase): Additive operand
+
+    Returns:
+        float | drjit.ArrayBase: Result of the FMA operation
+    '''
     if isinstance(a, ArrayBase) or \
        isinstance(b, ArrayBase) or \
        isinstance(c, ArrayBase):
         if type(a) is not type(b) or type(b) is not type(c):
             a, b, c = _var_promote(a, b, c)
-        return a.fmadd_(b, c)
+        return a.fma_(b, c)
     else:
         return _dr.detail.fmadd_scalar(a, b, c)
 
 
-def fmsub(a, b, c):
-    return fmadd(a, b, -c)
-
-
-def fnmadd(a, b, c):
-    return fmadd(-a, b, c)
-
-
-def fnmsub(a, b, c):
-    return fmadd(-a, b, -c)
-
-
-def select(m, t, f):
+def select(m, t, f, /):
     if isinstance(m, bool):
         return t if m else f
     type_t, type_f, type_m = type(t), type(f), type(m)
@@ -1883,7 +1892,7 @@ def isfinite(a):
 
 
 def lerp(a, b, t):
-    return fmadd(b, t, fnmadd(a, t, a))
+    return fma(b, t, fma(-a, t, a))
 
 
 def clamp(value, min, max):
@@ -3355,7 +3364,7 @@ def hypot(a, b):
 
     return _dr.select(
         (a < inf) & (b < inf) & (ratio < inf),
-        maxval * _dr.sqrt(_dr.fmadd(ratio, ratio, 1)),
+        maxval * _dr.sqrt(_dr.fma(ratio, ratio, 1)),
         a + b
     )
 
@@ -3436,7 +3445,7 @@ def meshgrid(*args, indexing='xy'):
     for v in args:
         size //= len(v)
         index_v = index // size
-        index = fnmadd(index_v, size, index)
+        index = fma(-index_v, size, index)
         result.append(_dr.gather(t, v, index_v))
 
     if indexing == "xy":
@@ -3477,8 +3486,8 @@ def cross(a, b):
 
     ta, tb = type(a), type(b)
 
-    return fmsub(ta(a.y, a.z, a.x), tb(b.z, b.x, b.y),
-                 ta(a.z, a.x, a.y) * tb(b.y, b.z, b.x))
+    return _dr.fma(ta(a.y, a.z, a.x), tb(b.z, b.x, b.y),
+                     -ta(a.z, a.x, a.y) * tb(b.y, b.z, b.x))
 
 
 # -------------------------------------------------------------------

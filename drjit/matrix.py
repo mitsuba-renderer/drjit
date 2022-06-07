@@ -31,7 +31,7 @@ def det(m):
     if m.Size == 1:
         return m[0, 0]
     elif m.Size == 2:
-        return _dr.fmsub(m[0, 0], m[1, 1], m[0, 1] * m[1, 0])
+        return _dr.fma(m[0, 0], m[1, 1], -m[0, 1] * m[1, 0])
     elif m.Size == 3:
         return _dr.dot(m[0], _dr.cross(m[1], m[2]))
     elif m.Size == 4:
@@ -43,19 +43,19 @@ def det(m):
         temp = _dr.shuffle((1, 0, 3, 2), col2 * col3)
         row0 = col1 * temp
         temp = _dr.shuffle((2, 3, 0, 1), temp)
-        row0 = _dr.fmsub(col1, temp, row0)
+        row0 = _dr.fma(col1, temp, -row0)
 
         temp = _dr.shuffle((1, 0, 3, 2), col1 * col2)
-        row0 = _dr.fmadd(col3, temp, row0)
+        row0 = _dr.fma(col3, temp, row0)
         temp = _dr.shuffle((2, 3, 0, 1), temp)
-        row0 = _dr.fnmadd(col3, temp, row0)
+        row0 = _dr.fma(-col3, temp, row0)
 
         col1 = _dr.shuffle((2, 3, 0, 1), col1)
         col2 = _dr.shuffle((2, 3, 0, 1), col2)
         temp = _dr.shuffle((1, 0, 3, 2), col1 * col3)
-        row0 = _dr.fmadd(col2, temp, row0)
+        row0 = _dr.fma(col2, temp, row0)
         temp = _dr.shuffle((2, 3, 0, 1), temp)
-        row0 = _dr.fnmadd(col2, temp, row0)
+        row0 = _dr.fma(-col2, temp, row0)
 
         return _dr.dot(col0, row0)
     else:
@@ -70,7 +70,7 @@ def inverse_transpose(m):
     if m.Size == 1:
         return t(_dr.rcp(m[0, 0]))
     elif m.Size == 2:
-        inv_det = _dr.rcp(_dr.fmsub(m[0, 0], m[1, 1], m[0, 1] * m[1, 0]))
+        inv_det = _dr.rcp(_dr.fma(m[0, 0], m[1, 1], -m[0, 1] * m[1, 0]))
         return t(
             m[1, 1] * inv_det, -m[1, 0] * inv_det,
             -m[0, 1] * inv_det, m[0, 0] * inv_det
@@ -98,45 +98,45 @@ def inverse_transpose(m):
         row0 = col1 * temp
         row1 = col0 * temp
         temp = _dr.shuffle((2, 3, 0, 1), temp)
-        row0 = _dr.fmsub(col1, temp, row0)
-        row1 = _dr.shuffle((2, 3, 0, 1), _dr.fmsub(col0, temp, row1))
+        row0 = _dr.fma(col1, temp, -row0)
+        row1 = _dr.shuffle((2, 3, 0, 1), _dr.fma(col0, temp, -row1))
 
         temp = _dr.shuffle((1, 0, 3, 2), col1 * col2)
-        row0 = _dr.fmadd(col3, temp, row0)
+        row0 = _dr.fma(col3, temp, row0)
         row3 = col0 * temp
         temp = _dr.shuffle((2, 3, 0, 1), temp)
-        row0 = _dr.fnmadd(col3, temp, row0)
-        row3 = _dr.shuffle((2, 3, 0, 1), _dr.fmsub(col0, temp, row3))
+        row0 = _dr.fma(-col3, temp, row0)
+        row3 = _dr.shuffle((2, 3, 0, 1), _dr.fma(col0, temp, -row3))
 
         temp = _dr.shuffle((1, 0, 3, 2),
                            _dr.shuffle((2, 3, 0, 1), col1) * col3)
         col2 = _dr.shuffle((2, 3, 0, 1), col2)
-        row0 = _dr.fmadd(col2, temp, row0)
+        row0 = _dr.fma(col2, temp, row0)
         row2 = col0 * temp
         temp = _dr.shuffle((2, 3, 0, 1), temp)
-        row0 = _dr.fnmadd(col2, temp, row0)
-        row2 = _dr.shuffle((2, 3, 0, 1), _dr.fmsub(col0, temp, row2))
+        row0 = _dr.fma(-col2, temp, row0)
+        row2 = _dr.shuffle((2, 3, 0, 1), _dr.fma(col0, temp, -row2))
 
         temp = _dr.shuffle((1, 0, 3, 2), col0 * col1)
-        row2 = _dr.fmadd(col3, temp, row2)
-        row3 = _dr.fmsub(col2, temp, row3)
+        row2 = _dr.fma(col3, temp, row2)
+        row3 = _dr.fma(col2, temp, -row3)
         temp = _dr.shuffle((2, 3, 0, 1), temp)
-        row2 = _dr.fmsub(col3, temp, row2)
-        row3 = _dr.fnmadd(col2, temp, row3)
+        row2 = _dr.fma(col3, temp, -row2)
+        row3 = _dr.fma(-col2, temp, row3)
 
         temp = _dr.shuffle((1, 0, 3, 2), col0 * col3)
-        row1 = _dr.fnmadd(col2, temp, row1)
-        row2 = _dr.fmadd(col1, temp, row2)
+        row1 = _dr.fma(-col2, temp, row1)
+        row2 = _dr.fma(col1, temp, row2)
         temp = _dr.shuffle((2, 3, 0, 1), temp)
-        row1 = _dr.fmadd(col2, temp, row1)
-        row2 = _dr.fnmadd(col1, temp, row2)
+        row1 = _dr.fma(col2, temp, row1)
+        row2 = _dr.fma(-col1, temp, row2)
 
         temp = _dr.shuffle((1, 0, 3, 2), col0 * col2)
-        row1 = _dr.fmadd(col3, temp, row1)
-        row3 = _dr.fnmadd(col1, temp, row3)
+        row1 = _dr.fma(col3, temp, row1)
+        row3 = _dr.fma(-col1, temp, row3)
         temp = _dr.shuffle((2, 3, 0, 1), temp)
-        row1 = _dr.fnmadd(col3, temp, row1)
-        row3 = _dr.fmadd(col1, temp, row3)
+        row1 = _dr.fma(-col3, temp, row1)
+        row3 = _dr.fma(col1, temp, row3)
 
         inv_det = _dr.rcp(_dr.dot(col0, row0))
 
@@ -187,7 +187,7 @@ def frob(a):
     result = _dr.sqr(a[0])
     for i in range(1, a.Size):
         value = a[i]
-        result = _dr.fmadd(value, value, result)
+        result = _dr.fma(value, value, result)
     return _dr.sum(result)
 
 
@@ -198,7 +198,7 @@ def polar_decomp(a, it=10):
         gamma = _dr.sqrt(_dr.frob(qi) / _dr.frob(q))
         s1, s2 = gamma * .5, (_dr.rcp(gamma) * .5)
         for i in range(a.Size):
-            q[i] = _dr.fmadd(q[i], s1, qi[i] * s2)
+            q[i] = _dr.fma(q[i], s1, qi[i] * s2)
     return q, transpose(q) @ a
 
 
@@ -272,21 +272,21 @@ def quat_to_euler(q):
     Array3f = getattr(module, name)
 
     # Clamp the result to stay in the valid range for asin
-    sinp = _dr.clamp(2 * _dr.fmsub(q.w, q.y, q.z * q.x), -1.0, 1.0)
+    sinp = _dr.clamp(2 * _dr.fma(q.w, q.y, -q.z * q.x), -1.0, 1.0)
     gimbal_lock = _dr.abs(sinp) > (1.0 - 5e-8)
 
     # roll (x-axis rotation)
     q_y_2 = _dr.sqr(q.y)
-    sinr_cosp = 2 * _dr.fmadd(q.w, q.x, q.y * q.z)
-    cosr_cosp = _dr.fnmadd(2, _dr.fmadd(q.x, q.x, q_y_2), 1)
+    sinr_cosp = 2 * _dr.fma(q.w, q.x, q.y * q.z)
+    cosr_cosp = _dr.fma(-2, _dr.fma(q.x, q.x, q_y_2), 1)
     roll = _dr.select(gimbal_lock, 2 * _dr.atan2(q.x, q.w), _dr.atan2(sinr_cosp, cosr_cosp))
 
     # pitch (y-axis rotation)
     pitch = _dr.select(gimbal_lock, _dr.copysign(0.5 * _dr.pi, sinp), _dr.asin(sinp))
 
     # yaw (z-axis rotation)
-    siny_cosp = 2 * _dr.fmadd(q.w, q.z, q.x * q.y)
-    cosy_cosp = _dr.fnmadd(2, _dr.fmadd(q.z, q.z, q_y_2), 1)
+    siny_cosp = 2 * _dr.fma(q.w, q.z, q.x * q.y)
+    cosy_cosp = _dr.fma(-2, _dr.fma(q.z, q.z, q_y_2), 1)
     yaw = _dr.select(gimbal_lock, 0, _dr.atan2(siny_cosp, cosy_cosp))
 
     return Array3f(roll, pitch, yaw)
