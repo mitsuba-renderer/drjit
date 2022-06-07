@@ -240,7 +240,6 @@ def test05_scalar(t):
         t2 = t(2)
         assert dr.sum(t2) == t.Value(2 * len(t2))
         assert dr.dot(t2, t2) == t.Value(4 * len(t2))
-        assert dr.dot_async(t2, t2) == t(4 * len(t2))
 
         value = t(1)
         value[dr.eq(value, t(1))] = t(2)

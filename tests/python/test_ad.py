@@ -174,19 +174,19 @@ def test13_prod(m):
     assert dr.allclose(dr.grad(x), [80, 40, 16, 10])
 
 
-def test14_hmax_bwd(m):
+def test14_max_bwd(m):
     x = m.Float(1, 2, 8, 5, 8)
     dr.enable_grad(x)
-    y = dr.hmax_async(x)
+    y = dr.max(x)
     dr.backward(y)
     assert len(y) == 1 and dr.allclose(y[0], 8)
     assert dr.allclose(dr.grad(x), [0, 0, 1, 0, 1])
 
 
-def test15_hmax_fwd(m):
+def test15_max_fwd(m):
     x = m.Float(1, 2, 8, 5, 8)
     dr.enable_grad(x)
-    y = dr.hmax_async(x)
+    y = dr.max(x)
     dr.forward(x)
     assert len(y) == 1 and dr.allclose(y[0], 8)
     assert dr.allclose(dr.grad(y), [2])  # Approximation
@@ -283,7 +283,7 @@ def test23_scatter_reduce_bwd(m):
 
         assert dr.allclose(ref_buf, buf2, atol=1e-4)
 
-        s = dr.dot_async(buf2, buf2)
+        s = dr.dot(buf2, buf2)
 
         dr.backward(s)
 
@@ -328,7 +328,7 @@ def test24_scatter_reduce_fwd(m):
         dr.scatter_reduce(dr.ReduceOp.Add, buf2, x, idx1)
         dr.scatter_reduce(dr.ReduceOp.Add, buf2, y, idx2)
 
-        s = dr.dot_async(buf2, buf2)
+        s = dr.dot(buf2, buf2)
 
         if i % 2 == 0:
             dr.enqueue(dr.ADMode.Forward, buf)
@@ -371,7 +371,7 @@ def test25_scatter_bwd(m):
 
         assert dr.allclose(ref_buf, buf2, atol=1e-4)
 
-        s = dr.dot_async(buf2, buf2)
+        s = dr.dot(buf2, buf2)
 
         dr.backward(s)
 

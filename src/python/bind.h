@@ -240,19 +240,19 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
         cls.def(Array::IsFloat ? "itruediv_" : "ifloordiv_",
                 [](Array *a, const Array &b) { *a = a->div_(b); return a; });
 
-        cls.def("dot_", &Array::dot_);
-        cls.def("min_", &Array::hmin_);
-        cls.def("max_", &Array::hmax_);
 
         if constexpr (dr::is_dynamic_v<Array> &&
                       dr::array_depth_v<Array> == 1 &&
                       dr::is_jit_array_v<Array>) {
-            cls.def("dot_async_", &Array::dot_async_);
-            cls.def("sum_", &Array::hsum_async_);
+            cls.def("dot_",  &Array::dot_async_);
+            cls.def("min_",  &Array::hmin_async_);
+            cls.def("max_",  &Array::hmax_async_);
+            cls.def("sum_",  &Array::hsum_async_);
             cls.def("prod_", &Array::hprod_async_);
-            cls.def("hmin_async_", &Array::hmin_async_);
-            cls.def("hmax_async_", &Array::hmax_async_);
         } else {
+            cls.def("dot_",  &Array::dot_);
+            cls.def("min_",  &Array::hmin_);
+            cls.def("max_",  &Array::hmax_);
             cls.def("sum_",  &Array::hsum_);
             cls.def("prod_", &Array::hprod_);
         }
