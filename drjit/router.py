@@ -2301,12 +2301,15 @@ def set_label(*args, **kwargs):
     '''
     n_args, n_kwargs = len(args), len(kwargs)
     if (n_kwargs and n_args) or (n_args and n_args != 2):
-        raise Exception('set_label(): invalid input arguments')
+        raise TypeError('set_label(): incompatible function arguments')
 
     if n_args:
         a, label = args
         if _dr.is_jit_v(a) or _dr.is_diff_v(a):
             a.set_label_(label)
+        elif isinstance(a, _Sequence):
+            for i, v in enumerate(a):
+                set_label(v, label + "_" + str(i))
         elif isinstance(a, _Mapping):
             for k, v in a.items():
                 set_label(v, label + "_" + k)
@@ -3880,6 +3883,9 @@ def detach(arg, preserve_type=True):
             return arg.detach_()
     elif _dr.is_struct_v(arg):
         result = type(arg)()
+        if not preserve_type:
+            raise TypeError("detach(): preserve_type=True is required when "
+                            "detaching custom data structures!")
         for k in type(arg).DRJIT_STRUCT.keys():
             setattr(result, k, detach(getattr(arg, k),
                 preserve_type=preserve_type))
@@ -3912,7 +3918,7 @@ def grad(arg, preserve_type=True):
     elif _dr.is_struct_v(arg):
         result = type(arg)()
         if not preserve_type:
-            raise Exception("grad(): preserve_type=True is required when "
+            raise TypeError("grad(): preserve_type=True is required when "
                             "getting the gradient of a custom data structure!")
         for k in type(arg).DRJIT_STRUCT.keys():
             setattr(result, k, grad(getattr(arg, k), preserve_type))
@@ -3950,7 +3956,9 @@ def set_grad(dst, src):
         dst.set_grad_(src)
     elif isinstance(dst, _Sequence):
         vs = isinstance(src, _Sequence)
-        assert not vs or len(dst) == len(src)
+        if vs and len(dst) != len(src):
+            raise RuntimeError("set_grad(): argument sizes are not matching "
+                            "({len(dst)}, {len(src)})")
         for i in range(len(dst)):
             set_grad(dst[i], src[i] if vs else src)
     elif isinstance(dst, _Mapping):
@@ -3990,7 +3998,9 @@ def accum_grad(dst, src):
         dst.accum_grad_(src)
     elif isinstance(dst, _Sequence):
         vs = isinstance(src, _Sequence)
-        assert not vs or len(dst) == len(src)
+        if vs and len(dst) != len(src):
+            raise RuntimeError("accum_grad(): argument sizes are not matching "
+                            "({len(dst)}, {len(src)})")
         for i in range(len(dst)):
             accum_grad(dst[i], src[i] if vs else src)
     elif isinstance(dst, _Mapping):
@@ -4116,40 +4126,44 @@ def replace_grad(dst, src):
     Returns:
         object: the variable with the replaced gradients.
     '''
+    tdst, tsrc = type(dst), type(src)
+
+    if not (_dr.is_diff_v(tsrc) and tsrc.IsFloat):
+        raise TypeError("replace_grad(): unsupported input types!")
+
     if type(dst) is not type(src):
         dst, src = _var_promote(dst, src)
+    tdst, tsrc = type(dst), type(src)
 
-    ta, tb = type(dst), type(src)
-
-    if not (_dr.is_diff_v(ta) and ta.IsFloat and
-            _dr.is_diff_v(tb) and tb.IsFloat):
+    if not (_dr.is_diff_v(tdst) and tdst.IsFloat and
+            _dr.is_diff_v(tsrc) and tsrc.IsFloat):
         raise Exception("replace_grad(): unsupported input types!")
 
-    la, lb = len(dst), len(src)
+    ldst, lsrc = len(dst), len(src)
     depth = dst.Depth # matches b.Depth
 
-    if la != lb:
-        if la == 1 and depth == 1:
-            dst = dst + _dr.zeros(ta, lb)
-        elif lb == 1 and depth == 1:
-            src = src + _dr.zeros(tb, la)
+    if ldst != lsrc:
+        if ldst == 1 and depth == 1:
+            dst = dst + _dr.zeros(tdst, lsrc)
+        elif lsrc == 1 and depth == 1:
+            src = src + _dr.zeros(tsrc, ldst)
         else:
             raise Exception("replace_grad(): input arguments have "
                            "incompatible sizes (%i vs %i)!"
-                           % (la, lb))
+                           % (ldst, lsrc))
 
     if depth > 1:
-        result = ta()
+        result = tdst()
         if dst.Size == Dynamic:
-            result.init_(la)
-        for i in range(la):
+            result.init_(ldst)
+        for i in range(ldst):
             result[i] = replace_grad(dst[i], src[i])
         return result
     else:
         if _dr.is_tensor_v(dst):
-            return ta(replace_grad(dst.array, src.array), dst.shape)
+            return tdst(replace_grad(dst.array, src.array), dst.shape)
         else:
-            return ta.create_(src.index_ad(), dst.detach_())
+            return tdst.create_(src.index_ad(), dst.detach_())
 
 
 def enqueue(mode, *args):
@@ -4269,7 +4283,7 @@ def traverse(dtype, mode, flags=_dr.ADFlag.Default):
 def _check_grad_enabled(name, t, a):
     if _dr.is_diff_v(t) and t.IsFloat:
         if _dr.flag(_dr.JitFlag.VCallRecord) and not grad_enabled(a):
-            raise Exception(
+            raise TypeError(
                 f'{name}(): the argument does not depend on the input '
                 'variable(s) being differentiated. Raising an exception '
                 'since this is usually indicative of a bug (for example, '
@@ -4277,7 +4291,7 @@ def _check_grad_enabled(name, t, a):
                 f'this is expected behavior, skip the call to {name}(..) '
                 'if ek.grad_enabled(..) returns False.')
     else:
-        raise Exception(f'{name}(): expected a differentiable array type!')
+        raise TypeError(f'{name}(): expected a differentiable array type!')
 
 
 def forward_from(arg, flags=_dr.ADFlag.Default):
@@ -4328,7 +4342,7 @@ def forward_to(*args, flags=_dr.ADFlag.Default):
     '''
     for a in args:
         if isinstance(a, (int, _dr.ADFlag)):
-            raise Exception('forward_to(): AD flags should be passed via '
+            raise TypeError('forward_to(): AD flags should be passed via '
                             'the "flags=.." keyword argument')
 
     ta = _dr.leaf_array_t(args)
