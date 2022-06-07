@@ -14,6 +14,14 @@ def m(request):
     yield importlib.import_module(request.param)
 
 
+def struct_class(m):
+    class MyStruct:
+        def __init__(self) -> None:
+            self.x = m.Float(1.0)
+            self.y = m.Float(2.0)
+        DRJIT_STRUCT = { 'x': m.Float, 'y': m.Float }
+    return MyStruct
+
 
 @pytest.fixture
 def do_record():
@@ -1443,3 +1451,398 @@ def test70_isolate_fwd(m):
             c = a * 3
             dc = dr.forward_to(c)
             assert dc == 6
+
+def test71_enable_grad(m):
+    # Test on single float variable
+    a = m.Float(4.0)
+    assert not dr.grad_enabled(a)
+    dr.enable_grad(a)
+    assert dr.grad_enabled(a)
+    dr.disable_grad(a)
+    assert not dr.grad_enabled(a)
+
+    # Test on non-float variable
+    b = m.UInt(1)
+    assert not dr.grad_enabled(b)
+    dr.enable_grad(b)
+    assert not dr.grad_enabled(b)
+
+    # Test with sequence and mapping
+    c = m.Float(2.0)
+
+    l = [a, b, c]
+    assert not dr.grad_enabled(l)
+    dr.enable_grad(c)
+    assert dr.grad_enabled(l)
+    dr.disable_grad(l)
+    assert not dr.grad_enabled(l)
+
+    d = { 'a': a, 'c': b, 'c': c }
+    assert not dr.grad_enabled(d)
+    dr.enable_grad(c)
+    assert dr.grad_enabled(d)
+    dr.disable_grad(d)
+    assert not dr.grad_enabled(d)
+
+    # Test with multiple arguments
+    dr.enable_grad(c)
+    assert dr.grad_enabled(a, b, c)
+
+    # Test with static array
+    a = m.Array3f(1.0, 2.0, 3.0)
+    assert not dr.grad_enabled(a)
+    dr.enable_grad(a)
+    assert dr.grad_enabled(a)
+    assert dr.grad_enabled(a[0])
+
+    s = struct_class(m)()
+    assert not dr.grad_enabled(s)
+    dr.enable_grad(s.x)
+    assert dr.grad_enabled(s)
+    dr.enable_grad(s)
+    assert dr.grad_enabled(s.y)
+
+
+
+def test72_detach(m):
+    a = m.Float([1, 2, 3])
+    dr.enable_grad(a)
+    b = dr.detach(a, preserve_type=False)
+    c = dr.detach(a, preserve_type=True)
+    assert dr.detached_t(type(a)) is type(b)
+    assert type(a) is type(c)
+    assert dr.grad_enabled(a)
+    assert not dr.grad_enabled(b)
+    assert not dr.grad_enabled(c)
+
+    a = m.Array3f()
+    dr.enable_grad(a)
+    b = dr.detach(a, preserve_type=False)
+    c = dr.detach(a, preserve_type=True)
+    assert dr.detached_t(type(a)) is type(b)
+    assert type(a) is type(c)
+    assert dr.grad_enabled(a)
+    assert not dr.grad_enabled(b)
+    assert not dr.grad_enabled(c)
+
+    a = m.ArrayXf(1, 2, 3)
+    dr.enable_grad(a)
+    b = dr.detach(a, preserve_type=False)
+    c = dr.detach(a, preserve_type=True)
+    assert dr.detached_t(type(a)) is type(b)
+    assert type(a) is type(c)
+    assert type(a) is not type(b)
+
+    a = struct_class(m)()
+    dr.enable_grad(a)
+    c = dr.detach(a)
+    assert type(a) is type(c)
+    assert dr.grad_enabled(a)
+    assert not dr.grad_enabled(c)
+
+    with pytest.raises(TypeError) as ei:
+        dr.detach(a, preserve_type=False)
+    assert "preserve_type=True is required" in str(ei.value)
+
+
+def test73_set_grad(m):
+    a = m.Float([1, 2, 3])
+    dr.enable_grad(a)
+    assert dr.allclose(dr.grad(a), 0.0)
+    dr.set_grad(a, 2.0)
+    assert dr.allclose(dr.grad(a), 2.0)
+    dr.set_grad(a, m.Float([3.0]))
+    assert dr.allclose(dr.grad(a), 3.0)
+    with pytest.raises(RuntimeError) as ei:
+        dr.set_grad(a, m.Float([1, 2, 3, 4]))
+    assert "attempted to assign a gradient of size 4" in str(ei.value)
+    dr.set_grad(a, [3.0, 2.0, 1.0])
+    assert dr.allclose(dr.grad(a), [3.0, 2.0, 1.0])
+    assert type(dr.grad(a)) is type(a)
+    assert type(dr.grad(a, False)) is dr.detached_t(type(a))
+
+    a = m.Array3f([1, 2, 3], [2, 3, 4], [3, 4, 5])
+    dr.enable_grad(a)
+    assert dr.allclose(dr.grad(a), 0.0)
+    dr.set_grad(a, 2.0)
+    assert dr.allclose(dr.grad(a), 2.0)
+    dr.set_grad(a, m.Float([3.0]))
+    assert dr.allclose(dr.grad(a), 3.0)
+    with pytest.raises(RuntimeError) as ei:
+        dr.set_grad(a, m.Float([1, 2, 3, 4]))
+    assert "attempted to assign a gradient of size 4" in str(ei.value)
+    dr.set_grad(a, m.Array3f([3, 2, 1]))
+    assert dr.allclose(dr.grad(a.y), [2, 2, 2])
+    dr.set_grad(a, m.Array3f([1, 2, 3], [2, 3, 4], [3, 4, 5]))
+    assert dr.allclose(dr.grad(a), [[1, 2, 3], [2, 3, 4], [3, 4, 5]])
+    assert type(dr.grad(a)) is type(a)
+    assert type(dr.grad(a, False)) is dr.detached_t(type(a))
+
+    a = m.ArrayXf(1, 2, 3)
+    dr.enable_grad(a)
+    assert dr.allclose(dr.grad(a), 0.0)
+    dr.set_grad(a, 2.0)
+    assert dr.allclose(dr.grad(a), 2.0)
+    dr.set_grad(a, m.ArrayXf([3, 2, 1]))
+    assert dr.allclose(dr.grad(a[1]), [2, 2, 2])
+    assert type(dr.grad(a)) is type(a)
+    assert type(dr.grad(a, False)) is dr.detached_t(type(a))
+
+    args = [m.Float(1.0), m.Float(2.0), m.Float(3.0)]
+    dr.enable_grad(args)
+    dr.set_grad(args, 1.0)
+    assert dr.allclose(dr.grad(args), 1.0)
+    dr.set_grad(args, [3.0, 2.0, 1.0])
+    assert dr.allclose(dr.grad(args), [3.0, 2.0, 1.0])
+    with pytest.raises(RuntimeError) as ei:
+        dr.set_grad(args, [3.0, 2.0])
+    assert "argument sizes are not matching" in str(ei.value)
+
+    args = {'a': m.Float(1.0), 'b': m.Float(2.0)}
+    dr.enable_grad(args)
+    dr.set_grad(args, 1.0)
+    assert dr.allclose(dr.grad(args)['a'], 1.0)
+    assert dr.allclose(dr.grad(args)['b'], 1.0)
+    dr.set_grad(args, {'a': 2.0, 'b': 3.0})
+    assert dr.allclose(dr.grad(args)['a'], 2.0)
+    assert dr.allclose(dr.grad(args)['b'], 3.0)
+
+    struct_class_type = struct_class(m)
+    a = struct_class_type()
+    dr.enable_grad(a)
+    dr.set_grad(a, 1.0)
+    assert dr.allclose(dr.grad(a).x, 1.0)
+    assert dr.allclose(dr.grad(a).y, 1.0)
+    dr.set_grad(a, struct_class_type())
+    assert dr.allclose(dr.grad(a).x, 1.0)
+    assert dr.allclose(dr.grad(a).y, 2.0)
+
+    with pytest.raises(TypeError) as ei:
+        dr.grad(a, preserve_type=False)
+    assert "preserve_type=True is required" in str(ei.value)
+
+
+
+
+def test74_broadcasting_set_grad(m):
+    theta = m.Float(1.0)
+    dr.enable_grad(theta)
+    x = 4.0 * theta
+    y = m.Array3f(x)
+    dr.backward(y)
+    assert dr.grad(theta) == 12.0
+
+
+def test75_accum_grad(m):
+    a = m.Float([1, 2, 3])
+    dr.enable_grad(a)
+    assert dr.allclose(dr.grad(a), 0.0)
+    dr.accum_grad(a, 2.0)
+    assert dr.allclose(dr.grad(a), 2.0)
+    dr.accum_grad(a, m.Float([3.0]))
+    assert dr.allclose(dr.grad(a), 5.0)
+    with pytest.raises(RuntimeError) as ei:
+        dr.accum_grad(a, m.Float([1, 2, 3, 4]))
+    assert "attempted to accumulate a gradient of size 4" in str(ei.value)
+    dr.accum_grad(a, [3.0, 2.0, 1.0])
+    assert dr.allclose(dr.grad(a), [8.0, 7.0, 6.0])
+
+    a = m.Array3f([1, 2, 3], [2, 3, 4], [3, 4, 5])
+    dr.enable_grad(a)
+    assert dr.allclose(dr.grad(a), 0.0)
+    dr.accum_grad(a, 2.0)
+    assert dr.allclose(dr.grad(a), 2.0)
+    dr.accum_grad(a, m.Float([3.0]))
+    assert dr.allclose(dr.grad(a), 5.0)
+    with pytest.raises(RuntimeError) as ei:
+        dr.accum_grad(a, m.Float([1, 2, 3, 4]))
+    assert "attempted to accumulate a gradient of size 4" in str(ei.value)
+    dr.accum_grad(a, m.Array3f([3, 2, 1]))
+    assert dr.allclose(dr.grad(a.y), [7, 7, 7])
+    dr.accum_grad(a, m.Array3f([1, 2, 3], [2, 3, 4], [3, 4, 5]))
+    assert dr.allclose(dr.grad(a), [[9, 10, 11], [9, 10, 11], [9, 10, 11]])
+
+    args = [m.Float(1.0), m.Float(2.0), m.Float(3.0)]
+    dr.enable_grad(args)
+    dr.accum_grad(args, 1.0)
+    assert dr.allclose(dr.grad(args), 1.0)
+    dr.accum_grad(args, [3.0, 2.0, 1.0])
+    assert dr.allclose(dr.grad(args), [4.0, 3.0, 2.0])
+    with pytest.raises(RuntimeError) as ei:
+        dr.accum_grad(args, [3.0, 2.0])
+    assert "argument sizes are not matching" in str(ei.value)
+
+    args = {'a': m.Float(1.0), 'b': m.Float(2.0)}
+    dr.enable_grad(args)
+    dr.accum_grad(args, 1.0)
+    assert dr.allclose(dr.grad(args)['a'], 1.0)
+    assert dr.allclose(dr.grad(args)['b'], 1.0)
+    dr.accum_grad(args, {'a': 2.0, 'b': 3.0})
+    assert dr.allclose(dr.grad(args)['a'], 3.0)
+    assert dr.allclose(dr.grad(args)['b'], 4.0)
+
+    struct_class_type = struct_class(m)
+    a = struct_class_type()
+    dr.enable_grad(a)
+    dr.accum_grad(a, 1.0)
+    assert dr.allclose(dr.grad(a).x, 1.0)
+    assert dr.allclose(dr.grad(a).y, 1.0)
+    dr.accum_grad(a, struct_class_type())
+    assert dr.allclose(dr.grad(a).x, 2.0)
+    assert dr.allclose(dr.grad(a).y, 3.0)
+
+
+def test76_replace_grad(m):
+    with pytest.raises(TypeError) as ei:
+        dr.replace_grad(1.0, m.UInt(1))
+    assert "unsupported input types" in str(ei.value)
+
+    with pytest.raises(TypeError) as ei:
+        dr.replace_grad(1.0, dr.detached_t(m.Float)(2.0))
+    assert "unsupported input types" in str(ei.value)
+
+    with pytest.raises(TypeError) as ei:
+        dr.replace_grad(1.0, 2.0)
+    assert "unsupported input types" in str(ei.value)
+
+    x = m.Array3f(1, 2, 3)
+    y = m.Array3f(3, 2, 1)
+    dr.enable_grad(x, y)
+    x2 = x*x
+    y2 = y*y
+    z = dr.replace_grad(x2, y2)
+    print(f"{x2=}")
+    print(f"{y2=}")
+    print(f"{z=}")
+    assert z.x.index_ad() == y2.x.index_ad()
+    assert z.y.index_ad() == y2.y.index_ad()
+    assert z.z.index_ad() == y2.z.index_ad()
+    z2 = z*z
+    assert dr.allclose(z2, [1, 16, 81])
+    dr.backward(z2)
+    assert dr.allclose(dr.grad(x), 0)
+    assert dr.allclose(dr.grad(y), [12, 32, 36])
+
+    x = m.Array3f(1, 2, 3)
+    y = m.Float(1)
+    dr.enable_grad(x, y)
+    z = dr.replace_grad(x, y)
+    assert z.x.index_ad() == y.index_ad()
+    assert z.y.index_ad() == y.index_ad()
+    assert z.z.index_ad() == y.index_ad()
+
+    a = m.Float(1.0)
+    dr.enable_grad(a)
+    b = dr.replace_grad(4.0, a)
+    assert type(b) is type(a)
+    assert b.index_ad() == a.index_ad()
+    assert dr.allclose(b, 4.0)
+
+    a = m.ArrayXf(1, 2, 3)
+    y = m.Float(1)
+    dr.enable_grad(x, y)
+    z = dr.replace_grad(x, y)
+    assert z[0].index_ad() == y.index_ad()
+    assert z[1].index_ad() == y.index_ad()
+    assert z[2].index_ad() == y.index_ad()
+
+def test77_set_label(m):
+    a = m.Float(1.0)
+    b = [m.Float(1.0), m.Float(2.0)]
+    c = m.Array3f(1.0, 2.0, 3.0)
+    d = struct_class(m)()
+    dr.enable_grad(a, b, c, d)
+
+    assert dr.label(a) == 'unnamed'
+
+    dr.set_label(a, 'aa')
+    assert dr.label(a) == 'aa'
+
+    dr.set_label(a=a, b=b, c=c, d=d)
+    assert dr.label(a) == 'a'
+    assert dr.label(b[0]) == 'b_0'
+    assert dr.label(b[1]) == 'b_1'
+    assert dr.label(c.x) == 'c_0'
+    assert dr.label(c.y) == 'c_1'
+    assert dr.label(c.z) == 'c_2'
+    assert dr.label(d.x) == 'd_x'
+    assert dr.label(d.y) == 'd_y'
+
+    with pytest.raises(TypeError) as ei:
+        dr.set_label(a, 'aa', b=b)
+    assert "incompatible function arguments" in str(ei.value)
+
+
+def test78_forward_to(m):
+    a = m.Float(1.0)
+    dr.enable_grad(a)
+    b = a * a * 2
+    c = a * 2
+    dr.set_grad(a, 1.0)
+    d = m.Float(4.0) # some detached variable
+    grad_b, grad_c, grad_d = dr.forward_to(b, c, d)
+    assert dr.allclose(dr.grad(a), 0.0)
+    assert dr.allclose(grad_b, 4.0)
+    assert dr.allclose(grad_c, 2.0)
+    assert dr.allclose(grad_d, 0.0)
+
+    with pytest.raises(TypeError) as ei:
+        dr.forward_to(b, c, dr.ADFlag.Default)
+    assert "AD flags should be passed via the" in str(ei.value)
+
+    with pytest.raises(TypeError) as ei:
+        dr.forward_to(b, c, flags=d)
+    assert "incompatible function arguments" in str(ei.value)
+
+    with pytest.raises(TypeError) as ei:
+        dr.forward_to(b, c, flags=dr.ADFlag.Default, test='test')
+    assert "unexpected keyword argument" in str(ei.value)
+
+    with pytest.raises(TypeError) as ei:
+        dr.forward_to(b, c, test='test')
+    assert "unexpected keyword argument" in str(ei.value)
+
+    # Error because the input isn't attached to the AD graph
+    with pytest.raises(TypeError) as ei:
+        dr.forward_to(m.Float(2.0))
+    assert "the argument does not depend on the input" in str(ei.value)
+
+    # Error because the input isn't a diff array
+    with pytest.raises(TypeError) as ei:
+        dr.forward_to(dr.detached_t(m.Float)(2.0))
+    assert "expected a differentiable array type" in str(ei.value)
+
+    # Error because the input isn't a drjit array
+    with pytest.raises(TypeError) as ei:
+        dr.forward_to([2.0])
+    assert "expected a differentiable array type" in str(ei.value)
+
+    # Trying to call with a different flag
+    dr.set_grad(a, 1.0)
+    b = a * a * 2
+    grad_b = dr.forward_to(b, flags=dr.ADFlag.ClearInterior)
+    assert dr.allclose(dr.grad(a), 1.0)
+    assert dr.allclose(grad_b, 4.0)
+
+
+def test79_forward_to(m):
+    a, b, c = m.Float(1), m.Float(2), m.Float(3)
+    dr.enable_grad(a, b, c)
+    dr.set_grad(a, 10)
+    dr.set_grad(b, 100)
+    dr.set_grad(c, 1000)
+
+    d, e, f = a + b, a + c, b + c
+    g, h, i = d*d, e*e, f*f
+
+    for k in range(2):
+        for j, v in enumerate([g, h, i]):
+            dr.set_grad(v, 0)
+            dr.forward_to(v, flags=dr.ADFlag.ClearInterior)
+            assert v == [9, 16, 25][j]
+            assert dr.grad(v) == [660, 8080, 11000][j]
+            assert dr.grad([g, h, i][(j + 1)%3]) == 0
+            assert dr.grad([g, h, i][(j + 2)%3]) == 0
+            dr.set_grad(v, m.Float())
+
+
