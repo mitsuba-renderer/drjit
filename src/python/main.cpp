@@ -169,6 +169,29 @@ PYBIND11_MODULE(drjit_ext, m_) {
     export_llvm_ad(m);
     m.def("ad_whos_str", &dr::ad_whos);
     m.def("ad_whos", []() { py::print(dr::ad_whos()); });
+    array_detail.def("graphviz_ad", [](){
+        py::str string = py::str("");
+
+        const char *s = drjit::detail::ad_graphviz<drjit::LLVMArray<float>>();
+        if (strlen(s) > 453)
+            string = py::str(string + py::str(s));
+
+        s = drjit::detail::ad_graphviz<drjit::LLVMArray<double>>();
+        if (strlen(s) > 453)
+            string = py::str(string + py::str(s));
+
+    #if defined(DRJIT_ENABLE_CUDA)
+        s = drjit::detail::ad_graphviz<drjit::CUDAArray<float>>();
+        if (strlen(s) > 453)
+            string = py::str(string + py::str(s));
+
+        s = drjit::detail::ad_graphviz<drjit::CUDAArray<double>>();
+        if (strlen(s) > 453)
+            string = py::str(string + py::str(s));
+    #endif
+
+        return string;
+    });
 #endif
 
     struct Scope {
