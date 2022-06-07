@@ -458,8 +458,9 @@ def op_getitem(self, index):
             else:
                 return self.entry_(index)
         else:
-            raise IndexError("Tried to read from array index %i, which "
-                             "exceeds its size (%i)!" % (index, size))
+            raise IndexError("%s.__getitem__(): entry %i is out of bounds "
+                             "(the array is of size %i)." % (type(self), index, size))
+
     elif isinstance(index, tuple):
         if self.IsMatrix:
             index = (index[1], index[0], *index[2:])
@@ -1263,7 +1264,7 @@ def op_imul(a, b):
 
 def op_truediv(a, b):
     if not a.IsFloat:
-        raise Exception("Use the floor division operator \"//\" for "
+        raise TypeError("Use the floor division operator \"//\" for "
                         "Dr.Jit integer arrays.")
     if getattr(b, 'Depth', 0) < a.Depth:
         return a * rcp(b)
@@ -1298,7 +1299,7 @@ def op_itruediv(a, b):
 
 def op_floordiv(a, b):
     if not a.IsIntegral:
-        raise Exception("Use the true division operator \"/\" for "
+        raise TypeError("Use the true division operator \"/\" for "
                         "Dr.Jit floating point arrays.")
 
     if isinstance(b, int):
@@ -4644,7 +4645,7 @@ def linspace(dtype, start, stop, num=1, endpoint=True):
         return dtype(start)
 
 
-def arange(dtype, start=None, end=None, step=1):
+def arange(dtype, start=None, stop=None, step=1):
     '''
     This function generates an integer sequence on the interval [``start``,
     ``stop``) with step size ``step``, where ``start`` = 0 and ``step`` = 1 if not
@@ -4667,15 +4668,15 @@ def arange(dtype, start=None, end=None, step=1):
     '''
     if start is None:
         start = 0
-        end = 1
-    elif end is None:
-        end = start
+        stop = 1
+    elif stop is None:
+        stop = start
         start = 0
 
     if not isinstance(dtype, type):
         raise Exception('arange(): Type expected as first argument')
     elif issubclass(dtype, ArrayBase):
-        return dtype.arange_(start, end, step)
+        return dtype.arange_(start, stop, step)
     else:
         return dtype(start)
 
@@ -5530,6 +5531,7 @@ def custom(cls, *args, **kwargs):
         inst._implicit_out = []
 
     return output
+
 
 def graphviz_ad(as_str=False):
     '''
