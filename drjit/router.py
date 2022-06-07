@@ -2228,26 +2228,29 @@ def eval(*args):
         _dr.detail.eval()
 
 
-def graphviz_str(arg):
-    base = _ek.leaf_array_t(arg)
+def graphviz(as_str=False):
+    '''
+    Assembles a graphviz diagram for the computational graph trace by the JIT.
 
-    if _ek.is_diff_array_v(base):
-        return base.graphviz_()
-    elif _ek.is_jit_array_v(base):
-        return _ek.detail.graphviz()
-    else:
-        raise Exception('graphviz_str(): only variables registered with '
-                        'the JIT (LLVM/CUDA) or AD backend are supported!')
+    Args:
+        as_str (bool): whether the function should return the graphviz object as
+            a string representation or not.
 
+    Returns:
+        object: the graphviz obj (or its string representation).
+    '''
+    s = _dr.detail.graphviz()
 
-def graphviz(arg):
+    if as_str:
+        return s
+
     try:
         from graphviz import Source
-        return Source(graphviz_str(arg))
+        return Source(s)
     except ImportError:
         raise Exception('The "graphviz" Python package not available! Install '
                         'via "python -m pip install graphviz". Alternatively, '
-                        'you can call drjit.graphviz_str() function to obtain '
+                        'you can call drjit.graphviz(as_str=True) to obtain '
                         'a string representation.')
 
 
@@ -4654,7 +4657,7 @@ def isolate_grad(when=True):
 
 
 # -------------------------------------------------------------------
-#             Automatic differentation of custom fuctions
+#             Automatic differentation of custom functions
 # -------------------------------------------------------------------
 
 class CustomOp:
@@ -4905,6 +4908,30 @@ def custom(cls, *args, **kwargs):
 
     return output
 
+def graphviz_ad(as_str=False):
+    '''
+    Assembles a graphviz diagram for the computational graph trace by the AD system.
+
+    Args:
+        as_str (bool): whether the function should return the graphviz object as
+            a string representation or not.
+
+    Returns:
+        object: the graphviz obj (or its string representation).
+    '''
+    s = _dr.detail.graphviz_ad()
+
+    if as_str:
+        return s
+
+    try:
+        from graphviz import Source
+        return Source(s)
+    except ImportError:
+        raise Exception('The "graphviz" Python package not available! Install '
+                        'via "python -m pip install graphviz". Alternatively, '
+                        'you can call drjit.graphviz_ad(as_str=True) to obtain '
+                        'a string representation.')
 
 def get_cmake_dir():
     from os import path

@@ -457,7 +457,6 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
             cls.def("set_grad_enabled_", &Array::set_grad_enabled_);
             cls.def("grad_enabled_", &Array::grad_enabled_);
             cls.def("enqueue_", &Array::enqueue_);
-            cls.def("graphviz_", &Array::graphviz_);
 
             cls.def_static("traverse_", &Array::traverse_,
                            py::call_guard<py::gil_scoped_release>());
