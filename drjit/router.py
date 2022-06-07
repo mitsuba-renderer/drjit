@@ -1837,6 +1837,27 @@ def fma(a, b, c, /):
 
 
 def select(m, t, f, /):
+    '''
+    select(condition, x, y, /)
+    Select elements from inputs based on a condition
+
+    This function implements the component-wise operation
+
+    .. math::
+
+    \mathrm{result}_i = \begin{cases}
+        x_i,\quad&\text{if condition}_i,\\
+        y_i,\quad&\text{otherwise.}
+    \end{cases}
+
+    Args:
+        condition (bool | drjit.ArrayBase): A Python or Dr.Jit mask/boolean array
+        x (int | float | drjit.ArrayBase): A Python or Dr.Jit array
+        y (int | float | drjit.ArrayBase): A Python or Dr.Jit array
+
+    Returns:
+        float | int | drjit.ArrayBase: Component-wise result of the selection operation
+    '''
     if isinstance(m, bool):
         return t if m else f
     type_t, type_f, type_m = type(t), type(f), type(m)
@@ -1845,7 +1866,7 @@ def select(m, t, f, /):
         if type_t is type_f and _dr.is_struct_v(type_t):
             result = type_t()
             for k in type_t.DRJIT_STRUCT.keys():
-                setattr(result, k, select(m, getattr(t, k), getattr(f, k)))
+                setattr(result, k, _dr.select(m, getattr(t, k), getattr(f, k)))
             return result
 
         m, t, f = _var_promote_select(m, t, f)
@@ -1853,121 +1874,307 @@ def select(m, t, f, /):
     return type(t).select_(m, t, f)
 
 
-def sign(a):
-    t = type(a)
-    return select(a >= 0, t(1), t(-1))
+def sign(arg, /):
+    '''
+    sign(arg, /)
+    Return the element-wise sign of the provided array.
+
+    Args:
+        arg (int | float | drjit.ArrayBase): A Python or Dr.Jit array
+
+    Returns:
+        float | int | drjit.ArrayBase: Sign of the input array
+    '''
+    t = type(arg)
+    return _dr.select(arg >= 0, t(1), t(-1))
 
 
-def copysign(a, b):
-    a_a = abs(a)
-    return select(b >= 0, a_a, -a_a)
+def copysign(a, b, /):
+    '''
+    copysign(arg0, arg1, /)
+    Copy the sign of ``arg1`` to ``arg0` element-wise.
+
+    Args:
+        arg0 (int | float | drjit.ArrayBase): A Python or Dr.Jit array to change the sign of
+        arg1 (int | float | drjit.ArrayBase): A Python or Dr.Jit array to copy the sign from
+
+    Returns:
+        float | int | drjit.ArrayBase: The values of ``arg0`` with the sign of ``arg1``
+    '''
+    a_a = _dr.abs(a)
+    return _dr.select(b >= 0, a_a, -a_a)
 
 
-def copysign_neg(a, b):
-    a_a = abs(a)
-    return select(b >= 0, a_a, -a_a)
+def mulsign(a, b, /):
+    '''
+    mulsign(arg0, arg1, /)
+    Multiply ``arg0`` by the sign of ``arg1` element-wise.
+
+    This function is equivalent to
+
+    .. code-block::
+
+        a * dr.sign(b)
+
+    Args:
+        arg0 (int | float | drjit.ArrayBase): A Python or Dr.Jit array to multiply the sign of
+        arg1 (int | float | drjit.ArrayBase): A Python or Dr.Jit array to take the sign from
+
+    Returns:
+        float | int | drjit.ArrayBase: The values of ``arg0`` multiplied with the sign of ``arg1``
+    '''
+    return _dr.select(b >= 0, a, -a)
 
 
-def mulsign(a, b):
-    return select(b >= 0, a, -a)
+def isnan(arg, /):
+    '''
+    Performs an element-wise test for *NaN* (Not a Number) values
 
+    Args:
+        arg (object): A Dr.Jit array or other kind of numeric sequence type.
 
-def mulsign_neg(a, b):
-    return select(b >= 0, -a, a)
-
-
-def isnan(a):
-    if _dr.is_array_v(a):
-        return ~eq(a, a)
+    Returns:
+        :py:func:`mask_t(arg) <mask_t>`: A mask value describing the result of the test.
+    '''
+    if _dr.is_array_v(arg):
+        return ~_dr.eq(arg, arg)
     else:
-        return not (a == a)
+        return not (arg == arg)
 
 
-def isinf(a):
-    return eq(abs(a), _dr.inf)
+def isinf(arg, /):
+    '''
+    Performs an element-wise test for positive or negative infinity
+
+    Args:
+        arg (object): A Dr.Jit array or other kind of numeric sequence type.
+
+    Returns:
+        :py:func:`mask_t(arg) <mask_t>`: A mask value describing the result of the test
+    '''
+    return _dr.eq(_dr.abs(arg), _dr.inf)
 
 
-def isfinite(a):
-    return abs(a) < _dr.inf
+def isfinite(arg, /):
+    '''
+    Performs an element-wise test that checks whether values are finite and not
+    equal to *NaN* (Not a Number)
+
+    Args:
+        arg (object): A Dr.Jit array or other kind of numeric sequence type.
+
+    Returns:
+        :py:func:`mask_t(arg) <mask_t>`: A mask value describing the result of the test
+    '''
+    return _dr.abs(arg) < _dr.inf
 
 
-def lerp(a, b, t):
-    return fma(b, t, fma(-a, t, a))
+def lerp(a, b, t, /):
+    '''
+    lerp(a, b, t, /)
+    Blends between the values ``a`` and ``b`` using the expression :math:`a \cdot (1 - t) + b \cdot t`
+
+    Args:
+        a (int | float | drjit.ArrayBase): A Python or Dr.Jit array
+        b (int | float | drjit.ArrayBase): A Python or Dr.Jit array
+        t (float | drjit.ArrayBase): A Python or Dr.Jit array
+
+    Returns:
+        float | int | drjit.ArrayBase: Blended value
+    '''
+    return _dr.fma(b, t, _dr.fma(-a, t, a))
 
 
-def clamp(value, min, max):
+def clip(value, min, max, /):
+    '''
+    Clip the provided input to the given interval.
+
+    This function is equivalent to
+
+    .. code-block::
+
+        dr.maximum(dr.minimum(value, max), min)
+
+    Dr.Jit also defines :py:func:`drjit.clamp` as an alias of this function.
+
+    Args:
+        value (int | float | drjit.ArrayBase): A Python or Dr.Jit array
+        min (int | float | drjit.ArrayBase): A Python or Dr.Jit array
+        max (int | float | drjit.ArrayBase): A Python or Dr.Jit array
+
+    Returns:
+        float | drjit.ArrayBase: Clipped input
+    '''
     return _dr.maximum(_dr.minimum(value, max), min)
 
 
-def arg(value):
-    if _dr.is_complex_v(value):
-        return _dr.atan2(value.imag, value.real)
+def clamp(value, min, max, /):
+    '''
+    Clip the provided input to the given interval.
+
+    This function is equivalent :py:func:`drjit.clamp`.
+
+    Args:
+        value (int | float | drjit.ArrayBase): A Python or Dr.Jit array
+        min (int | float | drjit.ArrayBase): A Python or Dr.Jit array
+        max (int | float | drjit.ArrayBase): A Python or Dr.Jit array
+
+    Returns:
+        float | drjit.ArrayBase: Clipped input
+    '''
+    return _dr.clip(value, min, max)
+
+
+def arg(arg, /):
+    '''
+    Return the argument of a complex Dr.Jit array.
+
+    When the provided array isn't an instance of :py:class:`drjit.Complex`, this
+    function assumes that the input array represents the real part of a complex
+    variable.
+
+    Args:
+        arg (int | float | drjit.ArrayBase): A Python or Dr.Jit array
+
+    Returns:
+        float | drjit.ArrayBase: Argument of the complex input array
+    '''
+    if _dr.is_complex_v(arg):
+        return _dr.atan2(arg.imag, arg.real)
     else:
-        return _dr.select(value >= 0, 0, -_dr.pi)
+        return _dr.select(arg >= 0, 0, -_dr.pi)
 
 
-def real(value):
-    if _dr.is_complex_v(value):
-        return value[0]
-    elif _dr.is_quaternion_v(value):
-        return value[3]
+def real(arg, /):
+    '''
+    Return the real part of a complex Dr.Jit array.
+
+    When the provided array isn't an instance of :py:class:`drjit.Complex` or
+    :py:class:`drjit.Quaternion`, this function returns the input unchanged.
+
+    Args:
+        arg (int | float | drjit.ArrayBase): A Python or Dr.Jit array
+
+    Returns:
+        float | drjit.ArrayBase: Real part of the input array
+    '''
+    if _dr.is_complex_v(arg):
+        return arg[0]
+    elif _dr.is_quaternion_v(arg):
+        return arg[3]
     else:
-        return value
+        return arg
 
 
-def imag(value):
-    if _dr.is_complex_v(value):
-        return value[1]
-    elif _dr.is_quaternion_v(value):
-        name = _dr.detail.array_name('Array', value.Type, (3), value.IsScalar)
-        Array3f = getattr(_modules.get(value.__module__), name)
-        return Array3f(value[0], value[1], value[2])
+def imag(arg, /):
+    '''
+    Return the imaginary part of a complex Dr.Jit array.
+
+    When the provided array isn't an instance of :py:class:`drjit.Complex` or
+    :py:class:`drjit.Quaternion`, this function returns the input unchanged.
+
+    Args:
+        arg (int | float | drjit.ArrayBase): A Python or Dr.Jit array
+
+    Returns:
+        float | drjit.ArrayBase: Imaginary part of the input array
+    '''
+    if _dr.is_complex_v(arg):
+        return arg[1]
+    elif _dr.is_quaternion_v(arg):
+        name = _dr.detail.array_name('Array', arg.Type, (3), arg.IsScalar)
+        Array3f = getattr(_modules.get(arg.__module__), name)
+        return Array3f(arg[0], arg[1], arg[2])
     else:
-        return type(value)(0)
+        return type(arg)(0)
 
 
-def tzcnt(a):
-    if isinstance(a, ArrayBase):
-        return a.tzcnt_()
+def tzcnt(arg, /):
+    '''
+    Return the number of trailing zero bits.
+
+    This function assumes that ``arg`` is an integer array.
+
+    Args:
+        arg (int | drjit.ArrayBase): A Python or Dr.Jit array
+
+    Returns:
+        int | drjit.ArrayBase: number of trailing zero bits in the input array
+    '''
+    if isinstance(arg, ArrayBase):
+        return arg.tzcnt_()
     else:
         # The following assumes that 'a' is a 32 bit integer
-        assert a >= 0 and a <= 0xFFFFFFFF
+        assert arg >= 0 and arg <= 0xFFFFFFFF
         result = 32
-        while a & 0xFFFFFFFF:
+        while arg & 0xFFFFFFFF:
             result -= 1
-            a <<= 1
+            arg <<= 1
         return result
 
 
-def lzcnt(a):
-    if isinstance(a, ArrayBase):
-        return a.lzcnt_()
+def lzcnt(arg, /):
+    '''
+    Return the number of leading zero bits.
+
+    This function assumes that ``arg`` is an integer array.
+
+    Args:
+        arg (int | drjit.ArrayBase): A Python or Dr.Jit array
+
+    Returns:
+        int | drjit.ArrayBase: number of leading zero bits in the input array
+    '''
+    if isinstance(arg, ArrayBase):
+        return arg.lzcnt_()
     else:
         # The following assumes that 'a' is a 32 bit integer
-        assert a >= 0 and a <= 0xFFFFFFFF
+        assert arg >= 0 and arg <= 0xFFFFFFFF
         result = 32
-        while a:
+        while arg:
             result -= 1
-            a >>= 1
+            arg >>= 1
         return result
 
 
-def popcnt(a):
-    if isinstance(a, ArrayBase):
-        return a.popcnt_()
+def popcnt(arg, /):
+    '''
+    Return the number of nonzero zero bits.
+
+    This function assumes that ``arg`` is an integer array.
+
+    Args:
+        arg (int | drjit.ArrayBase): A Python or Dr.Jit array
+
+    Returns:
+        int | drjit.ArrayBase: number of nonzero zero bits in the input array
+    '''
+    if isinstance(arg, ArrayBase):
+        return arg.popcnt_()
     else:
         result = 0
-        while a:
-            result += a & 1
-            a >>= 1
+        while arg:
+            result += arg & 1
+            arg >>= 1
         return result
 
 
-def log2i(a):
-    if isinstance(a, ArrayBase):
-        return (a.Type.Size * 8 - 1) - lzcnt(a)
+def log2i(arg, /):
+    '''
+    Return the floor of the base-two logarithm.
+
+    This function assumes that ``arg`` is an integer array.
+
+    Args:
+        arg (int | drjit.ArrayBase): A Python or Dr.Jit array
+
+    Returns:
+        int | drjit.ArrayBase: number of leading zero bits in the input array
+    '''
+    if isinstance(arg, ArrayBase):
+        return (arg.Type.Size * 8 - 1) - _dr.lzcnt(arg)
     else:
-        return 31 - lzcnt(a)
+        return 31 - _dr.lzcnt(arg)
 
 
 # -------------------------------------------------------------------
@@ -3468,6 +3675,35 @@ def repeat(array, count: int):
 
 
 def meshgrid(*args, indexing='xy'):
+    '''
+    Creates a grid coordinates based on the coordinates contained in the
+    provided one-dimensional arrays.
+
+    The indexing keyword argument allows this function to support both matrix
+    and Cartesian indexing conventions. If given the string 'ij', it will return
+    a grid coordinates with matrix indexing. If given 'xy', it will return a
+    grid coordinates with Cartesian indexing.
+
+    .. codeblock::
+
+        import drjit as dr
+
+        x, y = dr.meshgrid(
+            dr.arange(dr.llvm.UInt, 4),
+            dr.arange(dr.llvm.UInt, 4)
+        )
+
+        # x = [0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3]
+        # y = [0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3]
+
+    Args:
+        args (drjit.ArrayBase): Dr.Jit one-dimensional coordinate arrays
+
+        indexing (str): Specifies the indexing conventions
+
+    Returns:
+        tuple: Grid coordinates
+    '''
     if indexing != "ij" and indexing != "xy":
         raise Exception("meshgrid(): 'indexing' argument must equal"
                         " 'ij' or 'xy'!")
@@ -3495,7 +3731,7 @@ def meshgrid(*args, indexing='xy'):
     for v in args:
         size //= len(v)
         index_v = index // size
-        index = fma(-index_v, size, index)
+        index = _dr.fma(-index_v, size, index)
         result.append(_dr.gather(t, v, index_v))
 
     if indexing == "xy":
@@ -3514,7 +3750,7 @@ def block_sum(value, block_size):
 def binary_search(start, end, pred):
     assert isinstance(start, int) and isinstance(end, int)
 
-    iterations = log2i(end - start) + 1 if start < end else 0
+    iterations = _dr.log2i(end - start) + 1 if start < end else 0
 
     for i in range(iterations):
         middle = (start + end) >> 1
