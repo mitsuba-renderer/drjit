@@ -2832,7 +2832,7 @@ def count(a):
 
 def all(arg, /):
     '''
-    all(arg, /) -> float | int | drjit.ArrayBase
+    all(arg, /) -> bool | drjit.ArrayBase
     Computes whether all input elements evaluate to ``True``.
 
     When the argument is a dynamic array, function performs a horizontal reduction.
@@ -2864,26 +2864,30 @@ def all(arg, /):
                         "iterable containing masks!")
 
 
-def all_nested(a):
+def all_nested(arg, /):
+    '''
+    all_nested(arg, /) -> bool
+    Iterates :py:func:`all` until the type of the return value no longer
+    changes. This can be used to reduce a nested mask array into a single
+    value.
+
+    Args:
+        arg (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+    Returns:
+        Boolean
+    '''
     while True:
-        b = all(a)
-        if b is a:
+        b = _dr.all(arg)
+        if b is arg:
             break
-        a = b
-    return a
-
-
-def all_or(value, a):
-    assert isinstance(value, bool)
-    if _dr.is_jit_v(a) and a.Depth == 1:
-        return value
-    else:
-        return _dr.all(a)
+        arg = b
+    return arg
 
 
 def any(arg, /):
     '''
-    any(arg, /) -> float | int | drjit.ArrayBase
+    any(arg, /) -> bool | drjit.ArrayBase
     Computes whether any of the input elements evaluate to ``True``.
 
     When the argument is a dynamic array, function performs a horizontal reduction.
@@ -2916,39 +2920,61 @@ def any(arg, /):
                         "iterable containing masks!")
 
 
-def any_nested(a):
+def any_nested(arg, /):
+    '''
+    any_nested(arg, /) -> bool
+    Iterates :py:func:`any` until the type of the return value no longer
+    changes. This can be used to reduce a nested mask array into a single
+    value.
+
+    Args:
+        arg (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+    Returns:
+        Boolean
+    '''
     while True:
-        b = any(a)
-        if b is a:
+        b = _dr.any(arg)
+        if b is arg:
             break
-        a = b
-    return a
+        arg = b
+    return arg
 
 
-def any_or(value, a):
-    assert isinstance(value, bool)
-    if _dr.is_jit_v(a) and a.Depth == 1:
-        return value
-    else:
-        return _dr.any(a)
+def none(arg, /):
+    '''
+    none(arg, /) -> bool | drjit.ArrayBase
+    Computes whether none of the input elements evaluate to ``True``.
 
+    When the argument is a dynamic array, function performs a horizontal reduction.
+    Please see the section on :ref:`horizontal reductions <horizontal-reductions>`
+    for details.
 
-def none(a):
-    b = any(a)
+    Args:
+        arg (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+    Returns:
+        Boolean array
+    '''
+    b = _dr.any(arg)
     return not b if isinstance(b, bool) else ~b
 
 
-def none_nested(a):
-    b = any_nested(a)
+def none_nested(arg, /):
+    '''
+    none_nested(arg, /) -> bool
+    Iterates :py:func:`none` until the type of the return value no longer
+    changes. This can be used to reduce a nested mask array into a single
+    value.
+
+    Args:
+        arg (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+    Returns:
+        Boolean
+    '''
+    b = _dr.any_nested(arg)
     return not b if isinstance(b, bool) else ~b
-
-
-def none_or(value, a):
-    assert isinstance(value, bool)
-    if _dr.is_jit_v(a) and a.Depth == 1:
-        return value
-    else:
-        return _dr.none(a)
 
 
 def sum(arg, /):
@@ -2983,29 +3009,68 @@ def sum(arg, /):
                         "containing arithmetic types!")
 
 
-def sum_nested(a):
+def sum_nested(arg, /):
+    '''
+    sum_nested(arg, /) -> float | int
+    Iterates :py:func:`sum` until the type of the return value no longer
+    changes. This can be used to reduce a nested array into a single value.
+
+    This function recursively calls :py:func:`drjit.sum` on all elements of
+    the input array in order to reduce the returned value to a single entry.
+
+    Args:
+        arg (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+    Returns:
+        Sum of the input
+    '''
     while True:
-        b = _dr.sum(a)
-        if b is a:
+        b = _dr.sum(arg)
+        if b is arg:
             break
-        a = b
-    return a
+        arg = b
+    return arg
 
 
-def mean(a):
-    if hasattr(a, '__len__'):
-        return _dr.sum(a) / len(a)
+def mean(arg, /):
+    '''
+    mean(arg, /) -> float | int | drjit.ArrayBase
+    Compute the mean of all array elements.
+
+    When the argument is a dynamic array, function performs a horizontal reduction.
+    Please see the section on :ref:`horizontal reductions <horizontal-reductions>`
+    for details.
+
+    Args:
+        arg (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+    Returns:
+        Mean of the input
+    '''
+    if hasattr(arg, '__len__'):
+        return _dr.sum(arg) / len(arg)
     else:
-        return a
+        return arg
 
 
-def mean_nested(a):
+def mean_nested(arg, /):
+    '''
+    mean_nested(arg, /) -> float | int
+    Iterates :py:func:`mean` until the type of the return value no longer
+    changes. This can be used to reduce a nested array into a single value.
+
+    Args:
+        arg (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+    Returns:
+        Mean of the input
+    '''
     while True:
-        b = _dr.mean(a)
-        if b is a:
+        b = _dr.mean(arg)
+        if b is arg:
             break
-        a = b
-    return a
+        arg = b
+    return arg
 
 
 def prod(arg, /):
@@ -3040,78 +3105,132 @@ def prod(arg, /):
                         "containing arithmetic types!")
 
 
-def prod_nested(a):
+def prod_nested(arg, /):
+    '''
+    prod_nested(arg, /) -> float | int
+    Iterates :py:func:`prod` until the type of the return value no longer
+    changes. This can be used to reduce a nested array into a single value.
+
+    Args:
+        arg (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+    Returns:
+        Product of the input
+    '''
     while True:
-        b = _dr.prod(a)
-        if b is a:
+        b = _dr.prod(arg)
+        if b is arg:
             break
-        a = b
-    return a
+        arg = b
+    return arg
 
 
-def hmax(a):
-    if _var_is_drjit(a):
-        return a.hmax_()
-    elif isinstance(a, float) or isinstance(a, int):
-        return a
-    elif _dr.is_iterable_v(a):
+def max(arg, /):
+    '''
+    max(arg, /) -> float | int | drjit.ArrayBase
+    Compute the maximum value in the provided input.
+
+    When the argument is a dynamic array, function performs a horizontal reduction.
+    Please see the section on :ref:`horizontal reductions <horizontal-reductions>`
+    for details.
+
+    Args:
+        arg (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+    Returns:
+        Maximum of the input
+    '''
+    if _var_is_drjit(arg):
+        return arg.max_()
+    elif isinstance(arg, float) or isinstance(arg, int):
+        return arg
+    elif _dr.is_iterable_v(arg):
         result = None
-        for index, value in enumerate(a):
+        for index, value in enumerate(arg):
             if index == 0:
                 result = value
             else:
                 result = _dr.maximum(result, value)
         if result is None:
-            raise Exception("hmax(): zero-sized array!")
+            raise Exception("max(): zero-sized array!")
         return result
     else:
-        raise Exception("hmax(): input must be a boolean or an iterable "
+        raise Exception("max(): input must be a boolean or an iterable "
                         "containing arithmetic types!")
 
 
-def hmax_async(a):
-    return a.hmax_async_()
+def max_nested(arg, /):
+    '''
+    max_nested(arg, /) -> float | int
+    Iterates :py:func:`max` until the type of the return value no longer
+    changes. This can be used to reduce a nested array into a single value.
 
-def hmax_nested(a):
+    Args:
+        arg (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+    Returns:
+        Maximum scalar value of the input
+    '''
     while True:
-        b = hmax(a)
-        if b is a:
+        b = _dr.max(arg)
+        if b is arg:
             break
-        a = b
-    return a
+        arg = b
+    return arg
 
 
-def hmin(a):
-    if _var_is_drjit(a):
-        return a.hmin_()
-    elif isinstance(a, float) or isinstance(a, int):
-        return a
-    elif _dr.is_iterable_v(a):
+def min(arg, /):
+    '''
+    min(arg, /) -> float | int | drjit.ArrayBase
+    Compute the minimum value in the provided input.
+
+    When the argument is a dynamic array, function performs a horizontal reduction.
+    Please see the section on :ref:`horizontal reductions <horizontal-reductions>`
+    for details.
+
+    Args:
+        arg (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+    Returns:
+        Minimum of the input
+    '''
+    if _var_is_drjit(arg):
+        return arg.min_()
+    elif isinstance(arg, float) or isinstance(arg, int):
+        return arg
+    elif _dr.is_iterable_v(arg):
         result = None
-        for index, value in enumerate(a):
+        for index, value in enumerate(arg):
             if index == 0:
                 result = value
             else:
-                result = _dr.miniumum(result, value)
+                result = _dr.minimum(result, value)
         if result is None:
-            raise Exception("hmin(): zero-sized array!")
+            raise Exception("min(): zero-sized array!")
         return result
     else:
-        raise Exception("hmin(): input must be a boolean or an iterable "
+        raise Exception("min(): input must be a boolean or an iterable "
                         "containing arithmetic types!")
 
 
-def hmin_async(a):
-    return a.hmin_async_()
+def min_nested(arg, /):
+    '''
+    min_nested(arg, /) -> float | int
+    Iterates :py:func:`min` until the type of the return value no longer
+    changes. This can be used to reduce a nested array into a single value.
 
+    Args:
+        arg (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
 
-def hmin_nested(a):
+    Returns:
+        Minimum scalar value of the input
+    '''
     while True:
-        b = hmin(a)
-        if b is a:
+        b = _dr.min(arg)
+        if b is arg:
             break
-        a = b
-    return a
+        arg = b
+    return arg
 
 
 def dot(a, b, /):
@@ -3140,38 +3259,46 @@ def dot(a, b, /):
     return a.dot_(b)
 
 
-def dot_async(a, b):
-    if _dr.is_matrix_v(a) or _dr.is_matrix_v(b):
-        raise Exception("dot_async(): input shouldn't be a Matrix!"
-                        "The @ operator should be used instead.")
-
-    if type(a) is not type(b):
-        a, b = _var_promote(a, b)
-
-    elif hasattr(a, 'dot_async_'):
-        return a.dot_async_(b)
-    else:
-        return type(a)(a.dot_(b))
-
-
 def abs_dot(a, b):
+    '''
+    abs_dot(arg0, arg1, /) -> float | int | drjit.ArrayBase
+    Computes the absolute value of dot product of two arrays.
+
+    When the argument is a dynamic array, function performs a horizontal reduction.
+    Please see the section on :ref:`horizontal reductions <horizontal-reductions>`
+    for details.
+
+    Args:
+        arg0 (list | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+        arg1 (list | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+    Returns:
+        Absolute value of the dot product of inputs
+    '''
     if _dr.is_matrix_v(a) or _dr.is_matrix_v(b):
         raise Exception("abs_dot(): input shouldn't be a Matrix!"
                         "The @ operator should be used instead.")
 
-    return abs(dot(a, b))
+    return _dr.abs(_dr.dot(a, b))
 
 
-def abs_dot_async(a, b):
-    if _dr.is_matrix_v(a) or _dr.is_matrix_v(b):
-        raise Exception("abs_dot_async(): input shouldn't be a Matrix!"
-                        "The @ operator should be used instead.")
+def squared_norm(arg, /):
+    '''
+    squared_norm(arg, /) -> float | int | drjit.ArrayBase
+    Computes the squared norm of an array.
 
-    return abs(dot_async(a, b))
+    When the argument is a dynamic array, function performs a horizontal reduction.
+    Please see the section on :ref:`horizontal reductions <horizontal-reductions>`
+    for details.
 
+    Args:
+        arg (list | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
 
-def squared_norm(a):
-    return dot(a, a)
+    Returns:
+        Squared norm of the input
+    '''
+    return _dr.dot(arg, arg)
 
 
 def norm(arg, /):
@@ -3189,11 +3316,25 @@ def norm(arg, /):
     Returns:
         Norm of the input
     '''
-    return sqrt(dot(arg, arg))
+    return _dr.sqrt(_dr.dot(arg, arg))
 
 
-def normalize(a):
-    return a * rsqrt(squared_norm(a))
+def normalize(arg, /):
+    '''
+    normalize(arg, /) -> drjit.ArrayBase
+    Normalizes the provided array.
+
+    When the argument is a dynamic array, function performs a horizontal reduction.
+    Please see the section on :ref:`horizontal reductions <horizontal-reductions>`
+    for details.
+
+    Args:
+        arg (list | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+    Returns:
+        Normalized input array
+    '''
+    return arg * _dr.rsqrt(_dr.squared_norm(arg))
 
 
 def conj(a):
@@ -3206,7 +3347,7 @@ def conj(a):
 
 
 def hypot(a, b):
-    a, b = abs(a), abs(b)
+    a, b = _dr.abs(a), _dr.abs(b)
     maxval = _dr.maximum(a, b)
     minval = _dr.minimum(a, b)
     ratio = minval / maxval
@@ -3235,7 +3376,7 @@ def tile(array, count: int):
             result.init_(size)
 
         for i in range(size):
-            result[i] = tile(array[i], count)
+            result[i] = _dr.tile(array[i], count)
 
         return result
     else:
@@ -3259,7 +3400,7 @@ def repeat(array, count: int):
             result.init_(size)
 
         for i in range(size):
-            result[i] = repeat(array[i], count)
+            result[i] = _dr.repeat(array[i], count)
 
         return result
     else:
@@ -4219,7 +4360,7 @@ def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
         return x[i if xl > 1 else 0] if xl > 0 else x
 
     la, lb = safe_len(a), safe_len(b)
-    size = max(la, lb)
+    size = _builtins.max(la, lb)
 
     if la != size and la > 1 or lb != size and lb > 1:
         raise Exception("allclose(): size mismatch (%i vs %i)!" % (la, lb))

@@ -1196,12 +1196,12 @@ def prod_(a0):
     return value
 
 
-def hmin_(a0):
+def min_(a0):
     if a0.IsTensor:
-        return a0.array.hmin_()
+        return a0.array.min_()
     size = len(a0)
     if size == 0:
-        raise Exception("hmin(): zero-sized array!")
+        raise Exception("min(): zero-sized array!")
 
     value = a0[0]
     for i in range(1, size):
@@ -1209,32 +1209,18 @@ def hmin_(a0):
     return value
 
 
-def hmin_async_(a0):
+def max_(a0):
     if a0.IsTensor:
-        return a0.array.hmin_async_()
-    else:
-        return type(a0)([a0.hmin_()])
-
-
-def hmax_(a0):
-    if a0.IsTensor:
-        return a0.array.hmax_()
+        return a0.array.max_()
 
     size = len(a0)
     if size == 0:
-        raise Exception("hmax(): zero-sized array!")
+        raise Exception("max(): zero-sized array!")
 
     value = a0[0]
     for i in range(1, size):
         value = _dr.maximum(value, a0[i])
     return value
-
-
-def hmax_async_(a0):
-    if a0.IsTensor:
-        return a0.array.hmax_async_()
-    else:
-        return type(a0)([a0.hmax_()])
 
 
 def dot_(a0, a1):
