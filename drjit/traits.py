@@ -483,7 +483,7 @@ def int_array_t(arg):
         raise Exception("Unsupported variable size!")
 
     t = arg.ReplaceScalar(vt)
-    return t if isinstance(arg, type) else t(arg)
+    return t
 
 
 def uint_array_t(arg):
@@ -522,7 +522,7 @@ def uint_array_t(arg):
         raise Exception("Unsupported variable size!")
 
     t = arg.ReplaceScalar(vt)
-    return t if isinstance(arg, type) else t(arg)
+    return t
 
 
 def float_array_t(arg):
@@ -558,8 +558,7 @@ def float_array_t(arg):
     else:
         raise Exception("Unsupported variable size!")
 
-    t = arg.ReplaceScalar(vt)
-    return t if isinstance(arg, type) else t(arg)
+    return arg.ReplaceScalar(vt)
 
 
 def uint32_array_t(arg):
@@ -582,8 +581,7 @@ def uint32_array_t(arg):
     Returns:
         type: Result of the conversion as described above.
     '''
-    t = arg.ReplaceScalar(VarType.UInt32) if is_array_v(arg) else int
-    return t if isinstance(arg, type) else t(arg)
+    return arg.ReplaceScalar(VarType.UInt32) if is_array_v(arg) else int
 
 
 def int32_array_t(arg):
@@ -606,8 +604,7 @@ def int32_array_t(arg):
     Returns:
         type: Result of the conversion as described above.
     '''
-    t = arg.ReplaceScalar(VarType.Int32) if is_array_v(arg) else int
-    return t if isinstance(arg, type) else t(arg)
+    return arg.ReplaceScalar(VarType.Int32) if is_array_v(arg) else int
 
 
 def uint64_array_t(arg):
@@ -630,8 +627,7 @@ def uint64_array_t(arg):
     Returns:
         type: Result of the conversion as described above.
     '''
-    t = arg.ReplaceScalar(VarType.UInt64) if is_array_v(arg) else int
-    return t if isinstance(arg, type) else t(arg)
+    return arg.ReplaceScalar(VarType.UInt64) if is_array_v(arg) else int
 
 
 def int64_array_t(arg):
@@ -653,8 +649,7 @@ def int64_array_t(arg):
     Returns:
         type: Result of the conversion as described above.
     '''
-    t = arg.ReplaceScalar(VarType.Int64) if is_array_v(arg) else int
-    return t if isinstance(arg, type) else t(arg)
+    return arg.ReplaceScalar(VarType.Int64) if is_array_v(arg) else int
 
 
 def float32_array_t(arg):
@@ -676,8 +671,7 @@ def float32_array_t(arg):
     Returns:
         type: Result of the conversion as described above.
     '''
-    t = arg.ReplaceScalar(VarType.Float32) if is_array_v(arg) else float
-    return t if isinstance(arg, type) else t(arg)
+    return arg.ReplaceScalar(VarType.Float32) if is_array_v(arg) else float
 
 
 def float64_array_t(arg):
@@ -699,11 +693,30 @@ def float64_array_t(arg):
     Returns:
         type: Result of the conversion as described above.
     '''
-    t = arg.ReplaceScalar(VarType.Float64) if is_array_v(arg) else float
-    return t if isinstance(arg, type) else t(arg)
+    return arg.ReplaceScalar(VarType.Float64) if is_array_v(arg) else float
 
 
 def diff_array_t(a):
+    '''
+    Converts the provided Dr.Jit array/tensor type into a differentiable version.
+
+    This function implements the following set of behaviors:
+
+    1. When invoked with a Dr.Jit array *type* (e.g. :py:class:`drjit.cuda.Array3f`), it
+       returns a *differentiable* version (e.g. :py:class:`drjit.cuda.ad.Array3f`).
+
+    2. When the input isn't a type, it returns ``diff_array_t(type(arg))``.
+
+    3. When the input is is a list or a tuple, it recursively call ``diff_array_t`` over all elements.
+
+    4. When the input is not a Dr.Jit array or type, the function throws an exception.
+
+    Args:
+        arg (object): An arbitrary Python object
+
+    Returns:
+        type: Result of the conversion as described above.
+    '''
     if isinstance(a, tuple):
         return tuple(diff_array_t(v) for v in a)
     elif isinstance(a, list):

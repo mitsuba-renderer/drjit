@@ -675,7 +675,7 @@ def slice_tensor(shape, indices, uint32):
                 if comp[0] >= 0 and comp[2] >= 0:
                     index_val = comp[0] + comp[2] * index_rem
                 else:
-                    index_val = uint32(comp[0] + comp[2] * _dr.int32_array_t(index_rem))
+                    index_val = uint32(comp[0] + comp[2] * _dr.int32_array_t(index_rem)(index_rem))
 
             index_out += index_val * size_out
             index_tmp = index_next
