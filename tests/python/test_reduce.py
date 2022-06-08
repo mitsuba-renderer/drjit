@@ -1,0 +1,226 @@
+import drjit as dr
+import pytest
+import importlib
+
+@pytest.fixture(scope="module", params=['drjit.cuda', 'drjit.llvm'])
+def m(request):
+    if 'cuda' in request.param:
+        if not dr.has_backend(dr.JitBackend.CUDA):
+            pytest.skip('CUDA mode is unsupported')
+    else:
+        if not dr.has_backend(dr.JitBackend.LLVM):
+            pytest.skip('LLVM mode is unsupported')
+    yield importlib.import_module(request.param)
+
+
+def test01_sum(m):
+    assert dr.allclose(dr.sum(6.0), 6)
+
+    a = dr.sum(m.Float([1, 2, 3]))
+    assert dr.allclose(a, 6)
+    assert type(a) is m.Float
+
+    a = dr.sum([1.0, 2.0, 3.0])
+    assert dr.allclose(a, 6)
+    assert type(a) is float
+
+    a = dr.sum(m.Array3f(1, 2, 3))
+    assert dr.allclose(a, 6)
+    assert type(a) is m.Float
+
+    a = dr.sum(m.Array3i(1, 2, 3))
+    assert dr.allclose(a, 6)
+    assert type(a) is m.Int
+
+    a = dr.sum(m.ArrayXf([1, 2, 3], [2, 3, 4], [3, 4, 5]))
+    assert dr.allclose(a, [6, 9, 12])
+    assert type(a) is m.Float
+
+    a = dr.sum_nested(m.Array3f([1, 1], [2, 2], [3, 3]))
+    assert dr.allclose(a, 12)
+    assert type(a) is m.Float
+
+    a = dr.sum_nested(m.Array3i(1, 2, 3))
+    assert dr.allclose(a, 6)
+    assert type(a) is m.Int
+
+    a = dr.sum_nested(m.ArrayXf([1, 2, 3], [2, 3, 4], [3, 4, 5]))
+    assert dr.allclose(a, 27)
+    assert type(a) is m.Float
+
+
+def test02_mean(m):
+    assert dr.allclose(dr.sum(6.0), 6)
+
+    a = dr.mean(m.Float([1, 2, 3]))
+    assert dr.allclose(a, 6 / 3.0)
+    assert type(a) is m.Float
+
+    a = dr.mean([1.0, 2.0, 3.0])
+    assert dr.allclose(a, 6 / 3.0)
+    assert type(a) is float
+
+    a = dr.mean(m.Array3f(1, 2, 3))
+    assert dr.allclose(a, 6 / 3.0)
+    assert type(a) is m.Float
+
+    a = dr.mean(m.Array3i(1, 2, 3))
+    assert dr.allclose(a, 6 / 3.0)
+    assert type(a) is m.Float
+
+    a = dr.mean(m.ArrayXf([1, 2, 3], [2, 3, 4], [3, 4, 5]))
+    assert dr.allclose(a, [2, 3, 4])
+    assert type(a) is m.Float
+
+    a = dr.mean_nested(m.Array3f([1, 1], [2, 2], [3, 3]))
+    assert dr.allclose(a, 12 / 6.0)
+    assert type(a) is m.Float
+
+    a = dr.mean_nested(m.Array3i(1, 2, 3))
+    assert dr.allclose(a, 6 / 3.0)
+    assert type(a) is m.Float
+
+    a = dr.mean_nested(m.ArrayXf([1, 2, 3], [2, 3, 4], [3, 4, 5]))
+    assert dr.allclose(a, 27 / 9.0)
+    assert type(a) is m.Float
+
+
+def test03_prod(m):
+    assert dr.allclose(dr.prod(6.0), 6.0)
+
+    a = dr.prod(m.Float([1, 2, 3]))
+    assert dr.allclose(a, 6)
+    assert type(a) is m.Float
+
+    a = dr.prod([1.0, 2.0, 3.0])
+    assert dr.allclose(a, 6)
+    assert type(a) is float
+
+    a = dr.prod(m.Array3f(1, 2, 3))
+    assert dr.allclose(a, 6)
+    assert type(a) is m.Float
+
+    a = dr.prod(m.Array3i(1, 2, 3))
+    assert dr.allclose(a, 6)
+    assert type(a) is m.Int
+
+    a = dr.prod(m.ArrayXf([1, 2, 3], [2, 3, 4], [3, 4, 5]))
+    assert dr.allclose(a, [6, 24, 60])
+    assert type(a) is m.Float
+
+
+    a = dr.prod_nested(m.Array3f([1, 1], [2, 2], [3, 3]))
+    assert dr.allclose(a, 6 * 6)
+    assert type(a) is m.Float
+
+    a = dr.prod_nested(m.Array3i(1, 2, 3))
+    assert dr.allclose(a, 6)
+    assert type(a) is m.Int
+
+    a = dr.prod_nested(m.ArrayXf([1, 2, 3], [2, 3, 4], [3, 4, 5]))
+    assert dr.allclose(a, 6 * 24 * 60)
+    assert type(a) is m.Float
+
+
+def test04_max(m):
+    assert dr.allclose(dr.max(6.0), 6.0)
+
+    a = dr.max(m.Float([1, 2, 3]))
+    assert dr.allclose(a, 3)
+    assert type(a) is m.Float
+
+    a = dr.max([1.0, 2.0, 3.0])
+    assert dr.allclose(a, 3)
+    assert type(a) is float
+
+    a = dr.max(m.Array3f(1, 2, 3))
+    assert dr.allclose(a, 3)
+    assert type(a) is m.Float
+
+    a = dr.max(m.Array3i(1, 2, 3))
+    assert dr.allclose(a, 3)
+    assert type(a) is m.Int
+
+    a = dr.max(m.ArrayXf([1, 2, 5], [2, 3, 4], [3, 4, 3]))
+    assert dr.allclose(a, [3, 4, 5])
+    assert type(a) is m.Float
+
+    a = dr.max_nested(m.Array3f([1, 1], [2, 4], [3, 3]))
+    assert dr.allclose(a, 4)
+    assert type(a) is m.Float
+
+    a = dr.max_nested(m.Array3i(1, 2, 3))
+    assert dr.allclose(a, 3)
+    assert type(a) is m.Int
+
+    a = dr.max_nested(m.ArrayXf([1, 2, 5], [2, 3, 4], [3, 4, 3]))
+    assert dr.allclose(a, 5)
+    assert type(a) is m.Float
+
+
+def test05_min(m):
+    assert dr.allclose(dr.min(6.0), 6.0)
+
+    a = dr.min(m.Float([1, 2, 3]))
+    assert dr.allclose(a, 1)
+    assert type(a) is m.Float
+
+    a = dr.min([1.0, 2.0, 3.0])
+    assert dr.allclose(a, 1)
+    assert type(a) is float
+
+    a = dr.min(m.Array3f(1, 2, 3))
+    assert dr.allclose(a, 1)
+    assert type(a) is m.Float
+
+    a = dr.min(m.Array3i(1, 2, 3))
+    assert dr.allclose(a, 1)
+    assert type(a) is m.Int
+
+    a = dr.min(m.ArrayXf([1, 2, 5], [2, 3, 4], [3, 4, 3]))
+    assert dr.allclose(a, [1, 2, 3])
+    assert type(a) is m.Float
+
+    a = dr.min_nested(m.Array3f([1, 1], [2, 4], [3, 3]))
+    assert dr.allclose(a, 1)
+    assert type(a) is m.Float
+
+    a = dr.min_nested(m.Array3i(1, 2, 3))
+    assert dr.allclose(a, 1)
+    assert type(a) is m.Int
+
+    a = dr.min_nested(m.ArrayXf([1, 2, 5], [2, 3, 4], [3, 4, 3]))
+    assert dr.allclose(a, 1)
+    assert type(a) is m.Float
+
+
+def test06_dot(m):
+    a = dr.dot(m.Float(1, 2, 3), m.Float(2, 1, 1))
+    assert dr.allclose(a, 7)
+    assert type(a) is m.Float
+
+    a = dr.dot(m.Float(1, 2, 3), m.Float(2))
+    assert dr.allclose(a, 12)
+    assert type(a) is m.Float
+
+    a = dr.dot(m.Float(1, 2, 3), [2, 1, 1])
+    assert dr.allclose(a, 7)
+    assert type(a) is m.Float
+
+    a = dr.dot(m.Array3f(1, 2, 3), m.Array3f([2, 1, 1]))
+    assert dr.allclose(a, 7)
+    assert type(a) is m.Float
+
+    a = dr.dot(m.ArrayXf([1, 2, 5], [2, 1, 4], [3, 4, 3]), m.ArrayXf([[1, 2, 5], [2, 2, 4], [3, 4, 3]]))
+    assert dr.allclose(a, [14, 22, 50])
+    assert type(a) is m.Float
+
+
+def test07_norm(m):
+    a = dr.norm(m.Float(1, 2, 3))
+    assert dr.allclose(a, 3.74166)
+    assert type(a) is m.Float
+
+    a = dr.norm(m.Array3f(1, 2, 3))
+    assert dr.allclose(a, 3.74166)
+    assert type(a) is m.Float

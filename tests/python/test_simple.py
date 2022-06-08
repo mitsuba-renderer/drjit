@@ -1,5 +1,6 @@
 import drjit as dr
 import pytest
+import importlib
 
 
 def test01_init_zero():
@@ -1168,6 +1169,72 @@ def test42_prevent_inefficient_cast(capsys):
 
     #  la.Float(l.Float([1, 2, 3, 4]))
 
+
+@pytest.fixture(scope="module", params=['drjit.cuda', 'drjit.llvm'])
+def m(request):
+    if 'cuda' in request.param:
+        if not dr.has_backend(dr.JitBackend.CUDA):
+            pytest.skip('CUDA mode is unsupported')
+    else:
+        if not dr.has_backend(dr.JitBackend.LLVM):
+            pytest.skip('LLVM mode is unsupported')
+    yield importlib.import_module(request.param)
+
+
+def test43_minimum(m):
+    assert dr.allclose(dr.minimum(6.0, 4.0), 4.0)
+
+    a = dr.minimum(m.Float([1, 2, 3]), m.Float(2))
+    assert dr.allclose(a, [1, 2, 2])
+    assert type(a) is m.Float
+
+    a = dr.minimum(m.Float([1, 2, 3]), [2.0, 2.0, 2.0])
+    assert dr.allclose(a, [1, 2, 2])
+    assert type(a) is m.Float
+
+    a = dr.minimum(m.Array3f(1, 2, 3), m.Float(2))
+    assert dr.allclose(a, [1, 2, 2])
+    assert type(a) is m.Array3f
+
+    a = dr.minimum(m.Array3i(1, 2, 3), m.Float(2))
+    assert dr.allclose(a, [1, 2, 2])
+    assert type(a) is m.Array3f
+
+    a = dr.minimum(m.ArrayXf([1, 2, 5], [2, 1, 4], [3, 4, 3]), m.Float(1, 2, 3))
+    assert dr.allclose(a, [[1, 2, 3], [1, 1, 3], [1, 2, 3]])
+    assert type(a) is m.ArrayXf
+
+    a = dr.minimum(m.ArrayXf([1, 2, 5], [2, 1, 4], [3, 4, 3]), m.Array3f(1, 2, 3))
+    assert dr.allclose(a, [[1, 1, 1], [2, 1, 2], [3, 3, 3]])
+    assert type(a) is m.ArrayXf
+
+
+def test44_maximum(m):
+    assert dr.allclose(dr.maximum(6.0, 4.0), 6.0)
+
+    a = dr.maximum(m.Float([1, 2, 3]), m.Float(2))
+    assert dr.allclose(a, [2, 2, 3])
+    assert type(a) is m.Float
+
+    a = dr.maximum(m.Float([1, 2, 3]), [2.0, 2.0, 2.0])
+    assert dr.allclose(a, [2, 2, 3])
+    assert type(a) is m.Float
+
+    a = dr.maximum(m.Array3f(1, 2, 3), m.Float(2))
+    assert dr.allclose(a, [2, 2, 3])
+    assert type(a) is m.Array3f
+
+    a = dr.maximum(m.Array3i(1, 2, 3), m.Float(2))
+    assert dr.allclose(a, [2, 2, 3])
+    assert type(a) is m.Array3f
+
+    a = dr.maximum(m.ArrayXf([1, 2, 5], [2, 1, 4], [3, 4, 3]), m.Float(1, 2, 3))
+    assert dr.allclose(a, [[1, 2, 5], [2, 2, 4], [3, 4, 3]])
+    assert type(a) is m.ArrayXf
+
+    a = dr.maximum(m.ArrayXf([1, 2, 5], [2, 1, 4], [3, 4, 3]), m.Array3f(1, 2, 3))
+    assert dr.allclose(a, [[1, 2, 5], [2, 2, 4], [3, 4, 3]])
+    assert type(a) is m.ArrayXf
 
 #@pytest.mark.parametrize('name', ['sqrt', 'cbrt', 'sin', 'cos', 'tan', 'asin',
 #                                  'acos', 'atan', 'sinh', 'cosh', 'tanh',
