@@ -3268,7 +3268,8 @@ def all_nested(arg, /):
     '''
     while True:
         b = _dr.all(arg)
-        if b is arg:
+        ta, tb = type(arg), type(b)
+        if (tb is ta) and (ta is bool or len(arg) == 1):
             break
         arg = b
     return arg
@@ -3324,7 +3325,8 @@ def any_nested(arg, /):
     '''
     while True:
         b = _dr.any(arg)
-        if b is arg:
+        ta, tb = type(arg), type(b)
+        if (tb is ta) and (ta is bool or len(arg) == 1):
             break
         arg = b
     return arg
@@ -3401,8 +3403,7 @@ def sum(arg, /):
 def sum_nested(arg, /):
     '''
     sum_nested(arg, /) -> float | int
-    Iterates :py:func:`sum` until the type of the return value no longer
-    changes. This can be used to reduce a nested array into a single value.
+    Iterates :py:func:`sum` until the return value is reduced to a single value.
 
     This function recursively calls :py:func:`drjit.sum` on all elements of
     the input array in order to reduce the returned value to a single entry.
@@ -3415,7 +3416,8 @@ def sum_nested(arg, /):
     '''
     while True:
         b = _dr.sum(arg)
-        if b is arg:
+        ta, tb = type(arg), type(b)
+        if (tb is ta) and (ta in [int, float] or len(arg) == 1):
             break
         arg = b
     return arg
@@ -3423,7 +3425,7 @@ def sum_nested(arg, /):
 
 def mean(arg, /):
     '''
-    mean(arg, /) -> float | int | drjit.ArrayBase
+    mean(arg, /) -> float | drjit.ArrayBase
     Compute the mean of all array elements.
 
     When the argument is a dynamic array, function performs a horizontal reduction.
@@ -3437,7 +3439,8 @@ def mean(arg, /):
         Mean of the input
     '''
     if hasattr(arg, '__len__'):
-        return _dr.sum(arg) / len(arg)
+        v = _dr.sum(arg)
+        return _dr.float_array_t(v)(v) / len(arg)
     else:
         return arg
 
@@ -3445,8 +3448,7 @@ def mean(arg, /):
 def mean_nested(arg, /):
     '''
     mean_nested(arg, /) -> float | int
-    Iterates :py:func:`mean` until the type of the return value no longer
-    changes. This can be used to reduce a nested array into a single value.
+    Iterates :py:func:`mean` until the return value is reduced to a single value.
 
     Args:
         arg (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
@@ -3456,7 +3458,8 @@ def mean_nested(arg, /):
     '''
     while True:
         b = _dr.mean(arg)
-        if b is arg:
+        ta, tb = type(arg), type(b)
+        if (tb is ta) and (ta is float or len(arg) == 1):
             break
         arg = b
     return arg
@@ -3497,8 +3500,7 @@ def prod(arg, /):
 def prod_nested(arg, /):
     '''
     prod_nested(arg, /) -> float | int
-    Iterates :py:func:`prod` until the type of the return value no longer
-    changes. This can be used to reduce a nested array into a single value.
+    Iterates :py:func:`prod` until the return value is reduced to a single value.
 
     Args:
         arg (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
@@ -3508,7 +3510,8 @@ def prod_nested(arg, /):
     '''
     while True:
         b = _dr.prod(arg)
-        if b is arg:
+        ta, tb = type(arg), type(b)
+        if (tb is ta) and (ta in [int, float] or len(arg) == 1):
             break
         arg = b
     return arg
@@ -3551,8 +3554,7 @@ def max(arg, /):
 def max_nested(arg, /):
     '''
     max_nested(arg, /) -> float | int
-    Iterates :py:func:`max` until the type of the return value no longer
-    changes. This can be used to reduce a nested array into a single value.
+    Iterates :py:func:`max` until the return value is reduced to a single value.
 
     Args:
         arg (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
@@ -3562,7 +3564,8 @@ def max_nested(arg, /):
     '''
     while True:
         b = _dr.max(arg)
-        if b is arg:
+        ta, tb = type(arg), type(b)
+        if (tb is ta) and (ta in [int, float] or len(arg) == 1):
             break
         arg = b
     return arg
@@ -3605,8 +3608,7 @@ def min(arg, /):
 def min_nested(arg, /):
     '''
     min_nested(arg, /) -> float | int
-    Iterates :py:func:`min` until the type of the return value no longer
-    changes. This can be used to reduce a nested array into a single value.
+    Iterates :py:func:`min` until the return value is reduced to a single value.
 
     Args:
         arg (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
@@ -3616,7 +3618,8 @@ def min_nested(arg, /):
     '''
     while True:
         b = _dr.min(arg)
-        if b is arg:
+        ta, tb = type(arg), type(b)
+        if (tb is ta) and (ta in [int, float] or len(arg) == 1):
             break
         arg = b
     return arg
