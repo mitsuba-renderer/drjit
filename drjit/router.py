@@ -1406,7 +1406,8 @@ def schedule(*args):
                 result |= schedule(v)
     return result
 
-def flatten_indices(*args):
+
+def _flatten_indices(*args):
     results = []
     for a in args:
         t = type(a)
@@ -1417,47 +1418,70 @@ def flatten_indices(*args):
                 results.append(a.index())
             else:
                 for i in range(len(a)):
-                    results += flatten_indices(a[i])
+                    results += _flatten_indices(a[i])
         elif _ek.is_drjit_struct_v(t):
             for k in t.DRJIT_STRUCT.keys():
-                results += flatten_indices(getattr(a, k))
+                results += _flatten_indices(getattr(a, k))
         elif issubclass(t, _Sequence):
             for v in a:
-                results += flatten_indices(v)
+                results += _flatten_indices(v)
         elif issubclass(t, _Mapping):
             for k, v in a.items():
-                results += flatten_indices(v)
+                results += _flatten_indices(v)
     return results
 
 
+def _var_kind(var):
+    return (type(var), width(var))
+
+
 def kernel(fn):
-    cached_kernel = None
-    output_type = None
-    output_shape = None
+    class _CachedKernel:
+        def record(self, fn, *args):
+            param_slots = _flatten_indices(*args)
+            self.handle = _ek.detail.start_cached_kernel_recording(param_slots)
+
+            try:
+                output = fn(*args)
+            except:
+                # Prevent kernel recording state to leak if an exception is thrown
+                _ek.detail.end_cached_kernel_recording(self.handle, param_slots)
+                raise
+
+            self.kind = _var_kind(output)
+            param_slots += _flatten_indices(output)
+
+            schedule(output)
+            self.handle = _ek.detail.end_cached_kernel_recording(self.handle, param_slots)
+            return output
+
+        def replay(self, *args):
+            output = empty(*self.kind)
+            param_slots = _flatten_indices(*args) + _flatten_indices(output)
+
+            _ek.detail.run_cached_kernel(self.handle, param_slots)
+            return output
+
+
+    kernels_by_signature = dict()
 
 
     def wrapper(*args):
-        nonlocal cached_kernel 
-        nonlocal output_type
-        nonlocal output_shape
+        # TODO: find a way to promote literals automatically
+        # _var_promote requires at least one drjit array as reference for promotion
+        # For now all variables have to be drjit ones, as verified in _flatten_indices
+        make_opaque(*args)
         eval(*args)
-        param_slots = flatten_indices(*args)
-        if cached_kernel is None:
-            cached_kernel = _ek.detail.start_cached_kernel_recording(param_slots)
 
-            output = fn(*args)
-            schedule(output)
+        signature = tuple(_var_kind(var) for var in args)
+        kernel = kernels_by_signature.get(signature)
+        if kernel is None:
+            kernel = _CachedKernel()
+            output = kernel.record(fn, *args)
+            kernels_by_signature[signature] = kernel
+            return output
 
-            param_slots += flatten_indices(output)
-            cached_kernel = _ek.detail.end_cached_kernel_recording(cached_kernel, param_slots)
-            output_type = type(output)
-            output_shape = width(output)
-        else:
-            output = empty(output_type, output_shape)
-            param_slots += flatten_indices(output)
-
-            _ek.detail.run_cached_kernel(cached_kernel, param_slots)
-        return output
+        return kernel.replay(*args)
 
 
     return wrapper
