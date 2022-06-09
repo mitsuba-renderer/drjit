@@ -63,30 +63,36 @@ public:
      * texture objects should be reused/updated via \ref set_value() and \ref
      * set_tensor() as much as possible.
      *
+     * When \c use_accel is set to \c false on CUDA mode, the texture will not
+     * use the hardware acceleration (allocation and evaluation). In other modes
+     * this argument has no effect.
+     *
      * When \c migrate is set to \c true on CUDA mode, the texture information
      * is *fully* migrated to GPU texture memory to avoid redundant storage. In
      * this case, the fallback evaluation routine \ref eval_nonaccel() is not
      * usable anymore (it will return zero) and only \ref eval() or \ref
      * eval_cuda() should be used. Note that the texture is still
      * differentiable even when migrated. The \ref value() and \ref tensor()
-     * operations will perform a reverse migration in this caes.
+     * operations will perform a reverse migration in this case.
      *
      * The \c filter_mode parameter defines the interpolation method to be used
      * in all evaluation routines. By default, the texture is linearly
      * interpolated. Besides nearest/linear filtering, the implementation also
      * provides a clamped cubic B-spline interpolation scheme in case a
      * higher-order interpolation is needed. In CUDA mode, this is done using a
-     * series of linear lookups to optimally use the hardwrae (hence, linear
+     * series of linear lookups to optimally use the hardware (hence, linear
      * filtering must be enabled to use this feature).
      *
      * When evaluating the texture outside of its boundaries, the \c wrap_mode
      * defines the wrapping method. The default behavior is \ref WrapMode::Clamp,
      * which indefinitely extends the colors on the boundary along each dimension.
      */
-    Texture(const size_t shape[Dimension], size_t channels, bool migrate = true,
+    Texture(const size_t shape[Dimension], size_t channels,
+            bool use_accel = true,
+            bool migrate = true,
             FilterMode filter_mode = FilterMode::Linear,
             WrapMode wrap_mode = WrapMode::Clamp) {
-        init(shape, channels, migrate, filter_mode, wrap_mode);
+        init(shape, channels, use_accel, migrate, filter_mode, wrap_mode);
     }
 
     /**
@@ -100,13 +106,13 @@ public:
      * Both the \c filter_mode and \c wrap_mode have the same defaults and
      * behaviors as for the previous constructor.
      */
-    Texture(const TensorXf &tensor, bool migrate = true,
+    Texture(const TensorXf &tensor, bool use_accel = true, bool migrate = true,
             FilterMode filter_mode = FilterMode::Linear,
             WrapMode wrap_mode = WrapMode::Clamp) {
         if (tensor.ndim() != Dimension + 1)
             drjit_raise("Texture::Texture(): tensor dimension must equal "
                         "texture dimension plus one.");
-        init(tensor.shape().data(), tensor.shape(Dimension), migrate,
+        init(tensor.shape().data(), tensor.shape(Dimension), use_accel, migrate,
              filter_mode, wrap_mode);
         set_tensor(tensor);
     }
@@ -121,6 +127,7 @@ public:
             m_inv_resolution[i] = std::move(other.m_inv_resolution[i]);
         m_filter_mode = other.m_filter_mode;
         m_wrap_mode = other.m_wrap_mode;
+        m_use_accel = other.m_use_accel;
         m_migrate = other.m_migrate;
         m_migrated = other.m_migrated;
     }
@@ -137,6 +144,7 @@ public:
             m_inv_resolution[i] = std::move(other.m_inv_resolution[i]);
         m_filter_mode = other.m_filter_mode;
         m_wrap_mode = other.m_wrap_mode;
+        m_use_accel = other.m_use_accel;
         m_migrate = other.m_migrate;
         m_migrated = other.m_migrated;
         return *this;
@@ -146,8 +154,10 @@ public:
     Texture &operator=(const Texture &) = delete;
 
     ~Texture() {
-        if constexpr (IsCUDA)
-            jit_cuda_tex_destroy(m_handle);
+        if constexpr (HasCudaTexture) {
+            if (m_use_accel)
+                jit_cuda_tex_destroy(m_handle);
+        }
     }
 
     /// Return the CUDA handle (Dr.JitCudaTexture*). NULL on all other backends
@@ -168,23 +178,25 @@ public:
             drjit_raise("Texture::set_value(): unexpected array size!");
 
         if constexpr (HasCudaTexture) {
-            value.eval_(); // Sync the value before copying to texture memory
+            if (m_use_accel) {
+                value.eval_(); // Sync the value before copying to texture memory
 
-            size_t tex_shape[Dimension + 1];
-            reverse_tensor_shape(tex_shape, true);
-            jit_cuda_tex_memcpy_d2t(Dimension, tex_shape, value.data(), m_handle);
+                size_t tex_shape[Dimension + 1];
+                reverse_tensor_shape(tex_shape, true);
+                jit_cuda_tex_memcpy_d2t(Dimension, tex_shape, value.data(), m_handle);
 
-            if (m_migrate) {
-                Storage dummy = zero<Storage>(m_size);
+                if (m_migrate) {
+                    Storage dummy = zero<Storage>(m_size);
 
-                // Fully migrate to texture memory, set m_value to zero
-                if constexpr (IsDiff)
-                    m_value.array() = replace_grad(dummy, value);
-                else
-                    m_value.array() = dummy;
+                    // Fully migrate to texture memory, set m_value to zero
+                    if constexpr (IsDiff)
+                        m_value.array() = replace_grad(dummy, value);
+                    else
+                        m_value.array() = dummy;
 
-                m_migrated = true;
-                return;
+                    m_migrated = true;
+                    return;
+                }
             }
         }
 
@@ -205,31 +217,38 @@ public:
                         "texture dimension plus one (channels).");
 
         if constexpr (HasCudaTexture) {
-            bool is_inplace_update = (&tensor == &m_value);
-            size_t current_shape[Dimension + 1];
+            if (m_use_accel) {
+                bool is_inplace_update = (&tensor == &m_value);
+                size_t current_shape[Dimension + 1];
 
-            if (is_inplace_update) {
-                jit_cuda_tex_get_shape(Dimension, m_handle, current_shape);
-            } else {
-                for (size_t i = 0; i < Dimension + 1; ++i)
-                    current_shape[i] = m_value.shape(i);
-            }
-
-            bool shape_changed = false;
-            for (size_t i = 0; i < Dimension + 1; ++i) {
-                if (current_shape[i] != tensor.shape(i)) {
-                    shape_changed = true;
-                    break;
+                if (is_inplace_update) {
+                    jit_cuda_tex_get_shape(Dimension, m_handle, current_shape);
+                } else {
+                    for (size_t i = 0; i < Dimension + 1; ++i)
+                        current_shape[i] = m_value.shape(i);
                 }
-            }
 
-            if (shape_changed) {
-                jit_cuda_tex_destroy(m_handle);
-                init(tensor.shape().data(), tensor.shape(Dimension), m_migrate,
-                     m_filter_mode, m_wrap_mode, !is_inplace_update);
+                bool shape_changed = false;
+                for (size_t i = 0; i < Dimension + 1; ++i) {
+                    if (current_shape[i] != tensor.shape(i)) {
+                        shape_changed = true;
+                        break;
+                    }
+                }
+
+                if (shape_changed) {
+                    jit_cuda_tex_destroy(m_handle);
+                    init(tensor.shape().data(), tensor.shape(Dimension), m_use_accel, m_migrate,
+                        m_filter_mode, m_wrap_mode, !is_inplace_update);
+                }
+            } else {
+                init(tensor.shape().data(), tensor.shape(Dimension),
+                     m_use_accel, m_migrate,
+                     m_filter_mode, m_wrap_mode, false);
             }
         } else {
-            init(tensor.shape().data(), tensor.shape(Dimension), m_migrate,
+            init(tensor.shape().data(), tensor.shape(Dimension),
+                 m_use_accel, m_migrate,
                  m_filter_mode, m_wrap_mode, false);
         }
 
@@ -243,7 +262,7 @@ public:
      */
     const TensorXf &tensor() const {
         if constexpr (HasCudaTexture) {
-            if (m_migrated) {
+            if (m_use_accel && m_migrated) {
                 Storage primal = empty<Storage>(m_size);
 
                 size_t tex_shape[Dimension + 1];
@@ -286,22 +305,24 @@ public:
         const size_t channels = m_value.shape(Dimension);
 
         if constexpr (HasCudaTexture) {
-            uint32_t pos_idx[Dimension];
-            uint32_t *out_idx =
-                (uint32_t *) alloca(channels * sizeof(uint32_t));
-            for (size_t i = 0; i < Dimension; ++i)
-                pos_idx[i] = pos[i].index();
+            if (m_use_accel) {
+                uint32_t pos_idx[Dimension];
+                uint32_t *out_idx =
+                    (uint32_t *) alloca(channels * sizeof(uint32_t));
+                for (size_t i = 0; i < Dimension; ++i)
+                    pos_idx[i] = pos[i].index();
 
-            jit_cuda_tex_lookup(Dimension, m_handle, pos_idx, active.index(),
-                                out_idx);
+                jit_cuda_tex_lookup(Dimension, m_handle, pos_idx, active.index(),
+                                    out_idx);
 
-            for (size_t ch = 0; ch < channels; ++ch)
-                out[ch] = Value::steal(out_idx[ch]);
-        } else {
-            (void) pos; (void) active;
-            for (size_t ch = 0; ch < channels; ++ch)
-                out[ch] = zero<Value>();
+                for (size_t ch = 0; ch < channels; ++ch)
+                    out[ch] = Value::steal(out_idx[ch]);
+                return;
+            }
         }
+        DRJIT_MARK_USED(pos); DRJIT_MARK_USED(active);
+        for (size_t ch = 0; ch < channels; ++ch)
+            out[ch] = zero<Value>();
     }
 
     /**
@@ -390,22 +411,25 @@ public:
     void eval(const Array<Value, Dimension> &pos, Value *out,
               Mask active = true) const {
         if constexpr (HasCudaTexture) {
-            eval_cuda(pos, out, active);
+            if (m_use_accel) {
+                eval_cuda(pos, out, active);
 
-            if constexpr (IsDiff) {
-                if (grad_enabled(m_value, pos)) {
-                    const size_t channels = m_value.shape(Dimension);
+                if constexpr (IsDiff) {
+                    if (grad_enabled(m_value, pos)) {
+                        const size_t channels = m_value.shape(Dimension);
 
-                    ArrayX out_nonaccel = empty<ArrayX>(channels);
-                    eval_nonaccel(pos, out_nonaccel.data(), active);
+                        ArrayX out_nonaccel = empty<ArrayX>(channels);
+                        eval_nonaccel(pos, out_nonaccel.data(), active);
 
-                    for (size_t ch = 0; ch < channels; ++ch)
-                        out[ch] = replace_grad(out[ch], out_nonaccel[ch]);
+                        for (size_t ch = 0; ch < channels; ++ch)
+                            out[ch] = replace_grad(out[ch], out_nonaccel[ch]);
+                    }
                 }
+                return;
             }
-        } else {
-            eval_nonaccel(pos, out, active);
         }
+
+        eval_nonaccel(pos, out, active);
     }
 
     /**
@@ -421,58 +445,61 @@ public:
         const size_t channels = m_value.shape(Dimension);
 
         if constexpr (HasCudaTexture) {
-            if constexpr (Dimension == 1) {
-                const PosF res_f = PosF(m_shape_opaque);
-                const PosF pos_f = floor(fmadd(pos, res_f, -.5f)) + .5f;
+            if (m_use_accel) {
+                if constexpr (Dimension == 1) {
+                    const PosF res_f = PosF(m_shape_opaque);
+                    const PosF pos_f = floor(fmadd(pos, res_f, -.5f)) + .5f;
 
-                PosF fetch_pos;
-                PosF inv_shape = rcp(res_f);
-                for (size_t ix = 0; ix < 2; ix++) {
-                    fetch_pos = pos_f + PosF(ix);
-                    fetch_pos *= inv_shape;
+                    PosF fetch_pos;
+                    PosF inv_shape = rcp(res_f);
+                    for (size_t ix = 0; ix < 2; ix++) {
+                        fetch_pos = pos_f + PosF(ix);
+                        fetch_pos *= inv_shape;
 
-                    eval_cuda(fetch_pos, out[ix], active);
-                }
-            } else if constexpr (Dimension == 2) {
-                uint32_t pos_idx[Dimension];
-                uint32_t *out_idx =
-                    (uint32_t *) alloca(4 * channels * sizeof(uint32_t));
-                for (size_t i = 0; i < Dimension; ++i)
-                    pos_idx[i] = pos[i].index();
+                        eval_cuda(fetch_pos, out[ix], active);
+                    }
+                } else if constexpr (Dimension == 2) {
+                    uint32_t pos_idx[Dimension];
+                    uint32_t *out_idx =
+                        (uint32_t *) alloca(4 * channels * sizeof(uint32_t));
+                    for (size_t i = 0; i < Dimension; ++i)
+                        pos_idx[i] = pos[i].index();
 
-                jit_cuda_tex_bilerp_fetch(Dimension, m_handle, pos_idx,
-                                          active.index(), out_idx);
+                    jit_cuda_tex_bilerp_fetch(Dimension, m_handle, pos_idx,
+                                            active.index(), out_idx);
 
-                for (size_t ch = 0; ch < channels; ++ch) {
-                    out[2][ch] = Value::steal(out_idx[ch]);
-                    out[3][ch] = Value::steal(out_idx[channels + ch]);
-                    out[1][ch] = Value::steal(out_idx[2 * channels + ch]);
-                    out[0][ch] = Value::steal(out_idx[3 * channels + ch]);
-                }
-            } else if constexpr (Dimension == 3) {
-                const PosF res_f = PosF(m_shape_opaque);
-                const PosF pos_f = floor(fmadd(pos, res_f, -.5f)) + .5f;
+                    for (size_t ch = 0; ch < channels; ++ch) {
+                        out[2][ch] = Value::steal(out_idx[ch]);
+                        out[3][ch] = Value::steal(out_idx[channels + ch]);
+                        out[1][ch] = Value::steal(out_idx[2 * channels + ch]);
+                        out[0][ch] = Value::steal(out_idx[3 * channels + ch]);
+                    }
+                } else if constexpr (Dimension == 3) {
+                    const PosF res_f = PosF(m_shape_opaque);
+                    const PosF pos_f = floor(fmadd(pos, res_f, -.5f)) + .5f;
 
-                PosF fetch_pos;
-                PosF inv_shape = rcp(res_f);
-                for (size_t iz = 0; iz < 2; iz++) {
-                    for (size_t iy = 0; iy < 2; iy++) {
-                        for (size_t ix = 0; ix < 2; ix++) {
-                            size_t index = iz * 4 + iy * 2 + ix;
-                            fetch_pos = pos_f + PosF(ix, iy, iz);
-                            fetch_pos *= inv_shape;
+                    PosF fetch_pos;
+                    PosF inv_shape = rcp(res_f);
+                    for (size_t iz = 0; iz < 2; iz++) {
+                        for (size_t iy = 0; iy < 2; iy++) {
+                            for (size_t ix = 0; ix < 2; ix++) {
+                                size_t index = iz * 4 + iy * 2 + ix;
+                                fetch_pos = pos_f + PosF(ix, iy, iz);
+                                fetch_pos *= inv_shape;
 
-                            eval_cuda(fetch_pos, out[index], active);
+                                eval_cuda(fetch_pos, out[index], active);
+                            }
                         }
                     }
                 }
+                return;
             }
-        } else {
-            (void) pos; (void) active;
-            for (size_t i = 0; i < ipow(2ul, Dimension); ++i)
-                for (size_t ch = 0; ch < channels; ++ch)
-                    out[i][ch] = zero<Value>();
         }
+
+        DRJIT_MARK_USED(pos); DRJIT_MARK_USED(active);
+        for (size_t i = 0; i < ipow(2ul, Dimension); ++i)
+            for (size_t ch = 0; ch < channels; ++ch)
+                out[i][ch] = zero<Value>();
     }
 
     /**
@@ -486,8 +513,8 @@ public:
      * dispatch to this function depending on its inputs.
      */
     void eval_fetch_nonaccel(const Array<Value, Dimension> &pos,
-                          Array<Value *, 1 << Dimension> &out,
-                          Mask active = true) const {
+                             Array<Value *, 1 << Dimension> &out,
+                             Mask active = true) const {
         using InterpOffset = Array<Int32, 1 << Dimension>;
         using InterpPosI = Array<InterpOffset, Dimension>;
         using InterpIdx = uint32_array_t<InterpOffset>;
@@ -516,39 +543,42 @@ public:
      * linear interpolation without actually performing this interpolation.
      *
      * This function dispatches to \ref eval_fetch_nonaccel() or \ref
-     * eval_fecth_cuda() depending on whether or not CUDA is available. If
+     * eval_fetch_cuda() depending on whether or not CUDA is available. If
      * invoked with CUDA arrays that track derivative information, the function
-     * records the AD graph of \ref eval_fetch_nonacel() and combines it with
+     * records the AD graph of \ref eval_fetch_nonaccel() and combines it with
      * the primal result of \ref eval_fetch_cuda().
      */
     void eval_fetch(const Array<Value, Dimension> &pos,
                     Array<Value *, 1 << Dimension> &out,
                     Mask active = true) const {
         if constexpr (HasCudaTexture) {
-            eval_fetch_cuda(pos, out, active);
+            if (m_use_accel) {
+                eval_fetch_cuda(pos, out, active);
 
-            if constexpr (IsDiff) {
-                if (grad_enabled(m_value, pos)) {
-                    const size_t channels = m_value.shape(Dimension);
-                    constexpr size_t out_size = 1 << Dimension;
+                if constexpr (IsDiff) {
+                    if (grad_enabled(m_value, pos)) {
+                        const size_t channels = m_value.shape(Dimension);
+                        constexpr size_t out_size = 1 << Dimension;
 
-                    Array<Value *, out_size> out_nonaccel;
-                    ArrayX out_nonaccel_values =
-                        empty<ArrayX>(out_size * channels);
-                    for (size_t i = 0; i < out_size; ++i)
-                        out_nonaccel[i] =
-                            out_nonaccel_values.data() + i * channels;
-                    eval_fetch_nonaccel(pos, out_nonaccel, active);
+                        Array<Value *, out_size> out_nonaccel;
+                        ArrayX out_nonaccel_values =
+                            empty<ArrayX>(out_size * channels);
+                        for (size_t i = 0; i < out_size; ++i)
+                            out_nonaccel[i] =
+                                out_nonaccel_values.data() + i * channels;
+                        eval_fetch_nonaccel(pos, out_nonaccel, active);
 
-                    for (size_t i = 0; i < out_size; ++i)
-                        for (size_t ch = 0; ch < channels; ++ch)
-                            out[i][ch] =
-                                replace_grad(out[i][ch], out_nonaccel[i][ch]);
+                        for (size_t i = 0; i < out_size; ++i)
+                            for (size_t ch = 0; ch < channels; ++ch)
+                                out[i][ch] =
+                                    replace_grad(out[i][ch], out_nonaccel[i][ch]);
+                    }
                 }
+                return;
             }
-        } else {
-            eval_fetch_nonaccel(pos, out, active);
         }
+
+        eval_fetch_nonaccel(pos, out, active);
     }
 
     /**
@@ -637,7 +667,7 @@ public:
      * \brief Evaluate a clamped cubic B-Spline interpolant represented by this
      * texture
      *
-     * Intead of interpolating the texture via B-Spline basis functions, the
+     * Instead of interpolating the texture via B-Spline basis functions, the
      * implementation transforms this calculation into an equivalent weighted
      * sum of several linear interpolant evaluations. In CUDA mode, this can
      * then be accelerated by hardware texture units, which runs faster than
@@ -700,7 +730,7 @@ public:
                                const Mask &active) -> ArrayX {
             ArrayX out = empty<ArrayX>(channels);
             if constexpr (HasCudaTexture) {
-                if (!force_nonaccel) {
+                if (m_use_accel && !force_nonaccel) {
                     eval_cuda(pos, out.data(), active);
                     return out;
                 }
@@ -1101,7 +1131,7 @@ public:
     }
 
 protected:
-    void init(const size_t *shape, size_t channels, bool migrate,
+    void init(const size_t *shape, size_t channels, bool use_accel, bool migrate,
               FilterMode filter_mode, WrapMode wrap_mode,
               bool init_tensor = true) {
         if (channels == 0)
@@ -1121,15 +1151,18 @@ protected:
         if (init_tensor)
             m_value = TensorXf(zero<Storage>(m_size), Dimension + 1, tensor_shape);
 
+        m_use_accel = use_accel;
         m_migrate = migrate;
         m_filter_mode = filter_mode;
         m_wrap_mode = wrap_mode;
 
         if constexpr (HasCudaTexture) {
-            size_t tex_shape[Dimension];
-            reverse_tensor_shape(tex_shape, false);
-            m_handle = jit_cuda_tex_create(Dimension, tex_shape, channels,
-                                           (int) filter_mode, (int) wrap_mode);
+            if (m_use_accel) {
+                size_t tex_shape[Dimension];
+                reverse_tensor_shape(tex_shape, false);
+                m_handle = jit_cuda_tex_create(Dimension, tex_shape, channels,
+                                               (int) filter_mode, (int) wrap_mode);
+            }
         }
     }
 
@@ -1142,7 +1175,7 @@ private:
             output[Dimension] = m_value.shape(Dimension);
     }
 
-    /// Helper function to compmute integer powers of numbers
+    /// Helper function to compute integer powers of numbers
     template <typename T>
     constexpr static T ipow(T num, unsigned int pow) {
         return pow == 0 ? 1 : num * ipow(num, pow - 1);
@@ -1231,6 +1264,7 @@ private:
 
     FilterMode m_filter_mode;
     WrapMode m_wrap_mode;
+    bool m_use_accel = false;
     bool m_migrate = false;
     mutable bool m_migrated = false;
 };
