@@ -9,17 +9,17 @@ void bind_texture(py::module &m, const char *name) {
 
     auto tex = py::class_<Tex>(m, name)
         .def(py::init([](const std::array<size_t, Dimension> &shape,
-                         size_t channels, bool migrate,
+                         size_t channels, bool use_accel, bool migrate,
                          dr::FilterMode filter_mode, dr::WrapMode wrap_mode) {
-                 return new Tex(shape.data(), channels, migrate, filter_mode,
-                                wrap_mode);
+                 return new Tex(shape.data(), channels, use_accel, migrate,
+                                filter_mode, wrap_mode);
              }),
-             "shape"_a, "channels"_a, "migrate"_a = true,
+             "shape"_a, "channels"_a, "use_accel"_a=true, "migrate"_a = true,
              "filter_mode"_a = dr::FilterMode::Linear,
              "wrap_mode"_a = dr::WrapMode::Clamp)
-        .def(py::init<const typename Tex::TensorXf &, bool, dr::FilterMode,
+        .def(py::init<const typename Tex::TensorXf &, bool, bool, dr::FilterMode,
                       dr::WrapMode>(),
-             "tensor"_a, "migrate"_a = true,
+             "tensor"_a, "use_accel"_a=true, "migrate"_a = true,
              "filter_mode"_a = dr::FilterMode::Linear,
              "wrap_mode"_a = dr::WrapMode::Clamp)
         .def("set_value", &Tex::set_value, "value"_a)
