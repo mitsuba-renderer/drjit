@@ -315,6 +315,7 @@ PYBIND11_MODULE(drjit_ext, m_) {
     m.def("set_log_level", [](LogLevel level) { jit_set_log_level_callback(level, log_callback); });
     m.def("log_level", &jit_log_level_stderr);
     m.def("registry_trim", &jit_registry_trim);
+    m.def("registry_clear", &jit_registry_clear);
     m.def("set_thread_count", &jit_llvm_set_thread_count);
 
     py::object io = py::module_::import("io");
