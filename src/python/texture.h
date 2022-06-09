@@ -143,7 +143,11 @@ void bind_texture(py::module &m, const char *name) {
 
 template <typename Type>
 void bind_texture_all(py::module &m) {
+    using Type64 = dr::float64_array_t<Type>;
     bind_texture<Type, 1>(m, "Texture1f");
     bind_texture<Type, 2>(m, "Texture2f");
     bind_texture<Type, 3>(m, "Texture3f");
+    bind_texture<Type64, 1>(m, "Texture1f64");
+    bind_texture<Type64, 2>(m, "Texture2f64");
+    bind_texture<Type64, 3>(m, "Texture3f64");
 }
