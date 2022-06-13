@@ -2,10 +2,26 @@ import drjit as _dr
 from sys import modules as _modules
 
 
-def rotate(target_type, axis, angle):
-    if target_type.IsQuaternion:
+def rotate(dtype, axis, angle):
+    '''
+    Constructs a rotation quaternion, which rotates by ``angle`` radians around
+    ``axis``.
+
+    The function requires ``axis`` to be normalized.
+
+    Args:
+        dtype (type): Desired Dr.Jit quaternion type.
+
+        axis (drjit.ArrayBase): A 3-dimensional Dr.Jit array representing the rotation axis
+
+        angle (float | drjit.ArrayBase): Rotation angle.
+
+    Returns:
+        drjit.ArrayBase: The rotation quaternion
+    '''
+    if dtype.IsQuaternion:
         s, c = _dr.sincos(angle * .5)
-        quat = target_type()
+        quat = dtype()
         quat.imag = axis * s
         quat.real = c
         return quat
@@ -13,56 +29,37 @@ def rotate(target_type, axis, angle):
         raise Exception("Unsupported target type!")
 
 
-def transpose(a):
-    if not _dr.is_matrix_v(a):
+def transpose(arg, /):
+    '''
+    Transpose the provided Dr.Jit matrix.
+
+    Args:
+        arg (drjit.ArrayBase): A Dr.Jit matrix type
+
+    Returns:
+        drjit.ArrayBase: The transposed matrix
+    '''
+    if not _dr.is_matrix_v(arg):
         raise Exception("Unsupported target type!")
 
-    result = type(a)()
-    for i in range(a.Size):
+    result = type(arg)()
+    for i in range(arg.Size):
         for j in range(a.Size):
-            result[j, i] = a[i, j]
+            result[j, i] = arg[i, j]
     return result
 
 
-def det(m):
-    if not _dr.is_matrix_v(m):
-        raise Exception("Unsupported target type!")
+def inverse_transpose(m, /):
+    r'''
+    inverse_transpose(arg, /)
+    Returns the inverse transpose of the provided Dr.Jit matrix.
 
-    if m.Size == 1:
-        return m[0, 0]
-    elif m.Size == 2:
-        return _dr.fma(m[0, 0], m[1, 1], -m[0, 1] * m[1, 0])
-    elif m.Size == 3:
-        return _dr.dot(m[0], _dr.cross(m[1], m[2]))
-    elif m.Size == 4:
-        col0, col1, col2, col3 = m
+    Args:
+        arg (drjit.ArrayBase): A Dr.Jit matrix type
 
-        col1 = _dr.shuffle((2, 3, 0, 1), col1)
-        col3 = _dr.shuffle((2, 3, 0, 1), col3)
-
-        temp = _dr.shuffle((1, 0, 3, 2), col2 * col3)
-        row0 = col1 * temp
-        temp = _dr.shuffle((2, 3, 0, 1), temp)
-        row0 = _dr.fma(col1, temp, -row0)
-
-        temp = _dr.shuffle((1, 0, 3, 2), col1 * col2)
-        row0 = _dr.fma(col3, temp, row0)
-        temp = _dr.shuffle((2, 3, 0, 1), temp)
-        row0 = _dr.fma(-col3, temp, row0)
-
-        col1 = _dr.shuffle((2, 3, 0, 1), col1)
-        col2 = _dr.shuffle((2, 3, 0, 1), col2)
-        temp = _dr.shuffle((1, 0, 3, 2), col1 * col3)
-        row0 = _dr.fma(col2, temp, row0)
-        temp = _dr.shuffle((2, 3, 0, 1), temp)
-        row0 = _dr.fma(-col2, temp, row0)
-
-        return _dr.dot(col0, row0)
-    else:
-        raise Exception('Unsupported array size!')
-
-
-def inverse_transpose(m):
+    Returns:
+        drjit.ArrayBase: The inverse transposed matrix
+    '''
     if not _dr.is_matrix_v(m):
         raise Exception("Unsupported target type!")
 
@@ -148,11 +145,78 @@ def inverse_transpose(m):
         raise Exception('Unsupported array size!')
 
 
-def inverse(a):
-    return transpose(inverse_transpose(a))
+def det(m, /):
+    r'''
+    det(arg, /)
+    Compute the determinant of the provided Dr.Jit matrix.
+
+    Args:
+        arg (drjit.ArrayBase): A Dr.Jit matrix type
+
+    Returns:
+        drjit.ArrayBase: The determinant value of the input matrix
+    '''
+    if not _dr.is_matrix_v(m):
+        raise Exception("Unsupported target type!")
+
+    if m.Size == 1:
+        return m[0, 0]
+    elif m.Size == 2:
+        return _dr.fma(m[0, 0], m[1, 1], -m[0, 1] * m[1, 0])
+    elif m.Size == 3:
+        return _dr.dot(m[0], _dr.cross(m[1], m[2]))
+    elif m.Size == 4:
+        col0, col1, col2, col3 = m
+
+        col1 = _dr.shuffle((2, 3, 0, 1), col1)
+        col3 = _dr.shuffle((2, 3, 0, 1), col3)
+
+        temp = _dr.shuffle((1, 0, 3, 2), col2 * col3)
+        row0 = col1 * temp
+        temp = _dr.shuffle((2, 3, 0, 1), temp)
+        row0 = _dr.fma(col1, temp, -row0)
+
+        temp = _dr.shuffle((1, 0, 3, 2), col1 * col2)
+        row0 = _dr.fma(col3, temp, row0)
+        temp = _dr.shuffle((2, 3, 0, 1), temp)
+        row0 = _dr.fma(-col3, temp, row0)
+
+        col1 = _dr.shuffle((2, 3, 0, 1), col1)
+        col2 = _dr.shuffle((2, 3, 0, 1), col2)
+        temp = _dr.shuffle((1, 0, 3, 2), col1 * col3)
+        row0 = _dr.fma(col2, temp, row0)
+        temp = _dr.shuffle((2, 3, 0, 1), temp)
+        row0 = _dr.fma(-col2, temp, row0)
+
+        return _dr.dot(col0, row0)
+    else:
+        raise Exception('Unsupported array size!')
 
 
-def diag(a):
+def inverse(arg, /):
+    '''
+    Returns the inverse matrix of the provided Dr.Jit matrix.
+
+    Args:
+        arg (drjit.ArrayBase): A Dr.Jit matrix type
+
+    Returns:
+        drjit.ArrayBase: The inverse matrix of the input matrix
+    '''
+    return transpose(inverse_transpose(arg))
+
+
+def diag(a, /):
+    r'''
+    diag(arg, /)
+    Returns the diagonal matrix of the provided Dr.Jit matrix.
+
+    Args:
+        arg (drjit.ArrayBase): A Dr.Jit matrix type
+
+    Returns:
+        drjit.ArrayBase: The diagonal matrix of the input matrix
+    '''
     if _dr.is_matrix_v(a):
         result = a.Value()
         for i in range(a.Size):
@@ -171,7 +235,17 @@ def diag(a):
         raise Exception('Unsupported type!')
 
 
-def trace(a):
+def trace(a, /):
+    r'''
+    trace(arg, /)
+    Returns the trace of the provided Dr.Jit matrix.
+
+    Args:
+        arg (drjit.ArrayBase): A Dr.Jit matrix type
+
+    Returns:
+        drjit.ArrayBase: The trace of the input matrix
+    '''
     if not _dr.is_matrix_v(a):
         raise Exception('Unsupported type!')
     result = a[0, 0]
@@ -180,7 +254,23 @@ def trace(a):
     return result
 
 
-def frob(a):
+def frob(a, /):
+    r'''
+    frob(arg, /)
+    Returns the squared Frobenius norm of the provided Dr.Jit matrix.
+
+    The squared Frobenius norm is defined as the sum of the squares of its elements:
+
+    .. math::
+
+        \sum_{i=1}^m \sum_{j=1}^n a_{i j}^2
+
+    Args:
+        arg (drjit.ArrayBase): A Dr.Jit matrix type
+
+    Returns:
+        drjit.ArrayBase: The squared Frobenius norm of the input matrix
+    '''
     if not _dr.is_matrix_v(a):
         raise Exception('Unsupported type!')
 
@@ -191,18 +281,18 @@ def frob(a):
     return _dr.sum(result)
 
 
-def polar_decomp(a, it=10):
-    q = type(a)(a)
-    for i in range(it):
-        qi = _dr.inverse_transpose(q)
-        gamma = _dr.sqrt(_dr.frob(qi) / _dr.frob(q))
-        s1, s2 = gamma * .5, (_dr.rcp(gamma) * .5)
-        for i in range(a.Size):
-            q[i] = _dr.fma(q[i], s1, qi[i] * s2)
-    return q, transpose(q) @ a
+def quat_to_matrix(q, size=4):
+    r'''
+    quat_to_matrix(arg, size=4)
+    Converts a quaternion into its matrix representation.
 
+    Args:
+        arg (drjit.ArrayBase): A Dr.Jit quaternion type
+        size (int): Controls whether to construct a 3x3 or 4x4 matrix.
 
-def quat_to_matrix(q, size = 4):
+    Returns:
+        drjit.ArrayBase: The Dr.Jit matrix corresponding the to input quaternion.
+    '''
     if not _dr.is_quaternion_v(q):
         raise Exception('Unsupported type!')
 
@@ -222,15 +312,28 @@ def quat_to_matrix(q, size = 4):
             xy + zw, 1.0 - (xx + zz), yz - xw, 0.0,
             xz - yw, yz + xw, 1.0 - (xx + yy), 0.0,
             0.0, 0.0, 0.0, 1.0)
-    else:
+    elif size == 3:
         return Matrix(
             1.0 - (yy + zz), xy - zw, xz + yw,
             xy + zw, 1.0 - (xx + zz), yz - xw,
             xz - yw,  yz + xw, 1.0 - (xx + yy)
         )
+    else:
+        raise Exception('Unsupported size!')
 
 
-def matrix_to_quat(m):
+def matrix_to_quat(m, /):
+    r'''
+    matrix_to_quat(arg, /)
+    Converts a 3x3 or 4x4 homogeneous containing
+    a pure rotation into a rotation quaternion.
+
+    Args:
+        arg (drjit.ArrayBase): A Dr.Jit matrix type
+
+    Returns:
+        drjit.ArrayBase: The Dr.Jit quaternion corresponding the to input matrix.
+    '''
     if not _dr.is_matrix_v(m):
         raise Exception('Unsupported type!')
 
@@ -266,7 +369,19 @@ def matrix_to_quat(m):
     return q0123 * (_dr.rsqrt(t0123) * 0.5)
 
 
-def quat_to_euler(q):
+def quat_to_euler(q, /):
+    r'''
+    quat_to_euler(arg, /)
+    Converts a quaternion into its Euler angles representation.
+
+    The order for Euler angles is XYZ.
+
+    Args:
+        arg (drjit.ArrayBase): A Dr.Jit quaternion type
+
+    Returns:
+        drjit.ArrayBase: A 3D Dr.Jit array containing the Euler angles.
+    '''
     name = _dr.detail.array_name('Array', q.Type, [3], q.IsScalar)
     module = _modules.get(q.__module__)
     Array3f = getattr(module, name)
@@ -291,7 +406,20 @@ def quat_to_euler(q):
 
     return Array3f(roll, pitch, yaw)
 
-def euler_to_quat(a):
+
+def euler_to_quat(a, /):
+    r'''
+    euler_to_quat(arg, /)
+    Converts Euler angles into a Dr.Jit quaternion.
+
+    The order for input Euler angles must be XYZ.
+
+    Args:
+        arg (drjit.ArrayBase): A 3D Dr.Jit array type
+
+    Returns:
+        drjit.ArrayBase: A Dr.Jit quaternion representing the input Euler angles.
+    '''
     name = _dr.detail.array_name('Quaternion', a.Type, [4], a.IsScalar)
     module = _modules.get(a.__module__)
     Quat4f = getattr(module, name)
@@ -307,7 +435,57 @@ def euler_to_quat(a):
     z = cr*cp*sy - sr*sp*cy
     return Quat4f(x, y, z, w)
 
+
+def polar_decomp(arg, it=10):
+    '''
+    Returns the polar decomposition of the provided Dr.Jit matrix.
+
+    The polar decomposition separates the matrix into a rotation followed by a
+    scaling along each of its eigen vectors. This decomposition always exists
+    for square matrices.
+
+    The implementation relies on an iterative algorithm, where the number of
+    iterations can be controlled by the argument ``it`` (tradeoff between
+    precision and computational cost).
+
+    Args:
+        arg (drjit.ArrayBase): A Dr.Jit matrix type
+
+        it (int): Number of iterations to be taken by the algorithm.
+
+    Returns:
+        tuple: A tuple containing the rotation matrix and the scaling matrix resulting from the decomposition.
+    '''
+    q = type(arg)(arg)
+    for i in range(it):
+        qi = _dr.inverse_transpose(q)
+        gamma = _dr.sqrt(_dr.frob(qi) / _dr.frob(q))
+        s1, s2 = gamma * .5, (_dr.rcp(gamma) * .5)
+        for i in range(arg.Size):
+            q[i] = _dr.fma(q[i], s1, qi[i] * s2)
+    return q, transpose(q) @ arg
+
+
 def transform_decompose(a, it=10):
+    r'''
+    transform_decompose(arg, it=10)
+    Performs a polar decomposition of a non-perspective 4x4 homogeneous
+    coordinate matrix and returns a tuple of
+
+    1. A positive definite 3x3 matrix containing an inhomogeneous scaling operation
+    2. A rotation quaternion
+    3. A 3D translation vector
+
+    This representation is helpful when animating keyframe animations.
+
+    Args:
+        arg (drjit.ArrayBase): A Dr.Jit matrix type
+
+        it (int): Number of iterations to be taken by the polar decomposition algorithm.
+
+    Returns:
+        tuple: The tuple containing the scaling matrix, rotation quaternion and 3D translation vector.
+    '''
     if not _dr.is_matrix_v(a):
         raise Exception('Unsupported type!')
 
@@ -327,7 +505,21 @@ def transform_decompose(a, it=10):
     return P, matrix_to_quat(Q), Array3f(a[3][0], a[3][1], a[3][2])
 
 
-def transform_compose(s, q, t):
+def transform_compose(s, q, t, /):
+    r'''
+    transform_compose(S, Q, T, /)
+    This function composes a 4x4 homogeneous coordinate transformation from the
+    given scale, rotation, and translation. It performs the reverse of
+    :py:func:`transform_decompose`.
+
+    Args:
+        S (drjit.ArrayBase): A Dr.Jit matrix type representing the scaling part
+        Q (drjit.ArrayBase): A Dr.Jit quaternion type representing the rotation part
+        T (drjit.ArrayBase): A 3D Dr.Jit array type representing the translation part
+
+    Returns:
+        drjit.ArrayBase: The Dr.Jit matrix resulting from the composition described above.
+    '''
     if not _dr.is_matrix_v(s) or not _dr.is_quaternion_v(q):
         raise Exception('Unsupported type!')
 
