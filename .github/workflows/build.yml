@@ -9,7 +9,8 @@ on:
         default: '0'
 
 env:
-  CIBW_SKIP: pp* cp36-* cp38-macosx_arm64
+  CIBW_BUILD: cp37-* # FIXME: Enable all versions later to 3.7, and pypy
+  CIBW_SKIP: "*-musllinux*" pp* cp36-* cp38-macosx_arm64
   CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
   CIBW_MANYLINUX_AARCH64_IMAGE: manylinux2014
   CIBW_ARCHS_WINDOWS: auto64
@@ -24,35 +25,36 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-20.04, windows-latest, macos-latest]
+        os: [ubuntu-20.04]
+        #os: [ubuntu-20.04, windows-latest, macos-latest]
       fail-fast: false
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           submodules: recursive
           token: ${{ secrets.DRJIT_GITHUB_TOKEN }}
 
-      - uses: actions/setup-python@v2
+      - uses: actions/setup-python@v4
         name: Install Python
         with:
           python-version: '3.7'
 
       - name: Prepare compiler environment for Windows
         if: runner.os == 'Windows'
-        uses: ilammy/msvc-dev-cmd@v1
+        uses: ilammy/msvc-dev-cmd@v2
         with:
           arch: x64
 
       - name: Install cibuildwheel
         run: |
-          python -m pip install cibuildwheel==2.3.1
+          python -m pip install cibuildwheel==2.6.1
 
       - name: Build wheels
         run: |
           python -m cibuildwheel --output-dir wheelhouse
 
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v3
         with:
           name: wheels
           path: ./wheelhouse/*.whl
