@@ -4,12 +4,10 @@ requires = ["setuptools", "wheel", "scikit-build @ git+https://github.com/scikit
 [tool.pytest.ini_options]
 norecursedirs = [ "ext" ]
 
-[tool.cibuildwheel]
-build = ["cp37-*"]
-build-verbosity = 1
-[tool.cibuildwheel.linux]
-before-all = "yum install -y libatomic"
-repair-wheel-command = "LD_LIBRARY_PATH=/project/_skbuild/linux-x86_64-3.7/cmake-build/drjit:$LD_LIBRARY_PATH && auditwheel repair --lib-sdir . -w {dest_dir} {wheel}"
-[[tool.cibuildwheel.overrides]]
-select = "*-musllinux*"
-before-all = "apk add libatomic"
+#[tool.cibuildwheel]
+#build = ["cp37-*"]
+#build-verbosity = 1
+#[tool.cibuildwheel.linux]
+#skip = "*-musllinux*"
+#before-all = "yum install -y libatomic"
+#repair-wheel-command = "LD_LIBRARY_PATH=/project/_skbuild/linux-x86_64-3.7/cmake-build/drjit:$LD_LIBRARY_PATH && auditwheel repair --lib-sdir . -w {dest_dir} {wheel}"
