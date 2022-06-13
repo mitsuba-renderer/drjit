@@ -1,9 +1,11 @@
+from typing import Type, Callable
 import drjit as _dr
 from drjit import ArrayBase, VarType, Exception, Dynamic
 from drjit.detail import array_name as _array_name
 from sys import modules as _modules
 import math as _math
 import builtins as _builtins
+from functools import wraps as _wraps
 from collections.abc import Mapping as _Mapping, \
                             Sequence as _Sequence
 
@@ -77,6 +79,7 @@ def _var_promote(*args):
     base = None
     depth = 0
     diff = False
+    shape = []
 
     for i, a in enumerate(args):
         vt[i] = _var_type(a)
@@ -85,8 +88,9 @@ def _var_promote(*args):
         if depth_i > depth:
             base = a
             depth = depth_i
-        elif getattr(a, 'IsTensor', False):
+        if _dr.is_tensor_v(a):
             base = a
+            shape = a.shape
 
     if base is None:
         raise Exception("At least one of the input arguments "
@@ -105,7 +109,13 @@ def _var_promote(*args):
     result = list(args)
     for i, a in enumerate(result):
         if type(a) is not t:
-            result[i] = t(result[i])
+            if _dr.is_tensor_v(t):
+                try:
+                    result[i] = t(result[i], shape)
+                except:
+                    result[i] = t(result[i])
+            else:
+                result[i] = t(result[i])
 
     return result
 
@@ -4033,7 +4043,10 @@ def accum_grad(dst, src):
 
         t = _dr.detached_t(dst)
         if type(src) is not t:
-            src = t(src)
+            if _dr.is_tensor_v(t):
+                src = t(src, dst.shape)
+            else:
+                src = t(src)
 
         dst.accum_grad_(src)
     elif isinstance(dst, _Sequence):
@@ -4999,7 +5012,7 @@ def make_opaque(*args):
 # -------------------------------------------------------------------
 
 def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
-    '''
+    r'''
     Returns ``True`` if two arrays are element-wise equal within a given error
     tolerance.
 
@@ -5582,7 +5595,13 @@ def custom(cls, *args, **kwargs):
     # Convert args to kwargs
     kwargs.update(zip(inst.eval.__code__.co_varnames[1:], args))
 
-    output = inst.eval(**{ k: _dr.detach(v) for k, v in kwargs.items() })
+    # Check whether customop has variable number of arguments (*args)
+    eval_args = len(kwargs) == 1 and list(kwargs)[0] == 'args'
+
+    if eval_args:
+        output = inst.eval(*_dr.detach(kwargs['args']))
+    else:
+        output = inst.eval(**{ k: _dr.detach(v) for k, v in kwargs.items() })
     if _dr.grad_enabled(output):
         raise RuntimeError("drjit.custom(): the return value of CustomOp.eval() "
                            "should not be attached to the AD graph!")
@@ -5629,6 +5648,198 @@ def custom(cls, *args, **kwargs):
         inst._implicit_out = []
 
     return output
+
+
+def wrap_ad(source: str, target: str):
+    '''
+    Function decorator that wraps the excecution of a function using a different
+    AD framework to ensure that gradients can flow seamlessly between both
+    frameworks.
+
+    Using this decorator it is possible to mix AD-aware computation between two
+    AD frameworks (e.g. Dr.Jit and PyTorch). The wrapped function's arguments
+    will be casted to the tensor types corresponding to the ``target`` framework.
+    Similarily, the return values will be casted to the tensor types corresponding
+    to the ``source`` framework.
+
+    The decorated function can take an arbitrary number of arguments and have any
+    number of return values.
+
+    Currently only the following combination of frameworks are supported:
+
+    .. list-table::
+        :header-rows: 1
+
+        * - ``source``
+          - ``target``
+          - Forward AD
+          - Backward AD
+        * - ``drjit``
+          - ``torch``
+          - ❌
+          - ✔️
+        * - ``torch``
+          - ``drjit``
+          - ❌
+          - ✔️
+
+    The example below shows how to wrap a Dr.Jit function in a PyTorch script:
+
+    .. code-block:: python
+
+        # Start with a PyTorch tensor
+        a = torch.tensor([1.0, 2.0, 3.0], requires_grad=True)
+
+        # Some PyTorch arithmetic
+        b = torch.sin(a)
+
+        # Wrap a function performing some arithmetic using Dr.Jit
+        @dr.wrap_ad(source='torch', target='drjit')
+        def dr_func(x):
+            return dr.cos(x) + dr.pow(x, 2)
+
+        # Excecute the wrapped function (returns a PyTorch tensor)
+        c = dr_func(b)
+
+        # Some more PyTorch arithmetic
+        d = torch.tan(c)
+
+        # Propagate gradients to variable a (through PyTorch -> Dr.Jit -> PyTorch)
+        d.sum().backward()
+
+        # Inspect the resulting gradients
+        print(a.grad)
+
+    Similarily the following example shows how to wrap PyTorch code into a
+    Dr.Jit script:
+
+    .. code-block:: python
+
+        # Start with a Dr.Jit tensor
+        a = dr.llvm.ad.TensorXf([1, 2, 3], shape=[3])
+        dr.enable_grad(a)
+
+        # Some Dr.Jit arithmetic
+        b = dr.sin(a)
+
+        # Wrap a function performing some arithmetic using PyTorch
+        @dr.wrap_ad(source='drjit', target='torch')
+        def torch_func(x):
+            return torch.cos(x) + torch.sin(x)
+
+        # Excecute the wrapped function (returns a Dr.Jit tensor)
+        c = torch_func(b)
+
+        # Some more Dr.Jit arithmetic
+        d = dr.tan(c)
+
+        # Propagate gradients to variable a (through Dr.Jit -> PyTorch -> Dr.Jit)
+        dr.backward(d)
+
+        # Inspect the resulting gradients
+        print(dr.grad(a))
+
+    .. danger::
+
+        Forward-mode AD isn't currently supported by this operation.
+
+    Args:
+        source (str): The AD framework used outside of the wrapped function.
+        target (str): The AD framework used within the wrapped function.
+
+    Returns:
+        The decorated function.
+    '''
+    if not 'drjit' in [source, target]:
+        raise TypeError('wrap_ad(): invalid combination of frameworks, '
+                        'expected one to be drjit!', source, target)
+
+    def wrapper(func: Callable):
+        @_wraps(func)
+        def f(*args):
+            if 'torch' in [source, target]:
+                import torch as _torch
+
+            # Casting routing from Dr.Jit tensors to PyTorch tensors
+            def drjit_to_torch(a):
+                if isinstance(a, _Sequence):
+                    return tuple(drjit_to_torch(b) for b in a)
+                elif isinstance(a, _Mapping):
+                    return {k: drjit_to_torch(v) for k, v in a.items()}
+                elif _dr.is_array_v(a) and _dr.is_tensor_v(a):
+                    return a.torch()
+                else:
+                    raise TypeError("wrap_ad(): input arguments should be Dr.Jit tensor!")
+
+            # Casting routing from PyTorch tensors to Dr.Jit tensors
+            def torch_to_drjit(a):
+                if isinstance(a, _Sequence):
+                    return tuple(torch_to_drjit(b) for b in a)
+                elif isinstance(a, _Mapping):
+                    return {k: torch_to_drjit(v) for k, v in a.items()}
+                elif a.__module__ == 'torch' and type(a).__name__ == 'Tensor':
+                    dtype_str = {
+                        _torch.float:   'TensorXf',
+                        _torch.float32: 'TensorXf',
+                        _torch.float64: 'TensorXf64',
+                        _torch.int32:   'TensorXi',
+                        _torch.int:     'TensorXi',
+                        _torch.int64:   'TensorXi64',
+                        _torch.long:    'TensorXi64',
+                    }[a.dtype]
+                    device = 'cuda' if a.is_cuda else 'llvm'
+                    m = getattr(getattr(_dr, device),'ad')
+                    return getattr(m, dtype_str)(a)
+                else:
+                    raise TypeError("wrap_ad(): input arguments should be Torch tensors!")
+
+            if source == 'torch':
+                class ToDrJit(_torch.autograd.Function):
+                    @staticmethod
+                    def forward(ctx, *args):
+                        ctx.args = args
+                        ctx.args_drjit = torch_to_drjit(args)
+                        _dr.enable_grad(ctx.args_drjit)
+                        res = func(*ctx.args_drjit)
+                        ctx.res_drjit = (res,) if not isinstance(res, tuple) else res
+                        return drjit_to_torch(res)
+
+                    @staticmethod
+                    @_torch.autograd.function.once_differentiable
+                    def backward(ctx, *grad_output):
+                        _dr.set_grad(ctx.res_drjit, grad_output)
+                        _dr.enqueue(_dr.ADMode.Backward, ctx.res_drjit)
+                        _dr.traverse(ctx.res_drjit, _dr.ADMode.Backward)
+                        args_grad = drjit_to_torch(_dr.grad(ctx.args_drjit))
+                        del ctx.res_drjit, ctx.args_drjit
+                        return args_grad
+
+                return ToDrJit.apply(*args)
+
+            if target == 'torch':
+                class ToTorch(_dr.CustomOp):
+                    def eval(self, *args):
+                        self.args = args
+                        self.args_torch = drjit_to_torch(args)
+                        for i in range(len(self.args_torch)):
+                            self.args_torch[i].requires_grad = True
+                        self.res_torch = func(*self.args_torch)
+                        return torch_to_drjit(self.res_torch)
+
+                    def forward(self):
+                        raise TypeError("warp_ad(): forward-mode AD is not supported!")
+
+                    def backward(self):
+                        grad_out_torch = drjit_to_torch(self.grad_out())
+                        _torch.autograd.backward(self.res_torch, grad_out_torch)
+                        args_grad = torch_to_drjit([a.grad for a in self.args_torch])
+                        self.set_grad_in('args', args_grad)
+
+                return _dr.custom(ToTorch, args)
+
+        return f
+
+    return wrapper
 
 
 def graphviz_ad(as_str=False):

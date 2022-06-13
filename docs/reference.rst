@@ -604,6 +604,7 @@ Automatic differentiation
     .. automethod:: add_output
 
 .. autofunction:: custom
+.. autofunction:: wrap_ad
 
 Matrix and quaternion related functions
 ---------------------------------------
