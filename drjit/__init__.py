@@ -76,7 +76,7 @@ for k, v in const.__dict__.items():
     self[k] = v
 
 
-# Install matrix-related functions
+# Install matrix-related functions in global scope
 for k, v in matrix.__dict__.items():
     if k.startswith('_') or k[0].isupper():
         continue
