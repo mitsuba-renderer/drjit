@@ -603,6 +603,25 @@ Automatic differentiation
 
 .. autofunction:: custom
 
+Matrix and quaternion related functions
+---------------------------------------
+
+.. autofunction:: rotate
+.. autofunction:: transpose
+.. autofunction:: inverse_transpose
+.. autofunction:: det
+.. autofunction:: inverse
+.. autofunction:: diag
+.. autofunction:: trace
+.. autofunction:: frob
+.. autofunction:: polar_decomp
+.. autofunction:: quat_to_matrix
+.. autofunction:: matrix_to_quat
+.. autofunction:: quat_to_euler
+.. autofunction:: euler_to_quat
+.. autofunction:: transform_decompose
+.. autofunction:: transform_compose
+
 Concrete array classes
 ----------------------
 
@@ -714,6 +733,38 @@ _________________________________________
     :show-inheritance:
 .. autoclass:: drjit.scalar.ArrayXi64
     :show-inheritance:
+.. autoclass:: drjit.scalar.Matrix2u
+    :show-inheritance:
+.. autoclass:: drjit.scalar.Matrix2i
+    :show-inheritance:
+.. autoclass:: drjit.scalar.Matrix2f
+    :show-inheritance:
+.. autoclass:: drjit.scalar.Matrix2f64
+    :show-inheritance:
+.. autoclass:: drjit.scalar.Matrix3u
+    :show-inheritance:
+.. autoclass:: drjit.scalar.Matrix3i
+    :show-inheritance:
+.. autoclass:: drjit.scalar.Matrix3f
+    :show-inheritance:
+.. autoclass:: drjit.scalar.Matrix3f64
+    :show-inheritance:
+.. autoclass:: drjit.scalar.Matrix4u
+    :show-inheritance:
+.. autoclass:: drjit.scalar.Matrix4i
+    :show-inheritance:
+.. autoclass:: drjit.scalar.Matrix4f
+    :show-inheritance:
+.. autoclass:: drjit.scalar.Matrix4f64
+    :show-inheritance:
+.. autoclass:: drjit.scalar.Complex2f
+    :show-inheritance:
+.. autoclass:: drjit.scalar.Complex2f64
+    :show-inheritance:
+.. autoclass:: drjit.scalar.Quaternion4f
+    :show-inheritance:
+.. autoclass:: drjit.scalar.Quaternion4f64
+    :show-inheritance:
 
 
 CUDA array namespace (``drjit.cuda``)
@@ -817,6 +868,38 @@ _______________________________________
     :show-inheritance:
 .. autoclass:: drjit.cuda.ArrayXi64
     :show-inheritance:
+.. autoclass:: drjit.cuda.Matrix2u
+    :show-inheritance:
+.. autoclass:: drjit.cuda.Matrix2i
+    :show-inheritance:
+.. autoclass:: drjit.cuda.Matrix2f
+    :show-inheritance:
+.. autoclass:: drjit.cuda.Matrix2f64
+    :show-inheritance:
+.. autoclass:: drjit.cuda.Matrix3u
+    :show-inheritance:
+.. autoclass:: drjit.cuda.Matrix3i
+    :show-inheritance:
+.. autoclass:: drjit.cuda.Matrix3f
+    :show-inheritance:
+.. autoclass:: drjit.cuda.Matrix3f64
+    :show-inheritance:
+.. autoclass:: drjit.cuda.Matrix4u
+    :show-inheritance:
+.. autoclass:: drjit.cuda.Matrix4i
+    :show-inheritance:
+.. autoclass:: drjit.cuda.Matrix4f
+    :show-inheritance:
+.. autoclass:: drjit.cuda.Matrix4f64
+    :show-inheritance:
+.. autoclass:: drjit.cuda.Complex2f
+    :show-inheritance:
+.. autoclass:: drjit.cuda.Complex2f64
+    :show-inheritance:
+.. autoclass:: drjit.cuda.Quaternion4f
+    :show-inheritance:
+.. autoclass:: drjit.cuda.Quaternion4f64
+    :show-inheritance:
 
 CUDA array namespace with automatic differentiation (``drjit.cuda.ad``)
 _______________________________________________________________________
@@ -918,6 +1001,38 @@ _______________________________________________________________________
 .. autoclass:: drjit.cuda.ad.Array4i64
     :show-inheritance:
 .. autoclass:: drjit.cuda.ad.ArrayXi64
+    :show-inheritance:
+.. autoclass:: drjit.cuda.ad.Matrix2u
+    :show-inheritance:
+.. autoclass:: drjit.cuda.ad.Matrix2i
+    :show-inheritance:
+.. autoclass:: drjit.cuda.ad.Matrix2f
+    :show-inheritance:
+.. autoclass:: drjit.cuda.ad.Matrix2f64
+    :show-inheritance:
+.. autoclass:: drjit.cuda.ad.Matrix3u
+    :show-inheritance:
+.. autoclass:: drjit.cuda.ad.Matrix3i
+    :show-inheritance:
+.. autoclass:: drjit.cuda.ad.Matrix3f
+    :show-inheritance:
+.. autoclass:: drjit.cuda.ad.Matrix3f64
+    :show-inheritance:
+.. autoclass:: drjit.cuda.ad.Matrix4u
+    :show-inheritance:
+.. autoclass:: drjit.cuda.ad.Matrix4i
+    :show-inheritance:
+.. autoclass:: drjit.cuda.ad.Matrix4f
+    :show-inheritance:
+.. autoclass:: drjit.cuda.ad.Matrix4f64
+    :show-inheritance:
+.. autoclass:: drjit.cuda.ad.Complex2f
+    :show-inheritance:
+.. autoclass:: drjit.cuda.ad.Complex2f64
+    :show-inheritance:
+.. autoclass:: drjit.cuda.ad.Quaternion4f
+    :show-inheritance:
+.. autoclass:: drjit.cuda.ad.Quaternion4f64
     :show-inheritance:
 
 LLVM array namespace (``drjit.llvm``)
@@ -1021,6 +1136,38 @@ _______________________________________
     :show-inheritance:
 .. autoclass:: drjit.llvm.ArrayXi64
     :show-inheritance:
+.. autoclass:: drjit.llvm.Matrix2u
+    :show-inheritance:
+.. autoclass:: drjit.llvm.Matrix2i
+    :show-inheritance:
+.. autoclass:: drjit.llvm.Matrix2f
+    :show-inheritance:
+.. autoclass:: drjit.llvm.Matrix2f64
+    :show-inheritance:
+.. autoclass:: drjit.llvm.Matrix3u
+    :show-inheritance:
+.. autoclass:: drjit.llvm.Matrix3i
+    :show-inheritance:
+.. autoclass:: drjit.llvm.Matrix3f
+    :show-inheritance:
+.. autoclass:: drjit.llvm.Matrix3f64
+    :show-inheritance:
+.. autoclass:: drjit.llvm.Matrix4u
+    :show-inheritance:
+.. autoclass:: drjit.llvm.Matrix4i
+    :show-inheritance:
+.. autoclass:: drjit.llvm.Matrix4f
+    :show-inheritance:
+.. autoclass:: drjit.llvm.Matrix4f64
+    :show-inheritance:
+.. autoclass:: drjit.llvm.Complex2f
+    :show-inheritance:
+.. autoclass:: drjit.llvm.Complex2f64
+    :show-inheritance:
+.. autoclass:: drjit.llvm.Quaternion4f
+    :show-inheritance:
+.. autoclass:: drjit.llvm.Quaternion4f64
+    :show-inheritance:
 
 LLVM array namespace with automatic differentiation (``drjit.llvm.ad``)
 _______________________________________________________________________
@@ -1121,4 +1268,36 @@ _______________________________________________________________________
 .. autoclass:: drjit.llvm.ad.Array4i64
     :show-inheritance:
 .. autoclass:: drjit.llvm.ad.ArrayXi64
+    :show-inheritance:
+.. autoclass:: drjit.llvm.ad.Matrix2u
+    :show-inheritance:
+.. autoclass:: drjit.llvm.ad.Matrix2i
+    :show-inheritance:
+.. autoclass:: drjit.llvm.ad.Matrix2f
+    :show-inheritance:
+.. autoclass:: drjit.llvm.ad.Matrix2f64
+    :show-inheritance:
+.. autoclass:: drjit.llvm.ad.Matrix3u
+    :show-inheritance:
+.. autoclass:: drjit.llvm.ad.Matrix3i
+    :show-inheritance:
+.. autoclass:: drjit.llvm.ad.Matrix3f
+    :show-inheritance:
+.. autoclass:: drjit.llvm.ad.Matrix3f64
+    :show-inheritance:
+.. autoclass:: drjit.llvm.ad.Matrix4u
+    :show-inheritance:
+.. autoclass:: drjit.llvm.ad.Matrix4i
+    :show-inheritance:
+.. autoclass:: drjit.llvm.ad.Matrix4f
+    :show-inheritance:
+.. autoclass:: drjit.llvm.ad.Matrix4f64
+    :show-inheritance:
+.. autoclass:: drjit.llvm.ad.Complex2f
+    :show-inheritance:
+.. autoclass:: drjit.llvm.ad.Complex2f64
+    :show-inheritance:
+.. autoclass:: drjit.llvm.ad.Quaternion4f
+    :show-inheritance:
+.. autoclass:: drjit.llvm.ad.Quaternion4f64
     :show-inheritance:
