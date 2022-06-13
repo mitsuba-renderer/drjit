@@ -41,6 +41,9 @@ import drjit.matrix as matrix # noqa
 # Tensor-related functions
 import drjit.tensor as tensor # noqa
 
+# Matrix-related functions
+import drjit.torch as torch # noqa
+
 # Install routing functions in ArrayBase and global scope
 self = vars()
 base = self['ArrayBase']
@@ -76,7 +79,7 @@ for k, v in const.__dict__.items():
     self[k] = v
 
 
-# Install matrix-related functions
+# Install matrix-related functions in global scope
 for k, v in matrix.__dict__.items():
     if k.startswith('_') or k[0].isupper():
         continue
@@ -90,4 +93,10 @@ for k, v in tensor.__dict__.items():
     self[k] = v
 
 
-del k, v, self, base, generic, router, matrix, tensor, traits, const, drjit_ext
+# Install pytoch-related function in global scope
+for k, v in torch.__dict__.items():
+    if k.startswith('_'):
+        continue
+    self[k] = v
+
+del k, v, self, base, generic, router, matrix, tensor, torch, traits, const, drjit_ext

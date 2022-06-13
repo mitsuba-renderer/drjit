@@ -1,71 +1,102 @@
-# import drjit as dr
-# import numpy as np
-# import pytest
-# import torch
+import drjit as dr
+import torch
 
-# class DrJitAtan2(torch.autograd.Function):
-#     """PyTorch function example from the documentation."""
-#     @staticmethod
-#     def forward(ctx, arg1, arg2):
-#         ctx.in1 = dr.FloatD(arg1)
-#         ctx.in2 = dr.FloatD(arg2)
-#         dr.set_requires_gradient(ctx.in1, arg1.requires_grad)
-#         dr.set_requires_gradient(ctx.in2, arg2.requires_grad)
-#         ctx.out = dr.atan2(ctx.in1, ctx.in2)
-#         out_torch = ctx.out.torch()
-#         dr.cuda_flush_malloc_cache()
-#         return out_torch
+import importlib
+import pytest
 
-#     @staticmethod
-#     def backward(ctx, grad_out):
-#         dr.set_gradient(ctx.out, dr.FloatC(grad_out))
-#         dr.FloatD.backward()
-#         result = (dr.gradient(ctx.in1).torch()
-#                   if dr.requires_gradient(ctx.in1) else None,
-#                   dr.gradient(ctx.in2).torch()
-#                   if dr.requires_gradient(ctx.in2) else None)
-#         del ctx.out, ctx.in1, ctx.in2
-#         dr.cuda_flush_malloc_cache()
-#         return result
+@pytest.fixture(scope="module", params=['drjit.cuda.ad', 'drjit.llvm.ad'])
+def m(request):
+    if 'cuda' in request.param:
+        if not dr.has_backend(dr.JitBackend.CUDA):
+            pytest.skip('CUDA mode is unsupported')
+    else:
+        if not dr.has_backend(dr.JitBackend.LLVM):
+            pytest.skip('LLVM mode is unsupported')
+    yield importlib.import_module(request.param)
 
 
-# def test01_set_gradient():
-#     a = dr.FloatD(42, 10)
-#     dr.set_requires_gradient(a)
+def test01_to_torch(m):
+    a = m.Float([0.0, 1.0, 2.0])
+    dr.enable_grad(a)
+    b = 4.0 * a
+    c = dr.to_torch(b)
+    d = 4.0 * c
+    e = d.sum()
+    e.backward()
+    assert dr.allclose(dr.grad(a), [16, 16, 16])
 
-#     with pytest.raises(TypeError):
-#         grad = dr.FloatD(-1, 10)
-#         dr.set_gradient(a, grad)
+    a = m.Array3f([[0.0, 1.0], [2.0, 3.0], [4.0, 5.0]])
+    dr.enable_grad(a)
+    b = m.Array3f([1, 2], [2, 3], [4, 5]) * a
+    c = dr.to_torch(b)
+    d = 4.0 * c
+    e = d.sum()
+    e.backward()
+    assert dr.allclose(dr.grad(a), [[4, 8], [8, 12], [16, 20]])
 
-#     grad = dr.FloatC(-1, 10)
-#     dr.set_gradient(a, grad)
-#     assert np.allclose(grad.numpy(), dr.gradient(a).numpy())
-
-#     # Note: if `backward` is not called here, test03 segfaults later.
-#     # TODO: we should not need this, there's most likely some missing cleanup when `a` is destructed
-#     dr.FloatD.backward()
-#     del a, grad
-
-
-# def test02_array_to_torch():
-#     a = dr.FloatD(42, 10)
-#     a_torch = a.torch()
-#     assert isinstance(a_torch, torch.Tensor)
-#     a_torch += 8
-#     a_np = a_torch.cpu().numpy()
-#     assert isinstance(a_np, np.ndarray)
-#     assert np.allclose(a_np, 50)
+    a = m.TensorXf([0.0, 1.0, 2.0, 3.0, 4.0, 5.0], shape=(2, 3))
+    dr.enable_grad(a)
+    b = 4.0 * a
+    c = dr.to_torch(b)
+    d = 4.0 * c
+    e = d.sum()
+    e.backward()
+    assert a.shape == dr.grad(a).shape
+    assert dr.allclose(dr.grad(a), 16)
 
 
-# def test03_pytorch_function():
-#     drjit_atan2 = DrJitAtan2.apply
+def test02_from_torch(m):
+    with pytest.raises(TypeError) as ei:
+        _ = dr.from_torch(float, torch.tensor([1, 2, 3]))
+    assert "expected a differentiable Dr.Jit array type!" in str(ei.value)
 
-#     y = torch.tensor(1.0, device='cuda')
-#     x = torch.tensor(2.0, device='cuda')
-#     y.requires_grad_()
-#     x.requires_grad_()
+    with pytest.raises(TypeError) as ei:
+        _ = dr.from_torch(dr.llvm.Float, torch.tensor([1, 2, 3]))
+    assert "expected a differentiable Dr.Jit array type!" in str(ei.value)
 
-#     o = drjit_atan2(y, x)
-#     o.backward()
-#     assert np.allclose(y.grad.cpu(), 0.4)
-#     assert np.allclose(x.grad.cpu(), -0.2)
+    a = torch.tensor([1.0, 2.0, 3.0], requires_grad=True)
+    b = 4.0 * a
+    c = dr.from_torch(m.Float, b)
+    d = 4.0 * c
+    e = dr.sum(d)
+    dr.backward(e)
+    assert dr.allclose(a.grad, [16, 16, 16])
+
+    a = torch.tensor([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], requires_grad=True)
+    b = torch.tensor([[1, 2, 3], [3, 4, 5]]) * a
+    c = dr.from_torch(m.Array3f, b)
+    d = 4.0 * c
+    e = dr.sum(d)
+    dr.backward(e)
+    assert dr.allclose(a.grad, [[4, 8, 12], [12, 16, 20]])
+
+    a = torch.tensor([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], requires_grad=True)
+    b = torch.tensor([[1, 2, 3], [3, 4, 5]]) * a
+    c = dr.from_torch(m.TensorXf, b)
+    d = 4.0 * c
+    e = dr.sum(d)
+    dr.backward(e)
+    assert dr.allclose(a.grad, [[4, 8, 12], [12, 16, 20]])
+
+
+def test03_torch_drjit_roundtrip(m):
+    a = torch.tensor([1.0, 2.0, 3.0], requires_grad=True)
+    b = 4.0 * a
+    c = dr.from_torch(m.Float, b)
+    d = 4.0 * c
+    e = dr.to_torch(d)
+    f = e.sum()
+    f.backward()
+    assert dr.allclose(a.grad, [16, 16, 16])
+
+
+def test04_drjit_torch_roundtrip(m):
+    a = m.Float([0.0, 1.0, 2.0])
+    dr.enable_grad(a)
+    b = 4.0 * a
+    c = dr.to_torch(b)
+    d = 4.0 * c
+    e = dr.from_torch(m.Float, d)
+    f = dr.sum(e)
+    dr.backward(f)
+    assert dr.allclose(dr.grad(a), [16, 16, 16])
