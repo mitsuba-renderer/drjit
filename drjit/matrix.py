@@ -29,8 +29,9 @@ def rotate(dtype, axis, angle):
         raise Exception("Unsupported target type!")
 
 
-def transpose(arg, /):
-    '''
+def transpose(a, /):
+    r'''
+    transpose(arg, /)
     Transpose the provided Dr.Jit matrix.
 
     Args:
@@ -39,13 +40,13 @@ def transpose(arg, /):
     Returns:
         drjit.ArrayBase: The transposed matrix
     '''
-    if not _dr.is_matrix_v(arg):
+    if not _dr.is_matrix_v(a):
         raise Exception("Unsupported target type!")
 
-    result = type(arg)()
-    for i in range(arg.Size):
+    result = type(a)()
+    for i in range(a.Size):
         for j in range(a.Size):
-            result[j, i] = arg[i, j]
+            result[j, i] = a[i, j]
     return result
 
 
@@ -194,7 +195,8 @@ def det(m, /):
 
 
 def inverse(arg, /):
-    '''
+    r'''
+    inverse(arg, /)
     Returns the inverse matrix of the provided Dr.Jit matrix.
 
     Args:
