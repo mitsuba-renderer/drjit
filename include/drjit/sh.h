@@ -1,5 +1,5 @@
 /*
-    drjit/matrix.h -- Real spherical harmonics evaluation routines
+    drjit/sh.h -- Real spherical harmonics evaluation routines
 
     The generated code is based on the paper `Efficient Spherical Harmonic
     Evaluation, Journal of Computer Graphics Techniques (JCGT), vol. 2, no. 2,
