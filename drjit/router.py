@@ -3127,6 +3127,34 @@ def deg2rad(arg, /):
 
 
 # -------------------------------------------------------------------
+#                        Spherical harmonics
+# -------------------------------------------------------------------
+
+
+def sh_eval(arg, order, /):
+    '''
+    Evaluates the real spherical harmonics basis functions up to and including
+    order ``order``.
+
+    The directions provided to ``sh_eval`` must be normalized 3D vectors
+    (i.e. using Cartesian instead of spherical coordinates).
+
+    This function supports evaluation order up to 10 (e.g. ``order=9``).
+
+    Args:
+        arg (drjit.ArrayBase): A 3D Dr.Jit array type for the direction to be evaluated
+        order (int): Order of the spherical harmonic evaluation
+
+    Returns:
+        list: List of spherical harmonics coefficients
+    '''
+    if not _dr.is_array_v(arg) or arg.Size != 3:
+        raise Exception("sh_eval(): incompatible input!")
+
+    return _dr.float32_array_t(arg).sh_eval_(arg, order)
+
+
+# -------------------------------------------------------------------
 #                       Horizontal operations
 # -------------------------------------------------------------------
 

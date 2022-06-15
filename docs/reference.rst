@@ -183,6 +183,7 @@ Standard mathematical functions
 .. autofunction:: imag
 .. autofunction:: conj
 .. autofunction:: cross
+.. autofunction:: sh_eval
 
 Transcendental functions
 ------------------------

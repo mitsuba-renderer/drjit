@@ -6,6 +6,7 @@
 #include <drjit/matrix.h>
 #include <drjit/quaternion.h>
 #include <drjit/autodiff.h>
+#include <drjit/sh.h>
 #include <pybind11/functional.h>
 
 extern py::handle array_base, array_name, array_init, tensor_init, array_configure;
@@ -102,6 +103,17 @@ void bind_basic_methods(py::class_<Array> &cls) {
 }
 
 template <typename Array>
+void bind_other_methods(py::class_<Array> &cls) {
+    if constexpr (Array::Size == 3 && Array::IsFloat) {
+        cls.def("sh_eval_", [](Array &a, size_t order) {
+            std::vector<dr::value_t<Array>> out((order+1)*(order+1));
+            sh_eval(a, order, out.data());
+            return out;
+        });
+    }
+}
+
+template <typename Array>
 void bind_generic_constructor(py::class_<Array> &cls) {
     cls.def(
         "__init__",
@@ -115,6 +127,7 @@ template <typename Array> auto bind(py::module_ &m, bool scalar_mode = false) {
     auto cls = bind_type<Array>(m, scalar_mode);
     bind_generic_constructor(cls);
     bind_basic_methods(cls);
+    bind_other_methods(cls);
     return cls;
 };
 
