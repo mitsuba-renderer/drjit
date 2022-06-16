@@ -730,3 +730,18 @@ def diff_vars(o, indices, check_grad_enabled=True):
             if t is not None:
                 result = t
     return result
+
+
+class array_iterator:
+    def __init__(self, a) -> None:
+        assert _dr.depth_v(a) > 1
+        self.a = a
+        self.i = 0
+
+    def __next__(self):
+        if self.i >= len(self.a):
+            raise StopIteration()
+        else:
+            ret = self.a[self.i]
+            self.i += 1
+            return ret
