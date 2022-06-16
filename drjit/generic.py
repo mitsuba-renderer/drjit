@@ -684,8 +684,8 @@ def set_label_(a, label):
             for i, v in enumerate(a):
                 v.set_label_(label[i])
         else:
-            for i, v in enumerate(a):
-                v.set_label_(label + "_%i" % i)
+            for i in range(len(a)):
+                a[i].set_label_(label + "_%i" % i)
 
 
 @property
@@ -1663,3 +1663,20 @@ def tf(a):
     from tensorflow import constant
     constant(0) # Dummy op to ensure that the Tensorflow context is initialized
     return from_dlpack(a.__dlpack__())
+
+
+def op_iter(a):
+    size = len(a)
+    class array_iterator:
+        def __init__(self):
+            self.i = 0
+
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            if self.i >= size:
+                raise StopIteration()
+            self.i += 1
+            return a[self.i-1]
+    return array_iterator()

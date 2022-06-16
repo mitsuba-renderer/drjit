@@ -44,7 +44,7 @@ const char* var_type_numpy[(int) VarType::Count] {
     "i8", "u8", "u8", "f2", "f4", "f8"
 };
 
-py::handle array_base, array_name, array_init, tensor_init, array_configure, array_iterator;
+py::handle array_base, array_name, array_init, tensor_init, array_configure;
 
 /// Placeholder base of all DrJit arrays in the Python domain
 struct ArrayBase { };
@@ -77,7 +77,6 @@ PYBIND11_MODULE(drjit_ext, m_) {
     array_init = array_detail.attr("array_init");
     tensor_init = array_detail.attr("tensor_init");
     array_configure = array_detail.attr("array_configure");
-    array_iterator = array_detail.attr("array_iterator");
 
     m.attr("Dynamic") = dr::Dynamic;
 

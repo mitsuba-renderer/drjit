@@ -5447,8 +5447,8 @@ class CustomOp:
         def ad_clear(o):
             if _dr.depth_v(o) > 1 \
                or isinstance(o, _Sequence):
-                for v in o:
-                    ad_clear(v)
+                for i in range(len(o)):
+                    ad_clear(o[i])
             elif isinstance(o, _Mapping):
                 for k, v in o.items():
                     ad_clear(v)
@@ -5484,7 +5484,7 @@ def custom(cls, *args, **kwargs):
     def clear_primal(o, dec_ref):
         if _dr.depth_v(o) > 1 \
            or isinstance(o, _Sequence):
-            return type(o)([clear_primal(v, dec_ref) for v in o])
+            return type(o)([clear_primal(o[i], dec_ref) for i in range(len(o))])
         elif isinstance(o, _Mapping):
             return { k: clear_primal(v, dec_ref) for k, v in o.items() }
         elif _dr.is_diff_v(o) and _dr.is_float_v(o):
