@@ -9,7 +9,7 @@
 #include <drjit/sh.h>
 #include <pybind11/functional.h>
 
-extern py::handle array_base, array_name, array_init, tensor_init, array_configure;
+extern py::handle array_base, array_name, array_init, tensor_init, array_configure, array_iterator;
 
 template <typename Array>
 auto bind_type(py::module_ &m, bool scalar_mode = false) {
@@ -95,11 +95,16 @@ void bind_basic_methods(py::class_<Array> &cls) {
         cls.def("init_", [](Array &a, size_t size) { a.init_(size); });
     }
 
-    if constexpr (dr::array_depth_v<Array> > 1)
+    if constexpr (dr::array_depth_v<Array> > 1) {
         cls.def(
             "entry_ref_",
             [](Array &a, size_t i) -> Value & { return a.entry(i); },
             py::return_value_policy::reference_internal);
+
+        cls.def(
+            "__iter__", [](Array &a) { return array_iterator(a); }
+        );
+    }
 }
 
 template <typename Array>

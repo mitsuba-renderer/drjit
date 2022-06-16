@@ -11,7 +11,10 @@ def test01_init_zero():
     a = Array3f()
     assert len(a) == 3
     for i in range(3):
-        assert a[i] == 0
+        if dr.DEBUG:
+            assert a[i] != a[i]
+        else:
+            assert a[i] == 0
 
     a = ArrayXf()
     assert len(a) == 0
@@ -1235,6 +1238,33 @@ def test44_maximum(m):
     a = dr.maximum(m.ArrayXf([1, 2, 5], [2, 1, 4], [3, 4, 3]), m.Array3f(1, 2, 3))
     assert dr.allclose(a, [[1, 2, 5], [2, 2, 4], [3, 4, 3]])
     assert type(a) is m.ArrayXf
+
+
+def test45_iter(m):
+    a = m.Float([0, 1, 2, 3, 4 ,5])
+    for i, v in enumerate(a):
+        assert v == i
+
+    a = m.Array0f()
+    count = 0
+    for i, v in enumerate(a):
+        count += 1
+    assert count == 0
+
+    a = m.Array1f([0, 1, 2, 3, 4 ,5])
+    count = 0
+    for i, v in enumerate(a):
+        assert dr.allclose(v, [0, 1, 2, 3, 4 ,5])
+        count += 1
+    assert count == 1
+
+    a = m.Array3f([[0, 0], [1, 1], [2, 2]])
+    count = 0
+    for i, v in enumerate(a):
+        assert dr.allclose(v, i)
+        count += 1
+    assert count == 3
+
 
 #@pytest.mark.parametrize('name', ['sqrt', 'cbrt', 'sin', 'cos', 'tan', 'asin',
 #                                  'acos', 'atan', 'sinh', 'cosh', 'tanh',
