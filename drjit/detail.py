@@ -709,8 +709,8 @@ def diff_vars(o, indices, check_grad_enabled=True):
 
     result = None
     if _dr.depth_v(o) > 1 or isinstance(o, Sequence):
-        for v in o:
-            t = diff_vars(v, indices, check_grad_enabled)
+        for i in range(len(o)):
+            t = diff_vars(o[i], indices, check_grad_enabled)
             if t is not None:
                 result = t
     elif isinstance(o, Mapping):
@@ -738,10 +738,12 @@ class array_iterator:
         self.a = a
         self.i = 0
 
+    def __iter__(self):
+        return self
+
     def __next__(self):
         if self.i >= len(self.a):
             raise StopIteration()
-        else:
-            ret = self.a[self.i]
-            self.i += 1
-            return ret
+        ret = self.a[self.i]
+        self.i += 1
+        return ret
