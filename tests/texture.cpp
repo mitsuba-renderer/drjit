@@ -20,6 +20,8 @@ using MatrixD3f = dr::Matrix<DFloat, 3>;
 using FloatX = dr::DynamicArray<Float>;
 using FloatDX = dr::DynamicArray<DFloat>;
 
+#define CHECK_CUDA_AVAILABLE() if (!jit_has_backend(JitBackend::CUDA)) return;
+
 void test_interp_1d_wrap(WrapMode wrap_mode) {
     for (int k = 0; k < 2; ++k) {
         jit_set_flag(JitFlag::ForceOptiX, k == 1);
@@ -93,6 +95,8 @@ void test_interp_1d_wrap(WrapMode wrap_mode) {
 }
 
 DRJIT_TEST(test01_interp_1d) {
+    CHECK_CUDA_AVAILABLE()
+
     jit_init(JitBackend::CUDA);
 
     test_interp_1d_wrap(WrapMode::Repeat);
@@ -101,6 +105,8 @@ DRJIT_TEST(test01_interp_1d) {
 }
 
 DRJIT_TEST(test02_interp_1d) {
+    CHECK_CUDA_AVAILABLE()
+
     for (int ch = 1; ch <= 8; ++ch) {
         size_t shape[] = { 123 };
         PCG32<Float> rng_1(shape[0] * ch);
@@ -131,6 +137,8 @@ DRJIT_TEST(test02_interp_1d) {
 }
 
 DRJIT_TEST(test03_interp_2d) {
+    CHECK_CUDA_AVAILABLE()
+
     for (int ch = 1; ch <= 8; ++ch) {
         size_t shape[] = { 123, 456 };
         PCG32<Float> rng_1(shape[0] * shape[1] * ch);
@@ -159,6 +167,8 @@ DRJIT_TEST(test03_interp_2d) {
 }
 
 DRJIT_TEST(test04_interp_3d) {
+    CHECK_CUDA_AVAILABLE()
+
     for (int ch = 1; ch <= 8; ++ch) {
         size_t shape[] = { 123, 456, 12 };
         PCG32<Float> rng_1(shape[0] * shape[1] * shape[2] * ch);
@@ -215,11 +225,15 @@ void test_grad(bool migrate) {
 }
 
 DRJIT_TEST(test05_grad) {
+    CHECK_CUDA_AVAILABLE()
+
     test_grad(true);
     test_grad(false);
 }
 
 DRJIT_TEST(test06_nearest) {
+    CHECK_CUDA_AVAILABLE()
+
     size_t shape[1] = { 3 };
     dr::Texture<Float, 1> tex(shape, 1, true, false, FilterMode::Nearest);
     tex.set_value(Float(0.f, 0.5f, 1.f));
@@ -233,6 +247,8 @@ DRJIT_TEST(test06_nearest) {
 }
 
 DRJIT_TEST(test07_cubic_analytic) {
+    CHECK_CUDA_AVAILABLE()
+
     size_t shape[1] = { 4 };
     dr::Texture<DFloat, 1> tex(shape, 1, true, false, FilterMode::Linear,
                                WrapMode::Clamp);
@@ -348,12 +364,16 @@ void test_cubic_interp_1d(WrapMode wrap_mode) {
 }
 
 DRJIT_TEST(test08_cubic_interp_1d) {
+    CHECK_CUDA_AVAILABLE()
+
     test_cubic_interp_1d(WrapMode::Clamp);
     test_cubic_interp_1d(WrapMode::Repeat);
     test_cubic_interp_1d(WrapMode::Mirror);
 }
 
 DRJIT_TEST(test09_cubic_interp_2d) {
+    CHECK_CUDA_AVAILABLE()
+
     size_t shape[2] = { 5, 4 };
     Array<WrapMode, 3> wrap_modes(WrapMode::Repeat, WrapMode::Clamp,
                                   WrapMode::Mirror);
@@ -376,6 +396,8 @@ DRJIT_TEST(test09_cubic_interp_2d) {
 }
 
 DRJIT_TEST(test10_cubic_interp_3d) {
+    CHECK_CUDA_AVAILABLE()
+
     using TensorXf = Tensor<Float>;
     using UInt32 = dr::uint32_array_t<Float>;
     const int s = 9;
@@ -408,6 +430,8 @@ DRJIT_TEST(test10_cubic_interp_3d) {
 }
 
 DRJIT_TEST(test11_cubic_grad_pos) {
+    CHECK_CUDA_AVAILABLE()
+
     using TensorXf = Tensor<Float>;
     using UInt32 = dr::uint32_array_t<Float>;
     size_t shape[4] = { 4, 4, 4, 1 };
@@ -447,6 +471,8 @@ DRJIT_TEST(test11_cubic_grad_pos) {
 }
 
 DRJIT_TEST(test12_cubic_hessian_pos) {
+    CHECK_CUDA_AVAILABLE()
+
     using TensorXf = Tensor<Float>;
     using UInt32 = dr::uint32_array_t<Float>;
     size_t shape[4] = { 4, 4, 4, 1 };
@@ -485,6 +511,8 @@ DRJIT_TEST(test12_cubic_hessian_pos) {
 }
 
 DRJIT_TEST(test13_move_assignment) {
+    CHECK_CUDA_AVAILABLE()
+
     size_t shape[1] = { 2 };
     dr::Texture<Float, 1> move_from(shape, 1, true, false, FilterMode::Nearest,
                               WrapMode::Repeat);
@@ -503,6 +531,8 @@ DRJIT_TEST(test13_move_assignment) {
 }
 
 DRJIT_TEST(test14_move_constructor) {
+    CHECK_CUDA_AVAILABLE()
+
     size_t shape[1] = { 2 };
     dr::Texture<Float, 1> move_from(shape, 1, true, false, FilterMode::Nearest,
                               WrapMode::Repeat);
@@ -534,6 +564,8 @@ void test_tensor_value_1d(bool migrate) {
 }
 
 DRJIT_TEST(test15_tensor_value_1d) {
+    CHECK_CUDA_AVAILABLE()
+
     test_tensor_value_1d(true);
     test_tensor_value_1d(false);
 }
@@ -553,6 +585,8 @@ void test_tensor_value_2d(bool migrate) {
 }
 
 DRJIT_TEST(test16_tensor_value_2d) {
+    CHECK_CUDA_AVAILABLE()
+
     test_tensor_value_2d(true);
     test_tensor_value_2d(false);
 }
@@ -572,11 +606,15 @@ void test_tensor_value_3d(bool migrate) {
 }
 
 DRJIT_TEST(test17_tensor_value_3d) {
+    CHECK_CUDA_AVAILABLE()
+
     test_tensor_value_3d(true);
     test_tensor_value_3d(false);
 }
 
 DRJIT_TEST(test18_fetch_1d) {
+    CHECK_CUDA_AVAILABLE()
+
     size_t shape[1] = { 2 };
     for (size_t ch = 1; ch <= 8; ++ch) {
         dr::Texture<Float, 1> tex(shape, ch, true, false);
@@ -609,6 +647,8 @@ DRJIT_TEST(test18_fetch_1d) {
 }
 
 DRJIT_TEST(test19_fetch_2d) {
+    CHECK_CUDA_AVAILABLE()
+
     size_t shape[2] = { 2, 2 };
     for (size_t ch = 1; ch <= 8; ++ch) {
         dr::Texture<Float, 2> tex(shape, ch, true, false);
@@ -653,6 +693,8 @@ DRJIT_TEST(test19_fetch_2d) {
 }
 
 DRJIT_TEST(test20_fetch_3d) {
+    CHECK_CUDA_AVAILABLE()
+
     size_t shape[3] = { 2, 2, 2 };
     for (size_t ch = 1; ch <= 8; ++ch) {
         dr::Texture<Float, 3> tex(shape, ch, true, false);
@@ -746,11 +788,15 @@ void test_fetch_migrate(bool migrate) {
 }
 
 DRJIT_TEST(test21_fetch_migrate) {
+    CHECK_CUDA_AVAILABLE()
+
     test_fetch_migrate(true);
     test_fetch_migrate(false);
 }
 
 DRJIT_TEST(test22_fetch_grad) {
+    CHECK_CUDA_AVAILABLE()
+
     size_t shape[2] = { 2, 2 };
     Texture<DFloat, 2> tex(shape, 1, true, true);
 
@@ -796,6 +842,8 @@ DRJIT_TEST(test22_fetch_grad) {
 }
 
 DRJIT_TEST(test23_set_tensor) {
+    CHECK_CUDA_AVAILABLE()
+
     using TensorXf = Tensor<Float>;
     size_t shape[2] = { 2, 2 };
     Texture<Float, 2> tex(shape, 1, true, false);
@@ -845,6 +893,8 @@ DRJIT_TEST(test23_set_tensor) {
 }
 
 DRJIT_TEST(test24_set_tensor_inplace) {
+    CHECK_CUDA_AVAILABLE()
+
     using TensorXf = Tensor<Float>;
     size_t shape[2] = { 2, 2 };
     Texture<Float, 2> tex(shape, 1, true, false);
