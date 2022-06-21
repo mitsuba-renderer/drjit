@@ -32,6 +32,12 @@ void bind_texture(py::module &m, const char *name) {
         .def("wrap_mode", &Tex::wrap_mode)
         .def("use_accel", &Tex::use_accel)
         .def("migrate", &Tex::migrate)
+        .def_property_readonly("shape", [](const Tex &t) {
+            PyObject *shape = PyTuple_New(t.ndim());
+            for (size_t i = 0; i < t.ndim(); ++i)
+                PyTuple_SET_ITEM(shape, i, PyLong_FromLong((long) t.shape()[i]));
+            return py::reinterpret_steal<py::tuple>(shape);
+        })
         .def("eval_cuda",
                 [](const Tex &texture, const dr::Array<Type, Dimension> &pos,
                    const dr::mask_t<Type> active) {
