@@ -288,32 +288,32 @@ def test12_select(pkg):
 
 
 @pytest.mark.parametrize("pkg", pkgs)
-def test13_upsampling(pkg):
+def test13_upsampling_tensor(pkg):
     t = get_class(pkg + ".TensorXf")
 
     a = t([1, 2, 3, 4], shape=(2, 2))
-    dr.allclose(dr.upsample(a, [4, 4]).array, [1, 1, 2, 2,
-                                               1, 1, 2, 2,
-                                               3, 3, 4, 4,
-                                               3, 3, 4, 4])
+    assert dr.allclose(dr.upsample(a, [4, 4]).array, [1, 1, 2, 2,
+                                                      1, 1, 2, 2,
+                                                      3, 3, 4, 4,
+                                                      3, 3, 4, 4])
 
     a = t([1, 2, 3, 2, 3, 4, 3, 4, 5, 4, 5, 6], shape=(2, 2, 3))
-    dr.allclose(dr.upsample(a, [4, 4]).array, [1, 2, 3, 1, 2, 3, 2, 3, 4, 2, 3, 4,
-                                               1, 2, 3, 1, 2, 3, 2, 3, 4, 2, 3, 4,
-                                               3, 4, 5, 3, 4, 5, 4, 5, 6, 4, 5, 6,
-                                               3, 4, 5, 3, 4, 5, 4, 5, 6, 4, 5, 6])
+    assert dr.allclose(dr.upsample(a, [4, 4]).array, [1, 2, 3, 1, 2, 3, 2, 3, 4, 2, 3, 4,
+                                                      1, 2, 3, 1, 2, 3, 2, 3, 4, 2, 3, 4,
+                                                      3, 4, 5, 3, 4, 5, 4, 5, 6, 4, 5, 6,
+                                                      3, 4, 5, 3, 4, 5, 4, 5, 6, 4, 5, 6])
 
     a = t([1, 2, 3, 2, 3, 4, 3, 4, 5, 4, 5, 6], shape=(2, 2, 3))
-    dr.allclose(dr.upsample(a, [4, 4, 3]).array, [1, 2, 3, 1, 2, 3, 2, 3, 4, 2, 3, 4,
-                                                  1, 2, 3, 1, 2, 3, 2, 3, 4, 2, 3, 4,
-                                                  3, 4, 5, 3, 4, 5, 4, 5, 6, 4, 5, 6,
-                                                  3, 4, 5, 3, 4, 5, 4, 5, 6, 4, 5, 6])
+    assert dr.allclose(dr.upsample(a, [4, 4, 3]).array, [1, 2, 3, 1, 2, 3, 2, 3, 4, 2, 3, 4,
+                                                         1, 2, 3, 1, 2, 3, 2, 3, 4, 2, 3, 4,
+                                                         3, 4, 5, 3, 4, 5, 4, 5, 6, 4, 5, 6,
+                                                         3, 4, 5, 3, 4, 5, 4, 5, 6, 4, 5, 6])
 
     a = t([1, 2, 3, 4, 5, 6, 7, 8], shape=(2, 2, 2))
-    dr.allclose(dr.upsample(a, [4, 4, 4]).array, [1, 1, 2, 2, 1, 1, 2, 2, 3, 3, 4, 4, 3, 3, 4, 4,
-                                                  1, 1, 2, 2, 1, 1, 2, 2, 3, 3, 4, 4, 3, 3, 4, 4,
-                                                  5, 5, 6, 6, 5, 5, 6, 6, 7, 7, 8, 8, 7, 7, 8, 8,
-                                                  5, 5, 6, 6, 5, 5, 6, 6, 7, 7, 8, 8, 7, 7, 8, 8])
+    assert dr.allclose(dr.upsample(a, [4, 4, 4]).array, [1, 1, 2, 2, 1, 1, 2, 2, 3, 3, 4, 4, 3, 3, 4, 4,
+                                                         1, 1, 2, 2, 1, 1, 2, 2, 3, 3, 4, 4, 3, 3, 4, 4,
+                                                         5, 5, 6, 6, 5, 5, 6, 6, 7, 7, 8, 8, 7, 7, 8, 8,
+                                                         5, 5, 6, 6, 5, 5, 6, 6, 7, 7, 8, 8, 7, 7, 8, 8])
 
     with pytest.raises(TypeError) as ei:
         dr.upsample(a.array, [4])
@@ -337,9 +337,30 @@ def test13_upsampling(pkg):
         dr.upsample(a, [4, 4])
     assert "tensor resolution must be a power of two" in str(ei.value)
 
+
+@pytest.mark.parametrize("pkg", pkgs)
+def test14_upsampling_texture(pkg):
+    t = get_class(pkg + ".TensorXf")
     tex_t = get_class(pkg + ".Texture2f")
-    tex = tex_t(t([1, 2, 3, 4], shape=(2, 2, 1)))
-    dr.allclose(dr.upsample(tex, [4, 4]).tensor().array, [1, 1, 2, 2,
-                                                          1, 1, 2, 2,
-                                                          3, 3, 4, 4,
-                                                          3, 3, 4, 4])
+
+    tex = tex_t(t([1, 2, 3, 4], shape=(2, 2, 1)), filter_mode=dr.FilterMode.Nearest)
+    assert dr.allclose(dr.upsample(tex, [4, 4]).tensor().array, [1, 1, 2, 2,
+                                                                 1, 1, 2, 2,
+                                                                 3, 3, 4, 4,
+                                                                 3, 3, 4, 4])
+
+    tex = tex_t(t([1, 2, 3, 4], shape=(2, 2, 1)), filter_mode=dr.FilterMode.Nearest)
+    assert dr.allclose(dr.upsample(tex, [3, 3]).tensor().array, [1, 2, 2,
+                                                                 3, 4, 4,
+                                                                 3, 4, 4])
+
+    tex = tex_t(t([1, 2, 3, 4], shape=(2, 2, 1)), filter_mode=dr.FilterMode.Linear)
+    assert dr.allclose(dr.upsample(tex, [4, 4]).tensor().array, [1.0, 1.25, 1.75, 2.0,
+                                                                 1.5, 1.75, 2.25, 2.5,
+                                                                 2.5, 2.75, 3.25, 3.5,
+                                                                 3.0, 3.25, 3.75, 4.0])
+
+    tex = tex_t(t([1, 2, 3, 4], shape=(2, 2, 1)), filter_mode=dr.FilterMode.Linear)
+    assert dr.allclose(dr.upsample(tex, [3, 3]).tensor().array, [1.0, 1.5, 2.0,
+                                                                 2.0, 2.5, 3.0,
+                                                                 3.0, 3.5, 4.0])
