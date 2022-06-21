@@ -4602,7 +4602,7 @@ def empty(dtype, shape=1):
 
 def full(dtype, value, shape=1):
     '''
-    Return an constant-valued instance of the desired type and shape
+    Return a constant-valued instance of the desired type and shape
 
     This function can create constant-valued instances of various types. In
     particular, ``dtype`` can be:
@@ -4645,6 +4645,49 @@ def full(dtype, value, shape=1):
         return dtype.full_(value, shape)
     else:
         return dtype(value)
+
+
+def ones(dtype, shape=1):
+    '''
+    Return a constant-valued instance of the desired type and shape filled with ones.
+
+    This function can create constant-valued instances of various types. In
+    particular, ``dtype`` can be:
+
+    - A Dr.Jit array type like :py:class:`drjit.cuda.Array2f`. When ``shape``
+    specifies a sequence, it must be compatible with static dimensions of the
+    ``dtype``. For example, ``dr.ones(dr.cuda.Array2f, shape=(3, 100))`` fails,
+    since the leading dimension is incompatible with
+     :py:class:`drjit.cuda.Array2f`. When ``shape`` is an integer, it specifies
+    the size of the last (dynamic) dimension, if available.
+
+    - A tensorial type like :py:class:`drjit.scalar.TensorXf`. When ``shape``
+    specifies a sequence (list/tuple/..), it determines the tensor rank and
+    shape. When ``shape`` is an integer, the function creates a rank-1 tensor of
+    the specified size.
+
+    - A :ref:`custom data structure <custom-struct>`. In this case,
+    :py:func:`drjit.ones()` will invoke itself recursively to initialize
+    each field of the data structure.
+
+    - A scalar Python type like ``int``, ``float``, or ``bool``. The ``shape``
+    parameter is ignored in this case.
+
+    Args:
+        dtype (type): Desired Dr.Jit array type, Python scalar type, or
+          :ref:`custom data structure <custom-struct>`.
+
+        shape (Sequence[int] | int): Shape of the desired array
+
+    Returns:
+        object: A instance of type ``dtype`` filled with ones
+    '''
+    if not isinstance(dtype, type):
+        raise Exception('ones(): Type expected as first argument')
+    elif issubclass(dtype, ArrayBase):
+        return dtype.full_(1.0, shape)
+    else:
+        return dtype(1.0)
 
 
 def linspace(dtype, start, stop, num=1, endpoint=True):
