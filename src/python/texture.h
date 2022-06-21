@@ -30,6 +30,8 @@ void bind_texture(py::module &m, const char *name) {
              py::return_value_policy::reference_internal)
         .def("filter_mode", &Tex::filter_mode)
         .def("wrap_mode", &Tex::wrap_mode)
+        .def("use_accel", &Tex::use_accel)
+        .def("migrate", &Tex::migrate)
         .def("eval_cuda",
                 [](const Tex &texture, const dr::Array<Type, Dimension> &pos,
                    const dr::mask_t<Type> active) {

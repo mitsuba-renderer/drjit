@@ -62,6 +62,7 @@ Miscellaneous operations
 .. autofunction:: resize
 .. autofunction:: slice_index
 .. autofunction:: binary_search
+.. autofunction:: upsample
 .. autofunction:: tzcnt
 .. autofunction:: lzcnt
 .. autofunction:: popcnt

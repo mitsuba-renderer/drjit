@@ -285,3 +285,61 @@ def test12_select(pkg):
 
         expected = tp([1, 2, 13, 14], shape=dr.shape(initial))
         assert dr.allclose(result, expected)
+
+
+@pytest.mark.parametrize("pkg", pkgs)
+def test13_upsampling(pkg):
+    t = get_class(pkg + ".TensorXf")
+
+    a = t([1, 2, 3, 4], shape=(2, 2))
+    dr.allclose(dr.upsample(a, [4, 4]).array, [1, 1, 2, 2,
+                                               1, 1, 2, 2,
+                                               3, 3, 4, 4,
+                                               3, 3, 4, 4])
+
+    a = t([1, 2, 3, 2, 3, 4, 3, 4, 5, 4, 5, 6], shape=(2, 2, 3))
+    dr.allclose(dr.upsample(a, [4, 4]).array, [1, 2, 3, 1, 2, 3, 2, 3, 4, 2, 3, 4,
+                                               1, 2, 3, 1, 2, 3, 2, 3, 4, 2, 3, 4,
+                                               3, 4, 5, 3, 4, 5, 4, 5, 6, 4, 5, 6,
+                                               3, 4, 5, 3, 4, 5, 4, 5, 6, 4, 5, 6])
+
+    a = t([1, 2, 3, 2, 3, 4, 3, 4, 5, 4, 5, 6], shape=(2, 2, 3))
+    dr.allclose(dr.upsample(a, [4, 4, 3]).array, [1, 2, 3, 1, 2, 3, 2, 3, 4, 2, 3, 4,
+                                                  1, 2, 3, 1, 2, 3, 2, 3, 4, 2, 3, 4,
+                                                  3, 4, 5, 3, 4, 5, 4, 5, 6, 4, 5, 6,
+                                                  3, 4, 5, 3, 4, 5, 4, 5, 6, 4, 5, 6])
+
+    a = t([1, 2, 3, 4, 5, 6, 7, 8], shape=(2, 2, 2))
+    dr.allclose(dr.upsample(a, [4, 4, 4]).array, [1, 1, 2, 2, 1, 1, 2, 2, 3, 3, 4, 4, 3, 3, 4, 4,
+                                                  1, 1, 2, 2, 1, 1, 2, 2, 3, 3, 4, 4, 3, 3, 4, 4,
+                                                  5, 5, 6, 6, 5, 5, 6, 6, 7, 7, 8, 8, 7, 7, 8, 8,
+                                                  5, 5, 6, 6, 5, 5, 6, 6, 7, 7, 8, 8, 7, 7, 8, 8])
+
+    with pytest.raises(TypeError) as ei:
+        dr.upsample(a.array, [4])
+    assert "unsupported input type" in str(ei.value)
+
+    a = t([1, 2, 3, 4], shape=(2, 2, 1))
+    with pytest.raises(TypeError) as ei:
+        dr.upsample(a, [4])
+    assert "invalid number of dimensions" in str(ei.value)
+
+    with pytest.raises(TypeError) as ei:
+        dr.upsample(a, [4, 4, 3])
+    assert "target channel count must match" in str(ei.value)
+
+    with pytest.raises(TypeError) as ei:
+        dr.upsample(a, [4, 3])
+    assert "target resolution must be a power of two" in str(ei.value)
+
+    with pytest.raises(TypeError) as ei:
+        a = t([1, 2, 3, 4, 5, 6], shape=(3, 2))
+        dr.upsample(a, [4, 4])
+    assert "tensor resolution must be a power of two" in str(ei.value)
+
+    tex_t = get_class(pkg + ".Texture2f")
+    tex = tex_t(t([1, 2, 3, 4], shape=(2, 2, 1)))
+    dr.allclose(dr.upsample(tex, [4, 4]).tensor().array, [1, 1, 2, 2,
+                                                          1, 1, 2, 2,
+                                                          3, 3, 4, 4,
+                                                          3, 3, 4, 4])
