@@ -38,6 +38,9 @@ import drjit.const as const  # noqa
 # Matrix-related functions
 import drjit.matrix as matrix # noqa
 
+# Tensor-related functions
+import drjit.tensor as tensor # noqa
+
 # Install routing functions in ArrayBase and global scope
 self = vars()
 base = self['ArrayBase']
@@ -79,4 +82,12 @@ for k, v in matrix.__dict__.items():
         continue
     self[k] = v
 
-del k, v, self, base, generic, router, matrix, traits, const, drjit_ext
+
+# Install tensor-related functions
+for k, v in tensor.__dict__.items():
+    if k.startswith('_') or k[0].isupper():
+        continue
+    self[k] = v
+
+
+del k, v, self, base, generic, router, matrix, tensor, traits, const, drjit_ext

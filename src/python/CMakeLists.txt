@@ -68,7 +68,7 @@ endif()
 if (DRJIT_MASTER_PROJECT AND NOT "${CMAKE_CURRENT_SOURCE_DIR}" STREQUAL "${CMAKE_CURRENT_BINARY_DIR}")
   set(DRJIT_PYTHON_FILES
      __init__.py const.py detail.py generic.py
-     matrix.py router.py traits.py
+     matrix.py router.py traits.py tensor.py
   )
 
   set(DRJIT_COPY_FILES "")

@@ -4181,8 +4181,8 @@ def replace_grad(dst, src):
             src = src + _dr.zeros(tsrc, ldst)
         else:
             raise Exception("replace_grad(): input arguments have "
-                           "incompatible sizes (%i vs %i)!"
-                           % (ldst, lsrc))
+                            "incompatible sizes (%i vs %i)!"
+                            % (ldst, lsrc))
 
     if depth > 1:
         result = tdst()
