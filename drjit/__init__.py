@@ -1,8 +1,8 @@
 import sys
 import os
 
-if sys.version_info < (3, 5):
-    raise ImportError("Dr.Jit requires Python >= 3.5")
+if sys.version_info < (3, 8):
+    raise ImportError("Dr.Jit requires Python >= 3.8")
 
 if os.name == 'nt':
     # Specify DLL search path for windows (no rpath on this platform..)

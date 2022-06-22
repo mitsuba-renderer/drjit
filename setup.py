@@ -47,5 +47,6 @@ setup(
         '-DCMAKE_INSTALL_INCLUDEDIR=drjit/include',
         '-DCMAKE_INSTALL_DATAROOTDIR=drjit/share'
     ],
-    packages=['drjit']
+    packages=['drjit'],
+    python_requires=">=3.8"
 )
