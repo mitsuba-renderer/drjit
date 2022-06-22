@@ -13,12 +13,12 @@ def upsample(t, shape=None, scale_factor=None):
 
     1. When ``source`` is a Dr.Jit tensor, nearest neighbor up-sampling will use
     hence the target ``shape`` values must be multiples of the source shape
-    values. When `scale_factor` is use, its values must be integers.
+    values. When `scale_factor` is used, its values must be integers.
 
     2. When ``source`` is a Dr.Jit texture type, the up-sampling will be
     performed according to the filter mode set on the input texture. Target
-    ``shape`` values that are not multiples of the source shape values are also
-    supported. When `scale_factor` is use, its values must be integers.
+    ``shape`` values are not required to be multiples of the source shape values.
+    When `scale_factor` is used, its values must be integers.
 
     Args:
         source (object): A Dr.Jit tensor or texture type.
