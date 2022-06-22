@@ -3,7 +3,7 @@ import drjit as _dr
 from collections.abc import Sequence as _Sequence
 
 def upsample(t, shape=None, scale_factor=None):
-    r'''
+    '''
     upsample(source, shape=None, scale_factor=None)
     Up-sample the input tensor or texture according to the provided shape.
 
