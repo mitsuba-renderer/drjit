@@ -45,7 +45,7 @@ def upsample(t, shape=None, scale_factor=None):
         if len(shape) > len(t.shape):
             raise TypeError("upsample(): invalid shape size!")
 
-        shape += t.shape[len(shape):]
+        shape = list(shape) + list(t.shape[len(shape):])
 
         scale_factor = []
         for i, s in enumerate(shape):
@@ -54,13 +54,13 @@ def upsample(t, shape=None, scale_factor=None):
 
             if s < t.shape[i]:
                 raise TypeError("upsample(): target shape values must be larger "
-                                "or equal to input shape!")
+                                "or equal to input shape! (%i vs %i)" % (s, t.shape[i]))
 
             if _dr.is_tensor_v(t):
                 factor = s / float(t.shape[i])
                 if factor != int(factor):
                     raise TypeError("upsample(): target shape must be multiples of "
-                                    "the input shape!")
+                                    "the input shape! (%i vs %i)" % (s, t.shape[i]))
     else:
         if not isinstance(scale_factor, _Sequence):
             raise TypeError("upsample(): unsupported scale_factor type, expected a list!")
@@ -68,6 +68,7 @@ def upsample(t, shape=None, scale_factor=None):
         if len(scale_factor) > len(t.shape):
             raise TypeError("upsample(): invalid scale_factor size!")
 
+        scale_factor = list(scale_factor)
         for i in range(len(t.shape) - len(scale_factor)):
             scale_factor.append(1)
 
