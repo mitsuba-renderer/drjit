@@ -116,7 +116,7 @@ if (DRJIT_MASTER_PROJECT)
     set(SPHINX_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/html")
 
     add_custom_target(mkdoc
-        ${SPHINX_EXECUTABLE} -b html "${SPHINX_INPUT_DIR}" "${SPHINX_OUTPUT_DIR}"
+        ${CMAKE_COMMAND} -E env PYTHONPATH="${CMAKE_CURRENT_BINARY_DIR}" ${SPHINX_EXECUTABLE} -b html "${SPHINX_INPUT_DIR}" "${SPHINX_OUTPUT_DIR}"
         COMMENT "Building HTML documentation with Sphinx"
         USES_TERMINAL)
   endif()
