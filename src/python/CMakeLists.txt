@@ -54,15 +54,7 @@ set_target_properties(drjit-python PROPERTIES
 target_compile_options(drjit-python PRIVATE ${DRJIT_NATIVE_FLAGS})
 
 if (DRJIT_MASTER_PROJECT)
-  # Adapt to variations in rpath handling on Linux and macOS
-  if (APPLE)
-    set(DRJIT_ORIGIN "@loader_path")
-  elseif(UNIX)
-    set(DRJIT_ORIGIN "$ORIGIN")
-  endif()
-
   install(TARGETS drjit-python LIBRARY DESTINATION drjit)
-  set_target_properties(drjit-python PROPERTIES INSTALL_RPATH "${DRJIT_ORIGIN}")
 endif()
 
 if (DRJIT_MASTER_PROJECT AND NOT "${CMAKE_CURRENT_SOURCE_DIR}" STREQUAL "${CMAKE_CURRENT_BINARY_DIR}")

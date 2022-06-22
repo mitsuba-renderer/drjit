@@ -56,6 +56,16 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
   target_compile_options(drjit INTERFACE -fno-strict-aliasing)
 endif()
 
+if (DRJIT_MASTER_PROJECT)
+  if (APPLE)
+    set(DRJIT_ORIGIN "@loader_path")
+  elseif(UNIX)
+    set(DRJIT_ORIGIN "$ORIGIN")
+  endif()
+
+  set(CMAKE_INSTALL_RPATH "${DRJIT_ORIGIN}")
+endif()
+
 if (DRJIT_ENABLE_JIT)
   if (APPLE)
     message(STATUS "Dr.Jit: building the LLVM JIT backend.")
