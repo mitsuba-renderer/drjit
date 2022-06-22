@@ -30,7 +30,7 @@ def rotate(dtype, axis, angle):
 
 
 def transpose(a, /):
-    r'''
+    '''
     transpose(arg, /)
     Transpose the provided Dr.Jit matrix.
 
@@ -51,7 +51,7 @@ def transpose(a, /):
 
 
 def inverse_transpose(m, /):
-    r'''
+    '''
     inverse_transpose(arg, /)
     Returns the inverse transpose of the provided Dr.Jit matrix.
 
@@ -147,7 +147,7 @@ def inverse_transpose(m, /):
 
 
 def det(m, /):
-    r'''
+    '''
     det(arg, /)
     Compute the determinant of the provided Dr.Jit matrix.
 
@@ -195,7 +195,7 @@ def det(m, /):
 
 
 def inverse(arg, /):
-    r'''
+    '''
     inverse(arg, /)
     Returns the inverse matrix of the provided Dr.Jit matrix.
 
@@ -209,7 +209,7 @@ def inverse(arg, /):
 
 
 def diag(a, /):
-    r'''
+    '''
     diag(arg, /)
     Returns the diagonal matrix of the provided Dr.Jit matrix.
 
@@ -238,7 +238,7 @@ def diag(a, /):
 
 
 def trace(a, /):
-    r'''
+    '''
     trace(arg, /)
     Returns the trace of the provided Dr.Jit matrix.
 
@@ -257,7 +257,7 @@ def trace(a, /):
 
 
 def frob(a, /):
-    r'''
+    '''
     frob(arg, /)
     Returns the squared Frobenius norm of the provided Dr.Jit matrix.
 
@@ -284,7 +284,7 @@ def frob(a, /):
 
 
 def quat_to_matrix(q, size=4):
-    r'''
+    '''
     quat_to_matrix(arg, size=4)
     Converts a quaternion into its matrix representation.
 
@@ -325,7 +325,7 @@ def quat_to_matrix(q, size=4):
 
 
 def matrix_to_quat(m, /):
-    r'''
+    '''
     matrix_to_quat(arg, /)
     Converts a 3x3 or 4x4 homogeneous containing
     a pure rotation into a rotation quaternion.
@@ -372,7 +372,7 @@ def matrix_to_quat(m, /):
 
 
 def quat_to_euler(q, /):
-    r'''
+    '''
     quat_to_euler(arg, /)
     Converts a quaternion into its Euler angles representation.
 
@@ -410,7 +410,7 @@ def quat_to_euler(q, /):
 
 
 def euler_to_quat(a, /):
-    r'''
+    '''
     euler_to_quat(arg, /)
     Converts Euler angles into a Dr.Jit quaternion.
 
@@ -469,7 +469,7 @@ def polar_decomp(arg, it=10):
 
 
 def transform_decompose(a, it=10):
-    r'''
+    '''
     transform_decompose(arg, it=10)
     Performs a polar decomposition of a non-perspective 4x4 homogeneous
     coordinate matrix and returns a tuple of
@@ -508,7 +508,7 @@ def transform_decompose(a, it=10):
 
 
 def transform_compose(s, q, t, /):
-    r'''
+    '''
     transform_compose(S, Q, T, /)
     This function composes a 4x4 homogeneous coordinate transformation from the
     given scale, rotation, and translation. It performs the reverse of
