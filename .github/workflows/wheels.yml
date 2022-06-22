@@ -1,0 +1,94 @@
+name: Build Python wheels
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload:
+        description: 'Upload wheels to PyPI? (0: no, 1: yes)'
+        required: true
+        default: '0'
+
+env:
+  CIBW_BUILD_VERBOSITY: 1
+  CIBW_SKIP: "*-musllinux* pp* cp36-* cp37-*"
+  CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
+  CIBW_ARCHS_WINDOWS: auto64
+  CIBW_ARCHS_LINUX: auto64
+  CIBW_BEFORE_BUILD_LINUX: yum install -y libatomic
+  MACOSX_DEPLOYMENT_TARGET: 10.14
+
+jobs:
+  build_wheels:
+    strategy:
+      matrix:
+        os: [ubuntu-20.04, windows-latest]
+        include:
+          - os: macos-latest
+            cibw-arch: x86_64
+          - os: macos-latest
+            cibw-arch: arm64
+      fail-fast: false
+
+    name: >
+      Build wheels on ${{ matrix.os }}
+      ${{ (matrix.os == 'macos-latest' && format('({0})', matrix.cibw-arch)) || '' }}
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+          token: ${{ secrets.DRJIT_GITHUB_TOKEN }}
+
+      - uses: actions/setup-python@v4
+        name: Install Python
+        with:
+          python-version: '3.8'
+
+      - name: Prepare compiler environment for Windows
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Install cibuildwheel
+        run: |
+          python -m pip install cibuildwheel==2.6.1
+
+      - name: Prepare cibuildwheel environment for macOS
+        if: runner.os == 'macOS'
+        run: |
+          [[ "arm64" == "${{ matrix.cibw-arch }}" ]] && \
+          echo "set(CMAKE_SYSTEM_NAME Darwin)" >> /tmp/macOS_arm64_toolchain.cmake && \
+          echo "set(CMAKE_SYSTEM_PROCESSOR arm64)" >> /tmp/macOS_arm64_toolchain.cmake && \
+          echo "set(HAS_LIBCPP_EXITCODE 0)" >> /tmp/macOS_arm64_toolchain.cmake && \
+          echo "set(HAS_LIBCPP_EXITCODE__TRYRUN_OUTPUT \"\")" >> /tmp/macOS_arm64_toolchain.cmake && \
+          echo "DRJIT_CMAKE_TOOLCHAIN_FILE=/tmp/macOS_arm64_toolchain.cmake" >> $GITHUB_ENV
+
+          echo "CIBW_ARCHS_MACOS=${{ matrix.cibw-arch }}" >> $GITHUB_ENV
+
+      - name: Build wheels
+        run: |
+          python -m cibuildwheel --output-dir wheelhouse
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: wheels
+          path: ./wheelhouse/*.whl
+
+  upload_pypi:
+    name: Upload wheels to PyPI
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.upload == '1'}}
+    needs: [build_wheels]
+
+    steps:
+      - uses: actions/download-artifact@v2
+        with:
+          name: wheels
+          path: dist
+
+      - uses: pypa/gh-action-pypi-publish@v1.5.0
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_PASSWORD }}
