@@ -1,63 +1,93 @@
+from typing import Type
 import drjit as _dr
 from collections.abc import Sequence as _Sequence
 
-def upsample(t, shape):
+def upsample(t, shape=None, scale_factor=None):
     r'''
-    upsample(source, shape)
+    upsample(source, shape=None, scale_factor=None)
     Up-sample the input tensor or texture according to the provided shape.
 
-    This behavior of this function depends on the type of ``source``:
+    Alternatively to specifying the target shape, a scale factor can be provided.
 
-    1. When ``source`` is a Dr.Jit tensor, ``source`` is assumed to have a shape
-    that follows the following patterns: ``(D_0, ..., D_N)`` or ``(D_0, ..., D_N, C)``
-    with ``D_0, ..., D_N`` the resolution along each dimensions and ``C`` the
-    channel count. This function assumes that the last dimension of `source`
-    represents different channels when its resolution is not a power of two. The
-    resolution of all other dimensions (``D_0, ..., D_N``) must be powers of two.
+    The behavior of this function depends on the type of ``source``:
 
-    The target ``shape`` defines the target resolution along each dimensions
-    ``T_0, ..., T_N`` which have to be powers of two. Optionally, ``shape`` can also
-    specify the channel number which need to match the one of ``source``.
+    1. When ``source`` is a Dr.Jit tensor, nearest neighbor up-sampling will use
+    hence the target ``shape`` values must be multiples of the source shape
+    values. When `scale_factor` is use, its values must be integers.
 
-    2. When ``source`` is a Dr.Jit texture type, this function supports source
-    and target shapes that are not powers of two. In this case, ``shape`` should
-    define the target resolution along each dimensions ``T_0, ..., T_N``. The
-    up-sampling will be performed using the interpolation scheme set on the
-    texture itself, otherwise nearest neighbor will be used instead.
+    2. When ``source`` is a Dr.Jit texture type, the up-sampling will be
+    performed according to the filter mode set on the input texture. Target
+    ``shape`` values that are not multiples of the source shape values are also
+    supported. When `scale_factor` is use, its values must be integers.
 
     Args:
         source (object): A Dr.Jit tensor or texture type.
 
-        shape (list): The target shape
+        shape (list): The target shape (optional)
+
+        scale_factor (list): The scale factor to apply to the current shape (optional)
 
     Returns:
-        object: the up-sampled tensor or texture object
+        object: the up-sampled tensor or texture object. The type of the output will be the same as the type of the source.
     '''
-
-    if not isinstance(shape, _Sequence):
-        raise TypeError("upsample(): unsupported shape input type, expected a list!")
-
     if  not getattr(t, 'IsTexture', False) and not _dr.is_tensor_v(t):
         raise TypeError("upsample(): unsupported input type, expected Dr.Jit "
                         "tensor or texture type!")
 
-    if len(shape) != len(t.shape) and len(shape) != len(t.shape) - 1:
-        raise TypeError("upsample(): invalid number of dimensions in target shape!"
-                        "Should be equal to the number of dimensions of the input"
-                        "or one less (assuming the last dimension represents "
-                        "different channels)")
+    if shape is not None and scale_factor is not None:
+        raise TypeError("upsample(): shape and scale_factor arguments cannot "
+                        "be defined at the same time!")
+
+    if shape is not None:
+        if not isinstance(shape, _Sequence):
+            raise TypeError("upsample(): unsupported shape type, expected a list!")
+
+        if len(shape) > len(t.shape):
+            raise TypeError("upsample(): invalid shape size!")
+
+        shape += t.shape[len(shape):]
+
+        scale_factor = []
+        for i, s in enumerate(shape):
+            if type(s) is not int:
+                raise TypeError("upsample(): target shape must contain integer values!")
+
+            if s < t.shape[i]:
+                raise TypeError("upsample(): target shape values must be larger "
+                                "or equal to input shape!")
+
+            if _dr.is_tensor_v(t):
+                factor = s / float(t.shape[i])
+                if factor != int(factor):
+                    raise TypeError("upsample(): target shape must be multiples of "
+                                    "the input shape!")
+    else:
+        if not isinstance(scale_factor, _Sequence):
+            raise TypeError("upsample(): unsupported scale_factor type, expected a list!")
+
+        if len(scale_factor) > len(t.shape):
+            raise TypeError("upsample(): invalid scale_factor size!")
+
+        for i in range(len(t.shape) - len(scale_factor)):
+            scale_factor.append(1)
+
+        shape = []
+        for i, factor in enumerate(scale_factor):
+            if type(factor) is not int:
+                raise TypeError("upsample(): scale_factor must contain integer values!")
+
+            if factor < 1:
+                raise TypeError("upsample(): scale_factor values must be greater "
+                                "than 0!")
+
+            shape.append(factor * t.shape[i])
 
     if getattr(t, 'IsTexture', False):
         value_type = type(t.value())
         dim = len(t.shape) - 1
 
-        if dim != len(shape):
-            raise TypeError("upsample(): invalid number of dimensions in target shape!")
-
-        for i in range(dim):
-            if shape[i] < t.shape[i]:
-                raise TypeError("upsample(): target resolution must be larger or "
-                                "equal to texture resolution!")
+        if t.shape[dim] != shape[dim]:
+            raise TypeError("upsample(): channel counts doesn't match input texture!")
 
          # Create the query coordinates
         coords = list(_dr.meshgrid(*[
@@ -86,54 +116,25 @@ def upsample(t, shape):
             _dr.scatter(data, values[c], index + c)
 
         # Create the up-sampled texture
-        tex = type(t)(shape, channels,
-                      use_accel=t.use_accel(),
-                      migrate=t.migrate(),
-                      filter_mode=t.filter_mode(),
-                      wrap_mode=t.wrap_mode())
-        tex.set_value(data)
+        texture = type(t)(shape[:-1], channels,
+                          use_accel=t.use_accel(),
+                          migrate=t.migrate(),
+                          filter_mode=t.filter_mode(),
+                          wrap_mode=t.wrap_mode())
+        texture.set_value(data)
 
-        return tex
+        return texture
+    else:
+        dim = len(shape)
+        size = _dr.prod(shape[:dim])
+        base = _dr.arange(_dr.uint32_array_t(type(t.array)), size)
 
-    def is_power_of_2(x):
-        return ((x != 0) and not (x & (x - 1)))
+        index = 0
+        stride = 1
+        for i in reversed(range(dim)):
+            ratio = shape[i] // t.shape[i]
+            index += (base // ratio % t.shape[i]) * stride
+            base //= shape[i]
+            stride *= t.shape[i]
 
-    dim = len(shape)
-    channels = 1
-    if dim == len(t.shape) - 1:
-        channels = t.shape[dim]
-    elif not is_power_of_2(t.shape[dim-1]) or t.shape[dim-1] == 1:
-        channels = t.shape[dim-1]
-        dim -= 1
-
-        if shape[dim] != t.shape[dim]:
-            raise TypeError("upsample(): target channel count must match the one"
-                            "of the input tensor!")
-
-    for i in range(dim):
-        if not is_power_of_2(t.shape[i]):
-            raise TypeError("upsample(): tensor resolution must be a power of two!")
-
-        if not is_power_of_2(shape[i]):
-            raise TypeError("upsample(): target resolution must be a power of two!")
-
-        if shape[i] < t.shape[i]:
-            raise TypeError("upsample(): target resolution must be larger or "
-                            "equal to tensor resolution!")
-
-    size = _dr.prod(shape[:dim]) * channels
-    base = _dr.arange(_dr.uint32_array_t(type(t.array)), size)
-
-    index = base % channels
-    base //= channels
-
-    stride = 1
-    for i in range(dim):
-        ratio = shape[i] // t.shape[i]
-        index += (base // ratio % t.shape[i]) * stride * channels
-        base //= shape[i]
-        stride *= t.shape[i]
-
-    shape = [shape[i] for i in range(dim)]
-    shape.append(channels)
-    return type(t)(_dr.gather(type(t.array), t.array, index), shape)
+        return type(t)(_dr.gather(type(t.array), t.array, index), shape)

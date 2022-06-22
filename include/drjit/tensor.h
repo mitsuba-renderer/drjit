@@ -346,6 +346,7 @@ struct Tensor
 
     Array &array() { return m_array; }
     const Array &array() const { return m_array; }
+    Shape &shape() { return m_shape; }
     const Shape &shape() const { return m_shape; }
 
     const Value *data() const { return m_array.data(); }

@@ -31,6 +31,13 @@ template <typename T> auto bind_tensor(py::module m) {
        .def(py::init([](const T &array, const std::vector<size_t> &shape) {
                return Tensor(array, shape.size(), shape.data());
             }), "array"_a, "shape"_a)
+       .def("assign", [](Tensor &a, const Tensor &b) {
+           if (&a != &b) {
+               a.array() = b.array();
+                for (size_t i = 0; i < a.ndim(); ++i)
+                    a.shape()[i] = b.shape()[i];
+           }
+       })
        .def("__len__", &Tensor::size)
        .def_property_readonly("ndim", &Tensor::ndim)
        .def_property_readonly("array", [](Tensor &t) { return &(t.array()); })
