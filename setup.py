@@ -23,10 +23,12 @@ with open(os.path.join("include/drjit/fwd.h")) as f:
     matches = dict(VERSION_REGEX.findall(f.read()))
     drjit_version = "{MAJOR}.{MINOR}.{PATCH}".format(**matches)
 
-with open(os.path.join(this_directory, 'README.md'), encoding='utf-8') as f:
+with open(os.path.join(this_directory, 'README.rst'), encoding='utf-8') as f:
     long_description = f.read()
 
-long_description = long_description[long_description.find('## Introduction'):]
+long_description = long_description[long_description.find('Introduction'):]
+
+drjit_cmake_toolchain_file = os.environ.get("DRJIT_CMAKE_TOOLCHAIN_FILE", "")
 
 setup(
     name="drjit",
@@ -37,7 +39,7 @@ setup(
     url="https://github.com/mitsuba-renderer/drjit",
     license="BSD",
     long_description=long_description,
-    long_description_content_type='text/markdown',
+    long_description_content_type='text/x-rst',
     cmake_args=[
         '-DDRJIT_ENABLE_JIT:BOOL=ON',
         '-DDRJIT_ENABLE_AUTODIFF:BOOL=ON',
@@ -45,7 +47,8 @@ setup(
         '-DCMAKE_INSTALL_LIBDIR=drjit',
         '-DCMAKE_INSTALL_BINDIR=drjit',
         '-DCMAKE_INSTALL_INCLUDEDIR=drjit/include',
-        '-DCMAKE_INSTALL_DATAROOTDIR=drjit/share'
+        '-DCMAKE_INSTALL_DATAROOTDIR=drjit/share',
+        f'-DCMAKE_TOOLCHAIN_FILE={drjit_cmake_toolchain_file}'
     ],
     packages=['drjit'],
     python_requires=">=3.8"
