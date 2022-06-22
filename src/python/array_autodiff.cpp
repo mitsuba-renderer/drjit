@@ -40,7 +40,7 @@ static nb::object detach(nb::handle h, bool preserve_type=true) {
 
                 const supp &s2 = nb::type_supplement<supp>(result.type());
                 if (s2.meta.shape[0] == DRJIT_DYNAMIC)
-                    s2.init(nb::inst_ptr<void>(result), sm->sq_length(h.ptr()));
+                    s2.op_init(nb::inst_ptr<void>(result), sm->sq_length(h.ptr()));
 
                 for (Py_ssize_t i = 0, l = sm->sq_length(h.ptr()); i < l; ++i) {
                     nb::object v = nb::steal(sm->sq_item(h.ptr(), i));
@@ -206,7 +206,7 @@ static nb::object grad(nb::handle h, bool preserve_type=true) {
 
                 const supp &s2 = nb::type_supplement<supp>(result.type());
                 if (s2.meta.shape[0] == DRJIT_DYNAMIC)
-                    s2.init(nb::inst_ptr<void>(result), sm->sq_length(h.ptr()));
+                    s2.op_init(nb::inst_ptr<void>(result), sm->sq_length(h.ptr()));
 
                 for (Py_ssize_t i = 0, l = sm->sq_length(h.ptr()); i < l; ++i) {
                     nb::object v = nb::steal(sm->sq_item(h.ptr(), i));
@@ -388,7 +388,7 @@ static nb::object replace_grad(nb::handle h0, nb::handle h1) {
         PySequenceMethods *sm = ((PyTypeObject *) result.type().ptr())->tp_as_sequence;
 
         if (s.meta.shape[0] == DRJIT_DYNAMIC)
-            s.init(nb::inst_ptr<void>(result), sm->sq_length(o0.ptr()));
+            s.op_init(nb::inst_ptr<void>(result), sm->sq_length(o0.ptr()));
 
         for (Py_ssize_t i = 0, l = sm->sq_length(o0.ptr()); i < l; ++i) {
             nb::object v0 = nb::steal(sm->sq_item(o0.ptr(), i));

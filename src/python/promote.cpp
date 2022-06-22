@@ -300,7 +300,7 @@ bool promote(const char *op, PyObject **o, size_t n, bool select) {
 
             PyObject *res =
                 NB_VECTORCALL(h2.ptr(), args + 1,
-                              PY_VECTORCALL_ARGUMENTS_OFFSET | 1, nullptr);
+                              NB_VECTORCALL_ARGUMENTS_OFFSET | 1, nullptr);
 
             if (!res) {
                 PyErr_Clear();

@@ -24,7 +24,7 @@ inline bool operator==(const meta &a, const meta &b) {
 bool array_resize(PyObject *self, const supp &s, Py_ssize_t len) {
     if (s.meta.shape[0] == DRJIT_DYNAMIC) {
         try {
-            s.init(nb::inst_ptr<void>(self), (size_t) len);
+            s.op_init(nb::inst_ptr<void>(self), (size_t) len);
         } catch (const std::exception &e) {
             PyErr_Format(PyExc_TypeError, "%s.__init__(): %s",
                          Py_TYPE(self)->tp_name, e.what());
@@ -146,9 +146,9 @@ void array_init_from_tensor(nb::handle self, nb::handle arg) {
         if (tensor.device_type() != nb::device::cpu::value)
             throw std::runtime_error("Unsupported source device!");
 
-        nb::type_supplement<supp>(temp_t).init(nb::inst_ptr<void>(temp), size);
+        nb::type_supplement<supp>(temp_t).op_init(nb::inst_ptr<void>(temp), size);
         size *= tensor.dtype().bits / 8;
-        memcpy(s.ptr(nb::inst_ptr<void>(temp)), tensor.data(), size);
+        memcpy(s.op_ptr(nb::inst_ptr<void>(temp)), tensor.data(), size);
     }
 
     nb::object unraveled = unravel(
@@ -176,7 +176,7 @@ int array_init(PyObject *self, PyObject *args, PyObject *kwds) {
 
     if (argc == 0) {
         // Zero-initialize
-        nb::detail::nb_inst_zero(self);
+        nb::inst_zero(self);
         return 0;
     } else if (argc == 1) {
         PyObject *arg = PyTuple_GET_ITEM(args, 0);
@@ -186,7 +186,7 @@ int array_init(PyObject *self, PyObject *args, PyObject *kwds) {
         // Copy/conversion from a compatible Dr.Jit array
         if (is_drjit_type(arg_tp)) {
             if (arg_tp == self_tp) {
-                nb::detail::nb_inst_copy(self, arg);
+                nb::inst_copy(self, arg);
                 return 0;
             }
 
@@ -215,7 +215,7 @@ int array_init(PyObject *self, PyObject *args, PyObject *kwds) {
                 try_sequence_import = false;
         }
 
-        nb::detail::nb_inst_zero(self);
+        nb::inst_zero(self);
 
         // Fast path for tuples/list instances
         if (arg_tp == &PyTuple_Type) {
@@ -316,7 +316,7 @@ int array_init(PyObject *self, PyObject *args, PyObject *kwds) {
         } else {
             PyObject *args[2] = { nullptr, arg };
             result = NB_VECTORCALL((PyObject *) s.value, args + 1,
-                                   1 | PY_VECTORCALL_ARGUMENTS_OFFSET, nullptr);
+                                   1 | NB_VECTORCALL_ARGUMENTS_OFFSET, nullptr);
             if (!result) {
                 PyErr_Clear();
                 PyErr_Format(
@@ -369,7 +369,7 @@ int array_init(PyObject *self, PyObject *args, PyObject *kwds) {
 
         return 0;
     } else {
-        nb::detail::nb_inst_zero(self);
+        nb::inst_zero(self);
 
         Py_ssize_t len = PyTuple_GET_SIZE(args);
         if (!array_resize(self, s, len))
@@ -384,6 +384,7 @@ int array_init(PyObject *self, PyObject *args, PyObject *kwds) {
     }
 }
 
+
 int tensor_init(PyObject *self, PyObject *args, PyObject *kwds) {
     PyObject *array = nullptr, *shape = nullptr;
     const char *kwlist[3] = { "array", "shape", nullptr };
@@ -396,7 +397,7 @@ int tensor_init(PyObject *self, PyObject *args, PyObject *kwds) {
 
     if (!shape && !array) {
         // Zero-initialize
-        nb::detail::nb_inst_zero(self);
+        nb::inst_zero(self);
         s.op_tensor_shape(nb::inst_ptr<void>(self)).push_back(0);
         return 0;
     }
@@ -406,20 +407,21 @@ int tensor_init(PyObject *self, PyObject *args, PyObject *kwds) {
 
         // Same type -> copy constructor
         if (array_tp == self_tp) {
-            nb::detail::nb_inst_copy(self, array);
+            nb::inst_copy(self, array);
             return 0;
         }
 
-        /// XXX need dr.ravel(), and initialize shape here..
-
-        nb::detail::nb_inst_zero(self);
+        nb::inst_zero(self);
         PyObject *value = s.op_tensor_array(self);
-        if (array_init(value, args, kwds)) {
+        nb::tuple args2 = nb::make_tuple(nb::handle(array));
+
+        if (array_init(value, args2.ptr(), nullptr)) {
             Py_DECREF(value);
             return -1;
         }
+        nb::inst_set_state(value, true, false);
 
-        s.op_tensor_shape(nb::inst_ptr<void>(self)).push_back(len(value));
+        s.op_tensor_shape(nb::inst_ptr<void>(self)).push_back(nb::len(value));
         Py_DECREF(value);
         return 0;
     }

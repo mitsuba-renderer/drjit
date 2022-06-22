@@ -50,7 +50,7 @@ static nb::object nb_math_unop(const char *name, size_t ops_offset,
         nb::inst_zero(result);
 
         if (s.meta.shape[0] == DRJIT_DYNAMIC)
-            s.init(nb::inst_ptr<void>(result), size);
+            s.op_init(nb::inst_ptr<void>(result), size);
 
         for (Py_ssize_t i = 0; i < size; ++i) {
             nb::object v = nb::steal(sq_item(h.ptr(), i));
@@ -123,7 +123,7 @@ static PyObject *nb_math_unop_2(const char *name, size_t ops_offset,
     nb::inst_zero(result_2);
 
     if (s.meta.shape[0] == DRJIT_DYNAMIC)
-        s.init(nb::inst_ptr<void>(result), size);
+        s.op_init(nb::inst_ptr<void>(result), size);
 
     try {
         for (Py_ssize_t i = 0; i < size; ++i) {
@@ -220,7 +220,7 @@ static PyObject *nb_math_binop(const char *name, size_t ops_offset,
     nb::inst_zero(result);
 
     if (s.meta.shape[0] == DRJIT_DYNAMIC)
-        s.init(nb::inst_ptr<void>(result), sr);
+        s.op_init(nb::inst_ptr<void>(result), sr);
 
     Py_ssize_t i0 = 0,
                i1 = 0,
@@ -329,7 +329,7 @@ static PyObject *nb_math_ternop(const char *name, size_t ops_offset,
     nb::inst_zero(result);
 
     if (s.meta.shape[0] == DRJIT_DYNAMIC)
-        s.init(nb::inst_ptr<void>(result), sr);
+        s.op_init(nb::inst_ptr<void>(result), sr);
 
     Py_ssize_t i0 = 0,
                i1 = 0,

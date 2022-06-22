@@ -111,17 +111,17 @@ def test02_slice_index():
           shape_out=(1, 3, 1, 1), index_out=tp(1, 8, 15))
 
 
-#def test02_tensor_init_basic():
-#    t = dr.scalar.tensorXf()
-#    assert t.shape == (0,) and dr.all(t.array == dr.scalar.ArrayXf())
-#    t = dr.scalar.tensorXf(123)
-#    assert t.shape == (1,) and dr.all(t.array == dr.scalar.ArrayXf([123]))
-#    t = dr.scalar.TensorXf([123, 456])
-#    assert t.shape == (2,) and dr.all(t.array == dr.scalar.ArrayXf([123, 456]))
-#
-#    t = dr.llvm.TensorXf()
-#    assert t.shape == (0,) and dr.all(t.array == dr.llvm.Float())
-#    t = dr.llvm.TensorXf(123)
-#    assert t.shape == (1,) and dr.all(t.array == dr.llvm.Float([123]))
-#    t = dr.llvm.TensorXf([123, 456])
-#    assert t.shape == (2,) and dr.all(t.array == dr.llvm.Float([123, 456]))
+def test02_tensor_init_basic():
+    t = dr.scalar.TensorXf()
+    assert t.shape == (0,) and dr.all(t.array == dr.scalar.ArrayXf())
+    t = dr.scalar.TensorXf(123)
+    assert t.shape == (1,) and dr.all(t.array == dr.scalar.ArrayXf([123]))
+    t = dr.scalar.TensorXf([123, 456])
+    assert t.shape == (2,) and dr.all(t.array == dr.scalar.ArrayXf([123, 456]))
+
+    t = dr.llvm.TensorXf()
+    assert t.shape == (0,) and dr.all(t.array == dr.llvm.Float())
+    t = dr.llvm.TensorXf(123)
+    assert t.shape == (1,) and dr.all(t.array == dr.llvm.Float([123]))
+    t = dr.llvm.TensorXf([123, 456])
+    assert t.shape == (2,) and dr.all(t.array == dr.llvm.Float([123, 456]))

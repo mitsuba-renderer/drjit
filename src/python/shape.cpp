@@ -11,17 +11,6 @@
 
 #include "python.h"
 
-Py_ssize_t len(PyObject *o) noexcept {
-    PyTypeObject *tp = Py_TYPE(o);
-    const supp &s = nb::type_supplement<supp>(tp);
-    Py_ssize_t length = s.meta.shape[0];
-
-    if (length == DRJIT_DYNAMIC)
-        length = (Py_ssize_t) s.len(nb::inst_ptr<void>(o));
-
-    return length;
-}
-
 bool shape_impl(nb::handle h, int i, Py_ssize_t *shape) noexcept {
     if (i >= 4)
         nb::detail::fail("drjit.shape(): internal error!");
@@ -31,7 +20,7 @@ bool shape_impl(nb::handle h, int i, Py_ssize_t *shape) noexcept {
     Py_ssize_t size = s.meta.shape[0], cur = shape[i];
 
     if (size == DRJIT_DYNAMIC)
-        size = (Py_ssize_t) s.len(nb::inst_ptr<void>(h));
+        size = s.sq_len(h.ptr());
 
     Py_ssize_t max_size = size > cur ? size : cur;
     if (max_size != size && size != 1)

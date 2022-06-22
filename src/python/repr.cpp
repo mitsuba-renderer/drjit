@@ -40,17 +40,13 @@ void tp_repr_impl(PyObject *self,
             tp_repr_impl(self, shape, index, depth + 1);
         } else {
             nb::object o = nb::borrow(self);
-
             for (size_t k = 0; k < index.size(); ++k)
-                o = nb::steal(Py_TYPE(o.ptr())->tp_as_sequence->sq_item(
-                    o.ptr(), index[k]));
+                o = o[index[k]];
 
-            if (o.type() == nb::handle(&PyFloat_Type)) {
-                double d = nb::cast<double>(o);
-                buffer.fmt("%g", d);
-            } else {
+            if (o.type() == nb::handle(&PyFloat_Type))
+                buffer.fmt("%g", nb::cast<double>(o));
+            else
                 buffer.put_dstr(nb::str(o).c_str());
-            }
         }
 
         if (j + 1 < size) {
@@ -67,18 +63,24 @@ void tp_repr_impl(PyObject *self,
 }
 
 PyObject *tp_repr(PyObject *self) {
-    (void) self;
-    buffer.clear();
+    try {
+        (void) self;
+        buffer.clear();
 
-    nb::object shape_obj = shape(self);
-    if (shape_obj.is_none()) {
-        buffer.put("[ragged array]");
-    } else {
-        std::vector<size_t> shape = nb::cast<std::vector<size_t>>(shape_obj),
-                            index(shape.size(), 0);
-        tp_repr_impl(self, shape, index, 0);
+        nb::object shape_obj = shape(self);
+        if (shape_obj.is_none()) {
+            buffer.put("[ragged array]");
+        } else {
+            std::vector<size_t> shape = nb::cast<std::vector<size_t>>(shape_obj),
+                                index(shape.size(), 0);
+
+            tp_repr_impl(self, shape, index, 0);
+        }
+
+        return PyUnicode_FromString(buffer.get());
+    } catch (const std::exception &e) {
+        PyErr_SetString(PyExc_RuntimeError, e.what());
+        return nullptr;
     }
-
-    return PyUnicode_FromString(buffer.get());
 }
 

@@ -41,7 +41,7 @@ nb::object full(nb::type_object dtype, nb::handle value,
 
             nb::inst_zero(result);
             if (s.meta.shape[0] == DRJIT_DYNAMIC)
-                s.init(nb::inst_ptr<void>(result), shape[0]);
+                s.op_init(nb::inst_ptr<void>(result), shape[0]);
 
             nb::type_object sub_type = nb::borrow<nb::type_object>(s.value);
             std::vector<size_t> sub_shape = shape;
@@ -142,7 +142,7 @@ nb::object empty(nb::type_object dtype, const std::vector<size_t> &shape) {
 
             nb::inst_zero(result);
             if (s.meta.shape[0] == DRJIT_DYNAMIC)
-                s.init(nb::inst_ptr<void>(result), shape[0]);
+                s.op_init(nb::inst_ptr<void>(result), shape[0]);
 
             nb::type_object sub_type = nb::borrow<nb::type_object>(s.value);
             std::vector<size_t> sub_shape = shape;

@@ -59,13 +59,28 @@ struct array_metadata {
 
 struct array_supplement {
     array_metadata meta;
+
+    /// Type name (utf8)
+    const char *name;
+
+    /// Element type of this array
     PyTypeObject *value;
+
+    /// Type of comparisons involving this array
     PyTypeObject *mask;
+
+    /// Ordinary array counterpart (for matrices, quaternions, etc.)
     PyTypeObject *array;
 
-    size_t (*len)(const void *) noexcept;
-    void (*init)(void *, size_t);
-    void *(*ptr)(void *);
+    /// Key operations for the sequence protocol
+    Py_ssize_t (*sq_len)(PyObject *) noexcept;
+    PyObject *(*sq_item)(PyObject *, Py_ssize_t) noexcept;
+    int (*sq_ass_item)(PyObject *, Py_ssize_t, PyObject *) noexcept;
+
+    /// Key operations for dynamic arrays
+    void (*op_init)(void *, size_t);
+    void *(*op_ptr)(void *);
+
     dr_vector<size_t> & (*op_tensor_shape)(void *) noexcept;
     PyObject *(*op_tensor_array)(PyObject *) noexcept;
     array_cast op_cast;
@@ -128,82 +143,11 @@ extern DRJIT_PYTHON_EXPORT const nanobind::handle array_get(array_metadata meta)
 extern DRJIT_PYTHON_EXPORT nanobind::handle
 bind(const char *name, array_supplement &supp, const std::type_info *type,
      const std::type_info *value_type, void (*copy)(void *, const void *),
-     void (*move)(void *, void *) noexcept, void (*destruct)(void *) noexcept,
-     void (*type_callback)(PyTypeObject *) noexcept) noexcept;
-
-extern DRJIT_PYTHON_EXPORT int array_init(PyObject *self, PyObject *args,
-                                          PyObject *kwds);
-extern DRJIT_PYTHON_EXPORT int tensor_init(PyObject *self, PyObject *args,
-                                           PyObject *kwds);
+     void (*move)(void *, void *) noexcept,
+     void (*destruct)(void *) noexcept) noexcept;
 
 template <typename T>
 constexpr uint8_t size_or_zero_v = std::is_scalar_v<T> ? 0 : (uint8_t) array_size_v<T>;
-
-template <typename T> void type_callback_array(PyTypeObject *tp) noexcept {
-    namespace nb = nanobind;
-    using Value = std::decay_t<decltype(std::declval<T>().entry(0))>;
-
-    tp->tp_init = array_init;
-
-    PySequenceMethods *sm = tp->tp_as_sequence;
-    sm->sq_item = [](PyObject *o, Py_ssize_t i_) noexcept -> PyObject * {
-        T *inst = nb::inst_ptr<T>(o);
-        size_t i = (size_t) i_, size = inst->size();
-
-        if (size == 1) // Broadcast
-            i = 0;
-
-        PyObject *result = nullptr;
-        if (i < size) {
-            nb::detail::cleanup_list cleanup(o);
-            result = nb::detail::make_caster<Value>::from_cpp(
-                         inst->entry(i),
-                         nb::rv_policy::reference_internal,
-                         &cleanup).ptr();
-            cleanup.release();
-        } else {
-            PyErr_Format(
-                PyExc_IndexError,
-                "%s.__getitem__(): entry %zu is out of bounds (the array is of size %zu).",
-                Py_TYPE(o)->tp_name, i, size);
-        }
-        return result;
-    };
-
-    sm->sq_ass_item = [](PyObject *o, Py_ssize_t i_, PyObject *value) noexcept -> int {
-        T *inst = nb::inst_ptr<T>(o);
-        size_t i = (size_t) i_, size = inst->size();
-        if (i < size) {
-            nb::detail::cleanup_list cleanup(o);
-            nb::detail::make_caster<Value> in;
-            bool success = in.from_python(
-                value, (uint8_t) nb::detail::cast_flags::convert, &cleanup);
-            if (success)
-                inst->set_entry(i, in.operator Value & ());
-            cleanup.release();
-
-            if (success) {
-                return 0;
-            } else {
-                PyErr_Format(
-                    PyExc_TypeError,
-                    "%s.__setitem__(): could not initialize element with a value of type '%s'.",
-                    Py_TYPE(o)->tp_name, Py_TYPE(value)->tp_name);
-                return -1;
-            }
-        } else {
-            PyErr_Format(
-                PyExc_IndexError,
-                "%s.__setitem__(): entry %zu is out of bounds (the array is of size %zu).",
-                Py_TYPE(o)->tp_name, i, size);
-            return -1;
-        }
-    };
-}
-
-template <typename T> void type_callback_tensor(PyTypeObject *tp) noexcept {
-    tp->tp_init = tensor_init;
-}
 
 NAMESPACE_END(detail)
 
@@ -255,7 +199,6 @@ template <typename T> nanobind::class_<T> bind(const char *name = nullptr) {
     void (*copy)(void *, const void *) = nullptr;
     void (*move)(void *, void *) noexcept = nullptr;
     void (*destruct)(void *) noexcept = nullptr;
-    void (*type_callback)(PyTypeObject *) noexcept = nullptr;
 
     if constexpr (!std::is_trivially_copy_constructible_v<T>)
         copy = nb::detail::wrap_copy<T>;
@@ -266,16 +209,78 @@ template <typename T> nanobind::class_<T> bind(const char *name = nullptr) {
     if constexpr (!std::is_trivially_destructible_v<T>)
         destruct = nb::detail::wrap_destruct<T>;
 
-    using Value = typename T::Value;
+    if constexpr (!T::IsTensor) {
+        using Value = std::decay_t<decltype(std::declval<T>().entry(0))>;
 
-    if constexpr (!T::IsTensor)
-        type_callback = detail::type_callback_array<T>;
-    else
-        type_callback = detail::type_callback_tensor<T>;
+        s.sq_len = [](PyObject *o) noexcept -> Py_ssize_t {
+            if constexpr (T::Size == Dynamic) {
+                return nb::inst_ptr<T>(o)->size();
+            } else {
+                (void) o;
+                return T::Size;
+            }
+        };
 
+        s.sq_item = [](PyObject *o, Py_ssize_t i_) noexcept -> PyObject * {
+            T *inst = nb::inst_ptr<T>(o);
+            size_t i = (size_t) i_, size = inst->size();
+
+            if (size == 1) // Broadcast
+                i = 0;
+
+            PyObject *result = nullptr;
+            if (i < size) {
+                nb::detail::cleanup_list cleanup(o);
+                result = nb::detail::make_caster<Value>::from_cpp(
+                             inst->entry(i),
+                             nb::rv_policy::reference_internal,
+                             &cleanup).ptr();
+                cleanup.release();
+            } else {
+                PyErr_Format(
+                    PyExc_IndexError,
+                    "%s.__getitem__(): entry %zu is out of bounds (the array is of size %zu).",
+                    Py_TYPE(o)->tp_name, i, size);
+            }
+            return result;
+        };
+
+        s.sq_ass_item = [](PyObject *o, Py_ssize_t i_,
+                           PyObject *value) noexcept -> int {
+            T *inst = nb::inst_ptr<T>(o);
+            size_t i = (size_t) i_, size = inst->size();
+            if (i < size) {
+                nb::detail::cleanup_list cleanup(o);
+                nb::detail::make_caster<Value> in;
+                bool success = in.from_python(
+                    value, (uint8_t) nb::detail::cast_flags::convert, &cleanup);
+                if (success)
+                    inst->set_entry(i, in.operator Value & ());
+                cleanup.release();
+
+                if (success) {
+                    return 0;
+                } else {
+                    PyErr_Format(
+                        PyExc_TypeError,
+                        "%s.__setitem__(): could not initialize element with a value of type '%s'.",
+                        Py_TYPE(o)->tp_name, Py_TYPE(value)->tp_name);
+                    return -1;
+                }
+            } else {
+                PyErr_Format(
+                    PyExc_IndexError,
+                    "%s.__setitem__(): entry %zu is out of bounds (the array is of size %zu).",
+                    Py_TYPE(o)->tp_name, i, size);
+                return -1;
+            }
+        };
+    }
+
+    using Value = value_t<T>;
     return nb::steal<nb::class_<T>>(detail::bind(
         name, s, &typeid(T), std::is_scalar_v<Value> ? nullptr : &typeid(Value),
-        copy, move, destruct, type_callback));
+        copy, move, destruct));
 }
 
 template <typename T> nanobind::class_<T> bind_array(const char *name = nullptr) {
@@ -288,16 +293,10 @@ template <typename T> nanobind::class_<T> bind_array(const char *name = nullptr)
         nb::type_supplement<detail::array_supplement>(tp);
 
     if constexpr (T::Size == Dynamic) {
-        s.len = [](const void *a) noexcept -> size_t {
-            return ((const T *) a)->size();
-        };
-
-        s.init = [](void *a, size_t size) {
-            ((T *) a)->init_(size);
-        };
+        s.op_init = [](void *a, size_t size) { ((T *) a)->init_(size); };
 
         if constexpr (T::Depth == 1 && !T::IsJIT)
-            s.ptr = [](void *a) -> void * { return ((T *) a)->data(); };
+            s.op_ptr = [](void *a) -> void * { return ((T *) a)->data(); };
     }
 
     if constexpr (T::Depth == 1 && T::Size == Dynamic) {
@@ -669,10 +668,9 @@ template <typename T> nanobind::class_<T> bind_tensor(const char *name = nullptr
     s.op_tensor_array = [](PyObject *o) noexcept -> PyObject * {
         T *inst = nb::inst_ptr<T>(o);
         nb::detail::cleanup_list cleanup(o);
-        PyObject *result = nb::detail::make_caster<typename T::Array>::from_cpp(
-                     inst->array(),
-                     nb::rv_policy::reference_internal,
-                     &cleanup).ptr();
+        PyObject *result =
+            nb::detail::make_caster<typename T::Array>::from_cpp(
+                inst->array(), nb::rv_policy::reference_internal, &cleanup).ptr();
         cleanup.release();
         return result;
     };

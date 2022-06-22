@@ -37,7 +37,6 @@ extern nb::handle expr_t(nb::handle h0, nb::handle h1);
 nb::detail::tuple<lenfunc, ssizeargfunc, ssizeobjargproc>
 get_sq(nb::handle tp, const char *name, void *check);
 
-extern Py_ssize_t len(PyObject *o) noexcept;
 extern nb::object shape(nb::handle_t<dr::ArrayBase> h) noexcept;
 
 

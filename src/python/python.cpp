@@ -62,6 +62,7 @@ const char *array_name(array_metadata meta) {
 
 static nb::handle submodules[6];
 static nb::handle array_base;
+static void *sq_len_tmp, *sq_item_tmp, *sq_ass_item_tmp = nullptr;
 
 void prepare_imports() {
     submodules[0] = nb::module_::import_("drjit");
@@ -94,8 +95,7 @@ extern nb::handle bind(const char *name, array_supplement &supp,
                        const std::type_info *value_type,
                        void (*copy)(void *, const void *),
                        void (*move)(void *, void *) noexcept,
-                       void (*destruct)(void *) noexcept,
-                       void (*type_callback)(PyTypeObject *) noexcept) noexcept {
+                       void (*destruct)(void *) noexcept) noexcept {
     if (!name)
         name = array_name(supp.meta);
 
@@ -104,10 +104,17 @@ extern nb::handle bind(const char *name, array_supplement &supp,
               (uint32_t) nb::detail::type_flags::has_base_py |
               (uint32_t) nb::detail::type_flags::is_destructible |
               (uint32_t) nb::detail::type_flags::is_copy_constructible |
-              (uint32_t) nb::detail::type_flags::is_move_constructible;
+              (uint32_t) nb::detail::type_flags::is_move_constructible |
+              (uint32_t) nb::detail::type_flags::is_final |
+              (uint32_t) nb::detail::type_flags::has_type_callback |
+              (uint32_t) nb::detail::type_flags::has_supplement;
 
-    if (type_callback)
-        d.flags |= (uint32_t) nb::detail::type_flags::has_type_callback;
+    d.type_callback = [](PyType_Slot **s) noexcept {
+        *(*s)++ = { Py_mp_length, (void *) sq_len_tmp };
+        *(*s)++ = { Py_sq_length, (void *) sq_len_tmp };
+        *(*s)++ = { Py_sq_item, (void *) sq_item_tmp };
+        *(*s)++ = { Py_sq_ass_item, (void *) sq_ass_item_tmp };
+    };
 
     if (move) {
         d.flags |= (uint32_t) nb::detail::type_flags::has_move;
@@ -126,10 +133,9 @@ extern nb::handle bind(const char *name, array_supplement &supp,
 
     d.align = supp.meta.talign;
     d.size = supp.meta.tsize_rel * supp.meta.talign;
-    d.supplement = sizeof(array_supplement);
-    d.name = name;
+    d.supplement = malloc(sizeof(array_supplement));
+    d.name = strdup(name);
     d.type = type;
-    d.type_callback = type_callback;
 
     d.scope = array_module(supp.meta).ptr();
     d.base_py = (PyTypeObject *) array_base.ptr();
@@ -138,7 +144,8 @@ extern nb::handle bind(const char *name, array_supplement &supp,
 
     VarType vt = (VarType) supp.meta.type;
     bool is_mask     = vt == VarType::Bool;
-    bool is_float    = vt == VarType::Float16 || vt == VarType::Float32 ||
+    bool is_float    = vt == VarType::Float16 ||
+                       vt == VarType::Float32 ||
                        vt == VarType::Float64;
 
     nb::handle value_type_py;
@@ -170,7 +177,8 @@ extern nb::handle bind(const char *name, array_supplement &supp,
             return true;
         } else {
             VarType v = (VarType) s.meta.type;
-            return (v == VarType::Float16 || v == VarType::Float32 ||
+            return (v == VarType::Float16 ||
+                    v == VarType::Float32 ||
                     v == VarType::Float64) &&
                    Py_TYPE(o) == &PyLong_Type;
         }
@@ -198,13 +206,13 @@ extern nb::handle bind(const char *name, array_supplement &supp,
             m2.shape[0] = DRJIT_DYNAMIC;
             m2.ndim = 1;
         }
-        m2.is_vector = m2.is_complex = m2.is_quaternion = m2.is_matrix =
-            m2.is_tensor = false;
+        m2.is_vector = m2.is_complex = m2.is_quaternion =
+            m2.is_matrix = m2.is_tensor = false;
         array_type_py = array_get(m2);
     }
 
     supp.value = (PyTypeObject *) value_type_py.ptr();
-    supp.mask = (PyTypeObject *) mask_type_py.ptr();
+    supp.mask  = (PyTypeObject *) mask_type_py.ptr();
     supp.array = (PyTypeObject *) array_type_py.ptr();
 
     nb::type_supplement<detail::array_supplement>(h.ptr()) = supp;
