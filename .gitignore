@@ -71,6 +71,7 @@ compile_commands.json
 /enokiConfig.cmake
 /enokiConfigVersion.cmake
 /_skbuild
+/wheelhouse
 
 # Documentation
 /html
