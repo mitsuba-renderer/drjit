@@ -20,8 +20,8 @@ Dr.Jit — A Just-In-Time-Compiler for Differentiable Rendering
     <img src="https://github.com/mitsuba-renderer/drjit-core/raw/master/resources/drjit-logo-light.svg#gh-dark-mode-only" alt="Dr.Jit logo" width="500"/>
     </p>
 
-Introduction
-============
+About this project
+------------------
 
 **Dr.Jit** is a *just-in-time* (JIT) compiler for ordinary and differentiable
 computation. It was originally created as the numerical foundation of `Mitsuba

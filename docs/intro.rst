@@ -1,5 +1,5 @@
-Introduction
-============
+About this project
+==================
 
 **Dr.Jit** is a *just-in-time* (JIT) compiler for ordinary and differentiable
 computation. It was originally created as the numerical foundation of `Mitsuba
@@ -78,12 +78,6 @@ using the ``--recursive`` flag as follows:
 .. code-block:: bash
 
     $ git clone --recursive https://github.com/mitsuba-renderer/drjit
-
-Documentation
--------------
-
-Please see Dr.Jit's page on `readthedocs.io <https://drjit.readthedocs.io>`_
-for example code and reference documentation.
 
 References, citations
 ---------------------
