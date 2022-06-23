@@ -19,85 +19,68 @@
 
 ## Introduction
 
-**Dr.Jit** is a C++17 template library that dramatically simplifies several
-types of program transformations that are often applied to numerical software:
+**Dr.Jit** is a _just-in-time_ (JIT) compiler for ordinary and differentiable
+computation. It was originally created as the numerical foundation of [Mitsuba
+3](https://github.com/mitsuba-renderer/mitsuba3), a differentiable [Monte
+Carlo](https://en.wikipedia.org/wiki/Monte_Carlo_method) renderer. However,
+_Dr.Jit_ is a general-purpose tool that can also help with various other types
+of embarrassingly parallel computation.
 
-* **Vectorization**. Converting a scalar program into into one that
-  simultaneously processes many inputs to leverage parallelism on modern
-  processor architectures. Here, "many" could refer to a packet with 16 values
-  (AVX512) or millions of entries processed on a GPU.
+_Dr.Jit_ principally facilitates three steps
 
-* **Forward and reverse-mode automatic differentiation (AD)**. Computing
-  derivatives of an arbitrary computation with respect to its inputs or
-  outputs.
+- **Vectorization and tracing**: When _Dr.Jit_ encounters an arithmetic
+  operation (e.g. an addition `a + b`) it does not execute it right away:
+  instead, it remembers that an addition will be needed at some later point by
+  recording it into a graph representation (this is called _tracing_).
+  Eventually, it will _just-in-time_ (JIT)-compile the recorded operations into
+  a _fused_ kernel using either [LLVM](https://en.wikipedia.org/wiki/LLVM) (for
+  CPUs) or [CUDA](https://en.wikipedia.org/wiki/CUDA) (for GPUs). The values
+  `a` and `b` will typically be arrays with many elements, and the system thus
+  parallelizes the evaluation using both multi-core parallelism and vector
+  instruction sets like [AVX512](https://en.wikipedia.org/wiki/AVX-512) or [ARM
+  Neon](https://developer.arm.com/architectures/instruction-sets/simd-isas/neon).
 
-* **Python bindings**. Exposing C++ code within a Python environment so that it
-  becomes usable along widely used software from this ecosystem (NumPy,
-  Matplotlib, PyTorch, etc).
+  _Dr.Jit_ is ideal for Monte Carlo methods, where the same computation must be
+  repeated for millions of random samples. _Dr.Jit_ dynamically generates
+  specialized parallel code for various target platforms that would be
+  challenging maintain using traditional software development techniques.
 
-All features are "opt-in" and activated by including specific header files,
-keeping compilation times short.
+  As a fallback, Dr.Jit can also be used without JIT-compilation, which turns
+  the project into a header-only vector library without external dependencies.
 
-Algorithms designed using Dr.Jit are expressed a generic way (using *templates*)
-and specialized to specific requirements by "lifting" them onto a computational
-backend. By stacking up such transformations, it becomes possible to create
-elaborate architectures that would be very tedious to develop by hand—for
-example, a GPU implementation of an algorithm that can be differentiated
-end-to-end along with other code running in an interactive Python session.
-The following backends are currently included:
+- **Differentiation**: If desired, _Dr.Jit_ can compute derivatives using
+  _automatic differentiation_ (AD), using either [forward or reverse-mode
+  accumulation](https://en.wikipedia.org/wiki/Automatic_differentiation).
+  Differentiation and tracing go hand-in-hand to produce specialized derivative
+  evaluation code.
 
-* **SIMD**. Dr.Jit can express computation using efficient SIMD instructions
-  available on modern CPUs (AVX512, AVX2, AVX, and SSE4.2). In this mode, Dr.Jit
-  processes packets (typically 4, 8, or 16 elements) and turns into a pure
-  header-file library (i.e. no extra compilation steps needed for Dr.Jit
-  itself.)
+- **Python**: _Dr.Jit_ types are accessible within C++17 and Python. Code can be
+  developed in either language, or even both at once. Combinations of Python
+  and C++ code can be jointly traced and differentiated.
 
-* **JIT Compiler (CUDA)**. Dr.Jit includes a just-in-time compiler that
-  dynamically transforms algorithms into efficient kernels that run on NVIDIA
-  GPUs. Dr.Jit is able to do this without any compile-time dependencies on the
-  usual CUDA toolchain (``nvcc``, etc.): it simply looks for the graphics
-  driver at runtime and talks to it using NVIDIA's *Parallel Thread Execution*
-  (PTX) intermediate language.
+_Dr.Jit_ handles large programs with custom data structures, side effects,
+virtual method calls, lambda functions, loadable modules. It includes a
+mathematical support library including transcendental functions and types like
+vectors, matrices, complex numbers, quaternions, etc.
 
-* **JIT Compiler (LLVM)**. The same JIT compiler can also generate vectorized
-  CPU kernels via LLVM's intermediate representation. The difference to the
-  SIMD mode mentioned above is that these kernels operate on large arrays (e.g.
-  millions of entries), and that computation is automatically partitioned over
-  all cores in your system. In essence, this mode enables using your CPU as if
-  it was a GPU. Once more, Dr.Jit can do this without a any build-time
-  dependency on LLVM, which is detected dynamically at runtime (any non-ancient
-  version > 7.0 works).
+## Difference to machine learning frameworks
 
-* **Automatic Differentiation**. The above transformations can all be combined
-  with automatic differentiation (AD) in either forward and reverse mode to
-  compute high-dimensional derivatives, e.g., for gradient-based optimization.
+Why did we create _Dr.Jit_, when dynamic derivative compilation is already
+possible using Python-based ML frameworks like
+[JAX](https://github.com/google/jax), [Tensorflow](https://www.tensorflow.org),
+and [PyTorch](https://github.com/pytorch/pytorch) along with backends like
+[XLA](https://www.tensorflow.org/xla) and
+[TorchScript](https://pytorch.org/docs/stable/jit.html)? 
 
-* **Fallback option**. Dr.Jit is designed so that programs can also be lifted onto
-  simple builtin types (``float``, ``int``, etc.) and retain their
-  functionality. In this case, the algorithm will behave like a standard C++
-  implementation.
-
-In addition to the above, Dr.Jit is designed to be
-
-* **Unobtrusive**. Code written using Dr.Jit's abstractions must remain easy
-  to read and maintain.
-
-* **Structured**. Dr.Jit handles complex programs with
-  custom data structures, virtual method calls, lambda functions, loadable
-  modules, and many other modern C++ features. Tedious steps like conversion of
-  data structures into a *Structure of Arrays* (SoA) format are offloaded onto
-  the C++ type system.
-
-* **Complete**. Dr.Jit ships with a library of special functions and data
-  structures that facilitate implementation of numerical code (vectors,
-  matrices, complex numbers, quaternions, etc.).
-
-* **Non-viral**. Dr.Jit is licensed under the terms of the 3-clause BSD license.
-
-To the author's knowledge, nothing quite like it exists, although there are of
-course many vectorization techniques (Autovectorization, expression templates),
-frameworks (Eigen, XLA, Numba, Agner Fog's vector classes) and AD tools
-(PyTorch, Tensorflow, Jax) that provide subsets of the above functionality.
+The reason is related to the typical workloads: machine learning involves
+small-ish computation graphs that are, however, made of arithmetically intense
+operations like convolutions, matrix multiplications, etc. The application
+motivating _Dr.Jit_ (differentiable rendering) creates giant and messy
+computation graphs consisting of 100K to millions of "trivial" nodes
+(elementary arithmetic operations). In our experience, ML compilation backends
+use internal representations and optimization passes that are _too rich_ for
+this type of input, causing them to crash or time out during compilation. If
+you have encountered such issues, you may find _Dr.Jit_ useful.
 
 ## Cloning
 
@@ -115,6 +98,46 @@ $ git clone --recursive https://github.com/mitsuba-renderer/drjit
 
 ## Documentation
 
-Please see Dr.Jit's page on
-[readthedocs](https://drjit.readthedocs.io/en/master/demo.html) for example
-code and reference documentation.
+Please see Dr.Jit's page on [readthedocs](https://drjit.readthedocs.io) for
+example code and reference documentation.
+
+## References, citing
+
+Please see the paper [Dr.Jit: A Just-In-Time Compiler for Differentiable
+Rendering](https://rgl.epfl.ch/publications/Jakob2020DrJit) for the
+nitty-gritty details and details on the problem motivating this project. There
+is also a [video
+presentation](https://rgl.s3.eu-central-1.amazonaws.com/media/papers/Jakob2020DrJit.mp4).
+
+If you use _Dr.Jit_ in your own research, please cite it using the following
+BibTeX entry:
+```bibtex
+@article{Jakob2020DrJit,
+  author = {Wenzel Jakob and Sébastien Speierer and Nicolas Roussel and Delio Vicini},
+  title = {Dr.Jit: A Just-In-Time Compiler for Differentiable Rendering},
+  journal = {Transactions on Graphics (Proceedings of SIGGRAPH)},
+  volume = {41},
+  number = {4},
+  year = {2022},
+  month = jul,
+  doi = {10.1145/3528223.3530099}
+}
+```
+
+## Logo and history
+
+The _Dr.Jit_ logo was generously created by [Otto
+Jakob](https://ottojakob.com). The "_Dr_." prefix simultaneously abbreviates
+_differentiable rendering_ with the stylized partial derivative _D_, while also
+conveying a medical connotation that is emphasized by the [Rod of
+Asclepius](https://en.wikipedia.org/wiki/Rod_of_Asclepius). Differentiable
+rendering algorithms are growing beyond our control in terms of conceptual and
+implementation-level complexity. A doctor is a person, who can offer help in
+such a time of great need. _Dr.Jit_ tries to fill this role to to improve the
+well-being of differentiable rendering researchers.
+
+_Dr.Jit_ is the successor of the
+[Enoki](https://github.com/mitsuba-renderer/enoki) project, and its high-level
+API still somewhat resembles that of Enoki. The system evolved towards a
+different approach and has an all-new implementation, hence the decision
+to switch to a different name.
