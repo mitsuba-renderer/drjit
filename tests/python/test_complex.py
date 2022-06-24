@@ -182,16 +182,10 @@ def test11_hyp(C):
 
 @pytest.mark.parametrize('C', classes_dynamic)
 def test12_numpy(C):
-    pytest.importorskip("Numpy is missing")
-
+    pytest.importorskip("numpy")
     arr1 = C((1.0, 2.0, 3.0), (4.0, 5.0, 6.0))
-    print(arr1)
     arr2 = arr1.numpy()
-    print(arr2)
     assert 'j' in repr(arr2)
-    print(type(arr2))
-    print(arr2)
-    print(arr2.dtype)
     arr3 = C(arr2)
     assert arr1 == arr3
 

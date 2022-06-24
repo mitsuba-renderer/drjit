@@ -138,7 +138,7 @@ def test11_constructor(package):
     """
     Check Matrix construction from Python array and Numpy array
     """
-    np = pytest.importorskip("Numpy is missing")
+    np = pytest.importorskip("numpy")
 
     package = prepare(package)
     Float, Matrix3f = package.Float, package.Matrix3f
@@ -163,7 +163,7 @@ def test11_constructor(package):
 
 @pytest.mark.parametrize("package", ["drjit.scalar", "drjit.cuda", "drjit.llvm"])
 def test12_matrix_scale(package):
-    np = pytest.importorskip("Numpy is missing")
+    np = pytest.importorskip("numpy")
 
     package = prepare(package)
     Float, Matrix3f = package.Float, package.Matrix3f
@@ -181,7 +181,7 @@ def test12_matrix_scale(package):
 
 @pytest.mark.parametrize("package", ["drjit.scalar", "drjit.cuda", "drjit.llvm"])
 def test12_matrix_vector(package):
-    np = pytest.importorskip("Numpy is missing")
+    np = pytest.importorskip("numpy")
 
     m_ = np.array([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6], [0.7, 0.8, 0.9]], dtype=np.float32)
     package = prepare(package)
@@ -272,7 +272,7 @@ def test14_roundtrip(package, dest):
 
 @pytest.mark.parametrize("package", ["drjit.scalar"])
 def test15_quat_to_euler(package):
-    np = pytest.importorskip("Numpy is missing")
+    np = pytest.importorskip("numpy")
 
     package = prepare(package)
     Quaternion4f, Array3f, Float = package.Quaternion4f, package.Array3f, package.Float

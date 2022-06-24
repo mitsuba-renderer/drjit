@@ -29,9 +29,7 @@ class Checker:
     and asserts if there is a mismatch.
     """
     def __init__(self, shape, tensor_type):
-        np = pytest.importorskip("Numpy is missing")
-
-        import numpy as np
+        np = pytest.importorskip("numpy")
 
         self.shape = shape
         size = np.prod(shape)
@@ -39,7 +37,8 @@ class Checker:
         self.array_e = tensor_type(dr.arange(tensor_type.Array, size), shape)
 
     def __getitem__(self, args):
-        import numpy as np
+        np = pytest.importorskip("numpy")
+
         ref_n = self.array_n.__getitem__(args)
         ref_e = self.array_e.__getitem__(args)
         assert ref_n.shape == ref_e.shape
@@ -93,7 +92,7 @@ def test03_slice_append_dim(pkg):
 
 @pytest.mark.parametrize("pkg", pkgs)
 def test04_broadcasting(pkg):
-    np = pytest.importorskip("Numpy is missing")
+    np = pytest.importorskip("numpy")
 
     t = get_class(pkg + ".TensorXu")
     for i in range(1, 5):
@@ -166,6 +165,8 @@ def test05_ad(pkg):
 
 @pytest.mark.parametrize("pkg", pkgs)
 def test06_numpy_conversion(pkg):
+    np = pytest.importorskip("numpy")
+
     f = get_class(pkg + ".TensorXf")
 
     value = f(dr.arange(f.Array, 2*3*4), (2, 3, 4))

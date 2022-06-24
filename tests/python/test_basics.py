@@ -378,7 +378,7 @@ def test09_repeat_tile(cname):
 
 @pytest.mark.parametrize("cname", ["drjit.cuda.Int", "drjit.llvm.Int"])
 def test10_meshgrid(cname):
-    np = pytest.importorskip("Numpy is missing")
+    np = pytest.importorskip("numpy")
 
     Int = get_class(cname)
 
@@ -432,7 +432,7 @@ def test11_block_sum(cname):
 
 @pytest.mark.parametrize("cname", ["drjit.cuda.Float", "drjit.llvm.Float"])
 def test12_binary_search(cname):
-    np = pytest.importorskip("Numpy is missing")
+    np = pytest.importorskip("numpy")
 
     t = get_class(cname)
 

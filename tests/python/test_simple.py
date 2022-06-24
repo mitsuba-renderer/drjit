@@ -768,7 +768,7 @@ def test23_linspace():
         assert not dr.allclose([1,2,3], [1,4])
     assert 'incompatible sizes' in str(ei.value)
 
-    np = pytest.importorskip("Numpy is missing")
+    np = pytest.importorskip("numpy")
     assert dr.allclose(np.array([1, 2, 3]), [1, 2, 3])
     assert dr.allclose(np.array([1, 2, 3]), dr.scalar.Array3f(1, 2, 3))
     assert dr.allclose(np.array([1, float('nan'), 3.0]), [1, float('nan'), 3], equal_nan=True)
@@ -1070,7 +1070,7 @@ def test35_to_dlpack_numpy_cpu():
 @pytest.mark.skip("nanobind layer")
 @pytest.mark.skipif(not dr.has_backend(dr.JitBackend.CUDA), reason='CUDA mode is unsupported')
 def test36_to_dlpack_numpy_gpu():
-    np = pytest.importorskip("Numpy is missing")
+    np = pytest.importorskip("numpy")
 
     import drjit.cuda as c
 
@@ -1080,7 +1080,7 @@ def test36_to_dlpack_numpy_gpu():
 
 def test38_construct_from_numpy_1():
     # Simple scalar conversions, different types, static sizes
-    np = pytest.importorskip("Numpy is missing")
+    np = pytest.importorskip("numpy")
 
     import drjit.scalar as s
 
@@ -1097,7 +1097,7 @@ def test38_construct_from_numpy_1():
 @pytest.mark.skipif(not dr.has_backend(dr.JitBackend.LLVM), reason='LLVM mode is unsupported')
 def test39_construct_from_numpy_2():
     # Dynamically allocated arrays + implicit casts
-    np = pytest.importorskip("Numpy is missing")
+    np = pytest.importorskip("numpy")
 
     import drjit.scalar as s
     import drjit.llvm as l
@@ -1128,7 +1128,7 @@ def test39_construct_from_numpy_2():
 @pytest.mark.skipif(not dr.has_backend(dr.JitBackend.LLVM), reason='LLVM mode is unsupported')
 def test40_construct_from_numpy_3():
     # Nested arrays, CPU-only
-    np = pytest.importorskip("Numpy is missing")
+    np = pytest.importorskip("numpy")
 
     import drjit.llvm as l
 
@@ -1146,7 +1146,7 @@ def test40_construct_from_numpy_3():
 @pytest.mark.skipif(not dr.has_backend(dr.JitBackend.CUDA), reason='CUDA mode is unsupported')
 def test41_construct_from_numpy_4():
     # Nested arrays, copy to CUDA Dr.Jit array
-    np = pytest.importorskip("Numpy is missing")
+    np = pytest.importorskip("numpy")
 
     import drjit.cuda as c
 
