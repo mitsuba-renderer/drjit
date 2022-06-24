@@ -169,9 +169,9 @@ def all_arrays(cond=lambda x: True):
     a = list(dr.scalar.__dict__.items())
     if hasattr(dr, "packet"):
         a += dr.packet.__dict__.items()
-    if hasattr(dr, "cuda"):
+    if dr.has_backend(dr.JitBackend.CUDA):
         a += dr.cuda.__dict__.items()
-    if hasattr(dr, "llvm"):
+    if dr.has_backend(dr.JitBackend.LLVM):
         a += dr.llvm.__dict__.items()
     return [v for k, v in a if isinstance(v, type) and cond(v)
             and not dr.is_special_v(v)
@@ -378,7 +378,7 @@ def test09_repeat_tile(cname):
 
 @pytest.mark.parametrize("cname", ["drjit.cuda.Int", "drjit.llvm.Int"])
 def test10_meshgrid(cname):
-    import numpy as np
+    np = pytest.importorskip("Numpy is missing")
 
     Int = get_class(cname)
 
@@ -432,8 +432,9 @@ def test11_block_sum(cname):
 
 @pytest.mark.parametrize("cname", ["drjit.cuda.Float", "drjit.llvm.Float"])
 def test12_binary_search(cname):
+    np = pytest.importorskip("Numpy is missing")
+
     t = get_class(cname)
-    import numpy as np
 
     data_np = np.float32(np.sort(np.random.normal(size=10000)))
     search_np = np.float32(np.random.normal(size=10000))

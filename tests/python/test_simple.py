@@ -279,6 +279,7 @@ def test10_comparison(value):
 
 
 @pytest.mark.skip("nanobind layer")
+@pytest.mark.skipif(not dr.has_backend(dr.JitBackend.LLVM), reason='LLVM mode is unsupported')
 def test11_shape():
     import drjit.scalar as s
     import drjit.llvm as l
@@ -298,6 +299,7 @@ def test11_shape():
            l.Array2f(l.Float(1, 2, 3), l.Float(2, 3)).shape is None
 
 @pytest.mark.skip("nanobind layer")
+@pytest.mark.skipif(not dr.has_backend(dr.JitBackend.LLVM), reason='LLVM mode is unsupported')
 def test11_repr():
   import drjit.scalar as s
   import drjit.llvm as l
@@ -360,6 +362,7 @@ def test12_binop_simple():
 
 
 @pytest.mark.skip("nanobind layer")
+@pytest.mark.skipif(not dr.has_backend(dr.JitBackend.LLVM), reason='LLVM mode is unsupported')
 def test13_binop_promote_broadcast():
     import drjit.llvm as l
     import drjit.scalar as s
@@ -422,6 +425,7 @@ def test13_binop_promote_broadcast():
     assert type(x) is l.Array3f and dr.all_nested(x == l.Array3f(11, 101, 1001))
 
 
+@pytest.mark.skipif(not dr.has_backend(dr.JitBackend.LLVM), reason='LLVM mode is unsupported')
 def test14_binop_inplace():
     import drjit.scalar as s
     import drjit.llvm as l
@@ -503,6 +507,7 @@ def test16_type_promotion_errors():
         a + 2**100
 
 
+@pytest.mark.skipif(not dr.has_backend(dr.JitBackend.LLVM), reason='LLVM mode is unsupported')
 def test18_traits():
     import drjit.scalar as s
     import drjit.llvm as l
@@ -620,6 +625,7 @@ def test18_traits():
 
 
 @pytest.mark.skip("nanobind layer")
+@pytest.mark.skipif(not dr.has_backend(dr.JitBackend.LLVM), reason='LLVM mode is unsupported')
 def test19_select():
     import drjit.scalar as s
     import drjit.llvm as l
@@ -685,6 +691,7 @@ def test20_component_access():
 
 
 @pytest.mark.skip("nanobind layer")
+@pytest.mark.skipif(not dr.has_backend(dr.JitBackend.LLVM), reason='LLVM mode is unsupported')
 def test21_zero_or_full():
     import drjit.scalar as s
     import drjit.llvm as l
@@ -728,6 +735,7 @@ def test21_zero_or_full():
         and dr.all(ray.hit == True)
 
 
+@pytest.mark.skipif(not dr.has_backend(dr.JitBackend.LLVM), reason='LLVM mode is unsupported')
 def test22_masked_assignment():
     import drjit.scalar as s
     import drjit.llvm as l
@@ -760,12 +768,13 @@ def test23_linspace():
         assert not dr.allclose([1,2,3], [1,4])
     assert 'incompatible sizes' in str(ei.value)
 
-    import numpy as np
+    np = pytest.importorskip("Numpy is missing")
     assert dr.allclose(np.array([1, 2, 3]), [1, 2, 3])
     assert dr.allclose(np.array([1, 2, 3]), dr.scalar.Array3f(1, 2, 3))
     assert dr.allclose(np.array([1, float('nan'), 3.0]), [1, float('nan'), 3], equal_nan=True)
 
 
+@pytest.mark.skipif(not dr.has_backend(dr.JitBackend.LLVM), reason='LLVM mode is unsupported')
 def test24_arange():
     import drjit.scalar as s
     import drjit.llvm as l
@@ -781,6 +790,7 @@ def test24_arange():
     assert dr.all(dr.arange(dtype=l.Float, start=-2, stop=5, step=2) == l.Float(-2, 0, 2, 4))
 
 
+@pytest.mark.skipif(not dr.has_backend(dr.JitBackend.LLVM), reason='LLVM mode is unsupported')
 def test25_linspace():
     import drjit.scalar as s
     import drjit.llvm as l
@@ -793,6 +803,7 @@ def test25_linspace():
     assert dr.allclose(dr.linspace(l.Float, start=-2, stop=4, num=4, endpoint=False), l.Float(-2, -0.5, 1, 2.5))
 
 
+@pytest.mark.skipif(not dr.has_backend(dr.JitBackend.LLVM), reason='LLVM mode is unsupported')
 def test26_fast_cast(capsys):
     import drjit.llvm as l
     try:
@@ -811,6 +822,7 @@ def test26_fast_cast(capsys):
         dr.set_log_level(0)
 
 
+@pytest.mark.skipif(not dr.has_backend(dr.JitBackend.LLVM), reason='LLVM mode is unsupported')
 def test27_gather_simple():
     import drjit.llvm as l
     import drjit.scalar as s
@@ -843,6 +855,7 @@ def test27_gather_simple():
 
 
 
+@pytest.mark.skipif(not dr.has_backend(dr.JitBackend.LLVM), reason='LLVM mode is unsupported')
 def test28_scatter_simple():
     import drjit.llvm as l
     import drjit.scalar as s
@@ -868,6 +881,7 @@ def test28_scatter_simple():
     assert dr.all(target == l.Float([10, 5, 2]))
 
 
+@pytest.mark.skipif(not dr.has_backend(dr.JitBackend.LLVM), reason='LLVM mode is unsupported')
 def test29_gather_complex():
     import drjit.scalar as s
     import drjit.llvm as l
@@ -894,6 +908,7 @@ def test29_gather_complex():
     ))
 
 
+@pytest.mark.skipif(not dr.has_backend(dr.JitBackend.LLVM), reason='LLVM mode is unsupported')
 def test30_gather_complex_2():
     x = dr.scalar.ArrayXf([1, 2, 3, 4])
     y = dr.scalar.ArrayXf([5, 6, 7, 8])
@@ -917,6 +932,7 @@ def test30_gather_complex_2():
     assert dr.all(r[1] == dr.scalar.ArrayXf([6, 5]))
 
 
+@pytest.mark.skipif(not dr.has_backend(dr.JitBackend.LLVM), reason='LLVM mode is unsupported')
 def test31_scatter_complex():
     import drjit.scalar as s
     import drjit.llvm as l
@@ -950,6 +966,7 @@ def test31_scatter_complex_2():
     assert dr.all(x.a == dr.scalar.ArrayXf(21, 20, 3, 4))
 
 
+@pytest.mark.skipif(not dr.has_backend(dr.JitBackend.LLVM), reason='LLVM mode is unsupported')
 def test32_ravel(capsys):
     import drjit.scalar as s
     import drjit.llvm as l
@@ -973,6 +990,7 @@ def test32_ravel(capsys):
 
 
 @pytest.mark.skip("nanobind layer")
+@pytest.mark.skipif(not dr.has_backend(dr.JitBackend.LLVM), reason='LLVM mode is unsupported')
 def test33_unravel(capsys):
     import drjit.scalar as s
     import drjit.llvm as l
@@ -996,6 +1014,7 @@ def test33_unravel(capsys):
 
 
 @pytest.mark.skip("nanobind layer")
+@pytest.mark.skipif(not dr.has_backend(dr.JitBackend.LLVM), reason='LLVM mode is unsupported')
 def test34_schedule(capsys):
     import drjit.llvm as l
     try:
@@ -1021,6 +1040,7 @@ def test34_schedule(capsys):
 
 
 @pytest.mark.skip("nanobind layer")
+@pytest.mark.skipif(not dr.has_backend(dr.JitBackend.LLVM), reason='LLVM mode is unsupported')
 def test35_to_dlpack_numpy_cpu():
     import drjit.scalar as s
     import drjit.llvm as l
@@ -1048,26 +1068,21 @@ def test35_to_dlpack_numpy_cpu():
 
 
 @pytest.mark.skip("nanobind layer")
+@pytest.mark.skipif(not dr.has_backend(dr.JitBackend.CUDA), reason='CUDA mode is unsupported')
 def test36_to_dlpack_numpy_gpu():
+    np = pytest.importorskip("Numpy is missing")
+
     import drjit.cuda as c
-    try:
-        import numpy as np
-        c.Float(1)
-    except Exception as e:
-        pytest.skip('Dependencies not satisfied')
+
     x = c.Array3f([1, 2], [3, 4], [5, 6])
     assert np.all(x.__array__() == np.array([[1, 2], [3, 4], [5, 6]]))
 
 
 def test38_construct_from_numpy_1():
     # Simple scalar conversions, different types, static sizes
+    np = pytest.importorskip("Numpy is missing")
 
     import drjit.scalar as s
-
-    try:
-        import numpy as np
-    except:
-        pytest.skip('NumPy is missing')
 
     assert dr.all(s.Array3f(np.array([1, 2, 3], dtype=np.float32)) == s.Array3f(1, 2, 3))
     assert dr.all(s.Array3f(np.array([1, 2, 3], dtype=np.float64)) == s.Array3f(1, 2, 3))
@@ -1079,16 +1094,13 @@ def test38_construct_from_numpy_1():
 
 
 @pytest.mark.skip("nanobind layer")
+@pytest.mark.skipif(not dr.has_backend(dr.JitBackend.LLVM), reason='LLVM mode is unsupported')
 def test39_construct_from_numpy_2():
     # Dynamically allocated arrays + implicit casts
+    np = pytest.importorskip("Numpy is missing")
 
     import drjit.scalar as s
     import drjit.llvm as l
-
-    try:
-        import numpy as np
-    except:
-        pytest.skip('NumPy is missing')
 
     p = np.array([1, 2, 3, 4], dtype=np.float32)
     r = s.ArrayXf(p)
@@ -1113,14 +1125,12 @@ def test39_construct_from_numpy_2():
 
 
 @pytest.mark.skip("nanobind layer")
+@pytest.mark.skipif(not dr.has_backend(dr.JitBackend.LLVM), reason='LLVM mode is unsupported')
 def test40_construct_from_numpy_3():
     # Nested arrays, CPU-only
-    import drjit.llvm as l
+    np = pytest.importorskip("Numpy is missing")
 
-    try:
-        import numpy as np
-    except:
-        pytest.skip('NumPy is missing')
+    import drjit.llvm as l
 
     p = np.array([[1, 2], [4, 5], [6, 7]], dtype=np.float32)
 
@@ -1133,15 +1143,12 @@ def test40_construct_from_numpy_3():
 
 
 @pytest.mark.skip("nanobind layer")
+@pytest.mark.skipif(not dr.has_backend(dr.JitBackend.CUDA), reason='CUDA mode is unsupported')
 def test41_construct_from_numpy_4():
     # Nested arrays, copy to CUDA Dr.Jit array
-    import drjit.cuda as c
+    np = pytest.importorskip("Numpy is missing")
 
-    try:
-        c.Float(1)
-        import numpy as np
-    except:
-        pytest.skip('NumPy/CUDA support missing')
+    import drjit.cuda as c
 
     p = np.array([[1, 2], [4, 5], [6, 7]], dtype=np.float32)
 
@@ -1152,6 +1159,7 @@ def test41_construct_from_numpy_4():
 
 
 @pytest.mark.skip("nanobind layer")
+@pytest.mark.skipif(not dr.has_backend(dr.JitBackend.LLVM), reason='LLVM mode is unsupported')
 def test42_prevent_inefficient_cast(capsys):
     import drjit.scalar as s
     import drjit.llvm as l

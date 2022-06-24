@@ -1,6 +1,5 @@
 import drjit as dr
 import pytest
-import numpy as np
 
 #  pkgs = ["drjit.cuda", "drjit.cuda.ad",
 #          "drjit.llvm", "drjit.llvm.ad"]
@@ -30,7 +29,10 @@ class Checker:
     and asserts if there is a mismatch.
     """
     def __init__(self, shape, tensor_type):
+        np = pytest.importorskip("Numpy is missing")
+
         import numpy as np
+
         self.shape = shape
         size = np.prod(shape)
         self.array_n = np.arange(size, dtype=np.uint32).reshape(shape)
@@ -91,6 +93,8 @@ def test03_slice_append_dim(pkg):
 
 @pytest.mark.parametrize("pkg", pkgs)
 def test04_broadcasting(pkg):
+    np = pytest.importorskip("Numpy is missing")
+
     t = get_class(pkg + ".TensorXu")
     for i in range(1, 5):
         for j in range(1, 5):

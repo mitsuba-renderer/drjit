@@ -5,9 +5,9 @@ import pytest
 
 classes = []
 
-if hasattr(dr, 'cuda'):
+if dr.has_backend(dr.JitBackend.CUDA):
     classes.append(dr.cuda.Complex2f)
-if hasattr(dr, 'llvm'):
+if dr.has_backend(dr.JitBackend.LLVM):
     classes.append(dr.llvm.Complex2f)
 
 classes_dynamic = list(classes)
@@ -182,6 +182,8 @@ def test11_hyp(C):
 
 @pytest.mark.parametrize('C', classes_dynamic)
 def test12_numpy(C):
+    pytest.importorskip("Numpy is missing")
+
     arr1 = C((1.0, 2.0, 3.0), (4.0, 5.0, 6.0))
     print(arr1)
     arr2 = arr1.numpy()
