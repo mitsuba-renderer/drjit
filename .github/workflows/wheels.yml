@@ -14,6 +14,8 @@ env:
   CIBW_ARCHS_WINDOWS: auto64
   CIBW_ARCHS_LINUX: auto64
   CIBW_BEFORE_BUILD_LINUX: yum install -y libatomic
+  CIBW_TEST_COMMAND: "python -c \"import drjit\""
+  CIBW_TEST_SKIP: "*-macosx_arm64"
   MACOSX_DEPLOYMENT_TARGET: 10.14
 
 jobs:
