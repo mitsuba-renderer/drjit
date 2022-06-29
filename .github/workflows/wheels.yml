@@ -60,11 +60,7 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           [[ "arm64" == "${{ matrix.cibw-arch }}" ]] && \
-          echo "set(CMAKE_SYSTEM_NAME Darwin)" >> /tmp/macOS_arm64_toolchain.cmake && \
-          echo "set(CMAKE_SYSTEM_PROCESSOR arm64)" >> /tmp/macOS_arm64_toolchain.cmake && \
-          echo "set(HAS_LIBCPP_EXITCODE 0)" >> /tmp/macOS_arm64_toolchain.cmake && \
-          echo "set(HAS_LIBCPP_EXITCODE__TRYRUN_OUTPUT \"\")" >> /tmp/macOS_arm64_toolchain.cmake && \
-          echo "DRJIT_CMAKE_TOOLCHAIN_FILE=/tmp/macOS_arm64_toolchain.cmake" >> $GITHUB_ENV
+          echo "DRJIT_CMAKE_TOOLCHAIN_FILE=$(pwd)/.github/workflows/macOS_arm64_toolchain.cmake" >> $GITHUB_ENV
 
           echo "CIBW_ARCHS_MACOS=${{ matrix.cibw-arch }}" >> $GITHUB_ENV
 
