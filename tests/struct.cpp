@@ -43,10 +43,10 @@ using Custom3f = Custom<float>;
 using Custom3fX = Custom<FloatX>;
 
 DRJIT_TEST(test01_init) {
-    auto v = zero<Custom3fX>();
+    auto v = zeros<Custom3fX>();
 
     auto a = empty<std::pair<Custom3f, Custom3fX>>(100);
-    auto b = zero<std::tuple<Custom3f, Custom3fX, Custom3f>>(100);
+    auto b = zeros<std::tuple<Custom3f, Custom3fX, Custom3f>>(100);
 
     assert(width(a) == 100);
     assert(width(b) == 100);
@@ -55,22 +55,22 @@ DRJIT_TEST(test01_init) {
 }
 
 DRJIT_TEST(test02_masked_assignment) {
-    Custom3fX c = zero<Custom3fX>(5);
+    Custom3fX c = zeros<Custom3fX>(5);
     c.o.x() = linspace<FloatX>(0, 1, 5);
     c.i = arange<Int32X>(5);
 
-    masked(c, c.i < 3) = zero<Custom3fX>();
+    masked(c, c.i < 3) = zeros<Custom3fX>();
     assert(c.o.x() == FloatX(0.f, 0.f, 0.f, 0.75f, 1.f));
 }
 
 DRJIT_TEST(test03_scatter_gather) {
-    Custom3fX c1 = zero<Custom3fX>(5);
+    Custom3fX c1 = zeros<Custom3fX>(5);
     Custom3f c2(1, 2, 3);
 
     scatter(c1, c2, 2);
     assert (gather<Custom3f>(c1, 2) == c2);
 
-    Custom3fX c3 = zero<Custom3fX>(2);
+    Custom3fX c3 = zeros<Custom3fX>(2);
     c3.d.x() = Float64X(1, 2);
     c3.d.y() = Float64X(3, 4);
     c3.d.z() = Float64X(5, 6);
@@ -81,7 +81,7 @@ DRJIT_TEST(test03_scatter_gather) {
 }
 
 DRJIT_TEST(test04_slice) {
-    Custom3fX c = zero<Custom3fX>(5);
+    Custom3fX c = zeros<Custom3fX>(5);
     c.o.x() = linspace<FloatX>(0, 1, 5);
     c.i = arange<Int32X>(5);
 

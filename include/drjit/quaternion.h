@@ -37,7 +37,7 @@ struct Quaternion : StaticArrayImpl<Value_, 4, false, Quaternion<Value_>> {
 
     template <typename T, enable_if_t<!is_quaternion_v<T> && array_depth_v<T> != Base::Depth &&
                                        (is_array_v<T> || std::is_scalar_v<std::decay_t<T>>)> = 0>
-    DRJIT_INLINE Quaternion(T&& v) : Base(zero<Value_>(), zero<Value_>(), zero<Value_>(), std::forward<T>(v)) { }
+    DRJIT_INLINE Quaternion(T&& v) : Base(zeros<Value_>(), zeros<Value_>(), zeros<Value_>(), std::forward<T>(v)) { }
 
     template <typename T, enable_if_t<!is_array_v<T> && !std::is_scalar_v<std::decay_t<T>>> = 0> // __m128, __m256d
     DRJIT_INLINE Quaternion(T&& v) : Base(v) { }
@@ -61,7 +61,7 @@ struct Quaternion : StaticArrayImpl<Value_, 4, false, Quaternion<Value_>> {
 
 template <typename T, enable_if_quaternion_t<T> = 0> T identity(size_t size = 1) {
     using Value = value_t<T>;
-    Value z = zero<Value>(size),
+    Value z = zeros<Value>(size),
           o = identity<Value>(size);
     return T(z, z, z, o);
 }

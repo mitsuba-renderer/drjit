@@ -37,8 +37,8 @@ enum class WrapMode : uint32_t {
 
 template <typename Value, size_t Dimension> class Texture {
 public:
-    static constexpr bool IsCUDA = is_cuda_array_v<Value>;
-    static constexpr bool IsDiff = is_diff_array_v<Value>;
+    static constexpr bool IsCUDA = is_cuda_v<Value>;
+    static constexpr bool IsDiff = is_diff_v<Value>;
     static constexpr bool IsDynamic = is_dynamic_v<Value>;
     // Only single-precision floating-point CUDA textures are supported
     static constexpr bool HasCudaTexture =
@@ -190,7 +190,7 @@ public:
                 jit_cuda_tex_memcpy_d2t(Dimension, tex_shape, value.data(), m_handle);
 
                 if (migrate) {
-                    Storage dummy = zero<Storage>(m_size);
+                    Storage dummy = zeros<Storage>(m_size);
 
                     // Fully migrate to texture memory, set m_value to zero
                     if constexpr (IsDiff)
@@ -328,7 +328,7 @@ public:
         }
         DRJIT_MARK_USED(pos); DRJIT_MARK_USED(active);
         for (size_t ch = 0; ch < channels; ++ch)
-            out[ch] = zero<Value>();
+            out[ch] = zeros<Value>();
     }
 
     /**
@@ -367,7 +367,7 @@ public:
             InterpIdx idx = index(pos_i_w);
 
             for (uint32_t ch = 0; ch < channels; ++ch)
-                out[ch] = zero<Value>();
+                out[ch] = zeros<Value>();
 
             #define DR_TEX_ACCUM(index, weight)                                        \
                 {                                                                      \
@@ -506,7 +506,7 @@ public:
         DRJIT_MARK_USED(pos); DRJIT_MARK_USED(active);
         for (size_t i = 0; i < ipow(2ul, Dimension); ++i)
             for (size_t ch = 0; ch < channels; ++ch)
-                out[i][ch] = zero<Value>();
+                out[i][ch] = zeros<Value>();
     }
 
     /**
@@ -634,7 +634,7 @@ public:
 
         const uint32_t channels = (uint32_t) m_value.shape(Dimension);
         for (uint32_t ch = 0; ch < channels; ++ch)
-            out[ch] = zero<Value>();
+            out[ch] = zeros<Value>();
 
         #define DR_TEX_CUBIC_ACCUM(index, weight)                                  \
             {                                                                      \
@@ -867,7 +867,7 @@ public:
         const uint32_t channels = (uint32_t) m_value.shape(Dimension);
 
         for (uint32_t ch = 0; ch < channels; ++ch)
-            out[ch] = zero<PosF>();
+            out[ch] = zeros<PosF>();
         ArrayX values = empty<ArrayX>(channels);
 
         #define DR_TEX_CUBIC_GATHER(index)                                            \
@@ -996,9 +996,9 @@ public:
 
         const uint32_t channels = (uint32_t) m_value.shape(Dimension);
         for (uint32_t ch = 0; ch < channels; ++ch) {
-            out_gradient[ch] = zero<PosF>();
+            out_gradient[ch] = zeros<PosF>();
             for (uint32_t dim1 = 0; dim1 < Dimension; ++dim1)
-                out_hessian[ch][dim1] = zero<PosF>();
+                out_hessian[ch][dim1] = zeros<PosF>();
         }
         ArrayX values = empty<ArrayX>(channels);
 
@@ -1155,7 +1155,7 @@ protected:
         tensor_shape[Dimension] = channels;
 
         if (init_tensor)
-            m_value = TensorXf(zero<Storage>(m_size), Dimension + 1, tensor_shape);
+            m_value = TensorXf(zeros<Storage>(m_size), Dimension + 1, tensor_shape);
 
         m_use_accel = use_accel;
         m_filter_mode = filter_mode;

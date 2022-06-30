@@ -25,7 +25,7 @@ DRJIT_TEST_FLOAT(test01_i0e)  {
     };
 
     for (int i = 0; i < 16; ++i)
-        assert(hmax(abs(i0e(T(Scalar(i))) - T(Scalar(results[i])))) < 1e-6);
+        assert(max(abs(i0e(T(Scalar(i))) - T(Scalar(results[i])))) < 1e-6);
 }
 
 DRJIT_TEST_FLOAT(test02_erf) {
@@ -78,8 +78,8 @@ DRJIT_TEST_FLOAT(test05_dawson)  {
 
 
     for (int i = 0; i <= 30; ++i) {
-        assert(hmax(abs(dawson(T(Scalar(i * 0.1)))  - T(Scalar( results[i])))) < 1e-6);
-        assert(hmax(abs(dawson(T(Scalar(i * -0.1))) - T(Scalar(-results[i])))) < 1e-6);
+        assert(max(abs(dawson(T(Scalar(i * 0.1)))  - T(Scalar( results[i])))) < 1e-6);
+        assert(max(abs(dawson(T(Scalar(i * -0.1))) - T(Scalar(-results[i])))) < 1e-6);
     }
 }
 

@@ -99,7 +99,7 @@ struct StaticArrayBase : ArrayBase<Value_, IsMask_, Derived_> {
         if constexpr (is_array_v<Value>) {
             Derived result;
             for (size_t i = 0; i < Derived::Size; ++i)
-                result.entry(i) = zero<Value>(size);
+                result.entry(i) = zeros<Value>(size);
             return result;
         } else {
             DRJIT_MARK_USED(size);

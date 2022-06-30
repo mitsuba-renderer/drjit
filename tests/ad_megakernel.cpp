@@ -54,7 +54,7 @@ DRJIT_TEST(test01_vcall_reduce_and_record_bwd) {
                 if (k == 1)
                     b2p = dr::opaque<TestPtr>(b2, 13);
 
-                b1->value = dr::zero<Float>(10);
+                b1->value = dr::zeros<Float>(10);
                 b2->value = std::move(y);
 
                 Float z = b2p->f(arange<UInt32>(13) % 10);
@@ -97,7 +97,7 @@ DRJIT_TEST(test02_vcall_reduce_and_record_fwd) {
                 if (k == 1)
                     b2p = dr::opaque<TestPtr>(b2, 13);
 
-                b1->value = dr::zero<Float>(10);
+                b1->value = dr::zeros<Float>(10);
                 b2->value = std::move(y);
 
                 Float z = b2p->f(arange<UInt32>(13) % 10);
@@ -124,7 +124,7 @@ DRJIT_TEST(test03_loop_bwd_simple) {
         UInt32 i = dr::arange<UInt32>(10);
         dr::Loop<FMask> loop("MyLoop", i);
 
-        Float x = dr::zero<Float>(11);
+        Float x = dr::zeros<Float>(11);
         dr::enable_grad(x);
 
         while (loop(i < 10)) {
@@ -145,7 +145,7 @@ DRJIT_TEST(test04_loop_bwd_complex) {
 
         UInt32 i = dr::arange<UInt32>(10);
 
-        Float x = dr::zero<Float>(11);
+        Float x = dr::zeros<Float>(11);
         dr::enable_grad(x);
 
         Float y = dr::gather<Float>(x, 10 - dr::arange<UInt32>(11));
@@ -201,7 +201,7 @@ DRJIT_VCALL_END(Base)
 
 
 DRJIT_TEST(test05_vcall_symbolic_ad_loop_opt) {
-    if constexpr (dr::is_cuda_array_v<Float>)
+    if constexpr (dr::is_cuda_v<Float>)
         jit_init((uint32_t) JitBackend::CUDA);
     else
         jit_init((uint32_t) JitBackend::LLVM);
@@ -265,7 +265,7 @@ DRJIT_TEST(test05_vcall_symbolic_ad_loop_opt) {
 
 
 DRJIT_TEST(test06_vcall_symbolic_nested_ad_loop_opt) {
-    if constexpr (dr::is_cuda_array_v<Float>)
+    if constexpr (dr::is_cuda_v<Float>)
         jit_init((uint32_t) JitBackend::CUDA);
     else
         jit_init((uint32_t) JitBackend::LLVM);
@@ -314,7 +314,7 @@ DRJIT_TEST(test06_vcall_symbolic_nested_ad_loop_opt) {
 DRJIT_TEST(test07_vcall_within_loop_postpone_bwd) {
     /// postponing of AD edges across vcalls/loops, faux dependencies
 
-    if constexpr (dr::is_cuda_array_v<Float>)
+    if constexpr (dr::is_cuda_v<Float>)
         jit_init((uint32_t) JitBackend::CUDA);
     else
         jit_init((uint32_t) JitBackend::LLVM);

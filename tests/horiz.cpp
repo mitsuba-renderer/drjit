@@ -13,11 +13,11 @@
 
 #include "test.h"
 
-DRJIT_TEST_ALL(test01_hsum) {
+DRJIT_TEST_ALL(test01_sum) {
     auto sample = test::sample_values<Value>();
 
     test::validate_horizontal<T>(sample,
-        [](const T &a) -> Value { return hsum(a); },
+        [](const T &a) -> Value { return sum(a); },
         [](const T &a) -> Value {
             Value result = a[0];
             for (size_t i = 1; i < Size; ++i)
@@ -27,11 +27,11 @@ DRJIT_TEST_ALL(test01_hsum) {
         Value(1e-5f));
 }
 
-DRJIT_TEST_ALL(test02_hprod) {
+DRJIT_TEST_ALL(test02_prod) {
     auto sample = test::sample_values<Value>();
 
     test::validate_horizontal<T>(sample,
-        [](const T &a) -> Value { return hprod(a); },
+        [](const T &a) -> Value { return prod(a); },
         [](const T &a) -> Value {
             Value result = a[0];
             for (size_t i = 1; i < Size; ++i)
@@ -41,11 +41,11 @@ DRJIT_TEST_ALL(test02_hprod) {
         Value(1e-5f));
 }
 
-DRJIT_TEST_ALL(test03_hmin) {
+DRJIT_TEST_ALL(test03_min) {
     auto sample = test::sample_values<Value>(false);
 
     test::validate_horizontal<T>(sample,
-        [](const T &a) -> Value { return hmin(a); },
+        [](const T &a) -> Value { return min(a); },
         [](const T &a) -> Value {
             Value result = a[0];
             for (size_t i = 1; i < Size; ++i)
@@ -55,11 +55,11 @@ DRJIT_TEST_ALL(test03_hmin) {
     );
 }
 
-DRJIT_TEST_ALL(test04_hmax) {
+DRJIT_TEST_ALL(test04_max) {
     auto sample = test::sample_values<Value>(false);
 
     test::validate_horizontal<T>(sample,
-        [](const T &a) -> Value { return hmax(a); },
+        [](const T &a) -> Value { return max(a); },
         [](const T &a) -> Value {
             Value result = a[0];
             for (size_t i = 1; i < Size; ++i)
@@ -168,7 +168,7 @@ DRJIT_TEST_ALL(test09_dot) {
     }
 }
 
-DRJIT_TEST_ALL(test10_hsum_inner_nested) {
+DRJIT_TEST_ALL(test10_sum_inner_nested) {
     using Array3 = Array<T, 3>;
 
     Array3 x(
@@ -178,16 +178,16 @@ DRJIT_TEST_ALL(test10_hsum_inner_nested) {
     );
 
     Array<scalar_t<T>, 3> y(
-        hsum(x.x()),
-        hsum(x.y()),
-        hsum(x.z())
+        sum(x.x()),
+        sum(x.y()),
+        sum(x.z())
     );
 
-    assert(hsum_inner(x) == y);
-    assert(hsum_nested(x) == hsum(y));
+    assert(sum_inner(x) == y);
+    assert(sum_nested(x) == sum(y));
 }
 
-DRJIT_TEST_ALL(test11_hprod_inner_nested) {
+DRJIT_TEST_ALL(test11_prod_inner_nested) {
     using Array3 = Array<T, 3>;
 
     Array3 x(
@@ -197,16 +197,16 @@ DRJIT_TEST_ALL(test11_hprod_inner_nested) {
     );
 
     Array<scalar_t<T>, 3> y(
-        hprod(x.x()),
-        hprod(x.y()),
-        hprod(x.z())
+        prod(x.x()),
+        prod(x.y()),
+        prod(x.z())
     );
 
-    assert(hprod_inner(x) == y);
-    assert(hprod_nested(x) == hprod(y) || T::Size > 4);
+    assert(prod_inner(x) == y);
+    assert(prod_nested(x) == prod(y) || T::Size > 4);
 }
 
-DRJIT_TEST_ALL(test12_hmin_inner_nested) {
+DRJIT_TEST_ALL(test12_min_inner_nested) {
     using Array3 = Array<T, 3>;
 
     Array3 x(
@@ -216,16 +216,16 @@ DRJIT_TEST_ALL(test12_hmin_inner_nested) {
     );
 
     Array<scalar_t<T>, 3> y(
-        hmin(x.x()),
-        hmin(x.y()),
-        hmin(x.z())
+        min(x.x()),
+        min(x.y()),
+        min(x.z())
     );
 
-    assert(hmin_inner(x) == y);
-    assert(hmin_nested(x) == hmin(y));
+    assert(min_inner(x) == y);
+    assert(min_nested(x) == min(y));
 }
 
-DRJIT_TEST_ALL(test13_hmax_inner_nested) {
+DRJIT_TEST_ALL(test13_max_inner_nested) {
     using Array3 = Array<T, 3>;
 
     Array3 x(
@@ -235,11 +235,11 @@ DRJIT_TEST_ALL(test13_hmax_inner_nested) {
     );
 
     Array<scalar_t<T>, 3> y(
-        hmax(x.x()),
-        hmax(x.y()),
-        hmax(x.z())
+        max(x.x()),
+        max(x.y()),
+        max(x.z())
     );
 
-    assert(hmax_inner(x) == y);
-    assert(hmax_nested(x) == hmax(y));
+    assert(max_inner(x) == y);
+    assert(max_nested(x) == max(y));
 }

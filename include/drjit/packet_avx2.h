@@ -294,12 +294,12 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(32)
         #endif
     }
 
-    DRJIT_INLINE Derived min_(Ref a) const {
+    DRJIT_INLINE Derived minimum_(Ref a) const {
         return std::is_signed_v<Value> ? _mm256_min_epi32(a.m, m)
                                        : _mm256_min_epu32(a.m, m);
     }
 
-    DRJIT_INLINE Derived max_(Ref a) const {
+    DRJIT_INLINE Derived maximum_(Ref a) const {
         return std::is_signed_v<Value> ? _mm256_max_epi32(a.m, m)
                                        : _mm256_max_epu32(a.m, m);
     }
@@ -351,10 +351,10 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(32)
     //! @{ \name Horizontal operations
     // -----------------------------------------------------------------------
 
-    DRJIT_INLINE Value hsum_()  const { return hsum(low_() + high_()); }
-    DRJIT_INLINE Value hprod_() const { return hprod(low_() * high_()); }
-    DRJIT_INLINE Value hmin_()  const { return hmin(min(low_(), high_())); }
-    DRJIT_INLINE Value hmax_()  const { return hmax(max(low_(), high_())); }
+    DRJIT_INLINE Value sum_()  const { return sum(low_() + high_()); }
+    DRJIT_INLINE Value prod_() const { return prod(low_() * high_()); }
+    DRJIT_INLINE Value min_()  const { return min(minimum(low_(), high_())); }
+    DRJIT_INLINE Value max_()  const { return max(maximum(low_(), high_())); }
 
     DRJIT_INLINE bool all_() const { return _mm256_movemask_ps(_mm256_castsi256_ps(m)) == 0xFF; }
     DRJIT_INLINE bool any_() const { return _mm256_movemask_ps(_mm256_castsi256_ps(m)) != 0; }
@@ -747,7 +747,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(32)
         #endif
     }
 
-    DRJIT_INLINE Derived min_(Ref a) const {
+    DRJIT_INLINE Derived minimum_(Ref a) const {
         #if defined(DRJIT_X86_AVX512)
             return std::is_signed_v<Value> ? _mm256_min_epi64(a.m, m)
                                            : _mm256_min_epu64(a.m, m);
@@ -756,7 +756,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(32)
         #endif
     }
 
-    DRJIT_INLINE Derived max_(Ref a) const {
+    DRJIT_INLINE Derived maximum_(Ref a) const {
         #if defined(DRJIT_X86_AVX512)
             return std::is_signed_v<Value> ? _mm256_max_epi64(a.m, m)
                                            : _mm256_max_epu64(a.m, m);
@@ -770,7 +770,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(32)
             #if defined(DRJIT_X86_AVX512)
                 return _mm256_abs_epi64(m);
             #else
-                return select(derived() < zero<Derived>(),
+                return select(derived() < zeros<Derived>(),
                               ~derived() + Derived(Value(1)), derived());
             #endif
         } else {
@@ -804,10 +804,10 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(32)
     //! @{ \name Horizontal operations
     // -----------------------------------------------------------------------
     //
-    DRJIT_INLINE Value hsum_()  const { return hsum(low_() + high_()); }
-    DRJIT_INLINE Value hprod_() const { return hprod(low_() * high_()); }
-    DRJIT_INLINE Value hmin_()  const { return hmin(drjit::min(low_(), high_())); }
-    DRJIT_INLINE Value hmax_()  const { return hmax(drjit::max(low_(), high_())); }
+    DRJIT_INLINE Value sum_()  const { return sum(low_() + high_()); }
+    DRJIT_INLINE Value prod_() const { return prod(low_() * high_()); }
+    DRJIT_INLINE Value min_()  const { return min(drjit::minimum(low_(), high_())); }
+    DRJIT_INLINE Value max_()  const { return max(drjit::maximum(low_(), high_())); }
 
     DRJIT_INLINE bool all_() const { return _mm256_movemask_pd(_mm256_castsi256_pd(m)) == 0xF; }
     DRJIT_INLINE bool any_() const { return _mm256_movemask_pd(_mm256_castsi256_pd(m)) != 0; }
@@ -897,31 +897,31 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(32)
     //! @{ \name Horizontal operations (adapted for the n=3 case)
     // -----------------------------------------------------------------------
 
-    DRJIT_INLINE Value hsum_() const {
+    DRJIT_INLINE Value sum_() const {
         Value result = entry(0);
         for (size_t i = 1; i < 3; ++i)
             result += entry(i);
         return result;
     }
 
-    DRJIT_INLINE Value hprod_() const {
+    DRJIT_INLINE Value prod_() const {
         Value result = entry(0);
         for (size_t i = 1; i < 3; ++i)
             result *= entry(i);
         return result;
     }
 
-    DRJIT_INLINE Value hmin_() const {
+    DRJIT_INLINE Value min_() const {
         Value result = entry(0);
         for (size_t i = 1; i < 3; ++i)
-            result = drjit::min(result, entry(i));
+            result = drjit::minimum(result, entry(i));
         return result;
     }
 
-    DRJIT_INLINE Value hmax_() const {
+    DRJIT_INLINE Value max_() const {
         Value result = entry(0);
         for (size_t i = 1; i < 3; ++i)
-            result = drjit::max(result, entry(i));
+            result = drjit::maximum(result, entry(i));
         return result;
     }
 

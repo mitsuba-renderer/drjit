@@ -156,7 +156,7 @@ struct DynamicArray
         result.init_(size);
 
         for (size_t i = 0; i < size; ++i)
-            result.entry(i) = zero<Value>();
+            result.entry(i) = zeros<Value>();
 
         return result;
     }

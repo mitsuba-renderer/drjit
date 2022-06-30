@@ -233,7 +233,7 @@ DRJIT_TEST_ALL(test12_min) {
 #endif
 
     test::validate_binary<T>(sample,
-        [](const T &a, const T &b) -> T { return min(a, b); },
+        [](const T &a, const T &b) -> T { return minimum(a, b); },
         [](Value a, Value b) -> Value { return std::min(a, b); }
     );
 }
@@ -247,7 +247,7 @@ DRJIT_TEST_ALL(test13_max) {
 #endif
 
     test::validate_binary<T>(sample,
-        [](const T &a, const T &b) -> T { return max(a, b); },
+        [](const T &a, const T &b) -> T { return maximum(a, b); },
         [](Value a, Value b) -> Value { return std::max(a, b); }
     );
 }

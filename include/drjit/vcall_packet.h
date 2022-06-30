@@ -44,7 +44,7 @@ DRJIT_INLINE Result vcall_packet(Func func, const Self &self, const Args&... arg
     mask &= neq(self, nullptr);
 
     if constexpr (!std::is_void_v<Result>) {
-        Result result = zero<Result>(self.size());
+        Result result = zeros<Result>(self.size());
         while (any(mask)) {
             Class instance         = extract(self, mask);
             Mask active            = mask & eq(self, instance);

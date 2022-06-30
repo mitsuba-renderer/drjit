@@ -128,7 +128,7 @@ Index binary_search(scalar_t<Index> start_, scalar_t<Index> end_,
 
     using Mask = mask_t<Index>;
 
-    if constexpr (is_jit_array_v<Index>) {
+    if constexpr (is_jit_v<Index>) {
         // We might be running multiple binary searches in parallel..
         using Index1 = detached_t<std::conditional_t<is_static_array_v<Index>,
                                                      value_t<Index>, Index>>;
@@ -140,14 +140,14 @@ Index binary_search(scalar_t<Index> start_, scalar_t<Index> end_,
                      "dr::binary_search(size=%zu, iterations=%zu)",
                      (size_t)(end_ - start_), (size_t) iterations);
 
-            Index1 index = zero<Index1>(width(pred(start)));
+            Index1 index = zeros<Index1>(width(pred(start)));
             Loop<Mask1> loop(title, start, end, index);
 
             while (loop(index < iterations)) {
                 Index middle = sr<1>(start + end);
                 Mask cond = detach(pred(middle));
 
-                start = select(cond, min(middle + 1, end), start);
+                start = select(cond, minimum(middle + 1, end), start);
                 end   = select(cond, end, middle);
 
                 index++;
@@ -162,7 +162,7 @@ Index binary_search(scalar_t<Index> start_, scalar_t<Index> end_,
 
         Mask cond = pred(middle);
 
-        masked(start,  cond) = min(middle + 1, end);
+        masked(start,  cond) = minimum(middle + 1, end);
         masked(end,   !cond) = middle;
     }
 
@@ -213,10 +213,10 @@ template <typename Value> struct range {
                 if constexpr (!is_dynamic_v<Value>)
                     value[0] = index_p;
                 else
-                    value[0] = arange<Packet>(hprod(size));
+                    value[0] = arange<Packet>(prod(size));
                 DRJIT_UNROLL for (size_t i = 0; i < Dimension - 1; ++i)
                     value[i + 1] = div[i](value[i]);
-                Packet offset = zero<Packet>();
+                Packet offset = zeros<Packet>();
                 DRJIT_UNROLL for (size_t i = Dimension - 2; ; --i) {
                     offset = size[i] * (value[i + 1] + offset);
                     value[i] -= offset;
@@ -244,9 +244,9 @@ template <typename Value> struct range {
 
     iterator end() {
         if constexpr (is_dynamic_v<Value>)
-            return iterator(hprod(size) == 0 ? 0 : 1);
+            return iterator(prod(size) == 0 ? 0 : 1);
         else
-            return iterator((hprod(size) + PacketSize - 1) / PacketSize);
+            return iterator((prod(size) + PacketSize - 1) / PacketSize);
     }
 
 private:

@@ -57,13 +57,13 @@ template <typename T> void test02_vecops_float() {
     assert(v.z() == Value(3));
     assert(std::abs(norm(v) - 3.74165738677394f) < 1e-5f);
     assert(std::abs(squared_norm(v) - std::pow(3.74165738677394f, 2.f)) < 1e-5f);
-    assert(hsum(abs(normalize(v) - T(0.26726f, 0.53452f, 0.80178f))) < 1e-5f);
-    assert(hsum(v) == 6.f);
-    assert(hprod(v) == 6.f);
-    assert(hmax(v) == 3.f);
+    assert(sum(abs(normalize(v) - T(0.26726f, 0.53452f, 0.80178f))) < 1e-5f);
+    assert(sum(v) == 6.f);
+    assert(prod(v) == 6.f);
+    assert(max(v) == 3.f);
     if (T::ActualSize == 4)
         v.entry(3) = -4;
-    assert(hmin(v) == 1.f);
+    assert(min(v) == 1.f);
     assert(dot(v, v) == 14.f);
 
     v = T(0);
@@ -205,8 +205,8 @@ template <typename T> void test_bcast() {
     using Vector4 = Vector<T, 4>;
     using Vector4P = Vector<Packet, 4>;
 
-    assert(hsum(Vector4P(Vector4(T(1), T(2), T(3), T(4)))) == Vector4(T(10), T(10), T(10), T(10)));
-    assert(hsum(Vector4P(Packet(T(1), T(2), T(3), T(4)))) == Vector4(T(4), T(8), T(12), T(16)));
+    assert(sum(Vector4P(Vector4(T(1), T(2), T(3), T(4)))) == Vector4(T(10), T(10), T(10), T(10)));
+    assert(sum(Vector4P(Packet(T(1), T(2), T(3), T(4)))) == Vector4(T(4), T(8), T(12), T(16)));
 
     using Array4s = Array<size_t, 4>;
     assert(count(mask_t<Vector4P>(Vector4(T(1), T(2), T(3), T(4)) < value_t<T>(3))) == Array4s(2u, 2u, 2u, 2u));
@@ -244,7 +244,7 @@ DRJIT_TEST(transform_compose_inverse) {
     auto rng = PCG32<float>();
 
     for (int k = 0; k<10; ++k) {
-        Matrix m = zero<Matrix>();
+        Matrix m = zeros<Matrix>();
         for (size_t i=0; i<3; ++i)
             for (size_t j=0; j<4; ++j)
                 m(i, j) = rng.next_float32();

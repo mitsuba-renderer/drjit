@@ -190,11 +190,11 @@ template <typename T> T round_(const T &a) {
         return (T) drjit::detail::round_((float) a);
 }
 
-template <typename T> T max_(const T &a, const T &b) {
+template <typename T> T maximum_(const T &a, const T &b) {
     return a < b ? b : a;
 }
 
-template <typename T> T min_(const T &a, const T &b) {
+template <typename T> T minimum_(const T &a, const T &b) {
     return b < a ? b : a;
 }
 

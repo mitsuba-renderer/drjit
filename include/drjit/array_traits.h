@@ -92,10 +92,10 @@ namespace detail {
     template <typename T> using is_dynamic_array_det   = std::enable_if_t<T::IsDrJit && T::Derived::Size == Dynamic>;
     template <typename T> using is_packed_array_det    = std::enable_if_t<T::IsDrJit && T::Derived::IsPacked>;
     template <typename T> using is_recursive_array_det = std::enable_if_t<T::IsDrJit && T::Derived::IsRecursive>;
-    template <typename T> using is_cuda_array_det      = std::enable_if_t<T::IsDrJit && T::Derived::IsCUDA>;
-    template <typename T> using is_llvm_array_det      = std::enable_if_t<T::IsDrJit && T::Derived::IsLLVM>;
-    template <typename T> using is_jit_array_det       = std::enable_if_t<T::IsDrJit && T::Derived::IsJIT>;
-    template <typename T> using is_diff_array_det      = std::enable_if_t<T::IsDrJit && T::Derived::IsDiff>;
+    template <typename T> using is_cuda_det            = std::enable_if_t<T::IsDrJit && T::Derived::IsCUDA>;
+    template <typename T> using is_llvm_det            = std::enable_if_t<T::IsDrJit && T::Derived::IsLLVM>;
+    template <typename T> using is_jit_det             = std::enable_if_t<T::IsDrJit && T::Derived::IsJIT>;
+    template <typename T> using is_diff_det            = std::enable_if_t<T::IsDrJit && T::Derived::IsDiff>;
     template <typename T> using is_mask_det            = std::enable_if_t<T::IsDrJit && T::Derived::IsMask>;
     template <typename T> using is_kmask_det           = std::enable_if_t<T::IsDrJit && T::Derived::IsKMask>;
     template <typename T> using is_complex_det         = std::enable_if_t<T::Derived::IsComplex>;
@@ -136,20 +136,20 @@ constexpr bool is_packed_array_v = is_detected_v<detail::is_packed_array_det, st
 template <typename T> using enable_if_packed_array_t = enable_if_t<is_packed_array_v<T>>;
 
 template <typename T>
-constexpr bool is_cuda_array_v = is_detected_v<detail::is_cuda_array_det, std::decay_t<T>>;
-template <typename T> using enable_if_cuda_array_t = enable_if_t<is_cuda_array_v<T>>;
+constexpr bool is_cuda_v = is_detected_v<detail::is_cuda_det, std::decay_t<T>>;
+template <typename T> using enable_if_cuda_array_t = enable_if_t<is_cuda_v<T>>;
 
 template <typename T>
-constexpr bool is_llvm_array_v = is_detected_v<detail::is_llvm_array_det, std::decay_t<T>>;
-template <typename T> using enable_if_llvm_array_t = enable_if_t<is_llvm_array_v<T>>;
+constexpr bool is_llvm_v = is_detected_v<detail::is_llvm_det, std::decay_t<T>>;
+template <typename T> using enable_if_llvm_array_t = enable_if_t<is_llvm_v<T>>;
 
 template <typename T>
-constexpr bool is_jit_array_v = is_detected_v<detail::is_jit_array_det, std::decay_t<T>>;
-template <typename T> using enable_if_jit_array_t = enable_if_t<is_jit_array_v<T>>;
+constexpr bool is_jit_v = is_detected_v<detail::is_jit_det, std::decay_t<T>>;
+template <typename T> using enable_if_jit_array_t = enable_if_t<is_jit_v<T>>;
 
 template <typename T>
-constexpr bool is_diff_array_v = is_detected_v<detail::is_diff_array_det, std::decay_t<T>>;
-template <typename T> using enable_if_diff_array_t = enable_if_t<is_diff_array_v<T>>;
+constexpr bool is_diff_v = is_detected_v<detail::is_diff_det, std::decay_t<T>>;
+template <typename T> using enable_if_diff_array_t = enable_if_t<is_diff_v<T>>;
 
 template <typename T>
 constexpr bool is_recursive_array_v = is_detected_v<detail::is_recursive_array_det, std::decay_t<T>>;
@@ -534,8 +534,8 @@ namespace detail {
         using T1 = typename deepest<Args...>::type;
 
         // Give precedence to differentiable arrays
-        static constexpr size_t D0 = array_depth_v<T0> * 2 + (is_diff_array_v<T0> ? 1 : 0);
-        static constexpr size_t D1 = array_depth_v<T1> * 2 + (is_diff_array_v<T1> ? 1 : 0);
+        static constexpr size_t D0 = array_depth_v<T0> * 2 + (is_diff_v<T0> ? 1 : 0);
+        static constexpr size_t D1 = array_depth_v<T1> * 2 + (is_diff_v<T1> ? 1 : 0);
 
     public:
         using type = std::conditional_t<(D1 > D0 || D0 == 0), T1, T0>;

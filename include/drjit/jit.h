@@ -267,11 +267,11 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
         return { sin_(), cos_() };
     }
 
-    Derived min_(const Derived &v) const {
+    Derived minimum_(const Derived &v) const {
         return steal(jit_var_new_op_2(JitOp::Min, m_index, v.index()));
     }
 
-    Derived max_(const Derived &v) const {
+    Derived maximum_(const Derived &v) const {
         return steal(jit_var_new_op_2(JitOp::Max, m_index, v.index()));
     }
 
@@ -370,26 +370,26 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
         }                                                                        \
         Value name##_() const { return name##_async_().entry(0); }
 
-    DRJIT_HORIZONTAL_OP(hsum,  ReduceOp::Add, return Derived(0))
-    DRJIT_HORIZONTAL_OP(hprod, ReduceOp::Mul, return Derived(1))
-    DRJIT_HORIZONTAL_OP(hmin,  ReduceOp::Min, drjit_raise("hmin_async_(): zero-sized array!"))
-    DRJIT_HORIZONTAL_OP(hmax,  ReduceOp::Max, drjit_raise("hmax_async_(): zero-sized array!"))
+    DRJIT_HORIZONTAL_OP(sum,  ReduceOp::Add, return Derived(0))
+    DRJIT_HORIZONTAL_OP(prod, ReduceOp::Mul, return Derived(1))
+    DRJIT_HORIZONTAL_OP(min,  ReduceOp::Min, drjit_raise("min_async_(): zero-sized array!"))
+    DRJIT_HORIZONTAL_OP(max,  ReduceOp::Max, drjit_raise("max_async_(): zero-sized array!"))
 
     #undef DRJIT_HORIZONTAL_OP
 
     Value dot_(const Derived &a) const {
-        return hsum(derived() * a);
+        return sum(derived() * a);
     }
 
     Derived dot_async_(const Derived &a) const {
-        return hsum_async(derived() * a);
+        return sum_async(derived() * a);
     }
 
     uint32_t count_() const {
         if constexpr (!is_mask_v<Value>)
             drjit_raise("Unsupported operand type");
 
-        return hsum(select(derived(), (uint32_t) 1, (uint32_t) 0));
+        return sum(select(derived(), (uint32_t) 1, (uint32_t) 0));
     }
 
     //! @}
@@ -718,11 +718,11 @@ DRJIT_DECLARE_EXTERN_TEMPLATE(LLVMArray<double>, LLVMArray<bool>, LLVMArray<uint
 
 template <typename Mask, typename... Ts>
 void printf_async(const Mask &mask, const char *fmt, const Ts &... ts) {
-    constexpr bool Active = is_jit_array_v<Mask> || (is_jit_array_v<Ts> || ...);
-    static_assert(!Active || (is_jit_array_v<Mask> && array_depth_v<Mask> == 1 && is_mask_v<Mask>),
+    constexpr bool Active = is_jit_v<Mask> || (is_jit_v<Ts> || ...);
+    static_assert(!Active || (is_jit_v<Mask> && array_depth_v<Mask> == 1 && is_mask_v<Mask>),
                   "printf_async(): 'mask' argument must be CUDA/LLVM mask "
                   "array of depth 1");
-    static_assert(!Active || ((is_jit_array_v<Ts> && array_depth_v<Ts> == 1) && ...),
+    static_assert(!Active || ((is_jit_v<Ts> && array_depth_v<Ts> == 1) && ...),
                   "printf_async(): variadic arguments must be CUDA/LLVM arrays "
                   "of depth 1");
     if constexpr (Active) {
@@ -743,7 +743,7 @@ Array block_sum(const Array &array, size_t block_size) {
             result.entry(i) = block_sum(array.entry(i), block_size);
 
         return result;
-    } else if constexpr (is_jit_array_v<Array>) {
+    } else if constexpr (is_jit_v<Array>) {
         return array.block_sum_(block_size);
     } else {
         static_assert(detail::false_v<Array>, "block_sum(): requires a JIT array!");

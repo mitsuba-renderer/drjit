@@ -96,8 +96,8 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
     DRJIT_INLINE auto eq_ (Ref a) const { return mask_t<Derived>(eq(a1, a.a1), eq(a2, a.a2)); }
     DRJIT_INLINE auto neq_(Ref a) const { return mask_t<Derived>(neq(a1, a.a1), neq(a2, a.a2)); }
 
-    DRJIT_INLINE Derived min_(Ref a) const { return Derived(min(a1, a.a1), min(a2, a.a2)); }
-    DRJIT_INLINE Derived max_(Ref a) const { return Derived(max(a1, a.a1), max(a2, a.a2)); }
+    DRJIT_INLINE Derived minimum_(Ref a) const { return Derived(minimum(a1, a.a1), minimum(a2, a.a2)); }
+    DRJIT_INLINE Derived maximum_(Ref a) const { return Derived(maximum(a1, a.a1), maximum(a2, a.a2)); }
     DRJIT_INLINE Derived abs_() const { return Derived(abs(a1), abs(a2)); }
     DRJIT_INLINE Derived sqrt_() const { return Derived(sqrt(a1), sqrt(a2)); }
     DRJIT_INLINE Derived ceil_() const { return Derived(ceil(a1), ceil(a2)); }
@@ -219,40 +219,40 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
     //! @{ \name Horizontal operations
     // -----------------------------------------------------------------------
 
-    DRJIT_INLINE Value hsum_() const {
+    DRJIT_INLINE Value sum_() const {
         if constexpr (Size1 == Size2)
-            return hsum(a1 + a2);
+            return sum(a1 + a2);
         else
-            return hsum(a1) + hsum(a2);
+            return sum(a1) + sum(a2);
     }
 
-    DRJIT_INLINE Value hprod_() const {
+    DRJIT_INLINE Value prod_() const {
         if constexpr (Size1 == Size2)
-            return hprod(a1 * a2);
+            return prod(a1 * a2);
         else
-            return hprod(a1) * hprod(a2);
+            return prod(a1) * prod(a2);
     }
 
-    DRJIT_INLINE Value hmin_() const {
+    DRJIT_INLINE Value min_() const {
         if constexpr (Size1 == Size2)
-            return hmin(min(a1, a2));
+            return min(minimum(a1, a2));
         else
-            return min(hmin(a1), hmin(a2));
+            return minimum(min(a1), min(a2));
     }
 
-    DRJIT_INLINE Value hmax_() const {
+    DRJIT_INLINE Value max_() const {
         if constexpr (Size1 == Size2)
-            return hmax(max(a1, a2));
+            return max(maximum(a1, a2));
         else
-            return max(hmax(a1), hmax(a2));
+            return maximum(max(a1), max(a2));
     }
 
     DRJIT_INLINE Value dot_(Ref a) const {
         if constexpr (Size1 == Size2) {
             if constexpr (std::is_floating_point_v<Value>)
-                return hsum(fmadd(a1, a.a1, a2 * a.a2));
+                return sum(fmadd(a1, a.a1, a2 * a.a2));
             else
-                return hsum(a1 * a.a1 + a2 * a.a2);
+                return sum(a1 * a.a1 + a2 * a.a2);
         } else {
             return dot(a1, a.a1) + dot(a2, a.a2);
         }
@@ -339,7 +339,7 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
     }
 
     static DRJIT_INLINE Derived zero_(size_t) {
-        return Derived(zero<Array1>(), zero<Array2>());
+        return Derived(zeros<Array1>(), zeros<Array2>());
     }
 
     static DRJIT_INLINE Derived empty_(size_t) {

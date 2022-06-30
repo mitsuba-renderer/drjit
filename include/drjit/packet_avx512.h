@@ -146,8 +146,8 @@ template <bool IsMask_, typename Derived_> struct alignas(64)
 
     DRJIT_INLINE Derived abs_() const { return andnot_(Derived(_mm512_set1_ps(-0.f))); }
 
-    DRJIT_INLINE Derived min_(Ref b) const { return _mm512_min_ps(b.m, m); }
-    DRJIT_INLINE Derived max_(Ref b) const { return _mm512_max_ps(b.m, m); }
+    DRJIT_INLINE Derived minimum_(Ref b) const { return _mm512_min_ps(b.m, m); }
+    DRJIT_INLINE Derived maximum_(Ref b) const { return _mm512_max_ps(b.m, m); }
     DRJIT_INLINE Derived sqrt_()     const { return _mm512_sqrt_ps(m); }
 
     DRJIT_INLINE Derived ceil_()     const { return _mm512_ceil_ps(m);     }
@@ -246,10 +246,10 @@ template <bool IsMask_, typename Derived_> struct alignas(64)
     //! @{ \name Horizontal operations
     // -----------------------------------------------------------------------
 
-    DRJIT_INLINE Value hsum_()  const { return hsum(low_() + high_()); }
-    DRJIT_INLINE Value hprod_() const { return hprod(low_() * high_()); }
-    DRJIT_INLINE Value hmin_()  const { return hmin(min(low_(), high_())); }
-    DRJIT_INLINE Value hmax_()  const { return hmax(max(low_(), high_())); }
+    DRJIT_INLINE Value sum_()  const { return sum(low_() + high_()); }
+    DRJIT_INLINE Value prod_() const { return prod(low_() * high_()); }
+    DRJIT_INLINE Value min_()  const { return min(minimum(low_(), high_())); }
+    DRJIT_INLINE Value max_()  const { return max(maximum(low_(), high_())); }
 
     //! @}
     // -----------------------------------------------------------------------
@@ -459,8 +459,8 @@ template <bool IsMask_, typename Derived_> struct alignas(64)
 
     DRJIT_INLINE Derived abs_() const { return andnot_(Derived(_mm512_set1_pd(-0.0))); }
 
-    DRJIT_INLINE Derived min_(Ref b) const { return _mm512_min_pd(b.m, m); }
-    DRJIT_INLINE Derived max_(Ref b) const { return _mm512_max_pd(b.m, m); }
+    DRJIT_INLINE Derived minimum_(Ref b) const { return _mm512_min_pd(b.m, m); }
+    DRJIT_INLINE Derived maximum_(Ref b) const { return _mm512_max_pd(b.m, m); }
     DRJIT_INLINE Derived sqrt_()     const { return _mm512_sqrt_pd(m); }
 
     DRJIT_INLINE Derived ceil_()     const { return _mm512_ceil_pd(m);     }
@@ -558,10 +558,10 @@ template <bool IsMask_, typename Derived_> struct alignas(64)
     //! @{ \name Horizontal operations
     // -----------------------------------------------------------------------
 
-    DRJIT_INLINE Value hsum_()  const { return hsum(low_() + high_()); }
-    DRJIT_INLINE Value hprod_() const { return hprod(low_() * high_()); }
-    DRJIT_INLINE Value hmin_()  const { return hmin(min(low_(), high_())); }
-    DRJIT_INLINE Value hmax_()  const { return hmax(max(low_(), high_())); }
+    DRJIT_INLINE Value sum_()  const { return sum(low_() + high_()); }
+    DRJIT_INLINE Value prod_() const { return prod(low_() * high_()); }
+    DRJIT_INLINE Value min_()  const { return min(minimum(low_(), high_())); }
+    DRJIT_INLINE Value max_()  const { return max(maximum(low_(), high_())); }
 
     //! @}
     // -----------------------------------------------------------------------
@@ -793,12 +793,12 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(64)
     DRJIT_INLINE auto eq_ (Ref a) const { return mask_t<Derived>::from_k(_mm512_cmp_epi32_mask(m, a.m, _MM_CMPINT_EQ));  }
     DRJIT_INLINE auto neq_(Ref a) const { return mask_t<Derived>::from_k(_mm512_cmp_epi32_mask(m, a.m, _MM_CMPINT_NE)); }
 
-    DRJIT_INLINE Derived min_(Ref a) const {
+    DRJIT_INLINE Derived minimum_(Ref a) const {
         return std::is_signed_v<Value> ? _mm512_min_epi32(a.m, m)
                                        : _mm512_min_epu32(a.m, m);
     }
 
-    DRJIT_INLINE Derived max_(Ref a) const {
+    DRJIT_INLINE Derived maximum_(Ref a) const {
         return std::is_signed_v<Value> ? _mm512_max_epi32(a.m, m)
                                        : _mm512_max_epu32(a.m, m);
     }
@@ -851,10 +851,10 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(64)
     //! @{ \name Horizontal operations
     // -----------------------------------------------------------------------
 
-    DRJIT_INLINE Value hsum_()  const { return hsum(low_() + high_()); }
-    DRJIT_INLINE Value hprod_() const { return hprod(low_() * high_()); }
-    DRJIT_INLINE Value hmin_()  const { return hmin(min(low_(), high_())); }
-    DRJIT_INLINE Value hmax_()  const { return hmax(max(low_(), high_())); }
+    DRJIT_INLINE Value sum_()  const { return sum(low_() + high_()); }
+    DRJIT_INLINE Value prod_() const { return prod(low_() * high_()); }
+    DRJIT_INLINE Value min_()  const { return min(minimum(low_(), high_())); }
+    DRJIT_INLINE Value max_()  const { return max(maximum(low_(), high_())); }
 
     //! @}
     // -----------------------------------------------------------------------
@@ -1087,12 +1087,12 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(64)
     DRJIT_INLINE auto eq_ (Ref a) const { return mask_t<Derived>::from_k(_mm512_cmp_epi64_mask(m, a.m, _MM_CMPINT_EQ)); }
     DRJIT_INLINE auto neq_(Ref a) const { return mask_t<Derived>::from_k(_mm512_cmp_epi64_mask(m, a.m, _MM_CMPINT_NE)); }
 
-    DRJIT_INLINE Derived min_(Ref a) const {
+    DRJIT_INLINE Derived minimum_(Ref a) const {
         return std::is_signed_v<Value> ? _mm512_min_epi64(a.m, m)
                                        : _mm512_min_epu64(a.m, m);
     }
 
-    DRJIT_INLINE Derived max_(Ref a) const {
+    DRJIT_INLINE Derived maximum_(Ref a) const {
         return std::is_signed_v<Value> ? _mm512_max_epi64(a.m, m)
                                        : _mm512_max_epu64(a.m, m);
     }
@@ -1164,10 +1164,10 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(64)
     //! @{ \name Horizontal operations
     // -----------------------------------------------------------------------
 
-    DRJIT_INLINE Value hsum_()  const { return hsum(low_() + high_()); }
-    DRJIT_INLINE Value hprod_() const { return hprod(low_() * high_()); }
-    DRJIT_INLINE Value hmin_()  const { return hmin(min(low_(), high_())); }
-    DRJIT_INLINE Value hmax_()  const { return hmax(max(low_(), high_())); }
+    DRJIT_INLINE Value sum_()  const { return sum(low_() + high_()); }
+    DRJIT_INLINE Value prod_() const { return prod(low_() * high_()); }
+    DRJIT_INLINE Value min_()  const { return min(minimum(low_(), high_())); }
+    DRJIT_INLINE Value max_()  const { return max(maximum(low_(), high_())); }
 
     //! @}
     // -----------------------------------------------------------------------

@@ -246,8 +246,8 @@ template <bool IsMask_, typename Derived_> struct alignas(32)
     #undef DRJIT_COMP
 
     DRJIT_INLINE Derived abs_()      const { return _mm256_andnot_ps(_mm256_set1_ps(-0.f), m); }
-    DRJIT_INLINE Derived min_(Ref b) const { return _mm256_min_ps(b.m, m); }
-    DRJIT_INLINE Derived max_(Ref b) const { return _mm256_max_ps(b.m, m); }
+    DRJIT_INLINE Derived minimum_(Ref b) const { return _mm256_min_ps(b.m, m); }
+    DRJIT_INLINE Derived maximum_(Ref b) const { return _mm256_max_ps(b.m, m); }
     DRJIT_INLINE Derived ceil_()     const { return _mm256_ceil_ps(m);     }
     DRJIT_INLINE Derived floor_()    const { return _mm256_floor_ps(m);    }
     DRJIT_INLINE Derived sqrt_()     const { return _mm256_sqrt_ps(m);     }
@@ -362,10 +362,10 @@ template <bool IsMask_, typename Derived_> struct alignas(32)
     //! @{ \name Horizontal operations
     // -----------------------------------------------------------------------
 
-    DRJIT_INLINE Value hsum_()  const { return hsum(low_() + high_()); }
-    DRJIT_INLINE Value hprod_() const { return hprod(low_() * high_()); }
-    DRJIT_INLINE Value hmin_()  const { return hmin(min(low_(), high_())); }
-    DRJIT_INLINE Value hmax_()  const { return hmax(max(low_(), high_())); }
+    DRJIT_INLINE Value sum_()  const { return sum(low_() + high_()); }
+    DRJIT_INLINE Value prod_() const { return prod(low_() * high_()); }
+    DRJIT_INLINE Value min_()  const { return min(minimum(low_(), high_())); }
+    DRJIT_INLINE Value max_()  const { return max(maximum(low_(), high_())); }
 
     DRJIT_INLINE bool all_()  const { return _mm256_movemask_ps(m) == 0xFF;}
     DRJIT_INLINE bool any_()  const { return _mm256_movemask_ps(m) != 0x0; }
@@ -635,8 +635,8 @@ template <bool IsMask_, typename Derived_> struct alignas(32)
     #undef DRJIT_COMP
 
     DRJIT_INLINE Derived abs_()      const { return _mm256_andnot_pd(_mm256_set1_pd(-0.), m); }
-    DRJIT_INLINE Derived min_(Ref b) const { return _mm256_min_pd(b.m, m); }
-    DRJIT_INLINE Derived max_(Ref b) const { return _mm256_max_pd(b.m, m); }
+    DRJIT_INLINE Derived minimum_(Ref b) const { return _mm256_min_pd(b.m, m); }
+    DRJIT_INLINE Derived maximum_(Ref b) const { return _mm256_max_pd(b.m, m); }
     DRJIT_INLINE Derived ceil_()     const { return _mm256_ceil_pd(m);     }
     DRJIT_INLINE Derived floor_()    const { return _mm256_floor_pd(m);    }
     DRJIT_INLINE Derived sqrt_()     const { return _mm256_sqrt_pd(m);     }
@@ -735,10 +735,10 @@ template <bool IsMask_, typename Derived_> struct alignas(32)
     //! @{ \name Horizontal operations
     // -----------------------------------------------------------------------
 
-    DRJIT_INLINE Value hsum_()  const { return hsum(low_() + high_()); }
-    DRJIT_INLINE Value hprod_() const { return hprod(low_() * high_()); }
-    DRJIT_INLINE Value hmin_()  const { return hmin(min(low_(), high_())); }
-    DRJIT_INLINE Value hmax_()  const { return hmax(max(low_(), high_())); }
+    DRJIT_INLINE Value sum_()  const { return sum(low_() + high_()); }
+    DRJIT_INLINE Value prod_() const { return prod(low_() * high_()); }
+    DRJIT_INLINE Value min_()  const { return min(minimum(low_(), high_())); }
+    DRJIT_INLINE Value max_()  const { return max(maximum(low_(), high_())); }
 
     DRJIT_INLINE bool all_()  const { return _mm256_movemask_pd(m) == 0xF;}
     DRJIT_INLINE bool any_()  const { return _mm256_movemask_pd(m) != 0x0; }
@@ -838,10 +838,10 @@ template <bool IsMask_, typename Derived_> struct alignas(32)
             return _mm_cvtsd_f64(t2);                                        \
         }
 
-    DRJIT_HORIZONTAL_OP(hsum, add)
-    DRJIT_HORIZONTAL_OP(hprod, mul)
-    DRJIT_HORIZONTAL_OP(hmin, min)
-    DRJIT_HORIZONTAL_OP(hmax, max)
+    DRJIT_HORIZONTAL_OP(sum, add)
+    DRJIT_HORIZONTAL_OP(prod, mul)
+    DRJIT_HORIZONTAL_OP(min, min)
+    DRJIT_HORIZONTAL_OP(max, max)
 
     #undef DRJIT_HORIZONTAL_OP
 

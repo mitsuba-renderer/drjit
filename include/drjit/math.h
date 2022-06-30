@@ -175,7 +175,7 @@ namespace detail {
         s = fmadd(s, y, y);
         c = fmadd(c, z, fmadd(z, Scalar(-0.5), Scalar(1)));
 
-        Mask polymask = eq(j & Int(2), zero<IntArray>());
+        Mask polymask = eq(j & Int(2), zeros<IntArray>());
 
         if constexpr (Sin)
             *s_out = mulsign(select(polymask, s, c), sign_sin);
@@ -548,8 +548,8 @@ template <typename Y, typename X> expr_t<Y, X> atan2(const Y &y, const X &x) {
 
         Value abs_x      = abs(x),
               abs_y      = abs(y),
-              min_val    = min(abs_y, abs_x),
-              max_val    = max(abs_x, abs_y),
+              min_val    = minimum(abs_y, abs_x),
+              max_val    = maximum(abs_x, abs_y),
               scaled_min = min_val / max_val,
               z          = sqr(scaled_min);
 
@@ -586,8 +586,8 @@ template <typename Y, typename X> expr_t<Y, X> atan2(const Y &y, const X &x) {
         t = t * scaled_min;
 
         t = select(abs_y > abs_x, Pi<Scalar> * Scalar(.5f) - t, t);
-        t = select(x < zero<Value>(), Pi<Scalar> - t, t);
-        Value r = select(y < zero<Value>(), -t, t);
+        t = select(x < zeros<Value>(), Pi<Scalar> - t, t);
+        Value r = select(y < zeros<Value>(), -t, t);
         r = detail::and_(r, neq(max_val, Scalar(0)));
         return r;
     }
@@ -657,7 +657,7 @@ template <typename Value> std::pair<Value, Value> frexp(const Value &x) {
 
         // Detect zero/inf/NaN
         IntMask is_normal =
-            IntMask(neq(x, zero<Value>())) & neq(exponent_bits, exponent_mask);
+            IntMask(neq(x, zeros<Value>())) & neq(exponent_bits, exponent_mask);
 
         IntArray exponent_i = detail::and_(
             (sr < Single ? 23 : 52 > (exponent_bits)) - bias, is_normal);
@@ -749,7 +749,7 @@ template <typename Value> Value exp(const Value &x) {
         }
 
         return select(mask_overflow, Infinity<Value>,
-                      select(mask_underflow, zero<Value>(), ldexp(z, n)));
+                      select(mask_underflow, zeros<Value>(), ldexp(z, n)));
     }
 }
 
@@ -817,7 +817,7 @@ template <typename Value> Value exp2(const Value &x) {
         }
 
         return select(mask_overflow, inf,
-                      select(mask_underflow, zero<Value>(), ldexp(z, n)));
+                      select(mask_underflow, zeros<Value>(), ldexp(z, n)));
     }
 }
 

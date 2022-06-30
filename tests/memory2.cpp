@@ -95,7 +95,7 @@ void test04_nested_gather_packed_impl() {
         if (i < 2u)
             assert(slice(q, i) == x[i]);
         else
-            assert(slice(q, i) == zero<Matrix4>());
+            assert(slice(q, i) == zeros<Matrix4>());
     }
 
     /* Nested scatter */
@@ -181,7 +181,7 @@ void test05_nested_gather_nonpacked_impl() {
         if (i < 2u)
             assert(slice(q, i) == x[i]);
         else
-            assert(slice(q, i) == zero<Matrix3>());
+            assert(slice(q, i) == zeros<Matrix3>());
     }
 
     /* Nested scatter */
@@ -228,10 +228,10 @@ DRJIT_TEST_ALL(test06_range) {
         mem[i] = 1;
     using Index = uint_array_t<T>;
     MEMORY_BARRIER();
-    T sum = zero<T>();
+    T sum = zeros<T>();
     for (auto pair : range<Index>((10*Size)/3))
         sum += gather<T>(mem, pair.first, pair.second);
-    assert(((10*Size)/3) == hsum(sum));
+    assert(((10*Size)/3) == sum(sum));
 }
 
 DRJIT_TEST_ALL(test07_range_2d) {

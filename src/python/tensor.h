@@ -85,8 +85,8 @@ template <typename T> auto bind_tensor(py::module m) {
                 [](Tensor *a, const Tensor &b) { *a = a->div_(b); return a; });
 
         cls.def("abs_", &Tensor::abs_)
-           .def("minimum_", &Tensor::min_)
-           .def("maximum_", &Tensor::max_);
+           .def("minimum_", &Tensor::minimum_)
+           .def("maximum_", &Tensor::maximum_);
     }
 
     if constexpr (dr::is_floating_point_v<Tensor>) {
@@ -168,7 +168,7 @@ template <typename Tensor> auto bind_tensor_conversions(py::class_<Tensor> &cls)
         cls.def(py::init<const Tensor &>(), py::arg().noconvert());
     }
 
-    if constexpr (dr::is_diff_array_v<Tensor>)
+    if constexpr (dr::is_diff_v<Tensor>)
         cls.def(py::init<const dr::detached_t<Tensor> &>(), py::arg().noconvert());
 
     using Scalar = dr::scalar_t<Tensor>;

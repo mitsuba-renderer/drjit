@@ -39,7 +39,7 @@ struct Loop<Mask, enable_if_t<std::is_scalar_v<Mask>>> {
 template <typename Mask>
 struct Loop<Mask, enable_if_jit_array_t<Mask>> {
     static constexpr JitBackend Backend = backend_v<Mask>;
-    static constexpr bool IsDiff = is_diff_array_v<Mask>;
+    static constexpr bool IsDiff = is_diff_v<Mask>;
 
     using Float32 = float32_array_t<detached_t<Mask>>;
     using Float64 = float32_array_t<detached_t<Mask>>;
@@ -104,7 +104,7 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
     void put(T &value, Ts &... args) {
         if constexpr (is_array_v<T>) {
             if constexpr (array_depth_v<T> == 1) {
-                if constexpr (IsDiff && is_diff_array_v<T> &&
+                if constexpr (IsDiff && is_diff_v<T> &&
                               std::is_floating_point_v<scalar_t<T>>) {
                     int ad_float_precision = sizeof(scalar_t<T>) * 8;
                     if (m_ad_float_precision == 0)
@@ -128,7 +128,7 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
 
                     put(value.detach_());
                     m_indices_ad[m_indices_ad.size() - 1] = value.index_ad_ptr();
-                } else if constexpr (is_jit_array_v<T>) {
+                } else if constexpr (is_jit_v<T>) {
                     if (m_state)
                         jit_raise("Loop::put(): must be called "
                                   "*before* initialization!");

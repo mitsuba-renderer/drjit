@@ -226,8 +226,8 @@ template <bool IsMask_, typename Derived_> struct alignas(16)
     #undef DRJIT_COMP
 
     DRJIT_INLINE Derived abs_()      const { return _mm_andnot_ps(_mm_set1_ps(-0.f), m); }
-    DRJIT_INLINE Derived min_(Ref b) const { return _mm_min_ps(b.m, m); }
-    DRJIT_INLINE Derived max_(Ref b) const { return _mm_max_ps(b.m, m); }
+    DRJIT_INLINE Derived minimum_(Ref b) const { return _mm_min_ps(b.m, m); }
+    DRJIT_INLINE Derived maximum_(Ref b) const { return _mm_max_ps(b.m, m); }
     DRJIT_INLINE Derived sqrt_()     const { return _mm_sqrt_ps(m);     }
 
     DRJIT_INLINE Derived floor_() const {
@@ -354,10 +354,10 @@ template <bool IsMask_, typename Derived_> struct alignas(16)
             return _mm_cvtss_f32(t2);                                        \
         }
 
-    DRJIT_HORIZONTAL_OP(hsum, add)
-    DRJIT_HORIZONTAL_OP(hprod, mul)
-    DRJIT_HORIZONTAL_OP(hmin, min)
-    DRJIT_HORIZONTAL_OP(hmax, max)
+    DRJIT_HORIZONTAL_OP(sum, add)
+    DRJIT_HORIZONTAL_OP(prod, mul)
+    DRJIT_HORIZONTAL_OP(min, min)
+    DRJIT_HORIZONTAL_OP(max, max)
 
     #undef DRJIT_HORIZONTAL_OP
 
@@ -708,12 +708,12 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(16)
         #endif
     }
 
-    DRJIT_INLINE Derived min_(Ref a) const {
+    DRJIT_INLINE Derived minimum_(Ref a) const {
         return std::is_signed_v<Value> ? _mm_min_epi32(a.m, m)
                                        : _mm_min_epu32(a.m, m);
     }
 
-    DRJIT_INLINE Derived max_(Ref a) const {
+    DRJIT_INLINE Derived maximum_(Ref a) const {
         return std::is_signed_v<Value> ? _mm_max_epi32(a.m, m)
                                        : _mm_max_epu32(a.m, m);
     }
@@ -782,10 +782,10 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(16)
             return (Value) _mm_cvtsi128_si32(t2);                             \
         }
 
-    DRJIT_HORIZONTAL_OP(hsum, add)
-    DRJIT_HORIZONTAL_OP(hprod, mullo)
-    DRJIT_HORIZONTAL_OP_SIGNED(hmin, min)
-    DRJIT_HORIZONTAL_OP_SIGNED(hmax, max)
+    DRJIT_HORIZONTAL_OP(sum, add)
+    DRJIT_HORIZONTAL_OP(prod, mullo)
+    DRJIT_HORIZONTAL_OP_SIGNED(min, min)
+    DRJIT_HORIZONTAL_OP_SIGNED(max, max)
 
     #undef DRJIT_HORIZONTAL_OP
     #undef DRJIT_HORIZONTAL_OP_SIGNED
@@ -1029,8 +1029,8 @@ template <bool IsMask_, typename Derived_> struct alignas(16)
     #undef DRJIT_COMP
 
     DRJIT_INLINE Derived abs_()      const { return _mm_andnot_pd(_mm_set1_pd(-0.), m); }
-    DRJIT_INLINE Derived min_(Ref b) const { return _mm_min_pd(b.m, m); }
-    DRJIT_INLINE Derived max_(Ref b) const { return _mm_max_pd(b.m, m); }
+    DRJIT_INLINE Derived minimum_(Ref b) const { return _mm_min_pd(b.m, m); }
+    DRJIT_INLINE Derived maximum_(Ref b) const { return _mm_max_pd(b.m, m); }
     DRJIT_INLINE Derived ceil_()     const { return _mm_ceil_pd(m);     }
     DRJIT_INLINE Derived floor_()    const { return _mm_floor_pd(m);    }
     DRJIT_INLINE Derived sqrt_()     const { return _mm_sqrt_pd(m);     }
@@ -1143,10 +1143,10 @@ template <bool IsMask_, typename Derived_> struct alignas(16)
             return  _mm_cvtsd_f64(t1); \
         }
 
-    DRJIT_HORIZONTAL_OP(hsum, add)
-    DRJIT_HORIZONTAL_OP(hprod, mul)
-    DRJIT_HORIZONTAL_OP(hmin, min)
-    DRJIT_HORIZONTAL_OP(hmax, max)
+    DRJIT_HORIZONTAL_OP(sum, add)
+    DRJIT_HORIZONTAL_OP(prod, mul)
+    DRJIT_HORIZONTAL_OP(min, min)
+    DRJIT_HORIZONTAL_OP(max, max)
 
     #undef DRJIT_HORIZONTAL_OP
     #undef DRJIT_SHUFFLE_PD
@@ -1495,7 +1495,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(16)
         #endif
     }
 
-    DRJIT_INLINE Derived min_(Ref a) const {
+    DRJIT_INLINE Derived minimum_(Ref a) const {
         #if defined(DRJIT_X86_AVX512)
             return std::is_signed_v<Value> ? _mm_min_epi64(a.m, m)
                                            : _mm_min_epu64(a.m, m);
@@ -1504,7 +1504,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(16)
         #endif
     }
 
-    DRJIT_INLINE Derived max_(Ref a) const {
+    DRJIT_INLINE Derived maximum_(Ref a) const {
         #if defined(DRJIT_X86_AVX512)
             return std::is_signed_v<Value> ? _mm_max_epi64(a.m, m)
                                            : _mm_max_epu64(a.m, m);
@@ -1518,7 +1518,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(16)
             #if defined(DRJIT_X86_AVX512)
                 return _mm_abs_epi64(m);
             #else
-                return select(derived() < zero<Derived>(),
+                return select(derived() < zeros<Derived>(),
                               ~derived() + Derived(Value(1)), derived());
             #endif
         } else {
@@ -1560,10 +1560,10 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(16)
             return op;                                                        \
         }
 
-    DRJIT_HORIZONTAL_OP(hsum,  t1 + t2)
-    DRJIT_HORIZONTAL_OP(hprod, t1 * t2)
-    DRJIT_HORIZONTAL_OP(hmin,  min(t1, t2))
-    DRJIT_HORIZONTAL_OP(hmax,  max(t1, t2))
+    DRJIT_HORIZONTAL_OP(sum,  t1 + t2)
+    DRJIT_HORIZONTAL_OP(prod, t1 * t2)
+    DRJIT_HORIZONTAL_OP(min,  minimum(t1, t2))
+    DRJIT_HORIZONTAL_OP(max,  maximum(t1, t2))
 
     #undef DRJIT_HORIZONTAL_OP
 
@@ -1665,10 +1665,10 @@ template <bool IsMask_, typename Derived_> struct alignas(16)
             return _mm_cvtss_f32(t1);                                         \
         }
 
-    DRJIT_HORIZONTAL_OP(hsum, add)
-    DRJIT_HORIZONTAL_OP(hprod, mul)
-    DRJIT_HORIZONTAL_OP(hmin, min)
-    DRJIT_HORIZONTAL_OP(hmax, max)
+    DRJIT_HORIZONTAL_OP(sum, add)
+    DRJIT_HORIZONTAL_OP(prod, mul)
+    DRJIT_HORIZONTAL_OP(min, min)
+    DRJIT_HORIZONTAL_OP(max, max)
 
     #undef DRJIT_HORIZONTAL_OP
 
@@ -1772,10 +1772,10 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(16)
             return (Value) _mm_cvtsi128_si32(t1);                             \
         }
 
-    DRJIT_HORIZONTAL_OP(hsum, add)
-    DRJIT_HORIZONTAL_OP(hprod, mullo)
-    DRJIT_HORIZONTAL_OP_SIGNED(hmin, min)
-    DRJIT_HORIZONTAL_OP_SIGNED(hmax, max)
+    DRJIT_HORIZONTAL_OP(sum, add)
+    DRJIT_HORIZONTAL_OP(prod, mullo)
+    DRJIT_HORIZONTAL_OP_SIGNED(min, min)
+    DRJIT_HORIZONTAL_OP_SIGNED(max, max)
 
     #undef DRJIT_HORIZONTAL_OP
     #undef DRJIT_HORIZONTAL_OP_SIGNED

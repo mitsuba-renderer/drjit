@@ -45,7 +45,7 @@ void tensor_broadcast_impl(const char *op, T &t, const dr_vector<size_t> &shape)
 template <typename T0, typename T1>
 dr_vector<size_t> tensor_broadcast(const char *op, T0 &t0, T1 &t1) {
     size_t t0d = t0.ndim(), t1d = t1.ndim(),
-           ndim = drjit::max(t0d, t1d);
+           ndim = drjit::maximum(t0d, t1d);
 
     if ((t0d != ndim && t0d != 0) || (t1d != ndim && t1d != 0))
         drjit_raise("drjit::Tensor::%s(): incompatible tensor dimensions "
@@ -55,7 +55,7 @@ dr_vector<size_t> tensor_broadcast(const char *op, T0 &t0, T1 &t1) {
     for (size_t i = 0; i < ndim; ++i) {
         size_t t0_i = t0d > 0 ? t0.shape(i) : 0;
         size_t t1_i = t1d > 0 ? t1.shape(i) : 0;
-        shape[i] = drjit::max(t0_i, t1_i);
+        shape[i] = drjit::maximum(t0_i, t1_i);
         if (t0_i > 1 && t1_i > 1 && t0_i != t1_i)
             drjit_raise("drjit::Tensor::%s(): incompatible tensor shapes "
                         "for dimension %zu (%zu and %zu)!", op, i, t0_i, t1_i);
@@ -71,7 +71,7 @@ dr_vector<size_t> tensor_broadcast(const char *op, T0 &t0, T1 &t1) {
 template <typename T0, typename T1, typename T2>
 dr_vector<size_t> tensor_broadcast(const char *op, T0 &t0, T1 &t1, T2 &t2) {
     size_t t0d = t0.ndim(), t1d = t1.ndim(), t2d = t2.ndim();
-    size_t ndim = drjit::max(drjit::max(t0d, t1d), t2d);
+    size_t ndim = drjit::maximum(drjit::maximum(t0d, t1d), t2d);
 
     if ((t0d != ndim && t0d != 0) || (t1d != ndim && t1d != 0) ||
         (t2d != ndim && t2d != 0))
@@ -80,9 +80,9 @@ dr_vector<size_t> tensor_broadcast(const char *op, T0 &t0, T1 &t1, T2 &t2) {
 
     dr_vector<size_t> shape(ndim, 0);
     for (size_t i = 0; i < ndim; ++i)
-        shape[i] = drjit::max(drjit::max(t0d > 0 ? t0.shape(i) : 0,
-                                         t1d > 0 ? t1.shape(i) : 0),
-                                         t2d > 0 ? t2.shape(i) : 0);
+        shape[i] = drjit::maximum(drjit::maximum(t0d > 0 ? t0.shape(i) : 0,
+                                                 t1d > 0 ? t1.shape(i) : 0),
+                                                 t2d > 0 ? t2.shape(i) : 0);
 
     using Index = typename T0::Index;
     tensor_broadcast_impl<Index>(op, t0, shape);
@@ -117,10 +117,10 @@ struct Tensor
     static constexpr bool IsMask = is_mask_v<Array_>;
     static constexpr bool IsTensor = true;
     static constexpr bool IsDynamic = true;
-    static constexpr bool IsDiff = is_diff_array_v<Array_>;
-    static constexpr bool IsJIT  = is_jit_array_v<Array_>;
-    static constexpr bool IsCUDA = is_cuda_array_v<Array_>;
-    static constexpr bool IsLLVM = is_llvm_array_v<Array_>;
+    static constexpr bool IsDiff = is_diff_v<Array_>;
+    static constexpr bool IsJIT  = is_jit_v<Array_>;
+    static constexpr bool IsCUDA = is_cuda_v<Array_>;
+    static constexpr bool IsLLVM = is_llvm_v<Array_>;
     static constexpr size_t Size = Dynamic;
 
     template <typename T>
@@ -249,16 +249,16 @@ struct Tensor
 
     Tensor abs_() const { return Tensor(abs(m_array), m_shape); }
 
-    Tensor min_(const Tensor &b) const {
+    Tensor minimum_(const Tensor &b) const {
         Tensor t0 = *this, t1 = b;
-        Shape shape = detail::tensor_broadcast("min_", t0, t1);
-        return Tensor(drjit::min(t0.m_array, t1.m_array), std::move(shape));
+        Shape shape = detail::tensor_broadcast("minimum_", t0, t1);
+        return Tensor(drjit::minimum(t0.m_array, t1.m_array), std::move(shape));
     }
 
-    Tensor max_(const Tensor &b) const {
+    Tensor maximum_(const Tensor &b) const {
         Tensor t0 = *this, t1 = b;
-        Shape shape = detail::tensor_broadcast("max_", t0, t1);
-        return Tensor(drjit::max(t0.m_array, t1.m_array), std::move(shape));
+        Shape shape = detail::tensor_broadcast("maximum_", t0, t1);
+        return Tensor(drjit::maximum(t0.m_array, t1.m_array), std::move(shape));
     }
 
     auto gt_(const Tensor &b) const {
@@ -333,7 +333,7 @@ struct Tensor
     }
 
     static Tensor zero_(size_t size) {
-        return Tensor(zero<Array>(size));
+        return Tensor(zeros<Array>(size));
     }
 
     size_t ndim() const { return m_shape.size(); }

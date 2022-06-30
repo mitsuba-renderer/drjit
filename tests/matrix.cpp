@@ -30,7 +30,7 @@ template <typename Type> void test_scatter() {
     auto idx  = dr::arange<UInt32>(n);
     auto mask = idx >= (n / 2);
 
-    auto target = dr::zero<Type>(n);
+    auto target = dr::zeros<Type>(n);
     auto source = dr::full<Type>(4, n);
     dr::scatter(target, source, idx, mask);
 

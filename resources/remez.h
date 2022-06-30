@@ -1033,7 +1033,7 @@ template <typename Func> struct Remez {
                   a_err_guess     = abs_(err_guess),
                   a_err_guess_new = abs_(err_guess_new),
                   err_diff        = abs_(a_err_guess - a_err_guess_new),
-                  err_min         = min_(a_err_guess, a_err_guess_new);
+                  err_min         = minimum_(a_err_guess, a_err_guess_new);
 
             if (debug)
                 mpfr_printf("    (* error=%.5Re -> %.5Re *)\n", a_err_guess.value,
@@ -1112,7 +1112,7 @@ template <typename Func> struct Remez {
                   a_err_guess     = abs_(err_guess),
                   a_err_guess_new = abs_(err_guess_new),
                   err_diff        = abs_(a_err_guess - a_err_guess_new),
-                  err_min         = min_(a_err_guess, a_err_guess_new);
+                  err_min         = minimum_(a_err_guess, a_err_guess_new);
 
             if (debug)
                 mpfr_printf("(* error=%.5Re -> %.5Re *)\n", a_err_guess.value,

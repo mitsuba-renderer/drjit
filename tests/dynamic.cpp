@@ -111,7 +111,7 @@ DRJIT_TEST(test04_init)  {
     using FloatP = Array<float, 4>;
     using FloatX = DynamicArray<FloatP>;
 
-    auto v0 = zero<FloatX>(11);
+    auto v0 = zeros<FloatX>(11);
     auto v1 = arange<FloatX>(11);
     auto v2 = linspace<FloatX>(0.f, 1.f, 11);
     int ctr = 0;
@@ -277,9 +277,9 @@ template <typename T, size_t PacketSize> void test09_packet_from_struct() {
     using GPSCoord2fX  = GPSCoord2<ValueX>;
 
     size_t n   = 4 * PacketSize;
-    auto array = zero<ValueX>(n);      // Non-nested dynamic array
-    auto mask  = zero<MaskX>(n);       // Non-nested mask type for a dynamic array
-    auto gps   = zero<GPSCoord2fX>(n); // Structure of dynamic arrays
+    auto array = zeros<ValueX>(n);      // Non-nested dynamic array
+    auto mask  = zeros<MaskX>(n);       // Non-nested mask type for a dynamic array
+    auto gps   = zeros<GPSCoord2fX>(n); // Structure of dynamic arrays
 
     for (size_t i = 0; i < packets(array); ++i) {
         auto &&a = packet(array, i);

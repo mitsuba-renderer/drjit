@@ -85,7 +85,7 @@ void bind_basic_methods(py::class_<Array> &cls) {
     }
 
     if constexpr (dr::is_dynamic_array_v<Array> ||
-                  (!dr::is_jit_array_v<Array> && !dr::is_mask_v<Array>))
+                  (!dr::is_jit_v<Array> && !dr::is_mask_v<Array>))
         cls.def("data_", [](const Array &a) {
             return (uintptr_t) a.data();
         });
@@ -257,18 +257,18 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
 
         if constexpr (dr::is_dynamic_v<Array> &&
                       dr::array_depth_v<Array> == 1 &&
-                      dr::is_jit_array_v<Array>) {
+                      dr::is_jit_v<Array>) {
             cls.def("dot_",  &Array::dot_async_);
-            cls.def("min_",  &Array::hmin_async_);
-            cls.def("max_",  &Array::hmax_async_);
-            cls.def("sum_",  &Array::hsum_async_);
-            cls.def("prod_", &Array::hprod_async_);
+            cls.def("min_",  &Array::min_async_);
+            cls.def("max_",  &Array::max_async_);
+            cls.def("sum_",  &Array::sum_async_);
+            cls.def("prod_", &Array::prod_async_);
         } else {
             cls.def("dot_",  &Array::dot_);
-            cls.def("min_",  &Array::hmin_);
-            cls.def("max_",  &Array::hmax_);
-            cls.def("sum_",  &Array::hsum_);
-            cls.def("prod_", &Array::hprod_);
+            cls.def("min_",  &Array::min_);
+            cls.def("max_",  &Array::max_);
+            cls.def("sum_",  &Array::sum_);
+            cls.def("prod_", &Array::prod_);
         }
 
         cls.def("and_", [](const Array &a, const Mask &b) {
@@ -303,8 +303,8 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
         });
 
         cls.def("abs_", &Array::abs_);
-        cls.def("minimum_", &Array::min_);
-        cls.def("maximum_", &Array::max_);
+        cls.def("minimum_", &Array::minimum_);
+        cls.def("maximum_", &Array::maximum_);
 
         if constexpr (std::is_same_v<Mask, dr::mask_t<Array>>) {
             cls.def("lt_", &Array::lt_);
@@ -352,7 +352,7 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
         }
     }
 
-    if constexpr (dr::is_jit_array_v<Array>) {
+    if constexpr (dr::is_jit_v<Array>) {
         cls.def("resize_", [](Array &value, size_t size) { value.resize(size); });
         cls.def("is_literal_", [](Array &value) { return value.is_literal(); });
         cls.def("is_evaluated_", [](Array &value) { return value.is_evaluated(); });
@@ -426,7 +426,7 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
         });
     }
 
-    if constexpr (dr::is_jit_array_v<Array>) {
+    if constexpr (dr::is_jit_v<Array>) {
         cls.def_static("map_", [](uintptr_t ptr, size_t size, std::function<void (void)> callback) {
             Array result = Array::map_((void *) ptr, size, false);
             if (callback) {

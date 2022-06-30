@@ -39,7 +39,7 @@ struct Complex : StaticArrayImpl<Value_, 2, false, Complex<Value_>> {
 
     template <typename T, enable_if_t<!is_complex_v<T> && array_depth_v<T> != Base::Depth &&
                                        (is_array_v<T> || std::is_scalar_v<std::decay_t<T>>)> = 0>
-    DRJIT_INLINE Complex(T&& z) : Base(std::forward<T>(z), zero<Value_>()) { }
+    DRJIT_INLINE Complex(T&& z) : Base(std::forward<T>(z), zeros<Value_>()) { }
 
     template <typename T, enable_if_t<!is_array_v<T> && !std::is_scalar_v<std::decay_t<T>>> = 0> // __m128d
     DRJIT_INLINE Complex(T&& z) : Base(z) { }
@@ -55,7 +55,7 @@ template <typename T> DRJIT_INLINE T imag(const Complex<T> &z) { return z.y(); }
 template <typename T, enable_if_complex_t<T> = 0>
 T identity(size_t size = 1) {
     using Value = value_t<T>;
-    return { identity<Value>(size), zero<Value>(size) };
+    return { identity<Value>(size), zeros<Value>(size) };
 }
 
 template <typename T> T squared_norm(const Complex<T> &z) {

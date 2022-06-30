@@ -103,7 +103,7 @@ Matrix frustum(const entry_t<Matrix> &left,
           tb = rcp(top - bottom),
           fn = rcp(far_ - near_);
 
-    Matrix trafo = zero<Matrix>();
+    Matrix trafo = zeros<Matrix>();
     trafo(0, 0) = (2.f * near_) * rl;
     trafo(1, 1) = (2.f * near_) * tb;
     trafo(0, 2) = (right + left) * rl;
@@ -132,7 +132,7 @@ Matrix ortho(const entry_t<Matrix> &left,
           tb = rcp(top - bottom),
           fn = rcp(far_ - near_);
 
-    Matrix trafo = zero<Matrix>();
+    Matrix trafo = zeros<Matrix>();
 
     trafo(0, 0) = 2.f * rl;
     trafo(1, 1) = 2.f * tb;

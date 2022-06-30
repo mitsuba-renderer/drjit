@@ -153,7 +153,7 @@ DRJIT_INLINE Result vcall_autodiff(const char *name, const Func &func,
 
     /* Only perform a differentiable vcall if there is a differentiable
        float type somewhere within the argument or return values */
-    if constexpr (is_diff_array_v<DiffType> && std::is_floating_point_v<scalar_t<DiffType>>) {
+    if constexpr (is_diff_v<DiffType> && std::is_floating_point_v<scalar_t<DiffType>>) {
         using Type = typename DiffType::Type;
 
         auto [base, n_inst] = vcall_registry_get(backend_v<Self>, Base::Domain);

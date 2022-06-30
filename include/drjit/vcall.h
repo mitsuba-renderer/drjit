@@ -40,7 +40,7 @@ NAMESPACE_BEGIN(detail)
 
 template <typename T>
 DRJIT_INLINE decltype(auto) copy_diff(const T& value) {
-    if constexpr (is_jit_array_v<T> && is_diff_array_v<T> &&
+    if constexpr (is_jit_v<T> && is_diff_v<T> &&
                   std::is_floating_point_v<scalar_t<T>>) {
         T result;
         if constexpr (array_depth_v<T> == 1) {
@@ -84,7 +84,7 @@ inline void ad_copy() { }
 
 template <typename T, typename... Ts> void ad_copy(T &value, Ts&...values) {
     DRJIT_MARK_USED(value);
-    if constexpr (is_diff_array_v<T>) {
+    if constexpr (is_diff_v<T>) {
         if constexpr (array_depth_v<T> > 1) {
             for (size_t i = 0; i < value.size(); ++i)
                 ad_copy(value.entry(i));
@@ -129,11 +129,11 @@ auto vcall(const char *name, const Func &func, const Self &self,
     using Result = typename vectorize_type<Self, Output>::type;
 
     DRJIT_MARK_USED(name);
-    if constexpr (is_jit_array_v<Self>) {
+    if constexpr (is_jit_v<Self>) {
         if ((jit_flags() & (uint32_t) JitFlag::VCallRecord) == 0) {
             return detail::vcall_jit_reduce<Result>(func, self, copy_diff(args)...);
         } else {
-            if constexpr (is_diff_array_v<Self>)
+            if constexpr (is_diff_v<Self>)
                 return detail::vcall_autodiff<Result>(name, func, self, args...);
             else
                 return detail::vcall_jit_record<Result>(name, func, self, args...);
@@ -165,7 +165,7 @@ NAMESPACE_END(drjit)
 
 #define DRJIT_VCALL_REGISTER(Array, Class)                                     \
     static constexpr const char *Domain = #Class;                              \
-    static constexpr bool Registered = drjit::is_jit_array_v<Array>;           \
+    static constexpr bool Registered = drjit::is_jit_v<Array>;           \
     static constexpr JitBackend Backend = drjit::backend_v<Array>;             \
     void *operator new(size_t size) {                                          \
         void *ptr = ::operator new(size);                                      \
@@ -210,14 +210,14 @@ NAMESPACE_END(drjit)
 
 #define DRJIT_VCALL_GETTER(name, type)                                         \
     auto name(const mask_t<Array> &mask = true) const {                        \
-        if constexpr (is_jit_array_v<Array>) {                                 \
+        if constexpr (is_jit_v<Array>) {                                 \
             using Result = replace_scalar_t<Array, type>;                      \
             using UInt32 = uint32_array_t<Array>;                              \
             uint32_t attr_id = jit_var_registry_attr(                          \
                 detached_t<Result>::Backend, detached_t<Result>::Type,         \
                 Domain, #name);                                                \
             if (attr_id == 0)                                                  \
-                return zero<Result>();                                         \
+                return zeros<Result>();                                         \
             else                                                               \
                 return drjit::gather<Result>(Result::steal(attr_id),           \
                             UInt32::borrow(array.index()),                     \

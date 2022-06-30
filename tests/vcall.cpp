@@ -81,7 +81,7 @@ DRJIT_TEST(test01_vcall_reduce_and_record) {
     int n = 9999;
 
     // jit_set_log_level_stderr(::LogLevel::Error);
-    if constexpr (dr::is_cuda_array_v<Float>)
+    if constexpr (dr::is_cuda_v<Float>)
         jit_init((uint32_t) JitBackend::CUDA);
     else
         jit_init((uint32_t) JitBackend::LLVM);
@@ -134,7 +134,7 @@ DRJIT_TEST(test01_vcall_reduce_and_record) {
 DRJIT_TEST(test02_vcall_reduce_and_record_masked) {
     int n = 9999;
 
-    if constexpr (dr::is_cuda_array_v<Float>)
+    if constexpr (dr::is_cuda_v<Float>)
         jit_init((uint32_t) JitBackend::CUDA);
     else
         jit_init((uint32_t) JitBackend::LLVM);
@@ -225,7 +225,7 @@ DRJIT_VCALL_METHOD(dummy)
 DRJIT_VCALL_END(BaseD)
 
 DRJIT_TEST(test03_vcall_symbolic_ad_fwd) {
-    if constexpr (dr::is_cuda_array_v<Float>)
+    if constexpr (dr::is_cuda_v<Float>)
         jit_init((uint32_t) JitBackend::CUDA);
     else
         jit_init((uint32_t) JitBackend::LLVM);
@@ -274,7 +274,7 @@ DRJIT_TEST(test03_vcall_symbolic_ad_fwd) {
 }
 
 DRJIT_TEST(test04_vcall_symbolic_ad_fwd_accessing_local) {
-    if constexpr (dr::is_cuda_array_v<Float>)
+    if constexpr (dr::is_cuda_v<Float>)
         jit_init((uint32_t) JitBackend::CUDA);
     else
         jit_init((uint32_t) JitBackend::LLVM);
@@ -328,7 +328,7 @@ DRJIT_TEST(test04_vcall_symbolic_ad_fwd_accessing_local) {
 }
 
 DRJIT_TEST(test05_vcall_symbolic_ad_bwd_accessing_local) {
-    if constexpr (dr::is_cuda_array_v<Float>)
+    if constexpr (dr::is_cuda_v<Float>)
         jit_init((uint32_t) JitBackend::CUDA);
     else
         jit_init((uint32_t) JitBackend::LLVM);

@@ -55,7 +55,7 @@ template <typename T> struct PCG32 {
     void seed(size_t size = 1,
               const UInt64 &initstate = PCG32_DEFAULT_STATE,
               const UInt64 &initseq   = PCG32_DEFAULT_STREAM) {
-        state = zero<UInt64>();
+        state = zeros<UInt64>();
         inc = sl<1>(initseq + arange<UInt64>(size)) | 1u;
         next_uint32();
         state += initstate;
@@ -219,7 +219,7 @@ template <typename T> struct PCG32 {
             divisor<uint32_t> div(bound);
             UInt32 threshold = imod(~bound + 1u, div);
 
-            UInt32 result = zero<UInt32>();
+            UInt32 result = zeros<UInt32>();
             do {
                 result[mask] = next_uint32(mask);
 
@@ -249,7 +249,7 @@ template <typename T> struct PCG32 {
             divisor<uint64_t> div(bound);
             UInt64 threshold = imod(~bound + (uint64_t) 1, div);
 
-            UInt64 result = zero<UInt64>();
+            UInt64 result = zeros<UInt64>();
             do {
                 result[mask] = next_uint64(mask);
 
@@ -297,15 +297,15 @@ template <typename T> struct PCG32 {
         UInt64 delta(delta_);
 
         int it = 0; DRJIT_MARK_USED(it);
-        while (is_jit_array_v<T> || delta != zero<UInt64>()) {
-            Mask mask = neq(delta & 1, zero<UInt64>());
+        while (is_jit_v<T> || delta != zeros<UInt64>()) {
+            Mask mask = neq(delta & 1, zeros<UInt64>());
             masked(acc_mult, mask) = acc_mult * cur_mult;
             masked(acc_plus, mask) = acc_plus * cur_mult + cur_plus;
             cur_plus = (cur_mult + 1) * cur_plus;
             cur_mult *= cur_mult;
             delta = sr<1>(delta);
 
-            if constexpr (is_jit_array_v<T>) {
+            if constexpr (is_jit_v<T>) {
                 if (++it == 64)
                     break;
             }
@@ -330,7 +330,7 @@ template <typename T> struct PCG32 {
                cur_mult = PCG32_MULT;
 
         int it = 0; DRJIT_MARK_USED(it);
-        while (is_jit_array_v<T> || state != cur_state) {
+        while (is_jit_v<T> || state != cur_state) {
             Mask mask = neq(state & bit, cur_state & bit);
             masked(cur_state, mask) = fmadd(cur_state, cur_mult, cur_plus);
             masked(distance, mask) |= bit;
@@ -338,7 +338,7 @@ template <typename T> struct PCG32 {
             cur_mult *= cur_mult;
             bit = sl<1>(bit);
 
-            if constexpr (is_jit_array_v<T>) {
+            if constexpr (is_jit_v<T>) {
                 if (++it == 64)
                     break;
             }

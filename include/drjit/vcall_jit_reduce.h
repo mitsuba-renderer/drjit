@@ -20,7 +20,7 @@ template <size_t I, size_t N, typename T, typename UInt32>
 DRJIT_INLINE decltype(auto) gather_helper(const T& value, const UInt32 &perm) {
     if constexpr (is_mask_v<T> && I == N - 1) {
         return true;
-    } else if constexpr (is_jit_array_v<T>) {
+    } else if constexpr (is_jit_v<T>) {
         return gather<T, true>(value, perm);
     } else if constexpr (is_drjit_struct_v<T>) {
         T result = value;
@@ -63,7 +63,7 @@ Result vcall_jit_reduce_impl(Func func, const Self &self_,
         if (self)
             return func(self, args...);
         else
-            return zero<Result>();
+            return zeros<Result>();
     }
 
     Mask mask = extract_mask<Mask>(args...);
@@ -119,12 +119,12 @@ Result vcall_jit_reduce_impl(Func func, const Self &self_,
                 }
             } else {
                 if constexpr (!std::is_same_v<Result, std::nullptr_t>)
-                    scatter<true>(result, zero<Result>(), perm);
+                    scatter<true>(result, zeros<Result>(), perm);
             }
         }
         schedule(result);
     } else {
-        result = zero<Result>(self_size);
+        result = zeros<Result>(self_size);
     }
 
     return result;

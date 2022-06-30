@@ -79,7 +79,7 @@ template <typename Ray> DRJIT_INLINE typename Ray::Vector intersect_rays(const R
 
 /// "Shader": directional illumination
 template <typename Vector3f> DRJIT_INLINE typename Vector3f::Value shade_hits(Vector3f n) {
-    return 0.2f + max(dot(n, Vector3f(-1.f, -1.f, 2.f)), 0.f) * 90.f;
+    return 0.2f + maximum(dot(n, Vector3f(-1.f, -1.f, 2.f)), 0.f) * 90.f;
 }
 
 /// All three kernels combined into one

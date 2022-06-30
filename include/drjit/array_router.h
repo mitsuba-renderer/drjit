@@ -192,8 +192,8 @@ DRJIT_ROUTE_UNARY_TYPE_FALLBACK(trunc2int, trunc2int, (T2) detail::trunc_(a))
 DRJIT_ROUTE_UNARY_FALLBACK(rcp, rcp, detail::rcp_(a))
 DRJIT_ROUTE_UNARY_FALLBACK(rsqrt, rsqrt, detail::rsqrt_(a))
 
-DRJIT_ROUTE_BINARY_FALLBACK(max, max, detail::max_((E) a1, (E) a2))
-DRJIT_ROUTE_BINARY_FALLBACK(min, min, detail::min_((E) a1, (E) a2))
+DRJIT_ROUTE_BINARY_FALLBACK(maximum, maximum, detail::maximum_((E) a1, (E) a2))
+DRJIT_ROUTE_BINARY_FALLBACK(minimum, minimum, detail::minimum_((E) a1, (E) a2))
 
 DRJIT_ROUTE_BINARY_FALLBACK(mulhi, mulhi, detail::mulhi_((E) a1, (E) a2))
 DRJIT_ROUTE_UNARY_FALLBACK(lzcnt, lzcnt, detail::lzcnt_(a))
@@ -235,7 +235,7 @@ template <typename T, enable_if_not_array_t<T> = 0> T andnot(const T &a1, const 
     return detail::andnot_(a1, a2);
 }
 
-template <typename T> DRJIT_INLINE T zero(size_t size = 1);
+template <typename T> DRJIT_INLINE T zeros(size_t size = 1);
 
 template <typename M, typename T, typename F>
 DRJIT_INLINE auto select(const M &m, const T &t, const F &f) {
@@ -246,7 +246,7 @@ DRJIT_INLINE auto select(const M &m, const T &t, const F &f) {
             [&m](auto const &x1, auto const &x2, auto &x3) DRJIT_INLINE_LAMBDA {
                 using X = std::decay_t<decltype(x3)>;
                 if constexpr (is_array_v<M> && !(is_array_v<X> || is_drjit_struct_v<X>))
-                    x3 = zero<X>();
+                    x3 = zeros<X>();
                 else
                     x3 = select(m, x1, x2);
             });
@@ -335,7 +335,7 @@ auto lerp(const Value1 &a, const Value2 &b, const Value3 &t) {
 /// Clamp the value 'value' to the range [min, max]
 template <typename Value1, typename Value2, typename Value3>
 auto clamp(const Value1 &value, const Value2 &min, const Value3 &max) {
-    return drjit::max(drjit::min(value, max), min);
+    return maximum(minimum(value, max), min);
 }
 
 namespace detail {
@@ -350,7 +350,7 @@ namespace detail {
 }
 
 template <typename Array> DRJIT_INLINE Array sign(const Array &v) {
-    if constexpr (std::is_floating_point_v<scalar_t<Array>> && !is_diff_array_v<Array>)
+    if constexpr (std::is_floating_point_v<scalar_t<Array>> && !is_diff_v<Array>)
         return detail::or_(Array(1), detail::and_(detail::sign_mask<Array>(), v));
     else
         return select(v >= 0, Array(1), Array(-1));
@@ -358,7 +358,7 @@ template <typename Array> DRJIT_INLINE Array sign(const Array &v) {
 
 template <typename Array1, typename Array2>
 DRJIT_INLINE Array1 copysign(const Array1 &v1, const Array2 &v2) {
-    if constexpr (std::is_floating_point_v<scalar_t<Array2>> && !is_diff_array_v<Array2>) {
+    if constexpr (std::is_floating_point_v<scalar_t<Array2>> && !is_diff_v<Array2>) {
         return detail::or_(abs(v1), detail::and_(detail::sign_mask<Array2>(), v2));
     } else {
         Array1 v1_a = abs(v1);
@@ -368,7 +368,7 @@ DRJIT_INLINE Array1 copysign(const Array1 &v1, const Array2 &v2) {
 
 template <typename Array1, typename Array2>
 DRJIT_INLINE Array1 copysign_neg(const Array1 &v1, const Array2 &v2) {
-    if constexpr (std::is_floating_point_v<scalar_t<Array2>> && !is_diff_array_v<Array2>) {
+    if constexpr (std::is_floating_point_v<scalar_t<Array2>> && !is_diff_v<Array2>) {
         return detail::or_(abs(v1), detail::andnot_(detail::sign_mask<Array2>(), v2));
     } else {
         Array1 v1_a = abs(v1);
@@ -378,7 +378,7 @@ DRJIT_INLINE Array1 copysign_neg(const Array1 &v1, const Array2 &v2) {
 
 template <typename Array1, typename Array2>
 DRJIT_INLINE Array1 mulsign(const Array1 &v1, const Array2 &v2) {
-    if constexpr (std::is_floating_point_v<scalar_t<Array2>> && !is_diff_array_v<Array2>) {
+    if constexpr (std::is_floating_point_v<scalar_t<Array2>> && !is_diff_v<Array2>) {
         return detail::xor_(v1, detail::and_(detail::sign_mask<Array2>(), v2));
     } else {
         return select(v2 >= 0, v1, -v1);
@@ -388,7 +388,7 @@ DRJIT_INLINE Array1 mulsign(const Array1 &v1, const Array2 &v2) {
 template <typename Array1, typename Array2>
 DRJIT_INLINE Array1 mulsign_neg(const Array1 &v1, const Array2 &v2) {
     // TODO add support for binary op for floats
-    // if constexpr (std::is_floating_point_v<scalar_t<Array2>> && !is_diff_array_v<Array2>) {
+    // if constexpr (std::is_floating_point_v<scalar_t<Array2>> && !is_diff_v<Array2>) {
     //     return detail::xor_(v1, detail::andnot_(detail::sign_mask<Array2>(), v2));
     // } else {
         return select(v2 >= 0, -v1, v1);
@@ -410,8 +410,8 @@ template <typename A, typename B> expr_t<A, B> hypot(const A &a, const B &b) {
 
         Value abs_a  = abs(a),
               abs_b  = abs(b),
-              maxval = max(abs_a, abs_b),
-              minval = min(abs_a, abs_b),
+              maxval = maximum(abs_a, abs_b),
+              minval = minimum(abs_a, abs_b),
               ratio  = minval / maxval;
 
         scalar_t<Value> inf = Infinity<Value>;
@@ -491,30 +491,30 @@ template <typename X, typename Y> expr_t<X, Y> fmod(const X &x, const Y &y) {
 DRJIT_ROUTE_UNARY_FALLBACK(all,   all,   (bool) a)
 DRJIT_ROUTE_UNARY_FALLBACK(any,   any,   (bool) a)
 DRJIT_ROUTE_UNARY_FALLBACK(count, count, (uint32_t) ((bool) a ? 1 : 0))
-DRJIT_ROUTE_UNARY_FALLBACK(hsum,  hsum,  a)
-DRJIT_ROUTE_UNARY_FALLBACK(hprod, hprod, a)
-DRJIT_ROUTE_UNARY_FALLBACK(hmin,  hmin,  a)
-DRJIT_ROUTE_UNARY_FALLBACK(hmax,  hmax,  a)
+DRJIT_ROUTE_UNARY_FALLBACK(sum,  sum,  a)
+DRJIT_ROUTE_UNARY_FALLBACK(prod, prod, a)
+DRJIT_ROUTE_UNARY_FALLBACK(min,  min,  a)
+DRJIT_ROUTE_UNARY_FALLBACK(max,  max,  a)
 DRJIT_ROUTE_BINARY_FALLBACK(dot, dot, (E) a1 * (E) a2)
 
-DRJIT_ROUTE_UNARY_FALLBACK(hsum_async,  hsum_async,  a)
-DRJIT_ROUTE_UNARY_FALLBACK(hprod_async, hprod_async, a)
-DRJIT_ROUTE_UNARY_FALLBACK(hmin_async,  hmin_async,  a)
-DRJIT_ROUTE_UNARY_FALLBACK(hmax_async,  hmax_async,  a)
+DRJIT_ROUTE_UNARY_FALLBACK(sum_async,  sum_async,  a)
+DRJIT_ROUTE_UNARY_FALLBACK(prod_async, prod_async, a)
+DRJIT_ROUTE_UNARY_FALLBACK(min_async,  min_async,  a)
+DRJIT_ROUTE_UNARY_FALLBACK(max_async,  max_async,  a)
 DRJIT_ROUTE_BINARY_FALLBACK(dot_async, dot_async, (E) a1 * (E) a2)
 
 template <typename Array>
-DRJIT_INLINE auto hmean(const Array &a) {
+DRJIT_INLINE auto mean(const Array &a) {
     if constexpr (is_array_v<Array>)
-        return hsum(a) * (1.f / a.derived().size());
+        return sum(a) * (1.f / a.derived().size());
     else
         return a;
 }
 
 template <typename Array>
-DRJIT_INLINE auto hmean_async(const Array &a) {
+DRJIT_INLINE auto mean_async(const Array &a) {
     if constexpr (is_array_v<Array>)
-        return hsum_async(a) * (1.f / a.derived().size());
+        return sum_async(a) * (1.f / a.derived().size());
     else
         return a;
 }
@@ -529,46 +529,46 @@ DRJIT_INLINE bool operator!=(const T1 &a1, const T2 &a2) {
     return any_nested(neq(a1, a2));
 }
 
-template <typename T> auto hsum_nested(const T &a) {
+template <typename T> auto sum_nested(const T &a) {
     if constexpr (!is_array_v<T>)
         return a;
     else
-        return hsum_nested(hsum(a));
+        return sum_nested(sum(a));
 }
 
-template <typename T> auto hprod_nested(const T &a) {
+template <typename T> auto prod_nested(const T &a) {
     if constexpr (!is_array_v<T>)
         return a;
     else
-        return hprod_nested(hprod(a));
+        return prod_nested(prod(a));
 }
 
-template <typename T> auto hmin_nested(const T &a) {
+template <typename T> auto min_nested(const T &a) {
     if constexpr (!is_array_v<T>)
         return a;
     else
-        return hmin_nested(hmin(a));
+        return min_nested(min(a));
 }
 
-template <typename T> auto hmax_nested(const T &a) {
+template <typename T> auto max_nested(const T &a) {
     if constexpr (!is_array_v<T>)
         return a;
     else
-        return hmax_nested(hmax(a));
+        return max_nested(max(a));
 }
 
-template <typename T> auto hmean_nested(const T &a) {
+template <typename T> auto mean_nested(const T &a) {
     if constexpr (!is_array_v<T>)
         return a;
     else
-        return hmean_nested(hmean(a));
+        return mean_nested(mean(a));
 }
 
 template <typename T> auto count_nested(const T &a) {
     if constexpr (!is_array_v<T>)
         return count(a);
     else
-        return hsum_nested(count(a));
+        return sum_nested(count(a));
 }
 
 template <typename T> auto any_nested(const T &a) {
@@ -623,7 +623,7 @@ DRJIT_INLINE auto abs_dot_async(const T1 &a1, const T2 &a2) {
 
 template <typename T> DRJIT_INLINE auto squared_norm(const T &v) {
     if constexpr (array_depth_v<T> == 1 || array_size_v<T> == 0) {
-        return hsum(v * v);
+        return sum(v * v);
     } else {
         value_t<T> result = sqr(v.x());
         for (size_t i = 1; i < v.size(); ++i)
@@ -663,7 +663,7 @@ DRJIT_INLINE auto cross(const T1 &v1, const T2 &v2) {
 // -----------------------------------------------------------------------
 
 template <bool Default, typename T> auto all_or(const T &value) {
-    if constexpr (is_jit_array_v<T> && array_depth_v<T> == 1) {
+    if constexpr (is_jit_v<T> && array_depth_v<T> == 1) {
         DRJIT_MARK_USED(value);
         return Default;
     } else {
@@ -672,7 +672,7 @@ template <bool Default, typename T> auto all_or(const T &value) {
 }
 
 template <bool Default, typename T> auto any_or(const T &value) {
-    if constexpr (is_jit_array_v<T> && array_depth_v<T> == 1) {
+    if constexpr (is_jit_v<T> && array_depth_v<T> == 1) {
         DRJIT_MARK_USED(value);
         return Default;
     } else {
@@ -681,7 +681,7 @@ template <bool Default, typename T> auto any_or(const T &value) {
 }
 
 template <bool Default, typename T> auto none_or(const T &value) {
-    if constexpr (is_jit_array_v<T> && array_depth_v<T> == 1) {
+    if constexpr (is_jit_v<T> && array_depth_v<T> == 1) {
         DRJIT_MARK_USED(value);
         return Default;
     } else {
@@ -690,7 +690,7 @@ template <bool Default, typename T> auto none_or(const T &value) {
 }
 
 template <bool Default, typename T> auto all_nested_or(const T &value) {
-    if constexpr (is_jit_array_v<T>) {
+    if constexpr (is_jit_v<T>) {
         DRJIT_MARK_USED(value);
         return Default;
     } else {
@@ -699,7 +699,7 @@ template <bool Default, typename T> auto all_nested_or(const T &value) {
 }
 
 template <bool Default, typename T> auto any_nested_or(const T &value) {
-    if constexpr (is_jit_array_v<T>) {
+    if constexpr (is_jit_v<T>) {
         DRJIT_MARK_USED(value);
         return Default;
     } else {
@@ -708,7 +708,7 @@ template <bool Default, typename T> auto any_nested_or(const T &value) {
 }
 
 template <bool Default, typename T> auto none_nested_or(const T &value) {
-    if constexpr (is_jit_array_v<T>) {
+    if constexpr (is_jit_v<T>) {
         DRJIT_MARK_USED(value);
         return Default;
     } else {
@@ -742,7 +742,7 @@ template <bool UnderlyingType = true, typename T> decltype(auto) detach(T &&);
 template <typename T, typename... Ts> size_t width(const T &, const Ts& ...);
 template <typename T> bool schedule(const T &value);
 
-template <typename T> DRJIT_INLINE T zero(size_t size) {
+template <typename T> DRJIT_INLINE T zeros(size_t size) {
     DRJIT_MARK_USED(size);
     if constexpr (std::is_same_v<T, std::nullptr_t>) {
         return nullptr;
@@ -754,7 +754,7 @@ template <typename T> DRJIT_INLINE T zero(size_t size) {
             result,
             [size](auto &x) DRJIT_INLINE_LAMBDA {
                 using X = std::decay_t<decltype(x)>;
-                x = zero<X>(size);
+                x = zeros<X>(size);
             });
         if constexpr (is_detected_v<detail::has_zero, T>)
             result.zero_(size);
@@ -807,16 +807,16 @@ DRJIT_INLINE T full(const T2 &value, size_t size = 1) {
 template <typename T, typename T2>
 DRJIT_INLINE T opaque(const T2 &value, size_t size = 1) {
     DRJIT_MARK_USED(size);
-    if constexpr (!is_jit_array_v<T>) {
+    if constexpr (!is_jit_v<T>) {
         return full<T>(value, size);
     } else if constexpr (is_static_array_v<T>) {
         T result;
         for (size_t i = 0; i < T::Size; ++i)
             result.entry(i) = opaque<typename T::Value>(value, size);
         return result;
-    } else if constexpr (is_diff_array_v<T>) {
+    } else if constexpr (is_diff_v<T>) {
         return opaque<detached_t<T>>(value, size);
-    } else if constexpr (is_jit_array_v<T>) {
+    } else if constexpr (is_jit_v<T>) {
         return T::Derived::opaque_(scalar_t<T>(value), size);
     } else if constexpr (is_drjit_struct_v<T>) {
         T result;
@@ -842,11 +842,11 @@ template <typename T> DRJIT_INLINE void make_opaque(T &value) {
             [&](auto &x) DRJIT_INLINE_LAMBDA {
                 make_opaque(x);
             });
-    } else if constexpr (is_diff_array_v<T>) {
+    } else if constexpr (is_diff_v<T>) {
         make_opaque(value.detach_());
     } else if constexpr (is_tensor_v<T>) {
         make_opaque(value.array());
-    } else if constexpr (is_jit_array_v<T>) {
+    } else if constexpr (is_jit_v<T>) {
         if (!value.is_evaluated()) {
             value = value.copy();
             value.data();
@@ -913,7 +913,7 @@ template <typename T> DRJIT_INLINE T load_aligned(const void *ptr, size_t size =
 
 /// Map an array
 template <typename T> DRJIT_INLINE T map(void *ptr, size_t size = 1, bool free = false) {
-    static_assert(is_jit_array_v<T> && array_depth_v<T> == 1,
+    static_assert(is_jit_v<T> && array_depth_v<T> == 1,
                   "drjit::map(): only flat JIT arrays supported!");
     return T::map_(ptr, size, free);
 }
@@ -991,7 +991,7 @@ Target gather(Source &&source, const Index &index, const Mask &mask_ = true) {
                       "Source argument of gather operation must either be a "
                       "pointer address or a flat array!");
         if constexpr (!is_array_v<Index>) {
-            if constexpr (is_jit_array_v<Target> && is_jit_array_v<Source>) {
+            if constexpr (is_jit_v<Target> && is_jit_v<Source>) {
                 // Case 2.0.0: gather<FloatC>(const FloatC&, size_t, ...)
                 return Target::template gather_<Permute>(
                     source, uint32_array_t<Source>(index), mask);
@@ -1133,9 +1133,9 @@ void scatter_reduce(ReduceOp op, Target &&target, const Value &value,
                 else if (op == ReduceOp::Mul)
                     return a * b;
                 else if (op == ReduceOp::Min)
-                    return min(a, b);
+                    return minimum(a, b);
                 else if (op == ReduceOp::Max)
-                    return max(a, b);
+                    return maximum(a, b);
 
                 if constexpr (std::is_same_v<Value, bool>) {
                     if (op == ReduceOp::And)
@@ -1164,7 +1164,7 @@ decltype(auto) migrate(const T &value, TargetType target) {
     static_assert(std::is_enum_v<TargetType>);
     DRJIT_MARK_USED(target);
 
-    if constexpr (is_jit_array_v<T>) {
+    if constexpr (is_jit_v<T>) {
         if constexpr (array_depth_v<T> > 1) {
             T result;
             if constexpr (T::Size == Dynamic)
@@ -1295,11 +1295,11 @@ template <typename T> T erfinv(const T &a);
         }                                                                      \
     }
 
-DRJIT_INNER_REDUCTION(hsum)
-DRJIT_INNER_REDUCTION(hprod)
-DRJIT_INNER_REDUCTION(hmin)
-DRJIT_INNER_REDUCTION(hmax)
-DRJIT_INNER_REDUCTION(hmean)
+DRJIT_INNER_REDUCTION(sum)
+DRJIT_INNER_REDUCTION(prod)
+DRJIT_INNER_REDUCTION(min)
+DRJIT_INNER_REDUCTION(max)
+DRJIT_INNER_REDUCTION(mean)
 
 #undef DRJIT_INNER_REDUCTION
 
@@ -1311,7 +1311,7 @@ DRJIT_INNER_REDUCTION(hmean)
 // -----------------------------------------------------------------------
 
 template <typename T> DRJIT_INLINE bool schedule(const T &value) {
-    if constexpr (is_jit_array_v<T>) {
+    if constexpr (is_jit_v<T>) {
         if constexpr (array_depth_v<T> > 1) {
             bool result = false;
             for (size_t i = 0; i < value.derived().size(); ++i)
@@ -1349,7 +1349,7 @@ DRJIT_INLINE void eval() {
 template <typename... Ts>
 DRJIT_INLINE void eval(const Ts&... values) {
     (DRJIT_MARK_USED(values), ...);
-    if constexpr (((is_jit_array_v<Ts> || is_drjit_struct_v<Ts>) || ...)) {
+    if constexpr (((is_jit_v<Ts> || is_drjit_struct_v<Ts>) || ...)) {
         if (schedule(values...))
             eval();
     }
@@ -1412,7 +1412,7 @@ template <typename T> DRJIT_INLINE void resize(T &value, size_t size) {
     if constexpr (array_depth_v<T> > 1) {
         for (size_t i = 0; i < value.size(); ++i)
             resize(value.entry(i), size);
-    } else if constexpr (is_jit_array_v<T>) {
+    } else if constexpr (is_jit_v<T>) {
         value.resize(size);
     } else if constexpr (is_drjit_struct_v<T>) {
         struct_support_t<T>::apply_1(
@@ -1427,7 +1427,7 @@ template <typename T> void set_label(T &value, const char *label) {
     DRJIT_MARK_USED(value);
     DRJIT_MARK_USED(label);
 
-    if constexpr (is_diff_array_v<T> || is_jit_array_v<T>) {
+    if constexpr (is_diff_v<T> || is_jit_v<T>) {
         if constexpr (array_depth_v<T> > 1) {
             size_t bufsize = strlen(label) + 11;
             char *buf = (char *) alloca(bufsize);
@@ -1452,7 +1452,7 @@ template <typename T> void set_label(T &value, const char *label) {
 }
 
 template <typename T> bool grad_enabled(const T &value) {
-    if constexpr (is_diff_array_v<T>) {
+    if constexpr (is_diff_v<T>) {
         if constexpr (array_depth_v<T> > 1) {
             bool result = false;
             for (size_t i = 0; i < value.size(); ++i)
@@ -1480,7 +1480,7 @@ template <typename T> bool grad_enabled(const T &value) {
 }
 
 template <typename T> T replace_grad(const T &a, const T &b) {
-    static_assert(is_diff_array_v<T>, "Type does not support gradients!");
+    static_assert(is_diff_v<T>, "Type does not support gradients!");
     size_t sa = a.size(), sb = b.size(), sr = sa > sb ? sa : sb;
 
     if ((sa != sr && sa != 1) || (sb != sr && sb != 1))
@@ -1500,9 +1500,9 @@ template <typename T> T replace_grad(const T &a, const T &b) {
         T va = a, vb = b;
         if (sa != sb) {
             if (sa == 1)
-                va += zero<T>(sb);
+                va += zeros<T>(sb);
             else if (sb == 1)
-                vb += zero<T>(sa);
+                vb += zeros<T>(sa);
             else
                 drjit_raise("replace_grad(): internal error!");
         }
@@ -1515,7 +1515,7 @@ template <typename T> void set_grad_enabled(T &value, bool state) {
     DRJIT_MARK_USED(value);
     DRJIT_MARK_USED(state);
 
-    if constexpr (is_diff_array_v<T>) {
+    if constexpr (is_diff_v<T>) {
         if constexpr (array_depth_v<T> > 1) {
             for (size_t i = 0; i < value.size(); ++i)
                 set_grad_enabled(value.entry(i), state);
@@ -1550,7 +1550,7 @@ template <bool UnderlyingType, typename T>
 decltype(auto) detach(T &&value) {
     using Result = std::conditional_t<UnderlyingType, detached_t<T>, std::decay_t<T>>;
 
-    if constexpr (is_diff_array_v<T>) {
+    if constexpr (is_diff_v<T>) {
         if constexpr (array_depth_v<T> > 1) {
             Result result;
             if constexpr (Result::Size == Dynamic)
@@ -1590,7 +1590,7 @@ template <bool Underlying = true, bool FailIfMissing = true, typename T>
 auto grad(const T &value) {
     using Result = std::conditional_t<Underlying, detached_t<T>, T>;
 
-    if constexpr (is_diff_array_v<T>) {
+    if constexpr (is_diff_v<T>) {
         if constexpr (array_depth_v<T> > 1) {
             Result result;
             if constexpr (Result::Size == Dynamic)
@@ -1619,18 +1619,18 @@ auto grad(const T &value) {
 
         return result;
     } else {
-        return zero<Result>();
+        return zeros<Result>();
     }
 }
 
 template <bool FailIfMissing = true, typename T, typename T2>
 void set_grad(T &value, const T2 &grad) {
-    if constexpr (is_diff_array_v<T>) {
+    if constexpr (is_diff_v<T>) {
         if constexpr (array_depth_v<T> > 1) {
             for (size_t i = 0; i < value.size(); ++i)
                 set_grad<FailIfMissing>(value.entry(i), grad.entry(i));
         } else {
-            if constexpr (is_diff_array_v<T2>)
+            if constexpr (is_diff_v<T2>)
                 set_grad<FailIfMissing>(value, detach(grad));
             else {
                 if constexpr (is_tensor_v<T2>)
@@ -1652,12 +1652,12 @@ void set_grad(T &value, const T2 &grad) {
 
 template <bool FailIfMissing = true, typename T, typename T2>
 void accum_grad(T &value, const T2 &grad) {
-    if constexpr (is_diff_array_v<T>) {
+    if constexpr (is_diff_v<T>) {
         if constexpr (array_depth_v<T> > 1) {
             for (size_t i = 0; i < value.size(); ++i)
                 accum_grad<FailIfMissing>(value.entry(i), grad.entry(i));
         } else {
-            if constexpr (is_diff_array_v<T2>)
+            if constexpr (is_diff_v<T2>)
                 accum_grad<FailIfMissing>(value, detach(grad));
             else {
                 if constexpr (is_tensor_v<T>)
@@ -1676,7 +1676,7 @@ void accum_grad(T &value, const T2 &grad) {
 }
 
 template <typename T> void enqueue(ADMode mode, const T &value) {
-    if constexpr (is_diff_array_v<T>) {
+    if constexpr (is_diff_v<T>) {
         if constexpr (array_depth_v<T> > 1) {
             for (size_t i = 0; i < value.size(); ++i)
                 enqueue(mode, value.entry(i));
@@ -1708,7 +1708,7 @@ DRJIT_INLINE void enqueue(ADMode) { }
  */
 template <typename T> struct isolate_grad {
     static constexpr bool Enabled =
-        is_diff_array_v<T> && std::is_floating_point_v<scalar_t<T>>;
+        is_diff_v<T> && std::is_floating_point_v<scalar_t<T>>;
 
     isolate_grad() {
         if constexpr (Enabled)
@@ -1725,9 +1725,9 @@ template <typename T> struct isolate_grad {
 template <typename T> const char *graphviz() {
     using Type = leaf_array_t<T>;
 
-    if constexpr (is_diff_array_v<Type>)
+    if constexpr (is_diff_v<Type>)
         return Type::graphviz_();
-    else if constexpr (is_jit_array_v<Type>)
+    else if constexpr (is_jit_v<Type>)
         return jit_var_graphviz();
     else
         return "";
@@ -1779,7 +1779,7 @@ template <typename...Ts> void traverse(ADMode mode, uint32_t flags = (uint32_t) 
     using Type = leaf_array_t<Ts...>;
     DRJIT_MARK_USED(mode);
     DRJIT_MARK_USED(flags);
-    if constexpr (is_diff_array_v<Type> && std::is_floating_point_v<scalar_t<Type>>)
+    if constexpr (is_diff_v<Type> && std::is_floating_point_v<scalar_t<Type>>)
         Type::traverse_(mode, flags);
 }
 
@@ -1850,33 +1850,33 @@ void forward(T &value, uint32_t flags = (uint32_t) ADFlag::Default) {
 // -----------------------------------------------------------------------
 
 template <typename Value> DRJIT_INLINE Value safe_sqrt(const Value &a) {
-    Value result = sqrt(max(a, 0));
+    Value result = sqrt(maximum(a, 0));
 
-    if constexpr (is_diff_array_v<Value>) {
+    if constexpr (is_diff_v<Value>) {
         if (grad_enabled(a))
-            result = replace_grad(result, sqrt(max(a, Epsilon<Value>)));
+            result = replace_grad(result, sqrt(maximum(a, Epsilon<Value>)));
     }
 
     return result;
 }
 
 template <typename Value> DRJIT_INLINE Value safe_rsqrt(const Value &a) {
-    Value result = rsqrt(max(a, 0));
+    Value result = rsqrt(maximum(a, 0));
 
-    if constexpr (is_diff_array_v<Value>) {
+    if constexpr (is_diff_v<Value>) {
         if (grad_enabled(a))
-            result = replace_grad(result, rsqrt(max(a, Epsilon<Value>)));
+            result = replace_grad(result, rsqrt(maximum(a, Epsilon<Value>)));
     }
 
     return result;
 }
 
 template <typename Value> DRJIT_INLINE Value safe_cbrt(const Value &a) {
-    Value result = cbrt(max(a, 0));
+    Value result = cbrt(maximum(a, 0));
 
-    if constexpr (is_diff_array_v<Value>) {
+    if constexpr (is_diff_v<Value>) {
         if (grad_enabled(a))
-            result = replace_grad(result, cbrt(max(a, Epsilon<Value>)));
+            result = replace_grad(result, cbrt(maximum(a, Epsilon<Value>)));
     }
 
     return result;
@@ -1885,7 +1885,7 @@ template <typename Value> DRJIT_INLINE Value safe_cbrt(const Value &a) {
 template <typename Value> DRJIT_INLINE Value safe_asin(const Value &a) {
     Value result = asin(clamp(a, -1, 1));
 
-    if constexpr (is_diff_array_v<Value>) {
+    if constexpr (is_diff_v<Value>) {
         if (grad_enabled(a))
             result = replace_grad(result, asin(clamp(a, -OneMinusEpsilon<Value>,
                                                      OneMinusEpsilon<Value>)));
@@ -1897,7 +1897,7 @@ template <typename Value> DRJIT_INLINE Value safe_asin(const Value &a) {
 template <typename Value> DRJIT_INLINE Value safe_acos(const Value &a) {
     Value result = acos(clamp(a, -1, 1));
 
-    if constexpr (is_diff_array_v<Value>) {
+    if constexpr (is_diff_v<Value>) {
         if (grad_enabled(a))
             result = replace_grad(result, acos(clamp(a, -OneMinusEpsilon<Value>,
                                                      OneMinusEpsilon<Value>)));
@@ -2091,7 +2091,7 @@ auto concat(const T1 &a1, const T2 &a2) {
             constexpr size_t ScalarSize = sizeof(scalar_t<Result>);
             uint8_t *ptr = (uint8_t *) result.data();
 
-            if constexpr (is_jit_array_v<Result>) {
+            if constexpr (is_jit_v<Result>) {
                 constexpr JitBackend backend = detached_t<Result>::Backend;
                 jit_memcpy_async(backend, ptr, a1.data(), s1 * ScalarSize);
                 jit_memcpy_async(backend, ptr + s1 * ScalarSize, a2.data(), s2 * ScalarSize);

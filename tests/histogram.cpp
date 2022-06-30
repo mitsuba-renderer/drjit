@@ -48,7 +48,7 @@ int main(int /* argc */, char * /* argv */[]) {
             UInt32 idx((y - min_value) * float(bin_count) / (max_value - min_value));
 
             /* Discard samples that are out of bounds */
-            UInt32Mask mask = idx >= zero<UInt32>() && idx < bin_count;
+            UInt32Mask mask = idx >= zeros<UInt32>() && idx < bin_count;
 
             /* Increment the bin indices */
             scatter_reduce(ReduceOp::Add, bins, UInt32(1), idx, mask);

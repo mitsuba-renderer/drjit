@@ -110,13 +110,13 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
     static constexpr bool IsMaskedArray = false;
 
     /// Does this array compute derivatives using automatic differentiation?
-    static constexpr bool IsDiff = is_diff_array_v<Value_>;
+    static constexpr bool IsDiff = is_diff_v<Value_>;
 
     /// Are elements of this array implemented using the LLVM backend?
-    static constexpr bool IsLLVM = is_llvm_array_v<Value_>;
+    static constexpr bool IsLLVM = is_llvm_v<Value_>;
 
     /// Are elements of this array implemented using the CUDA backend?
-    static constexpr bool IsCUDA = is_cuda_array_v<Value_>;
+    static constexpr bool IsCUDA = is_cuda_v<Value_>;
 
     /// Are elements of this array implemented using a JIT-compiled backend?
     static constexpr bool IsJIT = IsLLVM || IsCUDA;
@@ -500,8 +500,8 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
     DRJIT_IMPLEMENT_ROUND2INT(floor)
     DRJIT_IMPLEMENT_ROUND2INT(round)
 
-    DRJIT_IMPLEMENT_BINARY(min, min(a, b), IsArithmetic)
-    DRJIT_IMPLEMENT_BINARY(max, max(a, b), IsArithmetic)
+    DRJIT_IMPLEMENT_BINARY(minimum, minimum(a, b), IsArithmetic)
+    DRJIT_IMPLEMENT_BINARY(maximum, maximum(a, b), IsArithmetic)
 
     DRJIT_IMPLEMENT_UNARY(rcp, rcp(a), IsFloat)
     DRJIT_IMPLEMENT_UNARY(rsqrt, rsqrt(a), IsFloat)
@@ -624,19 +624,19 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
                         result += derived().entry(i) * a.entry(i);
                 }
             } else {
-				result = hsum(derived() * a);
+				result = sum(derived() * a);
 			}
 		}
         return result;
     }
 
     Derived dot_async_(const Derived &a) const { return dot_(a); }
-    Derived hsum_async_()  const { return hsum_(); }
-    Derived hprod_async_() const { return hprod_(); }
-    Derived hmax_async_() const  { return hmax_(); }
-    Derived hmin_async_() const  { return hmin_(); }
+    Derived sum_async_()  const { return sum_(); }
+    Derived prod_async_() const { return prod_(); }
+    Derived max_async_() const  { return max_(); }
+    Derived min_async_() const  { return min_(); }
 
-    Value hsum_() const {
+    Value sum_() const {
         if constexpr (IsArithmetic) {
             if constexpr (Derived::Size == Dynamic) {
                 if (empty())
@@ -648,11 +648,11 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
                 value += derived().entry(i);
             return value;
         } else {
-            drjit_raise("hsum_(): invalid operand type!");
+            drjit_raise("sum_(): invalid operand type!");
         }
     }
 
-    Value hprod_() const {
+    Value prod_() const {
         if constexpr (IsArithmetic) {
             if constexpr (Derived::Size == Dynamic) {
                 if (empty())
@@ -664,39 +664,39 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
                 value *= derived().entry(i);
             return value;
         } else {
-            drjit_raise("hprod_(): invalid operand type!");
+            drjit_raise("prod_(): invalid operand type!");
         }
     }
 
-    Value hmin_() const {
+    Value min_() const {
         if constexpr (IsArithmetic) {
             if constexpr (Derived::Size == Dynamic) {
                 if (empty())
-                    drjit_raise("hmin_(): zero-sized array!");
+                    drjit_raise("min_(): zero-sized array!");
             }
 
             Value value = derived().entry(0);
             for (size_t i = 1; i < derived().size(); ++i)
-                value = min(value, derived().entry(i));
+                value = minimum(value, derived().entry(i));
             return value;
         } else {
-            drjit_raise("hmin_(): invalid operand type!");
+            drjit_raise("min_(): invalid operand type!");
         }
     }
 
-    Value hmax_() const {
+    Value max_() const {
         if constexpr (IsArithmetic) {
             if constexpr (Derived::Size == Dynamic) {
                 if (empty())
-                    drjit_raise("hmax_(): zero-sized array!");
+                    drjit_raise("max_(): zero-sized array!");
             }
 
             Value value = derived().entry(0);
             for (size_t i = 1; i < derived().size(); ++i)
-                value = max(value, derived().entry(i));
+                value = maximum(value, derived().entry(i));
             return value;
         } else {
-            drjit_raise("hmax_(): invalid operand type!");
+            drjit_raise("max_(): invalid operand type!");
         }
     }
 
@@ -759,7 +759,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
                 return derived().entry(i);
         }
 
-        return zero<Value>();
+        return zeros<Value>();
     }
 
     //! @}
@@ -829,7 +829,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
     }
 
     template <typename T> void migrate_(T type) {
-        if constexpr (is_jit_array_v<Value_>) {
+        if constexpr (is_jit_v<Value_>) {
             for (size_t i = 0; i < derived().size(); ++i)
                 derived().entry(i).migrate_(type);
         }

@@ -23,9 +23,9 @@ void collect_indices(dr_index_vector &indices, const T &value) {
     if constexpr (array_depth_v<T> > 1) {
         for (size_t i = 0; i < value.derived().size(); ++i)
             collect_indices(indices, value.derived().entry(i));
-    } else if constexpr (is_diff_array_v<T>) {
+    } else if constexpr (is_diff_v<T>) {
         collect_indices(indices, value.detach_());
-    } else if constexpr (is_jit_array_v<T>) {
+    } else if constexpr (is_jit_v<T>) {
         uint32_t index = value.index();
         if (!index)
             drjit_raise("drjit::detail::collect_indices(): encountered an "
@@ -43,9 +43,9 @@ void write_indices(dr_vector<uint32_t> &indices, T &value, uint32_t &offset) {
     if constexpr (array_depth_v<T> > 1) {
         for (size_t i = 0; i < value.derived().size(); ++i)
             write_indices(indices, value.derived().entry(i), offset);
-    } else if constexpr (is_diff_array_v<T>) {
+    } else if constexpr (is_diff_v<T>) {
         write_indices(indices, value.detach_(), offset);
-    } else if constexpr (is_jit_array_v<T>) {
+    } else if constexpr (is_jit_v<T>) {
         value = T::steal(indices[offset++]);
     } else if constexpr (is_drjit_struct_v<T>) {
         struct_support_t<T>::apply_1(
@@ -59,9 +59,9 @@ template <typename T> DRJIT_INLINE auto wrap_vcall(const T &value) {
         for (size_t i = 0; i < value.derived().size(); ++i)
             result.derived().entry(i) = wrap_vcall(value.derived().entry(i));
         return result;
-    } else if constexpr (is_diff_array_v<T>) {
+    } else if constexpr (is_diff_v<T>) {
         return wrap_vcall(value.detach_());
-    } else if constexpr (is_jit_array_v<T>) {
+    } else if constexpr (is_jit_v<T>) {
         return T::steal(jit_var_wrap_vcall(value.index()));
     } else if constexpr (is_drjit_struct_v<T>) {
         T result;
@@ -183,7 +183,7 @@ vcall_jit_record_impl_scalar(Base *inst, const Func &func, const Mask &mask,
     if constexpr (is_drjit_struct_v<Result> || is_array_v<Result>) {
         // Return zero for masked results
         return select(mask, func(inst, (set_mask_true<Is, N>(args))...),
-                      zero<Result>());
+                      zeros<Result>());
     } else {
         return func(inst, (set_mask_true<Is, N>(args))...);
     }
@@ -226,7 +226,7 @@ Result vcall_jit_record(const char *name, const Func &func, Self &self,
                 self.index(), Base::Domain, name,
                 n_inst == 0 ? "no instances"
                             : (masked ? "masked" : "self.size == 0"));
-        return zero<Result>(self_size);
+        return zeros<Result>(self_size);
     } else if (n_inst == 1 && vcall_inline) {
         jit_log(::LogLevel::InfoSym,
                 "jit_var_vcall(self=r%u): call (\"%s::%s()\") inlined (only 1 "

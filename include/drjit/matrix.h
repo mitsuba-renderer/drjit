@@ -51,9 +51,9 @@ struct Matrix : StaticArrayImpl<Array<Value_, Size_>, Size_, false,
             /// Other matrix is smaller -- copy the top left part and set remainder to identity
             using Remainder = Array<Value_, Size - ArgSize>;
             for (size_t i = 0; i < ArgSize; ++i)
-                entry(i) = concat(m.entry(i), zero<Remainder>());
+                entry(i) = concat(m.entry(i), zeros<Remainder>());
             for (size_t i = ArgSize; i < Size; ++i) {
-                Column col = zero<Column>();
+                Column col = zeros<Column>();
                 col.entry(i) = 1;
                 entry(i) = col;
             }
@@ -61,7 +61,7 @@ struct Matrix : StaticArrayImpl<Array<Value_, Size_>, Size_, false,
     }
 
     template <typename T, enable_if_t<!is_matrix_v<T> && array_depth_v<T> != Base::Depth> = 0>
-    DRJIT_INLINE Matrix(T&& v) : Base(zero<Value_>()) {
+    DRJIT_INLINE Matrix(T&& v) : Base(zeros<Value_>()) {
         for (size_t i = 0; i < Size; ++i)
             entry(i, i) = v;
     }
@@ -93,7 +93,7 @@ template <typename T, enable_if_matrix_t<T> = 0>
 T identity(size_t size = 1) {
     using Entry = value_t<value_t<T>>;
     Entry o = identity<Entry>(size);
-    T result = zero<T>(size);
+    T result = zeros<T>(size);
     for (size_t i = 0; i < T::Size; ++i)
         result.entry(i, i) = o;
     return result;
@@ -164,7 +164,7 @@ Value frob(const Matrix<Value, Size> &m) {
     Array<Value, Size> result = sqr(m.entry(0));
     for (size_t i = 1; i < Size; ++i)
         result = fmadd(m.entry(i), m.entry(i), result);
-    return hsum(result);
+    return sum(result);
 }
 
 template <typename Value, size_t Size>
@@ -179,7 +179,7 @@ template <typename Array, enable_if_t<!is_matrix_v<Array>> = 0>
 Matrix<value_t<Array>, Array::Size> diag(const Array &v) {
     using Result = Matrix<value_t<Array>, Array::Size>;
 
-    Result result = zero<Result>();
+    Result result = zeros<Result>();
     for (size_t i = 0; i < Array::Size; ++i)
         result.entry(i, i) = v.entry(i);
     return result;

@@ -101,7 +101,7 @@ uint32_t ad_new_gather_impl(const char *label, size_t size, uint32_t src_index,
                            const Index &offset, const Mask &mask, bool permute);
 
 template <typename T> bool is_valid(const T &value) {
-    if constexpr (is_jit_array_v<T>)
+    if constexpr (is_jit_v<T>)
         return value.valid();
     else
         return true;
@@ -259,7 +259,7 @@ struct Variable {
                     v2 = v * scalar_t<Value>(src_size);
                 } else {
                     assert(v.size() == src_size);
-                    v2 = hsum_async(v);
+                    v2 = sum_async(v);
                 }
 
                 if (grad_valid)
@@ -293,7 +293,7 @@ struct Variable {
 
         T z = 0.f, v2;
 
-        if constexpr (is_jit_array_v<T>) {
+        if constexpr (is_jit_v<T>) {
             if (v2_.is_literal() && std::isnormal(v2_[0]) &&
                 jit_flag(JitFlag::ADOptimize)) {
                 /* The check can be elided if the edge weight is a normal
@@ -326,7 +326,7 @@ struct Variable {
                     v3 *= scalar_t<Value>(src_size);
                 } else {
                     assert(v3.size() == src_size);
-                    v3 = hsum_async(v3);
+                    v3 = sum_async(v3);
                 }
 
                 if (grad_valid)
@@ -702,7 +702,7 @@ static std::pair<uint32_t, Variable *> ad_var_new(const char *label,
         }
 
         bool rec = false;
-        if (is_jit_array_v<Value>)
+        if (is_jit_v<Value>)
             rec = jit_flag(JitFlag::Recording);
 
         auto result = state.variables.try_emplace(index, label, size, rec);
@@ -914,7 +914,7 @@ uint32_t ad_new(const char *label, size_t size, uint32_t op_count,
     }
 
     bool rec = false;
-    if constexpr (is_jit_array_v<Value>)
+    if constexpr (is_jit_v<Value>)
         rec = jit_flag(JitFlag::Recording);
 
     ReleaseOperandHelper helper;
@@ -974,7 +974,7 @@ uint32_t ad_new(const char *label, size_t size, uint32_t op_count,
             continue;
 
         bool weight_is_zero = false;
-        if constexpr (is_jit_array_v<T>)
+        if constexpr (is_jit_v<T>)
             weight_is_zero = jit_flag(JitFlag::ADOptimize) &&
                              weights[i].is_literal() && weights[i][0] == 0;
         else
@@ -1169,7 +1169,7 @@ template <typename Value, typename Mask>
 uint32_t ad_new_select(const char *label, size_t size, const Mask &mask,
                        uint32_t t_index, uint32_t f_index) {
     std::lock_guard<std::mutex> guard(state.mutex);
-    if constexpr (is_jit_array_v<Mask>) {
+    if constexpr (is_jit_v<Mask>) {
         if (jit_flag(JitFlag::ADOptimize) && mask.is_literal()) {
             uint32_t result = mask[0] ? t_index : f_index;
             if (result)
@@ -1201,7 +1201,7 @@ uint32_t ad_new_select(const char *label, size_t size, const Mask &mask,
     }
 
     bool rec = false;
-    if constexpr (is_jit_array_v<Value>)
+    if constexpr (is_jit_v<Value>)
         rec = jit_flag(JitFlag::Recording);
 
     uint32_t op[2] = { t_index, f_index };
@@ -1282,14 +1282,14 @@ uint32_t ad_new_select(const char *label, size_t size, const Mask &mask,
 
 template <typename Mask> struct MaskGuard {
     MaskGuard(const Mask &mask) {
-        if constexpr (is_jit_array_v<Mask>)
+        if constexpr (is_jit_v<Mask>)
             jit_var_mask_push(Mask::Backend, mask.index(), false);
         else
             DRJIT_MARK_USED(mask);
     }
 
     ~MaskGuard() {
-        if constexpr (is_jit_array_v<Value>)
+        if constexpr (is_jit_v<Value>)
             jit_var_mask_pop(Mask::Backend);
     }
 };
@@ -1298,7 +1298,7 @@ template <typename Mask> struct MaskGuard {
 template <typename Value> struct GatherEdge : Special {
     GatherEdge(const Index &offset, const Mask &mask, bool permute)
         : offset(offset), mask(mask), permute(permute) {
-        if constexpr (is_jit_array_v<Value>)
+        if constexpr (is_jit_v<Value>)
             mask_stack = mask_t<Value>::steal(jit_var_mask_peek(Value::Backend));
     }
 
@@ -1313,7 +1313,7 @@ template <typename Value> struct GatherEdge : Special {
         }
 
         if (!source_grad.valid())
-            source_grad = zero<Value>(size);
+            source_grad = zeros<Value>(size);
         else if ((uint32_t) source_grad.size() != size)
             source_grad.resize(size);
 
@@ -1342,7 +1342,7 @@ uint32_t ad_new_gather_impl(const char *label, size_t size, uint32_t src_index,
     Mask mask(mask_);
 
     if constexpr (is_array_v<Value>) {
-        if (is_jit_array_v<Value>) {
+        if (is_jit_v<Value>) {
             // Apply the mask stack (needed for wavefront-mode dr::Loop)
             Mask top = Mask::steal(jit_var_mask_peek(Mask::Backend));
             size_t tsize = top.size();
@@ -1412,7 +1412,7 @@ template <typename Value> struct ScatterEdge : Special {
         : offset(offset), mask(mask), op(op) {
             if (op != ReduceOp::None && op != ReduceOp::Add)
                 drjit_raise("AD only supports ReduceOp::Add in scatter_reduce!");
-        if constexpr (is_jit_array_v<Value>)
+        if constexpr (is_jit_v<Value>)
             mask_stack = mask_t<Value>::steal(jit_var_mask_peek(Value::Backend));
     }
 
@@ -1427,7 +1427,7 @@ template <typename Value> struct ScatterEdge : Special {
         uint32_t size = target->size;
 
         if (!target_grad.valid())
-            target_grad = zero<Value>(size);
+            target_grad = zeros<Value>(size);
         else if ((uint32_t) target_grad.size() != size)
             target_grad.resize(size);
 
@@ -1455,7 +1455,7 @@ uint32_t ad_new_scatter(const char *label, size_t size, ReduceOp op,
     if constexpr (is_array_v<Value>) {
         std::lock_guard<std::mutex> guard(state.mutex);
 
-        if (is_jit_array_v<Value>) {
+        if (is_jit_v<Value>) {
             // Apply the mask stack (needed for wavefront-mode dr::Loop)
             Mask top = Mask::steal(jit_var_mask_peek(Mask::Backend));
             size_t tsize = top.size(),
@@ -1562,9 +1562,9 @@ template <typename T> T ad_grad(uint32_t index, bool fail_if_missing) {
     const Variable &v = it->second;
     T result = v.grad;
 
-    if constexpr (is_jit_array_v<T>) {
+    if constexpr (is_jit_v<T>) {
         if (!is_valid(result))
-            result = zero<T>(v.size);
+            result = zeros<T>(v.size);
         else if (result.size() != v.size)
             result.resize(v.size);
     }
@@ -1600,7 +1600,7 @@ void ad_set_grad(uint32_t index, const T &value, bool fail_if_missing) {
     if (v.size != 1 || size_in == 1)
         v.grad = value;
     else
-        v.grad = hsum_async(value);
+        v.grad = sum_async(value);
 }
 
 template <typename T>
@@ -1784,7 +1784,7 @@ void ad_traverse(ADMode mode, uint32_t flags) {
 
     // Are we currently recording a megakernel?
     bool rec = false;
-    if (is_jit_array_v<Value>)
+    if (is_jit_v<Value>)
         rec = jit_flag(JitFlag::Recording);
     DRJIT_MARK_USED(rec);
 
