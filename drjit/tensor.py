@@ -119,7 +119,6 @@ def upsample(t, shape=None, scale_factor=None):
         # Create the up-sampled texture
         texture = type(t)(shape[:-1], channels,
                           use_accel=t.use_accel(),
-                          migrate=t.migrate(),
                           filter_mode=t.filter_mode(),
                           wrap_mode=t.wrap_mode())
         texture.set_value(data)
