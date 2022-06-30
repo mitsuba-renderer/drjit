@@ -25,14 +25,14 @@ NAMESPACE_BEGIN(drjit)
 /// Texture interpolation methods
 enum class FilterMode : uint32_t {
     Nearest = 0, /// Nearest-neighbor interpolation
-    Linear = 1 /// Linear interpolation
+    Linear = 1   /// Linear interpolation
 };
 
 /// Texture wrapping methods
 enum class WrapMode : uint32_t {
     Repeat = 0, /// Repeats the texture
-    Clamp = 1, /// Replicates the edge color
-    Mirror = 2 /// Mirrors the texture wrt. each edge
+    Clamp = 1,  /// Replicates the edge color
+    Mirror = 2  /// Mirrors the texture wrt. each edge
 };
 
 template <typename Value, size_t Dimension> class Texture {
@@ -67,14 +67,6 @@ public:
      * use the hardware acceleration (allocation and evaluation). In other modes
      * this argument has no effect.
      *
-     * When \c migrate is set to \c true on CUDA mode, the texture information
-     * is *fully* migrated to GPU texture memory to avoid redundant storage. In
-     * this case, the fallback evaluation routine \ref eval_nonaccel() is not
-     * usable anymore (it will return zero) and only \ref eval() or \ref
-     * eval_cuda() should be used. Note that the texture is still
-     * differentiable even when migrated. The \ref value() and \ref tensor()
-     * operations will perform a reverse migration in this case.
-     *
      * The \c filter_mode parameter defines the interpolation method to be used
      * in all evaluation routines. By default, the texture is linearly
      * interpolated. Besides nearest/linear filtering, the implementation also
@@ -89,10 +81,9 @@ public:
      */
     Texture(const size_t shape[Dimension], size_t channels,
             bool use_accel = true,
-            bool migrate = true,
             FilterMode filter_mode = FilterMode::Linear,
             WrapMode wrap_mode = WrapMode::Clamp) {
-        init(shape, channels, use_accel, migrate, filter_mode, wrap_mode);
+        init(shape, channels, use_accel, filter_mode, wrap_mode);
     }
 
     /**
@@ -103,6 +94,14 @@ public:
      * tensor. It then also invokes <tt>set_tensor(tensor)</tt> to fill
      * the texture memory with the provided tensor.
      *
+     * When \c migrate is set to \c true on CUDA mode, the texture information
+     * is *fully* migrated to GPU texture memory to avoid redundant storage. In
+     * this case, the fallback evaluation routine \ref eval_nonaccel() is not
+     * usable anymore (it will return zero) and only \ref eval() or \ref
+     * eval_cuda() should be used. Note that the texture is still
+     * differentiable even when migrated. The \ref value() and \ref tensor()
+     * operations will perform a reverse migration in this case.
+     *
      * Both the \c filter_mode and \c wrap_mode have the same defaults and
      * behaviors as for the previous constructor.
      */
@@ -112,9 +111,9 @@ public:
         if (tensor.ndim() != Dimension + 1)
             drjit_raise("Texture::Texture(): tensor dimension must equal "
                         "texture dimension plus one.");
-        init(tensor.shape().data(), tensor.shape(Dimension), use_accel, migrate,
+        init(tensor.shape().data(), tensor.shape(Dimension), use_accel,
              filter_mode, wrap_mode);
-        set_tensor(tensor);
+        set_tensor(tensor, migrate);
     }
 
     Texture(Texture &&other) noexcept {
@@ -128,7 +127,6 @@ public:
         m_filter_mode = other.m_filter_mode;
         m_wrap_mode = other.m_wrap_mode;
         m_use_accel = other.m_use_accel;
-        m_migrate = other.m_migrate;
         m_migrated = other.m_migrated;
     }
 
@@ -145,7 +143,6 @@ public:
         m_filter_mode = other.m_filter_mode;
         m_wrap_mode = other.m_wrap_mode;
         m_use_accel = other.m_use_accel;
-        m_migrate = other.m_migrate;
         m_migrated = other.m_migrated;
         return *this;
     }
@@ -171,12 +168,16 @@ public:
 
     FilterMode filter_mode() const { return m_filter_mode; }
     WrapMode wrap_mode() const { return m_wrap_mode; }
-    bool migrate() const { return m_migrate; }
+    bool migrated() const { return m_migrated; }
     bool use_accel() const { return m_use_accel; }
 
-
-    /// Override the texture contents with the provided linearized 1D array
-    void set_value(const Storage &value) {
+    /**
+     * \brief Override the texture contents with the provided linearized 1D array
+     *
+     * When \c migrate is set to \c true on CUDA mode, the texture information
+     * is *fully* migrated to GPU texture memory to avoid redundant storage.
+     */
+    void set_value(const Storage &value, bool migrate=false) {
         if (value.size() != m_size)
             drjit_raise("Texture::set_value(): unexpected array size!");
 
@@ -188,7 +189,7 @@ public:
                 reverse_tensor_shape(tex_shape, true);
                 jit_cuda_tex_memcpy_d2t(Dimension, tex_shape, value.data(), m_handle);
 
-                if (m_migrate) {
+                if (migrate) {
                     Storage dummy = zero<Storage>(m_size);
 
                     // Fully migrate to texture memory, set m_value to zero
@@ -198,6 +199,7 @@ public:
                         m_value.array() = dummy;
 
                     m_migrated = true;
+
                     return;
                 }
             }
@@ -206,15 +208,18 @@ public:
         m_value.array() = value;
     }
 
-    /*
+    /**
      * \brief Override the texture contents with the provided tensor
      *
      * This method updates the values of all texels. Changing the texture
      * resolution or its number of channels is also supported. However, on CUDA,
      * such operations have a significantly larger overhead (the GPU pipeline
      * needs to be synchronized for new texture objects to be created).
+     *
+     * When \c migrate is set to \c true on CUDA mode, the texture information
+     * is *fully* migrated to GPU texture memory to avoid redundant storage.
      */
-    void set_tensor(const TensorXf &tensor) {
+    void set_tensor(const TensorXf &tensor, bool migrate=false) {
         if (tensor.ndim() != Dimension + 1)
             drjit_raise("Texture::set_tensor(): tensor dimension must equal "
                         "texture dimension plus one (channels).");
@@ -241,21 +246,19 @@ public:
 
                 if (shape_changed) {
                     jit_cuda_tex_destroy(m_handle);
-                    init(tensor.shape().data(), tensor.shape(Dimension), m_use_accel, m_migrate,
-                        m_filter_mode, m_wrap_mode, !is_inplace_update);
+                    init(tensor.shape().data(), tensor.shape(Dimension), m_use_accel,
+                         m_filter_mode, m_wrap_mode, !is_inplace_update);
                 }
             } else {
                 init(tensor.shape().data(), tensor.shape(Dimension),
-                     m_use_accel, m_migrate,
-                     m_filter_mode, m_wrap_mode, false);
+                     m_use_accel, m_filter_mode, m_wrap_mode, false);
             }
         } else {
             init(tensor.shape().data(), tensor.shape(Dimension),
-                 m_use_accel, m_migrate,
-                 m_filter_mode, m_wrap_mode, false);
+                 m_use_accel, m_filter_mode, m_wrap_mode, false);
         }
 
-        set_value(tensor.array());
+        set_value(tensor.array(), migrate);
     }
 
     const Storage &value() const { return tensor().array(); }
@@ -335,7 +338,7 @@ public:
      * dispatch to this function depending on its inputs.
      */
     void eval_nonaccel(const Array<Value, Dimension> &pos, Value *out,
-                    Mask active = true) const {
+                       Mask active = true) const {
         if constexpr (!is_array_v<Mask>)
             active = true;
 
@@ -428,6 +431,7 @@ public:
                             out[ch] = replace_grad(out[ch], out_nonaccel[ch]);
                     }
                 }
+
                 return;
             }
         }
@@ -1133,7 +1137,7 @@ public:
     }
 
 protected:
-    void init(const size_t *shape, size_t channels, bool use_accel, bool migrate,
+    void init(const size_t *shape, size_t channels, bool use_accel,
               FilterMode filter_mode, WrapMode wrap_mode,
               bool init_tensor = true) {
         if (channels == 0)
@@ -1154,7 +1158,6 @@ protected:
             m_value = TensorXf(zero<Storage>(m_size), Dimension + 1, tensor_shape);
 
         m_use_accel = use_accel;
-        m_migrate = migrate;
         m_filter_mode = filter_mode;
         m_wrap_mode = wrap_mode;
 
