@@ -259,7 +259,7 @@ struct Variable {
                     v2 = v * scalar_t<Value>(src_size);
                 } else {
                     assert(v.size() == src_size);
-                    v2 = sum_async(v);
+                    v2 = sum(v);
                 }
 
                 if (grad_valid)
@@ -326,7 +326,7 @@ struct Variable {
                     v3 *= scalar_t<Value>(src_size);
                 } else {
                     assert(v3.size() == src_size);
-                    v3 = sum_async(v3);
+                    v3 = sum(v3);
                 }
 
                 if (grad_valid)
@@ -1600,7 +1600,7 @@ void ad_set_grad(uint32_t index, const T &value, bool fail_if_missing) {
     if (v.size != 1 || size_in == 1)
         v.grad = value;
     else
-        v.grad = sum_async(value);
+        v.grad = sum(value);
 }
 
 template <typename T>

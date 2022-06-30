@@ -254,22 +254,11 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
         cls.def(Array::IsFloat ? "itruediv_" : "ifloordiv_",
                 [](Array *a, const Array &b) { *a = a->div_(b); return a; });
 
-
-        if constexpr (dr::is_dynamic_v<Array> &&
-                      dr::array_depth_v<Array> == 1 &&
-                      dr::is_jit_v<Array>) {
-            cls.def("dot_",  &Array::dot_async_);
-            cls.def("min_",  &Array::min_async_);
-            cls.def("max_",  &Array::max_async_);
-            cls.def("sum_",  &Array::sum_async_);
-            cls.def("prod_", &Array::prod_async_);
-        } else {
-            cls.def("dot_",  &Array::dot_);
-            cls.def("min_",  &Array::min_);
-            cls.def("max_",  &Array::max_);
-            cls.def("sum_",  &Array::sum_);
-            cls.def("prod_", &Array::prod_);
-        }
+        cls.def("dot_",  &Array::dot_);
+        cls.def("min_",  &Array::min_);
+        cls.def("max_",  &Array::max_);
+        cls.def("sum_",  &Array::sum_);
+        cls.def("prod_", &Array::prod_);
 
         cls.def("and_", [](const Array &a, const Mask &b) {
             return a.and_(static_cast<const dr::mask_t<Array> &>(b));

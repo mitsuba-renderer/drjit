@@ -630,12 +630,6 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
         return result;
     }
 
-    Derived dot_async_(const Derived &a) const { return dot_(a); }
-    Derived sum_async_()  const { return sum_(); }
-    Derived prod_async_() const { return prod_(); }
-    Derived max_async_() const  { return max_(); }
-    Derived min_async_() const  { return min_(); }
-
     Value sum_() const {
         if constexpr (IsArithmetic) {
             if constexpr (Derived::Size == Dynamic) {

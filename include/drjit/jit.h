@@ -362,34 +362,29 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
         return jit_var_any(m_index);
     }
 
-    #define DRJIT_HORIZONTAL_OP(name, op, default_op)                            \
-        Derived name##_async_() const {                                          \
-            if (size() == 0)                                                     \
-                default_op;                                                      \
-            return steal(jit_var_reduce(m_index, op));                           \
-        }                                                                        \
-        Value name##_() const { return name##_async_().entry(0); }
+    #define DRJIT_HORIZONTAL_OP(name, op, default_op)                          \
+        Derived name##_() const {                                              \
+            if (size() == 0)                                                   \
+                default_op;                                                    \
+            return steal(jit_var_reduce(m_index, op));                         \
+        }
 
     DRJIT_HORIZONTAL_OP(sum,  ReduceOp::Add, return Derived(0))
     DRJIT_HORIZONTAL_OP(prod, ReduceOp::Mul, return Derived(1))
-    DRJIT_HORIZONTAL_OP(min,  ReduceOp::Min, drjit_raise("min_async_(): zero-sized array!"))
-    DRJIT_HORIZONTAL_OP(max,  ReduceOp::Max, drjit_raise("max_async_(): zero-sized array!"))
+    DRJIT_HORIZONTAL_OP(min,  ReduceOp::Min, drjit_raise("min_(): zero-sized array!"))
+    DRJIT_HORIZONTAL_OP(max,  ReduceOp::Max, drjit_raise("max_(): zero-sized array!"))
 
     #undef DRJIT_HORIZONTAL_OP
 
-    Value dot_(const Derived &a) const {
+    Derived dot_(const Derived &a) const {
         return sum(derived() * a);
-    }
-
-    Derived dot_async_(const Derived &a) const {
-        return sum_async(derived() * a);
     }
 
     uint32_t count_() const {
         if constexpr (!is_mask_v<Value>)
             drjit_raise("Unsupported operand type");
 
-        return sum(select(derived(), (uint32_t) 1, (uint32_t) 0));
+        return sum(select(derived(), (uint32_t) 1, (uint32_t) 0)).entry(0);
     }
 
     //! @}

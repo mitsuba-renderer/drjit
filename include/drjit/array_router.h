@@ -497,24 +497,10 @@ DRJIT_ROUTE_UNARY_FALLBACK(min,  min,  a)
 DRJIT_ROUTE_UNARY_FALLBACK(max,  max,  a)
 DRJIT_ROUTE_BINARY_FALLBACK(dot, dot, (E) a1 * (E) a2)
 
-DRJIT_ROUTE_UNARY_FALLBACK(sum_async,  sum_async,  a)
-DRJIT_ROUTE_UNARY_FALLBACK(prod_async, prod_async, a)
-DRJIT_ROUTE_UNARY_FALLBACK(min_async,  min_async,  a)
-DRJIT_ROUTE_UNARY_FALLBACK(max_async,  max_async,  a)
-DRJIT_ROUTE_BINARY_FALLBACK(dot_async, dot_async, (E) a1 * (E) a2)
-
 template <typename Array>
 DRJIT_INLINE auto mean(const Array &a) {
     if constexpr (is_array_v<Array>)
         return sum(a) * (1.f / a.derived().size());
-    else
-        return a;
-}
-
-template <typename Array>
-DRJIT_INLINE auto mean_async(const Array &a) {
-    if constexpr (is_array_v<Array>)
-        return sum_async(a) * (1.f / a.derived().size());
     else
         return a;
 }
@@ -529,67 +515,90 @@ DRJIT_INLINE bool operator!=(const T1 &a1, const T2 &a2) {
     return any_nested(neq(a1, a2));
 }
 
-template <typename T> auto sum_nested(const T &a) {
+template <typename T0 = void, typename T = void>
+auto sum_nested(const T &a) {
     if constexpr (!is_array_v<T>)
         return a;
+    else if constexpr (std::is_same_v<T, T0>)
+        return a.entry(0);
     else
-        return sum_nested(sum(a));
+        return sum_nested<T>(sum(a));
 }
 
-template <typename T> auto prod_nested(const T &a) {
+template <typename T0 = void, typename T = void>
+auto prod_nested(const T &a) {
     if constexpr (!is_array_v<T>)
         return a;
+    else if constexpr (std::is_same_v<T, T0>)
+        return a.entry(0);
     else
-        return prod_nested(prod(a));
+        return prod_nested<T>(prod(a));
 }
 
-template <typename T> auto min_nested(const T &a) {
+template <typename T0 = void, typename T = void>
+auto min_nested(const T &a) {
     if constexpr (!is_array_v<T>)
         return a;
+    else if constexpr (std::is_same_v<T, T0>)
+        return a.entry(0);
     else
-        return min_nested(min(a));
+        return min_nested<T>(min(a));
 }
 
-template <typename T> auto max_nested(const T &a) {
+template <typename T0 = void, typename T = void>
+auto max_nested(const T &a) {
     if constexpr (!is_array_v<T>)
         return a;
+    else if constexpr (std::is_same_v<T, T0>)
+        return a.entry(0);
     else
-        return max_nested(max(a));
+        return max_nested<T>(max(a));
 }
 
-template <typename T> auto mean_nested(const T &a) {
+template <typename T0 = void, typename T = void>
+auto mean_nested(const T &a) {
     if constexpr (!is_array_v<T>)
         return a;
+    else if constexpr (std::is_same_v<T, T0>)
+        return a.entry(0);
     else
-        return mean_nested(mean(a));
+        return mean_nested<T>(mean(a));
 }
 
-template <typename T> auto count_nested(const T &a) {
+template <typename T>
+auto count_nested(const T &a) {
     if constexpr (!is_array_v<T>)
         return count(a);
     else
         return sum_nested(count(a));
 }
 
-template <typename T> auto any_nested(const T &a) {
+template <typename T0 = void, typename T = void>
+auto any_nested(const T &a) {
     if constexpr (!is_array_v<T>)
         return any(a);
+    else if constexpr (std::is_same_v<T, T0>)
+        return a.entry(0);
     else
-        return any_nested(any(a));
+        return any_nested<T>(any(a));
 }
 
-template <typename T> auto all_nested(const T &a) {
+template <typename T0 = void, typename T = void>
+auto all_nested(const T &a) {
     if constexpr (!is_array_v<T>)
         return all(a);
+    else if constexpr (std::is_same_v<T, T0>)
+        return a.entry(0);
     else
-        return all_nested(all(a));
+        return all_nested<T>(all(a));
 }
 
 template <typename T> auto none(const T &value) {
     return !any(value);
 }
 
-template <typename T> auto none_nested(const T &a) {
+template <typename T>
+auto none_nested(const T &a) {
     return !any_nested(a);
 }
 
@@ -614,11 +623,6 @@ uint32_array_t<array_t<Mask>> compress(const Mask &mask) {
 template <typename T1, typename T2>
 DRJIT_INLINE auto abs_dot(const T1 &a1, const T2 &a2) {
     return abs(dot(a1, a2));
-}
-
-template <typename T1, typename T2>
-DRJIT_INLINE auto abs_dot_async(const T1 &a1, const T2 &a2) {
-    return abs(dot_async(a1, a2));
 }
 
 template <typename T> DRJIT_INLINE auto squared_norm(const T &v) {

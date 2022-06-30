@@ -1255,9 +1255,9 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             return count(m_value);
     }
 
-    DiffArray sum_async_() const {
+    DiffArray sum_() const {
         if constexpr (!std::is_arithmetic_v<Scalar>) {
-            drjit_raise("sum_async_(): invalid operand type!");
+            drjit_raise("sum_(): invalid operand type!");
         } else {
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
@@ -1265,33 +1265,18 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                     uint32_t indices[1] = { m_index };
                     Type weights[1] = { 1 };
                     index_new = detail::ad_new<Type>(
-                        "sum_async", 1, 1, indices, weights);
+                        "sum", 1, 1, indices, weights);
                 }
             }
-            return DiffArray::create(index_new, sum_async(m_value));
+            return DiffArray::create(index_new, sum(m_value));
         }
     }
 
-    Value sum_() const {
+    DiffArray prod_() const {
         if constexpr (!std::is_arithmetic_v<Scalar>) {
-            drjit_raise("sum_(): invalid operand type!");
+            drjit_raise("prod_(): invalid operand type!");
         } else {
-            if constexpr (IsEnabled) {
-                if (m_index)
-                    drjit_raise("sum_(): operation returns a detached scalar, "
-                                "which is not permitted for arrays attached to "
-                                "the AD graph! Use sum_async() instead, which "
-                                "returns a differentiable array.");
-            }
-            return sum(m_value);
-        }
-    }
-
-    DiffArray prod_async_() const {
-        if constexpr (!std::is_arithmetic_v<Scalar>) {
-            drjit_raise("prod_async_(): invalid operand type!");
-        } else {
-            Type result = prod_async(m_value);
+            Type result = prod(m_value);
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
                 if (m_index) {
@@ -1299,33 +1284,18 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                     Type weights[1] = { select(eq(m_value, (Scalar) 0),
                                                (Scalar) 0, result / m_value) };
                     index_new = detail::ad_new<Type>(
-                        "prod_async", 1, 1, indices, weights);
+                        "prod", 1, 1, indices, weights);
                 }
             }
             return DiffArray::create(index_new, std::move(result));
         }
     }
 
-    Value prod_() const {
+    DiffArray min_() const {
         if constexpr (!std::is_arithmetic_v<Scalar>) {
-            drjit_raise("prod_(): invalid operand type!");
+            drjit_raise("min_(): invalid operand type!");
         } else {
-            if constexpr (IsEnabled) {
-                if (m_index)
-                    drjit_raise("prod_(): operation returns a detached scalar, "
-                                "which is not permitted for arrays attached to "
-                                "the AD graph! Use prod_async() instead, which "
-                                "returns a differentiable array.");
-            }
-            return prod(m_value);
-        }
-    }
-
-    DiffArray min_async_() const {
-        if constexpr (!std::is_arithmetic_v<Scalar>) {
-            drjit_raise("min_async_(): invalid operand type!");
-        } else {
-            Type result = min_async(m_value);
+            Type result = min(m_value);
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
                 if (m_index) {
@@ -1338,33 +1308,18 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                     Type weights[1] = { select(
                         eq(m_value, result), Type(1), Type(0)) };
                     index_new = detail::ad_new<Type>(
-                        "min_async", 1, 1, indices, weights);
+                        "min", 1, 1, indices, weights);
                 }
             }
             return DiffArray::create(index_new, std::move(result));
         }
     }
 
-    Value min_() const {
+    DiffArray max_() const {
         if constexpr (!std::is_arithmetic_v<Scalar>) {
-            drjit_raise("min_(): invalid operand type!");
+            drjit_raise("max_(): invalid operand type!");
         } else {
-            if constexpr (IsEnabled) {
-                if (m_index)
-                    drjit_raise("min_(): operation returns a detached scalar, "
-                                "which is not permitted for arrays attached to "
-                                "the AD graph! Use min_async() instead, which "
-                                "returns a differentiable array.");
-            }
-            return min(m_value);
-        }
-    }
-
-    DiffArray max_async_() const {
-        if constexpr (!std::is_arithmetic_v<Scalar>) {
-            drjit_raise("max_async_(): invalid operand type!");
-        } else {
-            Type result = max_async(m_value);
+            Type result = max(m_value);
             uint32_t index_new = 0;
             if constexpr (IsEnabled) {
                 if (m_index) {
@@ -1377,45 +1332,15 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                     Type weights[1] = { select(
                         eq(m_value, result), Type(1), Type(0)) };
                     index_new = detail::ad_new<Type>(
-                        "max_async", 1, 1, indices, weights);
+                        "max", 1, 1, indices, weights);
                 }
             }
             return DiffArray::create(index_new, std::move(result));
         }
     }
 
-    Value max_() const {
-        if constexpr (!std::is_arithmetic_v<Scalar>) {
-            drjit_raise("max_(): invalid operand type!");
-        } else {
-            if constexpr (IsEnabled) {
-                if (m_index)
-                    drjit_raise("max_(): operation returns a detached scalar, "
-                                "which is not permitted for arrays attached to "
-                                "the AD graph! Use max_async() instead, which "
-                                "returns a differentiable array.");
-            }
-            return max(m_value);
-        }
-    }
-
-    DiffArray dot_async_(const DiffArray &a) const {
-        return sum_async(*this * a);
-    }
-
-    Value dot_(const DiffArray &a) const {
-        if constexpr (!std::is_arithmetic_v<Scalar>) {
-            drjit_raise("dot_(): invalid operand type!");
-        } else {
-            if constexpr (IsEnabled) {
-                if (m_index || a.m_index)
-                    drjit_raise("dot_(): operation returns a detached scalar, "
-                                "which is not permitted for arrays attached to "
-                                "the AD graph! Use dot_async() instead, which "
-                                "returns a differentiable array.");
-            }
-            return dot(m_value, a.m_value);
-        }
+    DiffArray dot_(const DiffArray &a) const {
+        return sum(*this * a);
     }
 
     //! @}
