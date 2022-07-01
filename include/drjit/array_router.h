@@ -1225,6 +1225,10 @@ decltype(auto) slice(const T &value, size_t index = -1) {
             index = 0;
         }
         return scalar_t<T>(value.entry(index));
+    } else if constexpr (is_diff_v<T>) { // Handle DiffArray<float> case
+        if (index != (size_t) -1 && index > 0)
+            drjit_raise("slice(): index out of bound!");
+        return value.detach_();
     } else {
         if (index != (size_t) -1 && index > 0)
             drjit_raise("slice(): index out of bound!");
