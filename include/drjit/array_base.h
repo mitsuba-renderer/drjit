@@ -624,7 +624,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
                         result += derived().entry(i) * a.entry(i);
                 }
             } else {
-				result = sum(derived() * a);
+				result = slice<Value>(sum(derived() * a));
 			}
 		}
         return result;
