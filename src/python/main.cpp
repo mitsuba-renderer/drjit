@@ -444,4 +444,6 @@ PYBIND11_MODULE(drjit_ext, m_) {
 #else
     m.attr("DEBUG") = true;
 #endif
+
+    m.attr("__version__") = DRJIT_VERSION;
 }
