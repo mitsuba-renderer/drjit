@@ -42,7 +42,7 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
     static constexpr bool IsDiff = is_diff_v<Mask>;
 
     using Float32 = float32_array_t<detached_t<Mask>>;
-    using Float64 = float32_array_t<detached_t<Mask>>;
+    using Float64 = float64_array_t<detached_t<Mask>>;
 
     Loop(const Loop &) = delete;
     Loop(Loop &&) = delete;
