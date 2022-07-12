@@ -181,6 +181,8 @@ public:
         if (value.size() != m_size)
             drjit_raise("Texture::set_value(): unexpected array size!");
 
+        drjit::eval(value);
+
         if constexpr (HasCudaTexture) {
             if (m_use_accel) {
                 value.eval_(); // Sync the value before copying to texture memory
