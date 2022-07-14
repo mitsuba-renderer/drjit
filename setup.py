@@ -26,7 +26,7 @@ with open(os.path.join("include/drjit/fwd.h")) as f:
 with open(os.path.join(this_directory, 'README.rst'), encoding='utf-8') as f:
     long_description = f.read()
 
-long_description = long_description[long_description.find('Introduction'):]
+long_description = long_description[long_description.find('About this project'):]
 
 drjit_cmake_toolchain_file = os.environ.get("DRJIT_CMAKE_TOOLCHAIN_FILE", "")
 
