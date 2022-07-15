@@ -3943,10 +3943,15 @@ def grad(arg, preserve_type=True):
         object: the gradient value associated to the input variable.
     '''
     if _dr.is_diff_v(arg):
-        if preserve_type:
-            return type(arg)(arg.grad_())
+        if _dr.is_integral_v(arg):
+            grads = _dr.zeros(_dr.detached_t(type(arg)))
         else:
-            return arg.grad_()
+            grads = arg.grad_()
+
+        if preserve_type:
+            return type(arg)(grads)
+        else:
+            return grads
     elif _dr.is_struct_v(arg):
         result = type(arg)()
         if not preserve_type:
@@ -5568,7 +5573,7 @@ def custom(cls, *args, **kwargs):
     _dr.detail.diff_vars(inst._implicit_in, diff_vars_in)
 
     if len(diff_vars_in) > 0:
-        output = _dr.diff_array_t(output)
+        output = _dr.diff_array_t(output, allow_non_array=True)
         Type = _dr.leaf_array_t(output)
         tmp_in, tmp_out = Type(), Type()
         _dr.enable_grad(tmp_in, tmp_out, output)
