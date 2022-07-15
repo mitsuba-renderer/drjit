@@ -1853,3 +1853,55 @@ def test75_diffloop_masking_bwd(m, no_record):
         i += 1
     dr.backward(fo)
     assert dr.grad(fi) == m.Float(5, 0)
+
+
+def test76_custom_op_non_array_types(m):
+    class NonArrayType():
+        def __init__(self):
+            self.constant = 0.5
+
+    v_input = m.Float(1)
+    other_input = NonArrayType()
+    dr.enable_grad(v_input)
+
+    class TestOp(dr.CustomOp):
+        def eval(self, value, other_input):
+            result1 = value + other_input.constant
+            result2 = 2 * result1
+            other_output1 = NonArrayType()
+            other_output2 = m.UInt32([1, 2, 3, 4])
+            return result1, result2, other_output1, other_output2
+
+        def forward(self):
+            grad_in = self.grad_in('value')
+            self.set_grad_out((grad_in, 2 * grad_in, None, None))
+
+        def backward(self):
+            g = self.grad_out()
+            assert len(g) == 4
+            self.set_grad_in('value', g[0] + 2 * g[1])
+
+    # Backward mode
+    result1, _, other1, other2 = dr.custom(TestOp, v_input, other_input)
+    assert isinstance(other1, NonArrayType)
+    assert isinstance(other2, m.UInt32)
+    dr.backward(result1)
+    assert dr.all(dr.grad(v_input) == 1)
+
+    dr.set_grad(v_input, m.Float(0.))
+    _, result2, other1, other2 = dr.custom(TestOp, v_input, other_input)
+    dr.backward(result2)
+    assert dr.all(dr.grad(v_input) == 2)
+
+    dr.set_grad(v_input, m.Float(0.))
+    result1, result2, other1, other2 = dr.custom(TestOp, v_input, other_input)
+    dr.backward(result1 + result2)
+    assert dr.all(dr.grad(v_input) == 3)
+
+    # Forward mode
+    dr.set_grad(v_input, m.Float(3.5))
+    result1, result2, other1, other2 = dr.custom(TestOp, v_input, other_input)
+    dr.forward_to(result1)
+    # Pushes gradients to both outputs
+    assert dr.all(dr.grad(result1) == 3.5)
+    assert dr.all(dr.grad(result2) == 2 * 3.5)
