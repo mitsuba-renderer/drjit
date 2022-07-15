@@ -111,18 +111,18 @@ References, citations
 ---------------------
 
 Please see the paper `Dr.Jit: A Just-In-Time Compiler for Differentiable
-Rendering <https://rgl.epfl.ch/publications/Jakob2020DrJit>`_ for the
+Rendering <https://rgl.epfl.ch/publications/Jakob2022DrJit>`_ for the
 nitty-gritty details and details on the problem motivating this project. There
 is also a `video presentation
-<https://rgl.s3.eu-central-1.amazonaws.com/media/papers/Jakob2020DrJit.mp4>`_.
+<https://rgl.s3.eu-central-1.amazonaws.com/media/papers/Jakob2022DrJit.mp4>`_.
 
 If you use *Dr.Jit* in your own research, please cite it using the following
 BibTeX entry:
 
 .. code-block:: bibtex
 
-    @article{Jakob2020DrJit,
-      author = {Wenzel Jakob and Sébastien Speierer and Nicolas Roussel and Delio Vicini},
+    @article{Jakob2022DrJit,
+      author = {Wenzel Jakob and S{\'e}bastien Speierer and Nicolas Roussel and Delio Vicini},
       title = {Dr.Jit: A Just-In-Time Compiler for Differentiable Rendering},
       journal = {Transactions on Graphics (Proceedings of SIGGRAPH)},
       volume = {41},

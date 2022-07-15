@@ -94,7 +94,7 @@ BibTeX entry:
 .. code-block:: bibtex
 
     @article{Jakob2020DrJit,
-      author = {Wenzel Jakob and Sébastien Speierer and Nicolas Roussel and Delio Vicini},
+      author = {Wenzel Jakob and S{\'e}bastien Speierer and Nicolas Roussel and Delio Vicini},
       title = {Dr.Jit: A Just-In-Time Compiler for Differentiable Rendering},
       journal = {Transactions on Graphics (Proceedings of SIGGRAPH)},
       volume = {41},

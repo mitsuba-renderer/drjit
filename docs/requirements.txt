@@ -1,0 +1,3 @@
+sphinx-togglebutton
+sphinxcontrib-katex
+furo

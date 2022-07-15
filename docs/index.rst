@@ -14,10 +14,12 @@ Dr.Jit — A Just-In-Time-Compiler for Differentiable Rendering
   :class: only-dark
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :caption: Contents:
 
    intro
+   firststeps-py
+   firststeps-cpp
    reference
 
 Indices and tables

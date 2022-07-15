@@ -4879,7 +4879,7 @@ def meshgrid(*args, indexing='xy'):
     a grid coordinates with matrix indexing. If given 'xy', it will return a
     grid coordinates with Cartesian indexing.
 
-    .. codeblock::
+    .. code-block::
 
         import drjit as dr
 
