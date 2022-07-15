@@ -114,7 +114,8 @@ Please see the paper `Dr.Jit: A Just-In-Time Compiler for Differentiable
 Rendering <https://rgl.epfl.ch/publications/Jakob2022DrJit>`_ for the
 nitty-gritty details and details on the problem motivating this project. There
 is also a `video presentation
-<https://rgl.s3.eu-central-1.amazonaws.com/media/papers/Jakob2022DrJit.mp4>`_.
+<https://rgl.s3.eu-central-1.amazonaws.com/media/papers/Jakob2022DrJit.mp4>`_
+explaining the design decisions at a higher level.
 
 If you use *Dr.Jit* in your own research, please cite it using the following
 BibTeX entry:

@@ -1,0 +1,6 @@
+sphinx-togglebutton
+sphinxcontrib-katex
+furo
+scikit-build
+pybind11
+cmake

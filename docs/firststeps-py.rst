@@ -378,7 +378,7 @@ output:
 
         def sdf(p: Array3f) -> Float:
             return dr.norm(p) - 1
-            
+
         def trace(o: Array3f, d: Array3f) -> Array3f:
             for i in range(10):
                 o = dr.fma(d, sdf(o), o)
@@ -421,7 +421,7 @@ Dr.Jit was originally designed for `Monte Carlo methods
 <https://en.wikipedia.org/wiki/Monte_Carlo_method>`_ that heavily rely on
 random sampling, and it ships with Melissa O'Neill's `PCG32
 <https://www.pcg-random.org/index.html>`_ pseudorandom number generator to
-help with such applications. 
+help with such applications.
 
 Here, we use PCG32 to generate a relatively small set of uniformly distributed
 variates covering the interval :math:`[0, 1]`.
@@ -456,7 +456,7 @@ causes Dr.Jit to emit a brief message whenever it compiles and runs a kernel.
 .. code-block:: python
 
     dr.set_log_level(dr.LogLevel.Info)
-        
+
 Re-running the program produces the following output:
 
 .. image:: images/sphere2.png
@@ -515,7 +515,7 @@ With this implementation, we obtain a smooth bumpy sphere.
             sdf_value = dr.norm(p) - 1
             sdf_value += noise_tex.eval_cubic(dr.fma(p, 0.5,  0.5))[0] * 0.1
             return sdf_value
-            
+
         def trace(o: Array3f, d: Array3f) -> Array3f:
             for i in range(10):
                 o = dr.fma(d, sdf(o), o)
@@ -547,5 +547,231 @@ With this implementation, we obtain a smooth bumpy sphere.
         plt.imshow(img_t)
         plt.show()
 
-Improving performance
----------------------
+Kernel launches, caching
+------------------------
+
+Besides generating an image, the last experiment also produced several log
+messages enabled by the call to :py:func:`dr.set_log_level()`.
+
+.. code-block:: pycon
+    :emphasize-lines: 2, 3, 6, 7
+
+    jit_eval(): launching 1 kernel.
+      -> launching 17509add1324abde (n=4096, in=0, out=1, ops=41, jit=15.073 us):
+         cache miss, build: 576.932 us, 3.375 KiB.
+    jit_eval(): done.
+    jit_eval(): launching 1 kernel.
+      -> launching 87908afce75f85b5 (n=1000000, in=5, out=0, se=3, ops=2114, jit=330.965 us):
+         cache miss, build: 1.17021 ms, 30.38 KiB.
+    jit_eval(): done.
+
+Several things are noteworthy here:
+
+- Dr.Jit launched *two* kernels: the first one to compute the noise texture
+  with ``n=4096`` texels, followed by the main rendering step that computed
+  ``n=1000000`` image pixels.
+
+- The second kernel is *big* and contains over two thousand operations (``ops=2114``).
+
+- It generated those kernels for the first time (``cache miss``) and so had to
+  perform a somewhat expensive compilation step to generate machine code.
+
+  If you re-run the example a second time, this part of the message will change
+  to ``cache hit``, and the compilation is skipped. Dr.Jit stores cached
+  kernels on disk in the ``~/.drjit`` directory on Linux/macOS, and in
+  ``~/AppData/Local/Temp/drjit`` on Windows. Dr.Jit was originally
+  designed to accelerate gradient-based optimization; caching is particularly
+  useful in this context, since the expensive compilation step will only run
+  once during the first gradient step.
+
+- If you are using the LLVM backend, the kernel will be even larger..
+
+  .. code-block:: pycon
+      :emphasize-lines: 2, 3
+
+      jit_eval(): launching 1 kernel.
+        -> launching 6e8cadb52477dd91 (n=1000000, in=5, out=0, se=3, ops=7560, jit=2.92385 ms):
+           cache miss, build: 2.411 s, 78.25 KiB.
+      jit_eval(): done.
+
+  The CPU does not have hardware texturing instructions and must emulate them,
+  which causes this size increase to over 7K instructions. While tracing is
+  fast (2.9 milliseconds), the one-time compilation step now takes almost 2.5
+  seconds!
+
+What leads to these large kernels? Not only does the bumpy sphere SDF generate
+more code: Dr.Jit's computation graph also contains it a whopping 17 times: 10
+times for sphere tracing steps, 6 times for finite differences-based normal
+computation, and one final time for the masked assignment that disables pixels
+without valid intersections. This doesn't seem like a good way of using the
+system—let's improve the example!
+
+Recorded loops
+--------------
+
+A first inefficiency is that a normal Python ``for`` loop will unroll the loop
+many times, producing an unnecessarily large trace that is expensive to
+compile. It is also inflexible: there is no easy way to to stop the sphere
+tracing iteration early when it is sufficiently close to the surface.
+
+Dr.Jit provides a *recorded loop* primitive to address these and related
+limitations. To use it, replace the earlier sphere tracing implementation
+
+.. code-block:: python
+
+    # Old version
+    def trace(o: Array3f, d: Array3f) -> Array3f:
+        for i in range(10):
+            o = dr.fma(d, sdf(o), o)
+        return o
+
+by the following improved version:
+
+.. code-block:: python
+
+    # Improved version
+    def trace(o: Array3f, d: Array3f) -> Array3f:
+        i = UInt32(0)
+        loop = Loop("Sphere tracing", lambda: (o, i))
+        while loop(i < 10):
+            o = dr.fma(d, sdf(o), o)
+            i += 1
+        return o
+
+Expressed in this form, Dr.Jit will only trace the body *once* and make note of
+the fact that it must loop on the device while the condition ``i < 10`` holds.
+The condition is itself a Dr.Jit array, and elements can therefore run the loop
+for different numbers of iterations.
+
+For this all to work correctly, Dr.Jit needs to know what variables are
+modified by the loop body. The ``lambda: (o, i)`` parameter serves this role
+and allows the system to detect when variables are changed or entirely
+overwritten. The label ``"Sphere tracing"`` will be added to generated PTX/LLVM
+code and can be helpful when looking at kernels of programs containing many
+loops. This simple change reduces the operation count to half.
+
+Automatic differentiation
+-------------------------
+
+Next, we can examine the ``shade()`` method that evaluated the SDF 6 times to
+compute an approximate derivative, which was a source of inefficiency:
+
+.. code-block:: python
+
+    # Old version
+    def shade(p: Array3f, l: Array3f, eps: float = 1e-3) -> Float:
+        n = Array3f(
+            sdf(p + [eps, 0, 0]) - sdf(p - [eps, 0, 0]),
+            sdf(p + [0, eps, 0]) - sdf(p - [0, eps, 0]),
+            sdf(p + [0, 0, eps]) - sdf(p - [0, 0, eps])
+        ) / (2 * eps)
+        return dr.maximum(0, dr.dot(n, l))
+
+Dr.Jit includes an `automatic differentiation
+<https://en.wikipedia.org/wiki/Automatic_differentiation>`_ layer to
+analytically differentiate expressions, producing code that is more efficient
+*and* more accurate. To use the AD layer, simple append ``.ad`` to the import
+directive at the top of the program. For example for the CUDA backend, you
+would write:
+
+.. code-block:: python
+
+    from drjit.cuda.ad import Float, UInt32, Array3f, Array2f, TensorXf, Texture3f, PCG32, Loop
+
+There is essentially no extra cost for using types from the ``.ad`` namespace
+when gradient tracking isn't explicitly enabled for a variable, so you can
+simply use them everywhere by default.
+
+The AD version of ``shade()`` invokes :py:func:`drjit.enable_grad()` to track
+the differential dependence of subsequent variables on the position ``p``. It
+subsequently evaluates the SDF just once, which records the structure of the
+computation into a graph representation. The next two lines set an input
+gradient at ``p`` and propagate the derivative to the output ``value``, which
+results in the desired directional derivative :math:`\nabla
+\mathrm{sdf}(\mathbf{p}) \cdot \mathbf{l}`.
+
+.. code-block:: python
+
+    # Improved version
+    def shade(p: Array3f, l: Array3f) -> Float:
+        dr.enable_grad(p)
+        value = sdf(p)
+        dr.set_grad(p, l)
+        dr.forward_to(value)
+        return dr.maximum(0, dr.grad(value))
+
+The :py:func:`dr.forward_to()` call materializes the AD-based
+derivatives into ordinary computation that is traced along with
+the rest of the program.
+
+This reduces the operation count by another factor of 2, and compilation
+time is now consistently between 30-90 milliseconds across backends.
+
+.. admonition:: Complete example code including optimizations
+   :class: dropdown
+
+    .. code-block:: python
+
+        import drjit as dr
+        from drjit.cuda.ad import Float, UInt32, Array3f, Array2f, TensorXf, Texture3f, PCG32, Loop
+
+        dr.set_log_level(dr.LogLevel.Info)
+
+        noise = PCG32(size=16*16*16).next_float32()
+        noise_tex = Texture3f(TensorXf(noise, shape=(16, 16, 16, 1)))
+
+        def sdf(p: Array3f) -> Float:
+            sdf_value = dr.norm(p) - 1
+            sdf_value += noise_tex.eval_cubic(dr.fma(p, 0.5,  0.5))[0] * 0.1
+            return sdf_value
+
+        def trace(o: Array3f, d: Array3f) -> Array3f:
+            i = UInt32(0)
+            loop = Loop("Sphere tracing", lambda: (o, i))
+            while loop(i < 10):
+                o = dr.fma(d, sdf(o), o)
+                i += 1
+            return o
+
+        def shade(p: Array3f, l: Array3f, eps: float = 1e-3) -> Float:
+            dr.enable_grad(p)
+            value = sdf(p);
+            dr.set_grad(p, l)
+            dr.forward_to(value)
+            return dr.maximum(0, dr.grad(value))
+
+        x = dr.linspace(Float, -1, 1, 1000)
+        x, y = dr.meshgrid(x, x)
+
+        p = trace(o=Array3f(0, 0, -2),
+                  d=dr.normalize(Array3f(x, y, 1)))
+
+        sh = shade(p, l=Array3f(0, -1, -1))
+        sh[sdf(p) > .1] = 0
+
+        img = Array3f(.1, .1, .2) + Array3f(.4, .4, .2) * sh
+        img_flat = dr.ravel(img)
+
+        img_t = TensorXf(img_flat, shape=(1000, 1000, 3))
+
+        import matplotlib.pyplot as plt
+        plt.imshow(img_t)
+        plt.show()
+
+Dr.Jit can propagate derivatives in forward mode (shown here) and reverse mode,
+which is useful for gradient-based optimization of programs with many inputs.
+
+Features
+--------
+
+Many features weren't covered in this basic tutorial.
+Dr.Jit also
+
+- supports polymorphic/virtual function calls, in which a program jumps to one of
+  many locations. It can efficiently trace and differentiate such indirection.
+
+- provides a library of transcendental functions (ordinary and hyperbolic trig functions, exponentials, logarithms, elliptic integrals, etc).
+
+- provides types for complex arithmetic, quaternions, and small (< :math:`4\times 4`) matrices.
+
+- provides efficient code for evaluating spherical harmonics.
