@@ -20,7 +20,11 @@ using MatrixD3f = dr::Matrix<DFloat, 3>;
 using FloatX = dr::DynamicArray<Float>;
 using FloatDX = dr::DynamicArray<DFloat>;
 
-#define CHECK_CUDA_AVAILABLE() if (!jit_has_backend(JitBackend::CUDA)) return;
+#define CHECK_CUDA_AVAILABLE()                     \
+    jit_init(JitBackend::CUDA);                    \
+    jit_set_log_level_stderr(::LogLevel::Error);   \
+    if (!jit_has_backend(JitBackend::CUDA))        \
+        return;
 
 void test_interp_1d_wrap(WrapMode wrap_mode) {
     for (int k = 0; k < 2; ++k) {
@@ -795,10 +799,10 @@ DRJIT_TEST(test22_fetch_grad) {
     out[2] = out10.data();
     out[3] = out11.data();
     tex.eval_fetch_nonaccel(pos, out);
-    assert(allclose(0.f, out[0][0]));
-    assert(allclose(0.f, out[1][0]));
-    assert(allclose(0.f, out[2][0]));
-    assert(allclose(0.f, out[3][0]));
+    assert(allclose(1.f, out[0][0]));
+    assert(allclose(2.f, out[1][0]));
+    assert(allclose(3.f, out[2][0]));
+    assert(allclose(4.f, out[3][0]));
 
     tex.eval_fetch(pos, out);
     assert(allclose(1.f, out[0][0]));
