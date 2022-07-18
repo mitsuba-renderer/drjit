@@ -257,9 +257,10 @@ DRJIT_TEST(test07_cubic_analytic) {
     tex.set_value(DFloat(0.f, 1.f, 0.f, 0.f));
 
     ArrayD1f pos(0.5f);
+    dr::Array<DFloat, 1> val_64 = empty<dr::Array<DFloat, 1>>();
     dr::Array<ArrayD1f, 1> grad_64 = empty<dr::Array<ArrayD1f, 1>>();
     dr::eval(grad_64);
-    tex.eval_cubic_grad(pos, grad_64.data());
+    tex.eval_cubic_grad(pos, val_64.data(), grad_64.data());
     dr::enable_grad(pos);
 
     ArrayD1f res = empty<ArrayD1f>();
@@ -448,14 +449,16 @@ DRJIT_TEST(test11_cubic_grad_pos) {
                                WrapMode::Clamp);
 
     ArrayD3f pos(.5f, .5f, .5f);
+    dr::Array<DFloat, 1> val_64 = empty<dr::Array<DFloat, 1>>();
     dr::Array<ArrayD3f, 1> grad_64 = empty<dr::Array<ArrayD3f, 1>>();
-    tex.eval_cubic_grad(pos, grad_64.data());
+    tex.eval_cubic_grad(pos, val_64.data(), grad_64.data());
     dr::enable_grad(pos);
 
     ArrayD1f res = empty<ArrayD1f>();
     tex.eval_cubic(pos, res.data(), true, true);
     dr::backward(res.x());
 
+    assert(dr::allclose(res, val_64));
     auto grad_ad = dr::grad(pos);
     ArrayD1f res2 = empty<ArrayD1f>();
     tex.eval_cubic_helper(pos, res2.data());
@@ -489,11 +492,17 @@ DRJIT_TEST(test12_cubic_hessian_pos) {
                                WrapMode::Clamp);
 
     ArrayD3f pos(.5f, .5f, .5f);
+    dr::Array<DFloat, 1> val_64 = empty<dr::Array<DFloat, 1>>();
     dr::Array<ArrayD3f, 1> grad_64 = empty<dr::Array<ArrayD3f, 1>>();
-    tex.eval_cubic_grad(pos, grad_64.data(), true);
+    tex.eval_cubic_grad(pos, val_64.data(), grad_64.data(), true);
+
+    dr::Array<DFloat, 1> value_h = empty<dr::Array<DFloat, 1>>();
     dr::Array<ArrayD3f, 1> grad_h = empty<dr::Array<ArrayD3f, 1>>();
     dr::Array<MatrixD3f, 1> hessian = empty<dr::Array<MatrixD3f, 1>>();
-    tex.eval_cubic_hessian(pos, grad_h.data(), hessian.data(), true);
+    tex.eval_cubic_hessian(pos, value_h.data(), grad_h.data(), hessian.data(), true);
+
+    assert(dr::allclose(val_64[0], value_h[0]));
+
     assert(dr::allclose(grad_64[0][0], grad_h[0][0]));
     assert(dr::allclose(grad_64[0][1], grad_h[0][1]));
     assert(dr::allclose(grad_64[0][2], grad_h[0][2]));
