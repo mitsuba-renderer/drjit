@@ -868,8 +868,10 @@ public:
 
         const uint32_t channels = (uint32_t) m_value.shape(Dimension);
 
-        for (uint32_t ch = 0; ch < channels; ++ch)
+        for (uint32_t ch = 0; ch < channels; ++ch) {
+            out_value[ch] = zeros<Value>();
             out_gradient[ch] = zeros<PosF>();
+        }
         ArrayX values = empty<ArrayX>(channels);
 
         #define DR_TEX_CUBIC_GATHER(index)                                            \
@@ -898,7 +900,7 @@ public:
                    gx = compute_weight(0, true);
             for (uint32_t ix = 0; ix < 4; ++ix) {
                 DR_TEX_CUBIC_GATHER(idx[ix]);
-                DR_TEX_CUBIC_ACCUM_VALUE(wx[ix] );
+                DR_TEX_CUBIC_ACCUM_VALUE(wx[ix]);
                 DR_TEX_CUBIC_ACCUM_GRAD(0, gx[ix]);
             }
         } else if constexpr (Dimension == 2) {
@@ -1011,6 +1013,7 @@ public:
 
         const uint32_t channels = (uint32_t) m_value.shape(Dimension);
         for (uint32_t ch = 0; ch < channels; ++ch) {
+            out_value[ch] = zeros<Value>();
             out_gradient[ch] = zeros<PosF>();
             for (uint32_t dim1 = 0; dim1 < Dimension; ++dim1)
                 out_hessian[ch][dim1] = zeros<PosF>();
