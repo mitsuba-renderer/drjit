@@ -110,11 +110,11 @@ def upsample(t, shape=None, scale_factor=None):
 
         # Concatenate output values to a flatten buffer
         channels = len(values)
-        width = _dr.width(values[0]) * channels
-        index = _dr.arange(_dr.uint32_array_t(value_type), width) // channels
-        data = _dr.zeros(value_type, width)
+        width = _dr.width(values[0])
+        index = _dr.arange(_dr.uint32_array_t(value_type), width)
+        data = _dr.zeros(value_type, width * channels)
         for c in range(channels):
-            _dr.scatter(data, values[c], index + c)
+            _dr.scatter(data, values[c], channels * index + c)
 
         # Create the up-sampled texture
         texture = type(t)(shape[:-1], channels,

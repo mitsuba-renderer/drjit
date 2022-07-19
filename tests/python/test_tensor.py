@@ -407,3 +407,9 @@ def test14_upsampling_texture(pkg):
     assert dr.allclose(b.tensor().array, [1.0, 1.5, 2.0,
                                           2.0, 2.5, 3.0,
                                           3.0, 3.5, 4.0])
+
+    a = tex_t(t([1, 1, 5, 2, 2, 6, 3, 3, 7, 4, 4, 8], shape=(2, 2, 3)), filter_mode=dr.FilterMode.Linear)
+    b = dr.upsample(a, shape=[3, 3])
+    assert dr.allclose(b.tensor().array, [1.0, 1.0, 5.0, 1.5, 1.5, 5.5, 2.0, 2.0, 6.0,
+                                          2.0, 2.0, 6.0, 2.5, 2.5, 6.5, 3.0, 3.0, 7.0,
+                                          3.0, 3.0, 7.0, 3.5, 3.5, 7.5, 4.0, 4.0, 8.0])
