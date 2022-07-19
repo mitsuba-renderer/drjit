@@ -35,7 +35,7 @@ setup(
     version=drjit_version,
     author="Wenzel Jakob",
     author_email="wenzel.jakob@epfl.ch",
-    description="Structured vectorization and differentiation on modern processor architectures",
+    description="A Just-In-Time-Compiler for Differentiable Rendering",
     url="https://github.com/mitsuba-renderer/drjit",
     license="BSD",
     long_description=long_description,
