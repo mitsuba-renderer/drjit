@@ -88,4 +88,4 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@v1.5.0
         with:
           user: __token__
-          password: ${{ secrets.PYPI_PASSWORD }}
+          password: ${{ secrets.DRJIT_GITHUB_TOKEN }}
