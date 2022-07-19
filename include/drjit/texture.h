@@ -823,7 +823,7 @@ public:
      * shape.
      */
     void eval_cubic_grad(const Array<Value, Dimension> &pos,
-                         Array<Value, Dimension> *out,
+                         Value *out_value, Array<Value, Dimension> *out_gradient,
                          Mask active = true) const {
         using Array4 = Array<Value, 4>;
         using InterpOffset = Array<Int32, ipow(4, Dimension)>;
@@ -868,8 +868,10 @@ public:
 
         const uint32_t channels = (uint32_t) m_value.shape(Dimension);
 
-        for (uint32_t ch = 0; ch < channels; ++ch)
-            out[ch] = zeros<PosF>();
+        for (uint32_t ch = 0; ch < channels; ++ch) {
+            out_value[ch] = zeros<Value>();
+            out_gradient[ch] = zeros<PosF>();
+        }
         ArrayX values = empty<ArrayX>(channels);
 
         #define DR_TEX_CUBIC_GATHER(index)                                            \
@@ -878,19 +880,28 @@ public:
                 for (uint32_t ch = 0; ch < channels; ++ch)                            \
                     values[ch] = gather<Value>(m_value.array(), index_ + ch, active); \
             }
-        #define DR_TEX_CUBIC_ACCUM(dim, weight)                                \
+        #define DR_TEX_CUBIC_ACCUM_VALUE(weight)                               \
             {                                                                  \
-                uint32_t dim_ = dim;                                           \
                 Value weight_ = weight;                                        \
                 for (uint32_t ch = 0; ch < channels; ++ch)                     \
-                    out[ch][dim_] = fmadd(values[ch], weight_, out[ch][dim_]); \
+                    out_value[ch] = fmadd(values[ch], weight_, out_value[ch]); \
+            }
+
+        #define DR_TEX_CUBIC_ACCUM_GRAD(dim, weight)                                             \
+            {                                                                                    \
+                uint32_t dim_ = dim;                                                             \
+                Value weight_ = weight;                                                          \
+                for (uint32_t ch = 0; ch < channels; ++ch)                                       \
+                    out_gradient[ch][dim_] = fmadd(values[ch], weight_, out_gradient[ch][dim_]); \
             }
 
         if constexpr (Dimension == 1) {
-            Array4 gx = compute_weight(0, true);
+            Array4 wx = compute_weight(0, false),
+                   gx = compute_weight(0, true);
             for (uint32_t ix = 0; ix < 4; ++ix) {
                 DR_TEX_CUBIC_GATHER(idx[ix]);
-                DR_TEX_CUBIC_ACCUM(0, gx[ix]);
+                DR_TEX_CUBIC_ACCUM_VALUE(wx[ix]);
+                DR_TEX_CUBIC_ACCUM_GRAD(0, gx[ix]);
             }
         } else if constexpr (Dimension == 2) {
             Array4 wx = compute_weight(0, false),
@@ -900,8 +911,9 @@ public:
             for (uint32_t iy = 0; iy < 4; ++iy)
                 for (uint32_t ix = 0; ix < 4; ++ix) {
                     DR_TEX_CUBIC_GATHER(idx[iy * 4 + ix]);
-                    DR_TEX_CUBIC_ACCUM(0, gx[ix] * wy[iy]);
-                    DR_TEX_CUBIC_ACCUM(1, wx[ix] * gy[iy]);
+                    DR_TEX_CUBIC_ACCUM_VALUE(wx[ix] * wy[iy]);
+                    DR_TEX_CUBIC_ACCUM_GRAD(0, gx[ix] * wy[iy]);
+                    DR_TEX_CUBIC_ACCUM_GRAD(1, wx[ix] * gy[iy]);
                 }
         } else if constexpr (Dimension == 3) {
             Array4 wx = compute_weight(0, false),
@@ -914,19 +926,21 @@ public:
                 for (uint32_t iy = 0; iy < 4; ++iy)
                     for (uint32_t ix = 0; ix < 4; ++ix) {
                         DR_TEX_CUBIC_GATHER(idx[iz * 16 + iy * 4 + ix]);
-                        DR_TEX_CUBIC_ACCUM(0, gx[ix] * wy[iy] * wz[iz]);
-                        DR_TEX_CUBIC_ACCUM(1, wx[ix] * gy[iy] * wz[iz]);
-                        DR_TEX_CUBIC_ACCUM(2, wx[ix] * wy[iy] * gz[iz]);
+                        DR_TEX_CUBIC_ACCUM_VALUE(wx[ix] * wy[iy] * wz[iz]);
+                        DR_TEX_CUBIC_ACCUM_GRAD(0, gx[ix] * wy[iy] * wz[iz]);
+                        DR_TEX_CUBIC_ACCUM_GRAD(1, wx[ix] * gy[iy] * wz[iz]);
+                        DR_TEX_CUBIC_ACCUM_GRAD(2, wx[ix] * wy[iy] * gz[iz]);
                     }
         }
 
         #undef DR_TEX_CUBIC_GATHER
-        #undef DR_TEX_CUBIC_ACCUM
+        #undef DR_TEX_CUBIC_ACCUM_VALUE
+        #undef DR_TEX_CUBIC_ACCUM_GRAD
 
         // transform volume from unit size to its resolution
         for (uint32_t ch = 0; ch < channels; ++ch)
             for (uint32_t dim = 0; dim < Dimension; ++dim)
-                out[ch][dim] *= res_f[dim];
+                out_gradient[ch][dim] *= res_f[dim];
     }
 
     /**
@@ -940,6 +954,7 @@ public:
      * shape.
      */
     void eval_cubic_hessian(const Array<Value, Dimension> &pos,
+                            Value *out_value,
                             Array<Value, Dimension> *out_gradient,
                             Matrix<Value, Dimension> *out_hessian,
                             Mask active = true) const {
@@ -998,6 +1013,7 @@ public:
 
         const uint32_t channels = (uint32_t) m_value.shape(Dimension);
         for (uint32_t ch = 0; ch < channels; ++ch) {
+            out_value[ch] = zeros<Value>();
             out_gradient[ch] = zeros<PosF>();
             for (uint32_t dim1 = 0; dim1 < Dimension; ++dim1)
                 out_hessian[ch][dim1] = zeros<PosF>();
@@ -1010,6 +1026,12 @@ public:
                 UInt32 index_ = index;                                                \
                 for (uint32_t ch = 0; ch < channels; ++ch)                            \
                     values[ch] = gather<Value>(m_value.array(), index_ + ch, active); \
+            }
+        #define DR_TEX_CUBIC_ACCUM_VALUE(weight_value)                                \
+            {                                                                         \
+                Value weight_value_ = weight_value;                                   \
+                for (uint32_t ch = 0; ch < channels; ++ch)                            \
+                    out_value[ch] = fmadd(values[ch], weight_value_, out_value[ch]);  \
             }
         #define DR_TEX_CUBIC_ACCUM_GRAD(dim, weight_grad)                                             \
             {                                                                                         \
@@ -1035,10 +1057,12 @@ public:
             }
 
         if constexpr (Dimension == 1) {
-            Array4 gx  = compute_weight_gradient(0),
+            Array4 wx  = compute_weight(0),
+                   gx  = compute_weight_gradient(0),
                    ggx = compute_weight_hessian(0);
             for (uint32_t ix = 0; ix < 4; ++ix) {
                 DR_TEX_CUBIC_GATHER(idx[ix]);
+                DR_TEX_CUBIC_ACCUM_VALUE(wx[ix]);
                 DR_TEX_CUBIC_ACCUM_GRAD(0, gx[ix]);
                 DR_TEX_CUBIC_ACCUM_HESSIAN(0, 0, ggx[ix]);
             }
@@ -1053,6 +1077,7 @@ public:
             for (uint32_t iy = 0; iy < 4; ++iy)
                 for (uint32_t ix = 0; ix < 4; ++ix) {
                     DR_TEX_CUBIC_GATHER(idx[iy * 4 + ix]);
+                    DR_TEX_CUBIC_ACCUM_VALUE(wx[ix] * wy[iy]);
                     DR_TEX_CUBIC_ACCUM_GRAD(0, gx[ix] * wy[iy]);
                     DR_TEX_CUBIC_ACCUM_GRAD(1, wx[ix] * gy[iy]);
                     DR_TEX_CUBIC_ACCUM_HESSIAN(0, 0, ggx[ix] * wy[iy]);
@@ -1074,6 +1099,7 @@ public:
                 for (uint32_t iy = 0; iy < 4; ++iy)
                     for (uint32_t ix = 0; ix < 4; ++ix) {
                         DR_TEX_CUBIC_GATHER(idx[iz * 16 + iy * 4 + ix]);
+                        DR_TEX_CUBIC_ACCUM_VALUE(wx[ix] * wy[iy] * wz[iz]);
                         DR_TEX_CUBIC_ACCUM_GRAD(0, gx[ix] * wy[iy] * wz[iz]);
                         DR_TEX_CUBIC_ACCUM_GRAD(1, wx[ix] * gy[iy] * wz[iz]);
                         DR_TEX_CUBIC_ACCUM_GRAD(2, wx[ix] * wy[iy] * gz[iz]);
@@ -1090,6 +1116,7 @@ public:
         }
 
         #undef DR_TEX_CUBIC_GATHER
+        #undef DR_TEX_CUBIC_ACCUM_VALUE
         #undef DR_TEX_CUBIC_ACCUM_GRAD
         #undef DR_TEX_CUBIC_ACCUM_HESSIAN
         #undef DR_TEX_CUBIC_HESSIAN_SYMM

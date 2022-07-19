@@ -128,21 +128,24 @@ void bind_texture(py::module &m, const char *name) {
                 [](const Tex &texture, const dr::Array<Type, Dimension> &pos,
                    const dr::mask_t<Type> active) {
                     size_t channels = texture.shape()[Dimension];
-                    std::vector<dr::Array<Type, Dimension>> result(channels);
-                    texture.eval_cubic_grad(pos, result.data(), active);
+                    std::vector<Type> value(channels);
+                    std::vector<dr::Array<Type, Dimension>> gradient(channels);
+                    texture.eval_cubic_grad(pos, value.data(), gradient.data(), active);
 
-                    return result;
+                    return std::make_tuple(value, gradient);
                 }, "pos"_a, "active"_a = true)
         .def("eval_cubic_hessian",
                 [](const Tex &texture, const dr::Array<Type, Dimension> &pos,
                    const dr::mask_t<Type> active) {
                     size_t channels = texture.shape()[Dimension];
+
+                    std::vector<Type> value(channels);
                     std::vector<dr::Array<Type, Dimension>> gradient(channels);
                     std::vector<dr::Matrix<Type, Dimension>> hessian(channels);
-                    texture.eval_cubic_hessian(pos, gradient.data(),
+                    texture.eval_cubic_hessian(pos, value.data(), gradient.data(),
                                                hessian.data(), active);
 
-                    return std::make_tuple(gradient, hessian);
+                    return std::make_tuple(value, gradient, hessian);
                 }, "pos"_a, "active"_a = true);
 
     tex.attr("IsTexture") = true;
