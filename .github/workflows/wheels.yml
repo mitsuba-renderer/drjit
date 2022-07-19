@@ -39,7 +39,6 @@ jobs:
       - uses: actions/checkout@v3
         with:
           submodules: recursive
-          token: ${{ secrets.DRJIT_GITHUB_TOKEN }}
 
       - uses: actions/setup-python@v4
         name: Install Python
