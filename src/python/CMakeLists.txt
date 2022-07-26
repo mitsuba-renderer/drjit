@@ -77,3 +77,15 @@ if (DRJIT_MASTER_PROJECT AND NOT "${CMAKE_CURRENT_SOURCE_DIR}" STREQUAL "${CMAKE
 
   add_custom_target(copy-python-files ALL DEPENDS ${DRJIT_COPY_FILES})
 endif()
+
+# ----------------------------------------------------------
+#   Generate type information stubs
+# ----------------------------------------------------------
+
+if (NOT Python_EXECUTABLE)
+    find_package(Python COMPONENTS Interpreter REQUIRED)
+endif()
+
+add_custom_target(drjit_stub_file_generation ALL COMMAND
+    "${Python_EXECUTABLE}" -Xutf8 ${CMAKE_SOURCE_DIR}/resources/generate_stub_files.py
+    ${CMAKE_CURRENT_BINARY_DIR}/../../drjit/ )
