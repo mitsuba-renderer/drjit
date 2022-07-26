@@ -26,6 +26,7 @@ def w(s):
     global buffer
     buffer += f'{s}\n'
 
+
 # ------------------------------------------------------------------------------
 
 
@@ -55,7 +56,7 @@ def process_type_hint(s):
     offset = 0
     result = ''
     for t in type_hints:
-        result += s[offset:t[0]-2]
+        result += s[offset:t[0] - 2]
         offset = t[1]
         # if the type hint is valid, then add it as well
         if not ('::' in t[2]):
@@ -70,6 +71,7 @@ def process_type_hint(s):
     #result = result.replace(f'.{mi.variant()}', '')
 
     return result
+
 
 # ------------------------------------------------------------------------------
 
@@ -89,6 +91,7 @@ def process_properties(name, p, indent=0):
                     w(f'{indent}{l}')
                 w(f'{indent}\"\"\"')
 
+
 # ------------------------------------------------------------------------------
 
 
@@ -105,6 +108,7 @@ def process_enums(name, e, indent=0):
                 if l.startswith(f'  {name}'):
                     w(f'{indent}{l}')
             w(f'{indent}\"\"\"')
+
 
 # ------------------------------------------------------------------------------
 
@@ -126,7 +130,8 @@ def process_class(obj):
         v = getattr(obj, k)
         if type(v).__name__ == 'instancemethod':
             methods.append((k, v))
-        elif type(v).__name__ == 'function' and v.__code__.co_varnames[0] == 'self':
+        elif type(v).__name__ == 'function' and v.__code__.co_varnames[
+                0] == 'self':
             py_methods.append((k, v))
         elif type(v).__name__ == 'property':
             properties.append((k, v))
@@ -174,6 +179,7 @@ def process_class(obj):
     w(f'    ...')
     w('')
 
+
 # ------------------------------------------------------------------------------
 
 
@@ -209,6 +215,7 @@ def process_function(name, obj, indent=0):
             w(f'{indent}    ...')
             w(f'')
 
+
 # ------------------------------------------------------------------------------
 
 
@@ -235,6 +242,7 @@ def process_py_function(name, obj, indent=0):
             w(f'{indent}    ...')
             w(f'')
 
+
 # ------------------------------------------------------------------------------
 
 
@@ -244,7 +252,8 @@ def process_module(m):
     submodules = []
     buffer = ''
 
-    w('from typing import Any, Callable, Iterable, Iterator, Tuple, List, TypeVar, Union, overload, ModuleType')
+    w('from typing import Any, Callable, Iterable, Iterator, Tuple, List, TypeVar, Union, overload, ModuleType'
+      )
     w('import drjit')
     w('import drjit as dr')
     w('')
@@ -259,8 +268,8 @@ def process_module(m):
         v = getattr(m, k)
 
         if inspect.isclass(v):
-            if (hasattr(v, '__module__') and
-                    not v.__module__.startswith('drjit.')):
+            if (hasattr(v, '__module__')
+                    and not v.__module__.startswith('drjit.')):
                 continue
             process_class(v)
         elif type(v).__name__ in ['method', 'function']:
@@ -271,7 +280,8 @@ def process_module(m):
             if k.startswith('_'):
                 continue
             process_properties(k, v)
-        elif type(v).__bases__[0].__name__ == 'module' or type(v).__name__ == 'module':
+        elif type(v).__bases__[0].__name__ == 'module' or type(
+                v).__name__ == 'module':
             if k in ['dr']:
                 continue
             if not v.__name__.startswith('drjit.'):
@@ -287,8 +297,8 @@ def process_module(m):
 
     return buffer, submodules
 
-# ------------------------------------------------------------------------------
 
+# ------------------------------------------------------------------------------
 
 if __name__ == '__main__':
     logging.info('Generating stub files for the drjit package.')
