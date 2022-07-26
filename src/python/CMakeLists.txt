@@ -88,4 +88,4 @@ endif()
 
 add_custom_target(drjit_stub_file_generation ALL COMMAND
     "${Python_EXECUTABLE}" -Xutf8 ${CMAKE_SOURCE_DIR}/resources/generate_stub_files.py
-    ${CMAKE_CURRENT_BINARY_DIR}/../../drjit/ ${CMAKE_CURRENT_BINARY_DIR}/../../drjit/ DEPENDS copy-python-files )
+    ${CMAKE_CURRENT_BINARY_DIR}/../../drjit/ ${CMAKE_CURRENT_BINARY_DIR}/../../ DEPENDS copy-python-files )
