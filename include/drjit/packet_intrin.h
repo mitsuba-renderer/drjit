@@ -26,8 +26,10 @@
 #  if !defined(_IMMINTRIN_H_INCLUDED) && !defined(__clang__) && defined(__GNUC__)
      // And the same once more, for GCC..
 #    define _IMMINTRIN_H_INCLUDED
-// GCC 11
-#    define _X86GPRINTRIN_H_INCLUDED
+#    if __GNUC__ >= 11
+     // In GCC 11 and later we are expected to include a different header..
+#       define _X86GPRINTRIN_H_INCLUDED
+#    endif
 #  endif
 
 #  if defined(DRJIT_X86_SSE42)
