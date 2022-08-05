@@ -26,6 +26,8 @@
 #  if !defined(_IMMINTRIN_H_INCLUDED) && !defined(__clang__) && defined(__GNUC__)
      // And the same once more, for GCC..
 #    define _IMMINTRIN_H_INCLUDED
+// GCC 11
+#    define _X86GPRINTRIN_H_INCLUDED
 #  endif
 
 #  if defined(DRJIT_X86_SSE42)
