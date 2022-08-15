@@ -245,7 +245,7 @@ def shape(arg, /):
             cur = shape[i]
             maxval = _builtins.max(cur, size)
 
-            if maxval != size and size != 1:
+            if cur != size and size != 1 and cur != 1:
                 return False
 
             shape[i] = maxval

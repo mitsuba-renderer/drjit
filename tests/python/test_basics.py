@@ -668,3 +668,23 @@ def test22_sh_eval(pkg):
     for i in range(10):
         out = dr.sh_eval(d, i)
         assert dr.allclose(out, ref[:(i+1)**2], atol=5e-6)
+
+
+@pytest.mark.parametrize("pkg", ['drjit.cuda', 'drjit.llvm'])
+def test23_shape(pkg):
+    m = get_class(pkg)
+
+    assert dr.shape(m.Float()) == [0]
+    assert dr.shape(m.Float(4.0)) == [1]
+    assert dr.shape(m.Float([0, 1, 2])) == [3]
+
+    assert dr.shape(m.Array3f(0, 1, 2)) == [3, 1]
+    assert dr.shape(m.Array3f([0, 1], [2, 3], [4, 5])) == [3, 2]
+    assert dr.shape(m.Array3f([0, 1], [2, 3], 4)) == [3, 2]
+
+    assert dr.shape(m.Matrix3f([[0, 1, 2], [3, 4, 5], [6, 7, 8]])) == [3, 3, 1]
+    assert dr.shape(m.Matrix3f([[0, 1, 2], [3, 4, 5], [6, 7, [8, 9]]])) == [3, 3, 2]
+
+    # Ragged
+    assert dr.shape(m.Array3f([0, 1, 2], [0, 1], [0, 1])) is None
+    assert dr.shape(m.Array3f([0, 1], [0, 1, 2], [0, 1, 2, 3])) is None
