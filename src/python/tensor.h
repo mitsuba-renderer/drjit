@@ -62,18 +62,21 @@ template <typename T> auto bind_tensor(py::module m) {
     cls.def("ixor_",   [](Tensor *a, const Tensor &b) { *a = a->xor_(b); return a;});
 
     if constexpr (!dr::is_mask_v<T>) {
-        cls.def("add_", &Tensor::add_)
-        .def("sub_", &Tensor::sub_)
-        .def("mul_", &Tensor::mul_)
-        .def("neg_", &Tensor::neg_)
-        .def("fmadd_", &Tensor::div_);
+        cls.def("add_", &Tensor::add_);
+        cls.def("sub_", &Tensor::sub_);
+        cls.def("mul_", &Tensor::mul_);
+        cls.def("mod_", &Tensor::mod_);
 
-        cls.def("lt_", &Tensor::lt_)
-        .def("gt_", &Tensor::gt_)
-        .def("le_", &Tensor::le_)
-        .def("ge_", &Tensor::ge_);
+        cls.def(Tensor::IsFloat ? "itruediv_" : "ifloordiv_",
+                [](Tensor *a, const Tensor &b) { *a = a->div_(b); return a; });
 
-        cls.def(Tensor::IsFloat ? "truediv_" : "floordiv_", &Tensor::div_);
+        cls.def("neg_", &Tensor::neg_);
+        cls.def("fma_", &Tensor::fmadd_);
+
+        cls.def("lt_", &Tensor::lt_);
+        cls.def("gt_", &Tensor::gt_);
+        cls.def("le_", &Tensor::le_);
+        cls.def("ge_", &Tensor::ge_);
 
         cls.def("iadd_", [](Tensor *a, const Tensor &b) { *a = a->add_(b); return a; });
         cls.def("isub_", [](Tensor *a, const Tensor &b) { *a = a->sub_(b); return a; });
@@ -81,53 +84,59 @@ template <typename T> auto bind_tensor(py::module m) {
         if constexpr (Tensor::IsIntegral)
             cls.def("imod_", [](Tensor *a, const Tensor &b) { *a = a->mod_(b); return a; });
 
-        cls.def(Tensor::IsFloat ? "itruediv_" : "ifloordiv_",
-                [](Tensor *a, const Tensor &b) { *a = a->div_(b); return a; });
 
-        cls.def("abs_", &Tensor::abs_)
-           .def("minimum_", &Tensor::minimum_)
-           .def("maximum_", &Tensor::maximum_);
+        cls.def("abs_", &Tensor::abs_);
+        cls.def("minimum_", &Tensor::minimum_);
+        cls.def("maximum_", &Tensor::maximum_);
     }
 
-    if constexpr (dr::is_floating_point_v<Tensor>) {
-        cls.def("rcp_", &Tensor::rcp_);
-        cls.def("sqrt_", &Tensor::sqrt_);
+    if constexpr (Tensor::IsFloat) {
+        cls.def("rcp_",   &Tensor::rcp_);
+        cls.def("sqrt_",  &Tensor::sqrt_);
         cls.def("rsqrt_", &Tensor::rsqrt_);
-    }
-
-    if constexpr (dr::is_floating_point_v<Tensor>) {
-        cls.def("sin_", &Tensor::sin_);
-        cls.def("cos_", &Tensor::cos_);
-        cls.def("tan_", &Tensor::tan_);
-        cls.def("csc_", &Tensor::csc_);
-        cls.def("sec_", &Tensor::sec_);
-        cls.def("cot_", &Tensor::cot_);
-        cls.def("asin_", &Tensor::asin_);
-        cls.def("acos_", &Tensor::acos_);
-        cls.def("atan_", &Tensor::atan_);
-        cls.def("exp_", &Tensor::exp_);
-        cls.def("exp2_", &Tensor::exp2_);
-        cls.def("log_", &Tensor::log_);
-        cls.def("log2_", &Tensor::log2_);
-        cls.def("sinh_", &Tensor::sinh_);
-        cls.def("cosh_", &Tensor::cosh_);
-        cls.def("tanh_", &Tensor::tanh_);
-        cls.def("asinh_", &Tensor::asinh_);
-        cls.def("acosh_", &Tensor::acosh_);
-        cls.def("atanh_", &Tensor::atanh_);
-        cls.def("cbrt_", &Tensor::cbrt_);
-        cls.def("erf_", &Tensor::erf_);
-        cls.def("erfinv_", &Tensor::erfinv_);
-        cls.def("lgamma_", &Tensor::lgamma_);
-        cls.def("tgamma_", &Tensor::tgamma_);
-        cls.def("atan2_", &Tensor::atan2_);
-        cls.def("sincos_", &Tensor::sincos_);
-        cls.def("sincosh_", &Tensor::sincosh_);
-    }
-
-    if constexpr (dr::is_integral_v<Tensor>) {
-        cls.def("mod_", &Tensor::mod_);
+        cls.def("floor_", &Tensor::floor_);
+        cls.def("ceil_",  &Tensor::ceil_);
+        cls.def("round_", &Tensor::round_);
+        cls.def("trunc_", &Tensor::trunc_);
+    } else if constexpr (Tensor::IsIntegral) {
         cls.def("mulhi_", &Tensor::mulhi_);
+        cls.def("tzcnt_", [](const Tensor &a) { return dr::tzcnt(a); });
+        cls.def("lzcnt_", [](const Tensor &a) { return dr::lzcnt(a); });
+        cls.def("popcnt_", [](const Tensor &a) { return dr::popcnt(a); });
+        cls.def("sl_", [](const Tensor &a, const Tensor &b) { return a.sl_(b); });
+        cls.def("sr_", [](const Tensor &a, const Tensor &b) { return a.sr_(b); });
+        cls.def("isl_", [](Tensor *a, const Tensor &b) { *a = a->sl_(b); return a; });
+        cls.def("isr_", [](Tensor *a, const Tensor &b) { *a = a->sr_(b); return a; });
+    }
+
+    if constexpr (Tensor::IsFloat) {
+        cls.def("sin_",     &Tensor::sin_);
+        cls.def("cos_",     &Tensor::cos_);
+        cls.def("tan_",     &Tensor::tan_);
+        cls.def("csc_",     &Tensor::csc_);
+        cls.def("sec_",     &Tensor::sec_);
+        cls.def("cot_",     &Tensor::cot_);
+        cls.def("asin_",    &Tensor::asin_);
+        cls.def("acos_",    &Tensor::acos_);
+        cls.def("atan_",    &Tensor::atan_);
+        cls.def("exp_",     &Tensor::exp_);
+        cls.def("exp2_",    &Tensor::exp2_);
+        cls.def("log_",     &Tensor::log_);
+        cls.def("log2_",    &Tensor::log2_);
+        cls.def("sinh_",    &Tensor::sinh_);
+        cls.def("cosh_",    &Tensor::cosh_);
+        cls.def("tanh_",    &Tensor::tanh_);
+        cls.def("asinh_",   &Tensor::asinh_);
+        cls.def("acosh_",   &Tensor::acosh_);
+        cls.def("atanh_",   &Tensor::atanh_);
+        cls.def("cbrt_",    &Tensor::cbrt_);
+        cls.def("erf_",     &Tensor::erf_);
+        cls.def("erfinv_",  &Tensor::erfinv_);
+        cls.def("lgamma_",  &Tensor::lgamma_);
+        cls.def("tgamma_",  &Tensor::tgamma_);
+        cls.def("atan2_",   &Tensor::atan2_);
+        cls.def("sincos_",  &Tensor::sincos_);
+        cls.def("sincosh_", &Tensor::sincosh_);
     }
 
     cls.attr("select_") = py::cpp_function([](const dr::mask_t<Tensor> &m,

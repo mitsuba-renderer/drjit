@@ -303,9 +303,14 @@ struct Tensor
     #define F(op) Tensor op##_() const { return Tensor(op(m_array), m_shape); }
     F(rcp) F(sqrt) F(rsqrt) F(sin) F(cos) F(tan) F(csc) F(sec) F(cot) F(asin)
     F(acos) F(atan) F(exp) F(exp2) F(log) F(log2) F(cbrt) F(erf) F(erfinv)
-    F(lgamma) F(tgamma) F(sinh) F(cosh) F(tanh) F(csch) F(sech)
-    F(coth) F(asinh) F(acosh) F(atanh)
+    F(lgamma) F(tgamma) F(sinh) F(cosh) F(tanh) F(csch) F(sech) F(coth) F(asinh)
+    F(acosh) F(atanh) F(floor) F(ceil) F(round) F(trunc) F(tzcnt) F(lzcnt) F(popcnt)
     #undef F
+
+    template <int Imm> Tensor sl_() const { return sl_(Imm); }
+    template <int Imm> Tensor sr_() const { return sr_(Imm); }
+    Tensor sl_(const Tensor &b) const { return Tensor(m_array.sl_(b.m_array), m_shape); }
+    Tensor sr_(const Tensor &b) const { return Tensor(m_array.sr_(b.m_array), m_shape); }
 
     std::pair<Tensor, Tensor> sincos_() const {
         auto [s, c] = sincos(m_array);

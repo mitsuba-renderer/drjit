@@ -1647,7 +1647,7 @@ def round(arg, /):
     if isinstance(arg, ArrayBase):
         return arg.round_()
     else:
-        return round(arg)
+        return _builtins.round(arg)
 
 
 def trunc(arg, /):
