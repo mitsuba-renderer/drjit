@@ -688,3 +688,30 @@ def test23_shape(pkg):
     # Ragged
     assert dr.shape(m.Array3f([0, 1, 2], [0, 1], [0, 1])) is None
     assert dr.shape(m.Array3f([0, 1], [0, 1, 2], [0, 1, 2, 3])) is None
+
+@pytest.mark.parametrize("pkg", ['drjit.cuda.ad', 'drjit.llvm.ad'])
+def test24_set_label(pkg):
+    m = get_class(pkg)
+
+    def check_label(v, label):
+        assert dr.label(v) == label
+        assert dr.label(dr.detach(v)) == dr.label(v)
+
+    a = m.Float()
+    check_label(a, None)
+    dr.set_label(a, 'a')
+    check_label(a, None)
+
+    a = m.Float(4.0)
+    b = m.Float(4.0)
+    dr.set_label(b, 'b')
+    check_label(a, None)
+    check_label(b, 'b')
+    c = m.Float(4.0)
+    check_label(c, None)
+
+    a = m.Array3f(4.0)
+    check_label(a, [None, None, None])
+    dr.set_label(a, 'a')
+    check_label(a, ['a_0', 'a_1', 'a_2'])
+    assert dr.label(dr.detach(a)) == ['a_0', 'a_1', 'a_2']
