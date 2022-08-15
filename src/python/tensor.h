@@ -66,9 +66,7 @@ template <typename T> auto bind_tensor(py::module m) {
         cls.def("sub_", &Tensor::sub_);
         cls.def("mul_", &Tensor::mul_);
         cls.def("mod_", &Tensor::mod_);
-
-        cls.def(Tensor::IsFloat ? "itruediv_" : "ifloordiv_",
-                [](Tensor *a, const Tensor &b) { *a = a->div_(b); return a; });
+        cls.def(Tensor::IsFloat ? "truediv_" : "floordiv_", &Tensor::div_);
 
         cls.def("neg_", &Tensor::neg_);
         cls.def("fma_", &Tensor::fmadd_);
@@ -83,7 +81,8 @@ template <typename T> auto bind_tensor(py::module m) {
         cls.def("imul_", [](Tensor *a, const Tensor &b) { *a = a->mul_(b); return a; });
         if constexpr (Tensor::IsIntegral)
             cls.def("imod_", [](Tensor *a, const Tensor &b) { *a = a->mod_(b); return a; });
-
+        cls.def(Tensor::IsFloat ? "itruediv_" : "ifloordiv_",
+                [](Tensor *a, const Tensor &b) { *a = a->div_(b); return a; });
 
         cls.def("abs_", &Tensor::abs_);
         cls.def("minimum_", &Tensor::minimum_);
