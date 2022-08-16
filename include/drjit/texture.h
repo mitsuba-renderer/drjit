@@ -698,7 +698,7 @@ public:
         if constexpr (!is_array_v<Mask>)
             active = true;
 
-        if (HasCudaTexture && m_migrate && force_nonaccel)
+        if (HasCudaTexture && m_migrated && force_nonaccel)
             jit_log(::LogLevel::Warn,
                     "\"force_nonaccel\" is used while the data has been fully "
                     "migrated to CUDA texture memory");
@@ -1299,7 +1299,6 @@ private:
     FilterMode m_filter_mode;
     WrapMode m_wrap_mode;
     bool m_use_accel = false;
-    bool m_migrate = false;
     mutable bool m_migrated = false;
 };
 
