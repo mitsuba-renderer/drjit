@@ -696,7 +696,7 @@ def float64_array_t(arg):
     return arg.ReplaceScalar(VarType.Float64) if is_array_v(arg) else float
 
 
-def diff_array_t(a, allow_non_array=False):
+def diff_array_t(a):
     '''
     Converts the provided Dr.Jit array/tensor type into a differentiable version.
 
@@ -705,7 +705,7 @@ def diff_array_t(a, allow_non_array=False):
     1. When invoked with a Dr.Jit array *type* (e.g. :py:class:`drjit.cuda.Array3f`), it
        returns a *differentiable* version (e.g. :py:class:`drjit.cuda.ad.Array3f`).
 
-    2. When the input isn't a type, it returns ``diff_array_t(type(arg))(arg)``.
+    2. When the input isn't a type, it returns ``diff_array_t(type(arg))``.
 
     3. When the input is is a list or a tuple, it recursively call ``diff_array_t`` over all elements.
 
@@ -718,16 +718,13 @@ def diff_array_t(a, allow_non_array=False):
         type: Result of the conversion as described above.
     '''
     if isinstance(a, tuple):
-        return tuple(diff_array_t(v, allow_non_array=allow_non_array)
-                     for v in a)
+        return tuple(diff_array_t(v) for v in a)
     elif isinstance(a, list):
         return [diff_array_t(v) for v in a]
-    elif not is_array_v(a):
-        if allow_non_array:
-            return a
-        raise Exception("diff_array_t(): requires an Dr.Jit input array!")
     elif not isinstance(a, type):
-        return diff_array_t(type(a), allow_non_array=allow_non_array)(a)
+        return diff_array_t(type(a))
+    elif not is_array_v(a):
+        raise Exception("diff_array_t(): requires an Dr.Jit input array!")
     elif a.IsDiff:
         return a
     else:

@@ -5558,6 +5558,22 @@ def custom(cls, *args, **kwargs):
         else:
             return o
 
+    # Cast input values into differentiable types
+    def to_diff_array(o):
+        if isinstance(o, _Sequence):
+            return [to_diff_array(o[i]) for i in range(len(o))]
+        elif isinstance(o, _Mapping):
+            return { k: to_diff_array(v) for k, v in o.items() }
+        elif _dr.is_struct_v(o):
+            res = type(o)()
+            for k in type(o).DRJIT_STRUCT.keys():
+                setattr(res, k, to_diff_array(getattr(o, k)))
+            return res
+        elif not _dr.is_array_v(o):
+            return o
+        else:
+            return _dr.diff_array_t(o)(o)
+
     inst = cls()
 
     # Convert args to kwargs
@@ -5573,7 +5589,7 @@ def custom(cls, *args, **kwargs):
     _dr.detail.diff_vars(inst._implicit_in, diff_vars_in)
 
     if len(diff_vars_in) > 0:
-        output = _dr.diff_array_t(output, allow_non_array=True)
+        output = to_diff_array(output)
         Type = _dr.leaf_array_t(output)
         tmp_in, tmp_out = Type(), Type()
         _dr.enable_grad(tmp_in, tmp_out, output)
