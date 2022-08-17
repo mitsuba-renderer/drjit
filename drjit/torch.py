@@ -1,4 +1,145 @@
+from argparse import ArgumentError
 import drjit as _dr
+
+import inspect
+from collections.abc import Mapping as _Mapping, \
+                            Sequence as _Sequence
+
+
+def warp_ad(func, to: str, arg):
+    '''
+
+    '''
+
+    # Detect input framework
+    def detect(o):
+        if isinstance(o, _Sequence):
+            return detect(o[0])
+        elif isinstance(o, _Mapping):
+            return detect(o.items()[0][1])
+        elif _dr.is_array_v(o):
+            return 'drjit'
+        elif o.__module__ == 'torch' and type(o).__name__ == 'Tensor':
+            return 'torch'
+        else:
+            return None
+
+    def cast_to_generic(cast):
+        def func(a):
+            if _dr.is_array_v(a):
+                return cast(a)
+            elif isinstance(a, _Sequence):
+                return [func(b) for b in a]
+            elif isinstance(a, _Mapping):
+                return {k: func(v) for k, v in a.items()}
+        return func
+
+    def cast_from_generic(cast):
+        def func(a, dtype):
+            if _dr.is_array_v(dtype):
+                return cast(a, dtype)
+            elif isinstance(dtype, _Sequence):
+                return [func(a[i], dtype[i]) for i in range(len(dtype))]
+            elif isinstance(dtype, _Mapping):
+                return {k: func(a[k], dtype[k]) for k in dtype.keys()}
+        return func
+
+    def cast_to_torch(a):
+        def cast(a):
+            b = _torch.tensor(_np.array(a))
+            return b if _dr.is_llvm_v(a) else b.cuda()
+        return cast_to_generic(cast)(a)
+
+    def cast_from_torch(a, dtype):
+        def cast(a, dtype):
+            if _dr.is_llvm_v(dtype):
+                return dtype(a.cpu())
+            elif _dr.is_cuda_v(dtype):
+                return dtype(a.cuda())
+        return cast_from_generic(cast)(a, dtype)
+
+    if detect(arg) == 'torch':
+        import numpy as _np
+        import torch as _torch
+
+        if not to == 'drjit':
+            raise ArgumentError('wrap_ad(): invalid combination of frameworks, '
+                                'expected to=drjit!')
+
+        class ToDrJit(_torch.autograd.Function):
+            @staticmethod
+            def forward(ctx, arg):
+                ctx.arg = arg
+                # Get list of func arguments types from its signature
+                sig = inspect.signature(func)
+                arg_type = [sig.parameters[k].annotation for k in sig.parameters][0]
+
+                ctx.arg_drjit = cast_from_torch(arg, arg_type)
+                _dr.enable_grad(ctx.arg_drjit)
+
+                ctx.res_drjit = func(ctx.arg_drjit)
+
+                res_torch = cast_to_torch(ctx.res_drjit)
+
+                return res_torch
+
+            @staticmethod
+            @_torch.autograd.function.once_differentiable
+            def backward(ctx, grad_output):
+                _dr.set_grad(ctx.res_drjit, grad_output)
+                _dr.enqueue(_dr.ADMode.Backward, ctx.res_drjit)
+                _dr.traverse(type(ctx.res_drjit), _dr.ADMode.Backward)
+
+                arg_grad = cast_to_torch(_dr.grad(ctx.arg_drjit))
+
+                del ctx.res_drjit, ctx.arg_drjit
+                return arg_grad
+
+        return ToDrJit.apply(arg)
+
+    if to == 'torch':
+        import numpy as _np
+        import torch as _torch
+
+        if not detect(arg) == 'drjit':
+            raise ArgumentError('wrap_ad(): invalid combination of frameworks, '
+                                'expected args to be Dr.Jit array types!')
+
+        class ToTorch(_dr.CustomOp):
+            def eval(self, arg):
+                self.arg = arg
+                self.arg_torch = _torch.tensor(_np.array(arg))
+
+                if _dr.is_cuda_v(arg):
+                    self.arg_torch = self.arg_torch.cuda()
+
+                self.arg_torch.requires_grad = True
+
+                self.res_torch = func(self.arg_torch)
+
+                res_dtype = inspect.signature(func).return_annotation
+
+                return cast_from_torch(self.res_torch, res_dtype)
+
+            def forward(self):
+                raise TypeError("warp_ad(): forward-mode AD is not supported!")
+
+            def backward(self):
+                grad_out_torch = cast_to_torch(self.grad_out())
+
+                _torch.autograd.backward(self.res_torch, grad_out_torch)
+
+                arg_grad = cast_from_torch(self.arg_torch.grad, type(self.arg))
+
+                self.set_grad_in('arg', arg_grad)
+
+        return _dr.custom(ToTorch, arg)
+
+
+
+
+
+
 
 
 def to_torch(arg):
@@ -57,7 +198,10 @@ def to_torch(arg):
     class ToTorch(_torch.autograd.Function):
         @staticmethod
         def forward(ctx, arg, handle):
+            print('to_torch(): forward')
+            print(f'Thread ID: {threading.get_native_id()}')
             ctx.drjit_arg = arg
+            ctx.thread = threading.current_thread()
             if _dr.is_llvm_v(arg):
                 return _torch.tensor(_np.array(arg))
             elif _dr.is_cuda_v(arg):
@@ -68,10 +212,18 @@ def to_torch(arg):
         @staticmethod
         @_torch.autograd.function.once_differentiable
         def backward(ctx, grad_output):
+            print(dir(ctx.thread))
+            print('to_torch(): backward -> set_grad')
+            print(f'VCallRecord: {_dr.flag(_dr.JitFlag.VCallRecord)}')
             _dr.set_grad(ctx.drjit_arg, grad_output)
+            print(f'VCallRecord: {_dr.flag(_dr.JitFlag.VCallRecord)}')
             _dr.enqueue(_dr.ADMode.Backward, ctx.drjit_arg)
+            print(f'VCallRecord: {_dr.flag(_dr.JitFlag.VCallRecord)}')
+            print(_dr)
+            print(f'Thread ID: {threading.get_native_id()}')
             _dr.traverse(type(ctx.drjit_arg), _dr.ADMode.Backward)
             del ctx.drjit_arg
+            print('to_torch(): backward -> DONE')
             return None, None
 
     handle = _torch.empty(0, requires_grad=True)
@@ -133,6 +285,7 @@ def from_torch(dtype, arg):
 
     class FromTorch(_dr.CustomOp):
         def eval(self, arg, handle):
+            print('from_torch(): eval')
             self.torch_arg = arg
             if _dr.is_llvm_v(dtype):
                 return dtype(arg.cpu())
@@ -145,6 +298,7 @@ def from_torch(dtype, arg):
             raise TypeError("from_torch(): forward-mode AD is not supported!")
 
         def backward(self):
+            print('from_torch(): backward')
             grad_out = self.grad_out()
             grad = _torch.tensor(_np.array(grad_out))
             if self.torch_arg.is_cuda:
