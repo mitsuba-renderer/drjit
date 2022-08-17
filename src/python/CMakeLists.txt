@@ -82,10 +82,18 @@ endif()
 #   Generate type information stubs
 # ----------------------------------------------------------
 
-if (NOT Python_EXECUTABLE)
-    find_package(Python COMPONENTS Interpreter REQUIRED)
-endif()
+if (DRJIT_MASTER_PROJECT)
+    if (NOT Python_EXECUTABLE)
+        find_package(Python COMPONENTS Interpreter REQUIRED)
+    endif()
 
-add_custom_target(drjit_stub_file_generation ALL COMMAND
-    "${Python_EXECUTABLE}" -Xutf8 ${CMAKE_SOURCE_DIR}/resources/generate_stub_files.py
-    ${CMAKE_CURRENT_BINARY_DIR}/../../drjit/ ${CMAKE_CURRENT_BINARY_DIR}/../../ DEPENDS drjit-python)
+    add_custom_target(drjit_stub_file_generation ALL COMMAND
+        "${Python_EXECUTABLE}" -Xutf8 ${CMAKE_CURRENT_SOURCE_DIR}/../../resources/generate_stub_files.py
+        ${CMAKE_CURRENT_BINARY_DIR}/../../drjit/ ${CMAKE_CURRENT_BINARY_DIR}/../../ DEPENDS drjit-python)
+
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/../../drjit/__init__.pyi DESTINATION drjit)
+    install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/../../drjit/stubs/ DESTINATION drjit/stubs)
+    
+    file(GENERATE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/../../drjit/py.typed CONTENT "partial\n")
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/../../drjit/py.typed DESTINATION drjit)
+endif()
