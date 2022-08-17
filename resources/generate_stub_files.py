@@ -2,7 +2,7 @@
 """
 Usage: generate_stub_files.py {dest_dir} {drjit_path}
 
-This script generates stub files for Python type information for the `m̀itsuba`
+This script generates stub files for Python type information for the `drjit`
 package.  It recursively traverses the `drjit` package and writes all the
 objects (clases, methods, functions, enums, etc.) it finds to the `dest_dir`
 folder. The stub files contain both the signatures and the docstrings of the
@@ -21,14 +21,11 @@ import logging
 
 buffer = ''
 
-
 def w(s):
     global buffer
     buffer += f'{s}\n'
 
-
 # ------------------------------------------------------------------------------
-
 
 def process_type_hint(s):
     sub = s
@@ -56,7 +53,7 @@ def process_type_hint(s):
     offset = 0
     result = ''
     for t in type_hints:
-        result += s[offset:t[0] - 2]
+        result += s[offset:t[0]-2]
         offset = t[1]
         # if the type hint is valid, then add it as well
         if not ('::' in t[2]):
@@ -67,14 +64,9 @@ def process_type_hint(s):
     if '::' in result[result.index(' -> '):]:
         result = result[:result.index(' -> ')]
 
-    # Remove the specific variant hint
-    #result = result.replace(f'.{mi.variant()}', '')
-
     return result
 
-
 # ------------------------------------------------------------------------------
-
 
 def process_properties(name, p, indent=0):
     indent = ' ' * indent
@@ -91,9 +83,7 @@ def process_properties(name, p, indent=0):
                     w(f'{indent}{l}')
                 w(f'{indent}\"\"\"')
 
-
 # ------------------------------------------------------------------------------
-
 
 def process_enums(name, e, indent=0):
     indent = ' ' * indent
@@ -109,9 +99,7 @@ def process_enums(name, e, indent=0):
                     w(f'{indent}{l}')
             w(f'{indent}\"\"\"')
 
-
 # ------------------------------------------------------------------------------
-
 
 def process_class(obj):
     methods = []
@@ -130,8 +118,7 @@ def process_class(obj):
         v = getattr(obj, k)
         if type(v).__name__ == 'instancemethod':
             methods.append((k, v))
-        elif type(v).__name__ == 'function' and v.__code__.co_varnames[
-                0] == 'self':
+        elif type(v).__name__ == 'function' and v.__code__.co_varnames[ 0] == 'self':
             py_methods.append((k, v))
         elif type(v).__name__ == 'property':
             properties.append((k, v))
@@ -207,7 +194,7 @@ def process_function(name, obj, indent=0):
         else:
             w(f"{indent}def {l}:{'' if has_doc else ' ...'}")
 
-        if len(doc) > 1:  # first line is always empty
+        if len(doc) > 1: # first line is always empty
             w(f'{indent}    \"\"\"')
             for l in doc[1:]:
                 w(f'{indent}    {l}')
@@ -215,9 +202,7 @@ def process_function(name, obj, indent=0):
             w(f'{indent}    ...')
             w(f'')
 
-
 # ------------------------------------------------------------------------------
-
 
 def process_py_function(name, obj, indent=0):
     indent = ' ' * indent
@@ -242,9 +227,7 @@ def process_py_function(name, obj, indent=0):
             w(f'{indent}    ...')
             w(f'')
 
-
 # ------------------------------------------------------------------------------
-
 
 def process_module(m):
     global buffer
@@ -292,11 +275,7 @@ def process_module(m):
             w('')
             submodules.append((k, v))
 
-    # Adjust DrJIT type hints manually here
-    #buffer = buffer.replace(f'drjit.{mi.variant()[:4]}.ad.', 'mitsuba.')
-
     return buffer, submodules
-
 
 # ------------------------------------------------------------------------------
 
@@ -337,5 +316,4 @@ if __name__ == '__main__':
         submodules = submodules[1:] + new_submodules
         processed_submodules.add(k)
 
-    logging.info(
-        f'Done -> stub files written to {os.path.abspath(stub_folder)}')
+    logging.info(f'Done -> stub files written to {os.path.abspath(stub_folder)}')
