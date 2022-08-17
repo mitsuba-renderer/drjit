@@ -1,5 +1,6 @@
 import drjit as _dr
 import numpy as _np
+import torch as _torch
 
 
 def to_torch(arg):
@@ -49,17 +50,15 @@ def to_torch(arg):
     Returns:
         torch.tensor: The PyTorch tensor representing the input Dr.Jit array.
     '''
-    import torch
-    import torch.autograd
 
-    class ToTorch(torch.autograd.Function):
+    class ToTorch(_torch.autograd.Function):
         @staticmethod
         def forward(ctx, arg, handle):
             ctx.drjit_arg = arg
-            return torch.tensor(_np.array(arg))
+            return _torch.tensor(_np.array(arg))
 
         @staticmethod
-        @torch.autograd.function.once_differentiable
+        @_torch.autograd.function.once_differentiable
         def backward(ctx, grad_output):
             _dr.set_grad(ctx.drjit_arg, grad_output)
             _dr.enqueue(_dr.ADMode.Backward, ctx.drjit_arg)
@@ -67,8 +66,7 @@ def to_torch(arg):
             del ctx.drjit_arg
             return None, None
 
-
-    handle = torch.empty(0, requires_grad=True)
+    handle = _torch.empty(0, requires_grad=True)
     return ToTorch.apply(arg, handle)
 
 
@@ -119,7 +117,6 @@ def from_torch(dtype, arg):
         drjit.ArrayBase: The differentiable Dr.Jit array representing the input
                          PyTorch tensor.
     '''
-    import torch
     if not _dr.is_diff_v(dtype) or not _dr.is_array_v(dtype):
         raise TypeError("from_torch(): expected a differentiable Dr.Jit array type!")
 
@@ -132,7 +129,7 @@ def from_torch(dtype, arg):
             raise TypeError("from_torch(): forward-mode AD is not supported!")
 
         def backward(self):
-            grad = torch.tensor(_np.array(self.grad_out()))
+            grad = _torch.tensor(_np.array(self.grad_out()))
             self.torch_arg.backward(grad)
 
     handle = _dr.zeros(dtype)
