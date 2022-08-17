@@ -1,6 +1,4 @@
 import drjit as _dr
-import numpy as _np
-import torch as _torch
 
 
 def to_torch(arg):
@@ -50,12 +48,22 @@ def to_torch(arg):
     Returns:
         torch.tensor: The PyTorch tensor representing the input Dr.Jit array.
     '''
+    import numpy as _np
+    import torch as _torch
+
+    if not _dr.is_diff_v(arg) or not _dr.is_array_v(arg):
+        raise TypeError("from_torch(): expected a differentiable Dr.Jit array type!")
 
     class ToTorch(_torch.autograd.Function):
         @staticmethod
         def forward(ctx, arg, handle):
             ctx.drjit_arg = arg
-            return _torch.tensor(_np.array(arg))
+            if _dr.is_llvm_v(arg):
+                return _torch.tensor(_np.array(arg))
+            elif _dr.is_cuda_v(arg):
+                return _torch.tensor(_np.array(arg)).cuda()
+            else:
+                raise TypeError("to_torch(): expected an LLVM or CUDA Dr.Jit array type!")
 
         @staticmethod
         @_torch.autograd.function.once_differentiable
@@ -117,19 +125,30 @@ def from_torch(dtype, arg):
         drjit.ArrayBase: The differentiable Dr.Jit array representing the input
                          PyTorch tensor.
     '''
+    import numpy as _np
+    import torch as _torch
+
     if not _dr.is_diff_v(dtype) or not _dr.is_array_v(dtype):
         raise TypeError("from_torch(): expected a differentiable Dr.Jit array type!")
 
     class FromTorch(_dr.CustomOp):
         def eval(self, arg, handle):
             self.torch_arg = arg
-            return dtype(arg)
+            if _dr.is_llvm_v(dtype):
+                return dtype(arg.cpu())
+            elif _dr.is_cuda_v(dtype):
+                return dtype(arg.cuda())
+            else:
+                raise TypeError("from_torch(): expected an LLVM or CUDA Dr.Jit array type!")
 
         def forward(self):
             raise TypeError("from_torch(): forward-mode AD is not supported!")
 
         def backward(self):
-            grad = _torch.tensor(_np.array(self.grad_out()))
+            grad_out = self.grad_out()
+            grad = _torch.tensor(_np.array(grad_out))
+            if self.torch_arg.is_cuda:
+                grad = grad.cuda()
             self.torch_arg.backward(grad)
 
     handle = _dr.zeros(dtype)

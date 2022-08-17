@@ -1,11 +1,18 @@
 import drjit as dr
-import torch
-
+import sys
 import importlib
 import pytest
 
+try:
+    import torch
+except:
+    pass
+
 @pytest.fixture(scope="module", params=['drjit.cuda.ad', 'drjit.llvm.ad'])
 def m(request):
+    if not 'torch' in sys.modules:
+        pytest.skip('PyTorch is not installed on this system')
+
     if 'cuda' in request.param:
         if not dr.has_backend(dr.JitBackend.CUDA):
             pytest.skip('CUDA mode is unsupported')
