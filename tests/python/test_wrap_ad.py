@@ -23,13 +23,13 @@ def m(request):
 
 
 def test01_to_torch(m):
-    a = m.Float([1.0, 2.0, 3.0])
+    a = m.TensorXf(m.Float([1.0, 2.0, 3.0]), shape=[3])
     dr.enable_grad(a)
 
-    def func(a) -> m.Float:
+    def func(a):
         return a * 4
 
-    b = dr.warp_ad(func, 'torch', a)
+    b = dr.wrap_ad(func, 'torch', a)
     dr.backward(dr.sum(b))
 
     assert dr.allclose(b, [4, 8, 12])
@@ -42,10 +42,10 @@ def test02_from_torch(m):
         a = a.cuda()
     a.requires_grad = True
 
-    def func(a: m.Float):
+    def func(a):
         return a * 4
 
-    b = dr.warp_ad(func, 'drjit', a)
+    b = dr.wrap_ad(func, 'drjit', a)
 
     b.sum().backward()
 

@@ -1,3 +1,4 @@
+from typing import Type
 import drjit as _dr
 from drjit import ArrayBase, VarType, Exception, Dynamic
 from drjit.detail import array_name as _array_name
@@ -77,6 +78,7 @@ def _var_promote(*args):
     base = None
     depth = 0
     diff = False
+    shape = []
 
     for i, a in enumerate(args):
         vt[i] = _var_type(a)
@@ -85,8 +87,9 @@ def _var_promote(*args):
         if depth_i > depth:
             base = a
             depth = depth_i
-        elif getattr(a, 'IsTensor', False):
+        if _dr.is_tensor_v(a):
             base = a
+            shape = a.shape
 
     if base is None:
         raise Exception("At least one of the input arguments "
@@ -105,7 +108,10 @@ def _var_promote(*args):
     result = list(args)
     for i, a in enumerate(result):
         if type(a) is not t:
-            result[i] = t(result[i])
+            if _dr.is_tensor_v(t):
+                result[i] = t(result[i], shape)
+            else:
+                result[i] = t(result[i])
 
     return result
 
@@ -4030,7 +4036,10 @@ def accum_grad(dst, src):
 
         t = _dr.detached_t(dst)
         if type(src) is not t:
-            src = t(src)
+            if _dr.is_tensor_v(t):
+                src = t(src, dst.shape)
+            else:
+                src = t(src)
 
         dst.accum_grad_(src)
     elif isinstance(dst, _Sequence):
@@ -5626,6 +5635,112 @@ def custom(cls, *args, **kwargs):
         inst._implicit_out = []
 
     return output
+
+
+def wrap_ad(func, to: str, arg):
+    '''
+
+    '''
+    def detect_framework(o):
+        if isinstance(o, _Sequence):
+            return detect_framework(o[0])
+        elif isinstance(o, _Mapping):
+            return detect_framework(o.items()[0][1])
+        elif _dr.is_array_v(o):
+            return 'drjit'
+        elif o.__module__ == 'torch' and type(o).__name__ == 'Tensor':
+            return 'torch'
+        else:
+            return None
+
+    def cast_generic(cast):
+        def func(a):
+            if isinstance(a, _Sequence):
+                print('sequence')
+                return [func(b) for b in a]
+            elif isinstance(a, _Mapping):
+                return {k: func(v) for k, v in a.items()}
+            else:
+                return cast(a)
+        return func
+
+    def cast_to_torch(a):
+        def cast(a):
+            b = _torch.tensor(_np.array(a))
+            return b if _dr.is_llvm_v(a) else b.cuda()
+        return cast_generic(cast)(a)
+
+    def cast_from_torch(a):
+        def cast(a):
+            dtype_str = {
+                _torch.float:   'TensorXf',
+                _torch.float32: 'TensorXf',
+                _torch.float64: 'TensorXf64',
+                _torch.int32:   'TensorXi',
+                _torch.int:     'TensorXi',
+                _torch.int64:   'TensorXi64',
+                _torch.long:    'TensorXi64',
+            }[a.dtype]
+            device = 'cuda' if a.is_cuda else 'llvm'
+            m = getattr(getattr(_dr, device),'ad')
+            return getattr(m, dtype_str)(a)
+        return cast_generic(cast)(a)
+
+    # Detect input framework
+    input_framework = detect_framework(arg)
+    func_framework = to
+
+    if not 'drjit' in [input_framework, func_framework]:
+            raise TypeError('wrap_ad(): invalid combination of frameworks, '
+                            'expected one to be drjit!')
+
+    if input_framework == 'torch':
+        import numpy as _np
+        import torch as _torch
+
+        class ToDrJit(_torch.autograd.Function):
+            @staticmethod
+            def forward(ctx, arg):
+                ctx.arg = arg
+                ctx.arg_drjit = cast_from_torch(arg)
+                _dr.enable_grad(ctx.arg_drjit)
+                ctx.res_drjit = func(ctx.arg_drjit)
+                return cast_to_torch(ctx.res_drjit)
+
+            @staticmethod
+            @_torch.autograd.function.once_differentiable
+            def backward(ctx, grad_output):
+                _dr.set_grad(ctx.res_drjit, grad_output)
+                _dr.enqueue(_dr.ADMode.Backward, ctx.res_drjit)
+                _dr.traverse(type(ctx.res_drjit), _dr.ADMode.Backward)
+                arg_grad = cast_to_torch(_dr.grad(ctx.arg_drjit))
+                del ctx.res_drjit, ctx.arg_drjit
+                return arg_grad
+
+        return ToDrJit.apply(arg)
+
+    if to == 'torch':
+        import numpy as _np
+        import torch as _torch
+
+        class ToTorch(_dr.CustomOp):
+            def eval(self, arg):
+                self.arg = arg
+                self.arg_torch = cast_to_torch(arg)
+                self.arg_torch.requires_grad = True
+                self.res_torch = func(self.arg_torch)
+                return cast_from_torch(self.res_torch)
+
+            def forward(self):
+                raise TypeError("warp_ad(): forward-mode AD is not supported!")
+
+            def backward(self):
+                grad_out_torch = cast_to_torch(self.grad_out())
+                _torch.autograd.backward(self.res_torch, grad_out_torch)
+                arg_grad = cast_from_torch(self.arg_torch.grad)
+                self.set_grad_in('arg', arg_grad.array)
+
+        return _dr.custom(ToTorch, arg)
 
 
 def graphviz_ad(as_str=False):
