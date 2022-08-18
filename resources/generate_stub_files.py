@@ -220,6 +220,18 @@ def process_py_function(name, obj, indent=0):
     signature = signature.replace('\'', '')
     signature = signature.replace('dr.', 'drjit.')
 
+    # Fix parameters that have enums as default values
+    enum_match = re.search(r'\=<', signature)
+    while enum_match is not None:
+        begin = enum_match.start()
+        end = begin + signature[begin:].index('>')
+
+        new_default_value = signature[begin + 2:end]
+        new_default_value = new_default_value[:new_default_value.index(':')]
+
+        signature = signature[:begin + 1] + new_default_value + signature[end + 1:]
+        enum_match = re.search(r'\=<', signature[begin])
+
     w(f"{indent}def {name}{signature}:{'' if has_doc else ' ...'}")
 
     if has_doc:
