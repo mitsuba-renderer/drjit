@@ -216,7 +216,7 @@ struct DynamicArray
     }
 
     void init_(size_t size) {
-        if (size == 0 || size == Dynamic)
+        if (size == 0)
             return;
         m_data = new Value[size];
         m_size = size;

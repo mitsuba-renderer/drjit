@@ -557,7 +557,7 @@ def reinterpret_array_v(dtype, value):
 
                 for i in range(len(value)):
                     result[i] = reinterpret_array(dtype.Value, value[i],
-                                                       dtype.Type, value.Type)
+                                                  dtype.Type, value.Type)
 
                 return result
         else:
