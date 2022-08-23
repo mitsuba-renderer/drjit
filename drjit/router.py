@@ -4975,10 +4975,10 @@ def make_opaque(*args):
             if _dr.depth_v(t) > 1:
                 for i in range(len(a)):
                     make_opaque(a.entry_ref_(i))
-            elif _dr.is_diff_v(t):
-                make_opaque(a.detach_ref_())
             elif _dr.is_tensor_v(t):
                 make_opaque(a.array)
+            elif _dr.is_diff_v(t):
+                make_opaque(a.detach_ref_())
             elif _dr.is_jit_v(t):
                 if not a.is_evaluated_():
                     a.assign(a.copy_())
