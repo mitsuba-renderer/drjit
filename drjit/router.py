@@ -238,7 +238,7 @@ def shape(arg, /):
 
     def _shape_impl(a, i, shape):
         if not isinstance(a, ArrayBase):
-            return
+            return False
 
         size = len(a)
         if i < len(shape):
@@ -286,7 +286,10 @@ def width(arg, /):
         if _dr.is_tensor_v(arg):
             return width(arg.array)
         else:
-            return shape(arg)[-1]
+            s = shape(arg)
+            if s is None:
+                raise Exception('width(): ragged arrays not permitted!')
+            return s[-1]
     elif _dr.is_struct_v(arg):
         result = 0
         for k in type(arg).DRJIT_STRUCT.keys():
