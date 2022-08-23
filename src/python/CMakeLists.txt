@@ -89,7 +89,11 @@ if (DRJIT_MASTER_PROJECT)
 
     add_custom_target(drjit_stub_file_generation ALL COMMAND
         "${Python_EXECUTABLE}" -Xutf8 ${CMAKE_CURRENT_SOURCE_DIR}/../../resources/generate_stub_files.py
-        ${CMAKE_CURRENT_BINARY_DIR}/../../drjit/ ${CMAKE_CURRENT_BINARY_DIR}/../../ DEPENDS drjit-python copy-python-files)
+        ${CMAKE_CURRENT_BINARY_DIR}/../../drjit/ ${CMAKE_CURRENT_BINARY_DIR}/../../ DEPENDS drjit-python)
+
+    if (NOT "${CMAKE_CURRENT_SOURCE_DIR}" STREQUAL "${CMAKE_CURRENT_BINARY_DIR}")
+        add_dependencies(drjit_stub_file_generation copy-python-files)
+    endif()
 
     install(FILES ${CMAKE_CURRENT_BINARY_DIR}/../../drjit/__init__.pyi DESTINATION drjit)
     install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/../../drjit/stubs/ DESTINATION drjit/stubs)
