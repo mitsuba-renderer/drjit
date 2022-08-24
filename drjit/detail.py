@@ -496,7 +496,7 @@ def _loop_process_state(value: type, in_state: list, out_state: list,
         return
 
     if _dr.is_tensor_v(t):
-        _loop_process_state(value.array, in_state, out_state, in_struct)
+        _loop_process_state(value.array, in_state, out_state, write, in_struct)
     elif _dr.is_jit_v(t):
         if t.Depth > 1:
             for i in range(len(value)):
@@ -533,7 +533,7 @@ def _loop_process_state(value: type, in_state: list, out_state: list,
                         value.set_index_ad_(index_ad)
     elif _dr.is_struct_v(t):
         for k, v in t.DRJIT_STRUCT.items():
-            _loop_process_state(getattr(value, k), in_state, out_state, True)
+            _loop_process_state(getattr(value, k), in_state, out_state, write, True)
     elif hasattr(value, 'loop_put') or value is None:
         pass
     elif not in_struct:
