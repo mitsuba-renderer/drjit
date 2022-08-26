@@ -339,7 +339,7 @@ def resize(arg, size):
 
 def device(value=None):
     '''
-    Return the CUDA device ID associated with the current thread.
+    Return the CUDA device ID associated with the current thread. (-1 if CPU)
     '''
     if value is None:
         return _dr.detail.device()
@@ -348,7 +348,10 @@ def device(value=None):
     elif _dr.is_diff_v(value):
         return device(_dr.detach(value, preserve_type=False))
     elif _dr.is_jit_v(value):
-        return _dr.detail.device(value.index)
+        try:
+            return _dr.detail.device(value.index)
+        except RuntimeError as e:
+            return 0 if _dr.is_cuda_v(value) else -1
     else:
         return -1
 
