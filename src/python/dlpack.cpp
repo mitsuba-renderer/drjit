@@ -18,6 +18,7 @@ static_assert(sizeof(DLManagedTensor) == 64, "Alignment issue?");
 
 
 static void cleanup(DLManagedTensor *mt) {
+    py::gil_scoped_acquire acquire;
     delete[] mt->shape;
     delete[] mt->strides;
     Py_DECREF(mt->manager_ctx);
