@@ -5799,7 +5799,7 @@ def wrap_ad(source: str, target: str):
             # Ensure tensors in `a` have same shape as tensors in `b` (handles dim==0 case)
             def torch_ensure_shape(a, b):
                 if isinstance(a, _Sequence):
-                    return tuple(torch_ensure_shape(b, b[i]) for i, b in enumerate(a))
+                    return tuple(torch_ensure_shape(a[i], b[i]) for i in range(len(a)))
                 elif isinstance(a, _Mapping):
                     return {k: torch_ensure_shape(v, b[k]) for k, v in a.items()}
                 else:
@@ -5809,7 +5809,7 @@ def wrap_ad(source: str, target: str):
                 class ToDrJit(_torch.autograd.Function):
                     @staticmethod
                     def forward(ctx, *args):
-                        ctx.args = args
+                        ctx.save_for_backward(*args)
                         ctx.args_drjit = torch_to_drjit(args)
                         _dr.enable_grad(ctx.args_drjit)
                         res = func(*ctx.args_drjit)
@@ -5823,7 +5823,7 @@ def wrap_ad(source: str, target: str):
                         _dr.enqueue(_dr.ADMode.Backward, ctx.res_drjit)
                         _dr.traverse(ctx.res_drjit, _dr.ADMode.Backward)
                         args_grad = drjit_to_torch(_dr.grad(ctx.args_drjit))
-                        args_grad = torch_ensure_shape(args_grad, ctx.args)
+                        args_grad = torch_ensure_shape(args_grad, ctx.saved_tensors)
                         del ctx.res_drjit, ctx.args_drjit
                         return args_grad
 
