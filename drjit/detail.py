@@ -299,7 +299,8 @@ def tensor_init(tensor_type, obj):
         import tensorflow as tf
         return tensor_type(tensor_type.Array(tf.reshape(obj, [-1])), obj.shape)
     elif mod.startswith('torch'):
-        return tensor_type(tensor_type.Array(obj.flatten()), obj.shape)
+        shape = obj.shape if len(obj.shape) > 0 else [1]
+        return tensor_type(tensor_type.Array(obj.flatten()), shape)
     elif mod.startswith(('numpy', 'jax')):
         return tensor_type(tensor_type.Array(obj.ravel()), obj.shape)
     else:

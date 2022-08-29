@@ -5796,6 +5796,15 @@ def wrap_ad(source: str, target: str):
                 else:
                     raise TypeError("wrap_ad(): input arguments should be Torch tensors!")
 
+            # Ensure tensors in `a` have same shape as tensors in `b` (handles dim==0 case)
+            def torch_ensure_shape(a, b):
+                if isinstance(a, _Sequence):
+                    return tuple(torch_ensure_shape(b, b[i]) for i, b in enumerate(a))
+                elif isinstance(a, _Mapping):
+                    return {k: torch_ensure_shape(v, b[k]) for k, v in a.items()}
+                else:
+                    return a.reshape(b.shape)
+
             if source == 'torch':
                 class ToDrJit(_torch.autograd.Function):
                     @staticmethod
@@ -5814,6 +5823,7 @@ def wrap_ad(source: str, target: str):
                         _dr.enqueue(_dr.ADMode.Backward, ctx.res_drjit)
                         _dr.traverse(ctx.res_drjit, _dr.ADMode.Backward)
                         args_grad = drjit_to_torch(_dr.grad(ctx.args_drjit))
+                        args_grad = torch_ensure_shape(args_grad, ctx.args)
                         del ctx.res_drjit, ctx.args_drjit
                         return args_grad
 
@@ -5834,6 +5844,7 @@ def wrap_ad(source: str, target: str):
 
                     def backward(self):
                         grad_out_torch = drjit_to_torch(self.grad_out())
+                        grad_out_torch = torch_ensure_shape(grad_out_torch, self.res_torch)
                         _torch.autograd.backward(self.res_torch, grad_out_torch)
                         args_grad = torch_to_drjit([a.grad for a in self.args_torch])
                         self.set_grad_in('args', args_grad)
