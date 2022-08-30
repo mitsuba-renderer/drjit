@@ -5,6 +5,7 @@
 #include <drjit/texture.h>
 #include <pybind11/stl.h>
 #include <pybind11/operators.h>
+#include <sstream>
 
 extern void export_scalar(py::module_ &m);
 
@@ -317,6 +318,13 @@ PYBIND11_MODULE(drjit_ext, m_) {
     m.def("registry_trim", &jit_registry_trim);
     m.def("registry_clear", &jit_registry_clear);
     m.def("set_thread_count", &jit_llvm_set_thread_count);
+    m.def("llvm_version", []() {
+        int major, minor, patch;
+        jit_llvm_version(&major, &minor, &patch);
+        char str[12];
+        snprintf(str, sizeof(str), "%i.%i.%i", major,  minor, patch);
+        return py::str(str);
+    });
 
     py::object io = py::module_::import("io");
     m.def(
