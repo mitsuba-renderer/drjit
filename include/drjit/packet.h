@@ -36,6 +36,10 @@
 #  include <drjit/packet_avx512.h>
 #endif
 
+#if defined(DRJIT_ARM_NEON)
+#  include <drjit/packet_neon.h>
+#endif
+
 NAMESPACE_BEGIN(drjit)
 
 template <typename Value_, size_t Size_>

@@ -442,7 +442,7 @@ void validate_horizontal(const std::vector<value_t<T>> &args,
                          value_t<T> (*refFunc)(const T &),
                          const value_t<T> &eps = 0) {
     std::mt19937 gen;
-    std::uniform_int_distribution<> dis(0, (int) args.size()-1);
+    std::uniform_int_distribution<> dis(1, (int) args.size()-1);
     T value;
 
     for (int i = 0; i < 1000; ++i) {

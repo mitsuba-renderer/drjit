@@ -13,6 +13,8 @@
 
 #pragma once
 
+#include <ostream>
+
 #include <drjit/array_traits.h>
 #include <drjit/packet_intrin.h>
 
