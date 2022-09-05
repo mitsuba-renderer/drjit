@@ -61,7 +61,7 @@ def _var_type(a, preferred=VarType.Void):
                   VarType.Int32, VarType.Int64, VarType.UInt32, VarType.UInt64]:
             if t.NumPy == a.dtype:
                 return t
-    elif isinstance(a, _Sequence):
+    elif isinstance(a, _Sequence) and not isinstance(a, str):
         return _builtins.max([_var_type(v, preferred) for v in a])
     elif isinstance(a, type(None)) or 'pybind11' in type(type(a)).__name__:
         return VarType.Pointer
@@ -1163,7 +1163,7 @@ def slice(value, index=None, return_type=None):
         object: Single entry of the structure of arrays.
     '''
     t = type(value)
-    if _dr.depth_v(t) > 1 or issubclass(t, _Sequence):
+    if _dr.depth_v(t) > 1 or issubclass(t, _Sequence) and not issubclass(t, str):
         size = len(value)
         result = [None] * size
         for i in range(size):
@@ -2324,7 +2324,7 @@ def set_label(*args, **kwargs):
         a, label = args
         if _dr.is_jit_v(a) or _dr.is_diff_v(a):
             a.set_label_(label)
-        elif isinstance(a, _Sequence):
+        elif isinstance(a, _Sequence) and not isinstance(a, str):
             for i, v in enumerate(a):
                 set_label(v, label + "_" + str(i))
         elif isinstance(a, _Mapping):
@@ -2418,7 +2418,7 @@ def schedule(*args):
         elif _dr.is_struct_v(t):
             for k in t.DRJIT_STRUCT.keys():
                 result |= schedule(getattr(a, k))
-        elif issubclass(t, _Sequence):
+        elif issubclass(t, _Sequence) and not issubclass(t, str):
             for v in a:
                 result |= schedule(v)
         elif issubclass(t, _Mapping):
@@ -3946,14 +3946,18 @@ def grad(arg, preserve_type=True):
     '''
     Return the gradient value associated to a given variable.
 
-    When the variable doesn't have gradient tracking enabled, this function returns ``0``.
+    When the variable doesn't have gradient tracking enabled, this function
+    returns ``0``.
+
+    For all input variables that are not Dr.Jit arrays or mapping and sequences,
+    thi function returns ``None``.
 
     Args:
         arg (object): An arbitrary Dr.Jit array, tensor,
           :ref:`custom data structure <custom-struct>`, sequences, or mapping.
 
-        preserve_type (bool): Defines whether the returned variable should preserve
-          the type of the input variable.
+        preserve_type (bool): Defines whether the returned variable should
+          preserve the type of the input variable.
 
     Returns:
         object: the gradient value associated to the input variable.
@@ -3976,12 +3980,13 @@ def grad(arg, preserve_type=True):
         for k in type(arg).DRJIT_STRUCT.keys():
             setattr(result, k, grad(getattr(arg, k), preserve_type))
         return result
-    elif isinstance(arg, _Sequence):
+    elif isinstance(arg, _Sequence) and not isinstance(arg, str):
         return type(arg)([grad(v, preserve_type) for v in arg])
     elif isinstance(arg, _Mapping):
         return {k : grad(v, preserve_type) for k, v in arg.items()}
     else:
-        return _dr.zeros(type(arg))
+        return None
+
 
 
 def set_grad(dst, src):
@@ -4007,8 +4012,8 @@ def set_grad(dst, src):
             src = t(src)
 
         dst.set_grad_(src)
-    elif isinstance(dst, _Sequence):
-        vs = isinstance(src, _Sequence)
+    elif isinstance(dst, _Sequence) and not isinstance(dst, str):
+        vs = isinstance(src, _Sequence) and not isinstance(src, str)
         if vs and len(dst) != len(src):
             raise RuntimeError("set_grad(): argument sizes are not matching "
                             "({len(dst)}, {len(src)})")
@@ -4052,8 +4057,8 @@ def accum_grad(dst, src):
                 src = t(src)
 
         dst.accum_grad_(src)
-    elif isinstance(dst, _Sequence):
-        vs = isinstance(src, _Sequence)
+    elif isinstance(dst, _Sequence) and not isinstance(dst, str):
+        vs = isinstance(src, _Sequence) and not isinstance(src, str)
         if vs and len(dst) != len(src):
             raise RuntimeError("accum_grad(): argument sizes are not matching "
                             "({len(dst)}, {len(src)})")
@@ -4091,7 +4096,7 @@ def grad_enabled(*args):
         elif _dr.is_struct_v(a):
             for k in type(a).DRJIT_STRUCT.keys():
                 result |= grad_enabled(getattr(a, k))
-        elif isinstance(a, _Sequence):
+        elif isinstance(a, _Sequence) and not isinstance(a, str):
             for v in a:
                 result |= grad_enabled(v)
         elif isinstance(a, _Mapping):
@@ -4116,7 +4121,7 @@ def set_grad_enabled(arg, value):
     elif _dr.is_struct_v(arg):
         for k in type(arg).DRJIT_STRUCT.keys():
             set_grad_enabled(getattr(arg, k), value)
-    elif isinstance(arg, _Sequence):
+    elif isinstance(arg, _Sequence) and not isinstance(arg, str):
         for v in arg:
             set_grad_enabled(v, value)
     elif isinstance(arg, _Mapping):
@@ -4286,7 +4291,7 @@ def enqueue(mode, *args):
     for a in args:
         if _dr.is_diff_v(a) and a.IsFloat:
             a.enqueue_(mode)
-        elif isinstance(a, _Sequence):
+        elif isinstance(a, _Sequence) and not isinstance(a, str):
             for v in a:
                 enqueue(mode, v)
         elif isinstance(a, _Mapping):
@@ -5002,7 +5007,7 @@ def make_opaque(*args):
         elif _dr.is_struct_v(t):
             for k in t.DRJIT_STRUCT.keys():
                 make_opaque(getattr(a, k))
-        elif issubclass(t, _Sequence):
+        elif issubclass(t, _Sequence) and not issubclass(t, str):
             for v in a:
                 make_opaque(v)
         elif issubclass(t, _Mapping):
@@ -5513,7 +5518,7 @@ class CustomOp:
     def __del__(self):
         def ad_clear(o):
             if _dr.depth_v(o) > 1 \
-               or isinstance(o, _Sequence):
+               or isinstance(o, _Sequence) and not isinstance(o, str):
                 for i in range(len(o)):
                     ad_clear(o[i])
             elif isinstance(o, _Mapping):
@@ -5550,7 +5555,7 @@ def custom(cls, *args, **kwargs):
     # Clear primal values of a differentiable array
     def clear_primal(o, dec_ref):
         if _dr.depth_v(o) > 1 \
-           or isinstance(o, _Sequence):
+           or isinstance(o, _Sequence) and not isinstance(o, str):
             return type(o)([clear_primal(o[i], dec_ref) for i in range(len(o))])
         elif isinstance(o, _Mapping):
             return { k: clear_primal(v, dec_ref) for k, v in o.items() }
@@ -5579,7 +5584,7 @@ def custom(cls, *args, **kwargs):
 
     # Cast input values into differentiable types
     def to_diff_array(o):
-        if isinstance(o, _Sequence):
+        if isinstance(o, _Sequence) and not isinstance(o, str):
             return [to_diff_array(o[i]) for i in range(len(o))]
         elif isinstance(o, _Mapping):
             return { k: to_diff_array(v) for k, v in o.items() }
@@ -5759,28 +5764,38 @@ def wrap_ad(source: str, target: str):
 
     def wrapper(func: Callable):
         @_wraps(func)
-        def f(*args):
+        def f(*args, **kwargs):
             if 'torch' in [source, target]:
                 import torch as _torch
 
+            # Return whether the input argument is a PyTorch tensor
+            def is_torch_tensor(a):
+                return getattr(a, '__module__', None) == 'torch' \
+                       and type(a).__name__ == 'Tensor'
+
             # Casting routing from Dr.Jit tensors to PyTorch tensors
             def drjit_to_torch(a):
-                if isinstance(a, _Sequence):
+                if isinstance(a, _Sequence) and not isinstance(a, str):
                     return tuple(drjit_to_torch(b) for b in a)
                 elif isinstance(a, _Mapping):
                     return {k: drjit_to_torch(v) for k, v in a.items()}
                 elif _dr.is_array_v(a) and _dr.is_tensor_v(a):
-                    return a.torch()
+                    b = a.torch()
+                    b.requires_grad = _dr.grad_enabled(a)
+                    return b
+                elif _dr.is_diff_v(a) and _dr.grad_enabled(a):
+                    raise TypeError("wrap_ad(): input arguments with gradient "
+                                    "enabled should be Dr.Jit tensor!")
                 else:
-                    raise TypeError("wrap_ad(): input arguments should be Dr.Jit tensor!")
+                    return a
 
             # Casting routing from PyTorch tensors to Dr.Jit tensors
             def torch_to_drjit(a):
-                if isinstance(a, _Sequence):
+                if isinstance(a, _Sequence) and not isinstance(a, str):
                     return tuple(torch_to_drjit(b) for b in a)
                 elif isinstance(a, _Mapping):
                     return {k: torch_to_drjit(v) for k, v in a.items()}
-                elif a.__module__ == 'torch' and type(a).__name__ == 'Tensor':
+                elif is_torch_tensor(a):
                     dtype_str = {
                         _torch.float:   'TensorXf',
                         _torch.float32: 'TensorXf',
@@ -5794,22 +5809,27 @@ def wrap_ad(source: str, target: str):
                     m = getattr(getattr(_dr, device),'ad')
                     return getattr(m, dtype_str)(a)
                 else:
-                    raise TypeError("wrap_ad(): input arguments should be Torch tensors!")
+                    return a
 
             # Ensure tensors in `a` have same shape as tensors in `b` (handles dim==0 case)
             def torch_ensure_shape(a, b):
-                if isinstance(a, _Sequence):
+                if isinstance(a, _Sequence) and not isinstance(a, str):
                     return tuple(torch_ensure_shape(a[i], b[i]) for i in range(len(a)))
                 elif isinstance(a, _Mapping):
                     return {k: torch_ensure_shape(v, b[k]) for k, v in a.items()}
-                else:
+                elif is_torch_tensor(a):
                     return a.reshape(b.shape)
+                else:
+                    return a
+
+            # Construct the full tuple of positional arguments
+            args = _dr.detail.get_args_values(func, *args, **kwargs)
 
             if source == 'torch':
                 class ToDrJit(_torch.autograd.Function):
                     @staticmethod
                     def forward(ctx, *args):
-                        ctx.save_for_backward(*args)
+                        ctx.args = args
                         ctx.args_drjit = torch_to_drjit(args)
                         _dr.enable_grad(ctx.args_drjit)
                         res = func(*ctx.args_drjit)
@@ -5823,7 +5843,7 @@ def wrap_ad(source: str, target: str):
                         _dr.enqueue(_dr.ADMode.Backward, ctx.res_drjit)
                         _dr.traverse(ctx.res_drjit, _dr.ADMode.Backward)
                         args_grad = drjit_to_torch(_dr.grad(ctx.args_drjit))
-                        args_grad = torch_ensure_shape(args_grad, ctx.saved_tensors)
+                        args_grad = torch_ensure_shape(args_grad, ctx.args)
                         del ctx.res_drjit, ctx.args_drjit
                         return args_grad
 
@@ -5834,8 +5854,6 @@ def wrap_ad(source: str, target: str):
                     def eval(self, *args):
                         self.args = args
                         self.args_torch = drjit_to_torch(args)
-                        for i in range(len(self.args_torch)):
-                            self.args_torch[i].requires_grad = True
                         self.res_torch = func(*self.args_torch)
                         return torch_to_drjit(self.res_torch)
 
@@ -5846,7 +5864,7 @@ def wrap_ad(source: str, target: str):
                         grad_out_torch = drjit_to_torch(self.grad_out())
                         grad_out_torch = torch_ensure_shape(grad_out_torch, self.res_torch)
                         _torch.autograd.backward(self.res_torch, grad_out_torch)
-                        args_grad = torch_to_drjit([a.grad for a in self.args_torch])
+                        args_grad = torch_to_drjit([getattr(a, 'grad', None) for a in self.args_torch])
                         self.set_grad_in('args', args_grad)
 
                 return _dr.custom(ToTorch, args)

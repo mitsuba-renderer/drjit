@@ -84,6 +84,13 @@ def test_roundtrip_pytorch_llvm():
 
 def test_roundtrip_pytorch_jax():
     pytest.importorskip("jax")
+
+    try:
+        from jax.lib import xla_bridge
+        xla_bridge.get_backend('gpu')
+    except:
+        pytest.skip('Backend gpu failed to initialize on JAX')
+
     prepare("drjit.cuda.ad")
     from drjit.cuda.ad import Float, Array3f
     a1 = Array3f(

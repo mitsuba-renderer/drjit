@@ -59,7 +59,23 @@ def test02_to_torch_two_args(m):
     assert dr.allclose(dr.grad(b), [3, 3, 3])
 
 
-def test03_to_torch_two_args_two_outputs(m):
+def test03_to_torch_non_diff_arg_and_kwargs(m):
+    a = m.TensorXf(m.Float([1.0, 2.0, 3.0]), shape=[3])
+    dr.enable_grad(a)
+
+    @dr.wrap_ad(source='drjit', target='torch')
+    def func2(a, c: int = 4, s: str = '', d: int = 1):
+        print(s)
+        return a * c * d
+
+    b = func2(a, s='test', c=4)
+    dr.backward(dr.sum(b))
+
+    assert dr.allclose(b, [4, 8, 12])
+    assert dr.allclose(dr.grad(a), [4, 4, 4])
+
+
+def test04_to_torch_two_args_two_outputs(m):
     a = m.TensorXf(m.Float([1.0, 2.0, 3.0]), shape=[3])
     b = m.TensorXf(m.Float([4.0, 5.0, 6.0]), shape=[3])
     dr.enable_grad(a, b)
@@ -77,7 +93,7 @@ def test03_to_torch_two_args_two_outputs(m):
     assert dr.allclose(dr.grad(b), [3, 3, 3])
 
 
-def test04_from_torch_single_arg(m):
+def test05_from_torch_single_arg(m):
     a = torch.tensor([1.0, 2.0, 3.0])
     if dr.is_cuda_v(m.Float):
         a = a.cuda()
@@ -94,13 +110,8 @@ def test04_from_torch_single_arg(m):
     assert dr.allclose(m.Float(b), [4, 8, 12])
     assert dr.allclose(m.Float(a.grad), [4, 4, 4])
 
-    a = m.Float([1.0, 2.0, 3.0])
-    dr.enable_grad(a)
-    with pytest.raises(TypeError, match='should be Torch tensor'):
-        b = func(a)
 
-
-def test05_from_torch_two_args(m):
+def test06_from_torch_two_args(m):
     a = torch.tensor([1.0, 2.0, 3.0])
     b = torch.tensor([4.0, 5.0, 6.0])
     if dr.is_cuda_v(m.Float):
@@ -122,7 +133,26 @@ def test05_from_torch_two_args(m):
     assert dr.allclose(m.Float(b.grad), [3, 3, 3])
 
 
-def test06_from_torch_two_args_two_outputs(m):
+def test07_from_torch_non_diff_args_and_kwargs(m):
+    a = torch.tensor([1.0, 2.0, 3.0])
+    if dr.is_cuda_v(m.Float):
+        a = a.cuda()
+    a.requires_grad = True
+
+    @dr.wrap_ad(source='torch', target='drjit')
+    def func2(a, c: int = 4, s: str = '', d: int = 1):
+        print(s)
+        return a * c * d
+
+    b = func2(a, s='test', c=4)
+
+    b.sum().backward()
+
+    assert dr.allclose(m.Float(b), [4, 8, 12])
+    assert dr.allclose(m.Float(a.grad), [4, 4, 4])
+
+
+def test08_from_torch_two_args_two_outputs(m):
     a = torch.tensor([1.0, 2.0, 3.0])
     b = torch.tensor([4.0, 5.0, 6.0])
     if dr.is_cuda_v(m.Float):
