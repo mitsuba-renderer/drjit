@@ -1367,7 +1367,8 @@ def test62_implicit_dep_customop(m):
 
         def forward(self):
             grad_in = self.grad_in('value')
-            self.set_grad_out(grad_in * dr.detach(v1) + self.value * dr.grad(v1))
+            assert grad_in is None
+            self.set_grad_out(self.value * dr.grad(v1))
 
         def backward(self):
             grad_out = self.grad_out()

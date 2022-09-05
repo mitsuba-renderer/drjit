@@ -148,7 +148,7 @@ def array_init(self, args):
             name = t.__name__
             is_array = issubclass(t, _dr.ArrayBase)
             is_static_array = is_array and not o.Size == _dr.Dynamic
-            is_sequence = issubclass(t, Sequence)
+            is_sequence = issubclass(t, Sequence) and not issubclass(t, str)
 
             # Matrix initialization from nested list
             if is_sequence and self.IsMatrix and \
@@ -552,7 +552,7 @@ def loop_process_state(loop, funcs, state, write):
         for func in funcs:
             values = func()
 
-            if isinstance(values, Sequence):
+            if isinstance(values, Sequence) and not isinstance(values, str):
                 for value in values:
                     if hasattr(value, 'loop_put'):
                         value.loop_put(loop)
@@ -620,7 +620,7 @@ def slice_tensor(shape, indices, uint32):
             if _dr.is_signed_v(v):
                 v = uint32(_dr.select(v >= 0, v, v + size))
             components.append(v)
-        elif isinstance(v, Sequence):
+        elif isinstance(v, Sequence) and not isinstance(v, str):
             components.append(uint32([v2 if v2 >= 0 else v2 + size for v2 in v]))
         elif v is Ellipsis:
             if ellipsis:
@@ -709,7 +709,7 @@ def diff_vars(o, indices, check_grad_enabled=True):
     """
 
     result = None
-    if _dr.depth_v(o) > 1 or isinstance(o, Sequence):
+    if _dr.depth_v(o) > 1 or (isinstance(o, Sequence) and not isinstance(o, str)):
         for i in range(len(o)):
             t = diff_vars(o[i], indices, check_grad_enabled)
             if t is not None:
@@ -731,3 +731,32 @@ def diff_vars(o, indices, check_grad_enabled=True):
             if t is not None:
                 result = t
     return result
+
+
+def get_args_values(f, *args, **kwargs):
+    '''
+    Given a function, a tuple of positional arguments and a dict of keyword
+    arguments, return the full tuple of positional arguments, including default
+    values and keyword arguments at the right position.
+
+    Here is a simple example:
+
+        def f(a, b, c=1, d=2):
+            pass
+        get_args_values(f, 6, 5, d=4) # returns (4, 5, 1, 4)
+    '''
+    argcount = f.__code__.co_argcount
+    argnames = f.__code__.co_varnames[:argcount]
+    defaults = f.__defaults__ if f.__defaults__ else []
+
+    assert len(args) + len(defaults) >= argcount
+
+    m = {n: None for n in argnames}
+    for i, a in enumerate(reversed(defaults)):
+        m[argnames[-(i + 1)]] = a
+    for i, a in enumerate(args):
+        m[argnames[i]] = a
+    for k, v in kwargs.items():
+        m[k] = v
+
+    return tuple(m.values())

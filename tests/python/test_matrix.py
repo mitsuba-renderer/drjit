@@ -227,6 +227,14 @@ def test13_matmul_other(package):
 @pytest.mark.parametrize("dest", ['numpy', 'torch', 'jax'])
 def test14_roundtrip(package, dest):
     pytest.importorskip(dest)
+
+    if dest == 'jax' and 'cuda' in package:
+        try:
+            from jax.lib import xla_bridge
+            xla_bridge.get_backend('gpu')
+        except:
+            pytest.skip('Backend gpu failed to initialize on JAX')
+
     package = prepare(package)
     Float, Array3f, Array4f = package.Float, package.Array3f, package.Array4f
     Matrix3f, Matrix4f, Matrix44f = package.Matrix3f, package.Matrix4f, package.Matrix44f
