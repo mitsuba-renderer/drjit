@@ -21,6 +21,7 @@ Dr.Jit — A Just-In-Time-Compiler for Differentiable Rendering
    firststeps-py
    firststeps-cpp
    reference
+   release_notes
 
 Indices and tables
 ==================
