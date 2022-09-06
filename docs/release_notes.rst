@@ -14,7 +14,9 @@ Incoming release
 - Compilation fixes for stub files generation
 - Add missing operations on Tensor types `[15d490c] <https://github.com/mitsuba-renderer/drjit/commit/15d490c0f4da2ac9f5f56c249eb2bcb6e6e64da2>`_
 - Fix dr.shape for ragged arrays `[a026b56] <https://github.com/mitsuba-renderer/drjit/commit/a026b5695f7abb499e483f5d2cd1523f9084e826>`_
-- ...
+- Add the ``dr.wrap_ad()`` function decorator for interoperability between AD-aware frameworks (e.g. Dr.Jit and PyTorch) `[4a1528e] <https://github.com/mitsuba-renderer/drjit/commit/4a1528ee057c83422316825439b078a7d5277ec4>`_
+- ``dr.device`` handles the case where the input was allocated by another framework `[9e993a6] <https://github.com/mitsuba-renderer/drjit/commit/9e993a61870dfab325050368380038e76d95ffa3>`_
+-  ...
 
 
 Dr.Jit 0.2.1
