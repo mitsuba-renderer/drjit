@@ -215,11 +215,15 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
         m_eval_stride = stride;
     }
 
-    bool operator()(const Mask &cond) {
-        if (m_record)
-            return cond_record(cond);
-        else
-            return cond_wavefront(cond);
+    bool operator()(const Mask &cond_) {
+        Mask cond = [&]() {
+            if constexpr (Backend == JitBackend::LLVM)
+                return cond_ & Mask::steal(jit_var_mask_peek(Backend));
+            else
+                return cond_;
+        }();
+
+        return m_record ? cond_record(cond) : cond_wavefront(cond);
     }
 
 protected:
