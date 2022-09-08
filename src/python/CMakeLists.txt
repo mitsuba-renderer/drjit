@@ -83,31 +83,29 @@ endif()
 # ----------------------------------------------------------
 
 if (DRJIT_MASTER_PROJECT)
-    if (NOT Python_EXECUTABLE)
-        find_package(Python COMPONENTS Interpreter REQUIRED)
-    endif()
+  if (NOT Python_EXECUTABLE)
+    find_package(Python COMPONENTS Interpreter REQUIRED)
+  endif()
 
-    if (MSVC)
-        add_custom_target(drjit_stub_file_generation ALL COMMAND
-            ${CMAKE_COMMAND} -E env
-            "PYTHONPATH=${CMAKE_CURRENT_BINARY_DIR}/../../;$ENV{PYTHONPATH}"
-            "${Python_EXECUTABLE}" -Xutf8 ${CMAKE_CURRENT_SOURCE_DIR}/../../resources/generate_stub_files.py
-            ${CMAKE_CURRENT_BINARY_DIR}/../../drjit DEPENDS drjit-python)
-    else()
-        add_custom_target(drjit_stub_file_generation ALL COMMAND
-            ${CMAKE_COMMAND} -E env
-            "PYTHONPATH=${CMAKE_CURRENT_BINARY_DIR}/../../:$ENV{PYTHONPATH}"
-            "${Python_EXECUTABLE}" -Xutf8 ${CMAKE_CURRENT_SOURCE_DIR}/../../resources/generate_stub_files.py
-            ${CMAKE_CURRENT_BINARY_DIR}/../../drjit DEPENDS drjit-python)
-    endif()
+  set(PATH_SEP ":")
+  if(MSVC)
+    set(PATH_SEP ";")
+  endif()
+  file(TO_NATIVE_PATH "${CMAKE_CURRENT_BINARY_DIR}/../.." DRJIT_STUBS_ENV_PYTHONPATH)
 
-    if (NOT "${CMAKE_CURRENT_SOURCE_DIR}" STREQUAL "${CMAKE_CURRENT_BINARY_DIR}")
-        add_dependencies(drjit_stub_file_generation copy-python-files)
-    endif()
+  add_custom_target(drjit_stub_file_generation ALL COMMAND
+    ${CMAKE_COMMAND} -E env
+    "PYTHONPATH=${DRJIT_STUBS_ENV_PYTHONPATH}${PATH_SEP}$ENV{PYTHONPATH}"
+    "${Python_EXECUTABLE}" -Xutf8 ${CMAKE_CURRENT_SOURCE_DIR}/../../resources/generate_stub_files.py
+    ${CMAKE_CURRENT_BINARY_DIR}/../../drjit DEPENDS drjit-python)
 
-    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/../../drjit/__init__.pyi DESTINATION drjit)
-    install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/../../drjit/stubs/ DESTINATION drjit/stubs)
-    
-    file(GENERATE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/../../drjit/py.typed CONTENT "partial\n")
-    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/../../drjit/py.typed DESTINATION drjit)
+  if (NOT "${CMAKE_CURRENT_SOURCE_DIR}" STREQUAL "${CMAKE_CURRENT_BINARY_DIR}")
+    add_dependencies(drjit_stub_file_generation copy-python-files)
+  endif()
+
+  install(FILES ${CMAKE_CURRENT_BINARY_DIR}/../../drjit/__init__.pyi DESTINATION drjit)
+  install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/../../drjit/stubs/ DESTINATION drjit/stubs)
+
+  file(GENERATE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/../../drjit/py.typed CONTENT "partial\n")
+  install(FILES ${CMAKE_CURRENT_BINARY_DIR}/../../drjit/py.typed DESTINATION drjit)
 endif()
