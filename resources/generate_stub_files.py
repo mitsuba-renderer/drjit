@@ -1,14 +1,12 @@
 #!/usr/bin/env python
 """
-Usage: generate_stub_files.py {dest_dir} {drjit_path}
+Usage: generate_stub_files.py {dest_dir}
 
 This script generates stub files for Python type information for the `drjit`
 package.  It recursively traverses the `drjit` package and writes all the
 objects (clases, methods, functions, enums, etc.) it finds to the `dest_dir`
 folder. The stub files contain both the signatures and the docstrings of the
-objects. The second argument of this script, `drjit_path`, is optional and
-indicates the path to the `drjit` package folder if it is not installed or
-included in the user's $PYTHONPATH envvar.
+objects.
 """
 
 import os
@@ -120,7 +118,7 @@ def process_class(obj):
         v = getattr(obj, k)
         if type(v).__name__ == 'instancemethod':
             methods.append((k, v))
-        elif type(v).__name__ == 'function' and v.__code__.co_varnames[ 0] == 'self':
+        elif type(v).__name__ == 'function' and v.__code__.co_varnames[0] == 'self':
             py_methods.append((k, v))
         elif type(v).__name__ == 'property':
             properties.append((k, v))
@@ -236,7 +234,7 @@ def process_py_function(name, obj, indent=0):
 
     if has_doc:
         doc = obj.__doc__.splitlines()
-        if len(doc) > 0:  # first line is always empty
+        if len(doc) > 0: # first line is always empty
             w(f'{indent}    \"\"\"')
             for l in doc:
                 w(f'{indent}    {l.strip()}')
@@ -258,7 +256,7 @@ def process_module(m, top_module=False):
     w('import drjit as dr')
     w('')
 
-    # Ignore initilization errors of invalid variants on this system
+    # Ignore initialization errors of invalid variants on this system
     try:
         dir(m)
     except Exception:
@@ -280,8 +278,7 @@ def process_module(m, top_module=False):
             if k.startswith('_'):
                 continue
             process_properties(k, v)
-        elif type(v).__bases__[0].__name__ == 'module' or type(
-                v).__name__ == 'module':
+        elif type(v).__bases__[0].__name__ == 'module' or type(v).__name__ == 'module':
             if k in ['dr']:
                 continue
             if not v.__name__.startswith('drjit'):
@@ -306,17 +303,13 @@ if __name__ == '__main__':
     logging.info('Generating stub files for the drjit package.')
 
     if len(sys.argv) < 2:
-        raise RuntimeError("At least one argument is expected: the output "
+        raise RuntimeError("Exactly one argument is expected: the output "
                            "directory of the generated stubs")
     stub_folder = sys.argv[1]
 
-    if len(sys.argv) > 2:
-        drjit_folder = sys.argv[2]
-        sys.path.append(drjit_folder)
-
     import drjit as dr
 
-    os.makedirs(f'{stub_folder}/stubs', exist_ok=True)
+    os.makedirs(os.path.join(stub_folder, 'stubs'), exist_ok=True)
 
     logging.debug(f'Processing drjit root module')
     buffer, submodules = process_module(dr, top_module=True)
@@ -333,7 +326,7 @@ if __name__ == '__main__':
         logging.debug(f'Processing submodule: {v.__name__}')
         buffer, new_submodules = process_module(v)
 
-        with open(f'{stub_folder}stubs/{k}.pyi', 'w') as f:
+        with open(f'{os.path.join(stub_folder, "stubs", k + ".pyi")}', 'w') as f:
             f.write(buffer)
 
         submodules = submodules[1:] + new_submodules
