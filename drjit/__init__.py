@@ -15,13 +15,20 @@ if os.name == 'nt':
         os.environ['PATH'] += os.pathsep + d
     del d, i
 
-del sys, os
-
 # Implementation details accessed by both C++ and Python
 import drjit.detail as detail # noqa
 
+if os.name != 'nt':
+    # Use RTLD_DEEPBIND to prevent the DLL to search symbols in the global scope
+    old_flags = sys.getdlopenflags()
+    sys.setdlopenflags(os.RTLD_LAZY | os.RTLD_LOCAL | os.RTLD_DEEPBIND)
+
 # Native extension defining low-level arrays
 import drjit.drjit_ext as drjit_ext  # noqa
+
+if os.name != 'nt':
+    sys.setdlopenflags(old_flags)
+    del old_flags
 
 # Routing functionality (type promotion, broadcasting, etc.)
 import drjit.router as router  # noqa
@@ -89,5 +96,5 @@ for k, v in tensor.__dict__.items():
         continue
     self[k] = v
 
-
+del sys, os
 del k, v, self, base, generic, router, matrix, tensor, traits, const, drjit_ext
