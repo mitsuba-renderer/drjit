@@ -21,7 +21,11 @@ import drjit.detail as detail # noqa
 if os.name != 'nt':
     # Use RTLD_DEEPBIND to prevent the DLL to search symbols in the global scope
     old_flags = sys.getdlopenflags()
-    sys.setdlopenflags(os.RTLD_LAZY | os.RTLD_LOCAL | os.RTLD_DEEPBIND)
+    new_flags = os.RTLD_LAZY | os.RTLD_LOCAL
+    if sys.platform != 'darwin':
+        new_flags |= os.RTLD_DEEPBIND
+    sys.setdlopenflags(new_flags)
+    del new_flags
 
 # Native extension defining low-level arrays
 import drjit.drjit_ext as drjit_ext  # noqa
