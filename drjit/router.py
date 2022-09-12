@@ -4004,14 +4004,15 @@ def set_grad(dst, src):
           :ref:`custom data structure <custom-struct>`, sequences, or mapping.
     '''
     if _dr.is_diff_v(dst) and dst.IsFloat:
-        if _dr.is_diff_v(src):
-            src = _dr.detach(src, preserve_type=False)
+        if _dr.grad_enabled(dst):
+            if _dr.is_diff_v(src):
+                src = _dr.detach(src, preserve_type=False)
 
-        t = _dr.detached_t(dst)
-        if type(src) is not t:
-            src = t(src)
+            t = _dr.detached_t(dst)
+            if type(src) is not t:
+                src = t(src)
 
-        dst.set_grad_(src)
+            dst.set_grad_(src)
     elif isinstance(dst, _Sequence) and not isinstance(dst, str):
         vs = isinstance(src, _Sequence) and not isinstance(src, str)
         if vs and len(dst) != len(src):
@@ -4046,17 +4047,18 @@ def accum_grad(dst, src):
           :ref:`custom data structure <custom-struct>`, sequences, or mapping.
     '''
     if _dr.is_diff_v(dst) and dst.IsFloat:
-        if _dr.is_diff_v(src):
-            src = _dr.detach(src, preserve_type=False)
+        if _dr.grad_enabled(dst):
+            if _dr.is_diff_v(src):
+                src = _dr.detach(src, preserve_type=False)
 
-        t = _dr.detached_t(dst)
-        if type(src) is not t:
-            if _dr.is_tensor_v(t):
-                src = t(src, dst.shape)
-            else:
-                src = t(src)
+            t = _dr.detached_t(dst)
+            if type(src) is not t:
+                if _dr.is_tensor_v(t):
+                    src = t(src, dst.shape)
+                else:
+                    src = t(src)
 
-        dst.accum_grad_(src)
+            dst.accum_grad_(src)
     elif isinstance(dst, _Sequence) and not isinstance(dst, str):
         vs = isinstance(src, _Sequence) and not isinstance(src, str)
         if vs and len(dst) != len(src):
@@ -5864,7 +5866,8 @@ def wrap_ad(source: str, target: str):
                         grad_out_torch = drjit_to_torch(self.grad_out())
                         grad_out_torch = torch_ensure_shape(grad_out_torch, self.res_torch)
                         _torch.autograd.backward(self.res_torch, grad_out_torch)
-                        args_grad = torch_to_drjit([getattr(a, 'grad', None) for a in self.args_torch])
+                        args_grad_torch = [getattr(a, 'grad', None) for a in self.args_torch]
+                        args_grad = torch_to_drjit(args_grad_torch)
                         self.set_grad_in('args', args_grad)
 
                 return _dr.custom(ToTorch, args)
