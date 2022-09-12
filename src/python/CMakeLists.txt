@@ -83,33 +83,43 @@ endif()
 # ----------------------------------------------------------
 
 if (DRJIT_MASTER_PROJECT)
-  if (NOT Python_EXECUTABLE)
-    find_package(Python COMPONENTS Interpreter REQUIRED)
-  endif()
+  set(DRJIT_PYTHON_STUBS_DIR "" CACHE STRING "Location of the Python typing fle stubs directory to use if the files should not be generated during the build.")
+  mark_as_advanced(DRJIT_PYTHON_STUBS_DIR)
+  if ("${DRJIT_PYTHON_STUBS_DIR}" STREQUAL "")
+    if (NOT Python_EXECUTABLE)
+      find_package(Python COMPONENTS Interpreter REQUIRED)
+    endif()
 
-  set(PATH_SEP ":")
-  if(MSVC)
-    set(PATH_SEP ";")
-  endif()
-  file(TO_NATIVE_PATH "${CMAKE_CURRENT_BINARY_DIR}/../.." DRJIT_STUBS_ENV_PYTHONPATH)
+    set(PATH_SEP ":")
+    if(MSVC)
+      set(PATH_SEP ";")
+    endif()
+    file(TO_NATIVE_PATH "${CMAKE_CURRENT_BINARY_DIR}/../.." DRJIT_STUBS_ENV_PYTHONPATH)
 
-  set(DRJIT_STUB_FILE_DEPENDENCIES drjit-python)
-  list(APPEND DRJIT_STUB_FILE_DEPENDENCIES ${DRJIT_COPY_FILES})
-  if (NOT "${CMAKE_CURRENT_SOURCE_DIR}" STREQUAL "${CMAKE_CURRENT_BINARY_DIR}")
-    list(APPEND DRJIT_STUB_FILE_DEPENDENCIES copy-python-files)
-  endif()
+    set(DRJIT_STUB_FILE_DEPENDENCIES drjit-python)
+    list(APPEND DRJIT_STUB_FILE_DEPENDENCIES ${DRJIT_COPY_FILES})
+    if (NOT "${CMAKE_CURRENT_SOURCE_DIR}" STREQUAL "${CMAKE_CURRENT_BINARY_DIR}")
+      list(APPEND DRJIT_STUB_FILE_DEPENDENCIES copy-python-files)
+    endif()
 
-  add_custom_command(
-    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/../../drjit/__init__.pyi
-    COMMAND ${CMAKE_COMMAND} -E env
-      "PYTHONPATH=${DRJIT_STUBS_ENV_PYTHONPATH}${PATH_SEP}$ENV{PYTHONPATH}"
-      "${Python_EXECUTABLE}" -Xutf8 ${CMAKE_CURRENT_SOURCE_DIR}/../../resources/generate_stub_files.py
-      ${CMAKE_CURRENT_BINARY_DIR}/../../drjit
-    DEPENDS ${DRJIT_STUB_FILE_DEPENDENCIES}
-  )
-  add_custom_target(drjit_stub_file_generation ALL
-    DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/../../drjit/__init__.pyi
-  )
+    add_custom_command(
+      OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/../../drjit/__init__.pyi
+      COMMAND ${CMAKE_COMMAND} -E env
+        "PYTHONPATH=${DRJIT_STUBS_ENV_PYTHONPATH}${PATH_SEP}$ENV{PYTHONPATH}"
+        "${Python_EXECUTABLE}" -Xutf8 ${CMAKE_CURRENT_SOURCE_DIR}/../../resources/generate_stub_files.py
+        ${CMAKE_CURRENT_BINARY_DIR}/../../drjit
+      DEPENDS ${DRJIT_STUB_FILE_DEPENDENCIES}
+    )
+    add_custom_target(drjit_stub_file_generation ALL
+      DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/../../drjit/__init__.pyi
+    )
+  else()
+    ro_copy(${DRJIT_PYTHON_STUBS_DIR}/__init__.pyi drjit/__init__.pyi)
+    file(GLOB_RECURSE DRJIT_PYTHON_STUB_FILES RELATIVE ${DRJIT_PYTHON_STUBS_DIR}/stubs ${DRJIT_PYTHON_STUBS_DIR}/stubs/*.pyi)
+    foreach(file ${DRJIT_PYTHON_STUB_FILES})
+      ro_copy(${DRJIT_PYTHON_STUBS_DIR}/stubs/${file} drjit/stubs/${file})
+    endforeach(file)
+  endif()
 
   install(FILES ${CMAKE_CURRENT_BINARY_DIR}/../../drjit/__init__.pyi DESTINATION drjit)
   install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/../../drjit/stubs/ DESTINATION drjit/stubs)

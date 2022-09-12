@@ -29,6 +29,7 @@ with open(os.path.join(this_directory, 'README.rst'), encoding='utf-8') as f:
 long_description = long_description[long_description.find('About this project'):]
 
 drjit_cmake_toolchain_file = os.environ.get("DRJIT_CMAKE_TOOLCHAIN_FILE", "")
+drjit_python_stubs_dir = os.environ.get("DRJIT_PYTHON_STUBS_DIR", "")
 
 setup(
     name="drjit",
@@ -48,7 +49,8 @@ setup(
         '-DCMAKE_INSTALL_BINDIR=drjit',
         '-DCMAKE_INSTALL_INCLUDEDIR=drjit/include',
         '-DCMAKE_INSTALL_DATAROOTDIR=drjit/share',
-        f'-DCMAKE_TOOLCHAIN_FILE={drjit_cmake_toolchain_file}'
+        f'-DCMAKE_TOOLCHAIN_FILE={drjit_cmake_toolchain_file}',
+        f'-DDRJIT_PYTHON_STUBS_DIR:STRING={drjit_python_stubs_dir}'
     ],
     packages=['drjit'],
     python_requires=">=3.8"
