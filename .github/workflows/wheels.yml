@@ -55,11 +55,20 @@ jobs:
         run: |
           python -m pip install cibuildwheel==2.6.1
 
+      - name: Local build for macOS cross-compilation
+        if: runner.os == 'macOS' && matrix.cibw-arch == 'arm64'
+        run: |
+          pip install ninja cmake
+          mkdir build
+          cmake -B build -GNinja .
+          ninja -C build drjit_stub_file_generation
+
       - name: Prepare cibuildwheel environment for macOS
         if: runner.os == 'macOS'
         run: |
           [[ "arm64" == "${{ matrix.cibw-arch }}" ]] && \
-          echo "DRJIT_CMAKE_TOOLCHAIN_FILE=$(pwd)/.github/workflows/macOS_arm64_toolchain.cmake" >> $GITHUB_ENV
+          echo "DRJIT_CMAKE_TOOLCHAIN_FILE=$(pwd)/.github/workflows/macOS_arm64_toolchain.cmake" >> $GITHUB_ENV && \
+          echo "DRJIT_PYTHON_STUBS_DIR=$(pwd)/build/drjit" >> $GITHUB_ENV
 
           echo "CIBW_ARCHS_MACOS=${{ matrix.cibw-arch }}" >> $GITHUB_ENV
 
