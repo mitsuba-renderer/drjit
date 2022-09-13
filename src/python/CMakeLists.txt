@@ -110,15 +110,37 @@ if (DRJIT_MASTER_PROJECT)
         ${CMAKE_CURRENT_BINARY_DIR}/../../drjit
       DEPENDS ${DRJIT_STUB_FILE_DEPENDENCIES}
     )
-    add_custom_target(drjit_stub_file_generation ALL
+
+    add_custom_target(
+      drjit_stub_file_generation ALL
       DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/../../drjit/__init__.pyi
     )
   else()
-    ro_copy(${DRJIT_PYTHON_STUBS_DIR}/__init__.pyi drjit/__init__.pyi)
-    file(GLOB_RECURSE DRJIT_PYTHON_STUB_FILES RELATIVE ${DRJIT_PYTHON_STUBS_DIR}/stubs ${DRJIT_PYTHON_STUBS_DIR}/stubs/*.pyi)
+    set(DRJIT_STUB_FILES_COPY "")
+
+    set(DRJIT_INIT_PYI_INPUT ${DRJIT_PYTHON_STUBS_DIR}/__init__.pyi)
+    set(DRJIT_INIT_PYI_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/../../drjit/__init__.pyi)
+    add_custom_command(
+      OUTPUT ${DRJIT_INIT_PYI_OUTPUT} DEPENDS ${DRJIT_INIT_PYI_INPUT}
+      COMMAND ${CMAKE_COMMAND} -E copy ${DRJIT_INIT_PYI_INPUT} ${DRJIT_INIT_PYI_OUTPUT}
+    )
+    list(APPEND DRJIT_STUB_FILES_COPY ${DRJIT_INIT_PYI_OUTPUT})
+
+    file(
+      GLOB_RECURSE DRJIT_PYTHON_STUB_FILES RELATIVE
+      ${DRJIT_PYTHON_STUBS_DIR}/stubs ${DRJIT_PYTHON_STUBS_DIR}/stubs/*.pyi
+    )
     foreach(file ${DRJIT_PYTHON_STUB_FILES})
-      ro_copy(${DRJIT_PYTHON_STUBS_DIR}/stubs/${file} drjit/stubs/${file})
+      set(DRJIT_STUB_PYI_INPUT ${DRJIT_PYTHON_STUBS_DIR}/stubs/${file})
+      set(DRJIT_STUB_PYI_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/../../drjit/stubs/${file})
+      add_custom_command(
+        OUTPUT ${DRJIT_STUB_PYI_OUTPUT} DEPENDS ${DRJIT_STUB_PYI_INPUT}
+        COMMAND ${CMAKE_COMMAND} -E copy ${DRJIT_STUB_PYI_INPUT} ${DRJIT_STUB_PYI_OUTPUT}
+      )
+      list(APPEND DRJIT_STUB_FILES_COPY ${DRJIT_STUB_PYI_OUTPUT})
     endforeach(file)
+
+    add_custom_target(copy-resources ALL DEPENDS ${DRJIT_STUB_FILES_COPY})
   endif()
 
   install(FILES ${CMAKE_CURRENT_BINARY_DIR}/../../drjit/__init__.pyi DESTINATION drjit)
