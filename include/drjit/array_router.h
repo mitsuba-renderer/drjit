@@ -1576,38 +1576,50 @@ template <typename T> struct resume_grad {
     static constexpr bool Enabled =
         is_diff_v<T> && std::is_floating_point_v<scalar_t<T>>;
     template <typename... Args>
-    resume_grad(const Args &... args) {
+    resume_grad(bool when, const Args &... args) : condition(when) {
         if constexpr (Enabled) {
-            dr_index_vector indices;
-            (detail::collect_ad_indices(indices, args), ...);
-            detail::ad_scope_enter<typename T::Type>(
-                detail::ADScope::Resume, indices.size(), indices.data());
+            if (condition) {
+                dr_index_vector indices;
+                (detail::collect_ad_indices(indices, args), ...);
+                detail::ad_scope_enter<typename T::Type>(
+                    detail::ADScope::Resume, indices.size(), indices.data());
+            }
         }
     }
 
     ~resume_grad() {
-        if constexpr (Enabled)
-            detail::ad_scope_leave<typename T::Type>(true);
+        if constexpr (Enabled) {
+            if (condition)
+                detail::ad_scope_leave<typename T::Type>(true);
+        }
     }
+
+    bool condition;
 };
 
 template <typename T> struct suspend_grad {
     static constexpr bool Enabled =
         is_diff_v<T> && std::is_floating_point_v<scalar_t<T>>;
     template <typename... Args>
-    suspend_grad(const Args &... args) {
+    suspend_grad(bool when, const Args &... args) : condition(when) {
         if constexpr (Enabled) {
-            dr_index_vector indices;
-            (detail::collect_ad_indices(indices, args), ...);
-            detail::ad_scope_enter<typename T::Type>(
-                detail::ADScope::Suspend, indices.size(), indices.data());
+            if (condition) {
+                dr_index_vector indices;
+                (detail::collect_ad_indices(indices, args), ...);
+                detail::ad_scope_enter<typename T::Type>(
+                    detail::ADScope::Suspend, indices.size(), indices.data());
+            }
         }
     }
 
     ~suspend_grad() {
-        if constexpr (Enabled)
-            detail::ad_scope_leave<typename T::Type>(true);
+        if constexpr (Enabled) {
+            if (condition)
+                detail::ad_scope_leave<typename T::Type>(true);
+        }
     }
+
+    bool condition;
 };
 
 template <bool UnderlyingType, typename T>
