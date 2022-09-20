@@ -3177,7 +3177,8 @@ def sh_eval(arg, order, /):
 
 def shuffle(perm, value):
     '''
-    Permute the entries of the provided Dr.Jit array for the indices given in ``perm``.
+    Permute the entries of the provided Dr.Jit static array for the indices
+    given in ``perm``.
 
     The pseudocode for this operation is
 
@@ -3187,12 +3188,12 @@ def shuffle(perm, value):
 
     Args:
         perm (drjit.ArrayBase): A Python list of integers
-        value (drjit.ArrayBase): A Dr.Jit array type
+        value (drjit.ArrayBase): A Dr.Jit static array type
 
     Returns:
         Shuffled input array
     '''
-    if not _dr.is_array_v(value) or len(perm) != value.Size:
+    if not _dr.is_static_array_v(value) or len(perm) != value.Size:
         raise Exception("shuffle(): incompatible input!")
 
     result = type(value)()
