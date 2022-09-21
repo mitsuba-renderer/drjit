@@ -174,7 +174,7 @@ def process_class(_, obj, indent=0):
     process_function('__call__', obj.__call__, indent=indent + 4)
 
     for k, v in classes:
-        if k is not 'MaskType':
+        if k != 'MaskType':
             process_class(k, v, indent=indent + 4)
 
     if len(properties) > 0:
