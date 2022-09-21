@@ -5709,7 +5709,7 @@ def wrap_ad(source: str, target: str):
         # Wrap a function performing some arithmetic using Dr.Jit
         @dr.wrap_ad(source='torch', target='drjit')
         def dr_func(x):
-            return dr.cos(x) + dr.pow(x, 2)
+            return dr.cos(x) + dr.power(x, 2)
 
         # Excecute the wrapped function (returns a PyTorch tensor)
         c = dr_func(b)

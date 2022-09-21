@@ -1348,7 +1348,7 @@ DRJIT_INLINE bool schedule() { return false; }
 
 template <typename T1, typename... Ts, enable_if_t<sizeof...(Ts) != 0> = 0>
 DRJIT_INLINE bool schedule(const T1 &value, const Ts&... values) {
-    return schedule(value) | schedule(values...);
+    return schedule(value) || schedule(values...);
 }
 
 DRJIT_INLINE void eval() {
