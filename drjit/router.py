@@ -1112,6 +1112,8 @@ def unravel(dtype, array, order='F'):
         t = t.Value
     index_type = _dr.uint32_array_t(t)
 
+    array = array if not _dr.is_tensor_v(array) else array.array
+
     if len(array) % size != 0:
         raise Exception('unravel(): input array length must be '
                         'divisible by %i!' % size)
