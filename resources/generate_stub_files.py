@@ -14,9 +14,11 @@ import inspect
 import re
 import sys
 import logging
+import collections.abc
 
 # ------------------------------------------------------------------------------
 
+top_level_objects = {}
 buffer = ''
 
 def w(s):
@@ -31,15 +33,17 @@ def process_type_hint(s):
     offset = 0
 
     while True:
-        match = re.search(r'[a-zA-Z]+: ', sub)
+        match = re.search(r'(\(|,|^)\s*[_a-zA-Z][_a-zA-Z0-9]*:[^:\w]', sub)
         if match is None:
-            return s
+            break
+
         i = match.start() + len(match.group())
-        match_next = re.search(r'[a-zA-Z]+: ', sub[i:])
+        match_next = re.search(r'(\(|,|^)\s*[_a-zA-Z][_a-zA-Z0-9]*:[^:\w]', sub[i:])
+
         if match_next is None:
             j = sub.index(')')
         else:
-            j = i + match_next.start() - 2
+            j = i + match_next.start()
 
         type_hints.append((offset + i, offset + j, sub[i:j]))
 
@@ -63,6 +67,19 @@ def process_type_hint(s):
     # Check is return type hint is not valid
     if '::' in result[result.index(' -> '):]:
         result = result[:result.index(' -> ')]
+
+    # Fix parameters that have enums as default values
+    default_enum_re = re.compile(r'<')
+    enum_match = default_enum_re.search(result)
+    while enum_match is not None:
+        begin = enum_match.end()
+        end = begin + result[begin:].index('>')
+
+        new_default_value = result[begin:end]
+        new_default_value = new_default_value[:new_default_value.index(':')]
+
+        result = result[:begin - 1] + new_default_value + result[end + 1:]
+        enum_match = default_enum_re.search(result, begin)
 
     return result
 
@@ -101,11 +118,14 @@ def process_enums(name, e, indent=0):
 
 # ------------------------------------------------------------------------------
 
-def process_class(obj):
+def process_class(_, obj, indent=0):
     methods = []
     py_methods = []
     properties = []
     enums = []
+    classes = []
+
+    indent_str = ' ' * indent
 
     for k in dir(obj):
         # Skip private attributes
@@ -124,6 +144,9 @@ def process_class(obj):
             properties.append((k, v))
         elif str(v).endswith(k):
             enums.append((k, v))
+        elif inspect.isclass(v):
+            if (hasattr(v, '__module__') and (v.__module__.startswith('drjit'))):
+                classes.append((k, v))
 
     base = obj.__bases__[0]
     base_module = base.__module__
@@ -132,48 +155,52 @@ def process_class(obj):
     base_name = base_module + '.' + base_name
 
     if has_base and not base.__module__.startswith('drjit'):
-        w(f'from {base.__module__} import {base_name}')
+        w(f'{indent_str}from {base.__module__} import {base_name}')
 
-    w(f'class {obj.__name__}{"(" + base_name + ")" if has_base else ""}:')
+    w(f'{indent_str}class {obj.__name__}{"(" + base_name + ")" if has_base else ""}:')
     if obj.__doc__ is not None:
         doc = obj.__doc__.splitlines()
         if len(doc) > 0:
             if doc[0].strip() == '':
                 doc = doc[1:]
             if obj.__doc__:
-                w(f'    \"\"\"')
+                w(f'{indent_str}    \"\"\"')
                 for l in doc:
-                    w(f'    {l}')
-                w(f'    \"\"\"')
+                    w(f'{indent_str}    {l}')
+                w(f'{indent_str}    \"\"\"')
                 w(f'')
 
-    process_function('__init__', obj.__init__, indent=4)
-    process_function('__call__', obj.__call__, indent=4)
+    process_function('__init__', obj.__init__, indent=indent + 4)
+    process_function('__call__', obj.__call__, indent=indent + 4)
+
+    for k, v in classes:
+        if k is not 'MaskType':
+            process_class(k, v, indent=indent + 4)
 
     if len(properties) > 0:
         for k, v in properties:
-            process_properties(k, v, indent=4)
+            process_properties(k, v, indent=indent + 4)
         w(f'')
 
     if len(enums) > 0:
         for k, v in enums:
-            process_enums(k, v, indent=4)
+            process_enums(k, v, indent=indent + 4)
         w(f'')
 
     for k, v in methods:
-        process_function(k, v, indent=4)
+        process_function(k, v, indent=indent + 4)
 
     for k, v in py_methods:
-        process_py_function(k, v, indent=4)
+        process_py_function(k, v, indent=indent + 4)
 
-    w(f'    ...')
+    w(f'{indent_str}    ...')
     w('')
 
 
 # ------------------------------------------------------------------------------
 
 
-def process_function(name, obj, indent=0):
+def process_function(_, obj, indent=0):
     indent = ' ' * indent
     if obj is None or obj.__doc__ is None:
         return
@@ -191,9 +218,11 @@ def process_function(name, obj, indent=0):
         has_doc = len(doc) > 1
 
         # Overload?
-        if l[1] == '.':
+        overload_re = re.compile(r'\d+\.')
+        overload_match = overload_re.match(l)
+        if overload_match is not None:
             w(f"{indent}@overload")
-            w(f"{indent}def {l[3:]}:{'' if has_doc else ' ...'}")
+            w(f"{indent}def {l[overload_match.end() + 1:]}:{'' if has_doc else ' ...'}")
         else:
             w(f"{indent}def {l}:{'' if has_doc else ' ...'}")
 
@@ -215,7 +244,6 @@ def process_py_function(name, obj, indent=0):
     has_doc = obj.__doc__ is not None
 
     signature = str(inspect.signature(obj))
-    signature = signature.replace('\'', '')
     signature = signature.replace('dr.', 'drjit.')
 
     # Fix parameters that have enums as default values
@@ -228,7 +256,7 @@ def process_py_function(name, obj, indent=0):
         new_default_value = new_default_value[:new_default_value.index(':')]
 
         signature = signature[:begin + 1] + new_default_value + signature[end + 1:]
-        enum_match = re.search(r'\=<', signature[begin])
+        enum_match = re.search(r'\=<', signature[begin:])
 
     w(f"{indent}def {name}{signature}:{'' if has_doc else ' ...'}")
 
@@ -250,8 +278,7 @@ def process_module(m, top_module=False):
     submodules = []
     buffer = ''
 
-    w('from typing import Any, Callable, Iterable, Iterator, Tuple, List, TypeVar, Union, overload, ModuleType'
-      )
+    w('from typing import Any, Callable, Iterable, Iterator, Tuple, List, TypeVar, Union, overload')
     w('import drjit')
     w('import drjit as dr')
     w('')
@@ -262,14 +289,21 @@ def process_module(m, top_module=False):
     except Exception:
         pass
 
+    if m not in top_level_objects:
+        top_level_objects[m] = set()
+
     for k in dir(m):
         v = getattr(m, k)
+
+        # Already seen object
+        if isinstance(v, collections.abc.Hashable) and v in top_level_objects[m]:
+            continue
 
         if inspect.isclass(v):
             if (hasattr(v, '__module__')
                     and not v.__module__.startswith('drjit')):
                 continue
-            process_class(v)
+            process_class(k, v)
         elif type(v).__name__ in ['method', 'function']:
             process_py_function(k, v)
         elif type(v).__name__ == 'builtin_function_or_method':
@@ -294,6 +328,9 @@ def process_module(m, top_module=False):
             w(f'from {".stubs" if top_module else "."} import {module_filename} as {k}')
             w('')
             submodules.append((module_filename, v))
+
+        if isinstance(v, collections.abc.Hashable):
+            top_level_objects[m].add(v)
 
     return buffer, submodules
 

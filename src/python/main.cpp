@@ -267,13 +267,13 @@ PYBIND11_MODULE(drjit_ext, m_) {
         .value("LLVM", JitBackend::LLVM);
 
     py::enum_<ReduceOp>(m, "ReduceOp")
-        .value("None", ReduceOp::None)
-        .value("Add",  ReduceOp::Add)
-        .value("Mul",  ReduceOp::Mul)
-        .value("Min",  ReduceOp::Min)
-        .value("Max",  ReduceOp::Max)
-        .value("And",  ReduceOp::And)
-        .value("Or",   ReduceOp::Or);
+        .value("Nothing", ReduceOp::None)
+        .value("Add",     ReduceOp::Add)
+        .value("Mul",     ReduceOp::Mul)
+        .value("Min",     ReduceOp::Min)
+        .value("Max",     ReduceOp::Max)
+        .value("And",     ReduceOp::And)
+        .value("Or",      ReduceOp::Or);
 
     py::enum_<JitFlag>(m, "JitFlag", py::arithmetic())
         .value("ConstProp",        JitFlag::ConstProp)
