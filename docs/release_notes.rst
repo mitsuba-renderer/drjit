@@ -7,7 +7,8 @@ strive to document breaking API changes in the release notes below.
 
 Incoming release
 ----------------
-- ...
+
+- Various Python type information (stub generation) improvements `[b102b3c]<https://github.com/mitsuba-renderer/drjit/commit/b102b3ccfe0dac39c580e8112983815dd10da566>`_
 
 
 Dr.Jit 0.2.2
