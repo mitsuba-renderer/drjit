@@ -1557,7 +1557,7 @@ template <typename... Ts> void disable_grad(Ts&... ts) {
 
 namespace detail {
     template <typename T>
-    void collect_ad_indices(dr_index_vector &indices, const T &value) {
+    void collect_ad_indices(dr_vector<uint32_t> &indices, const T &value) {
         if constexpr (array_depth_v<T> > 1) {
             for (size_t i = 0; i < value.derived().size(); ++i)
                 collect_ad_indices(indices, value.derived().entry(i));
@@ -1579,9 +1579,9 @@ template <typename T> struct resume_grad {
     resume_grad(bool when, const Args &... args) : condition(when) {
         if constexpr (Enabled) {
             if (condition) {
-                dr_index_vector indices;
+                dr_vector<uint32_t> indices;
                 (detail::collect_ad_indices(indices, args), ...);
-                detail::ad_scope_enter<typename T::Type>(
+                detail::ad_scope_enter<detached_t<typename T::Type>>(
                     detail::ADScope::Resume, indices.size(), indices.data());
             }
         }
@@ -1604,9 +1604,9 @@ template <typename T> struct suspend_grad {
     suspend_grad(bool when, const Args &... args) : condition(when) {
         if constexpr (Enabled) {
             if (condition) {
-                dr_index_vector indices;
+                dr_vector<uint32_t> indices;
                 (detail::collect_ad_indices(indices, args), ...);
-                detail::ad_scope_enter<typename T::Type>(
+                detail::ad_scope_enter<detached_t<typename T::Type>>(
                     detail::ADScope::Suspend, indices.size(), indices.data());
             }
         }
