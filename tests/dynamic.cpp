@@ -128,30 +128,6 @@ DRJIT_TEST(test04_init)  {
     }
 }
 
-DRJIT_TEST(test05_meshgrid) {
-    using FloatP = Array<float, 4>;
-    using FloatX = DynamicArray<FloatP>;
-
-    auto ac = test::alloc_count;
-    auto dc = test::dealloc_count;
-
-    /* Nested scope */ {
-        auto x = linspace<FloatX>(0.f, 1.f, 2);
-        auto y = linspace<FloatX>(1.f, 4.f, 4);
-        auto xy = meshgrid(x, y);
-
-        assert(slices(xy) == 8);
-        assert(to_string(xy) == "[[0, 1],\n [1, 1],\n [0, 2],\n [1, 2],\n [0, 3],\n [1, 3],\n [0, 4],\n [1, 4]]");
-
-        Array<FloatX, 2> yz = std::move(xy);
-        assert(to_string(yz) == "[[0, 1],\n [1, 1],\n [0, 2],\n [1, 2],\n [0, 3],\n [1, 3],\n [0, 4],\n [1, 4]]");
-        assert(to_string(xy) == "[]");
-    }
-
-    assert(test::alloc_count - ac == 4);
-    assert(test::dealloc_count - dc == 4);
-}
-
 template <typename Value> struct GPSCoord2 {
     using Vector2 = Array<Value, 2>;
     using UInt64  = uint64_array_t<Value>;

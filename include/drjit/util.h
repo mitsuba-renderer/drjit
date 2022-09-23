@@ -106,15 +106,34 @@ template <typename Target, typename Source> Target unravel(const Source &source)
 
 template <typename T> std::pair<T, T> meshgrid(const T &x, const T &y) {
     static_assert(array_depth_v<T> == 1 && is_dynamic_array_v<T>,
-                  "meshgrid(): requires two 1D dynamic Dr.Jit arrays as input!");
+                  "meshgrid(): requires two or three 1D dynamic Dr.Jit arrays as input!");
 
     uint32_t lx = (uint32_t) x.size(), ly = (uint32_t) y.size();
 
     if (lx == 1 || ly == 1) {
         return { x, y };
     } else {
-        auto [yi, xi] = idivmod(arange<uint32_array_t<T>>(lx*ly), lx);
+        // Note: Cartesian indexing consistent with  NumPy
+        auto [yi, xi] = idivmod(arange<uint32_array_t<T>>(ly * lx), lx);
         return { gather<T>(x, xi), gather<T>(y, yi) };
+    }
+}
+
+template <typename T> std::tuple<T, T, T> meshgrid(const T &x, const T &y, const T &z) {
+    static_assert(array_depth_v<T> == 1 && is_dynamic_array_v<T>,
+                  "meshgrid(): requires two or three 1D dynamic Dr.Jit arrays as input!");
+
+    uint32_t lx = (uint32_t) x.size(),
+             ly = (uint32_t) y.size(),
+             lz = (uint32_t) z.size();
+
+    if ((lx == 1 && ly == 1) || (ly == 1 && lz == 1) || (lx == 1 && lz == 1)) {
+        return { x, y, z };
+    } else {
+        // Note: Cartesian indexing consistent with  NumPy (y, x, z)
+        auto [yi, tmp] = idivmod(arange<uint32_array_t<T>>(ly * lx * lz), lx * lz);
+        auto [xi, zi] = idivmod(tmp, lz);
+        return { gather<T>(x, xi), gather<T>(y, yi), gather<T>(z, zi) };
     }
 }
 

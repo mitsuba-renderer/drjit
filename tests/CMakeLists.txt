@@ -94,29 +94,29 @@ function(drjit_test NAME)
 endfunction()
 
 drjit_test(basic basic.cpp)
-drjit_test(float float.cpp)
-drjit_test(integer integer.cpp)
-drjit_test(explog explog.cpp)
-drjit_test(trig trig.cpp)
-drjit_test(matrix matrix.cpp)
-drjit_test(nested nested.cpp)
-drjit_test(idiv idiv.cpp)
-drjit_test(hyperbolic hyperbolic.cpp)
-drjit_test(memory memory.cpp)
-# drjit_test(memory2 memory2.cpp)
-drjit_test(horiz horiz.cpp)
-#drjit_test(vector vector.cpp)
-#drjit_test(conv conv.cpp)
-#drjit_test(dynamic dynamic.cpp)
-#drjit_test(histogram histogram.cpp)
-#drjit_test(sphere sphere.cpp)
-drjit_test(complex complex.cpp)
-#drjit_test(morton morton.cpp)
-#drjit_test(special special.cpp)
-#drjit_test(call call.cpp)
-drjit_test(sh sh.cpp)
+# drjit_test(call call.cpp
 drjit_test(color color.cpp)
+drjit_test(complex complex.cpp)
+# drjit_test(conv conv.cpp
+# drjit_test(dynamic dynamic.cpp
+drjit_test(explog explog.cpp)
+drjit_test(float float.cpp)
+# drjit_test(histogram histogram.cpp
+drjit_test(horiz horiz.cpp)
+drjit_test(hyperbolic hyperbolic.cpp)
+drjit_test(idiv idiv.cpp)
+drjit_test(integer integer.cpp)
+drjit_test(matrix matrix.cpp)
+drjit_test(memory memory.cpp)
+# drjit_test(memory2 memory2.cpp
+# drjit_test(morton morton.cpp
+drjit_test(nested nested.cpp)
+drjit_test(sh sh.cpp)
+# drjit_test(special special.cpp
+# drjit_test(sphere sphere.cpp
 drjit_test(struct struct.cpp)
+drjit_test(trig trig.cpp)
+# drjit_test(vector vector.cpp
 
 # if (DRJIT_ENABLE_JIT)
 #     add_executable(matrix matrix.cpp)
@@ -144,4 +144,9 @@ if (DRJIT_ENABLE_JIT AND DRJIT_ENABLE_AUTODIFF)
   target_link_libraries(texture drjit drjit-autodiff drjit-core)
   add_test(texture_test texture)
   set_tests_properties(texture_test PROPERTIES LABELS "jit")
+
+  add_executable(util util.cpp)
+  target_link_libraries(util drjit drjit-autodiff drjit-core)
+  add_test(util_test util)
+  set_tests_properties(util_test PROPERTIES LABELS "jit")
 endif()
