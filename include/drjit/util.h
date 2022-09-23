@@ -104,37 +104,67 @@ template <typename Target, typename Source> Target unravel(const Source &source)
     return gather<Target>(source, indices);
 }
 
-template <typename T> std::pair<T, T> meshgrid(const T &x, const T &y) {
+/**
+ * The `index_xy` argument allows switching between Cartesian (default),
+ * or matrix indexing.
+ */
+template <typename T> std::pair<T, T> meshgrid(const T &x, const T &y,
+                                               bool index_xy = true) {
     static_assert(array_depth_v<T> == 1 && is_dynamic_array_v<T>,
                   "meshgrid(): requires two or three 1D dynamic Dr.Jit arrays as input!");
 
-    uint32_t lx = (uint32_t) x.size(), ly = (uint32_t) y.size();
+    // Cartesian or matrix indexing, consistent with NumPy
+    T rx = (index_xy ? x : y);
+    T ry = (index_xy ? y : x);
+    uint32_t lx = (uint32_t) rx.size(),
+             ly = (uint32_t) ry.size();
 
     if (lx == 1 || ly == 1) {
-        return { x, y };
+        // Nothing to do.
     } else {
-        // Note: Cartesian indexing consistent with  NumPy
         auto [yi, xi] = idivmod(arange<uint32_array_t<T>>(ly * lx), lx);
-        return { gather<T>(x, xi), gather<T>(y, yi) };
+        rx = gather<T>(rx, xi);
+        ry = gather<T>(ry, yi);
     }
+
+    if (index_xy)
+        return { rx, ry };
+    else
+        return { ry, rx };
 }
 
-template <typename T> std::tuple<T, T, T> meshgrid(const T &x, const T &y, const T &z) {
+/**
+ * The `index_xy` argument allows switching between Cartesian (default),
+ * or matrix indexing.
+ */
+template <typename T> std::tuple<T, T, T> meshgrid(const T &x, const T &y, const T &z,
+                                                   bool index_xy = true) {
     static_assert(array_depth_v<T> == 1 && is_dynamic_array_v<T>,
                   "meshgrid(): requires two or three 1D dynamic Dr.Jit arrays as input!");
 
-    uint32_t lx = (uint32_t) x.size(),
-             ly = (uint32_t) y.size(),
-             lz = (uint32_t) z.size();
+    // Cartesian or matrix indexing, consistent with NumPy
+    T rx = (index_xy ? x : y);
+    T ry = (index_xy ? y : x);
+    T rz = z;
+    uint32_t lx = (uint32_t) rx.size(),
+             ly = (uint32_t) ry.size(),
+             lz = (uint32_t) rz.size();
 
     if ((lx == 1 && ly == 1) || (ly == 1 && lz == 1) || (lx == 1 && lz == 1)) {
-        return { x, y, z };
+        // Nothing do to.
     } else {
         // Note: Cartesian indexing consistent with  NumPy (y, x, z)
         auto [yi, tmp] = idivmod(arange<uint32_array_t<T>>(ly * lx * lz), lx * lz);
         auto [xi, zi] = idivmod(tmp, lz);
-        return { gather<T>(x, xi), gather<T>(y, yi), gather<T>(z, zi) };
+        rx = gather<T>(rx, xi);
+        ry = gather<T>(ry, yi);
+        rz = gather<T>(rz, zi);
     }
+
+    if (index_xy)
+        return { rx, ry, rz };
+    else
+        return { ry, rx, rz };
 }
 
 template <typename Index, typename Predicate>
