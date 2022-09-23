@@ -48,6 +48,8 @@ Mask operations
 .. autofunction:: any
 .. autofunction:: all_nested
 .. autofunction:: any_nested
+.. autofunction:: eq
+.. autofunction:: neq
 .. autofunction:: isinf
 .. autofunction:: isnan
 .. autofunction:: isfinite
