@@ -175,7 +175,7 @@ def test08_from_torch_two_args_two_outputs(m):
     assert dr.allclose(m.Float(a.grad), [4, 4, 4])
     assert dr.allclose(m.Float(b.grad), [3, 3, 3])
 
-def test09_to_torch_list_of_tensors_as_args():
+def test09_to_torch_list_of_tensors_as_args(m):
     a = m.TensorXf(m.Float([1.0, 2.0, 3.0]), shape=[3])
     b = m.TensorXf(m.Float([4.0, 5.0, 6.0]), shape=[3])
     l = [a,b]
