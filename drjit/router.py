@@ -5869,20 +5869,21 @@ def wrap_ad(source: str, target: str):
                         grad_out_torch = drjit_to_torch(self.grad_out())
                         grad_out_torch = torch_ensure_shape(grad_out_torch, self.res_torch)
                         _torch.autograd.backward(self.res_torch, grad_out_torch)
-                        args_grad_torch = self.get_grads(self.args_torch)
+
+                        def get_grads(args):
+                            if isinstance(args, _Sequence) and not isinstance(args, str):
+                                return tuple(get_grads(b) for b in args)
+                            elif isinstance(args, _Mapping):
+                                return {k: get_grads(v) for k, v in args.items()}
+                            elif is_torch_tensor(args):
+                                return getattr(args, 'grad', None)
+                            else:
+                                return None
+
+                        args_grad_torch = get_grads(self.args_torch)
                         args_grad = torch_to_drjit(args_grad_torch)
                         self.set_grad_in('args', args_grad)
 
-                    @classmethod
-                    def get_grads(cls, args):
-                        if isinstance(args, _Sequence) and not isinstance(args, str):
-                            return tuple(cls.get_grads(b) for b in args)
-                        elif isinstance(args, _Mapping):
-                            return {k: cls.get_grads(v) for k, v in args.items()}
-                        elif is_torch_tensor(args):
-                            return getattr(args, 'grad', None)
-                        else:
-                            return None
 
                 return _dr.custom(ToTorch, args)
 
