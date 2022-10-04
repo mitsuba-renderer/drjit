@@ -5879,8 +5879,10 @@ def wrap_ad(source: str, target: str):
                             return tuple(cls.get_grads(b) for b in args)
                         elif isinstance(args, _Mapping):
                             return {k: cls.get_grads(v) for k, v in args.items()}
-                        else:
+                        elif is_torch_tensor(args):
                             return getattr(args, 'grad', None)
+                        else:
+                            return None
 
                 return _dr.custom(ToTorch, args)
 

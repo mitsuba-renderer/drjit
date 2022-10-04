@@ -174,3 +174,23 @@ def test08_from_torch_two_args_two_outputs(m):
     assert dr.allclose(m.Float(d), [12, 15, 18])
     assert dr.allclose(m.Float(a.grad), [4, 4, 4])
     assert dr.allclose(m.Float(b.grad), [3, 3, 3])
+
+def test09_to_torch_list_of_tensors_as_args():
+    l = [
+        m.TensorXf(m.Float([1.0, 2.0, 3.0]), shape=[3]),
+        m.TensorXf(m.Float([4.0, 5.0, 6.0]), shape=[3])
+    ]
+    dr.enable_grad(*l)
+
+    @dr.wrap_ad(source='drjit', target='torch')
+    def func(l):
+        return l[0] * 4, l[1] * 3
+
+    c, d = func(l)
+    dr.backward(dr.sum(c + d))
+
+    assert dr.allclose(c, [4, 8, 12])
+    assert dr.allclose(d, [12, 15, 18])
+    assert dr.allclose(dr.grad(a), [4, 4, 4])
+    assert dr.allclose(dr.grad(b), [3, 3, 3])
+
