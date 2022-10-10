@@ -166,10 +166,10 @@ template <typename T> auto bind_tensor(py::module m) {
 
 template <typename Tensor> auto bind_tensor_conversions(py::class_<Tensor> &cls) {
     if constexpr (!dr::is_mask_v<Tensor>) {
-        cls.def(py::init<const dr::int32_array_t<Tensor> &>(), py::arg().noconvert())
-           .def(py::init<const dr::uint32_array_t<Tensor> &>(), py::arg().noconvert())
-           .def(py::init<const dr::int64_array_t<Tensor> &>(), py::arg().noconvert())
-           .def(py::init<const dr::uint64_array_t<Tensor> &>(), py::arg().noconvert())
+        cls.def(py::init<const dr::  int32_array_t<Tensor> &>(), py::arg().noconvert())
+           .def(py::init<const dr:: uint32_array_t<Tensor> &>(), py::arg().noconvert())
+           .def(py::init<const dr::  int64_array_t<Tensor> &>(), py::arg().noconvert())
+           .def(py::init<const dr:: uint64_array_t<Tensor> &>(), py::arg().noconvert())
            .def(py::init<const dr::float32_array_t<Tensor> &>(), py::arg().noconvert())
            .def(py::init<const dr::float64_array_t<Tensor> &>(), py::arg().noconvert());
     } else {

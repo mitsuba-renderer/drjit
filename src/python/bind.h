@@ -119,8 +119,15 @@ void bind_generic_constructor(py::class_<Array> &cls) {
     cls.def(
         "__init__",
         [](py::detail::value_and_holder &v_h, py::args args) {
-            v_h.value_ptr() = new Array();
-            array_init(py::handle((PyObject *) v_h.inst), args);
+            Array * a = new Array();
+            v_h.value_ptr() = a;
+            try {
+                array_init(py::handle((PyObject *) v_h.inst), args);
+            } catch(const std::exception& e) {
+                delete a;
+                v_h.value_ptr() = nullptr;
+                throw;
+            }
         }, py::detail::is_new_style_constructor());
 }
 

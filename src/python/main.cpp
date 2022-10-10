@@ -403,6 +403,10 @@ PYBIND11_MODULE(drjit_ext, m_) {
     // Register a cleanup callback function
     auto atexit = py::module_::import("atexit");
     atexit.attr("register")(py::cpp_function([]() {
+        auto gc = py::module_::import("gc");
+        gc.attr("collect")();
+        gc.attr("collect")();
+
         py::gil_scoped_release gsr;
         jit_set_log_level_stderr(LogLevel::Warn);
         jit_set_log_level_callback(LogLevel::Disable, nullptr);
