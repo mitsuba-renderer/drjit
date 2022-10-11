@@ -4864,7 +4864,7 @@ def tile(arg, count: int):
 
         return result
     else:
-        index = _dr.arange(_dr.uint_array_t(t), size * count) % size
+        index = _dr.arange(_dr.uint32_array_t(t), size * count) % size
         return _dr.gather(t, arg, index)
 
 
@@ -4899,7 +4899,7 @@ def repeat(array, count: int):
 
         return result
     else:
-        index = _dr.arange(_dr.uint_array_t(t), size * count) // count
+        index = _dr.arange(_dr.uint32_array_t(t), size * count) // count
         return _dr.gather(t, array, index)
 
 

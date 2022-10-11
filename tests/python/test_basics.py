@@ -375,6 +375,14 @@ def test09_repeat_tile(cname):
     assert dr.repeat(a3(vec, vec + 1, vec + 2), 5) == \
         a3(reptd, reptd + 1, reptd + 2)
 
+    vec = dr.mask_t(t)([True, False, False])
+    tiled = dr.mask_t(t)([True, False, False, True, False, False])
+    reptd = dr.mask_t(t)([True, True, False, False, False, False])
+
+    assert dr.tile(vec, 2) == tiled
+    assert dr.repeat(vec, 2) == reptd
+
+
 
 @pytest.mark.parametrize("cname", ["drjit.cuda.Int", "drjit.llvm.Int"])
 def test10_meshgrid(cname):
