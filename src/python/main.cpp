@@ -400,18 +400,16 @@ PYBIND11_MODULE(drjit_ext, m_) {
     m.def("flags", &jit_flags);
     m.def("flag", [](JitFlag f) { return jit_flag(f); });
 
-    // Register a cleanup callback function
-    auto atexit = py::module_::import("atexit");
-    atexit.attr("register")(py::cpp_function([]() {
-        auto gc = py::module_::import("gc");
-        gc.attr("collect")();
-        gc.attr("collect")();
-
+    /* Register a cleanup callback function that is invoked when
+       the 'drjit::ArrayBase' Python type is garbage collected */
+    py::cpp_function cleanup_callback([](py::handle /* weakref */) {
         py::gil_scoped_release gsr;
         jit_set_log_level_stderr(LogLevel::Warn);
         jit_set_log_level_callback(LogLevel::Disable, nullptr);
         jit_shutdown(false);
-    }));
+    });
+
+    (void) py::weakref(m.attr("ArrayBase"), cleanup_callback).release();
 #else
     array_detail.def("schedule", [](uint32_t) { return false; });
     array_detail.def("eval", [](uint32_t) { return false; });
