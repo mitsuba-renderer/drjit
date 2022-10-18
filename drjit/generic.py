@@ -1530,10 +1530,9 @@ def export_(a, migrate_to_host, version, owner_supported=True):
 
         if a.IsTensor:
             # First dimension is the dynamic one, the rest should be in reversed order
-            for i in reversed(range(1, ndim)):
+            for i in reversed(range(ndim)):
                 strides[i] = temp
                 temp *= shape[i]
-            strides[0] = temp
         else:
             # Dr.Jit represents 3D arrays as 4D to leverage SIMD instructions
             padding = 1 if a.IsScalar and a.IsMatrix and shape[0] == 3 else 0
@@ -1555,11 +1554,19 @@ def export_(a, migrate_to_host, version, owner_supported=True):
         # C-style strides
         temp, strides = a.Type.Size, [0] * ndim
 
-        # First dimension is the dynamic one, the rest should be in reversed order
-        for i in reversed(range(1, ndim)):
-            strides[i if a.IsTensor else (ndim - i)] = temp
+        for i in reversed(range(ndim)):
+            strides[i] = temp
             temp *= shape[i]
-        strides[0] = temp
+
+        if a.IsMatrix:
+            if len(shape) == 4 and shape[1] == shape[2] and shape[2] == shape[3]:
+                strides[-3:] = strides[-3:][::-1]
+            else:
+                strides[-2:] = strides[-2:][::-1]
+
+        for i in range(ndim):
+            if shape[i] == 1:
+                strides[i] = 0
 
         # JIT array -- requires extra transformations
         b = _dr.ravel(_dr.detach(a) if a.IsDiff else a)

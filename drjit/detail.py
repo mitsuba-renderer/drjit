@@ -73,10 +73,10 @@ def array_from_dlpack(t, capsule):
 
     if t.IsCUDA and device_type != 2:
         raise _dr.Exception("Cannot create an Dr.Jit GPU array from a "
-                              "DLPack CPU tensor!")
+                             "DLPack CPU tensor!")
     elif not t.IsCUDA and device_type != 1:
         raise _dr.Exception("Cannot create an Dr.Jit CPU array from a "
-                              "DLPack GPU tensor!")
+                            "DLPack GPU tensor!")
 
     if dtype != t.Type:
         raise _dr.Exception("Incompatible type!")

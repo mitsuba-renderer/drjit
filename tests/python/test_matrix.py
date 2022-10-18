@@ -248,34 +248,37 @@ def test14_roundtrip(package, dest):
             return a.jax()
 
     v = Array3f(
-        (1.0 + dr.arange(Float, 5)),
-        (1.0 + dr.arange(Float, 5)) * 2,
-        (1.0 + dr.arange(Float, 5)) * 3,
+      (1.0 + dr.arange(Float, 5)),
+      (1.0 + dr.arange(Float, 5)) * 2,
+      (1.0 + dr.arange(Float, 5)) * 3,
     )
     assert(v == Array3f(to_dest(v)))
 
     m = Matrix3f([
-        Array3f([[1.0, 1.5], [2.0, 2.5], [3.0, 3.5]]),
-        Array3f([[1.0, 1.5], [2.0, 2.5], [3.0, 3.5]]) * 10,
-        Array3f([[1.0, 1.5], [2.0, 2.5], [3.0, 3.5]]) * 100
+      Array3f([[1.0, 1.5], [2.0, 2.5], [3.0, 3.5]]),
+      Array3f([[1.0, 1.5], [2.0, 2.5], [3.0, 3.5]]) * 10,
+      Array3f([[1.0, 1.5], [2.0, 2.5], [3.0, 3.5]]) * 100
     ])
     assert(m == Matrix3f(to_dest(m)))
 
     m = Matrix4f([
-        Array4f([[1.0, 1.5], [2.0, 2.5], [3.0, 3.5], [4.0, 4.5]]),
-        Array4f([[1.0, 1.5], [2.0, 2.5], [3.0, 3.5], [4.0, 4.5]]) * 10,
-        Array4f([[1.0, 1.5], [2.0, 2.5], [3.0, 3.5], [4.0, 4.5]]) * 100,
-        Array4f([[1.0, 1.5], [2.0, 2.5], [3.0, 3.5], [4.0, 4.5]]) * 1000
+      Array4f([[1.0, 1.5], [2.0, 2.5], [3.0, 3.5], [4.0, 4.5]]),
+      Array4f([[1.0, 1.5], [2.0, 2.5], [3.0, 3.5], [4.0, 4.5]]) * 10,
+      Array4f([[1.0, 1.5], [2.0, 2.5], [3.0, 3.5], [4.0, 4.5]]) * 100,
+      Array4f([[1.0, 1.5], [2.0, 2.5], [3.0, 3.5], [4.0, 4.5]]) * 1000
     ])
     assert(m == Matrix4f(to_dest(m)))
 
     m = Matrix44f([
-        [1.0, 2.0, 3.0, 4.0],
-        [1.0, 2.0, 3.0, 4.0],
-        [1.0, 2.0, 3.0, 4.0],
-        [1.0, 2.0, 3.0, 4.0]
+        [1, 2, 3, 4],
+        [5, 6, 7, 8],
+        [9, 10, 11, 12],
+        [13, 14, 15, 16]
     ])
-    assert(m == Matrix44f(to_dest(m)))
+    m[0, 0].x = Float([1, 2])
+    m2 = to_dest(m)
+    m3 = Matrix44f(m2)
+    assert(m == m3)
 
 
 @pytest.mark.parametrize("package", ["drjit.scalar"])
@@ -305,3 +308,18 @@ def test15_quat_to_euler(package):
     assert(dr.allclose(e, dr.quat_to_euler(dr.euler_to_quat(e))))
     # Euler -> Quat
     assert(dr.allclose(q, dr.euler_to_quat(e)))
+
+
+@pytest.mark.parametrize("package", ["drjit.scalar", "drjit.cuda", "drjit.llvm"])
+def test16_nested(package):
+    np = pytest.importorskip("numpy")
+    package = prepare(package)
+    Matrix41f = package.Matrix41f
+    Matrix4f = package.Matrix4f
+    Float = package.Float
+    m1 = [[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12], [13, 14, 15, 16]]
+    m2 = Matrix41f(m1)
+    m3 = np.array(m1, dtype=np.float32)[None, None, :, :]
+    m4 = np.array(m2)
+
+    assert np.allclose(m3, m4)
