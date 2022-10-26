@@ -193,3 +193,27 @@ def test09_to_torch_list_of_tensors_as_args(m):
     assert dr.allclose(dr.grad(a), [4, 4, 4])
     assert dr.allclose(dr.grad(b), [3, 3, 3])
 
+def test10_to_torch_list_of_tensors_as_args_and_return_nested_stucture(m):
+    a = m.TensorXf(m.Float([1.0, 2.0, 3.0]), shape=[3])
+    b = m.TensorXf(m.Float([4.0, 5.0, 6.0]), shape=[3])
+    l = [a,b]
+    dr.enable_grad(*l)
+
+    @dr.wrap_ad(source='drjit', target='torch')
+    def func(l):
+        return {
+            "first": l[0] * 4,
+            "second": {
+                "real_second": [l[1] * 3]
+            }
+        }
+
+    dictionary = func(l)
+    c, d = dictionary["first"], dictionary["second"]["real_second"][0]
+    dr.backward(dr.sum(c + d))
+
+    assert dr.allclose(c, [4, 8, 12])
+    assert dr.allclose(d, [12, 15, 18])
+    assert dr.allclose(dr.grad(a), [4, 4, 4])
+    assert dr.allclose(dr.grad(b), [3, 3, 3])
+

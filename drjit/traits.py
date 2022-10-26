@@ -813,7 +813,7 @@ def leaf_array_t(arg):
             if is_diff_v(t) and is_float_v(t):
                 break
     elif isinstance(arg, _Mapping):
-        for k, v in arg:
+        for k, v in arg.items():
             t = leaf_array_t(v)
             if is_diff_v(t) and is_float_v(t):
                 break
