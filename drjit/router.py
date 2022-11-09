@@ -1,4 +1,4 @@
-from typing import Type, Callable
+from typing import Callable, Union
 import drjit as _dr
 from drjit import ArrayBase, VarType, Exception, Dynamic
 from drjit.detail import array_name as _array_name
@@ -5868,7 +5868,7 @@ def wrap_ad(source: str, target: str):
                     def backward(self):
                         grad_out_torch = drjit_to_torch(self.grad_out())
                         grad_out_torch = torch_ensure_shape(grad_out_torch, self.res_torch)
-                        def flatten(values) -> Union[torch.Tensor, _Sequence[torch.Tensor]]:
+                        def flatten(values) -> Union[_torch.Tensor, _Sequence[_torch.Tensor]]:
                             """Flatten structure in a consistent arbitrary order"""
                             if isinstance(values, _Sequence):
                                 return [flatten(v) for v in values]
