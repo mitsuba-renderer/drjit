@@ -5870,12 +5870,23 @@ def wrap_ad(source: str, target: str):
                         grad_out_torch = torch_ensure_shape(grad_out_torch, self.res_torch)
                         def flatten(values) -> Union[_torch.Tensor, _Sequence[_torch.Tensor]]:
                             """Flatten structure in a consistent arbitrary order"""
-                            if isinstance(values, _Sequence):
-                                return [flatten(v) for v in values]
-                            elif isinstance(values, _Mapping):
-                                return [flatten(v) for k, v in sorted(values.items(), key=lambda k, v: k)]
-                            else:
-                                return values
+                            result = []
+                            def traverse(values):
+                                if isinstance(values, _Sequence):
+                                    for v in values:
+                                        traverse(v)
+                                elif isinstance(values, _Mapping):
+                                    for _, v in sorted(values.items(), key=lambda item: item[0]):
+                                        traverse(v)
+                                else:
+                                    result.append(values)
+                            traverse(values)
+
+                            # Single item should not be wrapped into a list
+                            if not isinstance(values, _Sequence) and not isinstance(values, _Mapping):
+                                result = result[0]
+
+                            return result
 
                         _torch.autograd.backward(flatten(self.res_torch), flatten(grad_out_torch))
 
