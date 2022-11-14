@@ -76,6 +76,11 @@ template <typename T> DRJIT_INLINE auto wrap_vcall(const T &value) {
     }
 }
 
+#  if defined(__GNUC__) && !defined(__clang__)
+#    pragma GCC diagnostic push
+#    pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#  endif
+
 template <typename Result, typename Base, typename Func, typename Self,
           typename Mask, size_t... Is, typename... Args>
 Result vcall_jit_record_impl(const char *name, uint32_t n_inst,
@@ -95,7 +100,7 @@ Result vcall_jit_record_impl(const char *name, uint32_t n_inst,
     (collect_indices(indices_in, args), ...);
 
     detail::JitState<Backend> jit_state;
-    jit_state.begin_recording();
+    jit_state.begin_recording(true);
     jit_state.new_scope();
 
     state[0] = jit_record_checkpoint(Backend);
@@ -166,6 +171,10 @@ Result vcall_jit_record_impl(const char *name, uint32_t n_inst,
         return nullptr;
     }
 }
+
+#  if defined(__GNUC__) && !defined(__clang__)
+#    pragma GCC diagnostic pop
+#  endif
 
 template <typename Result, typename Base, typename Func, typename Mask,
           size_t... Is, typename... Args>
