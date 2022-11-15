@@ -61,6 +61,9 @@ DRJIT_INLINE decltype(auto) copy_diff(const T& value) {
 
 template <typename Mask> Mask extract_mask() { return true; }
 
+template <typename T> constexpr bool is_pair_with_mask_v = false;
+template <typename T1, typename T2> constexpr bool is_pair_with_mask_v<std::pair<T1, T2>> = is_mask_v<T1>;
+
 template <typename Mask, typename T, typename... Ts>
 Mask extract_mask(const T &v, const Ts &... vs) {
     DRJIT_MARK_USED(v);
@@ -68,6 +71,8 @@ Mask extract_mask(const T &v, const Ts &... vs) {
         return extract_mask<Mask>(vs...);
     else if constexpr (is_mask_v<T>)
         return v;
+    else if constexpr (is_pair_with_mask_v<T>)
+        return v.first;
     else
         return true;
 }
@@ -76,6 +81,8 @@ template <size_t I, size_t N, typename T>
 decltype(auto) set_mask_true(const T &v) {
     if constexpr (is_mask_v<T> && I == N - 1)
         return T(true);
+    else if constexpr (is_pair_with_mask_v<T> && I == N - 1)
+        return std::make_pair(typename T::first_type(true), v.second);
     else
         return (const T &) v;
 }
