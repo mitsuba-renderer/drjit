@@ -192,6 +192,7 @@ struct BaseD {
     virtual ~BaseD() { }
     void dummy() { }
     virtual StructFD f(const StructFD &m) = 0;
+    virtual StructFD f_masked(const StructFD &m, MaskD active) = 0;
     virtual StructFD g(const StructFD &m) = 0;
     DRJIT_VCALL_REGISTER(FloatD, BaseD)
     FloatD x;
@@ -204,6 +205,11 @@ struct AD : BaseD {
         return { m.a * 2, m.b * 3 };
     }
 
+    StructFD f_masked(const StructFD &m, MaskD active) override {
+        DRJIT_MARK_USED(active);
+        return { m.a * 2, m.b * 3 };
+    }
+
     StructFD g(const StructFD &m) override {
         return { m.a * x, m.b * 3 };
     }
@@ -213,6 +219,12 @@ struct BD : BaseD {
     StructFD f(const StructFD &m) override {
         return { m.b * 4, m.a * 5 };
     }
+
+    StructFD f_masked(const StructFD &m, MaskD active) override {
+        DRJIT_MARK_USED(active);
+        return { m.b * 4, m.a * 5 };
+    }
+
     StructFD g(const StructFD &m) override {
         return { m.b * 4, m.a + x };
     }
@@ -220,6 +232,7 @@ struct BD : BaseD {
 
 DRJIT_VCALL_BEGIN(BaseD)
 DRJIT_VCALL_METHOD(f)
+DRJIT_VCALL_METHOD(f_masked)
 DRJIT_VCALL_METHOD(g)
 DRJIT_VCALL_METHOD(dummy)
 DRJIT_VCALL_END(BaseD)
@@ -247,26 +260,52 @@ DRJIT_TEST(test03_vcall_symbolic_ad_fwd) {
 
         Struct input{ Array3fD(1, 2, 3) * o,
                       Array3fD(4, 5, 6) };
+        {
+            dr::enable_grad(input);
 
-        dr::enable_grad(input);
+            StructFD output = arr->f(input);
+            dr::set_label(input, "input");
+            dr::set_label(output, "output");
+            dr::set_grad(input, StructF(1, 10));
+            dr::enqueue(ADMode::Forward, input);
+            dr::traverse<FloatD>(ADMode::Forward);
 
-        StructFD output = arr->f(input);
-        dr::set_label(input, "input");
-        dr::set_label(output, "output");
-        dr::set_grad(input, StructF(1, 10));
-        dr::enqueue(ADMode::Forward, input);
-        dr::traverse<FloatD>(ADMode::Forward);
+            StructF grad_out = dr::grad(output);
+            dr::eval(output, grad_out);
 
-        StructF grad_out = dr::grad(output);
-        dr::eval(output, grad_out);
+            assert(dr::all_nested(
+                dr::eq(output.a, dr::select(m, input.a * 2, input.b * 4)) &&
+                dr::eq(output.b, dr::select(m, input.b * 3, input.a * 5))));
 
-        assert(dr::all_nested(
-            dr::eq(output.a, dr::select(m, input.a * 2, input.b * 4)) &&
-            dr::eq(output.b, dr::select(m, input.b * 3, input.a * 5))));
+            assert(dr::all_nested(
+                dr::eq(grad_out.a, dr::select(dr::detach(m), 2, 40)) &&
+                dr::eq(grad_out.b, dr::select(dr::detach(m), 30, 5))));
+        }
 
-        assert(dr::all_nested(
-            dr::eq(grad_out.a, dr::select(dr::detach(m), 2, 40)) &&
-            dr::eq(grad_out.b, dr::select(dr::detach(m), 30, 5))));
+        // Masked version
+        {
+            dr::enable_grad(input);
+
+            MaskD active = dr::arange<UInt32D>(n) < (n / 2);
+
+            StructFD output = arr->f_masked(input, active);
+            dr::set_label(input, "input");
+            dr::set_label(output, "output");
+            dr::set_grad(input, StructF(1, 10));
+            dr::enqueue(ADMode::Forward, input);
+            dr::traverse<FloatD>(ADMode::Forward);
+
+            StructF grad_out = dr::grad(output);
+            dr::eval(output, grad_out);
+
+            assert(dr::all_nested(
+                dr::eq(output.a, dr::select(active, dr::select(m, input.a * 2, input.b * 4), 0)) &&
+                dr::eq(output.b, dr::select(active, dr::select(m, input.b * 3, input.a * 5), 0))));
+
+            assert(dr::all_nested(
+                dr::eq(grad_out.a, dr::select(dr::detach(active), dr::select(dr::detach(m), 2, 40), 0)) &&
+                dr::eq(grad_out.b, dr::select(dr::detach(active), dr::select(dr::detach(m), 30, 5), 0))));
+        }
     }
 
     delete a;
