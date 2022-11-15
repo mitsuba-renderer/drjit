@@ -5868,7 +5868,7 @@ def wrap_ad(source: str, target: str):
                     def backward(self):
                         grad_out_torch = drjit_to_torch(self.grad_out())
                         grad_out_torch = torch_ensure_shape(grad_out_torch, self.res_torch)
-                        def flatten(values) -> Union[_torch.Tensor, _Sequence[_torch.Tensor]]:
+                        def flatten(values):
                             """Flatten structure in a consistent arbitrary order"""
                             result = []
                             def traverse(values):
