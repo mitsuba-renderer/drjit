@@ -320,8 +320,7 @@ public:
                 for (size_t i = 0; i < Dimension; ++i)
                     pos_idx[i] = pos[i].index();
 
-                jit_cuda_tex_lookup(Dimension, m_handle, pos_idx, active.index(),
-                                    out_idx);
+                jit_cuda_tex_lookup(Dimension, m_handle, pos_idx, out_idx);
 
                 for (size_t ch = 0; ch < channels; ++ch)
                     out[ch] = Value::steal(out_idx[ch]);
@@ -475,7 +474,7 @@ public:
                         pos_idx[i] = pos[i].index();
 
                     jit_cuda_tex_bilerp_fetch(Dimension, m_handle, pos_idx,
-                                            active.index(), out_idx);
+                                              out_idx);
 
                     for (size_t ch = 0; ch < channels; ++ch) {
                         out[2][ch] = Value::steal(out_idx[ch]);
