@@ -33,17 +33,6 @@ DRJIT_INLINE decltype(auto) gather_helper(const T& value, const UInt32 &perm) {
     }
 }
 
-template <typename Mask>
-struct MaskScope {
-    static constexpr JitBackend Backend = detached_t<Mask>::Backend;
-    MaskScope(const Mask &mask) {
-        jit_var_mask_push(Backend, mask.index());
-    }
-    ~MaskScope() {
-        jit_var_mask_pop(Backend);
-    }
-};
-
 template <typename Result, typename Func, typename Self, size_t... Is,
           typename... Args>
 Result vcall_jit_reduce_impl(Func func, const Self &self_,

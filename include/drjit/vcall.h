@@ -87,6 +87,17 @@ decltype(auto) set_mask_true(const T &v) {
         return (const T &) v;
 }
 
+template <typename Mask>
+struct MaskScope {
+    static constexpr JitBackend Backend = detached_t<Mask>::Backend;
+    MaskScope(const Mask &mask) {
+        jit_var_mask_push(Backend, mask.index());
+    }
+    ~MaskScope() {
+        jit_var_mask_pop(Backend);
+    }
+};
+
 inline void ad_copy() { }
 
 template <typename T, typename... Ts> void ad_copy(T &value, Ts&...values) {

@@ -2,6 +2,7 @@
 #include "bind.h"
 #include "random.h"
 #include "loop.h"
+#include "switch.h"
 #include "tensor.h"
 #include "texture.h"
 #include <drjit/jit.h>
@@ -32,6 +33,9 @@ void export_llvm(py::module_ &m) {
         .def("__call__", &Loop<Mask>::operator());
 
     bind_texture_all<Guide>(llvm);
+
+    llvm.def("switch_record_", drjit::detail::switch_record_impl<dr::uint32_array_t<Guide>>);
+    llvm.def("switch_reduce_", drjit::detail::switch_reduce_impl<dr::uint32_array_t<Guide>>);
 
     DRJIT_BIND_TENSOR_TYPES(llvm);
 }
