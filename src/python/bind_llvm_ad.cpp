@@ -2,6 +2,7 @@
 #include "bind.h"
 #include "random.h"
 #include "loop.h"
+#include "switch.h"
 #include "tensor.h"
 #include "texture.h"
 #include <drjit/autodiff.h>
@@ -39,6 +40,9 @@ void export_llvm_ad(py::module_ &m) {
     DRJIT_BIND_TENSOR_TYPES(llvm_ad);
 
     bind_texture_all<Guide>(llvm_ad);
+
+    llvm_ad.def("switch_record_", drjit::detail::switch_record_impl<dr::uint32_array_t<Guide>>);
+    llvm_ad.def("switch_reduce_", drjit::detail::switch_reduce_impl<dr::uint32_array_t<Guide>>);
 
     bind_ad_details(a_f32);
     bind_ad_details(a_f64);

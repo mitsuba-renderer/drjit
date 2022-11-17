@@ -1,6 +1,8 @@
 import drjit as _dr
 import sys
 import inspect
+from typing import Callable, Union
+from functools import wraps as _wraps
 from collections.abc import Mapping, Sequence
 
 VAR_TYPE_NAME = [
@@ -731,6 +733,66 @@ def diff_vars(o, indices, check_grad_enabled=True):
             if t is not None:
                 result = t
     return result
+
+
+def traverse():
+    '''
+    Function decorator that traverses nested datastructures (e.g. dicts, lists,
+    Dr.Jit struct, ...) and applies the decorated function to all JIT arrays
+    it encounters.
+    '''
+    def wrapper(func: Callable):
+        @_wraps(func)
+        def traverse(*args):
+            a = args[0]
+            ta = type(a)
+
+            # Apply slicer to all arguments whose type match the one of the first argument.
+            def slice_args(slicer):
+                return tuple(slicer(b) if isinstance(b, ta) else b for b in args)
+
+            if _dr.depth_v(a) > 1:
+                res = ta()
+                for i in range(_dr.size_v(a)):
+                    v = traverse(*slice_args(lambda x: x[i]))
+                    if v is not None:
+                        res[i] = v
+                return res
+            elif isinstance(a, Sequence) and not isinstance(a, str):
+                return ta(traverse(*slice_args(lambda x: x[i])) for i in range(len(a)))
+            elif isinstance(a, Mapping):
+                return { k: traverse(*slice_args(lambda x: x[k])) for k in a.keys() }
+            elif _dr.is_struct_v(a):
+                res = ta()
+                for k in ta.DRJIT_STRUCT.keys():
+                    setattr(res, k, traverse(*slice_args(lambda x: getattr(x, k))))
+                return res
+            elif _dr.is_tensor_v(a):
+                return traverse(*slice_args(lambda x: x.array))
+            elif _dr.is_jit_v(a):
+                return func(*args)
+            else:
+                return args
+
+        return traverse
+
+    return wrapper
+
+@traverse()
+def apply_cpp(arg, func):
+    '''
+    Apply a C++ function to data structures containing JIT variables. The C++
+    lambda must take as input the index of the JIT variable. It can optionally
+    return a new index in which case a new data structure will be constructed
+    carrying the new JIT variables.
+    '''
+    res = type(arg)()
+    idx = func(arg.index)
+    if isinstance(idx, int):
+        res.set_index_(idx)
+        if _dr.is_diff_v(arg):
+            res.set_index_ad_(arg.index_ad)
+    return res
 
 
 def get_args_values(f, *args, **kwargs):

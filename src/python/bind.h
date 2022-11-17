@@ -357,7 +357,7 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
             cls.def("block_sum_", &Array::block_sum_);
     }
 
-    if constexpr (dr::is_dynamic_array_v<Array>)
+    if constexpr (dr::is_dynamic_array_v<Array> || Array::IsDiff)
         cls.def("copy_", [](Array &value) { return value.copy(); });
 
     if constexpr (Array::IsFloat) {
@@ -521,7 +521,7 @@ struct CustomOp : dr::detail::DiffCallback {
 template <typename T>
 void bind_ad_details(py::class_<dr::DiffArray<T>> &cls) {
     cls.def_static(
-        "add_edge_",
+        "ad_add_edge_",
         [](int32_t src_index, int32_t dst_index, py::handle cb) {
             dr::detail::ad_add_edge<T>(
                 src_index, dst_index,
@@ -529,8 +529,26 @@ void bind_ad_details(py::class_<dr::DiffArray<T>> &cls) {
         },
         "src_index"_a, "dst_index"_a, "cb"_a = py::none());
 
-    cls.def("dec_ref_", [](dr::DiffArray<T> &v) {
+    cls.def("ad_dec_ref_", [](dr::DiffArray<T> &v) {
         dr::detail::ad_dec_ref<T>(v.index_ad());
+    });
+    cls.def("ad_inc_ref_", [](dr::DiffArray<T> &v) {
+        dr::detail::ad_inc_ref<T>(v.index_ad());
+    });
+
+    cls.def("ad_implicit_", []() {
+        return dr::detail::ad_implicit<T>();
+    });
+    cls.def("ad_extract_implicit_", [](size_t snapshot) {
+        std::vector<uint32_t> implicit_in(dr::detail::ad_implicit<T>() - snapshot, 0);
+        dr::detail::ad_extract_implicit<T>(snapshot, implicit_in.data());
+        return implicit_in;
+    });
+    cls.def("ad_enqueue_implicit_", [](size_t snapshot) {
+        return dr::detail::ad_enqueue_implicit<T>(snapshot);
+    });
+    cls.def("ad_dequeue_implicit_", [](size_t snapshot) {
+        return dr::detail::ad_dequeue_implicit<T>(snapshot);
     });
 }
 

@@ -3941,7 +3941,7 @@ def detach(arg, preserve_type=True):
             setattr(result, k, detach(getattr(arg, k),
                 preserve_type=preserve_type))
         return result
-    elif isinstance(arg, list):
+    elif isinstance(arg, _Sequence):
         return type(arg)(detach(a, preserve_type) for a in arg)
     elif isinstance(arg, dict):
         return { k: detach(v, preserve_type) for k, v in arg.items() }
@@ -5581,7 +5581,7 @@ def custom(cls, *args, **kwargs):
                     o.index_ad,
                     _dr.detached_t(ot)())
             if dec_ref:
-                value.dec_ref_()
+                value.ad_dec_ref_()
             return result
         elif _dr.is_struct_v(o):
             res = type(o)()
@@ -5643,19 +5643,17 @@ def custom(cls, *args, **kwargs):
         if len(diff_vars_out) == 0:
             return output # Not relevant for AD after all..
 
-        detail = _modules.get(Type.__module__ + ".detail")
-
         if len(diff_vars_in) > 1:
             _dr.set_label(tmp_in, inst.name() + "_in")
             for index in diff_vars_in:
-                Type.add_edge_(index, tmp_in.index_ad)
+                Type.ad_add_edge_(index, tmp_in.index_ad)
 
         if len(diff_vars_out) > 1:
             _dr.set_label(tmp_out, inst.name() + "_out")
             for index in diff_vars_out:
-                Type.add_edge_(tmp_out.index_ad, index)
+                Type.ad_add_edge_(tmp_out.index_ad, index)
 
-        Type.add_edge_(
+        Type.ad_add_edge_(
             diff_vars_in[0]  if len(diff_vars_in)  == 1 else tmp_in.index_ad,
             diff_vars_out[0] if len(diff_vars_out) == 1 else tmp_out.index_ad,
             inst
@@ -5947,3 +5945,198 @@ def get_cmake_dir():
     if not path.exists(cmake_path):
         raise ImportError("Cannot find Dr.Jit CMake directory")
     return cmake_path
+
+# -------------------------------------------------------------------
+#             Function dispatch and polymorphism routines
+# -------------------------------------------------------------------
+
+def switch(indices, funcs, *args):
+    """
+    Dispatches a call to one of the given functions based on the given indices.
+
+    .. code-block:: python
+
+        def f1(x):
+             return x * 10
+
+        def f2(x):
+             return x * 100
+
+        arg = dr.llvm.Float([1.0, 2.0, 3.0, 4.0])
+        indices = dr.llvm.UInt32([0, 1, 1, 0])
+
+        res = dr.switch(indices, [f1, f2], arg)
+
+        # [10.0, 200.0, 300.0, 40.0]
+
+    Args:
+        indices (drjit.ArrayBase): a list of indices to choose the functions
+        funcs (list): a list of functions to dispatch based on ``indices``
+        args (tuple): the arguments to pass to the functions
+
+    Returns:
+        object: the result of the function call dispatched based on the indices
+    """
+
+    if not _dr.is_unsigned_v(indices):
+        raise Exception("switch(): expect indices to be an integer array!")
+
+    if not isinstance(funcs, list):
+        raise Exception("switch(): expect funcs to be a list of functions!")
+
+    for f in funcs:
+        if f is not None and not callable(f):
+            raise Exception("switch(): expect funcs to be a list of functions!")
+
+    Type = _dr.float32_array_t(indices)
+    Mask = _dr.mask_t(indices)
+    mod = _modules.get(Type.__module__)
+
+    # Dr.Jit expects callable indices to start at 1
+    indices = 1 + indices
+
+    # Extract and apply (optional) mask from last argument
+    if isinstance(args[-1], Mask):
+        indices = _dr.select(args[-1], indices, 0)
+        # Set the active mask to True
+        args = tuple(a if (i+1) < len(args) else Mask(True) for i, a in enumerate(args))
+
+    if not _dr.flag(_dr.JitFlag.VCallRecord):
+        @_dr.detail.traverse()
+        def gather_helper(src, idx):
+            return _dr.gather(type(src), src, idx)
+
+        @_dr.detail.traverse()
+        def zeros_helper(arg):
+            return _dr.zeros(type(arg), _dr.width(indices))
+
+        @_dr.detail.traverse()
+        def scatter_helper(dst, src, idx):
+            _dr.scatter(dst, src, idx)
+
+        return mod.switch_reduce_(indices, funcs, gather_helper,
+                                  zeros_helper, scatter_helper, *args)
+
+    if not _dr.is_diff_v(indices):
+        return mod.switch_record_(indices, funcs, *args)
+    else:
+        @_dr.detail.traverse()
+        def ad_copy(arg):
+            return arg.copy_() if _dr.is_diff_v(arg) else arg
+
+        class DiffSwitch(_dr.CustomOp):
+            def eval(self, indices, funcs, args):
+                self.indices = indices
+                self.funcs = funcs
+                self.args = args
+                implicit_snapshot = Type.ad_implicit_()
+                res = mod.switch_record_(self.indices, self.funcs, *self.args)
+                self.implicit_in = Type.ad_extract_implicit_(implicit_snapshot)
+                for i in self.implicit_in:
+                    Type.ad_inc_ref_(i)
+                return _dr.detach(res)
+
+            def forward(self):
+                def generate(func):
+                    def fwd(*args):
+                        # Prepare arguments
+                        args_value, args_grad = zip(*args)
+                        args_value = ad_copy(args_value)
+                        _dr.enable_grad(args_value)
+                        implicit_snapshot = Type.ad_implicit_()
+                        # Call function
+                        result = func(*args_value)
+                        # Propagate gradients from arguments to result
+                        _dr.set_grad(args_value, args_grad)
+                        _dr.enqueue(_dr.ADMode.Forward, args_value)
+                        Type.ad_enqueue_implicit_(implicit_snapshot)
+                        _dr.traverse(Type, _dr.ADMode.Forward)
+                        Type.ad_dequeue_implicit_(implicit_snapshot)
+                        # Return result gradients
+                        return _dr.grad(result, preserve_type=False)
+
+                    return fwd
+
+                funcs_fwd = [generate(func) for func in self.funcs]
+                args_value_grad = tuple(zip(self.args, self.grad_in('args') ))
+                grad_out = mod.switch_record_(self.indices, funcs_fwd, *args_value_grad)
+                self.set_grad_out(grad_out)
+
+            def backward(self):
+                def generate(func):
+                    def bwd(grad_out, *args):
+                        # Prepare arguments
+                        args = ad_copy(args)
+                        _dr.enable_grad(args)
+                        # Call function
+                        result = func(*args)
+                        # Propagate gradients from result to arguments
+                        _dr.set_grad(result, grad_out)
+                        _dr.enqueue(_dr.ADMode.Backward, result)
+                        _dr.traverse(Type, _dr.ADMode.Backward)
+                        # Return arguments gradients
+                        return _dr.grad(args, preserve_type=False)
+
+                    return bwd
+
+                funcs_bwd = [generate(func) for func in self.funcs]
+                grad_in = mod.switch_record_(self.indices, funcs_bwd, self.grad_out(), *self.args)
+                self.set_grad_in('args', grad_in)
+
+        return _dr.custom(DiffSwitch, indices, funcs, args)
+
+
+def dispatch(instances, func, *args):
+    """
+    Dispatches a call to the given function on an array of instances of a class
+    registered to the Dr.Jit registry. The provided function is assumed to take
+    at least one argument that will represent the individual instance of the
+    class this function is recorded on.
+
+    This routine can be used to perform dynamic dispatch to Python methods of
+    instances. The code generation underlying Dr.Jit will transform arbitrary
+    sequences of such method calls into unified functions in the generated code.
+    In other words, a single dispatch call that calls two methods is potentially
+    significantly faster than two separate dispatches.
+
+    .. code-block:: python
+
+        pointers = ... # Dr.Jit pointer array type
+
+        def func(self, arg):
+            v = self.foo() # call foo() on a single instance at a time
+            return v + arg
+
+        arg = dr.llvm.Float([1.0, 2.0, 3.0, 4.0])
+
+        res = dr.dispatch(pointers, func, arg)
+
+    Args:
+        instances (drjit.ArrayBase): array of pointers to instances to dispatch
+                                     the given function on.
+        func (dict): function to dispatch on all instances.
+        args (tuple): the arguments to pass to the function.
+
+    Returns:
+        object: the result of the function evaluated for the given instances.
+    """
+    Type = type(instances)
+
+    if not _dr.is_jit_v(Type) or _dr.detail.VAR_TYPE_NAME[Type.Type] != 'Pointer':
+        raise Exception('dispatch(): instances should be an array of pointers!')
+
+    if not isinstance(func, type(lambda:0)):
+        raise Exception('dispatch(): func should be function!')
+
+    # Generate functions for all instances of Type
+    def generate(inst):
+        return (lambda *args: func(inst, *args)) if inst else None
+    n_inst_max = Type.registry_get_max_()
+    funcs = [generate(Type.registry_get_ptr_(i+1)) for i in range(n_inst_max)]
+
+    # Reinterpret array of pointers into an array of indices
+    index_type = getattr(_modules.get(Type.__module__), 'UInt32')
+    indices = _dr.reinterpret_array_v(index_type, instances)
+
+    return _dr.switch(indices-1, funcs, *args)
+
