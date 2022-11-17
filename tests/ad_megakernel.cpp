@@ -263,7 +263,6 @@ DRJIT_TEST(test05_vcall_symbolic_ad_loop_opt) {
     }
 }
 
-
 DRJIT_TEST(test06_vcall_symbolic_nested_ad_loop_opt) {
     if constexpr (dr::is_cuda_v<Float>)
         jit_init((uint32_t) JitBackend::CUDA);

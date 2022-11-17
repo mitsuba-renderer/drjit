@@ -1283,7 +1283,7 @@ uint32_t ad_new_select(const char *label, size_t size, const Mask &mask,
 template <typename Mask> struct MaskGuard {
     MaskGuard(const Mask &mask) {
         if constexpr (is_jit_v<Mask>)
-            jit_var_mask_push(Mask::Backend, mask.index(), false);
+            jit_var_mask_push(Mask::Backend, mask.index());
         else
             DRJIT_MARK_USED(mask);
     }
@@ -1298,8 +1298,12 @@ template <typename Mask> struct MaskGuard {
 template <typename Value> struct GatherEdge : Special {
     GatherEdge(const Index &offset, const Mask &mask, bool permute)
         : offset(offset), mask(mask), permute(permute) {
-        if constexpr (is_jit_v<Value>)
-            mask_stack = mask_t<Value>::steal(jit_var_mask_peek(Value::Backend));
+        if constexpr (is_jit_v<Value>) {
+            uint32_t mask_idx = jit_var_mask_peek(Value::Backend);
+            if (!mask_idx)
+                mask_idx = jit_var_mask_default(Value::Backend, (uint32_t) width(offset, mask));
+            mask_stack = mask_t<Value>::steal(mask_idx);
+        }
     }
 
     void backward(Variable *source, const Variable *target, uint32_t) const override {
@@ -1412,8 +1416,12 @@ template <typename Value> struct ScatterEdge : Special {
         : offset(offset), mask(mask), op(op) {
             if (op != ReduceOp::None && op != ReduceOp::Add)
                 drjit_raise("AD only supports ReduceOp::Add in scatter_reduce!");
-        if constexpr (is_jit_v<Value>)
-            mask_stack = mask_t<Value>::steal(jit_var_mask_peek(Value::Backend));
+        if constexpr (is_jit_v<Value>) {
+            uint32_t mask_idx = jit_var_mask_peek(Value::Backend);
+            if (!mask_idx)
+                mask_idx = jit_var_mask_default(Value::Backend, (uint32_t) width(offset, mask));
+            mask_stack = mask_t<Value>::steal(mask_idx);
+        }
     }
 
     void backward(Variable *source, const Variable *target, uint32_t) const override {

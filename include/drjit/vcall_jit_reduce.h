@@ -37,7 +37,7 @@ template <typename Mask>
 struct MaskScope {
     static constexpr JitBackend Backend = detached_t<Mask>::Backend;
     MaskScope(const Mask &mask) {
-        jit_var_mask_push(Backend, mask.index(), 0);
+        jit_var_mask_push(Backend, mask.index());
     }
     ~MaskScope() {
         jit_var_mask_pop(Backend);
@@ -67,10 +67,12 @@ Result vcall_jit_reduce_impl(Func func, const Self &self_,
     }
 
     Mask mask = extract_mask<Mask>(args...);
-    if (jit_var_mask_size(Backend))
-        mask &= Mask::steal(jit_var_mask_peek(Backend));
+    size_t mask_size = mask.size();
 
-    MaskScope<Mask> scope(Mask::steal(jit_var_mask_default(Backend)));
+    // Apply mask stack
+    mask = Mask::steal(jit_var_mask_apply(mask.index(),
+        (uint32_t) (self_size > mask_size ? self_size : mask_size)
+    ));
 
     struct SetSelfHelper {
         void set(uint32_t value, uint32_t index) {
@@ -92,10 +94,13 @@ Result vcall_jit_reduce_impl(Func func, const Self &self_,
         size_t last_size = 0;
 
         for (size_t i = 0; i < n_inst ; ++i) {
-            UInt32 perm        = UInt32::borrow(buckets[i].index),
-                   instance_id = gather<UInt32>(self, perm);
-
+            UInt32 perm = UInt32::borrow(buckets[i].index);
             size_t wavefront_size = perm.size();
+
+            MaskScope<Mask> scope(Mask::steal(
+                jit_var_mask_default(Backend, (uint32_t) wavefront_size)));
+
+            UInt32 instance_id = gather<UInt32>(self, perm);
 
             // Avoid merging multiple vcall launches if size repeats..
             if (wavefront_size != last_size)

@@ -216,12 +216,26 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
     }
 
     bool operator()(const Mask &cond_) {
-        Mask cond = [&]() {
-            if constexpr (Backend == JitBackend::LLVM)
-                return cond_ & Mask::steal(jit_var_mask_peek(Backend));
-            else
-                return cond_;
-        }();
+        // Determine wavefront size
+        if (m_size <= 1) {
+            uint32_t size = jit_var_size(cond_.index());
+            for (uint32_t i = 0; i < m_indices.size(); ++i) {
+                uint32_t size_2 = jit_var_size(*m_indices[i]);
+                size = size_2 > size ? size_2 : size;
+            }
+            m_size = size;
+        }
+
+        m_jit_state.clear_mask_if_set();
+
+        // Apply any masks on the mask stack to 'cond_'
+        Mask cond = Mask::steal(jit_var_mask_apply(cond_.index(), m_size));
+
+        /* In LLVM megakernel and CUDA/LLVM wavefront modes, deactivated lanes
+           also execute the loop body. We need to push the condition onto the
+           mask stack to avoid undefined behavior e.g. due to gathers/scatters. */
+        if (!m_record || Backend == JitBackend::LLVM)
+            m_jit_state.set_mask(cond.index());
 
         return m_record ? cond_record(cond) : cond_wavefront(cond);
     }
@@ -253,10 +267,6 @@ protected:
                 // Start recording side effects
                 m_jit_state.begin_recording(false);
 
-                // Mask deactivated SIMD lanes
-                if constexpr (Backend == JitBackend::LLVM)
-                    m_jit_state.set_mask(cond.index());
-
                 m_state++;
 
                 return true;
@@ -277,6 +287,7 @@ protected:
                 if (rv == (uint32_t) -1) {
                     jit_log(::LogLevel::InfoSym,
                             "Loop(\"%s\"): ----- recording loop body *again* ------", m_name.get());
+                    m_jit_state.clear_mask_if_set();
                     return true;
                 } else {
                     jit_log(::LogLevel::InfoSym,
@@ -289,10 +300,8 @@ protected:
 
                     m_jit_state.end_recording();
                     m_jit_state.clear_scope();
+                    m_jit_state.clear_mask_if_set();
                     jit_var_mark_side_effect(rv);
-
-                    if constexpr (Backend == JitBackend::LLVM)
-                        m_jit_state.clear_mask();
 
                     if constexpr (IsDiff) {
                         if (m_ad_scope) {
@@ -325,9 +334,6 @@ protected:
 
         // If this is not the first iteration
         if (m_cond.index()) {
-            // Clear mask from last iteration
-            m_jit_state.clear_mask();
-
             // Disable lanes that have terminated previously
             cond &= m_cond;
 
@@ -371,14 +377,8 @@ protected:
         }
 
         // Try to compile loop iteration into a single kernel
-        size_t size = cond_.size();
-        for (uint32_t i = 0; i < m_indices.size(); ++i) {
+        for (uint32_t i = 0; i < m_indices.size(); ++i)
             jit_var_schedule(*m_indices[i]);
-            size_t vsize = jit_var_size(*m_indices[i]);
-            if (vsize > size)
-                size = vsize;
-        }
-
         jit_var_schedule(cond.index());
 
         // Should we evaluate the loop & run another iteration?
@@ -415,10 +415,7 @@ protected:
                 }
             }
 
-            // Mask scatters/gathers/vcalls in the next iteration
-            m_cond = cond;
-            m_cond.resize(size);
-            m_jit_state.set_mask(m_cond.index());
+            m_cond = std::move(cond);
             return true;
         } else {
             m_state = 4;
@@ -430,6 +427,7 @@ protected:
                     detail::ad_scope_leave<Float32>(true);
                 }
             }
+            m_jit_state.clear_mask_if_set();
 
             return false;
         }
@@ -438,6 +436,9 @@ protected:
 protected:
     /// Is the loop being recorded?
     bool m_record;
+
+    /// Wavefont size
+    uint32_t m_size = 0;
 
     /// RAII wrapper for JIT configuration
     detail::JitState<Backend> m_jit_state;
