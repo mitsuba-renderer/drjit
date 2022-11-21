@@ -697,10 +697,12 @@ public:
         if constexpr (!is_array_v<Mask>)
             active = true;
 
-        if (HasCudaTexture && m_migrated && force_nonaccel)
-            jit_log(::LogLevel::Warn,
-                    "\"force_nonaccel\" is used while the data has been fully "
-                    "migrated to CUDA texture memory");
+        if constexpr (HasCudaTexture) {
+            if (m_migrated && force_nonaccel)
+                jit_log(::LogLevel::Warn,
+                        "\"force_nonaccel\" is used while the data has been fully "
+                        "migrated to CUDA texture memory");
+        }
 
         PosF res_f = PosF(m_shape_opaque);
         PosF pos_f = fmadd(pos, res_f, -.5f);

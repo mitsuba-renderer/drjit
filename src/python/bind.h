@@ -123,7 +123,7 @@ void bind_generic_constructor(py::class_<Array> &cls) {
             v_h.value_ptr() = a;
             try {
                 array_init(py::handle((PyObject *) v_h.inst), args);
-            } catch(const std::exception& e) {
+            } catch(const std::exception&) {
                 delete a;
                 v_h.value_ptr() = nullptr;
                 throw;

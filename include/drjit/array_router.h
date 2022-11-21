@@ -1584,6 +1584,8 @@ template <typename T> struct resume_grad {
                 detail::ad_scope_enter<detached_t<typename T::Type>>(
                     detail::ADScope::Resume, indices.size(), indices.data());
             }
+        } else {
+            (((void) args), ...);
         }
     }
 
@@ -1609,6 +1611,8 @@ template <typename T> struct suspend_grad {
                 detail::ad_scope_enter<detached_t<typename T::Type>>(
                     detail::ADScope::Suspend, indices.size(), indices.data());
             }
+        } else {
+            (((void) args), ...);
         }
     }
 

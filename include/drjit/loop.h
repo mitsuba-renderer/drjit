@@ -218,9 +218,9 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
     bool operator()(const Mask &cond_) {
         // Determine wavefront size
         if (m_size <= 1) {
-            uint32_t size = jit_var_size(cond_.index());
+            uint32_t size = (uint32_t) jit_var_size(cond_.index());
             for (uint32_t i = 0; i < m_indices.size(); ++i) {
-                uint32_t size_2 = jit_var_size(*m_indices[i]);
+                uint32_t size_2 = (uint32_t) jit_var_size(*m_indices[i]);
                 size = size_2 > size ? size_2 : size;
             }
             m_size = size;
