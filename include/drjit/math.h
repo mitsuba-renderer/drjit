@@ -657,7 +657,7 @@ template <typename Value> std::pair<Value, Value> frexp(const Value &x) {
 
         // Detect zero/inf/NaN
         IntMask is_normal =
-            IntMask(neq(x, zeros<Value>())) & neq(exponent_bits, exponent_mask);
+            IntMask(neq(x, zeros<Value>())) && neq(exponent_bits, exponent_mask);
 
         IntArray exponent_i = detail::and_(
             (sr < Single ? 23 : 52 > (exponent_bits)) - bias, is_normal);
