@@ -723,3 +723,16 @@ def test24_set_label(pkg):
     dr.set_label(a, 'a')
     check_label(a, ['a_0', 'a_1', 'a_2'])
     assert dr.label(dr.detach(a)) == ['a_0', 'a_1', 'a_2']
+
+
+@pytest.mark.parametrize("pkg", ['drjit.cuda', 'drjit.llvm'])
+def test25_select_with_only_mask(pkg):
+    pkg = get_class(pkg)
+
+    a = pkg.Bool([0, 0, 1, 1])
+    b = pkg.Bool([1, 0, 1, 0])
+    c = pkg.Bool([0, 1, 0, 1])
+
+    res = dr.select(a, b, c)
+
+    assert dr.all(dr.eq(res, pkg.Bool([0, 1, 1, 0])))
