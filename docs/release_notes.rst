@@ -8,11 +8,19 @@ strive to document breaking API changes in the release notes below.
 Incoming release
 ----------------
 
+- Update Dr.Jit Core (various performance and stability improvements)
+- Allow functions in ``dr.wrap_ad``to return nested data structures  `[2d4910]<https://github.com/mitsuba-renderer/drjit/commit/2d4910b002baec8b96f80dc37fb4305cd5230c1f>`_
+- Fix matrix stride computation `[c7451c]<https://github.com/mitsuba-renderer/drjit/commit/c7451ced5a77d59fb47d90340c49852ada97269d>`_
+- Fix ``dr.tile`` and ``dr.repeat`` for Bool types `[c15a71]<https://github.com/mitsuba-renderer/drjit/commit/c15a71d4cf439fe239e1b6713fc426c6d94c45b7>`_
+- Support list/dict arguments in ``dr.wrap_ad`` `[9f711c]<https://github.com/mitsuba-renderer/drjit/commit/9f711c5d5efd9ff04a6aa490ea452c51534557cf>`_
+- Add 3D variant for ``dr::meshgrid`` in C++ `[ed3d046]<https://github.com/mitsuba-renderer/drjit/commit/ed3d046f4ad6f27090fa9a3106ce310c77edf4b2>`_
+- Fix ``dr.unravel`` for Tensor inputs `[578b0dd]<https://github.com/mitsuba-renderer/drjit/commit/578b0dd6258995c95cd9a9213f1d7db39e93c0e9>`_
+- Add ``dr::suspend_grad`` and ``dr::resume_grad`` C++ routines `[112c294]<https://github.com/mitsuba-renderer/drjit/commit/112c2940148e8173e5128c962d4dd50d0b9cd579>`_
 - Various Python type information (stub generation) improvements `[b102b3c]<https://github.com/mitsuba-renderer/drjit/commit/b102b3ccfe0dac39c580e8112983815dd10da566>`_
 
 
 Dr.Jit 0.2.2
-----------------
+-------------
 
 *September 12, 2022*
 
