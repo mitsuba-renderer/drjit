@@ -5,8 +5,18 @@ Being an experimental research framework, Dr.Jit does not strictly follow the
 `Semantic Versioning <https://semver.org/>`_ convention. That said, we will
 strive to document breaking API changes in the release notes below.
 
+Dr.Jit 0.3.1
+------------
+
+*November 24, 2022*
+
+- Fixed a regression in the C++ implementation of `dr::schedule()`
+  `[5e9da6]<https://github.com/mitsuba-renderer/drjit/commit/5e9da65f0e834927349713a5da1ae6e4e207ee16>`_
+
 Dr.Jit 0.3.0
-----------------
+------------
+
+*November 23, 2022*
 
 - Update Dr.Jit Core (various performance and stability improvements)
 - Allow functions in ``dr.wrap_ad``to return nested data structures  `[2d4910]<https://github.com/mitsuba-renderer/drjit/commit/2d4910b002baec8b96f80dc37fb4305cd5230c1f>`_
