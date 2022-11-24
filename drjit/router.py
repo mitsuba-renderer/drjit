@@ -3941,6 +3941,10 @@ def detach(arg, preserve_type=True):
             setattr(result, k, detach(getattr(arg, k),
                 preserve_type=preserve_type))
         return result
+    elif isinstance(arg, _Sequence) and not isinstance(arg, str):
+        return type(arg)(detach(a, preserve_type) for a in arg)
+    elif isinstance(arg, _Mapping):
+        return { k: detach(v, preserve_type) for k, v in arg.items()}
     else:
         return arg
 
@@ -5779,18 +5783,18 @@ def wrap_ad(source: str, target: str):
                        and type(a).__name__ == 'Tensor'
 
             # Casting routing from Dr.Jit tensors to PyTorch tensors
-            def drjit_to_torch(a):
+            def drjit_to_torch(a, enable_grad = False):
                 if isinstance(a, _Sequence) and not isinstance(a, str):
-                    return tuple(drjit_to_torch(b) for b in a)
+                    return tuple(drjit_to_torch(b, enable_grad) for b in a)
                 elif isinstance(a, _Mapping):
-                    return {k: drjit_to_torch(v) for k, v in a.items()}
+                    return {k: drjit_to_torch(v, enable_grad) for k, v in a.items()}
                 elif _dr.is_array_v(a) and _dr.is_tensor_v(a):
                     b = a.torch()
-                    b.requires_grad = _dr.grad_enabled(a)
+                    b.requires_grad = _dr.grad_enabled(a) or (enable_grad and _dr.is_diff_v(a))
                     return b
-                elif _dr.is_diff_v(a) and _dr.grad_enabled(a):
-                    raise TypeError("wrap_ad(): input arguments with gradient "
-                                    "enabled should be Dr.Jit tensor!")
+                elif _dr.is_diff_v(a) and a.IsFloat:
+                    raise TypeError("wrap_ad(): differential input arguments "
+                                    "should be Dr.Jit tensor!")
                 else:
                     return a
 
@@ -5858,7 +5862,7 @@ def wrap_ad(source: str, target: str):
                 class ToTorch(_dr.CustomOp):
                     def eval(self, *args):
                         self.args = args
-                        self.args_torch = drjit_to_torch(args)
+                        self.args_torch = drjit_to_torch(args, enable_grad=True)
                         self.res_torch = func(*self.args_torch)
                         return torch_to_drjit(self.res_torch)
 
@@ -5903,7 +5907,6 @@ def wrap_ad(source: str, target: str):
                         args_grad_torch = get_grads(self.args_torch)
                         args_grad = torch_to_drjit(args_grad_torch)
                         self.set_grad_in('args', args_grad)
-
 
                 return _dr.custom(ToTorch, args)
 
