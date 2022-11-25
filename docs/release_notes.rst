@@ -5,6 +5,14 @@ Being an experimental research framework, Dr.Jit does not strictly follow the
 `Semantic Versioning <https://semver.org/>`_ convention. That said, we will
 strive to document breaking API changes in the release notes below.
 
+Dr.Jit 0.3.2
+------------
+
+*November 25, 2022*
+
+- Fixed a regression related to type incompatibilities introduced by changes to `dr.detach()`
+  `[668081]<https://github.com/mitsuba-renderer/drjit/commit/668081cc9c4762127bae47c6490d49e624c5c1f6>`_
+
 Dr.Jit 0.3.1
 ------------
 
@@ -12,6 +20,8 @@ Dr.Jit 0.3.1
 
 - Fixed a regression in the C++ implementation of `dr::schedule()`
   `[5e9da6]<https://github.com/mitsuba-renderer/drjit/commit/5e9da65f0e834927349713a5da1ae6e4e207ee16>`_
+- Generalized `dr::detach()` to arbitrary mappings and sequences, related adaptations to  ``dr.wrap_ad()``
+  `[e0aeb4]<https://github.com/mitsuba-renderer/drjit/commit/e0aeb4575f77c55fa3cce90f3994109fcd67b0a1>`_
 
 Dr.Jit 0.3.0
 ------------
