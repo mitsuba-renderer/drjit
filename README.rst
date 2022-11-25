@@ -9,7 +9,7 @@ Dr.Jit — A Just-In-Time-Compiler for Differentiable Rendering
    :target: https://rgl-ci.epfl.ch/project/DrJit?mode=trends&guest=1
    :alt: Continuous Integration
 
-.. image:: https://img.shields.io/pypi/v/drjit.svg
+.. image:: https://img.shields.io/pypi/v/drjit.svg?color=green
    :target: https://pypi.org/pypi/drjit
    :alt: PyPI
 
