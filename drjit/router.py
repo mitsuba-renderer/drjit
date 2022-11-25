@@ -3941,10 +3941,10 @@ def detach(arg, preserve_type=True):
             setattr(result, k, detach(getattr(arg, k),
                 preserve_type=preserve_type))
         return result
-    elif isinstance(arg, _Sequence) and not isinstance(arg, str):
+    elif isinstance(arg, list):
         return type(arg)(detach(a, preserve_type) for a in arg)
-    elif isinstance(arg, _Mapping):
-        return { k: detach(v, preserve_type) for k, v in arg.items()}
+    elif isinstance(arg, dict):
+        return { k: detach(v, preserve_type) for k, v in arg.items() }
     else:
         return arg
 
