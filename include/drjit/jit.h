@@ -62,10 +62,10 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
 
     JitArray() = default;
 
-    ~JitArray() noexcept { jit_var_dec_ref_ext(m_index); }
+    ~JitArray() noexcept { jit_var_dec_ref(m_index); }
 
     JitArray(const JitArray &a) : m_index(a.m_index) {
-        jit_var_inc_ref_ext(m_index);
+        jit_var_inc_ref(m_index);
     }
 
     JitArray(JitArray &&a) noexcept : m_index(a.m_index) {
@@ -110,8 +110,8 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
     }
 
     JitArray &operator=(const JitArray &a) {
-        jit_var_inc_ref_ext(a.m_index);
-        jit_var_dec_ref_ext(m_index);
+        jit_var_inc_ref(a.m_index);
+        jit_var_dec_ref(m_index);
         m_index = a.m_index;
         return *this;
     }
@@ -629,13 +629,13 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
             ActualValue av = jit_registry_get_id(Backend, value);
             index = jit_var_write(m_index, (uint32_t) offset, &av);
         }
-        jit_var_dec_ref_ext(m_index);
+        jit_var_dec_ref(m_index);
         m_index = index;
     }
 
 	void resize(size_t size) {
         uint32_t index = jit_var_resize(m_index, size);
-        jit_var_dec_ref_ext(m_index);
+        jit_var_dec_ref(m_index);
         m_index = index;
     }
 
@@ -650,7 +650,7 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
 
 	void set_label_(const char *label) {
         uint32_t index = jit_var_set_label(m_index, label);
-        jit_var_dec_ref_ext(m_index);
+        jit_var_dec_ref(m_index);
         m_index = index;
 	}
 
@@ -673,7 +673,7 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
 
     static Derived borrow(uint32_t index) {
         Derived result;
-        jit_var_inc_ref_ext(index);
+        jit_var_inc_ref(index);
         result.m_index = index;
         return result;
     }

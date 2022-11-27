@@ -75,11 +75,11 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
                     m_name.get());
         #endif
 
-        jit_var_dec_ref_ext(m_loop_init);
-        jit_var_dec_ref_ext(m_loop_cond);
+        jit_var_dec_ref(m_loop_init);
+        jit_var_dec_ref(m_loop_cond);
 
         for (size_t i = 0; i < m_indices_prev.size(); ++i)
-            jit_var_dec_ref_ext(m_indices_prev[i]);
+            jit_var_dec_ref(m_indices_prev[i]);
 
         if constexpr (IsDiff) {
             for (size_t i = 0; i < m_indices_ad_prev.size(); ++i) {
@@ -261,7 +261,7 @@ protected:
                 m_indices_prev = dr_vector<uint32_t>(m_indices.size(), 0);
                 for (uint32_t i = 0; i < m_indices.size(); ++i) {
                     m_indices_prev[i] = *m_indices[i];
-                    jit_var_inc_ref_ext(m_indices_prev[i]);
+                    jit_var_inc_ref(m_indices_prev[i]);
                 }
 
                 // Start recording side effects
@@ -295,7 +295,7 @@ protected:
                     m_state = 4;
 
                     for (size_t i = 0; i < m_indices_prev.size(); ++i)
-                        jit_var_dec_ref_ext(m_indices_prev[i]);
+                        jit_var_dec_ref(m_indices_prev[i]);
                     m_indices_prev.clear();
 
                     m_jit_state.end_recording();
@@ -341,8 +341,8 @@ protected:
             for (uint32_t i = 0; i < m_indices.size(); ++i) {
                 uint32_t i1 = *m_indices[i], i2 = m_indices_prev[i];
                 *m_indices[i] = jit_var_new_op_3(JitOp::Select, m_cond.index(), i1, i2);
-                jit_var_dec_ref_ext(i1);
-                jit_var_dec_ref_ext(i2);
+                jit_var_dec_ref(i1);
+                jit_var_dec_ref(i2);
             }
             m_indices_prev.clear();
 
@@ -396,7 +396,7 @@ protected:
         if (do_continue) {
             for (uint32_t i = 0; i < m_indices.size(); ++i) {
                 uint32_t index = *m_indices[i];
-                jit_var_inc_ref_ext(index);
+                jit_var_inc_ref(index);
                 m_indices_prev.push_back(index);
             }
 
