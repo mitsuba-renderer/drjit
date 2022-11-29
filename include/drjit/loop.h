@@ -172,9 +172,6 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
         if (!m_record)
             return;
 
-        // Capture JIT state and begin recording session
-        m_jit_state.new_scope();
-
         // Rewrite loop state variables (1)
         m_loop_init = jit_var_loop_init(m_indices.size(), m_indices.data());
 
@@ -299,7 +296,6 @@ protected:
                     m_indices_prev.clear();
 
                     m_jit_state.end_recording();
-                    m_jit_state.clear_scope();
                     m_jit_state.clear_mask_if_set();
                     jit_var_mark_side_effect(rv);
 

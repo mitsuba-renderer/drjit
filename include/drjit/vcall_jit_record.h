@@ -96,7 +96,6 @@ Result vcall_jit_record_impl(const char *name, uint32_t n_inst,
 
     detail::JitState<Backend> jit_state;
     jit_state.begin_recording();
-    jit_state.new_scope();
 
     state[0] = jit_record_checkpoint(Backend);
 
@@ -156,6 +155,7 @@ Result vcall_jit_record_impl(const char *name, uint32_t n_inst,
 
     jit_state.end_recording();
     jit_var_mark_side_effect(se);
+    jit_new_scope(Backend);
 
     if constexpr (!std::is_same_v<Result, std::nullptr_t>) {
         Result result;
@@ -236,6 +236,7 @@ Result vcall_jit_record(const char *name, const Func &func, Self &self,
             std::make_index_sequence<sizeof...(Args)>(), args...);
     } else {
         isolate_grad<DiffType> guard;
+        jit_new_scope(Backend);
 
         return vcall_jit_record_impl<Result, Base>(
             name, n_inst, func, self, mask,
