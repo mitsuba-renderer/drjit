@@ -5283,10 +5283,10 @@ def suspend_grad(*args, when=True):
         return _DummyContextManager()
 
     array_indices = []
-    array_type = _dr.detail.diff_vars(args, array_indices, check_grad_enabled=False)
+    _dr.detail.diff_vars(args, array_indices, check_grad_enabled=False)
     if len(args) > 0 and len(array_indices) == 0:
         array_indices = [0]
-    return _ADContextManager(_dr.detail.ADScope.Suspend, array_type, array_indices)
+    return _ADContextManager(_dr.detail.ADScope.Suspend, _dr.leaf_array_t(args), array_indices)
 
 
 def resume_grad(*args, when=True):
@@ -5353,10 +5353,10 @@ def resume_grad(*args, when=True):
         return _DummyContextManager()
 
     array_indices = []
-    array_type = _dr.detail.diff_vars(args, array_indices, check_grad_enabled=False)
+    _dr.detail.diff_vars(args, array_indices, check_grad_enabled=False)
     if len(args) > 0 and len(array_indices) == 0:
         array_indices = [0]
-    return _ADContextManager(_dr.detail.ADScope.Resume, array_type, array_indices)
+    return _ADContextManager(_dr.detail.ADScope.Resume, _dr.leaf_array_t(args), array_indices)
 
 
 def isolate_grad(when=True):
@@ -5525,22 +5525,10 @@ class CustomOp:
         self._implicit_out.append(value)
 
     def __del__(self):
-        def ad_clear(o):
-            if _dr.depth_v(o) > 1 \
-               or isinstance(o, _Sequence) and not isinstance(o, str):
-                for i in range(len(o)):
-                    ad_clear(o[i])
-            elif isinstance(o, _Mapping):
-                for k, v in o.items():
-                    ad_clear(v)
-            elif _dr.is_diff_v(o):
-                if _dr.is_tensor_v(o):
-                    ad_clear(o.array)
-                else:
-                    o.set_index_ad_(0)
-            elif _dr.is_struct_v(o):
-                for k in type(o).DRJIT_STRUCT.keys():
-                    ad_clear(getattr(o, k))
+        @_dr.detail.traverse()
+        def ad_clear(arg):
+            if _dr.is_diff_v(arg):
+                arg.set_index_ad_(0)
         ad_clear(getattr(self, 'output', None))
 
     def name(self):
@@ -5562,50 +5550,26 @@ def custom(cls, *args, **kwargs):
     information.
     '''
     # Clear primal values of a differentiable array
-    def clear_primal(o, dec_ref):
-        if _dr.depth_v(o) > 1 \
-           or isinstance(o, _Sequence) and not isinstance(o, str):
-            return type(o)([clear_primal(o[i], dec_ref) for i in range(len(o))])
-        elif isinstance(o, _Mapping):
-            return { k: clear_primal(v, dec_ref) for k, v in o.items() }
-        elif _dr.is_diff_v(o) and _dr.is_float_v(o):
-            ot = type(o)
-
-            if _dr.is_tensor_v(ot):
-                value = ot.Array.create_(
-                    o.array.index_ad,
-                    _dr.zeros(_dr.detached_t(ot.Array), prod(o.shape)))
-                result = ot(value, o.shape)
+    @_dr.detail.traverse(traverse_tensor=False)
+    def clear_primal(arg, dec_ref):
+        if _dr.is_diff_v(arg) and _dr.is_float_v(arg):
+            tp = type(arg)
+            if _dr.is_tensor_v(tp):
+                zeros = _dr.zeros(_dr.detached_t(tp.Array), prod(arg.shape))
+                value = tp.Array.create_(arg.array.index_ad, zeros)
+                result = tp(value, arg.shape)
             else:
-                result = value = ot.create_(
-                    o.index_ad,
-                    _dr.detached_t(ot)())
+                result = value = tp.create_(arg.index_ad, _dr.detached_t(tp)())
             if dec_ref:
                 value.ad_dec_ref_()
             return result
-        elif _dr.is_struct_v(o):
-            res = type(o)()
-            for k in type(o).DRJIT_STRUCT.keys():
-                setattr(res, k, clear_primal(getattr(o, k), dec_ref))
-            return res
         else:
-            return o
+            return arg
 
     # Cast input values into differentiable types
+    @_dr.detail.traverse(traverse_tensor=False)
     def to_diff_array(o):
-        if isinstance(o, _Sequence) and not isinstance(o, str):
-            return [to_diff_array(o[i]) for i in range(len(o))]
-        elif isinstance(o, _Mapping):
-            return { k: to_diff_array(v) for k, v in o.items() }
-        elif _dr.is_struct_v(o):
-            res = type(o)()
-            for k in type(o).DRJIT_STRUCT.keys():
-                setattr(res, k, to_diff_array(getattr(o, k)))
-            return res
-        elif not _dr.is_array_v(o):
-            return o
-        else:
-            return _dr.diff_array_t(o)(o)
+        return _dr.diff_array_t(o)(o)
 
     inst = cls()
 

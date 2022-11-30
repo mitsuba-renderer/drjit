@@ -704,38 +704,7 @@ def tensor_setitem(tensor, slice_arg, value):
     _dr.scatter(target=tensor.array, value=value, index=index)
 
 
-def diff_vars(o, indices, check_grad_enabled=True):
-    """
-    Extract indices of differentiable variables, returns
-    the type of the underlying differentiable array
-    """
-
-    result = None
-    if _dr.depth_v(o) > 1 or (isinstance(o, Sequence) and not isinstance(o, str)):
-        for i in range(len(o)):
-            t = diff_vars(o[i], indices, check_grad_enabled)
-            if t is not None:
-                result = t
-    elif isinstance(o, Mapping):
-        for k, v in o.items():
-            t = diff_vars(v, indices, check_grad_enabled)
-            if t is not None:
-                result = t
-    elif _dr.is_diff_v(o) and o.IsFloat:
-        if _dr.is_tensor_v(o):
-            result = diff_vars(o.array, indices, check_grad_enabled)
-        elif o.index_ad != 0 and (not check_grad_enabled or o.grad_enabled_()):
-            indices.append(o.index_ad)
-            result = type(o)
-    elif _dr.is_struct_v(o):
-        for k in type(o).DRJIT_STRUCT.keys():
-            t = diff_vars(getattr(o, k), indices, check_grad_enabled)
-            if t is not None:
-                result = t
-    return result
-
-
-def traverse():
+def traverse(traverse_static_array=True, traverse_tensor=True):
     '''
     Function decorator that traverses nested datastructures (e.g. dicts, lists,
     Dr.Jit struct, ...) and applies the decorated function to all JIT arrays
@@ -743,40 +712,55 @@ def traverse():
     '''
     def wrapper(func: Callable):
         @_wraps(func)
-        def traverse(*args):
+        def traverse(*args, **kwargs):
             a = args[0]
             ta = type(a)
 
+            # Heuristic defining whether b should be sliced according to args[0]
+            def should_slice(b):
+                if not isinstance(b, ta):
+                    return False
+                if isinstance(a, Sequence):
+                    if len(b) != len(a):
+                        return False
+                    if len(a) > 0 and not isinstance(b[0], type(a[0])):
+                        return False
+                return True
+
             # Apply slicer to all arguments whose type match the one of the first argument.
             def slice_args(slicer):
-                return tuple(slicer(b) if isinstance(b, ta) else b for b in args)
+                return tuple(slicer(args[i]) if should_slice(args[i]) else args[i] for i in range(len(args)))
 
-            if _dr.depth_v(a) > 1:
+            if _dr.depth_v(a) > 1 and traverse_static_array:
                 res = ta()
                 for i in range(_dr.size_v(a)):
-                    v = traverse(*slice_args(lambda x: x[i]))
+                    v = traverse(*slice_args(lambda x: x[i]), **kwargs)
                     if v is not None:
                         res[i] = v
                 return res
             elif isinstance(a, Sequence) and not isinstance(a, str):
-                return ta(traverse(*slice_args(lambda x: x[i])) for i in range(len(a)))
+                return ta(traverse(*slice_args(lambda x: x[i]), **kwargs) for i in range(len(a)))
             elif isinstance(a, Mapping):
-                return { k: traverse(*slice_args(lambda x: x[k])) for k in a.keys() }
+                return { k: traverse(*slice_args(lambda x: x[k]), **kwargs) for k in a.keys() }
             elif _dr.is_struct_v(a):
                 res = ta()
                 for k in ta.DRJIT_STRUCT.keys():
-                    setattr(res, k, traverse(*slice_args(lambda x: getattr(x, k))))
+                    v = traverse(*slice_args(lambda x: getattr(x, k)), **kwargs)
+                    if v is not None:
+                        setattr(res, k, v)
                 return res
-            elif _dr.is_tensor_v(a):
-                return traverse(*slice_args(lambda x: x.array))
+            elif _dr.is_tensor_v(a) and traverse_tensor:
+                v = traverse(*slice_args(lambda x: x.array), **kwargs)
+                return ta(v, a.shape) if v is not None else None
             elif _dr.is_jit_v(a):
-                return func(*args)
+                return func(*args, **kwargs)
             else:
-                return args
+                return a
 
         return traverse
 
     return wrapper
+
 
 @traverse()
 def apply_cpp(arg, func):
@@ -793,6 +777,16 @@ def apply_cpp(arg, func):
         if _dr.is_diff_v(arg):
             res.set_index_ad_(arg.index_ad)
     return res
+
+
+@traverse()
+def diff_vars(arg, indices, check_grad_enabled=True):
+    """
+    Extract indices of differentiable variables.
+    """
+    if _dr.is_diff_v(arg) and arg.IsFloat:
+        if arg.index_ad != 0 and (not check_grad_enabled or arg.grad_enabled_()):
+            indices.append(arg.index_ad)
 
 
 def get_args_values(f, *args, **kwargs):
