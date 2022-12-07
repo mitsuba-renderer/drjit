@@ -86,6 +86,8 @@ Result vcall_jit_record_impl(const char *name, uint32_t n_inst,
     constexpr size_t N = sizeof...(Args);
     DRJIT_MARK_USED(N);
 
+    uint32_t scope = jit_scope(Backend);
+
     char label[128];
 
     dr_index_vector indices_in, indices_out_all;
@@ -107,6 +109,8 @@ Result vcall_jit_record_impl(const char *name, uint32_t n_inst,
         Base *base = (Base *) jit_registry_get_ptr(Backend, Base::Domain, i);
         if (!base)
             continue;
+
+        jit_set_scope(Backend, scope);
 
 #if defined(DRJIT_VCALL_DEBUG)
         jit_state.set_prefix(label);
