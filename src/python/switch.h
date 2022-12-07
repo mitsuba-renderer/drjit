@@ -33,6 +33,9 @@ py::object switch_record_impl(UInt32 indices, py::list funcs, py::args args) {
             n_inst++;
     }
 
+    jit_new_scope(Backend);
+    uint32_t scope = jit_scope(Backend);
+
     dr_index_vector indices_in, indices_out_all;
     dr_vector<uint32_t> state(n_inst + 1, 0);
     dr_vector<uint32_t> inst_id(n_inst, 0);
@@ -46,7 +49,6 @@ py::object switch_record_impl(UInt32 indices, py::list funcs, py::args args) {
 
     detail::JitState<Backend> jit_state;
     jit_state.begin_recording();
-    jit_state.new_scope();
 
     state[0] = jit_record_checkpoint(Backend);
 
@@ -55,6 +57,8 @@ py::object switch_record_impl(UInt32 indices, py::list funcs, py::args args) {
     for (uint32_t i = 1, j = 1; i <= funcs.size(); ++i) {
         if (funcs[i-1].is_none())
             continue;
+
+        jit_set_scope(Backend, scope);
 
         Mask vcall_mask = true;
         if constexpr (Backend == JitBackend::LLVM) {
