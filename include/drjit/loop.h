@@ -274,7 +274,7 @@ protected:
                 rv = jit_var_loop(m_name.get(), m_loop_init, m_loop_cond,
                                   m_indices.size(), m_indices_prev.data(),
                                   m_indices.data(), m_jit_state.checkpoint(),
-                                  m_state == 2);
+                                  m_state == 2, m_max_iterations == 1);
 
                 m_state++;
 
