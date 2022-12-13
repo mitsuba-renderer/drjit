@@ -183,7 +183,7 @@ NAMESPACE_END(drjit)
 
 #define DRJIT_VCALL_REGISTER(Array, Class)                                     \
     static constexpr const char *Domain = #Class;                              \
-    static constexpr bool Registered = drjit::is_jit_v<Array>;           \
+    static constexpr bool Registered = drjit::is_jit_v<Array>;                 \
     static constexpr JitBackend Backend = drjit::backend_v<Array>;             \
     void *operator new(size_t size) {                                          \
         void *ptr = ::operator new(size);                                      \
@@ -228,14 +228,14 @@ NAMESPACE_END(drjit)
 
 #define DRJIT_VCALL_GETTER(name, type)                                         \
     auto name(const mask_t<Array> &mask = true) const {                        \
-        if constexpr (is_jit_v<Array>) {                                 \
+        if constexpr (is_jit_v<Array>) {                                       \
             using Result = replace_scalar_t<Array, type>;                      \
             using UInt32 = uint32_array_t<Array>;                              \
             uint32_t attr_id = jit_var_registry_attr(                          \
                 detached_t<Result>::Backend, detached_t<Result>::Type,         \
                 Domain, #name);                                                \
             if (attr_id == 0)                                                  \
-                return zeros<Result>();                                         \
+                return zeros<Result>();                                        \
             else                                                               \
                 return drjit::gather<Result>(Result::steal(attr_id),           \
                             UInt32::borrow(array.index()),                     \
