@@ -72,7 +72,7 @@ py::object switch_record_impl(UInt32 indices, py::list funcs, py::args args) {
 
         try {
             result = funcs[i-1](*args);
-        } catch (const std::exception& e) {
+        } catch (const std::exception&) {
             // Special cleanup is necessary for interactive Python sessions
             py::object modules = py::module_::import("sys").attr("modules");
             if (modules.contains("ipykernel")) {
@@ -134,7 +134,7 @@ py::object switch_reduce_impl(UInt32 indices, py::list funcs,
         jit_var_schedule(index);
     }));
 
-    uint32_t n_inst = funcs.size();
+    uint32_t n_inst = (uint32_t) funcs.size();
     VCallBucket *buckets = jit_var_vcall_reduce(Backend, nullptr,
                                                 indices.index(), &n_inst);
 
