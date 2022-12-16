@@ -816,7 +816,7 @@ def test26_fast_cast(capsys):
         b = l.Array3u(a)
 
         out, err = capsys.readouterr()
-        assert out.count('jit_var_new_cast') == 5
+        assert out.count('jit_var_cast') == 5
         assert out.count('jit_poke') == 3
     finally:
         dr.set_log_level(0)
@@ -983,7 +983,7 @@ def test32_ravel(capsys):
         assert dr.all(dr.ravel(x) == l.Float([1, 3, 5, 2, 4, 6]))
 
         out, err = capsys.readouterr()
-        assert out.count('jit_var_new_scatter') == 6
+        assert out.count('jit_var_scatter') == 6
         assert out.count('jit_poke') == 18
     finally:
         dr.set_log_level(0)
