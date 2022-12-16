@@ -336,7 +336,7 @@ protected:
             // Blend with loop state from last iteration based on mask
             for (uint32_t i = 0; i < m_indices.size(); ++i) {
                 uint32_t i1 = *m_indices[i], i2 = m_indices_prev[i];
-                *m_indices[i] = jit_var_new_op_3(JitOp::Select, m_cond.index(), i1, i2);
+                *m_indices[i] = jit_var_select(m_cond.index(), i1, i2);
                 jit_var_dec_ref(i1);
                 jit_var_dec_ref(i2);
             }

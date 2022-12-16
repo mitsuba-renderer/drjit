@@ -258,9 +258,7 @@ PYBIND11_MODULE(drjit_ext, m_) {
         .value("Host", AllocType::Host)
         .value("HostAsync", AllocType::HostAsync)
         .value("HostPinned", AllocType::HostPinned)
-        .value("Device", AllocType::Device)
-        .value("Managed", AllocType::Managed)
-        .value("ManagedReadMostly", AllocType::ManagedReadMostly);
+        .value("Device", AllocType::Device);
 
     py::enum_<JitBackend>(m, "JitBackend")
         .value("CUDA", JitBackend::CUDA)

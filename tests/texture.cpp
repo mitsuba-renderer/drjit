@@ -319,16 +319,16 @@ void test_cubic_interp_1d(WrapMode wrap_mode) {
             Array1f res2 = empty<Array1f>();
 
             {
-                Array1f pos(dr::linspace<Float>(0.f, 1.f, N));
-                tex.eval_cubic(pos, res.data(), true, true);
-                tex.eval_cubic_helper(pos, res2.data());
+                Array1f pos_2(dr::linspace<Float>(0.f, 1.f, N));
+                tex.eval_cubic(pos_2, res.data(), true, true);
+                tex.eval_cubic_helper(pos_2, res2.data());
 
-                Float ref = Float(1.9792, 1.9259, 1.8198, 1.6629, 1.5168,
-                                  1.4546, 1.5485, 1.8199, 2.2043, 2.6288,
-                                  3.0232, 3.3783, 3.7461, 4.1814, 4.7305,
-                                  5.3536, 5.9603, 6.4595, 6.7778, 6.9375);
-                assert(dr::allclose(res.x(), ref, 5e-3f, 5e-3f));
-                assert(dr::allclose(res2.x(), ref, 5e-3f, 5e-3f));
+                Float ref_2 = Float(1.9792, 1.9259, 1.8198, 1.6629, 1.5168,
+                                    1.4546, 1.5485, 1.8199, 2.2043, 2.6288,
+                                    3.0232, 3.3783, 3.7461, 4.1814, 4.7305,
+                                    5.3536, 5.9603, 6.4595, 6.7778, 6.9375);
+                assert(dr::allclose(res.x(), ref_2, 5e-3f, 5e-3f));
+                assert(dr::allclose(res2.x(), ref_2, 5e-3f, 5e-3f));
             }
 
             ref = dr::opaque<Float>(2.f, N);
@@ -356,7 +356,7 @@ void test_cubic_interp_1d(WrapMode wrap_mode) {
             assert(dr::allclose(res.x(), ref));
             assert(dr::allclose(res2.x(), ref));
 
-            pos.x() = dr::linspace<Float>(1.9f, 1.1, N);
+            pos.x() = dr::linspace<Float>(1.9f, 1.1f, N);
             tex.eval_cubic(pos, res.data(), true, true);
             tex.eval_cubic_helper(pos, res2.data());
             assert(dr::allclose(res.x(), ref));

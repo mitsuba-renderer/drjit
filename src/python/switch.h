@@ -61,13 +61,8 @@ py::object switch_record_impl(UInt32 indices, py::list funcs, py::args args) {
         jit_set_scope(Backend, scope);
 
         Mask vcall_mask = true;
-        if constexpr (Backend == JitBackend::LLVM) {
-            // no-op to copy the mask into a local parameter
-            vcall_mask = Mask::steal(jit_var_new_stmt(
-                Backend, VarType::Bool,
-                "$r0 = bitcast <$w x i1> %mask to <$w x i1>", 1, 0,
-                nullptr));
-        }
+        if constexpr (Backend == JitBackend::LLVM)
+            vcall_mask = Mask::steal(jit_var_vcall_mask(Backend));
         jit_state.set_mask(vcall_mask.index());
 
         try {
