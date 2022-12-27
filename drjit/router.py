@@ -4723,9 +4723,9 @@ def ones(dtype, shape=1):
     if not isinstance(dtype, type):
         raise Exception('ones(): Type expected as first argument')
     elif issubclass(dtype, ArrayBase):
-        return dtype.full_(1.0, shape)
+        return dtype.full_(1, shape)
     else:
-        return dtype(1.0)
+        return dtype(1)
 
 
 def linspace(dtype, start, stop, num=1, endpoint=True):
