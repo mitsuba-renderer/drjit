@@ -477,10 +477,10 @@ public:
                                               out_idx);
 
                     for (size_t ch = 0; ch < channels; ++ch) {
-                        out[2][ch] = Value::steal(out_idx[ch]);
-                        out[3][ch] = Value::steal(out_idx[channels + ch]);
-                        out[1][ch] = Value::steal(out_idx[2 * channels + ch]);
-                        out[0][ch] = Value::steal(out_idx[3 * channels + ch]);
+                        out[2][ch] = Value::steal(out_idx[ch*4 + 0]);
+                        out[3][ch] = Value::steal(out_idx[ch*4 + 1]);
+                        out[1][ch] = Value::steal(out_idx[ch*4 + 2]);
+                        out[0][ch] = Value::steal(out_idx[ch*4 + 3]);
                     }
                 } else if constexpr (Dimension == 3) {
                     const PosF res_f = PosF(m_shape_opaque);
