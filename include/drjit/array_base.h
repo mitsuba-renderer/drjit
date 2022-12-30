@@ -595,7 +595,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
                       sizeof...(Indices) == Derived::ActualSize, "shuffle(): Invalid size!");
         DRJIT_CHKSCALAR("shuffle_");
         size_t idx = 0; (void) idx;
-        Derived out = zeros<Derived>();
+        Derived out;
         ((out.entry(idx++) = derived().entry(Indices % Derived::Size)), ...);
         return out;
     }

@@ -56,6 +56,13 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
   target_compile_options(drjit INTERFACE -fno-strict-aliasing)
 endif()
 
+if (CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND NOT APPLE)
+  if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 14.0.0 AND
+      CMAKE_CXX_COMPILER_VERSION VERSION_LESS 14.0.5)
+    message(FATAL_ERROR "Clang versions 14.0.0 to 14.0.4 miscompile Dr.Jit. Please use either a newer (14.0.5+) or older (e.g., 13.x) version. On Ubuntu, you can use the LLVM project's package server (https://apt.llvm.org) to get the latest version.")
+  endif()
+endif()
+
 if (DRJIT_MASTER_PROJECT)
   if (APPLE)
     set(DRJIT_ORIGIN "@loader_path")
