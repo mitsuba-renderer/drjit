@@ -5,8 +5,10 @@ Being an experimental research framework, Dr.Jit does not strictly follow the
 `Semantic Versioning <https://semver.org/>`_ convention. That said, we will
 strive to document breaking API changes in the release notes below.
 
-Upcoming changes
-----------------
+Dr.Jit 0.4.0
+------------
+
+*January 6, 2023*
 
 - Various bug fixes and stability improvements
 - Internal refactorings (merge in/external reference counting, new variable types)
