@@ -5,6 +5,26 @@ Being an experimental research framework, Dr.Jit does not strictly follow the
 `Semantic Versioning <https://semver.org/>`_ convention. That said, we will
 strive to document breaking API changes in the release notes below.
 
+Upcoming changes
+----------------
+
+- Various bug fixes and stability improvements
+- Internal refactorings (merge in/external reference counting, new variable types)
+  `[d5f4e65] <https://github.com/mitsuba-renderer/drjit/commit/d5f4e6596fe9e567b6ad548e18dc2ac69bf03d14>`_
+- Improvements to code generation consistency
+  `[1af8233] <https://github.com/mitsuba-renderer/drjit/commit/1af8233590ee7e2f6934b0089f835409567fc043>`_
+- Fix a bug which would ocassionally produce invalid PTX/LLVM
+  `[9eb0649] <https://github.com/mitsuba-renderer/drjit/commit/9eb064984d3683d4e6bb96230b97ce5298f8965b>`_
+- Improved atomic scatter-reduce operation
+  `[9eb0649] <https://github.com/mitsuba-renderer/drjit/commit/9eb064984d3683d4e6bb96230b97ce5298f8965b>`_
+- Add ``dr.switch()`` and ``dr.dispatch``
+  `[53bcbf9] <https://github.com/mitsuba-renderer/drjit/commit/53bcbf909a46b1e73dceefa19758d09dd4874b93>`_
+- Support for LLVM's ORCv2 JIT
+  `[fd36850] <https://github.com/mitsuba-renderer/drjit/commit/fd3685091fc7a7c39bc288ddd96f183898371930>`_
+- Various internal refactorings (node-based IR, code generation)
+  `[bfab9ac] <https://github.com/mitsuba-renderer/drjit/commit/bfab9ac11736b69fb8b5c0f7d9614fbfd82d627a>`_ .. `[d55d395] <https://github.com/mitsuba-renderer/drjit/commit/d55d3955df5c6c127800e00c678ec41d028a9547>`_
+
+
 Dr.Jit 0.3.2
 ------------
 
