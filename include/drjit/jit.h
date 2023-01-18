@@ -501,6 +501,15 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
                                     mask.index(), op));
     }
 
+    template <typename Index, typename Mask>
+    void scatter_reduce_kahan_(Derived &dst_1, Derived &dst_2,
+                               const Index &index, const Mask &mask) const {
+        static_assert(
+            std::is_same_v<detached_t<Mask>, detached_t<mask_t<Derived>>>);
+        jit_var_scatter_reduce_kahan(dst_1.index_ptr(), dst_2.index_ptr(),
+                                     m_index, index.index(), mask.index());
+    }
+
     //! @}
     // -----------------------------------------------------------------------
 

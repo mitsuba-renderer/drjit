@@ -1164,6 +1164,21 @@ void scatter_reduce(ReduceOp op, Target &&target, const Value &value,
     }
 }
 
+template <typename Target, typename Value, typename Index>
+void scatter_reduce_kahan(Target &&target_1, Target &&target_2,
+                          const Value &value, const Index &index,
+                          const mask_t<Value> &mask = true) {
+    static_assert(
+        is_jit_v<Target> &&
+        is_jit_v<Value> &&
+        is_jit_v<Index> &&
+        array_depth_v<Value> == array_depth_v<Index> &&
+        array_depth_v<Value> == 1,
+        "Only flat JIT arrays are supported at the moment");
+
+    value.scatter_reduce_kahan_(target_1, target_2, index, mask);
+}
+
 template <typename T, typename TargetType>
 decltype(auto) migrate(const T &value, TargetType target) {
     static_assert(std::is_enum_v<TargetType>);
