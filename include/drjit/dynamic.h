@@ -102,13 +102,14 @@ struct DynamicArray
     }
 
     DynamicArray &operator=(const DynamicArray &a) {
+        Value* new_data = new Value[a.m_size];
+        for (size_t i = 0; i < a.m_size; ++i)
+            new_data[i] = a.m_data[i];
         if (m_free)
             delete[] m_data;
-        m_data = new Value[a.m_size];
         m_size = a.m_size;
+        m_data = new_data;
         m_free = true;
-        for (size_t i = 0; i < m_size; ++i)
-            m_data[i] = a.m_data[i];
         return *this;
     }
 

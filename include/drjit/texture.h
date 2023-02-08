@@ -226,9 +226,9 @@ public:
             drjit_raise("Texture::set_tensor(): tensor dimension must equal "
                         "texture dimension plus one (channels).");
 
+        bool is_inplace_update = (&tensor == &m_value);
         if constexpr (HasCudaTexture) {
             if (m_use_accel) {
-                bool is_inplace_update = (&tensor == &m_value);
                 size_t current_shape[Dimension + 1];
 
                 if (is_inplace_update) {
@@ -259,6 +259,11 @@ public:
             init(tensor.shape().data(), tensor.shape(Dimension),
                  m_use_accel, m_filter_mode, m_wrap_mode, false);
         }
+
+        // Avoid unnecessary copy when working with `DynamicArray`
+        if constexpr (!IsDynamic)
+            if (is_inplace_update)
+                return;
 
         set_value(tensor.array(), migrate);
     }
