@@ -82,7 +82,7 @@ def test_roundtrip_pytorch_llvm():
     assert a1.x == Float(a1.x.torch())
 
 
-def test_roundtrip_pytorch_jax():
+def test_roundtrip_jax():
     pytest.importorskip("jax")
 
     try:
@@ -124,3 +124,25 @@ def test_matrix_3_to_4_conversion():
 
     assert dr.allclose(m4, [[1, 2, 3, 0], [4, 5, 6, 0], [7, 8, 9, 0], [0, 0, 0, 1]])
     assert dr.allclose(m3, dr.scalar.Matrix3f(m4))
+
+
+def test_numpy_unit_dimension():
+    pytest.importorskip("numpy")
+    prepare("drjit.llvm")
+    import numpy as np
+
+    a = dr.llvm.TensorXf(dr.arange(dr.llvm.Float32, 3*4), shape=(1, 3, 1, 4, 1))
+    b = a.numpy()
+
+    assert dr.allclose(a.shape, b.shape)
+
+
+def test_tensorflow_unit_dimension():
+    pytest.importorskip("tensorflow")
+    prepare("drjit.cuda")
+    import tensorflow as tf
+
+    a = dr.llvm.TensorXf(dr.arange(dr.llvm.Float32, 3*4), shape=(1, 3, 1, 4, 1))
+    b = a.tf()
+
+    assert dr.allclose(a.shape, b.shape)

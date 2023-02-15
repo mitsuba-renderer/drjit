@@ -1564,10 +1564,6 @@ def export_(a, migrate_to_host, version, owner_supported=True):
             else:
                 strides[-2:] = strides[-2:][::-1]
 
-        for i in range(ndim):
-            if shape[i] == 1:
-                strides[i] = 0
-
         # JIT array -- requires extra transformations
         b = _dr.ravel(_dr.detach(a) if a.IsDiff else a)
         _dr.eval(b)
