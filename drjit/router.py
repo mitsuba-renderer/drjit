@@ -5279,7 +5279,7 @@ def suspend_grad(*args, when=True):
         when (bool): An optional Python boolean determining whether to suspend
           derivative tracking.
     '''
-    if not when:
+    if not when or (not hasattr(_dr.detail, 'ADScope')):
         return _DummyContextManager()
 
     array_indices = []
@@ -5349,7 +5349,7 @@ def resume_grad(*args, when=True):
         when (bool): An optional Python boolean determining whether to resume
           derivative tracking.
     '''
-    if not when:
+    if not when or (not hasattr(_dr.detail, 'ADScope')):
         return _DummyContextManager()
 
     array_indices = []
@@ -5367,7 +5367,7 @@ def isolate_grad(when=True):
     specific scope. For instance this function is used internally to implement
     differentiable loops and polymorphic calls.
     '''
-    if not when:
+    if not when or (not hasattr(_dr.detail, 'ADScope')):
         return _DummyContextManager()
     return _ADContextManager(_dr.detail.ADScope.Isolate, None, [])
 
