@@ -5,8 +5,11 @@ Being an experimental research framework, Dr.Jit does not strictly follow the
 `Semantic Versioning <https://semver.org/>`_ convention. That said, we will
 strive to document breaking API changes in the release notes below.
 
-Incoming changes
-----------------
+
+Dr.Jit 0.4.1
+------------
+
+*February 22, 2023*
 
 - Add a Kahan-style error-compensating atomic scatter-accumulation operation
   `[c7225f6] <https://github.com/mitsuba-renderer/drjit/commit/c7225f6d6c50f0d0a19df6b9df85597011f318b5>`_ .. `[462dbd2] <https://github.com/mitsuba-renderer/drjit/commit/462dbd2c8e8af61b280b2dd0b82a42619a4ff75c>`_
