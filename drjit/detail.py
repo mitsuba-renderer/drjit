@@ -64,7 +64,7 @@ def array_from_dlpack(t, capsule):
     dtype = descr["dtype"]
     shape = descr["shape"]
     ndim = len(shape)
-    strides = descr["strides"]
+    strides = list(descr["strides"])
 
     if strides is None:
         tmp = 1
@@ -100,6 +100,12 @@ def array_from_dlpack(t, capsule):
     def load(t, i, offset):
         size = shape[-1 - i]
         stride = strides[-1 - i]
+
+        # Stride size is "irrelevant" with unit dimension, some frameworks set
+        # the stride to 0 or 1
+        if size == 1:
+            stride = strides[-i] * shape[-i] if i != 0 else 1
+            strides[-1 - i] = stride
 
         if i == ndim - 1:
             if type(offset) is int and stride == 1:

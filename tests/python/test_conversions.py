@@ -146,3 +146,16 @@ def test_tensorflow_unit_dimension():
     b = a.tf()
 
     assert dr.allclose(a.shape, b.shape)
+
+
+def test_torch_matrix_unit_dimension():
+    pytest.importorskip("torch")
+    prepare("drjit.cuda.ad")
+    import torch
+
+    expected = dr.cuda.ad.Matrix4f(*range(0, 16))
+
+    a = torch.arange(16).reshape((1, 4, 4)).float().cuda()
+    b = dr.cuda.ad.Matrix4f(a)
+
+    assert dr.allclose(b, expected)
