@@ -4359,7 +4359,7 @@ def _check_grad_enabled(name, t, a):
                 'since this is usually indicative of a bug (for example, '
                 'you may have forgotten to call dr.enable_grad(..)). If '
                 f'this is expected behavior, skip the call to {name}(..) '
-                'if ek.grad_enabled(..) returns False.')
+                'if dr.grad_enabled(..) returns False.')
     else:
         raise TypeError(f'{name}(): expected a differentiable array type!')
 
