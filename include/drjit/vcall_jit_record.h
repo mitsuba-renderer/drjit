@@ -97,7 +97,10 @@ Result vcall_jit_record_impl(const char *name, uint32_t n_inst,
     (collect_indices(indices_in, args), ...);
 
     detail::JitState<Backend> jit_state;
-    jit_state.begin_recording();
+    snprintf(label, sizeof(label), "%s::%s", Base::Domain, name);
+
+    if (!jit_state.begin_recording(name))
+        return zeros<Result>();
 
     state[0] = jit_record_checkpoint(Backend);
 
