@@ -52,10 +52,12 @@ def test_roundtrip_numpy_all(package):
         assert len(Float(np.array([], dtype=np.float32))) == 0
 
 
-def test_roundtrip_pytorch_cuda():
+@pytest.mark.parametrize("package", ["drjit.cuda", "drjit.cuda.ad",
+                                     "drjit.llvm", "drjit.llvm.ad"])
+def test_roundtrip_pytorch_all(package):
     pytest.importorskip("torch")
-    prepare("drjit.cuda.ad")
-    from drjit.cuda.ad import Float, Array3f
+    package = prepare(package)
+    Float, Array3f = package.Float, package.Array3f
     a1 = Array3f(
         dr.arange(Float, 10),
         dr.arange(Float, 10)+100,
@@ -67,32 +69,20 @@ def test_roundtrip_pytorch_cuda():
     assert a1.x == Float(a1.x.torch())
 
 
-def test_roundtrip_pytorch_llvm():
-    pytest.importorskip("torch")
-    prepare("drjit.llvm.ad")
-    from drjit.llvm.ad import Float, Array3f
-    a1 = Array3f(
-        dr.arange(Float, 10),
-        dr.arange(Float, 10)+100,
-        dr.arange(Float, 10)+1000,
-    )
-    a2 = a1.torch()
-    a3 = Array3f(a2)
-    assert a1 == a3
-    assert a1.x == Float(a1.x.torch())
-
-
-def test_roundtrip_jax():
+@pytest.mark.parametrize("package", ["drjit.cuda", "drjit.cuda.ad",
+                                     "drjit.llvm", "drjit.llvm.ad"])
+def test_roundtrip_jax_all(package):
     pytest.importorskip("jax")
 
     try:
         from jax.lib import xla_bridge
-        xla_bridge.get_backend('gpu')
+        device = 'gpu' if 'cuda' in package else 'cpu'
+        xla_bridge.get_backend(device)
     except:
         pytest.skip('Backend gpu failed to initialize on JAX')
 
-    prepare("drjit.cuda.ad")
-    from drjit.cuda.ad import Float, Array3f
+    package = prepare(package)
+    Float, Array3f = package.Float, package.Array3f
     a1 = Array3f(
         dr.arange(Float, 10),
         dr.arange(Float, 10)+100,
@@ -137,25 +127,32 @@ def test_numpy_unit_dimension():
     assert dr.allclose(a.shape, b.shape)
 
 
-def test_tensorflow_unit_dimension():
+@pytest.mark.parametrize("package", ["drjit.cuda", "drjit.cuda.ad",
+                                     "drjit.llvm", "drjit.llvm.ad"])
+def test_tensorflow_unit_dimension(package):
     pytest.importorskip("tensorflow")
-    prepare("drjit.cuda")
+    package = prepare(package)
     import tensorflow as tf
 
-    a = dr.llvm.TensorXf(dr.arange(dr.llvm.Float32, 3*4), shape=(1, 3, 1, 4, 1))
+    a = package.TensorXf(dr.arange(package.Float32, 3*4), shape=(1, 3, 1, 4, 1))
     b = a.tf()
 
     assert dr.allclose(a.shape, b.shape)
 
 
-def test_torch_matrix_unit_dimension():
+@pytest.mark.parametrize("package", ["drjit.cuda", "drjit.cuda.ad",
+                                     "drjit.llvm", "drjit.llvm.ad"])
+def test_torch_matrix_unit_dimension(package):
     pytest.importorskip("torch")
-    prepare("drjit.cuda.ad")
+    cuda_mode = 'cuda' in package
+    package = prepare(package)
     import torch
 
-    expected = dr.cuda.ad.Matrix4f(*range(0, 16))
+    expected = package.Matrix4f(*range(0, 16))
 
-    a = torch.arange(16).reshape((1, 4, 4)).float().cuda()
-    b = dr.cuda.ad.Matrix4f(a)
+    a = torch.arange(16).reshape((1, 4, 4)).float()
+    if cuda_mode:
+        a = a.cuda()
+    b = package.Matrix4f(a)
 
     assert dr.allclose(b, expected)
