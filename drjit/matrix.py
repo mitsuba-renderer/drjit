@@ -298,7 +298,7 @@ def quat_to_matrix(q, size=4):
     if not _dr.is_quaternion_v(q):
         raise Exception('Unsupported type!')
 
-    name = _dr.detail.array_name('Matrix', q.Type, (size, size), q.IsScalar)
+    name = _dr.detail.array_name('Matrix', q.Type, (size, size, *q.Shape[1:]), q.IsScalar)
     module = _modules.get(q.__module__)
     Matrix = getattr(module, name)
 
