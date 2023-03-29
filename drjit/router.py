@@ -168,7 +168,7 @@ def _var_promote_select(a0, a1, a2):
     base = a0 if getattr(a0, 'Depth', 0) >= getattr(a1, 'Depth', 0) else a1
     base = base if getattr(base, 'Depth', 0) >= getattr(a2, 'Depth', 0) else a2
 
-    t0 = base.ReplaceScalar(vt0, diff)
+    t0 = base.MaskType
     t12 = base.ReplaceScalar(_builtins.max(vt1, vt2), diff)
 
     if type(a0) is not t0:
