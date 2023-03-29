@@ -1,7 +1,7 @@
 import math
 import drjit as dr
 from drjit.scalar import Quaternion4f as Q
-from drjit.scalar import Float, Array4f
+from drjit.scalar import Bool, Float, Array4f, Array4b
 
 
 def test01_bcast():
@@ -61,3 +61,12 @@ def test06_exp():
 def test07_power():
     assert dr.allclose(Q(1, 2, 3, 4) ** Q(0.11, 0.13, 0.19, 0.21),
                        Q(0.253509, 0.372162, 0.481497, 0.982482))
+
+def test08_select():
+    m = Bool(True)
+    t = Q(1, 1, 1, 1)
+    f = Q(0, 0, 0, 0)
+    assert(dr.allclose(dr.select(m, t, f), t))
+    m = Array4b(True, False, True, False)
+    r = Q(1, 0, 1, 0)
+    assert(dr.allclose(dr.select(m, t, f), r))
