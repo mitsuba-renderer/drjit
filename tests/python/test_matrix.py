@@ -323,3 +323,33 @@ def test16_nested(package):
     m4 = np.array(m2)
 
     assert np.allclose(m3, m4)
+
+@pytest.mark.parametrize("package", ["drjit.scalar", "drjit.cuda", "drjit.llvm"])
+def test17_quat_to_matrix(package):
+    np = pytest.importorskip("numpy")
+
+    package = prepare(package)
+    Quaternion4f, Matrix3f, Matrix4f = package.Quaternion4f, package.Matrix3f, package.Matrix4f
+
+    # Identity
+    q = Quaternion4f([ 0, 0, 0, 1 ])
+    m3 = Matrix3f([ [1, 0, 0], [0, 1, 0], [0, 0, 1] ])
+    m4 = Matrix4f([ [1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1] ])
+    assert(dr.allclose(dr.quat_to_matrix(q, size=3), m3))
+    assert(dr.allclose(dr.quat_to_matrix(q, size=4), m4))
+    assert(dr.allclose(q, dr.matrix_to_quat(m3)))
+    assert(dr.allclose(q, dr.matrix_to_quat(m4)))
+
+    # pi/2 around z-axis
+    q = Quaternion4f([ 0, 0, 1/np.sqrt(2), 1/np.sqrt(2) ])
+    m3 = Matrix3f([ [0, -1, 0], [1, 0, 0], [0, 0, 1] ])
+    m4 = Matrix4f([ [0, -1, 0, 0], [1, 0, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1] ])
+    assert(dr.allclose(dr.quat_to_matrix(q, size=3), m3, atol=2e-7))
+    assert(dr.allclose(dr.quat_to_matrix(q, size=4), m4, atol=2e-7))
+    assert(dr.allclose(q, dr.matrix_to_quat(m3)))
+    assert(dr.allclose(q, dr.matrix_to_quat(m4)))
+
+    # Round trip "Random" quaternion
+    q = Quaternion4f(0.72331658, 0.49242236, 0.31087897, 0.3710628)
+    assert(dr.allclose(q, dr.matrix_to_quat(dr.quat_to_matrix(q, size=3))))
+    assert(dr.allclose(q, dr.matrix_to_quat(dr.quat_to_matrix(q, size=4))))
