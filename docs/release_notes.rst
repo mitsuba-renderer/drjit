@@ -6,6 +6,20 @@ Being an experimental research framework, Dr.Jit does not strictly follow the
 strive to document breaking API changes in the release notes below.
 
 
+Incoming release
+----------------
+
+*April 25, 2023*
+
+- Fix ``dlpack`` conversions
+  `[16b3882] <https://github.com/mitsuba-renderer/drjit/commit/16b388292b5cb1e532b43a8800f1cca95a17c513>`_
+- Fix virtual function call recursions
+  `[49ea1e0] <https://github.com/mitsuba-renderer/drjit/commit/49ea1e06fedcda60c8a679d626d0425f1a0ee9af>`_
+- Various fixes to quaternions handling
+  `[8bbf831] <https://github.com/mitsuba-renderer/drjit/commit/8bbf8312be3200d7bed6fec652d8e1bef68c09c1>`_ .. `[02e5b47] <https://github.com/mitsuba-renderer/drjit/commit/02e5b47d97b452a0badea1463eae19e257f0edb6>`_
+- Various minor bugs, memory leaks and undefined behaviour fixes
+
+
 Dr.Jit 0.4.1
 ------------
 
