@@ -27,7 +27,7 @@ jobs:
         cibw-arch: [x86_64, arm64]
         exclude:
           - os: ubuntu-20.04
-          - os: macos-latest
+            cibw-arch: arm64
           - os: windows-latest
             cibw-arch: arm64
       fail-fast: false
