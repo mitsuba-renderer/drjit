@@ -9,7 +9,7 @@ on:
 
 env:
   CIBW_BUILD_VERBOSITY: 1
-  CIBW_SKIP: "*-musllinux* pp* cp36-* cp37-*"
+  CIBW_SKIP: "*-musllinux* pp*"
   CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
   CIBW_ARCHS_WINDOWS: auto64
   CIBW_ARCHS_LINUX: auto64
@@ -22,23 +22,28 @@ jobs:
   build_wheels:
     strategy:
       matrix:
-        os: [ubuntu-20.04, windows-latest]
-        include:
-          - os: macos-latest
-            cibw-arch: x86_64
-          - os: macos-latest
+        os: [ubuntu-20.04, windows-latest, macos-latest]
+        python: [cp38, cp39, cp310, cp311]
+        cibw-arch: [x86_64, arm64]
+        exclude:
+          - os: ubuntu-20.04
             cibw-arch: arm64
+          - os: windows-latest
       fail-fast: false
 
     name: >
-      Build wheels on ${{ matrix.os }}
+      ${{ matrix.python }} wheel for ${{ matrix.os }}
       ${{ (matrix.os == 'macos-latest' && format('({0})', matrix.cibw-arch)) || '' }}
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: Wandalen/wretry.action@v1.0.36
         with:
-          submodules: recursive
+          action: actions/checkout@v3
+          with: |
+            submodules: recursive
+          attempt_limit: 3
+          attempt_delay: 2000
 
       - uses: actions/setup-python@v4
         name: Install Python
@@ -73,6 +78,8 @@ jobs:
           echo "CIBW_ARCHS_MACOS=${{ matrix.cibw-arch }}" >> $GITHUB_ENV
 
       - name: Build wheels
+        env:
+          CIBW_BUILD: ${{ matrix.python }}-*
         run: |
           python -m cibuildwheel --output-dir wheelhouse
 
