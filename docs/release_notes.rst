@@ -6,8 +6,8 @@ Being an experimental research framework, Dr.Jit does not strictly follow the
 strive to document breaking API changes in the release notes below.
 
 
-Incoming release
-----------------
+Dr.Jit 0.4.2
+------------
 
 *April 25, 2023*
 
