@@ -30,12 +30,11 @@ void tensor_broadcast_impl(const char *op, T &t, const dr_vector<size_t> &shape)
         size *= (uint32_t) shape[i];
 
     Index index = arange<Index>(size);
-    size = 1;
 
-    for (int i = ndim - 1; i >= 0; --i) {
-        uint32_t size_next = size * (uint32_t) shape[i];
+    for (int i = 0; i < ndim; ++i) {
+        uint32_t size_next = size / (uint32_t) shape[i];
         if (t.shape(i) == 1 && shape[i] != 1)
-            index = (index % size) + (index / size_next) * size;
+            index = (index % size_next) + (index / size) * size_next;
         size = size_next;
     }
 
