@@ -3985,7 +3985,9 @@ def grad(arg, preserve_type=True):
             raise TypeError("grad(): preserve_type=True is required when "
                             "getting the gradient of a custom data structure!")
         for k in type(arg).DRJIT_STRUCT.keys():
-            setattr(result, k, grad(getattr(arg, k), preserve_type))
+            g = grad(getattr(arg, k), preserve_type)
+            if g is not None:
+                setattr(result, k, g)
         return result
     elif isinstance(arg, _Sequence) and not isinstance(arg, str):
         return type(arg)([grad(v, preserve_type) for v in arg])
@@ -3993,7 +3995,6 @@ def grad(arg, preserve_type=True):
         return {k : grad(v, preserve_type) for k, v in arg.items()}
     else:
         return None
-
 
 
 def set_grad(dst, src):
@@ -5509,7 +5510,7 @@ class CustomOp:
         Args:
             value (object): variable this operation depends on implicitly.
         '''
-        self._implicit_in.append(value)
+        _dr.detail.diff_vars(value, self._implicit_in)
 
     def add_output(self, value):
         '''
@@ -5522,7 +5523,7 @@ class CustomOp:
         Args:
             value (object): variable this operation depends on implicitly.
         '''
-        self._implicit_out.append(value)
+        _dr.detail.diff_vars(value, self._implicit_out)
 
     def __del__(self):
         @_dr.detail.traverse()
@@ -5587,9 +5588,8 @@ def custom(cls, *args, **kwargs):
         raise RuntimeError("drjit.custom(): the return value of CustomOp.eval() "
                            "should not be attached to the AD graph!")
 
-    diff_vars_in = []
+    diff_vars_in = inst._implicit_in
     _dr.detail.diff_vars(kwargs, diff_vars_in)
-    _dr.detail.diff_vars(inst._implicit_in, diff_vars_in)
 
     if len(diff_vars_in) > 0:
         output = to_diff_array(output)
@@ -5600,9 +5600,8 @@ def custom(cls, *args, **kwargs):
         inst.inputs = clear_primal(kwargs, dec_ref=False)
         inst.output = clear_primal(output, dec_ref=True)
 
-        diff_vars_out = []
+        diff_vars_out = inst._implicit_out
         _dr.detail.diff_vars(inst.output, diff_vars_out)
-        _dr.detail.diff_vars(inst._implicit_out, diff_vars_out)
 
         if len(diff_vars_out) == 0:
             return output # Not relevant for AD after all..
@@ -5995,8 +5994,8 @@ def switch(indices, funcs, *args):
                 self.args = args
                 implicit_snapshot = Type.ad_implicit_()
                 res = mod.switch_record_(self.indices, self.funcs, *self.args)
-                self.implicit_in = Type.ad_extract_implicit_(implicit_snapshot)
-                for i in self.implicit_in:
+                self._implicit_in = Type.ad_extract_implicit_(implicit_snapshot)
+                for i in self._implicit_in:
                     Type.ad_inc_ref_(i)
                 return _dr.detach(res)
 
@@ -6017,7 +6016,7 @@ def switch(indices, funcs, *args):
                         _dr.traverse(Type, _dr.ADMode.Forward)
                         Type.ad_dequeue_implicit_(implicit_snapshot)
                         # Return result gradients
-                        return _dr.grad(result, preserve_type=False)
+                        return _dr.grad(result, preserve_type=True)
 
                     return fwd
 
@@ -6039,7 +6038,7 @@ def switch(indices, funcs, *args):
                         _dr.enqueue(_dr.ADMode.Backward, result)
                         _dr.traverse(Type, _dr.ADMode.Backward)
                         # Return arguments gradients
-                        return _dr.grad(args, preserve_type=False)
+                        return _dr.grad(args, preserve_type=True)
 
                     return bwd
 
