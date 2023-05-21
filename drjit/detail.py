@@ -769,7 +769,7 @@ def traverse(traverse_static_array=True, traverse_tensor=True):
 
 
 @traverse()
-def apply_cpp(arg, func):
+def apply_cpp(arg, func, diff=True):
     '''
     Apply a C++ function to data structures containing JIT variables. The C++
     lambda must take as input the index of the JIT variable. It can optionally
@@ -780,7 +780,7 @@ def apply_cpp(arg, func):
     idx = func(arg.index)
     if isinstance(idx, int):
         res.set_index_(idx)
-        if _dr.is_diff_v(arg):
+        if diff and _dr.is_diff_v(arg):
             res.set_index_ad_(arg.index_ad)
     return res
 

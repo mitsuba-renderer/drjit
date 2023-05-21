@@ -87,7 +87,36 @@ def test02_switch_autodiff_forward(modname, recorded):
 
 @pytest.mark.parametrize("modname", ["drjit.cuda.ad", "drjit.llvm.ad"])
 @pytest.mark.parametrize("recorded", [True, False])
-def test03_switch_autodiff_backward(modname, recorded):
+def test03_switch_autodiff_forward_implicit(modname, recorded):
+    m = get_module(modname)
+
+    dr.set_flag(dr.JitFlag.VCallRecord, recorded)
+
+    data = m.Float([1.0, 2.0, 3.0, 4.0])
+    dr.enable_grad(data)
+
+    def f(a, i):
+        return a + dr.gather(m.Float, data, i)
+
+    def g(a, i):
+        return a + 4 * dr.gather(m.Float, data, i)
+
+    idx = m.UInt([0, 0, 1, 1])
+    a = m.Float([1.0, 2.0, 3.0, 4.0])
+    i = m.UInt([3, 2, 1, 0])
+
+    result = dr.switch(idx, [f, g], a, i)
+
+    assert dr.allclose(result, [5, 5, 11, 8])
+
+    dr.forward(data)
+
+    assert dr.allclose(dr.grad(result), [1, 1, 4, 4])
+
+
+@pytest.mark.parametrize("modname", ["drjit.cuda.ad", "drjit.llvm.ad"])
+@pytest.mark.parametrize("recorded", [True, False])
+def test04_switch_autodiff_backward(modname, recorded):
     m = get_module(modname)
 
     dr.set_flag(dr.JitFlag.VCallRecord, recorded)
@@ -115,8 +144,37 @@ def test03_switch_autodiff_backward(modname, recorded):
 
 
 @pytest.mark.parametrize("modname", ["drjit.cuda.ad", "drjit.llvm.ad"])
+@pytest.mark.parametrize("recorded", [True, False])
+def test05_switch_autodiff_backward_implicit(modname, recorded):
+    m = get_module(modname)
+
+    dr.set_flag(dr.JitFlag.VCallRecord, recorded)
+
+    data = m.Float([1.0, 2.0, 3.0, 4.0])
+    dr.enable_grad(data)
+
+    def f(a, i):
+        return a + dr.gather(m.Float, data, i)
+
+    def g(a, i):
+        return a + 4 * dr.gather(m.Float, data, i)
+
+    idx = m.UInt([0, 0, 1, 1])
+    a = m.Float([1.0, 2.0, 3.0, 4.0])
+    i = m.UInt([3, 2, 1, 0])
+
+    result = dr.switch(idx, [f, g], a, i)
+
+    assert dr.allclose(result, [5, 5, 11, 8])
+
+    dr.backward(result)
+
+    assert dr.allclose(dr.grad(data), [4, 4, 1, 1])
+
+
+@pytest.mark.parametrize("modname", ["drjit.cuda.ad", "drjit.llvm.ad"])
 @pytest.mark.parametrize("recorded", [True])
-def test04_switch_failure(modname, recorded):
+def test06_switch_failure(modname, recorded):
     m = get_module(modname)
 
     dr.set_flag(dr.JitFlag.VCallRecord, recorded)

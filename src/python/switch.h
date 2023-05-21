@@ -104,7 +104,7 @@ py::object switch_record_impl(UInt32 indices, py::list funcs, py::args args) {
     uint32_t offset = 0;
     return apply_cpp(result, py::cpp_function([&](uint32_t /*index*/) {
                          return indices_out[offset++];
-                     }));
+                     }), false);
 }
 
 // ====================================================================
