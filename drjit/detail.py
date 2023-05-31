@@ -640,8 +640,8 @@ def slice_tensor(shape, indices, uint32):
                 shape_offset += 1
             continue
         else:
-            raise TypeError("slice_tensor(): type '%s' cannot be used to index into a tensor!",
-                            type(v).__name__)
+            raise TypeError("slice_tensor(): type '%s' cannot be used to index "
+                            "into a tensor!" % type(v).__name__)
         shape_offset += 1
 
     # Implicit ellipsis
