@@ -31,22 +31,23 @@ NAMESPACE_BEGIN(drjit)
 #define DRJIT_ARRAY_FALLBACK_CONSTRUCTORS(Name)                                \
     template <typename Value2, typename D2, typename D = Derived_,             \
               enable_if_t<D::Size == D2::Size && D::Depth == D2::Depth> = 0>   \
-    Name(const ArrayBase<Value2, false, D2> &v) {                              \
+    Name(const ArrayBaseT<Value2, false, D2> &v) {                             \
         DRJIT_CHKSCALAR("Copy constructor (conversion)");                      \
         for (size_t i = 0; i < derived().size(); ++i)                          \
             derived().entry(i) = (Value) v.derived().entry(i);                 \
     }                                                                          \
     template <typename Value2, typename D2, typename D = Derived_,             \
               enable_if_t<D::Size == D2::Size && D::Depth == D2::Depth> = 0>   \
-    Name(const ArrayBase<Value2, IsMask_, D2> &v, detail::reinterpret_flag) {  \
+    Name(const ArrayBaseT<Value2, IsMask_, D2> &v, detail::reinterpret_flag) { \
         DRJIT_CHKSCALAR("Copy constructor (reinterpret_cast)");                \
         for (size_t i = 0; i < derived().size(); ++i)                          \
             derived().entry(i) = reinterpret_array<Value>(v[i]);               \
     }
 
+struct ArrayBase { };
 
 /// Array base class templated via the curiously recurring template pattern
-template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
+template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : ArrayBase {
     // -----------------------------------------------------------------------
     //! @{ \name Basic declarations (may be overridden in subclasses)
     // -----------------------------------------------------------------------
@@ -370,60 +371,52 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
         DRJIT_IMPLEMENT_BINARY(name, op, cond)
 
 
-    #define DRJIT_IMPLEMENT_BINARY_BITOP(name, op, cond)                     \
+    #define DRJIT_IMPLEMENT_BINARY_BITOP(name, op)                           \
         template <typename Mask> Derived name##_(const Mask &v) const {      \
             DRJIT_CHKSCALAR(#name "_");                                      \
                                                                              \
-            if constexpr (cond) {                                            \
-                size_t sa = derived().size(), sb = v.size(),                 \
-                       sr = sa > sb ? sa : sb;                               \
+            size_t sa = derived().size(), sb = v.size(),                     \
+                   sr = sa > sb ? sa : sb;                                   \
                                                                              \
-                Derived result;                                              \
-                if constexpr (Derived::Size == Dynamic) {                    \
-                    if ((sa != sr && sa != 1) || (sb != sr && sb != 1))      \
-                        drjit_raise(#name "_() : mismatched input sizes "    \
-                                   "(%zu and %zu)", sa, sb);                 \
-                    result = drjit::empty<Derived>(sr);                      \
-                }                                                            \
-                                                                             \
-                for (size_t i = 0; i < sr; ++i) {                            \
-                    const Value &a = derived().entry(i);                     \
-                    const auto &b = v.entry(i);                              \
-                    result.set_entry(i, op);                                 \
-                }                                                            \
-                                                                             \
-                return result;                                               \
-            } else {                                                         \
-                drjit_raise(#name "_(): invalid operand type!");             \
+            Derived result;                                                  \
+            if constexpr (Derived::Size == Dynamic) {                        \
+                if ((sa != sr && sa != 1) || (sb != sr && sb != 1))          \
+                    drjit_raise(#name "_() : mismatched input sizes "        \
+                               "(%zu and %zu)", sa, sb);                     \
+                result = drjit::empty<Derived>(sr);                          \
             }                                                                \
+                                                                             \
+            for (size_t i = 0; i < sr; ++i) {                                \
+                const Value &a = derived().entry(i);                         \
+                const auto &b = v.entry(i);                                  \
+                result.set_entry(i, op);                                     \
+            }                                                                \
+                                                                             \
+            return result;                                                   \
         }
 
-    #define DRJIT_IMPLEMENT_BINARY_MASK(name, op, cond)                      \
+    #define DRJIT_IMPLEMENT_BINARY_MASK(name, op)                            \
         DRJIT_INLINE auto name##_(const Derived &v) const {                  \
             DRJIT_CHKSCALAR(#name "_");                                      \
                                                                              \
-            if constexpr (cond) {                                            \
-                size_t sa = derived().size(), sb = v.size(),                 \
-                       sr = sa > sb ? sa : sb;                               \
+            size_t sa = derived().size(), sb = v.size(),                     \
+                   sr = sa > sb ? sa : sb;                                   \
                                                                              \
-                mask_t<Derived> result;                                      \
-                if constexpr (Derived::Size == Dynamic) {                    \
-                    if ((sa != sr && sa != 1) || (sb != sr && sb != 1))      \
-                        drjit_raise(#name "_() : mismatched input sizes "    \
-                                   "(%zu and %zu)", sa, sb);                 \
-                    result = drjit::empty<mask_t<Derived>>(sr);              \
-                }                                                            \
-                                                                             \
-                for (size_t i = 0; i < sr; ++i) {                            \
-                    const Value &a = derived().entry(i);                     \
-                    const Value &b = v.entry(i);                             \
-                    result.set_entry(i, op);                                 \
-                }                                                            \
-                                                                             \
-                return result;                                               \
-            } else {                                                         \
-                drjit_raise(#name "_(): invalid operand type!");             \
+            mask_t<Derived> result;                                          \
+            if constexpr (Derived::Size == Dynamic) {                        \
+                if ((sa != sr && sa != 1) || (sb != sr && sb != 1))          \
+                    drjit_raise(#name "_() : mismatched input sizes "        \
+                               "(%zu and %zu)", sa, sb);                     \
+                result = drjit::empty<mask_t<Derived>>(sr);                  \
             }                                                                \
+                                                                             \
+            for (size_t i = 0; i < sr; ++i) {                                \
+                const Value &a = derived().entry(i);                         \
+                const Value &b = v.entry(i);                                 \
+                result.set_entry(i, op);                                     \
+            }                                                                \
+                                                                             \
+            return result;                                                   \
         }
 
     #define DRJIT_IMPLEMENT_TERNARY_ALT(name, op, alt, cond)                 \
@@ -466,10 +459,10 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
     DRJIT_IMPLEMENT_BINARY(div,   a / b,       IsArithmetic)
     DRJIT_IMPLEMENT_BINARY(mod,   a % b,       IsIntegral)
 
-    DRJIT_IMPLEMENT_BINARY_BITOP(or,     detail::or_(a, b),     true)
-    DRJIT_IMPLEMENT_BINARY_BITOP(and,    detail::and_(a, b),    true)
-    DRJIT_IMPLEMENT_BINARY_BITOP(andnot, detail::andnot_(a, b), true)
-    DRJIT_IMPLEMENT_BINARY_BITOP(xor,    detail::xor_(a, b),    true)
+    DRJIT_IMPLEMENT_BINARY_BITOP(or,     detail::or_(a, b))
+    DRJIT_IMPLEMENT_BINARY_BITOP(and,    detail::and_(a, b))
+    DRJIT_IMPLEMENT_BINARY_BITOP(andnot, detail::andnot_(a, b))
+    DRJIT_IMPLEMENT_BINARY_BITOP(xor,    detail::xor_(a, b))
 
     DRJIT_IMPLEMENT_BINARY(sl, a << b, IsIntegral)
     DRJIT_IMPLEMENT_BINARY(sr, a >> b, IsIntegral)
@@ -477,12 +470,12 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBase {
     DRJIT_IMPLEMENT_UNARY_TEMPLATE(sl, int Imm, a << Imm, IsIntegral)
     DRJIT_IMPLEMENT_UNARY_TEMPLATE(sr, int Imm, a >> Imm, IsIntegral)
 
-    DRJIT_IMPLEMENT_BINARY_MASK(eq,  eq(a, b), true)
-    DRJIT_IMPLEMENT_BINARY_MASK(neq, neq(a, b), true)
-    DRJIT_IMPLEMENT_BINARY_MASK(lt, a < b,  IsArithmetic)
-    DRJIT_IMPLEMENT_BINARY_MASK(le, a <= b, IsArithmetic)
-    DRJIT_IMPLEMENT_BINARY_MASK(gt, a > b,  IsArithmetic)
-    DRJIT_IMPLEMENT_BINARY_MASK(ge, a >= b, IsArithmetic)
+    DRJIT_IMPLEMENT_BINARY_MASK(eq,  eq(a, b))
+    DRJIT_IMPLEMENT_BINARY_MASK(neq, neq(a, b))
+    DRJIT_IMPLEMENT_BINARY_MASK(lt, a < b)
+    DRJIT_IMPLEMENT_BINARY_MASK(le, a <= b)
+    DRJIT_IMPLEMENT_BINARY_MASK(gt, a > b)
+    DRJIT_IMPLEMENT_BINARY_MASK(ge, a >= b)
 
     DRJIT_IMPLEMENT_UNARY(neg, detail::neg_(a), IsArithmetic)
     DRJIT_IMPLEMENT_UNARY(not, detail::not_(a), !IsFloat)

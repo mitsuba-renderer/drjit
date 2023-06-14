@@ -2012,7 +2012,7 @@ template <typename Value> DRJIT_INLINE Value safe_acos(const Value &a) {
 NAMESPACE_BEGIN(detail)
 
 template <typename T>
-struct MaskedArray : ArrayBase<value_t<T>, is_mask_v<T>, MaskedArray<T>> {
+struct MaskedArray : ArrayBaseT<value_t<T>, is_mask_v<T>, MaskedArray<T>> {
     using Mask     = mask_t<T>;
     static constexpr size_t Size = array_size_v<T>;
     static constexpr bool IsMaskedArray = true;
