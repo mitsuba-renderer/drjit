@@ -96,7 +96,7 @@ NAMESPACE_END(detail)
 
 template <typename Array_>
 struct Tensor
-    : ArrayBase<value_t<Array_>, is_mask_v<Array_>, Tensor<Array_>> {
+    : ArrayBaseT<value_t<Array_>, is_mask_v<Array_>, Tensor<Array_>> {
 
     template <typename Array2> friend struct Tensor;
 
@@ -104,7 +104,7 @@ struct Tensor
     friend void detail::tensor_broadcast_impl(const char *op, T &t,
                                               const dr_vector<size_t> &shape);
 
-    using Base = ArrayBase<value_t<Array_>, is_mask_v<Array_>, Tensor<Array_>>;
+    using Base = ArrayBaseT<value_t<Array_>, is_mask_v<Array_>, Tensor<Array_>>;
     using Array = Array_;
     using Value = typename Array::Value;
     using Index = uint32_array_t<Array>;

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.13...3.18)
+cmake_minimum_required(VERSION 3.13...3.22)
 
 project(drjit
   DESCRIPTION
@@ -10,7 +10,6 @@ project(drjit
 option(DRJIT_ENABLE_JIT           "Build Dr.Jit just in time compilation library?" ON)
 option(DRJIT_ENABLE_AUTODIFF      "Build Dr.Jit automatic differentation library?" ON)
 option(DRJIT_ENABLE_PYTHON        "Build Python extension library?" ON)
-option(DRJIT_ENABLE_PYTHON_PACKET "Enable packet mode in Python extension library?" OFF)
 option(DRJIT_ENABLE_TESTS         "Build Dr.Jit test suite? (Warning, this takes *very* long to compile)" OFF)
 
 # ----------------------------------------------------------

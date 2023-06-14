@@ -19,7 +19,7 @@
 NAMESPACE_BEGIN(drjit)
 
 template <JitBackend Backend_, typename Value_, typename Derived_>
-struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
+struct JitArray : ArrayBaseT<Value_, is_mask_v<Value_>, Derived_> {
     static_assert(std::is_scalar_v<Value_>,
                   "JIT Arrays can only be created over scalar types!");
 
@@ -29,7 +29,7 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
 
     using Value = Value_;
     using Derived = Derived_;
-    using Base = ArrayBase<Value_, is_mask_v<Value_>, Derived_>;
+    using Base = ArrayBaseT<Value_, is_mask_v<Value_>, Derived_>;
     using Base::derived;
 
     static constexpr JitBackend Backend = Backend_;
