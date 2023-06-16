@@ -17,3 +17,12 @@ extern nb::handle array_base;
 
 /// Create and publish the ArrayBase type object
 extern void export_base(nb::module_&);
+
+/// Is 'h' a Dr.Jit array type?
+inline bool is_drjit_type(nb::handle h) {
+    return PyType_IsSubtype((PyTypeObject *) h.ptr(),
+                            (PyTypeObject *) array_base.ptr());
+}
+
+/// Is 'type(h)' a Dr.Jit array type?
+inline bool is_drjit_array(nb::handle h) { return is_drjit_type(h.type()); }

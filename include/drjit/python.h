@@ -49,7 +49,7 @@ enum class ArrayOp {
  * The top entries (``len``, ``init``, ``item``, and ``set_item``) are always
  * available (the former two only for dynamic arrays).
  *
- * The ``ops`` array contains additional operations enumerated in ``ArrayOp``.
+ * The ``op`` array contains additional operations enumerated in ``ArrayOp``.
  * Besides pointing to an implementations, entries of this array can taken on
  * two special values:
  *
@@ -60,10 +60,12 @@ enum class ArrayOp {
  *   implementation that recursively invokes the operation on array elements.
  */
 struct ArraySupplement : ArrayMeta {
-    using Len     = size_t    (*)(const ArrayBase *);
+    using Item    = PyObject* (*)(PyObject *, Py_ssize_t) noexcept;
+    using SetItem = int       (*)(PyObject *, Py_ssize_t, PyObject *) noexcept;
+
+    using Len     = size_t    (*)(const ArrayBase *) noexcept;
     using Init    = void      (*)(ArrayBase *, size_t);
-    using Item    = PyObject* (*)(PyObject *, Py_ssize_t);
-    using SetItem = int       (*)(PyObject *, Py_ssize_t, PyObject *);
+    using Cast    = void      (*)(const ArrayBase *, VarType, ArrayBase *);
 
     // using Unary   = void      (*)(const ArrayBase *, const ArrayBase *);
     // using Binary  = void      (*)(const ArrayBase *, const ArrayBase *, ArrayBase *);
@@ -71,20 +73,26 @@ struct ArraySupplement : ArrayMeta {
     // Pointer to the associated array, mask, and element type
     PyObject *array, *mask, *value;
 
-    /// Determine the length of the given array (if dynamically sized)
-    Len len;
-
-    /// Initialize the dynamically sized array to the given size
-    Init init;
-
     /// Return an entry as a Python object
     Item item;
 
     /// Assign a Python object to the given entry
     SetItem set_item;
 
+    /// Determine the length of the given array (if dynamically sized)
+    Len len;
+
+    /// Initialize the dynamically sized array to the given size
+    Init init;
+
+    /// Cast an array into a different format
+    Cast cast;
+
     /// Additional operations
-    void *ops[(int) ArrayOp::Count];
+    void *op[(int) ArrayOp::Count];
+
+    inline void *& operator[](ArrayOp o) { return op[(int) o]; }
+    inline void * operator[](ArrayOp o) const { return op[(int) o]; }
 };
 
 /**
@@ -228,5 +236,31 @@ template <typename T> NB_INLINE void bind_base(ArrayBinding &b) {
         }
     };
 }
+
+template <typename T> void bind_arithmetic(ArrayBinding &b) {
+    using UInt32  = uint32_array_t<T>;
+    using Int32   = int32_array_t<T>;
+    using UInt64  = uint64_array_t<T>;
+    using Int64   = int64_array_t<T>;
+    using Float32 = float32_array_t<T>;
+    using Float64 = float64_array_t<T>;
+
+    b[ArrayOp::Add] = [](const T *a, const T *b, T *c) { new (c) T(*a + *b); };
+    b[ArrayOp::Sub] = [](const T *a, const T *b, T *c) { new (c) T(*a - *b); };
+    b[ArrayOp::Mul] = [](const T *a, const T *b, T *c) { new (c) T(*a * *b); };
+
+    b.cast = [](const ArrayBase *a, VarType vt, T *b) {
+        switch (vt) {
+            case VarType::Int32:   new (b) T(*(const Int32 *)   a); break;
+            case VarType::UInt32:  new (b) T(*(const UInt32 *)  a); break;
+            case VarType::Int64:   new (b) T(*(const Int64 *)   a); break;
+            case VarType::UInt64:  new (b) T(*(const UInt64 *)  a); break;
+            case VarType::Float32: new (b) T(*(const Float32 *) a); break;
+            case VarType::Float64: new (b) T(*(const Float64 *) a); break;
+            default: nanobind::detail::raise("Unsupported cast.");
+        }
+    };
+}
+
 
 NAMESPACE_END(drjit)

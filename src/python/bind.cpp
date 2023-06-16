@@ -11,6 +11,7 @@
 #include "bind.h"
 #include "meta.h"
 #include "base.h"
+#include "init.h"
 
 nb::object bind(const ArrayBinding &b) {
     const char *name = b.name;
@@ -21,6 +22,7 @@ nb::object bind(const ArrayBinding &b) {
 
     d.flags = (uint32_t) nb::detail::type_init_flags::has_supplement |
               (uint32_t) nb::detail::type_init_flags::has_base_py |
+              (uint32_t) nb::detail::type_init_flags::has_type_slots |
               (uint32_t) nb::detail::type_flags::is_final |
               (uint32_t) nb::detail::type_flags::is_destructible |
               (uint32_t) nb::detail::type_flags::is_copy_constructible |
@@ -47,7 +49,14 @@ nb::object bind(const ArrayBinding &b) {
     d.type = b.array_type;
     d.supplement = (uint32_t) sizeof(ArraySupplement);
     d.scope = b.scope.ptr();
-    d.type_slots = nullptr;
+
+    PyType_Slot slots [] = {
+        { Py_tp_init, (void *) array_init },
+        { 0, 0 }
+    };
+
+    d.type_slots = slots;
+    d.type_slots_callback = nullptr;
     d.scope = meta_get_module(b).ptr();
     d.base_py = (PyTypeObject *) array_base.ptr();
 
@@ -80,10 +89,10 @@ nb::object bind(const ArrayBinding &b) {
     nb::detail::implicitly_convertible(pred, b.array_type);
 
     VarType vt = (VarType) b.type;
-    bool is_bool     = vt == VarType::Bool;
-    bool is_float    = vt == VarType::Float16 ||
-                       vt == VarType::Float32 ||
-                       vt == VarType::Float64;
+    bool is_bool  = vt == VarType::Bool;
+    bool is_float = vt == VarType::Float16 ||
+                    vt == VarType::Float32 ||
+                    vt == VarType::Float64;
 
     // Cache a reference to the underlying value type for use in the bindings
     nb::handle value_type_py;

@@ -49,3 +49,11 @@ extern const char *meta_get_name(ArrayMeta meta);
 
 /// Look up the nanobind type associated with the given array metadata
 extern nb::handle meta_get_type(ArrayMeta meta);
+
+inline bool operator==(ArrayMeta a, ArrayMeta b) {
+    a.tsize_rel = a.talign = 0;
+    b.tsize_rel = b.talign = 0;
+    return memcpy(&a, &b, sizeof(ArrayMeta)) == 0;
+}
+
+inline bool operator!=(ArrayMeta a, ArrayMeta b) { return !operator==(a, b); }

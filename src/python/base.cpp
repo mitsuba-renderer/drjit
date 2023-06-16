@@ -40,7 +40,7 @@ static PyObject *apply(ArrayOp op, Func func, std::index_sequence<Is...>,
         }
 
         const ArraySupplement &supp = nb::type_supplement<ArraySupplement>(o[0]);
-        void *impl = supp.ops[(int) op];
+        void *impl = supp[op];
 
         if (impl == DRJIT_OP_NOT_IMPLEMENTED)
             return nb::not_implemented().release().ptr();
