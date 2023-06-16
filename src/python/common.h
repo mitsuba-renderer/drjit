@@ -10,6 +10,7 @@
 
 #pragma once
 #include <drjit/python.h>
+#include "docstr.h"
 
 namespace nb = nanobind;
 namespace dr = drjit;
