@@ -14,12 +14,6 @@
 #include <nanobind/ndarray.h>
 #include <string>
 
-inline bool operator!=(ArrayMeta a, ArrayMeta b) {
-    a.tsize_rel = a.talign = 0;
-    b.tsize_rel = b.talign = 0;
-    return memcpy(&a, &b, sizeof(ArrayMeta)) != 0;
-}
-
 /// Check if the given metadata record is valid
 bool meta_check(ArrayMeta m) noexcept {
     return m.is_valid && m.type > (uint8_t) VarType::Void &&

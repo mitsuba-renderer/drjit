@@ -59,6 +59,7 @@ tests/texture
 libdrjit-core.so
 libdrjit-core.dylib
 drjit-core.dll
+libnanobind-static.a
 libnanothread.so
 libnanothread.dylib
 nanothread.dll

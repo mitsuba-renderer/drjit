@@ -6,9 +6,10 @@ nanobind_add_module(
   LTO
 
   main.cpp
-  meta.cpp
-  base.cpp
-  bind.cpp
+  meta.h meta.cpp
+  base.h base.cpp
+  bind.h bind.cpp
+  init.h init.cpp
 )
 
 set_target_properties(drjit-python
