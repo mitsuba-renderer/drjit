@@ -1,5 +1,7 @@
 #include "base.h"
 #include "meta.h"
+#include "repr.h"
+#include "shape.h"
 #include <nanobind/stl/string.h>
 
 nb::handle array_base;
@@ -126,6 +128,8 @@ static PyType_Slot array_base_slots[] = {
     DR_ARRAY_SLOT(nb_add),
     DR_ARRAY_SLOT(nb_subtract),
     DR_ARRAY_SLOT(nb_multiply),
+    DR_ARRAY_SLOT(sq_length),
+    DR_ARRAY_SLOT(tp_repr),
     { 0, nullptr }
 };
 
@@ -138,5 +142,8 @@ void export_base(nb::module_ &m) {
     ab.def_prop_ro_static("__meta__", [](nb::handle h) {
         return meta_str(nb::type_supplement<ArraySupplement>(h));
     });
+
+    ab.def_prop_ro("shape", &shape, nb::raw_doc(doc_ArrayBase_shape));
+
     array_base = ab;
 }

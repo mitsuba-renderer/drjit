@@ -5,11 +5,14 @@ nanobind_add_module(
   STABLE_ABI
   LTO
 
+  common.h
   main.cpp
   meta.h meta.cpp
   base.h base.cpp
   bind.h bind.cpp
   init.h init.cpp
+  repr.h repr.cpp
+  shape.h shape.cpp
 )
 
 set_target_properties(drjit-python

@@ -52,6 +52,9 @@ nb::object bind(const ArrayBinding &b) {
 
     PyType_Slot slots [] = {
         { Py_tp_init, (void *) array_init },
+        { Py_sq_item, (void *) b.item },
+        { Py_sq_ass_item, (void *) b.set_item },
+        { Py_tp_init, (void *) array_init },
         { 0, 0 }
     };
 

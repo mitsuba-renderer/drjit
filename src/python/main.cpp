@@ -1,9 +1,11 @@
 #include "bind.h"
 #include "base.h"
+#include "shape.h"
 
 NB_MODULE(drjit_ext, m_) {
     (void) m_;
     nb::module_ m = nb::module_::import_("drjit");
+    m.doc() = "A Just-In-Time-Compiler for Differentiable Rendering";
 
     nb::module_ detail = m.def_submodule("detail"),
                 scalar = m.def_submodule("scalar"),
@@ -14,6 +16,7 @@ NB_MODULE(drjit_ext, m_) {
 
     export_bind(detail);
     export_base(m);
+    export_shape(m);
 
     using T = drjit::Array<bool, 3>;
     ArrayBinding b;

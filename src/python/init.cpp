@@ -93,18 +93,18 @@ int array_init(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
             }
 
             if (try_sequence_import) {
-                ssizeargfunc sq_item =
+                ssizeargfunc arg_sq_item =
                     (ssizeargfunc) PyType_GetSlot(arg_tp, Py_sq_item);
-                lenfunc sq_length =
+                lenfunc arg_sq_length =
                     (lenfunc) PyType_GetSlot(arg_tp, Py_sq_length);
 
                 // Special case for general sequence types
-                if (sq_length && sq_item) {
-                    Py_ssize_t len = sq_length(arg);
+                if (arg_sq_length && arg_sq_item) {
+                    Py_ssize_t len = arg_sq_length(arg);
                     array_resize(self, s, len);
 
                     for (Py_ssize_t i = 0; i < len; ++i) {
-                        nb::object o = nb::steal(sq_item(arg, i));
+                        nb::object o = nb::steal(arg_sq_item(arg, i));
                         if (!o.is_valid())
                             nb::detail::raise("Item retrieval failed.");
                         if (set_item(self, i, o.ptr()))
@@ -114,10 +114,10 @@ int array_init(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
                 }
 
                 // Special case for general iterable types. Handled recursively
-                getiterfunc tp_iter =
+                getiterfunc arg_tp_iter =
                     (getiterfunc) PyType_GetSlot(arg_tp, Py_tp_iter);
 
-                if (tp_iter) {
+                if (arg_tp_iter) {
                     nb::tuple args_2 =
                         nb::make_tuple(nb::steal(PySequence_List(arg)));
                     return array_init(self, args_2.ptr(), kwds);
