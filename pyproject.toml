@@ -6,7 +6,7 @@ build-backend = "scikit_build_core.build"
 [project]
 name = "drjit"
 version = "0.4.1"
-description = "A Just-In-Time-Compiler for Differentiable Rendering",
+description = "A Just-In-Time-Compiler for Differentiable Rendering"
 readme = "README.rst"
 requires-python = ">=3.8"
 authors = [
@@ -45,7 +45,6 @@ test-requires = "pytest"
 # Needed for full C++17 support
 [tool.cibuildwheel.macos.environment]
 MACOSX_DEPLOYMENT_TARGET = "10.14"
-
 
 [tool.pytest.ini_options]
 norecursedirs = [ "ext" ]

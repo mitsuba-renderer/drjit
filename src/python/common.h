@@ -19,3 +19,5 @@ using dr::ArrayMeta;
 using dr::ArraySupplement;
 using dr::ArrayBinding;
 using dr::ArrayOp;
+
+inline const ArraySupplement &supp(nb::handle h) { return nb::type_supplement<ArraySupplement>(h); }

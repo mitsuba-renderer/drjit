@@ -1,7 +1,22 @@
 #pragma once
+
 #include <drjit/array.h>
+#include <drjit/jit.h>
+#include <drjit/dynamic.h>
+#include <drjit/matrix.h>
+#include <drjit/complex.h>
+#include <drjit/quaternion.h>
+#include <drjit/tensor.h>
 #include <drjit-core/traits.h>
 #include <nanobind/nanobind.h>
+
+
+NAMESPACE_BEGIN(drjit)
+struct ArrayBinding;
+NAMESPACE_END(drjit)
+
+/// Publish a Dr.Jit type binding in Python
+extern nanobind::object bind(const drjit::ArrayBinding &);
 
 NAMESPACE_BEGIN(drjit)
 
@@ -63,27 +78,36 @@ struct ArraySupplement : ArrayMeta {
     using Item    = PyObject* (*)(PyObject *, Py_ssize_t) noexcept;
     using SetItem = int       (*)(PyObject *, Py_ssize_t, PyObject *) noexcept;
 
-    using Len     = size_t    (*)(const ArrayBase *) noexcept;
-    using Init    = void      (*)(ArrayBase *, size_t);
-    using Cast    = void      (*)(const ArrayBase *, VarType, ArrayBase *);
+    using Len  = size_t    (*)(const ArrayBase *) noexcept;
+    using Init = void      (*)(ArrayBase *, size_t);
+    using Cast = void      (*)(const ArrayBase *, VarType, ArrayBase *);
 
-    // using Unary   = void      (*)(const ArrayBase *, const ArrayBase *);
-    // using Binary  = void      (*)(const ArrayBase *, const ArrayBase *, ArrayBase *);
+    using TensorShape = dr_vector<size_t> & (*) (ArrayBase *) noexcept;
+    using TensorArray = PyObject * (*) (PyObject *) noexcept;
 
     // Pointer to the associated array, mask, and element type
     PyObject *array, *mask, *value;
 
-    /// Return an entry as a Python object
-    Item item;
+    union {
+        struct {
+            /// Return an entry as a Python object
+            Item item;
 
-    /// Assign a Python object to the given entry
-    SetItem set_item;
+            /// Assign a Python object to the given entry
+            SetItem set_item;
 
-    /// Determine the length of the given array (if dynamically sized)
-    Len len;
+            /// Determine the length of the given array (if dynamically sized)
+            Len len;
 
-    /// Initialize the dynamically sized array to the given size
-    Init init;
+            /// Initialize the dynamically sized array to the given size
+            Init init;
+        };
+
+        struct {
+            TensorShape tensor_shape;
+            TensorArray tensor_array;
+        };
+    };
 
     /// Cast an array into a different format
     Cast cast;
@@ -137,11 +161,11 @@ template <typename T> NB_INLINE void bind_init(ArrayBinding &b, nanobind::handle
 
     memset(&b, 0, sizeof(ArrayBinding));
     b.backend = (uint16_t) backend_v<T>;
-    if (T::IsMask)
+
+    if (is_mask_v<T>)
         b.type = (uint16_t) VarType::Bool;
     else
         b.type = (uint16_t) var_type_v<scalar_t<T>>;
-
 
     if constexpr (!T::IsTensor) {
         b.ndim = (uint16_t) array_depth_v<T>;
@@ -179,7 +203,8 @@ template <typename T> NB_INLINE void bind_init(ArrayBinding &b, nanobind::handle
 
 template <typename T> NB_INLINE void bind_base(ArrayBinding &b) {
     namespace nb = nanobind;
-    using Value = value_t<T>;
+    using Value = std::conditional_t<is_mask_v<T> && array_depth_v<T> == 1,
+                                     bool, value_t<T>>;
 
     b.item = [](PyObject *o, Py_ssize_t i_) noexcept -> PyObject * {
         T *inst = nb::inst_ptr<T>(o);
@@ -193,7 +218,7 @@ template <typename T> NB_INLINE void bind_base(ArrayBinding &b) {
             nb::detail::cleanup_list cleanup(o);
             result = nb::detail::make_caster<Value>::from_cpp(
                 inst->entry(i), nb::rv_policy::reference_internal, &cleanup);
-            cleanup.release();
+            assert(!cleanup.used());
         } else {
             nb::str tp_name = nb::inst_name(o);
             PyErr_Format(
@@ -210,7 +235,7 @@ template <typename T> NB_INLINE void bind_base(ArrayBinding &b) {
         if (i < size) {
             nb::detail::cleanup_list cleanup(o);
             nb::detail::make_caster<Value> in;
-            bool success = in.from_python(
+            bool success =  value != Py_None && in.from_python(
                 value, (uint8_t) nb::detail::cast_flags::convert, &cleanup);
             if (success)
                 inst->set_entry(i, in.operator Value & ());
@@ -235,6 +260,15 @@ template <typename T> NB_INLINE void bind_base(ArrayBinding &b) {
             return -1;
         }
     };
+
+    if constexpr (T::Size == Dynamic) {
+        b.len = (ArraySupplement::Len) + [](const T *a) noexcept -> size_t {
+            return a->size();
+        };
+
+        b.init = (ArraySupplement::Init) +[](T *a, size_t size) { a->init_(size); };
+    }
+
 }
 
 template <typename T> void bind_arithmetic(ArrayBinding &b) {
@@ -245,11 +279,11 @@ template <typename T> void bind_arithmetic(ArrayBinding &b) {
     using Float32 = float32_array_t<T>;
     using Float64 = float64_array_t<T>;
 
-    b[ArrayOp::Add] = [](const T *a, const T *b, T *c) { new (c) T(*a + *b); };
-    b[ArrayOp::Sub] = [](const T *a, const T *b, T *c) { new (c) T(*a - *b); };
-    b[ArrayOp::Mul] = [](const T *a, const T *b, T *c) { new (c) T(*a * *b); };
+    b[ArrayOp::Add] = (void *) +[](const T *a, const T *b, T *c) { new (c) T(*a + *b); };
+    b[ArrayOp::Sub] = (void *) +[](const T *a, const T *b, T *c) { new (c) T(*a - *b); };
+    b[ArrayOp::Mul] = (void *) +[](const T *a, const T *b, T *c) { new (c) T(*a * *b); };
 
-    b.cast = [](const ArrayBase *a, VarType vt, T *b) {
+    b.cast = (ArrayBinding::Cast) +[](const ArrayBase *a, VarType vt, T *b) {
         switch (vt) {
             case VarType::Int32:   new (b) T(*(const Int32 *)   a); break;
             case VarType::UInt32:  new (b) T(*(const UInt32 *)  a); break;
@@ -262,5 +296,102 @@ template <typename T> void bind_arithmetic(ArrayBinding &b) {
     };
 }
 
+template <typename T> void disable_arithmetic(ArrayBinding &b) {
+    b[ArrayOp::Add] = b[ArrayOp::Sub] = b[ArrayOp::Mul] =
+        DRJIT_OP_NOT_IMPLEMENTED;
+    b.cast = (ArrayBinding::Cast) DRJIT_OP_NOT_IMPLEMENTED;
+}
+
+template <typename T>
+void bind_tensor(ArrayBinding &b) {
+    b.tensor_shape = (ArrayBinding::TensorShape) +[](T *o) noexcept -> dr_vector<size_t> & {
+        return o->shape();
+    };
+
+    b.tensor_array = (ArrayBinding::TensorArray) +[](PyObject *o) noexcept -> PyObject * {
+        T *inst = nanobind::inst_ptr<T>(o);
+        nanobind::detail::cleanup_list cleanup(o);
+        PyObject *result = nanobind::detail::make_caster<typename T::Array>::from_cpp(
+                   inst->array(), nanobind::rv_policy::reference_internal,
+                   &cleanup)
+            .ptr();
+        assert(!cleanup.used());
+        return result;
+    };
+}
+
+template <typename T> void bind_array(ArrayBinding &b) {
+    bind_init<T>(b);
+
+    if constexpr (T::IsTensor) {
+        bind_tensor<T>(b);
+    } else {
+        bind_base<T>(b);
+
+        if constexpr (T::Depth == 1) {
+            if constexpr (T::IsArithmetic)
+                bind_arithmetic<T>(b);
+        }
+    }
+
+    if constexpr (!T::IsArithmetic)
+        disable_arithmetic<T>(b);
+
+    bind(b);
+}
+
+// Run bind_array() for many different plain array types
+template <typename T> void bind_array_types(ArrayBinding &b) {
+    bind_array<mask_t<T>>(b);
+    bind_array<float32_array_t<T>>(b);
+    bind_array<float64_array_t<T>>(b);
+    bind_array<uint32_array_t<T>>(b);
+    bind_array<int32_array_t<T>>(b);
+    bind_array<uint64_array_t<T>>(b);
+    bind_array<int64_array_t<T>>(b);
+}
+
+// Run bind_array() for many different matrix types
+template <typename T, size_t Size> void bind_matrix_types(ArrayBinding &b) {
+    using VecF32 = Array<float32_array_t<T>, Size>;
+    using VecF64 = Array<float64_array_t<T>, Size>;
+    using VecMask = mask_t<VecF32>;
+
+    bind_array<Mask<VecMask, Size>>(b);
+    bind_array<Array<VecF32, Size>>(b);
+    bind_array<Array<VecF64, Size>>(b);
+    bind_array<Matrix<float32_array_t<T>, Size>>(b);
+    bind_array<Matrix<float64_array_t<T>, Size>>(b);
+}
+
+template <typename T> void bind_all(ArrayBinding &b) {
+    if constexpr (!std::is_scalar_v<T>)
+        bind_array_types<T>(b);
+
+    bind_array_types<Array<T, 0>>(b);
+    bind_array_types<Array<T, 1>>(b);
+    bind_array_types<Array<T, 2>>(b);
+    bind_array_types<Array<T, 3>>(b);
+    bind_array_types<Array<T, 4>>(b);
+    bind_array_types<DynamicArray<T>>(b);
+
+    bind_matrix_types<T, 2>(b);
+    bind_matrix_types<T, 3>(b);
+    bind_matrix_types<T, 4>(b);
+
+    bind_array<Complex<float32_array_t<T>>>(b);
+    bind_array<Complex<float64_array_t<T>>>(b);
+    bind_array<Quaternion<float32_array_t<T>>>(b);
+    bind_array<Quaternion<float64_array_t<T>>>(b);
+
+    using T2 = std::conditional_t<std::is_scalar_v<T>, DynamicArray<T>, T>;
+    bind_array<Tensor<mask_t<T2>>>(b);
+    bind_array<Tensor<float32_array_t<T2>>>(b);
+    bind_array<Tensor<float64_array_t<T2>>>(b);
+    bind_array<Tensor<int32_array_t<T2>>>(b);
+    bind_array<Tensor<int64_array_t<T2>>>(b);
+    bind_array<Tensor<uint32_array_t<T2>>>(b);
+    bind_array<Tensor<uint64_array_t<T2>>>(b);
+}
 
 NAMESPACE_END(drjit)

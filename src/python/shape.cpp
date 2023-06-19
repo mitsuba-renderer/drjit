@@ -13,33 +13,37 @@
 Py_ssize_t sq_length(PyObject *o) noexcept {
     const ArraySupplement &s =
         nb::type_supplement<ArraySupplement>(nb::handle(o).type());
-    Py_ssize_t length = s.shape[0];
 
-    if (length == DRJIT_DYNAMIC)
+    Py_ssize_t length = s.shape[0];
+    if (s.is_tensor) {
+        const dr::dr_vector<size_t> &shape = s.tensor_shape(nb::inst_ptr<dr::ArrayBase>(o));
+        return shape.size() == 0 ? 0 : (Py_ssize_t) shape[0];
+    } else if (length == DRJIT_DYNAMIC) {
         length = (Py_ssize_t) s.len(nb::inst_ptr<dr::ArrayBase>(o));
+    }
 
     return length;
 }
 
-static bool shape_impl(nb::handle h, int i, Py_ssize_t *shape) noexcept {
+static bool shape_impl(nb::handle h, int i, size_t *shape) noexcept {
     if (i >= 4)
         nb::detail::fail("drjit.shape(): internal error!");
 
     const ArraySupplement &s = nb::type_supplement<ArraySupplement>(h.type());
-    Py_ssize_t size = s.shape[0], cur = shape[i];
+    size_t size = s.shape[0], cur = shape[i];
 
     if (size == DRJIT_DYNAMIC)
         size = (Py_ssize_t) s.len(nb::inst_ptr<dr::ArrayBase>(h));
 
     if (size != cur) {
-        if (size == 1 || cur == 1 || cur == -1)
+        if (size == 1 || cur == 1 || cur == 0)
             shape[i] = size > cur ? size : cur;
         else
             return false; // ragged array
     }
 
     if (s.ndim > 1) {
-        for (Py_ssize_t j = 0; j < size; ++j)
+        for (size_t j = 0; j < size; ++j)
             shape_impl(h[j], i + 1, shape);
     }
 
@@ -47,28 +51,27 @@ static bool shape_impl(nb::handle h, int i, Py_ssize_t *shape) noexcept {
 }
 
 nb::object shape(nb::handle_t<dr::ArrayBase> h) {
+    const size_t *shape_ptr = nullptr;
+    size_t temp[4] {};
+    size_t ndim = 0;
+
     const ArraySupplement &s = nb::type_supplement<ArraySupplement>(h.type());
-    nb::object result;
 
-    if (!s.is_tensor) {
-        Py_ssize_t shape[4] { -1, -1, -1, -1 };
-        if (!shape_impl(h, 0, shape))
+    if (s.is_tensor) {
+        const dr::dr_vector<size_t> &shape = s.tensor_shape(nb::inst_ptr<dr::ArrayBase>(h));
+        shape_ptr = shape.data();
+        ndim = shape.size();
+    } else {
+        shape_ptr = temp;
+        ndim = s.ndim;
+
+        if (!shape_impl(h, 0, temp))
             return nb::none();
-
-        result = nb::steal(PyTuple_New(s.ndim));
-        for (Py_ssize_t i = 0; i < s.ndim; ++i)
-            NB_TUPLE_SET_ITEM(result.ptr(), i, PyLong_FromSize_t(shape[i] < 0 ? 0 : shape[i]));
     }
 
-    // } else {
-    //     const drjit::dr_vector<size_t> &shape =
-    //         s.op_tensor_shape(nb::inst_ptr<void>(h));
-    //
-    //     result = nb::steal(PyTuple_New((Py_ssize_t) shape.size()));
-    //     for (size_t i = 0; i < shape.size(); ++i)
-    //         NB_TUPEL_SET_ITEM(result, i, PyLong_FromSize_t(shape[i]));
-    // }
-
+    nb::object result = nb::steal(PyTuple_New((Py_ssize_t) ndim));
+    for (size_t i = 0; i < ndim; ++i)
+        NB_TUPLE_SET_ITEM(result.ptr(), i, PyLong_FromSize_t(shape_ptr[i]));
     return result;
 }
 

@@ -22,6 +22,11 @@ bool meta_check(ArrayMeta m) noexcept {
                    m.is_tensor <= 1;
 }
 
+static const char *type_name_lowercase[] = {
+    "void", "bool", "int8", "uint8", "int16", "uint16", "int32", "uint32",
+    "int64", "uint64", "pointer", "float16", "float32", "float64"
+};
+
 static const char *type_name[] = {
     "Void", "Bool", "Int8", "UInt8", "Int16", "UInt16", "Int", "UInt",
     "Int64", "UInt64", "Pointer", "Float16", "Float", "Float64"
@@ -37,31 +42,33 @@ std::string meta_str(ArrayMeta m) {
     std::string result = "ArrayMeta[";
 
     if (m.is_valid) {
-        result += "\n    type = ";
-        result += type_name[m.type];
+        result += "\n  type=";
+        result += type_name_lowercase[m.type];
         result += ",\n";
 
         if (m.backend == (uint16_t) JitBackend::CUDA)
-            result += "    backend = cuda,\n";
+            result += "  backend=cuda,\n";
         else if (m.backend == (uint16_t) JitBackend::LLVM)
-            result += "    backend = llvm,\n";
+            result += "  backend=llvm,\n";
 
+        if (m.backend != (uint16_t) JitBackend::Invalid)
+            result += "  is_jit=1,\n";
         if (m.is_vector)
-            result += "    is_vector = 1,\n";
+            result += "  is_vector=1,\n";
         if (m.is_complex)
-            result += "    is_complex = 1,\n";
+            result += "  is_complex=1,\n";
         if (m.is_quaternion)
-            result += "    is_quaternion = 1,\n";
+            result += "  is_quaternion=1,\n";
         if (m.is_matrix)
-            result += "    is_matrix = 1,\n";
+            result += "  is_matrix=1,\n";
         if (m.is_tensor)
-            result += "    is_tensor = 1,\n";
+            result += "  is_tensor=1,\n";
         if (m.is_sequence)
-            result += "    is_sequence = 1,\n";
+            result += "  is_sequence=1,\n";
         if (m.is_diff)
-            result += "    is_diff = 1,\n";
+            result += "  is_diff=1,\n";
 
-        result += "    shape = [";
+        result += "  shape=(";
         for (int i = 0; i < 4; ++i) {
             if (m.shape[i] == 0)
                 break;
@@ -72,7 +79,7 @@ std::string meta_str(ArrayMeta m) {
             else
                 result += std::to_string(m.shape[i]);
         }
-        result += "]\n";
+        result += ")\n";
     } else {
         result += "invalid";
     }
@@ -360,10 +367,15 @@ nb::handle meta_get_module(ArrayMeta meta) {
     if (NB_UNLIKELY(!submodules[0].is_valid())) {
         submodules[0] = nb::module_::import_("drjit");
         submodules[1] = nb::module_::import_("drjit.scalar");
+#if defined(DRJIT_ENABLE_CUDA)
         submodules[2] = nb::module_::import_("drjit.cuda");
         submodules[3] = nb::module_::import_("drjit.cuda.ad");
+#endif
+
+#if defined(DRJIT_ENABLE_LLVM)
         submodules[4] = nb::module_::import_("drjit.llvm");
         submodules[5] = nb::module_::import_("drjit.llvm.ad");
+#endif
     }
 
     return submodules[index];
@@ -387,12 +399,14 @@ const char *meta_get_name(ArrayMeta meta) {
             buffer.put_dstr(type_name[meta.type]);
         } else {
             const char *prefix = "Array";
-            if (meta.is_complex)
+            if (meta.is_complex) {
                 prefix = "Complex";
-            else if (meta.is_quaternion)
+            } else if (meta.is_quaternion) {
                 prefix = "Quaternion";
-            else if (meta.is_matrix)
+            } else if (meta.is_matrix) {
                 prefix = "Matrix";
+                ndim--;
+            }
             buffer.put_dstr(prefix);
             suffix = type_suffix[meta.type];
         }

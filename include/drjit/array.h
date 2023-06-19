@@ -35,7 +35,9 @@ struct Array : StaticArrayImpl<Value_, Size_, false, Array<Value_, Size_>> {
     using Base = StaticArrayImpl<Value_, Size_, false, Array<Value_, Size_>>;
 
     using ArrayType = Array;
-    using MaskType = Mask<Value_, Size_>;
+    using MaskElement =
+        std::conditional_t<std::is_scalar_v<Value_>, Value_, mask_t<Value_>>;
+    using MaskType = Mask<MaskElement, Size_>;
 
     /// Type alias for creating a similar-shaped array over a different type
     template <typename T> using ReplaceValue = Array<T, Size_>;

@@ -1,4 +1,5 @@
 #pragma once
 #include "common.h"
 
-extern int array_init(PyObject *self, PyObject *args, PyObject *kwds);
+extern int tp_init_array(PyObject *, PyObject *, PyObject *);
+extern int tp_init_tensor(PyObject *, PyObject *, PyObject *);

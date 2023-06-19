@@ -51,10 +51,9 @@ nb::object bind(const ArrayBinding &b) {
     d.scope = b.scope.ptr();
 
     PyType_Slot slots [] = {
-        { Py_tp_init, (void *) array_init },
+        { Py_tp_init, (void *) (b.is_tensor ? tp_init_tensor : tp_init_array) },
         { Py_sq_item, (void *) b.item },
         { Py_sq_ass_item, (void *) b.set_item },
-        { Py_tp_init, (void *) array_init },
         { 0, 0 }
     };
 
@@ -65,21 +64,30 @@ nb::object bind(const ArrayBinding &b) {
 
     // Create the type and update its supplemental information
     nb::object tp = nb::steal(nb::detail::nb_type_new(&d));
-    ArraySupplement &supp = nb::type_supplement<ArraySupplement>(tp);
-    supp = b;
+    ArraySupplement &s = nb::type_supplement<ArraySupplement>(tp);
+    s = b;
 
     // Register implicit cast predicate
     auto pred = [](PyTypeObject *tp_, PyObject *o,
                    nb::detail::cleanup_list *) -> bool {
-        ArraySupplement &s = nb::type_supplement<ArraySupplement>(tp_);
+        const ArraySupplement &s = supp(tp_);
 
-        if (s.value == (PyObject *) Py_TYPE(o)) {
-            return true;
-        } else if (PyLong_CheckExact(o)) {
-            VarType v = (VarType) s.type;
-            return v == VarType::Float16 ||
-                   v == VarType::Float32 ||
-                   v == VarType::Float64;
+        PyTypeObject *tp_o  = Py_TYPE(o),
+                     *tp_t = (PyTypeObject *) s.value;
+
+        do {
+            if (tp_o == tp_t)
+                return true;
+            if (!is_drjit_type(tp_t))
+                break;
+            tp_t = (PyTypeObject *) supp(tp_t).value;
+        } while (true);
+
+        if (PyLong_CheckExact(o)) {
+            VarType vt = (VarType) s.type;
+            return vt == VarType::Float16 ||
+                   vt == VarType::Float32 ||
+                   vt == VarType::Float64;
         } else if (PySequence_Check(o)) {
             Py_ssize_t size = s.shape[0], len = PySequence_Length(o);
             if (len == -1)
@@ -109,9 +117,11 @@ nb::object bind(const ArrayBinding &b) {
     } else {
         value_type_py = nb::detail::nb_type_lookup(b.value_type);
         if (!value_type_py.is_valid())
-            nb::detail::fail("nanobind.detail.bind(): element type '%s' not found!", b.value_type->name());
+            nb::detail::fail(
+                "nanobind.detail.bind(%s): element type '%s' not found!",
+                d.type->name(), b.value_type->name());
     }
-    supp.value = value_type_py.ptr();
+    s.value = value_type_py.ptr();
 
     // Cache a reference to the associated mask type for use in the bindings
     nb::handle mask_type_py;
@@ -124,14 +134,14 @@ nb::object bind(const ArrayBinding &b) {
             m2.is_matrix = false;
         mask_type_py = meta_get_type(m2);
     }
-    supp.mask = mask_type_py.ptr();
+    s.mask = mask_type_py.ptr();
 
     // Cache a reference to the associated array type (for special types like matrices)
     nb::handle array_type_py;
-    if (!supp.is_tensor && !supp.is_complex && !supp.is_quaternion && !supp.is_matrix) {
+    if (!s.is_tensor && !s.is_complex && !s.is_quaternion && !s.is_matrix) {
         array_type_py = tp;
     } else {
-        ArrayMeta m2 = supp;
+        ArrayMeta m2 = s;
         if (m2.is_tensor) {
             m2.shape[0] = DRJIT_DYNAMIC;
             m2.ndim = 1;
@@ -141,7 +151,7 @@ nb::object bind(const ArrayBinding &b) {
         array_type_py = meta_get_type(m2);
     }
 
-    supp.array = array_type_py.ptr();
+    s.array = array_type_py.ptr();
 
     return tp;
 }

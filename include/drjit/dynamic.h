@@ -31,6 +31,7 @@ struct DynamicArray
     /// This is a dynamically allocated array, indicated using a special size flag
     static constexpr size_t Size = Dynamic;
     static constexpr bool IsDynamic = true;
+    static constexpr bool IsVector = true;
 
     using ArrayType = DynamicArray<array_t<Value>>;
     using MaskType  = DynamicArray<mask_t<Value>>;
