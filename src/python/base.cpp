@@ -41,7 +41,8 @@ static PyObject *apply(ArrayOp op, Func func, std::index_sequence<Is...>,
             tp = o[0].type();
         }
 
-        const ArraySupplement &supp = nb::type_supplement<ArraySupplement>(o[0]);
+        const ArraySupplement &supp = nb::type_supplement<ArraySupplement>(tp);
+
         void *impl = supp[op];
 
         if (impl == DRJIT_OP_NOT_IMPLEMENTED)
@@ -56,7 +57,8 @@ static PyObject *apply(ArrayOp op, Func func, std::index_sequence<Is...>,
 
         if (impl != DRJIT_OP_DEFAULT) {
             using Impl = void (*)(first_t<const dr::ArrayBase *, Args>..., dr::ArrayBase *);
-            ((Impl) impl)(p[N], p[Is]...);
+
+            ((Impl) impl)(p[Is]..., p[N]);
             nb::inst_mark_ready(result);
         } else {
             nb::inst_zero(result);

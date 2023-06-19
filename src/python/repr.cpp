@@ -26,40 +26,73 @@ void tp_repr_impl(PyObject *self,
     size_t i = index.size() - 1 - depth,
            size = shape.empty() ? 0 : shape[i];
 
-    buffer.put('[');
-    for (size_t j = 0; j < size; ++j) {
-        index[i] = j;
+    const ArraySupplement &s =
+        nb::type_supplement<ArraySupplement>(Py_TYPE(self));
 
-        if (size >= repr_threshold && j * 4 == repr_threshold) {
-            buffer.fmt(".. %zu skipped ..", size - repr_threshold / 2);
-            j = size - repr_threshold / 4 - 1;
-        } else if (i > 0) {
-            tp_repr_impl(self, shape, index, depth + 1);
-        } else {
+    if ((s.is_complex || s.is_quaternion) && i == 0) {
+        bool prev = false;
+
+        for (size_t j = 0; j < size; ++j) {
+            index[i] = j;
+
             nb::object o = nb::borrow(self);
 
             for (size_t k = 0; k < index.size(); ++k)
                 o = o[index[k]];
 
-            if (PyFloat_CheckExact(o.ptr())) {
-                double d = nb::cast<double>(o);
-                buffer.fmt("%g", d);
-            } else {
-                buffer.put_dstr(nb::str(o).c_str());
-            }
-        }
+            double d = nb::cast<double>(o);
+            if (d == 0)
+                continue;
 
-        if (j + 1 < size) {
-            if (i == 0) {
-                buffer.put(", ");
+            if (prev || d < 0)
+                buffer.put(d < 0 ? "-" : "+");
+            buffer.fmt("%g", fabs(d));
+            prev = true;
+
+            if (s.is_complex && j == 1)
+                buffer.put('j');
+            else if (s.is_quaternion && j < 3)
+                buffer.put("ijk"[j]);
+        }
+        if (!prev)
+            buffer.put("0");
+    } else {
+        buffer.put('[');
+        for (size_t j = 0; j < size; ++j) {
+            index[i] = j;
+
+            if (size >= repr_threshold && j * 4 == repr_threshold) {
+                buffer.fmt(".. %zu skipped ..", size - repr_threshold / 2);
+                j = size - repr_threshold / 4 - 1;
+            } else if (i > 0) {
+                tp_repr_impl(self, shape, index, depth + 1);
             } else {
-                buffer.put(",\n");
-                buffer.put(' ', i);
+                nb::object o = nb::borrow(self);
+
+                for (size_t k = 0; k < index.size(); ++k)
+                    o = o[index[k]];
+
+                if (PyFloat_CheckExact(o.ptr())) {
+                    double d = nb::cast<double>(o);
+                    buffer.fmt("%g", d);
+                } else {
+                    buffer.put_dstr(nb::str(o).c_str());
+                }
+            }
+
+            if (j + 1 < size) {
+                if (i == 0) {
+                    buffer.put(", ");
+                } else {
+                    buffer.put(",\n");
+                    buffer.put(' ', index.size() - 1);
+                }
             }
         }
+        buffer.put(']');
     }
 
-    buffer.put(']');
+
 }
 
 PyObject *tp_repr(PyObject *self) noexcept {

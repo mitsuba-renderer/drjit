@@ -89,8 +89,8 @@ you have encountered such issues, you may find *Dr.Jit* useful.
 Cloning
 -------
 
-Dr.Jit recursively depends on two other repositories: `pybind11
-<https://github.com/pybind/pybind11>`_ for Python bindings, and `drjit-core
+Dr.Jit recursively depends on two other repositories: `nanobind
+<https://github.com/wjakob/nanobind>`_ for Python bindings, and `drjit-core
 <https://github.com/mitsuba-renderer/drjit-core>`_ providing core components of
 the JIT-compiler.
 

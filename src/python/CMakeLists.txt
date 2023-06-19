@@ -7,12 +7,16 @@ nanobind_add_module(
 
   common.h
   main.cpp
-  meta.h meta.cpp
-  base.h base.cpp
-  bind.h bind.cpp
-  init.h init.cpp
-  repr.h repr.cpp
-  shape.h shape.cpp
+  log.h    log.cpp
+  meta.h   meta.cpp
+  base.h   base.cpp
+  bind.h   bind.cpp
+  init.h   init.cpp
+  repr.h   repr.cpp
+  shape.h  shape.cpp
+  traits.h traits.cpp
+  scalar.h scalar.cpp
+  llvm.h   llvm.cpp
 )
 
 set_target_properties(drjit-python
@@ -24,4 +28,10 @@ configure_file(
   ${CMAKE_CURRENT_SOURCE_DIR}/../../drjit/config.py
 )
 
-target_link_libraries(drjit-python PRIVATE drjit)
+target_link_libraries(drjit-python PRIVATE drjit drjit-core)
+
+if (DRJIT_ENABLE_JIT)
+  target_compile_definitions(drjit-python PRIVATE -DDRJIT_ENABLE_LLVM)
+  target_compile_definitions(drjit-python PRIVATE -DDRJIT_ENABLE_CUDA)
+endif()
+

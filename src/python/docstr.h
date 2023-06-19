@@ -280,6 +280,18 @@ Returns:
     ``drjit.cuda.*`` or ``drjit.llvm.*`` namespaces, and ``False`` otherwise.
 )";
 
+static const char *doc_is_dynamic_v = R"(
+is_dynamic_v(arg, /)
+array Check whether the input array instance or type represents a dynamically
+sized array type.
+
+Args:
+    arg (object): An arbitrary Python object
+
+Returns:
+    bool: ``True`` if the test was successful, and ``False`` otherwise.
+)";
+
 static const char *doc_is_cuda_v = R"(
 is_cuda_v(arg, /)
 Check whether the input is a Dr.Jit CUDA array instance or type.
@@ -341,6 +353,18 @@ Args:
 Returns:
     bool: ``True`` if the test was successful, and ``False`` otherwise.
 )";
+
+static const char *doc_is_vector_v = R"(
+is_quaternion_v(arg, /)
+Check whether the input is a Dr.Jit array instance or type representing a vectorial array type.
+
+Args:
+    arg (object): An arbitrary Python object
+
+Returns:
+    bool: ``True`` if the test was successful, and ``False`` otherwise.
+)";
+
 
 static const char *doc_is_matrix_v = R"(
 is_matrix_v(arg, /)
