@@ -159,7 +159,7 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
             if (s.is_complex) {
                 nb::float_ zero(0.0);
                 raise_if(set_item(self, 0, element.ptr()) ||
-                             set_item(self, 1, zero.ptr()),
+                         set_item(self, 1, zero.ptr()),
                          "Item assignment failed.");
             } else if (s.is_quaternion) {
                 nb::float_ zero(0.0);

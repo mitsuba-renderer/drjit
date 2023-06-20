@@ -1,6 +1,7 @@
 import drjit as dr
 import types
 import pytest
+import re
 
 array_types = []
 
@@ -10,22 +11,8 @@ for o1 in dr.__dict__.values():
             if isinstance(o2, type) and issubclass(o2, dr.ArrayBase):
                 array_types.append(o2)
 
-def find_arrays(query):
-    queries = query.replace(' ', '').split(',')
-    result = []
-    for o in array_types:
-        matched = True
-        meta = o.__meta__
-        for q in queries:
-            if not q in meta:
-                matched = False
-                break
-        if matched:
-            result.append(o)
-    return result;
 
-
-def test_arrays(*queries):
+def test_arrays(query=""):
     """
     Helper function used to parameterize testcases over Dr.Jit array types
 
@@ -38,25 +25,30 @@ def test_arrays(*queries):
 
     The type argument of the subsequent testcase must be named "t"
     """
-    pos, neg = [], []
-    npos = 0
-    for query in queries:
-        if query[0] != '-':
-            pos += find_arrays(query)
-            npos += 1
+    result = set(array_types)
+
+    query_list = re.split(r',\s*(?![^()]*\))', query)
+    for query in query_list:
+        if len(query) == 0:
+            continue
+
+        remove = False
+        if query[0] == '-':
+            query = query[1:]
+            remove = True
+
+        found = set(a for a in array_types if query in a.__meta__)
+        if remove:
+            result = result.difference(found)
         else:
-            neg += find_arrays(query[1:])
+            result = result.intersection(found)
 
-    if npos == 0:
-        pos = array_types
-
-    found = [x for x in pos if x not in neg]
-    ids = [a.__module__ + '.' + a.__name__ for a in found]
-    if len(found) == 0:
+    ids = [a.__module__ + '.' + a.__name__ for a in result]
+    if len(result) == 0:
         raise Exception('Query failed')
 
     def wrapped(func):
-        return pytest.mark.parametrize('t', found, ids=ids)(func)
+        return pytest.mark.parametrize('t', result, ids=ids)(func)
 
     return wrapped
 
