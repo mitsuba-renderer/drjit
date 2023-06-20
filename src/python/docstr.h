@@ -1250,28 +1250,42 @@ Returns:
 static const char *doc_ArrayBase_x = R"(
 If ``value`` is a static Dr.Jit array of size 1 (or larger), the property
 ``value.x`` can be used synonymously with ``value[0]``. Otherwise, accessing
-this field will generate a ``TypeError``.
+this field will generate a ``RuntimeError``.
 
 :type: :py:func:`value_t(self) <value_t>`)";
 
 static const char *doc_ArrayBase_y = R"(
 If ``value`` is a static Dr.Jit array of size 2 (or larger), the property
 ``value.y`` can be used synonymously with ``value[1]``. Otherwise, accessing
-this field will generate a ``TypeError``.
+this field will generate a ``RuntimeError``.
 
 :type: :py:func:`value_t(self) <value_t>`)";
 
 static const char *doc_ArrayBase_z = R"(
 If ``value`` is a static Dr.Jit array of size 3 (or larger), the property
 ``value.z`` can be used synonymously with ``value[2]``. Otherwise, accessing
-this field will generate a ``TypeError``.
+this field will generate a ``RuntimeError``.
 
 :type: :py:func:`value_t(self) <value_t>`)";
 
 static const char *doc_ArrayBase_w = R"(
 If ``value`` is a static Dr.Jit array of size 4 (or larger), the property
 ``value.w`` can be used synonymously with ``value[3]``. Otherwise, accessing
-this field will generate a ``TypeError``.
+this field will generate a ``RuntimeError``.
+
+:type: :py:func:`value_t(self) <value_t>`)";
+
+static const char *doc_ArrayBase_real = R"(
+If ``value`` is a complex Dr.Jit array, the property ``value.real`` returns the
+real component (as does ``value[0]``). Otherwise, accessing this field will
+generate a ``RuntimeError``.
+
+:type: :py:func:`value_t(self) <value_t>`)";
+
+static const char *doc_ArrayBase_imag = R"(
+If ``value`` is a complex Dr.Jit array, the property ``value.imag`` returns the
+imaginary component (as does ``value[1]``). Otherwise, accessing this field will
+generate a ``RuntimeError``.
 
 :type: :py:func:`value_t(self) <value_t>`)";
 

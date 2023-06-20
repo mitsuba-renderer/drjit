@@ -579,6 +579,16 @@ Array base class
     Scalar array namespace (``drjit.scalar``)
     _________________________________________
 
+    The scalar backend directly operates on individual floating point/integer
+    values without the use of parallelization or vectorization.
+
+    For example, a :py:class:`drjit.scalar.Array3f` instance represents a
+    simple 3D vector with 3 ``float``-valued entries. In the JIT-compiled
+    backends (CUDA, LLVM), the same ``Array3f`` type represents an array of 3D
+    vectors partaking in a parallel computation.
+
+    Scalars
+    ^^^^^^^
     .. py:data:: Bool
         :type: type
         :value: bool
@@ -600,6 +610,9 @@ Array base class
     .. py:data:: UInt64
         :type: type
         :value: int
+
+    1D arrays
+    ^^^^^^^^^
     .. autoclass:: drjit.scalar.Array0b
         :show-inheritance:
     .. autoclass:: drjit.scalar.Array1b
@@ -685,10 +698,77 @@ Array base class
     .. autoclass:: drjit.scalar.ArrayXi64
         :show-inheritance:
 
+    2D arrays
+    ^^^^^^^^^
+    .. autoclass:: drjit.scalar.Array22b
+        :show-inheritance:
+    .. autoclass:: drjit.scalar.Array33b
+        :show-inheritance:
+    .. autoclass:: drjit.scalar.Array44b
+        :show-inheritance:
+    .. autoclass:: drjit.scalar.Array22f
+        :show-inheritance:
+    .. autoclass:: drjit.scalar.Array33f
+        :show-inheritance:
+    .. autoclass:: drjit.scalar.Array44f
+        :show-inheritance:
+    .. autoclass:: drjit.scalar.Array22f64
+        :show-inheritance:
+    .. autoclass:: drjit.scalar.Array33f64
+        :show-inheritance:
+    .. autoclass:: drjit.scalar.Array44f64
+        :show-inheritance:
+
+    Special (complex numbers, etc.)
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    .. autoclass:: drjit.scalar.Complex2f
+        :show-inheritance:
+    .. autoclass:: drjit.scalar.Complex2f64
+        :show-inheritance:
+    .. autoclass:: drjit.scalar.Quaternion4f
+        :show-inheritance:
+    .. autoclass:: drjit.scalar.Quaternion4f64
+        :show-inheritance:
+    .. autoclass:: drjit.scalar.Matrix2f
+        :show-inheritance:
+    .. autoclass:: drjit.scalar.Matrix3f
+        :show-inheritance:
+    .. autoclass:: drjit.scalar.Matrix4f
+        :show-inheritance:
+    .. autoclass:: drjit.scalar.Matrix2f64
+        :show-inheritance:
+    .. autoclass:: drjit.scalar.Matrix3f64
+        :show-inheritance:
+    .. autoclass:: drjit.scalar.Matrix4f64
+        :show-inheritance:
+
+    Tensors
+    ^^^^^^^
+    .. autoclass:: drjit.scalar.TensorXb
+        :show-inheritance:
+    .. autoclass:: drjit.scalar.TensorXf
+        :show-inheritance:
+    .. autoclass:: drjit.scalar.TensorXu
+        :show-inheritance:
+    .. autoclass:: drjit.scalar.TensorXi
+        :show-inheritance:
+    .. autoclass:: drjit.scalar.TensorXf64
+        :show-inheritance:
+    .. autoclass:: drjit.scalar.TensorXu64
+        :show-inheritance:
+    .. autoclass:: drjit.scalar.TensorXi64
+        :show-inheritance:
+
 
     CUDA array namespace (``drjit.cuda``)
     _______________________________________
 
+    The CUDA backend is vectorized, hence types listed as *scalar* actually
+    represent an array of scalars partaking in a parallel computation
+    (analogously, 1D arrays are arrays of 1D arrays, etc.).
+
+    Scalars
+    ^^^^^^^
     .. autoclass:: drjit.cuda.Bool
         :show-inheritance:
     .. autoclass:: drjit.cuda.Float
@@ -703,6 +783,9 @@ Array base class
         :show-inheritance:
     .. autoclass:: drjit.cuda.Int64
         :show-inheritance:
+
+    1D arrays
+    ^^^^^^^^^
     .. autoclass:: drjit.cuda.Array0b
         :show-inheritance:
     .. autoclass:: drjit.cuda.Array1b
@@ -788,9 +871,76 @@ Array base class
     .. autoclass:: drjit.cuda.ArrayXi64
         :show-inheritance:
 
+    2D arrays
+    ^^^^^^^^^
+    .. autoclass:: drjit.cuda.Array22b
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.Array33b
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.Array44b
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.Array22f
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.Array33f
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.Array44f
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.Array22f64
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.Array33f64
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.Array44f64
+        :show-inheritance:
+
+    Special (complex numbers, etc.)
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    .. autoclass:: drjit.cuda.Complex2f
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.Complex2f64
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.Quaternion4f
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.Quaternion4f64
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.Matrix2f
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.Matrix3f
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.Matrix4f
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.Matrix2f64
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.Matrix3f64
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.Matrix4f64
+        :show-inheritance:
+
+    Tensors
+    ^^^^^^^
+    .. autoclass:: drjit.cuda.TensorXb
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.TensorXf
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.TensorXu
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.TensorXi
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.TensorXf64
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.TensorXu64
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.TensorXi64
+        :show-inheritance:
+
     CUDA array namespace with automatic differentiation (``drjit.cuda.ad``)
     _______________________________________________________________________
 
+    The CUDA AD backend is vectorized, hence types listed as *scalar* actually
+    represent an array of scalars partaking in a parallel computation
+    (analogously, 1D arrays are arrays of 1D arrays, etc.).
+
+    Scalars
+    ^^^^^^^
     .. autoclass:: drjit.cuda.ad.Bool
         :show-inheritance:
     .. autoclass:: drjit.cuda.ad.Float
@@ -805,6 +955,9 @@ Array base class
         :show-inheritance:
     .. autoclass:: drjit.cuda.ad.Int64
         :show-inheritance:
+
+    1D arrays
+    ^^^^^^^^^
     .. autoclass:: drjit.cuda.ad.Array0b
         :show-inheritance:
     .. autoclass:: drjit.cuda.ad.Array1b
@@ -890,8 +1043,76 @@ Array base class
     .. autoclass:: drjit.cuda.ad.ArrayXi64
         :show-inheritance:
 
+    2D arrays
+    ^^^^^^^^^
+    .. autoclass:: drjit.cuda.ad.Array22b
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.ad.Array33b
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.ad.Array44b
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.ad.Array22f
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.ad.Array33f
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.ad.Array44f
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.ad.Array22f64
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.ad.Array33f64
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.ad.Array44f64
+        :show-inheritance:
+
+    Special (complex numbers, etc.)
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    .. autoclass:: drjit.cuda.ad.Complex2f
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.ad.Complex2f64
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.ad.Quaternion4f
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.ad.Quaternion4f64
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.ad.Matrix2f
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.ad.Matrix3f
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.ad.Matrix4f
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.ad.Matrix2f64
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.ad.Matrix3f64
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.ad.Matrix4f64
+        :show-inheritance:
+
+    Tensors
+    ^^^^^^^
+    .. autoclass:: drjit.cuda.ad.TensorXb
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.ad.TensorXf
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.ad.TensorXu
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.ad.TensorXi
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.ad.TensorXf64
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.ad.TensorXu64
+        :show-inheritance:
+    .. autoclass:: drjit.cuda.ad.TensorXi64
+        :show-inheritance:
+
     LLVM array namespace (``drjit.llvm``)
     _______________________________________
+
+    The LLVM backend is vectorized, hence types listed as *scalar* actually
+    represent an array of scalars partaking in a parallel computation
+    (analogously, 1D arrays are arrays of 1D arrays, etc.).
+
+    Scalar
+    ^^^^^^
 
     .. autoclass:: drjit.llvm.Bool
         :show-inheritance:
@@ -907,6 +1128,9 @@ Array base class
         :show-inheritance:
     .. autoclass:: drjit.llvm.Int64
         :show-inheritance:
+
+    1D arrays
+    ^^^^^^^^^
     .. autoclass:: drjit.llvm.Array0b
         :show-inheritance:
     .. autoclass:: drjit.llvm.Array1b
@@ -992,8 +1216,76 @@ Array base class
     .. autoclass:: drjit.llvm.ArrayXi64
         :show-inheritance:
 
+    2D arrays
+    ^^^^^^^^^
+    .. autoclass:: drjit.llvm.Array22b
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.Array33b
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.Array44b
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.Array22f
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.Array33f
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.Array44f
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.Array22f64
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.Array33f64
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.Array44f64
+        :show-inheritance:
+
+    Special (complex numbers, etc.)
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    .. autoclass:: drjit.llvm.Complex2f
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.Complex2f64
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.Quaternion4f
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.Quaternion4f64
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.Matrix2f
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.Matrix3f
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.Matrix4f
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.Matrix2f64
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.Matrix3f64
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.Matrix4f64
+        :show-inheritance:
+
+    Tensors
+    ^^^^^^^
+    .. autoclass:: drjit.llvm.TensorXb
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.TensorXf
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.TensorXu
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.TensorXi
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.TensorXf64
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.TensorXu64
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.TensorXi64
+        :show-inheritance:
+
     LLVM array namespace with automatic differentiation (``drjit.llvm.ad``)
     _______________________________________________________________________
+
+    The LLVM AD backend is vectorized, hence types listed as *scalar* actually
+    represent an array of scalars partaking in a parallel computation
+    (analogously, 1D arrays are arrays of 1D arrays, etc.).
+
+    Scalars
+    ^^^^^^^
     .. autoclass:: drjit.llvm.ad.Bool
         :show-inheritance:
     .. autoclass:: drjit.llvm.ad.Float
@@ -1007,6 +1299,9 @@ Array base class
     .. autoclass:: drjit.llvm.ad.Int
         :show-inheritance:
     .. autoclass:: drjit.llvm.ad.Int64
+
+    1D arrays
+    ^^^^^^^^^
         :show-inheritance:
     .. autoclass:: drjit.llvm.ad.Array0b
         :show-inheritance:
@@ -1091,6 +1386,67 @@ Array base class
     .. autoclass:: drjit.llvm.ad.Array4i64
         :show-inheritance:
     .. autoclass:: drjit.llvm.ad.ArrayXi64
+        :show-inheritance:
+
+    2D arrays
+    ^^^^^^^^^
+    .. autoclass:: drjit.llvm.ad.Array22b
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.ad.Array33b
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.ad.Array44b
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.ad.Array22f
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.ad.Array33f
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.ad.Array44f
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.ad.Array22f64
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.ad.Array33f64
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.ad.Array44f64
+        :show-inheritance:
+
+    Special (complex numbers, etc.)
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    .. autoclass:: drjit.llvm.ad.Complex2f
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.ad.Complex2f64
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.ad.Quaternion4f
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.ad.Quaternion4f64
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.ad.Matrix2f
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.ad.Matrix3f
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.ad.Matrix4f
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.ad.Matrix2f64
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.ad.Matrix3f64
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.ad.Matrix4f64
+        :show-inheritance:
+
+    Tensors
+    ^^^^^^^
+    .. autoclass:: drjit.llvm.ad.TensorXb
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.ad.TensorXf
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.ad.TensorXu
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.ad.TensorXi
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.ad.TensorXf64
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.ad.TensorXu64
+        :show-inheritance:
+    .. autoclass:: drjit.llvm.ad.TensorXi64
         :show-inheritance:
 
     Miscellaneous

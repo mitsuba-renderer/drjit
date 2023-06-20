@@ -223,8 +223,8 @@ template <typename T> NB_INLINE void bind_base(ArrayBinding &b) {
             nb::str tp_name = nb::inst_name(o);
             PyErr_Format(
                 PyExc_IndexError,
-                "%U.__getitem__(): entry %zu is out of bounds (the array is of size %zu).",
-                tp_name.ptr(), i, size);
+                "%U.__getitem__(): entry %zd is out of bounds (the array is of size %zu).",
+                tp_name.ptr(), i_, size);
         }
         return result.ptr();
     };
@@ -255,8 +255,8 @@ template <typename T> NB_INLINE void bind_base(ArrayBinding &b) {
         } else {
             PyErr_Format(
                 PyExc_IndexError,
-                "%s.__setitem__(): entry %zu is out of bounds (the array is of size %zu).",
-                Py_TYPE(o)->tp_name, i, size);
+                "%s.__setitem__(): entry %zd is out of bounds (the array is of size %zu).",
+                Py_TYPE(o)->tp_name, i_, size);
             return -1;
         }
     };

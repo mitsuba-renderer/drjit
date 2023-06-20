@@ -41,9 +41,8 @@ static PyObject *apply(ArrayOp op, Func func, std::index_sequence<Is...>,
             tp = o[0].type();
         }
 
-        const ArraySupplement &supp = nb::type_supplement<ArraySupplement>(tp);
-
-        void *impl = supp[op];
+        const ArraySupplement &s = supp(tp);
+        void *impl = s[op];
 
         if (impl == DRJIT_OP_NOT_IMPLEMENTED)
             return nb::not_implemented().release().ptr();
@@ -64,17 +63,17 @@ static PyObject *apply(ArrayOp op, Func func, std::index_sequence<Is...>,
             nb::inst_zero(result);
 
             Py_ssize_t l[N + 1], i[N] { };
-            if (supp.shape[0] != DRJIT_DYNAMIC) {
-                ((l[Is] = supp.shape[0]), ...);
-                l[N] = supp.shape[0];
+            if (s.shape[0] != DRJIT_DYNAMIC) {
+                ((l[Is] = s.shape[0]), ...);
+                l[N] = s.shape[0];
             } else {
-                ((l[Is] = supp.len(p[Is])), ...);
+                ((l[Is] = s.len(p[Is])), ...);
                 l[N] = std::max(l[Is]...);
 
                 if (((l[Is] != l[N] && l[Is] != 1) || ...))
                     raise_incompatible_size_error(l, N);
 
-                supp.init(p[N], l[N]);
+                s.init(p[N], l[N]);
             }
 
             using PyImpl = PyObject *(*)(first_t<PyObject *, Args>...);
@@ -84,8 +83,11 @@ static PyObject *apply(ArrayOp op, Func func, std::index_sequence<Is...>,
             else
                 py_impl = func;
 
+            const ArraySupplement::Item item = s.item;
+            const ArraySupplement::SetItem set_item = s.set_item;
+
             for (Py_ssize_t j = 0; j < l[N]; ++j) {
-                nb::object v[] = { nb::steal(supp.item(o[Is].ptr(), i[Is]))... };
+                nb::object v[] = { nb::steal(item(o[Is].ptr(), i[Is]))... };
 
                 if (!(v[Is].is_valid() && ...)) {
                     result.reset();
@@ -93,7 +95,7 @@ static PyObject *apply(ArrayOp op, Func func, std::index_sequence<Is...>,
                 }
 
                 nb::object vr = nb::steal(py_impl(v[Is].ptr()...));
-                if (!vr.is_valid() || supp.set_item(result.ptr(), j, vr.ptr())) {
+                if (!vr.is_valid() || set_item(result.ptr(), j, vr.ptr())) {
                     result.reset();
                     break;
                 }
@@ -123,6 +125,58 @@ static PyObject *nb_multiply(PyObject *h0, PyObject *h1) noexcept {
     return apply(ArrayOp::Mul, Py_nb_multiply, std::make_index_sequence<2>(), h0, h1);
 }
 
+template <int Index> nb::object xyzw_getter(nb::handle_t<dr::ArrayBase> h) {
+    const ArraySupplement &s = supp(h.type());
+
+    if (NB_UNLIKELY((!s.is_vector && !s.is_quaternion) || s.ndim == 0 ||
+                    s.shape[0] == DRJIT_DYNAMIC || Index >= s.shape[0])) {
+        nb::str name = nb::inst_name(h);
+        nb::detail::raise("%s does not have a '%c' component!", name.c_str(),
+                          "xyzw"[Index]);
+    }
+
+    return nb::steal(s.item(h.ptr(), (Py_ssize_t) Index));
+}
+
+template <int Index> void xyzw_setter(nb::handle_t<dr::ArrayBase> h, nb::handle value) {
+    const ArraySupplement &s = supp(h.type());
+
+    if (NB_UNLIKELY((!s.is_vector && !s.is_quaternion) || s.ndim == 0 ||
+                    s.shape[0] == DRJIT_DYNAMIC || Index >= s.shape[0])) {
+        nb::str name = nb::inst_name(h);
+        nb::detail::raise("%s does not have a '%c' component!", name.c_str(),
+                          "xyzw"[Index]);
+    }
+
+    if (s.set_item(h.ptr(), (Py_ssize_t) Index, value.ptr()))
+        nb::detail::raise_python_error();
+}
+
+template <int Index> nb::object complex_getter(nb::handle_t<dr::ArrayBase> h) {
+    const ArraySupplement &s = supp(h.type());
+
+    if (NB_UNLIKELY(!s.is_complex)) {
+        nb::str name = nb::inst_name(h);
+        nb::detail::raise("%s does not have a '%s' component!", name.c_str(),
+                          Index == 0 ? "real" : "imaginary");
+    }
+
+    return nb::steal(s.item(h.ptr(), (Py_ssize_t) Index));
+}
+
+template <int Index> void complex_setter(nb::handle_t<dr::ArrayBase> h, nb::handle value) {
+    const ArraySupplement &s = supp(h.type());
+
+    if (NB_UNLIKELY(!s.is_complex)) {
+        nb::str name = nb::inst_name(h);
+        nb::detail::raise("%s does not have a '%s' component!", name.c_str(),
+                          Index == 0 ? "real" : "imaginary");
+    }
+
+    if (s.set_item(h.ptr(), (Py_ssize_t) Index, value.ptr()))
+        nb::detail::raise_python_error();
+}
+
 
 #define DR_ARRAY_SLOT(name) { Py_##name, (void *) name }
 
@@ -146,6 +200,12 @@ void export_base(nb::module_ &m) {
     });
 
     ab.def_prop_ro("shape", &shape, nb::raw_doc(doc_ArrayBase_shape));
+    ab.def_prop_rw("x", xyzw_getter<0>, xyzw_setter<0>, nb::raw_doc(doc_ArrayBase_x));
+    ab.def_prop_rw("y", xyzw_getter<1>, xyzw_setter<1>, nb::raw_doc(doc_ArrayBase_y));
+    ab.def_prop_rw("z", xyzw_getter<2>, xyzw_setter<2>, nb::raw_doc(doc_ArrayBase_z));
+    ab.def_prop_rw("w", xyzw_getter<3>, xyzw_setter<3>, nb::raw_doc(doc_ArrayBase_w));
+    ab.def_prop_rw("real", complex_getter<0>, complex_setter<0>, nb::raw_doc(doc_ArrayBase_real));
+    ab.def_prop_rw("imag", complex_getter<1>, complex_setter<1>, nb::raw_doc(doc_ArrayBase_imag));
 
     array_base = ab;
 }

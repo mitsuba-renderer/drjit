@@ -43,8 +43,10 @@ static bool shape_impl(nb::handle h, int i, size_t *shape) noexcept {
     }
 
     if (s.ndim > 1) {
-        for (size_t j = 0; j < size; ++j)
-            shape_impl(h[j], i + 1, shape);
+        for (size_t j = 0; j < size; ++j) {
+            if (!shape_impl(h[j], i + 1, shape))
+                return false;
+        }
     }
 
     return true;
