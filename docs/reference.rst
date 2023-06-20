@@ -55,7 +55,6 @@ Mask operations
 .. autofunction:: isfinite
 .. autofunction:: allclose
 
-
 Miscellaneous operations
 ------------------------
 
@@ -68,6 +67,12 @@ Miscellaneous operations
 .. autofunction:: tzcnt
 .. autofunction:: lzcnt
 .. autofunction:: popcnt
+
+Function dispatching
+--------------------
+
+.. autofunction:: switch
+.. autofunction:: dispatch
 
 Just-in-time compilation
 ------------------------
