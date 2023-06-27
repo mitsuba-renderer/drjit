@@ -49,9 +49,28 @@ struct ArrayMeta {
 
 static_assert(sizeof(ArrayMeta) == 8, "Structure packing issue");
 enum class ArrayOp {
+    // Unary operations
+    Abs,
+    Neg,
+    Invert,
+
+    // Binary arithetic operations
     Add,
     Sub,
     Mul,
+
+    // Binary bit/mask operations
+    And,
+    Or,
+    Xor,
+
+    // Horizontal reductions
+    All,
+    Any,
+
+    // Miscellaneous
+    Richcmp,
+
     Count
 };
 
@@ -79,8 +98,14 @@ struct ArraySupplement : ArrayMeta {
     using SetItem = int       (*)(PyObject *, Py_ssize_t, PyObject *) noexcept;
 
     using Len  = size_t    (*)(const ArrayBase *) noexcept;
-    using Init = void      (*)(ArrayBase *, size_t);
+    using Init = void      (*)(size_t, ArrayBase *);
+    using InitData = void  (*)(size_t, const void *, ArrayBase *);
+    using InitConst = void (*)(size_t, PyObject *, ArrayBase *);
     using Cast = void      (*)(const ArrayBase *, VarType, ArrayBase *);
+    using Index = uint32_t (*)(const ArrayBase *) noexcept;;
+
+    using UnaryOp  = void (*)(const ArrayBase *, ArrayBase *) noexcept;
+    using BinaryOp = void (*)(const ArrayBase *, const ArrayBase *, ArrayBase *) noexcept;
 
     using TensorShape = dr_vector<size_t> & (*) (ArrayBase *) noexcept;
     using TensorArray = PyObject * (*) (PyObject *) noexcept;
@@ -101,6 +126,15 @@ struct ArraySupplement : ArrayMeta {
 
             /// Initialize the dynamically sized array to the given size
             Init init;
+
+            /// Initialize from a Python constant value
+            InitConst init_const;
+
+            /// Initialize from a given memory region on the CPU
+            InitData init_data;
+
+            /// Return the JIT variable index
+            Index index;
         };
 
         struct {
@@ -235,10 +269,11 @@ template <typename T> NB_INLINE void bind_base(ArrayBinding &b) {
         if (i < size) {
             nb::detail::cleanup_list cleanup(o);
             nb::detail::make_caster<Value> in;
-            bool success =  value != Py_None && in.from_python(
+
+            bool success = value != Py_None && in.from_python(
                 value, (uint8_t) nb::detail::cast_flags::convert, &cleanup);
             if (success)
-                inst->set_entry(i, in.operator Value & ());
+                inst->set_entry(i, in.operator Value &());
             cleanup.release();
 
             if (success) {
@@ -266,9 +301,28 @@ template <typename T> NB_INLINE void bind_base(ArrayBinding &b) {
             return a->size();
         };
 
-        b.init = (ArraySupplement::Init) +[](T *a, size_t size) { a->init_(size); };
-    }
+        b.init =
+            (ArraySupplement::Init) + [](size_t size, T *a) { a->init_(size); };
 
+
+        if constexpr (T::Depth == 1) {
+            b.init_data = (ArraySupplement::InitData) +
+                          [](size_t size, const void *ptr, T *a) {
+                              new (a) T(load<T>(ptr, size));
+                          };
+
+            b.init_const = (ArraySupplement::InitConst) + [](size_t size, PyObject *o, T *a) {
+                scalar_t<T> scalar;
+                if (!nb::try_cast(nb::handle(o), scalar)) {
+                    nb::str tp_name = nb::inst_name(o);
+                    nb::detail::raise("Could not initialize element with a "
+                                      "value of type '%s'.", tp_name.c_str());
+                } else {
+                    new (a) T(full<T>(scalar, size));
+                }
+            };
+        }
+    }
 }
 
 template <typename T> void bind_arithmetic(ArrayBinding &b) {
@@ -279,6 +333,8 @@ template <typename T> void bind_arithmetic(ArrayBinding &b) {
     using Float32 = float32_array_t<T>;
     using Float64 = float64_array_t<T>;
 
+    b[ArrayOp::Abs] = (void *) +[](const T *a, T *b) { new (b) T(abs(*a)); };
+    b[ArrayOp::Neg] = (void *) +[](const T *a, T *b) { new (b) T(-*a); };
     b[ArrayOp::Add] = (void *) +[](const T *a, const T *b, T *c) { new (c) T(*a + *b); };
     b[ArrayOp::Sub] = (void *) +[](const T *a, const T *b, T *c) { new (c) T(*a - *b); };
     b[ArrayOp::Mul] = (void *) +[](const T *a, const T *b, T *c) { new (c) T(*a * *b); };
@@ -296,9 +352,9 @@ template <typename T> void bind_arithmetic(ArrayBinding &b) {
     };
 }
 
-template <typename T> void disable_arithmetic(ArrayBinding &b) {
-    b[ArrayOp::Add] = b[ArrayOp::Sub] = b[ArrayOp::Mul] =
-        DRJIT_OP_NOT_IMPLEMENTED;
+inline void disable_arithmetic(ArrayBinding &b) {
+    b[ArrayOp::Abs] = b[ArrayOp::Neg] = b[ArrayOp::Add] = b[ArrayOp::Sub] =
+        b[ArrayOp::Mul] = DRJIT_OP_NOT_IMPLEMENTED;
     b.cast = (ArrayBinding::Cast) DRJIT_OP_NOT_IMPLEMENTED;
 }
 
@@ -320,6 +376,58 @@ void bind_tensor(ArrayBinding &b) {
     };
 }
 
+template <typename T> void bind_mask_reductions(ArrayBinding &b) {
+    b[ArrayOp::All] = (void *) +[](const T *a, T *b) { new (b) T(a->all_()); };
+    b[ArrayOp::Any] = (void *) +[](const T *a, T *b) { new (b) T(a->any_()); };
+}
+
+inline void disable_mask_reductions(ArrayBinding &b) {
+    b[ArrayOp::All] = b[ArrayOp::Any] = DRJIT_OP_NOT_IMPLEMENTED;
+}
+
+template <typename T> void bind_bit_ops(ArrayBinding &b) {
+    b[ArrayOp::And] = (void *) +[](const T *a, const T *b, T *c) { new (c) T(*a & *b); };
+    b[ArrayOp::Or]  = (void *) +[](const T *a, const T *b, T *c) { new (c) T(*a | *b); };
+    b[ArrayOp::Xor] = (void *) +[](const T *a, const T *b, T *c) {
+        if constexpr (T::IsIntegral)
+            new (c) T(*a ^ *b);
+        else
+            new (c) T(neq(*a, *b));
+    };
+    b[ArrayOp::Invert] = (void *) +[](const T *a, T *b) {
+        if constexpr (T::IsIntegral)
+            new (b) T(~*a);
+        else
+            new (b) T(!*a);
+    };
+}
+
+inline void disable_bit_ops(ArrayBinding &b) {
+    b[ArrayOp::And] = b[ArrayOp::Or] = b[ArrayOp::Xor] = b[ArrayOp::Invert] =
+        DRJIT_OP_NOT_IMPLEMENTED;
+}
+
+
+template <typename T> void bind_richcmp(ArrayBinding &b) {
+    using Mask = mask_t<T>;
+
+    b[ArrayOp::Richcmp] = (void *) +[](const T *a, const T *b, int op, Mask *c) {
+        switch (op) {
+            case Py_LT: new (c) Mask(*a < *b); break;
+            case Py_LE: new (c) Mask(*a <= *b); break;
+            case Py_GT: new (c) Mask(*a > *b); break;
+            case Py_GE: new (c) Mask(*a >= *b); break;
+            case Py_EQ: new (c) Mask(eq(*a, *b)); break;
+            case Py_NE: new (c) Mask(neq(*a, *b)); break;
+        }
+    };
+}
+
+inline void disable_richcmp(ArrayBinding &b) {
+    b[ArrayOp::Richcmp] = DRJIT_OP_NOT_IMPLEMENTED;
+}
+
+
 template <typename T> void bind_array(ArrayBinding &b) {
     bind_init<T>(b);
 
@@ -328,14 +436,36 @@ template <typename T> void bind_array(ArrayBinding &b) {
     } else {
         bind_base<T>(b);
 
-        if constexpr (T::Depth == 1) {
+        if constexpr (T::Depth == 1 && T::IsDynamic) {
             if constexpr (T::IsArithmetic)
                 bind_arithmetic<T>(b);
+
+            if constexpr (T::IsMask)
+                bind_mask_reductions<T>(b);
+
+            if constexpr (T::IsMask || T::IsIntegral)
+                bind_bit_ops<T>(b);
+
+            if constexpr (T::IsJIT)
+                b.index = (ArraySupplement::Index)
+                    +[](const T *v) { return v->index(); };
+
+            if constexpr (T::IsArithmetic || T::IsMask)
+                bind_richcmp<T>(b);
         }
     }
 
     if constexpr (!T::IsArithmetic)
-        disable_arithmetic<T>(b);
+        disable_arithmetic(b);
+
+    if constexpr (!T::IsMask)
+        disable_mask_reductions(b);
+
+    if constexpr (!T::IsMask && !T::IsIntegral)
+        disable_bit_ops(b);
+
+    if constexpr (!T::IsArithmetic && !T::IsMask)
+        disable_richcmp(b);
 
     bind(b);
 }

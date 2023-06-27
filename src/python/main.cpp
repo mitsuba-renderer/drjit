@@ -5,6 +5,9 @@
 #include "traits.h"
 #include "scalar.h"
 #include "llvm.h"
+#include "reduce.h"
+#include "eval.h"
+#include "iter.h"
 
 NB_MODULE(drjit_ext, m_) {
     (void) m_;
@@ -47,6 +50,9 @@ NB_MODULE(drjit_ext, m_) {
     export_base(m);
     export_shape(m);
     export_traits(m);
+    export_iter(detail);
+    export_reduce(m);
+    export_eval(m);
 
     export_scalar();
 

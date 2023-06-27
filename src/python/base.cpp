@@ -1,128 +1,61 @@
+#include <nanobind/stl/string.h>
 #include "base.h"
 #include "meta.h"
 #include "repr.h"
+#include "iter.h"
 #include "shape.h"
-#include <nanobind/stl/string.h>
+#include "apply.h"
 
 nb::handle array_base;
 
-static const char *op_names[(int) ArrayOp::Count] = {
-    "__add__",
-    "__sub__",
-    "__mul__"
-};
-
-static void raise_incompatible_size_error(Py_ssize_t *sizes, size_t N) {
-    std::string msg = "invalid input array sizes (";
-    for (size_t i = 0; i < N; ++i) {
-        msg += std::to_string(sizes[i]);
-        if (i + 2 < N)
-            msg += ", ";
-        else if (i + 2 == N)
-            msg += ", and ";
-    }
-    msg += ")";
-    throw std::runtime_error(msg);
+static PyObject *nb_negative(PyObject *h0) noexcept {
+    return apply<Normal>(ArrayOp::Neg, Py_nb_negative,
+                         std::make_index_sequence<1>(), h0);
 }
 
-template <typename T1, typename T2> using first_t = T1;
+static PyObject *nb_absolute(PyObject *h0) noexcept {
+    return apply<Normal>(ArrayOp::Abs, Py_nb_absolute, std::make_index_sequence<1>(), h0);
+}
 
-template <typename Func, typename... Args, size_t... Is>
-static PyObject *apply(ArrayOp op, Func func, std::index_sequence<Is...>,
-                       Args... args) noexcept {
-    nb::object o[] = { nb::borrow(args)... };
-    nb::handle tp = o[0].type();
-    constexpr size_t N = sizeof...(Args);
-
-    try {
-        // All arguments must first be promoted to the same type
-        if (!(o[Is].type().is(tp) && ...)) {
-            promote(o, sizeof...(Args), false);
-            tp = o[0].type();
-        }
-
-        const ArraySupplement &s = supp(tp);
-        void *impl = s[op];
-
-        if (impl == DRJIT_OP_NOT_IMPLEMENTED)
-            return nb::not_implemented().release().ptr();
-
-        nb::object result = nb::inst_alloc(tp);
-
-        drjit::ArrayBase *p[N+1] = {
-            nb::inst_ptr<dr::ArrayBase>(args)...,
-            nb::inst_ptr<dr::ArrayBase>(result)
-        };
-
-        if (impl != DRJIT_OP_DEFAULT) {
-            using Impl = void (*)(first_t<const dr::ArrayBase *, Args>..., dr::ArrayBase *);
-
-            ((Impl) impl)(p[Is]..., p[N]);
-            nb::inst_mark_ready(result);
-        } else {
-            nb::inst_zero(result);
-
-            Py_ssize_t l[N + 1], i[N] { };
-            if (s.shape[0] != DRJIT_DYNAMIC) {
-                ((l[Is] = s.shape[0]), ...);
-                l[N] = s.shape[0];
-            } else {
-                ((l[Is] = s.len(p[Is])), ...);
-                l[N] = std::max(l[Is]...);
-
-                if (((l[Is] != l[N] && l[Is] != 1) || ...))
-                    raise_incompatible_size_error(l, N);
-
-                s.init(p[N], l[N]);
-            }
-
-            using PyImpl = PyObject *(*)(first_t<PyObject *, Args>...);
-            PyImpl py_impl;
-            if constexpr (std::is_same_v<Func, int>)
-                py_impl = (PyImpl) PyType_GetSlot((PyTypeObject *) tp.ptr(), func);
-            else
-                py_impl = func;
-
-            const ArraySupplement::Item item = s.item;
-            const ArraySupplement::SetItem set_item = s.set_item;
-
-            for (Py_ssize_t j = 0; j < l[N]; ++j) {
-                nb::object v[] = { nb::steal(item(o[Is].ptr(), i[Is]))... };
-
-                if (!(v[Is].is_valid() && ...)) {
-                    result.reset();
-                    break;
-                }
-
-                nb::object vr = nb::steal(py_impl(v[Is].ptr()...));
-                if (!vr.is_valid() || set_item(result.ptr(), j, vr.ptr())) {
-                    result.reset();
-                    break;
-                }
-
-                ((i[Is] += (l[Is] == 1 ? 0 : 1)), ...);
-            }
-        }
-
-        return result.release().ptr();
-    } catch (const std::exception &e) {
-        nb::str tp_name = nb::type_name(tp);
-        PyErr_Format(PyExc_RuntimeError, "%U.%s(): %s!", tp_name.ptr(),
-                     op_names[(int) op], e.what());
-        return nullptr;
-    }
+static PyObject *nb_invert(PyObject *h0) noexcept {
+    return apply<Normal>(ArrayOp::Invert, Py_nb_invert,
+                         std::make_index_sequence<1>(), h0);
 }
 
 static PyObject *nb_add(PyObject *h0, PyObject *h1) noexcept {
-    return apply(ArrayOp::Add, Py_nb_add, std::make_index_sequence<2>(), h0, h1);
+    return apply<Normal>(ArrayOp::Add, Py_nb_add,
+                         std::make_index_sequence<2>(), h0, h1);
 }
 
 static PyObject *nb_subtract(PyObject *h0, PyObject *h1) noexcept {
-    return apply(ArrayOp::Sub, Py_nb_subtract, std::make_index_sequence<2>(), h0, h1);
+    return apply<Normal>(ArrayOp::Sub, Py_nb_subtract,
+                         std::make_index_sequence<2>(), h0, h1);
 }
 
 static PyObject *nb_multiply(PyObject *h0, PyObject *h1) noexcept {
-    return apply(ArrayOp::Mul, Py_nb_multiply, std::make_index_sequence<2>(), h0, h1);
+    return apply<Normal>(ArrayOp::Mul, Py_nb_multiply,
+                         std::make_index_sequence<2>(), h0, h1);
+}
+
+static PyObject *nb_and(PyObject *h0, PyObject *h1) noexcept {
+    return apply<Normal>(ArrayOp::And, Py_nb_and, std::make_index_sequence<2>(),
+                         h0, h1);
+}
+
+static PyObject *nb_or(PyObject *h0, PyObject *h1) noexcept {
+    return apply<Normal>(ArrayOp::Or, Py_nb_or, std::make_index_sequence<2>(),
+                         h0, h1);
+}
+
+static PyObject *nb_xor(PyObject *h0, PyObject *h1) noexcept {
+    return apply<Normal>(ArrayOp::Xor, Py_nb_xor, std::make_index_sequence<2>(),
+                         h0, h1);
+}
+
+
+static PyObject *tp_richcompare(PyObject *h0, PyObject *h1, int slot) noexcept {
+    return apply<RichCompare>(ArrayOp::Richcmp, slot,
+                              std::make_index_sequence<2>(), h0, h1);
 }
 
 template <int Index> nb::object xyzw_getter(nb::handle_t<dr::ArrayBase> h) {
@@ -131,7 +64,7 @@ template <int Index> nb::object xyzw_getter(nb::handle_t<dr::ArrayBase> h) {
     if (NB_UNLIKELY((!s.is_vector && !s.is_quaternion) || s.ndim == 0 ||
                     s.shape[0] == DRJIT_DYNAMIC || Index >= s.shape[0])) {
         nb::str name = nb::inst_name(h);
-        nb::detail::raise("%s does not have a '%c' component!", name.c_str(),
+        nb::detail::raise("%s does not have a '%c' component.", name.c_str(),
                           "xyzw"[Index]);
     }
 
@@ -144,7 +77,7 @@ template <int Index> void xyzw_setter(nb::handle_t<dr::ArrayBase> h, nb::handle 
     if (NB_UNLIKELY((!s.is_vector && !s.is_quaternion) || s.ndim == 0 ||
                     s.shape[0] == DRJIT_DYNAMIC || Index >= s.shape[0])) {
         nb::str name = nb::inst_name(h);
-        nb::detail::raise("%s does not have a '%c' component!", name.c_str(),
+        nb::detail::raise("%s does not have a '%c' component.", name.c_str(),
                           "xyzw"[Index]);
     }
 
@@ -157,7 +90,7 @@ template <int Index> nb::object complex_getter(nb::handle_t<dr::ArrayBase> h) {
 
     if (NB_UNLIKELY(!s.is_complex)) {
         nb::str name = nb::inst_name(h);
-        nb::detail::raise("%s does not have a '%s' component!", name.c_str(),
+        nb::detail::raise("%s does not have a '%s' component.", name.c_str(),
                           Index == 0 ? "real" : "imaginary");
     }
 
@@ -169,7 +102,7 @@ template <int Index> void complex_setter(nb::handle_t<dr::ArrayBase> h, nb::hand
 
     if (NB_UNLIKELY(!s.is_complex)) {
         nb::str name = nb::inst_name(h);
-        nb::detail::raise("%s does not have a '%s' component!", name.c_str(),
+        nb::detail::raise("%s does not have a '%s' component.", name.c_str(),
                           Index == 0 ? "real" : "imaginary");
     }
 
@@ -177,15 +110,89 @@ template <int Index> void complex_setter(nb::handle_t<dr::ArrayBase> h, nb::hand
         nb::detail::raise_python_error();
 }
 
+static int nb_bool(PyObject *o) noexcept {
+    PyTypeObject *tp = Py_TYPE(o);
+    const ArraySupplement &s = supp(tp);
+
+    if (NB_UNLIKELY(s.type != (uint16_t) VarType::Bool)) {
+        nb::str name = nb::type_name(tp);
+        PyErr_Format(PyExc_TypeError,
+                     "%U.__bool__(): implicit conversion to 'bool' is only "
+                     "supported for scalar mask arrays.", name.ptr());
+        return -1;
+    }
+
+    if (NB_UNLIKELY(s.ndim != 1)) {
+        nb::str name = nb::type_name(tp);
+        PyErr_Format(
+            PyExc_RuntimeError,
+            "%U.__bool__(): implicit conversion to 'bool' requires an "
+            "array with at most 1 dimension (this one has %i dimensions).",
+            name.ptr(), (int) s.ndim);
+        return -1;
+    }
+
+    Py_ssize_t length = s.shape[0];
+    if (length == DRJIT_DYNAMIC)
+        length = (Py_ssize_t) s.len(nb::inst_ptr<dr::ArrayBase>(o));
+
+    if (NB_UNLIKELY(length != 1)) {
+        nb::str name = nb::type_name(tp);
+        PyErr_Format(
+            PyExc_RuntimeError,
+            "%U.__bool__(): implicit conversion to 'bool' requires an "
+            "array with at most 1 element (this one has %zd elements).",
+            name.ptr(), length);
+        return -1;
+    }
+
+    PyObject *result = s.item(o, 0);
+    if (!result)
+        return -1;
+    Py_DECREF(result);
+
+    if (result == Py_True) {
+        return 1;
+    } else if (result == Py_False) {
+        return 0;
+    } else {
+        nb::str name = nb::type_name(tp);
+        PyErr_Format(PyExc_RuntimeError, "%U.__bool__(): internal error!");
+        return -1;
+    }
+}
+
+static PyObject *nb_positive(PyObject *o) noexcept {
+    Py_INCREF(o);
+    return o;
+}
 
 #define DR_ARRAY_SLOT(name) { Py_##name, (void *) name }
 
 static PyType_Slot array_base_slots[] = {
+    // Unary operations
+    DR_ARRAY_SLOT(nb_absolute),
+    DR_ARRAY_SLOT(nb_negative),
+    DR_ARRAY_SLOT(nb_invert),
+    DR_ARRAY_SLOT(nb_positive),
+
+    /// Binary arithmetic operations
     DR_ARRAY_SLOT(nb_add),
     DR_ARRAY_SLOT(nb_subtract),
     DR_ARRAY_SLOT(nb_multiply),
-    DR_ARRAY_SLOT(sq_length),
+
+    /// Binary bit/mask operations
+    DR_ARRAY_SLOT(nb_and),
+    DR_ARRAY_SLOT(nb_or),
+    DR_ARRAY_SLOT(nb_xor),
+
+    /// Miscellaneous
+    DR_ARRAY_SLOT(tp_iter),
     DR_ARRAY_SLOT(tp_repr),
+    DR_ARRAY_SLOT(tp_richcompare),
+    DR_ARRAY_SLOT(sq_length),
+    DR_ARRAY_SLOT(nb_bool),
+
     { 0, nullptr }
 };
 

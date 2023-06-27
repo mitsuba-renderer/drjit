@@ -34,7 +34,7 @@ static const char *type_name[] = {
 
 static const char *type_suffix[] = {
     "?", "b", "i8", "u8", "i16", "u16", "i", "u",
-    "i64", "u64", "p", "f16", "f", "f64"
+    "i64", "u64", "p", "f16", "f", "d"
 };
 
 /// Convert a metadata record into a string representation (for debugging)
@@ -336,14 +336,12 @@ void promote(nb::object *o, size_t n, bool select) {
                 NB_VECTORCALL(h2.ptr(), args + 1,
                               PY_VECTORCALL_ARGUMENTS_OFFSET | 1, nullptr);
 
-            if (!res) {
-                PyErr_Clear();
+            if (NB_UNLIKELY(!res)) {
                 nb::str type_name_i = nb::type_name(o[i].type()),
                         type_name_o = nb::type_name(h2);
 
-                    nb::detail::raise(
-                        "Could not promote type '%s' to '%s'!",
-                        type_name_i.c_str(), type_name_o.c_str());
+                nb::detail::raise("Could not promote type '%s' to '%s'!",
+                                  type_name_i.c_str(), type_name_o.c_str());
             }
 
             o[i] = nb::steal(res);

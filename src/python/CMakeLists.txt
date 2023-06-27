@@ -1,6 +1,7 @@
 nanobind_add_module(
   drjit-python
 
+  NB_DOMAIN drjit
   NB_STATIC
   STABLE_ABI
   LTO
@@ -13,10 +14,14 @@ nanobind_add_module(
   bind.h   bind.cpp
   init.h   init.cpp
   repr.h   repr.cpp
+  iter.h   iter.cpp
   shape.h  shape.cpp
   traits.h traits.cpp
   scalar.h scalar.cpp
   llvm.h   llvm.cpp
+  reduce.h reduce.cpp
+  apply.h  apply.cpp
+  eval.h   eval.cpp
 )
 
 set_target_properties(drjit-python

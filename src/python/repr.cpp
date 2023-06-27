@@ -10,6 +10,7 @@
 
 #include "repr.h"
 #include "shape.h"
+#include "eval.h"
 #include "../ext/nanobind/src/buffer.h"
 #include <nanobind/stl/vector.h>
 
@@ -91,13 +92,12 @@ void tp_repr_impl(PyObject *self,
         }
         buffer.put(']');
     }
-
-
 }
 
 PyObject *tp_repr(PyObject *self) noexcept {
     try {
         buffer.clear();
+        schedule(self);
 
         nb::object shape_obj = shape(self);
         if (shape_obj.is_none()) {
