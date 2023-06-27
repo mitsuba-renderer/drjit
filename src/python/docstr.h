@@ -524,7 +524,7 @@ Returns:
 
 
 static const char *doc_all = R"(
-all(arg, /) -> float | int | drjit.ArrayBase
+all(arg, /) -> bool | drjit.ArrayBase
 Computes whether all input elements evaluate to ``True``.
 
 When the argument is a dynamic array, function performs a horizontal reduction.
@@ -532,11 +532,23 @@ Please see the section on :ref:`horizontal reductions <horizontal-reductions>`
 for details.
 
 Args:
-    arg (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+    arg (bool | drjit.ArrayBase): A Python or Dr.Jit mask type
 
 Returns:
     Boolean array)";
 
+static const char *doc_all_nested = R"(
+all_nested(arg, /) -> bool | drjit.ArrayBase
+Iterates :py:func:`all` until the type of the return value no longer
+changes.
+
+This function can be used to reduce a nested mask array into a single value.
+
+Args:
+    arg (bool | drjit.ArrayBase): A Python or Dr.Jit mask type
+
+Returns:
+    Boolean array)";
 
 static const char *doc_any = R"(
 any(arg, /) -> float | int | drjit.ArrayBase
@@ -548,11 +560,23 @@ for details.
 
 
 Args:
-    arg (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+    arg (bool | drjit.ArrayBase): A Python or Dr.Jit mask type
 
 Returns:
     Boolean array)";
 
+static const char *doc_any_nested = R"(
+any_nested(arg, /) -> bool | drjit.ArrayBase
+Iterates :py:func:`any` until the type of the return value no longer
+changes.
+
+This function can be used to reduce a nested mask array into a single value.
+
+Args:
+    arg (bool | drjit.ArrayBase): A Python or Dr.Jit mask type
+
+Returns:
+    Boolean array)";
 
 static const char *doc_dot = R"(
 dot(arg0, arg1, /) -> float | int | drjit.ArrayBase

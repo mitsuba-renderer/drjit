@@ -21,3 +21,9 @@ using dr::ArrayBinding;
 using dr::ArrayOp;
 
 inline const ArraySupplement &supp(nb::handle h) { return nb::type_supplement<ArraySupplement>(h); }
+
+#define raise_if(expr, ...)                                                    \
+    do {                                                                       \
+        if (NB_UNLIKELY(expr))                                                 \
+            nb::detail::raise(__VA_ARGS__);                                    \
+    } while (false)

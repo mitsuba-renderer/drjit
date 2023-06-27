@@ -12,7 +12,7 @@ for o1 in dr.__dict__.values():
                 array_types.append(o2)
 
 
-def test_arrays(query=""):
+def test_arrays(*queries):
     """
     Helper function used to parameterize testcases over Dr.Jit array types
 
@@ -25,32 +25,46 @@ def test_arrays(query=""):
 
     The type argument of the subsequent testcase must be named "t"
     """
-    result = set(array_types)
 
-    query_list = re.split(r',\s*(?![^()]*\))', query)
-    for query in query_list:
-        if len(query) == 0:
-            continue
+    combined = set()
+    if len(queries) == 0:
+        combined = set(array_types)
 
-        remove = False
-        if query[0] == '-':
-            query = query[1:]
-            remove = True
+    for query in queries:
+        query = re.split(r',\s*(?![^()]*\))', query)
+        result = set(array_types)
+        for entry in query:
+            if len(entry) == 0:
+                continue
 
-        found = set(a for a in array_types if query in a.__meta__)
-        if remove:
-            result = result.difference(found)
-        else:
-            result = result.intersection(found)
+            remove = False
+            if entry[0] == '-':
+                entry = entry[1:]
+                remove = True
 
-    ids = [a.__module__ + '.' + a.__name__ for a in result]
-    if len(result) == 0:
+            found = set(a for a in array_types if entry in a.__meta__)
+            if remove:
+                result = result.difference(found)
+            else:
+                result = result.intersection(found)
+
+        combined |= result
+
+    if len(combined) == 0:
         raise Exception('Query failed')
 
+    ids = [a.__module__ + '.' + a.__name__ for a in combined]
     def wrapped(func):
-        return pytest.mark.parametrize('t', result, ids=ids)(func)
+        return pytest.mark.parametrize('t', combined, ids=ids)(func)
 
     return wrapped
+
+@pytest.fixture(scope="module")
+def drjit_verbose():
+    level = dr.log_level()
+    dr.set_log_level(100)
+    yield
+    dr.set_log_level(level)
 
 def pytest_configure():
     pytest.test_arrays = test_arrays

@@ -661,17 +661,17 @@ Array base class
         :show-inheritance:
     .. autoclass:: drjit.scalar.ArrayXi
         :show-inheritance:
-    .. autoclass:: drjit.scalar.Array0f64
+    .. autoclass:: drjit.scalar.Array0d
         :show-inheritance:
-    .. autoclass:: drjit.scalar.Array1f64
+    .. autoclass:: drjit.scalar.Array1d
         :show-inheritance:
-    .. autoclass:: drjit.scalar.Array2f64
+    .. autoclass:: drjit.scalar.Array2d
         :show-inheritance:
-    .. autoclass:: drjit.scalar.Array3f64
+    .. autoclass:: drjit.scalar.Array3d
         :show-inheritance:
-    .. autoclass:: drjit.scalar.Array4f64
+    .. autoclass:: drjit.scalar.Array4d
         :show-inheritance:
-    .. autoclass:: drjit.scalar.ArrayXf64
+    .. autoclass:: drjit.scalar.ArrayXd
         :show-inheritance:
     .. autoclass:: drjit.scalar.Array0u64
         :show-inheritance:
@@ -712,22 +712,22 @@ Array base class
         :show-inheritance:
     .. autoclass:: drjit.scalar.Array44f
         :show-inheritance:
-    .. autoclass:: drjit.scalar.Array22f64
+    .. autoclass:: drjit.scalar.Array22d
         :show-inheritance:
-    .. autoclass:: drjit.scalar.Array33f64
+    .. autoclass:: drjit.scalar.Array33d
         :show-inheritance:
-    .. autoclass:: drjit.scalar.Array44f64
+    .. autoclass:: drjit.scalar.Array44d
         :show-inheritance:
 
     Special (complex numbers, etc.)
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     .. autoclass:: drjit.scalar.Complex2f
         :show-inheritance:
-    .. autoclass:: drjit.scalar.Complex2f64
+    .. autoclass:: drjit.scalar.Complex2d
         :show-inheritance:
     .. autoclass:: drjit.scalar.Quaternion4f
         :show-inheritance:
-    .. autoclass:: drjit.scalar.Quaternion4f64
+    .. autoclass:: drjit.scalar.Quaternion4d
         :show-inheritance:
     .. autoclass:: drjit.scalar.Matrix2f
         :show-inheritance:
@@ -735,11 +735,11 @@ Array base class
         :show-inheritance:
     .. autoclass:: drjit.scalar.Matrix4f
         :show-inheritance:
-    .. autoclass:: drjit.scalar.Matrix2f64
+    .. autoclass:: drjit.scalar.Matrix2d
         :show-inheritance:
-    .. autoclass:: drjit.scalar.Matrix3f64
+    .. autoclass:: drjit.scalar.Matrix3d
         :show-inheritance:
-    .. autoclass:: drjit.scalar.Matrix4f64
+    .. autoclass:: drjit.scalar.Matrix4d
         :show-inheritance:
 
     Tensors
@@ -752,7 +752,7 @@ Array base class
         :show-inheritance:
     .. autoclass:: drjit.scalar.TensorXi
         :show-inheritance:
-    .. autoclass:: drjit.scalar.TensorXf64
+    .. autoclass:: drjit.scalar.TensorXd
         :show-inheritance:
     .. autoclass:: drjit.scalar.TensorXu64
         :show-inheritance:
@@ -834,17 +834,17 @@ Array base class
         :show-inheritance:
     .. autoclass:: drjit.cuda.ArrayXi
         :show-inheritance:
-    .. autoclass:: drjit.cuda.Array0f64
+    .. autoclass:: drjit.cuda.Array0d
         :show-inheritance:
-    .. autoclass:: drjit.cuda.Array1f64
+    .. autoclass:: drjit.cuda.Array1d
         :show-inheritance:
-    .. autoclass:: drjit.cuda.Array2f64
+    .. autoclass:: drjit.cuda.Array2d
         :show-inheritance:
-    .. autoclass:: drjit.cuda.Array3f64
+    .. autoclass:: drjit.cuda.Array3d
         :show-inheritance:
-    .. autoclass:: drjit.cuda.Array4f64
+    .. autoclass:: drjit.cuda.Array4d
         :show-inheritance:
-    .. autoclass:: drjit.cuda.ArrayXf64
+    .. autoclass:: drjit.cuda.ArrayXd
         :show-inheritance:
     .. autoclass:: drjit.cuda.Array0u64
         :show-inheritance:
@@ -885,22 +885,22 @@ Array base class
         :show-inheritance:
     .. autoclass:: drjit.cuda.Array44f
         :show-inheritance:
-    .. autoclass:: drjit.cuda.Array22f64
+    .. autoclass:: drjit.cuda.Array22d
         :show-inheritance:
-    .. autoclass:: drjit.cuda.Array33f64
+    .. autoclass:: drjit.cuda.Array33d
         :show-inheritance:
-    .. autoclass:: drjit.cuda.Array44f64
+    .. autoclass:: drjit.cuda.Array44d
         :show-inheritance:
 
     Special (complex numbers, etc.)
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     .. autoclass:: drjit.cuda.Complex2f
         :show-inheritance:
-    .. autoclass:: drjit.cuda.Complex2f64
+    .. autoclass:: drjit.cuda.Complex2d
         :show-inheritance:
     .. autoclass:: drjit.cuda.Quaternion4f
         :show-inheritance:
-    .. autoclass:: drjit.cuda.Quaternion4f64
+    .. autoclass:: drjit.cuda.Quaternion4d
         :show-inheritance:
     .. autoclass:: drjit.cuda.Matrix2f
         :show-inheritance:
@@ -908,11 +908,11 @@ Array base class
         :show-inheritance:
     .. autoclass:: drjit.cuda.Matrix4f
         :show-inheritance:
-    .. autoclass:: drjit.cuda.Matrix2f64
+    .. autoclass:: drjit.cuda.Matrix2d
         :show-inheritance:
-    .. autoclass:: drjit.cuda.Matrix3f64
+    .. autoclass:: drjit.cuda.Matrix3d
         :show-inheritance:
-    .. autoclass:: drjit.cuda.Matrix4f64
+    .. autoclass:: drjit.cuda.Matrix4d
         :show-inheritance:
 
     Tensors
@@ -925,7 +925,7 @@ Array base class
         :show-inheritance:
     .. autoclass:: drjit.cuda.TensorXi
         :show-inheritance:
-    .. autoclass:: drjit.cuda.TensorXf64
+    .. autoclass:: drjit.cuda.TensorXd
         :show-inheritance:
     .. autoclass:: drjit.cuda.TensorXu64
         :show-inheritance:
@@ -1006,17 +1006,17 @@ Array base class
         :show-inheritance:
     .. autoclass:: drjit.cuda.ad.ArrayXi
         :show-inheritance:
-    .. autoclass:: drjit.cuda.ad.Array0f64
+    .. autoclass:: drjit.cuda.ad.Array0d
         :show-inheritance:
-    .. autoclass:: drjit.cuda.ad.Array1f64
+    .. autoclass:: drjit.cuda.ad.Array1d
         :show-inheritance:
-    .. autoclass:: drjit.cuda.ad.Array2f64
+    .. autoclass:: drjit.cuda.ad.Array2d
         :show-inheritance:
-    .. autoclass:: drjit.cuda.ad.Array3f64
+    .. autoclass:: drjit.cuda.ad.Array3d
         :show-inheritance:
-    .. autoclass:: drjit.cuda.ad.Array4f64
+    .. autoclass:: drjit.cuda.ad.Array4d
         :show-inheritance:
-    .. autoclass:: drjit.cuda.ad.ArrayXf64
+    .. autoclass:: drjit.cuda.ad.ArrayXd
         :show-inheritance:
     .. autoclass:: drjit.cuda.ad.Array0u64
         :show-inheritance:
@@ -1057,22 +1057,22 @@ Array base class
         :show-inheritance:
     .. autoclass:: drjit.cuda.ad.Array44f
         :show-inheritance:
-    .. autoclass:: drjit.cuda.ad.Array22f64
+    .. autoclass:: drjit.cuda.ad.Array22d
         :show-inheritance:
-    .. autoclass:: drjit.cuda.ad.Array33f64
+    .. autoclass:: drjit.cuda.ad.Array33d
         :show-inheritance:
-    .. autoclass:: drjit.cuda.ad.Array44f64
+    .. autoclass:: drjit.cuda.ad.Array44d
         :show-inheritance:
 
     Special (complex numbers, etc.)
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     .. autoclass:: drjit.cuda.ad.Complex2f
         :show-inheritance:
-    .. autoclass:: drjit.cuda.ad.Complex2f64
+    .. autoclass:: drjit.cuda.ad.Complex2d
         :show-inheritance:
     .. autoclass:: drjit.cuda.ad.Quaternion4f
         :show-inheritance:
-    .. autoclass:: drjit.cuda.ad.Quaternion4f64
+    .. autoclass:: drjit.cuda.ad.Quaternion4d
         :show-inheritance:
     .. autoclass:: drjit.cuda.ad.Matrix2f
         :show-inheritance:
@@ -1080,11 +1080,11 @@ Array base class
         :show-inheritance:
     .. autoclass:: drjit.cuda.ad.Matrix4f
         :show-inheritance:
-    .. autoclass:: drjit.cuda.ad.Matrix2f64
+    .. autoclass:: drjit.cuda.ad.Matrix2d
         :show-inheritance:
-    .. autoclass:: drjit.cuda.ad.Matrix3f64
+    .. autoclass:: drjit.cuda.ad.Matrix3d
         :show-inheritance:
-    .. autoclass:: drjit.cuda.ad.Matrix4f64
+    .. autoclass:: drjit.cuda.ad.Matrix4d
         :show-inheritance:
 
     Tensors
@@ -1097,7 +1097,7 @@ Array base class
         :show-inheritance:
     .. autoclass:: drjit.cuda.ad.TensorXi
         :show-inheritance:
-    .. autoclass:: drjit.cuda.ad.TensorXf64
+    .. autoclass:: drjit.cuda.ad.TensorXd
         :show-inheritance:
     .. autoclass:: drjit.cuda.ad.TensorXu64
         :show-inheritance:
@@ -1179,17 +1179,17 @@ Array base class
         :show-inheritance:
     .. autoclass:: drjit.llvm.ArrayXi
         :show-inheritance:
-    .. autoclass:: drjit.llvm.Array0f64
+    .. autoclass:: drjit.llvm.Array0d
         :show-inheritance:
-    .. autoclass:: drjit.llvm.Array1f64
+    .. autoclass:: drjit.llvm.Array1d
         :show-inheritance:
-    .. autoclass:: drjit.llvm.Array2f64
+    .. autoclass:: drjit.llvm.Array2d
         :show-inheritance:
-    .. autoclass:: drjit.llvm.Array3f64
+    .. autoclass:: drjit.llvm.Array3d
         :show-inheritance:
-    .. autoclass:: drjit.llvm.Array4f64
+    .. autoclass:: drjit.llvm.Array4d
         :show-inheritance:
-    .. autoclass:: drjit.llvm.ArrayXf64
+    .. autoclass:: drjit.llvm.ArrayXd
         :show-inheritance:
     .. autoclass:: drjit.llvm.Array0u64
         :show-inheritance:
@@ -1230,22 +1230,22 @@ Array base class
         :show-inheritance:
     .. autoclass:: drjit.llvm.Array44f
         :show-inheritance:
-    .. autoclass:: drjit.llvm.Array22f64
+    .. autoclass:: drjit.llvm.Array22d
         :show-inheritance:
-    .. autoclass:: drjit.llvm.Array33f64
+    .. autoclass:: drjit.llvm.Array33d
         :show-inheritance:
-    .. autoclass:: drjit.llvm.Array44f64
+    .. autoclass:: drjit.llvm.Array44d
         :show-inheritance:
 
     Special (complex numbers, etc.)
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     .. autoclass:: drjit.llvm.Complex2f
         :show-inheritance:
-    .. autoclass:: drjit.llvm.Complex2f64
+    .. autoclass:: drjit.llvm.Complex2d
         :show-inheritance:
     .. autoclass:: drjit.llvm.Quaternion4f
         :show-inheritance:
-    .. autoclass:: drjit.llvm.Quaternion4f64
+    .. autoclass:: drjit.llvm.Quaternion4d
         :show-inheritance:
     .. autoclass:: drjit.llvm.Matrix2f
         :show-inheritance:
@@ -1253,11 +1253,11 @@ Array base class
         :show-inheritance:
     .. autoclass:: drjit.llvm.Matrix4f
         :show-inheritance:
-    .. autoclass:: drjit.llvm.Matrix2f64
+    .. autoclass:: drjit.llvm.Matrix2d
         :show-inheritance:
-    .. autoclass:: drjit.llvm.Matrix3f64
+    .. autoclass:: drjit.llvm.Matrix3d
         :show-inheritance:
-    .. autoclass:: drjit.llvm.Matrix4f64
+    .. autoclass:: drjit.llvm.Matrix4d
         :show-inheritance:
 
     Tensors
@@ -1270,7 +1270,7 @@ Array base class
         :show-inheritance:
     .. autoclass:: drjit.llvm.TensorXi
         :show-inheritance:
-    .. autoclass:: drjit.llvm.TensorXf64
+    .. autoclass:: drjit.llvm.TensorXd
         :show-inheritance:
     .. autoclass:: drjit.llvm.TensorXu64
         :show-inheritance:
@@ -1351,17 +1351,17 @@ Array base class
         :show-inheritance:
     .. autoclass:: drjit.llvm.ad.ArrayXi
         :show-inheritance:
-    .. autoclass:: drjit.llvm.ad.Array0f64
+    .. autoclass:: drjit.llvm.ad.Array0d
         :show-inheritance:
-    .. autoclass:: drjit.llvm.ad.Array1f64
+    .. autoclass:: drjit.llvm.ad.Array1d
         :show-inheritance:
-    .. autoclass:: drjit.llvm.ad.Array2f64
+    .. autoclass:: drjit.llvm.ad.Array2d
         :show-inheritance:
-    .. autoclass:: drjit.llvm.ad.Array3f64
+    .. autoclass:: drjit.llvm.ad.Array3d
         :show-inheritance:
-    .. autoclass:: drjit.llvm.ad.Array4f64
+    .. autoclass:: drjit.llvm.ad.Array4d
         :show-inheritance:
-    .. autoclass:: drjit.llvm.ad.ArrayXf64
+    .. autoclass:: drjit.llvm.ad.ArrayXd
         :show-inheritance:
     .. autoclass:: drjit.llvm.ad.Array0u64
         :show-inheritance:
@@ -1402,22 +1402,22 @@ Array base class
         :show-inheritance:
     .. autoclass:: drjit.llvm.ad.Array44f
         :show-inheritance:
-    .. autoclass:: drjit.llvm.ad.Array22f64
+    .. autoclass:: drjit.llvm.ad.Array22d
         :show-inheritance:
-    .. autoclass:: drjit.llvm.ad.Array33f64
+    .. autoclass:: drjit.llvm.ad.Array33d
         :show-inheritance:
-    .. autoclass:: drjit.llvm.ad.Array44f64
+    .. autoclass:: drjit.llvm.ad.Array44d
         :show-inheritance:
 
     Special (complex numbers, etc.)
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     .. autoclass:: drjit.llvm.ad.Complex2f
         :show-inheritance:
-    .. autoclass:: drjit.llvm.ad.Complex2f64
+    .. autoclass:: drjit.llvm.ad.Complex2d
         :show-inheritance:
     .. autoclass:: drjit.llvm.ad.Quaternion4f
         :show-inheritance:
-    .. autoclass:: drjit.llvm.ad.Quaternion4f64
+    .. autoclass:: drjit.llvm.ad.Quaternion4d
         :show-inheritance:
     .. autoclass:: drjit.llvm.ad.Matrix2f
         :show-inheritance:
@@ -1425,11 +1425,11 @@ Array base class
         :show-inheritance:
     .. autoclass:: drjit.llvm.ad.Matrix4f
         :show-inheritance:
-    .. autoclass:: drjit.llvm.ad.Matrix2f64
+    .. autoclass:: drjit.llvm.ad.Matrix2d
         :show-inheritance:
-    .. autoclass:: drjit.llvm.ad.Matrix3f64
+    .. autoclass:: drjit.llvm.ad.Matrix3d
         :show-inheritance:
-    .. autoclass:: drjit.llvm.ad.Matrix4f64
+    .. autoclass:: drjit.llvm.ad.Matrix4d
         :show-inheritance:
 
     Tensors
@@ -1442,7 +1442,7 @@ Array base class
         :show-inheritance:
     .. autoclass:: drjit.llvm.ad.TensorXi
         :show-inheritance:
-    .. autoclass:: drjit.llvm.ad.TensorXf64
+    .. autoclass:: drjit.llvm.ad.TensorXd
         :show-inheritance:
     .. autoclass:: drjit.llvm.ad.TensorXu64
         :show-inheritance:

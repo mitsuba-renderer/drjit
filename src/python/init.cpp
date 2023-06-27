@@ -1,27 +1,13 @@
 #include "meta.h"
 #include "base.h"
 
-#define raise_if(expr, msg)                                                    \
-    do {                                                                       \
-        if (NB_UNLIKELY(expr))                                                 \
-            nb::detail::raise(msg);                                            \
-    } while (false)
+/// Forward declaration
+static bool array_init_seq(PyObject *self, const ArraySupplement &s, PyObject *seq);
 
-static void array_resize(PyObject *self, const ArraySupplement &s, Py_ssize_t len) {
-    if (s.shape[0] == len)
-        return;
-
-    if (s.shape[0] == DRJIT_DYNAMIC)
-        s.init(nb::inst_ptr<dr::ArrayBase>(self), (size_t) len);
-    else
-        nb::detail::raise(
-            "Input has the wrong size (expected %u elements, got %zd).",
-            (unsigned) s.shape[0], len);
-}
-
+/// Constructor for all dr.ArrayBase subclasses (except tensors)
 int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
     PyTypeObject *self_tp = Py_TYPE(self);
-    const ArraySupplement &s = nb::type_supplement<ArraySupplement>(self_tp);
+    const ArraySupplement &s = supp(self_tp);
     Py_ssize_t argc = NB_TUPLE_GET_SIZE(args);
     ArraySupplement::SetItem set_item = s.set_item;
 
@@ -35,12 +21,8 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
         } else if (argc > 1) {
             // Initialize from argument list, e.g., ``Array3f(1, 2, 3)``
             nb::detail::nb_inst_zero(self);
-
-            array_resize(self, s, argc);
-            for (Py_ssize_t i = 0; i < argc; ++i)
-                raise_if(set_item(self, i, NB_TUPLE_GET_ITEM(args, i)),
-                         "Item assignment failed.");
-
+            raise_if(!array_init_seq(self, s, args),
+                     "Could not initialize array from argument list.");
             return 0;
         } else {
             // Initialize from a single element, e.g., ``Array3f(other_array)``
@@ -56,11 +38,12 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
                     nb::detail::nb_inst_copy(self, arg);
                     return 0;
                 } else {
-                    ArrayMeta m = nb::type_supplement<ArraySupplement>(arg_tp);
+                    ArrayMeta m = supp(arg_tp);
 
                     VarType vt = (VarType) m.type;
                     m.type = s.type;
 
+                    // Potentially do a cast
                     if (m == s && s.cast) {
                         s.cast(nb::inst_ptr<dr::ArrayBase>(arg), vt,
                                nb::inst_ptr<dr::ArrayBase>(self));
@@ -75,62 +58,20 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
 
             nb::detail::nb_inst_zero(self);
 
-            // Fast path for tuples/list instances
-            if (arg_tp == &PyTuple_Type) {
-                Py_ssize_t len = NB_TUPLE_GET_SIZE(arg);
-                array_resize(self, s, len);
-
-                for (Py_ssize_t i = 0; i < len; ++i)
-                    raise_if(set_item(self, i, NB_TUPLE_GET_ITEM(arg, i)),
-                             "Item assignment failed.");
+            // Try to construct from a sequence/iterable type
+            if (try_sequence_import && array_init_seq(self, s, arg))
                 return 0;
-            } else if (arg_tp == &PyList_Type) {
-                Py_ssize_t len = NB_LIST_GET_SIZE(arg);
-                array_resize(self, s, len);
-
-                for (Py_ssize_t i = 0; i < len; ++i)
-                    raise_if(set_item(self, i, NB_LIST_GET_ITEM(arg, i)),
-                             "Item assignment failed.");
-                return 0;
-            }
-
-            if (try_sequence_import) {
-                ssizeargfunc arg_sq_item =
-                    (ssizeargfunc) PyType_GetSlot(arg_tp, Py_sq_item);
-                lenfunc arg_sq_length =
-                    (lenfunc) PyType_GetSlot(arg_tp, Py_sq_length);
-
-                // Special case for general sequence types
-                if (arg_sq_length && arg_sq_item) {
-                    Py_ssize_t len = arg_sq_length(arg);
-                    array_resize(self, s, len);
-
-                    for (Py_ssize_t i = 0; i < len; ++i) {
-                        nb::object o = nb::steal(arg_sq_item(arg, i));
-                        raise_if(!o.is_valid(), "Item retrieval failed.");
-                        raise_if(set_item(self, i, o.ptr()),
-                                 "Item assignment failed.");
-                    }
-                    return 0;
-                }
-
-                // Special case for general iterable types. Handled recursively
-                getiterfunc arg_tp_iter =
-                    (getiterfunc) PyType_GetSlot(arg_tp, Py_tp_iter);
-
-                if (arg_tp_iter) {
-                    nb::tuple args_2 =
-                        nb::make_tuple(nb::steal(PySequence_List(arg)));
-                    return tp_init_array(self, args_2.ptr(), kwds);
-                }
-            }
 
             // No sequence/iterable type, try broadcasting
+            Py_ssize_t size = s.shape[0];
+            raise_if(size == 0,
+                     "Input has the wrong size (expected 0 elements, got 1).");
+
             nb::object element;
             PyObject *value_type = s.value;
 
             if (s.is_matrix)
-                value_type = nb::type_supplement<ArraySupplement>(value_type).value;
+                value_type = supp(value_type).value;
 
             if (arg_tp == (PyTypeObject *) s.value) {
                 element = nb::borrow(arg);
@@ -139,7 +80,7 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
                 element = nb::steal(
                     NB_VECTORCALL(value_type, args + 1,
                                   1 | PY_VECTORCALL_ARGUMENTS_OFFSET, nullptr));
-                if (!element.is_valid()) {
+                if (NB_UNLIKELY(!element.is_valid())) {
                     nb::error_scope scope;
                     nb::str arg_tp_name = nb::type_name(arg_tp);
                     nb::detail::raise("Broadcast from type '%s' failed.",
@@ -147,13 +88,14 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
                 }
             }
 
-            Py_ssize_t len = s.shape[0];
-            raise_if(len == 0,
-                     "Input has the wrong size (expected 0 elements, got 1).");
+            if (size == DRJIT_DYNAMIC) {
+                if (s.init_const) {
+                    s.init_const(1, element.ptr(), nb::inst_ptr<dr::ArrayBase>(self));
+                    return 0;
+                }
 
-            if (len == DRJIT_DYNAMIC) {
-                len = 1;
-                array_resize(self, s, 1);
+                size = 1;
+                s.init(1, nb::inst_ptr<dr::ArrayBase>(self));
             }
 
             if (s.is_complex) {
@@ -171,13 +113,13 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
             } else if (s.is_matrix) {
                 nb::float_ zero(0.0);
 
-                for (Py_ssize_t i = 0; i < len; ++i) {
+                for (Py_ssize_t i = 0; i < size; ++i) {
                     nb::object col = nb::steal(s.item(self, i));
-                    for (Py_ssize_t j = 0; j < len; ++j)
+                    for (Py_ssize_t j = 0; j < size; ++j)
                         col[j] = (i == j) ? element : zero;
                 }
             } else {
-                for (Py_ssize_t i = 0; i < len; ++i)
+                for (Py_ssize_t i = 0; i < size; ++i)
                     raise_if(set_item(self, i, element.ptr()),
                              "Item assignment failed.");
             }
@@ -189,6 +131,113 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
         nb::chain_error(PyExc_TypeError, "%U.__init__(): %s", tp_name.ptr(), e.what());
         return -1;
     }
+}
+
+static bool array_init_seq(PyObject *self, const ArraySupplement &s, PyObject *seq) {
+    ssizeargfunc sq_item = nullptr;
+    lenfunc sq_length = nullptr;
+
+    PyTypeObject *tp = Py_TYPE(seq);
+#if defined(Py_LIMITED_API)
+    sq_length = (lenfunc) PyType_GetSlot(tp, Py_sq_length);
+    sq_item = (ssizeargfunc) PyType_GetSlot(tp, Py_sq_item);
+#else
+    PySequenceMethods *sm = tp->tp_as_sequence;
+    if (sm) {
+        sq_length = sm->sq_length;
+        sq_item = sm->sq_item;
+    }
+#endif
+
+    if (!sq_length || !sq_item) {
+        // Special case for general iterable types. Handled recursively
+        getiterfunc tp_iter;
+
+#if defined(Py_LIMITED_API)
+        tp_iter = (getiterfunc) PyType_GetSlot(tp, Py_tp_iter);
+#else
+        tp_iter = tp->tp_iter;
+#endif
+
+        if (tp_iter) {
+            nb::object seq2 = nb::steal(PySequence_List(seq));
+            raise_if(!seq2.is_valid(),
+                     "Could not convert iterable into a sequence.");
+            return array_init_seq(self, s, seq2.ptr());
+        }
+
+        return false;
+    }
+
+    Py_ssize_t size = sq_length(seq);
+    raise_if(size < 0, "Unable to determine the size of the given sequence.");
+
+    bool is_dynamic = s.shape[0] == DRJIT_DYNAMIC;
+    raise_if(!is_dynamic && s.shape[0] != size,
+             "Input has the wrong size (expected %u elements, got %zd).",
+             (unsigned) s.shape[0], size);
+
+    if (size == 1 && s.init_const) {
+        nb::object o = nb::steal(sq_item(seq, 0));
+        raise_if(!o.is_valid(), "Item retrival failed.");
+        s.init_const((size_t) size, o.ptr(), nb::inst_ptr<dr::ArrayBase>(self));
+        return true;
+    }
+
+    if (s.ndim == 1 && s.init_data) {
+        size_t byte_size = jit_type_size((VarType) s.type) * (size_t) size;
+        std::unique_ptr<uint8_t[]> storage(new uint8_t[byte_size]);
+        bool fail = false;
+
+        #define FROM_SEQ_IMPL(T)                                           \
+        {                                                                  \
+            nb::detail::make_caster<T> caster;                             \
+            T *p = (T *) storage.get();                                    \
+            for (Py_ssize_t i = 0; i < size; ++i) {                        \
+                nb::object o = nb::steal(sq_item(seq, i));                 \
+                if (NB_UNLIKELY(!o.is_valid() ||                           \
+                    !caster.from_python(o,                                 \
+                                        (uint8_t) nb::detail::cast_flags:: \
+                                            convert, nullptr))) {          \
+                    fail = true;                                           \
+                    break;                                                 \
+                }                                                          \
+                p[i] = caster.value;                                       \
+            }                                                              \
+        }
+
+        switch ((VarType) s.type) {
+            case VarType::Bool:    FROM_SEQ_IMPL(bool);     break;
+            case VarType::Float32: FROM_SEQ_IMPL(float);    break;
+            case VarType::Float64: FROM_SEQ_IMPL(double);   break;
+            case VarType::Int32:   FROM_SEQ_IMPL(int32_t);  break;
+            case VarType::UInt32:  FROM_SEQ_IMPL(uint32_t); break;
+            case VarType::Int64:   FROM_SEQ_IMPL(int64_t);  break;
+            case VarType::UInt64:  FROM_SEQ_IMPL(uint64_t); break;
+            default: fail = true;
+        }
+
+        raise_if(fail, "Could not construct from sequence (invalid type in input).");
+
+        s.init_data((size_t) size, storage.get(),
+                    nb::inst_ptr<dr::ArrayBase>(self));
+
+        return true;
+    }
+
+    if (is_dynamic)
+        s.init((size_t) size, nb::inst_ptr<dr::ArrayBase>(self));
+
+    ArraySupplement::SetItem set_item = s.set_item;
+    for (Py_ssize_t i = 0; i < size; ++i) {
+        nb::object o = nb::steal(sq_item(seq, i));
+        raise_if(!o.is_valid(),
+                 "Item retrieval failed.");
+        raise_if(set_item(self, i, o.ptr()),
+                 "Item assignment failed.");
+    }
+
+    return true;
 }
 
 int tp_init_tensor(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
