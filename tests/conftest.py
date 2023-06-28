@@ -12,7 +12,7 @@ for o1 in dr.__dict__.values():
                 array_types.append(o2)
 
 
-def test_arrays(*queries):
+def test_arrays(*queries, name='t'):
     """
     Helper function used to parameterize testcases over Dr.Jit array types
 
@@ -55,7 +55,7 @@ def test_arrays(*queries):
 
     ids = [a.__module__ + '.' + a.__name__ for a in combined]
     def wrapped(func):
-        return pytest.mark.parametrize('t', combined, ids=ids)(func)
+        return pytest.mark.parametrize(name, combined, ids=ids)(func)
 
     return wrapped
 

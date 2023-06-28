@@ -1,12 +1,31 @@
-#include <nanobind/stl/string.h>
+/*
+    base.cpp -- Bindings of the dr::ArrayBase type underlying
+    all Dr.Jit arrays
+
+    Dr.Jit: A Just-In-Time-Compiler for Differentiable Rendering
+    Copyright 2023, Realistic Graphics Lab, EPFL.
+
+    All rights reserved. Use of this source code is governed by a
+    BSD-style license that can be found in the LICENSE.txt file.
+*/
+
 #include "base.h"
+#include "apply.h"
+#include "iter.h"
 #include "meta.h"
 #include "repr.h"
-#include "iter.h"
 #include "shape.h"
-#include "apply.h"
+#include <nanobind/stl/string.h>
 
+nb::handle array_module;
+nb::handle array_submodules[5];
 nb::handle array_base;
+
+namespace drjit {
+    template <typename T> T fma(const T &a, const T &b, const T &c) {
+        return fmadd(a, b, c);
+    }
+};
 
 static PyObject *nb_negative(PyObject *h0) noexcept {
     return apply<Normal>(ArrayOp::Neg, Py_nb_negative,
@@ -14,7 +33,8 @@ static PyObject *nb_negative(PyObject *h0) noexcept {
 }
 
 static PyObject *nb_absolute(PyObject *h0) noexcept {
-    return apply<Normal>(ArrayOp::Abs, Py_nb_absolute, std::make_index_sequence<1>(), h0);
+    return apply<Normal>(ArrayOp::Abs, Py_nb_absolute,
+                         std::make_index_sequence<1>(), h0);
 }
 
 static PyObject *nb_invert(PyObject *h0) noexcept {
@@ -23,8 +43,8 @@ static PyObject *nb_invert(PyObject *h0) noexcept {
 }
 
 static PyObject *nb_add(PyObject *h0, PyObject *h1) noexcept {
-    return apply<Normal>(ArrayOp::Add, Py_nb_add,
-                         std::make_index_sequence<2>(), h0, h1);
+    return apply<Normal>(ArrayOp::Add, Py_nb_add, std::make_index_sequence<2>(),
+                         h0, h1);
 }
 
 static PyObject *nb_subtract(PyObject *h0, PyObject *h1) noexcept {
@@ -52,7 +72,6 @@ static PyObject *nb_xor(PyObject *h0, PyObject *h1) noexcept {
                          h0, h1);
 }
 
-
 static PyObject *tp_richcompare(PyObject *h0, PyObject *h1, int slot) noexcept {
     return apply<RichCompare>(ArrayOp::Richcmp, slot,
                               std::make_index_sequence<2>(), h0, h1);
@@ -71,7 +90,8 @@ template <int Index> nb::object xyzw_getter(nb::handle_t<dr::ArrayBase> h) {
     return nb::steal(s.item(h.ptr(), (Py_ssize_t) Index));
 }
 
-template <int Index> void xyzw_setter(nb::handle_t<dr::ArrayBase> h, nb::handle value) {
+template <int Index>
+void xyzw_setter(nb::handle_t<dr::ArrayBase> h, nb::handle value) {
     const ArraySupplement &s = supp(h.type());
 
     if (NB_UNLIKELY((!s.is_vector && !s.is_quaternion) || s.ndim == 0 ||
@@ -97,7 +117,8 @@ template <int Index> nb::object complex_getter(nb::handle_t<dr::ArrayBase> h) {
     return nb::steal(s.item(h.ptr(), (Py_ssize_t) Index));
 }
 
-template <int Index> void complex_setter(nb::handle_t<dr::ArrayBase> h, nb::handle value) {
+template <int Index>
+void complex_setter(nb::handle_t<dr::ArrayBase> h, nb::handle value) {
     const ArraySupplement &s = supp(h.type());
 
     if (NB_UNLIKELY(!s.is_complex)) {
@@ -118,7 +139,8 @@ static int nb_bool(PyObject *o) noexcept {
         nb::str name = nb::type_name(tp);
         PyErr_Format(PyExc_TypeError,
                      "%U.__bool__(): implicit conversion to 'bool' is only "
-                     "supported for scalar mask arrays.", name.ptr());
+                     "supported for scalar mask arrays.",
+                     name.ptr());
         return -1;
     }
 
@@ -167,7 +189,8 @@ static PyObject *nb_positive(PyObject *o) noexcept {
     return o;
 }
 
-#define DR_ARRAY_SLOT(name) { Py_##name, (void *) name }
+#define DR_ARRAY_SLOT(name)                                                    \
+    { Py_##name, (void *) name }
 
 static PyType_Slot array_base_slots[] = {
     // Unary operations
@@ -196,6 +219,18 @@ static PyType_Slot array_base_slots[] = {
     { 0, nullptr }
 };
 
+#define DR_MATH_TERNOP(name, op)                                               \
+    m.def(                                                                     \
+        #name,                                                                 \
+        [](double v0, double v1, double v2) { return dr::name(v0, v1, v2); },  \
+        nb::raw_doc(doc_##name));                                              \
+    m.def(#name, [](nb::handle h0, nb::handle h1, nb::handle h2) {             \
+        if (!is_drjit_array(h0) && !is_drjit_array(h1) && !is_drjit_array(h2)) \
+            throw nb::next_overload();                                         \
+        return nb::steal(apply<Normal>(op, #name,                              \
+                                       std::make_index_sequence<3>(),          \
+                                       h0.ptr(), h1.ptr(), h2.ptr()));         \
+    });
 
 void export_base(nb::module_ &m) {
     nb::class_<dr::ArrayBase> ab(m, "ArrayBase",
@@ -207,12 +242,32 @@ void export_base(nb::module_ &m) {
     });
 
     ab.def_prop_ro("shape", &shape, nb::raw_doc(doc_ArrayBase_shape));
-    ab.def_prop_rw("x", xyzw_getter<0>, xyzw_setter<0>, nb::raw_doc(doc_ArrayBase_x));
-    ab.def_prop_rw("y", xyzw_getter<1>, xyzw_setter<1>, nb::raw_doc(doc_ArrayBase_y));
-    ab.def_prop_rw("z", xyzw_getter<2>, xyzw_setter<2>, nb::raw_doc(doc_ArrayBase_z));
-    ab.def_prop_rw("w", xyzw_getter<3>, xyzw_setter<3>, nb::raw_doc(doc_ArrayBase_w));
-    ab.def_prop_rw("real", complex_getter<0>, complex_setter<0>, nb::raw_doc(doc_ArrayBase_real));
-    ab.def_prop_rw("imag", complex_getter<1>, complex_setter<1>, nb::raw_doc(doc_ArrayBase_imag));
+    ab.def_prop_rw("x", xyzw_getter<0>, xyzw_setter<0>,
+                   nb::raw_doc(doc_ArrayBase_x));
+    ab.def_prop_rw("y", xyzw_getter<1>, xyzw_setter<1>,
+                   nb::raw_doc(doc_ArrayBase_y));
+    ab.def_prop_rw("z", xyzw_getter<2>, xyzw_setter<2>,
+                   nb::raw_doc(doc_ArrayBase_z));
+    ab.def_prop_rw("w", xyzw_getter<3>, xyzw_setter<3>,
+                   nb::raw_doc(doc_ArrayBase_w));
+    ab.def_prop_rw("real", complex_getter<0>, complex_setter<0>,
+                   nb::raw_doc(doc_ArrayBase_real));
+    ab.def_prop_rw("imag", complex_getter<1>, complex_setter<1>,
+                   nb::raw_doc(doc_ArrayBase_imag));
+
+    DR_MATH_TERNOP(fma, ArrayOp::Fma);
 
     array_base = ab;
+    array_module = m;
+    array_submodules[0] = m.attr("scalar");
+
+#if defined(DRJIT_ENABLE_CUDA)
+    array_submodules[1] = m.attr("cuda");
+    array_submodules[2] = array_submodules[1].attr("ad");
+#endif
+
+#if defined(DRJIT_ENABLE_LLVM)
+    array_submodules[3] = m.attr("llvm");
+    array_submodules[4] = array_submodules[3].attr("ad");
+#endif
 }

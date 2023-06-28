@@ -12,7 +12,6 @@
 #include "shape.h"
 #include "eval.h"
 #include "../ext/nanobind/src/buffer.h"
-#include <nanobind/stl/vector.h>
 
 static nanobind::detail::Buffer buffer;
 

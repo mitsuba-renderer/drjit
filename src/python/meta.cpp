@@ -24,7 +24,7 @@ bool meta_check(ArrayMeta m) noexcept {
 
 static const char *type_name_lowercase[] = {
     "void", "bool", "int8", "uint8", "int16", "uint16", "int32", "uint32",
-    "int64", "uint64", "pointer", "float16", "float32", "float64"
+    "int64", "uint64", "pointer", "float162", "float32", "float64"
 };
 
 static const char *type_name[] = {
@@ -34,7 +34,7 @@ static const char *type_name[] = {
 
 static const char *type_suffix[] = {
     "?", "b", "i8", "u8", "i16", "u16", "i", "u",
-    "i64", "u64", "p", "f16", "f", "d"
+    "i64", "u64", "p", "f16", "f", "f64"
 };
 
 /// Convert a metadata record into a string representation (for debugging)
@@ -46,10 +46,14 @@ std::string meta_str(ArrayMeta m) {
         result += type_name_lowercase[m.type];
         result += ",\n";
 
-        if (m.backend == (uint16_t) JitBackend::CUDA)
+        if (m.backend == (uint16_t) JitBackend::Invalid)
+            ;
+        else if (m.backend == (uint16_t) JitBackend::CUDA)
             result += "  backend=cuda,\n";
         else if (m.backend == (uint16_t) JitBackend::LLVM)
             result += "  backend=llvm,\n";
+        else
+            result += "  backend=invalid,\n";
 
         if (m.backend != (uint16_t) JitBackend::Invalid)
             result += "  is_jit=1,\n";
@@ -217,7 +221,7 @@ ArrayMeta meta_from_builtin(nb::handle h) noexcept {
                 m.type = (uint16_t) (overflow > 0 ? VarType::UInt64 : VarType::Int64);
             }
         } else {
-            m.type = (uint16_t) (result > 0 ? VarType::UInt32 : VarType::Int32);
+            m.type = (uint16_t) (result > INT_MAX ? VarType::UInt32 : VarType::Int32);
         }
     } else if (PyFloat_CheckExact(h.ptr())) {
         m.type = (uint8_t) VarType::Float32;
@@ -314,7 +318,7 @@ void promote(nb::object *o, size_t n, bool select) {
     }
 
     if (!meta_check(m))
-        nb::detail::raise("Incompatible arguments!");
+        nb::detail::raise("Incompatible arguments.");
 
     if (!h.is_valid())
         h = meta_get_type(m);
@@ -340,7 +344,7 @@ void promote(nb::object *o, size_t n, bool select) {
                 nb::str type_name_i = nb::type_name(o[i].type()),
                         type_name_o = nb::type_name(h2);
 
-                nb::detail::raise("Could not promote type '%s' to '%s'!",
+                nb::detail::raise("Could not promote type '%s' to '%s'.",
                                   type_name_i.c_str(), type_name_o.c_str());
             }
 
@@ -349,40 +353,22 @@ void promote(nb::object *o, size_t n, bool select) {
     }
 }
 
-static nb::handle submodules[6];
-
 /// Look up the nanobind module associated with the given array metadata
-nb::handle meta_get_module(ArrayMeta meta) {
+nb::handle meta_get_module(ArrayMeta meta) noexcept {
     int index;
     switch ((JitBackend) meta.backend) {
-        case JitBackend::CUDA: index = 2; break;
-        case JitBackend::LLVM: index = 4; break;
-        default: index = 1; break;
+        case JitBackend::CUDA: index = 1; break;
+        case JitBackend::LLVM: index = 3; break;
+        default: index = 0; break;
     }
-
     index += (int) meta.is_diff;
-
-    if (NB_UNLIKELY(!submodules[0].is_valid())) {
-        submodules[0] = nb::module_::import_("drjit");
-        submodules[1] = nb::module_::import_("drjit.scalar");
-#if defined(DRJIT_ENABLE_CUDA)
-        submodules[2] = nb::module_::import_("drjit.cuda");
-        submodules[3] = nb::module_::import_("drjit.cuda.ad");
-#endif
-
-#if defined(DRJIT_ENABLE_LLVM)
-        submodules[4] = nb::module_::import_("drjit.llvm");
-        submodules[5] = nb::module_::import_("drjit.llvm.ad");
-#endif
-    }
-
-    return submodules[index];
+    return array_submodules[index];
 }
 
 static nb::detail::Buffer buffer;
 
 /// Determine the nanobind type name associated with the given array metadata
-const char *meta_get_name(ArrayMeta meta) {
+const char *meta_get_name(ArrayMeta meta) noexcept {
     buffer.clear();
 
     if (!meta.is_tensor) {
@@ -428,5 +414,10 @@ const char *meta_get_name(ArrayMeta meta) {
 
 /// Look up the nanobind type associated with the given array metadata
 nb::handle meta_get_type(ArrayMeta meta) {
-    return meta_get_module(meta).attr(meta_get_name(meta));
+    const char *name = meta_get_name(meta);
+    nb::handle result = getattr(meta_get_module(meta), name, nb::handle());
+    if (!result.is_valid())
+        nb::detail::raise(
+            "Operation references type \"%s\", which lacks bindings", name);
+    return result;
 }
