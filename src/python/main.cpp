@@ -1,3 +1,13 @@
+/*
+    main.cpp -- Entry point of the Python bindings
+
+    Dr.Jit: A Just-In-Time-Compiler for Differentiable Rendering
+    Copyright 2023, Realistic Graphics Lab, EPFL.
+
+    All rights reserved. Use of this source code is governed by a
+    BSD-style license that can be found in the LICENSE.txt file.
+*/
+
 #include "bind.h"
 #include "base.h"
 #include "shape.h"
@@ -8,6 +18,7 @@
 #include "reduce.h"
 #include "eval.h"
 #include "iter.h"
+#include "init.h"
 
 NB_MODULE(drjit_ext, m_) {
     (void) m_;
@@ -48,6 +59,7 @@ NB_MODULE(drjit_ext, m_) {
 
     export_bind(detail);
     export_base(m);
+    export_init(m);
     export_shape(m);
     export_traits(m);
     export_iter(detail);

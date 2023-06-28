@@ -64,6 +64,9 @@ enum class ArrayOp {
     Or,
     Xor,
 
+    // Ternary operations
+    Fma,
+
     // Horizontal reductions
     All,
     Any,
@@ -126,6 +129,9 @@ struct ArraySupplement : ArrayMeta {
 
             /// Initialize the dynamically sized array to the given size
             Init init;
+
+            /// Create a counter variable
+            Init init_counter;
 
             /// Initialize from a Python constant value
             InitConst init_const;
@@ -301,9 +307,10 @@ template <typename T> NB_INLINE void bind_base(ArrayBinding &b) {
             return a->size();
         };
 
-        b.init =
-            (ArraySupplement::Init) + [](size_t size, T *a) { a->init_(size); };
-
+        b.init = (ArraySupplement::Init) + [](size_t size, T *a) {
+            new (a) T();
+            a->init_(size);
+        };
 
         if constexpr (T::Depth == 1) {
             b.init_data = (ArraySupplement::InitData) +
@@ -321,6 +328,11 @@ template <typename T> NB_INLINE void bind_base(ArrayBinding &b) {
                     new (a) T(full<T>(scalar, size));
                 }
             };
+
+            if constexpr (std::is_same_v<scalar_t<T>, uint32_t>)
+                b.init_counter = (ArraySupplement::Init) +[](size_t size, T *a) {
+                    new (a) T(T::counter(size));
+                };
         }
     }
 }
@@ -338,6 +350,9 @@ template <typename T> void bind_arithmetic(ArrayBinding &b) {
     b[ArrayOp::Add] = (void *) +[](const T *a, const T *b, T *c) { new (c) T(*a + *b); };
     b[ArrayOp::Sub] = (void *) +[](const T *a, const T *b, T *c) { new (c) T(*a - *b); };
     b[ArrayOp::Mul] = (void *) +[](const T *a, const T *b, T *c) { new (c) T(*a * *b); };
+    b[ArrayOp::Fma] = (void *) +[](const T *a, const T *b, const T *c, T *d) {
+        new (d) T(fmadd(*a, *b, *c));
+    };
 
     b.cast = (ArrayBinding::Cast) +[](const ArrayBase *a, VarType vt, T *b) {
         switch (vt) {
@@ -354,7 +369,7 @@ template <typename T> void bind_arithmetic(ArrayBinding &b) {
 
 inline void disable_arithmetic(ArrayBinding &b) {
     b[ArrayOp::Abs] = b[ArrayOp::Neg] = b[ArrayOp::Add] = b[ArrayOp::Sub] =
-        b[ArrayOp::Mul] = DRJIT_OP_NOT_IMPLEMENTED;
+        b[ArrayOp::Mul] = b[ArrayOp::Fma] = DRJIT_OP_NOT_IMPLEMENTED;
     b.cast = (ArrayBinding::Cast) DRJIT_OP_NOT_IMPLEMENTED;
 }
 

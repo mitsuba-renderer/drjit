@@ -10,17 +10,22 @@
 
 #pragma once
 #include <drjit/python.h>
+#include <nanobind/stl/vector.h>
 #include "docstr.h"
 
 namespace nb = nanobind;
 namespace dr = drjit;
+
+using namespace nb::literals;
 
 using dr::ArrayMeta;
 using dr::ArraySupplement;
 using dr::ArrayBinding;
 using dr::ArrayOp;
 
-inline const ArraySupplement &supp(nb::handle h) { return nb::type_supplement<ArraySupplement>(h); }
+inline const ArraySupplement &supp(nb::handle h) {
+    return nb::type_supplement<ArraySupplement>(h);
+}
 
 #define raise_if(expr, ...)                                                    \
     do {                                                                       \

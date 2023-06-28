@@ -225,6 +225,14 @@ struct DynamicArray
         m_free = true;
     }
 
+    static auto counter(size_t size) {
+        uint32_array_t<DynamicArray> result;
+        result.init_(size);
+        for (size_t i = 0; i < size; ++i)
+            result.entry(i) = (uint32_t) i;
+        return result;
+    }
+
     const Value *data() const { return m_data; }
     Value *data() { return m_data; }
 

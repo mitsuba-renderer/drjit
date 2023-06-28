@@ -1,5 +1,6 @@
 /*
-    base.h -- Implementation of the drjit.ArrayBase subclass
+    base.h -- Bindings of the dr::ArrayBase type underlying
+    all Dr.Jit arrays
 
     Dr.Jit: A Just-In-Time-Compiler for Differentiable Rendering
     Copyright 2023, Realistic Graphics Lab, EPFL.
@@ -14,6 +15,12 @@
 
 /// Reference to the Python ArrayBase type object
 extern nb::handle array_base;
+
+/// Reference to the Dr.Jit core module
+extern nb::handle array_module;
+
+/// Reference to the Dr.Jit core module
+extern nb::handle array_submodules[5];
 
 /// Create and publish the ArrayBase type object
 extern void export_base(nb::module_&);

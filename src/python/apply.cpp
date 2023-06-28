@@ -1,3 +1,14 @@
+/*
+    apply.cpp -- Implementation of the internal apply() function,
+    which recursively propagates operations through Dr.Jit arrays
+
+    Dr.Jit: A Just-In-Time-Compiler for Differentiable Rendering
+    Copyright 2023, Realistic Graphics Lab, EPFL.
+
+    All rights reserved. Use of this source code is governed by a
+    BSD-style license that can be found in the LICENSE.txt file.
+*/
+
 #include "apply.h"
 #include "meta.h"
 #include "base.h"
@@ -17,6 +28,9 @@ static const char *op_names[] = {
     "__and__",
     "__or__",
     "__xor__",
+
+    // Ternary operations
+    "fma",
 
     // Horizontal reductions
     "all",
@@ -107,12 +121,12 @@ PyObject *apply(ArrayOp op, Slot slot, std::index_sequence<Is...>,
             }
             nb::inst_mark_ready(result);
         } else {
-            nb::inst_zero(result);
-
             Py_ssize_t l[N + 1], i[N] { };
             if (s.shape[0] != DRJIT_DYNAMIC) {
                 ((l[Is] = s.shape[0]), ...);
                 l[N] = s.shape[0];
+
+                nb::inst_zero(result);
             } else {
                 ((l[Is] = s.len(p[Is])), ...);
                 l[N] = maxv(l[Is]...);
@@ -121,14 +135,21 @@ PyObject *apply(ArrayOp op, Slot slot, std::index_sequence<Is...>,
                     raise_incompatible_size_error(l, N);
 
                 s.init(l[N], p[N]);
+                nb::inst_mark_ready(result);
             }
 
             void *py_impl;
-            if constexpr (Mode == Normal)
-                py_impl = PyType_GetSlot((PyTypeObject *) s.value, slot);
-            else if constexpr (Mode == RichCompare)
+            nb::object py_impl_o;
+
+            if constexpr (Mode == Normal) {
+                if constexpr (std::is_same_v<Slot, int>)
+                    py_impl = PyType_GetSlot((PyTypeObject *) s.value, slot);
+                else
+                    py_impl_o = array_module.attr(slot);
+            } else if constexpr (Mode == RichCompare) {
                 py_impl = PyType_GetSlot((PyTypeObject *) s.value,
                                          Py_tp_richcompare);
+            }
 
             for (Py_ssize_t j = 0; j < l[N]; ++j) {
                 nb::object v[] = { nb::steal(item(o[Is].ptr(), i[Is]))... };
@@ -137,8 +158,12 @@ PyObject *apply(ArrayOp op, Slot slot, std::index_sequence<Is...>,
 
                 nb::object vr;
                 if constexpr (Mode == Normal) {
-                    using PyImpl = PyObject *(*)(first_t<PyObject *, Args>...);
-                    vr = nb::steal(((PyImpl) py_impl)(v[Is].ptr()...));
+                    if constexpr (std::is_same_v<Slot, int>) {
+                        using PyImpl = PyObject *(*)(first_t<PyObject *, Args>...);
+                        vr = nb::steal(((PyImpl) py_impl)(v[Is].ptr()...));
+                    } else {
+                        vr = py_impl_o(v[Is]...);
+                    }
                 } else if constexpr (Mode == RichCompare) {
                     using PyImpl = PyObject *(*)(PyObject *, PyObject *, int);
                     vr = nb::steal(((PyImpl) py_impl)(v[0].ptr(), v[1].ptr(), slot));
@@ -156,13 +181,21 @@ PyObject *apply(ArrayOp op, Slot slot, std::index_sequence<Is...>,
     } catch (nb::python_error &e) {
         nb::str tp_name = nb::type_name(tp);
         e.restore();
-        nb::chain_error(PyExc_RuntimeError, "%U.%s(): failed (see above)!",
-                        tp_name.ptr(), op_names[(int) op]);
+        if constexpr (std::is_same_v<Slot, const char *>)
+            nb::chain_error(PyExc_RuntimeError, "drjit.%s(<%U>): failed (see above)!",
+                            op_names[(int) op], tp_name.ptr());
+        else
+            nb::chain_error(PyExc_RuntimeError, "%U.%s(): failed (see above)!",
+                            tp_name.ptr(), op_names[(int) op]);
         throw nb::python_error();
     } catch (const std::exception &e) {
         nb::str tp_name = nb::type_name(tp);
-        nb::chain_error(PyExc_RuntimeError, "%U.%s(): %s", tp_name.ptr(),
-                        op_names[(int) op], e.what());
+        if constexpr (std::is_same_v<Slot, const char *>)
+            nb::chain_error(PyExc_RuntimeError, "drjit.%s(<%U>): %s",
+                            op_names[(int) op], tp_name.ptr(), e.what());
+        else
+            nb::chain_error(PyExc_RuntimeError, "%U.%s(): %s", tp_name.ptr(),
+                            op_names[(int) op], e.what());
         return nullptr;
     }
 }
@@ -224,6 +257,12 @@ template PyObject *apply<Normal>(ArrayOp, int, std::index_sequence<0>,
 template PyObject *apply<Normal>(ArrayOp, int, std::index_sequence<0, 1>,
                                  PyObject *, PyObject *) noexcept;
 template PyObject *apply<Normal>(ArrayOp, int, std::index_sequence<0, 1, 2>,
+                                 PyObject *, PyObject *, PyObject *) noexcept;
+template PyObject *apply<Normal>(ArrayOp, const char *, std::index_sequence<0>,
+                                 PyObject *) noexcept;
+template PyObject *apply<Normal>(ArrayOp, const char *, std::index_sequence<0, 1>,
+                                 PyObject *, PyObject *) noexcept;
+template PyObject *apply<Normal>(ArrayOp, const char *, std::index_sequence<0, 1, 2>,
                                  PyObject *, PyObject *, PyObject *) noexcept;
 template PyObject *apply<RichCompare>(ArrayOp, int, std::index_sequence<0, 1>,
                                       PyObject *, PyObject *) noexcept;

@@ -42,18 +42,17 @@ extern ArrayMeta meta_from_builtin(nb::handle h) noexcept;
 extern void promote(nb::object *o, size_t n, bool select);
 
 /// Look up the nanobind module name associated with the given array metadata
-extern nb::handle meta_get_module(ArrayMeta meta);
+extern nb::handle meta_get_module(ArrayMeta meta) noexcept;
 
 /// Determine the nanobind type name associated with the given array metadata
-extern const char *meta_get_name(ArrayMeta meta);
+extern const char *meta_get_name(ArrayMeta meta) noexcept;
 
 /// Look up the nanobind type associated with the given array metadata
 extern nb::handle meta_get_type(ArrayMeta meta);
 
 inline bool operator==(ArrayMeta a, ArrayMeta b) {
-    a.tsize_rel = a.talign = 0;
-    b.tsize_rel = b.talign = 0;
-    return memcpy(&a, &b, sizeof(ArrayMeta)) == 0;
+    a.talign = a.tsize_rel = b.talign = b.tsize_rel = 0;
+    return memcmp(&a, &b, sizeof(ArrayMeta)) == 0;
 }
 
 inline bool operator!=(ArrayMeta a, ArrayMeta b) { return !operator==(a, b); }
