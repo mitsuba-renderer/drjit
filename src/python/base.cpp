@@ -27,55 +27,41 @@ namespace drjit {
     }
 };
 
-static PyObject *nb_negative(PyObject *h0) noexcept {
-    return apply<Normal>(ArrayOp::Neg, Py_nb_negative,
-                         std::make_index_sequence<1>(), h0);
-}
+#define DR_NB_UNOP(name, op)                                                   \
+    static PyObject *nb_##name(PyObject *h0) noexcept {                        \
+        return apply<Normal>(op, Py_nb_##name, std::make_index_sequence<1>(),  \
+                             h0);                                              \
+    }
 
-static PyObject *nb_absolute(PyObject *h0) noexcept {
-    return apply<Normal>(ArrayOp::Abs, Py_nb_absolute,
-                         std::make_index_sequence<1>(), h0);
-}
+#define DR_NB_BINOP(name, op)                                             \
+    static PyObject *nb_##name(PyObject *h0, PyObject *h1) noexcept {          \
+        return apply<Normal>(op, Py_nb_##name, std::make_index_sequence<2>(),  \
+                             h0, h1);                                          \
+    }                                                                          \
+    static PyObject *nb_inplace_##name(PyObject *h0, PyObject *h1) noexcept {  \
+        return apply<InPlace>(op, Py_nb_##name, std::make_index_sequence<2>(), \
+                              h0, h1);                                         \
+    }
 
-static PyObject *nb_invert(PyObject *h0) noexcept {
-    return apply<Normal>(ArrayOp::Invert, Py_nb_invert,
-                         std::make_index_sequence<1>(), h0);
-}
-
-static PyObject *nb_add(PyObject *h0, PyObject *h1) noexcept {
-    return apply<Normal>(ArrayOp::Add, Py_nb_add, std::make_index_sequence<2>(),
-                         h0, h1);
-}
-
-static PyObject *nb_subtract(PyObject *h0, PyObject *h1) noexcept {
-    return apply<Normal>(ArrayOp::Sub, Py_nb_subtract,
-                         std::make_index_sequence<2>(), h0, h1);
-}
-
-static PyObject *nb_multiply(PyObject *h0, PyObject *h1) noexcept {
-    return apply<Normal>(ArrayOp::Mul, Py_nb_multiply,
-                         std::make_index_sequence<2>(), h0, h1);
-}
-
-static PyObject *nb_and(PyObject *h0, PyObject *h1) noexcept {
-    return apply<Normal>(ArrayOp::And, Py_nb_and, std::make_index_sequence<2>(),
-                         h0, h1);
-}
-
-static PyObject *nb_or(PyObject *h0, PyObject *h1) noexcept {
-    return apply<Normal>(ArrayOp::Or, Py_nb_or, std::make_index_sequence<2>(),
-                         h0, h1);
-}
-
-static PyObject *nb_xor(PyObject *h0, PyObject *h1) noexcept {
-    return apply<Normal>(ArrayOp::Xor, Py_nb_xor, std::make_index_sequence<2>(),
-                         h0, h1);
-}
+DR_NB_UNOP(negative, ArrayOp::Neg)
+DR_NB_UNOP(absolute, ArrayOp::Abs)
+DR_NB_UNOP(invert, ArrayOp::Invert)
+DR_NB_BINOP(add, ArrayOp::Add)
+DR_NB_BINOP(subtract, ArrayOp::Sub)
+DR_NB_BINOP(multiply, ArrayOp::Mul)
+DR_NB_BINOP(true_divide, ArrayOp::TrueDiv)
+DR_NB_BINOP(floor_divide, ArrayOp::FloorDiv)
+DR_NB_BINOP(lshift, ArrayOp::LShift)
+DR_NB_BINOP(rshift, ArrayOp::RShift)
+DR_NB_BINOP(and, ArrayOp::And)
+DR_NB_BINOP(or, ArrayOp::Or)
+DR_NB_BINOP(xor, ArrayOp::Xor)
 
 static PyObject *tp_richcompare(PyObject *h0, PyObject *h1, int slot) noexcept {
     return apply<RichCompare>(ArrayOp::Richcmp, slot,
                               std::make_index_sequence<2>(), h0, h1);
 }
+
 
 template <int Index> nb::object xyzw_getter(nb::handle_t<dr::ArrayBase> h) {
     const ArraySupplement &s = supp(h.type());
@@ -201,13 +187,27 @@ static PyType_Slot array_base_slots[] = {
 
     /// Binary arithmetic operations
     DR_ARRAY_SLOT(nb_add),
+    DR_ARRAY_SLOT(nb_inplace_add),
     DR_ARRAY_SLOT(nb_subtract),
+    DR_ARRAY_SLOT(nb_inplace_subtract),
     DR_ARRAY_SLOT(nb_multiply),
+    DR_ARRAY_SLOT(nb_inplace_multiply),
+    DR_ARRAY_SLOT(nb_true_divide),
+    DR_ARRAY_SLOT(nb_inplace_true_divide),
+    DR_ARRAY_SLOT(nb_floor_divide),
+    DR_ARRAY_SLOT(nb_inplace_floor_divide),
+    DR_ARRAY_SLOT(nb_lshift),
+    DR_ARRAY_SLOT(nb_inplace_lshift),
+    DR_ARRAY_SLOT(nb_rshift),
+    DR_ARRAY_SLOT(nb_inplace_rshift),
 
     /// Binary bit/mask operations
     DR_ARRAY_SLOT(nb_and),
+    DR_ARRAY_SLOT(nb_inplace_and),
     DR_ARRAY_SLOT(nb_or),
+    DR_ARRAY_SLOT(nb_inplace_or),
     DR_ARRAY_SLOT(nb_xor),
+    DR_ARRAY_SLOT(nb_inplace_xor),
 
     /// Miscellaneous
     DR_ARRAY_SLOT(tp_iter),
@@ -218,6 +218,17 @@ static PyType_Slot array_base_slots[] = {
 
     { 0, nullptr }
 };
+
+#define DR_MATH_BINOP(name, op)                                                \
+    m.def(                                                                     \
+        #name, [](double v0, double v1) { return dr::name(v0, v1); },          \
+        nb::raw_doc(doc_##name));                                              \
+    m.def(#name, [](nb::handle h0, nb::handle h1) {                            \
+        if (!is_drjit_array(h0) && !is_drjit_array(h1))                        \
+            throw nb::next_overload();                                         \
+        return nb::steal(apply<Normal>(                                        \
+            op, #name, std::make_index_sequence<2>(), h0.ptr(), h1.ptr()));    \
+    });
 
 #define DR_MATH_TERNOP(name, op)                                               \
     m.def(                                                                     \
@@ -255,7 +266,18 @@ void export_base(nb::module_ &m) {
     ab.def_prop_rw("imag", complex_getter<1>, complex_setter<1>,
                    nb::raw_doc(doc_ArrayBase_imag));
 
+    m.def("minimum",
+          [](Py_ssize_t a, Py_ssize_t b) { return dr::minimum(a, b); }, doc_minimum);
+    m.def("maximum",
+          [](Py_ssize_t a, Py_ssize_t b) { return dr::maximum(a, b); }, doc_maximum);
+    DR_MATH_BINOP(minimum, ArrayOp::Minimum);
+    DR_MATH_BINOP(maximum, ArrayOp::Maximum);
     DR_MATH_TERNOP(fma, ArrayOp::Fma);
+
+    m.def("select",
+          [](bool mask, nb::handle a, nb::handle b) {
+              return nb::borrow(mask ? a : b);
+          }, doc_select);
 
     array_base = ab;
     array_module = m;

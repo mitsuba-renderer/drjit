@@ -138,16 +138,72 @@ ArrayMeta meta_promote(ArrayMeta a, ArrayMeta b) noexcept {
 }
 
 // Infer the metadata from the given Python object
-ArrayMeta meta_from_builtin(nb::handle h) noexcept {
+ArrayMeta meta_get(nb::handle h) noexcept {
+    nb::handle tp = h.type();
+
     ArrayMeta m { };
     m.is_valid = true;
 
-    if (nb::ndarray_check(h.type())) {
+    if (is_drjit_type(tp)) {
+        m = supp(tp);
+    } else if (tp.is(&PyBool_Type)) {
+        m.type = (uint8_t) VarType::Bool;
+    } else if (tp.is(&PyLong_Type)) {
+        int overflow = 0;
+        long long result = PyLong_AsLongLongAndOverflow(h.ptr(), &overflow);
+
+        if (result == -1) {
+            if (overflow == 0) {
+                PyErr_Clear();
+                m.is_valid = false;
+            } else {
+                m.type = (uint16_t) (overflow > 0 ? VarType::UInt64 : VarType::Int64);
+            }
+        } else {
+            m.type = (uint16_t) (result > INT_MAX ? VarType::UInt32 : VarType::Int32);
+        }
+    } else if (tp.is(&PyFloat_Type)) {
+        m.type = (uint8_t) VarType::Float32;
+    } else if (tp.is(&PyTuple_Type) || tp.is(&PyList_Type)) {
+        Py_ssize_t len = PySequence_Size(h.ptr());
+
+        if (len < 0) {
+            PyErr_Clear();
+            m.is_valid = false;
+        } else {
+            for (Py_ssize_t i = 0; i < len; ++i) {
+                PyObject *o2 = PySequence_GetItem(h.ptr(), i);
+                if (!o2) {
+                    PyErr_Clear();
+                    m.is_valid = false;
+                    break;
+                }
+
+                ArrayMeta m2 = meta_get(o2);
+                Py_DECREF(o2);
+
+                if (m2.ndim >= 3 || !m2.is_valid) {
+                    m.is_valid = false;
+                    break;
+                }
+
+                for (int j = 0; j < m2.ndim; ++j)
+                    m2.shape[j + 1] = m2.shape[j];
+                m2.shape[0] = len > 4 ? DRJIT_DYNAMIC : (uint8_t) len;
+                m2.ndim++;
+
+                if (m != m2)
+                    m = meta_promote(m, m2);
+            }
+
+            m.is_sequence = true;
+        }
+    } else if (nb::ndarray_check(tp)) {
         try {
             using nb::dlpack::dtype;
             using nb::dlpack::dtype_code;
 
-            auto array = nb::cast<nb::ndarray<nb::ro>>(h);
+            nb::ndarray<nb::ro> array = nb::cast<nb::ndarray<nb::ro>>(h);
             dtype dt = array.dtype();
             VarType vt = VarType::Void;
 
@@ -204,60 +260,8 @@ ArrayMeta meta_from_builtin(nb::handle h) noexcept {
         } catch (const std::exception &e) {
             PyErr_WarnFormat(
                 PyExc_Warning, 1,
-                "meta_from_builtin(): could not analyze array type: %s",
+                "meta_get(): could not analyze array type: %s",
                 e.what());
-        }
-    } else if (PyBool_Check(h.ptr())) {
-        m.type = (uint8_t) VarType::Bool;
-    } else if (PyLong_CheckExact(h.ptr())) {
-        int overflow = 0;
-        long long result = PyLong_AsLongLongAndOverflow(h.ptr(), &overflow);
-
-        if (result == -1) {
-            if (overflow == 0) {
-                PyErr_Clear();
-                m.is_valid = false;
-            } else {
-                m.type = (uint16_t) (overflow > 0 ? VarType::UInt64 : VarType::Int64);
-            }
-        } else {
-            m.type = (uint16_t) (result > INT_MAX ? VarType::UInt32 : VarType::Int32);
-        }
-    } else if (PyFloat_CheckExact(h.ptr())) {
-        m.type = (uint8_t) VarType::Float32;
-    } else if (PyTuple_CheckExact(h.ptr()) || PyList_CheckExact(h.ptr())) {
-        Py_ssize_t len = PySequence_Size(h.ptr());
-
-        if (len < 0) {
-            PyErr_Clear();
-            m.is_valid = false;
-        } else {
-            for (Py_ssize_t i = 0; i < len; ++i) {
-                PyObject *o2 = PySequence_GetItem(h.ptr(), i);
-                if (!o2) {
-                    PyErr_Clear();
-                    m.is_valid = false;
-                    break;
-                }
-
-                ArrayMeta m2 = meta_from_builtin(o2);
-                Py_DECREF(o2);
-
-                if (m2.ndim >= 3 || !m2.is_valid) {
-                    m.is_valid = false;
-                    break;
-                }
-
-                for (int j = 0; j < m2.ndim; ++j)
-                    m2.shape[j + 1] = m2.shape[j];
-                m2.shape[0] = len > 4 ? DRJIT_DYNAMIC : (uint8_t) len;
-                m2.ndim++;
-
-                if (m != m2)
-                    m = meta_promote(m, m2);
-            }
-
-            m.is_sequence = true;
         }
     } else {
         m.is_valid = false;
@@ -284,22 +288,15 @@ ArrayMeta meta_from_builtin(nb::handle h) noexcept {
  *    first operand will be promoted to a mask array
  */
 void promote(nb::object *o, size_t n, bool select) {
-    PyTypeObject *base = (PyTypeObject *) array_base.ptr();
     ArrayMeta m;
 
     nb::handle h;
     for (size_t i = 0; i < n; ++i) {
-        PyTypeObject *tp = Py_TYPE(o[i].ptr());
-        bool is_drjit_array = PyType_IsSubtype(tp, base);
-
-        ArrayMeta m2;
-        if (is_drjit_array)
-            m2 = nb::type_supplement<ArraySupplement>(tp);
-        else
-            m2 = meta_from_builtin(o[i]);
+        nb::handle o_i = o[i];
+        ArrayMeta m2 = meta_get(o_i);
 
         if (!m2.is_valid) {
-            nb::str type_name = nb::type_name(tp);
+            nb::str type_name = nb::inst_name(o_i);
             nb::detail::raise(
                 "Encountered an unsupported argument of type '%s' (must be a "
                 "Dr.Jit array or a type that can be converted into one)",
@@ -311,16 +308,19 @@ void promote(nb::object *o, size_t n, bool select) {
         else
             m = meta_promote(m, m2);
 
-        if (m != m2)
+        if (m == m2) {
+            if (m2.talign) // (if this is a Dr.Jit array)
+                h = o_i;
+        } else {
             h = nb::handle();
-        else if (is_drjit_array)
-            h = tp;
+        }
     }
-
     if (!meta_check(m))
         nb::detail::raise("Incompatible arguments.");
 
-    if (!h.is_valid())
+    if (h.is_valid())
+        h = h.type();
+    else
         h = meta_get_type(m);
 
     for (size_t i = 0; i < n; ++i) {

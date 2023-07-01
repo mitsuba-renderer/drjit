@@ -15,6 +15,7 @@
 
 enum ApplyMode {
     Normal,
+    InPlace,
     RichCompare,
     Select
 };

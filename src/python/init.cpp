@@ -39,7 +39,7 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
             // or ``Array3f(1.0)``
             PyObject *arg = NB_TUPLE_GET_ITEM(args, 0);
             PyTypeObject *arg_tp = Py_TYPE(arg);
-            bool try_sequence_import = arg_tp != (PyTypeObject *) s.value;
+            bool try_sequence_import = true;
 
             // Initialization from another Dr.Jit array
             if (is_drjit_type(arg_tp)) {
@@ -61,8 +61,19 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
                     }
 
                     // Disallow inefficient element-by-element imports of JIT arrays
-                    if (m1.ndim == 1 && m1.shape[0] == DRJIT_DYNAMIC)
+                    if (m1.ndim == 1 && m1.shape[0] == DRJIT_DYNAMIC) {
                         try_sequence_import = false;
+                    } else {
+                        // Always broadcast when the element type is one of the sub-elements
+                        PyTypeObject *cur_tp = (PyTypeObject *) s.value;
+                        while (cur_tp) {
+                            if (arg_tp == cur_tp) {
+                                try_sequence_import = false;
+                                break;
+                            }
+                            cur_tp = (PyTypeObject *) supp(cur_tp).value;
+                        }
+                    }
                 }
             }
 
@@ -422,7 +433,7 @@ nb::object arange(const nb::type_object_t<dr::ArrayBase> &dtype,
     VarType vt = (VarType) s.type;
     if (vt == VarType::Bool || vt == VarType::Pointer)
         throw nb::type_error("drjit.arange(): unsupported dtype -- must "
-                             "be an integral type.");
+                             "be an arithmetic type.");
 
     Py_ssize_t size = (end - start + step - (step > 0 ? 1 : -1)) / step;
     ArrayMeta meta = s;
@@ -447,6 +458,39 @@ nb::object arange(const nb::type_object_t<dr::ArrayBase> &dtype,
         return dtype(result);
     else
         return array_module.attr("fma")(dtype(result), dtype(step), dtype(start));
+}
+
+nb::object linspace(const nb::type_object_t<dr::ArrayBase> &dtype,
+                    double start, double stop, size_t size, bool endpoint) {
+    const ArraySupplement &s = supp(dtype);
+
+    if (s.ndim != 1 || s.shape[0] != DRJIT_DYNAMIC)
+        throw nb::type_error("drjit.linspace(): unsupported dtype -- must "
+                             "be a dynamically sized 1D array.");
+
+    VarType vt = (VarType) s.type;
+    if (vt != VarType::Float16 && vt != VarType::Float32 && vt != VarType::Float64)
+        throw nb::type_error("drjit.linspace(): unsupported dtype -- must "
+                             "be an floating point type.");
+
+    ArrayMeta meta = s;
+    meta.type = (uint16_t) VarType::UInt32;
+
+    nb::handle counter_tp = meta_get_type(meta);
+    const ArraySupplement &counter_s = supp(counter_tp);
+
+    if (!counter_s.init_counter)
+        throw nb::type_error("drjit.linspace(): unsupported dtype.");
+
+    if (size == 0)
+        return dtype();
+
+    nb::object result = nb::inst_alloc(counter_tp);
+    counter_s.init_counter((size_t) size, nb::inst_ptr<dr::ArrayBase>(result));
+    nb::inst_mark_ready(result);
+
+    double step = (stop - start) / (size - ((endpoint && size > 0) ? 1 : 0));
+    return array_module.attr("fma")(dtype(result), dtype(step), dtype(start));
 }
 
 void export_init(nb::module_ &m) {
@@ -490,5 +534,11 @@ void export_init(nb::module_ &m) {
           [](const nb::type_object_t<dr::ArrayBase> &dtype,
              Py_ssize_t start, Py_ssize_t stop, Py_ssize_t step) {
               return arange(dtype, start, stop, step);
-        }, "dtype"_a, "start"_a, "stop"_a, "step"_a = 1);
+        }, "dtype"_a, "start"_a, "stop"_a, "step"_a = 1)
+     .def("linspace",
+          [](const nb::type_object_t<dr::ArrayBase> &dtype, double start,
+             double stop, size_t num, bool endpoint) {
+              return linspace(dtype, start, stop, num, endpoint);
+          }, "dtype"_a, "start"_a, "stop"_a, "num"_a,
+             "endpoint"_a = true, doc_linspace);
 }

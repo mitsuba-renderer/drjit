@@ -23,6 +23,13 @@ static const char *op_names[] = {
     "__add__",
     "__sub__",
     "__mul__",
+    "__truediv__",
+    "__floordiv__",
+    "__lshift__",
+    "__rshift__",
+
+    "minimum",
+    "maximum",
 
     // Binary bit/mask operations
     "__and__",
@@ -88,85 +95,106 @@ PyObject *apply(ArrayOp op, Slot slot, std::index_sequence<Is...>,
         if (impl == DRJIT_OP_NOT_IMPLEMENTED)
             return nb::not_implemented().release().ptr();
 
-        nb::object result;
         ArraySupplement::Item item = s.item;
         ArraySupplement::SetItem set_item;
+        nb::handle result_type;
 
-        if constexpr (Mode == Normal) {
-            result = nb::inst_alloc(tp);
-            set_item = s.set_item;
+        if constexpr (Mode == RichCompare) {
+            raise_if(((s.is_matrix || s.is_complex || s.is_quaternion) &&
+                      (slot != Py_EQ && slot != Py_NE)) ||
+                         (VarType) s.type == VarType::Pointer,
+                     "Inequality comparisons are only permitted on ordinary "
+                     "arithmetic arrays. They are suppressed for complex "
+                     "arrays, quaternions, matrices, and arrays of pointers.");
+            result_type = s.mask;
+            set_item = supp(result_type).set_item;
         } else {
-            ArrayMeta m2 = s;
-            m2.type = (uint16_t) VarType::Bool;
-            nb::handle tp2 = meta_get_type(m2);
-            result = nb::inst_alloc(tp2);
-            set_item = supp(tp2).set_item;
+            result_type = tp;
+            set_item = s.set_item;
         }
 
-        drjit::ArrayBase *p[N+1] = {
-            nb::inst_ptr<dr::ArrayBase>(o[Is])...,
-            nb::inst_ptr<dr::ArrayBase>(result)
-        };
+        drjit::ArrayBase *p[N] = { nb::inst_ptr<dr::ArrayBase>(o[Is])... };
+        nb::object result;
 
         if (impl != DRJIT_OP_DEFAULT) {
-            if constexpr (Mode == Normal) {
-                using Impl = void (*)(first_t<const dr::ArrayBase *, Args>...,
-                                      dr::ArrayBase *);
-                ((Impl) impl)(p[Is]..., p[N]);
-            } else if constexpr (Mode == RichCompare) {
+            result = nb::inst_alloc(result_type);
+            drjit::ArrayBase *pr = nb::inst_ptr<dr::ArrayBase>(result);
+
+            if constexpr (Mode == RichCompare) {
                 using Impl =
                     void (*)(const dr::ArrayBase *, const dr::ArrayBase *, int,
                              dr::ArrayBase *);
-                ((Impl) impl)(p[0], p[1], slot, p[N]);
+                ((Impl) impl)(p[0], p[1], slot, pr);
+            } else {
+                using Impl = void (*)(first_t<const dr::ArrayBase *, Args>...,
+                                      dr::ArrayBase *);
+                ((Impl) impl)(p[Is]..., pr);
             }
+
             nb::inst_mark_ready(result);
+
+            if constexpr (Mode == InPlace) {
+                nb::inst_destruct(o[0]);
+                nb::inst_move(o[0], result);
+                result = borrow(o[0]);
+            }
         } else {
-            Py_ssize_t l[N + 1], i[N] { };
+            Py_ssize_t l[N], i[N] { }, lr;
             if (s.shape[0] != DRJIT_DYNAMIC) {
                 ((l[Is] = s.shape[0]), ...);
-                l[N] = s.shape[0];
+                lr = s.shape[0];
 
-                nb::inst_zero(result);
+                if constexpr (Mode == InPlace) {
+                    result = borrow(o[0]);
+                } else {
+                    result = nb::inst_alloc(result_type);
+                    nb::inst_zero(result);
+                }
             } else {
                 ((l[Is] = s.len(p[Is])), ...);
-                l[N] = maxv(l[Is]...);
+                lr = maxv(l[Is]...);
 
-                if (((l[Is] != l[N] && l[Is] != 1) || ...))
+                if (((l[Is] != lr && l[Is] != 1) || ...))
                     raise_incompatible_size_error(l, N);
 
-                s.init(l[N], p[N]);
-                nb::inst_mark_ready(result);
+                if (Mode == InPlace && lr == l[0]) {
+                    result = borrow(o[0]);
+                } else {
+                    result = nb::inst_alloc(result_type);
+                    s.init(lr, nb::inst_ptr<dr::ArrayBase>(result));
+                    nb::inst_mark_ready(result);
+                }
             }
 
             void *py_impl;
             nb::object py_impl_o;
 
-            if constexpr (Mode == Normal) {
+            if constexpr (Mode == RichCompare) {
+                py_impl = PyType_GetSlot((PyTypeObject *) s.value,
+                                         Py_tp_richcompare);
+            } else {
                 if constexpr (std::is_same_v<Slot, int>)
                     py_impl = PyType_GetSlot((PyTypeObject *) s.value, slot);
                 else
                     py_impl_o = array_module.attr(slot);
-            } else if constexpr (Mode == RichCompare) {
-                py_impl = PyType_GetSlot((PyTypeObject *) s.value,
-                                         Py_tp_richcompare);
             }
 
-            for (Py_ssize_t j = 0; j < l[N]; ++j) {
+            for (Py_ssize_t j = 0; j < lr; ++j) {
                 nb::object v[] = { nb::steal(item(o[Is].ptr(), i[Is]))... };
 
                 raise_if(!(v[Is].is_valid() && ...), "Item retrival failed!");
 
                 nb::object vr;
-                if constexpr (Mode == Normal) {
+                if constexpr (Mode == RichCompare) {
+                    using PyImpl = PyObject *(*)(PyObject *, PyObject *, int);
+                    vr = nb::steal(((PyImpl) py_impl)(v[0].ptr(), v[1].ptr(), slot));
+                } else {
                     if constexpr (std::is_same_v<Slot, int>) {
                         using PyImpl = PyObject *(*)(first_t<PyObject *, Args>...);
                         vr = nb::steal(((PyImpl) py_impl)(v[Is].ptr()...));
                     } else {
                         vr = py_impl_o(v[Is]...);
                     }
-                } else if constexpr (Mode == RichCompare) {
-                    using PyImpl = PyObject *(*)(PyObject *, PyObject *, int);
-                    vr = nb::steal(((PyImpl) py_impl)(v[0].ptr(), v[1].ptr(), slot));
                 }
 
                 raise_if(!vr.is_valid(), "Nested operation failed!");
@@ -266,3 +294,5 @@ template PyObject *apply<Normal>(ArrayOp, const char *, std::index_sequence<0, 1
                                  PyObject *, PyObject *, PyObject *) noexcept;
 template PyObject *apply<RichCompare>(ArrayOp, int, std::index_sequence<0, 1>,
                                       PyObject *, PyObject *) noexcept;
+template PyObject *apply<InPlace>(ArrayOp, int, std::index_sequence<0, 1>,
+                                  PyObject *, PyObject *) noexcept;

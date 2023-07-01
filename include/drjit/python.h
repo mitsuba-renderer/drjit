@@ -58,6 +58,13 @@ enum class ArrayOp {
     Add,
     Sub,
     Mul,
+    TrueDiv,
+    FloorDiv,
+    LShift,
+    RShift,
+
+    Minimum,
+    Maximum,
 
     // Binary bit/mask operations
     And,
@@ -105,7 +112,7 @@ struct ArraySupplement : ArrayMeta {
     using InitData = void  (*)(size_t, const void *, ArrayBase *);
     using InitConst = void (*)(size_t, PyObject *, ArrayBase *);
     using Cast = void      (*)(const ArrayBase *, VarType, ArrayBase *);
-    using Index = uint32_t (*)(const ArrayBase *) noexcept;;
+    using Index = uint32_t (*)(const ArrayBase *) noexcept;
 
     using UnaryOp  = void (*)(const ArrayBase *, ArrayBase *) noexcept;
     using BinaryOp = void (*)(const ArrayBase *, const ArrayBase *, ArrayBase *) noexcept;
@@ -347,9 +354,21 @@ template <typename T> void bind_arithmetic(ArrayBinding &b) {
 
     b[ArrayOp::Abs] = (void *) +[](const T *a, T *b) { new (b) T(abs(*a)); };
     b[ArrayOp::Neg] = (void *) +[](const T *a, T *b) { new (b) T(-*a); };
+
+    // Binary arithetic operations
     b[ArrayOp::Add] = (void *) +[](const T *a, const T *b, T *c) { new (c) T(*a + *b); };
     b[ArrayOp::Sub] = (void *) +[](const T *a, const T *b, T *c) { new (c) T(*a - *b); };
     b[ArrayOp::Mul] = (void *) +[](const T *a, const T *b, T *c) { new (c) T(*a * *b); };
+
+    b[ArrayOp::Minimum] = (void *) +[](const T *a, const T *b, T *c) {
+        new (c) T(drjit::minimum(*a, *b));
+    };
+
+    b[ArrayOp::Maximum] = (void *) +[](const T *a, const T *b, T *c) {
+        new (c) T(drjit::maximum(*a, *b));
+    };
+
+    // Ternary arithetic operations
     b[ArrayOp::Fma] = (void *) +[](const T *a, const T *b, const T *c, T *d) {
         new (d) T(fmadd(*a, *b, *c));
     };
@@ -369,8 +388,28 @@ template <typename T> void bind_arithmetic(ArrayBinding &b) {
 
 inline void disable_arithmetic(ArrayBinding &b) {
     b[ArrayOp::Abs] = b[ArrayOp::Neg] = b[ArrayOp::Add] = b[ArrayOp::Sub] =
-        b[ArrayOp::Mul] = b[ArrayOp::Fma] = DRJIT_OP_NOT_IMPLEMENTED;
+        b[ArrayOp::Mul] = b[ArrayOp::Minimum] = b[ArrayOp::Maximum] =
+        b[ArrayOp::Fma] = DRJIT_OP_NOT_IMPLEMENTED;
     b.cast = (ArrayBinding::Cast) DRJIT_OP_NOT_IMPLEMENTED;
+}
+
+template <typename T> void bind_int_arithmetic(ArrayBinding &b) {
+    b[ArrayOp::FloorDiv] = (void *) +[](const T *a, const T *b, T *c) { new (c) T(*a / *b); };
+    b[ArrayOp::LShift] = (void *) +[](const T *a, const T *b, T *c) { new (c) T(*a << *b); };
+    b[ArrayOp::RShift] = (void *) +[](const T *a, const T *b, T *c) { new (c) T(*a >> *b); };
+}
+
+inline void disable_int_arithmetic(ArrayBinding &b) {
+    b[ArrayOp::FloorDiv] = b[ArrayOp::LShift] = b[ArrayOp::RShift] =
+        DRJIT_OP_NOT_IMPLEMENTED;
+}
+
+template <typename T> void bind_float_arithmetic(ArrayBinding &b) {
+    b[ArrayOp::TrueDiv] = (void *) +[](const T *a, const T *b, T *c) { new (c) T(*a / *b); };
+}
+
+inline void disable_float_arithmetic(ArrayBinding &b) {
+    b[ArrayOp::TrueDiv] = DRJIT_OP_NOT_IMPLEMENTED;
 }
 
 template <typename T>
@@ -409,6 +448,9 @@ template <typename T> void bind_bit_ops(ArrayBinding &b) {
         else
             new (c) T(neq(*a, *b));
     };
+}
+
+template <typename T> void bind_bit_invert(ArrayBinding &b) {
     b[ArrayOp::Invert] = (void *) +[](const T *a, T *b) {
         if constexpr (T::IsIntegral)
             new (b) T(~*a);
@@ -421,7 +463,6 @@ inline void disable_bit_ops(ArrayBinding &b) {
     b[ArrayOp::And] = b[ArrayOp::Or] = b[ArrayOp::Xor] = b[ArrayOp::Invert] =
         DRJIT_OP_NOT_IMPLEMENTED;
 }
-
 
 template <typename T> void bind_richcmp(ArrayBinding &b) {
     using Mask = mask_t<T>;
@@ -438,11 +479,6 @@ template <typename T> void bind_richcmp(ArrayBinding &b) {
     };
 }
 
-inline void disable_richcmp(ArrayBinding &b) {
-    b[ArrayOp::Richcmp] = DRJIT_OP_NOT_IMPLEMENTED;
-}
-
-
 template <typename T> void bind_array(ArrayBinding &b) {
     bind_init<T>(b);
 
@@ -455,6 +491,12 @@ template <typename T> void bind_array(ArrayBinding &b) {
             if constexpr (T::IsArithmetic)
                 bind_arithmetic<T>(b);
 
+            if constexpr (T::IsIntegral)
+                bind_int_arithmetic<T>(b);
+
+            if constexpr (T::IsFloat)
+                bind_float_arithmetic<T>(b);
+
             if constexpr (T::IsMask)
                 bind_mask_reductions<T>(b);
 
@@ -465,22 +507,27 @@ template <typename T> void bind_array(ArrayBinding &b) {
                 b.index = (ArraySupplement::Index)
                     +[](const T *v) { return v->index(); };
 
-            if constexpr (T::IsArithmetic || T::IsMask)
-                bind_richcmp<T>(b);
+            bind_richcmp<T>(b);
         }
+
+        if constexpr (T::Depth == 1 && T::IsMask)
+            bind_bit_invert<T>(b);
     }
 
     if constexpr (!T::IsArithmetic)
         disable_arithmetic(b);
+
+    if constexpr (!T::IsIntegral)
+        disable_int_arithmetic(b);
+
+    if constexpr (!T::IsFloat)
+        disable_float_arithmetic(b);
 
     if constexpr (!T::IsMask)
         disable_mask_reductions(b);
 
     if constexpr (!T::IsMask && !T::IsIntegral)
         disable_bit_ops(b);
-
-    if constexpr (!T::IsArithmetic && !T::IsMask)
-        disable_richcmp(b);
 
     bind(b);
 }

@@ -26,13 +26,28 @@ bool schedule(nb::handle h) {
     return s.result;
 }
 
+static bool schedule_2(nb::args args) {
+    bool rv = false;
+    for (nb::handle h : args)
+        rv |= schedule(h);
+    return rv;
+}
 
-void eval(nb::handle h) {
+static void eval(nb::handle h) {
     if (schedule(h))
         jit_eval();
 }
 
+static bool eval_2(nb::args args) {
+    bool rv = schedule(args);
+    if (rv || nb::len(args) == 0)
+        jit_eval();
+    return rv;
+}
+
 void export_eval(nb::module_ &m) {
-    m.def("schedule", &schedule, nb::raw_doc(doc_schedule));
-    m.def("eval", &eval, nb::raw_doc(doc_eval));
+    m.def("schedule", &schedule, nb::raw_doc(doc_schedule))
+     .def("schedule", &schedule_2)
+     .def("eval", &eval, nb::raw_doc(doc_eval))
+     .def("eval", &eval_2);
 }
