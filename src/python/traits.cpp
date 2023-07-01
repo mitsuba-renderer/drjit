@@ -25,7 +25,7 @@ void export_traits(nb::module_ &m) {
     m.def("value_t", [](nb::handle h) -> nb::type_object {
         nb::handle tp = h.is_type() ? h : h.type();
         return nb::borrow<nb::type_object>(
-            is_drjit_type(tp) ? supp(tp).value : nb::none().type());
+            is_drjit_type(tp) ? supp(tp).value : tp);
     }, nb::raw_doc(doc_value_t));
 
     m.def("mask_t", [](nb::handle h) -> nb::handle {
@@ -66,12 +66,6 @@ void export_traits(nb::module_ &m) {
         }
         return false;
     }, nb::raw_doc(doc_is_jit_v));
-
-    m.def("is_mask_v", [](nb::handle h) -> bool {
-        nb::handle tp = h.is_type() ? h : h.type();
-        return is_drjit_type(tp) ? (VarType) supp(tp).type == VarType::Bool
-                                 : tp.is(&PyBool_Type);
-    }, nb::raw_doc(doc_is_mask_v));
 
     m.def("is_dynamic_v", [](nb::handle h) -> bool {
         nb::handle tp = h.is_type() ? h : h.type();
@@ -116,6 +110,52 @@ void export_traits(nb::module_ &m) {
         nb::handle tp = h.is_type() ? h : h.type();
         return is_drjit_type(tp) ? supp(tp).ndim : 0;
     }, nb::raw_doc(doc_depth_v));
+
+    m.def("is_mask_v", [](nb::handle h) -> bool {
+        nb::handle tp = h.is_type() ? h : h.type();
+        return is_drjit_type(tp) ? (VarType) supp(tp).type == VarType::Bool
+                                 : tp.is(&PyBool_Type);
+    }, nb::raw_doc(doc_is_mask_v));
+
+    m.def("is_float_v",
+          [](nb::handle h) -> bool {
+              nb::handle tp = h.is_type() ? h : h.type();
+              if (is_drjit_type(tp)) {
+                  VarType vt = (VarType) supp(tp).type;
+                  return vt == VarType::Float16 || vt == VarType::Float32 ||
+                         vt == VarType::Float64;
+              } else {
+                  return tp.is(&PyFloat_Type);
+              }
+          },
+          nb::raw_doc(doc_is_float_v));
+
+    m.def("is_arithmetic_v",
+          [](nb::handle h) -> bool {
+              nb::handle tp = h.is_type() ? h : h.type();
+              if (is_drjit_type(tp)) {
+                  VarType vt = (VarType) supp(tp).type;
+                  return vt != VarType::Bool && vt != VarType::Pointer;
+              } else {
+                  return tp.is(&PyLong_Type) || tp.is(&PyFloat_Type);
+              }
+          },
+          nb::raw_doc(doc_is_arithmetic_v));
+
+    m.def("is_integral_v",
+          [](nb::handle h) -> bool {
+              nb::handle tp = h.is_type() ? h : h.type();
+              if (is_drjit_type(tp)) {
+                  VarType vt = (VarType) supp(tp).type;
+                  return vt == VarType::Int8 || vt == VarType::Int16 ||
+                         vt == VarType::Int32 || vt == VarType::Int64 ||
+                         vt == VarType::UInt8 || vt == VarType::UInt16 ||
+                         vt == VarType::UInt32 || vt == VarType::UInt64;
+              } else {
+                  return tp.is(&PyLong_Type);
+              }
+          },
+          nb::raw_doc(doc_is_integral_v));
 
     m.def("is_signed_v",
           [](nb::handle h) -> bool {

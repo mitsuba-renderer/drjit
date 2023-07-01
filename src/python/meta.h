@@ -23,7 +23,7 @@ extern std::string meta_str(ArrayMeta m);
 extern ArrayMeta meta_promote(ArrayMeta a, ArrayMeta b) noexcept;
 
 // Infer a metadata record for the given Python object
-extern ArrayMeta meta_from_builtin(nb::handle h) noexcept;
+extern ArrayMeta meta_get(nb::handle h) noexcept;
 
 /**
  * \brief Given a list of Dr.Jit arrays and scalars, determine the flavor and

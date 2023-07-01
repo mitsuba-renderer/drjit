@@ -269,3 +269,42 @@ def test15_arange(t):
     if dr.is_signed_v(t):
         assert dr.all(dr.arange(t, -2, 5, 2) == t(-2, 0, 2, 4))
         assert dr.all(dr.arange(t, start=-2, stop=5, step=2) == t(-2, 0, 2, 4))
+
+@pytest.test_arrays('shape=(*), -bool, float')
+def test16_linspace(t):
+    assert dr.allclose(dr.linspace(t, -2, 4, 4), t(-2, 0, 2, 4))
+    assert dr.allclose(dr.linspace(t, start=-2, stop=5, num=4), t(-2, 1/3, 8/3, 5))
+    assert dr.allclose(dr.linspace(t, start=-2, stop=4, num=4, endpoint=False), t(-2, -0.5, 1, 2.5))
+
+
+@pytest.test_arrays('shape=(*), uint32')
+def test17_repr_long_1(t):
+  assert repr(t(range(1000))) == '[0, 1, 2, 3, 4, .. 990 skipped .., 995, 996, 997, 998, 999]'
+
+
+@pytest.test_arrays('shape=(1, *), uint32')
+def test18_repr_long_2(t):
+  assert repr(t([range(1000)])) == '[[0],\n [1],\n [2],\n [3],\n [4],\n .. 990 skipped ..,\n [995],\n [996],\n [997],\n [998],\n [999]]'
+
+def test19_shape_scalar():
+    p = dr.scalar
+    assert dr.shape(p.Array0f()) == (0,) and p.Array0f().shape == (0,)
+    assert dr.shape(p.Array2f()) == (2,) and p.Array2f().shape == (2,)
+    assert dr.shape(p.Matrix3f()) == (3, 3) and p.Matrix3f().shape == (3, 3)
+    assert dr.shape(p.ArrayXf(1, 2, 3)) == (3,) and p.ArrayXf(1, 2, 3).shape == (3,)
+
+def test19_shape_vectorized():
+    if hasattr(dr, 'llvm'):
+        p = getattr(dr, 'llvm')
+    elif hasattr(dr, 'cuda'):
+        p = getattr(dr, 'cuda')
+    else:
+        pytest.skip()
+    v = p.Float([1,2,3,4,5])
+    assert dr.shape(p.Array0f()) == (0, 0) and p.Array0f().shape == (0, 0)
+    assert dr.shape(p.Array2f()) == (2, 0) and p.Array2f().shape == (2, 0)
+    assert dr.shape(p.Matrix3f()) == (3, 3, 0) and p.Matrix3f().shape == (3, 3, 0)
+    assert dr.shape(p.Matrix3f(v)) == (3, 3, 5) and p.Matrix3f(v).shape == (3, 3, 5)
+    assert dr.shape(p.ArrayXf(1, 2, 3)) == (3, 1) and p.ArrayXf(1, 2, 3).shape == (3, 1)
+    assert dr.shape(p.ArrayXf(1, v, 3)) == (3, 5) and p.ArrayXf(1, v, 3).shape == (3, 5)
+    assert dr.shape(p.ArrayXf([1, 2], v, 3)) is None and p.ArrayXf([1, 2], v, 3).shape is None

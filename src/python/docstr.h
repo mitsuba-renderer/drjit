@@ -428,36 +428,35 @@ abs(arg, /)
 Compute the absolute value of the provided input.
 
 Args:
-    arg (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+    arg (int | float | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
 
 Returns:
-    float | int | drjit.ArrayBase: Absolute value of the input)";
+    int | float | drjit.ArrayBase: Absolute value of the input)";
 
 static const char *doc_maximum = R"(
-maximum(arg0, arg1, /) -> float | int | drjit.ArrayBase
+maximum(arg0, arg1, /) -> int | float | drjit.ArrayBase
 Compute the element-wise maximum value of the provided inputs.
 
 This function returns a result of the type ``type(arg0 + arg1)`` (i.e.,
 according to the usual implicit type conversion rules).
 
 Args:
-    arg0 (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
-    arg1 (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+    arg0 (int | float | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+    arg1 (int | float | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
 
 Returns:
     Maximum of the input(s))";
 
-
 static const char *doc_minimum = R"(
-minimum(arg0, arg1, /) -> float | int | drjit.ArrayBase
+minimum(arg0, arg1, /) -> int | float | drjit.ArrayBase
 Compute the element-wise minimum value of the provided inputs.
 
 This function returns a result of the type ``type(arg0 + arg1)`` (i.e.,
 according to the usual implicit type conversion rules).
 
 Args:
-    arg0 (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
-    arg1 (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+    arg0 (int | float | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+    arg1 (int | float | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
 
 Returns:
     Minimum of the input(s))";
@@ -1612,7 +1611,7 @@ Returns:
     type: Result of the extraction as described above.
 )";
 
-static const char *doc_expr_t =R"(
+static const char *doc_expr_t = R"(
 Computes the type of an arithmetic expression involving the provided Dr.Jit
 arrays (instances or types), or builtin Python objects.
 
