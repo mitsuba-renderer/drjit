@@ -25,6 +25,7 @@ static const char *op_names[] = {
     "__mul__",
     "__truediv__",
     "__floordiv__",
+    "__mod__",
     "__lshift__",
     "__rshift__",
 
@@ -38,6 +39,7 @@ static const char *op_names[] = {
 
     // Ternary operations
     "fma",
+    "select",
 
     // Horizontal reductions
     "all",
@@ -86,7 +88,7 @@ PyObject *apply(ArrayOp op, Slot slot, std::index_sequence<Is...>,
         // All arguments must first be promoted to the same type
         if (!(o[Is].type().is(tp) && ...)) {
             promote(o, sizeof...(Args), Mode == Select);
-            tp = o[0].type();
+            tp = o[Mode == Select ? 1 : 0].type();
         }
 
         const ArraySupplement &s = supp(tp);
@@ -95,7 +97,7 @@ PyObject *apply(ArrayOp op, Slot slot, std::index_sequence<Is...>,
         if (impl == DRJIT_OP_NOT_IMPLEMENTED)
             return nb::not_implemented().release().ptr();
 
-        ArraySupplement::Item item = s.item;
+        ArraySupplement::Item item = s.item, item_mask = nullptr;
         ArraySupplement::SetItem set_item;
         nb::handle result_type;
 
@@ -108,13 +110,21 @@ PyObject *apply(ArrayOp op, Slot slot, std::index_sequence<Is...>,
                      "arrays, quaternions, matrices, and arrays of pointers.");
             result_type = s.mask;
             set_item = supp(result_type).set_item;
+        } else if constexpr (Mode == Select) {
+            result_type = tp;
+            set_item = s.set_item;
+            item_mask = supp(o[0].type()).item;
         } else {
             result_type = tp;
             set_item = s.set_item;
         }
+        (void) item_mask;
 
         drjit::ArrayBase *p[N] = { nb::inst_ptr<dr::ArrayBase>(o[Is])... };
         nb::object result;
+
+        // In 'InPlace' mode
+        bool move = true;
 
         if (impl != DRJIT_OP_DEFAULT) {
             result = nb::inst_alloc(result_type);
@@ -132,13 +142,10 @@ PyObject *apply(ArrayOp op, Slot slot, std::index_sequence<Is...>,
             }
 
             nb::inst_mark_ready(result);
-
-            if constexpr (Mode == InPlace) {
-                nb::inst_destruct(o[0]);
-                nb::inst_move(o[0], result);
-                result = borrow(o[0]);
-            }
         } else {
+            /// Initialize an output array of the right size. In 'InPlace'
+            /// mode, try to place the output into o[0] if compatible.
+
             Py_ssize_t l[N], i[N] { }, lr;
             if (s.shape[0] != DRJIT_DYNAMIC) {
                 ((l[Is] = s.shape[0]), ...);
@@ -146,9 +153,9 @@ PyObject *apply(ArrayOp op, Slot slot, std::index_sequence<Is...>,
 
                 if constexpr (Mode == InPlace) {
                     result = borrow(o[0]);
+                    move = false; // can directly construct output into o[0]
                 } else {
-                    result = nb::inst_alloc(result_type);
-                    nb::inst_zero(result);
+                    result = nb::inst_alloc_zero(result_type);
                 }
             } else {
                 ((l[Is] = s.len(p[Is])), ...);
@@ -159,6 +166,7 @@ PyObject *apply(ArrayOp op, Slot slot, std::index_sequence<Is...>,
 
                 if (Mode == InPlace && lr == l[0]) {
                     result = borrow(o[0]);
+                    move = false; // can directly construct output into o[0]
                 } else {
                     result = nb::inst_alloc(result_type);
                     s.init(lr, nb::inst_ptr<dr::ArrayBase>(result));
@@ -169,6 +177,7 @@ PyObject *apply(ArrayOp op, Slot slot, std::index_sequence<Is...>,
             void *py_impl;
             nb::object py_impl_o;
 
+            // Fetch pointer/handle to function to be applied recursively
             if constexpr (Mode == RichCompare) {
                 py_impl = PyType_GetSlot((PyTypeObject *) s.value,
                                          Py_tp_richcompare);
@@ -180,10 +189,15 @@ PyObject *apply(ArrayOp op, Slot slot, std::index_sequence<Is...>,
             }
 
             for (Py_ssize_t j = 0; j < lr; ++j) {
-                nb::object v[] = { nb::steal(item(o[Is].ptr(), i[Is]))... };
+                // Fetch the j-th element from each array. In 'Select' mode,
+                // o[0] is a mask requiring a different accessor function.
+                nb::object v[] = { nb::steal(
+                    ((Mode == Select && Is == 0) ? item_mask : item)(
+                        o[Is].ptr(), i[Is]))... };
 
                 raise_if(!(v[Is].is_valid() && ...), "Item retrival failed!");
 
+                // Recurse
                 nb::object vr;
                 if constexpr (Mode == RichCompare) {
                     using PyImpl = PyObject *(*)(PyObject *, PyObject *, int);
@@ -198,11 +212,27 @@ PyObject *apply(ArrayOp op, Slot slot, std::index_sequence<Is...>,
                 }
 
                 raise_if(!vr.is_valid(), "Nested operation failed!");
+
+                // Assign result
                 raise_if(set_item(result.ptr(), j, vr.ptr()),
                          "Item assignment failed!");
 
+                // Advance to next element, broadcast size-1 arrays
                 ((i[Is] += (l[Is] == 1 ? 0 : 1)), ...);
             }
+        }
+
+        if constexpr (Mode == InPlace) {
+            // In in-place mode, if a separate result object had to be
+            // constructed, use it to now replace the contents of o[0]
+
+            if (move) {
+                nb::inst_destruct(o[0]);
+                nb::inst_move(o[0], result);
+                result = borrow(o[0]);
+            }
+        } else {
+            (void) move;
         }
 
         return result.release().ptr();
@@ -291,6 +321,8 @@ template PyObject *apply<Normal>(ArrayOp, const char *, std::index_sequence<0>,
 template PyObject *apply<Normal>(ArrayOp, const char *, std::index_sequence<0, 1>,
                                  PyObject *, PyObject *) noexcept;
 template PyObject *apply<Normal>(ArrayOp, const char *, std::index_sequence<0, 1, 2>,
+                                 PyObject *, PyObject *, PyObject *) noexcept;
+template PyObject *apply<Select>(ArrayOp, const char *, std::index_sequence<0, 1, 2>,
                                  PyObject *, PyObject *, PyObject *) noexcept;
 template PyObject *apply<RichCompare>(ArrayOp, int, std::index_sequence<0, 1>,
                                       PyObject *, PyObject *) noexcept;

@@ -1366,28 +1366,8 @@ variable index within the raw computation graph, if applicable.
 
 :type: int)";
 
-
-
-static const char *doc_bool_array_t = R"(
-Converts the provided Dr.Jit array/tensor type into a boolean version.
-
-This function implements the following set of behaviors:
-
-1. When invoked with a Dr.Jit array *type* (e.g. :py:class:`drjit.cuda.Array3i`), it
-   returns a *boolean* version (e.g. :py:class:`drjit.cuda.Array3b`).
-
-2. When the input isn't a type, it returns ``bool_array_t(type(arg))``.
-
-3. When the input is not a Dr.Jit array or type, the function returns ``bool``.
-
-Args:
-    arg (object): An arbitrary Python object
-
-Returns:
-    type: Result of the conversion as described above.
-)";
-
 static const char *doc_uint_array_t = R"(
+uint_array_t(arg, /)
 Converts the provided Dr.Jit array/tensor type into a *unsigned integer*
 version with the same element size.
 
@@ -1409,6 +1389,7 @@ Returns:
 
 
 static const char *doc_int_array_t = R"(
+int_array_t(arg, /)
 Converts the provided Dr.Jit array/tensor type into a *signed integer*
 version with the same element size.
 
@@ -1430,6 +1411,7 @@ Returns:
 
 
 static const char *doc_float_array_t = R"(
+float_array_t(arg, /)
 Converts the provided Dr.Jit array/tensor type into a *floating point*
 version with the same element size.
 
@@ -1450,6 +1432,7 @@ Returns:
 )";
 
 static const char *doc_uint32_array_t = R"(
+uint32_array_t(arg, /)
 Converts the provided Dr.Jit array/tensor type into a *unsigned 32 bit*
 version.
 
@@ -1470,6 +1453,7 @@ Returns:
 )";
 
 static const char *doc_int32_array_t = R"(
+int32_array_t(arg, /)
 Converts the provided Dr.Jit array/tensor type into a *signed 32 bit*
 version.
 
@@ -1490,6 +1474,7 @@ Returns:
 )";
 
 static const char *doc_uint64_array_t = R"(
+uint64_array_t(arg, /)
 Converts the provided Dr.Jit array/tensor type into an *unsigned 64 bit*
 version.
 
@@ -1510,6 +1495,7 @@ Returns:
 )";
 
 static const char *doc_int64_array_t = R"(
+int64_array_t(arg, /)
 Converts the provided Dr.Jit array/tensor type into an *signed 64 bit* version.
 
 This function implements the following set of behaviors:
@@ -1529,6 +1515,7 @@ Returns:
 )";
 
 static const char *doc_float32_array_t = R"(
+float32_array_t(arg, /)
 Converts the provided Dr.Jit array/tensor type into an 32 bit floating point version.
 
 This function implements the following set of behaviors:
@@ -1548,6 +1535,7 @@ Returns:
 )";
 
 static const char *doc_float64_array_t = R"(
+float64_array_t(arg, /)
 Converts the provided Dr.Jit array/tensor type into an 64 bit floating point version.
 
 This function implements the following set of behaviors:
@@ -1674,6 +1662,7 @@ Returns:
 )";
 
 static const char *doc_gather = R"(
+gather(dtype, source, index, active)
 Gather values from a flat array or nested data structure
 
 This function performs a *gather* (i.e., indirect memory read) from ``source``
@@ -1715,7 +1704,8 @@ This operation can be used in the following different ways:
          result = dr.cuda.Array3f(
              dr.gather(dr.cuda.Float, source.x, index),
              dr.gather(dr.cuda.Float, source.y, index),
-             dr.gather(dr.cuda.Float, source.z, index))
+             dr.gather(dr.cuda.Float, source.z, index)
+         )
 
    - Otherwise, the operation reconstructs the requested ``dtype`` from a flat
      ``source`` array, using C-style ordering with a suitably modified

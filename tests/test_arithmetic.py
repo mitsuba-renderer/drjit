@@ -95,7 +95,7 @@ def test05_binop_inplace(t):
         b = t([1, 2, 3], 2, 3)
         c = a
         a += b
-        assert a is not c
+        assert a is c
         assert len(a) == 3
         assert len(a[0]) == 3 and len(a[1]) == 1 and len(a[2]) == 1
         assert dr.all(a[0] == dr.value_t(t)(2, 3, 4))
@@ -109,3 +109,53 @@ def test05_unop(t):
     assert dr.all(abs(t(1, -2, 3)) == t(1, 2, 3))
     m = dr.mask_t(t)
     assert dr.all(~m(True, False, True) == m(False, True, False))
+
+def test06_select():
+    import drjit.scalar as s
+    assert dr.select(True, "hello", "world") == "hello"
+    result = dr.select(s.Array2b(True, False), 1, 2)
+    assert isinstance(result, s.Array2i) and dr.all(result == s.Array2i(1, 2))
+    result = dr.select(s.Array2b(True, False), 1, 2.0)
+    assert isinstance(result, s.Array2f) and dr.all(result == s.Array2f(1, 2))
+    result = dr.select(s.ArrayXb(True, False), 1, 2)
+    assert isinstance(result, s.ArrayXi) and dr.all(result == s.ArrayXi(1, 2))
+    result = dr.select(s.ArrayXb(True, False), 1, 2.0)
+    assert isinstance(result, s.ArrayXf) and dr.all(result == s.ArrayXf(1, 2))
+
+    result = dr.select(s.Array2b(True, False), s.Array2i(3, 4), s.Array2i(5, 6))
+    assert isinstance(result, s.Array2i) and dr.all(result == s.Array2i(3, 6))
+    result = dr.select(s.Array2b(True, False), s.Array2i(3, 4), s.Array2f(5, 6))
+    assert isinstance(result, s.Array2f) and dr.all(result == s.Array2f(3, 6))
+    result = dr.select(s.ArrayXb(True, False), s.ArrayXi(3, 4), s.ArrayXi(5, 6))
+    assert isinstance(result, s.ArrayXi) and dr.all(result == s.ArrayXi(3, 6))
+    result = dr.select(s.ArrayXb(True, False), s.ArrayXi(3, 4), s.ArrayXf(5, 6))
+    assert isinstance(result, s.ArrayXf) and dr.all(result == s.ArrayXf(3, 6))
+
+    result = dr.select(True, 1, s.ArrayXf(5, 6))
+    assert isinstance(result, s.ArrayXf) and dr.all(result == s.ArrayXf(1, 1))
+
+    try:
+        import drjit.llvm as l
+        success = True
+    except:
+        success = False
+
+    if success:
+        result = dr.select(l.Array2b(True, False), 1, 2)
+        assert isinstance(result, l.Array2i) and dr.all(result == l.Array2i(1, 2))
+        result = dr.select(l.Array2b(True, False), 1, 2.0)
+        assert isinstance(result, l.Array2f) and dr.all(result == l.Array2f(1, 2))
+        result = dr.select(l.ArrayXb(True, False), 1, 2)
+        assert isinstance(result, l.ArrayXi) and dr.all(result == l.ArrayXi(1, 2))
+        result = dr.select(l.ArrayXb(True, False), 1, 2.0)
+        assert isinstance(result, l.ArrayXf) and dr.all(result == l.ArrayXf(1, 2))
+
+        result = dr.select(l.Array2b(True, False), l.Array2i(3, 4), l.Array2i(5, 6))
+        assert isinstance(result, l.Array2i) and dr.all(result == l.Array2i(3, 6))
+        result = dr.select(l.Array2b(True, False), l.Array2i(3, 4), l.Array2f(5, 6))
+        assert isinstance(result, l.Array2f) and dr.all(result == l.Array2f(3, 6))
+        result = dr.select(l.ArrayXb(True, False), l.ArrayXi(3, 4), l.ArrayXi(5, 6))
+        assert isinstance(result, l.ArrayXi) and dr.all(result == l.ArrayXi(3, 6))
+        result = dr.select(l.ArrayXb(True, False), l.ArrayXi(3, 4), l.ArrayXf(5, 6))
+        assert isinstance(result, l.ArrayXf) and dr.all(result == l.ArrayXf(3, 6))
+

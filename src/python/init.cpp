@@ -61,7 +61,7 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
                     }
 
                     // Disallow inefficient element-by-element imports of JIT arrays
-                    if (m1.ndim == 1 && m1.shape[0] == DRJIT_DYNAMIC) {
+                    if (m1.ndim == 1 && m1.shape[0] == DRJIT_DYNAMIC && m2.shape[0] == DRJIT_DYNAMIC) {
                         try_sequence_import = false;
                     } else {
                         // Always broadcast when the element type is one of the sub-elements
@@ -102,8 +102,13 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
                 if (NB_UNLIKELY(!element.is_valid())) {
                     nb::error_scope scope;
                     nb::str arg_tp_name = nb::type_name(arg_tp);
-                    nb::detail::raise("Broadcast from type '%s' failed.",
-                                      arg_tp_name.c_str());
+                    nb::detail::raise(
+                        "Broadcast from type '%s' failed.%s",
+                        arg_tp_name.c_str(),
+                        try_sequence_import
+                            ? ""
+                            : " Refused to perform an inefficient "
+                              "element-by-element copy.");
                 }
             }
 

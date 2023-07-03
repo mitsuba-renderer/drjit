@@ -60,6 +60,7 @@ enum class ArrayOp {
     Mul,
     TrueDiv,
     FloorDiv,
+    Mod,
     LShift,
     RShift,
 
@@ -73,6 +74,7 @@ enum class ArrayOp {
 
     // Ternary operations
     Fma,
+    Select,
 
     // Horizontal reductions
     All,
@@ -107,15 +109,18 @@ struct ArraySupplement : ArrayMeta {
     using Item    = PyObject* (*)(PyObject *, Py_ssize_t) noexcept;
     using SetItem = int       (*)(PyObject *, Py_ssize_t, PyObject *) noexcept;
 
-    using Len  = size_t    (*)(const ArrayBase *) noexcept;
-    using Init = void      (*)(size_t, ArrayBase *);
-    using InitData = void  (*)(size_t, const void *, ArrayBase *);
+    using Len = size_t (*)(const ArrayBase *) noexcept;
+    using Init = void (*)(size_t, ArrayBase *);
+    using InitData = void (*)(size_t, const void *, ArrayBase *);
     using InitConst = void (*)(size_t, PyObject *, ArrayBase *);
-    using Cast = void      (*)(const ArrayBase *, VarType, ArrayBase *);
+    using Cast = void (*)(const ArrayBase *, VarType, ArrayBase *);
     using Index = uint32_t (*)(const ArrayBase *) noexcept;
-
-    using UnaryOp  = void (*)(const ArrayBase *, ArrayBase *) noexcept;
-    using BinaryOp = void (*)(const ArrayBase *, const ArrayBase *, ArrayBase *) noexcept;
+    using Gather = void (*)(const ArrayBase *, const ArrayBase *,
+                            const ArrayBase *, ArrayBase *);
+    using Scatter = void (*)(const ArrayBase *, const ArrayBase *,
+                            const ArrayBase *, const ArrayBase *);
+    using UnaryOp  = void (*)(const ArrayBase *, ArrayBase *);
+    using BinaryOp = void (*)(const ArrayBase *, const ArrayBase *, ArrayBase *);
 
     using TensorShape = dr_vector<size_t> & (*) (ArrayBase *) noexcept;
     using TensorArray = PyObject * (*) (PyObject *) noexcept;
@@ -145,6 +150,12 @@ struct ArraySupplement : ArrayMeta {
 
             /// Initialize from a given memory region on the CPU
             InitData init_data;
+
+            /// Gather operation
+            Gather gather;
+
+            /// Scatter operation
+            Scatter scatter;
 
             /// Return the JIT variable index
             Index index;
@@ -397,6 +408,7 @@ template <typename T> void bind_int_arithmetic(ArrayBinding &b) {
     b[ArrayOp::FloorDiv] = (void *) +[](const T *a, const T *b, T *c) { new (c) T(*a / *b); };
     b[ArrayOp::LShift] = (void *) +[](const T *a, const T *b, T *c) { new (c) T(*a << *b); };
     b[ArrayOp::RShift] = (void *) +[](const T *a, const T *b, T *c) { new (c) T(*a >> *b); };
+    b[ArrayOp::Mod] = (void *) +[](const T *a, const T *b, T *c) { new (c) T(*a % *b); };
 }
 
 inline void disable_int_arithmetic(ArrayBinding &b) {
@@ -479,6 +491,27 @@ template <typename T> void bind_richcmp(ArrayBinding &b) {
     };
 }
 
+template <typename T> void bind_select(ArrayBinding &b) {
+    b[ArrayOp::Select] = (void *) +[](const mask_t<T> *a, const T *b, const T *c, T *d) {
+        new (d) T(select(*a, *b, *c));
+    };
+}
+
+template <typename T> void bind_memop(ArrayBinding &b) {
+    using UInt32 = uint32_array_t<T>;
+    using Mask = mask_t<T>;
+
+    b.gather = (ArraySupplement::Gather)
+        +[](const T *a, const UInt32 *b, const Mask *c, T *d) {
+            new (d) T(gather<T>(*a, *b, *c));
+        };
+
+    b.scatter = (ArraySupplement::Scatter)
+        +[](const T *a, const UInt32 *b, const Mask *c, T *d) {
+            scatter(*d, *a, *b, *c);
+        };
+}
+
 template <typename T> void bind_array(ArrayBinding &b) {
     bind_init<T>(b);
 
@@ -507,7 +540,9 @@ template <typename T> void bind_array(ArrayBinding &b) {
                 b.index = (ArraySupplement::Index)
                     +[](const T *v) { return v->index(); };
 
+            bind_select<T>(b);
             bind_richcmp<T>(b);
+            bind_memop<T>(b);
         }
 
         if constexpr (T::Depth == 1 && T::IsMask)

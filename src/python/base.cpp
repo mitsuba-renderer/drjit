@@ -17,16 +17,6 @@
 #include "shape.h"
 #include <nanobind/stl/string.h>
 
-nb::handle array_module;
-nb::handle array_submodules[5];
-nb::handle array_base;
-
-namespace drjit {
-    template <typename T> T fma(const T &a, const T &b, const T &c) {
-        return fmadd(a, b, c);
-    }
-};
-
 #define DR_NB_UNOP(name, op)                                                   \
     static PyObject *nb_##name(PyObject *h0) noexcept {                        \
         return apply<Normal>(op, Py_nb_##name, std::make_index_sequence<1>(),  \
@@ -43,6 +33,34 @@ namespace drjit {
                               h0, h1);                                         \
     }
 
+#define DR_MATH_BINOP(name, op)                                                \
+    m.def(#name, [](nb::handle h0, nb::handle h1) {                            \
+        if (NB_UNLIKELY(!is_drjit_array(h0) && !is_drjit_array(h1)))           \
+            throw nb::next_overload();                                         \
+        return nb::steal(apply<Normal>(                                        \
+            op, #name, std::make_index_sequence<2>(), h0.ptr(), h1.ptr()));    \
+    }, doc_##name);                                                            \
+    m.def(                                                                     \
+        #name, [](double v0, double v1) { return dr::name(v0, v1); },          \
+        nb::raw_doc(doc_##name));
+
+#define DR_MATH_TERNOP(name, op)                                               \
+    m.def(#name, [](nb::handle h0, nb::handle h1, nb::handle h2) {             \
+        if (!is_drjit_array(h0) && !is_drjit_array(h1) && !is_drjit_array(h2)) \
+            throw nb::next_overload();                                         \
+        return nb::steal(apply<Normal>(op, #name,                              \
+                                       std::make_index_sequence<3>(),          \
+                                       h0.ptr(), h1.ptr(), h2.ptr()));         \
+    }, doc_##name);                                                            \
+    m.def(                                                                     \
+        #name,                                                                 \
+        [](double v0, double v1, double v2) { return dr::name(v0, v1, v2); },  \
+        nb::raw_doc(doc_##name));
+
+nb::handle array_module;
+nb::handle array_submodules[5];
+nb::handle array_base;
+
 DR_NB_UNOP(negative, ArrayOp::Neg)
 DR_NB_UNOP(absolute, ArrayOp::Abs)
 DR_NB_UNOP(invert, ArrayOp::Invert)
@@ -53,6 +71,7 @@ DR_NB_BINOP(true_divide, ArrayOp::TrueDiv)
 DR_NB_BINOP(floor_divide, ArrayOp::FloorDiv)
 DR_NB_BINOP(lshift, ArrayOp::LShift)
 DR_NB_BINOP(rshift, ArrayOp::RShift)
+DR_NB_BINOP(remainder, ArrayOp::Mod)
 DR_NB_BINOP(and, ArrayOp::And)
 DR_NB_BINOP(or, ArrayOp::Or)
 DR_NB_BINOP(xor, ArrayOp::Xor)
@@ -200,6 +219,8 @@ static PyType_Slot array_base_slots[] = {
     DR_ARRAY_SLOT(nb_inplace_lshift),
     DR_ARRAY_SLOT(nb_rshift),
     DR_ARRAY_SLOT(nb_inplace_rshift),
+    DR_ARRAY_SLOT(nb_remainder),
+    DR_ARRAY_SLOT(nb_inplace_remainder),
 
     /// Binary bit/mask operations
     DR_ARRAY_SLOT(nb_and),
@@ -219,29 +240,11 @@ static PyType_Slot array_base_slots[] = {
     { 0, nullptr }
 };
 
-#define DR_MATH_BINOP(name, op)                                                \
-    m.def(                                                                     \
-        #name, [](double v0, double v1) { return dr::name(v0, v1); },          \
-        nb::raw_doc(doc_##name));                                              \
-    m.def(#name, [](nb::handle h0, nb::handle h1) {                            \
-        if (!is_drjit_array(h0) && !is_drjit_array(h1))                        \
-            throw nb::next_overload();                                         \
-        return nb::steal(apply<Normal>(                                        \
-            op, #name, std::make_index_sequence<2>(), h0.ptr(), h1.ptr()));    \
-    });
-
-#define DR_MATH_TERNOP(name, op)                                               \
-    m.def(                                                                     \
-        #name,                                                                 \
-        [](double v0, double v1, double v2) { return dr::name(v0, v1, v2); },  \
-        nb::raw_doc(doc_##name));                                              \
-    m.def(#name, [](nb::handle h0, nb::handle h1, nb::handle h2) {             \
-        if (!is_drjit_array(h0) && !is_drjit_array(h1) && !is_drjit_array(h2)) \
-            throw nb::next_overload();                                         \
-        return nb::steal(apply<Normal>(op, #name,                              \
-                                       std::make_index_sequence<3>(),          \
-                                       h0.ptr(), h1.ptr(), h2.ptr()));         \
-    });
+namespace drjit {
+    template <typename T> T fma(const T &a, const T &b, const T &c) {
+        return fmadd(a, b, c);
+    }
+};
 
 void export_base(nb::module_ &m) {
     nb::class_<dr::ArrayBase> ab(m, "ArrayBase",
@@ -268,16 +271,28 @@ void export_base(nb::module_ &m) {
 
     m.def("minimum",
           [](Py_ssize_t a, Py_ssize_t b) { return dr::minimum(a, b); }, doc_minimum);
+    DR_MATH_BINOP(minimum, ArrayOp::Minimum);
+
     m.def("maximum",
           [](Py_ssize_t a, Py_ssize_t b) { return dr::maximum(a, b); }, doc_maximum);
-    DR_MATH_BINOP(minimum, ArrayOp::Minimum);
     DR_MATH_BINOP(maximum, ArrayOp::Maximum);
+
     DR_MATH_TERNOP(fma, ArrayOp::Fma);
+
+    m.def("select",
+          [](nb::handle h0, nb::handle h1, nb::handle h2) {
+              if (NB_UNLIKELY(!is_drjit_array(h0) && !is_drjit_array(h1) &&
+                              !is_drjit_array(h2)))
+                  throw nb::next_overload();
+              return nb::steal(apply<Select>(ArrayOp::Select, "select",
+                                             std::make_index_sequence<3>(),
+                                             h0.ptr(), h1.ptr(), h2.ptr()));
+          }, doc_select);
 
     m.def("select",
           [](bool mask, nb::handle a, nb::handle b) {
               return nb::borrow(mask ? a : b);
-          }, doc_select);
+          });
 
     array_base = ab;
     array_module = m;

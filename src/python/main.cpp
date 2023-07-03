@@ -19,6 +19,7 @@
 #include "eval.h"
 #include "iter.h"
 #include "init.h"
+#include "memop.h"
 
 NB_MODULE(drjit_ext, m_) {
     (void) m_;
@@ -65,6 +66,7 @@ NB_MODULE(drjit_ext, m_) {
     export_iter(detail);
     export_reduce(m);
     export_eval(m);
+    export_memop(m);
 
     export_scalar();
 
