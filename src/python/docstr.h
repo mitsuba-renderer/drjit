@@ -403,7 +403,7 @@ Returns:
 )";
 
 static const char *doc_select = R"(
-select(condition, x, y)
+select(condition, x, y, /)
 Select elements from inputs based on a condition
 
 This function implements the component-wise operation
@@ -416,7 +416,7 @@ This function implements the component-wise operation
    \end{cases}
 
 Args:
-    condition (bool | drjit.ArrayBase): A Python or Dr.Jit mask/boolean type
+    condition (bool | drjit.ArrayBase): A Python or Dr.Jit mask type
     x (int | float | drjit.ArrayBase): A Python or Dr.Jit type
     y (int | float | drjit.ArrayBase): A Python or Dr.Jit type
 
@@ -1662,7 +1662,7 @@ Returns:
 )";
 
 static const char *doc_gather = R"(
-gather(dtype, source, index, active)
+gather(dtype, source, index, active=True)
 Gather values from a flat array or nested data structure
 
 This function performs a *gather* (i.e., indirect memory read) from ``source``
@@ -1754,6 +1754,7 @@ Returns:
 )";
 
 static const char *doc_scatter = R"(
+scatter(target, value, index, active=True)
 Scatter values into a flat array or nested data structure
 
 This operation performs a *scatter* (i.e., indirect memory write) of the
@@ -1845,6 +1846,7 @@ Args:
 )";
 
 static const char *doc_ravel = R"(
+ravel(array, order='A')
 Convert the input into a contiguous flat array
 
 This operation takes a Dr.Jit array, typically with some static and some
@@ -1855,6 +1857,9 @@ convention.
 
 It can also convert Dr.Jit tensors into a flat representation, though only
 C-style ordering is supported in this case.
+
+Internally, `ravel` performs a series of calls to :py:func:`drjit.scatter()`
+to suitably reorganize the array contents.
 
 For example,
 
@@ -1889,6 +1894,7 @@ Returns:
 
 
 static const char *doc_unravel = R"(
+unravel(dtype, array, order='A')
 Load a sequence of Dr.Jit vectors/matrices/etc. from a contiguous flat array
 
 This operation implements the inverse of :py:func:`drjit.ravel()`. In contrast
@@ -1906,6 +1912,9 @@ on the indexing convention:
 - ``[1, 2, 3]`` and ``[4, 5, 6]`` when unraveled with ``order='F'`` (the
   default for Dr.Jit arrays), and
 - ``[1, 3, 5]`` and ``[2, 4, 6]`` when unraveled with ``order='C'``
+
+Internally, `unravel` performs a series of calls to :py:func:`drjit.gather()`
+to suitably reorganize the array contents.
 
 Args:
     dtype (type): An arbitrary Dr.Jit array type

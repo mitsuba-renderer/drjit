@@ -286,25 +286,19 @@ def test17_repr_long_1(t):
 def test18_repr_long_2(t):
   assert repr(t([range(1000)])) == '[[0],\n [1],\n [2],\n [3],\n [4],\n .. 990 skipped ..,\n [995],\n [996],\n [997],\n [998],\n [999]]'
 
-def test19_shape_scalar():
-    p = dr.scalar
-    assert dr.shape(p.Array0f()) == (0,) and p.Array0f().shape == (0,)
-    assert dr.shape(p.Array2f()) == (2,) and p.Array2f().shape == (2,)
-    assert dr.shape(p.Matrix3f()) == (3, 3) and p.Matrix3f().shape == (3, 3)
-    assert dr.shape(p.ArrayXf(1, 2, 3)) == (3,) and p.ArrayXf(1, 2, 3).shape == (3,)
-
-def test19_shape_vectorized():
-    if hasattr(dr, 'llvm'):
-        p = getattr(dr, 'llvm')
-    elif hasattr(dr, 'cuda'):
-        p = getattr(dr, 'cuda')
+@pytest.test_packages()
+def test19_shape_vectorized(p):
+    if 'scalar' in p.__name__:
+        assert dr.shape(p.Array0f()) == (0,) and p.Array0f().shape == (0,)
+        assert dr.shape(p.Array2f()) == (2,) and p.Array2f().shape == (2,)
+        assert dr.shape(p.Matrix3f()) == (3, 3) and p.Matrix3f().shape == (3, 3)
+        assert dr.shape(p.ArrayXf(1, 2, 3)) == (3,) and p.ArrayXf(1, 2, 3).shape == (3,)
     else:
-        pytest.skip()
-    v = p.Float([1,2,3,4,5])
-    assert dr.shape(p.Array0f()) == (0, 0) and p.Array0f().shape == (0, 0)
-    assert dr.shape(p.Array2f()) == (2, 0) and p.Array2f().shape == (2, 0)
-    assert dr.shape(p.Matrix3f()) == (3, 3, 0) and p.Matrix3f().shape == (3, 3, 0)
-    assert dr.shape(p.Matrix3f(v)) == (3, 3, 5) and p.Matrix3f(v).shape == (3, 3, 5)
-    assert dr.shape(p.ArrayXf(1, 2, 3)) == (3, 1) and p.ArrayXf(1, 2, 3).shape == (3, 1)
-    assert dr.shape(p.ArrayXf(1, v, 3)) == (3, 5) and p.ArrayXf(1, v, 3).shape == (3, 5)
-    assert dr.shape(p.ArrayXf([1, 2], v, 3)) is None and p.ArrayXf([1, 2], v, 3).shape is None
+        v = p.Float([1,2,3,4,5])
+        assert dr.shape(p.Array0f()) == (0, 0) and p.Array0f().shape == (0, 0)
+        assert dr.shape(p.Array2f()) == (2, 0) and p.Array2f().shape == (2, 0)
+        assert dr.shape(p.Matrix3f()) == (3, 3, 0) and p.Matrix3f().shape == (3, 3, 0)
+        assert dr.shape(p.Matrix3f(v)) == (3, 3, 5) and p.Matrix3f(v).shape == (3, 3, 5)
+        assert dr.shape(p.ArrayXf(1, 2, 3)) == (3, 1) and p.ArrayXf(1, 2, 3).shape == (3, 1)
+        assert dr.shape(p.ArrayXf(1, v, 3)) == (3, 5) and p.ArrayXf(1, v, 3).shape == (3, 5)
+        assert dr.shape(p.ArrayXf([1, 2], v, 3)) is None and p.ArrayXf([1, 2], v, 3).shape is None
