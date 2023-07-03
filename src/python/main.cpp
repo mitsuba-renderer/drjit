@@ -20,6 +20,7 @@
 #include "iter.h"
 #include "init.h"
 #include "memop.h"
+#include "slice.h"
 
 NB_MODULE(drjit_ext, m_) {
     (void) m_;
@@ -67,6 +68,7 @@ NB_MODULE(drjit_ext, m_) {
     export_reduce(m);
     export_eval(m);
     export_memop(m);
+    export_slice(m);
 
     export_scalar();
 

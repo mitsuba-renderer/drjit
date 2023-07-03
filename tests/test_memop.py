@@ -16,6 +16,14 @@ def test01_gather_simple(t):
         active=dr.mask_t(t)(True, False, True)
     ) == t(0, 0, 3))
 
+    with pytest.raises(TypeError, match="unsupported dtype"):
+        dr.gather(
+            dtype=str,
+            source=dr.arange(t, 10),
+            index=dr.uint_array_t(t)(0, 5, 3),
+            active=dr.mask_t(t)(True, False, True)
+        )
+
 
 @pytest.test_arrays('-bool,shape=(*)')
 def test02_scatter_simple(t):

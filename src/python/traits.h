@@ -13,4 +13,4 @@
 
 #include "common.h"
 
-extern void export_traits(nb::module_ &m);
+extern void export_traits(nb::module_ &);

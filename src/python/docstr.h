@@ -1629,11 +1629,12 @@ Computes an index array that can be used to slice a tensor. It is used
 internally by Dr.Jit to implement complex cases of the ``__getitem__``
 operation.
 
-It must be called with the desired output ``dtype``, which must be a dynamic
-32-bit integer array. The ``shape`` parameter specifies the dimensions of the
-input tensor, and ``indices`` contains the entries that would appear in a
-complex slicing operation, but as a tuple. For example, ``[5:10:2, ..., None]``
-would be specified as ``(slice(5, 10, 2), Ellipsis, None)``.
+It must be called with the desired output ``dtype``, which must be a
+dynamically sized 1D array of 32-bit integers. The ``shape`` parameter
+specifies the dimensions of a hypothetical input tensor, and ``indices``
+contains the entries that would appear in a complex slicing operation, but as a
+tuple. For example, ``[5:10:2, ..., None]`` would be specified as ``(slice(5,
+10, 2), Ellipsis, None)``.
 
 An example is shown below:
 

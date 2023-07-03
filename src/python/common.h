@@ -11,6 +11,7 @@
 #pragma once
 #include <drjit/python.h>
 #include <nanobind/stl/vector.h>
+#include <nanobind/stl/pair.h>
 #include "docstr.h"
 
 namespace nb = nanobind;
