@@ -246,6 +246,14 @@ namespace drjit {
     }
 };
 
+nb::object fma(nb::handle h0, nb::handle h1, nb::handle h2) {
+    if (!is_drjit_array(h0) && !is_drjit_array(h1) && !is_drjit_array(h2))
+        throw nb::next_overload();
+    return nb::steal(apply<Normal>(ArrayOp::Fma, "fma",
+                                   std::make_index_sequence<3>(), h0.ptr(),
+                                   h1.ptr(), h2.ptr()));
+}
+
 void export_base(nb::module_ &m) {
     nb::class_<dr::ArrayBase> ab(m, "ArrayBase",
                                  nb::type_slots(array_base_slots),
