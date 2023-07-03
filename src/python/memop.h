@@ -13,3 +13,16 @@
 #include "common.h"
 
 extern void export_memop(nb::module_ &);
+
+extern nb::object gather(nb::type_object dtype, nb::object source,
+                         nb::object index, nb::object active);
+
+extern void scatter(nb::object target, nb::object value, nb::object index,
+                    nb::object active);
+
+extern nb::object ravel(nb::handle_t<dr::ArrayBase> h, char order,
+                        std::vector<size_t> *shape_out = nullptr,
+                        std::vector<int64_t> *strides_out = nullptr);
+
+extern nb::object unravel(const nb::type_object_t<dr::ArrayBase> &dtype,
+                          nb::handle_t<dr::ArrayBase> array, char order);

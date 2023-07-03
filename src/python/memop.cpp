@@ -11,6 +11,8 @@
 #include "memop.h"
 #include "base.h"
 #include "meta.h"
+#include "init.h"
+#include "shape.h"
 
 nb::object gather(nb::type_object dtype, nb::object source,
                   nb::object index, nb::object active) {
@@ -234,8 +236,8 @@ void scatter(nb::object target, nb::object value, nb::object index,
         try {
             value = target.type()(value);
             value_tp = value.type();
-        } catch (...) {
-            throw nb::type_error(
+        } catch (nb::python_error &e) {
+            nb::raise_from(e, PyExc_TypeError,
                 "drjit.scatter(): 'value' argument has an unsupported type! "
                 "Please provide an instance that is convertible to "
                 "type(target).");
@@ -277,9 +279,223 @@ void scatter(nb::object target, nb::object value, nb::object index,
     throw nb::type_error("drjit.scatter(): 'value' type is unsupported.");
 }
 
+static void ravel_recursive(nb::handle result, nb::handle value,
+                            nb::handle index_dtype, const Py_ssize_t *shape,
+                            const Py_ssize_t *strides, Py_ssize_t offset,
+                            int depth, int stop_depth) {
+    if (depth == stop_depth) {
+        if (index_dtype.is_valid()) {
+            nb::object index =
+                arange(nb::borrow<nb::type_object_t<dr::ArrayBase>>(index_dtype), offset,
+                       offset + strides[depth] * shape[depth], strides[depth]);
+            scatter(nb::borrow(result), nb::borrow(value), index, nb::cast(true));
+        } else {
+            result[offset] = value;
+        }
+    } else {
+        for (Py_ssize_t i = 0; i < shape[depth]; ++i) {
+            ravel_recursive(result, value[i], index_dtype, shape, strides,
+                            offset, depth + 1, stop_depth);
+            offset += strides[depth];
+        }
+    }
+}
+
+nb::object ravel(nb::handle_t<dr::ArrayBase> h, char order,
+                 std::vector<size_t> *shape_out,
+                 std::vector<int64_t> *strides_out) {
+    const ArraySupplement &s = supp(h.type());
+
+    if (s.is_tensor) {
+        if (order != 'C' && order != 'A')
+            throw std::runtime_error("drjit.ravel(): tensors do not support "
+                                     "F-style ordering for now.");
+
+        return nb::steal(s.tensor_array(h.ptr()));
+    }
+
+    if (s.ndim == 1 && s.shape[0] == DRJIT_DYNAMIC) {
+        if (shape_out && strides_out) {
+            shape_out->push_back(len(h));
+            strides_out->push_back(1);
+        }
+        return nb::borrow(h);
+    }
+
+    nb::object shape_tuple = shape(h);
+    if (shape_tuple.is_none())
+        throw std::runtime_error("drjit.ravel(): ragged input not allowed.");
+
+    Py_ssize_t shape[4] { }, strides[4] { }, stride = 1;
+
+    size_t ndim = nb::len(shape_tuple);
+    for (size_t i = 0; i < ndim; ++i)
+        shape[i] = nb::cast<Py_ssize_t>(shape_tuple[i]);
+
+    if (order == 'C') {
+        for (size_t i = ndim - 1; ; --i) {
+            strides[i] = stride;
+            stride *= shape[i];
+            if (i == 0)
+                break;
+        }
+    } else if (order == 'F' || order == 'A') {
+        for (size_t i = 0; i < ndim; ++i) {
+            strides[i] = stride;
+            stride *= shape[i];
+        }
+    } else {
+        throw std::runtime_error(
+            "drjit.ravel(): order parameter must equal 'A', 'C', or 'F'.");
+    }
+
+    ArrayMeta m { };
+    m.backend = s.backend;
+    m.type = s.type;
+    m.ndim = 1;
+    m.shape[0] = DRJIT_DYNAMIC;
+
+    size_t size = (size_t) stride;
+    nb::object result = full(meta_get_type(m), nb::handle(), 1, &size);
+
+    nb::handle index_dtype;
+    if (s.shape[s.ndim - 1] == DRJIT_DYNAMIC) {
+        m.type = (uint16_t) VarType::UInt32;
+        index_dtype = meta_get_type(m);
+    }
+
+    ravel_recursive(result, h, index_dtype, shape, strides, 0, 0,
+                    (int) ndim - index_dtype.is_valid());
+
+    if (shape_out && strides_out) {
+        shape_out->resize(ndim);
+        strides_out->resize(ndim);
+        for (size_t i = 0; i < ndim; ++i) {
+            shape_out->operator[](i) = (size_t) shape[i];
+            strides_out->operator[](i) = (int64_t) strides[i];
+        }
+    }
+
+    return result;
+}
+
+static nb::object unravel_recursive(nb::handle dtype,
+                                    nb::handle value,
+                                    nb::handle index_dtype,
+                                    const Py_ssize_t *shape,
+                                    const Py_ssize_t *strides,
+                                    Py_ssize_t offset, int depth,
+                                    int stop_depth) {
+    if (depth == stop_depth) {
+        if (index_dtype.is_valid()) {
+            nb::object index = arange(
+                nb::borrow<nb::type_object_t<dr::ArrayBase>>(index_dtype),
+                offset, offset + strides[depth] * shape[depth], strides[depth]);
+            return gather(nb::borrow<nb::type_object>(dtype), nb::borrow(value),
+                          index, nb::cast(true));
+        } else {
+            return value[offset];
+        }
+    } else {
+        const ArraySupplement &s = supp(dtype);
+
+        nb::object result = dtype();
+        for (Py_ssize_t i = 0; i < shape[depth]; ++i) {
+            result[i] =
+                unravel_recursive(s.value, value, index_dtype, shape, strides,
+                                  offset, depth + 1, stop_depth);
+            offset += strides[depth];
+        }
+
+        return result;
+    }
+}
+
+nb::object unravel(const nb::type_object_t<dr::ArrayBase> &dtype,
+                   nb::handle_t<dr::ArrayBase> array, char order) {
+    const ArraySupplement &s = supp(dtype);
+    if (s.is_tensor)
+        throw nb::type_error(
+            "drjit.unravel(): 'dtype' cannot be a tensor!");
+
+    ArrayMeta m { };
+    m.backend = s.backend;
+    m.type = s.type;
+    m.ndim = 1;
+    m.shape[0] = DRJIT_DYNAMIC;
+
+    nb::handle flat = meta_get_type(m);
+    if (!flat.is(array.type())) {
+        nb::str flat_name = nb::type_name(flat),
+                actual_name = nb::inst_name(array);
+        nb::detail::raise_type_error(
+            "drjit.unravel(): expected array of type '%s', but got '%s'!",
+            flat_name.c_str(), actual_name.c_str());
+    }
+
+    if (array.type().is(dtype))
+        return nb::borrow(array);
+
+    Py_ssize_t size = (Py_ssize_t) len(array);
+
+    Py_ssize_t shape[4] { }, strides[4] { }, stride = 1;
+    int ndim = s.ndim;
+    for (int i = 0; i < ndim; ++i) {
+        if (s.shape[i] == DRJIT_DYNAMIC) {
+            if (i != s.ndim - 1)
+                throw nb::type_error("drjit.unravel(): only the last dimension "
+                                     "of 'dtype' may be dynamic!");
+            shape[i] = size / stride;
+        } else {
+            shape[i] = s.shape[i];
+        }
+        stride *= shape[i];
+    }
+
+    if (size != stride)
+        throw std::runtime_error("dtype.unravel(): input array size is not "
+                                 "divisible by 'dtype' shape!");
+
+    stride = 1;
+    if (order == 'C') {
+        for (int i = ndim - 1; ; --i) {
+            strides[i] = stride;
+            stride *= shape[i];
+            if (i == 0)
+                break;
+        }
+    } else if (order == 'F' || order == 'A') {
+        for (int i = 0; i < ndim; ++i) {
+            strides[i] = stride;
+            stride *= shape[i];
+        }
+    } else {
+        throw std::runtime_error(
+            "drjit.unravel(): order parameter must equal 'C' or 'F'.");
+    }
+
+    nb::handle index_dtype;
+    if (s.shape[s.ndim - 1] == DRJIT_DYNAMIC) {
+        m.type = (uint16_t) VarType::UInt32;
+        index_dtype = meta_get_type(m);
+    }
+
+    return unravel_recursive(dtype, array, index_dtype, shape, strides, 0, 0,
+                             (int) ndim - index_dtype.is_valid());
+}
+
 void export_memop(nb::module_ &m) {
     m.def("gather", &gather, "dtype"_a, "source"_a, "index"_a,
           "active"_a = true, nb::raw_doc(doc_gather));
     m.def("scatter", &scatter, "target"_a, "value"_a, "index"_a,
           "active"_a = true, nb::raw_doc(doc_scatter));
+    m.def("ravel",
+          [](nb::handle_t<dr::ArrayBase> array, char order) {
+              return ravel(array, order);
+          }, "array"_a, "order"_a = 'A', nb::raw_doc(doc_ravel));
+    m.def("unravel",
+          [](const nb::type_object_t<dr::ArrayBase> &dtype,
+             nb::handle_t<dr::ArrayBase> array,
+             char order) { return unravel(dtype, array, order); },
+          "dtype"_a, "array"_a, "order"_a = 'A', nb::raw_doc(doc_unravel));
 }

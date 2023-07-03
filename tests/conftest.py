@@ -4,9 +4,13 @@ import pytest
 import re
 
 array_types = []
+array_packages = []
 
 for o1 in dr.__dict__.values():
     if isinstance(o1, types.ModuleType):
+        if hasattr(o1, 'ArrayXf'):
+            array_packages.append(o1)
+
         for o2 in o1.__dict__.values():
             if isinstance(o2, type) and issubclass(o2, dr.ArrayBase):
                 array_types.append(o2)
@@ -59,6 +63,11 @@ def test_arrays(*queries, name='t'):
 
     return wrapped
 
+def test_packages(name='p'):
+    def wrapped(func):
+        return pytest.mark.parametrize(name, array_packages)(func)
+    return wrapped
+
 @pytest.fixture(scope="module")
 def drjit_verbose():
     level = dr.log_level()
@@ -68,3 +77,4 @@ def drjit_verbose():
 
 def pytest_configure():
     pytest.test_arrays = test_arrays
+    pytest.test_packages = test_packages

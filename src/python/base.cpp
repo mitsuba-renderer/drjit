@@ -287,7 +287,7 @@ void export_base(nb::module_ &m) {
               return nb::steal(apply<Select>(ArrayOp::Select, "select",
                                              std::make_index_sequence<3>(),
                                              h0.ptr(), h1.ptr(), h2.ptr()));
-          }, doc_select);
+          }, nb::raw_doc(doc_select));
 
     m.def("select",
           [](bool mask, nb::handle a, nb::handle b) {
