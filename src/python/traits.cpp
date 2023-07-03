@@ -11,12 +11,39 @@
 
 #include "traits.h"
 #include "base.h"
+#include "meta.h"
 
 static nb::handle scalar_t(nb::handle h) {
     nb::handle tp = h.is_type() ? h : h.type();
     while (is_drjit_type(tp))
         tp = supp(tp).value;
     return tp;
+}
+
+static int itemsize_v(nb::handle h) {
+    nb::handle tp = h.is_type() ? h : h.type();
+    if (is_drjit_type(tp))
+        return jit_type_size((VarType) supp(tp).type);
+    throw nb::type_error("Unsupported input type!");
+}
+
+nb::object reinterpret_array_t(nb::handle h, VarType vt) {
+    nb::handle tp = h.is_type() ? h : h.type();
+    if (is_drjit_type(tp)) {
+        ArrayMeta m = supp(tp);
+        m.type = (uint16_t) vt;
+        tp = meta_get_type(m);
+    } else {
+        if (vt == VarType::Bool)
+            tp = &PyBool_Type;
+        else if (vt == VarType::Float16 ||
+                 vt == VarType::Float32 ||
+                 vt == VarType::Float64)
+            tp = &PyFloat_Type;
+        else
+            tp = &PyLong_Type;
+    }
+    return borrow(tp);
 }
 
 void export_traits(nb::module_ &m) {
@@ -183,6 +210,74 @@ void export_traits(nb::module_ &m) {
               } else {
                   return tp.is(&PyBool_Type);
               }
-          },
-          nb::raw_doc(doc_is_unsigned_v));
+          }, nb::raw_doc(doc_is_unsigned_v));
+
+    m.def("itemsize_v", &itemsize_v, nb::raw_doc(doc_itemsize_v));
+
+    m.def("uint32_array_t",
+          [](nb::handle h) { return reinterpret_array_t(h, VarType::UInt32); },
+          nb::raw_doc(doc_uint32_array_t));
+
+    m.def("int32_array_t",
+          [](nb::handle h) { return reinterpret_array_t(h, VarType::Int32); },
+          nb::raw_doc(doc_int32_array_t));
+
+    m.def("uint64_array_t",
+          [](nb::handle h) { return reinterpret_array_t(h, VarType::UInt64); },
+          nb::raw_doc(doc_uint64_array_t));
+
+    m.def("int64_array_t",
+          [](nb::handle h) { return reinterpret_array_t(h, VarType::Int64); },
+          nb::raw_doc(doc_int64_array_t));
+
+    m.def("float32_array_t",
+          [](nb::handle h) { return reinterpret_array_t(h, VarType::Float32); },
+          nb::raw_doc(doc_float32_array_t));
+
+    m.def("float64_array_t",
+          [](nb::handle h) { return reinterpret_array_t(h, VarType::Float64); },
+          nb::raw_doc(doc_float64_array_t));
+
+    m.def("uint_array_t",
+          [](nb::handle h) {
+              VarType vt;
+              switch (itemsize_v(h)) {
+                  case 1: vt = VarType::UInt8; break;
+                  case 2: vt = VarType::UInt16; break;
+                  case 4: vt = VarType::UInt32; break;
+                  case 8: vt = VarType::UInt64; break;
+                  default: throw nb::type_error("Unsupported input type!");
+              }
+              return reinterpret_array_t(h, vt);
+          }, nb::raw_doc(doc_uint_array_t));
+
+    m.def("int_array_t",
+          [](nb::handle h) {
+              VarType vt;
+              switch (itemsize_v(h)) {
+                  case 1: vt = VarType::Int8; break;
+                  case 2: vt = VarType::Int16; break;
+                  case 4: vt = VarType::Int32; break;
+                  case 8: vt = VarType::Int64; break;
+                  default: throw nb::type_error("Unsupported input type!");
+              }
+              return reinterpret_array_t(h, vt);
+          }, nb::raw_doc(doc_int_array_t));
+
+    m.def("float_array_t",
+          [](nb::handle h) {
+              VarType vt;
+              switch (itemsize_v(h)) {
+                  case 2: vt = VarType::Float16; break;
+                  case 4: vt = VarType::Float32; break;
+                  case 8: vt = VarType::Float64; break;
+                  default: throw nb::type_error("Unsupported input type!");
+              }
+              return reinterpret_array_t(h, vt);
+          }, nb::raw_doc(doc_float_array_t));
+
+    m.def("is_struct_v", [](nb::handle h) -> bool {
+        nb::handle tp = h.is_type() ? h : h.type();
+        return nb::hasattr(tp, "DRJIT_STRUCT");
+    }, nb::raw_doc(doc_is_struct_v));
 }

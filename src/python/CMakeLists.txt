@@ -22,6 +22,7 @@ nanobind_add_module(
   reduce.h reduce.cpp
   apply.h  apply.cpp
   eval.h   eval.cpp
+  memop.h  memop.cpp
 )
 
 set_target_properties(drjit-python
