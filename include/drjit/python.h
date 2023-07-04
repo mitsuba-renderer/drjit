@@ -50,9 +50,11 @@ struct ArrayMeta {
 static_assert(sizeof(ArrayMeta) == 8, "Structure packing issue");
 enum class ArrayOp {
     // Unary operations
-    Abs,
     Neg,
     Invert,
+
+    Abs,
+    Sqrt,
 
     // Binary arithetic operations
     Add,
@@ -115,6 +117,7 @@ struct ArraySupplement : ArrayMeta {
     using InitConst = void (*)(size_t, PyObject *, ArrayBase *);
     using Cast = void (*)(const ArrayBase *, VarType, ArrayBase *);
     using Index = uint32_t (*)(const ArrayBase *) noexcept;
+    using Data = void *(*)(const ArrayBase *) noexcept;
     using Gather = void (*)(const ArrayBase *, const ArrayBase *,
                             const ArrayBase *, ArrayBase *);
     using Scatter = void (*)(const ArrayBase *, const ArrayBase *,
@@ -157,21 +160,25 @@ struct ArraySupplement : ArrayMeta {
             /// Scatter operation
             Scatter scatter;
 
+            /// Return a pointer to the underlying storage
+            Data data;
+
             /// Return the JIT variable index
             Index index;
+
+            /// Cast an array into a different format
+            Cast cast;
+
+            /// Additional operations
+            void *op[(int) ArrayOp::Count];
         };
 
         struct {
             TensorShape tensor_shape;
             TensorArray tensor_array;
+            PyObject *tensor_array_index;
         };
     };
-
-    /// Cast an array into a different format
-    Cast cast;
-
-    /// Additional operations
-    void *op[(int) ArrayOp::Count];
 
     inline void *& operator[](ArrayOp o) { return op[(int) o]; }
     inline void * operator[](ArrayOp o) const { return op[(int) o]; }
@@ -347,10 +354,13 @@ template <typename T> NB_INLINE void bind_base(ArrayBinding &b) {
                 }
             };
 
-            if constexpr (std::is_same_v<scalar_t<T>, uint32_t>)
+            if constexpr (std::is_same_v<scalar_t<T>, uint32_t>) {
                 b.init_counter = (ArraySupplement::Init) +[](size_t size, T *a) {
                     new (a) T(T::counter(size));
                 };
+            }
+
+            b.data = (ArraySupplement::Data) + [](const T *a) { return a->data(); };
         }
     }
 }
@@ -418,14 +428,18 @@ inline void disable_int_arithmetic(ArrayBinding &b) {
 
 template <typename T> void bind_float_arithmetic(ArrayBinding &b) {
     b[ArrayOp::TrueDiv] = (void *) +[](const T *a, const T *b, T *c) { new (c) T(*a / *b); };
+    b[ArrayOp::Sqrt] = (void *) +[](const T *a, T *b) { new (b) T(sqrt(*a)); };
 }
 
 inline void disable_float_arithmetic(ArrayBinding &b) {
     b[ArrayOp::TrueDiv] = DRJIT_OP_NOT_IMPLEMENTED;
+    b[ArrayOp::Sqrt] = DRJIT_OP_NOT_IMPLEMENTED;
 }
 
 template <typename T>
 void bind_tensor(ArrayBinding &b) {
+    namespace nb = nanobind;
+
     b.tensor_shape = (ArrayBinding::TensorShape) +[](T *o) noexcept -> dr_vector<size_t> & {
         return o->shape();
     };
@@ -433,12 +447,12 @@ void bind_tensor(ArrayBinding &b) {
     b.tensor_array = (ArrayBinding::TensorArray) +[](PyObject *o) noexcept -> PyObject * {
         T *inst = nanobind::inst_ptr<T>(o);
         nanobind::detail::cleanup_list cleanup(o);
-        PyObject *result = nanobind::detail::make_caster<typename T::Array>::from_cpp(
-                   inst->array(), nanobind::rv_policy::reference_internal,
-                   &cleanup)
-            .ptr();
+        nb::handle result =
+            nanobind::detail::make_caster<typename T::Array>::from_cpp(
+                inst->array(), nanobind::rv_policy::reference_internal,
+                &cleanup);
         assert(!cleanup.used());
-        return result;
+        return result.ptr();
     };
 }
 

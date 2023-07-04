@@ -23,9 +23,15 @@ using dr::ArrayMeta;
 using dr::ArraySupplement;
 using dr::ArrayBinding;
 using dr::ArrayOp;
+using dr::ArrayBase;
+using dr::dr_vector;
 
 inline const ArraySupplement &supp(nb::handle h) {
     return nb::type_supplement<ArraySupplement>(h);
+}
+
+inline ArrayBase* inst_ptr(nb::handle h) {
+    return nb::inst_ptr<ArrayBase>(h);
 }
 
 #define raise_if(expr, ...)                                                    \

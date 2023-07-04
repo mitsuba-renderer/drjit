@@ -149,6 +149,11 @@ nb::object bind(const ArrayBinding &b) {
         m2.is_vector = m2.is_complex = m2.is_quaternion = m2.is_matrix =
             m2.is_tensor = false;
         array_type_py = meta_get_type(m2);
+
+        if (s.is_tensor) {
+            m2.type = (uint32_t) VarType::UInt32;
+            s.tensor_array_index = meta_get_type(m2).ptr();
+        }
     }
 
     s.array = array_type_py.ptr();

@@ -1,6 +1,7 @@
 #include "memop.h"
 #include "base.h"
 #include "init.h"
+#include "shape.h"
 
 /// Holds metadata about slicing component
 struct Component {
@@ -16,9 +17,9 @@ struct Component {
           object(nb::borrow(h)) { }
 };
 
-std::pair<nb::tuple, nb::object> slice_index(const nb::type_object_t<dr::ArrayBase> &dtype,
-                                             const nb::tuple &shape,
-                                             const nb::tuple &indices) {
+std::pair<nb::tuple, nb::object>
+slice_index(const nb::type_object_t<dr::ArrayBase> &dtype,
+            const nb::tuple &shape, const nb::tuple &indices) {
     const ArraySupplement &s = supp(dtype);
 
     if (s.ndim != 1 || s.shape[0] != DRJIT_DYNAMIC ||
@@ -168,7 +169,98 @@ std::pair<nb::tuple, nb::object> slice_index(const nb::type_object_t<dr::ArrayBa
     return { nb::tuple(shape_out), index_out };
 }
 
+PyObject *mp_subscript(PyObject *self, PyObject *key) {
+    nb::handle self_tp = nb::handle(self).type(),
+               key_tp = nb::handle(key).type();
+
+    const ArraySupplement &s = supp(self_tp);
+
+    try {
+        if (s.is_tensor) {
+            nb::tuple key2;
+
+            if (key_tp.is(&PyTuple_Type))
+                key2 = nb::borrow<nb::tuple>(key);
+            else
+                key2 = nb::make_tuple(nb::handle(key));
+
+            auto [out_shape, out_index] = slice_index(
+                nb::borrow<nb::type_object_t<dr::ArrayBase>>(s.tensor_array_index),
+                nb::borrow<nb::tuple>(shape(self)), key2);
+
+            nb::object source = nb::steal(s.tensor_array(self));
+
+            nb::object out = gather(nb::borrow<nb::type_object>(s.array),
+                                    source, out_index, nb::borrow(Py_True));
+
+            return self_tp("array"_a = out, "shape"_a = out_shape)
+                .release().ptr();
+        }
+
+        bool complex_case = false;
+        if (key_tp.is(&PyLong_Type)) {
+            Py_ssize_t index = PyLong_AsSsize_t(key);
+            if (index < 0) {
+                if (index == -1 && PyErr_Occurred())
+                    nb::detail::raise("Invalid array index.");
+
+                Py_ssize_t size = s.shape[0];
+                if (size == DRJIT_DYNAMIC)
+                    size = (Py_ssize_t) s.len(inst_ptr(self));
+
+                index = size + index;
+            }
+
+            return s.item(self, index);
+        } else if (key_tp.is(&PyTuple_Type)) {
+            nb::object o = nb::borrow(self);
+            Py_ssize_t size = NB_TUPLE_GET_SIZE(key);
+
+            for (Py_ssize_t i = 0; i < size; ++i) {
+                nb::handle key2 = NB_TUPLE_GET_ITEM(key, i);
+                nb::object o2 = nb::steal(PyObject_GetItem(o.ptr(), key2.ptr()));
+                if (!o2.is_valid())
+                    nb::detail::raise_python_error();
+                else
+                    o = o2;
+            }
+
+            return o.release().ptr();
+        } else if (is_drjit_type(key_tp)) {
+            if ((VarType) supp(key_tp).type == VarType::Bool) {
+                Py_INCREF(self);
+                return self;
+            } else {
+                complex_case = true;
+            }
+        } else if (key == Py_None || key_tp.is(&PyEllipsis_Type) || key_tp.is(&PySlice_Type)) {
+            complex_case = true;
+        }
+
+        if (complex_case) {
+            nb::detail::raise_type_error(
+                "Complex slicing operations are only supported on tensors.");
+        } else {
+            nb::str key_name = nb::type_name(key_tp);
+            nb::detail::raise_type_error("Invalid key of type '%s' specified.",
+                                         key_name.c_str());
+        }
+    } catch (nb::python_error &e) {
+        nb::str tp_name = nb::type_name(self_tp);
+        e.restore();
+        nb::chain_error(PyExc_TypeError, "%U.__getitem__(): internal error!",
+                        tp_name.ptr());
+        return nullptr;
+    } catch (const std::exception &e) {
+        nb::str tp_name = nb::type_name(self_tp);
+        PyErr_Format(PyExc_TypeError, "%U.__getitem__(): %s!",
+                     tp_name.ptr(), e.what());
+        return nullptr;
+    }
+}
+
 void export_slice(nb::module_&m) {
     m.def("slice_index", &slice_index, doc_slice_index, "dtype"_a, "shape"_a,
           "indices"_a);
+    m.attr("new_axis") = nb::none();
 }

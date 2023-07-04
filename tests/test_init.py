@@ -293,6 +293,7 @@ def test19_shape_vectorized(p):
         assert dr.shape(p.Array2f()) == (2,) and p.Array2f().shape == (2,)
         assert dr.shape(p.Matrix3f()) == (3, 3) and p.Matrix3f().shape == (3, 3)
         assert dr.shape(p.ArrayXf(1, 2, 3)) == (3,) and p.ArrayXf(1, 2, 3).shape == (3,)
+        assert p.ArrayXf().ndim == 1
     else:
         v = p.Float([1,2,3,4,5])
         assert dr.shape(p.Array0f()) == (0, 0) and p.Array0f().shape == (0, 0)
@@ -302,3 +303,22 @@ def test19_shape_vectorized(p):
         assert dr.shape(p.ArrayXf(1, 2, 3)) == (3, 1) and p.ArrayXf(1, 2, 3).shape == (3, 1)
         assert dr.shape(p.ArrayXf(1, v, 3)) == (3, 5) and p.ArrayXf(1, v, 3).shape == (3, 5)
         assert dr.shape(p.ArrayXf([1, 2], v, 3)) is None and p.ArrayXf([1, 2], v, 3).shape is None
+        assert dr.shape(p.Array2f([1, 2], [])) is None and p.Array2f([1, 2], []).shape is None
+        assert p.ArrayXf().ndim == 2
+
+def test20_shape_other():
+    assert dr.shape(0) == ()
+    assert dr.shape([]) == (0,)
+    assert dr.shape([1]) == (1,)
+    assert dr.shape([1, 2]) == (2,)
+    assert dr.shape([[1, 2], [3, 4]]) == (2, 2)
+    assert dr.shape([[1, 2, 5], [3, 4, 5]]) == (2, 3)
+    assert dr.shape([[[1], [2], [5]], [[3], [4], [5]]]) == (2, 3, 1)
+    assert dr.shape((dr.scalar.Array3f(), dr.scalar.Array3f())) == (2, 3)
+
+    # Ragged
+    assert dr.shape([[1, 2, 5], [3, 4]]) is None
+    assert dr.shape([[1, 2], [3, 4, 5]]) is None
+    assert dr.shape([[1, 2], 1]) is None
+    assert dr.shape([1, [1, 2]]) is None
+    assert dr.shape((dr.scalar.Array2f(), dr.scalar.Array3f())) is None

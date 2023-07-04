@@ -434,7 +434,7 @@ Returns:
     int | float | drjit.ArrayBase: Absolute value of the input)";
 
 static const char *doc_maximum = R"(
-maximum(arg0, arg1, /) -> int | float | drjit.ArrayBase
+maximum(arg0, arg1, /)
 Compute the element-wise maximum value of the provided inputs.
 
 This function returns a result of the type ``type(arg0 + arg1)`` (i.e.,
@@ -445,10 +445,10 @@ Args:
     arg1 (int | float | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
 
 Returns:
-    Maximum of the input(s))";
+    int | float | drjit.ArrayBase: Maximum of the input(s))";
 
 static const char *doc_minimum = R"(
-minimum(arg0, arg1, /) -> int | float | drjit.ArrayBase
+minimum(arg0, arg1, /)
 Compute the element-wise minimum value of the provided inputs.
 
 This function returns a result of the type ``type(arg0 + arg1)`` (i.e.,
@@ -459,11 +459,10 @@ Args:
     arg1 (int | float | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
 
 Returns:
-    Minimum of the input(s))";
-
+    int | float | drjit.ArrayBase: Minimum of the input(s))";
 
 static const char *doc_max = R"(
-max(arg, /) -> float | int | drjit.ArrayBase
+max(arg, /)
 Compute the maximum value in the provided input.
 
 When the argument is a dynamic array, function performs a horizontal reduction.
@@ -474,11 +473,11 @@ Args:
     arg (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
 
 Returns:
-    Maximum of the input)";
+    float | int | drjit.ArrayBase: Maximum of the input)";
 
 
 static const char *doc_min = R"(
-min(arg, /) -> float | int | drjit.ArrayBase
+min(arg, /)
 Compute the minimum value in the provided input.
 
 When the argument is a dynamic array, function performs a horizontal reduction.
@@ -489,11 +488,11 @@ Args:
     arg (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
 
 Returns:
-    Minimum of the input)";
+    float | int | drjit.ArrayBase: Minimum of the input)";
 
 
 static const char *doc_sum = R"(
-sum(arg, /) -> float | int | drjit.ArrayBase
+sum(arg, /)
 Compute the sum of all array elements.
 
 When the argument is a dynamic array, function performs a horizontal reduction.
@@ -504,11 +503,11 @@ Args:
     arg (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
 
 Returns:
-    Sum of the input)";
+    float | int | drjit.ArrayBase: Sum of the input)";
 
 
 static const char *doc_prod = R"(
-prod(arg, /) -> float | int | drjit.ArrayBase
+prod(arg, /)
 Compute the product of all array elements.
 
 When the argument is a dynamic array, function performs a horizontal reduction.
@@ -519,11 +518,11 @@ Args:
     arg (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
 
 Returns:
-    Product of the input)";
+    float | int | drjit.ArrayBase: Product of the input)";
 
 
 static const char *doc_all = R"(
-all(arg, /) -> bool | drjit.ArrayBase
+all(arg, /)
 Computes whether all input elements evaluate to ``True``.
 
 When the argument is a dynamic array, function performs a horizontal reduction.
@@ -534,10 +533,10 @@ Args:
     arg (bool | drjit.ArrayBase): A Python or Dr.Jit mask type
 
 Returns:
-    Boolean array)";
+    bool | drjit.ArrayBase: Boolean array)";
 
 static const char *doc_all_nested = R"(
-all_nested(arg, /) -> bool | drjit.ArrayBase
+all_nested(arg, /)
 Iterates :py:func:`all` until the type of the return value no longer
 changes.
 
@@ -547,10 +546,10 @@ Args:
     arg (bool | drjit.ArrayBase): A Python or Dr.Jit mask type
 
 Returns:
-    Boolean array)";
+    bool | drjit.ArrayBase: Boolean array)";
 
 static const char *doc_any = R"(
-any(arg, /) -> float | int | drjit.ArrayBase
+any(arg, /)
 Computes whether any of the input elements evaluate to ``True``.
 
 When the argument is a dynamic array, function performs a horizontal reduction.
@@ -562,10 +561,10 @@ Args:
     arg (bool | drjit.ArrayBase): A Python or Dr.Jit mask type
 
 Returns:
-    Boolean array)";
+    bool | drjit.ArrayBase: Boolean array)";
 
 static const char *doc_any_nested = R"(
-any_nested(arg, /) -> bool | drjit.ArrayBase
+any_nested(arg, /)
 Iterates :py:func:`any` until the type of the return value no longer
 changes.
 
@@ -575,10 +574,10 @@ Args:
     arg (bool | drjit.ArrayBase): A Python or Dr.Jit mask type
 
 Returns:
-    Boolean array)";
+    bool | drjit.ArrayBase: Boolean array)";
 
 static const char *doc_dot = R"(
-dot(arg0, arg1, /) -> float | int | drjit.ArrayBase
+dot(arg0, arg1, /)
 Computes the dot product of two arrays.
 
 When the argument is a dynamic array, function performs a horizontal reduction.
@@ -591,11 +590,11 @@ Args:
     arg1 (list | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
 
 Returns:
-    Dot product of inputs)";
+    float | int | drjit.ArrayBase: Dot product of inputs)";
 
 
 static const char *doc_norm = R"(
-norm(arg, /) -> float | int | drjit.ArrayBase
+norm(arg, /)
 Computes the norm of an array.
 
 When the argument is a dynamic array, function performs a horizontal reduction.
@@ -606,7 +605,7 @@ Args:
     arg (list | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
 
 Returns:
-    Norm of the input)";
+    float | int | drjit.ArrayBase: Norm of the input)";
 
 
 static const char *doc_sqrt = R"(
@@ -1249,8 +1248,8 @@ Returns:
 
 static const char *doc_shape = R"(
 shape(arg, /)
-Return a tuple describing dimension and shape of the provided Dr.Jit array or
-tensor.
+Return a tuple describing dimension and shape of the provided Dr.Jit array,
+tensor, or standard sequence type.
 
 When the arrays is ragged, the implementation signals a failure by returning
 ``None``. A ragged array has entries of incompatible size, e.g. ``[[1, 2], [3,
@@ -1260,7 +1259,7 @@ since broadcasting can effectively convert them to any size.
 The expressions ``drjit.shape(arg)`` and ``arg.shape`` are equivalent.
 
 Args:
-    arg (drjit.ArrayBase): an arbitrary Dr.Jit array or tensor
+    arg (drjit.ArrayBase | Sequence): an arbitrary Dr.Jit array or tensor
 
 Returns:
     tuple | NoneType: A tuple describing the dimension and shape of the
@@ -1313,7 +1312,7 @@ generate a ``RuntimeError``.
 :type: :py:func:`value_t(self) <value_t>`)";
 
 static const char *doc_ArrayBase_shape = R"(
-This property contains a tuple describing dimension and shape of the
+This property provides a tuple describing dimension and shape of the
 provided Dr.Jit array or tensor. When the input array is *ragged*
 (i.e., when it contains components with mismatched sizes), the
 property equals ``None``.
@@ -1321,6 +1320,11 @@ property equals ``None``.
 The expressions ``drjit.shape(arg)`` and ``arg.shape`` are equivalent.
 
 :type: tuple | NoneType)";
+
+static const char *doc_ArrayBase_ndim = R"(
+This property represents the dimension of the provided Dr.Jit array or tensor. 
+
+:type: int)";
 
 static const char *doc_ArrayBase_array = R"(
 This member plays multiple roles:

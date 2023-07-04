@@ -1,7 +1,7 @@
 import drjit as dr
 import pytest
 
-@pytest.test_arrays('uint32,shape=(*)')
+@pytest.test_arrays('uint32, shape=(*)')
 def test01_slice_index(t):
     with pytest.raises(TypeError):
         dr.slice_index(dtype=int, shape=(1,), indices=(0,))
@@ -81,3 +81,18 @@ def test01_slice_index(t):
           shape_out=(3, 7), index_out=dr.arange(t, 7*3))
     check(shape=(3, 7), indices=(None, ..., None, 1, None),
           shape_out=(1, 3, 1, 1), index_out=t(1, 8, 15))
+
+@pytest.test_arrays('is_tensor, -bool')
+def test02_construct(t):
+    v = t()
+
+    assert len(v) == 0 and v.ndim == 1 and v.shape == (0,)
+    assert type(v.array) is dr.array_t(t) and len(v.array) == 0
+
+    v = t([1, 2, 3, 4])
+    assert len(v) == 4 and v.ndim == 1 and v.shape == (4,)
+    assert dr.all(v.array == [1, 2, 3, 4])
+
+    v = t([[1, 2, 3, 4], [5, 6, 7, 8]])
+    assert len(v) == 2 and v.ndim == 2 and v.shape == (2, 4)
+    assert dr.all(v.array == [1, 2, 3, 4, 5, 6, 7, 8])

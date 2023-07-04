@@ -15,8 +15,12 @@ struct ScheduleCallback : TraverseCallback {
     bool result = false;
     void operator()(nb::handle h) override {
         const ArraySupplement &s = supp(h.type());
-        if (s.index)
-            result |= jit_var_schedule(s.index(nb::inst_ptr<dr::ArrayBase>(h))) != 0;
+        if (s.is_tensor) {
+            nb::object o = nb::steal(s.tensor_array(h.ptr()));
+            operator()(o);
+        } else if (s.index) {
+            result |= jit_var_schedule(s.index(inst_ptr(h))) != 0;
+        }
     }
 };
 

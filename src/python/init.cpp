@@ -11,6 +11,7 @@
 
 #include "meta.h"
 #include "base.h"
+#include "memop.h"
 
 /// Forward declaration
 static bool array_init_seq(PyObject *self, const ArraySupplement &s, PyObject *seq);
@@ -48,20 +49,36 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
                     nb::detail::nb_inst_copy(self, arg);
                     return 0;
                 } else {
-                    ArrayMeta m1 = s,
-                              m2 = supp(arg_tp);
-                    m1.type = m2.type;
+                    const ArraySupplement &s_arg = supp(arg_tp);
+
+                    ArrayMeta m_self = s,
+                              m_arg  = s_arg;
 
                     // Potentially do a cast
-                    if (m1 == m2 && s.cast) {
-                        s.cast(nb::inst_ptr<dr::ArrayBase>(arg), (VarType) m2.type,
-                               nb::inst_ptr<dr::ArrayBase>(self));
+                    ArrayMeta m_temp = s_arg;
+                    m_temp.type = s.type;
+                    if (m_temp == m_self && s.cast) {
+                        s.cast(inst_ptr(arg), (VarType) s_arg.type, inst_ptr(self));
+                        nb::inst_mark_ready(self);
+                        return 0;
+                    }
+
+                    // Potentially load from the CPU
+                    m_temp = s;
+                    m_temp.backend = (uint64_t) JitBackend::Invalid;
+                    m_temp.is_vector = true;
+
+                    if (m_temp == m_arg && s.init_data && s_arg.data) {
+                        dr::ArrayBase *arg_p = inst_ptr(arg);
+                        size_t len = s_arg.len(arg_p);
+                        void *data = s_arg.data(arg_p);
+                        s.init_data(len, data, inst_ptr(self));
                         nb::inst_mark_ready(self);
                         return 0;
                     }
 
                     // Disallow inefficient element-by-element imports of JIT arrays
-                    if (m1.ndim == 1 && m1.shape[0] == DRJIT_DYNAMIC && m2.shape[0] == DRJIT_DYNAMIC) {
+                    if (s.ndim == 1 && s_arg.ndim == 1 && s.shape[0] == DRJIT_DYNAMIC && s_arg.shape[0] == DRJIT_DYNAMIC) {
                         try_sequence_import = false;
                     } else {
                         // Always broadcast when the element type is one of the sub-elements
@@ -114,14 +131,13 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
 
             if (size == DRJIT_DYNAMIC) {
                 if (s.init_const) {
-                    s.init_const(1, element.ptr(),
-                                 nb::inst_ptr<dr::ArrayBase>(self));
+                    s.init_const(1, element.ptr(), inst_ptr(self));
                     nb::inst_mark_ready(self);
                     return 0;
                 }
 
                 size = 1;
-                s.init(1, nb::inst_ptr<dr::ArrayBase>(self));
+                s.init(1, inst_ptr(self));
                 nb::inst_mark_ready(self);
             } else {
                 nb::inst_zero(self);
@@ -209,7 +225,7 @@ static bool array_init_seq(PyObject *self, const ArraySupplement &s, PyObject *s
     if (size == 1 && s.init_const) {
         nb::object o = nb::steal(sq_item(seq, 0));
         raise_if(!o.is_valid(), "Item retrival failed.");
-        s.init_const((size_t) size, o.ptr(), nb::inst_ptr<dr::ArrayBase>(self));
+        s.init_const((size_t) size, o.ptr(), inst_ptr(self));
         nb::inst_mark_ready(self);
         return true;
     }
@@ -249,15 +265,14 @@ static bool array_init_seq(PyObject *self, const ArraySupplement &s, PyObject *s
 
         raise_if(fail, "Could not construct from sequence (invalid type in input).");
 
-        s.init_data((size_t) size, storage.get(),
-                    nb::inst_ptr<dr::ArrayBase>(self));
+        s.init_data((size_t) size, storage.get(), inst_ptr(self));
         nb::inst_mark_ready(self);
 
         return true;
     }
 
     if (is_dynamic) {
-        s.init((size_t) size, nb::inst_ptr<dr::ArrayBase>(self));
+        s.init((size_t) size, inst_ptr(self));
         nb::inst_mark_ready(self);
     } else {
         nb::inst_zero(self);
@@ -279,20 +294,26 @@ nb::object full_alt(nb::type_object dtype, nb::handle value, size_t size);
 nb::object empty_alt(nb::type_object dtype, size_t size);
 
 int tp_init_tensor(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
-    PyObject *array = nullptr, *shape = nullptr;
-    const char *kwlist[3] = { "array", "shape", nullptr };
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "|OO!", (char **) kwlist,
-                                     &array, &PyTuple_Type, &shape))
-        return -1;
-
     PyTypeObject *self_tp = Py_TYPE(self);
 
-    if (!shape && !array) {
-        nb::detail::nb_inst_zero(self);
-        return 0;
-    }
+    try {
+        PyObject *array = nullptr, *shape = nullptr;
+        const char *kwlist[3] = { "array", "shape", nullptr };
+        raise_if(!PyArg_ParseTupleAndKeywords(args, kwds, "|OO!",
+                                              (char **) kwlist, &array,
+                                              &PyTuple_Type, &shape),
+                 "Invalid tensor constructor arguments.");
 
-    if (!shape) {
+        const ArraySupplement &s = supp(self_tp);
+
+        if (!shape && !array) {
+            nb::detail::nb_inst_zero(self);
+            s.tensor_shape(inst_ptr(self)).push_back(0);
+            return 0;
+        }
+
+        raise_if(!array, "Input array must be specified.");
+
         PyTypeObject *array_tp = Py_TYPE(array);
 
         // Same type -> copy constructor
@@ -301,22 +322,55 @@ int tp_init_tensor(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
             return 0;
         }
 
-        /// XXX need dr.ravel(), and initialize shape here..
-        // nb::detail::nb_inst_zero(self);
-        // PyObject *value = s.op_tensor_array(self);
-        // if (array_init(value, args, kwds)) {
-        //     Py_DECREF(value);
-        //     return -1;
-        // }
-        //
-        // s.op_tensor_shape(nb::inst_ptr<void>(self)).push_back(len(value));
-        // Py_DECREF(value);
-        // return 0;
-    }
+        nb::detail::nb_inst_zero(self);
+        dr_vector<size_t> &shape_vec = s.tensor_shape(inst_ptr(self));
 
-    nb::str tp_name = nb::type_name(self_tp);
-    PyErr_Format(PyExc_TypeError, "%U.__init__(): unsupported", tp_name.ptr());
-    return -1;
+        nb::object args_2;
+        if (!shape) {
+            // Infer the shape of an arbitrary data structure & flatten it
+            VarType vt = (VarType) s.type;
+            nb::object flat = ravel(array, 'C', &shape_vec, nullptr, &vt);
+            args_2 = nb::make_tuple(flat);
+        } else {
+            // Shape is given, require flat input
+            args_2 = nb::make_tuple(nb::handle(array));
+            shape_vec.resize((size_t) NB_TUPLE_GET_SIZE(shape));
+
+            for (size_t i = 0; i < shape_vec.size(); ++i) {
+                PyObject *o = NB_TUPLE_GET_ITEM(shape, (Py_ssize_t) i);
+                size_t rv = PyLong_AsSize_t(o);
+                raise_if(rv == (size_t) -1, "Invalid shape tuple.");
+                shape_vec[i] = rv;
+            }
+        }
+
+        nb::object self_array = nb::steal(s.tensor_array(self));
+        int rv = tp_init_array(self_array.ptr(), args_2.ptr(), nullptr);
+        auto [ready, destruct] = nb::inst_state(self_array);
+        (void) destruct;
+        nb::inst_set_state(self_array, ready, false);
+        raise_if(rv, "Tensor storage initialization failed.");
+
+        // Double-check that the size makes sense
+        size_t size_exp = 1, size = nb::len(self_array);
+        for (size_t i = 0; i < shape_vec.size(); ++i)
+            size_exp *= shape_vec[i];
+
+        raise_if(size != size_exp,
+                 "Input array has the wrong number of entries (got %zu, "
+                 "expected %zu).", size, size_exp);
+
+        return 0;
+    } catch (nb::python_error &e) {
+        nb::str tp_name = nb::type_name(self_tp);
+        e.restore();
+        nb::chain_error(PyExc_TypeError, "%U.__init__(): internal error.", tp_name.ptr());
+        return -1;
+    } catch (const std::exception &e) {
+        nb::str tp_name = nb::type_name(self_tp);
+        nb::chain_error(PyExc_TypeError, "%U.__init__(): %s", tp_name.ptr(), e.what());
+        return -1;
+    }
 }
 
 // Forward declaration
@@ -371,13 +425,13 @@ nb::object full(nb::handle dtype, nb::handle value, size_t ndim, const size_t *s
                 value = nb::cast<int>(value) ? Py_True : Py_False;
 
             s.init_const(shape[0], value.ptr(),
-                         nb::inst_ptr<dr::ArrayBase>(result));
+                         inst_ptr(result));
             nb::inst_mark_ready(result);
             return result;
         }
 
         if (s.shape[0] == DRJIT_DYNAMIC) {
-            s.init(shape[0], nb::inst_ptr<dr::ArrayBase>(result));
+            s.init(shape[0], inst_ptr(result));
             nb::inst_mark_ready(result);
         } else {
             nb::inst_zero(result);
@@ -456,13 +510,13 @@ nb::object arange(const nb::type_object_t<dr::ArrayBase> &dtype,
         nb::detail::raise("drjit.arange(): size cannot be negative.");
 
     nb::object result = nb::inst_alloc(counter_tp);
-    counter_s.init_counter((size_t) size, nb::inst_ptr<dr::ArrayBase>(result));
+    counter_s.init_counter((size_t) size, inst_ptr(result));
     nb::inst_mark_ready(result);
 
     if (start == 0 && step == 1)
         return dtype(result);
     else
-        return array_module.attr("fma")(dtype(result), dtype(step), dtype(start));
+        return fma(dtype(result), dtype(step), dtype(start));
 }
 
 nb::object linspace(const nb::type_object_t<dr::ArrayBase> &dtype,
@@ -491,11 +545,11 @@ nb::object linspace(const nb::type_object_t<dr::ArrayBase> &dtype,
         return dtype();
 
     nb::object result = nb::inst_alloc(counter_tp);
-    counter_s.init_counter((size_t) size, nb::inst_ptr<dr::ArrayBase>(result));
+    counter_s.init_counter((size_t) size, inst_ptr(result));
     nb::inst_mark_ready(result);
 
     double step = (stop - start) / (size - ((endpoint && size > 0) ? 1 : 0));
-    return array_module.attr("fma")(dtype(result), dtype(step), dtype(start));
+    return fma(dtype(result), dtype(step), dtype(start));
 }
 
 void export_init(nb::module_ &m) {
