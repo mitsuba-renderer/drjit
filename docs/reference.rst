@@ -116,6 +116,13 @@ ___________
     Special size value used to identify dynamic arrays in
     :py:func:`array_size_v`.
 
+.. py:data:: newaxis
+    :type: NoneType
+    :value: None
+
+    Special size value used to create new axes in slicing
+    expressions (analogous to a similar feature in NumPy).
+
 Access to related types
 _______________________
 
@@ -123,7 +130,6 @@ _______________________
 .. autofunction:: value_t
 .. autofunction:: scalar_t
 .. autofunction:: array_t
-.. autofunction:: bool_array_t
 .. autofunction:: int_array_t
 .. autofunction:: uint_array_t
 .. autofunction:: int32_array_t
@@ -470,6 +476,7 @@ Array base class
 .. autoclass:: ArrayBase
 
     .. autoproperty:: array
+    .. autoproperty:: ndim
     .. autoproperty:: shape
     .. autoproperty:: x
     .. autoproperty:: y

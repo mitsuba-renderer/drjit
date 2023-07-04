@@ -28,8 +28,8 @@ static nb::object all(nb::handle h) {
         if (op) {
             nb::object result = nb::inst_alloc(tp);
             ((ArraySupplement::UnaryOp) op)(
-                nb::inst_ptr<dr::ArrayBase>(h),
-                nb::inst_ptr<dr::ArrayBase>(result));
+                inst_ptr(h),
+                inst_ptr(result));
             nb::inst_mark_ready(result);
             return result;
         }
@@ -65,8 +65,8 @@ static nb::object any(nb::handle h) {
         if (op) {
             nb::object result = nb::inst_alloc(tp);
             ((ArraySupplement::UnaryOp) op)(
-                nb::inst_ptr<dr::ArrayBase>(h),
-                nb::inst_ptr<dr::ArrayBase>(result));
+                inst_ptr(h),
+                inst_ptr(result));
             nb::inst_mark_ready(result);
             return result;
         }

@@ -15,6 +15,7 @@
 #include "meta.h"
 #include "repr.h"
 #include "shape.h"
+#include "slice.h"
 #include <nanobind/stl/string.h>
 
 #define DR_NB_UNOP(name, op)                                                   \
@@ -33,29 +34,35 @@
                               h0, h1);                                         \
     }
 
+#define DR_MATH_UNOP(name, op)                                                 \
+    m.def(#name, [](nb::handle_t<dr::ArrayBase> h0) {                          \
+        return nb::steal(apply<Normal>(                                        \
+            op, #name, std::make_index_sequence<1>(), h0.ptr()));              \
+    }, nb::raw_doc(doc_##name));                                               \
+    m.def(#name, [](double v0) { return dr::name(v0); });
+
 #define DR_MATH_BINOP(name, op)                                                \
     m.def(#name, [](nb::handle h0, nb::handle h1) {                            \
         if (NB_UNLIKELY(!is_drjit_array(h0) && !is_drjit_array(h1)))           \
             throw nb::next_overload();                                         \
         return nb::steal(apply<Normal>(                                        \
             op, #name, std::make_index_sequence<2>(), h0.ptr(), h1.ptr()));    \
-    }, doc_##name);                                                            \
-    m.def(                                                                     \
-        #name, [](double v0, double v1) { return dr::name(v0, v1); },          \
-        nb::raw_doc(doc_##name));
+    }, nb::raw_doc(doc_##name));                                               \
+    m.def(#name, [](double v0, double v1) { return dr::name(v0, v1); });
 
 #define DR_MATH_TERNOP(name, op)                                               \
-    m.def(#name, [](nb::handle h0, nb::handle h1, nb::handle h2) {             \
-        if (!is_drjit_array(h0) && !is_drjit_array(h1) && !is_drjit_array(h2)) \
-            throw nb::next_overload();                                         \
-        return nb::steal(apply<Normal>(op, #name,                              \
-                                       std::make_index_sequence<3>(),          \
-                                       h0.ptr(), h1.ptr(), h2.ptr()));         \
-    }, doc_##name);                                                            \
-    m.def(                                                                     \
-        #name,                                                                 \
-        [](double v0, double v1, double v2) { return dr::name(v0, v1, v2); },  \
-        nb::raw_doc(doc_##name));
+    m.def(#name,                                                               \
+          [](nb::handle h0, nb::handle h1, nb::handle h2) {                    \
+              if (!is_drjit_array(h0) && !is_drjit_array(h1) &&                \
+                  !is_drjit_array(h2))                                         \
+                  throw nb::next_overload();                                   \
+              return nb::steal(apply<Normal>(op, #name,                        \
+                                             std::make_index_sequence<3>(),    \
+                                             h0.ptr(), h1.ptr(), h2.ptr()));   \
+          }, nb::raw_doc(doc_##name));                                         \
+    m.def(#name, [](double v0, double v1, double v2) {                         \
+        return dr::name(v0, v1, v2);                                           \
+    });
 
 nb::handle array_module;
 nb::handle array_submodules[5];
@@ -161,7 +168,7 @@ static int nb_bool(PyObject *o) noexcept {
 
     Py_ssize_t length = s.shape[0];
     if (length == DRJIT_DYNAMIC)
-        length = (Py_ssize_t) s.len(nb::inst_ptr<dr::ArrayBase>(o));
+        length = (Py_ssize_t) s.len(inst_ptr(o));
 
     if (NB_UNLIKELY(length != 1)) {
         nb::str name = nb::type_name(tp);
@@ -236,6 +243,7 @@ static PyType_Slot array_base_slots[] = {
     DR_ARRAY_SLOT(tp_richcompare),
     DR_ARRAY_SLOT(sq_length),
     DR_ARRAY_SLOT(nb_bool),
+    DR_ARRAY_SLOT(mp_subscript),
 
     { 0, nullptr }
 };
@@ -264,6 +272,21 @@ void export_base(nb::module_ &m) {
     });
 
     ab.def_prop_ro("shape", &shape, nb::raw_doc(doc_ArrayBase_shape));
+    ab.def_prop_ro("ndim", &ndim, nb::raw_doc(doc_ArrayBase_ndim));
+
+    ab.def_prop_ro(
+        "array",
+        [](nb::handle_t<dr::ArrayBase> h) -> nb::object {
+            const ArraySupplement &s = supp(h.type());
+            if (s.is_tensor)
+                return nb::steal(s.tensor_array(h.ptr()));
+            else if (s.is_matrix || s.is_quaternion || s.is_complex)
+                return nb::handle(s.array)(h);
+            else
+                return nb::borrow(h);
+        },
+        nb::raw_doc(doc_ArrayBase_array));
+
     ab.def_prop_rw("x", xyzw_getter<0>, xyzw_setter<0>,
                    nb::raw_doc(doc_ArrayBase_x));
     ab.def_prop_rw("y", xyzw_getter<1>, xyzw_setter<1>,
@@ -272,19 +295,26 @@ void export_base(nb::module_ &m) {
                    nb::raw_doc(doc_ArrayBase_z));
     ab.def_prop_rw("w", xyzw_getter<3>, xyzw_setter<3>,
                    nb::raw_doc(doc_ArrayBase_w));
+
     ab.def_prop_rw("real", complex_getter<0>, complex_setter<0>,
                    nb::raw_doc(doc_ArrayBase_real));
     ab.def_prop_rw("imag", complex_getter<1>, complex_setter<1>,
                    nb::raw_doc(doc_ArrayBase_imag));
 
+    m.def("abs", [](Py_ssize_t a) { return dr::abs(a); });
+    DR_MATH_UNOP(abs, ArrayOp::Abs);
+    DR_MATH_UNOP(sqrt, ArrayOp::Sqrt);
+
     m.def("minimum",
-          [](Py_ssize_t a, Py_ssize_t b) { return dr::minimum(a, b); }, doc_minimum);
+          [](Py_ssize_t a, Py_ssize_t b) { return dr::minimum(a, b); });
     DR_MATH_BINOP(minimum, ArrayOp::Minimum);
 
     m.def("maximum",
-          [](Py_ssize_t a, Py_ssize_t b) { return dr::maximum(a, b); }, doc_maximum);
+          [](Py_ssize_t a, Py_ssize_t b) { return dr::maximum(a, b); });
     DR_MATH_BINOP(maximum, ArrayOp::Maximum);
 
+    m.def("maximum",
+          [](Py_ssize_t a, Py_ssize_t b) { return dr::maximum(a, b); });
     DR_MATH_TERNOP(fma, ArrayOp::Fma);
 
     m.def("select",

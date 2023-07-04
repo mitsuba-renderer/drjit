@@ -15,9 +15,10 @@
 
 static const char *op_names[] = {
     // Unary operations
-    "__abs__",
     "__neg__",
     "__invert__",
+    "abs",
+    "sqrt",
 
     // Binary arithetic operations
     "__add__",
@@ -120,7 +121,7 @@ PyObject *apply(ArrayOp op, Slot slot, std::index_sequence<Is...>,
         }
         (void) item_mask;
 
-        drjit::ArrayBase *p[N] = { nb::inst_ptr<dr::ArrayBase>(o[Is])... };
+        drjit::ArrayBase *p[N] = { inst_ptr(o[Is])... };
         nb::object result;
 
         // In 'InPlace' mode
@@ -128,7 +129,7 @@ PyObject *apply(ArrayOp op, Slot slot, std::index_sequence<Is...>,
 
         if (impl != DRJIT_OP_DEFAULT) {
             result = nb::inst_alloc(result_type);
-            drjit::ArrayBase *pr = nb::inst_ptr<dr::ArrayBase>(result);
+            drjit::ArrayBase *pr = inst_ptr(result);
 
             if constexpr (Mode == RichCompare) {
                 using Impl =
@@ -169,7 +170,7 @@ PyObject *apply(ArrayOp op, Slot slot, std::index_sequence<Is...>,
                     move = false; // can directly construct output into o[0]
                 } else {
                     result = nb::inst_alloc(result_type);
-                    s.init(lr, nb::inst_ptr<dr::ArrayBase>(result));
+                    s.init(lr, inst_ptr(result));
                     nb::inst_mark_ready(result);
                 }
             }
@@ -269,7 +270,7 @@ void traverse(const char *op, TraverseCallback &tc, nb::handle h) {
             } else {
                 Py_ssize_t len = s.shape[0];
                 if (len == DRJIT_DYNAMIC)
-                    len = s.len(nb::inst_ptr<dr::ArrayBase>(h.ptr()));
+                    len = s.len(inst_ptr(h.ptr()));
 
                 for (Py_ssize_t i = 0; i < len; ++i) {
                     nb::object item = nb::steal(s.item(h.ptr(), i));
