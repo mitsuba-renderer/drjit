@@ -88,6 +88,8 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
                                 try_sequence_import = false;
                                 break;
                             }
+                            if (!is_drjit_type(cur_tp))
+                                break;
                             cur_tp = (PyTypeObject *) supp(cur_tp).value;
                         }
                     }
@@ -184,8 +186,8 @@ static bool array_init_seq(PyObject *self, const ArraySupplement &s, PyObject *s
 
     PyTypeObject *tp = Py_TYPE(seq);
 #if defined(Py_LIMITED_API)
-    sq_length = (lenfunc) PyType_GetSlot(tp, Py_sq_length);
-    sq_item = (ssizeargfunc) PyType_GetSlot(tp, Py_sq_item);
+    sq_length = (lenfunc) nb::type_get_slot(tp, Py_sq_length);
+    sq_item = (ssizeargfunc) nb::type_get_slot(tp, Py_sq_item);
 #else
     PySequenceMethods *sm = tp->tp_as_sequence;
     if (sm) {
@@ -199,7 +201,7 @@ static bool array_init_seq(PyObject *self, const ArraySupplement &s, PyObject *s
         getiterfunc tp_iter;
 
 #if defined(Py_LIMITED_API)
-        tp_iter = (getiterfunc) PyType_GetSlot(tp, Py_tp_iter);
+        tp_iter = (getiterfunc) nb::type_get_slot(tp, Py_tp_iter);
 #else
         tp_iter = tp->tp_iter;
 #endif

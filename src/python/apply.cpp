@@ -180,11 +180,11 @@ PyObject *apply(ArrayOp op, Slot slot, std::index_sequence<Is...>,
 
             // Fetch pointer/handle to function to be applied recursively
             if constexpr (Mode == RichCompare) {
-                py_impl = PyType_GetSlot((PyTypeObject *) s.value,
-                                         Py_tp_richcompare);
+                py_impl = nb::type_get_slot((PyTypeObject *) s.value,
+                                            Py_tp_richcompare);
             } else {
                 if constexpr (std::is_same_v<Slot, int>)
-                    py_impl = PyType_GetSlot((PyTypeObject *) s.value, slot);
+                    py_impl = nb::type_get_slot((PyTypeObject *) s.value, slot);
                 else
                     py_impl_o = array_module.attr(slot);
             }
