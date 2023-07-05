@@ -12,6 +12,7 @@
 #include "meta.h"
 #include "base.h"
 #include "memop.h"
+#include "shape.h"
 
 /// Forward declaration
 static bool array_init_seq(PyObject *self, const ArraySupplement &s, PyObject *seq);
@@ -226,7 +227,7 @@ static bool array_init_seq(PyObject *self, const ArraySupplement &s, PyObject *s
 
     if (size == 1 && s.init_const) {
         nb::object o = nb::steal(sq_item(seq, 0));
-        raise_if(!o.is_valid(), "Item retrival failed.");
+        raise_if(!o.is_valid(), "Item retrieval failed.");
         s.init_const((size_t) size, o.ptr(), inst_ptr(self));
         nb::inst_mark_ready(self);
         return true;
@@ -389,13 +390,19 @@ nb::object full(nb::handle dtype, nb::handle value, size_t size) {
 
     if (is_drjit_type(dtype)) {
         const ArraySupplement &s = supp(dtype);
-        shape.resize(s.ndim);
 
-        for (size_t i = 0; i < s.ndim; ++i) {
-            size_t k = s.shape[i];
-            if (k == DRJIT_DYNAMIC)
-                k = (i == s.ndim - 1) ? size : 1;
-            shape[i] = k;
+        if (s.is_tensor) {
+            shape.resize(1);
+            shape[0] = size;
+        } else {
+            shape.resize(s.ndim);
+
+            for (size_t i = 0; i < s.ndim; ++i) {
+                size_t k = s.shape[i];
+                if (k == DRJIT_DYNAMIC)
+                    k = (i == s.ndim - 1) ? size : 1;
+                shape[i] = k;
+            }
         }
     } else {
         shape.resize(1);
@@ -409,6 +416,17 @@ nb::object full(nb::handle dtype, nb::handle value, size_t size) {
 nb::object full(nb::handle dtype, nb::handle value, size_t ndim, const size_t *shape) {
     if (is_drjit_type(dtype)) {
         const ArraySupplement &s = supp(dtype);
+
+        if (s.is_tensor) {
+            size_t size = 1;
+            for (size_t i = 0; i < ndim; ++i)
+                size *= shape[i];
+
+            nb::tuple shape_tuple =
+                cast_shape(dr_vector<size_t>(shape, shape + ndim));
+
+            return dtype(full(s.array, value, 1, &size), shape_tuple);
+        }
 
         bool fail = s.ndim != ndim;
         if (!fail) {
@@ -487,6 +505,13 @@ nb::object arange(const nb::type_object_t<dr::ArrayBase> &dtype,
                   Py_ssize_t start, Py_ssize_t end, Py_ssize_t step) {
     const ArraySupplement &s = supp(dtype);
 
+    if (s.is_tensor) {
+        return dtype(arange(
+            nb::borrow<nb::type_object_t<dr::ArrayBase>>(s.array),
+            start, end, step
+        ));
+    }
+
     if (s.ndim != 1 || s.shape[0] != DRJIT_DYNAMIC)
         throw nb::type_error("drjit.arange(): unsupported dtype -- must "
                              "be a dynamically sized 1D array.");
@@ -524,6 +549,13 @@ nb::object arange(const nb::type_object_t<dr::ArrayBase> &dtype,
 nb::object linspace(const nb::type_object_t<dr::ArrayBase> &dtype,
                     double start, double stop, size_t size, bool endpoint) {
     const ArraySupplement &s = supp(dtype);
+
+    if (s.is_tensor) {
+        return dtype(linspace(
+            nb::borrow<nb::type_object_t<dr::ArrayBase>>(s.array),
+            start, stop, size, endpoint
+        ));
+    }
 
     if (s.ndim != 1 || s.shape[0] != DRJIT_DYNAMIC)
         throw nb::type_error("drjit.linspace(): unsupported dtype -- must "

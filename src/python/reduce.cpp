@@ -11,7 +11,7 @@
 #include "reduce.h"
 #include "base.h"
 
-static nb::object all(nb::handle h) {
+nb::object all(nb::handle h) {
     nb::handle tp = h.type();
     if (tp.is(&PyBool_Type))
         return nb::borrow(h);
@@ -33,20 +33,15 @@ static nb::object all(nb::handle h) {
             nb::inst_mark_ready(result);
             return result;
         }
+
+        if (s.is_tensor && s.tensor_shape(inst_ptr(h)).size() <= 1)
+            return all_nested(h);
     }
 
     nb::object result = nb::borrow(Py_True);
-    printf("Entering loop.\n");
-    printf("h=%s\n", nb::str(h).c_str());
-    printf("result=%s\n", nb::str(result).c_str());
 
     size_t it = 0;
     for (nb::handle h2 : h) {
-        if (true) {
-            printf("%p %p %p\n", h.ptr(), h2.ptr(), result.ptr());
-            printf("result=%s\n", nb::str(result).c_str());
-            printf("h2=%s\n", nb::str(h2).c_str());
-        }
         if (it++ == 0)
             result = nb::borrow(h2);
         else
@@ -56,7 +51,7 @@ static nb::object all(nb::handle h) {
     return result;
 }
 
-static nb::object any(nb::handle h) {
+nb::object any(nb::handle h) {
     nb::handle tp = h.type();
     if (tp.is(&PyBool_Type))
         return nb::borrow(h);
@@ -78,6 +73,9 @@ static nb::object any(nb::handle h) {
             nb::inst_mark_ready(result);
             return result;
         }
+
+        if (s.is_tensor && s.tensor_shape(inst_ptr(h)).size() <= 1)
+            return any_nested(h);
     }
 
     nb::object result = nb::borrow(Py_False);
@@ -94,9 +92,16 @@ static nb::object any(nb::handle h) {
     return result;
 }
 
-nb::object all_nested(nb::object o) {
-    nb::handle tp_prev, tp_cur = o.type();
+nb::object all_nested(nb::handle h) {
+    nb::handle tp_prev, tp_cur = h.type();
 
+    if (is_drjit_type(tp_cur)) {
+        const ArraySupplement &s = supp(tp_cur);
+        if (s.is_tensor)
+            return tp_cur(all(nb::steal(s.tensor_array(h.ptr()))), nb::tuple());
+    }
+
+    nb::object o = nb::borrow(h);
     do {
         tp_prev = tp_cur;
         o = all(o);
@@ -106,9 +111,16 @@ nb::object all_nested(nb::object o) {
     return o;
 }
 
-nb::object any_nested(nb::object o) {
-    nb::handle tp_prev, tp_cur = o.type();
+nb::object any_nested(nb::handle h) {
+    nb::handle tp_prev, tp_cur = h.type();
 
+    if (is_drjit_type(tp_cur)) {
+        const ArraySupplement &s = supp(tp_cur);
+        if (s.is_tensor)
+            return tp_cur(any(nb::steal(s.tensor_array(h.ptr()))), nb::tuple());
+    }
+
+    nb::object o = nb::borrow(h);
     do {
         tp_prev = tp_cur;
         o = any(o);

@@ -156,6 +156,11 @@ static int nb_bool(PyObject *o) noexcept {
         return -1;
     }
 
+    if (s.is_tensor) {
+        nb::object array = nb::steal(s.tensor_array(o));
+        return nb_bool(array.ptr());
+    }
+
     if (NB_UNLIKELY(s.ndim != 1)) {
         nb::str name = nb::type_name(tp);
         PyErr_Format(
@@ -242,8 +247,10 @@ static PyType_Slot array_base_slots[] = {
     DR_ARRAY_SLOT(tp_repr),
     DR_ARRAY_SLOT(tp_richcompare),
     DR_ARRAY_SLOT(sq_length),
+    DR_ARRAY_SLOT(mp_length),
     DR_ARRAY_SLOT(nb_bool),
     DR_ARRAY_SLOT(mp_subscript),
+    DR_ARRAY_SLOT(mp_ass_subscript),
 
     { 0, nullptr }
 };
@@ -257,9 +264,30 @@ namespace drjit {
 nb::object fma(nb::handle h0, nb::handle h1, nb::handle h2) {
     if (!is_drjit_array(h0) && !is_drjit_array(h1) && !is_drjit_array(h2))
         throw nb::next_overload();
-    return nb::steal(apply<Normal>(ArrayOp::Fma, "fma",
-                                   std::make_index_sequence<3>(), h0.ptr(),
-                                   h1.ptr(), h2.ptr()));
+
+    PyObject *o =
+        apply<Normal>(ArrayOp::Fma, "fma", std::make_index_sequence<3>(),
+                      h0.ptr(), h1.ptr(), h2.ptr());
+
+    if (!o)
+        nb::detail::raise_python_error();
+
+    return nb::steal(o);
+}
+
+nb::object select(nb::handle h0, nb::handle h1, nb::handle h2) {
+    if (NB_UNLIKELY(!is_drjit_array(h0) && !is_drjit_array(h1) &&
+                    !is_drjit_array(h2)))
+        throw nb::next_overload();
+
+    PyObject *o =
+        apply<Select>(ArrayOp::Select, "select", std::make_index_sequence<3>(),
+                      h0.ptr(), h1.ptr(), h2.ptr());
+
+    if (!o)
+        nb::detail::raise_python_error();
+
+    return nb::steal(o);
 }
 
 void export_base(nb::module_ &m) {
@@ -318,14 +346,8 @@ void export_base(nb::module_ &m) {
     DR_MATH_TERNOP(fma, ArrayOp::Fma);
 
     m.def("select",
-          [](nb::handle h0, nb::handle h1, nb::handle h2) {
-              if (NB_UNLIKELY(!is_drjit_array(h0) && !is_drjit_array(h1) &&
-                              !is_drjit_array(h2)))
-                  throw nb::next_overload();
-              return nb::steal(apply<Select>(ArrayOp::Select, "select",
-                                             std::make_index_sequence<3>(),
-                                             h0.ptr(), h1.ptr(), h2.ptr()));
-          }, nb::raw_doc(doc_select));
+          nb::overload_cast<nb::handle, nb::handle, nb::handle>(&select),
+          nb::raw_doc(doc_select));
 
     m.def("select",
           [](bool mask, nb::handle a, nb::handle b) {

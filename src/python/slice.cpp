@@ -2,6 +2,8 @@
 #include "base.h"
 #include "init.h"
 #include "shape.h"
+#include "base.h"
+#include "slice.h"
 
 /// Holds metadata about slicing component
 struct Component {
@@ -107,7 +109,7 @@ slice_index(const nb::type_object_t<dr::ArrayBase> &dtype,
             --shape_offset;
             for (size_t i = 0; i <indices_to_add; ++i) {
                 if (shape_offset >= shape_len)
-                    nb::detail::fail("slice_index(): internal error!");
+                    nb::detail::fail("slice_index(): internal error.");
                 size = nb::cast<Py_ssize_t>(shape[shape_offset++]);
                 components.emplace_back(0, 1, size, size);
                 shape_out.append(size);
@@ -169,13 +171,18 @@ slice_index(const nb::type_object_t<dr::ArrayBase> &dtype,
     return { nb::tuple(shape_out), index_out };
 }
 
-PyObject *mp_subscript(PyObject *self, PyObject *key) {
+PyObject *mp_subscript(PyObject *self, PyObject *key) noexcept {
     nb::handle self_tp = nb::handle(self).type(),
                key_tp = nb::handle(key).type();
 
     const ArraySupplement &s = supp(self_tp);
 
     try {
+        if (is_drjit_type(key_tp) && (VarType) supp(key_tp).type == VarType::Bool) {
+            Py_INCREF(self);
+            return self;
+        }
+
         if (s.is_tensor) {
             nb::tuple key2;
 
@@ -201,8 +208,8 @@ PyObject *mp_subscript(PyObject *self, PyObject *key) {
         if (key_tp.is(&PyLong_Type)) {
             Py_ssize_t index = PyLong_AsSsize_t(key);
             if (index < 0) {
-                if (index == -1 && PyErr_Occurred())
-                    nb::detail::raise("Invalid array index.");
+                raise_if(index == -1 && PyErr_Occurred(),
+                         "Invalid array index.");
 
                 Py_ssize_t size = s.shape[0];
                 if (size == DRJIT_DYNAMIC)
@@ -217,22 +224,13 @@ PyObject *mp_subscript(PyObject *self, PyObject *key) {
             Py_ssize_t size = NB_TUPLE_GET_SIZE(key);
 
             for (Py_ssize_t i = 0; i < size; ++i) {
-                nb::handle key2 = NB_TUPLE_GET_ITEM(key, i);
-                nb::object o2 = nb::steal(PyObject_GetItem(o.ptr(), key2.ptr()));
-                if (!o2.is_valid())
-                    nb::detail::raise_python_error();
-                else
-                    o = o2;
+                nb::object o2 = nb::steal(
+                    PyObject_GetItem(o.ptr(), NB_TUPLE_GET_ITEM(key, i)));
+                raise_if(!o2.is_valid(), "Item retrieval failed.");
+                o = std::move(o2);
             }
 
             return o.release().ptr();
-        } else if (is_drjit_type(key_tp)) {
-            if ((VarType) supp(key_tp).type == VarType::Bool) {
-                Py_INCREF(self);
-                return self;
-            } else {
-                complex_case = true;
-            }
         } else if (key == Py_None || key_tp.is(&PyEllipsis_Type) || key_tp.is(&PySlice_Type)) {
             complex_case = true;
         }
@@ -248,15 +246,121 @@ PyObject *mp_subscript(PyObject *self, PyObject *key) {
     } catch (nb::python_error &e) {
         nb::str tp_name = nb::type_name(self_tp);
         e.restore();
-        nb::chain_error(PyExc_TypeError, "%U.__getitem__(): internal error!",
+        nb::chain_error(PyExc_TypeError, "%U.__getitem__(): internal error.",
                         tp_name.ptr());
         return nullptr;
     } catch (const std::exception &e) {
         nb::str tp_name = nb::type_name(self_tp);
-        PyErr_Format(PyExc_TypeError, "%U.__getitem__(): %s!",
-                     tp_name.ptr(), e.what());
+        nb::chain_error(PyExc_TypeError, "%U.__getitem__(): %s",
+                        tp_name.ptr(), e.what());
         return nullptr;
     }
+}
+
+int mp_ass_subscript(PyObject *self, PyObject *key, PyObject *value) noexcept {
+    nb::handle self_tp = nb::handle(self).type(),
+               key_tp = nb::handle(key).type();
+
+    const ArraySupplement &s = supp(self_tp);
+
+    try {
+        if (is_drjit_type(key_tp) && (VarType) supp(key_tp).type == VarType::Bool) {
+            nb::object result = select(nb::borrow(key), nb::borrow(value), nb::borrow(self));
+            nb::inst_destruct(self);
+            nb::inst_move(self, result);
+            return 0;
+        }
+
+        if (s.is_tensor) {
+            nb::tuple key2;
+
+            if (key_tp.is(&PyTuple_Type))
+                key2 = nb::borrow<nb::tuple>(key);
+            else
+                key2 = nb::make_tuple(nb::handle(key));
+
+            auto [out_shape, out_index] = slice_index(
+                nb::borrow<nb::type_object_t<dr::ArrayBase>>(s.tensor_index),
+                nb::borrow<nb::tuple>(shape(self)), key2);
+
+            nb::object target = nb::steal(s.tensor_array(self));
+
+            scatter(target, nb::borrow(value), out_index, nb::borrow(Py_True));
+
+            return 0;
+        }
+
+        bool complex_case = false;
+        if (key_tp.is(&PyLong_Type)) {
+            Py_ssize_t index = PyLong_AsSsize_t(key);
+            if (index < 0) {
+                raise_if(index == -1 && PyErr_Occurred(),
+                         "Invalid array index.");
+
+                Py_ssize_t size = s.shape[0];
+                if (size == DRJIT_DYNAMIC)
+                    size = (Py_ssize_t) s.len(inst_ptr(self));
+
+                index = size + index;
+            }
+
+            return s.set_item(self, index, value);
+        } else if (key_tp.is(&PyTuple_Type)) {
+            nb::object o = nb::borrow(self);
+            Py_ssize_t size = NB_TUPLE_GET_SIZE(key);
+
+            for (Py_ssize_t i = 0; i < size - 1; ++i) {
+                nb::object o2 = nb::steal(
+                    PyObject_GetItem(o.ptr(), NB_TUPLE_GET_ITEM(key, i)));
+                raise_if(!o2.is_valid(), "Item retrival failed.");
+                o = std::move(o2);
+            }
+
+            if (size) {
+                raise_if(PyObject_SetItem(
+                             o.ptr(), NB_TUPLE_GET_ITEM(key, size - 1), value),
+                         "Item assigment failed.");
+            }
+
+            return 0;
+        } else if (key == Py_None || key_tp.is(&PyEllipsis_Type) || key_tp.is(&PySlice_Type)) {
+            complex_case = true;
+        }
+
+        if (complex_case) {
+            nb::detail::raise_type_error(
+                "Complex slicing operations are only supported on tensors.");
+        } else {
+            nb::str key_name = nb::type_name(key_tp);
+            nb::detail::raise_type_error("Invalid key of type '%s' specified.",
+                                         key_name.c_str());
+        }
+    } catch (nb::python_error &e) {
+        nb::str tp_name = nb::type_name(self_tp);
+        e.restore();
+        nb::chain_error(PyExc_TypeError, "%U.__setitem__(): internal error.",
+                        tp_name.ptr());
+        return -1;
+    } catch (const std::exception &e) {
+        nb::str tp_name = nb::type_name(self_tp);
+        PyErr_Format(PyExc_TypeError, "%U.__setitem__(): %s",
+                     tp_name.ptr(), e.what());
+        return -1;
+    }
+}
+
+PyObject *sq_item_tensor(PyObject *self, Py_ssize_t index) noexcept {
+    PyObject *key = PyLong_FromSsize_t(index);
+    if (!key)
+        return nullptr;
+    return mp_subscript(self, key);
+}
+
+int sq_ass_item_tensor(PyObject *self, Py_ssize_t index, PyObject *value) noexcept {
+    PyObject *key = PyLong_FromSsize_t(index);
+    if (!key)
+        return -1;
+    return mp_ass_subscript(self, key, value);
 }
 
 void export_slice(nb::module_&m) {
