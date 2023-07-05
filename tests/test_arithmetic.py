@@ -1,5 +1,4 @@
 import drjit as dr
-import numpy as np
 import pytest
 import sys
 
@@ -45,7 +44,7 @@ def test02_allclose():
         assert not dr.allclose([1,2,3], [1,4])
     assert 'incompatible sizes' in str(ei.value)
 
-    import numpy as np
+    np = pytest.importorskip("numpy")
     assert dr.allclose(np.array([1, 2, 3]), [1, 2, 3])
     assert dr.allclose(np.array([1, 2, 3]), dr.scalar.Array3f(1, 2, 3))
     assert dr.allclose(np.array([1, float('nan'), 3.0]), [1, float('nan'), 3], equal_nan=True)
@@ -98,6 +97,12 @@ def test05_binop_inplace(t):
     c = a
     a += b
     assert a is not c and dr.all(a == t(3, 4, 2))
+
+    if dr.is_float_v(t):
+        a = dr.int_array_t(t)(1)
+        c = a
+        a += b
+        assert a is not c and type(a) is t and dr.all(a == t(3, 4, 2))
 
     if dr.size_v(t) == dr.Dynamic:
         a = t(1)

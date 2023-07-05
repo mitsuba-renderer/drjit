@@ -217,3 +217,126 @@ def test07_cast(t, drjit_verbose, capsys):
     assert msg.count("jit_var_cast") == 3
     assert msg.count("jit_all") == 3
     assert msg.count("jit_var_mem_copy") == 4
+
+
+@pytest.test_arrays('is_tensor, uint32')
+def test08_slice(t):
+    class Checker:
+        """
+        Compares a Tensor indexing operation against a NumPy reference
+        and asserts if there is a mismatch.
+        """
+        def __init__(self, shape, tensor_type):
+            np = pytest.importorskip("numpy")
+
+            self.shape = shape
+            size = np.prod(shape)
+            self.array_n = np.arange(size, dtype=np.uint32).reshape(shape)
+            self.array_e = tensor_type(dr.arange(dr.array_t(tensor_type), size), shape)
+
+        def __getitem__(self, args):
+            np = pytest.importorskip("numpy")
+
+            #  print(type(self.array_e))
+            #  print(self.array_e)
+            #  print(args)
+            ref_n = self.array_n[args]
+            ref_e = self.array_e[args]
+            assert ref_n.shape == ref_e.shape
+            assert np.all(ref_n.ravel() == np.array(ref_e.array))
+
+    c = Checker((10,), t)
+    c[:]
+    c[3]
+    c[1:5]
+    c[-5]
+
+    c = Checker((10, 20), t)
+    c[:]
+    c[0:0]
+    c[5, 0]
+    c[5, 0:2]
+    c[:, 5]
+    c[5, :]
+    c[:, :]
+    c[1:3, 2:7:2]
+    c[8:2:-1, 7:0:-1]
+    c[0:0, 0:0]
+
+    c = Checker((8, 9, 10, 11), t)
+    c[...]
+    c[1, ...]
+    c[..., 1]
+    c[4, ..., 3]
+    c[0, 1:3, ..., 3]
+
+    c[None]
+    c[..., None]
+    c[1, None, ...]
+    c[..., None, 1, None]
+    c[None, 4, ..., 3, None]
+
+@pytest.test_arrays('is_tensor, -bool')
+def test09_broadcast(t):
+    np = pytest.importorskip("numpy")
+
+    for i in range(1, 4):
+        for j in range(1, 4):
+            for k in range(1, 4):
+                shape = [i, j, k]
+                for l in range(len(shape)):
+                    shape_2 = list(shape)
+                    shape_2[l] = 1
+                    array_n1 = np.arange(np.prod(shape),   dtype=np.uint32).reshape(shape)
+                    array_n2 = np.arange(np.prod(shape_2), dtype=np.uint32).reshape(shape_2)
+
+                    index_t = dr.uint32_array_t(dr.array_t(t))
+                    array_e1 = t(dr.arange(index_t, np.prod(shape)),   tuple(shape))
+                    array_e2 = t(dr.arange(index_t, np.prod(shape_2)), tuple(shape_2))
+
+                    out_n = array_n1 + array_n2
+                    out_e = array_e1 + array_e2
+
+                    assert out_n.shape == out_e.shape
+                    assert np.all(out_n.ravel() == np.array(out_e.array))
+
+    with pytest.raises(RuntimeError, match=r'Operands have incompatible shapes: \(2,\) and \(2, 1\).'):
+        dr.zeros(t, 2) + dr.zeros(t, (2, 1))
+
+    with pytest.raises(RuntimeError, match=r'Operands have incompatible shapes: \(2,\) and \(3,\).'):
+        dr.zeros(t, 2) + dr.zeros(t, 3)
+
+    with pytest.raises(RuntimeError, match=r'Operands have incompatible shapes: \(3, 2\) and \(2, 3\).'):
+        dr.zeros(t, (3, 2)) + dr.zeros(t, (2, 3))
+
+@pytest.test_arrays('is_tensor, -bool')
+def test10_inplace(t):
+    v1 = t([[1, 2], [4, 5]])
+    v2 = t(v1)
+    v3 = v1
+
+    v1 += 1
+    assert v3 is v1 and v3 is not v2
+    assert str(v1) == "[[2, 3],\n [5, 6]]"
+
+    v1 += v2
+    assert str(v1) == "[[3, 5],\n [9, 11]]"
+    assert v3 is v1 and v3 is not v2
+
+    if dr.is_float_v(t):
+        ti = dr.int_array_t(t)
+
+        v1 = ti([[1, 2], [4, 5]])
+        v2 = t([[1, 2], [4, 5]])
+        v3 = v1
+        v1 += v2
+
+        assert v1 is not v2
+        assert type(v1) is t
+        assert str(v1) == "[[2, 4],\n [8, 10]]"
+
+@pytest.test_arrays('is_tensor, -bool')
+def test11_masked_assignment(t):
+    v1 = t([[1, 2], [4, 5]])
+    v1[v1>4] = 10
+    assert str(v1) == "[[1, 2],\n [4, 10]]"

@@ -25,6 +25,11 @@ PyObject *tp_iter(PyObject *o) {
         .ptr();
 }
 
+static PyObject *tp_iter_self(PyObject *o) {
+    Py_INCREF(o);
+    return o;
+}
+
 static PyObject *tp_iternext(PyObject *o) {
     dr_iterator &it = *nb::inst_ptr<dr_iterator>(o);
     if (it.index >= it.size)
@@ -35,15 +40,15 @@ static PyObject *tp_iternext(PyObject *o) {
 }
 
 static int tp_traverse(PyObject *self, visitproc visit, void *arg) {
-    dr_iterator &it = *(dr_iterator *) self;
+    dr_iterator &it = *nb::inst_ptr<dr_iterator>(self);
     Py_VISIT(it.o.ptr());
     return 0;
 }
 
-
 void export_iter(nb::module_ &m) {
     const PyType_Slot iter_slots[] = {
         { Py_tp_traverse, (void *) tp_traverse },
+        { Py_tp_iter, (void *) tp_iter_self },
         { Py_tp_iternext, (void *) tp_iternext },
         { 0, nullptr }
     };

@@ -765,7 +765,9 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                sr = sa > sb ? sa : sb;
 
         if constexpr (Derived::Size == Dynamic) {
-            if ((sa != sr && sa != 1) || (sb != sr && sb != 1))
+            if (sa == 0 && sb == 1)
+                sr = 0;
+            else if ((sa != sr && sa != 1) || (sb != sr && sb != 1))
                 drjit_raise("gather_() : mismatched input sizes "
                             "(%zu and %zu)", sa, sb);
             result = drjit::empty<Derived>(sr);
@@ -787,8 +789,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                sd = sa > sb ? sa : sb, sr = sc > sd ? sc : sd;
 
         for (size_t i = 0; i < sr; ++i)
-            scatter<Permute>(target, derived().entry(i),
-                             index.entry(i),
+            scatter<Permute>(target, derived().entry(i), index.entry(i),
                              mask.entry(i));
     }
 

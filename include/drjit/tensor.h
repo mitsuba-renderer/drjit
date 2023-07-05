@@ -47,17 +47,20 @@ dr_vector<size_t> tensor_broadcast(const char *op, T0 &t0, T1 &t1) {
            ndim = drjit::maximum(t0d, t1d);
 
     if ((t0d != ndim && t0d != 0) || (t1d != ndim && t1d != 0))
-        drjit_raise("drjit::Tensor::%s(): incompatible tensor dimensions "
+        drjit_raise("drjit::Tensor::%s(): incompatible tensor rank "
                     "(%zu and %zu)!", op, t0d, t1d);
 
     dr_vector<size_t> shape(ndim, 0);
     for (size_t i = 0; i < ndim; ++i) {
-        size_t t0_i = t0d > 0 ? t0.shape(i) : 0;
-        size_t t1_i = t1d > 0 ? t1.shape(i) : 0;
-        shape[i] = drjit::maximum(t0_i, t1_i);
-        if (t0_i > 1 && t1_i > 1 && t0_i != t1_i)
+        size_t t0_i = t0d > 0 ? t0.shape(i) : 1,
+               t1_i = t1d > 0 ? t1.shape(i) : 1,
+               value = drjit::maximum(t0_i, t1_i);
+
+        if ((t0_i != value && t0_i != 1) || (t1_i != value && t1_i != 1))
             drjit_raise("drjit::Tensor::%s(): incompatible tensor shapes "
-                        "for dimension %zu (%zu and %zu)!", op, i, t0_i, t1_i);
+                        "on axis %zu (%zu and %zu)!", op, i, t0_i, t1_i);
+
+        shape[i] = value;
     }
 
     using Index = typename T0::Index;
@@ -74,14 +77,25 @@ dr_vector<size_t> tensor_broadcast(const char *op, T0 &t0, T1 &t1, T2 &t2) {
 
     if ((t0d != ndim && t0d != 0) || (t1d != ndim && t1d != 0) ||
         (t2d != ndim && t2d != 0))
-        drjit_raise("drjit::Tensor::%s(): incompatible tensor dimensions "
+        drjit_raise("drjit::Tensor::%s(): incompatible tensor rank "
                     "(%zu, %zu, and %zu)!", op, t0d, t1d, t2d);
 
     dr_vector<size_t> shape(ndim, 0);
-    for (size_t i = 0; i < ndim; ++i)
-        shape[i] = drjit::maximum(drjit::maximum(t0d > 0 ? t0.shape(i) : 0,
-                                                 t1d > 0 ? t1.shape(i) : 0),
-                                                 t2d > 0 ? t2.shape(i) : 0);
+    for (size_t i = 0; i < ndim; ++i) {
+        size_t t0_i = t0d > 0 ? t0.shape(i) : 1,
+               t1_i = t1d > 0 ? t1.shape(i) : 1,
+               t2_i = t2d > 0 ? t2.shape(i) : 1,
+               value = drjit::maximum(drjit::maximum(t0_i, t1_i), t2_i);
+
+        if ((t0_i != value && t0_i != 1) || (t1_i != value && t1_i != 1) ||
+            (t2_i != value && t2_i != 1))
+            drjit_raise("drjit::Tensor::%s(): incompatible tensor shapes "
+                        "on axis %zu (%zu, %zu, and %zu)!",
+                        op, i, t0_i, t1_i, t2_i);
+
+        shape[i] = value;
+    }
+
 
     using Index = typename T0::Index;
     tensor_broadcast_impl<Index>(op, t0, shape);

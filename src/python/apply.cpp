@@ -304,8 +304,8 @@ void tensor_broadcast(nb::object &tensor, nb::object &array,
         size_o = std::move(size_next_o);
     }
 
-    array = tp(gather(nb::borrow<nb::type_object>(array.type()),
-                      array, index, nb::borrow(Py_True)));
+    array = gather(nb::borrow<nb::type_object>(array.type()),
+                   array, index, nb::borrow(Py_True));
 }
 
 
@@ -341,24 +341,45 @@ NB_NOINLINE PyObject *apply_tensor(ArrayOp op, Slot slot,
 
         size_t ndims[] = { shapes[Is]->size()... };
         size_t ndim = maxv(ndims[Is]...);
+        bool compatible = true;
 
         if constexpr (sizeof...(Is) > 1) {
-            if (((ndim != ndims[Is] && ndims[Is] != 0) || ...)) {
-                const char *fmt = sizeof...(Is) == 2
-                    ? "Incompatible tensor dimensions (%zu and %zu)."
-                    : "Incompatible tensor dimensions (%zu, %zu, and %zu).";
-                nb::detail::raise(fmt, ndims[Is]...);
-            }
+            if (((ndim != ndims[Is] && ndims[Is] != 0) || ...))
+                compatible = false;
         }
 
         dr_vector<size_t> shape(ndim, 0);
-        for (size_t i = 0; i < ndim; ++i)
-            shape[i] = maxv((ndims[Is] ? shapes[Is]->operator[](i) : 0)...);
 
-        if constexpr (sizeof...(Is) > 1)
+        if (compatible) {
+            for (size_t i = 0; i < ndim; ++i) {
+                size_t shape_i[] = { (ndims[Is] ? shapes[Is]->operator[](i) : 1)... };
+                size_t value = maxv(shape_i[Is]...);
+                if (((shape_i[Is] != value && shape_i[Is] != 1 && ndims[Is]) || ...)) {
+                    compatible = false;
+                    break;
+                }
+                shape[i] = value;
+            }
+        }
+
+        if (!compatible) {
+            nb::str shape_str[] = { nb::str(cast_shape(*shapes[Is]))... };
+
+            const char *fmt = N == 2
+                ? "Operands have incompatible shapes: %s and %s."
+                : "Operands have incompatible shapes: %s, %s, and %s.";
+
+            nb::detail::raise(fmt, shape_str[Is].c_str()...);
+        }
+
+        if constexpr (N > 1) {
+            // Broadcast to compatible shape for binary/ternary operations
             (tensor_broadcast(o[Is], arrays[Is], *shapes[Is], shape), ...);
+        }
 
-        nb::object result_array = nb::steal(apply<Mode, Slot>(
+        constexpr ApplyMode NestedMode = Mode == InPlace ? Normal : Mode;
+
+        nb::object result_array = nb::steal(apply<NestedMode, Slot>(
             op, slot, is, arrays[Is].ptr()...));
 
         raise_if(!result_array.is_valid(),
