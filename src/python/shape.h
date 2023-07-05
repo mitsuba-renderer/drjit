@@ -13,6 +13,7 @@
 #include "common.h"
 
 extern Py_ssize_t sq_length(PyObject *o) noexcept;
+extern Py_ssize_t mp_length(PyObject *o) noexcept;
 
 extern nb::object shape(nb::handle h);
 extern bool shape_impl(nb::handle h, dr_vector<size_t> &result);
@@ -21,7 +22,7 @@ extern bool shape_impl(nb::handle h, dr_vector<size_t> &result);
 extern size_t ndim(nb::handle_t<dr::ArrayBase> h) noexcept;
 
 /// Convert dr_vector<size_t> into a python tuple
-extern nb::object cast_shape(dr_vector<size_t> &shape);
+extern nb::tuple cast_shape(const dr_vector<size_t> &shape);
 
 /// Publish the drjit.shape() function
 extern void export_shape(nb::module_&);

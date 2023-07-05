@@ -25,6 +25,10 @@ Py_ssize_t sq_length(PyObject *o) noexcept {
     return length;
 }
 
+Py_ssize_t mp_length(PyObject *o) noexcept {
+    return sq_length(o);
+}
+
 size_t ndim(nb::handle_t<dr::ArrayBase> h) noexcept {
     const ArraySupplement &s = supp(h.type());
     if (s.is_tensor)
@@ -119,8 +123,8 @@ bool shape_impl(nb::handle h, dr_vector<size_t> &result) {
     return shape_traverse(h, result.size(), result.data());
 }
 
-nb::object cast_shape(dr_vector<size_t> &shape) {
-    nb::object o = nb::steal(PyTuple_New((Py_ssize_t) shape.size()));
+nb::tuple cast_shape(const dr_vector<size_t> &shape) {
+    nb::tuple o = nb::steal<nb::tuple>(PyTuple_New((Py_ssize_t) shape.size()));
     if (!o.is_valid())
         nb::detail::raise_python_error();
 

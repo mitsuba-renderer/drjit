@@ -10,6 +10,7 @@
 
 #include "iter.h"
 #include "shape.h"
+#include "slice.h"
 
 struct dr_iterator {
     nb::object o;
@@ -29,10 +30,8 @@ static PyObject *tp_iternext(PyObject *o) {
     if (it.index >= it.size)
         return nullptr;
 
-    if (it.s.is_tensor)
-        return PySequence_GetItem(it.o.ptr(), it.index++);
-    else
-        return it.s.item(it.o.ptr(), it.index++);
+    ssizeargfunc func = it.s.is_tensor ? sq_item_tensor : it.s.item;
+    return func(it.o.ptr(), it.index++);
 }
 
 static int tp_traverse(PyObject *self, visitproc visit, void *arg) {

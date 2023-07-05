@@ -34,5 +34,8 @@ inline bool is_drjit_type(nb::handle h) {
 /// Is 'type(h)' a Dr.Jit array type?
 inline bool is_drjit_array(nb::handle h) { return is_drjit_type(h.type()); }
 
-// Fused multiply-add operation used in a few places
+// Fused multiply-add operation used in a few places in the bindings
 extern nb::object fma(nb::handle h0, nb::handle h1, nb::handle h2);
+
+// Tenrnary select/blend operation used in a few places in the bindings
+extern nb::object select(nb::handle h0, nb::handle h1, nb::handle h2);

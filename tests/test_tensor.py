@@ -134,8 +134,38 @@ def test02_construct(t):
     assert dr.all(v.array == [1, 2, 3, 4, 5, 6])
     assert str(v) == "[[1, 2],\n [3, 4],\n [5, 6]]"
 
+    with pytest.raises(TypeError, match='ragged input'):
+        v = t([[1, 2, 3, 4], [5, 6, 7, 8], 5])
+
+    v = t(ta(1, 2, 3, 4, 5, 6, 7, 8))
+    assert len(v) == 8 and v.ndim == 1 and v.shape == (8,)
+
+    v = t(array=ta(1, 2, 3, 4, 5, 6, 7, 8), shape=(2, 4))
+    assert len(v) == 2 and v.ndim == 2 and v.shape == (2, 4)
+
+    with pytest.raises(TypeError, match=r'Input array has the wrong number of entries \(got 4, expected 8\)'):
+        v = t(ta(1, 2, 3, 4), (2, 4))
+
+    with pytest.raises(TypeError, match='Input array must be specified'):
+        v = t(shape=(3,4))
+
+@pytest.test_arrays('is_tensor, -bool')
+def test03_construct_2(t):
+    assert dr.all(dr.arange(t, 3) == [0, 1, 2])
+    assert dr.all(dr.zeros(t, 3) == [0, 0, 0])
+    assert dr.all(dr.full(t, 1, 3) == [1, 1, 1])
+    assert dr.all(dr.empty(t, 3).shape == (3,))
+
+    if dr.is_float_v(t):
+        assert dr.all(dr.linspace(t, 0, 1, 3) == [0, 0.5, 1])
+
+    v = dr.zeros(t, shape=(1, 2, 3))
+    assert v.shape == (1, 2, 3) and dr.all(v.array == 0)
+    v = dr.full(t, 1, shape=(1, 2, 3))
+    assert v.shape == (1, 2, 3) and dr.all(v.array == 1)
+
 @pytest.test_arrays('-bool, is_tensor')
-def test04_binop(t):
+def test05_binop(t):
     mod = sys.modules[t.__module__]
 
     with pytest.raises(RuntimeError, match='Incompatible arguments'):
@@ -151,8 +181,29 @@ def test04_binop(t):
     assert str(t([1, 2, 3]) + t(4)) == '[5, 6, 7]'
     assert str(t([1, 2, 3]) + t([4, 5, 6])) == '[5, 7, 9]'
 
+@pytest.test_arrays('is_tensor, bool, is_jit')
+def test06_reduce(t, drjit_verbose, capsys):
+    v = t([[True, False], [False, False]])
+    v_any = dr.any_nested(v)
+    v_all = dr.all_nested(v)
+    assert type(v_any) is t and type(v_all) is t
+    assert v_any.shape == () and v_all.shape == ()
+    assert bool(v_any)
+    assert not bool(v_all)
+    msg = capsys.readouterr().out
+    assert msg.count('jit_var_mem_copy') == 1
+    assert msg.count('jit_any') == 1
+    assert msg.count('jit_all') == 1
+
+    v_any = dr.any(v)
+    msg = capsys.readouterr().out
+    assert msg.count('jit_var_or') == 1
+
+    assert dr.all(v_any == t([True, False]))
+
+
 @pytest.test_arrays('is_tensor, float32, is_jit')
-def test05_cast(t, drjit_verbose, capsys):
+def test07_cast(t, drjit_verbose, capsys):
     ti = dr.int32_array_t(t)
     tu = dr.uint32_array_t(t)
     td = dr.float64_array_t(t)
@@ -160,6 +211,9 @@ def test05_cast(t, drjit_verbose, capsys):
     v = t(dr.array_t(t)(1, 2, 3))
     assert dr.all(ti(v) == ti(dr.array_t(ti)(1, 2, 3)))
     assert dr.all(tu(v) == tu(dr.array_t(tu)(1, 2, 3)))
-    assert dr.all(td(v) == tu(dr.array_t(td)(1, 2, 3)))
+    assert dr.all(td(v) == td(dr.array_t(td)(1, 2, 3)))
 
-    assert capsys.readouterr().out.count("jit_var_cast") == 3
+    msg = capsys.readouterr().out
+    assert msg.count("jit_var_cast") == 3
+    assert msg.count("jit_all") == 3
+    assert msg.count("jit_var_mem_copy") == 4

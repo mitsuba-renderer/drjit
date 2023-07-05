@@ -13,3 +13,8 @@
 #include "common.h"
 
 extern void export_reduce(nb::module_ &);
+
+extern nb::object all(nb::handle h);
+extern nb::object any(nb::handle h);
+extern nb::object all_nested(nb::handle h);
+extern nb::object any_nested(nb::handle h);

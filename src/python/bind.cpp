@@ -12,6 +12,7 @@
 #include "meta.h"
 #include "base.h"
 #include "init.h"
+#include "slice.h"
 
 nb::object bind(const ArrayBinding &b) {
     const char *name = b.name;
@@ -52,8 +53,8 @@ nb::object bind(const ArrayBinding &b) {
 
     PyType_Slot slots [] = {
         { Py_tp_init, (void *) (b.is_tensor ? tp_init_tensor : tp_init_array) },
-        { Py_sq_item, (void *) b.item },
-        { Py_sq_ass_item, (void *) b.set_item },
+        { Py_sq_item, (void *) (b.is_tensor ? sq_item_tensor : b.item) },
+        { Py_sq_ass_item, (void *) (b.is_tensor ? sq_ass_item_tensor : b.set_item) },
         { 0, 0 }
     };
 
@@ -118,7 +119,7 @@ nb::object bind(const ArrayBinding &b) {
         value_type_py = nb::detail::nb_type_lookup(b.value_type);
         if (!value_type_py.is_valid())
             nb::detail::fail(
-                "nanobind.detail.bind(%s): element type '%s' not found!",
+                "nanobind.detail.bind(%s): element type '%s' not found.",
                 d.type->name(), b.value_type->name());
     }
     s.value = value_type_py.ptr();
