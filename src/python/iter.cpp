@@ -28,7 +28,11 @@ static PyObject *tp_iternext(PyObject *o) {
     dr_iterator &it = *nb::inst_ptr<dr_iterator>(o);
     if (it.index >= it.size)
         return nullptr;
-    return it.s.item(it.o.ptr(), it.index++);
+
+    if (it.s.is_tensor)
+        return PySequence_GetItem(it.o.ptr(), it.index++);
+    else
+        return it.s.item(it.o.ptr(), it.index++);
 }
 
 static int tp_traverse(PyObject *self, visitproc visit, void *arg) {

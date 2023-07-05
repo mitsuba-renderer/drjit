@@ -185,7 +185,7 @@ PyObject *mp_subscript(PyObject *self, PyObject *key) {
                 key2 = nb::make_tuple(nb::handle(key));
 
             auto [out_shape, out_index] = slice_index(
-                nb::borrow<nb::type_object_t<dr::ArrayBase>>(s.tensor_array_index),
+                nb::borrow<nb::type_object_t<dr::ArrayBase>>(s.tensor_index),
                 nb::borrow<nb::tuple>(shape(self)), key2);
 
             nb::object source = nb::steal(s.tensor_array(self));

@@ -16,10 +16,13 @@
 enum ApplyMode {
     /// Ordinary unary/binary/ternary operation mapping T+ -> T
     Normal,
+
     /// In-place variant that modifies the first argument if possible
     InPlace,
+
     /// Rich comparison, a binary operation mapping T, T -> mask_t<T>
     RichCompare,
+
     ///  Select, a ternary operation mapping mask_t<T>, T, T -> T
     Select
 };

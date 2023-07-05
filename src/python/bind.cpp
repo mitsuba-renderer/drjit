@@ -152,7 +152,7 @@ nb::object bind(const ArrayBinding &b) {
 
         if (s.is_tensor) {
             m2.type = (uint32_t) VarType::UInt32;
-            s.tensor_array_index = meta_get_type(m2).ptr();
+            s.tensor_index = meta_get_type(m2).ptr();
         }
     }
 

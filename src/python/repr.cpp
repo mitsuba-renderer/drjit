@@ -24,12 +24,15 @@ void tp_repr_impl(PyObject *self,
                   const dr_vector<size_t> &shape,
                   nb::list &index,
                   size_t depth) {
-    size_t i = shape.size() - 1 - depth,
-           size = shape.empty() ? 0 : shape[i];
-
     const ArraySupplement &s = supp(Py_TYPE(self));
 
-    if ((s.is_complex || s.is_quaternion) && i == 0) {
+    // Reverse the dimensions of non-tensor shapes for convenience
+    size_t i = s.is_tensor ? depth : (shape.size() - 1 - depth),
+           size = shape.empty() ? 0 : shape[i];
+
+    bool leaf = depth == shape.size() - 1;
+
+    if ((s.is_complex || s.is_quaternion) && leaf) {
         bool prev = false;
 
         for (size_t j = 0; j < size; ++j) {
@@ -80,7 +83,7 @@ void tp_repr_impl(PyObject *self,
             if (size >= repr_threshold && j * 4 == repr_threshold) {
                 buffer.fmt(".. %zu skipped ..", size - repr_threshold / 2);
                 j = size - repr_threshold / 4 - 1;
-            } else if (i > 0) {
+            } else if (!leaf) {
                 tp_repr_impl(self, shape, index, depth + 1);
             } else {
                 nb::tuple index_tuple(index);
@@ -98,11 +101,11 @@ void tp_repr_impl(PyObject *self,
             }
 
             if (j + 1 < size) {
-                if (i == 0) {
+                if (leaf) {
                     buffer.put(", ");
                 } else {
                     buffer.put(",\n");
-                    buffer.put(' ', index.size() - 1);
+                    buffer.put(' ', shape.size() - 1);
                 }
             }
         }
