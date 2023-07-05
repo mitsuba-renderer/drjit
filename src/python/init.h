@@ -17,7 +17,7 @@ extern int tp_init_tensor(PyObject *, PyObject *, PyObject *);
 
 extern void export_init(nb::module_ &);
 
-extern nb::object arange(const nb::type_object_t<dr::ArrayBase> &dtype,
+extern nb::object arange(const nb::type_object_t<ArrayBase> &dtype,
                          Py_ssize_t start, Py_ssize_t end, Py_ssize_t step);
 
 extern nb::object full(nb::handle dtype, nb::handle value, size_t ndim,

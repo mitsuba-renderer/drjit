@@ -19,7 +19,7 @@ extern nb::object shape(nb::handle h);
 extern bool shape_impl(nb::handle h, dr_vector<size_t> &result);
 
 /// Return the number of dimensions of the given array/tensor
-extern size_t ndim(nb::handle_t<dr::ArrayBase> h) noexcept;
+extern size_t ndim(nb::handle_t<ArrayBase> h) noexcept;
 
 /// Convert dr_vector<size_t> into a python tuple
 extern nb::tuple cast_shape(const dr_vector<size_t> &shape);

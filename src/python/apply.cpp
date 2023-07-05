@@ -147,12 +147,12 @@ PyObject *apply(ArrayOp op, Slot slot, std::index_sequence<Is...> is,
 
             if constexpr (Mode == RichCompare) {
                 using Impl =
-                    void (*)(const dr::ArrayBase *, const dr::ArrayBase *, int,
-                             dr::ArrayBase *);
+                    void (*)(const ArrayBase *, const ArrayBase *, int,
+                             ArrayBase *);
                 ((Impl) impl)(p[0], p[1], slot, pr);
             } else {
-                using Impl = void (*)(first_t<const dr::ArrayBase *, Args>...,
-                                      dr::ArrayBase *);
+                using Impl = void (*)(first_t<const ArrayBase *, Args>...,
+                                      ArrayBase *);
                 ((Impl) impl)(p[Is]..., pr);
             }
 
@@ -239,10 +239,8 @@ PyObject *apply(ArrayOp op, Slot slot, std::index_sequence<Is...> is,
 
         // In in-place mode, if a separate result object had to be
         // constructed, use it to now replace the contents of o[0]
-
         if (move) {
-            nb::inst_destruct(o[0]);
-            nb::inst_move(o[0], result);
+            nb::inst_replace_move(o[0], result);
             result = borrow(o[0]);
         }
 
@@ -286,8 +284,8 @@ void tensor_broadcast(nb::object &tensor, nb::object &array,
     nb::handle tp = tensor.type();
     const ArraySupplement &s = supp(tp);
 
-    nb::type_object_t<dr::ArrayBase> index_type =
-        nb::borrow<nb::type_object_t<dr::ArrayBase>>(s.tensor_index);
+    nb::type_object_t<ArrayBase> index_type =
+        nb::borrow<nb::type_object_t<ArrayBase>>(s.tensor_index);
 
     nb::object index  = arange(index_type, 0, (Py_ssize_t) size, 1),
                size_o = index_type(size);
@@ -392,8 +390,7 @@ NB_NOINLINE PyObject *apply_tensor(ArrayOp op, Slot slot,
         nb::object result = result_type(result_array, cast_shape(shape));
 
         if (move) {
-            nb::inst_destruct(o[0]);
-            nb::inst_move(o[0], result);
+            nb::inst_replace_move(o[0], result);
             result = borrow(o[0]);
         }
 

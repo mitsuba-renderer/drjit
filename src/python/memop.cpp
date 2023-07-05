@@ -286,7 +286,7 @@ static void ravel_recursive(nb::handle result, nb::handle value,
     if (depth == stop_depth) {
         if (index_dtype.is_valid()) {
             nb::object index =
-                arange(nb::borrow<nb::type_object_t<dr::ArrayBase>>(index_dtype), offset,
+                arange(nb::borrow<nb::type_object_t<ArrayBase>>(index_dtype), offset,
                        offset + strides[depth] * shape[depth], strides[depth]);
             scatter(nb::borrow(result), nb::borrow(value), index, nb::cast(true));
         } else {
@@ -406,7 +406,7 @@ static nb::object unravel_recursive(nb::handle dtype,
     if (depth == stop_depth) {
         if (index_dtype.is_valid()) {
             nb::object index = arange(
-                nb::borrow<nb::type_object_t<dr::ArrayBase>>(index_dtype),
+                nb::borrow<nb::type_object_t<ArrayBase>>(index_dtype),
                 offset, offset + strides[depth] * shape[depth], strides[depth]);
             return gather(nb::borrow<nb::type_object>(dtype), nb::borrow(value),
                           index, nb::cast(true));
@@ -428,8 +428,8 @@ static nb::object unravel_recursive(nb::handle dtype,
     }
 }
 
-nb::object unravel(const nb::type_object_t<dr::ArrayBase> &dtype,
-                   nb::handle_t<dr::ArrayBase> array, char order) {
+nb::object unravel(const nb::type_object_t<ArrayBase> &dtype,
+                   nb::handle_t<ArrayBase> array, char order) {
     const ArraySupplement &s = supp(dtype);
     if (s.is_tensor)
         throw nb::type_error(
@@ -511,8 +511,8 @@ void export_memop(nb::module_ &m) {
               return ravel(array, order);
           }, "array"_a, "order"_a = 'A', nb::raw_doc(doc_ravel));
     m.def("unravel",
-          [](const nb::type_object_t<dr::ArrayBase> &dtype,
-             nb::handle_t<dr::ArrayBase> array,
+          [](const nb::type_object_t<ArrayBase> &dtype,
+             nb::handle_t<ArrayBase> array,
              char order) { return unravel(dtype, array, order); },
           "dtype"_a, "array"_a, "order"_a = 'A', nb::raw_doc(doc_unravel));
 }
