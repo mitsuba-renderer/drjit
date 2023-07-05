@@ -1,5 +1,5 @@
 /*
-    base.h -- Bindings of the dr::ArrayBase type underlying
+    base.h -- Bindings of the ArrayBase type underlying
     all Dr.Jit arrays
 
     Dr.Jit: A Just-In-Time-Compiler for Differentiable Rendering

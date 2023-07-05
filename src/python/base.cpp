@@ -1,5 +1,5 @@
 /*
-    base.cpp -- Bindings of the dr::ArrayBase type underlying
+    base.cpp -- Bindings of the ArrayBase type underlying
     all Dr.Jit arrays
 
     Dr.Jit: A Just-In-Time-Compiler for Differentiable Rendering
@@ -35,7 +35,7 @@
     }
 
 #define DR_MATH_UNOP(name, op)                                                 \
-    m.def(#name, [](nb::handle_t<dr::ArrayBase> h0) {                          \
+    m.def(#name, [](nb::handle_t<ArrayBase> h0) {                          \
         return nb::steal(apply<Normal>(                                        \
             op, #name, std::make_index_sequence<1>(), h0.ptr()));              \
     }, nb::raw_doc(doc_##name));                                               \
@@ -89,7 +89,7 @@ static PyObject *tp_richcompare(PyObject *h0, PyObject *h1, int slot) noexcept {
 }
 
 
-template <int Index> nb::object xyzw_getter(nb::handle_t<dr::ArrayBase> h) {
+template <int Index> nb::object xyzw_getter(nb::handle_t<ArrayBase> h) {
     const ArraySupplement &s = supp(h.type());
 
     if (NB_UNLIKELY((!s.is_vector && !s.is_quaternion) || s.ndim == 0 ||
@@ -103,7 +103,7 @@ template <int Index> nb::object xyzw_getter(nb::handle_t<dr::ArrayBase> h) {
 }
 
 template <int Index>
-void xyzw_setter(nb::handle_t<dr::ArrayBase> h, nb::handle value) {
+void xyzw_setter(nb::handle_t<ArrayBase> h, nb::handle value) {
     const ArraySupplement &s = supp(h.type());
 
     if (NB_UNLIKELY((!s.is_vector && !s.is_quaternion) || s.ndim == 0 ||
@@ -117,7 +117,7 @@ void xyzw_setter(nb::handle_t<dr::ArrayBase> h, nb::handle value) {
         nb::detail::raise_python_error();
 }
 
-template <int Index> nb::object complex_getter(nb::handle_t<dr::ArrayBase> h) {
+template <int Index> nb::object complex_getter(nb::handle_t<ArrayBase> h) {
     const ArraySupplement &s = supp(h.type());
 
     if (NB_UNLIKELY(!s.is_complex)) {
@@ -130,7 +130,7 @@ template <int Index> nb::object complex_getter(nb::handle_t<dr::ArrayBase> h) {
 }
 
 template <int Index>
-void complex_setter(nb::handle_t<dr::ArrayBase> h, nb::handle value) {
+void complex_setter(nb::handle_t<ArrayBase> h, nb::handle value) {
     const ArraySupplement &s = supp(h.type());
 
     if (NB_UNLIKELY(!s.is_complex)) {
@@ -291,7 +291,7 @@ nb::object select(nb::handle h0, nb::handle h1, nb::handle h2) {
 }
 
 void export_base(nb::module_ &m) {
-    nb::class_<dr::ArrayBase> ab(m, "ArrayBase",
+    nb::class_<ArrayBase> ab(m, "ArrayBase",
                                  nb::type_slots(array_base_slots),
                                  nb::supplement<ArraySupplement>());
 
@@ -304,7 +304,7 @@ void export_base(nb::module_ &m) {
 
     ab.def_prop_ro(
         "array",
-        [](nb::handle_t<dr::ArrayBase> h) -> nb::object {
+        [](nb::handle_t<ArrayBase> h) -> nb::object {
             const ArraySupplement &s = supp(h.type());
             if (s.is_tensor)
                 return nb::steal(s.tensor_array(h.ptr()));

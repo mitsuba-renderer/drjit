@@ -25,5 +25,5 @@ extern nb::object ravel(nb::handle h, char order,
                         dr_vector<int64_t> *strides_out = nullptr,
                         const VarType *vt_in = nullptr);
 
-extern nb::object unravel(const nb::type_object_t<dr::ArrayBase> &dtype,
-                          nb::handle_t<dr::ArrayBase> array, char order);
+extern nb::object unravel(const nb::type_object_t<ArrayBase> &dtype,
+                          nb::handle_t<ArrayBase> array, char order);

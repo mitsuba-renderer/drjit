@@ -20,7 +20,7 @@ struct Component {
 };
 
 std::pair<nb::tuple, nb::object>
-slice_index(const nb::type_object_t<dr::ArrayBase> &dtype,
+slice_index(const nb::type_object_t<ArrayBase> &dtype,
             const nb::tuple &shape, const nb::tuple &indices) {
     const ArraySupplement &s = supp(dtype);
 
@@ -192,7 +192,7 @@ PyObject *mp_subscript(PyObject *self, PyObject *key) noexcept {
                 key2 = nb::make_tuple(nb::handle(key));
 
             auto [out_shape, out_index] = slice_index(
-                nb::borrow<nb::type_object_t<dr::ArrayBase>>(s.tensor_index),
+                nb::borrow<nb::type_object_t<ArrayBase>>(s.tensor_index),
                 nb::borrow<nb::tuple>(shape(self)), key2);
 
             nb::object source = nb::steal(s.tensor_array(self));
@@ -266,8 +266,7 @@ int mp_ass_subscript(PyObject *self, PyObject *key, PyObject *value) noexcept {
     try {
         if (is_drjit_type(key_tp) && (VarType) supp(key_tp).type == VarType::Bool) {
             nb::object result = select(nb::borrow(key), nb::borrow(value), nb::borrow(self));
-            nb::inst_destruct(self);
-            nb::inst_move(self, result);
+            nb::inst_replace_move(self, result);
             return 0;
         }
 
@@ -280,7 +279,7 @@ int mp_ass_subscript(PyObject *self, PyObject *key, PyObject *value) noexcept {
                 key2 = nb::make_tuple(nb::handle(key));
 
             auto [out_shape, out_index] = slice_index(
-                nb::borrow<nb::type_object_t<dr::ArrayBase>>(s.tensor_index),
+                nb::borrow<nb::type_object_t<ArrayBase>>(s.tensor_index),
                 nb::borrow<nb::tuple>(shape(self)), key2);
 
             nb::object target = nb::steal(s.tensor_array(self));

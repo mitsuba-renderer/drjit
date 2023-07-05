@@ -116,6 +116,20 @@ def test05_binop_inplace(t):
         assert a[1] == 3
         assert a[2] == 4
 
+    if dr.is_jit_v(t) and dr.size_v(t) == 3:
+        vt = dr.value_t(t)
+        v = t(1, 2, 3)
+        v.x += 5
+        vy = v.y
+        vy += 3
+        vz = v[2]
+        vz += 1
+        assert dr.all(v == t(6, 5, 4))
+        assert v.y is vy
+        assert v.z is vz
+        del vz
+        del vy
+
 @pytest.test_arrays('type=int32,shape=(3)', 'type=int32,shape=(3, *)', 'type=int32, shape=(*, *)')
 def test05_unop(t):
     assert dr.all(-t(1, 2, 3) == t(-1, -2, -3))

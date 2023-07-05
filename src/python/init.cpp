@@ -70,7 +70,7 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
                     m_temp.is_vector = true;
 
                     if (m_temp == m_arg && s.init_data && s_arg.data) {
-                        dr::ArrayBase *arg_p = inst_ptr(arg);
+                        ArrayBase *arg_p = inst_ptr(arg);
                         size_t len = s_arg.len(arg_p);
                         void *data = s_arg.data(arg_p);
                         s.init_data(len, data, inst_ptr(self));
@@ -501,13 +501,13 @@ nb::object full(nb::handle dtype, nb::handle value, size_t ndim, const size_t *s
     }
 }
 
-nb::object arange(const nb::type_object_t<dr::ArrayBase> &dtype,
+nb::object arange(const nb::type_object_t<ArrayBase> &dtype,
                   Py_ssize_t start, Py_ssize_t end, Py_ssize_t step) {
     const ArraySupplement &s = supp(dtype);
 
     if (s.is_tensor) {
         return dtype(arange(
-            nb::borrow<nb::type_object_t<dr::ArrayBase>>(s.array),
+            nb::borrow<nb::type_object_t<ArrayBase>>(s.array),
             start, end, step
         ));
     }
@@ -546,13 +546,13 @@ nb::object arange(const nb::type_object_t<dr::ArrayBase> &dtype,
         return fma(dtype(result), dtype(step), dtype(start));
 }
 
-nb::object linspace(const nb::type_object_t<dr::ArrayBase> &dtype,
+nb::object linspace(const nb::type_object_t<ArrayBase> &dtype,
                     double start, double stop, size_t size, bool endpoint) {
     const ArraySupplement &s = supp(dtype);
 
     if (s.is_tensor) {
         return dtype(linspace(
-            nb::borrow<nb::type_object_t<dr::ArrayBase>>(s.array),
+            nb::borrow<nb::type_object_t<ArrayBase>>(s.array),
             start, stop, size, endpoint
         ));
     }
@@ -620,16 +620,16 @@ void export_init(nb::module_ &m) {
               return full(dtype, value, shape);
           }, "dtype"_a, "value"_a, "shape"_a)
      .def("arange",
-          [](const nb::type_object_t<dr::ArrayBase> &dtype, Py_ssize_t size) {
+          [](const nb::type_object_t<ArrayBase> &dtype, Py_ssize_t size) {
               return arange(dtype, 0, size, 1);
           }, "dtype"_a, "size"_a, doc_arange)
      .def("arange",
-          [](const nb::type_object_t<dr::ArrayBase> &dtype,
+          [](const nb::type_object_t<ArrayBase> &dtype,
              Py_ssize_t start, Py_ssize_t stop, Py_ssize_t step) {
               return arange(dtype, start, stop, step);
         }, "dtype"_a, "start"_a, "stop"_a, "step"_a = 1)
      .def("linspace",
-          [](const nb::type_object_t<dr::ArrayBase> &dtype, double start,
+          [](const nb::type_object_t<ArrayBase> &dtype, double start,
              double stop, size_t num, bool endpoint) {
               return linspace(dtype, start, stop, num, endpoint);
           }, "dtype"_a, "start"_a, "stop"_a, "num"_a,

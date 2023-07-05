@@ -29,7 +29,7 @@ Py_ssize_t mp_length(PyObject *o) noexcept {
     return sq_length(o);
 }
 
-size_t ndim(nb::handle_t<dr::ArrayBase> h) noexcept {
+size_t ndim(nb::handle_t<ArrayBase> h) noexcept {
     const ArraySupplement &s = supp(h.type());
     if (s.is_tensor)
         return s.tensor_shape(inst_ptr(h)).size();
