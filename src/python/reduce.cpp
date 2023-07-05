@@ -14,7 +14,7 @@
 static nb::object all(nb::handle h) {
     nb::handle tp = h.type();
     if (tp.is(&PyBool_Type))
-        return borrow(h);
+        return nb::borrow(h);
 
     if (is_drjit_array(h)) {
         const ArraySupplement &s = supp(tp);
@@ -25,7 +25,7 @@ static nb::object all(nb::handle h) {
                 "drjit.all(): requires a Dr.Jit mask array or Python "
                 "boolean sequence as input.");
 
-        if (op) {
+        if (op != DRJIT_OP_DEFAULT) {
             nb::object result = nb::inst_alloc(tp);
             ((ArraySupplement::UnaryOp) op)(
                 inst_ptr(h),
@@ -36,11 +36,19 @@ static nb::object all(nb::handle h) {
     }
 
     nb::object result = nb::borrow(Py_True);
+    printf("Entering loop.\n");
+    printf("h=%s\n", nb::str(h).c_str());
+    printf("result=%s\n", nb::str(result).c_str());
 
     size_t it = 0;
     for (nb::handle h2 : h) {
+        if (true) {
+            printf("%p %p %p\n", h.ptr(), h2.ptr(), result.ptr());
+            printf("result=%s\n", nb::str(result).c_str());
+            printf("h2=%s\n", nb::str(h2).c_str());
+        }
         if (it++ == 0)
-            result = borrow(h2);
+            result = nb::borrow(h2);
         else
             result = result & h2;
     }
@@ -51,7 +59,7 @@ static nb::object all(nb::handle h) {
 static nb::object any(nb::handle h) {
     nb::handle tp = h.type();
     if (tp.is(&PyBool_Type))
-        return borrow(h);
+        return nb::borrow(h);
 
     if (is_drjit_type(tp)) {
         const ArraySupplement &s = supp(tp);
@@ -62,7 +70,7 @@ static nb::object any(nb::handle h) {
                 "drjit.any(): requires a Dr.Jit mask array or Python "
                 "boolean sequence as input.");
 
-        if (op) {
+        if (op != DRJIT_OP_DEFAULT) {
             nb::object result = nb::inst_alloc(tp);
             ((ArraySupplement::UnaryOp) op)(
                 inst_ptr(h),

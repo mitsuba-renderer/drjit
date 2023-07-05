@@ -119,19 +119,28 @@ bool shape_impl(nb::handle h, dr_vector<size_t> &result) {
     return shape_traverse(h, result.size(), result.data());
 }
 
+nb::object cast_shape(dr_vector<size_t> &shape) {
+    nb::object o = nb::steal(PyTuple_New((Py_ssize_t) shape.size()));
+    if (!o.is_valid())
+        nb::detail::raise_python_error();
+
+    for (size_t i = 0; i < shape.size(); ++i) {
+        PyObject *l = PyLong_FromSize_t(shape[i]);
+        if (!l)
+            nb::detail::raise_python_error();
+        NB_TUPLE_SET_ITEM(o.ptr(), (Py_ssize_t) i, l);
+    }
+
+    return o;
+}
+
 nb::object shape(nb::handle h) {
     dr_vector<size_t> result;
 
     if (!shape_impl(h, result))
         return nb::none();
 
-
-    nb::object o = nb::steal(PyTuple_New((Py_ssize_t) result.size()));
-    for (size_t i = 0; i < result.size(); ++i)
-        NB_TUPLE_SET_ITEM(o.ptr(), (Py_ssize_t) i,
-                          PyLong_FromSize_t(result[i]));
-
-    return o;
+    return cast_shape(result);
 }
 
 void export_shape(nb::module_ &m) {

@@ -315,6 +315,7 @@ void promote(nb::object *o, size_t n, bool select) {
             h = nb::handle();
         }
     }
+
     if (!meta_check(m))
         nb::detail::raise("Incompatible arguments.");
 

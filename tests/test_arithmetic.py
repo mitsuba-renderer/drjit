@@ -1,6 +1,7 @@
 import drjit as dr
-import pytest
 import numpy as np
+import pytest
+import sys
 
 @pytest.test_arrays('-bool,shape=(3, *)', '-bool,shape=(*)')
 def test01_comparison(t):
@@ -20,6 +21,14 @@ def test01_comparison(t):
     assert dr.all((t(1, 2, 3) >= t(0, 2, 4)) == m(True, True, False))
     assert dr.all((t(1, 2, 3) == t(0, 2, 4)) == m(False, True, False))
     assert dr.all((t(1, 2, 3) != t(0, 2, 4)) == m(True, False, True))
+
+    with pytest.raises(RuntimeError, match='Incompatible arguments'):
+        mod = sys.modules[t.__module__]
+        mod.Array3f(1, 2, 3) + mod.Complex2f(1, 2)
+
+    with pytest.raises(RuntimeError, match='Incompatible arguments'):
+        mod = sys.modules[t.__module__]
+        mod.Array3f(1, 2, 3) + mod.Array4f(1, 2, 3, 4)
 
 def test02_allclose():
     assert dr.allclose(2, 2)

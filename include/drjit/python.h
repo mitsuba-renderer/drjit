@@ -176,7 +176,7 @@ struct ArraySupplement : ArrayMeta {
         struct {
             TensorShape tensor_shape;
             TensorArray tensor_array;
-            PyObject *tensor_array_index;
+            PyObject *tensor_index;
         };
     };
 

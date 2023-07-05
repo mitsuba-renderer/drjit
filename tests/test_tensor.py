@@ -1,5 +1,6 @@
 import drjit as dr
 import pytest
+import sys
 
 @pytest.test_arrays('uint32, shape=(*)')
 def test01_slice_index(t):
@@ -85,14 +86,80 @@ def test01_slice_index(t):
 @pytest.test_arrays('is_tensor, -bool')
 def test02_construct(t):
     v = t()
+    ta = dr.array_t(t)
 
     assert len(v) == 0 and v.ndim == 1 and v.shape == (0,)
     assert type(v.array) is dr.array_t(t) and len(v.array) == 0
+    assert str(v) == "[]"
 
     v = t([1, 2, 3, 4])
     assert len(v) == 4 and v.ndim == 1 and v.shape == (4,)
     assert dr.all(v.array == [1, 2, 3, 4])
+    assert str(v) == "[1, 2, 3, 4]"
+
+    v = t(ta(1, 2, 3, 4))
+    assert len(v) == 4 and v.ndim == 1 and v.shape == (4,)
+    assert dr.all(v.array == [1, 2, 3, 4])
+    assert str(v) == "[1, 2, 3, 4]"
+
+    v = t(ta(1, 2, 3, 4), shape=(2, 2))
+    assert len(v) == 2 and v.ndim == 2 and v.shape == (2, 2)
+    assert dr.all(v.array == [1, 2, 3, 4])
+    assert str(v) == "[[1, 2],\n [3, 4]]"
+
+    v = t(ta(1, 2, 3, 4), shape=(1, 4))
+    assert len(v) == 1 and v.ndim == 2 and v.shape == (1, 4)
+    assert dr.all(v.array == [1, 2, 3, 4])
+    assert str(v) == "[[1, 2, 3, 4]]"
+
+    v = t(ta(1, 2, 3, 4), shape=(4, 1))
+    assert len(v) == 4 and v.ndim == 2 and v.shape == (4, 1)
+    assert dr.all(v.array == [1, 2, 3, 4])
+    assert str(v) == "[[1],\n [2],\n [3],\n [4]]"
 
     v = t([[1, 2, 3, 4], [5, 6, 7, 8]])
     assert len(v) == 2 and v.ndim == 2 and v.shape == (2, 4)
     assert dr.all(v.array == [1, 2, 3, 4, 5, 6, 7, 8])
+    assert str(v) == "[[1, 2, 3, 4],\n [5, 6, 7, 8]]"
+
+    if not dr.is_jit_v(t):
+        return
+
+    mod = sys.modules[t.__module__]
+    v = mod.Array3f([1, 2], [3, 4], [5, 6])
+    assert str(v) == "[[1, 3, 5],\n [2, 4, 6]]"
+
+    v = t(v)
+    assert len(v) == 3 and v.ndim == 2 and v.shape == (3, 2)
+    assert dr.all(v.array == [1, 2, 3, 4, 5, 6])
+    assert str(v) == "[[1, 2],\n [3, 4],\n [5, 6]]"
+
+@pytest.test_arrays('-bool, is_tensor')
+def test04_binop(t):
+    mod = sys.modules[t.__module__]
+
+    with pytest.raises(RuntimeError, match='Incompatible arguments'):
+        v = t(1) + mod.Array3f(1, 2, 3)
+
+    v = t(1) + 4
+    assert type(v) is t
+    assert str(v) == '5'
+
+    v = t(1) + t(4)
+    assert type(v) is t
+    assert str(v) == '5'
+    assert str(t([1, 2, 3]) + t(4)) == '[5, 6, 7]'
+    assert str(t([1, 2, 3]) + t([4, 5, 6])) == '[5, 7, 9]'
+
+@pytest.test_arrays('is_tensor, float32, is_jit')
+def test05_cast(t, drjit_verbose, capsys):
+    ti = dr.int32_array_t(t)
+    tu = dr.uint32_array_t(t)
+    td = dr.float64_array_t(t)
+
+    v = t(dr.array_t(t)(1, 2, 3))
+    assert dr.all(ti(v) == ti(dr.array_t(ti)(1, 2, 3)))
+    assert dr.all(tu(v) == tu(dr.array_t(tu)(1, 2, 3)))
+    assert dr.all(td(v) == tu(dr.array_t(td)(1, 2, 3)))
+
+    assert capsys.readouterr().out.count("jit_var_cast") == 3
