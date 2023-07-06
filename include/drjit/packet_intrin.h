@@ -14,75 +14,10 @@
 #pragma once
 
 #if !defined(_MSC_VER)
-#  if !defined(__IMMINTRIN_H) && defined(__clang__)
-/* We want to be able to selectively include intrinsics. For instance, it's
-   often not desirable to pull in 1 MB (!) of AVX512 header code unless the
-   application is really using those intrinsics. Unfortunately, immintrin.h
-   tries to prevent this kind of selectiveness, which we simply circumvent with
-   the following define.. */
-#    define __IMMINTRIN_H
-#  endif
-
-#  if !defined(_IMMINTRIN_H_INCLUDED) && !defined(__clang__) && defined(__GNUC__)
-     // And the same once more, for GCC..
-#    define _IMMINTRIN_H_INCLUDED
-#    if __GNUC__ >= 11
-     // In GCC 11 and later we are expected to include a different header..
-#       define _X86GPRINTRIN_H_INCLUDED
-#    endif
-#  endif
-
-#  if defined(DRJIT_X86_SSE42)
-#    include <nmmintrin.h>
-#  endif
-
-#  if defined(DRJIT_X86_AVX)
-#    include <avxintrin.h>
-#  endif
-
-#  if defined(DRJIT_X86_AVX2)
-#    include <avx2intrin.h>
-#  endif
-
-#  if defined(DRJIT_X86_BMI)
-#    include <bmiintrin.h>
-#  endif
-
-#  if defined(DRJIT_X86_BMI2)
-#    include <bmi2intrin.h>
-#endif
-
-#  if defined(DRJIT_X86_FMA)
-#    include <fmaintrin.h>
-#  endif
-
-#  if defined(DRJIT_X86_F16C)
-#    include <f16cintrin.h>
-#  endif
-
-#  if defined(DRJIT_X86_AVX512)
-#    include <avx512fintrin.h>
-#    include <avx512vlintrin.h>
-#    include <avx512bwintrin.h>
-#    include <avx512cdintrin.h>
-#    include <avx512dqintrin.h>
-#    include <avx512vldqintrin.h>
-#    include <avx512vlbwintrin.h>
-#    if defined(DRJIT_X86_AVX512VPOPCNTDQ)
-#        include <avx512vpopcntdqintrin.h>
-#        include <avx512vpopcntdqvlintrin.h>
-#    endif
-#    if defined(DRJIT_X86_AVX512VBMI)
-#        include <avx512vbmiintrin.h>
-#        include <avx512vbmivlintrin.h>
-#    endif
-#    if defined(__clang__)
-#      include <avx512vlcdintrin.h>
-#    endif
-#  endif
-
 #  if defined(DRJIT_ARM_NEON)
 #    include <arm_neon.h>
+#  else
+#    include <immintrin.h>
 #  endif
 #else
 #  include <intrin.h>
