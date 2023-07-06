@@ -425,8 +425,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                                                                              \
             if constexpr (!cond) {                                           \
                 drjit_raise(#name "_(): invalid operand type!");             \
-            } else if constexpr (!std::is_scalar_v<Value> &&                 \
-                                 !is_special_v<Derived>) {                   \
+            } else if constexpr (!is_special_v<Derived>) {                   \
                 size_t sa = derived().size(), sb = v1.size(), sc = v2.size(),\
                        sd = sa > sb ? sa : sb, sr = sc > sd ? sc : sd;       \
                                                                              \
