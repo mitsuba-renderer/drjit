@@ -20,12 +20,11 @@ NAMESPACE_BEGIN(drjit)
 template <typename Value_, size_t Size_>
 struct Matrix : StaticArrayImpl<Array<Value_, Size_>, Size_, false,
                                 Matrix<Value_, Size_>> {
-    using Column = Array<Value_, Size_>;
-    using Base = StaticArrayImpl<Column, Size_, false, Matrix<Value_, Size_>>;
+    using Row = Array<Value_, Size_>;
+    using Base = StaticArrayImpl<Row, Size_, false, Matrix<Value_, Size_>>;
     using Base::entry;
     using Base::Size;
     DRJIT_ARRAY_DEFAULTS(Matrix)
-
 
     static constexpr bool IsMatrix = true;
     static constexpr bool IsSpecial = true;
@@ -33,7 +32,7 @@ struct Matrix : StaticArrayImpl<Array<Value_, Size_>, Size_, false,
 
     using ArrayType = Matrix;
     using PlainArrayType = Array<Array<Value_, Size>, Size>;
-    using MaskType = Mask<mask_t<Column>, Size_>;
+    using MaskType = Mask<mask_t<Row>, Size_>;
     using Entry = Value_;
 
     template <typename T> using ReplaceValue = Matrix<value_t<T>, Size_>;
@@ -53,7 +52,7 @@ struct Matrix : StaticArrayImpl<Array<Value_, Size_>, Size_, false,
             for (size_t i = 0; i < ArgSize; ++i)
                 entry(i) = concat(m.entry(i), zeros<Remainder>());
             for (size_t i = ArgSize; i < Size; ++i) {
-                Column col = zeros<Column>();
+                Row col = zeros<Row>();
                 col.entry(i) = 1;
                 entry(i) = col;
             }
@@ -66,9 +65,9 @@ struct Matrix : StaticArrayImpl<Array<Value_, Size_>, Size_, false,
             entry(i, i) = v;
     }
 
-    /// Initialize the matrix from a list of columns
+    /// Initialize the matrix from a list of rows
     template <typename... Args, enable_if_t<sizeof...(Args) == Size_ &&
-              std::conjunction_v<std::is_constructible<Column, Args>...>> = 0>
+              std::conjunction_v<std::is_constructible<Row, Args>...>> = 0>
     DRJIT_INLINE Matrix(const Args&... args) : Base(args...) { }
 
     /// Initialize the matrix from a list of entries in row-major order
@@ -76,17 +75,16 @@ struct Matrix : StaticArrayImpl<Array<Value_, Size_>, Size_, false,
               std::conjunction_v<std::is_constructible<Value_, Args>...>> = 0>
     DRJIT_INLINE Matrix(const Args&... args) {
         Value_ values[sizeof...(Args)] = { Value_(args)... };
-        for (size_t j = 0; j < Size; ++j)
-            for (size_t i = 0; i < Size; ++i)
-                entry(j, i) = values[i * Size + j];
+        for (size_t i = 0; i < Size; ++i)
+            for (size_t j = 0; j < Size; ++j)
+                entry(i, j) = values[i * Size + j];
     }
 
     /// Return a reference to the (i, j) element
-    DRJIT_INLINE Value_& operator()(size_t i, size_t j) { return entry(j, i); }
+    DRJIT_INLINE Value_& operator()(size_t i, size_t j) { return entry(i, j); }
 
     /// Return a reference to the (i, j) element (const)
-    DRJIT_INLINE const Value_ &operator()(size_t i, size_t j) const { return entry(j, i); }
-
+    DRJIT_INLINE const Value_ &operator()(size_t i, size_t j) const { return entry(i, j); }
 };
 
 template <typename T, enable_if_matrix_t<T> = 0>
@@ -103,14 +101,15 @@ template <typename T0, typename T1, size_t Size>
 Matrix<expr_t<T0, T1>, Size> operator*(const Matrix<T0, Size> &m0,
                                        const Matrix<T1, Size> &m1) {
     using Result = Matrix<expr_t<T0, T1>, Size>;
+    using Row = value_t<Result>;
+
     Result result;
 
-    for (size_t j = 0; j < Size; ++j) {
-        using Column = value_t<Result>;
-        Column col = m0.entry(0) * full<Column>(m1(0, j));
-        for (size_t i = 1; i < Size; ++i)
-            col = fmadd(m0.entry(i), full<Column>(m1(i, j), 1), col);
-        result.entry(j) = col;
+    for (size_t i = 0; i < Size; ++i) {
+        Row row = m0(i, 0) * m1.entry(0);
+        for (size_t j = 1; j < Size; ++j)
+            row = fmadd(m1(i, j), m1.entry(j), row);
+        result.entry(i) = row;
     }
 
     return result;
@@ -121,9 +120,28 @@ template <typename T0, typename T1, size_t Size,
 auto operator*(const Matrix<T0, Size> &m0, const T1 &a1) {
     if constexpr (is_vector_v<T1> && array_size_v<T1> == Size) {
         using Result = Array<expr_t<T0, value_t<T1>>, Size>;
-        Result result = m0.entry(0) * full<Result>(a1.entry(0));
+
+        if constexpr (Size == 4 && is_packed_array_v<T1> &&
+                      std::is_same_v<T0, float> &&
+                      std::is_same_v<value_t<T1>, float>) {
+            #if defined(DRJIT_X86_SSE42)
+                __m128 v = a1.m,
+                       r0 = _mm_mul_ps(m0.entry(0).m, v),
+                       r1 = _mm_mul_ps(m0.entry(1).m, v),
+                       r2 = _mm_mul_ps(m0.entry(2).m, v),
+                       r3 = _mm_mul_ps(m0.entry(3).m, v),
+                       s01 = _mm_hadd_ps(r0, r1),
+                       s23 = _mm_hadd_ps(r2, r3),
+                       s = _mm_hadd_ps(s01, s23);
+                return Result(s);
+            #endif
+        }
+
+        Matrix<T0, Size> t = transpose(m0);
+        Result result = t.entry(0) * a1.entry(0);
         for (size_t i = 1; i < Size; ++i)
-            result = fmadd(m0.entry(i), full<Result>(a1.entry(i)), result);
+            result = fmadd(t.entry(i), a1.entry(i), result);
+
         return result;
     } else {
         using Value = expr_t<T0, T1>;
@@ -187,35 +205,35 @@ Matrix<value_t<Array>, Array::Size> diag(const Array &v) {
 
 template <typename Array, enable_if_array_t<Array> = 0>
 Array transpose(const Array &a) {
-    using Column = value_t<Array>;
+    using Row = value_t<Array>;
     constexpr size_t Size = array_size_v<Array>;
 
-    static_assert(array_depth_v<Array> >= 2 && Size == array_size_v<Column>,
+    static_assert(array_depth_v<Array> >= 2 && Size == array_size_v<Row>,
                   "Array must be a square matrix!");
 
-    if constexpr (Column::IsPacked) {
+    if constexpr (Row::IsPacked) {
         #if defined(DRJIT_X86_SSE42)
-            if constexpr (std::is_same_v<value_t<Column>, float> && Size == 3) {
-                __m128 c0 = a.entry(0).m, c1 = a.entry(1).m, c2 = a.entry(2).m;
+            if constexpr (std::is_same_v<value_t<Row>, float> && Size == 3) {
+                __m128 r0 = a.entry(0).m, r1 = a.entry(1).m, r2 = a.entry(2).m;
 
-                __m128 t0 = _mm_unpacklo_ps(c0, c1);
-                __m128 t1 = _mm_unpacklo_ps(c2, c2);
-                __m128 t2 = _mm_unpackhi_ps(c0, c1);
-                __m128 t3 = _mm_unpackhi_ps(c2, c2);
+                __m128 t0 = _mm_unpacklo_ps(r0, r1);
+                __m128 t1 = _mm_unpacklo_ps(r2, r2);
+                __m128 t2 = _mm_unpackhi_ps(r0, r1);
+                __m128 t3 = _mm_unpackhi_ps(r2, r2);
 
                 return Array(
                     _mm_movelh_ps(t0, t1),
                     _mm_movehl_ps(t1, t0),
                     _mm_movelh_ps(t2, t3)
                 );
-            } else if constexpr (std::is_same_v<value_t<Column>, float> && Size == 4) {
-                __m128 c0 = a.entry(0).m, c1 = a.entry(1).m,
-                       c2 = a.entry(2).m, c3 = a.entry(3).m;
+            } else if constexpr (std::is_same_v<value_t<Row>, float> && Size == 4) {
+                __m128 r0 = a.entry(0).m, r1 = a.entry(1).m,
+                       r2 = a.entry(2).m, r3 = a.entry(3).m;
 
-                __m128 t0 = _mm_unpacklo_ps(c0, c1);
-                __m128 t1 = _mm_unpacklo_ps(c2, c3);
-                __m128 t2 = _mm_unpackhi_ps(c0, c1);
-                __m128 t3 = _mm_unpackhi_ps(c2, c3);
+                __m128 t0 = _mm_unpacklo_ps(r0, r1);
+                __m128 t1 = _mm_unpacklo_ps(r2, r3);
+                __m128 t2 = _mm_unpackhi_ps(r0, r1);
+                __m128 t3 = _mm_unpackhi_ps(r2, r3);
 
                 return Array(
                     _mm_movelh_ps(t0, t1),
@@ -227,27 +245,27 @@ Array transpose(const Array &a) {
         #endif
 
         #if defined(DRJIT_X86_AVX)
-            if constexpr (std::is_same_v<value_t<Column>, double> && Size == 3) {
-                __m256d c0 = a.entry(0).m, c1 = a.entry(1).m, c2 = a.entry(2).m;
+            if constexpr (std::is_same_v<value_t<Row>, double> && Size == 3) {
+                __m256d r0 = a.entry(0).m, r1 = a.entry(1).m, r2 = a.entry(2).m;
 
-                __m256d t3 = _mm256_shuffle_pd(c2, c2, 0b0000),
-                        t2 = _mm256_shuffle_pd(c2, c2, 0b1111),
-                        t1 = _mm256_shuffle_pd(c0, c1, 0b0000),
-                        t0 = _mm256_shuffle_pd(c0, c1, 0b1111);
+                __m256d t3 = _mm256_shuffle_pd(r2, r2, 0b0000),
+                        t2 = _mm256_shuffle_pd(r2, r2, 0b1111),
+                        t1 = _mm256_shuffle_pd(r0, r1, 0b0000),
+                        t0 = _mm256_shuffle_pd(r0, r1, 0b1111);
 
                 return Array(
                     _mm256_permute2f128_pd(t1, t3, 0b0010'0000),
                     _mm256_permute2f128_pd(t0, t2, 0b0010'0000),
                     _mm256_permute2f128_pd(t1, t3, 0b0011'0001)
                 );
-            } else if constexpr (std::is_same_v<value_t<Column>, double> && Size == 4) {
-                __m256d c0 = a.entry(0).m, c1 = a.entry(1).m,
-                        c2 = a.entry(2).m, c3 = a.entry(3).m;
+            } else if constexpr (std::is_same_v<value_t<Row>, double> && Size == 4) {
+                __m256d r0 = a.entry(0).m, r1 = a.entry(1).m,
+                        r2 = a.entry(2).m, r3 = a.entry(3).m;
 
-                __m256d t3 = _mm256_shuffle_pd(c2, c3, 0b0000),
-                        t2 = _mm256_shuffle_pd(c2, c3, 0b1111),
-                        t1 = _mm256_shuffle_pd(c0, c1, 0b0000),
-                        t0 = _mm256_shuffle_pd(c0, c1, 0b1111);
+                __m256d t3 = _mm256_shuffle_pd(r2, r3, 0b0000),
+                        t2 = _mm256_shuffle_pd(r2, r3, 0b1111),
+                        t1 = _mm256_shuffle_pd(r0, r1, 0b0000),
+                        t0 = _mm256_shuffle_pd(r0, r1, 0b1111);
 
                 return Array(
                     _mm256_permute2f128_pd(t1, t3, 0b0010'0000),
@@ -259,7 +277,7 @@ Array transpose(const Array &a) {
         #endif
 
         #if defined(DRJIT_ARM_NEON)
-            if constexpr (std::is_same_v<value_t<Column>, float> && Size == 3) {
+            if constexpr (std::is_same_v<value_t<Row>, float> && Size == 3) {
                 float32x4x2_t v01 = vtrnq_f32(a.entry(0).m, a.entry(1).m);
                 float32x4x2_t v23 = vtrnq_f32(a.entry(2).m, a.entry(2).m);
 
@@ -268,7 +286,7 @@ Array transpose(const Array &a) {
                     vcombine_f32(vget_low_f32 (v01.val[1]), vget_low_f32 (v23.val[1])),
                     vcombine_f32(vget_high_f32(v01.val[0]), vget_high_f32(v23.val[0]))
                 );
-            } else if constexpr (std::is_same_v<value_t<Column>, float> && Size == 4) {
+            } else if constexpr (std::is_same_v<value_t<Row>, float> && Size == 4) {
                 float32x4x2_t v01 = vtrnq_f32(a.entry(0).m, a.entry(1).m);
                 float32x4x2_t v23 = vtrnq_f32(a.entry(2).m, a.entry(3).m);
 
@@ -329,19 +347,19 @@ template <typename T> T det(const Matrix<T, 3> &m) {
 template <typename T> Matrix<T, 3> inverse_transpose(const Matrix<T, 3> &m) {
     using Vector = Array<T, 3>;
 
-    Vector col0 = m.entry(0),
-           col1 = m.entry(1),
-           col2 = m.entry(2);
+    Vector row0 = m.entry(0),
+           row1 = m.entry(1),
+           row2 = m.entry(2);
 
-    Vector row0 = cross(col1, col2),
-           row1 = cross(col2, col0),
-           row2 = cross(col0, col1);
+    Vector col0 = cross(row1, row2),
+           col1 = cross(row2, row0),
+           col2 = cross(row0, row1);
 
-    T inv_det = rcp(dot(col0, row0));
+    T inv_det = rcp(dot(row0, col0));
     return Matrix<T, 3>(
-        row0 * inv_det,
-        row1 * inv_det,
-        row2 * inv_det
+        col0 * inv_det,
+        col1 * inv_det,
+        col2 * inv_det
     );
 }
 
@@ -352,94 +370,94 @@ template <typename T> Matrix<T, 3> inverse(const Matrix<T, 3> &m) {
 template <typename T> T det(const Matrix<T, 4> &m) {
     using Vector = Array<T, 4>;
 
-    Vector col0 = m.entry(0), col1 = m.entry(1),
-           col2 = m.entry(2), col3 = m.entry(3);
+    Vector row0 = m.entry(0), row1 = m.entry(1),
+           row2 = m.entry(2), row3 = m.entry(3);
 
-    col1 = shuffle<2, 3, 0, 1>(col1);
-    col3 = shuffle<2, 3, 0, 1>(col3);
+    row1 = shuffle<2, 3, 0, 1>(row1);
+    row3 = shuffle<2, 3, 0, 1>(row3);
 
-    Vector temp, row0;
+    Vector temp, col0;
 
-    temp = shuffle<1, 0, 3, 2>(col2 * col3);
-    row0 = col1 * temp;
+    temp = shuffle<1, 0, 3, 2>(row2 * row3);
+    col0 = row1 * temp;
     temp = shuffle<2, 3, 0, 1>(temp);
-    row0 = fmsub(col1, temp, row0);
+    col0 = fmsub(row1, temp, col0);
 
-    temp = shuffle<1, 0, 3, 2>(col1 * col2);
-    row0 = fmadd(col3, temp, row0);
+    temp = shuffle<1, 0, 3, 2>(row1 * row2);
+    col0 = fmadd(row3, temp, col0);
     temp = shuffle<2, 3, 0, 1>(temp);
-    row0 = fnmadd(col3, temp, row0);
+    col0 = fnmadd(row3, temp, col0);
 
-    col1 = shuffle<2, 3, 0, 1>(col1);
-    col2 = shuffle<2, 3, 0, 1>(col2);
-    temp = shuffle<1, 0, 3, 2>(col1 * col3);
-    row0 = fmadd(col2, temp, row0);
+    row1 = shuffle<2, 3, 0, 1>(row1);
+    row2 = shuffle<2, 3, 0, 1>(row2);
+    temp = shuffle<1, 0, 3, 2>(row1 * row3);
+    col0 = fmadd(row2, temp, col0);
     temp = shuffle<2, 3, 0, 1>(temp);
-    row0 = fnmadd(col2, temp, row0);
+    col0 = fnmadd(row2, temp, col0);
 
-    return dot(col0, row0);
+    return dot(row0, col0);
 }
 
 
 template <typename T> Matrix<T, 4> inverse_transpose(const Matrix<T, 4> &m) {
     using Vector = Array<T, 4>;
 
-    Vector col0 = m.entry(0), col1 = m.entry(1),
-           col2 = m.entry(2), col3 = m.entry(3);
+    Vector row0 = m.entry(0), row1 = m.entry(1),
+           row2 = m.entry(2), row3 = m.entry(3);
 
-    col1 = shuffle<2, 3, 0, 1>(col1);
-    col3 = shuffle<2, 3, 0, 1>(col3);
+    row1 = shuffle<2, 3, 0, 1>(row1);
+    row3 = shuffle<2, 3, 0, 1>(row3);
 
-    Vector temp, row0, row1, row2, row3;
+    Vector temp, col0, col1, col2, col3;
 
-    temp = shuffle<1, 0, 3, 2>(col2 * col3);
-    row0 = col1 * temp;
-    row1 = col0 * temp;
+    temp = shuffle<1, 0, 3, 2>(row2 * row3);
+    col0 = row1 * temp;
+    col1 = row0 * temp;
     temp = shuffle<2, 3, 0, 1>(temp);
-    row0 = fmsub(col1, temp, row0);
-    row1 = shuffle<2, 3, 0, 1>(fmsub(col0, temp, row1));
+    col0 = fmsub(row1, temp, col0);
+    col1 = shuffle<2, 3, 0, 1>(fmsub(row0, temp, col1));
 
-    temp = shuffle<1, 0, 3, 2>(col1 * col2);
-    row0 = fmadd(col3, temp, row0);
-    row3 = col0 * temp;
+    temp = shuffle<1, 0, 3, 2>(row1 * row2);
+    col0 = fmadd(row3, temp, col0);
+    col3 = row0 * temp;
     temp = shuffle<2, 3, 0, 1>(temp);
-    row0 = fnmadd(col3, temp, row0);
-    row3 = shuffle<2, 3, 0, 1>(fmsub(col0, temp, row3));
+    col0 = fnmadd(row3, temp, col0);
+    col3 = shuffle<2, 3, 0, 1>(fmsub(row0, temp, col3));
 
-    temp = shuffle<1, 0, 3, 2>(shuffle<2, 3, 0, 1>(col1) * col3);
-    col2 = shuffle<2, 3, 0, 1>(col2);
-    row0 = fmadd(col2, temp, row0);
-    row2 = col0 * temp;
+    temp = shuffle<1, 0, 3, 2>(shuffle<2, 3, 0, 1>(row1) * row3);
+    row2 = shuffle<2, 3, 0, 1>(row2);
+    col0 = fmadd(row2, temp, col0);
+    col2 = row0 * temp;
     temp = shuffle<2, 3, 0, 1>(temp);
-    row0 = fnmadd(col2, temp, row0);
-    row2 = shuffle<2, 3, 0, 1>(fmsub(col0, temp, row2));
+    col0 = fnmadd(row2, temp, col0);
+    col2 = shuffle<2, 3, 0, 1>(fmsub(row0, temp, col2));
 
-    temp = shuffle<1, 0, 3, 2>(col0 * col1);
-    row2 = fmadd(col3, temp, row2);
-    row3 = fmsub(col2, temp, row3);
+    temp = shuffle<1, 0, 3, 2>(row0 * row1);
+    col2 = fmadd(row3, temp, col2);
+    col3 = fmsub(row2, temp, col3);
     temp = shuffle<2, 3, 0, 1>(temp);
-    row2 = fmsub(col3, temp, row2);
-    row3 = fnmadd(col2, temp, row3);
+    col2 = fmsub(row3, temp, col2);
+    col3 = fnmadd(row2, temp, col3);
 
-    temp = shuffle<1, 0, 3, 2>(col0 * col3);
-    row1 = fnmadd(col2, temp, row1);
-    row2 = fmadd(col1, temp, row2);
+    temp = shuffle<1, 0, 3, 2>(row0 * row3);
+    col1 = fnmadd(row2, temp, col1);
+    col2 = fmadd(row1, temp, col2);
     temp = shuffle<2, 3, 0, 1>(temp);
-    row1 = fmadd(col2, temp, row1);
-    row2 = fnmadd(col1, temp, row2);
+    col1 = fmadd(row2, temp, col1);
+    col2 = fnmadd(row1, temp, col2);
 
-    temp = shuffle<1, 0, 3, 2>(col0 * col2);
-    row1 = fmadd(col3, temp, row1);
-    row3 = fnmadd(col1, temp, row3);
+    temp = shuffle<1, 0, 3, 2>(row0 * row2);
+    col1 = fmadd(row3, temp, col1);
+    col3 = fnmadd(row1, temp, col3);
     temp = shuffle<2, 3, 0, 1>(temp);
-    row1 = fnmadd(col3, temp, row1);
-    row3 = fmadd(col1, temp, row3);
+    col1 = fnmadd(row3, temp, col1);
+    col3 = fmadd(row1, temp, col3);
 
-    T inv_det = rcp(dot(col0, row0));
+    T inv_det = rcp(dot(row0, col0));
 
     return Matrix<T, 4>(
-        row0 * inv_det, row1 * inv_det,
-        row2 * inv_det, row3 * inv_det
+        col0 * inv_det, col1 * inv_det,
+        col2 * inv_det, col3 * inv_det
     );
 }
 
