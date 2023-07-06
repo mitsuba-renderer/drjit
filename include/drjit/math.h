@@ -995,7 +995,7 @@ namespace detail {
 template <typename X, typename Y> expr_t<X, Y> pow(const X &x, const Y &y) {
     static_assert(!is_special_v<X> && !is_special_v<Y>,
                   "pow(): requires a regular scalar/array argument!");
-    if constexpr ((is_dynamic_v<X> && std::is_scalar_v<Y>) || std::is_integral_v<expr_t<X, Y>>) {
+    if constexpr (std::is_scalar_v<Y> || std::is_integral_v<expr_t<X, Y>>) {
         if constexpr (std::is_floating_point_v<Y>) {
             if (detail::round_(y) == y)
                 return detail::powi(x, (int) y);

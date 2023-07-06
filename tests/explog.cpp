@@ -102,3 +102,7 @@ DRJIT_TEST_FLOAT(test05_pow) {
    assert(T(abs(pow(T(Pi<Value>), T(Value(-2))) -
               T(Value(0.101321183642338))))[0] < 1e-6f);
 }
+
+DRJIT_TEST_FLOAT(test06_pow_neg) {
+    assert((pow(T(-0.8), 3.0) - 0.512)[0] < 1e-6f);
+}
