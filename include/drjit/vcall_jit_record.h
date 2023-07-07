@@ -20,7 +20,7 @@ NAMESPACE_BEGIN(detail)
 
 template <typename T>
 void collect_indices(dr_index_vector &indices, const T &value) {
-    if constexpr (array_depth_v<T> > 1) {
+    if constexpr (depth_v<T> > 1) {
         for (size_t i = 0; i < value.derived().size(); ++i)
             collect_indices(indices, value.derived().entry(i));
     } else if constexpr (is_diff_v<T>) {
@@ -40,7 +40,7 @@ void collect_indices(dr_index_vector &indices, const T &value) {
 
 template <typename T>
 void write_indices(dr_vector<uint32_t> &indices, T &value, uint32_t &offset) {
-    if constexpr (array_depth_v<T> > 1) {
+    if constexpr (depth_v<T> > 1) {
         for (size_t i = 0; i < value.derived().size(); ++i)
             write_indices(indices, value.derived().entry(i), offset);
     } else if constexpr (is_diff_v<T>) {
@@ -54,7 +54,7 @@ void write_indices(dr_vector<uint32_t> &indices, T &value, uint32_t &offset) {
 }
 
 template <typename T> DRJIT_INLINE auto wrap_vcall(const T &value) {
-    if constexpr (array_depth_v<T> > 1) {
+    if constexpr (depth_v<T> > 1) {
         T result;
         for (size_t i = 0; i < value.derived().size(); ++i)
             result.derived().entry(i) = wrap_vcall(value.derived().entry(i));

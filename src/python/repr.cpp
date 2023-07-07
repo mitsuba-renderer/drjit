@@ -144,7 +144,8 @@ PyObject *tp_repr(PyObject *self) noexcept {
         return nullptr;
     } catch (const std::exception &e) {
         nb::str tp_name = nb::inst_name(self);
-        PyErr_Format(PyExc_RuntimeError, "%U.__repr__(): %s", tp_name.ptr(), e.what());
+        nb::chain_error(PyExc_RuntimeError, "%U.__repr__(): %s", tp_name.ptr(),
+                        e.what());
         return nullptr;
     }
 }

@@ -103,7 +103,7 @@ struct Loop<Mask, enable_if_jit_array_t<Mask>> {
     template <typename T, typename... Ts>
     void put(T &value, Ts &... args) {
         if constexpr (is_array_v<T>) {
-            if constexpr (array_depth_v<T> == 1) {
+            if constexpr (depth_v<T> == 1) {
                 if constexpr (IsDiff && is_diff_v<T> &&
                               std::is_floating_point_v<scalar_t<T>>) {
                     int ad_float_precision = sizeof(scalar_t<T>) * 8;

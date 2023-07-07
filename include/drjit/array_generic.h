@@ -150,8 +150,8 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
 
     /// Construct from sub-arrays
     template <typename T1, typename T2, typename T = StaticArrayImpl, enable_if_t<
-              array_depth_v<T1> == array_depth_v<T> && array_size_v<T1> == Base::Size1 &&
-              array_depth_v<T2> == array_depth_v<T> && array_size_v<T2> == Base::Size2 &&
+              depth_v<T1> == depth_v<T> && size_v<T1> == Base::Size1 &&
+              depth_v<T2> == depth_v<T> && size_v<T2> == Base::Size2 &&
               Base::Size2 != 0> = 0>
     StaticArrayImpl(T1 &&a1, T2 &&a2)
         : StaticArrayImpl(a1, a2, std::make_index_sequence<Base::Size1>(),
@@ -214,7 +214,7 @@ struct StaticArrayImpl<Value_, 0, IsMask_, Derived_>
 namespace detail {
     template <typename T> bool put_shape(size_t *shape) {
         size_t cur = *shape,
-               size = array_size_v<T> == Dynamic ? 0 : array_size_v<T>,
+               size = size_v<T> == Dynamic ? 0 : size_v<T>,
                maxval = cur > size ? cur : size;
 
         if (maxval != size && size != 1)
@@ -257,44 +257,84 @@ namespace detail {
         return true;
     }
 
-    template <bool Abbrev, typename Array, typename... Indices>
-    void to_string(StringBuffer &buf, const Array &a, const size_t *shape, Indices... indices) {
+    template <bool Abbrev, size_t Depth, typename T, size_t ... Is>
+    void to_string(StringBuffer &buf, const T &v, const size_t *shape, size_t *indices) {
+        constexpr size_t Dimensions = depth_v<T>;
+        constexpr bool Last = Depth == Dimensions - 1;
+        // Skip output when there are more than 20 elements.
+        constexpr size_t Threshold = 20; // Must be divisible by 4
+
         DRJIT_MARK_USED(shape);
-        if constexpr (sizeof...(Indices) == array_depth_v<Array>) {
-            buf.put(a.derived().entry(indices...));
-        } else {
-            constexpr size_t k = array_depth_v<Array> - sizeof...(Indices) - 1;
-            buf.put('[');
-            for (size_t i = 0; i < shape[k]; ++i) {
-                if constexpr (is_dynamic_v<Array>) {
-                    if (Abbrev && shape[k] > 20 && i == 5) {
-                        buf.fmt(".. %zu skipped ..,%s", shape[k] - 10, k > 0 ? "\n" : " ");
-                        if (k > 0) {
-                            for (size_t j = 0; j <= sizeof...(Indices); ++j)
-                                buf.put(' ');
-                        }
-                        i = shape[k] - 6;
-                        continue;
-                    }
-                }
-                to_string<false>(buf, a, shape, i, indices...);
-                if (i + 1 < shape[k]) {
-                    if constexpr (k == 0) {
-                        buf.put(", ");
-                    } else {
-                        buf.put(",\n");
-                        for (size_t j = 0; j <= sizeof...(Indices); ++j)
-                            buf.put(' ');
-                    }
+        DRJIT_MARK_USED(indices);
+
+        // On vectorized types, iterate over the last dimension first
+        size_t i = Depth;
+        using Leaf = leaf_array_t<T>;
+        if constexpr (!Leaf::BroadcastOuter || Leaf::IsDynamic) {
+            if (Depth == 0)
+                i = Dimensions - 1;
+            else
+                i -= 1;
+        }
+
+        if constexpr (Last && (is_complex_v<T> || is_quaternion_v<T>)) {
+            // Special handling for complex numbers and quaternions
+            bool prev = false;
+
+            for (size_t j = 0; j < size_v<T>; ++j) {
+                indices[i] = j;
+
+                scalar_t<T> value = v.derived().entry(indices[Is]...);
+                if (value == 0)
+                    continue;
+
+                if (prev || value < 0)
+                    buf.put(value < 0 ? "-" : "+");
+                buf.put(value);
+                prev = true;
+
+                if (is_complex_v<T> && j == 1)
+                    buf.put('j');
+                else if (is_quaternion_v<T> && j < 3)
+                    buf.put("ijk"[j]);
+            }
+            if (!prev)
+                buf.put("0");
+            return;
+        }
+
+        size_t size = shape[i];
+
+        buf.put('[');
+        for (size_t j = 0; j < size; ++j) {
+            indices[i] = j;
+
+            if (Abbrev && size >= Threshold && j * 4 == Threshold) {
+                buf.fmt(".. %zu skipped ..", size - Threshold / 2);
+                j = size - Threshold / 4 - 1;
+            } else {
+                if constexpr (Last)
+                    buf.put(v.derived().entry(indices[Is]...));
+                else
+                    to_string<Abbrev, Depth + 1, T, Is..., Depth + 1>(buf, v, shape, indices);
+            }
+
+            if (j + 1 < size) {
+                if (Last) {
+                    buf.put(", ");
+                } else {
+                    buf.put(",\n");
+                    for (int i = 0; i <= Depth; ++i)
+                        buf.put(' ');
                 }
             }
-            buf.put(']');
         }
+        buf.put(']');
     }
 }
 
 template <typename Array> bool ragged(const Array &a) {
-    size_t shape[array_depth_v<Array> + 1 /* avoid zero-sized array */ ] { };
+    size_t shape[depth_v<Array> == 0 ? 1 : depth_v<Array>] { };
     return !detail::put_shape(a, shape);
 }
 

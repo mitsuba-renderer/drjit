@@ -62,37 +62,37 @@ template <typename Array> Array repeat(const Array &array, size_t count) {
 }
 
 template <typename Array> auto ravel(const Array &array) {
-    if constexpr (array_depth_v<Array> <= 1) {
+    if constexpr (depth_v<Array> <= 1) {
         return array;
     } else {
         using Result = leaf_array_t<Array>;
         using Index = uint32_array_t<Result>;
 
-        size_t shape[array_depth_v<Array> + 1 /* avoid zero-sized array */ ] { };
+        size_t shape[depth_v<Array> + 1 /* avoid zero-sized array */ ] { };
         detail::put_shape(array, shape);
 
         size_t size = shape[0];
-        for (size_t i = 1; i < array_depth_v<Array>; ++i)
+        for (size_t i = 1; i < depth_v<Array>; ++i)
             size *= shape[i];
 
         Result result = empty<Result>(size);
         scatter(result, array,
-                arange<Index>(shape[array_depth_v<Array> - 1]));
+                arange<Index>(shape[depth_v<Array> - 1]));
 
         return result;
     }
 }
 
 template <typename Target, typename Source> Target unravel(const Source &source) {
-    static_assert(array_depth_v<Source> == 1, "Expected a flat array as input!");
-    static_assert(array_depth_v<Target> > 1, "Expected a nested array as output!");
+    static_assert(depth_v<Source> == 1, "Expected a flat array as input!");
+    static_assert(depth_v<Target> > 1, "Expected a nested array as output!");
 
     Target target;
-    size_t shape[array_depth_v<Target> + 1 /* avoid zero-sized array */ ] { };
+    size_t shape[depth_v<Target> + 1 /* avoid zero-sized array */ ] { };
     detail::put_shape(target, shape);
 
     size_t source_size = source.size(), size = shape[0];
-    for (size_t i = 1; i < array_depth_v<Target> - 1; ++i)
+    for (size_t i = 1; i < depth_v<Target> - 1; ++i)
         size *= shape[i];
 
     if (size == 0 || source_size % size != 0)
@@ -110,7 +110,7 @@ template <typename Target, typename Source> Target unravel(const Source &source)
  */
 template <typename T> std::pair<T, T> meshgrid(const T &x, const T &y,
                                                bool index_xy = true) {
-    static_assert(array_depth_v<T> == 1 && is_dynamic_array_v<T>,
+    static_assert(depth_v<T> == 1 && is_dynamic_array_v<T>,
                   "meshgrid(): requires two or three 1D dynamic Dr.Jit arrays as input!");
 
     // Cartesian or matrix indexing, consistent with NumPy
@@ -139,7 +139,7 @@ template <typename T> std::pair<T, T> meshgrid(const T &x, const T &y,
  */
 template <typename T> std::tuple<T, T, T> meshgrid(const T &x, const T &y, const T &z,
                                                    bool index_xy = true) {
-    static_assert(array_depth_v<T> == 1 && is_dynamic_array_v<T>,
+    static_assert(depth_v<T> == 1 && is_dynamic_array_v<T>,
                   "meshgrid(): requires two or three 1D dynamic Dr.Jit arrays as input!");
 
     // Cartesian or matrix indexing, consistent with NumPy
@@ -222,14 +222,14 @@ Index binary_search(scalar_t<Index> start_, scalar_t<Index> end_,
 template <typename Value> struct range {
     static constexpr bool Recurse =
         !(Value::IsPacked || Value::Size == Dynamic) ||
-        array_depth_v<Value> == 2;
-    static constexpr size_t Dimension = Recurse ? array_size_v<Value> : 1;
+        depth_v<Value> == 2;
+    static constexpr size_t Dimension = Recurse ? size_v<Value> : 1;
 
     using Scalar = scalar_t<Value>;
     using Packet = std::conditional_t<Recurse, value_t<Value>, Value>;
     using Size   = Array<Scalar, Dimension>;
 
-    static constexpr size_t PacketSize = array_size_v<Packet>;
+    static constexpr size_t PacketSize = size_v<Packet>;
 
     struct iterator {
         iterator(size_t index) : index(index) { }

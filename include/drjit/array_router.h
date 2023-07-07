@@ -224,7 +224,7 @@ DRJIT_INLINE auto operator/(const T1 &a1, const T2 &a2) {
     if constexpr (std::is_same_v<T1, E> && std::is_same_v<T2, E>)
         return a1.derived().div_(a2.derived());
     else if constexpr (std::is_floating_point_v<scalar_t<E>> &&
-                       array_depth_v<T1> > array_depth_v<T2>) // reciprocal approximation
+                       depth_v<T1> > depth_v<T2>) // reciprocal approximation
         return static_cast<ref_cast_t<T1, E>>(a1) *
                rcp(static_cast<ref_cast_t<T1, E2>>(a2));
     else
@@ -627,7 +627,7 @@ DRJIT_INLINE auto abs_dot(const T1 &a1, const T2 &a2) {
 }
 
 template <typename T> DRJIT_INLINE auto squared_norm(const T &v) {
-    if constexpr (array_depth_v<T> == 1 || array_size_v<T> == 0) {
+    if constexpr (depth_v<T> == 1 || size_v<T> == 0) {
         return sum(v * v);
     } else {
         value_t<T> result = sqr(v.x());
@@ -647,7 +647,7 @@ template <typename T> DRJIT_INLINE auto normalize(const T &v) {
 
 template <typename T1, typename T2>
 DRJIT_INLINE auto cross(const T1 &v1, const T2 &v2) {
-    static_assert(array_size_v<T1> == 3 && array_size_v<T2> == 3,
+    static_assert(size_v<T1> == 3 && size_v<T2> == 3,
             "cross(): requires 3D input arrays!");
 
 #if defined(DRJIT_ARM_32) || defined(DRJIT_ARM_64)
@@ -668,7 +668,7 @@ DRJIT_INLINE auto cross(const T1 &v1, const T2 &v2) {
 // -----------------------------------------------------------------------
 
 template <bool Default, typename T> auto all_or(const T &value) {
-    if constexpr (is_jit_v<T> && array_depth_v<T> == 1) {
+    if constexpr (is_jit_v<T> && depth_v<T> == 1) {
         DRJIT_MARK_USED(value);
         return Default;
     } else {
@@ -677,7 +677,7 @@ template <bool Default, typename T> auto all_or(const T &value) {
 }
 
 template <bool Default, typename T> auto any_or(const T &value) {
-    if constexpr (is_jit_v<T> && array_depth_v<T> == 1) {
+    if constexpr (is_jit_v<T> && depth_v<T> == 1) {
         DRJIT_MARK_USED(value);
         return Default;
     } else {
@@ -686,7 +686,7 @@ template <bool Default, typename T> auto any_or(const T &value) {
 }
 
 template <bool Default, typename T> auto none_or(const T &value) {
-    if constexpr (is_jit_v<T> && array_depth_v<T> == 1) {
+    if constexpr (is_jit_v<T> && depth_v<T> == 1) {
         DRJIT_MARK_USED(value);
         return Default;
     } else {
@@ -838,7 +838,7 @@ DRJIT_INLINE T opaque(const T2 &value, size_t size = 1) {
 
 DRJIT_INLINE void make_opaque() { }
 template <typename T> DRJIT_INLINE void make_opaque(T &value) {
-    if constexpr (array_depth_v<T> > 1) {
+    if constexpr (depth_v<T> > 1) {
         for (size_t i = 0; i < value.size(); ++i)
             make_opaque(value.entry(i));
     } else if constexpr (is_drjit_struct_v<T>) {
@@ -918,7 +918,7 @@ template <typename T> DRJIT_INLINE T load_aligned(const void *ptr, size_t size =
 
 /// Map an array
 template <typename T> DRJIT_INLINE T map(void *ptr, size_t size = 1, bool free = false) {
-    static_assert(is_jit_v<T> && array_depth_v<T> == 1,
+    static_assert(is_jit_v<T> && depth_v<T> == 1,
                   "drjit::map(): only flat JIT arrays supported!");
     return T::map_(ptr, size, free);
 }
@@ -961,7 +961,7 @@ namespace detail {
         Index scaled = index * Scalar(Target::Size);
         Target result;
         for (size_t i = 0; i < Target::Size; ++i) {
-            if constexpr (array_depth_v<Target> == array_depth_v<Index> + 1)
+            if constexpr (depth_v<Target> == depth_v<Index> + 1)
                 result.entry(i) = scaled + Scalar(i);
             else
                 result.entry(i) = broadcast_index<value_t<Target>>(scaled + Scalar(i));
@@ -975,9 +975,9 @@ template <typename Target, bool Permute = false, typename Source,
 Target gather(Source &&source, const Index &index, const Mask &mask_ = true) {
     // Broadcast mask to match shape of Index
     mask_t<plain_t<replace_scalar_t<Index, scalar_t<Target>>>> mask = mask_;
-    if constexpr (array_depth_v<Source> > 1) {
+    if constexpr (depth_v<Source> > 1) {
         // Case 1: gather<Vector3fC>(const Vector3fC&, ...)
-        static_assert(array_size_v<Source> == array_size_v<Target>,
+        static_assert(size_v<Source> == size_v<Target>,
                       "When gathering from a nested array source, the source "
                       "and target types must be compatible!");
         using Index2 = plain_t<replace_scalar_t<Target, scalar_t<Index>>>;
@@ -992,7 +992,7 @@ Target gather(Source &&source, const Index &index, const Mask &mask_ = true) {
         return result;
     } else if constexpr (is_array_v<Target>) {
         static_assert(std::is_pointer_v<std::decay_t<Source>> ||
-                          array_depth_v<Source> == 1,
+                          depth_v<Source> == 1,
                       "Source argument of gather operation must either be a "
                       "pointer address or a flat array!");
         if constexpr (!is_array_v<Index>) {
@@ -1016,7 +1016,7 @@ Target gather(Source &&source, const Index &index, const Mask &mask_ = true) {
                     return select(mask, load<Target>((const uint8_t *)source.data() + offset), Target(0));
                 }
             }
-        } else if constexpr (array_depth_v<Target> == array_depth_v<Index>) {
+        } else if constexpr (depth_v<Target> == depth_v<Index>) {
             if constexpr ((Target::IsPacked || Target::IsRecursive) && is_array_v<Source>)
                 // Case 2.1.0: gather<FloatC>(const FloatP&, ...)
                 return Target::template gather_<Permute>(source.data(), index, mask);
@@ -1064,9 +1064,9 @@ void scatter(Target &&target, const Value &value, const Index &index,
     mask_t<plain_t<Index>> mask = mask_;
     if constexpr (std::is_same_v<std::decay_t<Target>, std::nullptr_t>) {
         return; // Used by virtual function call dispatch when there is no return value
-    } else if constexpr (array_depth_v<Target> > 1) {
+    } else if constexpr (depth_v<Target> > 1) {
         // Case 1: scatter(Vector3fC&, const Vector3fC &...)
-        static_assert(array_size_v<Value> == array_size_v<Target>,
+        static_assert(size_v<Value> == size_v<Target>,
                       "When scattering a nested array value, the source and "
                       "target types must be compatible!");
         using Index2 = plain_t<replace_scalar_t<Value, scalar_t<Index>>>;
@@ -1077,13 +1077,13 @@ void scatter(Target &&target, const Value &value, const Index &index,
                              index2.entry(i), mask2.entry(i));
     } else if constexpr (is_array_v<Value>) {
         static_assert(std::is_pointer_v<std::decay_t<Target>> ||
-                          array_depth_v<Target> == 1,
+                          depth_v<Target> == 1,
                       "Target argument of scatter operation must either be a "
                       "pointer address or a flat array!");
         static_assert(is_array_v<Index> && is_integral_v<Index>,
                       "Second argument of gather operation must be an index array!");
 
-        if constexpr (array_depth_v<Value> == array_depth_v<Index>) {
+        if constexpr (depth_v<Value> == depth_v<Index>) {
             value.template scatter_<Permute>(target, index, mask);
         } else {
             using TargetIndex = replace_scalar_t<Value, scalar_t<Index>>;
@@ -1117,13 +1117,13 @@ template <typename Target, typename Value, typename Index>
 void scatter_reduce(ReduceOp op, Target &&target, const Value &value,
                     const Index &index, const mask_t<Value> &mask = true) {
     if constexpr (is_array_v<Value>) {
-        static_assert(std::is_pointer_v<std::decay_t<Target>> || array_depth_v<Target> == 1,
+        static_assert(std::is_pointer_v<std::decay_t<Target>> || depth_v<Target> == 1,
                       "Target argument of scatter_reduce operation must either be a "
                       "pointer address or a flat array!");
         static_assert(is_array_v<Index> && is_integral_v<Index>,
                       "Second argument of gather operation must be an index array!");
 
-        if constexpr (array_depth_v<Value> == array_depth_v<Index>) {
+        if constexpr (depth_v<Value> == depth_v<Index>) {
             value.scatter_reduce_(op, target, index, mask);
         } else {
             using TargetIndex = replace_scalar_t<Value, scalar_t<Index>>;
@@ -1172,8 +1172,8 @@ void scatter_reduce_kahan(Target &&target_1, Target &&target_2,
         is_jit_v<Target> &&
         is_jit_v<Value> &&
         is_jit_v<Index> &&
-        array_depth_v<Value> == array_depth_v<Index> &&
-        array_depth_v<Value> == 1,
+        depth_v<Value> == depth_v<Index> &&
+        depth_v<Value> == 1,
         "Only flat JIT arrays are supported at the moment");
 
     value.scatter_reduce_kahan_(target_1, target_2, index, mask);
@@ -1185,7 +1185,7 @@ decltype(auto) migrate(const T &value, TargetType target) {
     DRJIT_MARK_USED(target);
 
     if constexpr (is_jit_v<T>) {
-        if constexpr (array_depth_v<T> > 1) {
+        if constexpr (depth_v<T> > 1) {
             T result;
             if constexpr (T::Size == Dynamic)
                 result = empty<T>(value.size());
@@ -1215,7 +1215,7 @@ decltype(auto) migrate(const T &value, TargetType target) {
 template <typename ResultType = void, typename T>
 decltype(auto) slice(const T &value, size_t index = -1) {
     schedule(value);
-    if constexpr (array_depth_v<T> > 1) {
+    if constexpr (depth_v<T> > 1) {
         using Value = std::decay_t<decltype(slice(value.entry(0), index))>;
         using Result = typename T::template ReplaceValue<Value>;
         Result result;
@@ -1302,7 +1302,7 @@ template <typename T> T erfinv(const T &a);
 #define DRJIT_INNER_REDUCTION(red)                                             \
     template <bool Reduce = false, typename Array>                             \
     DRJIT_INLINE auto red##_inner(const Array &a) {                            \
-        if constexpr (array_depth_v<Array> <= 1) {                             \
+        if constexpr (depth_v<Array> <= 1) {                             \
             if constexpr (Reduce)                                              \
                 return red(a);                                                 \
             else                                                               \
@@ -1336,7 +1336,7 @@ DRJIT_INNER_REDUCTION(mean)
 
 template <typename T> DRJIT_INLINE bool schedule(const T &value) {
     if constexpr (is_jit_v<T>) {
-        if constexpr (array_depth_v<T> > 1) {
+        if constexpr (depth_v<T> > 1) {
             bool result = false;
             for (size_t i = 0; i < value.derived().size(); ++i)
                 result |= schedule(value.derived().entry(i));
@@ -1399,9 +1399,9 @@ DRJIT_INLINE void sync_all_devices() {
 template <typename T, typename... Ts> DRJIT_INLINE size_t width(const T &value, const Ts& ...values) {
     DRJIT_MARK_USED(value);
     size_t result = 0;
-    if constexpr (array_size_v<T> == 0) {
+    if constexpr (size_v<T> == 0) {
         ;
-    } if constexpr (array_depth_v<T> > 1) {
+    } if constexpr (depth_v<T> > 1) {
         for (size_t i = 0; i < value.derived().size(); ++i) {
             size_t w = width(value.derived().entry(i));
             if (w > result)
@@ -1434,7 +1434,7 @@ template <typename T> DRJIT_INLINE void resize(T &value, size_t size) {
     DRJIT_MARK_USED(value);
     DRJIT_MARK_USED(size);
 
-    if constexpr (array_depth_v<T> > 1) {
+    if constexpr (depth_v<T> > 1) {
         for (size_t i = 0; i < value.size(); ++i)
             resize(value.entry(i), size);
     } else if constexpr (is_jit_v<T>) {
@@ -1453,7 +1453,7 @@ template <typename T> void set_label(T &value, const char *label) {
     DRJIT_MARK_USED(label);
 
     if constexpr (is_diff_v<T> || is_jit_v<T>) {
-        if constexpr (array_depth_v<T> > 1) {
+        if constexpr (depth_v<T> > 1) {
             size_t bufsize = strlen(label) + 11;
             char *buf = (char *) alloca(bufsize);
             for (size_t i = 0; i < value.size(); ++i) {
@@ -1478,7 +1478,7 @@ template <typename T> void set_label(T &value, const char *label) {
 
 template <typename T> bool grad_enabled(const T &value) {
     if constexpr (is_diff_v<T>) {
-        if constexpr (array_depth_v<T> > 1) {
+        if constexpr (depth_v<T> > 1) {
             bool result = false;
             for (size_t i = 0; i < value.size(); ++i)
                 result |= grad_enabled(value.entry(i));
@@ -1512,7 +1512,7 @@ template <typename T> T replace_grad(const T &a, const T &b) {
         drjit_raise("replace_grad() : mismatched input sizes "
                     "(%zu and %zu)", sa, sb);
 
-    if constexpr (array_depth_v<T> > 1) {
+    if constexpr (depth_v<T> > 1) {
         T result;
         if constexpr (T::Size == Dynamic)
             result = drjit::empty<T>(sr);
@@ -1541,7 +1541,7 @@ template <typename T> void set_grad_enabled(T &value, bool state) {
     DRJIT_MARK_USED(state);
 
     if constexpr (is_diff_v<T>) {
-        if constexpr (array_depth_v<T> > 1) {
+        if constexpr (depth_v<T> > 1) {
             for (size_t i = 0; i < value.size(); ++i)
                 set_grad_enabled(value.entry(i), state);
         } else if constexpr (is_tensor_v<T>) {
@@ -1574,7 +1574,7 @@ template <typename... Ts> void disable_grad(Ts&... ts) {
 namespace detail {
     template <typename T>
     void collect_ad_indices(dr_vector<uint32_t> &indices, const T &value) {
-        if constexpr (array_depth_v<T> > 1) {
+        if constexpr (depth_v<T> > 1) {
             for (size_t i = 0; i < value.derived().size(); ++i)
                 collect_ad_indices(indices, value.derived().entry(i));
         } else if constexpr (is_diff_v<T>) {
@@ -1647,7 +1647,7 @@ decltype(auto) detach(T &&value) {
     using Result = std::conditional_t<UnderlyingType, detached_t<T>, std::decay_t<T>>;
 
     if constexpr (is_diff_v<T>) {
-        if constexpr (array_depth_v<T> > 1) {
+        if constexpr (depth_v<T> > 1) {
             Result result;
             if constexpr (Result::Size == Dynamic)
                 result = empty<Result>(value.size());
@@ -1687,7 +1687,7 @@ auto grad(const T &value) {
     using Result = std::conditional_t<Underlying, detached_t<T>, T>;
 
     if constexpr (is_diff_v<T>) {
-        if constexpr (array_depth_v<T> > 1) {
+        if constexpr (depth_v<T> > 1) {
             Result result;
             if constexpr (Result::Size == Dynamic)
                 result = empty<Result>(value.size());
@@ -1722,7 +1722,7 @@ auto grad(const T &value) {
 template <bool FailIfMissing = true, typename T, typename T2>
 void set_grad(T &value, const T2 &grad) {
     if constexpr (is_diff_v<T>) {
-        if constexpr (array_depth_v<T> > 1) {
+        if constexpr (depth_v<T> > 1) {
             for (size_t i = 0; i < value.size(); ++i)
                 set_grad<FailIfMissing>(value.entry(i), grad.entry(i));
         } else {
@@ -1749,7 +1749,7 @@ void set_grad(T &value, const T2 &grad) {
 template <bool FailIfMissing = true, typename T, typename T2>
 void accum_grad(T &value, const T2 &grad) {
     if constexpr (is_diff_v<T>) {
-        if constexpr (array_depth_v<T> > 1) {
+        if constexpr (depth_v<T> > 1) {
             for (size_t i = 0; i < value.size(); ++i)
                 accum_grad<FailIfMissing>(value.entry(i), grad.entry(i));
         } else {
@@ -1773,7 +1773,7 @@ void accum_grad(T &value, const T2 &grad) {
 
 template <typename T> void enqueue(ADMode mode, const T &value) {
     if constexpr (is_diff_v<T>) {
-        if constexpr (array_depth_v<T> > 1) {
+        if constexpr (depth_v<T> > 1) {
             for (size_t i = 0; i < value.size(); ++i)
                 enqueue(mode, value.entry(i));
         } else {
@@ -1898,7 +1898,7 @@ void backward_from(T &value, uint32_t flags = (uint32_t) ADFlag::Default) {
     detail::check_grad_enabled("backward_from", value);
 
     // Handle case where components of an N-d vector map to the same AD variable
-    if constexpr (array_depth_v<T> > 1)
+    if constexpr (depth_v<T> > 1)
         value = value + T(0);
 
     set_grad(value, 1.f);
@@ -2014,7 +2014,7 @@ NAMESPACE_BEGIN(detail)
 template <typename T>
 struct MaskedArray : ArrayBaseT<value_t<T>, is_mask_v<T>, MaskedArray<T>> {
     using Mask     = mask_t<T>;
-    static constexpr size_t Size = array_size_v<T>;
+    static constexpr size_t Size = size_v<T>;
     static constexpr bool IsMaskedArray = true;
 
     MaskedArray() = default;
@@ -2086,15 +2086,15 @@ DRJIT_INLINE auto masked(T &value, const Mask &mask) {
 // -----------------------------------------------------------------------
 
 /// Extract the low elements from an array of even size
-template <typename Array, enable_if_t<(array_size_v<Array>> 1 &&
-                                       array_size_v<Array> != Dynamic)> = 0>
+template <typename Array, enable_if_t<(size_v<Array>> 1 &&
+                                       size_v<Array> != Dynamic)> = 0>
 DRJIT_INLINE auto low(const Array &a) {
     return a.derived().low_();
 }
 
 /// Extract the high elements from an array of even size
-template <typename Array, enable_if_t<(array_size_v<Array>> 1 &&
-                                       array_size_v<Array> != Dynamic)> = 0>
+template <typename Array, enable_if_t<(size_v<Array>> 1 &&
+                                       size_v<Array> != Dynamic)> = 0>
 DRJIT_INLINE auto high(const Array &a) {
     return a.derived().high_();
 }
@@ -2115,7 +2115,7 @@ template <size_t Size, typename T> DRJIT_INLINE Array<value_t<T>, Size> head(con
     } else if constexpr (T::Size1 == Size) {
         return low(a);
     } else {
-        static_assert(Size <= array_size_v<T>, "Array size mismatch");
+        static_assert(Size <= size_v<T>, "Array size mismatch");
         return detail::extract<Array<value_t<T>, Size>, 0>(
             a, std::make_index_sequence<Size>());
     }
@@ -2129,7 +2129,7 @@ template <size_t Size, typename T> DRJIT_INLINE Array<value_t<T>, Size> tail(con
     } else if constexpr (T::Size2 == Size) {
         return high(a);
     } else {
-        static_assert(Size <= array_size_v<T>, "Array size mismatch");
+        static_assert(Size <= size_v<T>, "Array size mismatch");
         return detail::extract<Array<value_t<T>, Size>, T::Size - Size>(
             a, std::make_index_sequence<Size>());
     }
@@ -2137,8 +2137,8 @@ template <size_t Size, typename T> DRJIT_INLINE Array<value_t<T>, Size> tail(con
 
 template <typename T1, typename T2, enable_if_array_any_t<T1, T2> = 0>
 auto concat(const T1 &a1, const T2 &a2) {
-    constexpr size_t Size1 = array_size_v<T1>,
-                     Size2 = array_size_v<T2>;
+    constexpr size_t Size1 = size_v<T1>,
+                     Size2 = size_v<T2>;
 
     static_assert(is_array_any_v<T1, T2>,
                   "concat(): at least one of the inputs must be an array!");
@@ -2176,7 +2176,7 @@ auto concat(const T1 &a1, const T2 &a2) {
             return result;
         }
     } else {
-        static_assert(std::is_same_v<T1, T2> && array_depth_v<T1> == 1);
+        static_assert(std::is_same_v<T1, T2> && depth_v<T1> == 1);
         using Result = T1;
         using UInt32 = uint32_array_t<T1>;
 

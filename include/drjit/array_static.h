@@ -109,8 +109,8 @@ struct StaticArrayBase : ArrayBaseT<Value_, IsMask_, Derived_> {
 
     template <typename T>
     static Derived full_(const T &value, size_t size) {
-        if constexpr (array_depth_v<T> > array_depth_v<Value> ||
-                      (array_depth_v<T> == array_depth_v<Value> &&
+        if constexpr (depth_v<T> > depth_v<Value> ||
+                      (depth_v<T> == depth_v<Value> &&
                        (is_dynamic_array_v<Value> || !is_array_v<Value>))) {
             DRJIT_MARK_USED(size);
             return value;

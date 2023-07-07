@@ -123,7 +123,7 @@ DRJIT_INLINE void morton_decode_helper(value_t<Array> value, Array &out) {
     out.entry(0) = gather_bits<Array::Size>(value);
 }
 
-template <typename Array, size_t Index = array_size_v<Array> - 1,
+template <typename Array, size_t Index = size_v<Array> - 1,
           enable_if_t<Index != 0> = 0>
 DRJIT_INLINE void morton_decode_helper(value_t<Array> value, Array &out) {
     out.entry(Index) = gather_bits<Array::Size>(sr<Index>(value));
@@ -139,7 +139,7 @@ DRJIT_INLINE value_t<Array> morton_encode(Array a) {
 }
 
 /// Convert a N-dimensional integer array into the Morton/Z-order curve encoding
-template <typename Array, size_t Index = array_size_v<Array> - 1, enable_if_t<Index != 0> = 0>
+template <typename Array, size_t Index = size_v<Array> - 1, enable_if_t<Index != 0> = 0>
 DRJIT_INLINE value_t<Array> morton_encode(Array a) {
     static_assert(std::is_unsigned_v<scalar_t<Array>>, "morton_encode() requires unsigned arguments");
     return sl<Index>(detail::scatter_bits<Array::Size>(a.entry(Index))) |

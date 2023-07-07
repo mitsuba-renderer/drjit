@@ -103,6 +103,11 @@ static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu) {
             shape[i] = s.shape[i];
             strides[i] = stride;
             stride *= s.shape[i];
+
+            // Special case: array containing 3D SIMD arrays which are 4D-aligned
+            if (i == s.ndim - 1 && s.talign == 16 && s.shape[i] == 3)
+                stride++;
+
             if (i == 0)
                 break;
         }

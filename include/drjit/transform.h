@@ -19,19 +19,19 @@
 NAMESPACE_BEGIN(drjit)
 
 template <typename Matrix>
-Matrix translate(const Array<entry_t<Matrix>, array_size_v<Matrix> - 1> &v) {
+Matrix translate(const Array<entry_t<Matrix>, size_v<Matrix> - 1> &v) {
     Matrix trafo = identity<Matrix>();
-    trafo.entry(array_size_v<Matrix> - 1) = concat(v, Array<entry_t<Matrix>, 1>(1));
+    trafo.entry(size_v<Matrix> - 1) = concat(v, Array<entry_t<Matrix>, 1>(1));
     return trafo;
 }
 
 template <typename Matrix>
-Matrix scale(const Array<entry_t<Matrix>, array_size_v<Matrix> - 1> &v) {
+Matrix scale(const Array<entry_t<Matrix>, size_v<Matrix> - 1> &v) {
     return diag(concat(v, Array<entry_t<Matrix>, 1>(1)));
 }
 
 template <typename Matrix,
-          enable_if_t<is_matrix_v<Matrix> && array_size_v<Matrix> == 3> = 0>
+          enable_if_t<is_matrix_v<Matrix> && size_v<Matrix> == 3> = 0>
 Matrix rotate(const entry_t<Matrix> &angle) {
     entry_t<Matrix> z(0.f), o(1.f);
     auto [s, c] = sincos(angle);
@@ -39,7 +39,7 @@ Matrix rotate(const entry_t<Matrix> &angle) {
 }
 
 template <typename Matrix,
-          enable_if_t<is_matrix_v<Matrix> && array_size_v<Matrix> == 4> = 0>
+          enable_if_t<is_matrix_v<Matrix> && size_v<Matrix> == 4> = 0>
 Matrix rotate(const Array<entry_t<Matrix>, 3> &axis,
               const entry_t<Matrix> &angle) {
     using Value = entry_t<Matrix>;
@@ -71,7 +71,7 @@ Matrix perspective(const entry_t<Matrix> &fov,
     using Value = entry_t<Matrix>;
 
     static_assert(
-        array_size_v<Matrix> == 4,
+        size_v<Matrix> == 4,
         "Matrix::perspective(): implementation assumes 4x4 matrix output");
 
     Value recip = rcp(near_ - far_);
@@ -96,7 +96,7 @@ Matrix frustum(const entry_t<Matrix> &left,
     using Value = entry_t<Matrix>;
 
     static_assert(
-        is_matrix_v<Matrix> && array_size_v<Matrix> == 4,
+        is_matrix_v<Matrix> && size_v<Matrix> == 4,
         "Matrix::frustum(): template argument must be of type Matrix<T, 4>");
 
     Value rl = rcp(right - left),
@@ -125,7 +125,7 @@ Matrix ortho(const entry_t<Matrix> &left,
     using Value = entry_t<Matrix>;
 
     static_assert(
-        is_matrix_v<Matrix> && array_size_v<Matrix> == 4,
+        is_matrix_v<Matrix> && size_v<Matrix> == 4,
         "Matrix::ortho(): template argument must be of type Matrix<T, 4>");
 
     Value rl = rcp(right - left),
@@ -150,7 +150,7 @@ Matrix look_at(const Array<entry_t<Matrix>, 3> &origin,
                const Array<entry_t<Matrix>, 3> &target,
                const Array<entry_t<Matrix>, 3> &up) {
     static_assert(
-        is_matrix_v<Matrix> && array_size_v<Matrix> == 4,
+        is_matrix_v<Matrix> && size_v<Matrix> == 4,
         "Matrix::look_at(): template argument must be of type Matrix<T, 4>");
 
     using Value = entry_t<Matrix>;
@@ -194,7 +194,7 @@ Matrix4 transform_compose(const Matrix<entry_t<Matrix4>, 3> &s,
                           const Quaternion<entry_t<Matrix4>> &q,
                           const Array<entry_t<Matrix4>, 3> &t) {
     static_assert(
-        is_matrix_v<Matrix4> && array_size_v<Matrix4> == 4,
+        is_matrix_v<Matrix4> && size_v<Matrix4> == 4,
         "Matrix::transform_compose(): template argument must be of type Matrix<T, 4>");
 
     using Value = entry_t<Matrix4>;
@@ -208,7 +208,7 @@ Matrix4 transform_compose_inverse(const Matrix<entry_t<Matrix4>, 3> &s,
                                   const Quaternion<entry_t<Matrix4>> &q,
                                   const Array<entry_t<Matrix4>, 3> &t) {
     static_assert(
-        is_matrix_v<Matrix4> && array_size_v<Matrix4> == 4,
+        is_matrix_v<Matrix4> && size_v<Matrix4> == 4,
         "Matrix::transform_compose_inverse(): template argument must be of type Matrix<T, 4>");
 
     using Value = entry_t<Matrix4>;

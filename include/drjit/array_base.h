@@ -66,7 +66,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
     static constexpr bool IsDrJit = true;
 
     /// Specifies how deeply nested this array is
-    static constexpr size_t Depth = 1 + array_depth_v<Value>;
+    static constexpr size_t Depth = 1 + depth_v<Value>;
 
     /// Is this a mask array?
     static constexpr bool IsMask = IsMask_;

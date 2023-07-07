@@ -25,7 +25,6 @@
 #include <drjit-core/jit.h>
 
 NAMESPACE_BEGIN(drjit)
-
 NAMESPACE_BEGIN(detail)
 
 // -----------------------------------------------------------------------
@@ -155,7 +154,7 @@ NAMESPACE_END(detail)
 
 template <typename Type_>
 struct DiffArray : ArrayBaseT<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>> {
-    static_assert(std::is_scalar_v<Type_> || (is_dynamic_array_v<Type_> && array_depth_v<Type_> == 1),
+    static_assert(std::is_scalar_v<Type_> || (is_dynamic_array_v<Type_> && depth_v<Type_> == 1),
                   "DiffArray template parameter must either be a scalar (e.g. "
                   "float) or a dynamic array of depth 1.");
     using Base = ArrayBaseT<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>;
@@ -173,8 +172,8 @@ struct DiffArray : ArrayBaseT<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>
     using typename Base::Value;
     using typename Base::Scalar;
 
-    static constexpr size_t Size  = std::is_scalar_v<Type_> ? 1 : array_size_v<Type_>;
-    static constexpr size_t Depth = std::is_scalar_v<Type_> ? 1 : array_depth_v<Type_>;
+    static constexpr size_t Size  = std::is_scalar_v<Type_> ? 1 : size_v<Type_>;
+    static constexpr size_t Depth = std::is_scalar_v<Type_> ? 1 : depth_v<Type_>;
 
     static constexpr bool IsDiff = true;
     static constexpr bool IsJIT = is_jit_v<Type_>;

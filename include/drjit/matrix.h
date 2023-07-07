@@ -39,9 +39,9 @@ struct Matrix : StaticArrayImpl<Array<Value_, Size_>, Size_, false,
 
     Matrix() = default;
 
-    template <typename T, enable_if_t<is_matrix_v<T> || array_depth_v<T> == Base::Depth> = 0>
+    template <typename T, enable_if_t<is_matrix_v<T> || depth_v<T> == Base::Depth> = 0>
     DRJIT_INLINE Matrix(T&& m) {
-        constexpr size_t ArgSize = array_size_v<T>;
+        constexpr size_t ArgSize = size_v<T>;
         if constexpr (ArgSize >= Size) {
             /// Other matrix is equal or bigger -- retain the top left part
             for (size_t i = 0; i < Size; ++i)
@@ -59,7 +59,7 @@ struct Matrix : StaticArrayImpl<Array<Value_, Size_>, Size_, false,
         }
     }
 
-    template <typename T, enable_if_t<!is_matrix_v<T> && array_depth_v<T> != Base::Depth> = 0>
+    template <typename T, enable_if_t<!is_matrix_v<T> && depth_v<T> != Base::Depth> = 0>
     DRJIT_INLINE Matrix(T&& v) : Base(zeros<Value_>()) {
         for (size_t i = 0; i < Size; ++i)
             entry(i, i) = v;
@@ -118,7 +118,7 @@ Matrix<expr_t<T0, T1>, Size> operator*(const Matrix<T0, Size> &m0,
 template <typename T0, typename T1, size_t Size,
           enable_if_t<!is_matrix_v<T1>> = 0>
 auto operator*(const Matrix<T0, Size> &m0, const T1 &a1) {
-    if constexpr (is_vector_v<T1> && array_size_v<T1> == Size) {
+    if constexpr (is_vector_v<T1> && size_v<T1> == Size) {
         using Result = Array<expr_t<T0, value_t<T1>>, Size>;
 
         if constexpr (Size == 4 && is_packed_array_v<T1> &&
@@ -206,9 +206,9 @@ Matrix<value_t<Array>, Array::Size> diag(const Array &v) {
 template <typename Array, enable_if_array_t<Array> = 0>
 Array transpose(const Array &a) {
     using Row = value_t<Array>;
-    constexpr size_t Size = array_size_v<Array>;
+    constexpr size_t Size = size_v<Array>;
 
-    static_assert(array_depth_v<Array> >= 2 && Size == array_size_v<Row>,
+    static_assert(depth_v<Array> >= 2 && Size == size_v<Row>,
                   "Array must be a square matrix!");
 
     if constexpr (Row::IsPacked) {

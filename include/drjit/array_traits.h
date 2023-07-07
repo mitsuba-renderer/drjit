@@ -238,10 +238,10 @@ template <typename T> using scalar_t = typename detail::scalar<T>::type;
 template <typename T> using value_t = typename detail::value<T>::type;
 
 /// Determine the depth of a nested Dr.Jit array (scalars evaluate to zero)
-template <typename T> constexpr size_t array_depth_v = detail::array_depth<T>::value;
+template <typename T> constexpr size_t depth_v = detail::array_depth<T>::value;
 
 /// Determine the size of a nested Dr.Jit array (scalars evaluate to one)
-template <typename T> constexpr size_t array_size_v = detail::array_size<T>::value;
+template <typename T> constexpr size_t size_v = detail::array_size<T>::value;
 
 template <typename T> constexpr bool is_floating_point_v = std::is_floating_point_v<scalar_t<T>> && !is_mask_v<T>;
 template <typename T> constexpr bool is_integral_v = std::is_integral_v<scalar_t<T>> && !is_mask_v<T>;
@@ -534,8 +534,8 @@ namespace detail {
         using T1 = typename deepest<Args...>::type;
 
         // Give precedence to differentiable arrays
-        static constexpr size_t D0 = array_depth_v<T0> * 2 + (is_diff_v<T0> ? 1 : 0);
-        static constexpr size_t D1 = array_depth_v<T1> * 2 + (is_diff_v<T1> ? 1 : 0);
+        static constexpr size_t D0 = depth_v<T0> * 2 + (is_diff_v<T0> ? 1 : 0);
+        static constexpr size_t D1 = depth_v<T1> * 2 + (is_diff_v<T1> ? 1 : 0);
 
     public:
         using type = std::conditional_t<(D1 > D0 || D0 == 0), T1, T0>;

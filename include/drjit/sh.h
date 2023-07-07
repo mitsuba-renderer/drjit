@@ -39,7 +39,7 @@ void sh_eval(const Vector3f &d, size_t order, value_t<Vector3f> *out) {
 
 template <typename Vector3f>
 void sh_eval_0(const Vector3f &, value_t<Vector3f> *out) {
-    static_assert(array_size_v<Vector3f> == 3, "The parameter 'd' should be a 3D vector.");
+    static_assert(size_v<Vector3f> == 3, "The parameter 'd' should be a 3D vector.");
 
     using Value = value_t<Vector3f>;
     using Scalar = scalar_t<Value>;
@@ -49,7 +49,7 @@ void sh_eval_0(const Vector3f &, value_t<Vector3f> *out) {
 
 template <typename Vector3f>
 void sh_eval_1(const Vector3f &d, value_t<Vector3f> *out) {
-    static_assert(array_size_v<Vector3f> == 3, "The parameter 'd' should be a 3D vector.");
+    static_assert(size_v<Vector3f> == 3, "The parameter 'd' should be a 3D vector.");
 
     using Value = value_t<Vector3f>;
     using Scalar = scalar_t<Value>;
@@ -69,7 +69,7 @@ void sh_eval_1(const Vector3f &d, value_t<Vector3f> *out) {
 
 template <typename Vector3f>
 void sh_eval_2(const Vector3f &d, value_t<Vector3f> *out) {
-    static_assert(array_size_v<Vector3f> == 3, "The parameter 'd' should be a 3D vector.");
+    static_assert(size_v<Vector3f> == 3, "The parameter 'd' should be a 3D vector.");
 
     using Value = value_t<Vector3f>;
     using Scalar = scalar_t<Value>;
@@ -99,7 +99,7 @@ void sh_eval_2(const Vector3f &d, value_t<Vector3f> *out) {
 
 template <typename Vector3f>
 void sh_eval_3(const Vector3f &d, value_t<Vector3f> *out) {
-    static_assert(array_size_v<Vector3f> == 3, "The parameter 'd' should be a 3D vector.");
+    static_assert(size_v<Vector3f> == 3, "The parameter 'd' should be a 3D vector.");
 
     using Value = value_t<Vector3f>;
     using Scalar = scalar_t<Value>;
@@ -142,7 +142,7 @@ void sh_eval_3(const Vector3f &d, value_t<Vector3f> *out) {
 
 template <typename Vector3f>
 void sh_eval_4(const Vector3f &d, value_t<Vector3f> *out) {
-    static_assert(array_size_v<Vector3f> == 3, "The parameter 'd' should be a 3D vector.");
+    static_assert(size_v<Vector3f> == 3, "The parameter 'd' should be a 3D vector.");
 
     using Value = value_t<Vector3f>;
     using Scalar = scalar_t<Value>;
@@ -201,7 +201,7 @@ void sh_eval_4(const Vector3f &d, value_t<Vector3f> *out) {
 
 template <typename Vector3f>
 void sh_eval_5(const Vector3f &d, value_t<Vector3f> *out) {
-    static_assert(array_size_v<Vector3f> == 3, "The parameter 'd' should be a 3D vector.");
+    static_assert(size_v<Vector3f> == 3, "The parameter 'd' should be a 3D vector.");
 
     using Value = value_t<Vector3f>;
     using Scalar = scalar_t<Value>;
@@ -279,7 +279,7 @@ void sh_eval_5(const Vector3f &d, value_t<Vector3f> *out) {
 
 template <typename Vector3f>
 void sh_eval_6(const Vector3f &d, value_t<Vector3f> *out) {
-    static_assert(array_size_v<Vector3f> == 3, "The parameter 'd' should be a 3D vector.");
+    static_assert(size_v<Vector3f> == 3, "The parameter 'd' should be a 3D vector.");
 
     using Value = value_t<Vector3f>;
     using Scalar = scalar_t<Value>;
@@ -379,7 +379,7 @@ void sh_eval_6(const Vector3f &d, value_t<Vector3f> *out) {
 
 template <typename Vector3f>
 void sh_eval_7(const Vector3f &d, value_t<Vector3f> *out) {
-    static_assert(array_size_v<Vector3f> == 3, "The parameter 'd' should be a 3D vector.");
+    static_assert(size_v<Vector3f> == 3, "The parameter 'd' should be a 3D vector.");
 
     using Value = value_t<Vector3f>;
     using Scalar = scalar_t<Value>;
@@ -504,7 +504,7 @@ void sh_eval_7(const Vector3f &d, value_t<Vector3f> *out) {
 
 template <typename Vector3f>
 void sh_eval_8(const Vector3f &d, value_t<Vector3f> *out) {
-    static_assert(array_size_v<Vector3f> == 3, "The parameter 'd' should be a 3D vector.");
+    static_assert(size_v<Vector3f> == 3, "The parameter 'd' should be a 3D vector.");
 
     using Value = value_t<Vector3f>;
     using Scalar = scalar_t<Value>;
@@ -657,7 +657,7 @@ void sh_eval_8(const Vector3f &d, value_t<Vector3f> *out) {
 
 template <typename Vector3f>
 void sh_eval_9(const Vector3f &d, value_t<Vector3f> *out) {
-    static_assert(array_size_v<Vector3f> == 3, "The parameter 'd' should be a 3D vector.");
+    static_assert(size_v<Vector3f> == 3, "The parameter 'd' should be a 3D vector.");
 
     using Value = value_t<Vector3f>;
     using Scalar = scalar_t<Value>;
