@@ -26,13 +26,24 @@ void tp_repr_impl(PyObject *self,
                   size_t depth) {
     const ArraySupplement &s = supp(Py_TYPE(self));
 
+    size_t ndim = shape.size();
+
+    // On vectorized types, iterate over the last dimension first
+    size_t i = depth;
+    if ((JitBackend) s.backend != JitBackend::Invalid && !s.is_tensor) {
+        if (depth == 0)
+            i = ndim - 1;
+        else
+            i -= 1;
+    }
+
+    bool last_dim = depth == ndim - 1;
+
     // Reverse the dimensions of non-tensor shapes for convenience
-    size_t i = s.is_tensor ? depth : (shape.size() - 1 - depth),
-           size = shape.empty() ? 0 : shape[i];
+    size_t size = shape.empty() ? 0 : shape[i];
 
-    bool leaf = depth == shape.size() - 1;
-
-    if ((s.is_complex || s.is_quaternion) && leaf) {
+    if ((s.is_complex || s.is_quaternion) && last_dim) {
+        // Special handling for complex numbers and quaternions
         bool prev = false;
 
         for (size_t j = 0; j < size; ++j) {
@@ -59,20 +70,15 @@ void tp_repr_impl(PyObject *self,
         }
         if (!prev)
             buffer.put("0");
+    } else if (s.is_tensor && ndim == 0) {
+        // Special handling for 0D tensors
+        nb::object o = nb::steal(s.tensor_array(self))[0];
+
+        if (PyFloat_CheckExact(o.ptr()))
+            buffer.fmt("%g", nb::cast<double>(o));
+        else
+            buffer.put_dstr(nb::str(o).c_str());
     } else {
-        if (s.is_tensor && shape.empty()) {
-            nb::object o = nb::steal(s.tensor_array(self))[0];
-
-            if (PyFloat_CheckExact(o.ptr())) {
-                double d = nb::cast<double>(o);
-                buffer.fmt("%g", d);
-            } else {
-                buffer.put_dstr(nb::str(o).c_str());
-            }
-
-            return;
-        }
-
         buffer.put('[');
         for (size_t j = 0; j < size; ++j) {
             PyObject *jo = PyLong_FromSize_t(j);
@@ -83,7 +89,7 @@ void tp_repr_impl(PyObject *self,
             if (size >= repr_threshold && j * 4 == repr_threshold) {
                 buffer.fmt(".. %zu skipped ..", size - repr_threshold / 2);
                 j = size - repr_threshold / 4 - 1;
-            } else if (!leaf) {
+            } else if (!last_dim) {
                 tp_repr_impl(self, shape, index, depth + 1);
             } else {
                 nb::tuple index_tuple(index);
@@ -101,11 +107,11 @@ void tp_repr_impl(PyObject *self,
             }
 
             if (j + 1 < size) {
-                if (leaf) {
+                if (last_dim) {
                     buffer.put(", ");
                 } else {
                     buffer.put(",\n");
-                    buffer.put(' ', shape.size() - 1);
+                    buffer.put(' ', depth + 1);
                 }
             }
         }

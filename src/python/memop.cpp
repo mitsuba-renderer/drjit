@@ -318,8 +318,22 @@ nb::object ravel(nb::handle h, char order,
             if (order != 'C' && order != 'A')
                 throw std::runtime_error("drjit.ravel(): tensors do not "
                                          "support F-style ordering for now.");
+
+            const dr_vector<size_t> &shape = s.tensor_shape(inst_ptr(h));
             if (shape_out)
-                *shape_out = s.tensor_shape(inst_ptr(h));
+                *shape_out = shape;
+
+            if (strides_out && !shape.empty()) {
+                strides_out->resize(shape.size());
+
+                int64_t stride = 1;
+                for (size_t i = shape.size() - 1; ; --i) {
+                    strides_out->operator[](i) = (int64_t) stride;
+                    stride *= shape[i];
+                    if (i == 0)
+                        break;
+                }
+            }
 
             return nb::steal(s.tensor_array(h.ptr()));
         }
