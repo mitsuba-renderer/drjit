@@ -224,10 +224,8 @@ PyObject *mp_subscript(PyObject *self, PyObject *key) noexcept {
             Py_ssize_t size = NB_TUPLE_GET_SIZE(key);
 
             for (Py_ssize_t i = 0; i < size; ++i) {
-                nb::object o2 = nb::steal(
-                    PyObject_GetItem(o.ptr(), NB_TUPLE_GET_ITEM(key, i)));
-                raise_if(!o2.is_valid(), "Item retrieval failed.");
-                o = std::move(o2);
+                o = nb::steal(PyObject_GetItem(o.ptr(), NB_TUPLE_GET_ITEM(key, i)));
+                raise_if(!o.is_valid(), "Item retrieval failed.");
             }
 
             return o.release().ptr();
@@ -309,16 +307,14 @@ int mp_ass_subscript(PyObject *self, PyObject *key, PyObject *value) noexcept {
             Py_ssize_t size = NB_TUPLE_GET_SIZE(key);
 
             for (Py_ssize_t i = 0; i < size - 1; ++i) {
-                nb::object o2 = nb::steal(
-                    PyObject_GetItem(o.ptr(), NB_TUPLE_GET_ITEM(key, i)));
-                raise_if(!o2.is_valid(), "Item retrival failed.");
-                o = std::move(o2);
+                o = nb::steal(PyObject_GetItem(o.ptr(), NB_TUPLE_GET_ITEM(key, i)));
+                raise_if(!o.is_valid(), "Item retrival failed.");
             }
 
             if (size) {
-                raise_if(PyObject_SetItem(
-                             o.ptr(), NB_TUPLE_GET_ITEM(key, size - 1), value),
-                         "Item assigment failed.");
+                int rv = PyObject_SetItem(
+                    o.ptr(), NB_TUPLE_GET_ITEM(key, size - 1), value);
+                raise_if(rv != 0, "Item assigment failed.");
             }
 
             return 0;

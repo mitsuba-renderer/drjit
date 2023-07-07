@@ -114,6 +114,7 @@ struct ArraySupplement : ArrayMeta {
     using Len = size_t (*)(const ArrayBase *) noexcept;
     using Init = void (*)(size_t, ArrayBase *);
     using InitData = void (*)(size_t, const void *, ArrayBase *);
+    using InitIndex = void (*)(uint32_t, ArrayBase *);
     using InitConst = void (*)(size_t, PyObject *, ArrayBase *);
     using Cast = void (*)(const ArrayBase *, VarType, ArrayBase *);
     using Index = uint32_t (*)(const ArrayBase *) noexcept;
@@ -153,6 +154,9 @@ struct ArraySupplement : ArrayMeta {
 
             /// Initialize from a given memory region on the CPU
             InitData init_data;
+
+            /// Initialize from a JIT variable index
+            InitIndex init_index;
 
             /// Gather operation
             Gather gather;
@@ -359,9 +363,12 @@ template <typename T> NB_INLINE void bind_base(ArrayBinding &b) {
                     new (a) T(T::counter(size));
                 };
             }
-
-            b.data = (ArraySupplement::Data) + [](const T *a) { return a->data(); };
         }
+
+        b.data = (ArraySupplement::Data) + [](const T *a) { return a->data(); };
+    } else {
+        if constexpr (!is_dynamic_v<T>)
+            b.data = (ArraySupplement::Data) + [](const T *a) { return a->data(); };
     }
 }
 
@@ -511,6 +518,13 @@ template <typename T> void bind_select(ArrayBinding &b) {
     };
 }
 
+template <typename T> void bind_jit_ops(ArrayBinding &b) {
+    b.index = (ArraySupplement::Index)
+        +[](const T *v) { return v->index(); };
+    b.init_index = (ArraySupplement::InitIndex)
+        +[](uint32_t index, T *v) { new (v) T(T::borrow(index)); };
+}
+
 template <typename T> void bind_memop(ArrayBinding &b) {
     using UInt32 = uint32_array_t<T>;
     using Mask = mask_t<T>;
@@ -551,8 +565,7 @@ template <typename T> void bind_array(ArrayBinding &b) {
                 bind_bit_ops<T>(b);
 
             if constexpr (T::IsJIT)
-                b.index = (ArraySupplement::Index)
-                    +[](const T *v) { return v->index(); };
+                bind_jit_ops<T>(b);
 
             bind_select<T>(b);
             bind_richcmp<T>(b);
