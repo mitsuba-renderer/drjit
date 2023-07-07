@@ -1143,7 +1143,7 @@ public:
     template <typename T> T wrap(const T &pos) const {
         using Scalar = scalar_t<T>;
         static_assert(
-            array_size_v<T> == Dimension &&
+            size_v<T> == Dimension &&
             std::is_integral_v<Scalar> &&
             std::is_signed_v<Scalar>
         );
@@ -1229,7 +1229,7 @@ private:
         using InterpOffset = Array<Int32, ipow(Length, Dimension)>;
         using InterpPosI = Array<InterpOffset, Dimension>;
         static_assert(
-            array_size_v<T> == Dimension &&
+            size_v<T> == Dimension &&
             std::is_integral_v<Scalar> &&
             std::is_signed_v<Scalar>
         );
@@ -1271,7 +1271,7 @@ private:
         using Scalar = scalar_t<T>;
         using Index = uint32_array_t<value_t<T>>;
         static_assert(
-            array_size_v<T> == Dimension &&
+            size_v<T> == Dimension &&
             std::is_integral_v<Scalar> &&
             std::is_signed_v<Scalar>
         );

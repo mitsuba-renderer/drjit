@@ -87,8 +87,8 @@ struct MaskBase : StaticArrayImpl<Value_, Size_, true, Derived_> {
 
     /// Construct from sub-arrays
     template <typename T1, typename T2, typename T = MaskBase, enable_if_t<
-              array_depth_v<T1> == array_depth_v<T> && array_size_v<T1> == Base::Size1 &&
-              array_depth_v<T2> == array_depth_v<T> && array_size_v<T2> == Base::Size2 &&
+              depth_v<T1> == depth_v<T> && size_v<T1> == Base::Size1 &&
+              depth_v<T2> == depth_v<T> && size_v<T2> == Base::Size2 &&
               Base::Size2 != 0> = 0>
     MaskBase(const T1 &a1, const T2 &a2)
         : Base(a1, a2) { }

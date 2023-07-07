@@ -111,7 +111,7 @@ protected:
     /// Convenience wrapper around \ref add_input_index
     template <typename T> void add_input(const T &value) {
         if constexpr (is_diff_v<T>) {
-            if constexpr (array_depth_v<T> > 1) {
+            if constexpr (depth_v<T> > 1) {
                 for (size_t i = 0; i < value.size(); ++i)
                     add_input(value.entry(i));
             } else {
@@ -141,7 +141,7 @@ protected:
     /// Convenience wrapper around \ref add_output_index
     template <typename T> void add_output(const T &value) {
         if constexpr (is_diff_v<T>) {
-            if constexpr (array_depth_v<T> > 1) {
+            if constexpr (depth_v<T> > 1) {
                 for (size_t i = 0; i < value.size(); ++i)
                     add_output(value.entry(i));
             } else {
@@ -174,7 +174,7 @@ NAMESPACE_BEGIN(detail)
 template <typename T>
 void clear_diff_vars(T &value) {
     if constexpr (is_diff_v<T>) {
-        if constexpr (array_depth_v<T> > 1) {
+        if constexpr (depth_v<T> > 1) {
             for (size_t i = 0; i < value.size(); ++i)
                 clear_diff_vars(value.entry(i));
         } else {
@@ -190,7 +190,7 @@ void clear_diff_vars(T &value) {
 template <typename T>
 void diff_vars(const T &value, size_t &counter, uint32_t *out) {
     if constexpr (is_array_v<T>) {
-        if constexpr (array_depth_v<T> == 1) {
+        if constexpr (depth_v<T> == 1) {
             if constexpr (is_diff_v<T>) {
                 if (grad_enabled(value)) {
                     if (out)
@@ -212,7 +212,7 @@ void diff_vars(const T &value, size_t &counter, uint32_t *out) {
 // Clear the primal values associated with an array
 template <typename T> T clear_primal(const T &value) {
     if constexpr (is_diff_v<T>) {
-        if constexpr (array_depth_v<T> > 1) {
+        if constexpr (depth_v<T> > 1) {
             T result;
             if constexpr (T::Size == Dynamic)
                 result = empty<T>(value.size());

@@ -322,3 +322,69 @@ def test20_shape_other():
     assert dr.shape([[1, 2], 1]) is None
     assert dr.shape([1, [1, 2]]) is None
     assert dr.shape((dr.scalar.Array2f(), dr.scalar.Array3f())) is None
+
+@pytest.test_arrays('matrix, -jit, float32')
+def test21_stringify_matrix_scalar(t):
+    if dr.depth_v(t) > 2:
+        return
+    if dr.size_v(t) == 2:
+        m = t([[1,2],[3,4]])
+        ref = "[[1, 2],\n [3, 4]]"
+    elif dr.size_v(t) == 3:
+        m = t([[1,2,3],[4,5,6],[7,8,9]])
+        ref = "[[1, 2, 3],\n [4, 5, 6],\n [7, 8, 9]]"
+    elif dr.size_v(t) == 4:
+        m = t([[1,2,3,4],[5,6,7,8],[9,10,11,12],[13,14,15,16]])
+        ref = "[[1, 2, 3, 4],\n [5, 6, 7, 8],\n " \
+            "[9, 10, 11, 12],\n [13, 14, 15, 16]]"
+
+    assert str(m) == ref
+
+    try:
+        import numpy as np
+    except:
+        return
+
+    def simplify(s):
+        s = s.replace(",", '')
+        s = s.replace(' ', '')
+        s = s.replace('\n', '')
+        s = s.replace('.', '')
+        return s
+
+    assert simplify(str(np.array(m))) == simplify(ref)
+
+@pytest.test_arrays('matrix, jit, float32')
+def test21_stringify_matrix_vectorized(t):
+    if dr.depth_v(t) > 3:
+        return
+    if dr.size_v(t) == 2:
+        m = t([[1,2],[3,[4,-1]]])
+        ref = "[[[1, 2],\n  [3, 4]],\n [[1, 2],\n  [3, -1]]]"
+    elif dr.size_v(t) == 3:
+        m = t([[1,2,3],[4,5,6],[7,8,[9, -1]]])
+        ref = "[[[1, 2, 3],\n  [4, 5, 6],\n  [7, 8, 9]],\n" \
+            " [[1, 2, 3],\n  [4, 5, 6],\n  [7, 8, -1]]]"
+    elif dr.size_v(t) == 4:
+        m = t([[1,2,3,4],[5,6,7,8],[9,10,11,12],[13,14,15,[16, -1]]])
+        ref = "[[[1, 2, 3, 4],\n  [5, 6, 7, 8],\n  [9, 10, 11, 12],\n" \
+            "  [13, 14, 15, 16]],\n [[1, 2, 3, 4],\n  [5, 6, 7, 8],\n" \
+            "  [9, 10, 11, 12],\n  [13, 14, 15, -1]]]"
+
+    assert str(m) == ref
+
+    try:
+        import numpy as np
+        m = np.array(m)
+        m = np.moveaxis(m, -1, 0)
+    except:
+        return
+
+    def simplify(s):
+        s = s.replace(",", '')
+        s = s.replace(' ', '')
+        s = s.replace('\n', '')
+        s = s.replace('.', '')
+        return s
+
+    assert simplify(str(m)) == simplify(ref)

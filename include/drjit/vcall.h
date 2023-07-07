@@ -43,7 +43,7 @@ DRJIT_INLINE decltype(auto) copy_diff(const T& value) {
     if constexpr (is_jit_v<T> && is_diff_v<T> &&
                   std::is_floating_point_v<scalar_t<T>>) {
         T result;
-        if constexpr (array_depth_v<T> == 1) {
+        if constexpr (depth_v<T> == 1) {
             result = value.copy();
         } else {
             for (size_t i = 0; i < value.derived().size(); ++i)
@@ -103,7 +103,7 @@ inline void ad_copy() { }
 template <typename T, typename... Ts> void ad_copy(T &value, Ts&...values) {
     DRJIT_MARK_USED(value);
     if constexpr (is_diff_v<T>) {
-        if constexpr (array_depth_v<T> > 1) {
+        if constexpr (depth_v<T> > 1) {
             for (size_t i = 0; i < value.size(); ++i)
                 ad_copy(value.entry(i));
         } else {

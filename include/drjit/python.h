@@ -205,7 +205,7 @@ struct ArrayBinding : ArraySupplement {
 NAMESPACE_BEGIN(detail)
 
 template <typename T>
-constexpr uint8_t size_or_zero_v = std::is_scalar_v<T> ? 0 : (uint8_t) array_size_v<T>;
+constexpr uint8_t size_or_zero_v = std::is_scalar_v<T> ? 0 : (uint8_t) size_v<T>;
 
 NAMESPACE_END(detail)
 
@@ -237,7 +237,7 @@ template <typename T> NB_INLINE void bind_init(ArrayBinding &b, nanobind::handle
         b.type = (uint16_t) var_type_v<scalar_t<T>>;
 
     if constexpr (!T::IsTensor) {
-        b.ndim = (uint16_t) array_depth_v<T>;
+        b.ndim = (uint16_t) depth_v<T>;
         b.shape[0] = detail::size_or_zero_v<T>;
         b.shape[1] = detail::size_or_zero_v<Value>;
         b.shape[2] = detail::size_or_zero_v<value_t<Value>>;
@@ -272,7 +272,7 @@ template <typename T> NB_INLINE void bind_init(ArrayBinding &b, nanobind::handle
 
 template <typename T> NB_INLINE void bind_base(ArrayBinding &b) {
     namespace nb = nanobind;
-    using Value = std::conditional_t<is_mask_v<T> && array_depth_v<T> == 1,
+    using Value = std::conditional_t<is_mask_v<T> && depth_v<T> == 1,
                                      bool, value_t<T>>;
 
     b.item = [](PyObject *o, Py_ssize_t i_) noexcept -> PyObject * {

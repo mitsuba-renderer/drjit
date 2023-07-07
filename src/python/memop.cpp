@@ -517,14 +517,14 @@ nb::object unravel(const nb::type_object_t<ArrayBase> &dtype,
 
 void export_memop(nb::module_ &m) {
     m.def("gather", &gather, "dtype"_a, "source"_a, "index"_a,
-          "active"_a = true, nb::raw_doc(doc_gather));
-    m.def("scatter", &scatter, "target"_a, "value"_a, "index"_a,
-          "active"_a = true, nb::raw_doc(doc_scatter));
-    m.def("ravel",
+          "active"_a = true, nb::raw_doc(doc_gather))
+     .def("scatter", &scatter, "target"_a, "value"_a, "index"_a,
+          "active"_a = true, nb::raw_doc(doc_scatter))
+     .def("ravel",
           [](nb::handle array, char order) {
               return ravel(array, order);
-          }, "array"_a, "order"_a = 'A', nb::raw_doc(doc_ravel));
-    m.def("unravel",
+          }, "array"_a, "order"_a = 'A', nb::raw_doc(doc_ravel))
+     .def("unravel",
           [](const nb::type_object_t<ArrayBase> &dtype,
              nb::handle_t<ArrayBase> array,
              char order) { return unravel(dtype, array, order); },

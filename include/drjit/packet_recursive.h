@@ -58,7 +58,7 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
 
     /// Construct from two smaller arrays
     template <typename T1, typename T2,
-              enable_if_t<array_size_v<T1> == Size1 && array_size_v<T2> == Size2> = 0>
+              enable_if_t<size_v<T1> == Size1 && size_v<T2> == Size2> = 0>
     DRJIT_INLINE StaticArrayImpl(const T1 &a1, const T2 &a2)
         : a1(a1), a2(a2) { }
 

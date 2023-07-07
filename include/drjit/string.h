@@ -19,8 +19,8 @@ NAMESPACE_BEGIN(drjit)
 template <typename T> bool schedule(const T &value);
 
 namespace detail {
-    template <bool Abbrev, typename Array, typename... Indices>
-    void to_string(StringBuffer &buf, const Array &a, const size_t *shape, Indices... indices);
+    template <bool Abbrev, size_t Depth, typename Array, size_t... Is>
+    void to_string(StringBuffer &buf, const Array &a, const size_t *, size_t *);
     template <typename T> bool put_shape(const T &array, size_t *shape);
 
     template <typename T> using has_c_str     = decltype(std::declval<T>().c_str());
@@ -144,13 +144,15 @@ struct StringBuffer {
     /// Append an Dr.Jit array to the buffer
     template <typename T, enable_if_t<is_array_v<T>> = 0>
     StringBuffer &put(const T &value) {
-        size_t shape[std::decay_t<T>::Depth + 1 /* avoid zero-sized array */ ] { };
+        constexpr size_t Np = depth_v<T>,
+                         N = Np == 0 ? 1 : Np; /* avoid zero-sized array */
+        size_t shape[N] { }, temp[N];
 
         if (!detail::put_shape(value, shape)) {
             put("[ragged array]");
         } else {
             drjit::schedule(value.derived());
-            detail::to_string<true>(*this, value.derived(), shape);
+            detail::to_string<true, 0, typename T::Derived, 0>(*this, value.derived(), shape, temp);
         }
 
         return *this;

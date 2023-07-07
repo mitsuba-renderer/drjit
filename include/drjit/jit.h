@@ -687,10 +687,10 @@ DRJIT_DECLARE_EXTERN_TEMPLATE(LLVMArray<double>, LLVMArray<bool>, LLVMArray<uint
 template <typename Mask, typename... Ts>
 void printf_async(const Mask &mask, const char *fmt, const Ts &... ts) {
     constexpr bool Active = is_jit_v<Mask> || (is_jit_v<Ts> || ...);
-    static_assert(!Active || (is_jit_v<Mask> && array_depth_v<Mask> == 1 && is_mask_v<Mask>),
+    static_assert(!Active || (is_jit_v<Mask> && depth_v<Mask> == 1 && is_mask_v<Mask>),
                   "printf_async(): 'mask' argument must be CUDA/LLVM mask "
                   "array of depth 1");
-    static_assert(!Active || ((is_jit_v<Ts> && array_depth_v<Ts> == 1) && ...),
+    static_assert(!Active || ((is_jit_v<Ts> && depth_v<Ts> == 1) && ...),
                   "printf_async(): variadic arguments must be CUDA/LLVM arrays "
                   "of depth 1");
     if constexpr (Active) {
@@ -702,7 +702,7 @@ void printf_async(const Mask &mask, const char *fmt, const Ts &... ts) {
 
 template <typename Array>
 Array block_sum(const Array &array, size_t block_size) {
-    if constexpr (array_depth_v<Array> > 1) {
+    if constexpr (depth_v<Array> > 1) {
         Array result;
         if constexpr (Array::Size == Dynamic)
             result = empty<Array>(array.size());

@@ -34,10 +34,10 @@ struct Complex : StaticArrayImpl<Value_, 2, false, Complex<Value_>> {
 
     Complex() = default;
 
-    template <typename T, enable_if_t<is_complex_v<T> || array_depth_v<T> == Base::Depth> = 0>
+    template <typename T, enable_if_t<is_complex_v<T> || depth_v<T> == Base::Depth> = 0>
     DRJIT_INLINE Complex(T&& z) : Base(std::forward<T>(z)) { }
 
-    template <typename T, enable_if_t<!is_complex_v<T> && array_depth_v<T> != Base::Depth &&
+    template <typename T, enable_if_t<!is_complex_v<T> && depth_v<T> != Base::Depth &&
                                        (is_array_v<T> || std::is_scalar_v<std::decay_t<T>>)> = 0>
     DRJIT_INLINE Complex(T&& z) : Base(std::forward<T>(z), zeros<Value_>()) { }
 
@@ -264,24 +264,6 @@ Complex<T> acosh(const Complex<T> &z) {
 template <typename T>
 Complex<T> atanh(const Complex<T> &z) {
     return log((1.f + z) / (1.f - z)) * .5f;
-}
-
-template <typename T, typename Stream>
-DRJIT_NOINLINE Stream &operator<<(Stream &os, const Complex<T> &z) {
-    if constexpr (is_array_v<T>) {
-        os << "[";
-        size_t size = real(z).size();
-        for (size_t i = 0; i < size; ++i) {
-            os << Complex<typename T::Value>(real(z).entry(i), imag(z).entry(i));
-            if (i + 1 < size)
-                os << ",\n ";
-        }
-        os << "]";
-    } else {
-        os << real(z);
-        os << (imag(z) < 0 ? " - " : " + ") << abs(imag(z)) << "i";
-    }
-    return os;
 }
 
 NAMESPACE_END(drjit)

@@ -33,10 +33,10 @@ struct Quaternion : StaticArrayImpl<Value_, 4, false, Quaternion<Value_>> {
 
     Quaternion() = default;
 
-    template <typename T, enable_if_t<is_quaternion_v<T> || array_depth_v<T> == Base::Depth> = 0>
+    template <typename T, enable_if_t<is_quaternion_v<T> || depth_v<T> == Base::Depth> = 0>
     DRJIT_INLINE Quaternion(T&& q) : Base(std::forward<T>(q)) { }
 
-    template <typename T, enable_if_t<!is_quaternion_v<T> && array_depth_v<T> != Base::Depth &&
+    template <typename T, enable_if_t<!is_quaternion_v<T> && depth_v<T> != Base::Depth &&
                                        (is_array_v<T> || std::is_scalar_v<std::decay_t<T>>)> = 0>
     DRJIT_INLINE Quaternion(T&& v) : Base(zeros<Value_>(), zeros<Value_>(), zeros<Value_>(), std::forward<T>(v)) { }
 
@@ -49,13 +49,13 @@ struct Quaternion : StaticArrayImpl<Value_, 4, false, Quaternion<Value_>> {
     DRJIT_INLINE Quaternion(Value_ &&vi, Value_ &&vj, Value_ &&vk, Value_ &&vr)
         : Base(std::move(vi), std::move(vj), std::move(vk), std::move(vr)) { }
 
-    template <typename Im, typename Re, enable_if_t<array_size_v<Im> == 3> = 0>
+    template <typename Im, typename Re, enable_if_t<size_v<Im> == 3> = 0>
     DRJIT_INLINE Quaternion(const Im &im, const Re &re)
         : Base(im.x(), im.y(), im.z(), re) { }
 
     template <typename T1, typename T2, typename T = Quaternion, enable_if_t<
-              array_depth_v<T1> == array_depth_v<T> && array_size_v<T1> == 2 &&
-              array_depth_v<T2> == array_depth_v<T> && array_size_v<T2> == 2> = 0>
+              depth_v<T1> == depth_v<T> && size_v<T1> == 2 &&
+              depth_v<T2> == depth_v<T> && size_v<T2> == 2> = 0>
     Quaternion(const T1 &a1, const T2 &a2)
         : Base(a1, a2) { }
 };
@@ -297,27 +297,6 @@ template <typename Quat, typename Vector3, enable_if_quaternion_t<Quat> = 0>
 Quat rotate(const Vector3 &axis, const value_t<Quat> &angle) {
     auto [s, c] = sincos(angle * .5f);
     return Quat(axis * s, c);
-}
-
-template <typename T, typename Stream>
-DRJIT_NOINLINE Stream &operator<<(Stream &os, const Quaternion<T> &q) {
-    if constexpr (is_array_v<T>) {
-        os << "[";
-        size_t size = q.x().size();
-        for (size_t i = 0; i < size; ++i) {
-            os << Quaternion<typename T::Value>(q.x().entry(i), q.y().entry(i),
-                                                q.z().entry(i), q.w().entry(i));
-            if (i + 1 < size)
-                os << ",\n ";
-        }
-        os << "]";
-    } else {
-        os << q.w();
-        os << (q.x() < 0 ? " - " : " + ") << abs(q.x()) << "i";
-        os << (q.y() < 0 ? " - " : " + ") << abs(q.y()) << "j";
-        os << (q.z() < 0 ? " - " : " + ") << abs(q.z()) << "k";
-    }
-    return os;
 }
 
 NAMESPACE_END(drjit)
