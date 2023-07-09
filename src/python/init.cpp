@@ -9,13 +9,18 @@
     BSD-style license that can be found in the LICENSE.txt file.
 */
 
+#include <nanobind/ndarray.h>
+#include "../ext/nanobind/src/buffer.h"
 #include "meta.h"
 #include "base.h"
 #include "memop.h"
 #include "shape.h"
+#include "dlpack.h"
 
 /// Forward declaration
-static bool array_init_seq(PyObject *self, const ArraySupplement &s, PyObject *seq);
+static bool array_init_from_seq(PyObject *self, const ArraySupplement &s, PyObject *seq);
+static nb::object import_ndarray(const ArraySupplement &s, PyObject *arg,
+                                 dr_vector<size_t> *shape = nullptr);
 
 /// Constructor for all dr.ArrayBase subclasses (except tensors)
 int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
@@ -33,7 +38,7 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
             return 0;
         } else if (argc > 1) {
             // Initialize from argument list, e.g., ``Array3f(1, 2, 3)``
-            raise_if(!array_init_seq(self, s, args),
+            raise_if(!array_init_from_seq(self, s, args),
                      "Could not initialize array from argument list.");
             return 0;
         } else {
@@ -78,8 +83,9 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
                         return 0;
                     }
 
-                    // Disallow inefficient element-by-element imports of JIT arrays
-                    if (s.ndim == 1 && s_arg.ndim == 1 && s.shape[0] == DRJIT_DYNAMIC && s_arg.shape[0] == DRJIT_DYNAMIC) {
+                    // Disallow inefficient element-by-element imports of dynamic arrays
+                    if (s.ndim     == 1 && s.shape[0]     == DRJIT_DYNAMIC &&
+                        s_arg.ndim == 1 && s_arg.shape[0] == DRJIT_DYNAMIC) {
                         try_sequence_import = false;
                     } else {
                         // Always broadcast when the element type is one of the sub-elements
@@ -97,8 +103,22 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
                 }
             }
 
+            // Try to construct from an instance created by another
+            // array programming framework
+            if (nb::ndarray_check(arg)) {
+                // Import flattened array in C-style ordering
+                nb::object temp = import_ndarray(s, arg);
+
+                nb::object unraveled = unravel(
+                    nb::borrow<nb::type_object_t<dr::ArrayBase>>(self_tp),
+                    temp, 'C');
+
+                nb::inst_move(self, unraveled);
+                return 0;
+            }
+
             // Try to construct from a sequence/iterable type
-            if (try_sequence_import && array_init_seq(self, s, arg))
+            if (try_sequence_import && array_init_from_seq(self, s, arg))
                 return 0;
 
             // No sequence/iterable type, try broadcasting
@@ -181,7 +201,7 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
     }
 }
 
-static bool array_init_seq(PyObject *self, const ArraySupplement &s, PyObject *seq) {
+static bool array_init_from_seq(PyObject *self, const ArraySupplement &s, PyObject *seq) {
     ssizeargfunc sq_item = nullptr;
     lenfunc sq_length = nullptr;
 
@@ -211,7 +231,7 @@ static bool array_init_seq(PyObject *self, const ArraySupplement &s, PyObject *s
             nb::object seq2 = nb::steal(PySequence_List(seq));
             raise_if(!seq2.is_valid(),
                      "Could not convert iterable into a sequence.");
-            return array_init_seq(self, s, seq2.ptr());
+            return array_init_from_seq(self, s, seq2.ptr());
         }
 
         return false;
@@ -293,6 +313,138 @@ static bool array_init_seq(PyObject *self, const ArraySupplement &s, PyObject *s
     return true;
 }
 
+static nb::object import_ndarray(const ArraySupplement &s, PyObject *arg,
+                                 dr_vector<size_t> *shape_out) {
+    size_t shape[4];
+    nb::detail::ndarray_req req { };
+    req.ndim = s.ndim;
+    req.shape = shape;
+    req.dtype = dlpack_dtype((VarType) s.type);
+    req.req_order = 'C';
+    req.req_dtype = true;
+    req.req_shape = s.ndim != 0;
+    req.req_ro = true;
+
+    for (size_t i = 0; i < s.ndim; ++i) {
+        shape[i] = s.shape[i];
+        if (shape[i] == DRJIT_DYNAMIC)
+            shape[i] = nb::any;
+    }
+
+    nb::detail::ndarray_handle *th = nb::detail::ndarray_import(
+        arg, &req, (uint8_t) nb::detail::cast_flags::convert);
+
+    if (!th && s.ndim > 1 && s.shape[s.ndim - 1] == DRJIT_DYNAMIC) {
+        // Try conversion of scalar to vectorized representation
+        req.ndim--;
+        th = nb::detail::ndarray_import(
+            arg, &req, (uint8_t) nb::detail::cast_flags::convert);
+    }
+
+    if (!th) {
+        nb::str arg_name = nb::inst_name(arg);
+        nb::detail::Buffer buf(256);
+
+        buf.fmt("Unable to initialize from an array of type '%s'. The input "
+                "should have the following configuration for this to succeed: ",
+                arg_name.c_str());
+
+        if (s.ndim) {
+            buf.fmt("ndim=%u, shape=(", s.ndim);
+
+            for (size_t i = 0; i < s.ndim; ++i) {
+                if (s.shape[i] == DRJIT_DYNAMIC)
+                    buf.put('*');
+                else
+                    buf.put_uint32((uint32_t) s.shape[i]);
+                if (i + 1 < s.ndim)
+                    buf.put(", ");
+            }
+            buf.put("), ");
+        }
+
+        buf.put("dtype=");
+        nb::dlpack::dtype_code code = (nb::dlpack::dtype_code) req.dtype.code;
+        switch (code) {
+            case nb::dlpack::dtype_code::Bool: buf.put("bool"); break;
+            case nb::dlpack::dtype_code::Int: buf.put("int"); break;
+            case nb::dlpack::dtype_code::UInt: buf.put("uint"); break;
+            case nb::dlpack::dtype_code::Float: buf.put("float"); break;
+            case nb::dlpack::dtype_code::Bfloat: buf.put("bfloat"); break;
+            case nb::dlpack::dtype_code::Complex: buf.put("complex"); break;
+        }
+
+        if (code != nb::dlpack::dtype_code::Bool)
+            buf.put_uint32(req.dtype.bits);
+
+        buf.put(", order='C'.");
+
+        throw nb::type_error(buf.get());
+    }
+
+    nb::ndarray<> ndarr(th);
+    size_t size = 1, ndim = ndarr.ndim();
+    if (shape_out)
+        shape_out->resize(ndim);
+    for (size_t i = 0; i < ndim; ++i) {
+        size_t cur_size = ndarr.shape(i);
+        size *= cur_size;
+        if (shape_out)
+            shape_out->operator[](i) = cur_size;
+    }
+
+    ArrayMeta temp_meta { };
+    temp_meta.backend = s.backend;
+    temp_meta.is_diff = s.is_diff;
+    temp_meta.type = s.type;
+    temp_meta.ndim = 1;
+    temp_meta.shape[0] = DRJIT_DYNAMIC;
+    nb::handle temp_t = meta_get_type(temp_meta);
+    nb::object temp = nb::inst_alloc(temp_t);
+    JitBackend backend = (JitBackend) s.backend;
+    VarType vt = (VarType) s.type;
+
+    if (backend != JitBackend::Invalid) {
+        int32_t device_type = backend == JitBackend::CUDA
+                                  ? nb::device::cuda::value
+                                  : nb::device::cpu::value;
+
+        uint32_t index;
+
+        if (device_type == ndarr.device_type()) {
+            index = jit_var_mem_map(backend, vt, ndarr.data(), size, 0);
+
+            if (index) {
+                nb::detail::ndarray_inc_ref(th);
+                jit_var_set_callback(index, [](uint32_t /* i */, int free, void *o) {
+                    if (free)
+                        nb::detail::ndarray_dec_ref((nb::detail::ndarray_handle *) o);
+                }, th);
+            }
+        } else {
+            AllocType at;
+            switch (ndarr.device_type()) {
+                case nb::device::cuda::value: at = AllocType::Device; break;
+                case nb::device::cpu::value:  at = AllocType::Host; break;
+                default: nb::detail::raise("Unsupported source device!");
+            }
+
+            index = jit_var_mem_copy(backend, at, vt, ndarr.data(), size);
+        }
+
+        supp(temp_t).init_index(index, inst_ptr(temp));
+        jit_var_dec_ref(index);
+    } else {
+        if (ndarr.device_type() != nb::device::cpu::value)
+            nb::detail::raise("Unsupported source device!");
+
+        supp(temp_t).init_data(size, ndarr.data(), inst_ptr(temp));
+    }
+
+    nb::inst_mark_ready(temp);
+    return temp;
+}
+
 nb::object full_alt(nb::type_object dtype, nb::handle value, size_t size);
 nb::object empty_alt(nb::type_object dtype, size_t size);
 
@@ -330,9 +482,16 @@ int tp_init_tensor(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
 
         nb::object args_2;
         if (!shape) {
-            // Infer the shape of an arbitrary data structure & flatten it
-            VarType vt = (VarType) s.type;
-            nb::object flat = ravel(array, 'C', &shape_vec, nullptr, &vt);
+            nb::object flat;
+            if (nb::ndarray_check(array)) {
+                // Try to construct from an instance created by another
+                // array programming framework
+                flat = import_ndarray(s, array, &shape_vec);
+            } else {
+                // Infer the shape of an arbitrary data structure & flatten it
+                VarType vt = (VarType) s.type;
+                flat = ravel(array, 'C', &shape_vec, nullptr, &vt);
+            }
             args_2 = nb::make_tuple(flat);
         } else {
             // Shape is given, require flat input

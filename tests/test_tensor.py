@@ -340,3 +340,33 @@ def test11_masked_assignment(t):
     v1 = t([[1, 2], [4, 5]])
     v1[v1>4] = 10
     assert str(v1) == "[[1, 2],\n [4, 10]]"
+
+@pytest.test_arrays('matrix, shape=(3, 3), float32')
+def test12_convert_tensor_scalar(t):
+    mod = sys.modules[t.__module__]
+    m = t([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
+
+    assert str(m) == "[[1, 2, 3],\n [4, 5, 6],\n [7, 8, 9]]"
+
+    tx = mod.TensorXf(m)
+    assert str(tx) == "[[1, 2, 3],\n [4, 5, 6],\n [7, 8, 9]]"
+
+@pytest.test_arrays('matrix, shape=(3, 3, *), float32')
+def test13_convert_tensor_vectorized(t, drjit_verbose, capsys):
+    mod = sys.modules[t.__module__]
+    m = t([[[1,8], 2, 3], [4, 5, 6], [7, 8, 9]])
+
+    assert str(m) == "[[[1, 2, 3],\n  [4, 5, 6],\n" \
+        "  [7, 8, 9]],\n [[8, 2, 3],\n" \
+        "  [4, 5, 6],\n  [7, 8, 9]]]"
+
+    tx = mod.TensorXf(m)
+    assert str(tx) == \
+        "[[[1, 8],\n  [2, 2],\n" \
+        "  [3, 3]],\n [[4, 4],\n" \
+        "  [5, 5],\n  [6, 6]],\n" \
+        " [[7, 7],\n  [8, 8],\n" \
+        "  [9, 9]]]"
+
+    transcript = capsys.readouterr().out
+    assert transcript.count("jit_var_scatter") == 9

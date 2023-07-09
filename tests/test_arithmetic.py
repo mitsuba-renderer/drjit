@@ -44,10 +44,10 @@ def test02_allclose():
         assert not dr.allclose([1,2,3], [1,4])
     assert 'incompatible sizes' in str(ei.value)
 
-    # np = pytest.importorskip("numpy")
-    # assert dr.allclose(np.array([1, 2, 3]), [1, 2, 3])
-    # assert dr.allclose(np.array([1, 2, 3]), dr.scalar.Array3f(1, 2, 3))
-    # assert dr.allclose(np.array([1, float('nan'), 3.0]), [1, float('nan'), 3], equal_nan=True)
+    np = pytest.importorskip("numpy")
+    assert dr.allclose(np.array([1, 2, 3]), [1, 2, 3])
+    assert dr.allclose(np.array([1, 2, 3]), dr.scalar.Array3f(1, 2, 3))
+    assert dr.allclose(np.array([1, float('nan'), 3.0]), [1, float('nan'), 3], equal_nan=True)
 
 @pytest.test_arrays('-bool,shape=(3)', '-bool,shape=(3, *)', '-bool,shape=(*, *)')
 def test03_binop_simple(t):

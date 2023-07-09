@@ -13,3 +13,4 @@
 #include "common.h"
 
 extern void export_dlpack(nb::module_ &);
+extern nb::dlpack::dtype dlpack_dtype(VarType vt);
