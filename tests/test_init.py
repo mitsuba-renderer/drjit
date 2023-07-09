@@ -355,7 +355,7 @@ def test21_stringify_matrix_scalar(t):
     assert simplify(str(np.array(m))) == simplify(ref)
 
 @pytest.test_arrays('matrix, jit, float32')
-def test21_stringify_matrix_vectorized(t):
+def test22_stringify_matrix_vectorized(t):
     if dr.depth_v(t) > 3:
         return
     if dr.size_v(t) == 2:
@@ -388,3 +388,76 @@ def test21_stringify_matrix_vectorized(t):
         return s
 
     assert simplify(str(m)) == simplify(ref)
+
+@pytest.test_arrays('float32, shape=(3, *)')
+def test23_init_from_ndarray_various_cases(t):
+    np = pytest.importorskip("numpy")
+
+    v = t(np.array([1, 2, 3], dtype=np.float32))
+    assert dr.all(v == t(1, 2, 3))
+
+    v = t(np.array([[1], [2], [3]], dtype=np.float32))
+    assert dr.all(v == t(1, 2, 3))
+
+    a = np.array([[1, 2], [3, 4], [5, 6]], dtype=np.float32, order='F')
+    v = t(a)
+    assert dr.all_nested(v == t([1, 2], [3, 4], [5, 6]))
+    a[0] = 5 # Gather made a copy, comparison still holds
+    assert dr.all_nested(v == t([1, 2], [3, 4], [5, 6]))
+
+    # Implicit conversion
+    v = t(np.array([[1, 2], [3, 4], [5, 6]], dtype=np.int32, order='C'))
+    assert dr.all_nested(v == t([1, 2], [3, 4], [5, 6]))
+
+    a = np.array([1, 2, 3], dtype=np.float32)
+    tv = dr.value_t(t)
+    v = tv(a)
+    assert dr.all(v == [1, 2, 3])
+    a[1] = 5 # Should affect 'v' as well
+    assert dr.any(v != [1, 2, 3])
+    assert dr.all(v == [1, 5, 3])
+
+    # Once more, with an implicit conversion
+    a = np.array([1, 2, 3], dtype=np.float64)
+    tv = dr.value_t(t)
+    v = tv(a)
+    assert dr.all(v == [1, 2, 3])
+    a[1] = 5 # This time, 'v' should be unaffected
+    assert dr.all(v == [1, 2, 3])
+
+    msg = r"Unable to initialize from an array of type 'ndarray'. The input " \
+        r"should have the following configuration for this to succeed: " \
+        r"ndim=2, shape=\(3, \*\), dtype=float32, order='C'."
+
+    with pytest.raises(TypeError, match=msg):
+        v = t(np.array([[1, 2], [3, 4], [5, 6], [7, 8]]))
+
+    with pytest.raises(TypeError, match=msg):
+        v = t(np.array(1))
+
+@pytest.test_arrays('tensor, float32')
+def test23_init_tensor_from_ndarray(t):
+    np = pytest.importorskip("numpy")
+
+    v = t(np.array(1, dtype=np.float32))
+    assert v.shape == () and v.array[0] == 1
+
+    v = t(np.array([1], dtype=np.float32))
+    assert v.shape == (1,) and v.array[0] == 1
+
+    a = np.array([1, 2], dtype=np.float32)
+    v = t(a)
+    assert v.shape == (2,) and dr.all(v.array == (1, 2))
+    if dr.is_jit_v(t):
+        a[0] = 5
+        assert dr.any(v.array != (1, 2)) and dr.all(v.array == (5, 2))
+
+    a = np.array([1, 2], dtype=np.int32)
+    v = t(a)
+    assert v.shape == (2,) and dr.all(v.array == (1, 2))
+    if dr.is_jit_v(t):
+        a[0] = 5
+        assert dr.any(v.array == (1, 2))
+
+    a = np.array([[1, 2, 3], [4, 5, 6]], dtype=np.float32)
+    assert dr.all_nested(t(a) == t([[1, 2, 3], [4, 5, 6]]))

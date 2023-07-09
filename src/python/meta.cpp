@@ -198,7 +198,7 @@ ArrayMeta meta_get(nb::handle h) noexcept {
 
             m.is_sequence = true;
         }
-    } else if (nb::ndarray_check(tp)) {
+    } else if (nb::ndarray_check(h)) {
         try {
             using nb::dlpack::dtype;
             using nb::dlpack::dtype_code;
