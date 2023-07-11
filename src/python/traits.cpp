@@ -89,7 +89,7 @@ void export_traits(nb::module_ &m) {
         if (is_drjit_type(tp)) {
             JitBackend backend =
                 (JitBackend) supp(tp).backend;
-            return backend != JitBackend::Invalid;
+            return backend != JitBackend::None;
         }
         return false;
     }, nb::raw_doc(doc_is_jit_v));

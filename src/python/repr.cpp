@@ -30,7 +30,7 @@ void tp_repr_impl(PyObject *self,
 
     // On vectorized types, iterate over the last dimension first
     size_t i = depth;
-    if ((JitBackend) s.backend != JitBackend::Invalid && !s.is_tensor) {
+    if ((JitBackend) s.backend != JitBackend::None && !s.is_tensor) {
         if (depth == 0)
             i = ndim - 1;
         else

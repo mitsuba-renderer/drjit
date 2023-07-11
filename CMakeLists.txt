@@ -97,6 +97,12 @@ if (MSVC)
    add_compile_options(/wd4251) # 'warning C4251: X needs to have dll-interface to be used by clients of struct Y
 endif()
 
+if (DRJIT_ENABLE_JIT)
+  add_subdirectory(src/extra)
+  set_target_properties(drjit-extra PROPERTIES ${DRJIT_OUTPUT_DIRECTORY})
+  install(TARGETS drjit-extra EXPORT drjitTargets)
+endif()
+
 if (DRJIT_ENABLE_AUTODIFF)
   message(STATUS "Dr.Jit: building the autodiff backend.")
   add_subdirectory(src/autodiff)

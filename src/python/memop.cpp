@@ -307,7 +307,7 @@ nb::object ravel(nb::handle h, char order,
                  const VarType *vt_in) {
 
     nb::handle tp = h.type();
-    JitBackend backend = JitBackend::Invalid;
+    JitBackend backend = JitBackend::None;
     VarType vt = VarType::Float32;
     bool is_dynamic = false;
 

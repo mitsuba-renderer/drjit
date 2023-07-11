@@ -1259,38 +1259,38 @@ decltype(auto) slice(const T &value, size_t index = -1) {
 //! @{ \name Forward declarations of math functions
 // -----------------------------------------------------------------------
 
-template <typename T> T sin(const T &a);
-template <typename T> T cos(const T &a);
-template <typename T> std::pair<T, T> sincos(const T &a);
-template <typename T> T csc(const T &a);
-template <typename T> T sec(const T &a);
-template <typename T> T tan(const T &a);
-template <typename T> T cot(const T &a);
-template <typename T> T asin(const T &a);
-template <typename T> T acos(const T &a);
-template <typename T> T atan(const T &a);
-template <typename T1, typename T2> expr_t<T1, T2> atan2(const T1 &a, const T2 &b);
+template <typename T, bool = true> T sin(const T &a);
+template <typename T, bool = true> T cos(const T &a);
+template <typename T, bool = true> std::pair<T, T> sincos(const T &a);
+template <typename T, bool = true> T csc(const T &a);
+template <typename T, bool = true> T sec(const T &a);
+template <typename T, bool = true> T tan(const T &a);
+template <typename T, bool = true> T cot(const T &a);
+template <typename T, bool = true> T asin(const T &a);
+template <typename T, bool = true> T acos(const T &a);
+template <typename T, bool = true> T atan(const T &a);
+template <typename T1, typename T2, bool = true> expr_t<T1, T2> atan2(const T1 &a, const T2 &b);
 
-template <typename T> std::pair<T, T> frexp(const T &a);
-template <typename T1, typename T2> expr_t<T1, T2> ldexp(const T1 &a, const T2 &b);
-template <typename T> T exp(const T &a);
-template <typename T> T exp2(const T &a);
-template <typename T> T log(const T &a);
-template <typename T> T log2(const T &a);
+template <typename T, bool = true> std::pair<T, T> frexp(const T &a);
+template <typename T1, typename T2, bool = true> expr_t<T1, T2> ldexp(const T1 &a, const T2 &b);
+template <typename T, bool = true> T exp(const T &a);
+template <typename T, bool = true> T exp2(const T &a);
+template <typename T, bool = true> T log(const T &a);
+template <typename T, bool = true> T log2(const T &a);
 template <typename T1, typename T2> expr_t<T1, T2> pow(const T1 &a, const T2 &b);
 
-template <typename T> T sinh(const T &a);
-template <typename T> T cosh(const T &a);
-template <typename T> std::pair<T, T> sincosh(const T &a);
+template <typename T, bool = true> T sinh(const T &a);
+template <typename T, bool = true> T cosh(const T &a);
+template <typename T, bool = true> std::pair<T, T> sincosh(const T &a);
 
-template <typename T> T tanh(const T &a);
-template <typename T> T asinh(const T &a);
-template <typename T> T acosh(const T &a);
-template <typename T> T atanh(const T &a);
+template <typename T, bool = true> T tanh(const T &a);
+template <typename T, bool = true> T asinh(const T &a);
+template <typename T, bool = true> T acosh(const T &a);
+template <typename T, bool = true> T atanh(const T &a);
 
-template <typename T> T cbrt(const T &a);
-template <typename T> T erf(const T &a);
-template <typename T> T erfinv(const T &a);
+template <typename T, bool = true> T cbrt(const T &a);
+template <typename T, bool = true> T erf(const T &a);
+template <typename T, bool = true> T erfinv(const T &a);
 
 //! @}
 // -----------------------------------------------------------------------

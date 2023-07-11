@@ -36,7 +36,7 @@ configure_file(
   ${CMAKE_CURRENT_SOURCE_DIR}/../../drjit/config.py
 )
 
-target_link_libraries(drjit-python PRIVATE drjit drjit-core)
+target_link_libraries(drjit-python PRIVATE drjit drjit-core drjit-extra)
 
 if (DRJIT_ENABLE_JIT)
   target_compile_definitions(drjit-python PRIVATE -DDRJIT_ENABLE_LLVM)

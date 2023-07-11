@@ -71,7 +71,7 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
 
                     // Potentially load from the CPU
                     m_temp = s;
-                    m_temp.backend = (uint64_t) JitBackend::Invalid;
+                    m_temp.backend = (uint64_t) JitBackend::None;
                     m_temp.is_vector = true;
 
                     if (m_temp == m_arg && s.init_data && s_arg.data) {
@@ -404,7 +404,7 @@ static nb::object import_ndarray(const ArraySupplement &s, PyObject *arg,
     JitBackend backend = (JitBackend) s.backend;
     VarType vt = (VarType) s.type;
 
-    if (backend != JitBackend::Invalid) {
+    if (backend != JitBackend::None) {
         int32_t device_type = backend == JitBackend::CUDA
                                   ? nb::device::cuda::value
                                   : nb::device::cpu::value;
