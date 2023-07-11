@@ -14,6 +14,7 @@
 #define DRJIT_H
 
 #include <drjit/array.h>
+#include <drjit/extra.h>
 #include <drjit-core/traits.h>
 
 NAMESPACE_BEGIN(drjit)
@@ -85,14 +86,23 @@ struct JitArray : ArrayBaseT<Value_, is_mask_v<Value_>, Derived_> {
 
     template <typename T, enable_if_scalar_t<T> = 0>
     JitArray(T value) {
-        ActualValue av;
-
-        if constexpr (!IsClass)
-            av = (ActualValue) value;
-        else
-            av = jit_registry_get_id(Backend, value);
-
-        m_index = jit_var_literal(Backend, Type, &av, 1, 0, IsClass);
+        if constexpr (IsClass) {
+            ActualValue av = jit_registry_get_id(Backend, value);
+            m_index = jit_var_literal(Backend, Type, &av, 1, 0, IsClass);
+        } else {
+            switch (Type) {
+                case VarType::Float32: m_index = jit_var_f32(Backend, (float) value); break;
+                case VarType::Float64: m_index = jit_var_f64(Backend, (float) value); break;
+                case VarType::Int32:   m_index = jit_var_i32(Backend, (int32_t) value); break;
+                case VarType::UInt32:  m_index = jit_var_u32(Backend, (uint32_t) value); break;
+                case VarType::Int64:   m_index = jit_var_i64(Backend, (int64_t) value); break;
+                case VarType::UInt64:  m_index = jit_var_u64(Backend, (uint64_t) value); break;
+                case VarType::Bool:    m_index = jit_var_bool(Backend, (bool) value); break;
+                default:
+                    m_index = jit_var_literal(Backend, Type, &value, 1, 0, 0);
+                    break;
+            }
+        }
     }
 
     template <typename... Ts, enable_if_t<(sizeof...(Ts) > 1 &&
@@ -217,26 +227,73 @@ struct JitArray : ArrayBaseT<Value_, is_mask_v<Value_>, Derived_> {
     Derived rcp_() const { return steal(jit_var_rcp(m_index)); }
     Derived rsqrt_() const { return steal(jit_var_rsqrt(m_index)); }
 
-    template <typename T = Value, enable_if_t<std::is_same_v<T, float> && IsCUDA> = 0>
-    Derived exp2_() const { return steal(jit_var_exp2(m_index)); }
+    #define WRAP_OP(name)                                                          \
+        Derived name##_() const {                                                  \
+            return steal(std::is_same_v<Value, float>                              \
+                             ? jit_var_##name##_f32(m_index)                       \
+                             : jit_var_##name##_f64(m_index));                     \
+        }
 
-    template <typename T = Value, enable_if_t<std::is_same_v<T, float> && IsCUDA> = 0>
-    Derived exp_() const { return exp2(InvLogTwo<T> * derived()); }
+    WRAP_OP(exp2)
+    WRAP_OP(exp)
+    WRAP_OP(log2)
+    WRAP_OP(log)
+    WRAP_OP(sin)
+    WRAP_OP(cos)
+    WRAP_OP(tan)
+    WRAP_OP(cot)
+    WRAP_OP(asin)
+    WRAP_OP(acos)
+    WRAP_OP(sinh)
+    WRAP_OP(cosh)
+    WRAP_OP(tanh)
+    WRAP_OP(asinh)
+    WRAP_OP(acosh)
+    WRAP_OP(atanh)
+    WRAP_OP(cbrt)
+    WRAP_OP(erf)
 
-    template <typename T = Value, enable_if_t<std::is_same_v<T, float> && IsCUDA> = 0>
-    Derived log2_() const { return steal(jit_var_log2(m_index)); }
+    Derived atan2_(const Derived &x) const {
+        return steal(std::is_same_v<Value, float>
+                         ? jit_var_atan2_f32(m_index, x.index())
+                         : jit_var_atan2_f64(m_index, x.index()));
+    }
 
-    template <typename T = Value, enable_if_t<std::is_same_v<T, float> && IsCUDA> = 0>
-    Derived log_() const { return log2(derived()) * LogTwo<T>; }
+    Derived ldexp_(const Derived &x) const {
+        return steal(std::is_same_v<Value, float>
+                         ? jit_var_ldexp_f32(m_index, x.index())
+                         : jit_var_ldexp_f64(m_index, x.index()));
+    }
 
-    template <typename T = Value, enable_if_t<std::is_same_v<T, float> && IsCUDA> = 0>
-    Derived sin_() const { return steal(jit_var_sin(m_index)); }
+    std::pair<Derived, Derived> frexp_() const {
+        if constexpr (std::is_same_v<Value, float>) {
+            auto [i0, i1] = jit_var_frexp_f32(m_index);
+            return { steal(i0), steal(i1) };
+        } else {
+            auto [i0, i1] = jit_var_frexp_f64(m_index);
+            return { steal(i0), steal(i1) };
+        }
+    }
 
-    template <typename T = Value, enable_if_t<std::is_same_v<T, float> && IsCUDA> = 0>
-    Derived cos_() const { return steal(jit_var_cos(m_index)); }
+    std::pair<Derived, Derived> sincos_() const {
+        if constexpr (std::is_same_v<Value, float>) {
+            auto [i0, i1] = jit_var_sincos_f32(m_index);
+            return { steal(i0), steal(i1) };
+        } else {
+            auto [i0, i1] = jit_var_sincos_f64(m_index);
+            return { steal(i0), steal(i1) };
+        }
+    }
 
-    template <typename T = Value, enable_if_t<std::is_same_v<T, float> && IsCUDA> = 0>
-    std::pair<Derived, Derived> sincos_() const { return { sin_(), cos_() }; }
+    std::pair<Derived, Derived> sincosh_() const {
+        if constexpr (std::is_same_v<Value, float>) {
+            auto [i0, i1] = jit_var_sincosh_f32(m_index);
+            return { steal(i0), steal(i1) };
+        } else {
+            auto [i0, i1] = jit_var_sincosh_f64(m_index);
+            return { steal(i0), steal(i1) };
+        }
+    }
 
     Derived minimum_(const Derived &v) const {
         return steal(jit_var_min(m_index, v.index()));
@@ -649,6 +706,12 @@ struct JitArray : ArrayBaseT<Value_, is_mask_v<Value_>, Derived_> {
         jit_var_inc_ref(index);
         result.m_index = index;
         return result;
+    }
+
+    uint32_t release() {
+        uint32_t tmp = m_index;
+        m_index = 0;
+        return tmp;
     }
 
     void init_(size_t size) {

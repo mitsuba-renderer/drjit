@@ -46,7 +46,7 @@ std::string meta_str(ArrayMeta m) {
         result += type_name_lowercase[m.type];
         result += ",\n";
 
-        if (m.backend == (uint16_t) JitBackend::Invalid)
+        if (m.backend == (uint16_t) JitBackend::None)
             ;
         else if (m.backend == (uint16_t) JitBackend::CUDA)
             result += "  backend=cuda,\n";
@@ -55,7 +55,7 @@ std::string meta_str(ArrayMeta m) {
         else
             result += "  backend=invalid,\n";
 
-        if (m.backend != (uint16_t) JitBackend::Invalid)
+        if (m.backend != (uint16_t) JitBackend::None)
             result += "  is_jit=1,\n";
         if (m.is_vector)
             result += "  is_vector=1,\n";
@@ -375,7 +375,7 @@ const char *meta_get_name(ArrayMeta meta) noexcept {
     if (!meta.is_tensor) {
         int ndim = meta.ndim;
 
-        if (meta.backend != (uint16_t) JitBackend::Invalid)
+        if (meta.backend != (uint16_t) JitBackend::None)
             ndim--;
 
         const char *suffix = nullptr;

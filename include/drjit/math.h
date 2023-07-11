@@ -304,8 +304,8 @@ namespace detail {
     DRJIT_DETECTOR(erf)
 }
 
-template <typename Value> Value sin(const Value &x) {
-    if constexpr (is_detected_v<detail::has_sin, Value>) {
+template <typename Value, bool Native> Value sin(const Value &x) {
+    if constexpr (is_detected_v<detail::has_sin, Value> && Native) {
         return x.sin_();
     } else {
         Value result;
@@ -314,8 +314,8 @@ template <typename Value> Value sin(const Value &x) {
     }
 }
 
-template <typename Value> Value cos(const Value &x) {
-    if constexpr (is_detected_v<detail::has_cos, Value>) {
+template <typename Value, bool Native> Value cos(const Value &x) {
+    if constexpr (is_detected_v<detail::has_cos, Value> && Native) {
         return x.cos_();
     } else {
         Value result;
@@ -324,8 +324,8 @@ template <typename Value> Value cos(const Value &x) {
     }
 }
 
-template <typename Value> std::pair<Value, Value> sincos(const Value &x) {
-    if constexpr (is_detected_v<detail::has_sincos, Value>) {
+template <typename Value, bool Native> std::pair<Value, Value> sincos(const Value &x) {
+    if constexpr (is_detected_v<detail::has_sincos, Value> && Native) {
         return x.sincos_();
     } else {
         Value result_s, result_c;
@@ -334,36 +334,36 @@ template <typename Value> std::pair<Value, Value> sincos(const Value &x) {
     }
 }
 
-template <typename Value> Value csc(const Value &x) {
-    if constexpr (is_detected_v<detail::has_csc, Value>)
+template <typename Value, bool Native> Value csc(const Value &x) {
+    if constexpr (is_detected_v<detail::has_csc, Value> && Native)
         return x.csc_();
     else
         return rcp(sin(x));
 }
 
-template <typename Value> Value sec(const Value &x) {
-    if constexpr (is_detected_v<detail::has_sec, Value>)
+template <typename Value, bool Native> Value sec(const Value &x) {
+    if constexpr (is_detected_v<detail::has_sec, Value> && Native)
         return x.sec_();
     else
         return rcp(cos(x));
 
 }
 
-template <typename Value> Value tan(const Value &x) {
-    if constexpr (is_detected_v<detail::has_tan, Value>)
+template <typename Value, bool Native> Value tan(const Value &x) {
+    if constexpr (is_detected_v<detail::has_tan, Value> && Native)
         return x.tan_();
     else
         return detail::tancot<true>(x);
 }
 
-template <typename Value> Value cot(const Value &x) {
-    if constexpr (is_detected_v<detail::has_cot, Value>)
+template <typename Value, bool Native> Value cot(const Value &x) {
+    if constexpr (is_detected_v<detail::has_cot, Value> && Native)
         return x.cot_();
     else
         return detail::tancot<false>(x);
 }
 
-template <typename Value> Value asin(const Value &x) {
+template <typename Value, bool Native> Value asin(const Value &x) {
     /*
        Arc sine function approximation based on CEPHES.
 
@@ -378,7 +378,7 @@ template <typename Value> Value asin(const Value &x) {
          (at x=-0.841416)
     */
 
-    if constexpr (is_detected_v<detail::has_asin, Value>) {
+    if constexpr (is_detected_v<detail::has_asin, Value> && Native) {
         return x.asin_();
     } else {
         using Scalar = scalar_t<Value>;
@@ -456,8 +456,8 @@ template <typename Value> Value asin(const Value &x) {
     }
 }
 
-template <typename Value> Value acos(const Value &x) {
-    if constexpr (is_detected_v<detail::has_acos, Value>) {
+template <typename Value, bool Native> Value acos(const Value &x) {
+    if constexpr (is_detected_v<detail::has_acos, Value> && Native) {
         return x.acos_();
     } else {
         /*
@@ -516,12 +516,12 @@ template <typename Value> Value acos(const Value &x) {
     }
 }
 
-template <typename Y, typename X> expr_t<Y, X> atan2(const Y &y, const X &x) {
+template <typename Y, typename X, bool Native> expr_t<Y, X> atan2(const Y &y, const X &x) {
     if constexpr (!std::is_same_v<X, Y>) {
         using E = expr_t<X, Y>;
         return atan2(static_cast<ref_cast_t<Y, E>>(y),
                      static_cast<ref_cast_t<X, E>>(x));
-    } else if constexpr (is_detected_v<detail::has_atan2, Y>) {
+    } else if constexpr (is_detected_v<detail::has_atan2, Y> && Native) {
         return y.atan2_(x);
     } else {
         /*
@@ -593,8 +593,8 @@ template <typename Y, typename X> expr_t<Y, X> atan2(const Y &y, const X &x) {
     }
 }
 
-template <typename Value> Value atan(const Value &x) {
-    if constexpr (is_detected_v<detail::has_atan, Value>)
+template <typename Value, bool Native> Value atan(const Value &x) {
+    if constexpr (is_detected_v<detail::has_atan, Value> && Native)
         return x.atan_();
     else
         return atan2(x, Value(1));
@@ -607,12 +607,12 @@ template <typename Value> Value atan(const Value &x) {
 //! @{ \name Exponential function, logarithm, power
 // -----------------------------------------------------------------------
 
-template <typename X, typename Y> expr_t<X, Y> ldexp(const X &x, const Y &y) {
+template <typename X, typename Y, bool Native> expr_t<X, Y> ldexp(const X &x, const Y &y) {
     if constexpr (!std::is_same_v<X, Y>) {
         using E = expr_t<X, Y>;
         return ldexp(static_cast<ref_cast_t<X, E>>(x),
                      static_cast<ref_cast_t<Y, E>>(y));
-    } else if constexpr (is_detected_v<detail::has_ldexp, X>) {
+    } else if constexpr (is_detected_v<detail::has_ldexp, X> && Native) {
         return x.ldexp_(y);
     } else {
         using Scalar = scalar_t<X>;
@@ -631,8 +631,8 @@ template <typename X, typename Y> expr_t<X, Y> ldexp(const X &x, const Y &y) {
 #  pragma warning(disable: 4310) // cast truncates constant value
 #endif
 
-template <typename Value> std::pair<Value, Value> frexp(const Value &x) {
-    if constexpr (is_detected_v<detail::has_frexp, Value>) {
+template <typename Value, bool Native> std::pair<Value, Value> frexp(const Value &x) {
+    if constexpr (is_detected_v<detail::has_frexp, Value> && Native) {
         return x.frexp_();
     } else {
         using Scalar = scalar_t<Value>;
@@ -682,8 +682,8 @@ template <typename Value> std::pair<Value, Value> frexp(const Value &x) {
 #  pragma warning(pop)
 #endif
 
-template <typename Value> Value exp(const Value &x) {
-    if constexpr (is_detected_v<detail::has_exp, Value>) {
+template <typename Value, bool Native> Value exp(const Value &x) {
+    if constexpr (is_detected_v<detail::has_exp, Value> && Native) {
         return x.exp_();
     } else {
         /* Exponential function approximation based on CEPHES
@@ -753,8 +753,8 @@ template <typename Value> Value exp(const Value &x) {
     }
 }
 
-template <typename Value> Value exp2(const Value &x) {
-    if constexpr (is_detected_v<detail::has_exp2, Value>) {
+template <typename Value, bool Native> Value exp2(const Value &x) {
+    if constexpr (is_detected_v<detail::has_exp2, Value> && Native) {
         return x.exp2_();
     } else {
         /* Base-2 exponential function approximation based on CEPHES
@@ -821,8 +821,8 @@ template <typename Value> Value exp2(const Value &x) {
     }
 }
 
-template <typename Value> Value log(const Value &x) {
-    if constexpr (is_detected_v<detail::has_log, Value>) {
+template <typename Value, bool Native> Value log(const Value &x) {
+    if constexpr (is_detected_v<detail::has_log, Value> && Native) {
         return x.log_();
     } else {
         /* Logarithm function approximation based on CEPHES
@@ -898,8 +898,8 @@ template <typename Value> Value log(const Value &x) {
     }
 }
 
-template <typename Value> Value log2(const Value &x) {
-    if constexpr (is_detected_v<detail::has_log2, Value>) {
+template <typename Value, bool Native> Value log2(const Value &x) {
+    if constexpr (is_detected_v<detail::has_log2, Value> && Native) {
         return x.log2_();
     } else {
         /* Logarithm function approximation based on CEPHES
@@ -1022,8 +1022,8 @@ template <typename X, typename Y> expr_t<X, Y> pow(const X &x, const Y &y) {
 //! @{ \name Hyperbolic and inverse hyperbolic functions
 // -----------------------------------------------------------------------
 
-template <typename Value> Value sinh(const Value &x) {
-    if constexpr (is_detected_v<detail::has_sinh, Value>) {
+template <typename Value, bool Native> Value sinh(const Value &x) {
+    if constexpr (is_detected_v<detail::has_sinh, Value> && Native) {
         return x.sinh_();
     } else {
         /*
@@ -1082,8 +1082,8 @@ template <typename Value> Value sinh(const Value &x) {
     }
 }
 
-template <typename Value> Value cosh(const Value &x) {
-    if constexpr (is_detected_v<detail::has_cosh, Value>) {
+template <typename Value, bool Native> Value cosh(const Value &x) {
+    if constexpr (is_detected_v<detail::has_cosh, Value> && Native) {
         return x.cosh_();
     } else {
         /*
@@ -1107,8 +1107,8 @@ template <typename Value> Value cosh(const Value &x) {
     }
 }
 
-template <typename Value> std::pair<Value, Value> sincosh(const Value &x) {
-    if constexpr (is_detected_v<detail::has_sincosh, Value>) {
+template <typename Value, bool Native> std::pair<Value, Value> sincosh(const Value &x) {
+    if constexpr (is_detected_v<detail::has_sincosh, Value> && Native) {
         return x.sincosh_();
     } else {
         static_assert(!is_special_v<Value>,
@@ -1154,8 +1154,8 @@ template <typename Value> std::pair<Value, Value> sincosh(const Value &x) {
     }
 }
 
-template <typename Value> Value tanh(const Value &x) {
-    if constexpr (is_detected_v<detail::has_tanh, Value>) {
+template <typename Value, bool Native> Value tanh(const Value &x) {
+    if constexpr (is_detected_v<detail::has_tanh, Value> && Native) {
         return x.tanh_();
     } else {
         /*
@@ -1218,8 +1218,8 @@ template <typename Value> Value csch(const Value &a) { return rcp(sinh(a)); }
 template <typename Value> Value sech(const Value &a) { return rcp(cosh(a)); }
 template <typename Value> Value coth(const Value &a) { return rcp(tanh(a)); }
 
-template <typename Value> Value asinh(const Value &x) {
-    if constexpr (is_detected_v<detail::has_asinh, Value>) {
+template <typename Value, bool Native> Value asinh(const Value &x) {
+    if constexpr (is_detected_v<detail::has_asinh, Value> && Native) {
         return x.asinh_();
     } else {
         /*
@@ -1278,8 +1278,8 @@ template <typename Value> Value asinh(const Value &x) {
     }
 }
 
-template <typename Value> Value acosh(const Value &x) {
-    if constexpr (is_detected_v<detail::has_acosh, Value>) {
+template <typename Value, bool Native> Value acosh(const Value &x) {
+    if constexpr (is_detected_v<detail::has_acosh, Value> && Native) {
         return x.acosh_();
     } else {
         /*
@@ -1341,8 +1341,8 @@ template <typename Value> Value acosh(const Value &x) {
     }
 }
 
-template <typename Value> Value atanh(const Value &x) {
-    if constexpr (is_detected_v<detail::has_atanh, Value>) {
+template <typename Value, bool Native> Value atanh(const Value &x) {
+    if constexpr (is_detected_v<detail::has_atanh, Value> && Native) {
         return x.atanh_();
     } else {
         /*
@@ -1406,8 +1406,8 @@ template <typename Value> Value atanh(const Value &x) {
 //! @}
 // -----------------------------------------------------------------------
 
-template <typename Value> Value cbrt(const Value &x) {
-    if constexpr (is_detected_v<detail::has_cbrt, Value>) {
+template <typename Value, bool Native> Value cbrt(const Value &x) {
+    if constexpr (is_detected_v<detail::has_cbrt, Value> && Native) {
         return x.cbrt_();
     } else {
         /* Cubic root approximation based on CEPHES
@@ -1468,8 +1468,8 @@ template <typename Value> Value cbrt(const Value &x) {
     }
 }
 
-template <typename Value> Value erf(const Value &x) {
-    if constexpr (is_detected_v<detail::has_erf, Value>) {
+template <typename Value, bool Native> Value erf(const Value &x) {
+    if constexpr (is_detected_v<detail::has_erf, Value> && Native) {
         return x.erf_();
     } else {
         // Fits computed using 'resources/remez.cpp'
