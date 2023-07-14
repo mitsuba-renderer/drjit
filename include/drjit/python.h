@@ -7,6 +7,7 @@
 #include <drjit/complex.h>
 #include <drjit/quaternion.h>
 #include <drjit/tensor.h>
+#include <drjit/math.h>
 #include <drjit-core/traits.h>
 #include <nanobind/nanobind.h>
 
@@ -55,6 +56,8 @@ enum class ArrayOp {
 
     Abs,
     Sqrt,
+
+    Sin,
 
     // Binary arithetic operations
     Add,
@@ -436,11 +439,13 @@ inline void disable_int_arithmetic(ArrayBinding &b) {
 template <typename T> void bind_float_arithmetic(ArrayBinding &b) {
     b[ArrayOp::TrueDiv] = (void *) +[](const T *a, const T *b, T *c) { new (c) T(*a / *b); };
     b[ArrayOp::Sqrt] = (void *) +[](const T *a, T *b) { new (b) T(sqrt(*a)); };
+    b[ArrayOp::Sin] = (void *) +[](const T *a, T *b) { new (b) T(sin(*a)); };
 }
 
 inline void disable_float_arithmetic(ArrayBinding &b) {
     b[ArrayOp::TrueDiv] = DRJIT_OP_NOT_IMPLEMENTED;
     b[ArrayOp::Sqrt] = DRJIT_OP_NOT_IMPLEMENTED;
+    b[ArrayOp::Sin] = DRJIT_OP_NOT_IMPLEMENTED;
 }
 
 template <typename T>

@@ -1597,8 +1597,9 @@ template <typename T> struct resume_grad {
             if (condition) {
                 dr_vector<uint32_t> indices;
                 (detail::collect_ad_indices(indices, args), ...);
-                detail::ad_scope_enter<detached_t<typename T::Type>>(
-                    detail::ADScope::Resume, indices.size(), indices.data());
+                abort(); /// XXX
+                // detail::ad_scope_enter<detached_t<typename T::Type>>(
+                //     detail::ADScope::Resume, indices.size(), indices.data());
             }
         } else {
             (((void) args), ...);
@@ -1607,8 +1608,9 @@ template <typename T> struct resume_grad {
 
     ~resume_grad() {
         if constexpr (Enabled) {
-            if (condition)
-                detail::ad_scope_leave<typename T::Type>(true);
+            abort(); /// XXX
+            // if (condition)
+            //     detail::ad_scope_leave<typename T::Type>(true);
         }
     }
 
@@ -1624,8 +1626,9 @@ template <typename T> struct suspend_grad {
             if (condition) {
                 dr_vector<uint32_t> indices;
                 (detail::collect_ad_indices(indices, args), ...);
-                detail::ad_scope_enter<detached_t<typename T::Type>>(
-                    detail::ADScope::Suspend, indices.size(), indices.data());
+                // detail::ad_scope_enter<detached_t<typename T::Type>>(
+                //     detail::ADScope::Suspend, indices.size(), indices.data());
+                abort(); //  XXX
             }
         } else {
             (((void) args), ...);
@@ -1634,8 +1637,9 @@ template <typename T> struct suspend_grad {
 
     ~suspend_grad() {
         if constexpr (Enabled) {
-            if (condition)
-                detail::ad_scope_leave<typename T::Type>(true);
+            abort(); /// XXX
+            // if (condition)
+                // detail::ad_scope_leave<typename T::Type>(true);
         }
     }
 
@@ -1771,6 +1775,8 @@ void accum_grad(T &value, const T2 &grad) {
     }
 }
 
+enum class ADScope { Invalid = 0, Suspend = 1, Resume = 2, Isolate = 3 };
+
 template <typename T> void enqueue(ADMode mode, const T &value) {
     if constexpr (is_diff_v<T>) {
         if constexpr (depth_v<T> > 1) {
@@ -1807,14 +1813,16 @@ template <typename T> struct isolate_grad {
         is_diff_v<T> && std::is_floating_point_v<scalar_t<T>>;
 
     isolate_grad() {
-        if constexpr (Enabled)
-            detail::ad_scope_enter<typename T::Type>(
-                detail::ADScope::Isolate, 0, nullptr);
+        abort(); /// XXX
+        // if constexpr (Enabled)
+        //     detail::ad_scope_enter<typename T::Type>(
+        //         detail::ADScope::Isolate, 0, nullptr);
     }
 
     ~isolate_grad() {
-        if constexpr (Enabled)
-            detail::ad_scope_leave<typename T::Type>(true);
+        abort(); /// XXX
+        // if constexpr (Enabled)
+        //     detail::ad_scope_leave<typename T::Type>(true);
     }
 };
 

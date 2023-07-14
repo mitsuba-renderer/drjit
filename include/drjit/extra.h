@@ -22,49 +22,82 @@
 #  define DRJIT_EXTRA_EXPORT __attribute__ ((visibility("default")))
 #endif
 
-#define WRAP_OP(x)                                                             \
-    extern DRJIT_EXTRA_EXPORT uint32_t jit_var_##x##_f32(uint32_t);            \
-    extern DRJIT_EXTRA_EXPORT uint32_t jit_var_##x##_f64(uint32_t);
+#define WRAP_MATH_OP(x)                                                        \
+    template <typename T> uint32_t jit_var_##x(uint32_t);                      \
+    template <typename T> uint64_t ad_var_##x(uint64_t);                       \
+    extern template DRJIT_EXTRA_EXPORT uint32_t jit_var_##x<float>(uint32_t);  \
+    extern template DRJIT_EXTRA_EXPORT uint32_t jit_var_##x<double>(uint32_t); \
+    extern template DRJIT_EXTRA_EXPORT uint64_t ad_var_##x<float>(uint64_t);   \
+    extern template DRJIT_EXTRA_EXPORT uint64_t ad_var_##x<double>(uint64_t);
 
-#define WRAP_OP_2(x)                                                           \
-    extern DRJIT_EXTRA_EXPORT uint32_t jit_var_##x##_f32(uint32_t, uint32_t);  \
-    extern DRJIT_EXTRA_EXPORT uint32_t jit_var_##x##_f64(uint32_t, uint32_t);
+#define WRAP_MATH_OP_2(x)                                                      \
+    template <typename T> uint32_t jit_var_##x(uint32_t, uint32_t);            \
+    template <typename T> uint64_t ad_var_##x(uint64_t, uint64_t);             \
+    extern template DRJIT_EXTRA_EXPORT uint32_t jit_var_##x<float>(uint32_t,   \
+                                                                   uint32_t);  \
+    extern template DRJIT_EXTRA_EXPORT uint32_t jit_var_##x<double>(uint32_t,  \
+                                                                    uint32_t); \
+    extern template DRJIT_EXTRA_EXPORT uint64_t ad_var_##x<float>(uint64_t,    \
+                                                                  uint64_t);   \
+    extern template DRJIT_EXTRA_EXPORT uint64_t ad_var_##x<double>(uint64_t,   \
+                                                                   uint64_t);
 
-#define WRAP_OP_PAIR(x)                                                        \
-    extern DRJIT_EXTRA_EXPORT std::pair<uint32_t, uint32_t> jit_var_##x##_f32( \
-        uint32_t);                                                             \
-    extern DRJIT_EXTRA_EXPORT std::pair<uint32_t, uint32_t> jit_var_##x##_f64( \
-        uint32_t);
+#define WRAP_MATH_OP_PAIR(x)                                                   \
+    template <typename T> std::pair<uint32_t, uint32_t> jit_var_##x(uint32_t); \
+    template <typename T> std::pair<uint64_t, uint64_t> ad_var_##x(uint64_t);  \
+    extern template DRJIT_EXTRA_EXPORT std::pair<uint32_t, uint32_t>           \
+        jit_var_##x<float>(uint32_t);                                          \
+    extern template DRJIT_EXTRA_EXPORT std::pair<uint32_t, uint32_t>           \
+        jit_var_##x<double>(uint32_t);                                         \
+    extern template DRJIT_EXTRA_EXPORT std::pair<uint64_t, uint64_t>           \
+        ad_var_##x<float>(uint64_t);                                           \
+    extern template DRJIT_EXTRA_EXPORT std::pair<uint64_t, uint64_t>           \
+        ad_var_##x<double>(uint64_t);
 
-WRAP_OP(exp2)
-WRAP_OP(exp)
-WRAP_OP(log2)
-WRAP_OP(log)
-WRAP_OP(sin)
-WRAP_OP(cos)
-WRAP_OP(tan)
-WRAP_OP(cot)
-WRAP_OP(asin)
-WRAP_OP(acos)
-WRAP_OP(sinh)
-WRAP_OP(cosh)
-WRAP_OP(tanh)
-WRAP_OP(asinh)
-WRAP_OP(acosh)
-WRAP_OP(atanh)
-WRAP_OP(cbrt)
-WRAP_OP(erf)
-WRAP_OP_2(atan2)
-WRAP_OP_2(ldexp)
-WRAP_OP_PAIR(sincos)
-WRAP_OP_PAIR(sincosh)
-WRAP_OP_PAIR(frexp)
+WRAP_MATH_OP(exp2)
+WRAP_MATH_OP(exp)
+WRAP_MATH_OP(log2)
+WRAP_MATH_OP(log)
+WRAP_MATH_OP(sin)
+WRAP_MATH_OP(cos)
+WRAP_MATH_OP(tan)
+WRAP_MATH_OP(cot)
+WRAP_MATH_OP(asin)
+WRAP_MATH_OP(acos)
+WRAP_MATH_OP(sinh)
+WRAP_MATH_OP(cosh)
+WRAP_MATH_OP(tanh)
+WRAP_MATH_OP(asinh)
+WRAP_MATH_OP(acosh)
+WRAP_MATH_OP(atanh)
+WRAP_MATH_OP(cbrt)
+WRAP_MATH_OP(erf)
+WRAP_MATH_OP_2(atan2)
+WRAP_MATH_OP_2(ldexp)
+WRAP_MATH_OP_PAIR(sincos)
+WRAP_MATH_OP_PAIR(sincosh)
+WRAP_MATH_OP_PAIR(frexp)
 
-#undef WRAP_OP
-#undef WRAP_OP_2
-#undef WRAP_OP_PAIR
+#undef WRAP_MATH_OP
+#undef WRAP_MATH_OP_2
+#undef WRAP_MATH_OP_PAIR
 
 extern DRJIT_EXTRA_EXPORT void ad_var_inc_ref_impl(uint64_t) noexcept (true);
 extern DRJIT_EXTRA_EXPORT void ad_var_dec_ref_impl(uint64_t) noexcept (true);
 
-extern DRJIT_EXTRA_EXPORT uint64_t ad_var_add(uint64_t, uint64_t);
+#if defined(__GNUC__)
+inline void ad_var_inc_ref(uint64_t index) noexcept(true) {
+    /* If 'index' is known at compile time, it can only be zero, in
+       which case we can skip the redundant call to ad_var_dec_ref */
+    if (!__builtin_constant_p(index) || index != 0)
+        ad_var_inc_ref_impl(index);
+}
+inline void ad_var_dec_ref(uint64_t index) noexcept(true) {
+    if (!__builtin_constant_p(index) || index != 0)
+        ad_var_dec_ref_impl(index);
+}
+#else
+#define ad_var_dec_ref ad_var_dec_ref_impl
+#define ad_var_inc_ref ad_var_inc_ref_impl
+#endif
+

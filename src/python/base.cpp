@@ -332,6 +332,7 @@ void export_base(nb::module_ &m) {
     m.def("abs", [](Py_ssize_t a) { return dr::abs(a); });
     DR_MATH_UNOP(abs, ArrayOp::Abs);
     DR_MATH_UNOP(sqrt, ArrayOp::Sqrt);
+    DR_MATH_UNOP(sin, ArrayOp::Sin);
 
     m.def("minimum",
           [](Py_ssize_t a, Py_ssize_t b) { return dr::minimum(a, b); });
