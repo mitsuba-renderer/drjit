@@ -21,6 +21,7 @@
 #  define DRJIT_INLINE                 __forceinline
 #  define DRJIT_INLINE_LAMBDA
 #  define DRJIT_MALLOC                 __declspec(restrict)
+#  define DRJIT_THREAD                 __declspec(thread)
 #  define DRJIT_MAY_ALIAS
 #  define DRJIT_ASSUME_ALIGNED(x, s)   x
 #  if !defined(DRJIT_UNROLL)
@@ -32,6 +33,7 @@
 #  define DRJIT_UNLIKELY(x)            x
 #  define DRJIT_IMPORT                 __declspec(dllimport)
 #  define DRJIT_EXPORT                 __declspec(dllexport)
+#  define DRJIT_TRIVIAL_ABI
 #else
 #  define DRJIT_NOINLINE               __attribute__ ((noinline))
 #  define DRJIT_INLINE                 __attribute__ ((always_inline)) inline
@@ -42,6 +44,8 @@
 #  define DRJIT_UNLIKELY(x)            __builtin_expect(!!(x), 0)
 #  define DRJIT_PACK                   __attribute__ ((packed))
 #  define DRJIT_MAY_ALIAS              __attribute__ ((may_alias))
+#  define DRJIT_THREAD                 __thread
+#  define DRJIT_TRIVIAL_ABI            __attribute__ ((trivial_abi))
 #  if defined(__clang__)
 #    if !defined(DRJIT_UNROLL)
 #      define DRJIT_UNROLL               _Pragma("unroll")
@@ -226,12 +230,10 @@ struct PacketMask;
 template <typename Value_> struct DynamicArray;
 
 /// JIT-compiled dynamically sized generic array
-template <JitBackend Backend_, typename Value_, typename Derived_> struct JitArray;
-template <typename Value_> struct CUDAArray;
-template <typename Value_> struct LLVMArray;
+template <JitBackend Backend_, typename Value_> struct JitArray;
 
 /// Forward- and backward-mode automatic differentiation wrapper
-template <typename Value_> struct DiffArray;
+template <JitBackend Backend_, typename Value_> struct DiffArray;
 
 /// Generic square matrix type
 template <typename Value_, size_t Size_> struct Matrix;
@@ -273,46 +275,6 @@ namespace detail {
 }
 /// This library supports two main directions of derivative propagation
 enum class ADMode { Primal, Forward, Backward };
-
-NAMESPACE_BEGIN(detail)
-enum class ADScope { Invalid = 0, Suspend = 1, Resume = 2, Isolate = 3 };
-// A few forward declarations so that this compiles even without autodiff.h
-template <typename Value> void ad_inc_ref_impl(uint32_t) noexcept;
-template <typename Value> void ad_dec_ref_impl(uint32_t) noexcept;
-template <typename Value, typename Mask>
-uint32_t ad_new_select(const char *, size_t, const Mask &, uint32_t, uint32_t);
-template <typename Value>
-void ad_scope_enter(ADScope type, size_t size, const uint32_t *indices);
-template <typename Value> void ad_scope_leave(bool);
-NAMESPACE_END(detail)
-
-#if defined(DRJIT_BUILD_AUTODIFF)
-#  define DRJIT_AD_EXPORT
-#else
-#  define DRJIT_AD_EXPORT DRJIT_IMPORT
-#endif
-
-#define DRJIT_DECLARE_EXTERN_AD_TEMPLATE(T, Mask)                              \
-    namespace detail {                                                         \
-    extern template DRJIT_AD_EXPORT void                                       \
-        ad_inc_ref_impl<T>(uint32_t) noexcept(true);                           \
-    extern template DRJIT_AD_EXPORT void                                       \
-        ad_dec_ref_impl<T>(uint32_t) noexcept(true);                           \
-    extern template DRJIT_AD_EXPORT void ad_scope_enter<T>(                    \
-        ADScope type, size_t, const uint32_t *);                               \
-    extern template DRJIT_AD_EXPORT void ad_scope_leave<T>(bool);              \
-    extern template DRJIT_AD_EXPORT uint32_t ad_new_select<T, Mask>(           \
-        const char *, size_t, const Mask &, uint32_t, uint32_t);               \
-    }
-
-DRJIT_DECLARE_EXTERN_AD_TEMPLATE(float,  bool)
-DRJIT_DECLARE_EXTERN_AD_TEMPLATE(double, bool)
-DRJIT_DECLARE_EXTERN_AD_TEMPLATE(CUDAArray<float>,  CUDAArray<bool>)
-DRJIT_DECLARE_EXTERN_AD_TEMPLATE(CUDAArray<double>, CUDAArray<bool>)
-DRJIT_DECLARE_EXTERN_AD_TEMPLATE(LLVMArray<float>,  LLVMArray<bool>)
-DRJIT_DECLARE_EXTERN_AD_TEMPLATE(LLVMArray<double>, LLVMArray<bool>)
-
-#undef DRJIT_DECLARE_EXTERN_AD_TEMPLATE
 
 NAMESPACE_END(drjit)
 

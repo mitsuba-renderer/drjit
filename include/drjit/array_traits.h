@@ -370,7 +370,7 @@ namespace detail {
     };
 
     template <typename T> struct diff_array<T, enable_if_t<!T::IsDiff && T::IsJIT && T::Depth == 1>> {
-        using type = DiffArray<T>;
+        using type = DiffArray<T::JitBackend, typename T::Value>;
     };
 
     template <typename T, typename = int> struct detached {
