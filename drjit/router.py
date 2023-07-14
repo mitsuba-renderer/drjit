@@ -4383,7 +4383,7 @@ def forward_from(arg, flags=_dr.ADFlag.Default):
     '''
     ta = type(arg)
     _check_grad_enabled('forward_from', ta, arg)
-    set_grad(arg, 1)
+    set_grad(arg, _dr.ones(ta))
     enqueue(_dr.ADMode.Forward, arg)
     traverse(ta, _dr.ADMode.Forward, flags)
 
@@ -4465,7 +4465,7 @@ def backward_from(arg, flags=_dr.ADFlag.Default):
     if _dr.depth_v(arg) > 1:
         arg = arg + ta(0)
 
-    set_grad(arg, 1)
+    set_grad(arg, _dr.ones(ta))
     enqueue(_dr.ADMode.Backward, arg)
     traverse(ta, _dr.ADMode.Backward, flags)
 

@@ -1906,3 +1906,39 @@ def test76_custom_op_non_array_types(m):
     # Pushes gradients to both outputs
     assert dr.all(dr.grad(result1) == 3.5)
     assert dr.all(dr.grad(result2) == 2 * 3.5)
+
+
+def test77_forward_from_quaternion(m):
+    # Propagating from a Quaternion, propagates from all its components
+    a = m.Quaternion4f(1.0)
+    dr.enable_grad(a.y) # Gradients on `j` component
+    b = 2 * a
+    dr.forward_from(a)
+    assert dr.allclose(dr.grad(b), m.Quaternion4f(0, 2, 0, 0))
+
+
+def test78_backward_from_quaternion(m):
+    # Propagating from a Quaternion, propagates from all its components
+    a = m.Quaternion4f(1.0)
+    dr.enable_grad(a.y) # Gradients on `j` component
+    b = 2 * a
+    dr.backward_from(b)
+    assert dr.allclose(dr.grad(a), m.Quaternion4f(0, 2, 0, 0))
+
+
+def test79_forward_from_complex(m):
+    # Propagating from a Quaternion, propagates from all its components
+    a = m.Complex2f(1.0)
+    dr.enable_grad(a.imag) # Gradients on imaginary component
+    b = 2 * a
+    dr.forward_from(a)
+    assert dr.allclose(dr.grad(b), m.Complex2f(0, 2))
+
+
+def test80_backward_from_complex(m):
+    # Propagating from a Quaternion, propagates from all its components
+    a = m.Complex2f(1.0)
+    dr.enable_grad(a.imag) # Gradients on imaginary component
+    b = 2 * a
+    dr.backward_from(b)
+    assert dr.allclose(dr.grad(a), m.Complex2f(0, 2))
