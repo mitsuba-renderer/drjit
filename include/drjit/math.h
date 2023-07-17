@@ -999,8 +999,10 @@ template <typename X, typename Y> expr_t<X, Y> pow(const X &x, const Y &y) {
         if constexpr (std::is_floating_point_v<Y>) {
             if (detail::round_(y) == y)
                 return detail::powi(x, (int) y);
-            else
+            else if constexpr (is_dynamic_v<X>)
                 return pow(x, X(y));
+            else
+                return exp2(log2(x) * y);
         } else {
             return detail::powi(x, (int) y);
         }

@@ -104,5 +104,11 @@ DRJIT_TEST_FLOAT(test05_pow) {
 }
 
 DRJIT_TEST_FLOAT(test06_pow_neg) {
-    assert((pow(T(-0.8), 3.0) - 0.512)[0] < 1e-6f);
+    assert((drjit::pow(-0.8, 3.0) - 0.512) < 1e-6f);
+    assert((drjit::pow(T(-0.8), 3.0) - 0.512)[0] < 1e-6f);
+}
+
+DRJIT_TEST_FLOAT(test07_pow_noninteger) {
+    assert((drjit::pow(0.87, 3.2) - 0.64041516) < 1e-6f);
+    assert((drjit::pow(T(0.87), 3.2) - 0.64041516)[0] < 1e-6f);
 }
