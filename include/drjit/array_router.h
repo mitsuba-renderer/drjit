@@ -1327,6 +1327,27 @@ DRJIT_INNER_REDUCTION(mean)
 
 #undef DRJIT_INNER_REDUCTION
 
+
+// -------------------------------------------------------------------
+//! @{ \name Context manager for setting JIT flags
+// -------------------------------------------------------------------
+
+struct scoped_set_flag {
+    scoped_set_flag(JitFlag flag, bool value) : 
+        flag(flag),
+        orig_value(jit_flag(flag)) {
+
+        jit_set_flag(flag, value);
+    }
+
+    ~scoped_set_flag() {
+        jit_set_flag(flag, orig_value);
+    }
+
+    JitFlag flag;
+    bool orig_value;
+};
+
 //! @}
 // -----------------------------------------------------------------------
 
