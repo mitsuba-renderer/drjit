@@ -1466,7 +1466,7 @@ template <typename Value> Value cbrt(const Value &x) {
         if constexpr (!Single)
             r -= (r - (x / sqr(r))) * third;
 
-        return select(isfinite(x), r, x);
+        return select(isfinite(x) && neq(x, 0), r, x);
     }
 }
 
