@@ -384,7 +384,7 @@ def quat_to_euler(q, /):
     Returns:
         drjit.ArrayBase: A 3D Dr.Jit array containing the Euler angles.
     '''
-    name = _dr.detail.array_name('Array', q.Type, [3], q.IsScalar)
+    name = _dr.detail.array_name('Array', q.Type, (3, *q.Shape[1:]), q.IsScalar)
     module = _modules.get(q.__module__)
     Array3f = getattr(module, name)
 
@@ -422,7 +422,7 @@ def euler_to_quat(a, /):
     Returns:
         drjit.ArrayBase: A Dr.Jit quaternion representing the input Euler angles.
     '''
-    name = _dr.detail.array_name('Quaternion', a.Type, [4], a.IsScalar)
+    name = _dr.detail.array_name('Quaternion', a.Type, (4, *a.Shape[1:]), a.IsScalar)
     module = _modules.get(a.__module__)
     Quat4f = getattr(module, name)
 
@@ -491,11 +491,11 @@ def transform_decompose(a, it=10):
     if not _dr.is_matrix_v(a):
         raise Exception('Unsupported type!')
 
-    name = _dr.detail.array_name('Array', a.Type, [3], a.IsScalar)
+    name = _dr.detail.array_name('Array', a.Type, (3, *a.Shape[2:]), a.IsScalar)
     module = _modules.get(a.__module__)
     Array3f = getattr(module, name)
 
-    name = _dr.detail.array_name('Matrix', a.Type, (3, 3), a.IsScalar)
+    name = _dr.detail.array_name('Matrix', a.Type, (3, 3, *a.Shape[2:]), a.IsScalar)
     Matrix3f = getattr(module, name)
 
     Q, P = polar_decomp(Matrix3f(a), it)
@@ -525,7 +525,7 @@ def transform_compose(s, q, t, /):
     if not _dr.is_matrix_v(s) or not _dr.is_quaternion_v(q):
         raise Exception('Unsupported type!')
 
-    name = _dr.detail.array_name('Matrix', q.Type, (4, 4), q.IsScalar)
+    name = _dr.detail.array_name('Matrix', q.Type, (4, 4, *q.Shape[1:]), q.IsScalar)
     module = _modules.get(q.__module__)
     Matrix4f = getattr(module, name)
 
