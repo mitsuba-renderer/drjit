@@ -22,11 +22,10 @@ NAMESPACE_BEGIN(drjit)
 template <JitBackend Backend_, typename Value_>
 struct DRJIT_TRIVIAL_ABI JitArray
     : ArrayBaseT<Value_, is_mask_v<Value_>, JitArray<Backend_, Value_>> {
-    static_assert(std::is_scalar_v<Value_>,
+    static_assert(std::is_scalar_v<Value_> || std::is_void_v<Value_>,
                   "JIT Arrays can only be created over scalar types!");
 
-    template <JitBackend Backend2, typename Value2> friend struct JitArray;
-    template <JitBackend Backend2, typename Value2> friend struct DiffArray;
+    template <JitBackend, typename> friend struct JitArray;
 
     // -----------------------------------------------------------------------
     //! @{ \name Basic type declarations
@@ -95,16 +94,14 @@ struct DRJIT_TRIVIAL_ABI JitArray
             m_index = jit_var_literal(Backend, Type, &av, 1, 0, IsClass);
         } else {
             switch (Type) {
-                case VarType::Float32: m_index = jit_var_f32(Backend, (float) value); break;
-                case VarType::Float64: m_index = jit_var_f64(Backend, (float) value); break;
-                case VarType::Int32:   m_index = jit_var_i32(Backend, (int32_t) value); break;
-                case VarType::UInt32:  m_index = jit_var_u32(Backend, (uint32_t) value); break;
-                case VarType::Int64:   m_index = jit_var_i64(Backend, (int64_t) value); break;
-                case VarType::UInt64:  m_index = jit_var_u64(Backend, (uint64_t) value); break;
                 case VarType::Bool:    m_index = jit_var_bool(Backend, (bool) value); break;
-                default:
-                    m_index = jit_var_literal(Backend, Type, &value, 1, 0, 0);
-                    break;
+                case VarType::Int32:   m_index = jit_var_i32 (Backend, (int32_t) value); break;
+                case VarType::UInt32:  m_index = jit_var_u32 (Backend, (uint32_t) value); break;
+                case VarType::Int64:   m_index = jit_var_i64 (Backend, (int64_t) value); break;
+                case VarType::UInt64:  m_index = jit_var_u64 (Backend, (uint64_t) value); break;
+                case VarType::Float32: m_index = jit_var_f32 (Backend, (float) value); break;
+                case VarType::Float64: m_index = jit_var_f64 (Backend, (double) value); break;
+                default: jit_fail("JitArray(): tried to initialize scalar array with unsupported type!");
             }
         }
     }
@@ -131,7 +128,9 @@ struct DRJIT_TRIVIAL_ABI JitArray
     }
 
     JitArray &operator=(JitArray &&a) {
-        std::swap(m_index, a.m_index);
+        uint32_t temp = m_index;
+        m_index = a.m_index;
+        a.m_index = temp;
         return *this;
     }
 
@@ -225,49 +224,46 @@ struct DRJIT_TRIVIAL_ABI JitArray
     JitArray sqrt_() const { return steal(jit_var_sqrt(m_index)); }
     JitArray rcp_() const { return steal(jit_var_rcp(m_index)); }
     JitArray rsqrt_() const { return steal(jit_var_rsqrt(m_index)); }
-
-    JitArray exp2_() const { return steal(jit_var_exp2<Value>(m_index)); }
-    JitArray exp_() const { return steal(jit_var_exp<Value>(m_index)); }
-    JitArray log2_() const { return steal(jit_var_log2<Value>(m_index)); }
-    JitArray log_() const { return steal(jit_var_log<Value>(m_index)); }
-    JitArray sin_() const { return steal(jit_var_sin<Value>(m_index)); }
-    JitArray cos_() const { return steal(jit_var_cos<Value>(m_index)); }
-    JitArray tan_() const { return steal(jit_var_tan<Value>(m_index)); }
-    JitArray cot_() const { return steal(jit_var_cot<Value>(m_index)); }
-    JitArray asin_() const { return steal(jit_var_asin<Value>(m_index)); }
-    JitArray acos_() const { return steal(jit_var_acos<Value>(m_index)); }
-
-    JitArray sinh_() const { return steal(jit_var_sinh<Value>(m_index)); }
-    JitArray cosh_() const { return steal(jit_var_cosh<Value>(m_index)); }
-    JitArray tanh_() const { return steal(jit_var_tanh<Value>(m_index)); }
-
-    JitArray asinh_() const { return steal(jit_var_asinh<Value>(m_index)); }
-    JitArray acosh_() const { return steal(jit_var_acosh<Value>(m_index)); }
-    JitArray atanh_() const { return steal(jit_var_atanh<Value>(m_index)); }
-    JitArray cbrt_() const { return steal(jit_var_cbrt<Value>(m_index)); }
-    JitArray erf_() const { return steal(jit_var_erf<Value>(m_index)); }
+    JitArray exp2_() const { return steal(jit_var_exp2(m_index)); }
+    JitArray exp_() const { return steal(jit_var_exp(m_index)); }
+    JitArray log2_() const { return steal(jit_var_log2(m_index)); }
+    JitArray log_() const { return steal(jit_var_log(m_index)); }
+    JitArray sin_() const { return steal(jit_var_sin(m_index)); }
+    JitArray cos_() const { return steal(jit_var_cos(m_index)); }
+    JitArray tan_() const { return steal(jit_var_tan(m_index)); }
+    JitArray cot_() const { return steal(jit_var_cot(m_index)); }
+    JitArray asin_() const { return steal(jit_var_asin(m_index)); }
+    JitArray acos_() const { return steal(jit_var_acos(m_index)); }
+    JitArray sinh_() const { return steal(jit_var_sinh(m_index)); }
+    JitArray cosh_() const { return steal(jit_var_cosh(m_index)); }
+    JitArray tanh_() const { return steal(jit_var_tanh(m_index)); }
+    JitArray asinh_() const { return steal(jit_var_asinh(m_index)); }
+    JitArray acosh_() const { return steal(jit_var_acosh(m_index)); }
+    JitArray atanh_() const { return steal(jit_var_atanh(m_index)); }
+    JitArray cbrt_() const { return steal(jit_var_cbrt(m_index)); }
+    JitArray erf_() const { return steal(jit_var_erf(m_index)); }
 
     JitArray atan2_(const JitArray &x) const {
-        return steal(jit_var_atan2<Value>(m_index, x.index()));
+        return steal(jit_var_atan2(m_index, x.index()));
     }
 
     JitArray ldexp_(const JitArray &x) const {
-        return steal(jit_var_ldexp<Value>(m_index, x.index()));
+        return steal(jit_var_ldexp(m_index, x.index()));
     }
 
     std::pair<JitArray, JitArray> frexp_() const {
-        auto [i0, i1] = jit_var_frexp<Value>(m_index);
-        return { steal(i0), steal(i1) };
+        UInt32Pair p = jit_var_frexp(m_index);
+        return { steal(p.first), steal(p.second) };
     }
 
     std::pair<JitArray, JitArray> sincos_() const {
-        auto [i0, i1] = jit_var_sincos<Value>(m_index);
-        return { steal(i0), steal(i1) };
+        UInt32Pair p = jit_var_sincos(m_index);
+        return { steal(p.first), steal(p.second) };
     }
 
     std::pair<JitArray, JitArray> sincosh_() const {
-        auto [i0, i1] = jit_var_sincosh<Value>(m_index);
-        return { steal(i0), steal(i1) };
+        UInt32Pair p = jit_var_sincosh(m_index);
+        return { steal(p.first), steal(p.second) };
     }
 
     JitArray minimum_(const JitArray &v) const {
@@ -410,7 +406,8 @@ struct DRJIT_TRIVIAL_ABI JitArray
         return steal(jit_var_literal(Backend, Type, &value, size));
     }
 
-    static JitArray full_(Value value, size_t size) {
+    template <typename T, enable_if_t<!std::is_void_v<T> && std::is_same_v<T, Value>> = 0>
+    static JitArray full_(T value, size_t size) {
         ActualValue av;
         if constexpr (!IsClass)
             av = (ActualValue) value;
@@ -420,7 +417,8 @@ struct DRJIT_TRIVIAL_ABI JitArray
         return steal(jit_var_literal(Backend, Type, &av, size, false, IsClass));
     }
 
-    static JitArray opaque_(Value value, size_t size) {
+    template <typename T, enable_if_t<!std::is_void_v<T> && std::is_same_v<T, Value>> = 0>
+    static JitArray opaque_(T value, size_t size) {
         ActualValue av;
         if constexpr (!IsClass)
             av = (ActualValue) value;
@@ -439,8 +437,9 @@ struct DRJIT_TRIVIAL_ABI JitArray
                      JitArray((Value) start));
     }
 
-    static JitArray linspace_(Value min, Value max, size_t size, bool endpoint) {
-        Value step = (max - min) / Value(size - ((endpoint && size > 1) ? 1 : 0));
+    template <typename T, enable_if_t<!std::is_void_v<T> && std::is_same_v<T, Value>> = 0>
+    static JitArray linspace_(T min, T max, size_t size, bool endpoint) {
+        T step = (max - min) / T(size - ((endpoint && size > 1) ? 1 : 0));
         return fmadd(JitArray(uint32_array_t<JitArray>::counter(size)),
                      JitArray(step),
                      JitArray(min));
@@ -628,7 +627,8 @@ struct DRJIT_TRIVIAL_ABI JitArray
             return (Value) jit_registry_get_ptr(Backend, CallSupport::Domain, out);
     }
 
-    void set_entry(size_t offset, Value value) {
+    template <typename T, enable_if_t<!std::is_void_v<T> && std::is_same_v<T, Value>> = 0>
+    void set_entry(size_t offset, T value) {
         uint32_t index;
         if constexpr (!IsClass) {
             index = jit_var_write(m_index, offset, &value);

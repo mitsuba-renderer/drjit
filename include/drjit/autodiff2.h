@@ -24,7 +24,7 @@ struct DRJIT_TRIVIAL_ABI DiffArray
     static_assert(std::is_scalar_v<Value_>,
                   "Differentiable arrays can only be created over scalar types!");
 
-    template <JitBackend Backend2, typename Value2> friend struct DiffArray;
+    template <JitBackend, typename> friend struct DiffArray;
 
     // -----------------------------------------------------------------------
     //! @{ \name Basic type declarations
@@ -80,7 +80,7 @@ struct DRJIT_TRIVIAL_ABI DiffArray
 
     DiffArray(const DiffArray &a) {
         if constexpr (IsFloat) {
-            m_index = ad_var_inc_ref_maybe(a.m_index);
+            m_index = ad_var_inc_ref(a.m_index);
         } else {
             m_index = a.m_index;
             jit_var_inc_ref(m_index);
@@ -115,20 +115,22 @@ struct DRJIT_TRIVIAL_ABI DiffArray
     DiffArray(Ts&&... ts) : m_index(Detached(ts...).release()) { }
 
     DiffArray &operator=(const DiffArray &a) {
+        Index old_index = m_index;
         if constexpr (IsFloat) {
-            Index old_index = m_index;
-            m_index = ad_var_inc_ref_maybe(a.m_index);
+            m_index = ad_var_inc_ref(a.m_index);
             ad_var_dec_ref(old_index);
         } else {
-            jit_var_inc_ref(a.m_index);
-            jit_var_dec_ref(m_index);
             m_index = a.m_index;
+            jit_var_inc_ref(m_index);
+            jit_var_dec_ref(old_index);
         }
         return *this;
     }
 
     DiffArray &operator=(DiffArray &&a) {
-        std::swap(m_index, a.m_index);
+        Index temp = m_index;
+        m_index = a.m_index;
+        a.m_index = temp;
         return *this;
     }
 
@@ -137,10 +139,135 @@ struct DRJIT_TRIVIAL_ABI DiffArray
 
     DiffArray add_(const DiffArray &a) const {
         if constexpr (IsFloat)
-            return steal(ad_var_add<Value>(m_index, a.m_index));
+            return steal(ad_var_add(m_index, a.m_index));
         else
             return steal(jit_var_add(m_index, a.m_index));
     }
+
+    DiffArray sub_(const DiffArray &a) const {
+        if constexpr (IsFloat)
+            return steal(ad_var_sub(m_index, a.m_index));
+        else
+            return steal(jit_var_sub(m_index, a.m_index));
+    }
+
+    DiffArray mul_(const DiffArray &a) const {
+        if constexpr (IsFloat)
+            return steal(ad_var_mul(m_index, a.m_index));
+        else
+            return steal(jit_var_mul(m_index, a.m_index));
+    }
+
+    DiffArray mulhi_(const DiffArray &a) const {
+        return steal(jit_var_mulhi((uint32_t) m_index, (uint32_t) a.m_index));
+    }
+
+    DiffArray div_(const DiffArray &a) const {
+        if constexpr (IsFloat)
+            return steal(ad_var_div(m_index, a.m_index));
+        else
+            return steal(jit_var_div(m_index, a.m_index));
+    }
+
+    DiffArray neg_(const DiffArray &a) const {
+        if constexpr (IsFloat)
+            return steal(ad_var_neg(m_index));
+        else
+            return steal(jit_var_neg(m_index));
+    }
+
+    DiffArray abs_(const DiffArray &a) const {
+        if constexpr (IsFloat)
+            return steal(ad_var_abs(m_index));
+        else
+            return steal(jit_var_abs(m_index));
+    }
+
+    DiffArray sqrt_(const DiffArray &a) const {
+        return steal(ad_var_sqrt(m_index));
+    }
+
+    DiffArray rcp_(const DiffArray &a) const {
+        return steal(ad_var_rcp(m_index));
+    }
+
+    DiffArray rsqrt_(const DiffArray &a) const {
+        return steal(ad_var_rsqrt(m_index));
+    }
+
+    DiffArray sqrt_(const DiffArray &a) const {
+        return steal(ad_var_sqrt(m_index));
+    }
+
+    DiffArray cbrt_(const DiffArray &a) const {
+        return steal(ad_var_cbrt(m_index));
+    }
+
+    DiffArray min_(const DiffArray &a) const {
+        if constexpr (IsFloat)
+            return steal(ad_var_min(m_index, a.m_index));
+        else
+            return steal(jit_var_min(m_index, a.m_index));
+    }
+
+    DiffArray max_(const DiffArray &a) const {
+        if constexpr (IsFloat)
+            return steal(ad_var_max(m_index, a.m_index));
+        else
+            return steal(jit_var_max(m_index, a.m_index));
+    }
+
+    DiffArray fma_(const DiffArray &a, const DiffArray &b) const {
+        if constexpr (IsFloat)
+            return steal(ad_var_fma(m_index, a.m_index, b.m_index));
+        else
+            return steal(jit_var_fma(m_index, a.m_index, b.m_index));
+    }
+
+    static DiffArray select_(const MaskType m,
+                             const DiffArray &t,
+                             const DiffArray &f) {
+        if constexpr (IsFloat)
+            return steal(ad_var_select(m.m_index, a.m_index, b.m_index));
+        else
+            return steal(jit_var_select(m.m_index, a.m_index, b.m_index));
+    }
+
+    MaskType eq_(const DiffArray &d) const {
+        return MaskType::steal(
+            jit_var_eq((uint32_t) index, (uint32_t) d.m_index));
+    }
+
+    MaskType neq_(const DiffArray &d) const {
+        return MaskType::steal(
+            jit_var_neq((uint32_t) index, (uint32_t) d.m_index));
+    }
+
+    MaskType lt_(const DiffArray &d) const {
+        return MaskType::steal(
+            jit_var_lt((uint32_t) index, (uint32_t) d.m_index));
+    }
+
+    MaskType le_(const DiffArray &d) const {
+        return MaskType::steal(
+            jit_var_le((uint32_t) index, (uint32_t) d.m_index));
+    }
+
+    MaskType gt_(const DiffArray &d) const {
+        return MaskType::steal(
+            jit_var_gt((uint32_t) index, (uint32_t) d.m_index));
+    }
+
+    MaskType ge_(const DiffArray &d) const {
+        return MaskType::steal(
+            jit_var_ge((uint32_t) index, (uint32_t) d.m_index));
+    }
+
+    DiffArray mod_(const DiffArray &a) const {
+        return steal(jit_var_mod((uint32_t) m_index, (uint32_t) a.m_index));
+    }
+
+    DiffArray not_() const { return steal(jit_var_not((uint32_t) m_index)); }
 
     //! @}
     // -----------------------------------------------------------------------
@@ -163,11 +290,6 @@ struct DRJIT_TRIVIAL_ABI DiffArray
         m_index = 0;
         return tmp;
     }
-
-    // void init_(size_t size) {
-    //     *this = empty_(size);
-    // }
-
 
 private:
     Index m_index = 0;

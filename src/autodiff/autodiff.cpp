@@ -1168,24 +1168,6 @@ template <typename Value> struct SpecialCallback : Special {
 template <typename Value, typename Mask>
 uint32_t ad_new_select(const char *label, size_t size, const Mask &mask,
                        uint32_t t_index, uint32_t f_index) {
-    std::lock_guard<std::mutex> guard(state.mutex);
-    if constexpr (is_jit_v<Mask>) {
-        if (jit_flag(JitFlag::ADOptimize) && mask.is_literal()) {
-            uint32_t result = mask[0] ? t_index : f_index;
-            if (result)
-                ad_inc_ref(result, state[result]);
-            ad_log(Debug, "ad_new_select(a%u <- a%u, a%u): simplified", result, t_index, f_index);
-            return result;
-        }
-
-        if (jit_flag(JitFlag::ADOptimize) && f_index == t_index) {
-            if (t_index)
-                ad_inc_ref(t_index, state[t_index]);
-            ad_log(Debug, "ad_new_select(a%u <- a%u, a%u): simplified", t_index, t_index, f_index);
-            return t_index;
-        }
-    }
-
     /* Potentially turn off derivative tracking for some of the operands if
        we're within a scope that enables/disables gradient propagation
        (globally, or only for specific variables) */
