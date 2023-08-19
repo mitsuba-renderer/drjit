@@ -2,125 +2,63 @@
 #include <drjit/math.h>
 #include "common.h"
 
+namespace dr = drjit;
+
 #if !defined(_MSC_VER)
 #  undef DRJIT_EXTRA_EXPORT
 #  define DRJIT_EXTRA_EXPORT __attribute__((flatten, visibility("default")))
 #endif
 
-#define EXPORT_MATH_OP(name)                                                   \
-    template DRJIT_EXTRA_EXPORT uint32_t jit_var_##name<float>(uint32_t);      \
-    template DRJIT_EXTRA_EXPORT uint32_t jit_var_##name<double>(uint32_t);
-
-#define EXPORT_MATH_OP_2(name)                                                 \
-    template DRJIT_EXTRA_EXPORT uint32_t jit_var_##name<float>(uint32_t,       \
-                                                               uint32_t);      \
-    template DRJIT_EXTRA_EXPORT uint32_t jit_var_##name<double>(uint32_t,      \
-                                                                uint32_t);
-
-#define EXPORT_MATH_OP_PAIR(name)                                              \
-    template DRJIT_EXTRA_EXPORT std::pair<uint32_t, uint32_t>                  \
-        jit_var_##name<float>(uint32_t);                                       \
-    template DRJIT_EXTRA_EXPORT std::pair<uint32_t, uint32_t>                  \
-        jit_var_##name<double>(uint32_t);
+using Float32 = GenericArray<float>;
+using Float64 = GenericArray<double>;
 
 #define DEFINE_MATH_OP(name)                                                   \
-    template <typename Scalar> uint32_t jit_var_##name(uint32_t i0) {          \
-        using T = GenericArray<Scalar>;                                        \
-        jit_set_default_backend_from(i0);                                      \
-        return dr::name<T, false>(T::borrow(i0)).release();                    \
-    }                                                                          \
-    EXPORT_MATH_OP(name)
-
-#define DEFINE_MATH_OP_2(name)                                                 \
-    template <typename Scalar>                                                 \
-    uint32_t jit_var_##name(uint32_t i0, uint32_t i1) {                        \
-        using T = GenericArray<Scalar>;                                        \
-        jit_set_default_backend_from(i0);                                      \
-        return dr::name<T, T, false>(T::borrow(i0), T::borrow(i1)).release();  \
-    }                                                                          \
-    EXPORT_MATH_OP_2(name)
-
-#define DEFINE_MATH_OP_PAIR(name)                                              \
-    template <typename Scalar>                                                 \
-    std::pair<uint32_t, uint32_t> jit_var_##name(uint32_t i0) {                \
-        using T = GenericArray<Scalar>;                                        \
-        jit_set_default_backend_from(i0);                                      \
-        auto [a, b] = dr::name<T, false>(T::borrow(i0));                       \
-        return { a.release(), b.release() };                                   \
-    }                                                                          \
-    EXPORT_MATH_OP_PAIR(name)
-
-namespace dr = drjit;
-
-template <typename Scalar> uint32_t jit_var_exp(uint32_t i0) {
-    using T = GenericArray<Scalar>;
-    JitBackend backend = jit_set_default_backend_from(i0);
-
-    if (std::is_same_v<Scalar, float> && backend == JitBackend::CUDA) {
-        T value = T::borrow(i0) * dr::InvLogTwo<Scalar>;
-        return jit_var_exp2_intrinsic(value.index());
+    DRJIT_EXTRA_EXPORT uint32_t jit_var_##name(uint32_t i0) {                  \
+        VarInfo info = jit_set_backend(i0);                                    \
+        switch (info.type) {                                                   \
+            case VarType::Float32:                                             \
+                return dr::name<Float32, false>(Float32::borrow(i0))           \
+                    .release();                                                \
+            case VarType::Float64:                                             \
+                return dr::name<Float64, false>(Float64::borrow(i0))           \
+                    .release();                                                \
+            default:                                                           \
+                jit_fail("jit_var_" #name "(): invalid operand!");             \
+        }                                                                      \
     }
 
-    return dr::exp<T, false>(T::borrow(i0)).release();
-}
+#define DEFINE_MATH_OP_2(name)                                                 \
+    DRJIT_EXTRA_EXPORT uint32_t jit_var_##name(uint32_t i0, uint32_t i1) {     \
+        VarInfo info = jit_set_backend(i0);                                    \
+        switch (info.type) {                                                   \
+            case VarType::Float32:                                             \
+                return dr::name<Float32, Float32, false>(Float32::borrow(i0),  \
+                                                         Float32::borrow(i1))  \
+                    .release();                                                \
+            case VarType::Float64:                                             \
+                return dr::name<Float64, Float64, false>(Float64::borrow(i0),  \
+                                                         Float64::borrow(i1))  \
+                    .release();                                                \
+                                                                               \
+            default:                                                           \
+                jit_fail("jit_var_" #name "(): invalid operand!");             \
+        }                                                                      \
+    }
 
-template <typename Scalar> uint32_t jit_var_exp2(uint32_t i0) {
-    using T = GenericArray<Scalar>;
-    JitBackend backend = jit_set_default_backend_from(i0);
-
-    if (std::is_same_v<Scalar, float> && backend == JitBackend::CUDA)
-        return jit_var_exp2_intrinsic(i0);
-
-    return dr::exp2<T, false>(T::borrow(i0)).release();
-}
-
-template <typename Scalar> uint32_t jit_var_log(uint32_t i0) {
-    using T = GenericArray<Scalar>;
-    JitBackend backend = jit_set_default_backend_from(i0);
-
-    if (std::is_same_v<Scalar, float> && backend == JitBackend::CUDA)
-        return (T::steal(jit_var_log2_intrinsic(i0)) * dr::LogTwo<float>)
-            .release();
-
-    return dr::log<T, false>(T::borrow(i0)).release();
-}
-
-template <typename Scalar> uint32_t jit_var_log2(uint32_t i0) {
-    using T = GenericArray<Scalar>;
-    JitBackend backend = jit_set_default_backend_from(i0);
-
-    if (std::is_same_v<Scalar, float> && backend == JitBackend::CUDA)
-        return jit_var_log2_intrinsic(i0);
-
-    return dr::log2<T, false>(T::borrow(i0)).release();
-}
-
-template <typename Scalar> uint32_t jit_var_sin(uint32_t i0) {
-    using T = GenericArray<Scalar>;
-    JitBackend backend = jit_set_default_backend_from(i0);
-
-    if (std::is_same_v<Scalar, float> && backend == JitBackend::CUDA)
-        return jit_var_sin_intrinsic(i0);
-
-    return dr::sin<T, false>(T::borrow(i0)).release();
-}
-
-template <typename Scalar> uint32_t jit_var_cos(uint32_t i0) {
-    using T = GenericArray<Scalar>;
-    JitBackend backend = jit_set_default_backend_from(i0);
-
-    if (std::is_same_v<Scalar, float> && backend == JitBackend::CUDA)
-        return jit_var_cos_intrinsic(i0);
-
-    return dr::cos<T, false>(T::borrow(i0)).release();
-}
-
-EXPORT_MATH_OP(exp2)
-EXPORT_MATH_OP(exp)
-EXPORT_MATH_OP(log2)
-EXPORT_MATH_OP(log)
-EXPORT_MATH_OP(sin)
-EXPORT_MATH_OP(cos)
+#define DEFINE_MATH_OP_PAIR(name)                                              \
+    DRJIT_EXTRA_EXPORT UInt32Pair jit_var_##name(uint32_t i0) {                \
+        VarInfo info = jit_set_backend(i0);                                    \
+        switch (info.type) {                                                   \
+            case VarType::Float32: {                                           \
+                auto [a, b] = dr::name<Float32, false>(Float32::borrow(i0));   \
+                return { a.release(), b.release() }; }                         \
+            case VarType::Float64: {                                           \
+                auto [a, b] = dr::name<Float64, false>(Float64::borrow(i0));   \
+                return { a.release(), b.release() }; }                         \
+            default:                                                           \
+                jit_fail("jit_var_" #name "(): invalid operand!");             \
+        }                                                                      \
+    }
 
 DEFINE_MATH_OP(tan)
 DEFINE_MATH_OP(cot)
@@ -140,3 +78,105 @@ DEFINE_MATH_OP_2(ldexp)
 DEFINE_MATH_OP_PAIR(frexp)
 DEFINE_MATH_OP_PAIR(sincos)
 DEFINE_MATH_OP_PAIR(sincosh)
+
+// The operations below need special casing to use intrinsics on CUDA hardware
+
+DRJIT_EXTRA_EXPORT uint32_t jit_var_exp(uint32_t i0) {
+    VarInfo info = jit_set_backend(i0);
+
+    switch (info.type) {
+        case VarType::Float32:
+            if (info.backend == JitBackend::CUDA) {
+                Float32 value = Float32::borrow(i0) * dr::InvLogTwo<float>;
+                return jit_var_exp2_intrinsic(value.index());
+            }
+
+            return dr::exp<Float32, false>(Float32::borrow(i0)).release();
+
+        case VarType::Float64:
+            return dr::exp<Float64, false>(Float64::borrow(i0)).release();
+
+        default: jit_fail("jit_var_exp(): invalid operand!");
+    }
+}
+
+DRJIT_EXTRA_EXPORT uint32_t jit_var_exp2(uint32_t i0) {
+    VarInfo info = jit_set_backend(i0);
+
+    switch (info.type) {
+        case VarType::Float32:
+            if (info.backend == JitBackend::CUDA)
+                return jit_var_exp2_intrinsic(i0);
+            return dr::exp2<Float32, false>(Float32::borrow(i0)).release();
+
+        case VarType::Float64:
+            return dr::exp2<Float64, false>(Float64::borrow(i0)).release();
+
+        default: jit_fail("jit_var_exp2(): invalid operand!");
+    }
+}
+
+DRJIT_EXTRA_EXPORT uint32_t jit_var_log(uint32_t i0) {
+    VarInfo info = jit_set_backend(i0);
+
+    switch (info.type) {
+        case VarType::Float32:
+            if (info.backend == JitBackend::CUDA)
+                return (Float32::steal(jit_var_log2_intrinsic(i0)) *
+                        dr::LogTwo<float>).release();
+            return dr::log<Float32, false>(Float32::borrow(i0)).release();
+
+        case VarType::Float64:
+            return dr::log<Float64, false>(Float64::borrow(i0)).release();
+
+        default: jit_fail("jit_var_log(): invalid operand!");
+    }
+}
+
+DRJIT_EXTRA_EXPORT uint32_t jit_var_log2(uint32_t i0) {
+    VarInfo info = jit_set_backend(i0);
+
+    switch (info.type) {
+        case VarType::Float32:
+            if (info.backend == JitBackend::CUDA)
+                return jit_var_log2_intrinsic(i0);
+            return dr::log2<Float32, false>(Float32::borrow(i0)).release();
+
+        case VarType::Float64:
+            return dr::log2<Float64, false>(Float64::borrow(i0)).release();
+
+        default: jit_fail("jit_var_log2(): invalid operand!");
+    }
+}
+
+DRJIT_EXTRA_EXPORT uint32_t jit_var_sin(uint32_t i0) {
+    VarInfo info = jit_set_backend(i0);
+
+    switch (info.type) {
+        case VarType::Float32:
+            if (info.backend == JitBackend::CUDA)
+                return jit_var_sin_intrinsic(i0);
+            return dr::sin<Float32, false>(Float32::borrow(i0)).release();
+
+        case VarType::Float64:
+            return dr::sin<Float64, false>(Float64::borrow(i0)).release();
+
+        default: jit_fail("jit_var_sin(): invalid operand!");
+    }
+}
+
+DRJIT_EXTRA_EXPORT uint32_t jit_var_cos(uint32_t i0) {
+    VarInfo info = jit_set_backend(i0);
+
+    switch (info.type) {
+        case VarType::Float32:
+            if (info.backend == JitBackend::CUDA)
+                return jit_var_cos_intrinsic(i0);
+            return dr::cos<Float32, false>(Float32::borrow(i0)).release();
+
+        case VarType::Float64:
+            return dr::cos<Float64, false>(Float64::borrow(i0)).release();
+
+        default: jit_fail("jit_var_cos(): invalid operand!");
+    }
+}

@@ -1,5 +1,5 @@
 #include <drjit-core/jit.h>
-#include <drjit/fwd.h>
+#include <drjit/array.h>
 
 #define likely(x)   DRJIT_LIKELY(x)
 #define unlikely(x) DRJIT_UNLIKELY(x)
@@ -23,4 +23,4 @@ struct UInt32Hasher {
 };
 
 template <typename Value>
-using GenericArray = dr::JitArray<JitBackend::None, Value>;
+using GenericArray = drjit::JitArray<JitBackend::None, Value>;

@@ -49,6 +49,10 @@ struct ArrayMeta {
 };
 
 static_assert(sizeof(ArrayMeta) == 8, "Structure packing issue");
+
+/// A large set of Dr.Jit operations are handled generically. This
+/// enumeration encodes indices into the ArraySupplement::op field
+/// which points to the underlying implementations.
 enum class ArrayOp {
     // Unary operations
     Neg,
@@ -180,9 +184,12 @@ struct ArraySupplement : ArrayMeta {
             void *op[(int) ArrayOp::Count];
         };
 
+        // Tensors expose a different set of operations
         struct {
             TensorShape tensor_shape;
             TensorArray tensor_array;
+
+            /// Python type object for indexing calculations
             PyObject *tensor_index;
         };
     };
@@ -212,7 +219,9 @@ constexpr uint8_t size_or_zero_v = std::is_scalar_v<T> ? 0 : (uint8_t) size_v<T>
 
 NAMESPACE_END(detail)
 
-template <typename T> NB_INLINE void bind_init(ArrayBinding &b, nanobind::handle scope = {}, const char *name = nullptr) {
+template <typename T>
+NB_INLINE void bind_init(ArrayBinding &b, nanobind::handle scope = {},
+                         const char *name = nullptr) {
     namespace nb = nanobind;
 
     static_assert(
@@ -340,8 +349,7 @@ template <typename T> NB_INLINE void bind_base(ArrayBinding &b) {
         };
 
         b.init = (ArraySupplement::Init) + [](size_t size, T *a) {
-            new (a) T();
-            a->init_(size);
+            new (a) T(empty<T>(size));
         };
 
         if constexpr (T::Depth == 1) {
