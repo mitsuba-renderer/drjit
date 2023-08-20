@@ -18,7 +18,7 @@ nanobind_add_module(
   shape.h  shape.cpp
   traits.h traits.cpp
   scalar.h scalar.cpp
-  llvm.h   llvm.cpp
+  llvm.h   llvm.cpp llvm_ad.cpp
   reduce.h reduce.cpp
   apply.h  apply.cpp
   eval.h   eval.cpp

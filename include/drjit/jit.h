@@ -234,6 +234,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
     JitArray cot_() const { return steal(jit_var_cot(m_index)); }
     JitArray asin_() const { return steal(jit_var_asin(m_index)); }
     JitArray acos_() const { return steal(jit_var_acos(m_index)); }
+    JitArray atan_() const { return steal(jit_var_atan(m_index)); }
     JitArray sinh_() const { return steal(jit_var_sinh(m_index)); }
     JitArray cosh_() const { return steal(jit_var_cosh(m_index)); }
     JitArray tanh_() const { return steal(jit_var_tanh(m_index)); }
@@ -274,37 +275,17 @@ struct DRJIT_TRIVIAL_ABI JitArray
         return steal(jit_var_max(m_index, v.m_index));
     }
 
-    JitArray round_() const {
-        return steal(jit_var_round(m_index));
-    }
+    JitArray round_() const { return steal(jit_var_round(m_index)); }
+    template <typename T> T round2int_() const { return T(round(*this)); }
 
-    template <typename T> T round2int_() const {
-        return T(round(*this));
-    }
+    JitArray floor_() const { return steal(jit_var_floor(m_index)); }
+    template <typename T> T floor2int_() const { return T(floor(*this)); }
 
-    JitArray floor_() const {
-        return steal(jit_var_floor(m_index));
-    }
+    JitArray ceil_() const { return steal(jit_var_ceil(m_index)); }
+    template <typename T> T ceil2int_() const { return T(ceil(*this)); }
 
-    template <typename T> T floor2int_() const {
-        return T(floor(*this));
-    }
-
-    JitArray ceil_() const {
-        return steal(jit_var_ceil(m_index));
-    }
-
-    template <typename T> T ceil2int_() const {
-        return T(ceil(*this));
-    }
-
-    JitArray trunc_() const {
-        return steal(jit_var_trunc(m_index));
-    }
-
-    template <typename T> T trunc2int_() const {
-        return T(trunc(*this));
-    }
+    JitArray trunc_() const { return steal(jit_var_trunc(m_index)); }
+    template <typename T> T trunc2int_() const { return T(trunc(*this)); }
 
     JitArray fmadd_(const JitArray &b, const JitArray &c) const {
         return steal(jit_var_fma(m_index, b.index(), c.index()));
@@ -328,17 +309,9 @@ struct DRJIT_TRIVIAL_ABI JitArray
         return steal(jit_var_select(m.index(), t.index(), f.index()));
     }
 
-    JitArray popcnt_() const {
-        return steal(jit_var_popc(m_index));
-    }
-
-    JitArray lzcnt_() const {
-        return steal(jit_var_clz(m_index));
-    }
-
-    JitArray tzcnt_() const {
-        return steal(jit_var_ctz(m_index));
-    }
+    JitArray popcnt_() const { return steal(jit_var_popc(m_index)); }
+    JitArray lzcnt_() const { return steal(jit_var_clz(m_index)); }
+    JitArray tzcnt_() const { return steal(jit_var_ctz(m_index)); }
 
     //! @}
     // -----------------------------------------------------------------------
@@ -347,35 +320,22 @@ struct DRJIT_TRIVIAL_ABI JitArray
     //! @{ \name Horizontal operations
     // -----------------------------------------------------------------------
 
-    bool all_() const {
-        if (size() == 0)
-            return true;
-        return jit_var_all(m_index);
-    }
+    bool all_() const { return jit_var_all(m_index); }
+    bool any_() const { return jit_var_any(m_index); }
 
-    bool any_() const {
-        if (size() == 0)
-            return false;
-        return jit_var_any(m_index);
-    }
-
-    #define DRJIT_HORIZONTAL_OP(name, op, default_op)                          \
-        JitArray name##_() const {                                             \
-            if (size() == 0)                                                   \
-                default_op;                                                    \
-            return steal(jit_var_reduce(m_index, op));                         \
+    #define DRJIT_HORIZONTAL_OP(name, op)                                  \
+        JitArray name##_() const {                                         \
+            return steal(jit_var_reduce(Backend, Type, op, m_index));      \
         }
 
-    DRJIT_HORIZONTAL_OP(sum,  ReduceOp::Add, return JitArray(0))
-    DRJIT_HORIZONTAL_OP(prod, ReduceOp::Mul, return JitArray(1))
-    DRJIT_HORIZONTAL_OP(min,  ReduceOp::Min, drjit_raise("min_(): zero-sized array!"))
-    DRJIT_HORIZONTAL_OP(max,  ReduceOp::Max, drjit_raise("max_(): zero-sized array!"))
+    DRJIT_HORIZONTAL_OP(sum,  ReduceOp::Add)
+    DRJIT_HORIZONTAL_OP(prod, ReduceOp::Mul)
+    DRJIT_HORIZONTAL_OP(min,  ReduceOp::Min)
+    DRJIT_HORIZONTAL_OP(max,  ReduceOp::Max)
 
     #undef DRJIT_HORIZONTAL_OP
 
-    JitArray dot_(const JitArray &a) const {
-        return sum(*this * a);
-    }
+    JitArray dot_(const JitArray &a) const { return sum(*this * a); }
 
     uint32_t count_() const {
         if constexpr (!is_mask_v<Value>)
@@ -387,7 +347,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
     //! @}
     // -----------------------------------------------------------------------
 
-   // -----------------------------------------------------------------------
+    // -----------------------------------------------------------------------
     //! @{ \name Fancy array initialization
     // -----------------------------------------------------------------------
 
