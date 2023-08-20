@@ -383,7 +383,7 @@ namespace detail {
     };
 
     template <typename T> struct detached<T, enable_if_t<T::IsDiff && T::Depth == 1 && !T::IsTensor>> {
-        using type = typename std::decay_t<T>::Type;
+        using type = typename std::decay_t<T>::Detached;
     };
 
     template <typename T> struct detached<T, enable_if_t<T::IsDiff && T::Depth == 1 && T::IsTensor>> {

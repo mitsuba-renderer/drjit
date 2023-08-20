@@ -468,15 +468,15 @@ DRJIT_EXPORT void ad_prefix_pop() {
 //
 static void ad_free(ADIndex, Variable *);
 
-static void ad_inc_ref_int(ADIndex index, Variable *v) noexcept {
+static void ad_var_inc_ref_int(ADIndex index, Variable *v) noexcept {
     DRJIT_MARK_USED(index);
-    ad_log("ad_inc_ref(a%u): %u", index, v->ref_count + 1);
+    ad_log("ad_var_inc_ref(a%u): %u", index, v->ref_count + 1);
     v->ref_count++;
 }
 
-static bool ad_dec_ref_int(ADIndex index, Variable *v) noexcept {
+static bool ad_var_dec_ref_int(ADIndex index, Variable *v) noexcept {
     DRJIT_MARK_USED(index);
-    ad_log("ad_dec_ref(a%u): %u", index, v->ref_count - 1);
+    ad_log("ad_var_dec_ref(a%u): %u", index, v->ref_count - 1);
     ad_assert(v->ref_count > 0);
 
     if (--v->ref_count > 0) {
@@ -522,7 +522,7 @@ static void ad_free(ADIndex index, Variable *v) {
         Variable *v2 = state[source];
         ad_assert(v2->ref_count > 0);
 
-        if (!ad_dec_ref_int(source, v2)) {
+        if (!ad_var_dec_ref_int(source, v2)) {
             EdgeIndex fwd = v2->next_fwd;
             if (fwd == edge_id) {
                 v2->next_fwd = next_fwd;
@@ -548,7 +548,7 @@ static void ad_free(ADIndex index, Variable *v) {
     state.variables.erase(index);
 }
 
-template <typename T> Index ad_inc_ref_impl(Index index) JIT_NOEXCEPT {
+Index ad_var_inc_ref_impl(Index index) JIT_NOEXCEPT {
     JitIndex jit_index = ::jit_index(index);
     ADIndex ad_index = ::ad_index(index);
 
@@ -561,14 +561,14 @@ template <typename T> Index ad_inc_ref_impl(Index index) JIT_NOEXCEPT {
 
         if (ad_index) {
             std::lock_guard<std::mutex> guard(state.mutex);
-            ad_inc_ref_int(ad_index, state[ad_index]);
+            ad_var_inc_ref_int(ad_index, state[ad_index]);
         }
     }
 
     return combine(ad_index, jit_index);
 }
 
-template <typename T> void ad_dec_ref_impl(Index index) JIT_NOEXCEPT {
+void ad_var_dec_ref_impl(Index index) JIT_NOEXCEPT {
     JitIndex jit_index = ::jit_index(index);
     ADIndex ad_index = ::ad_index(index);
 
@@ -576,7 +576,7 @@ template <typename T> void ad_dec_ref_impl(Index index) JIT_NOEXCEPT {
 
     if (unlikely(ad_index)) {
         std::lock_guard<std::mutex> guard(state.mutex);
-        if (unlikely(ad_dec_ref_int(ad_index, state[ad_index]))) {
+        if (unlikely(ad_var_dec_ref_int(ad_index, state[ad_index]))) {
             /* Extra-careful here: deallocate cleanup queue of
                custom AD edge callbacks (reentrant!) */
             std::vector<Special *> temp, &cleanup = local_state.cleanup;
@@ -839,7 +839,7 @@ DRJIT_NOINLINE Index ad_var_new_impl(const char *label, JitVar &&result,
         edge.next_bwd = edge_index;
         edge_index = edge_index_new;
 
-        ad_inc_ref_int(source, v_source);
+        ad_var_inc_ref_int(source, v_source);
         v_source->next_fwd = edge_index_new;
     }
 
@@ -905,87 +905,8 @@ struct MaskEdge : Special {
 };
 
 // ==========================================================================
-// Implementation of the JIT backend arithmetic operations
+// Implementation of arithmetic operations and transcendental functions
 // ==========================================================================
-
-Index ad_var_neg(Index i0) {
-    JitVar result = JitVar::steal(jit_var_neg(jit_index(i0)));
-
-    if (is_detached(i0))
-        return result.release();
-    else
-        return ad_var_new("neg", std::move(result), Arg(i0, -1.0));
-}
-
-Index ad_var_abs(Index i0) {
-    JitVar result = JitVar::steal(jit_var_abs(jit_index(i0)));
-
-    if (is_detached(i0)) {
-        return result.release();
-    } else {
-        JitVar v0 = JitVar::borrow(jit_index(i0)),
-               vz = scalar(i0, 0.0),
-               vp = scalar(i0, 1.0),
-               vn = scalar(i0, -1.0);
-
-        return ad_var_new("abs", std::move(result),
-                          Arg(i0, dr::select(v0 >= vz, vp, vn)));
-    }
-}
-
-Index ad_var_sqrt(Index i0) {
-    JitVar result = JitVar::steal(jit_var_sqrt(jit_index(i0)));
-
-    if (is_detached(i0))
-        return result.release();
-    else
-        return ad_var_new("sqrt", std::move(result),
-                          Arg(i0, dr::rcp(result) * scalar(i0, .5f)));
-}
-
-Index ad_var_rcp(Index i0) {
-    JitVar result = JitVar::steal(jit_var_rcp(jit_index(i0)));
-
-    if (is_detached(i0))
-        return result.release();
-    else
-        return ad_var_new("rcp", std::move(result),
-                          Arg(i0, -dr::sqr(result)));
-}
-
-Index ad_var_rsqrt(Index i0) {
-    JitVar result = JitVar::steal(jit_var_rsqrt(jit_index(i0)));
-
-    if (is_detached(i0))
-        return result.release();
-    else
-        return ad_var_new("rsqrt", std::move(result),
-                          Arg(i0, -dr::sqr(result) * result * scalar(i0, -.5)));
-}
-
-Index ad_var_cbrt(Index i0) {
-    JitVar result = JitVar::steal(jit_var_cbrt(jit_index(i0)));
-
-    if (is_detached(i0))
-        return result.release();
-    else
-        return ad_var_new(
-            "cbrt", std::move(result),
-            Arg(i0, dr::sqr(dr::rcp(result)) * scalar(i0, 1.0 / 3.f)));
-}
-
-Index ad_var_erf(Index i0) {
-    JitVar result = JitVar::steal(jit_var_erf(jit_index(i0)));
-
-    if (is_detached(i0)) {
-        return result.release();
-    } else {
-        JitVar v0 = JitVar::borrow(jit_index(i0));
-        return ad_var_new("erf", std::move(result),
-                          Arg(i0, scalar(i0, 2.0 * dr::InvSqrtPi<double>) *
-                                      dr::exp(-dr::sqr(v0))));
-    }
-}
 
 Index ad_var_add(Index i0, Index i1) {
     JitVar result = JitVar::steal(jit_var_add(jit_index(i0), jit_index(i1)));
@@ -1030,6 +951,352 @@ Index ad_var_div(Index i0, Index i1) {
         return ad_var_new("div", std::move(result),
                           Arg(i0, std::move(w0)),
                           Arg(i1, std::move(w1)));
+    }
+}
+
+Index ad_var_neg(Index i0) {
+    JitVar result = JitVar::steal(jit_var_neg(jit_index(i0)));
+
+    if (is_detached(i0))
+        return result.release();
+    else
+        return ad_var_new("neg", std::move(result), Arg(i0, -1.0));
+}
+
+Index ad_var_abs(Index i0) {
+    JitVar result = JitVar::steal(jit_var_abs(jit_index(i0)));
+
+    if (is_detached(i0)) {
+        return result.release();
+    } else {
+        JitVar v0 = JitVar::borrow(jit_index(i0)),
+               vz = scalar(i0, 0.0),
+               vp = scalar(i0, 1.0),
+               vn = scalar(i0, -1.0);
+
+        return ad_var_new("abs", std::move(result),
+                          Arg(i0, dr::select(v0 >= vz, vp, vn)));
+    }
+}
+
+Index ad_var_sqrt(Index i0) {
+    JitVar result = JitVar::steal(jit_var_sqrt(jit_index(i0)));
+
+    if (is_detached(i0))
+        return result.release();
+    else
+        return ad_var_new("sqrt", std::move(result),
+                          Arg(i0, dr::rcp(result) * scalar(i0, .5f)));
+}
+
+Index ad_var_rcp(Index i0) {
+    JitVar result = JitVar::steal(jit_var_rcp(jit_index(i0)));
+
+    if (is_detached(i0)) {
+        return result.release();
+    } else {
+        JitVar w0 = -dr::sqr(result);
+        return ad_var_new("rcp", std::move(result),
+                          Arg(i0, std::move(w0)));
+    }
+}
+
+Index ad_var_rsqrt(Index i0) {
+    JitVar result = JitVar::steal(jit_var_rsqrt(jit_index(i0)));
+
+    if (is_detached(i0)) {
+        return result.release();
+    } else {
+        JitVar w0 = -dr::sqr(result) * result * scalar(i0, -.5);
+        return ad_var_new("rsqrt", std::move(result), Arg(i0, std::move(w0)));
+    }
+}
+
+Index ad_var_cbrt(Index i0) {
+    JitVar result = JitVar::steal(jit_var_cbrt(jit_index(i0)));
+
+    if (is_detached(i0)) {
+        return result.release();
+    } else {
+        JitVar w0 = dr::sqr(dr::rcp(result)) * scalar(i0, 1.0 / 3.f);
+        return ad_var_new("cbrt", std::move(result), Arg(i0, std::move(w0)));
+    }
+}
+
+Index ad_var_erf(Index i0) {
+    JitVar result = JitVar::steal(jit_var_erf(jit_index(i0)));
+
+    if (is_detached(i0)) {
+        return result.release();
+    } else {
+        JitVar v0 = JitVar::borrow(jit_index(i0)),
+               w0 = scalar(i0, 2.0 * dr::InvSqrtPi<double>) *
+                    dr::exp(-dr::sqr(v0));
+        return ad_var_new("erf", std::move(result), Arg(i0, std::move(w0)));
+    }
+}
+
+Index ad_var_sin(Index i0) {
+    if (is_detached(i0)) {
+        return jit_var_sin(jit_index(i0));
+    } else {
+        JitVar v0 = JitVar::borrow(jit_index(i0));
+        auto [s, c] = dr::sincos(v0);
+        return ad_var_new("sin", std::move(s), Arg(i0, std::move(c)));
+    }
+}
+
+Index ad_var_cos(Index i0) {
+    if (is_detached(i0)) {
+        return jit_var_cos(jit_index(i0));
+    } else {
+        JitVar v0 = JitVar::borrow(jit_index(i0));
+        auto [s, c] = dr::sincos(v0);
+
+        return ad_var_new("cos", std::move(c), Arg(i0, -s));
+    }
+}
+
+UInt64Pair ad_var_sincos(Index i0) {
+    if (is_detached(i0)) {
+        UInt32Pair p = jit_var_sincos(jit_index(i0));
+        return { p.first, p.second };
+    } else {
+        JitVar v0 = JitVar::borrow(jit_index(i0));
+
+        auto [s, c] = dr::sincos(v0);
+
+        Index ci = ad_var_new("cos [sincos]", JitVar(c), Arg(i0, -s)),
+              si = ad_var_new("sin [sincos]", std::move(s), Arg(i0, std::move(c)));
+
+        return { si, ci };
+    }
+}
+
+Index ad_var_tan(Index i0) {
+    JitVar result = JitVar::steal(jit_var_tan(jit_index(i0)));
+
+    if (is_detached(i0)) {
+        return result.release();
+    } else {
+        JitVar v0 = JitVar::borrow(jit_index(i0));
+        return ad_var_new("tan", std::move(result),
+                          Arg(i0, dr::sqr(dr::sec(v0))));
+    }
+}
+
+Index ad_var_csc(Index i0) {
+    JitVar v0     = JitVar::borrow(jit_index(i0)),
+           result = dr::csc(v0);
+
+    if (is_detached(i0)) {
+        return result.release();
+    } else {
+        JitVar w0 = -result*dr::cot(v0);
+        return ad_var_new("csc", std::move(result), Arg(i0, std::move(w0)));
+    }
+}
+
+Index ad_var_sec(Index i0) {
+    JitVar v0     = JitVar::borrow(jit_index(i0)),
+           result = dr::sec(v0);
+
+    if (is_detached(i0)) {
+        return result.release();
+    } else {
+        JitVar w0 = result*dr::tan(v0);
+        return ad_var_new("sec", std::move(result), Arg(i0, std::move(w0)));
+    }
+}
+
+Index ad_var_cot(Index i0) {
+    JitVar result = JitVar::steal(jit_var_cot(jit_index(i0)));
+
+    if (is_detached(i0)) {
+        return result.release();
+    } else {
+        JitVar v0 = JitVar::borrow(jit_index(i0));
+        return ad_var_new("cot", std::move(result),
+                          Arg(i0, -dr::sqr(dr::csc(v0))));
+    }
+}
+
+Index ad_var_asin(Index i0) {
+    JitVar result = JitVar::steal(jit_var_asin(jit_index(i0)));
+
+    if (is_detached(i0)) {
+        return result.release();
+    } else {
+        JitVar v0 = JitVar::borrow(jit_index(i0)),
+               w0 = dr::rsqrt(dr::fmadd(-v0, v0, scalar(i0, 1.0)));
+        return ad_var_new("asin", std::move(result), Arg(i0, std::move(w0)));
+    }
+}
+
+Index ad_var_acos(Index i0) {
+    JitVar result = JitVar::steal(jit_var_acos(jit_index(i0)));
+
+    if (is_detached(i0)) {
+        return result.release();
+    } else {
+        JitVar v0 = JitVar::borrow(jit_index(i0)),
+               w0 = -dr::rsqrt(dr::fmadd(-v0, v0, scalar(i0, 1.0)));
+        return ad_var_new("acos", std::move(result), Arg(i0, std::move(w0)));
+    }
+}
+
+Index ad_var_atan(Index i0) {
+    JitVar result = JitVar::steal(jit_var_atan(jit_index(i0)));
+
+    if (is_detached(i0)) {
+        return result.release();
+    } else {
+        JitVar v0 = JitVar::borrow(jit_index(i0)),
+               w0 = -dr::rcp(dr::fmadd(v0, v0, scalar(i0, 1.0)));
+        return ad_var_new("atan", std::move(result), Arg(i0, std::move(w0)));
+    }
+}
+
+Index ad_var_atan2(Index i0, Index i1) {
+    JitVar result = JitVar::steal(jit_var_atan2(jit_index(i0), jit_index(i1)));
+
+    if (is_detached(i0, i1)) {
+        return result.release();
+    } else {
+        JitVar v0 = JitVar::borrow(jit_index(i0)),
+               v1 = JitVar::borrow(jit_index(i1)),
+               il2 = dr::rcp(dr::fmadd(v0, v0, sqr(v1)));
+
+        return ad_var_new("atan2", std::move(result),
+                          Arg(i0, il2 * v1),
+                          Arg(i1, il2 * v0));
+    }
+}
+
+Index ad_var_exp(Index i0) {
+    JitVar result = JitVar::steal(jit_var_exp(jit_index(i0)));
+
+    if (is_detached(i0)) {
+        return result.release();
+    } else {
+        JitVar w0 = result;
+        return ad_var_new("exp", std::move(result), Arg(i0, std::move(w0)));
+    }
+}
+
+Index ad_var_exp2(Index i0) {
+    JitVar result = JitVar::steal(jit_var_exp2(jit_index(i0)));
+
+    if (is_detached(i0)) {
+        return result.release();
+    } else {
+        JitVar w0 = result * scalar(i0, dr::LogTwo<double>);
+        return ad_var_new("exp2", std::move(result), Arg(i0, std::move(w0)));
+    }
+}
+
+Index ad_var_log(Index i0) {
+    JitVar result = JitVar::steal(jit_var_log(jit_index(i0)));
+
+    if (is_detached(i0)) {
+        return result.release();
+    } else {
+        JitVar w0 = dr::rcp(JitVar::borrow(i0));
+        return ad_var_new("log", std::move(result), Arg(i0, std::move(w0)));
+    }
+}
+
+Index ad_var_log2(Index i0) {
+    JitVar result = JitVar::steal(jit_var_log2(jit_index(i0)));
+
+    if (is_detached(i0)) {
+        return result.release();
+    } else {
+        JitVar w0 = dr::rcp(JitVar::borrow(i0)) * scalar(i0, dr::InvLogTwo<double>);
+        return ad_var_new("log2", std::move(result), Arg(i0, std::move(w0)));
+    }
+}
+
+Index ad_var_sinh(Index i0) {
+    if (is_detached(i0)) {
+        return jit_var_sinh(jit_index(i0));
+    } else {
+        JitVar v0 = JitVar::borrow(jit_index(i0));
+        auto [s, c] = dr::sincosh(v0);
+        return ad_var_new("sinh", std::move(s), Arg(i0, std::move(c)));
+    }
+}
+
+Index ad_var_cosh(Index i0) {
+    if (is_detached(i0)) {
+        return jit_var_cosh(jit_index(i0));
+    } else {
+        JitVar v0 = JitVar::borrow(jit_index(i0));
+        auto [s, c] = dr::sincosh(v0);
+        return ad_var_new("cosh", std::move(c), Arg(i0, std::move(s)));
+    }
+}
+
+UInt64Pair ad_var_sincosh(Index i0) {
+    if (is_detached(i0)) {
+        UInt32Pair p = jit_var_sincosh(jit_index(i0));
+        return { p.first, p.second };
+    } else {
+        JitVar v0 = JitVar::borrow(jit_index(i0));
+
+        auto [s, c] = dr::sincosh(v0);
+
+        Index ci = ad_var_new("cosh [sincos]", JitVar(c), Arg(i0, JitVar(s))),
+              si = ad_var_new("sinh [sincos]", std::move(s), Arg(i0, std::move(c)));
+
+        return { si, ci };
+    }
+}
+
+Index ad_var_tanh(Index i0) {
+    JitVar result = JitVar::steal(jit_var_tanh(jit_index(i0)));
+
+    if (is_detached(i0)) {
+        return result.release();
+    } else {
+        JitVar v0 = JitVar::borrow(jit_index(i0));
+        return ad_var_new("tanh", std::move(result), Arg(i0, dr::sqr(dr::sech(v0))));
+    }
+}
+
+Index ad_var_asinh(Index i0) {
+    JitVar result = JitVar::steal(jit_var_asinh(jit_index(i0)));
+
+    if (is_detached(i0)) {
+        return result.release();
+    } else {
+        JitVar v0 = JitVar::borrow(jit_index(i0)),
+               w0 = dr::rsqrt(dr::fmadd(v0, v0, scalar(i0, 1.0)));
+        return ad_var_new("asinh", std::move(result), Arg(i0, std::move(w0)));
+    }
+}
+
+Index ad_var_acosh(Index i0) {
+    JitVar result = JitVar::steal(jit_var_acosh(jit_index(i0)));
+
+    if (is_detached(i0)) {
+        return result.release();
+    } else {
+        JitVar v0 = JitVar::borrow(jit_index(i0)),
+               w0 = dr::rsqrt(dr::fmadd(v0, v0, scalar(i0, -1.0)));
+        return ad_var_new("acosh", std::move(result), Arg(i0, std::move(w0)));
+    }
+}
+
+Index ad_var_atanh(Index i0) {
+    JitVar result = JitVar::steal(jit_var_atanh(jit_index(i0)));
+
+    if (is_detached(i0)) {
+        return result.release();
+    } else {
+        JitVar v0 = JitVar::borrow(jit_index(i0)),
+               w0 = dr::rsqrt(dr::fmadd(-v0, v0, scalar(i0, 1.0)));
+        return ad_var_new("atanh", std::move(result), Arg(i0, std::move(w0)));
     }
 }
 
@@ -1078,13 +1345,14 @@ Index ad_var_select(Index i0, Index i1, Index i2) {
     if (is_detached(i1, i2)) {
         return result.release();
     } else if (jit_var_is_literal(i0) || i1 == i2) {
-        ad_log("ad_new_select(a%u <- a%u, a%u): simplified",
-               ad_index(i0), ad_index(i1), ad_index(i2));
+        Index out_index = jit_var_is_literal_zero(i0) ? i2 : i1;
 
-        Index ad_index = jit_var_is_literal_zero(i0) ? i2 : i1;
+        ad_log("ad_var_select(a%u <- a%u, a%u, a%u): simplified.",
+               out_index, ad_index(i0), ad_index(i1), ad_index(i2));
+
         std::lock_guard<std::mutex> guard(state.mutex);
-        ad_inc_ref_int(ad_index, state[ad_index]);
-        return ad_index;
+        ad_var_inc_ref_int(out_index, state[out_index]);
+        return out_index;
     } else {
         JitMask m = JitMask::borrow(i0);
         return ad_var_new("select", std::move(result),
@@ -1106,3 +1374,56 @@ Index ad_var_fma(Index i0, Index i1, Index i2) {
                           Arg(i2, 1.0));
 }
 
+Index ad_var_reduce(JitBackend backend, VarType vt, ReduceOp op, Index i0) {
+    JitVar result = JitVar::steal(jit_var_reduce(backend, vt, op, jit_index(i0)));
+
+    if (is_detached(i0)) {
+        return result.release();
+    } else {
+        switch (op) {
+            case ReduceOp::Add: {
+                    return ad_var_new("reduce[sum]", std::move(result),
+                                      Arg(i0, scalar(i0, 1.0)));
+                }
+
+            case ReduceOp::Mul: {
+                    JitVar v0 = JitVar::borrow(jit_index(i0)),
+                           z  = scalar(i0, 0.0),
+                           w0 = dr::select(dr::eq(v0, z), z, result / v0);
+                    return ad_var_new("reduce[mul]", std::move(result),
+                                      Arg(i0, std::move(w0)));
+                }
+
+            /* The cases below introduce duplicate '1' entries when
+               multiple entries are equal to the min/max value, which is
+               strictly speaking not correct (but getting this right
+               would make the operation quite a bit more expensive). */
+
+            case ReduceOp::Min:
+            case ReduceOp::Max: {
+                    JitVar v0 = JitVar::borrow(jit_index(i0)),
+                           z = scalar(i0, 0.0), o = scalar(i0, 1.0),
+                           w0 = dr::select(dr::eq(v0, result), o, z);
+
+                    const char *name =
+                        op == ReduceOp::Min ? "reduce[min]" : "reduce[max]";
+
+                    return ad_var_new(name, std::move(result),
+                                      Arg(i0, std::move(w0)));
+                }
+
+            default:
+                ad_raise("ad_var_reduce(): unsupported reduction!");
+        }
+    }
+}
+
+Index ad_var_cast(Index i0, VarType vt) {
+    JitVar result = JitVar::steal(jit_var_cast(jit_index(i0), vt, 0));
+
+    if (is_detached(i0)) {
+        return result.release();
+    } else {
+        ad_raise("Case not yet handled.");
+    }
+}

@@ -222,7 +222,7 @@ template <typename T> T clear_primal(const T &value) {
 
             return result;
         } else {
-            return T::create_borrow(value.index_ad(), typename T::Type());
+            return T::create_borrow(value.index_ad(), typename T::Detached());
         }
     } else if constexpr (is_drjit_struct_v<T>) {
         T result;

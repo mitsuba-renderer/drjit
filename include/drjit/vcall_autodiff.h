@@ -26,7 +26,7 @@ template <typename DiffType, typename Self, typename Result, typename Func,
           typename... Args>
 struct DiffVCall : CustomOp<DiffType, Result, ConstStr, Self, Func, Args...> {
     using Base = CustomOp<DiffType, Result, ConstStr, Self, Func, Args...>;
-    using Type = typename DiffType::Type;
+    using Type = typename DiffType::Detached;
     using Base::m_implicit_in;
 
     static constexpr bool ClearPrimal = false;
@@ -154,7 +154,7 @@ DRJIT_INLINE Result vcall_autodiff(const char *name, const Func &func,
     /* Only perform a differentiable vcall if there is a differentiable
        float type somewhere within the argument or return values */
     if constexpr (is_diff_v<DiffType> && std::is_floating_point_v<scalar_t<DiffType>>) {
-        using Type = typename DiffType::Type;
+        using Type = typename DiffType::Detached;
 
         auto [base, n_inst] = vcall_registry_get(backend_v<Self>, Base::Domain);
 

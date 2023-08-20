@@ -1,602 +1,287 @@
 
-    template <typename T = Type_, enable_if_t<!is_mask_v<T>> = 0>
-    DiffArray and_(const MaskType &mask) const {
-        return select(mask, *this, DiffArray(Scalar(0)));
+/*
+    drjit/autodiff.h -- Forward/reverse-mode automatic differentiation
+
+    Dr.Jit is a C++ template library for efficient vectorization and
+    differentiation of numerical kernels on modern processor architectures.
+
+    Copyright (c) 2021 Wenzel Jakob <wenzel.jakob@epfl.ch>
+
+    All rights reserved. Use of this source code is governed by a BSD-style
+    license that can be found in the LICENSE file.
+*/
+
+#pragma once
+
+#include <drjit/jit.h>
+#include <drjit/extra.h>
+
+NAMESPACE_BEGIN(drjit)
+
+template <JitBackend Backend_, typename Value_>
+struct DRJIT_TRIVIAL_ABI DiffArray
+    : ArrayBaseT<Value_, is_mask_v<Value_>, DiffArray<Backend_, Value_>> {
+    static_assert(std::is_scalar_v<Value_>,
+                  "Differentiable arrays can only be created over scalar types!");
+
+    template <JitBackend, typename> friend struct DiffArray;
+
+    // -----------------------------------------------------------------------
+    //! @{ \name Basic type declarations
+    // -----------------------------------------------------------------------
+
+    using Value = Value_;
+    using Base = ArrayBaseT<Value_, is_mask_v<Value_>, DiffArray<Backend_, Value_>>;
+
+    static constexpr JitBackend Backend = Backend_;
+
+    static constexpr bool IsDiff = true;
+    static constexpr bool IsArray = true;
+    static constexpr bool IsDynamic = true;
+    static constexpr bool IsJIT = true;
+    static constexpr bool IsCUDA = Backend == JitBackend::CUDA;
+    static constexpr bool IsLLVM = Backend == JitBackend::LLVM;
+    static constexpr bool IsFloat = std::is_floating_point_v<Value_>;
+    static constexpr bool IsClass =
+        std::is_pointer_v<Value_> &&
+        std::is_class_v<std::remove_pointer_t<Value_>>;
+    static constexpr size_t Size = Dynamic;
+
+    static constexpr VarType Type =
+        IsClass ? VarType::UInt32 : var_type_v<Value>;
+
+    using ActualValue = std::conditional_t<IsClass, uint32_t, Value>;
+
+    using CallSupport =
+        call_support<std::decay_t<std::remove_pointer_t<Value_>>, DiffArray>;
+
+    template <typename T> using ReplaceValue = DiffArray<Backend, T>;
+    using MaskType = DiffArray<Backend, bool>;
+    using ArrayType = DiffArray;
+
+    using Index = std::conditional_t<IsFloat, uint64_t, uint32_t>;
+    using Detached = JitArray<Backend, Value>;
+
+    //! @}
+    // -----------------------------------------------------------------------
+
+    // -----------------------------------------------------------------------
+    //! @{ \name Constructors and assignment operators
+    // -----------------------------------------------------------------------
+
+    DiffArray() = default;
+
+    ~DiffArray() noexcept {
+        if constexpr (IsFloat)
+            ad_var_dec_ref(m_index);
+        else
+            jit_var_dec_ref(m_index);
     }
 
-    template <typename T = Type_, enable_if_t<!is_mask_v<T>> = 0>
-    DiffArray or_(const MaskType &mask) const {
-        if constexpr (IsEnabled) {
-            const Scalar value = memcpy_cast<Scalar>(int_array_t<Scalar>(-1));
-            if (m_index)
-                return select(mask, DiffArray(value), *this);
+    DiffArray(const DiffArray &a) {
+        if constexpr (IsFloat) {
+            m_index = ad_var_inc_ref(a.m_index);
+        } else {
+            m_index = a.m_index;
+            jit_var_inc_ref(m_index);
         }
-        return DiffArray::create(0, detail::or_(m_value, mask.m_value));
     }
 
-    template <typename T = Type_, enable_if_t<!is_mask_v<T>> = 0>
-    DiffArray xor_(const MaskType &mask) const {
-        if constexpr (IsEnabled) {
-            if (m_index)
-                drjit_raise("xor_(): operation not permitted for "
-                            "floating point arrays attached to the AD graph!");
-        }
-        return DiffArray::create(0, detail::xor_(m_value, mask.m_value));
+    DiffArray(DiffArray &&a) noexcept : m_index(a.m_index) {
+        a.m_index = 0;
     }
 
-    template <typename T = Type_, enable_if_t<!is_mask_v<T>> = 0>
-    DiffArray andnot_(const MaskType &mask) const {
-        if constexpr (IsEnabled) {
-            if (m_index)
-                drjit_raise("andnot_(): operation not permitted for "
-                            "floating point arrays attached to the AD graph!");
+    template <typename T>
+    DiffArray(const DiffArray<Backend, T> &v) {
+        if constexpr (IsFloat && std::is_floating_point_v<T>)
+            m_index = ad_var_cast(v.m_index, Type);
+        else
+            m_index = jit_var_cast((uint32_t) v.m_index, Type, 0);
+    }
+
+    template <typename T>
+    DiffArray(const DiffArray<Backend, T> &v, detail::reinterpret_flag) {
+        m_index = jit_var_cast((uint32_t) v.m_index, Type, 1);
+    }
+
+    DiffArray(const Detached &v) : m_index(v.m_index) {
+        jit_var_inc_ref((uint32_t) m_index);
+    }
+
+    template <typename T, enable_if_scalar_t<T> = 0>
+    DiffArray(T value) : m_index(Detached(value).release()) { }
+
+    template <typename... Ts, enable_if_t<(sizeof...(Ts) > 1 &&
+              detail::and_v<!std::is_same_v<Ts, detail::reinterpret_flag>...>)> = 0>
+    DiffArray(Ts&&... ts) : m_index(Detached(ts...).release()) { }
+
+    DiffArray &operator=(const DiffArray &a) {
+        Index old_index = m_index;
+        if constexpr (IsFloat) {
+            m_index = ad_var_inc_ref(a.m_index);
+            ad_var_dec_ref(old_index);
+        } else {
+            m_index = a.m_index;
+            jit_var_inc_ref(m_index);
+            jit_var_dec_ref(old_index);
         }
-        return DiffArray::create(0, detail::andnot_(m_value, mask.m_value));
+        return *this;
+    }
+
+    DiffArray &operator=(DiffArray &&a) {
+        Index temp = m_index;
+        m_index = a.m_index;
+        a.m_index = temp;
+        return *this;
     }
 
     //! @}
     // -----------------------------------------------------------------------
 
     // -----------------------------------------------------------------------
-    //! @{ \name Transcendental functions
+    //! @{ \name Vertical operations with derivative tracking
     // -----------------------------------------------------------------------
 
-    DiffArray sin_() const {
-        if constexpr (!std::is_floating_point_v<Scalar>) {
-            drjit_raise("sin_(): invalid operand type!");
-        } else {
-            auto [s, c] = sincos(m_value);
-            uint32_t index_new = 0;
-            if constexpr (IsEnabled) {
-                if (m_index) {
-                    uint32_t indices[1] = { m_index };
-                    Type weights[1] = { std::move(c) };
-                    index_new = detail::ad_new<Type>("sin", width(s),
-                                                     1, indices, weights);
-                }
-            }
-            return DiffArray::create(index_new, std::move(s));
-        }
+    DiffArray add_(const DiffArray &a) const {
+        if constexpr (IsFloat)
+            return steal(ad_var_add(m_index, a.m_index));
+        else
+            return steal(jit_var_add(m_index, a.m_index));
     }
 
-    DiffArray cos_() const {
-        if constexpr (!std::is_floating_point_v<Scalar>) {
-            drjit_raise("cos_(): invalid operand type!");
-        } else {
-            auto [s, c] = sincos(m_value);
-            uint32_t index_new = 0;
-            if constexpr (IsEnabled) {
-                if (m_index) {
-                    uint32_t indices[1] = { m_index };
-                    Type weights[1] = { -s };
-                    index_new = detail::ad_new<Type>("cos", width(c),
-                                                     1, indices, weights);
-                }
-            }
-            return DiffArray::create(index_new, std::move(c));
-        }
+    DiffArray sub_(const DiffArray &a) const {
+        if constexpr (IsFloat)
+            return steal(ad_var_sub(m_index, a.m_index));
+        else
+            return steal(jit_var_sub(m_index, a.m_index));
     }
 
+    DiffArray mul_(const DiffArray &a) const {
+        if constexpr (IsFloat)
+            return steal(ad_var_mul(m_index, a.m_index));
+        else
+            return steal(jit_var_mul(m_index, a.m_index));
+    }
+
+    DiffArray mulhi_(const DiffArray &a) const {
+        return steal(jit_var_mulhi((uint32_t) m_index,
+                                   (uint32_t) a.m_index));
+    }
+
+    DiffArray div_(const DiffArray &a) const {
+        if constexpr (IsFloat)
+            return steal(ad_var_div(m_index, a.m_index));
+        else
+            return steal(jit_var_div(m_index, a.m_index));
+    }
+
+    DiffArray neg_() const {
+        if constexpr (IsFloat)
+            return steal(ad_var_neg(m_index));
+        else
+            return steal(jit_var_neg(m_index));
+    }
+
+    DiffArray not_() const {
+        if (grad_enabled_())
+            jit_raise("DiffArray::not_(): not permitted on attached variables!");
+        return steal(jit_var_not((uint32_t) m_index));
+    }
+
+    template <typename T> DiffArray or_(const T &v) const {
+        if (grad_enabled_())
+            jit_raise("DiffArray::or_(): not permitted on attached variables!");
+        return steal(jit_var_or((uint32_t) m_index, (uint32_t) v.m_index));
+    }
+
+    template <typename T> DiffArray and_(const T &v) const {
+        if (grad_enabled_())
+            jit_raise("DiffArray::and_(): not permitted on attached variables!");
+        return steal(jit_var_and((uint32_t) m_index, (uint32_t) v.m_index));
+    }
+
+    template <typename T> DiffArray xor_(const T &v) const {
+        if (grad_enabled_())
+            jit_raise("DiffArray::xor_(): not permitted on attached variables!");
+        return steal(jit_var_xor((uint32_t) m_index, (uint32_t) v.m_index));
+    }
+
+    template <typename T> DiffArray andnot_(const T &a) const {
+        return and_(a.not_());
+    }
+
+    DiffArray abs_() const {
+        if constexpr (IsFloat)
+            return steal(ad_var_abs(m_index));
+        else
+            return steal(jit_var_abs(m_index));
+    }
+
+    DiffArray rcp_() const { return steal(ad_var_rcp(m_index)); }
+    DiffArray rsqrt_() const { return steal(ad_var_rsqrt(m_index)); }
+    DiffArray sqrt_() const { return steal(ad_var_sqrt(m_index)); }
+    DiffArray cbrt_() const { return steal(ad_var_cbrt(m_index)); }
+    DiffArray sin_() const { return steal(ad_var_sin(m_index)); }
+    DiffArray cos_() const { return steal(ad_var_cos(m_index)); }
     std::pair<DiffArray, DiffArray> sincos_() const {
-        if constexpr (!std::is_floating_point_v<Scalar>) {
-            drjit_raise("sincos_(): invalid operand type!");
-        } else {
-            auto [s, c] = sincos(m_value);
-            uint32_t index_s = 0, index_c = 0;
-            if constexpr (IsEnabled) {
-                if (m_index) {
-                    uint32_t indices[1] = { m_index };
-                    Type weights_s[1] = { c }, weights_c[1] = { -s };
-                    uint32_t w = (uint32_t) width(s);
-                    index_s = detail::ad_new<Type>("sincos[s]", w, 1, indices,
-                                                   weights_s);
-                    index_c = detail::ad_new<Type>("sincos[c]", w, 1, indices,
-                                                   weights_c);
-                }
-            }
-            return {
-                DiffArray::create(index_s, std::move(s)),
-                DiffArray::create(index_c, std::move(c)),
-            };
-        }
+        UInt64Pair p = jit_var_sincos(m_index);
+        return { steal(p.first), steal(p.second) };
     }
-
-    DiffArray csc_() const {
-        if constexpr (!std::is_floating_point_v<Scalar>) {
-            drjit_raise("csc_(): invalid operand type!");
-        } else {
-            Type result = csc(m_value);
-            uint32_t index_new = 0;
-            if constexpr (IsEnabled) {
-                if (m_index) {
-                    uint32_t indices[1] = { m_index };
-                    Type weights[1] = { -result * cot(m_value) };
-                    index_new = detail::ad_new<Type>(
-                        "csc", width(result), 1, indices, weights);
-                }
-            }
-            return DiffArray::create(index_new, std::move(result));
-        }
-    }
-
-    DiffArray sec_() const {
-        if constexpr (!std::is_floating_point_v<Scalar>) {
-            drjit_raise("sec_(): invalid operand type!");
-        } else {
-            Type result = sec(m_value);
-            uint32_t index_new = 0;
-            if constexpr (IsEnabled) {
-                if (m_index) {
-                    uint32_t indices[1] = { m_index };
-                    Type weights[1] = { result * tan(m_value) };
-                    index_new = detail::ad_new<Type>(
-                        "sec", width(result), 1, indices, weights);
-                }
-            }
-            return DiffArray::create(index_new, std::move(result));
-        }
-    }
-
-    DiffArray tan_() const {
-        if constexpr (!std::is_floating_point_v<Scalar>) {
-            drjit_raise("tan_(): invalid operand type!");
-        } else {
-            Type result = tan(m_value);
-            uint32_t index_new = 0;
-            if constexpr (IsEnabled) {
-                if (m_index) {
-                    uint32_t indices[1] = { m_index };
-                    Type weights[1] = { sqr(sec(m_value)) };
-                    index_new = detail::ad_new<Type>(
-                        "tan", width(result), 1, indices, weights);
-                }
-            }
-            return DiffArray::create(index_new, std::move(result));
-        }
-    }
-
-    DiffArray cot_() const {
-        if constexpr (!std::is_floating_point_v<Scalar>) {
-            drjit_raise("cot_(): invalid operand type!");
-        } else {
-            Type result = cot(m_value);
-            uint32_t index_new = 0;
-            if constexpr (IsEnabled) {
-                if (m_index) {
-                    uint32_t indices[1] = { m_index };
-                    Type weights[1] = { -sqr(csc(m_value)) };
-                    index_new = detail::ad_new<Type>(
-                        "cot", width(result), 1, indices, weights);
-                }
-            }
-            return DiffArray::create(index_new, std::move(result));
-        }
-    }
-
-    DiffArray asin_() const {
-        if constexpr (!std::is_floating_point_v<Scalar>) {
-            drjit_raise("asin_(): invalid operand type!");
-        } else {
-            Type result = asin(m_value);
-            uint32_t index_new = 0;
-            if constexpr (IsEnabled) {
-                if (m_index) {
-                    uint32_t indices[1] = { m_index };
-                    Type weights[1] = { rsqrt(fnmadd(m_value, m_value, 1)) };
-                    index_new = detail::ad_new<Type>(
-                        "asin", width(result), 1, indices, weights);
-                }
-            }
-            return DiffArray::create(index_new, std::move(result));
-        }
-    }
-
-    DiffArray acos_() const {
-        if constexpr (!std::is_floating_point_v<Scalar>) {
-            drjit_raise("acos_(): invalid operand type!");
-        } else {
-            Type result = acos(m_value);
-            uint32_t index_new = 0;
-            if constexpr (IsEnabled) {
-                if (m_index) {
-                    uint32_t indices[1] = { m_index };
-                    Type weights[1] = { -rsqrt(fnmadd(m_value, m_value, 1)) };
-                    index_new = detail::ad_new<Type>(
-                        "acos", width(result), 1, indices, weights);
-                }
-            }
-            return DiffArray::create(index_new, std::move(result));
-        }
-    }
-
-    DiffArray atan_() const {
-        if constexpr (!std::is_floating_point_v<Scalar>) {
-            drjit_raise("atan_(): invalid operand type!");
-        } else {
-            Type result = atan(m_value);
-            uint32_t index_new = 0;
-            if constexpr (IsEnabled) {
-                if (m_index) {
-                    uint32_t indices[1] = { m_index };
-                    Type weights[1] = { rcp(fmadd(m_value, m_value, 1)) };
-                    index_new = detail::ad_new<Type>(
-                        "atan", width(result), 1, indices, weights);
-                }
-            }
-            return DiffArray::create(index_new, std::move(result));
-        }
-    }
-
+    DiffArray tan_() const { return steal(ad_var_tan(m_index)); }
+    DiffArray csc_() const { return steal(ad_var_csc(m_index)); }
+    DiffArray sec_() const { return steal(ad_var_sec(m_index)); }
+    DiffArray cot_() const { return steal(ad_var_cot(m_index)); }
+    DiffArray asin_() const { return steal(ad_var_asin(m_index)); }
+    DiffArray acos_() const { return steal(ad_var_acos(m_index)); }
+    DiffArray atan_() const { return steal(ad_var_atan(m_index)); }
     DiffArray atan2_(const DiffArray &x) const {
-        if constexpr (!std::is_floating_point_v<Scalar>) {
-            drjit_raise("atan2_(): invalid operand type!");
-        } else {
-            Type result = atan2(m_value, x.m_value);
-            uint32_t index_new = 0;
-            if constexpr (IsEnabled) {
-                if (m_index || x.m_index) {
-                    Type il2 = rcp(fmadd(m_value, m_value, sqr(x.m_value)));
-                    uint32_t indices[2] = { m_index, x.m_index };
-                    Type weights[2] = { il2 * x.m_value, -il2 * m_value };
-                    index_new = detail::ad_new<Type>(
-                        "atan2", width(result), 2, indices, weights);
-                }
-            }
-            return DiffArray::create(index_new, std::move(result));
-        }
+        return steal(ad_var_atan2(m_index, x.index()));
     }
 
-    DiffArray exp_() const {
-        if constexpr (!std::is_floating_point_v<Scalar>) {
-            drjit_raise("exp_(): invalid operand type!");
-        } else {
-            Type result = exp(m_value);
-            uint32_t index_new = 0;
-            if constexpr (IsEnabled) {
-                if (m_index) {
-                    uint32_t indices[1] = { m_index };
-                    Type weights[1] = { result };
-                    index_new = detail::ad_new<Type>(
-                        "exp", width(result), 1, indices, weights);
-                }
-            }
-            return DiffArray::create(index_new, std::move(result));
-        }
-    }
+    DiffArray exp_() const { return steal(ad_var_exp(m_index)); }
+    DiffArray exp2_() const { return steal(ad_var_exp2(m_index)); }
+    DiffArray log_() const { return steal(ad_var_log(m_index)); }
+    DiffArray log2_() const { return steal(ad_var_log2(m_index)); }
 
-    DiffArray exp2_() const {
-        if constexpr (!std::is_floating_point_v<Scalar>) {
-            drjit_raise("exp2_(): invalid operand type!");
-        } else {
-            Type result = exp2(m_value);
-            uint32_t index_new = 0;
-            if constexpr (IsEnabled) {
-                if (m_index) {
-                    uint32_t indices[1] = { m_index };
-                    Type weights[1] = { result * LogTwo<Value> };
-                    index_new = detail::ad_new<Type>(
-                        "exp2", width(result), 1, indices, weights);
-                }
-            }
-            return DiffArray::create(index_new, std::move(result));
-        }
-    }
-
-    DiffArray log_() const {
-        if constexpr (!std::is_floating_point_v<Scalar>) {
-            drjit_raise("log_(): invalid operand type!");
-        } else {
-            Type result = log(m_value);
-            uint32_t index_new = 0;
-            if constexpr (IsEnabled) {
-                if (m_index) {
-                    uint32_t indices[1] = { m_index };
-                    Type weights[1] = { rcp(m_value) };
-                    index_new = detail::ad_new<Type>(
-                        "log", width(result), 1, indices, weights);
-                }
-            }
-            return DiffArray::create(index_new, std::move(result));
-        }
-    }
-
-    DiffArray log2_() const {
-        if constexpr (!std::is_floating_point_v<Scalar>) {
-            drjit_raise("log2_(): invalid operand type!");
-        } else {
-            Type result = log2(m_value);
-            uint32_t index_new = 0;
-            if constexpr (IsEnabled) {
-                if (m_index) {
-                    uint32_t indices[1] = { m_index };
-                    Type weights[1] = { rcp(m_value) * InvLogTwo<Value> };
-                    index_new = detail::ad_new<Type>(
-                        "log2", width(result), 1, indices, weights);
-                }
-            }
-            return DiffArray::create(index_new, std::move(result));
-        }
-    }
-
-    DiffArray sinh_() const {
-        if constexpr (!std::is_floating_point_v<Scalar>) {
-            drjit_raise("sinh_(): invalid operand type!");
-        } else {
-            auto [s, c] = sincosh(m_value);
-            uint32_t index_new = 0;
-            if constexpr (IsEnabled) {
-                if (m_index) {
-                    uint32_t indices[1] = { m_index };
-                    Type weights[1] = { std::move(c) };
-                    index_new = detail::ad_new<Type>("sinh", width(s),
-                                                     1, indices, weights);
-                }
-            }
-            return DiffArray::create(index_new, std::move(s));
-        }
-    }
-
-    DiffArray cosh_() const {
-        if constexpr (!std::is_floating_point_v<Scalar>) {
-            drjit_raise("cosh_(): invalid operand type!");
-        } else {
-            auto [s, c] = sincosh(m_value);
-            uint32_t index_new = 0;
-            if constexpr (IsEnabled) {
-                if (m_index) {
-                    uint32_t indices[1] = { m_index };
-                    Type weights[1] = { s };
-                    index_new = detail::ad_new<Type>("cosh", width(c),
-                                                     1, indices, weights);
-                }
-            }
-            return DiffArray::create(index_new, std::move(c));
-        }
-    }
-
+    DiffArray sinh_() const { return steal(ad_var_sinh(m_index)); }
+    DiffArray cosh_() const { return steal(ad_var_cosh(m_index)); }
     std::pair<DiffArray, DiffArray> sincosh_() const {
-        if constexpr (!std::is_floating_point_v<Scalar>) {
-            drjit_raise("sincosh_(): invalid operand type!");
-        } else {
-            auto [s, c] = sincosh(m_value);
-            uint32_t index_s = 0, index_c = 0;
-            if constexpr (IsEnabled) {
-                if (m_index) {
-                    uint32_t indices[1] = { m_index };
-                    Type weights_s[1] = { c }, weights_c[1] = { s };
-                    size_t w = width(s);
-                    index_s =
-                        detail::ad_new<Type>("sincosh[s]", w, 1, indices, weights_s);
-                    index_c =
-                        detail::ad_new<Type>("sincosh[c]", w, 1, indices, weights_c);
-                }
-            }
-            return {
-                DiffArray::create(index_s, std::move(s)),
-                DiffArray::create(index_c, std::move(c)),
-            };
-        }
+        UInt64Pair p = jit_var_sincosh(m_index);
+        return { steal(p.first), steal(p.second) };
     }
+    DiffArray tanh_() const { return steal(ad_var_tanh(m_index)); }
+    DiffArray asinh_() const { return steal(ad_var_asinh(m_index)); }
+    DiffArray acosh_() const { return steal(ad_var_acosh(m_index)); }
+    DiffArray atanh_() const { return steal(ad_var_atanh(m_index)); }
 
-    DiffArray tanh_() const {
-        if constexpr (!std::is_floating_point_v<Scalar>) {
-            drjit_raise("tanh_(): invalid operand type!");
-        } else {
-            Type result = tanh(m_value);
-            uint32_t index_new = 0;
-            if constexpr (IsEnabled) {
-                if (m_index) {
-                    uint32_t indices[1] = { m_index };
-                    Type weights[1] = { sqr(sech(m_value)) };
-                    index_new = detail::ad_new<Type>(
-                        "tanh", width(result), 1, indices, weights);
-                }
-            }
-            return DiffArray::create(index_new, std::move(result));
-        }
-    }
-
-    DiffArray asinh_() const {
-        if constexpr (!std::is_floating_point_v<Scalar>) {
-            drjit_raise("asinh_(): invalid operand type!");
-        } else {
-            Type result = asinh(m_value);
-            uint32_t index_new = 0;
-            if constexpr (IsEnabled) {
-                if (m_index) {
-                    uint32_t indices[1] = { m_index };
-                    Type weights[1] = { rsqrt((Scalar) 1 + sqr(m_value)) };
-                    index_new = detail::ad_new<Type>(
-                        "asinh", width(result), 1, indices, weights);
-                }
-            }
-            return DiffArray::create(index_new, std::move(result));
-        }
-    }
-
-    DiffArray acosh_() const {
-        if constexpr (!std::is_floating_point_v<Scalar>) {
-            drjit_raise("acosh_(): invalid operand type!");
-        } else {
-            Type result = acosh(m_value);
-            uint32_t index_new = 0;
-            if constexpr (IsEnabled) {
-                if (m_index) {
-                    uint32_t indices[1] = { m_index };
-                    Type weights[1] = { rsqrt(sqr(m_value) - (Scalar) 1) };
-                    index_new = detail::ad_new<Type>(
-                        "acosh", width(result), 1, indices, weights);
-                }
-            }
-            return DiffArray::create(index_new, std::move(result));
-        }
-    }
-
-    DiffArray atanh_() const {
-        if constexpr (!std::is_floating_point_v<Scalar>) {
-            drjit_raise("atanh_(): invalid operand type!");
-        } else {
-            Type result = atanh(m_value);
-            uint32_t index_new = 0;
-            if constexpr (IsEnabled) {
-                if (m_index) {
-                    uint32_t indices[1] = { m_index };
-                    Type weights[1] = { rcp((Scalar) 1 - sqr(m_value)) };
-                    index_new = detail::ad_new<Type>(
-                        "atanh", width(result), 1, indices, weights);
-                }
-            }
-            return DiffArray::create(index_new, std::move(result));
-        }
-    }
-
-    //! @}
-    // -----------------------------------------------------------------------
-
-    // -----------------------------------------------------------------------
-    //! @{ \name Operations that don't require derivatives
-    // -----------------------------------------------------------------------
-
-
-    DiffArray or_(const DiffArray &a) const {
-        if constexpr (is_floating_point_v<Scalar>) {
-            if (m_index || a.m_index)
-                drjit_raise("or_(): bit operations are not permitted for "
-                            "floating point arrays attached to the AD graph!");
-        }
-        return DiffArray::create(0, detail::or_(m_value, a.m_value));
-    }
-
-    DiffArray and_(const DiffArray &a) const {
-        if constexpr (is_floating_point_v<Scalar>) {
-            if (m_index || a.m_index)
-                drjit_raise("and_(): bit operations are not permitted for "
-                            "floating point arrays attached to the AD graph!");
-        }
-        return DiffArray::create(0, detail::and_(m_value, a.m_value));
-    }
-
-    DiffArray xor_(const DiffArray &a) const {
-        if constexpr (is_floating_point_v<Scalar>) {
-            if (m_index || a.m_index)
-                drjit_raise("xor_(): bit operations are not permitted for "
-                            "floating point arrays attached to the AD graph!");
-        }
-        return DiffArray::create(0, detail::xor_(m_value, a.m_value));
-    }
-
-    DiffArray andnot_(const DiffArray &a) const {
-        if constexpr (is_floating_point_v<Scalar>) {
-            if (m_index || a.m_index)
-                drjit_raise("andnot_(): bit operations are not permitted for "
-                            "floating point arrays attached to the AD graph!");
-        }
-        return DiffArray::create(0, detail::andnot_(m_value, a.m_value));
-    }
-
-    DiffArray floor_() const {
-        if constexpr (!std::is_floating_point_v<Scalar>)
-            drjit_raise("floor_(): invalid operand type!");
+    DiffArray min_(const DiffArray &a) const {
+        if constexpr (IsFloat)
+            return steal(ad_var_min(m_index, a.m_index));
         else
-            return DiffArray::create(0, floor(m_value));
+            return steal(jit_var_min(m_index, a.m_index));
     }
 
-    DiffArray ceil_() const {
-        if constexpr (!std::is_floating_point_v<Scalar>)
-            drjit_raise("ceil_(): invalid operand type!");
+    DiffArray max_(const DiffArray &a) const {
+        if constexpr (IsFloat)
+            return steal(ad_var_max(m_index, a.m_index));
         else
-            return DiffArray::create(0, ceil(m_value));
+            return steal(jit_var_max(m_index, a.m_index));
     }
 
-    DiffArray trunc_() const {
-        if constexpr (!std::is_floating_point_v<Scalar>)
-            drjit_raise("trunc_(): invalid operand type!");
+    DiffArray fma_(const DiffArray &a, const DiffArray &b) const {
+        if constexpr (IsFloat)
+            return steal(ad_var_fma(m_index, a.m_index, b.m_index));
         else
-            return DiffArray::create(0, trunc(m_value));
+            return steal(jit_var_fma(m_index, a.m_index, b.m_index));
     }
 
-    DiffArray round_() const {
-        if constexpr (!std::is_floating_point_v<Scalar>)
-            drjit_raise("round_(): invalid operand type!");
+    static DiffArray select_(const MaskType m,
+                             const DiffArray &t,
+                             const DiffArray &f) {
+        if constexpr (IsFloat)
+            return steal(ad_var_select(m.m_index, t.m_index, f.m_index));
         else
-            return DiffArray::create(0, round(m_value));
-    }
-
-    template <typename T> T ceil2int_() const {
-        if constexpr (!std::is_floating_point_v<Scalar>)
-            drjit_raise("ceil2int_(): invalid operand type!");
-        else
-            return T::create(0, ceil2int<typename T::Type>(m_value));
-    }
-
-    template <typename T> T floor2int_() const {
-        if constexpr (!std::is_floating_point_v<Scalar>)
-            drjit_raise("floor2int_(): invalid operand type!");
-        else
-            return T::create(0, floor2int<typename T::Type>(m_value));
-    }
-
-    template <typename T> T round2int_() const {
-        if constexpr (!std::is_floating_point_v<Scalar>)
-            drjit_raise("round2int_(): invalid operand type!");
-        else
-            return T::create(0, round2int<typename T::Type>(m_value));
-    }
-
-    template <typename T> T trunc2int_() const {
-        if constexpr (!std::is_floating_point_v<Scalar>)
-            drjit_raise("trunc2int_(): invalid operand type!");
-        else
-            return T::create(0, trunc2int<typename T::Type>(m_value));
-    }
-
-    DiffArray sl_(const DiffArray &a) const {
-        if constexpr (!std::is_integral_v<Scalar>)
-            drjit_raise("sl_(): invalid operand type!");
-        else
-            return DiffArray::create(0, m_value << a.m_value);
-    }
-
-    DiffArray sr_(const DiffArray &a) const {
-        if constexpr (!std::is_integral_v<Scalar>)
-            drjit_raise("sr_(): invalid operand type!");
-        else
-            return DiffArray::create(0, m_value >> a.m_value);
-    }
-
-    template <int Imm> DiffArray sl_() const {
-        if constexpr (!std::is_integral_v<Scalar>)
-            drjit_raise("sl_(): invalid operand type!");
-        else
-            return DiffArray::create(0, sl<Imm>(m_value));
-    }
-
-    template <int Imm> DiffArray sr_() const {
-        if constexpr (!std::is_integral_v<Scalar>)
-            drjit_raise("sr_(): invalid operand type!");
-        else
-            return DiffArray::create(0, sr<Imm>(m_value));
-    }
-
-    DiffArray tzcnt_() const {
-        if constexpr (!std::is_integral_v<Scalar>)
-            drjit_raise("tzcnt_(): invalid operand type!");
-        else
-            return DiffArray::create(0, tzcnt(m_value));
-    }
-
-    DiffArray lzcnt_() const {
-        if constexpr (!std::is_integral_v<Scalar>)
-            drjit_raise("lzcnt_(): invalid operand type!");
-        else
-            return DiffArray::create(0, lzcnt(m_value));
-    }
-
-    DiffArray popcnt_() const {
-        if constexpr (!std::is_integral_v<Scalar>)
-            drjit_raise("popcnt_(): invalid operand type!");
-        else
-            return DiffArray::create(0, popcnt(m_value));
+            return steal(jit_var_select(m.m_index, t.m_index, f.m_index));
     }
 
     //! @}
@@ -606,554 +291,289 @@
     //! @{ \name Horizontal operations
     // -----------------------------------------------------------------------
 
-    bool all_() const {
-        if constexpr (!is_mask_v<Type>)
-            drjit_raise("all_(): invalid operand type!");
-        else
-            return all(m_value);
-    }
+    bool all_() const { return jit_var_all((uint32_t) m_index); }
+    bool any_() const { return jit_var_any((uint32_t) m_index); }
 
-    bool any_() const {
-        if constexpr (!is_mask_v<Type>)
-            drjit_raise("any_(): invalid operand type!");
-        else
-            return any(m_value);
-    }
-
-    size_t count_() const {
-        if constexpr (!is_mask_v<Type>)
-            drjit_raise("count_(): invalid operand type!");
-        else
-            return count(m_value);
-    }
-
-    DiffArray sum_() const {
-        if constexpr (!std::is_arithmetic_v<Scalar>) {
-            drjit_raise("sum_(): invalid operand type!");
-        } else {
-            uint32_t index_new = 0;
-            if constexpr (IsEnabled) {
-                if (m_index) {
-                    uint32_t indices[1] = { m_index };
-                    Type weights[1] = { 1 };
-                    index_new = detail::ad_new<Type>(
-                        "sum", 1, 1, indices, weights);
-                }
-            }
-            return DiffArray::create(index_new, sum(m_value));
+    #define DRJIT_HORIZONTAL_OP(name, op)                                      \
+        DiffArray name##_() const {                                            \
+            if constexpr (IsFloat)                                             \
+                return steal(ad_var_reduce(Backend, Type, op, m_index));       \
+            else                                                               \
+                return steal(jit_var_reduce(Backend, Type, op, m_index));      \
         }
-    }
 
-    DiffArray prod_() const {
-        if constexpr (!std::is_arithmetic_v<Scalar>) {
-            drjit_raise("prod_(): invalid operand type!");
-        } else {
-            Type result = prod(m_value);
-            uint32_t index_new = 0;
-            if constexpr (IsEnabled) {
-                if (m_index) {
-                    uint32_t indices[1] = { m_index };
-                    Type weights[1] = { select(eq(m_value, (Scalar) 0),
-                                               (Scalar) 0, result / m_value) };
-                    index_new = detail::ad_new<Type>(
-                        "prod", 1, 1, indices, weights);
-                }
-            }
-            return DiffArray::create(index_new, std::move(result));
-        }
-    }
+    DRJIT_HORIZONTAL_OP(sum,  ReduceOp::Add)
+    DRJIT_HORIZONTAL_OP(prod, ReduceOp::Mul)
+    DRJIT_HORIZONTAL_OP(min,  ReduceOp::Min)
+    DRJIT_HORIZONTAL_OP(max,  ReduceOp::Max)
 
-    DiffArray min_() const {
-        if constexpr (!std::is_arithmetic_v<Scalar>) {
-            drjit_raise("min_(): invalid operand type!");
-        } else {
-            Type result = min(m_value);
-            uint32_t index_new = 0;
-            if constexpr (IsEnabled) {
-                if (m_index) {
-                    /* This gradient has duplicate '1' entries when
-                       multiple entries are equal to the minimum , which is
-                       strictly speaking not correct (but getting this right
-                       would make the operation quite a bit more expensive). */
+    #undef DRJIT_HORIZONTAL_OP
 
-                    uint32_t indices[1] = { m_index };
-                    Type weights[1] = { select(
-                        eq(m_value, result), Type(1), Type(0)) };
-                    index_new = detail::ad_new<Type>(
-                        "min", 1, 1, indices, weights);
-                }
-            }
-            return DiffArray::create(index_new, std::move(result));
-        }
-    }
+    DiffArray dot_(const DiffArray &a) const { return sum(*this * a); }
 
-    DiffArray max_() const {
-        if constexpr (!std::is_arithmetic_v<Scalar>) {
-            drjit_raise("max_(): invalid operand type!");
-        } else {
-            Type result = max(m_value);
-            uint32_t index_new = 0;
-            if constexpr (IsEnabled) {
-                if (m_index) {
-                    /* This gradient has duplicate '1' entries when
-                       multiple entries are equal to the maximum, which is
-                       strictly speaking not correct (but getting this right
-                       would make the operation quite a bit more expensive). */
+    uint32_t count_() const {
+        if constexpr (!is_mask_v<Value>)
+            drjit_raise("Unsupported operand type");
 
-                    uint32_t indices[1] = { m_index };
-                    Type weights[1] = { select(
-                        eq(m_value, result), Type(1), Type(0)) };
-                    index_new = detail::ad_new<Type>(
-                        "max", 1, 1, indices, weights);
-                }
-            }
-            return DiffArray::create(index_new, std::move(result));
-        }
-    }
-
-    DiffArray dot_(const DiffArray &a) const {
-        return sum(*this * a);
+        return sum(select(*this, (uint32_t) 1, (uint32_t) 0)).entry(0);
     }
 
     //! @}
     // -----------------------------------------------------------------------
 
     // -----------------------------------------------------------------------
-    //! @{ \name Scatter/gather operations
+    //! @{ \name Operations that aren't tracked by the AD backend
     // -----------------------------------------------------------------------
 
-    template <bool Permute>
-    static DiffArray gather_(const DiffArray &src, const IndexType &offset,
-                             const MaskType &mask = true) {
-        if constexpr (std::is_scalar_v<Type>) {
-            drjit_raise("Array gather operation not supported for scalar array type.");
-        } else {
-            Type result = gather<Type>(src.m_value, offset.m_value, mask.m_value);
-            uint32_t index_new = 0;
-            if constexpr (IsEnabled) {
-                if (src.m_index)
-                    index_new = detail::ad_new_gather<Type>(
-                        Permute ? "gather[permute]" : "gather",
-                        width(result), src.m_index, offset.m_value,
-                        mask.m_value, Permute);
-            }
-            return create(index_new, std::move(result));
-        }
+    DiffArray mod_(const DiffArray &a) const {
+        return steal(jit_var_mod((uint32_t) m_index, (uint32_t) a.m_index));
     }
 
-    template <bool Permute>
-    void scatter_(DiffArray &dst, const IndexType &offset,
-                  const MaskType &mask = true) const {
-        if constexpr (std::is_scalar_v<Type>) {
-            (void) dst; (void) offset; (void) mask;
-            drjit_raise("Array scatter operation not supported for scalar array type.");
-        } else {
-            scatter(dst.m_value, m_value, offset.m_value, mask.m_value);
-            if constexpr (IsEnabled) {
-                if (m_index || (dst.m_index && !Permute)) {
-                    uint32_t index = detail::ad_new_scatter<Type>(
-                        Permute ? "scatter[permute]" : "scatter", width(dst),
-                        ReduceOp::None, m_index, dst.m_index, offset.m_value,
-                        mask.m_value, Permute);
-                    detail::ad_dec_ref<Type>(dst.m_index);
-                    dst.m_index = index;
-                }
-            }
-        }
+    MaskType eq_(const DiffArray &d) const {
+        return MaskType::steal(
+            jit_var_eq((uint32_t) m_index, (uint32_t) d.m_index));
     }
 
-    void scatter_reduce_(ReduceOp op, DiffArray &dst, const IndexType &offset,
-                         const MaskType &mask = true) const {
-        if constexpr (std::is_scalar_v<Type>) {
-            (void) op; (void) dst; (void) offset; (void) mask;
-            drjit_raise("Array scatter_reduce operation not supported for scalar array type.");
-        } else {
-            scatter_reduce(op, dst.m_value, m_value, offset.m_value, mask.m_value);
-            if constexpr (IsEnabled) {
-                if (m_index) { // safe to ignore dst.m_index in the case of scatter_reduce
-                    uint32_t index = detail::ad_new_scatter<Type>(
-                        "scatter_reduce", width(dst), op, m_index,
-                        dst.m_index, offset.m_value, mask.m_value, false);
-                    detail::ad_dec_ref<Type>(dst.m_index);
-                    dst.m_index = index;
-                }
-            }
-        }
+    MaskType neq_(const DiffArray &d) const {
+        return MaskType::steal(
+            jit_var_neq((uint32_t) m_index, (uint32_t) d.m_index));
     }
 
-    void scatter_reduce_kahan_(DiffArray &dst_1, DiffArray &dst_2, const IndexType &offset,
-                         const MaskType &mask = true) const {
-        if constexpr (std::is_scalar_v<Type>) {
-            (void) dst_1; (void) dst_2; (void) offset; (void) mask;
-            drjit_raise("Array scatter_reduce operation not supported for scalar array type.");
-        } else {
-            scatter_reduce_kahan(dst_1.m_value, dst_2.m_value, m_value,
-                                 offset.m_value, mask.m_value);
-            if constexpr (IsEnabled) {
-                if (m_index) { // safe to ignore dst_1.m_index in the case of scatter_reduce
-                    uint32_t index = detail::ad_new_scatter<Type>(
-                        "scatter_reduce_kahan", width(dst_1), ReduceOp::Add,
-                        m_index, dst_1.m_index, offset.m_value, mask.m_value,
-                        false);
-                    detail::ad_dec_ref<Type>(dst_1.m_index);
-                    dst_1.m_index = index;
-                }
-            }
-        }
+    MaskType lt_(const DiffArray &d) const {
+        return MaskType::steal(
+            jit_var_lt((uint32_t) m_index, (uint32_t) d.m_index));
     }
 
-    template <bool>
-    static DiffArray gather_(const void *src, const IndexType &offset,
-                             const MaskType &mask = true) {
-        return create(0, gather<Type>(src, offset.m_value, mask.m_value));
+    MaskType le_(const DiffArray &d) const {
+        return MaskType::steal(
+            jit_var_le((uint32_t) m_index, (uint32_t) d.m_index));
     }
 
-    template <bool>
-    void scatter_(void *dst, const IndexType &offset,
-                  const MaskType &mask = true) const {
-        scatter(dst, m_value, offset.m_value, mask.m_value);
+    MaskType gt_(const DiffArray &d) const {
+        return MaskType::steal(
+            jit_var_gt((uint32_t) m_index, (uint32_t) d.m_index));
     }
 
-    void scatter_reduce_(ReduceOp op, void *dst, const IndexType &offset,
-                         const MaskType &mask = true) const {
-        scatter_reduce(op, dst, m_value, offset.m_value, mask.m_value);
+    MaskType ge_(const DiffArray &d) const {
+        return MaskType::steal(
+            jit_var_ge((uint32_t) m_index, (uint32_t) d.m_index));
     }
 
-    auto compress_() const {
-        if constexpr (!is_mask_v<Type>)
-            drjit_raise("compress_(): invalid operand type!");
-        else
-            return uint32_array_t<ArrayType>::create(0, compress(m_value));
+    DiffArray sl_(const DiffArray &v) const {
+        return steal(jit_var_shl((uint32_t) m_index, (uint32_t) v.m_index));
+    }
+
+    DiffArray sr_(const DiffArray &v) const {
+        return steal(jit_var_shr((uint32_t) m_index, (uint32_t) v.m_index));
+    }
+
+    template <int Imm> DiffArray sr_() const { return sr_(Imm); }
+    template <int Imm> DiffArray sl_() const { return sl_(Imm); }
+
+    DiffArray popcnt_() const { return steal(jit_var_popc((uint32_t) m_index)); }
+    DiffArray lzcnt_() const { return steal(jit_var_clz((uint32_t) m_index)); }
+    DiffArray tzcnt_() const { return steal(jit_var_ctz((uint32_t) m_index)); }
+
+    DiffArray round_() const { return steal(jit_var_round((uint32_t) m_index)); }
+    template <typename T> T round2int_() const { return T(round(*this)); }
+
+    DiffArray floor_() const { return steal(jit_var_floor((uint32_t) m_index)); }
+    template <typename T> T floor2int_() const { return T(floor(*this)); }
+
+    DiffArray ceil_() const { return steal(jit_var_ceil((uint32_t) m_index)); }
+    template <typename T> T ceil2int_() const { return T(ceil(*this)); }
+
+    DiffArray trunc_() const { return steal(jit_var_trunc((uint32_t) m_index)); }
+    template <typename T> T trunc2int_() const { return T(trunc(*this)); }
+
+    //! @}
+    // -----------------------------------------------------------------------
+
+    // -----------------------------------------------------------------------
+    //! @{ \name Scatter/gather support
+    // -----------------------------------------------------------------------
+
+    template <bool, typename Index, typename Mask>
+    static DiffArray gather_(const void * /*src*/, const Index & /*index*/,
+                             const Mask & /*mask*/) {
+        drjit_raise("Not implemented, please use gather() variant that takes a "
+                    "array source argument.");
+    }
+
+    template <bool, typename Index, typename Mask>
+    static DiffArray gather_(const DiffArray &src, const Index &index,
+                             const Mask &mask) {
+        static_assert(
+            std::is_same_v<detached_t<Mask>, detached_t<mask_t<DiffArray>>>);
+        return steal(jit_var_gather(src.m_index, index.m_index, mask.m_index));
+    }
+
+    template <bool, typename Index, typename Mask>
+    void scatter_(void * /* dst */, const Index & /*index*/,
+                  const Mask & /*mask*/) const {
+        drjit_raise("Not implemented, please use scatter() variant that takes "
+                    "a array target argument.");
+    }
+
+    template <bool, typename Index, typename Mask>
+    void scatter_(DiffArray &dst, const Index &index, const Mask &mask) const {
+        static_assert(
+            std::is_same_v<detached_t<Mask>, detached_t<mask_t<DiffArray>>>);
+        dst = steal(jit_var_scatter(dst.m_index, m_index, index.m_index,
+                                    mask.m_index, ReduceOp::None));
+    }
+
+    template <typename Index, typename Mask>
+    void scatter_reduce_(ReduceOp /*op*/, void * /*dst*/,
+                         const Index & /*index*/,
+                         const Mask & /* mask */) const {
+        drjit_raise("Not implemented, please use scatter_reduce() variant that "
+                    "takes a array target argument.");
+    }
+
+    template <typename Index, typename Mask>
+    void scatter_reduce_(ReduceOp op, DiffArray &dst, const Index &index,
+                         const Mask &mask) const {
+        static_assert(
+            std::is_same_v<detached_t<Mask>, detached_t<mask_t<DiffArray>>>);
+        dst = steal(jit_var_scatter(dst.m_index, m_index, index.m_index,
+                                    mask.m_index, op));
+    }
+
+    template <typename Index, typename Mask>
+    void scatter_reduce_kahan_(DiffArray &dst_1, DiffArray &dst_2,
+                               const Index &index, const Mask &mask) const {
+        static_assert(
+            std::is_same_v<detached_t<Mask>, detached_t<mask_t<DiffArray>>>);
+        jit_var_scatter_reduce_kahan(dst_1.index_ptr(), dst_2.index_ptr(),
+                                     m_index, index.m_index, mask.m_index);
     }
 
     //! @}
     // -----------------------------------------------------------------------
 
     // -----------------------------------------------------------------------
-    //! @{ \name Standard initializers
+    //! @{ \name Fancy array initialization
     // -----------------------------------------------------------------------
 
     static DiffArray empty_(size_t size) {
-        return drjit::empty<Type>(size);
+        return steal(Detached::empty_(size).release());
     }
 
     static DiffArray zero_(size_t size) {
-        return zeros<Type>(size);
+        return steal(Detached::zero_(size).release());
     }
 
-    static DiffArray full_(Value value, size_t size) {
-        return full<Type>(value, size);
+    template <typename T, enable_if_t<!std::is_void_v<T> && std::is_same_v<T, Value>> = 0>
+    static DiffArray full_(T value, size_t size) {
+        return steal(Detached::full_(value, size).release());
+    }
+
+    template <typename T, enable_if_t<!std::is_void_v<T> && std::is_same_v<T, Value>> = 0>
+    static DiffArray opaque_(T value, size_t size) {
+        return steal(Detached::opaque_(value, size).release());
     }
 
     static DiffArray arange_(ssize_t start, ssize_t stop, ssize_t step) {
-        return arange<Type>(start, stop, step);
+        return steal(Detached::arange_(start, stop, step).release());
     }
 
-    static DiffArray linspace_(Value min, Value max, size_t size, bool endpoint) {
-        return linspace<Type>(min, max, size, endpoint);
+    template <typename T, enable_if_t<!std::is_void_v<T> && std::is_same_v<T, Value>> = 0>
+    static DiffArray linspace_(T min, T max, size_t size, bool endpoint) {
+        return steal(Detached::linspace_(min, max, size, endpoint).release());
     }
 
     static DiffArray map_(void *ptr, size_t size, bool free = false) {
-        DRJIT_MARK_USED(size);
-        DRJIT_MARK_USED(free);
-        DRJIT_MARK_USED(ptr);
-        if constexpr (is_jit_v<Type>)
-            return Type::map_(ptr, size, free);
-        else
-            drjit_raise("map_(): not supported in scalar mode!");
+        return steal(Detached::map_(ptr, size, free).release());
     }
 
     static DiffArray load_(const void *ptr, size_t size) {
-        return load<Type>(ptr, size);
+        return steal(Detached::load_(ptr, size).release());
+    }
+
+    static auto counter(size_t size) {
+        return steal(Detached::counter(size).release());
     }
 
     void store_(void *ptr) const {
-        store(ptr, m_value);
+        Detached::borrow((uint32_t) m_index).store_(ptr);
     }
 
     //! @}
     // -----------------------------------------------------------------------
 
-    // -----------------------------------------------------------------------
-    //! @{ \name Miscellaneous
-    // -----------------------------------------------------------------------
-
-    DiffArray copy() const {
-        if constexpr (IsEnabled) {
-            if (m_index) {
-                uint32_t indices[1] = { m_index };
-                Type weights[1] = { 1 };
-
-                uint32_t index_new = detail::ad_new<Type>(
-                    "copy", width(m_value), 1, indices, weights);
-
-                return DiffArray::create(index_new, std::move(Type(m_value)));
-            }
-        }
-
-        return *this;
-    }
-
-    auto vcall_() const {
-        if constexpr (is_jit_v<Type>)
-            return m_value.vcall_();
-        else
-            drjit_raise("vcall_(): not supported in scalar mode!");
-    }
-
-    DiffArray block_sum_(size_t block_size) {
-        if constexpr (is_jit_v<Type>) {
-            if (m_index)
-                drjit_raise("block_sum_(): not supported for attached arrays!");
-            return m_value.block_sum_(block_size);
-        } else {
-            DRJIT_MARK_USED(block_size);
-            drjit_raise("block_sum_(): not supported in scalar mode!");
-        }
-    }
-
-    static DiffArray steal(uint32_t index) {
-        DRJIT_MARK_USED(index);
-        if constexpr (is_jit_v<Type>)
-            return Type::steal(index);
-        else
-            drjit_raise("steal(): not supported in scalar mode!");
-    }
-
-    static DiffArray borrow(uint32_t index) {
-        DRJIT_MARK_USED(index);
-        if constexpr (is_jit_v<Type>)
-            return Type::borrow(index);
-        else
-            drjit_raise("borrow(): not supported in scalar mode!");
-    }
-
-    bool grad_enabled_() const {
-        if constexpr (IsEnabled) {
-            if (!m_index)
-                return false;
-            else
-                return detail::ad_grad_enabled<Type>(m_index);
-        } else {
-            return false;
-        }
-    }
-
-    void set_grad_enabled_(bool value) {
-        DRJIT_MARK_USED(value);
-        if constexpr (IsEnabled) {
-            if (value) {
-                if (m_index)
-                    return;
-                m_index = detail::ad_new<Type>(nullptr, width(m_value));
-                if constexpr (is_jit_v<Type>) {
-                    const char *label = m_value.label_();
-                    if (label)
-                        detail::ad_set_label<Type>(m_index, label);
-                }
-            } else {
-                if (m_index == 0)
-                    return;
-                detail::ad_dec_ref<Type>(m_index);
-                m_index = 0;
-            }
-        }
-    }
-
-    DiffArray migrate_(AllocType type) const {
-        DRJIT_MARK_USED(type);
-        if constexpr (is_jit_v<Type_>)
-            return m_value.migrate_(type);
-        else
-            return *this;
-    }
-
-    bool schedule_() const {
-        if constexpr (is_jit_v<Type_>)
-            return m_value.schedule_();
-        else
-            return false;
-    }
-
-    bool eval_() const {
-        if constexpr (is_jit_v<Type_>)
-            return m_value.eval_();
-        else
-            return false;
-    }
-
-    void enqueue_(ADMode mode) const {
-        DRJIT_MARK_USED(mode);
-        if constexpr (IsEnabled)
-            detail::ad_enqueue<Type>(mode, m_index);
-    }
-
-    static void traverse_(ADMode mode, uint32_t flags) {
-        DRJIT_MARK_USED(flags);
-        if constexpr (IsEnabled)
-            detail::ad_traverse<Type>(mode, flags);
-    }
-
-    void set_label_(const char *label) {
-        set_label(m_value, label);
-
-        if constexpr (IsEnabled) {
-            if (m_index)
-                detail::ad_set_label<Type>(m_index, label);
-        }
-    }
-
-    const char *label_() const {
-        const char *result = nullptr;
-        if constexpr (IsEnabled) {
-            if (m_index)
-                result = detail::ad_label<Type>(m_index);
-        }
-        if constexpr (is_jit_v<Type>) {
-            if (!result)
-                result = m_value.label_();
-        }
+    static DRJIT_INLINE DiffArray steal(Index index) {
+        DiffArray result;
+        result.m_index = index;
         return result;
     }
 
-    static const char *graphviz_() {
-        if constexpr (IsEnabled)
-            return detail::ad_graphviz<Type>();
+    static DRJIT_INLINE DiffArray borrow(Index index) {
+        DiffArray result;
+
+        if constexpr (IsFloat) {
+            result.m_index = ad_var_inc_ref(index);
+        } else {
+            jit_var_inc_ref(index);
+            result.m_index = index;
+        }
+
+        return result;
     }
 
-    const Type &detach_() const {
-        return m_value;
+    Index release() {
+        Index tmp = m_index;
+        m_index = 0;
+        return tmp;
     }
 
-    Type &detach_() {
-        return m_value;
-    }
+    size_t size() const { return jit_var_size(m_index); }
 
-    const Type grad_(bool fail_if_missing = false) const {
-        DRJIT_MARK_USED(fail_if_missing);
-        if constexpr (IsEnabled)
-            return detail::ad_grad<Type>(m_index, fail_if_missing);
+    bool grad_enabled_() const {
+        if constexpr (IsFloat)
+            return (m_index >> 32) != 0;
         else
-            return zeros<Type>();
-    }
-
-    void set_grad_(const Type &value, bool fail_if_missing = false) {
-        DRJIT_MARK_USED(value);
-        DRJIT_MARK_USED(fail_if_missing);
-        if constexpr (IsEnabled)
-            detail::ad_set_grad<Type>(m_index, value, fail_if_missing);
-    }
-
-    void accum_grad_(const Type &value, bool fail_if_missing = false) {
-        DRJIT_MARK_USED(value);
-        DRJIT_MARK_USED(fail_if_missing);
-        if constexpr (IsEnabled)
-            detail::ad_accum_grad<Type>(m_index, value, fail_if_missing);
-    }
-
-    size_t size() const {
-        if constexpr (std::is_scalar_v<Type>)
-            return 1;
-        else
-            return m_value.size();
+            return false;
     }
 
     Value entry(size_t offset) const {
-        DRJIT_MARK_USED(offset);
-        if constexpr (std::is_scalar_v<Type>)
-            return m_value;
+        ActualValue out;
+        jit_var_read((uint32_t) m_index, offset, &out);
+
+        if constexpr (!IsClass)
+            return out;
         else
-            return m_value.entry(offset);
+            return (Value) jit_registry_get_ptr(Backend, CallSupport::Domain, out);
     }
 
-    void set_entry(size_t offset, Value value) {
-        if (m_index)
-            drjit_raise("Attempted to overwrite entries of a variable that is "
-                        "attached to the AD graph. This is not allowed.");
+    template <typename T, enable_if_t<!std::is_void_v<T> && std::is_same_v<T, Value>> = 0>
+    void set_entry(size_t offset, T value) {
+        if (grad_enabled_())
+            jit_raise("DiffArray::set_entry(): not permitted on attached variables!");
 
-        if constexpr (is_dynamic_v<Type_>) {
-            m_value.set_entry(offset, value);
+        uint32_t index;
+        if constexpr (!IsClass) {
+            index = jit_var_write((uint32_t) m_index, offset, &value);
         } else {
-            DRJIT_MARK_USED(offset);
-#if !defined(NDEBUG) && !defined(DRJIT_DISABLE_RANGE_CHECK)
-            if (offset != 0)
-                drjit_raise("Out of range access (tried to access index %u in "
-                            "an array of size 1)", offset);
-#endif
-            m_value = value;
+            ActualValue av = jit_registry_get_id(Backend, value);
+            index = jit_var_write((uint32_t) m_index, (uint32_t) offset, &av);
         }
+        jit_var_dec_ref((uint32_t) m_index);
+        m_index = index;
     }
 
-    void resize(size_t size) {
-        DRJIT_MARK_USED(size);
-        if constexpr (is_dynamic_v<Type>)
-            m_value.resize(size);
-    }
+    const Value *data() const { return (const Value *) jit_var_ptr((uint32_t) m_index); }
+    Value *data() { return (Value *) jit_var_ptr((uint32_t) m_index); }
 
-    Scalar *data() {
-        if constexpr (std::is_scalar_v<Type>)
-            return &m_value;
-        else
-            return m_value.data();
-    }
+    bool valid() const { return m_index != 0; }
+    uint32_t index() const { return (uint32_t) m_index; }
+    uint32_t ad_index() const { return (uint32_t) (m_index >> 32); }
 
-    const Scalar *data() const {
-        if constexpr (std::is_scalar_v<Type>)
-            return &m_value;
-        else
-            return m_value.data();
-    }
+private:
+    Index m_index = 0;
+};
 
-    static DiffArray create(uint32_t index, Type&& value) {
-        DiffArray result;
-        result.m_index = index;
-        result.m_value = std::move(value);
-        return result;
-    }
+template <typename Value> using CUDADiffArray = DiffArray<JitBackend::CUDA, Value>;
+template <typename Value> using LLVMDiffArray = DiffArray<JitBackend::LLVM, Value>;
 
-    static DiffArray create_borrow(uint32_t index, const Type &value) {
-        DiffArray result;
-        result.m_index = index;
-        result.m_value = value;
-        if constexpr (IsEnabled)
-            detail::ad_inc_ref<Type>(index);
-        return result;
-    }
-
-    void init_(size_t size) {
-        DRJIT_MARK_USED(size);
-        if constexpr (is_dynamic_v<Type>)
-            m_value.init_(size);
-    }
-
-    bool is_literal() const {
-        if constexpr (is_jit_v<Type>)
-            return m_value.is_literal();
-        else
-            drjit_raise("is_literal(): expected a JIT array type");
-    }
-
-    bool is_evaluated() const {
-        if constexpr (is_jit_v<Type>)
-            return m_value.is_evaluated();
-        else
-            drjit_raise("is_evaluated(): expected a JIT array type");
-    }
-
-    uint32_t index() const {
-        if constexpr (is_jit_v<Type>)
-            return m_value.index();
-        else
-            drjit_raise("index(): expected a JIT array type");
-    }
-
-    uint32_t* index_ptr() {
-        if constexpr (is_jit_v<Type>)
-            return m_value.index_ptr();
-        else
-            drjit_raise("index_ptr(): expected a JIT array type");
-    }
-
-    uint32_t index_ad() const { return m_index; }
-    uint32_t* index_ad_ptr() { return &m_index; }
-
+NAMESPACE_END(drjit)

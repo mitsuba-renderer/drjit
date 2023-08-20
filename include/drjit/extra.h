@@ -69,6 +69,7 @@ DR_EXPORT(tan)
 DR_EXPORT(cot)
 DR_EXPORT(asin)
 DR_EXPORT(acos)
+DR_EXPORT(atan)
 DR_EXPORT(sinh)
 DR_EXPORT(cosh)
 DR_EXPORT(tanh)
@@ -108,6 +109,11 @@ DR_EXPORT_AD_3(select)
 
 extern DRJIT_EXTRA_EXPORT uint64_t ad_var_inc_ref_impl(uint64_t) JIT_NOEXCEPT;
 extern DRJIT_EXTRA_EXPORT void ad_var_dec_ref_impl(uint64_t) JIT_NOEXCEPT;
+
+extern DRJIT_EXTRA_EXPORT uint64_t ad_var_reduce(JitBackend, VarType, uint64_t,
+                                                 JIT_ENUM ReduceOp);
+
+extern DRJIT_EXTRA_EXPORT uint64_t ad_var_cast(uint64_t, VarType);
 
 #if defined(__cplusplus)
 }

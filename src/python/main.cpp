@@ -76,5 +76,6 @@ NB_MODULE(drjit_ext, m_) {
 
 #if defined(DRJIT_ENABLE_LLVM)
     export_llvm();
+    export_llvm_ad();
 #endif
 }
