@@ -1,22 +1,22 @@
 /** Dr.Jit automatic differentiation library
  *
  * This file implements the data structures and traversal routines underlying
- * the Dr.Jit ``DiffArray<T>`` type. THis file is part of a separately compiled
- * library to reduce compilation overheads in large projects that make
- * extensive use of autodiff. Consequently, most methods of ``DiffArray<T>``
- * merely wrap functions implemented here.
+ * the Dr.Jit ``drjit::DiffArray<T>`` type. This file is part of the separately
+ * compiled ``drjit-extra`` library to reduce compilation overheads in large
+ * projects that make extensive use of autodiff. Consequently, most methods of
+ * ``drjit::DiffArray<T>`` merely wrap functions implemented here.
  *
  * Forward and reverse-mode traversal build on three main data structures:
  *
  * - ``state.variable``: A hash table to map from variable IDs (uint32_t) to
- *   ``Variable`` instances. They store the gradient associated with each
- *   variable and link into the ``state.edges`` list to specify the variable's
+ *   ``Variable`` instances. It stores the gradient associated with each
+ *   variable and links into the ``state.edges`` list to specify the variable's
  *   connectivity.
  *
  * - ``state.edges``: An interlinked array storing edges, which encode the
  *   connectivity between variables. Each edge can be simple or special. A
- *   simple edge records an edge weight that scales gradients flowing along it.
- *   Special edges implement more complex gradient transformation via
+ *   simple edge records an edge weight that scales gradients flowing along
+ *   it. Special edges implement more complex gradient transformation via
  *   callbacks. Operations that exchange across array entries (e.g.,
  *   scatter/gather) require such special edges.
  *
@@ -35,11 +35,12 @@
  *
  * The implementation on top of drjit-core (a JIT compiler) is noteworthy:
  * derivative propagation performs arithmetic operations that appear
- * instantanous but are actually postponed for evaluation at a later point.
- * While Dr.Jit's AD backend tape-based, the combination with deferred
- * evaluation resembles AD via code transformation. The generated code
- * leverages optimizations such as constant propagation and local value
- * numbering and can handle function calls without unrolling.
+ * instantanous but whose evaluation is actually symbolic and deferred until
+ * the system eventually compiles and runs a fused kernel. While Dr.Jit's AD
+ * backend tape-based, the combination with deferred evaluation resembles AD
+ * via code transformation. The generated code leverages optimizations such as
+ * constant propagation and local value numbering and can support some types of
+ * control flow without the usual tape-style unrolling.
  */
 
 #include "common.h"
@@ -48,6 +49,7 @@
 #include <tsl/robin_map.h>
 #include <tsl/robin_set.h>
 #include <mutex>
+#include <memory>
 
 namespace dr = drjit;
 using dr::ADScope;
@@ -56,26 +58,26 @@ using dr::ADScope;
 // Aliases for various indices to clarify their use in the code below
 // ==========================================================================
 
-/// Index of an edge between AD variables in the 'state.edges' list
+/// Index of an AD edge within ``state.edges``
 using EdgeIndex     = uint32_t;
 
-/// Index of an AD variable in the 'state.variables' hash table
+/// Index of an AD variable within ``state.variables``
 using ADIndex       = uint32_t;
 
-/// Index of a JIT compiler variable in the drjit-core library
+/// Index of a Jit variable managed by drjit-core
 using JitIndex      = uint32_t;
 
-/// Combined index that simultaneously stores a JIT variable index (low part)
-/// and an AD variable index (high part)
+/// Combined index that simultaneously stores a Jit index (low part)
+/// and an AD index (high part)
 using Index         = uint64_t;
 
-/// Return the low (JIT) part of a combined variable index
+/// Return the low (Jit) part of a combined variable index
 inline JitIndex jit_index(Index i) { return (JitIndex) i; }
 
 /// Return the high (AD) part of a combined variable index
 inline ADIndex ad_index(Index i) { return (ADIndex) (i >> 32); }
 
-/// Combine an AD and JIT index into
+/// Merge an AD and JIT index into a combined index
 inline Index combine(ADIndex ad_index, JitIndex jit_index) {
     return (((Index) ad_index) << 32) | ((Index) jit_index);
 }
@@ -85,13 +87,41 @@ template <typename... Args> bool is_detached(Args... args) {
 }
 
 // ==========================================================================
+// Generic Jit type for arithmetic
+// ==========================================================================
+
+/**
+ * Declare a generic Jit type with an unknown backend and type. Despite the
+ * complete lack of information, Dr.Jit arithmetic in this file is functional
+ * since Dr.Jit can generally infer the backend+type from the arguments of
+ * arithmetic operations.
+ *
+ * One exception is the creation of scalars: an operation like ``JitVar(1)`` is
+ * simply too abiguous. Instead, use the ``scalar()`` function below.
+ */
+using JitVar = GenericArray<void>;
+
+/// Associated mask type
+using JitMask = GenericArray<bool>;
+
+/// Create a scalar Jit variable with the same floating point type and backend
+/// as an already existing variable with the provided ``index``
+DRJIT_NOINLINE JitVar scalar(Index index, double value) {
+    VarInfo info = jit_set_backend(jit_index(index));
+
+    return JitVar::steal(info.type == VarType::Float32
+                             ? jit_var_f32(info.backend, (float) value)
+                             : jit_var_f64(info.backend, value));
+}
+
+// ==========================================================================
 // Central data structures: edges, variables, global state
 // ==========================================================================
 
 struct Special;
 
 /**
- * Represents an edge in the AD graph that futhermore stores either
+ * Represents an edge in the AD graph that furthermore stores either
  *
  * 1. An edge weight that scales gradients passing along this edge
  *
@@ -107,62 +137,26 @@ struct Special;
  */
 struct Edge {
     /// Variable index of source operand
-    ADIndex source;
+    ADIndex source = 0;
 
     /// Source variable index
-    ADIndex target;
+    ADIndex target = 0;
 
     /// Link to the next forward edge
-    EdgeIndex next_fwd;
+    EdgeIndex next_fwd = 0;
 
     /// Link to the next backward edge
-    EdgeIndex next_bwd;
+    EdgeIndex next_bwd = 0;
 
-    /// Payload area storing:
-    ///
-    /// Bit 0: Is this a special or an ordinary edge?
-    /// Bit 1: Was this edge previously visited as part of an AD traversal?
-    ///
-    /// If Bit 0 is set:
-    ///    - bit 2..63   Pointer to an instance of the 'Special' interface
-    ///    - bit 32..63  JIT variable index referencing the edge weight
-    uint64_t payload;
+    /// Special edge handler
+    std::unique_ptr<Special> special;
 
-    bool is_special() const { return (payload & 1ull) == 0ull; }
-    bool is_normal() const  { return (payload & 1ull) == 1ull; }
-    bool is_visited() const { return (payload & 2ull) == 2ull; }
+    /// Edge weight
+    JitVar weight;
 
-    // Override the edge's 'visited' bit
-    void set_visited(bool value) {
-        payload = (payload & ~2ull) | (uint64_t(value) << 1);
-    }
-
-    /// Inititialize an edge with a special callback handler
-    void set_special(Special *special) {
-        ad_assert(payload == 0);
-        payload = (uint64_t) special;
-    }
-
-    /// Initialize a normal edge with a given weight value
-    void set_weight(JitIndex index) {
-        ad_assert(payload == 0);
-        payload = (((uint64_t) index) << 32) | 1ull;
-    }
-
-    /// Return the JIT variable index referencing the weight of an ordinary edge
-    JitIndex weight() const {
-        ad_assert(is_normal());
-        return (JitIndex) (payload >> 32);
-    }
-
-    /// Return the pointer to a special edge's callback handler
-    Special *special() const {
-        ad_assert(is_special());
-        return (Special *) (payload & ~2ull);
-    }
+    /// Visited flag for DFS traversal
+    bool visited = false;
 };
-
-static_assert(sizeof(Edge) == 24);
 
 /// Flags characterizing the 'Variable.flags' bit field
 enum VariableFlags : uint8_t {
@@ -202,7 +196,7 @@ struct Variable {
     EdgeIndex next_bwd = 0;
 
     /// JIT variable index referencing the gradient
-    JitIndex grad = 0;
+    JitVar grad;
 
     /// Size of the associated primal variable
     size_t size = 0;
@@ -210,8 +204,8 @@ struct Variable {
     /// Descriptive label
     char *label = nullptr;
 
-    /// High bits of variable index
-    uint32_t index_hi = 0;
+    /// Value of the ``state.counter`` field when this variable was created
+    uint64_t counter = 0;
 
     /// Gradient reference count for custom operations
     uint16_t ref_count_grad = 0;
@@ -221,41 +215,145 @@ struct Variable {
 
     /// Floating point type (half/single/double)
     uint8_t type = 0;
-};
 
-static_assert(sizeof(Variable) ==
-              6 * sizeof(uint32_t) + sizeof(size_t) + sizeof(char *));
+    Variable() = default;
+    Variable(const Variable &) = default;
+    Variable(Variable &&) = default;
+    Variable &operator=(const Variable &) = default;
+    Variable &operator=(Variable &&) = default;
+
+    ~Variable() {
+        if (flags & (uint8_t) VariableFlags::FreeLabel)
+            free(label);
+    }
+
+    /**
+     * \brief Multiply-accumulate a gradient (i.e., ``grad += v1*v2``), where
+     * ``v2`` is typically the weight of an AD edge.
+     *
+     * The arithmetic is slightly unusual in the sense that ``mul_accum(0,
+     * v2)`` leaves ``grad`` unchanged even if the edge weight ``v2`` is
+     * infinite or NaN. This is important so that propagating zero gradients
+     * through invalid/masked AD subgraphs does not contaminate the final
+     * gradient.
+     *
+     * This is operation is heavily used during AD traversal, hence the
+     * implementation considers a few different cases and optimizations.
+     */
+    void mul_accum(const JitVar &v1, const JitVar &v2, size_t src_size) {
+        JitVar zero = scalar(v1.index(), 0.f), weight;
+
+        // Elide the zero check if ``v2`` is known not to be NaN/infinite
+        if (jit_var_is_normal_literal(v2.index()))
+            weight = v2;
+        else
+            weight = dr::select(dr::eq(v1, zero), zero, v2);
+
+        if (size == 1 && src_size != 1) {
+            /* When this variable is scalar (size == 1) and the source is
+               not (src_size != 1), the gradient must be reduced to a single
+               value. A special case arises when the source gradient is
+               actually scalar after all, in which case it is considered to
+               broadcast to all elements. */
+
+            JitVar v3 = v1 * weight;
+            if (v3.size() == 1) {
+                v3 *= scalar(v1.index(), (double) src_size);
+            } else {
+                ad_assert(v3.size() == src_size);
+                v3 = dr::sum(v3);
+            }
+
+            if (grad.valid())
+                grad += v3;
+            else
+                grad = std::move(v3);
+        } else {
+            if (grad.valid())
+                grad = dr::fmadd(v1, weight, grad);
+            else
+                grad = v1 * weight;
+        }
+    }
+
+    /**
+     * \brief Accumulate a gradient 'v' originating from another variable of
+     * size 'src_size' into the current variable.
+     *
+     * This is a relatively important operation that is heavily used during AD
+     * traversal, hence the implementation considers a few different cases and
+     * optimizations.
+     */
+    void accum(const JitVar& v, size_t src_size) {
+        if (size == 1 && src_size != 1) {
+            /* When this variable is scalar (size == 1) and the source is
+               not (src_size != 1), the gradient must be reduced to a single
+               value. A special case arises when the source gradient is
+               actually scalar after all, in which case it is considered to
+               broadcast to all elements. */
+
+            JitVar v2;
+            if (v.size() == 1) {
+                v2 = v * scalar(v.index(), (double) src_size);
+            } else {
+                ad_assert(v.size() == src_size);
+                v2 = dr::sum(v);
+            }
+
+            if (grad.valid())
+                grad += v2;
+            else
+                grad = std::move(v2);
+        } else {
+            if (grad.valid())
+                grad += v;
+            else
+                grad = v;
+        }
+    }
+
+    void assign(const JitVar &v, size_t src_size) {
+        if (size == 1 || src_size != 1)
+            grad = dr::sum(v);
+        else
+            grad = v;
+    }
+};
 
 /// Represents the global state of the AD system
 struct State {
-    using VariableMap = tsl::robin_map<ADIndex, Variable, UInt32Hasher,
-                                       std::equal_to<ADIndex>>;
-    using EdgeVector  = std::vector<Edge>;
-
     /// std::mutex protecting the state data structure
     std::mutex mutex;
 
     /// Hash table mapping variable IDs to variable instances
-    VariableMap variables;
+    std::vector<Variable> variables;
 
     /// List of all edges (used and unused ones)
-    EdgeVector edges;
+    std::vector<Edge> edges;
 
     /// List of currently unused edges
+    std::vector<ADIndex> unused_variables;
     std::vector<EdgeIndex> unused_edges;
 
-    /// Counter for variable indices
-    uint64_t variable_index = 1;
+    /// Counter to establish an ordering among variables
+    uint64_t counter = 0;
 
-    State() : edges(1) { }
+    State() : variables(1), edges(1) { }
 
     ~State() {
-        if (!variables.empty()) {
+        size_t vars_used  = variables.size() - unused_variables.size() - 1,
+               edges_used = edges.size() - unused_edges.size() - 1;
+
+        if (vars_used) {
             ad_warn("Variable leak detected (%zu variables remain in use)!",
-                    variables.size());
+                    vars_used);
             size_t counter = 0;
-            for (auto kv : variables) {
-                ad_warn(" - variable a%u (%u references)", kv.first, kv.second.ref_count);
+
+            for (size_t i = 0; i < variables.size(); ++i) {
+                if (variables[i].ref_count == 0)
+                    continue;
+
+                ad_warn(" - variable a%zu (%u references)", i, variables[i].ref_count);
                 if (++counter == 10) {
                     ad_warn(" - (skipping the rest)");
                     break;
@@ -263,17 +361,15 @@ struct State {
             }
         }
 
-        size_t edges_used = edges.size() - unused_edges.size() - 1;
         if (edges_used != 0)
             ad_warn("Edge leak detected (%zu edges remain in use)!",
                     edges_used);
     }
 
     Variable *operator[](ADIndex index) {
-        VariableMap::iterator it = variables.find(index);
-        if (unlikely(index == 0 || it == variables.end()))
+        if (unlikely(index > variables.size() || variables[index].ref_count == 0))
             ad_fail("Referenced an unknown variable a%u!", index);
-        return &it.value();
+        return &variables[index];
     }
 };
 
@@ -299,10 +395,15 @@ struct EdgeRef {
     EdgeIndex id;
     ADIndex source;
     ADIndex target;
+    uint64_t counter;
 
-    EdgeRef() : id(0), source(0), target(0) { }
-    EdgeRef(EdgeIndex id, ADIndex source, ADIndex target)
-    : id(id), source(source), target(target) { }
+    EdgeRef() = default;
+    EdgeRef(EdgeIndex id, ADIndex source, ADIndex target, uint64_t counter)
+    : id(id), source(source), target(target), counter(counter) { }
+
+    bool operator<(const EdgeRef &r) const {
+        return std::tie(counter, id) < std::tie(r.counter, id);
+    }
 };
 
 /**
@@ -331,8 +432,8 @@ struct Scope {
      */
     bool isolate = false;
 
-    // Current variable index when entering this scope
-    uint64_t variable_index = 0;
+    // Current ``state.counter`` value when entering this scope
+    uint64_t counter = 0;
 
     /**
      * \brief Depending on the value of 'complement', this set specifies
@@ -396,12 +497,9 @@ struct LocalState {
     std::vector<Scope> scopes;
 
     /// List of edges that should be cleaned up
-    std::vector<Special *> cleanup;
+    std::vector<std::unique_ptr<Special>> cleanup;
 
     ~LocalState() {
-        for (Special *s : cleanup)
-            delete s;
-
         if (!scopes.empty())
             ad_warn("Scope leak detected (%zu scopes remain in use)!",
                     scopes.size());
@@ -462,6 +560,29 @@ DRJIT_EXPORT void ad_prefix_pop() {
     }
 }
 
+void ad_set_label(Index index, const char *label) {
+    uint32_t ad_index = ::ad_index(index);
+
+    if (!ad_index)
+        return;
+
+    std::lock_guard<std::mutex> guard(state.mutex);
+    ad_log("ad_set_label(a%u, \"%s\")", ad_index, label ? label : "(null)");
+    Variable *v = state[ad_index];
+    if (v->flags & (uint8_t) VariableFlags::FreeLabel)
+        free(v->label);
+    v->label = strdup(label);
+    v->flags |= (uint8_t) VariableFlags::FreeLabel |
+                (uint8_t) VariableFlags::CustomLabel;
+}
+
+template <typename T> const char *ad_label(uint32_t index) {
+    if (index == 0)
+        return nullptr;
+    std::lock_guard<std::mutex> guard(state.mutex);
+    return state[index]->label;
+}
+
 // ==========================================================================
 // Reference counting and variable cleanup
 // ==========================================================================
@@ -490,14 +611,6 @@ static bool ad_var_dec_ref_int(ADIndex index, Variable *v) noexcept {
 static void ad_free(ADIndex index, Variable *v) {
     ad_log("ad_free(a%u)", index);
 
-    if (v->flags & (uint8_t) VariableFlags::FreeLabel) {
-        free(v->label);
-        v->label = nullptr;
-    }
-
-    jit_var_dec_ref(v->grad);
-    v->grad = 0;
-
     EdgeIndex edge_id = v->next_bwd;
     v->next_bwd = 0;
 
@@ -514,8 +627,8 @@ static void ad_free(ADIndex index, Variable *v) {
                   next_fwd = edge.next_fwd;
 
         // Postpone deallocation of the edge callback, if there is one
-        if (unlikely(edge.is_special()))
-            local_state.cleanup.push_back(edge.special());
+        if (edge.special)
+            local_state.cleanup.emplace_back(std::move(edge.special));
 
         edge = Edge { };
 
@@ -545,7 +658,8 @@ static void ad_free(ADIndex index, Variable *v) {
         edge_id = next_bwd;
     }
 
-    state.variables.erase(index);
+    *v = Variable { };
+    state.unused_variables.push_back(index);
 }
 
 Index ad_var_inc_ref_impl(Index index) JIT_NOEXCEPT {
@@ -568,6 +682,18 @@ Index ad_var_inc_ref_impl(Index index) JIT_NOEXCEPT {
     return combine(ad_index, jit_index);
 }
 
+static void clear_special() {
+    std::vector<std::unique_ptr<Special>> &cleanup = local_state.cleanup;
+    if (cleanup.empty())
+        return;
+
+    std::vector<std::unique_ptr<Special>> temp;
+    unlock_guard<std::mutex> guard(state.mutex);
+    temp.swap(cleanup);
+    temp.clear();
+    temp.swap(cleanup);
+}
+
 void ad_var_dec_ref_impl(Index index) JIT_NOEXCEPT {
     JitIndex jit_index = ::jit_index(index);
     ADIndex ad_index = ::ad_index(index);
@@ -576,17 +702,8 @@ void ad_var_dec_ref_impl(Index index) JIT_NOEXCEPT {
 
     if (unlikely(ad_index)) {
         std::lock_guard<std::mutex> guard(state.mutex);
-        if (unlikely(ad_var_dec_ref_int(ad_index, state[ad_index]))) {
-            /* Extra-careful here: deallocate cleanup queue of
-               custom AD edge callbacks (reentrant!) */
-            std::vector<Special *> temp, &cleanup = local_state.cleanup;
-
-            if (!cleanup.empty()) {
-                temp.swap(cleanup);
-                for (Special *special : temp)
-                    delete special;
-            }
-        }
+        if (ad_var_dec_ref_int(ad_index, state[ad_index]))
+            clear_special();
     }
 }
 
@@ -597,44 +714,46 @@ void ad_var_dec_ref_impl(Index index) JIT_NOEXCEPT {
 /// Allocate a new variable and initialize basic fields
 static std::pair<ADIndex, Variable *> ad_var_new(const char *label, size_t size,
                                                  VarType type, bool symbolic) {
-    while (true) {
-        Index index = state.variable_index++;
-        ADIndex index_lo = (uint32_t) index;
 
-        if (unlikely(index_lo == 0)) // overflow of the low part
-            continue;
-
-        Variable v;
-        v.ref_count = 1;
-        v.size = size;
-        v.index_hi = (uint32_t) (index >> 32);
-        v.flags = symbolic ? (uint8_t) VariableFlags::Symbolic : (uint8_t) 0;
-        v.type = (uint8_t) type;
-
-        PrefixEntry *p = prefix;
-        if (p) {
-            label = concat_str(p->value, label);
-            v.flags |= (uint8_t) VariableFlags::FreeLabel;
-        }
-
-        v.label = (char *) label;
-
-        auto result = state.variables.emplace(index_lo, v);
-        if (likely(result.second))
-            return { index, &result.first.value() };
+    std::vector<ADIndex> &unused = state.unused_variables;
+    if (unlikely(unused.empty())) {
+        unused.push_back(state.variables.size());
+        state.variables.emplace_back();
     }
+
+    ADIndex index = unused.back();
+    unused.pop_back();
+
+    Variable *v = &state.variables[index];
+    v->ref_count = 1;
+    v->size = size;
+    v->counter = state.counter++;
+    v->flags = symbolic ? (uint8_t) VariableFlags::Symbolic : (uint8_t) 0;
+    v->type = (uint8_t) type;
+
+    PrefixEntry *p = prefix;
+    if (p) {
+        label = concat_str(p->value, label);
+        v->flags |= (uint8_t) VariableFlags::FreeLabel;
+    }
+
+    v->label = (char *) label;
+
+    return { index, v };
 }
 
 /// Allocate a new edge from the pool
 static EdgeIndex ad_edge_new() {
     EdgeIndex index;
-    if (likely(!state.unused_edges.empty())) {
-        index = state.unused_edges.back();
-        state.unused_edges.pop_back();
-    } else {
-        index = (EdgeIndex) state.edges.size();
+
+    if (unlikely(state.unused_edges.empty())) {
+        state.unused_edges.push_back((EdgeIndex) state.edges.size());
         state.edges.emplace_back();
     }
+
+    index = state.unused_edges.back();
+    state.unused_edges.pop_back();
+
     return index;
 }
 
@@ -653,24 +772,7 @@ static void ad_propagate_size(Variable *v) {
     }
 }
 
-/**
- * This step declares a generic Jit type with an unknown backend and type.
- * Despite the lack of information, Dr.Jit arithmetic below is functional
- * since the underlying drjit-core implementation infers the backend+type
- * from the existing operands.
- */
-using JitVar = GenericArray<void>;
-using JitMask = GenericArray<bool>;
-
-DRJIT_NOINLINE JitVar scalar(Index index, double value) {
-    VarInfo info = jit_set_backend(jit_index(index));
-
-    return JitVar::steal(info.type == VarType::Float32
-                             ? jit_var_f32(info.backend, (float) value)
-                             : jit_var_f64(info.backend, value));
-}
-
-// This data structure encodes an ordianry dependence on a function argument
+// This data structure encodes an ordinary dependence on a function argument
 struct Arg {
     Arg(Index index, JitVar &&weight)
         : ad_index(::ad_index(index)), weight(std::move(weight)) { }
@@ -678,8 +780,7 @@ struct Arg {
     Arg(Index index, double value)
         : ad_index(::ad_index(index)), weight(scalar(index, value)) { }
 
-    Arg(Arg &&a) : ad_index(a.ad_index), weight(std::move(a.weight)) { }
-
+    Arg(Arg &&a) = default;
     Arg(const Arg &a) = delete;
     Arg &operator=(const Arg &a) = delete;
     Arg &operator=(Arg &&a) = delete;
@@ -693,26 +794,23 @@ struct Arg {
 struct SpecialArg {
     SpecialArg(Index index, Special *special)
         : ad_index(::ad_index(index)), special(special) { }
-
-    SpecialArg(SpecialArg &&a) : ad_index(a.ad_index), special(a.special) {
-        a.special = nullptr;
-    }
-
-    ~SpecialArg() {
-        delete special;
-    }
-
-    void release() { special = nullptr; }
-
+    SpecialArg(SpecialArg &&a) = default;
     SpecialArg(const SpecialArg &a) = delete;
     SpecialArg &operator=(const SpecialArg &a) = delete;
     SpecialArg &operator=(SpecialArg &&a) = delete;
 
+    void release() { special.release(); }
+
     ADIndex ad_index;
-    Special *special;
+    std::unique_ptr<Special> special;
 };
 
-template <typename T, typename ...> struct first {
+struct Arg;
+template <typename...> struct first {
+    using type = Arg;
+};
+
+template <typename T, typename... Ts> struct first<T, Ts...> {
     using type = T;
 };
 
@@ -721,8 +819,9 @@ template <typename... Ts> using first_t = typename first<Ts...>::type;
 template <typename... Args>
 DRJIT_NOINLINE Index ad_var_new_impl(const char *label, JitVar &&result,
                                      Args &&...args_) {
+    constexpr size_t N = sizeof...(Args);
     using ArgType = first_t<Args...>;
-    ArgType args[] { std::move(args_)... };
+    ArgType args[N] { std::move(args_)... };
 
     std::lock_guard<std::mutex> guard(state.mutex);
 
@@ -734,12 +833,12 @@ DRJIT_NOINLINE Index ad_var_new_impl(const char *label, JitVar &&result,
         const Scope &scope = scopes.back();
 
         bool active = false;
-        if constexpr (sizeof...(Args) == 0) {
+        if constexpr (N == 0) {
             // If AD is completely disabled (i.e. this is an dr.suspend_grad()
             // region), don't allow creating new AD variables
             active = scope.complement || !scope.indices.empty();
         } else {
-            for (size_t i = 0; i < sizeof...(Args); ++i)
+            for (size_t i = 0; i < N; ++i)
                 active |= scope.maybe_disable(args[i].ad_index);
         }
 
@@ -751,7 +850,7 @@ DRJIT_NOINLINE Index ad_var_new_impl(const char *label, JitVar &&result,
 
     // ReleaseOperandHelper helper;
     if (unlikely(symbolic)) {
-        for (size_t i = 0; i < sizeof...(Args); ++i) {
+        for (size_t i = 0; i < N; ++i) {
             if (args[i].ad_index == 0)
                 continue;
 
@@ -782,32 +881,25 @@ DRJIT_NOINLINE Index ad_var_new_impl(const char *label, JitVar &&result,
         }
     }
 
-    auto [ad_index, var] = ad_var_new(label, jit_var_size(result.index()),
-                                      jit_var_type(result.index()), symbolic);
+    auto &&[ad_index, var] = ad_var_new(label, jit_var_size(result.index()),
+                                        jit_var_type(result.index()), symbolic);
 
-    switch (sizeof...(Args)) {
-        case 0:
-            ad_log("ad_var_new(a%u, label=\"%s\")", ad_index, label);
-            break;
-        case 1:
-            ad_log("ad_var_new(a%u <- a%u, label=\"%s\")", ad_index, args[0].ad_index,
-                   label);
-            break;
-        case 2:
-            ad_log("ad_var_new(a%u <- a%u, a%u, label=\"%s\")", ad_index, args[0].ad_index,
-                   args[1].ad_index, label);
-            break;
-        case 3:
-            ad_log("ad_var_new(a%u <- a%u, a%u, a%u, label=\"%s\")", ad_index,
-                   args[0].ad_index, args[1].ad_index, args[2].ad_index, label);
-            break;
-        default:
-            break;
+    if constexpr (N == 0) {
+        ad_log("ad_var_new(a%u, label=\"%s\")", ad_index, label);
+    } else if constexpr (N == 1) {
+        ad_log("ad_var_new(a%u <- a%u, label=\"%s\")", ad_index,
+               args[0].ad_index, label);
+    } else if constexpr (N == 2) {
+        ad_log("ad_var_new(a%u <- a%u, a%u, label=\"%s\")", ad_index,
+               args[0].ad_index, args[1].ad_index, label);
+    } else if constexpr (N == 3) {
+        ad_log("ad_var_new(a%u <- a%u, a%u, a%u, label=\"%s\")", ad_index,
+               args[0].ad_index, args[1].ad_index, args[2].ad_index, label);
     }
 
     EdgeIndex edge_index = 0;
 
-    for (size_t i = 0; i < sizeof...(Args); ++i) {
+    for (size_t i = 0; i < N; ++i) {
         ADIndex source = args[i].ad_index;
 
         if (!source)
@@ -828,12 +920,10 @@ DRJIT_NOINLINE Index ad_var_new_impl(const char *label, JitVar &&result,
         edge.source = source;
         edge.target = ad_index;
 
-        if constexpr (std::is_same_v<ArgType, SpecialArg>) {
-            edge.set_special(args[i].special);
-            args[i].special = nullptr;
-        } else {
-            edge.set_weight(args[i].weight.release());
-        }
+        if constexpr (std::is_same_v<ArgType, SpecialArg>)
+            edge.special = std::move(args[i].special);
+        else
+            edge.weight = std::move(args[i].weight);
 
         edge.next_fwd = v_source->next_fwd;
         edge.next_bwd = edge_index;
@@ -843,7 +933,7 @@ DRJIT_NOINLINE Index ad_var_new_impl(const char *label, JitVar &&result,
         v_source->next_fwd = edge_index_new;
     }
 
-    if (sizeof...(Args) > 0 && !edge_index) {
+    if (N > 0 && !edge_index) {
         // All edges were pruned, don't create the node after all
         ad_log("ad_var_new(a%u): all edges pruned, removing variable.", ad_index);
         ad_free(ad_index, var);
@@ -875,6 +965,396 @@ DRJIT_INLINE Index ad_var_new(const char *label, JitVar &&result,
     return rv;
 }
 
+void ad_accum_grad(Index index, JitIndex value, bool assign) {
+    const std::vector<Scope> &scopes = local_state.scopes;
+    ADIndex ad_index = ::ad_index(index);
+
+    if (unlikely(!scopes.empty()))
+        scopes.back().maybe_disable(ad_index);
+
+    if (unlikely(ad_index == 0))
+        return;
+
+    std::lock_guard<std::mutex> guard(state.mutex);
+    Variable *v = state[ad_index];
+
+    JitVar value_v = JitVar::borrow(value);
+    size_t size_in = value_v.size();
+    if (v->size != size_in && size_in != 1 && size_in != 0 && v->size != 1)
+        ad_raise("ad_set_grad(): attempted to assign a gradient of size "
+                 "%zu to AD variable a%u, which has size %zu!",
+                 size_in, ad_index, v->size);
+
+    ad_log("ad_set_grad(a%u)", ad_index);
+
+    if (assign)
+        v->assign(value_v, size_in);
+    else
+        v->accum(value_v, size_in);
+}
+
+// ==========================================================================
+// Enqueuing of variables and edges
+// ==========================================================================
+
+/// Forward-mode DFS starting from 'index'
+static void ad_dfs_fwd(std::vector<EdgeRef> &todo, uint32_t index,
+                       Variable *v) {
+    DRJIT_MARK_USED(index);
+
+    uint32_t edge_id = v->next_fwd;
+    while (edge_id) {
+        Edge &edge = state.edges[edge_id];
+
+        if (!edge.visited) {
+            edge.visited = true;
+
+            ad_log("ad_dfs_fwd(): enqueuing edge a%u -> a%u", index,
+                   edge.target);
+
+            Variable *v2 = state[edge.target];
+            ad_var_inc_ref_int(edge.target, v2);
+            todo.emplace_back(edge_id, edge.source, edge.target, v2->counter);
+            ad_dfs_fwd(todo, edge.target, v2);
+        }
+
+        edge_id = edge.next_fwd;
+    }
+}
+
+/// Reverse-mode DFS starting from 'index'
+static void ad_dfs_bwd(std::vector<EdgeRef> &todo, uint32_t index,
+                       Variable *v) {
+    uint32_t edge_id = v->next_bwd;
+    while (edge_id) {
+        Edge &edge = state.edges[edge_id];
+
+        if (!edge.visited) {
+            edge.visited = true;
+
+            ad_log("ad_dfs_bwd(): enqueuing edge a%u -> a%u", index,
+                   edge.source);
+
+            Variable *v2 = state[edge.source];
+            ad_var_inc_ref_int(index, v);
+            todo.emplace_back(edge_id, edge.source, edge.target, v->counter);
+            ad_dfs_bwd(todo, edge.source, v2);
+        }
+
+        edge_id = edge.next_bwd;
+    }
+}
+
+void ad_enqueue(dr::ADMode mode, Index index) {
+    uint32_t ad_index = ::ad_index(index);
+    if (ad_index == 0)
+        return;
+
+    ad_log("ad_enqueue_node(a%u, mode=%s)", ad_index,
+           mode == dr::ADMode::Forward ? "forward" : "backward");
+
+    LocalState &ls = local_state;
+
+    std::lock_guard<std::mutex> guard(state.mutex);
+    switch (mode) {
+        case dr::ADMode::Forward:
+            ad_dfs_fwd(ls.todo, ad_index, state[ad_index]);
+            break;
+
+        case dr::ADMode::Backward:
+            ad_dfs_bwd(ls.todo, ad_index, state[ad_index]);
+            break;
+
+        default:
+            ad_raise("ad_enqueue(): invalid mode specified!");
+    }
+}
+
+// ==========================================================================
+// AD graph traversal
+// ==========================================================================
+
+void ad_traverse(dr::ADMode mode, uint32_t flags) {
+    LocalState &ls = local_state;
+
+    std::vector<EdgeRef> &todo_tls = ls.todo, todo;
+    if (todo_tls.empty())
+        return;
+
+    std::lock_guard<std::mutex> guard(state.mutex);
+    todo_tls.swap(todo);
+
+    if (mode != dr::ADMode::Forward && mode != dr::ADMode::Backward)
+        ad_raise("ad_traverse(): invalid mode specified!");
+
+    // Bring the edges into the appropriate order
+    std::sort(todo.begin(), todo.end());
+
+    ad_log("ad_traverse(): processing %zu edges in %s mode ..", todo.size(),
+           mode == dr::ADMode::Forward ? "forward" : "backward");
+
+    /// Any edges with an ID less than this value will be postponed
+    uint64_t postpone_before = 0;
+    if (!ls.scopes.empty() && ls.scopes.back().isolate)
+        postpone_before = ls.scopes.back().counter;
+
+    std::vector<JitVar> dr_loop_todo;
+    auto postprocess = [&](uint32_t prev_i, uint32_t cur_i) {
+        if (!prev_i || prev_i == cur_i)
+            return;
+
+        Variable *cur  = cur_i ? state[cur_i] : nullptr,
+                 *prev = state[prev_i];
+
+        /* Wave-front style evaluation of dr.Loop with differentiable
+           variables produces nodes with label 'dr_loop' at the boundary of
+           each iteration. It's good if we dr::schedule() and then finally
+           evaluate the gradient of all such variables at once so that AD
+           tarversal produces reasonably sized kernels (i.e. with an evaluation
+           granularity matching the loop iterations of the original/primal
+           evaluation). The code below does just that. */
+
+        bool dr_loop_prev = prev->label && strstr(prev->label, "dr_loop"),
+             dr_loop_cur  = cur && cur->label && strstr(cur->label, "dr_loop");
+
+        if (dr_loop_prev) {
+            dr_loop_todo.push_back(prev->grad);
+            dr::schedule(prev->grad);
+
+            if (!dr_loop_cur) {
+                ad_log("ad_traverse(): evaluating %zi loop variables",
+                       dr_loop_todo.size());
+                dr::eval();
+                dr_loop_todo.clear();
+            }
+        }
+
+        bool clear_grad = false;
+        uint32_t next_edge =
+            mode == dr::ADMode::Forward ? prev->next_bwd : prev->next_fwd;
+
+        if (flags & (uint32_t) dr::ADFlag::ClearInterior)
+            clear_grad |= next_edge != 0;
+        if (flags & (uint32_t) dr::ADFlag::ClearInput)
+            clear_grad |= next_edge == 0;
+
+        /* Don't clear the gradient of vertices created *before* entering
+           an dr.isolation() scope, or when their gradient is still explicitly
+           referenced by some other part of the computation graph */
+        if (prev_i < postpone_before || prev->ref_count_grad > 0)
+            clear_grad = false;
+
+        // Aggressively clear gradients at intermediate nodes
+        if (clear_grad) {
+            ad_log("ad_traverse(): clearing gradient at intermediate variable a%u", prev_i);
+            prev->grad = JitVar();
+        }
+    };
+
+    uint32_t v0i_prev = 0;
+    uint32_t last_edge_id = 0;
+
+    // This is the main AD traversal loop
+    for (EdgeRef &er : todo) {
+        Edge &edge = state.edges[er.id];
+
+        uint32_t v0i, v1i;
+        if (mode == dr::ADMode::Forward) {
+            v0i = edge.source;
+            v1i = edge.target;
+        } else {
+            v0i = edge.target;
+            v1i = edge.source;
+        }
+
+        if (unlikely(er.id == last_edge_id))
+            ad_fail("ad_traverse(): internal error: edge a%u -> a%u was "
+                    "enqueued twice!", edge.source, edge.target);
+        last_edge_id = er.id;
+
+        if (unlikely(edge.source != er.source ||
+                     edge.target != er.target))
+            ad_fail("ad_traverse(): internal error: edge a%u -> a%u was "
+                    "garbage collected between enqueuing and traversal steps!",
+                    er.source, er.target);
+
+        if (unlikely(!edge.visited))
+            ad_fail("ad_traverse(): internal error: edge a%u -> a%u is not "
+                    "marked as visited! (1)", er.source,
+                    er.target);
+
+        Variable *v0 = state[v0i],
+                 *v1 = state[v1i];
+
+        size_t grad_size = v0->grad.size();
+
+        if (unlikely(v0i < postpone_before)) {
+            if (mode == dr::ADMode::Backward) {
+                ad_log("ad_traverse(): postponing edge a%u -> a%u due "
+                       "dr.isolate_grad() scope.", v0i, v1i);
+                ls.scopes.back().postponed.push_back(er);
+                er.id = er.source = er.target = 0;
+                continue;
+            } else if (v1i < postpone_before) {
+                ad_raise(
+                    "ad_traverse(): tried to forward-propagate derivatives "
+                    "across edge a%u -> a%u, which lies outside of the current "
+                    "dr.isolate_grad() scope (a%llu .. a%llu). You must "
+                    "enqueue the variables being differentiated and call "
+                    "dr.traverse(dr.ADFlag.ClearEdges) *before* entering this "
+                    "scope.", v0i, v1i, (unsigned long long) postpone_before,
+                    (unsigned long long) state.counter);
+            }
+        }
+
+        if (unlikely(grad_size != 1 && v0->size != grad_size)) {
+            if (grad_size == 0) {
+                ad_log("ad_traverse(): skipping edge a%u -> a%u (no source "
+                       "gradient).", v0i, v1i);
+                continue;
+            } else {
+                ad_raise("ad_traverse(): gradient propagation encountered "
+                         "variable a%u (\"%s\") with an invalid gradient size "
+                         "(expected size %zu, actual size %zu)!",
+                         v0i, v0->label ? v0->label : "", v0->size, grad_size);
+            }
+        }
+
+        postprocess(v0i_prev, v0i);
+        v0i_prev = v0i;
+
+        ad_log("ad_traverse(): processing edge a%u -> a%u ..", v0i, v1i);
+
+        if (unlikely(v0->flags & (uint8_t) VariableFlags::CustomLabel)) {
+            char tmp[256];
+            snprintf(tmp, 256, "%s_grad", v0->label);
+            if (width(v0->grad) != 0)
+                dr::set_label(v0->grad, tmp);
+        }
+
+        if (unlikely(edge.special)) {
+            if (mode == dr::ADMode::Forward)
+                edge.special->forward(v0, v1, flags);
+            else
+                edge.special->backward(v1, v0, flags);
+
+            if (flags & (uint32_t) dr::ADFlag::ClearEdges) {
+                // Edge may have been invalidated by callback, look up once more
+                Edge &edge2 = state.edges[er.id];
+                if (edge2.source == (uint32_t) er.source &&
+                    edge2.target == (uint32_t) er.target)
+                    ls.cleanup.push_back(std::move(edge2.special));
+            }
+        } else {
+            v1->mul_accum(v0->grad, edge.weight, v0->size);
+
+            if (flags & (uint32_t) dr::ADFlag::ClearEdges)
+                edge.weight = JitVar();
+        }
+    }
+
+    postprocess(v0i_prev, 0);
+
+    ad_log("ad_traverse(): decreasing reference counts %s..",
+           (flags & (uint32_t) dr::ADFlag::ClearEdges)
+               ? "and removing traversed edges from graph "
+               : "");
+
+    // Undo reference count increases performed by ad_enqueue()
+    for (EdgeRef &er : todo) {
+        if (!er.target)
+            continue;
+
+        Edge &edge = state.edges[er.id];
+        if (unlikely(edge.source != (uint32_t) er.source ||
+                     edge.target != (uint32_t) er.target))
+            ad_fail("ad_traverse(): internal error: edge a%u -> a%u was "
+                    "garbage collected between enqueue and traverse steps!",
+                    er.source, er.target);
+        else if (unlikely(!edge.visited))
+            ad_fail("ad_traverse(): internal error: edge a%u -> a%u is not "
+                    "marked as visited!", er.source, er.target);
+
+        edge.visited = 0;
+
+        Variable *source = state[er.source],
+                 *target = state[er.target];
+
+        if (flags & (uint32_t) dr::ADFlag::ClearEdges) {
+            ad_log("ad_traverse(): removing edge a%u -> a%u", er.source,
+                   er.target);
+
+            // Clear out forward edge
+            uint32_t edge_id_prev = 0,
+                     edge_id_cur = source->next_fwd;
+            while (edge_id_cur) {
+                Edge &e2 = state.edges[edge_id_cur];
+                ad_log("ad_traverse(): visiting forward edge a%u -> a%u",
+                       e2.source, e2.target);
+
+                if (edge_id_cur == er.id) {
+                    if (edge_id_prev)
+                        state.edges[edge_id_prev].next_fwd = e2.next_fwd;
+                    else
+                        source->next_fwd = e2.next_fwd;
+                    break;
+                } else if (unlikely(e2.source != er.source)) {
+                    ad_fail("ad_traverse(): invalid forward edge connectivity!");
+                }
+
+                edge_id_prev = edge_id_cur;
+                edge_id_cur = e2.next_fwd;
+            }
+
+            if (unlikely(!edge_id_cur))
+                ad_fail("ad_traverse(): could not find forward edge a%u "
+                        "-> a%u", er.source, er.target);
+
+            // Clear out backward edge
+            edge_id_prev = 0;
+            edge_id_cur = target->next_bwd;
+            while (edge_id_cur) {
+                Edge &e2 = state.edges[edge_id_cur];
+
+                if (edge_id_cur == er.id) {
+                    if (edge_id_prev)
+                        state.edges[edge_id_prev].next_bwd = e2.next_bwd;
+                    else
+                        target->next_bwd = e2.next_bwd;
+                    break;
+                } else if (unlikely(e2.target != er.target)) {
+                    ad_fail("ad_traverse(): invalid backward edge connectivity!");
+                }
+
+                edge_id_prev = edge_id_cur;
+                edge_id_cur = e2.next_bwd;
+            }
+
+            if (unlikely(!edge_id_cur))
+                ad_fail("ad_traverse(): could not find backward edge a%u "
+                        "-> a%u", er.source, er.target);
+
+            // Postpone deallocation of the edge callback, if there is one
+            if (unlikely(edge.special))
+                ls.cleanup.push_back(std::move(edge.special));
+
+            edge = Edge { };
+            state.unused_edges.push_back(er.id);
+
+            ad_var_dec_ref_int(er.source, source);
+            target = state[er.target]; // pointer might have changed
+        }
+
+        ad_var_dec_ref_int(er.target, target);
+    }
+
+    ad_log("ad_traverse(): done.");
+
+    todo.clear();
+    todo_tls.swap(todo);
+    clear_special();
+}
+
 // ==========================================================================
 // AD traversal callbacks for special operations: masks, gathers, scatters
 // ==========================================================================
@@ -883,26 +1363,28 @@ struct MaskEdge : Special {
     MaskEdge(const JitMask &mask, bool negate) : mask(mask), negate(negate) { }
 
     void backward(Variable *source, const Variable *target, uint32_t) const override {
-        (void) source;
-        (void) target;
-        // if (!negate)
-        //     JitVar::borrow(target->grad) & mask;
-        // source->accum(!negate ? detail::and_(target->grad, mask)
-        //                       : detail::andnot_(target->grad, mask),
-        //               target->size);
+        source->accum(!negate ? (target->grad & mask)
+                              : andnot(target->grad, mask),
+                      target->size);
     }
 
     void forward(const Variable *source, Variable *target, uint32_t) const override {
-        (void) source;
-        (void) target;
-        // target->accum(!negate ? detail::and_(source->grad, mask)
-        //                       : detail::andnot_(source->grad, mask),
-        //               source->size);
+        target->accum(!negate ? (source->grad & mask)
+                              : andnot(source->grad, mask),
+                      source->size);
     }
 
     JitMask mask;
     bool negate;
 };
+
+Index ad_var_new(JitIndex i0) {
+    Index result = ad_var_new(nullptr, JitVar::steal(i0));
+    const char *label = jit_var_label(i0);
+    if (label)
+        ad_set_label(result, label);
+    return result;
+}
 
 // ==========================================================================
 // Implementation of arithmetic operations and transcendental functions

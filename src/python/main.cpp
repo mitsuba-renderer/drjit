@@ -22,6 +22,7 @@
 #include "memop.h"
 #include "slice.h"
 #include "dlpack.h"
+#include "autodiff.h"
 
 NB_MODULE(drjit_ext, m_) {
     (void) m_;
@@ -71,6 +72,7 @@ NB_MODULE(drjit_ext, m_) {
     export_memop(m);
     export_slice(m);
     export_dlpack(m);
+    export_autodiff(m);
 
     export_scalar();
 

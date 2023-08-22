@@ -329,10 +329,31 @@ void export_base(nb::module_ &m) {
     ab.def_prop_rw("imag", complex_getter<1>, complex_setter<1>,
                    nb::raw_doc(doc_ArrayBase_imag));
 
+    ab.def_prop_ro(
+        "index",
+        [](nb::handle_t<dr::ArrayBase> h) -> uint32_t {
+            const ArraySupplement &s = supp(h.type());
+            if (s.is_tensor || !s.index)
+                return 0;
+            return (uint32_t) s.index(inst_ptr(h));
+        },
+        nb::raw_doc(doc_ArrayBase_index));
+
+    ab.def_prop_ro(
+        "index_ad",
+        [](nb::handle_t<dr::ArrayBase> h) -> uint32_t {
+            const ArraySupplement &s = supp(h.type());
+            if (s.is_tensor || !s.index)
+                return 0;
+            return s.index(inst_ptr(h)) >> 32;
+        },
+        nb::raw_doc(doc_ArrayBase_index_ad));
+
     m.def("abs", [](Py_ssize_t a) { return dr::abs(a); });
     DR_MATH_UNOP(abs, ArrayOp::Abs);
     DR_MATH_UNOP(sqrt, ArrayOp::Sqrt);
     DR_MATH_UNOP(sin, ArrayOp::Sin);
+    DR_MATH_UNOP(atan, ArrayOp::Atan);
 
     m.def("minimum",
           [](Py_ssize_t a, Py_ssize_t b) { return dr::minimum(a, b); });

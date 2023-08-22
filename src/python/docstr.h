@@ -1992,8 +1992,7 @@ that it does the evaluation immediately without deferring the kernel launch.
 This function accepts a variable-length keyword argument and processes it
 as follows:
 
-- It recurses into sequences (``tuple``, ``list``, etc.)
-- It recurses into the values of mappings (``dict``, etc.)
+- It recurses into tuples, lists, and the values of dictionaries.
 - It recurses into the fields of :ref:`custom data structures <custom-struct>`.
 
 During recursion, the function gathers all unevaluated Dr.Jit arrays. Evaluated
@@ -2042,8 +2041,7 @@ slightly improve performance in certain cases (the documentation of
 This function accepts a variable-length keyword argument and processes it
 as follows:
 
-- It recurses into sequences (``tuple``, ``list``, etc.)
-- It recurses into the values of mappings (``dict``, etc.)
+- It recurses into tuples, lists, and the values of dictionaries.
 - It recurses into the fields of :ref:`custom data structures <custom-struct>`.
 
 During recursion, the function gathers all unevaluated Dr.Jit arrays. Evaluated
@@ -2127,8 +2125,7 @@ Enable gradient tracking for the provided variables.
 This function accepts a variable-length list of arguments and processes it
 as follows:
 
-- It recurses into sequences (``tuple``, ``list``, etc.)
-- It recurses into the values of mappings (``dict``, etc.)
+- It recurses into tuples, lists, and the values of dictionaries.
 - It recurses into the fields of :ref:`custom data structures <custom-struct>`.
 
 During recursion, the function enables gradient tracking for all Dr.Jit arrays.
@@ -2145,8 +2142,7 @@ Disable gradient tracking for the provided variables.
 This function accepts a variable-length list of arguments and processes it
 as follows:
 
-- It recurses into sequences (``tuple``, ``list``, etc.)
-- It recurses into the values of mappings (``dict``, etc.)
+- It recurses into tuples, lists, and the values of dictionaries.
 - It recurses into the fields of :ref:`custom data structures <custom-struct>`.
 
 During recursion, the function disables gradient tracking for all Dr.Jit arrays.

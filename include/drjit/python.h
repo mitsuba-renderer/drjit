@@ -62,6 +62,7 @@ enum class ArrayOp {
     Sqrt,
 
     Sin,
+    Atan,
 
     // Binary arithetic operations
     Add,
@@ -121,10 +122,10 @@ struct ArraySupplement : ArrayMeta {
     using Len = size_t (*)(const ArrayBase *) noexcept;
     using Init = void (*)(size_t, ArrayBase *);
     using InitData = void (*)(size_t, const void *, ArrayBase *);
-    using InitIndex = void (*)(uint32_t, ArrayBase *);
+    using InitIndex = void (*)(uint64_t, ArrayBase *);
     using InitConst = void (*)(size_t, PyObject *, ArrayBase *);
     using Cast = void (*)(const ArrayBase *, VarType, ArrayBase *);
-    using Index = uint32_t (*)(const ArrayBase *) noexcept;
+    using Index = uint64_t (*)(const ArrayBase *) noexcept;
     using Data = void *(*)(const ArrayBase *) noexcept;
     using Gather = void (*)(const ArrayBase *, const ArrayBase *,
                             const ArrayBase *, ArrayBase *);
@@ -448,6 +449,7 @@ template <typename T> void bind_float_arithmetic(ArrayBinding &b) {
     b[ArrayOp::TrueDiv] = (void *) +[](const T *a, const T *b, T *c) { new (c) T(*a / *b); };
     b[ArrayOp::Sqrt] = (void *) +[](const T *a, T *b) { new (b) T(sqrt(*a)); };
     b[ArrayOp::Sin] = (void *) +[](const T *a, T *b) { new (b) T(sin(*a)); };
+    b[ArrayOp::Atan] = (void *) +[](const T *a, T *b) { new (b) T(atan(*a)); };
 }
 
 inline void disable_float_arithmetic(ArrayBinding &b) {
@@ -533,9 +535,10 @@ template <typename T> void bind_select(ArrayBinding &b) {
 
 template <typename T> void bind_jit_ops(ArrayBinding &b) {
     b.index = (ArraySupplement::Index)
-        +[](const T *v) { return v->index(); };
-    b.init_index = (ArraySupplement::InitIndex)
-        +[](uint32_t index, T *v) { new (v) T(T::borrow(index)); };
+        +[](const T *v) { return v->index_combined(); };
+    b.init_index = (ArraySupplement::InitIndex) + [](uint64_t index, T *v) {
+        new (v) T(T::borrow((typename T::Index) index));
+    };
 }
 
 template <typename T> void bind_memop(ArrayBinding &b) {

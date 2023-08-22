@@ -549,6 +549,8 @@ namespace detail {
         using type = std::decay_t<T>;
     };
 
+    template <> struct expr<void, bool> { using type = void; };
+
     template <typename T> struct expr<T, T> : expr<T> { };
     template <typename T> struct expr<T, T, T> : expr<T> { };
     template <typename T> struct expr<T*, std::nullptr_t> : expr<T*> { };

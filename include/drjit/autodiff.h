@@ -235,7 +235,7 @@ struct DRJIT_TRIVIAL_ABI DiffArray
     DiffArray acos_() const { return steal(ad_var_acos(m_index)); }
     DiffArray atan_() const { return steal(ad_var_atan(m_index)); }
     DiffArray atan2_(const DiffArray &x) const {
-        return steal(ad_var_atan2(m_index, x.index()));
+        return steal(ad_var_atan2(m_index, x.m_index));
     }
 
     DiffArray exp_() const { return steal(ad_var_exp(m_index)); }
@@ -440,15 +440,6 @@ struct DRJIT_TRIVIAL_ABI DiffArray
                                     mask.m_index, op));
     }
 
-    template <typename Index, typename Mask>
-    void scatter_reduce_kahan_(DiffArray &dst_1, DiffArray &dst_2,
-                               const Index &index, const Mask &mask) const {
-        static_assert(
-            std::is_same_v<detached_t<Mask>, detached_t<mask_t<DiffArray>>>);
-        jit_var_scatter_reduce_kahan(dst_1.index_ptr(), dst_2.index_ptr(),
-                                     m_index, index.m_index, mask.m_index);
-    }
-
     //! @}
     // -----------------------------------------------------------------------
 
@@ -536,6 +527,21 @@ struct DRJIT_TRIVIAL_ABI DiffArray
             return false;
     }
 
+    void set_grad_enabled_(bool value) {
+        DRJIT_MARK_USED(value);
+        if constexpr (IsFloat) {
+            if (value) {
+                if (grad_enabled_())
+                    return;
+                m_index = ad_var_new(m_index);
+            } else {
+                jit_var_inc_ref(m_index);
+                ad_var_dec_ref(m_index);
+                m_index = (uint32_t) m_index;
+            }
+        }
+    }
+
     Value entry(size_t offset) const {
         ActualValue out;
         jit_var_read((uint32_t) m_index, offset, &out);
@@ -566,8 +572,10 @@ struct DRJIT_TRIVIAL_ABI DiffArray
     Value *data() { return (Value *) jit_var_ptr((uint32_t) m_index); }
 
     bool valid() const { return m_index != 0; }
+
     uint32_t index() const { return (uint32_t) m_index; }
-    uint32_t ad_index() const { return (uint32_t) (m_index >> 32); }
+    uint32_t index_ad() const { return (uint32_t) (((uint64_t) m_index) >> 32); }
+    uint64_t index_combined() const { return m_index; }
 
 private:
     Index m_index = 0;

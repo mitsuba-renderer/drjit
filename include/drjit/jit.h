@@ -58,6 +58,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
     template <typename T> using ReplaceValue = JitArray<Backend, T>;
     using MaskType = JitArray<Backend, bool>;
     using ArrayType = JitArray;
+    using Index = uint32_t;
 
     //! @}
     // -----------------------------------------------------------------------
@@ -128,7 +129,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
     }
 
     JitArray &operator=(JitArray &&a) {
-        uint32_t temp = m_index;
+        Index temp = m_index;
         m_index = a.m_index;
         a.m_index = temp;
         return *this;
@@ -498,7 +499,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
                                const Index &index, const Mask &mask) const {
         static_assert(
             std::is_same_v<detached_t<Mask>, detached_t<mask_t<JitArray>>>);
-        jit_var_scatter_reduce_kahan(dst_1.index_ptr(), dst_2.index_ptr(),
+        jit_var_scatter_reduce_kahan(&dst_1.m_index, &dst_2.m_index,
                                      m_index, index.index(), mask.index());
     }
 
@@ -566,7 +567,8 @@ struct DRJIT_TRIVIAL_ABI JitArray
     bool valid() const { return m_index != 0; }
     size_t size() const { return jit_var_size(m_index); }
     uint32_t index() const { return m_index; }
-    uint32_t* index_ptr() { return &m_index; }
+    uint32_t index_ad() const { return 0; }
+    uint64_t index_combined() const { return m_index; }
 
     const Value *data() const { return (const Value *) jit_var_ptr(m_index); }
     Value *data() { return (Value *) jit_var_ptr(m_index); }
@@ -589,7 +591,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
 
     template <typename T, enable_if_t<!std::is_void_v<T> && std::is_same_v<T, Value>> = 0>
     void set_entry(size_t offset, T value) {
-        uint32_t index;
+        Index index;
         if constexpr (!IsClass) {
             index = jit_var_write(m_index, offset, &value);
         } else {
@@ -601,7 +603,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
     }
 
 	void resize(size_t size) {
-        uint32_t index = jit_var_resize(m_index, size);
+        Index index = jit_var_resize(m_index, size);
         jit_var_dec_ref(m_index);
         m_index = index;
     }
@@ -615,7 +617,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
     }
 
 	void set_label_(const char *label) {
-        uint32_t index = jit_var_set_label(m_index, label);
+        Index index = jit_var_set_label(m_index, label);
         jit_var_dec_ref(m_index);
         m_index = index;
 	}
@@ -631,27 +633,27 @@ struct DRJIT_TRIVIAL_ABI JitArray
     //! @}
     // -----------------------------------------------------------------------
 
-    static DRJIT_INLINE JitArray steal(uint32_t index) {
+    static DRJIT_INLINE JitArray steal(Index index) {
         JitArray result;
         result.m_index = index;
         return result;
     }
 
-    static DRJIT_INLINE JitArray borrow(uint32_t index) {
+    static DRJIT_INLINE JitArray borrow(Index index) {
         JitArray result;
         jit_var_inc_ref(index);
         result.m_index = index;
         return result;
     }
 
-    DRJIT_INLINE uint32_t release() {
-        uint32_t tmp = m_index;
+    DRJIT_INLINE Index release() {
+        Index tmp = m_index;
         m_index = 0;
         return tmp;
     }
 
 protected:
-    uint32_t m_index = 0;
+    Index m_index = 0;
 };
 
 template <typename Value> using CUDAArray = JitArray<JitBackend::CUDA, Value>;

@@ -8,23 +8,24 @@ nanobind_add_module(
 
   common.h
   main.cpp
-  log.h    log.cpp
-  meta.h   meta.cpp
-  base.h   base.cpp
-  bind.h   bind.cpp
-  init.h   init.cpp
-  repr.h   repr.cpp
-  iter.h   iter.cpp
-  shape.h  shape.cpp
-  traits.h traits.cpp
-  scalar.h scalar.cpp
-  llvm.h   llvm.cpp llvm_ad.cpp
-  reduce.h reduce.cpp
-  apply.h  apply.cpp
-  eval.h   eval.cpp
-  memop.h  memop.cpp
-  slice.h  slice.cpp
-  dlpack.h dlpack.cpp
+  log.h      log.cpp
+  meta.h     meta.cpp
+  base.h     base.cpp
+  bind.h     bind.cpp
+  init.h     init.cpp
+  repr.h     repr.cpp
+  iter.h     iter.cpp
+  shape.h    shape.cpp
+  traits.h   traits.cpp
+  scalar.h   scalar.cpp
+  llvm.h     llvm.cpp llvm_ad.cpp
+  reduce.h   reduce.cpp
+  apply.h    apply.cpp
+  eval.h     eval.cpp
+  memop.h    memop.cpp
+  slice.h    slice.cpp
+  dlpack.h   dlpack.cpp
+  autodiff.h autodiff.cpp
 )
 
 set_target_properties(drjit-python
