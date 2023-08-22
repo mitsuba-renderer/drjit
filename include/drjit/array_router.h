@@ -1686,27 +1686,25 @@ decltype(auto) detach(T &&value) {
     }
 }
 
-template <bool Underlying = true, bool FailIfMissing = true, typename T>
+template <bool Underlying = true, typename T>
 auto grad(const T &value) {
     using Result = std::conditional_t<Underlying, detached_t<T>, T>;
 
     if constexpr (is_diff_v<T>) {
-        if constexpr (depth_v<T> > 1) {
+        if constexpr (is_tensor_v<T>) {
+            return Result(grad<Underlying>(value.array()),
+                          value.ndim(), value.shape());
+        } else if constexpr (depth_v<T> > 1) {
             Result result;
             if constexpr (Result::Size == Dynamic)
                 result = empty<Result>(value.size());
 
             for (size_t i = 0; i < value.size(); ++i)
-                result.entry(i) = grad<Underlying, FailIfMissing>(value.entry(i));
+                result.entry(i) = grad<Underlying>(value.entry(i));
 
             return result;
         } else {
-            if constexpr (is_tensor_v<T>) {
-                return Result(grad<Underlying, FailIfMissing>(value.array()),
-                              value.ndim(), value.shape());
-            } else {
-                return Result(value.derived().grad_(FailIfMissing));
-            }
+            return Result::steal(value.derived().grad_());
         }
     } else if constexpr (is_drjit_struct_v<T>) {
         Result result;
@@ -1714,7 +1712,7 @@ auto grad(const T &value) {
         struct_support_t<T>::apply_2(
             value, result,
             [](auto const &x1, auto &x2) DRJIT_INLINE_LAMBDA {
-                x2 = grad<Underlying, FailIfMissing>(x1);
+                x2 = grad<Underlying>(x1);
             });
 
         return result;
@@ -1723,86 +1721,31 @@ auto grad(const T &value) {
     }
 }
 
-template <bool FailIfMissing = true, typename T, typename T2>
+template <bool Accum = false, typename T, typename T2>
 void set_grad(T &value, const T2 &grad) {
     if constexpr (is_diff_v<T>) {
-        if constexpr (depth_v<T> > 1) {
+        if constexpr (is_tensor_v<T2>) {
+            set_grad<Accum>(value.array(), grad.array());
+        } else if constexpr (depth_v<T> > 1) {
             for (size_t i = 0; i < value.size(); ++i)
-                set_grad<FailIfMissing>(value.entry(i), grad.entry(i));
+                set_grad<Accum>(value.entry(i), grad.entry(i));
         } else {
-            if constexpr (is_diff_v<T2>)
-                set_grad<FailIfMissing>(value, detach(grad));
-            else {
-                if constexpr (is_tensor_v<T2>)
-                    set_grad<FailIfMissing>(value, grad.array());
-                else if constexpr (is_tensor_v<T>)
-                    set_grad<FailIfMissing>(value.array(), grad);
-                else
-                    value.set_grad_(grad, FailIfMissing);
-            }
+            value.set_grad_(grad.index(), Accum);
         }
     } else if constexpr (is_drjit_struct_v<T>) {
         struct_support_t<T>::apply_2(
             value, grad,
             [](auto &x1, auto &x2) DRJIT_INLINE_LAMBDA {
-                set_grad<FailIfMissing>(x1, x2);
+                set_grad<Accum>(x1, x2);
             });
     }
 }
 
-template <bool FailIfMissing = true, typename T, typename T2>
-void accum_grad(T &value, const T2 &grad) {
-    if constexpr (is_diff_v<T>) {
-        if constexpr (depth_v<T> > 1) {
-            for (size_t i = 0; i < value.size(); ++i)
-                accum_grad<FailIfMissing>(value.entry(i), grad.entry(i));
-        } else {
-            if constexpr (is_diff_v<T2>)
-                accum_grad<FailIfMissing>(value, detach(grad));
-            else {
-                if constexpr (is_tensor_v<T>)
-                    accum_grad<FailIfMissing>(value.array(), grad);
-                else
-                    value.accum_grad_(grad, FailIfMissing);
-            }
-        }
-    } else if constexpr (is_drjit_struct_v<T>) {
-        struct_support_t<T>::apply_2(
-            value, grad,
-            [&](auto &x1, auto &x2) DRJIT_INLINE_LAMBDA {
-                accum_grad<FailIfMissing>(x1, x2);
-            });
-    }
+template <typename T, typename T2> void accum_grad(T &value, const T2 &grad) {
+    set_grad<true>(value, grad);
 }
 
 enum class ADScope { Invalid = 0, Suspend = 1, Resume = 2, Isolate = 3 };
-
-template <typename T> void enqueue(ADMode mode, const T &value) {
-    if constexpr (is_diff_v<T>) {
-        if constexpr (depth_v<T> > 1) {
-            for (size_t i = 0; i < value.size(); ++i)
-                enqueue(mode, value.entry(i));
-        } else {
-            value.derived().enqueue_(mode);
-        }
-    } else if constexpr (is_drjit_struct_v<T>) {
-        struct_support_t<T>::apply_1(
-            value,
-            [mode](auto const &x) DRJIT_INLINE_LAMBDA {
-                enqueue(mode, x);
-            });
-    }
-    DRJIT_MARK_USED(mode);
-    DRJIT_MARK_USED(value);
-}
-
-template <typename T1, typename... Ts, enable_if_t<sizeof...(Ts) != 0> = 0>
-void enqueue(ADMode mode, const T1 &value, const Ts&... values) {
-    enqueue(mode, value);
-    enqueue(mode, values...);
-}
-
-DRJIT_INLINE void enqueue(ADMode) { }
 
 /**
  * \brief RAII helper to push/pop an isolation scope that postpones traversal
@@ -1839,111 +1782,6 @@ template <typename T> const char *graphviz() {
 
 template <typename T> const char *graphviz(const T&) {
     return graphviz<T>();
-}
-
-/**
- * By default, Dr.Jit's AD system destructs the enqueued input graph during
- * forward/backward mode traversal. This frees up resources, which is useful
- * when working with large wavefronts or very complex computation graphs.
- * However, this also prevents repeated propagation of gradients through a
- * shared subgraph that is being differentiated multiple times.
- *
- * To support more fine-grained use cases that require this, the following
- * flags can be used to control what should and should not be destructed.
- */
-enum class ADFlag : uint32_t {
-   /// None: clear nothing.
-   ClearNone = 0,
-
-   /// Delete all traversed edges from the computation graph
-   ClearEdges = 1,
-
-   // Clear the gradients of processed input vertices (in-degree == 0)
-   ClearInput = 2,
-
-   // Clear the gradients of processed interior vertices (out-degree != 0)
-   ClearInterior = 4,
-
-   /// Clear gradients of processed vertices only, but leave edges intact
-   ClearVertices = (uint32_t) ClearInput | (uint32_t) ClearInterior,
-
-   /// Default: clear everything (edges, gradients of processed vertices)
-   Default = (uint32_t) ClearEdges | (uint32_t) ClearVertices
-};
-
-constexpr uint32_t operator |(ADFlag f1, ADFlag f2)   { return (uint32_t) f1 | (uint32_t) f2; }
-constexpr uint32_t operator |(uint32_t f1, ADFlag f2) { return f1 | (uint32_t) f2; }
-constexpr uint32_t operator &(ADFlag f1, ADFlag f2)   { return (uint32_t) f1 & (uint32_t) f2; }
-constexpr uint32_t operator &(uint32_t f1, ADFlag f2) { return f1 & (uint32_t) f2; }
-constexpr uint32_t operator ~(ADFlag f1)              { return ~(uint32_t) f1; }
-constexpr uint32_t operator +(ADFlag e)               { return (uint32_t) e; }
-
-
-template <typename...Ts> void traverse(ADMode mode, uint32_t flags = (uint32_t) ADFlag::Default) {
-    using Type = leaf_array_t<Ts...>;
-    DRJIT_MARK_USED(mode);
-    DRJIT_MARK_USED(flags);
-    if constexpr (is_diff_v<Type> && std::is_floating_point_v<scalar_t<Type>>)
-        Type::traverse_(mode, flags);
-}
-
-namespace detail {
-    template <typename T>
-    void check_grad_enabled(const char *name, const T &value) {
-        if (!grad_enabled(value))
-            drjit_raise(
-                "drjit::%s(): the argument does not depend on the input "
-                "variable(s) being differentiated. Throwing an exception since "
-                "this is usually indicative of a bug (for example, you may "
-                "have forgotten to call drjit::enable_grad(..)). If this is "
-                "expected behavior, skip the call to drjit::%s(..) if "
-                "drjit::grad_enabled(..) returns 'false'.", name, name);
-    }
-}
-
-template <typename T>
-void backward_from(T &value, uint32_t flags = (uint32_t) ADFlag::Default) {
-    detail::check_grad_enabled("backward_from", value);
-
-    // Handle case where components of an N-d vector map to the same AD variable
-    if constexpr (depth_v<T> > 1)
-        value = value + T(0);
-
-    set_grad(value, 1.f);
-    enqueue(ADMode::Backward, value);
-    traverse<T>(ADMode::Backward, flags);
-}
-
-template <typename T>
-void backward_to(const T &value, uint32_t flags = (uint32_t) ADFlag::Default) {
-    detail::check_grad_enabled("backward_to", value);
-    enqueue(ADMode::Forward, value);
-    traverse<T>(ADMode::Backward, flags);
-}
-
-template <typename T>
-void forward_from(T &value, uint32_t flags = (uint32_t) ADFlag::Default) {
-    detail::check_grad_enabled("forward_from", value);
-    set_grad(value, 1.f);
-    enqueue(ADMode::Forward, value);
-    traverse<T>(ADMode::Forward, flags);
-}
-
-template <typename T>
-void forward_to(T &value, uint32_t flags = (uint32_t) ADFlag::Default) {
-    detail::check_grad_enabled("forward_to", value);
-    enqueue(ADMode::Backward, value);
-    traverse<T>(ADMode::Forward, flags);
-}
-
-template <typename T>
-void backward(T &value, uint32_t flags = (uint32_t) ADFlag::Default) {
-    backward_from(value, flags);
-}
-
-template <typename T>
-void forward(T &value, uint32_t flags = (uint32_t) ADFlag::Default) {
-    forward_from(value, flags);
 }
 
 //! @}

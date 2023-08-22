@@ -1,3 +1,16 @@
+/*
+    extra/math.cpp -- Transcendental functions exported by the drjit-extra library
+
+    Dr.Jit is a C++ template library for efficient vectorization and
+    differentiation of numerical kernels on modern processor architectures.
+
+    Copyright (c) 2023 Wenzel Jakob <wenzel.jakob@epfl.ch>
+
+    All rights reserved. Use of this source code is governed by a BSD-style
+    license that can be found in the LICENSE file.
+*/
+
+
 #include <drjit/jit.h>
 #include <drjit/math.h>
 #include "common.h"

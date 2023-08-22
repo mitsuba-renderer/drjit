@@ -319,6 +319,127 @@ ___________________________
       - :math:`6.4 \cdot 10^{-8}\,(0.79\,\text{ulp})`
       - :math:`1 \cdot 10^{-6}\,(11\,\text{ulp})`
 
+Automatic differentiation
+-------------------------
+
+.. autoclass:: ADMode
+
+   Enumeration to distinguish different types of primal/derivative computation.
+
+   See also :py:func:`drjit.enqueue()`, :py:func:`drjit.traverse()`.
+
+   .. autoattribute:: Primal
+      :annotation:
+
+      Primal/original computation without derivative tracking. Note that this
+      is *not* a valid input to Dr.Jit AD routines, but it is sometimes useful
+      to have this entry when to indicate to a computation that derivative
+      propagation should not be performed.
+
+   .. autoattribute:: Forward
+      :annotation:
+
+      Propagate derivatives in forward mode (from inputs to outputs)
+
+   .. autoattribute:: Backward
+      :annotation:
+
+      Propagate derivatives in backward/reverse mode (from outputs to inputs)
+
+.. autoclass:: ADFlag
+
+   By default, Dr.Jit's AD system destructs the enqueued input graph during
+   forward/backward mode traversal. This frees up resources, which is useful
+   when working with large wavefronts or very complex computation graphs.
+   However, this also prevents repeated propagation of gradients through a
+   shared subgraph that is being differentiated multiple times.
+
+   To support more fine-grained use cases that require this, the flags in the
+   following enumeration can be used to control what should and should not be
+   destructed.
+
+   See also :py:func:`drjit.traverse()`, :py:func:`drjit.forward_from()`,
+   :py:func:`drjit.forward_to()`, :py:func:`drjit.backward_from()`, and
+   :py:func:`drjit.backward_to()`.
+
+   .. autoattribute:: ClearNone
+      :annotation:
+
+      Clear nothing.
+
+   .. autoattribute:: ClearEdges
+      :annotation:
+
+      Delete all traversed edges from the computation graph
+
+   .. autoattribute:: ClearInput
+      :annotation:
+
+      Clear the gradients of processed input vertices (in-degree == 0)
+
+   .. autoattribute:: ClearInterior
+      :annotation:
+
+      Clear the gradients of processed interior vertices (out-degree != 0)
+
+   .. autoattribute:: ClearVertices
+      :annotation:
+
+      Clear gradients of processed vertices only, but leave edges intact. Equal
+      to ``ClearInput | ClearInterior``.
+
+   .. autoattribute:: Default
+      :annotation:
+
+      Default: clear everything (edges, gradients of processed vertices). Equal
+      to ``ClearEdges | ClearVertices``.
+
+.. autofunction:: detach
+.. autofunction:: enable_grad
+.. autofunction:: disable_grad
+.. autofunction:: set_grad_enabled
+.. autofunction:: grad_enabled
+.. autofunction:: grad
+.. autofunction:: set_grad
+.. autofunction:: accum_grad
+.. autofunction:: replace_grad
+.. autofunction:: traverse
+.. autofunction:: enqueue
+.. py:function:: forward(arg: drjit.ArrayBase, flags: drjit.ADFlag | int = drjit.ADFlag.Default)
+
+   This function is a convenience alias of :py:func:`forward_from`.
+
+.. py:function:: backward(arg: drjit.ArrayBase, flags: drjit.ADFlag | int = drjit.ADFlag.Default)
+
+   This function is a convenience alias of :py:func:`backward_from`.
+
+.. autofunction:: forward_from
+.. autofunction:: forward_to
+.. autofunction:: backward_from
+.. autofunction:: backward_to
+
+.. .. autofunction:: ad_scope_enter
+.. .. autofunction:: ad_scope_leave
+.. autofunction:: suspend_grad
+.. autofunction:: resume_grad
+.. autofunction:: isolate_grad
+
+.. autoclass:: CustomOp
+
+   .. automethod:: eval
+   .. automethod:: forward
+   .. automethod:: backward
+   .. automethod:: name
+   .. automethod:: grad_out
+   .. automethod:: set_grad_out
+   .. automethod:: grad_in
+   .. automethod:: set_grad_in
+   .. automethod:: add_input
+   .. automethod:: add_output
+
+.. autofunction:: custom
+
+
 Accuracy (double precision)
 ___________________________
 
@@ -536,50 +657,6 @@ Array base class
     .. automethod:: __dlpack_device__
     .. automethod:: __array__
 
-
-
-Automatic differentiation
--------------------------
-
-.. autofunction:: detach
-.. autofunction:: enable_grad
-.. autofunction:: disable_grad
-.. autofunction:: set_grad_enabled
-.. autofunction:: grad_enabled
-.. autofunction:: grad
-.. autofunction:: set_grad
-.. autofunction:: accum_grad
-.. autofunction:: replace_grad
-.. autofunction:: traverse
-.. autofunction:: enqueue
-.. autofunction:: forward_from
-.. autofunction:: forward
-.. autofunction:: forward_to
-.. autofunction:: backward_from
-.. autofunction:: backward
-.. autofunction:: backward_to
-
-.. .. autofunction:: ad_scope_enter
-.. .. autofunction:: ad_scope_leave
-.. autofunction:: suspend_grad
-.. autofunction:: resume_grad
-.. autofunction:: isolate_grad
-
-.. autoclass:: CustomOp
-
-    .. automethod:: eval
-    .. automethod:: forward
-    .. automethod:: backward
-    .. automethod:: name
-    .. automethod:: grad_out
-    .. automethod:: set_grad_out
-    .. automethod:: grad_in
-    .. automethod:: set_grad_in
-    .. automethod:: add_input
-    .. automethod:: add_output
-
-.. autofunction:: custom
-
 Concrete array classes
 ----------------------
 
@@ -719,22 +796,22 @@ Scalars
     :show-inheritance:
 .. autoclass:: drjit.scalar.Array44f
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array22d
+.. autoclass:: drjit.scalar.Array22f64
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array33d
+.. autoclass:: drjit.scalar.Array33f64
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array44d
+.. autoclass:: drjit.scalar.Array44f64
     :show-inheritance:
 
 Special (complex numbers, etc.)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .. autoclass:: drjit.scalar.Complex2f
     :show-inheritance:
-.. autoclass:: drjit.scalar.Complex2d
+.. autoclass:: drjit.scalar.Complex2f64
     :show-inheritance:
 .. autoclass:: drjit.scalar.Quaternion4f
     :show-inheritance:
-.. autoclass:: drjit.scalar.Quaternion4d
+.. autoclass:: drjit.scalar.Quaternion4f64
     :show-inheritance:
 .. autoclass:: drjit.scalar.Matrix2f
     :show-inheritance:
@@ -742,11 +819,11 @@ Special (complex numbers, etc.)
     :show-inheritance:
 .. autoclass:: drjit.scalar.Matrix4f
     :show-inheritance:
-.. autoclass:: drjit.scalar.Matrix2d
+.. autoclass:: drjit.scalar.Matrix2f64
     :show-inheritance:
-.. autoclass:: drjit.scalar.Matrix3d
+.. autoclass:: drjit.scalar.Matrix3f64
     :show-inheritance:
-.. autoclass:: drjit.scalar.Matrix4d
+.. autoclass:: drjit.scalar.Matrix4f64
     :show-inheritance:
 
 Tensors
@@ -766,350 +843,6 @@ Tensors
 .. autoclass:: drjit.scalar.TensorXi64
     :show-inheritance:
 
-
-CUDA array namespace (``drjit.cuda``)
-_______________________________________
-
-The CUDA backend is vectorized, hence types listed as *scalar* actually
-represent an array of scalars partaking in a parallel computation
-(analogously, 1D arrays are arrays of 1D arrays, etc.).
-
-Scalars
-^^^^^^^
-.. autoclass:: drjit.cuda.Bool
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Float
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Float64
-    :show-inheritance:
-.. autoclass:: drjit.cuda.UInt
-    :show-inheritance:
-.. autoclass:: drjit.cuda.UInt64
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Int
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Int64
-    :show-inheritance:
-
-1D arrays
-^^^^^^^^^
-.. autoclass:: drjit.cuda.Array0b
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Array1b
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Array2b
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Array3b
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Array4b
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ArrayXb
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Array0f
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Array1f
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Array2f
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Array3f
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Array4f
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ArrayXf
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Array0u
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Array1u
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Array2u
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Array3u
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Array4u
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ArrayXu
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Array0i
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Array1i
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Array2i
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Array3i
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Array4i
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ArrayXi
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Array0f64
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Array1f64
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Array2f64
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Array3f64
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Array4f64
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ArrayXf64
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Array0u64
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Array1u64
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Array2u64
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Array3u64
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Array4u64
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ArrayXu64
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Array0i64
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Array1i64
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Array2i64
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Array3i64
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Array4i64
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ArrayXi64
-    :show-inheritance:
-
-2D arrays
-^^^^^^^^^
-.. autoclass:: drjit.cuda.Array22b
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Array33b
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Array44b
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Array22f
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Array33f
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Array44f
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Array22d
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Array33d
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Array44d
-    :show-inheritance:
-
-Special (complex numbers, etc.)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-.. autoclass:: drjit.cuda.Complex2f
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Complex2d
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Quaternion4f
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Quaternion4d
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Matrix2f
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Matrix3f
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Matrix4f
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Matrix2d
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Matrix3d
-    :show-inheritance:
-.. autoclass:: drjit.cuda.Matrix4d
-    :show-inheritance:
-
-Tensors
-^^^^^^^
-.. autoclass:: drjit.cuda.TensorXb
-    :show-inheritance:
-.. autoclass:: drjit.cuda.TensorXf
-    :show-inheritance:
-.. autoclass:: drjit.cuda.TensorXu
-    :show-inheritance:
-.. autoclass:: drjit.cuda.TensorXi
-    :show-inheritance:
-.. autoclass:: drjit.cuda.TensorXf64
-    :show-inheritance:
-.. autoclass:: drjit.cuda.TensorXu64
-    :show-inheritance:
-.. autoclass:: drjit.cuda.TensorXi64
-    :show-inheritance:
-
-CUDA array namespace with automatic differentiation (``drjit.cuda.ad``)
-_______________________________________________________________________
-
-The CUDA AD backend is vectorized, hence types listed as *scalar* actually
-represent an array of scalars partaking in a parallel computation
-(analogously, 1D arrays are arrays of 1D arrays, etc.).
-
-Scalars
-^^^^^^^
-.. autoclass:: drjit.cuda.ad.Bool
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Float
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Float64
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.UInt
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.UInt64
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Int
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Int64
-    :show-inheritance:
-
-1D arrays
-^^^^^^^^^
-.. autoclass:: drjit.cuda.ad.Array0b
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Array1b
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Array2b
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Array3b
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Array4b
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.ArrayXb
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Array0f
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Array1f
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Array2f
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Array3f
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Array4f
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.ArrayXf
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Array0u
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Array1u
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Array2u
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Array3u
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Array4u
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.ArrayXu
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Array0i
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Array1i
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Array2i
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Array3i
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Array4i
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.ArrayXi
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Array0f64
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Array1f64
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Array2f64
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Array3f64
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Array4f64
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.ArrayXf64
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Array0u64
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Array1u64
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Array2u64
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Array3u64
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Array4u64
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.ArrayXu64
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Array0i64
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Array1i64
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Array2i64
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Array3i64
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Array4i64
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.ArrayXi64
-    :show-inheritance:
-
-2D arrays
-^^^^^^^^^
-.. autoclass:: drjit.cuda.ad.Array22b
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Array33b
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Array44b
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Array22f
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Array33f
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Array44f
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Array22d
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Array33d
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Array44d
-    :show-inheritance:
-
-Special (complex numbers, etc.)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-.. autoclass:: drjit.cuda.ad.Complex2f
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Complex2d
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Quaternion4f
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Quaternion4d
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Matrix2f
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Matrix3f
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Matrix4f
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Matrix2d
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Matrix3d
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.Matrix4d
-    :show-inheritance:
-
-Tensors
-^^^^^^^
-.. autoclass:: drjit.cuda.ad.TensorXb
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.TensorXf
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.TensorXu
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.TensorXi
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.TensorXf64
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.TensorXu64
-    :show-inheritance:
-.. autoclass:: drjit.cuda.ad.TensorXi64
-    :show-inheritance:
 
 LLVM array namespace (``drjit.llvm``)
 _______________________________________
@@ -1237,22 +970,22 @@ Scalar
     :show-inheritance:
 .. autoclass:: drjit.llvm.Array44f
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array22d
+.. autoclass:: drjit.llvm.Array22f64
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array33d
+.. autoclass:: drjit.llvm.Array33f64
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array44d
+.. autoclass:: drjit.llvm.Array44f64
     :show-inheritance:
 
 Special (complex numbers, etc.)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .. autoclass:: drjit.llvm.Complex2f
     :show-inheritance:
-.. autoclass:: drjit.llvm.Complex2d
+.. autoclass:: drjit.llvm.Complex2f64
     :show-inheritance:
 .. autoclass:: drjit.llvm.Quaternion4f
     :show-inheritance:
-.. autoclass:: drjit.llvm.Quaternion4d
+.. autoclass:: drjit.llvm.Quaternion4f64
     :show-inheritance:
 .. autoclass:: drjit.llvm.Matrix2f
     :show-inheritance:
@@ -1260,11 +993,11 @@ Special (complex numbers, etc.)
     :show-inheritance:
 .. autoclass:: drjit.llvm.Matrix4f
     :show-inheritance:
-.. autoclass:: drjit.llvm.Matrix2d
+.. autoclass:: drjit.llvm.Matrix2f64
     :show-inheritance:
-.. autoclass:: drjit.llvm.Matrix3d
+.. autoclass:: drjit.llvm.Matrix3f64
     :show-inheritance:
-.. autoclass:: drjit.llvm.Matrix4d
+.. autoclass:: drjit.llvm.Matrix4f64
     :show-inheritance:
 
 Tensors
@@ -1409,22 +1142,22 @@ Scalars
     :show-inheritance:
 .. autoclass:: drjit.llvm.ad.Array44f
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array22d
+.. autoclass:: drjit.llvm.ad.Array22f64
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array33d
+.. autoclass:: drjit.llvm.ad.Array33f64
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array44d
+.. autoclass:: drjit.llvm.ad.Array44f64
     :show-inheritance:
 
 Special (complex numbers, etc.)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 .. autoclass:: drjit.llvm.ad.Complex2f
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Complex2d
+.. autoclass:: drjit.llvm.ad.Complex2f64
     :show-inheritance:
 .. autoclass:: drjit.llvm.ad.Quaternion4f
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Quaternion4d
+.. autoclass:: drjit.llvm.ad.Quaternion4f64
     :show-inheritance:
 .. autoclass:: drjit.llvm.ad.Matrix2f
     :show-inheritance:
@@ -1432,11 +1165,11 @@ Special (complex numbers, etc.)
     :show-inheritance:
 .. autoclass:: drjit.llvm.ad.Matrix4f
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Matrix2d
+.. autoclass:: drjit.llvm.ad.Matrix2f64
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Matrix3d
+.. autoclass:: drjit.llvm.ad.Matrix3f64
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Matrix4d
+.. autoclass:: drjit.llvm.ad.Matrix4f64
     :show-inheritance:
 
 Tensors
@@ -1460,6 +1193,6 @@ Miscellaneous
 -------------
 
 .. autofunction:: graphviz
-.. autofunction:: graphviz_ad
+.. autofunction:: graphviz_af64
 .. autofunction:: label
 .. autofunction:: set_label

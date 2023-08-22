@@ -6,14 +6,20 @@ import re
 array_types = []
 array_packages = []
 
-for o1 in dr.__dict__.values():
-    if isinstance(o1, types.ModuleType):
-        if hasattr(o1, 'ArrayXf'):
-            array_packages.append(o1)
+def traverse(o):
+    if isinstance(o, types.ModuleType):
+        if hasattr(o, 'ArrayXf'):
+            array_packages.append(o)
 
-        for o2 in o1.__dict__.values():
+        for o2 in o.__dict__.values():
             if isinstance(o2, type) and issubclass(o2, dr.ArrayBase):
                 array_types.append(o2)
+
+        traverse(getattr(o, 'ad', None))
+
+
+for o in dr.__dict__.values():
+    traverse(o)
 
 
 def test_arrays(*queries, name='t'):

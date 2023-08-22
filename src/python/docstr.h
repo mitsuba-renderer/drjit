@@ -1322,7 +1322,7 @@ The expressions ``drjit.shape(arg)`` and ``arg.shape`` are equivalent.
 :type: tuple | NoneType)";
 
 static const char *doc_ArrayBase_ndim = R"(
-This property represents the dimension of the provided Dr.Jit array or tensor. 
+This property represents the dimension of the provided Dr.Jit array or tensor.
 
 :type: int)";
 
@@ -1558,7 +1558,7 @@ Returns:
     type: Result of the conversion as described above.
 )";
 
-static const char *doc_detached_t =R"(
+static const char *doc_detached_t = R"(
 Converts the provided Dr.Jit array/tensor type into an non-differentiable version.
 
 This function implements the following set of behaviors:
@@ -1577,7 +1577,7 @@ Returns:
     type: Result of the conversion as described above.
 )";
 
-static const char *doc_leaf_array_t =R"(
+static const char *doc_leaf_array_t = R"(
 Extracts a leaf array type underlying a Python object tree, with a preference
 for differentiable arrays.
 
@@ -2084,7 +2084,7 @@ In other case, e.g. for :py:class:`drjit.llvm.Float`,
 :py:class:`drjit.scalar.Array3f`, or :py:class:`drjit.scalar.ArrayXf`, the data
 is already contiguous and a zero-copy approach is used instead.)";
 
-static const char *doc_detach =R"(
+static const char *doc_detach = R"(
 Transforms the input variable into its non-differentiable version (*detaches* it
 from the AD computational graph).
 
@@ -2108,7 +2108,7 @@ Returns:
     object: The detached variable.
 )";
 
-static const char *doc_set_grad_enabled =R"(
+static const char *doc_set_grad_enabled = R"(
 Enable or disable gradient tracking on the provided variables.
 
 Args:
@@ -2136,7 +2136,7 @@ Args:
         :ref:`custom data structures <custom-struct>`, sequences, or mappings.
 )";
 
-static const char *doc_disable_grad =R"(
+static const char *doc_disable_grad = R"(
 Disable gradient tracking for the provided variables.
 
 This function accepts a variable-length list of arguments and processes it
@@ -2153,7 +2153,7 @@ Args:
         :ref:`custom data structures <custom-struct>`, sequences, or mappings.
 )";
 
-static const char *doc_grad_enabled =R"(
+static const char *doc_grad_enabled = R"(
 Return whether gradient tracking is enabled on any of the given variables.
 
 Args:
@@ -2166,7 +2166,7 @@ Returns:
     bool: ``True`` if any variable has gradient tracking enabled, ``False`` otherwise.
 )";
 
-static const char *doc_grad =R"(
+static const char *doc_grad = R"(
 Return the gradient value associated to a given variable.
 
 When the variable doesn't have gradient tracking enabled, this function returns ``0``.
@@ -2182,7 +2182,7 @@ Returns:
     object: the gradient value associated to the input variable.
 )";
 
-static const char *doc_set_grad =R"(
+static const char *doc_set_grad = R"(
 Set the gradient value to the provided variable.
 
 Broadcasting is applied to the gradient value if necessary and possible to match
@@ -2196,7 +2196,7 @@ Args:
         :ref:`custom data structure <custom-struct>`, sequences, or mapping.
 )";
 
-static const char *doc_accum_grad =R"(
+static const char *doc_accum_grad = R"(
 Accumulate into the gradient of a variable.
 
 Broadcasting is applied to the gradient value if necessary and possible to match
@@ -2210,7 +2210,7 @@ Args:
         :ref:`custom data structure <custom-struct>`, sequences, or mapping.
 )";
 
-static const char *doc_replace_grad =R"(
+static const char *doc_replace_grad = R"(
 Replace the gradient value of ``dst`` with the one of ``src``.
 
 Broadcasting is applied to ``dst`` if necessary to match the type of ``src``.
@@ -2224,7 +2224,7 @@ Returns:
     object: the variable with the replaced gradients.
 )";
 
-static const char *doc_enqueue =R"(
+static const char *doc_enqueue = R"(
 Enqueues variable for the subsequent AD traversal.
 
 In Dr.Jit, the process of automatic differentiation is split into two parts:
@@ -2295,63 +2295,67 @@ wavefronts or very complex computation graphs. However, this also prevents
 repeated propagation of gradients through a shared subgraph that is being
 differentiated multiple times.
 
-To support more fine-grained use cases that require this, the following flags
-can be used to control what should and should not be destructed:
-
-- ``ADFlag.ClearNone``: clear nothing
-- ``ADFlag.ClearEdges``: delete all traversed edges from the computation graph
-- ``ADFlag.ClearInput``: clear the gradients of processed input vertices (in-degree == 0)
-- ``ADFlag.ClearInterior``: clear the gradients of processed interior vertices (out-degree != 0)
-- ``ADFlag.ClearVertices``: clear gradients of processed vertices only, but leave edges intact
-- ``ADFlag.Default``: clear everything (default behaviour)
+To support more fine-grained use cases that require this, the function accepts
+combinations of the :py:class:`drjit.ADFlag` flag enumeration.
 
 Args:
     type (type): defines the Dr.JIT array type used to build the AD graph
 
     mode (ADMode): defines the mode traversal (backward or forward)
 
-    flags (ADFlag | int): flags to control what should and should not be
-    destructed during forward/backward mode traversal.
+    flags (drjit.ADFlag | int): Controls what parts of the AD graph are cleared
+        during traversal. The default value is :py:attr:`drjit.ADFlag.Default`.
 )";
 
-static const char *doc_forward_from =R"(
-Forward propagates gradients from a provided Dr.Jit differentiable array.
+static const char *doc_forward_from = R"(
+forward_from(arg: drjit.ArrayBase, flags: drjit.ADFlag | int = drjit.ADFlag.Default)
 
-This function will first see the gradient value of the provided variable to ``1.0``
-before executing the AD graph traversal.
+Forward-propagate gradients from the provided Dr.Jit array
 
-An exception will be raised when the provided array doesn't have gradient tracking
-enabled or if it isn't an instance of a Dr.Jit differentiable array type.
+This function sets the gradient of the provided Dr.Jit array ``arg`` to ``1.0``
+and then forward-propagates derivatives through the connected component (i.e.,
+reaching all variables that directly or indirectly depend on ``arg``).
+
+The operation is equivalent to
+
+.. code-block:: python
+
+   dr.set_grad(arg, 1.0)
+   dr.enqueue(dr.ADMode.Forward, h)
+   dr.traverse(dr.ADMode.Forward)
+
+You may also refer to the functions :py:func:`drjit.set_grad()`,
+:py:func:`drjit.enqueue()`, and :py:func:`drjit.traverse()` for further
+detail.
+
+By default, the operation is destructive: it clears the gradients of visited
+interior nodes and only retains gradients in at leaf nodes. It also
+removes the edges of visited nodes to isolate them.
+
+This default is intentional to both free up resources and keep subsequent AD traversal steps
+from visiting the same variables by accident, which could introduce undesired
+derivative contributions and waste computation. Such a case would otherwise arise if
+the AD graphs of two unrelated computations are connected by an edge
+and subsequently separately differentiated.
+
+To change this behavior, specify a different combination of the
+enumeration :py:class:`drjit.ADFlag` via the `flags` parameter.
+
+The implementation raises an exception when the provided array does not support
+gradient tracking, or when gradient tracking was not previously enabled via
+:py:func:`drjit.enable_grad()`.
 
 Args:
-    arg (object): A Dr.Jit differentiable array instance.
+    arg (drjit.ArrayBase): A Dr.Jit differentiable array instance.
 
-    flags (ADFlag | int): flags to control what should and should not be
-    destructed during the traversal. The default value is ``ADFlag.Default``.
+    flags (drjit.ADFlag | int): Controls what parts of the AD graph are cleared
+        during traversal. The default value is :py:attr:`drjit.ADFlag.Default`.
 )";
 
-static const char *doc_forward =R"(
-Forward propagates gradients from a provided Dr.Jit differentiable array.
-
-This function will first see the gradient value of the provided variable to ``1.0``
-before executing the AD graph traversal.
-
-An exception will be raised when the provided array doesn't have gradient tracking
-enabled or if it isn't an instance of a Dr.Jit differentiable array type.
-
-This function is an alias of :py:func:`drjit.forward_from`.
-
-Args:
-    arg (object): A Dr.Jit differentiable array instance.
-
-    flags (ADFlag | int): flags to control what should and should not be
-    destructed during the traversal. The default value is ``ADFlag.Default``.
-)";
-
-static const char *doc_forward_to =R"(
+static const char *doc_forward_to = R"(
 Forward propagates gradients to a set of provided Dr.Jit differentiable arrays.
 
-Internally, the AD computational graph will be first traversed backward to find
+Internally, the AD computation graph will be first traversed backward to find
 all potential source of gradient for the provided array. Then only the forward
 gradient propagation traversal takes place.
 
@@ -2364,14 +2368,14 @@ Args:
     *args (tuple): A variable-length list of Dr.Jit differentiable array, tensor,
         :ref:`custom data structure <custom-struct>`, sequences, or mapping.
 
-    flags (ADFlag | int): flags to control what should and should not be
-    destructed during the traversal. The default value is ``ADFlag.Default``.
+    flags (drjit.ADFlag | int): Controls what parts of the AD graph are cleared
+        during traversal. The default value is :py:attr:`drjit.ADFlag.Default`.
 
 Returns:
     object: the gradient value associated to the output variables.
 )";
 
-static const char *doc_backward_from =R"(
+static const char *doc_backward_from = R"(
 Backward propagates gradients from a provided Dr.Jit differentiable array.
 
 An exception will be raised when the provided array doesn't have gradient tracking
@@ -2384,7 +2388,7 @@ Args:
     destructed during the traversal. The default value is ``ADFlag.Default``.
 )";
 
-static const char *doc_backward =R"(
+static const char *doc_backward = R"(
 Backward propagate gradients from a provided Dr.Jit differentiable array.
 
 An exception will be raised when the provided array doesn't have gradient tracking
@@ -2399,10 +2403,10 @@ Args:
     destructed during the traversal. The default value is ``ADFlag.Default``.
 )";
 
-static const char *doc_backward_to =R"(
+static const char *doc_backward_to = R"(
 Backward propagate gradients to a set of provided Dr.Jit differentiable arrays.
 
-Internally, the AD computational graph will be first traversed *forward* to find
+Internally, the AD computation graph will be first traversed *forward* to find
 all potential source of gradient for the provided array. Then only the backward
 gradient propagation traversal takes place.
 
@@ -2422,8 +2426,8 @@ Returns:
     object: the gradient value associated to the output variables.
 )";
 
-static const char *doc_graphviz =R"(
-Assembles a graphviz diagram for the computational graph trace by the JIT.
+static const char *doc_graphviz = R"(
+Assembles a graphviz diagram for the computation graph trace by the JIT.
 
 Args:
     as_str (bool): whether the function should return the graphviz object as
@@ -2433,7 +2437,7 @@ Returns:
     object: the graphviz obj (or its string representation).
 )";
 
-static const char *doc_graphviz_ad =R"(
+static const char *doc_graphviz_ad = R"(
 Assembles a graphviz diagram for the computational graph trace by the AD system.
 
 Args:
@@ -2444,15 +2448,15 @@ Returns:
     object: the graphviz obj (or its string representation).
 )";
 
-static const char *doc_ad_scope_enter =R"(
+static const char *doc_ad_scope_enter = R"(
 TODO
 )";
 
-static const char *doc_ad_scope_leave =R"(
+static const char *doc_ad_scope_leave = R"(
 TODO
 )";
 
-static const char *doc_suspend_grad =R"(
+static const char *doc_suspend_grad = R"(
 suspend_grad(*args, when = True)
 Context manager for temporally suspending derivative tracking.
 
@@ -2521,7 +2525,7 @@ Args:
       derivative tracking.
 )";
 
-static const char *doc_resume_grad =R"(
+static const char *doc_resume_grad = R"(
 resume_grad(*args, when = True)
 Context manager for temporally resume derivative tracking.
 
@@ -2581,7 +2585,7 @@ Args:
       derivative tracking.
 )";
 
-static const char *doc_isolate_grad =R"(
+static const char *doc_isolate_grad = R"(
 Context manager to temporarily isolate outside world from AD traversals.
 
 Dr.Jit provides isolation boundaries to postpone AD traversals steps leaving a
@@ -2589,7 +2593,7 @@ specific scope. For instance this function is used internally to implement
 differentiable loops and polymorphic calls.
 )";
 
-static const char *doc_custom =R"(
+static const char *doc_custom = R"(
 Evaluate a custom differentiable operation (see :py:class:`CustomOp`).
 
 Look at the section on :ref:`AD custom operations <custom-op>` for more detailed
@@ -2634,7 +2638,7 @@ custom operation and properly attach it to the AD graph.
     dr.custom(MyCustomOp, *args)
 )";
 
-static const char *doc_CustomOp_eval =R"(
+static const char *doc_CustomOp_eval = R"(
 eval(self, *args) -> object
 Evaluate the custom function in primal mode.
 
@@ -2646,7 +2650,7 @@ detached.
     This method must be overriden, no default implementation provided.
 )";
 
-static const char *doc_CustomOp_forward =R"(
+static const char *doc_CustomOp_forward = R"(
 Evaluated forward-mode derivatives.
 
 .. danger::
@@ -2654,7 +2658,7 @@ Evaluated forward-mode derivatives.
     This method must be overriden, no default implementation provided.
 )";
 
-static const char *doc_CustomOp_backward =R"(
+static const char *doc_CustomOp_backward = R"(
 Evaluated backward-mode derivatives.
 
 .. danger::
@@ -2662,7 +2666,7 @@ Evaluated backward-mode derivatives.
     This method must be overriden, no default implementation provided.
 )";
 
-static const char *doc_CustomOp_name =R"(
+static const char *doc_CustomOp_name = R"(
 Return a descriptive name of the ``CustomOp`` instance.
 
 The name returned by this method is used in the GraphViz output.
@@ -2670,21 +2674,21 @@ The name returned by this method is used in the GraphViz output.
 If not overriden, this method returns ``"CustomOp[unnamed]"``.
 )";
 
-static const char *doc_CustomOp_grad_out =R"(
+static const char *doc_CustomOp_grad_out = R"(
 Access the gradient associated with the output argument (backward mode AD).
 
 Returns:
     object: the gradient value associated with the output argument.
 )";
 
-static const char *doc_CustomOp_set_grad_out =R"(
+static const char *doc_CustomOp_set_grad_out = R"(
 Accumulate a gradient value into the output argument (forward mode AD).
 
 Args:
     value (object): gradient value to accumulate.
 )";
 
-static const char *doc_CustomOp_grad_in =R"(
+static const char *doc_CustomOp_grad_in = R"(
 Access the gradient associated with the input argument ``name`` (fwd. mode AD).
 
 Args:
@@ -2694,7 +2698,7 @@ Returns:
     object: the gradient value associated with the input argument.
 )";
 
-static const char *doc_CustomOp_set_grad_in =R"(
+static const char *doc_CustomOp_set_grad_in = R"(
 Accumulate a gradient value into an input argument (backward mode AD).
 
 Args:
@@ -2702,7 +2706,7 @@ Args:
     value (object): gradient value to accumulate.
 )";
 
-static const char *doc_CustomOp_add_input =R"(
+static const char *doc_CustomOp_add_input = R"(
 Register an implicit input dependency of the operation on an AD variable.
 
 This function should be called by the ``eval()`` implementation when an
@@ -2713,7 +2717,7 @@ Args:
     value (object): variable this operation depends on implicitly.
 )";
 
-static const char *doc_CustomOp_add_output =R"(
+static const char *doc_CustomOp_add_output = R"(
 Register an implicit output dependency of the operation on an AD variable.
 
 This function should be called by the \ref eval() implementation when an
@@ -2724,7 +2728,7 @@ Args:
     value (object): variable this operation depends on implicitly.
 )";
 
-static const char *doc_label =R"(
+static const char *doc_label = R"(
 Returns the label of a given Dr.Jit array.
 
 Args:
@@ -2734,7 +2738,7 @@ Returns:
     str: the label of the given variable.
 )";
 
-static const char *doc_set_label =R"(
+static const char *doc_set_label = R"(
 Sets the label of a provided Dr.Jit array, either in the JIT or the AD system.
 
 When a :ref:`custom data structure <custom-struct>` is provided, the field names
@@ -2750,6 +2754,54 @@ Args:
 
     **kwarg (dict): A set of (keyword, object) pairs.
 )";
+
+static const char *doc_ADMode = R"(
+Enumeration to distinguish different types of primal/derivative computation.
+
+See also :py:func:`drjit.enqueue()`, :py:func:`drjit.traverse()`.
+)";
+
+static const char *doc_ADMode_Primal = R"(
+Primal/original computation without derivative tracking. Note that this
+is *not* a valid input to Dr.Jit AD routines, but it is sometimes useful
+to have this entry when to indicate to a computation that derivative
+propagation should not be performed.)";
+
+static const char *doc_ADMode_Forward = R"(
+Propagate derivatives in forward mode (from inputs to outputs))";
+
+static const char *doc_ADMode_Backward = R"(
+Propagate derivatives in backward/reverse mode (from outputs to inputs)";
+
+static const char *doc_ADFlag = R"(
+By default, Dr.Jit's AD system destructs the enqueued input graph during
+forward/backward mode traversal. This frees up resources, which is useful
+when working with large wavefronts or very complex computation graphs.
+However, this also prevents repeated propagation of gradients through a
+shared subgraph that is being differentiated multiple times.
+
+To support more fine-grained use cases that require this, the following
+flags can be used to control what should and should not be destructed.
+)";
+
+static const char *doc_ADFlag_ClearNone = "Clear nothing.";
+
+static const char *doc_ADFlag_ClearEdges =
+    "Delete all traversed edges from the computation graph";
+
+static const char *doc_ADFlag_ClearInput =
+    "Clear the gradients of processed input vertices (in-degree == 0)";
+
+static const char *doc_ADFlag_ClearInterior =
+    "Clear the gradients of processed interior vertices (out-degree != 0)";
+
+static const char *doc_ADFlag_ClearVertices =
+    "Clear gradients of processed vertices only, but leave edges intact. Equal "
+    "to ``ClearInput | ClearInterior``.";
+
+static const char *doc_ADFlag_Default =
+    "Default: clear everything (edges, gradients of processed vertices). Equal "
+    "to ``ClearEdges | ClearVertices``.";
 
 #if defined(__GNUC__)
 #  pragma GCC diagnostic pop

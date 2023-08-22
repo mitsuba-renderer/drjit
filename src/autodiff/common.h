@@ -25,7 +25,6 @@ constexpr LogLevel log_level = LogLevel::Trace;
 constexpr LogLevel log_level = LogLevel::Info;
 #endif
 
-
 struct Buffer {
 public:
     Buffer(size_t size);

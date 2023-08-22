@@ -273,7 +273,8 @@ namespace detail {
     template <typename T> struct MaskedArray;
     template <typename T> struct MaskBit;
 }
-/// This library supports two main directions of derivative propagation
+
+/// Enumeration to distinguish different types of primal/derivative computation
 enum class ADMode { Primal, Forward, Backward };
 
 NAMESPACE_END(drjit)
