@@ -11,29 +11,25 @@
 #include "eval.h"
 #include "apply.h"
 
-struct ScheduleCallback : TraverseCallback {
-    bool result = false;
-    void operator()(nb::handle h) override {
-        const ArraySupplement &s = supp(h.type());
-        if (s.is_tensor)
-            operator()(nb::steal(s.tensor_array(h.ptr())));
-        else if (s.index)
-            result |= jit_var_schedule(s.index(inst_ptr(h))) != 0;
-    }
-};
-
 bool schedule(nb::handle h) {
-    ScheduleCallback s;
-    traverse("drjit.schedule", s, h);
-    return s.result;
+    bool result_ = false;
+
+    struct ScheduleCallback : TraverseCallback {
+        bool &result;
+        ScheduleCallback(bool &result) : result(result) { }
+
+        void operator()(nb::handle h) const override {
+            const ArraySupplement &s = supp(h.type());
+            if (s.index)
+                result |= jit_var_schedule(s.index(inst_ptr(h))) != 0;
+        }
+    };
+
+    traverse("drjit.schedule", ScheduleCallback{ result_ }, h);
+    return result_;
 }
 
-static bool schedule_2(nb::args args) {
-    bool rv = false;
-    for (nb::handle h : args)
-        rv |= schedule(h);
-    return rv;
-}
+static bool schedule_2(nb::args args) { return schedule(args); }
 
 static void eval(nb::handle h) {
     if (schedule(h))

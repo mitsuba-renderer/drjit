@@ -456,6 +456,7 @@ inline void disable_float_arithmetic(ArrayBinding &b) {
     b[ArrayOp::TrueDiv] = DRJIT_OP_NOT_IMPLEMENTED;
     b[ArrayOp::Sqrt] = DRJIT_OP_NOT_IMPLEMENTED;
     b[ArrayOp::Sin] = DRJIT_OP_NOT_IMPLEMENTED;
+    b[ArrayOp::Atan] = DRJIT_OP_NOT_IMPLEMENTED;
 }
 
 template <typename T>

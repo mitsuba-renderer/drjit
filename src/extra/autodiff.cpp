@@ -46,8 +46,9 @@
 #include "common.h"
 #include <drjit/jit.h>
 #include <drjit/math.h>
-#include <tsl/robin_map.h>
+#include <drjit/autodiff.h>
 #include <tsl/robin_set.h>
+#include <queue>
 #include <mutex>
 #include <memory>
 
@@ -332,8 +333,8 @@ struct State {
     std::vector<Edge> edges;
 
     /// List of currently unused edges
-    std::vector<ADIndex> unused_variables;
-    std::vector<EdgeIndex> unused_edges;
+    std::priority_queue<ADIndex, std::vector<ADIndex>, std::greater<uint32_t>> unused_variables;
+    std::priority_queue<EdgeIndex, std::vector<EdgeIndex>, std::greater<uint32_t>> unused_edges;
 
     /// Counter to establish an ordering among variables
     uint64_t counter = 0;
@@ -653,13 +654,13 @@ static void ad_free(ADIndex index, Variable *v) {
             }
         }
 
-        state.unused_edges.push_back(edge_id);
+        state.unused_edges.push(edge_id);
 
         edge_id = next_bwd;
     }
 
     *v = Variable { };
-    state.unused_variables.push_back(index);
+    state.unused_variables.push(index);
 }
 
 Index ad_var_inc_ref_impl(Index index) JIT_NOEXCEPT {
@@ -715,14 +716,16 @@ void ad_var_dec_ref_impl(Index index) JIT_NOEXCEPT {
 static std::pair<ADIndex, Variable *> ad_var_new(const char *label, size_t size,
                                                  VarType type, bool symbolic) {
 
-    std::vector<ADIndex> &unused = state.unused_variables;
-    if (unlikely(unused.empty())) {
-        unused.push_back(state.variables.size());
-        state.variables.emplace_back();
-    }
+    auto &unused = state.unused_variables;
+    ADIndex index;
 
-    ADIndex index = unused.back();
-    unused.pop_back();
+    if (unlikely(unused.empty())) {
+        index = state.variables.size();
+        state.variables.emplace_back();
+    } else {
+        index = unused.top();
+        unused.pop();
+    }
 
     Variable *v = &state.variables[index];
     v->ref_count = 1;
@@ -744,15 +747,16 @@ static std::pair<ADIndex, Variable *> ad_var_new(const char *label, size_t size,
 
 /// Allocate a new edge from the pool
 static EdgeIndex ad_edge_new() {
+    auto &unused = state.unused_edges;
     EdgeIndex index;
 
-    if (unlikely(state.unused_edges.empty())) {
-        state.unused_edges.push_back((EdgeIndex) state.edges.size());
+    if (unlikely(unused.empty())) {
+        index = state.edges.size();
         state.edges.emplace_back();
+    } else {
+        index = unused.top();
+        unused.pop();
     }
-
-    index = state.unused_edges.back();
-    state.unused_edges.pop_back();
 
     return index;
 }
@@ -965,7 +969,32 @@ DRJIT_INLINE Index ad_var_new(const char *label, JitVar &&result,
     return rv;
 }
 
-void ad_accum_grad(Index index, JitIndex value, bool assign) {
+JitIndex ad_grad(Index index) {
+    ADIndex ad_index = ::ad_index(index);
+    const std::vector<Scope> &scopes = local_state.scopes;
+    if (unlikely(!scopes.empty()))
+        scopes.back().maybe_disable(ad_index);
+
+    JitVar result;
+    size_t size = 1;
+
+    if (ad_index) {
+        std::lock_guard<std::mutex> guard(state.mutex);
+        const Variable *v = state[ad_index];
+        result = v->grad;
+        size = v->size;
+    }
+
+    if (!result.valid())
+        result = scalar(index, 0.0);
+
+    if (result.size() != size)
+        result.resize(size);
+
+    return result.release();
+}
+
+void ad_set_grad(Index index, JitIndex value, bool accum) {
     const std::vector<Scope> &scopes = local_state.scopes;
     ADIndex ad_index = ::ad_index(index);
 
@@ -981,16 +1010,16 @@ void ad_accum_grad(Index index, JitIndex value, bool assign) {
     JitVar value_v = JitVar::borrow(value);
     size_t size_in = value_v.size();
     if (v->size != size_in && size_in != 1 && size_in != 0 && v->size != 1)
-        ad_raise("ad_set_grad(): attempted to assign a gradient of size "
-                 "%zu to AD variable a%u, which has size %zu!",
+        ad_raise("ad_set_grad(): attempted to store a gradient of size "
+                 "%zu into AD variable a%u, which has size %zu!",
                  size_in, ad_index, v->size);
 
     ad_log("ad_set_grad(a%u)", ad_index);
 
-    if (assign)
-        v->assign(value_v, size_in);
-    else
+    if (accum)
         v->accum(value_v, size_in);
+    else
+        v->assign(value_v, size_in);
 }
 
 // ==========================================================================
@@ -1339,7 +1368,7 @@ void ad_traverse(dr::ADMode mode, uint32_t flags) {
                 ls.cleanup.push_back(std::move(edge.special));
 
             edge = Edge { };
-            state.unused_edges.push_back(er.id);
+            state.unused_edges.push(er.id);
 
             ad_var_dec_ref_int(er.source, source);
             target = state[er.target]; // pointer might have changed

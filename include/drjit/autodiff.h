@@ -18,6 +18,43 @@
 
 NAMESPACE_BEGIN(drjit)
 
+/**
+ * By default, Dr.Jit's AD system destructs the enqueued input graph during
+ * forward/backward mode traversal. This frees up resources, which is useful
+ * when working with large wavefronts or very complex computation graphs.
+ * However, this also prevents repeated propagation of gradients through a
+ * shared subgraph that is being differentiated multiple times.
+ *
+ * To support more fine-grained use cases that require this, the following
+ * flags can be used to control what should and should not be destructed.
+ */
+enum class ADFlag : uint32_t {
+   /// None: clear nothing.
+   ClearNone = 0,
+
+   /// Delete all traversed edges from the computation graph
+   ClearEdges = 1,
+
+   // Clear the gradients of processed input vertices (in-degree == 0)
+   ClearInput = 2,
+
+   // Clear the gradients of processed interior vertices (out-degree != 0)
+   ClearInterior = 4,
+
+   /// Clear gradients of processed vertices only, but leave edges intact
+   ClearVertices = (uint32_t) ClearInput | (uint32_t) ClearInterior,
+
+   /// Default: clear everything (edges, gradients of processed vertices)
+   Default = (uint32_t) ClearEdges | (uint32_t) ClearVertices
+};
+
+constexpr uint32_t operator |(ADFlag f1, ADFlag f2)   { return (uint32_t) f1 | (uint32_t) f2; }
+constexpr uint32_t operator |(uint32_t f1, ADFlag f2) { return f1 | (uint32_t) f2; }
+constexpr uint32_t operator &(ADFlag f1, ADFlag f2)   { return (uint32_t) f1 & (uint32_t) f2; }
+constexpr uint32_t operator &(uint32_t f1, ADFlag f2) { return f1 & (uint32_t) f2; }
+constexpr uint32_t operator ~(ADFlag f1)              { return ~(uint32_t) f1; }
+constexpr uint32_t operator +(ADFlag e)               { return (uint32_t) e; }
+
 template <JitBackend Backend_, typename Value_>
 struct DRJIT_TRIVIAL_ABI DiffArray
     : ArrayBaseT<Value_, is_mask_v<Value_>, DiffArray<Backend_, Value_>> {
@@ -527,6 +564,10 @@ struct DRJIT_TRIVIAL_ABI DiffArray
             return false;
     }
 
+    void set_grad_(uint32_t index, bool accum) {
+        ad_set_grad(m_index, index, accum);
+    }
+
     void set_grad_enabled_(bool value) {
         DRJIT_MARK_USED(value);
         if constexpr (IsFloat) {
@@ -576,6 +617,7 @@ struct DRJIT_TRIVIAL_ABI DiffArray
     uint32_t index() const { return (uint32_t) m_index; }
     uint32_t index_ad() const { return (uint32_t) (((uint64_t) m_index) >> 32); }
     uint64_t index_combined() const { return m_index; }
+    uint32_t grad_() const { return ad_grad(m_index); }
 
 private:
     Index m_index = 0;
@@ -583,5 +625,97 @@ private:
 
 template <typename Value> using CUDADiffArray = DiffArray<JitBackend::CUDA, Value>;
 template <typename Value> using LLVMDiffArray = DiffArray<JitBackend::LLVM, Value>;
+
+template <typename T> void enqueue(ADMode mode, const T &value) {
+    if constexpr (is_diff_v<T>) {
+        if constexpr (depth_v<T> > 1) {
+            for (size_t i = 0; i < value.size(); ++i)
+                enqueue(mode, value.entry(i));
+        } else {
+            ad_enqueue(value.index_combined(), mode);
+        }
+    } else if constexpr (is_drjit_struct_v<T>) {
+        struct_support_t<T>::apply_1(
+            value,
+            [mode](auto const &x) DRJIT_INLINE_LAMBDA {
+                enqueue(mode, x);
+            });
+    }
+    DRJIT_MARK_USED(mode);
+    DRJIT_MARK_USED(value);
+}
+
+template <typename T1, typename... Ts, enable_if_t<sizeof...(Ts) != 0> = 0>
+void enqueue(ADMode mode, const T1 &value, const Ts&... values) {
+    enqueue(mode, value);
+    enqueue(mode, values...);
+}
+
+DRJIT_INLINE void enqueue(ADMode) { }
+
+template <typename... Ts>
+void traverse(ADMode mode, uint32_t flags = (uint32_t) ADFlag::Default) {
+    ad_traverse(mode, flags);
+}
+
+namespace detail {
+    template <typename T>
+    void check_grad_enabled(const char *name, const T &value) {
+        if (!grad_enabled(value))
+            drjit_raise(
+                "drjit::%s(): the argument does not depend on the input "
+                "variable(s) being differentiated. Throwing an exception since "
+                "this is usually indicative of a bug (for example, you may "
+                "have forgotten to call drjit::enable_grad(..)). If this is "
+                "expected behavior, skip the call to drjit::%s(..) if "
+                "drjit::grad_enabled(..) returns 'false'.", name, name);
+    }
+}
+
+template <typename T>
+void backward_from(T &value, uint32_t flags = (uint32_t) ADFlag::Default) {
+    detail::check_grad_enabled("backward_from", value);
+
+    // Handle case where components of an N-d vector map to the same AD variable
+    if constexpr (depth_v<T> > 1)
+        value = value + T(0);
+
+    set_grad(value, 1.f);
+    enqueue(ADMode::Backward, value);
+    traverse<T>(ADMode::Backward, flags);
+}
+
+template <typename T>
+void backward_to(const T &value, uint32_t flags = (uint32_t) ADFlag::Default) {
+    detail::check_grad_enabled("backward_to", value);
+    enqueue(ADMode::Forward, value);
+    traverse(ADMode::Backward, flags);
+}
+
+template <typename T>
+void forward_from(T &value, uint32_t flags = (uint32_t) ADFlag::Default) {
+    detail::check_grad_enabled("forward_from", value);
+    set_grad(value, 1.f);
+    enqueue(ADMode::Forward, value);
+    traverse(ADMode::Forward, flags);
+}
+
+template <typename T>
+void forward_to(T &value, uint32_t flags = (uint32_t) ADFlag::Default) {
+    detail::check_grad_enabled("forward_to", value);
+    enqueue(ADMode::Backward, value);
+    traverse(ADMode::Forward, flags);
+}
+
+template <typename T>
+void backward(T &value, uint32_t flags = (uint32_t) ADFlag::Default) {
+    backward_from(value, flags);
+}
+
+template <typename T>
+void forward(T &value, uint32_t flags = (uint32_t) ADFlag::Default) {
+    forward_from(value, flags);
+}
+
 
 NAMESPACE_END(drjit)

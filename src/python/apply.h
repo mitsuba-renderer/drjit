@@ -1,6 +1,7 @@
 /*
-    apply.h -- Implementation of the internal apply() function,
-    which recursively propagates operations through Dr.Jit arrays
+    apply.h -- Implementation of the internal ``apply()``, ``traverse()``,
+    and ``transform()`` functions, which recursively perform operations on
+    Dr.Jit arrays and Python object trees ("pytrees")
 
     Dr.Jit: A Just-In-Time-Compiler for Differentiable Rendering
     Copyright 2023, Realistic Graphics Lab, EPFL.
@@ -44,10 +45,29 @@ template <ApplyMode Mode, typename Func, typename... Args, size_t... Is>
 PyObject *apply(ArrayOp op, Func func, std::index_sequence<Is...>,
                 Args... args) noexcept;
 
-/// Callback operator for 'traverse' below
+/// Callback for the ``traverse()`` operation below
 struct TraverseCallback {
-    virtual void operator()(nb::handle h) = 0;
+    virtual void operator()(nb::handle h) const = 0;
+};
+
+/// Callback for the ``traverse_pair()`` operation below
+struct TraversePairCallback {
+    virtual void operator()(nb::handle h1, nb::handle h2) const = 0;
+};
+
+/// Callback for the ``transform()`` operation below
+struct TransformCallback {
+    virtual nb::handle transform_type(nb::handle tp) const;
+    virtual void operator()(nb::handle h1, nb::handle h2) const = 0;
 };
 
 /// Invoke the given callback on leaf elements of the pytree 'h'
-extern void traverse(const char *op, TraverseCallback &callback, nb::handle h);
+extern void traverse(const char *op, const TraverseCallback &callback,
+                     nb::handle h);
+
+/// Parallel traversal of two compatible pytrees 'h1' and 'h2'
+extern void traverse_pair(const char *op, const TraversePairCallback &callback,
+                          nb::handle h1, nb::handle h2);
+
+/// Transform an input pytree 'h' into an output pytree, potentially of a different type
+extern nb::object transform(const char *op, const TransformCallback &callback, nb::handle h);

@@ -46,9 +46,6 @@ def isfinite(arg, /):
     """
     return abs(arg) < float('inf')
 
-def detach(x):
-    return x
-
 def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
     r'''
     Returns ``True`` if two arrays are element-wise equal within a given error

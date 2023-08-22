@@ -1,6 +1,7 @@
 /*
-    apply.cpp -- Implementation of the internal apply() function,
-    which recursively propagates operations through Dr.Jit arrays
+    apply.cpp -- Implementation of the internal ``apply()``, ``traverse()``,
+    and ``transform()`` functions, which recursively perform operations on
+    Dr.Jit arrays and Python object trees ("pytrees")
 
     Dr.Jit: A Just-In-Time-Compiler for Differentiable Rendering
     Copyright 2023, Realistic Graphics Lab, EPFL.
@@ -402,10 +403,10 @@ NB_NOINLINE PyObject *apply_tensor(ArrayOp op, Slot slot,
         nb::str tp_name = nb::type_name(tp);
         e.restore();
         if constexpr (std::is_same_v<Slot, const char *>)
-            nb::chain_error(PyExc_RuntimeError, "drjit.%s(<%U>): failed (see above)!",
+            nb::chain_error(PyExc_RuntimeError, "drjit.%s(<%U>): failed (see above).",
                             op_names[(int) op], tp_name.ptr());
         else
-            nb::chain_error(PyExc_RuntimeError, "%U.%s(): failed (see above)!",
+            nb::chain_error(PyExc_RuntimeError, "%U.%s(): failed (see above).",
                             tp_name.ptr(), op_names[(int) op]);
     } catch (const std::exception &e) {
         nb::str tp_name = nb::type_name(tp);
@@ -420,23 +421,23 @@ NB_NOINLINE PyObject *apply_tensor(ArrayOp op, Slot slot,
 }
 
 
-void traverse(const char *op, TraverseCallback &tc, nb::handle h) {
+void traverse(const char *op, const TraverseCallback &tc, nb::handle h) {
     nb::handle tp = h.type();
 
     try {
-        if (is_drjit_array(h)) {
+        if (is_drjit_type(tp)) {
             const ArraySupplement &s = supp(tp);
-            if (s.ndim == 1) {
-                tc(h);
-            } else {
+            if (s.is_tensor) {
+                tc(nb::steal(s.tensor_array(h.ptr())));
+            } else if (s.ndim > 1) {
                 Py_ssize_t len = s.shape[0];
                 if (len == DRJIT_DYNAMIC)
-                    len = s.len(inst_ptr(h.ptr()));
+                    len = s.len(inst_ptr(h));
 
-                for (Py_ssize_t i = 0; i < len; ++i) {
-                    nb::object item = nb::steal(s.item(h.ptr(), i));
-                    traverse(op, tc, item);
-                }
+                for (Py_ssize_t i = 0; i < len; ++i)
+                    traverse(op, tc, nb::steal(s.item(h.ptr(), i)));
+            } else  {
+                tc(h);
             }
         } else if (tp.is(&PyTuple_Type)) {
             for (nb::handle h2 : nb::borrow<nb::tuple>(h))
@@ -460,10 +461,174 @@ void traverse(const char *op, TraverseCallback &tc, nb::handle h) {
         e.restore();
         nb::chain_error(PyExc_RuntimeError,
                         "%s(): error encountered while processing an argument "
-                        "of type '%U' (see above)!", op, tp_name.ptr());
+                        "of type '%U' (see above).", op, tp_name.ptr());
         throw nb::python_error();
     } catch (const std::exception &e) {
         nb::str tp_name = nb::type_name(tp);
+        nb::chain_error(PyExc_RuntimeError,
+                        "%s(): error encountered while processing an argument "
+                        "of type '%U': %s", op, tp_name.ptr(), e.what());
+        throw nb::python_error();
+    }
+}
+
+void traverse_pair(const char *op, const TraversePairCallback &tc,
+                   nb::handle h1, nb::handle h2) {
+    nb::handle tp1 = h1.type(),
+               tp2 = h2.type();
+
+    try {
+        if (!tp1.is(tp2))
+            nb::detail::raise("Mismatched input types.");
+
+        if (is_drjit_type(tp1)) {
+            const ArraySupplement &s = supp(tp1);
+
+            if (s.is_tensor) {
+                tc(nb::steal(s.tensor_array(h1.ptr())),
+                   nb::steal(s.tensor_array(h2.ptr())));
+            } else if (s.ndim > 1) {
+                Py_ssize_t len1 = s.shape[0], len2 = len1;
+                if (len1 == DRJIT_DYNAMIC) {
+                    len1 = s.len(inst_ptr(h1));
+                    len2 = s.len(inst_ptr(h2));
+                }
+
+                if (len1 != len2)
+                    nb::detail::raise("Incompatible input lengths (%zu and %zu).", len1, len2);
+
+                for (Py_ssize_t i = 0; i < len1; ++i)
+                    traverse_pair(op, tc,
+                                  nb::steal(s.item(h1.ptr(), i)),
+                                  nb::steal(s.item(h2.ptr(), i)));
+            } else  {
+                tc(h1, h2);
+            }
+            return;
+        }
+
+        if (tp1.is(&PyTuple_Type) || tp1.is(&PyList_Type)) {
+            size_t len1 = nb::len(h1),
+                   len2 = nb::len(h2);
+            if (len1 != len2)
+                nb::detail::raise("Incompatible input lengths (%zu and %zu).", len1, len2);
+            for (size_t i = 0; i < len1; ++i)
+                traverse_pair(op, tc, h1[i], h2[i]);
+        } else if (tp1.is(&PyDict_Type)) {
+            nb::dict d1 = nb::borrow<nb::dict>(h1),
+                     d2 = nb::borrow<nb::dict>(h2);
+            nb::object k1 = d1.keys(), k2 = d2.keys();
+            if (!k1.equal(k2))
+                nb::detail::raise("Dictionaries have mismatched keys.");
+            for (nb::handle k : k1)
+                traverse_pair(op, tc, d1[k], d2[k]);
+        } else {
+            nb::object dstruct = nb::getattr(tp1, "DRJIT_STRUCT", nb::handle());
+            if (dstruct.is_valid() && dstruct.type().is(&PyDict_Type)) {
+                nb::dict dstruct_dict = nb::borrow<nb::dict>(dstruct);
+                for (auto [k, v] : dstruct_dict)
+                    traverse_pair(op, tc,
+                                  nb::getattr(h1, k),
+                                  nb::getattr(h2, k));
+            }
+        }
+    } catch (nb::python_error &e) {
+        nb::str tp_name_1 = nb::type_name(tp1),
+                tp_name_2 = nb::type_name(tp2);
+        e.restore();
+        nb::chain_error(PyExc_RuntimeError,
+                        "%s(): error encountered while processing arguments "
+                        "of type '%U' and '%U' (see above).",
+                        op, tp_name_1.ptr(), tp_name_2.ptr());
+        throw nb::python_error();
+    } catch (const std::exception &e) {
+        nb::str tp_name_1 = nb::type_name(tp1),
+                tp_name_2 = nb::type_name(tp2);
+        nb::chain_error(PyExc_RuntimeError,
+                        "%s(): error encountered while processing arguments "
+                        "of type '%U' and '%U': %s",
+                        op, tp_name_1.ptr(), tp_name_2.ptr(), e.what());
+        throw nb::python_error();
+    }
+}
+
+nb::handle TransformCallback::transform_type(nb::handle tp) const {
+    return tp;
+}
+
+nb::object transform(const char *op, const TransformCallback &tc, nb::handle h1) {
+    nb::handle t1 = h1.type();
+
+    try {
+        if (is_drjit_type(t1)) {
+            nb::handle t2 = tc.transform_type(t1);
+            if (!t2.is_valid())
+                return nb::none();
+
+            const ArraySupplement &s1 = supp(t1),
+                                  &s2 = supp(t2);
+
+            nb::object h2 = nb::inst_alloc_zero(t2);
+            if (s1.is_tensor) {
+                tc(nb::steal(s1.tensor_array(h1.ptr())),
+                   nb::steal(s2.tensor_array(h2.ptr())));
+            } else if (s1.ndim != 1) {
+                dr::ArrayBase *p1 = inst_ptr(h1),
+                              *p2 = inst_ptr(h2);
+
+                size_t size = s1.shape[0];
+                if (size == DRJIT_DYNAMIC) {
+                    size = s1.len(p1);
+                    s2.init(size, p2);
+                }
+
+                for (size_t i = 0; i < size; ++i) {
+                    nb::object o = h1[i];
+                    h2[i] = transform(op, tc, o);
+                }
+            } else {
+                tc(h1, h2);
+            }
+            return h2;
+        } else if (t1.is(&PyTuple_Type)) {
+            nb::tuple t = nb::borrow<nb::tuple>(h1);
+            size_t size = nb::len(t);
+            nb::object result = nb::steal(PyTuple_New(size));
+            for (size_t i = 0; i < size; ++i)
+                PyTuple_SET_ITEM(result.ptr(), i,
+                                 transform(op, tc, t[i]).release().ptr());
+            return result;
+        } else if (t1.is(&PyList_Type)) {
+            nb::list result;
+            for (nb::handle item : nb::borrow<nb::list>(h1))
+                result.append(transform(op, tc, item));
+            return result;
+        } else if (t1.is(&PyDict_Type)) {
+            nb::dict result;
+            for (auto [k, v] : nb::borrow<nb::dict>(h1))
+                result[k] = transform(op, tc, v);
+            return result;
+        } else {
+            nb::object dstruct = nb::getattr(t1, "DRJIT_STRUCT", nb::handle());
+            if (dstruct.is_valid() && dstruct.type().is(&PyDict_Type)) {
+                nb::dict dstruct_dict = nb::borrow<nb::dict>(dstruct);
+                nb::object result = t1();
+                for (auto [k, v] : dstruct_dict)
+                    nb::setattr(result, k, transform(op, tc, nb::getattr(h1, k)));
+                return result;
+            } else {
+                return nb::borrow(h1);
+            }
+        }
+    } catch (nb::python_error &e) {
+        nb::str tp_name = nb::type_name(t1);
+        e.restore();
+        nb::chain_error(PyExc_RuntimeError,
+                        "%s(): error encountered while processing an argument "
+                        "of type '%U' (see above).", op, tp_name.ptr());
+        throw nb::python_error();
+    } catch (const std::exception &e) {
+        nb::str tp_name = nb::type_name(t1);
         nb::chain_error(PyExc_RuntimeError,
                         "%s(): error encountered while processing an argument "
                         "of type '%U': %s", op, tp_name.ptr(), e.what());

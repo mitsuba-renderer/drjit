@@ -110,7 +110,14 @@ DR_EXPORT_AD_3(select)
 #undef DR_EXPORT_AD_2
 
 /// Create a new AD-attached variable for the given JIT variable index
-extern DRJIT_EXTRA_EXPORT uint64_t ad_var_new(uint32_t);
+extern DRJIT_EXTRA_EXPORT uint64_t ad_var_new(uint32_t index);
+
+/// Return the gradient value associated with a particular variable
+extern DRJIT_EXTRA_EXPORT uint32_t ad_grad(uint64_t index);
+
+/// Assign or accumulate into the gradient associated with a given variable
+extern DRJIT_EXTRA_EXPORT void ad_set_grad(uint64_t index, uint32_t value,
+                                           bool accum);
 
 /**
  * \brief Increase the reference count of the given AD variable
