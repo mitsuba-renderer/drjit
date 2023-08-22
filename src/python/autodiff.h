@@ -1,5 +1,5 @@
 /*
-    eval.h -- Bindings for drjit.eval() and drjit.schedule()
+    autodiff.h -- Bindings for autodiff utility functions
 
     Dr.Jit: A Just-In-Time-Compiler for Differentiable Rendering
     Copyright 2023, Realistic Graphics Lab, EPFL.
@@ -12,5 +12,4 @@
 
 #include "common.h"
 
-extern bool schedule(nb::handle);
-extern void export_eval(nb::module_ &);
+extern void export_autodiff(nb::module_ &);

@@ -1,5 +1,5 @@
 /*
-    drjit/extra.h -- Forward/reverse-mode automatic differentiation wrapper
+    drjit/extra.h -- List of symbols exported by the drjit-extra shared library
 
     Dr.Jit is a C++ template library for efficient vectorization and
     differentiation of numerical kernels on modern processor architectures.
@@ -59,6 +59,7 @@ struct UInt64Pair {
 #define DR_EXPORT_AD_3(x)                                                      \
     extern DRJIT_EXTRA_EXPORT uint64_t ad_var_##x(uint64_t, uint64_t, uint64_t);
 
+// Unary arithmetic/transcendental operations
 DR_EXPORT(exp2)
 DR_EXPORT(exp)
 DR_EXPORT(log2)
@@ -90,14 +91,15 @@ DR_EXPORT_AD(sqrt)
 DR_EXPORT_AD(rcp)
 DR_EXPORT_AD(rsqrt)
 
+// Binary operations
 DR_EXPORT_AD_2(add)
 DR_EXPORT_AD_2(sub)
 DR_EXPORT_AD_2(mul)
 DR_EXPORT_AD_2(div)
-
 DR_EXPORT_AD_2(min)
 DR_EXPORT_AD_2(max)
 
+// Ternary operations
 DR_EXPORT_AD_3(fma)
 DR_EXPORT_AD_3(select)
 
@@ -107,13 +109,28 @@ DR_EXPORT_AD_3(select)
 #undef DR_EXPORT_AD
 #undef DR_EXPORT_AD_2
 
+/// Create a new AD-attached variable for the given JIT variable index
+extern DRJIT_EXTRA_EXPORT uint64_t ad_var_new(uint32_t);
+
+/**
+ * \brief Increase the reference count of the given AD variable
+ *
+ * This function is typically called when an AD variable is copied. It may
+ * return a detached variable when an active AD scope disables differentiation
+ * of the provided input variable.
+ */
 extern DRJIT_EXTRA_EXPORT uint64_t ad_var_inc_ref_impl(uint64_t) JIT_NOEXCEPT;
+
+/// Decrease the reference count of the given AD variable
 extern DRJIT_EXTRA_EXPORT void ad_var_dec_ref_impl(uint64_t) JIT_NOEXCEPT;
 
+/// Perform a horizontal reduction
 extern DRJIT_EXTRA_EXPORT uint64_t ad_var_reduce(JitBackend, VarType, uint64_t,
                                                  JIT_ENUM ReduceOp);
 
 extern DRJIT_EXTRA_EXPORT uint64_t ad_var_cast(uint64_t, VarType);
+extern DRJIT_EXTRA_EXPORT void ad_enqueue(drjit::ADMode, uint64_t);
+extern DRJIT_EXTRA_EXPORT void ad_traverse(drjit::ADMode, uint32_t);
 
 #if defined(__cplusplus)
 }

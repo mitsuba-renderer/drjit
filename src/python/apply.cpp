@@ -24,6 +24,7 @@ static const char *op_names[] = {
     "sqrt",
 
     "sin",
+    "atan",
 
     // Binary arithetic operations
     "__add__",
