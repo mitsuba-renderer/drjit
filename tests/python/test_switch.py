@@ -113,6 +113,28 @@ def test03_switch_autodiff_forward_implicit(modname, recorded):
 
     assert dr.allclose(dr.grad(result), [1, 1, 4, 4])
 
+    # Test implicit dependency of a un-modified variable
+
+    value = m.Float(4.0)
+    dr.enable_grad(value)
+
+    def f2(a):
+        return value
+
+    def g2(a):
+        return 4.0 * a
+
+    idx = m.UInt([0, 0, 1, 1])
+    a = m.Float([1.0, 2.0, 3.0, 4.0])
+
+    result = dr.switch(idx, [f2, g2], a)
+
+    assert dr.allclose(result, [4, 4, 12, 16])
+
+    dr.forward(value)
+
+    assert dr.allclose(dr.grad(result), [1, 1, 0, 0])
+
 
 @pytest.mark.parametrize("modname", ["drjit.cuda.ad", "drjit.llvm.ad"])
 @pytest.mark.parametrize("recorded", [True, False])
