@@ -56,3 +56,10 @@ inline bool operator==(ArrayMeta a, ArrayMeta b) {
 }
 
 inline bool operator!=(ArrayMeta a, ArrayMeta b) { return !operator==(a, b); }
+
+inline bool is_float(const ArrayMeta &meta) {
+    VarType type = (VarType) meta.type;
+    return type == VarType::Float16 ||
+           type == VarType::Float32 ||
+           type == VarType::Float64;
+}

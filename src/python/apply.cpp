@@ -451,8 +451,7 @@ void traverse(const char *op, const TraverseCallback &tc, nb::handle h) {
         } else {
             nb::object dstruct = nb::getattr(tp, "DRJIT_STRUCT", nb::handle());
             if (dstruct.is_valid() && dstruct.type().is(&PyDict_Type)) {
-                nb::dict dstruct_dict = nb::borrow<nb::dict>(dstruct);
-                for (auto [k, v] : dstruct_dict)
+                for (auto [k, v] : nb::borrow<nb::dict>(dstruct))
                     traverse(op, tc, nb::getattr(h, k));
             }
         }
@@ -504,6 +503,7 @@ void traverse_pair(const char *op, const TraversePairCallback &tc,
             } else  {
                 tc(h1, h2);
             }
+
             return;
         }
 
@@ -525,8 +525,7 @@ void traverse_pair(const char *op, const TraversePairCallback &tc,
         } else {
             nb::object dstruct = nb::getattr(tp1, "DRJIT_STRUCT", nb::handle());
             if (dstruct.is_valid() && dstruct.type().is(&PyDict_Type)) {
-                nb::dict dstruct_dict = nb::borrow<nb::dict>(dstruct);
-                for (auto [k, v] : dstruct_dict)
+                for (auto [k, v] : nb::borrow<nb::dict>(dstruct))
                     traverse_pair(op, tc,
                                   nb::getattr(h1, k),
                                   nb::getattr(h2, k));
@@ -611,9 +610,8 @@ nb::object transform(const char *op, const TransformCallback &tc, nb::handle h1)
         } else {
             nb::object dstruct = nb::getattr(t1, "DRJIT_STRUCT", nb::handle());
             if (dstruct.is_valid() && dstruct.type().is(&PyDict_Type)) {
-                nb::dict dstruct_dict = nb::borrow<nb::dict>(dstruct);
                 nb::object result = t1();
-                for (auto [k, v] : dstruct_dict)
+                for (auto [k, v] : nb::borrow<nb::dict>(dstruct))
                     nb::setattr(result, k, transform(op, tc, nb::getattr(h1, k)));
                 return result;
             } else {

@@ -118,7 +118,7 @@ DRJIT_NOINLINE JitVar scalar(Index index, double value) {
 // ==========================================================================
 // Central data structures: edges, variables, global state
 // ==========================================================================
-
+//
 struct Special;
 
 /**
@@ -218,10 +218,29 @@ struct Variable {
     uint8_t type = 0;
 
     Variable() = default;
-    Variable(const Variable &) = default;
-    Variable(Variable &&) = default;
-    Variable &operator=(const Variable &) = default;
-    Variable &operator=(Variable &&) = default;
+
+    Variable(const Variable &) = delete;
+    Variable &operator=(const Variable &) = delete;
+
+    Variable(Variable &&v) noexcept
+        : ref_count(v.ref_count), next_fwd(v.next_fwd), next_bwd(v.next_bwd),
+          grad(std::move(v.grad)), size(v.size), label(v.label),
+          counter(v.counter), ref_count_grad(v.ref_count_grad), flags(v.flags),
+          type(v.type) {
+        v.label = nullptr;
+    }
+
+    Variable &operator=(Variable &&v) noexcept {
+        ref_count = v.ref_count; next_fwd = v.next_fwd;
+        next_bwd = v.next_bwd; grad = std::move(v.grad);
+        size = v.size;
+        if (flags & (uint8_t) VariableFlags::FreeLabel)
+            free(label);
+        label = v.label; v.label = nullptr;
+        counter = v.counter; ref_count_grad = v.ref_count_grad;
+        flags = v.flags; type = v.type;
+        return *this;
+    }
 
     ~Variable() {
         if (flags & (uint8_t) VariableFlags::FreeLabel)
@@ -314,7 +333,7 @@ struct Variable {
     }
 
     void assign(const JitVar &v, size_t src_size) {
-        if (size == 1 || src_size != 1)
+        if (size == 1 && src_size != 1)
             grad = dr::sum(v);
         else
             grad = v;
@@ -510,6 +529,10 @@ struct LocalState {
 static State state;
 static thread_local LocalState local_state;
 
+// Forward declarations
+static void ad_free(ADIndex, Variable *);
+static void ad_var_inc_ref_int(ADIndex index, Variable *v) noexcept;
+
 // ==========================================================================
 // Variable prefix (mainly useful for GraphViz visualizations)
 // ==========================================================================
@@ -561,34 +584,46 @@ DRJIT_EXPORT void ad_prefix_pop() {
     }
 }
 
-void ad_set_label(Index index, const char *label) {
-    uint32_t ad_index = ::ad_index(index);
+Index ad_var_set_label(Index index, const char *label) {
+    uint32_t jit_index = ::jit_index(index),
+             ad_index = ::ad_index(index);
 
-    if (!ad_index)
-        return;
+    jit_index = jit_var_set_label(jit_index, label);
 
-    std::lock_guard<std::mutex> guard(state.mutex);
-    ad_log("ad_set_label(a%u, \"%s\")", ad_index, label ? label : "(null)");
-    Variable *v = state[ad_index];
-    if (v->flags & (uint8_t) VariableFlags::FreeLabel)
-        free(v->label);
-    v->label = strdup(label);
-    v->flags |= (uint8_t) VariableFlags::FreeLabel |
-                (uint8_t) VariableFlags::CustomLabel;
+    if (ad_index) {
+        std::lock_guard<std::mutex> guard(state.mutex);
+        ad_log("ad_var_set_label(a%u, \"%s\")", ad_index,
+               label ? label : "(null)");
+        Variable *v = state[ad_index];
+
+        if (v->flags & (uint8_t) VariableFlags::FreeLabel)
+            free(v->label);
+
+        v->label = strdup(label);
+        v->flags |= (uint8_t) VariableFlags::FreeLabel |
+                    (uint8_t) VariableFlags::CustomLabel;
+
+        ad_var_inc_ref_int(ad_index, v);
+    }
+
+    return combine(ad_index, jit_index);
 }
 
-template <typename T> const char *ad_label(uint32_t index) {
-    if (index == 0)
-        return nullptr;
-    std::lock_guard<std::mutex> guard(state.mutex);
-    return state[index]->label;
+const char *ad_var_label(Index index) {
+    uint32_t jit_index = ::jit_index(index),
+             ad_index = ::ad_index(index);
+
+    if (ad_index) {
+        std::lock_guard<std::mutex> guard(state.mutex);
+        return state[ad_index]->label;
+    } else {
+        return jit_var_label(jit_index);
+    }
 }
 
 // ==========================================================================
 // Reference counting and variable cleanup
 // ==========================================================================
-//
-static void ad_free(ADIndex, Variable *);
 
 static void ad_var_inc_ref_int(ADIndex index, Variable *v) noexcept {
     DRJIT_MARK_USED(index);
@@ -1009,6 +1044,7 @@ void ad_set_grad(Index index, JitIndex value, bool accum) {
 
     JitVar value_v = JitVar::borrow(value);
     size_t size_in = value_v.size();
+
     if (v->size != size_in && size_in != 1 && size_in != 0 && v->size != 1)
         ad_raise("ad_set_grad(): attempted to store a gradient of size "
                  "%zu into AD variable a%u, which has size %zu!",
@@ -1411,7 +1447,7 @@ Index ad_var_new(JitIndex i0) {
     Index result = ad_var_new(nullptr, JitVar::steal(i0));
     const char *label = jit_var_label(i0);
     if (label)
-        ad_set_label(result, label);
+        ad_var_set_label(result, label);
     return result;
 }
 

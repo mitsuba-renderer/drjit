@@ -26,6 +26,7 @@ nanobind_add_module(
   slice.h    slice.cpp
   dlpack.h   dlpack.cpp
   autodiff.h autodiff.cpp
+  inspect.h  inspect.cpp
 )
 
 set_target_properties(drjit-python

@@ -23,6 +23,7 @@
 #include "slice.h"
 #include "dlpack.h"
 #include "autodiff.h"
+#include "inspect.h"
 
 NB_MODULE(drjit_ext, m_) {
     (void) m_;
@@ -90,6 +91,7 @@ NB_MODULE(drjit_ext, m_) {
     export_slice(m);
     export_dlpack(m);
     export_autodiff(m);
+    export_inspect(m);
 
     export_scalar();
 

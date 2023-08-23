@@ -459,13 +459,12 @@ nb::object unravel(const nb::type_object_t<ArrayBase> &dtype,
         throw nb::type_error(
             "drjit.unravel(): 'dtype' cannot be a tensor!");
 
-    ArrayMeta m, m2 { };
+    ArrayMeta m { }, m2 { };
     m.backend = s.backend;
     m.type = s.type;
     m.is_diff = s.is_diff;
     m.ndim = 1;
     m.shape[0] = DRJIT_DYNAMIC;
-
     nb::handle flat = meta_get_type(m);
 
     if (!flat.is(array.type())) {
