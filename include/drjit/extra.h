@@ -139,6 +139,13 @@ extern DRJIT_EXTRA_EXPORT uint64_t ad_var_cast(uint64_t, VarType);
 extern DRJIT_EXTRA_EXPORT void ad_enqueue(drjit::ADMode, uint64_t);
 extern DRJIT_EXTRA_EXPORT void ad_traverse(drjit::ADMode, uint32_t);
 
+/// Label a variable (useful for debugging via graphviz etc.)
+extern DRJIT_EXTRA_EXPORT uint64_t ad_var_set_label(uint64_t index,
+                                                    const char *label);
+
+/// Return the label associated with a variable
+extern DRJIT_EXTRA_EXPORT const char *ad_var_label(uint64_t index);
+
 #if defined(__cplusplus)
 }
 #endif

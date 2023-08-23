@@ -1279,6 +1279,6 @@ Miscellaneous
 -------------
 
 .. autofunction:: graphviz
-.. autofunction:: graphviz_af64
+.. autofunction:: graphviz_ad
 .. autofunction:: label
 .. autofunction:: set_label
