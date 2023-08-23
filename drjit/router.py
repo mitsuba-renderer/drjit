@@ -3969,7 +3969,7 @@ def grad(arg, preserve_type=True):
     Returns:
         object: the gradient value associated to the input variable.
     '''
-    if _dr.is_diff_v(arg):
+    if _dr.is_diff_v(arg) and not _dr.is_mask_v(arg):
         if _dr.is_integral_v(arg):
             grads = _dr.zeros(_dr.detached_t(type(arg)))
         else:
@@ -5986,6 +5986,15 @@ def switch(indices, funcs, *args):
         @_dr.detail.traverse()
         def ad_copy(arg):
             return arg.copy_() if _dr.is_diff_v(arg) else arg
+
+        class ADCopyWrapper:
+            def __init__(self, func):
+                self.func = func
+
+            def __call__(self, *args, **kwargs):
+                return ad_copy(self.func(*args, **kwargs))
+
+        funcs = [ADCopyWrapper(func) for func in funcs]
 
         class DiffSwitch(_dr.CustomOp):
             def eval(self, indices, funcs, args):
