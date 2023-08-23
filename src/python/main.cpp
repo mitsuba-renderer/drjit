@@ -47,11 +47,28 @@ NB_MODULE(drjit_ext, m_) {
                 cuda_ad = cuda.def_submodule("ad");
 #endif
 
-    nb::enum_<JitBackend>(m, "JitBackend")
-        .value("CUDA", JitBackend::CUDA)
-        .value("LLVM", JitBackend::LLVM);
+    nb::enum_<JitBackend>(m, "JitBackend", doc_JitBackend)
+        .value("None", JitBackend::None, doc_JitBackend_None)
+        .value("CUDA", JitBackend::CUDA, doc_JitBackend_CUDA)
+        .value("LLVM", JitBackend::LLVM, doc_JitBackend_LLVM);
 
-    m.def("has_backend", &jit_has_backend);
+    nb::enum_<VarType>(m, "VarType", doc_VarType)
+        .value("Void", VarType::Void, doc_VarType_Void)
+        .value("Bool", VarType::Bool, doc_VarType_Bool)
+        .value("Int8", VarType::Int8, doc_VarType_Int8)
+        .value("UInt8", VarType::UInt8, doc_VarType_UInt8)
+        .value("Int16", VarType::Int16, doc_VarType_Int16)
+        .value("UInt16", VarType::UInt16, doc_VarType_UInt16)
+        .value("Int32", VarType::Int32, doc_VarType_Int32)
+        .value("UInt32", VarType::UInt32, doc_VarType_UInt32)
+        .value("Int64", VarType::Int64, doc_VarType_Int64)
+        .value("UInt64", VarType::UInt64, doc_VarType_UInt64)
+        .value("Pointer", VarType::Pointer, doc_VarType_Pointer)
+        .value("Float16", VarType::Float16, doc_VarType_Float16)
+        .value("Float32", VarType::Float32, doc_VarType_Float32)
+        .value("Float64", VarType::Float64, doc_VarType_Float64);
+
+    m.def("has_backend", &jit_has_backend, doc_has_backend);
 
     m.def("whos_str", &jit_var_whos);
     m.def("whos", []() { nb::print(jit_var_whos()); });

@@ -450,8 +450,8 @@ struct DRJIT_TRIVIAL_ABI JitArray
     template <bool, typename Index, typename Mask>
     static JitArray gather_(const void * /*src*/, const Index & /*index*/,
                             const Mask & /*mask*/) {
-        drjit_raise("Not implemented, please use gather() variant that takes a "
-                    "array source argument.");
+        drjit_raise("Not implemented, please use gather() variant that takes "
+                    "an array source argument.");
     }
 
     template <bool, typename Index, typename Mask>
@@ -466,7 +466,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
     void scatter_(void * /* dst */, const Index & /*index*/,
                   const Mask & /*mask*/) const {
         drjit_raise("Not implemented, please use scatter() variant that takes "
-                    "a array target argument.");
+                    "an array target argument.");
     }
 
     template <bool, typename Index, typename Mask>
@@ -482,7 +482,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
                          const Index & /*index*/,
                          const Mask & /* mask */) const {
         drjit_raise("Not implemented, please use scatter_reduce() variant that "
-                    "takes a array target argument.");
+                    "takes an array target argument.");
     }
 
     template <typename Index, typename Mask>

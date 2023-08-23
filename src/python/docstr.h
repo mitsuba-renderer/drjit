@@ -332,6 +332,30 @@ Returns:
     ``drjit.[cuda/llvm].ad.*`` namespace, and ``False`` otherwise.
 )";
 
+static const char *doc_backend_v = R"(
+backend_v(arg, /)
+
+Returns the backend responsible for the given Dr.Jit array instance or type.
+
+Args:
+    arg (object): An arbitrary Python object
+
+Returns:
+    drjit.JitBackend: The associated Jit backend or ``drjit.JitBackend.None``.)";
+
+static const char *doc_var_type_v = R"(
+var_type_v(arg, /)
+
+Returns the scalar type associated with the given Dr.Jit array instance or
+type.
+
+Args:
+    arg (object): An arbitrary Python object
+
+Returns:
+    drjit.VarType: The associated type ``drjit.VarType.Void``.)";
+
+
 static const char *doc_is_complex_v = R"(
 is_complex_v(arg, /)
 Check whether the input is a Dr.Jit array instance or type representing a complex number.
@@ -1558,6 +1582,30 @@ Returns:
     type: Result of the conversion as described above.
 )";
 
+static const char *doc_reinterpret_array_t = R"(
+Converts the provided Dr.Jit array/tensor type into a
+version with the same element size and scalar type `type`.
+
+This function implements the following set of behaviors:
+
+1. When invoked with a Dr.Jit array *type* (e.g.
+:py:class:`drjit.cuda.Array3f64`), it returns a matching array type with the
+specified scalar type (e.g., :py:class:`drjit.cuda.Array3u64` when `arg1` is set
+to `drjit.VarType.UInt64`).
+
+2. When the input isn't a type, it returns ``reinterpret_array_t(type(arg0), arg1)``.
+
+3. When the input is not a Dr.Jit array or type, the function returns the
+   associated Python scalar type.
+
+Args:
+    arg0 (object): An arbitrary Python object
+    arg1 (drjit.VarType): The desired scalar type
+
+Returns:
+    type: Result of the conversion as described above.
+)";
+
 static const char *doc_detached_t = R"(
 Converts the provided Dr.Jit array/tensor type into an non-differentiable version.
 
@@ -2738,6 +2786,9 @@ Returns:
     str: the label of the given variable.
 )";
 
+static const char *doc_has_backend = R"(
+Check if the specified Dr.Jit backend was successfully initialized.)";
+
 static const char *doc_set_label = R"(
 Sets the label of a provided Dr.Jit array, either in the JIT or the AD system.
 
@@ -2802,6 +2853,37 @@ static const char *doc_ADFlag_ClearVertices =
 static const char *doc_ADFlag_Default =
     "Default: clear everything (edges, gradients of processed vertices). Equal "
     "to ``ClearEdges | ClearVertices``.";
+
+static const char *doc_JitBackend =
+    "List of just-in-time compilation backends supported by Dr.Jit. See also "
+    ":py:func:`drjit.backend_v()`.";
+
+static const char *doc_JitBackend_None =
+    "Indicates that a type is not handled by a Dr.Jit backend (e.g., a scalar type)";
+
+static const char *doc_JitBackend_LLVM =
+    "Dr.Jit backend targeting various processors via the LLVM compiler infractructure.";
+
+static const char *doc_JitBackend_CUDA =
+    "Dr.Jit backend targeting NVIDIA GPUs using PTX (\"Parallel Thread Excecution\") IR.";
+
+static const char *doc_VarType =
+    "List of possible scalar array types (not all of them are supported).";
+
+static const char *doc_VarType_Void = "Unknown/unspecified type.";
+static const char *doc_VarType_Bool = "Boolean/mask type.";
+static const char *doc_VarType_Int8 = "Signed 8-bit integer.";
+static const char *doc_VarType_UInt8 = "Unsigned 8-bit integer.";
+static const char *doc_VarType_Int16 = "Signed 16-bit integer.";
+static const char *doc_VarType_UInt16 = "Unsigned 16-bit integer.";
+static const char *doc_VarType_Int32 = "Signed 32-bit integer.";
+static const char *doc_VarType_UInt32 = "Unsigned 32-bit integer.";
+static const char *doc_VarType_Int64 = "Signed 64-bit integer.";
+static const char *doc_VarType_UInt64 = "Unsigned 64-bit integer.";
+static const char *doc_VarType_Pointer = "Pointer to a memory address.";
+static const char *doc_VarType_Float16 = "16-bit floating point format (IEEE 754).";
+static const char *doc_VarType_Float32 = "32-bit floating point format (IEEE 754).";
+static const char *doc_VarType_Float64 = "64-bit floating point format (IEEE 754).";
 
 #if defined(__GNUC__)
 #  pragma GCC diagnostic pop

@@ -295,13 +295,12 @@ void export_base(nb::module_ &m) {
                                  nb::type_slots(array_base_slots),
                                  nb::supplement<ArraySupplement>());
 
-    ab.def_prop_ro_static("__meta__", [](nb::handle h) {
-        return meta_str(nb::type_supplement<ArraySupplement>(h));
+    ab.def_prop_ro_static("__meta__", [](nb::type_object_t<ArrayBase> tp) {
+        return meta_str(supp(tp));
     });
 
-    ab.def_prop_ro("shape", &shape, nb::raw_doc(doc_ArrayBase_shape));
     ab.def_prop_ro("ndim", &ndim, nb::raw_doc(doc_ArrayBase_ndim));
-
+    ab.def_prop_ro("shape", &shape, nb::raw_doc(doc_ArrayBase_shape));
     ab.def_prop_ro(
         "array",
         [](nb::handle_t<ArrayBase> h) -> nb::object {
