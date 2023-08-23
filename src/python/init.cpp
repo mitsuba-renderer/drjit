@@ -60,8 +60,18 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
                     ArrayMeta m_self = s,
                               m_arg  = s_arg;
 
-                    // Potentially do a cast
+                    // Potentially convert AD <-> non-AD arrays
                     ArrayMeta m_temp = s_arg;
+                    m_temp.is_diff = m_self.is_diff;
+                    if (m_temp == m_self && m_self.ndim == 1) {
+                        uint32_t index = (uint32_t) s_arg.index(inst_ptr(arg));
+                        s.init_index(index, inst_ptr(self));
+                        nb::inst_mark_ready(self);
+                        return 0;
+                    }
+
+                    // Potentially do a cast
+                    m_temp = s_arg;
                     m_temp.type = s.type;
                     if (m_temp == m_self && s.cast) {
                         s.cast(inst_ptr(arg), (VarType) s_arg.type, inst_ptr(self));
@@ -73,6 +83,7 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
                     m_temp = s;
                     m_temp.backend = (uint64_t) JitBackend::None;
                     m_temp.is_vector = true;
+                    m_temp.is_diff = false;
 
                     if (m_temp == m_arg && s.init_data && s_arg.data) {
                         ArrayBase *arg_p = inst_ptr(arg);

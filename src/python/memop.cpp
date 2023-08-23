@@ -195,7 +195,7 @@ void scatter(nb::object target, nb::object value, nb::object index,
     }
 
     if (!is_drjit_target_1d)
-        throw nb::type_error(
+        nb::detail::raise_type_error(
             "drjit.scatter(): 'target' argument must be a dynamic 1D array!");
 
     const ArraySupplement &target_supp = supp(target_tp);
@@ -247,6 +247,11 @@ void scatter(nb::object target, nb::object value, nb::object index,
     const ArraySupplement &value_supp = supp(value_tp);
     ArrayMeta value_meta = value_supp;
 
+    if (value_meta.is_diff != target_meta.is_diff) {
+        value = target.type()(value);
+        value_meta = target_meta;
+    }
+
     if (value_meta == target_meta) {
         target_supp.scatter(
             inst_ptr(value),
@@ -276,7 +281,12 @@ void scatter(nb::object target, nb::object value, nb::object index,
         return;
     }
 
-    throw nb::type_error("drjit.scatter(): 'value' type is unsupported.");
+    nb::str flat_name = nb::inst_name(target),
+            actual_name = nb::inst_name(value);
+
+    nb::detail::raise_type_error(
+        "drjit.scatter(): value type %s is not supported for a scatter target of type %s.",
+        flat_name.c_str(), actual_name.c_str());
 }
 
 static void ravel_recursive(nb::handle result, nb::handle value,
@@ -449,19 +459,26 @@ nb::object unravel(const nb::type_object_t<ArrayBase> &dtype,
         throw nb::type_error(
             "drjit.unravel(): 'dtype' cannot be a tensor!");
 
-    ArrayMeta m { };
+    ArrayMeta m, m2 { };
     m.backend = s.backend;
     m.type = s.type;
+    m.is_diff = s.is_diff;
     m.ndim = 1;
     m.shape[0] = DRJIT_DYNAMIC;
 
     nb::handle flat = meta_get_type(m);
+
     if (!flat.is(array.type())) {
-        nb::str flat_name = nb::type_name(flat),
-                actual_name = nb::inst_name(array);
-        nb::detail::raise_type_error(
-            "drjit.unravel(): expected array of type '%s', but got '%s'!",
-            flat_name.c_str(), actual_name.c_str());
+        m2.is_diff = false;
+        flat = meta_get_type(m);
+
+        if (!flat.is(array.type())) {
+            nb::str flat_name = nb::type_name(flat),
+                    actual_name = nb::inst_name(array);
+            nb::detail::raise_type_error(
+                "drjit.unravel(): expected array of type '%s', but got '%s'!",
+                flat_name.c_str(), actual_name.c_str());
+        }
     }
 
     if (array.type().is(dtype))

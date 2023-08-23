@@ -3,18 +3,6 @@
 Reference
 =========
 
-Miscellaneous operations
-------------------------
-
-.. autofunction:: shape
-
-Array base class
-----------------
-
-.. autoclass:: ArrayBase
-
-   .. autoproperty:: shape
-
 Array creation
 --------------
 
@@ -66,6 +54,102 @@ Miscellaneous operations
 Just-in-time compilation
 ------------------------
 
+.. autoclass:: JitBackend
+
+   List of just-in-time compilation backends supported by Dr.Jit
+   See also :py:func:`drjit.backend_v()`.
+
+   .. autoattribute:: None
+      :annotation:
+
+      Indicates that a type is not handled by a Dr.Jit backend (e.g., a scalar type)
+
+   .. autoattribute:: LLVM
+      :annotation:
+
+      Dr.Jit backend targeting various processors via the LLVM compiler infractructure.
+
+   .. autoattribute:: CUDA
+      :annotation:
+
+      Dr.Jit backend targeting NVIDIA GPUs using PTX ("Parallel Thread Excecution") IR.
+
+.. autoclass:: VarType
+
+   List of possible scalar array types (not all of them are supported).
+
+   .. autoattribute:: Void
+      :annotation:
+
+      Unknown/unspecified type.
+
+   .. autoattribute:: Boolean
+      :annotation:
+
+      Boolean/mask type.
+
+   .. autoattribute:: Int8
+      :annotation:
+
+      Signed 8-bit integer.
+
+   .. autoattribute:: UInt8
+      :annotation:
+
+      Unsigned 8-bit integer.
+
+   .. autoattribute:: Int16
+      :annotation:
+
+      Signed 16-bit integer.
+
+   .. autoattribute:: UInt16
+      :annotation:
+
+      Unsigned 16-bit integer.
+
+   .. autoattribute:: Int32
+      :annotation:
+
+      Signed 32-bit integer.
+
+   .. autoattribute:: UInt32
+      :annotation:
+
+      Unsigned 32-bit integer.
+
+   .. autoattribute:: Int64
+      :annotation:
+
+      Signed 64-bit integer.
+
+   .. autoattribute:: UInt64
+      :annotation:
+
+      Unsigned 64-bit integer.
+
+   .. autoattribute:: Pointer
+      :annotation:
+
+      Pointer to a memory address.
+
+   .. autoattribute:: Float16
+      :annotation:
+
+      16-bit floating point format (IEEE 754).
+
+   .. autoattribute:: Float32
+      :annotation:
+
+      32-bit floating point format (IEEE 754).
+
+   .. autoattribute:: Float64
+      :annotation:
+
+      64-bit floating point format (IEEE 754).
+
+
+.. autofunction:: has_backend
 .. autofunction:: schedule
 .. autofunction:: eval
 
@@ -599,6 +683,8 @@ Array base class
     .. autoproperty:: array
     .. autoproperty:: ndim
     .. autoproperty:: shape
+    .. autoproperty:: backend
+    .. autoproperty:: type
     .. autoproperty:: x
     .. autoproperty:: y
     .. autoproperty:: z
