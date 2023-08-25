@@ -127,6 +127,7 @@ def test05_initialization_casting(pkg):
     tu = get_class(pkg + ".TensorXu")
     tf = get_class(pkg + ".TensorXf")
     tf64 = get_class(pkg + ".TensorXf")
+    a3f = get_class(pkg + ".Array3f")
 
     t0 = dr.full(tu, 1, (2, 3, 4))
     t1 = dr.full(tf, 2, (2, 3, 4))
@@ -143,6 +144,20 @@ def test05_initialization_casting(pkg):
     t3[:, 1, :] = 12
     assert t3[:, 0, :] == 3
     assert t3[:, 1, :] == 12
+
+    # Aliases or derived Array types defined in other packages should not
+    # accidentally use the __array_interface__ constructor, which would be
+    # inefficient and silently lose gradients.
+    # We simulate such a derived type here.
+    class Color3f(a3f):
+        def __init__(self, *args):
+            super().__init__(*args)
+    Color3f.__module__ = 'mitsuba.llvm_ad_rgb'
+    assert Color3f.IsDrJit
+
+    color = Color3f([1, 2, 3], [4, 5, 6], [7, 8, 9])
+    with pytest.raises(TypeError, match='.*incompatible constructor arguments.*'):
+        tensor = tf(color)
 
 
 @pytest.mark.parametrize("pkg", pkgs_ad)
