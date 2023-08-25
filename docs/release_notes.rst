@@ -5,6 +5,19 @@ Being an experimental research framework, Dr.Jit does not strictly follow the
 `Semantic Versioning <https://semver.org/>`_ convention. That said, we will
 strive to document breaking API changes in the release notes below.
 
+Upcoming changes
+----------------
+
+- Fix nested recorded virtual function calls
+  `[7e8c13c] <https://github.com/mitsuba-renderer/drjit/commit/7e8c13c61dda2f28be7aa62df83b5267418016a5>`_
+- Fix ``dr.gather``/``dr.scatter`` operations on quaternion types
+  `[9a7ac4e] <https://github.com/mitsuba-renderer/drjit/commit/9a7ac4e70f108469ae56e34bd6a587d3dba03394>`_
+- Fix gradient propagations on "special" types (quaternions, matrices, complex numbers)
+  `[fe624de] <https://github.com/mitsuba-renderer/drjit/commit/fe624de34af8e052bd85c3fd3cf0b7e29761f255>`_
+- Add support for JIT types in ``dr.transform_decompose`` and ``dr.transform_compose``
+  `[1244530] <https://github.com/mitsuba-renderer/drjit/commit/124453020fe7cfdc4db08c2b01be8eb70224674c>`_
+- Various minor bug fixes
+
 
 Dr.Jit 0.4.2
 ------------
