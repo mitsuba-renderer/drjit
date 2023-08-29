@@ -5,8 +5,10 @@ Being an experimental research framework, Dr.Jit does not strictly follow the
 `Semantic Versioning <https://semver.org/>`_ convention. That said, we will
 strive to document breaking API changes in the release notes below.
 
-Upcoming changes
-----------------
+Dr.Jit 0.4.3
+------------
+
+*August 29, 2023*
 
 - Fix nested recorded virtual function calls
   `[7e8c13c] <https://github.com/mitsuba-renderer/drjit/commit/7e8c13c61dda2f28be7aa62df83b5267418016a5>`_
