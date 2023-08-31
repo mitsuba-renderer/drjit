@@ -974,7 +974,7 @@ template <typename Target, bool Permute = false, typename Source,
           typename Index, typename Mask = mask_t<Index>>
 Target gather(Source &&source, const Index &index, const Mask &mask_ = true) {
     // Broadcast mask to match shape of Index
-    mask_t<plain_t<replace_scalar_t<Index, scalar_t<Target>>>> mask = mask_;
+    mask_t<plain_t<Index>> mask = mask_;
     if constexpr (array_depth_v<Source> > 1) {
         // Case 1: gather<Vector3fC>(const Vector3fC&, ...)
         static_assert(array_size_v<Source> == array_size_v<Target>,
@@ -1017,12 +1017,13 @@ Target gather(Source &&source, const Index &index, const Mask &mask_ = true) {
                 }
             }
         } else if constexpr (array_depth_v<Target> == array_depth_v<Index>) {
+            mask_t<plain_t<replace_scalar_t<Index, scalar_t<Target>>>> mask2 = mask_;
             if constexpr ((Target::IsPacked || Target::IsRecursive) && is_array_v<Source>)
                 // Case 2.1.0: gather<FloatC>(const FloatP&, ...)
-                return Target::template gather_<Permute>(source.data(), index, mask);
+                return Target::template gather_<Permute>(source.data(), index, mask2);
             else
                 // Case 2.1.1: gather<FloatC>(const FloatC& / const void *, ...)
-                return Target::template gather_<Permute>(source, index, mask);
+                return Target::template gather_<Permute>(source, index, mask2);
         } else {
             // Case 2.2: gather<Vector3fC>(const FloatC & / const void *, ...)
             using TargetIndex = replace_scalar_t<Target, scalar_t<Index>>;
@@ -1055,6 +1056,7 @@ Target gather(Source &&source, const Index &index, const Mask &mask_ = true) {
             return mask ? ((Target *) source)[index] : Target(0);
     }
 }
+
 
 template <bool Permute = false, typename Target, typename Value, typename Index,
           typename Mask = mask_t<Index>>
