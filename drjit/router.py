@@ -5781,13 +5781,13 @@ def wrap_ad(source: str, target: str):
                 else:
                     return a
 
-            # Ensure tensors in `a` have same shape as tensors in `b` (handles dim==0 case)
-            def torch_ensure_shape(a, b):
+            # Ensure gradient tensors in `a` have same shape as tensors in `b` (handles dim==0 case)
+            def torch_ensure_grad_shape(a, b):
                 if isinstance(a, _Sequence) and not isinstance(a, str):
-                    return tuple(torch_ensure_shape(a[i], b[i]) for i in range(len(a)))
+                    return tuple(torch_ensure_grad_shape(a[i], b[i]) for i in range(len(a)))
                 elif isinstance(a, _Mapping):
-                    return {k: torch_ensure_shape(v, b[k]) for k, v in a.items()}
-                elif is_torch_tensor(a):
+                    return {k: torch_ensure_grad_shape(v, b[k]) for k, v in a.items()}
+                elif is_torch_tensor(a) and a.dtype in [_torch.float, _torch.float32, _torch.float64]:
                     return a.reshape(b.shape)
                 else:
                     return a
@@ -5813,7 +5813,7 @@ def wrap_ad(source: str, target: str):
                         _dr.enqueue(_dr.ADMode.Backward, ctx.res_drjit)
                         _dr.traverse(ctx.res_drjit, _dr.ADMode.Backward)
                         args_grad = drjit_to_torch(_dr.grad(ctx.args_drjit))
-                        args_grad = torch_ensure_shape(args_grad, ctx.args)
+                        args_grad = torch_ensure_grad_shape(args_grad, ctx.args)
                         del ctx.res_drjit, ctx.args_drjit
                         return args_grad
 
@@ -5832,7 +5832,7 @@ def wrap_ad(source: str, target: str):
 
                     def backward(self):
                         grad_out_torch = drjit_to_torch(self.grad_out())
-                        grad_out_torch = torch_ensure_shape(grad_out_torch, self.res_torch)
+                        grad_out_torch = torch_ensure_grad_shape(grad_out_torch, self.res_torch)
                         def flatten(values):
                             """Flatten structure in a consistent arbitrary order"""
                             result = []
