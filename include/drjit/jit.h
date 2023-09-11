@@ -528,6 +528,13 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
         }
     }
 
+    Derived prefix_sum_(bool exclusive) const {
+        uint32_t s = size();
+        Derived output = empty_(s);
+        jit_prefix_sum(Backend, Type, exclusive, data(), s, output.data());
+        return output;
+    }
+
     auto compress_() const {
         if constexpr (!is_mask_v<Value>) {
             drjit_raise("Unsupported operand type");

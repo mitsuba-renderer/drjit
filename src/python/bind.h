@@ -353,8 +353,10 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
         cls.def("is_literal_", [](Array &value) { return value.is_literal(); });
         cls.def("is_evaluated_", [](Array &value) { return value.is_evaluated(); });
 
-        if constexpr (!Array::IsMask)
+        if constexpr (!Array::IsMask) {
+            cls.def("prefix_sum_", &Array::prefix_sum_);
             cls.def("block_sum_", &Array::block_sum_);
+        }
     }
 
     if constexpr (dr::is_dynamic_array_v<Array> || Array::IsDiff)

@@ -239,9 +239,9 @@ def shape(arg, /):
 
     Returns:
         tuple | NoneType: A tuple describing the dimension and shape of the
-        provided Dr.Jit input array or tensor. When the input array is *ragged*
-        (i.e., when it contains components with mismatched sizes), the function
-        returns ``None``.
+          provided Dr.Jit input array or tensor. When the input array is *ragged*
+          (i.e., when it contains components with mismatched sizes), the function
+          returns ``None``.
     '''
     if _dr.is_tensor_v(arg):
         return arg.shape
@@ -1017,9 +1017,9 @@ def ravel(array, order='A'):
 
     Returns:
         object: A dynamic 1D array containing the flattened representation of
-        ``array`` with the desired ordering. The type of the return value depends
-        on the type of the input. When ``array`` is already contiguous/flattened,
-        this function returns it without making a copy.
+          ``array`` with the desired ordering. The type of the return value depends
+          on the type of the input. When ``array`` is already contiguous/flattened,
+          this function returns it without making a copy.
     '''
     if not _var_is_drjit(array):
         return array
@@ -1098,7 +1098,7 @@ def unravel(dtype, array, order='F'):
 
     Returns:
         object: An instance of type ``dtype`` containing the result of the unravel
-        operation.
+          operation.
     '''
     if not isinstance(array, ArrayBase) or array.Depth != 1:
         raise Exception('unravel(): array input must be a flat array!')
@@ -3797,6 +3797,68 @@ def hypot(a, b):
         maxval * _dr.sqrt(_dr.fma(ratio, ratio, 1)),
         a + b
     )
+
+
+def prefix_sum(value, exclusive=True):
+    '''
+    Compute an exclusive or inclusive prefix sum of the input array.
+
+    By default, the function returns an output array :math:`\mathbf{y}` of the
+    same size as the input :math:`\mathbf{x}`, where
+
+    .. math::
+
+       y_i = \sum_{i=0}^{i-1} x_i.
+
+    which is known as an *exclusive* prefix sum, as each element of the output
+    array excludes the corresponding input in its sum. When the ``exclusive``
+    argument is set to ``False``, the function instead returns an *inclusive*
+    prefix sum defined as
+
+    .. math::
+
+       y_i = \sum_{i=0}^i x_i.
+
+    There is also a convenience alias :py:func:`drjit.cumsum` that computes an
+    inclusive sum analogous to various other nd-array frameworks.
+
+    Not all numeric data types are supported by :py:func:`prefix_sum`:
+    presently, the function accepts ``Int32``, ``UInt32``, ``UInt64``,
+    ``Float32``, and ``Float64``-typed arrays.
+
+    The CUDA backend implementation for "large" numeric types (``Float64``,
+    ``UInt64``) has the following technical limitation: when reducing 64-bit
+    integers, their values must be smaller than 2**62. When reducing double
+    precision arrays, the two least significant mantissa bits are clamped to
+    zero when forwarding the prefix from one 512-wide block to the next (at a
+    *very minor*, probably negligible loss in accuracy). See the implementation
+    for details on the rationale of this limitation.
+
+    Args:
+        value (drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+        exclusive (bool): Specifies whether or not the prefix sum should
+          be exclusive (the default) or inclusive.
+
+    Returns:
+        drjit.ArrayBase: An array of the same type containing the computed prefix sum.
+    '''
+    if _dr.is_jit_v(value):
+        return value.prefix_sum_(exclusive)
+    else:
+        raise Exception("prefix_sum(): requires a JIT array!")
+
+def cumsum(value):
+    '''
+    Compute an cumulative sum (aka. inclusive prefix sum) of the input array.
+
+    This function wraps :cpp:func:`drjit.prefix_sum` and is implemented as
+
+    .. code-block:: python
+
+       return prefix_sum(value, exclusive=False)
+    '''
+    return prefix_sum(value, exclusive=False)
 
 
 def block_sum(value, size):
