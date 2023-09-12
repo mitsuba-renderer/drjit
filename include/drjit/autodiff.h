@@ -1529,7 +1529,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             drjit_raise("vcall_(): not supported in scalar mode!");
     }
 
-    DiffArray block_sum_(size_t block_size) {
+    DiffArray block_sum_(size_t block_size) const {
         if constexpr (is_jit_v<Type>) {
             if (m_index)
                 drjit_raise("block_sum_(): not supported for attached arrays!");
