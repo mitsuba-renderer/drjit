@@ -551,7 +551,7 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
         }
     }
 
-    Derived block_sum_(size_t block_size) {
+    Derived block_sum_(size_t block_size) const {
         size_t input_size  = size(),
                block_count = input_size / block_size;
 
