@@ -2409,8 +2409,8 @@ the ``flags`` parameter.
 The implementation raises an exception when the provided array does not support
 gradient tracking, or when gradient tracking was not previously enabled via
 :py:func:`drjit.enable_grad()`, as this generally indicates the presence of
-a bug. Specify the :py:attr:`drjit.ADFlag.PermitNoFlag` flag (e.g. by
-passing ``flags=dr.ADFlag.Default | dr.ADFlag.PermitNoGrad``) to the function.
+a bug. Specify the :py:attr:`drjit.ADFlag.AllowNoFlag` flag (e.g. by
+passing ``flags=dr.ADFlag.Default | dr.ADFlag.AllowNoGrad``) to the function.
 
 Args:
     args (object): A Dr.Jit array, tensor, or :ref:`Pytree <pytrees>`.
@@ -2452,8 +2452,8 @@ the ``flags`` parameter.
 The implementation raises an exception when the provided array does not support
 gradient tracking, or when gradient tracking was not previously enabled via
 :py:func:`drjit.enable_grad()`, as this generally indicates the presence of
-a bug. Specify the :py:attr:`drjit.ADFlag.PermitNoFlag` flag (e.g. by
-passing ``flags=dr.ADFlag.Default | dr.ADFlag.PermitNoGrad``) to the function.
+a bug. Specify the :py:attr:`drjit.ADFlag.AllowNoFlag` flag (e.g. by
+passing ``flags=dr.ADFlag.Default | dr.ADFlag.AllowNoGrad``) to the function.
 
 Args:
     *args (tuple): A variable-length list of Dr.Jit differentiable array, tensors,
@@ -2513,8 +2513,8 @@ the ``flags`` parameter.
 The implementation raises an exception when the provided array does not support
 gradient tracking, or when gradient tracking was not previously enabled via
 :py:func:`drjit.enable_grad()`, as this generally indicates the presence of
-a bug. Specify the :py:attr:`drjit.ADFlag.PermitNoFlag` flag (e.g. by
-passing ``flags=dr.ADFlag.Default | dr.ADFlag.PermitNoGrad``) to the function.
+a bug. Specify the :py:attr:`drjit.ADFlag.AllowNoFlag` flag (e.g. by
+passing ``flags=dr.ADFlag.Default | dr.ADFlag.AllowNoGrad``) to the function.
 
 Args:
     args (object): A Dr.Jit array, tensor, or :ref:`Pytree <pytrees>`.
@@ -2556,8 +2556,8 @@ the ``flags`` parameter.
 The implementation raises an exception when the provided array does not support
 gradient tracking, or when gradient tracking was not previously enabled via
 :py:func:`drjit.enable_grad()`, as this generally indicates the presence of
-a bug. Specify the :py:attr:`drjit.ADFlag.PermitNoFlag` flag (e.g. by
-passing ``flags=dr.ADFlag.Default | dr.ADFlag.PermitNoGrad``) to the function.
+a bug. Specify the :py:attr:`drjit.ADFlag.AllowNoFlag` flag (e.g. by
+passing ``flags=dr.ADFlag.Default | dr.ADFlag.AllowNoGrad``) to the function.
 
 Args:
     *args (tuple): A variable-length list of Dr.Jit differentiable array, tensors,
@@ -3019,7 +3019,7 @@ static const char *doc_ADFlag_Default =
     "Default: clear everything (edges, gradients of processed vertices). Equal "
     "to ``ClearEdges | ClearVertices``.";
 
-static const char *doc_ADFlag_PermitNoGrad =
+static const char *doc_ADFlag_AllowNoGrad =
     "Don't fail when the input to a ``drjit.forward`` or ``backward`` "
     "operation is not a differentiable array.";
 

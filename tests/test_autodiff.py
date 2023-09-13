@@ -206,7 +206,7 @@ def test06_forward_to(t):
   with pytest.raises(RuntimeError, match='argument does not depend on the input'):
       dr.forward_to(t(1.0))
 
-  dr.forward_to(t(1.0), flags=dr.ADFlag.Default | dr.ADFlag.PermitNoGrad)
+  dr.forward_to(t(1.0), flags=dr.ADFlag.Default | dr.ADFlag.AllowNoGrad)
 
   # Error because the input isn't a diff array
   with pytest.raises(RuntimeError, match='argument does not depend on the input'):
@@ -339,6 +339,34 @@ def test11_backward_to_reuse(t):
             assert dr.grad([a, b, c][(j + 2)%3]) == 0
             dr.set_grad(v, t())
 
+@pytest.test_arrays('is_diff,float32,shape=(*)')
+def test12_mixed_precision_bwd(t):
+    t2 = dr.float64_array_t(t)
+
+    a = t(1)
+    dr.enable_grad(a)
+    b = dr.sin(a)
+    c = dr.sin(t2(a))
+    d = t2(t(t2(a)))
+    e = b + c + d + a
+    dr.backward_from(e)
+    assert dr.allclose(dr.grad(a), dr.cos(1) * 2 + 2)
+
+
+@pytest.test_arrays('is_diff,float32,shape=(*)')
+def test12_mixed_precision_fwd(t):
+    t2 = dr.float64_array_t(t)
+
+    a = t(1)
+    dr.enable_grad(a)
+    b = dr.sin(a)
+    c = dr.sin(t2(a))
+    d = t2(t(t2(a)))
+    e = b + c + d + a
+    dr.forward_from(a)
+    assert dr.allclose(dr.grad(e), dr.cos(1) * 2 + 2)
+
+
 counter = 12
 
 def std_test(name, func, f_in, f_out, grad_out):
@@ -352,7 +380,7 @@ def std_test(name, func, f_in, f_out, grad_out):
         dr.enable_grad(args)
         rv = func(*args)
         assert dr.allclose(rv, f_out)
-        dr.backward_from(rv)
+        dr.backward_from(rv, flags=dr.ADFlag.Default | dr.ADFlag.AllowNoGrad)
         assert dr.allclose(dr.grad(args), grad_out)
 
     query = pytest.test_arrays('is_diff,float,shape=(*)')
@@ -392,3 +420,16 @@ std_test('tanh', lambda a: dr.tanh(a), 1, math.tanh(1), 1/math.cosh(1)**2)
 std_test('asinh', lambda a: dr.asinh(a), .5, math.asinh(.5), 1/math.sqrt(1 + .5**2))
 std_test('acosh', lambda a: dr.acosh(a), 1.5, math.acosh(1.5), 1/math.sqrt(1.5**2 - 1))
 std_test('atanh', lambda a: dr.atanh(a), .5, math.atanh(.5), 1/(1 - .5**2))
+
+std_test('sincos_s', lambda a: dr.sincos(a)[0], 1, math.sin(1), math.cos(1))
+std_test('sincos_c', lambda a: dr.sincos(a)[1], 1, math.cos(1), -math.sin(1))
+std_test('sincosh_s', lambda a: dr.sincosh(a)[0], 1, math.sinh(1), math.cosh(1))
+std_test('sincosh_c', lambda a: dr.sincosh(a)[1], 1, math.cosh(1), math.sinh(1))
+
+std_test('atan2_1', lambda a, b: dr.atan2(a, b), (1, 2), math.atan2(1, 2), (2/5, 1/5))
+std_test('atan2_2', lambda a, b: dr.atan2(a, b), (-1, 2), math.atan2(-1, 2), (2/5, -1/5))
+
+std_test('round', lambda a: dr.round(a), 1.6, 2.0, 0.0)
+std_test('trunc', lambda a: dr.trunc(a), 1.6, 1.0, 0.0)
+std_test('ceil', lambda a: dr.ceil(a), 1.6, 2.0, 0.0)
+std_test('floor', lambda a: dr.floor(a), 1.6, 1.0, 0.0)

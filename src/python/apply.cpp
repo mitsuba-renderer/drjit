@@ -50,6 +50,11 @@ static const char *op_names[] = {
 
     "erf",
 
+    "round",
+    "trunc",
+    "ceil",
+    "floor",
+
     // Binary arithetic operations
     "__add__",
     "__sub__",
@@ -117,6 +122,20 @@ template <typename T1, typename T2> using first_t = T1;
 template <typename... T>
 nb::handle first(nb::handle h, T&...) { return h; }
 
+
+/**
+ * A significant portion of Dr.Jit operations pass through the central apply()
+ * function below. It performs arithmetic operation (e.g. addition, FMA) by
+ *
+ * 1.  Casting operands into compatible representations, and
+ * 2a. Calling an existing "native" implementation of the operation if
+ *     available (see drjit/python.h), or alternatively:
+ * 2b. Executing a fallback loop that recursively invokes the operation
+ *     on array elements.
+ *
+ * The ApplyMode template parameter slightly adjusts the functions' operation
+ * (see the definition of the ApplyMode enumeration for details).
+ */
 template <ApplyMode Mode, typename Slot, typename... Args, size_t... Is>
 PyObject *apply(ArrayOp op, Slot slot, std::index_sequence<Is...> is,
                 Args... args) noexcept {
@@ -137,8 +156,12 @@ PyObject *apply(ArrayOp op, Slot slot, std::index_sequence<Is...> is,
 
         void *impl = s[op];
 
-        if (impl == DRJIT_OP_NOT_IMPLEMENTED)
-            return nb::not_implemented().release().ptr();
+        if (impl == DRJIT_OP_NOT_IMPLEMENTED) {
+            if constexpr (std::is_same_v<Slot, int>)
+                return nb::not_implemented().release().ptr();
+            else
+                nb::detail::raise("Operation not supported for this type.");
+        }
 
         ArraySupplement::Item item = s.item, item_mask = nullptr;
         ArraySupplement::SetItem set_item;
@@ -201,7 +224,7 @@ PyObject *apply(ArrayOp op, Slot slot, std::index_sequence<Is...> is,
                     result = nb::inst_alloc_zero(result_type);
                 }
             } else {
-                ((l[Is] = s.len(p[Is])), ...);
+                ((l[Is] = (Py_ssize_t) s.len(p[Is])), ...);
                 lr = maxv(l[Is]...);
 
                 if (((l[Is] != lr && l[Is] != 1) || ...))
@@ -295,6 +318,7 @@ PyObject *apply(ArrayOp op, Slot slot, std::index_sequence<Is...> is,
     return nullptr;
 }
 
+// Broadcast a tensor to a desired shape
 void tensor_broadcast(nb::object &tensor, nb::object &array,
                       const dr_vector<size_t> &shape_src,
                       const dr_vector<size_t> &shape_dst) {
@@ -334,7 +358,7 @@ void tensor_broadcast(nb::object &tensor, nb::object &array,
                    array, index, nb::borrow(Py_True));
 }
 
-
+/// Apply an element-wise operation to the given tensor(s)
 template <ApplyMode Mode, typename Slot, typename... Args, size_t... Is>
 NB_NOINLINE PyObject *apply_tensor(ArrayOp op, Slot slot,
                                    std::index_sequence<Is...> is,
@@ -444,7 +468,77 @@ NB_NOINLINE PyObject *apply_tensor(ArrayOp op, Slot slot,
     return nullptr;
 }
 
+/// Like apply(), but returns a pair of results. Used for dr.sincos, dr.sincosh, dr.frexp()
+nb::object apply_ret_pair(ArrayOp op, const char *name, nb::handle_t<dr::ArrayBase> h) {
+    using Impl = void (*)(const ArrayBase *, ArrayBase *, ArrayBase *);
+    nb::handle tp = h.type();
 
+    try {
+        const ArraySupplement &s = supp(tp);
+        nb::object r0 = nb::inst_alloc_zero(tp),
+                   r1 = nb::inst_alloc_zero(tp);
+
+        if (s.is_tensor) {
+            nb::object result_shape = shape(h),
+                       result_array = apply_ret_pair(
+                           op, name, nb::steal(s.tensor_array(h.ptr())));
+            return nb::make_tuple(tp(result_array[0], result_shape),
+                                  tp(result_array[1], result_shape));
+        }
+
+        Impl impl = (Impl) s[op];
+
+        raise_if(impl == DRJIT_OP_NOT_IMPLEMENTED,
+                 "Operation not supported for this type.");
+
+        if (impl != DRJIT_OP_DEFAULT) {
+            impl(inst_ptr(h), inst_ptr(r0), inst_ptr(r1));
+            return nb::make_tuple(r0, r1);
+        }
+        dr::ArrayBase *ph = inst_ptr(h),
+                      *p0 = inst_ptr(r0),
+                      *p1 = inst_ptr(r1);
+
+        Py_ssize_t lr = s.shape[0];
+        if (lr == DRJIT_DYNAMIC) {
+            lr = (Py_ssize_t) s.len(ph);
+            s.init(lr, p0);
+            s.init(lr, p1);
+        }
+
+        ArraySupplement::Item item = s.item;
+        ArraySupplement::SetItem set_item = s.set_item;
+
+        nb::object py_impl_o = array_module.attr(name);
+
+        for (Py_ssize_t i = 0; i < lr; ++i) {
+            nb::object v = nb::steal(item(h.ptr(), i));
+            raise_if(!v.is_valid(), "Item retrival failed!");
+            nb::object vr = py_impl_o(v);
+
+            // Assign result
+            raise_if(set_item(r0.ptr(), i, vr[0].ptr()) ||
+                     set_item(r1.ptr(), i, vr[1].ptr()),
+                     "Item assignment failed!");
+        }
+
+        return nb::make_tuple(r0, r1);
+    } catch (nb::python_error &e) {
+        nb::str tp_name = nb::type_name(tp);
+        e.restore();
+        nb::chain_error(PyExc_RuntimeError,
+                        "drjit.%s(<%U>): failed (see above)!", name,
+                        tp_name.ptr());
+    } catch (const std::exception &e) {
+        nb::str tp_name = nb::type_name(tp);
+        nb::chain_error(PyExc_RuntimeError, "drjit.%s(<%U>): %s",
+                        name, tp_name.ptr(), e.what());
+    }
+
+    return nb::object();
+}
+
+/// Invoke the given callback on leaf elements of the pytree 'h'
 void traverse(const char *op, const TraverseCallback &tc, nb::handle h) {
     nb::handle tp = h.type();
 
@@ -495,10 +589,10 @@ void traverse(const char *op, const TraverseCallback &tc, nb::handle h) {
     }
 }
 
+/// Parallel traversal of two compatible pytrees 'h1' and 'h2'
 void traverse_pair(const char *op, const TraversePairCallback &tc,
                    nb::handle h1, nb::handle h2) {
-    nb::handle tp1 = h1.type(),
-               tp2 = h2.type();
+    nb::handle tp1 = h1.type(), tp2 = h2.type();
 
     try {
         if (!tp1.is(tp2))
@@ -579,6 +673,7 @@ nb::handle TransformCallback::transform_type(nb::handle tp) const {
     return tp;
 }
 
+/// Transform an input pytree 'h' into an output pytree, potentially of a different type
 nb::object transform(const char *op, const TransformCallback &tc, nb::handle h1) {
     nb::handle t1 = h1.type();
 
@@ -657,7 +752,6 @@ nb::object transform(const char *op, const TransformCallback &tc, nb::handle h1)
         throw nb::python_error();
     }
 }
-
 
 template PyObject *apply<Normal>(ArrayOp, int, std::index_sequence<0>,
                                  PyObject *) noexcept;
