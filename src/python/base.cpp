@@ -351,8 +351,30 @@ void export_base(nb::module_ &m) {
     m.def("abs", [](Py_ssize_t a) { return dr::abs(a); });
     DR_MATH_UNOP(abs, ArrayOp::Abs);
     DR_MATH_UNOP(sqrt, ArrayOp::Sqrt);
+    DR_MATH_UNOP(rcp, ArrayOp::Rcp);
+    DR_MATH_UNOP(rsqrt, ArrayOp::Rsqrt);
+    DR_MATH_UNOP(cbrt, ArrayOp::Cbrt);
+
+    DR_MATH_UNOP(exp, ArrayOp::Exp);
+    DR_MATH_UNOP(exp2, ArrayOp::Exp2);
+    DR_MATH_UNOP(log, ArrayOp::Log);
+    DR_MATH_UNOP(log2, ArrayOp::Log2);
+
     DR_MATH_UNOP(sin, ArrayOp::Sin);
+    DR_MATH_UNOP(cos, ArrayOp::Cos);
+    DR_MATH_UNOP(tan, ArrayOp::Tan);
+    DR_MATH_UNOP(asin, ArrayOp::Asin);
+    DR_MATH_UNOP(acos, ArrayOp::Acos);
     DR_MATH_UNOP(atan, ArrayOp::Atan);
+
+    DR_MATH_UNOP(sinh, ArrayOp::Sinh);
+    DR_MATH_UNOP(cosh, ArrayOp::Cosh);
+    DR_MATH_UNOP(tanh, ArrayOp::Tanh);
+    DR_MATH_UNOP(asinh, ArrayOp::Asinh);
+    DR_MATH_UNOP(acosh, ArrayOp::Acosh);
+    DR_MATH_UNOP(atanh, ArrayOp::Atanh);
+
+    DR_MATH_UNOP(erf, ArrayOp::Erf);
 
     m.def("minimum",
           [](Py_ssize_t a, Py_ssize_t b) { return dr::minimum(a, b); });
@@ -362,8 +384,7 @@ void export_base(nb::module_ &m) {
           [](Py_ssize_t a, Py_ssize_t b) { return dr::maximum(a, b); });
     DR_MATH_BINOP(maximum, ArrayOp::Maximum);
 
-    m.def("maximum",
-          [](Py_ssize_t a, Py_ssize_t b) { return dr::maximum(a, b); });
+    DR_MATH_BINOP(atan2, ArrayOp::Atan2);
     DR_MATH_TERNOP(fma, ArrayOp::Fma);
 
     m.def("select",

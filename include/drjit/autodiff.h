@@ -29,23 +29,27 @@ NAMESPACE_BEGIN(drjit)
  * flags can be used to control what should and should not be destructed.
  */
 enum class ADFlag : uint32_t {
-   /// None: clear nothing.
-   ClearNone = 0,
+    /// None: clear nothing.
+    ClearNone = 0,
 
-   /// Delete all traversed edges from the computation graph
-   ClearEdges = 1,
+    /// Delete all traversed edges from the computation graph
+    ClearEdges = 1,
 
-   // Clear the gradients of processed input vertices (in-degree == 0)
-   ClearInput = 2,
+    /// Clear the gradients of processed input vertices (in-degree == 0)
+    ClearInput = 2,
 
-   // Clear the gradients of processed interior vertices (out-degree != 0)
-   ClearInterior = 4,
+    /// Clear the gradients of processed interior vertices (out-degree != 0)
+    ClearInterior = 4,
 
-   /// Clear gradients of processed vertices only, but leave edges intact
-   ClearVertices = (uint32_t) ClearInput | (uint32_t) ClearInterior,
+    /// Clear gradients of processed vertices only, but leave edges intact
+    ClearVertices = (uint32_t) ClearInput | (uint32_t) ClearInterior,
 
-   /// Default: clear everything (edges, gradients of processed vertices)
-   Default = (uint32_t) ClearEdges | (uint32_t) ClearVertices
+    /// Don't fail when the input to a ``dr::forward`` or ``backward`` operation
+    /// is not a differentiable array.
+    PermitNoGrad = 8,
+
+    /// Default: clear everything (edges, gradients of processed vertices)
+    Default = (uint32_t) ClearEdges | (uint32_t) ClearVertices
 };
 
 constexpr uint32_t operator |(ADFlag f1, ADFlag f2)   { return (uint32_t) f1 | (uint32_t) f2; }
@@ -130,7 +134,7 @@ struct DRJIT_TRIVIAL_ABI DiffArray
 
     template <typename T>
     DiffArray(const DiffArray<Backend, T> &v) {
-        if constexpr (IsFloat && std::is_floating_point_v<T>)
+        if constexpr (IsFloat && DiffArray<Backend, T>::IsFloat)
             m_index = ad_var_cast(v.m_index, Type);
         else
             m_index = jit_var_cast((uint32_t) v.m_index, Type, 0);
@@ -258,10 +262,11 @@ struct DRJIT_TRIVIAL_ABI DiffArray
     DiffArray rsqrt_() const { return steal(ad_var_rsqrt(m_index)); }
     DiffArray sqrt_() const { return steal(ad_var_sqrt(m_index)); }
     DiffArray cbrt_() const { return steal(ad_var_cbrt(m_index)); }
+    DiffArray erf_() const { return steal(ad_var_erf(m_index)); }
     DiffArray sin_() const { return steal(ad_var_sin(m_index)); }
     DiffArray cos_() const { return steal(ad_var_cos(m_index)); }
     std::pair<DiffArray, DiffArray> sincos_() const {
-        UInt64Pair p = jit_var_sincos(m_index);
+        UInt64Pair p = ad_var_sincos(m_index);
         return { steal(p.first), steal(p.second) };
     }
     DiffArray tan_() const { return steal(ad_var_tan(m_index)); }
@@ -283,7 +288,7 @@ struct DRJIT_TRIVIAL_ABI DiffArray
     DiffArray sinh_() const { return steal(ad_var_sinh(m_index)); }
     DiffArray cosh_() const { return steal(ad_var_cosh(m_index)); }
     std::pair<DiffArray, DiffArray> sincosh_() const {
-        UInt64Pair p = jit_var_sincosh(m_index);
+        UInt64Pair p = ad_var_sincosh(m_index);
         return { steal(p.first), steal(p.second) };
     }
     DiffArray tanh_() const { return steal(ad_var_tanh(m_index)); }
@@ -305,7 +310,7 @@ struct DRJIT_TRIVIAL_ABI DiffArray
             return steal(jit_var_max(m_index, a.m_index));
     }
 
-    DiffArray fma_(const DiffArray &a, const DiffArray &b) const {
+    DiffArray fmadd_(const DiffArray &a, const DiffArray &b) const {
         if constexpr (IsFloat)
             return steal(ad_var_fma(m_index, a.m_index, b.m_index));
         else

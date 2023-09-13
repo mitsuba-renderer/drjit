@@ -5,6 +5,7 @@ Dr.Jit — A Just-In-Time-Compiler for Differentiable Rendering
    :maxdepth: 2
    :caption: Contents:
 
+   pytrees
    reference
 
 Indices and tables

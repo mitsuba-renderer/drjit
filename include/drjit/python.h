@@ -60,9 +60,31 @@ enum class ArrayOp {
 
     Abs,
     Sqrt,
+    Rcp,
+    Rsqrt,
+    Cbrt,
 
+    Exp,
+    Exp2,
+    Log,
+    Log2,
     Sin,
+    Cos,
+    Sincos,
+    Tan,
+    Asin,
+    Acos,
     Atan,
+
+    Sinh,
+    Cosh,
+    Sincosh,
+    Tanh,
+    Asinh,
+    Acosh,
+    Atanh,
+
+    Erf,
 
     // Binary arithetic operations
     Add,
@@ -76,6 +98,7 @@ enum class ArrayOp {
 
     Minimum,
     Maximum,
+    Atan2,
 
     // Binary bit/mask operations
     And,
@@ -448,15 +471,51 @@ inline void disable_int_arithmetic(ArrayBinding &b) {
 template <typename T> void bind_float_arithmetic(ArrayBinding &b) {
     b[ArrayOp::TrueDiv] = (void *) +[](const T *a, const T *b, T *c) { new (c) T(*a / *b); };
     b[ArrayOp::Sqrt] = (void *) +[](const T *a, T *b) { new (b) T(sqrt(*a)); };
+    b[ArrayOp::Rcp] = (void *) +[](const T *a, T *b) { new (b) T(rcp(*a)); };
+    b[ArrayOp::Rsqrt] = (void *) +[](const T *a, T *b) { new (b) T(rsqrt(*a)); };
+    b[ArrayOp::Cbrt] = (void *) +[](const T *a, T *b) { new (b) T(cbrt(*a)); };
+    b[ArrayOp::Exp] = (void *) +[](const T *a, T *b) { new (b) T(exp(*a)); };
+    b[ArrayOp::Exp2] = (void *) +[](const T *a, T *b) { new (b) T(exp2(*a)); };
+    b[ArrayOp::Log] = (void *) +[](const T *a, T *b) { new (b) T(log(*a)); };
+    b[ArrayOp::Log2] = (void *) +[](const T *a, T *b) { new (b) T(log2(*a)); };
     b[ArrayOp::Sin] = (void *) +[](const T *a, T *b) { new (b) T(sin(*a)); };
+    b[ArrayOp::Cos] = (void *) +[](const T *a, T *b) { new (b) T(cos(*a)); };
+    b[ArrayOp::Sincos] = (void *) +[](const T *a, T *b, T *c) {
+        auto [sa, ca] = sincos(*a);
+        new (b) T(std::move(sa));
+        new (c) T(std::move(ca));
+    };
+    b[ArrayOp::Tan] = (void *) +[](const T *a, T *b) { new (b) T(tan(*a)); };
+    b[ArrayOp::Asin] = (void *) +[](const T *a, T *b) { new (b) T(asin(*a)); };
+    b[ArrayOp::Acos] = (void *) +[](const T *a, T *b) { new (b) T(acos(*a)); };
     b[ArrayOp::Atan] = (void *) +[](const T *a, T *b) { new (b) T(atan(*a)); };
+    b[ArrayOp::Sinh] = (void *) +[](const T *a, T *b) { new (b) T(sinh(*a)); };
+    b[ArrayOp::Cosh] = (void *) +[](const T *a, T *b) { new (b) T(cosh(*a)); };
+    b[ArrayOp::Sincosh] = (void *) +[](const T *a, T *b, T *c) {
+        auto [sa, ca] = sincosh(*a);
+        new (b) T(std::move(sa));
+        new (c) T(std::move(ca));
+    };
+    b[ArrayOp::Tanh] = (void *) +[](const T *a, T *b) { new (b) T(tanh(*a)); };
+    b[ArrayOp::Asinh] = (void *) +[](const T *a, T *b) { new (b) T(asinh(*a)); };
+    b[ArrayOp::Acosh] = (void *) +[](const T *a, T *b) { new (b) T(acosh(*a)); };
+    b[ArrayOp::Atanh] = (void *) +[](const T *a, T *b) { new (b) T(atanh(*a)); };
+    b[ArrayOp::Erf] = (void *) +[](const T *a, T *b) { new (b) T(erf(*a)); };
+    b[ArrayOp::Atan2] = (void *) +[](const T *a, const T *b, T *c) {
+        new (c) T(atan2(*a, *b));
+    };
 }
 
 inline void disable_float_arithmetic(ArrayBinding &b) {
-    b[ArrayOp::TrueDiv] = DRJIT_OP_NOT_IMPLEMENTED;
-    b[ArrayOp::Sqrt] = DRJIT_OP_NOT_IMPLEMENTED;
-    b[ArrayOp::Sin] = DRJIT_OP_NOT_IMPLEMENTED;
-    b[ArrayOp::Atan] = DRJIT_OP_NOT_IMPLEMENTED;
+    b[ArrayOp::TrueDiv] = b[ArrayOp::Sqrt] = b[ArrayOp::Rcp] =
+    b[ArrayOp::Rsqrt] = b[ArrayOp::Cbrt] = b[ArrayOp::Exp] =
+    b[ArrayOp::Exp2] = b[ArrayOp::Log] = b[ArrayOp::Log2] =
+    b[ArrayOp::Sin] = b[ArrayOp::Cos] = b[ArrayOp::Sincos] =
+    b[ArrayOp::Tan] = b[ArrayOp::Asin] = b[ArrayOp::Acos] =
+    b[ArrayOp::Atan] = b[ArrayOp::Sinh] = b[ArrayOp::Cosh] =
+    b[ArrayOp::Sincosh] = b[ArrayOp::Tanh] = b[ArrayOp::Asinh] =
+    b[ArrayOp::Acosh] = b[ArrayOp::Atanh] = b[ArrayOp::Erf] =
+    b[ArrayOp::Atan2] = DRJIT_OP_NOT_IMPLEMENTED;
 }
 
 template <typename T>

@@ -153,7 +153,7 @@ ArrayMeta meta_get(nb::handle h) noexcept {
         long long result = PyLong_AsLongLongAndOverflow(h.ptr(), &overflow);
 
         if (result == -1) {
-            if (overflow == 0) {
+            if (overflow) {
                 PyErr_Clear();
                 m.is_valid = false;
             } else {

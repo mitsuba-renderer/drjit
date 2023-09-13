@@ -1,6 +1,7 @@
 import drjit as dr
 import pytest
 import sys
+import math
 
 def make_mystruct(t):
     class MyStruct:
@@ -10,7 +11,7 @@ def make_mystruct(t):
         DRJIT_STRUCT = { 'x': t, 'y': t }
     return MyStruct
 
-@pytest.test_arrays("is_diff,-mask,-shape=()")
+@pytest.test_arrays('is_diff,-mask,-shape=()')
 def test01_enable_grad(t):
     a = t(1)
 
@@ -63,7 +64,7 @@ def test01_enable_grad(t):
            dr.grad_enabled(a.x) and \
            dr.grad_enabled(a.y)
 
-@pytest.test_arrays("is_diff,float,-shape=()")
+@pytest.test_arrays('is_diff,float,-shape=()')
 def test02_detach(t):
     a = t(1)
     dr.enable_grad(a)
@@ -84,7 +85,7 @@ def test02_detach(t):
     assert dr.grad_enabled(a)
     assert not dr.grad_enabled(c)
 
-@pytest.test_arrays("is_diff,float,shape=(*)")
+@pytest.test_arrays('is_diff,float,shape=(*)')
 def test03_set_grad(t):
     a = t([1, 2, 3])
     dr.set_grad(a, 2.0) # AD tracking not yet enabled
@@ -101,7 +102,7 @@ def test03_set_grad(t):
     g = dr.grad(a)
     assert len(g) == 3 and dr.allclose(g, [3, 4, 5])
 
-    with pytest.raises(RuntimeError, match="attempted to store a gradient of size 2 into AD variable"):
+    with pytest.raises(RuntimeError, match='attempted to store a gradient of size 2 into AD variable'):
         dr.set_grad(a, t(1, 2))
 
     a = t(1)
@@ -137,7 +138,7 @@ def test03_set_grad(t):
     assert dr.all(b.x == c.x)
     assert dr.all(b.y == c.y)
 
-@pytest.test_arrays("is_diff,float,shape=(*)")
+@pytest.test_arrays('is_diff,float,shape=(*)')
 def test04_accum_grad(t):
     a = t([1, 2, 3])
     dr.accum_grad(a, 2) # AD tracking not yet enabled
@@ -158,7 +159,7 @@ def test04_accum_grad(t):
     assert len(a) == 1 and dr.allclose(g, 6)
 
 
-@pytest.test_arrays("is_diff,float,shape=(*)")
+@pytest.test_arrays('is_diff,float,shape=(*)')
 def test05_set_label(t):
     a = t(1.0)
     b = [t(1.0), t(2.0)]
@@ -183,44 +184,211 @@ def test05_set_label(t):
     assert dr.label(d.x) == 'd_x'
     assert dr.label(d.y) == 'd_y'
 
-    with pytest.raises(TypeError, match="incompatible function arguments"):
+    with pytest.raises(TypeError, match='incompatible function arguments'):
         dr.set_label(a, 'aa', b=b)
 
-#@pytest.test_arrays("is_diff,float,shape=(*)")
-#def test06_forward_to(t):
-#    a = t(1.0)
-#    dr.enable_grad(a)
-#    b = a * a * 2
-#    c = a * 2
-#    dr.set_grad(a, 1.0)
-#    d = t(4.0) # some detached variable
-#    grad_b, grad_c, grad_d = dr.forward_to(b, c, d)
-#    assert dr.allclose(dr.grad(a), 0.0)
-#    assert dr.allclose(grad_b, 4.0)
-#    assert dr.allclose(grad_c, 2.0)
-#    assert dr.allclose(grad_d, 0.0)
-#
-#    with pytest.raises(TypeError, matches="AD flags should be passed via the"):
-#        dr.forward_to(b, c, dr.ADFlag.Default)
-#
-#    # Error because the input isn't attached to the AD graph
-#    with pytest.raises(TypeError) as ei:
-#        dr.forward_to(m.Float(2.0))
-#    assert "the argument does not depend on the input" in str(ei.value)
-#
-#    # Error because the input isn't a diff array
-#    with pytest.raises(TypeError) as ei:
-#        dr.forward_to(dr.detached_t(m.Float)(2.0))
-#    assert "expected a differentiable array type" in str(ei.value)
-#
-#    # Error because the input isn't a drjit array
-#    with pytest.raises(TypeError) as ei:
-#        dr.forward_to([2.0])
-#    assert "expected a Dr.JIT array type" in str(ei.value)
-#
-#    # Trying to call with a different flag
-#    dr.set_grad(a, 1.0)
-#    b = a * a * 2
-#    grad_b = dr.forward_to(b, flags=dr.ADFlag.ClearInterior)
-#    assert dr.allclose(dr.grad(a), 1.0)
-#    assert dr.allclose(grad_b, 4.0)
+@pytest.test_arrays('is_diff,float,shape=(*)')
+def test06_forward_to(t):
+  a = t(1.0)
+  dr.enable_grad(a)
+  b = a * a * 2
+  c = a * 2
+  dr.set_grad(a, 1.0)
+  d = t(4.0) # some detached variable
+  grad_b, grad_c, grad_d = dr.forward_to(b, c, d)
+  assert dr.allclose(dr.grad(a), 0.0)
+  assert dr.allclose(grad_b, 4.0)
+  assert dr.allclose(grad_c, 2.0)
+  assert dr.allclose(grad_d, 0.0)
+  dr.forward_to(b, c, d, dr.ADFlag.Default)
+
+  # Error because the input isn't attached to the AD graph
+  with pytest.raises(RuntimeError, match='argument does not depend on the input'):
+      dr.forward_to(t(1.0))
+
+  dr.forward_to(t(1.0), flags=dr.ADFlag.Default | dr.ADFlag.PermitNoGrad)
+
+  # Error because the input isn't a diff array
+  with pytest.raises(RuntimeError, match='argument does not depend on the input'):
+      dr.forward_to(dr.detached_t(t)(1.0))
+
+  # Trying to call with a different flag
+  dr.set_grad(a, 1.0)
+  b = a * a * 2
+  grad_b = dr.forward_to(b, flags=dr.ADFlag.ClearInterior)
+  assert dr.allclose(dr.grad(a), 1.0)
+  assert dr.allclose(grad_b, 4.0)
+
+@pytest.test_arrays('is_diff,float,shape=(*)')
+def test07_forward_from(t):
+    a = t(1.0)
+
+    with pytest.raises(RuntimeError, match='argument does not depend on the input'):
+        dr.forward_from(a)
+
+    dr.enable_grad(a)
+    b = a * a * 2
+    dr.forward_from(a)
+    assert dr.allclose(dr.grad(a), 0.0)
+    assert dr.allclose(dr.grad(b), 4.0)
+
+    b = a * a * 2
+    dr.forward_from(a, flags=dr.ADFlag.ClearInterior)
+    assert dr.allclose(dr.grad(a), 1.0)
+    assert dr.allclose(dr.grad(b), 4.0)
+
+    # Interior gradients are cleared, forwarding again will accumulate gradients
+    dr.forward_from(a, flags=dr.ADFlag.ClearEdges)
+    assert dr.allclose(dr.grad(b), 8.0)
+
+    # Edges are cleared, forwarding again will do nothing
+    dr.forward_from(a, flags=dr.ADFlag.ClearEdges)
+    assert dr.allclose(dr.grad(a), 1.0)
+    assert dr.allclose(dr.grad(b), 8.0)
+
+@pytest.test_arrays('is_diff,float,shape=(*)')
+def test08_backward_to(t):
+    with pytest.raises(RuntimeError, match='argument does not depend on the input'):
+        dr.backward_to(1.0)
+
+    a = t(1.0)
+
+    with pytest.raises(RuntimeError, match='argument does not depend on the input'):
+        dr.backward_to(a)
+
+    b = t(3.0)
+    dr.enable_grad(a, b)
+    c = a * b * 2
+
+    dr.set_grad(c, 1.0)
+    dr.backward_to(a, flags=dr.ADFlag.ClearVertices)
+    assert dr.allclose(dr.grad(a), 6.0)
+    assert dr.allclose(dr.grad(b), 0.0)
+    assert dr.allclose(dr.grad(c), 0.0)
+
+    dr.set_grad(c, 1.0)
+    dr.backward_to(a, b, flags=dr.ADFlag.ClearVertices)
+    assert dr.allclose(dr.grad(a), 12.0) # accumulates
+    assert dr.allclose(dr.grad(b), 2.0)
+    assert dr.allclose(dr.grad(c), 0.0)
+
+
+@pytest.test_arrays('is_diff,float,shape=(*)')
+def test09_backward_from(t):
+    a = t(1.0)
+
+    with pytest.raises(RuntimeError, match='argument does not depend on the input'):
+        dr.backward_from(a)
+
+    dr.enable_grad(a)
+    b = a * a * 2
+    dr.backward_from(b)
+    assert dr.allclose(dr.grad(a), 4.0)
+    assert dr.allclose(dr.grad(b), 0.0)
+
+    a = t(1.0)
+    dr.enable_grad(a)
+    if '64' in t.__name__:
+        Array3f = getattr(sys.modules[t.__module__], 'Array3f64')
+    else:
+        Array3f = getattr(sys.modules[t.__module__], 'Array3f')
+
+    c = Array3f(a)
+    dr.backward_from(c)
+    print(dr.grad(a))
+    assert dr.allclose(dr.grad(a), 3.0)
+
+@pytest.test_arrays('is_diff,float,shape=(*)')
+def test10_forward_to_reuse(t):
+    a, b, c = t(1), t(2), t(3)
+    dr.enable_grad(a, b, c)
+    dr.set_grad(a, 10)
+    dr.set_grad(b, 100)
+    dr.set_grad(c, 1000)
+
+    d, e, f = a + b, a + c, b + c
+    g, h, i = d*d, e*e, f*f
+
+    for k in range(2):
+        for j, v in enumerate([g, h, i]):
+            dr.set_grad(v, 0)
+            dr.forward_to(v, flags=dr.ADFlag.ClearInterior)
+            assert v == [9, 16, 25][j]
+            assert dr.grad(v) == [660, 8080, 11000][j]
+            assert dr.grad([g, h, i][(j + 1)%3]) == 0
+            assert dr.grad([g, h, i][(j + 2)%3]) == 0
+            dr.set_grad(v, t())
+
+@pytest.test_arrays('is_diff,float,shape=(*)')
+def test11_backward_to_reuse(t):
+    a, b, c = t(1), t(2), t(3)
+    dr.enable_grad(a, b, c)
+
+    d, e, f = a + b, a + c, b + c
+    g, h, i = d*d, e*e, f*f
+
+    dr.set_grad(g, 10)
+    dr.set_grad(h, 100)
+    dr.set_grad(i, 1000)
+
+    for k in range(2):
+        for j, v in enumerate([a, b, c]):
+            dr.backward_to(v, flags=dr.ADFlag.ClearInterior)
+            assert dr.grad(v) == [860, 10060, 10800][j]
+            assert dr.grad([a, b, c][(j + 1)%3]) == 0
+            assert dr.grad([a, b, c][(j + 2)%3]) == 0
+            dr.set_grad(v, t())
+
+counter = 12
+
+def std_test(name, func, f_in, f_out, grad_out):
+    global counter
+
+    if not isinstance(f_in, tuple):
+        f_in = (f_in, )
+
+    def test_func(t):
+        args = tuple(t(v) for v in f_in)
+        dr.enable_grad(args)
+        rv = func(*args)
+        assert dr.allclose(rv, f_out)
+        dr.backward_from(rv)
+        assert dr.allclose(dr.grad(args), grad_out)
+
+    query = pytest.test_arrays('is_diff,float,shape=(*)')
+    test_func_param = query(test_func)
+
+    globals()[f'test{counter:02}_op_{name}'] = test_func_param
+    counter += 1
+
+# Spot-check various builtin operations
+std_test('neg', lambda a: -a, 3, -3, (-1))
+std_test('add', lambda a, b: a + b, (2, 3), 5, (1, 1))
+std_test('sub', lambda a, b: a - b, (2, 3), -1, (1, -1))
+std_test('mul', lambda a, b: a * b, (2, 3), 6, (3, 2))
+std_test('div', lambda a, b: a / b, (2, 3), 2 / 3, (1 / 3, -2 / 9))
+std_test('fma', lambda a, b, c: dr.fma(a, b, c), (3, 7, 11), 32, (7, 3, 1))
+std_test('abs_pos', lambda a: abs(a), 3, 3, 1)
+std_test('abs_neg', lambda a: abs(a), -3, 3, -1)
+std_test('rcp', lambda a: dr.rcp(a), 3, 1/3, -1/9)
+std_test('rsqrt', lambda a: dr.rsqrt(a), 3, 1/dr.sqrt(3), -1/(6*dr.sqrt(3)))
+std_test('cbrt', lambda a: dr.cbrt(a), 3, 3**(1/3), 1/(3* 3**(2/3)))
+std_test('erf', lambda a: dr.erf(a), .2, math.erf(.2), 2*math.exp(-.2**2)/math.sqrt(math.pi))
+std_test('log', lambda a: dr.log(a), 2, math.log(2), .5)
+std_test('log2', lambda a: dr.log2(a), 2, math.log2(2), 1/(2*math.log(2)))
+std_test('exp', lambda a: dr.exp(a), 2, math.exp(2), math.exp(2))
+std_test('exp2', lambda a: dr.exp2(a), 2, math.exp2(2), 4*math.log(2))
+
+std_test('sin', lambda a: dr.sin(a), 1, math.sin(1), math.cos(1))
+std_test('cos', lambda a: dr.cos(a), 1, math.cos(1), -math.sin(1))
+std_test('tan', lambda a: dr.tan(a), 1, math.tan(1), 1/math.cos(1)**2)
+std_test('asin', lambda a: dr.asin(a), .5, math.asin(.5), 1/math.sqrt(1 - .5**2))
+std_test('acos', lambda a: dr.acos(a), .5, math.acos(.5), -1/math.sqrt(1 - .5**2))
+std_test('atan', lambda a: dr.atan(a), .5, math.atan(.5), 1/(1 + .5**2))
+
+std_test('sinh', lambda a: dr.sinh(a), 1, math.sinh(1), math.cosh(1))
+std_test('cosh', lambda a: dr.cosh(a), 1, math.cosh(1), math.sinh(1))
+std_test('tanh', lambda a: dr.tanh(a), 1, math.tanh(1), 1/math.cosh(1)**2)
+std_test('asinh', lambda a: dr.asinh(a), .5, math.asinh(.5), 1/math.sqrt(1 + .5**2))
+std_test('acosh', lambda a: dr.acosh(a), 1.5, math.acosh(1.5), 1/math.sqrt(1.5**2 - 1))
+std_test('atanh', lambda a: dr.atanh(a), .5, math.atanh(.5), 1/(1 - .5**2))

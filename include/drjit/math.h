@@ -334,21 +334,6 @@ template <typename Value, bool Native> std::pair<Value, Value> sincos(const Valu
     }
 }
 
-template <typename Value, bool Native> Value csc(const Value &x) {
-    if constexpr (is_detected_v<detail::has_csc, Value> && Native)
-        return x.csc_();
-    else
-        return rcp(sin(x));
-}
-
-template <typename Value, bool Native> Value sec(const Value &x) {
-    if constexpr (is_detected_v<detail::has_sec, Value> && Native)
-        return x.sec_();
-    else
-        return rcp(cos(x));
-
-}
-
 template <typename Value, bool Native> Value tan(const Value &x) {
     if constexpr (is_detected_v<detail::has_tan, Value> && Native)
         return x.tan_();
@@ -359,6 +344,8 @@ template <typename Value, bool Native> Value tan(const Value &x) {
 template <typename Value, bool Native> Value cot(const Value &x) {
     if constexpr (is_detected_v<detail::has_cot, Value> && Native)
         return x.cot_();
+    else if constexpr (is_detected_v<detail::has_tan, Value> && Native)
+        return rcp(x.tan_());
     else
         return detail::tancot<false>(x);
 }
@@ -1213,10 +1200,6 @@ template <typename Value, bool Native> Value tanh(const Value &x) {
         return select(mask_big, r_big, r_small);
     }
 }
-
-template <typename Value> Value csch(const Value &a) { return rcp(sinh(a)); }
-template <typename Value> Value sech(const Value &a) { return rcp(cosh(a)); }
-template <typename Value> Value coth(const Value &a) { return rcp(tanh(a)); }
 
 template <typename Value, bool Native> Value asinh(const Value &x) {
     if constexpr (is_detected_v<detail::has_asinh, Value> && Native) {

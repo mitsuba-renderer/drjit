@@ -53,6 +53,13 @@
 #include <memory>
 
 namespace dr = drjit;
+
+/// Reuse the Buffer class from nanobind
+#define NB_NAMESPACE drjit
+#define NB_NOINLINE DRJIT_NOINLINE
+#include "../ext/nanobind/src/buffer.h"
+using drjit::detail::Buffer;
+
 using dr::ADScope;
 
 // ==========================================================================
@@ -331,13 +338,6 @@ struct Variable {
                 grad = v;
         }
     }
-
-    void assign(const JitVar &v, size_t src_size) {
-        if (size == 1 && src_size != 1)
-            grad = dr::sum(v);
-        else
-            grad = v;
-    }
 };
 
 /// Represents the global state of the AD system
@@ -415,15 +415,13 @@ struct EdgeRef {
     EdgeIndex id;
     ADIndex source;
     ADIndex target;
-    uint64_t counter;
+    uint64_t source_counter;
+    uint64_t target_counter;
 
-    EdgeRef() = default;
-    EdgeRef(EdgeIndex id, ADIndex source, ADIndex target, uint64_t counter)
-    : id(id), source(source), target(target), counter(counter) { }
-
-    bool operator<(const EdgeRef &r) const {
-        return std::tie(counter, id) < std::tie(r.counter, id);
-    }
+    EdgeRef(EdgeIndex id, ADIndex source, ADIndex target,
+            uint64_t source_counter, uint64_t target_counter)
+        : id(id), source(source), target(target),
+          source_counter(source_counter), target_counter(target_counter) { }
 };
 
 /**
@@ -533,93 +531,6 @@ static thread_local LocalState local_state;
 static void ad_free(ADIndex, Variable *);
 static void ad_var_inc_ref_int(ADIndex index, Variable *v) noexcept;
 
-// ==========================================================================
-// Variable prefix (mainly useful for GraphViz visualizations)
-// ==========================================================================
-
-struct PrefixEntry {
-    PrefixEntry *prev;
-    char *value;
-};
-
-static DRJIT_THREAD PrefixEntry *prefix = nullptr;
-
-/// Concatenate two strings with a '/' separator. 's1' may be null.
-char *concat_str(const char *s1, const char *s2) {
-    size_t l1 = s1 ? strlen(s1) : 0,
-           l2 = strlen(s2);
-
-    char *buf = (char *) malloc(l1 + l2 + 2);
-    if (!buf)
-        ad_fail("concat(): memory allocation failed!");
-
-    char *s = buf;
-    if (s1) {
-        memcpy(s, s1, l1);
-        s += l1;
-        *s++ = '/';
-    }
-
-    memcpy(s, s2, l2);
-    s += l2;
-    *s = '\0';
-
-    return buf;
-}
-
-DRJIT_EXPORT void ad_prefix_push(const char *value) {
-    if (strchr(value, '/'))
-        ad_raise("ad_prefix_push(): may not contain a '/' character.");
-
-    PrefixEntry *&p = prefix;
-    p = new PrefixEntry{ p, concat_str(p ? p->value : nullptr, value ) };
-}
-
-DRJIT_EXPORT void ad_prefix_pop() {
-    PrefixEntry *p = prefix;
-    if (p) {
-        prefix = p->prev;
-        free(p->value);
-        delete p;
-    }
-}
-
-Index ad_var_set_label(Index index, const char *label) {
-    uint32_t jit_index = ::jit_index(index),
-             ad_index = ::ad_index(index);
-
-    jit_index = jit_var_set_label(jit_index, label);
-
-    if (ad_index) {
-        std::lock_guard<std::mutex> guard(state.mutex);
-        ad_log("ad_var_set_label(a%u, \"%s\")", ad_index,
-               label ? label : "(null)");
-        Variable *v = state[ad_index];
-
-        if (v->flags & (uint8_t) VariableFlags::FreeLabel)
-            free(v->label);
-
-        v->label = strdup(label);
-        v->flags |= (uint8_t) VariableFlags::FreeLabel |
-                    (uint8_t) VariableFlags::CustomLabel;
-
-        ad_var_inc_ref_int(ad_index, v);
-    }
-
-    return combine(ad_index, jit_index);
-}
-
-const char *ad_var_label(Index index) {
-    uint32_t jit_index = ::jit_index(index),
-             ad_index = ::ad_index(index);
-
-    if (ad_index) {
-        std::lock_guard<std::mutex> guard(state.mutex);
-        return state[ad_index]->label;
-    } else {
-        return jit_var_label(jit_index);
-    }
-}
 
 // ==========================================================================
 // Reference counting and variable cleanup
@@ -747,9 +658,25 @@ void ad_var_dec_ref_impl(Index index) JIT_NOEXCEPT {
 // Variable and edge creation
 // ==========================================================================
 
-/// Allocate a new variable and initialize basic fields
-static std::pair<ADIndex, Variable *> ad_var_new(const char *label, size_t size,
-                                                 VarType type, bool symbolic) {
+/// Concatenate two strings
+char *concat(const char *s1, const char *s2) {
+    size_t l1 = strlen(s1),
+           l2 = strlen(s1);
+
+    char *buf = (char *) malloc(l1 + l2 + 1);
+    if (!buf)
+        ad_fail("concat(): memory allocation failed!");
+    memcpy(buf, s1, l1);
+    memcpy(buf + l1, s2, l2);
+    buf[l1 + l2] = '\0';
+    return buf;
+}
+
+/// Allocate a new variable from the pool
+static std::pair<ADIndex, Variable *> ad_var_new(JitBackend backend,
+                                                 size_t size, VarType type,
+                                                 bool symbolic,
+                                                 const char *label) {
 
     auto &unused = state.unused_variables;
     ADIndex index;
@@ -769,13 +696,13 @@ static std::pair<ADIndex, Variable *> ad_var_new(const char *label, size_t size,
     v->flags = symbolic ? (uint8_t) VariableFlags::Symbolic : (uint8_t) 0;
     v->type = (uint8_t) type;
 
-    PrefixEntry *p = prefix;
-    if (p) {
-        label = concat_str(p->value, label);
+    const char *prefix = jit_prefix(backend);
+    if (prefix) {
+        v->label = concat(prefix, label);
         v->flags |= (uint8_t) VariableFlags::FreeLabel;
+    } else {
+        v->label = (char *) label;
     }
-
-    v->label = (char *) label;
 
     return { index, v };
 }
@@ -920,8 +847,9 @@ DRJIT_NOINLINE Index ad_var_new_impl(const char *label, JitVar &&result,
         }
     }
 
-    auto &&[ad_index, var] = ad_var_new(label, jit_var_size(result.index()),
-                                        jit_var_type(result.index()), symbolic);
+    VarInfo info = jit_set_backend(result.index());
+    auto [ad_index, var] =
+        ad_var_new(info.backend, info.size, info.type, symbolic, label);
 
     if constexpr (N == 0) {
         ad_log("ad_var_new(a%u, label=\"%s\")", ad_index, label);
@@ -1029,7 +957,21 @@ JitIndex ad_grad(Index index) {
     return result.release();
 }
 
-void ad_set_grad(Index index, JitIndex value, bool accum) {
+void ad_clear_grad(Index index) {
+    ADIndex ad_index = ::ad_index(index);
+    if (ad_index == 0)
+        return;
+    ad_log("ad_clear_grad(a%u)", ad_index);
+
+    std::lock_guard<std::mutex> guard(state.mutex);
+    Variable *v = state[ad_index];
+    v->grad = JitVar();
+}
+
+void ad_accum_grad(Index index, JitIndex value) {
+    if (!value)
+        return;
+
     const std::vector<Scope> &scopes = local_state.scopes;
     ADIndex ad_index = ::ad_index(index);
 
@@ -1050,13 +992,48 @@ void ad_set_grad(Index index, JitIndex value, bool accum) {
                  "%zu into AD variable a%u, which has size %zu!",
                  size_in, ad_index, v->size);
 
-    ad_log("ad_set_grad(a%u)", ad_index);
+    ad_log("ad_accum_grad(a%u)", ad_index);
 
-    if (accum)
-        v->accum(value_v, size_in);
-    else
-        v->assign(value_v, size_in);
+    v->accum(value_v, size_in);
 }
+
+Index ad_var_set_label(Index index, const char *label) {
+    uint32_t jit_index = ::jit_index(index),
+             ad_index = ::ad_index(index);
+
+    jit_index = jit_var_set_label(jit_index, label);
+
+    if (ad_index) {
+        std::lock_guard<std::mutex> guard(state.mutex);
+        ad_log("ad_var_set_label(a%u, \"%s\")", ad_index,
+               label ? label : "(null)");
+        Variable *v = state[ad_index];
+
+        if (v->flags & (uint8_t) VariableFlags::FreeLabel)
+            free(v->label);
+
+        VarInfo info = jit_set_backend(jit_index);
+        const char *prefix = jit_prefix(info.backend);
+        if (!prefix || !label) {
+            v->label = label ? strdup(label) : nullptr;
+        } else {
+            v->label = concat(prefix, label);
+        }
+
+        const uint8_t flags = (uint8_t) VariableFlags::FreeLabel |
+                              (uint8_t) VariableFlags::CustomLabel;
+
+        if (label)
+            v->flags |= flags;
+        else
+            v->flags &= ~flags;
+
+        ad_var_inc_ref_int(ad_index, v);
+    }
+
+    return combine(ad_index, jit_index);
+}
+
 
 // ==========================================================================
 // Enqueuing of variables and edges
@@ -1079,7 +1056,8 @@ static void ad_dfs_fwd(std::vector<EdgeRef> &todo, uint32_t index,
 
             Variable *v2 = state[edge.target];
             ad_var_inc_ref_int(edge.target, v2);
-            todo.emplace_back(edge_id, edge.source, edge.target, v2->counter);
+            todo.emplace_back(edge_id, edge.source, edge.target, v->counter, v2->counter);
+
             ad_dfs_fwd(todo, edge.target, v2);
         }
 
@@ -1102,7 +1080,7 @@ static void ad_dfs_bwd(std::vector<EdgeRef> &todo, uint32_t index,
 
             Variable *v2 = state[edge.source];
             ad_var_inc_ref_int(index, v);
-            todo.emplace_back(edge_id, edge.source, edge.target, v->counter);
+            todo.emplace_back(edge_id, edge.source, edge.target, v2->counter, v->counter);
             ad_dfs_bwd(todo, edge.source, v2);
         }
 
@@ -1153,7 +1131,15 @@ void ad_traverse(dr::ADMode mode, uint32_t flags) {
         ad_raise("ad_traverse(): invalid mode specified!");
 
     // Bring the edges into the appropriate order
-    std::sort(todo.begin(), todo.end());
+    std::sort(todo.begin(), todo.end(),
+              [mode](const EdgeRef &a, const EdgeRef &b) {
+                  if (mode == dr::ADMode::Forward)
+                      return std::tie(a.source_counter, a.target_counter) <
+                             std::tie(b.source_counter, b.target_counter);
+                  else
+                      return std::tie(a.target_counter, a.source_counter) >
+                             std::tie(b.target_counter, b.source_counter);
+              });
 
     ad_log("ad_traverse(): processing %zu edges in %s mode ..", todo.size(),
            mode == dr::ADMode::Forward ? "forward" : "backward");
@@ -1425,12 +1411,14 @@ void ad_traverse(dr::ADMode mode, uint32_t flags) {
 // ==========================================================================
 
 struct MaskEdge : Special {
-    MaskEdge(const JitMask &mask, bool negate) : mask(mask), negate(negate) { }
+        MaskEdge(const JitMask &mask, bool negate)
+            : mask(mask), negate(negate) {}
 
-    void backward(Variable *source, const Variable *target, uint32_t) const override {
-        source->accum(!negate ? (target->grad & mask)
-                              : andnot(target->grad, mask),
-                      target->size);
+        void backward(Variable * source, const Variable *target, uint32_t)
+            const override {
+            source->accum(!negate ? (target->grad & mask)
+                                  : andnot(target->grad, mask),
+                          target->size);
     }
 
     void forward(const Variable *source, Variable *target, uint32_t) const override {
@@ -1554,7 +1542,7 @@ Index ad_var_rsqrt(Index i0) {
     if (is_detached(i0)) {
         return result.release();
     } else {
-        JitVar w0 = -dr::sqr(result) * result * scalar(i0, -.5);
+        JitVar w0 = dr::sqr(result) * result * scalar(i0, -.5);
         return ad_var_new("rsqrt", std::move(result), Arg(i0, std::move(w0)));
     }
 }
@@ -1628,43 +1616,7 @@ Index ad_var_tan(Index i0) {
     } else {
         JitVar v0 = JitVar::borrow(jit_index(i0));
         return ad_var_new("tan", std::move(result),
-                          Arg(i0, dr::sqr(dr::sec(v0))));
-    }
-}
-
-Index ad_var_csc(Index i0) {
-    JitVar v0     = JitVar::borrow(jit_index(i0)),
-           result = dr::csc(v0);
-
-    if (is_detached(i0)) {
-        return result.release();
-    } else {
-        JitVar w0 = -result*dr::cot(v0);
-        return ad_var_new("csc", std::move(result), Arg(i0, std::move(w0)));
-    }
-}
-
-Index ad_var_sec(Index i0) {
-    JitVar v0     = JitVar::borrow(jit_index(i0)),
-           result = dr::sec(v0);
-
-    if (is_detached(i0)) {
-        return result.release();
-    } else {
-        JitVar w0 = result*dr::tan(v0);
-        return ad_var_new("sec", std::move(result), Arg(i0, std::move(w0)));
-    }
-}
-
-Index ad_var_cot(Index i0) {
-    JitVar result = JitVar::steal(jit_var_cot(jit_index(i0)));
-
-    if (is_detached(i0)) {
-        return result.release();
-    } else {
-        JitVar v0 = JitVar::borrow(jit_index(i0));
-        return ad_var_new("cot", std::move(result),
-                          Arg(i0, -dr::sqr(dr::csc(v0))));
+                          Arg(i0, dr::sqr(dr::rcp(dr::cos(v0)))));
     }
 }
 
@@ -1699,7 +1651,7 @@ Index ad_var_atan(Index i0) {
         return result.release();
     } else {
         JitVar v0 = JitVar::borrow(jit_index(i0)),
-               w0 = -dr::rcp(dr::fmadd(v0, v0, scalar(i0, 1.0)));
+               w0 = dr::rcp(dr::fmadd(v0, v0, scalar(i0, 1.0)));
         return ad_var_new("atan", std::move(result), Arg(i0, std::move(w0)));
     }
 }
@@ -1807,7 +1759,7 @@ Index ad_var_tanh(Index i0) {
         return result.release();
     } else {
         JitVar v0 = JitVar::borrow(jit_index(i0));
-        return ad_var_new("tanh", std::move(result), Arg(i0, dr::sqr(dr::sech(v0))));
+        return ad_var_new("tanh", std::move(result), Arg(i0, dr::sqr(dr::rcp(dr::cosh(v0)))));
     }
 }
 
@@ -1842,7 +1794,7 @@ Index ad_var_atanh(Index i0) {
         return result.release();
     } else {
         JitVar v0 = JitVar::borrow(jit_index(i0)),
-               w0 = dr::rsqrt(dr::fmadd(-v0, v0, scalar(i0, 1.0)));
+               w0 = dr::rcp(dr::fmadd(-v0, v0, scalar(i0, 1.0)));
         return ad_var_new("atanh", std::move(result), Arg(i0, std::move(w0)));
     }
 }
@@ -1891,15 +1843,13 @@ Index ad_var_select(Index i0, Index i1, Index i2) {
 
     if (is_detached(i1, i2)) {
         return result.release();
-    } else if (jit_var_is_literal(i0) || i1 == i2) {
-        Index out_index = jit_var_is_literal_zero(i0) ? i2 : i1;
+    } else if (jit_var_is_literal(jit_index(i0)) || i1 == i2) {
+        Index out_index = jit_var_is_literal_zero(jit_index(i0)) ? i2 : i1;
 
-        ad_log("ad_var_select(a%u <- a%u, a%u, a%u): simplified.",
-               out_index, ad_index(i0), ad_index(i1), ad_index(i2));
+        ad_log("ad_var_select(a%u <- r%u, a%u, a%u): simplified.",
+               ad_index(out_index), jit_index(i0), ad_index(i1), ad_index(i2));
 
-        std::lock_guard<std::mutex> guard(state.mutex);
-        ad_var_inc_ref_int(out_index, state[out_index]);
-        return out_index;
+        return ad_var_inc_ref_impl(out_index);
     } else {
         JitMask m = JitMask::borrow(i0);
         return ad_var_new("select", std::move(result),
@@ -1973,4 +1923,226 @@ Index ad_var_cast(Index i0, VarType vt) {
     } else {
         ad_raise("Case not yet handled.");
     }
+}
+
+// ==========================================================================
+// Debugging: GraphViz, variable listing
+// ==========================================================================
+
+static Buffer buffer;
+
+static const char *type_name_short[(int) VarType::Count] {
+    "void ", "msk", "i8",  "u8",  "i16", "u16", "i32",
+    "u32", "i64", "u64", "ptr", "f16", "f32", "f64"
+};
+
+
+const char *ad_var_whos() {
+    std::lock_guard<std::mutex> guard(state.mutex);
+
+    std::vector<uint32_t> indices;
+    for (size_t i = 1; i < state.variables.size(); ++i) {
+        if (state.variables[i].ref_count == 0)
+            continue;
+        indices.emplace_back(i);
+    }
+
+    std::sort(indices.begin(), indices.end(), [](uint32_t i0, uint32_t i1) {
+        return state[i0]->counter < state[i1]->counter;
+    });
+
+    buffer.clear();
+    buffer.put("\n"
+               "  ID        Type        Size     Refs    Label\n"
+               "  =========================================================\n");
+    for (uint32_t id : indices) {
+        const Variable *v = state[id];
+        buffer.fmt("  %-9i %-3s %12zu %8u    %s\n", id, type_name_short[v->type],
+                   v->size, v->ref_count, v->label ? v->label : "");
+    }
+    buffer.put("  =========================================================\n");
+    return buffer.get();
+}
+
+const char *ad_var_graphviz() {
+    std::lock_guard<std::mutex> guard(state.mutex);
+
+    std::vector<uint32_t> indices;
+    for (size_t i = 1; i < state.variables.size(); ++i) {
+        if (state.variables[i].ref_count == 0)
+            continue;
+        indices.emplace_back(i);
+    }
+
+    std::sort(indices.begin(), indices.end(), [](uint32_t i0, uint32_t i1) {
+        return state[i0]->counter < state[i1]->counter;
+    });
+
+    buffer.clear();
+    buffer.put("digraph {\n"
+               "    rankdir=BT;\n"
+               "    graph [dpi=50 fontname=Consolas];\n"
+               "    node [shape=record fontname=Consolas];\n"
+               "    edge [fontname=Consolas];\n");
+
+    size_t current_hash = 0, current_depth = 1;
+    std::hash<std::string> hasher;
+
+    for (uint32_t index : indices) {
+        const Variable *v = state[index];
+        const char *label = v->label,
+                   *label_without_prefix = label;
+
+        size_t prefix_hash = 0;
+        if (label) {
+            const char *sep = strrchr(label, '/');
+            if (sep) {
+                prefix_hash = hasher(std::string(label, sep));
+                label_without_prefix = sep + 1;
+            }
+        } else {
+            label = label_without_prefix = "(unnamed)";
+        }
+
+        if (prefix_hash != current_hash) {
+            for (size_t i = current_depth - 1; i > 0; --i) {
+                buffer.put(' ', 4 * i);
+                buffer.put("}\n");
+            }
+
+            current_hash = prefix_hash;
+            current_depth = 1;
+
+            const char *p = label;
+            while (true) {
+                const char *pn = p ? strchr(p, '/') : nullptr;
+                if (!pn)
+                    break;
+
+                buffer.put(' ', 4 * current_depth);
+                buffer.fmt("subgraph cluster_%08llx {\n",
+                           (unsigned long long) hasher(std::string(label, pn)));
+                current_depth++;
+                buffer.put(' ', 4 * current_depth);
+                buffer.put("label=\"");
+                buffer.put(p, pn - p);
+                buffer.put("\";\n");
+                buffer.put(' ', 4 * current_depth);
+                buffer.put("color=gray95;\n");
+                buffer.put(' ', 4 * current_depth);
+                buffer.put("style=filled;\n");
+
+                p = pn + 1;
+            }
+        }
+
+        buffer.put(' ', 4 * current_depth);
+        buffer.put_uint32((uint32_t) index);
+        buffer.put(" [label=\"{");
+
+        auto print_escape = [&](const char *s) {
+            char c;
+            while (c = *s++, c != '\0') {
+                bool escape = false;
+                switch (c) {
+                    case '$':
+                        if (s[0] == 'n') {
+                            s++;
+                            buffer.put("\\l");
+                            continue;
+                        }
+                        break;
+
+                    case '\n':
+                        buffer.put("\\l");
+                        continue;
+
+                    case '"':
+                    case '|':
+                    case '{':
+                    case '}':
+                    case '<':
+                    case '>':
+                        escape = true;
+                        break;
+                    default:
+                        break;
+                }
+                if (escape)
+                    buffer.put('\\');
+                buffer.put(c);
+            }
+        };
+
+        const char *color = nullptr;
+        bool labeled = false;
+        if (label_without_prefix && strlen(label_without_prefix) != 0) {
+            if (v->flags & VariableFlags::CustomLabel) {
+                buffer.put("Label: \\\"");
+                labeled = true;
+            }
+            print_escape(label_without_prefix);
+            if (v->flags & VariableFlags::CustomLabel)
+                buffer.put("\\\"");
+        }
+
+        if (v->next_bwd == 0)
+            color = "salmon";
+        else if (v->next_fwd == 0)
+            color = "lightblue2";
+        if (labeled && !color)
+            color = "wheat";
+        if (v->grad.size() > 0)
+            color = "yellowgreen";
+
+        if (v->flags & VariableFlags::Symbolic)
+            buffer.put("|{Symbolic}");
+
+        buffer.fmt("|{Type: %s|Size: %zu}|{a%u|Refs: %u}}\"",
+            type_name_short[v->type], v->size,
+            index, (uint32_t) v->ref_count);
+
+        if (color)
+            buffer.fmt(" fillcolor=%s style=filled", color);
+        buffer.put("];\n");
+    }
+
+    for (size_t i = current_depth - 1; i > 0; --i) {
+        buffer.put(' ', 4 * i);
+        buffer.put("}\n");
+    }
+
+    for (uint32_t index : indices) {
+        const Variable *v = state[index];
+
+        uint32_t edge = v->next_bwd, edge_count = 0;
+        while (edge) {
+            edge = state.edges[edge].next_bwd;
+            edge_count++;
+        }
+        edge = v->next_bwd;
+        uint32_t edge_ctr = edge_count;
+        while (edge) {
+            const Edge &e = state.edges[edge];
+            if (edge_count == 1)
+                buffer.fmt("    %i -> %i%s;\n", e.target, e.source,
+                           e.special ? " [color=red]" : "");
+            else
+                buffer.fmt("    %i -> %i [label=\" %u\"%s];\n", e.target, e.source,
+                           edge_ctr--, e.special ? " color=red" : "");
+            edge = e.next_bwd;
+        }
+    }
+
+    buffer.put(
+        "    subgraph cluster_legend {\n"
+        "        label=\"Legend\";\n"
+        "        l4 [style=filled fillcolor=yellowgreen label=\"Gradient present\"];\n"
+        "        l3 [style=filled fillcolor=salmon label=\"Input\"];\n"
+        "        l2 [style=filled fillcolor=lightblue2 label=\"Output\"];\n"
+        "        l1 [style=filled fillcolor=wheat label=\"Labeled\"];\n"
+        "    }\n"
+        "}\n");
+
+    return buffer.get();
 }

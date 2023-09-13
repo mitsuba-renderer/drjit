@@ -18,8 +18,8 @@ is_struct_v(arg, /)
 Check if the input is a Dr.Jit-compatible data structure
 
 Custom data structures can be made compatible with various Dr.Jit operations by
-specifying a ``DRJIT_STRUCT`` member. See the section on :ref:`custom data
-structure <custom-struct>` for details. This type trait can be used to check
+specifying a ``DRJIT_STRUCT`` member. See the section on :ref:`Pytrees
+<pytrees>` for details. This type trait can be used to check
 for the existence of such a field.
 
 Args:
@@ -810,6 +810,19 @@ Args:
 Returns:
     float | drjit.ArrayBase: Base-2 exponential of the input)";
 
+static const char *doc_erf = R"(
+erf(arg, /)
+Error function approximation.
+
+See the section on :ref:`transcendental function approximations
+<transcendental-accuracy>` for details regarding accuracy.
+
+Args:
+    arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+Returns:
+    float | drjit.ArrayBase: Sine of the input)";
+
 static const char *doc_sin = R"(
 sin(arg, /)
 Sine approximation based on the CEPHES library.
@@ -1098,9 +1111,8 @@ particular, ``dtype`` can be:
   shape. When ``shape`` is an integer, the function creates a rank-1 tensor of
   the specified size.
 
-- A :ref:`custom data structure <custom-struct>`. In this case,
-  :py:func:`drjit.zero()` will invoke itself recursively to zero-initialize
-  each field of the data structure.
+- A :ref:`Pytree <pytrees>`. In this case, :py:func:`drjit.zero()` will invoke
+  itself recursively to zero-initialize each field of the data structure.
 
 - A scalar Python type like ``int``, ``float``, or ``bool``. The ``shape``
   parameter is ignored in this case.
@@ -1110,7 +1122,7 @@ initialized to ``False`` as opposed to zero.
 
 Args:
     dtype (type): Desired Dr.Jit array type, Python scalar type, or
-      :ref:`custom data structure <custom-struct>`.
+      :ref:`Pytree <pytrees>`.
     shape (Sequence[int] | int): Shape of the desired array
 
 Returns:
@@ -1135,9 +1147,8 @@ particular, ``dtype`` can be:
   shape. When ``shape`` is an integer, the function creates a rank-1 tensor of
   the specified size.
 
-- A :ref:`custom data structure <custom-struct>`. In this case,
-  :py:func:`drjit.ones()` will invoke itself recursively to initialize
-  each field of the data structure.
+- A :ref:`Pytree <pytrees>`. In this case, :py:func:`drjit.ones()` will invoke
+  itself recursively to initialize each field of the data structure.
 
 - A scalar Python type like ``int``, ``float``, or ``bool``. The ``shape``
   parameter is ignored in this case.
@@ -1147,7 +1158,7 @@ initialized to ``True`` as opposed to one.
 
 Args:
     dtype (type): Desired Dr.Jit array type, Python scalar type, or
-      :ref:`custom data structure <custom-struct>`.
+      :ref:`Pytree <pytrees>`.
     shape (Sequence[int] | int): Shape of the desired array
 
 Returns:
@@ -1173,16 +1184,15 @@ particular, ``dtype`` can be:
   shape. When ``shape`` is an integer, the function creates a rank-1 tensor of
   the specified size.
 
-- A :ref:`custom data structure <custom-struct>`. In this case,
-  :py:func:`drjit.full()` will invoke itself recursively to initialize
-  each field of the data structure.
+- A :ref:`Pytree <pytrees>`. In this case, :py:func:`drjit.full()` will invoke
+  itself recursively to initialize each field of the data structure.
 
 - A scalar Python type like ``int``, ``float``, or ``bool``. The ``shape``
   parameter is ignored in this case.
 
 Args:
     dtype (type): Desired Dr.Jit array type, Python scalar type, or
-      :ref:`custom data structure <custom-struct>`.
+      :ref:`Pytree <pytrees>`.
     value (object): An instance of the underlying scalar type
       (``float``/``int``/``bool``, etc.) that will be used to initialize the
       array contents.
@@ -1215,9 +1225,8 @@ The ``dtype`` parameter can be used to request:
   shape. When ``shape`` is an integer, the function creates a rank-1 tensor of
   the specified size.
 
-- A :ref:`custom data structure <custom-struct>`. In this case,
-  :py:func:`drjit.empty()` will invoke itself recursively to allocate memory
-  for each field of the data structure.
+- A :ref:`Pytree <pytrees>`. In this case, :py:func:`drjit.empty()` will invoke
+  itself recursively to allocate memory for each field of the data structure.
 
 - A scalar Python type like ``int``, ``float``, or ``bool``. The ``shape``
   parameter is ignored in this case, and the function returns a
@@ -1226,7 +1235,7 @@ The ``dtype`` parameter can be used to request:
 
 Args:
     dtype (type): Desired Dr.Jit array type, Python scalar type, or
-      :ref:`custom data structure <custom-struct>`.
+      :ref:`Pytree <pytrees>`.
     shape (Sequence[int] | int): Shape of the desired array
 
 Returns:
@@ -1625,32 +1634,6 @@ Returns:
     type: Result of the conversion as described above.
 )";
 
-static const char *doc_leaf_array_t = R"(
-Extracts a leaf array type underlying a Python object tree, with a preference
-for differentiable arrays.
-
-This function implements the following set of behaviors:
-
-1. When the input isn't a type, it returns ``leaf_array_t(type(arg))``.
-
-2. When invoked with a Dr.Jit array type, returns the lowest-level array type
-   underlying a potentially nested array.
-
-3. When invoked with a sequence, mapping or custom data structure made of Dr.Jit arrays,
-   examines underlying Dr.Jit array types and returns the lowest-level array type with
-   a preference for differentiable arrays and floating points arrays.
-   E.g. when passing a list containing arrays of type :py:class:`drjit.cuda.ad.Float` and :py:class:`drjit.cuda.UInt`,
-   the function will return :py:class:`drjit.cuda.ad.Float`.
-
-4. Otherwise returns ``None``.
-
-Args:
-    arg (object): An arbitrary Python object
-
-Returns:
-    type: Result of the extraction as described above.
-)";
-
 static const char *doc_expr_t = R"(
 Computes the type of an arithmetic expression involving the provided Dr.Jit
 arrays (instances or types), or builtin Python objects.
@@ -1670,7 +1653,7 @@ addition of several Dr.Jit array:
 
 Args:
     *args (tuple): A variable-length list of Dr.Jit arrays, builtin Python
-      objects, or types.
+          objects, or types.
 
 Returns:
     type: Result type of an arithmetic expression involving the provided variables.
@@ -1736,9 +1719,8 @@ This operation can be used in the following different ways:
        index = dr.cuda.UInt([...]) # Note: negative indices are not permitted
        result = dr.gather(dtype=type(source), source=source, index=index)
 
-2. When ``dtype`` is a more complex type (e.g. a :ref:`custom source structure
-   <custom-struct>`, nested Dr.Jit array, tuple, list, dictionary, etc.), the
-   behavior depends:
+2. When ``dtype`` is a more complex type (e.g. a nested Dr.Jit array or :ref:`Pytree
+   <pytrees>`), the behavior depends:
 
    - When ``type(source)`` matches ``dtype``, the the gather operation threads
      through entries and invokes itself recursively. For example, the
@@ -1759,6 +1741,9 @@ This operation can be used in the following different ways:
              dr.gather(dr.cuda.Float, source.y, index),
              dr.gather(dr.cuda.Float, source.z, index)
          )
+
+     A similar recursive traversal is used for other kinds of
+     sequences, mappings, and custom data structures.
 
    - Otherwise, the operation reconstructs the requested ``dtype`` from a flat
      ``source`` array, using C-style ordering with a suitably modified
@@ -1828,9 +1813,8 @@ This operation can be used in the following different ways:
        index = dr.cuda.UInt([...]) # Note: negative indices are not permitted
        dr.scatter(target, value=value, index=index)
 
-2. When ``target`` is a more complex type (e.g. a :ref:`custom source structure
-   <custom-struct>`, nested Dr.Jit array, tuple, list, dictionary, etc.), the
-   behavior depends:
+2. When ``target`` is a more complex type (e.g. a nested Dr.Jit array or
+   :ref:`Pytree <pytrees>`), the behavior depends:
 
    - When ``target`` and ``value`` are of the same type, the scatter operation
      threads through entries and invokes itself recursively. For example, the
@@ -1850,6 +1834,9 @@ This operation can be used in the following different ways:
          dr.scatter(target.x, value.x, index)
          dr.scatter(target.y, value.y, index)
          dr.scatter(target.z, value.z, index)
+
+     A similar recursive traversal is used for other kinds of
+     sequences, mappings, and custom data structures.
 
    - Otherwise, the operation flattens the ``value`` array and writes it using
      C-style ordering with a suitably modified ``index``. For example, the
@@ -2037,11 +2024,9 @@ Note that :py:func:`drjit.eval()` would also have been a suitable alternative
 in the above example; the main difference to :py:func:`drjit.schedule()` is
 that it does the evaluation immediately without deferring the kernel launch.
 
-This function accepts a variable-length keyword argument and processes it
-as follows:
-
-- It recurses into tuples, lists, and the values of dictionaries.
-- It recurses into the fields of :ref:`custom data structures <custom-struct>`.
+This function accepts a variable-length keyword argument and processes all
+input arguments. It recursively traverses Pytrees :ref:`Pytrees <pytrees>`
+(sequences, mappings, custom data structures, etc.).
 
 During recursion, the function gathers all unevaluated Dr.Jit arrays. Evaluated
 arrays and incompatible types are ignored. Multiple variables can be
@@ -2051,10 +2036,9 @@ collected between the original :py:func:`drjit.schedule()` call and the next
 kernel launch are ignored and will not be stored in memory.
 
 Args:
-    *args (tuple): A variable-length list of Dr.Jit array instances,
-      :ref:`custom data structures <custom-struct>`, sequences, or mappings.
-      The function will recursively traverse data structures to discover all
-      Dr.Jit arrays.
+    *args (tuple): A variable-length list of Dr.Jit array instances or
+         :ref:`Pytrees <pytrees>` (they will be recursively traversed to
+         all differentiable variables.)
 
 Returns:
     bool: ``True`` if a variable was scheduled, ``False`` if the operation did
@@ -2086,20 +2070,17 @@ user would need to call this function explicitly. Explicit evaluation can
 slightly improve performance in certain cases (the documentation of
 :py:func:`drjit.schedule()` shows an example of such a use case.)
 
-This function accepts a variable-length keyword argument and processes it
-as follows:
-
-- It recurses into tuples, lists, and the values of dictionaries.
-- It recurses into the fields of :ref:`custom data structures <custom-struct>`.
+This function accepts a variable-length keyword argument and processes all
+input arguments. It recursively traverses Pytrees :ref:`Pytrees <pytrees>`
+(sequences, mappings, custom data structures, etc.).
 
 During recursion, the function gathers all unevaluated Dr.Jit arrays. Evaluated
 arrays and incompatible types are ignored.
 
 Args:
-    *args (tuple): A variable-length list of Dr.Jit array instances,
-      :ref:`custom data structures <custom-struct>`, sequences, or mappings.
-      The function will recursively traverse data structures to discover all
-      Dr.Jit arrays.
+    *args (tuple): A variable-length list of Dr.Jit array instances or
+        :ref:`Pytrees <pytrees>` (they will be recursively traversed to discover
+        all Dr.Jit arrays.)
 
 Returns:
     bool: ``True`` if a variable was evaluated, ``False`` if the operation did
@@ -2136,19 +2117,18 @@ static const char *doc_detach = R"(
 Transforms the input variable into its non-differentiable version (*detaches* it
 from the AD computational graph).
 
-This function is able to traverse data-structures such a sequences, mappings or
-:ref:`custom data structure <custom-struct>` and applies the transformation to the
-underlying variables.
-
-When the input variable isn't a Dr.Jit differentiable array, it is returned as it is.
+This function supports arbitrary Dr.Jit arrays/tensors and :ref:`Pytrees
+<pytrees>` as input. In the latter case, it applies the transformation
+recursively. When the input variable isn't a Pytree or Dr.Jit array, it is
+returned as it is.
 
 While the type of the returned array is preserved by default, it is possible to
 set the ``preserve_type`` argument to false to force the returned type to be
-non-differentiable.
+non-differentiable. For example, this will convert an array of type
+:py:class:`drjit.llvm.ad.Float` into one of type :py:class:`drjit.llvm.Float`.
 
 Args:
-    arg (object): An arbitrary Dr.Jit array, tensor,
-        :ref:`custom data structure <custom-struct>`, sequence, or mapping.
+    arg (object): An arbitrary Dr.Jit array, tensor, or :ref:`Pytree <pytrees>`.
 
     preserve_type (bool): Defines whether the returned variable should preserve
         the type of the input variable.
@@ -2161,7 +2141,7 @@ Enable or disable gradient tracking on the provided variables.
 
 Args:
     arg (object): An arbitrary Dr.Jit array, tensor,
-        :ref:`custom data structure <custom-struct>`, sequence, or mapping.
+        :ref:`Pytree <pytrees>`, sequence, or mapping.
 
     value (bool): Defines whether gradient tracking should be enabled or
         disabled.
@@ -2170,48 +2150,44 @@ Args:
 static const char *doc_enable_grad = R"(
 Enable gradient tracking for the provided variables.
 
-This function accepts a variable-length list of arguments and processes it
-as follows:
+This function accepts a variable-length keyword argument and processes all
+input arguments. It recursively traverses Pytrees :ref:`Pytrees <pytrees>`
+(sequences, mappings, custom data structures, etc.).
 
-- It recurses into tuples, lists, and the values of dictionaries.
-- It recurses into the fields of :ref:`custom data structures <custom-struct>`.
-
-During recursion, the function enables gradient tracking for all Dr.Jit arrays.
-For every other types, this function won't do anything.
+During this recursive traversal, the function enables gradient tracking for all
+encountered Dr.Jit arrays. Variables of other types are ignored.
 
 Args:
-    *args (tuple): A variable-length list of Dr.Jit array instances,
-        :ref:`custom data structures <custom-struct>`, sequences, or mappings.
+    *args (tuple): A variable-length list of Dr.Jit arrays/tensors or
+        :ref:`Pytrees <pytrees>`.
 )";
 
 static const char *doc_disable_grad = R"(
 Disable gradient tracking for the provided variables.
 
-This function accepts a variable-length list of arguments and processes it
-as follows:
+This function accepts a variable-length keyword argument and processes all
+input arguments. It recursively traverses Pytrees :ref:`Pytrees <pytrees>`
+(sequences, mappings, custom data structures, etc.).
 
-- It recurses into tuples, lists, and the values of dictionaries.
-- It recurses into the fields of :ref:`custom data structures <custom-struct>`.
-
-During recursion, the function disables gradient tracking for all Dr.Jit arrays.
-For every other types, this function won't do anything.
+During this recursive traversal, the function disables gradient tracking for all
+encountered Dr.Jit arrays. Variables of other types are ignored.
 
 Args:
-    *args (tuple): A variable-length list of Dr.Jit array instances,
-        :ref:`custom data structures <custom-struct>`, sequences, or mappings.
+    *args (tuple): A variable-length list of Dr.Jit arrays/tensors or
+        :ref:`Pytrees <pytrees>`.
 )";
 
 static const char *doc_grad_enabled = R"(
 Return whether gradient tracking is enabled on any of the given variables.
 
 Args:
-    *args (tuple): A variable-length list of Dr.Jit array instances,
-      :ref:`custom data structures <custom-struct>`, sequences, or mappings.
-      The function will recursively traverse data structures to discover all
-      Dr.Jit arrays.
+    *args (tuple): A variable-length list of Dr.Jit arrays/tensors instances or
+      :ref:`Pytrees <pytrees>`. The function recursively traverses them to
+      all differentiable variables.
 
 Returns:
-    bool: ``True`` if any variable has gradient tracking enabled, ``False`` otherwise.
+    bool: ``True`` if any of the input variables
+        has gradient tracking enabled, ``False`` otherwise.
 )";
 
 static const char *doc_grad = R"(
@@ -2220,42 +2196,54 @@ Return the gradient value associated to a given variable.
 When the variable doesn't have gradient tracking enabled, this function returns ``0``.
 
 Args:
-    arg (object): An arbitrary Dr.Jit array, tensor,
-        :ref:`custom data structure <custom-struct>`, sequences, or mapping.
+    arg (object): An arbitrary Dr.Jit array, tensor or :ref:`Pytree <pytrees>`.
 
-    preserve_type (bool): Defines whether the returned variable should preserve
-        the type of the input variable.
+    preserve_type (bool): Should the operation preserve the input type in the
+        return value? (This is the default). Otherwise, Dr.Jit will, e.g.,
+        return a type of `drjit.cuda.Float` for an input of type
+        `drjit.cuda.ad.Float`.
 
 Returns:
     object: the gradient value associated to the input variable.
 )";
 
 static const char *doc_set_grad = R"(
-Set the gradient value to the provided variable.
+Set the gradient associated with the provided variable.
 
-Broadcasting is applied to the gradient value if necessary and possible to match
-the type of the input variable.
+This operation internally decomposes into two sub-steps:
+
+.. code-block:: python
+
+   dr.clear_grad(target)
+   dr.accum_grad(target, source)
+
+When `source` is not of the same type as `target`, Dr.Jit will try to broadcast
+its contents into the right shape.
 
 Args:
-    dst (object): An arbitrary Dr.Jit array, tensor,
-        :ref:`custom data structure <custom-struct>`, sequences, or mapping.
+    target (object): An arbitrary Dr.Jit array, tensor, or :ref:`Pytree <pytrees>`.
 
-    src (object): An arbitrary Dr.Jit array, tensor,
-        :ref:`custom data structure <custom-struct>`, sequences, or mapping.
+    source (object): An arbitrary Dr.Jit array, tensor, or :ref:`Pytree <pytrees>`.
 )";
 
-static const char *doc_accum_grad = R"(
-Accumulate into the gradient of a variable.
 
-Broadcasting is applied to the gradient value if necessary and possible to match
-the type of the input variable.
+static const char *doc_accum_grad = R"(
+Accumulate the contents of one variable into the gradient of another variable.
+
+When `source` is not of the same type as `target`, Dr.Jit will try to broadcast
+its contents into the right shape.
 
 Args:
-    dst (object): An arbitrary Dr.Jit array, tensor,
-        :ref:`custom data structure <custom-struct>`, sequences, or mapping.
+    target (object): An arbitrary Dr.Jit array, tensor, or :ref:`Pytree <pytrees>`.
 
-    src (object): An arbitrary Dr.Jit array, tensor,
-        :ref:`custom data structure <custom-struct>`, sequences, or mapping.
+    source (object): An arbitrary Dr.Jit array, tensor, or :ref:`Pytree <pytrees>`.
+)";
+
+static const char *doc_clear_grad = R"(
+Clear the gradient of the given variable.
+
+Args:
+    arg (object): An arbitrary Dr.Jit array, tensor, or :ref:`Pytree <pytrees>`.
 )";
 
 static const char *doc_replace_grad = R"(
@@ -2273,83 +2261,119 @@ Returns:
 )";
 
 static const char *doc_enqueue = R"(
-Enqueues variable for the subsequent AD traversal.
+Enqueues the input variable(s) for subsequent gradient propagation
 
-In Dr.Jit, the process of automatic differentiation is split into two parts:
+Dr.Jit splits the process of automatic differentiation into three parts:
 
-1. Discover and enqueue the variables to be considered as inputs during the
-   subsequent AD traversal.
-2. Traverse the AD graph starting from the enqueued variables to propagate the
-   gradients towards the output variables (e.g. leaf in the AD graph).
+1. Initializing the gradient of one or more input or output variables. The most
+   common initialization entails setting the gradient of an output (e.g., an
+   optimization loss) to ``1.0``.
 
+2. Enqueuing nodes that should partake in the gradient propagation pass. Dr.Jit
+   will follow variable dependences (edges in the AD graph) to find variables
+   that are reachable from the enqueued variable.
 
-This function handles the first part can operate in different modes depending on
-the specified ``mode``:
+3. Finally propagating gradients to all of the enqueued variables.
 
-- ``ADMode.Forward``: the provided ``value`` will be considered as input during
-  the subsequent AD traversal.
+This function is responsible for step 2 of the above list and works differently
+depending on the specified ``mode``:
 
-- ``ADMode.Backward``: a traversal of the AD graph starting from the provided
-  ``value`` will take place to find all potential source of gradients and
-  enqueue them.
+-:py:attr:`drjit.ADMode.Forward`: Dr.Jit will recursively enqueue all variables that are
+   reachable along forward edges. That is, given a differentiable operation ``a =
+   b+c``, enqueuing ``c`` will also enqueue ``a`` for later traversal.
+
+-:py:attr:`drjit.ADMode.Backward`: Dr.Jit will recursively enqueue all variables that are
+  reachable along backward edges. That is, given a differentiable operation ``a =
+  b+c``, enqueuing ``a`` will also enqueue ``b`` and ``c`` for later traversal.
 
 For example, a typical chain of operations to forward propagate the gradients
-from ``a`` to ``b`` would look as follow:
+from ``a`` to ``b`` might look as follow:
 
-.. code-block::
+.. code-block:: python
 
     a = dr.llvm.ad.Float(1.0)
     dr.enable_grad(a)
     b = f(a) # some computation involving `a`
+
+    # The below three operations can also be written more compactly as dr.forward_from(a)
     dr.set_gradient(a, 1.0)
     dr.enqueue(dr.ADMode.Forward, a)
-    dr.traverse(dr.llvm.ad.Float, dr.ADMode.Forward)
+    dr.traverse(dr.ADMode.Forward)
+
     grad = dr.grad(b)
 
-It could be the case that ``f(a)`` involves other differentiable variables that
-already contain some gradients. In this situation we can use ``ADMode.Backward``
-to discover and enqueue them before the traversal.
+One interesting aspect of this design is that enqueuing and traversal don't
+necessarily need to follow the same direction.
 
-.. code-block::
+For example, we may only be interested in forward gradients reaching a specific
+output node ``c``, which can be expressed as follows:
+
+.. code-block:: python
 
     a = dr.llvm.ad.Float(1.0)
     dr.enable_grad(a)
-    b = f(a, ...) # some computation involving `a` and some hidden variables
+
+    b, c, d, e = f(a)
+
     dr.set_gradient(a, 1.0)
     dr.enqueue(dr.ADMode.Backward, b)
-    dr.traverse(dr.llvm.ad.Float, dr.ADMode.Forward)
+    dr.traverse(dr.ADMode.Forward)
+
     grad = dr.grad(b)
 
-Dr.Jit also provides a higher level API that encapsulate this logic in a few
-different functions:
+The same naturally also works in the reverse directiion. Dr.Jit provides a
+higher level API that encapsulate such logic in a few different flavors:
 
-- :py:func:`drjit.forward_from`, :py:func:`drjit.forward`, :py:func:`drjit.forward_to`
-- :py:func:`drjit.backward_from`, :py:func:`drjit.backward`, :py:func:`drjit.backward_to`
+- :py:func:`drjit.forward_from` (alias: :py:func:`drjit.forward`) and
+  :py:func:`drjit.forward_to`.
+- :py:func:`drjit.backward_from` (alias: :py:func:`drjit.backward`) and
+  :py:func:`drjit.backward_to`.
 
 Args:
-    mode (ADMode): defines the enqueuing mode (backward or forward)
+    mode (drjit.ADMode): Specifies the set edges which Dr.Jit should follow to
+       enqueue variables to be visited by a later gradient propagation phase.
+      :py:attr:`drjit.ADMode.Forward` and:py:attr:`drjit.ADMode.Backward` refer to forward and
+       backward edges, respectively.
 
-    value (object): An arbitrary Dr.Jit array, tensor,
-        :ref:`custom data structure <custom-struct>`, sequences, or mapping.
+    value (object): An arbitrary Dr.Jit array, tensor or
+        :ref:`Pytree <pytrees>`.
 )";
 
 static const char *doc_traverse = R"(
-Propagate derivatives through the enqueued set of edges in the AD computational
-graph in the direction specified by ``mode``.
+Propagate gradients along the enqueued set of AD graph edges.
 
-By default, Dr.Jit's AD system destructs the enqueued input graph during AD
-traversal. This frees up resources, which is useful when working with large
-wavefronts or very complex computation graphs. However, this also prevents
-repeated propagation of gradients through a shared subgraph that is being
-differentiated multiple times.
+Given prior use of :py:func`drjit.enqueue()` to enqueue AD nodes for gradient
+propagation, this functions now performs the actual gradient propagation into
+either the forward or reverse direction (as specified by the ``mode``
+parameter)
 
-To support more fine-grained use cases that require this, the function accepts
-combinations of the :py:class:`drjit.ADFlag` flag enumeration.
+By default, the operation is destructive: it clears the gradients of visited
+interior nodes and only retains gradients at leaf nodes. The term *leaf node*
+is defined as follows:
+refers to
+
+- In forward AD, leaf nodes have no forward edges. They are outputs of a
+  computation, and no other differentiable variable depends on them.
+
+- In backward AD, leaf nodes have no backward edges. They are inputs to a
+  computation.
+
+By default, the traversal also removes the edges of visited nodes to isolate
+them. These defaults are usually good ones: cleaning up the graph his frees up
+resources, which is useful when working with large wavefronts or very complex
+computation graphs. It also avoids potentially undesired derivative
+contributions that can arise when the AD graphs of two unrelated computations
+are connected by an edge and subsequently separately differentiated.
+
+In advanced applications that require multiple AD traversals of the same graph,
+specify specify different combinations of the enumeration
+:py:class:`drjit.ADFlag` via the `flags` parameter.
 
 Args:
-    type (type): defines the Dr.JIT array type used to build the AD graph
-
-    mode (ADMode): defines the mode traversal (backward or forward)
+    mode (drjit.ADMode): Specifies the direction in which gradients should be
+        propgated. :py:attr:`drjit.ADMode.Forward`
+        and:py:attr:`drjit.ADMode.Backward` refer to forward and backward
+        traversal.
 
     flags (drjit.ADFlag | int): Controls what parts of the AD graph are cleared
         during traversal. The default value is :py:attr:`drjit.ADFlag.Default`.
@@ -2358,11 +2382,12 @@ Args:
 static const char *doc_forward_from = R"(
 forward_from(arg: drjit.ArrayBase, flags: drjit.ADFlag | int = drjit.ADFlag.Default)
 
-Forward-propagate gradients from the provided Dr.Jit array
+Forward-propagate gradients from the provided Dr.Jit array or tensor.
 
-This function sets the gradient of the provided Dr.Jit array ``arg`` to ``1.0``
-and then forward-propagates derivatives through the connected component (i.e.,
-reaching all variables that directly or indirectly depend on ``arg``).
+This function sets the gradient of the provided Dr.Jit array or tensor ``arg``
+to ``1.0`` and then forward-propagates derivatives through forward-connected
+components of the computation graph (i.e., reaching all variables that directly
+or indirectly depend on ``arg``).
 
 The operation is equivalent to
 
@@ -2370,130 +2395,272 @@ The operation is equivalent to
 
    dr.set_grad(arg, 1.0)
    dr.enqueue(dr.ADMode.Forward, h)
-   dr.traverse(dr.ADMode.Forward)
+   dr.traverse(dr.ADMode.Forward, flags=flags)
 
-You may also refer to the functions :py:func:`drjit.set_grad()`,
+Refer to the documentation functions :py:func:`drjit.set_grad()`,
 :py:func:`drjit.enqueue()`, and :py:func:`drjit.traverse()` for further
-detail.
+details on the nuances of forward derivative propagation.
 
 By default, the operation is destructive: it clears the gradients of visited
-interior nodes and only retains gradients in at leaf nodes. It also
-removes the edges of visited nodes to isolate them.
-
-This default is intentional to both free up resources and keep subsequent AD traversal steps
-from visiting the same variables by accident, which could introduce undesired
-derivative contributions and waste computation. Such a case would otherwise arise if
-the AD graphs of two unrelated computations are connected by an edge
-and subsequently separately differentiated.
-
-To change this behavior, specify a different combination of the
-enumeration :py:class:`drjit.ADFlag` via the `flags` parameter.
+interior nodes and only retains gradients at leaf nodes. For details on this,
+refer to the documentation of :py:func:`drjit.enqueue()` and the meaning of
+the ``flags`` parameter.
 
 The implementation raises an exception when the provided array does not support
 gradient tracking, or when gradient tracking was not previously enabled via
-:py:func:`drjit.enable_grad()`.
+:py:func:`drjit.enable_grad()`, as this generally indicates the presence of
+a bug. Specify the :py:attr:`drjit.ADFlag.PermitNoFlag` flag (e.g. by
+passing ``flags=dr.ADFlag.Default | dr.ADFlag.PermitNoGrad``) to the function.
 
 Args:
-    arg (drjit.ArrayBase): A Dr.Jit differentiable array instance.
+    args (object): A Dr.Jit array, tensor, or :ref:`Pytree <pytrees>`.
 
-    flags (drjit.ADFlag | int): Controls what parts of the AD graph are cleared
-        during traversal. The default value is :py:attr:`drjit.ADFlag.Default`.
+    flags (drjit.ADFlag | int): Controls what parts of the AD graph to clear
+        during traversal, and whether or not to fail when the input is not
+        differentiable. The default value is :py:attr:`drjit.ADFlag.Default`.
 )";
 
 static const char *doc_forward_to = R"(
-Forward propagates gradients to a set of provided Dr.Jit differentiable arrays.
+forward_to(*args, *, flags: drjit.ADFlag | int = drjit.ADFlag.Default)
 
-Internally, the AD computation graph will be first traversed backward to find
-all potential source of gradient for the provided array. Then only the forward
-gradient propagation traversal takes place.
+Forward-propagate gradients to the provided set of Dr.Jit arrays/tensors.
 
-The ``flags`` argument should be provided as a keyword argument for this function.
+.. code-block:: python
 
-An exception will be raised when the provided array doesn't have gradient tracking
-enabled or if it isn't an instance of a Dr.Jit differentiable array type.
+   dr.enqueue(dr.ADMode.Backward, *args)
+   dr.traverse(dr.ADMode.Forward, flags=flags)
+   return dr.grad(*args)
+
+Internally, the operation first traverses the computation graph *backwards*
+from ``args`` to find potential paths along which gradients can flow to the
+given set of arrays. Then, it performs a gradient propagation pass along the
+detected variables.
+
+For this to work, you must have previously enabled and specified input
+gradients for inputs of the computation. (see :py:func:`drjit.enable_grad()`
+and via :py:func:`drjit.set_grad()`).
+
+Refer to the documentation functions :py:func:`drjit.enqueue()` and
+:py:func:`drjit.traverse()` for further details on the nuances of forward
+derivative propagation.
+
+By default, the operation is destructive: it clears the gradients of visited
+interior nodes and only retains gradients at leaf nodes. For details on this,
+refer to the documentation of :py:func:`drjit.enqueue()` and the meaning of
+the ``flags`` parameter.
+
+The implementation raises an exception when the provided array does not support
+gradient tracking, or when gradient tracking was not previously enabled via
+:py:func:`drjit.enable_grad()`, as this generally indicates the presence of
+a bug. Specify the :py:attr:`drjit.ADFlag.PermitNoFlag` flag (e.g. by
+passing ``flags=dr.ADFlag.Default | dr.ADFlag.PermitNoGrad``) to the function.
 
 Args:
-    *args (tuple): A variable-length list of Dr.Jit differentiable array, tensor,
-        :ref:`custom data structure <custom-struct>`, sequences, or mapping.
+    *args (tuple): A variable-length list of Dr.Jit differentiable array, tensors,
+        or :ref:`Pytree <pytrees>`.
+
+    flags (drjit.ADFlag | int): Controls what parts of the AD graph to clear
+        during traversal, and whether or not to fail when the input is not
+        differentiable. The default value is :py:attr:`drjit.ADFlag.Default`.
+
+Returns:
+    object: the gradient value(s) associated with ``*args`` following the
+        traversal.
+)";
+
+static const char *doc_forward = R"(
+forward(arg: drjit.ArrayBase, flags: drjit.ADFlag | int = drjit.ADFlag.Default)
+
+Forward-propagate gradients from the provided Dr.Jit array or tensor
+
+This function is an alias of :py:func:`drjit.forward_from()`. Please refer to
+the documentation of this function.
+
+Args:
+    args (object): A Dr.Jit array, tensor, or :ref:`Pytree <pytrees>`.
 
     flags (drjit.ADFlag | int): Controls what parts of the AD graph are cleared
         during traversal. The default value is :py:attr:`drjit.ADFlag.Default`.
-
-Returns:
-    object: the gradient value associated to the output variables.
 )";
 
 static const char *doc_backward_from = R"(
-Backward propagates gradients from a provided Dr.Jit differentiable array.
+backward_from(arg: drjit.ArrayBase, flags: drjit.ADFlag | int = drjit.ADFlag.Default)
 
-An exception will be raised when the provided array doesn't have gradient tracking
-enabled or if it isn't an instance of a Dr.Jit differentiable array type.
+Backpropagate gradients from the provided Dr.Jit array or tensor.
+
+This function sets the gradient of the provided Dr.Jit array or tensor ``arg``
+to ``1.0`` and then backpropagates derivatives through backward-connected
+components of the computation graph (i.e., reaching differentiable variables
+that potentially influence the value of ``arg``).
+
+The operation is equivalent to
+
+.. code-block:: python
+
+   dr.set_grad(arg, 1.0)
+   dr.enqueue(dr.ADMode.Backward, h)
+   dr.traverse(dr.ADMode.Backward, flags=flags)
+
+Refer to the documentation functions :py:func:`drjit.set_grad()`,
+:py:func:`drjit.enqueue()`, and :py:func:`drjit.traverse()` for further
+details on the nuances of derivative backpropagation.
+
+By default, the operation is destructive: it clears the gradients of visited
+interior nodes and only retains gradients at leaf nodes. For details on this,
+refer to the documentation of :py:func:`drjit.enqueue()` and the meaning of
+the ``flags`` parameter.
+
+The implementation raises an exception when the provided array does not support
+gradient tracking, or when gradient tracking was not previously enabled via
+:py:func:`drjit.enable_grad()`, as this generally indicates the presence of
+a bug. Specify the :py:attr:`drjit.ADFlag.PermitNoFlag` flag (e.g. by
+passing ``flags=dr.ADFlag.Default | dr.ADFlag.PermitNoGrad``) to the function.
 
 Args:
-    arg (object): A Dr.Jit differentiable array instance.
+    args (object): A Dr.Jit array, tensor, or :ref:`Pytree <pytrees>`.
 
-    flags (ADFlag | int): flags to control what should and should not be
-    destructed during the traversal. The default value is ``ADFlag.Default``.
-)";
-
-static const char *doc_backward = R"(
-Backward propagate gradients from a provided Dr.Jit differentiable array.
-
-An exception will be raised when the provided array doesn't have gradient tracking
-enabled or if it isn't an instance of a Dr.Jit differentiable array type.
-
-This function is an alias of :py:func:`drjit.backward_from`.
-
-Args:
-    arg (object): A Dr.Jit differentiable array instance.
-
-    flags (ADFlag | int): flags to control what should and should not be
-    destructed during the traversal. The default value is ``ADFlag.Default``.
+    flags (drjit.ADFlag | int): Controls what parts of the AD graph to clear
+        during traversal, and whether or not to fail when the input is not
+        differentiable. The default value is :py:attr:`drjit.ADFlag.Default`.
 )";
 
 static const char *doc_backward_to = R"(
-Backward propagate gradients to a set of provided Dr.Jit differentiable arrays.
+backward_to(*args, *, flags: drjit.ADFlag | int = drjit.ADFlag.Default)
 
-Internally, the AD computation graph will be first traversed *forward* to find
-all potential source of gradient for the provided array. Then only the backward
-gradient propagation traversal takes place.
+Backpropagate gradients to the provided set of Dr.Jit arrays/tensors.
 
-The ``flags`` argument should be provided as a keyword argument for this function.
+.. code-block:: python
 
-An exception will be raised when the provided array doesn't have gradient tracking
-enabled or if it isn't an instance of a Dr.Jit differentiable array type.
+   dr.enqueue(dr.ADMode.Forward, *args)
+   dr.traverse(dr.ADMode.Backwards, flags=flags)
+   return dr.grad(*args)
+
+Internally, the operation first traverses the computation graph *forwards*
+from ``args`` to find potential paths along which reverse-mode gradients can flow to the
+given set of input variables. Then, it performs a backpropagation pass along the
+detected variables.
+
+For this to work, you must have previously enabled and specified input
+gradients for outputs of the computation. (see :py:func:`drjit.enable_grad()`
+and via :py:func:`drjit.set_grad()`).
+
+Refer to the documentation functions :py:func:`drjit.enqueue()` and
+:py:func:`drjit.traverse()` for further details on the nuances of
+derivative backpropagation.
+
+By default, the operation is destructive: it clears the gradients of visited
+interior nodes and only retains gradients at leaf nodes. For details on this,
+refer to the documentation of :py:func:`drjit.enqueue()` and the meaning of
+the ``flags`` parameter.
+
+The implementation raises an exception when the provided array does not support
+gradient tracking, or when gradient tracking was not previously enabled via
+:py:func:`drjit.enable_grad()`, as this generally indicates the presence of
+a bug. Specify the :py:attr:`drjit.ADFlag.PermitNoFlag` flag (e.g. by
+passing ``flags=dr.ADFlag.Default | dr.ADFlag.PermitNoGrad``) to the function.
 
 Args:
-    *args (tuple): A variable-length list of Dr.Jit differentiable array, tensor,
-        :ref:`custom data structure <custom-struct>`, sequences, or mapping.
+    *args (tuple): A variable-length list of Dr.Jit differentiable array, tensors,
+        or :ref:`Pytree <pytrees>`.
 
-    flags (ADFlag | int): flags to control what should and should not be
-    destructed during the traversal. The default value is ``ADFlag.Default``.
+    flags (drjit.ADFlag | int): Controls what parts of the AD graph to clear
+        during traversal, and whether or not to fail when the input is not
+        differentiable. The default value is :py:attr:`drjit.ADFlag.Default`.
 
 Returns:
-    object: the gradient value associated to the output variables.
+    object: the gradient value(s) associated with ``*args`` following the
+        traversal.
 )";
 
-static const char *doc_graphviz = R"(
-Assembles a graphviz diagram for the computation graph trace by the JIT.
+static const char *doc_backward = R"(
+backward(arg: drjit.ArrayBase, flags: drjit.ADFlag | int = drjit.ADFlag.Default)
+
+Backpropgate gradients from the provided Dr.Jit array or tensor.
+
+This function is an alias of :py:func:`drjit.backward_from()`. Please refer to
+the documentation of this function.
 
 Args:
-    as_str (bool): whether the function should return the graphviz object as
-        a string representation or not.
+    args (object): A Dr.Jit array, tensor, or :ref:`Pytree <pytrees>`.
+
+    flags (drjit.ADFlag | int): Controls what parts of the AD graph to clear
+        during traversal, and whether or not to fail when the input is not
+        differentiable. The default value is :py:attr:`drjit.ADFlag.Default`.
+)";
+
+
+static const char *doc_graphviz = R"(
+Return a GraphViz diagram describing registered JIT variables and their connectivity.
+
+This function returns a representation of the computation graph underlying the
+Dr.Jit just-in-time compiler, which is separate from the automatic
+differentiation layer. See the :py:func:`graphviz_ad()` function to visualize
+the computation graph of the latter.
+
+The function depends on the ``graphviz`` Python package when
+``as_string=False`` (the default).
+
+Args:
+    as_string (bool): if set to ``True``, the function will return raw GraphViz markup
+        as a string. (Default: ``False``)
 
 Returns:
-    object: the graphviz obj (or its string representation).
+    object: GraphViz object or raw markup.
 )";
 
 static const char *doc_graphviz_ad = R"(
-Assembles a graphviz diagram for the computational graph trace by the AD system.
+Return a GraphViz diagram describing variables registered with the automatic
+differentiation layer, as well as their connectivity.
+
+This function returns a representation of the computation graph underlying the
+Dr.Jit AD layer, which one architectural layer above the just-in-time compiler.
+See the :py:func:`graphviz()` function to visualize the computation graph of
+the latter.
+
+The function depends on the ``graphviz`` Python package when
+``as_string=False`` (the default).
 
 Args:
-    as_str (bool): whether the function should return the graphviz object as
-        a string representation or not.
+    as_string (bool): if set to ``True``, the function will return raw GraphViz markup
+        as a string. (Default: ``False``)
 
 Returns:
-    object: the graphviz obj (or its string representation).
+    object: GraphViz object or raw markup.
+)";
+
+static const char *doc_whos = R"(
+Return/print a list of live JIT variables.
+
+This function provides information about the set of variables that are
+currently registered with the Dr.Jit just-in-time compiler, which is separate
+from the automatic differentiation layer. See the :py:func:`whos_ad()` function
+for the latter.
+
+Args:
+    as_string (bool): if set to ``True``, the function will return the list in
+        string form. Otherwise, it will print directly onto the console and return
+        ``None``. (Default: ``False``)
+
+Returns:
+    NoneType | str: a human-readable list (if requested).
+)";
+
+static const char *doc_whos_ad = R"(
+Return/print a list of live variables registered with the automatic differentiation layer.
+
+This function provides information about the set of variables that are
+currently registered with the Dr.Jit automatic differentiation layer,
+which one architectural layer above the just-in-time compiler.
+See the :py:func:`whos()` function to obtain informatoina about
+the latter.
+
+Args:
+    as_string (bool): if set to ``True``, the function will return the list in
+        string form. Otherwise, it will print directly onto the console and return
+        ``None``. (Default: ``False``)
+
+Returns:
+    NoneType | str: a human-readable list (if requested).
 )";
 
 static const char *doc_ad_scope_enter = R"(
@@ -2565,9 +2732,8 @@ condition determining whether to suspend the tracking of derivatives or not.
 
 Args:
     *args (tuple): A variable-length list of differentiable Dr.Jit array
-      instances, :ref:`custom data structures <custom-struct>`, sequences, or
-      mappings. The function will recursively traverse data structures to
-      discover all Dr.Jit arrays.
+        instances or :ref:`Pytrees <pytrees>`. The function will recursively
+        traverse them to all differentiable variables.
 
     when (bool): An optional Python boolean determining whether to suspend
       derivative tracking.
@@ -2625,9 +2791,8 @@ condition determining whether to resume the tracking of derivatives or not.
 
 Args:
     *args (tuple): A variable-length list of differentiable Dr.Jit array
-      instances, :ref:`custom data structures <custom-struct>`, sequences, or
-      mappings. The function will recursively traverse data structures to
-      discover all Dr.Jit arrays.
+        instances or :ref:`Pytrees <pytrees>`. The function will recursively
+        traverse them to all differentiable variables.
 
     when (bool): An optional Python boolean determining whether to resume
       derivative tracking.
@@ -2792,7 +2957,7 @@ Check if the specified Dr.Jit backend was successfully initialized.)";
 static const char *doc_set_label = R"(
 Sets the label of a provided Dr.Jit array, either in the JIT or the AD system.
 
-When a :ref:`custom data structure <custom-struct>` is provided, the field names
+When a :ref:`Pytree <pytrees>` is provided, the field names
 will be used as suffix for the variables labels.
 
 When a sequence or static array is provided, the item's indices will be appended
@@ -2853,6 +3018,10 @@ static const char *doc_ADFlag_ClearVertices =
 static const char *doc_ADFlag_Default =
     "Default: clear everything (edges, gradients of processed vertices). Equal "
     "to ``ClearEdges | ClearVertices``.";
+
+static const char *doc_ADFlag_PermitNoGrad =
+    "Don't fail when the input to a ``drjit.forward`` or ``backward`` "
+    "operation is not a differentiable array.";
 
 static const char *doc_JitBackend =
     "List of just-in-time compilation backends supported by Dr.Jit. See also "

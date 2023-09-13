@@ -74,7 +74,6 @@ using Float64 = GenericArray<double>;
     }
 
 DEFINE_MATH_OP(tan)
-DEFINE_MATH_OP(cot)
 DEFINE_MATH_OP(asin)
 DEFINE_MATH_OP(acos)
 DEFINE_MATH_OP(atan)

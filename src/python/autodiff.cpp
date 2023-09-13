@@ -138,35 +138,49 @@ static nb::object grad(nb::handle h, bool preserve_type_) {
     return transform("drjit.grad", Grad{ preserve_type_ }, h);
 }
 
-static void set_grad(nb::handle dst, nb::handle src_, bool accum_) {
-    nb::handle tp = dst.type();
+static void clear_grad(nb::handle dst) {
+    struct ClearGrad : TraverseCallback {
+        void operator()(nb::handle h) const override {
+            const ArraySupplement &s = supp(h.type());
+            if (s.is_diff && is_float(s))
+                ad_clear_grad(s.index(inst_ptr(h)));
+        }
+    };
 
-    nb::object src = nb::borrow(src_);
-    if (!src.type().is(tp))
-        src = tp(src);
+    traverse("drjit.clear_grad", ClearGrad{ }, dst);
+}
 
+static void accum_grad(nb::handle target, nb::handle source) {
     struct SetGrad : TraversePairCallback {
-        bool accum;
-        SetGrad(bool accum) : accum(accum) { }
-
         void operator()(nb::handle h1, nb::handle h2) const override {
             const ArraySupplement &s1 = supp(h1.type()),
                                   &s2 = supp(h2.type());
 
-            if (!s1.is_diff || !is_float(s1))
-                nb::detail::raise("Input must be a differentiable Dr.Jit type.");
+            if (s1.is_diff && is_float(s1) && is_float(s2) &&
+                s1.backend == s2.backend) {
+                uint64_t i1 = s1.index(inst_ptr(h1)),
+                         i2 = s2.index(inst_ptr(h2));
 
-            uint64_t i1 = s1.index(inst_ptr(h1)),
-                     i2 = s2.index(inst_ptr(h2));
-
-            ad_set_grad(i1, (uint32_t) i2, accum);
+                ad_accum_grad(i1, (uint32_t) i2);
+            }
         }
     };
 
-    traverse_pair("drjit.set_grad", SetGrad{ accum_ }, dst, src);
+    nb::handle tp = target.type();
+
+    nb::object o = nb::borrow(source);
+    if (!o.type().is(tp))
+        o = tp(o);
+
+    traverse_pair("drjit.accum_grad", SetGrad{ }, target, o);
 }
 
-static void enqueue(dr::ADMode mode_, nb::handle h_) {
+static void set_grad(nb::handle target, nb::handle source) {
+  ::clear_grad(target);
+  ::accum_grad(target, source);
+}
+
+static void enqueue_impl(dr::ADMode mode_, nb::handle h_) {
     struct Enqueue : TraverseCallback {
         dr::ADMode mode;
         Enqueue(dr::ADMode mode) : mode(mode) { }
@@ -174,70 +188,58 @@ static void enqueue(dr::ADMode mode_, nb::handle h_) {
         void operator()(nb::handle h) const override {
             const ArraySupplement &s = supp(h.type());
             if (s.is_diff && is_float(s))
-                ad_enqueue(mode, s.index(inst_ptr(h)));
+                ::ad_enqueue(mode, s.index(inst_ptr(h)));
         }
     };
 
     traverse("drjit.enqueue", Enqueue { mode_ }, h_);
 }
 
-static void check_grad_enabled(const char *name, nb::handle h) {
-    nb::handle tp = h.type();
+static bool check_grad_enabled(const char *name, nb::handle h, uint32_t flags) {
+    bool rv = grad_enabled(h);
+    if (!rv & !(flags & dr::ADFlag::PermitNoGrad))
+        nb::detail::raise(
+            "%s(): the argument does not depend on the input variable(s) being "
+            "differentiated. Raising an exception since this is usually "
+            "indicative of a bug (for example, you may have forgotten to call "
+            "dr.enable_grad(..)). If this is expected behavior, provide the "
+            "drjit.ADFlag.PermitNoGrad flag to the function (e.g., by "
+            "specifying flags=dr.ADFlag.Default | dr.ADFlag.PermitNoGrad).",
+            name);
+    return rv;
+}
 
-    if (is_drjit_type(tp)) {
-        const ArraySupplement &s = supp(tp);
-        if (s.is_diff && is_float(s)) {
-            if (!grad_enabled(h)) {
-                nb::detail::raise_type_error(
-                            "%s(): the argument does not depend on the input "
-                            "variable(s) being differentiated. Raising an exception "
-                            "since this is usually indicative of a bug (for example, "
-                            "you may have forgotten to call dr.enable_grad(..)). If "
-                            "this is expected behavior, skip the call to %s(..) "
-                            "when dr.grad_enabled(..) returns False.", name, name);
-            }
-        } else {
-            nb::str tp_name = nb::type_name(tp);
-            nb::detail::raise_type_error(
-                "%s(): expected a differentiable array type (got %s)!", name,
-                tp_name.c_str());
-        }
-    } else if (tp.is(&PyTuple_Type)) {
-        for (nb::handle v : nb::borrow<nb::tuple>(h))
-            check_grad_enabled(name, v);
-    } else {
-        nb::str tp_name = nb::type_name(tp);
-        nb::detail::raise_type_error(
-            "%s(): expected a Dr.Jit array type (got %s)!", name,
-            tp_name.c_str());
+static void forward_from(nb::handle_t<dr::ArrayBase> h, uint32_t flags) {
+    if (check_grad_enabled("drjit.forward_from", h, flags)) {
+        clear_grad(h);
+        ::accum_grad(h, nb::float_(1.0));
+        enqueue_impl(dr::ADMode::Forward, h);
+        ad_traverse(dr::ADMode::Forward, flags);
     }
 }
 
-static void forward_from(nb::handle h, uint32_t flags) {
-    check_grad_enabled("drjit.forward_from", h);
-    set_grad(h, nb::float_(1.0), false);
-    enqueue(drjit::ADMode::Forward, h);
-    ad_traverse(drjit::ADMode::Forward, flags);
-}
-
-static void backward_from(nb::handle h, uint32_t flags) {
-    check_grad_enabled("drjit.backward_from", h);
-    set_grad(h, nb::float_(1.0), false);
-    enqueue(drjit::ADMode::Backward, h);
-    ad_traverse(drjit::ADMode::Backward, flags);
+static void backward_from(nb::handle_t<dr::ArrayBase> h, uint32_t flags) {
+    if (check_grad_enabled("drjit.backward_from", h, flags)) {
+        clear_grad(h);
+        ::accum_grad(h, nb::float_(1.0));
+        enqueue_impl(dr::ADMode::Backward, h);
+        ad_traverse(dr::ADMode::Backward, flags);
+    }
 }
 
 static nb::object forward_to(nb::handle h, uint32_t flags) {
-    check_grad_enabled("drjit.forward_to", h);
-    enqueue(drjit::ADMode::Backward, h);
-    traverse(drjit::ADMode::Forward, flags);
+    if (check_grad_enabled("drjit.forward_to", h, flags)) {
+        enqueue_impl(dr::ADMode::Backward, h);
+        ad_traverse(dr::ADMode::Forward, flags);
+    }
     return grad(h, true);
 }
 
 static nb::object backward_to(nb::handle h, uint32_t flags) {
-    check_grad_enabled("drjit.backward_to", h);
-    enqueue(drjit::ADMode::Forward, h);
-    traverse(drjit::ADMode::Backward, flags);
+    if (check_grad_enabled("drjit.backward_to", h, flags)) {
+        enqueue_impl(dr::ADMode::Forward, h);
+        ad_traverse(dr::ADMode::Backward, flags);
+    }
     return grad(h, true);
 }
 
@@ -247,7 +249,7 @@ static nb::object forward_to_2(nb::args args, nb::kwargs kwargs) {
 
     if (nkwargs) {
         if (nkwargs != 1 || !kwargs.contains("flags") ||
-            !nb::try_cast<uint32_t>(kwargs, flags))
+            !nb::try_cast<uint32_t>(kwargs["flags"], flags))
             throw nb::type_error(
                 "drjit.forward_to(): incompatible keyword arguments.");
     }
@@ -261,7 +263,7 @@ static nb::object backward_to_2(nb::args args, nb::kwargs kwargs) {
 
     if (nkwargs) {
         if (nkwargs != 1 || !kwargs.contains("flags") ||
-            !nb::try_cast<uint32_t>(kwargs, flags))
+            !nb::try_cast<uint32_t>(kwargs["flags"], flags))
             throw nb::type_error(
                 "drjit.backward_to(): incompatible keyword arguments.");
     }
@@ -281,14 +283,8 @@ void export_autodiff(nb::module_ &m) {
         .value("ClearInput", dr::ADFlag::ClearInput, doc_ADFlag_ClearInput)
         .value("ClearInterior", dr::ADFlag::ClearInterior, doc_ADFlag_ClearInterior)
         .value("ClearVertices", dr::ADFlag::ClearVertices, doc_ADFlag_ClearVertices)
-        .value("Default", dr::ADFlag::Default, doc_ADFlag_Default)
-        .def(nb::self == nb::self)
-        .def(nb::self | nb::self)
-        .def(int() | nb::self)
-        .def(nb::self & nb::self)
-        .def(int() & nb::self)
-        .def(+nb::self)
-        .def(~nb::self);
+        .value("PermitNoGrad", dr::ADFlag::PermitNoGrad, doc_ADFlag_PermitNoGrad)
+        .value("Default", dr::ADFlag::Default, doc_ADFlag_Default);
 
     m.def("set_grad_enabled", &set_grad_enabled, doc_set_grad_enabled)
      .def("enable_grad", &enable_grad, doc_enable_grad)
@@ -297,32 +293,32 @@ void export_autodiff(nb::module_ &m) {
      .def("disable_grad", &disable_grad_2)
      .def("grad_enabled", &grad_enabled, doc_grad_enabled)
      .def("grad_enabled", &grad_enabled_2)
-     .def("set_grad",
-          [](nb::handle dst, nb::handle src) { set_grad(dst, src, false); },
-          "dst"_a, "src"_a, doc_set_grad)
-     .def("accum_grad",
-          [](nb::handle dst, nb::handle src) { set_grad(dst, src, true); },
-          "dst"_a, "src"_a, doc_accum_grad)
+     .def("set_grad", &::set_grad, "target"_a, "source"_a, doc_set_grad)
+     .def("accum_grad", &::accum_grad, "target"_a, "source"_a, doc_accum_grad)
+     .def("clear_grad", &::clear_grad, doc_clear_grad)
      .def("grad", &grad, "arg"_a, "preserve_type"_a = true, doc_grad)
      .def("detach", &detach, "arg"_a, "preserve_type"_a = true, doc_detach)
-     .def("enqueue", &enqueue, "mode"_a, "arg"_a, doc_enqueue)
-     .def("enqueue", [](dr::ADMode mode, nb::args args) { enqueue(mode, args); }, "mode"_a, "args"_a)
-     .def("traverse", &ad_traverse, "mode"_a, "flags"_a = drjit::ADFlag::Default, doc_traverse)
+     .def("enqueue", &enqueue_impl, "mode"_a, "arg"_a, doc_enqueue)
+     .def("enqueue", [](dr::ADMode mode, nb::args args) { enqueue_impl(mode, args); }, "mode"_a, "args"_a)
+     .def("traverse", &ad_traverse, "mode"_a, "flags"_a = dr::ADFlag::Default, doc_traverse)
      .def("forward_from", &forward_from,
-          "arg"_a, "flags"_a = drjit::ADFlag::Default,
+          "arg"_a, "flags"_a = dr::ADFlag::Default,
           nb::raw_doc(doc_forward_from))
+     .def("forward", &forward_from,
+          "arg"_a, "flags"_a = dr::ADFlag::Default,
+          nb::raw_doc(doc_forward))
      .def("backward_from", &backward_from,
-          "arg"_a, "flags"_a = drjit::ADFlag::Default,
+          "arg"_a, "flags"_a = dr::ADFlag::Default,
           nb::raw_doc(doc_backward_from))
+     .def("backward", &backward_from,
+          "arg"_a, "flags"_a = dr::ADFlag::Default,
+          nb::raw_doc(doc_backward))
      .def("forward_to", &forward_to,
-          "arg"_a, "flags"_a = drjit::ADFlag::Default,
+          "arg"_a, "flags"_a = dr::ADFlag::Default,
           nb::raw_doc(doc_forward_to))
      .def("backward_to", &backward_to,
-          "arg"_a, "flags"_a = drjit::ADFlag::Default,
+          "arg"_a, "flags"_a = dr::ADFlag::Default,
           nb::raw_doc(doc_backward_to))
      .def("forward_to", &forward_to_2, "args"_a, "kwargs"_a)
      .def("backward_to", &backward_to_2, "args"_a, "kwargs"_a);
-
-    m.attr("forward") = m.attr("forward_from");
-    m.attr("backward") = m.attr("backward_from");
 }
