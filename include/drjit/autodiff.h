@@ -46,7 +46,7 @@ enum class ADFlag : uint32_t {
 
     /// Don't fail when the input to a ``dr::forward`` or ``backward`` operation
     /// is not a differentiable array.
-    PermitNoGrad = 8,
+    AllowNoGrad = 8,
 
     /// Default: clear everything (edges, gradients of processed vertices)
     Default = (uint32_t) ClearEdges | (uint32_t) ClearVertices
@@ -597,6 +597,8 @@ struct DRJIT_TRIVIAL_ABI DiffArray
         else
             return (Value) jit_registry_get_ptr(Backend, CallSupport::Domain, out);
     }
+
+    bool schedule_() const { return jit_var_schedule((uint32_t) m_index); }
 
     template <typename T, enable_if_t<!std::is_void_v<T> && std::is_same_v<T, Value>> = 0>
     void set_entry(size_t offset, T value) {

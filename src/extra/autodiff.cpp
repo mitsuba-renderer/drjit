@@ -1411,17 +1411,18 @@ void ad_traverse(dr::ADMode mode, uint32_t flags) {
 // ==========================================================================
 
 struct MaskEdge : Special {
-        MaskEdge(const JitMask &mask, bool negate)
-            : mask(mask), negate(negate) {}
+    MaskEdge(const JitMask &mask, bool negate)
+        : mask(mask), negate(negate) { }
 
-        void backward(Variable * source, const Variable *target, uint32_t)
-            const override {
-            source->accum(!negate ? (target->grad & mask)
-                                  : andnot(target->grad, mask),
-                          target->size);
+    void backward(Variable *source, const Variable *target,
+                  uint32_t) const override {
+        source->accum(!negate ? (target->grad & mask)
+                              : andnot(target->grad, mask),
+                      target->size);
     }
 
-    void forward(const Variable *source, Variable *target, uint32_t) const override {
+    void forward(const Variable *source, Variable *target,
+                 uint32_t) const override {
         target->accum(!negate ? (source->grad & mask)
                               : andnot(source->grad, mask),
                       source->size);
@@ -1429,6 +1430,24 @@ struct MaskEdge : Special {
 
     JitMask mask;
     bool negate;
+};
+
+struct CastEdge : Special {
+    CastEdge(VarType v1, VarType v2) : v1(v1), v2(v2) { }
+
+    void backward(Variable *source, const Variable *target,
+                  uint32_t) const override {
+        source->accum(JitVar::steal(jit_var_cast(target->grad.index(), v1, 0)),
+                      target->size);
+    }
+
+    void forward(const Variable *source, Variable *target,
+                 uint32_t) const override {
+        target->accum(JitVar::steal(jit_var_cast(source->grad.index(), v2, 0)),
+                      source->size);
+    }
+
+    VarType v1, v2;
 };
 
 Index ad_var_new(JitIndex i0) {
@@ -1921,7 +1940,8 @@ Index ad_var_cast(Index i0, VarType vt) {
     if (is_detached(i0)) {
         return result.release();
     } else {
-        ad_raise("Case not yet handled.");
+        return ad_var_new("cast", std::move(result),
+                          SpecialArg(i0, new CastEdge(jit_var_type(i0), vt)));
     }
 }
 

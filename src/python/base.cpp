@@ -24,7 +24,7 @@
                              h0);                                              \
     }
 
-#define DR_NB_BINOP(name, op)                                             \
+#define DR_NB_BINOP(name, op)                                                  \
     static PyObject *nb_##name(PyObject *h0, PyObject *h1) noexcept {          \
         return apply<Normal>(op, Py_nb_##name, std::make_index_sequence<2>(),  \
                              h0, h1);                                          \
@@ -35,9 +35,15 @@
     }
 
 #define DR_MATH_UNOP(name, op)                                                 \
-    m.def(#name, [](nb::handle_t<ArrayBase> h0) {                          \
+    m.def(#name, [](nb::handle_t<ArrayBase> h0) {                              \
         return nb::steal(apply<Normal>(                                        \
             op, #name, std::make_index_sequence<1>(), h0.ptr()));              \
+    }, nb::raw_doc(doc_##name));                                               \
+    m.def(#name, [](double v0) { return dr::name(v0); });
+
+#define DR_MATH_UNOP_PAIR(name, op)                                            \
+    m.def(#name, [](nb::handle_t<ArrayBase> h0) {                              \
+        return apply_ret_pair(op, #name, h0);                                  \
     }, nb::raw_doc(doc_##name));                                               \
     m.def(#name, [](double v0) { return dr::name(v0); });
 
@@ -355,6 +361,11 @@ void export_base(nb::module_ &m) {
     DR_MATH_UNOP(rsqrt, ArrayOp::Rsqrt);
     DR_MATH_UNOP(cbrt, ArrayOp::Cbrt);
 
+    DR_MATH_UNOP(round, ArrayOp::Round);
+    DR_MATH_UNOP(trunc, ArrayOp::Trunc);
+    DR_MATH_UNOP(ceil, ArrayOp::Ceil);
+    DR_MATH_UNOP(floor, ArrayOp::Floor);
+
     DR_MATH_UNOP(exp, ArrayOp::Exp);
     DR_MATH_UNOP(exp2, ArrayOp::Exp2);
     DR_MATH_UNOP(log, ArrayOp::Log);
@@ -375,6 +386,9 @@ void export_base(nb::module_ &m) {
     DR_MATH_UNOP(atanh, ArrayOp::Atanh);
 
     DR_MATH_UNOP(erf, ArrayOp::Erf);
+
+    DR_MATH_UNOP_PAIR(sincos, ArrayOp::Sincos);
+    DR_MATH_UNOP_PAIR(sincosh, ArrayOp::Sincosh);
 
     m.def("minimum",
           [](Py_ssize_t a, Py_ssize_t b) { return dr::minimum(a, b); });

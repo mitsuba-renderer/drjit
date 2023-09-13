@@ -45,6 +45,10 @@ template <ApplyMode Mode, typename Func, typename... Args, size_t... Is>
 PyObject *apply(ArrayOp op, Func func, std::index_sequence<Is...>,
                 Args... args) noexcept;
 
+/// Like apply(), but returns a pair of results. Used for dr.sincos, dr.sincosh, dr.frexp
+extern nb::object apply_ret_pair(ArrayOp op, const char *name,
+                                 nb::handle_t<dr::ArrayBase> h);
+
 /// Callback for the ``traverse()`` operation below
 struct TraverseCallback {
     virtual void operator()(nb::handle h) const = 0;

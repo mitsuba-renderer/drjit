@@ -4,7 +4,7 @@ nanobind_add_module(
   NB_DOMAIN drjit
   NB_STATIC
   STABLE_ABI
-  LTO
+  #LTO
 
   common.h
   main.cpp

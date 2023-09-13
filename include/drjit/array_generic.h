@@ -324,7 +324,7 @@ namespace detail {
                     buf.put(", ");
                 } else {
                     buf.put(",\n");
-                    for (int i = 0; i <= Depth; ++i)
+                    for (size_t i = 0; i <= Depth; ++i)
                         buf.put(' ');
                 }
             }

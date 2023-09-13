@@ -197,14 +197,14 @@ static void enqueue_impl(dr::ADMode mode_, nb::handle h_) {
 
 static bool check_grad_enabled(const char *name, nb::handle h, uint32_t flags) {
     bool rv = grad_enabled(h);
-    if (!rv & !(flags & dr::ADFlag::PermitNoGrad))
+    if (!rv & !(flags & dr::ADFlag::AllowNoGrad))
         nb::detail::raise(
             "%s(): the argument does not depend on the input variable(s) being "
             "differentiated. Raising an exception since this is usually "
             "indicative of a bug (for example, you may have forgotten to call "
             "dr.enable_grad(..)). If this is expected behavior, provide the "
-            "drjit.ADFlag.PermitNoGrad flag to the function (e.g., by "
-            "specifying flags=dr.ADFlag.Default | dr.ADFlag.PermitNoGrad).",
+            "drjit.ADFlag.AllowNoGrad flag to the function (e.g., by "
+            "specifying flags=dr.ADFlag.Default | dr.ADFlag.AllowNoGrad).",
             name);
     return rv;
 }
@@ -283,7 +283,7 @@ void export_autodiff(nb::module_ &m) {
         .value("ClearInput", dr::ADFlag::ClearInput, doc_ADFlag_ClearInput)
         .value("ClearInterior", dr::ADFlag::ClearInterior, doc_ADFlag_ClearInterior)
         .value("ClearVertices", dr::ADFlag::ClearVertices, doc_ADFlag_ClearVertices)
-        .value("PermitNoGrad", dr::ADFlag::PermitNoGrad, doc_ADFlag_PermitNoGrad)
+        .value("AllowNoGrad", dr::ADFlag::AllowNoGrad, doc_ADFlag_AllowNoGrad)
         .value("Default", dr::ADFlag::Default, doc_ADFlag_Default);
 
     m.def("set_grad_enabled", &set_grad_enabled, doc_set_grad_enabled)

@@ -11,7 +11,6 @@
 #include <drjit-core/traits.h>
 #include <nanobind/nanobind.h>
 
-
 NAMESPACE_BEGIN(drjit)
 struct ArrayBinding;
 NAMESPACE_END(drjit)
@@ -85,6 +84,11 @@ enum class ArrayOp {
     Atanh,
 
     Erf,
+
+    Round,
+    Trunc,
+    Ceil,
+    Floor,
 
     // Binary arithetic operations
     Add,
@@ -504,6 +508,11 @@ template <typename T> void bind_float_arithmetic(ArrayBinding &b) {
     b[ArrayOp::Atan2] = (void *) +[](const T *a, const T *b, T *c) {
         new (c) T(atan2(*a, *b));
     };
+
+    b[ArrayOp::Round] = (void *) +[](const T *a, T *b) { new (b) T(round(*a)); };
+    b[ArrayOp::Trunc] = (void *) +[](const T *a, T *b) { new (b) T(trunc(*a)); };
+    b[ArrayOp::Ceil] = (void *) +[](const T *a, T *b) { new (b) T(ceil(*a)); };
+    b[ArrayOp::Floor] = (void *) +[](const T *a, T *b) { new (b) T(floor(*a)); };
 }
 
 inline void disable_float_arithmetic(ArrayBinding &b) {
@@ -670,7 +679,7 @@ template <typename T> void bind_array(ArrayBinding &b) {
     bind(b);
 }
 
-// Run bind_array() for many different plain array types
+/// Run bind_array() for many different plain array types
 template <typename T> void bind_array_types(ArrayBinding &b) {
     bind_array<mask_t<T>>(b);
     bind_array<float32_array_t<T>>(b);
@@ -681,7 +690,7 @@ template <typename T> void bind_array_types(ArrayBinding &b) {
     bind_array<int64_array_t<T>>(b);
 }
 
-// Run bind_array() for many different matrix types
+/// Run bind_array() for many different matrix types
 template <typename T, size_t Size> void bind_matrix_types(ArrayBinding &b) {
     using VecF32 = Array<float32_array_t<T>, Size>;
     using VecF64 = Array<float64_array_t<T>, Size>;
@@ -694,6 +703,7 @@ template <typename T, size_t Size> void bind_matrix_types(ArrayBinding &b) {
     bind_array<Matrix<float64_array_t<T>, Size>>(b);
 }
 
+/// Run bind_array() for arrays, matrices, quaternions, complex numbers, and tensors
 template <typename T> void bind_all(ArrayBinding &b) {
     if constexpr (!std::is_scalar_v<T>)
         bind_array_types<T>(b);
