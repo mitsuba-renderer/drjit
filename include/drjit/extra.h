@@ -115,9 +115,11 @@ extern DRJIT_EXTRA_EXPORT uint64_t ad_var_new(uint32_t index);
 /// Return the gradient value associated with a particular variable
 extern DRJIT_EXTRA_EXPORT uint32_t ad_grad(uint64_t index);
 
-/// Assign or accumulate into the gradient associated with a given variable
-extern DRJIT_EXTRA_EXPORT void ad_set_grad(uint64_t index, uint32_t value,
-                                           bool accum);
+/// Accumulate into the gradient associated with a given variable
+extern DRJIT_EXTRA_EXPORT void ad_accum_grad(uint64_t index, uint32_t value);
+
+/// Clear the gradient of a given variable
+extern DRJIT_EXTRA_EXPORT void ad_clear_grad(uint64_t index);
 
 /**
  * \brief Increase the reference count of the given AD variable
@@ -145,6 +147,12 @@ extern DRJIT_EXTRA_EXPORT uint64_t ad_var_set_label(uint64_t index,
 
 /// Return the label associated with a variable
 extern DRJIT_EXTRA_EXPORT const char *ad_var_label(uint64_t index);
+
+/// Return a list of variables that are registered with the AD computation grpah
+extern DRJIT_EXTRA_EXPORT const char *ad_var_whos();
+
+/// Return GraphViz markup describing registered variables and their connectivity
+extern DRJIT_EXTRA_EXPORT const char *ad_var_graphviz();
 
 #if defined(__cplusplus)
 }

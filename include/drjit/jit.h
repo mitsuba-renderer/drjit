@@ -232,7 +232,6 @@ struct DRJIT_TRIVIAL_ABI JitArray
     JitArray sin_() const { return steal(jit_var_sin(m_index)); }
     JitArray cos_() const { return steal(jit_var_cos(m_index)); }
     JitArray tan_() const { return steal(jit_var_tan(m_index)); }
-    JitArray cot_() const { return steal(jit_var_cot(m_index)); }
     JitArray asin_() const { return steal(jit_var_asin(m_index)); }
     JitArray acos_() const { return steal(jit_var_acos(m_index)); }
     JitArray atan_() const { return steal(jit_var_atan(m_index)); }

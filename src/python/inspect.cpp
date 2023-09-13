@@ -13,10 +13,15 @@
 #include "base.h"
 #include <string>
 
-static nb::object graphviz(bool as_str = false) {
-    nb::str string = nb::str(jit_var_graphviz());
+static nb::object graphviz(bool ad, bool as_string) {
+    nb::str string;
 
-    if (as_str)
+    if (ad)
+        string = nb::str(ad_var_graphviz());
+    else
+        string = nb::str(jit_var_graphviz());
+
+    if (as_string)
         return std::move(string);
 
     try {
@@ -25,8 +30,24 @@ static nb::object graphviz(bool as_str = false) {
         throw nb::type_error(
             "drjit.graphviz(): The 'graphviz' Python package not available! "
             "Install via 'python -m pip install graphviz'. Alternatively, "
-            "you can call ``drjit.graphviz(as_str=True)`` to obtain a "
+            "you can call ``drjit.graphviz(as_string=True)`` to obtain a "
             "string representation..");
+    }
+}
+
+static nb::object whos(bool ad, bool as_string) {
+    nb::str string;
+
+    if (ad)
+        string = nb::str(ad_var_whos());
+    else
+        string = nb::str(jit_var_whos());
+
+    if (as_string) {
+        return std::move(string);
+    } else {
+        nb::print(string);
+        return nb::none();
     }
 }
 
@@ -74,7 +95,7 @@ static nb::object label(nb::handle h) {
     if (is_drjit_array(h)) {
         const ArraySupplement &s = supp(h.type());
         if ((JitBackend) s.backend != JitBackend::None) {
-            const char *str = ad_var_label(s.index(inst_ptr(h)));
+            const char *str = jit_var_label((uint32_t) s.index(inst_ptr(h)));
             if (str)
                 return nb::str(str);
         }
@@ -84,7 +105,15 @@ static nb::object label(nb::handle h) {
 }
 
 void export_inspect(nb::module_ &m) {
-    m.def("graphviz", &graphviz, "as_str"_a = false, doc_graphviz)
+    m.def("graphviz", [](bool as_string) { return graphviz(false, as_string); },
+          "as_string"_a = false, doc_graphviz)
+     .def("graphviz_ad",
+          [](bool as_string) { return graphviz(true, as_string); },
+          "as_string"_a = false, doc_graphviz_ad)
+     .def("whos", [](bool as_string) { return whos(false, as_string); },
+          "as_string"_a = false, doc_whos)
+     .def("whos_ad", [](bool as_string) { return whos(true, as_string); },
+          "as_string"_a = false, doc_whos_ad)
      .def("label", &label, doc_label)
      .def("set_label", &set_label, doc_set_label)
      .def("set_label", &set_label_2);

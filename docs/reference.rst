@@ -1,5 +1,7 @@
 .. py:module:: drjit
 
+.. _reference:
+
 Reference
 =========
 
@@ -472,6 +474,12 @@ Automatic differentiation
       Clear gradients of processed vertices only, but leave edges intact. Equal
       to ``ClearInput | ClearInterior``.
 
+   .. autoattribute:: PermitNoGrad
+      :annotation:
+
+      Don't fail when the input to a ``drjit.forward`` or ``backward``
+      operation is not a differentiable array.";
+
    .. autoattribute:: Default
       :annotation:
 
@@ -487,20 +495,15 @@ Automatic differentiation
 .. autofunction:: set_grad
 .. autofunction:: accum_grad
 .. autofunction:: replace_grad
+.. autofunction:: clear_grad
 .. autofunction:: traverse
 .. autofunction:: enqueue
-.. py:function:: forward(arg: drjit.ArrayBase, flags: drjit.ADFlag | int = drjit.ADFlag.Default)
-
-   This function is a convenience alias of :py:func:`forward_from`.
-
-.. py:function:: backward(arg: drjit.ArrayBase, flags: drjit.ADFlag | int = drjit.ADFlag.Default)
-
-   This function is a convenience alias of :py:func:`backward_from`.
-
 .. autofunction:: forward_from
 .. autofunction:: forward_to
+.. autofunction:: forward
 .. autofunction:: backward_from
 .. autofunction:: backward_to
+.. autofunction:: backward
 
 .. .. autofunction:: ad_scope_enter
 .. .. autofunction:: ad_scope_leave

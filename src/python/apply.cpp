@@ -23,9 +23,32 @@ static const char *op_names[] = {
     "__invert__",
     "abs",
     "sqrt",
+    "rcp",
+    "rsqrt",
+    "cbrt",
+
+    "exp",
+    "exp2",
+    "log",
+    "log2",
 
     "sin",
+    "cos",
+    "sincos",
+    "tan",
+    "asin",
+    "acos",
     "atan",
+
+    "sinh",
+    "cosh",
+    "sincosh",
+    "tanh",
+    "asinh",
+    "acosh",
+    "atanh",
+
+    "erf",
 
     // Binary arithetic operations
     "__add__",
@@ -39,6 +62,7 @@ static const char *op_names[] = {
 
     "minimum",
     "maximum",
+    "atan2",
 
     // Binary bit/mask operations
     "__and__",
