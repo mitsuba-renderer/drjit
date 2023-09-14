@@ -5722,12 +5722,16 @@ def wrap_ad(source: str, target: str):
         Forward-mode AD isn't currently supported by this operation.
 
     Args:
-        source (str): The AD framework used outside of the wrapped function.
-        target (str): The AD framework used within the wrapped function.
+        source (str, module): The AD framework used outside of the wrapped function.
+        target (str, module): The AD framework used within the wrapped function.
 
     Returns:
         The decorated function.
     '''
+    # Get module names if source and target are not already strings
+    source = source.__name__ if not isinstance(source, str) else source
+    target = target.__name__ if not isinstance(target, str) else target
+
     if not 'drjit' in [source, target]:
         raise TypeError('wrap_ad(): invalid combination of frameworks, '
                         'expected one to be drjit!', source, target)
