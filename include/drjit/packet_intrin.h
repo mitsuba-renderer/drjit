@@ -300,6 +300,7 @@ DRJIT_INLINE long long mm_extract_epi64(__m128i m)  {
 #if defined(DRJIT_X86_AVX2)
 template <typename T> DRJIT_INLINE T tzcnt(T v) {
     static_assert(std::is_integral_v<T>, "tzcnt(): requires an integer argument!");
+#if defined(DRJIT_X86_BMI)  // Check for BMI support for _tzcnt_u32/u64
     if (sizeof(T) <= 4) {
         return (T) _tzcnt_u32((unsigned int) v);
     } else {
@@ -312,6 +313,16 @@ template <typename T> DRJIT_INLINE T tzcnt(T v) {
         return (T) (lo != 0 ? _tzcnt_u32(lo) : (_tzcnt_u32(hi) + 32));
 #endif
     }
+#elif defined(__GNUC__) || defined(__clang__)  // GCC and Clang fallback
+    if (sizeof(T) <= 4) {
+        return (T) __builtin_ctz(v);
+    } else {
+        return (T) __builtin_ctzll(v);
+    }
+#else
+    // Some other generic fallback for other compilers or a static assertion for unsupported compilers
+    static_assert(false, "tzcnt() is not supported on this platform/compiler");
+#endif
 }
 #endif
 
