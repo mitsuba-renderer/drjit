@@ -83,6 +83,7 @@ def test01_slice_index(t):
     check(shape=(3, 7), indices=(None, ..., None, 1, None),
           shape_out=(1, 3, 1, 1), index_out=t(1, 8, 15))
 
+
 @pytest.test_arrays('is_tensor, -bool')
 def test02_construct(t):
     v = t()
@@ -150,6 +151,7 @@ def test02_construct(t):
     with pytest.raises(TypeError, match='Input array must be specified'):
         v = t(shape=(3,4))
 
+
 @pytest.test_arrays('is_tensor, -bool')
 def test03_construct_2(t):
     assert dr.all(dr.arange(t, 3) == [0, 1, 2])
@@ -164,6 +166,7 @@ def test03_construct_2(t):
     assert v.shape == (1, 2, 3) and dr.all(v.array == 0)
     v = dr.full(t, 1, shape=(1, 2, 3))
     assert v.shape == (1, 2, 3) and dr.all(v.array == 1)
+
 
 @pytest.test_arrays('-bool, is_tensor')
 def test05_binop(t):
@@ -182,11 +185,12 @@ def test05_binop(t):
     assert str(t([1, 2, 3]) + t(4)) == '[5, 6, 7]'
     assert str(t([1, 2, 3]) + t([4, 5, 6])) == '[5, 7, 9]'
 
+
 @pytest.test_arrays('is_tensor, bool, is_jit')
 def test06_reduce(t, drjit_verbose, capsys):
     v = t([[True, False], [False, False]])
-    v_any = dr.any_nested(v)
-    v_all = dr.all_nested(v)
+    v_any = dr.any(v, axis=None)
+    v_all = dr.all(v, axis=None)
     assert type(v_any) is t and type(v_all) is t
     assert v_any.shape == () and v_all.shape == ()
     assert bool(v_any)
@@ -277,6 +281,7 @@ def test08_slice(t):
     c[..., None, 1, None]
     c[None, 4, ..., 3, None]
 
+
 @pytest.test_arrays('is_tensor, -bool')
 def test09_broadcast(t):
     np = pytest.importorskip("numpy")
@@ -310,6 +315,7 @@ def test09_broadcast(t):
     with pytest.raises(RuntimeError, match=r'Operands have incompatible shapes: \(3, 2\) and \(2, 3\).'):
         dr.zeros(t, (3, 2)) + dr.zeros(t, (2, 3))
 
+
 @pytest.test_arrays('is_tensor, -bool')
 def test10_inplace(t):
     v1 = t([[1, 2], [4, 5]])
@@ -336,11 +342,13 @@ def test10_inplace(t):
         assert type(v1) is t
         assert str(v1) == "[[2, 4],\n [8, 10]]"
 
+
 @pytest.test_arrays('is_tensor, -bool')
 def test11_masked_assignment(t):
     v1 = t([[1, 2], [4, 5]])
     v1[v1>4] = 10
     assert str(v1) == "[[1, 2],\n [4, 10]]"
+
 
 @pytest.test_arrays('matrix, shape=(3, 3), float32')
 def test12_convert_tensor_scalar(t):
@@ -351,6 +359,7 @@ def test12_convert_tensor_scalar(t):
 
     tx = mod.TensorXf(m)
     assert str(tx) == "[[1, 2, 3],\n [4, 5, 6],\n [7, 8, 9]]"
+
 
 @pytest.test_arrays('matrix, shape=(3, 3, *), float32')
 def test13_convert_tensor_vectorized(t, drjit_verbose, capsys):

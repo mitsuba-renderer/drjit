@@ -14,7 +14,7 @@ Array creation
 .. autofunction:: arange
 .. autofunction:: linspace
 
-.. _horizontal-reductions:
+.. _horizontal-reductions-ref:
 
 Horizontal operations
 ---------------------
@@ -31,15 +31,15 @@ These operations are *horizontal* in the sense that [..]
 .. autofunction:: prod
 .. autofunction:: dot
 .. autofunction:: norm
+.. autofunction:: all
+.. autofunction:: any
 
 Mask operations
 ---------------
 
+Also relevant here are :py:func:`any`, :py:func:`all`.
+
 .. autofunction:: select
-.. autofunction:: all
-.. autofunction:: any
-.. autofunction:: all_nested
-.. autofunction:: any_nested
 .. autofunction:: isinf
 .. autofunction:: isnan
 .. autofunction:: isfinite

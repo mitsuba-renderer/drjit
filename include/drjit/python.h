@@ -116,6 +116,10 @@ enum class ArrayOp {
     // Horizontal reductions
     All,
     Any,
+    Sum,
+    Prod,
+    Min,
+    Max,
 
     // Miscellaneous
     Richcmp,
@@ -451,12 +455,18 @@ template <typename T> void bind_arithmetic(ArrayBinding &b) {
             default: nanobind::detail::raise("Unsupported cast.");
         }
     };
+
+    b[ArrayOp::Sum] = (void *) +[](const T *a, T *b) { new (b) T(a->sum_()); };
+    b[ArrayOp::Prod] = (void *) +[](const T *a, T *b) { new (b) T(a->prod_()); };
+    b[ArrayOp::Min] = (void *) +[](const T *a, T *b) { new (b) T(a->min_()); };
+    b[ArrayOp::Max] = (void *) +[](const T *a, T *b) { new (b) T(a->max_()); };
 }
 
 inline void disable_arithmetic(ArrayBinding &b) {
     b[ArrayOp::Abs] = b[ArrayOp::Neg] = b[ArrayOp::Add] = b[ArrayOp::Sub] =
         b[ArrayOp::Mul] = b[ArrayOp::Minimum] = b[ArrayOp::Maximum] =
-        b[ArrayOp::Fma] = DRJIT_OP_NOT_IMPLEMENTED;
+        b[ArrayOp::Fma] = b[ArrayOp::Sum] = b[ArrayOp::Prod] =
+        b[ArrayOp::Min] = b[ArrayOp::Max] = DRJIT_OP_NOT_IMPLEMENTED;
     b.cast = (ArrayBinding::Cast) DRJIT_OP_NOT_IMPLEMENTED;
 }
 

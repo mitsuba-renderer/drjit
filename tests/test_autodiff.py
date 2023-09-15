@@ -85,6 +85,7 @@ def test02_detach(t):
     assert dr.grad_enabled(a)
     assert not dr.grad_enabled(c)
 
+
 @pytest.test_arrays('is_diff,float,shape=(*)')
 def test03_set_grad(t):
     a = t([1, 2, 3])
@@ -138,6 +139,7 @@ def test03_set_grad(t):
     assert dr.all(b.x == c.x)
     assert dr.all(b.y == c.y)
 
+
 @pytest.test_arrays('is_diff,float,shape=(*)')
 def test04_accum_grad(t):
     a = t([1, 2, 3])
@@ -187,8 +189,76 @@ def test05_set_label(t):
     with pytest.raises(TypeError, match='incompatible function arguments'):
         dr.set_label(a, 'aa', b=b)
 
+
 @pytest.test_arrays('is_diff,float,shape=(*)')
-def test06_forward_to(t):
+def test06_add_bwd(t):
+    a, b = t(1), t(2)
+    dr.enable_grad(a, b)
+    c = 2 * a + b
+    dr.backward(c)
+    assert dr.grad(a) == 2
+    assert dr.grad(b) == 1
+
+
+@pytest.test_arrays('is_diff,float,shape=(*)')
+def test07_add_fwd(t):
+    if True:
+        a, b = t(1), t(2)
+        dr.enable_grad(a, b)
+        c = 2 * a + b
+        dr.forward(a, flags=dr.ADFlag.ClearVertices)
+        assert dr.grad(c) == 2
+        dr.set_grad(c, 101)
+        dr.forward(b)
+        assert dr.grad(c) == 102
+
+    if True:
+        a, b = t(1), t(2)
+        dr.enable_grad(a, b)
+        c = 2 * a + b
+        dr.set_grad(a, 1.0)
+        dr.enqueue(dr.ADMode.Forward, a)
+        dr.traverse(dr.ADMode.Forward, flags=dr.ADFlag.ClearVertices)
+        assert dr.grad(c) == 2
+        assert dr.grad(a) == 0
+        dr.set_grad(a, 1.0)
+        dr.enqueue(dr.ADMode.Forward, a)
+        dr.traverse(dr.ADMode.Forward, flags=dr.ADFlag.ClearVertices)
+        assert dr.grad(c) == 4
+
+
+@pytest.test_arrays('is_diff,float,shape=(*)')
+def test08_branch_fwd(t):
+    a = t(1)
+    dr.enable_grad(a)
+
+    b = a + 1
+    c = a + 1
+    d = b + c
+
+    del b, c
+
+    dr.forward(a)
+    assert dr.grad(d) == 2
+
+
+@pytest.test_arrays('is_diff,float,shape=(*)')
+def test09_branch_ref(t):
+    a = t(1)
+    dr.enable_grad(a)
+
+    b = a + 1
+    c = a + 1
+    d = b + c
+
+    del b, c
+
+    dr.backward(d)
+    assert dr.grad(a) == 2
+
+
+@pytest.test_arrays('is_diff,float,shape=(*)')
+def test10_forward_to(t):
   a = t(1.0)
   dr.enable_grad(a)
   b = a * a * 2
@@ -219,8 +289,9 @@ def test06_forward_to(t):
   assert dr.allclose(dr.grad(a), 1.0)
   assert dr.allclose(grad_b, 4.0)
 
+
 @pytest.test_arrays('is_diff,float,shape=(*)')
-def test07_forward_from(t):
+def test11_forward_from(t):
     a = t(1.0)
 
     with pytest.raises(RuntimeError, match='argument does not depend on the input'):
@@ -247,7 +318,7 @@ def test07_forward_from(t):
     assert dr.allclose(dr.grad(b), 8.0)
 
 @pytest.test_arrays('is_diff,float,shape=(*)')
-def test08_backward_to(t):
+def test12_backward_to(t):
     with pytest.raises(RuntimeError, match='argument does not depend on the input'):
         dr.backward_to(1.0)
 
@@ -274,7 +345,7 @@ def test08_backward_to(t):
 
 
 @pytest.test_arrays('is_diff,float,shape=(*)')
-def test09_backward_from(t):
+def test13_backward_from(t):
     a = t(1.0)
 
     with pytest.raises(RuntimeError, match='argument does not depend on the input'):
@@ -298,8 +369,9 @@ def test09_backward_from(t):
     print(dr.grad(a))
     assert dr.allclose(dr.grad(a), 3.0)
 
+
 @pytest.test_arrays('is_diff,float,shape=(*)')
-def test10_forward_to_reuse(t):
+def test14_forward_to_reuse(t):
     a, b, c = t(1), t(2), t(3)
     dr.enable_grad(a, b, c)
     dr.set_grad(a, 10)
@@ -320,7 +392,7 @@ def test10_forward_to_reuse(t):
             dr.set_grad(v, t())
 
 @pytest.test_arrays('is_diff,float,shape=(*)')
-def test11_backward_to_reuse(t):
+def test15_backward_to_reuse(t):
     a, b, c = t(1), t(2), t(3)
     dr.enable_grad(a, b, c)
 
@@ -340,7 +412,7 @@ def test11_backward_to_reuse(t):
             dr.set_grad(v, t())
 
 @pytest.test_arrays('is_diff,float32,shape=(*)')
-def test12_mixed_precision_bwd(t):
+def test16_mixed_precision_bwd(t):
     t2 = dr.float64_array_t(t)
 
     a = t(1)
@@ -354,7 +426,7 @@ def test12_mixed_precision_bwd(t):
 
 
 @pytest.test_arrays('is_diff,float32,shape=(*)')
-def test12_mixed_precision_fwd(t):
+def test17_mixed_precision_fwd(t):
     t2 = dr.float64_array_t(t)
 
     a = t(1)
@@ -367,7 +439,158 @@ def test12_mixed_precision_fwd(t):
     assert dr.allclose(dr.grad(e), dr.cos(1) * 2 + 2)
 
 
-counter = 12
+@pytest.test_arrays('is_diff,float32,shape=(*)')
+def test18_select_fwd(t):
+    a = t(1)
+    b = t(2)
+    dr.enable_grad(a, b)
+    dr.set_grad(a, 3)
+    dr.set_grad(b, 4)
+    c = dr.select(dr.mask_t(a)(True, False), a, b)
+    gc = dr.forward_to(c)
+    assert dr.allclose(c, t(1, 2))
+    assert dr.allclose(gc, t(3, 4))
+
+
+@pytest.test_arrays('is_diff,float,shape=(*)')
+def test19_nan_propagation(t):
+    for i in range(2):
+        x = dr.arange(t, 10)
+        dr.enable_grad(x)
+        f0 = t(0)
+        y = dr.select(x < (20 if i == 0 else 0), x, x * (f0 / f0))
+        dr.backward(y)
+        g = dr.grad(x)
+        if i == 0:
+            assert dr.allclose(g, 1)
+        else:
+            assert dr.all(dr.isnan(g))
+
+    for i in range(2):
+        x = dr.arange(t, 10)
+        dr.enable_grad(x)
+        f0 = t(0)
+        y = dr.select(x < (20 if i == 0 else 0), x, x * (f0 / f0))
+        dr.forward(x)
+        g = dr.grad(y)
+        if i == 0:
+            assert dr.allclose(g, 1)
+        else:
+            assert dr.all(dr.isnan(g))
+
+@pytest.test_arrays('is_diff,float,shape=(*)')
+@pytest.mark.parametrize("f1", [0, int(dr.ADFlag.ClearEdges)])
+@pytest.mark.parametrize("f2", [0, int(dr.ADFlag.ClearInterior)])
+@pytest.mark.parametrize("f3", [0, int(dr.ADFlag.ClearInput)])
+def test20_ad_flags(t, f1, f2, f3):
+    v0 = t(2)
+    dr.enable_grad(v0)
+    v1 = v0 * 0.5
+    v2 = v0 + v1
+
+    for i in range(2):
+        dr.accum_grad(v0, 1 if i == 0 else 100)
+        dr.enqueue(dr.ADMode.Forward, v0)
+        dr.traverse(dr.ADMode.Forward, flags=(f1 | f2 | f3))
+
+    if f1 == 0:
+        if f2 == 0:
+            if f3 == 0:
+                assert dr.grad(v0) == 101
+                assert dr.grad(v1) == 51
+                assert dr.grad(v2) == 153.5
+            else:
+                assert dr.grad(v0) == 0
+                assert dr.grad(v1) == 50.5
+                assert dr.grad(v2) == 152
+        else:
+            if f3 == 0:
+                assert dr.grad(v0) == 101
+                assert dr.grad(v1) == 0
+                assert dr.grad(v2) == 153
+            else:
+                assert dr.grad(v0) == 0
+                assert dr.grad(v1) == 0
+                assert dr.grad(v2) == 151.5
+    else:
+        if f2 == 0:
+            if f3 == 0:
+                assert dr.grad(v0) == 101
+                assert dr.grad(v1) == 0.5
+                assert dr.grad(v2) == 1.5
+            else:
+                assert dr.grad(v0) == 100
+                assert dr.grad(v1) == 0.5
+                assert dr.grad(v2) == 1.5
+        else:
+            if f3 == 0:
+                assert dr.grad(v0) == 101
+                assert dr.grad(v1) == 0
+                assert dr.grad(v2) == 1.5
+            else:
+                assert dr.grad(v0) == 100
+                assert dr.grad(v1) == 0
+                assert dr.grad(v2) == 1.5
+
+
+@pytest.test_arrays('is_diff,float,shape=(*)')
+def test21_sum_0_bwd(t):
+    x = dr.linspace(t, 0, 1, 10)
+    dr.enable_grad(x)
+    y = dr.sum(x*x)
+    dr.backward(y)
+    assert len(y) == 1 and dr.allclose(y, 95.0/27.0)
+    assert dr.allclose(dr.grad(x), 2 * dr.detach(x))
+
+
+@pytest.test_arrays('is_diff,float,shape=(*)')
+def test22_sum_0_fwd(t):
+    x = dr.linspace(t, 0, 1, 10)
+    dr.enable_grad(x)
+    y = dr.sum(x*x)
+    dr.forward(x)
+    assert len(y) == 1 and dr.allclose(dr.detach(y), 95.0/27.0)
+    assert len(dr.grad(y)) == 1 and dr.allclose(dr.grad(y), 10)
+
+
+@pytest.test_arrays('is_diff,float,shape=(*)')
+def test23_sum_1_bwd(t):
+    x = dr.linspace(t, 0, 1, 11)
+    dr.enable_grad(x)
+    y = dr.sum(dr.sum(x)*x)
+    dr.backward(y)
+    assert dr.allclose(dr.grad(x), 11)
+
+
+@pytest.test_arrays('is_diff,float,shape=(*)')
+def test24_sum_1_fwd(t):
+    x = dr.linspace(t, 0, 1, 10)
+    dr.enable_grad(x)
+    y = dr.sum(dr.sum(x)*x)
+    dr.forward(x)
+    assert dr.allclose(dr.grad(y), 100)
+
+
+@pytest.test_arrays('is_diff,float,shape=(*)')
+def test25_sum_2_bwd(t):
+    x = dr.linspace(t, 0, 1, 11)
+    dr.enable_grad(x)
+    z = dr.sum(dr.sum(x*x)*x*x)
+    dr.backward(z)
+    assert dr.allclose(dr.grad(x),
+                       [0., 1.54, 3.08, 4.62, 6.16, 7.7,
+                        9.24, 10.78, 12.32, 13.86, 15.4])
+
+
+@pytest.test_arrays('is_diff,float,shape=(*)')
+def test26_sum_2_fwd(t):
+    x = dr.linspace(t, 0, 1, 10)
+    dr.enable_grad(x)
+    y = dr.sum(dr.sum(x*x)*dr.sum(x*x))
+    dr.forward(x)
+    assert dr.allclose(dr.grad(y), 1900.0 / 27.0)
+
+counter = 27
 
 def std_test(name, func, f_in, f_out, grad_out):
     global counter

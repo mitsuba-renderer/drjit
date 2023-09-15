@@ -29,6 +29,7 @@ def test01_comparison(t):
         mod = sys.modules[t.__module__]
         mod.Array3f(1, 2, 3) + mod.Array4f(1, 2, 3, 4)
 
+
 def test02_allclose():
     assert dr.allclose(2, 2)
     assert dr.allclose([1, 2, 3], [1, 2, 3])
@@ -130,6 +131,7 @@ def test05_binop_inplace(t):
         del vz
         del vy
 
+
 @pytest.test_arrays('type=int32,shape=(3)', 'type=int32,shape=(3, *)', 'type=int32, shape=(*, *)')
 def test05_unop(t):
     assert dr.all(-t(1, 2, 3) == t(-1, -2, -3))
@@ -137,6 +139,7 @@ def test05_unop(t):
     assert dr.all(abs(t(1, -2, 3)) == t(1, 2, 3))
     m = dr.mask_t(t)
     assert dr.all(~m(True, False, True) == m(False, True, False))
+
 
 def test06_select():
     import drjit.scalar as s

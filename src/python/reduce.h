@@ -11,10 +11,13 @@
 #pragma once
 
 #include "common.h"
+#include <optional>
 
 extern void export_reduce(nb::module_ &);
 
-extern nb::object all(nb::handle h);
-extern nb::object any(nb::handle h);
-extern nb::object all_nested(nb::handle h);
-extern nb::object any_nested(nb::handle h);
+extern nb::object all(nb::handle, std::optional<int>);
+extern nb::object any(nb::handle, std::optional<int>);
+extern nb::object sum(nb::handle, std::optional<int>);
+extern nb::object prod(nb::handle, std::optional<int>);
+extern nb::object min(nb::handle, std::optional<int>);
+extern nb::object max(nb::handle, std::optional<int>);
