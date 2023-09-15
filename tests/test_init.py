@@ -17,6 +17,7 @@ def test01_init_default(t):
             s = '[' + ',\n '.join([s]*size) + ']'
     assert str(t()) == s
 
+
 # Test broadcasting from a constant, i.e., ``Array(1)``
 @pytest.test_arrays('-tensor, -bool, -shape=()')
 def test02_init_broadcast(t):
@@ -40,6 +41,7 @@ def test02_init_broadcast(t):
 
     # Test copy constructor
     assert str(t(t(1))) == s
+
 
 # Test array initialization from a list of arguments (explicit, list, tuple, iterable)
 @pytest.test_arrays('-tensor')
@@ -118,11 +120,13 @@ def test03_init_list(t):
             with pytest.raises(TypeError, match=msg):
                 t((None for i in range(size)))
 
+
 # Test initialization+stringification of arrays with diff. # of components
 @pytest.test_arrays('vector, int, shape=(3, *)')
 def test04_init_ragged(t):
     assert str(t(1, [2, 3], 4)) == '[[1, 2, 4],\n [1, 3, 4]]'
     assert str(t([1, 5, 6], [2, 3], 4)) == '[ragged array]'
+
 
 # Test literal initialization
 @pytest.test_arrays('float32, shape=(*), jit')
@@ -131,6 +135,7 @@ def test05_literal(t, drjit_verbose, capsys):
     assert "literal" in capsys.readouterr().out
     v[0] = 124
     assert "jit_poke" in capsys.readouterr().out
+
 
 # Test efficient initialization from lists/tuples/sequences
 @pytest.test_arrays('float32, shape=(*), jit')
@@ -141,6 +146,7 @@ def test06_literal(t, drjit_verbose, capsys):
     assert "jit_var_mem_copy" in capsys.readouterr().out
     t(range(10))
     assert "jit_var_mem_copy" in capsys.readouterr().out
+
 
 # Test dr.zeros (1)
 @pytest.test_arrays('float32, shape=(*)')
@@ -179,6 +185,7 @@ def test08_zeros_3d(t, drjit_verbose, capsys):
     with pytest.raises(RuntimeError, match="The provided 'shape' and 'dtype' parameters are incompatible."):
         v = dr.zeros(t, (100, 3))
 
+
 # Test dr.zeros (3)
 @pytest.test_arrays('float32, shape=(*, *)')
 def test09_zeros_nd(t, drjit_verbose, capsys):
@@ -194,6 +201,7 @@ def test09_zeros_nd(t, drjit_verbose, capsys):
     assert len(v) == 3 and len(v[1]) == 100 and v[0][0] == 0
     assert not is_jit or "literal" in capsys.readouterr().out
 
+
 # Test dr.zeros (4)
 @pytest.test_arrays('float32, matrix, shape=(3, 3, *)')
 def test10_zeros_matrix(t):
@@ -205,6 +213,7 @@ def test10_zeros_matrix(t):
     assert len(v) == 3 and len(v[1]) == 3 and len(v[1][1]) == 100 and v[1][1][1] == 0
     with pytest.raises(RuntimeError, match="The provided 'shape' and 'dtype' parameters are incompatible."):
         v = dr.zeros(t, (3, 4, 100))
+
 
 # Test dr.zeros (5)
 @pytest.test_arrays('float32, shape=(*)')
@@ -218,12 +227,14 @@ def test11_zeros_struct(t):
     v = dr.zeros(Q, 100)
     assert type(v) is Q and type(v.a) is t and len(v.a) == 100 and v.a[0] == 0
 
+
 # Test dr.zeros (t)
 def test12_zeros_simple():
     v = dr.zeros(float)
     assert type(v) is float and v == 0
     v = dr.zeros(int)
     assert type(v) is int and v == 0
+
 
 # Test dr.empty
 @pytest.test_arrays('float32, shape=(*)')
@@ -244,6 +255,7 @@ def test13_empty(t, drjit_verbose, capsys):
     with pytest.raises(RuntimeError, match="The provided 'shape' and 'dtype' parameters are incompatible."):
         v = dr.empty(t, [100, 200])
 
+
 # Test dr.full (2)
 @pytest.test_arrays('float32, shape=(3, *)')
 def test14_zeros_3d(t, drjit_verbose, capsys):
@@ -262,6 +274,7 @@ def test14_zeros_3d(t, drjit_verbose, capsys):
     with pytest.raises(RuntimeError, match="The provided 'shape' and 'dtype' parameters are incompatible."):
         v = dr.full(t, 5, (100, 3))
 
+
 @pytest.test_arrays('shape=(*), -bool')
 def test15_arange(t):
     assert dr.all(dr.arange(t, 5) == t(0, 1, 2, 3, 4))
@@ -269,6 +282,7 @@ def test15_arange(t):
     if dr.is_signed_v(t):
         assert dr.all(dr.arange(t, -2, 5, 2) == t(-2, 0, 2, 4))
         assert dr.all(dr.arange(t, start=-2, stop=5, step=2) == t(-2, 0, 2, 4))
+
 
 @pytest.test_arrays('shape=(*), -bool, float')
 def test16_linspace(t):
@@ -285,6 +299,7 @@ def test17_repr_long_1(t):
 @pytest.test_arrays('shape=(1, *), uint32')
 def test18_repr_long_2(t):
   assert repr(t([range(1000)])) == '[[0],\n [1],\n [2],\n [3],\n [4],\n .. 990 skipped ..,\n [995],\n [996],\n [997],\n [998],\n [999]]'
+
 
 @pytest.test_packages()
 def test19_shape_vectorized(p):
@@ -323,6 +338,7 @@ def test20_shape_other():
     assert dr.shape([1, [1, 2]]) is None
     assert dr.shape((dr.scalar.Array2f(), dr.scalar.Array3f())) is None
 
+
 @pytest.test_arrays('matrix, -jit, float32')
 def test21_stringify_matrix_scalar(t):
     if dr.depth_v(t) > 2:
@@ -353,6 +369,7 @@ def test21_stringify_matrix_scalar(t):
         return s
 
     assert simplify(str(np.array(m))) == simplify(ref)
+
 
 @pytest.test_arrays('matrix, jit, float32')
 def test22_stringify_matrix_vectorized(t):
@@ -389,6 +406,7 @@ def test22_stringify_matrix_vectorized(t):
 
     assert simplify(str(m)) == simplify(ref)
 
+
 @pytest.test_arrays('float32, shape=(3, *)')
 def test23_init_from_ndarray_various_cases(t):
     np = pytest.importorskip("numpy")
@@ -401,13 +419,13 @@ def test23_init_from_ndarray_various_cases(t):
 
     a = np.array([[1, 2], [3, 4], [5, 6]], dtype=np.float32, order='F')
     v = t(a)
-    assert dr.all_nested(v == t([1, 2], [3, 4], [5, 6]))
+    assert dr.all(v == t([1, 2], [3, 4], [5, 6]), axis=None)
     a[0] = 5 # Gather made a copy, comparison still holds
-    assert dr.all_nested(v == t([1, 2], [3, 4], [5, 6]))
+    assert dr.all(v == t([1, 2], [3, 4], [5, 6]), axis=None)
 
     # Implicit conversion
     v = t(np.array([[1, 2], [3, 4], [5, 6]], dtype=np.int32, order='C'))
-    assert dr.all_nested(v == t([1, 2], [3, 4], [5, 6]))
+    assert dr.all(v == t([1, 2], [3, 4], [5, 6]), axis=None)
 
     a = np.array([1, 2, 3], dtype=np.float32)
     tv = dr.value_t(t)
@@ -435,8 +453,9 @@ def test23_init_from_ndarray_various_cases(t):
     with pytest.raises(TypeError, match=msg):
         v = t(np.array(1))
 
+
 @pytest.test_arrays('tensor, float32')
-def test23_init_tensor_from_ndarray(t):
+def test24_init_tensor_from_ndarray(t):
     np = pytest.importorskip("numpy")
 
     v = t(np.array(1, dtype=np.float32))
@@ -460,4 +479,4 @@ def test23_init_tensor_from_ndarray(t):
         assert dr.any(v.array == (1, 2))
 
     a = np.array([[1, 2, 3], [4, 5, 6]], dtype=np.float32)
-    assert dr.all_nested(t(a) == t([[1, 2, 3], [4, 5, 6]]))
+    assert dr.all(t(a) == t([[1, 2, 3], [4, 5, 6]]), axis=None)

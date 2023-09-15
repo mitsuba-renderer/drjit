@@ -4,10 +4,10 @@
 #define likely(x)   DRJIT_LIKELY(x)
 #define unlikely(x) DRJIT_UNLIKELY(x)
 
-#define ad_warn(fmt, ...) jit_log(LogLevel::Warn, "drjit-autodiff: " fmt, ## __VA_ARGS__)
-#define ad_log(fmt, ...) jit_log(LogLevel::Debug, "drjit-autodiff: " fmt, ## __VA_ARGS__)
-#define ad_fail(fmt, ...) jit_fail("drjit-autodiff: " fmt, ## __VA_ARGS__)
-#define ad_raise(fmt, ...) jit_raise("drjit-autodiff: " fmt, ## __VA_ARGS__)
+#define ad_warn(fmt, ...) jit_log(LogLevel::Warn,  fmt, ## __VA_ARGS__)
+#define ad_log(fmt, ...) jit_log(LogLevel::Debug,  fmt, ## __VA_ARGS__)
+#define ad_fail(fmt, ...) jit_fail(fmt, ## __VA_ARGS__)
+#define ad_raise(fmt, ...) jit_raise(fmt, ## __VA_ARGS__)
 #define ad_assert(cond) if (unlikely(!(cond))) jit_fail("drjit-autodiff: assertion failure (%s) at line %i", #cond, __LINE__);
 
 struct UInt32Hasher {

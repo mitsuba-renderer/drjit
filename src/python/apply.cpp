@@ -81,6 +81,10 @@ static const char *op_names[] = {
     // Horizontal reductions
     "all",
     "any",
+    "sum",
+    "prod",
+    "min",
+    "max",
 
     // Miscellaneous
     "__richcmp__",

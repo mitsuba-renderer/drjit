@@ -45,18 +45,18 @@ def test03_gather_nested(t):
     active = dr.mask_t(vt)(True, False, True)
     idx = dr.uint32_array_t(vt)(0, 5, 3)
 
-    assert dr.all_nested(dr.gather(
+    assert dr.all(dr.gather(
         dtype=t,
         source=v,
-        index=idx) == r)
+        index=idx) == r, axis=None)
 
     r = t([0, 0, 3], [10, 0, 13])
 
-    assert dr.all_nested(dr.gather(
+    assert dr.all(dr.gather(
         dtype=t,
         source=v,
         index=idx,
-        active=active) == r)
+        active=active) == r, axis=None)
 
 
 @pytest.test_arrays('-bool,shape=(*, *)')
@@ -99,13 +99,13 @@ def test05_gather_nested_2(t):
         vt(1, 16, 10),
         vt(2, 17, 11)
     )
-    assert dr.all_nested(dr.gather(t, v, idx) == r)
+    assert dr.all(dr.gather(t, v, idx) == r, axis=None)
     r = t(
         vt(0, 0, 9),
         vt(1, 0, 10),
         vt(2, 0, 11)
     )
-    assert dr.all_nested(dr.gather(t, v, idx, active) == r)
+    assert dr.all(dr.gather(t, v, idx, active) == r, axis=None)
 
 
 @pytest.test_arrays('-bool,shape=(3, *)')
@@ -216,8 +216,8 @@ def test11_unravel_scalar():
     assert dr.unravel(type(v), v) is v
     assert dr.all(dr.unravel(dtype=s.Array3f, array=s.ArrayXf(1, 2, 3), order='C') == s.Array3f([1, 2, 3]))
     assert dr.all(dr.unravel(dtype=s.Array3f, array=s.ArrayXf(1, 2, 3), order='F') == s.Array3f([1, 2, 3]))
-    assert dr.all_nested(dr.unravel(s.Array22f, s.ArrayXf(1, 2, 3, 4), order='C') == s.Array22f([[1, 2], [3, 4]]))
-    assert dr.all_nested(dr.unravel(s.Array22f, s.ArrayXf(1, 3, 2, 4), order='F') == s.Array22f([[1, 2], [3, 4]]))
+    assert dr.all(dr.unravel(s.Array22f, s.ArrayXf(1, 2, 3, 4), order='C') == s.Array22f([[1, 2], [3, 4]]), axis=None)
+    assert dr.all(dr.unravel(s.Array22f, s.ArrayXf(1, 3, 2, 4), order='F') == s.Array22f([[1, 2], [3, 4]]), axis=None)
 
 
 @pytest.test_arrays('-bool,shape=(3, *)')
@@ -227,13 +227,13 @@ def test12_unravel_vec(t, drjit_verbose, capsys):
     v0 = vt(1, 2, 3, 4, 5, 6, 7, 7, 7)
     v1 = vt(1, 4, 7, 2, 5, 7, 3, 6, 7)
 
-    assert dr.all_nested(dr.unravel(t, v0, order='C') == t([1, 2, 3], [4, 5, 6], 7))
-    assert dr.all_nested(dr.unravel(t, v1, order='F') == t([1, 2, 3], [4, 5, 6], 7))
-    assert dr.all_nested(dr.unravel(t, v1) == t([1, 2, 3], [4, 5, 6], 7))
+    assert dr.all(dr.unravel(t, v0, order='C') == t([1, 2, 3], [4, 5, 6], 7), axis=None)
+    assert dr.all(dr.unravel(t, v1, order='F') == t([1, 2, 3], [4, 5, 6], 7), axis=None)
+    assert dr.all(dr.unravel(t, v1) == t([1, 2, 3], [4, 5, 6], 7), axis=None)
     transcript = capsys.readouterr().out
     assert transcript.count('jit_var_gather') == 9
 
-    assert dr.all_nested(dr.unravel(t, vt()) == t())
+    assert dr.all(dr.unravel(t, vt()) == t(), axis=None)
 
 
     with pytest.raises(TypeError, match="expected array of type"):

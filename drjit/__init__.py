@@ -86,7 +86,7 @@ def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
         if equal_nan:
             cond |= isnan(a) & isnan(b)
 
-        return all_nested(cond)
+        return all(cond, axis=None)
 
     def safe_len(x):
         try:
@@ -120,3 +120,41 @@ def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
             if not allclose(ia, ib, rtol, atol, equal_nan):
                 return False
         return True
+
+# --- Deprecated wrappers for old Dr.Jit reduction operations ----
+
+def all_nested(a):
+    import warnings
+    warnings.warn("all_nested() is deprecated, please use all(a, axis=None)",
+                  DeprecationWarning, stacklevel=2)
+    return all(a, axis=None)
+
+def any_nested(a):
+    import warnings
+    warnings.warn("any_nested() is deprecated, please use any(a, axis=None)",
+                  DeprecationWarning, stacklevel=2)
+    return any(a, axis=None)
+
+def sum_nested(a):
+    import warnings
+    warnings.warn("sum_nested() is deprecated, please use sum(a, axis=None)",
+                  DeprecationWarning, stacklevel=2)
+    return sum(a, axis=None)
+
+def prod_nested(a):
+    import warnings
+    warnings.warn("prod_nested() is deprecated, please use prod(a, axis=None)",
+                  DeprecationWarning, stacklevel=2)
+    return prod(a, axis=None)
+
+def min_nested(a):
+    import warnings
+    warnings.warn("min_nested() is deprecated, please use min(a, axis=None)",
+                  DeprecationWarning, stacklevel=2)
+    return min(a, axis=None)
+
+def max_nested(a):
+    import warnings
+    warnings.warn("max_nested() is deprecated, please use max(a, axis=None)",
+                  DeprecationWarning, stacklevel=2)
+    return max(a, axis=None)

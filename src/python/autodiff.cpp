@@ -243,6 +243,10 @@ static nb::object backward_to(nb::handle h, uint32_t flags) {
     return grad(h, true);
 }
 
+static nb::object strip_tuple(nb::handle h) {
+    return nb::len(h) == 1 ? h[0] : nb::borrow(h);
+}
+
 static nb::object forward_to_2(nb::args args, nb::kwargs kwargs) {
     uint32_t flags = (uint32_t) dr::ADFlag::Default;
     size_t nkwargs = nb::len(kwargs);
@@ -254,7 +258,7 @@ static nb::object forward_to_2(nb::args args, nb::kwargs kwargs) {
                 "drjit.forward_to(): incompatible keyword arguments.");
     }
 
-    return forward_to(args, flags);
+    return strip_tuple(forward_to(args, flags));
 }
 
 static nb::object backward_to_2(nb::args args, nb::kwargs kwargs) {
@@ -268,7 +272,7 @@ static nb::object backward_to_2(nb::args args, nb::kwargs kwargs) {
                 "drjit.backward_to(): incompatible keyword arguments.");
     }
 
-    return backward_to(args, flags);
+    return strip_tuple(backward_to(args, flags));
 }
 
 void export_autodiff(nb::module_ &m) {

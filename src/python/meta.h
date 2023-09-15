@@ -39,7 +39,7 @@ extern ArrayMeta meta_get(nb::handle h) noexcept;
  *    Should be 'true' if this is a drjit.select() operation, in which case the
  *    first operand will be promoted to a mask array
  */
-extern void promote(nb::object *o, size_t n, bool select);
+extern void promote(nb::object *o, size_t n, bool select = false);
 
 /// Look up the nanobind module name associated with the given array metadata
 extern nb::handle meta_get_module(ArrayMeta meta) noexcept;

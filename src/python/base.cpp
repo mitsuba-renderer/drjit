@@ -399,6 +399,10 @@ void export_base(nb::module_ &m) {
     DR_MATH_BINOP(maximum, ArrayOp::Maximum);
 
     DR_MATH_BINOP(atan2, ArrayOp::Atan2);
+
+    m.def("fma", [](Py_ssize_t a, Py_ssize_t b, Py_ssize_t c) {
+        return dr::fma(a, b, c);
+    });
     DR_MATH_TERNOP(fma, ArrayOp::Fma);
 
     m.def("select",

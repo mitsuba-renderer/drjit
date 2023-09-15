@@ -1872,8 +1872,8 @@ Index ad_var_select(Index i0, Index i1, Index i2) {
     } else {
         JitMask m = JitMask::borrow(i0);
         return ad_var_new("select", std::move(result),
-                          SpecialArg(i0, new MaskEdge(m, false)),
-                          SpecialArg(i1, new MaskEdge(m, true)));
+                          SpecialArg(i1, new MaskEdge(m, false)),
+                          SpecialArg(i2, new MaskEdge(m, true)));
     }
 }
 

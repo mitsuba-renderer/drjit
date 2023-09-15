@@ -485,128 +485,157 @@ Args:
 Returns:
     int | float | drjit.ArrayBase: Minimum of the input(s))";
 
-static const char *doc_max = R"(
-max(arg, /)
-Compute the maximum value in the provided input.
-
-When the argument is a dynamic array, function performs a horizontal reduction.
-Please see the section on :ref:`horizontal reductions <horizontal-reductions>`
-for details.
-
-Args:
-    arg (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
-
-Returns:
-    float | int | drjit.ArrayBase: Maximum of the input)";
-
 
 static const char *doc_min = R"(
-min(arg, /)
-Compute the minimum value in the provided input.
+Compute the minimum of the input array or tensor along one or multiple axes.
 
-When the argument is a dynamic array, function performs a horizontal reduction.
-Please see the section on :ref:`horizontal reductions <horizontal-reductions>`
-for details.
+This function performs a horizontal minimum reduction of the input array,
+tensor, or Python sequence along one or multiple axes. By default, it computes
+the minimumm along the outermost axis; specify ``axis=None`` to process all of
+them at once. The minimum of an empty array is considered to be equal to
+positive infinity.
+
+See the section on :ref:`horizontal reductions <horizontal-reductions>` for
+important general information about their properties.
 
 Args:
-    arg (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+    value (float | int | Sequence | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+    axis (int | None): The axis along which to reduce (Default: ``0``). A value
+        of ``None`` causes a simultaneous reduction along all axes. Currently, only
+        values of ``0`` and ``None`` are supported.
 
 Returns:
-    float | int | drjit.ArrayBase: Minimum of the input)";
+    float | int | drjit.ArrayBase: Result of the reduction operation)";
 
+static const char *doc_max = R"(
+Compute the maximum of the input array or tensor along one or multiple axes.
+
+This function performs a horizontal maximum reduction of the input array,
+tensor, or Python sequence along one or multiple axes. By default, it computes
+the maximumm along the outermost axis; specify ``axis=None`` to process all of
+them at once. The maximum of an empty array is considered to be equal to
+positive infinity.
+
+See the section on :ref:`horizontal reductions <horizontal-reductions>` for
+important general information about their properties.
+
+Args:
+    value (float | int | Sequence | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+    axis (int | None): The axis along which to reduce (Default: ``0``). A value
+        of ``None`` causes a simultaneous reduction along all axes. Currently, only
+        values of ``0`` and ``None`` are supported.
+
+Returns:
+    float | int | drjit.ArrayBase: Result of the reduction operation)";
 
 static const char *doc_sum = R"(
-sum(arg, /)
-Compute the sum of all array elements.
+Compute the sum of the input array or tensor along one or multiple axes.
 
-When the argument is a dynamic array, function performs a horizontal reduction.
-Please see the section on :ref:`horizontal reductions <horizontal-reductions>`
-for details.
+This function performs a horizontal sum reduction by adding values of the input
+array, tensor, or Python sequence along one or multiple axes. By default, it
+sums along the outermost axis; specify ``axis=None`` to sum over all of them at
+once. The horizontal sum of an empty array is considered to be zero.
+
+See the section on :ref:`horizontal reductions <horizontal-reductions>` for
+important general information about their properties.
 
 Args:
-    arg (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+    value (float | int | Sequence | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+    axis (int | None): The axis along which to reduce (Default: ``0``). A value
+        of ``None`` causes a simultaneous reduction along all axes. Currently, only
+        values of ``0`` and ``None`` are supported.
 
 Returns:
-    float | int | drjit.ArrayBase: Sum of the input)";
-
+    float | int | drjit.ArrayBase: Result of the reduction operation)";
 
 static const char *doc_prod = R"(
-prod(arg, /)
-Compute the product of all array elements.
+Compute the product of the input array or tensor along one or multiple axes.
 
-When the argument is a dynamic array, function performs a horizontal reduction.
-Please see the section on :ref:`horizontal reductions <horizontal-reductions>`
-for details.
+This function performs horizontal product reduction by multiplying values of
+the input array, tensor, or Python sequence along one or multiple axes. By
+default, it multiplies along the outermost axis; specify ``axis=None`` to
+process all of them at once. The horizontal product of an empty array is
+considered to be equal to one.
+
+See the section on :ref:`horizontal reductions <horizontal-reductions>` for
+important general information about their properties.
 
 Args:
-    arg (float | int | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+    value (float | int | Sequence | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+    axis (int | None): The axis along which to reduce (Default: ``0``). A value
+        of ``None`` causes a simultaneous reduction along all axes. Currently, only
+        values of ``0`` and ``None`` are supported.
 
 Returns:
-    float | int | drjit.ArrayBase: Product of the input)";
-
+    float | int | drjit.ArrayBase: Result of the reduction operation)";
 
 static const char *doc_all = R"(
-all(arg, /)
-Computes whether all input elements evaluate to ``True``.
+Compute an ``&`` (AND) reduction of the input array or tensor along one
+or multiple axes.
 
-When the argument is a dynamic array, function performs a horizontal reduction.
-Please see the section on :ref:`horizontal reductions <horizontal-reductions>`
-for details.
+This type of reduction only applies to masks and is typically used to determine
+whether all array elements evaluate to ``True``.
 
-Args:
-    arg (bool | drjit.ArrayBase): A Python or Dr.Jit mask type
+This function performs horizontal reduction by combining the input
+array, tensor, or Python sequence entries using the ``&`` operator along one or
+multiple axes. By default, it reduces along the outermost axis; specify
+``axis=None`` to reduce over all of them at once. The reduced form of an empty
+array is considered to be ``True``.
 
-Returns:
-    bool | drjit.ArrayBase: Boolean array)";
-
-static const char *doc_all_nested = R"(
-all_nested(arg, /)
-Iterates :py:func:`all` until the type of the return value no longer
-changes.
-
-This function can be used to reduce a nested mask array into a single value.
+See the section on :ref:`horizontal reductions <horizontal-reductions>` for
+important general information about their properties.
 
 Args:
-    arg (bool | drjit.ArrayBase): A Python or Dr.Jit mask type
+    value (bool | Sequence | drjit.ArrayBase): A Python or Dr.Jit mask type
+
+    axis (int | None): The axis along which to reduce (Default: ``0``). A value
+        of ``None`` causes a simultaneous reduction along all axes. Currently, only
+        values of ``0`` and ``None`` are supported.
 
 Returns:
-    bool | drjit.ArrayBase: Boolean array)";
+    bool | drjit.ArrayBase: Result of the reduction operation)";
 
 static const char *doc_any = R"(
-any(arg, /)
-Computes whether any of the input elements evaluate to ``True``.
+Compute an ``|`` (OR) reduction of the input array or tensor along one
+or multiple axes.
 
-When the argument is a dynamic array, function performs a horizontal reduction.
-Please see the section on :ref:`horizontal reductions <horizontal-reductions>`
-for details.
+This type of reduction only applies to masks and is typically used to determine
+whether at least one array element evaluates to ``True``.
 
+This function performs a horizontal reduction by combining the input array,
+tensor, or Python sequence entries using the ``|`` operator along one or
+multiple axes. By default, it reduces along the outermost axis; specify
+``axis=None`` to reduce over all of them at once. The reduced form of an empty
+array is considered to be ``False``.
 
-Args:
-    arg (bool | drjit.ArrayBase): A Python or Dr.Jit mask type
-
-Returns:
-    bool | drjit.ArrayBase: Boolean array)";
-
-static const char *doc_any_nested = R"(
-any_nested(arg, /)
-Iterates :py:func:`any` until the type of the return value no longer
-changes.
-
-This function can be used to reduce a nested mask array into a single value.
+See the section on :ref:`horizontal reductions <horizontal-reductions>` for
+important general information about their properties.
 
 Args:
-    arg (bool | drjit.ArrayBase): A Python or Dr.Jit mask type
+    value (bool | Sequence | drjit.ArrayBase): A Python or Dr.Jit mask type
+
+    axis (int | None): The axis along which to reduce (Default: ``0``). A value
+        of ``None`` causes a simultaneous reduction along all axes. Currently, only
+        values of ``0`` and ``None`` are supported.
 
 Returns:
-    bool | drjit.ArrayBase: Boolean array)";
+    bool | drjit.ArrayBase: Result of the reduction operation)";
 
 static const char *doc_dot = R"(
-dot(arg0, arg1, /)
-Computes the dot product of two arrays.
+Compute the dot product of two arrays.
 
-When the argument is a dynamic array, function performs a horizontal reduction.
-Please see the section on :ref:`horizontal reductions <horizontal-reductions>`
-for details.
+Whenever possible, the implementation uses a sequence of :py:func:`fma` (fused
+multiply-add) operations to evaluate the dot product. When the input is a 1D
+JIT array like :py:class:`drjit.cuda.Float`, the function evaluates the product
+of the input arrays via :py:func:`drjit.eval` and then performs a sum reduction
+via :py:func:`drjit.sum`.
+
+See the section on :ref:`horizontal reductions <horizontal-reductions>` for
+details on the properties of such horizontal reductions.
 
 Args:
     arg0 (list | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
@@ -618,18 +647,23 @@ Returns:
 
 
 static const char *doc_norm = R"(
-norm(arg, /)
-Computes the norm of an array.
+Computes the 2-norm of a Dr.Jit array, tensor, or Python sequence.
 
-When the argument is a dynamic array, function performs a horizontal reduction.
-Please see the section on :ref:`horizontal reductions <horizontal-reductions>`
-for details.
+The operation is equivalent to
+
+.. code-block:: pycon
+
+   dr.sqrt(dr.dot(arg, arg))
+
+The :py:func:`dot` operation performs a horizontal reduction. Please see the
+section on :ref:`horizontal reductions <horizontal-reductions>` for details on
+their properties.
 
 Args:
-    arg (list | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+    arg (Sequence | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
 
 Returns:
-    float | int | drjit.ArrayBase: Norm of the input)";
+    float | int | drjit.ArrayBase: 2-norm of the input)";
 
 
 static const char *doc_sqrt = R"(
