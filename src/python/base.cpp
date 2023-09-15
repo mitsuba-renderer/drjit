@@ -390,6 +390,8 @@ void export_base(nb::module_ &m) {
     DR_MATH_UNOP_PAIR(sincos, ArrayOp::Sincos);
     DR_MATH_UNOP_PAIR(sincosh, ArrayOp::Sincosh);
 
+    m.def("sqr", [](nb::handle h) { return h*h; }, doc_sqr);
+
     m.def("minimum",
           [](Py_ssize_t a, Py_ssize_t b) { return dr::minimum(a, b); });
     DR_MATH_BINOP(minimum, ArrayOp::Minimum);

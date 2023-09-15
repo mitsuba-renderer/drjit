@@ -109,7 +109,7 @@ template <typename... Args> bool is_detached(Args... args) {
  */
 using JitVar = GenericArray<void>;
 
-/// Associated mask type
+/// Associated mask & offset type
 using JitMask = GenericArray<bool>;
 
 /// Create a scalar Jit variable with the same floating point type and backend
@@ -814,6 +814,7 @@ DRJIT_NOINLINE Index ad_var_new_impl(const char *label, JitVar &&result,
 
     bool symbolic = jit_flag(JitFlag::Recording);
 
+#if 0
     // ReleaseOperandHelper helper;
     if (unlikely(symbolic)) {
         for (size_t i = 0; i < N; ++i) {
@@ -825,7 +826,7 @@ DRJIT_NOINLINE Index ad_var_new_impl(const char *label, JitVar &&result,
 
             /* When recording AD code (e.g. in a virtual function call),
                convert reads from external/private variables into gathers */
-            if (unlikely(arg->flags & (uint8_t) VariableFlags::Symbolic)) {
+            if (unlikely(!(arg->flags & (uint8_t) VariableFlags::Symbolic))) {
                 if (arg->size != 1)
                     ad_raise(
                         "ad_var_new(): symbolic computation performs an implicit "
@@ -843,9 +844,22 @@ DRJIT_NOINLINE Index ad_var_new_impl(const char *label, JitVar &&result,
                 //
                 // op[2 * i] = index;
                 // helper.put(index);
+                //
+
+                // TODO: *if* this is a gather operation, execute the following
+                /* Encountered a dependency between recorded/non-recorded computation
+                   that will need special handling when the AD graph is traversed at
+                   some later point. For now, just keep track of this event. */
+                ad_log("ad_var_gather(): recording an implicit dependency (a%u "
+                       "<- a%u).", i1, i0);
+                local_state.implicit.emplace_back(v1->next_bwd, i0, i1,
+                                                  v0->counter, v1->counter);
+
+        return result_index;
             }
         }
     }
+#endif
 
     VarInfo info = jit_set_backend(result.index());
     auto [ad_index, var] =
@@ -1450,6 +1464,67 @@ struct CastEdge : Special {
     VarType v1, v2;
 };
 
+struct MaskGuard {
+    MaskGuard(JitBackend backend, const JitMask &mask) : backend(backend), mask(mask) {
+        if (mask.index())
+            jit_var_mask_push(backend, mask.index());
+    }
+    ~MaskGuard() {
+        if (mask.index())
+            jit_var_mask_pop(backend);
+    }
+    JitBackend backend;
+    JitMask mask;
+};
+
+struct GatherEdge : Special {
+    GatherEdge(const GenericArray<uint32_t> &offset, const JitMask &mask, bool permute)
+        : offset(offset), mask(mask), permute(permute) {
+        backend = jit_set_backend(mask.index()).backend;
+        mask_stack = JitMask::steal(jit_var_mask_peek(backend));
+    }
+
+    void backward(Variable *source, const Variable *target, uint32_t) const override {
+        JitVar &source_grad = (JitVar &) source->grad;
+        size_t size = source->size;
+
+        if (source->size == 1 && target->size == 1 &&
+            !(target->flags & VariableFlags::Symbolic)) {
+            // Downgrade to scalar op
+            source->accum(target->grad & mask, 1);
+            return;
+        }
+
+        if (!source_grad.valid())
+            source_grad =
+                JitVar::steal((VarType) source->type == VarType::Float32
+                                  ? jit_var_f32(backend, 0.f)
+                                  : jit_var_f64(backend, 0.0));
+
+        if (source_grad.size() != size)
+            source_grad.resize(size);
+
+        MaskGuard guard(backend, mask_stack);
+        if (permute)
+            scatter(source_grad, target->grad, offset, mask);
+        else
+            scatter_reduce(ReduceOp::Add, source_grad, target->grad, offset, mask);
+    }
+
+    void forward(const Variable *source, Variable *target, uint32_t) const override {
+        MaskGuard guard(backend, mask_stack);
+        target->accum(dr::gather<JitVar>(source->grad, offset, mask),
+                      std::max(width(offset), width(mask)));
+    }
+
+    GenericArray<uint32_t> offset;
+    JitMask mask;
+    bool permute;
+
+    JitBackend backend;
+    JitMask mask_stack;
+};
+
 Index ad_var_new(JitIndex i0) {
     Index result = ad_var_new(nullptr, JitVar::steal(i0));
     const char *label = jit_var_label(i0);
@@ -1831,7 +1906,7 @@ Index ad_var_min(Index i0, Index i1) {
 
         JitMask mask = v0 <= v1;
 
-        return ad_var_new("min", std::move(result),
+        return ad_var_new("minimum", std::move(result),
                           Arg(i0, dr::select(mask, one, zero)),
                           Arg(i1, dr::select(mask, zero, one)));
     }
@@ -1850,7 +1925,7 @@ Index ad_var_max(Index i0, Index i1) {
 
         JitMask mask = v0 > v1;
 
-        return ad_var_new("max", std::move(result),
+        return ad_var_new("maximum", std::move(result),
                           Arg(i0, dr::select(mask, one, zero)),
                           Arg(i1, dr::select(mask, zero, one)));
     }
@@ -1898,7 +1973,7 @@ Index ad_var_reduce(JitBackend backend, VarType vt, ReduceOp op, Index i0) {
     } else {
         switch (op) {
             case ReduceOp::Add: {
-                    return ad_var_new("reduce[sum]", std::move(result),
+                    return ad_var_new("sum", std::move(result),
                                       Arg(i0, scalar(i0, 1.0)));
                 }
 
@@ -1906,7 +1981,7 @@ Index ad_var_reduce(JitBackend backend, VarType vt, ReduceOp op, Index i0) {
                     JitVar v0 = JitVar::borrow(jit_index(i0)),
                            z  = scalar(i0, 0.0),
                            w0 = dr::select(dr::eq(v0, z), z, result / v0);
-                    return ad_var_new("reduce[mul]", std::move(result),
+                    return ad_var_new("prod", std::move(result),
                                       Arg(i0, std::move(w0)));
                 }
 
@@ -1921,8 +1996,7 @@ Index ad_var_reduce(JitBackend backend, VarType vt, ReduceOp op, Index i0) {
                            z = scalar(i0, 0.0), o = scalar(i0, 1.0),
                            w0 = dr::select(dr::eq(v0, result), o, z);
 
-                    const char *name =
-                        op == ReduceOp::Min ? "reduce[min]" : "reduce[max]";
+                    const char *name = op == ReduceOp::Min ? "min" : "max";
 
                     return ad_var_new(name, std::move(result),
                                       Arg(i0, std::move(w0)));
@@ -1944,6 +2018,21 @@ Index ad_var_cast(Index i0, VarType vt) {
                           SpecialArg(i0, new CastEdge(jit_var_type(i0), vt)));
     }
 }
+
+uint64_t ad_var_gather(uint64_t source, uint64_t offset, uint64_t mask, bool permute) {
+    JitVar result = JitVar::steal(jit_var_gather(source, offset, mask));
+
+    if (is_detached(source)) {
+        return result.release();
+    } else {
+        return ad_var_new(
+            "gather", std::move(result),
+            SpecialArg(source,
+                       new GatherEdge(GenericArray<uint32_t>::borrow(offset),
+                                      JitMask::borrow(mask), permute)));
+    }
+}
+
 
 // ==========================================================================
 // Debugging: GraphViz, variable listing

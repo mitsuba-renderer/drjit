@@ -137,6 +137,10 @@ extern DRJIT_EXTRA_EXPORT void ad_var_dec_ref_impl(uint64_t) JIT_NOEXCEPT;
 extern DRJIT_EXTRA_EXPORT uint64_t ad_var_reduce(JitBackend, VarType,
                                                  JIT_ENUM ReduceOp, uint64_t);
 
+/// Perform a differentialble gather operation
+extern DRJIT_EXPORT uint64_t ad_var_gather(uint64_t source, uint64_t index,
+                                           uint64_t mask, bool permute);
+
 extern DRJIT_EXTRA_EXPORT uint64_t ad_var_cast(uint64_t, VarType);
 extern DRJIT_EXTRA_EXPORT void ad_enqueue(drjit::ADMode, uint64_t);
 extern DRJIT_EXTRA_EXPORT void ad_traverse(drjit::ADMode, uint32_t);
