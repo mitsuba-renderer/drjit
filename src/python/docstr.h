@@ -491,7 +491,7 @@ Compute the minimum of the input array or tensor along one or multiple axes.
 
 This function performs a horizontal minimum reduction of the input array,
 tensor, or Python sequence along one or multiple axes. By default, it computes
-the minimumm along the outermost axis; specify ``axis=None`` to process all of
+the minimum along the outermost axis; specify ``axis=None`` to process all of
 them at once. The minimum of an empty array is considered to be equal to
 positive infinity.
 
@@ -513,7 +513,7 @@ Compute the maximum of the input array or tensor along one or multiple axes.
 
 This function performs a horizontal maximum reduction of the input array,
 tensor, or Python sequence along one or multiple axes. By default, it computes
-the maximumm along the outermost axis; specify ``axis=None`` to process all of
+the maximum along the outermost axis; specify ``axis=None`` to process all of
 them at once. The maximum of an empty array is considered to be equal to
 positive infinity.
 

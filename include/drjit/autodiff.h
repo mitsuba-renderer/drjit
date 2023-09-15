@@ -442,12 +442,16 @@ struct DRJIT_TRIVIAL_ABI DiffArray
                     "an array source argument.");
     }
 
-    template <bool, typename Index, typename Mask>
+    template <bool Permute, typename Index, typename Mask>
     static DiffArray gather_(const DiffArray &src, const Index &index,
                              const Mask &mask) {
         static_assert(
             std::is_same_v<detached_t<Mask>, detached_t<mask_t<DiffArray>>>);
-        return steal(jit_var_gather(src.m_index, index.m_index, mask.m_index));
+
+        if constexpr (IsFloat)
+            return steal(ad_var_gather(src.m_index, index.m_index, mask.m_index, Permute));
+        else
+            return steal(jit_var_gather(src.m_index, index.m_index, mask.m_index));
     }
 
     template <bool, typename Index, typename Mask>
@@ -723,6 +727,5 @@ template <typename T>
 void forward(T &value, uint32_t flags = (uint32_t) ADFlag::Default) {
     forward_from(value, flags);
 }
-
 
 NAMESPACE_END(drjit)
