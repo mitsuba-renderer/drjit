@@ -970,9 +970,10 @@ namespace detail {
     }
 }
 
-template <typename Target, bool Permute = false, typename Source,
+template <typename Target, typename Source,
           typename Index, typename Mask = mask_t<Index>>
-Target gather(Source &&source, const Index &index, const Mask &mask_ = true) {
+Target gather(Source &&source, const Index &index, const Mask &mask_ = true,
+              bool permute = false) {
     // Broadcast mask to match shape of Index
     mask_t<plain_t<replace_scalar_t<Index, scalar_t<Target>>>> mask = mask_;
     if constexpr (depth_v<Source> > 1) {
@@ -987,8 +988,8 @@ Target gather(Source &&source, const Index &index, const Mask &mask_ = true) {
         Index2 index2(index);
         mask_t<Index2> mask2(mask);
         for (size_t i = 0; i < source.size(); ++i)
-            result.entry(i) = gather<value_t<Target>, Permute>(
-                source.entry(i), index2.entry(i), mask2.entry(i));
+            result.entry(i) = gather<value_t<Target>>(
+                source.entry(i), index2.entry(i), mask2.entry(i), permute);
         return result;
     } else if constexpr (is_array_v<Target>) {
         static_assert(std::is_pointer_v<std::decay_t<Source>> ||
@@ -998,8 +999,8 @@ Target gather(Source &&source, const Index &index, const Mask &mask_ = true) {
         if constexpr (!is_array_v<Index>) {
             if constexpr (is_jit_v<Target> && is_jit_v<Source>) {
                 // Case 2.0.0: gather<FloatC>(const FloatC&, size_t, ...)
-                return Target::template gather_<Permute>(
-                    source, uint32_array_t<Source>(index), mask);
+                return Target::gather_(
+                    source, uint32_array_t<Source>(index), mask, permute);
             } else {
                 DRJIT_MARK_USED(mask);
                 size_t offset = index * sizeof(value_t<Target>) * Target::Size;
@@ -1019,16 +1020,16 @@ Target gather(Source &&source, const Index &index, const Mask &mask_ = true) {
         } else if constexpr (depth_v<Target> == depth_v<Index>) {
             if constexpr ((Target::IsPacked || Target::IsRecursive) && is_array_v<Source>)
                 // Case 2.1.0: gather<FloatC>(const FloatP&, ...)
-                return Target::template gather_<Permute>(source.data(), index, mask);
+                return Target::template gather_(source.data(), index, mask, permute);
             else
                 // Case 2.1.1: gather<FloatC>(const FloatC& / const void *, ...)
-                return Target::template gather_<Permute>(source, index, mask);
+                return Target::template gather_(source, index, mask, permute);
         } else {
             // Case 2.2: gather<Vector3fC>(const FloatC & / const void *, ...)
             using TargetIndex = replace_scalar_t<Target, scalar_t<Index>>;
 
-            return gather<Target, Permute>(
-                source, detail::broadcast_index<TargetIndex>(index), mask);
+            return gather<Target>(
+                source, detail::broadcast_index<TargetIndex>(index), mask, permute);
         }
     } else if constexpr (is_drjit_struct_v<Target>) {
         /// Case 3: gather<MyStruct>(const MyStruct &, ...)
@@ -1037,9 +1038,9 @@ Target gather(Source &&source, const Index &index, const Mask &mask_ = true) {
         Target result;
         struct_support_t<Target>::apply_2(
             source, result,
-            [&index, &mask](auto const &x1, auto &x2) DRJIT_INLINE_LAMBDA {
+            [&index, &mask, permute](auto const &x1, auto &x2) DRJIT_INLINE_LAMBDA {
                 using X2 = std::decay_t<decltype(x2)>;
-                x2 = gather<X2, Permute>(x1, index, mask);
+                x2 = gather<X2>(x1, index, mask, permute);
             });
         return result;
     } else {
@@ -1056,10 +1057,10 @@ Target gather(Source &&source, const Index &index, const Mask &mask_ = true) {
     }
 }
 
-template <bool Permute = false, typename Target, typename Value, typename Index,
+template <typename Target, typename Value, typename Index,
           typename Mask = mask_t<Index>>
 void scatter(Target &&target, const Value &value, const Index &index,
-             const Mask &mask_ = true) {
+             const Mask &mask_ = true, bool permute = false) {
     // Broadcast mask to match shape of Index
     mask_t<plain_t<Index>> mask = mask_;
     if constexpr (std::is_same_v<std::decay_t<Target>, std::nullptr_t>) {
@@ -1073,8 +1074,8 @@ void scatter(Target &&target, const Value &value, const Index &index,
         Index2 index2(index);
         mask_t<Index2> mask2(mask);
         for (size_t i = 0; i < value.size(); ++i)
-            scatter<Permute>(target.entry(i), value.entry(i),
-                             index2.entry(i), mask2.entry(i));
+            scatter(target.entry(i), value.entry(i),
+                    index2.entry(i), mask2.entry(i), permute);
     } else if constexpr (is_array_v<Value>) {
         static_assert(std::is_pointer_v<std::decay_t<Target>> ||
                           depth_v<Target> == 1,
@@ -1084,19 +1085,19 @@ void scatter(Target &&target, const Value &value, const Index &index,
                       "Second argument of gather operation must be an index array!");
 
         if constexpr (depth_v<Value> == depth_v<Index>) {
-            value.template scatter_<Permute>(target, index, mask);
+            value.scatter_(target, index, mask, permute);
         } else {
             using TargetIndex = replace_scalar_t<Value, scalar_t<Index>>;
-            scatter<Permute>(target, value,
-                             detail::broadcast_index<TargetIndex>(index), mask);
+            scatter(target, value, detail::broadcast_index<TargetIndex>(index),
+                    mask, permute);
         }
     } else if constexpr (is_drjit_struct_v<Value>) {
         static_assert(is_drjit_struct_v<Target>,
                       "Target must also be a custom data structure!");
         struct_support_t<Value>::apply_2(
             target, value,
-            [&index, &mask](auto &x1, const auto &x2) DRJIT_INLINE_LAMBDA {
-                scatter<Permute>(x1, x2, index, mask);
+            [&index, &mask, permute](auto &x1, const auto &x2) DRJIT_INLINE_LAMBDA {
+                scatter(x1, x2, index, mask, permute);
             });
     } else {
         static_assert(std::is_integral_v<Index> && std::is_scalar_v<Value>,

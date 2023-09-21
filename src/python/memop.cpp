@@ -15,7 +15,7 @@
 #include "shape.h"
 
 nb::object gather(nb::type_object dtype, nb::object source,
-                  nb::object index, nb::object active) {
+                  nb::object index, nb::object active, bool permute) {
     nb::handle source_tp = source.type();
 
     bool is_drjit_source_1d = is_drjit_type(source_tp);
@@ -31,7 +31,7 @@ nb::object gather(nb::type_object dtype, nb::object source,
             nb::list result;
             for (nb::handle value : source)
                 result.append(gather(nb::borrow<nb::type_object>(value.type()),
-                                     nb::borrow(value), index, active));
+                                     nb::borrow(value), index, active, permute));
 
             if (!dtype.is(&PyList_Type))
                 return dtype(result);
@@ -41,7 +41,7 @@ nb::object gather(nb::type_object dtype, nb::object source,
             nb::dict result;
             for (auto [k, v] : nb::borrow<nb::dict>(source))
                 result[k] = gather(nb::borrow<nb::type_object>(v.type()),
-                                   nb::borrow(v), index, active);
+                                   nb::borrow(v), index, active, permute);
 
             return result;
         } else {
@@ -54,7 +54,7 @@ nb::object gather(nb::type_object dtype, nb::object source,
                     if (!v.is_type())
                         throw nb::type_error("DRJIT_STRUCT invalid, expected types!");
                     nb::type_object sub_dtype = nb::borrow<nb::type_object>(v);
-                    out[k] = gather(sub_dtype, nb::getattr(source, k), index, active);
+                    out[k] = gather(sub_dtype, nb::getattr(source, k), index, active, permute);
                 }
 
                 return dtype(**out);
@@ -113,7 +113,8 @@ nb::object gather(nb::type_object dtype, nb::object source,
             inst_ptr(source),
             inst_ptr(index),
             inst_ptr(active),
-            inst_ptr(result)
+            inst_ptr(result),
+            permute
         );
 
         nb::inst_mark_ready(result);
@@ -136,7 +137,7 @@ nb::object gather(nb::type_object dtype, nb::object source,
 
         for (size_t i = 0; i < m.shape[0]; ++i)
             result[i] =
-                gather(sub_tp, source, index * sub_size + nb::int_(i), active);
+                gather(sub_tp, source, index * sub_size + nb::int_(i), active ,permute);
 
         return result;
     }
@@ -145,7 +146,7 @@ nb::object gather(nb::type_object dtype, nb::object source,
 }
 
 void scatter(nb::object target, nb::object value, nb::object index,
-             nb::object active) {
+             nb::object active, bool permute) {
     nb::handle target_tp = target.type(),
                 value_tp = value.type();
 
@@ -172,13 +173,13 @@ void scatter(nb::object target, nb::object value, nb::object index,
 
         if (is_seq) {
             for (size_t i = 0, l = len; i < l; ++i)
-                scatter(target[i], value[i], index, active);
+                scatter(target[i], value[i], index, active, permute);
             return;
         }
 
         if (is_dict) {
             for (nb::handle k : nb::borrow<nb::dict>(value).keys())
-                scatter(target[k], value[k], index, active);
+                scatter(target[k], value[k], index, active, permute);
             return;
         }
 
@@ -188,7 +189,7 @@ void scatter(nb::object target, nb::object value, nb::object index,
 
             for (auto [k, v] : dstruct_dict)
                 scatter(nb::getattr(target, k), nb::getattr(value, k),
-                        index, active);
+                        index, active, permute);
 
             return;
         }
@@ -257,7 +258,8 @@ void scatter(nb::object target, nb::object value, nb::object index,
             inst_ptr(value),
             inst_ptr(index),
             inst_ptr(active),
-            inst_ptr(target)
+            inst_ptr(target),
+            permute
         );
 
         return;
@@ -276,8 +278,8 @@ void scatter(nb::object target, nb::object value, nb::object index,
         m.shape[0] != DRJIT_DYNAMIC) {
         nb::int_ sub_size(m.shape[0]);
         for (size_t i = 0; i < m.shape[0]; ++i)
-            ::scatter(target, value[i],
-                      index * sub_size + nb::int_(i), active);
+            ::scatter(target, value[i], index * sub_size + nb::int_(i), active,
+                      permute);
         return;
     }
 
@@ -298,7 +300,7 @@ static void ravel_recursive(nb::handle result, nb::handle value,
             nb::object index =
                 arange(nb::borrow<nb::type_object_t<ArrayBase>>(index_dtype), offset,
                        offset + strides[depth] * shape[depth], strides[depth]);
-            scatter(nb::borrow(result), nb::borrow(value), index, nb::cast(true));
+            scatter(nb::borrow(result), nb::borrow(value), index, nb::cast(true), false);
         } else {
             result[offset] = value;
         }
@@ -433,7 +435,7 @@ static nb::object unravel_recursive(nb::handle dtype,
                 nb::borrow<nb::type_object_t<ArrayBase>>(index_dtype),
                 offset, offset + strides[depth] * shape[depth], strides[depth]);
             return gather(nb::borrow<nb::type_object>(dtype), nb::borrow(value),
-                          index, nb::cast(true));
+                          index, nb::cast(true), false);
         } else {
             return value[offset];
         }
@@ -533,9 +535,9 @@ nb::object unravel(const nb::type_object_t<ArrayBase> &dtype,
 
 void export_memop(nb::module_ &m) {
     m.def("gather", &gather, "dtype"_a, "source"_a, "index"_a,
-          "active"_a = true, nb::raw_doc(doc_gather))
+          "active"_a = true, "permute"_a = false, nb::raw_doc(doc_gather))
      .def("scatter", &scatter, "target"_a, "value"_a, "index"_a,
-          "active"_a = true, nb::raw_doc(doc_scatter))
+          "active"_a = true, "permute"_a = false, nb::raw_doc(doc_scatter))
      .def("ravel",
           [](nb::handle array, char order) {
               return ravel(array, order);

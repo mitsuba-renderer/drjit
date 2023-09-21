@@ -435,38 +435,43 @@ struct DRJIT_TRIVIAL_ABI DiffArray
     //! @{ \name Scatter/gather support
     // -----------------------------------------------------------------------
 
-    template <bool, typename Index, typename Mask>
+    template <typename Index, typename Mask>
     static DiffArray gather_(const void * /*src*/, const Index & /*index*/,
-                             const Mask & /*mask*/) {
+                             const Mask & /*mask*/, bool /* permute */) {
         drjit_raise("Not implemented, please use gather() variant that takes "
                     "an array source argument.");
     }
 
-    template <bool Permute, typename Index, typename Mask>
+    template <typename Index, typename Mask>
     static DiffArray gather_(const DiffArray &src, const Index &index,
-                             const Mask &mask) {
+                             const Mask &mask, bool permute) {
         static_assert(
             std::is_same_v<detached_t<Mask>, detached_t<mask_t<DiffArray>>>);
 
         if constexpr (IsFloat)
-            return steal(ad_var_gather(src.m_index, index.m_index, mask.m_index, Permute));
+            return steal(ad_var_gather(src.m_index, index.m_index, mask.m_index, permute));
         else
             return steal(jit_var_gather(src.m_index, index.m_index, mask.m_index));
     }
 
-    template <bool, typename Index, typename Mask>
+    template <typename Index, typename Mask>
     void scatter_(void * /* dst */, const Index & /*index*/,
-                  const Mask & /*mask*/) const {
+                  const Mask & /*mask*/, bool /* permute */) const {
         drjit_raise("Not implemented, please use scatter() variant that takes "
                     "an array target argument.");
     }
 
-    template <bool, typename Index, typename Mask>
-    void scatter_(DiffArray &dst, const Index &index, const Mask &mask) const {
+    template <typename Index, typename Mask>
+    void scatter_(DiffArray &dst, const Index &index, const Mask &mask, bool permute) const {
         static_assert(
             std::is_same_v<detached_t<Mask>, detached_t<mask_t<DiffArray>>>);
-        dst = steal(jit_var_scatter(dst.m_index, m_index, index.m_index,
-                                    mask.m_index, ReduceOp::None));
+
+        if constexpr (IsFloat)
+            dst = steal(ad_var_scatter(dst.m_index, m_index, index.m_index,
+                                       mask.m_index, ReduceOp::None, permute));
+        else
+            dst = steal(jit_var_scatter(dst.m_index, m_index, index.m_index,
+                                        mask.m_index, ReduceOp::None));
     }
 
     template <typename Index, typename Mask>
@@ -482,8 +487,12 @@ struct DRJIT_TRIVIAL_ABI DiffArray
                          const Mask &mask) const {
         static_assert(
             std::is_same_v<detached_t<Mask>, detached_t<mask_t<DiffArray>>>);
-        dst = steal(jit_var_scatter(dst.m_index, m_index, index.m_index,
-                                    mask.m_index, op));
+        if constexpr (IsFloat)
+            dst = steal(ad_var_scatter(dst.m_index, m_index, index.m_index,
+                                       mask.m_index, op, false));
+        else
+            dst = steal(jit_var_scatter(dst.m_index, m_index, index.m_index,
+                                        mask.m_index, op));
     }
 
     //! @}

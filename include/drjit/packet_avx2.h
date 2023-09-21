@@ -388,8 +388,8 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(32)
     static DRJIT_INLINE Derived empty_(size_t) { return _mm256_undefined_si256(); }
     static DRJIT_INLINE Derived zero_(size_t) { return _mm256_setzero_si256(); }
 
-    template <bool, typename Index, typename Mask>
-    static DRJIT_INLINE Derived gather_(const void *ptr, const Index &index, const Mask &mask) {
+    template <typename Index, typename Mask>
+    static DRJIT_INLINE Derived gather_(const void *ptr, const Index &index, const Mask &mask, bool) {
         #if defined(DRJIT_X86_AVX512)
             if constexpr (sizeof(scalar_t<Index>) == 4)
                 return _mm256_mmask_i32gather_epi32(_mm256_setzero_si256(), mask.k, index.m, (const int *) ptr, 4);
@@ -409,8 +409,8 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(32)
     }
 
 #if defined(DRJIT_X86_AVX512)
-    template <bool, typename Index, typename Mask>
-    DRJIT_INLINE void scatter_(void *ptr, const Index &index, const Mask &mask) const {
+    template <typename Index, typename Mask>
+    DRJIT_INLINE void scatter_(void *ptr, const Index &index, const Mask &mask, bool) const {
         if constexpr (sizeof(scalar_t<Index>) == 4)
             _mm256_mask_i32scatter_epi32(ptr, mask.k, index.m, m, 4);
         else
@@ -841,8 +841,8 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(32)
     static DRJIT_INLINE Derived zero_(size_t) { return _mm256_setzero_si256(); }
     static DRJIT_INLINE Derived empty_(size_t) { return _mm256_undefined_si256(); }
 
-    template <bool, typename Index, typename Mask>
-    static DRJIT_INLINE Derived gather_(const void *ptr, const Index &index, const Mask &mask) {
+    template <typename Index, typename Mask>
+    static DRJIT_INLINE Derived gather_(const void *ptr, const Index &index, const Mask &mask, bool) {
         #if defined(DRJIT_X86_AVX512)
             if constexpr (sizeof(scalar_t<Index>) == 4)
                 return _mm256_mmask_i32gather_epi64(_mm256_setzero_si256(), mask.k, index.m, (const long long *) ptr, 8);
@@ -857,8 +857,8 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(32)
     }
 
 #if defined(DRJIT_X86_AVX512)
-    template <bool, typename Index, typename Mask>
-    DRJIT_INLINE void scatter_(void *ptr, const Index &index, const Mask &mask) const {
+    template <typename Index, typename Mask>
+    DRJIT_INLINE void scatter_(void *ptr, const Index &index, const Mask &mask, bool) const {
         if constexpr (sizeof(scalar_t<Index>) == 4)
             _mm256_mask_i32scatter_epi64(ptr, mask.k, index.m, m, 8);
         else
@@ -965,15 +965,15 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(32)
         return result;
     }
 
-    template <bool, typename Index, typename Mask>
-    static DRJIT_INLINE Derived gather_(const void *ptr, const Index &index, const Mask &mask) {
-        return Base::template gather_<false>(ptr, index, mask & mask_());
+    template <typename Index, typename Mask>
+    static DRJIT_INLINE Derived gather_(const void *ptr, const Index &index, const Mask &mask, bool) {
+        return Base::gather_(ptr, index, mask & mask_(), false);
     }
 
 #if defined(DRJIT_X86_AVX512)
-    template <bool, typename Index, typename Mask>
-    DRJIT_INLINE void scatter_(void *ptr, const Index &index, const Mask &mask) const {
-        Base::template scatter_<false>(ptr, index, mask & mask_());
+    template <typename Index, typename Mask>
+    DRJIT_INLINE void scatter_(void *ptr, const Index &index, const Mask &mask, bool) const {
+        Base::scatter_(ptr, index, mask & mask_(), false);
     }
 #endif
 

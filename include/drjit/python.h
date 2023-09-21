@@ -159,9 +159,9 @@ struct ArraySupplement : ArrayMeta {
     using Index = uint64_t (*)(const ArrayBase *) noexcept;
     using Data = void *(*)(const ArrayBase *) noexcept;
     using Gather = void (*)(const ArrayBase *, const ArrayBase *,
-                            const ArrayBase *, ArrayBase *);
+                            const ArrayBase *, ArrayBase *, bool);
     using Scatter = void (*)(const ArrayBase *, const ArrayBase *,
-                            const ArrayBase *, const ArrayBase *);
+                            const ArrayBase *, const ArrayBase *, bool);
     using UnaryOp  = void (*)(const ArrayBase *, ArrayBase *);
     using BinaryOp = void (*)(const ArrayBase *, const ArrayBase *, ArrayBase *);
 
@@ -625,13 +625,13 @@ template <typename T> void bind_memop(ArrayBinding &b) {
     using Mask = mask_t<T>;
 
     b.gather = (ArraySupplement::Gather)
-        +[](const T *a, const UInt32 *b, const Mask *c, T *d) {
-            new (d) T(gather<T>(*a, *b, *c));
+        +[](const T *a, const UInt32 *b, const Mask *c, T *d, bool permute) {
+            new (d) T(gather<T>(*a, *b, *c, permute));
         };
 
     b.scatter = (ArraySupplement::Scatter)
-        +[](const T *a, const UInt32 *b, const Mask *c, T *d) {
-            scatter(*d, *a, *b, *c);
+        +[](const T *a, const UInt32 *b, const Mask *c, T *d, bool permute) {
+            scatter(*d, *a, *b, *c, permute);
         };
 }
 

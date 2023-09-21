@@ -359,7 +359,7 @@ void tensor_broadcast(nb::object &tensor, nb::object &array,
     }
 
     array = gather(nb::borrow<nb::type_object>(array.type()),
-                   array, index, nb::borrow(Py_True));
+                   array, index, nb::borrow(Py_True), false);
 }
 
 /// Apply an element-wise operation to the given tensor(s)

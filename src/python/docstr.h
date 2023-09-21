@@ -524,7 +524,8 @@ The function accepts Python arithmetic types, Dr.Jit arrays, and tensors. It
 processes each input component separately. When `arg1` is a Python `int` or
 integral `float` value, the function performs a sequence of multiplies. The
 general case involves recursive use of the identity ``pow(x, y) = exp2(log2(x)
-* y)``.
+* y)``. There is no difference betweeen using :py:func:`drjit.power()` and the
+* builtin ``**`` Python operator.
 
 Args:
     arg (object): A Python or Dr.Jit arithmetic type
