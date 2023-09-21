@@ -167,7 +167,7 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
                 index_val = fma(index_rem, dtype(uint32_t(c.step * size_out)),
                                 dtype(uint32_t(c.start * size_out)));
             else
-                index_val = gather(dtype, c.object, index_rem, active) *
+                index_val = gather(dtype, c.object, index_rem, active, false) *
                             dtype(uint32_t(size_out));
 
             index_out += index_val;
@@ -209,7 +209,7 @@ PyObject *mp_subscript(PyObject *self, PyObject *key) noexcept {
             nb::object source = nb::steal(s.tensor_array(self));
 
             nb::object out = gather(nb::borrow<nb::type_object>(s.array),
-                                    source, out_index, nb::borrow(Py_True));
+                                    source, out_index, nb::borrow(Py_True), false);
 
             return self_tp("array"_a = out, "shape"_a = out_shape)
                 .release().ptr();
@@ -293,7 +293,7 @@ int mp_ass_subscript(PyObject *self, PyObject *key, PyObject *value) noexcept {
 
             nb::object target = nb::steal(s.tensor_array(self));
 
-            scatter(target, nb::borrow(value), out_index, nb::borrow(Py_True));
+            scatter(target, nb::borrow(value), out_index, nb::borrow(Py_True), false);
 
             return 0;
         }

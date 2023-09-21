@@ -59,13 +59,14 @@ void set_label(nb::handle h, nb::str label) {
         if ((JitBackend) s.backend == JitBackend::None)
             return;
         if (s.ndim == 1) {
-            uint64_t index = s.index(inst_ptr(h));
-            uint64_t new_index = ad_var_set_label(index, label.c_str());
+            uint64_t new_index =
+                ad_var_set_label(s.index(inst_ptr(h)), label.c_str());
             nb::object tmp = nb::inst_alloc(tp);
             s.init_index(new_index, inst_ptr(tmp));
             nb::inst_mark_ready(tmp);
-            nb::inst_replace_move(h, tmp);
             ad_var_dec_ref(new_index);
+
+            nb::inst_replace_move(h, tmp);
             return;
         }
     }

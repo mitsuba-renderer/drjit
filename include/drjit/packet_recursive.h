@@ -317,18 +317,18 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
         );
     }
 
-    template <bool, typename Index, typename Mask>
-    static DRJIT_INLINE Derived gather_(const void *ptr, const Index &index, const Mask &mask) {
+    template <typename Index, typename Mask>
+    static DRJIT_INLINE Derived gather_(const void *ptr, const Index &index, const Mask &mask, bool permute) {
         return Derived(
-            gather<Array1>(ptr, low(index), low(mask)),
-            gather<Array2>(ptr, high(index), high(mask))
+            gather<Array1>(ptr, low(index), low(mask), permute),
+            gather<Array2>(ptr, high(index), high(mask), permute)
         );
     }
 
-    template <bool, typename Index, typename Mask>
-    DRJIT_INLINE void scatter_(void *ptr, const Index &index, const Mask &mask) const {
-        scatter(ptr, a1, low(index), low(mask));
-        scatter(ptr, a2, high(index), high(mask));
+    template <typename Index, typename Mask>
+    DRJIT_INLINE void scatter_(void *ptr, const Index &index, const Mask &mask, bool permute) const {
+        scatter(ptr, a1, low(index), low(mask), permute);
+        scatter(ptr, a2, high(index), high(mask), permute);
     }
 
     template <typename Index, typename Mask>

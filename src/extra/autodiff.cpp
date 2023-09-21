@@ -37,7 +37,7 @@
  * derivative propagation performs arithmetic operations that appear
  * instantanous but whose evaluation is actually symbolic and deferred until
  * the system eventually compiles and runs a fused kernel. While Dr.Jit's AD
- * backend tape-based, the combination with deferred evaluation resembles AD
+ * backend is tape-based, the combination with deferred evaluation resembles AD
  * via code transformation. The generated code leverages optimizations such as
  * constant propagation and local value numbering and can support some types of
  * control flow without the usual tape-style unrolling.
@@ -351,7 +351,7 @@ struct State {
     /// List of all edges (used and unused ones)
     std::vector<Edge> edges;
 
-    /// List of currently unused edges
+    /// Sorted list of currently unused edges and vertices
     std::priority_queue<ADIndex, std::vector<ADIndex>, std::greater<uint32_t>> unused_variables;
     std::priority_queue<EdgeIndex, std::vector<EdgeIndex>, std::greater<uint32_t>> unused_edges;
 
@@ -365,7 +365,7 @@ struct State {
                edges_used = edges.size() - unused_edges.size() - 1;
 
         if (vars_used) {
-            ad_warn("Variable leak detected (%zu variables remain in use)!",
+            ad_warn("AD Variable leak detected (%zu variables remain in use)!",
                     vars_used);
             size_t counter = 0;
 
@@ -382,7 +382,7 @@ struct State {
         }
 
         if (edges_used != 0)
-            ad_warn("Edge leak detected (%zu edges remain in use)!",
+            ad_warn("AD Edge leak detected (%zu edges remain in use)!",
                     edges_used);
     }
 
@@ -782,6 +782,11 @@ template <typename T, typename... Ts> struct first<T, Ts...> {
 
 template <typename... Ts> using first_t = typename first<Ts...>::type;
 
+/// This helper function is called by essentially all implementations of
+/// arithmetic operations below (e.g. ``ad_var_add``). It creates a new
+/// AD variable representing an operation along with edges to inputs. It
+/// centrally takes care of various special cases, like custom derivative
+/// tracking via AD scopes, etc.
 template <typename... Args>
 DRJIT_NOINLINE Index ad_var_new_impl(const char *label, JitVar &&result,
                                      Args &&...args_) {
@@ -1015,12 +1020,13 @@ Index ad_var_set_label(Index index, const char *label) {
     uint32_t jit_index = ::jit_index(index),
              ad_index = ::ad_index(index);
 
+    ad_log("ad_var_set_label(a%u, \"%s\")", ad_index,
+           label ? label : "(null)");
+
     jit_index = jit_var_set_label(jit_index, label);
 
     if (ad_index) {
         std::lock_guard<std::mutex> guard(state.mutex);
-        ad_log("ad_var_set_label(a%u, \"%s\")", ad_index,
-               label ? label : "(null)");
         Variable *v = state[ad_index];
 
         if (v->flags & (uint8_t) VariableFlags::FreeLabel)
@@ -1028,11 +1034,10 @@ Index ad_var_set_label(Index index, const char *label) {
 
         VarInfo info = jit_set_backend(jit_index);
         const char *prefix = jit_prefix(info.backend);
-        if (!prefix || !label) {
+        if (!prefix || !label)
             v->label = label ? strdup(label) : nullptr;
-        } else {
+        else
             v->label = concat(prefix, label);
-        }
 
         const uint8_t flags = (uint8_t) VariableFlags::FreeLabel |
                               (uint8_t) VariableFlags::CustomLabel;
@@ -1485,8 +1490,7 @@ struct GatherEdge : Special {
     }
 
     void backward(Variable *source, const Variable *target, uint32_t) const override {
-        JitVar &source_grad = (JitVar &) source->grad;
-        size_t size = source->size;
+        JitVar &source_grad = source->grad;
 
         if (source->size == 1 && target->size == 1 &&
             !(target->flags & VariableFlags::Symbolic)) {
@@ -1501,14 +1505,14 @@ struct GatherEdge : Special {
                                   ? jit_var_f32(backend, 0.f)
                                   : jit_var_f64(backend, 0.0));
 
-        if (source_grad.size() != size)
-            source_grad.resize(size);
+        if (source_grad.size() != source->size)
+            source_grad.resize(source->size);
 
         MaskGuard guard(backend, mask_stack);
         if (permute)
-            scatter(source_grad, target->grad, offset, mask);
+            dr::scatter(source_grad, target->grad, offset, mask);
         else
-            scatter_reduce(ReduceOp::Add, source_grad, target->grad, offset, mask);
+            dr::scatter_reduce(ReduceOp::Add, source_grad, target->grad, offset, mask);
     }
 
     void forward(const Variable *source, Variable *target, uint32_t) const override {
@@ -1525,11 +1529,65 @@ struct GatherEdge : Special {
     JitMask mask_stack;
 };
 
+struct ScatterEdge : Special {
+    ScatterEdge(const GenericArray<uint32_t> &offset, const JitMask &mask,
+                ReduceOp op)
+        : offset(offset), mask(mask), op(op) {
+        backend = jit_set_backend(mask.index()).backend;
+        mask_stack = JitMask::steal(jit_var_mask_peek(backend));
+    }
+
+    void backward(Variable *source, const Variable *target, uint32_t) const override {
+        MaskGuard guard(backend, mask_stack);
+        source->accum(dr::gather<JitVar>(target->grad, offset, mask), width(offset));
+    }
+
+    void forward(const Variable *source, Variable *target, uint32_t) const override {
+        JitVar &target_grad = target->grad;
+
+        if (!target_grad.valid())
+            target_grad =
+                JitVar::steal((VarType) target->type == VarType::Float32
+                                  ? jit_var_f32(backend, 0.f)
+                                  : jit_var_f64(backend, 0.0));
+
+        if (target_grad.size() != target->size)
+            target_grad.resize(target->size);
+
+        MaskGuard guard(backend, mask_stack);
+        if (op != ReduceOp::None)
+            dr::scatter_reduce(op, target_grad, source->grad, offset, mask);
+        else
+            dr::scatter(target_grad, source->grad, offset, mask);
+    }
+
+    GenericArray<uint32_t> offset;
+    JitMask mask;
+    ReduceOp op;
+
+    JitBackend backend;
+    JitMask mask_stack;
+};
+
+
 Index ad_var_new(JitIndex i0) {
-    Index result = ad_var_new(nullptr, JitVar::steal(i0));
+    Index result = ad_var_new(nullptr, JitVar::borrow(i0));
+
     const char *label = jit_var_label(i0);
-    if (label)
-        ad_var_set_label(result, label);
+    if (label) {
+        VarInfo info = jit_set_backend(i0);
+        const char *prefix = jit_prefix(info.backend);
+        Variable *v = state[ad_index(result)];
+
+        if (!prefix || !label)
+            v->label = label ? strdup(label) : nullptr;
+        else
+            v->label = concat(prefix, label);
+
+        v->flags = (uint8_t) VariableFlags::FreeLabel |
+                   (uint8_t) VariableFlags::CustomLabel;
+    }
+
     return result;
 }
 
@@ -2033,6 +2091,38 @@ uint64_t ad_var_gather(uint64_t source, uint64_t offset, uint64_t mask, bool per
     }
 }
 
+/// Perform a differentiable scatter operation. See jit_var_scatter for signature.
+Index ad_var_scatter(Index target, Index value, JitIndex offset,
+                     JitIndex mask, JIT_ENUM ReduceOp reduce_op,
+                     bool permute) {
+    JitVar result = JitVar::steal(jit_var_scatter(
+        jit_index(target), jit_index(value), offset, mask, reduce_op));
+
+    if (is_detached(value) && (is_detached(target) || permute)) {
+        return result.release();
+    } else {
+        if (reduce_op != ReduceOp::None && reduce_op != ReduceOp::Add)
+            ad_raise("ad_var_scatter(): differentiable scatters with with "
+                     "reduce_op not in {ReduceOp::None, ReduceOp::Add} are "
+                     "currently unsupported!");
+
+        VarInfo info = jit_set_backend(jit_index(target));
+
+        JitMask edge_mask = dr::full<JitMask>(false, info.size);
+        if (reduce_op == ReduceOp::None && !permute)
+            dr::scatter(edge_mask, JitMask(true),
+                        GenericArray<uint32_t>::borrow(offset),
+                        JitMask::borrow(mask));
+
+        return ad_var_new(
+            permute ? "scatter[permute]" : "scatter", std::move(result),
+            SpecialArg(value,
+                       new ScatterEdge(GenericArray<uint32_t>::borrow(offset),
+                                       JitMask::borrow(mask), reduce_op)),
+            SpecialArg(target, new MaskEdge(edge_mask, true))
+        );
+    }
+}
 
 // ==========================================================================
 // Debugging: GraphViz, variable listing

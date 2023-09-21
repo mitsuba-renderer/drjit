@@ -446,30 +446,31 @@ struct DRJIT_TRIVIAL_ABI JitArray
     //! @{ \name Scatter/gather support
     // -----------------------------------------------------------------------
 
-    template <bool, typename Index, typename Mask>
+    template <typename Index, typename Mask>
     static JitArray gather_(const void * /*src*/, const Index & /*index*/,
-                            const Mask & /*mask*/) {
+                            const Mask & /*mask*/, bool /* permute */) {
         drjit_raise("Not implemented, please use gather() variant that takes "
                     "an array source argument.");
     }
 
-    template <bool, typename Index, typename Mask>
+    template <typename Index, typename Mask>
     static JitArray gather_(const JitArray &src, const Index &index,
-                            const Mask &mask) {
+                            const Mask &mask, bool /* permute */) {
         static_assert(
             std::is_same_v<detached_t<Mask>, detached_t<mask_t<JitArray>>>);
         return steal(jit_var_gather(src.index(), index.index(), mask.index()));
     }
 
-    template <bool, typename Index, typename Mask>
+    template <typename Index, typename Mask>
     void scatter_(void * /* dst */, const Index & /*index*/,
-                  const Mask & /*mask*/) const {
+                  const Mask & /*mask*/, bool /* permute */) const {
         drjit_raise("Not implemented, please use scatter() variant that takes "
                     "an array target argument.");
     }
 
-    template <bool, typename Index, typename Mask>
-    void scatter_(JitArray &dst, const Index &index, const Mask &mask) const {
+    template <typename Index, typename Mask>
+    void scatter_(JitArray &dst, const Index &index, const Mask &mask,
+                  bool /* permute */) const {
         static_assert(
             std::is_same_v<detached_t<Mask>, detached_t<mask_t<JitArray>>>);
         dst = steal(jit_var_scatter(dst.index(), m_index, index.index(),

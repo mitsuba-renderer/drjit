@@ -284,6 +284,7 @@ ________________________________________
 .. autofunction:: log
 .. autofunction:: exp2
 .. autofunction:: exp
+.. autofunction:: power
 
 .. _transcendental-accuracy:
 

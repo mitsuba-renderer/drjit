@@ -755,8 +755,8 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
     //! @{ \name Fallback implementations of scatter/gather/load/store ops
     // -----------------------------------------------------------------------
 
-    template <bool Permute, typename Source, typename Index, typename Mask>
-    static Derived gather_(Source &&source, const Index &index, const Mask &mask) {
+    template <typename Source, typename Index, typename Mask>
+    static Derived gather_(Source &&source, const Index &index, const Mask &mask, bool permute) {
         DRJIT_CHKSCALAR("gather_");
         Derived result;
 
@@ -773,23 +773,22 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
         }
 
         for (size_t i = 0; i < sr; ++i)
-            result.entry(i) = gather<Value, Permute>(
-                source, index.entry(i),
-                mask.entry(i));
+            result.entry(i) =
+                gather<Value>(source, index.entry(i), mask.entry(i), permute);
 
         return result;
     }
 
-    template <bool Permute, typename Target, typename Index, typename Mask>
-    void scatter_(Target &&target, const Index &index, const Mask &mask) const {
+    template <typename Target, typename Index, typename Mask>
+    void scatter_(Target &&target, const Index &index, const Mask &mask, bool permute) const {
         DRJIT_CHKSCALAR("scatter_");
 
         size_t sa = derived().size(), sb = index.size(), sc = mask.size(),
                sd = sa > sb ? sa : sb, sr = sc > sd ? sc : sd;
 
         for (size_t i = 0; i < sr; ++i)
-            scatter<Permute>(target, derived().entry(i), index.entry(i),
-                             mask.entry(i));
+            scatter(target, derived().entry(i), index.entry(i), mask.entry(i),
+                    permute);
     }
 
     template <typename Target, typename Index, typename Mask>
