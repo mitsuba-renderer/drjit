@@ -89,6 +89,68 @@ DR_NB_BINOP(and, ArrayOp::And)
 DR_NB_BINOP(or, ArrayOp::Or)
 DR_NB_BINOP(xor, ArrayOp::Xor)
 
+static PyObject *nb_power(PyObject *h0_, PyObject *h1_) noexcept {
+    nb::handle h0 = h0_, h1 = h1_;
+
+    try {
+        Py_ssize_t i1 = 0;
+        double d1 = 0.0;
+        if (nb::try_cast(h1, i1) || (nb::try_cast(h1, d1) && (i1 = (Py_ssize_t) d1, (double) i1 == d1))) {
+            if (i1 == PY_SSIZE_T_MIN)
+                nb::detail::raise("Negative exponent is too large!");
+
+            Py_ssize_t u1 = (i1 < 0) ? -i1 : i1;
+
+            nb::object result = array_module.attr("ones")(h0.type(), nb::len(h0)),
+                       x = nb::borrow(h0);
+
+            while (u1) {
+                if (u1 & 1)
+                    result *= x;
+                x *= x;
+                u1 >>= 1;
+            }
+
+            if (i1 < 0)
+                result = array_module.attr("rcp")(result);
+
+            return result.release().ptr();
+        } else {
+            nb::object log2 = array_module.attr("log2"),
+                       exp2 = array_module.attr("exp2");
+
+            return exp2(log2(h0) * h1).release().ptr();
+        }
+    } catch (nb::python_error &e) {
+        nb::str tp0_name = nb::inst_name(h0), tp1_name = nb::inst_name(h1);
+        e.restore();
+        nb::chain_error(PyExc_RuntimeError,
+                        "drjit.power(<%U>, <%U>): failed (see above)!",
+                        tp0_name.ptr(), tp1_name.ptr());
+    } catch (const std::exception &e) {
+        nb::str tp0_name = nb::inst_name(h0), tp1_name = nb::inst_name(h1);
+        nb::chain_error(PyExc_RuntimeError, "drjit.power(<%U>, <%U>): %s",
+                        tp0_name.ptr(), tp1_name.ptr(), e.what());
+    }
+
+    return nullptr;
+}
+
+static PyObject *nb_inplace_power(PyObject *h0, PyObject *h1) noexcept {
+    PyObject *r = nb_power(h0, h1);
+    if (!r)
+        return nullptr;
+
+    if (Py_TYPE(r) == Py_TYPE(h0) && h0 != r) {
+        nb::inst_replace_move(h0, r);
+        Py_INCREF(h0);
+        Py_DECREF(r);
+        return h0;
+    } else {
+        return r;
+    }
+}
+
 static PyObject *tp_richcompare(PyObject *h0, PyObject *h1, int slot) noexcept {
     return apply<RichCompare>(ArrayOp::Richcmp, slot,
                               std::make_index_sequence<2>(), h0, h1);
@@ -239,6 +301,8 @@ static PyType_Slot array_base_slots[] = {
     DR_ARRAY_SLOT(nb_inplace_rshift),
     DR_ARRAY_SLOT(nb_remainder),
     DR_ARRAY_SLOT(nb_inplace_remainder),
+    DR_ARRAY_SLOT(nb_power),
+    DR_ARRAY_SLOT(nb_inplace_power),
 
     /// Binary bit/mask operations
     DR_ARRAY_SLOT(nb_and),
@@ -405,6 +469,7 @@ void export_base(nb::module_ &m) {
     m.def("fma", [](Py_ssize_t a, Py_ssize_t b, Py_ssize_t c) {
         return dr::fma(a, b, c);
     });
+
     DR_MATH_TERNOP(fma, ArrayOp::Fma);
 
     m.def("select",
@@ -415,6 +480,21 @@ void export_base(nb::module_ &m) {
           [](bool mask, nb::handle a, nb::handle b) {
               return nb::borrow(mask ? a : b);
           });
+
+    m.def(
+        "power", [](Py_ssize_t arg0, Py_ssize_t arg1) { return std::pow(arg0, arg1); },
+        doc_pow);
+
+    m.def(
+        "power", [](double arg0, double arg1) { return std::pow(arg0, arg1); });
+
+    m.def("power",
+          [](nb::handle h0, nb::handle h1) {
+              if (NB_UNLIKELY(!is_drjit_array(h0) && !is_drjit_array(h1)))
+                  throw nb::next_overload();
+              return nb::steal(nb_power(h0.ptr(), h1.ptr()));
+          }
+    );
 
     array_base = ab;
     array_module = m;

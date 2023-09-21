@@ -508,6 +508,31 @@ Args:
 Returns:
     float | int | drjit.ArrayBase: Result of the reduction operation)";
 
+static const char *doc_sqr = R"(
+Compute the square of the input array, tensor, or arithmetic type.
+
+Args:
+    arg (object): A Python or Dr.Jit arithmetic type
+
+Returns:
+    object: The result of the operation ``arg*arg``)";
+
+static const char *doc_pow = R"(
+Raise the first argument to a power specified via the second argument.
+
+The function accepts Python arithmetic types, Dr.Jit arrays, and tensors. It
+processes each input component separately. When `arg1` is a Python `int` or
+integral `float` value, the function performs a sequence of multiplies. The
+general case involves recursive use of the identity ``pow(x, y) = exp2(log2(x)
+* y)``.
+
+Args:
+    arg (object): A Python or Dr.Jit arithmetic type
+
+Returns:
+    object: The result of the operation ``arg0**arg1``)";
+
+
 static const char *doc_max = R"(
 Compute the maximum of the input array or tensor along one or multiple axes.
 

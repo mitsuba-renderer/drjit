@@ -700,8 +700,8 @@ std_test('sincos_c', lambda a: dr.sincos(a)[1], 1, math.cos(1), -math.sin(1))
 std_test('sincosh_s', lambda a: dr.sincosh(a)[0], 1, math.sinh(1), math.cosh(1))
 std_test('sincosh_c', lambda a: dr.sincosh(a)[1], 1, math.cosh(1), math.sinh(1))
 
-std_test('atan2_1', lambda a, b: dr.atan2(a, b), (1, 2), math.atan2(1, 2), (2/5, 1/5))
-std_test('atan2_2', lambda a, b: dr.atan2(a, b), (-1, 2), math.atan2(-1, 2), (2/5, -1/5))
+std_test('atan2_1', lambda a, b: dr.atan2(a, b), (1, 2), math.atan2(1, 2), (2/5, -1/5))
+std_test('atan2_2', lambda a, b: dr.atan2(a, b), (-1, 2), math.atan2(-1, 2), (2/5, 1/5))
 
 std_test('round', lambda a: dr.round(a), 1.6, 2.0, 0.0)
 std_test('trunc', lambda a: dr.trunc(a), 1.6, 1.0, 0.0)
@@ -803,23 +803,25 @@ def test48_atan(t):
 @pytest.test_arrays('is_diff,float,shape=(*)')
 def test49_atan2(t):
     x = dr.linspace(t, -.8, .8, 10)
-    y = t(dr.arange(m.Int, 10) & 1) * 1 - .5
+    Int = getattr(sys.modules[t.__module__], 'Int')
+    y = t(dr.arange(Int, 10) & 1) * 1 - .5
     dr.enable_grad(x, y)
     z = dr.atan2(y, x)
     dr.backward(z)
     assert dr.allclose(z, t(-2.58299, 2.46468, -2.29744, 2.06075,
-                                  -1.74674, 1.39486, -1.08084, 0.844154,
-                                  -0.676915, 0.558599))
+                            -1.74674, 1.39486, -1.08084, 0.844154,
+                            -0.676915, 0.558599))
     assert dr.allclose(dr.grad(x),
                        t(0.561798, -0.784732, 1.11724, -1.55709, 1.93873,
-                               -1.93873, 1.55709, -1.11724, 0.784732,
-                               -0.561798))
+                         -1.93873, 1.55709, -1.11724, 0.784732,
+                         -0.561798))
     assert dr.allclose(dr.grad(y),
                        t(-0.898876, -0.976555, -0.993103, -0.83045,
-                               -0.344663, 0.344663, 0.83045, 0.993103,
-                               0.976555, 0.898876))
+                         -0.344663, 0.344663, 0.83045, 0.993103,
+                          0.976555, 0.898876))
 
 
+@pytest.test_arrays('is_diff,float,shape=(*)')
 def test50_cbrt(t):
     x = dr.linspace(t, -.8, .8, 10)
     dr.enable_grad(x)
@@ -833,6 +835,7 @@ def test50_cbrt(t):
                                1.67358, 0.804574, 0.572357, 0.45735, 0.386799))
 
 
+@pytest.test_arrays('is_diff,float,shape=(*)')
 def test51_sinh(t):
     x = dr.linspace(t, -1, 1, 10)
     dr.enable_grad(x)

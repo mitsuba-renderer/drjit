@@ -190,3 +190,12 @@ def test06_select():
         result = dr.select(l.ArrayXb(True, False), l.ArrayXi(3, 4), l.ArrayXf(5, 6))
         assert isinstance(result, l.ArrayXf) and dr.all(result == l.ArrayXf(3, 6))
 
+@pytest.test_arrays('type=float32,shape=(*)')
+def test07_power(t):
+    assert dr.allclose(t(2)**0, t(1))
+    assert dr.allclose(t(2)**1, t(2))
+    assert dr.allclose(t(2)**-1, t(1/2))
+    assert dr.allclose(t(2)**-13, t(2**-13))
+    assert dr.allclose(t(2)**13, t(2**13))
+    assert dr.allclose(t(2)**2.5, t(2**2.5))
+    assert dr.allclose(t(2)**-2.5, t(2**-2.5))
