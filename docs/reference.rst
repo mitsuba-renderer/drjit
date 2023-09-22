@@ -1335,3 +1335,7 @@ Miscellaneous
 .. autofunction:: graphviz_ad
 .. autofunction:: label
 .. autofunction:: set_label
+.. py:data:: None
+   :type: NoneType
+
+   This is just a copy of the builtin Python ``None`` value.

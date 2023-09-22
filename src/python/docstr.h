@@ -2433,17 +2433,26 @@ Args:
 )";
 
 static const char *doc_replace_grad = R"(
-Replace the gradient value of ``dst`` with the one of ``src``.
+Replace the gradient value of ``arg0`` with the one of ``arg1``.
 
-Broadcasting is applied to ``dst`` if necessary to match the type of ``src``.
+This is a relatively specialized operation to be used with care when
+implementing advanced automatic differentiation-related features.
+
+One example use would be to inform Dr.Jit that there is a better way to compute
+the gradient of a particular expression than what the normal AD traversal of
+the primal computation graph would yield.
+
+The function promotes and broadcasts `arg0` and `arg1` if they are not of the
+same type.
 
 Args:
-    dst (object): An arbitrary Dr.Jit array, tensor, or scalar builtin instance.
+    arg0 (object): An arbitrary Dr.Jit array, tensor, Python arithmetic type, or :ref:`Pytree <pytrees>`.
 
-    src (object): An differentiable Dr.Jit array or tensor.
+    arg1 (object): An arbitrary Dr.Jit array, tensor, or :ref:`Pytree <pytrees>`.
 
 Returns:
-    object: the variable with the replaced gradients.
+    object: a new Dr.Jit array combining the *primal* value of `arg0` and the
+        derivative of `arg1`.
 )";
 
 static const char *doc_enqueue = R"(

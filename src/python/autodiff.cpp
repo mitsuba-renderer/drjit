@@ -97,8 +97,7 @@ static nb::object detach(nb::handle h, bool preserve_type_) {
         void operator()(nb::handle h1, nb::handle h2) const override {
             const ArraySupplement &s1 = supp(h1.type()),
                                   &s2 = supp(h2.type());
-            uint64_t index = s1.index(inst_ptr(h1));
-            s2.init_index((uint32_t) index, inst_ptr(h2));
+            s2.init_index((uint32_t) s1.index(inst_ptr(h1)), inst_ptr(h2));
         }
     };
 
@@ -177,6 +176,29 @@ static void accum_grad(nb::handle target, nb::handle source) {
 
     traverse_pair("drjit.accum_grad", SetGrad{ }, target, o);
 }
+
+static nb::object replace_grad(nb::handle h0, nb::handle h1) {
+    struct ReplaceGrad : TransformPairCallback {
+        void operator()(nb::handle h1, nb::handle h2, nb::handle h3) const override {
+            const ArraySupplement &s = supp(h1.type());
+
+            if (s.is_diff && is_float(s)) {
+                uint64_t i1 = s.index(inst_ptr(h1)),
+                         i2 = s.index(inst_ptr(h2)),
+                         i3 = ((uint32_t) i1) | ((i2 >> 32) << 32);
+                s.init_index(i3, inst_ptr(h3));
+            }
+        }
+    };
+
+    nb::object o[2] = { borrow(h0), borrow(h1) };
+
+    if (!o[0].type().is(o[1].type()))
+        promote(o, 2);
+
+    return transform_pair("drjit.replace_grad", ReplaceGrad{ }, o[0], o[1]);
+}
+
 
 static void set_grad(nb::handle target, nb::handle source) {
   ::clear_grad(target);
@@ -303,6 +325,7 @@ void export_autodiff(nb::module_ &m) {
      .def("set_grad", &::set_grad, "target"_a, "source"_a, doc_set_grad)
      .def("accum_grad", &::accum_grad, "target"_a, "source"_a, doc_accum_grad)
      .def("clear_grad", &::clear_grad, doc_clear_grad)
+     .def("replace_grad", &::replace_grad, doc_replace_grad)
      .def("grad", &grad, "arg"_a, "preserve_type"_a = true, doc_grad)
      .def("detach", &detach, "arg"_a, "preserve_type"_a = true, doc_detach)
      .def("enqueue", &enqueue_impl, "mode"_a, "arg"_a, doc_enqueue)

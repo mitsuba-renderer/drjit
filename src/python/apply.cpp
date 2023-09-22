@@ -164,7 +164,7 @@ PyObject *apply(ArrayOp op, Slot slot, std::index_sequence<Is...> is,
             if constexpr (std::is_same_v<Slot, int>)
                 return nb::not_implemented().release().ptr();
             else
-                nb::detail::raise("Operation not supported for this type.");
+                nb::detail::raise("operation not supported for this type.");
         }
 
         ArraySupplement::Item item = s.item, item_mask = nullptr;
@@ -175,7 +175,7 @@ PyObject *apply(ArrayOp op, Slot slot, std::index_sequence<Is...> is,
             raise_if(((s.is_matrix || s.is_complex || s.is_quaternion) &&
                       (slot != Py_EQ && slot != Py_NE)) ||
                          (VarType) s.type == VarType::Pointer,
-                     "Inequality comparisons are only permitted on ordinary "
+                     "inequality comparisons are only permitted on ordinary "
                      "arithmetic arrays. They are suppressed for complex "
                      "arrays, quaternions, matrices, and arrays of pointers.");
             result_type = s.mask;
@@ -265,7 +265,7 @@ PyObject *apply(ArrayOp op, Slot slot, std::index_sequence<Is...> is,
                     ((Mode == Select && Is == 0) ? item_mask : item)(
                         o[Is].ptr(), i[Is]))... };
 
-                raise_if(!(v[Is].is_valid() && ...), "Item retrival failed!");
+                raise_if(!(v[Is].is_valid() && ...), "item retrival failed!");
 
                 // Recurse
                 nb::object vr;
@@ -281,11 +281,11 @@ PyObject *apply(ArrayOp op, Slot slot, std::index_sequence<Is...> is,
                     }
                 }
 
-                raise_if(!vr.is_valid(), "Nested operation failed!");
+                raise_if(!vr.is_valid(), "nested operation failed!");
 
                 // Assign result
                 raise_if(set_item(result.ptr(), j, vr.ptr()),
-                         "Item assignment failed!");
+                         "item assignment failed!");
 
                 // Advance to next element, broadcast size-1 arrays
                 ((i[Is] += (l[Is] == 1 ? 0 : 1)), ...);
@@ -420,8 +420,8 @@ NB_NOINLINE PyObject *apply_tensor(ArrayOp op, Slot slot,
             nb::str shape_str[] = { nb::str(cast_shape(*shapes[Is]))... };
 
             const char *fmt = N == 2
-                ? "Operands have incompatible shapes: %s and %s."
-                : "Operands have incompatible shapes: %s, %s, and %s.";
+                ? "operands have incompatible shapes: %s and %s."
+                : "operands have incompatible shapes: %s, %s, and %s.";
 
             nb::detail::raise(fmt, shape_str[Is].c_str()...);
         }
@@ -437,7 +437,7 @@ NB_NOINLINE PyObject *apply_tensor(ArrayOp op, Slot slot,
             op, slot, is, arrays[Is].ptr()...));
 
         raise_if(!result_array.is_valid(),
-                 "Operation on underlying array failed.");
+                 "operation on underlying array failed.");
 
         nb::handle result_type = tp;
         if (Mode == RichCompare)
@@ -493,7 +493,7 @@ nb::object apply_ret_pair(ArrayOp op, const char *name, nb::handle_t<dr::ArrayBa
         Impl impl = (Impl) s[op];
 
         raise_if(impl == DRJIT_OP_NOT_IMPLEMENTED,
-                 "Operation not supported for this type.");
+                 "operation not supported for this type.");
 
         if (impl != DRJIT_OP_DEFAULT) {
             impl(inst_ptr(h), inst_ptr(r0), inst_ptr(r1));
@@ -517,13 +517,13 @@ nb::object apply_ret_pair(ArrayOp op, const char *name, nb::handle_t<dr::ArrayBa
 
         for (Py_ssize_t i = 0; i < lr; ++i) {
             nb::object v = nb::steal(item(h.ptr(), i));
-            raise_if(!v.is_valid(), "Item retrival failed!");
+            raise_if(!v.is_valid(), "item retrival failed!");
             nb::object vr = py_impl_o(v);
 
             // Assign result
             raise_if(set_item(r0.ptr(), i, vr[0].ptr()) ||
                      set_item(r1.ptr(), i, vr[1].ptr()),
-                     "Item assignment failed!");
+                     "item assignment failed!");
         }
 
         return nb::make_tuple(r0, r1);
@@ -600,7 +600,7 @@ void traverse_pair(const char *op, const TraversePairCallback &tc,
 
     try {
         if (!tp1.is(tp2))
-            nb::detail::raise("Mismatched input types.");
+            nb::detail::raise("mismatched input types.");
 
         if (is_drjit_type(tp1)) {
             const ArraySupplement &s = supp(tp1);
@@ -616,7 +616,7 @@ void traverse_pair(const char *op, const TraversePairCallback &tc,
                 }
 
                 if (len1 != len2)
-                    nb::detail::raise("Incompatible input lengths (%zu and %zu).", len1, len2);
+                    nb::detail::raise("incompatible input lengths (%zu and %zu).", len1, len2);
 
                 for (Py_ssize_t i = 0; i < len1; ++i)
                     traverse_pair(op, tc,
@@ -633,7 +633,7 @@ void traverse_pair(const char *op, const TraversePairCallback &tc,
             size_t len1 = nb::len(h1),
                    len2 = nb::len(h2);
             if (len1 != len2)
-                nb::detail::raise("Incompatible input lengths (%zu and %zu).", len1, len2);
+                nb::detail::raise("incompatible input lengths (%zu and %zu).", len1, len2);
             for (size_t i = 0; i < len1; ++i)
                 traverse_pair(op, tc, h1[i], h2[i]);
         } else if (tp1.is(&PyDict_Type)) {
@@ -641,7 +641,7 @@ void traverse_pair(const char *op, const TraversePairCallback &tc,
                      d2 = nb::borrow<nb::dict>(h2);
             nb::object k1 = d1.keys(), k2 = d2.keys();
             if (!k1.equal(k2))
-                nb::detail::raise("Dictionaries have mismatched keys.");
+                nb::detail::raise("dictionaries have mismatched keys.");
             for (nb::handle k : k1)
                 traverse_pair(op, tc, d1[k], d2[k]);
         } else {
@@ -679,18 +679,18 @@ nb::handle TransformCallback::transform_type(nb::handle tp) const {
 
 /// Transform an input pytree 'h' into an output pytree, potentially of a different type
 nb::object transform(const char *op, const TransformCallback &tc, nb::handle h1) {
-    nb::handle t1 = h1.type();
+    nb::handle tp1 = h1.type();
 
     try {
-        if (is_drjit_type(t1)) {
-            nb::handle t2 = tc.transform_type(t1);
-            if (!t2.is_valid())
+        if (is_drjit_type(tp1)) {
+            nb::handle tp2 = tc.transform_type(tp1);
+            if (!tp2.is_valid())
                 return nb::none();
 
-            const ArraySupplement &s1 = supp(t1),
-                                  &s2 = supp(t2);
+            const ArraySupplement &s1 = supp(tp1),
+                                  &s2 = supp(tp2);
 
-            nb::object h2 = nb::inst_alloc_zero(t2);
+            nb::object h2 = nb::inst_alloc_zero(tp2);
             if (s1.is_tensor) {
                 tc(nb::steal(s1.tensor_array(h1.ptr())),
                    nb::steal(s2.tensor_array(h2.ptr())));
@@ -712,7 +712,7 @@ nb::object transform(const char *op, const TransformCallback &tc, nb::handle h1)
                 tc(h1, h2);
             }
             return h2;
-        } else if (t1.is(&PyTuple_Type)) {
+        } else if (tp1.is(&PyTuple_Type)) {
             nb::tuple t = nb::borrow<nb::tuple>(h1);
             size_t size = nb::len(t);
             nb::object result = nb::steal(PyTuple_New(size));
@@ -720,20 +720,20 @@ nb::object transform(const char *op, const TransformCallback &tc, nb::handle h1)
                 PyTuple_SET_ITEM(result.ptr(), i,
                                  transform(op, tc, t[i]).release().ptr());
             return result;
-        } else if (t1.is(&PyList_Type)) {
+        } else if (tp1.is(&PyList_Type)) {
             nb::list result;
             for (nb::handle item : nb::borrow<nb::list>(h1))
                 result.append(transform(op, tc, item));
             return result;
-        } else if (t1.is(&PyDict_Type)) {
+        } else if (tp1.is(&PyDict_Type)) {
             nb::dict result;
             for (auto [k, v] : nb::borrow<nb::dict>(h1))
                 result[k] = transform(op, tc, v);
             return result;
         } else {
-            nb::object dstruct = nb::getattr(t1, "DRJIT_STRUCT", nb::handle());
+            nb::object dstruct = nb::getattr(tp1, "DRJIT_STRUCT", nb::handle());
             if (dstruct.is_valid() && dstruct.type().is(&PyDict_Type)) {
-                nb::object result = t1();
+                nb::object result = tp1();
                 for (auto [k, v] : nb::borrow<nb::dict>(dstruct))
                     nb::setattr(result, k, transform(op, tc, nb::getattr(h1, k)));
                 return result;
@@ -742,17 +742,134 @@ nb::object transform(const char *op, const TransformCallback &tc, nb::handle h1)
             }
         }
     } catch (nb::python_error &e) {
-        nb::str tp_name = nb::type_name(t1);
+        nb::str tp_name = nb::type_name(tp1);
         e.restore();
         nb::chain_error(PyExc_RuntimeError,
                         "%s(): error encountered while processing an argument "
                         "of type '%U' (see above).", op, tp_name.ptr());
         throw nb::python_error();
     } catch (const std::exception &e) {
-        nb::str tp_name = nb::type_name(t1);
+        nb::str tp_name = nb::type_name(tp1);
         nb::chain_error(PyExc_RuntimeError,
                         "%s(): error encountered while processing an argument "
                         "of type '%U': %s", op, tp_name.ptr(), e.what());
+        throw nb::python_error();
+    }
+}
+
+nb::handle TransformPairCallback::transform_type(nb::handle tp) const {
+    return tp;
+}
+
+/// Transform a pair of input pytrees 'h1' and 'h2' into an output pytree, potentially of a different type
+nb::object transform_pair(const char *op, const TransformPairCallback &tc, nb::handle h1, nb::handle h2) {
+    nb::handle tp1 = h1.type(), tp2 = h2.type();
+
+    try {
+        if (!tp1.is(tp2))
+            nb::detail::raise("mismatched input types.");
+
+        if (is_drjit_type(tp1)) {
+            nb::handle tp3 = tc.transform_type(tp1);
+            if (!tp3.is_valid())
+                return nb::none();
+
+            const ArraySupplement &s1 = supp(tp1),
+                                  &s3 = supp(tp3);
+
+            nb::object h3 = nb::inst_alloc_zero(tp3);
+            if (s1.is_tensor) {
+                tc(nb::steal(s1.tensor_array(h1.ptr())),
+                   nb::steal(s1.tensor_array(h2.ptr())),
+                   nb::steal(s3.tensor_array(h3.ptr())));
+            } else if (s1.ndim != 1) {
+                dr::ArrayBase *p1 = inst_ptr(h1),
+                              *p2 = inst_ptr(h2),
+                              *p3 = inst_ptr(h3);
+
+                Py_ssize_t len1 = s1.shape[0], len2 = len1;
+                if (len1 == DRJIT_DYNAMIC) {
+                    len1 = s1.len(p1);
+                    len2 = s1.len(p2);
+
+                    if (len1 != len2)
+                        nb::detail::raise("incompatible input lengths (%zu and %zu).", len1, len2);
+
+                    s3.init(len1, p3);
+                }
+
+                for (Py_ssize_t i = 0; i < len1; ++i) {
+                    nb::object o1 = h1[i], o2 = h2[i];
+                    h3[i] = transform_pair(op, tc, o1, o2);
+                }
+            } else {
+                tc(h1, h2, h3);
+            }
+
+            return h3;
+        } else if (tp1.is(&PyTuple_Type)) {
+            nb::tuple t1 = nb::borrow<nb::tuple>(h1),
+                      t2 = nb::borrow<nb::tuple>(h2);
+            size_t len1 = nb::len(t1), len2 = nb::len(t2);
+            if (len1 != len2)
+                nb::detail::raise("incompatible input lengths (%zu and %zu).", len1, len2);
+
+            nb::object result = nb::steal(PyTuple_New(len1));
+            for (size_t i = 0; i < len1; ++i)
+                PyTuple_SET_ITEM(result.ptr(), i,
+                                 transform_pair(op, tc, t1[i], t2[i]).release().ptr());
+            return result;
+        } else if (tp1.is(&PyList_Type)) {
+            nb::list l1 = nb::borrow<nb::list>(h1),
+                     l2 = nb::borrow<nb::list>(h2);
+            size_t len1 = nb::len(l1), len2 = nb::len(l2);
+            if (len1 != len2)
+                nb::detail::raise("incompatible input lengths (%zu and %zu).", len1, len2);
+
+            nb::list result;
+            for (size_t i = 0; i < len1; ++i)
+                result.append(transform_pair(op, tc, l1[i], l2[i]));
+            return result;
+        } else if (tp1.is(&PyDict_Type)) {
+            nb::dict d1 = nb::borrow<nb::dict>(h1),
+                     d2 = nb::borrow<nb::dict>(h2);
+
+            nb::object k1 = d1.keys(), k2 = d2.keys();
+            if (!k1.equal(k2))
+                nb::detail::raise("dictionaries have mismatched keys.");
+
+            nb::dict result;
+            for (nb::handle k : k1)
+                result[k] = transform_pair(op, tc, d1[k], d2[k]);
+
+            return result;
+        } else {
+            nb::object dstruct = nb::getattr(tp1, "DRJIT_STRUCT", nb::handle());
+            if (dstruct.is_valid() && dstruct.type().is(&PyDict_Type)) {
+                nb::object result = tp1();
+                for (auto [k, v] : nb::borrow<nb::dict>(dstruct))
+                    nb::setattr(result, k,
+                                transform_pair(op, tc, nb::getattr(h1, k),
+                                               nb::getattr(h2, k)));
+                return result;
+            } else {
+                return nb::none();
+            }
+        }
+    } catch (nb::python_error &e) {
+        nb::str tp1_name = nb::type_name(tp1),
+                tp2_name = nb::type_name(tp2);
+        e.restore();
+        nb::chain_error(PyExc_RuntimeError,
+                        "%s(): error encountered while processing arguments "
+                        "of type '%U' and '%U' (see above).", op, tp1_name.ptr(), tp2_name.ptr());
+        throw nb::python_error();
+    } catch (const std::exception &e) {
+        nb::str tp1_name = nb::type_name(tp1),
+                tp2_name = nb::type_name(tp2);
+        nb::chain_error(PyExc_RuntimeError,
+                        "%s(): error encountered while processing arguments "
+                        "of type '%U' and '%U': %s", op, tp1_name.ptr(), tp2_name.ptr(), e.what());
         throw nb::python_error();
     }
 }

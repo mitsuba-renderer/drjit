@@ -83,6 +83,7 @@ NB_MODULE(drjit_ext, m_) {
 
     m.def("whos_str", &jit_var_whos);
     m.def("whos", []() { nb::print(jit_var_whos()); });
+    m.attr("None") = nb::none();
 
     jit_init(backends);
 

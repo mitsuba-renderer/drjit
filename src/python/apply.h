@@ -65,6 +65,12 @@ struct TransformCallback {
     virtual void operator()(nb::handle h1, nb::handle h2) const = 0;
 };
 
+/// Callback for the ``transform_pair()`` operation below
+struct TransformPairCallback {
+    virtual nb::handle transform_type(nb::handle tp) const;
+    virtual void operator()(nb::handle h1, nb::handle h2, nb::handle h3) const = 0;
+};
+
 /// Invoke the given callback on leaf elements of the pytree 'h'
 extern void traverse(const char *op, const TraverseCallback &callback,
                      nb::handle h);
@@ -75,3 +81,6 @@ extern void traverse_pair(const char *op, const TraversePairCallback &callback,
 
 /// Transform an input pytree 'h' into an output pytree, potentially of a different type
 extern nb::object transform(const char *op, const TransformCallback &callback, nb::handle h);
+
+/// Transform a pair of input pytrees 'h1' and 'h2' into an output pytree, potentially of a different type
+extern nb::object transform_pair(const char *op, const TransformPairCallback &callback, nb::handle h1, nb::handle h2);
