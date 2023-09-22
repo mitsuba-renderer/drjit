@@ -847,7 +847,7 @@ def test36_scatter_reduce_fwd(t):
         assert dr.allclose(dr.grad(s), (25.1667 if i // 2 == 0 else 0)
                            + (17 if i % 2 == 0 else 0))
 
-counter = 32
+counter = 37
 
 def std_test(name, func, f_in, f_out, grad_out):
     global counter
@@ -917,7 +917,7 @@ std_test('floor', lambda a: dr.floor(a), 1.6, 1.0, 0.0)
 
 
 @pytest.test_arrays('is_diff,float,shape=(*)')
-def test70_exp(t):
+def test75_exp(t):
     x = dr.linspace(t, 0, 1, 10)
     dr.enable_grad(x)
     y = dr.exp(x * x)
@@ -928,7 +928,7 @@ def test70_exp(t):
 
 
 @pytest.test_arrays('is_diff,float,shape=(*)')
-def test71_log(t):
+def test76_log(t):
     x = dr.linspace(t, 0.01, 1, 10)
     dr.enable_grad(x)
     y = dr.log(x * x)
@@ -939,7 +939,7 @@ def test71_log(t):
 
 
 @pytest.test_arrays('is_diff,float,shape=(*)')
-def test72_pow(t):
+def test77_pow(t):
     x = dr.linspace(t, 1, 10, 10)
     y = dr.full(t, 2.0, 10)
     dr.enable_grad(x, y)
@@ -952,7 +952,7 @@ def test72_pow(t):
 
 
 @pytest.test_arrays('is_diff,float,shape=(*)')
-def test73_tan(t):
+def test78_tan(t):
     x = dr.linspace(t, 0, 1, 10)
     dr.enable_grad(x)
     y = dr.tan(x * x)
@@ -965,7 +965,7 @@ def test73_tan(t):
 
 
 @pytest.test_arrays('is_diff,float,shape=(*)')
-def test74_asin(t):
+def test79_asin(t):
     x = dr.linspace(t, -.8, .8, 10)
     dr.enable_grad(x)
     y = dr.asin(x * x)
@@ -979,7 +979,7 @@ def test74_asin(t):
 
 
 @pytest.test_arrays('is_diff,float,shape=(*)')
-def test78_acos(t):
+def test80_acos(t):
     x = dr.linspace(t, -.8, .8, 10)
     dr.enable_grad(x)
     y = dr.acos(x * x)
@@ -993,7 +993,7 @@ def test78_acos(t):
 
 
 @pytest.test_arrays('is_diff,float,shape=(*)')
-def test79_atan(t):
+def test81_atan(t):
     x = dr.linspace(t, -.8, .8, 10)
     dr.enable_grad(x)
     y = dr.atan(x * x)
@@ -1007,7 +1007,7 @@ def test79_atan(t):
 
 
 @pytest.test_arrays('is_diff,float,shape=(*)')
-def test80_atan2(t):
+def test82_atan2(t):
     x = dr.linspace(t, -.8, .8, 10)
     Int = getattr(sys.modules[t.__module__], 'Int')
     y = t(dr.arange(Int, 10) & 1) * 1 - .5
@@ -1028,7 +1028,7 @@ def test80_atan2(t):
 
 
 @pytest.test_arrays('is_diff,float,shape=(*)')
-def test81_cbrt(t):
+def test83_cbrt(t):
     x = dr.linspace(t, -.8, .8, 10)
     dr.enable_grad(x)
     y = dr.cbrt(x)
@@ -1042,7 +1042,7 @@ def test81_cbrt(t):
 
 
 @pytest.test_arrays('is_diff,float,shape=(*)')
-def test82_sinh(t):
+def test84_sinh(t):
     x = dr.linspace(t, -1, 1, 10)
     dr.enable_grad(x)
     y = dr.sinh(x)
@@ -1057,7 +1057,7 @@ def test82_sinh(t):
 
 
 @pytest.test_arrays('is_diff,float,shape=(*)')
-def test83_cosh(t):
+def test85_cosh(t):
     x = dr.linspace(t, -1, 1, 10)
     dr.enable_grad(x)
     y = dr.cosh(x)
@@ -1073,7 +1073,7 @@ def test83_cosh(t):
 
 
 @pytest.test_arrays('is_diff,float,shape=(*)')
-def test84_tanh(t):
+def test86_tanh(t):
     x = dr.linspace(t, -1, 1, 10)
     dr.enable_grad(x)
     y = dr.tanh(x)
@@ -1090,7 +1090,7 @@ def test84_tanh(t):
 
 
 @pytest.test_arrays('is_diff,float,shape=(*)')
-def test85_asinh(t):
+def test87_asinh(t):
     x = dr.linspace(t, -.9, .9, 10)
     dr.enable_grad(x)
     y = dr.asinh(x)
@@ -1107,7 +1107,7 @@ def test85_asinh(t):
 
 
 @pytest.test_arrays('is_diff,float,shape=(*)')
-def test86_acosh(t):
+def test88_acosh(t):
     x = dr.linspace(t, 1.01, 2, 10)
     dr.enable_grad(x)
     y = dr.acosh(x)
@@ -1124,7 +1124,7 @@ def test86_acosh(t):
 
 
 @pytest.test_arrays('is_diff,float,shape=(*)')
-def test87_atanh(t):
+def test89_atanh(t):
     x = dr.linspace(t, -.99, .99, 10)
     dr.enable_grad(x)
     y = dr.atanh(x)
@@ -1138,3 +1138,49 @@ def test87_atanh(t):
         t(50.2513, 2.4564, 1.43369, 1.12221, 1.01225, 1.01225, 1.12221,
                 1.43369, 2.4564, 50.2513)
     )
+
+@pytest.test_arrays('is_diff,float32,shape=(*)')
+def test90_replace_grad(t):
+    m = sys.modules[t.__module__]
+
+    with pytest.raises(RuntimeError) as ei:
+       dr.replace_grad((1.0,), (m.UInt(1),))
+    assert "drjit.replace_grad(): error encountered while processing arguments of type 'float' and 'drjit.llvm.ad.UInt': mismatched input types." in str(ei.value.__cause__)
+
+    x = m.Array3f(1, 2, 3)
+    y = m.Array3f(3, 2, 1)
+    dr.enable_grad(x, y)
+    x2 = x*x
+    y2 = y*y
+    z = dr.replace_grad(x2, y2)
+    assert z.x.index_ad == y2.x.index_ad
+    assert z.y.index_ad == y2.y.index_ad
+    assert z.z.index_ad == y2.z.index_ad
+    z2 = z*z
+    assert dr.allclose(z2, [1, 16, 81])
+    dr.backward(z2)
+    assert dr.allclose(dr.grad(x), 0)
+    assert dr.allclose(dr.grad(y), [12, 32, 36])
+
+    x = m.Array3f(1, 2, 3)
+    y = t(1)
+    dr.enable_grad(x, y)
+    z = dr.replace_grad(x, y)
+    assert z.x.index_ad == y.index_ad
+    assert z.y.index_ad == y.index_ad
+    assert z.z.index_ad == y.index_ad
+
+    a = t(1.0)
+    dr.enable_grad(a)
+    b = dr.replace_grad(4.0, a)
+    assert type(b) is type(a)
+    assert b.index_ad == a.index_ad
+    assert dr.allclose(b, 4.0)
+
+    a = m.ArrayXf(1, 2, 3)
+    y = t(1)
+    dr.enable_grad(x, y)
+    z = dr.replace_grad(x, y)
+    assert z[0].index_ad == y.index_ad
+    assert z[1].index_ad == y.index_ad
+    assert z[2].index_ad == y.index_ad

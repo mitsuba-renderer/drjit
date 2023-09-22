@@ -306,13 +306,13 @@ def test09_broadcast(t):
                     assert out_n.shape == out_e.shape
                     assert np.all(out_n.ravel() == np.array(out_e.array))
 
-    with pytest.raises(RuntimeError, match=r'Operands have incompatible shapes: \(2,\) and \(2, 1\).'):
+    with pytest.raises(RuntimeError, match=r'operands have incompatible shapes: \(2,\) and \(2, 1\).'):
         dr.zeros(t, 2) + dr.zeros(t, (2, 1))
 
-    with pytest.raises(RuntimeError, match=r'Operands have incompatible shapes: \(2,\) and \(3,\).'):
+    with pytest.raises(RuntimeError, match=r'operands have incompatible shapes: \(2,\) and \(3,\).'):
         dr.zeros(t, 2) + dr.zeros(t, 3)
 
-    with pytest.raises(RuntimeError, match=r'Operands have incompatible shapes: \(3, 2\) and \(2, 3\).'):
+    with pytest.raises(RuntimeError, match=r'operands have incompatible shapes: \(3, 2\) and \(2, 3\).'):
         dr.zeros(t, (3, 2)) + dr.zeros(t, (2, 3))
 
 
