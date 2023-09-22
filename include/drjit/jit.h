@@ -480,14 +480,14 @@ struct DRJIT_TRIVIAL_ABI JitArray
     template <typename Index, typename Mask>
     void scatter_reduce_(ReduceOp /*op*/, void * /*dst*/,
                          const Index & /*index*/,
-                         const Mask & /* mask */) const {
+                         const Mask & /* mask */, bool /* permute */) const {
         drjit_raise("Not implemented, please use scatter_reduce() variant that "
                     "takes an array target argument.");
     }
 
     template <typename Index, typename Mask>
     void scatter_reduce_(ReduceOp op, JitArray &dst, const Index &index,
-                         const Mask &mask) const {
+                         const Mask &mask, bool /* permute */) const {
         static_assert(
             std::is_same_v<detached_t<Mask>, detached_t<mask_t<JitArray>>>);
         dst = steal(jit_var_scatter(dst.index(), m_index, index.index(),

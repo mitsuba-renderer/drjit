@@ -145,8 +145,9 @@ nb::object gather(nb::type_object dtype, nb::object source,
     throw nb::type_error("drjit.gather(): unsupported dtype!");
 }
 
-void scatter(nb::object target, nb::object value, nb::object index,
-             nb::object active, bool permute) {
+static void scatter_generic(const char *name, ReduceOp op, nb::object target,
+                            nb::object value, nb::object index,
+                            nb::object active, bool permute) {
     nb::handle target_tp = target.type(),
                 value_tp = value.type();
 
@@ -167,19 +168,20 @@ void scatter(nb::object target, nb::object value, nb::object index,
             len = nb::len(value);
 
             if (len != nb::len(target))
-                throw std::runtime_error("drjit.scatter(): 'target' and 'value' "
-                                         "have incompatible lengths!");
+                nb::detail::raise("drjit.%s(): 'target' and 'value' have "
+                                  "incompatible lengths!", name);
         }
 
         if (is_seq) {
             for (size_t i = 0, l = len; i < l; ++i)
-                scatter(target[i], value[i], index, active, permute);
+                scatter_generic(name, op, target[i], value[i], index, active,
+                                permute);
             return;
         }
 
         if (is_dict) {
             for (nb::handle k : nb::borrow<nb::dict>(value).keys())
-                scatter(target[k], value[k], index, active, permute);
+                scatter_generic(name, op, target[k], value[k], index, active, permute);
             return;
         }
 
@@ -188,8 +190,8 @@ void scatter(nb::object target, nb::object value, nb::object index,
             nb::dict dstruct_dict = nb::borrow<nb::dict>(dstruct);
 
             for (auto [k, v] : dstruct_dict)
-                scatter(nb::getattr(target, k), nb::getattr(value, k),
-                        index, active, permute);
+                scatter_generic(name, op, nb::getattr(target, k),
+                                nb::getattr(value, k), index, active, permute);
 
             return;
         }
@@ -197,7 +199,7 @@ void scatter(nb::object target, nb::object value, nb::object index,
 
     if (!is_drjit_target_1d)
         nb::detail::raise_type_error(
-            "drjit.scatter(): 'target' argument must be a dynamic 1D array!");
+            "drjit.%s(): 'target' argument must be a dynamic 1D array!", name);
 
     const ArraySupplement &target_supp = supp(target_tp);
 
@@ -216,9 +218,9 @@ void scatter(nb::object target, nb::object value, nb::object index,
             index = index_tp(index);
         } catch (nb::python_error &e) {
             nb::raise_from(e, PyExc_TypeError,
-                "drjit.scatter(): 'index' argument has an unsupported type, "
+                "%s: 'index' argument has an unsupported type, "
                 "please provide an instance that is convertible to "
-                "drjit.uint32_array_t(target).");
+                "drjit.uint32_array_t(target).", name);
         }
     }
 
@@ -227,9 +229,9 @@ void scatter(nb::object target, nb::object value, nb::object index,
             active = active_tp(active);
         } catch (nb::python_error &e) {
             nb::raise_from(e, PyExc_TypeError,
-                "drjit.scatter(): 'active' argument has an unsupported type, "
+                "drjit.%s(): 'active' argument has an unsupported type, "
                 "please provide an instance that is convertible to "
-                "drjit.mask_t(target).");
+                "drjit.mask_t(target).", name);
         }
     }
 
@@ -239,9 +241,9 @@ void scatter(nb::object target, nb::object value, nb::object index,
             value_tp = value.type();
         } catch (nb::python_error &e) {
             nb::raise_from(e, PyExc_TypeError,
-                "drjit.scatter(): 'value' argument has an unsupported type! "
+                "drjit.%s(): 'value' argument has an unsupported type! "
                 "Please provide an instance that is convertible to "
-                "type(target).");
+                "type(target).", name);
         }
     }
 
@@ -254,14 +256,8 @@ void scatter(nb::object target, nb::object value, nb::object index,
     }
 
     if (value_meta == target_meta) {
-        target_supp.scatter(
-            inst_ptr(value),
-            inst_ptr(index),
-            inst_ptr(active),
-            inst_ptr(target),
-            permute
-        );
-
+        target_supp.scatter_reduce(op, inst_ptr(value), inst_ptr(index),
+                                   inst_ptr(active), inst_ptr(target), permute);
         return;
     }
 
@@ -278,17 +274,30 @@ void scatter(nb::object target, nb::object value, nb::object index,
         m.shape[0] != DRJIT_DYNAMIC) {
         nb::int_ sub_size(m.shape[0]);
         for (size_t i = 0; i < m.shape[0]; ++i)
-            ::scatter(target, value[i], index * sub_size + nb::int_(i), active,
-                      permute);
+            scatter_generic(name, op, target, value[i],
+                            index * sub_size + nb::int_(i), active, permute);
         return;
     }
 
     nb::str flat_name = nb::inst_name(target),
             actual_name = nb::inst_name(value);
 
-    nb::detail::raise_type_error(
-        "drjit.scatter(): value type %s is not supported for a scatter target of type %s.",
-        flat_name.c_str(), actual_name.c_str());
+    nb::detail::raise_type_error("drjit.%s(): value type %s is not supported "
+                                 "for a scatter target of type %s.",
+                                 name, flat_name.c_str(), actual_name.c_str());
+}
+
+void scatter(nb::object target, nb::object value, nb::object index,
+             nb::object active, bool permute) {
+    scatter_generic("scatter", ReduceOp::None, std::move(target),
+                    std::move(value), std::move(index), std::move(active),
+                    permute);
+}
+
+void scatter_reduce(ReduceOp op, nb::object target, nb::object value,
+                    nb::object index, nb::object active) {
+    scatter_generic("scatter_reduce", op, std::move(target), std::move(value),
+                    std::move(index), std::move(active), false);
 }
 
 static void ravel_recursive(nb::handle result, nb::handle value,
@@ -535,16 +544,18 @@ nb::object unravel(const nb::type_object_t<ArrayBase> &dtype,
 
 void export_memop(nb::module_ &m) {
     m.def("gather", &gather, "dtype"_a, "source"_a, "index"_a,
-          "active"_a = true, "permute"_a = false, nb::raw_doc(doc_gather))
+          "active"_a = true, "permute"_a = false, doc_gather)
      .def("scatter", &scatter, "target"_a, "value"_a, "index"_a,
-          "active"_a = true, "permute"_a = false, nb::raw_doc(doc_scatter))
+          "active"_a = true, "permute"_a = false, doc_scatter)
+     .def("scatter_reduce", &scatter_reduce, "op"_a, "target"_a, "value"_a, "index"_a,
+          "active"_a = true, doc_scatter_reduce)
      .def("ravel",
           [](nb::handle array, char order) {
               return ravel(array, order);
-          }, "array"_a, "order"_a = 'A', nb::raw_doc(doc_ravel))
+          }, "array"_a, "order"_a = 'A', doc_ravel)
      .def("unravel",
           [](const nb::type_object_t<ArrayBase> &dtype,
              nb::handle_t<ArrayBase> array,
              char order) { return unravel(dtype, array, order); },
-          "dtype"_a, "array"_a, "order"_a = 'A', nb::raw_doc(doc_unravel));
+          "dtype"_a, "array"_a, "order"_a = 'A', doc_unravel);
 }

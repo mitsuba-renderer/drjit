@@ -649,9 +649,9 @@ def test32_scatter_bwd(t):
         idx1 = dr.arange(m.UInt, 5)
         idx2 = dr.arange(m.UInt, 4) + 3
 
-        x = dr.linspace(m.Float, 0, 1, 5)
-        y = dr.linspace(m.Float, 1, 2, 4)
-        buf = dr.zeros(m.Float, 10)
+        x = dr.linspace(t, 0, 1, 5)
+        y = dr.linspace(t, 1, 2, 4)
+        buf = dr.zeros(t, 10)
 
         if i % 2 == 0:
             dr.enable_grad(buf)
@@ -662,13 +662,13 @@ def test32_scatter_bwd(t):
         dr.set_label(y, "y")
         dr.set_label(buf, "buf")
 
-        buf2 = m.Float(buf)
+        buf2 = t(buf)
         dr.scatter(buf2, x, idx1)
         dr.eval(buf2)
         dr.scatter(buf2, y, idx2)
 
-        ref_buf = m.Float(0.0000, 0.2500, 0.5000, 1.0000, 1.3333,
-                          1.6667, 2.0000, 0.0000, 0.0000, 0.0000)
+        ref_buf = t(0.0000, 0.2500, 0.5000, 1.0000, 1.3333,
+                    1.6667, 2.0000, 0.0000, 0.0000, 0.0000)
 
         assert dr.allclose(ref_buf, buf2, atol=1e-4)
 
@@ -676,8 +676,8 @@ def test32_scatter_bwd(t):
 
         dr.backward(s)
 
-        ref_x = m.Float(0.0000, 0.5000, 1.0000, 0.0000, 0.0000)
-        ref_y = m.Float(2.0000, 2.6667, 3.3333, 4.0000)
+        ref_x = t(0.0000, 0.5000, 1.0000, 0.0000, 0.0000)
+        ref_y = t(2.0000, 2.6667, 3.3333, 4.0000)
 
         if i // 2 == 0:
             assert dr.allclose(dr.grad(y), dr.detach(ref_y), atol=1e-4)
@@ -693,7 +693,7 @@ def test32_scatter_bwd(t):
 
 
 @pytest.test_arrays('is_diff,float,shape=(*)')
-def test34_scatter_fwd(t):
+def test33_scatter_fwd(t):
     m = sys.modules[t.__module__]
     x = t(4.0)
     dr.enable_grad(x)
@@ -729,8 +729,9 @@ def test34_scatter_fwd(t):
     ref_grad = [0.0, 0.0, 16.0, 0.0, 24.0, 0.0, 32.0, 0.0, 0.0, 0.0]
     assert dr.allclose(grad, ref_grad)
 
+
 @pytest.test_arrays('is_diff,float,shape=(*)')
-def test41_scatter_fwd_permute(t):
+def test34_scatter_fwd_permute(t):
     m = sys.modules[t.__module__]
     x = t(4.0)
     dr.enable_grad(x)
@@ -754,6 +755,97 @@ def test41_scatter_fwd_permute(t):
 
     ref_grad = [1.0, 3.0, 5.0, 7.0, 9.0, 11.0, 13.0, 15.0, 17.0, 19.0]
     assert dr.allclose(grad, ref_grad)
+
+
+@pytest.test_arrays('is_diff,float,shape=(*)')
+def test35_scatter_reduce_bwd(t):
+    m = sys.modules[t.__module__]
+    for i in range(3):
+        idx1 = dr.arange(m.UInt, 5)
+        idx2 = dr.arange(m.UInt, 4) + 3
+
+        x = dr.linspace(t, 0, 1, 5)
+        y = dr.linspace(t, 1, 2, 4)
+        buf = dr.zeros(t, 10)
+
+        if i % 2 == 0:
+            dr.enable_grad(buf)
+        if i // 2 == 0:
+            dr.enable_grad(x, y)
+
+        dr.set_label(x, "x")
+        dr.set_label(y, "y")
+        dr.set_label(buf, "buf")
+
+        buf2 = t(buf)
+        dr.scatter_reduce(dr.ReduceOp.Add, buf2, x, idx1)
+        dr.scatter_reduce(dr.ReduceOp.Add, buf2, y, idx2)
+
+        ref_buf = t(0.0000, 0.2500, 0.5000, 1.7500, 2.3333,
+                          1.6667, 2.0000, 0.0000, 0.0000, 0.0000)
+
+        assert dr.allclose(ref_buf, buf2, atol=1e-4)
+
+        s = dr.dot(buf2, buf2)
+
+        dr.backward(s)
+
+        ref_x = t(0.0000, 0.5000, 1.0000, 3.5000, 4.6667)
+        ref_y = t(3.5000, 4.6667, 3.3333, 4.0000)
+
+        if i // 2 == 0:
+            assert dr.allclose(dr.grad(y), dr.detach(ref_y), atol=1e-4)
+            assert dr.allclose(dr.grad(x), dr.detach(ref_x), atol=1e-4)
+        else:
+            assert dr.grad(x) == 0
+            assert dr.grad(y) == 0
+
+        if i % 2 == 0:
+            assert dr.allclose(dr.grad(buf), dr.detach(ref_buf) * 2, atol=1e-4)
+        else:
+            assert dr.grad(buf) == 0
+
+
+@pytest.test_arrays('is_diff,float,shape=(*)')
+def test36_scatter_reduce_fwd(t):
+    m = sys.modules[t.__module__]
+    for i in range(3):
+        idx1 = dr.arange(m.UInt, 5)
+        idx2 = dr.arange(m.UInt, 4) + 3
+
+        x = dr.linspace(t, 0, 1, 5)
+        y = dr.linspace(t, 1, 2, 4)
+        buf = dr.zeros(t, 10)
+
+        if i % 2 == 0:
+            dr.enable_grad(buf)
+            dr.set_grad(buf, 1)
+        if i // 2 == 0:
+            dr.enable_grad(x, y)
+            dr.set_grad(x, 1)
+            dr.set_grad(y, 1)
+
+        dr.set_label(x, "x")
+        dr.set_label(y, "y")
+        dr.set_label(buf, "buf")
+
+        buf2 = t(buf)
+        dr.scatter_reduce(dr.ReduceOp.Add, buf2, x, idx1)
+        dr.scatter_reduce(dr.ReduceOp.Add, buf2, y, idx2)
+
+        s = dr.dot(buf2, buf2)
+
+        if i % 2 == 0:
+            dr.enqueue(dr.ADMode.Forward, buf)
+        if i // 2 == 0:
+            dr.enqueue(dr.ADMode.Forward, x, y)
+
+        dr.traverse(dr.ADMode.Forward)
+
+        # Verified against Mathematica
+        assert dr.allclose(dr.detach(s), 15.5972)
+        assert dr.allclose(dr.grad(s), (25.1667 if i // 2 == 0 else 0)
+                           + (17 if i % 2 == 0 else 0))
 
 counter = 32
 

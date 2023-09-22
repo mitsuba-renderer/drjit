@@ -2084,7 +2084,7 @@ uint64_t ad_var_gather(uint64_t source, uint64_t offset, uint64_t mask, bool per
         return result.release();
     } else {
         return ad_var_new(
-            "gather", std::move(result),
+            permute ? "gather_permute" : "gather", std::move(result),
             SpecialArg(source,
                        new GatherEdge(GenericArray<uint32_t>::borrow(offset),
                                       JitMask::borrow(mask), permute)));
@@ -2108,19 +2108,28 @@ Index ad_var_scatter(Index target, Index value, JitIndex offset,
 
         VarInfo info = jit_set_backend(jit_index(target));
 
-        JitMask edge_mask = dr::full<JitMask>(false, info.size);
-        if (reduce_op == ReduceOp::None && !permute)
-            dr::scatter(edge_mask, JitMask(true),
-                        GenericArray<uint32_t>::borrow(offset),
-                        JitMask::borrow(mask));
+        JitMask overwritten = dr::zeros<JitMask>(info.size);
+
+        const char *name;
+        if (reduce_op == ReduceOp::None) {
+            if (permute) {
+                name = "scatter_permute";
+            } else {
+                name = "scatter";
+                dr::scatter(overwritten, JitMask(true),
+                            GenericArray<uint32_t>::borrow(offset),
+                            JitMask::borrow(mask));
+            }
+        } else {
+            name = "scatter_reduce";
+        }
 
         return ad_var_new(
-            permute ? "scatter[permute]" : "scatter", std::move(result),
+            name, std::move(result),
             SpecialArg(value,
                        new ScatterEdge(GenericArray<uint32_t>::borrow(offset),
                                        JitMask::borrow(mask), reduce_op)),
-            SpecialArg(target, new MaskEdge(edge_mask, true))
-        );
+            SpecialArg(target, new MaskEdge(overwritten, true)));
     }
 }
 

@@ -792,10 +792,8 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
     }
 
     template <typename Target, typename Index, typename Mask>
-    void scatter_reduce_(ReduceOp op,
-                         Target &&target,
-                         const Index &index,
-                         const Mask &mask) const {
+    void scatter_reduce_(ReduceOp op, Target &&target, const Index &index,
+                         const Mask &mask, bool permute) const {
         DRJIT_CHKSCALAR("scatter_reduce_");
 
         size_t sa = derived().size(), sb = index.size(), sc = mask.size(),
@@ -803,7 +801,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
 
         for (size_t i = 0; i < sr; ++i)
             scatter_reduce(op, target, derived().entry(i), index.entry(i),
-                           mask.entry(i));
+                           mask.entry(i), permute);
     }
 
     static Derived load_aligned_(const void *mem, size_t size) {
