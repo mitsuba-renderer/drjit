@@ -296,7 +296,7 @@ template <bool IsMask_, typename Derived_> struct alignas(64)
 
     template <typename Index, typename Mask>
     DRJIT_INLINE void scatter_reduce_(ReduceOp op, void *ptr, const Index &index_,
-                                      const Mask &active_) const {
+                                      const Mask &active_, bool) const {
         if (op != ReduceOp::Add)
             drjit_raise("Packet scatter_reduce only support Add operation!");
 
@@ -331,7 +331,7 @@ template <bool IsMask_, typename Derived_> struct alignas(64)
 
             _mm512_mask_i32scatter_ps(ptr, active, index, value, 4);
         } else {
-            scatter_reduce_(ptr, int32_array_t<Index>(index_), op, active_);
+            scatter_reduce_(ptr, int32_array_t<Index>(index_), op, active_, false);
         }
     }
 
@@ -603,9 +603,9 @@ template <bool IsMask_, typename Derived_> struct alignas(64)
 
     template <typename Index, typename Mask>
     DRJIT_INLINE void scatter_reduce_(ReduceOp op, void *ptr, const Index &index_,
-                                      const Mask &active_) const {
+                                      const Mask &active_, bool) const {
         if (op != ReduceOp::Add)
-            drjit_raise("Packet scatter_reduce only support Add operation!");
+            drjit_raise("Packet scatter_reduce only supports the 'Add' operation!");
 
         if constexpr (sizeof(scalar_t<Index>) == 8) {
             __m512i index = index_.m;
@@ -638,7 +638,7 @@ template <bool IsMask_, typename Derived_> struct alignas(64)
 
             _mm512_mask_i64scatter_pd(ptr, active, index, value, 8);
         } else {
-            scatter_reduce_(ptr, int64_array_t<Index>(index_), op, active_);
+            scatter_reduce_(ptr, int64_array_t<Index>(index_), op, active_, false);
         }
     }
 
@@ -901,9 +901,9 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(64)
 
     template <typename Index, typename Mask>
     DRJIT_INLINE void scatter_reduce_(ReduceOp op, void *ptr, const Index &index_,
-                                      const Mask &active_) const {
+                                      const Mask &active_, bool) const {
         if (op != ReduceOp::Add)
-            drjit_raise("Packet scatter_reduce only support Add operation!");
+            drjit_raise("Packet scatter_reduce only supports the 'Add' operation!");
 
         if constexpr (sizeof(scalar_t<Index>) == 4) {
             __m512i index = index_.m;
@@ -936,7 +936,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(64)
 
             _mm512_mask_i32scatter_epi32(ptr, active, index, value, 4);
         } else {
-            scatter_reduce_(ptr, int32_array_t<Index>(index_), op, active_);
+            scatter_reduce_(ptr, int32_array_t<Index>(index_), op, active_, false);
         }
     }
 
@@ -1210,9 +1210,9 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(64)
 
     template <typename Index, typename Mask>
     DRJIT_INLINE void scatter_reduce_(ReduceOp op, void *ptr, const Index &index_,
-                                      const Mask &active_) const {
+                                      const Mask &active_, bool) const {
         if (op != ReduceOp::Add)
-            drjit_raise("Packet scatter_reduce only support Add operation!");
+            drjit_raise("Packet scatter_reduce only supports the 'Add' operation!");
 
         if constexpr (sizeof(scalar_t<Index>) == 8) {
             __m512i index = index_.m;
@@ -1245,7 +1245,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(64)
 
             _mm512_mask_i64scatter_epi64(ptr, active, index, value, 8);
         } else {
-            scatter_reduce_(ptr, int64_array_t<Index>(index_), op, active_);
+            scatter_reduce_(ptr, int64_array_t<Index>(index_), op, active_, false);
         }
     }
 

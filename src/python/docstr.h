@@ -1171,7 +1171,7 @@ particular, ``dtype`` can be:
   shape. When ``shape`` is an integer, the function creates a rank-1 tensor of
   the specified size.
 
-- A :ref:`Pytree <pytrees>`. In this case, :py:func:`drjit.zero()` will invoke
+- A :ref:`Pytree <pytrees>`. In this case, :py:func:`drjit.zeros()` will invoke
   itself recursively to zero-initialize each field of the data structure.
 
 - A scalar Python type like ``int``, ``float``, or ``bool``. The ``shape``
@@ -1758,7 +1758,6 @@ Returns:
 )";
 
 static const char *doc_gather = R"(
-gather(dtype, source, index, active=True)
 Gather values from a flat array or nested data structure
 
 This function performs a *gather* (i.e., indirect memory read) from ``source``
@@ -1788,19 +1787,19 @@ This operation can be used in the following different ways:
 
      .. code-block::
 
-         result = dr.cuda.Array3f(...)
-         index = dr.cuda.UInt([...])
-         result = dr.gather(dr.cuda.Array3f, source, index)
+        result = dr.cuda.Array3f(...)
+        index = dr.cuda.UInt([...])
+        result = dr.gather(dr.cuda.Array3f, source, index)
 
      is equivalent to
 
      .. code-block::
 
-         result = dr.cuda.Array3f(
-             dr.gather(dr.cuda.Float, source.x, index),
-             dr.gather(dr.cuda.Float, source.y, index),
-             dr.gather(dr.cuda.Float, source.z, index)
-         )
+        result = dr.cuda.Array3f(
+            dr.gather(dr.cuda.Float, source.x, index),
+            dr.gather(dr.cuda.Float, source.y, index),
+            dr.gather(dr.cuda.Float, source.z, index)
+        )
 
      A similar recursive traversal is used for other kinds of
      sequences, mappings, and custom data structures.
@@ -1812,18 +1811,18 @@ This operation can be used in the following different ways:
 
      .. code-block::
 
-         source = dr.cuda.Float([...])
-         index = dr.cuda.UInt([...])
-         result = dr.gather(dr.cuda.Array3f, source, index)
+        source = dr.cuda.Float([...])
+        index = dr.cuda.UInt([...])
+        result = dr.gather(dr.cuda.Array3f, source, index)
 
      and is equivalent to
 
      .. code-block::
 
-         result = dr.cuda.Vector3f(
-             dr.gather(dr.cuda.Float, source, index*3 + 0),
-             dr.gather(dr.cuda.Float, source, index*3 + 1),
-             dr.gather(dr.cuda.Float, source, index*3 + 2))
+        result = dr.cuda.Vector3f(
+            dr.gather(dr.cuda.Float, source, index*3 + 0),
+            dr.gather(dr.cuda.Float, source, index*3 + 1),
+            dr.gather(dr.cuda.Float, source, index*3 + 2))
 
 .. danger::
 
@@ -1834,25 +1833,30 @@ This operation can be used in the following different ways:
 Args:
     dtype (type): The desired output type (typically equal to ``type(source)``,
       but other variations are possible as well, see the description above.)
+
     source (object): The object from which data should be read (typically a 1D
       Dr.Jit array, but other variations are possible as well, see the
       description above.)
+
     index (object): a 1D dynamic unsigned 32-bit Dr.Jit array (e.g.,
       :py:class:`drjit.scalar.ArrayXu` or :py:class:`drjit.cuda.UInt`)
       specifying gather indices. Dr.Jit will attempt an implicit conversion if
       another type is provided.
+
     active (object): an optional 1D dynamic Dr.Jit mask array (e.g.,
       :py:class:`drjit.scalar.ArrayXb` or :py:class:`drjit.cuda.Bool`)
       specifying active components. Dr.Jit will attempt an implicit conversion
       if another type is provided. The default is `True`.
 
-Returns:
-    object: An instance of type ``dtype`` containing the result of the gather
-    operation.
+    permute (bool): You can leave this flag at its default value (``False``).
+      It exists to slightly improve the efficiency of a special case where an
+      array is fully read by differentiable gathers without duplicate reads
+      from any particular entry. (i.e., the gather indices are a permutation).
+      This case arises in the implementation of wavefront-style virtual funtion
+      dispatch.
 )";
 
 static const char *doc_scatter = R"(
-scatter(target, value, index, active=True)
 Scatter values into a flat array or nested data structure
 
 This operation performs a *scatter* (i.e., indirect memory write) of the
@@ -1868,10 +1872,10 @@ This operation can be used in the following different ways:
 
    .. code-block::
 
-       target = dr.empty(dr.cuda.Float, 1024*1024)
-       value = dr.cuda.Float([...])
-       index = dr.cuda.UInt([...]) # Note: negative indices are not permitted
-       dr.scatter(target, value=value, index=index)
+      target = dr.empty(dr.cuda.Float, 1024*1024)
+      value = dr.cuda.Float([...])
+      index = dr.cuda.UInt([...]) # Note: negative indices are not permitted
+      dr.scatter(target, value=value, index=index)
 
 2. When ``target`` is a more complex type (e.g. a nested Dr.Jit array or
    :ref:`Pytree <pytrees>`), the behavior depends:
@@ -1882,18 +1886,18 @@ This operation can be used in the following different ways:
 
      .. code-block::
 
-         target = dr.cuda.Array3f(...)
-         value = dr.cuda.Array3f(...)
-         index = dr.cuda.UInt([...])
-         dr.scatter(target, value, index)
+        target = dr.cuda.Array3f(...)
+        value = dr.cuda.Array3f(...)
+        index = dr.cuda.UInt([...])
+        dr.scatter(target, value, index)
 
      is equivalent to
 
      .. code-block::
 
-         dr.scatter(target.x, value.x, index)
-         dr.scatter(target.y, value.y, index)
-         dr.scatter(target.z, value.z, index)
+        dr.scatter(target.x, value.x, index)
+        dr.scatter(target.y, value.y, index)
+        dr.scatter(target.z, value.z, index)
 
      A similar recursive traversal is used for other kinds of
      sequences, mappings, and custom data structures.
@@ -1904,18 +1908,18 @@ This operation can be used in the following different ways:
 
      .. code-block::
 
-         target = dr.cuda.Float(...)
-         value = dr.cuda.Array3f(...)
-         index = dr.cuda.UInt([...])
-         dr.scatter(target, value, index)
+        target = dr.cuda.Float(...)
+        value = dr.cuda.Array3f(...)
+        index = dr.cuda.UInt([...])
+        dr.scatter(target, value, index)
 
      and is equivalent to
 
      .. code-block::
 
-         dr.scatter(target, value.x, index*3 + 0)
-         dr.scatter(target, value.y, index*3 + 1)
-         dr.scatter(target, value.z, index*3 + 2)
+        dr.scatter(target, value.x, index*3 + 0)
+        dr.scatter(target, value.y, index*3 + 1)
+        dr.scatter(target, value.z, index*3 + 2)
 
 .. danger::
 
@@ -1930,23 +1934,146 @@ This operation can be used in the following different ways:
 Args:
     target (object): The object into which data should be written (typically a
       1D Dr.Jit array, but other variations are possible as well, see the
-    description above.)
+      description above.)
+
     value (object): The values to be written (typically of type ``type(target)``,
       but other variations are possible as well, see the description above.)
       Dr.Jit will attempt an implicit conversion if the the input is not an
       array type.
+
     index (object): a 1D dynamic unsigned 32-bit Dr.Jit array (e.g.,
       :py:class:`drjit.scalar.ArrayXu` or :py:class:`drjit.cuda.UInt`)
       specifying gather indices. Dr.Jit will attempt an implicit conversion if
       another type is provided.
+
     active (object): an optional 1D dynamic Dr.Jit mask array (e.g.,
       :py:class:`drjit.scalar.ArrayXb` or :py:class:`drjit.cuda.Bool`)
       specifying active components. Dr.Jit will attempt an implicit conversion
       if another type is provided. The default is `True`.
+
+    permute (bool): You can leave this flag at its default value (``False``).
+      It exists to slightly improve the efficiency of a special case where a
+      zero-initialized array is fully initialized by differentiable scatters
+      without duplicate writes to an entry. (i.e., the scatter indices are a
+      permutation). This case arises in the implementation of wavefront-style
+      virtual funtion dispatch.
+)";
+
+static const char *doc_scatter_reduce = R"(
+Atomically update values in a flat array or nested data structure
+
+This operation performs a *scatter-reduction* (i.e., an atomic
+read-modify-write operation) using the ``value`` parameter to update the
+``target`` array at position ``index``. The optional ``active`` argument can be
+used to disable some of the individual RMW operations, which is useful when not
+all provided values or indices are valid.
+
+This operation can be used in the following different ways:
+
+1. When ``target`` is a 1D Dr.Jit array like :py:class:`drjit.llvm.ad.Float`,
+   this operation implements a parallelized version of the Python array
+   indexing expression ``target[index] = op(target[index], value)`` with
+   optional masking. Example:
+
+   .. code-block::
+
+      target = dr.zeros(dr.cuda.Float, 1024*1024)
+      value = dr.cuda.Float([...])
+      index = dr.cuda.UInt([...]) # Note: negative indices are not permitted
+      dr.scatter_reduce(dr.ReduceOp.Add, target, value=value, index=index)
+
+2. When ``target`` is a more complex type (e.g. a nested Dr.Jit array or
+   :ref:`Pytree <pytrees>`), the behavior depends:
+
+   - When ``target`` and ``value`` are of the same type, the scatter-reduction
+     threads through entries and invokes itself recursively. For example, the
+     scatter operation in
+
+     .. code-block::
+
+        op = dr.ReduceOp.Add
+        target = dr.cuda.Array3f(...)
+        value = dr.cuda.Array3f(...)
+        index = dr.cuda.UInt([...])
+        dr.scatter_reduce(op, target, value, index)
+
+     is equivalent to
+
+     .. code-block::
+
+        dr.scatter_reduce(op, target.x, value.x, index)
+        dr.scatter_reduce(op, target.y, value.y, index)
+        dr.scatter_reduce(op, target.z, value.z, index)
+
+     A similar recursive traversal is used for other kinds of
+     sequences, mappings, and custom data structures.
+
+   - Otherwise, the operation flattens the ``value`` array and writes it using
+     C-style ordering with a suitably modified ``index``. For example, the
+     scatter-reduction below writes 3D vectors into a 1D array.
+
+     .. code-block::
+
+        op = dr.ReduceOp.Add
+        target = dr.cuda.Float(...)
+        value = dr.cuda.Array3f(...)
+        index = dr.cuda.UInt([...])
+        dr.scatter_reduce(op, target, value, index)
+
+     and is equivalent to
+
+     .. code-block::
+
+        dr.scatter_reduce(op, target, value.x, index*3 + 0)
+        dr.scatter_reduce(op, target, value.y, index*3 + 1)
+        dr.scatter_reduce(op, target, value.z, index*3 + 2)
+
+.. warning::
+
+   Support for reductions beyond `ReduceOp.Add` is currently very limited and
+   backend-dependent.
+
+.. danger::
+
+    The indices provided to this operation are unchecked. Out-of-bounds writes
+    are undefined behavior (if not disabled via the ``active`` parameter) and may
+    crash the application. Negative indices are not permitted.
+
+    Dr.Jit makes no guarantees about the relative ordering of atomic operations
+    when a specific position is written multiple times by a single
+    :py:func:`drjit.scatter_reduce()` operation.
+
+Args:
+    op (drjit.ReduceOp): Specifies the type of update that should be performed.
+
+    target (object): The object into which data should be written (typically a
+      1D Dr.Jit array, but other variations are possible as well, see the
+      description above.)
+
+    value (object): The values to be used in the RMW operation (typically of
+      type ``type(target)``, but other variations are possible as well, see
+      the description above.) Dr.Jit will attempt an implicit conversion if the 
+      the input is not an array type.
+
+    index (object): a 1D dynamic unsigned 32-bit Dr.Jit array (e.g.,
+      :py:class:`drjit.scalar.ArrayXu` or :py:class:`drjit.cuda.UInt`)
+      specifying gather indices. Dr.Jit will attempt an implicit conversion if
+      another type is provided.
+
+    active (object): an optional 1D dynamic Dr.Jit mask array (e.g.,
+      :py:class:`drjit.scalar.ArrayXb` or :py:class:`drjit.cuda.Bool`)
+      specifying active components. Dr.Jit will attempt an implicit conversion
+      if another type is provided. The default is `True`.
+
+    permute (bool): You can leave this flag at its default value (``False``).
+      It exists to slightly improve the efficiency of a special case where a
+      zero-initialized array is fully initialized by differentiable scatters
+      without duplicate writes to an entry. (i.e., the scatter indices are a
+      permutation). This case arises in the implementation of wavefront-style
+      virtual funtion dispatch.
 )";
 
 static const char *doc_ravel = R"(
-ravel(array, order='A')
 Convert the input into a contiguous flat array
 
 This operation takes a Dr.Jit array, typically with some static and some
@@ -1994,7 +2121,6 @@ Returns:
 
 
 static const char *doc_unravel = R"(
-unravel(dtype, array, order='A')
 Load a sequence of Dr.Jit vectors/matrices/etc. from a contiguous flat array
 
 This operation implements the inverse of :py:func:`drjit.ravel()`. In contrast
@@ -3113,6 +3239,25 @@ static const char *doc_VarType_Pointer = "Pointer to a memory address.";
 static const char *doc_VarType_Float16 = "16-bit floating point format (IEEE 754).";
 static const char *doc_VarType_Float32 = "32-bit floating point format (IEEE 754).";
 static const char *doc_VarType_Float64 = "64-bit floating point format (IEEE 754).";
+
+static const char *doc_ReduceOp =
+    "Denotes the type of atomic read-modify-write (RMW) operation (for "
+    "scatter-reductions) or aggregation to be performed by a horizontal "
+    "reduction.";
+
+static const char *doc_ReduceOp_None =
+    "Perform an ordinary scatter operation that ignores the current entry "
+    "(only applies to scatter-reductions).";
+
+static const char *doc_ReduceOp_Add = "Addition.";
+static const char *doc_ReduceOp_Mul = "Multiplication.";
+static const char *doc_ReduceOp_Min = "Minimum.";
+static const char *doc_ReduceOp_Max = "Maximum.";
+static const char *doc_ReduceOp_And = "Binary AND operation.";
+static const char *doc_ReduceOp_Or = "Binary OR operation.";
+static const char *doc_ReduceOp_Count =
+    "Count the number of nonzero entries (only applies to horizontal "
+    "reductions).";
 
 #if defined(__GNUC__)
 #  pragma GCC diagnostic pop

@@ -1116,7 +1116,8 @@ void scatter(Target &&target, const Value &value, const Index &index,
 
 template <typename Target, typename Value, typename Index>
 void scatter_reduce(ReduceOp op, Target &&target, const Value &value,
-                    const Index &index, const mask_t<Value> &mask = true) {
+                    const Index &index, const mask_t<Value> &mask = true,
+                    bool permute = false) {
     if constexpr (is_array_v<Value>) {
         static_assert(std::is_pointer_v<std::decay_t<Target>> || depth_v<Target> == 1,
                       "Target argument of scatter_reduce operation must either be a "
@@ -1125,29 +1126,31 @@ void scatter_reduce(ReduceOp op, Target &&target, const Value &value,
                       "Second argument of gather operation must be an index array!");
 
         if constexpr (depth_v<Value> == depth_v<Index>) {
-            value.scatter_reduce_(op, target, index, mask);
+            value.scatter_reduce_(op, target, index, mask, permute);
         } else {
             using TargetIndex = replace_scalar_t<Value, scalar_t<Index>>;
             scatter_reduce(op, target, value,
-                           detail::broadcast_index<TargetIndex>(index), mask);
+                           detail::broadcast_index<TargetIndex>(index), mask, permute);
         }
     } else if constexpr (std::is_integral_v<Index> && std::is_arithmetic_v<Value>) {
         if (mask) {
-            auto func = [op](const Value &a, const Value &b) {
-                if (op == ReduceOp::Add)
-                    return a + b;
-                else if (op == ReduceOp::Mul)
-                    return a * b;
-                else if (op == ReduceOp::Min)
-                    return minimum(a, b);
-                else if (op == ReduceOp::Max)
-                    return maximum(a, b);
-
-                if constexpr (std::is_same_v<Value, bool>) {
-                    if (op == ReduceOp::And)
-                        return a & b;
-                    else if (op == ReduceOp::Or)
-                        return a | b;
+            auto func = [op](const Value &a, const Value &b) -> Value {
+                switch (op) {
+                    case ReduceOp::None: return b;
+                    case ReduceOp::Add: return a + b;
+                    case ReduceOp::Mul: return a * b;
+                    case ReduceOp::Min: return minimum(a, b);
+                    case ReduceOp::Max: return maximum(a, b);
+                    case ReduceOp::And:
+                        if constexpr (std::is_integral_v<Value>)
+                            return a & b;
+                        break;
+                    case ReduceOp::Or:
+                        if constexpr (std::is_integral_v<Value>)
+                            return a | b;
+                        break;
+                    default:
+                        break;
                 }
 
                 drjit_raise("Reduce operation not supported");

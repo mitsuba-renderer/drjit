@@ -160,8 +160,8 @@ struct ArraySupplement : ArrayMeta {
     using Data = void *(*)(const ArrayBase *) noexcept;
     using Gather = void (*)(const ArrayBase *, const ArrayBase *,
                             const ArrayBase *, ArrayBase *, bool);
-    using Scatter = void (*)(const ArrayBase *, const ArrayBase *,
-                            const ArrayBase *, const ArrayBase *, bool);
+    using ScatterReduce = void (*)(ReduceOp, const ArrayBase *, const ArrayBase *,
+                                   const ArrayBase *, const ArrayBase *, bool);
     using UnaryOp  = void (*)(const ArrayBase *, ArrayBase *);
     using BinaryOp = void (*)(const ArrayBase *, const ArrayBase *, ArrayBase *);
 
@@ -200,8 +200,8 @@ struct ArraySupplement : ArrayMeta {
             /// Gather operation
             Gather gather;
 
-            /// Scatter operation
-            Scatter scatter;
+            /// Scatter reduction operation
+            ScatterReduce scatter_reduce;
 
             /// Return a pointer to the underlying storage
             Data data;
@@ -629,9 +629,9 @@ template <typename T> void bind_memop(ArrayBinding &b) {
             new (d) T(gather<T>(*a, *b, *c, permute));
         };
 
-    b.scatter = (ArraySupplement::Scatter)
-        +[](const T *a, const UInt32 *b, const Mask *c, T *d, bool permute) {
-            scatter(*d, *a, *b, *c, permute);
+    b.scatter_reduce = (ArraySupplement::ScatterReduce)
+        +[](ReduceOp op, const T *a, const UInt32 *b, const Mask *c, T *d, bool permute) {
+            scatter_reduce(op, *d, *a, *b, *c, permute);
         };
 }
 

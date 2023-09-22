@@ -333,9 +333,9 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
 
     template <typename Index, typename Mask>
     DRJIT_INLINE void scatter_reduce_(ReduceOp op, void *ptr, const Index &index,
-                                      const Mask &mask) const {
-        scatter_reduce(op, ptr, a1, low(index), low(mask));
-        scatter_reduce(op, ptr, a2, high(index), high(mask));
+                                      const Mask &mask, bool permute) const {
+        scatter_reduce(op, ptr, a1, low(index), low(mask), permute);
+        scatter_reduce(op, ptr, a2, high(index), high(mask), permute);
     }
 
     static DRJIT_INLINE Derived zero_(size_t) {

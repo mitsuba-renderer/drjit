@@ -69,6 +69,16 @@ NB_MODULE(drjit_ext, m_) {
         .value("Float32", VarType::Float32, doc_VarType_Float32)
         .value("Float64", VarType::Float64, doc_VarType_Float64);
 
+    nb::enum_<ReduceOp>(m, "ReduceOp", doc_ReduceOp)
+        .value("None", ReduceOp::None, doc_ReduceOp_None)
+        .value("Add", ReduceOp::Add, doc_ReduceOp_Add)
+        .value("Mul", ReduceOp::Mul, doc_ReduceOp_Mul)
+        .value("Min", ReduceOp::Min, doc_ReduceOp_Min)
+        .value("Max", ReduceOp::Max, doc_ReduceOp_Max)
+        .value("And", ReduceOp::And, doc_ReduceOp_And)
+        .value("Or", ReduceOp::Or, doc_ReduceOp_Or)
+        .value("Count", ReduceOp::Count, doc_ReduceOp_Count);
+
     m.def("has_backend", &jit_has_backend, doc_has_backend);
 
     m.def("whos_str", &jit_var_whos);

@@ -23,6 +23,56 @@ These operations are *horizontal* in the sense that [..]
 
 .. autofunction:: gather
 .. autofunction:: scatter
+
+.. autoclass:: ReduceOp
+
+   Denotes the type of atomic read-modify-write (RMW) operation (for use with
+   :py:func:`drjit.scatter_reduce`) or aggregation to be performed by a
+   horizontal reduction.
+
+   .. autoattribute:: None
+      :annotation:
+
+      Perform an ordinary scatter operation that ignores the current entry 
+      (only applies to scatter-reductions).
+
+   .. autoattribute:: Add
+      :annotation:
+
+      Addition.
+
+   .. autoattribute:: Mul
+      :annotation:
+
+      Multiplication.
+
+   .. autoattribute:: Min
+      :annotation:
+
+      Minimum
+
+   .. autoattribute:: Max
+      :annotation:
+
+      Maximum
+
+   .. autoattribute:: And
+      :annotation:
+
+      Binary AND operation
+
+   .. autoattribute:: Or
+      :annotation:
+
+      Binary OR operation
+
+   .. autoattribute:: Count
+      :annotation:
+
+      Count the number of nonzero entries (only applies to horizontal
+      reductions
+
+.. autofunction:: scatter_reduce
 .. autofunction:: ravel
 .. autofunction:: unravel
 .. autofunction:: min
