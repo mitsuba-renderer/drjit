@@ -1184,3 +1184,22 @@ def test90_replace_grad(t):
     assert z[0].index_ad == y.index_ad
     assert z[1].index_ad == y.index_ad
     assert z[2].index_ad == y.index_ad
+
+@pytest.test_arrays('is_diff,float32,shape=(*)')
+def test91_safe_functions(t):
+    x = dr.linspace(t, 0, 1, 10)
+    y = dr.linspace(t, -1, 1, 10)
+    z = dr.linspace(t, -1, 1, 10)
+    dr.enable_grad(x, y, z)
+    x2 = dr.safe_sqrt(x)
+    y2 = dr.safe_acos(y)
+    z2 = dr.safe_asin(z)
+    dr.backward(x2)
+    dr.backward(y2)
+    dr.backward(z2)
+    assert dr.grad(x)[0] == 0
+    assert dr.allclose(dr.grad(x)[1], .5 / dr.sqrt(1 / 9))
+    assert x[0] == 0
+    assert dr.all(dr.isfinite(dr.grad(x)))
+    assert dr.all(dr.isfinite(dr.grad(y)))
+    assert dr.all(dr.isfinite(dr.grad(z)))

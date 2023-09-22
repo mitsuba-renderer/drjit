@@ -33,7 +33,7 @@ These operations are *horizontal* in the sense that [..]
    .. autoattribute:: None
       :annotation:
 
-      Perform an ordinary scatter operation that ignores the current entry 
+      Perform an ordinary scatter operation that ignores the current entry
       (only applies to scatter-reductions).
 
    .. autoattribute:: Add
@@ -704,24 +704,79 @@ Safe mathematical functions
 Constants
 ---------
 
-.. autoattribute:: const.e
-.. autoattribute:: const.log_two
-.. autoattribute:: const.inv_log_two
-.. autoattribute:: const.pi
-.. autoattribute:: const.inv_pi
-.. autoattribute:: const.sqrt_pi
-.. autoattribute:: const.inv_sqrt_pi
-.. autoattribute:: const.two_pi
-.. autoattribute:: const.inv_two_pi
-.. autoattribute:: const.sqrt_two_pi
-.. autoattribute:: const.inv_sqrt_two_pi
-.. autoattribute:: const.four_pi
-.. autoattribute:: const.inv_four_pi
-.. autoattribute:: const.sqrt_four_pi
-.. autoattribute:: const.sqrt_two
-.. autoattribute:: const.inv_sqrt_two
-.. autoattribute:: const.inf
-.. autoattribute:: const.nan
+.. autodata:: e
+
+   The exponential constant :math:`e` represented as a Python ``float``.
+
+.. autodata:: log_two
+
+   The value :math:`\log(2)` represented as a Python ``float``.
+
+.. autodata:: inv_log_two
+
+   The value :math:`\frac{1}{\log(2)}` represented as a Python ``float``.
+
+.. autodata:: pi
+
+   The value :math:`\pi` represented as a Python ``float``.
+
+.. autodata:: inv_pi
+
+   The value :math:`\frac{1}{\pi}` represented as a Python ``float``.
+
+.. autodata:: sqrt_pi
+
+   The value :math:`\sqrt{\pi}` represented as a Python ``float``.
+
+.. autodata:: inv_sqrt_pi
+
+   The value :math:`\frac{1}{\sqrt{\pi}}` represented as a Python ``float``.
+
+.. autodata:: two_pi
+
+   The value :math:`2\pi` represented as a Python ``float``.
+
+.. autodata:: inv_two_pi
+
+   The value :math:`\frac{1}{2\pi}` represented as a Python ``float``.
+
+.. autodata:: sqrt_two_pi
+
+   The value :math:`\sqrt{2\pi}` represented as a Python ``float``.
+
+.. autodata:: inv_sqrt_two_pi
+   :annotation:
+
+   The value :math:`\frac{1}{\sqrt{2\pi}}` represented as a Python ``float``.
+
+.. autodata:: four_pi
+
+   The value :math:`4\pi` represented as a Python ``float``.
+
+.. autodata:: inv_four_pi
+
+   The value :math:`\frac{1}{4\pi}` represented as a Python ``float``.
+
+.. autodata:: sqrt_four_pi
+
+   The value :math:`\sqrt{4\pi}` represented as a Python ``float``.
+
+.. autodata:: sqrt_two
+
+   The value :math:`\sqrt{2\pi}` represented as a Python ``float``.
+
+.. autodata:: inv_sqrt_two
+
+   The value :math:`\frac{1}{\sqrt{2\pi}}` represented as a Python ``float``.
+
+.. autodata:: inf
+
+   The value ``float('inf')`` represented as a Python ``float``.
+
+.. autodata:: nan
+
+   The value ``float('nan')`` represented as a Python ``float``.
+
 .. autofunction:: epsilon
 .. autofunction:: one_minus_epsilon
 .. autofunction:: recip_overflow

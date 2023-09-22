@@ -296,14 +296,14 @@ struct DRJIT_TRIVIAL_ABI DiffArray
     DiffArray acosh_() const { return steal(ad_var_acosh(m_index)); }
     DiffArray atanh_() const { return steal(ad_var_atanh(m_index)); }
 
-    DiffArray min_(const DiffArray &a) const {
+    DiffArray minimum_(const DiffArray &a) const {
         if constexpr (IsFloat)
             return steal(ad_var_min(m_index, a.m_index));
         else
             return steal(jit_var_min(m_index, a.m_index));
     }
 
-    DiffArray max_(const DiffArray &a) const {
+    DiffArray maximum_(const DiffArray &a) const {
         if constexpr (IsFloat)
             return steal(ad_var_max(m_index, a.m_index));
         else
