@@ -243,6 +243,16 @@ void export_traits(nb::module_ &m) {
               }
           }, nb::raw_doc(doc_is_unsigned_v));
 
+    m.def("is_diff_v",
+          [](nb::handle h) -> bool {
+              nb::handle tp = h.is_type() ? h : h.type();
+              if (is_drjit_type(tp))
+                  return supp(tp).is_diff;
+              else
+                  return false;
+          },
+          nb::raw_doc(doc_is_diff_v));
+
     m.def("itemsize_v", &itemsize_v, nb::raw_doc(doc_itemsize_v));
 
     m.def("reinterpret_array_t",
