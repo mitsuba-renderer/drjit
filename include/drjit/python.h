@@ -120,6 +120,7 @@ enum class ArrayOp {
     Prod,
     Min,
     Max,
+    PrefixSum,
 
     // Miscellaneous
     Richcmp,
@@ -164,6 +165,7 @@ struct ArraySupplement : ArrayMeta {
                                    const ArrayBase *, const ArrayBase *, bool);
     using UnaryOp  = void (*)(const ArrayBase *, ArrayBase *);
     using BinaryOp = void (*)(const ArrayBase *, const ArrayBase *, ArrayBase *);
+    using PrefixSum = void (*)(const ArrayBase *, bool, ArrayBase *);
 
     using TensorShape = dr_vector<size_t> & (*) (ArrayBase *) noexcept;
     using TensorArray = PyObject * (*) (PyObject *) noexcept;
@@ -460,6 +462,9 @@ template <typename T> void bind_arithmetic(ArrayBinding &b) {
     b[ArrayOp::Prod] = (void *) +[](const T *a, T *b) { new (b) T(a->prod_()); };
     b[ArrayOp::Min] = (void *) +[](const T *a, T *b) { new (b) T(a->min_()); };
     b[ArrayOp::Max] = (void *) +[](const T *a, T *b) { new (b) T(a->max_()); };
+    b[ArrayOp::PrefixSum] = (void *) +[](const T *a, bool exclusive, T *b) {
+        new (b) T(a->prefix_sum_(exclusive));
+    };
 }
 
 inline void disable_arithmetic(ArrayBinding &b) {

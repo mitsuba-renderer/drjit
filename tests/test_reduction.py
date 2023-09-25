@@ -276,3 +276,14 @@ def test07_norm(t):
     a = dr.norm(m.Array3f(1, 2, 3))
     assert dr.allclose(a, 3.74166)
     assert type(a) is m.Float
+
+
+@pytest.test_arrays('shape=(*), float32')
+def test08_prefix_sum(t):
+    m = sys.modules[t.__module__]
+    assert dr.all(dr.prefix_sum(t(1, 2, 3)) == t(0, 1, 3))
+    assert dr.all(dr.prefix_sum(t(1, 2, 3), exclusive=False) == t(1, 3, 6))
+    assert dr.all(dr.prefix_sum(m.TensorXf([1, 2, 3])) == m.TensorXf([0, 1, 3]))
+    assert dr.all(dr.cumsum(m.TensorXf([1, 2, 3])) == m.TensorXf([1, 3, 6]))
+    assert dr.all(dr.prefix_sum(m.Array3f(1, 2, 3)) == m.Array3f(0, 1, 3), axis=None)
+    assert dr.all(dr.prefix_sum(m.Array3f(1, 2, 3), exclusive=False) == m.Array3f(1, 3, 6), axis=None)

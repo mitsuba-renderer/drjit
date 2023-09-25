@@ -335,6 +335,10 @@ struct DRJIT_TRIVIAL_ABI JitArray
 
     #undef DRJIT_HORIZONTAL_OP
 
+    JitArray prefix_sum_(bool exclusive) const {
+        return steal(jit_var_prefix_sum(m_index, exclusive));
+    }
+
     JitArray dot_(const JitArray &a) const { return sum(*this * a); }
 
     uint32_t count_() const {

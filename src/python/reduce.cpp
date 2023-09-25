@@ -11,6 +11,8 @@
 #include "reduce.h"
 #include "base.h"
 #include "meta.h"
+#include "shape.h"
+#include "init.h"
 #include <nanobind/stl/optional.h>
 
 nb::object reduce(const char *name, ArrayOp op_id, nb::handle h,
@@ -210,6 +212,70 @@ nb::object max(nb::handle h, std::optional<int> axis) {
         });
 }
 
+nb::object prefix_sum(nb::handle_t<dr::ArrayBase> h, bool exclusive, std::optional<int> axis) {
+    nb::handle tp = h.type();
+    try {
+        const ArraySupplement &s = supp(tp);
+
+        if (!axis)
+            nb::detail::raise("the prefix sum reduction is not implemented for the axis=None case!");
+
+        if (axis.value() != 0)
+            nb::detail::raise("the prefix sum reduction are currently limited to axis=0!");
+
+        void *op = s.op[(int) ArrayOp::PrefixSum];
+        if (op == DRJIT_OP_NOT_IMPLEMENTED)
+            nb::detail::raise_type_error(
+                "requires an arithmetic Dr.Jit array as input!");
+
+        if (op != DRJIT_OP_DEFAULT) {
+            nb::object result = nb::inst_alloc(tp);
+            ((ArraySupplement::PrefixSum) op)(inst_ptr(h), exclusive, inst_ptr(result));
+            nb::inst_mark_ready(result);
+            return result;
+        }
+
+        if (s.is_tensor && s.tensor_shape(inst_ptr(h)).size() <= 1) {
+            nb::object arr = nb::steal(s.tensor_array(h.ptr()));
+            nb::object result = prefix_sum(arr, exclusive, axis);
+            return tp(result, shape(h));
+        }
+
+        dr_vector<size_t> shape;
+        if (!shape_impl(h, shape))
+            nb::detail::raise("input array is ragged!");
+
+        nb::object result = full(tp, nb::int_(0), shape.size(), shape.data()),
+                   accum = nb::int_(0);
+
+        size_t it = 0;
+        for (nb::handle h2 : h) {
+            if (exclusive) {
+                result[it] = accum;
+                accum += h2;
+            } else {
+                accum += h2;
+                result[it] = accum;
+            }
+            it++;
+        }
+
+        return result;
+    } catch (nb::python_error &e) {
+        nb::str tp_name = nb::type_name(tp);
+        e.restore();
+        nb::chain_error(PyExc_RuntimeError,
+                        "drjit.prefix_sum(<%U>): failed (see above)!",
+                        tp_name.ptr());
+    } catch (const std::exception &e) {
+        nb::str tp_name = nb::type_name(tp);
+        nb::chain_error(PyExc_RuntimeError, "drjit.prefix_sum(<%U>): %s",
+                        tp_name.ptr(), e.what());
+    }
+
+    return nb::object();
+}
+
 void export_reduce(nb::module_ & m) {
     m.def("all", &all, "value"_a, "axis"_a.none() = 0, doc_all)
      .def("any", &any, "value"_a, "axis"_a.none() = 0, doc_any)
@@ -229,5 +295,8 @@ void export_reduce(nb::module_ & m) {
           [](nb::handle h) -> nb::object {
               return array_module.attr("sqrt")(
                   array_module.attr("dot")(h, h));
-          }, doc_norm);
+          }, doc_norm)
+     .def("prefix_sum", &prefix_sum,
+          "value"_a, "exclusive"_a = true,
+          "axis"_a.none() = 0, doc_prefix_sum);
 }

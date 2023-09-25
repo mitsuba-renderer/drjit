@@ -692,6 +692,49 @@ Returns:
     float | int | drjit.ArrayBase: 2-norm of the input)";
 
 
+static const char *doc_prefix_sum = R"(
+Compute an exclusive or inclusive prefix sum of the input array.
+
+By default, the function returns an output array :math:`\mathbf{y}` of the
+same size as the input :math:`\mathbf{x}`, where
+
+.. math::
+
+   y_i = \sum_{i=0}^{i-1} x_i.
+
+which is known as an *exclusive* prefix sum, as each element of the output
+array excludes the corresponding input in its sum. When the ``exclusive``
+argument is set to ``False``, the function instead returns an *inclusive*
+prefix sum defined as
+
+.. math::
+
+   y_i = \sum_{i=0}^i x_i.
+
+There is also a convenience alias :py:func:`drjit.cumsum` that computes an
+inclusive sum analogous to various other nd-array frameworks.
+
+Not all numeric data types are supported by :py:func:`prefix_sum`:
+presently, the function accepts ``Int32``, ``UInt32``, ``UInt64``,
+``Float32``, and ``Float64``-typed arrays.
+
+The CUDA backend implementation for "large" numeric types (``Float64``,
+``UInt64``) has the following technical limitation: when reducing 64-bit
+integers, their values must be smaller than 2**62. When reducing double
+precision arrays, the two least significant mantissa bits are clamped to
+zero when forwarding the prefix from one 512-wide block to the next (at a
+*very minor*, probably negligible loss in accuracy). See the implementation
+for details on the rationale of this limitation.
+
+Args:
+    value (drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+    exclusive (bool): Specifies whether or not the prefix sum should
+      be exclusive (the default) or inclusive.
+
+Returns:
+    drjit.ArrayBase: An array of the same type containing the computed prefix sum.)";
+
 static const char *doc_sqrt = R"(
 sqrt(arg, /)
 Evaluate the square root of the provided input.

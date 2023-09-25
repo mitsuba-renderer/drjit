@@ -12,4 +12,4 @@
 
 #include "common.h"
 
-extern void export_scalar();
+extern void export_scalar(nb::module_&);

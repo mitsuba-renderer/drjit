@@ -547,11 +547,9 @@ int tp_init_tensor(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
 }
 
 // Forward declaration
-nb::object full(nb::handle dtype, nb::handle value, size_t ndim,
-                const size_t *shape);
+nb::object full(nb::handle dtype, nb::handle value, size_t ndim, const size_t *shape);
 
-nb::object full(nb::handle dtype, nb::handle value,
-                std::vector<size_t> &shape) {
+nb::object full(nb::handle dtype, nb::handle value, const std::vector<size_t> &shape) {
     return full(dtype, value, shape.size(), shape.data());
 }
 

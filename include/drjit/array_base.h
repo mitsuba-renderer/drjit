@@ -734,6 +734,29 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
         }
     }
 
+    Derived prefix_sum_(bool exclusive) const {
+        if constexpr (IsArithmetic) {
+            size_t size = derived().size();
+            Derived result = drjit::empty<Derived>(size);
+            Value accum = Value(0);
+
+            if (exclusive) {
+                for (size_t i = 0; i < size; ++i) {
+                    result.set_entry(i, accum);
+                    accum += derived().entry(i);
+                }
+            } else {
+                for (size_t i = 0; i < size; ++i) {
+                    accum += derived().entry(i);
+                    result.set_entry(i, accum);
+                }
+            }
+            return result;
+        } else {
+            drjit_raise("prefix_sum_(): invalid operand type!");
+        }
+    }
+
     template <typename Mask, enable_if_t<Mask::Depth == 1> = 0>
     DRJIT_INLINE Value extract_(const Mask &mask) const {
         size_t sa = derived().size(), sb = mask.size(),

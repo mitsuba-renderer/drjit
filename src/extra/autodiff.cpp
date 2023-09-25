@@ -2133,6 +2133,15 @@ Index ad_var_scatter(Index target, Index value, JitIndex offset,
     }
 }
 
+Index ad_var_prefix_sum(Index index, int exclusive) {
+    JitVar result =
+        JitVar::steal(jit_var_prefix_sum(jit_index(index), exclusive));
+    if (is_detached(index))
+        return result.release();
+    else
+        ad_raise("Differentiable prefix sums aren't supported yet!");
+}
+
 // ==========================================================================
 // Debugging: GraphViz, variable listing
 // ==========================================================================

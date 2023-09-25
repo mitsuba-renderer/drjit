@@ -137,6 +137,9 @@ extern DRJIT_EXTRA_EXPORT void ad_var_dec_ref_impl(uint64_t) JIT_NOEXCEPT;
 extern DRJIT_EXTRA_EXPORT uint64_t ad_var_reduce(JitBackend, VarType,
                                                  JIT_ENUM ReduceOp, uint64_t);
 
+/// Compute an exclusive (exclusive == 1) or inclusive (exclusive == 0) prefix sum
+extern DRJIT_EXPORT uint64_t ad_var_prefix_sum(uint64_t index, int exclusive);
+
 /// Perform a differentiable gather operation. See jit_var_gather for signature.
 extern DRJIT_EXPORT uint64_t ad_var_gather(uint64_t source, uint64_t offset,
                                            uint64_t mask, bool permute);
