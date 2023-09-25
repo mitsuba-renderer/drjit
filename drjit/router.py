@@ -5784,8 +5784,8 @@ def wrap_ad(source: str, target: str):
         Forward-mode AD isn't currently supported by this operation.
 
     Args:
-        source (str, module): The AD framework used outside of the wrapped function.
-        target (str, module): The AD framework used within the wrapped function.
+        source (str | module): The AD framework used outside of the wrapped function.
+        target (str | module): The AD framework used within the wrapped function.
 
     Returns:
         The decorated function.
