@@ -104,7 +104,7 @@ NB_MODULE(drjit_ext, m_) {
     export_autodiff(m);
     export_inspect(m);
 
-    export_scalar();
+    export_scalar(scalar);
 
 #if defined(DRJIT_ENABLE_LLVM)
     export_llvm();

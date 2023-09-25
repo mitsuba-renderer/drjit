@@ -351,6 +351,13 @@ struct DRJIT_TRIVIAL_ABI DiffArray
 
     #undef DRJIT_HORIZONTAL_OP
 
+    DiffArray prefix_sum_(bool exclusive) const {
+        if constexpr (IsFloat)
+            return steal(ad_var_prefix_sum(m_index, exclusive));
+        else
+            return steal(jit_var_prefix_sum(m_index, exclusive));
+    }
+
     DiffArray dot_(const DiffArray &a) const { return sum(*this * a); }
 
     uint32_t count_() const {

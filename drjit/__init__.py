@@ -217,11 +217,13 @@ def all_nested(a):
                   DeprecationWarning, stacklevel=2)
     return all(a, axis=None)
 
+
 def any_nested(a):
     import warnings
     warnings.warn("any_nested() is deprecated, please use any(a, axis=None)",
                   DeprecationWarning, stacklevel=2)
     return any(a, axis=None)
+
 
 def sum_nested(a):
     import warnings
@@ -229,11 +231,13 @@ def sum_nested(a):
                   DeprecationWarning, stacklevel=2)
     return sum(a, axis=None)
 
+
 def prod_nested(a):
     import warnings
     warnings.warn("prod_nested() is deprecated, please use prod(a, axis=None)",
                   DeprecationWarning, stacklevel=2)
     return prod(a, axis=None)
+
 
 def min_nested(a):
     import warnings
@@ -241,11 +245,25 @@ def min_nested(a):
                   DeprecationWarning, stacklevel=2)
     return min(a, axis=None)
 
+
 def max_nested(a):
     import warnings
     warnings.warn("max_nested() is deprecated, please use max(a, axis=None)",
                   DeprecationWarning, stacklevel=2)
     return max(a, axis=None)
+
+
+def cumsum(value):
+    '''
+    Compute an cumulative sum (aka. inclusive prefix sum) of the input array.
+
+    This function wraps :cpp:func:`drjit.prefix_sum` and is implemented as
+
+    .. code-block:: python
+
+       return prefix_sum(value, exclusive=False)
+    '''
+    return prefix_sum(value, exclusive=False)
 
 
 # -------------------------------------------------------------------

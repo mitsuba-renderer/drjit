@@ -85,6 +85,7 @@ static const char *op_names[] = {
     "prod",
     "min",
     "max",
+    "prefix_sum",
 
     // Miscellaneous
     "__richcmp__",

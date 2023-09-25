@@ -83,6 +83,8 @@ These operations are *horizontal* in the sense that [..]
 .. autofunction:: norm
 .. autofunction:: all
 .. autofunction:: any
+.. autofunction:: prefix_sum
+.. autofunction:: cumsum
 
 Mask operations
 ---------------
