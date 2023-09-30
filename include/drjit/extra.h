@@ -115,6 +115,9 @@ extern DRJIT_EXTRA_EXPORT uint64_t ad_var_new(uint32_t index);
 /// Return the gradient value associated with a particular variable
 extern DRJIT_EXTRA_EXPORT uint32_t ad_grad(uint64_t index);
 
+/// Check if gradient tracking is enabled for the given variable
+extern DRJIT_EXTRA_EXPORT int ad_grad_enabled(uint64_t index);
+
 /// Accumulate into the gradient associated with a given variable
 extern DRJIT_EXTRA_EXPORT void ad_accum_grad(uint64_t index, uint32_t value);
 
@@ -166,6 +169,13 @@ extern DRJIT_EXTRA_EXPORT const char *ad_var_whos();
 
 /// Return GraphViz markup describing registered variables and their connectivity
 extern DRJIT_EXTRA_EXPORT const char *ad_var_graphviz();
+
+/// Indicate that the program entered a scope which modifies the AD layer's behavior
+extern DRJIT_EXTRA_EXPORT void ad_scope_enter(drjit::ADScope type, size_t size,
+                                              const uint64_t *indices);
+
+/// Indicate that the program left a scope which modifies the AD layer's behavior
+extern DRJIT_EXTRA_EXPORT void ad_scope_leave(bool process_postponed);
 
 #if defined(__cplusplus)
 }

@@ -65,10 +65,8 @@ static bool grad_enabled(nb::handle h) {
 
         void operator()(nb::handle h) const override {
             const ArraySupplement &s = supp(h.type());
-            if (s.is_diff && is_float(s)) {
-                uint64_t index = s.index(inst_ptr(h));
-                result |= ((uint32_t) index) != index;
-            }
+            if (s.is_diff && is_float(s))
+                result |= ad_grad_enabled(s.index(inst_ptr(h)));
         }
     };
 
@@ -300,6 +298,24 @@ static nb::object backward_to_2(nb::args args, nb::kwargs kwargs) {
     return strip_tuple(backward_to(args, flags));
 }
 
+void collect_indices(nb::handle h, nb::list result_) {
+    struct CollectIndices : TraverseCallback {
+        nb::list &result;
+        CollectIndices(nb::list &result) : result(result) { }
+
+        void operator()(nb::handle h) const override {
+            nb::handle tp = h.type();
+            const ArraySupplement &s = supp(tp);
+            if (!s.index)
+                return;
+
+            result.append(s.index(inst_ptr(h)));
+        }
+    };
+
+    traverse("drjit.collect_indices", CollectIndices { result_ }, h);
+}
+
 void export_autodiff(nb::module_ &m) {
     nb::enum_<dr::ADMode>(m, "ADMode", doc_ADMode)
         .value("Primal", dr::ADMode::Primal, doc_ADMode_Primal)
@@ -351,4 +367,38 @@ void export_autodiff(nb::module_ &m) {
           nb::raw_doc(doc_backward_to))
      .def("forward_to", &forward_to_2, "args"_a, "kwargs"_a)
      .def("backward_to", &backward_to_2, "args"_a, "kwargs"_a);
+
+    /// Internal context managers for drjit.isolate_grad(), drjit.suspend_grad(), etc.
+    nb::module_ detail = nb::module_::import_("drjit.detail");
+
+    nb::enum_<dr::ADScope>(detail, "ADScope")
+        .value("Invalid", dr::ADScope::Invalid)
+        .value("Suspend", dr::ADScope::Suspend)
+        .value("Resume", dr::ADScope::Resume)
+        .value("Isolate", dr::ADScope::Isolate);
+
+    struct NoopContextManager { };
+    struct ADContextManager {
+        drjit::ADScope scope;
+        std::vector<uint64_t> indices;
+    };
+
+    nb::class_<NoopContextManager>(detail, "NoopContextManager")
+        .def(nb::init<>())
+        .def("__enter__", [](NoopContextManager&) { })
+        .def("__exit__", [](NoopContextManager&, nb::handle, nb::handle, nb::handle) {
+             }, nb::arg().none(), nb::arg().none(), nb::arg().none());
+
+    nb::class_<ADContextManager>(detail, "ADContextManager")
+        .def(nb::init<dr::ADScope, std::vector<uint64_t>>())
+        .def("__enter__",
+             [](ADContextManager &m) {
+                 ad_scope_enter(m.scope, m.indices.size(), m.indices.data());
+             })
+        .def("__exit__",
+             [](ADContextManager &, nb::handle exc_type, nb::handle, nb::handle) {
+                 ad_scope_leave(exc_type.is(nb::none()));
+             }, nb::arg().none(), nb::arg().none(), nb::arg().none());
+
+    detail.def("collect_indices", &collect_indices);
 }

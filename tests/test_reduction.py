@@ -287,3 +287,8 @@ def test08_prefix_sum(t):
     assert dr.all(dr.cumsum(m.TensorXf([1, 2, 3])) == m.TensorXf([1, 3, 6]))
     assert dr.all(dr.prefix_sum(m.Array3f(1, 2, 3)) == m.Array3f(0, 1, 3), axis=None)
     assert dr.all(dr.prefix_sum(m.Array3f(1, 2, 3), exclusive=False) == m.Array3f(1, 3, 6), axis=None)
+
+    # Prefix sum of literals
+    x = dr.full(t, 3, 4)
+    assert dr.all(dr.prefix_sum(x) == [0, 3, 6, 9])
+    assert dr.all(dr.prefix_sum(x, False) == [3, 6, 9, 12])

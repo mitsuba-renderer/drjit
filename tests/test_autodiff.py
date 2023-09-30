@@ -366,7 +366,6 @@ def test13_backward_from(t):
 
     c = Array3f(a)
     dr.backward_from(c)
-    print(dr.grad(a))
     assert dr.allclose(dr.grad(a), 3.0)
 
 
@@ -1139,6 +1138,7 @@ def test89_atanh(t):
                 1.43369, 2.4564, 50.2513)
     )
 
+
 @pytest.test_arrays('is_diff,float32,shape=(*)')
 def test90_replace_grad(t):
     m = sys.modules[t.__module__]
@@ -1185,6 +1185,7 @@ def test90_replace_grad(t):
     assert z[1].index_ad == y.index_ad
     assert z[2].index_ad == y.index_ad
 
+
 @pytest.test_arrays('is_diff,float32,shape=(*)')
 def test91_safe_functions(t):
     x = dr.linspace(t, 0, 1, 10)
@@ -1203,3 +1204,179 @@ def test91_safe_functions(t):
     assert dr.all(dr.isfinite(dr.grad(x)))
     assert dr.all(dr.isfinite(dr.grad(y)))
     assert dr.all(dr.isfinite(dr.grad(z)))
+
+
+@pytest.test_arrays('is_diff,float32,shape=(*)')
+def test92_prefix_sum_fwd(t):
+    x = t([1,2,3,4])
+    dr.enable_grad(x)
+    y = dr.prefix_sum(x)
+    assert dr.allclose(y, [0, 1, 3, 6])
+
+    dr.set_grad(x, [1.1, 1.2, 1.3, 1.4])
+    dr.forward_to(y)
+    assert dr.allclose(dr.grad(y), [0, 1.1, 2.3, 3.6])
+
+    x = t([1,2,3,4])
+    dr.enable_grad(x)
+    y = dr.prefix_sum(x, False)
+    assert dr.allclose(y, [1, 3, 6, 10])
+    dr.set_grad(x, [1.1, 1.2, 1.3, 1.4])
+    dr.forward_to(y)
+    assert dr.allclose(dr.grad(y), [1.1, 2.3, 3.6, 5])
+
+    x = t([1,2,3,4])
+    dr.enable_grad(x)
+    y = dr.prefix_sum(x, False)
+    dr.forward_from(x)
+    assert dr.allclose(dr.grad(y), [1, 2, 3, 4])
+
+
+@pytest.test_arrays('is_diff,float32,shape=(*)')
+def test93_prefix_sum_bwd(t):
+    x = t([1, 2, 3, 4])
+    dr.enable_grad(x)
+    y = dr.prefix_sum(x)
+    assert dr.allclose(y, [0, 1, 3, 6])
+    dr.set_grad(y, [1.1, 1.2, 1.3, 1.4])
+    dr.backward_to(x)
+    assert dr.allclose(dr.grad(x), [1.2+1.3+1.4, 1.3+1.4, 1.4, 0])
+
+    x = t([1, 2, 3, 4])
+    dr.enable_grad(x)
+    y = dr.prefix_sum(x, False)
+    dr.set_grad(y, 1)
+    dr.backward_to(x)
+    assert dr.allclose(dr.grad(x), [4, 3, 2, 1])
+
+
+@pytest.test_arrays('is_diff,float32,shape=(*)')
+def test94_suspend_resume(t):
+    a = t(1)
+    b = t(1)
+    c = t(1)
+    dr.enable_grad(a, b, c)
+
+    with dr.suspend_grad():
+        assert not dr.grad_enabled(a) and \
+               not dr.grad_enabled(b) and \
+               not dr.grad_enabled(c) and \
+               not dr.grad_enabled(a, b, c)
+        d = a + b + c
+        assert not dr.grad_enabled(d)
+
+        with dr.resume_grad():
+            assert dr.grad_enabled(a) and \
+                   dr.grad_enabled(b) and \
+                   dr.grad_enabled(c) and \
+                   dr.grad_enabled(a, b, c)
+            e = a + b + c
+            assert dr.grad_enabled(e)
+            pass
+
+        # dr.enable_grad() is ignored in a full dr.suspend_grad() session
+        e = t(1)
+        dr.enable_grad(e)
+        assert not dr.grad_enabled(a, b, c, d, e)
+
+        # Replicating suspended variables creates detached copies
+        f = t(a)
+        with dr.resume_grad():
+            assert dr.grad_enabled(a) and \
+                   not dr.grad_enabled(f)
+
+
+@pytest.test_arrays('is_diff,float32,shape=(*)')
+def test95_suspend_resume_selective(t):
+    a = t(1)
+    b = t(1)
+    c = t(1)
+    d = t(1)
+    dr.enable_grad(a, b, c)
+
+    with dr.suspend_grad():
+        with dr.resume_grad(a, b):
+            dr.enable_grad(d)
+            assert dr.grad_enabled(a) and \
+                   dr.grad_enabled(b) and \
+                   not dr.grad_enabled(c) and \
+                   dr.grad_enabled(d)
+            with dr.suspend_grad(b):
+                assert dr.grad_enabled(a) and \
+                       not dr.grad_enabled(b) and \
+                       not dr.grad_enabled(c)
+
+    with dr.suspend_grad(a, b):
+        assert not dr.grad_enabled(a) and \
+               not dr.grad_enabled(b) and \
+               dr.grad_enabled(c)
+        with dr.resume_grad(b):
+            assert not dr.grad_enabled(a) and \
+                   dr.grad_enabled(b) and \
+                   dr.grad_enabled(c)
+        with dr.resume_grad():
+            assert dr.grad_enabled(a) and \
+                   dr.grad_enabled(b) and \
+                   dr.grad_enabled(c)
+
+@pytest.test_arrays('is_diff,float32,shape=(*)')
+def test96_isolate_bwd(t):
+    a = t(1)
+    dr.enable_grad(a)
+
+    b = a * 2
+
+    with dr.isolate_grad():
+        c = b * 2
+
+        with dr.isolate_grad():
+            d = c * 2
+            dr.backward(d)
+
+            assert dr.grad(d) == 0 and \
+                   dr.grad(c) == 2 and \
+                   dr.grad(b) == 0 and \
+                   dr.grad(a) == 0
+
+        assert dr.grad(d) == 0 and \
+               dr.grad(c) == 0 and \
+               dr.grad(b) == 4 and \
+               dr.grad(a) == 0
+
+    assert dr.grad(d) == 0 and \
+           dr.grad(c) == 0 and \
+           dr.grad(b) == 0 and \
+           dr.grad(a) == 8
+
+@pytest.test_arrays('is_diff,float32,shape=(*)')
+def test97_isolate_fwd(t):
+    # Tests that repeatedly forward-propagating through a shared subgraph
+    # leaves the part outside of the isolation boundary intact (Not really sure
+    # if we need this, but that's how the operation behaves)
+
+    if True:
+        a = t(0)
+        dr.enable_grad(a)
+        dr.set_grad(a, 2)
+
+        b = a * 2
+        db = dr.forward_to(b)
+        assert db == 4
+
+        c = a * 3
+        dc = dr.forward_to(c)
+        assert dc == 0
+
+    if True:
+        a = t(0)
+        dr.enable_grad(a)
+        dr.set_grad(a, 2)
+
+        with dr.isolate_grad():
+            b = a * 2
+            db = dr.forward_to(b)
+            assert db == 4
+
+            c = a * 3
+            dc = dr.forward_to(c)
+            assert dc == 6

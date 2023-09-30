@@ -871,16 +871,19 @@ DRJIT_NOINLINE Index ad_var_new_impl(const char *label, JitVar &&result,
         ad_var_new(info.backend, info.size, info.type, symbolic, label);
 
     if constexpr (N == 0) {
-        ad_log("ad_var_new(a%u, label=\"%s\")", ad_index, label);
+        if (label)
+            ad_log("ad_var_new(a%u, label=\"%s\", ctr=%zu)", ad_index, label, var->counter);
+        else
+            ad_log("ad_var_new(a%u, ctr=%zu)", ad_index, var->counter);
     } else if constexpr (N == 1) {
-        ad_log("ad_var_new(a%u <- a%u, label=\"%s\")", ad_index,
-               args[0].ad_index, label);
+        ad_log("ad_var_new(a%u <- a%u, label=\"%s\", ctr=%zu)", ad_index,
+               args[0].ad_index, label, var->counter);
     } else if constexpr (N == 2) {
-        ad_log("ad_var_new(a%u <- a%u, a%u, label=\"%s\")", ad_index,
-               args[0].ad_index, args[1].ad_index, label);
+        ad_log("ad_var_new(a%u <- a%u, a%u, label=\"%s\", ctr=%zu)", ad_index,
+               args[0].ad_index, args[1].ad_index, label, var->counter);
     } else if constexpr (N == 3) {
-        ad_log("ad_var_new(a%u <- a%u, a%u, a%u, label=\"%s\")", ad_index,
-               args[0].ad_index, args[1].ad_index, args[2].ad_index, label);
+        ad_log("ad_var_new(a%u <- a%u, a%u, a%u, label=\"%s\", ctr=%zu)", ad_index,
+               args[0].ad_index, args[1].ad_index, args[2].ad_index, label, var->counter);
     }
 
     EdgeIndex edge_index = 0;
@@ -1075,7 +1078,8 @@ static void ad_dfs_fwd(std::vector<EdgeRef> &todo, uint32_t index,
 
             Variable *v2 = state[edge.target];
             ad_var_inc_ref_int(edge.target, v2);
-            todo.emplace_back(edge_id, edge.source, edge.target, v->counter, v2->counter);
+            todo.emplace_back(edge_id, edge.source, edge.target, v->counter,
+                              v2->counter);
 
             ad_dfs_fwd(todo, edge.target, v2);
         }
@@ -1211,7 +1215,7 @@ void ad_traverse(dr::ADMode mode, uint32_t flags) {
         /* Don't clear the gradient of vertices created *before* entering
            an dr.isolation() scope, or when their gradient is still explicitly
            referenced by some other part of the computation graph */
-        if (prev_i < postpone_before || prev->ref_count_grad > 0)
+        if (prev->counter < postpone_before || prev->ref_count_grad > 0)
             clear_grad = false;
 
         // Aggressively clear gradients at intermediate nodes
@@ -1258,14 +1262,15 @@ void ad_traverse(dr::ADMode mode, uint32_t flags) {
 
         size_t grad_size = v0->grad.size();
 
-        if (unlikely(v0i < postpone_before)) {
+        if (unlikely(v0->counter < postpone_before)) {
             if (mode == dr::ADMode::Backward) {
                 ad_log("ad_traverse(): postponing edge a%u -> a%u due "
                        "dr.isolate_grad() scope.", v0i, v1i);
+
                 ls.scopes.back().postponed.push_back(er);
                 er.id = er.source = er.target = 0;
                 continue;
-            } else if (v1i < postpone_before) {
+            } else if (v1->counter < postpone_before) {
                 ad_raise(
                     "ad_traverse(): tried to forward-propagate derivatives "
                     "across edge a%u -> a%u, which lies outside of the current "
@@ -1426,6 +1431,131 @@ void ad_traverse(dr::ADMode mode, uint32_t flags) {
 }
 
 // ==========================================================================
+// AD scope management
+// ==========================================================================
+
+void ad_scope_enter(ADScope type, size_t size, const Index *indices) {
+    std::vector<Scope> &scopes = local_state.scopes;
+    Scope scope;
+
+    if (!scopes.empty())
+        scope = scopes.back();
+
+    scope.postponed.clear();
+    scope.type = type;
+
+    switch (type) {
+        case ADScope::Suspend:
+            ad_log("ad_scope_enter(suspend, %zu indices)", size);
+
+            if (size) {
+                for (size_t i = 0; i < size; ++i)
+                    scope.disable(ad_index(indices[i]));
+            } else {
+                scope.complement = false;
+                scope.indices.clear();
+            }
+            break;
+
+        case ADScope::Resume:
+            ad_log("ad_scope_enter(resume, %zu indices)", size);
+
+            if (size) {
+                for (size_t i = 0; i < size; ++i)
+                    scope.enable(ad_index(indices[i]));
+                if (!scope.complement && scope.indices.empty())
+                    scope.indices.insert(0);
+            } else {
+                scope.complement = true;
+                scope.indices.clear();
+            }
+            break;
+
+        case ADScope::Isolate:
+            if (unlikely(size))
+                ad_fail("ad_scope_enter(isolate): variables cannot be "
+                        "specified for this scope type!");
+
+            scope.isolate = true;
+
+            /* access state data structure */ {
+                std::lock_guard<std::mutex> guard(state.mutex);
+                scope.counter = state.counter;
+            }
+
+            ad_log("ad_scope_enter(isolate, ctr=%zu)", scope.counter);
+            break;
+
+        default:
+            ad_fail("ad_scope_enter(): unknown scope type!");
+    }
+
+    scopes.push_back(std::move(scope));
+}
+
+void ad_scope_leave(bool process_postponed) {
+    LocalState &ls = local_state;
+    std::vector<Scope> &scopes = ls.scopes;
+    if (scopes.empty())
+        ad_raise("ad_scope_leave(): scope underflow!");
+
+    Scope &scope = scopes.back();
+
+    const char *type_name = nullptr;
+
+    switch (scope.type) {
+        case ADScope::Suspend: type_name = "suspend"; break;
+        case ADScope::Resume:  type_name = "resume"; break;
+        case ADScope::Isolate: type_name = "isolate"; break;
+        default: type_name = "unknown"; break;
+    }
+    (void) type_name;
+
+    ad_log("ad_scope_leave(%s)", type_name);
+
+    if (scope.isolate && !scope.postponed.empty()) {
+        ad_log("ad_scope_leave(): %s %zu postponed edges.",
+               process_postponed ? "enqueuing" : "discarding",
+               scope.postponed.size());
+
+        if (process_postponed) {
+            // Need to process postponed edges now..
+            if (unlikely(!ls.todo.empty()))
+                ad_raise("ad_scope_leave(): internal error: wanted to process "
+                         "postponed AD edges, but other edges were already "
+                         "enqueued. Did you forget to call dr.traverse() to "
+                         "process them?");
+
+            ls.todo.insert(ls.todo.end(), scope.postponed.begin(),
+                           scope.postponed.end());
+            scopes.pop_back();
+
+            ad_traverse(dr::ADMode::Backward,
+                        (uint32_t) dr::ADFlag::ClearVertices);
+        } else {
+            std::lock_guard<std::mutex> guard(state.mutex);
+            for (EdgeRef &r: scope.postponed)
+                ad_var_dec_ref_int(r.target, state[r.target]);
+            scopes.pop_back();
+        }
+    } else {
+        scopes.pop_back();
+    }
+}
+
+/// Check if gradient tracking is enabled for the given variable
+int ad_grad_enabled(Index index) {
+    ADIndex ad_index = ::ad_index(index);
+    if (!ad_index)
+        return 0;
+
+    const std::vector<Scope> &scopes = local_state.scopes;
+    if (!scopes.empty())
+        scopes.back().maybe_disable(ad_index);
+    return ad_index != 0;
+}
+
+// ==========================================================================
 // AD traversal callbacks for special operations: masks, gathers, scatters
 // ==========================================================================
 
@@ -1567,6 +1697,37 @@ struct ScatterEdge : Special {
 
     JitBackend backend;
     JitMask mask_stack;
+};
+
+struct PrefixSumEdge : Special {
+    PrefixSumEdge(bool exclusive) : m_exclusive(exclusive) { }
+
+    void forward(const Variable *source, Variable *target,
+                 uint32_t) const override {
+        JitVar value = source->grad;
+
+        if (value.size() != source->size)
+            value.resize(source->size);
+
+        value = dr::prefix_sum(value, m_exclusive);
+        target->accum(value, source->size);
+    }
+
+    void backward(Variable *source, const Variable *target,
+                  uint32_t) const override {
+        JitVar value = target->grad;
+        if (!value.valid())
+            return;
+
+        if (value.size() != target->size)
+            value.resize(target->size);
+
+        jit_set_backend(value.index());
+        value = dr::reverse(dr::prefix_sum(dr::reverse(value), m_exclusive));
+        source->accum(value, value.size());
+    }
+
+    bool m_exclusive;
 };
 
 
@@ -2136,10 +2297,12 @@ Index ad_var_scatter(Index target, Index value, JitIndex offset,
 Index ad_var_prefix_sum(Index index, int exclusive) {
     JitVar result =
         JitVar::steal(jit_var_prefix_sum(jit_index(index), exclusive));
+
     if (is_detached(index))
         return result.release();
     else
-        ad_raise("Differentiable prefix sums aren't supported yet!");
+        return ad_var_new("prefix_sum", std::move(result),
+                          SpecialArg(index, new PrefixSumEdge(exclusive != 0)));
 }
 
 // ==========================================================================

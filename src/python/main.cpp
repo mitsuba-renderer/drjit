@@ -79,6 +79,8 @@ NB_MODULE(drjit_ext, m_) {
         .value("Or", ReduceOp::Or, doc_ReduceOp_Or)
         .value("Count", ReduceOp::Count, doc_ReduceOp_Count);
 
+    nb::enum_<JitFlag>(m, "JitFlag", doc_JitFlag);
+
     m.def("has_backend", &jit_has_backend, doc_has_backend);
 
     m.def("whos_str", &jit_var_whos);
