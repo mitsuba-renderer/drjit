@@ -85,6 +85,7 @@ These operations are *horizontal* in the sense that [..]
 .. autofunction:: any
 .. autofunction:: prefix_sum
 .. autofunction:: cumsum
+.. autofunction:: reverse
 
 Mask operations
 ---------------
@@ -206,6 +207,13 @@ Just-in-time compilation
 .. autofunction:: has_backend
 .. autofunction:: schedule
 .. autofunction:: eval
+.. autofunction:: set_flag
+.. autofunction:: flag
+.. autoclass:: scoped_set_flag
+
+   .. automethod:: __init__
+   .. automethod:: __enter__
+   .. automethod:: __exit__
 
 Type traits
 -----------
@@ -556,9 +564,6 @@ Automatic differentiation
 .. autofunction:: backward_from
 .. autofunction:: backward_to
 .. autofunction:: backward
-
-.. .. autofunction:: ad_scope_enter
-.. .. autofunction:: ad_scope_leave
 .. autofunction:: suspend_grad
 .. autofunction:: resume_grad
 .. autofunction:: isolate_grad

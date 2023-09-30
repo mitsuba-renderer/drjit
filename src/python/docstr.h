@@ -4,17 +4,16 @@
 #endif
 
 static const char *doc_is_array_v = R"(
-is_array_v(arg, /)
 Check if the input is a Dr.Jit array instance or type
 
 Args:
     arg (object): An arbitrary Python object
 
 Returns:
-    bool: ``True`` if ``arg`` or type(``arg``) is a Dr.Jit array type, and ``False`` otherwise)";
+    bool: ``True`` if ``arg`` or type(``arg``) is a Dr.Jit array type, and
+      ``False`` otherwise)";
 
 static const char *doc_is_struct_v = R"(
-is_struct_v(arg, /)
 Check if the input is a Dr.Jit-compatible data structure
 
 Custom data structures can be made compatible with various Dr.Jit operations by
@@ -29,7 +28,6 @@ Returns:
     bool: ``True`` if ``arg`` has a ``DRJIT_STRUCT`` member)";
 
 static const char *doc_size_v = R"(
-size_v(arg, /)
 Return the (static) size of the outermost dimension of the provided Dr.Jit
 array instance or type
 
@@ -45,7 +43,6 @@ Returns:
     ``arg`` is a dynamic Dr.Jit array. Returns ``1`` for all other types.)";
 
 static const char *doc_depth_v = R"(
-depth_v(arg, /)
 Return the depth of the provided Dr.Jit array instance or type
 
 For example, an array consisting of floating point values (for example,
@@ -60,7 +57,6 @@ Returns:
     type. Returns ``0`` for all other inputs.)";
 
 static const char *doc_itemsize_v = R"(
-itemsize_v(arg, /)
 Return the per-item size (in bytes) of the scalar type underlying a Dr.Jit array
 
 Args:
@@ -70,7 +66,6 @@ Returns:
     int: Returns the item size array elements in bytes.)";
 
 static const char *doc_value_t = R"(
-value_t(arg, /)
 Return the *value type* underlying the provided Dr.Jit array or type (i.e., the
 type of values obtained by accessing the contents using a 1D index).
 
@@ -95,7 +90,6 @@ Returns:
 )";
 
 static const char *doc_array_t = R"(
-array_t(arg, /)
 Return the *array form* of the provided Dr.Jit array or type.
 
 There are several different cases:
@@ -131,7 +125,6 @@ Returns:
 )";
 
 static const char *doc_mask_t = R"(
-mask_t(arg, /)
 Return the *mask type* associated with the provided Dr.Jit array or type (i.e., the
 type produced by comparisons involving the argument).
 
@@ -156,11 +149,10 @@ Returns:
 )";
 
 static const char *doc_scalar_t = R"(
-scalar_t(arg, /)
-Return the *scalar type* associated with the provided Dr.Jit array or type (i.e., the
-representation of elements at the lowest level)
+Return the *scalar type* associated with the provided Dr.Jit array or type
+(i.e., the representation of elements at the lowest level)
 
-When the input is not a Dr.Jit array or type, the function returns the input
+When the input is not a Dr.Jit array or type, the function returns its input
 unchanged. The following assertions illustrate the behavior of
 :py:func:`scalar_t`.
 
@@ -181,7 +173,6 @@ Returns:
 )";
 
 static const char *doc_is_mask_v = R"(
-is_mask_v(arg, /)
 Check whether the input array instance or type is a Dr.Jit mask array or a
 Python ``bool`` value/type.
 
@@ -194,7 +185,6 @@ Returns:
 )";
 
 static const char *doc_is_integral_v = R"(
-is_integral_v(arg, /)
 Check whether the input array instance or type is an integral Dr.Jit array
 or a Python ``int`` value/type.
 
@@ -209,7 +199,6 @@ Returns:
 )";
 
 static const char *doc_is_float_v = R"(
-is_float_v(arg, /)
 Check whether the input array instance or type is a Dr.Jit floating point array
 or a Python ``float`` value/type.
 
@@ -223,7 +212,6 @@ Returns:
 
 
 static const char *doc_is_arithmetic_v = R"(
-is_arithmetic_v(arg, /)
 Check whether the input array instance or type is an arithmetic Dr.Jit array
 or a Python ``int`` or ``float`` value/type.
 
@@ -234,13 +222,12 @@ Args:
     arg (object): An arbitrary Python object
 
 Returns:
-    bool: ``True`` if ``arg`` represents an arithmetic Dr.Jit array or
-    Python ``int`` or ``float`` instance or type.
+    bool: ``True`` if ``arg`` represents an arithmetic Dr.Jit array or Python
+    ``int`` or ``float`` instance or type.
 )";
 
 
 static const char *doc_is_signed_v = R"(
-is_signed_v(arg, /)
 Check whether the input array instance or type is an signed Dr.Jit array
 or a Python ``int`` or ``float`` value/type.
 
@@ -248,13 +235,12 @@ Args:
     arg (object): An arbitrary Python object
 
 Returns:
-    bool: ``True`` if ``arg`` represents an signed Dr.Jit array or
-    Python ``int`` or ``float`` instance or type.
+    bool: ``True`` if ``arg`` represents an signed Dr.Jit array or Python
+    ``int`` or ``float`` instance or type.
 )";
 
 
 static const char *doc_is_unsigned_v = R"(
-is_unsigned_v(arg, /)
 Check whether the input array instance or type is an unsigned integer Dr.Jit
 array or a Python ``bool`` value/type (masks and boolean values are also
 considered to be unsigned).
@@ -263,12 +249,11 @@ Args:
     arg (object): An arbitrary Python object
 
 Returns:
-    bool: ``True`` if ``arg`` represents an unsigned Dr.Jit array or
-    Python ``bool`` instance or type.
+    bool: ``True`` if ``arg`` represents an unsigned Dr.Jit array or Python
+    ``bool`` instance or type.
 )";
 
 static const char *doc_is_jit_v = R"(
-is_jit_v(arg, /)
 Check whether the input array instance or type represents a type that
 undergoes just-in-time compilation.
 
@@ -281,9 +266,8 @@ Returns:
 )";
 
 static const char *doc_is_dynamic_v = R"(
-is_dynamic_v(arg, /)
-array Check whether the input array instance or type represents a dynamically
-sized array type.
+Check whether the input instance or type represents a dynamically sized Dr.Jit
+array type.
 
 Args:
     arg (object): An arbitrary Python object
@@ -317,7 +301,6 @@ Returns:
 )";
 
 static const char *doc_is_diff_v = R"(
-is_diff_v(arg, /)
 Check whether the input is a differentiable Dr.Jit array instance or type.
 
 Note that this is a type-based statement that is unrelated to mathematical
@@ -333,8 +316,6 @@ Returns:
 )";
 
 static const char *doc_backend_v = R"(
-backend_v(arg, /)
-
 Returns the backend responsible for the given Dr.Jit array instance or type.
 
 Args:
@@ -344,8 +325,6 @@ Returns:
     drjit.JitBackend: The associated Jit backend or ``drjit.JitBackend.None``.)";
 
 static const char *doc_var_type_v = R"(
-var_type_v(arg, /)
-
 Returns the scalar type associated with the given Dr.Jit array instance or
 type.
 
@@ -357,7 +336,6 @@ Returns:
 
 
 static const char *doc_is_complex_v = R"(
-is_complex_v(arg, /)
 Check whether the input is a Dr.Jit array instance or type representing a complex number.
 
 Args:
@@ -368,7 +346,6 @@ Returns:
 )";
 
 static const char *doc_is_quaternion_v = R"(
-is_quaternion_v(arg, /)
 Check whether the input is a Dr.Jit array instance or type representing a quaternion.
 
 Args:
@@ -379,7 +356,6 @@ Returns:
 )";
 
 static const char *doc_is_vector_v = R"(
-is_quaternion_v(arg, /)
 Check whether the input is a Dr.Jit array instance or type representing a vectorial array type.
 
 Args:
@@ -391,7 +367,6 @@ Returns:
 
 
 static const char *doc_is_matrix_v = R"(
-is_matrix_v(arg, /)
 Check whether the input is a Dr.Jit array instance or type representing a matrix.
 
 Args:
@@ -402,7 +377,6 @@ Returns:
 )";
 
 static const char *doc_is_tensor_v = R"(
-is_tensor_v(arg, /)
 Check whether the input is a Dr.Jit array instance or type representing a tensor.
 
 Args:
@@ -700,7 +674,7 @@ same size as the input :math:`\mathbf{x}`, where
 
 .. math::
 
-   y_i = \sum_{i=0}^{i-1} x_i.
+   y_i = \sum_{j=0}^{i-1} x_j.
 
 which is known as an *exclusive* prefix sum, as each element of the output
 array excludes the corresponding input in its sum. When the ``exclusive``
@@ -709,7 +683,7 @@ prefix sum defined as
 
 .. math::
 
-   y_i = \sum_{i=0}^i x_i.
+   y_i = \sum_{j=0}^i x_j.
 
 There is also a convenience alias :py:func:`drjit.cumsum` that computes an
 inclusive sum analogous to various other nd-array frameworks.
@@ -720,11 +694,11 @@ presently, the function accepts ``Int32``, ``UInt32``, ``UInt64``,
 
 The CUDA backend implementation for "large" numeric types (``Float64``,
 ``UInt64``) has the following technical limitation: when reducing 64-bit
-integers, their values must be smaller than 2**62. When reducing double
-precision arrays, the two least significant mantissa bits are clamped to
-zero when forwarding the prefix from one 512-wide block to the next (at a
-*very minor*, probably negligible loss in accuracy). See the implementation
-for details on the rationale of this limitation.
+integers, their values must be smaller than :math:`2^{62}`. When reducing
+double precision arrays, the two least significant mantissa bits are clamped to
+zero when forwarding the prefix from one 512-wide block to the next (at a *very
+minor*, probably negligible loss in accuracy). See the implementation for
+details on the rationale of this limitation.
 
 Args:
     value (drjit.ArrayBase): A Python or Dr.Jit arithmetic type
@@ -1507,7 +1481,6 @@ variable index within the raw computation graph, if applicable.
 :type: int)";
 
 static const char *doc_uint_array_t = R"(
-uint_array_t(arg, /)
 Converts the provided Dr.Jit array/tensor type into a *unsigned integer*
 version with the same element size.
 
@@ -1529,7 +1502,6 @@ Returns:
 
 
 static const char *doc_int_array_t = R"(
-int_array_t(arg, /)
 Converts the provided Dr.Jit array/tensor type into a *signed integer*
 version with the same element size.
 
@@ -1572,7 +1544,6 @@ Returns:
 )";
 
 static const char *doc_uint32_array_t = R"(
-uint32_array_t(arg, /)
 Converts the provided Dr.Jit array/tensor type into a *unsigned 32 bit*
 version.
 
@@ -1593,7 +1564,6 @@ Returns:
 )";
 
 static const char *doc_int32_array_t = R"(
-int32_array_t(arg, /)
 Converts the provided Dr.Jit array/tensor type into a *signed 32 bit*
 version.
 
@@ -1614,7 +1584,6 @@ Returns:
 )";
 
 static const char *doc_uint64_array_t = R"(
-uint64_array_t(arg, /)
 Converts the provided Dr.Jit array/tensor type into an *unsigned 64 bit*
 version.
 
@@ -1635,7 +1604,6 @@ Returns:
 )";
 
 static const char *doc_int64_array_t = R"(
-int64_array_t(arg, /)
 Converts the provided Dr.Jit array/tensor type into an *signed 64 bit* version.
 
 This function implements the following set of behaviors:
@@ -1655,7 +1623,6 @@ Returns:
 )";
 
 static const char *doc_float32_array_t = R"(
-float32_array_t(arg, /)
 Converts the provided Dr.Jit array/tensor type into an 32 bit floating point version.
 
 This function implements the following set of behaviors:
@@ -1675,7 +1642,6 @@ Returns:
 )";
 
 static const char *doc_float64_array_t = R"(
-float64_array_t(arg, /)
 Converts the provided Dr.Jit array/tensor type into an 64 bit floating point version.
 
 This function implements the following set of behaviors:
@@ -1719,16 +1685,19 @@ Returns:
 )";
 
 static const char *doc_detached_t = R"(
-Converts the provided Dr.Jit array/tensor type into an non-differentiable version.
+Converts the provided Dr.Jit array/tensor type into an non-differentiable
+version.
 
 This function implements the following set of behaviors:
 
-1. When invoked with a differentiable Dr.Jit array *type* (e.g. :py:class:`drjit.cuda.ad.Array3f`), it
-   returns a non-differentiable version (e.g. :py:class:`drjit.cuda.Array3f`).
+1. When invoked with a differentiable Dr.Jit array *type* (e.g.
+   :py:class:`drjit.cuda.ad.Array3f`), it returns a non-differentiable version
+   (e.g. :py:class:`drjit.cuda.Array3f`).
 
 2. When the input isn't a type, it returns ``detached_t(type(arg))``.
 
-3. When the input type is non-differentiable or not a Dr.Jit array type, the function returns it unchanged.
+3. When the input type is non-differentiable or not a Dr.Jit array type, the
+   function returns it unchanged.
 
 Args:
     arg (object): An arbitrary Python object
@@ -2415,8 +2384,8 @@ Args:
       all differentiable variables.
 
 Returns:
-    bool: ``True`` if any of the input variables
-        has gradient tracking enabled, ``False`` otherwise.
+    bool: ``True`` if any of the input variables has gradient tracking enabled,
+    ``False`` otherwise.
 )";
 
 static const char *doc_grad = R"(
@@ -2495,7 +2464,7 @@ Args:
 
 Returns:
     object: a new Dr.Jit array combining the *primal* value of `arg0` and the
-        derivative of `arg1`.
+    derivative of `arg1`.
 )";
 
 static const char *doc_enqueue = R"(
@@ -2703,7 +2672,7 @@ Args:
 
 Returns:
     object: the gradient value(s) associated with ``*args`` following the
-        traversal.
+    traversal.
 )";
 
 static const char *doc_forward = R"(
@@ -2807,7 +2776,7 @@ Args:
 
 Returns:
     object: the gradient value(s) associated with ``*args`` following the
-        traversal.
+    traversal.
 )";
 
 static const char *doc_backward = R"(
@@ -3310,6 +3279,8 @@ static const char *doc_ReduceOp_Or = "Binary OR operation.";
 static const char *doc_ReduceOp_Count =
     "Count the number of nonzero entries (only applies to horizontal "
     "reductions).";
+
+static const char *doc_JitFlag = R"(This enumeration lists several options to fine-tune the behavior of the just-in-time compilation)";
 
 #if defined(__GNUC__)
 #  pragma GCC diagnostic pop

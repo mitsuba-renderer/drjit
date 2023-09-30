@@ -6,6 +6,7 @@ Dr.Jit — A Just-In-Time-Compiler for Differentiable Rendering
    :caption: Contents:
 
    general
+   changelog
    reference
 
 Indices and tables

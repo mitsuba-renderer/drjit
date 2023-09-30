@@ -1256,6 +1256,51 @@ decltype(auto) slice(const T &value, size_t index = -1) {
     }
 }
 
+template <typename Array> Array reverse(const Array &value) {
+    uint32_t size = (uint32_t) value.size();
+
+    if constexpr (depth_v<Array> == 1 && is_dynamic_v<Array>) {
+        using UInt32 = uint32_array_t<Array>;
+        return gather<Array>(value, size - 1 - arange<UInt32>(size));
+    } else {
+        Array result;
+        if constexpr (Array::Size == Dynamic)
+            result = empty<Array>(size);
+
+        for (size_t i = 0; i < size; ++i)
+            result.entry(i) = value.entry(size - 1 - i);
+
+        return result;
+    }
+}
+
+template <typename Array> Array prefix_sum(const Array &value, bool exclusive = true) {
+    if constexpr (depth_v<Array> == 1 && is_dynamic_v<Array>) {
+        return value.prefix_sum_(exclusive);
+    } else {
+        uint32_t size = (uint32_t) value.size();
+
+        Array result;
+        if constexpr (Array::Size == Dynamic)
+            result = empty<Array>(size);
+
+        value_t<Array> accum = 0;
+        if (exclusive) {
+            for (size_t i = 0; i < size; ++i) {
+                result.entry(i) = accum;
+                accum += value.entry(i);
+            }
+        } else {
+            for (size_t i = 0; i < size; ++i) {
+                accum += value.entry(i);
+                result.entry(i) = accum;
+            }
+        }
+
+        return result;
+    }
+}
+
 //! @}
 // -----------------------------------------------------------------------
 

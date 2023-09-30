@@ -44,12 +44,14 @@ enum class ADFlag : uint32_t {
     /// Clear gradients of processed vertices only, but leave edges intact
     ClearVertices = (uint32_t) ClearInput | (uint32_t) ClearInterior,
 
+    /// Default: clear everything (edges, gradients of processed vertices)
+    Default = (uint32_t) ClearEdges | (uint32_t) ClearVertices,
+
+    // --------------- Other flags influencing the AD traversal ---------------
+
     /// Don't fail when the input to a ``dr::forward`` or ``backward`` operation
     /// is not a differentiable array.
     AllowNoGrad = 8,
-
-    /// Default: clear everything (edges, gradients of processed vertices)
-    Default = (uint32_t) ClearEdges | (uint32_t) ClearVertices
 };
 
 constexpr uint32_t operator |(ADFlag f1, ADFlag f2)   { return (uint32_t) f1 | (uint32_t) f2; }

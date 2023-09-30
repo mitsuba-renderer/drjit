@@ -257,11 +257,12 @@ def cumsum(value):
     '''
     Compute an cumulative sum (aka. inclusive prefix sum) of the input array.
 
-    This function wraps :cpp:func:`drjit.prefix_sum` and is implemented as
+    This function wraps :py:func:`drjit.prefix_sum` and is implemented as
 
     .. code-block:: python
 
-       return prefix_sum(value, exclusive=False)
+       def cumsum(value):
+           return prefix_sum(value, exclusive=False)
     '''
     return prefix_sum(value, exclusive=False)
 
@@ -408,3 +409,253 @@ def largest(arg0, /):
         return float.fromhex('0x1.ffcp+15')
     else:
         raise TypeError("largest(): input is not a Dr.Jit array or array type!")
+
+
+def reverse(value, axis:int=0):
+    '''
+    Reverses the given Dr.Jit array or Python sequence along the
+    specified axis.
+
+    Args:
+        value (ArrayBase|Sequence): Dr.Jit array or Python sequence type
+
+        axis (int): Axis along which the reversal should be performed. Only
+          ``axis==0`` is supported for now.
+
+    Returns:
+        object: An output of the same type as `value` containing a copy of the
+        reversed array.
+    '''
+    tp = type(value)
+    n = len(value)
+
+    if axis != 0:
+        raise Exception("reverse(): only the axis=0 case is implemented so far!")
+
+    if is_dynamic_v(tp) and depth_v(tp) == 1:
+        return gather(tp, value, n - 1 - arange(uint32_array_t(tp), n))
+    else:
+        result = []
+        for i in range(n):
+            result.append(value[n-1-i])
+        if not isinstance(result, tp):
+            result = tp(result)
+        return result
+
+# -------------------------------------------------------------------
+#               Context manager for setting JIT flags
+# -------------------------------------------------------------------
+
+class scoped_set_flag:
+    """
+    This context manager can be used to selectively enable or disable a JIT
+    compilation flag (:py:class:`drjit.JitFlag` member) for a given chunk of
+    code.
+
+    An example is shown below:
+
+    .. code-block::
+
+       with dr.scoped_set_flag(dr.JitFlag.VCallOptimize, False):
+           # .. code coes here ..
+    """
+    def __init__(self, flag: JitFlag, value: bool = True):
+        self.flag = flag
+        self.value = value
+
+    def __enter__(self):
+        self.backup = flag(self.flag)
+        set_flag(self.flag, self.value)
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        set_flag(self.flag, self.backup)
+
+# -------------------------------------------------------------------
+#                        Enabling/disabling AD
+# -------------------------------------------------------------------
+
+
+def suspend_grad(*args, when=True):
+    """
+    Python context manager to temporarily disable gradient tracking globally,
+    or for a specific set of variables.
+
+    This context manager can be used as follows to completely disable all
+    gradient tracking. Newly created variables will be detached from Dr.Jit's
+    AD graph.
+
+    .. code-block:: python
+
+       with dr.suspend_grad():
+           # .. code coes here ..
+
+    You may also specify any number of Dr.Jit arrays, tensors, or :ref:`Pytrees
+    <pytrees>`. In this case, the context manager behaves differently by
+    disabling gradient tracking more selectively for the specified variables.
+
+    .. code-block:: python
+
+       with dr.suspend_grad(x):
+           z = x + y  # 'z' will not track any gradients arising from 'x'
+
+    The :py:func:`suspend_grad` and :py:func:`resume_grad` context manager can
+    be arbitrarily nested and suitably update the set of tracked variables.
+
+    A note about the interaction with :py:func:`drjit.enable_grad`: it is legal
+    to register further AD variables within a scope that disables gradient
+    tracking for specific variables.
+
+    .. code-block:: python
+
+       with dr.suspend_grad(x):
+           y = Float(1)
+           dr.enable_grad(y)
+
+           # The following condition holds
+           assert not dr.grad_enabled(x) and \
+                  dr.grad_enabled(y) 
+
+    In contrast, a :py:func:`suspend_grad` environment without arguments that
+    completely disables AD does *not* allow further variables to be registered:
+
+    .. code-block:: python
+
+       with dr.suspend_grad():
+           y = Float(1)
+           dr.enable_grad(y) # ignored
+
+           # The following condition holds
+           assert not dr.grad_enabled(x) and \
+                  not dr.grad_enabled(y)
+
+    Args:
+        *args (tuple): Arbitrary list of Dr.Jit arrays, tuples, or :ref:`Pytrees
+          <pytrees>`. Elements of data structures that could not possibly be
+          attached to the AD graph (e.g., Python scalars) are ignored.
+
+        when (bool): Optional keyword argument that can be specified to turn the
+          context manager into a no-op via ``when=False``. The default value is
+          ``when=True``.
+    """
+    if not when:
+        return detail.NoopContextManager()
+
+    array_indices = []
+    detail.collect_indices(
+        args,
+        array_indices
+    )
+
+    if len(args) > 0 and len(array_indices) == 0:
+        array_indices = [0]
+
+    return detail.ADContextManager(detail.ADScope.Suspend, array_indices)
+
+
+def resume_grad(*args, when=True):
+    """
+    Python context manager to temporarily resume gradient tracking globally,
+    or for a specific set of variables.
+
+    This context manager can be used as follows to fully re-enable all
+    gradient tracking following a previous call to
+    :py:func:`drjit.suspend_grad()`. Newly created variables will then again be
+    attached to Dr.Jit's AD graph.
+
+    .. code-block:: python
+
+       with dr.suspend_grad():
+           # .. 
+
+           with dr.resume_grad():
+               # In this scope, the effect of the outer context
+               # manager is effectively disabled
+
+    You may also specify any number of Dr.Jit arrays, tensors, or :ref:`Pytrees
+    <pytrees>`. In this case, the context manager behaves differently by
+    enabling gradient tracking more selectively for the specified variables.
+
+    .. code-block::
+
+       with dr.suspend_grad():
+           with dr.resume_grad(x):
+               z = x + y  # 'z' will only track gradients arising from 'x'
+
+    The :py:func:`suspend_grad` and :py:func:`resume_grad` context manager can
+    be arbitrarily nested and suitably update the set of tracked variables.
+
+    Args:
+        *args (tuple): Arbitrary list of Dr.Jit arrays, tuples, or :ref:`Pytrees
+          <pytrees>`. Elements of data structures that could not possibly be
+          attached to the AD graph (e.g., Python scalars) are ignored.
+
+        when (bool): Optional keyword argument that can be specified to turn the
+          context manager into a no-op via ``when=False``. The default value is
+          ``when=True``.
+    """
+    if not when:
+        return detail.NoopContextManager()
+
+    array_indices = []
+    detail.collect_indices(
+        args,
+        array_indices
+    )
+
+    if len(args) > 0 and len(array_indices) == 0:
+        array_indices = [0]
+
+    return detail.ADContextManager(detail.ADScope.Resume, array_indices)
+
+
+def isolate_grad(when=True):
+    """
+    Python context manager to isolate and partition AD traversals into multiple
+    distinct phases.
+
+    Consider a sequence of steps being differentiated in reverse mode, like so:
+
+    .. code-block:: python
+
+       x = ..
+       dr.enable_grad(x)
+
+       y = f(x)
+       z = g(y)
+       dr.backward(z)
+
+    The :py:func:`drjit.backward` call would automatically traverse the AD
+    graph nodes created during the execution of the function ``f()`` and
+    ``g()``.
+
+    However, sometimes this is undesirable and more control is needed. For
+    example, Dr.Jit may be in an execution context (a symbolic loop or call)
+    that temporarily disallows differentiation of the ``f()`` part. The
+    :py:func:`drjit.isolate_grad` context manager addresses this need:
+
+    .. code-block::
+
+       dr.enable_grad(x)
+       y = f(x)
+
+       with dr.isolate_grad():
+           z = g(y)
+           dr.backward(z)
+
+    Any reverse-mode AD traversal of an edge that crosses the isolation
+    boundary is postponed until leaving the scope. This is mathematically
+    equivalent but produces two smaller separate AD graph traversals.
+
+    Dr.Jit operations like symbolic loops and calls internally create such an
+    isolation boundary, hence it is rare that you would need to do so yourself.
+    :py:func:`isolate_grad` is not useful for forward mode AD.
+
+    Args:
+        when (bool): Optional keyword argument that can be specified to turn the
+          context manager into a no-op via ``when=False``. The default value is
+          ``when=True``.
+    """
+    if not when:
+        return detail.NoopContextManager()
+
+    return detail.ADContextManager(detail.ADScope.Isolate, [])
