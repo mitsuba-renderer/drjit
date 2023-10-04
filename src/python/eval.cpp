@@ -46,6 +46,6 @@ static bool eval_2(nb::args args) {
 void export_eval(nb::module_ &m) {
     m.def("schedule", &schedule, doc_schedule)
      .def("schedule", &schedule_2)
-     .def("eval", &eval, doc_eval)
-     .def("eval", &eval_2);
+     .def("eval", &eval, doc_eval, nb::call_guard<nb::gil_scoped_release>())
+     .def("eval", &eval_2, nb::call_guard<nb::gil_scoped_release>());
 }

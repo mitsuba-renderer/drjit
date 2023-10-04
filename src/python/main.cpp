@@ -8,6 +8,7 @@
     BSD-style license that can be found in the LICENSE.txt file.
 */
 
+#include <nanobind/intrusive/counter.h>
 #include "bind.h"
 #include "base.h"
 #include "shape.h"
@@ -47,6 +48,8 @@ NB_MODULE(drjit_ext, m_) {
     nb::module_ cuda = m.def_submodule("cuda"),
                 cuda_ad = cuda.def_submodule("ad");
 #endif
+    nb::module_ detail = m.attr("detail"),
+                scalar = m.def_submodule("scalar");
 
     nb::enum_<JitBackend>(m, "JitBackend", doc_JitBackend)
         .value("None", JitBackend::None, doc_JitBackend_None)
@@ -87,10 +90,23 @@ NB_MODULE(drjit_ext, m_) {
     m.def("whos", []() { nb::print(jit_var_whos()); });
     m.attr("None") = nb::none();
 
-    jit_init(backends);
+    // Intrusive reference counting
+    nb::intrusive_init(
+        [](PyObject *o) noexcept {
+            nb::gil_scoped_acquire guard;
+            Py_INCREF(o);
+        },
+        [](PyObject *o) noexcept {
+            nb::gil_scoped_acquire guard;
+            Py_DECREF(o);
+        });
 
-    nb::module_ detail = m.attr("detail"),
-                scalar = m.def_submodule("scalar");
+     nb::class_<nb::intrusive_base>(
+       detail, "intrusive_base",
+       nb::intrusive_ptr<nb::intrusive_base>(
+           [](nb::intrusive_base *o, PyObject *po) noexcept { o->set_self_py(po); }));
+
+    jit_init(backends);
 
     export_bind(detail);
     export_base(m);

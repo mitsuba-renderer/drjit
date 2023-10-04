@@ -47,7 +47,9 @@
 #include <drjit/jit.h>
 #include <drjit/math.h>
 #include <drjit/autodiff.h>
+#include <drjit/custom.h>
 #include <tsl/robin_set.h>
+#include <nanobind/intrusive/counter.inl>
 #include <queue>
 #include <mutex>
 #include <memory>
@@ -397,13 +399,13 @@ struct State {
 struct Special {
     virtual void backward(Variable * /* source */,
                           const Variable * /* target */,
-                          uint32_t /* flags */) const {
+                          uint32_t /* flags */) {
         ad_fail("Special::backward(): not implemented!");
     }
 
     virtual void forward(const Variable * /* source */,
                          Variable * /* target */,
-                         uint32_t /* flags */) const {
+                         uint32_t /* flags */) {
         ad_fail("Special::forward(): not implemented!");
     }
 
@@ -633,12 +635,11 @@ static void clear_special() {
     std::vector<std::unique_ptr<Special>> &cleanup = local_state.cleanup;
     if (cleanup.empty())
         return;
-
-    std::vector<std::unique_ptr<Special>> temp;
     unlock_guard<std::mutex> guard(state.mutex);
-    temp.swap(cleanup);
-    temp.clear();
-    temp.swap(cleanup);
+    {
+        std::vector<std::unique_ptr<Special>> temp;
+        temp.swap(cleanup);
+    }
 }
 
 void ad_var_dec_ref_impl(Index index) JIT_NOEXCEPT {
@@ -1023,7 +1024,7 @@ Index ad_var_set_label(Index index, const char *label) {
     uint32_t jit_index = ::jit_index(index),
              ad_index = ::ad_index(index);
 
-    ad_log("ad_var_set_label(a%u, \"%s\")", ad_index,
+    ad_log("ad_var_set_label(a%u): \"%s\"", ad_index,
            label ? label : "(null)");
 
     jit_index = jit_var_set_label(jit_index, label);
@@ -1282,7 +1283,7 @@ void ad_traverse(dr::ADMode mode, uint32_t flags) {
             }
         }
 
-        if (unlikely(grad_size != 1 && v0->size != grad_size)) {
+        if (unlikely(grad_size != 1 && v0->size != grad_size && v0->size != 0)) {
             if (grad_size == 0) {
                 ad_log("ad_traverse(): skipping edge a%u -> a%u (no source "
                        "gradient).", v0i, v1i);
@@ -1564,14 +1565,14 @@ struct MaskEdge : Special {
         : mask(mask), negate(negate) { }
 
     void backward(Variable *source, const Variable *target,
-                  uint32_t) const override {
+                  uint32_t) override {
         source->accum(!negate ? (target->grad & mask)
                               : andnot(target->grad, mask),
                       target->size);
     }
 
     void forward(const Variable *source, Variable *target,
-                 uint32_t) const override {
+                 uint32_t) override {
         target->accum(!negate ? (source->grad & mask)
                               : andnot(source->grad, mask),
                       source->size);
@@ -1585,13 +1586,13 @@ struct CastEdge : Special {
     CastEdge(VarType v1, VarType v2) : v1(v1), v2(v2) { }
 
     void backward(Variable *source, const Variable *target,
-                  uint32_t) const override {
+                  uint32_t) override {
         source->accum(JitVar::steal(jit_var_cast(target->grad.index(), v1, 0)),
                       target->size);
     }
 
     void forward(const Variable *source, Variable *target,
-                 uint32_t) const override {
+                 uint32_t) override {
         target->accum(JitVar::steal(jit_var_cast(source->grad.index(), v2, 0)),
                       source->size);
     }
@@ -1619,7 +1620,7 @@ struct GatherEdge : Special {
         mask_stack = JitMask::steal(jit_var_mask_peek(backend));
     }
 
-    void backward(Variable *source, const Variable *target, uint32_t) const override {
+    void backward(Variable *source, const Variable *target, uint32_t) override {
         JitVar &source_grad = source->grad;
 
         if (source->size == 1 && target->size == 1 &&
@@ -1645,7 +1646,7 @@ struct GatherEdge : Special {
             dr::scatter_reduce(ReduceOp::Add, source_grad, target->grad, offset, mask);
     }
 
-    void forward(const Variable *source, Variable *target, uint32_t) const override {
+    void forward(const Variable *source, Variable *target, uint32_t) override {
         MaskGuard guard(backend, mask_stack);
         target->accum(dr::gather<JitVar>(source->grad, offset, mask),
                       std::max(width(offset), width(mask)));
@@ -1667,12 +1668,12 @@ struct ScatterEdge : Special {
         mask_stack = JitMask::steal(jit_var_mask_peek(backend));
     }
 
-    void backward(Variable *source, const Variable *target, uint32_t) const override {
+    void backward(Variable *source, const Variable *target, uint32_t) override {
         MaskGuard guard(backend, mask_stack);
         source->accum(dr::gather<JitVar>(target->grad, offset, mask), width(offset));
     }
 
-    void forward(const Variable *source, Variable *target, uint32_t) const override {
+    void forward(const Variable *source, Variable *target, uint32_t) override {
         JitVar &target_grad = target->grad;
 
         if (!target_grad.valid())
@@ -1702,8 +1703,7 @@ struct ScatterEdge : Special {
 struct PrefixSumEdge : Special {
     PrefixSumEdge(bool exclusive) : m_exclusive(exclusive) { }
 
-    void forward(const Variable *source, Variable *target,
-                 uint32_t) const override {
+    void forward(const Variable *source, Variable *target, uint32_t) override {
         JitVar value = source->grad;
 
         if (value.size() != source->size)
@@ -1713,8 +1713,7 @@ struct PrefixSumEdge : Special {
         target->accum(value, source->size);
     }
 
-    void backward(Variable *source, const Variable *target,
-                  uint32_t) const override {
+    void backward(Variable *source, const Variable *target, uint32_t) override {
         JitVar value = target->grad;
         if (!value.valid())
             return;
@@ -2526,3 +2525,294 @@ const char *ad_var_graphviz() {
 
     return buffer.get();
 }
+
+// ==========================================================================
+// Custom operations
+// ==========================================================================
+
+struct CustomOpConnection : Special {
+    void backward(Variable *, const Variable *target, uint32_t) override {
+        const_cast<Variable *>(target)->ref_count_grad++;
+    }
+
+    void forward(const Variable *source, Variable *, uint32_t) override {
+        const_cast<Variable *>(source)->ref_count_grad++;
+    }
+};
+
+/// Recreate the suspend/resume status in place when this callback edge was created
+struct PushScope {
+    PushScope(const Scope &scope) {
+        std::vector<Scope> &scopes = local_state.scopes;
+        scopes.push_back(scope);
+
+        if (scopes.size() >= 2) {
+            Scope &child_scope  = scopes[scopes.size() - 1],
+                  &parent_scope = scopes[scopes.size() - 2];
+            if (parent_scope.isolate) {
+                child_scope.isolate = true;
+                child_scope.counter =
+                    std::max(child_scope.counter, parent_scope.counter);
+            }
+        }
+    }
+
+    ~PushScope() {
+        std::vector<Scope> &scopes = local_state.scopes;
+
+        if (scopes.size() >= 2) {
+            Scope &child_scope  = scopes[scopes.size() - 1],
+                  &parent_scope = scopes[scopes.size() - 2];
+
+            if (child_scope.isolate && !child_scope.postponed.empty()) {
+                if (!parent_scope.isolate)
+                    ad_fail("PushScope::~PushScope(): internal error!");
+
+                parent_scope.postponed.insert(
+                    parent_scope.postponed.end(),
+                    child_scope.postponed.begin(),
+                    child_scope.postponed.end()
+                );
+            }
+        } else if (scopes.size() == 0) {
+            ad_fail("PushScope::~PushScope(): underflow!");
+        }
+
+        scopes.pop_back();
+    }
+};
+
+
+struct CustomOpSpecial : Special {
+    nanobind::ref<dr::detail::CustomOpBase> m_op;
+    Scope m_scope;
+
+    CustomOpSpecial(dr::detail::CustomOpBase *op, Scope &&scope)
+        : m_op(op), m_scope(std::move(scope)) { }
+
+    void backward(Variable *, const Variable *target, uint32_t flags) override {
+        ad_log("ad_traverse(): evaluating backward derivative of custom "
+               "operation \"%s\"..", m_op->name());
+
+        uint32_t edge = target->next_fwd;
+
+        /* leave critical section */ {
+            unlock_guard<std::mutex> guard(state.mutex);
+            PushScope push(m_scope);
+            m_op->backward();
+        }
+
+        if (edge && state.edges[edge].next_fwd) { // fan-in > 1, update ref counts
+            do {
+                const Edge &e = state.edges[edge];
+                Variable *v = state[e.target];
+
+                if (v->ref_count_grad > 0 && --v->ref_count_grad == 0) {
+                    if (((flags & (uint32_t) dr::ADFlag::ClearInterior) && v->next_fwd != 0) ||
+                        ((flags & (uint32_t) dr::ADFlag::ClearInput) && v->next_fwd == 0))
+                        v->grad = JitVar();
+                }
+                edge = e.next_fwd;
+            } while (edge);
+        }
+    }
+
+    void forward(const Variable *source, Variable *, uint32_t flags) override {
+        ad_log("ad_traverse(): evaluating forward derivative of custom "
+               "operation \"%s\"..", m_op->name());
+
+        uint32_t edge = source->next_bwd;
+
+        /* leave critical section */ {
+            unlock_guard<std::mutex> guard(state.mutex);
+            PushScope push(m_scope);
+            m_op->forward();
+        }
+
+        if (edge && state.edges[edge].next_bwd) { // fan-in > 1, update ref counts
+            do {
+                const Edge &e = state.edges[edge];
+                Variable *v = state[e.source];
+
+                if (v->ref_count_grad > 0 && --v->ref_count_grad == 0) {
+                    if (((flags & (uint32_t) dr::ADFlag::ClearInterior) && v->next_bwd != 0) ||
+                        ((flags & (uint32_t) dr::ADFlag::ClearInput) && v->next_bwd == 0))
+                        v->grad = JitVar();
+                }
+
+                edge = e.next_bwd;
+            } while (edge);
+        }
+    }
+};
+
+void ad_add_special(uint32_t v0i, uint32_t v1i,
+                    std::unique_ptr<Special> special) {
+    Variable *v0 = state[v0i], *v1 = state[v1i];
+
+    if (v0->counter >= v1->counter)
+        ad_fail("ad_add_special(): internal error!");
+
+    uint32_t edge_index_new = ad_edge_new();
+
+    Edge &edge = state.edges[edge_index_new];
+    edge.source = v0i;
+    edge.target = v1i;
+    edge.special = std::move(special);
+
+    edge.next_fwd = v0->next_fwd;
+    edge.next_bwd = v1->next_bwd;
+
+    v0->next_fwd = edge_index_new;
+    v1->next_bwd = edge_index_new;
+
+    ad_var_inc_ref_int(v0i, v0);
+}
+
+bool ad_custom_op(dr::detail::CustomOpBase *op) {
+    tsl::robin_set<ADIndex, UInt32Hasher> inputs, outputs;
+
+    for (size_t i = 0; i < op->m_input_indices.size(); ++i)
+        inputs.insert(op->m_input_indices[i]);
+    for (size_t i = 0; i < op->m_output_indices.size(); ++i)
+        outputs.insert(op->m_output_indices[i]);
+
+    if (inputs.empty() || outputs.empty() || op->m_counter == 0)
+        return false;
+
+    const char *name = op->name();
+    ad_log("ad_var_custom_op(\"%s\", n_in=%zu, n_out=%zu)", name, inputs.size(),
+           outputs.size());
+
+    std::lock_guard<std::mutex> guard(state.mutex);
+
+    bool symbolic = jit_flag(JitFlag::Recording);
+
+    ADIndex v0i, v1i;
+
+    if (inputs.size() == 1) {
+        v0i = *inputs.begin();
+        ad_log(" - in: a%u", v0i);
+        ad_var_inc_ref_int(v0i, state[v0i]);
+    } else {
+        auto [idx, v0] = ad_var_new(op->m_backend, 1, VarType::Void, symbolic,
+                                    "CustomOp[in]");
+        v0->counter = op->m_counter;
+        v0->size = 0;
+        v0i = idx;
+
+        for (uint32_t i: inputs) {
+            ad_log(" - in: a%u", i);
+            ad_add_special(i, v0i, std::make_unique<CustomOpConnection>());
+        }
+    }
+
+    if (outputs.size() == 1) {
+        v1i = *outputs.begin();
+        ad_log(" - out: a%u", v1i);
+        ad_var_inc_ref_int(v1i, state[v1i]);
+    } else {
+        auto [idx, v1] = ad_var_new(op->m_backend, 1, VarType::Void, symbolic,
+                                    "CustomOp[out]");
+        v1->counter = op->m_counter + 1;
+        v1i = idx;
+
+        for (uint32_t o: outputs) {
+            ad_log(" - out: a%u", o);
+            ad_add_special(v1i, o, std::make_unique<CustomOpConnection>());
+        }
+    }
+
+    const std::vector<Scope> &scopes = local_state.scopes;
+    Scope scope;
+
+    if (!scopes.empty()) {
+        scope = scopes.back();
+        scope.postponed.clear();
+    }
+
+    ad_add_special(v0i, v1i,
+                   std::make_unique<CustomOpSpecial>(op, std::move(scope)));
+
+    Variable *v0 = state[v0i], *v1 = state[v1i];
+
+    if (v1->flags & (uint8_t) VariableFlags::FreeLabel)
+        free(v1->label);
+
+    const char *prefix = jit_prefix(op->m_backend);
+    if (!prefix)
+        v1->label = strdup(name);
+    else
+        v1->label = concat(prefix, name);
+
+    v1->flags |= (uint8_t) VariableFlags::FreeLabel |
+                 (uint8_t) VariableFlags::CustomLabel;
+
+    ad_var_dec_ref_int(v0i, v0);
+    ad_var_dec_ref_int(v1i, v1);
+
+    op->m_counter = 0;
+    return true;
+}
+
+NAMESPACE_BEGIN(drjit)
+NAMESPACE_BEGIN(detail)
+
+CustomOpBase::CustomOpBase() {
+    std::lock_guard<std::mutex> guard(state.mutex);
+    m_backend = JitBackend::None;
+    m_counter = state.counter;
+    state.counter += 2;
+}
+
+CustomOpBase::~CustomOpBase() {
+    std::lock_guard<std::mutex> guard(state.mutex);
+
+    for (size_t i = 0, size = m_input_indices.size(); i < size; ++i) {
+        ADIndex ad_index = m_input_indices[i];
+        ad_var_dec_ref_int(ad_index, state[ad_index]);
+    }
+
+    for (size_t i = 0, size = m_output_indices.size(); i < size; ++i) {
+        ADIndex ad_index = m_output_indices[i];
+        ad_var_dec_ref_int(ad_index, state[ad_index]);
+    }
+}
+
+void CustomOpBase::add_index(JitBackend backend, ADIndex index, bool input) {
+    if (m_backend != backend) {
+        if (m_backend != JitBackend::None)
+            ad_raise("CustomOpBase::add_index(): can't mix and match backends!");
+        m_backend = backend;
+    }
+
+    const std::vector<Scope> &scopes = local_state.scopes;
+    if (!scopes.empty())
+        scopes.back().maybe_disable(index);
+
+    if (!index)
+        return;
+
+    std::lock_guard<std::mutex> guard(state.mutex);
+    ad_var_inc_ref_int(index, state[index]);
+
+    if (input)
+        m_input_indices.push_back(index);
+    else
+        m_output_indices.push_back(index);
+}
+
+void CustomOpBase::forward() {
+    throw std::runtime_error(std::string(name()) +
+                             "::forward(): operation is unimplemented!");
+}
+
+void CustomOpBase::backward() {
+    throw std::runtime_error(std::string(name()) +
+                             "::backward(): operation is unimplemented!");
+}
+
+const char *CustomOpBase::name() const { return "CustomOpBase"; }
+
+NAMESPACE_END(detail)
+NAMESPACE_END(drjit)

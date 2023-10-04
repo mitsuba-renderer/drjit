@@ -592,9 +592,9 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
         return out;
     }
 
-    Value dot_(const Derived &a) const {
-        Value result;
+    auto dot_(const Derived &a) const {
         if constexpr (IsArithmetic) {
+            Value result;
 			if constexpr (is_array_v<Value>) {
                 size_t sa = derived().size(), sb = a.size(),
                        sr = sa > sb ? sa : sb;
@@ -615,11 +615,11 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                     for (size_t i = 1; i < sr; ++i)
                         result += derived().entry(i) * a.entry(i);
                 }
+                return result;
             } else {
-				result = slice<Value>(sum(derived() * a));
+                return sum(derived() * a);
 			}
 		}
-        return result;
     }
 
     Value sum_() const {

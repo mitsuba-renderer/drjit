@@ -53,8 +53,9 @@ static nb::object whos(bool ad, bool as_string) {
 
 void set_label(nb::handle h, nb::str label) {
     nb::handle tp = h.type();
+    bool is_drjit = is_drjit_type(tp);
 
-    if (is_drjit_type(tp)) {
+    if (is_drjit) {
         const ArraySupplement &s = supp(tp);
         if ((JitBackend) s.backend == JitBackend::None)
             return;
@@ -71,11 +72,11 @@ void set_label(nb::handle h, nb::str label) {
         }
     }
 
-    if (nb::isinstance<nb::sequence>(h)) {
+    if (is_drjit || tp.is(&PyList_Type) || tp.is(&PyTuple_Type)) {
         size_t size = nb::len(h);
         for (size_t i = 0; i < size; ++i)
             set_label(h[i], nb::str("{}_{}").format(label, nb::int_(i)));
-    } else if (nb::isinstance<nb::dict>(h)) {
+    } else if (tp.is(&PyDict_Type)) {
         for (auto [k, v] : nb::borrow<nb::dict>(h))
             set_label(v, nb::str("{}_{}").format(label, k));
     } else {
@@ -88,8 +89,14 @@ void set_label(nb::handle h, nb::str label) {
 }
 
 void set_label_2(nb::kwargs kwargs) {
-    for (auto [k, v] : kwargs)
-        set_label(v, nb::str(k));
+    for (auto [k, v] : kwargs) {
+        if (v.type().is(&PyUnicode_Type))
+            nb::detail::raise("drjit.set_label(): You passed a ``str``-valued "
+                              "keyword argument where an array was expected. "
+                              "To use the kwargs-style interface, call this "
+                              "function as follows: ``set_label(x=x, y=y)``");
+        set_label(v, nb::borrow<nb::str>(k));
+    }
 }
 
 static nb::object label(nb::handle h) {

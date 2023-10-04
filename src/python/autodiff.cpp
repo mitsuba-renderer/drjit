@@ -9,7 +9,8 @@
 */
 
 #include <drjit/autodiff.h>
-#include <nanobind/operators.h>
+#include <drjit/custom.h>
+#include <nanobind/trampoline.h>
 #include "autodiff.h"
 #include "apply.h"
 #include "meta.h"
@@ -51,6 +52,26 @@ static void set_grad_enabled(nb::handle h, bool enable_) {
     traverse("drjit.set_grad_enabled", SetGradEnabled{ enable_ }, h);
 }
 
+static void new_grad(nb::handle h) {
+    struct NewGrad : TraverseCallback {
+        void operator()(nb::handle h) const override {
+            nb::handle tp = h.type();
+            const ArraySupplement &s = supp(tp);
+            if (!s.is_diff || !is_float(s))
+                return;
+
+            nb::object tmp = nb::inst_alloc(tp);
+            uint64_t new_index = ad_var_new((uint32_t) s.index(inst_ptr(h)));
+            s.init_index(new_index, inst_ptr(tmp));
+            ad_var_dec_ref(new_index);
+            nb::inst_mark_ready(tmp);
+            nb::inst_replace_move(h, tmp);
+        }
+    };
+
+    traverse("drjit.detail.new_grad", NewGrad{ }, h);
+}
+
 static void enable_grad(nb::handle h) { set_grad_enabled(h, true); }
 static void disable_grad(nb::handle h) { set_grad_enabled(h, false); }
 static void enable_grad_2(nb::args args) { enable_grad(args); }
@@ -76,7 +97,7 @@ static bool grad_enabled(nb::handle h) {
 
 static bool grad_enabled_2(nb::args args) { return grad_enabled(args); }
 
-static nb::object detach(nb::handle h, bool preserve_type_) {
+static nb::object detach(nb::handle h, bool preserve_type_ = true) {
     struct Detach : TransformCallback {
         bool preserve_type;
         Detach(bool preserve_type) : preserve_type(preserve_type) { }
@@ -106,7 +127,7 @@ static nb::object detach(nb::handle h, bool preserve_type_) {
     return transform("drjit.detach", Detach{ preserve_type_ }, h);
 }
 
-static nb::object grad(nb::handle h, bool preserve_type_) {
+static nb::object grad(nb::handle h, bool preserve_type_ = true) {
     struct Grad : TransformCallback {
         bool preserve_type;
         Grad(bool preserve_type) : preserve_type(preserve_type) { }
@@ -237,6 +258,7 @@ static void forward_from(nb::handle_t<dr::ArrayBase> h, uint32_t flags) {
         clear_grad(h);
         ::accum_grad(h, nb::float_(1.0));
         enqueue_impl(dr::ADMode::Forward, h);
+        nb::gil_scoped_release r;
         ad_traverse(dr::ADMode::Forward, flags);
     }
 }
@@ -246,6 +268,7 @@ static void backward_from(nb::handle_t<dr::ArrayBase> h, uint32_t flags) {
         clear_grad(h);
         ::accum_grad(h, nb::float_(1.0));
         enqueue_impl(dr::ADMode::Backward, h);
+        nb::gil_scoped_release r;
         ad_traverse(dr::ADMode::Backward, flags);
     }
 }
@@ -253,6 +276,7 @@ static void backward_from(nb::handle_t<dr::ArrayBase> h, uint32_t flags) {
 static nb::object forward_to(nb::handle h, uint32_t flags) {
     if (check_grad_enabled("drjit.forward_to", h, flags)) {
         enqueue_impl(dr::ADMode::Backward, h);
+        nb::gil_scoped_release r;
         ad_traverse(dr::ADMode::Forward, flags);
     }
     return grad(h, true);
@@ -261,6 +285,7 @@ static nb::object forward_to(nb::handle h, uint32_t flags) {
 static nb::object backward_to(nb::handle h, uint32_t flags) {
     if (check_grad_enabled("drjit.backward_to", h, flags)) {
         enqueue_impl(dr::ADMode::Forward, h);
+        nb::gil_scoped_release r;
         ad_traverse(dr::ADMode::Backward, flags);
     }
     return grad(h, true);
@@ -306,14 +331,164 @@ void collect_indices(nb::handle h, nb::list result_) {
         void operator()(nb::handle h) const override {
             nb::handle tp = h.type();
             const ArraySupplement &s = supp(tp);
-            if (!s.index)
-                return;
-
-            result.append(s.index(inst_ptr(h)));
+            if (s.index)
+                result.append(s.index(inst_ptr(h)));
         }
     };
 
-    traverse("drjit.collect_indices", CollectIndices { result_ }, h);
+    traverse("drjit.detail.collect_indices", CollectIndices { result_ }, h);
+}
+
+class PyCustomOp : public drjit::detail::CustomOpBase {
+    NB_TRAMPOLINE(drjit::detail::CustomOpBase, 3);
+public:
+    PyCustomOp() = default;
+    using ticket = nb::detail::ticket;
+
+    nb::str type_name() const { return nb::inst_name(nb_trampoline.base()); }
+
+    void forward() override {
+        ticket t(nb_trampoline, "forward", false);
+        if (t.key.is_valid())
+            nb_trampoline.base().attr(t.key)();
+        else
+            nb::detail::raise("%s.forward(): not implemented!", type_name().c_str());
+    }
+
+    void backward() override {
+        ticket t(nb_trampoline, "backward", false);
+        if (t.key.is_valid())
+            nb_trampoline.base().attr(t.key)();
+        else
+            nb::detail::raise("%s.backward(): not implemented!", type_name().c_str());
+    }
+
+    void eval(nb::args, nb::kwargs) {
+        nb::detail::raise("%s.eval(): not implemented!", type_name().c_str());
+    }
+
+    const char *name() const override {
+        if (!m_name_cache.empty())
+            return m_name_cache.c_str();
+
+        ticket t(nb_trampoline, "name", false);
+        if (t.key.is_valid())
+            m_name_cache = nb::cast<const char *>(nb_trampoline.base().attr(t.key)());
+        else
+            m_name_cache = type_name().c_str();
+
+        return m_name_cache.c_str();
+    }
+
+    nb::object add_generic(const char *name, nb::handle h, bool input_) {
+        struct AddInOut : TransformCallback {
+            dr::detail::CustomOpBase &op;
+            bool input;
+
+            AddInOut(dr::detail::CustomOpBase &op, bool input)
+                : op(op), input(input) { }
+
+            void operator()(nb::handle h1, nb::handle h2) const override {
+                const ArraySupplement &s = supp(h1.type());
+                uint32_t ad_index = (uint32_t) (s.index(inst_ptr(h1)) >> 32);
+                op.add_index((JitBackend) s.backend, ad_index, input);
+                s.init_index(((uint64_t) ad_index) << 32, inst_ptr(h2));
+            }
+        };
+
+        return transform(name, AddInOut { *this, input_ }, h);
+    }
+
+    nb::object grad_in(nb::handle key) {
+        nb::object result =
+            nb::borrow(PyDict_GetItem(m_inputs.ptr(), key.ptr()));
+        if (!result.is_valid())
+            nb::detail::raise("drjit.CustomOp.grad_in(): could not find an "
+                              "input argument named \"%s\"", nb::str(key).c_str());
+        return ::grad(result);
+    }
+
+    void set_grad_in(nb::handle key, nb::handle value) {
+        nb::object result =
+            nb::borrow(PyDict_GetItem(m_inputs.ptr(), key.ptr()));
+        if (!result.is_valid())
+            nb::detail::raise("drjit.CustomOp.set_grad_in(): could not find an "
+                              "input argument named \"%s\"", nb::str(key).c_str());
+        accum_grad(result, value);
+    }
+
+    nb::object grad_out() { return ::grad(m_output); }
+    void set_grad_out(nb::handle value) {
+        accum_grad(m_output, value);
+    }
+
+    nb::object add_input_v(nb::handle h) {
+        return add_generic("drjit.CustomOp.add_input", h, true);
+    }
+
+    nb::object add_output_v(nb::handle h) {
+        return add_generic("drjit.CustomOp.add_output", h, false);
+    }
+
+    void add_input(nb::handle h) { (void) add_input_v(h); }
+    void add_output(nb::handle h) { (void) add_output_v(h); }
+
+    void set_input(const nb::dict &d) {
+        m_inputs = nb::borrow<nb::dict>(add_input_v(d));
+    }
+
+    void set_output(const nb::handle &h) {
+        m_output = add_output_v(h);
+    }
+
+private:
+    mutable std::string m_name_cache;
+    nb::dict m_inputs;
+    nb::object m_output;
+};
+
+nb::object custom(nb::type_object_t<PyCustomOp> cls, nb::args args, nb::kwargs kwargs) {
+    try {
+        nb::object op = cls();
+
+        auto eval_func = op.attr("eval"),
+             eval_code = eval_func.attr("__code__"),
+             eval_argc = eval_code.attr("co_argcount"),
+             eval_argn = eval_code.attr("co_varnames");
+
+        nb::object output = eval_func(*detach(args), **detach(kwargs));
+
+        // Ensure that the output is registered with the AD layer without depending
+        // on prevous computation. That dependence is reintroduced below.
+        ::new_grad(output);
+
+        size_t i = 0, argc = nb::cast<size_t>(eval_argc);
+        for (nb::handle arg: args) {
+            if (i + 1 < argc)
+                kwargs[eval_argn[i + 1]] = arg;
+            i++;
+        }
+
+        PyCustomOp *op_cpp = nb::cast<PyCustomOp *>(op);
+        op_cpp->set_input(kwargs);
+        op_cpp->set_output(output);
+
+        if (!ad_custom_op(op_cpp))
+            ::disable_grad(output);
+
+        return output;
+    } catch (nb::python_error &e) {
+        nb::str tp_name = nb::type_name(cls);
+        nb::raise_from(e, PyExc_RuntimeError,
+                       "drjit.custom(<%U>): error while performing a custom "
+                       "differentiable operation. (see above).", tp_name.ptr());
+    } catch (const std::exception &e) {
+        nb::str tp_name = nb::type_name(cls);
+        nb::chain_error(PyExc_RuntimeError,
+                        "drjit.custom(<%U>): error while performing a custom "
+                        "differentiable operation: %s.", tp_name.ptr(), e.what());
+        nb::detail::raise_python_error();
+    }
 }
 
 void export_autodiff(nb::module_ &m) {
@@ -332,37 +507,42 @@ void export_autodiff(nb::module_ &m) {
         .value("Default", dr::ADFlag::Default, doc_ADFlag_Default);
 
     m.def("set_grad_enabled", &set_grad_enabled, doc_set_grad_enabled)
-     .def("enable_grad", &enable_grad, doc_enable_grad)
-     .def("enable_grad", &enable_grad_2)
-     .def("disable_grad", &disable_grad, doc_disable_grad)
+     .def("enable_grad", &::enable_grad, doc_enable_grad)
+     .def("enable_grad", &::enable_grad_2)
+     .def("disable_grad", &::disable_grad, doc_disable_grad)
      .def("disable_grad", &disable_grad_2)
-     .def("grad_enabled", &grad_enabled, doc_grad_enabled)
-     .def("grad_enabled", &grad_enabled_2)
+     .def("grad_enabled", &::grad_enabled, doc_grad_enabled)
+     .def("grad_enabled", &::grad_enabled_2)
      .def("set_grad", &::set_grad, "target"_a, "source"_a, doc_set_grad)
      .def("accum_grad", &::accum_grad, "target"_a, "source"_a, doc_accum_grad)
      .def("clear_grad", &::clear_grad, doc_clear_grad)
      .def("replace_grad", &::replace_grad, doc_replace_grad)
-     .def("grad", &grad, "arg"_a, "preserve_type"_a = true, doc_grad)
-     .def("detach", &detach, "arg"_a, "preserve_type"_a = true, doc_detach)
+     .def("grad", &::grad, "arg"_a, "preserve_type"_a = true, doc_grad)
+     .def("detach", &::detach, "arg"_a, "preserve_type"_a = true, doc_detach)
      .def("enqueue", &enqueue_impl, "mode"_a, "arg"_a, doc_enqueue)
-     .def("enqueue", [](dr::ADMode mode, nb::args args) { enqueue_impl(mode, args); }, "mode"_a, "args"_a)
-     .def("traverse", &ad_traverse, "mode"_a, "flags"_a = dr::ADFlag::Default, doc_traverse)
-     .def("forward_from", &forward_from,
+     .def("enqueue",
+          [](dr::ADMode mode, nb::args args) {
+              enqueue_impl(mode, args);
+          }, "mode"_a, "args"_a)
+     .def("traverse", &ad_traverse,
+          "mode"_a, "flags"_a = dr::ADFlag::Default,
+          doc_traverse)
+     .def("forward_from", &::forward_from,
           "arg"_a, "flags"_a = dr::ADFlag::Default,
           nb::raw_doc(doc_forward_from))
-     .def("forward", &forward_from,
+     .def("forward", &::forward_from,
           "arg"_a, "flags"_a = dr::ADFlag::Default,
           nb::raw_doc(doc_forward))
-     .def("backward_from", &backward_from,
+     .def("backward_from", &::backward_from,
           "arg"_a, "flags"_a = dr::ADFlag::Default,
           nb::raw_doc(doc_backward_from))
-     .def("backward", &backward_from,
+     .def("backward", &::backward_from,
           "arg"_a, "flags"_a = dr::ADFlag::Default,
           nb::raw_doc(doc_backward))
-     .def("forward_to", &forward_to,
+     .def("forward_to", &::forward_to,
           "arg"_a, "flags"_a = dr::ADFlag::Default,
           nb::raw_doc(doc_forward_to))
-     .def("backward_to", &backward_to,
+     .def("backward_to", &::backward_to,
           "arg"_a, "flags"_a = dr::ADFlag::Default,
           nb::raw_doc(doc_backward_to))
      .def("forward_to", &forward_to_2, "args"_a, "kwargs"_a)
@@ -377,16 +557,16 @@ void export_autodiff(nb::module_ &m) {
         .value("Resume", dr::ADScope::Resume)
         .value("Isolate", dr::ADScope::Isolate);
 
-    struct NoopContextManager { };
+    struct NullContextManager { };
     struct ADContextManager {
         drjit::ADScope scope;
         std::vector<uint64_t> indices;
     };
 
-    nb::class_<NoopContextManager>(detail, "NoopContextManager")
+    nb::class_<NullContextManager>(detail, "NullContextManager")
         .def(nb::init<>())
-        .def("__enter__", [](NoopContextManager&) { })
-        .def("__exit__", [](NoopContextManager&, nb::handle, nb::handle, nb::handle) {
+        .def("__enter__", [](NullContextManager&) { })
+        .def("__exit__", [](NullContextManager&, nb::handle, nb::handle, nb::handle) {
              }, nb::arg().none(), nb::arg().none(), nb::arg().none());
 
     nb::class_<ADContextManager>(detail, "ADContextManager")
@@ -401,4 +581,20 @@ void export_autodiff(nb::module_ &m) {
              }, nb::arg().none(), nb::arg().none(), nb::arg().none());
 
     detail.def("collect_indices", &collect_indices);
+    detail.def("new_grad", &new_grad);
+
+    nb::class_<PyCustomOp, nb::intrusive_base>(m, "CustomOp", doc_CustomOp)
+        .def(nb::init<>())
+        .def("forward", &PyCustomOp::forward, doc_CustomOp_forward)
+        .def("backward", &PyCustomOp::backward, doc_CustomOp_backward)
+        .def("name", &PyCustomOp::name, doc_CustomOp_name)
+        .def("eval", &PyCustomOp::eval, doc_CustomOp_eval)
+        .def("grad_in", &PyCustomOp::grad_in, doc_CustomOp_grad_in)
+        .def("set_grad_in", &PyCustomOp::set_grad_in, doc_CustomOp_set_grad_in)
+        .def("grad_out", &PyCustomOp::grad_out, doc_CustomOp_grad_out)
+        .def("set_grad_out", &PyCustomOp::set_grad_out, doc_CustomOp_set_grad_out)
+        .def("add_input", &PyCustomOp::add_input, doc_CustomOp_add_input)
+        .def("add_output", &PyCustomOp::add_output, doc_CustomOp_add_output);
+
+    m.def("custom", &custom, doc_custom);
 }

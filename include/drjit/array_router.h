@@ -743,7 +743,7 @@ bool allclose(const T1 &a, const T2 &b, float rtol = 1e-5f, float atol = 1e-8f,
 // -----------------------------------------------------------------------
 
 /// Forward declarations
-template <bool UnderlyingType = true, typename T> decltype(auto) detach(T &&);
+template <bool PreserveType = true, typename T> decltype(auto) detach(T &&);
 template <typename T, typename... Ts> size_t width(const T &, const Ts& ...);
 template <typename T> bool schedule(const T &value);
 
@@ -1216,46 +1216,6 @@ decltype(auto) migrate(const T &value, TargetType target) {
     }
 }
 
-template <typename ResultType = void, typename T>
-decltype(auto) slice(const T &value, size_t index = -1) {
-    schedule(value);
-    if constexpr (depth_v<T> > 1) {
-        using Value = std::decay_t<decltype(slice(value.entry(0), index))>;
-        using Result = typename T::template ReplaceValue<Value>;
-        Result result;
-        if constexpr (Result::Size == Dynamic)
-            result = empty<Result>(value.size());
-        for (size_t i = 0; i < value.size(); ++i)
-            result.set_entry(i, slice(value.entry(i), index));
-        return result;
-    } else if constexpr (is_drjit_struct_v<T>) {
-        static_assert(!std::is_same_v<ResultType, void>,
-                      "slice(): return type should be specified for drjit struct!");
-        ResultType result;
-        struct_support_t<T>::apply_2(
-            value, result,
-            [index](auto const &x1, auto &x2) DRJIT_INLINE_LAMBDA {
-                x2 = slice(x1, index);
-            });
-        return result;
-    } else if constexpr (is_dynamic_array_v<T>) {
-        if (index == (size_t) -1) {
-            if (width(value) > 1)
-                drjit_raise("slice(): variable contains more than a single entry!");
-            index = 0;
-        }
-        return scalar_t<T>(value.entry(index));
-    } else if constexpr (is_diff_v<T>) { // Handle DiffArray<float> case
-        if (index != (size_t) -1 && index > 0)
-            drjit_raise("slice(): index out of bound!");
-        return value.detach_();
-    } else {
-        if (index != (size_t) -1 && index > 0)
-            drjit_raise("slice(): index out of bound!");
-        return value;
-    }
-}
-
 template <typename Array> Array reverse(const Array &value) {
     uint32_t size = (uint32_t) value.size();
 
@@ -1695,9 +1655,9 @@ template <typename T> struct suspend_grad {
     bool condition;
 };
 
-template <bool UnderlyingType, typename T>
+template <bool PreserveType, typename T>
 decltype(auto) detach(T &&value) {
-    using Result = std::conditional_t<UnderlyingType, detached_t<T>, std::decay_t<T>>;
+    using Result = std::decay_t<std::conditional_t<PreserveType, T, detached_t<T>>>;
 
     if constexpr (is_diff_v<T>) {
         if constexpr (depth_v<T> > 1) {
@@ -1706,18 +1666,18 @@ decltype(auto) detach(T &&value) {
                 result = empty<Result>(value.size());
 
             for (size_t i = 0; i < value.size(); ++i)
-                result.entry(i) = detach<UnderlyingType>(value.entry(i));
+                result.entry(i) = detach<PreserveType>(value.entry(i));
 
             return result;
         } else {
             if constexpr (is_tensor_v<T>) {
-                return Result(detach<UnderlyingType>(value.array()),
+                return Result(detach<PreserveType>(value.array()),
                               value.ndim(), value.shape());
             } else {
-                if constexpr (UnderlyingType)
-                    return value.derived().detach_();
-                else
+                if constexpr (PreserveType)
                     return Result(value.derived().detach_());
+                else
+                    return value.derived().detach_();
             }
         }
     } else if constexpr (is_drjit_struct_v<T>) {
@@ -1726,7 +1686,7 @@ decltype(auto) detach(T &&value) {
         struct_support_t<T>::apply_2(
             value, result,
             [](auto const &x1, auto &x2) DRJIT_INLINE_LAMBDA {
-                x2 = detach<UnderlyingType>(x1);
+                x2 = detach<PreserveType>(x1);
             });
 
         return result;
@@ -1735,13 +1695,13 @@ decltype(auto) detach(T &&value) {
     }
 }
 
-template <bool Underlying = true, typename T>
+template <bool PreserveType = true, typename T>
 auto grad(const T &value) {
-    using Result = std::conditional_t<Underlying, detached_t<T>, T>;
+    using Result = std::conditional_t<PreserveType, T, detached_t<T>>;
 
     if constexpr (is_diff_v<T>) {
         if constexpr (is_tensor_v<T>) {
-            return Result(grad<Underlying>(value.array()),
+            return Result(grad<PreserveType>(value.array()),
                           value.ndim(), value.shape());
         } else if constexpr (depth_v<T> > 1) {
             Result result;
@@ -1749,11 +1709,14 @@ auto grad(const T &value) {
                 result = empty<Result>(value.size());
 
             for (size_t i = 0; i < value.size(); ++i)
-                result.entry(i) = grad<Underlying>(value.entry(i));
+                result.entry(i) = grad<PreserveType>(value.entry(i));
 
             return result;
         } else {
-            return Result::steal(value.derived().grad_());
+            if constexpr (PreserveType)
+                return Result(value.derived().grad_());
+            else
+                return value.derived().grad_();
         }
     } else if constexpr (is_drjit_struct_v<T>) {
         Result result;
@@ -1761,7 +1724,7 @@ auto grad(const T &value) {
         struct_support_t<T>::apply_2(
             value, result,
             [](auto const &x1, auto &x2) DRJIT_INLINE_LAMBDA {
-                x2 = grad<Underlying>(x1);
+                x2 = grad<PreserveType>(x1);
             });
 
         return result;

@@ -177,6 +177,10 @@ extern DRJIT_EXTRA_EXPORT void ad_scope_enter(drjit::ADScope type, size_t size,
 /// Indicate that the program left a scope which modifies the AD layer's behavior
 extern DRJIT_EXTRA_EXPORT void ad_scope_leave(bool process_postponed);
 
+namespace drjit { namespace detail { class CustomOpBase; }};
+
+extern DRJIT_EXTRA_EXPORT bool ad_custom_op(drjit::detail::CustomOpBase *);
+
 #if defined(__cplusplus)
 }
 #endif

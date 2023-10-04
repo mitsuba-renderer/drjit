@@ -1,4 +1,5 @@
 from . import detail
+import typing as _typing
 
 with detail.scoped_rtld_deepbind():
     from . import drjit_ext
@@ -513,7 +514,7 @@ def suspend_grad(*args, when=True):
 
            # The following condition holds
            assert not dr.grad_enabled(x) and \
-                  dr.grad_enabled(y) 
+                  dr.grad_enabled(y)
 
     In contrast, a :py:func:`suspend_grad` environment without arguments that
     completely disables AD does *not* allow further variables to be registered:
@@ -538,7 +539,7 @@ def suspend_grad(*args, when=True):
           ``when=True``.
     """
     if not when:
-        return detail.NoopContextManager()
+        return detail.NullContextManager()
 
     array_indices = []
     detail.collect_indices(
@@ -547,7 +548,7 @@ def suspend_grad(*args, when=True):
     )
 
     if len(args) > 0 and len(array_indices) == 0:
-        array_indices = [0]
+        array_indices.append(0)
 
     return detail.ADContextManager(detail.ADScope.Suspend, array_indices)
 
@@ -565,7 +566,7 @@ def resume_grad(*args, when=True):
     .. code-block:: python
 
        with dr.suspend_grad():
-           # .. 
+           # ..
 
            with dr.resume_grad():
                # In this scope, the effect of the outer context
@@ -594,7 +595,7 @@ def resume_grad(*args, when=True):
           ``when=True``.
     """
     if not when:
-        return detail.NoopContextManager()
+        return detail.NullContextManager()
 
     array_indices = []
     detail.collect_indices(
@@ -603,7 +604,7 @@ def resume_grad(*args, when=True):
     )
 
     if len(args) > 0 and len(array_indices) == 0:
-        array_indices = [0]
+        array_indices.append(0)
 
     return detail.ADContextManager(detail.ADScope.Resume, array_indices)
 
@@ -656,6 +657,6 @@ def isolate_grad(when=True):
           ``when=True``.
     """
     if not when:
-        return detail.NoopContextManager()
+        return detail.NullContextManager()
 
     return detail.ADContextManager(detail.ADScope.Isolate, [])

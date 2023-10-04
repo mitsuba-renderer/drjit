@@ -5,7 +5,7 @@
 Changelog
 #########
 
-- ⚠️ The nanobind Python bindings were completely rewritten using a new
+- ⚠️ The Dr.Jit Python bindings were completely rewritten using a new
   architecture centered around the `nanobind
   <https://github.com/wjakob/nanobind>`__ library. This has the following
   consequences:
@@ -21,8 +21,8 @@ Changelog
 
 - Reductions operations previously existed as ordinary (e.g.,
   :py:func:`drjit.all`) and nested (e.g. ``drjit.all_nested``) variants. Both
-  are now subsumed by an optional ``axis:int|NoneType`` argument similar to
-  other array programming frameworks like NumPy.
+  are now subsumed by an optional ``axis`` argument similar to other array
+  programming frameworks like NumPy.
 
   All reduction functions (:py:func:`drjit.all` :py:func:`drjit.any`,
   :py:func:`drjit.sum`, :py:func:`drjit.prod`, :py:func:`drjit.min`,
