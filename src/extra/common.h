@@ -31,7 +31,9 @@ public:
     unlock_guard(T &mutex) : m_mutex(mutex) { m_mutex.unlock(); }
     ~unlock_guard() { m_mutex.lock(); }
     unlock_guard(const unlock_guard &) = delete;
+    unlock_guard(unlock_guard &&) = delete;
     unlock_guard &operator=(const unlock_guard &) = delete;
+    unlock_guard &operator=(unlock_guard &&) = delete;
 private:
     T &m_mutex;
 };

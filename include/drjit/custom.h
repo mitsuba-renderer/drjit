@@ -12,205 +12,74 @@
 
 #pragma once
 
+#define NB_INTRUSIVE_EXPORT DRJIT_EXTRA_EXPORT
+
 #include <drjit/autodiff.h>
+#include <drjit/extra.h>
 #include <drjit-core/containers.h>
 
+#include <nanobind/intrusive/counter.h>
+#include <nanobind/intrusive/ref.h>
+
 NAMESPACE_BEGIN(drjit)
-
-namespace detail { template <typename T> void clear_diff_vars(T &); };
-
-template <typename DiffType_, typename Output_, typename... Input>
-struct CustomOp : detail::DiffCallback {
-    template <typename C, typename... Ts> friend auto custom(const Ts&... input);
-public:
-    using DiffType = DiffType_;
-    using Type     = detached_t<DiffType_>;
-    using Output   = Output_;
-    using Inputs   = dr_tuple<Input...>;
-
-    template <size_t Index>
-    using InputType = typename Inputs::template type<Index>;
-
-    static constexpr bool ClearPrimal   = true;
-
-    virtual ~CustomOp() {
-        /* Important: reference counts associated with 'm_output' were cleared
-           in custom() below to ensure that this edge can be garbage collected.
-           We therefore need to clear the variable indices to prevent a second
-           reference count decrease from occurring. */
-        detail::clear_diff_vars(m_output);
-        clear_implicit_dependencies();
-    }
-
-    /**
-     * Evaluate the custom function in primal mode. The inputs will be detached
-     * from the AD graph, and the output *must* also be detached.
-     */
-    virtual Output eval(const Input&... input) = 0;
-
-    /// Callback to implement forward-mode derivatives
-    virtual void forward() = 0;
-
-    /// Callback to implement backward-mode derivatives
-    virtual void backward() = 0;
-
-    /// Return a descriptive name (used in GraphViz output)
-    virtual const char *name() const = 0;
-
-protected:
-
-    /// Check if gradients are enabled for a specific input variable
-    template <size_t Index = 0>
-    bool grad_enabled_in() const {
-        return grad_enabled(m_inputs->template get<Index>());
-    }
-
-    /// Access the gradient associated with the input argument 'Index' (fwd. mode AD)
-    template <size_t Index = 0>
-    InputType<Index> grad_in() const {
-        return grad<false>(m_inputs->template get<Index>());
-    }
-
-    /// Access the primal value associated with the input argument 'Index', requires ClearPrimal=false
-    template <size_t Index = 0>
-    InputType<Index> value_in() const {
-        return detach<false>(m_inputs->template get<Index>());
-    }
-
-    /// Access the gradient associated with the output argument (backward mode AD)
-    Output grad_out() const {
-        return grad<false, false>(m_output);
-    }
-
-    /// Accumulate a gradient value into an input argument (backward mode AD)
-    template <size_t Index = 0>
-    void set_grad_in(const InputType<Index> &value) {
-        accum_grad(m_inputs->template get<Index>(), value);
-    }
-
-    /// Accumulate a gradient value into the output argument (forward mode AD)
-    void set_grad_out(const Output &value) {
-        accum_grad<false>(m_output, value);
-    }
-
-    /**
-     * \brief Register an implicit input dependency of the operation on an AD
-     * variable
-     *
-     * This function should be called by the \ref eval() implementation when an
-     * operation has a differentiable dependence on an input that is not an
-     * input argument (e.g. a private instance variable).
-     */
-    void add_input_index(uint32_t index) {
-        if (!detail::ad_grad_enabled<Type>(index))
-            return;
-        detail::ad_inc_ref<Type>(index);
-        m_implicit_in.push_back(index);
-    }
-
-    /// Convenience wrapper around \ref add_input_index
-    template <typename T> void add_input(const T &value) {
-        if constexpr (is_diff_v<T>) {
-            if constexpr (depth_v<T> > 1) {
-                for (size_t i = 0; i < value.size(); ++i)
-                    add_input(value.entry(i));
-            } else {
-                add_input_index(value.index_ad());
-            }
-        } else if constexpr (is_drjit_struct_v<T>) {
-            struct_support_t<T>::apply_1(value,
-                [&](auto &x) { add_input(x); });
-        }
-    }
-
-    /**
-     * \brief Register an implicit output dependency of the operation on an AD
-     * variable
-     *
-     * This function should be called by the \ref eval() implementation when an
-     * operation has a differentiable dependence on an output that is not an
-     * return value of the operation (e.g. a private instance variable).
-     */
-    void add_output_index(uint32_t index) {
-        if (!detail::ad_grad_enabled<Type>(index))
-            return;
-        detail::ad_inc_ref<Type>(index);
-        m_implicit_out.push_back(index);
-    }
-
-    /// Convenience wrapper around \ref add_output_index
-    template <typename T> void add_output(const T &value) {
-        if constexpr (is_diff_v<T>) {
-            if constexpr (depth_v<T> > 1) {
-                for (size_t i = 0; i < value.size(); ++i)
-                    add_output(value.entry(i));
-            } else {
-                add_output_index(value.index_ad());
-            }
-        } else if constexpr (is_drjit_struct_v<T>) {
-            struct_support_t<T>::apply_1(value,
-                [&](auto &x) { add_output(x); });
-        }
-    }
-
-    /// Release the implicit dependencies registered via add_input/add_output
-    void clear_implicit_dependencies() {
-        for (size_t i = 0; i < m_implicit_in.size(); ++i)
-            detail::ad_dec_ref<Type>(m_implicit_in[i]);
-        for (size_t i = 0; i < m_implicit_out.size(); ++i)
-            detail::ad_dec_ref<Type>(m_implicit_out[i]);
-        m_implicit_in.clear();
-        m_implicit_out.clear();
-    }
-protected:
-    dr_unique_ptr<Inputs> m_inputs;
-    Output m_output;
-    dr_vector<uint32_t> m_implicit_in, m_implicit_out;
-};
-
 NAMESPACE_BEGIN(detail)
 
-// Zero out indices of variables that are attached to the AD graph
-template <typename T>
-void clear_diff_vars(T &value) {
-    if constexpr (is_diff_v<T>) {
-        if constexpr (depth_v<T> > 1) {
-            for (size_t i = 0; i < value.size(); ++i)
-                clear_diff_vars(value.entry(i));
-        } else {
-            *value.index_ad_ptr() = 0;
-        }
-    } else if constexpr (is_drjit_struct_v<T>) {
-        struct_support_t<T>::apply_1(value,
-            [](auto &x) { clear_diff_vars(x); });
-    }
-}
+/**
+ * Base class used to realize custom differentiable operations.
+ *
+ * Dr.Jit can compute derivatives of builtin operations in both forward and
+ * reverse mode. In some cases, it may be useful or even necessary to tell
+ * it how a particular operation should be differentiated.
+ *
+ * To do so, extend this class and and provide callback functions that will be
+ * invoked when the AD backend traverses the associated node in the computation
+ * graph. This class also provides a convenient way of stashing temporary
+ * results during the original function evaluation that can be accessed later
+ * on as part of forward or reverse-mode differentiation.
+ */
 
-// Collect indices of variables that are attached to the AD graph
-template <typename T>
-void diff_vars(const T &value, size_t &counter, uint32_t *out) {
-    if constexpr (is_array_v<T>) {
-        if constexpr (depth_v<T> == 1) {
-            if constexpr (is_diff_v<T>) {
-                if (grad_enabled(value)) {
-                    if (out)
-                        out[counter] = value.index_ad();
-                    counter++;
-                }
-            }
-        } else {
-            for (size_t i = 0; i < value.size(); ++i)
-                diff_vars(value.entry(i), counter, out);
-        }
-    } else if constexpr (is_drjit_struct_v<T>) {
-        struct_support_t<T>::apply_1(value,
-            [&](auto &x) { diff_vars(x, counter, out); }
-        );
-    }
-}
+class DRJIT_EXTRA_EXPORT CustomOpBase : public nanobind::intrusive_base {
+    friend bool ::ad_custom_op(CustomOpBase*);
+public:
+    CustomOpBase();
+    CustomOpBase(const CustomOpBase &) = delete;
+    CustomOpBase(CustomOpBase &&) = delete;
+    CustomOpBase& operator=(const CustomOpBase &) = delete;
+    CustomOpBase& operator=(CustomOpBase &&) = delete;
 
-// Clear the primal values associated with an array
-template <typename T> T clear_primal(const T &value) {
+    virtual ~CustomOpBase();
+
+    /// Forward derivative callback, default implementation raises an exception
+    virtual void forward();
+
+    /// Backward derivative callback, default implementation raises an exception
+    virtual void backward();
+
+    /// Return a descriptive name (used in GraphViz output)
+    virtual const char *name() const;
+
+    /**
+     * \brief Register an implicit input or output dependence
+     *
+     * This function should be called by the \ref eval() implementation when an
+     * operation has a differentiable dependence on an *implicit* input (i.e.,
+     * one that is not a regular input argument of the operation, such as a
+     * private instance field).
+     *
+     * The function expects the AD index (``index_ad()``) value of the
+     * variable.
+     */
+    void add_index(JitBackend backend, uint32_t index, bool input);
+
+protected:
+    JitBackend m_backend;
+    uint64_t m_counter;
+    dr_vector<uint32_t> m_input_indices;
+    dr_vector<uint32_t> m_output_indices;
+};
+
+template <typename T>
+T ad_scan(CustomOpBase &op, const T &value, bool input) {
     if constexpr (is_diff_v<T>) {
         if constexpr (depth_v<T> > 1) {
             T result;
@@ -218,19 +87,21 @@ template <typename T> T clear_primal(const T &value) {
                 result = empty<T>(value.size());
 
             for (size_t i = 0; i < value.size(); ++i)
-                result.entry(i) = clear_primal(value.entry(i));
+                result.entry(i) = ad_scan(op, value.entry(i), input);
 
             return result;
         } else {
-            return T::create_borrow(value.index_ad(), typename T::Detached());
+            uint32_t ad_index = value.index_ad();
+            op.add_index(backend_v<T>, ad_index, input);
+            return T::borrow(((uint64_t) ad_index) << 32);
         }
     } else if constexpr (is_drjit_struct_v<T>) {
         T result;
 
         struct_support_t<T>::apply_2(
             value, result,
-            [](auto const &x1, auto &x2) DRJIT_INLINE_LAMBDA {
-                x2 = clear_primal(x1);
+            [&](auto const &x1, auto &x2) DRJIT_INLINE_LAMBDA {
+                x2 = ad_scan(op, x1, input);
             });
 
         return result;
@@ -239,106 +110,59 @@ template <typename T> T clear_primal(const T &value) {
     }
 }
 
+template <typename T> void new_grad(T &value) {
+    if constexpr (is_diff_v<T>) {
+        if constexpr (depth_v<T> > 1) {
+            for (size_t i = 0; i < value.size(); ++i)
+                new_grad(value.entry(i));
+        } else if constexpr (is_tensor_v<T>) {
+            new_grad(value.array());
+        } else {
+            value.new_grad_();
+        }
+    } else if constexpr (is_drjit_struct_v<T>) {
+        struct_support_t<T>::apply_1(value, [](auto &x) { new_grad(x); });
+    } else {
+        DRJIT_MARK_USED(value);
+    }
+}
+
 NAMESPACE_END(detail)
 
-template <typename Custom, typename... Input> auto custom(const Input&... input) {
-    using Type     = typename Custom::Type;
-    using Output   = typename Custom::Output;
+template <typename Output_, typename... Input_>
+class CustomOp : public detail::CustomOpBase {
+    template <typename Op, typename... Ts>
+    friend typename Op::Output custom(const Ts &...);
 
-    dr_unique_ptr<Custom> custom(new Custom());
+public:
+    using Base     = detail::CustomOpBase;
+    using Inputs   = dr_tuple<Input_...>;
+    using Output   = Output_;
 
-    Output output = custom->eval(detach<false>(input)...);
+    CustomOp(const Input_ &...in)
+        : m_inputs(detail::ad_scan(*this, Inputs(in...), true)) { }
 
-    if (grad_enabled(output))
-        drjit_raise("drjit::custom(): the return value of the CustomOp::eval() "
-                    "implementation was attached to the AD graph. This is not "
-                    "allowed.");
+private:
+    Inputs m_inputs;
+    Output m_output;
+};
 
-    // Collect the input autodiff variable indices
-    size_t diff_vars_in_ctr = 0;
-    (detail::diff_vars(input, diff_vars_in_ctr, nullptr), ...);
+template <typename Op, typename... Inputs>
+typename Op::Output custom(const Inputs &...inputs) {
+    nanobind::ref<Op> op = new Op(inputs...);
 
-    if (diff_vars_in_ctr > 0 || custom->m_implicit_in.size() > 0) {
-        uint32_t in_var  = detail::ad_new<Type>(nullptr, 0),
-                 out_var = detail::ad_new<Type>(nullptr, 0);
+    // Perform the operations
+    typename Op::Output output = op->eval(detach(inputs)...);
 
-        /* Gradients are enabled for at least one input, or the function
-           accesses an instance variable with enabled gradients */
-        enable_grad(output);
+    // Ensure that the output is registered with the AD layer without depending
+    // on prevous computation. That dependence is reintroduced below.
+    detail::new_grad(output);
 
-        if constexpr (Custom::ClearPrimal) {
-            // Only retain variable indices
-            custom->m_inputs = new dr_tuple<Input...>(detail::clear_primal(input)...);
-            custom->m_output = detail::clear_primal(output);
-        } else {
-            custom->m_inputs = new dr_tuple<Input...>(input...);
-            custom->m_output = output;
-        }
+    op->m_output = detail::ad_scan(op, output, false);
 
-        size_t diff_vars_out_ctr = 0;
-        detail::diff_vars(output, diff_vars_out_ctr, nullptr);
-        if (diff_vars_out_ctr + custom->m_implicit_out.size() == 0)
-            return output; // Not relevant for AD after all..
-
-        dr_unique_ptr<uint32_t[]> diff_vars_in(
-            new uint32_t[diff_vars_in_ctr + custom->m_implicit_in.size()]);
-        dr_unique_ptr<uint32_t[]> diff_vars_out(
-            new uint32_t[diff_vars_out_ctr + custom->m_implicit_out.size()]);
-
-        diff_vars_out_ctr = 0;
-        diff_vars_in_ctr = 0;
-        (detail::diff_vars(input, diff_vars_in_ctr, diff_vars_in.get()), ...);
-        detail::diff_vars(output, diff_vars_out_ctr, diff_vars_out.get());
-
-        /* Undo the reference count increases that resulted from storage in
-           'm_output'. This is important to avoid a reference cycle that would
-           prevent the CustomOp from being garbage collected. See also the
-           CustomOp destructor. */
-        for (size_t i = 0; i < diff_vars_out_ctr; ++i)
-            detail::ad_dec_ref<Type>(diff_vars_out[i]);
-
-        // Capture additional dependencies
-        for (size_t i = 0; i < custom->m_implicit_in.size(); ++i)
-            diff_vars_in[diff_vars_in_ctr++] = custom->m_implicit_in[i];
-
-        for (size_t i = 0; i < custom->m_implicit_out.size(); ++i)
-            diff_vars_out[diff_vars_out_ctr++] = custom->m_implicit_out[i];
-
-        const char *name = custom->name();
-        size_t buf_size = strlen(name) + 7;
-        char *buf = (char *) alloca(buf_size);
-
-        // Create a dummy node in case the branch-in factor is > 1
-        if (diff_vars_in_ctr > 1 || diff_vars_in_ctr == 0) {
-            snprintf(buf, buf_size, "%s [in]", name);
-            detail::ad_set_label<Type>(in_var, buf);
-            for (size_t i = 0; i < diff_vars_in_ctr; ++i)
-                detail::ad_add_edge<Type>(diff_vars_in[i], in_var);
-        } else {
-            detail::ad_dec_ref<Type>(in_var);
-            in_var = diff_vars_in[0];
-            detail::ad_inc_ref<Type>(in_var);
-        }
-
-        // Create a dummy node in case the branch-out factor is > 1
-        if (diff_vars_out_ctr > 1 || diff_vars_out_ctr == 0) {
-            snprintf(buf, buf_size, "%s [out]", name);
-            detail::ad_set_label<Type>(out_var, buf);
-            for (size_t i = 0; i < diff_vars_out_ctr; ++i)
-                detail::ad_add_edge<Type>(out_var, diff_vars_out[i]);
-        } else {
-            detail::ad_dec_ref<Type>(out_var);
-            out_var = diff_vars_out[0];
-            detail::ad_inc_ref<Type>(out_var);
-        }
-
-        custom->clear_implicit_dependencies();
-
-        // Connect the two nodes using a custom edge with a callback
-        detail::ad_add_edge<Type>(in_var, out_var, custom.release());
-        detail::ad_dec_ref<Type>(in_var);
-        detail::ad_dec_ref<Type>(out_var);
-    }
+    // Tie the operation into the AD graph, or detach if unsuccessful
+    if (!ad_custom_op(op.get()))
+        disable_grad(output);
 
     return output;
 }

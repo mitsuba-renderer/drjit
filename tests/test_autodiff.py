@@ -884,7 +884,7 @@ std_test('erf', lambda a: dr.erf(a), .2, math.erf(.2), 2*math.exp(-.2**2)/math.s
 std_test('log', lambda a: dr.log(a), 2, math.log(2), .5)
 std_test('log2', lambda a: dr.log2(a), 2, math.log2(2), 1/(2*math.log(2)))
 std_test('exp', lambda a: dr.exp(a), 2, math.exp(2), math.exp(2))
-std_test('exp2', lambda a: dr.exp2(a), 2, math.exp2(2), 4*math.log(2))
+std_test('exp2', lambda a: dr.exp2(a), 2, 2**2, 4*math.log(2))
 
 std_test('sin', lambda a: dr.sin(a), 1, math.sin(1), math.cos(1))
 std_test('cos', lambda a: dr.cos(a), 1, math.cos(1), -math.sin(1))

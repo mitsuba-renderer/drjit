@@ -2912,7 +2912,7 @@ context manager will temporally disable all derivative tracking.
 In a scope where derivative tracking is completely suspended, the AD layer will
 ignore any attempt to enable gradient tracking on a variable:
 
-.. code-block::
+.. code-block:: python
 
     a = dr.llvm.ad.Float(1.0)
 
@@ -2925,7 +2925,7 @@ ignore any attempt to enable gradient tracking on a variable:
 The optional ``when`` boolean keyword argument can be defined to specifed a
 condition determining whether to suspend the tracking of derivatives or not.
 
-.. code-block::
+.. code-block:: python
 
     a = dr.llvm.ad.Float(1.0)
     dr.enable_grad(a)
@@ -3012,142 +3012,6 @@ Dr.Jit provides isolation boundaries to postpone AD traversals steps leaving a
 specific scope. For instance this function is used internally to implement
 differentiable loops and polymorphic calls.
 )";
-
-static const char *doc_custom = R"(
-Evaluate a custom differentiable operation (see :py:class:`CustomOp`).
-
-Look at the section on :ref:`AD custom operations <custom-op>` for more detailed
-information.
-)";
-
-static const char *doc_CustomOp = R"(
-Base class to implement custom differentiable operations.
-
-Dr.Jit can compute derivatives of builtin operations in both forward and reverse
-mode. In some cases, it may be useful or even necessary to tell Dr.Jit how a
-particular operation should be differentiated.
-
-This can be achieved by extending this class, overwriting callback functions
-that will later be invoked when the AD backend traverses the associated node in
-the computation graph. This class also provides a convenient way of stashing
-temporary results during the original function evaluation that can be accessed
-later on as part of forward or reverse-mode differentiation.
-
-Look at the section on :ref:`AD custom operations <custom-op>` for more detailed
-information.
-
-A class that inherits from this class should override a few methods as done in
-the code snippet below. :py:func:`dr.custom` can then be used to evaluate the
-custom operation and properly attach it to the AD graph.
-
-.. code-block::
-
-    class MyCustomOp(dr.CustomOp):
-        def eval(self, *args):
-            # .. evaluate operation ..
-
-        def forward(self):
-            # .. compute forward-mode derivatives ..
-
-        def backward(self):
-            # .. compute backward-mode derivatives ..
-
-        def name(self):
-            return "MyCustomOp[]"
-
-    dr.custom(MyCustomOp, *args)
-)";
-
-static const char *doc_CustomOp_eval = R"(
-eval(self, *args) -> object
-Evaluate the custom function in primal mode.
-
-The inputs will be detached from the AD graph, and the output *must* also be
-detached.
-
-.. danger::
-
-    This method must be overriden, no default implementation provided.
-)";
-
-static const char *doc_CustomOp_forward = R"(
-Evaluated forward-mode derivatives.
-
-.. danger::
-
-    This method must be overriden, no default implementation provided.
-)";
-
-static const char *doc_CustomOp_backward = R"(
-Evaluated backward-mode derivatives.
-
-.. danger::
-
-    This method must be overriden, no default implementation provided.
-)";
-
-static const char *doc_CustomOp_name = R"(
-Return a descriptive name of the ``CustomOp`` instance.
-
-The name returned by this method is used in the GraphViz output.
-
-If not overriden, this method returns ``"CustomOp[unnamed]"``.
-)";
-
-static const char *doc_CustomOp_grad_out = R"(
-Access the gradient associated with the output argument (backward mode AD).
-
-Returns:
-    object: the gradient value associated with the output argument.
-)";
-
-static const char *doc_CustomOp_set_grad_out = R"(
-Accumulate a gradient value into the output argument (forward mode AD).
-
-Args:
-    value (object): gradient value to accumulate.
-)";
-
-static const char *doc_CustomOp_grad_in = R"(
-Access the gradient associated with the input argument ``name`` (fwd. mode AD).
-
-Args:
-    name (str): name associated to an input variable (e.g. keyword argument).
-
-Returns:
-    object: the gradient value associated with the input argument.
-)";
-
-static const char *doc_CustomOp_set_grad_in = R"(
-Accumulate a gradient value into an input argument (backward mode AD).
-
-Args:
-    name (str): name associated to the input variable (e.g. keyword argument).
-    value (object): gradient value to accumulate.
-)";
-
-static const char *doc_CustomOp_add_input = R"(
-Register an implicit input dependency of the operation on an AD variable.
-
-This function should be called by the ``eval()`` implementation when an
-operation has a differentiable dependence on an input that is not an
-input argument (e.g. a private instance variable).
-
-Args:
-    value (object): variable this operation depends on implicitly.
-)";
-
-static const char *doc_CustomOp_add_output = R"(
-Register an implicit output dependency of the operation on an AD variable.
-
-This function should be called by the \ref eval() implementation when an
-operation has a differentiable dependence on an output that is not an
-return value of the operation (e.g. a private instance variable).
-
-Args:
-    value (object): variable this operation depends on implicitly.
-)";
-
 static const char *doc_label = R"(
 Returns the label of a given Dr.Jit array.
 
@@ -3162,15 +3026,23 @@ static const char *doc_has_backend = R"(
 Check if the specified Dr.Jit backend was successfully initialized.)";
 
 static const char *doc_set_label = R"(
-Sets the label of a provided Dr.Jit array, either in the JIT or the AD system.
+Assign a label to the provided Dr.Jit array.
 
-When a :ref:`Pytree <pytrees>` is provided, the field names
-will be used as suffix for the variables labels.
+This can be helpful to identify computation in GraphViz output (see
+:py:func:`drjit.graphviz`, :py:func:`graphviz_ad`).
 
-When a sequence or static array is provided, the item's indices will be appended
-to the label.
+The operations assumes that the array is tracked by the just-in-time compiler.
+It has no effect on unsupported inputs (e.g., arrays from the ``drjit.scalar``
+package). It recurses through :ref:`Pytrees <pytrees>` (tuples, lists,
+dictionaries, custom data structures) and appends names (indices, dictionary
+keys, field names) separated by underscores to uniquely identify each element.
 
-When a mapping is provided, the item's key will be appended to the label.
+The following ``**kwargs``-based shorthand notation can be used to assign
+multiple labels at once:
+
+.. code-block:: python
+
+   set_label(x=x, y=y)
 
 Args:
     *arg (tuple): a Dr.Jit array instance and its corresponding label ``str`` value.
@@ -3282,6 +3154,223 @@ static const char *doc_ReduceOp_Count =
 
 static const char *doc_JitFlag = R"(This enumeration lists several options to fine-tune the behavior of the just-in-time compilation)";
 
+static const char *doc_CustomOp = R"(
+Base class for implementing custom differentiable operations.
+
+Dr.Jit can compute derivatives of builtin operations in both forward and
+reverse mode. In some cases, it may be useful or even necessary to control how
+a particular operation should be differentiated.
+
+To do so, you may extend this class to provide *three* callback functions:
+
+1. :py:func:`CustomOp.eval()`: Implements the *primal* evaluation of the
+   function with detached inputs.
+
+2. :py:func:`CustomOp.forward()`: Implements the *forward derivative* that
+   propagates derivatives from input arguments to the return value
+
+3. :py:func:`CustomOp.backward()`: Implements the *backward derivative* that
+   propagates derivatives from the return value to the input arguments.
+
+An example for a hypothetical custom addition operation is shown below
+
+.. code-block:: python
+
+    class Addition(dr.CustomOp):
+        def eval(self, x, y):
+            # Primal calculation without derivative tracking
+            return x + y
+
+        def forward(self):
+            # Compute forward derivatives
+            self.set_grad_out(self.grad_in('x') + self.grad_in('y'))
+
+        def backward(self):
+            # .. compute backward derivatives ..
+            self.set_grad_in('x', self.grad_out())
+            self.set_grad_in('y', self.grad_out())
+
+        def name(self):
+            # Optional: a descriptive name shown in GraphViz visualizations
+            return "Addition"
+
+You should never need to call these functions yourself---Dr.Jit will do so when
+appropriate. To weave such a custom operation into the AD graph, use the
+:py:func:`drjit.custom()` function, which expects a subclass of
+:py:class:`drjit.CustomOp` as first argument, followed by arguments to the
+actual operation that are directly forwarded to the ``.eval()`` callback.
+
+.. code-block:: python
+
+   # Add two numbers `x` and `y`. Calls our ``.eval()`` callback with detached arguments
+   result = dr.custom(Addition, x, y)
+
+Forward or backward derivatives are then automatically handled through the
+standard operations. For example,
+
+.. code-block:: python
+
+   dr.backward(result)
+
+will invoke the ``.backward()`` callback from above.
+
+Many derivatives are more complex than the above examples and require access to
+inputs or intermediate steps of the primal evaluation routine. You can simply
+stash them in the instance (``self.field = ...``), which is shown below for a
+differentiable multiplication operation that implements the product rule:
+
+.. code-block:: python
+
+    class Multiplication(dr.CustomOp):
+        def eval(self, x, y):
+            # Stash input arguments
+            self.x = x
+            self.y = y
+
+            return x * y
+
+        def forward(self):
+            self.set_grad_out(self.y * self.grad_in('x') + self.x * self.grad_in('y'))
+
+        def backward(self):
+            self.set_grad_in('x', self.y * self.grad_out())
+            self.set_grad_in('y', self.x * self.grad_out())
+
+        def name(self):
+            return "Multiplication"
+)";
+
+static const char *doc_CustomOp_eval = R"(
+Evaluate the custom operation in primal mode.
+
+You must implement this method when subclassing :py:class:`CustomOp`, since the
+default implementation raises an exception. It should realize the original
+(non-derivative-aware) form of a computation and may take an arbitrary sequence
+of positional, keyword, and variable-length positional/keword arguments.
+
+You should not need to call this function yourself---Dr.Jit will automatically do so
+when performing custom operations through the :py:func:`drjit.custom()` interface. 
+
+Note that the input arguments passed to ``.eval()`` will be *detached* (i.e.
+they don't have derivative tracking enabled). This is intentional, since
+derivative tracking is handled by the custom operation along with the other
+callbacks :py:func:`forward` and :py:func:`backward`.)";
+
+static const char *doc_CustomOp_forward = R"(
+Evaluate the forward derivative of the custom operation.
+
+You must implement this method when subclassing :py:class:`CustomOp`, since the
+default implementation raises an exception. It takes no arguments and has no
+return value.
+
+An implementation will generally perform repeated calls to :py:func:`grad_in`
+to query the gradients of all function followed by a single call to
+:py:func:`set_grad_out` to set the gradient of the return value.
+
+For example, this is how one would implement the product rule of the primal
+calculation ``x*y``, assuming that the ``.eval()`` routine stashed the inputs
+in the custom operation object.
+
+.. code-block:: python
+
+   def forward(self):
+       self.set_grad_out(self.y * self.grad_in('x') + self.x * self.grad_in('y'))
+
+)";
+
+static const char *doc_CustomOp_backward = R"(
+Evaluate the backward derivative of the custom operation.
+
+You must implement this method when subclassing :py:class:`CustomOp`, since the
+default implementation raises an exception. It takes no arguments and has no
+return value.
+
+An implementation will generally perform a single call to :py:func:`grad_out`
+to query the gradient of the function return value followed by a sequence of calls to
+:py:func:`set_grad_in` to assign the gradients of the function inputs.
+
+For example, this is how one would implement the product rule of the primal
+calculation ``x*y``, assuming that the ``.eval()`` routine stashed the inputs
+in the custom operation object.
+
+.. code-block:: python
+
+   def backward(self):
+       self.set_grad_in('x', self.y * self.grad_out())
+       self.set_grad_in('y', self.x * self.grad_out())
+)";
+
+static const char *doc_CustomOp_grad_out = R"(
+Query the gradient of the return value.
+
+Returns an object, whose type matches the original return value produced in
+:py:func:`eval()`. This function should only be used within the
+:py:func:`backward()` callback.)";
+
+static const char *doc_CustomOp_set_grad_out = R"(
+Accumulate a gradient into the return value.
+
+This function should only be used within the :py:func:`forward()` callback.)";
+
+static const char *doc_CustomOp_grad_in = R"(
+Query the gradient of a specified input parameter.
+
+The second argument specifies the parameter name as string. Gradients of
+variable-length positional arguments (``*args``) can be queried by providing an
+integer index instead.
+
+This function should only be used within the :py:func:`forward()` callback.)";
+
+static const char *doc_CustomOp_set_grad_in = R"(
+Accumulate a gradient into the specified input parameter.
+
+The second argument specifies the parameter name as string. Gradients of
+variable-length positional arguments (``*args``) can be assigned by providing
+an integer index instead.
+
+This function should only be used within the :py:func:`backward()` callback.)";
+
+static const char *doc_CustomOp_add_input = R"(
+Register an implicit input dependency of the operation on an AD variable.
+
+This function should be called by the :py:func:`eval()` implementation when an
+operation has a differentiable dependence on an input that is not a ordinary
+input argument of the function (e.g., a global program variable or a field of a
+class).)";
+
+static const char *doc_CustomOp_add_output = R"(
+Register an implicit output dependency of the operation on an AD variable.
+
+This function should be called by the :py:func:`eval()` implementation when an
+operation has a differentiable dependence on an output that is not part of the
+function return value (e.g., a global program variable or a field of a
+class).")";
+
+static const char *doc_CustomOp_name = R"(
+Return a descriptive name of the ``CustomOp`` instance.
+
+Amongst other things, this name is used to document the presence of the
+custom operation in GraphViz debug output. (See :py:func:`graphviz_ad`.))";
+
+static const char *doc_custom = R"(
+Evaluate a custom differentiable operation.
+
+It can be useful or even necessary to control how a particular operation should
+be differentiated by Dr.Jit's automatic differentiation (AD) layer. The
+:py:func:`drjit.custom` function  enables such use cases by stitching an opque
+operation with user-defined primal and forward/backward derivative
+implementations into the AD graph.
+
+The function expects a subclass of the :py:class:`CustomOp` interface as first
+argument. The remaining positional and keyword arguments are forwarded to the
+:py:func:`CustomOp.eval` callback.
+
+See the documentation of :py:class:`CustomOp` for examples on how to realize
+such a custom operation.
+)";
+
+
 #if defined(__GNUC__)
 #  pragma GCC diagnostic pop
 #endif
+

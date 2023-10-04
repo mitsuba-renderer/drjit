@@ -412,7 +412,7 @@ template <typename T> NB_INLINE void bind_base(ArrayBinding &b) {
 
         b.data = (ArraySupplement::Data) + [](const T *a) { return a->data(); };
     } else {
-        if constexpr (!is_dynamic_v<T>)
+        if constexpr (!is_dynamic_v<T> && !T::IsKMask)
             b.data = (ArraySupplement::Data) + [](const T *a) { return a->data(); };
     }
 }

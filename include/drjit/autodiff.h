@@ -599,15 +599,26 @@ struct DRJIT_TRIVIAL_ABI DiffArray
     void set_grad_enabled_(bool value) {
         DRJIT_MARK_USED(value);
         if constexpr (IsFloat) {
+            uint32_t jit_index = (uint32_t) m_index;
+
             if (value) {
                 if (grad_enabled_())
                     return;
-                m_index = ad_var_new(m_index);
+                m_index = ad_var_new(jit_index);
+                jit_var_dec_ref(jit_index);
             } else {
-                jit_var_inc_ref(m_index);
+                jit_var_inc_ref(jit_index);
                 ad_var_dec_ref(m_index);
-                m_index = (uint32_t) m_index;
+                m_index = jit_index;
             }
+        }
+    }
+
+    void new_grad_() {
+        if constexpr (IsFloat) {
+            Index old_index = m_index;
+            m_index = ad_var_new((uint32_t) m_index);
+            ad_var_dec_ref(old_index);
         }
     }
 
