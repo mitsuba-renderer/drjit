@@ -74,7 +74,7 @@ def test_packages(name='p'):
         return pytest.mark.parametrize(name, array_packages)(func)
     return wrapped
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def drjit_verbose():
     level = dr.log_level()
     dr.set_log_level(100)

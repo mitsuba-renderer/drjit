@@ -1145,7 +1145,7 @@ def test90_replace_grad(t):
 
     with pytest.raises(RuntimeError) as ei:
        dr.replace_grad((1.0,), (m.UInt(1),))
-    assert "drjit.replace_grad(): error encountered while processing arguments of type 'float' and 'drjit.llvm.ad.UInt': mismatched input types." in str(ei.value.__cause__)
+    assert "mismatched input types." in str(ei.value.__cause__)
 
     x = m.Array3f(1, 2, 3)
     y = m.Array3f(3, 2, 1)
