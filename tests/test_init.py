@@ -352,7 +352,7 @@ def test21_stringify_matrix_scalar(t):
     elif dr.size_v(t) == 4:
         m = t([[1,2,3,4],[5,6,7,8],[9,10,11,12],[13,14,15,16]])
         ref = "[[1, 2, 3, 4],\n [5, 6, 7, 8],\n " \
-            "[9, 10, 11, 12],\n [13, 14, 15, 16]]"
+              "[9, 10, 11, 12],\n [13, 14, 15, 16]]"
 
     assert str(m) == ref
 
@@ -381,12 +381,12 @@ def test22_stringify_matrix_vectorized(t):
     elif dr.size_v(t) == 3:
         m = t([[1,2,3],[4,5,6],[7,8,[9, -1]]])
         ref = "[[[1, 2, 3],\n  [4, 5, 6],\n  [7, 8, 9]],\n" \
-            " [[1, 2, 3],\n  [4, 5, 6],\n  [7, 8, -1]]]"
+             " [[1, 2, 3],\n  [4, 5, 6],\n  [7, 8, -1]]]"
     elif dr.size_v(t) == 4:
         m = t([[1,2,3,4],[5,6,7,8],[9,10,11,12],[13,14,15,[16, -1]]])
         ref = "[[[1, 2, 3, 4],\n  [5, 6, 7, 8],\n  [9, 10, 11, 12],\n" \
-            "  [13, 14, 15, 16]],\n [[1, 2, 3, 4],\n  [5, 6, 7, 8],\n" \
-            "  [9, 10, 11, 12],\n  [13, 14, 15, -1]]]"
+              "  [13, 14, 15, 16]],\n [[1, 2, 3, 4],\n  [5, 6, 7, 8],\n" \
+              "  [9, 10, 11, 12],\n  [13, 14, 15, -1]]]"
 
     assert str(m) == ref
 
@@ -431,9 +431,11 @@ def test23_init_from_ndarray_various_cases(t):
     tv = dr.value_t(t)
     v = tv(a)
     assert dr.all(v == [1, 2, 3])
-    a[1] = 5 # Should affect 'v' as well
-    assert dr.any(v != [1, 2, 3])
-    assert dr.all(v == [1, 5, 3])
+
+    if dr.backend_v(t) != dr.JitBackend.CUDA:
+        a[1] = 5 # Should affect 'v' as well
+        assert dr.any(v != [1, 2, 3])
+        assert dr.all(v == [1, 5, 3])
 
     # Once more, with an implicit conversion
     a = np.array([1, 2, 3], dtype=np.float64)
@@ -467,7 +469,7 @@ def test24_init_tensor_from_ndarray(t):
     a = np.array([1, 2], dtype=np.float32)
     v = t(a)
     assert v.shape == (2,) and dr.all(v.array == (1, 2))
-    if dr.is_jit_v(t):
+    if dr.is_jit_v(t) and dr.backend_v(t) != dr.JitBackend.CUDA:
         a[0] = 5
         assert dr.any(v.array != (1, 2)) and dr.all(v.array == (5, 2))
 

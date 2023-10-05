@@ -16,6 +16,7 @@
 #include "traits.h"
 #include "scalar.h"
 #include "llvm.h"
+#include "cuda.h"
 #include "reduce.h"
 #include "eval.h"
 #include "iter.h"
@@ -127,5 +128,10 @@ NB_MODULE(drjit_ext, m_) {
 #if defined(DRJIT_ENABLE_LLVM)
     export_llvm();
     export_llvm_ad();
+#endif
+
+#if defined(DRJIT_ENABLE_CUDA)
+    export_cuda();
+    export_cuda_ad();
 #endif
 }

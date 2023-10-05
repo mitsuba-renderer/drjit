@@ -56,15 +56,14 @@ static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu) {
         void *ptr;
         if (s2.index) {
             uint32_t index = s2.index(inst_ptr(flat));
-
             JitBackend backend = (JitBackend) s2.backend;
 
             if (force_cpu && backend == JitBackend::CUDA) {
-                uint32_t index_new =
-                    jit_var_migrate(index, AllocType::Host);
+                index = jit_var_migrate(index, AllocType::Host);
 
                 nb::object tmp = nb::inst_alloc(flat.type());
-                s2.init_index(index_new, inst_ptr(tmp));
+                s2.init_index(index, inst_ptr(tmp));
+                jit_var_dec_ref(index);
                 nb::inst_mark_ready(tmp);
                 flat = std::move(tmp);
             }
@@ -72,7 +71,7 @@ static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu) {
             jit_var_eval(index);
             ptr = jit_var_ptr(index);
 
-            if (backend == JitBackend::CUDA) {
+            if (backend == JitBackend::CUDA && !force_cpu) {
                 device_type = nb::device::cuda::value;
                 device_id = jit_var_device(index);
             } else {

@@ -19,6 +19,7 @@ nanobind_add_module(
   traits.h   traits.cpp
   scalar.h   scalar.cpp
   llvm.h     llvm.cpp llvm_ad.cpp
+  cuda.h     cuda.cpp cuda_ad.cpp
   reduce.h   reduce.cpp
   apply.h    apply.cpp
   eval.h     eval.cpp
@@ -40,8 +41,10 @@ configure_file(
 
 target_link_libraries(drjit-python PRIVATE drjit drjit-core drjit-extra)
 
-if (DRJIT_ENABLE_JIT)
+if (DRJIT_ENABLE_LLVM)
   target_compile_definitions(drjit-python PRIVATE -DDRJIT_ENABLE_LLVM)
-  target_compile_definitions(drjit-python PRIVATE -DDRJIT_ENABLE_CUDA)
 endif()
 
+if (DRJIT_ENABLE_CUDA)
+  target_compile_definitions(drjit-python PRIVATE -DDRJIT_ENABLE_CUDA)
+endif()
