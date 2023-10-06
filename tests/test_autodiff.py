@@ -1504,7 +1504,6 @@ def test102_custom_op_bwd_3(t):
     gx = dr.backward_to(x)
     assert dr.allclose(gx, 30)
 
-
 @pytest.test_arrays('is_diff,float,shape=(*)')
 def test103_custom_forward_external_dependency(t):
     theta = t(2)
@@ -1536,7 +1535,7 @@ def test103_custom_forward_external_dependency(t):
     assert dr.grad(out) == 3*123
 
 @pytest.test_arrays('is_diff,float,shape=(*)')
-def test64_suspend_resume_custom_fwd(t):
+def test104_suspend_resume_custom_fwd(t):
     v_implicit, v_input = t(1), t(1)
     check = [0]
 
@@ -1572,7 +1571,7 @@ def test64_suspend_resume_custom_fwd(t):
 
 
 @pytest.test_arrays('is_diff,float,shape=(*)')
-def test66_suspend_resume_custom_bwd(t):
+def test105_suspend_resume_custom_bwd(t):
     v_implicit, v_input = t(1), t(1)
     check = [0]
 
@@ -1606,3 +1605,45 @@ def test66_suspend_resume_custom_bwd(t):
             dr.traverse(dr.ADMode.Backward)
             assert dr.grad(v_implicit) == ((i & 1) == 0)
             assert dr.grad(v_input) == ((i & 2) == 0)
+
+
+@pytest.test_arrays('is_diff,float32,shape=(*)')
+def test106_custom_op_leak(t):
+    # Ensure that a non-traversed custom op is correctly GCed
+    x = t(1)
+    dr.enable_grad(x)
+    dr.custom(Copy, x)
+
+
+class Fail(dr.CustomOp):
+    def eval(self, x):
+        return x
+
+    def forward(self):
+        raise RuntimeError("Forward traversal failed")
+
+    def backward(self):
+        raise RuntimeError("Backward traversal failed")
+
+    def name(self):
+        return "Fail"
+
+
+@pytest.test_arrays('is_diff,float32,shape=(*)')
+def test107_custom_op_fail_fwd(t):
+    for i in range(100):
+        x = t(1)
+        dr.enable_grad(x)
+        y = dr.custom(Fail, x)
+        with pytest.raises(RuntimeError, match='Forward traversal failed'):
+            dr.forward_from(x)
+
+
+@pytest.test_arrays('is_diff,float32,shape=(*)')
+def test108_custom_op_fail_bwd(t):
+    for i in range(100):
+        x = t(1)
+        dr.enable_grad(x)
+        y = dr.custom(Fail, x)
+        with pytest.raises(RuntimeError, match='Backward traversal failed'):
+            dr.backward_from(y)
