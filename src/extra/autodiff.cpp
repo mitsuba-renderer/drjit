@@ -599,6 +599,7 @@ static void ad_free(ADIndex index, Variable *v) {
         EdgeIndex next_bwd = edge.next_bwd,
                   next_fwd = edge.next_fwd;
 
+        if (edge.is_custom)
         edge = Edge { };
 
         Variable *v2 = state[source];
@@ -2617,8 +2618,11 @@ struct CustomOp : Special {
 
     ~CustomOp() {
         if (m_op.get()) {
-            unlock_guard<std::mutex> guard(state.mutex);
-            m_op.reset();
+            nanobind::ref<dr::detail::CustomOpBase> op = std::move(m_op);
+            {
+                unlock_guard<std::mutex> guard(state.mutex);
+                op.reset();
+            }
         }
     }
 
@@ -2644,9 +2648,12 @@ struct CustomOp : Special {
     }
 
     void release_one_output() {
-        if (!ad_release_one_output(m_op.get())) {
-            unlock_guard<std::mutex> guard(state.mutex);
-            m_op.reset();
+        if (m_op.get() && !ad_release_one_output(m_op.get())) {
+            nanobind::ref<dr::detail::CustomOpBase> op = std::move(m_op);
+            {
+                unlock_guard<std::mutex> guard(state.mutex);
+                op.reset();
+            }
         }
     }
 
@@ -2829,19 +2836,25 @@ bool ad_custom_op(dr::detail::CustomOpBase *op) {
 // following a CustomOp. It breaks what would otherwise be an uncollectable
 // reference cycle, since the CustomOp references its own outputs.
 static void DRJIT_NOINLINE ad_decref_custom_op_output(Variable *v) {
-    if (v->ref_count != 2 || !v->next_bwd)
+    uint32_t next_bwd = v->next_bwd;
+    if (v->ref_count != 2 || !next_bwd)
         return;
 
     Edge *edge = &state.edges[v->next_bwd];
-    if (edge->copy_grad)
-        edge = &state.edges[state[edge->source]->next_bwd];
+    if (edge->copy_grad) {
+        next_bwd = state[edge->source]->next_bwd;
+        ad_assert(next_bwd, "ad_decref_custom_op_output(): missing backward "
+                            "edge in copy_grad node!");
+        edge = &state.edges[next_bwd];
+    }
 
-    ad_assert(edge && edge->is_custom, "ad_decref_custom_op_output(): expected to "
-                                       "find an edge representing a CustomOp!");
+    ad_assert(edge->is_custom, "ad_decref_custom_op_output(): expected to "
+                               "find an edge representing a CustomOp!");
 
-    CustomOp *op = (CustomOp *) edge->special.get();
-    if (op)
-        op->release_one_output();
+    if (!edge->special)
+        return;
+
+    ((CustomOp *) edge->special.get())->release_one_output();
 }
 
 
