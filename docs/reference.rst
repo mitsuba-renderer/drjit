@@ -9,6 +9,7 @@ Array creation
 --------------
 
 .. autofunction:: zeros
+.. autofunction:: empty
 .. autofunction:: ones
 .. autofunction:: full
 .. autofunction:: arange
@@ -138,7 +139,7 @@ Just-in-time compilation
 
       Unknown/unspecified type.
 
-   .. autoattribute:: Boolean
+   .. autoattribute:: Bool
       :annotation:
 
       Boolean/mask type.
@@ -238,7 +239,6 @@ ________________
 .. autofunction:: is_unsigned_v
 .. autofunction:: is_dynamic_v
 .. autofunction:: is_jit_v
-.. autofunction:: is_llvm_v
 .. autofunction:: is_diff_v
 .. autofunction:: is_vector_v
 .. autofunction:: is_complex_v
@@ -248,9 +248,11 @@ ________________
 .. autofunction:: is_special_v
 .. autofunction:: is_struct_v
 
-Array shape
-___________
+Array properties (shape, type, etc.)
+____________________________________
 
+.. autofunction:: type_v
+.. autofunction:: backend_v
 .. autofunction:: size_v
 .. autofunction:: depth_v
 .. autofunction:: itemsize_v
@@ -260,7 +262,7 @@ ___________
     :value: -1
 
     Special size value used to identify dynamic arrays in
-    :py:func:`array_size_v`.
+    :py:func:`size_v`.
 
 .. py:data:: newaxis
     :type: NoneType
@@ -534,7 +536,7 @@ Automatic differentiation
       Clear gradients of processed vertices only, but leave edges intact. Equal
       to ``ClearInput | ClearInterior``.
 
-   .. autoattribute:: PermitNoGrad
+   .. autoattribute:: AllowNoGrad
       :annotation:
 
       Don't fail when the input to a ``drjit.forward`` or ``backward``
@@ -798,8 +800,6 @@ Array base class
     .. autoproperty:: array
     .. autoproperty:: ndim
     .. autoproperty:: shape
-    .. autoproperty:: backend
-    .. autoproperty:: type
     .. autoproperty:: x
     .. autoproperty:: y
     .. autoproperty:: z
@@ -1240,10 +1240,10 @@ Scalars
 .. autoclass:: drjit.llvm.ad.Int
     :show-inheritance:
 .. autoclass:: drjit.llvm.ad.Int64
+    :show-inheritance:
 
 1D arrays
 ^^^^^^^^^
-    :show-inheritance:
 .. autoclass:: drjit.llvm.ad.Array0b
     :show-inheritance:
 .. autoclass:: drjit.llvm.ad.Array1b

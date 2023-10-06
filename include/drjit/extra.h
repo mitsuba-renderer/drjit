@@ -180,6 +180,7 @@ extern DRJIT_EXTRA_EXPORT void ad_scope_leave(bool process_postponed);
 namespace drjit { namespace detail { class CustomOpBase; }};
 
 extern DRJIT_EXTRA_EXPORT bool ad_custom_op(drjit::detail::CustomOpBase *);
+extern DRJIT_EXTRA_EXPORT bool ad_release_one_output(drjit::detail::CustomOpBase *);
 
 #if defined(__cplusplus)
 }

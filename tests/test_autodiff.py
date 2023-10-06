@@ -682,13 +682,13 @@ def test32_scatter_bwd(t):
             assert dr.allclose(dr.grad(y), dr.detach(ref_y), atol=1e-4)
             assert dr.allclose(dr.grad(x), dr.detach(ref_x), atol=1e-4)
         else:
-            assert dr.grad(x) == 0
-            assert dr.grad(y) == 0
+            assert dr.all(dr.grad(x) == 0)
+            assert dr.all(dr.grad(y) == 0)
 
         if i % 2 == 0:
             assert dr.allclose(dr.grad(buf), 0, atol=1e-4)
         else:
-            assert dr.grad(buf) == 0
+            assert dr.all(dr.grad(buf) == 0)
 
 
 @pytest.test_arrays('is_diff,float,shape=(*)')
@@ -796,13 +796,13 @@ def test35_scatter_reduce_bwd(t):
             assert dr.allclose(dr.grad(y), dr.detach(ref_y), atol=1e-4)
             assert dr.allclose(dr.grad(x), dr.detach(ref_x), atol=1e-4)
         else:
-            assert dr.grad(x) == 0
-            assert dr.grad(y) == 0
+            assert dr.all(dr.grad(x) == 0)
+            assert dr.all(dr.grad(y) == 0)
 
         if i % 2 == 0:
             assert dr.allclose(dr.grad(buf), dr.detach(ref_buf) * 2, atol=1e-4)
         else:
-            assert dr.grad(buf) == 0
+            assert dr.all(dr.grad(buf) == 0)
 
 
 @pytest.test_arrays('is_diff,float,shape=(*)')
@@ -1142,6 +1142,10 @@ def test89_atanh(t):
 @pytest.test_arrays('is_diff,float32,shape=(*)')
 def test90_replace_grad(t):
     m = sys.modules[t.__module__]
+
+    with pytest.raises(RuntimeError) as ei:
+       dr.replace_grad(t(1,2,3),t(1,2,3,4))
+    assert "mismatched input sizes" in str(ei.value)
 
     with pytest.raises(RuntimeError) as ei:
        dr.replace_grad((1.0,), (m.UInt(1),))

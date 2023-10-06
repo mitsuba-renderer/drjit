@@ -243,7 +243,7 @@ template <typename T> constexpr size_t depth_v = detail::array_depth<T>::value;
 /// Determine the size of a nested Dr.Jit array (scalars evaluate to one)
 template <typename T> constexpr size_t size_v = detail::array_size<T>::value;
 
-template <typename T> constexpr bool is_floating_point_v = std::is_floating_point_v<scalar_t<T>> && !is_mask_v<T>;
+template <typename T> constexpr bool is_float_v = std::is_floating_point_v<scalar_t<T>> && !is_mask_v<T>;
 template <typename T> constexpr bool is_integral_v = std::is_integral_v<scalar_t<T>> && !is_mask_v<T>;
 template <typename T> constexpr bool is_arithmetic_v = std::is_arithmetic_v<scalar_t<T>> && !is_mask_v<T>;
 template <typename T> constexpr bool is_signed_v = std::is_signed_v<scalar_t<T>>;

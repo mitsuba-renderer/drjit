@@ -411,7 +411,7 @@ nb::object ravel(nb::handle h, char order,
     size_t size = stride;
 
     // Create an empty array of the right shape
-    nb::object result = full(meta_get_type(m), nb::handle(), 1, &size);
+    nb::object result = full("empty", meta_get_type(m), nb::handle(), 1, &size);
 
     nb::handle index_dtype;
     if (is_dynamic) {

@@ -270,6 +270,27 @@ ArrayMeta meta_get(nb::handle h) noexcept {
     return m;
 }
 
+ArrayMeta meta_get_general(nb::handle h) noexcept {
+    ArrayMeta m { };
+    m.is_valid = true;
+
+    if (!h.is_type())
+        m = meta_get(h);
+    else if (is_drjit_type(h))
+        m = supp(h);
+    else if (h.is(&PyBool_Type))
+        m.type = (uint8_t) VarType::Bool;
+    else if (h.is(&PyLong_Type))
+        m.type = (uint8_t) VarType::Int32;
+    else if (h.is(&PyFloat_Type))
+        m.type = (uint8_t) VarType::Float32;
+    else
+        m.is_valid = false;
+
+    return m;
+}
+
+
 /**
  * \brief Given a list of Dr.Jit arrays and scalars, determine the flavor and
  * shape of the result array and broadcast/convert everything into this form.

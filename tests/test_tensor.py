@@ -127,7 +127,7 @@ def test02_construct(t):
         return
 
     mod = sys.modules[t.__module__]
-    t3f = dr.reinterpret_array_t(mod.Array3f, dr.var_type_v(v))
+    t3f = dr.reinterpret_array_t(mod.Array3f, dr.type_v(v))
     v = t3f([1, 2], [3, 4], [5, 6])
     assert str(v) == "[[1, 3, 5],\n [2, 4, 6]]"
 

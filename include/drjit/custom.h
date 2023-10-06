@@ -40,6 +40,7 @@ NAMESPACE_BEGIN(detail)
 
 class DRJIT_EXTRA_EXPORT CustomOpBase : public nanobind::intrusive_base {
     friend bool ::ad_custom_op(CustomOpBase*);
+    friend bool ::ad_release_one_output(CustomOpBase*);
 public:
     CustomOpBase();
     CustomOpBase(const CustomOpBase &) = delete;
@@ -72,8 +73,18 @@ public:
     void add_index(JitBackend backend, uint32_t index, bool input);
 
 protected:
+    /**
+     * \brief Called by the AD layer to notify the CustomOp that one of its
+     * outputs is no longer referenced. The operation returns ``false`` when
+     * all outputs have expired, in which case the CustomOp can be freed.
+     */
+    bool release_one_output();
+
+protected:
     JitBackend m_backend;
-    uint64_t m_counter;
+    uint32_t m_outputs_alive;
+    uint64_t m_counter_offset;
+
     dr_vector<uint32_t> m_input_indices;
     dr_vector<uint32_t> m_output_indices;
 };
@@ -155,7 +166,7 @@ typename Op::Output custom(const Inputs &...inputs) {
     typename Op::Output output = op->eval(detach(inputs)...);
 
     // Ensure that the output is registered with the AD layer without depending
-    // on prevous computation. That dependence is reintroduced below.
+    // on previous computation. That dependence is reintroduced later below.
     detail::new_grad(output);
 
     op->m_output = detail::ad_scan(op, output, false);

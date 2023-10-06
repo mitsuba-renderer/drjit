@@ -8,7 +8,11 @@
 #define ad_log(fmt, ...) jit_log(LogLevel::Debug,  fmt, ## __VA_ARGS__)
 #define ad_fail(fmt, ...) jit_fail(fmt, ## __VA_ARGS__)
 #define ad_raise(fmt, ...) jit_raise(fmt, ## __VA_ARGS__)
-#define ad_assert(cond) if (unlikely(!(cond))) jit_fail("drjit-autodiff: assertion failure (%s) at line %i", #cond, __LINE__);
+#define ad_assert(cond, fmt, ...)                                              \
+    if (unlikely(!(cond)))                                                     \
+        jit_fail(                                                              \
+            "drjit-autodiff: assertion failure (\"%s\") in line %i: " fmt,     \
+            #cond, __LINE__, ##__VA_ARGS__);
 
 struct UInt32Hasher {
     size_t operator()(uint32_t v) const {

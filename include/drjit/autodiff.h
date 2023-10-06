@@ -91,7 +91,7 @@ struct DRJIT_TRIVIAL_ABI DiffArray
     static constexpr size_t Size = Dynamic;
 
     static constexpr VarType Type =
-        IsClass ? VarType::UInt32 : var_type_v<Value>;
+        IsClass ? VarType::UInt32 : type_v<Value>;
 
     using ActualValue = std::conditional_t<IsClass, uint32_t, Value>;
 

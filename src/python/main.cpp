@@ -98,12 +98,14 @@ NB_MODULE(drjit_ext, m_) {
             Py_INCREF(o);
         },
         [](PyObject *o) noexcept {
+            if (!nb::is_alive())
+                return;
             nb::gil_scoped_acquire guard;
             Py_DECREF(o);
         });
 
      nb::class_<nb::intrusive_base>(
-       detail, "intrusive_base",
+       detail, "IntrusiveBase",
        nb::intrusive_ptr<nb::intrusive_base>(
            [](nb::intrusive_base *o, PyObject *po) noexcept { o->set_self_py(po); }));
 

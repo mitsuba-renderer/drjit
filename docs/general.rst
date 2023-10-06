@@ -77,9 +77,10 @@ operations, and many others (the :ref:`reference <reference>` explicitly lists
 the word *Pytree* in all supported operations).
 
 To turn a user-defined type into a Pytree, define a static ``DRJIT_STRUCT``
-member dictionary describing the names and types of all fields. For instance,
-the following snippet defines a named 2D point, containing (amongst others) two
-nested Dr.Jit arrays.
+member dictionary describing the names and types of all fields. It should also
+be default-constructible without the need to specify any arguments. For
+instance, the following snippet defines a named 2D point, containing (amongst
+others) two nested Dr.Jit arrays.
 
 .. code-block:: python
 
@@ -88,7 +89,7 @@ nested Dr.Jit arrays.
    class MyPoint2f:
        DRJIT_STRUCT = { 'name': str, 'x' : Float, 'y': Float }
 
-       def __init__(self, name: str, x: Float, y: Float):
+       def __init__(self, name: str = "", x: Float = 0, y: Float = 0):
            self.name = name
            self.x = x
            self.y = y
