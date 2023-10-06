@@ -14,6 +14,7 @@
 #include "autodiff.h"
 #include "apply.h"
 #include "meta.h"
+#include "init.h"
 #include "base.h"
 
 static void set_grad_enabled(nb::handle h, bool enable_) {
@@ -135,26 +136,35 @@ static nb::object grad(nb::handle h, bool preserve_type_ = true) {
         nb::handle transform_type(nb::handle tp) const override {
             ArrayMeta m = supp(tp);
 
-            if (!m.is_diff)
-                return nb::handle();
-
-            if (!preserve_type) {
+            if (m.is_diff && !preserve_type) {
                 m.is_diff = false;
                 return meta_get_type(m);
-            } else {
-                return tp;
             }
+
+            return tp;
         }
 
-        nb::object transform_unknown(nb::handle tp) const override {
+        nb::object transform_unknown(nb::handle) const override {
             return nb::float_(0);
         }
 
         void operator()(nb::handle h1, nb::handle h2) const override {
-            const ArraySupplement &s1 = supp(h1.type()),
-                                  &s2 = supp(h2.type());
+            const ArraySupplement &s1 = supp(h1.type());
+            if (!s1.backend) {
+                nb::object o2 = full("zeros", h2.type(), nb::int_(0), nb::len(h1));
+                nb::inst_replace_move(h2, o2);
+                return;
+            }
+
+            const ArraySupplement &s2 = supp(h2.type());
             uint64_t index = s1.index(inst_ptr(h1));
             uint32_t grad_index = ad_grad(index);
+            if (!grad_index) {
+                nb::object o2 = full("zeros", h2.type(), nb::int_(0), 1);
+                nb::inst_replace_move(h2, o2);
+                return;
+            }
+
             s2.init_index(grad_index, inst_ptr(h2));
             jit_var_dec_ref(grad_index);
         }
