@@ -1398,7 +1398,6 @@ class Normalize(dr.CustomOp):
         self.set_grad_out(grad_out)
 
     def backward(self):
-        print("In callback")
         grad_out = self.grad_out()
         grad_in = grad_out * self.inv_norm
         grad_in -= self.value * (dr.dot(self.value, grad_in) * dr.sqr(self.inv_norm))
@@ -1481,7 +1480,6 @@ def test100_custom_op_bwd_1(t):
     d2 = dr.custom(Normalize, d)
     dr.set_grad(d2, t(5, 6, 7))
     dr.backward_to(d)
-    print(dr.grad(d))
     assert dr.allclose(dr.grad(d), t(0.610883, 0.152721, -0.305441))
 
 @pytest.test_arrays('is_diff,float,shape=(*)')
@@ -1529,7 +1527,6 @@ def test103_custom_forward_external_dependency(t):
     dr.set_grad(theta, 1.0)
     out = dr.custom(GlobalOp, 123)
     dr.forward_to(out)
-    print(dr.grad(out))
 
     assert out == 123*6
     assert dr.grad(out) == 3*123
@@ -1547,7 +1544,6 @@ def test104_suspend_resume_custom_fwd(t):
 
         def forward(self):
             assert dr.grad_enabled(v_implicit) == check[0]
-            print(self.grad_in('value'))
             self.set_grad_out(self.grad_in('value') + dr.grad(v_implicit))
 
     for i in range(4):
