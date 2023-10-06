@@ -992,11 +992,10 @@ JitIndex ad_grad(Index index) {
         size = info.size;
     }
 
-    if (!result.valid()) {
+    if (!result.valid())
         result =
             JitVar::steal(type == VarType::Float32 ? jit_var_f32(backend, 0.f)
                                                    : jit_var_f64(backend, 0.0));
-    }
 
     if (result.size() != size)
         result.resize(size);

@@ -1465,7 +1465,7 @@ def test098_custom_op_fwd_2(t):
 
 
 @pytest.test_arrays('is_diff,float,shape=(*)')
-def test098_custom_op_fwd_3(t):
+def test099_custom_op_fwd_3(t):
     x = t(1)
     dr.enable_grad(x)
     dr.set_grad(x, 10)
@@ -1475,18 +1475,17 @@ def test098_custom_op_fwd_3(t):
 
 
 @pytest.test_arrays('is_diff,float,shape=(3, *)')
-def test099_custom_op_bwd_1(t):
+def test100_custom_op_bwd_1(t):
     d = t(1, 2, 3)
     dr.enable_grad(d)
     d2 = dr.custom(Normalize, d)
     dr.set_grad(d2, t(5, 6, 7))
-    dr.set_log_level(10)
     dr.backward_to(d)
     print(dr.grad(d))
     assert dr.allclose(dr.grad(d), t(0.610883, 0.152721, -0.305441))
 
 @pytest.test_arrays('is_diff,float,shape=(*)')
-def test100_custom_op_bwd_2(t):
+def test101_custom_op_bwd_2(t):
     x, y = t(1), t(2)
     dr.enable_grad(x, y)
     a, b = dr.custom(Swap, x, y)
@@ -1496,7 +1495,7 @@ def test100_custom_op_bwd_2(t):
     assert dr.allclose((gx, gy), [20, 10])
 
 @pytest.test_arrays('is_diff,float,shape=(*)')
-def test101_custom_op_bwd_3(t):
+def test102_custom_op_bwd_3(t):
     x = t(1)
     dr.enable_grad(x)
     a, b = dr.custom(Copy, x)
@@ -1507,7 +1506,7 @@ def test101_custom_op_bwd_3(t):
 
 
 @pytest.test_arrays('is_diff,float,shape=(*)')
-def test102_custom_forward_external_dependency(t):
+def test103_custom_forward_external_dependency(t):
     theta = t(2)
     dr.enable_grad(theta)
 
@@ -1535,3 +1534,75 @@ def test102_custom_forward_external_dependency(t):
 
     assert out == 123*6
     assert dr.grad(out) == 3*123
+
+@pytest.test_arrays('is_diff,float,shape=(*)')
+def test64_suspend_resume_custom_fwd(t):
+    v_implicit, v_input = t(1), t(1)
+    check = [0]
+
+    class TestOp(dr.CustomOp):
+        def eval(self, value):
+            self.add_input(v_implicit)
+            assert dr.grad_enabled(v_implicit) == check[0]
+            return value + dr.detach(v_implicit)
+
+        def forward(self):
+            assert dr.grad_enabled(v_implicit) == check[0]
+            print(self.grad_in('value'))
+            self.set_grad_out(self.grad_in('value') + dr.grad(v_implicit))
+
+    for i in range(4):
+        dr.disable_grad(v_implicit, v_input)
+        dr.enable_grad(v_implicit, v_input)
+        dr.set_grad(v_implicit, 1)
+        dr.set_grad(v_input, 1)
+        check[0] = (i & 1) == 0
+
+        with dr.suspend_grad(
+                v_implicit if i & 1 else None,
+                v_input if i & 2 else None):
+            output = dr.custom(TestOp, v_input)
+            assert dr.detach(output) == 2
+            assert (i == 3 and not dr.grad_enabled(output)) or \
+                   (i <  3 and dr.grad_enabled(output))
+
+            dr.enqueue(dr.ADMode.Forward, v_implicit, v_input)
+            dr.traverse(dr.ADMode.Forward)
+            assert dr.grad(output) == 2 - (i & 1) - ((i & 2) >> 1)
+
+
+@pytest.test_arrays('is_diff,float,shape=(*)')
+def test66_suspend_resume_custom_bwd(t):
+    v_implicit, v_input = t(1), t(1)
+    check = [0]
+
+    class TestOp(dr.CustomOp):
+        def eval(self, value):
+            self.add_input(v_implicit)
+            assert dr.grad_enabled(v_implicit) == check[0]
+            return value + dr.detach(v_implicit)
+
+        def backward(self):
+            assert dr.grad_enabled(v_implicit) == check[0]
+            g = self.grad_out()
+            dr.accum_grad(v_implicit, g)
+            self.set_grad_in('value', g)
+
+    for i in range(4):
+        dr.disable_grad(v_implicit, v_input)
+        dr.enable_grad(v_implicit, v_input)
+        check[0] = (i & 1) == 0
+
+        with dr.suspend_grad(
+                v_implicit if i & 1 else None,
+                v_input if i & 2 else None):
+            output = dr.custom(TestOp, v_input)
+            assert dr.detach(output) == 2
+            assert (i == 3 and not dr.grad_enabled(output)) or \
+                   (i <  3 and dr.grad_enabled(output))
+
+            dr.enqueue(dr.ADMode.Backward, output)
+            dr.set_grad(output, 1)
+            dr.traverse(dr.ADMode.Backward)
+            assert dr.grad(v_implicit) == ((i & 1) == 0)
+            assert dr.grad(v_input) == ((i & 2) == 0)
