@@ -280,7 +280,7 @@ NB_INLINE void bind_init(ArrayBinding &b, nanobind::handle scope = {},
     if (is_mask_v<T>)
         b.type = (uint16_t) VarType::Bool;
     else
-        b.type = (uint16_t) var_type_v<scalar_t<T>>;
+        b.type = (uint16_t) type_v<scalar_t<T>>;
 
     if constexpr (!T::IsTensor) {
         b.ndim = (uint16_t) depth_v<T>;

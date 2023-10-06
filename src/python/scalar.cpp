@@ -13,6 +13,7 @@
 void export_scalar(nb::module_& m) {
     ArrayBinding b;
     dr::bind_all<float>(b);
+    m.attr("Bool") = nb::borrow(&PyBool_Type);
     m.attr("Float16") = nb::borrow(&PyFloat_Type);
     m.attr("Float") = nb::borrow(&PyFloat_Type);
     m.attr("Float64") = nb::borrow(&PyFloat_Type);

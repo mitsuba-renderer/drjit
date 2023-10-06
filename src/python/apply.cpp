@@ -763,7 +763,8 @@ nb::handle TransformPairCallback::transform_type(nb::handle tp) const {
 }
 
 /// Transform a pair of input pytrees 'h1' and 'h2' into an output pytree, potentially of a different type
-nb::object transform_pair(const char *op, const TransformPairCallback &tc, nb::handle h1, nb::handle h2) {
+nb::object transform_pair(const char *op, const TransformPairCallback &tc,
+                          nb::handle h1, nb::handle h2) {
     nb::handle tp1 = h1.type(), tp2 = h2.type();
 
     try {

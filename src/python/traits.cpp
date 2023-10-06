@@ -46,6 +46,43 @@ nb::object reinterpret_array_t(nb::handle h, VarType vt) {
     return borrow(tp);
 }
 
+nb::object expr_t(nb::handle h0, nb::handle h1) {
+    nb::handle tp0 = h0.is_type() ? h0 : h0.type(),
+               tp1 = h1.is_type() ? h1 : h1.type();
+
+    if (tp0.is(tp1))
+        return nb::borrow(tp0);
+
+    ArrayMeta m0 = meta_get_general(h0),
+              m1 = meta_get_general(h1),
+              m  = meta_promote(m0, m1);
+
+    if (!meta_check(m)) {
+        nb::str tp0_name = nb::type_name(tp0),
+                tp1_name = nb::type_name(tp1);
+
+        nb::detail::raise_type_error(
+            "drjit.expr_t(): incompatible types \"%s\" and \"%s\"",
+            tp0_name.c_str(), tp1_name.c_str());
+    }
+
+    return nb::borrow(meta_get_type(m));
+}
+
+nb::object expr_t(nb::args args) {
+    nb::object result = nb::none();
+    size_t ctr = 0;
+
+    for (nb::handle h : args) {
+        if (ctr++ == 0)
+            result = nb::borrow(args[0]);
+        else
+            result = expr_t(result, h);
+    }
+
+    return result;
+}
+
 void export_traits(nb::module_ &m) {
     m.attr("Dynamic") = -1;
 
@@ -101,13 +138,13 @@ void export_traits(nb::module_ &m) {
               return false;
           }, doc_is_jit_v);
 
-    m.def("var_type_v",
+    m.def("type_v",
           [](nb::handle h) {
               nb::handle tp = h.is_type() ? h : h.type();
               if (is_drjit_type(tp))
                   return (VarType) supp(tp).type;
               return VarType::Void;
-          }, doc_var_type_v);
+          }, doc_type_v);
 
     m.def("backend_v",
           [](nb::handle h) {
@@ -154,6 +191,16 @@ void export_traits(nb::module_ &m) {
               nb::handle tp = h.is_type() ? h : h.type();
               return is_drjit_type(tp) ? supp(tp).is_matrix : false;
           }, doc_is_matrix_v);
+
+    m.def("is_special_v",
+          [](nb::handle h) -> bool {
+              nb::handle tp = h.is_type() ? h : h.type();
+            if (is_drjit_type(tp)) {
+                const ArrayMeta &m = supp(tp);
+                return m.is_complex || m.is_quaternion || m.is_matrix;
+            }
+            return false;
+          }, doc_is_special_v);
 
     m.def("is_vector_v",
           [](nb::handle h) -> bool {
@@ -331,4 +378,6 @@ void export_traits(nb::module_ &m) {
               }
               return tp;
           }, doc_detached_t);
+
+    m.def("expr_t", nb::overload_cast<nb::args>(expr_t), doc_expr_t);
 }

@@ -547,13 +547,13 @@ int tp_init_tensor(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
 }
 
 // Forward declaration
-nb::object full(nb::handle dtype, nb::handle value, size_t ndim, const size_t *shape);
+nb::object full(const char *name, nb::handle dtype, nb::handle value, size_t ndim, const size_t *shape);
 
-nb::object full(nb::handle dtype, nb::handle value, const std::vector<size_t> &shape) {
-    return full(dtype, value, shape.size(), shape.data());
+nb::object full(const char *name, nb::handle dtype, nb::handle value, const std::vector<size_t> &shape) {
+    return full(name, dtype, value, shape.size(), shape.data());
 }
 
-nb::object full(nb::handle dtype, nb::handle value, size_t size) {
+nb::object full(const char *name, nb::handle dtype, nb::handle value, size_t size) {
     std::vector<size_t> shape;
 
     if (is_drjit_type(dtype)) {
@@ -577,95 +577,109 @@ nb::object full(nb::handle dtype, nb::handle value, size_t size) {
         shape[0] = size;
     }
 
-    return full(dtype, value, shape);
+    return full(name, dtype, value, shape);
 }
 
+nb::object full(const char *name, nb::handle dtype, nb::handle value,
+                size_t ndim, const size_t *shape) {
+    try {
+        if (is_drjit_type(dtype)) {
+            const ArraySupplement &s = supp(dtype);
 
-nb::object full(nb::handle dtype, nb::handle value, size_t ndim, const size_t *shape) {
-    if (is_drjit_type(dtype)) {
-        const ArraySupplement &s = supp(dtype);
+            if (s.is_tensor) {
+                size_t size = 1;
+                for (size_t i = 0; i < ndim; ++i)
+                    size *= shape[i];
 
-        if (s.is_tensor) {
-            size_t size = 1;
-            for (size_t i = 0; i < ndim; ++i)
-                size *= shape[i];
+                nb::tuple shape_tuple =
+                    cast_shape(dr_vector<size_t>(shape, shape + ndim));
 
-            nb::tuple shape_tuple =
-                cast_shape(dr_vector<size_t>(shape, shape + ndim));
-
-            return dtype(full(s.array, value, 1, &size), shape_tuple);
-        }
-
-        bool fail = s.ndim != ndim;
-        if (!fail) {
-            for (size_t i = 0; i < ndim; ++i)
-                fail |= s.shape[i] != DRJIT_DYNAMIC && s.shape[i] != shape[i];
-        }
-
-        if (fail)
-            nb::detail::raise(
-                "The provided 'shape' and 'dtype' parameters are incompatible.");
-
-        nb::object result = nb::inst_alloc(dtype);
-
-        if (s.init_const && value.is_valid()) {
-            if ((VarType) s.type == VarType::Bool && value.type().is(&PyLong_Type))
-                value = nb::cast<int>(value) ? Py_True : Py_False;
-
-            s.init_const(shape[0], value.ptr(),
-                         inst_ptr(result));
-            nb::inst_mark_ready(result);
-            return result;
-        }
-
-        if (s.shape[0] == DRJIT_DYNAMIC) {
-            s.init(shape[0], inst_ptr(result));
-            nb::inst_mark_ready(result);
-        } else {
-            nb::inst_zero(result);
-        }
-
-        if (!value.is_valid() && ndim == 1) {
-            return result;
-        } else {
-            ArraySupplement::SetItem set_item = s.set_item;
-            nb::object o;
-            for (size_t i = 0; i < shape[0]; ++i) {
-                if (i == 0 || !value.is_valid())
-                    o = full(s.value, value, ndim - 1, shape + 1);
-                set_item(result.ptr(), i, o.ptr());
+                return dtype(full(name, s.array, value, 1, &size), shape_tuple);
             }
-        }
 
-        return result;
-    } else if (dtype.is(&PyLong_Type) || dtype.is(&PyFloat_Type) || dtype.is(&PyBool_Type)) {
-        if (value.is_valid())
-            return dtype(value);
-        else
-            return dtype(0);
-    } else {
-        nb::object dstruct = nb::getattr(dtype, "DRJIT_STRUCT", nb::handle());
-        if (dstruct.is_valid() && dstruct.type().is(&PyDict_Type)) {
-            nb::dict dstruct_dict = nb::borrow<nb::dict>(dstruct);
-            nb::object result = dtype();
+            bool fail = s.ndim != ndim;
+            if (!fail) {
+                for (size_t i = 0; i < ndim; ++i)
+                    fail |= s.shape[i] != DRJIT_DYNAMIC && s.shape[i] != shape[i];
+            }
 
-            for (auto [k, v] : dstruct_dict) {
-                if (!v.is_type())
-                    throw nb::type_error("DRJIT_STRUCT invalid, expected type keys.");
+            raise_if(fail, "the provided \"shape\" and \"dtype\" parameters are incompatible.");
 
-                nb::object entry;
-                if (is_drjit_type(v) && ndim == 1)
-                    entry = full(v, value, shape[0]);
-                else
-                    entry = full(v, value, ndim, shape);
+            nb::object result = nb::inst_alloc(dtype);
 
-                nb::setattr(result, k, entry);
+            if (s.init_const && value.is_valid()) {
+                if ((VarType) s.type == VarType::Bool && value.type().is(&PyLong_Type))
+                    value = nb::cast<int>(value) ? Py_True : Py_False;
+
+                s.init_const(shape[0], value.ptr(),
+                             inst_ptr(result));
+                nb::inst_mark_ready(result);
+                return result;
+            }
+
+            if (s.shape[0] == DRJIT_DYNAMIC) {
+                s.init(shape[0], inst_ptr(result));
+                nb::inst_mark_ready(result);
+            } else {
+                nb::inst_zero(result);
+            }
+
+            if (!value.is_valid() && ndim == 1) {
+                return result;
+            } else {
+                ArraySupplement::SetItem set_item = s.set_item;
+                nb::object o;
+                for (size_t i = 0; i < shape[0]; ++i) {
+                    if (i == 0 || !value.is_valid())
+                        o = full(name, s.value, value, ndim - 1, shape + 1);
+                    set_item(result.ptr(), i, o.ptr());
+                }
             }
 
             return result;
-        }
+        } else if (dtype.is(&PyLong_Type) || dtype.is(&PyFloat_Type) || dtype.is(&PyBool_Type)) {
+            if (value.is_valid())
+                return dtype(value);
+            else
+                return dtype(0);
+        } else {
+            nb::object dstruct = nb::getattr(dtype, "DRJIT_STRUCT", nb::handle());
+            if (dstruct.is_valid() && dstruct.type().is(&PyDict_Type)) {
+                nb::dict dstruct_dict = nb::borrow<nb::dict>(dstruct);
+                nb::object result = dtype();
 
-        throw nb::type_error("Unsupported dtype.");
+                for (auto [k, v] : dstruct_dict) {
+                    raise_if(!v.is_type(), "DRJIT_STRUCT invalid, expected type keys.");
+
+                    nb::object entry;
+                    if (is_drjit_type(v) && ndim == 1)
+                        entry = full(name, v, value, shape[0]);
+                    else
+                        entry = full(name, v, value, ndim, shape);
+
+                    nb::setattr(result, k, entry);
+                }
+
+                return result;
+            }
+
+            if (!value.is_valid() || value.is(nb::int_(0)))
+                return dtype();
+
+            nb::detail::raise("unsupported dtype");
+        }
+    } catch (nb::python_error &e) {
+        nb::str tp_name = nb::type_name(dtype);
+        nb::raise_from(
+            e, PyExc_RuntimeError,
+            "drjit.%s(<%U>): could not construct output (see the error above).",
+            name, tp_name.ptr());
+    } catch (const std::exception &e) {
+        nb::str tp_name = nb::type_name(dtype);
+        nb::chain_error(PyExc_RuntimeError,
+                        "drjit.%s(<%U>): could not construct output: %s.", name,
+                        tp_name.ptr(), e.what());
+        nb::detail::raise_python_error();
     }
 }
 
@@ -757,35 +771,35 @@ nb::object linspace(const nb::type_object_t<ArrayBase> &dtype,
 void export_init(nb::module_ &m) {
     m.def("empty",
           [](nb::type_object dtype, size_t size) {
-              return full(dtype, nb::handle(), size);
+              return full("empty", dtype, nb::handle(), size);
           }, "dtype"_a, "shape"_a = 1, doc_empty)
      .def("empty",
           [](nb::type_object dtype, std::vector<size_t> shape) {
-              return full(dtype, nb::handle(), shape);
+              return full("empty", dtype, nb::handle(), shape);
           }, "dtype"_a, "shape"_a)
      .def("zeros",
           [](nb::type_object dtype, size_t size) {
-              return full(dtype, nb::int_(0), size);
+              return full("zeros", dtype, nb::int_(0), size);
           }, "dtype"_a, "shape"_a = 1, doc_zeros)
      .def("zeros",
           [](nb::type_object dtype, std::vector<size_t> shape) {
-              return full(dtype, nb::int_(0), shape);
+              return full("zeros", dtype, nb::int_(0), shape);
           }, "dtype"_a, "shape"_a)
      .def("ones",
           [](nb::type_object dtype, size_t size) {
-              return full(dtype, nb::int_(1), size);
+              return full("ones", dtype, nb::int_(1), size);
           }, "dtype"_a, "shape"_a = 1, doc_ones)
      .def("ones",
           [](nb::type_object dtype, std::vector<size_t> shape) {
-              return full(dtype, nb::int_(1), shape);
+              return full("ones", dtype, nb::int_(1), shape);
           }, "dtype"_a, "shape"_a)
      .def("full",
           [](nb::type_object dtype, nb::handle value, size_t size) {
-              return full(dtype, value, size);
+              return full("full", dtype, value, size);
           }, "dtype"_a, "value"_a, "shape"_a = 1, doc_full)
      .def("full",
           [](nb::type_object dtype, nb::handle value, std::vector<size_t> shape) {
-              return full(dtype, value, shape);
+              return full("full", dtype, value, shape);
           }, "dtype"_a, "value"_a, "shape"_a)
      .def("arange",
           [](const nb::type_object_t<ArrayBase> &dtype, Py_ssize_t size) {

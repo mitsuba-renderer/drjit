@@ -245,7 +245,8 @@ nb::object prefix_sum(nb::handle_t<dr::ArrayBase> h, bool exclusive, std::option
         if (!shape_impl(h, shape))
             nb::detail::raise("input array is ragged!");
 
-        nb::object result = full(tp, nb::int_(0), shape.size(), shape.data()),
+        nb::object result = full("zeros", tp, nb::int_(0), shape.size(),
+                                 shape.data()),
                    accum = nb::int_(0);
 
         size_t it = 0;

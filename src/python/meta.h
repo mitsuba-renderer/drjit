@@ -25,6 +25,9 @@ extern ArrayMeta meta_promote(ArrayMeta a, ArrayMeta b) noexcept;
 // Infer a metadata record for the given Python object
 extern ArrayMeta meta_get(nb::handle h) noexcept;
 
+/// Variant of the above that also works when 'h' is a type object
+extern ArrayMeta meta_get_general(nb::handle h) noexcept;
+
 /**
  * \brief Given a list of Dr.Jit arrays and scalars, determine the flavor and
  * shape of the result array and broadcast/convert everything into this form.

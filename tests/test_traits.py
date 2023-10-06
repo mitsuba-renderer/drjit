@@ -1,5 +1,6 @@
 import drjit as dr
 import pytest
+import sys
 
 @pytest.test_arrays("-tensor")
 def test01_traits(t):
@@ -149,3 +150,35 @@ def test01_traits(t):
     #  assert dr.float_array_t(dr.scalar.TensorXu64) is dr.scalar.TensorXf64
 
 
+@pytest.test_arrays("float, shape=(*)")
+def test02_expr_t(t):
+    m = sys.modules[t.__module__]
+    for t in [m.Float, m.UInt, m.Array3f, dr.detached_t(m.Float)]:
+        assert t == dr.expr_t(t)
+
+    assert dr.expr_t(1.0, m.Float(4.0)) == m.Float
+    assert dr.expr_t(m.Array3f, m.Float(4.0)) == m.Array3f
+    assert dr.expr_t(m.Array3f, m.ArrayXf, m.Float) == m.ArrayXf
+    assert dr.expr_t(m.Array3f, [1, 2, 3]) == m.Array3f
+    assert dr.expr_t(m.Array3f, m.ArrayXf, m.Float) == m.ArrayXf
+    assert dr.expr_t(int, float) == float
+    assert dr.expr_t(int, int) == int
+    assert dr.expr_t(m.Bool, m.Float) == m.Float
+
+    with pytest.raises(TypeError) as ei:
+        dr.expr_t(m.Array3f, m.ArrayXf, {})
+    assert "expr_t(): incompatible types" in str(ei.value)
+
+    with pytest.raises(TypeError) as ei:
+        dr.expr_t(m.Array3f, m.ArrayXf, None)
+    assert "expr_t(): incompatible types" in str(ei.value)
+
+    class MyStruct:
+        def __init__(self) -> None:
+            self.a = m.Float(1.0)
+            self.b = m.Float(2.0)
+        DRJIT_STRUCT = { 'a': m.Float, 'b': m.Float }
+
+    with pytest.raises(TypeError) as ei:
+        dr.expr_t(MyStruct, m.Float)
+    assert "expr_t(): incompatible types" in str(ei.value)

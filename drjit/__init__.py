@@ -311,7 +311,7 @@ def epsilon(arg0, /):
     Returns:
         float: The machine epsilon.
     '''
-    vt = var_type_v(arg0)
+    vt = type_v(arg0)
     if vt == VarType.Float64:
         return float.fromhex('0x1p-53')
     elif vt == VarType.Float32:
@@ -333,7 +333,7 @@ def one_minus_epsilon(arg0, /):
     Returns:
         float: One minus the machine epsilon.
     '''
-    vt = var_type_v(arg0)
+    vt = type_v(arg0)
     if vt == VarType.Float64:
         return float.fromhex('0x1.fffffffffffffp-1')
     elif vt == VarType.Float32:
@@ -358,7 +358,7 @@ def recip_overflow(arg0, /):
     Returns:
         float: The reciprocal overflow threshold value.
     '''
-    vt = var_type_v(arg0)
+    vt = type_v(arg0)
     if vt == VarType.Float64:
         return float.fromhex('0x1p-1024')
     elif vt == VarType.Float32:
@@ -380,7 +380,7 @@ def smallest(arg0, /):
     Returns:
         float: The smallest representable normalized floating point value.
     '''
-    vt = var_type_v(arg0)
+    vt = type_v(arg0)
     if vt == VarType.Float64:
         return float.fromhex('0x1p-1022')
     elif vt == VarType.Float32:
@@ -401,7 +401,7 @@ def largest(arg0, /):
     Returns:
         float: The largest representable finite floating point value.
     '''
-    vt = var_type_v(arg0)
+    vt = type_v(arg0)
     if vt == VarType.Float64:
         return float.fromhex('0x1.fffffffffffffp+1023')
     elif vt == VarType.Float32:

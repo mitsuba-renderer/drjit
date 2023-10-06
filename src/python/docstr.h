@@ -324,7 +324,7 @@ Args:
 Returns:
     drjit.JitBackend: The associated Jit backend or ``drjit.JitBackend.None``.)";
 
-static const char *doc_var_type_v = R"(
+static const char *doc_type_v = R"(
 Returns the scalar type associated with the given Dr.Jit array instance or
 type.
 

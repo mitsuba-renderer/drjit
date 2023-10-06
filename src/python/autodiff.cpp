@@ -52,24 +52,24 @@ static void set_grad_enabled(nb::handle h, bool enable_) {
     traverse("drjit.set_grad_enabled", SetGradEnabled{ enable_ }, h);
 }
 
-static void new_grad(nb::handle h) {
-    struct NewGrad : TraverseCallback {
-        void operator()(nb::handle h) const override {
-            nb::handle tp = h.type();
+static nb::object new_grad(nb::handle h) {
+    struct NewGrad : TransformCallback {
+        void operator()(nb::handle h1, nb::handle h2) const override {
+            nb::handle tp = h1.type();
             const ArraySupplement &s = supp(tp);
-            if (!s.is_diff || !is_float(s))
-                return;
+            uint32_t index = (uint32_t) s.index(inst_ptr(h1));
 
-            nb::object tmp = nb::inst_alloc(tp);
-            uint64_t new_index = ad_var_new((uint32_t) s.index(inst_ptr(h)));
-            s.init_index(new_index, inst_ptr(tmp));
-            ad_var_dec_ref(new_index);
-            nb::inst_mark_ready(tmp);
-            nb::inst_replace_move(h, tmp);
+            if (s.is_diff && is_float(s)) {
+                uint64_t new_index = ad_var_new(index);
+                s.init_index(new_index, inst_ptr(h2));
+                ad_var_dec_ref(new_index);
+            } else {
+                s.init_index(index, inst_ptr(h2));
+            }
         }
     };
 
-    traverse("drjit.detail.new_grad", NewGrad{ }, h);
+    return transform("drjit.detail.new_grad", NewGrad{ }, h);
 }
 
 static void enable_grad(nb::handle h) { set_grad_enabled(h, true); }
@@ -202,9 +202,16 @@ static nb::object replace_grad(nb::handle h0, nb::handle h1) {
             const ArraySupplement &s = supp(h1.type());
 
             if (s.is_diff && is_float(s)) {
-                uint64_t i1 = s.index(inst_ptr(h1)),
-                         i2 = s.index(inst_ptr(h2)),
+                dr::ArrayBase *p1 = inst_ptr(h1),
+                              *p2 = inst_ptr(h2);
+
+                if (s.len(p1) != s.len(p2))
+                    nb::detail::raise("mismatched input sizes.");
+
+                uint64_t i1 = s.index(p1),
+                         i2 = s.index(p2),
                          i3 = ((uint32_t) i1) | ((i2 >> 32) << 32);
+
                 s.init_index(i3, inst_ptr(h3));
             }
         }
@@ -432,14 +439,8 @@ public:
 
     void add_input(nb::handle h) { (void) add_input_v(h); }
     void add_output(nb::handle h) { (void) add_output_v(h); }
-
-    void set_input(const nb::dict &d) {
-        m_inputs = nb::borrow<nb::dict>(add_input_v(d));
-    }
-
-    void set_output(const nb::handle &h) {
-        m_output = add_output_v(h);
-    }
+    void set_input(nb::handle h) { m_inputs = nb::borrow<nb::dict>(add_input_v(h)); }
+    void set_output(nb::handle h) { m_output = add_output_v(h); }
 
 private:
     mutable std::string m_name_cache;
@@ -459,8 +460,8 @@ nb::object custom(nb::type_object_t<PyCustomOp> cls, nb::args args, nb::kwargs k
         nb::object output = eval_func(*detach(args), **detach(kwargs));
 
         // Ensure that the output is registered with the AD layer without depending
-        // on prevous computation. That dependence is reintroduced below.
-        ::new_grad(output);
+        // on previous computation. That dependence is reintroduced later below.
+        output = new_grad(output);
 
         size_t i = 0, argc = nb::cast<size_t>(eval_argc);
         for (nb::handle arg: args) {

@@ -48,7 +48,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
         std::is_class_v<std::remove_pointer_t<Value_>>;
 
     static constexpr VarType Type =
-        IsClass ? VarType::UInt32 : var_type_v<Value>;
+        IsClass ? VarType::UInt32 : type_v<Value>;
 
     using ActualValue = std::conditional_t<IsClass, uint32_t, Value>;
 

@@ -164,7 +164,7 @@ def test07_zeros(t, drjit_verbose, capsys):
     assert len(v) == 100 and v[0] == 0
     assert not is_jit or "literal" in capsys.readouterr().out
 
-    with pytest.raises(RuntimeError, match="The provided 'shape' and 'dtype' parameters are incompatible."):
+    with pytest.raises(RuntimeError, match='the provided "shape" and "dtype" parameters are incompatible.'):
         v = dr.zeros(t, (100, 200))
 
 # Test dr.zeros (2)
@@ -182,7 +182,7 @@ def test08_zeros_3d(t, drjit_verbose, capsys):
     assert len(v) == 3 and len(v[1]) == 100 and v[0][0] == 0
     assert not is_jit or "literal" in capsys.readouterr().out
 
-    with pytest.raises(RuntimeError, match="The provided 'shape' and 'dtype' parameters are incompatible."):
+    with pytest.raises(RuntimeError, match='the provided "shape" and "dtype" parameters are incompatible.'):
         v = dr.zeros(t, (100, 3))
 
 
@@ -211,7 +211,7 @@ def test10_zeros_matrix(t):
     assert len(v) == 3 and len(v[1]) == 3 and len(v[1][1]) == 100 and v[1][1][1] == 0
     v = dr.zeros(t, (3, 3, 100))
     assert len(v) == 3 and len(v[1]) == 3 and len(v[1][1]) == 100 and v[1][1][1] == 0
-    with pytest.raises(RuntimeError, match="The provided 'shape' and 'dtype' parameters are incompatible."):
+    with pytest.raises(RuntimeError, match='the provided "shape" and "dtype" parameters are incompatible.'):
         v = dr.zeros(t, (3, 4, 100))
 
 
@@ -252,7 +252,7 @@ def test13_empty(t, drjit_verbose, capsys):
     assert len(v) == 100
     assert not is_jit or "jit_var_new" in capsys.readouterr().out
 
-    with pytest.raises(RuntimeError, match="The provided 'shape' and 'dtype' parameters are incompatible."):
+    with pytest.raises(RuntimeError, match='the provided "shape" and "dtype" parameters are incompatible.'):
         v = dr.empty(t, [100, 200])
 
 
@@ -271,7 +271,7 @@ def test14_zeros_3d(t, drjit_verbose, capsys):
     assert len(v) == 3 and len(v[1]) == 100 and v[0][0] == 5
     assert not is_jit or "literal" in capsys.readouterr().out
 
-    with pytest.raises(RuntimeError, match="The provided 'shape' and 'dtype' parameters are incompatible."):
+    with pytest.raises(RuntimeError, match='the provided "shape" and "dtype" parameters are incompatible.'):
         v = dr.full(t, 5, (100, 3))
 
 
