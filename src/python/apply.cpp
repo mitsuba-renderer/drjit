@@ -678,6 +678,10 @@ nb::handle TransformCallback::transform_type(nb::handle tp) const {
     return tp;
 }
 
+nb::object TransformCallback::transform_unknown(nb::handle tp) const {
+    return nb::borrow(tp);
+}
+
 /// Transform an input pytree 'h' into an output pytree, potentially of a different type
 nb::object transform(const char *op, const TransformCallback &tc, nb::handle h1) {
     nb::handle tp1 = h1.type();
@@ -739,7 +743,7 @@ nb::object transform(const char *op, const TransformCallback &tc, nb::handle h1)
                     nb::setattr(result, k, transform(op, tc, nb::getattr(h1, k)));
                 return result;
             } else {
-                return nb::borrow(h1);
+                return tc.transform_unknown(h1);
             }
         }
     } catch (nb::python_error &e) {
