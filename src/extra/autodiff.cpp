@@ -171,7 +171,7 @@ struct Edge {
     bool copy_grad = false;
 
     /// Does edge.special store an instance of 'CustomOp'?
-    bool custom = false;
+    bool is_custom = false;
 };
 
 /// Flags characterizing the 'Variable.flags' bit field
@@ -599,11 +599,6 @@ static void ad_free(ADIndex index, Variable *v) {
         EdgeIndex next_bwd = edge.next_bwd,
                   next_fwd = edge.next_fwd;
 
-        if (edge.custom) {
-            unlock_guard<std::mutex> guard(state.mutex);
-            edge.special.reset();
-        }
-
         edge = Edge { };
 
         Variable *v2 = state[source];
@@ -941,7 +936,7 @@ DRJIT_NOINLINE Index ad_var_new_impl(const char *label, JitVar &&result,
         // All edges were pruned, don't create the node after all
         ad_log("ad_var_new(a%u): all edges pruned, removing variable.", ad_index);
         ad_free(ad_index, var);
-        return 0;
+        return result.release();
     }
 
     var->next_bwd = edge_index;
@@ -1206,13 +1201,11 @@ static void ad_clear_todo(std::vector<EdgeRef> &todo, bool remove_edges) {
         if (er.id == 0 && er.source == 0 && er.target == 0)
             continue; // edge has been moved to another todo list
 
-        Edge &edge = state.edges[er.id];
-
         Variable *source, *target;
-        std::tie(source, target) = ad_lookup_edge(er, edge);
+        std::tie(source, target) = ad_lookup_edge(er, state.edges[er.id]);
 
         if (!remove_edges) {
-            edge.visited = 0;
+            state.edges[er.id].visited = 0;
         } else {
             ad_log("ad_clear_todo(): removing edge a%u -> a%u", er.source,
                    er.target);
@@ -1268,12 +1261,7 @@ static void ad_clear_todo(std::vector<EdgeRef> &todo, bool remove_edges) {
                       "ad_clear_todo(): could not find backward edge a%u -> a%u",
                       er.source, er.target)
 
-            if (edge.custom) {
-                unlock_guard<std::mutex> guard(state.mutex);
-                edge.special.reset();
-            }
-
-            edge = Edge { };
+            state.edges[er.id] = Edge { };
             state.unused_edges.push(er.id);
 
             source = state[er.source];
@@ -1412,7 +1400,7 @@ void ad_traverse(dr::ADMode mode, uint32_t flags) {
                 }
             }
 
-            if (unlikely(grad_size != 1 && v0->size != grad_size && v0->size != 0)) {
+            if (unlikely(grad_size != 1 && v0->size != grad_size && !edge.is_custom)) {
                 if (grad_size == 0) {
                     ad_log("ad_traverse(): skipping edge a%u -> a%u (no source "
                            "gradient).", v0i, v1i);
@@ -1451,12 +1439,7 @@ void ad_traverse(dr::ADMode mode, uint32_t flags) {
                     if (edge2.copy_grad)
                         continue;
 
-                    if (edge.custom) {
-                        unlock_guard<std::mutex> guard(state.mutex);
-                        edge2.special.reset();
-                    } else {
-                        edge2.special.reset();
-                    }
+                    edge2.special.reset();
                 }
             } else {
                 v1->mul_accum(v0->grad, edge.weight, v0->size);
@@ -2633,6 +2616,13 @@ struct CustomOp : Special {
     CustomOp(dr::detail::CustomOpBase *op, Scope &&scope)
         : m_op(op), m_scope(std::move(scope)) { }
 
+    ~CustomOp() {
+        if (m_op.get()) {
+            unlock_guard<std::mutex> guard(state.mutex);
+            m_op.reset();
+        }
+    }
+
     bool swap(const Edge &e, Variable *v) {
         if (e.copy_grad) {
             CopyGrad &copy_grad = *(CopyGrad *) e.special.get();
@@ -2712,7 +2702,7 @@ struct CustomOp : Special {
     }
 };
 
-void ad_add_special(uint32_t v0i, uint32_t v1i, bool custom,
+void ad_add_special(uint32_t v0i, uint32_t v1i, bool is_custom,
                     std::unique_ptr<Special> special) {
     Variable *v0 = state[v0i], *v1 = state[v1i];
 
@@ -2725,8 +2715,8 @@ void ad_add_special(uint32_t v0i, uint32_t v1i, bool custom,
     edge.source = v0i;
     edge.target = v1i;
     edge.special = std::move(special);
-    edge.copy_grad = !custom;
-    edge.custom = custom;
+    edge.copy_grad = !is_custom;
+    edge.is_custom = is_custom;
 
     edge.next_fwd = v0->next_fwd;
     edge.next_bwd = v1->next_bwd;
@@ -2840,20 +2830,19 @@ bool ad_custom_op(dr::detail::CustomOpBase *op) {
 // following a CustomOp. It breaks what would otherwise be an uncollectable
 // reference cycle, since the CustomOp references its own outputs.
 static void DRJIT_NOINLINE ad_decref_custom_op_output(Variable *v) {
-    if (v->ref_count != 2)
+    if (v->ref_count != 2 || !v->next_bwd)
         return;
-
-    ad_assert(v->next_bwd, "ad_decref_custom_op_output(): expected to "
-                           "find a backward edge!");
 
     Edge *edge = &state.edges[v->next_bwd];
     if (edge->copy_grad)
         edge = &state.edges[state[edge->source]->next_bwd];
 
-    ad_assert(edge && edge->custom, "ad_decref_custom_op_output(): expected to "
-                                    "find an edge representing a CustomOp!");
+    ad_assert(edge && edge->is_custom, "ad_decref_custom_op_output(): expected to "
+                                       "find an edge representing a CustomOp!");
 
-    ((CustomOp *) edge->special.get())->release_one_output();
+    CustomOp *op = (CustomOp *) edge->special.get();
+    if (op)
+        op->release_one_output();
 }
 
 

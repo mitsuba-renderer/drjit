@@ -62,6 +62,7 @@ struct TraversePairCallback {
 /// Callback for the ``transform()`` operation below
 struct TransformCallback {
     virtual nb::handle transform_type(nb::handle tp) const;
+    virtual nb::object transform_unknown(nb::handle tp) const;
     virtual void operator()(nb::handle h1, nb::handle h2) const = 0;
 };
 

@@ -146,6 +146,10 @@ static nb::object grad(nb::handle h, bool preserve_type_ = true) {
             }
         }
 
+        nb::object transform_unknown(nb::handle tp) const override {
+            return nb::float_(0);
+        }
+
         void operator()(nb::handle h1, nb::handle h2) const override {
             const ArraySupplement &s1 = supp(h1.type()),
                                   &s2 = supp(h2.type());
@@ -439,7 +443,9 @@ public:
 
     void add_input(nb::handle h) { (void) add_input_v(h); }
     void add_output(nb::handle h) { (void) add_output_v(h); }
-    void set_input(nb::handle h) { m_inputs = nb::borrow<nb::dict>(add_input_v(h)); }
+    void set_input(nb::handle h) {
+        m_inputs = nb::borrow<nb::dict>(add_input_v(h));
+    }
     void set_output(nb::handle h) { m_output = add_output_v(h); }
 
 private:
