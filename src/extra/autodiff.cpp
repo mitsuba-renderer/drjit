@@ -2291,7 +2291,13 @@ Index ad_var_scatter(Index target, Index value, JitIndex offset,
         jit_index(target), jit_index(value), offset, mask, reduce_op));
 
     if (is_detached(value) && (is_detached(target) || permute)) {
-        return result.release();
+        ADIndex ad_index = ::ad_index(target);
+        if (ad_index) {
+            std::lock_guard<std::mutex> guard(state.mutex);
+            ad_var_inc_ref_int(ad_index, state[ad_index]);
+        }
+
+        return combine(ad_index, result.release());
     } else {
         if (reduce_op != ReduceOp::None && reduce_op != ReduceOp::Add)
             ad_raise("ad_var_scatter(): differentiable scatters with with "

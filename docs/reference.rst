@@ -213,6 +213,126 @@ Just-in-time compilation
 .. autofunction:: has_backend
 .. autofunction:: schedule
 .. autofunction:: eval
+
+
+.. autoclass:: JitFlag
+
+   Flags that control how Dr.Jit compiles and optimizes programs.
+
+   This enumeration lists various flag that control how Dr.Jit compiles and
+   optimizes programs, most of which are enabled by default. The status of each
+   flag can be queried via :py:func:`drjit.flag` and enabled/disabled via the
+   :py:func:`drjit.scoped_flag` and :py:func:`drjit.scoped_set_flag` functions.
+
+   The most common reason to update the flags is to switch between *wavefront* and
+   *recorded* execution of loops and functions. The former eagerly executes
+   programs by breaking them into many smaller kernels, while the latter records
+   computation symbolically to assemble large *megakernels*. See the documentation
+   of :py:func:`drjit.switch` and :py:class:`drjit.Loop` for more details on these
+   two modes.
+
+   .. autoattribute:: ConstantPropagation
+      :annotation:
+
+      **Constant propagation**: immediately evaluate arithmetic involving literal
+      constants on the host and don't generate any device-specific code for them.
+
+      For example, the following assertion holds when value numbering is enabled in
+      Dr.Jit.
+
+      .. code-block:: python
+
+         from drjit.llvm import Int
+
+         # Create two literal constant arrays
+         a, b = Int(4), Int(5)
+
+         # This addition operation can be immediately performed and does not need to be recorded
+         c1 = a + b
+
+         # Double-check that c1 and c2 refer to the same Dr.Jit variable
+         c2 = Int(9)
+         assert c1.index == c2.index
+
+      Enabled by default.
+
+   .. autoattribute:: ValueNumbering
+      :annotation:
+
+      **Local value numbering**: a simple variant of common subexpression elimination
+      that collapses identical expressions within basic blocks. For example, the
+      following assertion holds when value numbering is enabled in Dr.Jit.
+
+      .. code-block:: python
+
+         from drjit.llvm import Int
+
+         # Create two nonliteral arrays stored in device memory
+         a, b = Int(1, 2, 3), Int(4, 5, 6)
+
+         # Perform the same arithmetic operation twice
+         c1 = a + b
+         c2 = a + b
+
+         # Verify that c1 and c2 reference the same Dr.Jit variable
+         assert c1.index == c2.index
+
+       Enabled by default.
+
+   .. autoattribute:: VCallRecord
+      :annotation:
+
+      **Recorded function calls**: Dr.Jit provides two main ways of compiling
+      *indirect function calls* (aka. *virtual function calls* or *dynamic dispatch*).
+
+      1. **Recorded mode**: When this flag is set (the default), Dr.Jit captures
+         callables by invoking them with symbolic/abstract arguments. These
+         transcripts are then turned into function calls in the generated program.
+         In a sense, recorded mode most closely preserves the original program
+         semantics.
+
+         The main advantage of recorded mode is:
+
+         * It is very efficient in terms of device memory storage and bandwidth, since
+           function call arguments and return values can be exchanged through fast
+           CPU/GPU registers.
+
+         Its main downsides are:
+
+         * Symbolic arrays cannot be evaluated, printed, etc. Attempting to
+           perform such operations will raise an exception.
+
+           This limitation may be inconvenient especially when debugging code, in
+           which case wavefront mode is preferable.
+
+         * Thread divergence: neighboring SIMD lanes may target different callables,
+           which can have a significant negative impact on refficiency.
+
+         * A kernel with many callables can become quite large and costly to compile.
+
+      2. **Wavefront mode**: In this mode, Dr.Jit to launches a series of kernels
+         processing subsets of the input data (one per callable).
+
+         The main advantages of wavefront mode is:
+
+         * Easy to debug / step through programs and examine intermediate results.
+
+         * Kernels are smaller and avoid thread divergence, since Dr.Jit reorders
+           computation by callable.
+
+         The main downsides are:
+
+         * Each callable essentially turns its own kernel that reads its input and
+           writes outputs via device memory. The required memory bandwidth and
+           storage are often so overwhelming that wavefront mode becomes impractical.
+
+      Recorded mode is enabled by default.
+
+   .. autoattribute:: Default
+      :annotation:
+
+      The default set of flags.
+
 .. autofunction:: set_flag
 .. autofunction:: flag
 .. autoclass:: scoped_set_flag
@@ -860,7 +980,6 @@ Array base class
     .. automethod:: __ne__
     .. automethod:: __eq__
     .. automethod:: __dlpack__
-    .. automethod:: __dlpack_device__
     .. automethod:: __array__
 
 Concrete array classes

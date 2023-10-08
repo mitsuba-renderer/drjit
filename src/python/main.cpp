@@ -59,6 +59,14 @@ NB_MODULE(drjit_ext, m_) {
         .value("CUDA", JitBackend::CUDA, doc_JitBackend_CUDA)
         .value("LLVM", JitBackend::LLVM, doc_JitBackend_LLVM);
 
+    nb::enum_<JitFlag>(m, "JitFlag", doc_JitFlag)
+        .value("ConstantPropagation", JitFlag::ConstantPropagation, doc_JitFlag_ConstantPropagation)
+        .value("ValueNumbering", JitFlag::ValueNumbering, doc_JitFlag_ValueNumbering)
+        .value("VCallRecord", JitFlag::VCallRecord, doc_JitFlag_VCallRecord)
+        .value("Default", JitFlag::Default, doc_JitFlag_Default);
+        // .value("VCallDeduplicate", JitFlag::VCallDeduplicate, doc_JitFlag_VCallDeduplicate)
+        // .value("VCallOptimize", JitFlag::VCallOptimize, doc_JitFlag_VCallOptimize);
+
     nb::enum_<VarType>(m, "VarType", doc_VarType)
         .value("Void", VarType::Void, doc_VarType_Void)
         .value("Bool", VarType::Bool, doc_VarType_Bool)
@@ -85,12 +93,37 @@ NB_MODULE(drjit_ext, m_) {
         .value("Or", ReduceOp::Or, doc_ReduceOp_Or)
         .value("Count", ReduceOp::Count, doc_ReduceOp_Count);
 
-    nb::enum_<JitFlag>(m, "JitFlag", doc_JitFlag);
-
     m.def("has_backend", &jit_has_backend, doc_has_backend);
 
     m.def("whos_str", &jit_var_whos);
     m.def("whos", []() { nb::print(jit_var_whos()); });
+
+    struct scoped_set_flag_py {
+        JitFlag flag;
+        bool value, backup = false;
+        scoped_set_flag_py(JitFlag flag, bool value)
+            : flag(flag), value(value) { }
+
+        void __enter__() {
+            backup = jit_flag(flag);
+            jit_set_flag(flag, value);
+        }
+
+        void __exit__(nb::handle, nb::handle, nb::handle) {
+            jit_set_flag(flag, backup);
+        }
+    };
+
+    m.def("flag", &jit_flag, doc_flag);
+    m.def("set_flag", &jit_set_flag, doc_set_flag);
+
+    nb::class_<scoped_set_flag_py>(detail, "scoped_set_flag",
+                                   doc_scoped_set_flag)
+        .def(nb::init<JitFlag, bool>(), "flag"_a, "value"_a = true)
+        .def("__enter__", &scoped_set_flag_py::__enter__)
+        .def("__exit__", &scoped_set_flag_py::__exit__, nb::arg().none(),
+             nb::arg().none(), nb::arg().none());
+
     m.attr("None") = nb::none();
 
     // Intrusive reference counting
