@@ -219,8 +219,11 @@ static nb::object replace_grad(nb::handle h0, nb::handle h1) {
                 dr::ArrayBase *p1 = inst_ptr(h1),
                               *p2 = inst_ptr(h2);
 
-                if (s.len(p1) != s.len(p2))
-                    nb::detail::raise("mismatched input sizes.");
+                size_t l1 = s.len(p1),
+                       l2 = s.len(p2);
+
+                if (l1 != l2)
+                    nb::detail::raise("incompatible input sizes (%zu and %zu).", l1, l2);
 
                 uint64_t i1 = s.index(p1),
                          i2 = s.index(p2),
@@ -342,22 +345,6 @@ static nb::object backward_to_2(nb::args args, nb::kwargs kwargs) {
     }
 
     return strip_tuple(backward_to(args, flags));
-}
-
-void collect_indices(nb::handle h, nb::list result_) {
-    struct CollectIndices : TraverseCallback {
-        nb::list &result;
-        CollectIndices(nb::list &result) : result(result) { }
-
-        void operator()(nb::handle h) const override {
-            nb::handle tp = h.type();
-            const ArraySupplement &s = supp(tp);
-            if (s.index)
-                result.append(s.index(inst_ptr(h)));
-        }
-    };
-
-    traverse("drjit.detail.collect_indices", CollectIndices { result_ }, h);
 }
 
 class PyCustomOp : public drjit::detail::CustomOpBase {
@@ -597,7 +584,6 @@ void export_autodiff(nb::module_ &m) {
                  ad_scope_leave(exc_type.is(nb::none()));
              }, nb::arg().none(), nb::arg().none(), nb::arg().none());
 
-    detail.def("collect_indices", &collect_indices);
     detail.def("new_grad", &new_grad);
 
     nb::class_<PyCustomOp, nb::intrusive_base>(m, "CustomOp", doc_CustomOp)

@@ -349,7 +349,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                 Derived result;                                              \
                 if constexpr (Derived::Size == Dynamic) {                    \
                     if ((sa != sr && sa != 1) || (sb != sr && sb != 1))      \
-                        drjit_raise(#name "_() : mismatched input sizes "    \
+                        drjit_raise(#name "_() : incompatible input sizes "  \
                                    "(%zu and %zu)", sa, sb);                 \
                     result = drjit::empty<Derived>(sr);                      \
                 }                                                            \
@@ -381,7 +381,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
             Derived result;                                                  \
             if constexpr (Derived::Size == Dynamic) {                        \
                 if ((sa != sr && sa != 1) || (sb != sr && sb != 1))          \
-                    drjit_raise(#name "_() : mismatched input sizes "        \
+                    drjit_raise(#name "_() : incompatible input sizes "      \
                                "(%zu and %zu)", sa, sb);                     \
                 result = drjit::empty<Derived>(sr);                          \
             }                                                                \
@@ -405,7 +405,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
             mask_t<Derived> result;                                          \
             if constexpr (Derived::Size == Dynamic) {                        \
                 if ((sa != sr && sa != 1) || (sb != sr && sb != 1))          \
-                    drjit_raise(#name "_() : mismatched input sizes "        \
+                    drjit_raise(#name "_() : incompatible input sizes "      \
                                "(%zu and %zu)", sa, sb);                     \
                 result = drjit::empty<mask_t<Derived>>(sr);                  \
             }                                                                \
@@ -433,7 +433,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                 if constexpr (Derived::Size == Dynamic) {                    \
                     if ((sa != sr && sa != 1) || (sb != sr && sb != 1) ||    \
                         (sc != sr && sc != 1))                               \
-                        drjit_raise(#name "_() : mismatched input sizes "    \
+                        drjit_raise(#name "_() : incompatible input sizes "  \
                                    "(%zu, %zu, and %zu)", sa, sb, sc);       \
                     result = drjit::empty<Derived>(sr);                      \
                 }                                                            \
@@ -560,7 +560,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
         if constexpr (Derived::Size == Dynamic) {
             if ((sm != sr && sm != 1) || (st != sr && st != 1) ||
                 (sf != sr && sf != 1))
-                drjit_raise("select_() : mismatched input sizes "
+                drjit_raise("select_() : incompatible input sizes "
                            "(%zu, %zu, and %zu)", sm, st, sf);
             result = drjit::empty<Derived>(sr);
         }
@@ -601,7 +601,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
 
                 if constexpr (Derived::Size == Dynamic) {
                     if ((sa != sr && sa != 1) || (sb != sr && sb != 1))
-                        drjit_raise("dot_() : mismatched input sizes "
+                        drjit_raise("dot_() : incompatible input sizes "
                                     "(%zu and %zu)", sa, sb);
                     else if (sr == 0)
                         return Value(0);
@@ -790,7 +790,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
             if (sa == 0 && sb == 1)
                 sr = 0;
             else if ((sa != sr && sa != 1) || (sb != sr && sb != 1))
-                drjit_raise("gather_() : mismatched input sizes "
+                drjit_raise("gather_() : incompatible input sizes "
                             "(%zu and %zu)", sa, sb);
             result = drjit::empty<Derived>(sr);
         }

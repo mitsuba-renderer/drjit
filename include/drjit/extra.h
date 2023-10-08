@@ -140,18 +140,23 @@ extern DRJIT_EXTRA_EXPORT void ad_var_dec_ref_impl(uint64_t) JIT_NOEXCEPT;
 extern DRJIT_EXTRA_EXPORT uint64_t ad_var_reduce(JitBackend, VarType,
                                                  JIT_ENUM ReduceOp, uint64_t);
 
-/// Compute an exclusive (exclusive == 1) or inclusive (exclusive == 0) prefix sum
-extern DRJIT_EXPORT uint64_t ad_var_prefix_sum(uint64_t index, int exclusive);
+/// Compute an exclusive (exclusive == 1) or inclusive (exclusive == 0) prefix
+/// sum
+extern DRJIT_EXTRA_EXPORT uint64_t ad_var_prefix_sum(uint64_t index,
+                                                     int exclusive);
 
 /// Perform a differentiable gather operation. See jit_var_gather for signature.
-extern DRJIT_EXPORT uint64_t ad_var_gather(uint64_t source, uint64_t offset,
-                                           uint64_t mask, bool permute);
+extern DRJIT_EXTRA_EXPORT uint64_t ad_var_gather(uint64_t source,
+                                                 uint64_t offset, uint64_t mask,
+                                                 bool permute);
 
-/// Perform a differentiable scatter operation. See jit_var_scatter for signature.
-extern DRJIT_EXPORT uint64_t ad_var_scatter(uint64_t target, uint64_t value,
-                                            uint32_t index, uint32_t mask,
-                                            JIT_ENUM ReduceOp reduce_op,
-                                            bool permute);
+/// Perform a differentiable scatter operation. See jit_var_scatter for
+/// signature.
+extern DRJIT_EXTRA_EXPORT uint64_t ad_var_scatter(uint64_t target,
+                                                  uint64_t value,
+                                                  uint32_t index, uint32_t mask,
+                                                  JIT_ENUM ReduceOp reduce_op,
+                                                  bool permute);
 
 extern DRJIT_EXTRA_EXPORT uint64_t ad_var_cast(uint64_t, VarType);
 extern DRJIT_EXTRA_EXPORT void ad_enqueue(drjit::ADMode, uint64_t);
@@ -181,6 +186,17 @@ namespace drjit { namespace detail { class CustomOpBase; }};
 
 extern DRJIT_EXTRA_EXPORT bool ad_custom_op(drjit::detail::CustomOpBase *);
 extern DRJIT_EXTRA_EXPORT bool ad_release_one_output(drjit::detail::CustomOpBase *);
+
+using ad_dispatch_callback = void(void *payload, size_t index,
+                               const drjit::dr_vector<uint64_t> &args_i,
+                               drjit::dr_vector<uint64_t> &rv_i);
+
+extern DRJIT_EXTRA_EXPORT void
+ad_dispatch(JitBackend backend, const char *domain, uint32_t index,
+            uint32_t mask, size_t callable_count,
+            const drjit::dr_vector<uint64_t> args,
+            drjit::dr_vector<uint64_t> &rv, ad_dispatch_callback callback,
+            void *payload);
 
 #if defined(__cplusplus)
 }

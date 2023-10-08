@@ -33,6 +33,8 @@ nanobind_add_module(
   dlpack.h   dlpack.cpp
   autodiff.h autodiff.cpp
   inspect.h  inspect.cpp
+  misc.h     misc.cpp
+  dispatch.h dispatch.cpp
 )
 
 set_target_properties(drjit-python

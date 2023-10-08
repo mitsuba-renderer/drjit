@@ -35,6 +35,15 @@ inline ArrayBase* inst_ptr(nb::handle h) {
     return nb::inst_ptr<ArrayBase>(h);
 }
 
+NAMESPACE_BEGIN(NB_NAMESPACE)
+NAMESPACE_BEGIN(detail)
+
+template <typename T> struct type_caster<dr::dr_vector<T>>
+ : list_caster<drjit::dr_vector<T>, T> { };
+
+NAMESPACE_END(detail)
+NAMESPACE_END(NB_NAMESPACE)
+
 #define raise_if(expr, ...)                                                    \
     do {                                                                       \
         if (NB_UNLIKELY(expr))                                                 \

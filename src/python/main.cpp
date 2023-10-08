@@ -26,6 +26,8 @@
 #include "dlpack.h"
 #include "autodiff.h"
 #include "inspect.h"
+#include "dispatch.h"
+#include "misc.h"
 
 NB_MODULE(drjit_ext, m_) {
     (void) m_;
@@ -124,6 +126,8 @@ NB_MODULE(drjit_ext, m_) {
     export_dlpack(m);
     export_autodiff(m);
     export_inspect(m);
+    export_misc(m);
+    export_dispatch(m);
 
     export_scalar(scalar);
 

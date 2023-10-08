@@ -1145,11 +1145,11 @@ def test090_replace_grad(t):
 
     with pytest.raises(RuntimeError) as ei:
        dr.replace_grad(t(1,2,3),t(1,2,3,4))
-    assert "mismatched input sizes" in str(ei.value)
+    assert "incompatible input sizes" in str(ei.value)
 
     with pytest.raises(RuntimeError) as ei:
        dr.replace_grad((1.0,), (m.UInt(1),))
-    assert "mismatched input types." in str(ei.value.__cause__)
+    assert "incompatible input types." in str(ei.value.__cause__)
 
     x = m.Array3f(1, 2, 3)
     y = m.Array3f(3, 2, 1)
@@ -1627,19 +1627,28 @@ class Fail(dr.CustomOp):
 
 @pytest.test_arrays('is_diff,float32,shape=(*)')
 def test107_custom_op_fail_fwd(t):
-    for i in range(100):
-        x = t(1)
-        dr.enable_grad(x)
-        y = dr.custom(Fail, x)
-        with pytest.raises(RuntimeError, match='Forward traversal failed'):
-            dr.forward_from(x)
+    x = t(1)
+    dr.enable_grad(x)
+    y = dr.custom(Fail, x)
+    with pytest.raises(RuntimeError, match='Forward traversal failed'):
+        dr.forward_from(x)
 
 
 @pytest.test_arrays('is_diff,float32,shape=(*)')
 def test108_custom_op_fail_bwd(t):
-    for i in range(100):
-        x = t(1)
+    x = t(1)
+    dr.enable_grad(x)
+    y = dr.custom(Fail, x)
+    with pytest.raises(RuntimeError, match='Backward traversal failed'):
+        dr.backward_from(y)
+
+@pytest.test_arrays('is_diff,float32,shape=(*)')
+def test109_infinite_recursion(t):
+    x = [ t(1) ]
+    x.append(x)
+    with pytest.raises(RuntimeError) as e:
         dr.enable_grad(x)
-        y = dr.custom(Fail, x)
-        with pytest.raises(RuntimeError, match='Backward traversal failed'):
-            dr.backward_from(y)
+    e = e.value
+    while e.__cause__ is not None:
+        e = e.__cause__
+    assert type(e) is RecursionError

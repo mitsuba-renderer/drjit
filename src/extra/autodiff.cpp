@@ -599,7 +599,6 @@ static void ad_free(ADIndex index, Variable *v) {
         EdgeIndex next_bwd = edge.next_bwd,
                   next_fwd = edge.next_fwd;
 
-        if (edge.is_custom)
         edge = Edge { };
 
         Variable *v2 = state[source];

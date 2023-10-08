@@ -2064,7 +2064,7 @@ Args:
 
     value (object): The values to be used in the RMW operation (typically of
       type ``type(target)``, but other variations are possible as well, see
-      the description above.) Dr.Jit will attempt an implicit conversion if the 
+      the description above.) Dr.Jit will attempt an implicit conversion if the
       the input is not an array type.
 
     index (object): a 1D dynamic unsigned 32-bit Dr.Jit array (e.g.,
@@ -3249,7 +3249,7 @@ default implementation raises an exception. It should realize the original
 of positional, keyword, and variable-length positional/keword arguments.
 
 You should not need to call this function yourself---Dr.Jit will automatically do so
-when performing custom operations through the :py:func:`drjit.custom()` interface. 
+when performing custom operations through the :py:func:`drjit.custom()` interface.
 
 Note that the input arguments passed to ``.eval()`` will be *detached* (i.e.
 they don't have derivative tracking enabled). This is intentional, since
@@ -3369,6 +3369,164 @@ See the documentation of :py:class:`CustomOp` for examples on how to realize
 such a custom operation.
 )";
 
+static const char *doc_switch = R"(
+switch(index: int | drjit.ArrayBase, callables: Sequence[Callable], *args, **kwargs) -> object
+
+Invoke one of multiple callables based on an index or an array of indices.
+
+When provided with a *scalar* index (``type(index)`` is ``int``), this function
+invokes one of the provided callables and is semantically equivalent to the
+following Python code:
+
+.. code-block:: python
+
+   def switch(index: int, callables, *args, **kwargs):
+       return callables[index](*args, **kwargs)
+
+When provided with a Dr.Jit array of indices (32-bit unsigned integers), it
+performs the vectorized equivalent of the above and assembles an array of
+return values containing the result of all referenced callables.
+
+.. code-block:: python
+
+    import drjit as dr
+    from drjit.llvm import UInt32
+
+    def f1(x):
+        return x
+
+    def f2(x):
+        return x*10
+
+    index = UInt32(0, 1, 1, 0)
+    res = dr.switch(index, [f1, f2], dr.arange(UInt32, 4))
+
+    # res now contains [0, 10, 20, 3]
+
+When a boolean Dr.Jit array (e.g., :py:class:`drjit.llvm.Bool`,
+:py:class:`drjit.cuda.ad.Bool`, etc.) is specified as last positional argument
+or as a keyword argument named ``active``, that argument is treated specially
+and *not* forwarded to the provided callables. Entries of the input arrays
+associated with a ``False`` mask entry are ignored and never passed to the
+callables. The corresponding return value entries remain zero-initialized.
+
+Dr.Jit will use one of two possible strategies to realize this operation
+depending on the active compilation flags (see :py:func:`drjit.set_flag`,
+:py:func:`drjit.scoped_set_flag`):
+
+1. **Symbolic mode**: When :py:attr:`drjit.JitFlag.SymbolicDispatch` is set (the
+   default), Dr.Jit transcribes every callable into an equivalent function in the
+   generated low-level intermediate representation (LLVM IR or PTX) and targets
+   them via an indirect jump instruction.
+
+   One caveat with this approach is that Dr.Jit does not yet know the specific
+   inputs reaching each callable at trace time. This knowledge will only become
+   available later on when the generated code runs on the device (e.g., the
+   GPU). Thus, callables receive *symbolic* input arrays that merely help to
+   transcribe their implementation into low-level IR. Some operations involving
+   such symbolic inputs are not valid and will fail:
+
+   .. code-block:: python
+
+      from drjit.llvm import Array3f, Float, UInt32
+
+      # A callable 'f1' called by dr.switch()
+      def f1(x: dr.llvm.Array3f):
+          print(x)        # <-- fails
+          y: Float = x[0] # <-- OK
+          z: float = y[0] # <-- fails
+
+   The common pattern of the failing operations is that they require variable
+   evaluation (i.e., :py:func:`drjit.eval`). It's perfectly valid to index into
+   nested Dr.Jit arrays like :py:class:`drjit.llvm.Array3f`---the end result
+   should just not be a Python ``int`` or ``float`` since that would require
+   knowing the actual array contents. Printing array contents is also possible,
+   but it requires a special *unevaluated* operation named
+   :py:func:`drjit.print_async`. If you wish to avoid such complications,
+   consider wavefront-mode compilation discussed next.
+
+2. **Wavefront mode**: When :py:attr:`drjit.JitFlag.SymbolicDispatch` is *not* set,
+   Dr.Jit *evaluates* the inputs  ``index``, ``args``, ``kwargs`` via
+   :py:func:`drjit.eval`, groups them by the provided index, and invokes each
+   callable with with the subset of inputs that reference it. Callables that
+   are not referenced by any element of ``index`` are ignored.
+
+   In this mode, a :py:func:`drjit.switch` statement will cause Dr.Jit to
+   launch a series of kernels processing subsets of the input data (one per
+   callable), which is referred to as *wavefronts* in Dr.Jit.
+
+   This can negatively impact performance and memory usage as function
+   arguments must be written to device memory. On the other hand,
+   wavefront-mode execution is simpler to understand and debug. It is possible
+   to single-step through programs, examine array contents, etc.
+
+To switch the compilation mode locally, use :py:func:`drjit.scoped_set_flag` as
+shown below:
+
+.. code-block:: python
+
+   with dr.scoped_set_flag(dr.JitFlag.SymbolicDispatch, False):
+       result = dr.switch(..)
+
+The functions :py:func:`drjit.switch` and :py:func:`drjit.dispatch` may be
+arbitrarily nested. However, a callable invoked by a symbolic-mode
+:py:func:`drjit.switch` call may not perform a wavefront-style
+:py:func:`dr.switch` or :py:func:`dr.dispatch` since this would require the
+evaluation of symbolic variables.
+
+Args:
+    index (int|drjit.ArrayBase): a list of indices to choose the functions
+
+    callables (Sequence[Callable]): a list of callables to which calls will be
+      dispatched based on the `index` argument.
+
+    *args (tuple): a variable-length list of positional arguments passed to the
+      callables.
+
+    **kwargs (dict): a variable-length list of keyword arguments passed to the
+      callables.
+
+Returns:
+    object: A single function reutrn value, or an array of return values. The
+    specifics depend on whether the `index` argument is scalar, and what the
+    provided functions return.)";
+
+static const char *doc_collect_indices = R"(
+Return Dr.Jit variable indices associated with the provided data structure.
+
+This function traverses Dr.Jit arrays, tensors, :ref:`Pytree <pytrees>` (lists,
+tuples, dicts, custom data structures) and returns the indices of all detected
+variables (in the order of traversal, may contain duplicates). The index
+information is returned as a list of encoded 64 bit integers, where each
+contains the AD variable index in the upper 32 bits and the JIT variable index
+in the lower 32 bit.
+
+Intended purely for internal Dr.Jit use, you probably should not call this in
+your own application.)";
+
+static const char *doc_update_indices = R"(
+Create a copy of the provided input while replacing Dr.Jit variables with
+new ones based on a provided set of indices.
+
+This function works analogously to ``collect_indices``, except that it
+consumes an index array and produces an updated output.
+
+It recursively traverses and copies an input object that may be a Dr.Jit array,
+tensor, or :ref:`Pytree <pytrees>` (list, tuple, dict, custom data structure)
+while replacing any detected Dr.Jit variables with new ones based on the
+provided index vector. The function returns the resulting object, while leaving
+the input unchanged. The output array borrows the referenced array indices
+as opposed to stealing them.
+
+Intended purely for internal Dr.Jit use, you probably should not call this in
+your own application.)";
+
+static const char *doc_check_compatibility = R"(
+Traverse two pytrees in parallel and ensure that they have an identical
+structure.
+
+Raises an exception is a mismatch is found (e.g., different types, arrays with
+incompatible numbers of elements, dictionaries with different keys, etc.))";
 
 #if defined(__GNUC__)
 #  pragma GCC diagnostic pop
