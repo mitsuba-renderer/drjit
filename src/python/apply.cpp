@@ -543,9 +543,23 @@ nb::object apply_ret_pair(ArrayOp op, const char *name, nb::handle_t<dr::ArrayBa
     return nb::object();
 }
 
+static int recursion_level = 0;
+
+// Pytrees can include cycles. Catch infinite recursion below
+struct recursion_guard {
+    recursion_guard() {
+        if (++recursion_level >= 50) {
+            PyErr_SetString(PyExc_RecursionError, "runaway recursion detected");
+            nb::detail::raise_python_error();
+        }
+    }
+    ~recursion_guard() { recursion_level--; }
+};
+
 /// Invoke the given callback on leaf elements of the pytree 'h'
 void traverse(const char *op, const TraverseCallback &tc, nb::handle h) {
     nb::handle tp = h.type();
+    recursion_guard guard;
 
     try {
         if (is_drjit_type(tp)) {
@@ -597,11 +611,12 @@ void traverse(const char *op, const TraverseCallback &tc, nb::handle h) {
 /// Parallel traversal of two compatible pytrees 'h1' and 'h2'
 void traverse_pair(const char *op, const TraversePairCallback &tc,
                    nb::handle h1, nb::handle h2) {
+    recursion_guard guard;
     nb::handle tp1 = h1.type(), tp2 = h2.type();
 
     try {
         if (!tp1.is(tp2))
-            nb::detail::raise("mismatched input types.");
+            nb::detail::raise("incompatible input types.");
 
         if (is_drjit_type(tp1)) {
             const ArraySupplement &s = supp(tp1);
@@ -642,7 +657,9 @@ void traverse_pair(const char *op, const TraversePairCallback &tc,
                      d2 = nb::borrow<nb::dict>(h2);
             nb::object k1 = d1.keys(), k2 = d2.keys();
             if (!k1.equal(k2))
-                nb::detail::raise("dictionaries have mismatched keys.");
+                nb::detail::raise(
+                    "dictionaries have incompatible keys (%s vs %s).",
+                    nb::str(k1).c_str(), nb::str(k2).c_str());
             for (nb::handle k : k1)
                 traverse_pair(op, tc, d1[k], d2[k]);
         } else {
@@ -684,6 +701,7 @@ nb::object TransformCallback::transform_unknown(nb::handle tp) const {
 
 /// Transform an input pytree 'h' into an output pytree, potentially of a different type
 nb::object transform(const char *op, const TransformCallback &tc, nb::handle h1) {
+    recursion_guard guard;
     nb::handle tp1 = h1.type();
 
     try {
@@ -721,9 +739,13 @@ nb::object transform(const char *op, const TransformCallback &tc, nb::handle h1)
             nb::tuple t = nb::borrow<nb::tuple>(h1);
             size_t size = nb::len(t);
             nb::object result = nb::steal(PyTuple_New(size));
+            if (!result.is_valid())
+                nb::detail::raise_python_error();
+
             for (size_t i = 0; i < size; ++i)
                 PyTuple_SET_ITEM(result.ptr(), i,
                                  transform(op, tc, t[i]).release().ptr());
+
             return result;
         } else if (tp1.is(&PyList_Type)) {
             nb::list result;
@@ -769,11 +791,12 @@ nb::handle TransformPairCallback::transform_type(nb::handle tp) const {
 /// Transform a pair of input pytrees 'h1' and 'h2' into an output pytree, potentially of a different type
 nb::object transform_pair(const char *op, const TransformPairCallback &tc,
                           nb::handle h1, nb::handle h2) {
+    recursion_guard guard;
     nb::handle tp1 = h1.type(), tp2 = h2.type();
 
     try {
         if (!tp1.is(tp2))
-            nb::detail::raise("mismatched input types.");
+            nb::detail::raise("incompatible input types.");
 
         if (is_drjit_type(tp1)) {
             nb::handle tp3 = tc.transform_type(tp1);
@@ -821,9 +844,13 @@ nb::object transform_pair(const char *op, const TransformPairCallback &tc,
                 nb::detail::raise("incompatible input lengths (%zu and %zu).", len1, len2);
 
             nb::object result = nb::steal(PyTuple_New(len1));
+            if (!result.is_valid())
+                nb::detail::raise_python_error();
+
             for (size_t i = 0; i < len1; ++i)
                 PyTuple_SET_ITEM(result.ptr(), i,
                                  transform_pair(op, tc, t1[i], t2[i]).release().ptr());
+
             return result;
         } else if (tp1.is(&PyList_Type)) {
             nb::list l1 = nb::borrow<nb::list>(h1),
@@ -835,6 +862,7 @@ nb::object transform_pair(const char *op, const TransformPairCallback &tc,
             nb::list result;
             for (size_t i = 0; i < len1; ++i)
                 result.append(transform_pair(op, tc, l1[i], l2[i]));
+
             return result;
         } else if (tp1.is(&PyDict_Type)) {
             nb::dict d1 = nb::borrow<nb::dict>(h1),
@@ -842,7 +870,9 @@ nb::object transform_pair(const char *op, const TransformPairCallback &tc,
 
             nb::object k1 = d1.keys(), k2 = d2.keys();
             if (!k1.equal(k2))
-                nb::detail::raise("dictionaries have mismatched keys.");
+                nb::detail::raise(
+                    "dictionaries have incompatible keys (%s vs %s).",
+                    nb::str(k1).c_str(), nb::str(k2).c_str());
 
             nb::dict result;
             for (nb::handle k : k1)

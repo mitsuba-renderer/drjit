@@ -99,6 +99,11 @@ Also relevant here are :py:func:`any`, :py:func:`all`.
 .. autofunction:: isfinite
 .. autofunction:: allclose
 
+Function dispatch
+-----------------
+
+.. autofunction:: switch
+.. autofunction:: dispatch
 
 Miscellaneous operations
 ------------------------

@@ -15,7 +15,6 @@
 #define DRJIT_VCALL_H
 
 #include <drjit/array.h>
-#include <drjit/vcall_packet.h>
 #include <memory>
 
 extern "C" {
@@ -147,17 +146,13 @@ auto vcall(const char *name, const Func &func, const Self &self,
     using Result = typename vectorize_type<Self, Output>::type;
 
     DRJIT_MARK_USED(name);
-    if constexpr (is_jit_v<Self>) {
-        if ((jit_flags() & (uint32_t) JitFlag::VCallRecord) == 0) {
-            return detail::vcall_jit_reduce<Result>(func, self, copy_diff(args)...);
-        } else {
-            if constexpr (is_diff_v<Self>)
-                return detail::vcall_autodiff<Result>(name, func, self, args...);
-            else
-                return detail::vcall_jit_record<Result>(name, func, self, args...);
-        }
+    if ((jit_flags() & (uint32_t) JitFlag::VCallRecord) == 0) {
+        return detail::vcall_jit_reduce<Result>(func, self, copy_diff(args)...);
     } else {
-        return detail::vcall_packet<Result>(func, self, args...);
+        if constexpr (is_diff_v<Self>)
+            return detail::vcall_autodiff<Result>(name, func, self, args...);
+        else
+            return detail::vcall_jit_record<Result>(name, func, self, args...);
     }
 }
 

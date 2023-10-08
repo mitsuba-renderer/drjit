@@ -1518,7 +1518,7 @@ template <typename T> T replace_grad(const T &a, const T &b) {
     size_t sa = a.size(), sb = b.size(), sr = sa > sb ? sa : sb;
 
     if ((sa != sr && sa != 1) || (sb != sr && sb != 1))
-        drjit_raise("replace_grad() : mismatched input sizes "
+        drjit_raise("replace_grad() : incompatible input sizes "
                     "(%zu and %zu)", sa, sb);
 
     if constexpr (depth_v<T> > 1) {
