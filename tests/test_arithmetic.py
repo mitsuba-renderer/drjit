@@ -199,3 +199,32 @@ def test07_power(t):
     assert dr.allclose(t(2)**13, t(2**13))
     assert dr.allclose(t(2)**2.5, t(2**2.5))
     assert dr.allclose(t(2)**-2.5, t(2**-2.5))
+
+
+@pytest.test_arrays('type=int32,jit,shape=(*)')
+@pytest.mark.parametrize("value", [True, False])
+def test_scoped_set_flag_const_prop(t, value):
+    with dr.scoped_set_flag(dr.JitFlag.ConstantPropagation, value):
+        # Create two literal constant arrays
+        a, b = t(4), t(5)
+
+        # This addition operation can be immediately performed and does not need to be recorded
+        c1 = a + b
+
+        # Double-check that c1 and c2 refer to the same Dr.Jit variable
+        c2 = t(9)
+        assert (c1.index == c2.index) == value
+
+@pytest.test_arrays('type=int32,jit,shape=(*)')
+@pytest.mark.parametrize("value", [True, False])
+def test_scoped_set_flag_lvn(t, value):
+    with dr.scoped_set_flag(dr.JitFlag.ValueNumbering, value):
+        # Create two nonliteral arrays stored in device memory
+        a, b = t(1, 2, 3), t(4, 5, 6)
+
+        # Perform the same arithmetic operation twice
+        c1 = a + b
+        c2 = a + b
+
+        # Verify that c1 and c2 reference the same Dr.Jit variable
+        assert (c1.index == c2.index) == value

@@ -3152,8 +3152,6 @@ static const char *doc_ReduceOp_Count =
     "Count the number of nonzero entries (only applies to horizontal "
     "reductions).";
 
-static const char *doc_JitFlag = R"(This enumeration lists several options to fine-tune the behavior of the just-in-time compilation)";
-
 static const char *doc_CustomOp = R"(
 Base class for implementing custom differentiable operations.
 
@@ -3414,12 +3412,12 @@ Dr.Jit will use one of two possible strategies to realize this operation
 depending on the active compilation flags (see :py:func:`drjit.set_flag`,
 :py:func:`drjit.scoped_set_flag`):
 
-1. **Symbolic mode**: When :py:attr:`drjit.JitFlag.SymbolicDispatch` is set (the
+1. **Recorded mode**: When :py:attr:`drjit.JitFlag.VCallRecord` is set (the
    default), Dr.Jit transcribes every callable into an equivalent function in the
    generated low-level intermediate representation (LLVM IR or PTX) and targets
    them via an indirect jump instruction.
 
-   One caveat with this approach is that Dr.Jit does not yet know the specific
+   One caveat with this approach is that Dr.Jit does not know the specific
    inputs reaching each callable at trace time. This knowledge will only become
    available later on when the generated code runs on the device (e.g., the
    GPU). Thus, callables receive *symbolic* input arrays that merely help to
@@ -3445,7 +3443,7 @@ depending on the active compilation flags (see :py:func:`drjit.set_flag`,
    :py:func:`drjit.print_async`. If you wish to avoid such complications,
    consider wavefront-mode compilation discussed next.
 
-2. **Wavefront mode**: When :py:attr:`drjit.JitFlag.SymbolicDispatch` is *not* set,
+2. **Wavefront mode**: When :py:attr:`drjit.JitFlag.VCallRecord` is *not* set,
    Dr.Jit *evaluates* the inputs  ``index``, ``args``, ``kwargs`` via
    :py:func:`drjit.eval`, groups them by the provided index, and invokes each
    callable with with the subset of inputs that reference it. Callables that
@@ -3465,7 +3463,7 @@ shown below:
 
 .. code-block:: python
 
-   with dr.scoped_set_flag(dr.JitFlag.SymbolicDispatch, False):
+   with dr.scoped_set_flag(dr.JitFlag.VCallRecord, False):
        result = dr.switch(..)
 
 The functions :py:func:`drjit.switch` and :py:func:`drjit.dispatch` may be
@@ -3527,6 +3525,138 @@ structure.
 
 Raises an exception is a mismatch is found (e.g., different types, arrays with
 incompatible numbers of elements, dictionaries with different keys, etc.))";
+
+static const char *doc_flag =
+    "Query whether the given Dr.Jit compilation flag is active.";
+
+static const char *doc_set_flag =
+    "Set the value of the given Dr.Jit compilation flag.";
+
+static const char *doc_scoped_set_flag = R"(
+Context manager, which sets or unsets a Dr.Jit compilation flag in a local
+execution scope.
+
+For example, the following snippet shows how to temporarily disable a flag:
+
+.. code-block:: python
+
+   with dr.scoped_set_flag(dr.JitFlag.VCallRecord, False):
+       # Code affected by the change should be placed here
+
+   # Flag is returned to its original status
+)";
+
+static const char *doc_JitFlag = R"(
+Flags that control how Dr.Jit compiles and optimizes programs.
+
+This enumeration lists various flag that control how Dr.Jit compiles and
+optimizes programs, most of which are enabled by default. The status of each
+flag can be queried via :py:func:`drjit.flag` and enabled/disabled via the
+:py:func:`drjit.scoped_flag` and :py:func:`drjit.scoped_set_flag` functions.
+
+The most common reason to update the flags is to switch between *wavefront* and
+*recorded* execution of loops and functions. The former eagerly executes
+programs by breaking them into many smaller kernels, while the latter records
+computation symbolically to assemble large *megakernels*. See the documentation
+of :py:func:`drjit.switch` and :py:class:`drjit.Loop` for more details on these
+two modes.
+
+Dr.Jit flags are a thread-local property. This means that multiple independent
+threads using Dr.Jit can set them independently without interfering with each
+other.)";
+
+static const char *doc_JitFlag_ConstantPropagation =R"(
+**Constant propagation**: immediately evaluate arithmetic involving literal
+constants on the host and don't generate any device-specific code for them.
+
+For example, the following assertion holds when value numbering is enabled in
+Dr.Jit.
+
+.. code-block:: python
+
+   from drjit.llvm import Int
+
+   # Create two literal constant arrays
+   a, b = Int(4), Int(5)
+
+   # This addition operation can be immediately performed and does not need to be recorded
+   c1 = a + b
+
+   # Double-check that c1 and c2 refer to the same Dr.Jit variable
+   c2 = Int(9)
+   assert c1.index == c2.index
+
+Enabled by default.)";
+
+static const char *doc_JitFlag_ValueNumbering = R"(
+**Local value numbering**: a simple variant of common subexpression elimination
+that collapses identical expressions within basic blocks. For example, the
+following assertion holds when value numbering is enabled in Dr.Jit.
+
+.. code-block:: python
+
+   from drjit.llvm import Int
+
+   # Create two nonliteral arrays stored in device memory
+   a, b = Int(1, 2, 3), Int(4, 5, 6)
+
+   # Perform the same arithmetic operation twice
+   c1 = a + b
+   c2 = a + b
+
+   # Verify that c1 and c2 reference the same Dr.Jit variable
+   assert c1.index == c2.index
+
+Enabled by default.)";
+
+static const char *doc_JitFlag_VCallRecord = R"(
+**Recorded function calls**: Dr.Jit provides two main ways of compiling
+*indirect function calls* (aka. *virtual function calls* or *dynamic dispatch*).
+
+1. **Recorded mode**: When this flag is set (the default), Dr.Jit captures
+   callables by invoking them with symbolic/abstract arguments. These
+   transcripts are then turned into function calls in the generated program.
+   In a sense, recorded mode most closely preserves the original program
+   semantics.
+
+   The main advantage of recorded mode is:
+
+   * It is very efficient in terms of device memory storage and bandwidth, since
+     function call arguments and return values can be exchanged through fast
+     CPU/GPU registers.
+
+   Its main downsides are:
+
+   * Symbolic arrays cannot be evaluated, printed, etc. Attempting to
+     perform such operations will raise an exception.
+
+     This limitation may be inconvenient especially when debugging code, in
+     which case wavefront mode is preferable.
+
+   * Thread divergence: neighboring SIMD lanes may target different callables,
+     which can have a significant negative impact on refficiency.
+
+   * A kernel with many callables can become quite large and costly to compile.
+
+2. **Wavefront mode**: In this mode, Dr.Jit to launches a series of kernels
+   processing subsets of the input data (one per callable).
+
+   The main advantages of wavefront mode is:
+
+   * Easy to debug / step through programs and examine intermediate results.
+
+   * Kernels are smaller and avoid thread divergence, since Dr.Jit reorders
+     computation by callable.
+
+   The main downsides are:
+
+   * Each callable essentially turns its own kernel that reads its input and
+     writes outputs via device memory. The required memory bandwidth and
+     storage are often so overwhelming that wavefront mode becomes impractical.
+
+Recorded mode is enabled by default.)";
+
+static const char *doc_JitFlag_Default = "The default set of flags.";
 
 #if defined(__GNUC__)
 #  pragma GCC diagnostic pop
