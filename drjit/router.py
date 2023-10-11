@@ -6060,7 +6060,9 @@ def switch(indices, funcs, *args):
             def __call__(self, *args, **kwargs):
                 return ad_copy(self.func(*args, **kwargs))
 
-        funcs = [ADCopyWrapper(func) for func in funcs]
+        funcs = [
+            ADCopyWrapper(func) if func is not None else None for func in funcs
+        ]
 
         class DiffSwitch(_dr.CustomOp):
             def eval(self, indices, funcs, args):
