@@ -608,6 +608,12 @@ value_t<Array> extract(const Array &array, const Mask &mask) {
     return array.extract_(mask);
 }
 
+template <typename Array>
+Array prefix_sum(const Array &array, bool exclusive = true) {
+    static_assert(is_dynamic_array_v<Array>);
+    return array.prefix_sum_(exclusive);
+}
+
 template <typename Mask>
 uint32_array_t<array_t<Mask>> compress(const Mask &mask) {
     static_assert(is_dynamic_array_v<Mask>);

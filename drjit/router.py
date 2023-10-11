@@ -3801,7 +3801,7 @@ def hypot(a, b):
 
 def prefix_sum(value, exclusive=True):
     '''
-    Compute an exclusive or inclusive prefix sum of the input array.
+    Compute an exclusive or inclusive prefix sum of the 1D input array.
 
     By default, the function returns an output array :math:`\mathbf{y}` of the
     same size as the input :math:`\mathbf{x}`, where
@@ -3850,7 +3850,7 @@ def prefix_sum(value, exclusive=True):
 
 def cumsum(value):
     '''
-    Compute an cumulative sum (aka. inclusive prefix sum) of the input array.
+    Compute an cumulative sum (aka. inclusive prefix sum) of the 1D input array.
 
     This function wraps :cpp:func:`drjit.prefix_sum` and is implemented as
 
