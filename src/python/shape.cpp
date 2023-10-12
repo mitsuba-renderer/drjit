@@ -47,7 +47,7 @@ static bool shape_traverse(nb::handle h, size_t ndim, size_t *shape) noexcept {
         const ArraySupplement &s = supp(tp);
 
         if (s.ndim == 0)
-            nb::detail::raise("drjit.shape(): unsupported type in input!");
+            nb::raise("drjit.shape(): unsupported type in input!");
 
         size = s.shape[0];
 
@@ -126,12 +126,12 @@ bool shape_impl(nb::handle h, dr_vector<size_t> &result) {
 nb::tuple cast_shape(const dr_vector<size_t> &shape) {
     nb::tuple o = nb::steal<nb::tuple>(PyTuple_New((Py_ssize_t) shape.size()));
     if (!o.is_valid())
-        nb::detail::raise_python_error();
+        nb::raise_python_error();
 
     for (size_t i = 0; i < shape.size(); ++i) {
         PyObject *l = PyLong_FromSize_t(shape[i]);
         if (!l)
-            nb::detail::raise_python_error();
+            nb::raise_python_error();
         NB_TUPLE_SET_ITEM(o.ptr(), (Py_ssize_t) i, l);
     }
 

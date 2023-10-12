@@ -14,6 +14,7 @@
 #include "common.h"
 
 extern void export_misc(nb::module_ &);
+extern void collect_indices(nb::handle, dr::dr_vector<uint64_t>&);
 extern dr::dr_vector<uint64_t> collect_indices(nb::handle);
 extern nb::object update_indices(nb::handle, const dr::dr_vector<uint64_t> &);
 extern void check_compatibility(nb::handle, nb::handle);

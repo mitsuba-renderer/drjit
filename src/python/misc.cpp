@@ -27,7 +27,7 @@
  * (Note: this explanation is also part of src/python/docstr.h -- please keep
  * them in sync in case you make a change here)
 */
-dr::dr_vector<uint64_t> collect_indices(nb::handle h) {
+void collect_indices(nb::handle h, dr::dr_vector<uint64_t> &indices) {
     struct CollectIndices : TraverseCallback {
         dr::dr_vector<uint64_t> &result;
         CollectIndices(dr::dr_vector<uint64_t> &result) : result(result) { }
@@ -39,9 +39,13 @@ dr::dr_vector<uint64_t> collect_indices(nb::handle h) {
         }
     };
 
-    dr::dr_vector<uint64_t> indices;
     traverse("drjit.detail.collect_indices", CollectIndices { indices }, h);
-    return indices;
+}
+
+dr::dr_vector<uint64_t> collect_indices(nb::handle h) {
+    dr::dr_vector<uint64_t> result;
+    collect_indices(h, result);
+    return result;
 }
 
 /**
@@ -75,7 +79,7 @@ nb::object update_indices(nb::handle h, const dr::dr_vector<uint64_t> &indices_)
             const ArraySupplement &s = supp(h1.type());
             if (s.index) {
                 if (counter >= indices.size())
-                    nb::detail::raise("too few (%zu) indices provided", indices.size());
+                    nb::raise("too few (%zu) indices provided", indices.size());
 
                 s.init_index(indices[counter++], inst_ptr(h2));
             }
@@ -86,8 +90,9 @@ nb::object update_indices(nb::handle h, const dr::dr_vector<uint64_t> &indices_)
     nb::object result = transform("drjit.detail.update_indices", ui, h);
 
     if (ui.counter != indices_.size())
-        nb::detail::raise(
-            "drjit.detail.update_indices(): too many indices provided!");
+        nb::raise("drjit.detail.update_indices(): too many indices "
+                  "provided (needed %zu, got %zu)!",
+                  ui.counter, indices_.size());
 
     return result;
 }
@@ -113,7 +118,10 @@ void check_compatibility(nb::handle h1, nb::handle h2) {
 
 void export_misc(nb::module_ &) {
     nb::module_ detail = nb::module_::import_("drjit.detail");
-    detail.def("collect_indices", &collect_indices, doc_collect_indices);
+    detail.def("collect_indices",
+               nb::overload_cast<nb::handle>(&collect_indices),
+               doc_collect_indices);
     detail.def("update_indices", &update_indices, doc_update_indices);
-    detail.def("check_compatibility", &check_compatibility, doc_check_compatibility);
+    detail.def("check_compatibility", &check_compatibility,
+               doc_check_compatibility);
 }

@@ -18,27 +18,12 @@
  * back to 'stderr' if needed.
  */
 static void log_callback(LogLevel /* level */, const char *msg) {
-#if !defined(Py_LIMITED_API)
-    if (_Py_IsFinalizing()) {
+    if (!nb::is_alive() || !PyGILState_Check()) {
         fprintf(stderr, "%s\n", msg);
         return;
     }
 
-    if (PyGILState_Check()) {
-        nb::print(msg);
-        return;
-    }
-#endif
-
-    char *msg_copy = NB_STRDUP(msg);
-    int rv = Py_AddPendingCall(
-        [](void *p) -> int {
-            nb::print((char *) p);
-            free(p);
-            return 0;
-        }, msg_copy);
-    if (rv)
-        nb::detail::fail("log_callback(): Py_AddPendingCall(): failed!");
+    nb::print(msg);
 }
 
 

@@ -153,13 +153,12 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
                 if (NB_UNLIKELY(!element.is_valid())) {
                     nb::error_scope scope;
                     nb::str arg_tp_name = nb::type_name(arg_tp);
-                    nb::detail::raise(
-                        "Broadcast from type '%s' failed.%s",
-                        arg_tp_name.c_str(),
-                        try_sequence_import
-                            ? ""
-                            : " Refused to perform an inefficient "
-                              "element-by-element copy.");
+                    nb::raise("Broadcast from type '%s' failed.%s",
+                              arg_tp_name.c_str(),
+                              try_sequence_import
+                                  ? ""
+                                  : " Refused to perform an inefficient "
+                                    "element-by-element copy.");
                 }
             }
 
@@ -266,7 +265,7 @@ static bool array_init_from_seq(PyObject *self, const ArraySupplement &s, PyObje
 
     if (s.ndim == 1 && s.init_data) {
         size_t byte_size = jit_type_size((VarType) s.type) * (size_t) size;
-        std::unique_ptr<uint8_t[]> storage(new uint8_t[byte_size]);
+        dr::dr_unique_ptr<uint8_t[]> storage(new uint8_t[byte_size]);
         bool fail = false;
 
         #define FROM_SEQ_IMPL(T)                                           \
@@ -343,13 +342,13 @@ static nb::object import_ndarray(const ArraySupplement &s, PyObject *arg,
     }
 
     nb::detail::ndarray_handle *th = nb::detail::ndarray_import(
-        arg, &req, (uint8_t) nb::detail::cast_flags::convert);
+        arg, &req, (uint8_t) nb::detail::cast_flags::convert, nullptr);
 
     if (!th && s.ndim > 1 && s.shape[s.ndim - 1] == DRJIT_DYNAMIC) {
         // Try conversion of scalar to vectorized representation
         req.ndim--;
         th = nb::detail::ndarray_import(
-            arg, &req, (uint8_t) nb::detail::cast_flags::convert);
+            arg, &req, (uint8_t) nb::detail::cast_flags::convert, nullptr);
     }
 
     if (!th) {
@@ -437,7 +436,7 @@ static nb::object import_ndarray(const ArraySupplement &s, PyObject *arg,
             switch (ndarr.device_type()) {
                 case nb::device::cuda::value: at = AllocType::Device; break;
                 case nb::device::cpu::value:  at = AllocType::Host; break;
-                default: nb::detail::raise("Unsupported source device!");
+                default: nb::raise("Unsupported source device!");
             }
 
             index = jit_var_mem_copy(backend, at, vt, ndarr.data(), size);
@@ -447,7 +446,7 @@ static nb::object import_ndarray(const ArraySupplement &s, PyObject *arg,
         jit_var_dec_ref(index);
     } else {
         if (ndarr.device_type() != nb::device::cpu::value)
-            nb::detail::raise("Unsupported source device!");
+            nb::raise("Unsupported source device!");
 
         supp(temp_t).init_data(size, ndarr.data(), inst_ptr(temp));
     }
@@ -568,7 +567,7 @@ nb::object full(const char *name, nb::handle dtype, nb::handle value, size_t siz
             for (size_t i = 0; i < s.ndim; ++i) {
                 size_t k = s.shape[i];
                 if (k == DRJIT_DYNAMIC)
-                    k = (i == s.ndim - 1) ? size : 1;
+                    k = (i == (size_t) s.ndim - 1) ? size : 1;
                 shape[i] = k;
             }
         }
@@ -666,7 +665,7 @@ nb::object full(const char *name, nb::handle dtype, nb::handle value,
             if (!value.is_valid() || value.is(nb::int_(0)))
                 return dtype();
 
-            nb::detail::raise("unsupported dtype");
+            nb::raise("unsupported dtype");
         }
     } catch (nb::python_error &e) {
         nb::str tp_name = nb::type_name(dtype);
@@ -679,7 +678,7 @@ nb::object full(const char *name, nb::handle dtype, nb::handle value,
         nb::chain_error(PyExc_RuntimeError,
                         "drjit.%s(<%U>): could not construct output: %s.", name,
                         tp_name.ptr(), e.what());
-        nb::detail::raise_python_error();
+        nb::raise_python_error();
     }
 }
 
@@ -716,7 +715,7 @@ nb::object arange(const nb::type_object_t<ArrayBase> &dtype,
     if (size == 0)
         return dtype();
     else if (size < 0)
-        nb::detail::raise("drjit.arange(): size cannot be negative.");
+        nb::raise("drjit.arange(): size cannot be negative.");
 
     nb::object result = nb::inst_alloc(counter_tp);
     counter_s.init_counter((size_t) size, inst_ptr(result));

@@ -30,7 +30,13 @@ if (NOT IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/ext/drjit-core/ext/nanothread/
 endif()
 
 set(DRJIT_VERSION_FILE "${CMAKE_CURRENT_SOURCE_DIR}/include/drjit/fwd.h")
+
 include(ext/drjit-core/ext/nanothread/ext/cmake-defaults/CMakeLists.txt)
+
+if (SKBUILD)
+  set(CMAKE_INSTALL_DATAROOTDIR drjit)
+  set(CMAKE_INSTALL_INCLUDEDIR ${CMAKE_INSTALL_DATAROOTDIR}/include)
+endif()
 
 if (MSVC)
   set(DRJIT_OUTPUT_DIRECTORY
@@ -98,36 +104,18 @@ if (DRJIT_ENABLE_JIT)
   set_target_properties(drjit-core PROPERTIES ${DRJIT_OUTPUT_DIRECTORY})
   set_target_properties(nanothread PROPERTIES ${DRJIT_OUTPUT_DIRECTORY})
 
-  if (DRJIT_MASTER_PROJECT)
-    install(TARGETS drjit-core EXPORT drjitTargets)
-    install(TARGETS nanothread EXPORT drjitTargets)
-  endif()
-
   mark_as_advanced(DRJIT_THREAD_ENABLE_TESTS)
 endif()
 
 if (MSVC)
-   add_definitions(-D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE -DNOMINMAX)
    add_compile_options(/wd4251) # 'warning C4251: X needs to have dll-interface to be used by clients of struct Y
 endif()
 
 if (DRJIT_ENABLE_JIT)
   add_subdirectory(src/extra)
   set_target_properties(drjit-extra PROPERTIES ${DRJIT_OUTPUT_DIRECTORY})
-  install(TARGETS drjit-extra EXPORT drjitTargets)
+  # install(TARGETS drjit-extra EXPORT drjitTargets)
 endif()
-
-# if (DRJIT_ENABLE_AUTODIFF)
-#   message(STATUS "Dr.Jit: building the autodiff backend.")
-#   add_subdirectory(src/autodiff)
-#   set_target_properties(drjit-autodiff PROPERTIES ${DRJIT_OUTPUT_DIRECTORY})
-# 
-#   if (DRJIT_MASTER_PROJECT)
-#     install(TARGETS drjit-autodiff EXPORT drjitTargets)
-#   endif()
-# else()
-#   message(STATUS "Dr.Jit: *not* building the autodiff backend.")
-# endif()
 
 if (DRJIT_ENABLE_PYTHON)
   message(STATUS "Dr.Jit: building the Python plugin.")
@@ -160,6 +148,16 @@ endif()
 
 if (DRJIT_MASTER_PROJECT)
   install(DIRECTORY include/drjit DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+
+  install(TARGETS drjit-core EXPORT drjitTargets DESTINATION drjit)
+  install(TARGETS drjit-extra EXPORT drjitTargets DESTINATION drjit)
+  install(TARGETS nanothread EXPORT drjitTargets DESTINATION drjit)
+
+  if (DRJIT_ENABLE_PYTHON)
+    install(TARGETS drjit-python DESTINATION drjit)
+    install(FILES drjit/config.py DESTINATION drjit)
+  endif()
+
   if (DRJIT_ENABLE_JIT)
     install(DIRECTORY ext/drjit-core/include/drjit-core DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
     install(DIRECTORY ext/drjit-core/ext/nanothread/include/nanothread DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})

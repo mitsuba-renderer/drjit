@@ -1,5 +1,7 @@
 [build-system]
-requires = ["scikit-build-core >=0.4.3", "nanobind >=1.6.2"]
+requires = [
+"scikit-build-core >=0.4.3",
+"nanobind @ git+https://github.com/wjakob/nanobind@master"]
 build-backend = "scikit_build_core.build"
 
 [project]
@@ -15,7 +17,7 @@ authors = [
     { name = "Delio Vicini", email = "delio.vicini@epfl.ch" }
 ]
 classifiers = [
-    "License :: BSD",
+    "License :: OSI Approved :: BSD License"
 ]
 
 [project.urls]
@@ -45,3 +47,5 @@ test-requires = "pytest"
 MACOSX_DEPLOYMENT_TARGET = "10.14"
 
 
+[tool.pytest.ini_options]
+norecursedirs = [ "ext" ]

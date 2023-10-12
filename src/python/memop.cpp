@@ -86,9 +86,9 @@ nb::object gather(nb::type_object dtype, nb::object source,
             index = index_tp(index);
         } catch (nb::python_error &e) {
             nb::raise_from(e, PyExc_TypeError,
-                "drjit.gather(): 'index' argument has an unsupported type, "
-                "please provide an instance that is convertible to "
-                "drjit.uint32_array_t(source).");
+                           "drjit.gather(): 'index' argument has an "
+                           "unsupported type, please provide an instance that "
+                           "is convertible to drjit.uint32_array_t(source).");
         }
     }
 
@@ -97,9 +97,9 @@ nb::object gather(nb::type_object dtype, nb::object source,
             active = active_tp(active);
         } catch (nb::python_error &e) {
             nb::raise_from(e, PyExc_TypeError,
-                "drjit.gather(): 'active' argument has an unsupported type, "
-                "please provide an instance that is convertible to "
-                "drjit.mask_t(source).");
+                           "drjit.gather(): 'active' argument has an "
+                           "unsupported type, please provide an instance that "
+                           "is convertible to drjit.mask_t(source).");
         }
     }
 
@@ -168,8 +168,8 @@ static void scatter_generic(const char *name, ReduceOp op, nb::object target,
             len = nb::len(value);
 
             if (len != nb::len(target))
-                nb::detail::raise("drjit.%s(): 'target' and 'value' have "
-                                  "incompatible lengths!", name);
+                nb::raise("drjit.%s(): 'target' and 'value' have "
+                          "incompatible lengths!", name);
         }
 
         if (is_seq) {
@@ -198,7 +198,7 @@ static void scatter_generic(const char *name, ReduceOp op, nb::object target,
     }
 
     if (!is_drjit_target_1d)
-        nb::detail::raise_type_error(
+        nb::raise_type_error(
             "drjit.%s(): 'target' argument must be a dynamic 1D array!", name);
 
     const ArraySupplement &target_supp = supp(target_tp);
@@ -218,9 +218,9 @@ static void scatter_generic(const char *name, ReduceOp op, nb::object target,
             index = index_tp(index);
         } catch (nb::python_error &e) {
             nb::raise_from(e, PyExc_TypeError,
-                "%s: 'index' argument has an unsupported type, "
-                "please provide an instance that is convertible to "
-                "drjit.uint32_array_t(target).", name);
+                           "%s: 'index' argument has an unsupported type, "
+                           "please provide an instance that is convertible to "
+                           "drjit.uint32_array_t(target).", name);
         }
     }
 
@@ -229,9 +229,9 @@ static void scatter_generic(const char *name, ReduceOp op, nb::object target,
             active = active_tp(active);
         } catch (nb::python_error &e) {
             nb::raise_from(e, PyExc_TypeError,
-                "drjit.%s(): 'active' argument has an unsupported type, "
-                "please provide an instance that is convertible to "
-                "drjit.mask_t(target).", name);
+                           "drjit.%s(): 'active' argument has an unsupported "
+                           "type, please provide an instance that is "
+                           "convertible to drjit.mask_t(target).", name);
         }
     }
 
@@ -240,10 +240,10 @@ static void scatter_generic(const char *name, ReduceOp op, nb::object target,
             value = target.type()(value);
             value_tp = value.type();
         } catch (nb::python_error &e) {
-            nb::raise_from(e, PyExc_TypeError,
-                "drjit.%s(): 'value' argument has an unsupported type! "
-                "Please provide an instance that is convertible to "
-                "type(target).", name);
+            nb::raise_from(
+                e, PyExc_TypeError,
+                "drjit.%s(): 'value' argument has an unsupported type! Please "
+                "provide an instance that is convertible to type(target).", name);
         }
     }
 
@@ -282,9 +282,9 @@ static void scatter_generic(const char *name, ReduceOp op, nb::object target,
     nb::str flat_name = nb::inst_name(target),
             actual_name = nb::inst_name(value);
 
-    nb::detail::raise_type_error("drjit.%s(): value type %s is not supported "
-                                 "for a scatter target of type %s.",
-                                 name, flat_name.c_str(), actual_name.c_str());
+    nb::raise_type_error("drjit.%s(): value type %s is not supported "
+                         "for a scatter target of type %s.",
+                         name, flat_name.c_str(), actual_name.c_str());
 }
 
 void scatter(nb::object target, nb::object value, nb::object index,
@@ -480,12 +480,12 @@ nb::object unravel(const nb::type_object_t<ArrayBase> &dtype,
 
     if (!flat.is(array.type())) {
         m2.is_diff = false;
-        flat = meta_get_type(m);
+        flat = meta_get_type(m2);
 
         if (!flat.is(array.type())) {
             nb::str flat_name = nb::type_name(flat),
                     actual_name = nb::inst_name(array);
-            nb::detail::raise_type_error(
+            nb::raise_type_error(
                 "drjit.unravel(): expected array of type '%s', but got '%s'!",
                 flat_name.c_str(), actual_name.c_str());
         }
@@ -547,8 +547,9 @@ void export_memop(nb::module_ &m) {
           "active"_a = true, "permute"_a = false, doc_gather)
      .def("scatter", &scatter, "target"_a, "value"_a, "index"_a,
           "active"_a = true, "permute"_a = false, doc_scatter)
-     .def("scatter_reduce", &scatter_reduce, "op"_a, "target"_a, "value"_a, "index"_a,
-          "active"_a = true, doc_scatter_reduce)
+     .def("scatter_reduce", &scatter_reduce, "reduce_op"_a,
+          "target"_a, "value"_a, "index"_a, "active"_a = true,
+          doc_scatter_reduce)
      .def("ravel",
           [](nb::handle array, char order) {
               return ravel(array, order);

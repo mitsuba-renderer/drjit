@@ -21,8 +21,8 @@ struct dr_index_vector : dr::dr_vector<uint64_t> {
     }
 };
 
-nb::object switch_impl(nb::handle index, nb::sequence callables, nb::args args_,
-                       nb::kwargs kwargs) {
+nb::object switch_impl(nb::handle index_, nb::sequence callables,
+                       nb::args args_, nb::kwargs kwargs) {
     try {
         // Extract the 'active' parameter, if provided.
         nb::str mask_key("active");
@@ -55,7 +55,7 @@ nb::object switch_impl(nb::handle index, nb::sequence callables, nb::args args_,
             }
         }
 
-        nb::handle index_tp = index.type();
+        nb::handle index_tp = index_.type();
         if (index_tp.is(&PyLong_Type)) {
             if (mask.is_valid()) {
                 bool mask_b = false;
@@ -66,8 +66,12 @@ nb::object switch_impl(nb::handle index, nb::sequence callables, nb::args args_,
                     return nb::none();
             }
 
-            return callables[index](*args, **kwargs);
+            return callables[index_](*args, **kwargs);
         }
+
+        // Shift the callable index (ad_vcall interprets 0 as 'disabled')
+        nb::object index = index_ + nb::int_(1);
+        index_tp = index.type();
 
         raise_if(!is_drjit_type(index_tp),
                  "the 'index' argument must be a Dr.Jit array");
@@ -80,46 +84,69 @@ nb::object switch_impl(nb::handle index, nb::sequence callables, nb::args args_,
 
         struct State {
             nb::tuple args_o;
-            nb::object rv_o;
             nb::object callables_o;
+            nb::object rv_o;
+
+            ~State() {
+                nb::gil_scoped_acquire guard;
+                args_o.reset();
+                callables_o.reset();
+                rv_o.reset();
+            }
         };
 
-        auto callback = [](void *ptr, size_t index,
-                           const dr::dr_vector<uint64_t> &args_i,
-                           dr::dr_vector<uint64_t> &rv_i) {
+        ad_vcall_callback callback = [](void *ptr, size_t index,
+                                        const dr::dr_vector<uint64_t> &args_i,
+                                        dr::dr_vector<uint64_t> &rv_i) {
+            nb::gil_scoped_acquire guard;
             State &state = *(State *) ptr;
-            state.args_o = nb::borrow<nb::tuple>(update_indices(state.args_o, args_i));
-            nb::object result = state.callables_o[index](
-                *state.args_o[0],
-                **state.args_o[1]
-            );
+            state.args_o =
+                nb::borrow<nb::tuple>(update_indices(state.args_o, args_i));
+
+            nb::object result =
+                state.callables_o[index](*state.args_o[0], **state.args_o[1]);
+
             if (state.rv_o.is_valid())
                 check_compatibility(result, state.rv_o);
+
             state.rv_o = std::move(result);
-            rv_i = collect_indices(state.rv_o);
+            collect_indices(state.rv_o, rv_i);
         };
 
-        State state;
-        state.args_o = nb::make_tuple(args, kwargs);
-        state.callables_o = callables;
+        ad_vcall_cleanup cleanup = [](void *ptr) {
+            if (!nb::is_alive())
+                return;
+            nb::gil_scoped_acquire guard;
+            delete  (State *) ptr;
+        };
+
+        State *state = new State {
+            nb::make_tuple(args, kwargs), callables, nb::object()
+        };
 
         dr_index_vector rv_i;
-        ad_dispatch((JitBackend) s.backend, nullptr,
-                    (uint32_t) s.index(inst_ptr(index)),
-                    mask.is_valid() ? ((uint32_t) s.index(inst_ptr(mask))) : 0u,
-                    nb::len(index), collect_indices(state.args_o), rv_i,
-                    callback, &state);
+        bool done = ad_vcall(
+            (JitBackend) s.backend, nullptr, "dr.switch()",
+            (uint32_t) s.index(inst_ptr(index)),
+            mask.is_valid() ? ((uint32_t) s.index(inst_ptr(mask))) : 0u,
+            nb::len(callables), collect_indices(state->args_o), rv_i, state,
+            callback, cleanup, true);
 
-        if (!state.rv_o.is_valid())
-            state.rv_o = nb::none();
+        if (!state->rv_o.is_valid())
+            state->rv_o = nb::none();
 
-        return update_indices(state.rv_o, rv_i);
+        nb::object result = update_indices(state->rv_o, rv_i);
+
+        if (done)
+            cleanup(state);
+
+        return result;
     } catch (nb::python_error &e) {
         nb::raise_from(e, PyExc_RuntimeError,
                        "drjit.switch(): encountered an exception (see above)!");
     } catch (const std::exception &e) {
         nb::chain_error(PyExc_RuntimeError, "drjit.switch(): %s!", e.what());
-        nb::detail::raise_python_error();
+        nb::raise_python_error();
     }
 }
 

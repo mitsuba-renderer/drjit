@@ -63,6 +63,7 @@ NB_MODULE(drjit_ext, m_) {
         .value("ConstantPropagation", JitFlag::ConstantPropagation, doc_JitFlag_ConstantPropagation)
         .value("ValueNumbering", JitFlag::ValueNumbering, doc_JitFlag_ValueNumbering)
         .value("VCallRecord", JitFlag::VCallRecord, doc_JitFlag_VCallRecord)
+        .value("IndexReuse", JitFlag::IndexReuse, doc_JitFlag_IndexReuse)
         .value("Default", JitFlag::Default, doc_JitFlag_Default);
         // .value("VCallDeduplicate", JitFlag::VCallDeduplicate, doc_JitFlag_VCallDeduplicate)
         // .value("VCallOptimize", JitFlag::VCallOptimize, doc_JitFlag_VCallOptimize);
@@ -90,8 +91,7 @@ NB_MODULE(drjit_ext, m_) {
         .value("Min", ReduceOp::Min, doc_ReduceOp_Min)
         .value("Max", ReduceOp::Max, doc_ReduceOp_Max)
         .value("And", ReduceOp::And, doc_ReduceOp_And)
-        .value("Or", ReduceOp::Or, doc_ReduceOp_Or)
-        .value("Count", ReduceOp::Count, doc_ReduceOp_Count);
+        .value("Or", ReduceOp::Or, doc_ReduceOp_Or);
 
     m.def("has_backend", &jit_has_backend, doc_has_backend);
 

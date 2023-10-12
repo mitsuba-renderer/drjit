@@ -131,7 +131,7 @@ PyObject *tp_repr(PyObject *self) noexcept {
             nb::list index =
                 nb::steal<nb::list>(PyList_New((Py_ssize_t) shape.size()));
             if (!index.is_valid())
-                nb::detail::raise_python_error();
+                nb::raise_python_error();
             tp_repr_impl(self, shape, index, 0);
         }
 

@@ -516,7 +516,7 @@ template <bool IsMask_, typename Derived_> struct alignas(64)
         __m512d r = _mm512_rcp14_pd(m); // rel error < 2^-14
 
         // Refine using two Newton-Raphson iterations
-        DRJIT_UNROLL for (int i = 0; i < 2; ++i) {
+        for (int i = 0; i < 2; ++i) {
             __m512d t0 = _mm512_add_pd(r, r);
             __m512d t1 = _mm512_mul_pd(r, m);
 
@@ -534,7 +534,7 @@ template <bool IsMask_, typename Derived_> struct alignas(64)
                       c1 = _mm512_set1_pd(3.0);
 
         // Refine using two Newton-Raphson iterations
-        DRJIT_UNROLL for (int i = 0; i < 2; ++i) {
+        for (int i = 0; i < 2; ++i) {
             __m512d t0 = _mm512_mul_pd(r, c0);
             __m512d t1 = _mm512_mul_pd(r, m);
 

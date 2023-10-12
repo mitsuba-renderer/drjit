@@ -69,8 +69,13 @@ public:
      *
      * The function expects the AD index (``index_ad()``) value of the
      * variable.
+     *
+     * The function returns a boolean result stating whether the index was
+     * added. A return value of ``false`` indicates that ``index`` is either
+     * zero, or that gradient tracking was previously disabled for the
+     * specified variable.
      */
-    void add_index(JitBackend backend, uint32_t index, bool input);
+    bool add_index(JitBackend backend, uint32_t index, bool input);
 
 protected:
     /**

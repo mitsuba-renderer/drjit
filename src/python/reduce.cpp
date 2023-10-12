@@ -33,12 +33,12 @@ nb::object reduce(const char *name, ArrayOp op_id, nb::handle h,
             if (s && s->is_tensor) {
                 nb::object arr = nb::steal(s->tensor_array(h.ptr()));
                 if (!arr.is_valid())
-                    nb::detail::raise_python_error();
+                    nb::raise_python_error();
 
                 nb::object o = reduce(name, op_id, arr, 0, reduce_skip,
                                       reduce_init, reduce_combine);
                 if (!o.is_valid())
-                    nb::detail::raise_python_error();
+                    nb::raise_python_error();
 
                 return tp(o, nb::tuple());
             }
@@ -51,7 +51,7 @@ nb::object reduce(const char *name, ArrayOp op_id, nb::handle h,
                            reduce_init, reduce_combine);
 
                 if (!o.is_valid())
-                    nb::detail::raise_python_error();
+                    nb::raise_python_error();
 
                 tp = o.type();
             } while (!tp_prev.is(tp));
@@ -60,15 +60,14 @@ nb::object reduce(const char *name, ArrayOp op_id, nb::handle h,
         }
 
         if (axis.value() != 0)
-            nb::detail::raise(
+            nb::raise(
                 "reductions are currently limited to axis=0 or axis=None!");
 
         if (s) {
             void *op = s->op[(int) op_id];
             if (op == DRJIT_OP_NOT_IMPLEMENTED)
-                nb::detail::raise_type_error(
-                    "requires an arithmetic Dr.Jit array "
-                    "or Python sequence as input.");
+                nb::raise_type_error("requires an arithmetic Dr.Jit array "
+                                     "or Python sequence as input.");
 
             if (op != DRJIT_OP_DEFAULT) {
                 nb::object result = nb::inst_alloc(tp);
@@ -114,7 +113,7 @@ static nb::object dot(nb::handle h0, nb::handle h1) {
                lr = std::max(l0, l1);
 
         if (l0 != l1 && l0 != 1 && l1 != 1)
-            nb::detail::raise("invalid input array sizes (%zu and %zu)", l0, l1);
+            nb::raise("invalid input array sizes (%zu and %zu)", l0, l1);
 
         bool use_fma = true;
 
@@ -218,14 +217,14 @@ nb::object prefix_sum(nb::handle_t<dr::ArrayBase> h, bool exclusive, std::option
         const ArraySupplement &s = supp(tp);
 
         if (!axis)
-            nb::detail::raise("the prefix sum reduction is not implemented for the axis=None case!");
+            nb::raise("the prefix sum reduction is not implemented for the axis=None case!");
 
         if (axis.value() != 0)
-            nb::detail::raise("the prefix sum reduction are currently limited to axis=0!");
+            nb::raise("the prefix sum reduction are currently limited to axis=0!");
 
         void *op = s.op[(int) ArrayOp::PrefixSum];
         if (op == DRJIT_OP_NOT_IMPLEMENTED)
-            nb::detail::raise_type_error(
+            nb::raise_type_error(
                 "requires an arithmetic Dr.Jit array as input!");
 
         if (op != DRJIT_OP_DEFAULT) {
@@ -243,7 +242,7 @@ nb::object prefix_sum(nb::handle_t<dr::ArrayBase> h, bool exclusive, std::option
 
         dr_vector<size_t> shape;
         if (!shape_impl(h, shape))
-            nb::detail::raise("input array is ragged!");
+            nb::raise("input array is ragged!");
 
         nb::object result = full("zeros", tp, nb::int_(0), shape.size(),
                                  shape.data()),

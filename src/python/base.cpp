@@ -97,7 +97,7 @@ static PyObject *nb_power(PyObject *h0_, PyObject *h1_) noexcept {
         double d1 = 0.0;
         if (nb::try_cast(h1, i1) || (nb::try_cast(h1, d1) && (i1 = (Py_ssize_t) d1, (double) i1 == d1))) {
             if (i1 == PY_SSIZE_T_MIN)
-                nb::detail::raise("Negative exponent is too large!");
+                nb::raise("Negative exponent is too large!");
 
             Py_ssize_t u1 = (i1 < 0) ? -i1 : i1;
 
@@ -163,8 +163,8 @@ template <int Index> nb::object xyzw_getter(nb::handle_t<ArrayBase> h) {
     if (NB_UNLIKELY((!s.is_vector && !s.is_quaternion) || s.ndim == 0 ||
                     s.shape[0] == DRJIT_DYNAMIC || Index >= s.shape[0])) {
         nb::str name = nb::inst_name(h);
-        nb::detail::raise("%s does not have a '%c' component.", name.c_str(),
-                          "xyzw"[Index]);
+        nb::raise("%s does not have a '%c' component.", name.c_str(),
+                  "xyzw"[Index]);
     }
 
     return nb::steal(s.item(h.ptr(), (Py_ssize_t) Index));
@@ -177,12 +177,12 @@ void xyzw_setter(nb::handle_t<ArrayBase> h, nb::handle value) {
     if (NB_UNLIKELY((!s.is_vector && !s.is_quaternion) || s.ndim == 0 ||
                     s.shape[0] == DRJIT_DYNAMIC || Index >= s.shape[0])) {
         nb::str name = nb::inst_name(h);
-        nb::detail::raise("%s does not have a '%c' component.", name.c_str(),
-                          "xyzw"[Index]);
+        nb::raise("%s does not have a '%c' component.", name.c_str(),
+                  "xyzw"[Index]);
     }
 
     if (s.set_item(h.ptr(), (Py_ssize_t) Index, value.ptr()))
-        nb::detail::raise_python_error();
+        nb::raise_python_error();
 }
 
 template <int Index> nb::object complex_getter(nb::handle_t<ArrayBase> h) {
@@ -190,7 +190,7 @@ template <int Index> nb::object complex_getter(nb::handle_t<ArrayBase> h) {
 
     if (NB_UNLIKELY(!s.is_complex)) {
         nb::str name = nb::inst_name(h);
-        nb::detail::raise("%s does not have a '%s' component.", name.c_str(),
+        nb::raise("%s does not have a '%s' component.", name.c_str(),
                           Index == 0 ? "real" : "imaginary");
     }
 
@@ -203,12 +203,12 @@ void complex_setter(nb::handle_t<ArrayBase> h, nb::handle value) {
 
     if (NB_UNLIKELY(!s.is_complex)) {
         nb::str name = nb::inst_name(h);
-        nb::detail::raise("%s does not have a '%s' component.", name.c_str(),
-                          Index == 0 ? "real" : "imaginary");
+        nb::raise("%s does not have a '%s' component.", name.c_str(),
+                  Index == 0 ? "real" : "imaginary");
     }
 
     if (s.set_item(h.ptr(), (Py_ssize_t) Index, value.ptr()))
-        nb::detail::raise_python_error();
+        nb::raise_python_error();
 }
 
 static int nb_bool(PyObject *o) noexcept {
@@ -340,7 +340,7 @@ nb::object fma(nb::handle h0, nb::handle h1, nb::handle h2) {
                       h0.ptr(), h1.ptr(), h2.ptr());
 
     if (!o)
-        nb::detail::raise_python_error();
+        nb::raise_python_error();
 
     return nb::steal(o);
 }
@@ -355,7 +355,7 @@ nb::object select(nb::handle h0, nb::handle h1, nb::handle h2) {
                       h0.ptr(), h1.ptr(), h2.ptr());
 
     if (!o)
-        nb::detail::raise_python_error();
+        nb::raise_python_error();
 
     return nb::steal(o);
 }

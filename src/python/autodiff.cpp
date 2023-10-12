@@ -223,7 +223,7 @@ static nb::object replace_grad(nb::handle h0, nb::handle h1) {
                        l2 = s.len(p2);
 
                 if (l1 != l2)
-                    nb::detail::raise("incompatible input sizes (%zu and %zu).", l1, l2);
+                    nb::raise("incompatible input sizes (%zu and %zu).", l1, l2);
 
                 uint64_t i1 = s.index(p1),
                          i2 = s.index(p2),
@@ -266,7 +266,7 @@ static void enqueue_impl(dr::ADMode mode_, nb::handle h_) {
 static bool check_grad_enabled(const char *name, nb::handle h, uint32_t flags) {
     bool rv = grad_enabled(h);
     if (!rv & !(flags & dr::ADFlag::AllowNoGrad))
-        nb::detail::raise(
+        nb::raise(
             "%s(): the argument does not depend on the input variable(s) being "
             "differentiated. Raising an exception since this is usually "
             "indicative of a bug (for example, you may have forgotten to call "
@@ -360,7 +360,7 @@ public:
         if (t.key.is_valid())
             nb_trampoline.base().attr(t.key)();
         else
-            nb::detail::raise("%s.forward(): not implemented!", type_name().c_str());
+            nb::raise("%s.forward(): not implemented!", type_name().c_str());
     }
 
     void backward() override {
@@ -368,11 +368,11 @@ public:
         if (t.key.is_valid())
             nb_trampoline.base().attr(t.key)();
         else
-            nb::detail::raise("%s.backward(): not implemented!", type_name().c_str());
+            nb::raise("%s.backward(): not implemented!", type_name().c_str());
     }
 
     void eval(nb::args, nb::kwargs) {
-        nb::detail::raise("%s.eval(): not implemented!", type_name().c_str());
+        nb::raise("%s.eval(): not implemented!", type_name().c_str());
     }
 
     const char *name() const override {
@@ -411,8 +411,8 @@ public:
         nb::object result =
             nb::borrow(PyDict_GetItem(m_inputs.ptr(), key.ptr()));
         if (!result.is_valid())
-            nb::detail::raise("drjit.CustomOp.grad_in(): could not find an "
-                              "input argument named \"%s\"", nb::str(key).c_str());
+            nb::raise("drjit.CustomOp.grad_in(): could not find an "
+                      "input argument named \"%s\"", nb::str(key).c_str());
         return ::grad(result);
     }
 
@@ -420,8 +420,8 @@ public:
         nb::object result =
             nb::borrow(PyDict_GetItem(m_inputs.ptr(), key.ptr()));
         if (!result.is_valid())
-            nb::detail::raise("drjit.CustomOp.set_grad_in(): could not find an "
-                              "input argument named \"%s\"", nb::str(key).c_str());
+            nb::raise("drjit.CustomOp.set_grad_in(): could not find an "
+                      "input argument named \"%s\"", nb::str(key).c_str());
         accum_grad(result, value);
     }
 
@@ -491,7 +491,7 @@ nb::object custom(nb::type_object_t<PyCustomOp> cls, nb::args args, nb::kwargs k
         nb::chain_error(PyExc_RuntimeError,
                         "drjit.custom(<%U>): error while performing a custom "
                         "differentiable operation: %s.", tp_name.ptr(), e.what());
-        nb::detail::raise_python_error();
+        nb::raise_python_error();
     }
 }
 

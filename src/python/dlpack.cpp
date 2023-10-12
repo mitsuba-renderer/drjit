@@ -27,7 +27,7 @@ nb::dlpack::dtype dlpack_dtype(VarType vt) {
         case VarType::Float32: return nb::dtype<float>(); break;
         case VarType::Float64: return nb::dtype<double>(); break;
         default:
-            nb::detail::raise_type_error("Type is incompatible with DLPack.");
+            nb::raise_type_error("Type is incompatible with DLPack.");
     }
 }
 

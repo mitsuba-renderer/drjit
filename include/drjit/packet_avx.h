@@ -691,7 +691,7 @@ template <bool IsMask_, typename Derived_> struct alignas(32)
         (void) ro;
 
         // Refine using 2 Newton-Raphson iterations
-        DRJIT_UNROLL for (int i = 0; i < 2; ++i) {
+        for (int i = 0; i < 2; ++i) {
             t0 = _mm256_add_pd(r, r);
             t1 = _mm256_mul_pd(r, m);
             r = _mm256_fnmadd_pd(t1, r, t0);
@@ -714,7 +714,7 @@ template <bool IsMask_, typename Derived_> struct alignas(32)
         (void) ro;
 
         // Refine using 2 Newton-Raphson iterations
-        DRJIT_UNROLL for (int i = 0; i < 2; ++i) {
+        for (int i = 0; i < 2; ++i) {
             t0 = _mm256_mul_pd(r, c0);
             t1 = _mm256_mul_pd(r, m);
             r = _mm256_mul_pd(_mm256_fnmadd_pd(t1, r, c1), t0);

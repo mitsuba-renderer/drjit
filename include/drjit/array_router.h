@@ -1137,8 +1137,14 @@ void scatter_reduce(ReduceOp op, Target &&target, const Value &value,
             auto func = [op](const Value &a, const Value &b) -> Value {
                 switch (op) {
                     case ReduceOp::None: return b;
-                    case ReduceOp::Add: return a + b;
-                    case ReduceOp::Mul: return a * b;
+                    case ReduceOp::Add:
+                        if constexpr (!std::is_same_v<Value, bool>)
+                            return a + b;
+                        break;
+                    case ReduceOp::Mul:
+                        if constexpr (!std::is_same_v<Value, bool>)
+                            return a * b;
+                        break;
                     case ReduceOp::Min: return minimum(a, b);
                     case ReduceOp::Max: return maximum(a, b);
                     case ReduceOp::And:

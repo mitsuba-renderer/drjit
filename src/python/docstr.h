@@ -70,7 +70,7 @@ Return the *value type* underlying the provided Dr.Jit array or type (i.e., the
 type of values obtained by accessing the contents using a 1D index).
 
 When the input is not a Dr.Jit array or type, the function returns the input
-unchanged. The following code fragment shows several example uses of
+type without changes. The following code fragment shows several example uses of
 :py:func:`value_t`.
 
 .. code-block::
@@ -79,6 +79,7 @@ unchanged. The following code fragment shows several example uses of
     assert dr.value_t(dr.cuda.Array3f) is dr.cuda.Float
     assert dr.value_t(dr.cuda.Matrix4f) is dr.cuda.Array4f
     assert dr.value_t(dr.cuda.TensorXf) is float
+    assert dr.value_t(str) is str
     assert dr.value_t("test") is str
 
 Args:
@@ -138,6 +139,7 @@ Python ``bool`` type. The following assertions illustrate the behavior of
     assert dr.mask_t(dr.scalar.Array3f) is dr.scalar.Array3b
     assert dr.mask_t(dr.cuda.Array3f) is dr.cuda.Array3b
     assert dr.mask_t(dr.cuda.Matrix4f) is dr.cuda.Array44b
+    assert dr.mask_t(bool) is bool
     assert dr.mask_t("test") is bool
 
 Args:
@@ -162,6 +164,7 @@ unchanged. The following assertions illustrate the behavior of
     assert dr.scalar_t(dr.scalar.Array3f) is bool
     assert dr.scalar_t(dr.cuda.Array3f) is float
     assert dr.scalar_t(dr.cuda.Matrix4f) is float
+    assert dr.scalar_t(str) is str
     assert dr.scalar_t("test") is str
 
 Args:
@@ -333,6 +336,30 @@ Args:
 
 Returns:
     drjit.VarType: The associated type ``drjit.VarType.Void``.)";
+
+static const char *doc_replace_type_t = R"(
+Converts the provided Dr.Jit array/tensor type into an analogous version with
+the specified scalar type.
+
+This function implements the following set of behaviors:
+
+1. When invoked with a Dr.Jit array *type* `arg0`, it returns an analogous
+   version with a different scalar type, as specified via `arg1`. For example,
+   when called with :py:class:`drjit.cuda.Array3u` and and
+   :py:attr:`drjit.VarType.Float32`, it will return
+   :py:class:`drjit.cuda.Array3f`.
+
+2. When the input is not a type, it returns ``replace_type_t(type(arg0), arg1)``.
+
+3. When the input is not a Dr.Jit type, the function returns `arg0`.
+
+Args:
+    arg0 (object): An arbitrary Python object
+
+    arg1 (drjit.VarType): The desired variable type
+
+Returns:
+    type: Result of the conversion as described above.)";
 
 
 static const char *doc_is_complex_v = R"(
@@ -1489,7 +1516,7 @@ This function implements the following set of behaviors:
 1. When invoked with a Dr.Jit array *type* (e.g. :py:class:`drjit.cuda.Array3f64`), it
    returns an *unsigned integer* version (e.g. :py:class:`drjit.cuda.Array3u64`).
 
-2. When the input isn't a type, it returns ``uint_array_t(type(arg))``.
+2. When the input is not a type, it returns ``uint_array_t(type(arg))``.
 
 3. When the input is not a Dr.Jit array or type, the function returns ``int``.
 
@@ -1510,7 +1537,7 @@ This function implements the following set of behaviors:
 1. When invoked with a Dr.Jit array *type* (e.g. :py:class:`drjit.cuda.Array3f64`), it
    returns an *signed integer* version (e.g. :py:class:`drjit.cuda.Array3u64`).
 
-2. When the input isn't a type, it returns ``int_array_t(type(arg))``.
+2. When the input is not a type, it returns ``int_array_t(type(arg))``.
 
 3. When the input is not a Dr.Jit array or type, the function returns ``int``.
 
@@ -1532,7 +1559,7 @@ This function implements the following set of behaviors:
 1. When invoked with a Dr.Jit array *type* (e.g. :py:class:`drjit.cuda.Array3u64`), it
    returns an *floating point* version (e.g. :py:class:`drjit.cuda.Array3f64`).
 
-2. When the input isn't a type, it returns ``float_array_t(type(arg))``.
+2. When the input is not a type, it returns ``float_array_t(type(arg))``.
 
 3. When the input is not a Dr.Jit array or type, the function returns ``float``.
 
@@ -1552,7 +1579,7 @@ This function implements the following set of behaviors:
 1. When invoked with a Dr.Jit array *type* (e.g. :py:class:`drjit.cuda.Array3f`), it
    returns an *unsigned 32 bit* version (e.g. :py:class:`drjit.cuda.Array3u`).
 
-2. When the input isn't a type, it returns ``uint32_array_t(type(arg))``.
+2. When the input is not a type, it returns ``uint32_array_t(type(arg))``.
 
 3. When the input is not a Dr.Jit array or type, the function returns ``int``.
 
@@ -1572,7 +1599,7 @@ This function implements the following set of behaviors:
 1. When invoked with a Dr.Jit array *type* (e.g. :py:class:`drjit.cuda.Array3f`), it
    returns an *signed 32 bit* version (e.g. :py:class:`drjit.cuda.Array3i`).
 
-2. When the input isn't a type, it returns ``int32_array_t(type(arg))``.
+2. When the input is not a type, it returns ``int32_array_t(type(arg))``.
 
 3. When the input is not a Dr.Jit array or type, the function returns ``int``.
 
@@ -1592,7 +1619,7 @@ This function implements the following set of behaviors:
 1. When invoked with a Dr.Jit array *type* (e.g. :py:class:`drjit.cuda.Array3f`), it
    returns an *unsigned 64 bit* version (e.g. :py:class:`drjit.cuda.Array3u64`).
 
-2. When the input isn't a type, it returns ``uint64_array_t(type(arg))``.
+2. When the input is not a type, it returns ``uint64_array_t(type(arg))``.
 
 3. When the input is not a Dr.Jit array or type, the function returns ``int``.
 
@@ -1611,7 +1638,7 @@ This function implements the following set of behaviors:
 1. When invoked with a Dr.Jit array *type* (e.g. :py:class:`drjit.cuda.Array3f`), it
    returns an *signed 64 bit* version (e.g. :py:class:`drjit.cuda.Array3i64`).
 
-2. When the input isn't a type, it returns ``int64_array_t(type(arg))``.
+2. When the input is not a type, it returns ``int64_array_t(type(arg))``.
 
 3. When the input is not a Dr.Jit array or type, the function returns ``int``.
 
@@ -1630,7 +1657,7 @@ This function implements the following set of behaviors:
 1. When invoked with a Dr.Jit array *type* (e.g. :py:class:`drjit.cuda.Array3u`), it
    returns a *32 bit floating point* version (e.g. :py:class:`drjit.cuda.Array3f`).
 
-2. When the input isn't a type, it returns ``float32_array_t(type(arg))``.
+2. When the input is not a type, it returns ``float32_array_t(type(arg))``.
 
 3. When the input is not a Dr.Jit array or type, the function returns ``float``.
 
@@ -1649,7 +1676,7 @@ This function implements the following set of behaviors:
 1. When invoked with a Dr.Jit array *type* (e.g. :py:class:`drjit.cuda.Array3u`), it
    returns a *64 bit floating point* version (e.g. :py:class:`drjit.cuda.Array3f64`).
 
-2. When the input isn't a type, it returns ``float64_array_t(type(arg))``.
+2. When the input is not a type, it returns ``float64_array_t(type(arg))``.
 
 3. When the input is not a Dr.Jit array or type, the function returns ``float``.
 
@@ -1671,7 +1698,7 @@ This function implements the following set of behaviors:
 specified scalar type (e.g., :py:class:`drjit.cuda.Array3u64` when `arg1` is set
 to `drjit.VarType.UInt64`).
 
-2. When the input isn't a type, it returns ``reinterpret_array_t(type(arg0), arg1)``.
+2. When the input is not a type, it returns ``reinterpret_array_t(type(arg0), arg1)``.
 
 3. When the input is not a Dr.Jit array or type, the function returns the
    associated Python scalar type.
@@ -1694,7 +1721,7 @@ This function implements the following set of behaviors:
    :py:class:`drjit.cuda.ad.Array3f`), it returns a non-differentiable version
    (e.g. :py:class:`drjit.cuda.Array3f`).
 
-2. When the input isn't a type, it returns ``detached_t(type(arg))``.
+2. When the input is not a type, it returns ``detached_t(type(arg))``.
 
 3. When the input type is non-differentiable or not a Dr.Jit array type, the
    function returns it unchanged.
@@ -1972,7 +1999,7 @@ Args:
 )";
 
 static const char *doc_scatter_reduce = R"(
-Atomically update values in a flat array or nested data structure
+Atomically update values in a flat array or nested data structure.
 
 This operation performs a *scatter-reduction* (i.e., an atomic
 read-modify-write operation) using the ``value`` parameter to update the
@@ -2042,8 +2069,24 @@ This operation can be used in the following different ways:
 
 .. warning::
 
-   Support for reductions beyond `ReduceOp.Add` is currently very limited and
-   backend-dependent.
+   Various combinations of parameters are not supported or are
+   backend-dependent:
+
+   - Multiplicative reductions (:py:attr:`drjit.ReduceOp.Mul`) are not
+     supported.
+
+   - Mask/boolean array `target` values are not supported.
+
+   - Bitwise reductions (:py:attr:`drjit.ReduceOp.And`,
+     :py:attr:`drjit.ReduceOp.Or`) do not support floating point
+     operands.
+
+   - On the LLVM backend, some reductions may require newer versions of
+     the LLVM library (v15 or newer).
+
+   - On the CUDA backend, min/max reductions (:py:attr:`drjit.ReduceOp.Min`,
+     :py:attr:`drjit.ReduceOp.Max`) do not support floating point
+     operands.
 
 .. danger::
 
@@ -2052,11 +2095,13 @@ This operation can be used in the following different ways:
     crash the application. Negative indices are not permitted.
 
     Dr.Jit makes no guarantees about the relative ordering of atomic operations
-    when a specific position is written multiple times by a single
-    :py:func:`drjit.scatter_reduce()` operation.
+    when a :py:func:`drjit.scatter_reduce()` writes to the same element
+    multiple times. Combined with the non-associate nature of floating point
+    operations, concurrent writes will generally introduce nondeterministic
+    rounding error.
 
 Args:
-    op (drjit.ReduceOp): Specifies the type of update that should be performed.
+    reduce_op (drjit.ReduceOp): Specifies the type of update that should be performed.
 
     target (object): The object into which data should be written (typically a
       1D Dr.Jit array, but other variations are possible as well, see the
@@ -2076,13 +2121,6 @@ Args:
       :py:class:`drjit.scalar.ArrayXb` or :py:class:`drjit.cuda.Bool`)
       specifying active components. Dr.Jit will attempt an implicit conversion
       if another type is provided. The default is `True`.
-
-    permute (bool): You can leave this flag at its default value (``False``).
-      It exists to slightly improve the efficiency of a special case where a
-      zero-initialized array is fully initialized by differentiable scatters
-      without duplicate writes to an entry. (i.e., the scatter indices are a
-      permutation). This case arises in the implementation of wavefront-style
-      virtual funtion dispatch.
 )";
 
 static const char *doc_ravel = R"(
@@ -2317,7 +2355,7 @@ from the AD computational graph).
 
 This function supports arbitrary Dr.Jit arrays/tensors and :ref:`Pytrees
 <pytrees>` as input. In the latter case, it applies the transformation
-recursively. When the input variable isn't a Pytree or Dr.Jit array, it is
+recursively. When the input variable is not a Pytree or Dr.Jit array, it is
 returned as it is.
 
 While the type of the returned array is preserved by default, it is possible to
@@ -3148,9 +3186,6 @@ static const char *doc_ReduceOp_Min = "Minimum.";
 static const char *doc_ReduceOp_Max = "Maximum.";
 static const char *doc_ReduceOp_And = "Binary AND operation.";
 static const char *doc_ReduceOp_Or = "Binary OR operation.";
-static const char *doc_ReduceOp_Count =
-    "Count the number of nonzero entries (only applies to horizontal "
-    "reductions).";
 
 static const char *doc_CustomOp = R"(
 Base class for implementing custom differentiable operations.
@@ -3655,6 +3690,28 @@ static const char *doc_JitFlag_VCallRecord = R"(
      storage are often so overwhelming that wavefront mode becomes impractical.
 
 Recorded mode is enabled by default.)";
+
+static const char *doc_JitFlag_IndexReuse = R"(
+**Index reuse**: Dr.Jit consists of two main parts: the just-in-time compiler,
+and the automatic differentiation layer. Both maintain an internal data
+structure representing captured computation, in which each variable is
+associated with an index (e.g., ``r1234`` in the JIT compiler,
+and ``a1234`` in the AD graph).
+
+The index of a Dr.Jit array in these graphs can be queried via the
+:py:attr:`drjit.index` and :py:attr:`drjit.index_ad` variables, and they are
+also visible in debug messages (if :py:func:`drjit.set_log_level` is set to a
+more verbose debug level).
+
+Dr.Jit aggressively reuses the indices of expired variables by default, but
+this can make debug output difficult to interpret. When when debugging Dr.Jit
+itself, it is often helpful to investigate the history of a particular
+variable. In such cases, set this flag to ``False`` to disable variable reuse
+both at the JIT and AD levels. This comes at a cost: the internal data
+structures keep on growing, so it is not suitable for long-running
+computations.
+
+Index reuse is enabled by default.)";
 
 static const char *doc_JitFlag_Default = "The default set of flags.";
 

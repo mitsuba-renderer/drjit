@@ -274,7 +274,7 @@ NB_INLINE void bind_init(ArrayBinding &b, nanobind::handle scope = {},
     static_assert(Align < 0xFF && RelSize <= 0xFF && RelSize * Align == Size,
                   "drjit::bind(): type is too large!");
 
-    memset(&b, 0, sizeof(ArrayBinding));
+    memset((void *) &b, 0, sizeof(ArrayBinding));
     b.backend = (uint16_t) backend_v<T>;
 
     if (is_mask_v<T>)
