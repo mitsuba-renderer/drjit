@@ -1,26 +1,25 @@
 [build-system]
-requires = ["scikit-build-core >=0.4.3", "nanobind >=1.3.2"]
+requires = ["scikit-build-core >=0.4.3", "nanobind >=1.6.2"]
 build-backend = "scikit_build_core.build"
-
 
 [project]
 name = "drjit"
-version = "0.4.1"
-description = "A Just-In-Time-Compiler for Differentiable Rendering"
+version = "1.0.0"
+description = "Dr.Jit: A Just-In-Time Compiler for Differentiable Rendering"
 readme = "README.rst"
 requires-python = ">=3.8"
 authors = [
-    "Wenzel Jakob <wenzel.jakob@epfl.ch>",
-    "Sebastien Speierer <sebastien.speierer@epfl.ch>",
-    "Nicolas Roussel <nicolas.roussel@epfl.ch>"
+    { name = "Wenzel Jakob", email = "wenzel.jakob@epfl.ch" },
+    { name = "Sébastien Speierer", email = "sebastien.speierer@epfl.ch" },
+    { name = "Nicolas Roussel", email = "nicolas.roussel@epfl.ch" },
+    { name = "Delio Vicini", email = "delio.vicini@epfl.ch" }
 ]
-
 classifiers = [
-    "License :: BSD"
+    "License :: BSD",
 ]
 
 [project.urls]
-homepage = "https://github.com/mitsuba-renderer/drjit"
+Homepage = "https://github.com/mitsuba-renderer/drjit"
 
 
 [tool.scikit-build]
@@ -32,7 +31,6 @@ build-dir = "build/{wheel_tag}"
 
 # Build stable ABI wheels for CPython 3.12+
 wheel.py-api = "cp312"
-
 
 [tool.cibuildwheel]
 # Necessary to see build output from the actual compilation
@@ -46,5 +44,4 @@ test-requires = "pytest"
 [tool.cibuildwheel.macos.environment]
 MACOSX_DEPLOYMENT_TARGET = "10.14"
 
-[tool.pytest.ini_options]
-norecursedirs = [ "ext" ]
+
