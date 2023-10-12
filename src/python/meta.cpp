@@ -318,7 +318,7 @@ void promote(nb::object *o, size_t n, bool select) {
 
         if (!m2.is_valid) {
             nb::str type_name = nb::inst_name(o_i);
-            nb::detail::raise(
+            nb::raise(
                 "Encountered an unsupported argument of type '%s' (must be a "
                 "Dr.Jit array or a type that can be converted into one)",
                 type_name.c_str());
@@ -338,7 +338,7 @@ void promote(nb::object *o, size_t n, bool select) {
     }
 
     if (!meta_check(m))
-        nb::detail::raise("Incompatible arguments.");
+        nb::raise("Incompatible arguments.");
 
     if (h.is_valid())
         h = h.type();
@@ -366,8 +366,8 @@ void promote(nb::object *o, size_t n, bool select) {
                 nb::str type_name_i = nb::type_name(o[i].type()),
                         type_name_o = nb::type_name(h2);
 
-                nb::detail::raise("Could not promote type '%s' to '%s'.",
-                                  type_name_i.c_str(), type_name_o.c_str());
+                nb::raise("Could not promote type '%s' to '%s'.",
+                          type_name_i.c_str(), type_name_o.c_str());
             }
 
             o[i] = nb::steal(res);
@@ -439,7 +439,6 @@ nb::handle meta_get_type(ArrayMeta meta) {
     const char *name = meta_get_name(meta);
     nb::handle result = getattr(meta_get_module(meta), name, nb::handle());
     if (!result.is_valid())
-        nb::detail::raise(
-            "Operation references type \"%s\", which lacks bindings", name);
+        nb::raise("Operation references type \"%s\", which lacks bindings", name);
     return result;
 }

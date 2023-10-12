@@ -91,10 +91,10 @@ void set_label(nb::handle h, nb::str label) {
 void set_label_2(nb::kwargs kwargs) {
     for (auto [k, v] : kwargs) {
         if (v.type().is(&PyUnicode_Type))
-            nb::detail::raise("drjit.set_label(): You passed a ``str``-valued "
-                              "keyword argument where an array was expected. "
-                              "To use the kwargs-style interface, call this "
-                              "function as follows: ``set_label(x=x, y=y)``");
+            nb::raise("drjit.set_label(): You passed a ``str``-valued "
+                      "keyword argument where an array was expected. "
+                      "To use the kwargs-style interface, call this "
+                      "function as follows: ``set_label(x=x, y=y)``");
         set_label(v, nb::borrow<nb::str>(k));
     }
 }

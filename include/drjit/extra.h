@@ -187,16 +187,18 @@ namespace drjit { namespace detail { class CustomOpBase; }};
 extern DRJIT_EXTRA_EXPORT bool ad_custom_op(drjit::detail::CustomOpBase *);
 extern DRJIT_EXTRA_EXPORT bool ad_release_one_output(drjit::detail::CustomOpBase *);
 
-using ad_dispatch_callback = void(void *payload, size_t index,
-                               const drjit::dr_vector<uint64_t> &args_i,
-                               drjit::dr_vector<uint64_t> &rv_i);
+typedef void (*ad_vcall_callback)(void *payload, size_t index,
+                                  const drjit::dr_vector<uint64_t> &args_i,
+                                  drjit::dr_vector<uint64_t> &rv_i);
+typedef void (*ad_vcall_cleanup)(void*);
 
-extern DRJIT_EXTRA_EXPORT void
-ad_dispatch(JitBackend backend, const char *domain, uint32_t index,
-            uint32_t mask, size_t callable_count,
-            const drjit::dr_vector<uint64_t> args,
-            drjit::dr_vector<uint64_t> &rv, ad_dispatch_callback callback,
-            void *payload);
+/// Perform a differentiable virtual function call
+extern DRJIT_EXTRA_EXPORT bool
+ad_vcall(JitBackend backend, const char *domain, const char *name,
+         uint32_t index, uint32_t mask, size_t callable_count,
+         const drjit::dr_vector<uint64_t> &args, drjit::dr_vector<uint64_t> &rv,
+         void *payload, ad_vcall_callback callback, ad_vcall_cleanup cleanup,
+         bool ad);
 
 #if defined(__cplusplus)
 }

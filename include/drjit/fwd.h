@@ -24,10 +24,6 @@
 #  define DRJIT_THREAD                 __declspec(thread)
 #  define DRJIT_MAY_ALIAS
 #  define DRJIT_ASSUME_ALIGNED(x, s)   x
-#  if !defined(DRJIT_UNROLL)
-#    define DRJIT_UNROLL
-#  endif
-#  define DRJIT_NOUNROLL
 #  define DRJIT_PACK
 #  define DRJIT_LIKELY(x)              x
 #  define DRJIT_UNLIKELY(x)            x
@@ -45,15 +41,10 @@
 #  define DRJIT_PACK                   __attribute__ ((packed))
 #  define DRJIT_MAY_ALIAS              __attribute__ ((may_alias))
 #  define DRJIT_THREAD                 __thread
-#  define DRJIT_TRIVIAL_ABI            __attribute__ ((trivial_abi))
 #  if defined(__clang__)
-#    if !defined(DRJIT_UNROLL)
-#      define DRJIT_UNROLL               _Pragma("unroll")
-#    endif
-#    define DRJIT_NOUNROLL               _Pragma("nounroll")
+#    define DRJIT_TRIVIAL_ABI            __attribute__ ((trivial_abi))
 #  else
-#    define DRJIT_UNROLL
-#    define DRJIT_NOUNROLL
+#    define DRJIT_TRIVIAL_ABI
 #  endif
 #  define DRJIT_IMPORT
 #  define DRJIT_EXPORT                 __attribute__ ((visibility("default")))

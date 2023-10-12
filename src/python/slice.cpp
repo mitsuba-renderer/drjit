@@ -47,7 +47,7 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
     }
 
     if (ellipsis_count > 1)
-        nb::detail::raise(
+        nb::raise(
             "drjit.slice_tensor(): multiple ellipses (...) are not allowed.");
 
     size_t shape_offset = 0;
@@ -68,7 +68,7 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
         }
 
         if (shape_offset >= shape_len)
-            nb::detail::raise("drjit.slice_tensor(): too many indices.");
+            nb::raise("drjit.slice_tensor(): too many indices.");
 
         Py_ssize_t size = nb::cast<Py_ssize_t>(shape[shape_offset++]);
         nb::handle tp = h.type();
@@ -79,9 +79,9 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
                 v += size;
 
             if (v < 0 || v >= size)
-                nb::detail::raise("drjit.slice_tensor(): index %zd is out of "
-                                  "bounds for axis %zu with size %zd.",
-                                  v, components.size(), size);
+                nb::raise("drjit.slice_tensor(): index %zd is out of "
+                          "bounds for axis %zu with size %zd.",
+                          v, components.size(), size);
 
             components.emplace_back(v, 1, 1, size);
             continue;
@@ -130,7 +130,7 @@ slice_index(const nb::type_object_t<ArrayBase> &dtype,
         }
 
         nb::str tp_name = nb::type_name(tp);
-        nb::detail::raise(
+        nb::raise(
             "drjit.slice_index(): unsupported type \"%s\" in slice expression.",
             tp_name.c_str());
     }
@@ -245,12 +245,12 @@ PyObject *mp_subscript(PyObject *self, PyObject *key) noexcept {
         }
 
         if (complex_case) {
-            nb::detail::raise_type_error(
+            nb::raise_type_error(
                 "Complex slicing operations are only supported on tensors.");
         } else {
             nb::str key_name = nb::type_name(key_tp);
-            nb::detail::raise_type_error("Invalid key of type '%s' specified.",
-                                         key_name.c_str());
+            nb::raise_type_error("Invalid key of type '%s' specified.",
+                                 key_name.c_str());
         }
     } catch (nb::python_error &e) {
         nb::str tp_name = nb::type_name(self_tp);
@@ -334,12 +334,12 @@ int mp_ass_subscript(PyObject *self, PyObject *key, PyObject *value) noexcept {
         }
 
         if (complex_case) {
-            nb::detail::raise_type_error(
+            nb::raise_type_error(
                 "Complex slicing operations are only supported on tensors.");
         } else {
             nb::str key_name = nb::type_name(key_tp);
-            nb::detail::raise_type_error("Invalid key of type '%s' specified.",
-                                         key_name.c_str());
+            nb::raise_type_error("Invalid key of type '%s' specified.",
+                                 key_name.c_str());
         }
     } catch (nb::python_error &e) {
         nb::str tp_name = nb::type_name(self_tp);

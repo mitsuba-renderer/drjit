@@ -165,7 +165,7 @@ PyObject *apply(ArrayOp op, Slot slot, std::index_sequence<Is...> is,
             if constexpr (std::is_same_v<Slot, int>)
                 return nb::not_implemented().release().ptr();
             else
-                nb::detail::raise("operation not supported for this type.");
+                nb::raise("operation not supported for this type.");
         }
 
         ArraySupplement::Item item = s.item, item_mask = nullptr;
@@ -424,7 +424,7 @@ NB_NOINLINE PyObject *apply_tensor(ArrayOp op, Slot slot,
                 ? "operands have incompatible shapes: %s and %s."
                 : "operands have incompatible shapes: %s, %s, and %s.";
 
-            nb::detail::raise(fmt, shape_str[Is].c_str()...);
+            nb::raise(fmt, shape_str[Is].c_str()...);
         }
 
         if constexpr (N > 1) {
@@ -550,7 +550,7 @@ struct recursion_guard {
     recursion_guard() {
         if (++recursion_level >= 50) {
             PyErr_SetString(PyExc_RecursionError, "runaway recursion detected");
-            nb::detail::raise_python_error();
+            nb::raise_python_error();
         }
     }
     ~recursion_guard() { recursion_level--; }
@@ -616,7 +616,7 @@ void traverse_pair(const char *op, const TraversePairCallback &tc,
 
     try {
         if (!tp1.is(tp2))
-            nb::detail::raise("incompatible input types.");
+            nb::raise("incompatible input types.");
 
         if (is_drjit_type(tp1)) {
             const ArraySupplement &s = supp(tp1);
@@ -632,7 +632,7 @@ void traverse_pair(const char *op, const TraversePairCallback &tc,
                 }
 
                 if (len1 != len2)
-                    nb::detail::raise("incompatible input lengths (%zu and %zu).", len1, len2);
+                    nb::raise("incompatible input lengths (%zu and %zu).", len1, len2);
 
                 for (Py_ssize_t i = 0; i < len1; ++i)
                     traverse_pair(op, tc,
@@ -649,7 +649,7 @@ void traverse_pair(const char *op, const TraversePairCallback &tc,
             size_t len1 = nb::len(h1),
                    len2 = nb::len(h2);
             if (len1 != len2)
-                nb::detail::raise("incompatible input lengths (%zu and %zu).", len1, len2);
+                nb::raise("incompatible input lengths (%zu and %zu).", len1, len2);
             for (size_t i = 0; i < len1; ++i)
                 traverse_pair(op, tc, h1[i], h2[i]);
         } else if (tp1.is(&PyDict_Type)) {
@@ -657,9 +657,8 @@ void traverse_pair(const char *op, const TraversePairCallback &tc,
                      d2 = nb::borrow<nb::dict>(h2);
             nb::object k1 = d1.keys(), k2 = d2.keys();
             if (!k1.equal(k2))
-                nb::detail::raise(
-                    "dictionaries have incompatible keys (%s vs %s).",
-                    nb::str(k1).c_str(), nb::str(k2).c_str());
+                nb::raise("dictionaries have incompatible keys (%s vs %s).",
+                          nb::str(k1).c_str(), nb::str(k2).c_str());
             for (nb::handle k : k1)
                 traverse_pair(op, tc, d1[k], d2[k]);
         } else {
@@ -740,7 +739,7 @@ nb::object transform(const char *op, const TransformCallback &tc, nb::handle h1)
             size_t size = nb::len(t);
             nb::object result = nb::steal(PyTuple_New(size));
             if (!result.is_valid())
-                nb::detail::raise_python_error();
+                nb::raise_python_error();
 
             for (size_t i = 0; i < size; ++i)
                 PyTuple_SET_ITEM(result.ptr(), i,
@@ -796,7 +795,7 @@ nb::object transform_pair(const char *op, const TransformPairCallback &tc,
 
     try {
         if (!tp1.is(tp2))
-            nb::detail::raise("incompatible input types.");
+            nb::raise("incompatible input types.");
 
         if (is_drjit_type(tp1)) {
             nb::handle tp3 = tc.transform_type(tp1);
@@ -822,7 +821,7 @@ nb::object transform_pair(const char *op, const TransformPairCallback &tc,
                     len2 = s1.len(p2);
 
                     if (len1 != len2)
-                        nb::detail::raise("incompatible input lengths (%zu and %zu).", len1, len2);
+                        nb::raise("incompatible input lengths (%zu and %zu).", len1, len2);
 
                     s3.init(len1, p3);
                 }
@@ -841,11 +840,11 @@ nb::object transform_pair(const char *op, const TransformPairCallback &tc,
                       t2 = nb::borrow<nb::tuple>(h2);
             size_t len1 = nb::len(t1), len2 = nb::len(t2);
             if (len1 != len2)
-                nb::detail::raise("incompatible input lengths (%zu and %zu).", len1, len2);
+                nb::raise("incompatible input lengths (%zu and %zu).", len1, len2);
 
             nb::object result = nb::steal(PyTuple_New(len1));
             if (!result.is_valid())
-                nb::detail::raise_python_error();
+                nb::raise_python_error();
 
             for (size_t i = 0; i < len1; ++i)
                 PyTuple_SET_ITEM(result.ptr(), i,
@@ -857,7 +856,7 @@ nb::object transform_pair(const char *op, const TransformPairCallback &tc,
                      l2 = nb::borrow<nb::list>(h2);
             size_t len1 = nb::len(l1), len2 = nb::len(l2);
             if (len1 != len2)
-                nb::detail::raise("incompatible input lengths (%zu and %zu).", len1, len2);
+                nb::raise("incompatible input lengths (%zu and %zu).", len1, len2);
 
             nb::list result;
             for (size_t i = 0; i < len1; ++i)
@@ -870,7 +869,7 @@ nb::object transform_pair(const char *op, const TransformPairCallback &tc,
 
             nb::object k1 = d1.keys(), k2 = d2.keys();
             if (!k1.equal(k2))
-                nb::detail::raise(
+                nb::raise(
                     "dictionaries have incompatible keys (%s vs %s).",
                     nb::str(k1).c_str(), nb::str(k2).c_str());
 

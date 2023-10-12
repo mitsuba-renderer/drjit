@@ -61,7 +61,7 @@ nb::object expr_t(nb::handle h0, nb::handle h1) {
         nb::str tp0_name = nb::type_name(tp0),
                 tp1_name = nb::type_name(tp1);
 
-        nb::detail::raise_type_error(
+        nb::raise_type_error(
             "drjit.expr_t(): incompatible types \"%s\" and \"%s\"",
             tp0_name.c_str(), tp1_name.c_str());
     }
@@ -145,6 +145,17 @@ void export_traits(nb::module_ &m) {
                   return (VarType) supp(tp).type;
               return VarType::Void;
           }, doc_type_v);
+
+    m.def("replace_type_t",
+          [](nb::handle h, VarType vt) {
+              nb::handle tp = h.is_type() ? h : h.type();
+              if (is_drjit_type(tp)) {
+                  ArrayMeta m = supp(tp);
+                  m.type = (uint16_t) vt;
+                  tp = meta_get_type(m);
+              }
+              return nb::borrow(tp);
+          }, doc_replace_type_t);
 
     m.def("backend_v",
           [](nb::handle h) {

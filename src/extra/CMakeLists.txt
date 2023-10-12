@@ -5,7 +5,7 @@ add_library(
   common.h
   math.cpp
   autodiff.cpp
-  dispatch.cpp
+  vcall.cpp
 )
 
 nanobind_disable_stack_protector(drjit-extra)

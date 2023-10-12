@@ -87,13 +87,252 @@ others) two nested Dr.Jit arrays.
    from drjit.cuda.ad import Float
 
    class MyPoint2f:
-       DRJIT_STRUCT = { 'name': str, 'x' : Float, 'y': Float }
+       DRJIT_STRUCT = { 'x' : Float, 'y': Float }
 
-       def __init__(self, name: str = "", x: Float = 0, y: Float = 0):
-           self.name = name
+       def __init__(self, x: Float = None, y: Float = None):
            self.x = x
            self.y = y
 
    # Create a vector representing 100 2D points. Dr.Jit will
    # automatically populate the 'x' and 'y' members
    value = dr.zeros(MyPoint2f, 100)
+
+Fields don't exclusively have to be containers or Dr.Jit types. For example, we
+could have added an extra ``datetime`` entry to record when a set of points was
+captured. Such fields will be ignored by traversal operations.
+
+.. _transcendental-accuracy:
+
+Accuracy (single precision)
+___________________________
+
+.. note::
+
+    The trigonometric functions *sin*, *cos*, and *tan* are optimized for low
+    error on the domain :math:`|x| < 8192` and don't perform as well beyond
+    this range.
+
+.. list-table::
+    :widths: 5 8 8 10 8 10
+    :header-rows: 1
+    :align: center
+
+    * - Function
+      - Tested domain
+      - Abs. error (mean)
+      - Abs. error (max)
+      - Rel. error (mean)
+      - Rel. error (max)
+    * - :math:`\text{sin}()`
+      - :math:`-8192 < x < 8192`
+      - :math:`1.2 \cdot 10^{-8}`
+      - :math:`1.2 \cdot 10^{-7}`
+      - :math:`1.9 \cdot 10^{-8}\,(0.25\,\text{ulp})`
+      - :math:`1.8 \cdot 10^{-6}\,(19\,\text{ulp})`
+    * - :math:`\text{cos}()`
+      - :math:`-8192 < x < 8192`
+      - :math:`1.2 \cdot 10^{-8}`
+      - :math:`1.2 \cdot 10^{-7}`
+      - :math:`1.9 \cdot 10^{-8}\,(0.25\,\text{ulp})`
+      - :math:`3.1 \cdot 10^{-6}\,(47\,\text{ulp})`
+    * - :math:`\text{tan}()`
+      - :math:`-8192 < x < 8192`
+      - :math:`4.7 \cdot 10^{-6}`
+      - :math:`8.1 \cdot 10^{-1}`
+      - :math:`3.4 \cdot 10^{-8}\,(0.42\,\text{ulp})`
+      - :math:`3.1 \cdot 10^{-6}\,(30\,\text{ulp})`
+    * - :math:`\text{asin}()`
+      - :math:`-1 < x < 1`
+      - :math:`2.3 \cdot 10^{-8}`
+      - :math:`1.2 \cdot 10^{-7}`
+      - :math:`2.9 \cdot 10^{-8}\,(0.33\,\text{ulp})`
+      - :math:`2.3 \cdot 10^{-7}\,(2\,\text{ulp})`
+    * - :math:`\text{acos}()`
+      - :math:`-1 < x < 1`
+      - :math:`4.7 \cdot 10^{-8}`
+      - :math:`2.4 \cdot 10^{-7}`
+      - :math:`2.9 \cdot 10^{-8}\,(0.33\,\text{ulp})`
+      - :math:`1.2 \cdot 10^{-7}\,(1\,\text{ulp})`
+    * - :math:`\text{atan}()`
+      - :math:`-1 < x < 1`
+      - :math:`1.8 \cdot 10^{-7}`
+      - :math:`6 \cdot 10^{-7}`
+      - :math:`4.2 \cdot 10^{-7}\,(4.9\,\text{ulp})`
+      - :math:`8.2 \cdot 10^{-7}\,(12\,\text{ulp})`
+    * - :math:`\text{sinh}()`
+      - :math:`-10 < x < 10`
+      - :math:`2.6 \cdot 10^{-5}`
+      - :math:`2 \cdot 10^{-3}`
+      - :math:`2.8 \cdot 10^{-8}\,(0.34\,\text{ulp})`
+      - :math:`2.7 \cdot 10^{-7}\,(3\,\text{ulp})`
+    * - :math:`\text{cosh}()`
+      - :math:`-10 < x < 10`
+      - :math:`2.9 \cdot 10^{-5}`
+      - :math:`2 \cdot 10^{-3}`
+      - :math:`2.9 \cdot 10^{-8}\,(0.35\,\text{ulp})`
+      - :math:`2.5 \cdot 10^{-7}\,(4\,\text{ulp})`
+    * - :math:`\text{tanh}()`
+      - :math:`-10 < x < 10`
+      - :math:`4.8 \cdot 10^{-8}`
+      - :math:`4.2 \cdot 10^{-7}`
+      - :math:`5 \cdot 10^{-8}\,(0.76\,\text{ulp})`
+      - :math:`5 \cdot 10^{-7}\,(7\,\text{ulp})`
+    * - :math:`\text{asinh}()`
+      - :math:`-30 < x < 30`
+      - :math:`2.8 \cdot 10^{-8}`
+      - :math:`4.8 \cdot 10^{-7}`
+      - :math:`1 \cdot 10^{-8}\,(0.13\,\text{ulp})`
+      - :math:`1.7 \cdot 10^{-7}\,(2\,\text{ulp})`
+    * - :math:`\text{acosh}()`
+      - :math:`1 < x < 10`
+      - :math:`2.9 \cdot 10^{-8}`
+      - :math:`2.4 \cdot 10^{-7}`
+      - :math:`1.5 \cdot 10^{-8}\,(0.18\,\text{ulp})`
+      - :math:`2.4 \cdot 10^{-7}\,(3\,\text{ulp})`
+    * - :math:`\text{atanh}()`
+      - :math:`-1 < x < 1`
+      - :math:`9.9 \cdot 10^{-9}`
+      - :math:`2.4 \cdot 10^{-7}`
+      - :math:`1.5 \cdot 10^{-8}\,(0.18\,\text{ulp})`
+      - :math:`1.2 \cdot 10^{-7}\,(1\,\text{ulp})`
+    * - :math:`\text{exp}()`
+      - :math:`-20 < x < 30`
+      - :math:`0.72 \cdot 10^{4}`
+      - :math:`0.1 \cdot 10^{7}`
+      - :math:`2.4 \cdot 10^{-8}\,(0.27\,\text{ulp})`
+      - :math:`1.2 \cdot 10^{-7}\,(1\,\text{ulp})`
+    * - :math:`\text{log}()`
+      - :math:`10^{-20} < x < 2\cdot 10^{30}`
+      - :math:`9.6 \cdot 10^{-9}`
+      - :math:`7.6 \cdot 10^{-6}`
+      - :math:`1.4 \cdot 10^{-10}\,(0.0013\,\text{ulp})`
+      - :math:`1.2 \cdot 10^{-7}\,(1\,\text{ulp})`
+    * - :math:`\text{erf}()`
+      - :math:`-1 < x < 1`
+      - :math:`3.2 \cdot 10^{-8}`
+      - :math:`1.8 \cdot 10^{-7}`
+      - :math:`6.4 \cdot 10^{-8}\,(0.78\,\text{ulp})`
+      - :math:`3.3 \cdot 10^{-7}\,(4\,\text{ulp})`
+    * - :math:`\text{erfc}()`
+      - :math:`-1 < x < 1`
+      - :math:`3.4 \cdot 10^{-8}`
+      - :math:`2.4 \cdot 10^{-7}`
+      - :math:`6.4 \cdot 10^{-8}\,(0.79\,\text{ulp})`
+      - :math:`1 \cdot 10^{-6}\,(11\,\text{ulp})`
+
+Accuracy (double precision)
+___________________________
+
+.. list-table::
+    :widths: 5 8 8 10 8 10
+    :header-rows: 1
+    :align: center
+
+    * - Function
+      - Tested domain
+      - Abs. error (mean)
+      - Abs. error (max)
+      - Rel. error (mean)
+      - Rel. error (max)
+    * - :math:`\text{sin}()`
+      - :math:`-8192 < x < 8192`
+      - :math:`2.2 \cdot 10^{-17}`
+      - :math:`2.2 \cdot 10^{-16}`
+      - :math:`3.6 \cdot 10^{-17}\,(0.25\,\text{ulp})`
+      - :math:`3.1 \cdot 10^{-16}\,(2\,\text{ulp})`
+    * - :math:`\text{cos}()`
+      - :math:`-8192 < x < 8192`
+      - :math:`2.2 \cdot 10^{-17}`
+      - :math:`2.2 \cdot 10^{-16}`
+      - :math:`3.6 \cdot 10^{-17}\,(0.25\,\text{ulp})`
+      - :math:`3 \cdot 10^{-16}\,(2\,\text{ulp})`
+    * - :math:`\text{tan}()`
+      - :math:`-8192 < x < 8192`
+      - :math:`6.8 \cdot 10^{-16}`
+      - :math:`1.2 \cdot 10^{-10}`
+      - :math:`5.4 \cdot 10^{-17}\,(0.35\,\text{ulp})`
+      - :math:`4.1 \cdot 10^{-16}\,(3\,\text{ulp})`
+    * - :math:`\text{cot}()`
+      - :math:`-8192 < x < 8192`
+      - :math:`4.9 \cdot 10^{-16}`
+      - :math:`1.2 \cdot 10^{-10}`
+      - :math:`5.5 \cdot 10^{-17}\,(0.36\,\text{ulp})`
+      - :math:`4.4 \cdot 10^{-16}\,(3\,\text{ulp})`
+    * - :math:`\text{asin}()`
+      - :math:`-1 < x < 1`
+      - :math:`1.3 \cdot 10^{-17}`
+      - :math:`2.2 \cdot 10^{-16}`
+      - :math:`1.5 \cdot 10^{-17}\,(0.098\,\text{ulp})`
+      - :math:`2.2 \cdot 10^{-16}\,(1\,\text{ulp})`
+    * - :math:`\text{acos}()`
+      - :math:`-1 < x < 1`
+      - :math:`5.4 \cdot 10^{-17}`
+      - :math:`4.4 \cdot 10^{-16}`
+      - :math:`3.5 \cdot 10^{-17}\,(0.23\,\text{ulp})`
+      - :math:`2.2 \cdot 10^{-16}\,(1\,\text{ulp})`
+    * - :math:`\text{atan}()`
+      - :math:`-1 < x < 1`
+      - :math:`4.3 \cdot 10^{-17}`
+      - :math:`3.3 \cdot 10^{-16}`
+      - :math:`1 \cdot 10^{-16}\,(0.65\,\text{ulp})`
+      - :math:`7.1 \cdot 10^{-16}\,(5\,\text{ulp})`
+    * - :math:`\text{sinh}()`
+      - :math:`-10 < x < 10`
+      - :math:`3.1 \cdot 10^{-14}`
+      - :math:`1.8 \cdot 10^{-12}`
+      - :math:`3.3 \cdot 10^{-17}\,(0.22\,\text{ulp})`
+      - :math:`4.3 \cdot 10^{-16}\,(2\,\text{ulp})`
+    * - :math:`\text{cosh}()`
+      - :math:`-10 < x < 10`
+      - :math:`2.2 \cdot 10^{-14}`
+      - :math:`1.8 \cdot 10^{-12}`
+      - :math:`2 \cdot 10^{-17}\,(0.13\,\text{ulp})`
+      - :math:`2.9 \cdot 10^{-16}\,(2\,\text{ulp})`
+    * - :math:`\text{tanh}()`
+      - :math:`-10 < x < 10`
+      - :math:`5.6 \cdot 10^{-17}`
+      - :math:`3.3 \cdot 10^{-16}`
+      - :math:`6.1 \cdot 10^{-17}\,(0.52\,\text{ulp})`
+      - :math:`5.5 \cdot 10^{-16}\,(3\,\text{ulp})`
+    * - :math:`\text{asinh}()`
+      - :math:`-30 < x < 30`
+      - :math:`5.1 \cdot 10^{-17}`
+      - :math:`8.9 \cdot 10^{-16}`
+      - :math:`1.9 \cdot 10^{-17}\,(0.13\,\text{ulp})`
+      - :math:`4.4 \cdot 10^{-16}\,(2\,\text{ulp})`
+    * - :math:`\text{acosh}()`
+      - :math:`1 < x < 10`
+      - :math:`4.9 \cdot 10^{-17}`
+      - :math:`4.4 \cdot 10^{-16}`
+      - :math:`2.6 \cdot 10^{-17}\,(0.17\,\text{ulp})`
+      - :math:`6.6 \cdot 10^{-16}\,(5\,\text{ulp})`
+    * - :math:`\text{atanh}()`
+      - :math:`-1 < x < 1`
+      - :math:`1.8 \cdot 10^{-17}`
+      - :math:`4.4 \cdot 10^{-16}`
+      - :math:`3.2 \cdot 10^{-17}\,(0.21\,\text{ulp})`
+      - :math:`3 \cdot 10^{-16}\,(2\,\text{ulp})`
+    * - :math:`\text{exp}()`
+      - :math:`-20 < x < 30`
+      - :math:`4.7 \cdot 10^{-6}`
+      - :math:`2 \cdot 10^{-3}`
+      - :math:`2.5 \cdot 10^{-17}\,(0.16\,\text{ulp})`
+      - :math:`3.3 \cdot 10^{-16}\,(2\,\text{ulp})`
+    * - :math:`\text{log}()`
+      - :math:`10^{-20} < x < 2\cdot 10^{30}`
+      - :math:`1.9 \cdot 10^{-17}`
+      - :math:`1.4 \cdot 10^{-14}`
+      - :math:`2.7 \cdot 10^{-19}\,(0.0013\,\text{ulp})`
+      - :math:`2.2 \cdot 10^{-16}\,(1\,\text{ulp})`
+    * - :math:`\text{erf}()`
+      - :math:`-1 < x < 1`
+      - :math:`4.7 \cdot 10^{-17}`
+      - :math:`4.4 \cdot 10^{-16}`
+      - :math:`9.6 \cdot 10^{-17}\,(0.63\,\text{ulp})`
+      - :math:`5.9 \cdot 10^{-16}\,(5\,\text{ulp})`
+    * - :math:`\text{erfc}()`
+      - :math:`-1 < x < 1`
+      - :math:`4.8 \cdot 10^{-17}`
+      - :math:`4.4 \cdot 10^{-16}`
+      - :math:`9.6 \cdot 10^{-17}\,(0.64\,\text{ulp})`
+      - :math:`2.5 \cdot 10^{-15}\,(16\,\text{ulp})`

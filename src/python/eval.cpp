@@ -32,20 +32,24 @@ bool schedule(nb::handle h) {
 static bool schedule_2(nb::args args) { return schedule(args); }
 
 static void eval(nb::handle h) {
-    if (schedule(h))
+    if (schedule(h)) {
+        nb::gil_scoped_release guard;
         jit_eval();
+    }
 }
 
 static bool eval_2(nb::args args) {
     bool rv = schedule(args);
-    if (rv || nb::len(args) == 0)
+    if (rv || nb::len(args) == 0) {
+        nb::gil_scoped_release guard;
         jit_eval();
+    }
     return rv;
 }
 
 void export_eval(nb::module_ &m) {
     m.def("schedule", &schedule, doc_schedule)
      .def("schedule", &schedule_2)
-     .def("eval", &eval, doc_eval, nb::call_guard<nb::gil_scoped_release>())
-     .def("eval", &eval_2, nb::call_guard<nb::gil_scoped_release>());
+     .def("eval", &eval, doc_eval)
+     .def("eval", &eval_2);
 }

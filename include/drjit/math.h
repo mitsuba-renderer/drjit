@@ -28,7 +28,7 @@ DRJIT_INLINE Value estrin_impl(const Value &x, const Value (&coeff)[n]) {
     constexpr size_t n_rec = (n - 1) / 2, n_fma = n / 2;
 
     Value coeff_rec[n_rec + 1];
-    DRJIT_UNROLL for (size_t i = 0; i < n_fma; ++i)
+    for (size_t i = 0; i < n_fma; ++i)
         coeff_rec[i] = fmadd(x, coeff[2 * i + 1], coeff[2 * i]);
 
     if constexpr (n_rec == n_fma) // odd case
@@ -43,7 +43,7 @@ DRJIT_INLINE Value estrin_impl(const Value &x, const Value (&coeff)[n]) {
 template <typename Value, size_t n>
 DRJIT_INLINE Value horner_impl(const Value &x, const Value (&coeff)[n]) {
     Value accum = coeff[n - 1];
-    DRJIT_UNROLL for (size_t i = 1; i < n; ++i)
+    for (size_t i = 1; i < n; ++i)
         accum = fmadd(x, accum, coeff[n - 1 - i]);
     return accum;
 }

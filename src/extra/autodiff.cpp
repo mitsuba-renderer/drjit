@@ -685,12 +685,13 @@ char *concat(const char *s1, const char *s2) {
 static std::pair<ADIndex, Variable *> ad_var_new(JitBackend backend,
                                                  size_t size, VarType type,
                                                  bool symbolic,
+                                                 bool index_reuse,
                                                  const char *label) {
 
     auto &unused = state.unused_variables;
     ADIndex index;
 
-    if (unlikely(unused.empty())) {
+    if (unlikely(unused.empty() || !index_reuse)) {
         index = state.variables.size();
         state.variables.emplace_back();
     } else {
@@ -800,9 +801,18 @@ template <typename... Ts> using first_t = typename first<Ts...>::type;
 template <typename... Args>
 DRJIT_NOINLINE Index ad_var_new_impl(const char *label, JitVar &&result,
                                      Args &&...args_) {
+#if defined(__GNUC__)
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wunused-value"
+#endif
+
     constexpr size_t N = sizeof...(Args);
     using ArgType = first_t<Args...>;
     ArgType args[N] { std::move(args_)... };
+
+#if defined(__GNUC__)
+    #pragma GCC diagnostic pop
+#endif
 
     std::lock_guard<std::mutex> guard(state.mutex);
 
@@ -827,7 +837,10 @@ DRJIT_NOINLINE Index ad_var_new_impl(const char *label, JitVar &&result,
             return (Index) result.release();
     }
 
-    bool symbolic = jit_flag(JitFlag::Recording);
+    uint32_t flags = jit_flags();
+
+    bool symbolic    = flags & (uint32_t) JitFlag::Recording,
+         index_reuse = flags & (uint32_t) JitFlag::IndexReuse;
 
 #if 0
     // ReleaseOperandHelper helper;
@@ -877,23 +890,23 @@ DRJIT_NOINLINE Index ad_var_new_impl(const char *label, JitVar &&result,
 #endif
 
     VarInfo info = jit_set_backend(result.index());
-    auto [ad_index, var] =
-        ad_var_new(info.backend, info.size, info.type, symbolic, label);
+    auto [ad_index, var] = ad_var_new(info.backend, info.size, info.type,
+                                      symbolic, index_reuse, label);
 
     if constexpr (N == 0) {
         if (label)
-            ad_log("ad_var_new(a%u, label=\"%s\", ctr=%zu)", ad_index, label, var->counter);
+            ad_log("ad_var_new(a%u, label=\"%s\")", ad_index, label);
         else
-            ad_log("ad_var_new(a%u, ctr=%zu)", ad_index, var->counter);
+            ad_log("ad_var_new(a%u)", ad_index);
     } else if constexpr (N == 1) {
-        ad_log("ad_var_new(a%u <- a%u, label=\"%s\", ctr=%zu)", ad_index,
-               args[0].ad_index, label, var->counter);
+        ad_log("ad_var_new(a%u <- a%u, label=\"%s\")", ad_index,
+               args[0].ad_index, label);
     } else if constexpr (N == 2) {
-        ad_log("ad_var_new(a%u <- a%u, a%u, label=\"%s\", ctr=%zu)", ad_index,
-               args[0].ad_index, args[1].ad_index, label, var->counter);
+        ad_log("ad_var_new(a%u <- a%u, a%u, label=\"%s\")", ad_index,
+               args[0].ad_index, args[1].ad_index, label);
     } else if constexpr (N == 3) {
-        ad_log("ad_var_new(a%u <- a%u, a%u, a%u, label=\"%s\", ctr=%zu)", ad_index,
-               args[0].ad_index, args[1].ad_index, args[2].ad_index, label, var->counter);
+        ad_log("ad_var_new(a%u <- a%u, a%u, a%u, label=\"%s\")", ad_index,
+               args[0].ad_index, args[1].ad_index, args[2].ad_index, label);
     }
 
     EdgeIndex edge_index = 0;
@@ -991,6 +1004,10 @@ JitIndex ad_grad(Index index) {
         type = info.type;
         size = info.size;
     }
+
+    if (type != VarType::Float32 && type != VarType::Float64)
+        ad_raise("ad_grad(): this is not a floating point variable!");
+
 
     if (!result.valid())
         result =
@@ -2626,6 +2643,7 @@ struct CustomOp : Special {
             nanobind::ref<dr::detail::CustomOpBase> op = std::move(m_op);
             {
                 unlock_guard<std::mutex> guard(state.mutex);
+                ad_log("ad_free(): freeing custom operation \"%s\"", op->name());
                 op.reset();
             }
         }
@@ -2657,6 +2675,7 @@ struct CustomOp : Special {
             nanobind::ref<dr::detail::CustomOpBase> op = std::move(m_op);
             {
                 unlock_guard<std::mutex> guard(state.mutex);
+                ad_log("ad_free(): freeing custom operation \"%s\"", op->name());
                 op.reset();
             }
         }
@@ -2755,17 +2774,19 @@ bool ad_custom_op(dr::detail::CustomOpBase *op) {
 
     std::lock_guard<std::mutex> guard(state.mutex);
 
-    bool symbolic = jit_flag(JitFlag::Recording);
+    uint32_t flags = jit_flags();
+    bool symbolic      = flags & (uint32_t) JitFlag::Recording,
+         index_reuse = flags & (uint32_t) JitFlag::IndexReuse;
 
     ADIndex v0i, v1i;
-
     if (inputs.size() == 1) {
         v0i = *inputs.begin();
         ad_log(" - in: a%u", v0i);
         ad_var_inc_ref_int(v0i, state[v0i]);
     } else {
+
         auto [idx, v0] = ad_var_new(op->m_backend, 1, VarType::Void, symbolic,
-                                    "CustomOp[in]");
+                                    index_reuse, "CustomOp[in]");
         v0->counter = op->m_counter_offset;
         v0->size = 0;
         v0i = idx;
@@ -2787,7 +2808,7 @@ bool ad_custom_op(dr::detail::CustomOpBase *op) {
                   v1->ref_count, v1i);
     } else {
         auto [idx, v1] = ad_var_new(op->m_backend, 1, VarType::Void, symbolic,
-                                    "CustomOp[out]");
+                                    index_reuse, "CustomOp[out]");
         v1->counter = op->m_counter_offset + 1;
         v1i = idx;
 
@@ -2797,6 +2818,8 @@ bool ad_custom_op(dr::detail::CustomOpBase *op) {
             Variable *vo = state[o];
 
             vo->flags |= VariableFlags::CustomOpOutput;
+
+            // references should be held by: caller & CustomOp (2x)
             ad_assert(vo->ref_count == 3,
                       "ad_custom_op(): invalid reference count %u in variable a%u",
                       vo->ref_count, o);
@@ -2891,10 +2914,10 @@ bool CustomOpBase::release_one_output() {
     return --m_outputs_alive > 0;
 }
 
-void CustomOpBase::add_index(JitBackend backend, ADIndex index, bool input) {
+bool CustomOpBase::add_index(JitBackend backend, ADIndex index, bool input) {
     if (m_backend != backend) {
         if (m_backend != JitBackend::None)
-            ad_raise("CustomOpBase::add_index(): can't mix and match backends!");
+            ad_raise("CustomOpBase::add_index(): can't mix several backends!");
         m_backend = backend;
     }
 
@@ -2903,7 +2926,7 @@ void CustomOpBase::add_index(JitBackend backend, ADIndex index, bool input) {
         scopes.back().maybe_disable(index);
 
     if (!index)
-        return;
+        return false;
 
     std::lock_guard<std::mutex> guard(state.mutex);
     ad_var_inc_ref_int(index, state[index]);
@@ -2912,6 +2935,8 @@ void CustomOpBase::add_index(JitBackend backend, ADIndex index, bool input) {
         m_input_indices.push_back(index);
     else
         m_output_indices.push_back(index);
+
+    return true;
 }
 
 void CustomOpBase::forward() {

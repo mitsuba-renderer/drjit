@@ -263,10 +263,10 @@ template <typename Value> struct range {
                     value[0] = index_p;
                 else
                     value[0] = arange<Packet>(prod(size));
-                DRJIT_UNROLL for (size_t i = 0; i < Dimension - 1; ++i)
+                for (size_t i = 0; i < Dimension - 1; ++i)
                     value[i + 1] = div[i](value[i]);
                 Packet offset = zeros<Packet>();
-                DRJIT_UNROLL for (size_t i = Dimension - 2; ; --i) {
+                for (size_t i = Dimension - 2; ; --i) {
                     offset = size[i] * (value[i + 1] + offset);
                     value[i] -= offset;
                     if (i == 0)

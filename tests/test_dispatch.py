@@ -38,9 +38,12 @@ def test02_switch_vec_simple(t, recorded, drjit_verbose, capsys):
         result = dr.switch(index, c, a, b)
         assert dr.allclose(result, [[4, 8, 24, 32], [2, 2, -1, -1]])
 
-        # two kernel launches (not merged!) with 2 inputs/outputs and 2 side effects
         out = capsys.readouterr().out
-        assert out.count("(n=2, in=4, out=0, se=2") == 2
+        if recorded:
+            assert out.count("jit_var_vcall(") == 1
+        else:
+            # two kernel launches (not merged!) with 2 inputs/outputs and 2 side effects
+            assert out.count("(n=2, in=4, out=0, se=2") == 2
 
 # + Masking for some elements
 @pytest.mark.parametrize("recorded", [True, False])
