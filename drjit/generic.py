@@ -1559,10 +1559,10 @@ def export_(a, migrate_to_host, version, owner_supported=True):
             temp *= shape[i]
 
         if a.IsMatrix:
-            if len(shape) == 4 and shape[1] == shape[2] and shape[2] == shape[3]:
-                strides[-3:] = strides[-3:][::-1]
-            else:
-                strides[-2:] = strides[-2:][::-1]
+            temp = a.Type.Size
+            for i in range(1, ndim):
+                strides[i] = temp
+                temp *= shape[i]
 
         # JIT array -- requires extra transformations
         b = _dr.ravel(_dr.detach(a) if a.IsDiff else a)
