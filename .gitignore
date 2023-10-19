@@ -45,17 +45,7 @@ Release
 /.vscode
 
 # Build products
-*_none
-*_sse42
-*_avx
-*_avx2
-*_avx512
-*_neon
-*.ppm
-tests/custom
-tests/vcall
-tests/ad_megakernel
-tests/texture
+tests/*.so
 libdrjit-core.so
 libdrjit-core.dylib
 drjit-core.dll
@@ -66,16 +56,9 @@ libnanobind-static.a
 libnanothread.so
 libnanothread.dylib
 nanothread.dll
-libdrjit-autodiff.so
-libdrjit-autodiff.dylib
-drjit-autodiff.dll
 drjit_ext.cp*
-compile_commands.json
-\.clangd
 /drjitConfig.cmake
 /drjitConfigVersion.cmake
-/_skbuild
-/wheelhouse
 drjit/config.py
 
 # Documentation

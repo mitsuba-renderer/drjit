@@ -103,9 +103,10 @@ if (DRJIT_ENABLE_JIT)
   add_subdirectory(ext/drjit-core)
   set_target_properties(drjit-core PROPERTIES ${DRJIT_OUTPUT_DIRECTORY})
   set_target_properties(nanothread PROPERTIES ${DRJIT_OUTPUT_DIRECTORY})
-
-  mark_as_advanced(DRJIT_THREAD_ENABLE_TESTS)
 endif()
+
+mark_as_advanced(NANOTHREAD_ENABLE_TESTS)
+mark_as_advanced(DRJIT_CORE_ENABLE_TESTS)
 
 if (MSVC)
    add_compile_options(/wd4251) # 'warning C4251: X needs to have dll-interface to be used by clients of struct Y
@@ -125,8 +126,10 @@ else()
 endif()
 
 if (DRJIT_ENABLE_TESTS)
-  message(STATUS "Dr.Jit: building the test suite (Warning, this takes *very* long to compile).")
-  enable_testing()
+  if (NOT DRJIT_ENABLE_PYTHON)
+    message(FATAL_ERROR "The test suite requires the Python plugin to be built.")
+  endif()
+
   add_subdirectory(tests)
 endif()
 

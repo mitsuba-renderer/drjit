@@ -5,10 +5,10 @@
 Changelog
 #########
 
-DrJit 2.0.0 (TBA)
+DrJit 1.0.0 (TBA)
 -----------------
 
-Dr.Jit 2 represents a major redesign of many parts of this project. The
+Dr.Jit 1.0 represents a major redesign of many parts of this project. The
 following list covers the most important changes and their impact on
 source-level compatibility. Points with an exclamation sign cover
 incompatibilities and potential stumbling blocks.
@@ -20,7 +20,7 @@ incompatibilities and potential stumbling blocks.
 
   - Tracing Dr.Jit code written in Python is *significantly* faster. Expect
     speedups of ~10-20×. The shared libraries containing the bindings have also
-    become much smaller (from ~10MB to ~1MB).
+    become much smaller (from ~10MB to just over ~1MB).
 
   - All functions now have a reference documentation that clearly specifies
     their behavior and accepted inputs. Their behavior with respect to less
@@ -37,9 +37,10 @@ incompatibilities and potential stumbling blocks.
   ``matrix[row, col]``, which internally permuted ``row`` and ``col``), then
   your code will need to be updated.
 
-- Dr.Jit now maintains one global AD graph for all variables, enabling
-  differentiation of mixed-precision calculations. Previously, there was a
-  separate graph per floating point representation.
+- **Mixed-precision optimization**: Dr.Jit now maintains one global AD graph
+  for all variables, enabling differentiation of calculations that combine
+  single-, double, and half precisions. Previously, there was a separate graph
+  per type, and gradients did not propagate through casts between them.
 
 - Variable indices (:py:func:`drjit.ArrayBase.index`,
   :py:func:`drjit.ArrayBase.index_ad`) used to monotonically increase as
@@ -93,26 +94,29 @@ Internals
 This section documents lower level changes that don't directly impact the
 Python API.
 
-- Dr.Jit now compiles a support library (``libdrjit-extra.so``) containing many
-  pieces of functionality that were previously implemented using templates.
-  This should improve compilation speed in C++ projects using Dr.Jit. The
-  following features were moved into this library:
+- Dr.Jit now compiles a support library (``libdrjit-extra.so``) containing
+  large amounts of functionality that used to be implemented using templates.
+  The template-heavy approach had the disadvantage that this code was compiled
+  over and over again when Dr.Jit was used within larger projects such as
+  `Mitsuba 3 <https://mitsuba-renderer.org>`__. The following features were
+  moved into this library:
 
   * Transcendental functions (:py:func:`drjit.log`, :py:func:`drjit.atan2`,
-    etc.) now have pre-compiled implementations for Jit-based and
-    differentiable arguments in this library, which prevents them from being
-    compiled over and over again.
+    etc.) now have pre-compiled implementations for Jit arrays. Automatic
+    differentiation of such operations was entirely moved into
+    ``libdrjit-extra.so``.
 
-  * Automatic differentiation: the AD layer was rewritten to reduce the AD
+  * The AD layer was rewritten to reduce the previous
     backend (``drjit/include/autodiff.h``) into a thin wrapper around
     functionality in ``libdrjit-extra.so``. The previous AD-related shared
     library ``libdrjit-autodiff.so`` no longer exists.
 
-  * Virtual function dispatch (``drjit/include/vcall_autodiff.h``,
-    ``drjit/include/vcall_jit_reduce.h``, ``drjit/include/vcall_jit_record.h``)
-    was turned into generic implementation reachable through a single function
-    call in the ``libdrjit-extra.so`` library, which supports
-    wavefront/recorded mode along with automatic differentiation.
+  * Virtual function dispatch (``drjit/include/vcall.h``,
+    ``drjit/include/vcall_autodiff.h``, ``drjit/include/vcall_jit_reduce.h``,
+    ``drjit/include/vcall_jit_record.h``) was turned into generic
+    implementation reachable through a single function call in the
+    ``libdrjit-extra.so`` library, which supports wavefront/recorded mode along
+    with automatic differentiation.
 
 - The packet mode backend (``include/drjit/packet.h``) now includes support
   for ``aarch64`` processors via NEON intrinsics. This is actually an old
