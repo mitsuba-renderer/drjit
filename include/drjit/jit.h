@@ -581,7 +581,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
 
     bool is_literal() const { return (bool) jit_var_is_literal(m_index); }
     bool is_evaluated() const { return (bool) jit_var_is_evaluated(m_index); }
-    bool is_placeholder() const { return (bool) jit_var_is_placeholder(m_index); }
+    bool is_symbolic() const { return (bool) jit_var_is_symbolic(m_index); }
 
     Value entry(size_t offset) const {
         ActualValue out;

@@ -88,6 +88,8 @@ nb::object switch_impl(nb::handle index_, nb::sequence callables,
             nb::object rv_o;
 
             ~State() {
+                if (!nb::is_alive())
+                    return;
                 nb::gil_scoped_acquire guard;
                 args_o.reset();
                 callables_o.reset();
@@ -113,16 +115,10 @@ nb::object switch_impl(nb::handle index_, nb::sequence callables,
             collect_indices(state.rv_o, rv_i);
         };
 
-        ad_vcall_cleanup cleanup = [](void *ptr) {
-            if (!nb::is_alive())
-                return;
-            nb::gil_scoped_acquire guard;
-            delete  (State *) ptr;
-        };
+        ad_vcall_cleanup cleanup = [](void *ptr) { delete (State *) ptr; };
 
-        State *state = new State {
-            nb::make_tuple(args, kwargs), callables, nb::object()
-        };
+        State *state = new State{ nb::make_tuple(args, kwargs), callables,
+                                  nb::object() };
 
         dr_index_vector rv_i;
         bool done = ad_vcall(
@@ -132,13 +128,12 @@ nb::object switch_impl(nb::handle index_, nb::sequence callables,
             nb::len(callables), collect_indices(state->args_o), rv_i, state,
             callback, cleanup, true);
 
-        if (!state->rv_o.is_valid())
-            state->rv_o = nb::none();
-
         nb::object result = update_indices(state->rv_o, rv_i);
 
         if (done)
             cleanup(state);
+        else
+            state->rv_o.reset();
 
         return result;
     } catch (nb::python_error &e) {

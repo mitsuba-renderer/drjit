@@ -85,6 +85,7 @@ DR_EXPORT_PAIR(sincos)
 DR_EXPORT_PAIR(sincosh)
 DR_EXPORT_PAIR(frexp)
 
+DR_EXPORT_AD(copy)
 DR_EXPORT_AD(neg)
 DR_EXPORT_AD(abs)
 DR_EXPORT_AD(sqrt)
@@ -184,8 +185,15 @@ extern DRJIT_EXTRA_EXPORT void ad_scope_leave(bool process_postponed);
 
 namespace drjit { namespace detail { class CustomOpBase; }};
 
+/// Weave a custom operation into the AD graph
 extern DRJIT_EXTRA_EXPORT bool ad_custom_op(drjit::detail::CustomOpBase *);
 extern DRJIT_EXTRA_EXPORT bool ad_release_one_output(drjit::detail::CustomOpBase *);
+
+/// VCall implementation: get a list of observed implicit dependencies
+extern DRJIT_EXTRA_EXPORT void ad_copy_implicit_deps(drjit::dr_vector<uint32_t>&);
+
+/// Check if a variable represents an implicit dependency on a non-symbolic operand
+extern void ad_var_check_implicit(uint64_t index);
 
 typedef void (*ad_vcall_callback)(void *payload, size_t index,
                                   const drjit::dr_vector<uint64_t> &args_i,
