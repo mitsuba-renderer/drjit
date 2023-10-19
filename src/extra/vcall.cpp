@@ -140,24 +140,26 @@ static void ad_vcall_record(JitBackend backend, const char *domain,
     args2.reserve(args.size());
     args2.reserve(args.size());
 
-    // Wrap input arguments to clearly expose them as inputs of the vcall
-    for (size_t i = 0; i < args.size(); ++i) {
-        uint32_t wrapped = jit_var_wrap_vcall((uint32_t) args[i]);
-        args3.push_back_steal(wrapped);
-
-        if (args[i] >> 32)
-            args2.push_back_steal(ad_var_new(wrapped));
-        else
-            args2.push_back_borrow(wrapped);
-    }
-
     dr_vector<uint32_t> checkpoints(callable_count + 1, 0),
                             inst_id(callable_count, 0);
 
     uint32_t se = 0; // operation representing side effects from the call
     {
         scoped_record rec(backend, name);
+
+        // Wrap input arguments to clearly expose them as inputs of the vcall
+        for (size_t i = 0; i < args.size(); ++i) {
+            uint32_t wrapped = jit_var_wrap_vcall((uint32_t) args[i]);
+            args3.push_back_steal(wrapped);
+
+            if (args[i] >> 32)
+                args2.push_back_steal(ad_var_new(wrapped));
+            else
+                args2.push_back_borrow(wrapped);
+        }
+
         {
+            scoped_set_mask mask_guard(backend, jit_var_vcall_mask(backend));
             for (size_t i = 0; i < callable_count; ++i) {
                 checkpoints[i] = rec.checkpoint_and_rewind();
                 inst_id[i] = i + 1;
@@ -450,7 +452,11 @@ public:
             ad_enqueue(dr::ADMode::Forward, index);
         }
 
-        ad_traverse(dr::ADMode::Forward, (uint32_t) dr::ADFlag::Default);
+        for (size_t i = m_input_offsets.size(); i < m_input_indices.size(); ++i)
+            ad_enqueue(dr::ADMode::Forward, ((uint64_t) m_input_indices[i]) << 32);
+
+        // Enqueue implicit dependencies
+        ad_traverse(dr::ADMode::Forward, (uint32_t) dr::ADFlag::ClearNone);
 
         m_temp.release();
         for (size_t i = 0; i < m_output_offsets.size(); ++i) {
@@ -492,7 +498,7 @@ public:
             ad_var_dec_ref(index_new);
         }
 
-        ad_traverse(dr::ADMode::Backward, (uint32_t) dr::ADFlag::Default);
+        ad_traverse(dr::ADMode::Backward, (uint32_t) dr::ADFlag::ClearNone);
 
         m_temp.release();
         for (size_t i = 0; i < m_input_offsets.size(); ++i) {

@@ -474,11 +474,13 @@ nb::object unravel(const nb::type_object_t<ArrayBase> &dtype,
     m.backend = s.backend;
     m.type = s.type;
     m.is_diff = s.is_diff;
+    m.is_valid = 1;
     m.ndim = 1;
     m.shape[0] = DRJIT_DYNAMIC;
     nb::handle flat = meta_get_type(m);
 
     if (!flat.is(array.type())) {
+        m2 = m;
         m2.is_diff = false;
         flat = meta_get_type(m2);
 

@@ -10,15 +10,14 @@
 #define ad_raise(fmt, ...) jit_raise(fmt, ## __VA_ARGS__)
 
 #if defined(NDEBUG)
-#define ad_assert(cond, fmt, ...)
-#define ad_trace(fmt, ...)
+#  define ad_assert(cond, fmt, ...) do { } while (0)
+#  define ad_trace(fmt, ...) do { } while (0)
 #else
-#define ad_assert(cond, fmt, ...)                                              \
-    if (unlikely(!(cond)))                                                     \
-        jit_fail(                                                              \
-            "drjit-autodiff: assertion failure (\"%s\") in line %i: " fmt,     \
-            #cond, __LINE__, ##__VA_ARGS__);
-#define ad_trace(fmt, ...) jit_log(LogLevel::Trace, fmt, ## __VA_ARGS__)
+#  define ad_assert(cond, fmt, ...)                                            \
+      if (unlikely(!(cond)))                                                   \
+          jit_fail("drjit-autodiff: assertion failure (\"%s\") in line %i: "   \
+                   fmt, #cond, __LINE__, ##__VA_ARGS__);
+#  define ad_trace(fmt, ...) jit_log(LogLevel::Trace, fmt, ## __VA_ARGS__)
 #endif
 
 struct UInt32Hasher {
