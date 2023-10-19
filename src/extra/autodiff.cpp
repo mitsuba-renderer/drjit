@@ -187,7 +187,10 @@ enum VariableFlags : uint8_t {
     FreeLabel = 1 << 2,
 
     /// Is this variable the output of a 'CustomOp' operation?
-    CustomOpOutput = 1 << 3
+    CustomOpOutput = 1 << 3,
+
+    /// Temporary 'visited' flag used in ad_custom_op
+    Visited = 1 << 4,
 };
 
 /**
@@ -456,6 +459,9 @@ struct Scope {
     /// How should this scope be interpreted?
     ADScope type = ADScope::Invalid;
 
+    /// Was this scope created in a symbolic execution context?
+    bool symbolic = false;
+
     /**
      * \brief Controls the interpretation of the 'indices' field
      *
@@ -485,6 +491,9 @@ struct Scope {
 
     /// List of AD postponed edges that will be traversed when leaving the scope
     std::vector<EdgeRef> postponed;
+
+    /// Keeps track of implicit input dependencies of symbolic computation
+    std::vector<uint32_t> implicit;
 
     Scope() = default;
     Scope(Scope&&) = default;
@@ -532,9 +541,6 @@ struct LocalState {
     /// Thread-local edge list used by ad_enqueue_*() and ad_traverse()
     std::vector<EdgeRef> todo;
 
-    /// Keeps track of implicit input dependencies of symbolic computation
-    std::vector<EdgeRef> implicit;
-
     /// Nested scopes that restrict AD to specific variables
     std::vector<Scope> scopes;
 
@@ -561,13 +567,13 @@ static void DRJIT_NOINLINE ad_decref_custom_op_output(Variable *);
 
 static void ad_var_inc_ref_int(ADIndex index, Variable *v) noexcept {
     DRJIT_MARK_USED(index);
-    ad_log("ad_var_inc_ref(a%u): %u", index, v->ref_count + 1);
+    ad_trace("ad_var_inc_ref(a%u): %u", index, v->ref_count + 1);
     v->ref_count++;
 }
 
 static bool ad_var_dec_ref_int(ADIndex index, Variable *v) noexcept {
     DRJIT_MARK_USED(index);
-    ad_log("ad_var_dec_ref(a%u): %u", index, v->ref_count - 1);
+    ad_trace("ad_var_dec_ref(a%u): %u", index, v->ref_count - 1);
     ad_assert(v->ref_count > 0, "ad_var_dec_ref_int(): reference count underflow");
 
     if (--v->ref_count > 0) {
@@ -581,7 +587,7 @@ static bool ad_var_dec_ref_int(ADIndex index, Variable *v) noexcept {
 }
 
 static void ad_free(ADIndex index, Variable *v) {
-    ad_log("ad_free(a%u)", index);
+    ad_trace("ad_free(a%u)", index);
 
     EdgeIndex edge_id = v->next_bwd;
     v->next_bwd = 0;
@@ -793,6 +799,35 @@ template <typename T, typename... Ts> struct first<T, Ts...> {
 
 template <typename... Ts> using first_t = typename first<Ts...>::type;
 
+/// RAII helper to reduce AD reference counts of a set of variables
+struct ReleaseHelper {
+    uint32_t item = 0;
+    ReleaseHelper *next = nullptr;
+
+    void put(uint32_t value) {
+        if (item) {
+            ReleaseHelper *rl = new ReleaseHelper();
+            rl->next = next;
+            rl->item = item;
+            next = rl;
+        }
+        item = value;
+    }
+
+    ~ReleaseHelper() {
+        if (item) {
+            ad_var_dec_ref_int(item, state[item]);
+            delete next;
+        }
+    }
+};
+
+/// Forward declaration of a helper function defined later on
+uint32_t ad_record_implicit_dependence(LocalState &ls, ReleaseHelper &rl,
+                                       JitBackend backend, const char *label,
+                                       uint32_t source, Variable *v_source,
+                                       bool index_reuse);
+
 /// This helper function is called by essentially all implementations of
 /// arithmetic operations below (e.g. ``ad_var_add``). It creates a new
 /// AD variable representing an operation along with edges to inputs. It
@@ -819,8 +854,9 @@ DRJIT_NOINLINE Index ad_var_new_impl(const char *label, JitVar &&result,
     /* Potentially turn off derivative tracking for some of the operands if
        we're within a scope that enables/disables gradient propagation
        (globally, or only for specific variables) */
-    std::vector<Scope> &scopes = local_state.scopes;
-    if (unlikely(!scopes.empty())) {
+    LocalState &ls = local_state;
+    std::vector<Scope> &scopes = ls.scopes;
+    if (!scopes.empty()) {
         const Scope &scope = scopes.back();
 
         bool active = false;
@@ -842,54 +878,25 @@ DRJIT_NOINLINE Index ad_var_new_impl(const char *label, JitVar &&result,
     bool symbolic    = flags & (uint32_t) JitFlag::Recording,
          index_reuse = flags & (uint32_t) JitFlag::IndexReuse;
 
-#if 0
-    // ReleaseOperandHelper helper;
+    VarInfo info = jit_set_backend(result.index());
+    ReleaseHelper rh;
+
+    /* Turn symbolic reads from non-symbolic variables into gathers,
+       and keep track of implicit dependencies while recording virtual
+       function calls */
     if (unlikely(symbolic)) {
         for (size_t i = 0; i < N; ++i) {
-            if (args[i].ad_index == 0)
+            ADIndex source = args[i].ad_index;
+            if (source == 0)
                 continue;
-
-            ADIndex arg_index = args[i].ad_index;
-            const Variable *arg = state[arg_index];
-
-            /* When recording AD code (e.g. in a virtual function call),
-               convert reads from external/private variables into gathers */
-            if (unlikely(!(arg->flags & (uint8_t) VariableFlags::Symbolic))) {
-                if (arg->size != 1)
-                    ad_raise(
-                        "ad_var_new(): symbolic computation performs an implicit "
-                        "read of variable (a%u), which has size %zu! However, "
-                        "only scalar (size == 1) accesses are permitted in "
-                        "this manner. You will likely want to convert the "
-                        "read into an drjit.gather() operation.",
-                        arg_index, arg->size);
-
-                ad_log("ad_var_new(): implicit read of variable a%u, inserting a "
-                       "gather operation..", arg_index);
-
-                // index = ad_new_gather_impl<Value>("gather", size, arg_index, Index(0),
-                //                                   Mask(true), false);
-                //
-                // op[2 * i] = index;
-                // helper.put(index);
-                //
-
-                // TODO: *if* this is a gather operation, execute the following
-                /* Encountered a dependency between recorded/non-recorded computation
-                   that will need special handling when the AD graph is traversed at
-                   some later point. For now, just keep track of this event. */
-                ad_log("ad_var_gather(): recording an implicit dependency (a%u "
-                       "<- a%u).", i1, i0);
-                local_state.implicit.emplace_back(v1->next_bwd, i0, i1,
-                                                  v0->counter, v1->counter);
-
-        return result_index;
-            }
+            Variable *v_source = state[source];
+            if (v_source->flags & (uint8_t) VariableFlags::Symbolic)
+                continue;
+            args[i].ad_index = ad_record_implicit_dependence(
+                ls, rh, info.backend, label, source, v_source, index_reuse);
         }
     }
-#endif
 
-    VarInfo info = jit_set_backend(result.index());
     auto [ad_index, var] = ad_var_new(info.backend, info.size, info.type,
                                       symbolic, index_reuse, label);
 
@@ -1489,7 +1496,9 @@ void ad_scope_enter(ADScope type, size_t size, const Index *indices) {
     if (!scopes.empty())
         scope = scopes.back();
 
+    scope.symbolic = jit_flag(JitFlag::Recording);
     scope.postponed.clear();
+    scope.implicit.clear();
     scope.type = type;
 
     switch (type) {
@@ -1560,6 +1569,16 @@ void ad_scope_leave(bool process_postponed) {
     (void) type_name;
 
     ad_log("ad_scope_leave(%s)", type_name);
+
+    if (scopes.size() < 2 || !scopes[scopes.size() - 2].symbolic) {
+        for (uint32_t i: scope.implicit)
+            ad_var_dec_ref_int(i, state[i]);
+    } else {
+        Scope &prev = scopes[scopes.size() - 2];
+        prev.implicit.reserve(prev.implicit.size() + scope.implicit.size());
+        for (uint32_t i : scope.implicit)
+            prev.implicit.push_back(i);
+    }
 
     if (scope.isolate && !scope.postponed.empty()) {
         ad_log("ad_scope_leave(): %s %zu postponed edges.",
@@ -1657,7 +1676,7 @@ struct MaskGuard {
 };
 
 struct Gather : Special {
-    Gather(const GenericArray<uint32_t> &offset, const JitMask &mask, bool permute)
+    Gather(const GenericArray<uint32_t> &offset, const JitMask &mask, bool permute = false)
         : offset(offset), mask(mask), permute(permute) {
         backend = jit_set_backend(mask.index()).backend;
         uint32_t mask_idx = jit_var_mask_peek(backend);
@@ -1786,6 +1805,8 @@ Index ad_var_new(JitIndex i0) {
     if (label) {
         VarInfo info = jit_set_backend(i0);
         const char *prefix = jit_prefix(info.backend);
+
+        std::lock_guard<std::mutex> guard(state.mutex);
         Variable *v = state[ad_index(result)];
 
         if (!prefix || !label)
@@ -1803,6 +1824,15 @@ Index ad_var_new(JitIndex i0) {
 // ==========================================================================
 // Implementation of arithmetic operations and transcendental functions
 // ==========================================================================
+
+Index ad_var_copy(Index i0) {
+    JitVar result = JitVar::borrow(i0);
+
+    if (likely(is_detached(i0)))
+        return result.release();
+    else
+        return ad_var_new("copy", std::move(result), Arg(i0, 1.0));
+}
 
 Index ad_var_add(Index i0, Index i1) {
     JitVar result = JitVar::steal(jit_var_add(jit_index(i0), jit_index(i1)));
@@ -2582,6 +2612,102 @@ const char *ad_var_graphviz() {
 }
 
 // ==========================================================================
+// Functionality to track implicit inputs of recorded computation
+// ==========================================================================
+
+void ad_var_check_implicit(uint64_t index) {
+    ADIndex ad_index = ::ad_index(index);
+    if (ad_index == 0 || !jit_flag(JitFlag::Recording))
+        return;
+
+    std::lock_guard<std::mutex> guard(state.mutex);
+    Variable *v = state[ad_index];
+
+    if (!(v->flags & (uint8_t) VariableFlags::Symbolic)) {
+        ad_var_inc_ref_int(ad_index, v);
+        ad_log("ad_check_implicit(): registering an implicit dependence on "
+               "variable a%u.",
+               ad_index);
+        std::vector<Scope> &scopes = local_state.scopes;
+        if (scopes.empty())
+            ad_raise("ad_var_check_implicit(): no scope found!");
+        scopes.back().implicit.push_back(ad_index);
+    }
+}
+
+// Turn symbolic reads from non-symbolic variables into gathers,
+// and keep track of implicit dependencies of symbolic function calls
+uint32_t ad_record_implicit_dependence(LocalState &ls, ReleaseHelper &rh,
+                                       JitBackend backend, const char *label,
+                                       uint32_t source, Variable *v_source,
+                                       bool index_reuse) {
+    std::vector<Scope> &scopes = ls.scopes;
+    if (scopes.empty())
+        ad_raise("ad_record_implicit_dependence(): no scope found!");
+
+    if (strncmp(label, "gather", 6) == 0) {
+        ad_log("ad_var_new(): registering an implicit dependence on variable a%u.", source);
+        ad_var_inc_ref_int(source, v_source);
+        scopes.back().implicit.push_back(source);
+        return source;
+    } else if (strncmp(label, "scatter", 7) == 0) {
+        return source; // don't know how to handle this case yet
+    } else {
+        if (v_source->size != 1)
+            ad_raise("ad_var_new(): the symbolic computation being recorded "
+                     "reads from a variable that lies outside of the current "
+                     "scope. This variable (a%u) has size %zu. However, only "
+                     "scalar (size == 1) accesses are permitted in this "
+                     "manner. You will likely want to convert the variable "
+                     "access into an drjit.gather() operation.",
+                     source, v_source->size);
+
+        auto [ad_index, v] = ad_var_new(backend, 1, (VarType) v_source->type,
+                                        true, index_reuse, "gather");
+        v_source = state[source];
+        EdgeIndex edge_index_new = ad_edge_new();
+        Edge &edge = state.edges[edge_index_new];
+        edge.source = source;
+        edge.target = ad_index;
+        edge.next_fwd = v_source->next_fwd;
+        v->next_bwd = edge_index_new;
+        v_source->next_fwd = edge_index_new;
+        edge.next_bwd = 0;
+        edge.special = std::make_unique<Gather>(GenericArray<uint32_t>(0), JitMask(true));
+        ad_var_inc_ref_int(source, v_source);
+        ad_var_inc_ref_int(source, v_source);
+        ad_log(
+            "ad_var_new(a%u <- a%u, label=\"gather\"): converted from scalar "
+            "read, registering an implicit dependence on variable a%u.",
+            ad_index, source, source);
+
+        scopes.back().implicit.push_back(source);
+        rh.put(ad_index);
+        return ad_index;
+    }
+
+    return source;
+}
+
+void ad_copy_implicit_deps(drjit::dr_vector<uint32_t>& result) {
+    std::vector<Scope> &scopes = local_state.scopes;
+    if (scopes.empty())
+        return;
+
+    std::vector<uint32_t> &implicit = scopes.back().implicit;
+    if (implicit.empty())
+        return;
+
+    ad_log("ad_copy_implicit_deps(): returning %zu implicit dependences.", implicit.size());
+
+    result.reserve(result.size() + implicit.size());
+    for (uint32_t index : implicit) {
+        ad_log(" - a%u", index);
+        result.push_back(index);
+    }
+}
+
+// ==========================================================================
 // Custom operations
 // ==========================================================================
 
@@ -2684,8 +2810,9 @@ struct CustomOp : Special {
     void forward(const Variable *source, Variable *) override {
         ad_log("ad_traverse(): evaluating forward derivative of custom "
                "operation \"%s\"..", m_op->name());
+        uint32_t next_bwd = source->next_bwd;
 
-        for (uint32_t ei = source->next_bwd; ei != 0; ) {
+        for (uint32_t ei = next_bwd; ei != 0; ) {
             const Edge &e = state.edges[ei];
             if (!swap(e, state[e.source]))
                 break;
@@ -2698,7 +2825,7 @@ struct CustomOp : Special {
             m_op->forward();
         }
 
-        for (uint32_t ei = source->next_bwd; ei != 0; ) {
+        for (uint32_t ei = next_bwd; ei != 0; ) {
             const Edge &e = state.edges[ei];
             if (!clear(e, state[e.source]))
                 break;
@@ -2707,10 +2834,12 @@ struct CustomOp : Special {
     }
 
     void backward(Variable *, const Variable *target) override {
+        uint32_t next_fwd = target->next_fwd;
+
         ad_log("ad_traverse(): evaluating backward derivative of custom "
                "operation \"%s\"..", m_op->name());
 
-        for (uint32_t ei = target->next_fwd; ei; ) {
+        for (uint32_t ei = next_fwd; ei; ) {
             const Edge &e = state.edges[ei];
             if (!swap(e, state[e.target]))
                 break;
@@ -2723,7 +2852,7 @@ struct CustomOp : Special {
             m_op->backward();
         }
 
-        for (uint32_t ei = target->next_fwd; ei; ) {
+        for (uint32_t ei = next_fwd; ei; ) {
             const Edge &e = state.edges[ei];
             if (!clear(e, state[e.target]))
                 break;
@@ -2738,6 +2867,7 @@ void ad_add_special(uint32_t v0i, uint32_t v1i, bool is_custom,
 
     if (v0->counter >= v1->counter)
         ad_fail("ad_add_special(): internal error!");
+    ad_log("ad_add_special(a%u <- a%u)", v1i, v0i);
 
     uint32_t edge_index_new = ad_edge_new();
 
@@ -2758,47 +2888,57 @@ void ad_add_special(uint32_t v0i, uint32_t v1i, bool is_custom,
 }
 
 bool ad_custom_op(dr::detail::CustomOpBase *op) {
-    tsl::robin_set<ADIndex, UInt32Hasher> inputs, outputs;
-
-    for (size_t i = 0; i < op->m_input_indices.size(); ++i)
-        inputs.insert(op->m_input_indices[i]);
-    for (size_t i = 0; i < op->m_output_indices.size(); ++i)
-        outputs.insert(op->m_output_indices[i]);
+    const dr::dr_vector<uint32_t> &inputs  = op->m_input_indices,
+                                  &outputs = op->m_output_indices;
 
     if (inputs.empty() || outputs.empty() || op->m_counter_offset == 0)
         return false;
 
+    for (uint32_t i: inputs)
+        state[i]->flags &= ~ (uint8_t) VariableFlags::Visited;
+    for (uint32_t o: outputs)
+        state[o]->flags &= ~ (uint8_t) VariableFlags::Visited;
+
     const char *name = op->name();
-    ad_log("ad_var_custom_op(\"%s\", n_in=%zu, n_out=%zu)", name, inputs.size(),
-           outputs.size());
+
+    ad_log("ad_var_custom_op(\"%s\", n_in=%zu, n_out=%zu)",
+           name, inputs.size(), outputs.size());
 
     std::lock_guard<std::mutex> guard(state.mutex);
 
     uint32_t flags = jit_flags();
-    bool symbolic      = flags & (uint32_t) JitFlag::Recording,
+
+    bool symbolic    = flags & (uint32_t) JitFlag::Recording,
          index_reuse = flags & (uint32_t) JitFlag::IndexReuse;
 
     ADIndex v0i, v1i;
     if (inputs.size() == 1) {
-        v0i = *inputs.begin();
+        v0i = inputs[0];
         ad_log(" - in: a%u", v0i);
         ad_var_inc_ref_int(v0i, state[v0i]);
     } else {
-
         auto [idx, v0] = ad_var_new(op->m_backend, 1, VarType::Void, symbolic,
                                     index_reuse, "CustomOp[in]");
+        ad_log("ad_var_new(a%u, \"%s [in]\")", idx, name);
         v0->counter = op->m_counter_offset;
         v0->size = 0;
         v0i = idx;
 
         for (uint32_t i: inputs) {
+            uint8_t &flags = state[i]->flags;
+            if (flags & (uint8_t) VariableFlags::Visited) {
+                ad_log(" - in: a%u (ignored)", i);
+                continue;
+            }
+
+            flags |= (uint8_t) VariableFlags::Visited;
             ad_log(" - in: a%u", i);
             ad_add_special(i, v0i, false, std::make_unique<CopyGrad>());
         }
     }
 
     if (outputs.size() == 1) {
-        v1i = *outputs.begin();
+        v1i = outputs[0];
         Variable *v1 = state[v1i];
         ad_log(" - out: a%u", v1i);
         ad_var_inc_ref_int(v1i, v1);
@@ -2809,10 +2949,19 @@ bool ad_custom_op(dr::detail::CustomOpBase *op) {
     } else {
         auto [idx, v1] = ad_var_new(op->m_backend, 1, VarType::Void, symbolic,
                                     index_reuse, "CustomOp[out]");
+        ad_log("ad_var_new(a%u, \"%s [in]\")", idx, name);
         v1->counter = op->m_counter_offset + 1;
         v1i = idx;
 
         for (uint32_t o: outputs) {
+            uint8_t &flags = state[o]->flags;
+            if (flags & (uint8_t) VariableFlags::Visited) {
+                ad_log(" - out: a%u (ignored)", o);
+                continue;
+            }
+
+            flags |= (uint8_t) VariableFlags::Visited;
+
             ad_log(" - out: a%u", o);
             ad_add_special(v1i, o, false, std::make_unique<CopyGrad>());
             Variable *vo = state[o];
@@ -2834,6 +2983,7 @@ bool ad_custom_op(dr::detail::CustomOpBase *op) {
     if (!scopes.empty()) {
         scope = scopes.back();
         scope.postponed.clear();
+        scope.implicit.clear();
     }
 
     ad_add_special(v0i, v1i, true,

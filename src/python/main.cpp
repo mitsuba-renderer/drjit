@@ -139,10 +139,12 @@ NB_MODULE(drjit_ext, m_) {
             Py_DECREF(o);
         });
 
-     nb::class_<nb::intrusive_base>(
-       detail, "IntrusiveBase",
-       nb::intrusive_ptr<nb::intrusive_base>(
-           [](nb::intrusive_base *o, PyObject *po) noexcept { o->set_self_py(po); }));
+    nb::class_<nb::intrusive_base>(
+        detail, "IntrusiveBase",
+        nb::intrusive_ptr<nb::intrusive_base>(
+            [](nb::intrusive_base *o, PyObject *po) noexcept {
+                o->set_self_py(po);
+            }));
 
     jit_init(backends);
 

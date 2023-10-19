@@ -254,31 +254,84 @@ def test04_switch_autodiff_backward(t, recorded):
 def test05_switch_autodiff_backward_implicit(t, recorded):
     UInt32 = dr.uint32_array_t(t)
 
+    idx = UInt32(0, 0, 1, 1)
+    a = t(1.0, 2.0, 3.0, 4.0)
+    i = UInt32(3, 2, 1, 0)
+
     with dr.scoped_set_flag(dr.JitFlag.VCallRecord, recorded):
-        data = t(1.0, 2.0, 3.0, 4.0)
-        dr.enable_grad(data)
+        if True:
+            data = t(1.0, 2.0, 3.0, 4.0)
+            dr.enable_grad(data)
 
-        def f(a, i):
-            return a + dr.gather(t, data, i)
+            def f(a, i):
+                return a + dr.gather(t, data, i)
 
-        def g(a, i):
-            return a + 4 * dr.gather(t, data, i)
+            def g(a, i):
+                return a + 4 * dr.gather(t, data, i)
 
-        idx = UInt32(0, 0, 1, 1)
-        a = t(1.0, 2.0, 3.0, 4.0)
-        i = UInt32(3, 2, 1, 0)
+            result = dr.switch(idx, [f, g], a, i)
+            assert dr.allclose(result, [5, 5, 11, 8])
 
-        result = dr.switch(idx, [f, g], a, i)
-        assert dr.allclose(result, [5, 5, 11, 8])
+            dr.backward(result)
+            assert dr.allclose(dr.grad(data), [4, 4, 1, 1])
 
-        dr.backward(result)
-        assert dr.allclose(dr.grad(data), [4, 4, 1, 1])
+        if True:
+            data = t(3.0)
+            dr.enable_grad(data)
+
+            def f(a, i):
+                return data + 0
+
+            def g(a, i):
+                return a + 4 * data
+
+            result = dr.switch(idx, [f, g], a, i)
+            assert dr.allclose(result, [3, 3, 15, 16])
+
+            dr.backward(result)
+            assert dr.allclose(dr.grad(data), 10)
+
+        if True:
+            data = t(3.0)
+            dr.enable_grad(data)
+
+            def f(a, i):
+                return data
+
+            def g(a, i):
+                return data
+
+            result = dr.switch(idx, [f, g], a, i)
+            assert dr.allclose(result, [3, 3, 3, 3])
+
+            dr.backward(result)
+            assert dr.allclose(dr.grad(data), 4)
+
+@pytest.test_arrays('float,shape=(*),jit,is_diff')
+def test06_invalid_implicit_dependence(t):
+    UInt32 = dr.uint32_array_t(t)
+
+    data = t(3.0, 4.0)
+    dr.enable_grad(data)
+
+    def f(a, i):
+        return data
+
+    def g(a, i):
+        return a + 4 * data
+
+    idx = UInt32(0, 0, 1, 1)
+    a = t(1.0, 2.0, 3.0, 4.0)
+    i = UInt32(3, 2, 1, 0)
+
+    dr.switch(idx, [f, g], a, i)
+    assert False
 
 
 # Keyword calling, pytrees, differentiation
 @pytest.mark.parametrize("recorded", [True, False])
 @pytest.test_arrays('float,shape=(*),jit')
-def test08_complex(t, recorded):
+def test07_complex(t, recorded):
     UInt32 = dr.uint32_array_t(t)
     Bool = dr.mask_t(t)
 

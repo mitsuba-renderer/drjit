@@ -39,6 +39,9 @@ void collect_indices(nb::handle h, dr::dr_vector<uint64_t> &indices) {
         }
     };
 
+    if (!h.is_valid())
+        return;
+
     traverse("drjit.detail.collect_indices", CollectIndices { indices }, h);
 }
 
@@ -85,6 +88,9 @@ nb::object update_indices(nb::handle h, const dr::dr_vector<uint64_t> &indices_)
             }
         }
     };
+
+    if (!h.is_valid())
+        return nb::object();
 
     UpdateIndices ui { indices_ };
     nb::object result = transform("drjit.detail.update_indices", ui, h);

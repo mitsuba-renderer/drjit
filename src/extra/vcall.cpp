@@ -168,6 +168,9 @@ static void ad_vcall_record(JitBackend backend, const char *domain,
                 rv2.clear();
                 callback(payload, i, args2, rv2);
 
+                for (uint64_t index: rv2)
+                    ad_var_check_implicit(index);
+
                 // Perform some sanity checks on the return values
                 ad_vcall_check_rv(backend, size, i, rv, rv2);
 
@@ -182,7 +185,7 @@ static void ad_vcall_record(JitBackend backend, const char *domain,
 
                 for (size_t j = 0; j < rv2.size(); ++j) {
                     uint64_t index = rv2[j];
-                    rv_ad[i] |= (index >> 32) != 0;
+                    rv_ad[j] |= (index >> 32) != 0;
                     rv3.push_back_borrow((uint32_t) index);
                 }
             }
@@ -482,9 +485,11 @@ public:
         ad_assert(m_rv2.size() == m_rv.size(), "Size mismatch!");
 
         for (size_t i = 0; i < m_output_offsets.size(); ++i) {
-            uint64_t index = m_rv2[m_output_offsets[i]];
-            ad_accum_grad(index, (uint32_t) args[m_args.size() + i]);
-            ad_enqueue(dr::ADMode::Backward, index);
+            uint64_t index     = m_rv2[m_output_offsets[i]],
+                     index_new = ad_var_copy(index);
+            ad_accum_grad(index_new, (uint32_t) args[m_args.size() + i]);
+            ad_enqueue(dr::ADMode::Backward, index_new);
+            ad_var_dec_ref(index_new);
         }
 
         ad_traverse(dr::ADMode::Backward, (uint32_t) dr::ADFlag::Default);
@@ -569,10 +574,12 @@ bool ad_vcall(JitBackend backend, const char *domain, const char *name,
 
     if (jit_flag(JitFlag::VCallRecord)) {
         dr_vector<bool> rv_ad;
+        dr_vector<uint32_t> implicit_in;
         {
             scoped_isolation_boundary guard;
             ad_vcall_record(backend, domain, name, size, index, mask,
                             callable_count, args, rv, rv_ad, callback, payload);
+            ad_copy_implicit_deps(implicit_in);
             guard.success = true;
         }
 
@@ -587,14 +594,17 @@ bool ad_vcall(JitBackend backend, const char *domain, const char *name,
             for (size_t i = 0; i < args.size(); ++i)
                 op->add_input(i, args[i]);
 
+            for (uint32_t index: implicit_in)
+                op->add_index(backend, index, true);
+
             for (size_t i = 0; i < rv.size(); ++i) {
                 if (!rv_ad[i])
                     continue;
 
                 uint64_t index = ad_var_new((uint32_t) rv[i]);
+
                 jit_var_dec_ref((uint32_t) rv[i]);
                 rv[i] = index;
-
                 op->add_output(i, index);
             }
 
