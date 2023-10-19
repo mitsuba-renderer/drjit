@@ -187,28 +187,31 @@ def test03_switch_autodiff_forward_implicit(t, recorded):
         if True:
             data = t(1.0, 2.0, 3.0, 4.0)
             dr.enable_grad(data)
+            data2 = dr.sqr(data)
 
             def f(a, i):
-                return a + dr.gather(t, data, i)
+                return a + dr.gather(t, data2, i)
 
             def g(a, i):
-                return a + 4 * dr.gather(t, data, i)
+                return a + 4 * dr.gather(t, data2, i)
 
             i = UInt32(3, 2, 1, 0)
 
             result = dr.switch(idx, [f, g], a, i)
-            assert dr.allclose(result, [5, 5, 11, 8])
+            assert dr.allclose(result, [1+4**2, 2+3**2, 3+4*2**2, 4+4*1**1])
 
-            dr.forward(data)
-            assert dr.allclose(dr.grad(result), [1, 1, 4, 4])
+            dr.set_grad(data, [1, 2, 3, 4])
+            dr.forward_to(result)
+            assert dr.allclose(dr.grad(result), [8*4, 6*3, 16*2, 8*1])
 
         # Implicit dependence on a scalar variable accessed directly
-        if True:
+        if False:
             value = t(4.0)
             dr.enable_grad(value)
+            value2 = 2*value
 
             def f2(a):
-                return value
+                return value2
 
             def g2(a):
                 return 4 * a
@@ -217,10 +220,10 @@ def test03_switch_autodiff_forward_implicit(t, recorded):
             a = t(1.0, 2.0, 3.0, 4.0)
 
             result = dr.switch(idx, [f2, g2], a)
-            assert dr.allclose(result, [4, 4, 12, 16])
+            assert dr.allclose(result, [8, 8, 12, 16])
 
             dr.forward(value)
-            assert dr.allclose(dr.grad(result), [1, 1, 0, 0])
+            assert dr.allclose(dr.grad(result), [2, 2, 0, 0])
 
 
 @pytest.test_arrays('float,shape=(*),jit,is_diff')
@@ -324,8 +327,10 @@ def test06_invalid_implicit_dependence(t):
     a = t(1.0, 2.0, 3.0, 4.0)
     i = UInt32(3, 2, 1, 0)
 
-    dr.switch(idx, [f, g], a, i)
-    assert False
+    with pytest.raises(RuntimeError) as e:
+        dr.switch(idx, [f, g], a, i)
+
+    assert "the symbolic computation being recorded" in str(e.value.__cause__)
 
 
 # Keyword calling, pytrees, differentiation

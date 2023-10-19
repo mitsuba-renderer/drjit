@@ -1257,7 +1257,7 @@ static void ad_clear_todo(std::vector<EdgeRef> &todo, bool remove_edges) {
 
             ad_assert(edge_id_cur,
                       "ad_clear_todo(): could not find forward edge a%u -> a%u",
-                      er.source, er.target)
+                      er.source, er.target);
 
             // Clear out backward edge
             edge_id_prev = 0;
@@ -1282,7 +1282,7 @@ static void ad_clear_todo(std::vector<EdgeRef> &todo, bool remove_edges) {
 
             ad_assert(edge_id_cur,
                       "ad_clear_todo(): could not find backward edge a%u -> a%u",
-                      er.source, er.target)
+                      er.source, er.target);
 
             state.edges[er.id] = Edge { };
             state.unused_edges.push(er.id);

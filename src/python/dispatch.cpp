@@ -21,8 +21,36 @@ struct dr_index_vector : dr::dr_vector<uint64_t> {
     }
 };
 
+template <typename T> struct StateGuard {
+    ad_vcall_cleanup cleanup = nullptr;
+    T *state = nullptr;
+
+    ~StateGuard() {
+        if (cleanup)
+            cleanup(state);
+    }
+};
+
 nb::object switch_impl(nb::handle index_, nb::sequence callables,
                        nb::args args_, nb::kwargs kwargs) {
+    struct State {
+        nb::tuple args_o;
+        nb::object callables_o;
+        nb::object rv_o;
+
+        ~State() {
+            if (!nb::is_alive())
+                return;
+            nb::gil_scoped_acquire guard;
+            args_o.reset();
+            callables_o.reset();
+            rv_o.reset();
+        }
+    };
+
+
+    StateGuard<State> guard;
+
     try {
         // Extract the 'active' parameter, if provided.
         nb::str mask_key("active");
@@ -82,21 +110,6 @@ nb::object switch_impl(nb::handle index_, nb::sequence callables,
                  "the 'index' argument must be a Jit-compiled 1D 32-bit "
                  "unsigned integer array");
 
-        struct State {
-            nb::tuple args_o;
-            nb::object callables_o;
-            nb::object rv_o;
-
-            ~State() {
-                if (!nb::is_alive())
-                    return;
-                nb::gil_scoped_acquire guard;
-                args_o.reset();
-                callables_o.reset();
-                rv_o.reset();
-            }
-        };
-
         ad_vcall_callback callback = [](void *ptr, size_t index,
                                         const dr::dr_vector<uint64_t> &args_i,
                                         dr::dr_vector<uint64_t> &rv_i) {
@@ -115,25 +128,26 @@ nb::object switch_impl(nb::handle index_, nb::sequence callables,
             collect_indices(state.rv_o, rv_i);
         };
 
-        ad_vcall_cleanup cleanup = [](void *ptr) { delete (State *) ptr; };
-
-        State *state = new State{ nb::make_tuple(args, kwargs), callables,
-                                  nb::object() };
+        guard.state =
+            new State{ nb::make_tuple(args, kwargs), callables, nb::object() };
+        guard.cleanup = [](void *ptr) { delete (State *) ptr; };
 
         dr_index_vector rv_i;
         bool done = ad_vcall(
             (JitBackend) s.backend, nullptr, "dr.switch()",
             (uint32_t) s.index(inst_ptr(index)),
             mask.is_valid() ? ((uint32_t) s.index(inst_ptr(mask))) : 0u,
-            nb::len(callables), collect_indices(state->args_o), rv_i, state,
-            callback, cleanup, true);
+            nb::len(callables), collect_indices(guard.state->args_o), rv_i,
+            guard.state, callback, guard.cleanup, true);
 
-        nb::object result = update_indices(state->rv_o, rv_i);
+        nb::object result = update_indices(guard.state->rv_o, rv_i);
 
-        if (done)
-            cleanup(state);
-        else
-            state->rv_o.reset();
+        if (!done) {
+            // Don't delete the 'State' instance. The AD framwork is responsible.
+            guard.state->rv_o.reset();
+            guard.state = nullptr;
+            guard.cleanup = nullptr;
+        }
 
         return result;
     } catch (nb::python_error &e) {

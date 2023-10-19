@@ -23,6 +23,7 @@ static void log_callback(LogLevel /* level */, const char *msg) {
         return;
     }
 
+    nb::error_scope scope;
     nb::print(msg);
 }
 
