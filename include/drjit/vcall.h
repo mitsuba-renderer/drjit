@@ -14,4 +14,30 @@
 
 #include <drjit/autodiff.h>
 
+#define DRJIT_VCALL_BEGIN(Name)                                                \
+    namespace drjit {                                                          \
+        template <typename Array>                                              \
+        struct call_support<Name, Array> {                                     \
+            using Class = Name;                                                \
+            static constexpr const char *Domain = #Name;                       \
+            call_support(const Array &array) : array(array) { }                \
+            const call_support *operator->() const {                           \
+                return this;                                                   \
+            }
 
+#define DRJIT_VCALL_TEMPLATE_BEGIN(Name)                                       \
+    namespace drjit {                                                          \
+        template <typename Array, typename... Ts>                              \
+        struct call_support<Name<Ts...>, Array> {                              \
+            using Class = Name<Ts...>;                                         \
+            static constexpr const char *Domain = #Name;                       \
+            call_support(const Array &array) : array(array) { }                \
+            const call_support *operator->() const {                           \
+                return this;                                                   \
+            }
+
+#define DRJIT_VCALL_END(Name)                                                  \
+        private:                                                               \
+            const Array &array;                                                \
+        };                                                                     \
+    }

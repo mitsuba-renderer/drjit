@@ -49,7 +49,6 @@ nb::object bind(const ArrayBinding &b) {
     d.name = name;
     d.type = b.array_type;
     d.supplement = (uint32_t) sizeof(ArraySupplement);
-    d.scope = b.scope.ptr();
 
     PyType_Slot slots [] = {
         { Py_tp_init, (void *) (b.is_tensor ? tp_init_tensor : tp_init_array) },
@@ -60,7 +59,10 @@ nb::object bind(const ArrayBinding &b) {
 
     d.type_slots = slots;
     d.type_slots_callback = nullptr;
-    d.scope = meta_get_module(b).ptr();
+    if (b.scope.is_valid())
+        d.scope = b.scope.ptr();
+    else
+        d.scope = meta_get_module(b).ptr();
     d.base_py = (PyTypeObject *) array_base.ptr();
 
     // Create the type and update its supplemental information
@@ -162,8 +164,6 @@ nb::object bind(const ArrayBinding &b) {
     return tp;
 }
 
-
 void export_bind(nb::module_ &detail) {
-    nb::class_<ArrayBinding>(detail, "ArrayBinding");
-    detail.def("bind", &bind);
+    detail.def("bind", [](void *p) { return bind(*(ArrayBinding *) p); });
 }

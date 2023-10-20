@@ -46,7 +46,7 @@
 #  else
 #    define DRJIT_TRIVIAL_ABI
 #  endif
-#  define DRJIT_IMPORT
+#  define DRJIT_IMPORT                 __attribute__ ((visibility("default")))
 #  define DRJIT_EXPORT                 __attribute__ ((visibility("default")))
 #endif
 

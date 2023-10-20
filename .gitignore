@@ -56,6 +56,9 @@ libnanobind-static.a
 libnanothread.so
 libnanothread.dylib
 nanothread.dll
+libnanobind-drjit.dylib
+libnanobind-drjit.so
+nanobind-drjit.dll
 drjit_ext.cp*
 /drjitConfig.cmake
 /drjitConfigVersion.cmake

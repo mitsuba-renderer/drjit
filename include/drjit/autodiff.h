@@ -629,7 +629,7 @@ struct DRJIT_TRIVIAL_ABI DiffArray
         if constexpr (!IsClass)
             return out;
         else
-            return (Value) jit_registry_get_ptr(Backend, CallSupport::Domain, out);
+            return (Value) jit_registry_ptr(Backend, CallSupport::Domain, out);
     }
 
     bool schedule_() const { return jit_var_schedule((uint32_t) m_index); }
@@ -643,7 +643,7 @@ struct DRJIT_TRIVIAL_ABI DiffArray
         if constexpr (!IsClass) {
             index = jit_var_write((uint32_t) m_index, offset, &value);
         } else {
-            ActualValue av = jit_registry_get_id(Backend, value);
+            ActualValue av = jit_registry_id(value);
             index = jit_var_write((uint32_t) m_index, (uint32_t) offset, &av);
         }
         jit_var_dec_ref((uint32_t) m_index);

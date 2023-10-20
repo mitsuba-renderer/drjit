@@ -1210,6 +1210,8 @@ static std::pair<Variable*, Variable *> ad_lookup_edge(const EdgeRef &er, const 
               "ad_clear_todo(): internal error: edge a%u -> a%u is in an "
               "invalid state! (3)", er.source, er.target);
 
+    (void) edge;
+
     return { source, target };
 }
 
