@@ -1,6 +1,7 @@
 import drjit as dr
 import vcall_ext as m
 import pytest
+import re
 
 def get_pkg(t):
     backend = dr.backend_v(t)
@@ -11,14 +12,13 @@ def get_pkg(t):
 
 def cleanup(s):
     """Remove memory addresses and backend names from a string """
-    import re
     s = re.sub(r' at 0x[a-fA-F0-9]*',r'', s)
     s = re.sub(r'\.llvm\.',r'.', s)
     s = re.sub(r'\.cuda\.',r'.', s)
     return s
 
 @pytest.test_arrays('float32,is_diff,is_diff,shape=(*)')
-def test01_vcall_simple(t):
+def test01_array_operations(t):
     pkg = get_pkg(t)
 
     A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
@@ -52,3 +52,7 @@ def test01_vcall_simple(t):
     print(c)
     assert cleanup(str(c)) == '[<vcall_ext.B object>, <vcall_ext.A object>]'
     assert c[0] is b and c[1] is a
+
+    with pytest.raises(TypeError, match=re.escape("unsupported operand type(s) for +: 'BasePtr' and 'BasePtr'")):
+        c+c
+    assert dr.all(c == c)

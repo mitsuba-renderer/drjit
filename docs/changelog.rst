@@ -13,12 +13,11 @@ following list covers the most important changes and their impact on
 source-level compatibility. Points with an exclamation sign cover
 incompatibilities and potential stumbling blocks.
 
-- ⚠️ The Dr.Jit Python bindings were completely rewritten using a new
-  architecture centered around the `nanobind
-  <https://github.com/wjakob/nanobind>`__ library. This has the following
-  consequences:
+- ⚠️ Dr.Jit comes with an all-new set of Python bindings created using the
+  `nanobind <https://github.com/wjakob/nanobind>`__ library. This was also an
+  opportunity to fix many long-standing binding-related problems:
 
-  - Tracing Dr.Jit code written in Python is *significantly* faster. Expect
+  - Tracing Dr.Jit code written in Python is now *significantly* faster. Expect
     speedups of ~10-20×. The shared libraries containing the bindings have also
     become much smaller (from ~10MB to just over ~1MB).
 
@@ -31,19 +30,29 @@ incompatibilities and potential stumbling blocks.
     incompatibilities. If they are not reported here, please open a ticket so
     that they can either be documented (if intentional) or fixed.
 
-- ⚠️ The Dr.Jit matrix type switched from column-major to row-major storage. If
-  you previously indexed into matrices first by column and then row (e.g.,
-  ``matrix[col][row]`` instead of specifying the complete location
-  ``matrix[row, col]``, which internally permuted ``row`` and ``col``), then
-  your code will need to be updated.
+- ⚠️ The ``==`` and ``!=`` comparisons previously reduced the result of to a
+  single Python ``bool``. They now return an array of component-wise
+  comparisons. Use :py:func:`dr.all(a == b) <all>` or :py:func:`dr.all(a == b,
+  axis=None) <all>` to reproduce the previous behavior.
+
+  This change makes Dr.Jit more consistent with other array programming
+  frameworks. The functions ``drjit.eq()`` and ``drjit.neq()`` for element-wise
+  equality and inequality tests were removed, as their behavior is now subsumed
+  by the builtin ``==`` and ``!=`` operators.
+
+- ⚠️ The Dr.Jit matrix type switched from column-major to row-major storage.
+  Your code will need to be updated if it indexes into matrices first by column
+  and then row (``matrix[col][row]``) instead of specifying the complete
+  location ``matrix[row, col]``. The latter convention is consistent between
+  both versions.
 
 - **Mixed-precision optimization**: Dr.Jit now maintains one global AD graph
-  for all variables, enabling differentiation of calculations that combine
-  single-, double, and half precisions. Previously, there was a separate graph
+  for all variables, enabling differentiation of computation combining single-,
+  double, and half precision variables. Previously, there was a separate graph
   per type, and gradients did not propagate through casts between them.
 
-- Variable indices (:py:func:`drjit.ArrayBase.index`,
-  :py:func:`drjit.ArrayBase.index_ad`) used to monotonically increase as
+- Variable indices (:py:attr:`drjit.ArrayBase.index`,
+  :py:attr:`drjit.ArrayBase.index_ad`) used to monotonically increase as
   variables were being created. Internally, multiple hash tables were needed to
   associate these ever-growing indices with locations in an internal variable
   array, which which had a surprisingly large impact on tracing performance.
@@ -67,8 +76,8 @@ incompatibilities and potential stumbling blocks.
 
 - Reductions operations previously existed as *ordinary* (e.g.,
   :py:func:`drjit.all`) and *nested* (e.g. ``drjit.all_nested``) variants. Both
-  are now subsumed by an optional ``axis`` argument similar to other array
-  programming frameworks like NumPy.
+  are now subsumed by an optional ``axis`` argument similar to how this works
+  in other array programming frameworks like NumPy.
 
   The reduction functions (:py:func:`drjit.all` :py:func:`drjit.any`,
   :py:func:`drjit.sum`, :py:func:`drjit.prod`, :py:func:`drjit.min`,
@@ -103,7 +112,7 @@ Python API.
 
   * Transcendental functions (:py:func:`drjit.log`, :py:func:`drjit.atan2`,
     etc.) now have pre-compiled implementations for Jit arrays. Automatic
-    differentiation of such operations was entirely moved into
+    differentiation of such operations was also moved into
     ``libdrjit-extra.so``.
 
   * The AD layer was rewritten to reduce the previous
@@ -127,7 +136,7 @@ Removals
 --------
 
 - Packet-mode virtual function code dispatch
-  (``drjit/include/vcall_jit_record.h``) was removed.
+  (``drjit/include/vcall_packet.h``) was removed.
 
 - The ability to instantiate a differentiable array on top of a
   non-JIT-compiled type (e.g., ``dr::DiffArray<float>``) was removed. This was
