@@ -71,6 +71,8 @@ std::string meta_str(ArrayMeta m) {
             result += "  is_sequence=1,\n";
         if (m.is_diff)
             result += "  is_diff=1,\n";
+        if (m.is_class)
+            result += "  is_class=1,\n";
 
         result += "  shape=(";
         for (int i = 0; i < 4; ++i) {

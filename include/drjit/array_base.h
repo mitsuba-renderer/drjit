@@ -110,6 +110,9 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
     /// Does this array represent the result of a 'masked(...)' expression?
     static constexpr bool IsMaskedArray = false;
 
+    /// Does this array store pointers to class instances?
+    static constexpr bool IsClass = false;
+
     /// Does this array compute derivatives using automatic differentiation?
     static constexpr bool IsDiff = is_diff_v<Value_>;
 

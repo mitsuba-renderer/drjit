@@ -138,23 +138,25 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
                      "Input has the wrong size (expected 0 elements, got 1).");
 
             nb::object element;
-            PyObject *value_type = s.value;
+            PyTypeObject *value_tp = (PyTypeObject *) s.value;
 
             if (s.is_matrix)
-                value_type = supp(value_type).value;
+                value_tp = (PyTypeObject *) supp(value_tp).value;
 
-            if (arg_tp == (PyTypeObject *) s.value) {
+            if (arg_tp == value_tp || PyType_IsSubtype(arg_tp, value_tp)) {
                 element = nb::borrow(arg);
             } else {
                 PyObject *args[2] = { nullptr, arg };
                 element = nb::steal(
-                    NB_VECTORCALL(value_type, args + 1,
+                    NB_VECTORCALL((PyObject *) value_tp, args + 1,
                                   1 | PY_VECTORCALL_ARGUMENTS_OFFSET, nullptr));
                 if (NB_UNLIKELY(!element.is_valid())) {
                     nb::error_scope scope;
+                    nb::str value_tp_name = nb::type_name(value_tp);
                     nb::str arg_tp_name = nb::type_name(arg_tp);
-                    nb::raise("Broadcast from type '%s' failed.%s",
+                    nb::raise("Broadcast from type '%s' to type '%s' failed.%s",
                               arg_tp_name.c_str(),
+                              value_tp_name.c_str(),
                               try_sequence_import
                                   ? ""
                                   : " Refused to perform an inefficient "
@@ -264,8 +266,6 @@ static bool array_init_from_seq(PyObject *self, const ArraySupplement &s, PyObje
     }
 
     if (s.ndim == 1 && s.init_data) {
-        size_t byte_size = jit_type_size((VarType) s.type) * (size_t) size;
-        dr::dr_unique_ptr<uint8_t[]> storage(new uint8_t[byte_size]);
         bool fail = false;
 
         #define FROM_SEQ_IMPL(T)                                           \
@@ -285,20 +285,41 @@ static bool array_init_from_seq(PyObject *self, const ArraySupplement &s, PyObje
             }                                                              \
         }
 
-        switch ((VarType) s.type) {
-            case VarType::Bool:    FROM_SEQ_IMPL(bool);     break;
-            case VarType::Float32: FROM_SEQ_IMPL(float);    break;
-            case VarType::Float64: FROM_SEQ_IMPL(double);   break;
-            case VarType::Int32:   FROM_SEQ_IMPL(int32_t);  break;
-            case VarType::UInt32:  FROM_SEQ_IMPL(uint32_t); break;
-            case VarType::Int64:   FROM_SEQ_IMPL(int64_t);  break;
-            case VarType::UInt64:  FROM_SEQ_IMPL(uint64_t); break;
-            default: fail = true;
+        if (!s.is_class) {
+            size_t byte_size = jit_type_size((VarType) s.type) * (size_t) size;
+            dr::dr_unique_ptr<uint8_t[]> storage(new uint8_t[byte_size]);
+            switch ((VarType) s.type) {
+                case VarType::Bool:    FROM_SEQ_IMPL(bool);     break;
+                case VarType::Float32: FROM_SEQ_IMPL(float);    break;
+                case VarType::Float64: FROM_SEQ_IMPL(double);   break;
+                case VarType::Int32:   FROM_SEQ_IMPL(int32_t);  break;
+                case VarType::UInt32:  FROM_SEQ_IMPL(uint32_t); break;
+                case VarType::Int64:   FROM_SEQ_IMPL(int64_t);  break;
+                case VarType::UInt64:  FROM_SEQ_IMPL(uint64_t); break;
+                default: fail = true;
+            }
+            raise_if(fail, "Could not construct from sequence (invalid type in input).");
+            s.init_data((size_t) size, storage.get(), inst_ptr(self));
+        } else {
+            const std::type_info &cpp_type = nb::type_info(s.value);
+            dr::dr_unique_ptr<void*[]> storage((new void*[size]));
+
+            for (Py_ssize_t i = 0; i < size; ++i) {
+                nb::object o = nb::steal(sq_item(seq, i));
+
+                void *ptr = nullptr;
+                if (!nb::detail::nb_type_get(&cpp_type, o.ptr(), 0, nullptr, &ptr)) {
+                    fail = true;
+                    break;
+                }
+                storage[i] = ptr;
+            }
+
+            raise_if(fail, "Could not construct from sequence (invalid type in input).");
+            s.init_data((size_t) size, storage.get(), inst_ptr(self));
         }
 
-        raise_if(fail, "Could not construct from sequence (invalid type in input).");
 
-        s.init_data((size_t) size, storage.get(), inst_ptr(self));
         nb::inst_mark_ready(self);
 
         return true;

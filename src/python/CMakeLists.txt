@@ -41,6 +41,8 @@ set_target_properties(drjit-python
   PROPERTIES
   OUTPUT_NAME drjit_ext ${DRJIT_OUTPUT_DIRECTORY})
 
+target_compile_definitions(drjit-python PRIVATE -DDRJIT_PYTHON_BUILD)
+
 configure_file(
   ${CMAKE_CURRENT_SOURCE_DIR}/../../resources/config.py.in
   ${CMAKE_CURRENT_SOURCE_DIR}/../../drjit/config.py

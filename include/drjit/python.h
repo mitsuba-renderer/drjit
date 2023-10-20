@@ -15,8 +15,10 @@ NAMESPACE_BEGIN(drjit)
 struct ArrayBinding;
 NAMESPACE_END(drjit)
 
+#if defined(DRJIT_PYTHON_BUILD)
 /// Publish a Dr.Jit type binding in Python
 extern nanobind::object bind(const drjit::ArrayBinding &);
+#endif
 
 NAMESPACE_BEGIN(drjit)
 
@@ -41,9 +43,10 @@ struct ArrayMeta {
     uint16_t is_matrix     : 1;
     uint16_t is_tensor     : 1;
     uint16_t is_diff       : 1;
-    uint8_t is_valid       : 1;
-    uint8_t tsize_rel      : 7;  // type size as multiple of 'talign'
-    uint8_t talign;              // type alignment
+    uint16_t is_class      : 1;
+    uint16_t is_valid      : 1;
+    uint16_t tsize_rel     : 7;  // type size as multiple of 'talign'
+    uint16_t talign        : 7; // type alignment
     uint8_t shape[4];
 };
 
@@ -271,7 +274,7 @@ NB_INLINE void bind_init(ArrayBinding &b, nanobind::handle scope = {},
                      Size = sizeof(T),
                      RelSize = Size / Align;
 
-    static_assert(Align < 0xFF && RelSize <= 0xFF && RelSize * Align == Size,
+    static_assert(Align < 0x80 && RelSize < 0x80 && RelSize * Align == Size,
                   "drjit::bind(): type is too large!");
 
     memset((void *) &b, 0, sizeof(ArrayBinding));
@@ -296,15 +299,17 @@ NB_INLINE void bind_init(ArrayBinding &b, nanobind::handle scope = {},
     b.is_matrix = T::IsMatrix;
     b.is_tensor = T::IsTensor;
     b.is_diff = T::IsDiff;
+    b.is_class = T::IsClass;
     b.is_valid = 1;
-
-    b.tsize_rel = (uint8_t) RelSize;
-    b.talign = (uint8_t) Align;
+    b.tsize_rel = (uint16_t) RelSize;
+    b.talign = (uint16_t) Align;
 
     b.scope = scope;
     b.name = name;
     b.array_type = &typeid(T);
-    b.value_type = std::is_scalar_v<Value> ? nullptr : &typeid(Value);
+    b.value_type = std::is_scalar_v<Value> && !std::is_pointer_v<Value>
+                       ? nullptr
+                       : &typeid(std::remove_pointer_t<Value>);
 
     if constexpr (!std::is_trivially_copy_constructible_v<T>)
         b.copy = nb::detail::wrap_copy<T>;
@@ -353,8 +358,10 @@ template <typename T> NB_INLINE void bind_base(ArrayBinding &b) {
 
             bool success = value != Py_None && in.from_python(
                 value, (uint8_t) nb::detail::cast_flags::convert, &cleanup);
-            if (success)
-                inst->set_entry(i, in.operator Value &());
+            if (success) {
+                using Out = std::conditional_t<std::is_pointer_v<Value>, Value, Value &>;
+                inst->set_entry(i, in.operator Out());
+            }
             cleanup.release();
 
             if (success) {
@@ -392,15 +399,18 @@ template <typename T> NB_INLINE void bind_base(ArrayBinding &b) {
                               new (a) T(load<T>(ptr, size));
                           };
 
-            b.init_const = (ArraySupplement::InitConst) + [](size_t size, PyObject *o, T *a) {
+            b.init_const = (ArraySupplement::InitConst) + [](size_t size, PyObject *h, T *a) {
                 scalar_t<T> scalar;
-                if (!nb::try_cast(nb::handle(o), scalar)) {
-                    nb::str tp_name = nb::inst_name(o);
+                if (T::IsClass) {
+                    if (nb::handle(h).equal(nb::int_(0)))
+                        h = Py_None;
+                }
+                if (!nb::try_cast(nb::handle(h), scalar)) {
+                    nb::str tp_name = nb::inst_name(h);
                     nb::detail::raise("Could not initialize element with a "
                                       "value of type '%s'.", tp_name.c_str());
-                } else {
-                    new (a) T(full<T>(scalar, size));
                 }
+                new (a) T(full<T>(scalar, size));
             };
 
             if constexpr (std::is_same_v<scalar_t<T>, uint32_t>) {
@@ -640,8 +650,12 @@ template <typename T> void bind_memop(ArrayBinding &b) {
         };
 }
 
-template <typename T> void bind_array(ArrayBinding &b) {
-    bind_init<T>(b);
+template <typename T>
+void bind_array(ArrayBinding &b, nanobind::handle scope = {},
+                const char *name = nullptr) {
+    namespace nb = nanobind;
+
+    bind_init<T>(b, scope, name);
 
     if constexpr (T::IsTensor) {
         bind_tensor<T>(b);
@@ -691,7 +705,12 @@ template <typename T> void bind_array(ArrayBinding &b) {
     if constexpr (!T::IsMask && !T::IsIntegral)
         disable_bit_ops(b);
 
-    bind(b);
+    #if defined(DRJIT_PYTHON_BUILD)
+        bind(b);
+    #else
+        nb::object bind_func = nb::module_::import_("drjit.detail").attr("bind");
+        bind_func(nb::cast((void *) &b));
+    #endif
 }
 
 /// Run bind_array() for many different plain array types

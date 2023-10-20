@@ -11,7 +11,6 @@
 */
 
 #pragma once
-#define DRJIT_H
 
 #include <drjit/array.h>
 #include <drjit/extra.h>
@@ -91,7 +90,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
     template <typename T, enable_if_scalar_t<T> = 0>
     JitArray(T value) {
         if constexpr (IsClass) {
-            ActualValue av = jit_registry_get_id(Backend, value);
+            uint32_t av = jit_registry_id(value);
             m_index = jit_var_literal(Backend, Type, &av, 1, 0, IsClass);
         } else {
             switch (Type) {
@@ -115,7 +114,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
             m_index = jit_var_mem_copy(Backend, AllocType::Host, Type, data,
                                        sizeof...(Ts));
         } else {
-            uint32_t data[] = { jit_registry_get_id(Backend, ts)... };
+            uint32_t data[] = { jit_registry_id(ts)... };
             m_index = jit_var_mem_copy(Backend, AllocType::Host, Type, data,
                                        sizeof...(Ts));
         }
@@ -376,7 +375,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
         if constexpr (!IsClass)
             av = (ActualValue) value;
         else
-            av = jit_registry_get_id(Backend, value);
+            av = jit_registry_id(value);
 
         return steal(jit_var_literal(Backend, Type, &av, size, false, IsClass));
     }
@@ -387,7 +386,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
         if constexpr (!IsClass)
             av = (ActualValue) value;
         else
-            av = jit_registry_get_id(Backend, value);
+            av = jit_registry_id(value);
 
         return steal(jit_var_literal(Backend, Type, &av, size, true, IsClass));
     }
@@ -420,7 +419,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
         } else {
             uint32_t *temp = new uint32_t[size];
             for (uint32_t i = 0; i < size; i++)
-                temp[i] = jit_registry_get_id(Backend, ((const void **) ptr)[i]);
+                temp[i] = jit_registry_id(((const void **) ptr)[i]);
             JitArray result = steal(
                 jit_var_mem_copy(Backend, AllocType::Host, Type, temp, (uint32_t) size));
             delete[] temp;
@@ -438,7 +437,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
             jit_memcpy(Backend, temp, data(), size * sizeof(uint32_t));
             for (uint32_t i = 0; i < size; i++)
                 ((void **) ptr)[i] =
-                    jit_registry_get_ptr(Backend, CallSupport::Domain, temp[i]);
+                    jit_registry_ptr(Backend, CallSupport::Domain, temp[i]);
             delete[] temp;
         }
     }
@@ -590,7 +589,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
         if constexpr (!IsClass)
             return out;
         else
-            return (Value) jit_registry_get_ptr(Backend, CallSupport::Domain, out);
+            return (Value) jit_registry_ptr(Backend, CallSupport::Domain, out);
     }
 
     template <typename T, enable_if_t<!std::is_void_v<T> && std::is_same_v<T, Value>> = 0>
@@ -599,7 +598,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
         if constexpr (!IsClass) {
             index = jit_var_write(m_index, offset, &value);
         } else {
-            ActualValue av = jit_registry_get_id(Backend, value);
+            uint32_t av = jit_registry_id(value);
             index = jit_var_write(m_index, (uint32_t) offset, &av);
         }
         jit_var_dec_ref(m_index);
@@ -698,8 +697,3 @@ Array block_sum(const Array &array, size_t block_size) {
 }
 
 NAMESPACE_END(drjit)
-
-#if defined(DRJIT_VCALL_H)
-#  include <drjit/vcall_jit_reduce.h>
-#  include <drjit/vcall_jit_record.h>
-#endif
