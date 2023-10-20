@@ -510,6 +510,14 @@ struct JitArray : ArrayBase<Value_, is_mask_v<Value_>, Derived_> {
                                      m_index, index.index(), mask.index());
     }
 
+    template <typename Mask>
+    static Derived scatter_inc_(Derived &dst, const Derived &index,
+                             const Mask &mask) {
+        static_assert(
+            std::is_same_v<detached_t<Mask>, detached_t<mask_t<Derived>>>);
+        return steal(jit_var_scatter_inc(dst.index_ptr(), index.index(), mask.index()));
+    }
+
     //! @}
     // -----------------------------------------------------------------------
 

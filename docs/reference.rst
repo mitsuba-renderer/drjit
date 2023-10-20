@@ -26,6 +26,7 @@ These operations are *horizontal* in the sense that [..]
 .. autofunction:: gather
 .. autofunction:: scatter
 .. autofunction:: scatter_reduce
+.. autofunction:: scatter_inc
 .. autofunction:: ravel
 .. autofunction:: unravel
 .. autofunction:: slice

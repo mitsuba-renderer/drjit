@@ -232,3 +232,19 @@ def test08_prefix_sum(m):
         assert dr.prefix_sum(t(1, 2, 3)) == t(0, 1, 3)
         assert dr.prefix_sum(t(1, 2, 3), exclusive=False) == t(1, 3, 6)
         assert dr.cumsum(t(1, 2, 3)) == t(1, 3, 6)
+
+def test09_scatter_inc(m):
+    try:
+        import numpy as np
+    except ImportError:
+        pytest.skip('NumPy is not installed')
+    n=10000
+    counter = m.UInt32(0)
+    index = dr.arange(m.UInt32, n)
+    offset = dr.scatter_inc(counter, m.UInt32(0))
+
+    out = dr.zeros(m.UInt32, n)
+    dr.scatter(out, offset, index)
+    out_np = np.array(out)
+    out_np.sort()
+    assert np.all(out_np == np.arange(n))

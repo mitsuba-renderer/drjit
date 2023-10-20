@@ -346,6 +346,12 @@ auto bind_full(py::class_<Array> &cls, bool /* scalar_mode */ = false) {
                         dr::scatter_reduce(op, target, value, index, mask);
                     }, "op"_a, "target"_a.noconvert(), "index"_a, "mask"_a);
         }
+        if constexpr (std::is_same_v<Scalar, uint32_t> && dr::is_jit_v<Array>) {
+            cls.def_static("scatter_inc_",
+                    [](Array& target, const Array & index, const Mask& mask) {
+                        return dr::scatter_inc(target, index, mask);
+                    });
+        }
     }
 
     if constexpr (dr::is_jit_v<Array>) {

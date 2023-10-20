@@ -973,6 +973,106 @@ def scatter_reduce(op, target, value, index, active=True):
 
             return value.scatter_reduce_(op, target, index, active)
 
+def scatter_inc(target, index, active=True):
+    '''
+    Atomically increment a value within an unsigned 32-bit integer array
+    and return the value prior to the update.
+
+    This operation works just like the :py:func:`drjit.scatter_reduce()`
+    operation for 32-bit unsigned integer operands, but with a fixed
+    ``value=1`` parameter and ``reduce_op=ReduceOp::Add``.
+
+    The main difference is that this variant additionally returns the *old*
+    value of the target array prior to the atomic update in contrast to the
+    more general scatter-reduction, which just returns ``None``. The operation
+    also supports masking---the return value in the unmasked case is undefined.
+    Both ``target`` and ``index`` parameters must be 1D unsigned 32-bit
+    arrays.
+
+    This operation is a building block for stream compaction: threads can
+    scatter-increment a global counter to request a spot in an array and then
+    write their result there. The recipe for this is look as follows:
+
+    .. code-block:: python
+
+       ctr = UInt32(0) # Counter
+       active = drjit.ones(Bool, len(data_1)) # .. or a more complex condition
+
+       my_index = dr.scatter_inc(target=ctr, index=UInt32(0), mask=active)
+
+       dr.scatter(
+           target=data_compact_1,
+           value=data_1,
+           index=my_index,
+           mask=active
+       )
+
+       dr.scatter(
+           target=data_compact_2,
+           value=data_2,
+           index=my_index,
+           mask=active
+       )
+
+    When following this approach, be sure to provide the same mask value to the
+    :py:func:`drjit.scatter_inc()` and subsequent :py:func:`dr.scatter()`
+    operations.
+
+    The function :py:func:`drjit.scatter_inc()` exhibits the following unusual
+    behavior compared to regular Dr.Jit operations: the return value references
+    the instantaneous state during a potentially large sequence of atomic
+    operations. This instantaneous state is not reproducible in later kernel
+    evaluations, and Dr.Jit will refuse to do so when the computed index is
+    reused. In essence, the variable is "consumed" by the process of
+    evaluation.
+
+    .. code-block:: python
+
+       my_index = dr.scatter_inc(target=ctr, index=UInt32(0), mask=active)
+       dr.scatter(
+           target=data_compact_1,
+           value=data_1,
+           index=my_index,
+           mask=active
+       )
+
+       dr.eval(data_compact_1) # Run Kernel #1
+
+       dr.scatter(
+           target=data_compact_2,
+           value=data_2,
+           index=my_index, # <-- oops, reusing my_index in another kernel.
+           mask=active     #     This raises an exception.
+       )
+
+    To get the above code to work, you will need to evaluate ``my_index`` at
+    the same time to materialize it into a stored (and therefore trivially
+    reproducible) representation. For this, ensure that the size of the
+    ``active`` mask matches ``len(data_*)`` and that it is not the trivial
+    ``True`` default mask (otherwise, the evaluated ``my_index`` will be
+    scalar).
+
+    .. code-block:: python
+
+       dr.eval(data_compact_1, my_index)
+
+    Such multi-stage evaluation is potentially inefficient and may defeat the
+    purpose of performing stream compaction in the first place. In general,
+    prefer keeping all scatter operations involving the computed index in the
+    same kernel, and then this issue does not arise.
+
+    The implementation of :py:func:`drjit.scatter_inc()` performs a local
+    reduction first, followed by a single atomic write per SIMD packet/warp.
+    This is done to reduce contention from a potentially very large number of
+    atomic operations targeting the same memory address. Fully masked updates
+    do not cause memory traffic.
+    '''
+
+    if not _dr.is_jit_v(target) or target.Type != _dr.VarType.UInt32 or \
+            type(index) is not type(target):
+        raise Exception('scatter_inc(): invalid input types!')
+    return type(target).scatter_inc_(target, index, active)
+
 
 def ravel(array, order='A'):
     '''
@@ -3800,7 +3900,7 @@ def hypot(a, b):
 
 
 def prefix_sum(value, exclusive=True):
-    '''
+    r'''
     Compute an exclusive or inclusive prefix sum of the 1D input array.
 
     By default, the function returns an output array :math:`\mathbf{y}` of the

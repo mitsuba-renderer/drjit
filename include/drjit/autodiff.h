@@ -1413,7 +1413,7 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
                          const MaskType &mask = true) const {
         if constexpr (std::is_scalar_v<Type>) {
             (void) dst_1; (void) dst_2; (void) offset; (void) mask;
-            drjit_raise("Array scatter_reduce operation not supported for scalar array type.");
+            drjit_raise("Array scatter_reduce_kahan operation not supported for scalar array type.");
         } else {
             scatter_reduce_kahan(dst_1.m_value, dst_2.m_value, m_value,
                                  offset.m_value, mask.m_value);
@@ -1429,6 +1429,16 @@ struct DiffArray : ArrayBase<value_t<Type_>, is_mask_v<Type_>, DiffArray<Type_>>
             }
         }
     }
+
+    static DiffArray scatter_inc_(DiffArray &dst, const DiffArray &offset, const MaskType &mask) {
+        if constexpr (std::is_scalar_v<Type>) {
+            (void) dst; (void) offset; (void) mask;
+            drjit_raise("Array scatter_inc operation not supported for scalar array type.");
+        } else {
+            return Type::scatter_inc_(dst.m_value, offset.m_value, mask.m_value);
+        }
+    }
+
 
     template <bool>
     static DiffArray gather_(const void *src, const IndexType &offset,
