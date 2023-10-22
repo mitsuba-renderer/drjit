@@ -1586,23 +1586,6 @@ template <typename... Ts> void disable_grad(Ts&... ts) {
     (set_grad_enabled(ts, false), ...);
 }
 
-namespace detail {
-    template <typename T>
-    void collect_ad_indices(dr_vector<uint32_t> &indices, const T &value) {
-        if constexpr (depth_v<T> > 1) {
-            for (size_t i = 0; i < value.derived().size(); ++i)
-                collect_ad_indices(indices, value.derived().entry(i));
-        } else if constexpr (is_diff_v<T>) {
-            uint32_t index = value.index_ad();
-            if (index)
-                indices.push_back(index);
-        } else if constexpr (is_drjit_struct_v<T>) {
-            struct_support_t<T>::apply_1(
-                value, [&](const auto &x) { collect_ad_indices(indices, x); });
-        }
-    }
-}
-
 template <typename T> struct resume_grad {
     static constexpr bool Enabled =
         is_diff_v<T> && std::is_floating_point_v<scalar_t<T>>;
@@ -1610,8 +1593,8 @@ template <typename T> struct resume_grad {
     resume_grad(bool when, const Args &... args) : condition(when) {
         if constexpr (Enabled) {
             if (condition) {
-                dr_vector<uint32_t> indices;
-                (detail::collect_ad_indices(indices, args), ...);
+                // dr_vector<uint32_t> indices;
+                // (detail::collect_ad_indices(indices, args), ...);
                 abort(); /// XXX
                 // detail::ad_scope_enter<detached_t<typename T::Type>>(
                 //     detail::ADScope::Resume, indices.size(), indices.data());
@@ -1639,8 +1622,8 @@ template <typename T> struct suspend_grad {
     suspend_grad(bool when, const Args &... args) : condition(when) {
         if constexpr (Enabled) {
             if (condition) {
-                dr_vector<uint32_t> indices;
-                (detail::collect_ad_indices(indices, args), ...);
+                // dr_vector<uint32_t> indices;
+                // (detail::collect_ad_indices(indices, args), ...);
                 // detail::ad_scope_enter<detached_t<typename T::Type>>(
                 //     detail::ADScope::Suspend, indices.size(), indices.data());
                 abort(); //  XXX

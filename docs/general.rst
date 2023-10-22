@@ -24,21 +24,32 @@ type :py:class:`drjit.cuda.Array3f` would just be a convenient abbreviation for
 the expression ``a[0] + a[1] + a[2]`` of type :py:class:`drjit.cuda.Float`.
 Dr.Jit can execute this operation symbolically.
 
-Reductions of 1D JIT-compiled arrays (e.g., :py:class:`drjit.cuda.Float`) are
-an important special case. Since each value of such an array represents a
-different thread of execution of a program, Dr.Jit must first invoke
+Reductions of dynamic 1D arrays (e.g., :py:class:`drjit.cuda.Float`) are an
+important special case. Since each value of such an array represents a
+different execution thread of a parallel program, Dr.Jit must first invoke
 :py:func:`drjit.eval` to evaluate and store the array in memory and then launch
-an device-specific implementation of a horizontal reduction. This interferes
-with symbolic execution and is even forbidden in certain execution contexts
-(e.g., when recording symbolic loops and functions).
+a device-specific implementation of a horizontal reduction. This interferes
+Dr.Jit's regular mode of operation, which is to capture a maximally large
+program without intermediate evaluation. In other words, use of such 1D
+reductions may have a negative effect on performance. The operation will fail
+in execution contexts where evaluation is forbidden, e.g., while capturing
+symbolic loops and function calls.
 
-Furthermore, in this mode of operation, Dr.Jit does *not* return the result
-using the array's element type (e.g., a standard Python `float`). Instead, it
-returns the sum as a dynamic array (:py:class:`drjit.cuda.Float`) containing
-single element. This is an intentional design decision to avoid transferring
-the value to the CPU, which would incur GPU<->CPU synchronization overheads on
-some backends. You must explicitly index into the result (``result[0]``) to
-obtain a value with the underlying element type.
+Furthermore Dr.Jit does *not* reduce 1D arrays to their element type (e.g., a
+standard Python `float`). Instead, it returns a dynamic array of the same type,
+containing only a single element. This is intentional--unboxing the array into
+a Python scalar would require transferring the value to the CPU, which would
+incur GPU<->CPU synchronization overheads. You must explicitly index into the
+result (``result[0]``) to obtain a value with the underlying element type.
+Boolean arrays define a ``__bool__`` method so that such indexing can be
+avoided. For example, the following works as expected:
+
+.. code-box:: python
+
+   a = drjit.cuda.Float(...)
+   # The line below is simply a nicer way of writing "if dr.any(a < 0)[0]:"
+   if dr.any(a < 0):
+      # ...
 
 All reduction operations take an optional argument ``axis`` that specifies the
 axis of the reduction (default: ``0``). The value ``None`` implies a reduction

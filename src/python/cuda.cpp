@@ -11,8 +11,11 @@
 #include "cuda.h"
 
 #if defined(DRJIT_ENABLE_CUDA)
-void export_cuda() {
+void export_cuda(nb::module_ &m) {
     ArrayBinding b;
     dr::bind_all<dr::CUDAArray<float>>(b);
+    m.attr("Float32") = m.attr("Float");
+    m.attr("Int32") = m.attr("Int");
+    m.attr("UInt32") = m.attr("UInt");
 }
 #endif

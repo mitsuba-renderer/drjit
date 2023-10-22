@@ -5,16 +5,16 @@ import sys
 # Scalar version, not backend-ependent
 def test01_switch_scalar():
     c = [
-        lambda x: x+1,
-        lambda x: x*10
+        lambda x,active=True: x+1,
+        lambda x,active=True: x*10
     ]
 
     assert dr.switch(0, c, 5) == 6
     assert dr.switch(1, c, 5) == 50
     assert dr.switch(0, c, x=5) == 6
     assert dr.switch(1, c, x=5) == 50
-    assert dr.switch(1, c, True, x=5) == 50
-    assert dr.switch(1, c, False, x=5) is None
+    assert dr.switch(1, c, active=True, x=5) == 50
+    assert dr.switch(1, c, active=False, x=5) is None
     assert dr.switch(1, c, x=5, active=False) is None
 
 # A simple call, nothing fancy
@@ -54,9 +54,13 @@ def test03_switch_vec_masked(t, recorded):
         UInt32 = dr.uint32_array_t(Int)
         Bool = dr.mask_t(Int)
 
+        def assert_literal(active, x):
+            assert active.state == dr.VarState.Literal and active[0] is True
+            return x
+
         c = [
-            lambda a, b: (a * 4, Int(2)),
-            lambda a, b: (a * 8, -b)
+            lambda a, b, active: assert_literal(active, (a * 4, Int(2))),
+            lambda a, b, active: assert_literal(active, (a * 8, -b))
         ]
 
         index = UInt32(0, 0, 1, 1)
@@ -332,11 +336,25 @@ def test06_invalid_implicit_dependence(t):
 
     assert "the symbolic computation being recorded" in str(e.value.__cause__)
 
+@pytest.test_arrays('float,shape=(*),jit')
+def test07_invalid_empty_array_in(t):
+    idx = dr.uint32_array_t(t)(0, 0, 1, 1)
+    with pytest.raises(RuntimeError) as e:
+        dr.switch(idx, [lambda a: a, lambda a: a*2], t())
+    assert "mismatched argument sizes (4 and 0)" in str(e.value)
+
+@pytest.test_arrays('float,shape=(*),jit')
+def test08_invalid_empty_array_out(t):
+    idx = dr.uint32_array_t(t)(0, 0, 1, 1)
+    with pytest.raises(RuntimeError) as e:
+        dr.switch(idx, [lambda a: a, lambda a: t()], t(1, 2, 3, 4))
+    assert "empty/uninitialized" in str(e.value)
+
 
 # Keyword calling, pytrees, differentiation
 @pytest.mark.parametrize("recorded", [True, False])
 @pytest.test_arrays('float,shape=(*),jit')
-def test07_complex(t, recorded):
+def test09_complex(t, recorded):
     UInt32 = dr.uint32_array_t(t)
     Bool = dr.mask_t(t)
 

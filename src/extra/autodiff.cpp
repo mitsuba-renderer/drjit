@@ -286,7 +286,7 @@ struct Variable {
         JitVar zero = scalar(v1.index(), 0.f), weight;
 
         // Elide the zero check if ``v2`` is known not to be NaN/infinite
-        if (jit_var_is_normal_literal(v2.index()))
+        if (jit_var_is_finite_literal(v2.index()))
             weight = v2;
         else
             weight = dr::select(dr::eq(v1, zero), zero, v2);
@@ -925,7 +925,7 @@ DRJIT_NOINLINE Index ad_var_new_impl(const char *label, JitVar &&result,
             continue;
 
         if constexpr (!std::is_same_v<ArgType, SpecialArg>) {
-            if (jit_var_is_literal_zero(args[i].weight.index())) {
+            if (jit_var_is_zero_literal(args[i].weight.index())) {
                 ad_log("ad_var_new(a%u <- a%u): weight of edge %zu is zero, skipping!",
                        ad_index, source, i);
                 continue;
@@ -2236,8 +2236,8 @@ Index ad_var_select(Index i0, Index i1, Index i2) {
 
     if (is_detached(i1, i2)) {
         return result.release();
-    } else if (jit_var_is_literal(jit_index(i0)) || i1 == i2) {
-        Index out_index = jit_var_is_literal_zero(jit_index(i0)) ? i2 : i1;
+    } else if (jit_var_state(jit_index(i0)) == VarState::Literal || i1 == i2) {
+        Index out_index = jit_var_is_zero_literal(jit_index(i0)) ? i2 : i1;
 
         ad_log("ad_var_select(a%u <- r%u, a%u, a%u): simplified.",
                ad_index(out_index), jit_index(i0), ad_index(i1), ad_index(i2));

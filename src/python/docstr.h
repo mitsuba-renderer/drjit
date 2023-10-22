@@ -3715,6 +3715,33 @@ Index reuse is enabled by default.)";
 
 static const char *doc_JitFlag_Default = "The default set of flags.";
 
+static const char *doc_VarState =
+    "The :py:attr:`drjit.ArrayBase.state` property returns one of the following "
+    "enumeration values describing possible evaluation states of a Dr.Jit variable.";
+
+static const char *doc_VarState_Invalid =
+    "The variable has length 0 and effectively does not exist.";
+
+static const char *doc_VarState_Normal =
+    "An ordinary unevaluated variable that is neither a literal constant nor symbolic.";
+
+static const char *doc_VarState_Literal =
+    "A literal constant. Does not consume device memory.";
+
+static const char *doc_VarState_Evaluated =
+    "Evaluated variable backed by an device memory region.";
+
+static const char *doc_VarState_Symbolic =
+    "A symbolic variable that could take on various inputs. Cannot be evaluated.";
+
+static const char *doc_VarState_Mixed =
+    "This is a nested array, and the components have mixed states.";
+
+static const char *doc_ArrayBase_state = R"(
+This read-only property returns an enumeration value describing the evaluation state of this Dr.Jit array.
+
+:type: drjit.VarState)";
+
 #if defined(__GNUC__)
 #  pragma GCC diagnostic pop
 #endif

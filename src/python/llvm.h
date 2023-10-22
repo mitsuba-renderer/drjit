@@ -12,5 +12,5 @@
 
 #include "common.h"
 
-extern void export_llvm();
-extern void export_llvm_ad();
+extern void export_llvm(nb::module_ &m);
+extern void export_llvm_ad(nb::module_ &m);

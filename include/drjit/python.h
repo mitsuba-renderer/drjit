@@ -651,8 +651,8 @@ template <typename T> void bind_memop(ArrayBinding &b) {
 }
 
 template <typename T>
-void bind_array(ArrayBinding &b, nanobind::handle scope = {},
-                const char *name = nullptr) {
+nanobind::object bind_array(ArrayBinding &b, nanobind::handle scope = {},
+                            const char *name = nullptr) {
     namespace nb = nanobind;
 
     bind_init<T>(b, scope, name);
@@ -706,11 +706,18 @@ void bind_array(ArrayBinding &b, nanobind::handle scope = {},
         disable_bit_ops(b);
 
     #if defined(DRJIT_PYTHON_BUILD)
-        bind(b);
+        return bind(b);
     #else
         nb::object bind_func = nb::module_::import_("drjit.detail").attr("bind");
-        bind_func(nb::cast((void *) &b));
+        return bind_func(nb::cast((void *) &b));
     #endif
+}
+
+template <typename T>
+nanobind::class_<T> bind_array_t(ArrayBinding &b, nanobind::handle scope = {},
+                                 const char *name = nullptr) {
+        return nanobind::borrow<nanobind::class_<T>>(
+            bind_array<T>(b, scope, name));
 }
 
 /// Run bind_array() for many different plain array types
