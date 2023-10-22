@@ -95,6 +95,14 @@ NB_MODULE(drjit_ext, m_) {
         .value("And", ReduceOp::And, doc_ReduceOp_And)
         .value("Or", ReduceOp::Or, doc_ReduceOp_Or);
 
+    nb::enum_<VarState>(m, "VarState", doc_VarState)
+        .value("Invalid", VarState::Invalid, doc_VarState_Invalid)
+        .value("Normal", VarState::Normal, doc_VarState_Normal)
+        .value("Literal", VarState::Literal, doc_VarState_Literal)
+        .value("Evaluated", VarState::Evaluated, doc_VarState_Evaluated)
+        .value("Symbolic", VarState::Symbolic, doc_VarState_Symbolic)
+        .value("Mixed", VarState::Mixed, doc_VarState_Mixed);
+
     m.def("has_backend", &jit_has_backend, doc_has_backend);
 
     m.def("whos_str", &jit_var_whos);
@@ -169,12 +177,12 @@ NB_MODULE(drjit_ext, m_) {
     export_scalar(scalar);
 
 #if defined(DRJIT_ENABLE_LLVM)
-    export_llvm();
-    export_llvm_ad();
+    export_llvm(llvm);
+    export_llvm_ad(llvm_ad);
 #endif
 
 #if defined(DRJIT_ENABLE_CUDA)
-    export_cuda();
-    export_cuda_ad();
+    export_cuda(cuda);
+    export_cuda_ad(cuda_ad);
 #endif
 }

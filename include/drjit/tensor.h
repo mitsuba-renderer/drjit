@@ -111,12 +111,7 @@ NAMESPACE_END(detail)
 template <typename Array_>
 struct Tensor
     : ArrayBaseT<value_t<Array_>, is_mask_v<Array_>, Tensor<Array_>> {
-
     template <typename Array2> friend struct Tensor;
-
-    template <typename Index, typename T>
-    friend void detail::tensor_broadcast_impl(const char *op, T &t,
-                                              const dr_vector<size_t> &shape);
 
     using Base = ArrayBaseT<value_t<Array_>, is_mask_v<Array_>, Tensor<Array_>>;
     using Array = Array_;
@@ -176,6 +171,12 @@ struct Tensor
             size *= shape[i];
         m_array = load<Array>(ptr, size);
     }
+
+    Tensor(Array &&data, const Shape &shape)
+        : m_array(std::move(data)), m_shape(shape) { }
+
+    Tensor(Array &&data, Shape &&shape)
+        : m_array(std::move(data)), m_shape(shape) { }
 
     template <typename T, enable_if_t<std::is_scalar_v<T> && !std::is_pointer_v<T>> = 0>
     Tensor(T value) : m_array(value) { }
@@ -369,13 +370,6 @@ struct Tensor
 
     const Value *data() const { return m_array.data(); }
     Value *data() { return m_array.data(); }
-
-protected:
-    Tensor(Array &&data, const Shape &shape)
-        : m_array(std::move(data)), m_shape(shape) { }
-
-    Tensor(Array &&data, Shape &&shape)
-        : m_array(std::move(data)), m_shape(shape) { }
 
 protected:
     Array m_array;

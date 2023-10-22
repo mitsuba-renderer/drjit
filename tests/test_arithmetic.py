@@ -203,7 +203,7 @@ def test07_power(t):
 
 @pytest.test_arrays('type=int32,jit,shape=(*)')
 @pytest.mark.parametrize("value", [True, False])
-def test_scoped_set_flag_const_prop(t, value):
+def test08_scoped_set_flag_const_prop(t, value):
     with dr.scoped_set_flag(dr.JitFlag.ConstantPropagation, value):
         # Create two literal constant arrays
         a, b = t(4), t(5)
@@ -217,7 +217,7 @@ def test_scoped_set_flag_const_prop(t, value):
 
 @pytest.test_arrays('type=int32,jit,shape=(*)')
 @pytest.mark.parametrize("value", [True, False])
-def test_scoped_set_flag_lvn(t, value):
+def test09_scoped_set_flag_lvn(t, value):
     with dr.scoped_set_flag(dr.JitFlag.ValueNumbering, value):
         # Create two nonliteral arrays stored in device memory
         a, b = t(1, 2, 3), t(4, 5, 6)
@@ -228,3 +228,20 @@ def test_scoped_set_flag_lvn(t, value):
 
         # Verify that c1 and c2 reference the same Dr.Jit variable
         assert (c1.index == c2.index) == value
+
+@pytest.test_arrays('type=int32,jit,shape=(3, *)')
+def test10_state(t):
+    a = t(1, 2, 3)
+    assert a.state == dr.VarState.Literal
+    a = a + 1
+    assert a.state == dr.VarState.Literal
+
+    a.x = type(a.x)(1,2,3)
+    assert a.x.state == dr.VarState.Evaluated
+    assert a.state == dr.VarState.Mixed
+    a.y = a.x + 1
+    assert a.y.state == dr.VarState.Normal
+    assert a.state == dr.VarState.Mixed
+    a.z = type(a.x)()
+    assert a.z.state == dr.VarState.Invalid
+    assert a.state == dr.VarState.Mixed

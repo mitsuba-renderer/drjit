@@ -17,14 +17,13 @@ def cleanup(s):
     s = re.sub(r'\.cuda\.',r'.', s)
     return s
 
-@pytest.test_arrays('float32,is_diff,is_diff,shape=(*)')
+@pytest.test_arrays('float32,is_diff,shape=(*)')
 def test01_array_operations(t):
     pkg = get_pkg(t)
 
     A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
     a, b = A(), B()
 
-    dr.set_log_level(5)
     # Creating objects
     c = dr.zeros(BasePtr, 2)
     assert(str(c) == '[None, None]')
@@ -43,16 +42,96 @@ def test01_array_operations(t):
     assert c[0] is a
 
     c = BasePtr(a, b)
-    print(c)
     assert cleanup(str(c)) == '[<vcall_ext.A object>, <vcall_ext.B object>]'
     assert c[0] is a and c[1] is b
-    print(c)
     c[0] = b
     c[1] = a
-    print(c)
     assert cleanup(str(c)) == '[<vcall_ext.B object>, <vcall_ext.A object>]'
     assert c[0] is b and c[1] is a
 
     with pytest.raises(TypeError, match=re.escape("unsupported operand type(s) for +: 'BasePtr' and 'BasePtr'")):
         c+c
     assert dr.all(c == c)
+
+
+@pytest.mark.parametrize("recorded", [True, False])
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test02_array_call(t, recorded):
+    pkg = get_pkg(t)
+
+    A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
+    a, b = A(), B()
+
+    c = BasePtr(a, a, None, b, b)
+
+    xi = t(1, 2, 8, 3, 4)
+    yi = t(5, 6, 8, 7, 8)
+
+    with dr.scoped_set_flag(dr.JitFlag.VCallRecord, recorded):
+        xo, yo = c.f(xi, yi)
+    assert dr.all(xo == t(10, 12, 0, 21, 24))
+    assert dr.all(yo == t(-1, -2, 0, 3, 4))
+
+@pytest.mark.parametrize("recorded", [True, False])
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test03_array_call_masked(t, recorded):
+    pkg = get_pkg(t)
+
+    A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
+    a, b = A(), B()
+
+    c = BasePtr(a, a, a, b, b)
+
+    xi = t(1, 2, 8, 3, 4)
+    yi = t(5, 6, 8, 7, 8)
+    mi = dr.mask_t(t)(True, True, False, True, True)
+
+    with dr.scoped_set_flag(dr.JitFlag.VCallRecord, recorded):
+        xo, yo = c.f_masked((xi, yi), mi)
+
+    assert dr.all(xo == t(10, 12, 0, 21, 24))
+    assert dr.all(yo == t(-1, -2, 0, 3, 4))
+
+    c.dummy()
+
+@pytest.mark.parametrize("recorded", [True, False])
+@pytest.mark.parametrize("use_mask", [True, False])
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test04_forward_diff(t, recorded, use_mask):
+    pkg = get_pkg(t)
+
+    A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
+    Mask = dr.mask_t(t)
+    a, b = A(), B()
+
+    xi = t(1, 2, 8, 3, 4)
+    yi = t(5, 6, 8, 7, 8)
+
+    # Turn one element off, two different ways..
+    if use_mask:
+        mi = Mask(True, True, False, True, True)
+        c = BasePtr(a, a, a, b, b)
+    else:
+        mi = dr.ones(Mask, 5)
+        c = BasePtr(a, a, None, b, b)
+
+    dr.enable_grad(xi)
+    dr.enable_grad(yi)
+
+    with dr.scoped_set_flag(dr.JitFlag.VCallRecord, recorded):
+        xo, yo = c.f_masked((xi, yi), mi)
+
+    assert dr.all(xo == t(10, 12, 0, 21, 24))
+    assert dr.all(yo == t(-1, -2, 0, 3, 4))
+
+    dr.set_grad(xi, dr.ones(t, 5))
+    dr.set_grad(yi, dr.full(t, 2, 5))
+    xg, yg = dr.forward_to(xo, yo)
+    dr.schedule(xg, yg)
+    print(dr.grad(xg))
+    print(dr.grad(yg))
+    assert dr.all(dr.grad(xg) == t(4, 4, 0, 6, 6))
+    assert dr.all(dr.grad(yg) == t(-1, -1, 0, 1, 1))
+
+
+# Differentiate masked implicit dependence in reverse mode

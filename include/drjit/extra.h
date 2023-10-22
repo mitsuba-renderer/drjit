@@ -195,15 +195,63 @@ extern DRJIT_EXTRA_EXPORT void ad_copy_implicit_deps(drjit::dr_vector<uint32_t>&
 /// Check if a variable represents an implicit dependency on a non-symbolic operand
 extern void ad_var_check_implicit(uint64_t index);
 
-typedef void (*ad_vcall_callback)(void *payload, size_t index,
+typedef void (*ad_vcall_callback)(void *payload, void *self,
                                   const drjit::dr_vector<uint64_t> &args_i,
                                   drjit::dr_vector<uint64_t> &rv_i);
 typedef void (*ad_vcall_cleanup)(void*);
 
-/// Perform a differentiable virtual function call
+/**
+ * Perform a differentiable virtual function call
+ *
+ * The call can be done by index or through the instance registry. In the
+ * former case, specify \c callable_count, otherwise specify the \c domain.
+ *
+ * \param backend
+ *     The JIT backend of the operation
+ *
+ * \param domain
+ *     The domain of the virtual function call in the instance registry.
+ *     Must be \c nullptr if \c callable_count is provided instead.
+ *
+ * \param callable_count
+ *     The number of callables. Must be zero if \c domain is provided instead.
+ *
+ * \param index
+ *     Callable index / instance ID of the call.
+ *
+ * \param mask
+ *     Mask that potentially disables some of the calling threads.
+ *
+ * \param args
+ *     Vector of indices to input function arguments.
+ *
+ * \param rv
+ *     Vector of indices to return values. Should be empty initially.
+ *
+ * \param payload
+ *     An opaque pointer that will passed to the \c callback and \c cleanup
+ *     routines.
+ *
+ * \param callback
+ *     Callback routine, which \c ad_vcall will invoke a number of times to
+ *     record each callable. It is given the \c payload parameter, a \c self
+ *     pointer (either a pointer to an instance in the instance registry, or a
+ *     callable index encoded as <tt>void*</tt>)
+ *
+ * \param cleanup
+ *     A cleanup routine that deletes storage associated with \c payload.
+ *
+ * When the function returns \c true, the caller is responsible for calling
+ * \c cleanup to destroy the payload. Otherwise, the AD system has taken over
+ * ownership and will eventually destroy the payload.
+ *
+ * The function may raise an exception in the case of a falure, for example by
+ * propagating an exception raised from a callable. In this case, the payload has
+ * already been destroyed.
+ */
 extern DRJIT_EXTRA_EXPORT bool
-ad_vcall(JitBackend backend, const char *domain, const char *name,
-         uint32_t index, uint32_t mask, size_t callable_count,
+ad_vcall(JitBackend backend, const char *domain, size_t callable_count,
+         const char *name, uint32_t index, uint32_t mask,
          const drjit::dr_vector<uint64_t> &args, drjit::dr_vector<uint64_t> &rv,
          void *payload, ad_vcall_callback callback, ad_vcall_cleanup cleanup,
          bool ad);

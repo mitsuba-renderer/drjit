@@ -659,6 +659,14 @@ struct DRJIT_TRIVIAL_ABI DiffArray
     uint32_t index_ad() const { return (uint32_t) (((uint64_t) m_index) >> 32); }
     uint64_t index_combined() const { return m_index; }
     uint32_t grad_() const { return ad_grad(m_index); }
+    VarState state() const { return jit_var_state((uint32_t) m_index); }
+
+    void swap(DiffArray &a) {
+        Index index = m_index;
+        m_index = a.m_index;
+        a.m_index = index;
+    }
+
 
 private:
     Index m_index = 0;

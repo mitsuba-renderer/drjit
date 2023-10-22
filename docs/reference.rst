@@ -67,12 +67,6 @@ These operations are *horizontal* in the sense that [..]
 
       Binary OR operation
 
-   .. autoattribute:: Count
-      :annotation:
-
-      Count the number of nonzero entries (only applies to horizontal
-      reductions
-
 .. autofunction:: scatter_reduce
 .. autofunction:: ravel
 .. autofunction:: unravel
@@ -209,6 +203,41 @@ Just-in-time compilation
 
       64-bit floating point format (IEEE 754).
 
+.. autoclass:: VarState
+
+   The :py:attr:`drjit.ArrayBase.state` property returns one of the following
+   enumeration values describing possible evaluation states of a Dr.Jit
+   variable.
+
+   .. autoattribute:: Invalid
+      :annotation:
+
+      The variable has length 0 and effetively does not exist.
+
+   .. autoattribute:: Normal
+      :annotation:
+
+      An ordinary unevaluated variable that is neither a literal constant nor symbolic.
+
+   .. autoattribute:: Literal
+      :annotation:
+
+      A literal constant. Does not consume device memory.
+
+   .. autoattribute:: Evaluated
+      :annotation:
+
+      An evaluated variable backed by a device memory region.
+
+   .. autoattribute:: Symbolic
+      :annotation:
+
+      A symbolic variable that could take on various inputs. Cannot be evaluated.
+
+   .. autoattribute:: Mixed
+      :annotation:
+
+      This is a nested array, and the components have mixed states.
 
 .. autofunction:: has_backend
 .. autofunction:: schedule
@@ -717,6 +746,7 @@ Array base class
     .. autoproperty:: array
     .. autoproperty:: ndim
     .. autoproperty:: shape
+    .. autoproperty:: state
     .. autoproperty:: x
     .. autoproperty:: y
     .. autoproperty:: z

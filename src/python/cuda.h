@@ -12,5 +12,5 @@
 
 #include "common.h"
 
-extern void export_cuda();
-extern void export_cuda_ad();
+extern void export_cuda(nb::module_ &m);
+extern void export_cuda_ad(nb::module_ &m);

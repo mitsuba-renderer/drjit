@@ -12,8 +12,11 @@
 #include <drjit/autodiff.h>
 
 #if defined(DRJIT_ENABLE_CUDA)
-void export_cuda_ad() {
+void export_cuda_ad(nb::module_ &m) {
     ArrayBinding b;
     dr::bind_all<dr::CUDADiffArray<float>>(b);
+    m.attr("Float32") = m.attr("Float");
+    m.attr("Int32") = m.attr("Int");
+    m.attr("UInt32") = m.attr("UInt");
 }
 #endif

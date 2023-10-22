@@ -573,14 +573,18 @@ struct DRJIT_TRIVIAL_ABI JitArray
     uint32_t index_ad() const { return 0; }
     uint64_t index_combined() const { return m_index; }
 
+    void swap(JitArray &a) {
+        uint32_t index = m_index;
+        m_index = a.m_index;
+        a.m_index = index;
+    }
+
     const Value *data() const { return (const Value *) jit_var_ptr(m_index); }
     Value *data() { return (Value *) jit_var_ptr(m_index); }
 
     const char *str() { return jit_var_str(m_index); }
 
-    bool is_literal() const { return (bool) jit_var_is_literal(m_index); }
-    bool is_evaluated() const { return (bool) jit_var_is_evaluated(m_index); }
-    bool is_symbolic() const { return (bool) jit_var_is_symbolic(m_index); }
+    VarState state() const { return jit_var_state(m_index); }
 
     Value entry(size_t offset) const {
         ActualValue out;

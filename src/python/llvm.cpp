@@ -11,8 +11,11 @@
 #include "llvm.h"
 
 #if defined(DRJIT_ENABLE_LLVM)
-void export_llvm() {
+void export_llvm(nb::module_ &m) {
     ArrayBinding b;
     dr::bind_all<dr::LLVMArray<float>>(b);
+    m.attr("Float32") = m.attr("Float");
+    m.attr("Int32") = m.attr("Int");
+    m.attr("UInt32") = m.attr("UInt");
 }
 #endif

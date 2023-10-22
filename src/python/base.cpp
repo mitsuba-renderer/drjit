@@ -360,6 +360,29 @@ nb::object select(nb::handle h0, nb::handle h1, nb::handle h2) {
     return nb::steal(o);
 }
 
+static VarState get_state(nb::handle h_) {
+    struct GetState : TraverseCallback {
+        mutable VarState state = VarState::Invalid;
+        mutable size_t count = 0;
+
+        void operator()(nb::handle h) const override {
+            const ArraySupplement &s = supp(h.type());
+            if (!s.index)
+                return;
+
+            VarState vs = jit_var_state(s.index(inst_ptr(h)));
+            if (count++ == 0)
+                state = vs;
+            if (state != vs)
+                state = VarState::Mixed;
+        }
+    };
+
+    GetState gs;
+    traverse("drjit.ArrayBase.state", gs, h_);
+    return gs.state;
+}
+
 void export_base(nb::module_ &m) {
     nb::class_<ArrayBase> ab(m, "ArrayBase",
                                  nb::type_slots(array_base_slots),
@@ -369,6 +392,7 @@ void export_base(nb::module_ &m) {
         return meta_str(supp(tp));
     });
 
+    ab.def_prop_ro("state", &get_state, nb::raw_doc(doc_ArrayBase_state));
     ab.def_prop_ro("ndim", &ndim, nb::raw_doc(doc_ArrayBase_ndim));
     ab.def_prop_ro("shape", &shape, nb::raw_doc(doc_ArrayBase_shape));
     ab.def_prop_ro(

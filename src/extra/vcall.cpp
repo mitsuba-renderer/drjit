@@ -139,6 +139,9 @@ static void ad_vcall_record(JitBackend backend, const char *domain,
 
     args2.reserve(args.size());
     args2.reserve(args.size());
+    std::string combined(name);
+    if (domain)
+        combined = std::string(domain) + "::" + combined;
 
     dr_vector<uint32_t> checkpoints(callable_count + 1, 0),
                             inst_id(callable_count, 0);
@@ -162,13 +165,23 @@ static void ad_vcall_record(JitBackend backend, const char *domain,
             scoped_set_mask mask_guard(backend, jit_var_vcall_mask(backend));
             for (size_t i = 0; i < callable_count; ++i) {
                 checkpoints[i] = rec.checkpoint_and_rewind();
-                inst_id[i] = i + 1;
 
                 // Populate 'rv2' with function return values. This may raise
                 // an exception, in which case everything should be properly
                 // cleaned up in this function's scope
                 rv2.clear();
-                callback(payload, i, args2, rv2);
+
+                void *ptr;
+                if (domain) {
+                    ptr = jit_registry_ptr(backend, domain, (uint32_t) i + 1);
+                    if (!ptr)
+                        continue;
+                } else {
+                    ptr = (void *) (uintptr_t) i;
+                }
+
+                callback(payload, ptr, args2, rv2);
+                inst_id[i] = i + 1;
 
                 for (uint64_t index: rv2)
                     ad_var_check_implicit(index);
@@ -198,10 +211,10 @@ static void ad_vcall_record(JitBackend backend, const char *domain,
         dr_vector<uint32_t> rv4;
         rv4.resize(rv.size());
 
-        se = jit_var_vcall(name, index, mask.index(), callable_count,
-                           inst_id.data(), (uint32_t) args3.size(),
-                           args3.data(), (uint32_t) rv3.size(), rv3.data(),
-                           checkpoints.data(), rv4.data());
+        se = jit_var_vcall(
+            combined.c_str(), index, mask.index(), callable_count,
+            inst_id.data(), (uint32_t) args3.size(), args3.data(),
+            (uint32_t) rv3.size(), rv3.data(), checkpoints.data(), rv4.data());
 
         for (size_t i = 0; i < rv.size(); ++i) {
             ad_var_dec_ref(rv[i]);
@@ -268,7 +281,14 @@ static void ad_vcall_reduce(JitBackend backend, const char *domain,
         // exception, in which case everything should be properly cleaned up in
         // this function's scope
         rv2.clear();
-        callback(payload, callable_index, args2, rv2);
+
+        void *ptr;
+        if (domain)
+            ptr = jit_registry_ptr(backend, domain, buckets[i].id);
+        else
+            ptr = (void *) (uintptr_t) callable_index;
+        callback(payload, ptr, args2, rv2);
+
 
         // Perform some sanity checks on the return values
         ad_vcall_check_rv(backend, size, i, rv, rv2);
@@ -312,6 +332,10 @@ static void ad_vcall_check_rv(JitBackend backend, size_t size,
         // Some sanity checks
         for (size_t i = 0; i < rv.size(); ++i) {
             uint64_t i1 = rv[i], i2 = rv2[i];
+
+            if (i2 == 0)
+                jit_raise("ad_vcall(): callable %zu returned an empty/uninitialized "
+                          "Dr.Jit array, which is not allowed", callable_index);
 
             VarInfo v1 = jit_set_backend(i1),
                     v2 = jit_set_backend(i2);
@@ -381,9 +405,8 @@ public:
         for (size_t i = 0; i < m_input_offsets.size(); ++i)
             args.push_back_steal(ad_grad(combine(m_input_indices[i])));
 
-        ad_vcall(m_backend, m_domain, name.c_str(), m_index, m_mask,
-                 m_callable_count, args, rv, this, &forward_cb, nullptr,
-                 false);
+        ad_vcall(m_backend, m_domain, m_callable_count, name.c_str(), m_index,
+                 m_mask, args, rv, this, &forward_cb, nullptr, false);
 
         ad_assert(rv.size() == m_output_offsets.size(), "Size mismatch!");
 
@@ -408,9 +431,8 @@ public:
         for (size_t i = 0; i < m_output_offsets.size(); ++i)
             args.push_back_steal(ad_grad(combine(m_output_indices[i])));
 
-        ad_vcall(m_backend, m_domain, name.c_str(), m_index, m_mask,
-                 m_callable_count, args, rv, this, &backward_cb, nullptr,
-                 false);
+        ad_vcall(m_backend, m_domain, m_callable_count, name.c_str(), m_index,
+                 m_mask, args, rv, this, &backward_cb, nullptr, false);
 
         ad_assert(rv.size() == m_input_offsets.size(), "Size mismatch!");
 
@@ -422,14 +444,14 @@ public:
             ad_accum_grad(combine(m_input_indices[i]), (uint32_t) rv[i]);
     }
 
-    static void forward_cb(void *ptr, size_t index,
+    static void forward_cb(void *ptr, void *self,
                            const dr_vector<uint64_t> &args,
                            dr_vector<uint64_t> &rv) {
-        ((VCallOp *) ptr)->forward_cb(index, args, rv);
+        ((VCallOp *) ptr)->forward_cb(self, args, rv);
     }
 
     /// Forward AD callback (invoked by forward() once per callable)
-    void forward_cb(size_t index, const dr_vector<uint64_t> &args,
+    void forward_cb(void *self, const dr_vector<uint64_t> &args,
                     dr_vector<uint64_t> &rv) {
         m_args2.release();
         for (size_t i = 0; i < m_args.size(); ++i)
@@ -443,7 +465,7 @@ public:
         }
 
         m_rv2.clear();
-        m_callback(m_payload, index, m_args2, m_rv2);
+        m_callback(m_payload, self, m_args2, m_rv2);
         ad_assert(m_rv2.size() == m_rv.size(), "Size mismatch!");
 
         for (size_t i = 0; i < m_input_offsets.size(); ++i) {
@@ -466,14 +488,14 @@ public:
         }
     }
 
-    static void backward_cb(void *ptr, size_t index,
+    static void backward_cb(void *ptr, void *self,
                            const dr_vector<uint64_t> &args,
                            dr_vector<uint64_t> &rv) {
-        ((VCallOp *) ptr)->backward_cb(index, args, rv);
+        ((VCallOp *) ptr)->backward_cb(self, args, rv);
     }
 
     /// Backward AD callback (invoked by backward() once per callable)
-    void backward_cb(size_t index, const dr_vector<uint64_t> &args,
+    void backward_cb(void *self, const dr_vector<uint64_t> &args,
                      dr_vector<uint64_t> &rv) {
         m_args2.release();
         for (size_t i = 0; i < m_args.size(); ++i)
@@ -487,7 +509,7 @@ public:
         }
 
         m_rv2.clear();
-        m_callback(m_payload, index, m_args2, m_rv2);
+        m_callback(m_payload, self, m_args2, m_rv2);
         ad_assert(m_rv2.size() == m_rv.size(), "Size mismatch!");
 
         for (size_t i = 0; i < m_output_offsets.size(); ++i) {
@@ -543,100 +565,113 @@ private:
 };
 
 // Generic checks, then forward either to ad_vcall_record or ad_vcall_reduce
-bool ad_vcall(JitBackend backend, const char *domain, const char *name,
-              uint32_t index, uint32_t mask, size_t callable_count,
+bool ad_vcall(JitBackend backend, const char *domain, size_t callable_count,
+              const char *name, uint32_t index, uint32_t mask,
               const dr_vector<uint64_t> &args, dr_vector<uint64_t> &rv,
               void *payload, ad_vcall_callback callback,
               ad_vcall_cleanup cleanup, bool ad) {
+    try {
+        if ((callable_count != 0) == (domain != nullptr))
+            jit_raise("ad_vcall(\"%s\"): please specify either the 'domain' "
+                      "parameter *or* 'callable_count', but not both", name);
 
-    if (callable_count == 0)
-        jit_raise("ad_vcall(\"%s\"): callable list cannot be empty", name);
-    if (index == 0)
-        jit_raise("ad_vcall(\"%s\"): index list cannot be empty", name);
+        if (domain)
+            callable_count = jit_registry_id_bound(backend, domain);
 
-    size_t size = jit_var_size(index);
-    if (mask) {
-        size_t size_2 = jit_var_size(mask);
+        if (index == 0)
+            jit_raise("ad_vcall(\"%s\"): index list cannot be empty", name);
 
-        if (size != size_2 && size != 1 && size_2 != 1)
-            jit_raise(
-                "ad_vcall(\"%s\"): mismatched argument sizes (%zu and %zu).",
-                name, size, size_2);
+        size_t size = jit_var_size(index);
+        if (mask) {
+            size_t size_2 = jit_var_size(mask);
 
-        size = std::max(size, size_2);
-    }
+            if (size != size_2 && size != 1 && size_2 != 1)
+                jit_raise(
+                    "ad_vcall(\"%s\"): mismatched argument sizes (%zu and %zu)",
+                    name, size, size_2);
 
-    bool needs_ad = false;
-    for (uint64_t arg_i : args) {
-        size_t size_2 = jit_var_size((uint32_t) arg_i);
-
-        if (size != size_2 && size != 1 && size_2 != 1)
-            jit_raise("ad_vcall(\"%s\"): mismatched argument sizes (%zu and %zu).",
-                      name, size, size_2);
-
-        size = std::max(size, size_2);
-        needs_ad |= arg_i >> 32;
-    }
-
-    if (jit_flag(JitFlag::VCallRecord)) {
-        dr_vector<bool> rv_ad;
-        dr_vector<uint32_t> implicit_in;
-        {
-            scoped_isolation_boundary guard;
-            ad_vcall_record(backend, domain, name, size, index, mask,
-                            callable_count, args, rv, rv_ad, callback, payload);
-            ad_copy_implicit_deps(implicit_in);
-            guard.success = true;
+            size = std::max(size, size_2);
         }
 
-        for (bool b : rv_ad)
-            needs_ad |= b;
+        bool needs_ad = false;
+        for (uint64_t arg_i : args) {
+            size_t size_2 = jit_var_size((uint32_t) arg_i);
 
-        if (ad && needs_ad) {
-            nanobind::ref<VCallOp> op =
-                new VCallOp(backend, name, domain, index, mask, callable_count,
-                            args, rv.size(), payload, callback, cleanup);
+            if (size != size_2 && size != 1 && size_2 != 1)
+                jit_raise("ad_vcall(\"%s\"): mismatched argument sizes (%zu and %zu)",
+                          name, size, size_2);
 
-            for (size_t i = 0; i < args.size(); ++i)
-                op->add_input(i, args[i]);
-
-            for (uint32_t index: implicit_in)
-                op->add_index(backend, index, true);
-
-            for (size_t i = 0; i < rv.size(); ++i) {
-                if (!rv_ad[i])
-                    continue;
-
-                uint64_t index = ad_var_new((uint32_t) rv[i]);
-
-                jit_var_dec_ref((uint32_t) rv[i]);
-                rv[i] = index;
-                op->add_output(i, index);
-            }
-
-            if (ad_custom_op(op.get())) {
-                // VCallOp will eventually call cleanup()
-                return false;
-            }
-
-            // CustomOp was not needed, detach output again..
-            op->disable_cleanup();
-            for (size_t i = 0; i < rv.size(); ++i) {
-                uint64_t index = rv[i],
-                         index_d = (index << 32) >> 32;
-                if (index == index_d)
-                    continue;
-                jit_var_inc_ref((uint32_t) index_d);
-                ad_var_dec_ref(index);
-                rv[i] = index_d;
-            }
+            size = std::max(size, size_2);
+            needs_ad |= arg_i >> 32;
         }
-    } else {
-        ad_vcall_reduce(backend, domain, name, size, index, mask,
-                        callable_count, args, rv, callback, payload);
-    }
 
-    // Caller should directly call cleanup()
-    return true;
+        if (jit_flag(JitFlag::VCallRecord)) {
+            dr_vector<bool> rv_ad;
+            dr_vector<uint32_t> implicit_in;
+            {
+                scoped_isolation_boundary guard;
+                ad_vcall_record(backend, domain, name, size, index, mask,
+                                callable_count, args, rv, rv_ad, callback, payload);
+                ad_copy_implicit_deps(implicit_in);
+                guard.success = true;
+            }
+
+            for (bool b : rv_ad)
+                needs_ad |= b;
+
+            if (ad && needs_ad) {
+                if (domain)
+                    callable_count = 0;
+
+                nanobind::ref<VCallOp> op =
+                    new VCallOp(backend, name, domain, index, mask, callable_count,
+                                args, rv.size(), payload, callback, cleanup);
+
+                for (size_t i = 0; i < args.size(); ++i)
+                    op->add_input(i, args[i]);
+
+                for (uint32_t index: implicit_in)
+                    op->add_index(backend, index, true);
+
+                for (size_t i = 0; i < rv.size(); ++i) {
+                    if (!rv_ad[i])
+                        continue;
+
+                    uint64_t index = ad_var_new((uint32_t) rv[i]);
+
+                    jit_var_dec_ref((uint32_t) rv[i]);
+                    rv[i] = index;
+                    op->add_output(i, index);
+                }
+
+                if (ad_custom_op(op.get())) {
+                    // VCallOp will eventually call cleanup()
+                    return false;
+                }
+
+                // CustomOp was not needed, detach output again..
+                op->disable_cleanup();
+                for (size_t i = 0; i < rv.size(); ++i) {
+                    uint64_t index = rv[i],
+                             index_d = (index << 32) >> 32;
+                    if (index == index_d)
+                        continue;
+                    jit_var_inc_ref((uint32_t) index_d);
+                    ad_var_dec_ref(index);
+                    rv[i] = index_d;
+                }
+            }
+        } else {
+            ad_vcall_reduce(backend, domain, name, size, index, mask,
+                            callable_count, args, rv, callback, payload);
+        }
+
+        // Caller should directly call cleanup()
+        return true;
+    } catch (...) {
+        if (cleanup)
+            cleanup(payload);
+        throw;
+    }
 }
 
