@@ -1015,7 +1015,7 @@ def scatter_inc(target, index, active=True):
        )
 
     When following this approach, be sure to provide the same mask value to the
-    :py:func:`drjit.scatter_inc()` and subsequent :py:func:`dr.scatter()`
+    :py:func:`drjit.scatter_inc()` and subsequent :py:func:`drjit.scatter()`
     operations.
 
     The function :py:func:`drjit.scatter_inc()` exhibits the following unusual
@@ -1066,7 +1066,18 @@ def scatter_inc(target, index, active=True):
     This is done to reduce contention from a potentially very large number of
     atomic operations targeting the same memory address. Fully masked updates
     do not cause memory traffic.
-    '''
+
+    There is some conceptual overlap between this function and
+    :py:func:`drjit.compress()`, which can likewise be used to reduce a stream
+    to a smaller subset of active items. The downside of
+    :py:func:`drjit.compress()` is that it requires evaluating the variables to
+    be reduced, which can be very costly in terms of of memory traffic and
+    storage footprint. Reducing through :py:func:`drjit.scatter_inc()` does not
+    have this limitation: it can operate on symbolic arrays that greatly exceed
+    the available device memory. One advantage of :py:func:`drjit.compress()`
+    is that it essentially boils down to a realtively simple prefix sum, which
+    does not require atomic memory operations (these can be slow in some
+    cases). '''
 
     if not _dr.is_jit_v(target) or target.Type != _dr.VarType.UInt32 or \
             type(index) is not type(target):
@@ -3308,10 +3319,27 @@ def shuffle(perm, value):
 def compress(mask, /):
     '''
     compress(arg, /) -> int | drjit.ArrayBase
-    Compress a mask into a array of nonzero indices.
+    Compress a mask into an array of nonzero indices.
 
-    This function takes an boolean array as input and then returns the
-    indices of nonzero entries.
+    This function takes an boolean array as input and then returns an unsigned
+    32-bit integer array containing the indices of nonzero entries.
+
+    It can be used to reduce a stream to a subset of active entries via the
+    following recipe:
+
+    .. code-box:: python
+
+       # Input: an active mask and several arrays data_1, data_2, ...
+       dr.schedule(active, data_1, data_2, ...)
+       indices = dr.compress(active)
+       data_1 = dr.gather(type(data_1), data_1, indices)
+       data_2 = dr.gather(type(data_2), data_2, indices)
+       # ...
+
+    There is some conceptual overlap between this function and
+    :py:func:`drjit.cscatter_inc()`, which can likewise be used to reduce a
+    stream to a smaller subset of active items. Please see the documentation of
+    t :py:func:`drjit.cscatter_inc()` for details.
 
     .. danger::
         This function internally performs a synchronization step.
