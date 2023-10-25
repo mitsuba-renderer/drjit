@@ -205,8 +205,8 @@ def test03_switch_autodiff_forward_implicit(t, recorded):
             assert dr.allclose(result, [1+4**2, 2+3**2, 3+4*2**2, 4+4*1**1])
 
             dr.set_grad(data, [1, 2, 3, 4])
-            dr.forward_to(result)
-            assert dr.allclose(dr.grad(result), [8*4, 6*3, 16*2, 8*1])
+            g = dr.forward_to(result)
+            assert dr.allclose(g, [8*4, 6*3, 16*2, 8*1])
 
         # Implicit dependence on a scalar variable accessed directly
         if False:
