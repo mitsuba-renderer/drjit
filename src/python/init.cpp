@@ -143,7 +143,8 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
             if (s.is_matrix)
                 value_tp = (PyTypeObject *) supp(value_tp).value;
 
-            if (arg_tp == value_tp || PyType_IsSubtype(arg_tp, value_tp)) {
+            if (arg_tp == value_tp || PyType_IsSubtype(arg_tp, value_tp) ||
+                    (s.is_class && arg == Py_None)) {
                 element = nb::borrow(arg);
             } else {
                 PyObject *args[2] = { nullptr, arg };

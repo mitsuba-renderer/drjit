@@ -216,6 +216,14 @@ typedef void (*ad_vcall_cleanup)(void*);
  * \param callable_count
  *     The number of callables. Must be zero if \c domain is provided instead.
  *
+ * \param name
+ *     A descriptive name used in debug message / GraphViz visualizations
+ *
+ * \param is_getter
+ *     Is the function a getter? In this case, an indirect jump is hardly
+ *     necessary. We can turn the vectorized query into a simple gather
+ *     operation.
+ *
  * \param index
  *     Callable index / instance ID of the call.
  *
@@ -251,7 +259,7 @@ typedef void (*ad_vcall_cleanup)(void*);
  */
 extern DRJIT_EXTRA_EXPORT bool
 ad_vcall(JitBackend backend, const char *domain, size_t callable_count,
-         const char *name, uint32_t index, uint32_t mask,
+         const char *name, bool is_getter, uint32_t index, uint32_t mask,
          const drjit::dr_vector<uint64_t> &args, drjit::dr_vector<uint64_t> &rv,
          void *payload, ad_vcall_callback callback, ad_vcall_cleanup cleanup,
          bool ad);

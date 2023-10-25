@@ -19,7 +19,7 @@ bool meta_check(ArrayMeta m) noexcept {
     return m.is_valid && m.type > (uint8_t) VarType::Void &&
            m.type < (uint8_t) VarType::Count &&
            m.is_vector + m.is_complex + m.is_quaternion + m.is_matrix +
-                   m.is_tensor <= 1;
+                   m.is_tensor + m.is_class <= 1;
 }
 
 static const char *type_name_lowercase[] = {
@@ -104,6 +104,7 @@ ArrayMeta meta_promote(ArrayMeta a, ArrayMeta b) noexcept {
     r.is_matrix = a.is_matrix | b.is_matrix;
     r.is_tensor = a.is_tensor | b.is_tensor;
     r.is_diff = a.is_diff | b.is_diff;
+    r.is_class = a.is_class | b.is_class;
     r.is_valid = a.is_valid && b.is_valid &&
         (a.backend == b.backend || a.backend == 0 || b.backend == 0);
 
@@ -265,6 +266,9 @@ ArrayMeta meta_get(nb::handle h) noexcept {
                 "meta_get(): could not analyze array type: %s",
                 e.what());
         }
+    } else if (h.is_none() || nb::type_check(tp)) {
+        m.type = (uint8_t) VarType::UInt32;
+        m.is_class = true;
     } else {
         m.is_valid = false;
     }
@@ -342,10 +346,24 @@ void promote(nb::object *o, size_t n, bool select) {
     if (!meta_check(m))
         nb::raise("Incompatible arguments.");
 
-    if (h.is_valid())
+    if (h.is_valid()) {
         h = h.type();
-    else
-        h = meta_get_type(m);
+    } else {
+        if (!m.is_class) {
+            h = meta_get_type(m);
+        } else {
+            for (size_t i = 0; i < n; ++i) {
+                ArrayMeta m2 = meta_get(o[i]);
+                if (m2.is_class && m2.ndim == 1) {
+                    h = o[i].type();
+                    break;
+                }
+            }
+
+            if (!h.is_valid())
+                nb::raise("Incompatible arguments.");
+        }
+    }
 
     for (size_t i = 0; i < n; ++i) {
         nb::handle h2 = h;

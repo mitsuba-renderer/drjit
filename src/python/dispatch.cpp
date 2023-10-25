@@ -128,7 +128,7 @@ nb::object switch_impl(nb::handle index_, nb::sequence callables,
 
         bool done = ad_vcall(
             (JitBackend) s.backend, nullptr, nb::len(callables), "dr.switch()",
-            (uint32_t) s.index(inst_ptr(index)),
+            false, (uint32_t) s.index(inst_ptr(index)),
             mask.is_valid() ? ((uint32_t) s.index(inst_ptr(mask))) : 0u, args_i,
             rv_i, state, callback, cleanup, true);
 

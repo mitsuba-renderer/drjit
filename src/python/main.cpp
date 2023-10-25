@@ -56,6 +56,8 @@ NB_MODULE(drjit_ext, m_) {
     nb::module_ detail = m.attr("detail"),
                 scalar = m.def_submodule("scalar");
 
+    m.attr("__version__") = DRJIT_VERSION;
+
     nb::enum_<JitBackend>(m, "JitBackend", doc_JitBackend)
         .value("None", JitBackend::None, doc_JitBackend_None)
         .value("CUDA", JitBackend::CUDA, doc_JitBackend_CUDA)
@@ -155,6 +157,8 @@ NB_MODULE(drjit_ext, m_) {
             [](nb::intrusive_base *o, PyObject *po) noexcept {
                 o->set_self_py(po);
             }));
+
+    m.def("set_thread_count", &jit_llvm_set_thread_count);
 
     jit_init(backends);
 

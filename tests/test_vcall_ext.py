@@ -24,7 +24,11 @@ def test01_array_operations(t):
     A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
     a, b = A(), B()
 
-    # Creating objects
+    # Creating objects (scalar)
+    BasePtr(A())
+    BasePtr(None)
+
+    # Creating objects (vectorial)
     c = dr.zeros(BasePtr, 2)
     assert(str(c) == '[None, None]')
     assert c[0] is None
@@ -52,6 +56,8 @@ def test01_array_operations(t):
     with pytest.raises(TypeError, match=re.escape("unsupported operand type(s) for +: 'BasePtr' and 'BasePtr'")):
         c+c
     assert dr.all(c == c)
+    assert dr.all((c == None) == [False, False])
+    assert dr.all((c == b) == [True, False])
 
 
 @pytest.mark.parametrize("recorded", [True, False])
@@ -94,6 +100,7 @@ def test03_array_call_masked(t, recorded):
 
     c.dummy()
 
+
 @pytest.mark.parametrize("recorded", [True, False])
 @pytest.mark.parametrize("use_mask", [True, False])
 @pytest.test_arrays('float32,is_diff,shape=(*)')
@@ -130,6 +137,7 @@ def test04_forward_diff(t, recorded, use_mask):
     dr.schedule(xg, yg)
     assert dr.all(xg == t(4, 4, 0, 6, 6))
     assert dr.all(yg == t(-1, -1, 0, 1, 1))
+
 
 @pytest.mark.parametrize("recorded", [True, False])
 @pytest.mark.parametrize("use_mask", [True, False])
@@ -243,3 +251,73 @@ def test07_backward_diff_implicit(t, recorded, use_mask):
     assert dr.all(dr.grad(x) == t([0, 0, 0, 24, 32]))
     assert dr.all(dr.grad(av) == t([4]))
     assert dr.all(dr.grad(bv) == t([100]))
+
+
+@pytest.mark.parametrize("use_mask", [True, False])
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test08_getters(t, use_mask):
+    pkg = get_pkg(t)
+
+    A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
+    Mask = dr.mask_t(t)
+    a, b = A(), B()
+
+    # Turn one element off, two different ways..
+    if use_mask:
+        mi = Mask(True, True, False, True, True)
+        c = BasePtr(a, a, a, b, b)
+    else:
+        mi = dr.ones(Mask, 5)
+        c = BasePtr(a, a, None, b, b)
+
+    arr0 = c.scalar_getter(mi)
+    assert dr.all(arr0 == t([1, 1, 0, 2, 2]))
+
+    arr1 = c.opaque_getter(mi)
+    assert dr.all(arr1 == t([1, 1, 0, 2, 2]))
+
+    arr3_a, arr3_b = c.complex_getter(mi)
+    assert dr.all(arr3_a == t([1, 1, 0, 4, 4]))
+    assert dr.all(arr3_b == dr.uint32_array_t(t)([5, 5, 0, 3, 3]))
+
+
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test09_constant_getter(t, drjit_verbose, capsys):
+    pkg = get_pkg(t)
+
+    A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
+    Mask = dr.mask_t(t)
+    a, b = A(), B()
+
+    c = BasePtr(a, a, a, b, b)
+    d = c.constant_getter()
+    transcript = capsys.readouterr().out
+    assert d[0] == 123
+    assert transcript.count('ad_vcall_getter') == 1
+    assert transcript.count('jit_var_gather') == 1
+    d = c.opaque_getter()
+    transcript = capsys.readouterr().out
+    assert transcript.count('ad_vcall_getter') == 1
+    assert transcript.count('jit_var_gather') == 1
+
+
+
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test11_getter_ad(t):
+    pkg = get_pkg(t)
+
+    A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
+    Mask = dr.mask_t(t)
+    a, b = A(), B()
+
+    c = BasePtr(a, a, None, b, b)
+    dr.enable_grad(a.opaque)
+    dr.enable_grad(b.opaque)
+    dr.set_grad(a.opaque, 10)
+    dr.set_grad(b.opaque, 20)
+
+    arr1 = c.opaque_getter()
+    assert dr.grad_enabled(arr1)
+    assert dr.all(arr1 == t([1, 1, 0, 2, 2]))
+    arr1_g = dr.forward_to(arr1)
+    assert dr.all(arr1_g == t([10, 10, 0, 20, 20]))
