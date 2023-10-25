@@ -1055,6 +1055,7 @@ Target gather(Source &&source, const Index &index, const Mask &mask_ = true,
         else
             return mask ? ((Target *) source)[index] : Target(0);
     }
+    (void) permute;
 }
 
 template <typename Target, typename Value, typename Index,
@@ -1172,6 +1173,7 @@ void scatter_reduce(ReduceOp op, Target &&target, const Value &value,
             detail::false_v<Index, Value>,
             "scatter_reduce(): don't know what to do with these inputs.");
     }
+    (void) permute;
 }
 
 template <typename Target, typename Value, typename Index>

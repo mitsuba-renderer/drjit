@@ -107,6 +107,25 @@ struct scoped_record {
     uint32_t checkpoint, scope;
 };
 
+struct scoped_set_self {
+    scoped_set_self(JitBackend backend, uint32_t value, uint32_t self_index = 0)
+        : m_backend(backend) {
+        jit_vcall_self(backend, &m_self_value, &m_self_index);
+        jit_var_inc_ref(m_self_index);
+        jit_vcall_set_self(m_backend, value, self_index);
+    }
+
+    ~scoped_set_self() {
+        jit_vcall_set_self(m_backend, m_self_value, m_self_index);
+        jit_var_dec_ref(m_self_index);
+    }
+
+private:
+    JitBackend m_backend;
+    uint32_t m_self_value;
+    uint32_t m_self_index;
+};
+
 using JitVar = GenericArray<void>;
 
 // Forward declaration of a helper function full of checks (used by all strategies)
@@ -163,11 +182,9 @@ static void ad_vcall_getter(JitBackend backend, const char *domain,
         ad_vcall_check_rv(backend, size, i, rv, rv2);
 
         // Preallocate memory in the first iteration
-        if (i == 0) {
+        if (rv_ad.empty()) {
             rv3.reserve(rv2.size() * callable_count);
-            rv_ad.resize(rv2.size());
-            for (bool &b : rv_ad)
-                b = false;
+            rv_ad.resize(rv2.size(), false);
         }
 
         // Move return values to a separate array storing them for all callables
@@ -248,6 +265,7 @@ static void ad_vcall_getter(JitBackend backend, const char *domain,
     }
 }
 
+
 // Strategy 2: perform symbolic indirection by tracing all callables
 static void ad_vcall_record(JitBackend backend, const char *domain,
                             const char *name, size_t size, uint32_t index,
@@ -311,6 +329,7 @@ static void ad_vcall_record(JitBackend backend, const char *domain,
                 // Populate 'rv2' with function return values. This may raise
                 // an exception, in which case everything should be properly
                 // cleaned up in this function's scope
+                scoped_set_self set_self(backend, i + 1);
                 callback(payload, ptr, args2, rv2);
                 inst_id[i] = i + 1;
 
@@ -321,12 +340,10 @@ static void ad_vcall_record(JitBackend backend, const char *domain,
                 ad_vcall_check_rv(backend, size, i, rv, rv2);
 
                 // Move return values to a separate array storing them for all callables
-                if (i == 0) {
+                if (rv_ad.empty()) {
                     // Preallocate memory in the first iteration
                     rv3.reserve(rv2.size() * callable_count);
-                    rv_ad.resize(rv2.size());
-                    for (bool &b : rv_ad)
-                        b = false;
+                    rv_ad.resize(rv2.size(), false);
                 }
 
                 for (size_t j = 0; j < rv2.size(); ++j) {
@@ -364,6 +381,8 @@ static void ad_vcall_reduce(JitBackend backend, const char *domain,
                             dr_vector<uint64_t> &rv,
                             ad_vcall_callback callback, void *payload) {
     (void) name; // unused
+    const char *domain_or_empty = domain ? domain : "",
+               *separator = domain ? "::" : "";
 
     JitVar index;
     if (mask)
@@ -414,12 +433,21 @@ static void ad_vcall_reduce(JitBackend backend, const char *domain,
         rv2.clear();
 
         void *ptr;
-        if (domain)
+        if (domain) {
             ptr = jit_registry_ptr(backend, domain, buckets[i].id);
-        else
+            if (!ptr)
+                jit_raise(
+                    "ad_vcall_reduce(\"%s%s%s\"): instance %u does not exist (or no longer exists).",
+                    domain_or_empty, separator, name, buckets[i].id);
+        } else {
             ptr = (void *) (uintptr_t) callable_index;
-        callback(payload, ptr, args2, rv2);
+        }
 
+        JitVar instance_id = JitVar::steal(
+            ad_var_gather(index.index(), index2, memop_mask.index(), false));
+
+        scoped_set_self set_self(backend, i + 1, instance_id.index());
+        callback(payload, ptr, args2, rv2);
 
         // Perform some sanity checks on the return values
         ad_vcall_check_rv(backend, size, i, rv, rv2);
@@ -457,8 +485,13 @@ static void ad_vcall_check_rv(JitBackend backend, size_t size,
         rv.resize(rv2.size());
 
         uint64_t zero = 0;
-        for (size_t i = 0; i < rv2.size(); ++i)
+        for (size_t i = 0; i < rv2.size(); ++i) {
+            if (rv2[i] == 0)
+                jit_raise("ad_vcall(): callable %zu returned an empty/uninitialized "
+                          "Dr.Jit array, which is not allowed", callable_index);
+
             rv[i] = jit_var_literal(backend, jit_var_type(rv2[i]), &zero, size);
+        }
     } else {
         // Some sanity checks
         for (size_t i = 0; i < rv.size(); ++i) {
@@ -713,32 +746,43 @@ bool ad_vcall(JitBackend backend, const char *domain, size_t callable_count,
         if (domain)
             callable_count = jit_registry_id_bound(backend, domain);
 
-        if (index == 0)
-            jit_raise("ad_vcall(\"%s%s%s\"): index list cannot be empty",
-                      domain_or_empty, separator, name);
-
         size_t size = jit_var_size(index);
         if (mask) {
             size_t size_2 = jit_var_size(mask);
 
-            if (size != size_2 && size != 1 && size_2 != 1)
+            if (size == 1)
+                size = size_2;
+            else if (size != size_2 && size_2 != 1)
                 jit_raise("ad_vcall(\"%s%s%s\"): mismatched argument sizes "
                           "(%zu and %zu)",
                           domain_or_empty, separator, name, size, size_2);
-
-            size = std::max(size, size_2);
         }
 
         bool needs_ad = false;
         for (uint64_t arg_i : args) {
             size_t size_2 = jit_var_size((uint32_t) arg_i);
 
-            if (size != size_2 && size != 1 && size_2 != 1)
-                jit_raise("ad_vcall(\"%s%s%s\"): mismatched argument sizes (%zu and %zu)",
+            if (size == 1)
+                size = size_2;
+            else if (size != size_2 && size_2 != 1)
+                jit_raise("ad_vcall(\"%s%s%s\"): mismatched argument sizes "
+                          "(%zu and %zu)",
                           domain_or_empty, separator, name, size, size_2);
 
-            size = std::max(size, size_2);
             needs_ad |= arg_i >> 32;
+        }
+
+        if (index == 0 || size == 0 || jit_var_is_zero_literal(mask) || callable_count == 0) {
+            scoped_set_mask mask_guard(backend, jit_var_bool(backend, false));
+            callback(payload, nullptr, args, rv);
+
+            for (uint64_t &i : rv) {
+                uint64_t zero = 0;
+                if (i)
+                    i = jit_var_literal(backend, jit_var_type(i), &zero, size);
+            }
+
+            return true;
         }
 
         dr_vector<bool> rv_ad;

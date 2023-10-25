@@ -21,6 +21,7 @@ template <typename Float> struct Base : nb::intrusive_base {
     virtual Float opaque_getter() = 0;
     virtual Float constant_getter() = 0;
     virtual std::pair<Float, dr::uint32_array_t<Float>> complex_getter() = 0;
+    virtual dr::replace_value_t<Float, Base<Float>*> get_self() const = 0;
 
     Base() {
         if constexpr (dr::is_jit_v<Float>)
@@ -55,6 +56,7 @@ template <typename Float> struct A : Base<Float> {
     complex_getter() override {
         return { opaque, 5 };
     }
+    dr::replace_value_t<Float, Base<Float>*> get_self() const override { return this; }
 
     Float value;
     Float opaque = dr::opaque<Float>(1.f);
@@ -86,6 +88,7 @@ template <typename Float> struct B : Base<Float> {
     complex_getter() override {
         return { 2 * opaque, 3 };
     }
+    dr::replace_value_t<Float, Base<Float>*> get_self() const override { return this; }
 
     Float value;
     Float opaque = dr::opaque<Float>(2.f);
@@ -100,6 +103,7 @@ DRJIT_VCALL_TEMPLATE_BEGIN(Base)
     DRJIT_VCALL_GETTER(opaque_getter)
     DRJIT_VCALL_GETTER(complex_getter)
     DRJIT_VCALL_GETTER(constant_getter)
+    DRJIT_VCALL_METHOD(get_self)
 DRJIT_VCALL_END(Base)
 
 template <JitBackend Backend>
@@ -149,7 +153,8 @@ void bind_simple(nb::module_ &m) {
              }, "mask"_a = true)
         .def("constant_getter", [](BaseArray &self, Mask m) {
                 return self->constant_getter(m);
-             }, "mask"_a = true);
+             }, "mask"_a = true)
+        .def("get_self", [](BaseArray &self) { return self->get_self(); });
 }
 
 NB_MODULE(vcall_ext, m) {

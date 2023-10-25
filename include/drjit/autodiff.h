@@ -456,6 +456,7 @@ struct DRJIT_TRIVIAL_ABI DiffArray
                              const Mask &mask, bool permute) {
         static_assert(
             std::is_same_v<detached_t<Mask>, detached_t<mask_t<DiffArray>>>);
+        (void) permute;
 
         if constexpr (IsFloat)
             return steal(ad_var_gather(src.m_index, index.m_index, mask.m_index, permute));
@@ -497,6 +498,8 @@ struct DRJIT_TRIVIAL_ABI DiffArray
                          const Mask &mask, bool permute) const {
         static_assert(
             std::is_same_v<detached_t<Mask>, detached_t<mask_t<DiffArray>>>);
+        (void) permute;
+
         if constexpr (IsFloat)
             dst = steal(ad_var_scatter(dst.m_index, m_index, index.m_index,
                                        mask.m_index, op, permute));
