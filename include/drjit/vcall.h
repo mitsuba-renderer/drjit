@@ -22,6 +22,7 @@
         template <typename Self>                                               \
         struct call_support<Name, Self> {                                      \
             using Class = Name;                                                \
+            using Mask = mask_t<Self>;                                         \
             static constexpr const char *Domain = #Name;                       \
             call_support(const Self &self) : self(self) { }                    \
             const call_support *operator->() const {                           \
@@ -33,6 +34,7 @@
         template <typename Self, typename... Ts>                               \
         struct call_support<Name<Ts...>, Self> {                               \
             using Class = Name<Ts...>;                                         \
+            using Mask = mask_t<Self>;                                         \
             static constexpr const char *Domain = #Name;                       \
             call_support(const Self &self) : self(self) { }                    \
             const call_support *operator->() const {                           \
@@ -57,8 +59,10 @@ private:                                                                       \
     auto drjit_impl_##Name(std::index_sequence<Is...>, const Args &...args)    \
         const {                                                                \
         using Ret = decltype(std::declval<Class &>().Name(args...));           \
-        using Ret2 = std::conditional_t<std::is_void_v<Ret>, void_t, Ret>;     \
+        using Ret2 = std::conditional_t<std::is_void_v<Ret>, std::nullptr_t,   \
+                                        vectorize_t<Self, Ret>>;               \
         using VCallStateT = detail::VCallState<Ret2, Args...>;                 \
+                                                                               \
         ad_vcall_callback callback = [](void *state_p, void *self,             \
                                         const dr_vector<uint64_t> &args_i,     \
                                         dr_vector<uint64_t> &rv_i) {           \
@@ -72,13 +76,34 @@ private:                                                                       \
                 state->collect_rv(rv_i);                                       \
             }                                                                  \
         };                                                                     \
+                                                                               \
         return detail::vcall<Self, Ret, Ret2, Args...>(                        \
-            self, Domain, #Name "()", callback, args...);                      \
+            self, Domain, #Name "()", false, callback, args...);               \
     }
 
+#define DRJIT_VCALL_GETTER(Name)                                               \
+public:                                                                        \
+    auto Name(Mask mask = true) const {                                        \
+        using Ret =                                                            \
+            vectorize_t<Self, decltype(std::declval<Class &>().Name())>;       \
+        using VCallStateT = detail::VCallState<Ret, Mask>;                     \
+                                                                               \
+        ad_vcall_callback callback = [](void *state_p, void *self,             \
+                                        const dr_vector<uint64_t> &,           \
+                                        dr_vector<uint64_t> &rv_i) {           \
+            VCallStateT *state = (VCallStateT *) state_p;                      \
+            state->rv = ((Class *) self)->Name();                              \
+            state->collect_rv(rv_i);                                           \
+        };                                                                     \
+                                                                               \
+        return detail::vcall<Self, Ret, Ret, Mask>(self, Domain, #Name "()",   \
+                                                   true, callback, mask);      \
+    }
 NAMESPACE_BEGIN(drjit)
 
-struct void_t { };
+template <typename Guide, typename T>
+using vectorize_t =
+    std::conditional_t<std::is_scalar_v<T>, replace_scalar_t<Guide, T>, T>;
 
 template <bool IncRef, typename T>
 void collect_indices(const T &value, dr_vector<uint64_t> &indices) {
@@ -167,7 +192,7 @@ struct dr_index_vector : dr_vector<uint64_t> {
 };
 
 template <typename Self, typename Ret, typename Ret2, typename... Args>
-Ret vcall(const Self &self, const char *domain, const char *name,
+Ret vcall(const Self &self, const char *domain, const char *name, bool is_getter,
              ad_vcall_callback callback, const Args &...args) {
     using Mask = mask_t<Self>;
     using VCallStateT = VCallState<Ret2, Args...>;
@@ -177,9 +202,9 @@ Ret vcall(const Self &self, const char *domain, const char *name,
 
     dr_index_vector args_i, rv_i;
     collect_indices<true>(state->args, args_i);
-    bool done =
-        ad_vcall(Self::Backend, domain, 0, name, self.index(), mask.index(),
-                 args_i, rv_i, state, callback, &VCallStateT::cleanup, true);
+    bool done = ad_vcall(Self::Backend, domain, 0, name, is_getter,
+                         self.index(), mask.index(), args_i, rv_i, state,
+                         callback, &VCallStateT::cleanup, true);
 
     if constexpr (!std::is_same_v<Ret, void>) {
         Ret2 result(std::move(state->rv));

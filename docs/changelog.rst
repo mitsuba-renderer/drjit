@@ -18,8 +18,8 @@ incompatibilities and potential stumbling blocks.
   opportunity to fix many long-standing binding-related problems:
 
   - Tracing Dr.Jit code written in Python is now *significantly* faster. Expect
-    speedups of ~10-20×. The shared libraries containing the bindings have also
-    become much smaller (from ~10MB to just over ~1MB).
+    speedups by a factor of ~10-20×. The shared libraries containing the
+    bindings have also become much smaller (from ~10MB to just over ~1MB).
 
   - All functions now have a reference documentation that clearly specifies
     their behavior and accepted inputs. Their behavior with respect to less
@@ -32,11 +32,11 @@ incompatibilities and potential stumbling blocks.
 
 - ⚠️ The ``==`` and ``!=`` comparisons previously reduced the result of to a
   single Python ``bool``. They now return an array of component-wise
-  comparisons. Use :py:func:`dr.all(a == b) <all>` or :py:func:`dr.all(a == b,
-  axis=None) <all>` to reproduce the previous behavior.
+  comparisons to be more consistent with other array programming frameworks.
+  Use :py:func:`dr.all(a == b) <all>` or :py:func:`dr.all(a == b, axis=None)
+  <all>` to get the previous behavior.
 
-  This change makes Dr.Jit more consistent with other array programming
-  frameworks. The functions ``drjit.eq()`` and ``drjit.neq()`` for element-wise
+  The functions ``drjit.eq()`` and ``drjit.neq()`` for element-wise
   equality and inequality tests were removed, as their behavior is now subsumed
   by the builtin ``==`` and ``!=`` operators.
 
@@ -50,6 +50,26 @@ incompatibilities and potential stumbling blocks.
   for all variables, enabling differentiation of computation combining single-,
   double, and half precision variables. Previously, there was a separate graph
   per type, and gradients did not propagate through casts between them.
+
+- Reductions operations previously existed as *ordinary* (e.g.,
+  :py:func:`drjit.all`) and *nested* (e.g. ``drjit.all_nested``) variants. Both
+  are now subsumed by an optional ``axis`` argument similar to how this works
+  in other array programming frameworks like NumPy.
+
+  The reduction functions (:py:func:`drjit.all` :py:func:`drjit.any`,
+  :py:func:`drjit.sum`, :py:func:`drjit.prod`, :py:func:`drjit.min`,
+  :py:func:`drjit.max`) reduce over the outermost axis (``axis=0``) by default,
+  Specify ``axis=None`` to reduce the entire array recursively analogous to the
+  previous nested reduction.
+
+  Aliases for the ``_nested`` function variants still exist to facilitate
+  porting but are deprecated and will be removed in a future release.
+
+- The new release has a strong focus on error resilience and leak avoidance.
+  Exceptions raised in custom operations, virtual function dispatch, recorded
+  loops, etc., should not cause leaks. Both Dr.Jit and nanobind are very noisy
+  if they detect that objects are still alive when the Python interpreter shuts
+  down. You may occasionally still see such leak warnings.
 
 - Variable indices (:py:attr:`drjit.ArrayBase.index`,
   :py:attr:`drjit.ArrayBase.index_ad`) used to monotonically increase as
@@ -74,26 +94,6 @@ incompatibilities and potential stumbling blocks.
   Note that this causes the internal variable array to steadily grow, hence
   this feature should only be used for brief debugging sessions.
 
-- Reductions operations previously existed as *ordinary* (e.g.,
-  :py:func:`drjit.all`) and *nested* (e.g. ``drjit.all_nested``) variants. Both
-  are now subsumed by an optional ``axis`` argument similar to how this works
-  in other array programming frameworks like NumPy.
-
-  The reduction functions (:py:func:`drjit.all` :py:func:`drjit.any`,
-  :py:func:`drjit.sum`, :py:func:`drjit.prod`, :py:func:`drjit.min`,
-  :py:func:`drjit.max`) reduce over the outermost axis (``axis=0``) by default,
-  Specify ``axis=None`` to reduce the entire array recursively analogous to the
-  previous nested reduction.
-
-  Aliases for the ``_nested`` function variants still exist to facilitate
-  porting but are deprecated and will be removed in a future release.
-
-- The new release has a strong focus on error resilience and leak avoidance.
-  Exceptions raised in custom operations, virtual function dispatch, recorded
-  loops, etc., should not cause leaks. Both Dr.Jit and nanobind are very noisy
-  if they detect that objects are still alive when the Python interpreter shuts
-  down. You may occasionally still see such leak warnings.
-
 - Dr.Jit can now target the Python 3.12+ stable ABI. This means that binary
   wheels will work on future versions of Python without recompilation.
 
@@ -103,12 +103,14 @@ Internals
 This section documents lower level changes that don't directly impact the
 Python API.
 
-- Dr.Jit now compiles a support library (``libdrjit-extra.so``) containing
-  large amounts of functionality that used to be implemented using templates.
-  The template-heavy approach had the disadvantage that this code was compiled
-  over and over again when Dr.Jit was used within larger projects such as
-  `Mitsuba 3 <https://mitsuba-renderer.org>`__. The following features were
-  moved into this library:
+- Dr.Jit now builds a support library (``libdrjit-extra.so``) containing large
+  amounts of functionality that was used to be implemented using templates. The
+  main disadvantage of the previous template-heavy approach was that this code
+  ended up getting compiled over and over again especially when Dr.Jit was used
+  within larger projects such as `Mitsuba 3 <https://mitsuba-renderer.org>`__,
+  where this caused very long compilation times.
+
+  The following features were moved into this library:
 
   * Transcendental functions (:py:func:`drjit.log`, :py:func:`drjit.atan2`,
     etc.) now have pre-compiled implementations for Jit arrays. Automatic
@@ -131,12 +133,16 @@ Python API.
   for ``aarch64`` processors via NEON intrinsics. This is actually an old
   feature from a predecessor project (Enoki) that was finally revived.
 
+- The ``nb::setattr()`` function that was previously used to update modified
+  fields queried by a *getter* no longer exists. Dr.Jit now uses a simpler way
+  to deal with getters so this whole issue doesn't exist anymore.
+
 
 Removals
 --------
 
-- Packet-mode virtual function code dispatch
-  (``drjit/include/vcall_packet.h``) was removed.
+- Packet-mode virtual function call dispatch (``drjit/include/vcall_packet.h``)
+  was removed.
 
 - The ability to instantiate a differentiable array on top of a
   non-JIT-compiled type (e.g., ``dr::DiffArray<float>``) was removed. This was

@@ -147,7 +147,7 @@ struct DRJIT_TRIVIAL_ABI DiffArray
         m_index = jit_var_cast((uint32_t) v.m_index, Type, 1);
     }
 
-    DiffArray(const Detached &v) : m_index(v.m_index) {
+    DiffArray(const Detached &v) : m_index(v.index()) {
         jit_var_inc_ref((uint32_t) m_index);
     }
 

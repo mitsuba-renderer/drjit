@@ -17,6 +17,10 @@ template <typename Float> struct Base : nb::intrusive_base {
     virtual std::pair<Float, Float> f_masked(const std::pair<Float, Float> &xy, Mask active) = 0;
     virtual Float g(Float, Mask) = 0;
     virtual void dummy() = 0;
+    virtual float scalar_getter() = 0;
+    virtual Float opaque_getter() = 0;
+    virtual Float constant_getter() = 0;
+    virtual std::pair<Float, dr::uint32_array_t<Float>> complex_getter() = 0;
 
     Base() {
         if constexpr (dr::is_jit_v<Float>)
@@ -44,9 +48,18 @@ template <typename Float> struct A : Base<Float> {
     }
 
     virtual void dummy() override { }
+    virtual float scalar_getter() override { return 1.f; }
+    virtual Float opaque_getter() override { return opaque; }
+    virtual Float constant_getter() override { return 123; }
+    virtual std::pair<Float, dr::uint32_array_t<Float>>
+    complex_getter() override {
+        return { opaque, 5 };
+    }
 
     Float value;
+    Float opaque = dr::opaque<Float>(1.f);
 };
+
 
 template <typename Float> struct B : Base<Float> {
     using Mask = dr::mask_t<Float>;
@@ -66,16 +79,27 @@ template <typename Float> struct B : Base<Float> {
     }
 
     virtual void dummy() override { }
+    virtual float scalar_getter() override { return 2.f; }
+    virtual Float opaque_getter() override { return opaque; }
+    virtual Float constant_getter() override { return 123; }
+    virtual std::pair<Float, dr::uint32_array_t<Float>>
+    complex_getter() override {
+        return { 2 * opaque, 3 };
+    }
 
     Float value;
+    Float opaque = dr::opaque<Float>(2.f);
 };
-
 
 DRJIT_VCALL_TEMPLATE_BEGIN(Base)
     DRJIT_VCALL_METHOD(f)
     DRJIT_VCALL_METHOD(f_masked)
     DRJIT_VCALL_METHOD(dummy)
     DRJIT_VCALL_METHOD(g)
+    DRJIT_VCALL_GETTER(scalar_getter)
+    DRJIT_VCALL_GETTER(opaque_getter)
+    DRJIT_VCALL_GETTER(complex_getter)
+    DRJIT_VCALL_GETTER(constant_getter)
 DRJIT_VCALL_END(Base)
 
 template <JitBackend Backend>
@@ -92,10 +116,12 @@ void bind_simple(nb::module_ &m) {
 
     nb::class_<AT, BaseT>(m, "A")
         .def(nb::init<>())
+        .def_rw("opaque", &AT::opaque)
         .def_rw("value", &AT::value);
 
     nb::class_<BT, BaseT>(m, "B")
         .def(nb::init<>())
+        .def_rw("opaque", &BT::opaque)
         .def_rw("value", &BT::value);
 
     dr::ArrayBinding b;
@@ -111,7 +137,19 @@ void bind_simple(nb::module_ &m) {
         .def("g",
              [](BaseArray &self, Float x, Mask m) { return self->g(x, m); },
              "x"_a, "mask"_a = true)
-        .def("dummy", [](BaseArray &self) { return self->dummy(); });
+        .def("dummy", [](BaseArray &self) { return self->dummy(); })
+        .def("scalar_getter", [](BaseArray &self, Mask m) {
+                return self->scalar_getter(m);
+             }, "mask"_a = true)
+        .def("opaque_getter", [](BaseArray &self, Mask m) {
+                return self->opaque_getter(m);
+             }, "mask"_a = true)
+        .def("complex_getter", [](BaseArray &self, Mask m) {
+                return self->complex_getter(m);
+             }, "mask"_a = true)
+        .def("constant_getter", [](BaseArray &self, Mask m) {
+                return self->constant_getter(m);
+             }, "mask"_a = true);
 }
 
 NB_MODULE(vcall_ext, m) {
