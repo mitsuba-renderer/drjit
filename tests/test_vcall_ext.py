@@ -2,6 +2,7 @@ import drjit as dr
 import vcall_ext as m
 import pytest
 import re
+import gc
 
 def get_pkg(t):
     backend = dr.backend_v(t)
@@ -62,7 +63,7 @@ def test01_array_operations(t):
 
 @pytest.mark.parametrize("recorded", [True, False])
 @pytest.test_arrays('float32,is_diff,shape=(*)')
-def test02_array_call(t, recorded):
+def test02_array_vcall(t, recorded):
     pkg = get_pkg(t)
 
     A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
@@ -80,7 +81,7 @@ def test02_array_call(t, recorded):
 
 @pytest.mark.parametrize("recorded", [True, False])
 @pytest.test_arrays('float32,is_diff,shape=(*)')
-def test03_array_call_masked(t, recorded):
+def test03_array_vcall_masked(t, recorded):
     pkg = get_pkg(t)
 
     A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
@@ -301,7 +302,6 @@ def test09_constant_getter(t, drjit_verbose, capsys):
     assert transcript.count('jit_var_gather') == 1
 
 
-
 @pytest.test_arrays('float32,is_diff,shape=(*)')
 def test11_getter_ad(t):
     pkg = get_pkg(t)
@@ -321,3 +321,71 @@ def test11_getter_ad(t):
     assert dr.all(arr1 == t([1, 1, 0, 2, 2]))
     arr1_g = dr.forward_to(arr1)
     assert dr.all(arr1_g == t([10, 10, 0, 20, 20]))
+
+
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test12_array_vcall_instance_expired(t):
+    pkg = get_pkg(t)
+
+    A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
+    a, b = A(), B()
+
+    c = BasePtr(a, a, None, b, b)
+    del a
+    gc.collect()
+    gc.collect()
+
+    xi = t(1, 2, 8, 3, 4)
+    yi = t(5, 6, 8, 7, 8)
+
+    with pytest.raises(RuntimeError, match=re.escape("no longer exists")):
+        with dr.scoped_set_flag(dr.JitFlag.VCallRecord, False):
+            xo, yo = c.f(xi, yi)
+
+@pytest.mark.parametrize("recorded", [True, False])
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test13_array_vcall_self(t, recorded, drjit_verbose, capsys):
+    pkg = get_pkg(t)
+    A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
+    a, b = A(), B()
+
+    c = BasePtr(a, a, None, b, b)
+    with dr.scoped_set_flag(dr.JitFlag.VCallRecord, recorded):
+        d = c.get_self()
+    assert dr.all(c == d)
+    transcript = capsys.readouterr().out
+    if recorded:
+        if dr.backend_v(t) == dr.JitBackend.LLVM:
+            assert transcript.count('%self') > 0
+        else:
+            assert transcript.count(', self;') > 0
+    else:
+        assert transcript.count('jit_var_gather') == 2
+
+@pytest.mark.parametrize("recorded", [True, False])
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test14_array_vcall_noinst(t, recorded):
+    pkg = get_pkg(t)
+    A, B, BasePtr = pkg.A, pkg.B, pkg.BasePtr
+    gc.collect()
+    gc.collect()
+    d = BasePtr(None, None)
+    dr.set_log_level(10)
+
+    with dr.scoped_set_flag(dr.JitFlag.VCallRecord, recorded):
+        c = BasePtr()
+        x = c.g(t())
+        assert x.state == dr.VarState.Invalid
+        assert len(x) == 0
+        y = d.g(t(1,2))
+        assert y.state == dr.VarState.Literal
+        assert len(y) == 2
+
+        a = A()
+        b = B()
+        a.value = 5
+        b.value =6
+        m = dr.mask_t(t)
+        e = BasePtr(a, b)
+        z = e.g(t(1, 2), m(False))
+        assert z.state == dr.VarState.Literal

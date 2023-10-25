@@ -258,6 +258,7 @@ PyObject *apply(ArrayOp op, Slot slot, std::index_sequence<Is...> is,
                 else
                     py_impl_o = array_module.attr(slot);
             }
+            (void) py_impl;
 
             for (Py_ssize_t j = 0; j < lr; ++j) {
                 // Fetch the j-th element from each array. In 'Select' mode,

@@ -69,10 +69,14 @@ private:                                                                       \
             VCallStateT *state = (VCallStateT *) state_p;                      \
             state->update_args(args_i);                                        \
             if constexpr (std::is_same_v<Ret, void>) {                         \
-                ((Class *) self)->Name(state->args.template get<Is>()...);     \
-            } else {                                                           \
-                state->rv =                                                    \
+                if (self)                                                      \
                     ((Class *) self)->Name(state->args.template get<Is>()...); \
+            } else {                                                           \
+                if (self)                                                      \
+                    state->rv = ((Class *) self)                               \
+                                    ->Name(state->args.template get<Is>()...); \
+                else                                                           \
+                    state->rv = zeros<Ret2>();                                 \
                 state->collect_rv(rv_i);                                       \
             }                                                                  \
         };                                                                     \
@@ -92,7 +96,10 @@ public:                                                                        \
                                         const dr_vector<uint64_t> &,           \
                                         dr_vector<uint64_t> &rv_i) {           \
             VCallStateT *state = (VCallStateT *) state_p;                      \
-            state->rv = ((Class *) self)->Name();                              \
+            if (self)                                                          \
+                state->rv = ((Class *) self)->Name();                          \
+            else                                                               \
+                state->rv = zeros<Ret>();                                      \
             state->collect_rv(rv_i);                                           \
         };                                                                     \
                                                                                \
