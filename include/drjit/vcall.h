@@ -1,5 +1,7 @@
 /*
-    drjit/vcall.h -- Vectorized method call support
+    drjit/vcall.h -- Vectorized method call support. This header file provides
+    the logic to capture a call to ``Jit/DiffArray<T*>().foo()`` and dispatch
+    it to ``T::foo()``.
 
     Dr.Jit is a C++ template library for efficient vectorization and
     differentiation of numerical kernels on modern processor architectures.
@@ -78,18 +80,21 @@ NAMESPACE_BEGIN(drjit)
 
 struct void_t { };
 
-template <typename T>
+template <bool IncRef, typename T>
 void collect_indices(const T &value, dr_vector<uint64_t> &indices) {
     if constexpr (depth_v<T> > 1) {
         for (size_t i = 0; i < value.derived().size(); ++i)
-            collect_indices(value.derived().entry(i), indices);
+            collect_indices<IncRef>(value.derived().entry(i), indices);
     } else if constexpr (is_tensor_v<T>) {
-        collect_indices(value.array(), indices);
+        collect_indices<IncRef>(value.array(), indices);
     } else if constexpr (is_jit_v<T>) {
-        indices.push_back(value.index_combined());
+        uint64_t index = value.index_combined();
+        if constexpr (IncRef)
+            ad_var_inc_ref(index);
+        indices.push_back(index);
     } else if constexpr (is_drjit_struct_v<T>) {
         struct_support_t<T>::apply_1(
-            value, [&](const auto &x) { collect_indices(x, indices); });
+            value, [&](const auto &x) { collect_indices<IncRef>(x, indices); });
     }
 }
 
@@ -127,7 +132,7 @@ Mask extract_mask(dr_tuple<Args...> &t) {
     if constexpr (N > 0) {
         auto &last = t.template get<N-1>();
         if constexpr (is_mask_v<decltype(last)>)
-            result.swap(last);
+            std::swap(result, last);
     }
 
     return result;
@@ -148,7 +153,7 @@ template <typename Ret, typename... Args> struct VCallState {
     }
 
     void collect_rv(dr_vector<uint64_t> &indices) const {
-        collect_indices(rv, indices);
+        collect_indices<false>(rv, indices);
     }
 };
 
@@ -170,10 +175,8 @@ Ret vcall(const Self &self, const char *domain, const char *name,
 
     Mask mask = extract_mask<Mask>(state->args);
 
-    dr_vector<uint64_t> args_i;
-    collect_indices(state->args, args_i);
-
-    dr_index_vector rv_i;
+    dr_index_vector args_i, rv_i;
+    collect_indices<true>(state->args, args_i);
     bool done =
         ad_vcall(Self::Backend, domain, 0, name, self.index(), mask.index(),
                  args_i, rv_i, state, callback, &VCallStateT::cleanup, true);

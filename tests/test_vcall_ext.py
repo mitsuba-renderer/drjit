@@ -128,10 +128,118 @@ def test04_forward_diff(t, recorded, use_mask):
     dr.set_grad(yi, dr.full(t, 2, 5))
     xg, yg = dr.forward_to(xo, yo)
     dr.schedule(xg, yg)
-    print(dr.grad(xg))
-    print(dr.grad(yg))
-    assert dr.all(dr.grad(xg) == t(4, 4, 0, 6, 6))
-    assert dr.all(dr.grad(yg) == t(-1, -1, 0, 1, 1))
+    assert dr.all(xg == t(4, 4, 0, 6, 6))
+    assert dr.all(yg == t(-1, -1, 0, 1, 1))
+
+@pytest.mark.parametrize("recorded", [True, False])
+@pytest.mark.parametrize("use_mask", [True, False])
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test05_backward_diff(t, recorded, use_mask):
+    pkg = get_pkg(t)
+
+    A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
+    Mask = dr.mask_t(t)
+    a, b = A(), B()
+
+    xi = t(1, 2, 8, 3, 4)
+    yi = t(5, 6, 8, 7, 8)
+
+    # Turn one element off, two different ways..
+    if use_mask:
+        mi = Mask(True, True, False, True, True)
+        c = BasePtr(a, a, a, b, b)
+    else:
+        mi = dr.ones(Mask, 5)
+        c = BasePtr(a, a, None, b, b)
+
+    dr.enable_grad(xi)
+    dr.enable_grad(yi)
+
+    with dr.scoped_set_flag(dr.JitFlag.VCallRecord, recorded):
+        xo, yo = c.f_masked((xi, yi), mi)
+
+    dr.set_grad(xo, dr.ones(t, 5))
+    dr.set_grad(yo, dr.full(t, 2, 5))
+    xg, yg = dr.backward_to(xi, yi)
+    assert dr.all(xg == [-2, -2, 0, 2, 2])
+    assert dr.all(yg == [2, 2, 0, 3, 3])
 
 
-# Differentiate masked implicit dependence in reverse mode
+@pytest.mark.parametrize("recorded", [True, False])
+@pytest.mark.parametrize("use_mask", [True, False])
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test06_forward_diff_implicit(t, recorded, use_mask):
+    pkg = get_pkg(t)
+
+    A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
+    Mask = dr.mask_t(t)
+    a, b = A(), B()
+
+    x = t(1, 2, 8, 3, 4)
+    av = t(1)
+    bv = t(1)
+    dr.enable_grad(x, av, bv)
+
+    # Turn one element off, two different ways..
+    if use_mask:
+        mi = Mask(True, True, False, True, True)
+        c = BasePtr(a, a, a, b, b)
+    else:
+        mi = dr.ones(Mask, 5)
+        c = BasePtr(a, a, None, b, b)
+
+    a.value = av * 2
+    b.value = bv * 4
+    y = x*x
+
+    with dr.scoped_set_flag(dr.JitFlag.VCallRecord, recorded):
+        xo = c.g(y, mi)
+
+    assert dr.all(xo == t(2, 2, 0, 4*9, 4*16))
+
+    dr.set_grad(x, [1,2,3,4,5])
+    dr.set_grad(av, 10)
+    dr.set_grad(bv, 100)
+    xg = dr.forward_to(xo)
+
+    assert dr.all(xg == t([20, 20, 0, 9*400+24*4, 16*400+40*4]))
+
+
+@pytest.mark.parametrize("recorded", [True, False])
+@pytest.mark.parametrize("use_mask", [True, False])
+@pytest.test_arrays('float32,is_diff,shape=(*)')
+def test07_backward_diff_implicit(t, recorded, use_mask):
+    pkg = get_pkg(t)
+
+    A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
+    Mask = dr.mask_t(t)
+    a, b = A(), B()
+
+    x = t(1, 2, 8, 3, 4)
+    av = t(1)
+    bv = t(1)
+    dr.enable_grad(x, av, bv)
+
+    # Turn one element off, two different ways..
+    if use_mask:
+        mi = Mask(True, True, False, True, True)
+        c = BasePtr(a, a, a, b, b)
+    else:
+        mi = dr.ones(Mask, 5)
+        c = BasePtr(a, a, None, b, b)
+
+    a.value = av * 2
+    b.value = bv * 4
+    y = x*x
+
+    with dr.scoped_set_flag(dr.JitFlag.VCallRecord, recorded):
+        xo = c.g(y, mi)
+
+    assert dr.all(xo == t(2, 2, 0, 4*9, 4*16))
+
+    dr.set_grad(xo, [1,2,3,4,5])
+    dr.backward_from(xo)
+
+    assert dr.all(dr.grad(x) == t([0, 0, 0, 24, 32]))
+    assert dr.all(dr.grad(av) == t([4]))
+    assert dr.all(dr.grad(bv) == t([100]))

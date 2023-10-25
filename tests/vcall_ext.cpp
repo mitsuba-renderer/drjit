@@ -14,7 +14,8 @@ template <typename Float> struct Base : nb::intrusive_base {
     using Mask = dr::mask_t<Float>;
 
     virtual std::pair<Float, Float> f(Float x, Float y) = 0;
-    virtual std::pair<Float, Float> f_masked(const std::pair<Float, Float> &xy, Mask mask) = 0;
+    virtual std::pair<Float, Float> f_masked(const std::pair<Float, Float> &xy, Mask active) = 0;
+    virtual Float g(Float, Mask) = 0;
     virtual void dummy() = 0;
 
     Base() {
@@ -32,13 +33,19 @@ template <typename Float> struct A : Base<Float> {
         return { 2 * y, -x };
     }
 
-    virtual std::pair<Float, Float> f_masked(const std::pair<Float, Float> &xy, Mask mask) override {
-        if (mask.state() != VarState::Literal || mask[0] != true)
+    virtual std::pair<Float, Float> f_masked(const std::pair<Float, Float> &xy, Mask active) override {
+        if (active.state() != VarState::Literal || active[0] != true)
             throw std::runtime_error("f_masked(): expected the mask to be a literal");
         return f(xy.first, xy.second);
     }
 
+    virtual Float g(Float, Mask) override {
+        return value;
+    }
+
     virtual void dummy() override { }
+
+    Float value;
 };
 
 template <typename Float> struct B : Base<Float> {
@@ -48,23 +55,27 @@ template <typename Float> struct B : Base<Float> {
         return { 3 * y, x };
     }
 
-    virtual std::pair<Float, Float> f_masked(const std::pair<Float, Float> &xy, Mask mask) override {
-        if (mask.state() != VarState::Literal || mask[0] != true)
+    virtual std::pair<Float, Float> f_masked(const std::pair<Float, Float> &xy, Mask active) override {
+        if (active.state() != VarState::Literal || active[0] != true)
             throw std::runtime_error("f_masked(): expected the mask to be a literal!");
         return f(xy.first, xy.second);
     }
 
+    virtual Float g(Float x, Mask) override {
+        return value*x;
+    }
+
     virtual void dummy() override { }
+
+    Float value;
 };
 
-
-template <typename T>
-using forward_t = std::conditional_t<std::is_lvalue_reference_v<T>, T, T &&>;
 
 DRJIT_VCALL_TEMPLATE_BEGIN(Base)
     DRJIT_VCALL_METHOD(f)
     DRJIT_VCALL_METHOD(f_masked)
     DRJIT_VCALL_METHOD(dummy)
+    DRJIT_VCALL_METHOD(g)
 DRJIT_VCALL_END(Base)
 
 template <JitBackend Backend>
@@ -76,13 +87,16 @@ void bind_simple(nb::module_ &m) {
     using Mask = dr::mask_t<Float>;
 
     nb::class_<BaseT, nb::intrusive_base>(m, "Base")
-        .def("f", &BaseT::f);
+        .def("f", &BaseT::f)
+        .def("g", &BaseT::g);
 
     nb::class_<AT, BaseT>(m, "A")
-        .def(nb::init<>());
+        .def(nb::init<>())
+        .def_rw("value", &AT::value);
 
     nb::class_<BT, BaseT>(m, "B")
-        .def(nb::init<>());
+        .def(nb::init<>())
+        .def_rw("value", &BT::value);
 
     dr::ArrayBinding b;
     using BaseArray = dr::DiffArray<Backend, BaseT *>;
@@ -90,10 +104,13 @@ void bind_simple(nb::module_ &m) {
         .def("f",
              [](BaseArray &self, Float a, Float b) { return self->f(a, b); })
         .def("f_masked",
-             [](BaseArray &self, std::pair<Float, Float> ab, Mask mask) {
-                 return self->f_masked(ab, mask);
+             [](BaseArray &self, std::pair<Float, Float> ab, Mask active) {
+                 return self->f_masked(ab, active);
              },
-             "ab"_a, "mask"_a)
+             "ab"_a, "mask"_a = true)
+        .def("g",
+             [](BaseArray &self, Float x, Mask m) { return self->g(x, m); },
+             "x"_a, "mask"_a = true)
         .def("dummy", [](BaseArray &self) { return self->dummy(); });
 }
 
