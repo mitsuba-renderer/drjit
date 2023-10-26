@@ -698,7 +698,7 @@ static std::pair<ADIndex, Variable *> ad_var_new(JitBackend backend,
     ADIndex index;
 
     if (unlikely(unused.empty() || !index_reuse)) {
-        index = state.variables.size();
+        index = (ADIndex) state.variables.size();
         state.variables.emplace_back();
     } else {
         index = unused.top();
