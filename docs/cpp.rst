@@ -62,7 +62,7 @@ Next, you must use the following macros to describe the interface of the type.
    template class.
 
 .. c:macro:: DRJIT_END()
-   
+
    Demarcates the end of an interface block.
 
 .. c:macro:: DRJIT_VCALL_METHOD(Name)
@@ -83,7 +83,7 @@ Following these declarations, the following code performs a vectorized virtual
 function call.
 
 .. code-block:: cpp
-   
+
    dr::CUDAArray<T*> instances = ...;
    Float x = ....;
    Float y = instances->f(x);
