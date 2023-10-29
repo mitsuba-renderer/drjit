@@ -202,7 +202,7 @@ def test06_reduce(t, drjit_verbose, capsys):
 
     v_any = dr.any(v)
     msg = capsys.readouterr().out
-    assert msg.count('jit_var_or') == 1
+    assert msg.count('or(') == 1
 
     assert dr.all(v_any == t([True, False]))
 
@@ -219,7 +219,7 @@ def test07_cast(t, drjit_verbose, capsys):
     assert dr.all(td(v) == td(dr.array_t(td)(1, 2, 3)))
 
     msg = capsys.readouterr().out
-    assert msg.count("jit_var_cast") == 3
+    assert msg.count("cast(") == 3
     assert msg.count("jit_all") == 3
     assert msg.count("jit_var_mem_copy") == 4
 

@@ -132,7 +132,7 @@ def test04_init_ragged(t):
 @pytest.test_arrays('float32, shape=(*), jit')
 def test05_literal(t, drjit_verbose, capsys):
     v = t(123)
-    assert "literal" in capsys.readouterr().out
+    assert " = 123" in capsys.readouterr().out
     v[0] = 124
     assert "jit_poke" in capsys.readouterr().out
 
@@ -154,15 +154,15 @@ def test07_zeros(t, drjit_verbose, capsys):
     is_jit = "jit" in t.__meta__
     v = dr.zeros(t)
     assert len(v) == 1 and v[0] == 0
-    assert not is_jit or "literal" in capsys.readouterr().out
+    assert not is_jit or " = 0" in capsys.readouterr().out
 
     v = dr.zeros(t, 100)
     assert len(v) == 100 and v[0] == 0
-    assert not is_jit or "literal" in capsys.readouterr().out
+    assert not is_jit or "[100] = 0" in capsys.readouterr().out
 
     v = dr.zeros(t, [100])
     assert len(v) == 100 and v[0] == 0
-    assert not is_jit or "literal" in capsys.readouterr().out
+    assert not is_jit or "[100] = 0" in capsys.readouterr().out
 
     with pytest.raises(RuntimeError, match='the provided "shape" and "dtype" parameters are incompatible.'):
         v = dr.zeros(t, (100, 200))
@@ -176,11 +176,11 @@ def test08_zeros_3d(t, drjit_verbose, capsys):
 
     v = dr.zeros(t, 100)
     assert len(v) == 3 and len(v[1]) == 100 and v[0][0] == 0
-    assert not is_jit or "literal" in capsys.readouterr().out
+    assert not is_jit or "[100] = 0" in capsys.readouterr().out
 
     v = dr.zeros(t, (3, 100))
     assert len(v) == 3 and len(v[1]) == 100 and v[0][0] == 0
-    assert not is_jit or "literal" in capsys.readouterr().out
+    assert not is_jit or "[100] = 0" in capsys.readouterr().out
 
     with pytest.raises(RuntimeError, match='the provided "shape" and "dtype" parameters are incompatible.'):
         v = dr.zeros(t, (100, 3))
@@ -195,11 +195,11 @@ def test09_zeros_nd(t, drjit_verbose, capsys):
 
     v = dr.zeros(t, 100)
     assert len(v) == 1 and len(v[1]) == 100 and v[0][0] == 0
-    assert not is_jit or "literal" in capsys.readouterr().out
+    assert not is_jit or "[100] = 0" in capsys.readouterr().out
 
     v = dr.zeros(t, (3, 100))
     assert len(v) == 3 and len(v[1]) == 100 and v[0][0] == 0
-    assert not is_jit or "literal" in capsys.readouterr().out
+    assert not is_jit or "[100] = 0" in capsys.readouterr().out
 
 
 # Test dr.zeros (4)
@@ -265,11 +265,11 @@ def test14_zeros_3d(t, drjit_verbose, capsys):
 
     v = dr.full(t, 5, 100)
     assert len(v) == 3 and len(v[1]) == 100 and v[0][0] == 5
-    assert not is_jit or "literal" in capsys.readouterr().out
+    assert not is_jit or "[100] = 5" in capsys.readouterr().out
 
     v = dr.full(dtype=t, value=5, shape=(3, 100))
     assert len(v) == 3 and len(v[1]) == 100 and v[0][0] == 5
-    assert not is_jit or "literal" in capsys.readouterr().out
+    assert not is_jit or "[100] = 5" in capsys.readouterr().out
 
     with pytest.raises(RuntimeError, match='the provided "shape" and "dtype" parameters are incompatible.'):
         v = dr.full(t, 5, (100, 3))
