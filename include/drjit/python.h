@@ -159,7 +159,7 @@ struct ArraySupplement : ArrayMeta {
     using InitData = void (*)(size_t, const void *, ArrayBase *);
     using InitIndex = void (*)(uint64_t, ArrayBase *);
     using InitConst = void (*)(size_t, PyObject *, ArrayBase *);
-    using Cast = void (*)(const ArrayBase *, VarType, ArrayBase *);
+    using Cast = void (*)(const ArrayBase *, VarType, bool reinterpret, ArrayBase *);
     using Index = uint64_t (*)(const ArrayBase *) noexcept;
     using Data = void *(*)(const ArrayBase *) noexcept;
     using Gather = void (*)(const ArrayBase *, const ArrayBase *,
@@ -456,16 +456,29 @@ template <typename T> void bind_arithmetic(ArrayBinding &b) {
         new (d) T(fmadd(*a, *b, *c));
     };
 
-    b.cast = (ArrayBinding::Cast) +[](const ArrayBase *a, VarType vt, T *b) {
-        switch (vt) {
-            case VarType::Int32:   new (b) T(*(const Int32 *)   a); break;
-            case VarType::UInt32:  new (b) T(*(const UInt32 *)  a); break;
-            case VarType::Int64:   new (b) T(*(const Int64 *)   a); break;
-            case VarType::UInt64:  new (b) T(*(const UInt64 *)  a); break;
-            case VarType::Float32: new (b) T(*(const Float32 *) a); break;
-            case VarType::Float64: new (b) T(*(const Float64 *) a); break;
-            default: nanobind::detail::raise("Unsupported cast.");
+    b.cast = (ArrayBinding::Cast) +[](const ArrayBase *a, VarType vt, bool reinterpret, T *b) {
+        if (!reinterpret) {
+            switch (vt) {
+                case VarType::Int32:   new (b) T(*(const Int32 *)   a); break;
+                case VarType::UInt32:  new (b) T(*(const UInt32 *)  a); break;
+                case VarType::Int64:   new (b) T(*(const Int64 *)   a); break;
+                case VarType::UInt64:  new (b) T(*(const UInt64 *)  a); break;
+                case VarType::Float32: new (b) T(*(const Float32 *) a); break;
+                case VarType::Float64: new (b) T(*(const Float64 *) a); break;
+                default: nanobind::raise("Unsupported cast.");
+            }
+        } else {
+            switch (vt) {
+                case VarType::Int32:   new (b) T(reinterpret_array<T>(*(const Int32 *)   a)); break;
+                case VarType::UInt32:  new (b) T(reinterpret_array<T>(*(const UInt32 *)  a)); break;
+                case VarType::Int64:   new (b) T(reinterpret_array<T>(*(const Int64 *)   a)); break;
+                case VarType::UInt64:  new (b) T(reinterpret_array<T>(*(const UInt64 *)  a)); break;
+                case VarType::Float32: new (b) T(reinterpret_array<T>(*(const Float32 *) a)); break;
+                case VarType::Float64: new (b) T(reinterpret_array<T>(*(const Float64 *) a)); break;
+                default: nanobind::raise("Unsupported cast.");
+            }
         }
+
     };
 
     b[ArrayOp::Sum] = (void *) +[](const T *a, T *b) { new (b) T(a->sum_()); };

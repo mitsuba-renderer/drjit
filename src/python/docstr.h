@@ -3813,6 +3813,20 @@ This read-only property returns an enumeration value describing the evaluation s
 
 :type: drjit.VarState)";
 
+static const char *doc_reinterpret_array = R"(
+Reinterpret the provided Dr.Jit array or tensor as a different type.
+
+This operation reinterprets the input type as another type provided that it has
+a compatible in-memory layout (this operation is also known as a *bit-cast*).
+
+Args:
+    dtype (type): Target type.
+
+    value (object): A compatible Dr.Jit input array or tensor.
+
+Returns:
+    object: Result of the conversion as described above.)";
+
 #if defined(__GNUC__)
 #  pragma GCC diagnostic pop
 #endif

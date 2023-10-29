@@ -486,8 +486,7 @@ Standard mathematical functions
 .. autofunction:: cbrt
 .. autofunction:: rcp
 .. autofunction:: rsqrt
-.. autofunction:: frexp
-.. autofunction:: ldexp
+.. autofunction:: reinterpret_array
 
 Transcendental functions
 ------------------------
@@ -648,9 +647,15 @@ Automatic differentiation
 .. autofunction:: custom
 
 
-
 Safe mathematical functions
 ---------------------------
+
+Dr.Jit provides "safe" variants of a few standard mathematical operations that
+are prone to out-of-domain errors in calculations with floating point rounding
+errors.  Such errors could, e.g., cause the argument of a square root to become
+negative, which would ordinarily require complex arithmetic. At zero, the
+derivative of the square root function is infinite. The following operations 
+clamp the input to a safe range to avoid these extremes.
 
 .. autofunction:: safe_sqrt
 .. autofunction:: safe_asin

@@ -155,3 +155,6 @@ Other minor technical improvements:
   standard Python calling conventions (positional, keyword, variable length).
   Their ``func`` and ``funcs`` arguments were renamed to ``callable`` and
   ``callables``.
+
+- the ``drjit.reinterpret_array_v`` function was renamed to
+  :py:func:`drjit.reinterpret_array`.
