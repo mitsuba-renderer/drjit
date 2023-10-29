@@ -100,3 +100,47 @@ the called functions are also disabled for these elements.
 
 It is legal to perform a function call on an array containing ``nullptr``
 pointers. These elements are considered to be masked as well.
+
+Exposing instance arrays in Python
+----------------------------------
+
+Suppose you have created a C++ type with the following signature:
+
+.. code-block:: cpp
+
+   using Float = dr::DiffArray<JitBackend::CUDA, float>;
+
+   struct Foo {
+       virtual Float f(Float input) const = 0;
+       virtual ~Foo() = default;
+   };
+
+The nanobind description to expose this type in Python is as follows:
+
+.. code-block:: cpp
+
+   nb::class_<Foo>(m, "Foo")
+       .def("f", &Foo::f);
+
+It can also be useful to create similar bindings for Dr.Jit ``Foo`` instance
+arrays that automatically dispatch function calls to the ``f`` method. To do
+so, include
+
+.. code-block:: cpp
+
+   #include <drjit/python.h>
+
+and append the following binding declarations:
+
+.. code-block:: cpp
+
+    using FooPtr = dr::DiffPtr<JitBackend::CUDA, Foo *>;
+
+    dr::ArrayBinding b;
+    auto base_ptr = dr::bind_array_t<FooPtr>(b, m, "FooPtr")
+        .def("f", [](FooPtr &self, Float a) { return self->f(a); })
+    base_ptr.attr("Domain") = "Foo";
+
+The ``Domain`` attribute at the end should match the name passed to
+``jit_registry_put`` and enables use of the instance array with
+:py:func:`drjit.dispatch`.

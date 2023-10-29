@@ -3405,7 +3405,7 @@ such a custom operation.
 static const char *doc_switch = R"(
 switch(index: int | drjit.ArrayBase, callables: Sequence[Callable], *args, **kwargs) -> object
 
-Invoke one of multiple callables based on an index or an array of indices.
+Invoke one of multiple callables based on an index or index array.
 
 When provided with a *scalar* index (``type(index)`` is ``int``), this function
 invokes one of the provided callables and is semantically equivalent to the
@@ -3418,7 +3418,8 @@ following Python code:
 
 When provided with a Dr.Jit array of indices (32-bit unsigned integers), it
 performs the vectorized equivalent of the above and assembles an array of
-return values containing the result of all referenced callables.
+return values containing the result of all referenced callables. It does so
+efficiently using at most a a single invocation of each callable.
 
 .. code-block:: python
 
@@ -3435,13 +3436,6 @@ return values containing the result of all referenced callables.
     res = dr.switch(index, [f1, f2], dr.arange(UInt32, 4))
 
     # res now contains [0, 10, 20, 3]
-
-When a boolean Dr.Jit array (e.g., :py:class:`drjit.llvm.Bool`,
-:py:class:`drjit.cuda.ad.Bool`, etc.) is specified as last positional argument
-or as a keyword argument named ``active``, that argument is treated specially
-and *not* forwarded to the provided callables. Entries of the input arrays
-associated with a ``False`` mask entry are ignored and never passed to the
-callables. The corresponding return value entries remain zero-initialized.
 
 Dr.Jit will use one of two possible strategies to realize this operation
 depending on the active compilation flags (see :py:func:`drjit.set_flag`,
@@ -3507,6 +3501,14 @@ arbitrarily nested. However, a callable invoked by a symbolic-mode
 :py:func:`dr.switch` or :py:func:`dr.dispatch` since this would require the
 evaluation of symbolic variables.
 
+When a boolean Dr.Jit array (e.g., :py:class:`drjit.llvm.Bool`,
+:py:class:`drjit.cuda.ad.Bool`, etc.) is specified as last positional argument
+or as a keyword argument named ``active``, that argument is treated specially:
+entries of the input arrays associated with a ``False`` mask entry are ignored
+and never passed to the callables. Associated entries of the return
+value will be zero-initialized. The callables will still receive the mask
+argument as input, but it will always be set to ``True``.
+
 Args:
     index (int|drjit.ArrayBase): a list of indices to choose the functions
 
@@ -3520,9 +3522,78 @@ Args:
       callables.
 
 Returns:
-    object: A single function reutrn value, or an array of return values. The
-    specifics depend on whether the `index` argument is scalar, and what the
-    provided functions return.)";
+    object: When `index` is a scalar Python integer, the return value simply
+    forwards the return value of the selected callable. Otherwise, the function
+    returns a Dr.Jit array or :ref:`Pytree <pytrees>` containing the result of
+    each performed function call.)";
+
+static const char *doc_dispatch = R"(
+Invoke a custom Python callable for each instance in an instance array.
+
+This function invokes the provided `callable` for each instance
+in the instance array `instances` and assembles the return values into
+a result array. Conceptually, it does the following:
+
+.. code-block:: python
+
+   def dispatch(instances, callable, *args, **kwargs):
+       result = []
+       for inst in instances:
+           result.append(callable(inst, *args, **kwargs))
+
+However, the implementation accomplishes this more efficiently using only a
+single call per unique instance. Instead of a Python ``list``, it returns a
+Dr.Jit array or :ref:`Pytree <pytrees>`.
+
+In practice, this function is mainly good for two things:
+
+- Dr.Jit instance arrays contain C++ instance, and these will typically expose
+  a set of methods. Adding further methods requires re-compiling C++ code and
+  adding bindings, which may impede quick prototyping. With
+  :py:func:`drjit.dispatch()`, a developer can quickly implement additional
+  vectorized method calls within Python (with the caveat that these can only
+  access public members of the underlying type).
+
+- Dynamic dispatch is a relatively costly operation. When multiple calls are
+  performed on the same set of instances, it may be preferable to merge them
+  into a single and potentially signficantly faster use of
+  :py:func:`drjit.dispatch()`. An example is shown below:
+
+  .. code-block:: python
+
+     instances = # .. Array of C++ instances ..
+     result_1 = instances.func_1(arg1)
+     result_2 = instances.func_2(arg2)
+
+  The following alternative implementation instead uses :py:func:`drjit.dispatch()`:
+
+  .. code-block:: python
+
+     def my_func(self, arg1, arg2):
+         return (self.func_1(arg1),
+                 self.func_2(arg2))
+
+     result_1, result_2 = dr.dispatch(instances, my_func, arg1, arg2)
+
+This function is otherwise very similar to :py:func:`drjit.switch()`
+and similarly provides two different compilation modes, differentiability,
+and special handling of mask arguments. Please review the documentation
+of :py:func:`drjit.switch()` for details.
+
+Args:
+    instances (drjit.ArrayBase): a Dr.Jit instance array.
+
+    func (Callable): function to dispatch on all instances.
+
+    *args (tuple): a variable-length list of positional arguments passed to the
+      callable.
+
+    **kwargs (dict): a variable-length list of keyword arguments passed to the
+      callable.
+
+Returns:
+    object: A Dr.Jit array or :ref:`Pytree <pytrees>` containing the
+    result of each performed function call.)";
 
 static const char *doc_collect_indices = R"(
 Return Dr.Jit variable indices associated with the provided data structure.

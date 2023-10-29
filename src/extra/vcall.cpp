@@ -191,12 +191,18 @@ static void ad_vcall_getter(JitBackend backend, const char *domain,
         for (size_t j = 0; j < rv2.size(); ++j) {
             uint64_t index = rv2[j];
             rv_ad[j] |= (index >> 32) != 0;
+            if (!index)
+                jit_raise(
+                    "ad_vcall_getter(\"%s%s%s\"): return value of callable %zu "
+                    "is empty/uninitialized, which is not permitted!",
+                    domain_or_empty, separator, name, i);
             rv3.push_back_borrow((uint32_t) index);
             size_t size = jit_var_size((uint32_t) index);
             if (size != 1)
-                jit_raise("ad_vcall_getter(\"%s%s%s\"): return value is not a "
-                          "scalar (r%u has size %zu).", domain_or_empty,
-                          separator, name, (uint32_t) index, size);
+                jit_raise("ad_vcall_getter(\"%s%s%s\"): return value of "
+                          "callable %zu is not a scalar (r%u has size %zu).",
+                          domain_or_empty, separator, name, i, (uint32_t) index,
+                          size);
         }
     }
 

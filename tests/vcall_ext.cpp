@@ -116,6 +116,7 @@ void bind_simple(nb::module_ &m) {
 
     nb::class_<BaseT, nb::intrusive_base>(m, "Base")
         .def("f", &BaseT::f)
+        .def("f_masked", &BaseT::f_masked)
         .def("g", &BaseT::g);
 
     nb::class_<AT, BaseT>(m, "A")
@@ -130,7 +131,7 @@ void bind_simple(nb::module_ &m) {
 
     dr::ArrayBinding b;
     using BaseArray = dr::DiffArray<Backend, BaseT *>;
-    dr::bind_array_t<BaseArray>(b, m, "BasePtr")
+    auto base_ptr = dr::bind_array_t<BaseArray>(b, m, "BasePtr")
         .def("f",
              [](BaseArray &self, Float a, Float b) { return self->f(a, b); })
         .def("f_masked",
@@ -155,6 +156,7 @@ void bind_simple(nb::module_ &m) {
                 return self->constant_getter(m);
              }, "mask"_a = true)
         .def("get_self", [](BaseArray &self) { return self->get_self(); });
+    base_ptr.attr("Domain") = "Base";
 }
 
 NB_MODULE(vcall_ext, m) {

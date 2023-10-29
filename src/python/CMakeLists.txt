@@ -34,7 +34,7 @@ nanobind_add_module(
   autodiff.h autodiff.cpp
   inspect.h  inspect.cpp
   misc.h     misc.cpp
-  dispatch.h dispatch.cpp
+  switch.h   switch.cpp
 )
 
 set_target_properties(drjit-python
