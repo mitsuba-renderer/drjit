@@ -90,8 +90,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
     template <typename T, enable_if_scalar_t<T> = 0>
     JitArray(T value) {
         if constexpr (IsClass) {
-            uint32_t av = jit_registry_id(value);
-            m_index = jit_var_literal(Backend, Type, &av, 1, 0, IsClass);
+            m_index = jit_var_class(Backend, (void *) value);
         } else {
             switch (Type) {
                 case VarType::Bool:    m_index = jit_var_bool(Backend, (bool) value); break;
