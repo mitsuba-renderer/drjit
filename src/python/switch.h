@@ -1,5 +1,5 @@
 /*
-    dispatch.h -- implementation of drjit.switch() and drjit.dispatch()
+    switch.h -- implementation of drjit.switch() and drjit.dispatch()
 
     Dr.Jit: A Just-In-Time-Compiler for Differentiable Rendering
     Copyright 2023, Realistic Graphics Lab, EPFL.
@@ -12,4 +12,4 @@
 
 #include "common.h"
 
-extern void export_dispatch(nb::module_&);
+extern void export_switch(nb::module_&);

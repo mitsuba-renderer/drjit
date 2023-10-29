@@ -28,7 +28,7 @@
 #include "dlpack.h"
 #include "autodiff.h"
 #include "inspect.h"
-#include "dispatch.h"
+#include "switch.h"
 #include "misc.h"
 
 NB_MODULE(drjit_ext, m_) {
@@ -176,7 +176,7 @@ NB_MODULE(drjit_ext, m_) {
     export_autodiff(m);
     export_inspect(m);
     export_misc(m);
-    export_dispatch(m);
+    export_switch(m);
 
     export_scalar(scalar);
 

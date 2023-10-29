@@ -1062,7 +1062,7 @@ void ad_accum_grad(Index index, JitIndex value) {
                  "%zu into AD variable a%u, which has size %zu!",
                  size_in, ad_index, v->size);
 
-    ad_log("ad_accum_grad(a%u)", ad_index);
+    ad_log("ad_accum_grad(a%u, r%u)", ad_index, value);
 
     v->accum(value_v, size_in);
 }
