@@ -360,6 +360,41 @@ nb::object select(nb::handle h0, nb::handle h1, nb::handle h2) {
     return nb::steal(o);
 }
 
+nb::object reinterpret_array(nb::type_object_t<dr::ArrayBase> t, nb::handle_t<dr::ArrayBase> h) {
+    struct Reinterpret : TransformCallback {
+        VarType source_type;
+        VarType target_type;
+
+        Reinterpret(VarType source_type, VarType target_type)
+            : source_type(source_type), target_type(target_type) { }
+
+        nb::handle transform_type(nb::handle tp) const override {
+            ArrayMeta m = supp(tp);
+            m.type = (uint8_t) target_type;
+            return meta_get_type(m);
+        }
+
+        virtual void operator()(nb::handle h1, nb::handle h2) const override {
+            supp(h2.type()).cast(
+                inst_ptr(h1), source_type, 1, inst_ptr(h2)
+            );
+        }
+    };
+
+    ArrayMeta mt = supp(t), ms = supp(h.type());
+    if (mt == ms)
+        return nb::borrow(h);
+
+    VarType source_type = (VarType) ms.type,
+            target_type = (VarType) mt.type;
+
+    ms.type = mt.type;
+    if (ms != mt)
+        nb::raise("drjit.reinterpret_array(): input and target type are incompatible.");
+
+    return transform("drjit.reinterpret_array", Reinterpret(source_type, target_type), h);
+}
+
 static VarState get_state(nb::handle h_) {
     struct GetState : TraverseCallback {
         mutable VarState state = VarState::Invalid;
@@ -518,6 +553,8 @@ void export_base(nb::module_ &m) {
               return nb::steal(nb_power(h0.ptr(), h1.ptr()));
           }
     );
+
+    m.def("reinterpret_array", &reinterpret_array, doc_reinterpret_array);
 
     array_base = ab;
     array_module = m;

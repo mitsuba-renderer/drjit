@@ -215,6 +215,7 @@ def test08_scoped_set_flag_const_prop(t, value):
         c2 = t(9)
         assert (c1.index == c2.index) == value
 
+
 @pytest.test_arrays('type=int32,jit,shape=(*)')
 @pytest.mark.parametrize("value", [True, False])
 def test09_scoped_set_flag_lvn(t, value):
@@ -228,6 +229,7 @@ def test09_scoped_set_flag_lvn(t, value):
 
         # Verify that c1 and c2 reference the same Dr.Jit variable
         assert (c1.index == c2.index) == value
+
 
 @pytest.test_arrays('type=int32,jit,shape=(3, *)')
 def test10_state(t):
@@ -245,3 +247,19 @@ def test10_state(t):
     a.z = type(a.x)()
     assert a.z.state == dr.VarState.Invalid
     assert a.state == dr.VarState.Mixed
+
+
+@pytest.test_arrays('type=float32,jit,shape=(*)', 'type=float32,jit,shape=(3, *)')
+def test11_reinterpret(t):
+    U = dr.uint32_array_t(t)
+    U64 = dr.uint64_array_t(t)
+    v = dr.reinterpret_array(U, t(1.0))
+    assert v[0] == 0x3f800000
+    v2 = dr.reinterpret_array(t, v)
+    assert v2[0] == 1.0
+    with pytest.raises(RuntimeError) as e:
+        dr.reinterpret_array(U64, t(1.0))
+    e = e.value
+    if hasattr(e, '__cause__') and e.__cause__ is not None:
+        e = e.__cause__
+    assert 'cannot reinterpret-cast between types of different size' in str(e)

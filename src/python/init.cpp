@@ -74,7 +74,7 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
                     m_temp = s_arg;
                     m_temp.type = s.type;
                     if (m_temp == m_self && s.cast) {
-                        s.cast(inst_ptr(arg), (VarType) s_arg.type, inst_ptr(self));
+                        s.cast(inst_ptr(arg), (VarType) s_arg.type, false, inst_ptr(self));
                         nb::inst_mark_ready(self);
                         return 0;
                     }
