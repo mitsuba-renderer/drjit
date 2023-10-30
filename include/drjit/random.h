@@ -55,8 +55,9 @@ template <typename T> struct PCG32 {
     void seed(size_t size = 1,
               const UInt64 &initstate = PCG32_DEFAULT_STATE,
               const UInt64 &initseq   = PCG32_DEFAULT_STREAM) {
-        state = zeros<UInt64>();
-        inc = sl<1>(initseq + arange<UInt64>(size)) | 1u;
+        UInt64 counter = arange<UInt64>(size);
+        state = counter;
+        inc = sl<1>(initseq + counter) | 1u;
         next_uint32();
         state += initstate;
         next_uint32();
