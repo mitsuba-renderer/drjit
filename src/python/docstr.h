@@ -3827,6 +3827,118 @@ Args:
 Returns:
     object: Result of the conversion as described above.)";
 
+static const char *doc_PCG32 = R"(
+Implementation of PCG32, a member of the PCG family of random number generators
+proposed by Melissa O'Neill.
+
+PCG combines a Linear Congruential Generator (LCG) with a permutation function
+that yields high-quality pseudorandom variates while at the same time requiring
+very low computational cost and internal state (only 128 bit in the case of
+PCG32).
+
+More detail on the PCG family of pseudorandom number generators can be found
+`here <https://www.pcg-random.org/index.html>`__.
+
+The :py:class:`PCG32` class is implemented as a :ref:`Pytree <pytrees>`, which
+means that it is compatible with symbolic function calls, loops, etc.)";
+
+static const char *doc_PCG32_PCG32 = R"(
+Initialize a random number generator that generates `size` variates in parallel.
+
+The `initstate` and `initseq` inputs determine the initial state and increment
+of the linear congruential generator. Their values are the defaults from the
+original implementation. All parameters are directly forwarded to the
+:py:func:`seed` function.
+
+A second overload copy-constructs a new PCG32 instance from an existing instance.)";
+
+static const char *doc_PCG32_seed = R"(
+Seed the random number generator so that it generates `size` variates in
+parallel.
+
+The `initstate` and `initseq` inputs determine the initial state and increment
+of the linear congruential generator. Their values are the defaults from the
+original implementation.
+
+The implementation of this routine follows the official PCG32 implementation
+except for one aspect: when multiple random numbers are being generated in
+parallel, an offset equal to :py:func:`drjit.arange(UInt64, size) <drjit.arange>` is added
+to both `initstate` and `initseq` to de-correlate the generated sequences.)";
+
+static const char *doc_PCG32_next_uint32 = R"(
+Generate a uniformly distributed unsigned 32-bit random number
+
+Two overloads of this function exist: the masked variant does not advance
+the the PRNG state of entries ``i`` where ``mask[i] == False``.)";
+
+static const char *doc_PCG32_next_uint64 = R"(
+Generate a uniformly distributed unsigned 64-bit random number
+
+Internally, the function calls :py:func:`next_uint32` twice.
+
+Two overloads of this function exist: the masked variant does not advance
+the the PRNG state of entries ``i`` where ``mask[i] == False``.)";
+
+static const char *doc_PCG32_next_float32 = R"(
+Generate a uniformly distributed single precision floating point number on the
+interval :math:`[0, 1)`.
+
+Two overloads of this function exist: the masked variant does not advance
+the the PRNG state of entries ``i`` where ``mask[i] == False``.)";
+
+
+static const char *doc_PCG32_next_float64 = R"(
+Generate a uniformly distributed double precision floating point number on the
+interval :math:`[0, 1)`.
+
+Two overloads of this function exist: the masked variant does not advance
+the the PRNG state of entries ``i`` where ``mask[i] == False``.)";
+
+static const char *doc_PCG32_next_uint32_bounded = R"(
+Generate a uniformly distributed 32-bit integer number on the
+interval :math:`[0, \texttt{bound})`.
+
+To ensure an unbiased result, the implementation relies on an iterative
+scheme that typically finishes after 1-2 iterations.)";
+
+static const char *doc_PCG32_next_uint64_bounded = R"(
+Generate a uniformly distributed 64-bit integer number on the
+interval :math:`[0, \texttt{bound})`.
+
+To ensure an unbiased result, the implementation relies on an iterative
+scheme that typically finishes after 1-2 iterations.)";
+
+static const char *doc_PCG32_add = R"(
+Advance the pseudorandom number generator.
+
+This function implements a multi-step advance function that is equivalent to
+(but more efficient than) calling the random number generator `arg` times
+in sequence.
+
+This is useful to advance a newly constructed PRNG to a certain known state.)";
+
+static const char *doc_PCG32_iadd =
+    R"(In-place addition operator based on :py:func:`__add__`.)";
+
+static const char *doc_PCG32_sub = R"(
+Rewind the pseudorandom number generator.
+
+This function implements the opposite of ``__add__`` to step a PRNG backwards.
+It can also compute the *difference* (as counted by the number of internal
+``next_uint32`` steps) between two :py:class:`PCG32` instances. This assumes
+that the two instances were consistently seeded.)";
+
+static const char *doc_PCG32_isub =
+    R"(In-place subtraction operator based on :py:func:`__sub__`.)";
+
+static const char *doc_PCG32_inc =
+    "Sequence increment of the PCG32 PRNG (an unusigned 64-bit integer or "
+    "integer array). Please see the original paper for details on this field.";
+
+static const char *doc_PCG32_state =
+    "Sequence state of the PCG32 PRNG (an unsigned 64-bit integer or integer "
+    "array). Please see the original paper for details on this field.";
+
 #if defined(__GNUC__)
 #  pragma GCC diagnostic pop
 #endif

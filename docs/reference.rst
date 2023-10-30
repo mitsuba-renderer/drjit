@@ -995,6 +995,26 @@ Tensors
 .. autoclass:: drjit.scalar.TensorXi64
     :show-inheritance:
 
+Random number generators
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. autoclass:: drjit.scalar.PCG32
+
+   .. automethod:: __init__
+   .. automethod:: seed
+   .. automethod:: next_uint32
+   .. automethod:: next_uint64
+   .. automethod:: next_float32
+   .. automethod:: next_float64
+   .. automethod:: next_uint32_bounded
+   .. automethod:: next_uint64_bounded
+   .. automethod:: __add__
+   .. automethod:: __iadd__
+   .. automethod:: __sub__
+   .. automethod:: __isub__
+   .. autoproperty:: inc
+   .. autoproperty:: state
+
 
 LLVM array namespace (``drjit.llvm``)
 _______________________________________
@@ -1169,6 +1189,26 @@ Tensors
 .. autoclass:: drjit.llvm.TensorXi64
     :show-inheritance:
 
+Random number generators
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. autoclass:: drjit.llvm.PCG32
+
+   .. automethod:: __init__
+   .. automethod:: seed
+   .. automethod:: next_uint32
+   .. automethod:: next_uint64
+   .. automethod:: next_float32
+   .. automethod:: next_float64
+   .. automethod:: next_uint32_bounded
+   .. automethod:: next_uint64_bounded
+   .. automethod:: __add__
+   .. automethod:: __iadd__
+   .. automethod:: __sub__
+   .. automethod:: __isub__
+   .. autoproperty:: inc
+   .. autoproperty:: state
+
 LLVM array namespace with automatic differentiation (``drjit.llvm.ad``)
 _______________________________________________________________________
 
@@ -1340,6 +1380,26 @@ Tensors
     :show-inheritance:
 .. autoclass:: drjit.llvm.ad.TensorXi64
     :show-inheritance:
+
+Random number generators
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. autoclass:: drjit.llvm.ad.PCG32
+
+   .. automethod:: __init__
+   .. automethod:: seed
+   .. automethod:: next_uint32
+   .. automethod:: next_uint64
+   .. automethod:: next_float32
+   .. automethod:: next_float64
+   .. automethod:: next_uint32_bounded
+   .. automethod:: next_uint64_bounded
+   .. automethod:: __add__
+   .. automethod:: __iadd__
+   .. automethod:: __sub__
+   .. automethod:: __isub__
+   .. autoproperty:: inc
+   .. autoproperty:: state
 
 Miscellaneous
 -------------

@@ -158,3 +158,8 @@ Other minor technical improvements:
 
 - the ``drjit.reinterpret_array_v`` function was renamed to
   :py:func:`drjit.reinterpret_array`.
+
+- The :py:func:`drjit.llvm.PCG32.seed` function (and other backend variants)
+  were modified to add the lane counter to both `initseq` and `initstate`.
+  Previously, the counter was only added to the former, which led to noticeable
+  correlation artifacts.
