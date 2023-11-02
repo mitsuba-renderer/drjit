@@ -48,6 +48,7 @@
 #include <drjit/math.h>
 #include <drjit/autodiff.h>
 #include <drjit/custom.h>
+#include <drjit-core/hash.h>
 #include <tsl/robin_set.h>
 #include <nanobind/intrusive/counter.inl>
 #include <queue>

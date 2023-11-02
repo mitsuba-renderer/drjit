@@ -1,5 +1,5 @@
 from . import detail
-import typing as _typing
+from . import ast
 
 with detail.scoped_rtld_deepbind():
     from . import drjit_ext
@@ -653,3 +653,5 @@ def isolate_grad(when=True):
         return detail.NullContextManager()
 
     return detail.ADContextManager(detail.ADScope.Isolate, [])
+
+function = ast.function

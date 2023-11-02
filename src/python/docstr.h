@@ -3419,7 +3419,7 @@ following Python code:
 When provided with a Dr.Jit array of indices (32-bit unsigned integers), it
 performs the vectorized equivalent of the above and assembles an array of
 return values containing the result of all referenced callables. It does so
-efficiently using at most a a single invocation of each callable.
+efficiently using at most a single invocation of each callable.
 
 .. code-block:: python
 

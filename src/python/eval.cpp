@@ -31,7 +31,7 @@ bool schedule(nb::handle h) {
 
 static bool schedule_2(nb::args args) { return schedule(args); }
 
-static void eval(nb::handle h) {
+void eval(nb::handle h) {
     if (schedule(h)) {
         nb::gil_scoped_release guard;
         jit_eval();

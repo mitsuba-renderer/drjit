@@ -130,7 +130,6 @@ void export_misc(nb::module_ &) {
     detail.def("update_indices", &update_indices, doc_update_indices);
     detail.def("check_compatibility", &check_compatibility,
                doc_check_compatibility);
-
     detail.def("llvm_version", []() {
         int major, minor, patch;
         jit_llvm_version(&major, &minor, &patch);

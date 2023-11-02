@@ -29,6 +29,7 @@
 #include "autodiff.h"
 #include "inspect.h"
 #include "switch.h"
+#include "while.h"
 #include "misc.h"
 
 NB_MODULE(drjit_ext, m_) {
@@ -177,6 +178,7 @@ NB_MODULE(drjit_ext, m_) {
     export_inspect(m);
     export_misc(m);
     export_switch(m);
+    export_while(m);
 
     export_scalar(scalar);
 
