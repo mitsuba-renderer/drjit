@@ -35,11 +35,16 @@ nanobind_add_module(
   inspect.h  inspect.cpp
   misc.h     misc.cpp
   switch.h   switch.cpp
+  while.h    while.cpp
 )
 
 set_target_properties(drjit-python
   PROPERTIES
   OUTPUT_NAME drjit_ext ${DRJIT_OUTPUT_DIRECTORY})
+
+target_include_directories(drjit-python
+  PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../ext/nanobind/ext/robin_map/include
+)
 
 target_compile_definitions(drjit-python PRIVATE -DDRJIT_PYTHON_BUILD)
 

@@ -20,18 +20,6 @@
 #  define ad_trace(fmt, ...) jit_log(LogLevel::Trace, fmt, ## __VA_ARGS__)
 #endif
 
-struct UInt32Hasher {
-    size_t operator()(uint32_t v) const {
-        // fmix32 from MurmurHash by Austin Appleby (public domain)
-        v ^= v >> 16;
-        v *= 0x85ebca6b;
-        v ^= v >> 13;
-        v *= 0xc2b2ae35;
-        v ^= v >> 16;
-        return (size_t) v;
-    }
-};
-
 template <typename Value>
 using GenericArray = drjit::JitArray<JitBackend::None, Value>;
 

@@ -595,11 +595,9 @@ void traverse(const char *op, const TraverseCallback &tc, nb::handle h) {
         }
     } catch (nb::python_error &e) {
         nb::str tp_name = nb::type_name(tp);
-        e.restore();
-        nb::chain_error(PyExc_RuntimeError,
-                        "%s(): error encountered while processing an argument "
-                        "of type '%U' (see above).", op, tp_name.ptr());
-        throw nb::python_error();
+        nb::raise_from(e, PyExc_RuntimeError,
+                       "%s(): error encountered while processing an argument "
+                       "of type '%U' (see above).", op, tp_name.ptr());
     } catch (const std::exception &e) {
         nb::str tp_name = nb::type_name(tp);
         nb::chain_error(PyExc_RuntimeError,
@@ -674,12 +672,10 @@ void traverse_pair(const char *op, const TraversePairCallback &tc,
     } catch (nb::python_error &e) {
         nb::str tp_name_1 = nb::type_name(tp1),
                 tp_name_2 = nb::type_name(tp2);
-        e.restore();
-        nb::chain_error(PyExc_RuntimeError,
-                        "%s(): error encountered while processing arguments "
-                        "of type '%U' and '%U' (see above).",
-                        op, tp_name_1.ptr(), tp_name_2.ptr());
-        throw nb::python_error();
+        nb::raise_from(e, PyExc_RuntimeError,
+                       "%s(): error encountered while processing arguments "
+                       "of type '%U' and '%U' (see above).",
+                       op, tp_name_1.ptr(), tp_name_2.ptr());
     } catch (const std::exception &e) {
         nb::str tp_name_1 = nb::type_name(tp1),
                 tp_name_2 = nb::type_name(tp2);
@@ -770,11 +766,9 @@ nb::object transform(const char *op, const TransformCallback &tc, nb::handle h1)
         }
     } catch (nb::python_error &e) {
         nb::str tp_name = nb::type_name(tp1);
-        e.restore();
-        nb::chain_error(PyExc_RuntimeError,
-                        "%s(): error encountered while processing an argument "
-                        "of type '%U' (see above).", op, tp_name.ptr());
-        throw nb::python_error();
+        nb::raise_from(e, PyExc_RuntimeError,
+                       "%s(): error encountered while processing an argument "
+                       "of type '%U' (see above).", op, tp_name.ptr());
     } catch (const std::exception &e) {
         nb::str tp_name = nb::type_name(tp1);
         nb::chain_error(PyExc_RuntimeError,
@@ -895,11 +889,9 @@ nb::object transform_pair(const char *op, const TransformPairCallback &tc,
     } catch (nb::python_error &e) {
         nb::str tp1_name = nb::type_name(tp1),
                 tp2_name = nb::type_name(tp2);
-        e.restore();
-        nb::chain_error(PyExc_RuntimeError,
-                        "%s(): error encountered while processing arguments "
-                        "of type '%U' and '%U' (see above).", op, tp1_name.ptr(), tp2_name.ptr());
-        throw nb::python_error();
+        nb::raise_from(e, PyExc_RuntimeError,
+                       "%s(): error encountered while processing arguments "
+                       "of type '%U' and '%U' (see above).", op, tp1_name.ptr(), tp2_name.ptr());
     } catch (const std::exception &e) {
         nb::str tp1_name = nb::type_name(tp1),
                 tp2_name = nb::type_name(tp2);

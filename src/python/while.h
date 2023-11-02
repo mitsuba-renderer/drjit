@@ -1,5 +1,5 @@
 /*
-    eval.h -- Bindings for drjit.eval() and drjit.schedule()
+    while.h -- implementation of drjit.while_loop()
 
     Dr.Jit: A Just-In-Time-Compiler for Differentiable Rendering
     Copyright 2023, Realistic Graphics Lab, EPFL.
@@ -12,6 +12,4 @@
 
 #include "common.h"
 
-extern bool schedule(nb::handle);
-extern void eval(nb::handle h);
-extern void export_eval(nb::module_ &);
+extern void export_while(nb::module_&);

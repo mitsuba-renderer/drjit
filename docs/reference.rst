@@ -15,6 +15,14 @@ Array creation
 .. autofunction:: arange
 .. autofunction:: linspace
 
+Control flow
+------------
+
+.. autofunction:: function
+.. autofunction:: switch
+.. autofunction:: dispatch
+.. autofunction:: while_loop
+
 .. _horizontal-reductions-ref:
 
 Horizontal operations
@@ -92,12 +100,6 @@ Also relevant here are :py:func:`any`, :py:func:`all`.
 .. autofunction:: isnan
 .. autofunction:: isfinite
 .. autofunction:: allclose
-
-Function dispatch
------------------
-
-.. autofunction:: switch
-.. autofunction:: dispatch
 
 Miscellaneous operations
 ------------------------
