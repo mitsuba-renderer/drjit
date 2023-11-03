@@ -60,7 +60,7 @@ template <typename T> DRJIT_INLINE auto wrap_vcall(const T &value) {
             result.derived().entry(i) = wrap_vcall(value.derived().entry(i));
         return result;
     } else if constexpr (is_diff_v<T>) {
-        return wrap_vcall(value.detach_());
+        return T(wrap_vcall(value.detach_()));
     } else if constexpr (is_jit_v<T>) {
         return T::steal(jit_var_wrap_vcall(value.index()));
     } else if constexpr (is_drjit_struct_v<T>) {
