@@ -2,7 +2,7 @@
 #define NB_INTRUSIVE_EXPORT NB_IMPORT
 #include <nanobind/intrusive/counter.h>
 #include <nanobind/stl/pair.h>
-#include <drjit/vcall.h>
+#include <drjit/call.h>
 #include <drjit/python.h>
 
 namespace nb = nanobind;
@@ -94,17 +94,17 @@ template <typename Float> struct B : Base<Float> {
     Float opaque = dr::opaque<Float>(2.f);
 };
 
-DRJIT_VCALL_TEMPLATE_BEGIN(Base)
-    DRJIT_VCALL_METHOD(f)
-    DRJIT_VCALL_METHOD(f_masked)
-    DRJIT_VCALL_METHOD(dummy)
-    DRJIT_VCALL_METHOD(g)
-    DRJIT_VCALL_GETTER(scalar_getter)
-    DRJIT_VCALL_GETTER(opaque_getter)
-    DRJIT_VCALL_GETTER(complex_getter)
-    DRJIT_VCALL_GETTER(constant_getter)
-    DRJIT_VCALL_METHOD(get_self)
-DRJIT_VCALL_END(Base)
+DRJIT_CALL_TEMPLATE_BEGIN(Base)
+    DRJIT_CALL_METHOD(f)
+    DRJIT_CALL_METHOD(f_masked)
+    DRJIT_CALL_METHOD(dummy)
+    DRJIT_CALL_METHOD(g)
+    DRJIT_CALL_GETTER(scalar_getter)
+    DRJIT_CALL_GETTER(opaque_getter)
+    DRJIT_CALL_GETTER(complex_getter)
+    DRJIT_CALL_GETTER(constant_getter)
+    DRJIT_CALL_METHOD(get_self)
+DRJIT_CALL_END(Base)
 
 template <JitBackend Backend>
 void bind_simple(nb::module_ &m) {
@@ -159,7 +159,7 @@ void bind_simple(nb::module_ &m) {
     base_ptr.attr("Domain") = "Base";
 }
 
-NB_MODULE(vcall_ext, m) {
+NB_MODULE(call_ext, m) {
 #if defined(DRJIT_ENABLE_LLVM)
     nb::module_ llvm = m.def_submodule("llvm");
     bind_simple<JitBackend::LLVM>(llvm);

@@ -195,10 +195,10 @@ extern DRJIT_EXTRA_EXPORT void ad_copy_implicit_deps(drjit::dr_vector<uint32_t>&
 /// Check if a variable represents an implicit dependency on a non-symbolic operand
 extern void ad_var_check_implicit(uint64_t index);
 
-typedef void (*ad_vcall_callback)(void *payload, void *self,
+typedef void (*ad_call_func)(void *payload, void *self,
                                   const drjit::dr_vector<uint64_t> &args_i,
                                   drjit::dr_vector<uint64_t> &rv_i);
-typedef void (*ad_vcall_cleanup)(void*);
+typedef void (*ad_call_cleanup)(void*);
 
 /**
  * Perform a differentiable virtual function call
@@ -241,7 +241,7 @@ typedef void (*ad_vcall_cleanup)(void*);
  *     routines.
  *
  * \param callback
- *     Callback routine, which \c ad_vcall will invoke a number of times to
+ *     Callback routine, which \c ad_call will invoke a number of times to
  *     record each callable. It is given the \c payload parameter, a \c self
  *     pointer (either a pointer to an instance in the instance registry, or a
  *     callable index encoded as <tt>void*</tt>)
@@ -258,10 +258,10 @@ typedef void (*ad_vcall_cleanup)(void*);
  * already been destroyed.
  */
 extern DRJIT_EXTRA_EXPORT bool
-ad_vcall(JitBackend backend, const char *domain, size_t callable_count,
+ad_call(JitBackend backend, const char *domain, size_t callable_count,
          const char *name, bool is_getter, uint32_t index, uint32_t mask,
          const drjit::dr_vector<uint64_t> &args, drjit::dr_vector<uint64_t> &rv,
-         void *payload, ad_vcall_callback callback, ad_vcall_cleanup cleanup,
+         void *payload, ad_call_func callback, ad_call_cleanup cleanup,
          bool ad);
 
 #if defined(__cplusplus)

@@ -1198,7 +1198,7 @@ Returns:
     float | drjit.ArrayBase: Result of the FMA operation)";
 
 static const char *doc_zeros = R"(
-Return a zero-initialized instance of the desired type and shape
+Return a zero-initialized instance of the desired type and shape.
 
 This function can create zero-initialized instances of various types. In
 particular, ``dtype`` can be:
@@ -1234,7 +1234,7 @@ Returns:
 )";
 
 static const char *doc_ones = R"(
-Return an instance of the desired type and shape filled with ones
+Return an instance of the desired type and shape filled with ones.
 
 This function can create one-initialized instances of various types. In
 particular, ``dtype`` can be:
@@ -1271,7 +1271,7 @@ Returns:
 
 
 static const char *doc_full = R"(
-Return an constant-valued instance of the desired type and shape
+Return an constant-valued instance of the desired type and shape.
 
 This function can create constant-valued instances of various types. In
 particular, ``dtype`` can be:
@@ -1293,6 +1293,70 @@ particular, ``dtype`` can be:
 
 - A scalar Python type like ``int``, ``float``, or ``bool``. The ``shape``
   parameter is ignored in this case.
+
+Args:
+    dtype (type): Desired Dr.Jit array type, Python scalar type, or
+      :ref:`Pytree <pytrees>`.
+    value (object): An instance of the underlying scalar type
+      (``float``/``int``/``bool``, etc.) that will be used to initialize the
+      array contents.
+    shape (Sequence[int] | int): Shape of the desired array
+
+Returns:
+    object: A instance of type ``dtype`` filled with ``value``
+)";
+
+static const char *doc_opaque = R"(
+Return an *opaque* constant-valued instance of the desired type and shape.
+
+This function is very similar to :py:func:`drjit.full` in that it creates
+constant-valued instances of various types including (potentially nested)
+Dr.Jit arrays, tensors, and :ref:`Pytrees <pytrees>`. Please refer to the
+documentation of :py:func:`drjit.full` for details on the function signature.
+However, :py:func:`drjit.full` creates *literal constant* arrays, which
+means that Dr.Jit is fully aware of the array contents.
+
+In contrast, :py:func:`drjit.opaque` produces an *opaque* array backed by a
+representation in device memory. *How is this useful?*
+
+Consider the following snippet, where a complex calculation is parameterized
+by the constant ``1``.
+
+.. code-block:: python
+
+   from drjit.llvm import Float
+
+   result = complex_function(Float(1), ...) # Float(1) is equivalent to dr.full(Float, 1) 
+   print(result)
+
+The ``print()`` statement will cause Dr.Jit to evaluate the queued computation,
+which likely also requires compilation of a new kernel (if that exact pattern
+of steps hasn't been observed before). Kernel compilation is a costly step and
+may be much slower than the actual computation that needs to be done.
+
+Suppose we later wish to evaluate the function with a different parameter:
+
+.. code-block:: python
+
+   result = complex_function(Float(2), ...)
+   print(result)
+
+The constant ``2`` is essentially copy-pasted into the generated program,
+causing a mismatch with the previously compiled kernel that therefore cannot be
+reused. This unfortunately means that we must once more wait a few tens or even
+hundreds of milliseconds until a new kernel has been compiled and uploaded to
+the device.
+
+This motivates the existence of :py:func:`drjit.opaque`. By wrapping
+a variable in an opaque representation, we can keep certain constants out
+of the generated program and improve the effectiveness of the kernel cache:
+
+.. code-block:: python
+
+   # The following lines reuse the compiled kernel regardless of the contents of 'value'
+   value = 2 
+   result = complex_function(dr.opaque(Float, value), ...)
+   print(result)
 
 Args:
     dtype (type): Desired Dr.Jit array type, Python scalar type, or
@@ -1781,8 +1845,8 @@ An example is shown below:
 
 Args:
     dtype (type): A dynamic 32-bit unsigned integer Dr.Jit array type,
-                  such as :py:class:`dr.scalar.ArrayXu` or
-                  :py:class:`dr.cuda.UInt`.
+                  such as :py:class:`drjit.scalar.ArrayXu` or
+                  :py:class:`drjit.cuda.UInt`.
 
     shape (tuple[int, ...]): The shape of the tensor to be sliced.
 
@@ -1891,8 +1955,7 @@ Args:
       It exists to slightly improve the efficiency of a special case where an
       array is fully read by differentiable gathers without duplicate reads
       from any particular entry. (i.e., the gather indices are a permutation).
-      This case arises in the implementation of wavefront-style virtual funtion
-      dispatch.
+      This case arises in the implementation of evaluated array method calls.
 )";
 
 static const char *doc_scatter = R"(
@@ -1994,8 +2057,7 @@ Args:
       It exists to slightly improve the efficiency of a special case where a
       zero-initialized array is fully initialized by differentiable scatters
       without duplicate writes to an entry. (i.e., the scatter indices are a
-      permutation). This case arises in the implementation of wavefront-style
-      virtual funtion dispatch.
+      permutation). This case arises in the implementation of array method calls.
 )";
 
 static const char *doc_scatter_reduce = R"(
@@ -3088,24 +3150,33 @@ Args:
     **kwarg (dict): A set of (keyword, object) pairs.
 )";
 
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
 static const char *doc_ADMode = R"(
 Enumeration to distinguish different types of primal/derivative computation.
 
-See also :py:func:`drjit.enqueue()`, :py:func:`drjit.traverse()`.
-)";
+See also :py:func:`drjit.enqueue()`, :py:func:`drjit.traverse()`.)";
 
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
 static const char *doc_ADMode_Primal = R"(
 Primal/original computation without derivative tracking. Note that this
 is *not* a valid input to Dr.Jit AD routines, but it is sometimes useful
 to have this entry when to indicate to a computation that derivative
 propagation should not be performed.)";
 
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
 static const char *doc_ADMode_Forward = R"(
 Propagate derivatives in forward mode (from inputs to outputs))";
 
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
 static const char *doc_ADMode_Backward = R"(
 Propagate derivatives in backward/reverse mode (from outputs to inputs)";
 
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
 static const char *doc_ADFlag = R"(
 By default, Dr.Jit's AD system destructs the enqueued input graph during
 forward/backward mode traversal. This frees up resources, which is useful
@@ -3117,42 +3188,66 @@ To support more fine-grained use cases that require this, the following
 flags can be used to control what should and should not be destructed.
 )";
 
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
 static const char *doc_ADFlag_ClearNone = "Clear nothing.";
 
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
 static const char *doc_ADFlag_ClearEdges =
     "Delete all traversed edges from the computation graph";
 
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
 static const char *doc_ADFlag_ClearInput =
     "Clear the gradients of processed input vertices (in-degree == 0)";
 
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
 static const char *doc_ADFlag_ClearInterior =
     "Clear the gradients of processed interior vertices (out-degree != 0)";
 
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
 static const char *doc_ADFlag_ClearVertices =
     "Clear gradients of processed vertices only, but leave edges intact. Equal "
     "to ``ClearInput | ClearInterior``.";
 
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
 static const char *doc_ADFlag_Default =
     "Default: clear everything (edges, gradients of processed vertices). Equal "
     "to ``ClearEdges | ClearVertices``.";
 
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
 static const char *doc_ADFlag_AllowNoGrad =
     "Don't fail when the input to a ``drjit.forward`` or ``backward`` "
     "operation is not a differentiable array.";
 
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
 static const char *doc_JitBackend =
     "List of just-in-time compilation backends supported by Dr.Jit. See also "
     ":py:func:`drjit.backend_v()`.";
 
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
 static const char *doc_JitBackend_None =
     "Indicates that a type is not handled by a Dr.Jit backend (e.g., a scalar type)";
 
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
 static const char *doc_JitBackend_LLVM =
     "Dr.Jit backend targeting various processors via the LLVM compiler infractructure.";
 
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
 static const char *doc_JitBackend_CUDA =
     "Dr.Jit backend targeting NVIDIA GPUs using PTX (\"Parallel Thread Excecution\") IR.";
 
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
 static const char *doc_VarType =
     "List of possible scalar array types (not all of them are supported).";
 
@@ -3441,7 +3536,7 @@ Dr.Jit will use one of two possible strategies to realize this operation
 depending on the active compilation flags (see :py:func:`drjit.set_flag`,
 :py:func:`drjit.scoped_set_flag`):
 
-1. **Recorded mode**: When :py:attr:`drjit.JitFlag.VCallRecord` is set (the
+1. **Symbolic mode**: When :py:attr:`drjit.JitFlag.SymbolicCalls` is set (the
    default), Dr.Jit transcribes every callable into an equivalent function in the
    generated low-level intermediate representation (LLVM IR or PTX) and targets
    them via an indirect jump instruction.
@@ -3472,7 +3567,7 @@ depending on the active compilation flags (see :py:func:`drjit.set_flag`,
    :py:func:`drjit.print_async`. If you wish to avoid such complications,
    consider wavefront-mode compilation discussed next.
 
-2. **Wavefront mode**: When :py:attr:`drjit.JitFlag.VCallRecord` is *not* set,
+2. **Evaluated mode**: When :py:attr:`drjit.JitFlag.SymbolicCalls` is *not* set,
    Dr.Jit *evaluates* the inputs  ``index``, ``args``, ``kwargs`` via
    :py:func:`drjit.eval`, groups them by the provided index, and invokes each
    callable with with the subset of inputs that reference it. Callables that
@@ -3480,11 +3575,12 @@ depending on the active compilation flags (see :py:func:`drjit.set_flag`,
 
    In this mode, a :py:func:`drjit.switch` statement will cause Dr.Jit to
    launch a series of kernels processing subsets of the input data (one per
-   callable), which is referred to as *wavefronts* in Dr.Jit.
+   callable), which also used to be referred to as *wavefronts* in previous
+   versions of Dr.Jit.
 
    This can negatively impact performance and memory usage as function
    arguments must be written to device memory. On the other hand,
-   wavefront-mode execution is simpler to understand and debug. It is possible
+   evaluated-mode execution is simpler to understand and debug. It is possible
    to single-step through programs, examine array contents, etc.
 
 To switch the compilation mode locally, use :py:func:`drjit.scoped_set_flag` as
@@ -3492,14 +3588,14 @@ shown below:
 
 .. code-block:: python
 
-   with dr.scoped_set_flag(dr.JitFlag.VCallRecord, False):
+   with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, False):
        result = dr.switch(..)
 
 The functions :py:func:`drjit.switch` and :py:func:`drjit.dispatch` may be
 arbitrarily nested. However, a callable invoked by a symbolic-mode
-:py:func:`drjit.switch` call may not perform a wavefront-style
-:py:func:`dr.switch` or :py:func:`dr.dispatch` since this would require the
-evaluation of symbolic variables.
+:py:func:`drjit.switch` call may not perform a evaluated-style
+:py:func:`drjit.switch` or :py:func:`drjit.dispatch` since this would require
+the evaluation of symbolic variables.
 
 When a boolean Dr.Jit array (e.g., :py:class:`drjit.llvm.Bool`,
 :py:class:`drjit.cuda.ad.Bool`, etc.) is specified as last positional argument
@@ -3646,31 +3742,65 @@ For example, the following snippet shows how to temporarily disable a flag:
 
 .. code-block:: python
 
-   with dr.scoped_set_flag(dr.JitFlag.VCallRecord, False):
+   with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, False):
        # Code affected by the change should be placed here
 
    # Flag is returned to its original status
 )";
 
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
 static const char *doc_JitFlag = R"(
 Flags that control how Dr.Jit compiles and optimizes programs.
 
 This enumeration lists various flag that control how Dr.Jit compiles and
 optimizes programs, most of which are enabled by default. The status of each
 flag can be queried via :py:func:`drjit.flag` and enabled/disabled via the
-:py:func:`drjit.scoped_flag` and :py:func:`drjit.scoped_set_flag` functions.
+:py:func:`drjit.set_flag` or the recommended :py:func:`drjit.scoped_set_flag`
+functions, e.g.:
 
-The most common reason to update the flags is to switch between *wavefront* and
-*recorded* execution of loops and functions. The former eagerly executes
+.. code-block:: python
+
+  with dr.scoped_set_flag(dr.JitFlag.SymbolicLoops, False):
+      # code that has this flag disabled goes here
+
+The most common reason to update the flags is to switch between *symbolic* and
+*evaluated* execution of loops and functions. The former eagerly executes
 programs by breaking them into many smaller kernels, while the latter records
-computation symbolically to assemble large *megakernels*. See the documentation
-of :py:func:`drjit.switch` and :py:class:`drjit.Loop` for more details on these
-two modes.
+computation symbolically to assemble large *megakernels*. See explanations
+below along with the documentation of :py:func:`drjit.switch` and
+:py:class:`drjit.while_loop` for more details on these two modes.
 
 Dr.Jit flags are a thread-local property. This means that multiple independent
 threads using Dr.Jit can set them independently without interfering with each
 other.)";
 
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
+static const char *doc_JitFlag_IndexReuse = R"(
+**Index reuse**: Dr.Jit consists of two main parts: the just-in-time compiler,
+and the automatic differentiation layer. Both maintain an internal data
+structure representing captured computation, in which each variable is
+associated with an index (e.g., ``r1234`` in the JIT compiler,
+and ``a1234`` in the AD graph).
+
+The index of a Dr.Jit array in these graphs can be queried via the
+:py:attr:`drjit.index` and :py:attr:`drjit.index_ad` variables, and they are
+also visible in debug messages (if :py:func:`drjit.set_log_level` is set to a
+more verbose debug level).
+
+Dr.Jit aggressively reuses the indices of expired variables by default, but
+this can make debug output difficult to interpret. When when debugging Dr.Jit
+itself, it is often helpful to investigate the history of a particular
+variable. In such cases, set this flag to ``False`` to disable variable reuse
+both at the JIT and AD levels. This comes at a cost: the internal data
+structures keep on growing, so it is not suitable for long-running
+computations.
+
+Index reuse is *enabled* by default.)";
+
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
 static const char *doc_JitFlag_ConstantPropagation =R"(
 **Constant propagation**: immediately evaluate arithmetic involving literal
 constants on the host and don't generate any device-specific code for them.
@@ -3692,8 +3822,10 @@ Dr.Jit.
    c2 = Int(9)
    assert c1.index == c2.index
 
-Enabled by default.)";
+Constant propagation is *enabled* by default.)";
 
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
 static const char *doc_JitFlag_ValueNumbering = R"(
 **Local value numbering**: a simple variant of common subexpression elimination
 that collapses identical expressions within basic blocks. For example, the
@@ -3713,17 +3845,19 @@ following assertion holds when value numbering is enabled in Dr.Jit.
    # Verify that c1 and c2 reference the same Dr.Jit variable
    assert c1.index == c2.index
 
-Enabled by default.)";
+Local value numbering is *enabled* by default.)";
 
-static const char *doc_JitFlag_VCallRecord = R"(
-**Recorded function calls**: Dr.Jit provides two main ways of compiling
-*indirect function calls* (aka. *virtual function calls* or *dynamic dispatch*).
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
+static const char *doc_JitFlag_SymbolicCalls = R"(
+Dr.Jit provides two main ways of compiling function calls targeting *instance arrays*. 
 
-1. **Recorded mode**: When this flag is set (the default), Dr.Jit captures
-   callables by invoking them with symbolic/abstract arguments. These
-   transcripts are then turned into function calls in the generated program.
-   In a sense, recorded mode most closely preserves the original program
-   semantics.
+1. **Symbolic mode** (the default): Dr.Jit captures callables by invoking them
+   with *symbolic* (abstract) arguments. By doing so, it can capture a
+   transcript of each callable and then turn it into a function in the
+   generated kernel. Symbolic mode preserves the control flow structure of the
+   original program by replicating it within Dr.Jit's intermediate
+   representation.
 
    The main advantage of recorded mode is:
 
@@ -3737,19 +3871,22 @@ static const char *doc_JitFlag_VCallRecord = R"(
      perform such operations will raise an exception.
 
      This limitation may be inconvenient especially when debugging code, in
-     which case wavefront mode is preferable.
+     which case evaluated mode is preferable.
 
    * Thread divergence: neighboring SIMD lanes may target different callables,
-     which can have a significant negative impact on refficiency.
+     which can have a negative impact on efficiency.
 
    * A kernel with many callables can become quite large and costly to compile.
 
-2. **Wavefront mode**: In this mode, Dr.Jit to launches a series of kernels
-   processing subsets of the input data (one per callable).
+2. **Evaluated mode**: Dr.Jit evaluates all inputs and groups them by instance
+   ID. Following this, it launches a a kernel *per instance* to process the
+   rearranged inputs and assemble the function return value.
 
-   The main advantages of wavefront mode is:
+   The main advantages of evaluated mode are:
 
-   * Easy to debug / step through programs and examine intermediate results.
+   * *It is easier to debug*: evaluating and processing intermediate results
+     (e.g. via Python's ``print`` statement or more advanced plotting tools)
+     is legal.  You may also use a debugger to step through the program.
 
    * Kernels are smaller and avoid thread divergence, since Dr.Jit reorders
      computation by callable.
@@ -3758,53 +3895,275 @@ static const char *doc_JitFlag_VCallRecord = R"(
 
    * Each callable essentially turns its own kernel that reads its input and
      writes outputs via device memory. The required memory bandwidth and
-     storage are often so overwhelming that wavefront mode becomes impractical.
+     storage often make evaluated mode impractical.
 
-Recorded mode is enabled by default.)";
+Note that the behavior of the functions :py:func:`drjit.switch` and
+:py:func:`drjit.dispatch` is also controlled by this flag.
 
-static const char *doc_JitFlag_IndexReuse = R"(
-**Index reuse**: Dr.Jit consists of two main parts: the just-in-time compiler,
-and the automatic differentiation layer. Both maintain an internal data
-structure representing captured computation, in which each variable is
-associated with an index (e.g., ``r1234`` in the JIT compiler,
-and ``a1234`` in the AD graph).
+Symbolic mode is *enabled* by default.)";
 
-The index of a Dr.Jit array in these graphs can be queried via the
-:py:attr:`drjit.index` and :py:attr:`drjit.index_ad` variables, and they are
-also visible in debug messages (if :py:func:`drjit.set_log_level` is set to a
-more verbose debug level).
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
+static const char *doc_JitFlag_OptimizeCalls = R"(Perform basic optimizations
+for function calls on instance arrays.
 
-Dr.Jit aggressively reuses the indices of expired variables by default, but
-this can make debug output difficult to interpret. When when debugging Dr.Jit
-itself, it is often helpful to investigate the history of a particular
-variable. In such cases, set this flag to ``False`` to disable variable reuse
-both at the JIT and AD levels. This comes at a cost: the internal data
-structures keep on growing, so it is not suitable for long-running
-computations.
+This flag enables two optimizations:
 
-Index reuse is enabled by default.)";
+- *Constant propagation*: Dr.Jit will propagate literal constants across
+  function boundaries while tracing, which can unlock simplifications within.
+  This is especially useful in combination with automatic differentiation,
+  where it helps to detect code that does not influence the computed
+  derivatives.
 
+- *Devirtualization*: When an element of the return value has the same
+  computation graph in all instances, it is removed from the function call
+  interface and moved to the caller.
+
+The flag is enabled by default. Note that it is only effective in combination
+with  :py:attr:`SymbolicCalls`. The behavior of the functions
+:py:func:`drjit.switch` and :py:func:`drjit.dispatch` is also controlled by
+this flag.)";
+
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
+static const char *doc_JitFlag_MergeFunctions = R"(Deduplicate code generated
+by function calls on instance arrays.
+
+When ``arr`` is an instance array (potentially with thousands of instances),
+a function call like
+
+.. code-block:: python
+
+   arr.f(inputs...)
+
+can potentially generate vast numbers of different callables in the generated
+code. At the same time, many of these callables may contain identical code
+(or code that is identical except for data references).
+
+Dr.Jit can exploit such redundancy and merge such callables during computation.
+Besides generating shorter programs, this also helps to reduce thread divergence.
+
+This flag is *enabled* by default. Note that it is only effective
+in combination with  :py:attr:`SymbolicCalls`.
+The behavior of the functions :py:func:`drjit.switch` and
+:py:func:`drjit.dispatch` is also controlled by this flag.)";
+
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
+static const char *doc_JitFlag_SymbolicLoops = R"(
+Dr.Jit provides two main ways of compiling loops involving Dr.Jit arrays.
+
+1. **Symbolic mode** (the default): Dr.Jit executes the loop a single
+   time regardless of how many iterations it requires in practice. It does so
+   with *symbolic* (abstract) arguments to capture the loop condition and body
+   and then turns it into an equivalent loop in the generated kernel. Symbolic
+   mode preserves the control flow structure of the original program by
+   replicating it within Dr.Jit's intermediate representation.
+
+   The main advantage of recorded mode is:
+
+   * It is very efficient in terms of device memory storage and bandwidth, since
+     loop state variables can be exchanged through fast CPU/GPU registers.
+
+   Its main downsides is:
+
+   * Symbolic arrays cannot be evaluated, printed, etc. Attempting to
+     perform such operations within the loop body will raise an exception.
+
+     This limitation may be inconvenient especially when debugging code, in
+     which case evaluated mode is preferable.
+
+2. **Evaluated mode**: Dr.Jit evaluates the loop's state variables and reduces
+   the loop condition to a single element (``bool``) that expresses whether any
+   elements are still alive. If so, it runs the loop body and the process repeats.
+   The main advantages of evaluated mode is:
+
+   * *It is easier to debug*: evaluating and processing intermediate results
+     (e.g. via Python's ``print`` statement or more advanced plotting tools)
+     is legal.  You may also use a debugger to step through the program.
+
+   The main downsides are:
+
+   * Each iteration generates at least one kernel that reads its input and
+     writes outputs via device memory. The required memory bandwidth and
+     storage often make evaluated mode impractical.
+
+Symbolic mode is *enabled* by default.)";
+
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
+static const char *doc_JitFlag_OptimizeLoops = R"(Perform basic optimizations
+for loops involving Dr.Jit arrays.
+
+This flag enables two optimizations:
+
+- *Constant arrays*: variables in the *loop state* set that aren't modified by
+  a loop are removed from this set. This shortens the generated code, which can
+  be helpful especially in combination with the automatic transformations
+  performed by :py:func:`drjit.function` that may be somewhat conservative in
+  classifying too many local variables as potential loop state.
+
+- *Literal constant arrays*: In addition to the above point, constant
+  loop state variables that are *literal constants* are propagated into
+  the loop body, where this may reveal optimization opportunities.
+
+  This is useful in combination with automatic differentiation, where
+  it helps to detect code that does not influence the computed derivatives.
+
+One practical implication of this optimization is that it may cause
+:py:func:`drjit.while_loop` to run the loop body twice instead of just once.
+
+This flag is *enabled* by default. Note that it is only effective
+in combination with  :py:attr:`SymbolicLoops`.)";
+
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
+static const char *doc_JitFlag_ForceOptiX = R"(
+Force execution through OptiX even if a kernel doesn't use ray tracing. This
+only applies to the CUDA backend is mainly helpful for automated tests done by
+the Dr.Jit team.
+
+This flag is *disabled* by default.)";
+
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
+static const char *doc_JitFlag_PrintIR = R"(
+Print the low-level IR representation when launching a kernel.
+
+If enabled, this flag causes Dr.Jit to print the low-level IR (LLVM IR,
+NVIDIA PTX) representation of the generated code onto the console (or
+Jupyter notebook).
+
+This flag is *disabled* by default.)";
+
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
+static const char *doc_JitFlag_KernelHistory = R"(
+Maintain a history of kernel launches to profile/debug programs.
+
+Programs written on top of Dr.Jit execute in an *extremely* asynchronous
+manner. By default, the system postpones the computation to build large fused
+kernels. Even when this computation eventually runs, it does so asynchronously
+with respect to the host, which can make benchmarking difficult.
+
+In general, beware of the following benchmarking *anti-pattern*:
+
+.. code-block::
+
+    import time
+    a = time.time()
+    # Some Dr.Jit computation
+    b = time.time()
+    print("took %.2f ms" % ((b-a) * 1000))
+
+In the worst case, the measured time interval may only capture the *tracing
+time*, without any actual computation having taken place. Another common
+mistake with this pattern is that Dr.Jit or the target device may still be busy
+with computation that started *prior* to the ``a = time.time()`` line, which is
+now incorrectly added to the measured period.
+
+Dr.Jit provides a *kernel history* feature, where it creates an entry in a list
+whenever it launches a kernel or related operation (memory copies, etc.). This
+not only gives accurate and isolated timings (measured with counters on the
+CPU/GPU) but also reveals if a kernel was launched at all. To capture the
+kernel history, set this flag just before the region to be benchmarked and call
+:py:func:`drjit.kernel_history()` at the end.
+
+Capturing the history has a (very) small cost and is therefore  *disabled* by
+default.)";
+
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
+static const char *doc_JitFlag_LaunchBlocking = R"(
+Force synchronization after every kernel launch. This is useful to
+isolate severe problems (e.g. crashes) to a specific kernel.
+
+This flag has a severe performance impact and is *disabled* by default.)";
+
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
+static const char *doc_JitFlag_AtomicReduceLocal = R"(
+Reduce locally before performing atomic memory operations.
+
+Atomic operations targeting global memory can be very expensive, especially
+when many writes target the same memory address leading to *contention*.
+
+This is a common problem when automatically differentiating computation in
+*reverse mode* (e.g. :py:func:`drjit.backward`), since this transformation
+turns differentiable global memory reads into atomic scatter-additions.
+
+To reduce this cost, Dr.Jit can optionally perform a local reduction that uses
+cooperation between SIMD/warp lanes to resolve all requests targeting the same
+address and then only issuing a single atomic memory transaction per unique
+target. This can reduce atomic memory traffic by up to a factor of 32 (CUDA) or
+16 (LLVM backend with AVX512).
+
+This operation only affects the behavior of the :py:func:`scatter_reduce`
+function (and the reverse-mode derivative of :py:func:`gather`).
+
+This flag is *enabled* by default.)";
+
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
+static const char *doc_JitFlag_Symbolic = R"(
+This flag should not be set in user code. Dr.Jit sets it whenever it is
+capturing computation symbolically.
+
+User code may query this flag to check if it is legal to perform certain
+operations (e.g., evaluating array contents).
+
+Note that this information can also be queried in a more fine-grained
+manner (per variable) using the :py:attr:`drjit.tArrayBase.state` field.)";
+
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
 static const char *doc_JitFlag_Default = "The default set of flags.";
 
-static const char *doc_VarState =
-    "The :py:attr:`drjit.ArrayBase.state` property returns one of the following "
-    "enumeration values describing possible evaluation states of a Dr.Jit variable.";
+static const char *doc_JitFlag_LoopRecord =
+    "Deprecated. Replaced by :py:attr:`SymbolicLoops`.";
+static const char *doc_JitFlag_LoopOptimize =
+    "Deprecated. Replaced by :py:attr:`OptimizeLoops`.";
+static const char *doc_JitFlag_VCallRecord =
+    "Deprecated. Replaced by :py:attr:`SymbolicCalls`.";
+static const char *doc_JitFlag_VCallOptimize =
+    "Deprecated. Replaced by :py:attr:`OptimizeCalls`.";
+static const char *doc_JitFlag_VCallDeduplicate =
+    "Deprecated. Replaced by :py:attr:`MergeFunctions`.";
+static const char *doc_JitFlag_Recording =
+    "Deprecated. Replaced by :py:attr:`Symbolic`.";
+
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
+static const char *doc_VarState = "The :py:attr:`drjit.ArrayBase.state` "
+                                  "property returns one of the following "
+                                  "enumeration values describing possible "
+                                  "evaluation states of a Dr.Jit variable.";
 
 static const char *doc_VarState_Invalid =
     "The variable has length 0 and effectively does not exist.";
 
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
 static const char *doc_VarState_Normal =
     "An ordinary unevaluated variable that is neither a literal constant nor symbolic.";
 
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
 static const char *doc_VarState_Literal =
     "A literal constant. Does not consume device memory.";
 
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
 static const char *doc_VarState_Evaluated =
     "Evaluated variable backed by an device memory region.";
 
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
 static const char *doc_VarState_Symbolic =
     "A symbolic variable that could take on various inputs. Cannot be evaluated.";
 
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
 static const char *doc_VarState_Mixed =
     "This is a nested array, and the components have mixed states.";
 

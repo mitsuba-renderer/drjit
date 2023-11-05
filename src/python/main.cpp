@@ -65,13 +65,28 @@ NB_MODULE(drjit_ext, m_) {
         .value("LLVM", JitBackend::LLVM, doc_JitBackend_LLVM);
 
     nb::enum_<JitFlag>(m, "JitFlag", doc_JitFlag)
+        .value("IndexReuse", JitFlag::IndexReuse, doc_JitFlag_IndexReuse)
         .value("ConstantPropagation", JitFlag::ConstantPropagation, doc_JitFlag_ConstantPropagation)
         .value("ValueNumbering", JitFlag::ValueNumbering, doc_JitFlag_ValueNumbering)
+        .value("SymbolicLoops", JitFlag::SymbolicLoops, doc_JitFlag_SymbolicLoops)
+        .value("OptimizeLoops", JitFlag::OptimizeLoops, doc_JitFlag_OptimizeLoops)
+        .value("SymbolicCalls", JitFlag::SymbolicCalls, doc_JitFlag_SymbolicCalls)
+        .value("OptimizeCalls", JitFlag::OptimizeCalls, doc_JitFlag_OptimizeCalls)
+        .value("MergeFunctions", JitFlag::MergeFunctions, doc_JitFlag_MergeFunctions)
+        .value("ForceOptiX", JitFlag::ForceOptiX, doc_JitFlag_ForceOptiX)
+        .value("PrintIR", JitFlag::PrintIR, doc_JitFlag_PrintIR)
+        .value("KernelHistory", JitFlag::KernelHistory, doc_JitFlag_KernelHistory)
+        .value("LaunchBlocking", JitFlag::LaunchBlocking, doc_JitFlag_LaunchBlocking)
+        .value("AtomicReduceLocal", JitFlag::AtomicReduceLocal, doc_JitFlag_AtomicReduceLocal)
+        .value("Symbolic", JitFlag::Symbolic, doc_JitFlag_Symbolic)
+        .value("Default", JitFlag::Default, doc_JitFlag_Default)
+        // Deprecated aliases
         .value("VCallRecord", JitFlag::VCallRecord, doc_JitFlag_VCallRecord)
-        .value("IndexReuse", JitFlag::IndexReuse, doc_JitFlag_IndexReuse)
-        .value("Default", JitFlag::Default, doc_JitFlag_Default);
-        // .value("VCallDeduplicate", JitFlag::VCallDeduplicate, doc_JitFlag_VCallDeduplicate)
-        // .value("VCallOptimize", JitFlag::VCallOptimize, doc_JitFlag_VCallOptimize);
+        .value("VCallOptimize", JitFlag::VCallOptimize, doc_JitFlag_VCallOptimize)
+        .value("VCallDeduplicate", JitFlag::VCallDeduplicate, doc_JitFlag_VCallDeduplicate)
+        .value("LoopRecord", JitFlag::LoopRecord, doc_JitFlag_LoopRecord)
+        .value("LoopOptimize", JitFlag::LoopOptimize, doc_JitFlag_LoopOptimize)
+        .value("Recording", JitFlag::Recording, doc_JitFlag_Recording);
 
     nb::enum_<VarType>(m, "VarType", doc_VarType)
         .value("Void", VarType::Void, doc_VarType_Void)

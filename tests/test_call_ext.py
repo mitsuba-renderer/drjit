@@ -1,5 +1,5 @@
 import drjit as dr
-import vcall_ext as m
+import call_ext as m
 import pytest
 import re
 import gc
@@ -35,23 +35,23 @@ def test01_array_operations(t):
     assert c[0] is None
 
     c = dr.full(BasePtr, a, 2)
-    assert cleanup(str(c)) == '[<vcall_ext.A object>, <vcall_ext.A object>]'
+    assert cleanup(str(c)) == '[<call_ext.A object>, <call_ext.A object>]'
     c = dr.full(BasePtr, b, 2)
-    assert cleanup(str(c)) == '[<vcall_ext.B object>, <vcall_ext.B object>]'
+    assert cleanup(str(c)) == '[<call_ext.B object>, <call_ext.B object>]'
     assert c[0] is b and c[1] is b
     c[0] = a
-    assert cleanup(str(c)) == '[<vcall_ext.A object>, <vcall_ext.B object>]'
+    assert cleanup(str(c)) == '[<call_ext.A object>, <call_ext.B object>]'
 
     c = BasePtr(a)
-    assert cleanup(str(c)) == '[<vcall_ext.A object>]'
+    assert cleanup(str(c)) == '[<call_ext.A object>]'
     assert c[0] is a
 
     c = BasePtr(a, b)
-    assert cleanup(str(c)) == '[<vcall_ext.A object>, <vcall_ext.B object>]'
+    assert cleanup(str(c)) == '[<call_ext.A object>, <call_ext.B object>]'
     assert c[0] is a and c[1] is b
     c[0] = b
     c[1] = a
-    assert cleanup(str(c)) == '[<vcall_ext.B object>, <vcall_ext.A object>]'
+    assert cleanup(str(c)) == '[<call_ext.B object>, <call_ext.A object>]'
     assert c[0] is b and c[1] is a
 
     with pytest.raises(TypeError, match=re.escape("unsupported operand type(s) for +: 'BasePtr' and 'BasePtr'")):
@@ -61,9 +61,9 @@ def test01_array_operations(t):
     assert dr.all((c == b) == [True, False])
 
 
-@pytest.mark.parametrize("recorded", [True, False])
+@pytest.mark.parametrize("symbolic", [True, False])
 @pytest.test_arrays('float32,is_diff,shape=(*)')
-def test02_array_vcall(t, recorded):
+def test02_array_call(t, symbolic):
     pkg = get_pkg(t)
 
     A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
@@ -74,14 +74,14 @@ def test02_array_vcall(t, recorded):
     xi = t(1, 2, 8, 3, 4)
     yi = t(5, 6, 8, 7, 8)
 
-    with dr.scoped_set_flag(dr.JitFlag.VCallRecord, recorded):
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
         xo, yo = c.f(xi, yi)
     assert dr.all(xo == t(10, 12, 0, 21, 24))
     assert dr.all(yo == t(-1, -2, 0, 3, 4))
 
-@pytest.mark.parametrize("recorded", [True, False])
+@pytest.mark.parametrize("symbolic", [True, False])
 @pytest.test_arrays('float32,is_diff,shape=(*)')
-def test03_array_vcall_masked(t, recorded):
+def test03_array_call_masked(t, symbolic):
     pkg = get_pkg(t)
 
     A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
@@ -93,7 +93,7 @@ def test03_array_vcall_masked(t, recorded):
     yi = t(5, 6, 8, 7, 8)
     mi = dr.mask_t(t)(True, True, False, True, True)
 
-    with dr.scoped_set_flag(dr.JitFlag.VCallRecord, recorded):
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
         xo, yo = c.f_masked((xi, yi), mi)
 
     assert dr.all(xo == t(10, 12, 0, 21, 24))
@@ -104,10 +104,10 @@ def test03_array_vcall_masked(t, recorded):
 
 @pytest.mark.parametrize("diff_p1", [True, False])
 @pytest.mark.parametrize("diff_p2", [True, False])
-@pytest.mark.parametrize("recorded", [True, False])
+@pytest.mark.parametrize("symbolic", [True, False])
 @pytest.mark.parametrize("use_mask", [True, False])
 @pytest.test_arrays('float32,is_diff,shape=(*)')
-def test04_forward_diff(t, recorded, use_mask, diff_p1, diff_p2):
+def test04_forward_diff(t, symbolic, use_mask, diff_p1, diff_p2):
     pkg = get_pkg(t)
 
     A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
@@ -131,7 +131,7 @@ def test04_forward_diff(t, recorded, use_mask, diff_p1, diff_p2):
     if diff_p2:
         dr.enable_grad(yi)
 
-    with dr.scoped_set_flag(dr.JitFlag.VCallRecord, recorded):
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
         xo, yo = c.f_masked((xi, yi), mi)
 
     assert dr.all(xo == t(10, 12, 0, 21, 24))
@@ -155,10 +155,10 @@ def test04_forward_diff(t, recorded, use_mask, diff_p1, diff_p2):
     assert dr.all(yg == t(-q, -q, 0, q, q))
 
 
-@pytest.mark.parametrize("recorded", [True, False])
+@pytest.mark.parametrize("symbolic", [True, False])
 @pytest.mark.parametrize("use_mask", [True, False])
 @pytest.test_arrays('float32,is_diff,shape=(*)')
-def test05_backward_diff(t, recorded, use_mask):
+def test05_backward_diff(t, symbolic, use_mask):
     pkg = get_pkg(t)
 
     A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
@@ -179,7 +179,7 @@ def test05_backward_diff(t, recorded, use_mask):
     dr.enable_grad(xi)
     dr.enable_grad(yi)
 
-    with dr.scoped_set_flag(dr.JitFlag.VCallRecord, recorded):
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
         xo, yo = c.f_masked((xi, yi), mi)
 
     dr.set_grad(xo, dr.ones(t, 5))
@@ -189,10 +189,10 @@ def test05_backward_diff(t, recorded, use_mask):
     assert dr.all(yg == [2, 2, 0, 3, 3])
 
 
-@pytest.mark.parametrize("recorded", [True, False])
+@pytest.mark.parametrize("symbolic", [True, False])
 @pytest.mark.parametrize("use_mask", [True, False])
 @pytest.test_arrays('float32,is_diff,shape=(*)')
-def test06_forward_diff_implicit(t, recorded, use_mask):
+def test06_forward_diff_implicit(t, symbolic, use_mask):
     pkg = get_pkg(t)
 
     A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
@@ -216,7 +216,7 @@ def test06_forward_diff_implicit(t, recorded, use_mask):
     b.value = bv * 4
     y = x*x
 
-    with dr.scoped_set_flag(dr.JitFlag.VCallRecord, recorded):
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
         xo = c.g(y, mi)
 
     assert dr.all(xo == t(2, 2, 0, 4*9, 4*16))
@@ -229,10 +229,10 @@ def test06_forward_diff_implicit(t, recorded, use_mask):
     assert dr.all(xg == t([20, 20, 0, 9*400+24*4, 16*400+40*4]))
 
 
-@pytest.mark.parametrize("recorded", [True, False])
+@pytest.mark.parametrize("symbolic", [True, False])
 @pytest.mark.parametrize("use_mask", [True, False])
 @pytest.test_arrays('float32,is_diff,shape=(*)')
-def test07_backward_diff_implicit(t, recorded, use_mask):
+def test07_backward_diff_implicit(t, symbolic, use_mask):
     pkg = get_pkg(t)
 
     A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
@@ -256,7 +256,7 @@ def test07_backward_diff_implicit(t, recorded, use_mask):
     b.value = bv * 4
     y = x*x
 
-    with dr.scoped_set_flag(dr.JitFlag.VCallRecord, recorded):
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
         xo = c.g(y, mi)
 
     assert dr.all(xo == t(2, 2, 0, 4*9, 4*16))
@@ -309,11 +309,11 @@ def test09_constant_getter(t, drjit_verbose, capsys):
     d = c.constant_getter()
     transcript = capsys.readouterr().out
     assert d[0] == 123
-    assert transcript.count('ad_vcall_getter') == 1
+    assert transcript.count('ad_call_getter') == 1
     assert transcript.count('jit_var_gather') == 1
     d = c.opaque_getter()
     transcript = capsys.readouterr().out
-    assert transcript.count('ad_vcall_getter') == 1
+    assert transcript.count('ad_call_getter') == 1
     assert transcript.count('jit_var_gather') == 1
 
 
@@ -339,7 +339,7 @@ def test11_getter_ad(t):
 
 
 @pytest.test_arrays('float32,is_diff,shape=(*)')
-def test12_array_vcall_instance_expired(t):
+def test12_array_call_instance_expired(t):
     pkg = get_pkg(t)
 
     A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
@@ -354,22 +354,22 @@ def test12_array_vcall_instance_expired(t):
     yi = t(5, 6, 8, 7, 8)
 
     with pytest.raises(RuntimeError, match=re.escape("no longer exists")):
-        with dr.scoped_set_flag(dr.JitFlag.VCallRecord, False):
+        with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, False):
             xo, yo = c.f(xi, yi)
 
-@pytest.mark.parametrize("recorded", [True, False])
+@pytest.mark.parametrize("symbolic", [True, False])
 @pytest.test_arrays('float32,is_diff,shape=(*)')
-def test13_array_vcall_self(t, recorded, drjit_verbose, capsys):
+def test13_array_call_self(t, symbolic, drjit_verbose, capsys):
     pkg = get_pkg(t)
     A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
     a, b = A(), B()
 
     c = BasePtr(a, a, None, b, b)
-    with dr.scoped_set_flag(dr.JitFlag.VCallRecord, recorded):
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
         d = c.get_self()
     assert dr.all(c == d)
     transcript = capsys.readouterr().out
-    if recorded:
+    if symbolic:
         if dr.backend_v(t) == dr.JitBackend.LLVM:
             assert transcript.count('%self') > 0
         else:
@@ -377,9 +377,9 @@ def test13_array_vcall_self(t, recorded, drjit_verbose, capsys):
     else:
         assert transcript.count('jit_var_gather') == 2
 
-@pytest.mark.parametrize("recorded", [True, False])
+@pytest.mark.parametrize("symbolic", [True, False])
 @pytest.test_arrays('float32,is_diff,shape=(*)')
-def test14_array_vcall_noinst(t, recorded):
+def test14_array_call_noinst(t, symbolic):
     pkg = get_pkg(t)
     A, B, BasePtr = pkg.A, pkg.B, pkg.BasePtr
     gc.collect()
@@ -387,7 +387,7 @@ def test14_array_vcall_noinst(t, recorded):
     d = BasePtr(None, None)
     dr.set_log_level(10)
 
-    with dr.scoped_set_flag(dr.JitFlag.VCallRecord, recorded):
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
         c = BasePtr()
         x = c.g(t())
         assert x.state == dr.VarState.Invalid
@@ -407,10 +407,10 @@ def test14_array_vcall_noinst(t, recorded):
 
 @pytest.mark.parametrize("diff_p1", [True, False])
 @pytest.mark.parametrize("diff_p2", [True, False])
-@pytest.mark.parametrize("recorded", [True, False])
+@pytest.mark.parametrize("symbolic", [True, False])
 @pytest.mark.parametrize("use_mask", [True, False])
 @pytest.test_arrays('float32,is_diff,shape=(*)')
-def test04_forward_diff_dispatch(t, recorded, use_mask, diff_p1, diff_p2):
+def test04_forward_diff_dispatch(t, symbolic, use_mask, diff_p1, diff_p2):
     pkg = get_pkg(t)
 
     A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
@@ -437,7 +437,7 @@ def test04_forward_diff_dispatch(t, recorded, use_mask, diff_p1, diff_p2):
     if diff_p2:
         dr.enable_grad(yi)
 
-    with dr.scoped_set_flag(dr.JitFlag.VCallRecord, recorded):
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
         xo, yo = dr.dispatch(c, my_func, (xi, yi), mi)
 
     assert dr.all(xo == t(10, 12, 0, 21, 24))

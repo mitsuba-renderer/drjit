@@ -43,7 +43,7 @@ First, include the header file
 
 .. code-block:: cpp
 
-   #include <drjit/vcall.h>
+   #include <drjit/call.h>
 
 Next, modify the constructors and destructor of the class so that they
 register/unregister themselves with the Dr.Jit instance registry.
@@ -73,22 +73,22 @@ simply list all function names that Dr.Jit should intercept.
 
 .. code-block:: cpp
 
-   DRJIT_VCALL_BEGIN(Foo)
-       DRJIT_VCALL_METHOD(f)
+   DRJIT_CALL_BEGIN(Foo)
+       DRJIT_CALL_METHOD(f)
        // Specify other methods here
-   DRJIT_VCALL_END()
+   DRJIT_CALL_END()
 
 There is no need to specify return values, argument types, or multiple
 overloads. Just be sure to list each function that you want to be able to call
 on a Dr.Jit instance arrays. Below is an overview of the available macros:
 
-.. c:macro:: DRJIT_VCALL_BEGIN(Name)
+.. c:macro:: DRJIT_CALL_BEGIN(Name)
 
    Demarcates the start of an interface block. The `Name` parameter must refer
    to the type in question, and the ``jit_registry_put`` call mentioned above
    should provide a string version of `Name` (including namespace prefixes).
 
-.. c:macro:: DRJIT_VCALL_TEMPLATE_BEGIN(Name)
+.. c:macro:: DRJIT_CALL_TEMPLATE_BEGIN(Name)
 
    A variant of the above macro that should be used when ``Name`` refers to a
    template class.
@@ -97,20 +97,20 @@ on a Dr.Jit instance arrays. Below is an overview of the available macros:
 
    Demarcates the end of an interface block.
 
-.. c:macro:: DRJIT_VCALL_METHOD(Name)
+.. c:macro:: DRJIT_CALL_METHOD(Name)
 
    Indicates to Dr.Jit that `Name` is the name of a method provided by
    the orginal type.
 
-.. c:macro:: DRJIT_VCALL_GETTER(Name)
+.. c:macro:: DRJIT_CALL_GETTER(Name)
 
    This is an optimized form of the above macro that should be used when the
    function in question is a *getter*. This refers to a function that does not
    take in put arguments, and which is pure (i.e., causes no side effects). The
    implementation can then avoid the cost of an actual indirect jump.
 
-Following these declarations, the following code performs a vectorized (virtual)
-function call.
+Following these declarations, the following code performs a vectorized method
+or virtual method call.
 
 .. code-block:: cpp
 
