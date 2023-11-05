@@ -12,8 +12,8 @@
 #pragma once
 #include "common.h"
 
-extern int tp_init_array(PyObject *, PyObject *, PyObject *);
-extern int tp_init_tensor(PyObject *, PyObject *, PyObject *);
+extern int tp_init_array(PyObject *, PyObject *, PyObject *) noexcept;
+extern int tp_init_tensor(PyObject *, PyObject *, PyObject *) noexcept;
 
 extern void export_init(nb::module_ &);
 
@@ -21,8 +21,8 @@ extern nb::object arange(const nb::type_object_t<ArrayBase> &dtype,
                          Py_ssize_t start, Py_ssize_t end, Py_ssize_t step);
 
 extern nb::object full(const char *name, nb::handle dtype, nb::handle value,
-                       size_t ndim, const size_t *shape);
+                       size_t ndim, const size_t *shape, bool opaque = false);
 extern nb::object full(const char *name, nb::handle dtype, nb::handle value,
-                       size_t size);
+                       size_t size, bool opaque = false);
 extern nb::object full(const char *name, nb::handle dtype, nb::handle value,
-                       const std::vector<size_t> &shape);
+                       const std::vector<size_t> &shape, bool opaque = false);

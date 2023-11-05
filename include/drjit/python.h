@@ -158,7 +158,7 @@ struct ArraySupplement : ArrayMeta {
     using Init = void (*)(size_t, ArrayBase *);
     using InitData = void (*)(size_t, const void *, ArrayBase *);
     using InitIndex = void (*)(uint64_t, ArrayBase *);
-    using InitConst = void (*)(size_t, PyObject *, ArrayBase *);
+    using InitConst = void (*)(size_t, bool, PyObject *, ArrayBase *);
     using Cast = void (*)(const ArrayBase *, VarType, bool reinterpret, ArrayBase *);
     using Index = uint64_t (*)(const ArrayBase *) noexcept;
     using Data = void *(*)(const ArrayBase *) noexcept;
@@ -399,7 +399,7 @@ template <typename T> NB_INLINE void bind_base(ArrayBinding &b) {
                               new (a) T(load<T>(ptr, size));
                           };
 
-            b.init_const = (ArraySupplement::InitConst) + [](size_t size, PyObject *h, T *a) {
+            b.init_const = (ArraySupplement::InitConst) + [](size_t size, bool opaque, PyObject *h, T *a) {
                 scalar_t<T> scalar;
                 if (T::IsClass) {
                     if (nb::handle(h).equal(nb::int_(0)))
@@ -410,7 +410,10 @@ template <typename T> NB_INLINE void bind_base(ArrayBinding &b) {
                     nb::detail::raise("Could not initialize element with a "
                                       "value of type '%s'.", tp_name.c_str());
                 }
-                new (a) T(full<T>(scalar, size));
+                if (opaque)
+                    new (a) T(drjit::opaque<T>(scalar, size));
+                else
+                    new (a) T(drjit::full<T>(scalar, size));
             };
 
             if constexpr (std::is_same_v<scalar_t<T>, uint32_t>) {

@@ -6,31 +6,39 @@ import inspect
 class ASTVisitor(ast.NodeTransformer):
     def __init__(self):
         super().__init__()
-        self.locals_r = set()
-        self.locals_w = set()
+        # Hierarchy of read/written variable names
+        self.locals_r = []
+        self.locals_w = []
         self.disarm = False
         self.loop_ctr = 0
 
     def visit_FunctionDef(self, node: ast.FunctionDef):
         if not self.disarm:
-            for o1 in (node.args.args, node.args.posonlyargs, node.args.kwonlyargs):
-                for o2 in o1:
-                    self.locals_w.add(o2.arg)
             # Process only the outermost function
             self.disarm = True
+
+            # Add function parameters to self.locals_w
+            locals_w = set()
+            for o1 in (node.args.args, node.args.posonlyargs, node.args.kwonlyargs):
+                for o2 in o1:
+                    locals_w.add(o2.arg)
+            self.locals_r.append(set())
+            self.locals_w.append(locals_w)
+
             node = self.generic_visit(node)
+
         return node
 
     def visit_Name(self, node: ast.Name):
         if isinstance(node.ctx, ast.Load):
-            self.locals_r.add(node.id)
+            self.locals_r[-1].add(node.id)
         elif isinstance(node.ctx, ast.Store):
-            self.locals_w.add(node.id)
+            self.locals_w[-1].add(node.id)
         return node
 
     def visit_While(self, node: ast.While):
-        locals_r, self.locals_r = self.locals_r, set()
-        locals_w, self.locals_w = self.locals_w, set()
+        self.locals_r.append(set())
+        self.locals_w.append(set())
 
         # 1. Names of generated functions
         loop_name = "_loop"
@@ -42,23 +50,27 @@ class ASTVisitor(ast.NodeTransformer):
         # 2. Process the loop condition separately
         node.body, body = [], node.body
         node_test = self.generic_visit(node).test
-        locals_r_cond = set(self.locals_r)
-        assert len(self.locals_w) == 0
-        self.locals_r.clear()
+        locals_r_cond = set(self.locals_r[-1])
+        assert len(self.locals_w[-1]) == 0
 
         # 3. Process the loop body separately
         node.body = body
         node.test = ast.Constant(value="True")
         node_body = self.generic_visit(node).body
 
-        self.locals_r, locals_r = locals_r, self.locals_r
-        self.locals_w, locals_w = locals_w, self.locals_w
+        locals_r, locals_w = self.locals_r.pop(), self.locals_w.pop()
+        parent_r, parent_w = set(), set()
+
+        for s in self.locals_r:
+            parent_r |= s
+        for s in self.locals_w:
+            parent_w |= s
 
         # 4. Compute data mapping:
         # 4a. Don't import globals into state data structure
         temp = set()
         for k in locals_r | locals_r_cond:
-            if k not in locals_w and k not in self.locals_w:
+            if k not in locals_w and k not in parent_w:
                 temp.add(k)
         locals_r -= temp
         locals_r_cond -= temp
@@ -68,7 +80,7 @@ class ASTVisitor(ast.NodeTransformer):
         # (which would be undefined if the loop condition is False)
         temp = set()
         for k in locals_w:
-            if not k in self.locals_w:
+            if not k in parent_w:
                 temp.add(k)
         locals_r -= temp
         locals_w -= temp
@@ -190,8 +202,7 @@ class ASTVisitor(ast.NodeTransformer):
         )
 
         # 9. Call the while loop function
-        while_expr = ast.Assign(
-            targets=[ast.Name(id=state_name, ctx=store)],
+        while_expr = ast.Expr(
             value=ast.Call(
                 func=ast.Name(id=loop_name, ctx=load),
                 args=[
@@ -245,8 +256,8 @@ class ASTVisitor(ast.NodeTransformer):
             ]
         )
 
-        self.locals_r.update(locals_r)
-        self.locals_w.update(locals_w)
+        self.locals_r[-1].update(locals_r)
+        self.locals_w[-1].update(locals_w)
 
         return (
             comment_start,

@@ -16,6 +16,7 @@
 #include "memop.h"
 #include "shape.h"
 #include "dlpack.h"
+#include "init.h"
 
 /// Forward declaration
 static bool array_init_from_seq(PyObject *self, const ArraySupplement &s, PyObject *seq);
@@ -167,7 +168,7 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
 
             if (size == DRJIT_DYNAMIC) {
                 if (s.init_const) {
-                    s.init_const(1, element.ptr(), inst_ptr(self));
+                    s.init_const(1, false, element.ptr(), inst_ptr(self));
                     nb::inst_mark_ready(self);
                     return 0;
                 }
@@ -261,7 +262,7 @@ static bool array_init_from_seq(PyObject *self, const ArraySupplement &s, PyObje
     if (size == 1 && s.init_const) {
         nb::object o = nb::steal(sq_item(seq, 0));
         raise_if(!o.is_valid(), "Item retrieval failed.");
-        s.init_const((size_t) size, o.ptr(), inst_ptr(self));
+        s.init_const((size_t) size, false, o.ptr(), inst_ptr(self));
         nb::inst_mark_ready(self);
         return true;
     }
@@ -568,13 +569,11 @@ int tp_init_tensor(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
 }
 
 // Forward declaration
-nb::object full(const char *name, nb::handle dtype, nb::handle value, size_t ndim, const size_t *shape);
-
-nb::object full(const char *name, nb::handle dtype, nb::handle value, const std::vector<size_t> &shape) {
-    return full(name, dtype, value, shape.size(), shape.data());
+nb::object full(const char *name, nb::handle dtype, nb::handle value, const std::vector<size_t> &shape, bool opaque) {
+    return full(name, dtype, value, shape.size(), shape.data(), opaque);
 }
 
-nb::object full(const char *name, nb::handle dtype, nb::handle value, size_t size) {
+nb::object full(const char *name, nb::handle dtype, nb::handle value, size_t size, bool opaque) {
     std::vector<size_t> shape;
 
     if (is_drjit_type(dtype)) {
@@ -598,11 +597,11 @@ nb::object full(const char *name, nb::handle dtype, nb::handle value, size_t siz
         shape[0] = size;
     }
 
-    return full(name, dtype, value, shape);
+    return full(name, dtype, value, shape, opaque);
 }
 
 nb::object full(const char *name, nb::handle dtype, nb::handle value,
-                size_t ndim, const size_t *shape) {
+                size_t ndim, const size_t *shape, bool opaque) {
     try {
         if (is_drjit_type(dtype)) {
             const ArraySupplement &s = supp(dtype);
@@ -615,7 +614,7 @@ nb::object full(const char *name, nb::handle dtype, nb::handle value,
                 nb::tuple shape_tuple =
                     cast_shape(dr_vector<size_t>(shape, shape + ndim));
 
-                return dtype(full(name, s.array, value, 1, &size), shape_tuple);
+                return dtype(full(name, s.array, value, 1, &size, opaque), shape_tuple);
             }
 
             bool fail = s.ndim != ndim;
@@ -632,8 +631,7 @@ nb::object full(const char *name, nb::handle dtype, nb::handle value,
                 if ((VarType) s.type == VarType::Bool && value.type().is(&PyLong_Type))
                     value = nb::cast<int>(value) ? Py_True : Py_False;
 
-                s.init_const(shape[0], value.ptr(),
-                             inst_ptr(result));
+                s.init_const(shape[0], opaque, value.ptr(), inst_ptr(result));
                 nb::inst_mark_ready(result);
                 return result;
             }
@@ -652,7 +650,7 @@ nb::object full(const char *name, nb::handle dtype, nb::handle value,
                 nb::object o;
                 for (size_t i = 0; i < shape[0]; ++i) {
                     if (i == 0 || !value.is_valid())
-                        o = full(name, s.value, value, ndim - 1, shape + 1);
+                        o = full(name, s.value, value, ndim - 1, shape + 1, opaque);
                     set_item(result.ptr(), i, o.ptr());
                 }
             }
@@ -674,9 +672,9 @@ nb::object full(const char *name, nb::handle dtype, nb::handle value,
 
                     nb::object entry;
                     if (is_drjit_type(v) && ndim == 1)
-                        entry = full(name, v, value, shape[0]);
+                        entry = full(name, v, value, shape[0], opaque);
                     else
-                        entry = full(name, v, value, ndim, shape);
+                        entry = full(name, v, value, ndim, shape, opaque);
 
                     nb::setattr(result, k, entry);
                 }
@@ -821,6 +819,14 @@ void export_init(nb::module_ &m) {
      .def("full",
           [](nb::type_object dtype, nb::handle value, std::vector<size_t> shape) {
               return full("full", dtype, value, shape);
+          }, "dtype"_a, "value"_a, "shape"_a)
+     .def("opaque",
+          [](nb::type_object dtype, nb::handle value, size_t size) {
+              return full("opaque", dtype, value, size, true);
+          }, "dtype"_a, "value"_a, "shape"_a = 1, doc_opaque)
+     .def("opaque",
+          [](nb::type_object dtype, nb::handle value, std::vector<size_t> shape) {
+              return full("opaque", dtype, value, shape, true);
           }, "dtype"_a, "value"_a, "shape"_a)
      .def("arange",
           [](const nb::type_object_t<ArrayBase> &dtype, Py_ssize_t size) {

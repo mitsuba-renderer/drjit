@@ -262,14 +262,17 @@ def test14_zeros_3d(t, drjit_verbose, capsys):
     is_jit = "jit" in t.__meta__
     v = dr.full(t, 5)
     assert len(v) == 3 and len(v[1]) == 1 and v[0][0] == 5
+    assert v.state == dr.VarState.Literal
 
     v = dr.full(t, 5, 100)
     assert len(v) == 3 and len(v[1]) == 100 and v[0][0] == 5
     assert not is_jit or "[100] = 5" in capsys.readouterr().out
+    assert v.state == dr.VarState.Literal
 
     v = dr.full(dtype=t, value=5, shape=(3, 100))
     assert len(v) == 3 and len(v[1]) == 100 and v[0][0] == 5
     assert not is_jit or "[100] = 5" in capsys.readouterr().out
+    assert v.state == dr.VarState.Literal
 
     with pytest.raises(RuntimeError, match='the provided "shape" and "dtype" parameters are incompatible.'):
         v = dr.full(t, 5, (100, 3))
@@ -482,3 +485,22 @@ def test24_init_tensor_from_ndarray(t):
 
     a = np.array([[1, 2, 3], [4, 5, 6]], dtype=np.float32)
     assert dr.all(t(a) == t([[1, 2, 3], [4, 5, 6]]), axis=None)
+
+# Test dr.opaque
+@pytest.test_arrays('float32, shape=(3, *)')
+def test25_opaque_3d(t, drjit_verbose, capsys):
+    is_jit = "jit" in t.__meta__
+    v = dr.opaque(t, 5)
+    assert len(v) == 3 and len(v[1]) == 1 and v[0][0] == 5
+    assert v.state == dr.VarState.Evaluated
+
+    v = dr.opaque(t, 5, 100)
+    assert len(v) == 3 and len(v[1]) == 100 and v[0][0] == 5
+    assert v.state == dr.VarState.Evaluated
+
+    v = dr.opaque(dtype=t, value=5, shape=(3, 100))
+    assert len(v) == 3 and len(v[1]) == 100 and v[0][0] == 5
+    assert v.state == dr.VarState.Evaluated
+
+    with pytest.raises(RuntimeError, match='the provided "shape" and "dtype" parameters are incompatible.'):
+        v = dr.opaque(t, 5, (100, 3))

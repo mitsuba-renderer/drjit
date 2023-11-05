@@ -91,7 +91,7 @@ nb::object switch_impl(nb::handle index_, nb::sequence callables,
             return callables[index_](*args, **kwargs);
         }
 
-        // Shift the callable index (ad_vcall interprets 0 as 'disabled')
+        // Shift the callable index (ad_call interprets 0 as 'disabled')
         nb::object index = index_ + nb::int_(1);
         index_tp = index.type();
 
@@ -104,9 +104,9 @@ nb::object switch_impl(nb::handle index_, nb::sequence callables,
                  "the 'index' argument must be a Jit-compiled 1D 32-bit "
                  "unsigned integer array");
 
-        ad_vcall_callback callback = [](void *ptr, void *self,
-                                        const dr::dr_vector<uint64_t> &args_i,
-                                        dr::dr_vector<uint64_t> &rv_i) {
+        ad_call_func func = [](void *ptr, void *self,
+                                   const dr::dr_vector<uint64_t> &args_i,
+                                   dr::dr_vector<uint64_t> &rv_i) {
             nb::gil_scoped_acquire guard;
             State &state = *(State *) ptr;
             state.args_o =
@@ -125,17 +125,17 @@ nb::object switch_impl(nb::handle index_, nb::sequence callables,
 
         State *state =
             new State{ nb::make_tuple(args, kwargs), callables, nb::object() };
-        ad_vcall_cleanup cleanup = [](void *ptr) { delete (State *) ptr; };
+        ad_call_cleanup cleanup = [](void *ptr) { delete (State *) ptr; };
 
         dr_vector<uint64_t> args_i;
         dr_index_vector rv_i;
         collect_indices(state->args_o, args_i);
 
-        bool done = ad_vcall(
+        bool done = ad_call(
             (JitBackend) s.backend, nullptr, nb::len(callables), "drjit.switch()", false,
             (uint32_t) s.index(inst_ptr(index)),
             mask.is_valid() ? ((uint32_t) s.index(inst_ptr(mask))) : 0u, args_i,
-            rv_i, state, callback, cleanup, true);
+            rv_i, state, func, cleanup, true);
 
         nb::object result = update_indices(state->rv_o, rv_i);
 
@@ -184,9 +184,9 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> instances,
         nb::list args(args_);
         nb::object mask = extract_mask(args, kwargs);
 
-        ad_vcall_callback callback = [](void *ptr, void *self,
-                                        const dr::dr_vector<uint64_t> &args_i,
-                                        dr::dr_vector<uint64_t> &rv_i) {
+        ad_call_func func = [](void *ptr, void *self,
+                               const dr::dr_vector<uint64_t> &args_i,
+                               dr::dr_vector<uint64_t> &rv_i) {
             nb::gil_scoped_acquire guard;
             State &state = *(State *) ptr;
             state.args_o =
@@ -207,17 +207,17 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> instances,
 
         State *state =
             new State{ &nb::type_info(s.value), nb::make_tuple(args, kwargs), callable, nb::object() };
-        ad_vcall_cleanup cleanup = [](void *ptr) { delete (State *) ptr; };
+        ad_call_cleanup cleanup = [](void *ptr) { delete (State *) ptr; };
 
         dr_vector<uint64_t> args_i;
         dr_index_vector rv_i;
         collect_indices(state->args_o, args_i);
 
-        bool done = ad_vcall(
+        bool done = ad_call(
             (JitBackend) s.backend, nb::borrow<nb::str>(domain_name).c_str(), 0,
             "dispatch()", false, (uint32_t) s.index(inst_ptr(instances)),
             mask.is_valid() ? ((uint32_t) s.index(inst_ptr(mask))) : 0u, args_i,
-            rv_i, state, callback, cleanup, true);
+            rv_i, state, func, cleanup, true);
 
         nb::object result = update_indices(state->rv_o, rv_i);
 

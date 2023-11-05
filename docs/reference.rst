@@ -12,6 +12,7 @@ Array creation
 .. autofunction:: empty
 .. autofunction:: ones
 .. autofunction:: full
+.. autofunction:: opaque
 .. autofunction:: arange
 .. autofunction:: linspace
 
@@ -245,123 +246,40 @@ Just-in-time compilation
 .. autofunction:: schedule
 .. autofunction:: eval
 
-
 .. autoclass:: JitFlag
+
+   .. For Sphinx-related technical reasons, the below comment is replicated
+      in docstr.h. Please keep the two in sync when making changes.
 
    Flags that control how Dr.Jit compiles and optimizes programs.
 
    This enumeration lists various flag that control how Dr.Jit compiles and
    optimizes programs, most of which are enabled by default. The status of each
    flag can be queried via :py:func:`drjit.flag` and enabled/disabled via the
-   :py:func:`drjit.scoped_flag` and :py:func:`drjit.scoped_set_flag` functions.
+   :py:func:`drjit.set_flag` or the recommended
+   :py:func:`drjit.scoped_set_flag` functions, e.g.:
 
-   The most common reason to update the flags is to switch between *wavefront* and
-   *recorded* execution of loops and functions. The former eagerly executes
-   programs by breaking them into many smaller kernels, while the latter records
-   computation symbolically to assemble large *megakernels*. See the documentation
-   of :py:func:`drjit.switch` and :py:class:`drjit.Loop` for more details on these
-   two modes.
+   .. code-block:: python
 
-   .. autoattribute:: ConstantPropagation
-      :annotation:
+      with dr.scoped_set_flag(dr.JitFlag.SymbolicLoops, False):
+          # code that has this flag disabled goes here
 
-      **Constant propagation**: immediately evaluate arithmetic involving literal
-      constants on the host and don't generate any device-specific code for them.
+   The most common reason to update the flags is to switch between *symbolic*
+   and *evaluated* execution of loops and functions. The former eagerly
+   executes programs by breaking them into many smaller kernels, while the
+   latter records computation symbolically to assemble large *megakernels*. See
+   explanations below along with the documentation of :py:func:`drjit.switch`
+   and :py:class:`drjit.while_loop` for more details on these two modes.
 
-      For example, the following assertion holds when value numbering is enabled in
-      Dr.Jit.
-
-      .. code-block:: python
-
-         from drjit.llvm import Int
-
-         # Create two literal constant arrays
-         a, b = Int(4), Int(5)
-
-         # This addition operation can be immediately performed and does not need to be recorded
-         c1 = a + b
-
-         # Double-check that c1 and c2 refer to the same Dr.Jit variable
-         c2 = Int(9)
-         assert c1.index == c2.index
-
-      Enabled by default.
-
-   .. autoattribute:: ValueNumbering
-      :annotation:
-
-      **Local value numbering**: a simple variant of common subexpression elimination
-      that collapses identical expressions within basic blocks. For example, the
-      following assertion holds when value numbering is enabled in Dr.Jit.
-
-      .. code-block:: python
-
-         from drjit.llvm import Int
-
-         # Create two nonliteral arrays stored in device memory
-         a, b = Int(1, 2, 3), Int(4, 5, 6)
-
-         # Perform the same arithmetic operation twice
-         c1 = a + b
-         c2 = a + b
-
-         # Verify that c1 and c2 reference the same Dr.Jit variable
-         assert c1.index == c2.index
-
-       Enabled by default.
-
-   .. autoattribute:: VCallRecord
-      :annotation:
-
-      **Recorded function calls**: Dr.Jit provides two main ways of compiling
-      *indirect function calls* (also known as *virtual function calls* or
-      *dynamic dispatch*).
-
-      1. **Recorded mode**: When this flag is set (the default), Dr.Jit captures
-         callables by invoking them with symbolic/abstract arguments. These
-         transcripts are then turned into function calls in the generated program.
-         In a sense, recorded mode most closely preserves the original program
-         semantics.
-
-         The main advantage of recorded mode is:
-
-         * It is very efficient in terms of device memory storage and bandwidth, since
-           function call arguments and return values can be exchanged through fast
-           CPU/GPU registers.
-
-         Its main downsides are:
-
-         * Symbolic arrays cannot be evaluated, printed, etc. Attempting to
-           perform such operations will raise an exception.
-
-           This limitation may be inconvenient especially when debugging code, in
-           which case wavefront mode is preferable.
-
-         * Thread divergence: neighboring SIMD lanes may target different callables,
-           which can have a significant negative impact on refficiency.
-
-         * A kernel with many callables can become quite large and costly to compile.
-
-      2. **Wavefront mode**: In this mode, Dr.Jit to launches a series of kernels
-         processing subsets of the input data (one per callable).
-
-         The main advantages of wavefront mode is:
-
-         * Easy to debug / step through programs and examine intermediate results.
-
-         * Kernels are smaller and avoid thread divergence, since Dr.Jit reorders
-           computation by callable.
-
-         The main downsides are:
-
-         * Each callable essentially turns its own kernel that reads its input and
-           writes outputs via device memory. The required memory bandwidth and
-           storage are often so overwhelming that wavefront mode becomes impractical.
-
-      Recorded mode is enabled by default.
+   Dr.Jit flags are a thread-local property. This means that multiple independent
+   threads using Dr.Jit can set them independently without interfering with each
+   other.
 
    .. autoattribute:: IndexReuse
       :annotation:
+
+      .. For Sphinx-related technical reasons, the below comment is replicated
+         in docstr.h. Please keep the two in sync when making changes.
 
       **Index reuse**: Dr.Jit consists of two main parts: the just-in-time
       compiler, and the automatic differentiation layer. Both maintain an
@@ -382,7 +300,370 @@ Just-in-time compilation
       cost: the internal data structures keep on growing, so it is not suitable
       for long-running computations.
 
-      Index reuse is enabled by default.
+      Index reuse is *enabled* by default.
+
+   .. autoattribute:: ConstantPropagation
+      :annotation:
+
+      .. For Sphinx-related technical reasons, the below comment is replicated
+         in docstr.h. Please keep the two in sync when making changes.
+
+      **Constant propagation**: immediately evaluate arithmetic involving
+      literal constants on the host and don't generate any device-specific code
+      for them.
+
+      For example, the following assertion holds when value numbering is
+      enabled in Dr.Jit.
+
+      .. code-block:: python
+
+         from drjit.llvm import Int
+
+         # Create two literal constant arrays
+         a, b = Int(4), Int(5)
+
+         # This addition operation can be immediately performed and does
+         # not need to be recorded
+         c1 = a + b
+
+         # Double-check that c1 and c2 refer to the same Dr.Jit variable
+         c2 = Int(9)
+         assert c1.index == c2.index
+
+      Constant propagation is *enabled* by default.
+
+   .. autoattribute:: ValueNumbering
+      :annotation:
+
+      .. For Sphinx-related technical reasons, the below comment is replicated
+         in docstr.h. Please keep the two in sync when making changes.
+
+      **Local value numbering**: a simple variant of common subexpression
+      elimination that collapses identical expressions within basic blocks. For
+      example, the following assertion holds when value numbering is enabled in
+      Dr.Jit.
+
+      .. code-block:: python
+
+         from drjit.llvm import Int
+
+         # Create two nonliteral arrays stored in device memory
+         a, b = Int(1, 2, 3), Int(4, 5, 6)
+
+         # Perform the same arithmetic operation twice
+         c1 = a + b
+         c2 = a + b
+
+         # Verify that c1 and c2 reference the same Dr.Jit variable
+         assert c1.index == c2.index
+
+      Local value numbering is *enabled* by default.
+
+   .. autoattribute:: SymbolicCalls
+      :annotation:
+
+      .. For Sphinx-related technical reasons, the below comment is replicated
+         in docstr.h. Please keep the two in sync when making changes.
+
+      Dr.Jit provides two main ways of compiling function calls targeting
+      *instance arrays*.
+
+      1. **Symbolic mode** (the default): Dr.Jit captures callables by invoking them
+         with *symbolic* (abstract) arguments. By doing so, it can capture a
+         transcript of each callable and then turn it into a function in the
+         generated kernel. Symbolic mode preserves the control flow structure of the
+         original program by replicating it within Dr.Jit's intermediate
+         representation.
+
+         The main advantage of recorded mode is:
+
+         * It is very efficient in terms of device memory storage and bandwidth, since
+           function call arguments and return values can be exchanged through fast
+           CPU/GPU registers.
+
+         Its main downsides are:
+
+         * Symbolic arrays cannot be evaluated, printed, etc. Attempting to
+           perform such operations will raise an exception.
+
+           This limitation may be inconvenient especially when debugging code, in
+           which case evaluated mode is preferable.
+
+         * Thread divergence: neighboring SIMD lanes may target different callables,
+           which can have a negative impact on efficiency.
+
+         * A kernel with many callables can become quite large and costly to compile.
+
+      2. **Evaluated mode**: Dr.Jit evaluates all inputs and groups them by instance
+         ID. Following this, it launches a a kernel *per instance* to process the
+         rearranged inputs and assemble the function return value.
+
+         The main advantages of evaluated mode are:
+
+         * *It is easier to debug*: evaluating and processing intermediate results
+           (e.g. via Python's ``print`` statement or more advanced plotting tools)
+           is legal.  You may also use a debugger to step through the program.
+
+         * Kernels are smaller and avoid thread divergence, since Dr.Jit reorders
+           computation by callable.
+
+         The main downsides are:
+
+         * Each callable essentially turns its own kernel that reads its input and
+           writes outputs via device memory. The required memory bandwidth and
+           storage often make evaluated mode impractical.
+
+      Note that the behavior of the functions :py:func:`drjit.switch` and
+      :py:func:`drjit.dispatch` is also controlled by this flag.
+
+   .. autoattribute:: OptimizeCalls
+      :annotation:
+
+      .. For Sphinx-related technical reasons, the below comment is replicated
+         in docstr.h. Please keep the two in sync when making changes.
+
+      Perform basic optimizations for function calls on instance arrays.
+
+      This flag enables two optimizations:
+
+      - *Constant propagation*: Dr.Jit will propagate literal constants across
+        function boundaries while tracing, which can unlock simplifications
+        within. This is especially useful in combination with automatic
+        differentiation, where it helps to detect code that does not influence
+        the computed derivatives.
+
+      - *Devirtualization*: When an element of the return value has the same
+        computation graph in all instances, it is removed from the function
+        call interface and moved to the caller.
+
+      The flag is *enabled* by default. Note that it is only effective in
+      combination with  :py:attr:`SymbolicCalls`. The behavior of the functions
+      :py:func:`drjit.switch` and :py:func:`drjit.dispatch` is also controlled
+      by this flag.
+
+   .. autoattribute:: MergeFunctions
+      :annotation:
+
+      .. For Sphinx-related technical reasons, the below comment is replicated
+         in docstr.h. Please keep the two in sync when making changes.
+
+      Deduplicate code generated by function calls on instance arrays.
+
+      When ``arr`` is an instance array (potentially with thousands of
+      instances), a function call like
+
+      .. code-block:: python
+
+         arr.f(inputs...)
+
+      can potentially generate vast numbers of different callables in the
+      generated code. At the same time, many of these callables may contain
+      identical code (or code that is identical except for data references).
+
+      Dr.Jit can exploit such redundancy and merge such callables during
+      computation. Besides generating shorter programs, this also helps to
+      reduce thread divergence.
+
+      This flag is enabled by default. Note that it is only effective in
+      combination with  :py:attr:`SymbolicCalls`. The behavior of the functions
+      :py:func:`drjit.switch` and :py:func:`drjit.dispatch` is also controlled
+      by this flag.
+
+   .. autoattribute:: SymbolicLoops
+      :annotation:
+
+      .. For Sphinx-related technical reasons, the below comment is replicated
+         in docstr.h. Please keep the two in sync when making changes.
+
+      Dr.Jit provides two main ways of compiling loops involving Dr.Jit arrays.
+
+      1. **Symbolic mode** (the default): Dr.Jit executes the loop a single
+         time regardless of how many iterations it requires in practice. It
+         does so with *symbolic* (abstract) arguments to capture the loop
+         condition and body and then turns it into an equivalent loop in the
+         generated kernel. Symbolic mode preserves the control flow structure
+         of the original program by replicating it within Dr.Jit's intermediate
+         representation.
+
+         The main advantage of recorded mode is:
+
+         * It is very efficient in terms of device memory storage and
+           bandwidth, since loop state variables can be exchanged through fast
+           CPU/GPU registers.
+
+         Its main downsides is:
+
+         * Symbolic arrays cannot be evaluated, printed, etc. Attempting to
+           perform such operations within the loop body will raise an
+           exception.
+
+           This limitation may be inconvenient especially when debugging code,
+           in which case evaluated mode is preferable.
+
+      2. **Evaluated mode**: Dr.Jit evaluates the loop's state variables and
+         reduces the loop condition to a single element (``bool``) that
+         expresses whether any elements are still alive. If so, it runs the
+         loop body and the process repeats. The main advantages of evaluated
+         mode is:
+
+         * *It is easier to debug*: evaluating and processing intermediate results
+           (e.g. via Python's ``print`` statement or more advanced plotting
+           tools) is legal.  You may also use a debugger to step through the
+           program.
+
+         The main downsides are:
+
+         * Each iteration generates at least one kernel that reads its input and
+           writes outputs via device memory. The required memory bandwidth and
+           storage often make evaluated mode impractical.
+
+      Symbolic mode is the default.
+
+   .. autoattribute:: OptimizeLoops
+      :annotation:
+
+      .. For Sphinx-related technical reasons, the below comment is replicated
+         in docstr.h. Please keep the two in sync when making changes.
+
+      Perform basic optimizations for loops involving Dr.Jit arrays.
+
+      This flag enables two optimizations:
+
+      - *Constant arrays*: variables in the *loop state* set that aren't
+        modified by a loop are removed from this set. This shortens the
+        generated code, which can be helpful especially in combination with the
+        automatic transformations performed by :py:func:`drjit.function` that
+        may be somewhat conservative in classifying too many local variables as
+        potential loop state.
+
+      - *Literal constant arrays*: In addition to the above point, constant
+        loop state variables that are *literal constants* are propagated into
+        the loop body, where this may reveal optimization opportunities.
+
+        This is useful in combination with automatic differentiation, where it
+        helps to detect code that does not influence the computed derivatives.
+
+      One practical implication of this optimization is that it may cause
+      :py:func:`drjit.while_loop` to run the loop body twice instead of just
+      once.
+
+      This flag is enabled by default. Note that it is only effective in
+      combination with  :py:attr:`SymbolicLoops`.
+
+   .. autoattribute:: ForceOptiX
+      :annotation:
+
+      .. For Sphinx-related technical reasons, the below comment is replicated
+         in docstr.h. Please keep the two in sync when making changes.
+
+      Force execution through OptiX even if a kernel doesn't use ray tracing.
+      This only applies to the CUDA backend is mainly helpful for automated
+      tests done by the Dr.Jit team.
+
+      This flag is *disabled* by default.
+
+   .. autoattribute:: PrintIR
+      :annotation:
+
+      .. For Sphinx-related technical reasons, the below comment is replicated
+         in docstr.h. Please keep the two in sync when making changes.
+
+      Print the low-level IR representation when launching a kernel.
+
+      If enabled, this flag causes Dr.Jit to print the low-level IR (LLVM IR,
+      NVIDIA PTX) representation of the generated code onto the console (or
+      Jupyter notebook).
+
+      This flag is *disabled* by default.
+
+   .. autoattribute:: KernelHistory
+      :annotation:
+
+      .. For Sphinx-related technical reasons, the below comment is replicated
+         in docstr.h. Please keep the two in sync when making changes.
+
+      Maintain a history of kernel launches to profile/debug programs.
+
+      Programs written on top of Dr.Jit execute in an *extremely* asynchronous
+      manner. By default, the system postpones the computation to build large
+      fused kernels. Even when this computation eventually runs, it does so
+      asynchronously with respect to the host, which can make benchmarking
+      difficult.
+
+      In general, beware of the following benchmarking *anti-pattern*:
+
+      .. code-block::
+
+          import time
+          a = time.time()
+          # Some Dr.Jit computation
+          b = time.time()
+          print("took %.2f ms" % ((b-a) * 1000))
+
+      In the worst case, the measured time interval may only capture the
+      *tracing time*, without any actual computation having taken place.
+      Another common mistake with this pattern is that Dr.Jit or the target
+      device may still be busy with computation that started *prior* to the ``a
+      = time.time()`` line, which is now incorrectly added to the measured
+      period.
+
+      Dr.Jit provides a *kernel history* feature, where it creates an entry in
+      a list whenever it launches a kernel or related operation (memory copies,
+      etc.). This not only gives accurate and isolated timings (measured with
+      counters on the CPU/GPU) but also reveals if a kernel was launched at
+      all. To capture the kernel history, set this flag just before the region
+      to be benchmarked and call :py:func:`drjit.kernel_history()` at the end.
+
+      Capturing the history has a (very) small cost and is therefore
+      *disabled* by default.
+
+   .. autoattribute:: LaunchBlocking
+      :annotation:
+
+      .. For Sphinx-related technical reasons, the below comment is replicated
+         in docstr.h. Please keep the two in sync when making changes.
+
+      Force synchronization after every kernel launch. This is useful to
+      isolate severe problems (e.g. crashes) to a specific kernel.
+
+      This flag has a severe performance impact and is *disabled* by default.
+
+   .. autoattribute:: AtomicReduceLocal
+      :annotation:
+
+      .. For Sphinx-related technical reasons, the below comment is replicated
+         in docstr.h. Please keep the two in sync when making changes.
+
+      Reduce locally before performing atomic memory operations.
+
+      Atomic operations targeting global memory can be very expensive,
+      especially when many writes target the same memory address leading to
+      *contention*.
+
+      This is a common problem when automatically differentiating computation
+      in *reverse mode* (e.g. :py:func:`drjit.backward`), since this
+      transformation turns differentiable global memory reads into atomic
+      scatter-additions.
+
+      To reduce this cost, Dr.Jit can optionally perform a local reduction that
+      uses cooperation between SIMD/warp lanes to resolve all requests
+      targeting the same address and then only issuing a single atomic memory
+      transaction per unique target. This can reduce atomic memory traffic by
+      up to a factor of 32 (CUDA) or 16 (LLVM backend with AVX512).
+
+      This operation only affects the behavior of the :py:func:`scatter_reduce`
+      function (and the reverse-mode derivative of :py:func:`gather`).
+
+      This flag is *enabled* by default.
+
+   .. autoattribute:: Symbolic
+      :annotation:
+
+      .. For Sphinx-related technical reasons, the below comment is replicated
+         in docstr.h. Please keep the two in sync when making changes.
+
+      This flag should not be set in user code. Dr.Jit sets it whenever it is
+      capturing computation symbolically.
 
    .. autoattribute:: Default
       :annotation:
@@ -656,7 +937,7 @@ Dr.Jit provides "safe" variants of a few standard mathematical operations that
 are prone to out-of-domain errors in calculations with floating point rounding
 errors.  Such errors could, e.g., cause the argument of a square root to become
 negative, which would ordinarily require complex arithmetic. At zero, the
-derivative of the square root function is infinite. The following operations 
+derivative of the square root function is infinite. The following operations
 clamp the input to a safe range to avoid these extremes.
 
 .. autofunction:: safe_sqrt
