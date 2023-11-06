@@ -3,6 +3,7 @@ import types
 import inspect
 from typing import Callable
 
+
 class ASTVisitor(ast.NodeTransformer):
     def __init__(self):
         super().__init__()
@@ -399,6 +400,7 @@ def function(f: Callable = None, print_ast: bool = False, print_code: bool = Fal
     """
 
     if f is None:
+
         def wrapper(f2):
             return function(f2, print_ast, print_code)
 
@@ -435,8 +437,17 @@ def function(f: Callable = None, print_ast: bool = False, print_code: bool = Fal
     return types.FunctionType(new_code, f.__globals__)
 
 
-def hint(arg: object, /, *, scalar=None, evaluate=None, symbolic=None, max_iterations=None) -> object:
-    '''
+def hint(
+    arg: object,
+    /,
+    *,
+    scalar=None,
+    evaluate=None,
+    symbolic=None,
+    max_iterations=None,
+    name=None,
+) -> object:
+    """
     Within ordinary Python code, this function is unremarkable: it returns the
     positional-only argument `arg` while ignoring any specified keyword
     arguments.
@@ -498,5 +509,12 @@ def hint(arg: object, /, *, scalar=None, evaluate=None, symbolic=None, max_itera
        so that it can allocate such a buffer, which can be provided via this
        hint. Otherwise, reverse-mode differentiation of loops will fail with an
        error message.
-    '''
+
+    5. Provide a descriptive name.
+
+       Specify the `name` parameter (of type ``str``). Dr.Jit will include this
+       name as a comment in the generated intermediate representation, which
+       can be helpful when debugging the compilation of large programs.
+
+    """
     return arg
