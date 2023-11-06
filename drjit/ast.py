@@ -269,40 +269,39 @@ def function(f: Callable = None, print_ast: bool = False, print_code: bool = Fal
     """
     Decorator for vectorized loops and conditionals.
 
-    This decorator implements *syntax sugar*. It allows users to write natural
-    Python code that it then turns into native Dr.Jit constructs. Importantly,
-    it *does not compile* or otherwise change the behavior of the function.
+    This decorator provides *syntax sugar*. It allows users to write natural
+    Python code that it then turns into native Dr.Jit constructs. It *does not
+    compile* or otherwise change the behavior of the function.
 
     The :py:func:`@drjit.function <drjit.function>` decorator introduces two
     specific changes:
 
     1. It rewrites ``while`` loops so that they still work when the loop
        condition is a Dr.Jit array. In that case, each element of the array
-       may need to run a different number of loop iterations.
+       may want to run a different number of loop iterations.
 
-    2. Analogously, it rewrites ``if`` statements so that they still work when
-       the condition expression is a Dr.Jit array. In that case, only a subset
-       of array elements may want to execute the body of the ``if`` statement.
+    2. Analogously, it rewrites ``if`` statements so that they work when the
+    condition expression is a Dr.Jit array. In that case, only a subset of
+    array elements may want to execute the body of the ``if`` statement.
 
     Other control flow statements are unaffected. The transformed function may
-    call other functions (whether annotated by :py:func:`drjit.function` or
-    not). The scope of the introduced transformations always remains
-    constrained to the annotated function.
+    call other functions, whether annotated by :py:func:`drjit.function` or
+    not. The introduced transformations only affect the annotated function.
 
     Internally, function turns ``while`` loops and ``if`` statements into calls
-    to :py:func:`drjit.while_loop` and :py:func:`drjit.if_stmt`. It is
-    extremely tedious to write large programs in this way, which is why the
-    decorator exists.
+    to :py:func:`drjit.while_loop` and :py:func:`drjit.if_stmt`. It is tedious
+    to write large programs in this way, which is why the decorator exists.
 
     For example, consider the following function that raises a floating point
-    array to an integer integer power. The resulting code looks fairly natural
-    thanks to the :py:func:`@drjit.function <drjit.function>` decorator.
+    array to an integer power. The resulting code looks natural thanks to the
+    :py:func:`@drjit.function <drjit.function>` decorator.
 
     .. code-block:: python
 
+       import drjit as dr
        from drjit.cuda import Int, Float
 
-       @drjit.function
+       @dr.function
        def ipow(x: Float, n: Int):
            result = Float(1)
 
@@ -316,8 +315,8 @@ def function(f: Callable = None, print_ast: bool = False, print_code: bool = Fal
 
     This (roughly) expands into the following native code that determines
     relevant state variables and wraps conditionals and blocks into functions.
-    These transformations are needed to enable symbolic compilation and
-    automatic derivative propagation in forward and reverse mode.
+    These transformations enable symbolic compilation and automatic derivative
+    propagation in forward and reverse mode.
 
     .. code-block:: python
 
@@ -353,10 +352,9 @@ def function(f: Callable = None, print_ast: bool = False, print_code: bool = Fal
                # Return updated loop state
                return (n, x, result)
 
-           # Initial loop state
            result = Float(1)
 
-           # Execute the loop to obtain the final loop state
+           # Execute the loop and assign the final loop state to local variables
            n, x, result = dr.while_loop(
                (n, x, result)
                loop_cond,
@@ -367,7 +365,7 @@ def function(f: Callable = None, print_ast: bool = False, print_code: bool = Fal
 
     The :py:func:`@drjit.function <drjit.function>` decorator preserves line
     number information so that debugging works and exeptions/error messages are
-    tied to the right locations in the untransformed function.
+    tied to the right locations in the corresponding *untransformed* function.
 
     There are two additional keyword arguments `print_ast` and `print_code`
     that are both disabled by default. Set them to ``True`` to inspect the
@@ -381,9 +379,9 @@ def function(f: Callable = None, print_ast: bool = False, print_code: bool = Fal
            # ...
 
     Note that the functions :py:func:`if_stmt` and :py:func:`while_loop` even
-    work when the loop condition is *scalar* (a Python `bool`). They don't do
-    anything special in that case, and you may want to avoid the transformation
-    altogether. You can provide such control flow hints using
+    work when the loop condition is *scalar* (a Python `bool`). Since they
+    don't do anything special in that case, you may want to avoid the
+    transformation altogether. You can provide such control flow hints using
     :py:func:`drjit.hint`. Other hints can also be provided to request
     compilation using evaluated/symbolic mode, or to specify a maximum number
     of loop iteration for reverse-mode automatic differentiation.
@@ -392,9 +390,10 @@ def function(f: Callable = None, print_ast: bool = False, print_code: bool = Fal
 
        @dr.function
        def foo():
-           i = 10 # 'i' is a Python 'int' (and therefore should not be vectorized)
+           i = 10 # 'i' is a Python 'int' and therefore does not need special
+                  # handling introduced by @dr.function
 
-           # Disable the transformation by @dr.function for this specific loop
+           # Disable the transformation by @dr.function to avoid overheads
            while dr.hint(i < 10, scalar=True):
                i += 1
     """
@@ -438,11 +437,11 @@ def function(f: Callable = None, print_ast: bool = False, print_code: bool = Fal
 
 def hint(arg: object, /, *, scalar=None, evaluate=None, symbolic=None, max_iterations=None) -> object:
     '''
-    Within ordinary Python code, this function does essentially nothing: it
-    returns the positional-only argument `arg` while ignoring any specified
-    keyword arguments.
+    Within ordinary Python code, this function is unremarkable: it returns the
+    positional-only argument `arg` while ignoring any specified keyword
+    arguments.
 
-    The main purpose of :py:func:`drjit.hint()`` is to provide *hints* that
+    The main purpose of :py:func:`drjit.hint()` is to provide *hints* that
     influence the transformation performed by the :py:func:`@drjit.function
     <drjit.function>` decorator. The following kinds of hints are supported:
 
@@ -451,7 +450,7 @@ def hint(arg: object, /, *, scalar=None, evaluate=None, symbolic=None, max_itera
        Wrap the condition of a ``while`` loop or ``if`` statement in a hint
        that specifies ``scalar=True`` to entirely disable the transformation:
 
-       .. code-block:
+       .. code-block:: python
 
           i = 0
           while dr.hint(i < 10, scalar=True):
@@ -460,10 +459,10 @@ def hint(arg: object, /, *, scalar=None, evaluate=None, symbolic=None, max_itera
     2. Force *evaluated* mode.
 
        Wrap the condition of a ``while`` loop or ``if`` statement in a hint
-       that specifies ``evaluate=True`` execute it in *evaluated* mode.
-       For a loop, this is, e.g., analogous to wrapping the code into
+       that specifies ``evaluate=True`` to force execution in *evaluated* mode.
+       For a loop, this is, e.g., analogous to wrapping the code in
 
-       .. code-block:
+       .. code-block:: python
 
           while dr.scoped_set_flag(dr.JitFlag.SymbolicLoops, False):
              # ...
@@ -475,10 +474,10 @@ def hint(arg: object, /, *, scalar=None, evaluate=None, symbolic=None, max_itera
     3. Force *symbolic* mode.
 
        Wrap the condition of a ``while`` loop or ``if`` statement in a hint
-       that specifies ``symbolic=True`` execute it in *symbolic* mode.
-       For a loop, this is, e.g., analogous to wrapping the code into
+       that specifies ``symbolic=True`` to force execution in *symbolic* mode.
+       For a loop, this is, e.g., analogous to wrapping the code in
 
-       .. code-block:
+       .. code-block:: python
 
           while dr.scoped_set_flag(dr.JitFlag.SymbolicLoops, True):
              # ...
@@ -491,7 +490,7 @@ def hint(arg: object, /, *, scalar=None, evaluate=None, symbolic=None, max_itera
        automatic differentiation.
 
        Naive reverse-mode differentiation of loops (unless replaced by a
-       smarter problem-specific strategy via :py:class:`drjit.custom`
+       smarter problem-specific strategy via :py:class:`drjit.custom` and
        :py:class:`drjit.CustomOp`) requires allocation of a large buffer that
        holds loop state for all iterations.
 
