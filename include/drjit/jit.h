@@ -354,13 +354,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
     // -----------------------------------------------------------------------
 
     static JitArray empty_(size_t size) {
-        size_t byte_size = size * sizeof(Value);
-        void *ptr =
-            jit_malloc(Backend == JitBackend::CUDA ? AllocType::Device
-                                                   : AllocType::HostAsync,
-                       byte_size);
-        return steal(
-            jit_var_mem_map(Backend, Type, ptr, size, 1));
+        return steal(jit_var_undefined(Backend, Type, size));
     }
 
     static JitArray zero_(size_t size) {

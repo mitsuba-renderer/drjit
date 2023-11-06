@@ -1,7 +1,7 @@
 import ast
 import types
 import inspect
-
+from typing import Callable
 
 class ASTVisitor(ast.NodeTransformer):
     def __init__(self):
@@ -131,7 +131,7 @@ class ASTVisitor(ast.NodeTransformer):
             ],
             decorator_list=[],
             lineno=node.lineno,
-            col_offset=node.col_offset
+            col_offset=node.col_offset,
         )
 
         # 6. Generate a function representing the loop body
@@ -176,7 +176,7 @@ class ASTVisitor(ast.NodeTransformer):
             body=[step_import_state, *node_body, step_export_state],
             decorator_list=[],
             lineno=node.lineno,
-            col_offset=node.col_offset
+            col_offset=node.col_offset,
         )
 
         # 7. Import the Dr.Jit while loop
@@ -188,16 +188,10 @@ class ASTVisitor(ast.NodeTransformer):
 
         # 8. Generate statement to create the loop state object
         loop_export_state = ast.Assign(
-            targets=[
-                ast.Name(id=state_name, ctx=store)
-            ],
+            targets=[ast.Name(id=state_name, ctx=store)],
             value=ast.Dict(
-                keys =[
-                    ast.Constant(value=k) for k in locals_rw_both
-                ],
-                values=[
-                    ast.Name(id=k, ctx=load) for k in locals_rw_both
-                ]
+                keys=[ast.Constant(value=k) for k in locals_rw_both],
+                values=[ast.Name(id=k, ctx=load) for k in locals_rw_both],
             ),
         )
 
@@ -212,7 +206,7 @@ class ASTVisitor(ast.NodeTransformer):
                 ],
                 keywords=[],
                 lineno=node.lineno,
-                col_offset=node.col_offset
+                col_offset=node.col_offset,
             ),
         )
 
@@ -220,9 +214,7 @@ class ASTVisitor(ast.NodeTransformer):
         state_var = ast.Name(id=state_name, ctx=load)
         loop_import_state = ast.Assign(
             targets=[
-                ast.Tuple(
-                    elts=[ast.Name(id=k, ctx=store) for k in locals_w], ctx=store
-                )
+                ast.Tuple(elts=[ast.Name(id=k, ctx=store) for k in locals_w], ctx=store)
             ],
             value=ast.Tuple(
                 elts=[
@@ -273,9 +265,141 @@ class ASTVisitor(ast.NodeTransformer):
         )
 
 
-def function(f=None, print_ast=False, print_code=False):
-    if f is None:
+def function(f: Callable = None, print_ast: bool = False, print_code: bool = False):
+    """
+    Decorator for vectorized loops and conditionals.
 
+    This decorator implements *syntax sugar*. It allows users to write natural
+    Python code that it then turns into native Dr.Jit constructs. Importantly,
+    it *does not compile* or otherwise change the behavior of the function.
+
+    The :py:func:`@drjit.function <drjit.function>` decorator introduces two
+    specific changes:
+
+    1. It rewrites ``while`` loops so that they still work when the loop
+       condition is a Dr.Jit array. In that case, each element of the array
+       may need to run a different number of loop iterations.
+
+    2. Analogously, it rewrites ``if`` statements so that they still work when
+       the condition expression is a Dr.Jit array. In that case, only a subset
+       of array elements may want to execute the body of the ``if`` statement.
+
+    Other control flow statements are unaffected. The transformed function may
+    call other functions (whether annotated by :py:func:`drjit.function` or
+    not). The scope of the introduced transformations always remains
+    constrained to the annotated function.
+
+    Internally, function turns ``while`` loops and ``if`` statements into calls
+    to :py:func:`drjit.while_loop` and :py:func:`drjit.if_stmt`. It is
+    extremely tedious to write large programs in this way, which is why the
+    decorator exists.
+
+    For example, consider the following function that raises a floating point
+    array to an integer integer power. The resulting code looks fairly natural
+    thanks to the :py:func:`@drjit.function <drjit.function>` decorator.
+
+    .. code-block:: python
+
+       from drjit.cuda import Int, Float
+
+       @drjit.function
+       def ipow(x: Float, n: Int):
+           result = Float(1)
+
+           while n != 0:
+               if n & 1 != 0:
+                   result *= x
+               x *= x
+               n >>= 1
+
+           return result
+
+    This (roughly) expands into the following native code that determines
+    relevant state variables and wraps conditionals and blocks into functions.
+    These transformations are needed to enable symbolic compilation and
+    automatic derivative propagation in forward and reverse mode.
+
+    .. code-block:: python
+
+       def ipow(x: Float, n: Int):
+           # Loop condition wrapped into a callable for ``drjit.while_loop``
+           def loop_cond(n, x, result):
+               return n != 0
+
+           # Loop body wrapped into a callable for ``drjit.while_loop``
+           def loop_body(n, x, result):
+               # Conditional expression wrapped into callable for drjit.if_stmt
+               def if_cond(n, x, result):
+                   return n & 1 != 0
+
+               # Conditional body wrapped into callable for drjit.if_stmt
+               def if_body(n, x, result):
+                   result *= x
+
+                   # Return updated state following conditional stmt
+                   return (n, x, result)
+
+               # Map the 'n', 'x', and 'result' variables though the conditional
+               n, x, result = dr.if_stmt(
+                   (n, x, result),
+                   if_cond,
+                   if_body,
+               )
+
+               # Rest of the loop body copy-pasted (no transformations needed here)
+               x *= x
+               n >>= 1
+
+               # Return updated loop state
+               return (n, x, result)
+
+           # Initial loop state
+           result = Float(1)
+
+           # Execute the loop to obtain the final loop state
+           n, x, result = dr.while_loop(
+               (n, x, result)
+               loop_cond,
+               loop_body
+           )
+
+           return result
+
+    The :py:func:`@drjit.function <drjit.function>` decorator preserves line
+    number information so that debugging works and exeptions/error messages are
+    tied to the right locations in the untransformed function.
+
+    There are two additional keyword arguments `print_ast` and `print_code`
+    that are both disabled by default. Set them to ``True`` to inspect the
+    function before/after the transformation, either using an AST dump or via
+    generated Python code.
+
+    .. code-block:: python
+
+       @dr.function(print_code=True)
+       def ipow(x: Float, n: Int):
+           # ...
+
+    Note that the functions :py:func:`if_stmt` and :py:func:`while_loop` even
+    work when the loop condition is *scalar* (a Python `bool`). They don't do
+    anything special in that case, and you may want to avoid the transformation
+    altogether. You can provide such control flow hints using
+    :py:func:`drjit.hint`. Other hints can also be provided to request
+    compilation using evaluated/symbolic mode, or to specify a maximum number
+    of loop iteration for reverse-mode automatic differentiation.
+
+    .. code-block:: python
+
+       @dr.function
+       def foo():
+           i = 10 # 'i' is a Python 'int' (and therefore should not be vectorized)
+
+           # Disable the transformation by @dr.function for this specific loop
+           while dr.hint(i < 10, scalar=True):
+               i += 1
+    """
+
+    if f is None:
         def wrapper(f2):
             return function(f2, print_ast, print_code)
 
@@ -310,3 +434,70 @@ def function(f=None, print_ast=False, print_code=False):
         (x for x in new_code.co_consts if isinstance(x, types.CodeType)), None
     )
     return types.FunctionType(new_code, f.__globals__)
+
+
+def hint(arg: object, /, *, scalar=None, evaluate=None, symbolic=None, max_iterations=None) -> object:
+    '''
+    Within ordinary Python code, this function does essentially nothing: it
+    returns the positional-only argument `arg` while ignoring any specified
+    keyword arguments.
+
+    The main purpose of :py:func:`drjit.hint()`` is to provide *hints* that
+    influence the transformation performed by the :py:func:`@drjit.function
+    <drjit.function>` decorator. The following kinds of hints are supported:
+
+    1. Disabling code transformations for scalar code.
+
+       Wrap the condition of a ``while`` loop or ``if`` statement in a hint
+       that specifies ``scalar=True`` to entirely disable the transformation:
+
+       .. code-block:
+
+          i = 0
+          while dr.hint(i < 10, scalar=True):
+             # ...
+
+    2. Force *evaluated* mode.
+
+       Wrap the condition of a ``while`` loop or ``if`` statement in a hint
+       that specifies ``evaluate=True`` execute it in *evaluated* mode.
+       For a loop, this is, e.g., analogous to wrapping the code into
+
+       .. code-block:
+
+          while dr.scoped_set_flag(dr.JitFlag.SymbolicLoops, False):
+             # ...
+
+       Refer to the discussion of :py:func:`drjit.while_loop`,
+       :py:attr:`drjit.JitFlag.SymbolicLoops` :py:func:`drjit.if_stmt`, and
+       :py:attr:`drjit.JitFlag.SymbolicConditionals` for details.
+
+    3. Force *symbolic* mode.
+
+       Wrap the condition of a ``while`` loop or ``if`` statement in a hint
+       that specifies ``symbolic=True`` execute it in *symbolic* mode.
+       For a loop, this is, e.g., analogous to wrapping the code into
+
+       .. code-block:
+
+          while dr.scoped_set_flag(dr.JitFlag.SymbolicLoops, True):
+             # ...
+
+       Refer to the discussion of :py:func:`drjit.while_loop`,
+       :py:attr:`drjit.JitFlag.SymbolicLoops` :py:func:`drjit.if_stmt`, and
+       :py:attr:`drjit.JitFlag.SymbolicConditionals` for details.
+
+    4. Specify a maximum number of loop iterations for reverse-mode
+       automatic differentiation.
+
+       Naive reverse-mode differentiation of loops (unless replaced by a
+       smarter problem-specific strategy via :py:class:`drjit.custom`
+       :py:class:`drjit.CustomOp`) requires allocation of a large buffer that
+       holds loop state for all iterations.
+
+       Dr.Jit requires an upper bound on the maximum number of loop iterations
+       so that it can allocate such a buffer, which can be provided via this
+       hint. Otherwise, reverse-mode differentiation of loops will fail with an
+       error message.
+    '''
+    return arg
