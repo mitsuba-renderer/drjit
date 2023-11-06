@@ -1224,6 +1224,8 @@ particular, ``dtype`` can be:
 Note that when ``dtype`` refers to a scalar mask or a mask array, it will be
 initialized to ``False`` as opposed to zero.
 
+The function returns a *literal constant* array that consumes no device memory.
+
 Args:
     dtype (type): Desired Dr.Jit array type, Python scalar type, or
       :ref:`Pytree <pytrees>`.
@@ -1260,6 +1262,8 @@ particular, ``dtype`` can be:
 Note that when ``dtype`` refers to a scalar mask or a mask array, it will be
 initialized to ``True`` as opposed to one.
 
+The function returns a *literal constant* array that consumes no device memory.
+
 Args:
     dtype (type): Desired Dr.Jit array type, Python scalar type, or
       :ref:`Pytree <pytrees>`.
@@ -1293,6 +1297,8 @@ particular, ``dtype`` can be:
 
 - A scalar Python type like ``int``, ``float``, or ``bool``. The ``shape``
   parameter is ignored in this case.
+
+The function returns a *literal constant* array that consumes no device memory.
 
 Args:
     dtype (type): Desired Dr.Jit array type, Python scalar type, or
@@ -1373,11 +1379,9 @@ Returns:
 static const char *doc_empty = R"(
 Return an uninitialized Dr.Jit array of the desired type and shape.
 
-This function can create uninitialized buffers of various types. It is
-essentially a wrapper around CPU/GPU variants of ``malloc()`` and produces
-arrays filled with uninitialized/undefined data. It should only be used in
-combination with a subsequent call to an operation like
-:py:func:`drjit.scatter()` that overwrites the array contents with valid data.
+This function can create uninitialized buffers of various types. It should only
+be used in combination with a subsequent call to an operation like
+:py:func:`drjit.scatter()` that fills the array contents with valid data.
 
 The ``dtype`` parameter can be used to request:
 
@@ -1400,6 +1404,9 @@ The ``dtype`` parameter can be used to request:
   parameter is ignored in this case, and the function returns a
   zero-initialized result (there is little point in instantiating uninitialized
   versions of scalar Python types).
+
+:py:func:`drjit.empty` delays allocation of the underlying buffer until an
+operation tries to read/write the actual array contents.
 
 Args:
     dtype (type): Desired Dr.Jit array type, Python scalar type, or

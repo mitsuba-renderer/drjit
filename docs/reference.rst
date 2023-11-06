@@ -19,10 +19,12 @@ Array creation
 Control flow
 ------------
 
-.. autofunction:: function
 .. autofunction:: switch
 .. autofunction:: dispatch
 .. autofunction:: while_loop
+.. autofunction:: if_stmt
+.. autofunction:: function
+.. autofunction:: hint
 
 .. _horizontal-reductions-ref:
 

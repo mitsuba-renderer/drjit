@@ -154,17 +154,21 @@ static void rewrite_variables(PyState &s1, PyState &s2, const F &f) {
     }
 }
 
-static uint32_t extract_index(nb::handle active) {
-    nb::handle active_tp = active.type();
-    if (is_drjit_type(active_tp)) {
-        const ArraySupplement &s = supp(active_tp);
+static const ArraySupplement &check_cond(nb::handle h) {
+    nb::handle tp = h.type();
+    if (is_drjit_type(tp)) {
+        const ArraySupplement &s = supp(tp);
         if ((VarType) s.type == VarType::Bool && s.ndim == 1)
-            return (uint32_t) s.index(inst_ptr(active));
+            return s;
     }
 
     nb::raise("The type of the loop condition ('%s') is not supported. "
               "You must either provide a 1D Dr.Jit boolean array or a "
-              "Python 'bool' value.", nb::type_name(active_tp).c_str());
+              "Python 'bool' value.", nb::type_name(tp).c_str());
+}
+
+static uint32_t extract_index(nb::handle h) {
+    return (uint32_t) check_cond(h).index(inst_ptr(h));
 }
 
 /// RAII helper to temporarily record symbolic computation
@@ -186,22 +190,40 @@ struct scoped_record {
     uint32_t checkpoint;
 };
 
-void while_loop_symbolic(nb::object state, nb::handle cond, nb::handle step) {
+/// RAII helper to temporarily push a mask onto the Dr.Jit mask stack
+struct scoped_set_mask {
+    scoped_set_mask(JitBackend backend, uint32_t index) : backend(backend) {
+        jit_var_mask_push(backend, index);
+    }
+
+    ~scoped_set_mask() {
+        jit_var_mask_pop(backend);
+    }
+
+    JitBackend backend;
+};
+
+static nb::object apply_default_mask(nb::handle h) {
+    const ArraySupplement &s = check_cond(h);
+    uint32_t index = (uint32_t) s.index(inst_ptr(h));
+    uint32_t new_index = jit_var_mask_apply(index, jit_var_size(index));
+    nb::object tmp = nb::inst_alloc(h.type());
+    s.init_index(new_index, inst_ptr(tmp));
+    nb::inst_mark_ready(tmp);
+    jit_var_dec_ref(new_index);
+    return tmp;
+}
+
+void while_loop_symbolic(JitBackend backend, nb::object state, nb::handle cond, nb::handle step) {
     PyState s1 = capture_state(state);
     std::vector<uint32_t> indices;
 
     using JitVar = drjit::JitArray<JitBackend::None, void>;
 
     try {
-        JitBackend backend = JitBackend::None;
-
         indices.reserve(s1.size());
         for (auto &[k, v] : s1) {
             if (v.index) {
-                if (indices.empty()) {
-                    backend = jit_set_backend(v.index).backend;
-                }
-
                 jit_var_inc_ref((uint32_t) v.index);
                 indices.push_back((uint32_t) v.index);
             }
@@ -219,14 +241,26 @@ void while_loop_symbolic(nb::object state, nb::handle cond, nb::handle step) {
                 steal_and_replace(v.object, indices[ctr++]);
         }
 
+        nb::object active = apply_default_mask(cond(state));
+        uint32_t active_index = extract_index(active);
+
         // Evaluate the loop condition
         JitVar loop_cond = JitVar::steal(
-            jit_var_loop_cond(loop.index(), extract_index(cond(state))));
+            jit_var_loop_cond(loop.index(), active_index));
 
         PyState s2;
         do {
             // Evolve the loop state
-            step(state);
+            {
+                if (backend == JitBackend::CUDA)
+                    active_index = jit_var_bool(backend, true);
+                scoped_set_mask m(backend, active_index);
+
+                if (backend == JitBackend::CUDA)
+                    jit_var_dec_ref(active_index);
+
+                step(state);
+            }
             s2 = capture_state(state);
 
             // Ensure that modified loop state remains compatible and capture indices
@@ -277,7 +311,7 @@ void while_loop_symbolic(nb::object state, nb::handle cond, nb::handle step) {
     }
 }
 
-void while_loop_evaluated(nb::object state, nb::handle cond, nb::handle step) {
+void while_loop_evaluated(JitBackend backend, nb::object state, nb::handle cond, nb::handle step) {
     if (jit_flag(JitFlag::Symbolic))
         nb::raise("Dr.Jit is currently recording symbolic computation and "
                   "cannot execute a loop in *evaluated mode*. You will likely "
@@ -285,11 +319,16 @@ void while_loop_evaluated(nb::object state, nb::handle cond, nb::handle step) {
                   "Please review the Dr.Jit documentation of both the flag "
                   "and ``drjit.while_loop()``.");
 
-    nb::object active = nb::borrow(Py_True);
+    nb::object active;
+
     while (true) {
         eval(state);
-        nb::object value = cond(state);
-        active &= value;
+        nb::object cond_value = cond(state);
+
+        if (!active.is_valid())
+            active = apply_default_mask(cond_value);
+        else
+            active &= cond_value;
 
         uint32_t active_index = extract_index(active);
 
@@ -301,7 +340,10 @@ void while_loop_evaluated(nb::object state, nb::handle cond, nb::handle step) {
         PyState s1 = capture_state(state);
 
         // Execute the loop body
-        step(state);
+        {
+            scoped_set_mask m(backend, active_index);
+            step(state);
+        }
 
         // Capture the state of all variables following execution of the loop body
         PyState s2 = capture_state(state);
@@ -333,6 +375,8 @@ void while_loop_evaluated(nb::object state, nb::handle cond, nb::handle step) {
 
 void while_loop(nb::object state, nb::handle cond, nb::handle step) {
     try {
+        JitBackend backend = JitBackend::None;
+
         // First, check if this is perhaps a scalar loop
         nb::object cond_val = cond(state);
         if (cond_val.type().is(&PyBool_Type)) {
@@ -340,14 +384,16 @@ void while_loop(nb::object state, nb::handle cond, nb::handle step) {
                 step(state);
                 cond_val = cond(state);
             }
+            return;
         } else {
+            backend = (JitBackend) check_cond(cond_val).backend;
             cond_val.reset();
         }
 
         if (jit_flag(JitFlag::SymbolicLoops))
-            while_loop_symbolic(state, cond, step);
+            while_loop_symbolic(backend, state, cond, step);
         else
-            while_loop_evaluated(state, cond, step);
+            while_loop_evaluated(backend, state, cond, step);
     } catch (nb::python_error &e) {
         nb::raise_from(
             e, PyExc_RuntimeError,

@@ -66,9 +66,9 @@ incompatibilities and potential stumbling blocks.
   Note the presence of the :py:func:`@drjit.function <drjit.function>`
   decorator, which transforms the ``while`` loop into a call to the
   array-compatible function :py:func:`drjit.while_loop` and the ``if``
-  statement into a call to :py:fund:`drjit.cond`. Besides these two effects,
-  the transformation is minimal and preserves other code along with line
-  number information to aid debugging.
+  statement into a call to :py:func:`drjit.if_stmt`. Besides these two effects,
+  the transformation is minimal and preserves other code along with line number
+  information to aid debugging.
 
 - ⚠️ **Comparison operators**: The ``==`` and ``!=`` comparisons previously
   reduced the result of to a single Python ``bool``. They now return an array
@@ -153,6 +153,12 @@ incompatibilities and potential stumbling blocks.
 
 - Dr.Jit can now target the Python 3.12+ stable ABI. This means that binary
   wheels will work on future versions of Python without recompilation.
+
+- The :py:func:`drjit.empty` function used to immediate allocate an array of
+  the desired shape (compared to, say, :py:func:`drjit.zero` which creates a
+  literal constant array that consumes no device memory). Users found this
+  surprising, so the behavior was changed so that :py:func:`drjit.empty`
+  similarly delays allocation.
 
 Internals
 ---------
