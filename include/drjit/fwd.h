@@ -15,6 +15,7 @@
 
 #include <stddef.h>
 #include <drjit-core/jit.h>
+#include <drjit-core/half.h>
 
 #if defined(_MSC_VER)
 #  define DRJIT_NOINLINE               __declspec(noinline)
@@ -178,7 +179,7 @@
 #endif
 
 #define DRJIT_CHKSCALAR(reason)                                                \
-    if (std::is_scalar_v<std::decay_t<Value>>)                                 \
+    if (drjit::is_scalar_v<std::decay_t<Value>>)                                 \
         DRJIT_TRACK_SCALAR(reason)
 
 NAMESPACE_BEGIN(drjit)

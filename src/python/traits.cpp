@@ -327,6 +327,10 @@ void export_traits(nb::module_ &m) {
           [](nb::handle h) { return reinterpret_array_t(h, VarType::Int64); },
           doc_int64_array_t);
 
+    m.def("float16_array_t",
+          [](nb::handle h) { return reinterpret_array_t(h, VarType::Float16); },
+          doc_float16_array_t);
+
     m.def("float32_array_t",
           [](nb::handle h) { return reinterpret_array_t(h, VarType::Float32); },
           doc_float32_array_t);

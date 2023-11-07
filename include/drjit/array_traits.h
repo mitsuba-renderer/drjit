@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include <drjit-core/traits.h>
 #include <drjit/fwd.h>
 #include <utility>
 #include <stdint.h>
@@ -51,8 +52,8 @@ namespace detail {
     template <typename T0, typename T1>
     static constexpr bool is_same_v =
         sizeof(T0) == sizeof(T1) &&
-        std::is_floating_point_v<T0> == std::is_floating_point_v<T1> &&
-        std::is_signed_v<T0> == std::is_signed_v<T1> &&
+        drjit::is_floating_point_v<T0> == drjit::is_floating_point_v<T1> &&
+        drjit::is_signed_v<T0> == drjit::is_signed_v<T1> &&
         is_integral_ext_v<T0> == is_integral_ext_v<T1>;
 
     /// SFINAE checker for component-based array constructors
@@ -108,7 +109,7 @@ namespace detail {
     template <typename T> using is_drjit_struct_det    = std::enable_if_t<T::IsDrJitStruct>;
 }
 
-template <typename T> using enable_if_scalar_t = enable_if_t<std::is_scalar_v<T>>;
+template <typename T> using enable_if_scalar_t = enable_if_t<drjit::is_scalar_v<T>>;
 
 template <typename T>
 constexpr bool is_array_v = is_detected_v<detail::is_array_det, std::decay_t<T>>;
@@ -243,11 +244,12 @@ template <typename T> constexpr size_t depth_v = detail::array_depth<T>::value;
 /// Determine the size of a nested Dr.Jit array (scalars evaluate to one)
 template <typename T> constexpr size_t size_v = detail::array_size<T>::value;
 
-template <typename T> constexpr bool is_float_v = std::is_floating_point_v<scalar_t<T>> && !is_mask_v<T>;
+template <typename T> constexpr bool is_float_v = drjit::is_floating_point_v<scalar_t<T>> && !is_mask_v<T>;
 template <typename T> constexpr bool is_integral_v = std::is_integral_v<scalar_t<T>> && !is_mask_v<T>;
-template <typename T> constexpr bool is_arithmetic_v = std::is_arithmetic_v<scalar_t<T>> && !is_mask_v<T>;
-template <typename T> constexpr bool is_signed_v = std::is_signed_v<scalar_t<T>>;
+//template <typename T> constexpr bool is_arithmetic_v = std::is_arithmetic_v<scalar_t<T>> && !is_mask_v<T>;
+//template <typename T> constexpr bool is_signed_v = std::is_signed_v<scalar_t<T>>;
 template <typename T> constexpr bool is_unsigned_v = std::is_unsigned_v<scalar_t<T>>;
+
 
 namespace detail {
     template <typename T, typename = int> struct mask {
@@ -356,7 +358,7 @@ namespace detail {
         using TsL = leaf_array_t<T1, Ts...>;
 
         using type = std::conditional_t<
-            is_array_v<T0L> && std::is_floating_point_v<scalar_t<T0L>>,
+            is_array_v<T0L> && drjit::is_floating_point_v<scalar_t<T0L>>,
             T0L,
             TsL
         >;

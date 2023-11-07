@@ -72,13 +72,13 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
     static constexpr bool IsMask = IsMask_;
 
     /// Is this an array of values that can be added, multiplied, etc.?
-    static constexpr bool IsArithmetic = std::is_arithmetic_v<Scalar> && !IsMask;
+    static constexpr bool IsArithmetic = drjit::is_arithmetic_v<Scalar> && !IsMask;
 
     /// Is this an array of signed or unsigned integer values?
     static constexpr bool IsIntegral = std::is_integral_v<Scalar> && !IsMask;
 
     /// Is this an array of floating point values?
-    static constexpr bool IsFloat = std::is_floating_point_v<Scalar> && !IsMask;
+    static constexpr bool IsFloat = drjit::is_floating_point_v<Scalar> && !IsMask;
 
     /// Does this array map operations onto packed vector instructions?
     static constexpr bool IsPacked = false;
@@ -324,7 +324,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                                                                              \
             if constexpr (!IsFloat) {                                        \
                 drjit_raise(#name "_(): invalid operand type!");             \
-            } else if constexpr (!std::is_scalar_v<Value>) {                 \
+            } else if constexpr (!drjit::is_scalar_v<Value>) {               \
                 size_t sa = derived().size();                                \
                                                                              \
                 T result;                                                    \
@@ -610,7 +610,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                 }
 
                 Value result = derived().entry(0) * a.entry(0);
-				if constexpr (std::is_floating_point_v<Scalar>) {
+				if constexpr (drjit::is_floating_point_v<Scalar>) {
                     for (size_t i = 1; i < sr; ++i)
                         result = fmadd(derived().entry(i), a.entry(i), result);
                 } else {

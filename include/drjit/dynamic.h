@@ -191,7 +191,7 @@ struct DynamicArray
         Scalar step = (max - min) / Scalar(size - (endpoint ? 1 : 0));
 
         for (size_t i = 0; i < size; ++i) {
-            if constexpr (std::is_floating_point_v<Scalar>)
+            if constexpr (drjit::is_floating_point_v<Scalar>)
                 result.entry(i) = fmadd(Scalar(i), step, min);
             else
                 result.entry(i) = Scalar(i) * step + min;

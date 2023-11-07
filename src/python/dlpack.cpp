@@ -12,8 +12,22 @@
 #include "base.h"
 #include "memop.h"
 #include <nanobind/ndarray.h>
+#include <drjit-core/half.h>
+
+NAMESPACE_BEGIN(NB_NAMESPACE)
+
+template <> struct ndarray_traits <drjit::half> {
+    static constexpr bool is_complex = false;
+    static constexpr bool is_float   = true;
+    static constexpr bool is_bool    = false;
+    static constexpr bool is_int     = false;
+    static constexpr bool is_signed  = true;
+};
+
+NAMESPACE_END(NB_NAMESPACE)
 
 nb::dlpack::dtype dlpack_dtype(VarType vt) {
+    using half = drjit::half;
     switch (vt) {
         case VarType::Bool:    return nb::dtype<bool>(); break;
         case VarType::UInt8:   return nb::dtype<uint8_t>(); break;
@@ -24,6 +38,7 @@ nb::dlpack::dtype dlpack_dtype(VarType vt) {
         case VarType::Int32:   return nb::dtype<int32_t>(); break;
         case VarType::UInt64:  return nb::dtype<uint64_t>(); break;
         case VarType::Int64:   return nb::dtype<int64_t>(); break;
+        case VarType::Float16: return nb::dtype<half>(); break;
         case VarType::Float32: return nb::dtype<float>(); break;
         case VarType::Float64: return nb::dtype<double>(); break;
         default:

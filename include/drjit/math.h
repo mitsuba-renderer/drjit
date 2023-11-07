@@ -83,7 +83,7 @@ namespace detail {
         DRJIT_MARK_USED(c_out);
         static_assert(!is_special_v<Value>,
                       "sincos(): requires a regular scalar/array argument!");
-        static_assert(std::is_floating_point_v<Scalar>,
+        static_assert(drjit::is_floating_point_v<Scalar>,
                       "sin()/cos(): function requires a floating point argument!");
 
         /* Joint sine & cosine function approximation based on CEPHES.
@@ -190,7 +190,7 @@ namespace detail {
         constexpr bool Single = std::is_same_v<Scalar, float>;
         using IntArray = int_array_t<Value>;
         using Int = scalar_t<IntArray>;
-        static_assert(std::is_floating_point_v<Scalar>,
+        static_assert(drjit::is_floating_point_v<Scalar>,
                       "tan()/cot(): function requires a floating point argument!");
         static_assert(!is_special_v<Value>,
                       "tancot(): requires a regular scalar/array argument!");
@@ -371,7 +371,7 @@ template <typename Value, bool Native> Value asin(const Value &x) {
         using Scalar = scalar_t<Value>;
         using Mask = mask_t<Value>;
         constexpr bool Single = std::is_same_v<Scalar, float>;
-        static_assert(std::is_floating_point_v<Scalar>,
+        static_assert(drjit::is_floating_point_v<Scalar>,
                       "asin(): function requires a floating point argument!");
         static_assert(!is_special_v<Value>,
                       "asin(): requires a regular scalar/array argument!");
@@ -464,7 +464,7 @@ template <typename Value, bool Native> Value acos(const Value &x) {
         using Scalar = scalar_t<Value>;
         using Mask = mask_t<Value>;
         constexpr bool Single = std::is_same_v<Scalar, float>;
-        static_assert(std::is_floating_point_v<Scalar>,
+        static_assert(drjit::is_floating_point_v<Scalar>,
                       "acos(): function requires a floating point argument!");
         static_assert(!is_special_v<Value>,
                       "acos(): requires a regular scalar/array argument!");
@@ -528,7 +528,7 @@ template <typename Y, typename X, bool Native> expr_t<Y, X> atan2(const Y &y, co
         using Value = X;
         using Scalar = scalar_t<Value>;
         constexpr bool Single = std::is_same_v<Scalar, float>;
-        static_assert(std::is_floating_point_v<Scalar>,
+        static_assert(drjit::is_floating_point_v<Scalar>,
                       "atan2(): function requires a floating point argument!");
         static_assert(!is_special_v<Value>,
                       "atan2(): requires a regular scalar/array argument!");
@@ -603,7 +603,7 @@ template <typename X, typename Y, bool Native> expr_t<X, Y> ldexp(const X &x, co
         return x.ldexp_(y);
     } else {
         using Scalar = scalar_t<X>;
-        static_assert(std::is_floating_point_v<Scalar>,
+        static_assert(drjit::is_floating_point_v<Scalar>,
                       "ldexp(): function requires a floating point argument!");
         static_assert(!is_special_v<X>,
                       "ldexp(): requires a regular scalar/array argument!");
@@ -629,7 +629,7 @@ template <typename Value, bool Native> std::pair<Value, Value> frexp(const Value
         using IntMask = mask_t<IntArray>;
         constexpr bool Single = std::is_same_v<Scalar, float>;
 
-        static_assert(std::is_floating_point_v<Scalar>,
+        static_assert(drjit::is_floating_point_v<Scalar>,
                       "frexp(): function requires a floating point argument!");
         static_assert(!is_special_v<Value>,
                       "frexp(): requires a regular scalar/array argument!");
@@ -972,7 +972,7 @@ namespace detail {
             n >>= 1;
         }
 
-        if constexpr (std::is_floating_point_v<scalar_t<Value>>)
+        if constexpr (drjit::is_floating_point_v<scalar_t<Value>>)
             return (y >= 0) ? result : rcp(result);
         else
             return result;
@@ -982,8 +982,8 @@ namespace detail {
 template <typename X, typename Y> expr_t<X, Y> pow(const X &x, const Y &y) {
     static_assert(!is_special_v<X> && !is_special_v<Y>,
                   "pow(): requires a regular scalar/array argument!");
-    if constexpr ((is_dynamic_v<X> && std::is_scalar_v<Y>) || std::is_integral_v<expr_t<X, Y>>) {
-        if constexpr (std::is_floating_point_v<Y>) {
+    if constexpr ((is_dynamic_v<X> && drjit::is_scalar_v<Y>) || std::is_integral_v<expr_t<X, Y>>) {
+        if constexpr (drjit::is_floating_point_v<Y>) {
             if (detail::round_(y) == y)
                 return detail::powi(x, (int) y);
             else

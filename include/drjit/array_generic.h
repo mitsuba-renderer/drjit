@@ -122,7 +122,7 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
 #if defined(NDEBUG)
     StaticArrayImpl() = default;
 #else
-    template <typename T = Value_, enable_if_t<!std::is_scalar_v<T>> = 0>
+    template <typename T = Value_, enable_if_t<!drjit::is_scalar_v<T>> = 0>
     StaticArrayImpl() { }
     template <typename T = Value_, enable_if_scalar_t<T> = 0>
     StaticArrayImpl() : StaticArrayImpl(DebugInitialization<Scalar>) { }

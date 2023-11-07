@@ -17,6 +17,7 @@
 #include <drjit/array_utils.h>
 #include <drjit/array_constants.h>
 #include <drjit-core/containers.h>
+#include <drjit-core/traits.h>
 
 #if defined(min) || defined(max)
 #  error min/max are defined as preprocessor symbols! Define NOMINMAX on MSVC.
@@ -94,7 +95,7 @@ NAMESPACE_BEGIN(drjit)
 
 #define DRJIT_ROUTE_BINARY_SHIFT(name, func)                                   \
     template <typename T1, typename T2,                                        \
-              enable_if_t<std::is_arithmetic_v<scalar_t<T1>>> = 0,             \
+              enable_if_t<drjit::is_arithmetic_v<scalar_t<T1>>> = 0,             \
               enable_if_array_any_t<T1, T2> = 0>                               \
     DRJIT_INLINE auto name(const T1 &a1, const T2 &a2) {                       \
         using E = expr_t<T1, T2>;                                              \
@@ -223,7 +224,7 @@ DRJIT_INLINE auto operator/(const T1 &a1, const T2 &a2) {
 
     if constexpr (std::is_same_v<T1, E> && std::is_same_v<T2, E>)
         return a1.derived().div_(a2.derived());
-    else if constexpr (std::is_floating_point_v<scalar_t<E>> &&
+    else if constexpr (drjit::is_floating_point_v<scalar_t<E>> &&
                        depth_v<T1> > depth_v<T2>) // reciprocal approximation
         return static_cast<ref_cast_t<T1, E>>(a1) *
                rcp(static_cast<ref_cast_t<T1, E2>>(a2));
@@ -289,7 +290,7 @@ DRJIT_INLINE decltype(auto) reinterpret_array(const Source &src) {
         return src;
     } else if constexpr (is_array_v<Target>) {
         return Target(src, detail::reinterpret_flag());
-    } else if constexpr (std::is_scalar_v<Source> && std::is_scalar_v<Target>) {
+    } else if constexpr (drjit::is_scalar_v<Source> && drjit::is_scalar_v<Target>) {
         if constexpr (sizeof(Source) == sizeof(Target)) {
             return memcpy_cast<Target>(src);
         } else {
@@ -351,7 +352,7 @@ namespace detail {
 }
 
 template <typename Array> DRJIT_INLINE Array sign(const Array &v) {
-    if constexpr (std::is_floating_point_v<scalar_t<Array>> && !is_diff_v<Array>)
+    if constexpr (drjit::is_floating_point_v<scalar_t<Array>> && !is_diff_v<Array>)
         return detail::or_(Array(1), detail::and_(detail::sign_mask<Array>(), v));
     else
         return select(v >= 0, Array(1), Array(-1));
@@ -359,7 +360,7 @@ template <typename Array> DRJIT_INLINE Array sign(const Array &v) {
 
 template <typename Array1, typename Array2>
 DRJIT_INLINE Array1 copysign(const Array1 &v1, const Array2 &v2) {
-    if constexpr (std::is_floating_point_v<scalar_t<Array2>> && !is_diff_v<Array2>) {
+    if constexpr (drjit::is_floating_point_v<scalar_t<Array2>> && !is_diff_v<Array2>) {
         return detail::or_(abs(v1), detail::and_(detail::sign_mask<Array2>(), v2));
     } else {
         Array1 v1_a = abs(v1);
@@ -369,7 +370,7 @@ DRJIT_INLINE Array1 copysign(const Array1 &v1, const Array2 &v2) {
 
 template <typename Array1, typename Array2>
 DRJIT_INLINE Array1 copysign_neg(const Array1 &v1, const Array2 &v2) {
-    if constexpr (std::is_floating_point_v<scalar_t<Array2>> && !is_diff_v<Array2>) {
+    if constexpr (drjit::is_floating_point_v<scalar_t<Array2>> && !is_diff_v<Array2>) {
         return detail::or_(abs(v1), detail::andnot_(detail::sign_mask<Array2>(), v2));
     } else {
         Array1 v1_a = abs(v1);
@@ -379,7 +380,7 @@ DRJIT_INLINE Array1 copysign_neg(const Array1 &v1, const Array2 &v2) {
 
 template <typename Array1, typename Array2>
 DRJIT_INLINE Array1 mulsign(const Array1 &v1, const Array2 &v2) {
-    if constexpr (std::is_floating_point_v<scalar_t<Array2>> && !is_diff_v<Array2>) {
+    if constexpr (drjit::is_floating_point_v<scalar_t<Array2>> && !is_diff_v<Array2>) {
         return detail::xor_(v1, detail::and_(detail::sign_mask<Array2>(), v2));
     } else {
         return select(v2 >= 0, v1, -v1);
@@ -389,7 +390,7 @@ DRJIT_INLINE Array1 mulsign(const Array1 &v1, const Array2 &v2) {
 template <typename Array1, typename Array2>
 DRJIT_INLINE Array1 mulsign_neg(const Array1 &v1, const Array2 &v2) {
     // TODO add support for binary op for floats
-    // if constexpr (std::is_floating_point_v<scalar_t<Array2>> && !is_diff_v<Array2>) {
+    // if constexpr (drjit::is_floating_point_v<scalar_t<Array2>> && !is_diff_v<Array2>) {
     //     return detail::xor_(v1, detail::andnot_(detail::sign_mask<Array2>(), v2));
     // } else {
         return select(v2 >= 0, -v1, v1);
@@ -726,8 +727,8 @@ bool allclose(const T1 &a, const T2 &b, float rtol = 1e-5f, float atol = 1e-8f,
               bool equal_nan = false) {
     auto cond = abs(a - b) <= abs(b) * rtol + atol;
 
-    if constexpr (std::is_floating_point_v<scalar_t<T1>> &&
-                  std::is_floating_point_v<scalar_t<T2>>) {
+    if constexpr (drjit::is_floating_point_v<scalar_t<T1>> &&
+                  drjit::is_floating_point_v<scalar_t<T2>>) {
         if (equal_nan)
             cond |= isnan(a) & isnan(b);
     }
@@ -764,7 +765,7 @@ template <typename T> DRJIT_INLINE T zeros(size_t size) {
         if constexpr (is_detected_v<detail::has_zero, T>)
             result.zero_(size);
         return result;
-    } else if constexpr (std::is_scalar_v<T>) {
+    } else if constexpr (drjit::is_scalar_v<T>) {
         return T(0);
     } else {
         return T();
@@ -789,7 +790,7 @@ template <typename T> DRJIT_INLINE T empty(size_t size = 1) {
                 x = empty<X>(size);
             });
         return result;
-    } else if constexpr (std::is_scalar_v<T>) {
+    } else if constexpr (drjit::is_scalar_v<T>) {
         return T(0);
     } else {
         return T();
@@ -1015,7 +1016,7 @@ Target gather(Source &&source, const Index &index, const Mask &mask_ = true,
         return result;
     } else {
         /// Case 4: gather<float>(const float *, ...)
-        static_assert(std::is_integral_v<Index> && std::is_scalar_v<Target>,
+        static_assert(std::is_integral_v<Index> && drjit::is_scalar_v<Target>,
                       "gather(): unsupported inputs -- did you forget to "
                       "include 'drjit/struct.h' or provide a suitable "
                       "DRJIT_STRUCT() declaration?");
@@ -1071,7 +1072,7 @@ void scatter(Target &target, const Value &value, const Index &index,
                 scatter(x1, x2, index, mask, permute);
             });
     } else {
-        static_assert(std::is_integral_v<Index> && std::is_scalar_v<Value>,
+        static_assert(std::is_integral_v<Index> && drjit::is_scalar_v<Value>,
                       "scatter(): unsupported inputs -- did you forget to "
                       "include 'drjit/struct.h' or provide a suitable "
                       "DRJIT_STRUCT() declaration?");
@@ -1109,7 +1110,7 @@ void scatter_reduce(ReduceOp op, Target &target, const Value &value,
             scatter_reduce(op, target, value,
                            detail::broadcast_index<TargetIndex>(index), mask, permute);
         }
-    } else if constexpr (std::is_integral_v<Index> && std::is_arithmetic_v<Value>) {
+    } else if constexpr (drjit::is_integral_v<Index> && drjit::is_arithmetic_v<Value>) {
         if (mask) {
             auto func = [op](const Value &a, const Value &b) -> Value {
                 switch (op) {
@@ -1849,7 +1850,7 @@ NAMESPACE_END(detail)
 
 template <typename T, typename Mask>
 DRJIT_INLINE auto masked(T &value, const Mask &mask) {
-    if constexpr (is_array_v<T> || std::is_scalar_v<Mask>) {
+    if constexpr (is_array_v<T> || drjit::is_scalar_v<Mask>) {
         return detail::MaskedArray<T>{ value, mask };
     } else if constexpr (is_drjit_struct_v<T>) {
         masked_t<T> result;
