@@ -91,7 +91,7 @@ def test03_implicit_bool_conversion_failures(t):
         with pytest.raises(RuntimeError, match=r'implicit conversion to \'bool\' requires an array with at most 1 element \(this one has 2 elements\).'):
             bool(dr.value_t(t)(True, False))
 
-@pytest.test_arrays('shape=(*), float32, jit')
+@pytest.test_arrays('shape=(*), float, -float64, jit')
 def test04_sum(t):
     m = sys.modules[t.__module__]
     assert dr.allclose(dr.sum(6.0), 6)
@@ -117,7 +117,7 @@ def test04_sum(t):
     assert type(a) is m.Float
 
 
-@pytest.test_arrays('shape=(*), float32, jit')
+@pytest.test_arrays('shape=(*), float, -float64, jit')
 def test05_prod(t):
     m = sys.modules[t.__module__]
     assert dr.allclose(dr.prod(6.0), 6.0)
@@ -143,7 +143,7 @@ def test05_prod(t):
     assert type(a) is m.Float
 
 
-@pytest.test_arrays('shape=(*), float32, jit')
+@pytest.test_arrays('shape=(*), float, -float64, jit')
 def test06_max(t):
     m = sys.modules[t.__module__]
     assert dr.allclose(dr.max(6.0), 6.0)
@@ -169,7 +169,7 @@ def test06_max(t):
     assert type(a) is m.Float
 
 
-@pytest.test_arrays('shape=(*), float32, jit')
+@pytest.test_arrays('shape=(*), float, -float64, jit')
 def test03_min(t):
     m = sys.modules[t.__module__]
     assert dr.allclose(dr.min(6.0), 6.0)
@@ -195,7 +195,7 @@ def test03_min(t):
     assert type(a) is m.Float
 
 
-@pytest.test_arrays('shape=(*), float32, jit')
+@pytest.test_arrays('shape=(*), float, -float64, jit')
 def test04_minimum(t):
     m = sys.modules[t.__module__]
     assert dr.allclose(dr.minimum(6.0, 4.0), 4.0)
@@ -224,7 +224,7 @@ def test04_minimum(t):
     assert dr.allclose(a, [[1, 1, 1], [2, 1, 2], [3, 3, 3]])
     assert type(a) is m.ArrayXf
 
-@pytest.test_arrays('shape=(*), float32, jit')
+@pytest.test_arrays('shape=(*), float, -float64, jit')
 def test05_maximum(t):
     m = sys.modules[t.__module__]
     assert dr.allclose(dr.maximum(6.0, 4.0), 6.0)
@@ -254,7 +254,7 @@ def test05_maximum(t):
     assert type(a) is m.ArrayXf
 
 
-@pytest.test_arrays('shape=(*), float32, jit')
+@pytest.test_arrays('shape=(*), float, -float64, jit')
 def test06_dot(t):
     m = sys.modules[t.__module__]
     a = dr.dot(m.Float(1, 2, 3), m.Float(2, 1, 1))
@@ -278,7 +278,7 @@ def test06_dot(t):
     assert type(a) is m.Float
 
 
-@pytest.test_arrays('shape=(*), float32, jit')
+@pytest.test_arrays('shape=(*), float, -float64, jit')
 def test07_norm(t):
     m = sys.modules[t.__module__]
     a = dr.norm(m.Float(1, 2, 3))

@@ -302,7 +302,7 @@ def test14_out_of_bounds_scatter(t, capsys):
     transcript = capsys.readouterr().err
     assert "out-of-bounds write to position 10 in an array of size 10." in transcript
 
-@pytest.test_arrays('float,shape=(*),jit')
+@pytest.test_arrays('float,-float16,shape=(*),jit')
 def test15_scatter_add_kahan(t):
     buf1 = dr.zeros(t, 2)
     buf2 = dr.zeros(t, 2)

@@ -37,7 +37,7 @@ void bind_texture(nb::module_ &m, const char *name) {
         .def_prop_ro("shape", [](const Tex &t) {
             PyObject *shape = PyTuple_New(t.ndim());
             for (size_t i = 0; i < t.ndim(); ++i)
-                PyTuple_SET_ITEM(shape, i, PyLong_FromLong((long) t.shape()[i]));
+                PyTuple_SetItem(shape, i, PyLong_FromLong((long) t.shape()[i]));
             return nb::steal<nb::tuple>(shape);
         }, doc_Texture_shape)
         .def("eval",

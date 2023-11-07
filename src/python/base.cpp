@@ -21,6 +21,7 @@
 #include "init.h"
 #include "autodiff.h"
 #include "reduce.h"
+#include <cmath>
 #include <nanobind/stl/string.h>
 
 #define DR_NB_UNOP(name, op)                                                   \

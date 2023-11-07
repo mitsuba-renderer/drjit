@@ -131,7 +131,7 @@ def allclose(a, b, rtol: _typing.Optional[float] = None, atol: _typing.Optional[
 
         if vt == VarType.Float16:
             rtol_ref, atol_ref = 1e-2, 1e-2
-        if vt == VarType.Float32:
+        elif vt == VarType.Float32:
             rtol_ref, atol_ref = 1e-3, 1e-5
         else:
             rtol_ref, atol_ref = 1e-5, 1e-8

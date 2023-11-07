@@ -48,7 +48,8 @@ def test04_div(t):
 @pytest.test_arrays('quaternion')
 def test05_abs(t):
     assert type(abs(t(0))) is dr.value_t(t)
-    assert dr.allclose(abs(t(1, 3, 5, 7)), math.sqrt(84))
+    A = dr.array_t(t)
+    assert dr.allclose(abs(t(1, 3, 5, 7)), A(math.sqrt(84)))
 
 
 @pytest.test_arrays('quaternion')

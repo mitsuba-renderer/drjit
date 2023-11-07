@@ -28,7 +28,7 @@ NAMESPACE_BEGIN(drjit)
 template <typename T, typename U> DRJIT_INLINE T memcpy_cast(const U &val) {
     static_assert(sizeof(T) == sizeof(U), "memcpy_cast: sizes did not match!");
     T result;
-    memcpy(&result, &val, sizeof(T));
+    memcpy((void*)&result, &val, sizeof(T));
     return result;
 }
 

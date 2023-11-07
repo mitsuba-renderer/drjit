@@ -10,7 +10,7 @@
     license that can be found in the LICENSE file.
 */
 
-
+#include <drjit-core/half.h>
 #include <drjit/jit.h>
 #include <drjit/math.h>
 #include "common.h"
@@ -22,6 +22,7 @@ namespace dr = drjit;
 #  define DRJIT_EXTRA_EXPORT __attribute__((flatten, visibility("default")))
 #endif
 
+using Float16 = GenericArray<dr::half>;
 using Float32 = GenericArray<float>;
 using Float64 = GenericArray<double>;
 
@@ -29,6 +30,9 @@ using Float64 = GenericArray<double>;
     DRJIT_EXTRA_EXPORT uint32_t jit_var_##name(uint32_t i0) {                  \
         VarInfo info = jit_set_backend(i0);                                    \
         switch (info.type) {                                                   \
+            case VarType::Float16:                                             \
+                return dr::name<Float16, false>(Float16::borrow(i0))           \
+                    .release();                                                \
             case VarType::Float32:                                             \
                 return dr::name<Float32, false>(Float32::borrow(i0))           \
                     .release();                                                \
@@ -44,6 +48,10 @@ using Float64 = GenericArray<double>;
     DRJIT_EXTRA_EXPORT uint32_t jit_var_##name(uint32_t i0, uint32_t i1) {     \
         VarInfo info = jit_set_backend(i0);                                    \
         switch (info.type) {                                                   \
+            case VarType::Float16:                                             \
+                return dr::name<Float16, Float16, false>(Float16::borrow(i0),  \
+                                                         Float16::borrow(i1))  \
+                    .release();                                                \
             case VarType::Float32:                                             \
                 return dr::name<Float32, Float32, false>(Float32::borrow(i0),  \
                                                          Float32::borrow(i1))  \
@@ -62,6 +70,9 @@ using Float64 = GenericArray<double>;
     DRJIT_EXTRA_EXPORT UInt32Pair jit_var_##name(uint32_t i0) {                \
         VarInfo info = jit_set_backend(i0);                                    \
         switch (info.type) {                                                   \
+            case VarType::Float16: {                                           \
+                auto [a, b] = dr::name<Float16, false>(Float16::borrow(i0));   \
+                return { a.release(), b.release() }; }                         \
             case VarType::Float32: {                                           \
                 auto [a, b] = dr::name<Float32, false>(Float32::borrow(i0));   \
                 return { a.release(), b.release() }; }                         \
@@ -98,6 +109,9 @@ DRJIT_EXTRA_EXPORT uint32_t jit_var_exp(uint32_t i0) {
     VarInfo info = jit_set_backend(i0);
 
     switch (info.type) {
+        case VarType::Float16:
+            return dr::exp<Float16, false>(Float16::borrow(i0)).release();
+
         case VarType::Float32:
             if (info.backend == JitBackend::CUDA) {
                 Float32 value = Float32::borrow(i0) * dr::InvLogTwo<float>;
@@ -117,6 +131,9 @@ DRJIT_EXTRA_EXPORT uint32_t jit_var_exp2(uint32_t i0) {
     VarInfo info = jit_set_backend(i0);
 
     switch (info.type) {
+        case VarType::Float16:
+            return dr::exp2<Float16, false>(Float16::borrow(i0)).release();
+
         case VarType::Float32:
             if (info.backend == JitBackend::CUDA)
                 return jit_var_exp2_intrinsic(i0);
@@ -133,6 +150,9 @@ DRJIT_EXTRA_EXPORT uint32_t jit_var_log(uint32_t i0) {
     VarInfo info = jit_set_backend(i0);
 
     switch (info.type) {
+        case VarType::Float16:
+            return dr::log<Float16, false>(Float16::borrow(i0)).release();
+
         case VarType::Float32:
             if (info.backend == JitBackend::CUDA)
                 return (Float32::steal(jit_var_log2_intrinsic(i0)) *
@@ -150,6 +170,9 @@ DRJIT_EXTRA_EXPORT uint32_t jit_var_log2(uint32_t i0) {
     VarInfo info = jit_set_backend(i0);
 
     switch (info.type) {
+        case VarType::Float16:
+            return dr::log2<Float16, false>(Float16::borrow(i0)).release();
+
         case VarType::Float32:
             if (info.backend == JitBackend::CUDA)
                 return jit_var_log2_intrinsic(i0);
@@ -166,6 +189,9 @@ DRJIT_EXTRA_EXPORT uint32_t jit_var_sin(uint32_t i0) {
     VarInfo info = jit_set_backend(i0);
 
     switch (info.type) {
+        case VarType::Float16:
+            return dr::sin<Float16, false>(Float16::borrow(i0)).release();
+
         case VarType::Float32:
             if (info.backend == JitBackend::CUDA)
                 return jit_var_sin_intrinsic(i0);
@@ -182,11 +208,12 @@ DRJIT_EXTRA_EXPORT uint32_t jit_var_cos(uint32_t i0) {
     VarInfo info = jit_set_backend(i0);
 
     switch (info.type) {
+        case VarType::Float16:
+            return dr::cos<Float16, false>(Float16::borrow(i0)).release();
         case VarType::Float32:
             if (info.backend == JitBackend::CUDA)
                 return jit_var_cos_intrinsic(i0);
             return dr::cos<Float32, false>(Float32::borrow(i0)).release();
-
         case VarType::Float64:
             return dr::cos<Float64, false>(Float64::borrow(i0)).release();
 
