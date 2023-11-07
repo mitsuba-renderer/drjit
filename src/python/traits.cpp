@@ -244,6 +244,17 @@ void export_traits(nb::module_ &m) {
               }
           }, doc_is_float_v);
 
+    m.def("is_half_v",
+          [](nb::handle h) -> bool {
+              nb::handle tp = h.is_type() ? h : h.type();
+              if (is_drjit_type(tp)) {
+                  VarType vt = (VarType) supp(tp).type;
+                  return vt == VarType::Float16;
+              } else {
+                  return tp.is(&PyFloat_Type);
+              }
+          }, doc_is_half_v);
+
     m.def("is_arithmetic_v",
           [](nb::handle h) -> bool {
               nb::handle tp = h.is_type() ? h : h.type();

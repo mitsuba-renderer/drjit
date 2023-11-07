@@ -156,11 +156,8 @@ struct Tensor
         for (size_t i = 0; i < ndim; ++i)
             size *= shape[i];
         if (size != m_array.size()) {
-            if (m_array.size() == 1)
-                resize(m_array, size);
-            else
-                drjit_raise("Tensor(): invalid size specified (%zu vs %zu)!",
-                            size, m_array.size());
+            drjit_raise("Tensor(): invalid size specified (%zu vs %zu)!",
+                size, m_array.size());
         }
     }
 
@@ -178,7 +175,7 @@ struct Tensor
     Tensor(Array &&data, Shape &&shape)
         : m_array(std::move(data)), m_shape(shape) { }
 
-    template <typename T, enable_if_t<drjit::is_scalar_v<T> && !std::is_pointer_v<T>> = 0>
+    template <typename T, enable_if_t<drjit::detail::is_scalar_v<T> && !std::is_pointer_v<T>> = 0>
     Tensor(T value) : m_array(value) { }
 
     operator Array() const { return m_array; }

@@ -9,6 +9,7 @@
     BSD-style license that can be found in the LICENSE.txt file.
 */
 
+#include <drjit-core/half.h>
 #include <nanobind/ndarray.h>
 #include "../ext/nanobind/src/buffer.h"
 #include "meta.h"
@@ -313,6 +314,7 @@ static bool array_init_from_seq(PyObject *self, const ArraySupplement &s, PyObje
             dr::dr_unique_ptr<uint8_t[]> storage(new uint8_t[byte_size]);
             switch ((VarType) s.type) {
                 case VarType::Bool:    FROM_SEQ_IMPL(bool);     break;
+                case VarType::Float16: FROM_SEQ_IMPL(dr::half); break;
                 case VarType::Float32: FROM_SEQ_IMPL(float);    break;
                 case VarType::Float64: FROM_SEQ_IMPL(double);   break;
                 case VarType::Int32:   FROM_SEQ_IMPL(int32_t);  break;

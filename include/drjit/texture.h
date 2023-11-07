@@ -12,6 +12,7 @@
 
 #include <array>
 #include <utility>
+#include <drjit-core/half.h>
 #include <drjit-core/texture.h>
 #include <drjit/dynamic.h>
 #include <drjit/idiv.h>
@@ -35,19 +36,29 @@ enum class WrapMode : uint32_t {
     Mirror = 2  /// Mirrors the texture wrt. each edge
 };
 
+/// Texture data type
+enum class CudaTextureFormat : uint32_t {
+    Float32 = 0, /// Single precision storage format
+    Float16 = 1, /// Half precision storage format
+};
+
 template <typename Value, size_t Dimension> class Texture {
 public:
     static constexpr bool IsCUDA = is_cuda_v<Value>;
     static constexpr bool IsDiff = is_diff_v<Value>;
     static constexpr bool IsDynamic = is_dynamic_v<Value>;
-    // Only single-precision floating-point CUDA textures are supported
-    static constexpr bool HasCudaTexture =
-        std::is_same_v<scalar_t<Value>, float> && IsCUDA;
+    // Only half/single-precision floating-point CUDA textures are supported
+    static constexpr bool IsHalf = std::is_same_v<scalar_t<Value>, drjit::half>;
+    static constexpr bool IsFloat = std::is_same_v<scalar_t<Value>, float>;
+    static constexpr bool HasCudaTexture = (IsHalf || IsFloat) && IsCUDA;
+    static constexpr int CudaFormat = HasCudaTexture ? 
+        IsHalf ? (int)CudaTextureFormat::Float16 : (int)CudaTextureFormat::Float32 : -1;
 
     using Int32 = int32_array_t<Value>;
     using UInt32 = uint32_array_t<Value>;
     using Mask = mask_t<Value>;
-    using PosF = Array<Value, Dimension>;
+    using PosType = float32_array_t<Value>;
+    using PosF = Array<PosType, Dimension>;
     using PosI = int32_array_t<PosF>;
     using ArrayX = DynamicArray<Value>;
     using Storage = std::conditional_t<IsDynamic, Value, DynamicArray<Value>>;
@@ -227,25 +238,28 @@ public:
                         "texture dimension plus one (channels).");
 
         bool is_inplace_update = (&tensor == &m_value);
+
+        bool shape_changed = false;
+        {
+            size_t current_shape[Dimension + 1];
+
+            if (HasCudaTexture && is_inplace_update && m_use_accel) {
+                jit_cuda_tex_get_shape(Dimension, m_handle, current_shape);
+            } else {
+                for (size_t i = 0; i < Dimension + 1; ++i)
+                    current_shape[i] = m_value.shape(i);
+            }
+
+            for (size_t i = 0; i < Dimension + 1; ++i) {
+                if (current_shape[i] != tensor.shape(i)) {
+                    shape_changed = true;
+                    break;
+                }
+            }
+        }
+
         if constexpr (HasCudaTexture) {
             if (m_use_accel) {
-                size_t current_shape[Dimension + 1];
-
-                if (is_inplace_update) {
-                    jit_cuda_tex_get_shape(Dimension, m_handle, current_shape);
-                } else {
-                    for (size_t i = 0; i < Dimension + 1; ++i)
-                        current_shape[i] = m_value.shape(i);
-                }
-
-                bool shape_changed = false;
-                for (size_t i = 0; i < Dimension + 1; ++i) {
-                    if (current_shape[i] != tensor.shape(i)) {
-                        shape_changed = true;
-                        break;
-                    }
-                }
-
                 if (shape_changed) {
                     jit_cuda_tex_destroy(m_handle);
                     init(tensor.shape().data(), tensor.shape(Dimension), m_use_accel,
@@ -253,11 +267,11 @@ public:
                 }
             } else {
                 init(tensor.shape().data(), tensor.shape(Dimension),
-                     m_use_accel, m_filter_mode, m_wrap_mode, false);
+                     m_use_accel, m_filter_mode, m_wrap_mode, shape_changed);
             }
         } else {
             init(tensor.shape().data(), tensor.shape(Dimension),
-                 m_use_accel, m_filter_mode, m_wrap_mode, false);
+                 m_use_accel, m_filter_mode, m_wrap_mode, shape_changed);
         }
 
         // Avoid unnecessary copy when working with `DynamicArray`
@@ -313,7 +327,7 @@ public:
      * This is an implementation detail, please use \ref eval() that may
      * dispatch to this function depending on its inputs.
      */
-    void eval_cuda(const Array<Value, Dimension> &pos, Value *out,
+    void eval_cuda(const Array<PosType, Dimension> &pos, Value *out,
                    Mask active = true) const {
         const size_t channels = m_value.shape(Dimension);
 
@@ -343,7 +357,7 @@ public:
      * This is an implementation detail, please use \ref eval() that may
      * dispatch to this function depending on its inputs.
      */
-    void eval_nonaccel(const Array<Value, Dimension> &pos, Value *out,
+    void eval_nonaccel(const Array<PosType, Dimension> &pos, Value *out,
                        Mask active = true) const {
         if constexpr (!is_array_v<Mask>)
             active = true;
@@ -378,7 +392,7 @@ public:
             #define DR_TEX_ACCUM(index, weight)                                        \
                 {                                                                      \
                     UInt32 index_ = index;                                             \
-                    Value weight_ = weight;                                            \
+                    Value weight_ = Value(weight);                                     \
                     for (uint32_t ch = 0; ch < channels; ++ch)                         \
                         out[ch] =                                                      \
                             fmadd(gather<Value>(m_value.array(), index_ + ch, active), \
@@ -420,7 +434,7 @@ public:
      * graph of \ref eval_nonaccel() and combines it with the primal result of
      * \ref eval_cuda().
      */
-    void eval(const Array<Value, Dimension> &pos, Value *out,
+    void eval(const Array<PosType, Dimension> &pos, Value *out,
               Mask active = true) const {
         if constexpr (HasCudaTexture) {
             if (m_use_accel) {
@@ -452,7 +466,7 @@ public:
      * This is an implementation detail, please use \ref eval_fetch() that may
      * dispatch to this function depending on its inputs.
      */
-    void eval_fetch_cuda(const Array<Value, Dimension> &pos,
+    void eval_fetch_cuda(const Array<PosType, Dimension> &pos,
                          Array<Value *, 1 << Dimension> &out,
                          Mask active = true) const {
         const size_t channels = m_value.shape(Dimension);
@@ -525,7 +539,7 @@ public:
      * This is an implementation detail, please use \ref eval_fetch() that may
      * dispatch to this function depending on its inputs.
      */
-    void eval_fetch_nonaccel(const Array<Value, Dimension> &pos,
+    void eval_fetch_nonaccel(const Array<PosType, Dimension> &pos,
                              Array<Value *, 1 << Dimension> &out,
                              Mask active = true) const {
         using InterpOffset = Array<Int32, 1 << Dimension>;
@@ -561,7 +575,7 @@ public:
      * records the AD graph of \ref eval_fetch_nonaccel() and combines it with
      * the primal result of \ref eval_fetch_cuda().
      */
-    void eval_fetch(const Array<Value, Dimension> &pos,
+    void eval_fetch(const Array<PosType, Dimension> &pos,
                     Array<Value *, 1 << Dimension> &out,
                     Mask active = true) const {
         if constexpr (HasCudaTexture) {
@@ -602,7 +616,7 @@ public:
      * evaluation result is desired, the \ref eval_cubic() function is faster
      * than this simple implementation
      */
-    void eval_cubic_helper(const Array<Value, Dimension> &pos, Value *out,
+    void eval_cubic_helper(const Array<PosType, Dimension> &pos, Value *out,
                            Mask active = true) const {
         using Array4 = Array<Value, 4>;
         using InterpOffset = Array<Int32, ipow(4, Dimension)>;
@@ -627,10 +641,10 @@ public:
         PosF pos_a = pos_f - PosF(pos_i);
 
         const auto compute_weight = [&pos_a](uint32_t dim) -> Array4 {
-            const Value &alpha = pos_a[dim];
+            const Value alpha = Value(pos_a[dim]);
             Value alpha2 = alpha * alpha,
                   alpha3 = alpha2 * alpha;
-            Value multiplier = 1.f / 6.f;
+            Value multiplier = Value(1.f / 6.f);
             return multiplier *
                    Array4(-alpha3 + 3.f * alpha2 - 3.f * alpha + 1.f,
                            3.f * alpha3 - 6.f * alpha2 + 4.f,
@@ -695,7 +709,7 @@ public:
      * calls \ref eval_cubic_helper() function to replace the AD graph with a
      * direct evaluation of the B-Spline basis functions in that case.
      */
-    void eval_cubic(const Array<Value, Dimension> &pos, Value *out,
+    void eval_cubic(const Array<PosType, Dimension> &pos, Value *out,
                     Mask active = true, bool force_nonaccel = false) const {
         using Array3 = Array<Value, 3>;
 
@@ -722,21 +736,21 @@ public:
            Note: the two weights sum to be 1.0 so only `w01` is returned. */
         auto compute_weight_coord = [&](uint32_t dim) -> Array3 {
             const Value integ = (Value) pos_i[dim];
-            const Value alpha = pos_a[dim];
+            const Value alpha = (Value) pos_a[dim];
             Value alpha2 = sqr(alpha),
                   alpha3 = alpha2 * alpha;
-            Value multiplier = 1.f / 6.f;
+            Value multiplier = Value(1.f / 6.f);
             // four basis functions, transformed to take as input the fractional part
             Value w0 =
-                      (-alpha3 + 3.f * alpha2 - 3.f * alpha + 1.f) * multiplier,
-                  w1 = (3.f * alpha3 - 6.f * alpha2 + 4.f) * multiplier,
+                      Value(-alpha3 + 3.f * alpha2 - 3.f * alpha + 1.f) * multiplier,
+                  w1 = Value(3.f * alpha3 - 6.f * alpha2 + 4.f) * multiplier,
                   w3 = alpha3 * multiplier;
             Value w01 = w0 + w1,
-                  w23 = 1.f - w01;
+                  w23 = Value(1.f - w01);
             return Array3(
                 w01,
-                (integ - 0.5f + w1 / w01) * inv_shape[dim],
-                (integ + 1.5f + w3 / w23) * inv_shape[dim]); // (integ + 0.5) +- 1 + weight
+                Value(integ - 0.5f + w1 / w01) * inv_shape[dim],
+                Value(integ + 1.5f + w3 / w23) * inv_shape[dim]); // (integ + 0.5) +- 1 + weight
         };
 
         const size_t channels = m_value.shape(Dimension);
@@ -828,7 +842,7 @@ public:
      * to count for the transformation from the unit size volume to the size of its
      * shape.
      */
-    void eval_cubic_grad(const Array<Value, Dimension> &pos,
+    void eval_cubic_grad(const Array<PosType, Dimension> &pos,
                          Value *out_value, Array<Value, Dimension> *out_gradient,
                          Mask active = true) const {
         using Array4 = Array<Value, 4>;
@@ -853,22 +867,22 @@ public:
 
         const auto compute_weight = [&pos_a](uint32_t dim,
                                              bool is_grad) -> Array4 {
-            const Value &alpha = pos_a[dim];
+            const Value alpha = Value(pos_a[dim]);
             Value alpha2 = sqr(alpha);
-            Value multiplier = 1.f / 6.f;
+            Value multiplier = Value(1.f / 6.f);
             if (!is_grad) {
                 Value alpha3 = alpha2 * alpha;
                 return multiplier * Array4(
-                    -alpha3 + 3.f * alpha2 - 3.f * alpha + 1.f,
-                     3.f * alpha3 - 6.f * alpha2 + 4.f,
-                    -3.f * alpha3 + 3.f * alpha2 + 3.f * alpha + 1.f,
+                    Value(-alpha3 + 3.f * alpha2 - 3.f * alpha + 1.f),
+                    Value(3.f * alpha3 - 6.f * alpha2 + 4.f),
+                    Value(-3.f * alpha3 + 3.f * alpha2 + 3.f * alpha + 1.f),
                     alpha3);
             } else {
                 return multiplier * Array4(
-                    -3.f * alpha2 + 6.f * alpha - 3.f,
-                     9.f * alpha2 - 12.f * alpha,
-                    -9.f * alpha2 + 6.f * alpha + 3.f,
-                     3.f * alpha2);
+                    Value(-3.f * alpha2 + 6.f * alpha - 3.f),
+                    Value(9.f * alpha2 - 12.f * alpha),
+                    Value(-9.f * alpha2 + 6.f * alpha + 3.f),
+                    Value(3.f * alpha2));
             }
         };
 
@@ -946,7 +960,7 @@ public:
         // transform volume from unit size to its resolution
         for (uint32_t ch = 0; ch < channels; ++ch)
             for (uint32_t dim = 0; dim < Dimension; ++dim)
-                out_gradient[ch][dim] *= res_f[dim];
+                out_gradient[ch][dim] *= Value(res_f[dim]);
     }
 
     /**
@@ -959,7 +973,7 @@ public:
      * to count for the transformation from the unit size volume to the size of its
      * shape.
      */
-    void eval_cubic_hessian(const Array<Value, Dimension> &pos,
+    void eval_cubic_hessian(const Array<PosType, Dimension> &pos,
                             Value *out_value,
                             Array<Value, Dimension> *out_gradient,
                             Matrix<Value, Dimension> *out_hessian,
@@ -985,30 +999,30 @@ public:
         PosF pos_a = pos_f - PosF(pos_i);
 
         const auto compute_weight = [&pos_a](uint32_t dim) -> Array4 {
-            const Value &alpha = pos_a[dim];
+            const Value alpha = Value(pos_a[dim]);
             Value alpha2 = sqr(alpha),
                   alpha3 = alpha2 * alpha;
-            Value multiplier = 1.f / 6.f;
+            Value multiplier = Value(1.f / 6.f);
             return multiplier * Array4(
-                -alpha3 + 3.f * alpha2 - 3.f * alpha + 1.f,
-                    3.f * alpha3 - 6.f * alpha2 + 4.f,
-                -3.f * alpha3 + 3.f * alpha2 + 3.f * alpha + 1.f,
+                Value(-alpha3 + 3.f * alpha2 - 3.f * alpha + 1.f),
+                Value(3.f * alpha3 - 6.f * alpha2 + 4.f),
+                Value(-3.f * alpha3 + 3.f * alpha2 + 3.f * alpha + 1.f),
                 alpha3);
         };
 
         const auto compute_weight_gradient = [&pos_a](uint32_t dim) -> Array4 {
-            const Value &alpha = pos_a[dim];
+            const Value alpha = Value(pos_a[dim]);
             Value alpha2 = sqr(alpha);
-            Value multiplier = 1.f / 6.f;
+            Value multiplier = Value(1.f / 6.f);
             return multiplier * Array4(
-                    -3.f * alpha2 + 6.f * alpha - 3.f,
-                     9.f * alpha2 - 12.f * alpha,
-                    -9.f * alpha2 + 6.f * alpha + 3.f,
-                     3.f * alpha2);
+                    Value(-3.f * alpha2 + 6.f * alpha - 3.f),
+                    Value( 9.f * alpha2 - 12.f * alpha),
+                    Value(-9.f * alpha2 + 6.f * alpha + 3.f),
+                    Value( 3.f * alpha2));
         };
 
         const auto compute_weight_hessian = [&pos_a](uint32_t dim) -> Array4 {
-            const Value &alpha = pos_a[dim];
+            const Value alpha = Value(pos_a[dim]);
             return Array4(
                 - alpha + 1.f,
                 3.f * alpha - 2.f,
@@ -1020,9 +1034,9 @@ public:
         const uint32_t channels = (uint32_t) m_value.shape(Dimension);
         for (uint32_t ch = 0; ch < channels; ++ch) {
             out_value[ch] = zeros<Value>();
-            out_gradient[ch] = zeros<PosF>();
+            out_gradient[ch] = zeros<Value>();
             for (uint32_t dim1 = 0; dim1 < Dimension; ++dim1)
-                out_hessian[ch][dim1] = zeros<PosF>();
+                out_hessian[ch][dim1] = zeros<Value>();
         }
         ArrayX values = empty<ArrayX>(channels);
 
@@ -1130,9 +1144,9 @@ public:
         // transform volume from unit size to its resolution
         for (uint32_t ch = 0; ch < channels; ++ch)
             for (uint32_t dim1 = 0; dim1 < Dimension; ++dim1) {
-                out_gradient[ch][dim1] *= res_f[dim1];
+                out_gradient[ch][dim1] *= Value(res_f[dim1]);
                 for (uint32_t dim2 = 0; dim2 < Dimension; ++dim2)
-                    out_hessian[ch][dim1][dim2] *= res_f[dim1] * res_f[dim2];
+                    out_hessian[ch][dim1][dim2] *= Value(res_f[dim1] * res_f[dim2]);
             }
     }
 
@@ -1201,7 +1215,7 @@ protected:
                 size_t tex_shape[Dimension];
                 reverse_tensor_shape(tex_shape, false);
                 m_handle = jit_cuda_tex_create(Dimension, tex_shape, channels,
-                                               (int) filter_mode, (int) wrap_mode);
+                                               (int) CudaFormat, (int) filter_mode, (int) wrap_mode);
             }
         }
     }

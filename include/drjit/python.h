@@ -55,6 +55,8 @@
 #include <drjit-core/traits.h>
 #include <drjit-core/half.h>
 #include <nanobind/nanobind.h>
+#include <nanobind/ndarray.h>
+#include <nanobind/stl/array.h>
 
 NAMESPACE_BEGIN(drjit)
 struct ArrayBinding;
@@ -85,6 +87,14 @@ template <> struct type_caster<drjit::half> {
 };
 
 NAMESPACE_END(detail)
+
+template <> struct ndarray_traits <drjit::half> {
+    static constexpr bool is_complex = false;
+    static constexpr bool is_float   = true;
+    static constexpr bool is_bool    = false;
+    static constexpr bool is_int     = false;
+    static constexpr bool is_signed  = true;
+};
 
 NAMESPACE_END(NB_NAMESPACE)
 
@@ -335,7 +345,7 @@ struct ArrayBinding : ArraySupplement {
 NAMESPACE_BEGIN(detail)
 
 template <typename T>
-constexpr uint8_t size_or_zero_v = drjit::is_scalar_v<T> ? 0 : (uint8_t) size_v<T>;
+constexpr uint8_t size_or_zero_v = drjit::detail::is_scalar_v<T> ? 0 : (uint8_t) size_v<T>;
 
 NAMESPACE_END(detail)
 
@@ -390,7 +400,7 @@ NB_INLINE void bind_init(ArrayBinding &b, nanobind::handle scope = {},
     b.scope = scope;
     b.name = name;
     b.array_type = &typeid(T);
-    b.value_type = drjit::is_scalar_v<Value> && !std::is_pointer_v<Value>
+    b.value_type = drjit::detail::is_scalar_v<Value> && !std::is_pointer_v<Value>
                        ? nullptr
                        : &typeid(std::remove_pointer_t<Value>);
 
@@ -625,7 +635,7 @@ template <typename T> void bind_float_arithmetic(ArrayBinding &b) {
         new (b) T(std::move(sa));
         new (c) T(std::move(ca));
     };
-    //b[ArrayOp::Tan] = (void *) +[](const T *a, T *b) { new (b) T(tan(*a)); };
+    b[ArrayOp::Tan] = (void *) +[](const T *a, T *b) { new (b) T(tan(*a)); };
     b[ArrayOp::Asin] = (void *) +[](const T *a, T *b) { new (b) T(asin(*a)); };
     b[ArrayOp::Acos] = (void *) +[](const T *a, T *b) { new (b) T(acos(*a)); };
     b[ArrayOp::Atan] = (void *) +[](const T *a, T *b) { new (b) T(atan(*a)); };
@@ -797,7 +807,7 @@ nanobind::object bind_array(ArrayBinding &b, nanobind::handle scope = {},
             if constexpr (T::IsIntegral)
                 bind_int_arithmetic<T>(b);
 
-            if constexpr (T::IsFloat)
+            if constexpr (T::IsFloat && !drjit::is_half_array_v<T>)
                 bind_float_arithmetic<T>(b);
 
             if constexpr (T::IsMask)
@@ -824,7 +834,7 @@ nanobind::object bind_array(ArrayBinding &b, nanobind::handle scope = {},
     if constexpr (!T::IsIntegral)
         disable_int_arithmetic(b);
 
-    if constexpr (!T::IsFloat)
+    if constexpr (!T::IsFloat || drjit::is_half_array_v<T>)
         disable_float_arithmetic(b);
 
     if constexpr (!T::IsMask)
@@ -925,7 +935,7 @@ template <typename T, size_t Size> void bind_matrix_types(ArrayBinding &b) {
 
 /// Run bind_array() for arrays, matrices, quaternions, complex numbers, and tensors
 template <typename T> void bind_all(ArrayBinding &b) {
-    if constexpr (!drjit::is_scalar_v<T>)
+    if constexpr (!drjit::detail::is_scalar_v<T>)
         bind_array_types<T>(b);
 
     bind_array_types<Array<T, 0>>(b);
@@ -946,7 +956,7 @@ template <typename T> void bind_all(ArrayBinding &b) {
     bind_array<Quaternion<float32_array_t<T>>>(b);
     bind_array<Quaternion<float64_array_t<T>>>(b);
 
-    using T2 = std::conditional_t<drjit::is_scalar_v<T>, DynamicArray<T>, T>;
+    using T2 = std::conditional_t<drjit::detail::is_scalar_v<T>, DynamicArray<T>, T>;
     bind_array<Tensor<mask_t<T2>>>(b);
     bind_array<Tensor<float16_array_t<T2>>>(b);
     bind_array<Tensor<float32_array_t<T2>>>(b);

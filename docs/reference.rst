@@ -778,6 +778,7 @@ ________________
 
 .. autofunction:: is_array_v
 .. autofunction:: is_mask_v
+.. autofunction:: is_half_v
 .. autofunction:: is_float_v
 .. autofunction:: is_integral_v
 .. autofunction:: is_arithmetic_v

@@ -179,7 +179,7 @@
 #endif
 
 #define DRJIT_CHKSCALAR(reason)                                                \
-    if (drjit::is_scalar_v<std::decay_t<Value>>)                                 \
+    if (drjit::detail::is_scalar_v<std::decay_t<Value>>)                                 \
         DRJIT_TRACK_SCALAR(reason)
 
 NAMESPACE_BEGIN(drjit)

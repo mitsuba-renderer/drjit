@@ -10,6 +10,7 @@
 
 #include "llvm.h"
 #include "random.h"
+#include "texture.h"
 #include <drjit/autodiff.h>
 
 #if defined(DRJIT_ENABLE_LLVM)
@@ -19,6 +20,7 @@ void export_llvm_ad(nb::module_ &m) {
     ArrayBinding b;
     dr::bind_all<Guide>(b);
     bind_pcg32<Guide>(m);
+    bind_texture_all<Guide>(m);
 
     m.attr("Float32") = m.attr("Float");
     m.attr("Int32") = m.attr("Int");

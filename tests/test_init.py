@@ -287,7 +287,7 @@ def test15_arange(t):
         assert dr.all(dr.arange(t, start=-2, stop=5, step=2) == t(-2, 0, 2, 4))
 
 
-@pytest.test_arrays('shape=(*), -bool, float')
+@pytest.test_arrays('shape=(*), -bool, float, -float16')
 def test16_linspace(t):
     assert dr.allclose(dr.linspace(t, -2, 4, 4), t(-2, 0, 2, 4))
     assert dr.allclose(dr.linspace(t, start=-2, stop=5, num=4), t(-2, 1/3, 8/3, 5))

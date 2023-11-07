@@ -14,18 +14,6 @@
 #include <nanobind/ndarray.h>
 #include <drjit-core/half.h>
 
-NAMESPACE_BEGIN(NB_NAMESPACE)
-
-template <> struct ndarray_traits <drjit::half> {
-    static constexpr bool is_complex = false;
-    static constexpr bool is_float   = true;
-    static constexpr bool is_bool    = false;
-    static constexpr bool is_int     = false;
-    static constexpr bool is_signed  = true;
-};
-
-NAMESPACE_END(NB_NAMESPACE)
-
 nb::dlpack::dtype dlpack_dtype(VarType vt) {
     using half = drjit::half;
     switch (vt) {

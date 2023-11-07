@@ -44,6 +44,7 @@
  */
 
 #include "common.h"
+#include <drjit-core/half.h>
 #include <drjit/jit.h>
 #include <drjit/math.h>
 #include <drjit/autodiff.h>
@@ -115,14 +116,25 @@ using JitVar = GenericArray<void>;
 /// Associated mask & offset type
 using JitMask = GenericArray<bool>;
 
+/// Create a floating-point scalar Jit variable given a backend and type
+DRJIT_NOINLINE JitVar scalar(JitBackend backend, VarType type, double value) {
+    switch (type) {
+        case VarType::Float16:
+            return JitVar::steal(jit_var_f16(backend, drjit::half(value)));
+        case VarType::Float32:
+            return JitVar::steal(jit_var_f32(backend, (float) value));
+        case VarType::Float64:
+            return JitVar::steal(jit_var_f64(backend, value));
+        default:
+            ad_fail("scalar(): unsupported AD scalar type");
+    }
+}
+
 /// Create a scalar Jit variable with the same floating point type and backend
 /// as an already existing variable with the provided ``index``
-DRJIT_NOINLINE JitVar scalar(Index index, double value) {
+DRJIT_INLINE JitVar scalar(Index index, double value) {
     VarInfo info = jit_set_backend(jit_index(index));
-
-    return JitVar::steal(info.type == VarType::Float32
-                             ? jit_var_f32(info.backend, (float) value)
-                             : jit_var_f64(info.backend, value));
+    return scalar(info.backend, info.type, value);
 }
 
 // ==========================================================================
@@ -1017,14 +1029,9 @@ JitIndex ad_grad(Index index) {
         size = info.size;
     }
 
-    if (type != VarType::Float32 && type != VarType::Float64)
-        ad_raise("ad_grad(): this is not a floating point variable!");
-
-
-    if (!result.valid())
-        result =
-            JitVar::steal(type == VarType::Float32 ? jit_var_f32(backend, 0.f)
-                                                   : jit_var_f64(backend, 0.0));
+    if (!result.valid()) {
+        result = scalar(backend, type, 0.0);
+    }
 
     if (result.size() != size)
         result.resize(size);
@@ -1701,11 +1708,10 @@ struct Gather : Special {
             return;
         }
 
-        if (!source_grad.valid())
-            source_grad =
-                JitVar::steal((VarType) source->type == VarType::Float32
-                                  ? jit_var_f32(backend, 0.f)
-                                  : jit_var_f64(backend, 0.0));
+        if (!source_grad.valid()) {
+            VarType type = (VarType)source->type;
+            source_grad = scalar(backend, type, 0.0);
+        }
 
         if (source_grad.size() != source->size)
             source_grad.resize(source->size);
@@ -1750,11 +1756,10 @@ struct Scatter : Special {
     void forward(const Variable *source, Variable *target) override {
         JitVar &target_grad = target->grad;
 
-        if (!target_grad.valid())
-            target_grad =
-                JitVar::steal((VarType) target->type == VarType::Float32
-                                  ? jit_var_f32(backend, 0.f)
-                                  : jit_var_f64(backend, 0.0));
+        if (!target_grad.valid()) {
+            VarType type = (VarType) target->type;
+            target_grad = scalar(backend, type, 0.0);
+        }
 
         if (target_grad.size() != target->size)
             target_grad.resize(target->size);

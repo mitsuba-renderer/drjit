@@ -75,7 +75,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
     static constexpr bool IsArithmetic = drjit::is_arithmetic_v<Scalar> && !IsMask;
 
     /// Is this an array of signed or unsigned integer values?
-    static constexpr bool IsIntegral = std::is_integral_v<Scalar> && !IsMask;
+    static constexpr bool IsIntegral = drjit::is_integral_v<Scalar> && !IsMask;
 
     /// Is this an array of floating point values?
     static constexpr bool IsFloat = drjit::is_floating_point_v<Scalar> && !IsMask;
@@ -324,7 +324,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                                                                              \
             if constexpr (!IsFloat) {                                        \
                 drjit_raise(#name "_(): invalid operand type!");             \
-            } else if constexpr (!drjit::is_scalar_v<Value>) {               \
+            } else if constexpr (!drjit::detail::is_scalar_v<Value>) {               \
                 size_t sa = derived().size();                                \
                                                                              \
                 T result;                                                    \

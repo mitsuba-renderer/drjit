@@ -61,14 +61,15 @@ def test03_binop_simple(t):
     assert dr.all(a - a == t(0, 0, 0))
     assert dr.all(a * a == t(1, 4, 9))
 
-    if dr.is_float_v(a):
-        assert dr.all(a / a == t(1, 1, 1))
-        with pytest.raises(TypeError, match=r'unsupported operand type\(s\)'):
-            a // a
-    else:
-        assert dr.all(a // a == t(1, 1, 1))
-        with pytest.raises(TypeError, match=r'unsupported operand type\(s\)'):
-            a / a
+    if not dr.is_half_v(a):
+        if dr.is_float_v(a):
+            assert dr.all(a / a == t(1, 1, 1))
+            with pytest.raises(TypeError, match=r'unsupported operand type\(s\)'):
+                a // a
+        else:
+            assert dr.all(a // a == t(1, 1, 1))
+            with pytest.raises(TypeError, match=r'unsupported operand type\(s\)'):
+                a / a
 
     if dr.is_integral_v(a):
         assert dr.all(a << 1 == t(2, 4, 6))
@@ -100,7 +101,7 @@ def test05_binop_inplace(t):
     assert a is not c and dr.all(a == t(3, 4, 2))
 
     if dr.is_float_v(t):
-        a = dr.int_array_t(t)(1)
+        a = dr.int32_array_t(t)(1) if dr.is_half_v(t) else dr.int_array_t(t)(1)
         c = a
         a += b
         assert a is not c and type(a) is t and dr.all(a == t(3, 4, 2))
