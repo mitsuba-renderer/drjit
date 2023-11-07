@@ -181,8 +181,6 @@ Scalars
 
 Special (complex numbers, etc.)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-.. autoclass:: Complex2f16
-    :show-inheritance:
 .. autoclass:: Complex2f
     :show-inheritance:
 .. autoclass:: Complex2f64
@@ -576,8 +574,6 @@ Scalar
 
 Special (complex numbers, etc.)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-.. autoclass:: Complex2f16
-    :show-inheritance:
 .. autoclass:: Complex2f
     :show-inheritance:
 .. autoclass:: Complex2f64

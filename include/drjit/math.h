@@ -307,6 +307,8 @@ namespace detail {
 template <typename Value, bool Native> Value sin(const Value &x) {
     if constexpr (is_detected_v<detail::has_sin, Value> && Native) {
         return x.sin_();
+    } else if constexpr (is_half_v<Value>) {
+        return (Value) sin(float32_array_t<Value>(x));
     } else {
         Value result;
         detail::sincos<true, false>(x, &result, (Value *) nullptr);
@@ -317,6 +319,8 @@ template <typename Value, bool Native> Value sin(const Value &x) {
 template <typename Value, bool Native> Value cos(const Value &x) {
     if constexpr (is_detected_v<detail::has_cos, Value> && Native) {
         return x.cos_();
+    } else if constexpr (is_half_v<Value>) {
+        return (Value) cos(float32_array_t<Value>(x));
     } else {
         Value result;
         detail::sincos<false, true>(x, (Value *) nullptr, &result);
@@ -327,6 +331,8 @@ template <typename Value, bool Native> Value cos(const Value &x) {
 template <typename Value, bool Native> std::pair<Value, Value> sincos(const Value &x) {
     if constexpr (is_detected_v<detail::has_sincos, Value> && Native) {
         return x.sincos_();
+    } else if constexpr (is_half_v<Value>) {
+        return sincos(float32_array_t<Value>(x));
     } else {
         Value result_s, result_c;
         detail::sincos<true, true>(x, &result_s, &result_c);
@@ -337,6 +343,8 @@ template <typename Value, bool Native> std::pair<Value, Value> sincos(const Valu
 template <typename Value, bool Native> Value tan(const Value &x) {
     if constexpr (is_detected_v<detail::has_tan, Value> && Native)
         return x.tan_();
+    else if constexpr (is_half_v<Value>)
+        return (Value) tan(float32_array_t<Value>(x));
     else
         return detail::tancot<true>(x);
 }
@@ -346,6 +354,8 @@ template <typename Value, bool Native> Value cot(const Value &x) {
         return x.cot_();
     else if constexpr (is_detected_v<detail::has_tan, Value> && Native)
         return rcp(x.tan_());
+    else if constexpr (is_half_v<Value>)
+        return (Value) cot(float32_array_t<Value>(x));
     else
         return detail::tancot<false>(x);
 }
@@ -367,6 +377,8 @@ template <typename Value, bool Native> Value asin(const Value &x) {
 
     if constexpr (is_detected_v<detail::has_asin, Value> && Native) {
         return x.asin_();
+    } else if constexpr (is_half_v<Value>) {
+        return (Value) asin(float32_array_t<Value>(x));
     } else {
         using Scalar = scalar_t<Value>;
         using Mask = mask_t<Value>;
@@ -446,6 +458,8 @@ template <typename Value, bool Native> Value asin(const Value &x) {
 template <typename Value, bool Native> Value acos(const Value &x) {
     if constexpr (is_detected_v<detail::has_acos, Value> && Native) {
         return x.acos_();
+    } else if constexpr (is_half_v<Value>) {
+        return (Value) acos(float32_array_t<Value>(x));
     } else {
         /*
            Arc cosine function approximation based on CEPHES.
@@ -510,6 +524,8 @@ template <typename Y, typename X, bool Native> expr_t<Y, X> atan2(const Y &y, co
                      static_cast<ref_cast_t<X, E>>(x));
     } else if constexpr (is_detected_v<detail::has_atan2, Y> && Native) {
         return y.atan2_(x);
+    } else if constexpr (is_half_v<X> || is_half_v<Y>) {
+        return atan2(float32_array_t<Y>(y), float32_array_t<X>(x));
     } else {
         /*
            MiniMax fit by Wenzel Jakob, May 2016
@@ -583,6 +599,8 @@ template <typename Y, typename X, bool Native> expr_t<Y, X> atan2(const Y &y, co
 template <typename Value, bool Native> Value atan(const Value &x) {
     if constexpr (is_detected_v<detail::has_atan, Value> && Native)
         return x.atan_();
+    else if constexpr (is_half_v<Value>)
+        return (Value) atan(float32_array_t<Value>(x));
     else
         return atan2(x, Value(1));
 }
@@ -672,6 +690,8 @@ template <typename Value, bool Native> std::pair<Value, Value> frexp(const Value
 template <typename Value, bool Native> Value exp(const Value &x) {
     if constexpr (is_detected_v<detail::has_exp, Value> && Native) {
         return x.exp_();
+    } else if constexpr (is_half_v<Value>) {
+        return (Value) exp(float32_array_t<Value>(x));
     } else {
         /* Exponential function approximation based on CEPHES
 
@@ -743,6 +763,8 @@ template <typename Value, bool Native> Value exp(const Value &x) {
 template <typename Value, bool Native> Value exp2(const Value &x) {
     if constexpr (is_detected_v<detail::has_exp2, Value> && Native) {
         return x.exp2_();
+    } else if constexpr (is_half_v<Value>) {
+        return (Value) exp2(float32_array_t<Value>(x));
     } else {
         /* Base-2 exponential function approximation based on CEPHES
 
@@ -811,6 +833,8 @@ template <typename Value, bool Native> Value exp2(const Value &x) {
 template <typename Value, bool Native> Value log(const Value &x) {
     if constexpr (is_detected_v<detail::has_log, Value> && Native) {
         return x.log_();
+    } else if constexpr (is_half_v<Value>) {
+        return (Value) log(float32_array_t<Value>(x));
     } else {
         /* Logarithm function approximation based on CEPHES
 
@@ -888,6 +912,8 @@ template <typename Value, bool Native> Value log(const Value &x) {
 template <typename Value, bool Native> Value log2(const Value &x) {
     if constexpr (is_detected_v<detail::has_log2, Value> && Native) {
         return x.log2_();
+    } else if constexpr (is_half_v<Value>) {
+        return (Value) log2(float32_array_t<Value>(x));
     } else {
         /* Logarithm function approximation based on CEPHES
 
@@ -1012,6 +1038,8 @@ template <typename X, typename Y> expr_t<X, Y> pow(const X &x, const Y &y) {
 template <typename Value, bool Native> Value sinh(const Value &x) {
     if constexpr (is_detected_v<detail::has_sinh, Value> && Native) {
         return x.sinh_();
+    } else if constexpr (is_half_v<Value>) {
+        return (Value) sinh(float32_array_t<Value>(x));
     } else {
         /*
          - sinh (in [-10, 10]):
@@ -1072,6 +1100,8 @@ template <typename Value, bool Native> Value sinh(const Value &x) {
 template <typename Value, bool Native> Value cosh(const Value &x) {
     if constexpr (is_detected_v<detail::has_cosh, Value> && Native) {
         return x.cosh_();
+    } else if constexpr (is_half_v<Value>) {
+        return (Value) cosh(float32_array_t<Value>(x));
     } else {
         /*
          - cosh (in [-10, 10]):
@@ -1097,6 +1127,8 @@ template <typename Value, bool Native> Value cosh(const Value &x) {
 template <typename Value, bool Native> std::pair<Value, Value> sincosh(const Value &x) {
     if constexpr (is_detected_v<detail::has_sincosh, Value> && Native) {
         return x.sincosh_();
+    } else if constexpr (is_half_v<Value>) {
+        return sincosh(float32_array_t<Value>(x));
     } else {
         static_assert(!is_special_v<Value>,
                       "sincosh(): requires a regular scalar/array argument!");
@@ -1144,6 +1176,8 @@ template <typename Value, bool Native> std::pair<Value, Value> sincosh(const Val
 template <typename Value, bool Native> Value tanh(const Value &x) {
     if constexpr (is_detected_v<detail::has_tanh, Value> && Native) {
         return x.tanh_();
+    } else if constexpr (is_half_v<Value>) {
+        return (Value) tanh(float32_array_t<Value>(x));
     } else {
         /*
            Hyperbolic tangent function approximation based on CEPHES.
@@ -1204,6 +1238,8 @@ template <typename Value, bool Native> Value tanh(const Value &x) {
 template <typename Value, bool Native> Value asinh(const Value &x) {
     if constexpr (is_detected_v<detail::has_asinh, Value> && Native) {
         return x.asinh_();
+    } else if constexpr (is_half_v<Value>) {
+        return (Value) asinh(float32_array_t<Value>(x));
     } else {
         /*
            Hyperbolic arc sine function approximation based on CEPHES.
@@ -1264,6 +1300,8 @@ template <typename Value, bool Native> Value asinh(const Value &x) {
 template <typename Value, bool Native> Value acosh(const Value &x) {
     if constexpr (is_detected_v<detail::has_acosh, Value> && Native) {
         return x.acosh_();
+    } else if constexpr (is_half_v<Value>) {
+        return (Value) acosh(float32_array_t<Value>(x));
     } else {
         /*
            Hyperbolic arc cosine function approximation based on CEPHES.
@@ -1327,6 +1365,8 @@ template <typename Value, bool Native> Value acosh(const Value &x) {
 template <typename Value, bool Native> Value atanh(const Value &x) {
     if constexpr (is_detected_v<detail::has_atanh, Value> && Native) {
         return x.atanh_();
+    } else if constexpr (is_half_v<Value>) {
+        return (Value) atanh(float32_array_t<Value>(x));
     } else {
         /*
            Hyperbolic arc tangent function approximation based on CEPHES.
@@ -1392,6 +1432,8 @@ template <typename Value, bool Native> Value atanh(const Value &x) {
 template <typename Value, bool Native> Value cbrt(const Value &x) {
     if constexpr (is_detected_v<detail::has_cbrt, Value> && Native) {
         return x.cbrt_();
+    } else if constexpr (is_half_v<Value>) {
+        return (Value) cbrt(float32_array_t<Value>(x));
     } else {
         /* Cubic root approximation based on CEPHES
 
@@ -1454,6 +1496,8 @@ template <typename Value, bool Native> Value cbrt(const Value &x) {
 template <typename Value, bool Native> Value erf(const Value &x) {
     if constexpr (is_detected_v<detail::has_erf, Value> && Native) {
         return x.erf_();
+    } else if constexpr (is_half_v<Value>) {
+        return (Value) erf(float32_array_t<Value>(x));
     } else {
         // Fits computed using 'resources/remez.cpp'
         // Total error on [-6, 6]:
@@ -1537,36 +1581,40 @@ template <typename Value> Value lgamma(Value x_) {
     using Mask = mask_t<Value>;
     using Scalar = scalar_t<Value>;
 
-    // 'g' and 'n' parameters of the Lanczos approximation
-    // See mrob.com/pub/ries/lanczos-gamma.html
-    const int n = 6;
-    const Scalar g = 5.0f;
-    const Scalar log_sqrt2pi = Scalar(0.91893853320467274178);
-    const Scalar coeff[n + 1] = { (Scalar)  1.000000000190015, (Scalar) 76.18009172947146,
-                                  (Scalar) -86.50532032941677, (Scalar) 24.01409824083091,
-                                  (Scalar) -1.231739572450155, (Scalar) 0.1208650973866179e-2,
-                                  (Scalar) -0.5395239384953e-5 };
+    if constexpr (is_half_v<Value>) {
+        return (Value) lgamma(float32_array_t<Value>(x_));
+    } else {
+        // 'g' and 'n' parameters of the Lanczos approximation
+        // See mrob.com/pub/ries/lanczos-gamma.html
+        const int n = 6;
+        const Scalar g = 5.0f;
+        const Scalar log_sqrt2pi = Scalar(0.91893853320467274178);
+        const Scalar coeff[n + 1] = { (Scalar)  1.000000000190015, (Scalar) 76.18009172947146,
+                                      (Scalar) -86.50532032941677, (Scalar) 24.01409824083091,
+                                      (Scalar) -1.231739572450155, (Scalar) 0.1208650973866179e-2,
+                                      (Scalar) -0.5395239384953e-5 };
 
-    // potentially reflect using gamma(x) = pi / (sin(pi*x) * gamma(1-x))
-    Mask reflect = x_ < .5f;
+        // potentially reflect using gamma(x) = pi / (sin(pi*x) * gamma(1-x))
+        Mask reflect = x_ < .5f;
 
-    Value x = select(reflect, -x_, x_ - 1.f),
-          b = x + g + .5f; // base
+        Value x = select(reflect, -x_, x_ - 1.f),
+              b = x + g + .5f; // base
 
-    Value sum = 0;
-    for (int i = n; i >= 1; --i)
-        sum += coeff[i] / (x + Scalar(i));
-    sum += coeff[0];
+        Value sum = 0;
+        for (int i = n; i >= 1; --i)
+            sum += coeff[i] / (x + Scalar(i));
+        sum += coeff[0];
 
-    // gamma(x) = sqrt(2*pi) * sum * b^(x + .5) / exp(b)
-    Value result = ((log_sqrt2pi + log(sum)) - b) + log(b) * (x + .5f);
+        // gamma(x) = sqrt(2*pi) * sum * b^(x + .5) / exp(b)
+        Value result = ((log_sqrt2pi + log(sum)) - b) + log(b) * (x + .5f);
 
-    if (any_nested_or<true>(reflect)) {
-        masked(result, reflect) = log(abs(Scalar(Pi<Scalar>) / sin(Scalar(Pi<Scalar>) * x_))) - result;
-        masked(result, reflect && eq(x_, round(x_))) = Infinity<Scalar>;
+        if (any_nested_or<true>(reflect)) {
+            masked(result, reflect) = log(abs(Scalar(Pi<Scalar>) / sin(Scalar(Pi<Scalar>) * x_))) - result;
+            masked(result, reflect && eq(x_, round(x_))) = Infinity<Scalar>;
+        }
+
+        return result;
     }
-
-    return result;
 }
 
 /// Gamma function

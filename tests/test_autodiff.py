@@ -857,15 +857,19 @@ def std_test(name, func, f_in, f_out, grad_out):
     if not isinstance(f_in, tuple):
         f_in = (f_in, )
 
+    if not isinstance(grad_out, tuple):
+        grad_out = (grad_out, )
+
     def test_func(t):
         args = tuple(t(v) for v in f_in)
         dr.enable_grad(args)
         rv = func(*args)
-        assert dr.allclose(rv, f_out)
+        assert dr.allclose(rv, t(f_out))
         dr.backward_from(rv, flags=dr.ADFlag.Default | dr.ADFlag.AllowNoGrad)
-        assert dr.allclose(dr.grad(args), grad_out)
+        g_out = tuple(t(v) for v in grad_out)
+        assert dr.allclose(dr.grad(args), g_out)
 
-    query = pytest.test_arrays('is_diff,float,-float16,shape=(*)')
+    query = pytest.test_arrays('is_diff,float,shape=(*)')
     test_func_param = query(test_func)
 
     globals()[f'test{counter:02}_op_{name}'] = test_func_param
@@ -881,8 +885,8 @@ std_test('fma', lambda a, b, c: dr.fma(a, b, c), (3, 7, 11), 32, (7, 3, 1))
 std_test('abs_pos', lambda a: abs(a), 3, 3, 1)
 std_test('abs_neg', lambda a: abs(a), -3, 3, -1)
 std_test('rcp', lambda a: dr.rcp(a), 3, 1/3, -1/9)
-std_test('rsqrt', lambda a: dr.rsqrt(a), 3, 1/dr.sqrt(3), -1/(6*dr.sqrt(3)))
-std_test('cbrt', lambda a: dr.cbrt(a), 3, 3**(1/3), 1/(3* 3**(2/3)))
+std_test('rsqrt', lambda a: dr.rsqrt(a), 2, 1/dr.sqrt(2), -1/(4*dr.sqrt(2)))
+std_test('cbrt', lambda a: dr.cbrt(a), 8, 8**(1/3), 1/(3 * 8 **(2/3)))
 std_test('erf', lambda a: dr.erf(a), .2, math.erf(.2), 2*math.exp(-.2**2)/math.sqrt(math.pi))
 std_test('log', lambda a: dr.log(a), 2, math.log(2), .5)
 std_test('log2', lambda a: dr.log2(a), 2, math.log2(2), 1/(2*math.log(2)))
@@ -891,7 +895,7 @@ std_test('exp2', lambda a: dr.exp2(a), 2, 2**2, 4*math.log(2))
 
 std_test('sin', lambda a: dr.sin(a), 1, math.sin(1), math.cos(1))
 std_test('cos', lambda a: dr.cos(a), 1, math.cos(1), -math.sin(1))
-std_test('tan', lambda a: dr.tan(a), 1, math.tan(1), 1/math.cos(1)**2)
+std_test('tan', lambda a: dr.tan(a), .5, math.tan(.5), 1/math.cos(.5)**2)
 std_test('asin', lambda a: dr.asin(a), .5, math.asin(.5), 1/math.sqrt(1 - .5**2))
 std_test('acos', lambda a: dr.acos(a), .5, math.acos(.5), -1/math.sqrt(1 - .5**2))
 std_test('atan', lambda a: dr.atan(a), .5, math.atan(.5), 1/(1 + .5**2))
@@ -1657,7 +1661,7 @@ def test109_infinite_recursion(t):
     assert type(e) is RecursionError
 
 
-@pytest.test_arrays('float,shape=(*),is_diff')
+@pytest.test_arrays('float,-float16,shape=(*),is_diff')
 def test110_scatter_add_kahan(t):
     buf1 = dr.zeros(t, 2)
     buf2 = dr.zeros(t, 2)

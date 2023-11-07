@@ -1161,7 +1161,7 @@ void scatter_add_kahan(Target &&target_1, Target &&target_2,
         is_jit_v<Target> &&
         is_jit_v<Value> &&
         is_jit_v<Index> &&
-        is_float_v<Value> &&
+        is_floating_point_v<Value> &&
         depth_v<Value> == depth_v<Index> &&
         depth_v<Value> == 1,
         "Only flat JIT arrays are supported at the moment");
