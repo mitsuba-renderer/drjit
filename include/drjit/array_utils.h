@@ -51,7 +51,7 @@ template <typename T> auto or_(const T &a1, const T &a2) {
     if constexpr (is_array_v<T> || std::is_integral_v<T>)
         return a1 | a2;
     else
-        return memcpy_cast<T>(memcpy_cast<UInt>(a1) | memcpy_cast<UInt>(a2));
+        return memcpy_cast<T, UInt>(memcpy_cast<UInt>(a1) | memcpy_cast<UInt>(a2));
 }
 
 template <typename T> auto and_(const T &a1, const T &a2) {
@@ -60,7 +60,7 @@ template <typename T> auto and_(const T &a1, const T &a2) {
     if constexpr (is_array_v<T> || std::is_integral_v<T>)
         return a1 & a2;
     else
-        return memcpy_cast<T>(memcpy_cast<UInt>(a1) & memcpy_cast<UInt>(a2));
+        return memcpy_cast<T, UInt>(memcpy_cast<UInt>(a1) & memcpy_cast<UInt>(a2));
 }
 
 template <typename T> auto andnot_(const T &a1, const T &a2) {
@@ -82,7 +82,7 @@ template <typename T> auto xor_(const T &a1, const T &a2) {
     if constexpr (is_array_v<T> || std::is_integral_v<T>)
         return a1 ^ a2;
     else
-        return memcpy_cast<T>(memcpy_cast<UInt>(a1) ^ memcpy_cast<UInt>(a2));
+        return memcpy_cast<T, UInt>(memcpy_cast<UInt>(a1) ^ memcpy_cast<UInt>(a2));
 }
 
 template <typename T, enable_if_t<!std::is_same_v<T, bool>> = 0> auto or_(const T &a, const bool &b) {

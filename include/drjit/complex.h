@@ -38,10 +38,10 @@ struct Complex : StaticArrayImpl<Value_, 2, false, Complex<Value_>> {
     DRJIT_INLINE Complex(T&& z) : Base(std::forward<T>(z)) { }
 
     template <typename T, enable_if_t<!is_complex_v<T> && depth_v<T> != Base::Depth &&
-                                       (is_array_v<T> || drjit::is_scalar_v<std::decay_t<T>>)> = 0>
+                                       (is_array_v<T> || drjit::detail::is_scalar_v<std::decay_t<T>>)> = 0>
     DRJIT_INLINE Complex(T&& z) : Base(std::forward<T>(z), zeros<Value_>()) { }
 
-    template <typename T, enable_if_t<!is_array_v<T> && !drjit::is_scalar_v<std::decay_t<T>>> = 0> // __m128d
+    template <typename T, enable_if_t<!is_array_v<T> && !drjit::detail::is_scalar_v<std::decay_t<T>>> = 0> // __m128d
     DRJIT_INLINE Complex(T&& z) : Base(z) { }
 
     DRJIT_INLINE Complex(const Value_ &v1, const Value_ &v2) : Base(v1, v2) { }

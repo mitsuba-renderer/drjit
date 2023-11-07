@@ -331,7 +331,7 @@ def test10_inplace(t):
     assert v3 is v1 and v3 is not v2
 
     if dr.is_float_v(t):
-        ti = dr.int_array_t(t)
+        ti = dr.int32_array_t(t)
 
         v1 = ti([[1, 2], [4, 5]])
         v2 = t([[1, 2], [4, 5]])

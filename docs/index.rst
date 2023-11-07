@@ -9,6 +9,7 @@ Dr.Jit — A Just-In-Time-Compiler for Differentiable Rendering
    special
    cflow
    cpp
+   textures
    changelog
 
 .. toctree::

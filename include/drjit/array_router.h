@@ -290,7 +290,7 @@ DRJIT_INLINE decltype(auto) reinterpret_array(const Source &src) {
         return src;
     } else if constexpr (is_array_v<Target>) {
         return Target(src, detail::reinterpret_flag());
-    } else if constexpr (drjit::is_scalar_v<Source> && drjit::is_scalar_v<Target>) {
+    } else if constexpr (drjit::detail::is_scalar_v<Source> && drjit::detail::is_scalar_v<Target>) {
         if constexpr (sizeof(Source) == sizeof(Target)) {
             return memcpy_cast<Target>(src);
         } else {
@@ -347,7 +347,7 @@ namespace detail {
     template <typename Array> DRJIT_INLINE Array sign_mask() {
         using Scalar = scalar_t<Array>;
         using UInt = uint_array_t<Scalar>;
-        return Array(memcpy_cast<Scalar>(UInt(1) << (sizeof(UInt) * 8 - 1)));
+        return Array(memcpy_cast<Scalar, UInt>(UInt(1) << (sizeof(UInt) * 8 - 1)));
     }
 }
 
@@ -765,7 +765,7 @@ template <typename T> DRJIT_INLINE T zeros(size_t size) {
         if constexpr (is_detected_v<detail::has_zero, T>)
             result.zero_(size);
         return result;
-    } else if constexpr (drjit::is_scalar_v<T>) {
+    } else if constexpr (drjit::detail::is_scalar_v<T>) {
         return T(0);
     } else {
         return T();
@@ -790,7 +790,7 @@ template <typename T> DRJIT_INLINE T empty(size_t size = 1) {
                 x = empty<X>(size);
             });
         return result;
-    } else if constexpr (drjit::is_scalar_v<T>) {
+    } else if constexpr (drjit::detail::is_scalar_v<T>) {
         return T(0);
     } else {
         return T();
@@ -1016,7 +1016,7 @@ Target gather(Source &&source, const Index &index, const Mask &mask_ = true,
         return result;
     } else {
         /// Case 4: gather<float>(const float *, ...)
-        static_assert(std::is_integral_v<Index> && drjit::is_scalar_v<Target>,
+        static_assert(drjit::is_integral_v<Index> && drjit::detail::is_scalar_v<Target>,
                       "gather(): unsupported inputs -- did you forget to "
                       "include 'drjit/struct.h' or provide a suitable "
                       "DRJIT_STRUCT() declaration?");
@@ -1072,7 +1072,7 @@ void scatter(Target &target, const Value &value, const Index &index,
                 scatter(x1, x2, index, mask, permute);
             });
     } else {
-        static_assert(std::is_integral_v<Index> && drjit::is_scalar_v<Value>,
+        static_assert(is_integral_v<Index> && drjit::detail::is_scalar_v<Value>,
                       "scatter(): unsupported inputs -- did you forget to "
                       "include 'drjit/struct.h' or provide a suitable "
                       "DRJIT_STRUCT() declaration?");
@@ -1110,7 +1110,7 @@ void scatter_reduce(ReduceOp op, Target &target, const Value &value,
             scatter_reduce(op, target, value,
                            detail::broadcast_index<TargetIndex>(index), mask, permute);
         }
-    } else if constexpr (drjit::is_integral_v<Index> && drjit::is_arithmetic_v<Value>) {
+    } else if constexpr (drjit::is_integral_v<Index> && drjit::detail::is_arithmetic_v<scalar_t<Value>>) {
         if (mask) {
             auto func = [op](const Value &a, const Value &b) -> Value {
                 switch (op) {
@@ -1126,11 +1126,11 @@ void scatter_reduce(ReduceOp op, Target &target, const Value &value,
                     case ReduceOp::Min: return minimum(a, b);
                     case ReduceOp::Max: return maximum(a, b);
                     case ReduceOp::And:
-                        if constexpr (std::is_integral_v<Value>)
+                        if constexpr (drjit::is_integral_v<Value>)
                             return a & b;
                         break;
                     case ReduceOp::Or:
-                        if constexpr (std::is_integral_v<Value>)
+                        if constexpr (drjit::is_integral_v<Value>)
                             return a | b;
                         break;
                     default:
@@ -1572,7 +1572,7 @@ template <typename T> T replace_grad(const T &a, const T &b) {
                 drjit_raise("replace_grad(): internal error!");
         }
 
-        return T::create_borrow(vb.index_ad(), va.detach_());
+        return T::borrow(a.index() | (((uint64_t) b.index_ad()) << 32));
     }
 }
 
@@ -1850,7 +1850,7 @@ NAMESPACE_END(detail)
 
 template <typename T, typename Mask>
 DRJIT_INLINE auto masked(T &value, const Mask &mask) {
-    if constexpr (is_array_v<T> || drjit::is_scalar_v<Mask>) {
+    if constexpr (is_array_v<T> || drjit::detail::is_scalar_v<Mask>) {
         return detail::MaskedArray<T>{ value, mask };
     } else if constexpr (is_drjit_struct_v<T>) {
         masked_t<T> result;

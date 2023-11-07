@@ -10,11 +10,13 @@
 
 #include "scalar.h"
 #include "random.h"
+#include "texture.h"
 
 void export_scalar(nb::module_& m) {
     ArrayBinding b;
     dr::bind_all<float>(b);
     bind_pcg32<float>(m);
+    bind_texture_all<float>(m);
 
     m.attr("Bool") = nb::borrow(&PyBool_Type);
     m.attr("Float16") = nb::borrow(&PyFloat_Type);

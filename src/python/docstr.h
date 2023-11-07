@@ -213,6 +213,17 @@ Returns:
     Python ``float`` instance or type.
 )";
 
+static const char *doc_is_half_v = R"(
+Check whether the input array instance or type is a Dr.Jit half-precision floating 
+point array or a Python ``half`` value/type.
+
+Args:
+    arg (object): An arbitrary Python object
+
+Returns:
+    bool: ``True`` if ``arg`` represents a Dr.Jit half-precision 
+    floating point array or Python ``half`` instance or type.
+)";
 
 static const char *doc_is_arithmetic_v = R"(
 Check whether the input array instance or type is an arithmetic Dr.Jit array
@@ -2009,7 +2020,24 @@ Returns:
     type: Result of the conversion as described above.
 )";
 
-static const char *doc_float16_array_t = R"(TODO)";
+static const char *doc_float16_array_t = R"(
+Converts the provided Dr.Jit array/tensor type into a 16 bit floating point version.
+
+This function implements the following set of behaviors:
+
+1. When invoked with a Dr.Jit array *type* (e.g. :py:class:`drjit.cuda.Array3u`), it
+   returns a *16 bit floating point* version (e.g. :py:class:`drjit.cuda.Array3f16`).
+
+2. When the input is not a type, it returns ``float16_array_t(type(arg))``.
+
+3. When the input is not a Dr.Jit array or type, the function returns ``half``.
+
+Args:
+    arg (object): An arbitrary Python object
+
+Returns:
+    type: Result of the conversion as described above.
+)";
 
 static const char *doc_float32_array_t = R"(
 Converts the provided Dr.Jit array/tensor type into an 32 bit floating point version.
@@ -5359,6 +5387,142 @@ static const char *doc_PCG32_inc =
 static const char *doc_PCG32_state =
     "Sequence state of the PCG32 PRNG (an unsigned 64-bit integer or integer "
     "array). Please see the original paper for details on this field.";
+
+static const char* doc_Texture_init = R"(
+    Create a new texture with the specified size and channel count
+
+    On CUDA, this is a slow operation that synchronizes the GPU pipeline, so
+    texture objects should be reused/updated via :py:func:`set_value()` and 
+    :py:func:`set_tensor()` as much as possible.
+
+    When ``use_accel`` is set to ``False`` on CUDA mode, the texture will not
+    use hardware acceleration (allocation and evaluation). In other modes
+    this argument has no effect.
+
+    The ``filter_mode`` parameter defines the interpolation method to be used
+    in all evaluation routines. By default, the texture is linearly
+    interpolated. Besides nearest/linear filtering, the implementation also
+    provides a clamped cubic B-spline interpolation scheme in case a
+    higher-order interpolation is needed. In CUDA mode, this is done using a
+    series of linear lookups to optimally use the hardware (hence, linear
+    filtering must be enabled to use this feature).
+
+    When evaluating the texture outside of its boundaries, the ``wrap_mode``
+    defines the wrapping method. The default behavior is ``drjit.WrapMode.Clamp``,
+    which indefinitely extends the colors on the boundary along each dimension.
+)";
+
+static const char* doc_Texture_init_tensor = R"(
+    Construct a new texture from a given tensor.
+
+    This constructor allocates texture memory with the shape information 
+    deduced from ``tensor``. It subsequently invokes :py:func:`set_tensor(tensor)` 
+    to fill the texture memory with the provided tensor.
+
+    When both ``migrate`` and ``use_accel`` are set to ``True`` in CUDA mode, the texture 
+    exclusively stores a copy of the input data as a CUDA texture to avoid 
+    redundant storage. Note that the texture is still differentiable even when migrated.
+)";
+
+static const char* doc_Texture_set_value = R"(
+    Override the texture contents with the provided linearized 1D array.
+
+    In CUDA mode, when both the argument ``migrate`` and :py:func:`use_accel()` are `True`, 
+    the texture exclusively stores a copy of the input data as a CUDA texture to avoid 
+    redundant storage.Note that the texture is still differentiable even when migrated.
+)";
+
+static const char* doc_Texture_set_tensor = R"(
+    Override the texture contents with the provided tensor.
+
+    This method updates the values of all texels. Changing the texture
+    resolution or its number of channels is also supported. However, on CUDA,
+    such operations have a significantly larger overhead (the GPU pipeline
+    needs to be synchronized for new texture objects to be created).
+
+    In CUDA mode, when both the argument ``migrate`` and :py:func:`use_accel()` are `True`, 
+    the texture exclusively stores a copy of the input data as a CUDA texture to avoid 
+    redundant storage.Note that the texture is still differentiable even when migrated.
+)";
+
+static const char* doc_Texture_value = R"(Return the texture data as an array object)";
+
+static const char* doc_Texture_tensor = R"(Return the texture data as a tensor object)";
+
+static const char* doc_Texture_filter_mode = R"(Return the filter mode)";
+
+static const char* doc_Texture_wrap_mode = R"(Return the wrap mode)";
+
+static const char* doc_Texture_use_accel = R"(
+    Return whether texture uses the GPU for storage and evaluation)";
+
+static const char* doc_Texture_migrated = R"(
+    Return whether textures with :py:func:`use_accel()` set to `True` only store
+    the data as a hardware-accelerated CUDA texture.
+
+    If `False` then a copy of the array data will additionally be retained .)";
+
+static const char* doc_Texture_shape = R"(Return the texture shape)";
+
+static const char* doc_Texture_eval = R"(
+     Evaluate the linear interpolant represented by this texture.
+)";
+
+static const char* doc_Texture_eval_fetch = R"(
+     Fetch the texels that would be referenced in a texture lookup with
+     linear interpolation without actually performing this interpolation.
+)";
+
+static const char* doc_Texture_eval_cubic = R"(
+    Evaluate a clamped cubic B-Spline interpolant represented by this
+    texture
+
+    Instead of interpolating the texture via B-Spline basis functions, the
+    implementation transforms this calculation into an equivalent weighted
+    sum of several linear interpolant evaluations. In CUDA mode, this can
+    then be accelerated by hardware texture units, which runs faster than
+    a naive implementation. More information can be found in:
+
+        GPU Gems 2, Chapter 20, "Fast Third-Order Texture Filtering"
+        by Christian Sigg.
+
+    When the underlying grid data and the query position are differentiable,
+    this transformation cannot be used as it is not linear with respect to position
+    (thus the default AD graph gives incorrect results). The implementation
+    calls :py:func:`eval_cubic_helper()` function to replace the AD graph with a
+    direct evaluation of the B-Spline basis functions in that case.
+)";
+
+static const char* doc_Texture_eval_cubic_grad = R"(
+    Evaluate the positional gradient of a cubic B-Spline
+
+    This implementation computes the result directly from explicit
+    differentiated basis functions. It has no autodiff support.
+
+    The resulting gradient and hessian have been multiplied by the spatial extents
+    to count for the transformation from the unit size volume to the size of its
+    shape.
+)";
+
+static const char* doc_Texture_eval_cubic_hessian = R"(
+    Evaluate the positional gradient and hessian matrix of a cubic B-Spline
+
+    This implementation computes the result directly from explicit
+    differentiated basis functions. It has no autodiff support.
+
+    The resulting gradient and hessian have been multiplied by the spatial extents
+    to count for the transformation from the unit size volume to the size of its
+    shape.
+)";
+
+static const char* doc_Texture_eval_cubic_helper = R"(
+    Helper function to evaluate a clamped cubic B-Spline interpolant
+
+    This is an implementation detail and should only be called by the 
+    :py:func:`eval_cubic()` function to construct an AD graph. When only the cubic
+    evaluation result is desired, the :py:func:`eval_cubic()` function is faster
+    than this simple implementation
+)";
 
 static const char *doc_scatter_inc = R"(
 Atomically increment a value within an unsigned 32-bit integer array and return

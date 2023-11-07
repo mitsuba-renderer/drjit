@@ -14,6 +14,7 @@
 
 #include <drjit/array.h>
 #include <drjit/extra.h>
+#include <drjit-core/half.h>
 #include <drjit-core/traits.h>
 
 NAMESPACE_BEGIN(drjit)
@@ -21,7 +22,7 @@ NAMESPACE_BEGIN(drjit)
 template <JitBackend Backend_, typename Value_>
 struct DRJIT_TRIVIAL_ABI JitArray
     : ArrayBaseT<Value_, is_mask_v<Value_>, JitArray<Backend_, Value_>> {
-    static_assert(drjit::is_scalar_v<Value_> || std::is_void_v<Value_>,
+    static_assert(drjit::detail::is_scalar_v<Value_> || std::is_void_v<Value_>,
                   "JIT Arrays can only be created over scalar types!");
 
     template <JitBackend, typename> friend struct JitArray;
@@ -98,6 +99,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
                 case VarType::UInt32:  m_index = jit_var_u32 (Backend, (uint32_t) value); break;
                 case VarType::Int64:   m_index = jit_var_i64 (Backend, (int64_t) value); break;
                 case VarType::UInt64:  m_index = jit_var_u64 (Backend, (uint64_t) value); break;
+                case VarType::Float16: m_index = jit_var_f16 (Backend, half(value)); break;
                 case VarType::Float32: m_index = jit_var_f32 (Backend, (float) value); break;
                 case VarType::Float64: m_index = jit_var_f64 (Backend, (double) value); break;
                 default: jit_fail("JitArray(): tried to initialize scalar array with unsupported type!");

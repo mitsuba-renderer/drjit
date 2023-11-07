@@ -65,7 +65,7 @@ constexpr uint32_t operator +(ADFlag e)               { return (uint32_t) e; }
 template <JitBackend Backend_, typename Value_>
 struct DRJIT_TRIVIAL_ABI DiffArray
     : ArrayBaseT<Value_, is_mask_v<Value_>, DiffArray<Backend_, Value_>> {
-    static_assert(drjit::is_scalar_v<Value_> || std::is_same_v<void, Value_>,
+    static_assert(drjit::detail::is_scalar_v<Value_> || std::is_same_v<void, Value_>,
                   "Differentiable arrays can only be created over scalar types!");
 
     template <JitBackend, typename> friend struct DiffArray;
@@ -652,6 +652,7 @@ struct DRJIT_TRIVIAL_ABI DiffArray
     }
 
     bool schedule_() const { return jit_var_schedule((uint32_t) m_index); }
+    bool eval_() const { return jit_var_eval((uint32_t) m_index) != 0; }
 
     bool schedule_force_() {
         int rv = 0;

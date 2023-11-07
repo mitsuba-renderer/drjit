@@ -130,7 +130,7 @@ struct StaticArrayBase : ArrayBaseT<Value_, IsMask_, Derived_> {
 
         Derived result;
 
-        if constexpr (drjit::is_scalar_v<Value>) {
+        if constexpr (drjit::detail::is_scalar_v<Value>) {
             memcpy(result.data(), mem, sizeof(Value) * Derived::Size);
         } else {
             DRJIT_CHKSCALAR("load");
@@ -148,7 +148,7 @@ struct StaticArrayBase : ArrayBaseT<Value_, IsMask_, Derived_> {
                       "store(): nested dynamic array not "
                       "supported! Did you mean to use drjit::gather?");
 
-        if constexpr (drjit::is_scalar_v<Value>) {
+        if constexpr (drjit::detail::is_scalar_v<Value>) {
             memcpy(mem, derived().data(), sizeof(Value) * Derived::Size);
         } else {
             DRJIT_CHKSCALAR("store");
