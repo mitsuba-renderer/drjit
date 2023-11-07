@@ -2009,6 +2009,8 @@ Returns:
     type: Result of the conversion as described above.
 )";
 
+static const char *doc_float16_array_t = R"(TODO)";
+
 static const char *doc_float32_array_t = R"(
 Converts the provided Dr.Jit array/tensor type into an 32 bit floating point version.
 

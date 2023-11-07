@@ -130,7 +130,7 @@ struct StaticArrayBase : ArrayBaseT<Value_, IsMask_, Derived_> {
 
         Derived result;
 
-        if constexpr (std::is_scalar_v<Value>) {
+        if constexpr (drjit::is_scalar_v<Value>) {
             memcpy(result.data(), mem, sizeof(Value) * Derived::Size);
         } else {
             DRJIT_CHKSCALAR("load");
@@ -148,7 +148,7 @@ struct StaticArrayBase : ArrayBaseT<Value_, IsMask_, Derived_> {
                       "store(): nested dynamic array not "
                       "supported! Did you mean to use drjit::gather?");
 
-        if constexpr (std::is_scalar_v<Value>) {
+        if constexpr (drjit::is_scalar_v<Value>) {
             memcpy(mem, derived().data(), sizeof(Value) * Derived::Size);
         } else {
             DRJIT_CHKSCALAR("store");
@@ -238,7 +238,7 @@ public:
     static DRJIT_INLINE Derived linspace_(T min, T max, size_t, bool endpoint) {
         if constexpr (Derived::Size == 1)
             return Derived(min);
-        else if constexpr (std::is_floating_point_v<Scalar>)
+        else if constexpr (drjit::is_floating_point_v<Scalar>)
             return linspace_impl_(
                 std::make_index_sequence<Derived::Size>(), min,
                 (max - min) / Scalar(Derived::Size - (endpoint ? 1 : 0)));

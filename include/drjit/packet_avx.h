@@ -13,7 +13,7 @@
 #pragma once
 
 NAMESPACE_BEGIN(drjit)
-DRJIT_PACKET_DECLARE_COND(32, enable_if_t<std::is_floating_point_v<Type>>)
+DRJIT_PACKET_DECLARE_COND(32, enable_if_t<drjit::is_floating_point_v<Type>>)
 DRJIT_PACKET_DECLARE_COND(24, enable_if_t<(std::is_same_v<Type, double>)>)
 
 /// Partial overload of StaticArrayImpl using AVX intrinsics (single precision)

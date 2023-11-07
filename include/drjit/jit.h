@@ -21,7 +21,7 @@ NAMESPACE_BEGIN(drjit)
 template <JitBackend Backend_, typename Value_>
 struct DRJIT_TRIVIAL_ABI JitArray
     : ArrayBaseT<Value_, is_mask_v<Value_>, JitArray<Backend_, Value_>> {
-    static_assert(std::is_scalar_v<Value_> || std::is_void_v<Value_>,
+    static_assert(drjit::is_scalar_v<Value_> || std::is_void_v<Value_>,
                   "JIT Arrays can only be created over scalar types!");
 
     template <JitBackend, typename> friend struct JitArray;

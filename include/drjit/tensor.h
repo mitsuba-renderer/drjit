@@ -178,7 +178,7 @@ struct Tensor
     Tensor(Array &&data, Shape &&shape)
         : m_array(std::move(data)), m_shape(shape) { }
 
-    template <typename T, enable_if_t<std::is_scalar_v<T> && !std::is_pointer_v<T>> = 0>
+    template <typename T, enable_if_t<drjit::is_scalar_v<T> && !std::is_pointer_v<T>> = 0>
     Tensor(T value) : m_array(value) { }
 
     operator Array() const { return m_array; }

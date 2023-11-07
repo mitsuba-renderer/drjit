@@ -53,6 +53,7 @@
 #include <drjit/tensor.h>
 #include <drjit/math.h>
 #include <drjit-core/traits.h>
+#include <drjit-core/half.h>
 #include <nanobind/nanobind.h>
 
 NAMESPACE_BEGIN(drjit)
@@ -63,6 +64,29 @@ NAMESPACE_END(drjit)
 /// Publish a Dr.Jit type binding in Python
 extern nanobind::object bind(const drjit::ArrayBinding &);
 #endif
+
+NAMESPACE_BEGIN(NB_NAMESPACE)
+
+NAMESPACE_BEGIN(detail)
+
+template <> struct type_caster<drjit::half> {
+    bool from_python(handle src, uint8_t flags, cleanup_list *) noexcept {
+        float f;
+        bool success = detail::load_f32(src.ptr(), flags, &f);
+        value = drjit::half(f);
+        return success;
+    }
+
+    static handle from_cpp(drjit::half src, rv_policy, cleanup_list *) noexcept {
+        return PyFloat_FromDouble((double) src);
+    }
+
+    NB_TYPE_CASTER(drjit::half, const_name("half"))
+};
+
+NAMESPACE_END(detail)
+
+NAMESPACE_END(NB_NAMESPACE)
 
 NAMESPACE_BEGIN(drjit)
 
@@ -311,7 +335,7 @@ struct ArrayBinding : ArraySupplement {
 NAMESPACE_BEGIN(detail)
 
 template <typename T>
-constexpr uint8_t size_or_zero_v = std::is_scalar_v<T> ? 0 : (uint8_t) size_v<T>;
+constexpr uint8_t size_or_zero_v = drjit::is_scalar_v<T> ? 0 : (uint8_t) size_v<T>;
 
 NAMESPACE_END(detail)
 
@@ -366,7 +390,7 @@ NB_INLINE void bind_init(ArrayBinding &b, nanobind::handle scope = {},
     b.scope = scope;
     b.name = name;
     b.array_type = &typeid(T);
-    b.value_type = std::is_scalar_v<Value> && !std::is_pointer_v<Value>
+    b.value_type = drjit::is_scalar_v<Value> && !std::is_pointer_v<Value>
                        ? nullptr
                        : &typeid(std::remove_pointer_t<Value>);
 
@@ -499,6 +523,7 @@ template <typename T> void bind_arithmetic(ArrayBinding &b) {
     using Int32   = int32_array_t<T>;
     using UInt64  = uint64_array_t<T>;
     using Int64   = int64_array_t<T>;
+    using Float16 = float16_array_t<T>;
     using Float32 = float32_array_t<T>;
     using Float64 = float64_array_t<T>;
 
@@ -530,6 +555,7 @@ template <typename T> void bind_arithmetic(ArrayBinding &b) {
                 case VarType::UInt32:  new (b) T(*(const UInt32 *)  a); break;
                 case VarType::Int64:   new (b) T(*(const Int64 *)   a); break;
                 case VarType::UInt64:  new (b) T(*(const UInt64 *)  a); break;
+                case VarType::Float16: new (b) T(*(const Float16 *) a); break;
                 case VarType::Float32: new (b) T(*(const Float32 *) a); break;
                 case VarType::Float64: new (b) T(*(const Float64 *) a); break;
                 default: nanobind::raise("Unsupported cast.");
@@ -540,6 +566,7 @@ template <typename T> void bind_arithmetic(ArrayBinding &b) {
                 case VarType::UInt32:  new (b) T(reinterpret_array<T>(*(const UInt32 *)  a)); break;
                 case VarType::Int64:   new (b) T(reinterpret_array<T>(*(const Int64 *)   a)); break;
                 case VarType::UInt64:  new (b) T(reinterpret_array<T>(*(const UInt64 *)  a)); break;
+                case VarType::Float16: new (b) T(reinterpret_array<T>(*(const Float16 *) a)); break;
                 case VarType::Float32: new (b) T(reinterpret_array<T>(*(const Float32 *) a)); break;
                 case VarType::Float64: new (b) T(reinterpret_array<T>(*(const Float64 *) a)); break;
                 default: nanobind::raise("Unsupported cast.");
@@ -598,7 +625,7 @@ template <typename T> void bind_float_arithmetic(ArrayBinding &b) {
         new (b) T(std::move(sa));
         new (c) T(std::move(ca));
     };
-    b[ArrayOp::Tan] = (void *) +[](const T *a, T *b) { new (b) T(tan(*a)); };
+    //b[ArrayOp::Tan] = (void *) +[](const T *a, T *b) { new (b) T(tan(*a)); };
     b[ArrayOp::Asin] = (void *) +[](const T *a, T *b) { new (b) T(asin(*a)); };
     b[ArrayOp::Acos] = (void *) +[](const T *a, T *b) { new (b) T(acos(*a)); };
     b[ArrayOp::Atan] = (void *) +[](const T *a, T *b) { new (b) T(atan(*a)); };
@@ -871,6 +898,7 @@ nanobind::class_<T> bind_array_t(ArrayBinding &b, nanobind::handle scope = {},
 /// Run bind_array() for many different plain array types
 template <typename T> void bind_array_types(ArrayBinding &b) {
     bind_array<mask_t<T>>(b);
+    bind_array<float16_array_t<T>>(b);
     bind_array<float32_array_t<T>>(b);
     bind_array<float64_array_t<T>>(b);
     bind_array<uint32_array_t<T>>(b);
@@ -881,20 +909,23 @@ template <typename T> void bind_array_types(ArrayBinding &b) {
 
 /// Run bind_array() for many different matrix types
 template <typename T, size_t Size> void bind_matrix_types(ArrayBinding &b) {
+    using VecF16 = Array<float16_array_t<T>, Size>;
     using VecF32 = Array<float32_array_t<T>, Size>;
     using VecF64 = Array<float64_array_t<T>, Size>;
     using VecMask = mask_t<VecF32>;
 
     bind_array<Mask<VecMask, Size>>(b);
+    bind_array<Array<VecF16, Size>>(b);
     bind_array<Array<VecF32, Size>>(b);
     bind_array<Array<VecF64, Size>>(b);
+    bind_array<Matrix<float16_array_t<T>, Size>>(b);
     bind_array<Matrix<float32_array_t<T>, Size>>(b);
     bind_array<Matrix<float64_array_t<T>, Size>>(b);
 }
 
 /// Run bind_array() for arrays, matrices, quaternions, complex numbers, and tensors
 template <typename T> void bind_all(ArrayBinding &b) {
-    if constexpr (!std::is_scalar_v<T>)
+    if constexpr (!drjit::is_scalar_v<T>)
         bind_array_types<T>(b);
 
     bind_array_types<Array<T, 0>>(b);
@@ -908,13 +939,16 @@ template <typename T> void bind_all(ArrayBinding &b) {
     bind_matrix_types<T, 3>(b);
     bind_matrix_types<T, 4>(b);
 
+    bind_array<Complex<float16_array_t<T>>>(b);
     bind_array<Complex<float32_array_t<T>>>(b);
     bind_array<Complex<float64_array_t<T>>>(b);
+    bind_array<Quaternion<float16_array_t<T>>>(b);
     bind_array<Quaternion<float32_array_t<T>>>(b);
     bind_array<Quaternion<float64_array_t<T>>>(b);
 
-    using T2 = std::conditional_t<std::is_scalar_v<T>, DynamicArray<T>, T>;
+    using T2 = std::conditional_t<drjit::is_scalar_v<T>, DynamicArray<T>, T>;
     bind_array<Tensor<mask_t<T2>>>(b);
+    bind_array<Tensor<float16_array_t<T2>>>(b);
     bind_array<Tensor<float32_array_t<T2>>>(b);
     bind_array<Tensor<float64_array_t<T2>>>(b);
     bind_array<Tensor<int32_array_t<T2>>>(b);
