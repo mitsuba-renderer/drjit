@@ -654,5 +654,5 @@ def isolate_grad(when=True):
 
     return detail.ADContextManager(detail.ADScope.Isolate, [])
 
-function = ast.function
+syntax = ast.syntax
 hint = ast.hint
