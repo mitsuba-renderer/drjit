@@ -4,6 +4,8 @@
 #include "reduce.h"
 #include <tsl/robin_map.h>
 #include <tsl/robin_set.h>
+#include <nanobind/stl/vector.h>
+#include <nanobind/stl/string.h>
 #include <functional>
 #include <string>
 
@@ -100,11 +102,27 @@ static void capture_state(std::string &name, Stack &stack, nb::handle h,
     stack.pop_back();
 }
 
-static PyState capture_state(nb::handle h) {
+static PyState capture_state(const nb::tuple &state, const std::vector<std::string> &names) {
+    size_t l1 = nb::len(state), l2 = names.size();
+
     std::string name;
     Stack stack;
     PyState snapshot;
-    capture_state(name, stack, h, snapshot);
+
+    if (l1 == l2) {
+        for (size_t i = 0; i < l1; ++i) {
+            name = names[i];
+            capture_state(name, stack, state[i], snapshot);
+        }
+    } else if (l2 == 0) {
+        for (size_t i = 0; i < l1; ++i) {
+            name = "arg" + std::to_string(i);
+            capture_state(name, stack, state[i], snapshot);
+        }
+    } else {
+        nb::raise("the arguments 'state' and 'names' have an inconsistent size!");
+    }
+
     return snapshot;
 }
 
@@ -214,8 +232,30 @@ static nb::object apply_default_mask(nb::handle h) {
     return tmp;
 }
 
-void while_loop_symbolic(JitBackend backend, nb::object state, nb::handle cond, nb::handle step) {
-    PyState s1 = capture_state(state);
+/// Perform a tuple function call directly using the CPython API
+static nb::object tuple_call(nb::handle callable, nb::handle tuple) {
+    nb::object result = nb::steal(PyObject_CallObject(callable.ptr(), tuple.ptr()));
+    if (!result.is_valid())
+        nb::raise_python_error();
+    return result;
+}
+
+
+/// Helper function to check that the type+size of the state variable returned by 'step()' is sensible
+static nb::tuple check_state(nb::object &&o, const nb::tuple &old_state) {
+    if (!o.type().is(&PyTuple_Type))
+        nb::raise("The 'step' function must return a tuple!");
+    nb::tuple o_t = nb::borrow<nb::tuple>(o);
+    if (nb::len(o_t) != nb::len(old_state))
+        nb::raise("The size of the state tuple must be consistent "
+                  "across loop iterations!");
+    return o_t;
+}
+
+nb::tuple while_loop_symbolic(JitBackend backend, nb::tuple state,
+                              nb::handle cond, nb::handle step,
+                              const std::vector<std::string> &names) {
+    PyState s1 = capture_state(state, names);
     std::vector<uint32_t> indices;
 
     using JitVar = drjit::JitArray<JitBackend::None, void>;
@@ -241,7 +281,7 @@ void while_loop_symbolic(JitBackend backend, nb::object state, nb::handle cond, 
                 steal_and_replace(v.object, indices[ctr++]);
         }
 
-        nb::object active = apply_default_mask(cond(state));
+        nb::object active = apply_default_mask(tuple_call(cond, state));
         uint32_t active_index = extract_index(active);
 
         // Evaluate the loop condition
@@ -259,9 +299,9 @@ void while_loop_symbolic(JitBackend backend, nb::object state, nb::handle cond, 
                 if (backend == JitBackend::CUDA)
                     jit_var_dec_ref(active_index);
 
-                step(state);
+                state = check_state(tuple_call(step, state), state);
             }
-            s2 = capture_state(state);
+            s2 = capture_state(state, names);
 
             // Ensure that modified loop state remains compatible and capture indices
             indices.clear();
@@ -300,6 +340,8 @@ void while_loop_symbolic(JitBackend backend, nb::object state, nb::handle cond, 
 
         for (auto &[k, v] : s1)
             jit_var_dec_ref((uint32_t) v.index);
+
+        return state;
     } catch (...) {
         // Restore all loop state variables to their original state
         for (auto &[k, v] : s1) {
@@ -311,19 +353,25 @@ void while_loop_symbolic(JitBackend backend, nb::object state, nb::handle cond, 
     }
 }
 
-void while_loop_evaluated(JitBackend backend, nb::object state, nb::handle cond, nb::handle step) {
+nb::tuple while_loop_evaluated(JitBackend backend, nb::tuple state,
+                               nb::handle cond, nb::handle step,
+                               const std::vector<std::string> &names) {
     if (jit_flag(JitFlag::Symbolic))
         nb::raise("Dr.Jit is currently recording symbolic computation and "
                   "cannot execute a loop in *evaluated mode*. You will likely "
                   "want to set ``drjit.JitFlag.SymbolicLoops`` to ``True``. "
-                  "Please review the Dr.Jit documentation of both the flag "
-                  "and ``drjit.while_loop()``.");
+                  "Alternatively, you could also annotate the loop condition "
+                  "with ``dr.hint(.., symbolic=True)`` if it occurs inside a "
+                  "``@dr.syntax``-annotated function. Please review the Dr.Jit "
+                  "documentation of ``drjit.JitFlag.SymbolicLoops`` and "
+                  "``drjit.while_loop()`` for details on symbolic and "
+                  "evaluated loops and their limitations.");
 
     nb::object active;
 
     while (true) {
         eval(state);
-        nb::object cond_value = cond(state);
+        nb::object cond_value = tuple_call(cond, state);
 
         if (!active.is_valid())
             active = apply_default_mask(cond_value);
@@ -337,16 +385,16 @@ void while_loop_evaluated(JitBackend backend, nb::object state, nb::handle cond,
             break;
 
         // Capture the state of all variables
-        PyState s1 = capture_state(state);
+        PyState s1 = capture_state(state, names);
 
         // Execute the loop body
         {
             scoped_set_mask m(backend, active_index);
-            step(state);
+            state = check_state(tuple_call(step, state), state);
         }
 
         // Capture the state of all variables following execution of the loop body
-        PyState s2 = capture_state(state);
+        PyState s2 = capture_state(state, names);
 
         rewrite_variables(
             s1, s2,
@@ -371,29 +419,32 @@ void while_loop_evaluated(JitBackend backend, nb::object state, nb::handle cond,
             }
         );
     }
+
+    return state;
 }
 
-void while_loop(nb::object state, nb::handle cond, nb::handle step) {
+nb::tuple while_loop(nb::tuple state, nb::callable cond, nb::callable step,
+                     const std::vector<std::string> &names) {
     try {
         JitBackend backend = JitBackend::None;
 
         // First, check if this is perhaps a scalar loop
-        nb::object cond_val = cond(state);
+        nb::object cond_val = tuple_call(cond, state);
         if (cond_val.type().is(&PyBool_Type)) {
             while (nb::cast<bool>(cond_val)) {
-                step(state);
-                cond_val = cond(state);
+                state = check_state(tuple_call(step, state), state);
+                cond_val = tuple_call(cond, state);
             }
-            return;
+            return state;
         } else {
             backend = (JitBackend) check_cond(cond_val).backend;
             cond_val.reset();
         }
 
         if (jit_flag(JitFlag::SymbolicLoops))
-            while_loop_symbolic(backend, state, cond, step);
+            return while_loop_symbolic(backend, state, cond, step, names);
         else
-            while_loop_evaluated(backend, state, cond, step);
+            return while_loop_evaluated(backend, state, cond, step, names);
     } catch (nb::python_error &e) {
         nb::raise_from(
             e, PyExc_RuntimeError,
@@ -405,5 +456,6 @@ void while_loop(nb::object state, nb::handle cond, nb::handle step) {
 }
 
 void export_while(nb::module_ &m) {
-    m.def("while_loop", &while_loop, "state"_a, "cond"_a, "step"_a);
+    m.def("while_loop", &while_loop, "state"_a, "cond"_a, "step"_a,
+          "names"_a = nb::make_tuple());
 }

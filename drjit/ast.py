@@ -4,27 +4,28 @@ import inspect
 from typing import Callable
 
 
-class ASTVisitor(ast.NodeTransformer):
+class SyntaxVisitor(ast.NodeTransformer):
     def __init__(self):
         super().__init__()
-        # Hierarchy of read/written variable names
-        self.locals_r = []
-        self.locals_w = []
-        self.disarm = False
-        self.loop_ctr = 0
+
+        # Keep track of read/written variables
+        self.var_r, self.var_w = set(), set()
+
+        # As the above, but for parent AST nodes
+        self.par_r, self.par_w = [], []
+
+        # Enable the syntax visitor transformations
+        self.enabled = True
 
     def visit_FunctionDef(self, node: ast.FunctionDef):
-        if not self.disarm:
+        if self.enabled:
             # Process only the outermost function
-            self.disarm = True
+            self.enabled = False
 
-            # Add function parameters to self.locals_w
-            locals_w = set()
+            # Add function parameters to self.var_w
             for o1 in (node.args.args, node.args.posonlyargs, node.args.kwonlyargs):
                 for o2 in o1:
-                    locals_w.add(o2.arg)
-            self.locals_r.append(set())
-            self.locals_w.append(locals_w)
+                    self.var_w.add(o2.arg)
 
             node = self.generic_visit(node)
 
@@ -32,205 +33,293 @@ class ASTVisitor(ast.NodeTransformer):
 
     def visit_Name(self, node: ast.Name):
         if isinstance(node.ctx, ast.Load):
-            self.locals_r[-1].add(node.id)
+            self.var_r.add(node.id)
         elif isinstance(node.ctx, ast.Store):
-            self.locals_w[-1].add(node.id)
+            self.var_w.add(node.id)
         return node
 
-    def visit_While(self, node: ast.While):
-        self.locals_r.append(set())
-        self.locals_w.append(set())
+    def rewrite_and_track(self, node: ast.AST):
+        # Keep track of variable reads/writes
+        self.par_r.append(self.var_r)
+        self.par_w.append(self.var_w)
+        self.var_r = set()
+        self.var_w = set()
+
+        # Process the node recursively
+        node = self.generic_visit(node)
+
+        # Collect read/written variables
+        var_r, var_w = self.var_r, self.var_w
+        par_r, par_w = set(), set()
+        for s in self.par_r:
+            par_r |= s
+        for s in self.par_w:
+            par_w |= s
+
+        # 3. Compute data mapping:
+        # 3a. Don't import globals into state data structure
+        temp = set()
+        for k in var_r:
+            if k not in var_w and k not in par_w:
+                temp.add(k)
+        var_r -= temp
+
+        # 3b. Don't store loop temporaries. We consider temporaries
+        # to be variables that haven't been defined before the loop
+        # (which would be undefined if the condition is False)
+        temp = set()
+        for k in var_w:
+            if k not in par_w:
+                temp.add(k)
+        var_r -= temp
+        var_w -= temp
+
+        self.var_r = var_r | self.par_r.pop()
+        self.var_w = var_w | self.par_w.pop()
+
+        state = sorted(var_r | var_w)
+
+        return node, var_r, var_w, par_r, par_w, state
+
+    def visit_If(self, node: ast.If):
+        node, var_r, var_w, par_r, par_w, state = self.rewrite_and_track(node)
 
         # 1. Names of generated functions
-        loop_name = "_loop"
-        cond_name = loop_name + "_cond"
-        step_name = loop_name + "_step"
-        state_name = loop_name + "_state"
-        local_name = "_s"
+        ifstmt_name = "_if_stmt"
+        cond_name = ifstmt_name + "_cond"
+        if_name = ifstmt_name + "_if"
+        else_name = ifstmt_name + "_else"
 
-        # 2. Process the loop condition separately
-        node.body, body = [], node.body
-        node_test = self.generic_visit(node).test
-        locals_r_cond = set(self.locals_r[-1])
-        assert len(self.locals_w[-1]) == 0
-
-        # 3. Process the loop body separately
-        node.body = body
-        node.test = ast.Constant(value="True")
-        node_body = self.generic_visit(node).body
-
-        locals_r, locals_w = self.locals_r.pop(), self.locals_w.pop()
-        parent_r, parent_w = set(), set()
-
-        for s in self.locals_r:
-            parent_r |= s
-        for s in self.locals_w:
-            parent_w |= s
-
-        # 4. Compute data mapping:
-        # 4a. Don't import globals into state data structure
-        temp = set()
-        for k in locals_r | locals_r_cond:
-            if k not in locals_w and k not in parent_w:
-                temp.add(k)
-        locals_r -= temp
-        locals_r_cond -= temp
-
-        # 4b. Don't store loop temporaries. We consider temporaries
-        # to be variables that haven't been defined before the loop
-        # (which would be undefined if the loop condition is False)
-        temp = set()
-        for k in locals_w:
-            if not k in parent_w:
-                temp.add(k)
-        locals_r -= temp
-        locals_w -= temp
-
-        locals_rw = locals_r | locals_w
-        locals_rw_both = locals_rw | locals_r_cond
-
-        locals_rw_both = sorted(locals_rw_both)
-        locals_rw = sorted(locals_rw)
-        locals_r = sorted(locals_r)
-        locals_w = sorted(locals_w)
-
-        # 5. Generate a function representing the loop condition
-        #    .. which takes a state dictionary as input
+        # 2. Generate a function representing the condition
+        #    .. which takes all state variables as input
         func_args = ast.arguments(
-            args=[ast.arg(local_name)],
+            args=[ast.arg(k) for k in state],
             posonlyargs=[],
             kwonlyargs=[],
             defaults=[],
             kw_defaults=[],
         )
 
-        # 5a. Generate statement to import loop state into local scope
-        load, store, delete = ast.Load(), ast.Store(), ast.Del()
-        state = ast.Name(local_name, ctx=load)
-        cond_import_state = ast.Assign(
-            targets=[
-                ast.Tuple(
-                    elts=[ast.Name(id=k, ctx=store) for k in locals_r_cond], ctx=store
-                )
-            ],
-            value=ast.Tuple(
-                elts=[
-                    ast.Subscript(value=state, slice=ast.Constant(value=k), ctx=load)
-                    for k in locals_r_cond
-                ],
-                ctx=load,
-            ),
-        )
-
-        # 5b. Generate the actual function
         cond_func = ast.FunctionDef(
             name=cond_name,
             args=func_args,
+            body=[ast.Return(value=node.test)],
+            decorator_list=[],
+            lineno=node.lineno,
+            col_offset=node.col_offset,
+            end_lineno=node.end_lineno,
+            end_col_offset=node.end_col_offset,
+        )
+
+        # 3. Generate a function representing the if/else branches
+        load, store, delete = ast.Load(), ast.Store(), ast.Del()
+        if_func = ast.FunctionDef(
+            name=if_name,
+            args=func_args,
             body=[
-                cond_import_state,
-                ast.Return(value=node_test),
+                *node.body,
+                ast.Return(
+                    value=ast.Tuple(
+                        elts=[ast.Name(id=k, ctx=load) for k in state], ctx=load
+                    )
+                ),
             ],
             decorator_list=[],
             lineno=node.lineno,
             col_offset=node.col_offset,
+            end_lineno=node.end_lineno,
+            end_col_offset=node.end_col_offset,
         )
 
-        # 6. Generate a function representing the loop body
-        # 6a. Generate statement to import loop state into local scope
-        step_import_state = ast.Assign(
-            targets=[
-                ast.Tuple(
-                    elts=[ast.Name(id=k, ctx=store) for k in locals_rw], ctx=store
-                )
+        else_func = ast.FunctionDef(
+            name=else_name,
+            args=func_args,
+            body=[
+                *node.orelse,
+                ast.Return(
+                    value=ast.Tuple(
+                        elts=[ast.Name(id=k, ctx=load) for k in state], ctx=load
+                    )
+                ),
             ],
-            value=ast.Tuple(
-                elts=[
-                    ast.Subscript(value=state, slice=ast.Constant(value=k), ctx=load)
-                    for k in locals_rw
-                ],
-                ctx=load,
-            ),
+            decorator_list=[],
+            lineno=node.lineno,
+            col_offset=node.col_offset,
+            end_lineno=node.end_lineno,
+            end_col_offset=node.end_col_offset,
         )
 
-        # 6b. Generate statement to export loop state from local scope
-        step_export_state = ast.Assign(
+        # 7. Import the Dr.Jit if_stmt function
+        import_stmt = ast.ImportFrom(
+            module="drjit",
+            names=[ast.alias(name="if_stmt", asname=ifstmt_name)],
+            level=0,
+        )
+
+        # 8. Call the while loop function
+        if_expr = ast.Assign(
             targets=[
                 ast.Tuple(
                     elts=[
-                        ast.Subscript(
-                            value=state, slice=ast.Constant(value=k), ctx=store
-                        )
-                        for k in locals_w
+                        ast.Name(id=k if k in self.var_w else "_", ctx=store)
+                        for k in state
                     ],
                     ctx=store,
                 )
             ],
-            value=ast.Tuple(
-                elts=[ast.Name(id=k, ctx=load) for k in locals_w], ctx=load
+            value=ast.Call(
+                func=ast.Name(id=ifstmt_name, ctx=load),
+                args=[
+                    ast.Tuple(elts=[ast.Name(id=k, ctx=load) for k in state], ctx=load),
+                    ast.Name(id=cond_name, ctx=load),
+                    ast.Name(id=if_name, ctx=load),
+                    ast.Name(id=else_name, ctx=load),
+                ],
+                keywords=[
+                    ast.keyword(
+                        arg="names",
+                        value=ast.Tuple(
+                            elts=[ast.Constant(k) for k in state],
+                            ctx=load,
+                        ),
+                    )
+                ],
+                lineno=node.lineno,
+                col_offset=node.col_offset,
+                end_lineno=node.end_lineno,
+                end_col_offset=node.end_col_offset
             ),
         )
 
-        # 6c. Generate the actual function
-        step_func = ast.FunctionDef(
-            name=step_name,
+        # 9. Some comments (as strings) to delineate processed parts of the AST
+        comment_start = ast.Expr(
+            ast.Constant("---- if statement transformed by dr.syntax ----")
+        )
+        comment_mid = ast.Expr(
+            ast.Constant("------------- invoke dr.if_stmt ---------------")
+        )
+        comment_end = ast.Expr(
+            ast.Constant("-----------------------------------------------")
+        )
+
+        # 10. Delete local variables created while processing the loop
+        cleanup_targets = [
+            ast.Name(id=ifstmt_name, ctx=delete),
+            ast.Name(id=cond_name, ctx=delete),
+            ast.Name(id=if_name, ctx=delete),
+            ast.Name(id=else_name, ctx=delete),
+        ]
+
+        if len(set(state) - set(self.var_w)) > 0:
+            cleanup_targets.append(ast.Name(id="_", ctx=delete))
+
+        cleanup = ast.Delete(targets=cleanup_targets)
+
+        return (
+            comment_start,
+            cond_func,
+            if_func,
+            else_func,
+            comment_mid,
+            import_stmt,
+            if_expr,
+            cleanup,
+            comment_end,
+        )
+
+    def visit_While(self, node: ast.While):
+        node, var_r, var_w, par_r, par_w, state = self.rewrite_and_track(node)
+
+        # 1. Names of generated functions
+        loop_name = "_loop"
+        cond_name = loop_name + "_cond"
+        step_name = loop_name + "_step"
+
+        # 5. Generate a function representing the loop condition
+        #    .. which takes all loop state variables as input
+        func_args = ast.arguments(
+            args=[ast.arg(k) for k in state],
+            posonlyargs=[],
+            kwonlyargs=[],
+            defaults=[],
+            kw_defaults=[],
+        )
+
+        cond_func = ast.FunctionDef(
+            name=cond_name,
             args=func_args,
-            body=[step_import_state, *node_body, step_export_state],
+            body=[ast.Return(value=node.test)],
             decorator_list=[],
             lineno=node.lineno,
             col_offset=node.col_offset,
+            end_lineno=node.end_lineno,
+            end_col_offset=node.end_col_offset,
         )
 
-        # 7. Import the Dr.Jit while loop
+        # 6. Generate a function representing the loop body
+        load, store, delete = ast.Load(), ast.Store(), ast.Del()
+        step_func = ast.FunctionDef(
+            name=step_name,
+            args=func_args,
+            body=[
+                *node.body,
+                ast.Return(
+                    value=ast.Tuple(
+                        elts=[ast.Name(id=k, ctx=load) for k in state], ctx=load
+                    )
+                ),
+            ],
+            decorator_list=[],
+            lineno=node.lineno,
+            col_offset=node.col_offset,
+            end_lineno=node.end_lineno,
+            end_col_offset=node.end_col_offset,
+        )
+
+        # 7. Import the Dr.Jit while_loop function
         import_stmt = ast.ImportFrom(
             module="drjit",
             names=[ast.alias(name="while_loop", asname=loop_name)],
             level=0,
         )
 
-        # 8. Generate statement to create the loop state object
-        loop_export_state = ast.Assign(
-            targets=[ast.Name(id=state_name, ctx=store)],
-            value=ast.Dict(
-                keys=[ast.Constant(value=k) for k in locals_rw_both],
-                values=[ast.Name(id=k, ctx=load) for k in locals_rw_both],
-            ),
-        )
-
-        # 9. Call the while loop function
-        while_expr = ast.Expr(
+        # 8. Call the while loop function
+        while_expr = ast.Assign(
+            targets=[
+                ast.Tuple(
+                    elts=[
+                        ast.Name(id=k if k in self.var_w else "_", ctx=store)
+                        for k in state
+                    ],
+                    ctx=store,
+                )
+            ],
             value=ast.Call(
                 func=ast.Name(id=loop_name, ctx=load),
                 args=[
-                    ast.Name(id=state_name, ctx=load),
+                    ast.Tuple(elts=[ast.Name(id=k, ctx=load) for k in state], ctx=load),
                     ast.Name(id=cond_name, ctx=load),
                     ast.Name(id=step_name, ctx=load),
                 ],
-                keywords=[],
+                keywords=[
+                    ast.keyword(
+                        arg="names",
+                        value=ast.Tuple(
+                            elts=[ast.Constant(k) for k in state],
+                            ctx=load,
+                        ),
+                    )
+                ],
                 lineno=node.lineno,
                 col_offset=node.col_offset,
+                end_lineno=node.end_lineno,
+                end_col_offset=node.end_col_offset
             ),
         )
 
-        # 10. Export loop state back into the local frame
-        state_var = ast.Name(id=state_name, ctx=load)
-        loop_import_state = ast.Assign(
-            targets=[
-                ast.Tuple(elts=[ast.Name(id=k, ctx=store) for k in locals_w], ctx=store)
-            ],
-            value=ast.Tuple(
-                elts=[
-                    ast.Subscript(
-                        value=state_var, slice=ast.Constant(value=k), ctx=load
-                    )
-                    for k in locals_w
-                ],
-                ctx=load,
-            ),
-        )
-
-        # 11. Some comments (as strings) to delineate processed parts of the AST
+        # 9. Some comments (as strings) to delineate processed parts of the AST
         comment_start = ast.Expr(
-            ast.Constant("------- loop transformed by dr.function -------")
+            ast.Constant("-------- loop transformed by dr.syntax --------")
         )
         comment_mid = ast.Expr(
             ast.Constant("----------- invoke dr.while_loop --------------")
@@ -239,18 +328,17 @@ class ASTVisitor(ast.NodeTransformer):
             ast.Constant("-----------------------------------------------")
         )
 
-        # 12. Delete local variables created while processing the loop
-        cleanup = ast.Delete(
-            targets=[
-                ast.Name(id=loop_name, ctx=delete),
-                ast.Name(id=cond_name, ctx=delete),
-                ast.Name(id=step_name, ctx=delete),
-                ast.Name(id=state_name, ctx=delete),
-            ]
-        )
+        # 10. Delete local variables created while processing the loop
+        cleanup_targets = [
+            ast.Name(id=loop_name, ctx=delete),
+            ast.Name(id=cond_name, ctx=delete),
+            ast.Name(id=step_name, ctx=delete),
+        ]
 
-        self.locals_r[-1].update(locals_r)
-        self.locals_w[-1].update(locals_w)
+        if len(set(state) - set(self.var_w)) > 0:
+            cleanup_targets.append(ast.Name(id="_", ctx=delete))
+
+        cleanup = ast.Delete(targets=cleanup_targets)
 
         return (
             comment_start,
@@ -258,23 +346,21 @@ class ASTVisitor(ast.NodeTransformer):
             step_func,
             comment_mid,
             import_stmt,
-            loop_export_state,
             while_expr,
-            loop_import_state,
             cleanup,
             comment_end,
         )
 
 
-def function(f: Callable = None, print_ast: bool = False, print_code: bool = False):
+def syntax(f: Callable = None, print_ast: bool = False, print_code: bool = False):
     """
-    Decorator for vectorized loops and conditionals.
+    Syntax decorator for vectorized loops and conditionals.
 
     This decorator provides *syntax sugar*. It allows users to write natural
     Python code that it then turns into native Dr.Jit constructs. It *does not
     compile* or otherwise change the behavior of the function.
 
-    The :py:func:`@drjit.function <drjit.function>` decorator introduces two
+    The :py:func:`@drjit.syntax <drjit.syntax>` decorator introduces two
     specific changes:
 
     1. It rewrites ``while`` loops so that they still work when the loop
@@ -282,11 +368,11 @@ def function(f: Callable = None, print_ast: bool = False, print_code: bool = Fal
        may want to run a different number of loop iterations.
 
     2. Analogously, it rewrites ``if`` statements so that they work when the
-    condition expression is a Dr.Jit array. In that case, only a subset of
-    array elements may want to execute the body of the ``if`` statement.
+       condition expression is a Dr.Jit array. In that case, only a subset of
+       array elements may want to execute the body of the ``if`` statement.
 
     Other control flow statements are unaffected. The transformed function may
-    call other functions, whether annotated by :py:func:`drjit.function` or
+    call other functions, whether annotated by :py:func:`drjit.syntax` or
     not. The introduced transformations only affect the annotated function.
 
     Internally, function turns ``while`` loops and ``if`` statements into calls
@@ -294,15 +380,14 @@ def function(f: Callable = None, print_ast: bool = False, print_code: bool = Fal
     to write large programs in this way, which is why the decorator exists.
 
     For example, consider the following function that raises a floating point
-    array to an integer power. The resulting code looks natural thanks to the
-    :py:func:`@drjit.function <drjit.function>` decorator.
+    array to an integer power.
 
     .. code-block:: python
 
        import drjit as dr
        from drjit.cuda import Int, Float
 
-       @dr.function
+       @dr.syntax
        def ipow(x: Float, n: Int):
            result = Float(1)
 
@@ -314,10 +399,18 @@ def function(f: Callable = None, print_ast: bool = False, print_code: bool = Fal
 
            return result
 
-    This (roughly) expands into the following native code that determines
-    relevant state variables and wraps conditionals and blocks into functions.
-    These transformations enable symbolic compilation and automatic derivative
-    propagation in forward and reverse mode.
+    Note that this function is *vectorized*: its inputs (of types
+    `drjit.cuda.Int` and `drjit.cuda.Float`) represent dynamic arrays that
+    could contain large numbers of elements.
+
+    The resulting code looks natural thanks to the :py:func:`@drjit.syntax
+    <drjit.syntax>` decorator. Following application of this decorator, the
+    function (roughly) expands into the following native Python code that
+    determines relevant state variables and wraps conditionals and blocks into
+    functions passed to :py:func:`drjit.while_loop` and
+    :py:func:`drjit.if_stmt`. These transformations enable Dr.Jit to
+    symbolically compile and automatically differentiate the implementation in
+    both forward and reverse modes (if desired).
 
     .. code-block:: python
 
@@ -343,7 +436,7 @@ def function(f: Callable = None, print_ast: bool = False, print_code: bool = Fal
                n, x, result = dr.if_stmt(
                    (n, x, result),
                    if_cond,
-                   if_body,
+                   if_body
                )
 
                # Rest of the loop body copy-pasted (no transformations needed here)
@@ -364,7 +457,9 @@ def function(f: Callable = None, print_ast: bool = False, print_code: bool = Fal
 
            return result
 
-    The :py:func:`@drjit.function <drjit.function>` decorator preserves line
+    The :py:func:`@drjit.syntax <drjit.syntax>` decorator runs *once* when
+    the function is first defined. Calling the resulting function does not
+    involve additional transformation steps. The transformation preserves line
     number information so that debugging works and exeptions/error messages are
     tied to the right locations in the corresponding *untransformed* function.
 
@@ -375,34 +470,45 @@ def function(f: Callable = None, print_ast: bool = False, print_code: bool = Fal
 
     .. code-block:: python
 
-       @dr.function(print_code=True)
+       @dr.syntax(print_code=True)
        def ipow(x: Float, n: Int):
            # ...
 
     Note that the functions :py:func:`if_stmt` and :py:func:`while_loop` even
     work when the loop condition is *scalar* (a Python `bool`). Since they
-    don't do anything special in that case, you may want to avoid the
-    transformation altogether. You can provide such control flow hints using
-    :py:func:`drjit.hint`. Other hints can also be provided to request
-    compilation using evaluated/symbolic mode, or to specify a maximum number
-    of loop iteration for reverse-mode automatic differentiation.
+    don't do anything special in that case and may add (very) small overheads,
+    you may want to avoid the transformation altogether. You can provide such
+    control flow hints using :py:func:`drjit.hint`. Other hints can also be
+    provided to request compilation using evaluated/symbolic mode, or to
+    specify a maximum number of loop iteration for reverse-mode automatic
+    differentiation.
 
     .. code-block:: python
 
-       @dr.function
+       @dr.syntax
        def foo():
-           i = 10 # 'i' is a Python 'int' and therefore does not need special
-                  # handling introduced by @dr.function
+           i = 0 # 'i' is a Python 'int' and therefore does not need special
+                 # handling introduced by @dr.syntax
 
-           # Disable the transformation by @dr.function to avoid overheads
+           # Disable the transformation by @dr.syntax to avoid overheads
            while dr.hint(i < 10, scalar=True):
                i += 1
+
+    One last point: :py:func:`@dr.syntax <drjit.syntax>`` may seem
+    reminiscent of function--level transformations in other frameworks like
+    ``@jax.jit`` (JAX) or ``@tf.function`` (TensorFlow). There is a key
+    difference: these tools create a JIT compilation wrapper that intercepts
+    calls and then invokes the nested function with placeholder arguments to
+    compile and cache a kernel for each encountered combination of argument
+    types. :py:func:`@dr.syntax <drjit.syntax>`` is not like that: it
+    merely rewrites the syntax of certain loop and conditional expressions and
+    has no further effect following the function definition.
     """
 
     if f is None:
 
         def wrapper(f2):
-            return function(f2, print_ast, print_code)
+            return syntax(f2, print_ast, print_code)
 
         return wrapper
 
@@ -414,7 +520,7 @@ def function(f: Callable = None, print_ast: bool = False, print_code: bool = Fal
     if print_code:
         print(f"Input code\n----------\n{ast.unparse(old_ast)}\n")
 
-    new_ast = ASTVisitor().visit(old_ast)
+    new_ast = SyntaxVisitor().visit(old_ast)
     new_ast = ast.fix_missing_locations(new_ast)
 
     if print_ast:
@@ -429,7 +535,7 @@ def function(f: Callable = None, print_ast: bool = False, print_code: bool = Fal
     except BaseException as e:
         raise RuntimeError(
             "The following transformed AST generated by "
-            "@drjit.function could not be compiled:\n\n%s" % ast.unparse(new_ast)
+            "@drjit.syntax could not be compiled:\n\n%s" % ast.unparse(new_ast)
         ) from e
     new_code = next(
         (x for x in new_code.co_consts if isinstance(x, types.CodeType)), None
@@ -453,8 +559,8 @@ def hint(
     arguments.
 
     The main purpose of :py:func:`drjit.hint()` is to provide *hints* that
-    influence the transformation performed by the :py:func:`@drjit.function
-    <drjit.function>` decorator. The following kinds of hints are supported:
+    influence the transformation performed by the :py:func:`@drjit.syntax
+    <drjit.syntax>` decorator. The following kinds of hints are supported:
 
     1. Disabling code transformations for scalar code.
 
@@ -475,7 +581,7 @@ def hint(
 
        .. code-block:: python
 
-          while dr.scoped_set_flag(dr.JitFlag.SymbolicLoops, False):
+          with dr.scoped_set_flag(dr.JitFlag.SymbolicLoops, False):
              # ...
 
        Refer to the discussion of :py:func:`drjit.while_loop`,
@@ -490,7 +596,7 @@ def hint(
 
        .. code-block:: python
 
-          while dr.scoped_set_flag(dr.JitFlag.SymbolicLoops, True):
+          with dr.scoped_set_flag(dr.JitFlag.SymbolicLoops, True):
              # ...
 
        Refer to the discussion of :py:func:`drjit.while_loop`,

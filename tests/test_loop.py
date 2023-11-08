@@ -5,7 +5,7 @@ import pytest
 @pytest.mark.parametrize("symbolic", [True, False])
 @pytest.mark.parametrize("optimize", [True, False])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
-@dr.function
+@dr.syntax
 def test01_simple(t, symbolic, optimize):
     # Test a very basic loop in a few different modes
     with dr.scoped_set_flag(dr.JitFlag.SymbolicLoops, symbolic):
@@ -21,7 +21,7 @@ def test01_simple(t, symbolic, optimize):
             assert dr.all(z == t(9, 9, 9, 9, 9, 0, 0))
 
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
-@dr.function
+@dr.syntax(print_code=True)
 def test02_nested_loop_disallowed_config(t):
     # Can't record an evaluated loop within a symbolic recording session
     with pytest.raises(RuntimeError) as e:
@@ -33,11 +33,12 @@ def test02_nested_loop_disallowed_config(t):
                     j += 1
 
     err_msg='Dr.Jit is currently recording symbolic computation and cannot execute'
+    print(e.value)
     assert err_msg in str(e.value.__cause__)
 
 @pytest.mark.parametrize("symbolic", [True, False])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
-@dr.function
+@dr.syntax
 def test03_cond_err(t, symbolic):
     # The loop condition might raise an exception, which should be propagated without problems
     with dr.scoped_set_flag(dr.JitFlag.SymbolicLoops, symbolic):
@@ -51,7 +52,7 @@ def test03_cond_err(t, symbolic):
 
 @pytest.mark.parametrize("symbolic", [True, False])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
-@dr.function
+@dr.syntax
 def test04_body_err(t, symbolic):
     # The body condition might raise an exception, which should be propagated without problems
     with dr.scoped_set_flag(dr.JitFlag.SymbolicLoops, symbolic):
@@ -63,7 +64,7 @@ def test04_body_err(t, symbolic):
 
 @pytest.mark.parametrize("optimize", [True, False])
 @pytest.test_arrays('uint32,is_jit,shape=(2, *)')
-@dr.function
+@dr.syntax
 def test05_dependency_structure(t, optimize, drjit_verbose, capsys):
     # Test that only requested variables are being evaluated
     with dr.scoped_set_flag(dr.JitFlag.OptimizeLoops, optimize):
@@ -88,7 +89,7 @@ def test05_dependency_structure(t, optimize, drjit_verbose, capsys):
 
 @pytest.mark.parametrize("optimize", [True, False])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
-@dr.function
+@dr.syntax
 def test06_loop_optimizations(t, optimize):
     # Test that the loop optimizes away constant loop state
     with dr.scoped_set_flag(dr.JitFlag.OptimizeLoops, optimize):
