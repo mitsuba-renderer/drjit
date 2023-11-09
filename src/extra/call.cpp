@@ -99,12 +99,15 @@ struct scoped_record {
         return jit_record_checkpoint(backend);
     }
 
+    void disarm() { cleanup = false; }
+
     ~scoped_record() {
-        jit_record_end(backend, checkpoint);
+        jit_record_end(backend, checkpoint, cleanup);
     }
 
     JitBackend backend;
     uint32_t checkpoint, scope;
+    bool cleanup = true;
 };
 
 /// RAII helper to temporarily set the 'self' instance
@@ -301,7 +304,6 @@ static void ad_call_record(JitBackend backend, const char *domain,
     dr_vector<uint32_t> checkpoints(callable_count + 1, 0),
                             inst_id(callable_count, 0);
 
-    uint32_t se = 0; // operation representing side effects from the call
     {
         scoped_record rec(backend, name);
 
@@ -364,7 +366,7 @@ static void ad_call_record(JitBackend backend, const char *domain,
         dr_vector<uint32_t> rv4;
         rv4.resize(rv.size());
 
-        se = jit_var_vcall(
+        jit_var_vcall(
             combined.c_str(), index, mask.index(), callable_count,
             inst_id.data(), (uint32_t) args3.size(), args3.data(),
             (uint32_t) rv3.size(), rv3.data(), checkpoints.data(), rv4.data());
@@ -373,9 +375,9 @@ static void ad_call_record(JitBackend backend, const char *domain,
             ad_var_dec_ref(rv[i]);
             rv[i] = rv4[i];
         }
-    }
 
-    jit_var_mark_side_effect(se);
+        rec.disarm();
+    }
 }
 
 // Strategy 3: group the arguments and evaluate a kernel per callable
@@ -804,6 +806,14 @@ bool ad_call(JitBackend backend, const char *domain, size_t callable_count,
             ad_copy_implicit_deps(implicit_in);
             guard.success = true;
         } else {
+            if (jit_flag(JitFlag::Symbolic))
+                jit_raise(
+                    "Dr.Jit is currently recording symbolic computation and cannot perform an\n"
+                    "array-based function call in *evaluated mode*. You will likely want to set\n"
+                    "the Jit flag drjit.JitFlag.SymbolicCalls to True. Please review the Dr.Jit\n"
+                    "documentation of drjit.JitFlag.SymbolicCalls and drjit.switch() for general\n"
+                    "information on symbolic and evaluated calls, as well as their limitations.");
+
             ad_call_reduce(backend, domain, name, size, index, mask,
                             callable_count, args, rv, func, payload);
             ad = false; // derivative already tracked, no CustomOp needed

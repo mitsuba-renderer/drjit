@@ -300,6 +300,12 @@ void scatter_reduce(ReduceOp op, nb::object target, nb::object value,
                     std::move(index), std::move(active), false);
 }
 
+void scatter_add(nb::object target, nb::object value,
+                    nb::object index, nb::object active) {
+    scatter_generic("scatter_add", ReduceOp::Add, std::move(target), std::move(value),
+                    std::move(index), std::move(active), false);
+}
+
 static void ravel_recursive(nb::handle result, nb::handle value,
                             nb::handle index_dtype, const size_t *shape,
                             const int64_t *strides, Py_ssize_t offset,
@@ -552,6 +558,9 @@ void export_memop(nb::module_ &m) {
      .def("scatter_reduce", &scatter_reduce, "reduce_op"_a,
           "target"_a, "value"_a, "index"_a, "active"_a = true,
           doc_scatter_reduce)
+     .def("scatter_add", &scatter_add,
+          "target"_a, "value"_a, "index"_a, "active"_a = true,
+          doc_scatter_add)
      .def("ravel",
           [](nb::handle array, char order) {
               return ravel(array, order);
