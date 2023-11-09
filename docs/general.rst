@@ -44,7 +44,7 @@ result (``result[0]``) to obtain a value with the underlying element type.
 Boolean arrays define a ``__bool__`` method so that such indexing can be
 avoided. For example, the following works as expected:
 
-.. code-box:: python
+.. code-block:: python
 
    a = drjit.cuda.Float(...)
    # The line below is simply a nicer way of writing "if dr.any(a < 0)[0]:"

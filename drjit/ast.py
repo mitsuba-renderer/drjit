@@ -38,6 +38,53 @@ class SyntaxVisitor(ast.NodeTransformer):
             self.var_w.add(node.id)
         return node
 
+    def extract_hints(self, node: ast.AST):
+        if (
+            not isinstance(node, ast.Call)
+            or not isinstance(node.func, ast.Attribute)
+            or node.func.attr != "hint"
+        ):
+            return node, {}
+
+        if len(node.args) != 1:
+            raise RuntimeError("drjit.hint(): must have a single positional argument")
+
+        hints = {}
+        for k in node.keywords:
+            if isinstance(k.value, ast.Constant):
+                hints[k.arg] = k.value.value
+            elif isinstance(k.value, ast.List):
+                l = []
+                for e in k.value.elts:
+                    if isinstance(e, ast.Name):
+                        l.append(e.id)
+                    else:
+                        raise RuntimeError(
+                            "drjit.hint(): variable lists must reference top-level variables without indirection"
+                        )
+                hints[k.arg] = l
+            else:
+                raise RuntimeError(
+                    f'drjit.hint(): don\'t know how to interpret the "{k.arg}" argument'
+                )
+
+        arg_types = {
+            "label": str,
+            "method": str,
+            "exclude": list,
+            "max_iterations": int,
+        }
+
+        for k, v in hints.items():
+            if k not in arg_types:
+                raise RuntimeError(f'drjit.hint(): unknown argument "{k}"')
+            if not isinstance(v, arg_types[k]):
+                raise RuntimeError(
+                    f'drjit.hint(): argument "{k}" has an unexpected type'
+                )
+
+        return node.args[0], hints
+
     def rewrite_and_track(self, node: ast.AST):
         # Keep track of variable reads/writes
         self.par_r.append(self.var_r)
@@ -47,6 +94,9 @@ class SyntaxVisitor(ast.NodeTransformer):
 
         # Process the node recursively
         node = self.generic_visit(node)
+
+        # Extract hints, if available
+        node.test, hints = self.extract_hints(node.test)
 
         # Collect read/written variables
         var_r, var_w = self.var_r, self.var_w
@@ -74,21 +124,30 @@ class SyntaxVisitor(ast.NodeTransformer):
         var_r -= temp
         var_w -= temp
 
+        # 3c: exclude variables as requested by the user
+        if "exclude" in hints:
+            exclude = set(hints["exclude"])
+            var_r -= set(exclude)
+            var_w -= set(exclude)
+
         self.var_r = var_r | self.par_r.pop()
         self.var_w = var_w | self.par_w.pop()
 
         state = sorted(var_r | var_w)
 
-        return node, var_r, var_w, par_r, par_w, state
+        return node, var_r, var_w, par_r, par_w, state, hints
 
     def visit_If(self, node: ast.If):
-        node, var_r, var_w, par_r, par_w, state = self.rewrite_and_track(node)
+        node, var_r, var_w, par_r, par_w, state, hints = self.rewrite_and_track(node)
+
+        if 'method' in hints and hints['method'] == 'scalar':
+            return node
 
         # 1. Names of generated functions
         ifstmt_name = "_if_stmt"
         cond_name = ifstmt_name + "_cond"
-        if_name = ifstmt_name + "_if"
-        else_name = ifstmt_name + "_else"
+        true_name = ifstmt_name + "_true"
+        false_name = ifstmt_name + "_false"
 
         # 2. Generate a function representing the condition
         #    .. which takes all state variables as input
@@ -113,8 +172,8 @@ class SyntaxVisitor(ast.NodeTransformer):
 
         # 3. Generate a function representing the if/else branches
         load, store, delete = ast.Load(), ast.Store(), ast.Del()
-        if_func = ast.FunctionDef(
-            name=if_name,
+        true_fn = ast.FunctionDef(
+            name=true_name,
             args=func_args,
             body=[
                 *node.body,
@@ -131,8 +190,8 @@ class SyntaxVisitor(ast.NodeTransformer):
             end_col_offset=node.end_col_offset,
         )
 
-        else_func = ast.FunctionDef(
-            name=else_name,
+        false_fn = ast.FunctionDef(
+            name=false_name,
             args=func_args,
             body=[
                 *node.orelse,
@@ -156,7 +215,21 @@ class SyntaxVisitor(ast.NodeTransformer):
             level=0,
         )
 
-        # 8. Call the while loop function
+        # 8. Call drjit.if_stmt()
+        call_kwargs = [
+            ast.keyword(
+                arg="state_labels",
+                value=ast.Tuple(
+                    elts=[ast.Constant(k) for k in state],
+                    ctx=load,
+                ),
+            ),
+        ]
+        if "label" in hints:
+            call_kwargs.append(
+                ast.keyword(arg="label", value=ast.Constant(value=hints["label"]))
+            )
+
         if_expr = ast.Assign(
             targets=[
                 ast.Tuple(
@@ -172,22 +245,14 @@ class SyntaxVisitor(ast.NodeTransformer):
                 args=[
                     ast.Tuple(elts=[ast.Name(id=k, ctx=load) for k in state], ctx=load),
                     ast.Name(id=cond_name, ctx=load),
-                    ast.Name(id=if_name, ctx=load),
-                    ast.Name(id=else_name, ctx=load),
+                    ast.Name(id=true_name, ctx=load),
+                    ast.Name(id=false_name, ctx=load),
                 ],
-                keywords=[
-                    ast.keyword(
-                        arg="names",
-                        value=ast.Tuple(
-                            elts=[ast.Constant(k) for k in state],
-                            ctx=load,
-                        ),
-                    )
-                ],
+                keywords=call_kwargs,
                 lineno=node.lineno,
                 col_offset=node.col_offset,
                 end_lineno=node.end_lineno,
-                end_col_offset=node.end_col_offset
+                end_col_offset=node.end_col_offset,
             ),
         )
 
@@ -206,8 +271,8 @@ class SyntaxVisitor(ast.NodeTransformer):
         cleanup_targets = [
             ast.Name(id=ifstmt_name, ctx=delete),
             ast.Name(id=cond_name, ctx=delete),
-            ast.Name(id=if_name, ctx=delete),
-            ast.Name(id=else_name, ctx=delete),
+            ast.Name(id=true_name, ctx=delete),
+            ast.Name(id=false_name, ctx=delete),
         ]
 
         if len(set(state) - set(self.var_w)) > 0:
@@ -218,8 +283,8 @@ class SyntaxVisitor(ast.NodeTransformer):
         return (
             comment_start,
             cond_func,
-            if_func,
-            else_func,
+            true_fn,
+            false_fn,
             comment_mid,
             import_stmt,
             if_expr,
@@ -228,7 +293,10 @@ class SyntaxVisitor(ast.NodeTransformer):
         )
 
     def visit_While(self, node: ast.While):
-        node, var_r, var_w, par_r, par_w, state = self.rewrite_and_track(node)
+        node, var_r, var_w, par_r, par_w, state, hints = self.rewrite_and_track(node)
+
+        if 'method' in hints and hints['method'] == 'scalar':
+            return node
 
         # 1. Names of generated functions
         loop_name = "_loop"
@@ -283,7 +351,21 @@ class SyntaxVisitor(ast.NodeTransformer):
             level=0,
         )
 
-        # 8. Call the while loop function
+        # 8. Call drjit.while_loop()
+        call_kwargs = [
+            ast.keyword(
+                arg="state_labels",
+                value=ast.Tuple(
+                    elts=[ast.Constant(k) for k in state],
+                    ctx=load,
+                ),
+            ),
+        ]
+        if "label" in hints:
+            call_kwargs.append(
+                ast.keyword(arg="label", value=ast.Constant(value=hints["label"]))
+            )
+
         while_expr = ast.Assign(
             targets=[
                 ast.Tuple(
@@ -301,19 +383,11 @@ class SyntaxVisitor(ast.NodeTransformer):
                     ast.Name(id=cond_name, ctx=load),
                     ast.Name(id=step_name, ctx=load),
                 ],
-                keywords=[
-                    ast.keyword(
-                        arg="names",
-                        value=ast.Tuple(
-                            elts=[ast.Constant(k) for k in state],
-                            ctx=load,
-                        ),
-                    )
-                ],
+                keywords=call_kwargs,
                 lineno=node.lineno,
                 col_offset=node.col_offset,
                 end_lineno=node.end_lineno,
-                end_col_offset=node.end_col_offset
+                end_col_offset=node.end_col_offset,
             ),
         )
 
@@ -368,7 +442,7 @@ def syntax(f: Callable = None, print_ast: bool = False, print_code: bool = False
        may want to run a different number of loop iterations.
 
     2. Analogously, it rewrites ``if`` statements so that they work when the
-       condition expression is a Dr.Jit array. In that case, only a subset of
+       conditional expression is a Dr.Jit array. In that case, only a subset of
        array elements may want to execute the body of the ``if`` statement.
 
     Other control flow statements are unaffected. The transformed function may
@@ -491,7 +565,7 @@ def syntax(f: Callable = None, print_ast: bool = False, print_code: bool = False
                  # handling introduced by @dr.syntax
 
            # Disable the transformation by @dr.syntax to avoid overheads
-           while dr.hint(i < 10, scalar=True):
+           while dr.hint(i < 10, method='scalar'):
                i += 1
 
     One last point: :py:func:`@dr.syntax <drjit.syntax>`` may seem
@@ -547,11 +621,10 @@ def hint(
     arg: object,
     /,
     *,
-    scalar=None,
-    evaluate=None,
-    symbolic=None,
-    max_iterations=None,
-    name=None,
+    method: str | None = None,
+    max_iterations: int | None = None,
+    label: str | None = None,
+    exclude: list[object] | None = None,
 ) -> object:
     """
     Within ordinary Python code, this function is unremarkable: it returns the
@@ -562,65 +635,77 @@ def hint(
     influence the transformation performed by the :py:func:`@drjit.syntax
     <drjit.syntax>` decorator. The following kinds of hints are supported:
 
-    1. Disabling code transformations for scalar code.
+    1. ``method`` overrides the compilation mode of a ``while``
+       loop or ``if`` statement. The following choices are available:
 
-       Wrap the condition of a ``while`` loop or ``if`` statement in a hint
-       that specifies ``scalar=True`` to entirely disable the transformation:
+       - ``method='scalar'`` completely disables code transformations which
+         is permitted when the predicate of a loop or ``if`` statement is a
+         scalar Python ``bool``.
 
-       .. code-block:: python
+         .. code-block:: python
 
-          i = 0
-          while dr.hint(i < 10, scalar=True):
-             # ...
+            i = 0
+            while dr.hint(i < 10, method='scalar'):
+               # ...
 
-    2. Force *evaluated* mode.
+         Routing such code through :py:func:`drjit.while_loop` or
+         :py:func:`drjit.if_stmt` of course still works but would add (very)
+         small overheads, which motivates the existence of this flag.
 
-       Wrap the condition of a ``while`` loop or ``if`` statement in a hint
-       that specifies ``evaluate=True`` to force execution in *evaluated* mode.
-       For a loop, this is, e.g., analogous to wrapping the code in
+       - ``method='evaluated'`` forces execution in *evaluated* mode. For a
+         loop, this is analogous to wrapping the code in
 
-       .. code-block:: python
+         .. code-block:: python
 
-          with dr.scoped_set_flag(dr.JitFlag.SymbolicLoops, False):
-             # ...
+            with dr.scoped_set_flag(dr.JitFlag.SymbolicLoops, False):
+               # ...
 
-       Refer to the discussion of :py:func:`drjit.while_loop`,
-       :py:attr:`drjit.JitFlag.SymbolicLoops` :py:func:`drjit.if_stmt`, and
-       :py:attr:`drjit.JitFlag.SymbolicConditionals` for details.
+         Refer to the discussion of :py:func:`drjit.while_loop`,
+         :py:attr:`drjit.JitFlag.SymbolicLoops`, :py:func:`drjit.if_stmt`, and
+         :py:attr:`drjit.JitFlag.SymbolicConditionals` for details.
 
-    3. Force *symbolic* mode.
+       - ``method='symbolic'`` forces execution in *symbolic* mode. For a
+         loop, this is analogous to wrapping the code in
 
-       Wrap the condition of a ``while`` loop or ``if`` statement in a hint
-       that specifies ``symbolic=True`` to force execution in *symbolic* mode.
-       For a loop, this is, e.g., analogous to wrapping the code in
+         .. code-block:: python
 
-       .. code-block:: python
+            with dr.scoped_set_flag(dr.JitFlag.SymbolicLoops, True):
+               # ...
 
-          with dr.scoped_set_flag(dr.JitFlag.SymbolicLoops, True):
-             # ...
+         Refer to the discussion of :py:func:`drjit.while_loop`,
+         :py:attr:`drjit.JitFlag.SymbolicLoops`, :py:func:`drjit.if_stmt`, and
+         :py:attr:`drjit.JitFlag.SymbolicConditionals` for details.
 
-       Refer to the discussion of :py:func:`drjit.while_loop`,
-       :py:attr:`drjit.JitFlag.SymbolicLoops` :py:func:`drjit.if_stmt`, and
-       :py:attr:`drjit.JitFlag.SymbolicConditionals` for details.
-
-    4. Specify a maximum number of loop iterations for reverse-mode
-       automatic differentiation.
+    2. ``max_iterations`` specifies a maximum number of loop iterations for
+       reverse-mode automatic differentiation.
 
        Naive reverse-mode differentiation of loops (unless replaced by a
        smarter problem-specific strategy via :py:class:`drjit.custom` and
-       :py:class:`drjit.CustomOp`) requires allocation of a large buffer that
-       holds loop state for all iterations.
+       :py:class:`drjit.CustomOp`) requires allocation of large buffers that
+       hold loop state for all iterations.
 
        Dr.Jit requires an upper bound on the maximum number of loop iterations
-       so that it can allocate such a buffer, which can be provided via this
+       so that it can allocate such buffers, which can be provided via this
        hint. Otherwise, reverse-mode differentiation of loops will fail with an
        error message.
 
-    5. Provide a descriptive name.
+    3. ``label`` provovides a descriptive label.
 
-       Specify the `name` parameter (of type ``str``). Dr.Jit will include this
-       name as a comment in the generated intermediate representation, which
-       can be helpful when debugging the compilation of large programs.
+       Dr.Jit will include this label as a comment in the generated
+       intermediate representation, which can be helpful when debugging the
+       compilation of large programs.
 
+    4. ``exclude`` indicates to the :py:func:`@drjit.syntax <drjit.syntax>`
+       decorator that a local variable should not be considered to be part of
+       the set of state variables passed to :py:func:`drjit.while_loop` or
+       :py:func:`drjit.if_stmt`.
+
+       While transforming a function, the :py:func:`@drjit.syntax
+       <drjit.syntax>` decorator sequentially steps through a program to
+       identify the set of read and written variables. It then forwards
+       referenced variables to recursive :py:func:`drjit.while_loop` and
+       :py:func:`drjit.if_stmt` calls. In rare cases, it may be useful to
+       exclude a local variable from this process--- specify a list of such
+       variables to the :py:func:`drjit.hint` annotation to do so.
     """
     return arg

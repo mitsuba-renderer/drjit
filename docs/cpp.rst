@@ -93,7 +93,7 @@ on a Dr.Jit instance arrays. Below is an overview of the available macros:
    A variant of the above macro that should be used when ``Name`` refers to a
    template class.
 
-.. c:macro:: DRJIT_END()
+.. c:macro:: DRJIT_CALL_END()
 
    Demarcates the end of an interface block.
 

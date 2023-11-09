@@ -55,7 +55,6 @@ static nb::object extract_mask(nb::list &args, nb::kwargs &kwargs) {
     return mask;
 }
 
-
 nb::object switch_impl(nb::handle index_, nb::sequence callables,
                        nb::args args_, nb::kwargs kwargs) {
     struct State {

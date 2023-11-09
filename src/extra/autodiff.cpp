@@ -1071,13 +1071,12 @@ void ad_accum_grad(Index index, JitIndex value) {
 Index ad_var_set_label(Index index, const char *label) {
     uint32_t jit_index = ::jit_index(index),
              ad_index = ::ad_index(index);
-
-    ad_log("ad_var_set_label(a%u): \"%s\"", ad_index,
-           label ? label : "(null)");
-
     jit_index = jit_var_set_label(jit_index, label);
 
     if (ad_index) {
+        ad_log("ad_var_set_label(a%u): \"%s\"", ad_index,
+               label ? label : "(null)");
+
         std::lock_guard<std::mutex> guard(state.mutex);
         Variable *v = state[ad_index];
 

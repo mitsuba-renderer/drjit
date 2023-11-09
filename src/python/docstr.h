@@ -428,22 +428,27 @@ Returns:
 )";
 
 static const char *doc_select = R"(
-select(condition, x, y, /)
+select(arg0, arg1, arg2, /)
 Select elements from inputs based on a condition
 
-This function implements the component-wise operation
+This function uses a first mask argument to select between the subsequent
+two arguments. It implements the following component-wise operation:
 
 .. math::
 
    \mathrm{result}_i = \begin{cases}
-       x_i,\quad&\text{if condition}_i,\\
-       y_i,\quad&\text{otherwise.}
+       \texttt{arg1}_i,\quad&\text{if }\texttt{arg0}_i,\\
+       \texttt{arg2}_i,\quad&\text{otherwise.}
    \end{cases}
 
 Args:
-    condition (bool | drjit.ArrayBase): A Python or Dr.Jit mask type
-    x (int | float | drjit.ArrayBase): A Python or Dr.Jit type
-    y (int | float | drjit.ArrayBase): A Python or Dr.Jit type
+    arg0 (bool | drjit.ArrayBase): A Python or Dr.Jit mask type 
+
+    arg1 (int | float | drjit.ArrayBase): A Python or Dr.Jit type, whose
+      entries should be returned for ``True``-valued mask entries.
+
+    arg2 (int | float | drjit.ArrayBase): A Python or Dr.Jit type, whose
+      entries should be returned for ``False``-valued mask entries.
 
 Returns:
     float | int | drjit.ArrayBase: Component-wise result of the selection operation)";
@@ -2066,6 +2071,13 @@ Args:
       without duplicate writes to an entry. (i.e., the scatter indices are a
       permutation). This case arises in the implementation of array method calls.
 )";
+
+static const char *doc_scatter_add = R"(
+Atomically add values to a flat array or nested data structure.
+
+This function is equivalent to ``drjit.scatter_reduce(drjit.ReduceOp.Add,
+...)`` and exists for convenience. Please refer to
+:py:func:`drjit.scatter_reduce` for details on atomic scatter-reductions.)";
 
 static const char *doc_scatter_reduce = R"(
 Atomically update values in a flat array or nested data structure.

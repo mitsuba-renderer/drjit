@@ -19,12 +19,12 @@ Array creation
 Control flow
 ------------
 
-.. autofunction:: switch
-.. autofunction:: dispatch
+.. autofunction:: syntax
+.. autofunction:: hint
 .. autofunction:: while_loop
 .. autofunction:: if_stmt
-.. autofunction:: function
-.. autofunction:: hint
+.. autofunction:: switch
+.. autofunction:: dispatch
 
 .. _horizontal-reductions-ref:
 
@@ -79,6 +79,7 @@ These operations are *horizontal* in the sense that [..]
       Binary OR operation
 
 .. autofunction:: scatter_reduce
+.. autofunction:: scatter_add
 .. autofunction:: ravel
 .. autofunction:: unravel
 .. autofunction:: min
