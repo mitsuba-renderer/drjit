@@ -128,7 +128,7 @@ def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
 # -------------------------------------------------------------------
 
 
-def safe_sqrt(arg0, /):
+def safe_sqrt(arg, /):
     '''
     Safely evaluate the square root of the provided input avoiding domain errors.
 
@@ -141,14 +141,14 @@ def safe_sqrt(arg0, /):
     Returns:
         float | drjit.ArrayBase: Square root of the input
     '''
-    result = sqrt(maximum(arg0, 0))
-    if is_diff_v(arg0) and grad_enabled(arg0):
-        alt = sqrt(maximum(arg0, epsilon(arg0)))
+    result = sqrt(maximum(arg, 0))
+    if is_diff_v(arg) and grad_enabled(arg):
+        alt = sqrt(maximum(arg, epsilon(arg)))
         result = replace_grad(result, alt)
     return result
 
 
-def safe_asin(arg0, /):
+def safe_asin(arg, /):
     '''
     Safe wrapper around :py:func:`drjit.asin` that avoids domain errors.
 
@@ -162,14 +162,14 @@ def safe_asin(arg0, /):
     Returns:
         float | drjit.ArrayBase: Arcsine approximation
     '''
-    result = asin(clip(arg0, -1, 1))
-    if is_diff_v(arg0) and grad_enabled(arg0):
-        alt = asin(clip(arg0, -one_minus_epsilon(arg0), one_minus_epsilon(arg0)))
+    result = asin(clip(arg, -1, 1))
+    if is_diff_v(arg) and grad_enabled(arg):
+        alt = asin(clip(arg, -one_minus_epsilon(arg), one_minus_epsilon(arg)))
         result = replace_grad(result, alt)
     return result
 
 
-def safe_acos(arg0, /):
+def safe_acos(arg, /):
     '''
     Safe wrapper around :py:func:`drjit.acos` that avoids domain errors.
 
@@ -183,9 +183,9 @@ def safe_acos(arg0, /):
     Returns:
         float | drjit.ArrayBase: Arccosine approximation
     '''
-    result = acos(clip(arg0, -1, 1))
-    if is_diff_v(arg0) and grad_enabled(arg0):
-        alt = acos(clip(arg0, -one_minus_epsilon(arg0), one_minus_epsilon(arg0)))
+    result = acos(clip(arg, -1, 1))
+    if is_diff_v(arg) and grad_enabled(arg):
+        alt = acos(clip(arg, -one_minus_epsilon(arg), one_minus_epsilon(arg)))
         result = replace_grad(result, alt)
     return result
 

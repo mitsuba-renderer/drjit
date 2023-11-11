@@ -170,8 +170,8 @@ def test09_loop_optimizations(t, optimize):
             assert a_const == 0
             assert b_const == 0
             assert it_count == 1
-            assert a.state == dr.VarState.Normal
-            assert b.state == dr.VarState.Normal
+            assert a.state == dr.VarState.Unevaluated
+            assert b.state == dr.VarState.Unevaluated
         else:
             assert a_const == 1
             assert b_const == 1

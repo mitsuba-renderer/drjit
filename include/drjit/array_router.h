@@ -835,36 +835,6 @@ DRJIT_INLINE T opaque(const T2 &value, size_t size = 1) {
         return T(value);
     }
 }
-
-DRJIT_INLINE void make_opaque() { }
-template <typename T> DRJIT_INLINE void make_opaque(T &value) {
-    if constexpr (depth_v<T> > 1) {
-        for (size_t i = 0; i < value.size(); ++i)
-            make_opaque(value.entry(i));
-    } else if constexpr (is_drjit_struct_v<T>) {
-        struct_support_t<T>::apply_1(
-            value,
-            [&](auto &x) DRJIT_INLINE_LAMBDA {
-                make_opaque(x);
-            });
-    } else if constexpr (is_diff_v<T>) {
-        make_opaque(value.detach_());
-    } else if constexpr (is_tensor_v<T>) {
-        make_opaque(value.array());
-    } else if constexpr (is_jit_v<T>) {
-        if (!value.is_evaluated()) {
-            value = value.copy();
-            value.data();
-        }
-    } else if constexpr (is_detected_v<detail::has_opaque, T>) {
-        value.opaque_();
-    }
-}
-template <typename T1, typename... Ts, enable_if_t<sizeof...(Ts) != 0> = 0>
-DRJIT_INLINE void make_opaque(T1 &value, Ts&... values) {
-    (make_opaque(value), make_opaque(values...));
-}
-
 template <typename T, enable_if_t<!is_special_v<T>> = 0>
 DRJIT_INLINE T identity(size_t size = 1) {
     return full<T>(scalar_t<T>(1), size);
@@ -1393,6 +1363,51 @@ DRJIT_INLINE void eval(const Ts&... values) {
     (DRJIT_MARK_USED(values), ...);
     if constexpr (((is_jit_v<Ts> || is_drjit_struct_v<Ts>) || ...)) {
         if (schedule(values...))
+            eval();
+    }
+}
+
+namespace detail {
+    template <typename T> DRJIT_INLINE bool schedule_force(T &value) {
+        if constexpr (is_jit_v<T>) {
+            if constexpr (depth_v<T> > 1) {
+                bool result = false;
+                for (size_t i = 0; i < value.derived().size(); ++i)
+                    result |= schedule_force(value.derived().entry(i));
+                return result;
+            } else if constexpr (is_tensor_v<T>) {
+                return schedule_force(value.array());
+            } else {
+                return value.derived().schedule_force_();
+            }
+        } else if constexpr (is_drjit_struct_v<T>) {
+            bool result = false;
+            struct_support_t<T>::apply_1(
+                value,
+                [&](auto const &x) DRJIT_INLINE_LAMBDA {
+                    result |= schedule_force(x);
+                });
+            return result;
+        } else {
+            static_assert(!is_detected_v<detail::has_opaque, T>, "TODO: Let's convert this to schedule_force");
+            return false;
+        }
+    }
+
+    DRJIT_INLINE bool schedule_force() { return false; }
+
+    template <typename T1, typename... Ts, enable_if_t<sizeof...(Ts) != 0> = 0>
+    DRJIT_INLINE bool schedule_force(T1 &value, Ts&... values) {
+        // bool<->int conversion to perform logical AND without broadcasting or compiler warnings
+        return (bool) ((int) schedule_force(value) | (int) schedule_force(values...));
+    }
+}
+
+template <typename... Ts>
+DRJIT_INLINE void make_opaque(Ts&... values) {
+    (DRJIT_MARK_USED(values), ...);
+    if constexpr (((is_jit_v<Ts> || is_drjit_struct_v<Ts>) || ...)) {
+        if (detail::schedule_force(values...))
             eval();
     }
 }

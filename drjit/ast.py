@@ -47,42 +47,36 @@ class SyntaxVisitor(ast.NodeTransformer):
             return node, {}
 
         if len(node.args) != 1:
-            raise RuntimeError("drjit.hint(): must have a single positional argument")
+            raise RuntimeError("drjit.hint(): must have a single positional argument.")
 
         hints = {}
         for k in node.keywords:
-            if isinstance(k.value, ast.Constant):
-                hints[k.arg] = k.value.value
-            elif isinstance(k.value, ast.List):
-                l = []
+            hints[k.arg] = k.value
+
+        if "exclude" in hints:
+            exclude = set()
+            if isinstance(k.value, ast.List):
                 for e in k.value.elts:
                     if isinstance(e, ast.Name):
-                        l.append(e.id)
+                        exclude.add(e.id)
                     else:
-                        raise RuntimeError(
-                            "drjit.hint(): variable lists must reference top-level variables without indirection"
-                        )
-                hints[k.arg] = l
+                        exclude = None
+                        break
             else:
-                raise RuntimeError(
-                    f'drjit.hint(): don\'t know how to interpret the "{k.arg}" argument'
+                exclude = None
+
+            if exclude is None:
+                raise Exception(
+                    "dr.hint(): The 'exclude' parameter must specify "
+                    "a literal list of strings (e.g., ['a', 'b'])."
                 )
 
-        arg_types = {
-            "label": str,
-            "method": str,
-            "exclude": list,
-            "max_iterations": int,
-        }
+            hints["exclude"] = exclude
 
-        for k, v in hints.items():
-            if k not in arg_types:
-                raise RuntimeError(f'drjit.hint(): unknown argument "{k}"')
-            if not isinstance(v, arg_types[k]):
-                raise RuntimeError(
-                    f'drjit.hint(): argument "{k}" has an unexpected type'
-                )
-
+        valid_keys = ["exclude", "label", "method", "max_iterations"]
+        for k in hints.keys():
+            if k not in valid_keys:
+                raise RuntimeError(f'drjit.hint(): unsupported keyword argument "{k}".')
         return node.args[0], hints
 
     def rewrite_and_track(self, node: ast.AST):
@@ -126,7 +120,7 @@ class SyntaxVisitor(ast.NodeTransformer):
 
         # 3c: exclude variables as requested by the user
         if "exclude" in hints:
-            exclude = set(hints["exclude"])
+            exclude = hints["exclude"]
             var_r -= set(exclude)
             var_w -= set(exclude)
 
@@ -135,12 +129,24 @@ class SyntaxVisitor(ast.NodeTransformer):
 
         state = sorted(var_r | var_w)
 
-        return node, var_r, var_w, par_r, par_w, state, hints
+        method = hints.get("method", None)
+        is_scalar = isinstance(method, ast.Constant) and method.value == "scalar"
+
+        return node, var_r, var_w, par_r, par_w, state, hints, is_scalar
 
     def visit_If(self, node: ast.If):
-        node, var_r, var_w, par_r, par_w, state, hints = self.rewrite_and_track(node)
+        (
+            node,
+            var_r,
+            var_w,
+            par_r,
+            par_w,
+            state,
+            hints,
+            is_scalar,
+        ) = self.rewrite_and_track(node)
 
-        if 'method' in hints and hints['method'] == 'scalar':
+        if is_scalar:
             return node
 
         # 1. Names of generated functions
@@ -225,10 +231,11 @@ class SyntaxVisitor(ast.NodeTransformer):
                 ),
             ),
         ]
-        if "label" in hints:
-            call_kwargs.append(
-                ast.keyword(arg="label", value=ast.Constant(value=hints["label"]))
-            )
+
+        for k, v in hints.items():
+            if k == "exclude":
+                continue
+            call_kwargs.append(ast.keyword(arg=k, value=v))
 
         if_expr = ast.Assign(
             targets=[
@@ -256,7 +263,7 @@ class SyntaxVisitor(ast.NodeTransformer):
             ),
         )
 
-        # 9. Some comments (as strings) to delineate processed parts of the AST
+        # 10. Some comments (as strings) to delineate processed parts of the AST
         comment_start = ast.Expr(
             ast.Constant("---- if statement transformed by dr.syntax ----")
         )
@@ -293,15 +300,24 @@ class SyntaxVisitor(ast.NodeTransformer):
         )
 
     def visit_While(self, node: ast.While):
-        node, var_r, var_w, par_r, par_w, state, hints = self.rewrite_and_track(node)
+        (
+            node,
+            var_r,
+            var_w,
+            par_r,
+            par_w,
+            state,
+            hints,
+            is_scalar,
+        ) = self.rewrite_and_track(node)
 
-        if 'method' in hints and hints['method'] == 'scalar':
+        if is_scalar:
             return node
 
         # 1. Names of generated functions
         loop_name = "_loop"
         cond_name = loop_name + "_cond"
-        step_name = loop_name + "_step"
+        body_name = loop_name + "_body"
 
         # 5. Generate a function representing the loop condition
         #    .. which takes all loop state variables as input
@@ -326,8 +342,8 @@ class SyntaxVisitor(ast.NodeTransformer):
 
         # 6. Generate a function representing the loop body
         load, store, delete = ast.Load(), ast.Store(), ast.Del()
-        step_func = ast.FunctionDef(
-            name=step_name,
+        body_func = ast.FunctionDef(
+            name=body_name,
             args=func_args,
             body=[
                 *node.body,
@@ -361,10 +377,10 @@ class SyntaxVisitor(ast.NodeTransformer):
                 ),
             ),
         ]
-        if "label" in hints:
-            call_kwargs.append(
-                ast.keyword(arg="label", value=ast.Constant(value=hints["label"]))
-            )
+        for k, v in hints.items():
+            if k == "exclude":
+                continue
+            call_kwargs.append(ast.keyword(arg=k, value=v))
 
         while_expr = ast.Assign(
             targets=[
@@ -381,7 +397,7 @@ class SyntaxVisitor(ast.NodeTransformer):
                 args=[
                     ast.Tuple(elts=[ast.Name(id=k, ctx=load) for k in state], ctx=load),
                     ast.Name(id=cond_name, ctx=load),
-                    ast.Name(id=step_name, ctx=load),
+                    ast.Name(id=body_name, ctx=load),
                 ],
                 keywords=call_kwargs,
                 lineno=node.lineno,
@@ -406,7 +422,7 @@ class SyntaxVisitor(ast.NodeTransformer):
         cleanup_targets = [
             ast.Name(id=loop_name, ctx=delete),
             ast.Name(id=cond_name, ctx=delete),
-            ast.Name(id=step_name, ctx=delete),
+            ast.Name(id=body_name, ctx=delete),
         ]
 
         if len(set(state) - set(self.var_w)) > 0:
@@ -417,7 +433,7 @@ class SyntaxVisitor(ast.NodeTransformer):
         return (
             comment_start,
             cond_func,
-            step_func,
+            body_func,
             comment_mid,
             import_stmt,
             while_expr,
@@ -474,8 +490,8 @@ def syntax(f: Callable = None, print_ast: bool = False, print_code: bool = False
            return result
 
     Note that this function is *vectorized*: its inputs (of types
-    `drjit.cuda.Int` and `drjit.cuda.Float`) represent dynamic arrays that
-    could contain large numbers of elements.
+    :py:class:`drjit.cuda.Int` and :py:class:`drjit.cuda.Float`) represent
+    dynamic arrays that could contain large numbers of elements.
 
     The resulting code looks natural thanks to the :py:func:`@drjit.syntax
     <drjit.syntax>` decorator. Following application of this decorator, the
@@ -537,16 +553,24 @@ def syntax(f: Callable = None, print_ast: bool = False, print_code: bool = False
     number information so that debugging works and exeptions/error messages are
     tied to the right locations in the corresponding *untransformed* function.
 
-    There are two additional keyword arguments `print_ast` and `print_code`
-    that are both disabled by default. Set them to ``True`` to inspect the
-    function before/after the transformation, either using an AST dump or via
-    generated Python code.
+    Note that this decorator can only be used when the code to be transformed
+    is part of a function. It cannot be applied to top-level statements on the
+    Python REPL, or in a Jupyter notebook cell (unless that cell defines a
+    function and applies the decorator to it).
+
+    The two optional keyword arguments ``print_ast`` and ``print_code`` are
+    both disabled by default. Set them to ``True`` to inspect the function
+    before/after the transformation, either using an AST dump or via generated
+    Python code
 
     .. code-block:: python
 
        @dr.syntax(print_code=True)
        def ipow(x: Float, n: Int):
            # ...
+
+    (This feature is mostly relevant for developers working on Dr.Jit
+    internals).
 
     Note that the functions :py:func:`if_stmt` and :py:func:`while_loop` even
     work when the loop condition is *scalar* (a Python `bool`). Since they
@@ -568,13 +592,13 @@ def syntax(f: Callable = None, print_ast: bool = False, print_code: bool = False
            while dr.hint(i < 10, method='scalar'):
                i += 1
 
-    One last point: :py:func:`@dr.syntax <drjit.syntax>`` may seem
+    One last point: :py:func:`@dr.syntax <drjit.syntax>` may seem
     reminiscent of function--level transformations in other frameworks like
     ``@jax.jit`` (JAX) or ``@tf.function`` (TensorFlow). There is a key
     difference: these tools create a JIT compilation wrapper that intercepts
     calls and then invokes the nested function with placeholder arguments to
     compile and cache a kernel for each encountered combination of argument
-    types. :py:func:`@dr.syntax <drjit.syntax>`` is not like that: it
+    types. :py:func:`@dr.syntax <drjit.syntax>` is not like that: it
     merely rewrites the syntax of certain loop and conditional expressions and
     has no further effect following the function definition.
     """
@@ -638,39 +662,42 @@ def hint(
     1. ``method`` overrides the compilation mode of a ``while``
        loop or ``if`` statement. The following choices are available:
 
-       - ``method='scalar'`` completely disables code transformations which
-         is permitted when the predicate of a loop or ``if`` statement is a
-         scalar Python ``bool``.
+       - ``method='scalar'`` disables code transformations, which is permitted
+         when the predicate of a loop or ``if`` statement is a scalar Python
+         ``bool``.
 
          .. code-block:: python
 
-            i = 0
+            i: int = 0
             while dr.hint(i < 10, method='scalar'):
                # ...
 
          Routing such code through :py:func:`drjit.while_loop` or
-         :py:func:`drjit.if_stmt` of course still works but would add (very)
-         small overheads, which motivates the existence of this flag.
-
-       - ``method='evaluated'`` forces execution in *evaluated* mode. For a
-         loop, this is analogous to wrapping the code in
+         :py:func:`drjit.if_stmt` still works but may add small overheads,
+         which motivates the existence of this flag. Note that this annotation
+         does *not* cause ``method=scalar`` to be passed
+         :py:func:`drjit.while_loop`, and :py:func:`drjit.if_stmt` (which
+         happens to be a valid input of both). Instead, it disables the code
+         transformation altogether so that the above example translates into
+         ordinary Python code:
 
          .. code-block:: python
 
-            with dr.scoped_set_flag(dr.JitFlag.SymbolicLoops, False):
+            i: int = 0
+            while i < 10:
                # ...
+
+       - ``method='evaluated'`` forces execution in *evaluated* mode and causes
+         the code transformation to forward this argument to the relevant
+         :py:func:`drjit.while_loop` or :py:func:`drjit.if_stmt` call.
 
          Refer to the discussion of :py:func:`drjit.while_loop`,
          :py:attr:`drjit.JitFlag.SymbolicLoops`, :py:func:`drjit.if_stmt`, and
          :py:attr:`drjit.JitFlag.SymbolicConditionals` for details.
 
-       - ``method='symbolic'`` forces execution in *symbolic* mode. For a
-         loop, this is analogous to wrapping the code in
-
-         .. code-block:: python
-
-            with dr.scoped_set_flag(dr.JitFlag.SymbolicLoops, True):
-               # ...
+       - ``method='symbolic'`` forces execution in *symbolic* mode and causes
+         the code transformation to forward this argument to the relevant
+         :py:func:`drjit.while_loop` or :py:func:`drjit.if_stmt` call.
 
          Refer to the discussion of :py:func:`drjit.while_loop`,
          :py:attr:`drjit.JitFlag.SymbolicLoops`, :py:func:`drjit.if_stmt`, and

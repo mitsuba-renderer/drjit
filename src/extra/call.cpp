@@ -1,7 +1,7 @@
 /*
     extra/call.cpp -- Logic to dispatch virtual function calls, dr.switch(),
-    and dr.dispatch() through one common interface with support for wavefront-
-    and recorded execution styles along with automatic differentiation.
+    and dr.dispatch() through one common interface with support for symbolic
+    and evaluated execution styles along with automatic differentiation.
 
     Dr.Jit is a C++ template library for efficient vectorization and
     differentiation of numerical kernels on modern processor architectures.
@@ -20,45 +20,6 @@
 
 namespace dr = drjit;
 using dr::dr_vector;
-
-/// Index vector that decreases JIT refcounts when destructed
-struct dr_index32_vector : dr_vector<uint32_t> {
-    using Base = dr_vector<uint32_t>;
-    using Base::Base;
-
-    ~dr_index32_vector() { release(); }
-
-    void release() {
-        for (size_t i = 0; i < size(); ++i)
-            jit_var_dec_ref(operator[](i));
-        Base::clear();
-    }
-
-    void push_back_steal(uint32_t index) { push_back(index); }
-    void push_back_borrow(uint32_t index) {
-        jit_var_inc_ref(index);
-        push_back(index);
-    }
-};
-
-/// Index vector that decreases JIT + AD refcounts when destructed
-struct dr_index64_vector : dr_vector<uint64_t> {
-    using Base = dr_vector<uint64_t>;
-    using Base::Base;
-
-    ~dr_index64_vector() { release(); }
-
-    void release() {
-        for (size_t i = 0; i < size(); ++i)
-            ad_var_dec_ref(operator[](i));
-        Base::clear();
-    }
-
-    void push_back_steal(uint64_t index) { push_back(index); }
-    void push_back_borrow(uint64_t index) {
-        push_back(ad_var_inc_ref(index));
-    }
-};
 
 /// RAII helper to temporarily push a mask onto the Dr.Jit mask stack
 struct scoped_set_mask {
@@ -149,6 +110,7 @@ static void ad_call_getter(JitBackend backend, const char *domain,
     dr_index64_vector args2; // unused
     dr_vector<uint64_t> rv2;
     dr_index32_vector rv3;
+    dr_index32_vector cleanup;
     (void) args;
 
     JitVar null_instance = JitVar::steal(jit_var_u32(backend, 0)),
@@ -255,10 +217,10 @@ static void ad_call_getter(JitBackend backend, const char *domain,
                     jit_var_read(rv3_i, 0, &p->src);
                     break;
 
-                case VarState::Normal:
+                case VarState::Unevaluated:
                 case VarState::Evaluated:
                     p->size = -(int) tsize;
-                    p->src = jit_var_ptr(rv3_i);
+                    cleanup.push_back(jit_var_data(rv3_i, (void **) &p->src));
                     break;
 
                 default:
@@ -777,7 +739,8 @@ bool ad_call(JitBackend backend, const char *domain, size_t callable_count,
             needs_ad |= arg_i >> 32;
         }
 
-        if (index == 0 || size == 0 || jit_var_is_zero_literal(mask) || callable_count == 0) {
+        if (index == 0 || size == 0 || jit_var_is_zero_literal(mask) ||
+            callable_count == 0) {
             scoped_set_mask mask_guard(backend, jit_var_bool(backend, false));
             func(payload, nullptr, args, rv);
 

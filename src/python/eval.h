@@ -13,5 +13,5 @@
 #include "common.h"
 
 extern bool schedule(nb::handle);
-extern void eval(nb::handle h);
+extern bool eval(nb::handle h);
 extern void export_eval(nb::module_ &);

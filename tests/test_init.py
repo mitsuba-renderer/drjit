@@ -488,7 +488,7 @@ def test24_init_tensor_from_ndarray(t):
 
 # Test dr.opaque
 @pytest.test_arrays('float32, shape=(3, *)')
-def test25_opaque_3d(t, drjit_verbose, capsys):
+def test25_opaque_3d(t):
     is_jit = "jit" in t.__meta__
     v = dr.opaque(t, 5)
     assert len(v) == 3 and len(v[1]) == 1 and v[0][0] == 5
@@ -504,3 +504,23 @@ def test25_opaque_3d(t, drjit_verbose, capsys):
 
     with pytest.raises(RuntimeError, match='the provided "shape" and "dtype" parameters are incompatible.'):
         v = dr.opaque(t, 5, (100, 3))
+
+
+# Test dr.make_opaque()
+@pytest.test_arrays('uint32, jit, shape=(*)')
+def test26_make_opaque(t):
+    a, b, c = t(3), t(3), t(3)
+    assert a.index == b.index and a.index == c.index
+    assert a.state == dr.VarState.Literal
+    dr.make_opaque(b, c)
+    for i in range(2):
+        assert a.index != b.index and a.index != c.index and b.index != c.index
+        assert a.state == dr.VarState.Literal
+        assert b.state == dr.VarState.Evaluated
+        dr.make_opaque(b, c)
+
+    d = dr.arange(t, 5)
+    assert d.state == dr.VarState.Unevaluated
+    for i in range(2):
+        dr.make_opaque(d)
+        assert d.state == dr.VarState.Evaluated

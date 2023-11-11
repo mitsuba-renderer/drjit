@@ -242,7 +242,7 @@ def test10_state(t):
     assert a.x.state == dr.VarState.Evaluated
     assert a.state == dr.VarState.Mixed
     a.y = a.x + 1
-    assert a.y.state == dr.VarState.Normal
+    assert a.y.state == dr.VarState.Unevaluated
     assert a.state == dr.VarState.Mixed
     a.z = type(a.x)()
     assert a.z.state == dr.VarState.Invalid

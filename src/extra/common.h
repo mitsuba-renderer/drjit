@@ -1,5 +1,6 @@
 #include <drjit-core/jit.h>
 #include <drjit/array.h>
+#include <drjit/autodiff.h>
 
 #define likely(x)   DRJIT_LIKELY(x)
 #define unlikely(x) DRJIT_UNLIKELY(x)
@@ -35,3 +36,43 @@ public:
 private:
     T &m_mutex;
 };
+
+/// Index vector that decreases JIT refcounts when destructed
+struct dr_index32_vector : drjit::dr_vector<uint32_t> {
+    using Base = drjit::dr_vector<uint32_t>;
+    using Base::Base;
+
+    ~dr_index32_vector() { release(); }
+
+    void release() {
+        for (size_t i = 0; i < size(); ++i)
+            jit_var_dec_ref(operator[](i));
+        Base::clear();
+    }
+
+    void push_back_steal(uint32_t index) { push_back(index); }
+    void push_back_borrow(uint32_t index) {
+        jit_var_inc_ref(index);
+        push_back(index);
+    }
+};
+
+/// Index vector that decreases JIT + AD refcounts when destructed
+struct dr_index64_vector : drjit::dr_vector<uint64_t> {
+    using Base = drjit::dr_vector<uint64_t>;
+    using Base::Base;
+
+    ~dr_index64_vector() { release(); }
+
+    void release() {
+        for (size_t i = 0; i < size(); ++i)
+            ad_var_dec_ref(operator[](i));
+        Base::clear();
+    }
+
+    void push_back_steal(uint64_t index) { push_back(index); }
+    void push_back_borrow(uint64_t index) {
+        push_back(ad_var_inc_ref(index));
+    }
+};
+
