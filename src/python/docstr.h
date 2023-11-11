@@ -95,7 +95,7 @@ Return the *array form* of the provided Dr.Jit array or type.
 
 There are several different cases:
 
-- When `self` is a tensor, this property returns the storage representation
+- When ``self`` is a tensor, this property returns the storage representation
   of the tensor in the form of a linearized dynamic 1D array. For example,
   the following hold:
 
@@ -104,9 +104,9 @@ There are several different cases:
     assert dr.array_t(dr.scalar.TensorXf) is dr.scalar.ArrayXf
     assert dr.array_t(dr.cuda.TensorXf) is dr.cuda.Float
 
-- When `arg` represents a special arithmetic object (matrix, quaternion, or
-  complex number), `array_t` returns a similarly-shaped type with ordinary array
-  semantics. For example, the following hold
+- When ``arg`` represents a special arithmetic object (matrix, quaternion, or
+  complex number), ``array_t`` returns a similarly-shaped type with ordinary
+  array semantics. For example, the following hold
 
   .. code-block::
 
@@ -343,15 +343,15 @@ the specified scalar type.
 
 This function implements the following set of behaviors:
 
-1. When invoked with a Dr.Jit array *type* `arg0`, it returns an analogous
-   version with a different scalar type, as specified via `arg1`. For example,
+1. When invoked with a Dr.Jit array *type* ``arg0``, it returns an analogous
+   version with a different scalar type, as specified via ``arg1``. For example,
    when called with :py:class:`drjit.cuda.Array3u` and and
    :py:attr:`drjit.VarType.Float32`, it will return
    :py:class:`drjit.cuda.Array3f`.
 
 2. When the input is not a type, it returns ``replace_type_t(type(arg0), arg1)``.
 
-3. When the input is not a Dr.Jit type, the function returns `arg0`.
+3. When the input is not a Dr.Jit type, the function returns ``arg0``.
 
 Args:
     arg0 (object): An arbitrary Python object
@@ -442,7 +442,7 @@ two arguments. It implements the following component-wise operation:
    \end{cases}
 
 Args:
-    arg0 (bool | drjit.ArrayBase): A Python or Dr.Jit mask type 
+    arg0 (bool | drjit.ArrayBase): A Python or Dr.Jit mask type
 
     arg1 (int | float | drjit.ArrayBase): A Python or Dr.Jit type, whose
       entries should be returned for ``True``-valued mask entries.
@@ -527,8 +527,8 @@ static const char *doc_pow = R"(
 Raise the first argument to a power specified via the second argument.
 
 The function accepts Python arithmetic types, Dr.Jit arrays, and tensors. It
-processes each input component separately. When `arg1` is a Python `int` or
-integral `float` value, the function performs a sequence of multiplies. The
+processes each input component separately. When ``arg1`` is a Python ``int`` or
+integral ``float`` value, the function performs a sequence of multiplies. The
 general case involves recursive use of the identity ``pow(x, y) = exp2(log2(x)
 * y)``. There is no difference betweeen using :py:func:`drjit.power()` and the
 * builtin ``**`` Python operator.
@@ -1328,7 +1328,9 @@ However, :py:func:`drjit.full` creates *literal constant* arrays, which
 means that Dr.Jit is fully aware of the array contents.
 
 In contrast, :py:func:`drjit.opaque` produces an *opaque* array backed by a
-representation in device memory. *How is this useful?*
+representation in device memory. 
+
+.. rubric:: Why is this useful?
 
 Consider the following snippet, where a complex calculation is parameterized
 by the constant ``1``.
@@ -1337,13 +1339,13 @@ by the constant ``1``.
 
    from drjit.llvm import Float
 
-   result = complex_function(Float(1), ...) # Float(1) is equivalent to dr.full(Float, 1) 
+   result = complex_function(Float(1), ...) # Float(1) is equivalent to dr.full(Float, 1)
    print(result)
 
 The ``print()`` statement will cause Dr.Jit to evaluate the queued computation,
 which likely also requires compilation of a new kernel (if that exact pattern
-of steps hasn't been observed before). Kernel compilation is a costly step and
-may be much slower than the actual computation that needs to be done.
+of steps hasn't been observed before). Kernel compilation is costly and may be
+much slower than the actual computation that needs to be done.
 
 Suppose we later wish to evaluate the function with a different parameter:
 
@@ -1358,16 +1360,20 @@ reused. This unfortunately means that we must once more wait a few tens or even
 hundreds of milliseconds until a new kernel has been compiled and uploaded to
 the device.
 
-This motivates the existence of :py:func:`drjit.opaque`. By wrapping
-a variable in an opaque representation, we can keep certain constants out
-of the generated program and improve the effectiveness of the kernel cache:
+This motivates the existence of :py:func:`drjit.opaque`. By making a variable
+opaque to Dr.Jit's tracing mechanism, we can keep constants out of the
+generated program and improve the effectiveness of the kernel cache:
 
 .. code-block:: python
 
-   # The following lines reuse the compiled kernel regardless of the contents of 'value'
-   value = 2 
-   result = complex_function(dr.opaque(Float, value), ...)
+   # The following lines reuse the compiled kernel regardless of the constant
+   value = dr.opqaque(Float, 2)
+   result = complex_function(value, ...)
    print(result)
+
+This function is related to :py:func:`drjit.make_opaque`, which can turn an
+already existing Dr.Jit array, tensor, or :ref:`Pytree <pytrees>` into an
+opaque representation.
 
 Args:
     dtype (type): Desired Dr.Jit array type, Python scalar type, or
@@ -1432,10 +1438,10 @@ Args:
     dtype (type): Desired Dr.Jit array type. The ``dtype`` must refer to a
       dynamically sized 1D Dr.Jit array such as :py:class:`drjit.scalar.ArrayXu`
       or :py:class:`drjit.cuda.Float`.
-    start (int): Start of the interval. The default value is `0`.
+    start (int): Start of the interval. The default value is ``0``.
     stop/size (int): End of the interval (not included). The name of this
       parameter differs between the two provided overloads.
-    step (int): Spacing between values. The default value is `1`.
+    step (int): Spacing between values. The default value is ``1``.
 
 Returns:
     object: The computed sequence of type ``dtype``.
@@ -1450,10 +1456,15 @@ Args:
     dtype (type): Desired Dr.Jit array type. The ``dtype`` must refer to a
       dynamically sized 1D Dr.Jit floating point array, such as
       :py:class:`drjit.scalar.ArrayXf` or :py:class:`drjit.cuda.Float`.
+
     start (float): Start of the interval.
+
     stop (float): End of the interval.
+
     num (int): Number of samples to generate.
-    endpoint (bool): Should the interval endpoint be included? The default is `True`.
+
+    endpoint (bool): Should the interval endpoint be included?
+      The default is ``True``.
 
 Returns:
     object: The computed sequence of type ``dtype``.
@@ -1542,14 +1553,14 @@ This property represents the dimension of the provided Dr.Jit array or tensor.
 static const char *doc_ArrayBase_array = R"(
 This member plays multiple roles:
 
-- When `self` is a tensor, this property returns the storage representation
+- When ``self`` is a tensor, this property returns the storage representation
   of the tensor in the form of a linarized dynamic 1D array.
 
-- When `self` is a special arithmetic object (matrix, quaternion, or complex
-  number), `array` provides an ordinary copy of the same data with ordinary
+- When ``self`` is a special arithmetic object (matrix, quaternion, or complex
+  number), ``array`` provides an ordinary copy of the same data with ordinary
   array semantics.
 
-- In all other cases, `array` is simply a reference to `self`.
+- In all other cases, ``array`` is simply a reference to ``self``.
 
 :type: :py:func:`array_t(self) <array_t>`)";
 
@@ -1765,13 +1776,13 @@ Returns:
 
 static const char *doc_reinterpret_array_t = R"(
 Converts the provided Dr.Jit array/tensor type into a
-version with the same element size and scalar type `type`.
+version with the same element size and scalar type ``type``.
 
 This function implements the following set of behaviors:
 
 1. When invoked with a Dr.Jit array *type* (e.g.
 :py:class:`drjit.cuda.Array3f64`), it returns a matching array type with the
-specified scalar type (e.g., :py:class:`drjit.cuda.Array3u64` when `arg1` is set
+specified scalar type (e.g., :py:class:`drjit.cuda.Array3u64` when ``arg1`` is set
 to `drjit.VarType.UInt64`).
 
 2. When the input is not a type, it returns ``reinterpret_array_t(type(arg0), arg1)``.
@@ -1873,7 +1884,7 @@ Returns:
 )";
 
 static const char *doc_gather = R"(
-Gather values from a flat array or nested data structure
+Gather values from a flat array or nested data structure.
 
 This function performs a *gather* (i.e., indirect memory read) from ``source``
 at position ``index``. It expects a ``dtype`` argument and will return an
@@ -1961,7 +1972,7 @@ Args:
     active (object): an optional 1D dynamic Dr.Jit mask array (e.g.,
       :py:class:`drjit.scalar.ArrayXb` or :py:class:`drjit.cuda.Bool`)
       specifying active components. Dr.Jit will attempt an implicit conversion
-      if another type is provided. The default is `True`.
+      if another type is provided. The default is ``True``.
 
     permute (bool): You can leave this flag at its default value (``False``).
       It exists to slightly improve the efficiency of a special case where an
@@ -1971,7 +1982,7 @@ Args:
 )";
 
 static const char *doc_scatter = R"(
-Scatter values into a flat array or nested data structure
+Scatter values into a flat array or nested data structure.
 
 This operation performs a *scatter* (i.e., indirect memory write) of the
 ``value`` parameter to the ``target`` array at position ``index``. The optional
@@ -2063,7 +2074,7 @@ Args:
     active (object): an optional 1D dynamic Dr.Jit mask array (e.g.,
       :py:class:`drjit.scalar.ArrayXb` or :py:class:`drjit.cuda.Bool`)
       specifying active components. Dr.Jit will attempt an implicit conversion
-      if another type is provided. The default is `True`.
+      if another type is provided. The default is ``True``.
 
     permute (bool): You can leave this flag at its default value (``False``).
       It exists to slightly improve the efficiency of a special case where a
@@ -2075,8 +2086,9 @@ Args:
 static const char *doc_scatter_add = R"(
 Atomically add values to a flat array or nested data structure.
 
-This function is equivalent to ``drjit.scatter_reduce(drjit.ReduceOp.Add,
-...)`` and exists for convenience. Please refer to
+This function is equivalent to
+:py:func:`drjit.scatter_reduce(drjit.ReduceOp.Add, ...) <scatter_reduce>` and
+exists for reasons of convenience. Please refer to
 :py:func:`drjit.scatter_reduce` for details on atomic scatter-reductions.)";
 
 static const char *doc_scatter_reduce = R"(
@@ -2156,7 +2168,7 @@ This operation can be used in the following different ways:
    - Multiplicative reductions (:py:attr:`drjit.ReduceOp.Mul`) are not
      supported.
 
-   - Mask/boolean array `target` values are not supported.
+   - Mask/boolean array ``target`` values are currently not supported.
 
    - Bitwise reductions (:py:attr:`drjit.ReduceOp.And`,
      :py:attr:`drjit.ReduceOp.Or`) do not support floating point
@@ -2201,11 +2213,11 @@ Args:
     active (object): an optional 1D dynamic Dr.Jit mask array (e.g.,
       :py:class:`drjit.scalar.ArrayXb` or :py:class:`drjit.cuda.Bool`)
       specifying active components. Dr.Jit will attempt an implicit conversion
-      if another type is provided. The default is `True`.
+      if another type is provided. The default is ``True``.
 )";
 
 static const char *doc_ravel = R"(
-Convert the input into a contiguous flat array
+Convert the input into a contiguous flat array.
 
 This operation takes a Dr.Jit array, typically with some static and some
 dynamic dimensions (e.g., :py:class:`drjit.cuda.Array3f` with shape
@@ -2216,8 +2228,8 @@ convention.
 It can also convert Dr.Jit tensors into a flat representation, though only
 C-style ordering is supported in this case.
 
-Internally, `ravel` performs a series of calls to :py:func:`drjit.scatter()`
-to suitably reorganize the array contents.
+Internally, :py:func:`drjit.ravel()` performs a series of calls to
+:py:func:`drjit.scatter()` to suitably reorganize the array contents.
 
 For example,
 
@@ -2252,7 +2264,7 @@ Returns:
 
 
 static const char *doc_unravel = R"(
-Load a sequence of Dr.Jit vectors/matrices/etc. from a contiguous flat array
+Load a sequence of Dr.Jit vectors/matrices/etc. from a contiguous flat array.
 
 This operation implements the inverse of :py:func:`drjit.ravel()`. In contrast
 to :py:func:`drjit.ravel()`, it requires one additional parameter (``dtype``)
@@ -2270,8 +2282,8 @@ on the indexing convention:
   default for Dr.Jit arrays), and
 - ``[1, 3, 5]`` and ``[2, 4, 6]`` when unraveled with ``order='C'``
 
-Internally, `unravel` performs a series of calls to :py:func:`drjit.gather()`
-to suitably reorganize the array contents.
+Internally, :py:func:`drjit.unravel()` performs a series of calls to
+:py:func:`drjit.gather()` to suitably reorganize the array contents.
 
 Args:
     dtype (type): An arbitrary Dr.Jit array type
@@ -2363,13 +2375,19 @@ Returns:
 )";
 
 static const char *doc_eval = R"(
-Immediately evaluate the provided JIT variable(s)
+Evaluate the provided JIT variable(s)
 
-This function immediately invokes Dr.Jit's LLVM or CUDA backends to compile and
-then execute a kernel containing the *trace* of the specified variables,
-turning them into an explicit memory-based representation. The generated
-kernel(s) will also include previously scheduled computation. The function
-:py:func:`drjit.eval()` internally calls :py:func:`drjit.schedule()`---specifically,
+Dr.Jit automatically evaluates variables as needed, hence it is usually not
+necessary to call this function explicitly. That said, explicit evaluation may
+sometimes improve performance---refer to the documentation of
+:py:func:`drjit.schedule()` for an example of such a use case.
+
+:py:func:`drjit.eval()` invokes Dr.Jit's LLVM or CUDA backends to compile and
+then execute a kernel containing the all steps that are needed to evaluate the
+specified variables, which will turn them into a memory-based representation.
+The generated kernel(s) will also include computation that was previously
+scheduled via :py:func:`drjit.schedule()`. In fact, :py:func:`drjit.eval()`
+internally calls :py:func:`drjit.schedule()`, as
 
 .. code-block::
 
@@ -2382,27 +2400,45 @@ is equivalent to
     dr.schedule(arg_1, arg_2, ...)
     dr.eval()
 
-Variable evaluation happens automatically as needed, hence it is rare that a
-user would need to call this function explicitly. Explicit evaluation can
-slightly improve performance in certain cases (the documentation of
-:py:func:`drjit.schedule()` shows an example of such a use case.)
-
 This function accepts a variable-length keyword argument and processes all
 input arguments. It recursively traverses Pytrees :ref:`Pytrees <pytrees>`
 (sequences, mappings, custom data structures, etc.).
 
-During recursion, the function gathers all unevaluated Dr.Jit arrays. Evaluated
-arrays and incompatible types are ignored.
+During this recursive traversal, the function collects all unevaluated Dr.Jit
+arrays, while ignoring previously evaluated arrays along and non-array types.
+The function also does not evaluate *literal constant* arrays (this refers to
+potentially large arrays that are entirely uniform), as this is generally not
+wanted. Use the function :py:func:`drjit.make_opaque` if you wish to evaluate
+literal constant arrays as well.
 
 Args:
     *args (tuple): A variable-length list of Dr.Jit array instances or
-        :ref:`Pytrees <pytrees>` (they will be recursively traversed to discover
-        all Dr.Jit arrays.)
+      :ref:`Pytrees <pytrees>` (they will be recursively traversed to discover
+      all Dr.Jit arrays.)
 
 Returns:
     bool: ``True`` if a variable was evaluated, ``False`` if the operation did
     not do anything.
 )";
+
+static const char *doc_make_opaque = R"(
+Forcefully evaluate arrays (including literal constants).
+
+This function implements a more drastic version of :py:func:`drjit.eval` that
+additionally converts literal constant arrays into evaluated (device
+memory-based) representations.
+
+It is related to the function :py:func:`drjit.opaque` that can be used to
+directly construct such opaque arrays. Please see the documentation of this
+function regarding the rationale of making array contents opaque to Dr.Jit's
+symbolic tracing mechanism.
+
+Args:
+    *args (tuple): A variable-length list of Dr.Jit array instances or
+      :ref:`Pytrees <pytrees>` (they will be recursively traversed to discover
+      all Dr.Jit arrays.)
+)";
+
 
 static const char *doc_dlpack_device = R"(
 Returns a tuple containing the DLPack device type and device ID associated with
@@ -2534,7 +2570,7 @@ This operation internally decomposes into two sub-steps:
    dr.clear_grad(target)
    dr.accum_grad(target, source)
 
-When `source` is not of the same type as `target`, Dr.Jit will try to broadcast
+When ``source`` is not of the same type as ``target``, Dr.Jit will try to broadcast
 its contents into the right shape.
 
 Args:
@@ -2547,7 +2583,7 @@ Args:
 static const char *doc_accum_grad = R"(
 Accumulate the contents of one variable into the gradient of another variable.
 
-When `source` is not of the same type as `target`, Dr.Jit will try to broadcast
+When ``source`` is not of the same type as ``target``, Dr.Jit will try to broadcast
 its contents into the right shape.
 
 Args:
@@ -2573,7 +2609,7 @@ One example use would be to inform Dr.Jit that there is a better way to compute
 the gradient of a particular expression than what the normal AD traversal of
 the primal computation graph would yield.
 
-The function promotes and broadcasts `arg0` and `arg1` if they are not of the
+The function promotes and broadcasts ``arg0`` and ``arg1`` if they are not of the
 same type.
 
 Args:
@@ -2582,8 +2618,8 @@ Args:
     arg1 (object): An arbitrary Dr.Jit array, tensor, or :ref:`Pytree <pytrees>`.
 
 Returns:
-    object: a new Dr.Jit array combining the *primal* value of `arg0` and the
-    derivative of `arg1`.
+    object: a new Dr.Jit array combining the *primal* value of ``arg0`` and the
+    derivative of ``arg1``.
 )";
 
 static const char *doc_enqueue = R"(
@@ -2619,7 +2655,7 @@ from ``a`` to ``b`` might look as follow:
 
     a = dr.llvm.ad.Float(1.0)
     dr.enable_grad(a)
-    b = f(a) # some computation involving `a`
+    b = f(a) # some computation involving 'a'
 
     # The below three operations can also be written more compactly as dr.forward_from(a)
     dr.set_gradient(a, 1.0)
@@ -2693,7 +2729,7 @@ are connected by an edge and subsequently separately differentiated.
 
 In advanced applications that require multiple AD traversals of the same graph,
 specify specify different combinations of the enumeration
-:py:class:`drjit.ADFlag` via the `flags` parameter.
+:py:class:`drjit.ADFlag` via the ``flags`` parameter.
 
 Args:
     mode (drjit.ADMode): Specifies the direction in which gradients should be
@@ -3021,7 +3057,7 @@ context manager will temporally disable all derivative tracking.
 
     assert not dr.grad_enabled(c)
 
-    with suspend_grad(a): # only suspend derivative tracking on `a`
+    with suspend_grad(a): # only suspend derivative tracking on 'a'
         d = 2.0 * a
         e = 4.0 * b
 
@@ -3286,13 +3322,11 @@ static const char *doc_VarType_Float32 = "32-bit floating point format (IEEE 754
 static const char *doc_VarType_Float64 = "64-bit floating point format (IEEE 754).";
 
 static const char *doc_ReduceOp =
-    "Denotes the type of atomic read-modify-write (RMW) operation (for "
-    "scatter-reductions) or aggregation to be performed by a horizontal "
-    "reduction.";
+    "List of different atomic read-modify-write (RMW) operations "
+    "supported by :py:func:`drjit.scatter_reduce()`.";
 
 static const char *doc_ReduceOp_None =
-    "Perform an ordinary scatter operation that ignores the current entry "
-    "(only applies to scatter-reductions).";
+    "Perform an ordinary scatter operation that ignores the current entry..";
 
 static const char *doc_ReduceOp_Add = "Addition.";
 static const char *doc_ReduceOp_Mul = "Multiplication.";
@@ -3349,7 +3383,7 @@ actual operation that are directly forwarded to the ``.eval()`` callback.
 
 .. code-block:: python
 
-   # Add two numbers `x` and `y`. Calls our ``.eval()`` callback with detached arguments
+   # Add two numbers 'x' and 'y'. Calls our '.eval()' callback with detached arguments
    result = dr.custom(Addition, x, y)
 
 Forward or backward derivatives are then automatically handled through the
@@ -3519,39 +3553,41 @@ such a custom operation.
 static const char *doc_switch = R"(
 switch(index: int | drjit.ArrayBase, callables: Sequence[Callable], *args, **kwargs) -> object
 
-Invoke one of multiple callables based on an index or index array.
+Selectively invoke callables based on a provided index array.
 
-When provided with a *scalar* index (``type(index)`` is ``int``), this function
-invokes one of the provided callables and is semantically equivalent to the
-following Python code:
-
-.. code-block:: python
-
-   def switch(index: int, callables, *args, **kwargs):
-       return callables[index](*args, **kwargs)
-
-When provided with a Dr.Jit array of indices (32-bit unsigned integers), it
-performs the vectorized equivalent of the above and assembles an array of
-return values containing the result of all referenced callables. It does so
-efficiently using at most a single invocation of each callable.
+When called with a *scalar* ``index`` (of type ``int``), this function
+evaluates the Python expression
 
 .. code-block:: python
 
-    import drjit as dr
+   callables[index](*args, **kwargs)
+
+When it is provided with a Dr.Jit index array (specifically, 32-bit unsigned
+integers), it performs the vectorized equivalent of the above and assembles an
+array of return values containing the result of all referenced functions. It
+does so efficiently using at most a single invocation of each callable.
+
+.. code-block:: python
+
     from drjit.llvm import UInt32
 
-    def f1(x):
-        return x
+    res = dr.switch(
+        index=UInt32(0, 0, 1, 1), # <-- selects the callable
+        callables=[               # <-- arbitrary list of callables
+            lambda x: x,
+            lambda x: x*10
+        ],
+        UInt32(1, 2, 3, 4)        # <-- argument passed to function
+    )
 
-    def f2(x):
-        return x*10
+    # res now contains [0, 10, 20, 30]
 
-    index = UInt32(0, 1, 1, 0)
-    res = dr.switch(index, [f1, f2], dr.arange(UInt32, 4))
+The function traverses the set of positional (``*args``) and keyword arguments
+(``**kwargs``) to find all Dr.Jit arrays including arrays contained within
+:ref:`Pytrees <pytrees>`. It routes a subset of array entries to each callable
+as specified by the ``index`` argument.
 
-    # res now contains [0, 10, 20, 3]
-
-Dr.Jit will use one of two possible strategies to realize this operation
+Dr.Jit will use one of two possible strategies to compile this operation
 depending on the active compilation flags (see :py:func:`drjit.set_flag`,
 :py:func:`drjit.scoped_set_flag`):
 
@@ -3582,9 +3618,9 @@ depending on the active compilation flags (see :py:func:`drjit.set_flag`,
    nested Dr.Jit arrays like :py:class:`drjit.llvm.Array3f`---the end result
    should just not be a Python ``int`` or ``float`` since that would require
    knowing the actual array contents. Printing array contents is also possible,
-   but it requires a special *unevaluated* operation named
-   :py:func:`drjit.print_async`. If you wish to avoid such complications,
-   consider wavefront-mode compilation discussed next.
+   but it requires a special *symbolic* operation named
+   :py:func:`drjit.print`. If you wish to avoid such complications,
+   consider the evaluated mode discussed next.
 
 2. **Evaluated mode**: When :py:attr:`drjit.JitFlag.SymbolicCalls` is *not* set,
    Dr.Jit *evaluates* the inputs  ``index``, ``args``, ``kwargs`` via
@@ -3610,11 +3646,11 @@ shown below:
    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, False):
        result = dr.switch(..)
 
-The functions :py:func:`drjit.switch` and :py:func:`drjit.dispatch` may be
-arbitrarily nested. However, a callable invoked by a symbolic-mode
-:py:func:`drjit.switch` call may not perform a evaluated-style
-:py:func:`drjit.switch` or :py:func:`drjit.dispatch` since this would require
-the evaluation of symbolic variables.
+Loops (:py:func:`drjit.while_loop`), conditionals (:py:func:`drjit.if_stmt`),
+and dynamic dispatch (:py:func:`drjit.switch`, :py:func:`drjit.dispatch`)
+may be arbitrarily nested. However, it is not legal to nest *evaluated*
+operations within *symbolic* operation, as this would require the evaluation
+of symbolic variables.
 
 When a boolean Dr.Jit array (e.g., :py:class:`drjit.llvm.Bool`,
 :py:class:`drjit.cuda.ad.Bool`, etc.) is specified as last positional argument
@@ -3628,25 +3664,341 @@ Args:
     index (int|drjit.ArrayBase): a list of indices to choose the functions
 
     callables (Sequence[Callable]): a list of callables to which calls will be
-      dispatched based on the `index` argument.
+      dispatched based on the ``index`` argument.
 
     *args (tuple): a variable-length list of positional arguments passed to the
-      callables.
+      callables. :ref:`Pytrees <pytrees>` are supported.
 
     **kwargs (dict): a variable-length list of keyword arguments passed to the
-      callables.
+      callables. :ref:`Pytrees <pytrees>` are supported.
 
 Returns:
-    object: When `index` is a scalar Python integer, the return value simply
+    object: When ``index`` is a scalar Python integer, the return value simply
     forwards the return value of the selected callable. Otherwise, the function
     returns a Dr.Jit array or :ref:`Pytree <pytrees>` containing the result of
     each performed function call.)";
 
+static const char *doc_while_loop = R"(
+Repeatedly execute a function while a loop condition holds.
+
+.. rubric:: Motivation
+
+This function provides a *vectorized* generalization of a standard Python
+``while`` loop. For example, consider the following Python snippet
+
+.. code-block:: python
+
+   i: int = 1
+   while i < 10:
+       x *= x
+       i += 1
+
+This code would fail when ``i`` is replaced by an array with multiple entries
+(e.g., of type :py:class:`drjit.llvm.Int`). In that case, the loop condition
+evaluates to a boolean array of per-component comparisons that are not
+necessarily consistent with each other. In other words, each entry of the array
+may need to run the loop for a *different* number of iterations. A standard
+Python ``while`` loop is not able to do so.
+
+The :py:func:`drjit.while_loop` function realizes such a fine-grained looping
+mechanism. It takes three main input arguments:
+
+1. ``state``, a tuple of *loop state variables* that are modified by the loop
+   iteration,
+
+2. ``cond``, a function that takes the state variables as input and uses them to
+   evaluate and return the loop condition in the form of a boolean array,
+
+3. ``body``, a function that also takes the state variables as input and runs one
+   loop iteration. It must return an updated set of state variables.
+
+The function calls ``cond`` and ``body`` to execute the loop. It then returns a
+tuple containing the final version of the ``state`` variables. With this
+functionality, a vectorized version of the above loop can be written as
+follows:
+
+.. code-block:: python
+
+   i, x = dr.while_loop(
+       state=(i, x),
+       cond=lambda i, x: i < 10,
+       body=lambda i, x: (i+1, x*x)
+   )
+
+Lambda functions are convenient when the condition and body are simple enough
+to fit onto a single line. In general you may prefer to define local functions
+(``def loop_cond(i, x): ...``) and pass them to the ``cond`` and ``body``
+arguments.
+
+Dr.Jit also provides the :py:func:`@drjit.syntax <drjit.syntax>` decorator,
+which automatically rewrites standard Python control flow constructs into the
+form shown above. It combines vectorization with the readability of natural
+Python syntax and is the recommended way of (indirectly) using
+:py:func:`drjit.while_loop`. With this decorator, the above example would be
+written as follows:
+
+.. code-block:: python
+
+   @dr.syntax
+   def f(i, x):
+       while i < 10:
+           x *= x
+           i += 1
+        return i, x
+
+.. rubric:: Evaluation modes
+
+Dr.Jit uses one of *three* different modes to realize this operation depending
+on the inputs and active compilation flags (the text below this overview will
+explain how this mode is automatically selected).
+
+1. **Scalar mode**: Scalar loops that don't actually need any vectorization can
+   be realized using a simple Python loop construct.
+
+   .. code-block:: python
+
+      while cond(state):
+          state = body(state)
+
+2. **Symbolic mode**: Here, Dr.Jit runs a single loop iteration to capture its
+   effect on the loop state variables. It embeds this captured computation into
+   the generated machine code. The loop will eventually run on the device
+   (e.g., the GPU) but unlike a Python ``while`` statement, the loop *does not*
+   run on the host CPU (besides the mentioned tentative evaluation for symbolic
+   tracing).
+
+   The main caveat with this approach is that Dr.Jit invokes the loop body with
+   *symbolic* loop state variables representing unknown information. Knowledge
+   about the contents of these variables will only become available later on
+   when the generated code runs on the device (e.g., the GPU). Some operations
+   involving such symbolic inputs are not possible and will fail:
+
+   .. code-block:: python
+
+      @dr.syntax
+      def f(i: dr.cuda.Int, x: dr.cuda.Array2f):
+          while i < 10:
+              x *= x
+              i += 1
+              print(x)                # <-- fails
+              y: dr.cuda.Float = x[0] # <-- OK
+              z: float         = y[0] # <-- fails
+
+   The common pattern of the failing operations is that they require variable
+   evaluation (i.e., :py:func:`drjit.eval`). It's perfectly valid to index into
+   nested Dr.Jit arrays like :py:class:`drjit.cuda.Array2f`, but the end result
+   should *not* be a Python ``int`` or ``float`` since that would require
+   knowing the actual array contents. Printing array contents is possible,
+   but this requires a *symbolic* print statement implemented by 
+   :py:func:`drjit.print`. If you wish to avoid such complications, consider
+   the evaluated mode discussed next.
+
+   Another pitfall involving symbolic evaluation is that Dr.Jit will not
+   capture *scalar* computation. If you update a scalar variable within a loop,
+   then Dr.Jit will only see the first round of those updates.
+
+   .. code-block:: python
+
+      @dr.syntax
+      def f():
+          i = dr.cuda.Int(0)
+          j = 0
+          while i < 10:
+              i += 1
+              j += 1
+           return j   # <-- oops, j is *not* equal to 10
+
+
+   Finally, note that when loop optimizations are enabled
+   (:py:attr:`drjit.JitFlag.OptimizeLoops`), Dr.Jit may re-trace the loop body
+   so that it runs twice in total. This happens transparently and has no
+   influence on the semantics of this operation.
+
+3. **Evaluated mode**: in this mode, Dr.Jit will repeatedly *evaluate* the loop
+   state variables and update active elements using the loop body function
+   until all of them are done. Conceptually, this is equivalent to the
+   following Python code:
+
+   .. code-block:: python
+
+      active = True
+      while True:
+         dr.eval(state)
+         active &= cond(state)
+         if not dr.any(active):
+             break
+         state = dr.select(active, body(state), state)
+
+   In practice, the implementation does a few additional things like
+   suppressing side effects associated with inactive entries.
+
+   Dr.Jit will typically compile a kernel when it runs the first loop
+   iteration. Subsequent iterations can then reuse this kernel since they
+   perform the same sequence of updates. This kernel caching tends to be
+   crucial to achieve good performance, and it is good to be aware of pitfalls
+   that can effectively disable it.
+
+   For example, when you update a scalar (e.g. a Python ``int``) in each loop
+   iteration, this changing counter might be merged into the generated program,
+   forcing the system to re-generate and re-compile code at every iteration,
+   and this can ultimately dominate the execution time. If in doubt, increase
+   the log level of Dr.Jit (:py:func:`drjit.set_log_level` to
+   :py:attr:`drjit.LogLevel.Info`) and check if the kernels being
+   launched contain the term ``cache miss``. You can also inspect the *Kernels
+   launched* line in the output of :py:func:`drjit.whos`. If you observe soft
+   or hard misses at every loop iteration, then kernel caching isn't working
+   and you should carefully inspect your code to ensure that the computation
+   stays consistent across iterations.
+
+   In general, *evaluated* mode can be significantly slower than *symbolic*
+   mode, as loop state variables are constantly read and written from/to device
+   memory. Processing large arrays in this way can also be inefficient when
+   only a few elements remain active. On the other hand, evaluated-mode
+   execution simple to understand and debug. It is possible to single-step
+   through programs, examine array contents, etc.
+
+The :py:func:`drjit.while_loop()` function chooses the evaluation mode as follows:
+
+1. When the ``method`` argument is set to ``"auto"`` (the *default*), the
+   function examines the loop condition to see if it returns a scalar Python
+   ``bool``. In this case, it uses scalar evaluation.
+
+   Otherwise, it chooses between symbolic and evaluated mode based on the
+   :py:attr:`drjit.JitFlag.SymbolicLoops` flag. This flag is set by default, so
+   a *symbolic* loop will generally be used. To change this automatic choice
+   for a region of code, you may nest it into a
+   :py:func:`drjit.scoped_set_flag` block or change the behavior globally via
+   :py:func:`drjit.set_flag`:
+
+   .. code-block:: python
+
+      with dr.scoped_set_flag(dr.JitFlag.SymbolicLoops, False):
+          # .. nested code will use evaluted loops ..
+
+2. When ``method`` is set to ``"scalar"`` ``"symbolic"``, or ``"evaluated"``,
+   it directly uses that method without inspecting the compilation flags or
+   loop condition type.
+
+When using the :py:func:`@drjit.syntax <drjit.syntax>` decorator to
+automatically convert Python ``while`` loops into :py:func:`drjit.while_loop`
+calls, you can also use the :py:func:`drjit.hint` function to pass keyword
+arguments including ``method``, ``label``, or ``max_iterations`` to the
+generated looping construct:
+
+.. code-block:: python
+
+  while dr.hint(i < 10, name='My loop', mode='evaluated'):
+     # ...
+
+Loops (:py:func:`drjit.while_loop`), conditionals (:py:func:`drjit.if_stmt`),
+and dynamic dispatch (:py:func:`drjit.switch`, :py:func:`drjit.dispatch`)
+may be arbitrarily nested. However, it is not legal to nest *evaluated*
+operations within *symbolic* operation, as this would require the evaluation
+of symbolic variables.
+
+.. rubric:: Assumptions
+
+The loop condition function must be *pure* (i.e., it should never modify the
+loop state variables or any other kind of proram state). The loop body
+should *not* write to variables besides the officially declared loop state
+variables:
+
+.. code-block:: python
+
+   y = ..
+   def loop_body(x):
+       y[0] += x     # <-- don't do this. 'y' is not a loop state variable
+
+   dr.while_loop(body=loop_body, ...)
+
+There is one small exception: the loop body *may* perform side effects via functions
+like :py:func:`scatter`, :py:func:`scatter_reduce`, :py:func:`scatter_inc`,
+:py:func:`scatter_add`, etc., and the targets of such operations don't *have*
+to be specified as loop state (however, doing so causes no harm.)
+
+.. code-block:: python
+
+   y = ..
+   def loop_body(x):
+       dr.scatter(target=y, value=x, index=0) # <-- this is okay
+
+The reason for this exception is that the set of possible targets of such side
+effects can be difficult to infer in large programs, especially when combined
+with array-based method calls (for example, :py:func:`drjit.dispatch` may
+scatter to numerous local instance variables).
+
+Another important assumption is that the loop state remains *consistent* across
+iterations, which means:
+
+1. The type of state variables is not allowed to change. You may not declare a
+   Python ``float`` before a loop and then overwrite it with a
+   :py:class:`drjit.cuda.Float` (or vice versa).
+
+2. Their structure/size must be consistent. The loop body may not turn
+   a variable with 3 entries into one that has 5.
+
+3. Analogously, loop state variables must always be initialized prior to the
+   loop. This is the case *even if you know that the loop body is guaranteed to
+   overwrite the variable with a well-defined result*. An initial value
+   of ``None`` would violate condition 1 (type invariance), while an empty
+   array would violate condition 2 (shape compatibility).
+
+The implementation will check for violations and, if applicable, raise an
+exception identifying problematic loop state variables.
+
+.. rubric:: Interface
+
+Args:
+    state (tuple): A tuple containing the initial values of the loop state
+      variables. This tuple normally consists of Dr.Jit arrays or :ref:`Pytrees
+      <pytrees>`. Other values are permissible as well and will be forwarded to
+      the loop body. However, such variables will not be captured by the
+      symbolic tracing process.
+
+    cond (Callable): a callable that will be invoked with ``*args`` (i.e., the
+      the state variables will be *unpacked* and turned into function arguments).
+      It should return a scalar Python ``bool`` or a boolean-typed Dr.Jit array
+      representing the loop condition.
+
+    body (Callable): a callable that will be invoked with ``*args`` (i.e., the
+      the state variables will be *unpacked* and turned into function arguments).
+      It should update the loop state and then return a new tuple of loop
+      state variables that are *compatible* with the previous state (see the
+      earlier description regarding what such compatibility entails).
+
+    method (str): Specify this parameter to override the evaluation method.
+      Possible values are: ``"scalar"``, ``"symbolic"``, ``"evaluated"``, or
+      ``"auto"``. The default value of ``"auto"`` causes the function will to
+      first check if the loop is potentially scalar, in which case it uses a
+      trivial fallback implementation. Otherwise, it queries the state of the
+      Jit flag :py:attr:`drjit.JitFlag.SymbolicLoops` and then either performs
+      a symbolic or an evaluated loop.
+
+    state_labels (list[str]): An optional list of labels associated with each
+      ``state`` entry. Dr.Jit uses this to provide better error messages in
+      case of a detected inconsistency. The :py:func:`@drjit.syntax <drjit.syntax>`
+      decorator automatically provides these labels baed on the transformed
+      code.
+
+    name (str): An optional descriptive name. Dr.Jit will include this label in
+      generated low-level IR, which can be helpful when debugging the
+      compilation of large programs. The default is ``"unnamed"``.
+
+    max_iterations (int): The maximum number of loop iterations (default: ``-1``).
+      You must specify a correct upper bound here if you wish to differentiate
+      the loop in reverse mode. In that case, the maximum iteration count is used
+      to reserve memory to store intermediate loop state.
+
+Returns:
+    tuple: The function returns the final state of the loop variables following
+    termination of the loop.)";
+
+
 static const char *doc_dispatch = R"(
 Invoke a custom Python callable for each instance in an instance array.
 
-This function invokes the provided `callable` for each instance
-in the instance array `instances` and assembles the return values into
+This function invokes the provided ``callable`` for each instance
+in the instance array ``instances`` and assembles the return values into
 a result array. Conceptually, it does the following:
 
 .. code-block:: python
@@ -3701,10 +4053,10 @@ Args:
     func (Callable): function to dispatch on all instances.
 
     *args (tuple): a variable-length list of positional arguments passed to the
-      callable.
+      callable. :ref:`Pytrees <pytrees>` are supported.
 
     **kwargs (dict): a variable-length list of keyword arguments passed to the
-      callable.
+      callable. :ref:`Pytrees <pytrees>` are supported.
 
 Returns:
     object: A Dr.Jit array or :ref:`Pytree <pytrees>` containing the
@@ -3869,7 +4221,7 @@ Local value numbering is *enabled* by default.)";
 // For Sphinx-related technical reasons, this comment is replicated in
 // reference.rst. Please keep them in sync when making changes
 static const char *doc_JitFlag_SymbolicCalls = R"(
-Dr.Jit provides two main ways of compiling function calls targeting *instance arrays*. 
+Dr.Jit provides two main ways of compiling function calls targeting *instance arrays*.
 
 1. **Symbolic mode** (the default): Dr.Jit captures callables by invoking them
    with *symbolic* (abstract) arguments. By doing so, it can capture a
@@ -4163,13 +4515,18 @@ static const char *doc_VarState_Invalid =
 
 // For Sphinx-related technical reasons, this comment is replicated in
 // reference.rst. Please keep them in sync when making changes
-static const char *doc_VarState_Normal =
-    "An ordinary unevaluated variable that is neither a literal constant nor symbolic.";
+static const char *doc_VarState_Undefined =
+    "An undefined memory region. Does not (yet) consume device memory.";
 
 // For Sphinx-related technical reasons, this comment is replicated in
 // reference.rst. Please keep them in sync when making changes
 static const char *doc_VarState_Literal =
     "A literal constant. Does not consume device memory.";
+
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
+static const char *doc_VarState_Unevaluated =
+    "An ordinary unevaluated variable that is neither a literal constant nor symbolic.";
 
 // For Sphinx-related technical reasons, this comment is replicated in
 // reference.rst. Please keep them in sync when making changes
@@ -4221,9 +4578,9 @@ The :py:class:`PCG32` class is implemented as a :ref:`Pytree <pytrees>`, which
 means that it is compatible with symbolic function calls, loops, etc.)";
 
 static const char *doc_PCG32_PCG32 = R"(
-Initialize a random number generator that generates `size` variates in parallel.
+Initialize a random number generator that generates ``size`` variates in parallel.
 
-The `initstate` and `initseq` inputs determine the initial state and increment
+The ``initstate`` and ``initseq`` inputs determine the initial state and increment
 of the linear congruential generator. Their values are the defaults from the
 original implementation. All parameters are directly forwarded to the
 :py:func:`seed` function.
@@ -4231,17 +4588,17 @@ original implementation. All parameters are directly forwarded to the
 A second overload copy-constructs a new PCG32 instance from an existing instance.)";
 
 static const char *doc_PCG32_seed = R"(
-Seed the random number generator so that it generates `size` variates in
+Seed the random number generator so that it generates ``size`` variates in
 parallel.
 
-The `initstate` and `initseq` inputs determine the initial state and increment
+The ``initstate`` and ``initseq`` inputs determine the initial state and increment
 of the linear congruential generator. Their values are the defaults from the
 original implementation.
 
 The implementation of this routine follows the official PCG32 implementation
 except for one aspect: when multiple random numbers are being generated in
 parallel, an offset equal to :py:func:`drjit.arange(UInt64, size) <drjit.arange>` is added
-to both `initstate` and `initseq` to de-correlate the generated sequences.)";
+to both ``initstate`` and ``initseq`` to de-correlate the generated sequences.)";
 
 static const char *doc_PCG32_next_uint32 = R"(
 Generate a uniformly distributed unsigned 32-bit random number
@@ -4290,7 +4647,7 @@ static const char *doc_PCG32_add = R"(
 Advance the pseudorandom number generator.
 
 This function implements a multi-step advance function that is equivalent to
-(but more efficient than) calling the random number generator `arg` times
+(but more efficient than) calling the random number generator ``arg`` times
 in sequence.
 
 This is useful to advance a newly constructed PRNG to a certain known state.)";

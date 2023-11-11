@@ -558,6 +558,12 @@ struct DRJIT_TRIVIAL_ABI JitArray
     JitArray copy() const { return steal(jit_var_copy(m_index)); }
 
     bool schedule_() const { return jit_var_schedule(m_index) != 0; }
+    bool schedule_force_() {
+        int rv = 0;
+        *this = steal(jit_var_schedule_force(m_index, &rv));
+        return rv;
+    }
+
     bool eval_() const { return jit_var_eval(m_index) != 0; }
 
     bool valid() const { return m_index != 0; }
@@ -572,8 +578,17 @@ struct DRJIT_TRIVIAL_ABI JitArray
         a.m_index = index;
     }
 
-    const Value *data() const { return (const Value *) jit_var_ptr(m_index); }
-    Value *data() { return (Value *) jit_var_ptr(m_index); }
+    const Value *data() const {
+        void *p = nullptr;
+        const_cast<JitArray&>(*this) = steal(jit_var_data(m_index, &p));
+        return (const Value *) p;
+    }
+
+    Value *data() {
+        void *p = nullptr;
+        *this = steal(jit_var_data(m_index, &p));
+        return (Value *) p;
+    }
 
     const char *str() { return jit_var_str(m_index); }
 

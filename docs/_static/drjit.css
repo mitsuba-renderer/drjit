@@ -1,0 +1,5 @@
+dd p.rubric {
+    text-transform: none; !important;
+    font-size: 1.5em; !important;
+    font-weight: bold; !important;
+}

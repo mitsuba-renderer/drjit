@@ -1824,6 +1824,36 @@ Index ad_var_new(JitIndex i0) {
 }
 
 // ==========================================================================
+// Convenience wrappers of jit_var_* functions()
+// ==========================================================================
+
+Index ad_var_schedule_force(Index index, int *rv) {
+    JitIndex jit_index = ::jit_index(index);
+    ADIndex ad_index = ::ad_index(index);
+
+    jit_index = jit_var_schedule_force(jit_index, rv);
+    if (ad_index) {
+        std::lock_guard<std::mutex> guard(state.mutex);
+        ad_var_inc_ref_int(ad_index, state[ad_index]);
+    }
+
+    return combine(ad_index, jit_index);
+}
+
+Index ad_var_data(Index index, void **ptr) {
+    JitIndex jit_index = ::jit_index(index);
+    ADIndex ad_index = ::ad_index(index);
+
+    jit_index = jit_var_data(jit_index, ptr);
+    if (ad_index) {
+        std::lock_guard<std::mutex> guard(state.mutex);
+        ad_var_inc_ref_int(ad_index, state[ad_index]);
+    }
+
+    return combine(ad_index, jit_index);
+}
+
+// ==========================================================================
 // Implementation of arithmetic operations and transcendental functions
 // ==========================================================================
 
@@ -1836,6 +1866,8 @@ Index ad_var_copy(Index i0) {
         return ad_var_new("copy", std::move(result), Arg(i0, 1.0));
 }
 
+// ==========================================================================
+
 Index ad_var_add(Index i0, Index i1) {
     JitVar result = JitVar::steal(jit_var_add(jit_index(i0), jit_index(i1)));
 
@@ -1845,6 +1877,8 @@ Index ad_var_add(Index i0, Index i1) {
         return ad_var_new("add", std::move(result), Arg(i0, 1.0), Arg(i1, 1.0));
 }
 
+// ==========================================================================
+
 Index ad_var_sub(Index i0, Index i1) {
     JitVar result = JitVar::steal(jit_var_sub(jit_index(i0), jit_index(i1)));
 
@@ -1853,6 +1887,8 @@ Index ad_var_sub(Index i0, Index i1) {
     else
         return ad_var_new("sub", std::move(result), Arg(i0, 1.0), Arg(i1, -1.0));
 }
+
+// ==========================================================================
 
 Index ad_var_mul(Index i0, Index i1) {
     JitVar result = JitVar::steal(jit_var_mul(jit_index(i0), jit_index(i1)));
@@ -1864,6 +1900,8 @@ Index ad_var_mul(Index i0, Index i1) {
                           Arg(i0, JitVar::borrow(jit_index(i1))),
                           Arg(i1, JitVar::borrow(jit_index(i0))));
 }
+
+// ==========================================================================
 
 Index ad_var_div(Index i0, Index i1) {
     JitVar result = JitVar::steal(jit_var_div(jit_index(i0), jit_index(i1)));
@@ -1882,6 +1920,8 @@ Index ad_var_div(Index i0, Index i1) {
     }
 }
 
+// ==========================================================================
+
 Index ad_var_neg(Index i0) {
     JitVar result = JitVar::steal(jit_var_neg(jit_index(i0)));
 
@@ -1890,6 +1930,8 @@ Index ad_var_neg(Index i0) {
     else
         return ad_var_new("neg", std::move(result), Arg(i0, -1.0));
 }
+
+// ==========================================================================
 
 Index ad_var_abs(Index i0) {
     JitVar result = JitVar::steal(jit_var_abs(jit_index(i0)));
@@ -1917,6 +1959,8 @@ Index ad_var_sqrt(Index i0) {
                           Arg(i0, dr::rcp(result) * scalar(i0, .5f)));
 }
 
+// ==========================================================================
+
 Index ad_var_rcp(Index i0) {
     JitVar result = JitVar::steal(jit_var_rcp(jit_index(i0)));
 
@@ -1929,6 +1973,8 @@ Index ad_var_rcp(Index i0) {
     }
 }
 
+// ==========================================================================
+
 Index ad_var_rsqrt(Index i0) {
     JitVar result = JitVar::steal(jit_var_rsqrt(jit_index(i0)));
 
@@ -1940,6 +1986,8 @@ Index ad_var_rsqrt(Index i0) {
     }
 }
 
+// ==========================================================================
+
 Index ad_var_cbrt(Index i0) {
     JitVar result = JitVar::steal(jit_var_cbrt(jit_index(i0)));
 
@@ -1950,6 +1998,8 @@ Index ad_var_cbrt(Index i0) {
         return ad_var_new("cbrt", std::move(result), Arg(i0, std::move(w0)));
     }
 }
+
+// ==========================================================================
 
 Index ad_var_erf(Index i0) {
     JitVar result = JitVar::steal(jit_var_erf(jit_index(i0)));
@@ -1964,6 +2014,8 @@ Index ad_var_erf(Index i0) {
     }
 }
 
+// ==========================================================================
+
 Index ad_var_sin(Index i0) {
     if (is_detached(i0)) {
         return jit_var_sin(jit_index(i0));
@@ -1973,6 +2025,8 @@ Index ad_var_sin(Index i0) {
         return ad_var_new("sin", std::move(s), Arg(i0, std::move(c)));
     }
 }
+
+// ==========================================================================
 
 Index ad_var_cos(Index i0) {
     if (is_detached(i0)) {
@@ -1984,6 +2038,8 @@ Index ad_var_cos(Index i0) {
         return ad_var_new("cos", std::move(c), Arg(i0, -s));
     }
 }
+
+// ==========================================================================
 
 UInt64Pair ad_var_sincos(Index i0) {
     if (is_detached(i0)) {
@@ -2001,6 +2057,8 @@ UInt64Pair ad_var_sincos(Index i0) {
     }
 }
 
+// ==========================================================================
+
 Index ad_var_tan(Index i0) {
     JitVar result = JitVar::steal(jit_var_tan(jit_index(i0)));
 
@@ -2012,6 +2070,8 @@ Index ad_var_tan(Index i0) {
                           Arg(i0, dr::sqr(dr::rcp(dr::cos(v0)))));
     }
 }
+
+// ==========================================================================
 
 Index ad_var_asin(Index i0) {
     JitVar result = JitVar::steal(jit_var_asin(jit_index(i0)));
@@ -2025,6 +2085,8 @@ Index ad_var_asin(Index i0) {
     }
 }
 
+// ==========================================================================
+
 Index ad_var_acos(Index i0) {
     JitVar result = JitVar::steal(jit_var_acos(jit_index(i0)));
 
@@ -2037,6 +2099,8 @@ Index ad_var_acos(Index i0) {
     }
 }
 
+// ==========================================================================
+
 Index ad_var_atan(Index i0) {
     JitVar result = JitVar::steal(jit_var_atan(jit_index(i0)));
 
@@ -2048,6 +2112,8 @@ Index ad_var_atan(Index i0) {
         return ad_var_new("atan", std::move(result), Arg(i0, std::move(w0)));
     }
 }
+
+// ==========================================================================
 
 Index ad_var_atan2(Index i0, Index i1) {
     JitVar result = JitVar::steal(jit_var_atan2(jit_index(i0), jit_index(i1)));
@@ -2065,6 +2131,8 @@ Index ad_var_atan2(Index i0, Index i1) {
     }
 }
 
+// ==========================================================================
+
 Index ad_var_exp(Index i0) {
     JitVar result = JitVar::steal(jit_var_exp(jit_index(i0)));
 
@@ -2075,6 +2143,8 @@ Index ad_var_exp(Index i0) {
         return ad_var_new("exp", std::move(result), Arg(i0, std::move(w0)));
     }
 }
+
+// ==========================================================================
 
 Index ad_var_exp2(Index i0) {
     JitVar result = JitVar::steal(jit_var_exp2(jit_index(i0)));
@@ -2087,6 +2157,8 @@ Index ad_var_exp2(Index i0) {
     }
 }
 
+// ==========================================================================
+
 Index ad_var_log(Index i0) {
     JitVar result = JitVar::steal(jit_var_log(jit_index(i0)));
 
@@ -2097,6 +2169,8 @@ Index ad_var_log(Index i0) {
         return ad_var_new("log", std::move(result), Arg(i0, std::move(w0)));
     }
 }
+
+// ==========================================================================
 
 Index ad_var_log2(Index i0) {
     JitVar result = JitVar::steal(jit_var_log2(jit_index(i0)));
@@ -2109,6 +2183,8 @@ Index ad_var_log2(Index i0) {
     }
 }
 
+// ==========================================================================
+
 Index ad_var_sinh(Index i0) {
     if (is_detached(i0)) {
         return jit_var_sinh(jit_index(i0));
@@ -2119,6 +2195,8 @@ Index ad_var_sinh(Index i0) {
     }
 }
 
+// ==========================================================================
+
 Index ad_var_cosh(Index i0) {
     if (is_detached(i0)) {
         return jit_var_cosh(jit_index(i0));
@@ -2128,6 +2206,8 @@ Index ad_var_cosh(Index i0) {
         return ad_var_new("cosh", std::move(c), Arg(i0, std::move(s)));
     }
 }
+
+// ==========================================================================
 
 UInt64Pair ad_var_sincosh(Index i0) {
     if (is_detached(i0)) {
@@ -2145,6 +2225,8 @@ UInt64Pair ad_var_sincosh(Index i0) {
     }
 }
 
+// ==========================================================================
+
 Index ad_var_tanh(Index i0) {
     JitVar result = JitVar::steal(jit_var_tanh(jit_index(i0)));
 
@@ -2155,6 +2237,8 @@ Index ad_var_tanh(Index i0) {
         return ad_var_new("tanh", std::move(result), Arg(i0, dr::sqr(dr::rcp(dr::cosh(v0)))));
     }
 }
+
+// ==========================================================================
 
 Index ad_var_asinh(Index i0) {
     JitVar result = JitVar::steal(jit_var_asinh(jit_index(i0)));
@@ -2168,6 +2252,8 @@ Index ad_var_asinh(Index i0) {
     }
 }
 
+// ==========================================================================
+
 Index ad_var_acosh(Index i0) {
     JitVar result = JitVar::steal(jit_var_acosh(jit_index(i0)));
 
@@ -2180,6 +2266,8 @@ Index ad_var_acosh(Index i0) {
     }
 }
 
+// ==========================================================================
+
 Index ad_var_atanh(Index i0) {
     JitVar result = JitVar::steal(jit_var_atanh(jit_index(i0)));
 
@@ -2191,6 +2279,8 @@ Index ad_var_atanh(Index i0) {
         return ad_var_new("atanh", std::move(result), Arg(i0, std::move(w0)));
     }
 }
+
+// ==========================================================================
 
 Index ad_var_min(Index i0, Index i1) {
     JitVar result = JitVar::steal(jit_var_min(jit_index(i0), jit_index(i1)));
@@ -2211,6 +2301,8 @@ Index ad_var_min(Index i0, Index i1) {
     }
 }
 
+// ==========================================================================
+
 Index ad_var_max(Index i0, Index i1) {
     JitVar result = JitVar::steal(jit_var_max(jit_index(i0), jit_index(i1)));
 
@@ -2229,6 +2321,8 @@ Index ad_var_max(Index i0, Index i1) {
                           Arg(i1, dr::select(mask, zero, one)));
     }
 }
+
+// ==========================================================================
 
 Index ad_var_select(Index i0, Index i1, Index i2) {
     JitVar result = JitVar::steal(
@@ -2251,6 +2345,8 @@ Index ad_var_select(Index i0, Index i1, Index i2) {
     }
 }
 
+// ==========================================================================
+
 Index ad_var_fma(Index i0, Index i1, Index i2) {
     JitVar result = JitVar::steal(
         jit_var_fma(jit_index(i0), jit_index(i1), jit_index(i2)));
@@ -2263,6 +2359,8 @@ Index ad_var_fma(Index i0, Index i1, Index i2) {
                           Arg(i1, JitVar::borrow(jit_index(i0))),
                           Arg(i2, 1.0));
 }
+
+// ==========================================================================
 
 Index ad_var_reduce(JitBackend backend, VarType vt, ReduceOp op, Index i0) {
     JitVar result = JitVar::steal(jit_var_reduce(backend, vt, op, jit_index(i0)));
@@ -2307,6 +2405,8 @@ Index ad_var_reduce(JitBackend backend, VarType vt, ReduceOp op, Index i0) {
     }
 }
 
+// ==========================================================================
+
 Index ad_var_cast(Index i0, VarType vt) {
     JitVar result = JitVar::steal(jit_var_cast(jit_index(i0), vt, 0));
 
@@ -2317,6 +2417,8 @@ Index ad_var_cast(Index i0, VarType vt) {
                           SpecialArg(i0, new CastEdge(jit_var_type(i0), vt)));
     }
 }
+
+// ==========================================================================
 
 uint64_t ad_var_gather(uint64_t source, uint64_t offset, uint64_t mask, bool permute) {
     JitVar result = JitVar::steal(jit_var_gather(source, offset, mask));
@@ -2331,6 +2433,8 @@ uint64_t ad_var_gather(uint64_t source, uint64_t offset, uint64_t mask, bool per
                                   JitMask::borrow(mask), permute)));
     }
 }
+
+// ==========================================================================
 
 /// Perform a differentiable scatter operation. See jit_var_scatter for signature.
 Index ad_var_scatter(Index target, Index value, JitIndex offset,
@@ -2379,6 +2483,8 @@ Index ad_var_scatter(Index target, Index value, JitIndex offset,
             SpecialArg(target, new MaskEdge(overwritten, true)));
     }
 }
+
+// ==========================================================================
 
 Index ad_var_prefix_sum(Index index, int exclusive) {
     JitVar result =

@@ -183,8 +183,19 @@ extern DRJIT_EXTRA_EXPORT void ad_scope_enter(drjit::ADScope type, size_t size,
 /// Indicate that the program left a scope which modifies the AD layer's behavior
 extern DRJIT_EXTRA_EXPORT void ad_scope_leave(bool process_postponed);
 
-namespace drjit { namespace detail { class CustomOpBase; }};
+/// Forcefully schedule a variable for evaluation. Returns a new reference
+/// with a (potentially) different index. The 'rv' output parameter specifies
+/// whether the operation did anything. If so, you should eventually call
+/// ``jit_eval()``.
+extern DRJIT_EXTRA_EXPORT uint64_t ad_var_schedule_force(uint64_t index, int *rv);
 
+/// Ensure that ``index`` is fully evaluated, and return a pointer to its
+/// device memory via ``ptr_out``. This process may require the creation of a
+/// new variable, hence the function always returns a new reference (whose
+/// index may, however be identical to the input ``index``).
+extern DRJIT_EXTRA_EXPORT uint64_t ad_var_data(uint64_t index, void **ptr_out);
+
+namespace drjit { namespace detail { class CustomOpBase; }};
 /// Weave a custom operation into the AD graph
 extern DRJIT_EXTRA_EXPORT bool ad_custom_op(drjit::detail::CustomOpBase *);
 extern DRJIT_EXTRA_EXPORT bool ad_release_one_output(drjit::detail::CustomOpBase *);
@@ -263,6 +274,17 @@ ad_call(JitBackend backend, const char *domain, size_t callable_count,
          const drjit::dr_vector<uint64_t> &args, drjit::dr_vector<uint64_t> &rv,
          void *payload, ad_call_func callback, ad_call_cleanup cleanup,
          bool ad);
+
+typedef void (*ad_loop_read)(void *payload, drjit::dr_vector<uint64_t> &);
+typedef void (*ad_loop_write)(void *payload, const drjit::dr_vector<uint64_t> &);
+typedef uint32_t (*ad_loop_cond)(void *payload);
+typedef void (*ad_loop_body)(void *payload);
+
+extern DRJIT_EXTRA_EXPORT void ad_loop(JitBackend backend, int symbolic,
+                                       const char *name, void *payload,
+                                       ad_loop_read read_cb, ad_loop_write write_cb,
+                                       ad_loop_cond cond_cb, ad_loop_body body_cb);
+
 
 #if defined(__cplusplus)
 }

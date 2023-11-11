@@ -637,6 +637,12 @@ struct DRJIT_TRIVIAL_ABI DiffArray
 
     bool schedule_() const { return jit_var_schedule((uint32_t) m_index); }
 
+    bool schedule_force_() {
+        int rv = 0;
+        *this = steal(ad_var_schedule_force(m_index, &rv));
+        return rv;
+    }
+
     template <typename T, enable_if_t<!std::is_void_v<T> && std::is_same_v<T, Value>> = 0>
     void set_entry(size_t offset, T value) {
         if (grad_enabled_())
@@ -653,8 +659,17 @@ struct DRJIT_TRIVIAL_ABI DiffArray
         m_index = index;
     }
 
-    const Value *data() const { return (const Value *) jit_var_ptr((uint32_t) m_index); }
-    Value *data() { return (Value *) jit_var_ptr((uint32_t) m_index); }
+    const Value *data() const {
+        void *p = nullptr;
+        const_cast<DiffArray&>(*this) = steal(ad_var_data(m_index, &p));
+        return (const Value *) p;
+    }
+
+    Value *data() {
+        void *p = nullptr;
+        *this = steal(ad_var_data(m_index, &p));
+        return (Value *) p;
+    }
 
     bool valid() const { return m_index != 0; }
 

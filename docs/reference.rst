@@ -38,16 +38,14 @@ These operations are *horizontal* in the sense that [..]
 
 .. autoclass:: ReduceOp
 
-   Denotes the type of atomic read-modify-write (RMW) operation (for use with
-   :py:func:`drjit.scatter_reduce`) or aggregation to be performed by a
-   horizontal reduction.
+   List of different atomic read-modify-write (RMW) operations supported by
+   :py:func:`drjit.scatter_reduce()`.
 
    .. autoattribute:: None
       :annotation:
 
-      Perform an ordinary scatter operation that ignores the current entry
-      (only applies to scatter-reductions).
-
+      Perform an ordinary scatter operation that ignores the current entry.
+.
    .. autoattribute:: Add
       :annotation:
 
@@ -111,6 +109,7 @@ Miscellaneous operations
 .. autofunction:: shape
 .. autofunction:: slice_index
 .. autofunction:: meshgrid
+.. autofunction:: make_opaque
 
 Just-in-time compilation
 ------------------------
@@ -220,15 +219,20 @@ Just-in-time compilation
 
       The variable has length 0 and effetively does not exist.
 
-   .. autoattribute:: Normal
+   .. autoattribute:: Undefined
       :annotation:
 
-      An ordinary unevaluated variable that is neither a literal constant nor symbolic.
+      An undefined memory region. Does not (yet) consume device memory.
 
    .. autoattribute:: Literal
       :annotation:
 
       A literal constant. Does not consume device memory.
+
+   .. autoattribute:: Unevaluated
+      :annotation:
+
+      An ordinary unevaluated variable that is neither a literal constant nor symbolic.
 
    .. autoattribute:: Evaluated
       :annotation:
@@ -950,76 +954,76 @@ clamp the input to a safe range to avoid these extremes.
 Constants
 ---------
 
-.. autodata:: e
+.. data:: e
 
    The exponential constant :math:`e` represented as a Python ``float``.
 
-.. autodata:: log_two
+.. data:: log_two
 
    The value :math:`\log(2)` represented as a Python ``float``.
 
-.. autodata:: inv_log_two
+.. data:: inv_log_two
 
    The value :math:`\frac{1}{\log(2)}` represented as a Python ``float``.
 
-.. autodata:: pi
+.. data:: pi
 
    The value :math:`\pi` represented as a Python ``float``.
 
-.. autodata:: inv_pi
+.. data:: inv_pi
 
    The value :math:`\frac{1}{\pi}` represented as a Python ``float``.
 
-.. autodata:: sqrt_pi
+.. data:: sqrt_pi
 
    The value :math:`\sqrt{\pi}` represented as a Python ``float``.
 
-.. autodata:: inv_sqrt_pi
+.. data:: inv_sqrt_pi
 
    The value :math:`\frac{1}{\sqrt{\pi}}` represented as a Python ``float``.
 
-.. autodata:: two_pi
+.. data:: two_pi
 
    The value :math:`2\pi` represented as a Python ``float``.
 
-.. autodata:: inv_two_pi
+.. data:: inv_two_pi
 
    The value :math:`\frac{1}{2\pi}` represented as a Python ``float``.
 
-.. autodata:: sqrt_two_pi
+.. data:: sqrt_two_pi
 
    The value :math:`\sqrt{2\pi}` represented as a Python ``float``.
 
-.. autodata:: inv_sqrt_two_pi
+.. data:: inv_sqrt_two_pi
    :annotation:
 
    The value :math:`\frac{1}{\sqrt{2\pi}}` represented as a Python ``float``.
 
-.. autodata:: four_pi
+.. data:: four_pi
 
    The value :math:`4\pi` represented as a Python ``float``.
 
-.. autodata:: inv_four_pi
+.. data:: inv_four_pi
 
    The value :math:`\frac{1}{4\pi}` represented as a Python ``float``.
 
-.. autodata:: sqrt_four_pi
+.. data:: sqrt_four_pi
 
    The value :math:`\sqrt{4\pi}` represented as a Python ``float``.
 
-.. autodata:: sqrt_two
+.. data:: sqrt_two
 
    The value :math:`\sqrt{2\pi}` represented as a Python ``float``.
 
-.. autodata:: inv_sqrt_two
+.. data:: inv_sqrt_two
 
    The value :math:`\frac{1}{\sqrt{2\pi}}` represented as a Python ``float``.
 
-.. autodata:: inf
+.. data:: inf
 
    The value ``float('inf')`` represented as a Python ``float``.
 
-.. autodata:: nan
+.. data:: nan
 
    The value ``float('nan')`` represented as a Python ``float``.
 

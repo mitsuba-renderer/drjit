@@ -6,6 +6,7 @@ add_library(
   math.cpp
   autodiff.cpp
   call.cpp
+  loop.cpp
 )
 
 nanobind_disable_stack_protector(drjit-extra)

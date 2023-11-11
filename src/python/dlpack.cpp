@@ -31,6 +31,8 @@ nb::dlpack::dtype dlpack_dtype(VarType vt) {
     }
 }
 
+using JitVar = drjit::JitArray<JitBackend::None, void>;
+
 static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu) {
     const ArraySupplement &s = supp(h.type());
     bool is_dynamic = false;
@@ -58,18 +60,18 @@ static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu) {
             uint32_t index = s2.index(inst_ptr(flat));
             JitBackend backend = (JitBackend) s2.backend;
 
-            if (force_cpu && backend == JitBackend::CUDA) {
-                index = jit_var_migrate(index, AllocType::Host);
+            JitVar value = JitVar::borrow(index);
+            if (force_cpu && backend == JitBackend::CUDA)
+                value = JitVar::steal(jit_var_migrate(value.index(), AllocType::Host));
 
+            value = JitVar::steal(jit_var_data(value.index(), &ptr));
+
+            if (value.index() != index) {
                 nb::object tmp = nb::inst_alloc(flat.type());
-                s2.init_index(index, inst_ptr(tmp));
-                jit_var_dec_ref(index);
+                s2.init_index(value.index(), inst_ptr(tmp));
                 nb::inst_mark_ready(tmp);
                 flat = std::move(tmp);
             }
-
-            jit_var_eval(index);
-            ptr = jit_var_ptr(index);
 
             if (backend == JitBackend::CUDA && !force_cpu) {
                 device_type = nb::device::cuda::value;

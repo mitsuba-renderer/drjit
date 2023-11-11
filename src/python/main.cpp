@@ -115,8 +115,9 @@ NB_MODULE(drjit_ext, m_) {
 
     nb::enum_<VarState>(m, "VarState", doc_VarState)
         .value("Invalid", VarState::Invalid, doc_VarState_Invalid)
-        .value("Normal", VarState::Normal, doc_VarState_Normal)
         .value("Literal", VarState::Literal, doc_VarState_Literal)
+        .value("Undefined", VarState::Undefined, doc_VarState_Undefined)
+        .value("Unevaluated", VarState::Unevaluated, doc_VarState_Unevaluated)
         .value("Evaluated", VarState::Evaluated, doc_VarState_Evaluated)
         .value("Symbolic", VarState::Symbolic, doc_VarState_Symbolic)
         .value("Mixed", VarState::Mixed, doc_VarState_Mixed);
