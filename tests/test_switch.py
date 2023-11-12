@@ -83,7 +83,7 @@ def test04_failure_incompatible_dict(t, recorded):
     with pytest.raises(RuntimeError) as e:
         dr.switch(
             index=t(0, 0, 1, 1),
-            callables=(
+            funcs=(
                 lambda a: dict(a=a),
                 lambda a: dict(b=a)
             ),
@@ -100,7 +100,7 @@ def test05_failure_incompatible_shape(t, recorded):
     with pytest.raises(RuntimeError) as e:
         dr.switch(
             index=t(0, 0, 1, 1),
-            callables=(
+            funcs=(
                 lambda a: m.ArrayXu(a, a),
                 lambda a: m.ArrayXu(a, a, a)
             ),
@@ -110,7 +110,7 @@ def test05_failure_incompatible_shape(t, recorded):
 
     r = dr.switch(
         index=t(0, 0, 1, 1),
-        callables=(
+        funcs=(
             lambda a: m.ArrayXu(a*1, a*2),
             lambda a: m.ArrayXu(a*3, a*4)
         ),
@@ -130,7 +130,7 @@ def test06_failure_incompatible_type(t, recorded):
     with pytest.raises(RuntimeError) as e:
         dr.switch(
             index=t(0, 0, 1, 1),
-            callables=(
+            funcs=(
                 lambda a: m.ArrayXu(a, a),
                 lambda a: m.ArrayXf(a, a)
             ),

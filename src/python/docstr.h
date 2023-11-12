@@ -3551,29 +3551,29 @@ such a custom operation.
 )";
 
 static const char *doc_switch = R"(
-switch(index: int | drjit.ArrayBase, callables: Sequence[Callable], *args, **kwargs) -> object
+switch(index: int | drjit.ArrayBase, funcs: Sequence[Callable], *args, **kwargs) -> object
 
-Selectively invoke callables based on a provided index array.
+Selectively invoke functions based on a provided index array.
 
 When called with a *scalar* ``index`` (of type ``int``), this function
 evaluates the Python expression
 
 .. code-block:: python
 
-   callables[index](*args, **kwargs)
+   funcs[index](*args, **kwargs)
 
 When it is provided with a Dr.Jit index array (specifically, 32-bit unsigned
 integers), it performs the vectorized equivalent of the above and assembles an
 array of return values containing the result of all referenced functions. It
-does so efficiently using at most a single invocation of each callable.
+does so efficiently using at most a single invocation of each function.
 
 .. code-block:: python
 
     from drjit.llvm import UInt32
 
     res = dr.switch(
-        index=UInt32(0, 0, 1, 1), # <-- selects the callable
-        callables=[               # <-- arbitrary list of callables
+        index=UInt32(0, 0, 1, 1), # <-- selects the function
+        funcs=[                   # <-- arbitrary function list
             lambda x: x,
             lambda x: x*10
         ],
@@ -3584,7 +3584,7 @@ does so efficiently using at most a single invocation of each callable.
 
 The function traverses the set of positional (``*args``) and keyword arguments
 (``**kwargs``) to find all Dr.Jit arrays including arrays contained within
-:ref:`Pytrees <pytrees>`. It routes a subset of array entries to each callable
+:ref:`Pytrees <pytrees>`. It routes a subset of array entries to each function
 as specified by the ``index`` argument.
 
 Dr.Jit will use one of two possible strategies to compile this operation
@@ -3592,14 +3592,14 @@ depending on the active compilation flags (see :py:func:`drjit.set_flag`,
 :py:func:`drjit.scoped_set_flag`):
 
 1. **Symbolic mode**: When :py:attr:`drjit.JitFlag.SymbolicCalls` is set (the
-   default), Dr.Jit transcribes every callable into an equivalent function in the
+   default), Dr.Jit transcribes every function into a counterpart in the
    generated low-level intermediate representation (LLVM IR or PTX) and targets
    them via an indirect jump instruction.
 
    One caveat with this approach is that Dr.Jit does not know the specific
-   inputs reaching each callable at trace time. This knowledge will only become
+   inputs reaching each function at trace time. This knowledge will only become
    available later on when the generated code runs on the device (e.g., the
-   GPU). Thus, callables receive *symbolic* input arrays that merely help to
+   GPU). Thus, functions receive *symbolic* input arrays that merely help to
    transcribe their implementation into low-level IR. Some operations involving
    such symbolic inputs are not valid and will fail:
 
@@ -3607,7 +3607,7 @@ depending on the active compilation flags (see :py:func:`drjit.set_flag`,
 
       from drjit.llvm import Array3f, Float, UInt32
 
-      # A callable 'f1' called by dr.switch()
+      # A function 'f1' called by dr.switch()
       def f1(x: dr.llvm.Array3f):
           print(x)        # <-- fails
           y: Float = x[0] # <-- OK
@@ -3625,12 +3625,12 @@ depending on the active compilation flags (see :py:func:`drjit.set_flag`,
 2. **Evaluated mode**: When :py:attr:`drjit.JitFlag.SymbolicCalls` is *not* set,
    Dr.Jit *evaluates* the inputs  ``index``, ``args``, ``kwargs`` via
    :py:func:`drjit.eval`, groups them by the provided index, and invokes each
-   callable with with the subset of inputs that reference it. Callables that
+   function with with the subset of inputs that reference it. Callables that
    are not referenced by any element of ``index`` are ignored.
 
    In this mode, a :py:func:`drjit.switch` statement will cause Dr.Jit to
    launch a series of kernels processing subsets of the input data (one per
-   callable), which also used to be referred to as *wavefronts* in previous
+   function), which also used to be referred to as *wavefronts* in previous
    versions of Dr.Jit.
 
    This can negatively impact performance and memory usage as function
@@ -3656,25 +3656,25 @@ When a boolean Dr.Jit array (e.g., :py:class:`drjit.llvm.Bool`,
 :py:class:`drjit.cuda.ad.Bool`, etc.) is specified as last positional argument
 or as a keyword argument named ``active``, that argument is treated specially:
 entries of the input arrays associated with a ``False`` mask entry are ignored
-and never passed to the callables. Associated entries of the return
-value will be zero-initialized. The callables will still receive the mask
+and never passed to the functions. Associated entries of the return
+value will be zero-initialized. The function will still receive the mask
 argument as input, but it will always be set to ``True``.
 
 Args:
     index (int|drjit.ArrayBase): a list of indices to choose the functions
 
-    callables (Sequence[Callable]): a list of callables to which calls will be
+    funcs (Sequence[Callable]): a list of functions to which calls will be
       dispatched based on the ``index`` argument.
 
     *args (tuple): a variable-length list of positional arguments passed to the
-      callables. :ref:`Pytrees <pytrees>` are supported.
+      functions. :ref:`Pytrees <pytrees>` are supported.
 
     **kwargs (dict): a variable-length list of keyword arguments passed to the
-      callables. :ref:`Pytrees <pytrees>` are supported.
+      functions. :ref:`Pytrees <pytrees>` are supported.
 
 Returns:
     object: When ``index`` is a scalar Python integer, the return value simply
-    forwards the return value of the selected callable. Otherwise, the function
+    forwards the return value of the selected functoin. Otherwise, the function
     returns a Dr.Jit array or :ref:`Pytree <pytrees>` containing the result of
     each performed function call.)";
 
@@ -3955,16 +3955,17 @@ Args:
       the loop body. However, such variables will not be captured by the
       symbolic tracing process.
 
-    cond (Callable): a callable that will be invoked with ``*args`` (i.e., the
-      the state variables will be *unpacked* and turned into function arguments).
-      It should return a scalar Python ``bool`` or a boolean-typed Dr.Jit array
-      representing the loop condition.
+    cond (Callable): a function/callable that will be invoked with ``*args``
+      (i.e., the the state variables will be *unpacked* and turned into
+       function arguments). It should return a scalar Python ``bool`` or a
+                     boolean-typed Dr.Jit array representing the loop
+                     condition.
 
-    body (Callable): a callable that will be invoked with ``*args`` (i.e., the
-      the state variables will be *unpacked* and turned into function arguments).
-      It should update the loop state and then return a new tuple of loop
-      state variables that are *compatible* with the previous state (see the
-      earlier description regarding what such compatibility entails).
+    body (Callable): a function/callable that will be invoked with ``*args``
+      (i.e., the the state variables will be *unpacked* and turned into
+      function arguments). It should update the loop state and then return a
+      new tuple of loop state variables that are *compatible* with the previous
+      state (see the earlier description regarding what such compatibility entails).
 
     method (str): Specify this parameter to override the evaluation method.
       Possible values are: ``"scalar"``, ``"symbolic"``, ``"evaluated"``, or
@@ -3995,18 +3996,18 @@ Returns:
 
 
 static const char *doc_dispatch = R"(
-Invoke a custom Python callable for each instance in an instance array.
+Invoke a provided Python function for each instance in an instance array.
 
-This function invokes the provided ``callable`` for each instance
+This function invokes the provided ``func`` for each instance
 in the instance array ``instances`` and assembles the return values into
 a result array. Conceptually, it does the following:
 
 .. code-block:: python
 
-   def dispatch(instances, callable, *args, **kwargs):
+   def dispatch(instances, func, *args, **kwargs):
        result = []
        for inst in instances:
-           result.append(callable(inst, *args, **kwargs))
+           result.append(func(inst, *args, **kwargs))
 
 However, the implementation accomplishes this more efficiently using only a
 single call per unique instance. Instead of a Python ``list``, it returns a
@@ -4053,10 +4054,10 @@ Args:
     func (Callable): function to dispatch on all instances.
 
     *args (tuple): a variable-length list of positional arguments passed to the
-      callable. :ref:`Pytrees <pytrees>` are supported.
+      function. :ref:`Pytrees <pytrees>` are supported.
 
     **kwargs (dict): a variable-length list of keyword arguments passed to the
-      callable. :ref:`Pytrees <pytrees>` are supported.
+      fucntion. :ref:`Pytrees <pytrees>` are supported.
 
 Returns:
     object: A Dr.Jit array or :ref:`Pytree <pytrees>` containing the
@@ -4223,9 +4224,9 @@ Local value numbering is *enabled* by default.)";
 static const char *doc_JitFlag_SymbolicCalls = R"(
 Dr.Jit provides two main ways of compiling function calls targeting *instance arrays*.
 
-1. **Symbolic mode** (the default): Dr.Jit captures callables by invoking them
-   with *symbolic* (abstract) arguments. By doing so, it can capture a
-   transcript of each callable and then turn it into a function in the
+1. **Symbolic mode** (the default): Dr.Jit captures the behavior of functions by 
+   invoking them with *symbolic* (abstract) arguments. By doing so, it can capture a
+   transcript of each function and then turn it into a function in the
    generated kernel. Symbolic mode preserves the control flow structure of the
    original program by replicating it within Dr.Jit's intermediate
    representation.
@@ -4244,10 +4245,10 @@ Dr.Jit provides two main ways of compiling function calls targeting *instance ar
      This limitation may be inconvenient especially when debugging code, in
      which case evaluated mode is preferable.
 
-   * Thread divergence: neighboring SIMD lanes may target different callables,
+   * Thread divergence: neighboring SIMD lanes may target different functions,
      which can have a negative impact on efficiency.
 
-   * A kernel with many callables can become quite large and costly to compile.
+   * A kernel with many functions can become quite large and costly to compile.
 
 2. **Evaluated mode**: Dr.Jit evaluates all inputs and groups them by instance
    ID. Following this, it launches a a kernel *per instance* to process the
@@ -4260,11 +4261,11 @@ Dr.Jit provides two main ways of compiling function calls targeting *instance ar
      is legal.  You may also use a debugger to step through the program.
 
    * Kernels are smaller and avoid thread divergence, since Dr.Jit reorders
-     computation by callable.
+     computation with respect to targeted functions.
 
    The main downsides are:
 
-   * Each callable essentially turns its own kernel that reads its input and
+   * Each function essentially turns its own kernel that reads its input and
      writes outputs via device memory. The required memory bandwidth and
      storage often make evaluated mode impractical.
 
@@ -4307,11 +4308,11 @@ a function call like
 
    arr.f(inputs...)
 
-can potentially generate vast numbers of different callables in the generated
-code. At the same time, many of these callables may contain identical code
+can potentially generate vast numbers of different functions in the generated
+code. At the same time, many of these functions may contain identical code
 (or code that is identical except for data references).
 
-Dr.Jit can exploit such redundancy and merge such callables during computation.
+Dr.Jit can exploit such redundancy and merge such functions during computation.
 Besides generating shorter programs, this also helps to reduce thread divergence.
 
 This flag is *enabled* by default. Note that it is only effective
