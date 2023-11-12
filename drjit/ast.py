@@ -1,7 +1,7 @@
 import ast
 import types
 import inspect
-from typing import Callable
+from typing import Callable, Optional, List
 
 
 class SyntaxVisitor(ast.NodeTransformer):
@@ -645,10 +645,10 @@ def hint(
     arg: object,
     /,
     *,
-    method: str | None = None,
-    max_iterations: int | None = None,
-    label: str | None = None,
-    exclude: list[object] | None = None,
+    method: Optional[str] = None,
+    max_iterations: Optional[int] = None,
+    label: Optional[str] = None,
+    exclude: Optional[List[object]] = None,
 ) -> object:
     """
     Within ordinary Python code, this function is unremarkable: it returns the
