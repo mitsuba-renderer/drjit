@@ -27,9 +27,11 @@ struct LoopState {
 
     struct Entry {
         std::string name;
-        nb::object value;
-        Entry(const std::string &name, nb::handle value)
-            : name(name), value(nb::borrow(value)) {}
+        nb::handle type;
+        uint64_t id;
+        size_t size;
+        Entry(const std::string &name, nb::handle type, uint64_t id, size_t size)
+            : name(name), type(nb::borrow(type)), id(id), size(size) { }
     };
 
     // Post-processed version of 'state'
@@ -44,6 +46,8 @@ struct LoopState {
     size_t entry_pos = 0;
     /// Index into the 'indices' array when traverse() is called with <Write>
     size_t indices_pos = 0;
+    /// Size of variables used by the loop
+    size_t loop_size = 1;
 
     LoopState(nb::tuple &&state, nb::callable &&cond, nb::callable &&body,
               std::vector<std::string> &&state_labels)
@@ -61,6 +65,7 @@ struct LoopState {
             indices_pos = 0;
 
         entry_pos = 0;
+        stack.clear();
         for (size_t i = 0; i < l1; ++i) {
             name = l2 ? state_labels[i] : ("arg" + std::to_string(i));
             traverse<Write>(state[i], indices);
@@ -81,12 +86,16 @@ private:
         if (std::find(stack.begin(), stack.end(), h.ptr()) != stack.end())
             return;
         stack.push_back(h.ptr());
+        nb::handle tp = h.type();
 
-        nb::object prev;
+        size_t id;
         if (first_time) {
-            entries.emplace_back(name, h);
+            id = entries.size();
+            entries.emplace_back(name, tp, 0, 0);
         } else {
-            if (entry_pos >= entries.size())
+            id = entry_pos++;
+
+            if (id >= entries.size())
                 nb::raise("the number of loop state variables must stay "
                           "constant across iterations. However, Dr.Jit "
                           "detected a previously unobserved variable '%s' of "
@@ -95,35 +104,30 @@ private:
                           "explained in the Dr.Jit documentation.",
                           name.c_str(), nb::inst_name(h).c_str());
 
-            Entry &e = entries[entry_pos++];
-
+            Entry &e = entries[id];
             if (name != e.name)
                 nb::raise(
                     "loop state variable '%s' of type '%s' created in a "
                     "previous iteration cannot be found anymore. "
                     "Instead, another variable '%s' of type '%s' was "
-                    "found in its place, which is not permitted. Please"
-                    "review the interface and assumptions of dr.while_loop()"
+                    "found in its place, which is not permitted. Please "
+                    "review the interface and assumptions of dr.while_loop() "
                     "as explained in the Dr.Jit documentation.", e.name.c_str(),
-                    nb::inst_name(e.value).c_str(), name.c_str(),
-                    nb::inst_name(h).c_str());
+                    nb::type_name(e.type).c_str(), name.c_str(),
+                    nb::type_name(tp).c_str());
 
-            if (!h.type().is(e.value.type()))
+            if (!tp.is(e.type))
                 nb::raise(
                     "the body of this loop changed the type of loop state "
                     "variable '%s' from '%s' to '%s', which is not "
                     "permitted. Please review the interface and assumptions "
                     "of dr.while_loop() as explained in the Dr.Jit "
                     "documentation.",
-                    name.c_str(), nb::inst_name(e.value).c_str(),
-                    nb::inst_name(h).c_str());
-
-            prev = std::move(e.value);
-            e.value = nb::borrow(h);
+                    name.c_str(), nb::type_name(e.type).c_str(),
+                    nb::type_name(tp).c_str());
         }
 
         size_t name_size = name.size();
-        nb::handle tp = h.type();
         if (is_drjit_type(tp)) {
             const ArraySupplement &s = supp(tp);
             if (s.is_tensor) {
@@ -141,37 +145,48 @@ private:
                     name.resize(name_size);
                 }
             } else if (s.index) {
-                uint64_t i1 = s.index(inst_ptr(h));
+                uint64_t i1 = entries[id].id,
+                         i2 = s.index(inst_ptr(h));
+                size_t &s1 = entries[id].size,
+                        s2 = jit_var_size((uint32_t) i2);
 
-                if (!first_time) {
-                    uint64_t i2 = s.index(inst_ptr(prev));
+                if (!first_time && s1 != s2 && s1 != 1 && s2 != 1)
+                    nb::raise("the body of this loop changed the size of loop "
+                              "state variable '%s' (which is of type '%s') from "
+                              "%zu to %zu. These sizes aren't compatible, and such "
+                              "a change is therefore not permitted. Please review "
+                              "the interface and assumptions of dr.while_loop() as "
+                              "explained in the Dr.Jit documentation.",
+                              name.c_str(), nb::inst_name(h).c_str(), s1, s2);
 
-                    size_t s1 = jit_var_size((uint32_t) i1),
-                           s2 = jit_var_size((uint32_t) i2);
-
-                    if (s1 != s2 && s1 != 1 && s2 != 1)
-                        nb::raise("the body of this loop changed the size of loop "
-                                  "state variable '%s' (which is of type '%s') from "
-                                  "%zu to %zu. These sizes aren't compatible, and such "
-                                  "a change is therefore not permitted. Please review "
-                                  "the interface and assumptions of dr.while_loop() as "
-                                  "explained in the Dr.Jit documentation.",
-                                  name.c_str(), nb::inst_name(h).c_str(), s2, s1);
+                if (loop_size != s2 && i1 != i2 && !jit_var_is_dirty(i2)) {
+                    if (loop_size != 1 && s2 != 1)
+                        nb::raise("The body of this loop operates on arrays of "
+                                  "size %zu. Loop state variable '%s' has an "
+                                  "incompatible size %zu.",
+                                  loop_size, name.c_str(), s2);
+                    loop_size = std::max(loop_size, s2);
                 }
 
                 if constexpr (Write) {
                     if (indices_pos >= indices.size())
                         nb::raise("traverse(): internal error, ran out of indices.");
 
+                    i2 = indices[indices_pos++];
+                    s2 = jit_var_size((uint32_t) i2);
+
                     nb::handle tp = h.type();
                     nb::object tmp = nb::inst_alloc(tp);
-                    supp(tp).init_index(indices[indices_pos++], inst_ptr(tmp));
+                    supp(tp).init_index(i2, inst_ptr(tmp));
                     nb::inst_mark_ready(tmp);
                     nb::inst_replace_move(h, tmp);
                 } else {
-                    ad_var_inc_ref(i1);
-                    indices.push_back(i1);
+                    ad_var_inc_ref(i2);
+                    indices.push_back(i2);
                 }
+
+                i1 = i2;
+                s1 = s2;
             }
         } else if (tp.is(&PyList_Type)) {
             size_t ctr = 0;
@@ -213,7 +228,7 @@ private:
     }
 };
 
-/// Helper fucntion to perform a tuple-based function call directly using the
+/// Helper function to perform a tuple-based function call directly using the
 /// CPython API. nanobind lacks a nice abstraction for this.
 static nb::object tuple_call(nb::handle callable, nb::handle tuple) {
     nb::object result = nb::steal(PyObject_CallObject(callable.ptr(), tuple.ptr()));
@@ -233,7 +248,7 @@ static nb::tuple check_state(const char *name, nb::object &&o, const nb::tuple &
     return o_t;
 }
 
-/// Helper fucntion to check that the return value of the loop conditional is sensible
+/// Helper function to check that the return value of the loop conditional is sensible
 static const ArraySupplement &check_cond(nb::handle h) {
     nb::handle tp = h.type();
     if (is_drjit_type(tp)) {
@@ -251,7 +266,9 @@ static const ArraySupplement &check_cond(nb::handle h) {
 static uint32_t while_loop_cond_cb(void *p) {
     LoopState *lp = (LoopState *) p;
     lp->active = tuple_call(lp->cond, lp->state);
-    return (uint32_t) check_cond(lp->active).index(inst_ptr(lp->active));
+    uint32_t active_index = (uint32_t) check_cond(lp->active).index(inst_ptr(lp->active));
+    lp->loop_size = jit_var_size(active_index);
+    return active_index;
 }
 
 static void while_loop_body_cb(void *p) {
@@ -295,8 +312,8 @@ nb::tuple while_loop(nb::tuple state, nb::callable cond, nb::callable body,
         backend = (JitBackend) check_cond(cond_val).backend;
         cond_val.reset();
 
-        // General case: call ad_loop() with a number of callbacks
-        // that implement an interface to Python
+        // General case: call ad_loop() with a number of callbacks that
+        // implement an interface to Python
         dr::dr_unique_ptr<LoopState> payload(
             new LoopState(std::move(state), std::move(cond), std::move(body),
                           std::move(state_labels)));
@@ -309,7 +326,7 @@ nb::tuple while_loop(nb::tuple state, nb::callable cond, nb::callable body,
         else if (method == "evaluated")
             symbolic = 0;
         else
-            nb::raise("invalid 'method' parameter (must be one of \"auto\", "
+            nb::raise("invalid 'method' argument (must equal \"auto\", "
                       "\"scalar\", \"symbolic\", or \"evaluated\").");
 
         ad_loop(backend, symbolic, name.c_str(), payload.get(),

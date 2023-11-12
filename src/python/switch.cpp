@@ -55,11 +55,11 @@ static nb::object extract_mask(nb::list &args, nb::kwargs &kwargs) {
     return mask;
 }
 
-nb::object switch_impl(nb::handle index_, nb::sequence callables,
+nb::object switch_impl(nb::handle index_, nb::sequence funcs,
                        nb::args args_, nb::kwargs kwargs) {
     struct State {
         nb::tuple args_o;
-        nb::object callables_o;
+        nb::object funcs_o;
         nb::object rv_o;
 
         ~State() {
@@ -67,7 +67,7 @@ nb::object switch_impl(nb::handle index_, nb::sequence callables,
                 return;
             nb::gil_scoped_acquire guard;
             args_o.reset();
-            callables_o.reset();
+            funcs_o.reset();
             rv_o.reset();
         }
     };
@@ -87,10 +87,10 @@ nb::object switch_impl(nb::handle index_, nb::sequence callables,
                     return nb::none();
             }
 
-            return callables[index_](*args, **kwargs);
+            return funcs[index_](*args, **kwargs);
         }
 
-        // Shift the callable index (ad_call interprets 0 as 'disabled')
+        // Shift the func index (ad_call interprets 0 as 'disabled')
         nb::object index = index_ + nb::int_(1);
         index_tp = index.type();
 
@@ -113,7 +113,7 @@ nb::object switch_impl(nb::handle index_, nb::sequence callables,
 
             uintptr_t index = (uintptr_t) self;
             nb::object result =
-                state.callables_o[index](*state.args_o[0], **state.args_o[1]);
+                state.funcs_o[index](*state.args_o[0], **state.args_o[1]);
 
             if (state.rv_o.is_valid())
                 check_compatibility(result, state.rv_o);
@@ -123,7 +123,7 @@ nb::object switch_impl(nb::handle index_, nb::sequence callables,
         };
 
         State *state =
-            new State{ nb::make_tuple(args, kwargs), callables, nb::object() };
+            new State{ nb::make_tuple(args, kwargs), funcs, nb::object() };
         ad_call_cleanup cleanup = [](void *ptr) { delete (State *) ptr; };
 
         dr_vector<uint64_t> args_i;
@@ -131,7 +131,7 @@ nb::object switch_impl(nb::handle index_, nb::sequence callables,
         collect_indices(state->args_o, args_i);
 
         bool done = ad_call(
-            (JitBackend) s.backend, nullptr, nb::len(callables), "drjit.switch()", false,
+            (JitBackend) s.backend, nullptr, nb::len(funcs), "drjit.switch()", false,
             (uint32_t) s.index(inst_ptr(index)),
             mask.is_valid() ? ((uint32_t) s.index(inst_ptr(mask))) : 0u, args_i,
             rv_i, state, func, cleanup, true);
@@ -152,12 +152,12 @@ nb::object switch_impl(nb::handle index_, nb::sequence callables,
 }
 
 nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> instances,
-                         nb::callable callable, nb::args args_,
+                         nb::callable func, nb::args args_,
                          nb::kwargs kwargs) {
     struct State {
         const std::type_info *type;
         nb::tuple args_o;
-        nb::object callable_o;
+        nb::object func_o;
         nb::object rv_o;
 
         ~State() {
@@ -165,7 +165,7 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> instances,
                 return;
             nb::gil_scoped_acquire guard;
             args_o.reset();
-            callable_o.reset();
+            func_o.reset();
             rv_o.reset();
         }
     };
@@ -183,7 +183,7 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> instances,
         nb::list args(args_);
         nb::object mask = extract_mask(args, kwargs);
 
-        ad_call_func func = [](void *ptr, void *self,
+        ad_call_func func_cb = [](void *ptr, void *self,
                                const dr::dr_vector<uint64_t> &args_i,
                                dr::dr_vector<uint64_t> &rv_i) {
             nb::gil_scoped_acquire guard;
@@ -195,7 +195,7 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> instances,
                 state.type, self, nb::rv_policy::reference, nullptr));
 
             nb::object result =
-                state.callable_o(self_o, *state.args_o[0], **state.args_o[1]);
+                state.func_o(self_o, *state.args_o[0], **state.args_o[1]);
 
             if (state.rv_o.is_valid())
                 check_compatibility(result, state.rv_o);
@@ -205,7 +205,7 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> instances,
         };
 
         State *state =
-            new State{ &nb::type_info(s.value), nb::make_tuple(args, kwargs), callable, nb::object() };
+            new State{ &nb::type_info(s.value), nb::make_tuple(args, kwargs), func, nb::object() };
         ad_call_cleanup cleanup = [](void *ptr) { delete (State *) ptr; };
 
         dr_vector<uint64_t> args_i;
@@ -216,7 +216,7 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> instances,
             (JitBackend) s.backend, nb::borrow<nb::str>(domain_name).c_str(), 0,
             "dispatch()", false, (uint32_t) s.index(inst_ptr(instances)),
             mask.is_valid() ? ((uint32_t) s.index(inst_ptr(mask))) : 0u, args_i,
-            rv_i, state, func, cleanup, true);
+            rv_i, state, func_cb, cleanup, true);
 
         nb::object result = update_indices(state->rv_o, rv_i);
 
@@ -237,7 +237,7 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> instances,
 
 void export_switch(nb::module_&m) {
     m.def("switch", &switch_impl, nb::raw_doc(doc_switch), "index"_a,
-          "callables"_a, "args"_a, "kwargs"_a)
+          "funcs"_a, "args"_a, "kwargs"_a)
      .def("dispatch", &dispatch_impl, doc_dispatch, "instances"_a,
-          "callable"_a, "args"_a, "kwargs"_a);
+          "func"_a, "args"_a, "kwargs"_a);
 }

@@ -226,8 +226,6 @@ Other minor technical improvements:
 
 - :py:func:`drjit.switch` and :py:func:`drjit.dispatch` now support all
   standard Python calling conventions (positional, keyword, variable length).
-  Their ``func`` and ``funcs`` arguments were renamed to ``callable`` and
-  ``callables``.
 
 - the ``drjit.reinterpret_array_v`` function was renamed to
   :py:func:`drjit.reinterpret_array`.

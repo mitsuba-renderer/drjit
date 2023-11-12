@@ -14,8 +14,6 @@
 
 #include "common.h"
 #include <drjit/custom.h>
-#include <algorithm>
-#include <string>
 
 namespace dr = drjit;
 
@@ -32,24 +30,141 @@ struct scoped_push_mask {
     JitBackend backend;
 };
 
+/// RAII helper to temporarily record symbolic computation
+struct scoped_record {
+    scoped_record(JitBackend backend) : backend(backend) {
+        checkpoint = jit_record_begin(backend, nullptr);
+    }
+
+    ~scoped_record() {
+        jit_record_end(backend, checkpoint, cleanup);
+    }
+
+    void disarm() { cleanup = false; }
+
+    JitBackend backend;
+    uint32_t checkpoint;
+    bool cleanup = true;
+};
+
+static void ad_loop_symbolic(JitBackend backend, const char *name,
+                             void *payload,
+                             ad_loop_read read_cb, ad_loop_write write_cb,
+                             ad_loop_cond cond_cb, ad_loop_body body_cb) {
+    dr_index64_vector indices1, backup;
+    dr::dr_vector<uint32_t> indices2;
+
+    // Read the loop state variables
+    read_cb(payload, indices1);
+
+    indices2.reserve(indices1.size());
+    bool needs_ad = false;
+    for (uint64_t i : indices1) {
+        backup.push_back_borrow(i);
+        indices2.push_back((uint32_t) i);
+        needs_ad |= (i >> 32) != 0;
+    }
+
+    try {
+        scoped_record record_guard(backend);
+
+        // Rewrite the loop state variables
+        JitVar loop = JitVar::steal(
+            jit_var_loop_start(name, indices2.size(), indices2.data()));
+
+        // Propagate these changes
+        indices1.release();
+        for (uint32_t i : indices2)
+            indices1.push_back_steal(i);
+        write_cb(payload, indices1);
+        indices1.release();
+        indices2.clear();
+
+        do {
+            // Evaluate the loop condition
+            uint32_t active_initial = cond_cb(payload);
+
+            // Potentially optimize the loop away
+            if (jit_var_is_zero_literal(active_initial) && jit_flag(JitFlag::OptimizeLoops)) {
+                jit_log(LogLevel::InfoSym,
+                        "ad_loop_symbolic(\"%s\"): optimized away (loop "
+                        "condition is 'false').", name);
+                write_cb(payload, backup);
+                break;
+            }
+
+            JitVar active = JitVar::steal(
+                jit_var_mask_apply(active_initial, jit_var_size(active_initial)));
+
+            JitVar loop_cond = JitVar::steal(
+                jit_var_loop_cond(loop.index(), active.index()));
+
+            // Evolve the loop state
+            {
+                if (backend == JitBackend::CUDA)
+                    active = JitVar::steal(jit_var_bool(backend, true));
+
+                scoped_push_mask m(backend, active.index());
+                body_cb(payload);
+            }
+
+            // Fetch latest version of loop state
+            read_cb(payload, indices1);
+            for (uint64_t i : indices1) {
+                indices2.push_back((uint32_t) i);
+                needs_ad |= (i >> 32) != 0;
+            }
+
+            int rv = jit_var_loop_end(loop.index(), loop_cond.index(),
+                                      indices2.data(), record_guard.checkpoint);
+
+            indices1.release();
+            for (uint32_t i : indices2)
+                indices1.push_back_steal(i);
+            write_cb(payload, indices1);
+            indices1.release();
+            indices2.clear();
+
+            // Construct the loop object
+            if (rv) {
+                // All done
+                record_guard.disarm();
+                break;
+            }
+        } while (true);
+    } catch (...) {
+        // Restore all loop state variables to their original state
+        try {
+            write_cb(payload, backup);
+        } catch (...) {
+            /* This happens when the user changed a variable type in Python (so
+             * writing back the original variable ID isn't possible). The error
+             * message of the parent exception already reports this problem, so
+             * ignore this duplicated error */
+        }
+        throw;
+    }
+}
+
 static void ad_loop_evaluated(JitBackend backend, const char *name,
                               void *payload,
                               ad_loop_read read_cb, ad_loop_write write_cb,
                               ad_loop_cond cond_cb, ad_loop_body body_cb) {
     if (jit_flag(JitFlag::Symbolic))
-        jit_raise(
-            "Dr.Jit is currently recording symbolic computation and cannot execute a\n"
-            "loop in *evaluated mode*. You will likely want to set the Jit flag\n"
-            "dr.JitFlag.SymbolicLoops to True. Alternatively, you could also annotate\n"
-            "the loop condition with dr.hint(.., symbolic=True) if it occurs inside a\n"
-            "@dr.syntax-annotated function. Please review the Dr.Jit documentation of\n"
-            "drjit.JitFlag.SymbolicLoops and drjit.while_loop() for general information\n"
-            "on symbolic and evaluated loops, as well as their limitations.");
+        jit_raise("Dr.Jit is currently recording symbolic computation and "
+                  "cannot execute a loop in *evaluated mode*. You will likely "
+                  "want to set the Jit flag dr.JitFlag.SymbolicLoops to True. "
+                  "Alternatively, you could also annotate the loop condition "
+                  "with dr.hint(.., symbolic=True) if it occurs inside a "
+                  "@dr.syntax-annotated function. Please review the Dr.Jit "
+                  "documentation of  drjit.JitFlag.SymbolicLoops and "
+                  "drjit.while_loop() for general information on symbolic and "
+                  "evaluated loops, as well as their limitations.");
 
     dr_index64_vector indices1, indices2;
     size_t it = 0;
 
-    jit_log(LogLevel::Debug,
+    jit_log(LogLevel::InfoSym,
             "ad_loop_evaluated(\"%s\"): evaluating initial loop state.", name);
 
     /// Before the loop starts, make the loop state opaque to ensure proper kernel caching
@@ -64,7 +179,8 @@ static void ad_loop_evaluated(JitBackend backend, const char *name,
 
     // Evaluate the condition and merge it into 'active'
     uint32_t active_initial = cond_cb(payload);
-    JitVar active = JitVar::steal(jit_var_mask_apply(active_initial, jit_var_size(active_initial)));
+    JitVar active = JitVar::steal(
+        jit_var_mask_apply(active_initial, jit_var_size(active_initial)));
     active.schedule_force_();
 
     while (true) {
@@ -74,7 +190,7 @@ static void ad_loop_evaluated(JitBackend backend, const char *name,
         if (!jit_var_any(active.index()))
             break;
 
-        jit_log(LogLevel::Debug,
+        jit_log(LogLevel::InfoSym,
                 "ad_loop_evaluated(\"%s\"): executing loop iteration %zu.", name, ++it);
 
         // Push the mask onto mask stack and execute the loop body
@@ -106,7 +222,7 @@ static void ad_loop_evaluated(JitBackend backend, const char *name,
         indices1.release();
         indices1.swap(indices2);
 
-        active = JitVar::borrow(cond_cb(payload));
+        active &= JitVar::borrow(cond_cb(payload));
         active.schedule_force_();
     }
 
@@ -117,154 +233,19 @@ static void ad_loop_evaluated(JitBackend backend, const char *name,
 void ad_loop(JitBackend backend, int symbolic, const char *name, void *payload,
              ad_loop_read read_cb, ad_loop_write write_cb, ad_loop_cond cond_cb,
              ad_loop_body body_cb) {
+    if (strchr(name, '\n') || strchr(name, '\r'))
+        jit_raise("The loop name may not contain newline characters.\n");
 
     if (symbolic == -1)
         symbolic = (int) jit_flag(JitFlag::SymbolicLoops);
 
     if (symbolic != 0 && symbolic != 1)
-        jit_raise("Invalid value of the 'symbolic' argument (must be 0, 1, or -1)");
+        jit_raise("The 'symbolic' argument must equal 0, 1, or -1");
 
-    ad_loop_evaluated(backend, name, payload, read_cb, write_cb,
-                      cond_cb, body_cb);
+    if (symbolic)
+        ad_loop_symbolic(backend, name, payload, read_cb, write_cb,
+                         cond_cb, body_cb);
+    else
+        ad_loop_evaluated(backend, name, payload, read_cb, write_cb,
+                          cond_cb, body_cb);
 }
-
-#if 0
-
-/// RAII helper to temporarily record symbolic computation
-struct scoped_record {
-    scoped_record(JitBackend backend) : backend(backend) {
-        checkpoint = jit_record_begin(backend, nullptr);
-    }
-
-    void reset() {
-        jit_record_end(backend, checkpoint, true);
-        checkpoint = jit_record_begin(backend, nullptr);
-    }
-
-    ~scoped_record() {
-        jit_record_end(backend, checkpoint, cleanup);
-    }
-
-    void disarm() { cleanup = false; }
-
-    JitBackend backend;
-    uint32_t checkpoint;
-    bool cleanup = true;
-};
-            if (s3 != size && size != 1 && s3 != 1)
-                nb::raise("The body of this loop operates on arrays of "
-                          "size %zu. Loop state variable '%s' has an "
-                          "incompatible size %zu.",
-                          size, key.c_str(), s3);
-
-nb::tuple while_loop_symbolic(JitBackend backend, nb::tuple state,
-                              nb::handle cond, nb::handle body,
-                              const std::vector<std::string> &state_labels,
-                              const std::string &name) {
-    PySnapshot s1 = capture_state(state, state_labels);
-    std::vector<uint32_t> indices;
-
-    using JitVar = drjit::JitArray<JitBackend::None, void>;
-
-    try {
-        indices.reserve(s1.size());
-        for (auto &[k, v] : s1) {
-            if (v.index) {
-                jit_var_inc_ref((uint32_t) v.index);
-                indices.push_back((uint32_t) v.index);
-            }
-        }
-
-        scoped_record record_guard(backend);
-
-        JitVar loop =
-            JitVar::steal(jit_var_loop_start(name.c_str(), indices.size(), indices.data()));
-
-        // Rewrite the loop state variables
-        size_t ctr = 0;
-        for (auto &[k, v] : s1) {
-            if (v.index)
-                steal_and_replace(v.object, indices[ctr++]);
-        }
-
-        nb::object active = apply_default_mask(tuple_call(cond, state));
-        uint32_t active_index = extract_index(active);
-
-        // Evaluate the loop condition
-        JitVar loop_cond = JitVar::steal(
-            jit_var_loop_cond(loop.index(), active_index));
-
-        PySnapshot s2;
-        do {
-            // Evolve the loop state
-            {
-                if (backend == JitBackend::CUDA)
-                    active_index = jit_var_bool(backend, true);
-                scoped_set_mask m(backend, active_index);
-
-                if (backend == JitBackend::CUDA)
-                    jit_var_dec_ref(active_index);
-
-                state = check_state("body", tuple_call(body, state), state);
-            }
-            s2 = capture_state(state, state_labels);
-
-            // Ensure that modified loop state remains compatible
-            check_sizes(active_index, s1, s2);
-
-            // Re-capture the indices
-            indices.clear();
-            visit_pairs(
-                s1, s2,
-                [&](const std::string &, const PyVar &, const PyVar &v2) {
-                    indices.push_back(v2.index);
-                }
-            );
-
-            // Construct the loop object
-            if (jit_var_loop_end(loop.index(), loop_cond.index(),
-                                 indices.data(), record_guard.checkpoint)) {
-                record_guard.disarm();
-            } else {
-                record_guard.reset();
-
-                // Re-run the loop recording process once more
-                ctr = 0;
-                for (auto &[k, v] : s2) {
-                    if (v.index) {
-                        jit_var_inc_ref((uint32_t) indices[ctr]);
-                        steal_and_replace(v.object, indices[ctr]);
-                        ctr++;
-                    }
-                }
-                s2.clear();
-                continue;
-            }
-
-            break;
-        } while (true);
-
-        // Rewrite the loop state variables
-        ctr = 0;
-        for (auto &[k, v] : s2) {
-            if (v.index)
-                steal_and_replace(v.object, indices[ctr++]);
-        }
-
-        for (auto &[k, v] : s1)
-            jit_var_dec_ref((uint32_t) v.index);
-
-        return state;
-    } catch (...) {
-        // Restore all loop state variables to their original state
-        for (auto &[k, v] : s1) {
-            if (!v.index)
-                continue;
-            steal_and_replace(v.object, v.index);
-        }
-        throw;
-    }
-}
-
-#endif
-
