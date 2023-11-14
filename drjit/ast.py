@@ -592,6 +592,18 @@ def syntax(f: Callable = None, print_ast: bool = False, print_code: bool = False
            while dr.hint(i < 10, method='scalar'):
                i += 1
 
+    Complex Python codebases often involve successive application of multiple
+    decorators to a function (e.g., combinations of ``@pytest.parameterize`` in
+    a test suite). If one of these decorators is :py:func:`@drjit.syntax
+    <drjit.syntax>`, then be sure to place it *closest* to the ``def``
+    statement defining the function. Usually, decorators wrap one function into
+    another one, but :py:func:`@drjit.syntax <drjit.syntax>` is special in that
+    it rewrites the underlying code. If, *hypothetically*,
+    :py:func:`@drjit.syntax <drjit.syntax>` was placed *above*
+    ``@pytest.parameterize``, then it would rewrite the PyTest parameterization
+    wrapper instead of the actual function definition, which is almost
+    certainly not wanted.
+
     One last point: :py:func:`@dr.syntax <drjit.syntax>` may seem
     reminiscent of function--level transformations in other frameworks like
     ``@jax.jit`` (JAX) or ``@tf.function`` (TensorFlow). There is a key

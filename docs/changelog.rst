@@ -221,8 +221,8 @@ Removals
   non-JIT-compiled type (e.g., ``dr::DiffArray<float>``) was removed. This was
   in any case too inefficient to be useful besides debugging.
 
-Other minor technical improvements:
------------------------------------
+Other minor technical improvements
+----------------------------------
 
 - :py:func:`drjit.switch` and :py:func:`drjit.dispatch` now support all
   standard Python calling conventions (positional, keyword, variable length).
