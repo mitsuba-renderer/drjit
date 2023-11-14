@@ -1328,7 +1328,7 @@ However, :py:func:`drjit.full` creates *literal constant* arrays, which
 means that Dr.Jit is fully aware of the array contents.
 
 In contrast, :py:func:`drjit.opaque` produces an *opaque* array backed by a
-representation in device memory. 
+representation in device memory.
 
 .. rubric:: Why is this useful?
 
@@ -3752,13 +3752,21 @@ Dr.Jit uses one of *three* different modes to realize this operation depending
 on the inputs and active compilation flags (the text below this overview will
 explain how this mode is automatically selected).
 
-1. **Scalar mode**: Scalar loops that don't actually need any vectorization can
+1. **Scalar mode**: Scalar loops that don't need any vectorization can
    be realized using a simple Python loop construct.
 
    .. code-block:: python
 
       while cond(state):
           state = body(state)
+
+   The function :py:func:`drjit.while_loop()` uses such a strategy by default
+   when ``cond(state)`` returns a scalar Python ``bool``.
+
+   The loop body may still use Dr.Jit types, but note that this effectively
+   unrolls the loop, generating a potentially long sequence of instructions
+   that may take a long time to compile. Symbolic mode (discussed next) may be
+   avantageous in such cases.
 
 2. **Symbolic mode**: Here, Dr.Jit runs a single loop iteration to capture its
    effect on the loop state variables. It embeds this captured computation into
@@ -3789,7 +3797,7 @@ explain how this mode is automatically selected).
    nested Dr.Jit arrays like :py:class:`drjit.cuda.Array2f`, but the end result
    should *not* be a Python ``int`` or ``float`` since that would require
    knowing the actual array contents. Printing array contents is possible,
-   but this requires a *symbolic* print statement implemented by 
+   but this requires a *symbolic* print statement implemented by
    :py:func:`drjit.print`. If you wish to avoid such complications, consider
    the evaluated mode discussed next.
 
@@ -3946,6 +3954,62 @@ iterations, which means:
 The implementation will check for violations and, if applicable, raise an
 exception identifying problematic loop state variables.
 
+.. rubric:: Potential pitfalls
+
+1. **Long compilation times**.
+
+   In the example below, ``i < 100000`` is *scalar*, causing
+   :py:func:`drjit.while_loop()` to use the scalar evaluation strategy that
+   effectively copy-pastes the loop body 100000 times to produce a *giant*
+   program. Code written in this way will be bottlenecked by the CUDA/LLVM
+   compilation stage.
+
+   .. code-block:: python
+
+      @dr.syntax
+      def f():
+          i = 0
+          while i < 100000:
+              # .. costly computation
+              i += 1
+
+2. **Incorrect behavior in symbolic mode**.
+
+   Let's fix the above program by casting the loop condition into a Dr.Jit type
+   to ensure that a *symbolic* loop is used. Problem solved, right?
+
+   .. code-block:: python
+
+      from drjit.cuda import Bool
+
+      @dr.syntax
+      def f():
+          i = 0
+          while Bool(i < 100000):
+              # .. costly computation
+              i += 1
+
+   Unfortunately, no: this loop *never terminates* when run in symbolic mode.
+   Symbolic mode does not track modifications of scalar/non-Dr.Jit types across
+   loop iterations such as the ``int``-valued loop counter ``i``. It's as if we
+   had written ``while Bool(0 < 100000)``, which of course never finishes.
+
+   Evaluated mode does not have this problem---if your loop behaves differently
+   in symbolic and evaluated modes, then some variation of this mistake is
+   likely to blame. To fix this, we must declare the loop counter as a vector
+   type *before* the loop and then modify it as follows:
+
+   .. code-block:: python
+
+      from drjit.cuda import Int
+
+      @dr.syntax
+      def f():
+          i = Int(0)
+          while i < 100000:
+              # .. costly computation
+              i += 1
+
 .. rubric:: Interface
 
 Args:
@@ -3957,9 +4021,8 @@ Args:
 
     cond (Callable): a function/callable that will be invoked with ``*args``
       (i.e., the the state variables will be *unpacked* and turned into
-       function arguments). It should return a scalar Python ``bool`` or a
-                     boolean-typed Dr.Jit array representing the loop
-                     condition.
+      function arguments). It should return a scalar Python ``bool`` or a
+      boolean-typed Dr.Jit array representing the loop condition.
 
     body (Callable): a function/callable that will be invoked with ``*args``
       (i.e., the the state variables will be *unpacked* and turned into
@@ -4224,7 +4287,7 @@ Local value numbering is *enabled* by default.)";
 static const char *doc_JitFlag_SymbolicCalls = R"(
 Dr.Jit provides two main ways of compiling function calls targeting *instance arrays*.
 
-1. **Symbolic mode** (the default): Dr.Jit captures the behavior of functions by 
+1. **Symbolic mode** (the default): Dr.Jit captures the behavior of functions by
    invoking them with *symbolic* (abstract) arguments. By doing so, it can capture a
    transcript of each function and then turn it into a function in the
    generated kernel. Symbolic mode preserves the control flow structure of the
