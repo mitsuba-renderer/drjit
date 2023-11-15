@@ -76,3 +76,16 @@ struct dr_index64_vector : drjit::dr_vector<uint64_t> {
     }
 };
 
+/// RAII AD Isolation helper
+struct scoped_isolation_boundary {
+    scoped_isolation_boundary() {
+        ad_scope_enter(drjit::ADScope::Isolate, 0, nullptr);
+    }
+
+    ~scoped_isolation_boundary() {
+        ad_scope_leave(success);
+    }
+
+    bool success = false;
+};
+

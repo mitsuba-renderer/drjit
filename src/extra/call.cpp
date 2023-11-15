@@ -35,19 +35,6 @@ struct scoped_set_mask {
     JitBackend backend;
 };
 
-/// RAII AD Isolation helper
-struct scoped_isolation_boundary {
-    scoped_isolation_boundary() {
-        ad_scope_enter(dr::ADScope::Isolate, 0, nullptr);
-    }
-
-    ~scoped_isolation_boundary() {
-        ad_scope_leave(success);
-    }
-
-    bool success = false;
-};
-
 /// RAII helper to temporarily record symbolic computation
 struct scoped_record {
     scoped_record(JitBackend backend, const char *name) : backend(backend) {
@@ -553,6 +540,7 @@ public:
 
     /// Implements f(arg..., grad(rv)...) -> grad(arg) ...
     void backward() override {
+        scoped_isolation_boundary isolation_guard;
         std::string name = m_name + " [ad, bwd]";
 
         dr_index64_vector args, rv;

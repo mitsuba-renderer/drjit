@@ -107,7 +107,7 @@ DRJIT_CALL_TEMPLATE_BEGIN(Base)
 DRJIT_CALL_END(Base)
 
 template <JitBackend Backend>
-void bind_simple(nb::module_ &m) {
+void bind(nb::module_ &m) {
     using Float = dr::DiffArray<Backend, float>;
     using BaseT = Base<Float>;
     using AT = A<Float>;
@@ -162,11 +162,11 @@ void bind_simple(nb::module_ &m) {
 NB_MODULE(call_ext, m) {
 #if defined(DRJIT_ENABLE_LLVM)
     nb::module_ llvm = m.def_submodule("llvm");
-    bind_simple<JitBackend::LLVM>(llvm);
+    bind<JitBackend::LLVM>(llvm);
 #endif
 
 #if defined(DRJIT_ENABLE_CUDA)
     nb::module_ cuda = m.def_submodule("cuda");
-    bind_simple<JitBackend::CUDA>(cuda);
+    bind<JitBackend::CUDA>(cuda);
 #endif
 }

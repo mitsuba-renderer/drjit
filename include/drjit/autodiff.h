@@ -15,6 +15,7 @@
 
 #include <drjit/jit.h>
 #include <drjit/extra.h>
+#include <stdexcept>
 
 NAMESPACE_BEGIN(drjit)
 
@@ -784,4 +785,51 @@ void forward(T &value, uint32_t flags = (uint32_t) ADFlag::Default) {
     forward_from(value, flags);
 }
 
+NAMESPACE_BEGIN(detail)
+
+/// Internal operations for traversing nested data structures and fetching or
+/// storing indices. Used in ``call.h`` and ``loop.h``.
+
+template <bool IncRef, typename T>
+void collect_indices(const T &value, dr_vector<uint64_t> &indices) {
+    if constexpr (depth_v<T> > 1) {
+        for (size_t i = 0; i < value.derived().size(); ++i)
+            collect_indices<IncRef>(value.derived().entry(i), indices);
+    } else if constexpr (is_tensor_v<T>) {
+        collect_indices<IncRef>(value.array(), indices);
+    } else if constexpr (is_jit_v<T>) {
+        uint64_t index = value.index_combined();
+        if constexpr (IncRef)
+            ad_var_inc_ref(index);
+        indices.push_back(index);
+    } else if constexpr (is_drjit_struct_v<T>) {
+        struct_support_t<T>::apply_1(
+            value, [&](const auto &x) { collect_indices<IncRef>(x, indices); });
+    }
+}
+
+template <typename T>
+void update_indices(T &value, const dr_vector<uint64_t> &indices, size_t &pos) {
+    if constexpr (depth_v<T> > 1) {
+        for (size_t i = 0; i < value.derived().size(); ++i)
+            update_indices(value.derived().entry(i), indices, pos);
+    } else if constexpr (is_tensor_v<T>) {
+        update_indices(value.array(), indices, pos);
+    } else if constexpr (is_jit_v<T>) {
+        value = T::borrow((typename T::Index) indices[pos++]);
+    } else if constexpr (is_drjit_struct_v<T>) {
+        struct_support_t<T>::apply_1(
+            value, [&](auto &x) { update_indices(x, indices, pos); });
+    }
+}
+
+template <typename T> void update_indices(T &value, const dr_vector<uint64_t> &indices) {
+    size_t pos = 0;
+    update_indices(value, indices, pos);
+#if !defined(NDEBUG)
+    if (pos != indices.size())
+        throw std::runtime_error("update_indices(): did not consume the expected number of indices!");
+#endif
+}
+NAMESPACE_END(detail)
 NAMESPACE_END(drjit)
