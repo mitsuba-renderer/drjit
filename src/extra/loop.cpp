@@ -233,6 +233,9 @@ static void ad_loop_evaluated(JitBackend backend, const char *name,
 void ad_loop(JitBackend backend, int symbolic, const char *name, void *payload,
              ad_loop_read read_cb, ad_loop_write write_cb, ad_loop_cond cond_cb,
              ad_loop_body body_cb) {
+    if (name == nullptr)
+        name = "unnamed";
+
     if (strchr(name, '\n') || strchr(name, '\r'))
         jit_raise("The loop name may not contain newline characters.\n");
 
@@ -242,10 +245,12 @@ void ad_loop(JitBackend backend, int symbolic, const char *name, void *payload,
     if (symbolic != 0 && symbolic != 1)
         jit_raise("The 'symbolic' argument must equal 0, 1, or -1");
 
+    scoped_isolation_boundary isolation_guard;
     if (symbolic)
         ad_loop_symbolic(backend, name, payload, read_cb, write_cb,
                          cond_cb, body_cb);
     else
         ad_loop_evaluated(backend, name, payload, read_cb, write_cb,
                           cond_cb, body_cb);
+    isolation_guard.success = true;
 }

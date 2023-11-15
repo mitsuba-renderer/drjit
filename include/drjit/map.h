@@ -23,7 +23,7 @@
 
         MY_MACRO(a), MY_MACRO(b), MY_MACRO(c)
 
-    (note the extra commans between arguments). The implementation supports a
+    (note the extra commas between arguments). The implementation supports a
     maximum of 32 arguments, which ought to be enough for everyone.
 
     The implementation is based on tricks proposed by Laurent Deniau and
