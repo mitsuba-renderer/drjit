@@ -32,6 +32,16 @@
 #include "while.h"
 #include "misc.h"
 
+static void set_flag_py(JitFlag flag, bool value) {
+    if (flag == JitFlag::Debug) {
+        if (value)
+            enable_py_tracing();
+        else
+            disable_py_tracing();
+    }
+    jit_set_flag(flag, value);
+}
+
 NB_MODULE(drjit_ext, m_) {
     (void) m_;
     nb::module_ m = nb::module_::import_("drjit");
@@ -65,6 +75,7 @@ NB_MODULE(drjit_ext, m_) {
         .value("LLVM", JitBackend::LLVM, doc_JitBackend_LLVM);
 
     nb::enum_<JitFlag>(m, "JitFlag", doc_JitFlag)
+        .value("Debug", JitFlag::Debug, doc_JitFlag_Debug)
         .value("IndexReuse", JitFlag::IndexReuse, doc_JitFlag_IndexReuse)
         .value("ConstantPropagation", JitFlag::ConstantPropagation, doc_JitFlag_ConstantPropagation)
         .value("ValueNumbering", JitFlag::ValueNumbering, doc_JitFlag_ValueNumbering)
@@ -127,6 +138,9 @@ NB_MODULE(drjit_ext, m_) {
     m.def("whos_str", &jit_var_whos);
     m.def("whos", []() { nb::print(jit_var_whos()); });
 
+    m.def("flag", &jit_flag, doc_flag);
+    m.def("set_flag", &set_flag_py, doc_set_flag);
+
     struct scoped_set_flag_py {
         JitFlag flag;
         bool value, backup = false;
@@ -135,18 +149,15 @@ NB_MODULE(drjit_ext, m_) {
 
         void __enter__() {
             backup = jit_flag(flag);
-            jit_set_flag(flag, value);
+            set_flag_py(flag, value);
         }
 
         void __exit__(nb::handle, nb::handle, nb::handle) {
-            jit_set_flag(flag, backup);
+            set_flag_py(flag, backup);
         }
     };
 
-    m.def("flag", &jit_flag, doc_flag);
-    m.def("set_flag", &jit_set_flag, doc_set_flag);
-
-    nb::class_<scoped_set_flag_py>(detail, "scoped_set_flag",
+    nb::class_<scoped_set_flag_py>(m, "scoped_set_flag",
                                    doc_scoped_set_flag)
         .def(nb::init<JitFlag, bool>(), "flag"_a, "value"_a = true)
         .def("__enter__", &scoped_set_flag_py::__enter__)

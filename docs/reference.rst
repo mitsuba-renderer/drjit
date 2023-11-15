@@ -282,6 +282,29 @@ Just-in-time compilation
    threads using Dr.Jit can set them independently without interfering with each
    other.
 
+   .. autoattribute:: Debug
+      :annotation:
+
+      .. For Sphinx-related technical reasons, the below comment is replicated
+         in docstr.h. Please keep the two in sync when making changes.
+
+      Enabling this flag will enable additional checks within Dr.Jit.
+
+      Specifically, debug mode will
+
+      - insert additional checks to catch out-of-bound reads and writes
+        performed by operations such as :py:func:`drjit.scatter`,
+        :py:func:`drjit.gather`, :py:func:`drjit.scatter_reduce`.
+
+      - include Python source code locations in the generated intermediate
+        representation (PTX, LLVM IR). This is mostly useful for low-level
+        debugging and development involving Dr.Jit internals.
+
+      Debug mode comes at a significant cost: it interferes with kernel
+      caching, reduces tracing performance, and produce kernels that run
+      slower. We recommend that you only use it when encountering a serious
+      problem like a crashing kernel.)";
+
    .. autoattribute:: IndexReuse
       :annotation:
 

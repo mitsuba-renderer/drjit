@@ -16,6 +16,7 @@
 #include "repr.h"
 #include "shape.h"
 #include "slice.h"
+#include "inspect.h"
 #include <nanobind/stl/string.h>
 
 #define DR_NB_UNOP(name, op)                                                   \
@@ -456,6 +457,20 @@ void export_base(nb::module_ &m) {
                    nb::raw_doc(doc_ArrayBase_real));
     ab.def_prop_rw("imag", complex_getter<1>, complex_setter<1>,
                    nb::raw_doc(doc_ArrayBase_imag));
+
+    ab.def_prop_rw("label",
+        [](nb::handle_t<dr::ArrayBase> h) -> nb::object {
+            const ArraySupplement &s = supp(h.type());
+            if ((JitBackend) s.backend != JitBackend::None) {
+                const char *str = jit_var_label((uint32_t) s.index(inst_ptr(h)));
+                if (str)
+                    return nb::str(str);
+            }
+            return nb::none();
+        },
+        &set_label,
+        nb::raw_doc(doc_ArrayBase_label)
+    );
 
     ab.def_prop_ro(
         "index",

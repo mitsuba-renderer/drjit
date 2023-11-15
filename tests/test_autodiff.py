@@ -169,22 +169,22 @@ def test005_set_label(t):
     c = Array3f(1.0, 2.0, 3.0)
     d = make_mystruct(t)()
 
-    assert dr.label(a) is None
+    assert a.label is None
     dr.enable_grad(a, b, c, d)
-    assert dr.label(a) is None
+    assert a.label is None
 
     dr.set_label(a, 'aa')
-    assert dr.label(a) == 'aa'
+    assert a.label == 'aa'
 
     dr.set_label(a=a, b=b, c=c, d=d)
-    assert dr.label(a) == 'a'
-    assert dr.label(b[0]) == 'b_0'
-    assert dr.label(b[1]) == 'b_1'
-    assert dr.label(c.x) == 'c_0'
-    assert dr.label(c.y) == 'c_1'
-    assert dr.label(c.z) == 'c_2'
-    assert dr.label(d.x) == 'd_x'
-    assert dr.label(d.y) == 'd_y'
+    assert a.label == 'a'
+    assert b[0].label == 'b_0'
+    assert b[1].label == 'b_1'
+    assert c.x.label == 'c_0'
+    assert c.y.label == 'c_1'
+    assert c.z.label == 'c_2'
+    assert d.x.label == 'd_x'
+    assert d.y.label == 'd_y'
 
     with pytest.raises(TypeError, match='incompatible function arguments'):
         dr.set_label(a, 'aa', b=b)
