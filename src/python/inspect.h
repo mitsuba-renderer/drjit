@@ -14,3 +14,4 @@
 #include "common.h"
 
 extern void export_inspect(nb::module_&);
+extern void set_label(nb::handle h, nb::str label);

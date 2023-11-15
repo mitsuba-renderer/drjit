@@ -444,34 +444,6 @@ def reverse(value, axis:int=0):
         return result
 
 # -------------------------------------------------------------------
-#               Context manager for setting JIT flags
-# -------------------------------------------------------------------
-
-class scoped_set_flag:
-    """
-    This context manager can be used to selectively enable or disable a JIT
-    compilation flag (:py:class:`drjit.JitFlag` member) for a given chunk of
-    code.
-
-    An example is shown below:
-
-    .. code-block::
-
-       with dr.scoped_set_flag(dr.JitFlag.VCallOptimize, False):
-           # .. code coes here ..
-    """
-    def __init__(self, flag: JitFlag, value: bool = True):
-        self.flag = flag
-        self.value = value
-
-    def __enter__(self):
-        self.backup = flag(self.flag)
-        set_flag(self.flag, self.value)
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        set_flag(self.flag, self.backup)
-
-# -------------------------------------------------------------------
 #                        Enabling/disabling AD
 # -------------------------------------------------------------------
 

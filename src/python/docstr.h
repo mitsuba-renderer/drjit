@@ -1579,6 +1579,22 @@ variable index within the AD computation graph, if applicable.
 
 :type: int)";
 
+static const char *doc_ArrayBase_label = R"(
+If ``self`` is a *leaf* Dr.Jit array managed by a just-in-time compiled backend
+(i.e, CUDA or LLVM), this property contains a custom label that may be
+associated with the variable. This label is visible graph visualizations, such
+as :py:func:`drjit.graphviz` and :py:func:`drjit.graphviz_ad`. It is also added
+to the generated low-level IR (LLVM, PTX) to aid debugging.
+
+You may directly assign new labels to this variable or use the
+:py:func:`drjit.set_label` function to label entire data structures (e.g.,
+:ref:`Pytrees <pytrees>`).
+
+When :py:attr:`drjit.JitFlag.Debug` is set, this field will initially be
+set to the source code location (file + line number) that created variable.
+
+:type: str | None)";
+
 static const char *doc_ArrayBase_index_ad = R"(
 If ``self`` is a *leaf* Dr.Jit array represented by an AD backend, this
 property contains the variable index in the graph data structure storing the
@@ -1952,9 +1968,15 @@ This operation can be used in the following different ways:
 
 .. danger::
 
-    The indices provided to this operation are unchecked. Out-of-bounds reads
-    are undefined behavior (if not disabled via the ``active`` parameter) and may
-    crash the application. Negative indices are not permitted.
+    The indices provided to this operation are unchecked by default.
+    Out-of-bounds reads are considered undefined behavior and may crash the
+    application (unless they are disabled via the ``active`` parameter).
+    Negative indices are not permitted.
+
+    If *debug mode* is enabled via the :py:attr:`drjit.JitFlag.Debug` flag,
+    Dr.Jit will insert range checks into the program. These will catch
+    out-of-bound reads and print an error message identifying the responsible
+    line of code.
 
 Args:
     dtype (type): The desired output type (typically equal to ``type(source)``,
@@ -2048,9 +2070,15 @@ This operation can be used in the following different ways:
 
 .. danger::
 
-    The indices provided to this operation are unchecked. Out-of-bounds writes
-    are undefined behavior (if not disabled via the ``active`` parameter) and may
-    crash the application. Negative indices are not permitted.
+    The indices provided to this operation are unchecked by default.
+    Out-of-bound writes are considered undefined behavior and may crash the
+    application (unless they are disabled via the ``active`` parameter).
+    Negative indices are not permitted.
+
+    If *debug mode* is enabled via the :py:attr:`drjit.JitFlag.Debug` flag,
+    Dr.Jit will insert range checks into the program. These will catch
+    out-of-bound writes and print an error message identifying the responsible
+    line of code.
 
     Dr.Jit makes no guarantees about the expected behavior when a scatter
     operation has *conflicts*, i.e., when a specific position is written
@@ -2183,9 +2211,15 @@ This operation can be used in the following different ways:
 
 .. danger::
 
-    The indices provided to this operation are unchecked. Out-of-bounds writes
-    are undefined behavior (if not disabled via the ``active`` parameter) and may
-    crash the application. Negative indices are not permitted.
+    The indices provided to this operation are unchecked by default.
+    Out-of-bound writes are considered undefined behavior and may crash the
+    application (unless they are disabled via the ``active`` parameter).
+    Negative indices are not permitted.
+
+    If *debug mode* is enabled via the :py:attr:`drjit.JitFlag.Debug` flag,
+    Dr.Jit will insert range checks into the program. These will catch
+    out-of-bound writes and print an error message identifying the responsible
+    line of code.
 
     Dr.Jit makes no guarantees about the relative ordering of atomic operations
     when a :py:func:`drjit.scatter_reduce()` writes to the same element
@@ -3166,15 +3200,6 @@ Context manager to temporarily isolate outside world from AD traversals.
 Dr.Jit provides isolation boundaries to postpone AD traversals steps leaving a
 specific scope. For instance this function is used internally to implement
 differentiable loops and polymorphic calls.
-)";
-static const char *doc_label = R"(
-Returns the label of a given Dr.Jit array.
-
-Args:
-    arg (object): a Dr.Jit array instance.
-
-Returns:
-    str: the label of the given variable.
 )";
 
 static const char *doc_has_backend = R"(
@@ -4209,6 +4234,27 @@ below along with the documentation of :py:func:`drjit.switch` and
 Dr.Jit flags are a thread-local property. This means that multiple independent
 threads using Dr.Jit can set them independently without interfering with each
 other.)";
+
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
+static const char *doc_JitFlag_Debug = R"(
+**Debug mode**: Enabling this flag will enable additional checks within
+Dr.Jit. 
+
+Specifically, debug mode will
+
+- insert additional checks to catch out-of-bound reads and writes performed by
+  operations such as :py:func:`drjit.scatter`, :py:func:`drjit.gather`,
+  :py:func:`drjit.scatter_reduce`.
+
+- include Python source code locations in the generated intermediate
+  representation (PTX, LLVM IR). This is mostly useful for low-level
+  debugging and development involving Dr.Jit internals.
+
+Debug mode comes at a significant cost: it interferes with kernel caching,
+reduces tracing performance, and produce kernels that run slower. We recommend
+that you only use it when encountering a serious problem like a crashing
+kernel.)";
 
 // For Sphinx-related technical reasons, this comment is replicated in
 // reference.rst. Please keep them in sync when making changes

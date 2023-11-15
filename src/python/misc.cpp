@@ -122,6 +122,24 @@ void check_compatibility(nb::handle h1, nb::handle h2) {
                   CheckCompatibility{ }, h1, h2);
 }
 
+static nb::handle trace_func_handle;
+
+/// Python debug tracing callback that informs Dr.Jit about the currently executing line of code
+nb::object trace_func(nb::handle frame, nb::handle, nb::handle) {
+    const size_t lineno = nb::cast<size_t>(frame.attr("f_lineno"));
+    const char *filename = nb::cast<const char *>(frame.attr("f_code").attr("co_filename"));
+    jit_set_source_location(filename, lineno);
+    return nb::borrow(trace_func_handle);
+}
+
+void enable_py_tracing() {
+    nb::module_::import_("sys").attr("settrace")(trace_func_handle);
+}
+
+void disable_py_tracing() {
+    nb::module_::import_("sys").attr("settrace")(nb::none());
+}
+
 void export_misc(nb::module_ &) {
     nb::module_ detail = nb::module_::import_("drjit.detail");
     detail.def("collect_indices",
@@ -135,4 +153,6 @@ void export_misc(nb::module_ &) {
         jit_llvm_version(&major, &minor, &patch);
         return nb::str("{}.{}.{}").format(major, minor, patch);
     });
+    detail.def("trace_func", &trace_func, "frame"_a, "event"_a, "arg"_a = nb::none());
+    trace_func_handle = detail.attr("trace_func");
 }

@@ -99,19 +99,6 @@ void set_label_2(nb::kwargs kwargs) {
     }
 }
 
-static nb::object label(nb::handle h) {
-    if (is_drjit_array(h)) {
-        const ArraySupplement &s = supp(h.type());
-        if ((JitBackend) s.backend != JitBackend::None) {
-            const char *str = jit_var_label((uint32_t) s.index(inst_ptr(h)));
-            if (str)
-                return nb::str(str);
-        }
-    }
-
-    return nb::none();
-}
-
 void export_inspect(nb::module_ &m) {
     m.def("graphviz", [](bool as_string) { return graphviz(false, as_string); },
           "as_string"_a = false, doc_graphviz)
@@ -122,7 +109,6 @@ void export_inspect(nb::module_ &m) {
           "as_string"_a = false, doc_whos)
      .def("whos_ad", [](bool as_string) { return whos(true, as_string); },
           "as_string"_a = false, doc_whos_ad)
-     .def("label", &label, doc_label)
      .def("set_label", &set_label, doc_set_label)
      .def("set_label", &set_label_2);
 }

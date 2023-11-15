@@ -18,3 +18,6 @@ extern void collect_indices(nb::handle, dr::dr_vector<uint64_t>&);
 extern dr::dr_vector<uint64_t> collect_indices(nb::handle);
 extern nb::object update_indices(nb::handle, const dr::dr_vector<uint64_t> &);
 extern void check_compatibility(nb::handle, nb::handle);
+
+extern void enable_py_tracing();
+extern void disable_py_tracing();
