@@ -80,6 +80,11 @@ struct LoopState {
         first_time = false;
     }
 
+    void cleanup() {
+        stack.clear();
+        state = nb::borrow<nb::tuple>(cleanup_impl(state));
+    }
+
 private:
     template <bool Write, typename OutArray> void traverse(nb::handle h, OutArray &indices) {
         // Avoid infinite recursion
@@ -226,6 +231,48 @@ private:
         }
         stack.pop_back();
     }
+
+    /// Release all Dr.Jit objects in a Pytree
+    nb::object cleanup_impl(nb::handle h) {
+        // Avoid infinite recursion
+        if (std::find(stack.begin(), stack.end(), h.ptr()) != stack.end())
+            return nb::none();
+
+        stack.push_back(h.ptr());
+
+        nb::handle tp = h.type();
+        nb::object result;
+        if (is_drjit_type(tp)) {
+            result = tp();
+        } else if (tp.is(&PyList_Type)) {
+            nb::list l;
+            for (nb::handle v: nb::borrow<nb::list>(h))
+                l.append(cleanup_impl(v));
+            result = std::move(l);
+        } else if (tp.is(&PyTuple_Type)) {
+            nb::list l;
+            for (nb::handle v: nb::borrow<nb::tuple>(h))
+                l.append(cleanup_impl(v));
+            result = nb::tuple(l);
+        } else if (tp.is(&PyDict_Type)) {
+            nb::dict d;
+            for (nb::handle kv: nb::borrow<nb::dict>(h).items())
+                d[cleanup_impl(kv[0])] = cleanup_impl(kv[1]);
+            result = std::move(d);
+        } else {
+            nb::object dstruct = nb::getattr(tp, "DRJIT_STRUCT", nb::handle());
+            if (dstruct.is_valid() && dstruct.type().is(&PyDict_Type)) {
+                result = tp();
+                for (auto [k, v] : nb::borrow<nb::dict>(dstruct))
+                    result.attr(k) = cleanup_impl(nb::getattr(h, k));
+            } else {
+                result = nb::borrow(h);
+            }
+        }
+
+        stack.pop_back();
+        return result;
+    }
 };
 
 /// Helper function to perform a tuple-based function call directly using the
@@ -264,6 +311,7 @@ static const ArraySupplement &check_cond(nb::handle h) {
 
 /// Callback functions that will be invoked by ad_loop()
 static uint32_t while_loop_cond_cb(void *p) {
+    nb::gil_scoped_acquire guard;
     LoopState *lp = (LoopState *) p;
     lp->active = tuple_call(lp->cond, lp->state);
     uint32_t active_index = (uint32_t) check_cond(lp->active).index(inst_ptr(lp->active));
@@ -272,17 +320,27 @@ static uint32_t while_loop_cond_cb(void *p) {
 }
 
 static void while_loop_body_cb(void *p) {
+    nb::gil_scoped_acquire guard;
     LoopState *lp = (LoopState *) p;
     lp->state = check_state("body", tuple_call(lp->body, lp->state), lp->state);
 };
 
 static void while_loop_read_cb(void *p, dr::dr_vector<uint64_t> &indices) {
+    nb::gil_scoped_acquire guard;
     ((LoopState *) p)->traverse<false>(indices);
 }
 
 static void while_loop_write_cb(void *p,
                                 const dr::dr_vector<uint64_t> &indices) {
+    nb::gil_scoped_acquire guard;
     ((LoopState *) p)->traverse<true>(indices);
+}
+
+static void while_loop_delete_cb(void *p) {
+    if (!nb::is_alive())
+        return;
+    nb::gil_scoped_acquire guard;
+    delete (LoopState *) p;
 }
 
 nb::tuple while_loop(nb::tuple state, nb::callable cond, nb::callable body,
@@ -314,10 +372,6 @@ nb::tuple while_loop(nb::tuple state, nb::callable cond, nb::callable body,
 
         // General case: call ad_loop() with a number of callbacks that
         // implement an interface to Python
-        dr::dr_unique_ptr<LoopState> payload(
-            new LoopState(std::move(state), std::move(cond), std::move(body),
-                          std::move(state_labels)));
-
         int symbolic = -1;
         if (auto_loop)
             symbolic = -1;
@@ -329,11 +383,22 @@ nb::tuple while_loop(nb::tuple state, nb::callable cond, nb::callable body,
             nb::raise("invalid 'method' argument (must equal \"auto\", "
                       "\"scalar\", \"symbolic\", or \"evaluated\").");
 
-        ad_loop(backend, symbolic, name.c_str(), payload.get(),
-                while_loop_read_cb, while_loop_write_cb, while_loop_cond_cb,
-                while_loop_body_cb);
+        LoopState *payload =
+            new LoopState(std::move(state), std::move(cond), std::move(body),
+                          std::move(state_labels));
 
-        return nb::borrow<nb::tuple>(payload->state);
+        bool rv = ad_loop(backend, symbolic, name.c_str(), payload,
+                          while_loop_read_cb, while_loop_write_cb,
+                          while_loop_cond_cb, while_loop_body_cb,
+                          while_loop_delete_cb, true);
+
+        nb::tuple t = nb::borrow<nb::tuple>(payload->state);
+        if (rv)
+            delete payload;
+        else
+            payload->cleanup();
+
+        return t;
     } catch (nb::python_error &e) {
         nb::raise_from(
             e, PyExc_RuntimeError,

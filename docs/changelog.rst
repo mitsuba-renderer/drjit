@@ -39,7 +39,7 @@ incompatibilities and potential stumbling blocks.
 
      from drjit.cuda import Int, Float
 
-     @drjit.function
+     @drjit.syntax
      def ipow(x: Float, n: Int):
          result = Float(1)
 
@@ -63,12 +63,17 @@ incompatibilities and potential stumbling blocks.
   retain conditional statements and translate them into conditional jumps in
   the generated CPU/GPU program.
 
-  Note the presence of the :py:func:`@drjit.function <drjit.function>`
+  Note the presence of the :py:func:`@drjit.syntax <drjit.syntax>`
   decorator, which transforms the ``while`` loop into a call to the
   array-compatible function :py:func:`drjit.while_loop` and the ``if``
   statement into a call to :py:func:`drjit.if_stmt`. Besides these two effects,
   the transformation is minimal and preserves other code along with line number
   information to aid debugging.
+
+- **Differentiable control flow**: symbolic control flow constructs (loops)
+  previously failed with an error message when they detected differentiable
+  variables. Both symbolic loops and conditionals now support differentiation
+  in forward and reverse modes.
 
 - ⚠️ **Comparison operators**: The ``==`` and ``!=`` comparisons previously
   reduced the result of to a single Python ``bool``. They now return an array

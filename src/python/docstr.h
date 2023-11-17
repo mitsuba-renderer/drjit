@@ -2805,7 +2805,7 @@ the ``flags`` parameter.
 The implementation raises an exception when the provided array does not support
 gradient tracking, or when gradient tracking was not previously enabled via
 :py:func:`drjit.enable_grad()`, as this generally indicates the presence of
-a bug. Specify the :py:attr:`drjit.ADFlag.AllowNoFlag` flag (e.g. by
+a bug. Specify the :py:attr:`drjit.ADFlag.AllowNoGrad` flag (e.g. by
 passing ``flags=dr.ADFlag.Default | dr.ADFlag.AllowNoGrad``) to the function.
 
 Args:
@@ -2848,7 +2848,7 @@ the ``flags`` parameter.
 The implementation raises an exception when the provided array does not support
 gradient tracking, or when gradient tracking was not previously enabled via
 :py:func:`drjit.enable_grad()`, as this generally indicates the presence of
-a bug. Specify the :py:attr:`drjit.ADFlag.AllowNoFlag` flag (e.g. by
+a bug. Specify the :py:attr:`drjit.ADFlag.AllowNoGrad` flag (e.g. by
 passing ``flags=dr.ADFlag.Default | dr.ADFlag.AllowNoGrad``) to the function.
 
 Args:
@@ -2909,7 +2909,7 @@ the ``flags`` parameter.
 The implementation raises an exception when the provided array does not support
 gradient tracking, or when gradient tracking was not previously enabled via
 :py:func:`drjit.enable_grad()`, as this generally indicates the presence of
-a bug. Specify the :py:attr:`drjit.ADFlag.AllowNoFlag` flag (e.g. by
+a bug. Specify the :py:attr:`drjit.ADFlag.AllowNoGrad` flag (e.g. by
 passing ``flags=dr.ADFlag.Default | dr.ADFlag.AllowNoGrad``) to the function.
 
 Args:
@@ -2952,7 +2952,7 @@ the ``flags`` parameter.
 The implementation raises an exception when the provided array does not support
 gradient tracking, or when gradient tracking was not previously enabled via
 :py:func:`drjit.enable_grad()`, as this generally indicates the presence of
-a bug. Specify the :py:attr:`drjit.ADFlag.AllowNoFlag` flag (e.g. by
+a bug. Specify the :py:attr:`drjit.ADFlag.AllowNoGrad` flag (e.g. by
 passing ``flags=dr.ADFlag.Default | dr.ADFlag.AllowNoGrad``) to the function.
 
 Args:
@@ -3783,7 +3783,7 @@ explain how this mode is automatically selected).
    .. code-block:: python
 
       while cond(state):
-          state = body(state)
+          state = body(*state)
 
    The function :py:func:`drjit.while_loop()` uses such a strategy by default
    when ``cond(state)`` returns a scalar Python ``bool``.
@@ -4034,6 +4034,12 @@ exception identifying problematic loop state variables.
           while i < 100000:
               # .. costly computation
               i += 1
+
+.. warning::
+
+   This new implementation of the :py:func:`drjit.while_loop` abstraction still
+   lacks the functionality to ``break`` from the loop or ``continue`` to the
+   next loop iteration. Our plan is to add the ability to do so soon as well.
 
 .. rubric:: Interface
 

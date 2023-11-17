@@ -279,11 +279,13 @@ typedef void (*ad_loop_read)(void *payload, drjit::dr_vector<uint64_t> &);
 typedef void (*ad_loop_write)(void *payload, const drjit::dr_vector<uint64_t> &);
 typedef uint32_t (*ad_loop_cond)(void *payload);
 typedef void (*ad_loop_body)(void *payload);
+typedef void (*ad_loop_delete)(void *payload);
 
-extern DRJIT_EXTRA_EXPORT void ad_loop(JitBackend backend, int symbolic,
+extern DRJIT_EXTRA_EXPORT bool ad_loop(JitBackend backend, int symbolic,
                                        const char *name, void *payload,
                                        ad_loop_read read_cb, ad_loop_write write_cb,
-                                       ad_loop_cond cond_cb, ad_loop_body body_cb);
+                                       ad_loop_cond cond_cb, ad_loop_body body_cb,
+                                       ad_loop_delete delete_cb, bool ad);
 
 
 #if defined(__cplusplus)
