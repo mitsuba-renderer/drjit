@@ -474,9 +474,9 @@ static void ad_call_check_rv(JitBackend backend, size_t size,
 }
 
 /// CustomOp that hooks a recorded virtual function call into the AD graph
-struct VCallOp : public dr::detail::CustomOpBase {
+struct CallOp : public dr::detail::CustomOpBase {
 public:
-    VCallOp(JitBackend backend, const char *name, const char *domain,
+    CallOp(JitBackend backend, const char *name, const char *domain,
             uint32_t index, uint32_t mask, size_t callable_count,
             const dr_vector<uint64_t> &args, size_t rv_size, void *payload,
             ad_call_func func, ad_call_cleanup cleanup)
@@ -499,9 +499,11 @@ public:
 
         for (size_t i = 0; i < args.size(); ++i)
             m_args.push_back_borrow((uint32_t) args[i]);
+
+        m_name_op = "Call: " + m_name;
     }
 
-    ~VCallOp() {
+    ~CallOp() {
         jit_var_dec_ref(m_index);
         jit_var_dec_ref(m_mask);
         if (m_cleanup)
@@ -568,7 +570,7 @@ public:
     static void forward_cb(void *ptr, void *self,
                            const dr_vector<uint64_t> &args,
                            dr_vector<uint64_t> &rv) {
-        ((VCallOp *) ptr)->forward_cb(self, args, rv);
+        ((CallOp *) ptr)->forward_cb(self, args, rv);
     }
 
     /// Forward AD callback (invoked by forward() once per callable)
@@ -611,7 +613,7 @@ public:
     static void backward_cb(void *ptr, void *self,
                            const dr_vector<uint64_t> &args,
                            dr_vector<uint64_t> &rv) {
-        ((VCallOp *) ptr)->backward_cb(self, args, rv);
+        ((CallOp *) ptr)->backward_cb(self, args, rv);
     }
 
     /// Backward AD callback (invoked by backward() once per callable)
@@ -650,7 +652,7 @@ public:
     }
 
 
-    const char *name() const override { return m_name.c_str(); }
+    const char *name() const override { return m_name_op.c_str(); }
 
     void add_input(size_t i, uint64_t index) {
         if (add_index(m_backend, index >> 32, true))
@@ -664,10 +666,10 @@ public:
         }
     }
 
-    void disable_cleanup() { m_cleanup = nullptr; }
+    void disable_deleter() { m_cleanup = nullptr; }
 
 private:
-    std::string m_name;
+    std::string m_name, m_name_op;
     const char *m_domain;
     uint32_t m_index, m_mask;
     size_t m_callable_count;
@@ -777,8 +779,8 @@ bool ad_call(JitBackend backend, const char *domain, size_t callable_count,
             if (domain)
                 callable_count = 0;
 
-            nanobind::ref<VCallOp> op =
-                new VCallOp(backend, name, domain, index, mask, callable_count,
+            nanobind::ref<CallOp> op =
+                new CallOp(backend, name, domain, index, mask, callable_count,
                             args, rv.size(), payload, func, cleanup);
 
             for (size_t i = 0; i < args.size(); ++i)
@@ -799,12 +801,12 @@ bool ad_call(JitBackend backend, const char *domain, size_t callable_count,
             }
 
             if (ad_custom_op(op.get())) {
-                // VCallOp will eventually call cleanup()
+                // CallOp will eventually call cleanup()
                 return false;
             }
 
             // CustomOp was not needed, detach output again..
-            op->disable_cleanup();
+            op->disable_deleter();
             for (size_t i = 0; i < rv.size(); ++i) {
                 uint64_t index = rv[i],
                          index_d = (index << 32) >> 32;

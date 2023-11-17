@@ -3003,9 +3003,9 @@ bool ad_custom_op(dr::detail::CustomOpBase *op) {
         return false;
 
     for (uint32_t i: inputs)
-        state[i]->flags &= ~ (uint8_t) VariableFlags::Visited;
+        state[i]->flags &= ~(uint8_t) VariableFlags::Visited;
     for (uint32_t o: outputs)
-        state[o]->flags &= ~ (uint8_t) VariableFlags::Visited;
+        state[o]->flags &= ~(uint8_t) VariableFlags::Visited;
 
     const char *name = op->name();
 

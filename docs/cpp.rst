@@ -174,3 +174,94 @@ and append the following binding declarations:
 The ``Domain`` attribute at the end should match the name passed to
 ``jit_registry_put`` and enables use of the instance array with
 :py:func:`drjit.dispatch`.
+
+Vectorized loops
+----------------
+
+Analogous to the vectorized loop interface in Python
+(:py:func:`drjit.while_loop`), it is possible to run symbolic and evaluated
+loops in C++ via the :cpp:func:`drjit::while_loop()` function. Use of this API
+requires the header file
+
+.. code-block:: cpp
+
+   #include <drjit/loop.h>
+
+An example usage is shown below, which is essentially a translation of the
+Python interface to C++.
+
+.. code-block:: cpp
+
+   using Int = dr::CUDAArray<int>;
+
+   Int i = ..., j = ....;
+
+   std::tie(i, j) = dr::while_loop(
+       // Initial loop state
+       std::make_tuple(i, j),
+
+       // while(..) condition of the loop
+       [](const UInt &i, const UInt &) {
+           return i < 5;
+       },
+
+       /// Loop body
+       [](UInt &i, UInt &j) {
+           i += 1;
+           j = j * j;
+       }
+   );
+
+An analogous form of the short-hand notation enabled via
+:py:func:`@drjit.syntax <drjit.syntax>` decorator is not available in the C++
+interface.
+
+The detailed interface of this function is as follows:
+
+.. cpp:function:: template <typename State, typename Cond, typename Body> std::decay_t<State> while_loop(State&& state, Cond &&cond, Body &&body, const char * label = nullptr)
+
+   This function takes an instance ``state`` of the tuple type ``State`` (which
+   could be a ``std::pair``, ``std::tuple``, or the lighter-weight alternative
+   :cpp:class:`drjit::dr_tuple` created via :cpp:func:`drjit::make_tuple`).
+
+   It invokes the *loop body* ``body`` with an unpacked version of the tuple elements
+   (i.e., ``body(std::get<0>(state), ...)``) until the *loop condition*
+   ``cond(std::get<0>(state), ...)`` equals ``false``. 
+
+   When the loop condition returns a scalar C++ ``bool``, the operation
+   compiles into an ordinary C++ loop. When it is a Dr.Jit array, the loop
+   either runs in *symbolic* or *evaluated* mode. Please see the Python
+   equivalent of this function (:py:func:`drjit.while_loop`) for details on
+   what this means.
+
+   The ``label`` argument can be used to optionally specify a human-readable
+   name that will be included in both low-level IR and GraphViz output.
+
+   Both ``cond`` and ``body`` may specify arbitrary callables (lambda
+   functions, types with a custom ``operator()`` implementation). When such
+   callables capture state from the surrounding call frame, it is important to
+   note that Dr.Jit's AD system may need to re-evaluate the loop at a later
+   time, at which point the function which originally called
+   :cpp:func:`drjit::while_loop` has itself returned. The `&step_size` variable
+   captured by reference below would lead to undefined behavior in this case
+   (i.e., it would likely crash your program).
+
+   .. code-block:: cpp
+   
+      int step_size = 123;
+   
+      dr::while_loop(
+          ...
+          /// Loop body
+          [&step_size](UInt &i) {
+              i += step_size;
+              ...
+          }
+          ...
+      );
+
+   Instead, capture relevant variable state *by value*. Dr.Jit will move the two
+   functions (``cond`` and ``body`` including captured state) into a persistent
+   object that will eventually be released by the AD backend when it is no
+   longer needed.
+

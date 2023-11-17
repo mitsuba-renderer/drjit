@@ -61,15 +61,6 @@ nb::object switch_impl(nb::handle index_, nb::sequence funcs,
         nb::tuple args_o;
         nb::object funcs_o;
         nb::object rv_o;
-
-        ~State() {
-            if (!nb::is_alive())
-                return;
-            nb::gil_scoped_acquire guard;
-            args_o.reset();
-            funcs_o.reset();
-            rv_o.reset();
-        }
     };
 
     try {
@@ -124,7 +115,13 @@ nb::object switch_impl(nb::handle index_, nb::sequence funcs,
 
         State *state =
             new State{ nb::make_tuple(args, kwargs), funcs, nb::object() };
-        ad_call_cleanup cleanup = [](void *ptr) { delete (State *) ptr; };
+
+        ad_call_cleanup cleanup = [](void *ptr) {
+            if (!nb::is_alive())
+                return;
+            nb::gil_scoped_acquire guard;
+            delete (State *) ptr;
+        };
 
         dr_vector<uint64_t> args_i;
         dr_index_vector rv_i;
@@ -206,7 +203,12 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> instances,
 
         State *state =
             new State{ &nb::type_info(s.value), nb::make_tuple(args, kwargs), func, nb::object() };
-        ad_call_cleanup cleanup = [](void *ptr) { delete (State *) ptr; };
+        ad_call_cleanup cleanup = [](void *ptr) {
+            if (!nb::is_alive())
+                return;
+            nb::gil_scoped_acquire guard;
+            delete (State *) ptr;
+        };
 
         dr_vector<uint64_t> args_i;
         dr_index_vector rv_i;

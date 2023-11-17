@@ -1,3 +1,47 @@
+/*
+   drjit/python.h -- Public interface for creating Python bindings of custom
+   Dr.Jit types.
+
+   To dynamically construct a new type binding for a class ``MyType``, call
+   the ``dr::bind_array_t<>`` function as follows:
+
+   ```python
+   dr::ArrayBinding b;
+   auto py_type_object = dr::bind_array_t<MyType>(b, m, "MyType")
+   ```
+
+   The ``ArrayBinding`` variable is scratch space and can be reused
+   following this call.
+
+   You do not need to link against the Dr.Jit Python bindings to be able
+   to use this function, it is realized using "pure" nanobind code.
+
+   This code below has the job of populating the ``ArrayBinding`` data
+   structure, which consists of two main parts: the ``ArrayMeta`` metadata
+   block describes the shape and type of the array.
+
+   The ``ArraySupplement`` part consists of a huge list of function pointers.
+   Each pointer provides the possibility to override how the array realizes a
+   certain operation (e.g., addition, trigometry, etc.). This pointer table is
+   directly copied into the newly created Python type object using the "type
+   supplement" feature of nanobind.
+
+   Entries can be initialized with two special values besides a pointer to an
+   implementation: ``DRJIT_OP_DEFAULT`` (equal to 0) means that the operation
+   is supported but no special implementation is given. Usually, this means
+   that the Dr.Jit Python bindings will recursively traverse the type and then
+   perform the operation on the elements.
+
+   The other option (``DRJIT_OP_NOT_IMPLEMENTED``) causes the bindings to
+   raise an exception when the user attempts to perform such an operation.
+
+   Dr.Jit: A Just-In-Time-Compiler for Differentiable Rendering
+   Copyright 2023, Realistic Graphics Lab, EPFL.
+
+   All rights reserved. Use of this source code is governed by a
+   BSD-style license that can be found in the LICENSE.txt file.
+*/
+
 #pragma once
 
 #include <drjit/array.h>

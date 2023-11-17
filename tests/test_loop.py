@@ -279,3 +279,21 @@ def test12_optimize_away(t, optimize):
             a += 1
 
         assert (a.index == ai) == optimize
+
+@pytest.mark.parametrize('method', ['evaluated', 'symbolic'])
+@pytest.mark.parametrize("optimize", [True, False])
+@pytest.test_arrays('float,is_diff,shape=(*)')
+@dr.syntax
+def test13_complex_diff_loop(t, optimize, method):
+    i = dr.int32_array_t(t)(0)
+    lvars = [t(0) for i in range(10)]
+    dr.enable_grad(lvars[5])
+    dr.set_grad(lvars[5], 1)
+
+    while dr.hint(i < 3, method=method):
+        lvars = [lvars[k] + lvars[k-1] for k in range(10)]
+        i += 1
+
+    dr.forward_to(lvars)
+    lvars = [dr.grad(lvars[i])[0] for i in range(10)]
+    assert lvars == [ 0, 0, 0, 0, 0, 1, 3, 3, 1, 0 ]
