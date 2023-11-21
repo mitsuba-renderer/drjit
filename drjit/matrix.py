@@ -250,8 +250,8 @@ def trace(a, /):
     '''
     if not _dr.is_matrix_v(a):
         raise Exception('Unsupported type!')
-    result = a[0, 0]
-    for i in range(1, a.Size):
+    result = _dr.zeros(type(a[0][0]), _dr.width(a))
+    for i in range(a.Size):
         result += a[i, i]
     return result
 
