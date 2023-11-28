@@ -329,8 +329,8 @@ ___________________________
       - :math:`1.2 \cdot 10^{-7}\,(1\,\text{ulp})`
     * - :math:`\text{exp}()`
       - :math:`-20 < x < 30`
-      - :math:`0.72 \cdot 10^{4}`
-      - :math:`0.1 \cdot 10^{7}`
+      - :math:`0.72 \cdot 10^{-4}`
+      - :math:`0.1 \cdot 10^{-7}`
       - :math:`2.4 \cdot 10^{-8}\,(0.27\,\text{ulp})`
       - :math:`1.2 \cdot 10^{-7}\,(1\,\text{ulp})`
     * - :math:`\text{log}()`
