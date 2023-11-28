@@ -218,6 +218,35 @@ Index binary_search(scalar_t<Index> start_, scalar_t<Index> end_,
     return start;
 }
 
+/// Binary search with non-scalar indices
+template <typename Index, typename Predicate>
+Index binary_search(typename std::enable_if_t<is_jit_v<Index>, Index> start,
+                    typename std::enable_if_t<is_jit_v<Index>, Index> end,
+                    const Predicate &pred) {
+    using Mask = mask_t<Index>;
+
+    // We might be running multiple binary searches in parallel..
+    using Index1 = detached_t<
+        std::conditional_t<is_static_array_v<Index>, value_t<Index>, Index>>;
+    using Mask1 = mask_t<Index1>;
+
+    Index1 iterations = detach(select(start < end, log2i(end - start) + 1, 0));
+
+    Index1 index = zeros<Index1>(width(pred(start)));
+    Loop<Mask1> loop("dr::binary_search()", start, end, index);
+    while (loop(index < iterations)) {
+        Index middle = sr<1>(start + end);
+        Mask cond    = detach(pred(middle));
+
+        start = select(cond, minimum(middle + 1, end), start);
+        end   = select(cond, end, middle);
+
+        index++;
+    }
+
+    return start;
+}
+
 /// Vectorized N-dimensional 'range' iterable with automatic mask computation
 template <typename Value> struct range {
     static constexpr bool Recurse =

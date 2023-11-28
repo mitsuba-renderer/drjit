@@ -119,3 +119,21 @@ DRJIT_TEST(test02_meshgrid_3d) {
                     Float(4, 4, 4, 5, 5, 5, 4, 4, 4, 5, 5, 5, 4, 4, 4, 5, 5, 5, 4, 4, 4, 5, 5, 5),
                     Float(6, 7, 8, 6, 7, 8, 6, 7, 8, 6, 7, 8, 6, 7, 8, 6, 7, 8, 6, 7, 8, 6, 7, 8));
 }
+
+DRJIT_TEST(test03_binary_search) {
+    jit_init((uint32_t) JitBackend::LLVM);
+
+    UInt32 start = dr::arange<UInt32>(0, 3);
+    UInt32 end = dr::arange<UInt32>(7, 10);
+    UInt32 values = dr::arange<UInt32>(11);
+
+    UInt32 indices = dr::binary_search<UInt32>(
+        start, end,
+        [&](UInt32 index) {
+            UInt32 value = dr::gather<UInt32>(values, index);
+            return value < 5;
+        }
+    );
+
+    assert(dr::all(dr::eq(indices, 5)));
+}
