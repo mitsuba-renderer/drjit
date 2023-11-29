@@ -296,12 +296,12 @@ def test16_linspace(t):
 
 @pytest.test_arrays('shape=(*), uint32')
 def test17_repr_long_1(t):
-  assert repr(t(range(1000))) == '[0, 1, 2, 3, 4, .. 990 skipped .., 995, 996, 997, 998, 999]'
+  assert repr(t(range(1000))) == '[0, 1, 2, .. 994 skipped .., 997, 998, 999]'
 
 
 @pytest.test_arrays('shape=(1, *), uint32')
 def test18_repr_long_2(t):
-  assert repr(t([range(1000)])) == '[[0],\n [1],\n [2],\n [3],\n [4],\n .. 990 skipped ..,\n [995],\n [996],\n [997],\n [998],\n [999]]'
+  assert repr(t([range(1000)])) == '[[0],\n [1],\n [2],\n .. 994 skipped ..,\n [997],\n [998],\n [999]]'
 
 
 @pytest.test_packages()

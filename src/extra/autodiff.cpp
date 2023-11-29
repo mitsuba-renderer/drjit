@@ -692,13 +692,13 @@ char *concat(const char *s1, const char *s2) {
 static std::pair<ADIndex, Variable *> ad_var_new(JitBackend backend,
                                                  size_t size, VarType type,
                                                  bool symbolic,
-                                                 bool index_reuse,
+                                                 bool reuse_indices,
                                                  const char *label) {
 
     auto &unused = state.unused_variables;
     ADIndex index;
 
-    if (unlikely(unused.empty() || !index_reuse)) {
+    if (unlikely(unused.empty() || !reuse_indices)) {
         index = (ADIndex) state.variables.size();
         state.variables.emplace_back();
     } else {
@@ -827,7 +827,7 @@ struct ReleaseHelper {
 uint32_t ad_record_implicit_dependence(LocalState &ls, ReleaseHelper &rl,
                                        JitBackend backend, const char *label,
                                        uint32_t source, Variable *v_source,
-                                       bool index_reuse);
+                                       bool reuse_indices);
 
 /// This helper function is called by essentially all implementations of
 /// arithmetic operations below (e.g. ``ad_var_add``). It creates a new
@@ -877,7 +877,7 @@ DRJIT_NOINLINE Index ad_var_new_impl(const char *label, JitVar &&result,
     uint32_t flags = jit_flags();
 
     bool symbolic    = flags & (uint32_t) JitFlag::Recording,
-         index_reuse = flags & (uint32_t) JitFlag::IndexReuse;
+         reuse_indices = flags & (uint32_t) JitFlag::ReuseIndices;
 
     VarInfo info = jit_set_backend(result.index());
     ReleaseHelper rh;
@@ -894,27 +894,27 @@ DRJIT_NOINLINE Index ad_var_new_impl(const char *label, JitVar &&result,
             if (v_source->flags & (uint8_t) VariableFlags::Symbolic)
                 continue;
             args[i].ad_index = ad_record_implicit_dependence(
-                ls, rh, info.backend, label, source, v_source, index_reuse);
+                ls, rh, info.backend, label, source, v_source, reuse_indices);
         }
     }
 
     auto [ad_index, var] = ad_var_new(info.backend, info.size, info.type,
-                                      symbolic, index_reuse, label);
+                                      symbolic, reuse_indices, label);
 
     if constexpr (N == 0) {
         if (label)
-            ad_log("ad_var_new(a%u, label=\"%s\")", ad_index, label);
+            ad_log("ad_var_new(): a%u = %s()", ad_index, label);
         else
-            ad_log("ad_var_new(a%u)", ad_index);
+            ad_log("ad_var_new(): a%u = new()", ad_index);
     } else if constexpr (N == 1) {
-        ad_log("ad_var_new(a%u <- a%u, label=\"%s\")", ad_index,
-               args[0].ad_index, label);
+        ad_log("ad_var_new(): a%u = %s(a%u)", ad_index, label,
+               args[0].ad_index);
     } else if constexpr (N == 2) {
-        ad_log("ad_var_new(a%u <- a%u, a%u, label=\"%s\")", ad_index,
-               args[0].ad_index, args[1].ad_index, label);
+        ad_log("ad_var_new(): a%u = %s(a%u, a%u)", ad_index,
+               label, args[0].ad_index, args[1].ad_index);
     } else if constexpr (N == 3) {
-        ad_log("ad_var_new(a%u <- a%u, a%u, a%u, label=\"%s\")", ad_index,
-               args[0].ad_index, args[1].ad_index, args[2].ad_index, label);
+        ad_log("ad_var_new(): a%u = %s(a%u, a%u, a%u)", ad_index,
+               label, args[0].ad_index, args[1].ad_index, args[2].ad_index);
     }
 
     EdgeIndex edge_index = 0;
@@ -927,8 +927,8 @@ DRJIT_NOINLINE Index ad_var_new_impl(const char *label, JitVar &&result,
 
         if constexpr (!std::is_same_v<ArgType, SpecialArg>) {
             if (jit_var_is_zero_literal(args[i].weight.index())) {
-                ad_log("ad_var_new(a%u <- a%u): weight of edge %zu is zero, skipping!",
-                       ad_index, source, i);
+                ad_trace("ad_var_new(a%u <- a%u): weight of edge %zu is zero, skipping!",
+                         ad_index, source, i);
                 continue;
             }
         }
@@ -955,7 +955,7 @@ DRJIT_NOINLINE Index ad_var_new_impl(const char *label, JitVar &&result,
 
     if (N > 0 && !edge_index) {
         // All edges were pruned, don't create the node after all
-        ad_log("ad_var_new(a%u): all edges pruned, removing variable.", ad_index);
+        ad_trace("ad_var_new(a%u): all edges pruned, removing variable.", ad_index);
         ad_free(ad_index, var);
         return result.release();
     }
@@ -1445,7 +1445,7 @@ void ad_traverse(dr::ADMode mode, uint32_t flags) {
 
             if (unlikely(v0->flags & (uint8_t) VariableFlags::CustomLabel)) {
                 char tmp[256];
-                snprintf(tmp, 256, "%s_grad", v0->label);
+                snprintf(tmp, 256, "%s [grad]", v0->label);
                 if (v0->grad.valid())
                     dr::set_label(v0->grad, tmp);
             }
@@ -2748,7 +2748,7 @@ void ad_var_check_implicit(uint64_t index) {
 uint32_t ad_record_implicit_dependence(LocalState &ls, ReleaseHelper &rh,
                                        JitBackend backend, const char *label,
                                        uint32_t source, Variable *v_source,
-                                       bool index_reuse) {
+                                       bool reuse_indices) {
     std::vector<Scope> &scopes = ls.scopes;
     if (scopes.empty())
         ad_raise("ad_record_implicit_dependence(): no scope found!");
@@ -2771,7 +2771,7 @@ uint32_t ad_record_implicit_dependence(LocalState &ls, ReleaseHelper &rh,
                      source, v_source->size);
 
         auto [ad_index, v] = ad_var_new(backend, 1, (VarType) v_source->type,
-                                        true, index_reuse, "gather");
+                                        true, reuse_indices, "gather");
         v_source = state[source];
         EdgeIndex edge_index_new = ad_edge_new();
         Edge &edge = state.edges[edge_index_new];
@@ -2785,8 +2785,8 @@ uint32_t ad_record_implicit_dependence(LocalState &ls, ReleaseHelper &rh,
         ad_var_inc_ref_int(source, v_source);
         ad_var_inc_ref_int(source, v_source);
         ad_log(
-            "ad_var_new(a%u <- a%u, label=\"gather\"): converted from scalar "
-            "read, registering an implicit dependence on variable a%u.",
+            "ad_var_new(): a%u = gather(a%u) [converted from scalar "
+            "read, registering an implicit dependence on variable a%u].",
             ad_index, source, source);
 
         scopes.back().implicit.push_back(source);
@@ -2865,12 +2865,26 @@ bool ad_release_one_output(dr::detail::CustomOpBase *op) {
     return op->release_one_output();
 }
 
+struct scoped_set_flags {
+    uint32_t backup;
+    scoped_set_flags(uint32_t flags) : backup(jit_flags()) {
+        flags &= ~(uint32_t) JitFlag::Symbolic;
+        flags |= backup & (uint32_t) JitFlag::Symbolic;
+        jit_set_flags(flags);
+    }
+
+    ~scoped_set_flags() {
+        jit_set_flags(backup);
+    }
+};
+
 struct CustomOp : Special {
     nanobind::ref<dr::detail::CustomOpBase> m_op;
     Scope m_scope;
+    uint32_t m_flags;
 
     CustomOp(dr::detail::CustomOpBase *op, Scope &&scope)
-        : m_op(op), m_scope(std::move(scope)) { }
+        : m_op(op), m_scope(std::move(scope)), m_flags(jit_flags()) { }
 
     ~CustomOp() {
         if (m_op.get()) {
@@ -2930,6 +2944,7 @@ struct CustomOp : Special {
         /* leave critical section */ {
             unlock_guard<std::mutex> guard(state.mutex);
             PushScope push(m_scope);
+            scoped_set_flags flag_guard(m_flags);
             m_op->forward();
         }
 
@@ -2957,6 +2972,7 @@ struct CustomOp : Special {
         /* leave critical section */ {
             unlock_guard<std::mutex> guard(state.mutex);
             PushScope push(m_scope);
+            scoped_set_flags flag_guard(m_flags);
             m_op->backward();
         }
 
@@ -3017,7 +3033,7 @@ bool ad_custom_op(dr::detail::CustomOpBase *op) {
     uint32_t flags = jit_flags();
 
     bool symbolic    = flags & (uint32_t) JitFlag::Recording,
-         index_reuse = flags & (uint32_t) JitFlag::IndexReuse;
+         reuse_indices = flags & (uint32_t) JitFlag::ReuseIndices;
 
     ADIndex v0i, v1i;
     if (inputs.size() == 1) {
@@ -3026,7 +3042,7 @@ bool ad_custom_op(dr::detail::CustomOpBase *op) {
         ad_var_inc_ref_int(v0i, state[v0i]);
     } else {
         auto [idx, v0] = ad_var_new(op->m_backend, 1, VarType::Void, symbolic,
-                                    index_reuse, "CustomOp[in]");
+                                    reuse_indices, "CustomOp[in]");
         ad_log("ad_var_new(a%u, \"%s [in]\")", idx, name);
         v0->counter = op->m_counter_offset;
         v0->size = 0;
@@ -3056,7 +3072,7 @@ bool ad_custom_op(dr::detail::CustomOpBase *op) {
                   v1->ref_count, v1i);
     } else {
         auto [idx, v1] = ad_var_new(op->m_backend, 1, VarType::Void, symbolic,
-                                    index_reuse, "CustomOp[out]");
+                                    reuse_indices, "CustomOp[out]");
         ad_log("ad_var_new(a%u, \"%s [in]\")", idx, name);
         v1->counter = op->m_counter_offset + 1;
         v1i = idx;

@@ -252,3 +252,20 @@ def test11_reverse(t):
     assert dr.all(dr.reverse([1, 2, 3]) == [3, 2, 1])
     assert dr.all(dr.reverse((1, 2, 3)) == (3, 2, 1))
     assert dr.all(dr.reverse(t(1, 2, [3, 4])) == t([3, 4], 2, 1), axis=None)
+
+@pytest.test_arrays('shape=(*), uint32, is_jit')
+def test12_scatter_inc(t):
+    try:
+        import numpy as np
+    except ImportError:
+        pytest.skip('NumPy is not installed')
+    n=10000
+    counter = t(0)
+    index = dr.arange(t, n)
+    offset = dr.scatter_inc(counter, t(0))
+
+    out = dr.zeros(t, n)
+    dr.scatter(out, offset, index)
+    out_np = np.array(out)
+    out_np.sort()
+    assert np.all(out_np == np.arange(n))

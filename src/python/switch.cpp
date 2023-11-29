@@ -143,7 +143,7 @@ nb::object switch_impl(nb::handle index_, nb::sequence funcs,
         nb::raise_from(e, PyExc_RuntimeError,
                        "drjit.switch(): encountered an exception (see above).");
     } catch (const std::exception &e) {
-        nb::chain_error(PyExc_RuntimeError, "drjit.switch(): %s!", e.what());
+        nb::chain_error(PyExc_RuntimeError, "drjit.switch(): %s", e.what());
         nb::raise_python_error();
     }
 }
@@ -230,7 +230,7 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> instances,
         nb::raise_from(e, PyExc_RuntimeError,
                        "drjit.dispatch(): encountered an exception (see above).");
     } catch (const std::exception &e) {
-        nb::chain_error(PyExc_RuntimeError, "drjit.dispatch(): %s!", e.what());
+        nb::chain_error(PyExc_RuntimeError, "drjit.dispatch(): %s", e.what());
         nb::raise_python_error();
     }
 

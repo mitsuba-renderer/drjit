@@ -22,7 +22,7 @@ static void set_grad_enabled(nb::handle h, bool enable_) {
         bool enable;
         SetGradEnabled(bool enable) : enable(enable) { }
 
-        void operator()(nb::handle h) const override {
+        void operator()(nb::handle h) override {
             nb::handle tp = h.type();
             const ArraySupplement &s = supp(tp);
             if (!s.is_diff || !is_float(s))
@@ -50,12 +50,13 @@ static void set_grad_enabled(nb::handle h, bool enable_) {
         }
     };
 
-    traverse("drjit.set_grad_enabled", SetGradEnabled{ enable_ }, h);
+    SetGradEnabled sge(enable_);
+    traverse("drjit.set_grad_enabled", sge, h);
 }
 
 static nb::object new_grad(nb::handle h) {
     struct NewGrad : TransformCallback {
-        void operator()(nb::handle h1, nb::handle h2) const override {
+        void operator()(nb::handle h1, nb::handle h2) override {
             nb::handle tp = h1.type();
             const ArraySupplement &s = supp(tp);
             uint32_t index = (uint32_t) s.index(inst_ptr(h1));
@@ -68,9 +69,9 @@ static nb::object new_grad(nb::handle h) {
                 s.init_index(index, inst_ptr(h2));
             }
         }
-    };
+    } ng;
 
-    return transform("drjit.detail.new_grad", NewGrad{ }, h);
+    return transform("drjit.detail.new_grad", ng, h);
 }
 
 static void enable_grad(nb::handle h) { set_grad_enabled(h, true); }
@@ -79,21 +80,19 @@ static void enable_grad_2(nb::args args) { enable_grad(args); }
 static void disable_grad_2(nb::args args) { disable_grad(args); }
 
 static bool grad_enabled(nb::handle h) {
-    bool result_ = false;
-
     struct GradEnabled : TraverseCallback {
-        bool &result;
-        GradEnabled(bool &result) : result(result) { }
+        bool result = false;
 
-        void operator()(nb::handle h) const override {
+        void operator()(nb::handle h) override {
             const ArraySupplement &s = supp(h.type());
             if (s.is_diff && is_float(s))
                 result |= ad_grad_enabled(s.index(inst_ptr(h)));
         }
     };
 
-    traverse("drjit.grad_enabled", GradEnabled{ result_ }, h);
-    return result_;
+    GradEnabled ge;
+    traverse("drjit.grad_enabled", ge, h);
+    return ge.result;
 }
 
 static bool grad_enabled_2(nb::args args) { return grad_enabled(args); }
@@ -114,7 +113,7 @@ static nb::object detach(nb::handle h, bool preserve_type_ = true) {
             }
         }
 
-        void operator()(nb::handle h1, nb::handle h2) const override {
+        void operator()(nb::handle h1, nb::handle h2) override {
             const ArraySupplement &s1 = supp(h1.type()),
                                   &s2 = supp(h2.type());
             s2.init_index((uint32_t) s1.index(inst_ptr(h1)), inst_ptr(h2));
@@ -125,7 +124,8 @@ static nb::object detach(nb::handle h, bool preserve_type_ = true) {
         (preserve_type_ && !grad_enabled(h)))
         return nb::borrow(h);
 
-    return transform("drjit.detach", Detach{ preserve_type_ }, h);
+    Detach d(preserve_type_);
+    return transform("drjit.detach", d, h);
 }
 
 static nb::object grad(nb::handle h, bool preserve_type_ = true) {
@@ -148,7 +148,7 @@ static nb::object grad(nb::handle h, bool preserve_type_ = true) {
             return nb::float_(0);
         }
 
-        void operator()(nb::handle h1, nb::handle h2) const override {
+        void operator()(nb::handle h1, nb::handle h2) override {
             const ArraySupplement &s1 = supp(h1.type());
             if (!s1.backend) {
                 nb::object o2 = full("zeros", h2.type(), nb::int_(0), nb::len(h1));
@@ -170,24 +170,25 @@ static nb::object grad(nb::handle h, bool preserve_type_ = true) {
         }
     };
 
-    return transform("drjit.grad", Grad{ preserve_type_ }, h);
+    Grad g(preserve_type_);
+    return transform("drjit.grad", g, h);
 }
 
 static void clear_grad(nb::handle dst) {
     struct ClearGrad : TraverseCallback {
-        void operator()(nb::handle h) const override {
+        void operator()(nb::handle h) override {
             const ArraySupplement &s = supp(h.type());
             if (s.is_diff && is_float(s))
                 ad_clear_grad(s.index(inst_ptr(h)));
         }
-    };
+    } cg;
 
-    traverse("drjit.clear_grad", ClearGrad{ }, dst);
+    traverse("drjit.clear_grad", cg, dst);
 }
 
 static void accum_grad(nb::handle target, nb::handle source) {
     struct SetGrad : TraversePairCallback {
-        void operator()(nb::handle h1, nb::handle h2) const override {
+        void operator()(nb::handle h1, nb::handle h2) override {
             const ArraySupplement &s1 = supp(h1.type()),
                                   &s2 = supp(h2.type());
 
@@ -199,7 +200,7 @@ static void accum_grad(nb::handle target, nb::handle source) {
                 ad_accum_grad(i1, (uint32_t) i2);
             }
         }
-    };
+    } sg;
 
     nb::handle tp = target.type();
 
@@ -207,12 +208,12 @@ static void accum_grad(nb::handle target, nb::handle source) {
     if (!o.type().is(tp))
         o = tp(o);
 
-    traverse_pair("drjit.accum_grad", SetGrad{ }, target, o);
+    traverse_pair("drjit.accum_grad", sg, target, o);
 }
 
 static nb::object replace_grad(nb::handle h0, nb::handle h1) {
     struct ReplaceGrad : TransformPairCallback {
-        void operator()(nb::handle h1, nb::handle h2, nb::handle h3) const override {
+        void operator()(nb::handle h1, nb::handle h2, nb::handle h3) override {
             const ArraySupplement &s = supp(h1.type());
 
             if (s.is_diff && is_float(s)) {
@@ -232,14 +233,14 @@ static nb::object replace_grad(nb::handle h0, nb::handle h1) {
                 s.init_index(i3, inst_ptr(h3));
             }
         }
-    };
+    } rg;
 
     nb::object o[2] = { borrow(h0), borrow(h1) };
 
     if (!o[0].type().is(o[1].type()))
         promote(o, 2);
 
-    return transform_pair("drjit.replace_grad", ReplaceGrad{ }, o[0], o[1]);
+    return transform_pair("drjit.replace_grad", rg, o[0], o[1]);
 }
 
 
@@ -253,14 +254,15 @@ static void enqueue_impl(dr::ADMode mode_, nb::handle h_) {
         dr::ADMode mode;
         Enqueue(dr::ADMode mode) : mode(mode) { }
 
-        void operator()(nb::handle h) const override {
+        void operator()(nb::handle h) override {
             const ArraySupplement &s = supp(h.type());
             if (s.is_diff && is_float(s))
                 ::ad_enqueue(mode, s.index(inst_ptr(h)));
         }
     };
 
-    traverse("drjit.enqueue", Enqueue { mode_ }, h_);
+    Enqueue e(mode_);
+    traverse("drjit.enqueue", e, h_);
 }
 
 static bool check_grad_enabled(const char *name, nb::handle h, uint32_t flags) {
@@ -396,7 +398,7 @@ public:
             AddInOut(dr::detail::CustomOpBase &op, bool input)
                 : op(op), input(input) { }
 
-            void operator()(nb::handle h1, nb::handle h2) const override {
+            void operator()(nb::handle h1, nb::handle h2) override {
                 const ArraySupplement &s = supp(h1.type());
                 uint32_t ad_index = (uint32_t) (s.index(inst_ptr(h1)) >> 32);
                 op.add_index((JitBackend) s.backend, ad_index, input);
@@ -404,7 +406,8 @@ public:
             }
         };
 
-        return transform(name, AddInOut { *this, input_ }, h);
+        AddInOut aio(*this, input_);
+        return transform(name, aio, h);
     }
 
     nb::object grad_in(nb::handle key) {

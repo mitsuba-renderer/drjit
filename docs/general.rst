@@ -58,15 +58,15 @@ unsupported.
 
 .. _pytrees:
 
-Pytrees
+PyTrees
 -------
 
-The word *Pytree* (borrowed from `JAX
+The word *PyTree* (borrowed from `JAX
 <https://jax.readthedocs.io/en/latest/pytrees.html>`_) refers to a tree-like
 data structure made of Python container types including ``list``, ``tuple``,
 and ``dict``, which can be further extended to encompass user-defined classes.
 
-Various Dr.Jit operations will automatically traverse such Pytrees to process
+Various Dr.Jit operations will automatically traverse such PyTrees to process
 any Dr.Jit arrays or tensors found within. For example, it might be convenient
 to store differentiable parameters of an optimization within a dictionary and
 then batch-enable gradients:
@@ -82,12 +82,12 @@ then batch-enable gradients:
 
    dr.enable_grad(params)
 
-Pytrees can similarly be used as variables in recorded loops, arguments and
-return values of polymorphic function calls, arguments in scatter/gather
-operations, and many others (the :ref:`reference <reference>` explicitly lists
-the word *Pytree* in all supported operations).
+PyTrees can similarly be used as state variables in symbolic loops and
+conditionals, as arguments and return values of symbolic calls, as arguments of
+scatter/gather operations, and many others (the :ref:`reference <reference>`
+explicitly lists the word *PyTree* in all supported operations).
 
-To turn a user-defined type into a Pytree, define a static ``DRJIT_STRUCT``
+To turn a user-defined type into a PyTree, define a static ``DRJIT_STRUCT``
 member dictionary describing the names and types of all fields. It should also
 be default-constructible without the need to specify any arguments. For
 instance, the following snippet defines a named 2D point, containing (amongst
@@ -111,6 +111,32 @@ others) two nested Dr.Jit arrays.
 Fields don't exclusively have to be containers or Dr.Jit types. For example, we
 could have added an extra ``datetime`` entry to record when a set of points was
 captured. Such fields will be ignored by traversal operations.
+
+The ability to traverse through members of custom data structures is also supported
+in Dr.Jit's C++ interface. For this, you must include the header file
+
+.. code-block:: cpp
+
+   #include <drjit/struct.h>
+
+Following this, you can use the variable-argument ``DRJIT_STRUCT(...)`` macro to
+list the available fields.
+
+.. code-block:: cpp
+
+   using Float = dr::CUDADiffArray<float>;
+
+   struct MyPoint2f {
+       Float x;
+       Float y;
+
+       DRJIT_STRUCT(x, y);
+   };
+
+The ``DRJIT_STRUCT`` macro inserts several template functions to aid the
+auto-traversal mechanism. One implication of this is that such data structures
+cannot be declared locally (e.g., at the function scope---this is a limitation
+of the C++ language).
 
 .. _transcendental-accuracy:
 

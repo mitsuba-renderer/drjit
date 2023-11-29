@@ -62,13 +62,13 @@ struct scoped_record {
 struct scoped_set_self {
     scoped_set_self(JitBackend backend, uint32_t value, uint32_t self_index = 0)
         : m_backend(backend) {
-        jit_vcall_self(backend, &m_self_value, &m_self_index);
+        jit_var_self(backend, &m_self_value, &m_self_index);
         jit_var_inc_ref(m_self_index);
-        jit_vcall_set_self(m_backend, value, self_index);
+        jit_var_set_self(m_backend, value, self_index);
     }
 
     ~scoped_set_self() {
-        jit_vcall_set_self(m_backend, m_self_value, m_self_index);
+        jit_var_set_self(m_backend, m_self_value, m_self_index);
         jit_var_dec_ref(m_self_index);
     }
 
@@ -247,7 +247,7 @@ static void ad_call_record(JitBackend backend, const char *domain,
     args2.reserve(args.size());
     args2.reserve(args.size());
     std::string combined(name);
-    if (domain)
+    if (domain && combined.find("::") == std::string::npos)
         combined = std::string(domain) + "::" + combined;
 
     dr_vector<uint32_t> checkpoints(callable_count + 1, 0),
@@ -258,7 +258,7 @@ static void ad_call_record(JitBackend backend, const char *domain,
 
         // Wrap input arguments to clearly expose them as inputs of the vcall
         for (size_t i = 0; i < args.size(); ++i) {
-            uint32_t wrapped = jit_var_wrap_vcall((uint32_t) args[i]);
+            uint32_t wrapped = jit_var_call_input((uint32_t) args[i]);
             args3.push_back_steal(wrapped);
 
             if (args[i] >> 32)
@@ -267,8 +267,9 @@ static void ad_call_record(JitBackend backend, const char *domain,
                 args2.push_back_borrow(wrapped);
         }
 
+        size_t callable_count_final = 0;
         {
-            scoped_set_mask mask_guard(backend, jit_var_vcall_mask(backend));
+            scoped_set_mask mask_guard(backend, jit_var_call_mask(backend));
             for (size_t i = 0; i < callable_count; ++i) {
                 checkpoints[i] = rec.checkpoint_and_rewind();
                 rv2.clear();
@@ -281,6 +282,7 @@ static void ad_call_record(JitBackend backend, const char *domain,
                 } else {
                     ptr = (void *) (uintptr_t) i;
                 }
+                callable_count_final++;
 
                 // Populate 'rv2' with function return values. This may raise
                 // an exception, in which case everything should be properly
@@ -315,8 +317,8 @@ static void ad_call_record(JitBackend backend, const char *domain,
         dr_vector<uint32_t> rv4;
         rv4.resize(rv.size());
 
-        jit_var_vcall(
-            combined.c_str(), index, mask.index(), callable_count,
+        jit_var_call(
+            combined.c_str(), index, mask.index(), callable_count_final,
             inst_id.data(), (uint32_t) args3.size(), args3.data(),
             (uint32_t) rv3.size(), rv3.data(), checkpoints.data(), rv4.data());
 
@@ -351,8 +353,8 @@ static void ad_call_reduce(JitBackend backend, const char *domain,
         jit_var_schedule((uint32_t) arg_i);
 
     uint32_t n_inst = callable_count;
-    VCallBucket *buckets =
-        jit_var_vcall_reduce(backend, domain, index.index(), &n_inst);
+    CallBucket *buckets =
+        jit_var_call_reduce(backend, domain, index.index(), &n_inst);
 
     dr_index64_vector args2(args.size(), 0);
     args2.clear();
@@ -476,11 +478,11 @@ static void ad_call_check_rv(JitBackend backend, size_t size,
 /// CustomOp that hooks a recorded virtual function call into the AD graph
 struct CallOp : public dr::detail::CustomOpBase {
 public:
-    CallOp(JitBackend backend, const char *name, const char *domain,
+    CallOp(JitBackend backend, std::string &&name, const char *domain,
             uint32_t index, uint32_t mask, size_t callable_count,
             const dr_vector<uint64_t> &args, size_t rv_size, void *payload,
             ad_call_func func, ad_call_cleanup cleanup)
-        : m_name(name), m_domain(domain), m_index(index), m_mask(mask),
+        : m_name(std::move(name)), m_domain(domain), m_index(index), m_mask(mask),
           m_callable_count(callable_count), m_payload(payload),
           m_func(func), m_cleanup(cleanup) {
         m_backend = backend;
@@ -776,12 +778,16 @@ bool ad_call(JitBackend backend, const char *domain, size_t callable_count,
             needs_ad |= b;
 
         if (ad && needs_ad) {
-            if (domain)
-                callable_count = 0;
+            std::string combined(name);
 
-            nanobind::ref<CallOp> op =
-                new CallOp(backend, name, domain, index, mask, callable_count,
-                            args, rv.size(), payload, func, cleanup);
+            if (domain) {
+                callable_count = 0;
+                combined = std::string(domain) + "::" + combined;
+            }
+
+            nanobind::ref<CallOp> op = new CallOp(
+                backend, std::move(combined), domain, index, mask, callable_count,
+                args, rv.size(), payload, func, cleanup);
 
             for (size_t i = 0; i < args.size(); ++i)
                 op->add_input(i, args[i]);
