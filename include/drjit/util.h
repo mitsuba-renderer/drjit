@@ -167,6 +167,7 @@ template <typename T> std::tuple<T, T, T> meshgrid(const T &x, const T &y, const
         return { ry, rx, rz };
 }
 
+/// Binary search with scalar starting/ending indices
 template <typename Index, typename Predicate>
 Index binary_search(scalar_t<Index> start_, scalar_t<Index> end_,
                     const Predicate &pred) {
@@ -218,7 +219,12 @@ Index binary_search(scalar_t<Index> start_, scalar_t<Index> end_,
     return start;
 }
 
-/// Binary search with non-scalar indices
+/**
+ * \brief Binary search with non-scalar starting/ending indices
+ *
+ * Note: this method forcefully uses recorded loops if called in a recorded
+ * context.
+ */
 template <typename IndexN,
           typename Index1 = std::conditional_t<is_static_array_v<IndexN>,
                                                value_t<IndexN>, IndexN>,
@@ -238,6 +244,11 @@ IndexN binary_search(typename std::enable_if_t<is_jit_v<Index1>, Index1> start_,
     IndexN start(start_), end(end_);
 
     Index1 index = zeros<Index1>(width(pred(start)));
+
+    bool loop_record = jit_flag(JitFlag::LoopRecord);
+    if (jit_flag(JitFlag::Recording))
+        jit_set_flag(JitFlag::LoopRecord, true);
+
     Loop<Mask1> loop("dr::binary_search()", start, end, index);
     while (loop(index < iterations)) {
         IndexN middle = sr<1>(start + end);
@@ -248,6 +259,8 @@ IndexN binary_search(typename std::enable_if_t<is_jit_v<Index1>, Index1> start_,
 
         index++;
     }
+
+    jit_set_flag(JitFlag::LoopRecord, loop_record);
 
     return start;
 }
