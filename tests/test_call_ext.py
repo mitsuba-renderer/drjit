@@ -189,10 +189,12 @@ def test05_backward_diff(t, symbolic, use_mask):
     assert dr.all(yg == [2, 2, 0, 3, 3])
 
 
+@pytest.mark.parametrize("opaque", [True, False])
+@pytest.mark.parametrize("optimize", [True, False])
 @pytest.mark.parametrize("symbolic", [True, False])
 @pytest.mark.parametrize("use_mask", [True, False])
 @pytest.test_arrays('float32,is_diff,shape=(*)')
-def test06_forward_diff_implicit(t, symbolic, use_mask):
+def test06_forward_diff_implicit(t, symbolic, use_mask, optimize, opaque):
     pkg = get_pkg(t)
 
     A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
@@ -216,8 +218,12 @@ def test06_forward_diff_implicit(t, symbolic, use_mask):
     b.value = bv * 4
     y = x*x
 
+    if opaque:
+        dr.make_opaque(a.value, b.value)
+
     with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
-        xo = c.g(y, mi)
+        with dr.scoped_set_flag(dr.JitFlag.OptimizeCalls, optimize):
+            xo = c.g(y, mi)
 
     assert dr.all(xo == t(2, 2, 0, 4*9, 4*16))
 
@@ -229,10 +235,12 @@ def test06_forward_diff_implicit(t, symbolic, use_mask):
     assert dr.all(xg == t([20, 20, 0, 9*400+24*4, 16*400+40*4]))
 
 
+@pytest.mark.parametrize("opaque", [True, False])
 @pytest.mark.parametrize("symbolic", [True, False])
+@pytest.mark.parametrize("optimize", [True, False])
 @pytest.mark.parametrize("use_mask", [True, False])
 @pytest.test_arrays('float32,is_diff,shape=(*)')
-def test07_backward_diff_implicit(t, symbolic, use_mask):
+def test07_backward_diff_implicit(t, symbolic, optimize, use_mask, opaque):
     pkg = get_pkg(t)
 
     A, B, Base, BasePtr = pkg.A, pkg.B, pkg.Base, pkg.BasePtr
@@ -256,8 +264,12 @@ def test07_backward_diff_implicit(t, symbolic, use_mask):
     b.value = bv * 4
     y = x*x
 
+    if opaque:
+        dr.make_opaque(a.value, b.value)
+
     with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
-        xo = c.g(y, mi)
+        with dr.scoped_set_flag(dr.JitFlag.OptimizeCalls, optimize):
+            xo = c.g(y, mi)
 
     assert dr.all(xo == t(2, 2, 0, 4*9, 4*16))
 
@@ -385,7 +397,6 @@ def test14_array_call_noinst(t, symbolic):
     gc.collect()
     gc.collect()
     d = BasePtr(None, None)
-    dr.set_log_level(10)
 
     with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
         c = BasePtr()

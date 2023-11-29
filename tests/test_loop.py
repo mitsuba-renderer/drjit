@@ -2,7 +2,7 @@ import drjit as dr
 import pytest
 
 
-@pytest.mark.parametrize('method', ['evaluated', 'symbolic'])
+@pytest.mark.parametrize('method', ['evaluate', 'symbolic'])
 @pytest.mark.parametrize("optimize", [True, False])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
@@ -36,7 +36,7 @@ def test02_nested_loop_disallowed_config(t):
     assert err_msg in str(e.value.__cause__)
 
 
-@pytest.mark.parametrize('method', ['evaluated', 'symbolic'])
+@pytest.mark.parametrize('method', ['evaluate', 'symbolic'])
 @pytest.mark.parametrize("version", [0, 1])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
@@ -54,7 +54,7 @@ def test03_change_type(t, method, version):
     assert err_msg in str(e.value)
 
 
-@pytest.mark.parametrize('method', ['evaluated', 'symbolic'])
+@pytest.mark.parametrize('method', ['evaluate', 'symbolic'])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
 def test04_change_size(t, method):
@@ -68,7 +68,7 @@ def test04_change_size(t, method):
     assert err_msg in str(e.value)
 
 
-@pytest.mark.parametrize('method', ['evaluated', 'symbolic'])
+@pytest.mark.parametrize('method', ['evaluate', 'symbolic'])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
 def test05_incompatible_size(t, method):
@@ -84,7 +84,7 @@ def test05_incompatible_size(t, method):
     assert err_msg in str(e.value)
 
 
-@pytest.mark.parametrize('method', ['evaluated', 'symbolic'])
+@pytest.mark.parametrize('method', ['evaluate', 'symbolic'])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
 def test06_cond_err(t, method):
@@ -98,7 +98,7 @@ def test06_cond_err(t, method):
     assert "oh no" in str(e.value.__cause__)
 
 
-@pytest.mark.parametrize('method', ['evaluated', 'symbolic'])
+@pytest.mark.parametrize('method', ['evaluate', 'symbolic'])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
 def test07_body_err(t, method):
@@ -174,7 +174,7 @@ def test09_loop_optimizations(t, optimize):
             assert b.state == dr.VarState.Literal
 
 
-@pytest.mark.parametrize('method', ['evaluated', 'symbolic'])
+@pytest.mark.parametrize('method', ['evaluate', 'symbolic'])
 @pytest.mark.parametrize('optimize', [True, False])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
@@ -193,7 +193,7 @@ def test10_scatter_v1(t, method, optimize):
         assert v[0] == 19
 
 
-@pytest.mark.parametrize('method', ['evaluated', 'symbolic'])
+@pytest.mark.parametrize('method', ['evaluate', 'symbolic'])
 @pytest.mark.parametrize('optimize', [True, False])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
@@ -211,8 +211,8 @@ def test10_scatter_v2(t, method, optimize):
         assert dr.all(i == 10)
         assert v[0] == 19
 
-@pytest.mark.parametrize('method1', ['evaluated', 'symbolic'])
-@pytest.mark.parametrize('method2', ['evaluated', 'symbolic'])
+@pytest.mark.parametrize('method1', ['evaluate', 'symbolic'])
+@pytest.mark.parametrize('method2', ['evaluate', 'symbolic'])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
 def test11_nested_loop(method1, method2, t):
@@ -230,7 +230,7 @@ def test11_nested_loop(method1, method2, t):
     except Exception as e:
         err = e
 
-    if dr.hint(method1 == 'symbolic' and method2 == 'evaluated', method='scalar'):
+    if dr.hint(method1 == 'symbolic' and method2 == 'evaluate', method='scalar'):
         # That combination is not allowed
         assert 'cannot execute a loop in *evaluated mode*' in str(err.__cause__)
     else:
@@ -238,8 +238,8 @@ def test11_nested_loop(method1, method2, t):
         assert dr.all(accum == (n*(n-1)) // 2)
 
 
-@pytest.mark.parametrize('method1', ['evaluated', 'symbolic'])
-@pytest.mark.parametrize('method2', ['evaluated', 'symbolic'])
+@pytest.mark.parametrize('method1', ['evaluate', 'symbolic'])
+@pytest.mark.parametrize('method2', ['evaluate', 'symbolic'])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
 def test11_nested_loop_with_side_effect(method1, method2, t):
@@ -257,7 +257,7 @@ def test11_nested_loop_with_side_effect(method1, method2, t):
     except Exception as e:
         err = e
 
-    if dr.hint(method1 == 'symbolic' and method2 == 'evaluated', method='scalar'):
+    if dr.hint(method1 == 'symbolic' and method2 == 'evaluate', method='scalar'):
         # That combination is not allowed
         assert 'cannot execute a loop in *evaluated mode*' in str(err.__cause__)
     else:
@@ -280,10 +280,24 @@ def test12_optimize_away(t, optimize):
 
         assert (a.index == ai) == optimize
 
-@pytest.mark.parametrize('method', ['evaluated', 'symbolic'])
+@pytest.mark.parametrize('method', ['evaluate', 'symbolic'])
 @pytest.mark.parametrize("optimize", [True, False])
 @pytest.test_arrays('float,is_diff,shape=(*)')
 @dr.syntax
+def test13_simple_diff_loop(t, optimize, method):
+    i, j = dr.int32_array_t(t)(0), t(1)
+    dr.enable_grad(j)
+    dr.set_grad(j, 1.1)
+
+    while dr.hint(i < 5, method=method):
+        j = j * 2
+        i += 1
+
+    assert dr.allclose(dr.forward_to(j), 32*1.1)
+
+@pytest.mark.parametrize('method', ['evaluated', 'symbolic'])
+@pytest.mark.parametrize("optimize", [True, False])
+@pytest.test_arrays('float,is_diff,shape=(*)')
 def test13_complex_diff_loop(t, optimize, method):
     i = dr.int32_array_t(t)(0)
     lvars = [t(0) for i in range(10)]
@@ -297,3 +311,40 @@ def test13_complex_diff_loop(t, optimize, method):
     dr.forward_to(lvars)
     lvars = [dr.grad(lvars[i])[0] for i in range(10)]
     assert lvars == [ 0, 0, 0, 0, 0, 1, 3, 3, 1, 0 ]
+
+
+@pytest.mark.parametrize('method', ['evaluate', 'symbolic'])
+@pytest.mark.parametrize("optimize", [True, False])
+@pytest.test_arrays('float,is_diff,shape=(*)')
+@dr.syntax
+def test14_no_mutate_inputs(t, optimize, method):
+    x = t(1)
+    z = t(2)
+
+    xo, zo = dr.while_loop(
+        state=(x,z),
+        cond=lambda x, z: x < 10,
+        body=lambda x, z: (x + 1, z)
+    )
+
+    assert xo == 10 and x == 1
+    assert zo is z
+
+    q1 = (t(3), t(4, 5))
+    q2 = (t(6), t(7, 8))
+
+    def mut(q1, q2):
+        item = q2[1]
+        item += 4
+        return q1, q2
+
+    q1o, q2o = dr.while_loop(
+        state=(q1,q2),
+        cond=lambda q1, q2: q2[1]<10,
+        body=mut
+    )
+
+    assert q1o is q1
+    assert q2o is not q2
+    assert q2o[0] is q2[0]
+    assert q2o[1] is not q2[1]

@@ -31,6 +31,7 @@
 #include "switch.h"
 #include "while.h"
 #include "misc.h"
+#include "format.h"
 
 static void set_flag_py(JitFlag flag, bool value) {
     if (flag == JitFlag::Debug) {
@@ -76,7 +77,7 @@ NB_MODULE(drjit_ext, m_) {
 
     nb::enum_<JitFlag>(m, "JitFlag", doc_JitFlag)
         .value("Debug", JitFlag::Debug, doc_JitFlag_Debug)
-        .value("IndexReuse", JitFlag::IndexReuse, doc_JitFlag_IndexReuse)
+        .value("ReuseIndices", JitFlag::ReuseIndices, doc_JitFlag_ReuseIndices)
         .value("ConstantPropagation", JitFlag::ConstantPropagation, doc_JitFlag_ConstantPropagation)
         .value("ValueNumbering", JitFlag::ValueNumbering, doc_JitFlag_ValueNumbering)
         .value("SymbolicLoops", JitFlag::SymbolicLoops, doc_JitFlag_SymbolicLoops)
@@ -130,6 +131,7 @@ NB_MODULE(drjit_ext, m_) {
         .value("Undefined", VarState::Undefined, doc_VarState_Undefined)
         .value("Unevaluated", VarState::Unevaluated, doc_VarState_Unevaluated)
         .value("Evaluated", VarState::Evaluated, doc_VarState_Evaluated)
+        .value("Dirty", VarState::Dirty, doc_VarState_Dirty)
         .value("Symbolic", VarState::Symbolic, doc_VarState_Symbolic)
         .value("Mixed", VarState::Mixed, doc_VarState_Mixed);
 
@@ -206,6 +208,7 @@ NB_MODULE(drjit_ext, m_) {
     export_misc(m);
     export_switch(m);
     export_while(m);
+    export_format(m);
 
     export_scalar(scalar);
 

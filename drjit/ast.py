@@ -132,19 +132,10 @@ class SyntaxVisitor(ast.NodeTransformer):
         method = hints.get("method", None)
         is_scalar = isinstance(method, ast.Constant) and method.value == "scalar"
 
-        return node, var_r, var_w, par_r, par_w, state, hints, is_scalar
+        return node, state, hints, is_scalar
 
     def visit_If(self, node: ast.If):
-        (
-            node,
-            var_r,
-            var_w,
-            par_r,
-            par_w,
-            state,
-            hints,
-            is_scalar,
-        ) = self.rewrite_and_track(node)
+        (node, state, hints, is_scalar) = self.rewrite_and_track(node)
 
         if is_scalar:
             return node
@@ -240,10 +231,7 @@ class SyntaxVisitor(ast.NodeTransformer):
         if_expr = ast.Assign(
             targets=[
                 ast.Tuple(
-                    elts=[
-                        ast.Name(id=k if k in self.var_w else "_", ctx=store)
-                        for k in state
-                    ],
+                    elts=[ast.Name(id=k, ctx=store) for k in state],
                     ctx=store,
                 )
             ],
@@ -282,9 +270,6 @@ class SyntaxVisitor(ast.NodeTransformer):
             ast.Name(id=false_name, ctx=delete),
         ]
 
-        if len(set(state) - set(self.var_w)) > 0:
-            cleanup_targets.append(ast.Name(id="_", ctx=delete))
-
         cleanup = ast.Delete(targets=cleanup_targets)
 
         return (
@@ -300,17 +285,7 @@ class SyntaxVisitor(ast.NodeTransformer):
         )
 
     def visit_While(self, node: ast.While):
-        (
-            node,
-            var_r,
-            var_w,
-            par_r,
-            par_w,
-            state,
-            hints,
-            is_scalar,
-        ) = self.rewrite_and_track(node)
-
+        (node, state, hints, is_scalar) = self.rewrite_and_track(node)
         if is_scalar:
             return node
 
@@ -385,10 +360,7 @@ class SyntaxVisitor(ast.NodeTransformer):
         while_expr = ast.Assign(
             targets=[
                 ast.Tuple(
-                    elts=[
-                        ast.Name(id=k if k in self.var_w else "_", ctx=store)
-                        for k in state
-                    ],
+                    elts=[ast.Name(id=k, ctx=store) for k in state],
                     ctx=store,
                 )
             ],
@@ -424,9 +396,6 @@ class SyntaxVisitor(ast.NodeTransformer):
             ast.Name(id=cond_name, ctx=delete),
             ast.Name(id=body_name, ctx=delete),
         ]
-
-        if len(set(state) - set(self.var_w)) > 0:
-            cleanup_targets.append(ast.Name(id="_", ctx=delete))
 
         cleanup = ast.Delete(targets=cleanup_targets)
 
@@ -623,6 +592,9 @@ def syntax(f: Callable = None, print_ast: bool = False, print_code: bool = False
         return wrapper
 
     source = inspect.getsource(f)
+    from textwrap import dedent
+    source = dedent(source)
+
     old_ast = ast.parse(source)
     new_ast = old_ast
     if print_ast:

@@ -509,6 +509,12 @@ struct DRJIT_TRIVIAL_ABI DiffArray
                                         mask.m_index, op));
     }
 
+    template <typename Mask>
+    DiffArray scatter_inc_(const DiffArray &index, const Mask &mask) {
+        return steal(jit_var_scatter_inc(&m_index, index.index(), mask.index()));
+    }
+
+
     //! @}
     // -----------------------------------------------------------------------
 
@@ -725,6 +731,16 @@ template <typename... Ts>
 void traverse(ADMode mode, uint32_t flags = (uint32_t) ADFlag::Default) {
     ad_traverse(mode, flags);
 }
+
+struct suspend_grad {
+    suspend_grad() {
+        ad_scope_enter(drjit::ADScope::Suspend, 0, nullptr);
+    }
+
+    ~suspend_grad() {
+        ad_scope_leave(true);
+    }
+};
 
 namespace detail {
     template <typename T>

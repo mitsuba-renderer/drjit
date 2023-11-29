@@ -558,7 +558,7 @@ struct recursion_guard {
 };
 
 /// Invoke the given callback on leaf elements of the pytree 'h'
-void traverse(const char *op, const TraverseCallback &tc, nb::handle h) {
+void traverse(const char *op, TraverseCallback &tc, nb::handle h) {
     nb::handle tp = h.type();
     recursion_guard guard;
 
@@ -608,7 +608,7 @@ void traverse(const char *op, const TraverseCallback &tc, nb::handle h) {
 }
 
 /// Parallel traversal of two compatible pytrees 'h1' and 'h2'
-void traverse_pair(const char *op, const TraversePairCallback &tc,
+void traverse_pair(const char *op, TraversePairCallback &tc,
                    nb::handle h1, nb::handle h2) {
     recursion_guard guard;
     nb::handle tp1 = h1.type(), tp2 = h2.type();
@@ -696,7 +696,7 @@ nb::object TransformCallback::transform_unknown(nb::handle tp) const {
 }
 
 /// Transform an input pytree 'h' into an output pytree, potentially of a different type
-nb::object transform(const char *op, const TransformCallback &tc, nb::handle h1) {
+nb::object transform(const char *op, TransformCallback &tc, nb::handle h1) {
     recursion_guard guard;
     nb::handle tp1 = h1.type();
 
@@ -783,7 +783,7 @@ nb::handle TransformPairCallback::transform_type(nb::handle tp) const {
 }
 
 /// Transform a pair of input pytrees 'h1' and 'h2' into an output pytree, potentially of a different type
-nb::object transform_pair(const char *op, const TransformPairCallback &tc,
+nb::object transform_pair(const char *op, TransformPairCallback &tc,
                           nb::handle h1, nb::handle h2) {
     recursion_guard guard;
     nb::handle tp1 = h1.type(), tp2 = h2.type();

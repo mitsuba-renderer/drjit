@@ -10,6 +10,7 @@
 
 #include "misc.h"
 #include "apply.h"
+#include "base.h"
 
 /**
  * \brief Return Dr.Jit variable indices associated with the provided data structure.
@@ -32,7 +33,7 @@ void collect_indices(nb::handle h, dr::dr_vector<uint64_t> &indices) {
         dr::dr_vector<uint64_t> &result;
         CollectIndices(dr::dr_vector<uint64_t> &result) : result(result) { }
 
-        void operator()(nb::handle h) const override {
+        void operator()(nb::handle h) override {
             auto index = supp(h.type()).index;
             if (index)
                 result.push_back(index(inst_ptr(h)));
@@ -42,7 +43,8 @@ void collect_indices(nb::handle h, dr::dr_vector<uint64_t> &indices) {
     if (!h.is_valid())
         return;
 
-    traverse("drjit.detail.collect_indices", CollectIndices { indices }, h);
+    CollectIndices ci { indices };
+    traverse("drjit.detail.collect_indices", ci, h);
 }
 
 dr::dr_vector<uint64_t> collect_indices(nb::handle h) {
@@ -75,10 +77,10 @@ dr::dr_vector<uint64_t> collect_indices(nb::handle h) {
 nb::object update_indices(nb::handle h, const dr::dr_vector<uint64_t> &indices_) {
     struct UpdateIndices : TransformCallback {
         const dr::dr_vector<uint64_t> &indices;
-        mutable size_t counter = 0;
+        size_t counter = 0;
         UpdateIndices(const dr::dr_vector<uint64_t> &indices) : indices(indices) { }
 
-        void operator()(nb::handle h1, nb::handle h2) const override {
+        void operator()(nb::handle h1, nb::handle h2) override {
             const ArraySupplement &s = supp(h1.type());
             if (s.index) {
                 if (counter >= indices.size())
@@ -104,6 +106,48 @@ nb::object update_indices(nb::handle h, const dr::dr_vector<uint64_t> &indices_)
 }
 
 /**
+ * \brief Create a deep copy of a PyTree
+ *
+ * This function recursively traverses PyTrees. It replaces Dr.Jit arrays with
+ * copies that are created via the ordinary copy constructor. This function is
+ * used to isolate the input variables of drjit.while_loop() from changes.
+ *
+ * (Note: this explanation is also part of src/python/docstr.h -- please keep
+ * them in sync in case you make a change here)
+ */
+nb::object copy(nb::handle h) {
+    nb::handle tp = h.type();
+    if (is_drjit_type(tp)) {
+        return tp(h);
+    } else if (tp.is(&PyTuple_Type)) {
+        nb::list result;
+        for (nb::handle v : nb::borrow<nb::tuple>(h))
+            result.append(copy(v));
+        return nb::tuple(result);
+    } else if (tp.is(&PyList_Type)) {
+        nb::list result;
+        for (nb::handle v : nb::borrow<nb::list>(h))
+            result.append(copy(v));
+        return result;
+    } else if (tp.is(&PyDict_Type)) {
+        nb::dict result;
+        for (nb::handle kv : nb::borrow<nb::dict>(h).items())
+            result[copy(kv[0])] = copy(kv[1]);
+        return result;
+    } else {
+        nb::object dstruct = nb::getattr(tp, "DRJIT_STRUCT", nb::handle());
+        if (dstruct.is_valid() && dstruct.type().is(&PyDict_Type)) {
+            nb::object result = tp();
+            for (auto [k, v] : nb::borrow<nb::dict>(dstruct))
+                nb::setattr(result, k, copy(nb::getattr(h, k)));
+            return result;
+        } else {
+            return nb::borrow(h);
+        }
+    }
+}
+
+/**
  * \brief Traverse two pytrees in parallel and ensure that they have an
  * identical structure.
  *
@@ -115,12 +159,138 @@ nb::object update_indices(nb::handle h, const dr::dr_vector<uint64_t> &indices_)
  */
 void check_compatibility(nb::handle h1, nb::handle h2) {
     struct CheckCompatibility : TraversePairCallback {
-        void operator()(nb::handle, nb::handle) const override { }
-    };
-
-    traverse_pair("drjit.detail.check_compatibility",
-                  CheckCompatibility{ }, h1, h2);
+        void operator()(nb::handle, nb::handle) override { }
+    } cc;
+    traverse_pair("drjit.detail.check_compatibility", cc, h1, h2);
 }
+
+/**
+ * \brief Undo a prior call to :py:func:`drjit.copy()` when the contents
+ * of a PyTree are unchanged.
+ *
+ * This operation recursively traverses a PyTree ``arg1`` that was previously
+ * copied from a PyTree ``arg0`` (using :py:func:`drjit.copy()`) and then
+ * potentially modified. Whenever an entire subtree was unchanged (in the sense
+ * that the Dr.Jit array indices are still the same), the function "undoes" the
+ * change by returning the original Python object prior to the copy.
+ *
+ * This function is internally used by :py:func:`drjit.while_loop()` and
+ * :py:func:`drjit.if_stmt()`, which both conservatively perform a deep copy of
+ * all state variables. When that copy is later discovered to not be necessary,
+ * the use :py:func:`uncopy()` to restore the variable to its original Python
+ * object.
+ *
+ * (Note: this explanation is also part of src/python/docstr.h -- please keep
+ * them in sync in case you make a change here)
+ */
+nb::object uncopy(nb::handle arg0, nb::handle arg1) {
+    nb::handle tp1 = arg0.type(), tp2 = arg1.type();
+
+    try {
+        if (!tp1.is(tp2))
+            nb::raise("incompatible types (%s and %s).",
+                      nb::type_name(tp1).c_str(),
+                      nb::type_name(tp2).c_str());
+
+        bool unchanged = true;
+        if (is_drjit_type(tp1)) {
+            const ArraySupplement &s = supp(tp1);
+
+            if (s.is_tensor) {
+                nb::object a1 = nb::steal(s.tensor_array(arg0.ptr())),
+                           a2 = nb::steal(s.tensor_array(arg1.ptr())),
+                           a3 = uncopy(a1, a2);
+                unchanged = a3.is(a1);
+            } else if (s.ndim > 1) {
+                Py_ssize_t l1 = s.shape[0], l2 = l1;
+
+                if (l1 == DRJIT_DYNAMIC) {
+                    l1 = s.len(inst_ptr(arg0));
+                    l2 = s.len(inst_ptr(arg1));
+                }
+
+                if (l1 != l2)
+                    nb::raise("incompatible input lengths (%zu and %zu).", l1, l2);
+
+                for (Py_ssize_t i = 0; i < l1; ++i) {
+                    nb::object o1 = nb::steal(s.item(arg0.ptr(), i)),
+                               o2 = nb::steal(s.item(arg1.ptr(), i)),
+                               o3 = uncopy(o1, o2);
+                    if (!o3.is(o1)) {
+                        unchanged = false;
+                        break;
+                    }
+                }
+            } else  {
+                unchanged = s.index(inst_ptr(arg0)) == s.index(inst_ptr(arg1));
+            }
+
+            return unchanged ? nb::borrow(arg0) : nb::borrow(arg1);
+        } else if (tp1.is(&PyTuple_Type) || tp1.is(&PyList_Type)) {
+            size_t l1 = nb::len(arg0), l2 = nb::len(arg1);
+            if (l1 != l2)
+                nb::raise("incompatible list/tuple size (%zu and %zu)", l1, l2);
+
+            nb::list result;
+            for (size_t i = 0; i < l1; ++i) {
+                nb::object o1 = arg0[i], o2 = arg1[i], o3 = uncopy(o1, o2);
+                if (!o3.is(o1))
+                    unchanged = false;
+                result.append(o3);
+            }
+
+            return unchanged ? nb::borrow(arg0) : result;
+        } else if (tp1.is(&PyDict_Type)) {
+            nb::object k1 = nb::borrow<nb::dict>(arg0).keys(),
+                       k2 = nb::borrow<nb::dict>(arg1).keys();
+
+            if (!k1.equal(k2))
+                nb::raise("incompatible dictionary keys (%s and %s)",
+                          nb::str(k1).c_str(), nb::str(k2).c_str());
+
+            nb::dict result;
+            for (nb::handle k : k1) {
+                nb::object o1 = arg0[k], o2 = arg1[k], o3 = uncopy(o1, o2);
+                if (!o3.is(o1))
+                    unchanged = false;
+                result[k] = o3;
+            }
+
+            return unchanged ? nb::borrow(arg0) : result;
+        } else {
+            nb::object dstruct = nb::getattr(tp1, "DRJIT_STRUCT", nb::handle());
+            if (dstruct.is_valid() && dstruct.type().is(&PyDict_Type)) {
+                nb::object result = tp1();
+                for (auto [k, v] : nb::borrow<nb::dict>(dstruct)) {
+                    nb::object o1 = nb::getattr(arg0, k),
+                               o2 = nb::getattr(arg1, k),
+                               o3 = uncopy(o1, o2);
+                    if (!o3.is(o1))
+                        unchanged = false;
+                    nb::setattr(result, k, o3);
+                }
+                return unchanged ? nb::borrow(arg0) : result;
+            } else {
+                return nb::borrow(arg1);
+            }
+        }
+    } catch (nb::python_error &e) {
+        nb::str tp1_name = nb::type_name(tp1),
+                tp2_name = nb::type_name(tp2);
+        nb::raise_from(
+            e, PyExc_RuntimeError,
+            "drjit.detail.uncopy(<%U>, <%U>): encountered an exception (see above).",
+            tp1_name.ptr(), tp2_name.ptr());
+    } catch (const std::exception &e) {
+        nb::str tp1_name = nb::type_name(tp1),
+                tp2_name = nb::type_name(tp2);
+        nb::chain_error(PyExc_RuntimeError,
+                        "drjit.detail.uncopy(<%U>, <%U>): %s.", tp1_name.ptr(),
+                        tp2_name.ptr(), e.what());
+        nb::raise_python_error();
+    }
+}
+
 
 static nb::handle trace_func_handle;
 
@@ -140,7 +310,7 @@ void disable_py_tracing() {
     nb::module_::import_("sys").attr("settrace")(nb::none());
 }
 
-void export_misc(nb::module_ &) {
+void export_misc(nb::module_ &m) {
     nb::module_ detail = nb::module_::import_("drjit.detail");
     detail.def("collect_indices",
                nb::overload_cast<nb::handle>(&collect_indices),
@@ -148,6 +318,9 @@ void export_misc(nb::module_ &) {
     detail.def("update_indices", &update_indices, doc_update_indices);
     detail.def("check_compatibility", &check_compatibility,
                doc_check_compatibility);
+    // detail.def("uncopy", &uncopy, doc_uncopy);
+    m.def("copy", &copy, doc_copy);
+    detail.def("uncopy", &uncopy, doc_uncopy);
     detail.def("llvm_version", []() {
         int major, minor, patch;
         jit_llvm_version(&major, &minor, &patch);

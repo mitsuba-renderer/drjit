@@ -1030,7 +1030,7 @@ Target gather(Source &&source, const Index &index, const Mask &mask_ = true,
 
 template <typename Target, typename Value, typename Index,
           typename Mask = mask_t<Index>>
-void scatter(Target &&target, const Value &value, const Index &index,
+void scatter(Target &target, const Value &value, const Index &index,
              const Mask &mask_ = true, bool permute = false) {
     // Broadcast mask to match shape of Index
     mask_t<plain_t<Index>> mask = mask_;
@@ -1085,8 +1085,14 @@ void scatter(Target &&target, const Value &value, const Index &index,
     }
 }
 
+template <typename Index>
+Index scatter_inc(Index &target, const Index &index, const mask_t<Index> &value = true) {
+    static_assert(is_jit_v<Index> && std::is_same_v<scalar_t<Index>, uint32_t> && depth_v<Index> == 1);
+    return target.scatter_inc_(index, value);
+}
+
 template <typename Target, typename Value, typename Index>
-void scatter_reduce(ReduceOp op, Target &&target, const Value &value,
+void scatter_reduce(ReduceOp op, Target &target, const Value &value,
                     const Index &index, const mask_t<Value> &mask = true,
                     bool permute = false) {
     if constexpr (is_array_v<Value>) {
@@ -1603,64 +1609,6 @@ template <typename... Ts> void disable_grad(Ts&... ts) {
     (set_grad_enabled(ts, false), ...);
 }
 
-template <typename T> struct resume_grad {
-    static constexpr bool Enabled =
-        is_diff_v<T> && std::is_floating_point_v<scalar_t<T>>;
-    template <typename... Args>
-    resume_grad(bool when, const Args &... args) : condition(when) {
-        if constexpr (Enabled) {
-            if (condition) {
-                // dr_vector<uint32_t> indices;
-                // (detail::collect_ad_indices(indices, args), ...);
-                abort(); /// XXX
-                // detail::ad_scope_enter<detached_t<typename T::Type>>(
-                //     detail::ADScope::Resume, indices.size(), indices.data());
-            }
-        } else {
-            (((void) args), ...);
-        }
-    }
-
-    ~resume_grad() {
-        if constexpr (Enabled) {
-            abort(); /// XXX
-            // if (condition)
-            //     detail::ad_scope_leave<typename T::Type>(true);
-        }
-    }
-
-    bool condition;
-};
-
-template <typename T> struct suspend_grad {
-    static constexpr bool Enabled =
-        is_diff_v<T> && std::is_floating_point_v<scalar_t<T>>;
-    template <typename... Args>
-    suspend_grad(bool when, const Args &... args) : condition(when) {
-        if constexpr (Enabled) {
-            if (condition) {
-                // dr_vector<uint32_t> indices;
-                // (detail::collect_ad_indices(indices, args), ...);
-                // detail::ad_scope_enter<detached_t<typename T::Type>>(
-                //     detail::ADScope::Suspend, indices.size(), indices.data());
-                abort(); //  XXX
-            }
-        } else {
-            (((void) args), ...);
-        }
-    }
-
-    ~suspend_grad() {
-        if constexpr (Enabled) {
-            abort(); /// XXX
-            // if (condition)
-                // detail::ad_scope_leave<typename T::Type>(true);
-        }
-    }
-
-    bool condition;
-};
-
 template <bool PreserveType, typename T>
 decltype(auto) detach(T &&value) {
     using Result = std::decay_t<std::conditional_t<PreserveType, T, detached_t<T>>>;
@@ -1764,28 +1712,6 @@ template <typename T, typename T2> void accum_grad(T &value, const T2 &grad) {
 }
 
 enum class ADScope { Invalid = 0, Suspend = 1, Resume = 2, Isolate = 3 };
-
-/**
- * \brief RAII helper to push/pop an isolation scope that postpones traversal
- * of operations across the scope boundary
- */
-template <typename T> struct isolate_grad {
-    static constexpr bool Enabled =
-        is_diff_v<T> && std::is_floating_point_v<scalar_t<T>>;
-
-    isolate_grad() {
-        abort(); /// XXX
-        // if constexpr (Enabled)
-        //     detail::ad_scope_enter<typename T::Type>(
-        //         detail::ADScope::Isolate, 0, nullptr);
-    }
-
-    ~isolate_grad() {
-        abort(); /// XXX
-        // if constexpr (Enabled)
-        //     detail::ad_scope_leave<typename T::Type>(true);
-    }
-};
 
 template <typename T> const char *graphviz() {
     using Type = leaf_array_t<T>;

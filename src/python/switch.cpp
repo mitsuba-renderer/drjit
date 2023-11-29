@@ -55,11 +55,11 @@ static nb::object extract_mask(nb::list &args, nb::kwargs &kwargs) {
     return mask;
 }
 
-nb::object switch_impl(nb::handle index_, nb::sequence funcs,
+nb::object switch_impl(nb::handle index_, nb::sequence targets,
                        nb::args args_, nb::kwargs kwargs) {
     struct State {
         nb::tuple args_o;
-        nb::object funcs_o;
+        nb::object targets_o;
         nb::object rv_o;
     };
 
@@ -78,7 +78,7 @@ nb::object switch_impl(nb::handle index_, nb::sequence funcs,
                     return nb::none();
             }
 
-            return funcs[index_](*args, **kwargs);
+            return targets[index_](*args, **kwargs);
         }
 
         // Shift the func index (ad_call interprets 0 as 'disabled')
@@ -104,7 +104,7 @@ nb::object switch_impl(nb::handle index_, nb::sequence funcs,
 
             uintptr_t index = (uintptr_t) self;
             nb::object result =
-                state.funcs_o[index](*state.args_o[0], **state.args_o[1]);
+                state.targets_o[index](*state.args_o[0], **state.args_o[1]);
 
             if (state.rv_o.is_valid())
                 check_compatibility(result, state.rv_o);
@@ -114,7 +114,7 @@ nb::object switch_impl(nb::handle index_, nb::sequence funcs,
         };
 
         State *state =
-            new State{ nb::make_tuple(args, kwargs), funcs, nb::object() };
+            new State{ nb::make_tuple(args, kwargs), targets, nb::object() };
 
         ad_call_cleanup cleanup = [](void *ptr) {
             if (!nb::is_alive())
@@ -128,7 +128,7 @@ nb::object switch_impl(nb::handle index_, nb::sequence funcs,
         collect_indices(state->args_o, args_i);
 
         bool done = ad_call(
-            (JitBackend) s.backend, nullptr, nb::len(funcs), "drjit.switch()", false,
+            (JitBackend) s.backend, nullptr, nb::len(targets), "drjit.switch()", false,
             (uint32_t) s.index(inst_ptr(index)),
             mask.is_valid() ? ((uint32_t) s.index(inst_ptr(mask))) : 0u, args_i,
             rv_i, state, func, cleanup, true);
@@ -143,7 +143,7 @@ nb::object switch_impl(nb::handle index_, nb::sequence funcs,
         nb::raise_from(e, PyExc_RuntimeError,
                        "drjit.switch(): encountered an exception (see above).");
     } catch (const std::exception &e) {
-        nb::chain_error(PyExc_RuntimeError, "drjit.switch(): %s!", e.what());
+        nb::chain_error(PyExc_RuntimeError, "drjit.switch(): %s", e.what());
         nb::raise_python_error();
     }
 }
@@ -230,7 +230,7 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> instances,
         nb::raise_from(e, PyExc_RuntimeError,
                        "drjit.dispatch(): encountered an exception (see above).");
     } catch (const std::exception &e) {
-        nb::chain_error(PyExc_RuntimeError, "drjit.dispatch(): %s!", e.what());
+        nb::chain_error(PyExc_RuntimeError, "drjit.dispatch(): %s", e.what());
         nb::raise_python_error();
     }
 
@@ -239,7 +239,7 @@ nb::object dispatch_impl(nb::handle_t<dr::ArrayBase> instances,
 
 void export_switch(nb::module_&m) {
     m.def("switch", &switch_impl, nb::raw_doc(doc_switch), "index"_a,
-          "funcs"_a, "args"_a, "kwargs"_a)
+          "targets"_a, "args"_a, "kwargs"_a)
      .def("dispatch", &dispatch_impl, doc_dispatch, "instances"_a,
           "func"_a, "args"_a, "kwargs"_a);
 }

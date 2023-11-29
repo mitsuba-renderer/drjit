@@ -253,6 +253,21 @@ static bool array_init_from_seq(PyObject *self, const ArraySupplement &s, PyObje
 
     Py_ssize_t size = sq_length(seq);
     raise_if(size < 0, "Unable to determine the size of the given sequence.");
+    ArraySupplement::SetItem set_item = s.set_item;
+
+    if (s.is_matrix && size == s.shape[0] * s.shape[1]) {
+        nb::inst_zero(self);
+        for (Py_ssize_t i = 0; i < s.shape[0]; ++i) {
+            for (Py_ssize_t j = 0; j < s.shape[1]; ++j) {
+                nb::object o = nb::steal(sq_item(seq, i*s.shape[1]+j));
+                raise_if(!o.is_valid(),
+                         "Item retrieval failed.");
+                nb::handle self_h = self;
+                self_h[i][j] = o;
+            }
+        }
+        return true;
+    }
 
     bool is_dynamic = s.shape[0] == DRJIT_DYNAMIC;
     raise_if(!is_dynamic && s.shape[0] != size,
@@ -334,7 +349,6 @@ static bool array_init_from_seq(PyObject *self, const ArraySupplement &s, PyObje
         nb::inst_zero(self);
     }
 
-    ArraySupplement::SetItem set_item = s.set_item;
     for (Py_ssize_t i = 0; i < size; ++i) {
         nb::object o = nb::steal(sq_item(seq, i));
         raise_if(!o.is_valid(),

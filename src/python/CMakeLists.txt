@@ -18,7 +18,6 @@ nanobind_add_module(
   base.h     base.cpp
   bind.h     bind.cpp
   init.h     init.cpp
-  repr.h     repr.cpp
   iter.h     iter.cpp
   shape.h    shape.cpp
   traits.h   traits.cpp
@@ -36,6 +35,7 @@ nanobind_add_module(
   misc.h     misc.cpp
   switch.h   switch.cpp
   while.h    while.cpp
+  format.h   format.cpp
 )
 
 set_target_properties(drjit-python

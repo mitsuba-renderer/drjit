@@ -65,13 +65,14 @@ static bool ad_loop_symbolic(JitBackend backend, const char *name,
         indices2.push_back((uint32_t) i);
         needs_ad |= (i >> 32) != 0;
     }
+    bool symbolic = jit_flag(JitFlag::Symbolic);
 
     try {
         scoped_record record_guard(backend);
 
         // Rewrite the loop state variables
-        JitVar loop = JitVar::steal(
-            jit_var_loop_start(name, indices2.size(), indices2.data()));
+        JitVar loop = JitVar::steal(jit_var_loop_start(
+            name, symbolic, indices2.size(), indices2.data()));
 
         // Propagate these changes
         indices1.release();

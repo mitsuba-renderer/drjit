@@ -18,14 +18,15 @@ bool schedule(nb::handle h) {
         bool &result;
         ScheduleCallback(bool &result) : result(result) { }
 
-        void operator()(nb::handle h) const override {
+        void operator()(nb::handle h) override {
             const ArraySupplement &s = supp(h.type());
             if (s.index)
                 result |= jit_var_schedule(s.index(inst_ptr(h))) != 0;
         }
     };
 
-    traverse("drjit.schedule", ScheduleCallback{ result_ }, h);
+    ScheduleCallback sc{ result_ };
+    traverse("drjit.schedule", sc, h);
     return result_;
 }
 
@@ -33,18 +34,17 @@ static bool schedule_2(nb::args args) { return schedule(args); }
 
 static void make_opaque(nb::handle h) {
     struct ScheduleForceCallback : TraverseCallback {
-        bool &result;
-        ScheduleForceCallback(bool &result) : result(result) { }
+        bool result = false;
 
-        void operator()(nb::handle h) const override {
+        void operator()(nb::handle h) override {
             nb::handle tp = h.type();
             const ArraySupplement &s = supp(tp);
             if (!s.index)
                 return;
 
             int rv = 0;
-            uint64_t index = s.index(inst_ptr(h));
-            uint32_t index_new = ad_var_schedule_force(index, &rv);
+            uint64_t index = s.index(inst_ptr(h)),
+                     index_new = ad_var_schedule_force(index, &rv);
             if (rv)
                 result = true;
 
@@ -59,9 +59,9 @@ static void make_opaque(nb::handle h) {
         }
     };
 
-    bool result = false;
-    traverse("drjit.make_opaque", ScheduleForceCallback{ result }, h);
-    if (result) {
+    ScheduleForceCallback sfc;
+    traverse("drjit.make_opaque", sfc, h);
+    if (sfc.result) {
         nb::gil_scoped_release guard;
         jit_eval();
     }

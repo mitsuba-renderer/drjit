@@ -2,6 +2,8 @@
 #include "eval.h"
 #include "base.h"
 #include "reduce.h"
+#include "misc.h"
+#include "apply.h"
 #include <nanobind/stl/vector.h>
 #include <nanobind/stl/string.h>
 #include <functional>
@@ -152,6 +154,7 @@ private:
             } else if (s.index) {
                 uint64_t i1 = entries[id].id,
                          i2 = s.index(inst_ptr(h));
+
                 size_t &s1 = entries[id].size,
                         s2 = jit_var_size((uint32_t) i2);
 
@@ -367,6 +370,9 @@ nb::tuple while_loop(nb::tuple state, nb::callable cond, nb::callable body,
             return state;
         }
 
+        nb::object state_orig = state;
+        state = nb::borrow<nb::tuple>(copy(state));
+
         backend = (JitBackend) check_cond(cond_val).backend;
         cond_val.reset();
 
@@ -377,11 +383,11 @@ nb::tuple while_loop(nb::tuple state, nb::callable cond, nb::callable body,
             symbolic = -1;
         else if (method == "symbolic")
             symbolic = 1;
-        else if (method == "evaluated")
+        else if (method == "evaluate")
             symbolic = 0;
         else
             nb::raise("invalid 'method' argument (must equal \"auto\", "
-                      "\"scalar\", \"symbolic\", or \"evaluated\").");
+                      "\"scalar\", \"symbolic\", or \"evaluate\").");
 
         LoopState *payload =
             new LoopState(std::move(state), std::move(cond), std::move(body),
@@ -392,13 +398,14 @@ nb::tuple while_loop(nb::tuple state, nb::callable cond, nb::callable body,
                           while_loop_cond_cb, while_loop_body_cb,
                           while_loop_delete_cb, true);
 
-        nb::tuple t = nb::borrow<nb::tuple>(payload->state);
+        nb::tuple result = nb::borrow<nb::tuple>(uncopy(state_orig, payload->state));
+
         if (rv)
             delete payload;
         else
             payload->cleanup();
 
-        return t;
+        return result;
     } catch (nb::python_error &e) {
         nb::raise_from(
             e, PyExc_RuntimeError,
