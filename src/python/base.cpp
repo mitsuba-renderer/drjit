@@ -13,7 +13,7 @@
 #include "apply.h"
 #include "iter.h"
 #include "meta.h"
-#include "repr.h"
+#include "format.h"
 #include "shape.h"
 #include "slice.h"
 #include "inspect.h"
@@ -375,7 +375,7 @@ nb::object reinterpret_array(nb::type_object_t<dr::ArrayBase> t, nb::handle_t<dr
             return meta_get_type(m);
         }
 
-        virtual void operator()(nb::handle h1, nb::handle h2) const override {
+        virtual void operator()(nb::handle h1, nb::handle h2) override {
             supp(h2.type()).cast(
                 inst_ptr(h1), source_type, 1, inst_ptr(h2)
             );
@@ -393,15 +393,16 @@ nb::object reinterpret_array(nb::type_object_t<dr::ArrayBase> t, nb::handle_t<dr
     if (ms != mt)
         nb::raise("drjit.reinterpret_array(): input and target type are incompatible.");
 
-    return transform("drjit.reinterpret_array", Reinterpret(source_type, target_type), h);
+    Reinterpret r(source_type, target_type);
+    return transform("drjit.reinterpret_array", r, h);
 }
 
 static VarState get_state(nb::handle h_) {
     struct GetState : TraverseCallback {
-        mutable VarState state = VarState::Invalid;
-        mutable size_t count = 0;
+        VarState state = VarState::Invalid;
+        size_t count = 0;
 
-        void operator()(nb::handle h) const override {
+        void operator()(nb::handle h) override {
             const ArraySupplement &s = supp(h.type());
             if (!s.index)
                 return;

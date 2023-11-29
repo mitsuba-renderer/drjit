@@ -18,7 +18,7 @@ extern nb::object gather(nb::type_object dtype, nb::object source,
                          nb::object index, nb::object active, bool permute);
 
 extern void scatter(nb::object target, nb::object value, nb::object index,
-                    nb::object active, bool permute);
+                    nb::object active, bool permute = false);
 
 extern nb::object ravel(nb::handle h, char order,
                         dr_vector<size_t> *shape_out = nullptr,
@@ -27,3 +27,6 @@ extern nb::object ravel(nb::handle h, char order,
 
 extern nb::object unravel(const nb::type_object_t<ArrayBase> &dtype,
                           nb::handle_t<ArrayBase> array, char order);
+
+extern nb::object scatter_inc(nb::handle_t<drjit::ArrayBase> target,
+                              nb::object index, nb::object active);

@@ -17,7 +17,7 @@ static const char *doc_is_struct_v = R"(
 Check if the input is a Dr.Jit-compatible data structure
 
 Custom data structures can be made compatible with various Dr.Jit operations by
-specifying a ``DRJIT_STRUCT`` member. See the section on :ref:`Pytrees
+specifying a ``DRJIT_STRUCT`` member. See the section on :ref:`PyTrees
 <pytrees>` for details. This type trait can be used to check
 for the existence of such a field.
 
@@ -1220,7 +1220,7 @@ particular, ``dtype`` can be:
   shape. When ``shape`` is an integer, the function creates a rank-1 tensor of
   the specified size.
 
-- A :ref:`Pytree <pytrees>`. In this case, :py:func:`drjit.zeros()` will invoke
+- A :ref:`PyTree <pytrees>`. In this case, :py:func:`drjit.zeros()` will invoke
   itself recursively to zero-initialize each field of the data structure.
 
 - A scalar Python type like ``int``, ``float``, or ``bool``. The ``shape``
@@ -1233,7 +1233,7 @@ The function returns a *literal constant* array that consumes no device memory.
 
 Args:
     dtype (type): Desired Dr.Jit array type, Python scalar type, or
-      :ref:`Pytree <pytrees>`.
+      :ref:`PyTree <pytrees>`.
     shape (Sequence[int] | int): Shape of the desired array
 
 Returns:
@@ -1258,7 +1258,7 @@ particular, ``dtype`` can be:
   shape. When ``shape`` is an integer, the function creates a rank-1 tensor of
   the specified size.
 
-- A :ref:`Pytree <pytrees>`. In this case, :py:func:`drjit.ones()` will invoke
+- A :ref:`PyTree <pytrees>`. In this case, :py:func:`drjit.ones()` will invoke
   itself recursively to initialize each field of the data structure.
 
 - A scalar Python type like ``int``, ``float``, or ``bool``. The ``shape``
@@ -1271,7 +1271,7 @@ The function returns a *literal constant* array that consumes no device memory.
 
 Args:
     dtype (type): Desired Dr.Jit array type, Python scalar type, or
-      :ref:`Pytree <pytrees>`.
+      :ref:`PyTree <pytrees>`.
     shape (Sequence[int] | int): Shape of the desired array
 
 Returns:
@@ -1297,7 +1297,7 @@ particular, ``dtype`` can be:
   shape. When ``shape`` is an integer, the function creates a rank-1 tensor of
   the specified size.
 
-- A :ref:`Pytree <pytrees>`. In this case, :py:func:`drjit.full()` will invoke
+- A :ref:`PyTree <pytrees>`. In this case, :py:func:`drjit.full()` will invoke
   itself recursively to initialize each field of the data structure.
 
 - A scalar Python type like ``int``, ``float``, or ``bool``. The ``shape``
@@ -1307,7 +1307,7 @@ The function returns a *literal constant* array that consumes no device memory.
 
 Args:
     dtype (type): Desired Dr.Jit array type, Python scalar type, or
-      :ref:`Pytree <pytrees>`.
+      :ref:`PyTree <pytrees>`.
     value (object): An instance of the underlying scalar type
       (``float``/``int``/``bool``, etc.) that will be used to initialize the
       array contents.
@@ -1322,7 +1322,7 @@ Return an *opaque* constant-valued instance of the desired type and shape.
 
 This function is very similar to :py:func:`drjit.full` in that it creates
 constant-valued instances of various types including (potentially nested)
-Dr.Jit arrays, tensors, and :ref:`Pytrees <pytrees>`. Please refer to the
+Dr.Jit arrays, tensors, and :ref:`PyTrees <pytrees>`. Please refer to the
 documentation of :py:func:`drjit.full` for details on the function signature.
 However, :py:func:`drjit.full` creates *literal constant* arrays, which
 means that Dr.Jit is fully aware of the array contents.
@@ -1372,12 +1372,12 @@ generated program and improve the effectiveness of the kernel cache:
    print(result)
 
 This function is related to :py:func:`drjit.make_opaque`, which can turn an
-already existing Dr.Jit array, tensor, or :ref:`Pytree <pytrees>` into an
+already existing Dr.Jit array, tensor, or :ref:`PyTree <pytrees>` into an
 opaque representation.
 
 Args:
     dtype (type): Desired Dr.Jit array type, Python scalar type, or
-      :ref:`Pytree <pytrees>`.
+      :ref:`PyTree <pytrees>`.
     value (object): An instance of the underlying scalar type
       (``float``/``int``/``bool``, etc.) that will be used to initialize the
       array contents.
@@ -1408,7 +1408,7 @@ The ``dtype`` parameter can be used to request:
   shape. When ``shape`` is an integer, the function creates a rank-1 tensor of
   the specified size.
 
-- A :ref:`Pytree <pytrees>`. In this case, :py:func:`drjit.empty()` will invoke
+- A :ref:`PyTree <pytrees>`. In this case, :py:func:`drjit.empty()` will invoke
   itself recursively to allocate memory for each field of the data structure.
 
 - A scalar Python type like ``int``, ``float``, or ``bool``. The ``shape``
@@ -1421,7 +1421,7 @@ operation tries to read/write the actual array contents.
 
 Args:
     dtype (type): Desired Dr.Jit array type, Python scalar type, or
-      :ref:`Pytree <pytrees>`.
+      :ref:`PyTree <pytrees>`.
     shape (Sequence[int] | int): Shape of the desired array
 
 Returns:
@@ -1588,7 +1588,7 @@ to the generated low-level IR (LLVM, PTX) to aid debugging.
 
 You may directly assign new labels to this variable or use the
 :py:func:`drjit.set_label` function to label entire data structures (e.g.,
-:ref:`Pytrees <pytrees>`).
+:ref:`PyTrees <pytrees>`).
 
 When :py:attr:`drjit.JitFlag.Debug` is set, this field will initially be
 set to the source code location (file + line number) that created variable.
@@ -1920,7 +1920,7 @@ This operation can be used in the following different ways:
        index = dr.cuda.UInt([...]) # Note: negative indices are not permitted
        result = dr.gather(dtype=type(source), source=source, index=index)
 
-2. When ``dtype`` is a more complex type (e.g. a nested Dr.Jit array or :ref:`Pytree
+2. When ``dtype`` is a more complex type (e.g. a nested Dr.Jit array or :ref:`PyTree
    <pytrees>`), the behavior depends:
 
    - When ``type(source)`` matches ``dtype``, the the gather operation threads
@@ -2025,7 +2025,7 @@ This operation can be used in the following different ways:
       dr.scatter(target, value=value, index=index)
 
 2. When ``target`` is a more complex type (e.g. a nested Dr.Jit array or
-   :ref:`Pytree <pytrees>`), the behavior depends:
+   :ref:`PyTree <pytrees>`), the behavior depends:
 
    - When ``target`` and ``value`` are of the same type, the scatter operation
      threads through entries and invokes itself recursively. For example, the
@@ -2143,7 +2143,7 @@ This operation can be used in the following different ways:
       dr.scatter_reduce(dr.ReduceOp.Add, target, value=value, index=index)
 
 2. When ``target`` is a more complex type (e.g. a nested Dr.Jit array or
-   :ref:`Pytree <pytrees>`), the behavior depends:
+   :ref:`PyTree <pytrees>`), the behavior depends:
 
    - When ``target`` and ``value`` are of the same type, the scatter-reduction
      threads through entries and invokes itself recursively. For example, the
@@ -2388,7 +2388,7 @@ in the above example; the main difference to :py:func:`drjit.schedule()` is
 that it does the evaluation immediately without deferring the kernel launch.
 
 This function accepts a variable-length keyword argument and processes all
-input arguments. It recursively traverses Pytrees :ref:`Pytrees <pytrees>`
+input arguments. It recursively traverses PyTrees :ref:`PyTrees <pytrees>`
 (sequences, mappings, custom data structures, etc.).
 
 During recursion, the function gathers all unevaluated Dr.Jit arrays. Evaluated
@@ -2400,7 +2400,7 @@ kernel launch are ignored and will not be stored in memory.
 
 Args:
     *args (tuple): A variable-length list of Dr.Jit array instances or
-         :ref:`Pytrees <pytrees>` (they will be recursively traversed to
+         :ref:`PyTrees <pytrees>` (they will be recursively traversed to
          all differentiable variables.)
 
 Returns:
@@ -2435,7 +2435,7 @@ is equivalent to
     dr.eval()
 
 This function accepts a variable-length keyword argument and processes all
-input arguments. It recursively traverses Pytrees :ref:`Pytrees <pytrees>`
+input arguments. It recursively traverses PyTrees :ref:`PyTrees <pytrees>`
 (sequences, mappings, custom data structures, etc.).
 
 During this recursive traversal, the function collects all unevaluated Dr.Jit
@@ -2447,7 +2447,7 @@ literal constant arrays as well.
 
 Args:
     *args (tuple): A variable-length list of Dr.Jit array instances or
-      :ref:`Pytrees <pytrees>` (they will be recursively traversed to discover
+      :ref:`PyTrees <pytrees>` (they will be recursively traversed to discover
       all Dr.Jit arrays.)
 
 Returns:
@@ -2469,7 +2469,7 @@ symbolic tracing mechanism.
 
 Args:
     *args (tuple): A variable-length list of Dr.Jit array instances or
-      :ref:`Pytrees <pytrees>` (they will be recursively traversed to discover
+      :ref:`PyTrees <pytrees>` (they will be recursively traversed to discover
       all Dr.Jit arrays.)
 )";
 
@@ -2504,9 +2504,9 @@ static const char *doc_detach = R"(
 Transforms the input variable into its non-differentiable version (*detaches* it
 from the AD computational graph).
 
-This function supports arbitrary Dr.Jit arrays/tensors and :ref:`Pytrees
+This function supports arbitrary Dr.Jit arrays/tensors and :ref:`PyTrees
 <pytrees>` as input. In the latter case, it applies the transformation
-recursively. When the input variable is not a Pytree or Dr.Jit array, it is
+recursively. When the input variable is not a PyTree or Dr.Jit array, it is
 returned as it is.
 
 While the type of the returned array is preserved by default, it is possible to
@@ -2515,7 +2515,7 @@ non-differentiable. For example, this will convert an array of type
 :py:class:`drjit.llvm.ad.Float` into one of type :py:class:`drjit.llvm.Float`.
 
 Args:
-    arg (object): An arbitrary Dr.Jit array, tensor, or :ref:`Pytree <pytrees>`.
+    arg (object): An arbitrary Dr.Jit array, tensor, or :ref:`PyTree <pytrees>`.
 
     preserve_type (bool): Defines whether the returned variable should preserve
         the type of the input variable.
@@ -2528,7 +2528,7 @@ Enable or disable gradient tracking on the provided variables.
 
 Args:
     arg (object): An arbitrary Dr.Jit array, tensor,
-        :ref:`Pytree <pytrees>`, sequence, or mapping.
+        :ref:`PyTree <pytrees>`, sequence, or mapping.
 
     value (bool): Defines whether gradient tracking should be enabled or
         disabled.
@@ -2538,7 +2538,7 @@ static const char *doc_enable_grad = R"(
 Enable gradient tracking for the provided variables.
 
 This function accepts a variable-length keyword argument and processes all
-input arguments. It recursively traverses Pytrees :ref:`Pytrees <pytrees>`
+input arguments. It recursively traverses PyTrees :ref:`PyTrees <pytrees>`
 (sequences, mappings, custom data structures, etc.).
 
 During this recursive traversal, the function enables gradient tracking for all
@@ -2546,14 +2546,14 @@ encountered Dr.Jit arrays. Variables of other types are ignored.
 
 Args:
     *args (tuple): A variable-length list of Dr.Jit arrays/tensors or
-        :ref:`Pytrees <pytrees>`.
+        :ref:`PyTrees <pytrees>`.
 )";
 
 static const char *doc_disable_grad = R"(
 Disable gradient tracking for the provided variables.
 
 This function accepts a variable-length keyword argument and processes all
-input arguments. It recursively traverses Pytrees :ref:`Pytrees <pytrees>`
+input arguments. It recursively traverses PyTrees :ref:`PyTrees <pytrees>`
 (sequences, mappings, custom data structures, etc.).
 
 During this recursive traversal, the function disables gradient tracking for all
@@ -2561,7 +2561,7 @@ encountered Dr.Jit arrays. Variables of other types are ignored.
 
 Args:
     *args (tuple): A variable-length list of Dr.Jit arrays/tensors or
-        :ref:`Pytrees <pytrees>`.
+        :ref:`PyTrees <pytrees>`.
 )";
 
 static const char *doc_grad_enabled = R"(
@@ -2569,7 +2569,7 @@ Return whether gradient tracking is enabled on any of the given variables.
 
 Args:
     *args (tuple): A variable-length list of Dr.Jit arrays/tensors instances or
-      :ref:`Pytrees <pytrees>`. The function recursively traverses them to
+      :ref:`PyTrees <pytrees>`. The function recursively traverses them to
       all differentiable variables.
 
 Returns:
@@ -2583,7 +2583,7 @@ Return the gradient value associated to a given variable.
 When the variable doesn't have gradient tracking enabled, this function returns ``0``.
 
 Args:
-    arg (object): An arbitrary Dr.Jit array, tensor or :ref:`Pytree <pytrees>`.
+    arg (object): An arbitrary Dr.Jit array, tensor or :ref:`PyTree <pytrees>`.
 
     preserve_type (bool): Should the operation preserve the input type in the
         return value? (This is the default). Otherwise, Dr.Jit will, e.g.,
@@ -2608,9 +2608,9 @@ When ``source`` is not of the same type as ``target``, Dr.Jit will try to broadc
 its contents into the right shape.
 
 Args:
-    target (object): An arbitrary Dr.Jit array, tensor, or :ref:`Pytree <pytrees>`.
+    target (object): An arbitrary Dr.Jit array, tensor, or :ref:`PyTree <pytrees>`.
 
-    source (object): An arbitrary Dr.Jit array, tensor, or :ref:`Pytree <pytrees>`.
+    source (object): An arbitrary Dr.Jit array, tensor, or :ref:`PyTree <pytrees>`.
 )";
 
 
@@ -2621,16 +2621,16 @@ When ``source`` is not of the same type as ``target``, Dr.Jit will try to broadc
 its contents into the right shape.
 
 Args:
-    target (object): An arbitrary Dr.Jit array, tensor, or :ref:`Pytree <pytrees>`.
+    target (object): An arbitrary Dr.Jit array, tensor, or :ref:`PyTree <pytrees>`.
 
-    source (object): An arbitrary Dr.Jit array, tensor, or :ref:`Pytree <pytrees>`.
+    source (object): An arbitrary Dr.Jit array, tensor, or :ref:`PyTree <pytrees>`.
 )";
 
 static const char *doc_clear_grad = R"(
 Clear the gradient of the given variable.
 
 Args:
-    arg (object): An arbitrary Dr.Jit array, tensor, or :ref:`Pytree <pytrees>`.
+    arg (object): An arbitrary Dr.Jit array, tensor, or :ref:`PyTree <pytrees>`.
 )";
 
 static const char *doc_replace_grad = R"(
@@ -2647,9 +2647,9 @@ The function promotes and broadcasts ``arg0`` and ``arg1`` if they are not of th
 same type.
 
 Args:
-    arg0 (object): An arbitrary Dr.Jit array, tensor, Python arithmetic type, or :ref:`Pytree <pytrees>`.
+    arg0 (object): An arbitrary Dr.Jit array, tensor, Python arithmetic type, or :ref:`PyTree <pytrees>`.
 
-    arg1 (object): An arbitrary Dr.Jit array, tensor, or :ref:`Pytree <pytrees>`.
+    arg1 (object): An arbitrary Dr.Jit array, tensor, or :ref:`PyTree <pytrees>`.
 
 Returns:
     object: a new Dr.Jit array combining the *primal* value of ``arg0`` and the
@@ -2732,7 +2732,7 @@ Args:
        backward edges, respectively.
 
     value (object): An arbitrary Dr.Jit array, tensor or
-        :ref:`Pytree <pytrees>`.
+        :ref:`PyTree <pytrees>`.
 )";
 
 static const char *doc_traverse = R"(
@@ -2809,7 +2809,7 @@ a bug. Specify the :py:attr:`drjit.ADFlag.AllowNoGrad` flag (e.g. by
 passing ``flags=dr.ADFlag.Default | dr.ADFlag.AllowNoGrad``) to the function.
 
 Args:
-    args (object): A Dr.Jit array, tensor, or :ref:`Pytree <pytrees>`.
+    args (object): A Dr.Jit array, tensor, or :ref:`PyTree <pytrees>`.
 
     flags (drjit.ADFlag | int): Controls what parts of the AD graph to clear
         during traversal, and whether or not to fail when the input is not
@@ -2853,7 +2853,7 @@ passing ``flags=dr.ADFlag.Default | dr.ADFlag.AllowNoGrad``) to the function.
 
 Args:
     *args (tuple): A variable-length list of Dr.Jit differentiable array, tensors,
-        or :ref:`Pytree <pytrees>`.
+        or :ref:`PyTree <pytrees>`.
 
     flags (drjit.ADFlag | int): Controls what parts of the AD graph to clear
         during traversal, and whether or not to fail when the input is not
@@ -2873,7 +2873,7 @@ This function is an alias of :py:func:`drjit.forward_from()`. Please refer to
 the documentation of this function.
 
 Args:
-    args (object): A Dr.Jit array, tensor, or :ref:`Pytree <pytrees>`.
+    args (object): A Dr.Jit array, tensor, or :ref:`PyTree <pytrees>`.
 
     flags (drjit.ADFlag | int): Controls what parts of the AD graph are cleared
         during traversal. The default value is :py:attr:`drjit.ADFlag.Default`.
@@ -2913,7 +2913,7 @@ a bug. Specify the :py:attr:`drjit.ADFlag.AllowNoGrad` flag (e.g. by
 passing ``flags=dr.ADFlag.Default | dr.ADFlag.AllowNoGrad``) to the function.
 
 Args:
-    args (object): A Dr.Jit array, tensor, or :ref:`Pytree <pytrees>`.
+    args (object): A Dr.Jit array, tensor, or :ref:`PyTree <pytrees>`.
 
     flags (drjit.ADFlag | int): Controls what parts of the AD graph to clear
         during traversal, and whether or not to fail when the input is not
@@ -2957,7 +2957,7 @@ passing ``flags=dr.ADFlag.Default | dr.ADFlag.AllowNoGrad``) to the function.
 
 Args:
     *args (tuple): A variable-length list of Dr.Jit differentiable array, tensors,
-        or :ref:`Pytree <pytrees>`.
+        or :ref:`PyTree <pytrees>`.
 
     flags (drjit.ADFlag | int): Controls what parts of the AD graph to clear
         during traversal, and whether or not to fail when the input is not
@@ -2977,7 +2977,7 @@ This function is an alias of :py:func:`drjit.backward_from()`. Please refer to
 the documentation of this function.
 
 Args:
-    args (object): A Dr.Jit array, tensor, or :ref:`Pytree <pytrees>`.
+    args (object): A Dr.Jit array, tensor, or :ref:`PyTree <pytrees>`.
 
     flags (drjit.ADFlag | int): Controls what parts of the AD graph to clear
         during traversal, and whether or not to fail when the input is not
@@ -2992,6 +2992,9 @@ This function returns a representation of the computation graph underlying the
 Dr.Jit just-in-time compiler, which is separate from the automatic
 differentiation layer. See the :py:func:`graphviz_ad()` function to visualize
 the computation graph of the latter.
+
+Run ``dr.graphviz().view()`` to open up a PDF viewer that shows the resulting
+output in a separate window.
 
 The function depends on the ``graphviz`` Python package when
 ``as_string=False`` (the default).
@@ -3012,6 +3015,9 @@ This function returns a representation of the computation graph underlying the
 Dr.Jit AD layer, which one architectural layer above the just-in-time compiler.
 See the :py:func:`graphviz()` function to visualize the computation graph of
 the latter.
+
+Run ``dr.graphviz_ad().view()`` to open up a PDF viewer that shows the
+resulting output in a separate window.
 
 The function depends on the ``graphviz`` Python package when
 ``as_string=False`` (the default).
@@ -3128,7 +3134,7 @@ condition determining whether to suspend the tracking of derivatives or not.
 
 Args:
     *args (tuple): A variable-length list of differentiable Dr.Jit array
-        instances or :ref:`Pytrees <pytrees>`. The function will recursively
+        instances or :ref:`PyTrees <pytrees>`. The function will recursively
         traverse them to all differentiable variables.
 
     when (bool): An optional Python boolean determining whether to suspend
@@ -3187,7 +3193,7 @@ condition determining whether to resume the tracking of derivatives or not.
 
 Args:
     *args (tuple): A variable-length list of differentiable Dr.Jit array
-        instances or :ref:`Pytrees <pytrees>`. The function will recursively
+        instances or :ref:`PyTrees <pytrees>`. The function will recursively
         traverse them to all differentiable variables.
 
     when (bool): An optional Python boolean determining whether to resume
@@ -3213,7 +3219,7 @@ This can be helpful to identify computation in GraphViz output (see
 
 The operations assumes that the array is tracked by the just-in-time compiler.
 It has no effect on unsupported inputs (e.g., arrays from the ``drjit.scalar``
-package). It recurses through :ref:`Pytrees <pytrees>` (tuples, lists,
+package). It recurses through :ref:`PyTrees <pytrees>` (tuples, lists,
 dictionaries, custom data structures) and appends names (indices, dictionary
 keys, field names) separated by underscores to uniquely identify each element.
 
@@ -3576,7 +3582,7 @@ such a custom operation.
 )";
 
 static const char *doc_switch = R"(
-switch(index: int | drjit.ArrayBase, funcs: Sequence[Callable], *args, **kwargs) -> object
+switch(index: int | drjit.ArrayBase, targets: Sequence[Callable], *args, **kwargs) -> object
 
 Selectively invoke functions based on a provided index array.
 
@@ -3585,7 +3591,7 @@ evaluates the Python expression
 
 .. code-block:: python
 
-   funcs[index](*args, **kwargs)
+   targets[index](*args, **kwargs)
 
 When it is provided with a Dr.Jit index array (specifically, 32-bit unsigned
 integers), it performs the vectorized equivalent of the above and assembles an
@@ -3598,7 +3604,7 @@ does so efficiently using at most a single invocation of each function.
 
     res = dr.switch(
         index=UInt32(0, 0, 1, 1), # <-- selects the function
-        funcs=[                   # <-- arbitrary function list
+        targets=[                 # <-- arbitrary list of callables
             lambda x: x,
             lambda x: x*10
         ],
@@ -3609,7 +3615,7 @@ does so efficiently using at most a single invocation of each function.
 
 The function traverses the set of positional (``*args``) and keyword arguments
 (``**kwargs``) to find all Dr.Jit arrays including arrays contained within
-:ref:`Pytrees <pytrees>`. It routes a subset of array entries to each function
+:ref:`PyTrees <pytrees>`. It routes a subset of array entries to each function
 as specified by the ``index`` argument.
 
 Dr.Jit will use one of two possible strategies to compile this operation
@@ -3688,19 +3694,19 @@ argument as input, but it will always be set to ``True``.
 Args:
     index (int|drjit.ArrayBase): a list of indices to choose the functions
 
-    funcs (Sequence[Callable]): a list of functions to which calls will be
+    targets (Sequence[Callable]): a list of functions to which calls will be
       dispatched based on the ``index`` argument.
 
     *args (tuple): a variable-length list of positional arguments passed to the
-      functions. :ref:`Pytrees <pytrees>` are supported.
+      functions. :ref:`PyTrees <pytrees>` are supported.
 
     **kwargs (dict): a variable-length list of keyword arguments passed to the
-      functions. :ref:`Pytrees <pytrees>` are supported.
+      functions. :ref:`PyTrees <pytrees>` are supported.
 
 Returns:
     object: When ``index`` is a scalar Python integer, the return value simply
     forwards the return value of the selected functoin. Otherwise, the function
-    returns a Dr.Jit array or :ref:`Pytree <pytrees>` containing the result of
+    returns a Dr.Jit array or :ref:`PyTree <pytrees>` containing the result of
     each performed function call.)";
 
 static const char *doc_while_loop = R"(
@@ -3908,7 +3914,7 @@ The :py:func:`drjit.while_loop()` function chooses the evaluation mode as follow
       with dr.scoped_set_flag(dr.JitFlag.SymbolicLoops, False):
           # .. nested code will use evaluted loops ..
 
-2. When ``method`` is set to ``"scalar"`` ``"symbolic"``, or ``"evaluated"``,
+2. When ``method`` is set to ``"scalar"`` ``"symbolic"``, or ``"evaluate"``,
    it directly uses that method without inspecting the compilation flags or
    loop condition type.
 
@@ -4038,14 +4044,15 @@ exception identifying problematic loop state variables.
 .. warning::
 
    This new implementation of the :py:func:`drjit.while_loop` abstraction still
-   lacks the functionality to ``break`` from the loop or ``continue`` to the
-   next loop iteration. Our plan is to add the ability to do so soon as well.
+   lacks the functionality to ``break`` or ``return`` from the loop, or to
+   ``continue`` to the next loop iteration. We plan to add these capabilities
+   in the near future.
 
 .. rubric:: Interface
 
 Args:
     state (tuple): A tuple containing the initial values of the loop state
-      variables. This tuple normally consists of Dr.Jit arrays or :ref:`Pytrees
+      variables. This tuple normally consists of Dr.Jit arrays or :ref:`PyTrees
       <pytrees>`. Other values are permissible as well and will be forwarded to
       the loop body. However, such variables will not be captured by the
       symbolic tracing process.
@@ -4062,8 +4069,8 @@ Args:
       state (see the earlier description regarding what such compatibility entails).
 
     method (str): Specify this parameter to override the evaluation method.
-      Possible values are: ``"scalar"``, ``"symbolic"``, ``"evaluated"``, or
-      ``"auto"``. The default value of ``"auto"`` causes the function will to
+      Possible values are: ``"scalar"``, ``"symbolic"``, ``"evaluate"``, or
+      ``"auto"``. The default value of ``"auto"`` causes the function to
       first check if the loop is potentially scalar, in which case it uses a
       trivial fallback implementation. Otherwise, it queries the state of the
       Jit flag :py:attr:`drjit.JitFlag.SymbolicLoops` and then either performs
@@ -4092,20 +4099,20 @@ Returns:
 static const char *doc_dispatch = R"(
 Invoke a provided Python function for each instance in an instance array.
 
-This function invokes the provided ``func`` for each instance
+This function invokes the provided ``target`` for each instance
 in the instance array ``instances`` and assembles the return values into
 a result array. Conceptually, it does the following:
 
 .. code-block:: python
 
-   def dispatch(instances, func, *args, **kwargs):
+   def dispatch(instances, target, *args, **kwargs):
        result = []
        for inst in instances:
-           result.append(func(inst, *args, **kwargs))
+           result.append(target(inst, *args, **kwargs))
 
 However, the implementation accomplishes this more efficiently using only a
 single call per unique instance. Instead of a Python ``list``, it returns a
-Dr.Jit array or :ref:`Pytree <pytrees>`.
+Dr.Jit array or :ref:`PyTree <pytrees>`.
 
 In practice, this function is mainly good for two things:
 
@@ -4145,22 +4152,22 @@ of :py:func:`drjit.switch()` for details.
 Args:
     instances (drjit.ArrayBase): a Dr.Jit instance array.
 
-    func (Callable): function to dispatch on all instances.
+    target (Callable): function to dispatch on all instances.
 
     *args (tuple): a variable-length list of positional arguments passed to the
-      function. :ref:`Pytrees <pytrees>` are supported.
+      function. :ref:`PyTrees <pytrees>` are supported.
 
     **kwargs (dict): a variable-length list of keyword arguments passed to the
-      fucntion. :ref:`Pytrees <pytrees>` are supported.
+      fucntion. :ref:`PyTrees <pytrees>` are supported.
 
 Returns:
-    object: A Dr.Jit array or :ref:`Pytree <pytrees>` containing the
+    object: A Dr.Jit array or :ref:`PyTree <pytrees>` containing the
     result of each performed function call.)";
 
 static const char *doc_collect_indices = R"(
 Return Dr.Jit variable indices associated with the provided data structure.
 
-This function traverses Dr.Jit arrays, tensors, :ref:`Pytree <pytrees>` (lists,
+This function traverses Dr.Jit arrays, tensors, :ref:`PyTree <pytrees>` (lists,
 tuples, dicts, custom data structures) and returns the indices of all detected
 variables (in the order of traversal, may contain duplicates). The index
 information is returned as a list of encoded 64 bit integers, where each
@@ -4170,6 +4177,22 @@ in the lower 32 bit.
 Intended purely for internal Dr.Jit use, you probably should not call this in
 your own application.)";
 
+static const char *doc_uncopy = R"(
+Undo a prior call to :py:func:`drjit.copy()` when the contents of a PyTree are
+unchanged.
+
+This operation recursively traverses a PyTree ``arg1`` that was previously
+copied from a PyTree ``arg0`` (using :py:func:`drjit.copy()`) and then
+potentially modified. Whenever an entire subtree was unchanged (in the sense
+that the Dr.Jit array indices are still the same), the function "undoes" the
+change by returning the original Python object prior to the copy.
+
+This function is internally used by :py:func:`drjit.while_loop()` and
+:py:func:`drjit.if_stmt()`, which both conservatively perform a deep copy of
+all state variables. When that copy is later discovered to not be necessary,
+the use :py:func:`uncopy()` to restore the variable to its original Python
+object.)";
+
 static const char *doc_update_indices = R"(
 Create a copy of the provided input while replacing Dr.Jit variables with
 new ones based on a provided set of indices.
@@ -4178,7 +4201,7 @@ This function works analogously to ``collect_indices``, except that it
 consumes an index array and produces an updated output.
 
 It recursively traverses and copies an input object that may be a Dr.Jit array,
-tensor, or :ref:`Pytree <pytrees>` (list, tuple, dict, custom data structure)
+tensor, or :ref:`PyTree <pytrees>` (list, tuple, dict, custom data structure)
 while replacing any detected Dr.Jit variables with new ones based on the
 provided index vector. The function returns the resulting object, while leaving
 the input unchanged. The output array borrows the referenced array indices
@@ -4186,6 +4209,14 @@ as opposed to stealing them.
 
 Intended purely for internal Dr.Jit use, you probably should not call this in
 your own application.)";
+
+static const char *doc_copy = R"(
+Create a deep copy of the input PyTree.
+
+This function recursively traverses a :ref:`PyTree <pytrees>` (consisting of
+Dr.Jit arrays/tensors, lists, tuples, dicts, custom data structures). Whenever
+it encounters a Dr.Jit array, it replaces it with another instance created via
+the array's copy constructor.)";
 
 static const char *doc_check_compatibility = R"(
 Traverse two pytrees in parallel and ensure that they have an identical
@@ -4245,7 +4276,7 @@ other.)";
 // reference.rst. Please keep them in sync when making changes
 static const char *doc_JitFlag_Debug = R"(
 **Debug mode**: Enabling this flag will enable additional checks within
-Dr.Jit. 
+Dr.Jit.
 
 Specifically, debug mode will
 
@@ -4264,7 +4295,7 @@ kernel.)";
 
 // For Sphinx-related technical reasons, this comment is replicated in
 // reference.rst. Please keep them in sync when making changes
-static const char *doc_JitFlag_IndexReuse = R"(
+static const char *doc_JitFlag_ReuseIndices = R"(
 **Index reuse**: Dr.Jit consists of two main parts: the just-in-time compiler,
 and the automatic differentiation layer. Both maintain an internal data
 structure representing captured computation, in which each variable is
@@ -4651,6 +4682,18 @@ static const char *doc_VarState_Evaluated =
 
 // For Sphinx-related technical reasons, this comment is replicated in
 // reference.rst. Please keep them in sync when making changes
+static const char *doc_VarState_Dirty = R"(
+An evaluated variable backed by a device memory region. The variable
+furthermore has pending *side effects* (i.e. the user has performed a
+:py:func`drjit.scatter`, :py:func`drjit.scatter_reduce`
+:py:func`drjit.scatter_inc`, :py:func`drjit.scatter_add`, or
+:py:func`drjit.scatter_add_kahan` operation, and the effect of this operation
+has not been realized yet). The array's status will automatically change to
+:py:attr:`Evaluated` the next time that Dr.Jit evaluates computation, e.g. via
+:py:func:`drjit.eval`.)";
+
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
 static const char *doc_VarState_Symbolic =
     "A symbolic variable that could take on various inputs. Cannot be evaluated.";
 
@@ -4690,7 +4733,7 @@ PCG32).
 More detail on the PCG family of pseudorandom number generators can be found
 `here <https://www.pcg-random.org/index.html>`__.
 
-The :py:class:`PCG32` class is implemented as a :ref:`Pytree <pytrees>`, which
+The :py:class:`PCG32` class is implemented as a :ref:`PyTree <pytrees>`, which
 means that it is compatible with symbolic function calls, loops, etc.)";
 
 static const char *doc_PCG32_PCG32 = R"(
@@ -4789,6 +4832,388 @@ static const char *doc_PCG32_inc =
 static const char *doc_PCG32_state =
     "Sequence state of the PCG32 PRNG (an unsigned 64-bit integer or integer "
     "array). Please see the original paper for details on this field.";
+
+static const char *doc_scatter_inc = R"(
+Atomically increment a value within an unsigned 32-bit integer array and return
+the value prior to the update.
+
+This operation works just like the :py:func:`drjit.scatter_reduce()` operation
+for 32-bit unsigned integer operands, but with a fixed ``value=1`` parameter
+and ``reduce_op=ReduceOp::Add``.
+
+The main difference is that this variant additionally returns the *old* value
+of the target array prior to the atomic update in contrast to the more general
+scatter-reduction, which just returns ``None``. The operation also supports
+masking---the return value in the unmasked case is undefined. Both ``target``
+and ``index`` parameters must be 1D unsigned 32-bit arrays.
+
+This operation is a building block for stream compaction: threads can
+scatter-increment a global counter to request a spot in an array and then write
+their result there. The recipe for this is look as follows:
+
+.. code-block:: python
+
+   data_1 = ...
+   data_2 = ...
+   active = drjit.ones(Bool, len(data_1)) # .. or a more complex condition
+
+   # This will hold the counter
+   ctr = UInt32(0)
+
+   # Allocate output buffers
+   max_size = 1024
+   data_compact_1 = dr.empty(Float, max_size)
+   data_compact_2 = dr.empty(Float, max_size)
+
+   idx = dr.scatter_inc(target=ctr, index=UInt32(0), mask=active)
+
+   # Disable dr.scatter() operations below in case of a buffer overflow
+   active &= idx < max_size
+
+   dr.scatter(
+       target=data_compact_1,
+       value=data_1,
+       index=my_index,
+       mask=active
+   )
+
+   dr.scatter(
+       target=data_compact_2,
+       value=data_2,
+       index=my_index,
+       mask=active
+   )
+
+When following this approach, be sure to provide the same mask value to the
+:py:func:`drjit.scatter_inc()` and subsequent :py:func:`drjit.scatter()`
+operations.
+
+The function :py:func:`drjit.scatter_inc()` exhibits the following unusual
+behavior compared to regular Dr.Jit operations: the return value references the
+instantaneous state during a potentially large sequence of atomic operations.
+This instantaneous state is not reproducible in later kernel evaluations, and
+Dr.Jit will refuse to do so when the computed index is reused. In essence, the
+variable is "consumed" by the process of evaluation.
+
+.. code-block:: python
+
+   my_index = dr.scatter_inc(target=ctr, index=UInt32(0), mask=active)
+   dr.scatter(
+       target=data_compact_1,
+       value=data_1,
+       index=my_index,
+       mask=active
+   )
+
+   dr.eval(data_compact_1) # Run Kernel #1
+
+   dr.scatter(
+       target=data_compact_2,
+       value=data_2,
+       index=my_index, # <-- oops, reusing my_index in another kernel.
+       mask=active     #     This raises an exception.
+   )
+
+To get the above code to work, you will need to evaluate ``my_index`` at the
+same time to materialize it into a stored (and therefore trivially
+reproducible) representation. For this, ensure that the size of the ``active``
+mask matches ``len(data_*)`` and that it is not the trivial ``True`` default
+mask (otherwise, the evaluated ``my_index`` will be scalar).
+
+.. code-block:: python
+
+   dr.eval(data_compact_1, my_index)
+
+Such multi-stage evaluation is potentially inefficient and may defeat the
+purpose of performing stream compaction in the first place. In general, prefer
+keeping all scatter operations involving the computed index in the same kernel,
+and then this issue does not arise.
+
+The implementation of :py:func:`drjit.scatter_inc()` performs a local reduction
+first, followed by a single atomic write per SIMD packet/warp. This is done to
+reduce contention from a potentially very large number of atomic operations
+targeting the same memory address. Fully masked updates do not cause memory
+traffic.
+
+There is some conceptual overlap between this function and
+:py:func:`drjit.compress()`, which can likewise be used to reduce a stream to a
+smaller subset of active items. The downside of :py:func:`drjit.compress()` is
+that it requires evaluating the variables to be reduced, which can be very
+costly in terms of of memory traffic and storage footprint. Reducing through
+:py:func:`drjit.scatter_inc()` does not have this limitation: it can operate on
+symbolic arrays that greatly exceed the available device memory. One advantage
+of :py:func:`drjit.compress()` is that it essentially boils down to a
+realtively simple prefix sum, which does not require atomic memory operations
+(these can be slow in some cases).)";
+
+
+static const char *doc_format = R"(
+format(fmt: str, *args, limit: int = 20, **kwargs) -> str
+format(arg, /, limit: int = 20) -> str
+
+Return a formatted string representation.
+
+This function generates a formatted string representation as specified by a
+*format string* ``fmt`` and then returns it as a Python ``str`` object. The
+operation fetches referenced positional and keyword arguments and pretty-prints
+Dr.Jit arrays, tensors, and :ref:`PyTrees <pytrees>` with indentation, field
+names, etc.
+
+.. code-block:: pycon
+
+   >>> from drjit.cuda import Array3f
+   >>> s = dr.format("{}:\n{foo}",
+   ...               "A PyTree containing an array",
+   ...               foo={ 'a' : Array3f(1, 2, 3) })
+   >>> print(s)
+   A PyTree containing an array:
+   {
+     'a': [[1, 2, 3]]
+   }
+
+Dynamic arrays with more than 20 entries will be abbreviated. Specify the
+``limit=..`` argument to reveal the contents of larger arrays.
+
+.. code-block:: pycon
+
+   >>> dr.format(dr.arange(dr.llvm.Int, 30))
+   [0, 1, 2, .. 24 skipped .., 27, 28, 29]
+
+   >>> dr.format(dr.arange(dr.llvm.Int, 30), limit=30)
+   [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,⏎
+    23, 24, 25, 26, 27, 28, 29]
+
+This function lacks many features of Python's (rather intricate)
+`format string mini language <https://docs.python.org/3/library/string.html#formatspec>`__ and
+`f-string interpolation <https://peps.python.org/pep-0498/>`__. However, a subset of the
+functionality is supported:
+
+- Positional arguments (in ``*args``) can be referenced implicitly (``{}``), or
+  using indices (``{0}``, ``{1}``, etc.). Those conventions should not be mixed.
+  Unreferenced positional arguments will be silently ignored.
+
+- Keyword arguments (in ``**kwargs``) can be referenced via their keyword name
+  (``{foo}``). Unreferenced keywords will be silently ignored.
+
+- A trailing ``=`` in a brace expression repeats the string within the braces followed
+  by the output:
+
+  .. code-block:: pycon
+
+     >>> dr.format('{foo=}', foo=1)
+     foo=1
+
+When the format string ``fmt`` is omitted, it is implicitly set to ``{}``, and the
+function formats a single positional argument.
+
+In contrast to the related :py:func:`drjit.print()` , this function does not
+output the result on the console, and it cannot support symbolic inputs. This
+is because returning a string right away is incompatible with the requirement
+of evaluating/formatting symbolic inputs in a delayed fashion. If you wish to
+format symbolic arrays, you must call :py:func:`drjit.print()` with a custom
+``file`` object that implements the ``.write()`` function. Dr.Jit will call
+this function with the generated string when it is ready.
+
+Args:
+    fmt (str): A format string that potentially references input arguments
+      from ``*args`` and ``**kwargs``.
+
+    limit (int): The operation will abbreviate dynamic arrays with more than
+      ``limit`` (default: 20) entries.
+
+Returns:
+    str: The formatted string representation created as specified above.)";
+
+static const char *doc_print = R"(
+print(fmt: str, *args, active: drjit.ArrayBase | bool = True, end: str = '\n', file: object = None, limit: int = 20, method='auto', **kwargs) -> None
+print(arg: str, /, active: drjit.ArrayBase | bool = True, end: str = '\n', file: object = None, limit: int = 20, method='auto', **kwargs) -> None
+
+Generate a formatted string representation and print it immediately or
+in a delayed fashion (if any of the inputs are symbolic).
+
+This function combines the behavior of the built-in Python ``format()`` and
+``print()`` functions: it generates a formatted string representation as
+specified by a *format string* ``fmt`` and then outputs it on the console.
+The operation fetches referenced positional and keyword arguments and
+pretty-prints Dr.Jit arrays, tensors, and :ref:`PyTrees <pytrees>` with
+indentation, field names, etc.
+
+.. code-block:: pycon
+
+   >>> from drjit.cuda import Array3f
+   >>> dr.print("{}:\n{foo}",
+   ...          "A PyTree containing an array",
+   ...          foo={ 'a' : Array3f(1, 2, 3) })
+   A PyTree containing an array:
+   {
+     'a': [[1, 2, 3]]
+   }
+
+The key advance of :py:func:`drjit.print` compared to the built-in Python
+``print()`` statement is that it can run asynchronously, which allows it to
+print *symbolic variables* without requiring their evaluation. Dr.Jit uses
+symbolic variables to trace loops (:py:func:`drjit.while_loop`), conditionals
+(:py:func:`drjit.if_stmt`), and calls (:py:func:`drjit.switch`,
+:py:func:`drjit.dispatch`). Such symbolic variables represent values that are
+unknown at trace time, and which cannot be printed using the built-in Python
+``print()`` function (attempting to do so will raise an exception).
+
+When the print statement does not reference any symbolic arrays or tensors, it
+will execute immediately. Otherwise, the output will appear after the next
+:py:func:`drjit.eval()` statement, or whenever any subsequent computation is
+evaluated. Here is an example from an interactive Python session demonstrating
+printing from a symbolic call performed via :py:func:`drjit.switch()`:
+
+.. code-block:: pycon
+
+   >>> from drjit.llvm import UInt, Float
+   >>> def f1(x):
+   ...     dr.print("in f1: {x=}", x=x)
+   ...
+   >>> def f2(x):
+   ...     dr.print("in f2: {x=}", x=x)
+   ...
+   >>> dr.switch(index=UInt(0, 0, 0, 1, 1, 1),
+   ...           targets=[f1, f2],
+   ...           x=Float(1, 2, 3, 4, 5, 6))
+   >>> # No output (yet)
+   >>> dr.eval()
+   in f1: x=[1, 2, 3]
+   in f2: x=[4, 5, 6]
+
+Dynamic arrays with more than 20 entries will be abbreviated. Specify the
+``limit=..`` argument to reveal the contents of larger arrays.
+
+.. code-block:: pycon
+
+   >>> dr.print(dr.arange(dr.llvm.Int, 30))
+   [0, 1, 2, .. 24 skipped .., 27, 28, 29]
+
+   >>> dr.format(dr.arange(dr.llvm.Int, 30), limit=30)
+   [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22,⏎
+    23, 24, 25, 26, 27, 28, 29]
+
+This function lacks many features of Python's (rather intricate)
+`format string mini language <https://docs.python.org/3/library/string.html#formatspec>`__ and
+`f-string interpolation <https://peps.python.org/pep-0498/>`__. However, a subset of the
+functionality is supported:
+
+- Positional arguments (in ``*args``) can be referenced implicitly (``{}``), or
+  using indices (``{0}``, ``{1}``, etc.). Those conventions should not be mixed.
+  Unreferenced positional arguments will be silently ignored.
+
+- Keyword arguments (in ``**kwargs``) can be referenced via their keyword name
+  (``{foo}``). Unreferenced keywords will be silently ignored.
+
+- A trailing ``=`` in a brace expression repeats the string within the braces followed
+  by the output:
+
+  .. code-block:: pycon
+
+     >>> dr.print('{foo=}', foo=1)
+     foo=1
+
+When the format string ``fmt`` is omitted, it is implicitly set to ``{}``, and the
+function formats a single positional argument.
+
+The final result is then sent to ``sys.stdout`` (by default) or ``file``. When
+a ``file`` argument is given, it must implement the method ``write(arg: str)``.
+The function implicitly appends ``end`` to the format string, which is set to a
+newline by default.
+
+The related operation named :py:func:`drjit.format()` admits the same format
+string syntax but immedately returns a Python ``str``. This means that the
+operation cannot be used to print symbolic inputs.
+
+.. note::
+
+   This operation is not suitable for extracting large amounts of data from
+   Dr.Jit kernels, as the conversion to a string representation incurs a
+   nontrivial runtime cost.
+
+.. note::
+
+   **Technical details on symbolic printing**
+
+   When Dr.Jit compiles and executes queued computation on the target device,
+   it includes additional code for symbolic print operations that that captures
+   referenced arguments and copies them back to the host (CPU). The information
+   is then printed following the end of that process.
+
+   Only a limited amount of memory is set aside to capture the output of
+   symbolic print operations. This is because the amount of data produced
+   within long-running symbolic loops can often exceed the total device
+   memory. Also, printing gigabytes of ASCII text into a Python console or
+   Jupyter notebook is likely not a good idea.
+
+   The operation will warn when the size of the buffers was insufficient.
+   In this case, output is still printed in the right order, but there
+   may be holes at any point.
+
+   .. code-block:: pycon
+      :emphasize-lines: 4-9
+
+      >>> dr.print(dr.arange(Float, 10000000), method='symbolic')
+      >>> dr.eval()
+      [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+      RuntimeWarning: dr.print(): symbolic print statement only captured 20 of
+      10000000 available outputs. The above is a nondeterministic sample, in
+      which entries are in the right order but not necessarily contiguous.
+      Specify `limit=..` to capture more information and/or add the
+      special format field `{thread_id}` show the thread ID/array index
+      associated with each entry of the captured output. dr.eval()
+
+   The (many) parallel threads of the program all try to append their state to
+   the output buffer, but only the first ``limit`` (20 by default) can succeed.
+   The host subsequently re-sorts the captured data by thread ID. This means
+   that the output ``[5, 6, 102, 188, 1026, ..]`` would also be a valid result
+   of the prior command.
+
+   One current limitation is that a symbolic print within a loop counts as one
+   print statement and will only generate a single output. The output of each
+   thread is arranged in one contiguous block. You can add the special format
+   string keyword ``{thread_id}`` to associate output values with the execution
+   thread that generated them:
+
+   .. code-block:: pycon
+
+      >>> from drjit.llvm import Int
+      >>> @dr.syntax
+      >>> def f(j: Int):
+      ...     i = Int(0)
+      ...     while i < j:
+      ...         dr.print('{thread_id=} {i=}', i=i)
+      ...         i += 1
+      ...
+      >>> f(Int(2, 3))
+      >>> dr.eval();
+      thread_id=[0, 0, 1, 1, 1], i=[0, 1, 0, 1, 2]
+
+Args:
+    fmt (str): A format string that potentially references input arguments
+      from ``*args`` and ``**kwargs``.
+
+    active (drjit.ArrayBase | bool): A mask argument that can be used to
+      disable a subset of the entries. Should only be specified when the
+      print statement uses symbolic evaluation (default: ``True``).
+
+    end (str): This string will be appended to the format string. It is
+      set to a newline character (``"\n"``) by default.
+
+    file (object): The print operation will eventually invoke
+      ``file.write(arg:str)`` to print the formatted string. Specify this
+      argument to route the output somewhere other than the default output
+      stream ``sys.stdout``.
+
+    method (str): Specify this parameter to override the evaluation method.
+      Possible values are: ``"symbolic"``, ``"evaluate"``, or ``"auto"``. The
+      default value of ``"auto"`` causes the function to use evaluated mode
+      (which prints immediately) unless a symbolic input is detected, in which
+      case printing takes place symbolically (i.e., in a delayed fashion).
+
+    limit (int): The operation will abbreviate dynamic arrays with more than
+      ``limit`` (default: 20) entries.
+)";
 
 #if defined(__GNUC__)
 #  pragma GCC diagnostic pop

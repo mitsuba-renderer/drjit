@@ -151,7 +151,7 @@ incompatibilities and potential stumbling blocks.
 
   .. code-block:: python
 
-     dr.set_flag(dr.JitFlag.IndexReuse, False)
+     dr.set_flag(dr.JitFlag.ReuseIndices, False)
 
   Note that this causes the internal variable array to steadily grow, hence
   this feature should only be used for brief debugging sessions.

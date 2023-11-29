@@ -306,6 +306,64 @@ void scatter_add(nb::object target, nb::object value,
                     std::move(index), std::move(active), false);
 }
 
+nb::object scatter_inc(nb::handle_t<drjit::ArrayBase> target, nb::object index,
+                       nb::object active) {
+    nb::handle tp = target.type();
+    const ArraySupplement &s = supp(tp);
+
+    if (s.ndim != 1 || s.type != (uint8_t) VarType::UInt32 || s.backend == (uint8_t) JitBackend::None)
+        nb::raise("drjit.scatter_inc(): 'target' must be a JIT-compiled 32 bit "
+                  "unsigned integer array (e.g., 'drjit.cuda.UInt32' or 'drjit.llvm.ad.UInt32')");
+
+    ArrayMeta target_meta = s,
+              active_meta = target_meta,
+              index_meta  = target_meta;
+
+    active_meta.type = (uint16_t) VarType::Bool;
+    index_meta.type = (uint16_t) VarType::UInt32;
+
+    nb::handle active_tp = meta_get_type(active_meta),
+               index_tp = meta_get_type(index_meta);
+
+    if (!index.type().is(index_tp)) {
+        try {
+            index = index_tp(index);
+        } catch (nb::python_error &e) {
+            nb::raise_from(e, PyExc_TypeError,
+                           "drjit.scatter_inc(): 'index' argument has an "
+                           "unsupported type, please provide an instance that "
+                           "is convertible to drjit.uint32_array_t(target).");
+        }
+    }
+
+    if (!active.type().is(active_tp)) {
+        try {
+            active = active_tp(active);
+        } catch (nb::python_error &e) {
+            nb::raise_from(e, PyExc_TypeError,
+                           "drjit.scatter_inc(): 'active' argument has an "
+                           "unsupported type, please provide an instance that "
+                           "is convertible to drjit.mask_t(target).");
+        }
+    }
+
+    if (s.scatter_inc) {
+        nb::object result = nb::inst_alloc(tp);
+
+        s.scatter_inc(
+            inst_ptr(index),
+            inst_ptr(active),
+            inst_ptr(target),
+            inst_ptr(result)
+        );
+
+        nb::inst_mark_ready(result);
+        return result;
+    } else {
+        nb::raise("drjit.scatter_inc(): unsupported operation!");
+    }
+}
+
 static void ravel_recursive(nb::handle result, nb::handle value,
                             nb::handle index_dtype, const size_t *shape,
                             const int64_t *strides, Py_ssize_t offset,
@@ -561,6 +619,9 @@ void export_memop(nb::module_ &m) {
      .def("scatter_add", &scatter_add,
           "target"_a, "value"_a, "index"_a, "active"_a = true,
           doc_scatter_add)
+     .def("scatter_inc", &scatter_inc,
+          "target"_a, "index"_a, "active"_a = true,
+          doc_scatter_inc)
      .def("ravel",
           [](nb::handle array, char order) {
               return ravel(array, order);

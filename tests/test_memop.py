@@ -252,3 +252,31 @@ def test11_reverse(t):
     assert dr.all(dr.reverse([1, 2, 3]) == [3, 2, 1])
     assert dr.all(dr.reverse((1, 2, 3)) == (3, 2, 1))
     assert dr.all(dr.reverse(t(1, 2, [3, 4])) == t([3, 4], 2, 1), axis=None)
+
+@pytest.test_arrays('shape=(*), uint32, is_jit')
+def test13_scatter_inc(t):
+    # Intense test of the dr.scatter_inc() operation to catch any issues caused
+    # by the local pre-accumulation phase). The code below performs random
+    # atomic increments to locations in a small array.
+
+    try:
+        import numpy as np
+    except ImportError:
+        pytest.skip('NumPy is not installed')
+
+    np.random.seed(0)
+    size = 10000
+    for i in range(2, 17):
+        index = np.random.randint(0, i, size)
+        hist = np.histogram(index, bins=np.arange(i+1))[0]
+        assert hist.sum() == size
+        counter = dr.zeros(t, i)
+        offset = dr.scatter_inc(counter, t(index))
+        dr.eval(offset)
+        assert np.all(np.array(counter) == hist)
+        a = np.column_stack((index, np.array(offset)))
+        for j in range(i):
+            g = a[a[:, 0] == j, 1]
+            g = np.sort(g)
+            assert len(g) == hist[j]
+            assert np.all(g == np.arange(len(g)))

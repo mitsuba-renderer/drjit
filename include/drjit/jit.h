@@ -499,6 +499,11 @@ struct DRJIT_TRIVIAL_ABI JitArray
                                      m_index, index.index(), mask.index());
     }
 
+    template <typename Mask>
+    JitArray scatter_inc_(const JitArray &index, const Mask &mask) {
+        return steal(jit_var_scatter_inc(&m_index, index.index(), mask.index()));
+    }
+
     //! @}
     // -----------------------------------------------------------------------
 
@@ -506,12 +511,12 @@ struct DRJIT_TRIVIAL_ABI JitArray
     //! @{ \name Miscellaneous
     // -----------------------------------------------------------------------
 
-    std::pair<VCallBucket *, uint32_t> vcall_() const {
+    std::pair<CallBucket *, uint32_t> vcall_() const {
         if constexpr (!IsClass) {
             drjit_raise("Unsupported operand type");
         } else {
             uint32_t bucket_count = 0;
-            VCallBucket *buckets = jit_var_vcall_reduce(
+            CallBucket *buckets = jit_var_call_reduce(
                 Backend, CallSupport::Domain, m_index, &bucket_count);
             return { buckets, bucket_count };
         }
@@ -673,22 +678,6 @@ protected:
 
 template <typename Value> using CUDAArray = JitArray<JitBackend::CUDA, Value>;
 template <typename Value> using LLVMArray = JitArray<JitBackend::LLVM, Value>;
-
-template <typename Mask, typename... Ts>
-void printf_async(const Mask &mask, const char *fmt, const Ts &... ts) {
-    constexpr bool Active = is_jit_v<Mask> || (is_jit_v<Ts> || ...);
-    static_assert(!Active || (is_jit_v<Mask> && depth_v<Mask> == 1 && is_mask_v<Mask>),
-                  "printf_async(): 'mask' argument must be CUDA/LLVM mask "
-                  "array of depth 1");
-    static_assert(!Active || ((is_jit_v<Ts> && depth_v<Ts> == 1) && ...),
-                  "printf_async(): variadic arguments must be CUDA/LLVM arrays "
-                  "of depth 1");
-    if constexpr (Active) {
-        uint32_t indices[] = { ts.index()... };
-        jit_var_printf(detached_t<Mask>::Backend, mask.index(), fmt,
-                       (uint32_t) sizeof...(Ts), indices);
-    }
-}
 
 template <typename Array>
 Array block_sum(const Array &array, size_t block_size) {

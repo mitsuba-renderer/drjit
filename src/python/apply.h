@@ -51,37 +51,37 @@ extern nb::object apply_ret_pair(ArrayOp op, const char *name,
 
 /// Callback for the ``traverse()`` operation below
 struct TraverseCallback {
-    virtual void operator()(nb::handle h) const = 0;
+    virtual void operator()(nb::handle h) = 0;
 };
 
 /// Callback for the ``traverse_pair()`` operation below
 struct TraversePairCallback {
-    virtual void operator()(nb::handle h1, nb::handle h2) const = 0;
+    virtual void operator()(nb::handle h1, nb::handle h2) = 0;
 };
 
 /// Callback for the ``transform()`` operation below
 struct TransformCallback {
     virtual nb::handle transform_type(nb::handle tp) const;
     virtual nb::object transform_unknown(nb::handle tp) const;
-    virtual void operator()(nb::handle h1, nb::handle h2) const = 0;
+    virtual void operator()(nb::handle h1, nb::handle h2) = 0;
 };
 
 /// Callback for the ``transform_pair()`` operation below
 struct TransformPairCallback {
     virtual nb::handle transform_type(nb::handle tp) const;
-    virtual void operator()(nb::handle h1, nb::handle h2, nb::handle h3) const = 0;
+    virtual void operator()(nb::handle h1, nb::handle h2, nb::handle h3) = 0;
 };
 
 /// Invoke the given callback on leaf elements of the pytree 'h'
-extern void traverse(const char *op, const TraverseCallback &callback,
+extern void traverse(const char *op, TraverseCallback &callback,
                      nb::handle h);
 
 /// Parallel traversal of two compatible pytrees 'h1' and 'h2'
-extern void traverse_pair(const char *op, const TraversePairCallback &callback,
+extern void traverse_pair(const char *op, TraversePairCallback &callback,
                           nb::handle h1, nb::handle h2);
 
 /// Transform an input pytree 'h' into an output pytree, potentially of a different type
-extern nb::object transform(const char *op, const TransformCallback &callback, nb::handle h);
+extern nb::object transform(const char *op, TransformCallback &callback, nb::handle h);
 
 /// Transform a pair of input pytrees 'h1' and 'h2' into an output pytree, potentially of a different type
-extern nb::object transform_pair(const char *op, const TransformPairCallback &callback, nb::handle h1, nb::handle h2);
+extern nb::object transform_pair(const char *op, TransformPairCallback &callback, nb::handle h1, nb::handle h2);

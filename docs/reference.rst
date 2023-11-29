@@ -78,6 +78,7 @@ These operations are *horizontal* in the sense that [..]
 
 .. autofunction:: scatter_reduce
 .. autofunction:: scatter_add
+.. autofunction:: scatter_inc
 .. autofunction:: ravel
 .. autofunction:: unravel
 .. autofunction:: min
@@ -239,6 +240,18 @@ Just-in-time compilation
 
       An evaluated variable backed by a device memory region.
 
+   .. autoattribute:: Dirty
+      :annotation:
+
+      An evaluated variable backed by a device memory region. The variable
+      furthermore has pending *side effects* (i.e. the user has performed a
+      :py:func`drjit.scatter`, :py:func`drjit.scatter_reduce`
+      :py:func`drjit.scatter_inc`, :py:func`drjit.scatter_add`, or
+      :py:func`drjit.scatter_add_kahan` operation, and the effect of this
+      operation has not been realized yet). The array's status will
+      automatically change to :py:attr:`Evaluated` the next time that Dr.Jit
+      evaluates computation, e.g. via :py:func:`drjit.eval`.
+
    .. autoattribute:: Symbolic
       :annotation:
 
@@ -305,7 +318,7 @@ Just-in-time compilation
       slower. We recommend that you only use it when encountering a serious
       problem like a crashing kernel.)";
 
-   .. autoattribute:: IndexReuse
+   .. autoattribute:: ReuseIndices
       :annotation:
 
       .. For Sphinx-related technical reasons, the below comment is replicated
@@ -1126,11 +1139,13 @@ Array base class
 Miscellaneous
 -------------
 
+.. autofunction:: format
+.. autofunction:: print
+.. autofunction:: copy
 .. autofunction:: graphviz
 .. autofunction:: graphviz_ad
 .. autofunction:: whos
 .. autofunction:: whos_ad
-.. autofunction:: label
 .. autofunction:: set_label
 .. py:data:: None
    :type: NoneType

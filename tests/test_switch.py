@@ -18,10 +18,10 @@ def test01_switch_scalar():
     assert dr.switch(1, c, x=5, active=False) is None
 
 # A simple call, nothing fancy
-@pytest.mark.parametrize("recorded", [True, False])
+@pytest.mark.parametrize("symbolic", [True, False])
 @pytest.test_arrays('int32,-uint32,shape=(*),jit')
-def test02_switch_vec_simple(t, recorded, drjit_verbose, capsys):
-    with dr.scoped_set_flag(dr.JitFlag.VCallRecord, recorded):
+def test02_switch_vec_simple(t, symbolic, drjit_verbose, capsys):
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
         Int = t
         UInt32 = dr.uint32_array_t(Int)
         Bool = dr.mask_t(Int)
@@ -39,17 +39,17 @@ def test02_switch_vec_simple(t, recorded, drjit_verbose, capsys):
         assert dr.allclose(result, [[4, 8, 24, 32], [2, 2, -1, -1]])
 
         out = capsys.readouterr().out
-        if recorded:
-            assert out.count("jit_var_vcall(") == 1
+        if symbolic:
+            assert out.count("jit_var_call(") == 1
         else:
             # two kernel launches (not merged!) with 2 inputs/outputs and 2 side effects
             assert out.count("(n=2, in=4, out=0, se=2") == 2
 
 # + Masking for some elements
-@pytest.mark.parametrize("recorded", [True, False])
+@pytest.mark.parametrize("symbolic", [True, False])
 @pytest.test_arrays('int32,-uint32,shape=(*),jit')
-def test03_switch_vec_masked(t, recorded):
-    with dr.scoped_set_flag(dr.JitFlag.VCallRecord, recorded):
+def test03_switch_vec_masked(t, symbolic):
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
         Int = t
         UInt32 = dr.uint32_array_t(Int)
         Bool = dr.mask_t(Int)
@@ -77,13 +77,13 @@ def test03_switch_vec_masked(t, recorded):
         assert dr.allclose(result, [[4, 0, 24, 0], [2, 0, -1, 0]])
 
 # Let's test a few failures -- dictionary key mismatch
-@pytest.mark.parametrize("recorded", [True, False])
+@pytest.mark.parametrize("symbolic", [True, False])
 @pytest.test_arrays('uint32,shape=(*),jit')
-def test04_failure_incompatible_dict(t, recorded):
+def test04_failure_incompatible_dict(t, symbolic):
     with pytest.raises(RuntimeError) as e:
         dr.switch(
             index=t(0, 0, 1, 1),
-            funcs=(
+            targets=(
                 lambda a: dict(a=a),
                 lambda a: dict(b=a)
             ),
@@ -93,14 +93,14 @@ def test04_failure_incompatible_dict(t, recorded):
 
 
 # Let's test a few failures -- dynamic arrays with mismatched sizes
-@pytest.mark.parametrize("recorded", [True, False])
+@pytest.mark.parametrize("symbolic", [True, False])
 @pytest.test_arrays('uint32,shape=(*),jit')
-def test05_failure_incompatible_shape(t, recorded):
+def test05_failure_incompatible_shape(t, symbolic):
     m = sys.modules[t.__module__]
     with pytest.raises(RuntimeError) as e:
         dr.switch(
             index=t(0, 0, 1, 1),
-            funcs=(
+            targets=(
                 lambda a: m.ArrayXu(a, a),
                 lambda a: m.ArrayXu(a, a, a)
             ),
@@ -110,7 +110,7 @@ def test05_failure_incompatible_shape(t, recorded):
 
     r = dr.switch(
         index=t(0, 0, 1, 1),
-        funcs=(
+        targets=(
             lambda a: m.ArrayXu(a*1, a*2),
             lambda a: m.ArrayXu(a*3, a*4)
         ),
@@ -123,14 +123,14 @@ def test05_failure_incompatible_shape(t, recorded):
 
 
 # Let's test a few failures -- differently typed return values
-@pytest.mark.parametrize("recorded", [True, False])
+@pytest.mark.parametrize("symbolic", [True, False])
 @pytest.test_arrays('uint32,shape=(*),jit')
-def test06_failure_incompatible_type(t, recorded):
+def test06_failure_incompatible_type(t, symbolic):
     m = sys.modules[t.__module__]
     with pytest.raises(RuntimeError) as e:
         dr.switch(
             index=t(0, 0, 1, 1),
-            funcs=(
+            targets=(
                 lambda a: m.ArrayXu(a, a),
                 lambda a: m.ArrayXf(a, a)
             ),
@@ -138,10 +138,11 @@ def test06_failure_incompatible_type(t, recorded):
         )
     assert "incompatible input types" in str(e.value.__cause__)
 
+
 # Let's test a few failures -- raising an exception in a callable
-@pytest.mark.parametrize("recorded", [True, False])
+@pytest.mark.parametrize("symbolic", [True, False])
 @pytest.test_arrays('uint32,shape=(*),jit')
-def test07_failure_incompatible_type(t, recorded):
+def test07_failure_incompatible_type(t, symbolic):
     def f0(x):
         return x
     def f1(x):
@@ -154,13 +155,14 @@ def test07_failure_incompatible_type(t, recorded):
         )
     assert "foobar" in str(e.value.__cause__)
 
+
 # Forward-mode AD testcase
 @pytest.test_arrays('float,shape=(*),jit,is_diff')
-@pytest.mark.parametrize("recorded", [True, False])
-def test02_switch_autodiff_forward(t, recorded):
+@pytest.mark.parametrize("symbolic", [True, False])
+def test02_switch_autodiff_forward(t, symbolic):
     UInt32 = dr.uint32_array_t(t)
 
-    with dr.scoped_set_flag(dr.JitFlag.VCallRecord, recorded):
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
         def f(a, b):
             return a * 4.0, b
 
@@ -178,15 +180,16 @@ def test02_switch_autodiff_forward(t, recorded):
         dr.forward(a)
         assert dr.allclose(dr.grad(result), [[4, 4, 8, 8], [0, 0, 0, 0]])
 
+
 # Forward-mode AD testcase with an implicit dependence on another variable
 @pytest.test_arrays('float,shape=(*),jit,is_diff')
-@pytest.mark.parametrize("recorded", [True, False])
-def test03_switch_autodiff_forward_implicit(t, recorded):
+@pytest.mark.parametrize("symbolic", [True, False])
+def test03_switch_autodiff_forward_implicit(t, symbolic):
     UInt32 = dr.uint32_array_t(t)
     idx = UInt32(0, 0, 1, 1)
     a = t(1.0, 2.0, 3.0, 4.0)
 
-    with dr.scoped_set_flag(dr.JitFlag.VCallRecord, recorded):
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
         # Implicit dependence on a variable accessed via `dr.gather`
         if True:
             data = t(1.0, 2.0, 3.0, 4.0)
@@ -231,11 +234,11 @@ def test03_switch_autodiff_forward_implicit(t, recorded):
 
 
 @pytest.test_arrays('float,shape=(*),jit,is_diff')
-@pytest.mark.parametrize("recorded", [True, False])
-def test04_switch_autodiff_backward(t, recorded):
+@pytest.mark.parametrize("symbolic", [True, False])
+def test04_switch_autodiff_backward(t, symbolic):
     UInt32 = dr.uint32_array_t(t)
 
-    with dr.scoped_set_flag(dr.JitFlag.VCallRecord, recorded):
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
         def f(a, b):
             return a * 4, b
 
@@ -257,15 +260,15 @@ def test04_switch_autodiff_backward(t, recorded):
 
 
 @pytest.test_arrays('float,shape=(*),jit,is_diff')
-@pytest.mark.parametrize("recorded", [True, False])
-def test05_switch_autodiff_backward_implicit(t, recorded):
+@pytest.mark.parametrize("symbolic", [True, False])
+def test05_switch_autodiff_backward_implicit(t, symbolic):
     UInt32 = dr.uint32_array_t(t)
 
     idx = UInt32(0, 0, 1, 1)
     a = t(1.0, 2.0, 3.0, 4.0)
     i = UInt32(3, 2, 1, 0)
 
-    with dr.scoped_set_flag(dr.JitFlag.VCallRecord, recorded):
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
         if True:
             data = t(1.0, 2.0, 3.0, 4.0)
             dr.enable_grad(data)
@@ -336,12 +339,14 @@ def test06_invalid_implicit_dependence(t):
 
     assert "the symbolic computation being recorded" in str(e.value.__cause__)
 
+
 @pytest.test_arrays('float,shape=(*),jit')
 def test07_invalid_empty_array_in(t):
     idx = dr.uint32_array_t(t)(0, 0, 1, 1)
     with pytest.raises(RuntimeError) as e:
         dr.switch(idx, [lambda a: a, lambda a: a*2], t())
     assert "mismatched argument sizes (4 and 0)" in str(e.value)
+
 
 @pytest.test_arrays('float,shape=(*),jit')
 def test08_invalid_empty_array_out(t):
@@ -352,9 +357,9 @@ def test08_invalid_empty_array_out(t):
 
 
 # Keyword calling, pytrees, differentiation
-@pytest.mark.parametrize("recorded", [True, False])
+@pytest.mark.parametrize("symbolic", [True, False])
 @pytest.test_arrays('float,shape=(*),jit')
-def test09_complex(t, recorded):
+def test09_complex(t, symbolic):
     UInt32 = dr.uint32_array_t(t)
     Bool = dr.mask_t(t)
 
@@ -380,7 +385,7 @@ def test09_complex(t, recorded):
         )
     }
 
-    with dr.scoped_set_flag(dr.JitFlag.VCallRecord, recorded):
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
         a = dict(key=t(1, 2, 3, 4))
         b = (t(2), t(10, 11, 12, 13))
         dr.enable_grad(a, b)
@@ -396,3 +401,41 @@ def test09_complex(t, recorded):
             assert dr.all(dr.grad(result['rv0']) == t(5, 5, 3, 3))
             assert dr.all(dr.grad(result['rv1'][0]) == 0)
             assert dr.all(dr.grad(result['rv1'][1]) == 0)
+
+
+# Devirtualization of literal constants
+@pytest.mark.parametrize("optimize", [True, False])
+@pytest.test_arrays('uint32,shape=(*),jit')
+def test10_devirtualize(t, optimize):
+    with dr.scoped_set_flag(dr.JitFlag.OptimizeCalls, optimize):
+        c = [
+            lambda a: (t(0), t(1)),
+            lambda a: (t(0), t(2))
+        ]
+
+        x, y = dr.switch(t(0, 0, 1, 1), c, t(1,2,3, 4))
+        assert x.state == (dr.VarState.Literal if optimize else dr.VarState.Unevaluated)
+        assert y.state == dr.VarState.Unevaluated
+
+
+@pytest.mark.parametrize("symbolic", [True, False])
+@pytest.mark.parametrize("optimize", [True, False])
+@pytest.test_arrays('uint32,shape=(*),jit')
+def test11_no_mutate(t, optimize, symbolic):
+    def f1(x):
+        x += 10
+        return x
+
+    def f2(x):
+        x += 100
+        return x
+
+    def f3(x):
+        x += 1000
+        return x
+
+    targets = [f1, f2, f3]
+
+    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
+        with dr.scoped_set_flag(dr.JitFlag.OptimizeCalls, optimize):
+            assert dr.all(dr.switch(t(0, 1, 2), targets, t(1, 2, 3)) == [11, 102, 1003])

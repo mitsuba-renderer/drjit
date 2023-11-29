@@ -208,8 +208,10 @@ struct ArraySupplement : ArrayMeta {
     using Data = void *(*)(const ArrayBase *) noexcept;
     using Gather = void (*)(const ArrayBase *, const ArrayBase *,
                             const ArrayBase *, ArrayBase *, bool);
-    using ScatterReduce = void (*)(ReduceOp, const ArrayBase *, const ArrayBase *,
-                                   const ArrayBase *, const ArrayBase *, bool);
+    using ScatterReduce = void (*)(ReduceOp, const ArrayBase *,
+                                   const ArrayBase *, const ArrayBase *,
+                                   const ArrayBase *, bool);
+    using ScatterInc = void (*)(const ArrayBase *, ArrayBase *, ArrayBase *, ArrayBase *);
     using UnaryOp  = void (*)(const ArrayBase *, ArrayBase *);
     using BinaryOp = void (*)(const ArrayBase *, const ArrayBase *, ArrayBase *);
     using PrefixSum = void (*)(const ArrayBase *, bool, ArrayBase *);
@@ -251,6 +253,9 @@ struct ArraySupplement : ArrayMeta {
 
             /// Scatter reduction operation
             ScatterReduce scatter_reduce;
+
+            /// Scatter-increment operation
+            ScatterInc scatter_inc;
 
             /// Return a pointer to the underlying storage
             Data data;
@@ -380,8 +385,15 @@ template <typename T> NB_INLINE void bind_base(ArrayBinding &b) {
         nb::handle result;
         if (i < size) {
             nb::detail::cleanup_list cleanup(o);
-            result = nb::detail::make_caster<Value>::from_cpp(
-                inst->entry(i), nb::rv_policy::reference_internal, &cleanup);
+            try {
+                auto &&value = inst->entry(i);
+                result = nb::detail::make_caster<Value>::from_cpp(
+                    value, nb::rv_policy::reference_internal, &cleanup);
+            } catch (const std::exception &e) {
+                nb::str tp_name = nb::inst_name(o);
+                PyErr_Format(PyExc_RuntimeError, "%U.__getitem__(): %s.",
+                             tp_name.ptr(), e.what());
+            }
             assert(!cleanup.used());
         } else {
             nb::str tp_name = nb::inst_name(o);
@@ -708,6 +720,13 @@ template <typename T> void bind_memop(ArrayBinding &b) {
         +[](ReduceOp op, const T *a, const UInt32 *b, const Mask *c, T *d, bool permute) {
             scatter_reduce(op, *d, *a, *b, *c, permute);
         };
+
+    if constexpr (std::is_same_v<scalar_t<T>, uint32_t> && is_jit_v<T>) {
+        b.scatter_inc = (ArraySupplement::ScatterInc)
+            +[](const UInt32 *a, const Mask *b, UInt32 *c, UInt32 *d) {
+                new (d) T(scatter_inc(*c, *a, *b));
+            };
+    }
 }
 
 template <typename T>
