@@ -460,10 +460,13 @@ static nb::object format_impl(const char *name, const std::string &fmt,
 
             dr::suspend_grad suspend_guard;
             nb::object active = nb::inst_alloc(mask_tp);
-            uint32_t default_mask = jit_var_mask_default(examine.backend, examine.size);
-            supp(active.type()).init_index(default_mask, inst_ptr(active));
+
+            uint32_t mask_1 = jit_var_bool(examine.backend, true);
+            uint32_t mask_2 = jit_var_mask_apply(mask_1, examine.size);
+            supp(active.type()).init_index(mask_2, inst_ptr(active));
             nb::inst_mark_ready(active);
-            jit_var_dec_ref(default_mask);
+            jit_var_dec_ref(mask_1);
+            jit_var_dec_ref(mask_2);
 
             if (kwargs.contains("active")) {
                 active &= kwargs["active"];

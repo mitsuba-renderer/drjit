@@ -82,9 +82,9 @@ using JitVar = GenericArray<void>;
 
 // Forward declaration of a helper function full of checks (used by all strategies)
 static void ad_call_check_rv(JitBackend backend, size_t size,
-                              size_t callable_index,
-                              dr_vector<uint64_t> &rv,
-                              const dr_vector<uint64_t> &rv2);
+                             size_t callable_index,
+                             dr_vector<uint64_t> &rv,
+                             const dr_vector<uint64_t> &rv2);
 
 // Strategy 1: this is a getter. turn the call into a gather operation
 static void ad_call_getter(JitBackend backend, const char *domain,

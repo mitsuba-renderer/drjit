@@ -141,3 +141,57 @@ def test09_symbolic_print_large(t):
         assert sorted(r) == r
     assert len(record) == 1
     assert "symbolic print statement only captured 25 of 1000 available outputs" in record[0].message.args[0]
+
+
+@pytest.test_arrays('shape=(*), uint32, jit')
+def test10_print_from_subroutine(t):
+    b1 = Buffer()
+    b2 = Buffer()
+
+    def f1(x):
+        dr.print("in f1: x={x}", x=x, file=b1)
+
+    def f2(x):
+        dr.print("in f2: x={x}", x=x, file=b2)
+
+    dr.switch(
+        index=t(0, 0, 0, 1, 1, 1),
+        funcs=[f1, f2],
+        x=t(1, 2, 3, 4, 5, 6)
+    )
+
+    dr.eval()
+    assert b1.value == 'in f1: x=[1, 2, 3]\n'
+    assert b2.value == 'in f2: x=[4, 5, 6]\n'
+
+
+@pytest.test_arrays('shape=(*), uint32, jit')
+def test11_print_from_subroutine_complex(t):
+    b1 = Buffer()
+    b2 = Buffer()
+
+    def f1(x):
+        i = t(0)
+
+        def body(i):
+            dr.print("in f1: tid={thread_id}, x={x}", x=x+i*10, file=b1)
+            return (i+1,)
+
+        dr.while_loop(
+            (i,),
+            lambda i: i<2,
+            body
+        )
+
+    def f2(x):
+        dr.print("in f2: tid={thread_id}, x={x}", x=x, file=b2)
+
+    dr.switch(
+        index=t(0, 0, 0, 1, 1, 1),
+        funcs=[f1, f2],
+        x=t(1, 2, 3, 4, 5, 6)
+    )
+
+    dr.eval()
+    assert b1.value == 'in f1: tid=[0, 0, 1, 1, 2, 2], x=[1, 11, 2, 12, 3, 13]\n'
+    assert b2.value == 'in f2: tid=[3, 4, 5], x=[4, 5, 6]\n'

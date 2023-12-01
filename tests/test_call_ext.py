@@ -397,7 +397,6 @@ def test14_array_call_noinst(t, symbolic):
     gc.collect()
     gc.collect()
     d = BasePtr(None, None)
-    dr.set_log_level(10)
 
     with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
         c = BasePtr()
