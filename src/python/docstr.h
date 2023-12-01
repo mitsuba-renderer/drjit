@@ -5116,14 +5116,16 @@ functionality is supported:
 When the format string ``fmt`` is omitted, it is implicitly set to ``{}``, and the
 function formats a single positional argument.
 
-The final result is then sent to ``sys.stdout`` (by default) or ``file``. When
-a ``file`` argument is given, it must implement the method ``write(arg: str)``.
 The function implicitly appends ``end`` to the format string, which is set to a
-newline by default.
+newline by default. The final result is sent to ``sys.stdout`` (by default) or
+``file``. When a ``file`` argument is given, it must implement the method
+``write(arg: str)``.
 
-The related operation named :py:func:`drjit.format()` admits the same format
-string syntax but immedately returns a Python ``str``. This means that the
-operation cannot be used to print symbolic inputs.
+A related operation :py:func:`drjit.format()` admits the same format string
+syntax but returns a Python ``str`` instead of printing to the console. This
+operation, however, does not support symbolic inputs---use
+:py:func:`drjit.print()` with a custom ``file`` argument to stringify symbolic
+inputs asynchronously.
 
 .. note::
 
@@ -5146,9 +5148,15 @@ operation cannot be used to print symbolic inputs.
    memory. Also, printing gigabytes of ASCII text into a Python console or
    Jupyter notebook is likely not a good idea.
 
-   The operation will warn when the size of the buffers was insufficient.
-   In this case, output is still printed in the right order, but there
-   may be holes at any point.
+   For the electronically inclined, the operation is best thought of as hooking
+   up an oscilloscope to a high-frequency circuit. The oscilloscope provides a
+   limited view into a vast torrent of data to assist the user, who would be
+   overwhelmed if the oscilloscope worked by capturing and showing everything.
+
+   The operation warns when the size of the buffers was insufficient. In this
+   case, the output is still printed in the correct order, but chunks of the
+   data are missing. The position of the resulting holes is unspecified and
+   nondeterministic.
 
    .. code-block:: pycon
       :emphasize-lines: 4-9
@@ -5163,17 +5171,27 @@ operation cannot be used to print symbolic inputs.
       special format field `{thread_id}` show the thread ID/array index
       associated with each entry of the captured output. dr.eval()
 
-   The (many) parallel threads of the program all try to append their state to
-   the output buffer, but only the first ``limit`` (20 by default) can succeed.
-   The host subsequently re-sorts the captured data by thread ID. This means
-   that the output ``[5, 6, 102, 188, 1026, ..]`` would also be a valid result
-   of the prior command.
+   This is because the (many) parallel threads of the program all try to append
+   their state to the output buffer, but only the first ``limit`` (20 by
+   default) succeed. The host subsequently re-sorts the captured data by thread
+   ID. This means that the output ``[5, 6, 102, 188, 1026, ..]`` would also be
+   a valid result of the prior command. When a print statement references
+   multiple arrays, then the operations either shows all array entries
+   associated with a particular execution thread, or none of them.
 
-   One current limitation is that a symbolic print within a loop counts as one
-   print statement and will only generate a single output. The output of each
-   thread is arranged in one contiguous block. You can add the special format
-   string keyword ``{thread_id}`` to associate output values with the execution
-   thread that generated them:
+   To refine what is captured, you can specify the ``active`` argument to
+   disable the print statement for a subset of the entries (a "trigger" in
+   the oscilloscope analogy). Printing from an inactive thread within a
+   symbolic loop (:py:func:`drjit.while_loop`), conditional
+   (:py:func:`drjit.if_stmt`), or call (:py:func:`drjit.switch`,
+   :py:func:`drjit.dispatch`) will likewise not generate any output.
+
+   A potential gotcha of the current design is that a symbolic print within a
+   symbolic loop counts as one print statement and will only generate a single
+   combined output string. The output of each thread is arranged in one
+   contiguous block. You can add the special format string keyword
+   ``{thread_id}`` to reveal the mapping between output values and the
+   execution thread that generated them:
 
    .. code-block:: pycon
 
@@ -5188,6 +5206,13 @@ operation cannot be used to print symbolic inputs.
       >>> f(Int(2, 3))
       >>> dr.eval();
       thread_id=[0, 0, 1, 1, 1], i=[0, 1, 0, 1, 2]
+
+   The example above runs a symbolic loop twice in parallel: the first thread
+   runs for for 2 iterations, and the second runs for 3 iterations. The loop
+   prints the iteration counter ``i``, which then leads to the output ``[0, 1,
+   0, 1, 2]`` where the first two entries are produced by the first thread, and
+   the trailing three belong to the second thread. The ``thread_id`` output
+   clarifies this mapping.
 
 Args:
     fmt (str): A format string that potentially references input arguments
