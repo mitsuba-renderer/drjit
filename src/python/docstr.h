@@ -4385,8 +4385,14 @@ Dr.Jit provides two main ways of compiling function calls targeting *instance ar
 
    Its main downsides are:
 
-   * Symbolic arrays cannot be evaluated, printed, etc. Attempting to
-     perform such operations will raise an exception.
+   * Symbolic arrays cannot be evaluated. Any attempt to reveal their contents
+     (e.g., via the built-in Python ``print()``) is doomed to fail since there
+     is simply nothing there (yet).
+
+     One small exception worthy of note is the special symbolic
+     :py:func:`drjit.print()` operation, which is able to print symbolic arrays
+     in a delayed fashion. However, all other types of operations that require
+     variable evaluation will raise an exception.
 
      This limitation may be inconvenient especially when debugging code, in
      which case evaluated mode is preferable.
@@ -4458,8 +4464,9 @@ can potentially generate vast numbers of different functions in the generated
 code. At the same time, many of these functions may contain identical code
 (or code that is identical except for data references).
 
-Dr.Jit can exploit such redundancy and merge such functions during computation.
-Besides generating shorter programs, this also helps to reduce thread divergence.
+Dr.Jit can exploit such redundancy and merge such functions during code
+generation. Besides generating shorter programs, this also helps to reduce
+thread divergence.
 
 This flag is *enabled* by default. Note that it is only effective
 in combination with  :py:attr:`SymbolicCalls`.
@@ -4485,8 +4492,14 @@ Dr.Jit provides two main ways of compiling loops involving Dr.Jit arrays.
 
    Its main downsides is:
 
-   * Symbolic arrays cannot be evaluated, printed, etc. Attempting to
-     perform such operations within the loop body will raise an exception.
+   * Symbolic arrays cannot be evaluated. Any attempt to reveal their contents
+     (e.g., via the built-in Python ``print()``) is doomed to fail since there
+     is simply nothing there (yet).
+
+     One small exception worthy of note is the special symbolic
+     :py:func:`drjit.print()` operation, which is able to print symbolic arrays
+     in a delayed fashion. However, all other types of operations that require
+     variable evaluation will raise an exception.
 
      This limitation may be inconvenient especially when debugging code, in
      which case evaluated mode is preferable.
@@ -5159,17 +5172,16 @@ inputs asynchronously.
    nondeterministic.
 
    .. code-block:: pycon
-      :emphasize-lines: 4-9
+      :emphasize-lines: 5-8
 
       >>> dr.print(dr.arange(Float, 10000000), method='symbolic')
       >>> dr.eval()
       [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
-      RuntimeWarning: dr.print(): symbolic print statement only captured 20 of
-      10000000 available outputs. The above is a nondeterministic sample, in
-      which entries are in the right order but not necessarily contiguous.
-      Specify `limit=..` to capture more information and/or add the
-      special format field `{thread_id}` show the thread ID/array index
-      associated with each entry of the captured output. dr.eval()
+
+      RuntimeWarning: dr.print(): symbolic print statement only captured 20 of 10000000 available outputs.
+      The above is a nondeterministic sample, in which entries are in the right order but not necessarily
+      contiguous. Specify `limit=..` to capture more information and/or add the special format field 
+      `{thread_id}` show the thread ID/array index associated with each entry of the captured output.
 
    This is because the (many) parallel threads of the program all try to append
    their state to the output buffer, but only the first ``limit`` (20 by

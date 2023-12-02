@@ -45,7 +45,7 @@ These operations are *horizontal* in the sense that [..]
       :annotation:
 
       Perform an ordinary scatter operation that ignores the current entry.
-.
+
    .. autoattribute:: Add
       :annotation:
 
@@ -316,7 +316,7 @@ Just-in-time compilation
       Debug mode comes at a significant cost: it interferes with kernel
       caching, reduces tracing performance, and produce kernels that run
       slower. We recommend that you only use it when encountering a serious
-      problem like a crashing kernel.)";
+      problem like a crashing kernel.
 
    .. autoattribute:: ReuseIndices
       :annotation:
@@ -331,9 +331,9 @@ Just-in-time compilation
       compiler, and ``a1234`` in the AD graph).
 
       The index of a Dr.Jit array in these graphs can be queried via the
-      :py:attr:`drjit.index` and :py:attr:`drjit.index_ad` variables, and they
-      are also visible in debug messages (if :py:func:`drjit.set_log_level` is
-      set to a more verbose debug level).
+      :py:attr:`ArrayBase.index` and :py:attr:`ArrayBase.index_ad` variables,
+      and they are also visible in debug messages (if
+      :py:func:`drjit.set_log_level` is set to a more verbose debug level).
 
       Dr.Jit aggressively reuses the indices of expired variables by default,
       but this can make debug output difficult to interpret. When when
@@ -352,8 +352,8 @@ Just-in-time compilation
          in docstr.h. Please keep the two in sync when making changes.
 
       **Constant propagation**: immediately evaluate arithmetic involving
-      literal constants on the host and don't generate any device-specific code
-      for them.
+      literal constants on the host and don't generate any device code for
+      them.
 
       For example, the following assertion holds when value numbering is
       enabled in Dr.Jit.
@@ -426,8 +426,14 @@ Just-in-time compilation
 
          Its main downsides are:
 
-         * Symbolic arrays cannot be evaluated, printed, etc. Attempting to
-           perform such operations will raise an exception.
+         * Symbolic arrays cannot be evaluated. Any attempt to reveal their contents
+           (e.g., via the built-in Python ``print()``) is doomed to fail since there
+           is simply nothing there (yet).
+
+           One small exception worthy of note is the special symbolic
+           :py:func:`drjit.print()` operation, which is able to print symbolic arrays
+           in a delayed fashion. However, all other types of operations that require
+           variable evaluation will raise an exception.
 
            This limitation may be inconvenient especially when debugging code, in
            which case evaluated mode is preferable.
@@ -450,7 +456,7 @@ Just-in-time compilation
          * Kernels are smaller and avoid thread divergence, since Dr.Jit reorders
            computation by callable.
 
-         The main downsides are:
+         Its main downsides is:
 
          * Each callable essentially turns its own kernel that reads its input and
            writes outputs via device memory. The required memory bandwidth and
@@ -503,8 +509,8 @@ Just-in-time compilation
       generated code. At the same time, many of these callables may contain
       identical code (or code that is identical except for data references).
 
-      Dr.Jit can exploit such redundancy and merge such callables during
-      computation. Besides generating shorter programs, this also helps to
+      Dr.Jit can exploit such redundancy and merge such callables during code
+      generation. Besides generating shorter programs, this also helps to
       reduce thread divergence.
 
       This flag is enabled by default. Note that it is only effective in
@@ -534,11 +540,16 @@ Just-in-time compilation
            bandwidth, since loop state variables can be exchanged through fast
            CPU/GPU registers.
 
-         Its main downsides is:
+         Its main downside is:
 
-         * Symbolic arrays cannot be evaluated, printed, etc. Attempting to
-           perform such operations within the loop body will raise an
-           exception.
+         * Symbolic arrays cannot be evaluated. Any attempt to reveal their contents
+           (e.g., via the built-in Python ``print()``) is doomed to fail since there
+           is simply nothing there (yet).
+
+           One small exception worthy of note is the special symbolic
+           :py:func:`drjit.print()` operation, which is able to print symbolic arrays
+           in a delayed fashion. However, all other types of operations that require
+           variable evaluation will raise an exception.
 
            This limitation may be inconvenient especially when debugging code,
            in which case evaluated mode is preferable.
@@ -554,7 +565,7 @@ Just-in-time compilation
            tools) is legal.  You may also use a debugger to step through the
            program.
 
-         The main downsides are:
+         Its main downsides is:
 
          * Each iteration generates at least one kernel that reads its input and
            writes outputs via device memory. The required memory bandwidth and

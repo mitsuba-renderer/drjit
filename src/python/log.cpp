@@ -17,16 +17,18 @@
  * It *never* tries to acquire the GIL to avoid deadlocks and instead falls
  * back to 'stderr' if needed.
  */
-static void log_callback(LogLevel /* level */, const char *msg) {
+static void log_callback(LogLevel level, const char *msg) {
     if (!nb::is_alive() || !PyGILState_Check()) {
         fprintf(stderr, "%s\n", msg);
         return;
     }
 
     nb::error_scope scope;
-    nb::print(msg);
+    if (level == LogLevel::Warn)
+        PyErr_WarnFormat(PyExc_RuntimeWarning, 1, "%s", msg);
+    else
+        nb::print(msg);
 }
-
 
 void export_log(nb::module_ &m, PyModuleDef &pmd) {
     jit_set_log_level_stderr(LogLevel::Disable);

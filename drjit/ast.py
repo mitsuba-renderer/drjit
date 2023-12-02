@@ -592,8 +592,10 @@ def syntax(f: Callable = None, print_ast: bool = False, print_code: bool = False
         return wrapper
 
     source = inspect.getsource(f)
-    from textwrap import dedent
-    source = dedent(source)
+
+    if source[0].isspace():
+        from textwrap import dedent
+        source = dedent(source)
 
     old_ast = ast.parse(source)
     new_ast = old_ast
