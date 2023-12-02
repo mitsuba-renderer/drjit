@@ -1968,15 +1968,22 @@ This operation can be used in the following different ways:
 
 .. danger::
 
-    The indices provided to this operation are unchecked by default.
-    Out-of-bounds reads are considered undefined behavior and may crash the
-    application (unless they are disabled via the ``active`` parameter).
-    Negative indices are not permitted.
+    The indices provided to this operation are unchecked by default. Attempting
+    to read beyond the end of the ``source`` array is undefined behavior and
+    may crash the application, unless such reads are explicitly disabled via the
+    ``active`` parameter. Negative indices are not permitted.
 
     If *debug mode* is enabled via the :py:attr:`drjit.JitFlag.Debug` flag,
-    Dr.Jit will insert range checks into the program. These will catch
-    out-of-bound reads and print an error message identifying the responsible
-    line of code.
+    Dr.Jit will insert range checks into the program. These checks disable
+    out-of-bound reads and furthermore report warnings to identify problematic
+    source locations:
+
+    .. code-block:: pycon
+       :emphasize-lines: 2-3
+
+       >>> dr.gather(dtype=UInt, source=UInt(1, 2, 3), index=UInt(0, 1, 100))
+       RuntimeWarning: drjit.gather(): out-of-bounds read from position 100 in an array⏎
+       of size 3. (<stdin>:2)
 
 Args:
     dtype (type): The desired output type (typically equal to ``type(source)``,
@@ -3691,6 +3698,25 @@ and never passed to the functions. Associated entries of the return
 value will be zero-initialized. The function will still receive the mask
 argument as input, but it will always be set to ``True``.
 
+.. danger::
+
+    The indices provided to this operation are unchecked by default. Attempting
+    to call functions beyond the end of the ``targets`` array is undefined
+    behavior and may crash the application, unless such calls are explicitly
+    disabled via the ``active`` parameter. Negative indices are not permitted.
+
+    If *debug mode* is enabled via the :py:attr:`drjit.JitFlag.Debug` flag,
+    Dr.Jit will insert range checks into the program. These checks disable
+    out-of-bound calls and furthermore report warnings to identify problematic
+    source locations:
+
+    .. code-block:: pycon
+       :emphasize-lines: 2-3
+
+       >>> print(dr.switch(UInt32(0, 100), [lambda x:x], UInt32(1)))
+       RuntimeWarning: attempted to invoke callable with index 100, but this ⏎
+       value must be smaller than 1. (<stdin>:2)
+
 Args:
     index (int|drjit.ArrayBase): a list of indices to choose the functions
 
@@ -4275,23 +4301,48 @@ other.)";
 // For Sphinx-related technical reasons, this comment is replicated in
 // reference.rst. Please keep them in sync when making changes
 static const char *doc_JitFlag_Debug = R"(
-**Debug mode**: Enabling this flag will enable additional checks within
-Dr.Jit.
+**Debug mode**: Enable functionality to uncover errors in application code.
 
-Specifically, debug mode will
+When debug mode is enabled, Dr. Jit inserts a number of addititional runtime
+checks to locate sources of undefined behavior.
 
-- insert additional checks to catch out-of-bound reads and writes performed by
-  operations such as :py:func:`drjit.scatter`, :py:func:`drjit.gather`,
-  :py:func:`drjit.scatter_reduce`.
-
-- include Python source code locations in the generated intermediate
-  representation (PTX, LLVM IR). This is mostly useful for low-level
-  debugging and development involving Dr.Jit internals.
-
-Debug mode comes at a significant cost: it interferes with kernel caching,
+Debug mode comes at a *significant* cost: it interferes with kernel caching,
 reduces tracing performance, and produce kernels that run slower. We recommend
-that you only use it when encountering a serious problem like a crashing
-kernel.)";
+that you only use it periodically before a release, or when encountering a
+serious problem like a crashing kernel.
+
+In debug mode, Dr.Jit inserts additional checks to intercept out-of-bound reads
+and writes performed by operations such as :py:func:`drjit.scatter`,
+:py:func:`drjit.gather`, :py:func:`drjit.scatter_reduce`,
+:py:func:`drjit.scatter_inc`, etc. It also detects calls to invalid callables
+performed via :py:func:`drjit.switch`, :py:func:`drjit.dispatch`. Such invalid
+operations are masked, and they generate a warning message on the console,
+e.g.:
+
+.. code-block:: pycon
+   :emphasize-lines: 2-3
+
+   >>> dr.gather(dtype=UInt, source=UInt(1, 2, 3), index=UInt(0, 1, 100))
+   RuntimeWarning: drjit.gather(): out-of-bounds read from position 100 in an array⏎
+   of size 3. (<stdin>:2)
+
+In debug mode, Dr.Jit also installs a
+`python tracing hook <https://docs.python.org/3/library/sys.html#sys.settrace>`__
+that associates all Jit variables with their Python source code location, and
+this information is propagated all the way to the final intermediate
+representation (PTX, LLVM IR). This is useful for low-level debugging and
+development of Dr.Jit itself. You can query the source location
+information of a variable ``x`` by writing ``x.label``.
+
+Due to limitations of the Python tracing interface, this handler becomes active
+within the *next* called function (or Jupyter notebook cell) following
+activation of the :py:attr:`drjit.JitFlag.Debug` flag. It does not apply to
+code within the same scope/function.
+
+C++ code using Dr.Jit also benefits from debug mode but will lack accurate
+source code location information. In mixed-language projects, the reported file
+and line number information will reflect that of the last operation on the
+Python side of the interface.)";
 
 // For Sphinx-related technical reasons, this comment is replicated in
 // reference.rst. Please keep them in sync when making changes
@@ -4698,9 +4749,9 @@ static const char *doc_VarState_Evaluated =
 static const char *doc_VarState_Dirty = R"(
 An evaluated variable backed by a device memory region. The variable
 furthermore has pending *side effects* (i.e. the user has performed a
-:py:func`drjit.scatter`, :py:func`drjit.scatter_reduce`
-:py:func`drjit.scatter_inc`, :py:func`drjit.scatter_add`, or
-:py:func`drjit.scatter_add_kahan` operation, and the effect of this operation
+:py:func`:drjit.scatter`, :py:func:`drjit.scatter_reduce`
+:py:func`:drjit.scatter_inc`, :py:func`:drjit.scatter_add`, or
+:py:func`:drjit.scatter_add_kahan` operation, and the effect of this operation
 has not been realized yet). The array's status will automatically change to
 :py:attr:`Evaluated` the next time that Dr.Jit evaluates computation, e.g. via
 :py:func:`drjit.eval`.)";
@@ -5180,7 +5231,7 @@ inputs asynchronously.
 
       RuntimeWarning: dr.print(): symbolic print statement only captured 20 of 10000000 available outputs.
       The above is a nondeterministic sample, in which entries are in the right order but not necessarily
-      contiguous. Specify `limit=..` to capture more information and/or add the special format field 
+      contiguous. Specify `limit=..` to capture more information and/or add the special format field
       `{thread_id}` show the thread ID/array index associated with each entry of the captured output.
 
    This is because the (many) parallel threads of the program all try to append

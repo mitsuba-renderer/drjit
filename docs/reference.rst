@@ -245,9 +245,9 @@ Just-in-time compilation
 
       An evaluated variable backed by a device memory region. The variable
       furthermore has pending *side effects* (i.e. the user has performed a
-      :py:func`drjit.scatter`, :py:func`drjit.scatter_reduce`
-      :py:func`drjit.scatter_inc`, :py:func`drjit.scatter_add`, or
-      :py:func`drjit.scatter_add_kahan` operation, and the effect of this
+      :py:func:`drjit.scatter`, :py:func:`drjit.scatter_reduce`
+      :py:func:`drjit.scatter_inc`, :py:func:`drjit.scatter_add`, or
+      :py:func:`drjit.scatter_add_kahan` operation, and the effect of this
       operation has not been realized yet). The array's status will
       automatically change to :py:attr:`Evaluated` the next time that Dr.Jit
       evaluates computation, e.g. via :py:func:`drjit.eval`.
@@ -301,22 +301,48 @@ Just-in-time compilation
       .. For Sphinx-related technical reasons, the below comment is replicated
          in docstr.h. Please keep the two in sync when making changes.
 
-      Enabling this flag will enable additional checks within Dr.Jit.
+      **Debug mode**: Enable functionality to uncover errors in application code.
 
-      Specifically, debug mode will
+      When debug mode is enabled, Dr. Jit inserts a number of addititional runtime
+      checks to locate sources of undefined behavior.
 
-      - insert additional checks to catch out-of-bound reads and writes
-        performed by operations such as :py:func:`drjit.scatter`,
-        :py:func:`drjit.gather`, :py:func:`drjit.scatter_reduce`.
+      Debug mode comes at a *significant* cost: it interferes with kernel caching,
+      reduces tracing performance, and produce kernels that run slower. We recommend
+      that you only use it periodically before a release, or when encountering a
+      serious problem like a crashing kernel.
 
-      - include Python source code locations in the generated intermediate
-        representation (PTX, LLVM IR). This is mostly useful for low-level
-        debugging and development involving Dr.Jit internals.
+      In debug mode, Dr.Jit inserts additional checks to intercept out-of-bound reads
+      and writes performed by operations such as :py:func:`drjit.scatter`,
+      :py:func:`drjit.gather`, :py:func:`drjit.scatter_reduce`,
+      :py:func:`drjit.scatter_inc`, etc. It also detects calls to invalid callables
+      performed via :py:func:`drjit.switch`, :py:func:`drjit.dispatch`. Such invalid
+      operations are masked, and they generate a warning message on the console,
+      e.g.:
 
-      Debug mode comes at a significant cost: it interferes with kernel
-      caching, reduces tracing performance, and produce kernels that run
-      slower. We recommend that you only use it when encountering a serious
-      problem like a crashing kernel.
+      .. code-block:: pycon
+         :emphasize-lines: 2-3
+
+         >>> dr.gather(dtype=UInt, source=UInt(1, 2, 3), index=UInt(0, 1, 100))
+         RuntimeWarning: drjit.gather(): out-of-bounds read from position 100 in an array⏎
+         of size 3. (<stdin>:2)
+
+      In debug mode, Dr.Jit also installs a `python tracing hook
+      <https://docs.python.org/3/library/sys.html#sys.settrace>`__ that
+      associates all Jit variables with their Python source code location, and
+      this information is propagated all the way to the final intermediate
+      representation (PTX, LLVM IR). This is useful for low-level debugging and
+      development of Dr.Jit itself. You can query the source location
+      information of a variable ``x`` by writing ``x.label``.
+
+      Due to limitations of the Python tracing interface, this handler becomes active
+      within the *next* called function (or Jupyter notebook cell) following
+      activation of the :py:attr:`drjit.JitFlag.Debug` flag. It does not apply to
+      code within the same scope/function.
+
+      C++ code using Dr.Jit also benefits from debug mode but will lack accurate
+      source code location information. In mixed-language projects, the reported file
+      and line number information will reflect that of the last operation on the
+      Python side of the interface.
 
    .. autoattribute:: ReuseIndices
       :annotation:
