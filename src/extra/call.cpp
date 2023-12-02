@@ -187,10 +187,17 @@ static void ad_call_getter(JitBackend backend, const char *domain,
         JitVar buf = JitVar::steal(
             jit_var_mem_map(backend, type, ptr, callable_count + 1, 1));
 
-        AggregationEntry *agg = (AggregationEntry *)
-            jit_malloc(backend == JitBackend::CUDA ? AllocType::HostPinned
-                                                   : AllocType::Host,
-                        sizeof(AggregationEntry) * callable_count), *p = agg;
+        AggregationEntry *agg = nullptr;
+        size_t agg_size = sizeof(AggregationEntry) * callable_count;
+
+        if (backend == JitBackend::CUDA) {
+            agg = (AggregationEntry *) jit_malloc(AllocType::HostPinned, agg_size);
+        } else {
+            agg = (AggregationEntry *) malloc(agg_size);
+            if (!agg)
+                jit_fail("malloc(): could not allocate %zu bytes!", agg_size);
+        }
+        AggregationEntry *p = agg;
 
         for (size_t j = 0; j < callable_count; ++j) {
             uint32_t rv3_i = rv3[i+j*rv2.size()];

@@ -370,7 +370,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
         else
             av = jit_registry_id(value);
 
-        return steal(jit_var_literal(Backend, Type, &av, size, false, IsClass));
+        return steal(jit_var_literal(Backend, Type, &av, size, false));
     }
 
     template <typename T, enable_if_t<!std::is_void_v<T> && std::is_same_v<T, Value>> = 0>
@@ -381,7 +381,7 @@ struct DRJIT_TRIVIAL_ABI JitArray
         else
             av = jit_registry_id(value);
 
-        return steal(jit_var_literal(Backend, Type, &av, size, true, IsClass));
+        return steal(jit_var_literal(Backend, Type, &av, size, true));
     }
 
     static JitArray arange_(ssize_t start, ssize_t stop, ssize_t step) {
