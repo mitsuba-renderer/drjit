@@ -981,6 +981,8 @@ template <typename Target, bool Permute = false, typename Source,
 Target gather(Source &&source, const Index &index, const Mask &mask_ = true) {
     // Broadcast mask to match shape of Index
     mask_t<plain_t<Index>> mask = mask_;
+    DRJIT_MARK_USED(mask);
+
     if constexpr (array_depth_v<Source> > 1) {
         // Case 1: gather<Vector3fC>(const Vector3fC&, ...)
         static_assert(array_size_v<Source> == array_size_v<Target>,
@@ -1070,6 +1072,8 @@ void scatter(Target &&target, const Value &value, const Index &index,
              const Mask &mask_ = true) {
     // Broadcast mask to match shape of Index
     mask_t<plain_t<Index>> mask = mask_;
+    DRJIT_MARK_USED(mask);
+
     if constexpr (std::is_same_v<std::decay_t<Target>, std::nullptr_t>) {
         return; // Used by virtual function call dispatch when there is no return value
     } else if constexpr (array_depth_v<Target> > 1) {
