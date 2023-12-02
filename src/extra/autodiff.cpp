@@ -876,7 +876,7 @@ DRJIT_NOINLINE Index ad_var_new_impl(const char *label, JitVar &&result,
 
     uint32_t flags = jit_flags();
 
-    bool symbolic    = flags & (uint32_t) JitFlag::Recording,
+    bool symbolic    = flags & (uint32_t) JitFlag::Symbolic,
          reuse_indices = flags & (uint32_t) JitFlag::ReuseIndices;
 
     VarInfo info = jit_set_backend(result.index());
@@ -1498,7 +1498,7 @@ void ad_scope_enter(ADScope type, size_t size, const Index *indices) {
     if (!scopes.empty())
         scope = scopes.back();
 
-    scope.symbolic = jit_flag(JitFlag::Recording);
+    scope.symbolic = jit_flag(JitFlag::Symbolic);
     scope.postponed.clear();
     scope.implicit.clear();
     scope.type = type;
@@ -2725,7 +2725,7 @@ const char *ad_var_graphviz() {
 
 void ad_var_check_implicit(uint64_t index) {
     ADIndex ad_index = ::ad_index(index);
-    if (ad_index == 0 || !jit_flag(JitFlag::Recording))
+    if (ad_index == 0 || !jit_flag(JitFlag::Symbolic))
         return;
 
     std::lock_guard<std::mutex> guard(state.mutex);
@@ -3032,7 +3032,7 @@ bool ad_custom_op(dr::detail::CustomOpBase *op) {
 
     uint32_t flags = jit_flags();
 
-    bool symbolic    = flags & (uint32_t) JitFlag::Recording,
+    bool symbolic    = flags & (uint32_t) JitFlag::Symbolic,
          reuse_indices = flags & (uint32_t) JitFlag::ReuseIndices;
 
     ADIndex v0i, v1i;
