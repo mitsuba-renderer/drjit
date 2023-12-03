@@ -348,3 +348,26 @@ def test14_no_mutate_inputs(t, optimize, method):
     assert q2o is not q2
     assert q2o[0] is q2[0]
     assert q2o[1] is not q2[1]
+
+@pytest.mark.parametrize('symbolic', [True, False])
+@pytest.mark.parametrize("optimize", [True, False])
+@pytest.test_arrays('uint32,is_jit,shape=(*)')
+def test15_loop_in_vcall(t, optimize, symbolic):
+    @dr.syntax
+    def f(t, x):
+        count = t(0)
+        while count < 10:
+            x *= 2
+            count += x
+
+        return count
+
+        with dr.scoped_set_flag(dr.JitFlag.SymbolicLoops, symbolic):
+            with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
+                with dr.scoped_set_flag(dr.JitFlag.OptimizeLoops, optimize):
+                    with dr.scoped_set_flag(dr.JitFlag.OptimizeCalls, optimize):
+                        x = dr.arange(t, 3)+2
+                        indices = dr.full(t, 0, 3)
+
+                        out = dr.switch(indices, [f], t, x)
+                        assert dr.all(out == [1,2,3])
