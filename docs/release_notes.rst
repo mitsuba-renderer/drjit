@@ -5,6 +5,24 @@ Being an experimental research framework, Dr.Jit does not strictly follow the
 `Semantic Versioning <https://semver.org/>`_ convention. That said, we will
 strive to document breaking API changes in the release notes below.
 
+Upcoming releases
+-----------------
+
+- Added new `dr.prefix_sum` operation for inclusive and exclusive prefix sums
+  `[4be7aa0] <https://github.com/mitsuba-renderer/drjit/commit/4be7aa03478db5aa61e9c0796bcdc6d1cfb3d678>`_
+- Added new `dr.scatter_inc` operation for stream compaction
+  `[754a541] <https://github.com/mitsuba-renderer/drjit/commit/754a541c274c6a57c1f2879e404215a64c507199>`_
+- Fix `dr.dispatch` when a instance of the class has been deleted
+  `[1f908cc] <https://github.com/mitsuba-renderer/drjit/commit/1f908cc48cb8f2d30ce36a63d8a90f7e93b82d5c>`_
+- Support for `dr.PCG32` samplers in recorded loops' state
+  `[58c8485] <https://github.com/mitsuba-renderer/drjit/commit/58c8485a3e4de6ab8323cb8555ed875635efda09>`_
+- Extend `dr.binary_search` to additionally support non-scalar and multi-dimensional indices
+  `[79de06a] <https://github.com/mitsuba-renderer/drjit/commit/79de06a64a59fdcd14e6e922127bec1bde3a68c3>`_ .. `[5fc5750] <https://github.com/mitsuba-renderer/drjit/commit/5fc5750dcd2621002f26ef403a9617ff48680a59>`_
+- Fix race condition in ``jit_sync_thread()`` `[6690923] <https://github.com/mitsuba-renderer/drjit-core/commit/6690923505cb4fca3fb7d75b2e1705008c0af738>`_
+- Switch ``jitc_vcall_prepare()`` allocation method to avoid deadlocks `[c13ef93] <https://github.com/mitsuba-renderer/drjit-core/commit/c13ef9300ce6627d327b27a1cf14497a94795196>`_
+- Various minor bug fixes
+
+
 Dr.Jit 0.4.3
 ------------
 
