@@ -1,4 +1,4 @@
-#include "while.h"
+#include "while_loop.h"
 #include "eval.h"
 #include "base.h"
 #include "reduce.h"
@@ -82,16 +82,15 @@ struct LoopState {
         first_time = false;
     }
 
-    void cleanup() {
-        stack.clear();
-        state = nb::borrow<nb::tuple>(cleanup_impl(state));
-    }
-
 private:
     template <bool Write, typename OutArray> void traverse(nb::handle h, OutArray &indices) {
-        // Avoid infinite recursion
-        if (std::find(stack.begin(), stack.end(), h.ptr()) != stack.end())
-            return;
+        if (std::find(stack.begin(), stack.end(), h.ptr()) != stack.end()) {
+            PyErr_Format(
+                PyExc_RecursionError,
+                "Detected a cycle in field %s. This is not permitted.", name.c_str());
+            nb::raise_python_error();
+        }
+
         stack.push_back(h.ptr());
         nb::handle tp = h.type();
 
@@ -124,7 +123,7 @@ private:
                     nb::type_name(tp).c_str());
 
             if (!tp.is(e.type))
-                nb::raise(
+                nb::raise_type_error(
                     "the body of this loop changed the type of loop state "
                     "variable '%s' from '%s' to '%s', which is not "
                     "permitted. Please review the interface and assumptions "
@@ -234,58 +233,7 @@ private:
         }
         stack.pop_back();
     }
-
-    /// Release all Dr.Jit objects in a Pytree
-    nb::object cleanup_impl(nb::handle h) {
-        // Avoid infinite recursion
-        if (std::find(stack.begin(), stack.end(), h.ptr()) != stack.end())
-            return nb::none();
-
-        stack.push_back(h.ptr());
-
-        nb::handle tp = h.type();
-        nb::object result;
-        if (is_drjit_type(tp)) {
-            result = tp();
-        } else if (tp.is(&PyList_Type)) {
-            nb::list l;
-            for (nb::handle v: nb::borrow<nb::list>(h))
-                l.append(cleanup_impl(v));
-            result = std::move(l);
-        } else if (tp.is(&PyTuple_Type)) {
-            nb::list l;
-            for (nb::handle v: nb::borrow<nb::tuple>(h))
-                l.append(cleanup_impl(v));
-            result = nb::tuple(l);
-        } else if (tp.is(&PyDict_Type)) {
-            nb::dict d;
-            for (nb::handle kv: nb::borrow<nb::dict>(h).items())
-                d[cleanup_impl(kv[0])] = cleanup_impl(kv[1]);
-            result = std::move(d);
-        } else {
-            nb::object dstruct = nb::getattr(tp, "DRJIT_STRUCT", nb::handle());
-            if (dstruct.is_valid() && dstruct.type().is(&PyDict_Type)) {
-                result = tp();
-                for (auto [k, v] : nb::borrow<nb::dict>(dstruct))
-                    result.attr(k) = cleanup_impl(nb::getattr(h, k));
-            } else {
-                result = nb::borrow(h);
-            }
-        }
-
-        stack.pop_back();
-        return result;
-    }
 };
-
-/// Helper function to perform a tuple-based function call directly using the
-/// CPython API. nanobind lacks a nice abstraction for this.
-static nb::object tuple_call(nb::handle callable, nb::handle tuple) {
-    nb::object result = nb::steal(PyObject_CallObject(callable.ptr(), tuple.ptr()));
-    if (!result.is_valid())
-        nb::raise_python_error();
-    return result;
-}
 
 /// Helper function to check that the type+size of the state variable returned
 /// by 'body()' is sensible
@@ -349,12 +297,12 @@ static void while_loop_delete_cb(void *p) {
 nb::tuple while_loop(nb::tuple state, nb::callable cond, nb::callable body,
                      std::vector<std::string> &&state_labels,
                      const std::string &name,
-                     const std::string &method) {
+                     const std::string &mode) {
     try {
         JitBackend backend = JitBackend::None;
 
-        bool scalar_loop = method == "scalar",
-             auto_loop = method == "auto";
+        bool scalar_loop = mode == "scalar",
+             auto_loop = mode == "auto";
 
         nb::object cond_val = tuple_call(cond, state);
         if (auto_loop)
@@ -381,12 +329,12 @@ nb::tuple while_loop(nb::tuple state, nb::callable cond, nb::callable body,
         int symbolic = -1;
         if (auto_loop)
             symbolic = -1;
-        else if (method == "symbolic")
+        else if (mode == "symbolic")
             symbolic = 1;
-        else if (method == "evaluate")
+        else if (mode == "evaluate")
             symbolic = 0;
         else
-            nb::raise("invalid 'method' argument (must equal \"auto\", "
+            nb::raise("invalid 'mode' argument (must equal \"auto\", "
                       "\"scalar\", \"symbolic\", or \"evaluate\").");
 
         LoopState *payload =
@@ -403,7 +351,7 @@ nb::tuple while_loop(nb::tuple state, nb::callable cond, nb::callable body,
         if (rv)
             delete payload;
         else
-            payload->cleanup();
+            payload->state = nb::borrow<nb::tuple>(reset(payload->state));
 
         return result;
     } catch (nb::python_error &e) {
@@ -416,39 +364,8 @@ nb::tuple while_loop(nb::tuple state, nb::callable cond, nb::callable body,
     }
 }
 
-#if 0
-nb::tuple if_stmt(nb::tuple state, nb::callable cond,
-                  nb::callable true_fn,
-                  nb::callable false_fn,
-                  const std::vector<std::string> &,
-                  const std::string &name,
-                  const std::string &method) {
-    try {
-        // First, check if this is perhaps a scalar loop
-        nb::object cond_val = tuple_call(cond, state);
-        if (cond_val.type().is(&PyBool_Type)) {
-            if (nb::cast<bool>(cond_val))
-                return check_state("true_fn", tuple_call(true_fn, state), state);
-            else
-                return check_state("false_fn", tuple_call(false_fn, state), state);
-        }
-        nb::raise("Vectorial if statements arent' supported yet.");
-    } catch (nb::python_error &e) {
-        nb::raise_from(
-            e, PyExc_RuntimeError,
-            "dr.if_stmt(): encountered an exception (see above).");
-    } catch (const std::exception &e) {
-        nb::chain_error(PyExc_RuntimeError, "dr.if_stmt(): %s", e.what());
-        throw nb::python_error();
-    }
-}
-#endif
-
-void export_while(nb::module_ &m) {
+void export_while_loop(nb::module_ &m) {
     m.def("while_loop", &while_loop, "state"_a, "cond"_a, "body"_a,
           "state_labels"_a = nb::make_tuple(), "label"_a = "unnamed",
-          "method"_a = "auto", doc_while_loop);
-    //
-    // m.def("if_stmt", &if_stmt, "state"_a, "cond"_a, "true_fn"_a, "false_fn"_a,
-    //       "state_labels"_a = nb::make_tuple(), "label"_a = "unnamed", method_a="auto");
+          "mode"_a = "auto", doc_while_loop);
 }

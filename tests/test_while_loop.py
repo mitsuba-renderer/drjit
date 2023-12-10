@@ -2,17 +2,17 @@ import drjit as dr
 import pytest
 
 
-@pytest.mark.parametrize('method', ['evaluate', 'symbolic'])
+@pytest.mark.parametrize('mode', ['evaluate', 'symbolic'])
 @pytest.mark.parametrize("optimize", [True, False])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
-def test01_simple(t, method, optimize):
+def test01_simple(t, mode, optimize):
     # Test a very basic loop in a few different modes
     with dr.scoped_set_flag(dr.JitFlag.OptimizeLoops, optimize):
         i = dr.arange(t, 7)
         z = t(0)
 
-        while dr.hint(i < 5, method=method):
+        while dr.hint(i < 5, mode=mode):
             i += 1
             z = i + 4
 
@@ -36,16 +36,16 @@ def test02_nested_loop_disallowed_config(t):
     assert err_msg in str(e.value.__cause__)
 
 
-@pytest.mark.parametrize('method', ['evaluate', 'symbolic'])
+@pytest.mark.parametrize('mode', ['evaluate', 'symbolic'])
 @pytest.mark.parametrize("version", [0, 1])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
-def test03_change_type(t, method, version):
+def test03_change_type(t, mode, version):
     # Can't change the type of a variable
     with pytest.raises(RuntimeError) as e:
         i = t(5)
-        while dr.hint(i < 10, method=method):
-            if dr.hint(version == 0, method='scalar'):
+        while dr.hint(i < 10, mode=mode):
+            if dr.hint(version == 0, mode='scalar'):
                 i = i + 1.1
             else:
                 i = None
@@ -54,24 +54,24 @@ def test03_change_type(t, method, version):
     assert err_msg in str(e.value)
 
 
-@pytest.mark.parametrize('method', ['evaluate', 'symbolic'])
+@pytest.mark.parametrize('mode', ['evaluate', 'symbolic'])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
-def test04_change_size(t, method):
+def test04_change_size(t, mode):
     # Can't change the size of a variable
     with pytest.raises(RuntimeError) as e:
         i = t(5, 10)
-        while dr.hint(i < 10, method=method):
+        while dr.hint(i < 10, mode=mode):
             i = t(10, 11, 12)
 
     err_msg = "the body of this loop changed the size of loop state variable 'i'"
     assert err_msg in str(e.value)
 
 
-@pytest.mark.parametrize('method', ['evaluate', 'symbolic'])
+@pytest.mark.parametrize('mode', ['evaluate', 'symbolic'])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
-def test05_incompatible_size(t, method):
+def test05_incompatible_size(t, mode):
     # Can't mix variables with incompatible sizes
     with pytest.raises(RuntimeError) as e:
         i = t(5, 6, 7)
@@ -84,28 +84,28 @@ def test05_incompatible_size(t, method):
     assert err_msg in str(e.value)
 
 
-@pytest.mark.parametrize('method', ['evaluate', 'symbolic'])
+@pytest.mark.parametrize('mode', ['evaluate', 'symbolic'])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
-def test06_cond_err(t, method):
+def test06_cond_err(t, mode):
     # The loop condition might raise an exception, which should be propagated without problems
     def mycond(v):
         raise Exception("oh no")
     with pytest.raises(RuntimeError) as e:
         i = t(5)
-        while dr.hint(mycond(i), method=method):
+        while dr.hint(mycond(i), mode=mode):
             i += 1
     assert "oh no" in str(e.value.__cause__)
 
 
-@pytest.mark.parametrize('method', ['evaluate', 'symbolic'])
+@pytest.mark.parametrize('mode', ['evaluate', 'symbolic'])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
-def test07_body_err(t, method):
+def test07_body_err(t, mode):
     # The body might raise an exception, which should be propagated without problems
     with pytest.raises(RuntimeError) as e:
         i = t(5)
-        while dr.hint(i < 10, method=method):
+        while dr.hint(i < 10, mode=mode):
             raise Exception("oh no")
     assert "oh no" in str(e.value.__cause__)
 
@@ -160,7 +160,7 @@ def test09_loop_optimizations(t, optimize):
             b += 0
             index += 1
 
-        if dr.hint(not optimize, method='scalar'):
+        if dr.hint(not optimize, mode='scalar'):
             assert a_const == 0
             assert b_const == 0
             assert it_count == 1
@@ -174,17 +174,17 @@ def test09_loop_optimizations(t, optimize):
             assert b.state == dr.VarState.Literal
 
 
-@pytest.mark.parametrize('method', ['evaluate', 'symbolic'])
+@pytest.mark.parametrize('mode', ['evaluate', 'symbolic'])
 @pytest.mark.parametrize('optimize', [True, False])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
-def test10_scatter_v1(t, method, optimize):
+def test10_scatter_v1(t, mode, optimize):
     with dr.scoped_set_flag(dr.JitFlag.OptimizeLoops, optimize):
         i = t(0, 1)
         v = dr.zeros(t, 1)
         dr.set_label(v, 'v')
 
-        while dr.hint(i < 10, method=method):
+        while dr.hint(i < 10, mode=mode):
             i += 1
             dr.scatter_add(target=v, index=0, value=1)
 
@@ -193,17 +193,17 @@ def test10_scatter_v1(t, method, optimize):
         assert v[0] == 19
 
 
-@pytest.mark.parametrize('method', ['evaluate', 'symbolic'])
+@pytest.mark.parametrize('mode', ['evaluate', 'symbolic'])
 @pytest.mark.parametrize('optimize', [True, False])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
-def test10_scatter_v2(t, method, optimize):
+def test10_scatter_v2(t, mode, optimize):
     with dr.scoped_set_flag(dr.JitFlag.OptimizeLoops, optimize):
         i = t(0, 1)
         v = dr.zeros(t, 1)
         dr.set_label(v, 'v')
 
-        while dr.hint(i < 10, method=method, exclude=[v]):
+        while dr.hint(i < 10, mode=mode, exclude=[v]):
             i += 1
             dr.scatter_add(target=v, index=0, value=1)
 
@@ -211,18 +211,18 @@ def test10_scatter_v2(t, method, optimize):
         assert dr.all(i == 10)
         assert v[0] == 19
 
-@pytest.mark.parametrize('method1', ['evaluate', 'symbolic'])
-@pytest.mark.parametrize('method2', ['evaluate', 'symbolic'])
+@pytest.mark.parametrize('mode1', ['evaluate', 'symbolic'])
+@pytest.mark.parametrize('mode2', ['evaluate', 'symbolic'])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
-def test11_nested_loop(method1, method2, t):
+def test11_nested_loop(mode1, mode2, t):
     n = dr.arange(t, 17)
     i, accum = t(0), t(0)
 
     try:
-        while dr.hint(i < n, method=method1, label='outer'):
+        while dr.hint(i < n, mode=mode1, label='outer'):
             j = t(0)
-            while dr.hint(j < i, method=method2, label='inner'):
+            while dr.hint(j < i, mode=mode2, label='inner'):
                 j += 1
                 accum += 1
             i += 1
@@ -230,7 +230,7 @@ def test11_nested_loop(method1, method2, t):
     except Exception as e:
         err = e
 
-    if dr.hint(method1 == 'symbolic' and method2 == 'evaluate', method='scalar'):
+    if dr.hint(mode1 == 'symbolic' and mode2 == 'evaluate', mode='scalar'):
         # That combination is not allowed
         assert 'cannot execute a loop in *evaluated mode*' in str(err.__cause__)
     else:
@@ -238,18 +238,18 @@ def test11_nested_loop(method1, method2, t):
         assert dr.all(accum == (n*(n-1)) // 2)
 
 
-@pytest.mark.parametrize('method1', ['evaluate', 'symbolic'])
-@pytest.mark.parametrize('method2', ['evaluate', 'symbolic'])
+@pytest.mark.parametrize('mode1', ['evaluate', 'symbolic'])
+@pytest.mark.parametrize('mode2', ['evaluate', 'symbolic'])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
-def test11_nested_loop_with_side_effect(method1, method2, t):
+def test11_nested_loop_with_side_effect(mode1, mode2, t):
     n = dr.arange(t, 17)
     i, accum = t(0), dr.zeros(t, 17)
 
     try:
-        while dr.hint(i < n, method=method1, label='outer'):
+        while dr.hint(i < n, mode=mode1, label='outer'):
             j = t(0)
-            while dr.hint(j < i, method=method2, label='inner'):
+            while dr.hint(j < i, mode=mode2, label='inner'):
                 j += 1
                 dr.scatter_add(target=accum, index=n, value=1)
             i += 1
@@ -257,7 +257,7 @@ def test11_nested_loop_with_side_effect(method1, method2, t):
     except Exception as e:
         err = e
 
-    if dr.hint(method1 == 'symbolic' and method2 == 'evaluate', method='scalar'):
+    if dr.hint(mode1 == 'symbolic' and mode2 == 'evaluate', mode='scalar'):
         # That combination is not allowed
         assert 'cannot execute a loop in *evaluated mode*' in str(err.__cause__)
     else:
@@ -280,31 +280,31 @@ def test12_optimize_away(t, optimize):
 
         assert (a.index == ai) == optimize
 
-@pytest.mark.parametrize('method', ['evaluate', 'symbolic'])
+@pytest.mark.parametrize('mode', ['evaluate', 'symbolic'])
 @pytest.mark.parametrize("optimize", [True, False])
 @pytest.test_arrays('float,is_diff,shape=(*)')
 @dr.syntax
-def test13_simple_diff_loop(t, optimize, method):
+def test13_simple_diff_loop(t, optimize, mode):
     i, j = dr.int32_array_t(t)(0), t(1)
     dr.enable_grad(j)
     dr.set_grad(j, 1.1)
 
-    while dr.hint(i < 5, method=method):
+    while dr.hint(i < 5, mode=mode):
         j = j * 2
         i += 1
 
     assert dr.allclose(dr.forward_to(j), 32*1.1)
 
-@pytest.mark.parametrize('method', ['evaluated', 'symbolic'])
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
 @pytest.mark.parametrize("optimize", [True, False])
 @pytest.test_arrays('float,is_diff,shape=(*)')
-def test13_complex_diff_loop(t, optimize, method):
+def test13_complex_diff_loop(t, optimize, mode):
     i = dr.int32_array_t(t)(0)
     lvars = [t(0) for i in range(10)]
     dr.enable_grad(lvars[5])
     dr.set_grad(lvars[5], 1)
 
-    while dr.hint(i < 3, method=method):
+    while dr.hint(i < 3, mode=mode):
         lvars = [lvars[k] + lvars[k-1] for k in range(10)]
         i += 1
 
@@ -313,11 +313,11 @@ def test13_complex_diff_loop(t, optimize, method):
     assert lvars == [ 0, 0, 0, 0, 0, 1, 3, 3, 1, 0 ]
 
 
-@pytest.mark.parametrize('method', ['evaluate', 'symbolic'])
+@pytest.mark.parametrize('mode', ['evaluate', 'symbolic'])
 @pytest.mark.parametrize("optimize", [True, False])
 @pytest.test_arrays('float,is_diff,shape=(*)')
 @dr.syntax
-def test14_no_mutate_inputs(t, optimize, method):
+def test14_no_mutate_inputs(t, optimize, mode):
     x = t(1)
     z = t(2)
 

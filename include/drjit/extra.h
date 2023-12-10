@@ -206,16 +206,21 @@ extern DRJIT_EXTRA_EXPORT void ad_copy_implicit_deps(drjit::dr_vector<uint32_t>&
 /// Check if a variable represents an implicit dependency on a non-symbolic operand
 extern void ad_var_check_implicit(uint64_t index);
 
+// Callbacks used by \ref ad_call() below. See the interface for details
 typedef void (*ad_call_func)(void *payload, void *self,
                                   const drjit::dr_vector<uint64_t> &args_i,
                                   drjit::dr_vector<uint64_t> &rv_i);
 typedef void (*ad_call_cleanup)(void*);
 
 /**
- * Perform a differentiable virtual function call
+ * \brief Perform a differentiable virtual function call
  *
- * The call can be done by index or through the instance registry. In the
- * former case, specify \c callable_count, otherwise specify the \c domain.
+ * The following function encapsulates the logic of performing a differentiable
+ * function call to a set of callables, either by index or through the instance
+ * registry. In the former case, specify \c callable_count, otherwise specify
+ * the registry \c domain.
+ *
+ * This function is used both By Dr.Jit's Python bindings, and the C++ interface.
  *
  * \param backend
  *     The JIT backend of the operation
@@ -249,7 +254,7 @@ typedef void (*ad_call_cleanup)(void*);
  *
  * \param payload
  *     An opaque pointer that will passed to the \c callback and \c cleanup
- *     routines.
+ *     routines. The caller can use this as it sees fit.
  *
  * \param callback
  *     Callback routine, which \c ad_call will invoke a number of times to
@@ -260,11 +265,15 @@ typedef void (*ad_call_cleanup)(void*);
  * \param cleanup
  *     A cleanup routine that deletes storage associated with \c payload.
  *
+ * \param ad
+ *     Should the operation insert a \c CustomOp into the AD graph to
+ *     track derivatives? This only affects symbolic mode.
+ *
  * When the function returns \c true, the caller is responsible for calling
  * \c cleanup to destroy the payload. Otherwise, the AD system has taken over
  * ownership and will eventually destroy the payload.
  *
- * The function may raise an exception in the case of a falure, for example by
+ * The function may raise an exception in the case of a failure, for example by
  * propagating an exception raised from a callable. In this case, the payload has
  * already been destroyed.
  */
@@ -275,18 +284,135 @@ ad_call(JitBackend backend, const char *domain, size_t callable_count,
          void *payload, ad_call_func callback, ad_call_cleanup cleanup,
          bool ad);
 
+// Callbacks used by \ref ad_loop() below. See the interface for details
 typedef void (*ad_loop_read)(void *payload, drjit::dr_vector<uint64_t> &);
 typedef void (*ad_loop_write)(void *payload, const drjit::dr_vector<uint64_t> &);
 typedef uint32_t (*ad_loop_cond)(void *payload);
 typedef void (*ad_loop_body)(void *payload);
 typedef void (*ad_loop_delete)(void *payload);
 
+/**
+ * \brief Execute a loop with derivative tracking
+ *
+ * The following function encapsulates the logic of performing a
+ * differentiable function of executing a loop that modifies a set of
+ * state variables.
+ *
+ * This function is used both By Dr.Jit's Python bindings, and the C++
+ * interface. It has the following parameters:
+ *
+ * \param backend
+ *     The JIT backend of the operation
+ *
+ * \param symbolic
+ *     Set this to \c 0 for evaluated mode, \c 1 for symbolic mode, and \c -1
+ *     to select the mode automatically.
+ *
+ * \param name
+ *     A descriptive name used in debug message / GraphViz visualizations
+ *
+ * \param payload
+ *     An opaque pointer that will passed to the various callback routines.
+ *     The caller can use this as it sees fit.
+ *
+ * \param read_cb
+ *     Pointer to a callback routine that analyzes the loop state variables and
+ *     adds detected JIT/AD variables to the provided index array.
+ *
+ * \param write_cb
+ *     Pointer to a callback routine that updates the loop state variables
+ *     by replacing their JIT/AD variable indices with values provided in
+ *     the given array.
+ *
+ * \param cond_cb
+ *     Callback routine that evaluates the loop condition and returns the
+ *     Jit variable index of the result.
+ *
+ * \param body_cb
+ *     Callback routine that executes one iteration of the loop body.
+ *
+ * \param delete_cb
+ *     A cleanup routine that deletes storage associated with \c payload.
+ *
+ * \param ad
+ *     Should the operation insert a \c CustomOp into the AD graph to
+ *     track derivatives? This only affects symbolic mode.
+ *
+ * When the function returns \c true, the caller is responsible for calling
+ * \c cleanup to destroy the payload. Otherwise, the AD system has taken over
+ * ownership and will eventually destroy the payload.
+ *
+ * The function may raise an exception in the case of a failure, for example by
+ * propagating an exception raised from a callable. In this case, the payload has
+ * already been destroyed.
+ */
 extern DRJIT_EXTRA_EXPORT bool ad_loop(JitBackend backend, int symbolic,
                                        const char *name, void *payload,
                                        ad_loop_read read_cb, ad_loop_write write_cb,
                                        ad_loop_cond cond_cb, ad_loop_body body_cb,
                                        ad_loop_delete delete_cb, bool ad);
 
+// Callbacks used by \ref ad_cond() below. See the interface for details
+typedef void (*ad_cond_read)(void *payload, drjit::dr_vector<uint64_t> &);
+typedef void (*ad_cond_write)(void *payload, const drjit::dr_vector<uint64_t> &);
+typedef void (*ad_cond_body)(void *payload, bool value);
+typedef void (*ad_cond_delete)(void *payload);
+
+/**
+ * \brief Execute a conditional ("if statement") with derivative tracking
+ *
+ * The following function encapsulates the logic of a differentiable
+ * conditional branch. It is used both By Dr.Jit's Python bindings, and the C++
+ * interface. The function has the following parameters:
+ *
+ * \param backend
+ *     The JIT backend of the operation
+ *
+ * \param symbolic
+ *     Set this to \c 0 for evaluated mode, \c 1 for symbolic mode, and \c -1
+ *     to select the mode automatically.
+ *
+ * \param name
+ *     A descriptive name used in debug message / GraphViz visualizations
+ *
+ * \param payload
+ *     An opaque pointer that will passed to the various callback routines.
+ *     The caller can use this as it sees fit.
+ *
+ * \param cond
+ *     The JIT variable index of the conditional expression.
+ *
+ * \param read_cb
+ *     Pointer to a callback routine that analyzes the return value and adds
+ *     detected JIT/AD variables to the provided index array.
+ *
+ * \param write_cb
+ *     Pointer to a callback routine that updates the return value by replacing
+ *     its JIT/AD variable indices with values provided in the given dynamic
+ *     array.
+ *
+ * \param body_cb
+ *     Callback routine that executes either the \c true or the \c false branch.
+ *
+ * \param delete_cb
+ *     A cleanup routine that deletes storage associated with \c payload.
+ *
+ * \param ad
+ *     Should the operation insert a \c CustomOp into the AD graph to
+ *     track derivatives? This only affects symbolic mode.
+ *
+ * When the function returns \c true, the caller is responsible for calling
+ * \c cleanup to destroy the payload. Otherwise, the AD system has taken over
+ * ownership and will eventually destroy the payload.
+ *
+ * The function may raise an exception in the case of a failure, for example by
+ * propagating an exception raised from a callable. In this case, the payload has
+ * already been destroyed.
+ */
+extern DRJIT_EXTRA_EXPORT bool
+ad_cond(JitBackend backend, int symbolic, const char *name, void *payload,
+        uint32_t cond, ad_cond_read read_cb, ad_cond_write write_cb,
+        ad_cond_body body_cb, ad_cond_delete delete_cb, bool ad);
 
 #if defined(__cplusplus)
 }

@@ -89,7 +89,7 @@ def test04_failure_incompatible_dict(t, symbolic):
             ),
             a=t(1, 2, 3, 4)
         )
-    assert "error encountered while processing arguments of type 'dict' and 'dict': dictionaries have incompatible keys (['b'] vs ['a'])" in str(e.value.__cause__)
+    assert "error encountered while processing arguments of type 'dict' and 'dict': dictionaries have incompatible keys (['b'] and ['a'])" in str(e.value.__cause__)
 
 
 # Let's test a few failures -- dynamic arrays with mismatched sizes
@@ -106,7 +106,7 @@ def test05_failure_incompatible_shape(t, symbolic):
             ),
             a=t(1, 2, 3, 4)
         )
-    assert "incompatible input lengths (3 and 2)" in str(e.value.__cause__)
+    assert "inconsistent sizes (3 and 2)" in str(e.value.__cause__)
 
     r = dr.switch(
         index=t(0, 0, 1, 1),
@@ -136,7 +136,7 @@ def test06_failure_incompatible_type(t, symbolic):
             ),
             a=t(1, 2, 3, 4)
         )
-    assert "incompatible input types" in str(e.value.__cause__)
+    assert "inconsistent types" in str(e.value.__cause__)
 
 
 # Let's test a few failures -- raising an exception in a callable
@@ -391,7 +391,7 @@ def test09_complex(t, symbolic):
         dr.enable_grad(a, b)
 
         result = dr.switch(index, c, b=b, a=a)
-        dr.detail.check_compatibility(result, expected)
+        dr.detail.check_compatibility(result, expected, "result")
         assert dr.all(result['rv0'] == expected['rv0'])
         assert dr.all(result['rv1'][0] == expected['rv1'][0])
         assert dr.all(result['rv1'][1] == expected['rv1'][1])

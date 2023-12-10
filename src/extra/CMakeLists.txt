@@ -7,6 +7,7 @@ add_library(
   autodiff.cpp
   call.cpp
   loop.cpp
+  cond.cpp
 )
 
 nanobind_disable_stack_protector(drjit-extra)

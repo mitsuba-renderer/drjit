@@ -124,7 +124,7 @@ def test07_evaluated_format_big_2d(t):
 @pytest.test_arrays('shape=(*), uint32, jit')
 def test08_symbolic_print(t):
     b = Buffer()
-    dr.print(t([1, 2, 3]), file=b, end='', method='symbolic')
+    dr.print(t([1, 2, 3]), file=b, end='', mode='symbolic')
     assert b.value is None
     dr.eval()
     assert b.value == '[1, 2, 3]'
@@ -133,7 +133,7 @@ def test08_symbolic_print(t):
 @pytest.test_arrays('shape=(*), uint32, jit')
 def test09_symbolic_print_large(t):
     b = Buffer()
-    dr.print(dr.arange(t, 1000)*2, file=b, method='symbolic', limit=25)
+    dr.print(dr.arange(t, 1000)*2, file=b, mode='symbolic', limit=25)
     with pytest.warns(RuntimeWarning) as record:
         assert b.value is None
         dr.eval()

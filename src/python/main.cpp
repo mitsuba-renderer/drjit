@@ -29,9 +29,10 @@
 #include "autodiff.h"
 #include "inspect.h"
 #include "switch.h"
-#include "while.h"
+#include "while_loop.h"
+#include "if_stmt.h"
 #include "misc.h"
-#include "format.h"
+#include "print.h"
 
 static void set_flag_py(JitFlag flag, bool value) {
     if (flag == JitFlag::Debug) {
@@ -90,7 +91,8 @@ NB_MODULE(drjit_ext, m_) {
         .value("KernelHistory", JitFlag::KernelHistory, doc_JitFlag_KernelHistory)
         .value("LaunchBlocking", JitFlag::LaunchBlocking, doc_JitFlag_LaunchBlocking)
         .value("AtomicReduceLocal", JitFlag::AtomicReduceLocal, doc_JitFlag_AtomicReduceLocal)
-        .value("Symbolic", JitFlag::Symbolic, doc_JitFlag_Symbolic)
+        .value("SymbolicConditionals", JitFlag::SymbolicConditionals, doc_JitFlag_SymbolicConditionals)
+        .value("SymbolicScope", JitFlag::SymbolicScope, doc_JitFlag_SymbolicScope)
         .value("Default", JitFlag::Default, doc_JitFlag_Default)
         // Deprecated aliases
         .value("VCallRecord", JitFlag::VCallRecord, doc_JitFlag_VCallRecord)
@@ -207,8 +209,9 @@ NB_MODULE(drjit_ext, m_) {
     export_inspect(m);
     export_misc(m);
     export_switch(m);
-    export_while(m);
-    export_format(m);
+    export_while_loop(m);
+    export_if_stmt(m);
+    export_print(m);
 
     export_scalar(scalar);
 

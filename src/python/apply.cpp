@@ -546,7 +546,7 @@ nb::object apply_ret_pair(ArrayOp op, const char *name, nb::handle_t<dr::ArrayBa
 
 static int recursion_level = 0;
 
-// Pytrees can include cycles. Catch infinite recursion below
+// Pytrees could theoretically include cycles. Catch infinite recursion below
 struct recursion_guard {
     recursion_guard() {
         if (++recursion_level >= 50) {
@@ -607,83 +607,118 @@ void traverse(const char *op, TraverseCallback &tc, nb::handle h) {
     }
 }
 
-/// Parallel traversal of two compatible pytrees 'h1' and 'h2'
-void traverse_pair(const char *op, TraversePairCallback &tc,
-                   nb::handle h1, nb::handle h2) {
-    recursion_guard guard;
+void traverse_pair_impl(const char *op, TraversePairCallback &tc, nb::handle h1,
+                        nb::handle h2, std::string &name,
+                        std::vector<PyObject *> &stack) {
+    if (std::find(stack.begin(), stack.end(), h1.ptr()) != stack.end()) {
+        PyErr_Format(PyExc_RecursionError, "detected a cycle in field '%s'.",
+                     name.c_str());
+        nb::raise_python_error();
+    }
+
     nb::handle tp1 = h1.type(), tp2 = h2.type();
+    stack.push_back(h1.ptr());
 
-    try {
-        if (!tp1.is(tp2))
-            nb::raise("incompatible input types.");
+    if (!tp1.is(tp2))
+        nb::raise_type_error(
+            "inconsistent types ('%s' and '%s') for field '%s'.",
+            nb::type_name(tp1).c_str(), nb::type_name(tp2).c_str(),
+            name.c_str());
 
-        if (is_drjit_type(tp1)) {
-            const ArraySupplement &s = supp(tp1);
+    size_t name_size = name.size();
+    if (is_drjit_type(tp1)) {
+        const ArraySupplement &s = supp(tp1);
+        if (s.is_tensor) {
+            name += ".array";
+            traverse_pair_impl(
+                op, tc,
+                nb::steal(s.tensor_array(h1.ptr())),
+                nb::steal(s.tensor_array(h2.ptr())),
+                name, stack
+            );
+            name.resize(name_size);
+        } else {
+            size_t s1 = nb::len(h1), s2 = nb::len(h2);
 
-            if (s.is_tensor) {
-                tc(nb::steal(s.tensor_array(h1.ptr())),
-                   nb::steal(s.tensor_array(h2.ptr())));
-            } else if (s.ndim > 1) {
-                Py_ssize_t len1 = s.shape[0], len2 = len1;
-                if (len1 == DRJIT_DYNAMIC) {
-                    len1 = s.len(inst_ptr(h1));
-                    len2 = s.len(inst_ptr(h2));
+            if (s.ndim > 1) {
+                if (s1 != s2)
+                    nb::raise("inconsistent sizes (%zu and %zu) for field '%s'.",
+                              s1, s2, name.c_str());
+
+                for (size_t i = 0; i < s1; ++i) {
+                    name += "[" + std::to_string(i) + "]";
+                    traverse_pair_impl(
+                        op, tc,
+                        nb::steal(s.item(h1.ptr(), i)),
+                        nb::steal(s.item(h2.ptr(), i)),
+                        name, stack
+                    );
+                    name.resize(name_size);
                 }
-
-                if (len1 != len2)
-                    nb::raise("incompatible input lengths (%zu and %zu).", len1, len2);
-
-                for (Py_ssize_t i = 0; i < len1; ++i)
-                    traverse_pair(op, tc,
-                                  nb::steal(s.item(h1.ptr(), i)),
-                                  nb::steal(s.item(h2.ptr(), i)));
-            } else  {
+            } else {
+                if (s1 != s2 && s1 != 1 && s2 != 1)
+                    nb::raise("incompatible sizes (%zu and %zu) for field '%s'.",
+                              s1, s2, name.c_str());
                 tc(h1, h2);
             }
-
-            return;
         }
-
-        if (tp1.is(&PyTuple_Type) || tp1.is(&PyList_Type)) {
-            size_t len1 = nb::len(h1),
-                   len2 = nb::len(h2);
-            if (len1 != len2)
-                nb::raise("incompatible input lengths (%zu and %zu).", len1, len2);
-            for (size_t i = 0; i < len1; ++i)
-                traverse_pair(op, tc, h1[i], h2[i]);
-        } else if (tp1.is(&PyDict_Type)) {
-            nb::dict d1 = nb::borrow<nb::dict>(h1),
-                     d2 = nb::borrow<nb::dict>(h2);
-            nb::object k1 = d1.keys(), k2 = d2.keys();
-            if (!k1.equal(k2))
-                nb::raise("dictionaries have incompatible keys (%s vs %s).",
-                          nb::str(k1).c_str(), nb::str(k2).c_str());
-            for (nb::handle k : k1)
-                traverse_pair(op, tc, d1[k], d2[k]);
-        } else {
-            nb::object dstruct = nb::getattr(tp1, "DRJIT_STRUCT", nb::handle());
-            if (dstruct.is_valid() && dstruct.type().is(&PyDict_Type)) {
-                for (auto [k, v] : nb::borrow<nb::dict>(dstruct))
-                    traverse_pair(op, tc,
-                                  nb::getattr(h1, k),
-                                  nb::getattr(h2, k));
+    } else if (tp1.is(&PyTuple_Type) || tp1.is(&PyList_Type)) {
+        size_t s1 = nb::len(h1), s2 = nb::len(h2);
+        if (s1 != s2)
+            nb::raise("inconsistent sizes (%zu and %zu) for field '%s'.",
+                      s1, s2, name.c_str());
+        for (size_t i = 0; i < s1; ++i) {
+            name += "[" + std::to_string(i) + "]";
+            traverse_pair_impl(op, tc, h1[i], h2[i], name, stack);
+            name.resize(name_size);
+        }
+    } else if (tp1.is(&PyDict_Type)) {
+        nb::dict d1 = nb::borrow<nb::dict>(h1),
+                 d2 = nb::borrow<nb::dict>(h2);
+        nb::object k1 = d1.keys(), k2 = d2.keys();
+        if (!k1.equal(k2))
+            nb::raise(
+                "dictionaries have incompatible keys (%s and %s) for field '%s'.",
+                nb::str(k1).c_str(), nb::str(k2).c_str(), name.c_str());
+        for (nb::handle k : k1) {
+            name += "['" + std::string(nb::str(k).c_str()) + "']";
+            traverse_pair_impl(op, tc, d1[k], d2[k], name, stack);
+            name.resize(name_size);
+        }
+    } else {
+        nb::object dstruct = nb::getattr(tp1, "DRJIT_STRUCT", nb::handle());
+        if (dstruct.is_valid() && dstruct.type().is(&PyDict_Type)) {
+            for (auto [k, v] : nb::borrow<nb::dict>(dstruct)) {
+                name += "." + std::string(nb::str(k).c_str());
+                traverse_pair_impl(op, tc, nb::getattr(h1, k),
+                                   nb::getattr(h2, k), name, stack);
+                name.resize(name_size);
             }
         }
+    }
+    stack.pop_back();
+}
+
+/// Parallel traversal of two compatible PyTrees 'h1' and 'h2'
+void traverse_pair(const char *op, TraversePairCallback &tc, nb::handle h1,
+                   nb::handle h2, const char *name_) {
+    std::string name = name_;
+    std::vector<PyObject *> stack;
+
+    try {
+        traverse_pair_impl(op, tc, h1, h2, name, stack);
     } catch (nb::python_error &e) {
-        nb::str tp_name_1 = nb::type_name(tp1),
-                tp_name_2 = nb::type_name(tp2);
         nb::raise_from(e, PyExc_RuntimeError,
                        "%s(): error encountered while processing arguments "
                        "of type '%U' and '%U' (see above).",
-                       op, tp_name_1.ptr(), tp_name_2.ptr());
+                       op, nb::inst_name(h1).ptr(), nb::inst_name(h2).ptr());
     } catch (const std::exception &e) {
-        nb::str tp_name_1 = nb::type_name(tp1),
-                tp_name_2 = nb::type_name(tp2);
         nb::chain_error(PyExc_RuntimeError,
                         "%s(): error encountered while processing arguments "
                         "of type '%U' and '%U': %s",
-                        op, tp_name_1.ptr(), tp_name_2.ptr(), e.what());
-        throw nb::python_error();
+                        op, nb::inst_name(h1).ptr(), nb::inst_name(h2).ptr(),
+                        e.what());
+        nb::raise_python_error();
     }
 }
 

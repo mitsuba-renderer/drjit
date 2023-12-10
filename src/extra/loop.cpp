@@ -20,34 +20,6 @@ namespace dr = drjit;
 
 using JitVar = GenericArray<void>;
 
-/// RAII helper to temporarily push a mask onto the Dr.Jit mask stack
-struct scoped_push_mask {
-    scoped_push_mask(JitBackend backend, uint32_t index) : backend(backend) {
-        jit_var_mask_push(backend, index);
-    }
-
-    ~scoped_push_mask() { jit_var_mask_pop(backend); }
-
-    JitBackend backend;
-};
-
-/// RAII helper to temporarily record symbolic computation
-struct scoped_record {
-    scoped_record(JitBackend backend) : backend(backend) {
-        checkpoint = jit_record_begin(backend, nullptr);
-    }
-
-    ~scoped_record() {
-        jit_record_end(backend, checkpoint, cleanup);
-    }
-
-    void disarm() { cleanup = false; }
-
-    JitBackend backend;
-    uint32_t checkpoint;
-    bool cleanup = true;
-};
-
 static bool ad_loop_symbolic(JitBackend backend, const char *name,
                              void *payload,
                              ad_loop_read read_cb, ad_loop_write write_cb,
@@ -65,7 +37,7 @@ static bool ad_loop_symbolic(JitBackend backend, const char *name,
         indices2.push_back((uint32_t) i);
         needs_ad |= (i >> 32) != 0;
     }
-    bool symbolic = jit_flag(JitFlag::Symbolic);
+    bool symbolic = jit_flag(JitFlag::SymbolicScope);
 
     try {
         scoped_record record_guard(backend);
@@ -154,14 +126,14 @@ static void ad_loop_evaluated(JitBackend backend, const char *name,
                               void *payload,
                               ad_loop_read read_cb, ad_loop_write write_cb,
                               ad_loop_cond cond_cb, ad_loop_body body_cb) {
-    if (jit_flag(JitFlag::Symbolic))
+    if (jit_flag(JitFlag::SymbolicScope))
         jit_raise("Dr.Jit is currently recording symbolic computation and "
                   "cannot execute a loop in *evaluated mode*. You will likely "
                   "want to set the Jit flag dr.JitFlag.SymbolicLoops to True. "
                   "Alternatively, you could also annotate the loop condition "
                   "with dr.hint(.., symbolic=True) if it occurs inside a "
                   "@dr.syntax-annotated function. Please review the Dr.Jit "
-                  "documentation of  drjit.JitFlag.SymbolicLoops and "
+                  "documentation of drjit.JitFlag.SymbolicLoops and "
                   "drjit.while_loop() for general information on symbolic and "
                   "evaluated loops, as well as their limitations.");
 
@@ -446,13 +418,13 @@ bool ad_loop(JitBackend backend, int symbolic, const char *name, void *payload,
             name = "unnamed";
 
         if (strchr(name, '\n') || strchr(name, '\r'))
-            jit_raise("The loop name may not contain newline characters.\n");
+            jit_raise("'name' may not contain newline characters.");
 
         if (symbolic == -1)
             symbolic = (int) jit_flag(JitFlag::SymbolicLoops);
 
         if (symbolic != 0 && symbolic != 1)
-            jit_raise("The 'symbolic' argument must equal 0, 1, or -1");
+            jit_raise("'symbolic' must equal 0, 1, or -1.");
 
 
         if (symbolic) {

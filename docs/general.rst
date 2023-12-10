@@ -87,6 +87,14 @@ conditionals, as arguments and return values of symbolic calls, as arguments of
 scatter/gather operations, and many others (the :ref:`reference <reference>`
 explicitly lists the word *PyTree* in all supported operations).
 
+PyTrees may not contain cycles. For example, the following data structure will
+cause PyTree-compatible operations to fail with a ``RecursionError``.
+
+.. code-block:: python
+
+   x = []
+   x.append(x)
+
 To turn a user-defined type into a PyTree, define a static ``DRJIT_STRUCT``
 member dictionary describing the names and types of all fields. It should also
 be default-constructible without the need to specify any arguments. For

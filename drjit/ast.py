@@ -73,7 +73,7 @@ class SyntaxVisitor(ast.NodeTransformer):
 
             hints["exclude"] = exclude
 
-        valid_keys = ["exclude", "label", "method", "max_iterations"]
+        valid_keys = ["exclude", "label", "mode", "max_iterations"]
         for k in hints.keys():
             if k not in valid_keys:
                 raise RuntimeError(f'drjit.hint(): unsupported keyword argument "{k}".')
@@ -129,8 +129,8 @@ class SyntaxVisitor(ast.NodeTransformer):
 
         state = sorted(var_r | var_w)
 
-        method = hints.get("method", None)
-        is_scalar = isinstance(method, ast.Constant) and method.value == "scalar"
+        mode = hints.get("mode", None)
+        is_scalar = isinstance(mode, ast.Constant) and mode.value == "scalar"
 
         return node, state, hints, is_scalar
 
@@ -142,7 +142,6 @@ class SyntaxVisitor(ast.NodeTransformer):
 
         # 1. Names of generated functions
         ifstmt_name = "_if_stmt"
-        cond_name = ifstmt_name + "_cond"
         true_name = ifstmt_name + "_true"
         false_name = ifstmt_name + "_false"
 
@@ -154,17 +153,6 @@ class SyntaxVisitor(ast.NodeTransformer):
             kwonlyargs=[],
             defaults=[],
             kw_defaults=[],
-        )
-
-        cond_func = ast.FunctionDef(
-            name=cond_name,
-            args=func_args,
-            body=[ast.Return(value=node.test)],
-            decorator_list=[],
-            lineno=node.lineno,
-            col_offset=node.col_offset,
-            end_lineno=node.end_lineno,
-            end_col_offset=node.end_col_offset,
         )
 
         # 3. Generate a function representing the if/else branches
@@ -215,7 +203,7 @@ class SyntaxVisitor(ast.NodeTransformer):
         # 8. Call drjit.if_stmt()
         call_kwargs = [
             ast.keyword(
-                arg="state_labels",
+                arg="rv_labels",
                 value=ast.Tuple(
                     elts=[ast.Constant(k) for k in state],
                     ctx=load,
@@ -239,7 +227,7 @@ class SyntaxVisitor(ast.NodeTransformer):
                 func=ast.Name(id=ifstmt_name, ctx=load),
                 args=[
                     ast.Tuple(elts=[ast.Name(id=k, ctx=load) for k in state], ctx=load),
-                    ast.Name(id=cond_name, ctx=load),
+                    node.test,
                     ast.Name(id=true_name, ctx=load),
                     ast.Name(id=false_name, ctx=load),
                 ],
@@ -558,7 +546,7 @@ def syntax(f: Callable = None, print_ast: bool = False, print_code: bool = False
                  # handling introduced by @dr.syntax
 
            # Disable the transformation by @dr.syntax to avoid overheads
-           while dr.hint(i < 10, method='scalar'):
+           while dr.hint(i < 10, mode='scalar'):
                i += 1
 
     Complex Python codebases often involve successive application of multiple
@@ -631,7 +619,7 @@ def hint(
     arg: object,
     /,
     *,
-    method: Optional[str] = None,
+    mode: Optional[str] = None,
     max_iterations: Optional[int] = None,
     label: Optional[str] = None,
     exclude: Optional[List[object]] = None,
@@ -645,23 +633,23 @@ def hint(
     influence the transformation performed by the :py:func:`@drjit.syntax
     <drjit.syntax>` decorator. The following kinds of hints are supported:
 
-    1. ``method`` overrides the compilation mode of a ``while``
+    1. ``mode`` overrides the compilation mode of a ``while``
        loop or ``if`` statement. The following choices are available:
 
-       - ``method='scalar'`` disables code transformations, which is permitted
+       - ``mode='scalar'`` disables code transformations, which is permitted
          when the predicate of a loop or ``if`` statement is a scalar Python
          ``bool``.
 
          .. code-block:: python
 
             i: int = 0
-            while dr.hint(i < 10, method='scalar'):
+            while dr.hint(i < 10, mode='scalar'):
                # ...
 
          Routing such code through :py:func:`drjit.while_loop` or
          :py:func:`drjit.if_stmt` still works but may add small overheads,
          which motivates the existence of this flag. Note that this annotation
-         does *not* cause ``method=scalar`` to be passed
+         does *not* cause ``mode=scalar`` to be passed
          :py:func:`drjit.while_loop`, and :py:func:`drjit.if_stmt` (which
          happens to be a valid input of both). Instead, it disables the code
          transformation altogether so that the above example translates into
@@ -673,7 +661,7 @@ def hint(
             while i < 10:
                # ...
 
-       - ``method='evaluated'`` forces execution in *evaluated* mode and causes
+       - ``mode='evaluated'`` forces execution in *evaluated* mode and causes
          the code transformation to forward this argument to the relevant
          :py:func:`drjit.while_loop` or :py:func:`drjit.if_stmt` call.
 
@@ -681,7 +669,7 @@ def hint(
          :py:attr:`drjit.JitFlag.SymbolicLoops`, :py:func:`drjit.if_stmt`, and
          :py:attr:`drjit.JitFlag.SymbolicConditionals` for details.
 
-       - ``method='symbolic'`` forces execution in *symbolic* mode and causes
+       - ``mode='symbolic'`` forces execution in *symbolic* mode and causes
          the code transformation to forward this argument to the relevant
          :py:func:`drjit.while_loop` or :py:func:`drjit.if_stmt` call.
 
