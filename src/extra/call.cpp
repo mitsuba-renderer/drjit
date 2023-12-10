@@ -35,29 +35,6 @@ struct scoped_set_mask {
     JitBackend backend;
 };
 
-/// RAII helper to temporarily record symbolic computation
-struct scoped_record {
-    scoped_record(JitBackend backend, const char *name) : backend(backend) {
-        checkpoint = jit_record_begin(backend, name);
-        scope = jit_new_scope(backend);
-    }
-
-    uint32_t checkpoint_and_rewind() {
-        jit_set_scope(backend, scope);
-        return jit_record_checkpoint(backend);
-    }
-
-    void disarm() { cleanup = false; }
-
-    ~scoped_record() {
-        jit_record_end(backend, checkpoint, cleanup);
-    }
-
-    JitBackend backend;
-    uint32_t checkpoint, scope;
-    bool cleanup = true;
-};
-
 /// RAII helper to temporarily set the 'self' instance
 struct scoped_set_self {
     scoped_set_self(JitBackend backend, uint32_t value, uint32_t self_index = 0)
@@ -124,7 +101,7 @@ static void ad_call_getter(JitBackend backend, const char *domain,
         }
 
         {
-            scoped_record rec(backend, name);
+            scoped_record rec(backend, name, true);
             func(payload, ptr, args2, rv2);
             for (uint64_t index: rv2)
                 ad_var_check_implicit(index);
@@ -261,7 +238,7 @@ static void ad_call_record(JitBackend backend, const char *domain,
                             inst_id(callable_count, 0);
 
     {
-        scoped_record rec(backend, name);
+        scoped_record rec(backend, name, true);
 
         // Wrap input arguments to clearly expose them as inputs of the vcall
         for (size_t i = 0; i < args.size(); ++i) {
@@ -768,7 +745,7 @@ bool ad_call(JitBackend backend, const char *domain, size_t callable_count,
             ad_copy_implicit_deps(implicit_in);
             guard.success = true;
         } else {
-            if (jit_flag(JitFlag::Symbolic))
+            if (jit_flag(JitFlag::SymbolicScope))
                 jit_raise(
                     "Dr.Jit is currently recording symbolic computation and cannot perform an\n"
                     "array-based function call in *evaluated mode*. You will likely want to set\n"

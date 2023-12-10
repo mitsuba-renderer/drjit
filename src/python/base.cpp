@@ -13,7 +13,7 @@
 #include "apply.h"
 #include "iter.h"
 #include "meta.h"
-#include "format.h"
+#include "print.h"
 #include "shape.h"
 #include "slice.h"
 #include "inspect.h"

@@ -93,3 +93,39 @@ struct scoped_isolation_boundary {
     bool success = false;
 };
 
+/// RAII helper to temporarily push a mask onto the Dr.Jit mask stack
+struct scoped_push_mask {
+    scoped_push_mask(JitBackend backend, uint32_t index) : backend(backend) {
+        jit_var_mask_push(backend, index);
+    }
+
+    ~scoped_push_mask() { jit_var_mask_pop(backend); }
+
+    JitBackend backend;
+};
+
+/// RAII helper to temporarily record symbolic computation
+struct scoped_record {
+    scoped_record(JitBackend backend, const char *name = nullptr,
+                  bool new_scope = false)
+        : backend(backend) {
+        checkpoint = jit_record_begin(backend, name);
+        if (new_scope)
+            scope = jit_new_scope(backend);
+    }
+
+    ~scoped_record() {
+        jit_record_end(backend, checkpoint, cleanup);
+    }
+
+    uint32_t checkpoint_and_rewind() {
+        jit_set_scope(backend, scope);
+        return jit_record_checkpoint(backend);
+    }
+
+    void disarm() { cleanup = false; }
+
+    JitBackend backend;
+    uint32_t checkpoint, scope;
+    bool cleanup = true;
+};

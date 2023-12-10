@@ -2,6 +2,7 @@ import drjit as dr
 import pytest
 import sys
 import math
+import re
 
 def make_mystruct(t):
     class MyStruct:
@@ -103,7 +104,7 @@ def test003_set_grad(t):
     g = dr.grad(a)
     assert len(g) == 3 and dr.allclose(g, [3, 4, 5])
 
-    with pytest.raises(RuntimeError, match='attempted to store a gradient of size 2 into AD variable'):
+    with pytest.raises(RuntimeError, match=re.escape("incompatible sizes for field 'target' (3 and 2)")):
         dr.set_grad(a, t(1, 2))
 
     a = t(1)

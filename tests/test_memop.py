@@ -245,6 +245,7 @@ def test12_unravel_vec(t, drjit_verbose, capsys):
     with pytest.raises(RuntimeError, match="not divisible"):
         dr.unravel(t, vt(1, 2, 3, 4))
 
+
 @pytest.test_arrays('shape=(3, *), float32', 'shape=(*, *), float32')
 def test11_reverse(t):
     vt = dr.value_t(t)
@@ -252,6 +253,7 @@ def test11_reverse(t):
     assert dr.all(dr.reverse([1, 2, 3]) == [3, 2, 1])
     assert dr.all(dr.reverse((1, 2, 3)) == (3, 2, 1))
     assert dr.all(dr.reverse(t(1, 2, [3, 4])) == t([3, 4], 2, 1), axis=None)
+
 
 @pytest.test_arrays('shape=(*), uint32, is_jit')
 def test13_scatter_inc(t):
@@ -280,3 +282,20 @@ def test13_scatter_inc(t):
             g = np.sort(g)
             assert len(g) == hist[j]
             assert np.all(g == np.arange(len(g)))
+
+
+@pytest.test_arrays('uint32,shape=(*),jit')
+def test14_out_of_bounds_gather(t):
+    buf = dr.opaque(t, 0, 10)
+    with dr.scoped_set_flag(dr.JitFlag.Debug, True):
+        with pytest.warns(RuntimeWarning, match="out-of-bounds read from position 10 in an array of size 10."):
+            dr.eval(dr.gather(t, buf, dr.arange(t, 11)))
+
+
+@pytest.test_arrays('uint32,shape=(*),jit')
+def test14_out_of_bounds_scatter(t):
+    buf = dr.opaque(t, 0, 10)
+    with dr.scoped_set_flag(dr.JitFlag.Debug, True):
+        with pytest.warns(RuntimeWarning, match="out-of-bounds write to position 10 in an array of size 10."):
+            dr.scatter(buf, index=dr.arange(t, 11), value=5)
+            dr.eval()

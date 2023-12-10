@@ -11,31 +11,37 @@ nanobind_add_module(
   STABLE_ABI
   ${DRJIT_LTO_FLAG}
 
-  common.h
+  # Entry point
   main.cpp
-  log.h      log.cpp
-  meta.h     meta.cpp
-  base.h     base.cpp
-  bind.h     bind.cpp
-  init.h     init.cpp
-  iter.h     iter.cpp
-  shape.h    shape.cpp
-  traits.h   traits.cpp
-  scalar.h   scalar.cpp
-  llvm.h     llvm.cpp llvm_ad.cpp
-  cuda.h     cuda.cpp cuda_ad.cpp
-  reduce.h   reduce.cpp
-  apply.h    apply.cpp
-  eval.h     eval.cpp
-  memop.h    memop.cpp
-  slice.h    slice.cpp
-  dlpack.h   dlpack.cpp
-  autodiff.h autodiff.cpp
-  inspect.h  inspect.cpp
-  misc.h     misc.cpp
-  switch.h   switch.cpp
-  while.h    while.cpp
-  format.h   format.cpp
+
+  # Shared functionality
+  common.h
+  log.h         log.cpp
+  meta.h        meta.cpp
+  base.h        base.cpp
+  bind.h        bind.cpp
+  init.h        init.cpp
+  iter.h        iter.cpp
+  shape.h       shape.cpp
+  traits.h      traits.cpp
+  reduce.h      reduce.cpp
+  apply.h       apply.cpp
+  eval.h        eval.cpp
+  memop.h       memop.cpp
+  slice.h       slice.cpp
+  dlpack.h      dlpack.cpp
+  autodiff.h    autodiff.cpp
+  inspect.h     inspect.cpp
+  misc.h        misc.cpp
+  switch.h      switch.cpp
+  while_loop.h  while_loop.cpp
+  if_stmt.h     if_stmt.cpp
+  print.h       print.cpp
+
+  # Backends
+  scalar.h      scalar.cpp
+  llvm.h        llvm.cpp llvm_ad.cpp
+  cuda.h        cuda.cpp cuda_ad.cpp
 )
 
 set_target_properties(drjit-python

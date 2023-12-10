@@ -1,6 +1,5 @@
 /*
-    format.h -- implementation of drjit.format(), drjit.print(),
-    and ArrayBase.__repr__().
+    if_stmt.h -- implementation of drjit.if_stmt()
 
     Dr.Jit: A Just-In-Time-Compiler for Differentiable Rendering
     Copyright 2023, Realistic Graphics Lab, EPFL.
@@ -9,10 +8,6 @@
     BSD-style license that can be found in the LICENSE.txt file.
 */
 
-#pragma once
-
 #include "common.h"
 
-extern void export_format(nb::module_&);
-
-extern PyObject *tp_repr(PyObject *self) noexcept;
+extern void export_if_stmt(nb::module_&);
