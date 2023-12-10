@@ -44,6 +44,15 @@ template <typename T> struct type_caster<dr::dr_vector<T>>
 NAMESPACE_END(detail)
 NAMESPACE_END(NB_NAMESPACE)
 
+/// Helper function to perform a tuple-based function call directly using the
+/// CPython API. nanobind lacks a nice abstraction for this.
+inline nb::object tuple_call(nb::handle callable, nb::handle tuple) {
+    nb::object result = nb::steal(PyObject_CallObject(callable.ptr(), tuple.ptr()));
+    if (!result.is_valid())
+        nb::raise_python_error();
+    return result;
+}
+
 #define raise_if(expr, ...)                                                    \
     do {                                                                       \
         if (NB_UNLIKELY(expr))                                                 \

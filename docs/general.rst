@@ -87,6 +87,21 @@ conditionals, as arguments and return values of symbolic calls, as arguments of
 scatter/gather operations, and many others (the :ref:`reference <reference>`
 explicitly lists the word *PyTree* in all supported operations).
 
+Limitations
+^^^^^^^^^^^
+
+You may not use Dr.Jit types as dictionary keys. Furthermore, PyTrees may not
+contain cycles. For example, the following data structure will cause
+PyTree-compatible operations to fail with a ``RecursionError``.
+
+.. code-block:: python
+
+   x = []
+   x.append(x)
+
+Custom types
+^^^^^^^^^^^^
+
 To turn a user-defined type into a PyTree, define a static ``DRJIT_STRUCT``
 member dictionary describing the names and types of all fields. It should also
 be default-constructible without the need to specify any arguments. For
@@ -112,6 +127,9 @@ Fields don't exclusively have to be containers or Dr.Jit types. For example, we
 could have added an extra ``datetime`` entry to record when a set of points was
 captured. Such fields will be ignored by traversal operations.
 
+C++
+^^^
+
 The ability to traverse through members of custom data structures is also supported
 in Dr.Jit's C++ interface. For this, you must include the header file
 
@@ -119,8 +137,8 @@ in Dr.Jit's C++ interface. For this, you must include the header file
 
    #include <drjit/struct.h>
 
-Following this, you can use the variable-argument ``DRJIT_STRUCT(...)`` macro to
-list the available fields.
+Following this, you can use the variable-argument ``DRJIT_STRUCT(...)`` macro
+to list the available fields.
 
 .. code-block:: cpp
 
@@ -140,8 +158,11 @@ of the C++ language).
 
 .. _transcendental-accuracy:
 
-Accuracy (single precision)
-___________________________
+Accuracy of transcendental operations
+-------------------------------------
+
+Single precision
+^^^^^^^^^^^^^^^^
 
 .. note::
 
@@ -257,8 +278,8 @@ ___________________________
       - :math:`6.4 \cdot 10^{-8}\,(0.79\,\text{ulp})`
       - :math:`1 \cdot 10^{-6}\,(11\,\text{ulp})`
 
-Accuracy (double precision)
-___________________________
+Double precision
+^^^^^^^^^^^^^^^^
 
 .. list-table::
     :widths: 5 8 8 10 8 10

@@ -11,6 +11,18 @@
 
 #include "log.h"
 
+struct scoped_disable_gc {
+    scoped_disable_gc() {
+        status = PyGC_Disable();
+    }
+    ~scoped_disable_gc() {
+        if (status)
+            PyGC_Enable();
+    }
+    int status;
+};
+
+
 /**
  * \brief Log callback that tries to print to the Python console if possible.
  *
@@ -18,12 +30,22 @@
  * back to 'stderr' if needed.
  */
 static void log_callback(LogLevel level, const char *msg) {
-    if (!nb::is_alive() || !PyGILState_Check()) {
+    if (!nb::is_alive()) {
         fprintf(stderr, "%s\n", msg);
         return;
     }
 
-    nb::error_scope scope;
+    // Must hold the GIL to access the functionality below
+    nb::gil_scoped_acquire guard_1;
+
+    // Temporarily disable the GC. Otherwise we can have situations where a log
+    // message printed by a function that holds the Dr.Jit mutex triggers a
+    // variable deletion that tries to reacquire the (non-reentrant) Dr.Jit mutex
+    scoped_disable_gc guard_2;
+
+    // Temporarily clear error status flags, if present
+    nb::error_scope guard_3;
+
     if (level == LogLevel::Warn)
         PyErr_WarnFormat(PyExc_RuntimeWarning, 1, "%s", msg);
     else
@@ -58,5 +80,5 @@ void export_log(nb::module_ &m, PyModuleDef &pmd) {
         jit_set_log_level_callback((LogLevel) level, log_callback);
     });
 
-    m.def("log_level", &jit_log_level_stderr);
+    m.def("log_level", &jit_log_level_callback);
 }

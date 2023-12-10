@@ -1,5 +1,5 @@
 /*
-    format.cpp -- implementation of drjit.format(), drjit.print(),
+    print.cpp -- implementation of drjit.format(), drjit.print(),
     and ArrayBase.__repr__().
 
     Dr.Jit: A Just-In-Time-Compiler for Differentiable Rendering
@@ -9,7 +9,7 @@
     BSD-style license that can be found in the LICENSE.txt file.
 */
 
-#include "format.h"
+#include "print.h"
 #include "base.h"
 #include "init.h"
 #include "memop.h"
@@ -274,15 +274,13 @@ struct DelayedPrint {
     nb::kwargs kwargs;
     bool success = false;
 
-    static int py_callback(void *p) {
+    static void callback(uint32_t, int free, void *p) {
+        nb::gil_scoped_acquire guard;
         try {
-            uintptr_t msg = (uintptr_t) p;
-            bool free = msg & 1;
-
-            DelayedPrint *d = (DelayedPrint *) (msg & ~((uintptr_t) 1));
+            DelayedPrint *d = (DelayedPrint *) p;
             if (free) {
                 delete d;
-                return 0;
+                return;
             }
             nb::object tid_o = d->kwargs["thread_id"];
             nb::handle tp = tid_o.type();
@@ -349,8 +347,6 @@ struct DelayedPrint {
                     "ID/array index associated with each entry of the captured "
                     "output.", max_size, ctr_size);
             }
-
-            return 0;
         } catch (nb::python_error &e) {
             e.restore();
             nb::chain_error(PyExc_RuntimeError,
@@ -358,16 +354,6 @@ struct DelayedPrint {
         } catch (const std::exception &e) {
             nb::chain_error(PyExc_RuntimeError, "drjit.print(): %s", e.what());
         }
-        return -1;
-    }
-
-    static void callback(uint32_t, int free, void *p) {
-        // Encode free flag as last bit in an asynchronous call to Python
-        uintptr_t msg = (uintptr_t) p;
-        msg |= free ? 1 : 0;
-        if (Py_AddPendingCall(&py_callback, (void *) msg))
-            fprintf(stderr, "drjit.print(): Py_AddPendingCall() to enqueue "
-                            "delayed print operation failed!\n");
     }
 };
 
@@ -415,20 +401,21 @@ static nb::object format_impl(const char *name, const std::string &fmt,
             nb::raise("the 'thread_id' keyword argument is reserved and should "
                       "not be specified.");
 
-        bool symbolic = jit_flag(JitFlag::Symbolic);
-        if (kwargs.contains("method")) {
-            const char *method = nb::cast<const char *>(kwargs["method"]);
-            if (strcmp(method, "auto") == 0)
+        bool symbolic = jit_flag(JitFlag::SymbolicScope);
+        if (kwargs.contains("mode")) {
+            const char *mode = nb::cast<const char *>(kwargs["mode"]);
+            if (strcmp(mode, "auto") == 0)
                 ;
-            if (strcmp(method, "evaluate") == 0)
+            if (strcmp(mode, "evaluate") == 0)
                 symbolic = false;
-            else if (strcmp(method, "symbolic") == 0)
+            else if (strcmp(mode, "symbolic") == 0)
                 symbolic = true;
             else
-                nb::raise("'method' parameter must be one of \"auto\", "
+                nb::raise("'mode' parameter must be one of \"auto\", "
                           "\"evaluate\", or \"symbolic\".");
-            nb::del(kwargs["method"]);
+            nb::del(kwargs["mode"]);
         }
+
         size_t limit;
         if (kwargs.contains("limit")) {
             ssize_t limit_ = nb::cast<ssize_t>(kwargs["limit"]);
@@ -650,7 +637,7 @@ void print_impl(const std::string &fmt, nb::args args, nb::kwargs kwargs) {
     format_impl("drjit.print", fmt + end, file, args, kwargs);
 }
 
-void export_format(nb::module_ &m) {
+void export_print(nb::module_ &m) {
     m.def("format",
           [](const std::string &fmt, nb::args args, nb::kwargs kwargs) {
               return format_impl("drjit.format", fmt, nb::handle(), args, kwargs);

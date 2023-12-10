@@ -345,7 +345,7 @@ This function implements the following set of behaviors:
 
 1. When invoked with a Dr.Jit array *type* ``arg0``, it returns an analogous
    version with a different scalar type, as specified via ``arg1``. For example,
-   when called with :py:class:`drjit.cuda.Array3u` and and
+   when called with :py:class:`drjit.cuda.Array3u` and
    :py:attr:`drjit.VarType.Float32`, it will return
    :py:class:`drjit.cuda.Array3f`.
 
@@ -530,7 +530,7 @@ The function accepts Python arithmetic types, Dr.Jit arrays, and tensors. It
 processes each input component separately. When ``arg1`` is a Python ``int`` or
 integral ``float`` value, the function performs a sequence of multiplies. The
 general case involves recursive use of the identity ``pow(x, y) = exp2(log2(x)
-* y)``. There is no difference betweeen using :py:func:`drjit.power()` and the
+* y)``. There is no difference between using :py:func:`drjit.power()` and the
 * builtin ``**`` Python operator.
 
 Args:
@@ -1070,7 +1070,7 @@ Args:
     n (float | drjit.ArrayBase): A Python or Dr.Jit floating point type *without fractional component*
 
 Returns:
-    float | drjit.ArrayBase: The result of ``x`` multipled by 2 taken to the power ``n``.)";
+    float | drjit.ArrayBase: The result of ``x`` multiplied by 2 taken to the power ``n``.)";
 
 static const char *doc_sinh = R"(
 sinh(arg, /)
@@ -1554,7 +1554,7 @@ static const char *doc_ArrayBase_array = R"(
 This member plays multiple roles:
 
 - When ``self`` is a tensor, this property returns the storage representation
-  of the tensor in the form of a linarized dynamic 1D array.
+  of the tensor in the form of a linearized dynamic 1D array.
 
 - When ``self`` is a special arithmetic object (matrix, quaternion, or complex
   number), ``array`` provides an ordinary copy of the same data with ordinary
@@ -1923,7 +1923,7 @@ This operation can be used in the following different ways:
 2. When ``dtype`` is a more complex type (e.g. a nested Dr.Jit array or :ref:`PyTree
    <pytrees>`), the behavior depends:
 
-   - When ``type(source)`` matches ``dtype``, the the gather operation threads
+   - When ``type(source)`` matches ``dtype``, the gather operation threads
      through entries and invokes itself recursively. For example, the
      gather operation in
 
@@ -2098,7 +2098,7 @@ Args:
 
     value (object): The values to be written (typically of type ``type(target)``,
       but other variations are possible as well, see the description above.)
-      Dr.Jit will attempt an implicit conversion if the the input is not an
+      Dr.Jit will attempt an implicit conversion if the input is not an
       array type.
 
     index (object): a 1D dynamic unsigned 32-bit Dr.Jit array (e.g.,
@@ -2231,7 +2231,7 @@ This operation can be used in the following different ways:
     Dr.Jit makes no guarantees about the relative ordering of atomic operations
     when a :py:func:`drjit.scatter_reduce()` writes to the same element
     multiple times. Combined with the non-associate nature of floating point
-    operations, concurrent writes will generally introduce nondeterministic
+    operations, concurrent writes will generally introduce non-deterministic
     rounding error.
 
 Args:
@@ -2724,7 +2724,7 @@ output node ``c``, which can be expressed as follows:
 
     grad = dr.grad(b)
 
-The same naturally also works in the reverse directiion. Dr.Jit provides a
+The same naturally also works in the reverse direction. Dr.Jit provides a
 higher level API that encapsulate such logic in a few different flavors:
 
 - :py:func:`drjit.forward_from` (alias: :py:func:`drjit.forward`) and
@@ -3060,7 +3060,7 @@ Return/print a list of live variables registered with the automatic differentiat
 This function provides information about the set of variables that are
 currently registered with the Dr.Jit automatic differentiation layer,
 which one architectural layer above the just-in-time compiler.
-See the :py:func:`whos()` function to obtain informatoina about
+See the :py:func:`whos()` function to obtain information about
 the latter.
 
 Args:
@@ -3124,7 +3124,7 @@ ignore any attempt to enable gradient tracking on a variable:
 
     assert not dr.grad_enabled(a)
 
-The optional ``when`` boolean keyword argument can be defined to specifed a
+The optional ``when`` boolean keyword argument can be defined to specified a
 condition determining whether to suspend the tracking of derivatives or not.
 
 .. code-block:: python
@@ -3182,7 +3182,7 @@ context manager will temporally resume derivative tracking for all variables.
     assert dr.grad_enabled(e)
     assert not dr.grad_enabled(f)
 
-The optional ``when`` boolean keyword argument can be defined to specifed a
+The optional ``when`` boolean keyword argument can be defined to specified a
 condition determining whether to resume the tracking of derivatives or not.
 
 .. code-block::
@@ -3465,7 +3465,7 @@ Evaluate the custom operation in primal mode.
 You must implement this method when subclassing :py:class:`CustomOp`, since the
 default implementation raises an exception. It should realize the original
 (non-derivative-aware) form of a computation and may take an arbitrary sequence
-of positional, keyword, and variable-length positional/keword arguments.
+of positional, keyword, and variable-length positional/keyword arguments.
 
 You should not need to call this function yourself---Dr.Jit will automatically do so
 when performing custom operations through the :py:func:`drjit.custom()` interface.
@@ -3594,16 +3594,17 @@ switch(index: int | drjit.ArrayBase, targets: Sequence[Callable], *args, **kwarg
 Selectively invoke functions based on a provided index array.
 
 When called with a *scalar* ``index`` (of type ``int``), this function
-evaluates the Python expression
+is equivalent to the following Python expression:
 
 .. code-block:: python
 
    targets[index](*args, **kwargs)
 
-When it is provided with a Dr.Jit index array (specifically, 32-bit unsigned
+When called with a Dr.Jit *index array* (specifically, 32-bit unsigned
 integers), it performs the vectorized equivalent of the above and assembles an
 array of return values containing the result of all referenced functions. It
-does so efficiently using at most a single invocation of each function.
+does so efficiently using at most a single invocation of each function in
+``targets``.
 
 .. code-block:: python
 
@@ -3629,52 +3630,24 @@ Dr.Jit will use one of two possible strategies to compile this operation
 depending on the active compilation flags (see :py:func:`drjit.set_flag`,
 :py:func:`drjit.scoped_set_flag`):
 
-1. **Symbolic mode**: When :py:attr:`drjit.JitFlag.SymbolicCalls` is set (the
-   default), Dr.Jit transcribes every function into a counterpart in the
+1. **Symbolic mode**: Dr.Jit transcribes every function into a counterpart in the
    generated low-level intermediate representation (LLVM IR or PTX) and targets
    them via an indirect jump instruction.
 
-   One caveat with this approach is that Dr.Jit does not know the specific
-   inputs reaching each function at trace time. This knowledge will only become
-   available later on when the generated code runs on the device (e.g., the
-   GPU). Thus, functions receive *symbolic* input arrays that merely help to
-   transcribe their implementation into low-level IR. Some operations involving
-   such symbolic inputs are not valid and will fail:
+   This mode is used when :py:attr:`drjit.JitFlag.SymbolicCalls` is set, which
+   is the default.
 
-   .. code-block:: python
-
-      from drjit.llvm import Array3f, Float, UInt32
-
-      # A function 'f1' called by dr.switch()
-      def f1(x: dr.llvm.Array3f):
-          print(x)        # <-- fails
-          y: Float = x[0] # <-- OK
-          z: float = y[0] # <-- fails
-
-   The common pattern of the failing operations is that they require variable
-   evaluation (i.e., :py:func:`drjit.eval`). It's perfectly valid to index into
-   nested Dr.Jit arrays like :py:class:`drjit.llvm.Array3f`---the end result
-   should just not be a Python ``int`` or ``float`` since that would require
-   knowing the actual array contents. Printing array contents is also possible,
-   but it requires a special *symbolic* operation named
-   :py:func:`drjit.print`. If you wish to avoid such complications,
-   consider the evaluated mode discussed next.
-
-2. **Evaluated mode**: When :py:attr:`drjit.JitFlag.SymbolicCalls` is *not* set,
-   Dr.Jit *evaluates* the inputs  ``index``, ``args``, ``kwargs`` via
-   :py:func:`drjit.eval`, groups them by the provided index, and invokes each
-   function with with the subset of inputs that reference it. Callables that
-   are not referenced by any element of ``index`` are ignored.
+2. **Evaluated mode**: Dr.Jit *evaluates* the inputs  ``index``, ``args``,
+   ``kwargs`` via :py:func:`drjit.eval`, groups them by ``index``, and invokes
+   each function with with the subset of inputs that reference it. Callables
+   that are not referenced by any element of ``index`` are ignored.
 
    In this mode, a :py:func:`drjit.switch` statement will cause Dr.Jit to
    launch a series of kernels processing subsets of the input data (one per
-   function), which also used to be referred to as *wavefronts* in previous
-   versions of Dr.Jit.
+   function).
 
-   This can negatively impact performance and memory usage as function
-   arguments must be written to device memory. On the other hand,
-   evaluated-mode execution is simpler to understand and debug. It is possible
-   to single-step through programs, examine array contents, etc.
+A separate section about :ref:`symbolic and evaluated modes <sym-eval>`
+discusses these two options in detail.
 
 To switch the compilation mode locally, use :py:func:`drjit.scoped_set_flag` as
 shown below:
@@ -3684,19 +3657,13 @@ shown below:
    with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, False):
        result = dr.switch(..)
 
-Loops (:py:func:`drjit.while_loop`), conditionals (:py:func:`drjit.if_stmt`),
-and dynamic dispatch (:py:func:`drjit.switch`, :py:func:`drjit.dispatch`)
-may be arbitrarily nested. However, it is not legal to nest *evaluated*
-operations within *symbolic* operation, as this would require the evaluation
-of symbolic variables.
-
 When a boolean Dr.Jit array (e.g., :py:class:`drjit.llvm.Bool`,
 :py:class:`drjit.cuda.ad.Bool`, etc.) is specified as last positional argument
 or as a keyword argument named ``active``, that argument is treated specially:
 entries of the input arrays associated with a ``False`` mask entry are ignored
-and never passed to the functions. Associated entries of the return
-value will be zero-initialized. The function will still receive the mask
-argument as input, but it will always be set to ``True``.
+and never passed to the functions. Associated entries of the return value will
+be zero-initialized. The function will still receive the mask argument as
+input, but it will always be set to ``True``.
 
 .. danger::
 
@@ -3720,7 +3687,7 @@ argument as input, but it will always be set to ``True``.
 Args:
     index (int|drjit.ArrayBase): a list of indices to choose the functions
 
-    targets (Sequence[Callable]): a list of functions to which calls will be
+    targets (Sequence[Callable]): a list of callables to which calls will be
       dispatched based on the ``index`` argument.
 
     *args (tuple): a variable-length list of positional arguments passed to the
@@ -3731,9 +3698,9 @@ Args:
 
 Returns:
     object: When ``index`` is a scalar Python integer, the return value simply
-    forwards the return value of the selected functoin. Otherwise, the function
-    returns a Dr.Jit array or :ref:`PyTree <pytrees>` containing the result of
-    each performed function call.)";
+    forwards the return value of the selected function. Otherwise, the function
+    returns a Dr.Jit array or :ref:`PyTree <pytrees>` combining the results from
+    each referenced callable.)";
 
 static const char *doc_while_loop = R"(
 Repeatedly execute a function while a loop condition holds.
@@ -3760,7 +3727,7 @@ Python ``while`` loop is not able to do so.
 The :py:func:`drjit.while_loop` function realizes such a fine-grained looping
 mechanism. It takes three main input arguments:
 
-1. ``state``, a tuple of *loop state variables* that are modified by the loop
+1. ``state``, a tuple of *state variables* that are modified by the loop
    iteration,
 
 2. ``cond``, a function that takes the state variables as input and uses them to
@@ -3805,76 +3772,34 @@ written as follows:
 
 .. rubric:: Evaluation modes
 
-Dr.Jit uses one of *three* different modes to realize this operation depending
+Dr.Jit uses one of *three* different modes to compile this operation depending
 on the inputs and active compilation flags (the text below this overview will
 explain how this mode is automatically selected).
 
 1. **Scalar mode**: Scalar loops that don't need any vectorization can
-   be realized using a simple Python loop construct.
+   fall back to a simple Python loop construct.
 
    .. code-block:: python
 
       while cond(state):
           state = body(*state)
 
-   The function :py:func:`drjit.while_loop()` uses such a strategy by default
-   when ``cond(state)`` returns a scalar Python ``bool``.
+   This is the default strategy when ``cond(state)`` returns a scalar Python
+   ``bool``.
 
    The loop body may still use Dr.Jit types, but note that this effectively
    unrolls the loop, generating a potentially long sequence of instructions
    that may take a long time to compile. Symbolic mode (discussed next) may be
-   avantageous in such cases.
+   advantageous in such cases.
 
 2. **Symbolic mode**: Here, Dr.Jit runs a single loop iteration to capture its
-   effect on the loop state variables. It embeds this captured computation into
+   effect on the state variables. It embeds this captured computation into
    the generated machine code. The loop will eventually run on the device
    (e.g., the GPU) but unlike a Python ``while`` statement, the loop *does not*
    run on the host CPU (besides the mentioned tentative evaluation for symbolic
    tracing).
 
-   The main caveat with this approach is that Dr.Jit invokes the loop body with
-   *symbolic* loop state variables representing unknown information. Knowledge
-   about the contents of these variables will only become available later on
-   when the generated code runs on the device (e.g., the GPU). Some operations
-   involving such symbolic inputs are not possible and will fail:
-
-   .. code-block:: python
-
-      @dr.syntax
-      def f(i: dr.cuda.Int, x: dr.cuda.Array2f):
-          while i < 10:
-              x *= x
-              i += 1
-              print(x)                # <-- fails
-              y: dr.cuda.Float = x[0] # <-- OK
-              z: float         = y[0] # <-- fails
-
-   The common pattern of the failing operations is that they require variable
-   evaluation (i.e., :py:func:`drjit.eval`). It's perfectly valid to index into
-   nested Dr.Jit arrays like :py:class:`drjit.cuda.Array2f`, but the end result
-   should *not* be a Python ``int`` or ``float`` since that would require
-   knowing the actual array contents. Printing array contents is possible,
-   but this requires a *symbolic* print statement implemented by
-   :py:func:`drjit.print`. If you wish to avoid such complications, consider
-   the evaluated mode discussed next.
-
-   Another pitfall involving symbolic evaluation is that Dr.Jit will not
-   capture *scalar* computation. If you update a scalar variable within a loop,
-   then Dr.Jit will only see the first round of those updates.
-
-   .. code-block:: python
-
-      @dr.syntax
-      def f():
-          i = dr.cuda.Int(0)
-          j = 0
-          while i < 10:
-              i += 1
-              j += 1
-           return j   # <-- oops, j is *not* equal to 10
-
-
-   Finally, note that when loop optimizations are enabled
+   When loop optimizations are enabled
    (:py:attr:`drjit.JitFlag.OptimizeLoops`), Dr.Jit may re-trace the loop body
    so that it runs twice in total. This happens transparently and has no
    influence on the semantics of this operation.
@@ -3894,8 +3819,8 @@ explain how this mode is automatically selected).
              break
          state = dr.select(active, body(state), state)
 
-   In practice, the implementation does a few additional things like
-   suppressing side effects associated with inactive entries.
+   (In practice, the implementation does a few additional things like
+   suppressing side effects associated with inactive entries.)
 
    Dr.Jit will typically compile a kernel when it runs the first loop
    iteration. Subsequent iterations can then reuse this kernel since they
@@ -3915,57 +3840,47 @@ explain how this mode is automatically selected).
    and you should carefully inspect your code to ensure that the computation
    stays consistent across iterations.
 
-   In general, *evaluated* mode can be significantly slower than *symbolic*
-   mode, as loop state variables are constantly read and written from/to device
-   memory. Processing large arrays in this way can also be inefficient when
-   only a few elements remain active. On the other hand, evaluated-mode
-   execution simple to understand and debug. It is possible to single-step
-   through programs, examine array contents, etc.
+A separate section about :ref:`symbolic and evaluated modes <sym-eval>`
+discusses these two options in further detail.
 
 The :py:func:`drjit.while_loop()` function chooses the evaluation mode as follows:
 
-1. When the ``method`` argument is set to ``"auto"`` (the *default*), the
-   function examines the loop condition to see if it returns a scalar Python
-   ``bool``. In this case, it uses scalar evaluation.
+1. When the ``mode`` argument is set to ``"auto"`` (the *default*), the
+   function examines the loop condition. It uses *scalar* mode when this
+   produces a Python `bool`, otherwise it inspects the
+   :py:attr:`drjit.JitFlag.SymbolicLoops` flag to switch between *symbolic* (the default)
+   and *evaluated* mode.
 
-   Otherwise, it chooses between symbolic and evaluated mode based on the
-   :py:attr:`drjit.JitFlag.SymbolicLoops` flag. This flag is set by default, so
-   a *symbolic* loop will generally be used. To change this automatic choice
-   for a region of code, you may nest it into a
-   :py:func:`drjit.scoped_set_flag` block or change the behavior globally via
+   To change this automatic choice for a region of code, you may specify the
+   ``mode=`` keyword argument, nest code into a
+   :py:func:`drjit.scoped_set_flag` block, or change the behavior globally via
    :py:func:`drjit.set_flag`:
 
    .. code-block:: python
 
       with dr.scoped_set_flag(dr.JitFlag.SymbolicLoops, False):
-          # .. nested code will use evaluted loops ..
+          # .. nested code will use evaluated loops ..
 
-2. When ``method`` is set to ``"scalar"`` ``"symbolic"``, or ``"evaluate"``,
+2. When ``mode`` is set to ``"scalar"`` ``"symbolic"``, or ``"evaluated"``,
    it directly uses that method without inspecting the compilation flags or
    loop condition type.
 
 When using the :py:func:`@drjit.syntax <drjit.syntax>` decorator to
 automatically convert Python ``while`` loops into :py:func:`drjit.while_loop`
 calls, you can also use the :py:func:`drjit.hint` function to pass keyword
-arguments including ``method``, ``label``, or ``max_iterations`` to the
-generated looping construct:
+arguments including ``mode``, ``label``, or ``max_iterations`` to the generated
+looping construct:
 
 .. code-block:: python
 
   while dr.hint(i < 10, name='My loop', mode='evaluated'):
      # ...
 
-Loops (:py:func:`drjit.while_loop`), conditionals (:py:func:`drjit.if_stmt`),
-and dynamic dispatch (:py:func:`drjit.switch`, :py:func:`drjit.dispatch`)
-may be arbitrarily nested. However, it is not legal to nest *evaluated*
-operations within *symbolic* operation, as this would require the evaluation
-of symbolic variables.
-
 .. rubric:: Assumptions
 
 The loop condition function must be *pure* (i.e., it should never modify the
-loop state variables or any other kind of proram state). The loop body
-should *not* write to variables besides the officially declared loop state
+state variables or any other kind of proram state). The loop body
+should *not* write to variables besides the officially declared state
 variables:
 
 .. code-block:: python
@@ -3987,11 +3902,6 @@ to be specified as loop state (however, doing so causes no harm.)
    def loop_body(x):
        dr.scatter(target=y, value=x, index=0) # <-- this is okay
 
-The reason for this exception is that the set of possible targets of such side
-effects can be difficult to infer in large programs, especially when combined
-with array-based method calls (for example, :py:func:`drjit.dispatch` may
-scatter to numerous local instance variables).
-
 Another important assumption is that the loop state remains *consistent* across
 iterations, which means:
 
@@ -4002,14 +3912,14 @@ iterations, which means:
 2. Their structure/size must be consistent. The loop body may not turn
    a variable with 3 entries into one that has 5.
 
-3. Analogously, loop state variables must always be initialized prior to the
+3. Analogously, state variables must always be initialized prior to the
    loop. This is the case *even if you know that the loop body is guaranteed to
    overwrite the variable with a well-defined result*. An initial value
    of ``None`` would violate condition 1 (type invariance), while an empty
    array would violate condition 2 (shape compatibility).
 
 The implementation will check for violations and, if applicable, raise an
-exception identifying problematic loop state variables.
+exception identifying problematic state variables.
 
 .. rubric:: Potential pitfalls
 
@@ -4077,25 +3987,25 @@ exception identifying problematic loop state variables.
 .. rubric:: Interface
 
 Args:
-    state (tuple): A tuple containing the initial values of the loop state
+    state (tuple): A tuple containing the initial values of the loop's state
       variables. This tuple normally consists of Dr.Jit arrays or :ref:`PyTrees
       <pytrees>`. Other values are permissible as well and will be forwarded to
       the loop body. However, such variables will not be captured by the
       symbolic tracing process.
 
-    cond (Callable): a function/callable that will be invoked with ``*args``
-      (i.e., the the state variables will be *unpacked* and turned into
+    cond (Callable): a function/callable that will be invoked with ``*state``
+      (i.e., the state variables will be *unpacked* and turned into
       function arguments). It should return a scalar Python ``bool`` or a
       boolean-typed Dr.Jit array representing the loop condition.
 
-    body (Callable): a function/callable that will be invoked with ``*args``
-      (i.e., the the state variables will be *unpacked* and turned into
+    body (Callable): a function/callable that will be invoked with ``*state``
+      (i.e., the state variables will be *unpacked* and turned into
       function arguments). It should update the loop state and then return a
-      new tuple of loop state variables that are *compatible* with the previous
+      new tuple of state variables that are *compatible* with the previous
       state (see the earlier description regarding what such compatibility entails).
 
-    method (str): Specify this parameter to override the evaluation method.
-      Possible values are: ``"scalar"``, ``"symbolic"``, ``"evaluate"``, or
+    mode (str): Specify this parameter to override the evaluation mode.
+      Possible values are: ``"scalar"``, ``"symbolic"``, ``"evaluated"``, or
       ``"auto"``. The default value of ``"auto"`` causes the function to
       first check if the loop is potentially scalar, in which case it uses a
       trivial fallback implementation. Otherwise, it queries the state of the
@@ -4105,7 +4015,7 @@ Args:
     state_labels (list[str]): An optional list of labels associated with each
       ``state`` entry. Dr.Jit uses this to provide better error messages in
       case of a detected inconsistency. The :py:func:`@drjit.syntax <drjit.syntax>`
-      decorator automatically provides these labels baed on the transformed
+      decorator automatically provides these labels based on the transformed
       code.
 
     name (str): An optional descriptive name. Dr.Jit will include this label in
@@ -4121,6 +4031,228 @@ Returns:
     tuple: The function returns the final state of the loop variables following
     termination of the loop.)";
 
+static const char *doc_if_stmt = R"(
+if_stmt(args: tuple, cond: bool|drjit.ArrayBase, true_fn: Callable, false_fn: Callable, rv_labels: list[str] = (), label: str = 'unnamed', mode: str = 'auto') -> tuple
+
+Conditionally execute code.
+
+.. rubric:: Motivation
+
+This function provides a *vectorized* generalization of a standard Python
+``if`` statement. For example, consider the following Python snippet
+
+.. code-block:: python
+
+   i: int = .. some expression ..
+   if i > 0:
+       x = f(i) # <-- some costly function 'f' that depends on 'i'
+   else:
+       y += 1
+
+This code would fail if ``i`` is replaced by an array containing multiple
+entries (e.g., of type :py:class:`drjit.llvm.Int`). In that case, the
+conditional expression produces a boolean array of per-component comparisons
+that are not necessarily consistent with each other. In other words, some of
+the entries may want to run the body of the ``if`` statement, while others must
+skip to the ``else`` block. This is not compatible with the semantics of a
+standard Python ``if`` statement.
+
+The :py:func:`drjit.if_stmt` function realizes a more fine-grained conditional
+operation that accommodates these requirements, while avoiding execution of the
+costly branch unless this is truly needed. It takes the following input
+arguments:
+
+1. ``cond``, a boolean array that specifies whether the body of the ``if``
+   statement should execute.
+
+2. A tuple of input arguments (``args``) that will be forwarded to
+   ``true_fn`` and ``false_fn``. It is important to specify all inputs to
+   ensure correct derivative tracking of the operation.
+
+3. ``true_fn``, a callable that implements the body of the ``if`` block.
+
+4. ``false_fn``, a callable that implements the body of the ``else`` block.
+
+The implementation will invoke ``true_fn(*args)`` and ``false_fn(*args)`` to
+trace their contents. The return values of these functions must be compatible
+with each other (a precise definition of compatibility is described below). A
+vectorized version of the earlier example can then be written as follows:
+
+.. code-block:: python
+
+   x, y = dr.if_stmt(
+       args=(i, x, y),
+       cond=i > 0,
+       true_fn=lambda i, x, y: (f(i), y),
+       false_fn=lambda i, x, y: (x, y + 1)
+   )
+
+Lambda functions are convenient when ``true_fn`` and ``false_fn`` are simple
+enough to fit onto a single line. In general you may prefer to define local
+functions (``def true_fn(i, x, y): ...``) and pass them to the ``true_fn`` and
+``false_fn`` arguments.
+
+Dr.Jit also provides the :py:func:`@drjit.syntax <drjit.syntax>` decorator,
+which automatically rewrites standard Python control flow constructs into the
+form shown above. It combines vectorization with the readability of natural
+Python syntax and is the recommended way of (indirectly) using
+:py:func:`drjit.if_stmt`. With this decorator, the above example would be
+written as follows:
+
+.. code-block:: python
+
+   @dr.syntax
+   def f(i, x, y):
+       if i > 0:
+           x = f(i)
+       else:
+           y += 1
+       return x, y
+
+.. rubric:: Evaluation modes
+
+Dr.Jit uses one of *three* different modes to realize this operation depending
+on the inputs and active compilation flags (the text below this overview will
+explain how this mode is automatically selected).
+
+1. **Scalar mode**: Scalar ``if`` statements that don't need any
+   vectorization can be reduced to normal Python branching constructs:
+
+   .. code-block:: python
+
+      if cond:
+          state = true_fn(*args)
+      else:
+          state = false_fn(*args)
+
+   This strategy is the default when ``cond`` is a scalar Python ``bool``.
+
+2. **Symbolic mode**: Dr.Jit runs ``true_fn`` and ``false_fn`` to
+   capture the computation performed by each function, which allows it to
+   generate an equivalent branch in the generated kernel. Symbolic mode
+   preserves the control flow structure of the original program by replicating
+   it within Dr.Jit's intermediate representation.
+
+3. **Evaluated**: in this mode, Dr.Jit runs both branches of the ``if``
+   statement and then combines the results via :py:func:`drjit.select`. This is
+   nearly equivalent to the following Python code:
+
+   .. code-block:: python
+
+      true_state = true_fn(*state)
+      false_state = false_fn(*state) if false_fn else state
+      state = dr.select(cond, true_fn, false_fn)
+
+   (In practice, the implementation does a few additional things like
+   suppressing side effects associated with inactive entries.)
+
+   Evaluated mode is conceptually simpler but also slower, since the device
+   executes both sides of a branch when only one of them is actually needed.
+
+The evaluation mode is chosen as follows:
+
+1. When the ``mod`` argument is set to ``"auto"`` (the *default*), the
+   function examines the type of the ``cond`` input and uses the scalar
+   mode the type is a builtin Python ``bool``.
+
+   Otherwise, it chooses between symbolic and evaluated mode based on the
+   :py:attr:`drjit.JitFlag.SymbolicConditionals` flag, which is set by default.
+   To change this choice for a region of code, you may specify the ``mode=``
+   keyword argument, nest it into a :py:func:`drjit.scoped_set_flag` block, or
+   change the behavior globally via :py:func:`drjit.set_flag`:
+
+   .. code-block:: python
+
+      with dr.scoped_set_flag(dr.JitFlag.SymbolicConditionals, False):
+          # .. nested code will use evaluated mode ..
+
+2. When ``mode`` is set to ``"scalar"`` ``"symbolic"``, or ``"evaluated"``,
+   it directly uses that mode without inspecting the compilation flags or
+   condition type.
+
+When using the :py:func:`@drjit.syntax <drjit.syntax>` decorator to
+automatically convert Python ``if`` statements into :py:func:`drjit.if_stmt`
+calls, you can also use the :py:func:`drjit.hint` function to pass keyword
+arguments including ``mode`` or ``label`` parameters.
+
+.. code-block:: python
+
+  if dr.hint(i < 10, mode='evaluated'):
+     # ...
+
+.. rubric:: Assumptions
+
+The functions ``true_fn`` and ``false_fn`` should *not* write to variables
+besides the explicitly declared return value(s):
+
+.. code-block:: python
+
+   vec = drjit.cuda.Array3f(1, 2, 3)
+   def f(x):
+       vec.x += x     # <-- don't do this. 'y' is not a declared output
+
+   dr.if_stmt(true_fun=f, ...)
+
+This example can be fixed as follows:
+
+.. code-block:: python
+
+   def f(vec, x):
+       vec.x += x
+       return vec
+
+   vec = dr.if_stmt(true_fun=f, ...)
+
+Correct derivative tracking also requires that differentiable inputs are
+specified via the ``args`` parameter. The :py:func:`@drjit.syntax
+<drjit.syntax>` decorator ensures that these assumptions are satisfied.
+
+There is one small exception: the functions *may* perform side effects via
+functions like :py:func:`scatter`, :py:func:`scatter_reduce`,
+:py:func:`scatter_inc`, :py:func:`scatter_add`, etc., and the targets
+of such operations don't *have* to be specified as state variables
+(however, doing so causes no harm.)
+
+.. code-block:: python
+
+   y = ..
+   def f(x):
+       dr.scatter(target=y, value=x, index=0) # <-- this is okay
+
+The return values of ``true_fn`` and ``false_fn`` must be of the same type.
+This requirement applies recursively if the return value is a :ref:`PyTree
+<pytrees>`.
+
+.. rubric:: Interface
+
+Args:
+    cond (bool|drjit.ArrayBase): a scalar Python ``bool`` or a boolean-valued
+      Dr.Jit array.
+
+    args (tuple): A list of positional arguments that will be forwarded to
+      ``true_fn`` and ``false_fn``.
+
+    true_fn (Callable): a callable that implements the body of the ``if`` block.
+
+    false_fn (Callable): a callable that implements the body of the ``else`` block.
+
+    mode (str): Specify this parameter to override the evaluation mode.
+      Possible values are: ``"scalar"``, ``"symbolic"``, ``"evaluated"``, or
+      ``"auto"``.
+
+    rv_labels (list[str]): An optional list of labels associated with each
+      element of the return value. This parameter should only be specified when
+      the return value is a tuple. Dr.Jit uses this feature in combination with
+      the :py:func:`@drjit.syntax <drjit.syntax>` decorator to provide better
+      error messages in case of detected inconsistencies.
+
+    name (str): An optional descriptive name. Dr.Jit will include this label in
+      generated low-level IR, which can be helpful when debugging the
+      compilation of large programs. The default is ``"unnamed"``.
+
+Returns:
+    object: Combined return value mixing the results of ``true_fn`` and
+    ``false_fn``.)";
 
 static const char *doc_dispatch = R"(
 Invoke a provided Python function for each instance in an instance array.
@@ -4190,7 +4322,7 @@ Returns:
     object: A Dr.Jit array or :ref:`PyTree <pytrees>` containing the
     result of each performed function call.)";
 
-static const char *doc_collect_indices = R"(
+static const char *doc_detail_collect_indices = R"(
 Return Dr.Jit variable indices associated with the provided data structure.
 
 This function traverses Dr.Jit arrays, tensors, :ref:`PyTree <pytrees>` (lists,
@@ -4203,7 +4335,7 @@ in the lower 32 bit.
 Intended purely for internal Dr.Jit use, you probably should not call this in
 your own application.)";
 
-static const char *doc_uncopy = R"(
+static const char *doc_detail_uncopy = R"(
 Undo a prior call to :py:func:`drjit.copy()` when the contents of a PyTree are
 unchanged.
 
@@ -4219,7 +4351,7 @@ all state variables. When that copy is later discovered to not be necessary,
 the use :py:func:`uncopy()` to restore the variable to its original Python
 object.)";
 
-static const char *doc_update_indices = R"(
+static const char *doc_detail_update_indices = R"(
 Create a copy of the provided input while replacing Dr.Jit variables with
 new ones based on a provided set of indices.
 
@@ -4227,14 +4359,22 @@ This function works analogously to ``collect_indices``, except that it
 consumes an index array and produces an updated output.
 
 It recursively traverses and copies an input object that may be a Dr.Jit array,
-tensor, or :ref:`PyTree <pytrees>` (list, tuple, dict, custom data structure)
+tensor, or :ref:`Pytree <pytrees>` (list, tuple, dict, custom data structure)
 while replacing any detected Dr.Jit variables with new ones based on the
 provided index vector. The function returns the resulting object, while leaving
-the input unchanged. The output array borrows the referenced array indices
-as opposed to stealing them.
+the input unchanged. The output array object borrows the provided array
+references as opposed to stealing them.
 
 Intended purely for internal Dr.Jit use, you probably should not call this in
 your own application.)";
+
+static const char *doc_detail_reset = R"(
+Release all Jit variables in a PyTree
+
+This function recursively traverses PyTrees and replaces Dr.Jit arrays with
+empty instances of the same type. :py:func:`drjit.while_loop` uses this
+function internally to release references held by a temporary copy of the
+state tuple.)";
 
 static const char *doc_copy = R"(
 Create a deep copy of the input PyTree.
@@ -4244,7 +4384,7 @@ Dr.Jit arrays/tensors, lists, tuples, dicts, custom data structures). Whenever
 it encounters a Dr.Jit array, it replaces it with another instance created via
 the array's copy constructor.)";
 
-static const char *doc_check_compatibility = R"(
+static const char *doc_detail_check_compatibility = R"(
 Traverse two pytrees in parallel and ensure that they have an identical
 structure.
 
@@ -4419,63 +4559,27 @@ Local value numbering is *enabled* by default.)";
 // For Sphinx-related technical reasons, this comment is replicated in
 // reference.rst. Please keep them in sync when making changes
 static const char *doc_JitFlag_SymbolicCalls = R"(
-Dr.Jit provides two main ways of compiling function calls targeting *instance arrays*.
+Dr.Jit provides two main ways of compiling function calls targeting
+*instance arrays*.
 
-1. **Symbolic mode** (the default): Dr.Jit captures the behavior of functions by
-   invoking them with *symbolic* (abstract) arguments. By doing so, it can capture a
-   transcript of each function and then turn it into a function in the
-   generated kernel. Symbolic mode preserves the control flow structure of the
+1. **Symbolic mode** (the default): Dr.Jit invokes each callable with
+   *symbolic* (abstract) arguments. It does this to capture a transcript
+   of the computation that it can turn into a function in the generated
+   kernel. Symbolic mode preserves the control flow structure of the
    original program by replicating it within Dr.Jit's intermediate
    representation.
-
-   The main advantage of recorded mode is:
-
-   * It is very efficient in terms of device memory storage and bandwidth, since
-     function call arguments and return values can be exchanged through fast
-     CPU/GPU registers.
-
-   Its main downsides are:
-
-   * Symbolic arrays cannot be evaluated. Any attempt to reveal their contents
-     (e.g., via the built-in Python ``print()``) is doomed to fail since there
-     is simply nothing there (yet).
-
-     One small exception worthy of note is the special symbolic
-     :py:func:`drjit.print()` operation, which is able to print symbolic arrays
-     in a delayed fashion. However, all other types of operations that require
-     variable evaluation will raise an exception.
-
-     This limitation may be inconvenient especially when debugging code, in
-     which case evaluated mode is preferable.
-
-   * Thread divergence: neighboring SIMD lanes may target different functions,
-     which can have a negative impact on efficiency.
-
-   * A kernel with many functions can become quite large and costly to compile.
 
 2. **Evaluated mode**: Dr.Jit evaluates all inputs and groups them by instance
    ID. Following this, it launches a a kernel *per instance* to process the
    rearranged inputs and assemble the function return value.
 
-   The main advantages of evaluated mode are:
+A separate section about :ref:`symbolic and evaluated modes <sym-eval>`
+discusses these two options in detail.
 
-   * *It is easier to debug*: evaluating and processing intermediate results
-     (e.g. via Python's ``print`` statement or more advanced plotting tools)
-     is legal.  You may also use a debugger to step through the program.
+Besides calls to instance arrays, this flag also controls the behavior of
+the functions :py:func:`drjit.switch` and :py:func:`drjit.dispatch`.
 
-   * Kernels are smaller and avoid thread divergence, since Dr.Jit reorders
-     computation with respect to targeted functions.
-
-   The main downsides are:
-
-   * Each function essentially turns its own kernel that reads its input and
-     writes outputs via device memory. The required memory bandwidth and
-     storage often make evaluated mode impractical.
-
-Note that the behavior of the functions :py:func:`drjit.switch` and
-:py:func:`drjit.dispatch` is also controlled by this flag.
-
-Symbolic mode is *enabled* by default.)";
+Symbolic calls are *enabled* by default.)";
 
 // For Sphinx-related technical reasons, this comment is replicated in
 // reference.rst. Please keep them in sync when making changes
@@ -4494,10 +4598,10 @@ This flag enables two optimizations:
   computation graph in all instances, it is removed from the function call
   interface and moved to the caller.
 
-The flag is enabled by default. Note that it is only effective in combination
-with  :py:attr:`SymbolicCalls`. The behavior of the functions
-:py:func:`drjit.switch` and :py:func:`drjit.dispatch` is also controlled by
-this flag.)";
+The flag is enabled by default. Note that it is only meaningful in combination
+with  :py:attr:`SymbolicCalls`. Besides calls to instance arrays, this flag
+also controls the behavior of the functions :py:func:`drjit.switch` and
+:py:func:`drjit.dispatch`.)";
 
 // For Sphinx-related technical reasons, this comment is replicated in
 // reference.rst. Please keep them in sync when making changes
@@ -4519,10 +4623,10 @@ Dr.Jit can exploit such redundancy and merge such functions during code
 generation. Besides generating shorter programs, this also helps to reduce
 thread divergence.
 
-This flag is *enabled* by default. Note that it is only effective
-in combination with  :py:attr:`SymbolicCalls`.
-The behavior of the functions :py:func:`drjit.switch` and
-:py:func:`drjit.dispatch` is also controlled by this flag.)";
+This flag is *enabled* by default. Note that it is only meaningful in
+combination with :py:attr:`SymbolicCalls`. Besides calls to instance arrays,
+this flag also controls the behavior of the functions :py:func:`drjit.switch`
+and :py:func:`drjit.dispatch`.)";
 
 // For Sphinx-related technical reasons, this comment is replicated in
 // reference.rst. Please keep them in sync when making changes
@@ -4530,47 +4634,22 @@ static const char *doc_JitFlag_SymbolicLoops = R"(
 Dr.Jit provides two main ways of compiling loops involving Dr.Jit arrays.
 
 1. **Symbolic mode** (the default): Dr.Jit executes the loop a single
-   time regardless of how many iterations it requires in practice. It does so
-   with *symbolic* (abstract) arguments to capture the loop condition and body
-   and then turns it into an equivalent loop in the generated kernel. Symbolic
-   mode preserves the control flow structure of the original program by
-   replicating it within Dr.Jit's intermediate representation.
+   time regardless of how many iterations it requires in practice. It
+   does so with *symbolic* (abstract) arguments to capture the loop
+   condition and body and then turns it into an equivalent loop in the
+   generated kernel. Symbolic mode preserves the control flow structure
+   of the original program by replicating it within Dr.Jit's intermediate
+   representation.
 
-   The main advantage of recorded mode is:
+2. **Evaluated mode**: Dr.Jit evaluates the loop's state variables and
+   reduces the loop condition to a single element (``bool``) that
+   expresses whether any elements are still alive. If so, it runs the
+   loop body and the process repeats.
 
-   * It is very efficient in terms of device memory storage and bandwidth, since
-     loop state variables can be exchanged through fast CPU/GPU registers.
+A separate section about :ref:`symbolic and evaluated modes <sym-eval>`
+discusses these two options in detail.
 
-   Its main downsides is:
-
-   * Symbolic arrays cannot be evaluated. Any attempt to reveal their contents
-     (e.g., via the built-in Python ``print()``) is doomed to fail since there
-     is simply nothing there (yet).
-
-     One small exception worthy of note is the special symbolic
-     :py:func:`drjit.print()` operation, which is able to print symbolic arrays
-     in a delayed fashion. However, all other types of operations that require
-     variable evaluation will raise an exception.
-
-     This limitation may be inconvenient especially when debugging code, in
-     which case evaluated mode is preferable.
-
-2. **Evaluated mode**: Dr.Jit evaluates the loop's state variables and reduces
-   the loop condition to a single element (``bool``) that expresses whether any
-   elements are still alive. If so, it runs the loop body and the process repeats.
-   The main advantages of evaluated mode is:
-
-   * *It is easier to debug*: evaluating and processing intermediate results
-     (e.g. via Python's ``print`` statement or more advanced plotting tools)
-     is legal.  You may also use a debugger to step through the program.
-
-   The main downsides are:
-
-   * Each iteration generates at least one kernel that reads its input and
-     writes outputs via device memory. The required memory bandwidth and
-     storage often make evaluated mode impractical.
-
-Symbolic mode is *enabled* by default.)";
+Symbolic loops are *enabled* by default.)";
 
 // For Sphinx-related technical reasons, this comment is replicated in
 // reference.rst. Please keep them in sync when making changes
@@ -4579,24 +4658,43 @@ for loops involving Dr.Jit arrays.
 
 This flag enables two optimizations:
 
-- *Constant arrays*: variables in the *loop state* set that aren't modified by
-  a loop are removed from this set. This shortens the generated code, which can
+- *Constant arrays*: loop state variables that aren't modified by
+  the loop are automatically removed. This shortens the generated code, which can
   be helpful especially in combination with the automatic transformations
-  performed by :py:func:`drjit.function` that may be somewhat conservative in
-  classifying too many local variables as potential loop state.
+  performed by :py:func:`@drjit.syntax <drjit.syntax>` that can be somewhat
+  conservative in classifying too many local variables as potential loop state.
 
 - *Literal constant arrays*: In addition to the above point, constant
   loop state variables that are *literal constants* are propagated into
-  the loop body, where this may reveal optimization opportunities.
+  the loop body, where this may unlock further optimization opportunities.
 
   This is useful in combination with automatic differentiation, where
   it helps to detect code that does not influence the computed derivatives.
 
-One practical implication of this optimization is that it may cause
+A practical implication of this optimization flag is that it may cause
 :py:func:`drjit.while_loop` to run the loop body twice instead of just once.
 
-This flag is *enabled* by default. Note that it is only effective
-in combination with  :py:attr:`SymbolicLoops`.)";
+This flag is *enabled* by default. Note that it is only meaningful
+in combination with :py:attr:`SymbolicLoops`.)";
+
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
+static const char *doc_JitFlag_SymbolicConditionals = R"(
+Dr.Jit provides two main ways of compiling conditionals involving Dr.Jit arrays.
+
+1. **Symbolic mode** (the default): Dr.Jit captures the computation
+   performed by the ``True`` and ``False`` branches and generates an
+   equivalent branch in the generated kernel. Symbolic mode preserves the
+   control flow structure of the original program by replicating it
+   within Dr.Jit's intermediate representation.
+
+2. **Evaluated mode**: Dr.Jit always executes both branches and blends
+   their outputs.
+
+A separate section about :ref:`symbolic and evaluated modes <sym-eval>`
+discusses these two options in detail.
+
+Symbolic conditionals are *enabled* by default.)";
 
 // For Sphinx-related technical reasons, this comment is replicated in
 // reference.rst. Please keep them in sync when making changes
@@ -4687,19 +4785,32 @@ This flag is *enabled* by default.)";
 
 // For Sphinx-related technical reasons, this comment is replicated in
 // reference.rst. Please keep them in sync when making changes
-static const char *doc_JitFlag_Symbolic = R"(
-This flag should not be set in user code. Dr.Jit sets it whenever it is
-capturing computation symbolically.
+static const char *doc_JitFlag_SymbolicScope = R"(
+This flag is set to ``True`` when Dr.Jit is currently capturing symbolic
+computation. The flag is automatically managed and should not be updated
+by application code.
 
 User code may query this flag to check if it is legal to perform certain
 operations (e.g., evaluating array contents).
 
 Note that this information can also be queried in a more fine-grained
-manner (per variable) using the :py:attr:`drjit.tArrayBase.state` field.)";
+manner (per variable) using the :py:attr:`drjit.ArrayBase.state` field.)";
 
 // For Sphinx-related technical reasons, this comment is replicated in
 // reference.rst. Please keep them in sync when making changes
-static const char *doc_JitFlag_Default = "The default set of flags.";
+static const char *doc_JitFlag_Default = R"(
+The default set of optimization flags consisting of
+
+- :py:attr:`drjit.JitFlag.ConstantPropagation`,
+- :py:attr:`drjit.JitFlag.ValueNumbering`,
+- :py:attr:`drjit.JitFlag.SymbolicLoops`,
+- :py:attr:`drjit.JitFlag.OptimizeLoops`,
+- :py:attr:`drjit.JitFlag.SymbolicCalls`,
+- :py:attr:`drjit.JitFlag.MergeFunctions`,
+- :py:attr:`drjit.JitFlag.OptimizeCalls`,
+- :py:attr:`drjit.JitFlag.SymbolicConditionals`,
+- :py:attr:`drjit.JitFlag.ReuseIndices`, and
+- :py:attr:`drjit.JitFlag.AtomicReduceLocal`.)";
 
 static const char *doc_JitFlag_LoopRecord =
     "Deprecated. Replaced by :py:attr:`SymbolicLoops`.";
@@ -4827,7 +4938,7 @@ static const char *doc_PCG32_next_uint32 = R"(
 Generate a uniformly distributed unsigned 32-bit random number
 
 Two overloads of this function exist: the masked variant does not advance
-the the PRNG state of entries ``i`` where ``mask[i] == False``.)";
+the PRNG state of entries ``i`` where ``mask[i] == False``.)";
 
 static const char *doc_PCG32_next_uint64 = R"(
 Generate a uniformly distributed unsigned 64-bit random number
@@ -4835,14 +4946,14 @@ Generate a uniformly distributed unsigned 64-bit random number
 Internally, the function calls :py:func:`next_uint32` twice.
 
 Two overloads of this function exist: the masked variant does not advance
-the the PRNG state of entries ``i`` where ``mask[i] == False``.)";
+the PRNG state of entries ``i`` where ``mask[i] == False``.)";
 
 static const char *doc_PCG32_next_float32 = R"(
 Generate a uniformly distributed single precision floating point number on the
 interval :math:`[0, 1)`.
 
 Two overloads of this function exist: the masked variant does not advance
-the the PRNG state of entries ``i`` where ``mask[i] == False``.)";
+the PRNG state of entries ``i`` where ``mask[i] == False``.)";
 
 
 static const char *doc_PCG32_next_float64 = R"(
@@ -4850,7 +4961,7 @@ Generate a uniformly distributed double precision floating point number on the
 interval :math:`[0, 1)`.
 
 Two overloads of this function exist: the masked variant does not advance
-the the PRNG state of entries ``i`` where ``mask[i] == False``.)";
+the PRNG state of entries ``i`` where ``mask[i] == False``.)";
 
 static const char *doc_PCG32_next_uint32_bounded = R"(
 Generate a uniformly distributed 32-bit integer number on the
@@ -5007,7 +5118,7 @@ costly in terms of of memory traffic and storage footprint. Reducing through
 :py:func:`drjit.scatter_inc()` does not have this limitation: it can operate on
 symbolic arrays that greatly exceed the available device memory. One advantage
 of :py:func:`drjit.compress()` is that it essentially boils down to a
-realtively simple prefix sum, which does not require atomic memory operations
+relatively simple prefix sum, which does not require atomic memory operations
 (these can be slow in some cases).)";
 
 
@@ -5089,8 +5200,8 @@ Returns:
     str: The formatted string representation created as specified above.)";
 
 static const char *doc_print = R"(
-print(fmt: str, *args, active: drjit.ArrayBase | bool = True, end: str = '\n', file: object = None, limit: int = 20, method='auto', **kwargs) -> None
-print(arg: str, /, active: drjit.ArrayBase | bool = True, end: str = '\n', file: object = None, limit: int = 20, method='auto', **kwargs) -> None
+print(fmt: str, *args, active: drjit.ArrayBase | bool = True, end: str = '\n', file: object = None, limit: int = 20, mode='auto', **kwargs) -> None
+print(arg: str, /, active: drjit.ArrayBase | bool = True, end: str = '\n', file: object = None, limit: int = 20, mode='auto', **kwargs) -> None
 
 Generate a formatted string representation and print it immediately or
 in a delayed fashion (if any of the inputs are symbolic).
@@ -5293,8 +5404,8 @@ Args:
       argument to route the output somewhere other than the default output
       stream ``sys.stdout``.
 
-    method (str): Specify this parameter to override the evaluation method.
-      Possible values are: ``"symbolic"``, ``"evaluate"``, or ``"auto"``. The
+    mode (str): Specify this parameter to override the evaluation mode.
+      Possible values are: ``"symbolic"``, ``"evaluated"``, or ``"auto"``. The
       default value of ``"auto"`` causes the function to use evaluated mode
       (which prints immediately) unless a symbolic input is detected, in which
       case printing takes place symbolically (i.e., in a delayed fashion).

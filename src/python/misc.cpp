@@ -28,22 +28,28 @@
  * (Note: this explanation is also part of src/python/docstr.h -- please keep
  * them in sync in case you make a change here)
 */
-void collect_indices(nb::handle h, dr::dr_vector<uint64_t> &indices) {
+void collect_indices(nb::handle h, dr::dr_vector<uint64_t> &indices, bool inc_ref) {
     struct CollectIndices : TraverseCallback {
         dr::dr_vector<uint64_t> &result;
-        CollectIndices(dr::dr_vector<uint64_t> &result) : result(result) { }
+        bool inc_ref;
+        CollectIndices(dr::dr_vector<uint64_t> &result, bool inc_ref)
+            : result(result), inc_ref(inc_ref) { }
 
         void operator()(nb::handle h) override {
-            auto index = supp(h.type()).index;
-            if (index)
-                result.push_back(index(inst_ptr(h)));
+            auto index_fn = supp(h.type()).index;
+            if (index_fn) {
+                uint64_t index = index_fn(inst_ptr(h));
+                if (inc_ref)
+                    ad_var_inc_ref(index);
+                result.push_back(index);
+            }
         }
     };
 
     if (!h.is_valid())
         return;
 
-    CollectIndices ci { indices };
+    CollectIndices ci { indices, inc_ref };
     traverse("drjit.detail.collect_indices", ci, h);
 }
 
@@ -54,18 +60,18 @@ dr::dr_vector<uint64_t> collect_indices(nb::handle h) {
 }
 
 /**
- * \brief Create a copy of the provided input while replacing Dr.Jit variables with
- * new ones based on a provided set of indices.
+ * \brief Create a copy of the provided input while replacing Dr.Jit variables
+ * with new ones based on a provided set of indices.
  *
  * This function works analogously to ``collect_indices``, except that it
  * consumes an index array and produces an updated output.
  *
- * It recursively traverses and copies an input object that may be a Dr.Jit array,
- * tensor, or :ref:`Pytree <pytrees>` (list, tuple, dict, custom data structure)
- * while replacing any detected Dr.Jit variables with new ones based on the
- * provided index vector. The function returns the resulting object, while leaving
- * the input unchanged. The output array borrows the referenced array indices
- * as opposed to stealing them.
+ * It recursively traverses and copies an input object that may be a Dr.Jit
+ * array, tensor, or :ref:`Pytree <pytrees>` (list, tuple, dict, custom data
+ * structure) while replacing any detected Dr.Jit variables with new ones based
+ * on the provided index vector. The function returns the resulting object,
+ * while leaving the input unchanged. The output array object borrows the
+ * provided array references as opposed to stealing them.
  *
  * Intended purely for internal Dr.Jit use, you probably should not call this in
  * your own application.
@@ -116,35 +122,34 @@ nb::object update_indices(nb::handle h, const dr::dr_vector<uint64_t> &indices_)
  * them in sync in case you make a change here)
  */
 nb::object copy(nb::handle h) {
-    nb::handle tp = h.type();
-    if (is_drjit_type(tp)) {
-        return tp(h);
-    } else if (tp.is(&PyTuple_Type)) {
-        nb::list result;
-        for (nb::handle v : nb::borrow<nb::tuple>(h))
-            result.append(copy(v));
-        return nb::tuple(result);
-    } else if (tp.is(&PyList_Type)) {
-        nb::list result;
-        for (nb::handle v : nb::borrow<nb::list>(h))
-            result.append(copy(v));
-        return result;
-    } else if (tp.is(&PyDict_Type)) {
-        nb::dict result;
-        for (nb::handle kv : nb::borrow<nb::dict>(h).items())
-            result[copy(kv[0])] = copy(kv[1]);
-        return result;
-    } else {
-        nb::object dstruct = nb::getattr(tp, "DRJIT_STRUCT", nb::handle());
-        if (dstruct.is_valid() && dstruct.type().is(&PyDict_Type)) {
-            nb::object result = tp();
-            for (auto [k, v] : nb::borrow<nb::dict>(dstruct))
-                nb::setattr(result, k, copy(nb::getattr(h, k)));
-            return result;
-        } else {
-            return nb::borrow(h);
+    struct Copy : TransformCallback {
+        void operator()(nb::handle h1, nb::handle h2) override {
+            nb::inst_replace_copy(h2, h1);
         }
-    }
+    };
+
+    Copy c;
+    return transform("drjit.detail.copy", c, h);
+}
+
+/**
+ * \brief Release all Jit variables in a PyTree
+ *
+ * This function recursively traverses PyTrees and replaces Dr.Jit arrays with
+ * empty instances of the same type. :py:func:`drjit.while_loop` uses this
+ * function internally to release references held by a temporary copy of the
+ * state tuple.
+ *
+ * (Note: this explanation is also part of src/python/docstr.h -- please keep
+ * them in sync in case you make a change here)
+ */
+nb::object reset(nb::handle h) {
+    struct Reset : TransformCallback {
+        void operator()(nb::handle, nb::handle) override { }
+    };
+
+    Reset r;
+    return transform("drjit.detail.reset", r, h);
 }
 
 /**
@@ -157,11 +162,11 @@ nb::object copy(nb::handle h) {
  * (Note: this explanation is also part of src/python/docstr.h -- please keep
  * them in sync in case you make a change here)
  */
-void check_compatibility(nb::handle h1, nb::handle h2) {
+void check_compatibility(nb::handle h1, nb::handle h2, const char *name) {
     struct CheckCompatibility : TraversePairCallback {
         void operator()(nb::handle, nb::handle) override { }
     } cc;
-    traverse_pair("drjit.detail.check_compatibility", cc, h1, h2);
+    traverse_pair("drjit.detail.check_compatibility", cc, h1, h2, name);
 }
 
 /**
@@ -314,13 +319,13 @@ void export_misc(nb::module_ &m) {
     nb::module_ detail = nb::module_::import_("drjit.detail");
     detail.def("collect_indices",
                nb::overload_cast<nb::handle>(&collect_indices),
-               doc_collect_indices);
-    detail.def("update_indices", &update_indices, doc_update_indices);
+               doc_detail_collect_indices);
+    detail.def("update_indices", &update_indices, doc_detail_update_indices);
     detail.def("check_compatibility", &check_compatibility,
-               doc_check_compatibility);
-    // detail.def("uncopy", &uncopy, doc_uncopy);
+               doc_detail_check_compatibility);
     m.def("copy", &copy, doc_copy);
-    detail.def("uncopy", &uncopy, doc_uncopy);
+    detail.def("uncopy", &uncopy, doc_detail_uncopy);
+    detail.def("reset", &reset, doc_detail_reset);
     detail.def("llvm_version", []() {
         int major, minor, patch;
         jit_llvm_version(&major, &minor, &patch);

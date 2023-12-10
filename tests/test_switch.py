@@ -89,7 +89,7 @@ def test04_failure_incompatible_dict(t, symbolic):
             ),
             a=t(1, 2, 3, 4)
         )
-    assert "error encountered while processing arguments of type 'dict' and 'dict': dictionaries have incompatible keys (['b'] vs ['a'])" in str(e.value.__cause__)
+    assert "inconsistent dictionary keys for field 'result' (['b'] and ['a'])" in str(e.value)
 
 
 # Let's test a few failures -- dynamic arrays with mismatched sizes
@@ -106,7 +106,7 @@ def test05_failure_incompatible_shape(t, symbolic):
             ),
             a=t(1, 2, 3, 4)
         )
-    assert "incompatible input lengths (3 and 2)" in str(e.value.__cause__)
+    assert "inconsistent sizes for field 'result' (3 and 2)" in str(e.value)
 
     r = dr.switch(
         index=t(0, 0, 1, 1),
@@ -136,7 +136,7 @@ def test06_failure_incompatible_type(t, symbolic):
             ),
             a=t(1, 2, 3, 4)
         )
-    assert "incompatible input types" in str(e.value.__cause__)
+    assert "inconsistent types" in str(e.value)
 
 
 # Let's test a few failures -- raising an exception in a callable
@@ -391,7 +391,7 @@ def test09_complex(t, symbolic):
         dr.enable_grad(a, b)
 
         result = dr.switch(index, c, b=b, a=a)
-        dr.detail.check_compatibility(result, expected)
+        dr.detail.check_compatibility(result, expected, "result")
         assert dr.all(result['rv0'] == expected['rv0'])
         assert dr.all(result['rv1'][0] == expected['rv1'][0])
         assert dr.all(result['rv1'][1] == expected['rv1'][1])
@@ -439,3 +439,11 @@ def test11_no_mutate(t, optimize, symbolic):
     with dr.scoped_set_flag(dr.JitFlag.SymbolicCalls, symbolic):
         with dr.scoped_set_flag(dr.JitFlag.OptimizeCalls, optimize):
             assert dr.all(dr.switch(t(0, 1, 2), targets, t(1, 2, 3)) == [11, 102, 1003])
+
+@pytest.test_arrays('uint32,shape=(*),jit')
+def test12_out_of_bounds(t):
+    targets = [lambda x:x, lambda x: x+1]
+
+    with pytest.warns(RuntimeWarning, match="attempted to invoke callable with index 100, but this value must be smaller than 2"):
+        with dr.scoped_set_flag(dr.JitFlag.Debug, True):
+            dr.eval(dr.switch(t(0, 1, 100), targets, t(1)))

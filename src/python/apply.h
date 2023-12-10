@@ -78,7 +78,7 @@ extern void traverse(const char *op, TraverseCallback &callback,
 
 /// Parallel traversal of two compatible pytrees 'h1' and 'h2'
 extern void traverse_pair(const char *op, TraversePairCallback &callback,
-                          nb::handle h1, nb::handle h2);
+                          nb::handle h1, nb::handle h2, const char *name);
 
 /// Transform an input pytree 'h' into an output pytree, potentially of a different type
 extern nb::object transform(const char *op, TransformCallback &callback, nb::handle h);

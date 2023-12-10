@@ -73,7 +73,7 @@ class SyntaxVisitor(ast.NodeTransformer):
 
             hints["exclude"] = exclude
 
-        valid_keys = ["exclude", "label", "method", "max_iterations"]
+        valid_keys = ["exclude", "label", "mode", "max_iterations"]
         for k in hints.keys():
             if k not in valid_keys:
                 raise RuntimeError(f'drjit.hint(): unsupported keyword argument "{k}".')
@@ -83,88 +83,89 @@ class SyntaxVisitor(ast.NodeTransformer):
         # Keep track of variable reads/writes
         self.par_r.append(self.var_r)
         self.par_w.append(self.var_w)
-        self.var_r = set()
-        self.var_w = set()
+        self.var_r, self.var_w = set(), set()
 
-        # Process the node recursively
-        node = self.generic_visit(node)
-
-        # Extract hints, if available
-        node.test, hints = self.extract_hints(node.test)
-
-        # Collect read/written variables
-        var_r, var_w = self.var_r, self.var_w
+        # Collect variables read/written by parent nodes
         par_r, par_w = set(), set()
         for s in self.par_r:
             par_r |= s
         for s in self.par_w:
             par_w |= s
 
-        # 3. Compute data mapping:
-        # 3a. Don't import globals into state data structure
-        temp = set()
-        for k in var_r:
-            if k not in var_w and k not in par_w:
-                temp.add(k)
-        var_r -= temp
+        # Process the node recursively
+        if isinstance(node, ast.While):
+            node = self.generic_visit(node)
 
-        # 3b. Don't store loop temporaries. We consider temporaries
-        # to be variables that haven't been defined before the loop
-        # (which would be undefined if the condition is False)
-        temp = set()
-        for k in var_w:
-            if k not in par_w:
-                temp.add(k)
-        var_r -= temp
-        var_w -= temp
+            # Set of written variables consists of:
+            # - variables written in the loop, which were also
+            #   written before. Otherwise, they might be undefined.
+            var_w = self.var_w & par_w
+            var_r = self.var_r
+
+        elif isinstance(node, ast.If):
+            # Get information about variable accesses in each branch
+            for n in node.body:
+                self.generic_visit(n)
+            self.var_w, var_w1 = set(), self.var_w
+            for n in node.orelse:
+                self.generic_visit(n)
+            var_w2 = self.var_w
+
+            # Set of written variables consists of:
+            # - variables written on both branches. Their
+            #   earlier status does not matter.
+            # - variables that were written before, and which
+            #   are written on at least one branch
+            var_w = (var_w1 & var_w2) | ((var_w1 | var_w2) & par_w)
+            var_r = self.var_r
+
+            # Now, visit the loop condition and rewrite the node
+            node = self.generic_visit(node)
+        else:
+            raise RuntimeError("rewrite_and_track(): Unsupported node type!")
+
+        # Extract hints, if available
+        node.test, hints = self.extract_hints(node.test)
+
+        # Do not import globals (variables that are only read and never defined)
+        var_r -= var_r - var_w - par_w
 
         # 3c: exclude variables as requested by the user
         if "exclude" in hints:
-            exclude = hints["exclude"]
-            var_r -= set(exclude)
-            var_w -= set(exclude)
+            exclude = set(hints["exclude"])
+            var_r -= exclude
+            var_w -= exclude
 
         self.var_r = var_r | self.par_r.pop()
         self.var_w = var_w | self.par_w.pop()
 
-        state = sorted(var_r | var_w)
+        state_out = sorted(var_r | var_w)
+        state_in  = sorted(var_r | (var_w & par_w))
 
-        method = hints.get("method", None)
-        is_scalar = isinstance(method, ast.Constant) and method.value == "scalar"
+        mode = hints.get("mode", None)
+        is_scalar = isinstance(mode, ast.Constant) and mode.value == "scalar"
 
-        return node, state, hints, is_scalar
+        return node, state_in, state_out, hints, is_scalar
 
     def visit_If(self, node: ast.If):
-        (node, state, hints, is_scalar) = self.rewrite_and_track(node)
+        (node, state_in, state_out, hints, is_scalar) = self.rewrite_and_track(node)
 
         if is_scalar:
             return node
 
         # 1. Names of generated functions
         ifstmt_name = "_if_stmt"
-        cond_name = ifstmt_name + "_cond"
         true_name = ifstmt_name + "_true"
         false_name = ifstmt_name + "_false"
 
         # 2. Generate a function representing the condition
         #    .. which takes all state variables as input
         func_args = ast.arguments(
-            args=[ast.arg(k) for k in state],
+            args=[ast.arg(k) for k in state_in],
             posonlyargs=[],
             kwonlyargs=[],
             defaults=[],
             kw_defaults=[],
-        )
-
-        cond_func = ast.FunctionDef(
-            name=cond_name,
-            args=func_args,
-            body=[ast.Return(value=node.test)],
-            decorator_list=[],
-            lineno=node.lineno,
-            col_offset=node.col_offset,
-            end_lineno=node.end_lineno,
-            end_col_offset=node.end_col_offset,
         )
 
         # 3. Generate a function representing the if/else branches
@@ -176,7 +177,7 @@ class SyntaxVisitor(ast.NodeTransformer):
                 *node.body,
                 ast.Return(
                     value=ast.Tuple(
-                        elts=[ast.Name(id=k, ctx=load) for k in state], ctx=load
+                        elts=[ast.Name(id=k, ctx=load) for k in state_out], ctx=load
                     )
                 ),
             ],
@@ -194,7 +195,7 @@ class SyntaxVisitor(ast.NodeTransformer):
                 *node.orelse,
                 ast.Return(
                     value=ast.Tuple(
-                        elts=[ast.Name(id=k, ctx=load) for k in state], ctx=load
+                        elts=[ast.Name(id=k, ctx=load) for k in state_out], ctx=load
                     )
                 ),
             ],
@@ -215,9 +216,9 @@ class SyntaxVisitor(ast.NodeTransformer):
         # 8. Call drjit.if_stmt()
         call_kwargs = [
             ast.keyword(
-                arg="state_labels",
+                arg="rv_labels",
                 value=ast.Tuple(
-                    elts=[ast.Constant(k) for k in state],
+                    elts=[ast.Constant(k) for k in state_out],
                     ctx=load,
                 ),
             ),
@@ -231,15 +232,15 @@ class SyntaxVisitor(ast.NodeTransformer):
         if_expr = ast.Assign(
             targets=[
                 ast.Tuple(
-                    elts=[ast.Name(id=k, ctx=store) for k in state],
+                    elts=[ast.Name(id=k, ctx=store) for k in state_out],
                     ctx=store,
                 )
             ],
             value=ast.Call(
                 func=ast.Name(id=ifstmt_name, ctx=load),
                 args=[
-                    ast.Tuple(elts=[ast.Name(id=k, ctx=load) for k in state], ctx=load),
-                    ast.Name(id=cond_name, ctx=load),
+                    ast.Tuple(elts=[ast.Name(id=k, ctx=load) for k in state_in], ctx=load),
+                    node.test,
                     ast.Name(id=true_name, ctx=load),
                     ast.Name(id=false_name, ctx=load),
                 ],
@@ -265,7 +266,6 @@ class SyntaxVisitor(ast.NodeTransformer):
         # 10. Delete local variables created while processing the loop
         cleanup_targets = [
             ast.Name(id=ifstmt_name, ctx=delete),
-            ast.Name(id=cond_name, ctx=delete),
             ast.Name(id=true_name, ctx=delete),
             ast.Name(id=false_name, ctx=delete),
         ]
@@ -274,7 +274,6 @@ class SyntaxVisitor(ast.NodeTransformer):
 
         return (
             comment_start,
-            cond_func,
             true_fn,
             false_fn,
             comment_mid,
@@ -285,7 +284,7 @@ class SyntaxVisitor(ast.NodeTransformer):
         )
 
     def visit_While(self, node: ast.While):
-        (node, state, hints, is_scalar) = self.rewrite_and_track(node)
+        (node, state, _, hints, is_scalar) = self.rewrite_and_track(node)
         if is_scalar:
             return node
 
@@ -558,7 +557,7 @@ def syntax(f: Callable = None, print_ast: bool = False, print_code: bool = False
                  # handling introduced by @dr.syntax
 
            # Disable the transformation by @dr.syntax to avoid overheads
-           while dr.hint(i < 10, method='scalar'):
+           while dr.hint(i < 10, mode='scalar'):
                i += 1
 
     Complex Python codebases often involve successive application of multiple
@@ -631,7 +630,7 @@ def hint(
     arg: object,
     /,
     *,
-    method: Optional[str] = None,
+    mode: Optional[str] = None,
     max_iterations: Optional[int] = None,
     label: Optional[str] = None,
     exclude: Optional[List[object]] = None,
@@ -645,23 +644,23 @@ def hint(
     influence the transformation performed by the :py:func:`@drjit.syntax
     <drjit.syntax>` decorator. The following kinds of hints are supported:
 
-    1. ``method`` overrides the compilation mode of a ``while``
+    1. ``mode`` overrides the compilation mode of a ``while``
        loop or ``if`` statement. The following choices are available:
 
-       - ``method='scalar'`` disables code transformations, which is permitted
+       - ``mode='scalar'`` disables code transformations, which is permitted
          when the predicate of a loop or ``if`` statement is a scalar Python
          ``bool``.
 
          .. code-block:: python
 
             i: int = 0
-            while dr.hint(i < 10, method='scalar'):
+            while dr.hint(i < 10, mode='scalar'):
                # ...
 
          Routing such code through :py:func:`drjit.while_loop` or
          :py:func:`drjit.if_stmt` still works but may add small overheads,
          which motivates the existence of this flag. Note that this annotation
-         does *not* cause ``method=scalar`` to be passed
+         does *not* cause ``mode=scalar`` to be passed
          :py:func:`drjit.while_loop`, and :py:func:`drjit.if_stmt` (which
          happens to be a valid input of both). Instead, it disables the code
          transformation altogether so that the above example translates into
@@ -673,7 +672,7 @@ def hint(
             while i < 10:
                # ...
 
-       - ``method='evaluated'`` forces execution in *evaluated* mode and causes
+       - ``mode='evaluated'`` forces execution in *evaluated* mode and causes
          the code transformation to forward this argument to the relevant
          :py:func:`drjit.while_loop` or :py:func:`drjit.if_stmt` call.
 
@@ -681,7 +680,7 @@ def hint(
          :py:attr:`drjit.JitFlag.SymbolicLoops`, :py:func:`drjit.if_stmt`, and
          :py:attr:`drjit.JitFlag.SymbolicConditionals` for details.
 
-       - ``method='symbolic'`` forces execution in *symbolic* mode and causes
+       - ``mode='symbolic'`` forces execution in *symbolic* mode and causes
          the code transformation to forward this argument to the relevant
          :py:func:`drjit.while_loop` or :py:func:`drjit.if_stmt` call.
 

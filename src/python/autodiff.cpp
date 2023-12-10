@@ -208,7 +208,7 @@ static void accum_grad(nb::handle target, nb::handle source) {
     if (!o.type().is(tp))
         o = tp(o);
 
-    traverse_pair("drjit.accum_grad", sg, target, o);
+    traverse_pair("drjit.accum_grad", sg, target, o, "target");
 }
 
 static nb::object replace_grad(nb::handle h0, nb::handle h1) {

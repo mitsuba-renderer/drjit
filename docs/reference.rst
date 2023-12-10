@@ -437,59 +437,24 @@ Just-in-time compilation
       Dr.Jit provides two main ways of compiling function calls targeting
       *instance arrays*.
 
-      1. **Symbolic mode** (the default): Dr.Jit captures callables by invoking them
-         with *symbolic* (abstract) arguments. By doing so, it can capture a
-         transcript of each callable and then turn it into a function in the
-         generated kernel. Symbolic mode preserves the control flow structure of the
+      1. **Symbolic mode** (the default): Dr.Jit invokes each callable with
+         *symbolic* (abstract) arguments. It does this to capture a transcript
+         of the computation that it can turn into a function in the generated
+         kernel. Symbolic mode preserves the control flow structure of the
          original program by replicating it within Dr.Jit's intermediate
          representation.
-
-         The main advantage of recorded mode is:
-
-         * It is very efficient in terms of device memory storage and bandwidth, since
-           function call arguments and return values can be exchanged through fast
-           CPU/GPU registers.
-
-         Its main downsides are:
-
-         * Symbolic arrays cannot be evaluated. Any attempt to reveal their contents
-           (e.g., via the built-in Python ``print()``) is doomed to fail since there
-           is simply nothing there (yet).
-
-           One small exception worthy of note is the special symbolic
-           :py:func:`drjit.print()` operation, which is able to print symbolic arrays
-           in a delayed fashion. However, all other types of operations that require
-           variable evaluation will raise an exception.
-
-           This limitation may be inconvenient especially when debugging code, in
-           which case evaluated mode is preferable.
-
-         * Thread divergence: neighboring SIMD lanes may target different callables,
-           which can have a negative impact on efficiency.
-
-         * A kernel with many callables can become quite large and costly to compile.
 
       2. **Evaluated mode**: Dr.Jit evaluates all inputs and groups them by instance
          ID. Following this, it launches a a kernel *per instance* to process the
          rearranged inputs and assemble the function return value.
 
-         The main advantages of evaluated mode are:
+      A separate section about :ref:`symbolic and evaluated modes <sym-eval>`
+      discusses these two options in detail.
 
-         * *It is easier to debug*: evaluating and processing intermediate results
-           (e.g. via Python's ``print`` statement or more advanced plotting tools)
-           is legal.  You may also use a debugger to step through the program.
+      Besides calls to instance arrays, this flag also controls the behavior of
+      the functions :py:func:`drjit.switch` and :py:func:`drjit.dispatch`.
 
-         * Kernels are smaller and avoid thread divergence, since Dr.Jit reorders
-           computation by callable.
-
-         Its main downsides is:
-
-         * Each callable essentially turns its own kernel that reads its input and
-           writes outputs via device memory. The required memory bandwidth and
-           storage often make evaluated mode impractical.
-
-      Note that the behavior of the functions :py:func:`drjit.switch` and
-      :py:func:`drjit.dispatch` is also controlled by this flag.
+      Symbolic calls are *enabled* by default.
 
    .. autoattribute:: OptimizeCalls
       :annotation:
@@ -511,10 +476,10 @@ Just-in-time compilation
         computation graph in all instances, it is removed from the function
         call interface and moved to the caller.
 
-      The flag is *enabled* by default. Note that it is only effective in
-      combination with  :py:attr:`SymbolicCalls`. The behavior of the functions
-      :py:func:`drjit.switch` and :py:func:`drjit.dispatch` is also controlled
-      by this flag.
+      The flag is *enabled* by default. Note that it is only meaningful in
+      combination with :py:attr:`SymbolicCalls`. Besides calls to instance
+      arrays, this flag also controls the behavior of the functions
+      :py:func:`drjit.switch` and :py:func:`drjit.dispatch`.
 
    .. autoattribute:: MergeFunctions
       :annotation:
@@ -539,10 +504,10 @@ Just-in-time compilation
       generation. Besides generating shorter programs, this also helps to
       reduce thread divergence.
 
-      This flag is enabled by default. Note that it is only effective in
-      combination with  :py:attr:`SymbolicCalls`. The behavior of the functions
-      :py:func:`drjit.switch` and :py:func:`drjit.dispatch` is also controlled
-      by this flag.
+      This flag is *enabled* by default. Note that it is only meaningful in
+      combination with :py:attr:`SymbolicCalls`. Besides calls to instance
+      arrays, this flag also controls the behavior of the functions
+      :py:func:`drjit.switch` and :py:func:`drjit.dispatch`.
 
    .. autoattribute:: SymbolicLoops
       :annotation:
@@ -560,44 +525,15 @@ Just-in-time compilation
          of the original program by replicating it within Dr.Jit's intermediate
          representation.
 
-         The main advantage of recorded mode is:
-
-         * It is very efficient in terms of device memory storage and
-           bandwidth, since loop state variables can be exchanged through fast
-           CPU/GPU registers.
-
-         Its main downside is:
-
-         * Symbolic arrays cannot be evaluated. Any attempt to reveal their contents
-           (e.g., via the built-in Python ``print()``) is doomed to fail since there
-           is simply nothing there (yet).
-
-           One small exception worthy of note is the special symbolic
-           :py:func:`drjit.print()` operation, which is able to print symbolic arrays
-           in a delayed fashion. However, all other types of operations that require
-           variable evaluation will raise an exception.
-
-           This limitation may be inconvenient especially when debugging code,
-           in which case evaluated mode is preferable.
-
       2. **Evaluated mode**: Dr.Jit evaluates the loop's state variables and
          reduces the loop condition to a single element (``bool``) that
          expresses whether any elements are still alive. If so, it runs the
-         loop body and the process repeats. The main advantages of evaluated
-         mode is:
+         loop body and the process repeats.
 
-         * *It is easier to debug*: evaluating and processing intermediate results
-           (e.g. via Python's ``print`` statement or more advanced plotting
-           tools) is legal.  You may also use a debugger to step through the
-           program.
+      A separate section about :ref:`symbolic and evaluated modes <sym-eval>`
+      discusses these two options in detail.
 
-         Its main downsides is:
-
-         * Each iteration generates at least one kernel that reads its input and
-           writes outputs via device memory. The required memory bandwidth and
-           storage often make evaluated mode impractical.
-
-      Symbolic mode is the default.
+      Symbolic loops are *enabled* by default.
 
    .. autoattribute:: OptimizeLoops
       :annotation:
@@ -627,8 +563,30 @@ Just-in-time compilation
       :py:func:`drjit.while_loop` to run the loop body twice instead of just
       once.
 
-      This flag is enabled by default. Note that it is only effective in
+      This flag is enabled by default. Note that it is only meaningful in
       combination with  :py:attr:`SymbolicLoops`.
+
+   .. autoattribute:: SymbolicConditionals
+      :annotation:
+
+      .. For Sphinx-related technical reasons, the below comment is replicated
+         in docstr.h. Please keep the two in sync when making changes.
+
+      Dr.Jit provides two main ways of compiling conditionals involving Dr.Jit arrays.
+
+      1. **Symbolic mode** (the default): Dr.Jit captures the computation
+         performed by the ``True`` and ``False`` branches and generates an
+         equivalent branch in the generated kernel. Symbolic mode preserves the
+         control flow structure of the original program by replicating it
+         within Dr.Jit's intermediate representation.
+
+      2. **Evaluated mode**: Dr.Jit always executes both branches and blends
+         their outputs.
+
+      A separate section about :ref:`symbolic and evaluated modes <sym-eval>`
+      discusses these two options in detail.
+
+      Symbolic conditionals are *enabled* by default.
 
    .. autoattribute:: ForceOptiX
       :annotation:
@@ -736,19 +694,37 @@ Just-in-time compilation
 
       This flag is *enabled* by default.
 
-   .. autoattribute:: Symbolic
+   .. autoattribute:: SymbolicScope
       :annotation:
 
       .. For Sphinx-related technical reasons, the below comment is replicated
          in docstr.h. Please keep the two in sync when making changes.
 
-      This flag should not be set in user code. Dr.Jit sets it whenever it is
-      capturing computation symbolically.
+      This flag is set to ``True`` when Dr.Jit is currently capturing symbolic
+      computation. The flag is automatically managed and should not be updated
+      by application code.
+
+      User code may query this flag to check if it is legal to perform certain
+      operations (e.g., evaluating array contents).
+
+      Note that this information can also be queried in a more fine-grained
+      manner (per variable) using the :py:attr:`drjit.ArrayBase.state` field.
 
    .. autoattribute:: Default
       :annotation:
 
-      The default set of flags.
+      The default set of optimization flags consisting of
+
+      - :py:attr:`drjit.JitFlag.ConstantPropagation`,
+      - :py:attr:`drjit.JitFlag.ValueNumbering`,
+      - :py:attr:`drjit.JitFlag.SymbolicLoops`,
+      - :py:attr:`drjit.JitFlag.OptimizeLoops`,
+      - :py:attr:`drjit.JitFlag.SymbolicCalls`,
+      - :py:attr:`drjit.JitFlag.MergeFunctions`,
+      - :py:attr:`drjit.JitFlag.OptimizeCalls`,
+      - :py:attr:`drjit.JitFlag.SymbolicConditionals`,
+      - :py:attr:`drjit.JitFlag.ReuseIndices`, and
+      - :py:attr:`drjit.JitFlag.AtomicReduceLocal`.
 
 .. autofunction:: set_flag
 .. autofunction:: flag
