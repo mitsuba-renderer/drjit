@@ -31,23 +31,32 @@ struct IfState {
 static void if_stmt_body_cb(void *p, bool value) {
     nb::gil_scoped_acquire guard;
     IfState *is = (IfState *) p;
+
     nb::object rv =
         tuple_call(value ? is->true_fn : is->false_fn, copy(is->args));
+
     if (is->rv.is_valid()) {
         size_t l1 = is->rv_labels.size(),
                l2 = nb::len(is->rv),
                l3 = nb::len(rv);
 
-        if (l1 == l2 && l2 == l3 && l3 > 0) {
-            for (size_t i = 0; i < l1; ++i)
-                check_compatibility(is->rv[i], rv[i], is->rv_labels[i].c_str());
-        } else {
-            check_compatibility(is->rv, rv, "result");
+        try {
+            if (l1 == l2 && l2 == l3 && l3 > 0) {
+                for (size_t i = 0; i < l1; ++i)
+                    check_compatibility(is->rv[i], rv[i], is->rv_labels[i].c_str());
+            } else {
+                check_compatibility(is->rv, rv, "result");
+            }
+        } catch (const std::exception &e) {
+            nb::raise("detected an inconsistency when comparing the return "
+                      "values of 'true_fn' and 'false_fn':\n%s\n\nPlease review "
+                      "the interface and assumptions of dr.if_stmt() as "
+                      "explained in the Dr.Jit documentation.", e.what());
         }
     }
 
     is->rv = std::move(rv);
-};
+}
 
 static void if_stmt_delete_cb(void *p) {
     if (!nb::is_alive())
@@ -58,12 +67,13 @@ static void if_stmt_delete_cb(void *p) {
 
 static void if_stmt_read_cb(void *p, dr::dr_vector<uint64_t> &indices) {
     nb::gil_scoped_acquire guard;
-    collect_indices(((IfState *) p)->rv, indices);
+    collect_indices(((IfState *) p)->rv, indices, true);
 }
 
 static void if_stmt_write_cb(void *p, const dr::dr_vector<uint64_t> &indices) {
+    IfState *is = (IfState *) p;
     nb::gil_scoped_acquire guard;
-    update_indices(((IfState *) p)->rv, indices);
+    is->rv = update_indices(is->rv, indices);
 }
 
 nb::object if_stmt(nb::tuple args, nb::handle cond, nb::callable true_fn,
@@ -93,7 +103,7 @@ nb::object if_stmt(nb::tuple args, nb::handle cond, nb::callable true_fn,
             }
 
             if (!cond_index)
-                nb::raise("'cond' must either be a Jit-compiled 1D boolean "
+                nb::raise("'cond' must either be a Jit-compiled 1D Boolean "
                           "array or a Python 'bool'.");
         }
 
@@ -112,11 +122,11 @@ nb::object if_stmt(nb::tuple args, nb::handle cond, nb::callable true_fn,
             symbolic = -1;
         else if (mode == "symbolic")
             symbolic = 1;
-        else if (mode == "evaluate")
+        else if (mode == "evaluated")
             symbolic = 0;
         else
             nb::raise("invalid 'mode' argument (must equal \"auto\", "
-                      "\"scalar\", \"symbolic\", or \"evaluate\").");
+                      "\"scalar\", \"symbolic\", or \"evaluated\").");
 
         IfState *payload =
             new IfState(std::move(args), std::move(true_fn),

@@ -16,7 +16,8 @@
 extern void export_misc(nb::module_ &);
 
 // See misc.cpp for documentation of these functions
-extern void collect_indices(nb::handle, dr::dr_vector<uint64_t>&);
+extern void collect_indices(nb::handle, dr::dr_vector<uint64_t> &,
+                            bool inc_ref = false);
 extern dr::dr_vector<uint64_t> collect_indices(nb::handle);
 extern nb::object update_indices(nb::handle, const dr::dr_vector<uint64_t> &);
 extern void check_compatibility(nb::handle, nb::handle, const char *name);

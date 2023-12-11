@@ -18,39 +18,46 @@ All control flow operations support compilation in either *symbolic* or
 Symbolic mode
 _____________
 
-*Symbolic mode* captures the structure of the *entire* user program and turns
-it into a single large kernel that eventually runs on the target device.
-Intermediate evaluation is *unwanted* in this mode, as it would split the
-kernel into multiple parts, which potentially carries a large cost in terms of
-memory storage and bandwidth.
+*Symbolic mode* captures the complete structure of a program and turns it into
+a single large kernel that eventually runs on the target device.
 
-Control flow constructs such as loops present a difficulty during the tracing
-process that Dr.Jit uses to capture computation. Consider the following
-snippet: knowing when to stop this loop requires analyzing the contents of
-``x``.
+Symbolic mode exists to avoid unwanted intermediate evaluation of variables,
+which would split the large kernel into multiple smaller ones. The resulting
+inter-kernel communication via device memory tends to have a *significant cost*
+in terms of both storage requirements and memory bandwidth.
+
+This is no big surprise: Dr.Jit already traces computation to generate fused
+kernels that specifically avoid these communication overheads. However, control
+flow constructs (loops, conditionals, dynamic dispatch) present a difficulty
+during this tracing process. Consider the following example:
 
 .. code-block:: python
 
    while x > 0:
        x = f(x)
 
-To keep the computation of ``f(x)`` on the target device (e.g. the GPU) and
-avoid intermediate evaluation, Dr.Jit must capture a loop that runs for an
-*unknown* number of iterations. This preserves the control flow structure of
-the original program by replicating it within Dr.Jit's intermediate
-representation.
+Knowing when to stop this loop requires access to the contents of ``x``. To
+keep evaluation of ``f(x)`` on the target device (e.g. the GPU) while at the
+same time avoiding intermediate evaluation, Dr.Jit must capture a loop that
+runs for an *unknown* number of iterations. Doing so preserves the control flow
+structure of the original program, by effectively replicating it within
+Dr.Jit's intermediate representation.
 
-To do so, Dr.Jit invokes the loop body with *symbolic* variables to capture the
-change from one iteration to the next. Symbolic variables represent unknown
-information that will only become available later when the generated code runs
-on the device.
+To accomplish these goals, Dr.Jit invokes the loop body with *symbolic*
+variables to capture the change from one iteration to the next. Symbolic
+variables represent unknown information that will only become available later
+when the generated code runs on the device.
 
 Advantages
 ~~~~~~~~~~
 
-Symbolic mode is highly efficient in terms of device memory storage and
-bandwidth. Function call arguments, return values, loop state variables, etc.,
-can all be exchanged via fast CPU/GPU registers.
+Symbolic mode is highly efficient with regards to of device storage
+requirements and memory bandwidth. This is because function call arguments,
+return values, loop state variables, etc., can all be exchanged via fast
+CPU/GPU registers.
+
+The difference is particularly pronounced when compiling code for the CPU,
+where memory bandwidth can quickly become a bottleneck.
 
 Disadvantages
 ~~~~~~~~~~~~~
@@ -110,7 +117,7 @@ evaluation (:py:func:`drjit.eval`) are likewise not permitted:
    evaluation modes:
    https://nanobind.readthedocs.io/cflow.html#symbolic-versus-evaluated-modes
 
-It's perfectly valid to index into nested Dr.Jit arrays like
+It is perfectly valid to index into nested Dr.Jit arrays like
 :py:class:`drjit.cuda.Array2f`, but the end result should *not* be a Python
 ``int`` or ``float`` since that would require knowing the actual array
 contents.
@@ -125,13 +132,13 @@ inputs---this means that you cannot, e.g., use PyTorch or Tensorflow to
 evaluate a neural network within a Dr.Jit loop or indirect function call.
 
 Loops (:py:func:`drjit.while_loop`), conditionals (:py:func:`drjit.if_stmt`),
-and dynamic dispatch (:py:func:`drjit.switch`, :py:func:`drjit.dispatch`)
-may be arbitrarily nested. However, it is not legal to nest *evaluated*
-operations within *symbolic* operation, as this would require the evaluation
-of symbolic variables.
+and dynamic dispatch (:py:func:`drjit.switch`, :py:func:`drjit.dispatch`) may
+be arbitrarily nested. However, it is not legal to nest *evaluated* operations
+within *symbolic* ones, as this would require the evaluation of symbolic
+variables.
 
 Some of the above limitations may be inconvenient especially when debugging
-code, in which case you may prefer to temporarily use evaluated mode.
+code, in which case you may prefer to temporarily switch to evaluated mode.
 
 Besides these points, symbolic mode has several additional disadvantages that
 we mention for completeness:
@@ -161,7 +168,7 @@ Advantages
 
 Programs that use evaluated mode are easier to debug. It is possible to
 single-step through programs and examine the contents of temporary variables.
-You may use Python's built-in ``print`` statement or use more advanced
+You may use Python's built-in ``print`` statement or more advanced
 graphical plotting tools to construct visualizations from within loops and
 dynamically called functions. The program may freely mix Dr.Jit computation
 with other array programming frameworks like PyTorch, Tensorflow, JAX, etc.

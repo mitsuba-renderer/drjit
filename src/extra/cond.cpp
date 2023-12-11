@@ -16,6 +16,7 @@
 #include <drjit/custom.h>
 #include <string>
 
+namespace dr = drjit;
 using JitVar = GenericArray<void>;
 
 static void ad_cond_evaluated(JitBackend backend, const char *name,
@@ -54,13 +55,49 @@ static void ad_cond_evaluated(JitBackend backend, const char *name,
     for (size_t i = 0; i < true_idx.size(); ++i) {
         uint64_t i1 = true_idx[i], i2 = false_idx[i];
 
-        if (i1 == i2)
-            combined_idx.push_back_borrow(i1);
-        else
-            combined_idx.push_back_steal(ad_var_select(cond, i1, i2));
+        combined_idx.push_back_steal(i1 == i2 ? ad_var_inc_ref(i1)
+                                              : ad_var_select(cond, i1, i2));
     }
 
     write_cb(payload, combined_idx);
+}
+
+static void ad_cond_symbolic(JitBackend backend, const char *name,
+                             void *payload, uint32_t cond,
+                             ad_cond_read read_cb, ad_cond_write write_cb,
+                             ad_cond_body body_cb) {
+    bool symbolic = jit_flag(JitFlag::SymbolicScope);
+    scoped_record record_guard(backend);
+
+    JitVar start = JitVar::steal(jit_var_cond_start(name, symbolic, cond));
+    dr_index64_vector indices;
+    dr::dr_vector<uint32_t> indices32;
+
+    body_cb(payload, true);
+    read_cb(payload, indices);
+
+    indices32.reserve(indices.size());
+    for (uint64_t index : indices)
+        indices32.push_back((uint32_t) index);
+
+    jit_var_cond_append(start.index(), indices32.data(), indices32.size());
+    indices.release();
+    indices32.clear();
+
+    body_cb(payload, false);
+    read_cb(payload, indices);
+
+    for (uint64_t index : indices)
+        indices32.push_back((uint32_t) index);
+
+    jit_var_cond_append(start.index(), indices32.data(), indices32.size());
+    indices.release();
+
+    jit_var_cond_end(start.index(), indices32.data());
+
+    for (uint32_t index : indices32)
+        indices.push_back_steal(index);
+    write_cb(payload, indices);
 }
 
 bool ad_cond(JitBackend backend, int symbolic, const char *name, void *payload,
@@ -87,9 +124,13 @@ bool ad_cond(JitBackend backend, int symbolic, const char *name, void *payload,
             return true;
         }
 
-        ad_cond_evaluated(backend, name, payload, cond, read_cb, write_cb,
-                          body_cb);
         (void) ad;
+        if (symbolic)
+            ad_cond_symbolic(backend, name, payload, cond, read_cb, write_cb,
+                             body_cb);
+        else
+            ad_cond_evaluated(backend, name, payload, cond, read_cb, write_cb,
+                              body_cb);
 
         return true; // Caller should directly call delete()
     } catch (...) {

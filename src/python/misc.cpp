@@ -28,22 +28,28 @@
  * (Note: this explanation is also part of src/python/docstr.h -- please keep
  * them in sync in case you make a change here)
 */
-void collect_indices(nb::handle h, dr::dr_vector<uint64_t> &indices) {
+void collect_indices(nb::handle h, dr::dr_vector<uint64_t> &indices, bool inc_ref) {
     struct CollectIndices : TraverseCallback {
         dr::dr_vector<uint64_t> &result;
-        CollectIndices(dr::dr_vector<uint64_t> &result) : result(result) { }
+        bool inc_ref;
+        CollectIndices(dr::dr_vector<uint64_t> &result, bool inc_ref)
+            : result(result), inc_ref(inc_ref) { }
 
         void operator()(nb::handle h) override {
-            auto index = supp(h.type()).index;
-            if (index)
-                result.push_back(index(inst_ptr(h)));
+            auto index_fn = supp(h.type()).index;
+            if (index_fn) {
+                uint64_t index = index_fn(inst_ptr(h));
+                if (inc_ref)
+                    ad_var_inc_ref(index);
+                result.push_back(index);
+            }
         }
     };
 
     if (!h.is_valid())
         return;
 
-    CollectIndices ci { indices };
+    CollectIndices ci { indices, inc_ref };
     traverse("drjit.detail.collect_indices", ci, h);
 }
 

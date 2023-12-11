@@ -620,7 +620,7 @@ void traverse_pair_impl(const char *op, TraversePairCallback &tc, nb::handle h1,
     stack.push_back(h1.ptr());
 
     if (!tp1.is(tp2))
-        nb::raise_type_error(
+        nb::raise(
             "inconsistent types ('%s' and '%s') for field '%s'.",
             nb::type_name(tp1).c_str(), nb::type_name(tp2).c_str(),
             name.c_str());
@@ -713,12 +713,7 @@ void traverse_pair(const char *op, TraversePairCallback &tc, nb::handle h1,
                        "of type '%U' and '%U' (see above).",
                        op, nb::inst_name(h1).ptr(), nb::inst_name(h2).ptr());
     } catch (const std::exception &e) {
-        nb::chain_error(PyExc_RuntimeError,
-                        "%s(): error encountered while processing arguments "
-                        "of type '%U' and '%U': %s",
-                        op, nb::inst_name(h1).ptr(), nb::inst_name(h2).ptr(),
-                        e.what());
-        nb::raise_python_error();
+        throw std::runtime_error(std::string(op) + "(): " + e.what());
     }
 }
 

@@ -255,9 +255,9 @@ static const ArraySupplement &check_cond(nb::handle h) {
             return s;
     }
 
-    nb::raise("the type of the loop condition ('%s') is not supported. "
-              "You must either provide a 1D Dr.Jit boolean array or a "
-              "Python 'bool' value.", nb::type_name(tp).c_str());
+    nb::raise("the type of the loop condition ('%s') is not supported. The "
+              "'cond' function must either return a Jit-compiled 1D Boolean "
+              "array or a Python 'bool'.", nb::type_name(tp).c_str());
 }
 
 /// Callback functions that will be invoked by ad_loop()
@@ -331,11 +331,11 @@ nb::tuple while_loop(nb::tuple state, nb::callable cond, nb::callable body,
             symbolic = -1;
         else if (mode == "symbolic")
             symbolic = 1;
-        else if (mode == "evaluate")
+        else if (mode == "evaluated")
             symbolic = 0;
         else
             nb::raise("invalid 'mode' argument (must equal \"auto\", "
-                      "\"scalar\", \"symbolic\", or \"evaluate\").");
+                      "\"scalar\", \"symbolic\", or \"evaluated\").");
 
         LoopState *payload =
             new LoopState(std::move(state), std::move(cond), std::move(body),

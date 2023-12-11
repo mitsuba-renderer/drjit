@@ -3861,7 +3861,7 @@ The :py:func:`drjit.while_loop()` function chooses the evaluation mode as follow
       with dr.scoped_set_flag(dr.JitFlag.SymbolicLoops, False):
           # .. nested code will use evaluated loops ..
 
-2. When ``mode`` is set to ``"scalar"`` ``"symbolic"``, or ``"evaluate"``,
+2. When ``mode`` is set to ``"scalar"`` ``"symbolic"``, or ``"evaluated"``,
    it directly uses that method without inspecting the compilation flags or
    loop condition type.
 
@@ -4005,7 +4005,7 @@ Args:
       state (see the earlier description regarding what such compatibility entails).
 
     mode (str): Specify this parameter to override the evaluation mode.
-      Possible values are: ``"scalar"``, ``"symbolic"``, ``"evaluate"``, or
+      Possible values are: ``"scalar"``, ``"symbolic"``, ``"evaluated"``, or
       ``"auto"``. The default value of ``"auto"`` causes the function to
       first check if the loop is potentially scalar, in which case it uses a
       trivial fallback implementation. Otherwise, it queries the state of the
@@ -5405,7 +5405,7 @@ Args:
       stream ``sys.stdout``.
 
     mode (str): Specify this parameter to override the evaluation mode.
-      Possible values are: ``"symbolic"``, ``"evaluate"``, or ``"auto"``. The
+      Possible values are: ``"symbolic"``, ``"evaluated"``, or ``"auto"``. The
       default value of ``"auto"`` causes the function to use evaluated mode
       (which prints immediately) unless a symbolic input is detected, in which
       case printing takes place symbolically (i.e., in a delayed fashion).

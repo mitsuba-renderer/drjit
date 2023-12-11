@@ -2,7 +2,7 @@ import drjit as dr
 import pytest
 
 
-@pytest.mark.parametrize('mode', ['evaluate', 'symbolic'])
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
 @pytest.mark.parametrize("optimize", [True, False])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
@@ -36,7 +36,7 @@ def test02_nested_loop_disallowed_config(t):
     assert err_msg in str(e.value.__cause__)
 
 
-@pytest.mark.parametrize('mode', ['evaluate', 'symbolic'])
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
 @pytest.mark.parametrize("version", [0, 1])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
@@ -54,7 +54,7 @@ def test03_change_type(t, mode, version):
     assert err_msg in str(e.value)
 
 
-@pytest.mark.parametrize('mode', ['evaluate', 'symbolic'])
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
 def test04_change_size(t, mode):
@@ -68,7 +68,7 @@ def test04_change_size(t, mode):
     assert err_msg in str(e.value)
 
 
-@pytest.mark.parametrize('mode', ['evaluate', 'symbolic'])
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
 def test05_incompatible_size(t, mode):
@@ -84,7 +84,7 @@ def test05_incompatible_size(t, mode):
     assert err_msg in str(e.value)
 
 
-@pytest.mark.parametrize('mode', ['evaluate', 'symbolic'])
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
 def test06_cond_err(t, mode):
@@ -98,7 +98,7 @@ def test06_cond_err(t, mode):
     assert "oh no" in str(e.value.__cause__)
 
 
-@pytest.mark.parametrize('mode', ['evaluate', 'symbolic'])
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
 def test07_body_err(t, mode):
@@ -174,7 +174,7 @@ def test09_loop_optimizations(t, optimize):
             assert b.state == dr.VarState.Literal
 
 
-@pytest.mark.parametrize('mode', ['evaluate', 'symbolic'])
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
 @pytest.mark.parametrize('optimize', [True, False])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
@@ -193,7 +193,7 @@ def test10_scatter_v1(t, mode, optimize):
         assert v[0] == 19
 
 
-@pytest.mark.parametrize('mode', ['evaluate', 'symbolic'])
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
 @pytest.mark.parametrize('optimize', [True, False])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
@@ -211,8 +211,8 @@ def test10_scatter_v2(t, mode, optimize):
         assert dr.all(i == 10)
         assert v[0] == 19
 
-@pytest.mark.parametrize('mode1', ['evaluate', 'symbolic'])
-@pytest.mark.parametrize('mode2', ['evaluate', 'symbolic'])
+@pytest.mark.parametrize('mode1', ['evaluated', 'symbolic'])
+@pytest.mark.parametrize('mode2', ['evaluated', 'symbolic'])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
 def test11_nested_loop(mode1, mode2, t):
@@ -230,7 +230,7 @@ def test11_nested_loop(mode1, mode2, t):
     except Exception as e:
         err = e
 
-    if dr.hint(mode1 == 'symbolic' and mode2 == 'evaluate', mode='scalar'):
+    if dr.hint(mode1 == 'symbolic' and mode2 == 'evaluated', mode='scalar'):
         # That combination is not allowed
         assert 'cannot execute a loop in *evaluated mode*' in str(err.__cause__)
     else:
@@ -238,8 +238,8 @@ def test11_nested_loop(mode1, mode2, t):
         assert dr.all(accum == (n*(n-1)) // 2)
 
 
-@pytest.mark.parametrize('mode1', ['evaluate', 'symbolic'])
-@pytest.mark.parametrize('mode2', ['evaluate', 'symbolic'])
+@pytest.mark.parametrize('mode1', ['evaluated', 'symbolic'])
+@pytest.mark.parametrize('mode2', ['evaluated', 'symbolic'])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
 def test11_nested_loop_with_side_effect(mode1, mode2, t):
@@ -257,7 +257,7 @@ def test11_nested_loop_with_side_effect(mode1, mode2, t):
     except Exception as e:
         err = e
 
-    if dr.hint(mode1 == 'symbolic' and mode2 == 'evaluate', mode='scalar'):
+    if dr.hint(mode1 == 'symbolic' and mode2 == 'evaluated', mode='scalar'):
         # That combination is not allowed
         assert 'cannot execute a loop in *evaluated mode*' in str(err.__cause__)
     else:
@@ -280,7 +280,7 @@ def test12_optimize_away(t, optimize):
 
         assert (a.index == ai) == optimize
 
-@pytest.mark.parametrize('mode', ['evaluate', 'symbolic'])
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
 @pytest.mark.parametrize("optimize", [True, False])
 @pytest.test_arrays('float,is_diff,shape=(*)')
 @dr.syntax
@@ -313,7 +313,7 @@ def test13_complex_diff_loop(t, optimize, mode):
     assert lvars == [ 0, 0, 0, 0, 0, 1, 3, 3, 1, 0 ]
 
 
-@pytest.mark.parametrize('mode', ['evaluate', 'symbolic'])
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
 @pytest.mark.parametrize("optimize", [True, False])
 @pytest.test_arrays('float,is_diff,shape=(*)')
 @dr.syntax

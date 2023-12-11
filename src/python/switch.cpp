@@ -95,8 +95,8 @@ nb::object switch_impl(nb::handle index_, nb::sequence targets,
                  "unsigned integer array");
 
         ad_call_func func = [](void *ptr, void *self,
-                                   const dr::dr_vector<uint64_t> &args_i,
-                                   dr::dr_vector<uint64_t> &rv_i) {
+                               const dr::dr_vector<uint64_t> &args_i,
+                               dr::dr_vector<uint64_t> &rv_i) {
             nb::gil_scoped_acquire guard;
             State &state = *(State *) ptr;
             state.args_o =
