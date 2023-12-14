@@ -36,7 +36,7 @@ nb::dlpack::dtype dlpack_dtype(VarType vt) {
 
 using JitVar = drjit::JitArray<JitBackend::None, void>;
 
-static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu) {
+static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu, nb::handle stream = nb::none()) {
     const ArraySupplement &s = supp(h.type());
     bool is_dynamic = false;
 
@@ -80,6 +80,25 @@ static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu) {
             if (backend == JitBackend::CUDA && !force_cpu) {
                 device_type = nb::device::cuda::value;
                 device_id = jit_var_device(index);
+
+                // https://data-apis.org/array-api/latest/API_specification/generated/array_api.array.__dlpack__.html
+                /*
+                    stream = -1 request producer to perform no synchronization
+                    stream = 0 is ambiguous
+                    stream = 1 or None is the legacy default stream
+                    stream = 2 is the per-thread default stream
+                    stream > 2 is a CUDA handle to the consumer's stream
+                */
+                if (!stream.is_none() && !stream.equal(nb::int_(-1)) && !stream.equal(nb::int_(1))) {
+                    if (stream.equal(nb::int_(0)))
+                        jit_sync_thread();
+                    else {
+                        uintptr_t stream_handle;
+                        if (!nb::try_cast(stream, stream_handle))
+                            nb::raise_type_error("__dlpack__(): 'stream' argument must be 'None' or of type 'int'.");
+                        jit_cuda_sync_stream(stream_handle);
+                    }
+                }
             } else {
                 jit_sync_thread();
             }
@@ -133,15 +152,49 @@ static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu) {
     };
 }
 
+static nb::tuple dlpack_device(nb::handle_t<ArrayBase> h) {
+    const ArraySupplement &s = supp(h.type());
+    int32_t device_id, device_type;
+
+    if ((JitBackend) s.backend == JitBackend::CUDA) {
+        device_type = nb::device::cuda::value;
+        device_id = jit_cuda_device_raw();
+    } else {
+        device_type = nb::device::cpu::value;
+        device_id = 0;
+    }
+
+    return nb::make_tuple(device_type, device_id);
+}
+
 void export_dlpack(nb::module_ &) {
     nb::class_<ArrayBase> ab = nb::borrow<nb::class_<ArrayBase>>(array_base);
 
     ab.def("__dlpack__",
+           [](nb::handle_t<ArrayBase> h, nb::handle stream) {
+               return dlpack(h, false, stream);
+           }, "stream"_a = nb::none(), doc_dlpack)
+      .def("__dlpack_device__",
            [](nb::handle_t<ArrayBase> h) {
-               return dlpack(h, false);
-           }, doc_dlpack)
+               return dlpack_device(h);
+           }, doc_dlpack_device)
       .def("__array__",
            [](nb::handle_t<ArrayBase> h) {
                return nb::ndarray<nb::numpy>(dlpack(h, true).handle());
-           }, doc_array);
+           }, doc_array)
+      .def("torch",
+           [](nb::handle_t<ArrayBase> h) {
+                nb::module_ torch = nb::module_::import_("torch.utils.dlpack");
+                return torch.attr("from_dlpack")(h);
+           }, doc_torch)
+      .def("jax",
+           [](nb::handle_t<ArrayBase> h) {
+                nb::module_ jax = nb::module_::import_("jax.dlpack");
+                return jax.attr("from_dlpack")(h);
+           }, doc_jax)
+      .def("tf",
+           [](nb::handle_t<ArrayBase> h) {
+                nb::module_ tf = nb::module_::import_("tensorflow.experimental.dlpack");
+                return tf.attr("from_dlpack")(h);
+           }, doc_tf);
 }

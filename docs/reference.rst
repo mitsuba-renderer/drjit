@@ -1218,6 +1218,10 @@ Array base class
     .. automethod:: __eq__
     .. automethod:: __dlpack__
     .. automethod:: __array__
+    .. automethod:: torch
+    .. automethod:: jax
+    .. automethod:: tf
+
 
 Computation graph analysis
 --------------------------
