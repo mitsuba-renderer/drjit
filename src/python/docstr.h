@@ -2848,6 +2848,57 @@ In other case, e.g. for :py:class:`drjit.llvm.Float`,
 :py:class:`drjit.scalar.Array3f`, or :py:class:`drjit.scalar.ArrayXf`, the data
 is already contiguous and a zero-copy approach is used instead.)";
 
+static const char *doc_torch = R"(
+Returns a PyTorch tensor representing the data in this array.
+
+For :ref:`flat arrays <flat_arrays>` and :ref:`tensors <tensors>`, Dr.Jit 
+performs a *zero-copy* conversion, which means that the created tensor provides 
+a *view* of the same data that will reflect later modifications to the Dr.Jit 
+array. :ref:`Nested arrays <nested_arrays>` require a temporary copy to rearrange 
+data into a compatible form.
+
+.. warning::
+   This operation converts the numerical representation but does *not* embed the 
+   resulting tensor into the automatic differentiation graph of the other 
+   framework. This means that gradients won't correctly propagate through 
+   programs combining multiple frameworks. Take a look at the function 
+   :py:func:`drjit.wrap_ad` for further information on how to accomplish this.
+)";
+
+static const char *doc_jax = R"(
+Returns a JAX tensor representing the data in this array.
+
+For :ref:`flat arrays <flat_arrays>` and :ref:`tensors <tensors>`, Dr.Jit 
+performs a *zero-copy* conversion, which means that the created tensor provides 
+a *view* of the same data that will reflect later modifications to the Dr.Jit 
+array. :ref:`Nested arrays <nested_arrays>` require a temporary copy to rearrange 
+data into a compatible form.
+
+.. warning::
+   This operation converts the numerical representation but does *not* embed the 
+   resulting tensor into the automatic differentiation graph of the other 
+   framework. This means that gradients won't correctly propagate through 
+   programs combining multiple frameworks. Take a look at the function 
+   :py:func:`drjit.wrap_ad` for further information on how to accomplish this.
+)";
+
+static const char *doc_tf = R"(
+Returns a TensorFlow tensor representing the data in this array.
+
+For :ref:`flat arrays <flat_arrays>` and :ref:`tensors <tensors>`, Dr.Jit 
+performs a *zero-copy* conversion, which means that the created tensor provides 
+a *view* of the same data that will reflect later modifications to the Dr.Jit 
+array. :ref:`Nested arrays <nested_arrays>` require a temporary copy to rearrange 
+data into a compatible form.
+
+.. warning::
+   This operation converts the numerical representation but does *not* embed the 
+   resulting tensor into the automatic differentiation graph of the other 
+   framework. This means that gradients won't correctly propagate through 
+   programs combining multiple frameworks. Take a look at the function 
+   :py:func:`drjit.wrap_ad` for further information on how to accomplish this.
+)";
+
 static const char *doc_detach = R"(
 Transforms the input variable into its non-differentiable version (*detaches* it
 from the AD computational graph).
