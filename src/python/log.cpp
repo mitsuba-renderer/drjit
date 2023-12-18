@@ -51,24 +51,24 @@ static void log_callback(LogLevel level, const char *msg) {
     // Temporarily clear error status flags, if present
     nb::error_scope guard_3;
 
-    if (level == LogLevel::Warn)
-        PyErr_WarnFormat(PyExc_RuntimeWarning, 1, "%s", msg);
-    else
-        nb::print(msg);
+    bool err_out = level == LogLevel::Error || level == LogLevel::Warn;
+    nb::handle file = PySys_GetObject(err_out ? "__stderr__" : "__stdout__");
+    nb::print(msg, nb::handle(), file);
 
     if (level == LogLevel::Error) {
         // If this is a fatal error that will bring down the Python process,
         // then let's ensure that the error message is properly delivered,
         // including potentially to a Jupyter notebook.
-        nb::handle(PySys_GetObject("__stdout__")).attr("flush")();
+        file.attr("flush")();
+
         if (running_in_jupyter_notebook)
-            nb::module_::import_("time").attr("sleep")(.5);
+            nb::module_::import_("time").attr("sleep")(0.5);
     }
 }
 
 void export_log(nb::module_ &m, PyModuleDef &pmd) {
-    running_in_jupyter_notebook =
-        nb::borrow<nb::dict>(PySys_GetObject("modules")).contains("ipykernel");
+    nb::dict modules = nb::borrow<nb::dict>(PySys_GetObject("modules"));
+    running_in_jupyter_notebook = modules.contains("ipykernel");
 
     jit_set_log_level_stderr(LogLevel::Disable);
     jit_set_log_level_callback(LogLevel::Warn, log_callback);
