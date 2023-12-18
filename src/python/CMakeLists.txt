@@ -37,6 +37,7 @@ nanobind_add_module(
   while_loop.h  while_loop.cpp
   if_stmt.h     if_stmt.cpp
   print.h       print.cpp
+  history.h     history.cpp
 
   # Backends
   scalar.h      scalar.cpp

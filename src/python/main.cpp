@@ -33,6 +33,7 @@
 #include "if_stmt.h"
 #include "misc.h"
 #include "print.h"
+#include "history.h"
 
 static void set_flag_py(JitFlag flag, bool value) {
     if (flag == JitFlag::Debug) {
@@ -212,6 +213,7 @@ NB_MODULE(drjit_ext, m_) {
     export_while_loop(m);
     export_if_stmt(m);
     export_print(m);
+    export_history(m);
 
     export_scalar(scalar);
 
