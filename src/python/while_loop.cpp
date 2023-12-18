@@ -1,3 +1,14 @@
+/*
+    while_loop.cpp -- Python implementation of drjit.while_loop() based on the
+    abstract interface ad_loop() provided by the drjit-extra library
+
+    Dr.Jit: A Just-In-Time-Compiler for Differentiable Rendering
+    Copyright 2023, Realistic Graphics Lab, EPFL.
+
+    All rights reserved. Use of this source code is governed by a
+    BSD-style license that can be found in the LICENSE.txt file.
+*/
+
 #include "while_loop.h"
 #include "eval.h"
 #include "base.h"
@@ -319,7 +330,16 @@ nb::tuple while_loop(nb::tuple state, nb::callable cond, nb::callable body,
         }
 
         nb::object state_orig = state;
-        state = nb::borrow<nb::tuple>(copy(state));
+
+        // Temporarily stash the reference counts of inputs. This influences the
+        // behavior of copy-on-write (COW) operations like dr.scatter performed
+        // within the symbolic region
+        std::vector<StashRef> sr;
+        stash_ref(state, sr);
+
+        // Copy the loop inputs so that they cannot be mutated
+        CopyMap copy_map;
+        state = nb::borrow<nb::tuple>(copy(state, &copy_map));
 
         backend = (JitBackend) check_cond(cond_val).backend;
         cond_val.reset();
@@ -346,7 +366,8 @@ nb::tuple while_loop(nb::tuple state, nb::callable cond, nb::callable body,
                           while_loop_cond_cb, while_loop_body_cb,
                           while_loop_delete_cb, true);
 
-        nb::tuple result = nb::borrow<nb::tuple>(uncopy(state_orig, payload->state));
+        // Undo the prior copy operation for unchanged parts of the PyTree
+        nb::tuple result = nb::borrow<nb::tuple>(uncopy(payload->state, copy_map));
 
         if (rv)
             delete payload;

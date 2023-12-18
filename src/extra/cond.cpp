@@ -14,7 +14,6 @@
 
 #include "common.h"
 #include <drjit/custom.h>
-#include <string>
 
 namespace dr = drjit;
 using JitVar = GenericArray<void>;

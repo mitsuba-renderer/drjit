@@ -626,5 +626,18 @@ def isolate_grad(when=True):
 
     return detail.ADContextManager(detail.ADScope.Isolate, [])
 
+
+def copy(arg, /):
+    """
+    Create a deep copy of a PyTree
+
+    This function recursively traverses PyTrees and replaces Dr.Jit arrays with
+    copies created via the ordinary copy constructor. It also rebuilds tuples,
+    lists, dictionaries, and custom data strutures.
+    """
+
+    return detail.copy(arg, None)
+
+
 syntax = ast.syntax
 hint = ast.hint

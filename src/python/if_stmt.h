@@ -1,5 +1,6 @@
 /*
-    if_stmt.h -- implementation of drjit.if_stmt()
+    if_stmt.h -- Python implementation of drjit.if_stmt() based on the
+    abstract interface ad_cond() provided by the drjit-extra library
 
     Dr.Jit: A Just-In-Time-Compiler for Differentiable Rendering
     Copyright 2023, Realistic Graphics Lab, EPFL.

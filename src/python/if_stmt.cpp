@@ -1,5 +1,6 @@
 /*
-    if_stmt.cpp -- implementation of drjit.if_stmt()
+    if_stmt.cpp -- Python implementation of drjit.if_stmt() based on the
+    abstract interface ad_cond() provided by the drjit-extra library
 
     Dr.Jit: A Just-In-Time-Compiler for Differentiable Rendering
     Copyright 2023, Realistic Graphics Lab, EPFL.
@@ -11,29 +12,70 @@
 #include "if_stmt.h"
 #include "pystate.h"
 #include "misc.h"
+#include "apply.h"
 #include "base.h"
+#include "shape.h"
 #include <nanobind/stl/vector.h>
 #include <nanobind/stl/string.h>
 
+/// State object passed to callbacks that implement the Python interface around ad_cond().
 struct IfState {
     nb::tuple args;
-    nb::object rv;
     nb::callable true_fn, false_fn;
+    nb::object rv;
     std::vector<std::string> rv_labels;
+    CopyMap copy_map;
+    std::vector<StashRef> sr;
 
     IfState(nb::tuple &&args, nb::callable &&true_fn, nb::callable &&false_fn,
             std::vector<std::string> &&rv_labels)
         : args(std::move(args)), true_fn(std::move(true_fn)),
           false_fn(std::move(false_fn)), rv_labels(std::move(rv_labels)) { }
+
+    void cleanup() {
+        copy_map.clear();
+        sr.clear();
+    }
 };
+
 
 static void if_stmt_body_cb(void *p, bool value) {
     nb::gil_scoped_acquire guard;
     IfState *is = (IfState *) p;
+    nb::callable &fn = value ? is->true_fn : is->false_fn;
 
-    nb::object rv =
-        tuple_call(value ? is->true_fn : is->false_fn, copy(is->args));
+    // Temporarily stash the reference counts of inputs. This influences the
+    // behavior of copy-on-write (COW) operations like dr.scatter performed
+    // within the symbolic region
+    stash_ref(is->args, is->sr);
 
+    // Copy the input arguments to prevent 'true_fn' from mutating values that
+    // are subsequently accessed by 'false_fn'.
+    nb::tuple args = nb::borrow<nb::tuple>(copy(is->args, &is->copy_map));
+
+    // Run the operation
+    nb::object rv = tuple_call(fn, args);
+
+    // Propagate side effects back to 'args'
+    for (auto [h1, h2] : is->copy_map.map) {
+        nb::handle tp = h1.type();
+        if (!is_drjit_type(tp))
+            continue;
+
+        const ArraySupplement &s = supp(tp);
+        if (!s.index)
+            continue;
+
+        uint64_t i1 = s.index(inst_ptr(h1)),
+                 i2 = s.index(inst_ptr(h2));
+
+        if (i1 != i2 && jit_var_state((uint32_t) i1) == VarState::Dirty) {
+            stash_ref(h1, is->sr);
+            nb::inst_replace_copy(h2, h1);
+        }
+    }
+
+    // Ensure that the output of 'true_fn' and 'false_fn' is consistent
     if (is->rv.is_valid()) {
         size_t l1 = is->rv_labels.size(), l2 = (size_t) -1, l3 = (size_t) -1;
 
@@ -45,7 +87,8 @@ static void if_stmt_body_cb(void *p, bool value) {
         try {
             if (l1 == l2 && l2 == l3 && l3 > 0) {
                 for (size_t i = 0; i < l1; ++i)
-                    check_compatibility(is->rv[i], rv[i], is->rv_labels[i].c_str());
+                    check_compatibility(is->rv[i], rv[i],
+                                        is->rv_labels[i].c_str());
             } else {
                 check_compatibility(is->rv, rv, "result");
             }
@@ -75,7 +118,7 @@ static void if_stmt_read_cb(void *p, dr::dr_vector<uint64_t> &indices) {
 static void if_stmt_write_cb(void *p, const dr::dr_vector<uint64_t> &indices) {
     IfState *is = (IfState *) p;
     nb::gil_scoped_acquire guard;
-    is->rv = update_indices(is->rv, indices);
+    is->rv = update_indices(is->rv, indices, &is->copy_map);
 }
 
 nb::object if_stmt(nb::tuple args, nb::handle cond, nb::callable true_fn,
@@ -101,6 +144,8 @@ nb::object if_stmt(nb::tuple args, nb::handle cond, nb::callable true_fn,
                     (JitBackend) s.backend != JitBackend::None) {
                     backend = (JitBackend) s.backend;
                     cond_index = s.index(inst_ptr(cond));
+                    if (!cond_index)
+                        nb::raise("'cond' cannot be empty.");
                 }
             }
 
@@ -130,20 +175,22 @@ nb::object if_stmt(nb::tuple args, nb::handle cond, nb::callable true_fn,
             nb::raise("invalid 'mode' argument (must equal \"auto\", "
                       "\"scalar\", \"symbolic\", or \"evaluated\").");
 
-        IfState *payload =
+        IfState *is =
             new IfState(std::move(args), std::move(true_fn),
                         std::move(false_fn), std::move(rv_labels));
 
-        bool status = ad_cond(backend, symbolic, name.c_str(), payload,
+        bool status = ad_cond(backend, symbolic, name.c_str(), is,
                               cond_index, if_stmt_read_cb, if_stmt_write_cb,
                               if_stmt_body_cb, if_stmt_delete_cb, true);
 
-        nb::object result = payload->rv;
+        nb::object result = uncopy(is->rv, is->copy_map);
 
-        if (status)
-            delete payload;
-        else
-            payload->rv = reset(payload->rv);
+        if (status) {
+            delete is;
+        } else {
+            is->rv = reset(is->rv);
+            is->cleanup();
+        }
 
         return result;
     } catch (nb::python_error &e) {

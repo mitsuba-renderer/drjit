@@ -1,5 +1,6 @@
 /*
-    while_loop.h -- implementation of drjit.while_loop()
+    while_loop.h -- Python implementation of drjit.while_loop() based on the
+    abstract interface ad_loop() provided by the drjit-extra library
 
     Dr.Jit: A Just-In-Time-Compiler for Differentiable Rendering
     Copyright 2023, Realistic Graphics Lab, EPFL.

@@ -4322,51 +4322,99 @@ Returns:
     object: A Dr.Jit array or :ref:`PyTree <pytrees>` containing the
     result of each performed function call.)";
 
+// This comment is replicated in misc.cpp. Please keep them in sync when making
+// changes
+
+static const char *doc_detail_copy = R"(
+Create a deep copy of a PyTree
+
+This function recursively traverses PyTrees and replaces Dr.Jit arrays with
+copies created via the ordinary copy constructor. It also rebuilds tuples,
+lists, dictionaries, and custom data strutures. The purpose of this function
+is isolate the inputs of :py:func:`drjit.while_loop()` and
+:py:func:`drjit.if_stmt()` from changes.
+
+If the ``copy_map`` parameter is provided, the function furthermore registers
+created copies, which is useful in combination with the
+:py:func:`drjit.detail.uncopy()` function.
+
+This function exists for Dr.Jit-internal use. You probably should not call
+it in your own application code.)";
+
+// This comment is replicated in misc.cpp. Please keep them in sync when making
+// changes
+
+static const char *doc_detail_uncopy = R"(
+Undo a prior call to :py:func:`drjit.copy()` when the contents of a
+PyTree are unchanged.
+
+This operation recursively traverses a PyTree ``h`` containing copies made
+by the functions :py:func:`drjit.copy()` and
+:py:func:`drjit.update_indices()`. Whenever an entire subtree was unchanged
+(in the sense that the Dr.Jit array indices are still the same), the
+function "undoes" the change by returning the original Python object prior
+to the copy.
+
+Both :py:func:`drjit.while_loop()` and :py:func:`drjit.if_stmt()`
+conservatively perform a deep copy of all state variables. When that copy is
+later discovered to not be necessary, the use :py:func:`uncopy()` to restore
+the variable to its original Python object.
+
+This function exists for Dr.Jit-internal use. You probably should not call
+it in your own application code.)";
+
+// This comment is replicated in misc.cpp. Please keep them in sync when making
+// changes
+
+static const char *doc_detail_check_compatibility = R"(
+Traverse two pytrees in parallel and ensure that they have an identical
+structure.
+
+Raises an exception is a mismatch is found (e.g., different types, arrays with
+incompatible numbers of elements, dictionaries with different keys, etc.))";
+
+// This comment is replicated in misc.cpp. Please keep them in sync when making
+// changes
+
 static const char *doc_detail_collect_indices = R"(
 Return Dr.Jit variable indices associated with the provided data structure.
 
-This function traverses Dr.Jit arrays, tensors, :ref:`PyTree <pytrees>` (lists,
+This function traverses Dr.Jit arrays, tensors, :ref:`Pytree <pytrees>` (lists,
 tuples, dicts, custom data structures) and returns the indices of all detected
 variables (in the order of traversal, may contain duplicates). The index
 information is returned as a list of encoded 64 bit integers, where each
-contains the AD variable index in the upper 32 bits and the JIT variable index
-in the lower 32 bit.
+contains the AD variable index in the upper 32 bits and the JIT variable
+index in the lower 32 bit.
 
-Intended purely for internal Dr.Jit use, you probably should not call this in
-your own application.)";
+This function exists for Dr.Jit-internal use. You probably should not
+call it in your own application code.)";
 
-static const char *doc_detail_uncopy = R"(
-Undo a prior call to :py:func:`drjit.copy()` when the contents of a PyTree are
-unchanged.
-
-This operation recursively traverses a PyTree ``arg1`` that was previously
-copied from a PyTree ``arg0`` (using :py:func:`drjit.copy()`) and then
-potentially modified. Whenever an entire subtree was unchanged (in the sense
-that the Dr.Jit array indices are still the same), the function "undoes" the
-change by returning the original Python object prior to the copy.
-
-This function is internally used by :py:func:`drjit.while_loop()` and
-:py:func:`drjit.if_stmt()`, which both conservatively perform a deep copy of
-all state variables. When that copy is later discovered to not be necessary,
-the use :py:func:`uncopy()` to restore the variable to its original Python
-object.)";
+// This comment is replicated in misc.cpp. Please keep them in sync when making
+// changes
 
 static const char *doc_detail_update_indices = R"(
-Create a copy of the provided input while replacing Dr.Jit variables with
-new ones based on a provided set of indices.
+Create a copy of the provided input while replacing Dr.Jit variables
+with new ones based on a provided set of indices.
 
 This function works analogously to ``collect_indices``, except that it
 consumes an index array and produces an updated output.
 
-It recursively traverses and copies an input object that may be a Dr.Jit array,
-tensor, or :ref:`Pytree <pytrees>` (list, tuple, dict, custom data structure)
-while replacing any detected Dr.Jit variables with new ones based on the
-provided index vector. The function returns the resulting object, while leaving
-the input unchanged. The output array object borrows the provided array
-references as opposed to stealing them.
+It recursively traverses and copies an input object that may be a Dr.Jit
+array, tensor, or :ref:`Pytree <pytrees>` (list, tuple, dict, custom data
+structure) while replacing any detected Dr.Jit variables with new ones based
+on the provided index vector. The function returns the resulting object,
+while leaving the input unchanged. The output array object borrows the
+provided array references as opposed to stealing them.
 
-Intended purely for internal Dr.Jit use, you probably should not call this in
-your own application.)";
+If the ``copy_map`` parameter is provided, the function furthermore registers
+created copies, which is useful in combination with the
+:py:func:`drjit.detail.uncopy()` function.
+
+This function exists for Dr.Jit-internal use. You probably should not call
+it in your own application code.)";
+
+// This comment is replicated in misc.cpp. Please keep them in sync when making
+// changes
 
 static const char *doc_detail_reset = R"(
 Release all Jit variables in a PyTree
@@ -4375,21 +4423,6 @@ This function recursively traverses PyTrees and replaces Dr.Jit arrays with
 empty instances of the same type. :py:func:`drjit.while_loop` uses this
 function internally to release references held by a temporary copy of the
 state tuple.)";
-
-static const char *doc_copy = R"(
-Create a deep copy of the input PyTree.
-
-This function recursively traverses a :ref:`PyTree <pytrees>` (consisting of
-Dr.Jit arrays/tensors, lists, tuples, dicts, custom data structures). Whenever
-it encounters a Dr.Jit array, it replaces it with another instance created via
-the array's copy constructor.)";
-
-static const char *doc_detail_check_compatibility = R"(
-Traverse two pytrees in parallel and ensure that they have an identical
-structure.
-
-Raises an exception is a mismatch is found (e.g., different types, arrays with
-incompatible numbers of elements, dictionaries with different keys, etc.))";
 
 static const char *doc_flag =
     "Query whether the given Dr.Jit compilation flag is active.";
