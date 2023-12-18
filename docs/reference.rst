@@ -1161,6 +1161,10 @@ Miscellaneous
 .. autofunction:: whos
 .. autofunction:: whos_ad
 .. autofunction:: set_label
+.. autofunction:: thread_count
+.. autofunction:: set_thread_count
+.. autofunction:: block_size
+.. autofunction:: set_block_size
 .. py:data:: None
    :type: NoneType
 
