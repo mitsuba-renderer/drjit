@@ -203,6 +203,11 @@ extern DRJIT_EXTRA_EXPORT bool ad_release_one_output(drjit::detail::CustomOpBase
 /// VCall implementation: get a list of observed implicit dependencies
 extern DRJIT_EXTRA_EXPORT void ad_copy_implicit_deps(drjit::dr_vector<uint32_t>&);
 
+/// Kahan-compensated floating point atomic scatter-addition
+extern DRJIT_EXTRA_EXPORT void
+ad_var_scatter_add_kahan(uint64_t *target_1, uint64_t *target_2, uint64_t value,
+                         uint32_t index, uint32_t mask);
+
 /// Check if a variable represents an implicit dependency on a non-symbolic operand
 extern void ad_var_check_implicit(uint64_t index);
 

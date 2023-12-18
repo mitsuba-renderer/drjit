@@ -1653,3 +1653,24 @@ def test109_infinite_recursion(t):
     while e.__cause__ is not None:
         e = e.__cause__
     assert type(e) is RecursionError
+
+
+@pytest.test_arrays('float,shape=(*),is_diff')
+def test110_scatter_add_kahan(t):
+    buf1 = dr.zeros(t, 2)
+    buf2 = dr.zeros(t, 2)
+    value = t(1, 2, 3)
+    dr.enable_grad(buf1, buf2, value)
+    ti = dr.uint32_array_t(t)
+
+    dr.scatter_add_kahan(
+        buf1,
+        buf2,
+        value,
+        ti(0, 1, 1)
+    )
+    dr.set_grad(buf1, [10, 20])
+    dr.set_grad(buf2, [100, 100]) # Ignored
+    value_d = dr.backward_to(value)
+    assert dr.all(buf1 + buf2 == [1, 5])
+    assert dr.all(value_d == [10, 20, 20])
