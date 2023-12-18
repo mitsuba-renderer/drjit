@@ -266,6 +266,7 @@ Just-in-time compilation
 .. autofunction:: has_backend
 .. autofunction:: schedule
 .. autofunction:: eval
+.. autofunction:: sync_thread
 
 .. autoclass:: JitFlag
 

@@ -195,6 +195,8 @@ NB_MODULE(drjit_ext, m_) {
      .def("block_size", &jit_llvm_block_size, doc_block_size)
      .def("set_block_size", &jit_llvm_set_block_size, doc_set_block_size);
 
+    m.def("sync_thread", jit_sync_thread);
+
     jit_init(backends);
 
     export_bind(detail);
