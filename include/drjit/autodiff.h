@@ -514,6 +514,15 @@ struct DRJIT_TRIVIAL_ABI DiffArray
         return steal(jit_var_scatter_inc(&m_index, index.index(), mask.index()));
     }
 
+    template <typename Index, typename Mask>
+    void scatter_add_kahan_(DiffArray &dst_1, DiffArray &dst_2,
+                            const Index &offset, const Mask &mask) const {
+        static_assert(
+            std::is_same_v<detached_t<Mask>, detached_t<mask_t<DiffArray>>>);
+
+        ad_var_scatter_add_kahan(&dst_1.m_index, &dst_2.m_index, m_index,
+                                 offset.index(), mask.index());
+    }
 
     //! @}
     // -----------------------------------------------------------------------

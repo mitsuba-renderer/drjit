@@ -5154,6 +5154,34 @@ of :py:func:`drjit.compress()` is that it essentially boils down to a
 relatively simple prefix sum, which does not require atomic memory operations
 (these can be slow in some cases).)";
 
+static const char *doc_scatter_add_kahan = R"(
+Perform a Kahan-compensated atomic scatter-addition.
+
+Atomic floating point accumulation can incur significant rounding error when
+many values contribute to a single element. This function implements an
+error-compensating version of :py:func:`drjit.scatter_add` based on the
+`Kahan-Babuška-Neumeier algorithm <https://en.wikipedia.org/wiki/Kahan_summation_algorithm>`__
+that simultaneously accumulates into *two* target buffers.
+
+In particular, the operation first accumulates a values into entries of a
+dynamic 1D array ``target_1``. It tracks the roundoff error caused by this
+operation and then accumulates this error into a *second* 1D array named
+``target_2``. At the end, the buffers can simply be added together to obtain
+the error-compensated result.
+
+This function has a few limitations: in contrast to
+:py:func:`drjit.scatter_reduce` and :py:func:`drjit.scatter_add`, it does not
+perform a local reduction (see flag :py:attr:`JitFlag.AtomicReduceLocal`),
+which can be an important optimization when atomic accumulation is a
+performance bottleneck.
+
+Furthermore, the function currently works with flat 1D arrays. This is an
+implementation limitation that could in principle be removed in the future.
+
+Finally, the function is differentiable, but derivatives currently only
+propagate into ``target_1``. This means that forward derivatives don't enjoy
+the error compensation of the primal computation. This limitation is of no
+relevance for backward derivatives.)";
 
 static const char *doc_format = R"(
 format(fmt: str, *args, limit: int = 20, **kwargs) -> str

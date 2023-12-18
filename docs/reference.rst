@@ -78,6 +78,7 @@ These operations are *horizontal* in the sense that [..]
 
 .. autofunction:: scatter_reduce
 .. autofunction:: scatter_add
+.. autofunction:: scatter_add_kahan
 .. autofunction:: scatter_inc
 .. autofunction:: ravel
 .. autofunction:: unravel

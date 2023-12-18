@@ -212,6 +212,9 @@ struct ArraySupplement : ArrayMeta {
                                    const ArrayBase *, const ArrayBase *,
                                    const ArrayBase *, bool);
     using ScatterInc = void (*)(const ArrayBase *, ArrayBase *, ArrayBase *, ArrayBase *);
+    using ScatterAddKahan = void (*)(const ArrayBase *, const ArrayBase *,
+                                     const ArrayBase *, ArrayBase *,
+                                     ArrayBase *);
     using UnaryOp  = void (*)(const ArrayBase *, ArrayBase *);
     using BinaryOp = void (*)(const ArrayBase *, const ArrayBase *, ArrayBase *);
     using PrefixSum = void (*)(const ArrayBase *, bool, ArrayBase *);
@@ -256,6 +259,9 @@ struct ArraySupplement : ArrayMeta {
 
             /// Scatter-increment operation
             ScatterInc scatter_inc;
+
+            /// Kahan-compensated scatter-addition
+            ScatterAddKahan scatter_add_kahan;
 
             /// Return a pointer to the underlying storage
             Data data;
@@ -710,6 +716,7 @@ template <typename T> void bind_jit_ops(ArrayBinding &b) {
 template <typename T> void bind_memop(ArrayBinding &b) {
     using UInt32 = uint32_array_t<T>;
     using Mask = mask_t<T>;
+    using Scalar = scalar_t<T>;
 
     b.gather = (ArraySupplement::Gather)
         +[](const T *a, const UInt32 *b, const Mask *c, T *d, bool permute) {
@@ -725,6 +732,15 @@ template <typename T> void bind_memop(ArrayBinding &b) {
         b.scatter_inc = (ArraySupplement::ScatterInc)
             +[](const UInt32 *a, const Mask *b, UInt32 *c, UInt32 *d) {
                 new (d) T(scatter_inc(*c, *a, *b));
+            };
+    }
+
+    if constexpr ((std::is_same_v<Scalar, float> ||
+                   std::is_same_v<Scalar, double>) && is_jit_v<T>) {
+        b.scatter_add_kahan =
+            (ArraySupplement::ScatterAddKahan) +
+            [](const T *a, const UInt32 *b, const Mask *c, T *d, T *e) {
+                scatter_add_kahan(*d, *e, *a, *b, *c);
             };
     }
 }

@@ -1629,7 +1629,7 @@ int ad_grad_enabled(Index index) {
 // ==========================================================================
 
 struct MaskEdge : Special {
-    MaskEdge(const JitMask &mask, bool negate)
+    MaskEdge(const JitMask &mask, bool negate = false)
         : mask(mask), negate(negate) { }
 
     void backward(Variable *source, const Variable *target) override {
@@ -2481,6 +2481,47 @@ Index ad_var_scatter(Index target, Index value, JitIndex offset,
                        new Scatter(GenericArray<uint32_t>::borrow(offset),
                                    JitMask::borrow(mask), reduce_op)),
             SpecialArg(target, new MaskEdge(overwritten, true)));
+    }
+}
+
+void ad_var_scatter_add_kahan(Index *target_1, Index *target_2, Index value,
+                              JitIndex offset, JitIndex mask) {
+    bool detached_1 = is_detached(*target_1),
+         detached_2 = is_detached(*target_2);
+
+    if (detached_1 != detached_2)
+        ad_raise("ad_var_scatter_kahan: AD status of the two target arrays is "
+                 "inconsistent!");
+
+    uint32_t target_1_jit = jit_index(*target_1),
+             target_2_jit = jit_index(*target_2);
+
+    jit_var_scatter_add_kahan(&target_1_jit, &target_2_jit, value, offset,
+                              mask);
+
+    if (is_detached(value) && detached_1) {
+        *target_1 = (Index) target_1_jit;
+        *target_2 = (Index) target_2_jit;
+    } else {
+        jit_set_backend(mask);
+
+        uint32_t ad_index_1 = ad_index(*target_1);
+        uint32_t ad_index_2 = ad_index(*target_2);
+
+        Index combined_1 = ad_var_new(
+            "scatter_add_kahan", JitVar::steal(target_1_jit),
+            SpecialArg(value,
+                       new Scatter(GenericArray<uint32_t>::borrow(offset),
+                                   JitMask::borrow(mask), ReduceOp::Add)),
+            SpecialArg(*target_1, new MaskEdge(JitMask(true))));
+
+        std::lock_guard<std::mutex> guard(state.mutex);
+        ad_var_dec_ref_int(ad_index_1, state[ad_index_1]);
+
+        Index combined_2 = combine(ad_index_2, target_2_jit);
+
+        *target_1 = combined_1;
+        *target_2 = combined_2;
     }
 }
 

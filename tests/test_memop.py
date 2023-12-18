@@ -299,3 +299,24 @@ def test14_out_of_bounds_scatter(t):
         with pytest.warns(RuntimeWarning, match="out-of-bounds write to position 10 in an array of size 10."):
             dr.scatter(buf, index=dr.arange(t, 11), value=5)
             dr.eval()
+
+@pytest.test_arrays('float,shape=(*),jit')
+def test15_scatter_add_simple(t):
+    buf1 = dr.zeros(t, 2)
+    buf2 = dr.zeros(t, 2)
+    buf3 = dr.zeros(t, 2)
+    ti = dr.uint32_array_t(t)
+    with dr.scoped_set_flag(dr.JitFlag.AtomicReduceLocal, False):
+        dr.scatter_add_kahan(
+            buf1,
+            buf2,
+            t(1, dr.epsilon(t), dr.epsilon(t)),
+            dr.full(ti, 1, 3)
+        )
+        dr.scatter_add(
+            buf3,
+            t(1, dr.epsilon(t), dr.epsilon(t)),
+            dr.full(ti, 1, 3)
+        )
+    assert dr.all(buf1 + buf2 == [0, 1+dr.epsilon(t)*2])
+    assert dr.all(buf3 == [0, 1])
