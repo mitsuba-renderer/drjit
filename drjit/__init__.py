@@ -297,7 +297,7 @@ inv_sqrt_two          = 0.70710678118654752440  # noqa
 inf                   = float('inf')  # noqa
 nan                   = float('nan')  # noqa
 
-def epsilon(arg0, /):
+def epsilon(arg, /):
     '''
     Returns the machine epsilon.
 
@@ -305,13 +305,13 @@ def epsilon(arg0, /):
     error due to rounding in floating point arithmetic.
 
     Args:
-        arg0 (object): Dr.Jit array or array type used to choose between
+        arg (object): Dr.Jit array or array type used to choose between
           an appropriate constant for half, single, or double precision.
 
     Returns:
         float: The machine epsilon.
     '''
-    vt = type_v(arg0)
+    vt = type_v(arg)
     if vt == VarType.Float64:
         return float.fromhex('0x1p-53')
     elif vt == VarType.Float32:
@@ -322,18 +322,18 @@ def epsilon(arg0, /):
         raise TypeError("epsilon(): input is not a Dr.Jit array or array type!")
 
 
-def one_minus_epsilon(arg0, /):
+def one_minus_epsilon(arg, /):
     '''
     Returns one minus the machine epsilon value.
 
     Args:
-        arg0 (object): Dr.Jit array or array type used to choose between
+        arg (object): Dr.Jit array or array type used to choose between
           an appropriate constant for half, single, or double precision.
 
     Returns:
         float: One minus the machine epsilon.
     '''
-    vt = type_v(arg0)
+    vt = type_v(arg)
     if vt == VarType.Float64:
         return float.fromhex('0x1.fffffffffffffp-1')
     elif vt == VarType.Float32:
@@ -344,7 +344,7 @@ def one_minus_epsilon(arg0, /):
         raise TypeError("one_minus_epsilon(): input is not a Dr.Jit array or array type!")
 
 
-def recip_overflow(arg0, /):
+def recip_overflow(arg, /):
     '''
     Returns the reciprocal overflow threshold value.
 
@@ -352,13 +352,13 @@ def recip_overflow(arg0, /):
     infinity when reciprocated.
 
     Args:
-        arg0 (object): Dr.Jit array or array type used to choose between
+        arg (object): Dr.Jit array or array type used to choose between
           an appropriate constant for half, single, or double precision.
 
     Returns:
         float: The reciprocal overflow threshold value.
     '''
-    vt = type_v(arg0)
+    vt = type_v(arg)
     if vt == VarType.Float64:
         return float.fromhex('0x1p-1024')
     elif vt == VarType.Float32:
@@ -369,18 +369,18 @@ def recip_overflow(arg0, /):
         raise TypeError("recip_overflow(): input is not a Dr.Jit array or array type!")
 
 
-def smallest(arg0, /):
+def smallest(arg, /):
     '''
     Returns the smallest representable normalized floating point value.
 
     Args:
-        arg0 (object): Dr.Jit array or array type used to choose between
+        arg (object): Dr.Jit array or array type used to choose between
           an appropriate constant for half, single, or double precision.
 
     Returns:
         float: The smallest representable normalized floating point value.
     '''
-    vt = type_v(arg0)
+    vt = type_v(arg)
     if vt == VarType.Float64:
         return float.fromhex('0x1p-1022')
     elif vt == VarType.Float32:
@@ -390,18 +390,18 @@ def smallest(arg0, /):
     else:
         raise TypeError("smallest(): input is not a Dr.Jit array or array type!")
 
-def largest(arg0, /):
+def largest(arg, /):
     '''
     Returns the largest representable finite floating point value for `t`.
 
     Args:
-        arg0 (object): Dr.Jit array or array type used to choose between
+        arg (object): Dr.Jit array or array type used to choose between
           an appropriate constant for half, single, or double precision.
 
     Returns:
         float: The largest representable finite floating point value.
     '''
-    vt = type_v(arg0)
+    vt = type_v(arg)
     if vt == VarType.Float64:
         return float.fromhex('0x1.fffffffffffffp+1023')
     elif vt == VarType.Float32:

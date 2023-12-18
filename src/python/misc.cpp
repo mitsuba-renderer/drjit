@@ -197,8 +197,8 @@ void stash_ref(nb::handle h, std::vector<StashRef> &v) {
  * contains the AD variable index in the upper 32 bits and the JIT variable
  * index in the lower 32 bit.
  *
- * Intended purely for internal Dr.Jit use, you probably should not call this in
- * your own application.
+ * This function exists for Dr.Jit-internal use. You probably should not
+ * call it in your own application code.
  *
  * (Note: this explanation is also part of src/python/docstr.h -- please keep
  * them in sync in case you make a change here)

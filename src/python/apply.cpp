@@ -304,22 +304,23 @@ PyObject *apply(ArrayOp op, Slot slot, std::index_sequence<Is...> is,
 
         return result.release().ptr();
     } catch (nb::python_error &e) {
-        nb::str tp_name = nb::type_name(tp);
-        e.restore();
         if constexpr (std::is_same_v<Slot, const char *>)
-            nb::chain_error(PyExc_RuntimeError, "drjit.%s(<%U>): failed (see above)!",
-                            op_names[(int) op], tp_name.ptr());
+            nb::raise_from(e, PyExc_RuntimeError,
+                           "drjit.%s(<%U>): failed (see above)!",
+                           op_names[(int) op], nb::type_name(tp).ptr());
         else
-            nb::chain_error(PyExc_RuntimeError, "%U.%s(): failed (see above)!",
-                            tp_name.ptr(), op_names[(int) op]);
+            nb::raise_from(e, PyExc_RuntimeError,
+                           "%U.%s(): failed (see above)!",
+                           nb::type_name(tp).ptr(), op_names[(int) op]);
     } catch (const std::exception &e) {
-        nb::str tp_name = nb::type_name(tp);
         if constexpr (std::is_same_v<Slot, const char *>)
             nb::chain_error(PyExc_RuntimeError, "drjit.%s(<%U>): %s",
-                            op_names[(int) op], tp_name.ptr(), e.what());
+                            op_names[(int) op], nb::type_name(tp).ptr(),
+                            e.what());
         else
-            nb::chain_error(PyExc_RuntimeError, "%U.%s(): %s", tp_name.ptr(),
-                            op_names[(int) op], e.what());
+            nb::chain_error(PyExc_RuntimeError, "%U.%s(): %s",
+                            nb::type_name(tp).ptr(), op_names[(int) op],
+                            e.what());
     }
 
     return nullptr;
@@ -537,9 +538,8 @@ nb::object apply_ret_pair(ArrayOp op, const char *name, nb::handle_t<dr::ArrayBa
                         "drjit.%s(<%U>): failed (see above)!", name,
                         tp_name.ptr());
     } catch (const std::exception &e) {
-        nb::str tp_name = nb::type_name(tp);
         nb::chain_error(PyExc_RuntimeError, "drjit.%s(<%U>): %s",
-                        name, tp_name.ptr(), e.what());
+                        name, nb::type_name(tp).ptr(), e.what());
     }
 
     return nb::object();
