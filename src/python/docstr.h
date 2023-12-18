@@ -5475,6 +5475,33 @@ Args:
       ``limit`` (default: 20) entries.
 )";
 
+static const char *doc_thread_count = R"(
+Return the number of threads that Dr.Jit uses to parallelize computation on the CPU)";
+
+static const char *doc_set_thread_count = R"(
+Adjust the number of threads that Dr.Jit uses to parallelize computation on the CPU.
+
+The thread pool is primarily used by Dr.Jit's LLVM backend. Other projects using
+underlying `nanothread <https://github.com/mitsuba-renderer/nanothread>`__
+thread pool library will also be affected by changes performed using by this
+function. It is legal to call it even while parallel computation is currently
+ongoing.)";
+
+static const char *doc_block_size = R"(
+Set the number of SIMD packets constituting a parallel work item in the LLVM backend.)";
+
+static const char *doc_set_block_size = R"(
+Set the number of SIMD packets constituting a parallel work item in the LLVM backend.
+
+Dr.Jit automatically vectorizes and parallelizes computation when using the
+LLVM backend (see the section on :ref:`optimization <optimization>` for
+details). One important decision is how many SIMD packets constitute a
+sufficient amount of work to hand over to the parallelization layer. This
+function can be used to tune this setting (the default is 1024 packets).)";
+
+static const char *doc_intrusive_base =
+    "Base class with intrusive combined C++/Python reference counting.";
+
 #if defined(__GNUC__)
 #  pragma GCC diagnostic pop
 #endif

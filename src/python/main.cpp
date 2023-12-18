@@ -8,8 +8,9 @@
     BSD-style license that can be found in the LICENSE.txt file.
 */
 
-#include <nanobind/nanobind.h>
 #define NB_INTRUSIVE_EXPORT NB_EXPORT
+
+#include <nanobind/nanobind.h>
 #include <nanobind/intrusive/counter.h>
 #include "bind.h"
 #include "base.h"
@@ -95,6 +96,7 @@ NB_MODULE(drjit_ext, m_) {
         .value("SymbolicConditionals", JitFlag::SymbolicConditionals, doc_JitFlag_SymbolicConditionals)
         .value("SymbolicScope", JitFlag::SymbolicScope, doc_JitFlag_SymbolicScope)
         .value("Default", JitFlag::Default, doc_JitFlag_Default)
+
         // Deprecated aliases
         .value("VCallRecord", JitFlag::VCallRecord, doc_JitFlag_VCallRecord)
         .value("VCallOptimize", JitFlag::VCallOptimize, doc_JitFlag_VCallOptimize)
@@ -139,9 +141,6 @@ NB_MODULE(drjit_ext, m_) {
         .value("Mixed", VarState::Mixed, doc_VarState_Mixed);
 
     m.def("has_backend", &jit_has_backend, doc_has_backend);
-
-    m.def("whos_str", &jit_var_whos);
-    m.def("whos", []() { nb::print(jit_var_whos()); });
 
     m.def("flag", &jit_flag, doc_flag);
     m.def("set_flag", &set_flag_py, doc_set_flag);
@@ -189,9 +188,12 @@ NB_MODULE(drjit_ext, m_) {
         nb::intrusive_ptr<nb::intrusive_base>(
             [](nb::intrusive_base *o, PyObject *po) noexcept {
                 o->set_self_py(po);
-            }));
+            }), doc_intrusive_base);
 
-    m.def("set_thread_count", &jit_llvm_set_thread_count);
+    m.def("thread_count", &jit_llvm_thread_count, doc_thread_count)
+     .def("set_thread_count", &jit_llvm_set_thread_count, doc_set_thread_count)
+     .def("block_size", &jit_llvm_block_size, doc_block_size)
+     .def("set_block_size", &jit_llvm_set_block_size, doc_set_block_size);
 
     jit_init(backends);
 
