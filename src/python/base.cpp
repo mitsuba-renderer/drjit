@@ -157,6 +157,9 @@ static PyObject *tp_richcompare(PyObject *h0, PyObject *h1, int slot) noexcept {
                               std::make_index_sequence<2>(), h0, h1);
 }
 
+static PyObject *tp_hash(PyObject *h) noexcept {
+    return PyLong_FromSize_t((size_t) (((uintptr_t) h) / sizeof(void *)));
+}
 
 template <int Index> nb::object xyzw_getter(nb::handle_t<ArrayBase> h) {
     const ArraySupplement &s = supp(h.type());
@@ -315,6 +318,7 @@ static PyType_Slot array_base_slots[] = {
 
     /// Miscellaneous
     DR_ARRAY_SLOT(tp_iter),
+    DR_ARRAY_SLOT(tp_hash),
     DR_ARRAY_SLOT(tp_repr),
     DR_ARRAY_SLOT(tp_richcompare),
     DR_ARRAY_SLOT(sq_length),

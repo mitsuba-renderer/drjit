@@ -51,29 +51,27 @@ class SyntaxVisitor(ast.NodeTransformer):
 
         hints = {}
         for k in node.keywords:
-            hints[k.arg] = k.value
+            if k.arg == "exclude" or k.arg == "include":
+                value = set()
+                if isinstance(k.value, ast.List):
+                    for e in k.value.elts:
+                        if isinstance(e, ast.Name):
+                            value.add(e.id)
+                        else:
+                            value = None
+                            break
+                else:
+                    value = None
 
-        if "exclude" in hints:
-            exclude = set()
-            if isinstance(k.value, ast.List):
-                for e in k.value.elts:
-                    if isinstance(e, ast.Name):
-                        exclude.add(e.id)
-                    else:
-                        exclude = None
-                        break
+                if value is None:
+                    raise Exception(
+                        f"dr.hint(): The '{k}' parameter must specify "
+                        "a literal list of strings (e.g., ['a', 'b']).")
             else:
-                exclude = None
+                value = k.value
+            hints[k.arg] = value
 
-            if exclude is None:
-                raise Exception(
-                    "dr.hint(): The 'exclude' parameter must specify "
-                    "a literal list of strings (e.g., ['a', 'b'])."
-                )
-
-            hints["exclude"] = exclude
-
-        valid_keys = ["exclude", "label", "mode", "max_iterations"]
+        valid_keys = ["exclude", "include", "label", "mode", "max_iterations"]
         for k in hints.keys():
             if k not in valid_keys:
                 raise RuntimeError(f'drjit.hint(): unsupported keyword argument "{k}".')
@@ -130,7 +128,12 @@ class SyntaxVisitor(ast.NodeTransformer):
         # Do not import globals (variables that are only read and never defined)
         var_r -= var_r - var_w - par_w
 
-        # 3c: exclude variables as requested by the user
+        # Include/exclude variables as requested by the user
+        if "include" in hints:
+            include = set(hints["include"])
+            var_r += include
+            var_w += include
+
         if "exclude" in hints:
             exclude = set(hints["exclude"])
             var_r -= exclude
@@ -225,7 +228,7 @@ class SyntaxVisitor(ast.NodeTransformer):
         ]
 
         for k, v in hints.items():
-            if k == "exclude":
+            if k == "include" or k == "exclude":
                 continue
             call_kwargs.append(ast.keyword(arg=k, value=v))
 
@@ -352,7 +355,7 @@ class SyntaxVisitor(ast.NodeTransformer):
             ),
         ]
         for k, v in hints.items():
-            if k == "exclude":
+            if k == "include" or k == "exclude":
                 continue
             call_kwargs.append(ast.keyword(arg=k, value=v))
 
@@ -633,6 +636,7 @@ def hint(
     mode: Optional[str] = None,
     max_iterations: Optional[int] = None,
     label: Optional[str] = None,
+    include: Optional[List[object]] = None,
     exclude: Optional[List[object]] = None,
 ) -> object:
     """
@@ -707,17 +711,18 @@ def hint(
        intermediate representation, which can be helpful when debugging the
        compilation of large programs.
 
-    4. ``exclude`` indicates to the :py:func:`@drjit.syntax <drjit.syntax>`
-       decorator that a local variable should not be considered to be part of
-       the set of state variables passed to :py:func:`drjit.while_loop` or
-       :py:func:`drjit.if_stmt`.
+    4. ``include`` and ``exclude`` indicates to the :py:func:`@drjit.syntax
+       <drjit.syntax>` decorator that a local variable *should* or *should not*
+       be considered to be part of the set of state variables passed to
+       :py:func:`drjit.while_loop` or :py:func:`drjit.if_stmt`.
 
        While transforming a function, the :py:func:`@drjit.syntax
        <drjit.syntax>` decorator sequentially steps through a program to
        identify the set of read and written variables. It then forwards
        referenced variables to recursive :py:func:`drjit.while_loop` and
        :py:func:`drjit.if_stmt` calls. In rare cases, it may be useful to
-       exclude a local variable from this process--- specify a list of such
-       variables to the :py:func:`drjit.hint` annotation to do so.
+       manually include or exclude a local variable from this process---
+       specify a list of such variables to the :py:func:`drjit.hint`
+       annotation to do so.
     """
     return arg

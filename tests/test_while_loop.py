@@ -178,29 +178,35 @@ def test09_loop_optimizations(t, optimize):
 @pytest.mark.parametrize('optimize', [True, False])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
-def test10_scatter_v1(t, mode, optimize):
+def test10_scatter_v1(t, mode, optimize, drjit_verbose, capsys):
     with dr.scoped_set_flag(dr.JitFlag.OptimizeLoops, optimize):
         i = t(0, 1)
-        v = dr.zeros(t, 1)
+        v = t(0, 0)
+        j = t(0) # Dummy variable to cause 2xrecording
         dr.set_label(v, 'v')
 
         while dr.hint(i < 10, mode=mode):
             i += 1
+            j = j
             dr.scatter_add(target=v, index=0, value=1)
 
         assert v[0] == 19
         assert dr.all(i == 10)
         assert v[0] == 19
 
+        # Check that the scatter operation did not make unnecessary copies
+        if mode == 'symbolic':
+            transcript = capsys.readouterr().out
+            assert transcript.count('[direct]') == 2
 
 @pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
 @pytest.mark.parametrize('optimize', [True, False])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @dr.syntax
-def test10_scatter_v2(t, mode, optimize):
+def test10_scatter_v2(t, mode, optimize, drjit_verbose, capsys):
     with dr.scoped_set_flag(dr.JitFlag.OptimizeLoops, optimize):
         i = t(0, 1)
-        v = dr.zeros(t, 1)
+        v = t(0, 0)
         dr.set_label(v, 'v')
 
         while dr.hint(i < 10, mode=mode, exclude=[v]):
@@ -210,6 +216,11 @@ def test10_scatter_v2(t, mode, optimize):
         assert v[0] == 19
         assert dr.all(i == 10)
         assert v[0] == 19
+
+        # Check that the scatter operation did not make unnecessary copies
+        if mode == 'symbolic':
+            transcript = capsys.readouterr().out
+            assert transcript.count('[direct]') == 1
 
 @pytest.mark.parametrize('mode1', ['evaluated', 'symbolic'])
 @pytest.mark.parametrize('mode2', ['evaluated', 'symbolic'])
