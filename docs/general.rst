@@ -3,6 +3,149 @@
 General information
 ===================
 
+.. _optimizations:
+
+Optimizations
+-------------
+
+This section reviews optimizations that Dr.Jit performs while tracing code. The
+examples all use the following import:
+
+.. code-block:: pycon
+
+   >>> from drjit.llvm import Int
+
+Vectorization and parallelization
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Dr.Jit automatically *vectorizes* and *parallelizes* traced code. The
+implications of these transformations are backend-specific.
+
+Consider the following simple calculation, which squares an integer
+sequence with 10000 elements.
+
+.. code-block:: pycon
+
+   >>> dr.arange(dr.llvm.Int, 10000)**2
+   [0, 1, 4, .. 9994 skipped .., 99940009, 99960004, 99980001]
+
+On the LLVM backend, *vectorization* implies that generated code uses
+instruction set extensions such as Intel AVX/AVX2/AVX512, or ARM NEON when they
+are available. When the machine, e.g., supports `AVX512
+<https://en.wikipedia.org/wiki/AVX-512>`__, each machine instruction processes a
+*packet* of 16 values, which means that a total of 625 packets need to be
+processed.
+
+When there are more than 1K packets (the default), each successive group of 1K
+packets forms a *block* for parallel processing using the built-in `nanothread
+<https://github.com/mitsuba-renderer/nanothread>`__ thread pool. In this case,
+there is not enough work for multi-core parallelism, and the computation
+immediately runs on the calling thread.
+
+You can use the functions :py:func:`drjit.thread_count`,
+:py:func:`drjit.set_thread_count`, :py:func:`drjit.block_size`,
+:py:func:`drjit.set_block_size` to fine-tune this process.
+
+On the CUDA backend, the system automatically determines a number of *threads*
+that maximize occupancy along with a suitable number of *blocks* and then
+launches a parallel program that spreads out over the entire GPU (assuming that
+there is enough work).
+
+.. _cow:
+
+Copy-on-Write 
+^^^^^^^^^^^^^
+
+Arrays are reference-counted and use a `Copy-on-Write
+<https://en.wikipedia.org/wiki/Copy-on-write>`__ (CoW) strategy. This means
+that copying an array is cheap since the copy can reference the original array
+without requiring a device memory copy. The matching variable indices in the
+example below demonstrate the lack of an actual copy.
+
+.. code-block:: pycon
+
+   >>> a = Int(1, 2, 3)
+   >>> b = Int(a)        # <- create a copy of 'a'
+   >>> a.index, b.index
+   (1, 1)
+
+However, subsequent modification causes this copy to be made.
+
+.. code-block:: pycon
+
+   >>> b[0] = 0
+   >>> (a.index, b.index)
+   (1, 2)
+
+This optimization is always active and cannot be disabled.
+
+Constant propagation
+^^^^^^^^^^^^^^^^^^^^
+
+Dr.Jit immediately performs arithmetic involving *literal constant* arrays:
+
+.. code-block:: pycon
+
+   >>> a = Int(4) + Int(5)
+   >>> a.state
+   dr.VarState.Literal
+
+In other words, the addition does not become part of the generated device code.
+This optimization reduces the size of the generated LLVM/PTX IR and can be
+controlled via :py:attr:`drjit.JitFlag.ConstantPropagation`.
+
+Value numbering
+^^^^^^^^^^^^^^^
+
+Dr.Jit collapses identical expressions into the same variable (this is safe
+given the :ref:`CoW <cow>` strategy explained above).
+
+.. code-block:: pycon
+
+   >>> a, b = Int(1, 2, 3), Int(4, 5, 6)
+   >>> c = a + b
+   >>> d = a + b
+   >>> c.index == d.index
+   True
+
+This optimization reduces the size of the generated LLVM/PTX IR and can be
+controlled via :py:attr:`drjit.JitFlag.ValueNumbering`.
+
+Local atomic reduction
+^^^^^^^^^^^^^^^^^^^^^^
+
+Atomic memory operations can be a bottleneck whenever they encounter *write
+contention*, which refers to a situation where many threads attempt to write to
+the same array element at once.
+
+For example, the following operation causes 1000'000 threads to write to
+``a[0]``.
+
+.. code-block:: pycon
+
+   >>> a = dr.zeros(Int, 10)
+   >>> dr.scatter_add(target=a, index=dr.zeros(Int, 1000000), value=...)
+
+Since Dr.Jit vectorizes the program during execution, the computation is
+grouped into *packets* that typically contain 16 to 32 elements. By locally
+adding values within each packet and then performing only 31-62K atomic memory
+operations, performance can be considerably improved.
+
+This optimization is particularly important when combined with *reverse-mode
+automatic differentiation*, which turns differentiable scalar reads into atomic
+scatter-additions that are sometimes subject to write contentions.
+
+Other
+^^^^^
+
+Some other optimizations are specific to symbolic operations, such as
+
+- :py:attr:`drjit.JitFlag.OptimizeCalls`,
+- :py:attr:`drjit.JitFlag.MergeFunctions`,
+- :py:attr:`drjit.JitFlag.OptimizeLoops`.
+
+Please refer the documentation of these flags for details.
+
 .. _horizontal-reductions:
 
 Horizontal reductions
@@ -90,14 +233,19 @@ explicitly lists the word *PyTree* in all supported operations).
 Limitations
 ^^^^^^^^^^^
 
-You may not use Dr.Jit types as dictionary keys. Furthermore, PyTrees may not
-contain cycles. For example, the following data structure will cause
-PyTree-compatible operations to fail with a ``RecursionError``.
+You may not use Dr.Jit types as *keys* of a dictionary occurring within a
+PyTree. Furthermore, PyTrees may not contain cycles. For example, the following
+data structure will cause PyTree-compatible operations to fail with a
+``RecursionError``.
 
 .. code-block:: python
 
    x = []
    x.append(x)
+
+Finally, Dr.Jit automatically traverses tuples, lists, and dictionaries,
+but it does not traverse subclasses of basic containers and other generalized
+sequences or mappings.
 
 Custom types
 ^^^^^^^^^^^^

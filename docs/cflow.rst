@@ -1,11 +1,115 @@
 Control flow
 ============
 
-This section explains how Dr.Jit handles control flow constructs such as
+This section explains how Dr.Jit handles control flow constructs such as ``if``
+statements, ``while`` loops, and dynamic dispatch.
 
-- ``if`` statements (:py:func:`drjit.if_stmt`),
-- ``while`` loops (:py:func:`drjit.while_loop`), and
-- indirect function calls (:py:func:`drjit.switch`, and :py:func:`drjit.dispatch`)
+``if`` statements
+-----------------
+
+The :py:func:`drjit.if_stmt` function provides a generalized ``if`` statement
+that works even when the conditional expression is a boolean-valued array or
+tensor. The resulting vectorized code only calls the taken branch when
+possible.
+
+.. code-block:: python
+
+   x = dr.cuda.Float(...)
+
+   # Return true_fn(*args) or false_fn(*args) depending on the value of 'cond'
+   x = dr.if_stmt(
+       args = (x,),
+       cond = x > 1,
+       true_fn = lambda x: x - 1,
+       false_fn = lambda x: x
+   )
+
+
+Since it can be tedious to write larger programs in this functional style, the
+library also provides the :py:func:`@drjit.syntax <drjit.syntax>` decorator
+that automatically rewrites ordinary Python code into the above form:
+
+.. code-block:: python
+
+   @dr.syntax
+   def f(x):
+       if x > 1:
+           x -= 1
+
+See the section on :ref:`symbolic and evaluated modes <sym-eval>` for an
+overview of how the system compiles such control flow statements. The reference
+of :py:func:`drjit.if_stmt` discusses the ``if`` statement in full detail.
+
+``while`` loops
+---------------
+
+The :py:func:`drjit.while_loop` function provides a generalized ``while`` loop
+that works even when the loop condition is a boolean-valued array or
+tensor. The resulting vectorized code can run the loop for a varying number of
+operations per array/tensor element when needed.
+
+.. code-block:: python
+
+   # Find the square root of a=1, 2, .., 10 using the Babylonian algorithm / Newton's method
+   a = dr.arange(dr.cuda.Float, 10) + 1
+   x = dr.cuda.Float(1)
+
+   # Run body(*state) while cond(*state) is True, then return 'state'
+   _, x = dr.while_loop(
+       state = (a, x),
+       cond = lambda a, x: abs((x*x - a) / a) > 1e-6,
+       body = lambda a, x: .5 * (x + a/x)
+   )
+
+Since it can be tedious to write larger programs in this functional style, the
+library also provides the :py:func:`@drjit.syntax <drjit.syntax>` decorator
+that automatically rewrites ordinary Python code into the above form:
+
+.. code-block:: python
+
+   @dr.syntax
+   def f(a, x):
+       while abs((x*x - a) / a) > 1e-6:
+           x = .5 * (x + a/x)
+       return x
+
+See the section on :ref:`symbolic and evaluated modes <sym-eval>` for an
+overview of how the system compiles such control flow statements. The reference
+of :py:func:`drjit.while_loop` discusses the ``while`` loop in full detail.
+
+Dynamic dispatch
+----------------
+
+The term `dynamic dispatch <https://en.wikipedia.org/wiki/Dynamic_dispatch>`__
+refers to a type of function call that targets multiple possible
+implementations based on runtime information. The functions
+:py:func:`drjit.switch` and :py:func:`drjit.dispatch` realize this type of
+control flow primitive within Dr.Jit.
+
+.. code-block:: python
+
+   def f1(a, b, c):
+      # ...
+      return x, y
+
+   def f2(a, b, c):
+      # ...
+      return x, y
+
+   # Call either 'f1' or 'f2' based on 'index', an integer array with values 0 and 1
+   x, y = dr.switch(
+      targets = [f1, f2],
+      index = index,
+      a, b, c
+   )
+
+There currently no syntax decorator support for automatically translating
+dynamic dispatch.
+
+See the section on :ref:`symbolic and evaluated modes <sym-eval>` for an
+overview of how the system compiles such control flow statements. The reference
+of :py:func:`drjit.switch` and :py:func:`drjit.dispatch` explains these two
+operations in full detail.
 
 .. _sym-eval:
 
