@@ -1535,7 +1535,7 @@ def export_(a, migrate_to_host, version, owner_supported=True):
                 temp *= shape[i]
         else:
             # Dr.Jit represents 3D arrays as 4D to leverage SIMD instructions
-            padding = 1 if a.IsScalar and a.IsMatrix and shape[0] == 3 else 0
+            padding = 1 if a.IsScalar and a.IsMatrix and shape[-1] == 3 else 0
             for i in range(ndim):
                 strides[i] = temp
                 temp *= shape[i] + padding
