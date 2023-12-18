@@ -243,7 +243,6 @@ static nb::object replace_grad(nb::handle h0, nb::handle h1) {
     return transform_pair("drjit.replace_grad", rg, o[0], o[1]);
 }
 
-
 static void set_grad(nb::handle target, nb::handle source) {
   ::clear_grad(target);
   ::accum_grad(target, source);
