@@ -926,8 +926,8 @@ nb::object transform_pair(const char *op, TransformPairCallback &tc,
                 nb::raise_python_error();
 
             for (size_t i = 0; i < len1; ++i)
-                PyTuple_SET_ITEM(result.ptr(), i,
-                                 transform_pair(op, tc, t1[i], t2[i]).release().ptr());
+                NB_TUPLE_SET_ITEM(result.ptr(), i,
+                                  transform_pair(op, tc, t1[i], t2[i]).release().ptr());
 
             return result;
         } else if (tp1.is(&PyList_Type)) {

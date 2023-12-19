@@ -2,7 +2,7 @@ function(add_drjit_test NAME)
   nanobind_add_module(
     ${NAME}
     NB_DOMAIN drjit
-    NB_SHARED
+    STABLE_ABI
     ${ARGV}
   )
 

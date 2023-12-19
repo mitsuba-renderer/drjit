@@ -429,19 +429,17 @@ template <typename T> NB_INLINE void bind_base(ArrayBinding &b) {
             if (success) {
                 return 0;
             } else {
-                nb::str tp_name = nb::inst_name(o),
-                        val_name = nb::inst_name(value);
                 PyErr_Format(
                     PyExc_TypeError,
                     "%U.__setitem__(): could not initialize element with a value of type '%U'.",
-                    tp_name.ptr(), val_name.ptr());
+                    nb::inst_name(o).ptr(), nb::inst_name(value).ptr());
                 return -1;
             }
         } else {
             PyErr_Format(
                 PyExc_IndexError,
-                "%s.__setitem__(): entry %zd is out of bounds (the array is of size %zu).",
-                Py_TYPE(o)->tp_name, i_, size);
+                "%U.__setitem__(): entry %zd is out of bounds (the array is of size %zu).",
+                nb::inst_name(o).ptr(), i_, size);
             return -1;
         }
     };

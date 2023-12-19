@@ -54,8 +54,9 @@ def test01_array_operations(t):
     assert cleanup(str(c)) == '[<call_ext.B object>, <call_ext.A object>]'
     assert c[0] is b and c[1] is a
 
-    with pytest.raises(TypeError, match=re.escape("unsupported operand type(s) for +: 'BasePtr' and 'BasePtr'")):
+    with pytest.raises(TypeError, match=re.escape("unsupported operand type(s) for +")):
         c+c
+
     assert dr.all(c == c)
     assert dr.all((c == None) == [False, False])
     assert dr.all((c == b) == [True, False])
