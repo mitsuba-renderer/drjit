@@ -285,23 +285,25 @@ def test13_scatter_inc(t):
 
 
 @pytest.test_arrays('uint32,shape=(*),jit')
-def test14_out_of_bounds_gather(t):
+def test14_out_of_bounds_gather(t, capsys):
     buf = dr.opaque(t, 0, 10)
     with dr.scoped_set_flag(dr.JitFlag.Debug, True):
-        with pytest.warns(RuntimeWarning, match="out-of-bounds read from position 10 in an array of size 10."):
-            dr.eval(dr.gather(t, buf, dr.arange(t, 11)))
+        dr.eval(dr.gather(t, buf, dr.arange(t, 11)))
+    transcript = capsys.readouterr().err
+    assert "out-of-bounds read from position 10 in an array of size 10." in transcript
 
 
 @pytest.test_arrays('uint32,shape=(*),jit')
-def test14_out_of_bounds_scatter(t):
+def test14_out_of_bounds_scatter(t, capsys):
     buf = dr.opaque(t, 0, 10)
     with dr.scoped_set_flag(dr.JitFlag.Debug, True):
-        with pytest.warns(RuntimeWarning, match="out-of-bounds write to position 10 in an array of size 10."):
-            dr.scatter(buf, index=dr.arange(t, 11), value=5)
-            dr.eval()
+        dr.scatter(buf, index=dr.arange(t, 11), value=5)
+        dr.eval()
+    transcript = capsys.readouterr().err
+    assert "out-of-bounds write to position 10 in an array of size 10." in transcript
 
 @pytest.test_arrays('float,shape=(*),jit')
-def test15_scatter_add_simple(t):
+def test15_scatter_add_kahan(t):
     buf1 = dr.zeros(t, 2)
     buf2 = dr.zeros(t, 2)
     buf3 = dr.zeros(t, 2)

@@ -441,9 +441,10 @@ def test11_no_mutate(t, optimize, symbolic):
             assert dr.all(dr.switch(t(0, 1, 2), targets, t(1, 2, 3)) == [11, 102, 1003])
 
 @pytest.test_arrays('uint32,shape=(*),jit')
-def test12_out_of_bounds(t):
+def test12_out_of_bounds(t, capsys):
     targets = [lambda x:x, lambda x: x+1]
 
-    with pytest.warns(RuntimeWarning, match="attempted to invoke callable with index 100, but this value must be smaller than 2"):
-        with dr.scoped_set_flag(dr.JitFlag.Debug, True):
-            dr.eval(dr.switch(t(0, 1, 100), targets, t(1)))
+    with dr.scoped_set_flag(dr.JitFlag.Debug, True):
+        dr.eval(dr.switch(t(0, 1, 100), targets, t(1)))
+    transcript = capsys.readouterr().err
+    assert "attempted to invoke callable with index 100, but this value must be smaller than 2" in transcript

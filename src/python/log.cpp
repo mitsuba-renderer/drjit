@@ -52,7 +52,10 @@ static void log_callback(LogLevel level, const char *msg) {
     nb::error_scope guard_3;
 
     bool err_out = level == LogLevel::Error || level == LogLevel::Warn;
-    nb::handle file = PySys_GetObject(err_out ? "__stderr__" : "__stdout__");
+    nb::handle file;
+    if (err_out)
+        file = PySys_GetObject("stderr");
+
     nb::print(msg, nb::handle(), file);
 
     if (level == LogLevel::Error) {
