@@ -247,6 +247,8 @@ Finally, Dr.Jit automatically traverses tuples, lists, and dictionaries,
 but it does not traverse subclasses of basic containers and other generalized
 sequences or mappings.
 
+.. _custom_types_py:
+
 Custom types
 ^^^^^^^^^^^^
 
@@ -275,34 +277,6 @@ Fields don't exclusively have to be containers or Dr.Jit types. For example, we
 could have added an extra ``datetime`` entry to record when a set of points was
 captured. Such fields will be ignored by traversal operations.
 
-C++
-^^^
-
-The ability to traverse through members of custom data structures is also supported
-in Dr.Jit's C++ interface. For this, you must include the header file
-
-.. code-block:: cpp
-
-   #include <drjit/struct.h>
-
-Following this, you can use the variable-argument ``DRJIT_STRUCT(...)`` macro
-to list the available fields.
-
-.. code-block:: cpp
-
-   using Float = dr::CUDADiffArray<float>;
-
-   struct MyPoint2f {
-       Float x;
-       Float y;
-
-       DRJIT_STRUCT(x, y);
-   };
-
-The ``DRJIT_STRUCT`` macro inserts several template functions to aid the
-auto-traversal mechanism. One implication of this is that such data structures
-cannot be declared locally (e.g., at the function scope---this is a limitation
-of the C++ language).
 
 .. _transcendental-accuracy:
 
