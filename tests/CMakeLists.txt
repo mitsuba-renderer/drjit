@@ -19,4 +19,5 @@ endfunction()
 
 
 add_drjit_test(call_ext call_ext.cpp)
-add_drjit_test(loop_ext loop_ext.cpp)
+add_drjit_test(while_loop_ext while_loop_ext.cpp)
+add_drjit_test(if_stmt_ext if_stmt_ext.cpp)

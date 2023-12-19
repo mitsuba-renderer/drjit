@@ -1,6 +1,5 @@
 #include <nanobind/stl/pair.h>
-#include <drjit/loop.h>
-#include <drjit/struct.h>
+#include <drjit/while_loop.h>
 #include <tuple>
 
 namespace nb = nanobind;
@@ -37,7 +36,7 @@ template <JitBackend Backend> void bind(nb::module_ &m) {
     m.def("simple_loop", &simple_loop<UInt>);
 }
 
-NB_MODULE(loop_ext, m) {
+NB_MODULE(while_loop_ext, m) {
 #if defined(DRJIT_ENABLE_LLVM)
     nb::module_ llvm = m.def_submodule("llvm");
     bind<JitBackend::LLVM>(llvm);

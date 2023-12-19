@@ -1,10 +1,10 @@
 /*
-    drjit/loop.h -- C++ loop tracing interface
+    drjit/while_loop.h -- C++ loop tracing interface
 
     Dr.Jit is a C++ template library for efficient vectorization and
     differentiation of numerical kernels on modern processor architectures.
 
-    Copyright (c) 2021 Wenzel Jakob <wenzel.jakob@epfl.ch>
+    Copyright (c) 2023 Wenzel Jakob <wenzel.jakob@epfl.ch>
 
     All rights reserved. Use of this source code is governed by a BSD-style
     license that can be found in the LICENSE file.
@@ -79,7 +79,7 @@ StateD while_loop_impl(std::index_sequence<Is...>, State &&state_, Cond &&cond,
 }
 NAMESPACE_END(detail)
 
-template <typename State, typename Cond, typename Body, typename... Ts>
+template <typename State, typename Cond, typename Body>
 std::decay_t<State> while_loop(State &&state, Cond &&cond, Body &&body,
                                const char *name = nullptr) {
     using StateD = std::decay_t<State>;
