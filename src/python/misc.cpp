@@ -384,7 +384,10 @@ void export_misc(nb::module_ &) {
           })
 
      .def("trace_func", &trace_func, "frame"_a,
-          "event"_a, "arg"_a = nb::none());
+          "event"_a, "arg"_a = nb::none())
+
+     .def("clear_registry", &jit_registry_clear,
+          doc_detail_clear_registry);
 
     trace_func_handle = d.attr("trace_func");
 }

@@ -18,6 +18,11 @@ def cleanup(s):
     s = re.sub(r'\.cuda\.',r'.', s)
     return s
 
+@pytest.fixture(autouse=True)
+def run_around_tests():
+    yield
+    dr.detail.clear_registry()
+
 @pytest.test_arrays('float32,is_diff,shape=(*)')
 def test01_array_operations(t):
     pkg = get_pkg(t)
