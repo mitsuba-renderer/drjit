@@ -13,6 +13,7 @@
 #pragma once
 
 #include <drjit/autodiff.h>
+#include <drjit/struct.h> // to traverse std::tuple
 
 NAMESPACE_BEGIN(drjit)
 NAMESPACE_BEGIN(detail)

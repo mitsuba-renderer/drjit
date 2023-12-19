@@ -160,6 +160,8 @@ void bind(nb::module_ &m) {
 }
 
 NB_MODULE(call_ext, m) {
+    nb::module_::import_("drjit");
+
 #if defined(DRJIT_ENABLE_LLVM)
     nb::module_ llvm = m.def_submodule("llvm");
     bind<JitBackend::LLVM>(llvm);
