@@ -107,6 +107,7 @@ endif()
 
 mark_as_advanced(NANOTHREAD_ENABLE_TESTS)
 mark_as_advanced(DRJIT_CORE_ENABLE_TESTS)
+mark_as_advanced(NB_TEST NB_TEST_SHARED_BUILD NB_TEST_STABLE_ABI NB_USE_SUBMODULE_DEPS NB_CREATE_INSTALL_RULES nanobind_DIR)
 
 if (MSVC)
    add_compile_options(/wd4251) # 'warning C4251: X needs to have dll-interface to be used by clients of struct Y
