@@ -360,6 +360,10 @@ static bool array_init_from_seq(PyObject *self, const ArraySupplement &s, PyObje
     return true;
 }
 
+// Forward declaration
+static void ndarray_keep_alive(JitBackend backend, uint32_t index,
+                               nb::detail::ndarray_handle *p);
+
 static nb::object import_ndarray(const ArraySupplement &s, PyObject *arg,
                                  dr_vector<size_t> *shape_out) {
     size_t shape[4];
@@ -460,14 +464,8 @@ static nb::object import_ndarray(const ArraySupplement &s, PyObject *arg,
 
         if (device_type == ndarr.device_type()) {
             index = jit_var_mem_map(backend, vt, ndarr.data(), size, 0);
-
-            if (index) {
-                nb::detail::ndarray_inc_ref(th);
-                jit_var_set_callback(index, [](uint32_t /* i */, int free, void *o) {
-                    if (free)
-                        nb::detail::ndarray_dec_ref((nb::detail::ndarray_handle *) o);
-                }, th);
-            }
+            // Hold a reference to the ndarray while Dr.Jit is using it
+            ndarray_keep_alive(backend, index, th);
         } else {
             AllocType at;
             switch (ndarr.device_type()) {
@@ -490,6 +488,58 @@ static nb::object import_ndarray(const ArraySupplement &s, PyObject *arg,
 
     nb::inst_mark_ready(temp);
     return temp;
+}
+
+// The ndarray release sequence implemented by the following callbacks is
+// paranoid but needed in some case. When Dr.Jit wants to release an array, it
+// might still be accessed by concurrently running code (this is particularly
+// relevant for LLVM mode, where both host and "device" share the same address
+// space). Decreasing the reference count is therefore done by enqueueuing a
+// host function that is called after Dr.Jit is guaranteed to have finished
+// accessing the array. But this presents another problem: decreasing the
+// DLPack reference count might involve CPython API calls that require holding
+// the GIL, which is not a nice requirement for things running in the
+// CUDA-internal message queue thread or nanothread worker due to a danger of
+// deadlocks. So we enqueue an asynchronous request via Py_AddPendingCall
+// asking Python to *eventually* decrease the reference count of the array.
+// Hopefully that won't come back to bite us. There are some known cases where
+// code that never releases the GIL doesn't service the Py_AddPendingCall
+// callbacks, see https://github.com/python/cpython/issues/95820.
+
+static int ndarray_free_cb_3(void *p) {
+    nb::detail::ndarray_dec_ref((nb::detail::ndarray_handle *) p);
+    return 0;
+}
+
+static void ndarray_free_cb_2(void *p) {
+    Py_AddPendingCall(ndarray_free_cb_3, p);
+}
+
+static void ndarray_free_cb(uint32_t, int free, void *p) {
+    if (!free)
+        return;
+
+    // Decode packed pointer + backend ID created in ndarray_keep_alive
+    uintptr_t msg = (uintptr_t) p, mask = 3;
+    JitBackend backend = (JitBackend) (msg & mask);
+    void *p2 = (void *) (msg & ~mask);
+
+    jit_enqueue_host_func(backend, ndarray_free_cb_2, p2);
+};
+
+static void ndarray_keep_alive(JitBackend backend, uint32_t index, nb::detail::ndarray_handle *p) {
+    if (!index)
+        return;
+
+    if ((int) backend > 3)
+        jit_raise("ndarray_keep_alive(): internal error, backend index too large.");
+
+    nb::detail::ndarray_inc_ref(p);
+
+    // Pack pointer + backend ID and send to ndarray_free_cb (asynchronously)
+    uintptr_t msg = (uintptr_t) p;
+    msg |= (uintptr_t) backend;
+    jit_var_set_callback(index, ndarray_free_cb, (void *) msg);
 }
 
 nb::object full_alt(nb::type_object dtype, nb::handle value, size_t size);
