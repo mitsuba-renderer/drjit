@@ -112,7 +112,7 @@ static void ad_call_getter(JitBackend backend, const char *domain,
 
         // Preallocate memory in the first iteration
         if (rv_ad.empty()) {
-            rv3.reserve(rv2.size() * callable_count);
+            rv3.resize(rv2.size() * callable_count, 0);
             rv_ad.resize(rv2.size(), false);
         }
 
@@ -125,13 +125,14 @@ static void ad_call_getter(JitBackend backend, const char *domain,
                     "ad_call_getter(\"%s%s%s\"): return value of callable %zu "
                     "is empty/uninitialized, which is not permitted!",
                     domain_or_empty, separator, name, i);
-            rv3.push_back_borrow((uint32_t) index);
             size_t size = jit_var_size((uint32_t) index);
             if (size != 1)
                 jit_raise("ad_call_getter(\"%s%s%s\"): return value of "
                           "callable %zu is not a scalar (r%u has size %zu).",
                           domain_or_empty, separator, name, i, (uint32_t) index,
                           size);
+            rv3[i*rv2.size()+j] = (uint32_t) index;
+            jit_var_inc_ref((uint32_t) index);
         }
     }
 
@@ -140,10 +141,23 @@ static void ad_call_getter(JitBackend backend, const char *domain,
         jit_var_dec_ref(rv[i]);
         rv[i] = 0;
 
+        // Find the first defined return value
+        uint32_t first = 0;
+        for (size_t j = 0; j < callable_count; ++j) {
+            first = rv3[i+j*rv2.size()];
+            if (first)
+                break;
+        }
+
+        if (!first)
+            jit_raise("ad_call_getter(\"%s%s%s\"): all return values are "
+                      "uninitialized!", domain_or_empty, separator, name);
+
         // Check if this is a literal
         bool is_literal = true;
         for (size_t j = 0; j < callable_count; ++j) {
-            if (rv3[i] != rv3[i+j*rv2.size()])
+            uint32_t index = rv3[i+j*rv2.size()];
+            if (index && index != first)
                 is_literal = false;
         }
 
@@ -177,26 +191,32 @@ static void ad_call_getter(JitBackend backend, const char *domain,
         AggregationEntry *p = agg;
 
         for (size_t j = 0; j < callable_count; ++j) {
-            uint32_t rv3_i = rv3[i+j*rv2.size()];
-            VarState state = jit_var_state(rv3_i);
             p->offset = (j + 1) * tsize;
 
-            switch (state) {
-                case VarState::Literal:
-                    p->size = (int) tsize;
-                    p->src = 0;
-                    jit_var_read(rv3_i, 0, &p->src);
-                    break;
+            uint32_t rv3_i = rv3[i+j*rv2.size()];
+            if (!rv3_i) {
+                p->size = (int) tsize;
+                p->src = 0;
+            } else {
+                VarState state = jit_var_state(rv3_i);
 
-                case VarState::Unevaluated:
-                case VarState::Evaluated:
-                    p->size = -(int) tsize;
-                    cleanup.push_back(jit_var_data(rv3_i, (void **) &p->src));
-                    break;
+                switch (state) {
+                    case VarState::Literal:
+                        p->size = (int) tsize;
+                        p->src = 0;
+                        jit_var_read(rv3_i, 0, &p->src);
+                        break;
 
-                default:
-                    jit_free(agg);
-                    jit_raise("ad_call_getter(): invalid variable state");
+                    case VarState::Unevaluated:
+                    case VarState::Evaluated:
+                        p->size = -(int) tsize;
+                        cleanup.push_back(jit_var_data(rv3_i, (void **) &p->src));
+                        break;
+
+                    default:
+                        jit_free(agg);
+                        jit_raise("ad_call_getter(): invalid variable state");
+                }
             }
 
             p++;
@@ -207,13 +227,13 @@ static void ad_call_getter(JitBackend backend, const char *domain,
     }
 }
 
-// Strategy 2: perform symbolic indirection by tracing all callables
-static void ad_call_record(JitBackend backend, const char *domain,
-                            const char *name, size_t size, uint32_t index,
-                            uint32_t mask_, size_t callable_count,
-                            const dr_vector<uint64_t> args,
-                            dr_vector<uint64_t> &rv, dr_vector<bool> &rv_ad,
-                            ad_call_func func, void *payload) {
+// Strategy 2: perform indirection symbolically by tracing all callables
+static void ad_call_symbolic(JitBackend backend, const char *domain,
+                             const char *name, size_t size, uint32_t index,
+                             uint32_t mask_, size_t callable_count,
+                             const dr_vector<uint64_t> args,
+                             dr_vector<uint64_t> &rv, dr_vector<bool> &rv_ad,
+                             ad_call_func func, void *payload) {
     (void) domain;
     (void) size;
 
@@ -266,14 +286,13 @@ static void ad_call_record(JitBackend backend, const char *domain,
                 } else {
                     ptr = (void *) (uintptr_t) i;
                 }
-                callable_count_final++;
 
                 // Populate 'rv2' with function return values. This may raise
                 // an exception, in which case everything should be properly
                 // cleaned up in this function's scope
                 scoped_set_self set_self(backend, i + 1);
                 func(payload, ptr, args2, rv2);
-                inst_id[i] = i + 1;
+                inst_id[callable_count_final] = i + 1;
 
                 for (uint64_t index: rv2)
                     ad_var_check_implicit(index);
@@ -293,9 +312,10 @@ static void ad_call_record(JitBackend backend, const char *domain,
                     rv_ad[j] |= (index >> 32) != 0;
                     rv3.push_back_borrow((uint32_t) index);
                 }
+                callable_count_final++;
             }
 
-            checkpoints[callable_count] = rec.checkpoint_and_rewind();
+            checkpoints[callable_count_final] = rec.checkpoint_and_rewind();
         }
 
         dr_vector<uint32_t> rv4;
@@ -671,7 +691,7 @@ private:
     ad_call_cleanup m_cleanup;
 };
 
-// Generic checks, then forward either to ad_call_record or ad_call_reduce
+// Generic checks, then forward either to ad_call_symbolic or ad_call_reduce
 bool ad_call(JitBackend backend, const char *domain, size_t callable_count,
              const char *name, bool is_getter, uint32_t index, uint32_t mask,
              const dr_vector<uint64_t> &args, dr_vector<uint64_t> &rv,
@@ -740,7 +760,7 @@ bool ad_call(JitBackend backend, const char *domain, size_t callable_count,
             guard.success = true;
         } else if (jit_flag(JitFlag::VCallRecord)) {
             scoped_isolation_boundary guard;
-            ad_call_record(backend, domain, name, size, index, mask,
+            ad_call_symbolic(backend, domain, name, size, index, mask,
                             callable_count, args, rv, rv_ad, func, payload);
             ad_copy_implicit_deps(implicit_in);
             guard.success = true;
