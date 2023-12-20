@@ -262,3 +262,18 @@ def test11_do_not_copy_unchanged(t, mode):
     assert zi_1 != zo_1
     assert zi_5 != zo_5
     assert dr.all(xo == [2, 4])
+
+
+def test12_limitations():
+    # Test that issues related to current limitations of the AST processing
+    # are correctly reported
+    with pytest.raises(SyntaxError, match="use of 'return' inside a transformed 'while' loop or 'if' statement is currently not supported."):
+        @dr.syntax
+        def foo(x):
+            if x < 0:
+                return -x
+    @dr.syntax
+    def foo(x):
+        if dr.hint(x < 0, mode='scalar'):
+            return -x
+

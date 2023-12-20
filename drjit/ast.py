@@ -1,11 +1,12 @@
 import ast
 import types
 import inspect
+import linecache
 from typing import Callable, Optional, List
 
 
 class SyntaxVisitor(ast.NodeTransformer):
-    def __init__(self):
+    def __init__(self, filename, line_offset):
         super().__init__()
 
         # Keep track of read/written variables
@@ -16,6 +17,16 @@ class SyntaxVisitor(ast.NodeTransformer):
 
         # Enable the syntax visitor transformations
         self.enabled = True
+
+        # Stack of conditionals ('cond') / and for/while loops ('loop') that
+        # are currently being transformed. This a list of 2-tuples, e.g.,
+        # [('loop', False), ('cond', True')], where the second element refers
+        # to whether this is a scalar Python operation
+        self.op_stack = []
+
+        # Information for reporting syntax error
+        self.filename = filename
+        self.line_offset = line_offset
 
     def visit_FunctionDef(self, node: ast.FunctionDef):
         if self.enabled:
@@ -30,6 +41,65 @@ class SyntaxVisitor(ast.NodeTransformer):
             node = self.generic_visit(node)
 
         return node
+
+    def raise_syntax_error(self, node: ast.AST, msg: str):
+        lineno = node.lineno + self.line_offset
+        s = SyntaxError(f"@drjit.syntax ({self.filename}:{lineno}): {msg}")
+        s.lineno = lineno
+        s.end_lineno = node.end_lineno + self.line_offset
+        s.offset = node.col_offset
+        s.end_offset = node.end_col_offset
+        s.filename = self.filename
+        s.text = linecache.getline(self.filename, s.lineno)
+        raise s
+
+    def raise_forbidden_stmt_error(self, node: ast.AST, op_name):
+        self.raise_syntax_error(
+            node,
+            f"use of '{op_name}' inside a transformed 'while' loop or 'if' "
+            "statement is currently not supported. If the operations are "
+            "all scalar, you can annotate them with dr.hint(condition, "
+            "mode='scalar') to avoid this limitation.",
+        )
+
+    def visit_Return(self, node: ast.Return):
+        fail = False
+        for el in self.op_stack:
+            if not el[1]:
+                fail = True
+
+        if fail:
+            self.raise_forbidden_stmt_error(node, 'return')
+        else:
+            return self.generic_visit(node)
+
+    def visit_Break(self, node: ast.Break):
+        fail = False
+        for el in reversed(self.op_stack):
+            if not el[1]:
+                fail = True
+                break
+            if el[0] == "loop":
+                break
+
+        if fail:
+            self.raise_forbidden_stmt_error(node, 'break')
+        else:
+            return self.generic_visit(node)
+
+    def visit_Continue(self, node: ast.Continue):
+        fail = False
+        for el in reversed(self.op_stack):
+            if not el[1]:
+                fail = True
+                break
+            if el[0] == "loop":
+                break
+
+        if fail:
+            self.raise_forbidden_stmt_error(node, 'continue')
+        else:
+            return self.generic_visit(node)
 
     def visit_Name(self, node: ast.Name):
         if isinstance(node.ctx, ast.Load):
@@ -47,7 +117,7 @@ class SyntaxVisitor(ast.NodeTransformer):
             return node, {}
 
         if len(node.args) != 1:
-            raise RuntimeError("drjit.hint(): must have a single positional argument.")
+            self.raise_syntax_error(node, "drjit.hint() must have at least a single positional argument.")
 
         hints = {}
         for k in node.keywords:
@@ -64,9 +134,11 @@ class SyntaxVisitor(ast.NodeTransformer):
                     value = None
 
                 if value is None:
-                    raise Exception(
-                        f"dr.hint(): The '{k}' parameter must specify "
-                        "a literal list of strings (e.g., ['a', 'b']).")
+                    self.raise_syntax_error(node,
+                        f"The '{k.arg}' parameter of dr.hint() must specify "
+                         "a list of names (e.g., [a, b]). General expressions "
+                         "are not allowed here."
+                    )
             else:
                 value = k.value
             hints[k.arg] = value
@@ -74,7 +146,7 @@ class SyntaxVisitor(ast.NodeTransformer):
         valid_keys = ["exclude", "include", "label", "mode", "max_iterations"]
         for k in hints.keys():
             if k not in valid_keys:
-                raise RuntimeError(f'drjit.hint(): unsupported keyword argument "{k}".')
+                self.raise_syntax_error(node, f'drjit.hint() does not support the keyword argument "{k}".')
         return node.args[0], hints
 
     def rewrite_and_track(self, node: ast.AST):
@@ -90,8 +162,14 @@ class SyntaxVisitor(ast.NodeTransformer):
         for s in self.par_w:
             par_w |= s
 
+        # Extract hints, if available
+        node.test, hints = self.extract_hints(node.test)
+        mode = hints.get("mode", None)
+        is_scalar = isinstance(mode, ast.Constant) and mode.value == "scalar"
+
         # Process the node recursively
         if isinstance(node, ast.While):
+            self.op_stack.append(("loop", is_scalar))
             node = self.generic_visit(node)
 
             # Set of written variables consists of:
@@ -100,7 +178,9 @@ class SyntaxVisitor(ast.NodeTransformer):
             var_w = self.var_w & par_w
             var_r = self.var_r
 
+            self.op_stack.pop()
         elif isinstance(node, ast.If):
+            self.op_stack.append(("cond", is_scalar))
             # Get information about variable accesses in each branch
             for n in node.body:
                 self.generic_visit(n)
@@ -119,11 +199,9 @@ class SyntaxVisitor(ast.NodeTransformer):
 
             # Now, visit the loop condition and rewrite the node
             node = self.generic_visit(node)
+            self.op_stack.pop()
         else:
             raise RuntimeError("rewrite_and_track(): Unsupported node type!")
-
-        # Extract hints, if available
-        node.test, hints = self.extract_hints(node.test)
 
         # Do not import globals (variables that are only read and never defined)
         var_r -= var_r - var_w - par_w
@@ -131,8 +209,8 @@ class SyntaxVisitor(ast.NodeTransformer):
         # Include/exclude variables as requested by the user
         if "include" in hints:
             include = set(hints["include"])
-            var_r += include
-            var_w += include
+            var_r |= include
+            var_w |= include
 
         if "exclude" in hints:
             exclude = set(hints["exclude"])
@@ -143,12 +221,15 @@ class SyntaxVisitor(ast.NodeTransformer):
         self.var_w = var_w | self.par_w.pop()
 
         state_out = sorted(var_r | var_w)
-        state_in  = sorted(var_r | (var_w & par_w))
-
-        mode = hints.get("mode", None)
-        is_scalar = isinstance(mode, ast.Constant) and mode.value == "scalar"
+        state_in = sorted(var_r | (var_w & par_w))
 
         return node, state_in, state_out, hints, is_scalar
+
+    def visit_For(self, node: ast.For):
+        self.op_stack.append(("loop", True))
+        node = self.generic_visit(node)
+        self.op_stack.pop()
+        return node
 
     def visit_If(self, node: ast.If):
         (node, state_in, state_out, hints, is_scalar) = self.rewrite_and_track(node)
@@ -242,7 +323,9 @@ class SyntaxVisitor(ast.NodeTransformer):
             value=ast.Call(
                 func=ast.Name(id=ifstmt_name, ctx=load),
                 args=[
-                    ast.Tuple(elts=[ast.Name(id=k, ctx=load) for k in state_in], ctx=load),
+                    ast.Tuple(
+                        elts=[ast.Name(id=k, ctx=load) for k in state_in], ctx=load
+                    ),
                     node.test,
                     ast.Name(id=true_name, ctx=load),
                     ast.Name(id=false_name, ctx=load),
@@ -597,16 +680,21 @@ def syntax(f: Callable = None, print_ast: bool = False, print_code: bool = False
 
     if source[0].isspace():
         from textwrap import dedent
+
         source = dedent(source)
 
     old_ast = ast.parse(source)
+    old_code = f.__code__
+    filename = old_code.co_filename
     new_ast = old_ast
+    line_offset = old_code.co_firstlineno - 1
+
     if print_ast:
         print(f"Input AST\n---------\n{ast.dump(old_ast, indent=4)}\n")
     if print_code:
         print(f"Input code\n----------\n{ast.unparse(old_ast)}\n")
 
-    new_ast = SyntaxVisitor().visit(old_ast)
+    new_ast = SyntaxVisitor(filename, line_offset).visit(old_ast)
     new_ast = ast.fix_missing_locations(new_ast)
 
     if print_ast:
@@ -614,10 +702,9 @@ def syntax(f: Callable = None, print_ast: bool = False, print_code: bool = False
     if print_code:
         print(f"Output code\n-----------\n{ast.unparse(new_ast)}\n")
 
-    old_code = f.__code__
-    ast.increment_lineno(new_ast, old_code.co_firstlineno - 1)
+    ast.increment_lineno(new_ast, line_offset)
     try:
-        new_code = compile(new_ast, old_code.co_filename, "exec")
+        new_code = compile(new_ast, filename, "exec")
     except BaseException as e:
         raise RuntimeError(
             "The following transformed AST generated by "

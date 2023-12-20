@@ -382,3 +382,22 @@ def test15_loop_in_vcall(t, optimize, symbolic):
 
                         out = dr.switch(indices, [f], t, x)
                         assert dr.all(out == [1,2,3])
+
+def test16_limitations():
+    # Test that issues related to current limitations of the AST processing
+    # are correctly reported
+    with pytest.raises(SyntaxError, match="use of 'break' inside a transformed 'while' loop or 'if' statement is currently not supported."):
+        @dr.syntax
+        def foo(x):
+            while x > 0:
+                x += 1
+                if x == 5:
+                    break
+    @dr.syntax
+    def foo(x):
+        while dr.hint(x > 0, mode='scalar'):
+            x += 1
+            if dr.hint(x == 5, mode='scalar'):
+                break
+            else:
+                continue
