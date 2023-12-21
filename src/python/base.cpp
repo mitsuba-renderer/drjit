@@ -17,6 +17,7 @@
 #include "shape.h"
 #include "slice.h"
 #include "inspect.h"
+#include "autodiff.h"
 #include <nanobind/stl/string.h>
 
 #define DR_NB_UNOP(name, op)                                                   \
@@ -462,6 +463,10 @@ void export_base(nb::module_ &m) {
                    nb::raw_doc(doc_ArrayBase_real));
     ab.def_prop_rw("imag", complex_getter<1>, complex_setter<1>,
                    nb::raw_doc(doc_ArrayBase_imag));
+    ab.def_prop_rw(
+        "grad", [](nb::handle_t<ArrayBase> h) { return ::grad(h); },
+        [](nb::handle_t<ArrayBase> h, nb::handle h2) { ::set_grad(h, h2); },
+        nb::raw_doc(doc_ArrayBase_grad));
 
     ab.def_prop_rw("label",
         [](nb::handle_t<dr::ArrayBase> h) -> nb::object {

@@ -128,7 +128,7 @@ static nb::object detach(nb::handle h, bool preserve_type_ = true) {
     return transform("drjit.detach", d, h);
 }
 
-static nb::object grad(nb::handle h, bool preserve_type_ = true) {
+nb::object grad(nb::handle h, bool preserve_type_) {
     struct Grad : TransformCallback {
         bool preserve_type;
         Grad(bool preserve_type) : preserve_type(preserve_type) { }
@@ -243,7 +243,7 @@ static nb::object replace_grad(nb::handle h0, nb::handle h1) {
     return transform_pair("drjit.replace_grad", rg, o[0], o[1]);
 }
 
-static void set_grad(nb::handle target, nb::handle source) {
+void set_grad(nb::handle target, nb::handle source) {
   ::clear_grad(target);
   ::accum_grad(target, source);
 }
