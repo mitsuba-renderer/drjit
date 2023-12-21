@@ -185,8 +185,13 @@ public:
         for (size_t i : m_input_offsets)
             args.push_back_steal(ad_grad(m_args[i]));
 
-        ad_cond(m_backend, 1, name.c_str(), this, m_cond, args, rv, forward_cb,
-                nullptr, false);
+        ad_cond(
+            m_backend, 1, name.c_str(), this, m_cond, args, rv,
+            [](void *p, bool value, const dr_vector<uint64_t> &args,
+               dr_vector<uint64_t> &rv) {
+                ((CondOp *) p)->forward_cb(value, args, rv);
+            },
+            nullptr, false);
 
         ad_assert(rv.size() == m_output_offsets.size(), "Size mismatch!");
 
@@ -206,25 +211,18 @@ public:
         for (size_t i = 0; i < m_output_offsets.size(); ++i)
             args.push_back_steal(ad_grad(m_rv[i]));
 
-        ad_cond(m_backend, 1, name.c_str(), this, m_cond, args, rv, backward_cb,
-                nullptr, false);
+        ad_cond(
+            m_backend, 1, name.c_str(), this, m_cond, args, rv,
+            [](void *p, bool value, const dr_vector<uint64_t> &args,
+               dr_vector<uint64_t> &rv) {
+                ((CondOp *) p)->backward_cb(value, args, rv);
+            },
+            nullptr, false);
 
         ad_assert(rv.size() == m_input_offsets.size(), "Size mismatch!");
 
         for (size_t i = 0; i < m_input_offsets.size(); ++i)
             ad_accum_grad(combine(m_input_indices[i]), (uint32_t) rv[i]);
-    }
-
-    static void forward_cb(void *p, bool value,
-                            const dr_vector<uint64_t> &args,
-                            dr_vector<uint64_t> &rv) {
-        ((CondOp *) p)->forward_cb(value, args, rv);
-    }
-
-    static void backward_cb(void *p, bool value,
-                            const dr_vector<uint64_t> &args,
-                            dr_vector<uint64_t> &rv) {
-        ((CondOp *) p)->backward_cb(value, args, rv);
     }
 
     void forward_cb(bool value, const dr_vector<uint64_t> &args,

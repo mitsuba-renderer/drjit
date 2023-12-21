@@ -533,8 +533,14 @@ public:
         for (size_t i = 0; i < m_input_offsets.size(); ++i)
             args.push_back_steal(ad_grad(combine(m_input_indices[i])));
 
-        ad_call(m_backend, m_domain, m_callable_count, name.c_str(), false, m_index,
-                 m_mask, args, rv, this, &forward_cb, nullptr, false);
+        ad_call(
+            m_backend, m_domain, m_callable_count, name.c_str(), false, m_index,
+            m_mask, args, rv, this,
+            [](void *ptr, void *self, const dr_vector<uint64_t> &args,
+               dr_vector<uint64_t> &rv) {
+                ((CallOp *) ptr)->forward_cb(self, args, rv);
+            },
+            nullptr, false);
 
         ad_assert(rv.size() == m_output_offsets.size(), "Size mismatch!");
 
@@ -560,8 +566,14 @@ public:
         for (size_t i = 0; i < m_output_offsets.size(); ++i)
             args.push_back_steal(ad_grad(combine(m_output_indices[i])));
 
-        ad_call(m_backend, m_domain, m_callable_count, name.c_str(), false,
-                 m_index, m_mask, args, rv, this, &backward_cb, nullptr, false);
+        ad_call(
+            m_backend, m_domain, m_callable_count, name.c_str(), false, m_index,
+            m_mask, args, rv, this,
+            [](void *ptr, void *self, const dr_vector<uint64_t> &args,
+               dr_vector<uint64_t> &rv) {
+                ((CallOp *) ptr)->backward_cb(self, args, rv);
+            },
+            nullptr, false);
 
         ad_assert(rv.size() == m_input_offsets.size(), "Size mismatch!");
 
@@ -571,12 +583,6 @@ public:
 
         for (size_t i = 0; i < m_input_offsets.size(); ++i)
             ad_accum_grad(combine(m_input_indices[i]), (uint32_t) rv[i]);
-    }
-
-    static void forward_cb(void *ptr, void *self,
-                           const dr_vector<uint64_t> &args,
-                           dr_vector<uint64_t> &rv) {
-        ((CallOp *) ptr)->forward_cb(self, args, rv);
     }
 
     /// Forward AD callback (invoked by forward() once per callable)
@@ -614,12 +620,6 @@ public:
             m_temp.push_back_steal(index);
             rv.push_back(index);
         }
-    }
-
-    static void backward_cb(void *ptr, void *self,
-                           const dr_vector<uint64_t> &args,
-                           dr_vector<uint64_t> &rv) {
-        ((CallOp *) ptr)->backward_cb(self, args, rv);
     }
 
     /// Backward AD callback (invoked by backward() once per callable)

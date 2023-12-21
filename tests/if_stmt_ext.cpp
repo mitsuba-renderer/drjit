@@ -8,8 +8,6 @@ namespace dr = drjit;
 using namespace nb::literals;
 
 template <typename UInt> UInt simple_cond() {
-    using Bool = dr::mask_t<UInt>;
-
     UInt i = dr::arange<UInt>(10),
          j = 5;
 
@@ -30,11 +28,22 @@ template <typename UInt> UInt simple_cond() {
     return k;
 }
 
+template <typename Float> Float my_abs(Float x) {
+    return dr::if_stmt(
+        dr::make_tuple(x),
+        x < 0,
+        [](Float x) { return -x; },
+        [](Float x) { return  x; }
+    );
+}
+
 template <JitBackend Backend> void bind(nb::module_ &m) {
     using UInt = dr::DiffArray<Backend, uint32_t>;
+    using Float = dr::DiffArray<Backend, float>;
 
     m.def("scalar_cond", &simple_cond<uint32_t>);
     m.def("simple_cond", &simple_cond<UInt>);
+    m.def("my_abs", &my_abs<Float>);
 }
 
 NB_MODULE(if_stmt_ext, m) {

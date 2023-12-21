@@ -341,7 +341,7 @@ def test06_invalid_implicit_dependence(t):
 
 
 @pytest.test_arrays('float,shape=(*),jit')
-def test07_invalid_empty_array_in(t):
+def test07_uninitialized_array_in(t):
     idx = dr.uint32_array_t(t)(0, 0, 1, 1)
     with pytest.raises(RuntimeError) as e:
         dr.switch(idx, [lambda a: a, lambda a: a*2], t())
@@ -349,7 +349,7 @@ def test07_invalid_empty_array_in(t):
 
 
 @pytest.test_arrays('float,shape=(*),jit')
-def test08_invalid_empty_array_out(t):
+def test08_uninitialized_array_out(t):
     idx = dr.uint32_array_t(t)(0, 0, 1, 1)
     with pytest.raises(RuntimeError) as e:
         dr.switch(idx, [lambda a: a, lambda a: t()], t(1, 2, 3, 4))
