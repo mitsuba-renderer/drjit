@@ -32,7 +32,7 @@
 #include "switch.h"
 #include "while_loop.h"
 #include "if_stmt.h"
-#include "misc.h"
+#include "detail.h"
 #include "print.h"
 #include "history.h"
 
@@ -212,7 +212,7 @@ NB_MODULE(drjit_ext, m_) {
     export_dlpack(m);
     export_autodiff(m);
     export_inspect(m);
-    export_misc(m);
+    export_detail(m);
     export_switch(m);
     export_while_loop(m);
     export_if_stmt(m);

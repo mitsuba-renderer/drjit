@@ -2,7 +2,7 @@ Dr.Jit — A Just-In-Time-Compiler for Differentiable Rendering
 =============================================================
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :caption: Contents
 
    general
@@ -11,7 +11,7 @@ Dr.Jit — A Just-In-Time-Compiler for Differentiable Rendering
    changelog
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :caption: Reference
 
    reference

@@ -18,6 +18,14 @@
 NAMESPACE_BEGIN(drjit)
 NAMESPACE_BEGIN(detail)
 
+struct ref_vec : dr_vector<uint64_t> {
+    ref_vec() = default;
+    ~ref_vec() {
+        for (size_t i = 0; i < m_size; ++i)
+            ad_var_dec_ref(m_data[i]);
+    }
+};
+
 template <size_t... Is, typename Args, typename Mask, typename TrueFn,
           typename FalseFn>
 auto if_stmt_impl(std::index_sequence<Is...>, Args &&args_, const Mask &cond,
@@ -33,53 +41,58 @@ auto if_stmt_impl(std::index_sequence<Is...>, Args &&args_, const Mask &cond,
             return false_fn(dr_get<Is>(args)...);
     } else {
 
-        using Result = std::decay_t<decltype(std::declval<TrueFn>()(
+        using Return = std::decay_t<decltype(std::declval<TrueFn>()(
               dr_get<Is>(args_)...))>;
 
         // This is a vectorized conditional statement
-        struct Payload {
+        struct IfStmtData {
             std::decay_t<Args> args;
             Mask cond;
             TrueFn true_fn;
             FalseFn false_fn;
-            Result result;
+            Return rv;
         };
 
-        ad_cond_read read_cb = [](void *p, dr_vector<uint64_t> &indices) {
-            detail::collect_indices<true>(((Payload *) p)->result, indices);
-        };
+        ad_cond_body body_cb = [](void *p, bool value,
+                                  const dr_vector<uint64_t> &args_i,
+                                  dr_vector<uint64_t> &rv_i) {
+            IfStmtData *isd = (IfStmtData *) p;
 
-        ad_cond_write write_cb = [](void *p, const dr_vector<uint64_t> &indices) {
-            detail::update_indices(((Payload *) p)->result, indices);
-        };
+            detail::update_indices(isd->args, args_i);
 
-        ad_cond_body body_cb = [](void *p, bool value) {
-            Payload *payload = (Payload *) p;
             if (value)
-                payload->result = payload->true_fn(dr_get<Is>(payload->args)...);
+                isd->rv = isd->true_fn(dr_get<Is>(isd->args)...);
             else
-                payload->result = payload->false_fn(dr_get<Is>(payload->args)...);
+                isd->rv = isd->false_fn(dr_get<Is>(isd->args)...);
+
+            detail::collect_indices<true>(isd->rv, rv_i);
         };
 
-        ad_cond_delete delete_cb = [](void *p) { delete (Payload *) p; };
+        ad_cond_delete delete_cb = [](void *p) { delete (IfStmtData *) p; };
 
-        Payload *payload =
-            new Payload{ std::forward<Args>(args_), cond,
-                         std::forward<TrueFn>(true_fn),
-                         std::forward<FalseFn>(false_fn),
-                         Result() };
+        IfStmtData *isd =
+            new IfStmtData{ std::forward<Args>(args_), cond,
+                            std::forward<TrueFn>(true_fn),
+                            std::forward<FalseFn>(false_fn),
+                            Return() };
 
-        bool rv = ad_cond(Mask::Backend, -1, name, payload, cond.index(),
-                          read_cb, write_cb, body_cb, delete_cb, true);
+        ref_vec args_i, rv_i;
+        detail::collect_indices<true>(isd->args, args_i);
 
-        Result result = std::move(payload->result);
+        bool all_done = ad_cond(Mask::Backend, -1, name, isd, cond.index(),
+                                args_i, rv_i, body_cb, delete_cb, true);
 
-        if (rv)
-            delete payload;
+        Return rv = std::move(isd->rv);
 
-        return result;
+        detail::update_indices(rv, rv_i);
+
+        if (all_done)
+            delete isd;
+
+        return rv;
     }
 }
+
 NAMESPACE_END(detail)
 
 template <typename Args, typename Mask, typename TrueFn, typename FalseFn>

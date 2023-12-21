@@ -53,6 +53,7 @@ libdrjit-extra.so
 libdrjit-extra.dylib
 drjit-extra.dll
 libnanobind-static.a
+libnanobind-static-abi3.a
 libnanothread.so
 libnanothread.dylib
 nanothread.dll
@@ -60,6 +61,7 @@ libnanobind-drjit.dylib
 libnanobind-drjit.so
 nanobind-drjit.dll
 drjit_ext.cp*
+drjit_ext.abi3.*
 /drjitConfig.cmake
 /drjitConfigVersion.cmake
 drjit/config.py

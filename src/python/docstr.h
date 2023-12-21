@@ -1982,7 +1982,7 @@ This operation can be used in the following different ways:
        :emphasize-lines: 2-3
 
        >>> dr.gather(dtype=UInt, source=UInt(1, 2, 3), index=UInt(0, 1, 100))
-       RuntimeWarning: drjit.gather(): out-of-bounds read from position 100 in an array⏎
+       drjit.gather(): out-of-bounds read from position 100 in an array⏎
        of size 3. (<stdin>:2)
 
 Args:
@@ -3681,7 +3681,7 @@ input, but it will always be set to ``True``.
        :emphasize-lines: 2-3
 
        >>> print(dr.switch(UInt32(0, 100), [lambda x:x], UInt32(1)))
-       RuntimeWarning: attempted to invoke callable with index 100, but this ⏎
+       Attempted to invoke callable with index 100, but this ⏎
        value must be smaller than 1. (<stdin>:2)
 
 Args:
@@ -3891,16 +3891,23 @@ variables:
 
    dr.while_loop(body=loop_body, ...)
 
-There is one small exception: the loop body *may* perform side effects via functions
-like :py:func:`scatter`, :py:func:`scatter_reduce`, :py:func:`scatter_inc`,
-:py:func:`scatter_add`, etc., and the targets of such operations don't *have*
-to be specified as loop state (however, doing so causes no harm.)
+Dr.Jit automatically tracks dependencies of indirect reads
+(:py:func:`drjit.gather`) and writes (:py:func:`drjit.scatter`,
+:py:func:`drjit.scatter_reduce`, :py:func:`drjit.scatter_add`,
+:py:func:`drjit.scatter_inc`, etc.). Such operations create implicit inputs and
+outputs of a loop, and these *do not* need to be specified as loop state
+variables (however, doing so causes no harm.) This auto-discovery mechanism is
+helpful when performing vectorized methods calls (within loops), where the set
+of implicit inputs and outputs can often be difficult to know a priori.
+(in principle, any public/private field in any instance could be accessed in
+this way).
 
 .. code-block:: python
 
    y = ..
    def loop_body(x):
-       dr.scatter(target=y, value=x, index=0) # <-- this is okay
+       # Scattering to 'y' is okay even if it is not declared as loop state
+       dr.scatter(target=y, value=x, index=0)
 
 Another important assumption is that the loop state remains *consistent* across
 iterations, which means:
@@ -4152,8 +4159,8 @@ explain how this mode is automatically selected).
 The evaluation mode is chosen as follows:
 
 1. When the ``mod`` argument is set to ``"auto"`` (the *default*), the
-   function examines the type of the ``cond`` input and uses the scalar
-   mode the type is a builtin Python ``bool``.
+   function examines the type of the ``cond`` input and uses scalar
+   mode if the type is a builtin Python ``bool``.
 
    Otherwise, it chooses between symbolic and evaluated mode based on the
    :py:attr:`drjit.JitFlag.SymbolicConditionals` flag, which is set by default.
@@ -4173,7 +4180,7 @@ The evaluation mode is chosen as follows:
 When using the :py:func:`@drjit.syntax <drjit.syntax>` decorator to
 automatically convert Python ``if`` statements into :py:func:`drjit.if_stmt`
 calls, you can also use the :py:func:`drjit.hint` function to pass keyword
-arguments including ``mode`` or ``label`` parameters.
+arguments including the ``mode`` and ``label`` parameters.
 
 .. code-block:: python
 
@@ -4182,46 +4189,80 @@ arguments including ``mode`` or ``label`` parameters.
 
 .. rubric:: Assumptions
 
+The return values of ``true_fn`` and ``false_fn`` must be of the same type.
+This requirement applies recursively if the return value is a :ref:`PyTree
+<pytrees>`.
+
+Dr.Jit will refuse to compile vectorized conditionals, in which ``true_fn``
+and ``false_fn`` return a scalar that is inconsistent between the branches.
+
+.. code-block:: pycon
+   :emphasize-lines: 10-15
+
+   >>> @dr.syntax
+   ... def (x):
+   ...    if x > 0:
+   ...        y = 1
+   ...    else:
+   ...        y = 0
+   ...    return y
+   ...
+   >>> print(f(dr.llvm.Float(-1,2)))
+   RuntimeError: dr.if_stmt(): detected an inconsistency when comparing the return
+   values of 'true_fn' and 'false_fn': drjit.detail.check_compatibility(): inconsistent
+   scalar Python object of type 'int' for field 'y'.
+
+   Please review the interface and assumptions of dr.if_stmt() as explained in the
+   Dr.Jit documentation.
+
+The problem can be solved by assigning an instance of a capitalized Dr.Jit type
+(e.g., ``y=Int(1)``) so that the operation can be tracked.
+
 The functions ``true_fn`` and ``false_fn`` should *not* write to variables
 besides the explicitly declared return value(s):
 
 .. code-block:: python
 
    vec = drjit.cuda.Array3f(1, 2, 3)
-   def f(x):
+   def true_fn(x):
        vec.x += x     # <-- don't do this. 'y' is not a declared output
 
-   dr.if_stmt(true_fun=f, ...)
+   dr.if_stmt(args=(x,), true_fun=true_fn, ...)
 
 This example can be fixed as follows:
 
 .. code-block:: python
 
-   def f(vec, x):
+   def true_fn(x, vec):
        vec.x += x
        return vec
 
-   vec = dr.if_stmt(true_fun=f, ...)
+   vec = dr.if_stmt(args=(x, vec), true_fun=true_fn, ...)
 
-Correct derivative tracking also requires that differentiable inputs are
+:py:func:`drjit.if_stmt()` is differentiable in both forward and reverse modes.
+Correct derivative tracking requires that regular differentiable inputs are
 specified via the ``args`` parameter. The :py:func:`@drjit.syntax
 <drjit.syntax>` decorator ensures that these assumptions are satisfied.
 
-There is one small exception: the functions *may* perform side effects via
-functions like :py:func:`scatter`, :py:func:`scatter_reduce`,
-:py:func:`scatter_inc`, :py:func:`scatter_add`, etc., and the targets
-of such operations don't *have* to be specified as state variables
-(however, doing so causes no harm.)
+Dr.Jit also tracks dependencies of *indirect* reads (done via
+:py:func:`drjit.gather`) and writes (done via :py:func:`drjit.scatter`,
+:py:func:`drjit.scatter_reduce`, :py:func:`drjit.scatter_add`,
+:py:func:`drjit.scatter_inc`, etc.). Such operations create implicit inputs and
+outputs, and these *do not* need to be specified as part of ``args`` or the
+return value of ``true_fn`` and ``false_fn`` (however, doing so causes no
+harm.) This auto-discovery mechanism is helpful when performing vectorized
+methods calls (within conditional statements), where the set of implicit inputs
+and outputs can often be difficult to know a priori. (in principle, any
+public/private field in any instance could be accessed in this way).
 
 .. code-block:: python
 
    y = ..
-   def f(x):
-       dr.scatter(target=y, value=x, index=0) # <-- this is okay
+   def true_fn(x):
+       # 'y' is neither declared as input nor output of 'f', which is fine
+       dr.scatter(target=y, value=x, index=0)
 
-The return values of ``true_fn`` and ``false_fn`` must be of the same type.
-This requirement applies recursively if the return value is a :ref:`PyTree
-<pytrees>`.
+   dr.if_stmt(args=(x,), true_fn=true_fn, ...)
 
 .. rubric:: Interface
 
@@ -4496,7 +4537,7 @@ e.g.:
    :emphasize-lines: 2-3
 
    >>> dr.gather(dtype=UInt, source=UInt(1, 2, 3), index=UInt(0, 1, 100))
-   RuntimeWarning: drjit.gather(): out-of-bounds read from position 100 in an array⏎
+   drjit.gather(): out-of-bounds read from position 100 in an array⏎
    of size 3. (<stdin>:2)
 
 In debug mode, Dr.Jit also installs a
@@ -5494,7 +5535,7 @@ static const char *doc_set_block_size = R"(
 Set the number of SIMD packets constituting a parallel work item in the LLVM backend.
 
 Dr.Jit automatically vectorizes and parallelizes computation when using the
-LLVM backend (see the section on :ref:`optimization <optimization>` for
+LLVM backend (see the section on :ref:`optimizations <optimizations>` for
 details). One important decision is how many SIMD packets constitute a
 sufficient amount of work to hand over to the parallelization layer. This
 function can be used to tune this setting (the default is 1024 packets).)";

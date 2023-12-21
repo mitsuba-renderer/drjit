@@ -13,6 +13,7 @@ def test01_scalar(cond):
     )
     assert r == (5 if cond else 6)
 
+
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
 @pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
 @pytest.mark.parametrize('cond', [True, False])
@@ -93,6 +94,30 @@ def test05_uninitialized_input(t, mode):
             args = (t(4),t(5)),
             cond = dr.mask_t(t)(),
             true_fn = lambda x, y: (x > 1, y),
+            false_fn = lambda x, y: (x > 2, y),
+            rv_labels = ('x', 'y'),
+            mode=mode
+        )
+
+
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+@pytest.test_arrays('uint32,is_jit,shape=(*)')
+def test06_uninitialized_output(t, mode):
+    with pytest.raises(RuntimeError, match="field 'y' is uninitialized"):
+        dr.if_stmt(
+            args = (t(4),t(3)),
+            cond = dr.mask_t(t)(True, False),
+            true_fn = lambda x, y: (x > 1, y),
+            false_fn = lambda x, y: (x > 2, t()),
+            rv_labels = ('x', 'y'),
+            mode=mode
+        )
+
+    with pytest.raises(RuntimeError, match="field 'y' is uninitialized"):
+        dr.if_stmt(
+            args = (t(4),t(3)),
+            cond = dr.mask_t(t)(True, False),
+            true_fn = lambda x, y: (x > 1, t()),
             false_fn = lambda x, y: (x > 2, y),
             rv_labels = ('x', 'y'),
             mode=mode
@@ -180,11 +205,15 @@ def test09_incompatible_scalar(t, mode):
         f(t(1,2,3,4), t, mode)
 
 
+@pytest.mark.parametrize('variant', [0, 1])
 @pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
-def test10_side_effect(t, mode, capsys, drjit_verbose):
+def test10_side_effect(t, mode, variant, capsys, drjit_verbose):
     # Ensure that side effects are correctly tracked in evaluated and symbolic modes
-    buf = t(0, 0)
+    if variant == 0:
+        buf = t(0, 0)
+    else:
+        buf = dr.zeros(t, 2)
 
     def true_fn():
         dr.scatter_add(buf, index=0, value=1)
@@ -205,8 +234,41 @@ def test10_side_effect(t, mode, capsys, drjit_verbose):
     # Check that the scatter operation did not make unnecessary copies
     if mode == 'symbolic':
         transcript = capsys.readouterr().out
-        assert transcript.count('[direct]') == 2
+        assert transcript.count('[direct]') == 2-variant
 
+
+@pytest.mark.parametrize('variant', [0, 1])
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+@pytest.test_arrays('uint32,is_jit,shape=(*)')
+def test11_side_effect_v2(t, mode, variant, capsys, drjit_verbose):
+    # The same test should work even when 'buf' is passed as part of 'args'
+    if variant == 0:
+        buf = t(0, 0)
+    else:
+        buf = dr.zeros(t, 2)
+
+    def true_fn(buf):
+        dr.scatter_add(buf, index=0, value=1)
+        return buf
+
+    def false_fn(buf):
+        dr.scatter_add(buf, index=1, value=1)
+        return buf
+
+    buf = dr.if_stmt(
+        args = (buf,),
+        cond = dr.mask_t(t)(True, True, True, False, False),
+        true_fn = true_fn,
+        false_fn = false_fn,
+        mode=mode
+    )
+
+    assert dr.all(buf == [3, 2])
+
+    # Check that the scatter operation did not make unnecessary copies
+    if mode == 'symbolic':
+        transcript = capsys.readouterr().out
+        assert transcript.count('[direct]') == 2-variant
 
 @pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
 @pytest.test_arrays('uint32,is_jit,shape=(*)')
@@ -277,3 +339,81 @@ def test12_limitations():
         if dr.hint(x < 0, mode='scalar'):
             return -x
 
+
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+@pytest.test_arrays('float,is_diff,shape=(*)')
+def test13_ad_fwd(t, mode):
+    @dr.syntax
+    def f(x, mode):
+        if dr.hint(x < 5, mode=mode):
+            y = 10*x
+        else:
+            y = 100*x
+        return x, y
+
+    x = dr.arange(t, 10)
+    dr.enable_grad(x)
+
+    xo, yo = f(x, mode)
+    assert dr.all(xo == dr.arange(t, 10))
+    assert dr.all(yo == [0, 10, 20, 30, 40, 500, 600, 700, 800, 900])
+    dr.forward_from(x, flags=0)
+    assert dr.all(dr.grad(xo) == dr.full(t, 1, 10))
+    assert dr.all(dr.grad(yo) == [10, 10, 10, 10, 10, 100, 100, 100, 100, 100])
+
+
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+@pytest.test_arrays('float,is_diff,shape=(*)')
+def test14_ad_bwd(t, mode):
+    @dr.syntax
+    def f(x, mode):
+        if dr.hint(x < 5, mode=mode):
+            y = 10*x
+        else:
+            y = 100*x
+        return y
+
+    x = dr.arange(t, 10)
+    dr.enable_grad(x)
+
+    y = f(x, mode)
+    dr.backward_from(y)
+    assert dr.all(dr.grad(x) == [10, 10, 10, 10, 10, 100, 100, 100, 100, 100])
+
+
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+@pytest.test_arrays('float,is_diff,shape=(*)')
+@dr.syntax
+def test15_ad_fwd_implicit_dep(t, mode):
+    y = t(1)
+    dr.enable_grad(y)
+    dr.set_grad(y, 1)
+
+    x = dr.arange(t, 10)
+
+    if dr.hint(x < 5, exclude=[y]):
+        z = x*y
+    else:
+        z = x-y
+
+    dr.forward_to(z)
+    assert dr.all(dr.grad(z) == [0, 1, 2, 3, 4, -1, -1, -1, -1, -1])
+
+
+@pytest.mark.parametrize('mode', ['evaluated', 'symbolic'])
+@pytest.test_arrays('float,is_diff,shape=(*)')
+@dr.syntax
+def test16_ad_bwd_implicit_dep(t, mode):
+    y = t(1)
+    dr.enable_grad(y)
+    dr.set_grad(y, 1)
+
+    x = dr.arange(t, 10)
+
+    if dr.hint(x < 5, exclude=[y]):
+        z = x*y
+    else:
+        z = x-y
+
+    dr.backward_from(z)
+    assert dr.all(dr.grad(y) == 6)

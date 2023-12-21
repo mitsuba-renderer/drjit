@@ -43,6 +43,10 @@ struct dr_index32_vector : drjit::dr_vector<uint32_t> {
     using Base::Base;
 
     dr_index32_vector(dr_index32_vector &&a) : Base(std::move(a)) { }
+    dr_index32_vector &operator=(dr_index32_vector &&a) {
+        Base::operator=(std::move(a));
+        return *this;
+    }
     ~dr_index32_vector() { release(); }
 
     void release() {
@@ -63,6 +67,10 @@ struct dr_index64_vector : drjit::dr_vector<uint64_t> {
     using Base = drjit::dr_vector<uint64_t>;
     using Base::Base;
     dr_index64_vector(dr_index64_vector &&a) : Base(std::move(a)) { }
+    dr_index64_vector &operator=(dr_index64_vector &&a) {
+        Base::operator=(std::move(a));
+        return *this;
+    }
 
     ~dr_index64_vector() { release(); }
 

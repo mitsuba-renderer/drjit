@@ -1,5 +1,5 @@
 /*
-    misc.cpp -- Bindings for miscellaneous implementation details
+    detail.cpp -- Bindings for miscellaneous implementation details
 
     Dr.Jit: A Just-In-Time-Compiler for Differentiable Rendering
     Copyright 2023, Realistic Graphics Lab, EPFL.
@@ -8,7 +8,7 @@
     BSD-style license that can be found in the LICENSE.txt file.
 */
 
-#include "misc.h"
+#include "detail.h"
 #include "apply.h"
 #include "shape.h"
 #include "base.h"
@@ -212,12 +212,12 @@ void collect_indices(nb::handle h, dr::dr_vector<uint64_t> &indices, bool inc_re
 
         void operator()(nb::handle h) override {
             auto index_fn = supp(h.type()).index;
-            if (index_fn) {
-                uint64_t index = index_fn(inst_ptr(h));
-                if (inc_ref)
-                    ad_var_inc_ref(index);
-                result.push_back(index);
-            }
+            if (!index_fn)
+                return;
+            uint64_t index = index_fn(inst_ptr(h));
+            if (inc_ref)
+                ad_var_inc_ref(index);
+            result.push_back(index);
         }
     };
 
@@ -253,23 +253,36 @@ void collect_indices(nb::handle h, dr::dr_vector<uint64_t> &indices, bool inc_re
  * them in sync in case you make a change here)
  */
 nb::object update_indices(nb::handle h, const dr::dr_vector<uint64_t> &indices,
-                          CopyMap *copy_map) {
+                          CopyMap *copy_map, bool preserve_dirty) {
     struct UpdateIndicesOp : TransformCallback {
         const dr::dr_vector<uint64_t> &indices;
         CopyMap *copy_map;
+        bool preserve_dirty;
         size_t counter;
 
-        UpdateIndicesOp(const dr::dr_vector<uint64_t> &indices, CopyMap *copy_map)
-            : indices(indices), copy_map(copy_map), counter(0) { }
+        UpdateIndicesOp(const dr::dr_vector<uint64_t> &indices,
+                        CopyMap *copy_map, bool preserve_dirty)
+            : indices(indices), copy_map(copy_map),
+              preserve_dirty(preserve_dirty), counter(0) { }
 
         void operator()(nb::handle h1, nb::handle h2) override {
             const ArraySupplement &s = supp(h1.type());
-            if (s.index) {
-                if (counter >= indices.size())
-                    nb::raise("too few (%zu) indices provided", indices.size());
+            if (!s.index)
+                return;
+            if (counter >= indices.size())
+                nb::raise("too few (%zu) indices provided", indices.size());
 
-                s.init_index(indices[counter++], inst_ptr(h2));
+            uint64_t index = indices[counter];
+
+            if (preserve_dirty) {
+                uint64_t index2 = s.index(inst_ptr(h1));
+                if (jit_var_is_dirty((uint32_t) index2))
+                    index = index2;
             }
+
+            s.init_index(index, inst_ptr(h2));
+
+            counter++;
         }
 
         void postprocess(nb::handle h1, nb::handle h2) override {
@@ -281,7 +294,7 @@ nb::object update_indices(nb::handle h, const dr::dr_vector<uint64_t> &indices,
     if (!h.is_valid())
         return nb::object();
 
-    UpdateIndicesOp uio { indices, copy_map };
+    UpdateIndicesOp uio { indices, copy_map, preserve_dirty };
     nb::object result = transform("drjit.detail.update_indices", uio, h);
 
     if (uio.counter != indices.size())
@@ -324,9 +337,10 @@ nb::object reset(nb::handle h) {
  */
 void check_compatibility(nb::handle h1, nb::handle h2, const char *name) {
     struct CheckCompatibility : TraversePairCallback {
-        void operator()(nb::handle, nb::handle) override { }
+        void operator()(nb::handle, nb::handle) override {
+        }
     } cc;
-    traverse_pair("drjit.detail.check_compatibility", cc, h1, h2, name);
+    traverse_pair("drjit.detail.check_compatibility", cc, h1, h2, name, true);
 }
 
 static nb::handle trace_func_handle;
@@ -347,7 +361,7 @@ void disable_py_tracing() {
     nb::module_::import_("sys").attr("settrace")(nb::none());
 }
 
-void export_misc(nb::module_ &) {
+void export_detail(nb::module_ &) {
     nb::module_ d = nb::module_::import_("drjit.detail");
 
     nb::class_<CopyMap>(d, "CopyMap")
@@ -363,7 +377,7 @@ void export_misc(nb::module_ &) {
 
      .def("update_indices", &update_indices,
           "value"_a, "indices"_a, "copy_map"_a = nb::none(),
-          doc_detail_update_indices)
+          "preserve_dirty"_a = false, doc_detail_update_indices)
 
      .def("copy", &copy, "value"_a,
           "copy_map"_a = nb::none(), doc_detail_copy)

@@ -11,7 +11,7 @@
 
 #include "if_stmt.h"
 #include "pystate.h"
-#include "misc.h"
+#include "detail.h"
 #include "apply.h"
 #include "base.h"
 #include "shape.h"
@@ -20,14 +20,14 @@
 
 /// State object passed to callbacks that implement the Python interface around ad_cond().
 struct IfState {
-    nb::tuple args;
+    nb::object args;
     nb::callable true_fn, false_fn;
     nb::object rv;
     std::vector<std::string> rv_labels;
     CopyMap copy_map;
     std::vector<StashRef> sr;
 
-    IfState(nb::tuple &&args, nb::callable &&true_fn, nb::callable &&false_fn,
+    IfState(nb::object &&args, nb::callable &&true_fn, nb::callable &&false_fn,
             std::vector<std::string> &&rv_labels)
         : args(std::move(args)), true_fn(std::move(true_fn)),
           false_fn(std::move(false_fn)), rv_labels(std::move(rv_labels)) { }
@@ -38,42 +38,22 @@ struct IfState {
     }
 };
 
-
-static void if_stmt_body_cb(void *p, bool value) {
-    nb::gil_scoped_acquire guard;
+static void if_stmt_body_cb(void *p, bool value,
+                            const dr_vector<uint64_t> &args_i,
+                            dr_vector<uint64_t> &rv_i) {
     IfState *is = (IfState *) p;
-    nb::callable &fn = value ? is->true_fn : is->false_fn;
+    nb::gil_scoped_acquire guard;
 
-    // Temporarily stash the reference counts of inputs. This influences the
-    // behavior of copy-on-write (COW) operations like dr.scatter performed
-    // within the symbolic region
-    stash_ref(is->args, is->sr);
-
-    // Copy the input arguments to prevent 'true_fn' from mutating values that
-    // are subsequently accessed by 'false_fn'.
-    nb::tuple args = nb::borrow<nb::tuple>(copy(is->args, &is->copy_map));
+    // Rewrite the inputs with new argument indices given in 'args_i'
+    is->args = update_indices(is->args, args_i, &is->copy_map,
+                              /* preserve_dirty == */ !value);
 
     // Run the operation
-    nb::object rv = tuple_call(fn, args);
+    nb::object rv = tuple_call(value ? is->true_fn : is->false_fn, is->args);
 
-    // Propagate side effects back to 'args'
-    for (auto [h1, h2] : is->copy_map.map) {
-        nb::handle tp = h1.type();
-        if (!is_drjit_type(tp))
-            continue;
-
-        const ArraySupplement &s = supp(tp);
-        if (!s.index)
-            continue;
-
-        uint64_t i1 = s.index(inst_ptr(h1)),
-                 i2 = s.index(inst_ptr(h2));
-
-        if (i1 != i2 && jit_var_state((uint32_t) i1) == VarState::Dirty) {
-            stash_ref(h1, is->sr);
-            nb::inst_replace_copy(h2, h1);
-        }
-    }
+    // Stash the reference count of any new variables created by side effects
+    if (value)
+        stash_ref(is->args, is->sr);
 
     // Ensure that the output of 'true_fn' and 'false_fn' is consistent
     if (is->rv.is_valid()) {
@@ -100,6 +80,7 @@ static void if_stmt_body_cb(void *p, bool value) {
         }
     }
 
+    collect_indices(rv, rv_i, true);
     is->rv = std::move(rv);
 }
 
@@ -108,17 +89,6 @@ static void if_stmt_delete_cb(void *p) {
         return;
     nb::gil_scoped_acquire guard;
     delete (IfState *) p;
-}
-
-static void if_stmt_read_cb(void *p, dr::dr_vector<uint64_t> &indices) {
-    nb::gil_scoped_acquire guard;
-    collect_indices(((IfState *) p)->rv, indices, true);
-}
-
-static void if_stmt_write_cb(void *p, const dr::dr_vector<uint64_t> &indices) {
-    IfState *is = (IfState *) p;
-    nb::gil_scoped_acquire guard;
-    is->rv = update_indices(is->rv, indices, &is->copy_map);
 }
 
 nb::object if_stmt(nb::tuple args, nb::handle cond, nb::callable true_fn,
@@ -179,20 +149,32 @@ nb::object if_stmt(nb::tuple args, nb::handle cond, nb::callable true_fn,
             new IfState(std::move(args), std::move(true_fn),
                         std::move(false_fn), std::move(rv_labels));
 
-        bool status = ad_cond(backend, symbolic, name.c_str(), is,
-                              cond_index, if_stmt_read_cb, if_stmt_write_cb,
-                              if_stmt_body_cb, if_stmt_delete_cb, true);
+        // Temporarily stash the reference counts of inputs. This influences the
+        // behavior of copy-on-write (COW) operations like dr.scatter performed
+        // within the symbolic region
+        stash_ref(is->args, is->sr);
 
-        nb::object result = uncopy(is->rv, is->copy_map);
+        dr_index_vector args_i, rv_i;
+        collect_indices(is->args, args_i, true);
 
-        if (status) {
+        bool all_done =
+            ad_cond(backend, symbolic, name.c_str(), is, cond_index, args_i,
+                    rv_i, if_stmt_body_cb, if_stmt_delete_cb, true);
+
+        // Construct the final set of return values
+        nb::object rv = update_indices(is->rv, rv_i, &is->copy_map);
+
+        // Undo copy operations for unchanged elements of 'args'
+        rv = uncopy(rv, is->copy_map);
+
+        if (all_done) {
             delete is;
         } else {
-            is->rv = reset(is->rv);
+            is->rv.reset();
             is->cleanup();
         }
 
-        return result;
+        return rv;
     } catch (nb::python_error &e) {
         nb::raise_from(
             e, PyExc_RuntimeError,

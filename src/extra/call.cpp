@@ -602,10 +602,10 @@ public:
             ad_enqueue(dr::ADMode::Forward, index);
         }
 
-        for (size_t i = m_input_offsets.size(); i < m_input_indices.size(); ++i)
-            ad_enqueue(dr::ADMode::Forward, ((uint64_t) m_input_indices[i]) << 32);
-
         // Enqueue implicit dependencies
+        for (size_t i = m_input_offsets.size(); i < m_input_indices.size(); ++i)
+            ad_enqueue(dr::ADMode::Forward, combine(m_input_indices[i]));
+
         ad_traverse(dr::ADMode::Forward, (uint32_t) dr::ADFlag::ClearNone);
 
         m_temp.release();
@@ -758,7 +758,7 @@ bool ad_call(JitBackend backend, const char *domain, size_t callable_count,
                             callable_count, args, rv, rv_ad, func, payload);
             ad_copy_implicit_deps(implicit_in);
             guard.success = true;
-        } else if (jit_flag(JitFlag::VCallRecord)) {
+        } else if (jit_flag(JitFlag::SymbolicCalls)) {
             scoped_isolation_boundary guard;
             ad_call_symbolic(backend, domain, name, size, index, mask,
                             callable_count, args, rv, rv_ad, func, payload);

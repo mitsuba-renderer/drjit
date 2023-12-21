@@ -1,5 +1,5 @@
 /*
-    misc.h -- Bindings for miscellaneous implementation details
+    detail.h -- Bindings for miscellaneous implementation details
 
     Dr.Jit: A Just-In-Time-Compiler for Differentiable Rendering
     Copyright 2023, Realistic Graphics Lab, EPFL.
@@ -68,7 +68,8 @@ extern nb::object uncopy(nb::handle h, CopyMap &copy_map);
 extern void collect_indices(nb::handle, dr::dr_vector<uint64_t> &,
                             bool inc_ref = false);
 extern nb::object update_indices(nb::handle, const dr::dr_vector<uint64_t> &,
-                                 CopyMap *copy_map = nullptr);
+                                 CopyMap *copy_map = nullptr,
+                                 bool preserve_dirty = false);
 extern void check_compatibility(nb::handle, nb::handle, const char *name);
 extern void stash_ref(nb::handle h, std::vector<StashRef> &);
 
@@ -76,4 +77,4 @@ extern nb::object reset(nb::handle h);
 extern void enable_py_tracing();
 extern void disable_py_tracing();
 
-extern void export_misc(nb::module_ &);
+extern void export_detail(nb::module_ &);

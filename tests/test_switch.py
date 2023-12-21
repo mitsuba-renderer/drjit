@@ -337,7 +337,7 @@ def test06_invalid_implicit_dependence(t):
     with pytest.raises(RuntimeError) as e:
         dr.switch(idx, [f, g], a, i)
 
-    assert "the symbolic computation being recorded" in str(e.value.__cause__)
+    assert "You performed a differentiable operation that mixes symbolic" in str(e.value.__cause__)
 
 
 @pytest.test_arrays('float,shape=(*),jit')
@@ -353,7 +353,7 @@ def test08_invalid_empty_array_out(t):
     idx = dr.uint32_array_t(t)(0, 0, 1, 1)
     with pytest.raises(RuntimeError) as e:
         dr.switch(idx, [lambda a: a, lambda a: t()], t(1, 2, 3, 4))
-    assert "empty/uninitialized" in str(e.value)
+    assert "field 'result' is uninitialized" in str(e.value)
 
 
 # Keyword calling, pytrees, differentiation
@@ -447,4 +447,4 @@ def test12_out_of_bounds(t, capsys):
     with dr.scoped_set_flag(dr.JitFlag.Debug, True):
         dr.eval(dr.switch(t(0, 1, 100), targets, t(1)))
     transcript = capsys.readouterr().err
-    assert "attempted to invoke callable with index 100, but this value must be smaller than 2" in transcript
+    assert "Attempted to invoke callable with index 100, but this value must be smaller than 2" in transcript
