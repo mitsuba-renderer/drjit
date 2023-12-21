@@ -91,10 +91,10 @@ The detailed interface of this function is as follows:
           ...
       );
 
-   Instead, capture relevant variable state *by value*. Dr.Jit will move the two
-   functions (``cond`` and ``body`` including captured state) into a persistent
-   object that will eventually be released by the AD backend when it is no
-   longer needed.
+   Instead, capture relevant variable state *by value* or include it as part of
+   ``state``. Dr.Jit will move the two functions (``cond`` and ``body``
+   including captured state) into a persistent object that will eventually be
+   released by the AD backend when it is no longer needed.
 
 Vectorized conditionals
 -----------------------
@@ -135,7 +135,7 @@ Python interface to C++.
        }
    );
 
-The argument 'args' must always be a tuple that will be unpacked and passed as
+The argument ``args`` must always be a tuple that will be unpacked and passed as
 arguments of ``true_fn`` and ``false_fn``. The return value of these function
 can be any tree of arbitrarily nested arrays, tuples, and other :ref:`custom
 data structures <custom_types_cpp>`.
@@ -186,10 +186,10 @@ The detailed interface of this function is as follows:
           ...
       );
 
-   Instead, capture relevant variable state *by value*. Dr.Jit will move the
-   two functions (``true_fn`` and ``false_fn`` including captured state) into a
-   persistent object that will eventually be released by the AD backend when it
-   is no longer needed.
+   Instead, capture relevant variable state *by value* or include it as part of
+   ``args``. Dr.Jit will move the two functions (``true_fn`` and ``false_fn``
+   including captured state) into a persistent object that will eventually be
+   released by the AD backend when it is no longer needed.
 
 Vectorized method calls
 -----------------------
@@ -269,8 +269,9 @@ on a Dr.Jit instance arrays. Below is an overview of the available macros:
 .. c:macro:: DRJIT_CALL_BEGIN(Name)
 
    Demarcates the start of an interface block. The `Name` parameter must refer
-   to the type in question, and the ``jit_registry_put`` call mentioned above
-   should provide a string version of `Name` (including namespace prefixes).
+   to the type in question. The ``jit_registry_put`` call in the earlier
+   snippet should provide the string-quoted equivalent of `Name` including
+   namespace prefixes.
 
 .. c:macro:: DRJIT_CALL_TEMPLATE_BEGIN(Name)
 
@@ -303,9 +304,9 @@ or virtual method call.
    Float y = instances->f(x);
 
 All of the commentary about function calls in Python (see
-:py:func:`drjit.switch()`) applies here as well. The call can be done
-symbolically, using wavefronts, and it can propagate derivatives in forward and
-reverse mode.
+:py:func:`drjit.switch()`) applies here as well. The call can be done in
+symbolic or evaluated mode, and it supports derivative propagation in forward
+and reverse modes.
 
 Masks passed as the last function argument are treated specially and apply to
 the entire operation. Masked elements of the call effectively don't perform the

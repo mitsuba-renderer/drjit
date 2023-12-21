@@ -6,7 +6,7 @@ from typing import Callable, Optional, List
 
 
 class SyntaxVisitor(ast.NodeTransformer):
-    def __init__(self, filename, line_offset):
+    def __init__(self, recursive, filename, line_offset):
         super().__init__()
 
         # Keep track of read/written variables
@@ -15,8 +15,9 @@ class SyntaxVisitor(ast.NodeTransformer):
         # As the above, but for parent AST nodes
         self.par_r, self.par_w = [], []
 
-        # Enable the syntax visitor transformations
-        self.enabled = True
+        # Recursion-related parameters
+        self.recursive = recursive
+        self.depth = 0
 
         # Stack of conditionals ('cond') / and for/while loops ('loop') that
         # are currently being transformed. This a list of 2-tuples, e.g.,
@@ -29,9 +30,13 @@ class SyntaxVisitor(ast.NodeTransformer):
         self.line_offset = line_offset
 
     def visit_FunctionDef(self, node: ast.FunctionDef):
-        if self.enabled:
+        if self.recursive or self.depth == 0:
             # Process only the outermost function
-            self.enabled = False
+            self.depth += 1
+
+            # Keep track of read/written variables
+            var_r, var_w = self.var_r, self.var_w
+            self.var_r, self.var_w = set(), set()
 
             # Add function parameters to self.var_w
             for o1 in (node.args.args, node.args.posonlyargs, node.args.kwonlyargs):
@@ -39,6 +44,10 @@ class SyntaxVisitor(ast.NodeTransformer):
                     self.var_w.add(o2.arg)
 
             node = self.generic_visit(node)
+
+            self.var_r, self.var_w = var_r, var_w
+
+            self.depth -= 1
 
         return node
 
@@ -69,7 +78,7 @@ class SyntaxVisitor(ast.NodeTransformer):
                 fail = True
 
         if fail:
-            self.raise_forbidden_stmt_error(node, 'return')
+            self.raise_forbidden_stmt_error(node, "return")
         else:
             return self.generic_visit(node)
 
@@ -83,7 +92,7 @@ class SyntaxVisitor(ast.NodeTransformer):
                 break
 
         if fail:
-            self.raise_forbidden_stmt_error(node, 'break')
+            self.raise_forbidden_stmt_error(node, "break")
         else:
             return self.generic_visit(node)
 
@@ -97,7 +106,7 @@ class SyntaxVisitor(ast.NodeTransformer):
                 break
 
         if fail:
-            self.raise_forbidden_stmt_error(node, 'continue')
+            self.raise_forbidden_stmt_error(node, "continue")
         else:
             return self.generic_visit(node)
 
@@ -117,7 +126,9 @@ class SyntaxVisitor(ast.NodeTransformer):
             return node, {}
 
         if len(node.args) != 1:
-            self.raise_syntax_error(node, "drjit.hint() must have at least a single positional argument.")
+            self.raise_syntax_error(
+                node, "drjit.hint() must have at least a single positional argument."
+            )
 
         hints = {}
         for k in node.keywords:
@@ -134,10 +145,11 @@ class SyntaxVisitor(ast.NodeTransformer):
                     value = None
 
                 if value is None:
-                    self.raise_syntax_error(node,
+                    self.raise_syntax_error(
+                        node,
                         f"The '{k.arg}' parameter of dr.hint() must specify "
-                         "a list of names (e.g., [a, b]). General expressions "
-                         "are not allowed here."
+                        "a list of names (e.g., [a, b]). General expressions "
+                        "are not allowed here.",
                     )
             else:
                 value = k.value
@@ -146,7 +158,9 @@ class SyntaxVisitor(ast.NodeTransformer):
         valid_keys = ["exclude", "include", "label", "mode", "max_iterations"]
         for k in hints.keys():
             if k not in valid_keys:
-                self.raise_syntax_error(node, f'drjit.hint() does not support the keyword argument "{k}".')
+                self.raise_syntax_error(
+                    node, f'drjit.hint() does not support the keyword argument "{k}".'
+                )
         return node.args[0], hints
 
     def rewrite_and_track(self, node: ast.AST):
@@ -496,7 +510,12 @@ class SyntaxVisitor(ast.NodeTransformer):
         )
 
 
-def syntax(f: Callable = None, print_ast: bool = False, print_code: bool = False):
+def syntax(
+    f: Callable = None,
+    recursive: bool = False,
+    print_ast: bool = False,
+    print_code: bool = False,
+):
     """
     Syntax decorator for vectorized loops and conditionals.
 
@@ -658,6 +677,10 @@ def syntax(f: Callable = None, print_ast: bool = False, print_code: bool = False
     wrapper instead of the actual function definition, which is almost
     certainly not wanted.
 
+    When :py:func:`@drjit.syntax <drjit.syntax>` decorates a function
+    containing *nested* functions, it only transforms the outermost function by
+    default. Specify the ``recursive=True`` parameter to process them as well.
+
     One last point: :py:func:`@dr.syntax <drjit.syntax>` may seem
     reminiscent of function--level transformations in other frameworks like
     ``@jax.jit`` (JAX) or ``@tf.function`` (TensorFlow). There is a key
@@ -672,7 +695,7 @@ def syntax(f: Callable = None, print_ast: bool = False, print_code: bool = False
     if f is None:
 
         def wrapper(f2):
-            return syntax(f2, print_ast, print_code)
+            return syntax(f2, recursive, print_ast, print_code)
 
         return wrapper
 
@@ -694,7 +717,7 @@ def syntax(f: Callable = None, print_ast: bool = False, print_code: bool = False
     if print_code:
         print(f"Input code\n----------\n{ast.unparse(old_ast)}\n")
 
-    new_ast = SyntaxVisitor(filename, line_offset).visit(old_ast)
+    new_ast = SyntaxVisitor(recursive, filename, line_offset).visit(old_ast)
     new_ast = ast.fix_missing_locations(new_ast)
 
     if print_ast:

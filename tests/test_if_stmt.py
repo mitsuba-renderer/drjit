@@ -417,3 +417,20 @@ def test16_ad_bwd_implicit_dep(t, mode):
 
     dr.backward_from(z)
     assert dr.all(dr.grad(y) == 6)
+
+
+@pytest.test_arrays('float,is_diff,shape=(*)')
+@dr.syntax(recursive=True)
+def test17_nested_ast_trafo(t):
+    y = t(1, 2, 3)
+
+    def g():
+        if y < 2:
+            z = t(-1)
+        else:
+            z = t(1)
+        return z
+
+    assert dr.all(g() == t(-1, 1, 1))
+
+
