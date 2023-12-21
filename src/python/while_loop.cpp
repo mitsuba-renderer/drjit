@@ -168,6 +168,13 @@ private:
                 size_t &s1 = entries[id].size,
                         s2 = jit_var_size((uint32_t) i2);
 
+                if (!first_time && (s1 == 0 || s2 == 0))
+                    nb::raise("loop state variable '%s' (which is of type "
+                              "'%s') is uninitialized. Please review the "
+                              "interface and assumptions of dr.while_loop() as "
+                              "explained in the Dr.Jit documentation. %zu %zu",
+                              name.c_str(), nb::inst_name(h).c_str(), s1, s2);
+
                 if (!first_time && s1 != s2 && s1 != 1 && s2 != 1)
                     nb::raise("the body of this loop changed the size of loop "
                               "state variable '%s' (which is of type '%s') from "
@@ -369,10 +376,13 @@ nb::tuple while_loop(nb::tuple state, nb::callable cond, nb::callable body,
         // Undo the prior copy operation for unchanged parts of the PyTree
         nb::tuple result = nb::borrow<nb::tuple>(uncopy(payload->state, copy_map));
 
-        if (rv)
+        if (rv) {
             delete payload;
-        else
+        } else {
             payload->state = nb::borrow<nb::tuple>(reset(payload->state));
+            payload->entries.clear();
+            payload->first_time = true;
+        }
 
         return result;
     } catch (nb::python_error &e) {

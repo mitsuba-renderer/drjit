@@ -290,6 +290,7 @@ public:
         m_state2.release();
         for (size_t i = 0; i < m_inputs.size(); ++i)
             m_state2.push_back_borrow(m_state[i]);
+
         m_write_cb(m_payload, m_state2);
         m_state2.release();
         return m_cond_cb(m_payload);
