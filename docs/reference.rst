@@ -1099,6 +1099,7 @@ Array base class
     .. autoproperty:: w
     .. autoproperty:: index
     .. autoproperty:: index_ad
+    .. autoproperty:: grad
     .. automethod:: __len__
     .. automethod:: __iter__
     .. automethod:: __repr__

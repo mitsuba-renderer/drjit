@@ -13,3 +13,6 @@
 #include "common.h"
 
 extern void export_autodiff(nb::module_ &);
+
+extern nb::object grad(nb::handle h, bool preserve_type_ = true);
+extern void set_grad(nb::handle target, nb::handle source);

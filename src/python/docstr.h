@@ -1610,6 +1610,15 @@ variable index within the raw computation graph, if applicable.
 
 :type: int)";
 
+static const char *doc_ArrayBase_grad = R"(
+This property can be used to retrieve or set the gradient associated with the
+Dr.Jit array or tensor.
+
+The expressions ``drjit.grad(arg)`` and ``arg.grad`` are equivalent when
+``arg`` is a Dr.Jit array/tensor.
+
+:type: drjit.ArrayBase)";
+
 static const char *doc_uint_array_t = R"(
 Converts the provided Dr.Jit array/tensor type into a *unsigned integer*
 version with the same element size.
