@@ -13,7 +13,7 @@
 #include "eval.h"
 #include "base.h"
 #include "reduce.h"
-#include "misc.h"
+#include "detail.h"
 #include "apply.h"
 #include <nanobind/stl/vector.h>
 #include <nanobind/stl/string.h>

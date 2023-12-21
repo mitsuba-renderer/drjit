@@ -32,7 +32,7 @@ nanobind_add_module(
   dlpack.h      dlpack.cpp
   autodiff.h    autodiff.cpp
   inspect.h     inspect.cpp
-  misc.h        misc.cpp
+  detail.h      detail.cpp
   switch.h      switch.cpp
   while_loop.h  while_loop.cpp
   if_stmt.h     if_stmt.cpp

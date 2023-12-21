@@ -462,7 +462,7 @@ bool ad_loop(JitBackend backend, int symbolic, const char *name, void *payload,
 
                 if (ad_custom_op(op.get())) {
                     write_cb(payload, indices_out);
-                    // LoopOp will eventually call delete()
+                    // LoopOp will eventually call delete_cb()
                     return false;
                 }
 

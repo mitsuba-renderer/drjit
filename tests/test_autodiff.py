@@ -104,7 +104,7 @@ def test003_set_grad(t):
     g = dr.grad(a)
     assert len(g) == 3 and dr.allclose(g, [3, 4, 5])
 
-    with pytest.raises(RuntimeError, match=re.escape("incompatible sizes for field 'target' (3 and 2)")):
+    with pytest.raises(RuntimeError, match=re.escape("attempted to store a gradient of size 2 into AD variable")):
         dr.set_grad(a, t(1, 2))
 
     a = t(1)

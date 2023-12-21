@@ -213,8 +213,8 @@ extern void ad_var_check_implicit(uint64_t index);
 
 // Callbacks used by \ref ad_call() below. See the interface for details
 typedef void (*ad_call_func)(void *payload, void *self,
-                                  const drjit::dr_vector<uint64_t> &args_i,
-                                  drjit::dr_vector<uint64_t> &rv_i);
+                             const drjit::dr_vector<uint64_t> &args_i,
+                             drjit::dr_vector<uint64_t> &rv_i);
 typedef void (*ad_call_cleanup)(void*);
 
 /**
@@ -284,10 +284,10 @@ typedef void (*ad_call_cleanup)(void*);
  */
 extern DRJIT_EXTRA_EXPORT bool
 ad_call(JitBackend backend, const char *domain, size_t callable_count,
-         const char *name, bool is_getter, uint32_t index, uint32_t mask,
-         const drjit::dr_vector<uint64_t> &args, drjit::dr_vector<uint64_t> &rv,
-         void *payload, ad_call_func callback, ad_call_cleanup cleanup,
-         bool ad);
+        const char *name, bool is_getter, uint32_t index, uint32_t mask,
+        const drjit::dr_vector<uint64_t> &args, drjit::dr_vector<uint64_t> &rv,
+        void *payload, ad_call_func callback, ad_call_cleanup cleanup,
+        bool ad);
 
 // Callbacks used by \ref ad_loop() below. See the interface for details
 typedef void (*ad_loop_read)(void *payload, drjit::dr_vector<uint64_t> &);
@@ -358,9 +358,9 @@ extern DRJIT_EXTRA_EXPORT bool ad_loop(JitBackend backend, int symbolic,
                                        ad_loop_delete delete_cb, bool ad);
 
 // Callbacks used by \ref ad_cond() below. See the interface for details
-typedef void (*ad_cond_read)(void *payload, drjit::dr_vector<uint64_t> &);
-typedef void (*ad_cond_write)(void *payload, const drjit::dr_vector<uint64_t> &);
-typedef void (*ad_cond_body)(void *payload, bool value);
+typedef void (*ad_cond_body)(void *payload, bool value,
+                             const drjit::dr_vector<uint64_t> &args_i,
+                             drjit::dr_vector<uint64_t> &rv_i);
 typedef void (*ad_cond_delete)(void *payload);
 
 /**
@@ -387,17 +387,14 @@ typedef void (*ad_cond_delete)(void *payload);
  * \param cond
  *     The JIT variable index of the conditional expression.
  *
- * \param read_cb
- *     Pointer to a callback routine that analyzes the return value and adds
- *     detected JIT/AD variables to the provided index array.
+ * \param args
+ *     Input arguments to the conditional statement
  *
- * \param write_cb
- *     Pointer to a callback routine that updates the return value by replacing
- *     its JIT/AD variable indices with values provided in the given dynamic
- *     array.
+ * \param rv
+ *     Will be used to store the return value of the conditional statement
  *
  * \param body_cb
- *     Callback routine that executes either the \c true or the \c false branch.
+ *     Callback to invoke 'true_fn' or 'false_fn'
  *
  * \param delete_cb
  *     A cleanup routine that deletes storage associated with \c payload.
@@ -416,12 +413,10 @@ typedef void (*ad_cond_delete)(void *payload);
  */
 extern DRJIT_EXTRA_EXPORT bool
 ad_cond(JitBackend backend, int symbolic, const char *name, void *payload,
-        uint32_t cond, ad_cond_read read_cb, ad_cond_write write_cb,
-        ad_cond_body body_cb, ad_cond_delete delete_cb, bool ad);
+        uint32_t cond, const drjit::dr_vector<uint64_t> &args,
+        drjit::dr_vector<uint64_t> &rv, ad_cond_body body_cb,
+        ad_cond_delete delete_cb, bool ad);
 
-#if defined(__cplusplus)
-}
-#endif
 
 #if defined(__GNUC__)
 DRJIT_INLINE uint64_t ad_var_inc_ref(uint64_t index) JIT_NOEXCEPT {
@@ -440,4 +435,8 @@ DRJIT_INLINE void ad_var_dec_ref(uint64_t index) JIT_NOEXCEPT {
 #else
 #define ad_var_dec_ref ad_var_dec_ref_impl
 #define ad_var_inc_ref ad_var_inc_ref_impl
+#endif
+
+#if defined(__cplusplus)
+}
 #endif

@@ -675,15 +675,13 @@ void traverse_pair_impl(const char *op, TraversePairCallback &tc, nb::handle h1,
                     name.resize(name_size);
                 }
             } else {
-                if (s1 != s2 && s1 != 1 && s2 != 1) {
-                    if (report_inconsistencies)
+                if (report_inconsistencies) {
+                    if (s1 == 0 || s2 == 0) {
+                        nb::raise("field '%s' is uninitialized.", name.c_str());
+                    } else if (s1 != s2 && s1 != 1 && s2 != 1) {
                         nb::raise("incompatible sizes for field '%s' (%zu and %zu).",
                                   name.c_str(), s1, s2);
-                    else
-                        return;
-                } else if (s1 == 0 && s2 == 0) {
-                    if (report_inconsistencies)
-                        nb::raise("field '%s' is uninitialized.", name.c_str());
+                    }
                 }
                 tc(h1, h2);
             }

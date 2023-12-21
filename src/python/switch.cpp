@@ -10,16 +10,7 @@
 
 #include "switch.h"
 #include "base.h"
-#include "misc.h"
-
-struct dr_index_vector : dr::dr_vector<uint64_t> {
-    using Base = dr::dr_vector<uint64_t>;
-    using Base::Base;
-    ~dr_index_vector() {
-        for (size_t i = 0; i < size(); ++i)
-            ad_var_dec_ref(operator[](i));
-    }
-};
+#include "detail.h"
 
 /// Exctract the mask parameter from a set of positional/keyword arguments
 static nb::object extract_mask(nb::list &args, nb::kwargs &kwargs) {

@@ -900,20 +900,21 @@ DRJIT_NOINLINE Index ad_var_new_impl(const char *label, JitVar &&result,
 
     auto [ad_index, var] = ad_var_new(info.backend, info.size, info.type,
                                       symbolic, reuse_indices, label);
+    const char *tname = jit_type_name(info.type);
 
     if constexpr (N == 0) {
         if (label)
-            ad_log("ad_var_new(): a%u = %s()", ad_index, label);
+            ad_log("ad_var_new(): %s a%u = %s()", tname, ad_index, label);
         else
-            ad_log("ad_var_new(): a%u = new()", ad_index);
+            ad_log("ad_var_new(): %s a%u = new()", tname, ad_index);
     } else if constexpr (N == 1) {
-        ad_log("ad_var_new(): a%u = %s(a%u)", ad_index, label,
+        ad_log("ad_var_new(): %s a%u = %s(a%u)", tname, ad_index, label,
                args[0].ad_index);
     } else if constexpr (N == 2) {
-        ad_log("ad_var_new(): a%u = %s(a%u, a%u)", ad_index,
+        ad_log("ad_var_new(): %s a%u = %s(a%u, a%u)", tname, ad_index,
                label, args[0].ad_index, args[1].ad_index);
     } else if constexpr (N == 3) {
-        ad_log("ad_var_new(): a%u = %s(a%u, a%u, a%u)", ad_index,
+        ad_log("ad_var_new(): %s a%u = %s(a%u, a%u, a%u)", tname, ad_index,
                label, args[0].ad_index, args[1].ad_index, args[2].ad_index);
     }
 
@@ -2803,13 +2804,43 @@ uint32_t ad_record_implicit_dependence(LocalState &ls, ReleaseHelper &rh,
         return source; // don't know how to handle this case yet
     } else {
         if (v_source->size != 1)
-            ad_raise("ad_var_new(): the symbolic computation being recorded "
-                     "reads from a variable that lies outside of the current "
-                     "scope. This variable (a%u) has size %zu. However, only "
-                     "scalar (size == 1) accesses are permitted in this "
-                     "manner. You will likely want to convert the variable "
-                     "access into an drjit.gather() operation.",
-                     source, v_source->size);
+            ad_raise(
+                "ad_var_new(): You performed a differentiable operation that mixes symbolic\n"
+                "non-symbolic variables in a non-permissible way. The reason is likely one\n"
+                "of the following factors:\n"
+                "\n"
+                "1. Your program performed a *symbolic* operation such as a\n"
+                "\n"
+                "   - conditional (via drjit.if_stmt())\n"
+                "   - loop (via drjit.while_loop())\n"
+                "   - call (via drjit.switch(), drjit.dispatch(), C++ method)\n"
+                "\n"
+                "   (this potentially involved the @drjit.syntax decorator, which \n"
+                "    rewrites scalar Python code to make use of these operations)\n"
+                "\n"
+                "2. The body of this operation accesses a variable *implicitly*, meaning\n"
+                "   that the variable wasn't listed as part of 'args' (for conditionals),\n"
+                "   'state' (for loops), or as a function argument (for calls).\n"
+                "\n"
+                "   If you executed a symbolic call, the variable might, e.g., be a field\n"
+                "   of an instance targeted by the call. This is fine.\n"
+                "\n"
+                "3. Dr.Jit then tried to convert the implicit read into a drjit.gather()\n"
+                "   operation to legalize this behavior.\n"
+                "\n"
+                "   However, the problem is that the variable in question (a%u) has size %zu,\n"
+                "   and the conversion to drjit.gather() only makes sense for scalar (size 1)\n"
+                "   variables.\n"
+                "\n"
+                "There are two possible solutions:\n"
+                "\n"
+                "1. \"Pipe\" the variable to the code in question, by explicitly listing it\n"
+                "   as part of conditional inputs, loop state varibles, and function inputs.\n"
+                "\n"
+                "2. Is this potentially a bug in your code? Did you mean to gather an\n"
+                "   element from the variable instead of reading it directly? In that case,\n"
+                "   please fix the operation referenced in the stack trace.",
+                source, v_source->size);
 
         auto [ad_index, v] = ad_var_new(backend, 1, (VarType) v_source->type,
                                         true, reuse_indices, "gather");
