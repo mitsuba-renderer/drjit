@@ -219,7 +219,7 @@ evaluation (:py:func:`drjit.eval`) are likewise not permitted:
    bandwidth, which is why it is not enabled by default. Please see the
    Dr.Jit documentation for more information on symbolic and evaluated
    evaluation modes:
-   https://nanobind.readthedocs.io/cflow.html#symbolic-versus-evaluated-modes
+   https://drjit.readthedocs.io/en/latest/cflow.html#symbolic-versus-evaluated-modes
 
 It is perfectly valid to index into nested Dr.Jit arrays like
 :py:class:`drjit.cuda.Array2f`, but the end result should *not* be a Python

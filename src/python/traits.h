@@ -14,3 +14,9 @@
 #include "common.h"
 
 extern void export_traits(nb::module_ &);
+extern nb::object expr_t(nb::handle h0, nb::handle h1);
+extern nb::type_object value_t(nb::handle h);
+extern bool is_special_v(nb::handle h);
+extern bool is_matrix_v(nb::handle h);
+extern bool is_complex_v(nb::handle h);
+extern bool is_quaternion_v(nb::handle h);

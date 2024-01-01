@@ -922,7 +922,7 @@ def test075_exp(t):
     dr.enable_grad(x)
     y = dr.exp(x * x)
     dr.backward(y)
-    exp_x = dr.exp(dr.sqr(dr.detach(x)))
+    exp_x = dr.exp(dr.square(dr.detach(x)))
     assert dr.allclose(y, exp_x)
     assert dr.allclose(dr.grad(x), 2 * dr.detach(x) * exp_x)
 
@@ -933,7 +933,7 @@ def test076_log(t):
     dr.enable_grad(x)
     y = dr.log(x * x)
     dr.backward(y)
-    log_x = dr.log(dr.sqr(dr.detach(x)))
+    log_x = dr.log(dr.square(dr.detach(x)))
     assert dr.allclose(y, log_x)
     assert dr.allclose(dr.grad(x), 2 / dr.detach(x))
 
@@ -957,7 +957,7 @@ def test078_tan(t):
     dr.enable_grad(x)
     y = dr.tan(x * x)
     dr.backward(y)
-    tan_x = dr.tan(dr.sqr(dr.detach(x)))
+    tan_x = dr.tan(dr.square(dr.detach(x)))
     assert dr.allclose(y, tan_x)
     assert dr.allclose(dr.grad(x),
                        t(0., 0.222256, 0.44553, 0.674965, 0.924494,
@@ -970,7 +970,7 @@ def test079_asin(t):
     dr.enable_grad(x)
     y = dr.asin(x * x)
     dr.backward(y)
-    asin_x = dr.asin(dr.sqr(dr.detach(x)))
+    asin_x = dr.asin(dr.square(dr.detach(x)))
     assert dr.allclose(y, asin_x)
     assert dr.allclose(dr.grad(x),
                        t(-2.08232, -1.3497, -0.906755, -0.534687,
@@ -984,7 +984,7 @@ def test080_acos(t):
     dr.enable_grad(x)
     y = dr.acos(x * x)
     dr.backward(y)
-    acos_x = dr.acos(dr.sqr(dr.detach(x)))
+    acos_x = dr.acos(dr.square(dr.detach(x)))
     assert dr.allclose(y, acos_x)
     assert dr.allclose(dr.grad(x),
                        t(2.08232, 1.3497, 0.906755, 0.534687, 0.177783,
@@ -998,7 +998,7 @@ def test081_atan(t):
     dr.enable_grad(x)
     y = dr.atan(x * x)
     dr.backward(y)
-    atan_x = dr.atan(dr.sqr(dr.detach(x)))
+    atan_x = dr.atan(dr.square(dr.detach(x)))
     assert dr.allclose(y, atan_x)
     assert dr.allclose(dr.grad(x),
                        t(-1.13507, -1.08223, -0.855508, -0.53065,
@@ -1395,13 +1395,13 @@ class Normalize(dr.CustomOp):
     def forward(self):
         grad_in = self.grad_in('value')
         grad_out = grad_in * self.inv_norm
-        grad_out -= self.value * (dr.dot(self.value, grad_out) * dr.sqr(self.inv_norm))
+        grad_out -= self.value * (dr.dot(self.value, grad_out) * dr.square(self.inv_norm))
         self.set_grad_out(grad_out)
 
     def backward(self):
         grad_out = self.grad_out()
         grad_in = grad_out * self.inv_norm
-        grad_in -= self.value * (dr.dot(self.value, grad_in) * dr.sqr(self.inv_norm))
+        grad_in -= self.value * (dr.dot(self.value, grad_in) * dr.square(self.inv_norm))
         self.set_grad_in('value', grad_in)
 
     def name(self):

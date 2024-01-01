@@ -10,6 +10,7 @@
 
 #include "shape.h"
 #include "base.h"
+#include "apply.h"
 
 Py_ssize_t sq_length(PyObject *o) noexcept {
     const ArraySupplement &s = supp(Py_TYPE(o));
@@ -147,6 +148,33 @@ nb::object shape(nb::handle h) {
     return cast_shape(result);
 }
 
+size_t width(nb::handle h) {
+    struct TraverseOp : TraverseCallback {
+        size_t width = 1;
+        bool ragged = false;
+
+        void operator()(nb::handle h) override {
+            size_t value = len(h);
+            if (width != 1 && value != 1 && width != value)
+                ragged = true;
+            width = std::max(value, width);
+        }
+    };
+
+    TraverseOp to;
+    traverse("drjit.width", to, h);
+    if (to.ragged)
+        nb::raise("drjit.width(): the input is ragged (i.e., it does not have a consistent size).");
+
+    return to.width;
+}
+
+
+/// Return the vectorization width of the given input array or PyTree
+extern size_t width(nb::handle h);
+
 void export_shape(nb::module_ &m) {
     m.def("shape", &shape, nb::raw_doc(doc_shape));
+    m.def("width", &width, doc_width)
+     .def("width", [](nb::args args) { return width(args); });
 }

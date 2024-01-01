@@ -6,6 +6,7 @@ Dr.Jit — A Just-In-Time-Compiler for Differentiable Rendering
    :caption: Contents
 
    general
+   special
    cflow
    cpp
    changelog
@@ -27,7 +28,6 @@ Alternative layout:
  - tensors
  - control flow
  - type traits
- - special types (complex, quaternion, )
  - 1d/2d/3d textures, bspline interp
  - automatic differentiation
  - interoperability with other libraries

@@ -21,6 +21,9 @@ extern bool shape_impl(nb::handle h, dr_vector<size_t> &result);
 /// Return the number of dimensions of the given array/tensor
 extern size_t ndim(nb::handle_t<ArrayBase> h) noexcept;
 
+/// Return the vectorization width of the given input array or PyTree
+extern size_t width(nb::handle h);
+
 /// Convert dr_vector<size_t> into a python tuple
 extern nb::tuple cast_shape(const dr_vector<size_t> &shape);
 

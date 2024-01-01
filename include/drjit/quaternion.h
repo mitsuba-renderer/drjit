@@ -106,6 +106,26 @@ Result operator*(const Quaternion<T0> &q0, const Quaternion<T1> &q1) {
     return t1 + t2;
 }
 
+template <typename T0, typename T1, typename T2,
+          typename Value = expr_t<T0, T1, T2>, typename Result = Quaternion<Value>>
+Result fmadd(const Quaternion<T0> &q0, const Quaternion<T1> &q1, const Quaternion<T2> &q2) {
+    using Base = Array<Value, 4>;
+    Base a0 = q0, a1 = q1, a2 = q2;
+
+    Base t1 = fmadd(shuffle<0, 1, 2, 0>(a0), shuffle<3, 3, 3, 0>(a1),
+                    shuffle<1, 2, 0, 1>(a0) * shuffle<2, 0, 1, 1>(a1));
+    Base t2 = fmadd(shuffle<3, 3, 3, 3>(a0), a1,
+                    fnmadd(shuffle<2, 0, 1, 2>(a0), shuffle<1, 2, 0, 2>(a1), a2));
+
+    if constexpr (!is_array_v<Value>)
+        t1 ^= Base(0.f, 0.f, 0.f, -0.f);
+    else
+        t1.w() = -t1.w();
+
+    return t1 + t2;
+}
+
+
 template <typename T0, typename T1>
 Quaternion<expr_t<T0, T1>> operator*(const Quaternion<T0> &q0, const T1 &v1) {
     return Array<T0, 4>(q0) * v1;
@@ -145,6 +165,17 @@ template <typename T> Quaternion<T> exp(const Quaternion<T> &q) {
     return { qi * (s * exp_w / ri), c * exp_w };
 }
 
+template <typename T> Quaternion<T> exp2(const Quaternion<T> &q) {
+    Array<T, 3> qi = imag(q);
+
+    T ri    = norm(qi),
+      exp_w = exp2(real(q));
+
+    auto [s, c] = sincos(ri * LogTwo<T>);
+
+    return { qi * (s * exp_w / ri), c * exp_w };
+}
+
 template <typename T> Quaternion<T> log(const Quaternion<T> &q) {
     Array<T, 3> qi_n = normalize(imag(q));
 
@@ -154,6 +185,17 @@ template <typename T> Quaternion<T> log(const Quaternion<T> &q) {
 
     return { qi_n * acos_rq, log_rq };
 }
+
+template <typename T> Quaternion<T> log2(const Quaternion<T> &q) {
+    Array<T, 3> qi_n = normalize(imag(q));
+
+    T rq      = norm(q),
+      acos_rq = acos(real(q) / rq),
+      log_rq  = log2(rq);
+
+    return { qi_n * acos_rq * InvLogTwo<T>, log_rq };
+}
+
 
 template <typename T0, typename T1>
 Quaternion<expr_t<T0, T1>> pow(const Quaternion<T0> &q0,
@@ -165,6 +207,10 @@ template <typename T> Quaternion<T> sqrt(const Quaternion<T> &q) {
     T ri = norm(imag(q));
     Complex<T> cs = sqrt(Complex<T>(real(q), ri));
     return { imag(q) * (rcp(ri) * imag(cs)), real(cs) };
+}
+
+template <typename T> Quaternion<T> rsqrt(const Quaternion<T> &z) {
+    return rcp(sqrt(z));
 }
 
 template <typename Matrix, typename T>
@@ -236,16 +282,16 @@ Array<Value, 3> quat_to_euler(const Quaternion<Value> &q) {
 
     // Clamp the result to stay in the valid range for asin
     Value sinp = clamp(2 * fmsub(q.w(), q.y(), q.z() * q.x()), -1.0, 1.0);
-    Mask gimbal_lock = abs(sinp) > (1.0f - 5e-8f);
+    Mask gimbal_lock = abs(sinp) > (1.f - 5e-8f);
 
     // roll (x-axis rotation)
     Value q_y_2 = sqr(q.y());
     Value sinr_cosp = 2 * fmadd(q.w(), q.x(), q.y() * q.z());
     Value cosr_cosp = fnmadd(2, fmadd(q.x(), q.x(), q_y_2), 1);
-    Value roll = select(gimbal_lock, 2.0f * atan2(q.x(), q.w()), atan2(sinr_cosp, cosr_cosp));
+    Value roll = select(gimbal_lock, 2.f * atan2(q.x(), q.w()), atan2(sinr_cosp, cosr_cosp));
 
     // pitch (y-axis rotation)
-    Value pitch = select(gimbal_lock, copysign(0.5f * Pi<Value>, sinp), asin(sinp));
+    Value pitch = select(gimbal_lock, copysign(.5f * Pi<Value>, sinp), asin(sinp));
 
     // yaw (z-axis rotation)
     Value siny_cosp = 2 * fmadd(q.w(), q.z(), q.x() * q.y());
@@ -259,15 +305,16 @@ template <typename Value>
 Quaternion<Value> euler_to_quat(const Array<Value, 3> &a) {
     // https://en.wikipedia.org/wiki/Conversion_between_quaternions_and_Euler_angles
 
-    Array<Value, 3> angles = a / 2.0f;
+    Array<Value, 3> angles = a * .5f;
     auto [sr, cr] = sincos(angles.x);
     auto [sp, cp] = sincos(angles.y);
     auto [sy, cy] = sincos(angles.z);
 
-    Value w = cr*cp*cy + sr*sp*sy;
-    Value x = sr*cp*cy - cr*sp*sy;
-    Value y = cr*sp*cy + sr*cp*sy;
-    Value z = cr*cp*sy - sr*sp*cy;
+    Value w = cr*cp*cy + sr*sp*sy,
+          x = sr*cp*cy - cr*sp*sy,
+          y = cr*sp*cy + sr*cp*sy,
+          z = cr*cp*sy - sr*sp*cy;
+
     return Quaternion<Value>(x, y, z, w);
 }
 

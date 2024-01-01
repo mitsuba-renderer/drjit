@@ -57,16 +57,18 @@ nb::object expr_t(nb::handle h0, nb::handle h1) {
               m1 = meta_get_general(h1),
               m  = meta_promote(m0, m1);
 
-    if (!meta_check(m)) {
-        nb::str tp0_name = nb::type_name(tp0),
-                tp1_name = nb::type_name(tp1);
-
+    if (!meta_check(m))
         nb::raise_type_error(
             "drjit.expr_t(): incompatible types \"%s\" and \"%s\"",
-            tp0_name.c_str(), tp1_name.c_str());
-    }
+            nb::type_name(tp0).c_str(), nb::type_name(tp1).c_str());
 
     return nb::borrow(meta_get_type(m));
+}
+
+nb::type_object value_t(nb::handle h) {
+    nb::handle tp = h.is_type() ? h : h.type();
+    return nb::borrow<nb::type_object>(
+        is_drjit_type(tp) ? supp(tp).value : tp);
 }
 
 nb::object expr_t(nb::args args) {
@@ -83,15 +85,34 @@ nb::object expr_t(nb::args args) {
     return result;
 }
 
+bool is_special_v(nb::handle h) {
+    nb::handle tp = h.is_type() ? h : h.type();
+    if (is_drjit_type(tp)) {
+        const ArrayMeta &m = supp(tp);
+        return m.is_complex || m.is_quaternion || m.is_matrix;
+    }
+    return false;
+}
+
+bool is_matrix_v(nb::handle h) {
+    nb::handle tp = h.is_type() ? h : h.type();
+    return is_drjit_type(tp) ? supp(tp).is_matrix : false;
+}
+
+bool is_complex_v(nb::handle h) {
+    nb::handle tp = h.is_type() ? h : h.type();
+    return is_drjit_type(tp) ? supp(tp).is_complex : false;
+}
+
+bool is_quaternion_v(nb::handle h) {
+    nb::handle tp = h.is_type() ? h : h.type();
+    return is_drjit_type(tp) ? supp(tp).is_quaternion : false;
+}
+
 void export_traits(nb::module_ &m) {
     m.attr("Dynamic") = -1;
 
-    m.def("value_t",
-          [](nb::handle h) -> nb::type_object {
-              nb::handle tp = h.is_type() ? h : h.type();
-              return nb::borrow<nb::type_object>(
-                  is_drjit_type(tp) ? supp(tp).value : tp);
-          }, doc_value_t);
+    m.def("value_t", value_t , doc_value_t);
 
     m.def("mask_t",
           [](nb::handle h) -> nb::handle {
@@ -186,32 +207,11 @@ void export_traits(nb::module_ &m) {
               return is_drjit_type(tp) ? supp(tp).is_tensor : false;
           }, doc_is_tensor_v);
 
-    m.def("is_complex_v",
-          [](nb::handle h) -> bool {
-              nb::handle tp = h.is_type() ? h : h.type();
-              return is_drjit_type(tp) ? supp(tp).is_complex : false;
-          }, doc_is_complex_v);
+    m.def("is_complex_v", &is_complex_v, doc_is_complex_v);
+    m.def("is_quaternion_v", &is_quaternion_v, doc_is_quaternion_v);
+    m.def("is_matrix_v", is_matrix_v, doc_is_matrix_v);
 
-    m.def("is_quaternion_v", [](nb::handle h) -> bool {
-        nb::handle tp = h.is_type() ? h : h.type();
-        return is_drjit_type(tp) ? supp(tp).is_quaternion : false;
-    }, doc_is_quaternion_v);
-
-    m.def("is_matrix_v",
-          [](nb::handle h) -> bool {
-              nb::handle tp = h.is_type() ? h : h.type();
-              return is_drjit_type(tp) ? supp(tp).is_matrix : false;
-          }, doc_is_matrix_v);
-
-    m.def("is_special_v",
-          [](nb::handle h) -> bool {
-              nb::handle tp = h.is_type() ? h : h.type();
-            if (is_drjit_type(tp)) {
-                const ArrayMeta &m = supp(tp);
-                return m.is_complex || m.is_quaternion || m.is_matrix;
-            }
-            return false;
-          }, doc_is_special_v);
+    m.def("is_special_v", is_special_v, doc_is_special_v);
 
     m.def("is_vector_v",
           [](nb::handle h) -> bool {

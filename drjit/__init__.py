@@ -1,7 +1,8 @@
-from . import detail
-from . import ast
+from . import detail as _detail
+from . import ast as _ast
+from . import special as _special
 
-with detail.scoped_rtld_deepbind():
+with _detail.scoped_rtld_deepbind():
     from . import drjit_ext
 
 def isnan(arg, /):
@@ -48,22 +49,50 @@ def isfinite(arg, /):
     return abs(arg) < float('inf')
 
 
-def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
+def allclose(a, b, rtol: float | None = None, atol:float | None = None, equal_nan: bool = False):
     r'''
     Returns ``True`` if two arrays are element-wise equal within a given error
     tolerance.
 
-    The function considers both absolute and relative error thresholds. Specifically
+    The function considers both absolute and relative error thresholds. In particular,
     **a** and **b** are considered equal if all elements satisfy
 
     .. math::
-        |a - b| \le |b| \cdot \mathrm{rtol} + \mathrm{atol}.
+        |a - b| \le |b| \cdot \texttt{rtol} + \texttt{atol}.
+
+    If not specified, the constants ``atol`` and ``rtol`` are chosen depending
+    on the precision of the input arrays:
+
+    .. list-table::
+       :header-rows: 1
+
+       * - Precision
+         - ``rtol``
+         - ``atol``
+       * - ``float64``
+         - ``1e-5``
+         - ``1e-8``
+       * - ``float32``
+         - ``1e-3``
+         - ``1e-5``
+       * - ``float16``
+         - ``1e-1``
+         - ``1e-2``
+
+    Note that these constants used are fairly loose and *far* larger than the
+    roundoff error of the underlying floating point representation. The double
+    precision parameters were chosen to match the behavior of
+    ``numpy.allclose()``.
 
     Args:
         a (object): A Dr.Jit array or other kind of numeric sequence type.
+
         b (object): A Dr.Jit array or other kind of numeric sequence type.
-        rtol (float): A relative error threshold. The default is :math:`10^{-5}`.
-        atol (float): An absolute error threshold. The default is :math:`10^{-8}`.
+
+        rtol (float): A relative error threshold chosen according to the above table.
+
+        atol (float): An absolute error threshold according to the above table.
+
         equal_nan (bool): If **a** and **b** *both* contain a *NaN* (Not a Number) entry,
                           should they be considered equal? The default is ``False``.
 
@@ -75,6 +104,11 @@ def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
         # No derivative tracking in the following
         a, b = detach(a), detach(b)
 
+        if is_special_v(a):
+            a = array_t(a)(a)
+        if is_special_v(b):
+            b = array_t(b)(b)
+
         if is_array_v(a):
             diff = a - b
         else:
@@ -83,7 +117,19 @@ def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
         a = type(diff)(a)
         b = type(diff)(b)
 
-        cond = abs(diff) <= abs(b) * rtol + atol
+        vt = type_v(diff)
+
+        if vt == VarType.Float16:
+            rtol_ref, atol_ref = 1e-2, 1e-2
+        if vt == VarType.Float32:
+            rtol_ref, atol_ref = 1e-3, 1e-5
+        else:
+            rtol_ref, atol_ref = 1e-5, 1e-8
+
+        atol_c = atol_ref if atol is None else atol
+        rtol_c = rtol_ref if rtol is None else rtol
+
+        cond = abs(diff) <= abs(b) * rtol_c + atol_c
 
         if equal_nan:
             cond |= isnan(a) & isnan(b)
@@ -114,7 +160,11 @@ def allclose(a, b, rtol=1e-5, atol=1e-8, equal_nan=False):
     elif len_ab == 0:
         if equal_nan and isnan(a) and isnan(b):
             return True
-        return abs(a - b) <= abs(b) * rtol + atol
+
+        rtol_c = 1e-5 if rtol is None else rtol
+        atol_c = 1e-8 if atol is None else atol
+
+        return abs(a - b) <= abs(b) * rtol_c + atol_c
     else:
         for i in range(len_ab):
             ia = safe_getitem(a, len_a, i)
@@ -212,49 +262,55 @@ def clip(value, min, max):
 
 # --- Deprecated wrappers for old Dr.Jit reduction operations ----
 
-def all_nested(a):
+def sqr(arg, /):
     import warnings
-    warnings.warn("all_nested() is deprecated, please use all(a, axis=None)",
+    warnings.warn("sqr() is deprecated, please use square(arg)",
                   DeprecationWarning, stacklevel=2)
-    return all(a, axis=None)
+    return square(arg)
 
-
-def any_nested(a):
+def all_nested(arg, /):
     import warnings
-    warnings.warn("any_nested() is deprecated, please use any(a, axis=None)",
+    warnings.warn("all_nested() is deprecated, please use all(arg, axis=None)",
                   DeprecationWarning, stacklevel=2)
-    return any(a, axis=None)
+    return all(arg, axis=None)
 
 
-def sum_nested(a):
+def any_nested(arg, /):
     import warnings
-    warnings.warn("sum_nested() is deprecated, please use sum(a, axis=None)",
+    warnings.warn("any_nested() is deprecated, please use any(arg, axis=None)",
                   DeprecationWarning, stacklevel=2)
-    return sum(a, axis=None)
+    return any(arg, axis=None)
 
 
-def prod_nested(a):
+def sum_nested(arg, /):
     import warnings
-    warnings.warn("prod_nested() is deprecated, please use prod(a, axis=None)",
+    warnings.warn("sum_nested() is deprecated, please use sum(arg, axis=None)",
                   DeprecationWarning, stacklevel=2)
-    return prod(a, axis=None)
+    return sum(arg, axis=None)
 
 
-def min_nested(a):
+def prod_nested(arg, /):
     import warnings
-    warnings.warn("min_nested() is deprecated, please use min(a, axis=None)",
+    warnings.warn("prod_nested() is deprecated, please use prod(arg, axis=None)",
                   DeprecationWarning, stacklevel=2)
-    return min(a, axis=None)
+    return prod(arg, axis=None)
 
 
-def max_nested(a):
+def min_nested(arg, /):
     import warnings
-    warnings.warn("max_nested() is deprecated, please use max(a, axis=None)",
+    warnings.warn("min_nested() is deprecated, please use min(arg, axis=None)",
                   DeprecationWarning, stacklevel=2)
-    return max(a, axis=None)
+    return min(arg, axis=None)
 
 
-def cumsum(value):
+def max_nested(arg, /):
+    import warnings
+    warnings.warn("max_nested() is deprecated, please use max(arg, axis=None)",
+                  DeprecationWarning, stacklevel=2)
+    return max(arg, axis=None)
+
+
+def cumsum(arg, /):
     '''
     Compute an cumulative sum (aka. inclusive prefix sum) of the input array.
 
@@ -262,10 +318,10 @@ def cumsum(value):
 
     .. code-block:: python
 
-       def cumsum(value):
-           return prefix_sum(value, exclusive=False)
+       def cumsum(arg, /):
+           return prefix_sum(arg, exclusive=False)
     '''
-    return prefix_sum(value, exclusive=False)
+    return prefix_sum(arg, exclusive=False)
 
 
 # -------------------------------------------------------------------
@@ -511,14 +567,14 @@ def suspend_grad(*args, when=True):
           ``when=True``.
     """
     if not when:
-        return detail.NullContextManager()
+        return _detail.NullContextManager()
 
-    array_indices = detail.collect_indices(args)
+    array_indices = _detail.collect_indices(args)
 
     if len(args) > 0 and len(array_indices) == 0:
         array_indices.append(0)
 
-    return detail.ADContextManager(detail.ADScope.Suspend, array_indices)
+    return _detail.ADContextManager(_detail.ADScope.Suspend, array_indices)
 
 
 def resume_grad(*args, when=True):
@@ -563,15 +619,15 @@ def resume_grad(*args, when=True):
           ``when=True``.
     """
     if not when:
-        return detail.NullContextManager()
+        return _detail.NullContextManager()
 
     array_indices = []
-    array_indices = detail.collect_indices(args)
+    array_indices = _detail.collect_indices(args)
 
     if len(args) > 0 and len(array_indices) == 0:
         array_indices.append(0)
 
-    return detail.ADContextManager(detail.ADScope.Resume, array_indices)
+    return _detail.ADContextManager(_detail.ADScope.Resume, array_indices)
 
 
 def isolate_grad(when=True):
@@ -622,9 +678,9 @@ def isolate_grad(when=True):
           ``when=True``.
     """
     if not when:
-        return detail.NullContextManager()
+        return _detail.NullContextManager()
 
-    return detail.ADContextManager(detail.ADScope.Isolate, [])
+    return _detail.ADContextManager(_detail.ADScope.Isolate, [])
 
 
 def copy(arg, /):
@@ -633,11 +689,155 @@ def copy(arg, /):
 
     This function recursively traverses PyTrees and replaces Dr.Jit arrays with
     copies created via the ordinary copy constructor. It also rebuilds tuples,
-    lists, dictionaries, and custom data strutures.
+    lists, dictionaries, and other :ref:`custom data strutures <custom_types_py>`.
     """
 
-    return detail.copy(arg, None)
+    return _detail.copy(arg, None)
 
 
-syntax = ast.syntax
-hint = ast.hint
+def cross(arg0, arg1, /):
+    '''
+    Returns the cross-product of the two input 3D arrays
+
+    Args:
+        arg0 (drjit.ArrayBase): A Dr.Jit 3D array
+        arg1 (drjit.ArrayBase): A Dr.Jit 3D array
+
+    Returns:
+        drjit.ArrayBase: Cross-product of the two input 3D arrays
+    '''
+
+    if size_v(arg0) != 3 or size_v(arg1) != 3:
+        raise Exception("cross(): requires 3D input arrays!")
+
+    ta, tb = type(arg0), type(arg1)
+
+    return fma(ta(arg0.y, arg0.z, arg0.x),  tb(arg1.z, arg1.x, arg1.y),
+              -ta(arg0.z, arg0.x, arg0.y) * tb(arg1.y, arg1.z, arg1.x))
+
+def conj(arg, /):
+    '''
+    Returns the conjugate of the provided complex or quaternion-valued array.
+    For all other types, it returns the input unchanged.
+
+    Args:
+        arg (drjit.ArrayBase): A Dr.Jit 3D array
+
+    Returns:
+        drjit.ArrayBase: Cross-product of the two input 3D arrays
+    '''
+
+    t = type(arg)
+
+    if is_complex_v(t):
+        return t(arg.real, -arg.imag)
+    elif is_quaternion_v(t):
+        return t(-arg.x, -arg.y, -arg.z, arg.w)
+    else:
+        return arg
+
+def det(arg, /):
+    '''
+    det(arg, /)
+    Compute the determinant of the provided Dr.Jit matrix.
+
+    Args:
+        arg (drjit.ArrayBase): A Dr.Jit matrix type
+
+    Returns:
+        drjit.ArrayBase: The determinant value of the input matrix
+    '''
+    if not is_matrix_v(arg):
+        raise Exception("Unsupported target type!")
+
+    size = size_v(arg)
+
+    if size == 1:
+        return arg[0, 0]
+    elif size == 2:
+        return fma(arg[0, 0], arg[1, 1], -arg[0, 1] * arg[1, 0])
+    elif size == 3:
+        return dot(arg[0], cross(arg[1], arg[2]))
+    elif size == 4:
+        row0, row1, row2, row3 = arg
+
+        shuffle = lambda perm, arr: type(arr)(arr[i] for i in perm)
+
+        row1 = shuffle((2, 3, 0, 1), row1)
+        row3 = shuffle((2, 3, 0, 1), row3)
+
+        temp = shuffle((1, 0, 3, 2), row2 * row3)
+        col0 = row1 * temp
+        temp = shuffle((2, 3, 0, 1), temp)
+        col0 = fma(row1, temp, -col0)
+
+        temp = shuffle((1, 0, 3, 2), row1 * row2)
+        col0 = fma(row3, temp, col0)
+        temp = shuffle((2, 3, 0, 1), temp)
+        col0 = fma(-row3, temp, col0)
+
+        row1 = shuffle((2, 3, 0, 1), row1)
+        row2 = shuffle((2, 3, 0, 1), row2)
+        temp = shuffle((1, 0, 3, 2), row1 * row3)
+        col0 = fma(row2, temp, col0)
+        temp = shuffle((2, 3, 0, 1), temp)
+        col0 = fma(-row2, temp, col0)
+
+        return dot(row0, col0)
+    else:
+        raise Exception('Unsupported array size!')
+
+
+def diag(arg, /):
+    '''
+    diag(arg, /)
+    This function either returns the diagonal entries of the provided Dr.Jit
+    matrix, or it constructs a new matrix from the diagonal entries.
+
+    Args:
+        arg (drjit.ArrayBase): A Dr.Jit matrix type
+
+    Returns:
+        drjit.ArrayBase: The diagonal matrix of the input matrix
+    '''
+    tp = type(arg)
+    if is_matrix_v(tp):
+        result = value_t(arg)()
+        for i in range(len(arg)):
+            result[i] = arg[i, i]
+        return result
+    elif is_array_v(arg) and 'Array' in tp.__name__:
+        import sys
+        mat_tp = getattr(sys.modules[tp.__module__], tp.__name__.replace('Array', 'Matrix'), None)
+        if mat_tp is None:
+            raise Exception('drjit.diag(): unsupported type!')
+        result = zeros(mat_tp, width(arg))
+        for i, v in enumerate(arg):
+            result[i, i] = v
+        return result
+    else:
+        raise Exception('drjit.diag(): unsupported type!')
+
+
+def trace(arg, /):
+    '''
+    trace(arg, /)
+    Returns the trace of the provided Dr.Jit matrix.
+
+    Args:
+        arg (drjit.ArrayBase): A Dr.Jit matrix type
+
+    Returns:
+        drjit.value_t(arg): The trace of the input matrix
+    '''
+    if is_matrix_v(arg):
+        accum = arg[0, 0]
+        accum = type(accum)(accum)
+        for i in range(1, len(arg)):
+            accum += arg[i, i]
+        return accum
+    else:
+        raise Exception('drjit.trace(): unsupported input type!')
+
+syntax = _ast.syntax
+hint = _ast.hint

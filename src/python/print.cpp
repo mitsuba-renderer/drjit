@@ -133,6 +133,7 @@ PyObject *tp_repr(PyObject *self) noexcept {
                 index.append(zero);
             if (!index.is_valid())
                 nb::raise_python_error();
+            schedule(self);
             repr_array(self, 0, 20, shape, 0, index);
         }
         return PyUnicode_FromString(buffer.get());

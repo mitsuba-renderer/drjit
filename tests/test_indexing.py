@@ -13,7 +13,7 @@ def test01_index_static(t):
 
     with pytest.raises(RuntimeError, match="does not have a"):
         v.w = 4
-    with pytest.raises(RuntimeError, match="does not have a"):
+    with pytest.raises(TypeError, match="is not complex-valued"):
         v.imag = 4
     with pytest.raises(IndexError, match=r"entry 3 is out of bounds \(the array is of size 3\)."):
         v[3]
@@ -33,7 +33,7 @@ def test02_index_dynamic(t):
 
     with pytest.raises(RuntimeError, match="does not have a"):
         v.x = 4
-    with pytest.raises(RuntimeError, match="does not have a"):
+    with pytest.raises(TypeError, match="is not complex-valued"):
         v.imag = 4
     with pytest.raises(IndexError, match=r"entry 3 is out of bounds \(the array is of size 3\)."):
         v[3]

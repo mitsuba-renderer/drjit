@@ -798,6 +798,48 @@ nanobind::object bind_array(ArrayBinding &b, nanobind::handle scope = {},
     if constexpr (!T::IsMask && !T::IsIntegral)
         disable_bit_ops(b);
 
+    if constexpr (T::IsComplex || T::IsQuaternion || T::IsMatrix) {
+        b[ArrayOp::Mul] = (void *) +[](const T *a, const T *b, T *c) { new (c) T(*a * *b); };
+        b[ArrayOp::Rcp] = (void *) +[](const T *a, T *b) { new (b) T(rcp(*a)); };
+        b[ArrayOp::Fma] = (void *) +[](const T *a, const T *b, const T *c,
+                                       T *d) { new (d) T(fmadd(*a, *b, *c)); };
+    }
+
+    if constexpr (T::IsComplex || T::IsQuaternion) {
+        b[ArrayOp::Abs] = (void *) +[](const T *a, T *b) { new (b) T(abs(*a)); };
+        b[ArrayOp::Sqrt] = (void *) +[](const T *a, T *b) { new (b) T(sqrt(*a)); };
+        b[ArrayOp::Rsqrt] = (void *) +[](const T *a, T *b) { new (b) T(rsqrt(*a)); };
+        b[ArrayOp::Log2] = (void *) +[](const T *a, T *b) { new (b) T(log2(*a)); };
+        b[ArrayOp::Log] = (void *) +[](const T *a, T *b) { new (b) T(log(*a)); };
+        b[ArrayOp::Exp2] = (void *) +[](const T *a, T *b) { new (b) T(exp2(*a)); };
+        b[ArrayOp::Exp] = (void *) +[](const T *a, T *b) { new (b) T(exp(*a)); };
+    }
+
+    if constexpr (T::IsComplex) {
+        b[ArrayOp::Sin] = (void *) +[](const T *a, T *b) { new (b) T(sin(*a)); };
+        b[ArrayOp::Cos] = (void *) +[](const T *a, T *b) { new (b) T(cos(*a)); };
+        b[ArrayOp::Tan] = (void *) +[](const T *a, T *b) { new (b) T(tan(*a)); };
+        b[ArrayOp::Sincos] = (void *) +[](const T *a, T *b, T *c) {
+            auto [sa, ca] = sincos(*a);
+            new (b) T(std::move(sa));
+            new (c) T(std::move(ca));
+        };
+        b[ArrayOp::Asin] = (void *) +[](const T *a, T *b) { new (b) T(asin(*a)); };
+        b[ArrayOp::Acos] = (void *) +[](const T *a, T *b) { new (b) T(acos(*a)); };
+        b[ArrayOp::Atan] = (void *) +[](const T *a, T *b) { new (b) T(atan(*a)); };
+        b[ArrayOp::Sinh] = (void *) +[](const T *a, T *b) { new (b) T(sinh(*a)); };
+        b[ArrayOp::Cosh] = (void *) +[](const T *a, T *b) { new (b) T(cosh(*a)); };
+        b[ArrayOp::Tanh] = (void *) +[](const T *a, T *b) { new (b) T(tanh(*a)); };
+        b[ArrayOp::Sincosh] = (void *) +[](const T *a, T *b, T *c) {
+            auto [sa, ca] = sincosh(*a);
+            new (b) T(std::move(sa));
+            new (c) T(std::move(ca));
+        };
+        b[ArrayOp::Asinh] = (void *) +[](const T *a, T *b) { new (b) T(asinh(*a)); };
+        b[ArrayOp::Acosh] = (void *) +[](const T *a, T *b) { new (b) T(acosh(*a)); };
+        b[ArrayOp::Atanh] = (void *) +[](const T *a, T *b) { new (b) T(atanh(*a)); };
+    }
+
     #if defined(DRJIT_PYTHON_BUILD)
         return bind(b);
     #else

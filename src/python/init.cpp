@@ -123,7 +123,7 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
 
                 nb::object unraveled = unravel(
                     nb::borrow<nb::type_object_t<dr::ArrayBase>>(self_tp),
-                    temp, 'C');
+                    temp, s.is_complex ? 'F' : 'C');
 
                 nb::inst_move(self, unraveled);
                 return 0;
@@ -132,6 +132,14 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
             // Try to construct from a sequence/iterable type
             if (try_sequence_import && array_init_from_seq(self, s, arg))
                 return 0;
+
+            if (try_sequence_import && s.is_complex && arg_tp == &PyComplex_Type) {
+                nb::object t = nb::make_tuple(PyComplex_RealAsDouble(arg),
+                                              PyComplex_ImagAsDouble(arg));
+
+                if (array_init_from_seq(self, s, t.ptr()))
+                    return 0;
+            }
 
             // No sequence/iterable type, try broadcasting
             Py_ssize_t size = s.shape[0];
@@ -154,11 +162,9 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
                                   1 | PY_VECTORCALL_ARGUMENTS_OFFSET, nullptr));
                 if (NB_UNLIKELY(!element.is_valid())) {
                     nb::error_scope scope;
-                    nb::str value_tp_name = nb::type_name(value_tp);
-                    nb::str arg_tp_name = nb::type_name(arg_tp);
                     nb::raise("Broadcast from type '%s' to type '%s' failed.%s",
-                              arg_tp_name.c_str(),
-                              value_tp_name.c_str(),
+                              nb::type_name(arg_tp).c_str(),
+                              nb::type_name(value_tp).c_str(),
                               try_sequence_import
                                   ? ""
                                   : " Refused to perform an inefficient "
@@ -382,6 +388,14 @@ static nb::object import_ndarray(const ArraySupplement &s, PyObject *arg,
             shape[i] = nb::any;
     }
 
+    if (s.is_complex) {
+        for (uint32_t i = 1; i < req.ndim; ++i)
+            shape[i - 1] = shape[i];
+        req.dtype.code = (uint8_t) nb::dlpack::dtype_code::Complex;
+        req.dtype.bits *= 2;
+        req.ndim -= 1;
+    }
+
     nb::detail::ndarray_handle *th = nb::detail::ndarray_import(
         arg, &req, (uint8_t) nb::detail::cast_flags::convert, nullptr);
 
@@ -390,6 +404,8 @@ static nb::object import_ndarray(const ArraySupplement &s, PyObject *arg,
         req.ndim--;
         th = nb::detail::ndarray_import(
             arg, &req, (uint8_t) nb::detail::cast_flags::convert, nullptr);
+        if (!th)
+            req.ndim++;
     }
 
     if (!th) {
@@ -401,14 +417,14 @@ static nb::object import_ndarray(const ArraySupplement &s, PyObject *arg,
                 arg_name.c_str());
 
         if (s.ndim) {
-            buf.fmt("ndim=%u, shape=(", s.ndim);
+            buf.fmt("ndim=%u, shape=(", req.ndim);
 
-            for (size_t i = 0; i < s.ndim; ++i) {
-                if (s.shape[i] == DRJIT_DYNAMIC)
+            for (size_t i = 0; i < req.ndim; ++i) {
+                if (shape[i] == nb::any)
                     buf.put('*');
                 else
-                    buf.put_uint32((uint32_t) s.shape[i]);
-                if (i + 1 < s.ndim)
+                    buf.put_uint32((uint32_t) shape[i]);
+                if (i + 1 < req.ndim)
                     buf.put(", ");
             }
             buf.put("), ");
@@ -442,6 +458,17 @@ static nb::object import_ndarray(const ArraySupplement &s, PyObject *arg,
         size *= cur_size;
         if (shape_out)
             shape_out->operator[](i) = cur_size;
+    }
+
+    if (s.is_complex) {
+        if (shape_out) {
+            shape_out->resize(shape_out->size() + 1);
+            for (size_t i = 1; i < ndim; ++i)
+                shape_out->operator[](i) = shape_out->operator[](i - 1);
+            shape_out->operator[](0) = 0;
+        }
+        ndim += 1;
+        size *= 2;
     }
 
     ArrayMeta temp_meta { };
@@ -633,11 +660,13 @@ int tp_init_tensor(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
 }
 
 // Forward declaration
-nb::object full(const char *name, nb::handle dtype, nb::handle value, const std::vector<size_t> &shape, bool opaque) {
+nb::object full(const char *name, nb::handle dtype, nb::handle value,
+                const std::vector<size_t> &shape, bool opaque) {
     return full(name, dtype, value, shape.size(), shape.data(), opaque);
 }
 
-nb::object full(const char *name, nb::handle dtype, nb::handle value, size_t size, bool opaque) {
+nb::object full(const char *name, nb::handle dtype, nb::handle value,
+                size_t size, bool opaque) {
     std::vector<size_t> shape;
 
     if (is_drjit_type(dtype)) {
@@ -713,8 +742,11 @@ nb::object full(const char *name, nb::handle dtype, nb::handle value,
                 ArraySupplement::SetItem set_item = s.set_item;
                 nb::object o;
                 for (size_t i = 0; i < shape[0]; ++i) {
-                    if (i == 0 || !value.is_valid())
-                        o = full(name, s.value, value, ndim - 1, shape + 1, opaque);
+                    nb::object v = nb::borrow(value);
+                    if ((s.is_complex && i == 1) || (s.is_quaternion && i != 3))
+                        v = nb::int_(0);
+                    if (i == 0 || !value.is_valid() || opaque || s.is_complex || s.is_quaternion)
+                        o = full(name, s.value, v, ndim - 1, shape + 1, opaque);
                     set_item(result.ptr(), i, o.ptr());
                 }
             }
