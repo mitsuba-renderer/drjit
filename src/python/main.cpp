@@ -83,6 +83,7 @@ NB_MODULE(drjit_ext, m_) {
         .value("ReuseIndices", JitFlag::ReuseIndices, doc_JitFlag_ReuseIndices)
         .value("ConstantPropagation", JitFlag::ConstantPropagation, doc_JitFlag_ConstantPropagation)
         .value("ValueNumbering", JitFlag::ValueNumbering, doc_JitFlag_ValueNumbering)
+        .value("FastMath", JitFlag::FastMath, doc_JitFlag_FastMath)
         .value("SymbolicLoops", JitFlag::SymbolicLoops, doc_JitFlag_SymbolicLoops)
         .value("OptimizeLoops", JitFlag::OptimizeLoops, doc_JitFlag_OptimizeLoops)
         .value("SymbolicCalls", JitFlag::SymbolicCalls, doc_JitFlag_SymbolicCalls)

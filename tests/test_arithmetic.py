@@ -263,3 +263,13 @@ def test11_reinterpret(t):
     if hasattr(e, '__cause__') and e.__cause__ is not None:
         e = e.__cause__
     assert 'cannot reinterpret-cast between types of different size' in str(e)
+
+
+@pytest.test_arrays('float,jit,shape=(3, *)')
+def test12_div_via_rcp(t, drjit_verbose, capsys):
+    x = dr.opaque(t, 3)
+    x / dr.opaque(dr.value_t(t), 4)
+    transcript = capsys.readouterr().out
+    print(transcript)
+    assert transcript.count('= mul(') == 3
+    assert transcript.count('= div(') + transcript.count('= rcp(') + transcript.count('= div.approx(') + transcript.count('= rcp.approx(') == 1

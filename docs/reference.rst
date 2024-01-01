@@ -87,6 +87,7 @@ These operations are *horizontal* in the sense that [..]
 .. autofunction:: sum
 .. autofunction:: prod
 .. autofunction:: dot
+.. autofunction:: abs_dot
 .. autofunction:: norm
 .. autofunction:: all
 .. autofunction:: any
@@ -109,9 +110,19 @@ Miscellaneous operations
 ------------------------
 
 .. autofunction:: shape
+.. autofunction:: width
 .. autofunction:: slice_index
 .. autofunction:: meshgrid
 .. autofunction:: make_opaque
+
+Operations for special array types
+----------------------------------
+
+.. autofunction:: cross
+.. autofunction:: det
+.. autofunction:: diag
+.. autofunction:: trace
+.. autofunction:: matmul
 
 Just-in-time compilation
 ------------------------
@@ -430,6 +441,28 @@ Just-in-time compilation
 
       Local value numbering is *enabled* by default.
 
+   .. autoattribute:: FastMath
+      :annotation:
+
+      .. For Sphinx-related technical reasons, the below comment is replicated
+         in docstr.h. Please keep the two in sync when making changes.
+
+      **Fast Math**: this flag is analogous to the ``-ffast-math`` flag in C
+      compilers. When set, the system may use approximations and simplifications
+      that sacrifice strict IEEE-754 compatibility. 
+
+      Currently, it changes two behaviors:
+
+      - expressions of the form ``a * 0`` will be simplified to ``0`` (which is
+        technically not correct when ``a`` is infinite or NaN-valued).
+
+      - Dr.Jit will use slightly approximate division and square root
+        operations for single precision arguments in CUDA mode. Disabling fast
+        math mode is costly on CUDA devices, as the strict IEEE-754 compliant
+        version of these operations requires a software-emulated fallback.
+
+      Fast math mode is *enabled* by default.
+
    .. autoattribute:: SymbolicCalls
       :annotation:
 
@@ -719,6 +752,7 @@ Just-in-time compilation
 
       - :py:attr:`drjit.JitFlag.ConstantPropagation`,
       - :py:attr:`drjit.JitFlag.ValueNumbering`,
+      - :py:attr:`drjit.JitFlag.FastMath`,
       - :py:attr:`drjit.JitFlag.SymbolicLoops`,
       - :py:attr:`drjit.JitFlag.OptimizeLoops`,
       - :py:attr:`drjit.JitFlag.SymbolicCalls`,
@@ -797,7 +831,6 @@ _______________________
 .. autofunction:: mask_t
 .. autofunction:: value_t
 .. autofunction:: scalar_t
-.. autofunction:: array_t
 .. autofunction:: int_array_t
 .. autofunction:: uint_array_t
 .. autofunction:: int32_array_t
@@ -810,6 +843,7 @@ _______________________
 .. autofunction:: replace_type_t
 .. autofunction:: detached_t
 .. autofunction:: expr_t
+.. autofunction:: array_t
 
 Standard mathematical functions
 -------------------------------
@@ -1097,6 +1131,7 @@ Array base class
     .. autoproperty:: y
     .. autoproperty:: z
     .. autoproperty:: w
+    .. autoproperty:: T
     .. autoproperty:: index
     .. autoproperty:: index_ad
     .. autoproperty:: grad
@@ -1117,6 +1152,9 @@ Array base class
     .. automethod:: __mul__
     .. automethod:: __rmul__
     .. automethod:: __imul__
+    .. automethod:: __matmul__
+    .. automethod:: __rmatmul__
+    .. automethod:: __imatmul__
     .. automethod:: __truediv__
     .. automethod:: __rtruediv__
     .. automethod:: __itruediv__
@@ -1167,6 +1205,7 @@ Miscellaneous
 .. autofunction:: set_thread_count
 .. autofunction:: block_size
 .. autofunction:: set_block_size
+.. autofunction:: conj
 .. py:data:: None
    :type: NoneType
 

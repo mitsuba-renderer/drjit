@@ -465,6 +465,10 @@ template <typename T> Matrix<T, 4> inverse(const Matrix<T, 4> &m) {
     return transpose(inverse_transpose(m));
 }
 
+template <typename T, size_t Size> Matrix<T, Size> rcp(const Matrix<T, Size> &m) {
+    return inverse(m);
+}
+
 template <typename T, size_t Size> std::pair<Matrix<T, Size>, Matrix<T, Size>>
 polar_decomp(const Matrix<T, Size> &A, size_t it = 10) {
     using PlainArrayType = plain_t<Matrix<T, Size>>;

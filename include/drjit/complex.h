@@ -86,6 +86,16 @@ Complex<expr_t<T0, T1>> operator*(const Complex<T0> &z0,
     };
 }
 
+template <typename T0, typename T1, typename T2>
+Complex<expr_t<T0, T1, T2>> fmadd(const Complex<T0> &z0,
+                                  const Complex<T1> &z1,
+                                  const Complex<T2> &z2) {
+    return {
+        fmadd(z0.x(), z1.x(), fnmadd(z0.y(),z1.y(), z2.x())),
+        fmadd(z0.x(), z1.y(), fmadd(z0.y(), z1.x(), z2.y()))
+    };
+}
+
 template <typename T0, typename T1>
 Complex<expr_t<T0, T1>> operator*(const Complex<T0> &z0,
                                   const T1 &v1) {

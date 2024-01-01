@@ -194,7 +194,7 @@ def test03_switch_autodiff_forward_implicit(t, symbolic):
         if True:
             data = t(1.0, 2.0, 3.0, 4.0)
             dr.enable_grad(data)
-            data2 = dr.sqr(data)
+            data2 = dr.square(data)
 
             def f(a, i):
                 return a + dr.gather(t, data2, i)

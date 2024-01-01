@@ -50,14 +50,15 @@ static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu) {
     dr_vector<int64_t> strides;
 
     int32_t device_id = 0, device_type = nb::device::cpu::value;
+    void *ptr;
+    nb::object owner;
 
     if (is_dynamic) {
-        nb::object flat = ravel(h, 'C', &shape, &strides);
-        const ArraySupplement &s2 = supp(flat.type());
+        owner = ravel(h, s.is_complex ? 'F' : 'C', &shape, &strides);
+        const ArraySupplement &s2 = supp(owner.type());
 
-        void *ptr;
         if (s2.index) {
-            uint32_t index = s2.index(inst_ptr(flat));
+            uint32_t index = s2.index(inst_ptr(owner));
             JitBackend backend = (JitBackend) s2.backend;
 
             JitVar value = JitVar::borrow(index);
@@ -67,10 +68,10 @@ static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu) {
             value = JitVar::steal(jit_var_data(value.index(), &ptr));
 
             if (value.index() != index) {
-                nb::object tmp = nb::inst_alloc(flat.type());
+                nb::object tmp = nb::inst_alloc(owner.type());
                 s2.init_index(value.index(), inst_ptr(tmp));
                 nb::inst_mark_ready(tmp);
-                flat = std::move(tmp);
+                owner = std::move(tmp);
             }
 
             if (backend == JitBackend::CUDA && !force_cpu) {
@@ -82,19 +83,9 @@ static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu) {
         } else {
             ptr = s2.data(inst_ptr(h));
         }
-
-        return {
-            ptr,
-            shape.size(),
-            shape.data(),
-            flat,
-            strides.data(),
-            dtype,
-            device_type,
-            device_id
-        };
     } else {
-        void *ptr = s.data(inst_ptr(h));
+        owner = nb::borrow(h);
+        ptr = s.data(inst_ptr(h));
 
         shape.resize(s.ndim);
         strides.resize(s.ndim);
@@ -112,18 +103,31 @@ static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu) {
             if (i == 0)
                 break;
         }
-
-        return {
-            ptr,
-            s.ndim,
-            shape.data(),
-            h,
-            strides.data(),
-            dtype,
-            device_type,
-            device_id
-        };
     }
+
+    if (s.is_complex) {
+        dtype.code = (uint8_t) nb::dlpack::dtype_code::Complex;
+        dtype.bits *= 2;
+
+        for (size_t i = 1; i < shape.size(); ++i) {
+            shape[i - 1] = shape[i];
+            strides[i - 1] = strides[i] / 2;
+        }
+
+        shape.resize(shape.size() - 1);
+        strides.resize(strides.size() - 1);
+    }
+
+    return {
+        ptr,
+        shape.size(),
+        shape.data(),
+        owner,
+        strides.data(),
+        dtype,
+        device_type,
+        device_id
+    };
 }
 
 void export_dlpack(nb::module_ &) {

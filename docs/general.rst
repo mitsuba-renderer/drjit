@@ -8,7 +8,7 @@ General information
 Optimizations
 -------------
 
-This section reviews optimizations that Dr.Jit performs while tracing code. The
+This section lists optimizations performed by Dr.Jit while tracing code. The
 examples all use the following import:
 
 .. code-block:: pycon
@@ -29,12 +29,12 @@ sequence with 10000 elements.
    >>> dr.arange(dr.llvm.Int, 10000)**2
    [0, 1, 4, .. 9994 skipped .., 99940009, 99960004, 99980001]
 
-On the LLVM backend, *vectorization* implies that generated code uses
-instruction set extensions such as Intel AVX/AVX2/AVX512, or ARM NEON when they
-are available. When the machine, e.g., supports `AVX512
-<https://en.wikipedia.org/wiki/AVX-512>`__, each machine instruction processes a
-*packet* of 16 values, which means that a total of 625 packets need to be
-processed.
+On the LLVM backend, *vectorization* means that generated code uses instruction
+set extensions such as Intel AVX/AVX2/AVX512, or ARM NEON when they are
+available. For example, when the machine supports the `AVX512
+<https://en.wikipedia.org/wiki/AVX-512>`__ extensions, each machine
+instruction processes a *packet* of 16 values, which means that a total of 625
+packets need to be evaluated.
 
 When there are more than 1K packets (the default), each successive group of 1K
 packets forms a *block* for parallel processing using the built-in `nanothread
@@ -49,7 +49,7 @@ You can use the functions :py:func:`drjit.thread_count`,
 On the CUDA backend, the system automatically determines a number of *threads*
 that maximize occupancy along with a suitable number of *blocks* and then
 launches a parallel program that spreads out over the entire GPU (assuming that
-there is enough work).
+there is enough work to do so).
 
 .. _cow:
 
@@ -94,6 +94,15 @@ In other words, the addition does not become part of the generated device code.
 This optimization reduces the size of the generated LLVM/PTX IR and can be
 controlled via :py:attr:`drjit.JitFlag.ConstantPropagation`.
 
+Dead code elimination
+^^^^^^^^^^^^^^^^^^^^^
+
+When generating code, Dr.Jit excludes unnecessary operations that do not
+influence arrays evaluated by the kernel. It also removes dead branches in
+loops and conditional statements.
+
+This optimization is always active and cannot be disabled.
+
 Value numbering
 ^^^^^^^^^^^^^^^
 
@@ -114,7 +123,7 @@ controlled via :py:attr:`drjit.JitFlag.ValueNumbering`.
 Local atomic reduction
 ^^^^^^^^^^^^^^^^^^^^^^
 
-Atomic memory operations can be a bottleneck whenever they encounter *write
+Atomic memory operations can be a bottleneck when they encounter *write
 contention*, which refers to a situation where many threads attempt to write to
 the same array element at once.
 
@@ -128,12 +137,12 @@ For example, the following operation causes 1000'000 threads to write to
 
 Since Dr.Jit vectorizes the program during execution, the computation is
 grouped into *packets* that typically contain 16 to 32 elements. By locally
-adding values within each packet and then performing only 31-62K atomic memory
-operations, performance can be considerably improved.
+pre-accumulating the values within each packet and then only performing 31-62K
+atomic memory operations, performance can be considerably improved.
 
-This optimization is particularly important when combined with *reverse-mode
+This optimization is particularly useful in combination with *reverse-mode
 automatic differentiation*, which turns differentiable scalar reads into atomic
-scatter-additions that are sometimes subject to write contentions.
+scatter-additions that can sometimes suffer from write contention.
 
 Other
 ^^^^^
@@ -245,7 +254,7 @@ data structure will cause PyTree-compatible operations to fail with a
 
 Finally, Dr.Jit automatically traverses tuples, lists, and dictionaries,
 but it does not traverse subclasses of basic containers and other generalized
-sequences or mappings.
+sequences or mappings. This is intentional.
 
 .. _custom_types_py:
 

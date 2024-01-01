@@ -290,7 +290,7 @@ void export_reduce(nb::module_ & m) {
           [](nb::handle h0, nb::handle h1) -> nb::object {
               return array_module.attr("abs")(
                   array_module.attr("dot")(h0, h1));
-          }, doc_norm)
+          }, doc_abs_dot)
      .def("norm",
           [](nb::handle h) -> nb::object {
               return array_module.attr("sqrt")(

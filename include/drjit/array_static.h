@@ -234,7 +234,8 @@ public:
     }
 
     /// Construct an array that linearly interpolates from min..max
-    static DRJIT_INLINE Derived linspace_(Scalar min, Scalar max, size_t, bool endpoint) {
+    template <typename T = Scalar>
+    static DRJIT_INLINE Derived linspace_(T min, T max, size_t, bool endpoint) {
         if constexpr (Derived::Size == 1)
             return Derived(min);
         else if constexpr (std::is_floating_point_v<Scalar>)

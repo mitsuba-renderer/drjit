@@ -91,7 +91,7 @@ Returns:
 )";
 
 static const char *doc_array_t = R"(
-Return the *array form* of the provided Dr.Jit array or type.
+Return the *plain array form* of the provided Dr.Jit array or type.
 
 There are several different cases:
 
@@ -457,6 +457,10 @@ static const char *doc_abs = R"(
 abs(arg, /)
 Compute the absolute value of the provided input.
 
+This function evaluates the component-wise absolute value of the input
+scalar, array, or tensor. When called with a complex or quaternion-valued
+array, it uses a suitable generalization of the operation.
+
 Args:
     arg (int | float | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
 
@@ -514,7 +518,7 @@ Args:
 Returns:
     float | int | drjit.ArrayBase: Result of the reduction operation)";
 
-static const char *doc_sqr = R"(
+static const char *doc_square = R"(
 Compute the square of the input array, tensor, or arithmetic type.
 
 Args:
@@ -526,12 +530,19 @@ Returns:
 static const char *doc_pow = R"(
 Raise the first argument to a power specified via the second argument.
 
-The function accepts Python arithmetic types, Dr.Jit arrays, and tensors. It
-processes each input component separately. When ``arg1`` is a Python ``int`` or
-integral ``float`` value, the function performs a sequence of multiplies. The
-general case involves recursive use of the identity ``pow(x, y) = exp2(log2(x)
-* y)``. There is no difference between using :py:func:`drjit.power()` and the
-* builtin ``**`` Python operator.
+This function evaluates the component-wise power of the input scalar, array, or
+tensor arguments. When called with a complex or quaternion-valued inputs, it
+uses a suitable generalization of the operation.
+
+When ``arg1`` is a Python ``int`` or integral ``float`` value, the function
+reduces operation to a sequence of multiplies and adds (potentially
+followed by a reciprocation operation when ``arg1`` is negative).
+
+The general case involves recursive use of the identity ``pow(arg0, arg1) =
+exp2(log2(arg0) * arg1)``.
+
+There is no difference between using :py:func:`drjit.power()` and the builtin
+Python ``**`` operator.
 
 Args:
     arg (object): A Python or Dr.Jit arithmetic type
@@ -539,6 +550,64 @@ Args:
 Returns:
     object: The result of the operation ``arg0**arg1``)";
 
+
+static const char *doc_matmul = R"(
+Compute a matrix-matrix, matrix-vector, vector-matrix, or inner product.
+
+This function implements the semantics of the ``@`` operator introduced in
+Python's `PEP 465 <https://peps.python.org/pep-0465/>`__. There is no practical
+difference between using :py:func:`drjit.matul()` or ``@`` in Dr.Jit-based
+code. Multiplication of matrix types (e.g., :py:class:`drjit.scalar.Matrix2f`)
+using the standard multiplication operator (``*``) is also based on on matrix
+multiplication.
+
+This function takes two Dr.Jit arrays and picks one of the following 5 cases
+based on their leading fixed-size dimensions.
+
+- **Matrix-matrix product**: If both arrays have leading static dimensions
+  ``(n, n)``, they are multiplied like conventional matrices.
+
+- **Matrix-vector product**: If ``arg0`` has leading static dimensions ``(n,
+  n)`` and ``arg1`` has leading static dimension ``(n,)``, the operation
+  conceptually appends a trailing 1-sized dimension to ``arg1``, multiplies,
+  and then removes the extra dimension from the result.
+
+- **Vector-matrix product**: If ``arg0`` has leading static dimensions ``(n,)``
+  and ``arg1`` has leading static dimension ``(n, n)``, the operation
+  conceptually prepends a leading 1-sized dimension to ``arg0``, multiplies,
+  and then removes the extra dimension from the result.
+
+- **Inner product**: If ``arg0`` and ``arg1`` have leading static dimensions
+  ``(n,)``, the operation returns the sum of the elements of ``arg0*arg1``.
+
+- **Scalar product**: If ``arg0`` or ``arg1`` is a scalar, the operation scales
+  the elements of the other argument.
+
+It is legal to combine vectorized and non-vectorized types, e.g.
+
+.. code-block:: python
+
+   dr.matmul(dr.scalar.Matrix4f(...), dr.cuda.Matrix4f(...))
+
+Also, note that doesn't matter whether an input is an instance of a matrix type
+or a similarly-shaped nested array---for example,
+:py:func:`drjit.scalar.Matrix3f` and :py:func:`drjit.scalar.Array33f` have the
+same shape and are treated identically.
+
+.. note::
+
+   This operation only handles fixed-sizes arrays. A different approach is
+   needed for multiplications involving potentially large dynamic
+   arrays/tensors. Other other tools like PyTorch, JAX, or Tensorflow will be
+   preferable in such situations (e.g., to train neural networks).
+
+Args:
+    arg0 (dr.ArrayBase): Dr.Jit array type
+
+    arg1 (dr.ArrayBase): Dr.Jit array type
+
+Returns:
+    object: The result of the operation as defined above)";
 
 static const char *doc_max = R"(
 Compute the maximum of the input array or tensor along one or multiple axes.
@@ -677,6 +746,21 @@ Args:
 Returns:
     float | int | drjit.ArrayBase: Dot product of inputs)";
 
+static const char *doc_abs_dot = R"(
+Compute the absolute value of the dot product of two arrays.
+
+This function implements a convenience short-hand for ``abs(dot(arg0, arg1))``.
+
+See the section on :ref:`horizontal reductions <horizontal-reductions>` for
+details on the properties of such horizontal reductions.
+
+Args:
+    arg0 (list | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+    arg1 (list | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+Returns:
+    float | int | drjit.ArrayBase: Absolute value of the dot product of inputs)";
 
 static const char *doc_norm = R"(
 Computes the 2-norm of a Dr.Jit array, tensor, or Python sequence.
@@ -745,7 +829,18 @@ static const char *doc_sqrt = R"(
 sqrt(arg, /)
 Evaluate the square root of the provided input.
 
-Negative inputs produce a *NaN* output value.
+This function evaluates the component-wise square root of the input
+scalar, array, or tensor. When called with a complex or quaternion-valued
+array, it uses a suitable generalization of the operation.
+
+Negative inputs produce a *NaN* output value. Consider using the
+:py:func:`safe_sqrt` function to work around issues where the input might
+occasionally be negative due to prior roundoff errors.
+
+Anoter noteworthy behavior of the square root function is that it has an
+infinite derivative at ``arg=0``, which can cause infinities/NaNs in gradients
+computed via forward/reverse-mode AD. The :py:func:`safe_sqrt` function
+contains a workaround to ensure a finite derivative in this case.
 
 Args:
     arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
@@ -757,6 +852,8 @@ Returns:
 static const char *doc_cbrt = R"(
 cbrt(arg, /)
 Evaluate the cube root of the provided input.
+
+This function is currently only implemented for real-valued inputs.
 
 Args:
     arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
@@ -770,9 +867,14 @@ rcp(arg, /)
 Evaluate the reciprocal (1 / arg) of the provided input.
 
 When ``arg`` is a CUDA single precision array, the operation is implemented
-using the native multi-function unit ("MUFU"). The result is slightly
-approximate in this case (refer to the documentation of the instruction
-`rcp.approx.ftz.f32` in the NVIDIA PTX manual for details).
+slightly approximately---see the documentation of the instruction
+``rcp.approx.ftz.f32`` in the
+`NVIDIA PTX manual <https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#floating-point-instructions-rcp>`__ for details.
+For full IEEE-754 compatibility, unset :py:attr:`drjit.JitFlag.FastMath`.
+
+When called with a matrix-, complex- or quaternion-valued array, this function
+uses the matrix, complex, or quaternion multiplicative inverse to evaluate the
+reciprocal.
 
 Args:
     arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
@@ -784,10 +886,15 @@ static const char *doc_rsqrt = R"(
 rsqrt(arg, /)
 Evaluate the reciprocal square root (1 / sqrt(arg)) of the provided input.
 
+This function evaluates the component-wise reciprocal square root of the input
+scalar, array, or tensor. When called with a complex or quaternion-valued
+array, it uses a suitable generalization of the operation.
+
 When ``arg`` is a CUDA single precision array, the operation is implemented
-using the native multi-function unit ("MUFU"). The result is slightly
-approximate in this case (refer to the documentation of the instruction
-`rsqrt.approx.ftz.f32` in the NVIDIA PTX manual for details).
+slightly approximately---see the documentation of the instruction
+``rsqrt.approx.ftz.f32`` in the
+`NVIDIA PTX manual <https://docs.nvidia.com/cuda/parallel-thread-execution/index.html#floating-point-instructions-rcp>`__ for details.
+For full IEEE-754 compatibility, unset :py:attr:`drjit.JitFlag.FastMath`.
 
 Args:
     arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
@@ -795,7 +902,7 @@ Args:
 Returns:
     float | drjit.ArrayBase: Reciprocal square root of the input)";
 
-static const char *doc_ceil= R"(
+static const char *doc_ceil = R"(
 ceil(arg, /)
 Evaluate the ceiling, i.e. the smallest integer >= arg.
 
@@ -859,11 +966,16 @@ static const char *doc_log = R"(
 log(arg, /)
 Natural exponential approximation based on the CEPHES library.
 
+This function evaluates the component-wise natural logarithm of the input
+scalar, array, or tensor.
+It uses a suitable generalization of the operation when the input
+is complex- or quaternion-valued.
+
 See the section on :ref:`transcendental function approximations
 <transcendental-accuracy>` for details regarding accuracy.
 
 When ``arg`` is a CUDA single precision array, the operation is implemented
-using the native multi-function unit ("MUFU").
+using the native multi-function ("MUFU") unit.
 
 Args:
     arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
@@ -875,11 +987,16 @@ static const char *doc_log2 = R"(
 log2(arg, /)
 Base-2 exponential approximation based on the CEPHES library.
 
+This function evaluates the component-wise base-2 logarithm of the input
+scalar, array, or tensor.
+It uses a suitable generalization of the operation when the input
+is complex- or quaternion-valued.
+
 See the section on :ref:`transcendental function approximations
 <transcendental-accuracy>` for details regarding accuracy.
 
 When ``arg`` is a CUDA single precision array, the operation is implemented
-using the native multi-function unit ("MUFU").
+using the native multi-function ("MUFU") unit.
 
 Args:
     arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
@@ -891,11 +1008,16 @@ static const char *doc_exp = R"(
 exp(arg, /)
 Natural exponential approximation based on the CEPHES library.
 
+This function evaluates the component-wise natural exponential function of the
+input scalar, array, or tensor.
+It uses a suitable generalization of the operation when the input
+is complex- or quaternion-valued.
+
 See the section on :ref:`transcendental function approximations
 <transcendental-accuracy>` for details regarding accuracy.
 
 When ``arg`` is a CUDA single precision array, the operation is implemented
-using the native multi-function unit ("MUFU").
+using the native multi-function ("MUFU") unit.
 
 Args:
     arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
@@ -907,11 +1029,16 @@ static const char *doc_exp2 = R"(
 exp2(arg, /)
 Base-2 exponential approximation based on the CEPHES library.
 
+This function evaluates the component-wise base-2 exponential function of the
+input scalar, array, or tensor.
+It uses a suitable generalization of the operation when the input
+is complex- or quaternion-valued.
+
 See the section on :ref:`transcendental function approximations
 <transcendental-accuracy>` for details regarding accuracy.
 
 When ``arg`` is a CUDA single precision array, the operation is implemented
-using the native multi-function unit ("MUFU").
+using the native multi-function ("MUFU") unit.
 
 Args:
     arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
@@ -926,6 +1053,8 @@ Error function approximation.
 See the section on :ref:`transcendental function approximations
 <transcendental-accuracy>` for details regarding accuracy.
 
+This function is currently only implemented for real-valued inputs.
+
 Args:
     arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
 
@@ -934,15 +1063,20 @@ Returns:
 
 static const char *doc_sin = R"(
 sin(arg, /)
-Sine approximation based on the CEPHES library.
+Sine function approximation.
 
-The implementation of this function is designed to achieve low error on the domain
-:math:`|x| < 8192` and will not perform as well beyond this range. See the
-section on :ref:`transcendental function approximations
-<transcendental-accuracy>` for details regarding accuracy.
+This function evaluates the component-wise sine of the input scalar, array, or
+tensor. It uses a suitable generalization of the operation when the input is
+complex-valued.
 
-When ``arg`` is a CUDA single precision array, the operation is implemented
-using the native multi-function unit ("MUFU").
+The default implementation of this function is based on the CEPHES library and
+is designed to achieve low error on the domain :math:`|x| < 8192` and will not
+perform as well beyond this range. See the section on :ref:`transcendental
+function approximations <transcendental-accuracy>` for details regarding
+accuracy.
+
+When ``arg`` is a CUDA single precision array, the operation instead uses the
+GPU's built-in multi-function ("MUFU") unit.
 
 Args:
     arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
@@ -952,15 +1086,20 @@ Returns:
 
 static const char *doc_cos = R"(
 cos(arg, /)
-Cosine approximation based on the CEPHES library.
+Cosine function approximation.
 
-The implementation of this function is designed to achieve low error on the
-domain :math:`|x| < 8192` and will not perform as well beyond this range. See
-the section on :ref:`transcendental function approximations
-<transcendental-accuracy>` for details regarding accuracy.
+This function evaluates the component-wise cosine of the input scalar, array,
+or tensor. It uses a suitable generalization of the operation when the input is
+complex-valued.
 
-When ``arg`` is a CUDA single precision array, the operation is implemented
-using the native multi-function unit ("MUFU").
+The default implementation of this function is based on the CEPHES library. It
+is designed to achieve low error on the domain :math:`|x| < 8192` and will not
+perform as well beyond this range. See the section on :ref:`transcendental
+function approximations <transcendental-accuracy>` for details regarding
+accuracy.
+
+When ``arg`` is a CUDA single precision array, the operation instead uses
+the GPU's built-in multi-function ("MUFU") unit.
 
 Args:
     arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
@@ -971,15 +1110,23 @@ Returns:
 
 static const char *doc_sincos = R"(
 sincos(arg, /)
-Sine/cosine approximation based on the CEPHES library.
+Combined sine/cosine function approximation.
 
-The implementation of this function is designed to achieve low error on the
-domain :math:`|x| < 8192` and will not perform as well beyond this range. See
-the section on :ref:`transcendental function approximations
-<transcendental-accuracy>` for details regarding accuracy.
+This function simultaneously evaluates the component-wise sine and cosine of
+the input scalar, array, or tensor. This is more efficient than two separate
+calls to :py:func:`drjit.sin` and :py:func:`drjit.cos` when both are required.
+The function uses a suitable generalization of the operation when the input
+is complex-valued.
 
-When ``arg`` is a CUDA single precision array, the operation is implemented
-using two operations involving the native multi-function unit ("MUFU").
+The default implementation of this function is based on the CEPHES library. It
+is designed to achieve low error on the domain :math:`|x| < 8192` and will not
+perform as well beyond this range. See the section on :ref:`transcendental
+function approximations <transcendental-accuracy>` for details regarding
+accuracy.
+
+When ``arg`` is a CUDA single precision array, the operation instead uses
+the hardware's built-in multi-function ("MUFU") unit.
+
 
 Args:
     arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
@@ -989,15 +1136,21 @@ Returns:
 
 static const char *doc_tan = R"(
 tan(arg, /)
-Tangent approximation based on the CEPHES library.
+Tangent approximation.
 
-The implementation of this function is designed to achieve low error on the
-domain :math:`|x| < 8192` and will not perform as well beyond this range. See
-the section on :ref:`transcendental function approximations
-<transcendental-accuracy>` for details regarding accuracy.
+This function evaluates the component-wise tangent function associated with
+each entry of the input scalar, array, or tensor.
+The function uses a suitable generalization of the operation when the input
+is complex-valued.
 
-When ``arg`` is a CUDA single precision array, the operation is implemented
-using the native multi-function unit ("MUFU").
+The default implementation of this function is based on the CEPHES library. It
+is designed to achieve low error on the domain :math:`|x| < 8192` and will not
+perform as well beyond this range. See the section on :ref:`transcendental
+function approximations <transcendental-accuracy>` for details regarding
+accuracy.
+
+When ``arg`` is a CUDA single precision array, the operation instead uses
+the GPU's built-in multi-function ("MUFU") unit.
 
 Args:
     arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
@@ -1007,10 +1160,25 @@ Returns:
 
 static const char *doc_asin = R"(
 asin(arg, /)
-Arcsine approximation based on the CEPHES library.
+Arcsine approximation.
 
-See the section on :ref:`transcendental function approximations
+This function evaluates the component-wise arcsine of the input scalar, array,
+or tensor. It uses a suitable generalization of the operation when called with
+a complex-valued input.
+
+The implementation of this function is based on the CEPHES library. See the
+section on :ref:`transcendental function approximations
 <transcendental-accuracy>` for details regarding accuracy.
+
+Real-valued inputs outside of the domain :math:`(-1, 1)` produce a *NaN* output
+value. Consider using the :py:func:`safe_asin` function to work around issues
+where the input might occasionally lie outside of this range due to prior
+roundoff errors.
+
+Anoter noteworthy behavior of the arcsine function is that it has an infinite
+derivative at :math:`\texttt{arg}=\pm 1`, which can cause infinities/NaNs in
+gradients computed via forward/reverse-mode AD. The :py:func:`safe_asin`
+function contains a workaround to ensure a finite derivative in this case.
 
 Args:
     arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
@@ -1021,10 +1189,25 @@ Returns:
 
 static const char *doc_acos = R"(
 acos(arg, /)
-Arccosine approximation based on the CEPHES library.
+Arccosine approximation.
 
-See the section on :ref:`transcendental function approximations
+This function evaluates the component-wise arccosine of the input scalar, array,
+or tensor. It uses a suitable generalization of the operation when the input is
+complex-valued.
+
+The implementation of this function is based on the CEPHES library. See the
+section on :ref:`transcendental function approximations
 <transcendental-accuracy>` for details regarding accuracy.
+
+Real-valued inputs outside of the domain :math:`(-1, 1)` produce a *NaN* output
+value. Consider using the :py:func:`safe_acos` function to work around issues
+where the input might occasionally lie outside of this range due to prior
+roundoff errors.
+
+Anoter noteworthy behavior of the arcsine function is that it has an infinite
+derivative at :math:`\texttt{arg}=\pm 1`, which can cause infinities/NaNs in
+gradients computed via forward/reverse-mode AD. The :py:func:`safe_acos`
+function contains a workaround to ensure a finite derivative in this case.
 
 Args:
     arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
@@ -1037,7 +1220,12 @@ static const char *doc_atan = R"(
 atan(arg, /)
 Arctangent approximation
 
-See the section on :ref:`transcendental function approximations
+This function evaluates the component-wise arctangent of the input scalar, array,
+or tensor. It uses a suitable generalization of the operation when the input is
+complex-valued.
+
+The implementation of this function is based on the CEPHES library. See the
+section on :ref:`transcendental function approximations
 <transcendental-accuracy>` for details regarding accuracy.
 
 Args:
@@ -1048,7 +1236,9 @@ Returns:
 
 static const char *doc_atan2 = R"(
 atan2(y, x, /)
-Arctangent of two values
+Evaluate the four-quadrant arctangent function.
+
+This function is currently only implemented for real-valued inputs.
 
 See the section on :ref:`transcendental function approximations
 <transcendental-accuracy>` for details regarding accuracy.
@@ -1074,9 +1264,14 @@ Returns:
 
 static const char *doc_sinh = R"(
 sinh(arg, /)
-Hyperbolic sine approximation based on the CEPHES library.
+Hyperbolic sine approximation.
 
-See the section on :ref:`transcendental function approximations
+This function evaluates the component-wise hyperbolic sine of the input scalar,
+array, or tensor. The function uses a suitable generalization of the operation
+when the input is complex-valued.
+
+The implementation of this function is based on the CEPHES library. See the
+section on :ref:`transcendental function approximations
 <transcendental-accuracy>` for details regarding accuracy.
 
 Args:
@@ -1088,9 +1283,14 @@ Returns:
 
 static const char *doc_cosh = R"(
 cosh(arg, /)
-Hyperbolic cosine approximation based on the CEPHES library.
+Hyperbolic cosine approximation.
 
-See the section on :ref:`transcendental function approximations
+This function evaluates the component-wise hyperbolic cosine of the input
+scalar, array, or tensor. The function uses a suitable generalization of the
+operation when the input is complex-valued.
+
+The implementation of this function is based on the CEPHES library. See the
+section on :ref:`transcendental function approximations
 <transcendental-accuracy>` for details regarding accuracy.
 
 Args:
@@ -1102,9 +1302,16 @@ Returns:
 
 static const char *doc_sincosh = R"(
 sincosh(arg, /)
-Hyperbolic sine/cosine approximation based on the CEPHES library.
+Combined hyperbolic sine/cosine function approximation.
 
-See the section on :ref:`transcendental function approximations
+This function simultaneously evaluates the component-wise hyperbolic sine and
+cosine of the input scalar, array, or tensor. This is more efficient than two
+separate calls to :py:func:`drjit.sinh` and :py:func:`drjit.cosh` when both are
+required. The function uses a suitable generalization of the operation when the
+input is complex-valued.
+
+The implementation of this function is based on the CEPHES library. See the
+section on :ref:`transcendental function approximations
 <transcendental-accuracy>` for details regarding accuracy.
 
 Args:
@@ -1115,9 +1322,14 @@ Returns:
 
 static const char *doc_tanh = R"(
 tanh(arg, /)
-Hyperbolic tangent approximation based on the CEPHES library.
+Hyperbolic tangent approximation.
 
-See the section on :ref:`transcendental function approximations
+This function evaluates the component-wise hyperbolic tangent of the input
+scalar, array, or tensor. It uses a suitable generalization of the operation
+when the input is complex-valued.
+
+The implementation of this function is based on the CEPHES library. See the
+section on :ref:`transcendental function approximations
 <transcendental-accuracy>` for details regarding accuracy.
 
 Args:
@@ -1129,9 +1341,14 @@ Returns:
 
 static const char *doc_asinh = R"(
 asinh(arg, /)
-Hyperbolic arcsine approximation based on the CEPHES library.
+Hyperbolic arcsine approximation.
 
-See the section on :ref:`transcendental function approximations
+This function evaluates the component-wise hyperbolic arcsine of the input
+scalar, array, or tensor. It uses a suitable generalization of the operation
+when the input is complex-valued.
+
+The implementation of this function is based on the CEPHES library. See the
+section on :ref:`transcendental function approximations
 <transcendental-accuracy>` for details regarding accuracy.
 
 Args:
@@ -1143,9 +1360,14 @@ Returns:
 
 static const char *doc_acosh = R"(
 acosh(arg, /)
-Hyperbolic arccosine approximation based on the CEPHES library.
+Hyperbolic arccosine approximation.
 
-See the section on :ref:`transcendental function approximations
+This function evaluates the component-wise hyperbolic arccosine of the input
+scalar, array, or tensor. It uses a suitable generalization of the operation
+when the input is complex-valued.
+
+The implementation of this function is based on the CEPHES library. See the
+section on :ref:`transcendental function approximations
 <transcendental-accuracy>` for details regarding accuracy.
 
 Args:
@@ -1157,9 +1379,14 @@ Returns:
 
 static const char *doc_atanh = R"(
 atanh(arg, /)
-Hyperbolic arctangent approximation based on the CEPHES library.
+Hyperbolic arctangent approximation.
 
-See the section on :ref:`transcendental function approximations
+This function evaluates the component-wise hyperbolic arctangent of the input
+scalar, array, or tensor. It uses a suitable generalization of the operation
+when the input is complex-valued.
+
+The implementation of this function is based on the CEPHES library. See the
+section on :ref:`transcendental function approximations
 <transcendental-accuracy>` for details regarding accuracy.
 
 Args:
@@ -1188,7 +1415,11 @@ Perform a *fused multiply-add* (FMA) operation.
 Given arguments ``arg0``, ``arg1``, and ``arg2``, this operation computes
 ``arg0`` * ``arg1`` + ``arg2`` using only one final rounding step. The
 operation is not only more accurate, but also more efficient, since FMA maps to
-a native machine instruction on platforms targeted by Dr.Jit.
+a native machine instruction on all platforms targeted by Dr.Jit.
+
+When the input is complex- or quaternion-valued, the function internally uses
+a complex or quaternion product. In this case, it reduces the number of
+internal rounding steps instead of avoiding them altogether.
 
 While FMA is traditionally a floating point operation, Dr.Jit also implements
 FMA for integer arrays and maps it onto dedicated instructions provided by the
@@ -1494,46 +1725,45 @@ Returns:
 
 
 static const char *doc_ArrayBase_x = R"(
-If ``value`` is a static Dr.Jit array of size 1 (or larger), the property
-``value.x`` can be used synonymously with ``value[0]``. Otherwise, accessing
+If ``self`` is a static Dr.Jit array of size 1 (or larger), the property
+``self.x`` can be used synonymously with ``self[0]``. Otherwise, accessing
 this field will generate a ``RuntimeError``.
 
 :type: :py:func:`value_t(self) <value_t>`)";
 
 static const char *doc_ArrayBase_y = R"(
-If ``value`` is a static Dr.Jit array of size 2 (or larger), the property
-``value.y`` can be used synonymously with ``value[1]``. Otherwise, accessing
+If ``self`` is a static Dr.Jit array of size 2 (or larger), the property
+``self.y`` can be used synonymously with ``self[1]``. Otherwise, accessing
 this field will generate a ``RuntimeError``.
 
 :type: :py:func:`value_t(self) <value_t>`)";
 
 static const char *doc_ArrayBase_z = R"(
-If ``value`` is a static Dr.Jit array of size 3 (or larger), the property
-``value.z`` can be used synonymously with ``value[2]``. Otherwise, accessing
+If ``self`` is a static Dr.Jit array of size 3 (or larger), the property
+``self.z`` can be used synonymously with ``self[2]``. Otherwise, accessing
 this field will generate a ``RuntimeError``.
 
 :type: :py:func:`value_t(self) <value_t>`)";
 
 static const char *doc_ArrayBase_w = R"(
-If ``value`` is a static Dr.Jit array of size 4 (or larger), the property
-``value.w`` can be used synonymously with ``value[3]``. Otherwise, accessing
+If ``self`` is a static Dr.Jit array of size 4 (or larger), the property
+``self.w`` can be used synonymously with ``self[3]``. Otherwise, accessing
 this field will generate a ``RuntimeError``.
 
 :type: :py:func:`value_t(self) <value_t>`)";
 
 static const char *doc_ArrayBase_real = R"(
-If ``value`` is a complex Dr.Jit array, the property ``value.real`` returns the
-real component (as does ``value[0]``). Otherwise, accessing this field will
-generate a ``RuntimeError``.
-
-:type: :py:func:`value_t(self) <value_t>`)";
+If ``self`` is a complex Dr.Jit array, the property ``self.real`` returns the
+real component (as does ``self[0]``). Otherwise, the field returns ``self``.)";
 
 static const char *doc_ArrayBase_imag = R"(
-If ``value`` is a complex Dr.Jit array, the property ``value.imag`` returns the
-imaginary component (as does ``value[1]``). Otherwise, accessing this field will
-generate a ``RuntimeError``.
+If ``self`` is a complex Dr.Jit array, the property ``self.imag`` returns the
+imaginary component (as does ``self[1]``). Otherwise, it returns a zero-valued
+array of the same type and shape as ``self``.)";
 
-:type: :py:func:`value_t(self) <value_t>`)";
+static const char *doc_ArrayBase_T = R"(
+This property returns the transpose of ``self``. When the underlying
+array is not a matrix type, it raises a ``TypeError``.)";
 
 static const char *doc_ArrayBase_shape = R"(
 This property provides a tuple describing dimension and shape of the
@@ -3900,16 +4130,16 @@ variables:
 
    dr.while_loop(body=loop_body, ...)
 
-Dr.Jit automatically tracks dependencies of indirect reads
-(:py:func:`drjit.gather`) and writes (:py:func:`drjit.scatter`,
-:py:func:`drjit.scatter_reduce`, :py:func:`drjit.scatter_add`,
-:py:func:`drjit.scatter_inc`, etc.). Such operations create implicit inputs and
-outputs of a loop, and these *do not* need to be specified as loop state
-variables (however, doing so causes no harm.) This auto-discovery mechanism is
-helpful when performing vectorized methods calls (within loops), where the set
-of implicit inputs and outputs can often be difficult to know a priori.
-(in principle, any public/private field in any instance could be accessed in
-this way).
+Dr.Jit automatically tracks dependencies of *indirect reads* (done via
+:py:func:`drjit.gather`) and *indirect writes* (done via
+:py:func:`drjit.scatter`, :py:func:`drjit.scatter_reduce`,
+:py:func:`drjit.scatter_add`, :py:func:`drjit.scatter_inc`, etc.). Such
+operations create implicit inputs and outputs of a loop, and these *do not*
+need to be specified as loop state variables (however, doing so causes no
+harm.) This auto-discovery mechanism is helpful when performing vectorized
+methods calls (within loops), where the set of implicit inputs and outputs can
+often be difficult to know a priori. (in principle, any public/private field in
+any instance could be accessed in this way).
 
 .. code-block:: python
 
@@ -4149,7 +4379,7 @@ explain how this mode is automatically selected).
    preserves the control flow structure of the original program by replicating
    it within Dr.Jit's intermediate representation.
 
-3. **Evaluated**: in this mode, Dr.Jit runs both branches of the ``if``
+3. **Evaluated mode**: in this mode, Dr.Jit runs both branches of the ``if``
    statement and then combines the results via :py:func:`drjit.select`. This is
    nearly equivalent to the following Python code:
 
@@ -4165,9 +4395,9 @@ explain how this mode is automatically selected).
    Evaluated mode is conceptually simpler but also slower, since the device
    executes both sides of a branch when only one of them is actually needed.
 
-The evaluation mode is chosen as follows:
+The mode is chosen as follows:
 
-1. When the ``mod`` argument is set to ``"auto"`` (the *default*), the
+1. When the ``mode`` argument is set to ``"auto"`` (the *default*), the
    function examines the type of the ``cond`` input and uses scalar
    mode if the type is a builtin Python ``bool``.
 
@@ -4253,16 +4483,17 @@ Correct derivative tracking requires that regular differentiable inputs are
 specified via the ``args`` parameter. The :py:func:`@drjit.syntax
 <drjit.syntax>` decorator ensures that these assumptions are satisfied.
 
-Dr.Jit also tracks dependencies of *indirect* reads (done via
-:py:func:`drjit.gather`) and writes (done via :py:func:`drjit.scatter`,
-:py:func:`drjit.scatter_reduce`, :py:func:`drjit.scatter_add`,
-:py:func:`drjit.scatter_inc`, etc.). Such operations create implicit inputs and
-outputs, and these *do not* need to be specified as part of ``args`` or the
-return value of ``true_fn`` and ``false_fn`` (however, doing so causes no
-harm.) This auto-discovery mechanism is helpful when performing vectorized
-methods calls (within conditional statements), where the set of implicit inputs
-and outputs can often be difficult to know a priori. (in principle, any
-public/private field in any instance could be accessed in this way).
+Dr.Jit also tracks dependencies of *indirect reads* (done via
+:py:func:`drjit.gather`) and *indirect writes* (done via
+:py:func:`drjit.scatter`, :py:func:`drjit.scatter_reduce`,
+:py:func:`drjit.scatter_add`, :py:func:`drjit.scatter_inc`, etc.). Such
+operations create implicit inputs and outputs, and these *do not* need to be
+specified as part of ``args`` or the return value of ``true_fn`` and
+``false_fn`` (however, doing so causes no harm.) This auto-discovery mechanism
+is helpful when performing vectorized methods calls (within conditional
+statements), where the set of implicit inputs and outputs can often be
+difficult to know a priori. (in principle, any public/private field in any
+instance could be accessed in this way).
 
 .. code-block:: python
 
@@ -4639,6 +4870,23 @@ following assertion holds when value numbering is enabled in Dr.Jit.
 
 Local value numbering is *enabled* by default.)";
 
+static const char *doc_JitFlag_FastMath = R"(
+**Fast Math**: this flag is analogous to the ``-ffast-math`` flag in C
+compilers. When set, the system may use approximations and simplifications
+that sacrifice strict IEEE-754 compatibility.
+
+Currently, it changes two behaviors:
+
+- expressions of the form ``a * 0`` will be simplified to ``0`` (which is
+  technically not correct when ``a`` is infinite or NaN-valued).
+
+- Dr.Jit will use slightly approximate division and square root
+  operations in CUDA mode. Note that disabling fast math mode is costly
+  on CUDA devices, as the strict IEEE-754 compliant version of these
+  operations uses software-based emulation.
+
+Fast math mode is *enabled* by default.)";
+
 // For Sphinx-related technical reasons, this comment is replicated in
 // reference.rst. Please keep them in sync when making changes
 static const char *doc_JitFlag_SymbolicCalls = R"(
@@ -4886,6 +5134,7 @@ The default set of optimization flags consisting of
 
 - :py:attr:`drjit.JitFlag.ConstantPropagation`,
 - :py:attr:`drjit.JitFlag.ValueNumbering`,
+- :py:attr:`drjit.JitFlag.FastMath`,
 - :py:attr:`drjit.JitFlag.SymbolicLoops`,
 - :py:attr:`drjit.JitFlag.OptimizeLoops`,
 - :py:attr:`drjit.JitFlag.SymbolicCalls`,
@@ -5563,6 +5812,24 @@ static const char *doc_detail_clear_registry =
     "influencing subsequent tests that must now also consider the code "
     "generated by these instances (in particular, failures due to "
     "unimplemented functions)";
+
+
+static const char *doc_width = R"(
+Returns the *vectorization width* of the provided input(s), which is defined as
+the length of the last dynamic dimension.
+
+When working with Jit-compiled CUDA or LLVM-based arrays, this corresponds to
+the number of items being processed in parallel.
+
+The function raises an exception when the input(s) is ragged, i.e., when it
+contains arrays with incompatiblle sizes. It returns ``1`` if if the input is
+scalar and/or does not contain any Dr.Jit arrays.
+
+Args:
+    arg (object): An arbitrary Dr.Jit array or :ref:`PyTree <pytrees>`.
+
+Returns:
+    int: The width of the provided input(s).)";
 
 #if defined(__GNUC__)
 #  pragma GCC diagnostic pop

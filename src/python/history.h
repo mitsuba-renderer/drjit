@@ -1,5 +1,5 @@
 /*
-    cuda.h -- instantiates the drjit.cuda.* namespace
+    history.h -- bindings for the kernel history
 
     Dr.Jit: A Just-In-Time-Compiler for Differentiable Rendering
     Copyright 2022, Realistic Graphics Lab, EPFL.
