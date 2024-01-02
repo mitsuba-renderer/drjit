@@ -13,6 +13,28 @@
 
 static bool running_in_jupyter_notebook = false;
 
+#if PY_VERSION_HEX < 0x030A0000
+// Emulate PyGC_Enable()/ PyGC_Disable() on Python < 3.10
+static PyCFunction pygc_enable = nullptr, pygc_disable = nullptr,
+                   pygc_isenabled = nullptr;
+
+static void PyGC_Enable() {
+    pygc_enable(nullptr, nullptr);
+}
+
+static int PyGC_Disable() {
+    pygc_disable(nullptr, nullptr);
+    PyObject *value = pygc_isenabled(nullptr, nullptr);
+    long value_l = PyLong_AsLong(value);
+    if (value_l != 0 && value_l != 1) {
+        fprintf(stderr, "PyGC_Disable() emulation: invalid state!");
+        abort();
+    }
+    Py_DECREF(value);
+    return (int) value_l;
+}
+#endif
+
 struct scoped_disable_gc {
     scoped_disable_gc() {
         status = PyGC_Disable();
@@ -64,12 +86,42 @@ static void log_callback(LogLevel level, const char *msg) {
         // including potentially to a Jupyter notebook.
         file.attr("flush")();
 
+        /// In case something intercepts stderr, write to the raw one as well
+        nb::handle file2 = PySys_GetObject("__stderr__");
+        if (!file.is(file2)) {
+            nb::print(msg, nb::handle(), file2);
+            file2.attr("flush")();
+        }
+
         if (running_in_jupyter_notebook)
             nb::module_::import_("time").attr("sleep")(0.5);
     }
 }
 
 void export_log(nb::module_ &m, PyModuleDef &pmd) {
+#if PY_VERSION_HEX < 0x030A0000
+    // Emulate PyGC_Enable()/ PyGC_Disable() on Python < 3.10
+
+    nb::module_ gc_module = nb::module_::import_("gc");
+    nb::object f_enable  = gc_module.attr("enable"),
+               f_disable = gc_module.attr("disable"),
+               f_isenabled = gc_module.attr("isenabled");
+
+    if (Py_TYPE(f_enable.ptr()) != &PyCFunction_Type ||
+        Py_TYPE(f_disable.ptr()) != &PyCFunction_Type ||
+        Py_TYPE(f_isenabled.ptr()) != &PyCFunction_Type ||
+        PyCFunction_GET_FLAGS(f_enable.ptr()) != METH_NOARGS ||
+        PyCFunction_GET_FLAGS(f_disable.ptr()) != METH_NOARGS ||
+        PyCFunction_GET_FLAGS(f_isenabled.ptr()) != METH_NOARGS) {
+        fprintf(stderr, "drjit: could not interface with garbage collector!");
+        abort();
+    }
+
+    pygc_enable = (PyCFunction) PyCFunction_GET_FUNCTION(f_enable.ptr());
+    pygc_disable = (PyCFunction) PyCFunction_GET_FUNCTION(f_disable.ptr());
+    pygc_isenabled = (PyCFunction) PyCFunction_GET_FUNCTION(f_isenabled.ptr());
+#endif
+
     nb::dict modules = nb::borrow<nb::dict>(PySys_GetObject("modules"));
     running_in_jupyter_notebook = modules.contains("ipykernel");
 

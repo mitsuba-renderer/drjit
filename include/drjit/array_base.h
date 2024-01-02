@@ -597,7 +597,6 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
 
     auto dot_(const Derived &a) const {
         if constexpr (IsArithmetic) {
-            Value result;
 			if constexpr (is_array_v<Value>) {
                 size_t sa = derived().size(), sb = a.size(),
                        sr = sa > sb ? sa : sb;
@@ -610,7 +609,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
                         return Value(0);
                 }
 
-				result = derived().entry(0) * a.entry(0);
+                Value result = derived().entry(0) * a.entry(0);
 				if constexpr (std::is_floating_point_v<Scalar>) {
                     for (size_t i = 1; i < sr; ++i)
                         result = fmadd(derived().entry(i), a.entry(i), result);

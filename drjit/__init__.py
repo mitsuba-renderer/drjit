@@ -1,9 +1,15 @@
 from . import detail as _detail
 from . import ast as _ast
 from . import special as _special
+import typing as _typing
 
 with _detail.scoped_rtld_deepbind():
-    from . import drjit_ext
+    try:
+        from . import drjit_ext
+    except ImportError as e:
+        err = ImportError("Could not import the Dr.Jit binary extension. It is likely that the Python version for which Dr.Jit was compiled does not match the current interpeter.")
+        err.__cause__ = e
+        raise err
 
 def isnan(arg, /):
     """
@@ -49,7 +55,7 @@ def isfinite(arg, /):
     return abs(arg) < float('inf')
 
 
-def allclose(a, b, rtol: float | None = None, atol:float | None = None, equal_nan: bool = False):
+def allclose(a, b, rtol: _typing.Optional[float] = None, atol: _typing.Optional[float] = None, equal_nan: bool = False):
     r'''
     Returns ``True`` if two arrays are element-wise equal within a given error
     tolerance.
