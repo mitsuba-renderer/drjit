@@ -115,15 +115,6 @@ Miscellaneous operations
 .. autofunction:: meshgrid
 .. autofunction:: make_opaque
 
-Operations for special array types
-----------------------------------
-
-.. autofunction:: cross
-.. autofunction:: det
-.. autofunction:: diag
-.. autofunction:: trace
-.. autofunction:: matmul
-
 Just-in-time compilation
 ------------------------
 
@@ -845,23 +836,50 @@ _______________________
 .. autofunction:: expr_t
 .. autofunction:: array_t
 
+Bit-level operations
+--------------------
+.. autofunction:: reinterpret_array
+.. autofunction:: popcnt
+.. autofunction:: lzcnt
+.. autofunction:: tzcnt
+
 Standard mathematical functions
 -------------------------------
 
+.. autofunction:: fma
 .. autofunction:: abs
 .. autofunction:: minimum
 .. autofunction:: maximum
-.. autofunction:: clip
-.. autofunction:: fma
-.. autofunction:: ceil
-.. autofunction:: floor
-.. autofunction:: trunc
-.. autofunction:: round
 .. autofunction:: sqrt
 .. autofunction:: cbrt
 .. autofunction:: rcp
 .. autofunction:: rsqrt
-.. autofunction:: reinterpret_array
+.. autofunction:: clip
+.. autofunction:: ceil
+.. autofunction:: floor
+.. autofunction:: trunc
+.. autofunction:: round
+.. autofunction:: hypot
+.. autofunction:: sign
+.. autofunction:: copysign
+.. autofunction:: mulsign
+
+Operations for vectors and matrices
+-----------------------------------
+
+.. autofunction:: cross
+.. autofunction:: det
+.. autofunction:: diag
+.. autofunction:: trace
+.. autofunction:: matmul
+
+Operations for complex values and quaternions
+---------------------------------------------
+
+.. autofunction:: conj
+.. autofunction:: arg
+.. autofunction:: real
+.. autofunction:: imag
 
 Transcendental functions
 ------------------------
@@ -902,6 +920,19 @@ ________________________________________
 .. autofunction:: exp
 .. autofunction:: power
 
+Safe mathematical functions
+---------------------------
+
+Dr.Jit provides "safe" variants of a few standard mathematical operations that
+are prone to out-of-domain errors in calculations with floating point rounding
+errors.  Such errors could, e.g., cause the argument of a square root to become
+negative, which would ordinarily require complex arithmetic. At zero, the
+derivative of the square root function is infinite. The following operations
+clamp the input to a safe range to avoid these extremes.
+
+.. autofunction:: safe_sqrt
+.. autofunction:: safe_asin
+.. autofunction:: safe_acos
 
 Automatic differentiation
 -------------------------
@@ -1021,20 +1052,6 @@ Automatic differentiation
 
 .. autofunction:: custom
 
-
-Safe mathematical functions
----------------------------
-
-Dr.Jit provides "safe" variants of a few standard mathematical operations that
-are prone to out-of-domain errors in calculations with floating point rounding
-errors.  Such errors could, e.g., cause the argument of a square root to become
-negative, which would ordinarily require complex arithmetic. At zero, the
-derivative of the square root function is infinite. The following operations
-clamp the input to a safe range to avoid these extremes.
-
-.. autofunction:: safe_sqrt
-.. autofunction:: safe_asin
-.. autofunction:: safe_acos
 
 Constants
 ---------
@@ -1189,23 +1206,35 @@ Array base class
     .. automethod:: __dlpack__
     .. automethod:: __array__
 
+Computation graph analysis
+--------------------------
 
-Miscellaneous
--------------
+The following operations visualize the contents of Dr.Jit's computation graphs
+(of which there are *two*: one for Jit compilation, and one for automatic
+differentiation).
 
-.. autofunction:: format
-.. autofunction:: print
-.. autofunction:: copy
 .. autofunction:: graphviz
 .. autofunction:: graphviz_ad
 .. autofunction:: whos
 .. autofunction:: whos_ad
 .. autofunction:: set_label
+
+Printing arrays
+---------------
+
+.. autofunction:: format
+.. autofunction:: print
+
+Miscellaneous
+-------------
+
+.. autofunction:: copy
 .. autofunction:: thread_count
 .. autofunction:: set_thread_count
 .. autofunction:: block_size
 .. autofunction:: set_block_size
-.. autofunction:: conj
+.. autofunction:: log2i
+
 .. py:data:: None
    :type: NoneType
 

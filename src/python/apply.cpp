@@ -28,6 +28,10 @@ static const char *op_names[] = {
     "rsqrt",
     "cbrt",
 
+    "popcnt",
+    "lzcnt",
+    "tzcnt",
+
     "exp",
     "exp2",
     "log",

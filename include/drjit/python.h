@@ -110,6 +110,10 @@ enum class ArrayOp {
     Rsqrt,
     Cbrt,
 
+    Popcnt,
+    Lzcnt,
+    Tzcnt,
+
     Exp,
     Exp2,
     Log,
@@ -566,11 +570,15 @@ template <typename T> void bind_int_arithmetic(ArrayBinding &b) {
     b[ArrayOp::LShift] = (void *) +[](const T *a, const T *b, T *c) { new (c) T(*a << *b); };
     b[ArrayOp::RShift] = (void *) +[](const T *a, const T *b, T *c) { new (c) T(*a >> *b); };
     b[ArrayOp::Mod] = (void *) +[](const T *a, const T *b, T *c) { new (c) T(*a % *b); };
+    b[ArrayOp::Popcnt] = (void *) +[](const T *a, T *b) { new (b) T(popcnt(*a)); };
+    b[ArrayOp::Lzcnt] = (void *) +[](const T *a, T *b) { new (b) T(lzcnt(*a)); };
+    b[ArrayOp::Tzcnt] = (void *) +[](const T *a, T *b) { new (b) T(tzcnt(*a)); };
 }
 
 inline void disable_int_arithmetic(ArrayBinding &b) {
     b[ArrayOp::FloorDiv] = b[ArrayOp::LShift] = b[ArrayOp::RShift] =
-        DRJIT_OP_NOT_IMPLEMENTED;
+        b[ArrayOp::Popcnt] = b[ArrayOp::Lzcnt] = b[ArrayOp::Tzcnt] =
+            DRJIT_OP_NOT_IMPLEMENTED;
 }
 
 template <typename T> void bind_float_arithmetic(ArrayBinding &b) {
