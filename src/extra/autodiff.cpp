@@ -374,7 +374,10 @@ struct State {
     /// Counter to establish an ordering among variables
     uint64_t counter = 0;
 
-    State() : variables(1), edges(1) { }
+    State() {
+        variables.resize(1);
+        edges.resize(1);
+    }
 
     ~State() {
         size_t vars_used  = variables.size() - unused_variables.size() - 1,

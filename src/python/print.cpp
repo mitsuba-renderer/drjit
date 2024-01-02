@@ -405,15 +405,16 @@ static nb::object format_impl(const char *name, const std::string &fmt,
         bool symbolic = jit_flag(JitFlag::SymbolicScope);
         if (kwargs.contains("mode")) {
             const char *mode = nb::cast<const char *>(kwargs["mode"]);
-            if (strcmp(mode, "auto") == 0)
-                ;
-            if (strcmp(mode, "evaluate") == 0)
+            if (strcmp(mode, "auto") == 0) {
+                /* Nothing */
+            } if (strcmp(mode, "evaluate") == 0) {
                 symbolic = false;
-            else if (strcmp(mode, "symbolic") == 0)
+            } else if (strcmp(mode, "symbolic") == 0) {
                 symbolic = true;
-            else
+            } else {
                 nb::raise("'mode' parameter must be one of \"auto\", "
                           "\"evaluate\", or \"symbolic\".");
+            }
             nb::del(kwargs["mode"]);
         }
 

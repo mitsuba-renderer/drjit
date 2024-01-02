@@ -33,7 +33,6 @@ StateD while_loop_impl(std::index_sequence<Is...>, State &&state_, Cond &&cond,
             body(dr_get<Is>(state)...);
         return state;
     } else {
-
         // This is a vectorized loop
         struct Payload {
             StateD state;
@@ -78,6 +77,7 @@ StateD while_loop_impl(std::index_sequence<Is...>, State &&state_, Cond &&cond,
         return state;
     }
 }
+
 NAMESPACE_END(detail)
 
 template <typename State, typename Cond, typename Body>
