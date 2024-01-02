@@ -108,7 +108,7 @@ Matrix<expr_t<T0, T1>, Size> operator*(const Matrix<T0, Size> &m0,
     for (size_t i = 0; i < Size; ++i) {
         Row row = m0(i, 0) * m1.entry(0);
         for (size_t j = 1; j < Size; ++j)
-            row = fmadd(m1(i, j), m1.entry(j), row);
+            row = fmadd(m0(i, j), m1.entry(j), row);
         result.entry(i) = row;
     }
 
@@ -148,6 +148,39 @@ auto operator*(const Matrix<T0, Size> &m0, const T1 &a1) {
         using Result = Matrix<Value, Size>;
         using PlainArrayType = plain_t<Result>;
         return Result(PlainArrayType(m0) * full<PlainArrayType>(Value(a1)));
+    }
+}
+
+template <typename T0, typename T1, typename T2, size_t Size>
+Matrix<expr_t<T0, T1, T2>, Size> fmadd(const Matrix<T0, Size> &m0,
+                                       const Matrix<T1, Size> &m1,
+                                       const Matrix<T2, Size> &m2) {
+    using Result = Matrix<expr_t<T0, T1, T2>, Size>;
+    using Row = value_t<Result>;
+
+    Result result;
+
+    for (size_t i = 0; i < Size; ++i) {
+        Row row = m2.entry(i);
+        for (size_t j = 0; j < Size; ++j)
+            row = fmadd(m0(i, j), m1.entry(j), row);
+        result.entry(i) = row;
+    }
+
+    return result;
+}
+
+template <typename T0, typename T1, typename T2, size_t Size>
+auto fmadd(const Matrix<T0, Size> &m0, const T1 &a1, const T2 &a2) {
+    if constexpr (is_vector_v<T1> && size_v<T1> == Size && is_vector_v<T2> && size_v<T2> == Size) {
+        Matrix<T0, Size> t = transpose(m0);
+        Array<expr_t<T0, value_t<T1>, value_t<T2>>, Size> result = a2;
+        for (size_t i = 0; i < Size; ++i)
+            result = fmadd(t.entry(i), a1.entry(i), result);
+        return result;
+
+    } else {
+        return m0 * a1 + a2;
     }
 }
 

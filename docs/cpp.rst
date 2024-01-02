@@ -316,6 +316,41 @@ the called functions are also disabled for these elements.
 It is legal to perform a function call on an array containing ``nullptr``
 pointers. These elements are considered to be masked as well.
 
+Besides vectorizing method calls, there is an alternative call interface named
+``drjit::dispatch``:
+
+.. cpp:function:: template <typename Self, typename Func, typename... Args> auto dispatch(const Self& self, const Func &func, const Args&... args)
+
+   This C++ interface is analogous the Python API function
+   :py:func:`drjit.dispatch()`. Please review the documentation of the Python
+   variant first.
+
+   The C++ interface takes an instance array ``self`` and invokes a provided
+   callable ``func`` once for each unique instance. The callable should take a
+   scalar instance pointer as first input argument, followed by ``args...``.
+   Dr.Jit assembles the traced computation into an indirect jump to one of
+   several subroutines.
+
+   The dispatch interface is convenient whenever adding a method or virtual
+   method to a class is undesirable. Also, dynamic dispatch is a relatively
+   costly operation. When multiple calls are performed on the same set of
+   instances, it may be preferable to merge them into a single and potentially
+   signficantly faster use of :cpp:func:`drjit::dispatch() <dispatch>`.
+
+
+The following snippet shows how merge two method calls into a combined call:
+
+.. code-block:: cpp
+
+   dr::CUDAArray<Foo*> instances = ...;
+   Float x = ....;
+
+   Float y = dr::dispatch(
+       instances,
+       [](Foo *self, Float x) { return self->f(x) + self->g(x); },
+       x
+   );
+
 Python bindings
 ---------------
 
@@ -362,12 +397,6 @@ and append the following binding declarations:
     dr::ArrayBinding b;
     auto base_ptr = dr::bind_array_t<FooPtr>(b, m, "FooPtr")
         .def("f", [](FooPtr &self, Float a) { return self->f(a); })
-    base_ptr.attr("Domain") = "Foo";
-
-The ``Domain`` attribute at the end should match the name passed to
-``jit_registry_put`` and enables use of the instance array with
-:py:func:`drjit.dispatch`.
-
 
 .. _custom_types_cpp:
 

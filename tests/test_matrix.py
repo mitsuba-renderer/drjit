@@ -29,6 +29,7 @@ def test03_add_mul(t):
     assert dr.all(t(1, 2, 3, 4) * t(0, 1, 0, 2) == t(0, 5, 0, 11), axis=None)
     assert dr.all(a(t(1, 2, 3, 4)) * a(t(0, 1, 0, 2)) == a(t(0, 2, 0, 8)), axis=None)
     assert dr.all(a(t(1, 2, 3, 4)) @ a(t(0, 1, 0, 2)) == a(t(0, 5, 0, 11)), axis=None)
+    assert dr.all(dr.fma(t(1, 2, 3, 4), t(0, 1, 0, 2), t(100,100,100,100)) == t(100, 105, 100, 111), axis=None)
 
 
 @pytest.test_arrays('matrix,shape=(2')

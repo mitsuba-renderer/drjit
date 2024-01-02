@@ -272,10 +272,17 @@ Matrices change the behavior of various operations:
   the nature of the arguments, this operation carries out a
   matrix-matrix, matrix-vector, vector-matrix, or scalar product.
 
-- Reciprocation via :py:func:`drjit.rcp()` returns the matrix inverse.
-
 - True division (``arg0 / arg1``) with a matrix-valued denominator ``arg1``
   involves a matrix inverse.
+
+- Additionally, the following operations generalize by internally replace
+  ordinary multiplication and division operations with their matrix analogs:
+
+  - :py:func:`drjit.fma`
+  - :py:func:`drjit.rcp`
+
+- The following operations Reciprocation via :py:func:`drjit.rcp()` returns the matrix inverse.
+
 
 To give an example, if ``a``, ``b``, ``c`` below were all matrices, then the
 expression below would right-multiply ``b`` by the inverse of ``c``,
