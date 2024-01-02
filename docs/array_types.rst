@@ -12,8 +12,11 @@ Dr.Jit types derive from :py:class:`drjit.ArrayBase` and generally do not
 implement any methods beyond those of the base class, which makes this section
 rather repetitious.
 
+
 Scalar array namespace (``drjit.scalar``)
 _________________________________________
+
+.. py:module:: drjit.scalar
 
 The scalar backend directly operates on individual floating point/integer
 values without the use of parallelization or vectorization.
@@ -49,156 +52,156 @@ Scalars
 
 1D arrays
 ^^^^^^^^^
-.. autoclass:: drjit.scalar.Array0b
+.. autoclass:: Array0b
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array1b
+.. autoclass:: Array1b
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array2b
+.. autoclass:: Array2b
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array3b
+.. autoclass:: Array3b
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array4b
+.. autoclass:: Array4b
     :show-inheritance:
-.. autoclass:: drjit.scalar.ArrayXb
+.. autoclass:: ArrayXb
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array0f
+.. autoclass:: Array0f
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array1f
+.. autoclass:: Array1f
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array2f
+.. autoclass:: Array2f
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array3f
+.. autoclass:: Array3f
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array4f
+.. autoclass:: Array4f
     :show-inheritance:
-.. autoclass:: drjit.scalar.ArrayXf
+.. autoclass:: ArrayXf
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array0u
+.. autoclass:: Array0u
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array1u
+.. autoclass:: Array1u
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array2u
+.. autoclass:: Array2u
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array3u
+.. autoclass:: Array3u
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array4u
+.. autoclass:: Array4u
     :show-inheritance:
-.. autoclass:: drjit.scalar.ArrayXu
+.. autoclass:: ArrayXu
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array0i
+.. autoclass:: Array0i
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array1i
+.. autoclass:: Array1i
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array2i
+.. autoclass:: Array2i
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array3i
+.. autoclass:: Array3i
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array4i
+.. autoclass:: Array4i
     :show-inheritance:
-.. autoclass:: drjit.scalar.ArrayXi
+.. autoclass:: ArrayXi
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array0f64
+.. autoclass:: Array0f64
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array1f64
+.. autoclass:: Array1f64
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array2f64
+.. autoclass:: Array2f64
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array3f64
+.. autoclass:: Array3f64
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array4f64
+.. autoclass:: Array4f64
     :show-inheritance:
-.. autoclass:: drjit.scalar.ArrayXf64
+.. autoclass:: ArrayXf64
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array0u64
+.. autoclass:: Array0u64
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array1u64
+.. autoclass:: Array1u64
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array2u64
+.. autoclass:: Array2u64
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array3u64
+.. autoclass:: Array3u64
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array4u64
+.. autoclass:: Array4u64
     :show-inheritance:
-.. autoclass:: drjit.scalar.ArrayXu64
+.. autoclass:: ArrayXu64
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array0i64
+.. autoclass:: Array0i64
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array1i64
+.. autoclass:: Array1i64
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array2i64
+.. autoclass:: Array2i64
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array3i64
+.. autoclass:: Array3i64
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array4i64
+.. autoclass:: Array4i64
     :show-inheritance:
-.. autoclass:: drjit.scalar.ArrayXi64
+.. autoclass:: ArrayXi64
     :show-inheritance:
 
 2D arrays
 ^^^^^^^^^
-.. autoclass:: drjit.scalar.Array22b
+.. autoclass:: Array22b
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array33b
+.. autoclass:: Array33b
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array44b
+.. autoclass:: Array44b
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array22f
+.. autoclass:: Array22f
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array33f
+.. autoclass:: Array33f
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array44f
+.. autoclass:: Array44f
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array22f64
+.. autoclass:: Array22f64
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array33f64
+.. autoclass:: Array33f64
     :show-inheritance:
-.. autoclass:: drjit.scalar.Array44f64
+.. autoclass:: Array44f64
     :show-inheritance:
 
 Special (complex numbers, etc.)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-.. autoclass:: drjit.scalar.Complex2f
+.. autoclass:: Complex2f
     :show-inheritance:
-.. autoclass:: drjit.scalar.Complex2f64
+.. autoclass:: Complex2f64
     :show-inheritance:
-.. autoclass:: drjit.scalar.Quaternion4f
+.. autoclass:: Quaternion4f
     :show-inheritance:
-.. autoclass:: drjit.scalar.Quaternion4f64
+.. autoclass:: Quaternion4f64
     :show-inheritance:
-.. autoclass:: drjit.scalar.Matrix2f
+.. autoclass:: Matrix2f
     :show-inheritance:
-.. autoclass:: drjit.scalar.Matrix3f
+.. autoclass:: Matrix3f
     :show-inheritance:
-.. autoclass:: drjit.scalar.Matrix4f
+.. autoclass:: Matrix4f
     :show-inheritance:
-.. autoclass:: drjit.scalar.Matrix2f64
+.. autoclass:: Matrix2f64
     :show-inheritance:
-.. autoclass:: drjit.scalar.Matrix3f64
+.. autoclass:: Matrix3f64
     :show-inheritance:
-.. autoclass:: drjit.scalar.Matrix4f64
+.. autoclass:: Matrix4f64
     :show-inheritance:
 
 Tensors
 ^^^^^^^
-.. autoclass:: drjit.scalar.TensorXb
+.. autoclass:: TensorXb
     :show-inheritance:
-.. autoclass:: drjit.scalar.TensorXf
+.. autoclass:: TensorXf
     :show-inheritance:
-.. autoclass:: drjit.scalar.TensorXu
+.. autoclass:: TensorXu
     :show-inheritance:
-.. autoclass:: drjit.scalar.TensorXi
+.. autoclass:: TensorXi
     :show-inheritance:
-.. autoclass:: drjit.scalar.TensorXf64
+.. autoclass:: TensorXf64
     :show-inheritance:
-.. autoclass:: drjit.scalar.TensorXu64
+.. autoclass:: TensorXu64
     :show-inheritance:
-.. autoclass:: drjit.scalar.TensorXi64
+.. autoclass:: TensorXi64
     :show-inheritance:
 
 Random number generators
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. autoclass:: drjit.scalar.PCG32
+.. autoclass:: PCG32
 
    .. automethod:: __init__
    .. automethod:: seed
@@ -219,6 +222,8 @@ Random number generators
 LLVM array namespace (``drjit.llvm``)
 _______________________________________
 
+.. py:module:: drjit.llvm
+
 The LLVM backend is vectorized, hence types listed as *scalar* actually
 represent an array of scalars partaking in a parallel computation
 (analogously, 1D arrays are arrays of 1D arrays, etc.).
@@ -226,173 +231,173 @@ represent an array of scalars partaking in a parallel computation
 Scalar
 ^^^^^^
 
-.. autoclass:: drjit.llvm.Bool
+.. autoclass:: Bool
     :show-inheritance:
-.. autoclass:: drjit.llvm.Float
+.. autoclass:: Float
     :show-inheritance:
-.. autoclass:: drjit.llvm.Float64
+.. autoclass:: Float64
     :show-inheritance:
-.. autoclass:: drjit.llvm.UInt
+.. autoclass:: UInt
     :show-inheritance:
-.. autoclass:: drjit.llvm.UInt64
+.. autoclass:: UInt64
     :show-inheritance:
-.. autoclass:: drjit.llvm.Int
+.. autoclass:: Int
     :show-inheritance:
-.. autoclass:: drjit.llvm.Int64
+.. autoclass:: Int64
     :show-inheritance:
 
 1D arrays
 ^^^^^^^^^
-.. autoclass:: drjit.llvm.Array0b
+.. autoclass:: Array0b
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array1b
+.. autoclass:: Array1b
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array2b
+.. autoclass:: Array2b
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array3b
+.. autoclass:: Array3b
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array4b
+.. autoclass:: Array4b
     :show-inheritance:
-.. autoclass:: drjit.llvm.ArrayXb
+.. autoclass:: ArrayXb
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array0f
+.. autoclass:: Array0f
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array1f
+.. autoclass:: Array1f
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array2f
+.. autoclass:: Array2f
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array3f
+.. autoclass:: Array3f
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array4f
+.. autoclass:: Array4f
     :show-inheritance:
-.. autoclass:: drjit.llvm.ArrayXf
+.. autoclass:: ArrayXf
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array0u
+.. autoclass:: Array0u
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array1u
+.. autoclass:: Array1u
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array2u
+.. autoclass:: Array2u
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array3u
+.. autoclass:: Array3u
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array4u
+.. autoclass:: Array4u
     :show-inheritance:
-.. autoclass:: drjit.llvm.ArrayXu
+.. autoclass:: ArrayXu
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array0i
+.. autoclass:: Array0i
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array1i
+.. autoclass:: Array1i
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array2i
+.. autoclass:: Array2i
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array3i
+.. autoclass:: Array3i
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array4i
+.. autoclass:: Array4i
     :show-inheritance:
-.. autoclass:: drjit.llvm.ArrayXi
+.. autoclass:: ArrayXi
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array0f64
+.. autoclass:: Array0f64
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array1f64
+.. autoclass:: Array1f64
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array2f64
+.. autoclass:: Array2f64
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array3f64
+.. autoclass:: Array3f64
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array4f64
+.. autoclass:: Array4f64
     :show-inheritance:
-.. autoclass:: drjit.llvm.ArrayXf64
+.. autoclass:: ArrayXf64
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array0u64
+.. autoclass:: Array0u64
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array1u64
+.. autoclass:: Array1u64
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array2u64
+.. autoclass:: Array2u64
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array3u64
+.. autoclass:: Array3u64
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array4u64
+.. autoclass:: Array4u64
     :show-inheritance:
-.. autoclass:: drjit.llvm.ArrayXu64
+.. autoclass:: ArrayXu64
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array0i64
+.. autoclass:: Array0i64
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array1i64
+.. autoclass:: Array1i64
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array2i64
+.. autoclass:: Array2i64
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array3i64
+.. autoclass:: Array3i64
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array4i64
+.. autoclass:: Array4i64
     :show-inheritance:
-.. autoclass:: drjit.llvm.ArrayXi64
+.. autoclass:: ArrayXi64
     :show-inheritance:
 
 2D arrays
 ^^^^^^^^^
-.. autoclass:: drjit.llvm.Array22b
+.. autoclass:: Array22b
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array33b
+.. autoclass:: Array33b
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array44b
+.. autoclass:: Array44b
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array22f
+.. autoclass:: Array22f
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array33f
+.. autoclass:: Array33f
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array44f
+.. autoclass:: Array44f
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array22f64
+.. autoclass:: Array22f64
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array33f64
+.. autoclass:: Array33f64
     :show-inheritance:
-.. autoclass:: drjit.llvm.Array44f64
+.. autoclass:: Array44f64
     :show-inheritance:
 
 Special (complex numbers, etc.)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-.. autoclass:: drjit.llvm.Complex2f
+.. autoclass:: Complex2f
     :show-inheritance:
-.. autoclass:: drjit.llvm.Complex2f64
+.. autoclass:: Complex2f64
     :show-inheritance:
-.. autoclass:: drjit.llvm.Quaternion4f
+.. autoclass:: Quaternion4f
     :show-inheritance:
-.. autoclass:: drjit.llvm.Quaternion4f64
+.. autoclass:: Quaternion4f64
     :show-inheritance:
-.. autoclass:: drjit.llvm.Matrix2f
+.. autoclass:: Matrix2f
     :show-inheritance:
-.. autoclass:: drjit.llvm.Matrix3f
+.. autoclass:: Matrix3f
     :show-inheritance:
-.. autoclass:: drjit.llvm.Matrix4f
+.. autoclass:: Matrix4f
     :show-inheritance:
-.. autoclass:: drjit.llvm.Matrix2f64
+.. autoclass:: Matrix2f64
     :show-inheritance:
-.. autoclass:: drjit.llvm.Matrix3f64
+.. autoclass:: Matrix3f64
     :show-inheritance:
-.. autoclass:: drjit.llvm.Matrix4f64
+.. autoclass:: Matrix4f64
     :show-inheritance:
 
 Tensors
 ^^^^^^^
-.. autoclass:: drjit.llvm.TensorXb
+.. autoclass:: TensorXb
     :show-inheritance:
-.. autoclass:: drjit.llvm.TensorXf
+.. autoclass:: TensorXf
     :show-inheritance:
-.. autoclass:: drjit.llvm.TensorXu
+.. autoclass:: TensorXu
     :show-inheritance:
-.. autoclass:: drjit.llvm.TensorXi
+.. autoclass:: TensorXi
     :show-inheritance:
-.. autoclass:: drjit.llvm.TensorXf64
+.. autoclass:: TensorXf64
     :show-inheritance:
-.. autoclass:: drjit.llvm.TensorXu64
+.. autoclass:: TensorXu64
     :show-inheritance:
-.. autoclass:: drjit.llvm.TensorXi64
+.. autoclass:: TensorXi64
     :show-inheritance:
 
 Random number generators
 ^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. autoclass:: drjit.llvm.PCG32
+.. autoclass:: PCG32
 
    .. automethod:: __init__
    .. automethod:: seed
@@ -412,179 +417,569 @@ Random number generators
 LLVM array namespace with automatic differentiation (``drjit.llvm.ad``)
 _______________________________________________________________________
 
+.. py:module:: drjit.llvm.ad
+
 The LLVM AD backend is vectorized, hence types listed as *scalar* actually
 represent an array of scalars partaking in a parallel computation
 (analogously, 1D arrays are arrays of 1D arrays, etc.).
 
 Scalars
 ^^^^^^^
-.. autoclass:: drjit.llvm.ad.Bool
+.. autoclass:: Bool
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Float
+.. autoclass:: Float
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Float64
+.. autoclass:: Float64
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.UInt
+.. autoclass:: UInt
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.UInt64
+.. autoclass:: UInt64
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Int
+.. autoclass:: Int
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Int64
+.. autoclass:: Int64
     :show-inheritance:
 
 1D arrays
 ^^^^^^^^^
-.. autoclass:: drjit.llvm.ad.Array0b
+.. autoclass:: Array0b
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array1b
+.. autoclass:: Array1b
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array2b
+.. autoclass:: Array2b
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array3b
+.. autoclass:: Array3b
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array4b
+.. autoclass:: Array4b
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.ArrayXb
+.. autoclass:: ArrayXb
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array0f
+.. autoclass:: Array0f
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array1f
+.. autoclass:: Array1f
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array2f
+.. autoclass:: Array2f
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array3f
+.. autoclass:: Array3f
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array4f
+.. autoclass:: Array4f
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.ArrayXf
+.. autoclass:: ArrayXf
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array0u
+.. autoclass:: Array0u
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array1u
+.. autoclass:: Array1u
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array2u
+.. autoclass:: Array2u
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array3u
+.. autoclass:: Array3u
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array4u
+.. autoclass:: Array4u
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.ArrayXu
+.. autoclass:: ArrayXu
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array0i
+.. autoclass:: Array0i
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array1i
+.. autoclass:: Array1i
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array2i
+.. autoclass:: Array2i
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array3i
+.. autoclass:: Array3i
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array4i
+.. autoclass:: Array4i
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.ArrayXi
+.. autoclass:: ArrayXi
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array0f64
+.. autoclass:: Array0f64
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array1f64
+.. autoclass:: Array1f64
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array2f64
+.. autoclass:: Array2f64
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array3f64
+.. autoclass:: Array3f64
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array4f64
+.. autoclass:: Array4f64
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.ArrayXf64
+.. autoclass:: ArrayXf64
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array0u64
+.. autoclass:: Array0u64
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array1u64
+.. autoclass:: Array1u64
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array2u64
+.. autoclass:: Array2u64
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array3u64
+.. autoclass:: Array3u64
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array4u64
+.. autoclass:: Array4u64
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.ArrayXu64
+.. autoclass:: ArrayXu64
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array0i64
+.. autoclass:: Array0i64
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array1i64
+.. autoclass:: Array1i64
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array2i64
+.. autoclass:: Array2i64
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array3i64
+.. autoclass:: Array3i64
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array4i64
+.. autoclass:: Array4i64
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.ArrayXi64
+.. autoclass:: ArrayXi64
     :show-inheritance:
 
 2D arrays
 ^^^^^^^^^
-.. autoclass:: drjit.llvm.ad.Array22b
+.. autoclass:: Array22b
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array33b
+.. autoclass:: Array33b
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array44b
+.. autoclass:: Array44b
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array22f
+.. autoclass:: Array22f
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array33f
+.. autoclass:: Array33f
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array44f
+.. autoclass:: Array44f
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array22f64
+.. autoclass:: Array22f64
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array33f64
+.. autoclass:: Array33f64
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Array44f64
+.. autoclass:: Array44f64
     :show-inheritance:
 
 Special (complex numbers, etc.)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-.. autoclass:: drjit.llvm.ad.Complex2f
+.. autoclass:: Complex2f
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Complex2f64
+.. autoclass:: Complex2f64
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Quaternion4f
+.. autoclass:: Quaternion4f
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Quaternion4f64
+.. autoclass:: Quaternion4f64
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Matrix2f
+.. autoclass:: Matrix2f
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Matrix3f
+.. autoclass:: Matrix3f
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Matrix4f
+.. autoclass:: Matrix4f
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Matrix2f64
+.. autoclass:: Matrix2f64
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Matrix3f64
+.. autoclass:: Matrix3f64
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.Matrix4f64
+.. autoclass:: Matrix4f64
     :show-inheritance:
 
 Tensors
 ^^^^^^^
-.. autoclass:: drjit.llvm.ad.TensorXb
+.. autoclass:: TensorXb
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.TensorXf
+.. autoclass:: TensorXf
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.TensorXu
+.. autoclass:: TensorXu
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.TensorXi
+.. autoclass:: TensorXi
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.TensorXf64
+.. autoclass:: TensorXf64
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.TensorXu64
+.. autoclass:: TensorXu64
     :show-inheritance:
-.. autoclass:: drjit.llvm.ad.TensorXi64
+.. autoclass:: TensorXi64
     :show-inheritance:
 
 Random number generators
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. autoclass:: drjit.llvm.ad.PCG32
+.. autoclass:: PCG32
+
+   .. automethod:: __init__
+   .. automethod:: seed
+   .. automethod:: next_uint32
+   .. automethod:: next_uint64
+   .. automethod:: next_float32
+   .. automethod:: next_float64
+   .. automethod:: next_uint32_bounded
+   .. automethod:: next_uint64_bounded
+   .. automethod:: __add__
+   .. automethod:: __iadd__
+   .. automethod:: __sub__
+   .. automethod:: __isub__
+   .. autoproperty:: inc
+   .. autoproperty:: state
+
+CUDA array namespace (``drjit.cuda``)
+_______________________________________
+
+.. py:module:: drjit.cuda
+
+The CUDA backend is vectorized, hence types listed as *scalar* actually
+represent an array of scalars partaking in a parallel computation
+(analogously, 1D arrays are arrays of 1D arrays, etc.).
+
+Scalars
+^^^^^^^
+.. autoclass:: Bool
+    :show-inheritance:
+.. autoclass:: Float
+    :show-inheritance:
+.. autoclass:: Float64
+    :show-inheritance:
+.. autoclass:: UInt
+    :show-inheritance:
+.. autoclass:: UInt64
+    :show-inheritance:
+.. autoclass:: Int
+    :show-inheritance:
+.. autoclass:: Int64
+    :show-inheritance:
+
+1D arrays
+^^^^^^^^^
+.. autoclass:: Array0b
+    :show-inheritance:
+.. autoclass:: Array1b
+    :show-inheritance:
+.. autoclass:: Array2b
+    :show-inheritance:
+.. autoclass:: Array3b
+    :show-inheritance:
+.. autoclass:: Array4b
+    :show-inheritance:
+.. autoclass:: ArrayXb
+    :show-inheritance:
+.. autoclass:: Array0f
+    :show-inheritance:
+.. autoclass:: Array1f
+    :show-inheritance:
+.. autoclass:: Array2f
+    :show-inheritance:
+.. autoclass:: Array3f
+    :show-inheritance:
+.. autoclass:: Array4f
+    :show-inheritance:
+.. autoclass:: ArrayXf
+    :show-inheritance:
+.. autoclass:: Array0u
+    :show-inheritance:
+.. autoclass:: Array1u
+    :show-inheritance:
+.. autoclass:: Array2u
+    :show-inheritance:
+.. autoclass:: Array3u
+    :show-inheritance:
+.. autoclass:: Array4u
+    :show-inheritance:
+.. autoclass:: ArrayXu
+    :show-inheritance:
+.. autoclass:: Array0i
+    :show-inheritance:
+.. autoclass:: Array1i
+    :show-inheritance:
+.. autoclass:: Array2i
+    :show-inheritance:
+.. autoclass:: Array3i
+    :show-inheritance:
+.. autoclass:: Array4i
+    :show-inheritance:
+.. autoclass:: ArrayXi
+    :show-inheritance:
+.. autoclass:: Array0f64
+    :show-inheritance:
+.. autoclass:: Array1f64
+    :show-inheritance:
+.. autoclass:: Array2f64
+    :show-inheritance:
+.. autoclass:: Array3f64
+    :show-inheritance:
+.. autoclass:: Array4f64
+    :show-inheritance:
+.. autoclass:: ArrayXf64
+    :show-inheritance:
+.. autoclass:: Array0u64
+    :show-inheritance:
+.. autoclass:: Array1u64
+    :show-inheritance:
+.. autoclass:: Array2u64
+    :show-inheritance:
+.. autoclass:: Array3u64
+    :show-inheritance:
+.. autoclass:: Array4u64
+    :show-inheritance:
+.. autoclass:: ArrayXu64
+    :show-inheritance:
+.. autoclass:: Array0i64
+    :show-inheritance:
+.. autoclass:: Array1i64
+    :show-inheritance:
+.. autoclass:: Array2i64
+    :show-inheritance:
+.. autoclass:: Array3i64
+    :show-inheritance:
+.. autoclass:: Array4i64
+    :show-inheritance:
+.. autoclass:: ArrayXi64
+    :show-inheritance:
+
+2D arrays
+^^^^^^^^^
+.. autoclass:: Array22b
+    :show-inheritance:
+.. autoclass:: Array33b
+    :show-inheritance:
+.. autoclass:: Array44b
+    :show-inheritance:
+.. autoclass:: Array22f
+    :show-inheritance:
+.. autoclass:: Array33f
+    :show-inheritance:
+.. autoclass:: Array44f
+    :show-inheritance:
+.. autoclass:: Array22f64
+    :show-inheritance:
+.. autoclass:: Array33f64
+    :show-inheritance:
+.. autoclass:: Array44f64
+    :show-inheritance:
+
+Special (complex numbers, etc.)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.. autoclass:: Complex2f
+    :show-inheritance:
+.. autoclass:: Complex2f64
+    :show-inheritance:
+.. autoclass:: Quaternion4f
+    :show-inheritance:
+.. autoclass:: Quaternion4f64
+    :show-inheritance:
+.. autoclass:: Matrix2f
+    :show-inheritance:
+.. autoclass:: Matrix3f
+    :show-inheritance:
+.. autoclass:: Matrix4f
+    :show-inheritance:
+.. autoclass:: Matrix2f64
+    :show-inheritance:
+.. autoclass:: Matrix3f64
+    :show-inheritance:
+.. autoclass:: Matrix4f64
+    :show-inheritance:
+
+Tensors
+^^^^^^^
+.. autoclass:: TensorXb
+    :show-inheritance:
+.. autoclass:: TensorXf
+    :show-inheritance:
+.. autoclass:: TensorXu
+    :show-inheritance:
+.. autoclass:: TensorXi
+    :show-inheritance:
+.. autoclass:: TensorXf64
+    :show-inheritance:
+.. autoclass:: TensorXu64
+    :show-inheritance:
+.. autoclass:: TensorXi64
+    :show-inheritance:
+
+Random number generators
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. autoclass:: PCG32
+
+   .. automethod:: __init__
+   .. automethod:: seed
+   .. automethod:: next_uint32
+   .. automethod:: next_uint64
+   .. automethod:: next_float32
+   .. automethod:: next_float64
+   .. automethod:: next_uint32_bounded
+   .. automethod:: next_uint64_bounded
+   .. automethod:: __add__
+   .. automethod:: __iadd__
+   .. automethod:: __sub__
+   .. automethod:: __isub__
+   .. autoproperty:: inc
+   .. autoproperty:: state
+
+CUDA array namespace with automatic differentiation (``drjit.cuda.ad``)
+_______________________________________________________________________
+
+.. py:module:: drjit.cuda.ad
+
+The CUDA AD backend is vectorized, hence types listed as *scalar* actually
+represent an array of scalars partaking in a parallel computation
+(analogously, 1D arrays are arrays of 1D arrays, etc.).
+
+Scalars
+^^^^^^^
+.. autoclass:: Bool
+    :show-inheritance:
+.. autoclass:: Float
+    :show-inheritance:
+.. autoclass:: Float64
+    :show-inheritance:
+.. autoclass:: UInt
+    :show-inheritance:
+.. autoclass:: UInt64
+    :show-inheritance:
+.. autoclass:: Int
+    :show-inheritance:
+.. autoclass:: Int64
+    :show-inheritance:
+
+1D arrays
+^^^^^^^^^
+.. autoclass:: Array0b
+    :show-inheritance:
+.. autoclass:: Array1b
+    :show-inheritance:
+.. autoclass:: Array2b
+    :show-inheritance:
+.. autoclass:: Array3b
+    :show-inheritance:
+.. autoclass:: Array4b
+    :show-inheritance:
+.. autoclass:: ArrayXb
+    :show-inheritance:
+.. autoclass:: Array0f
+    :show-inheritance:
+.. autoclass:: Array1f
+    :show-inheritance:
+.. autoclass:: Array2f
+    :show-inheritance:
+.. autoclass:: Array3f
+    :show-inheritance:
+.. autoclass:: Array4f
+    :show-inheritance:
+.. autoclass:: ArrayXf
+    :show-inheritance:
+.. autoclass:: Array0u
+    :show-inheritance:
+.. autoclass:: Array1u
+    :show-inheritance:
+.. autoclass:: Array2u
+    :show-inheritance:
+.. autoclass:: Array3u
+    :show-inheritance:
+.. autoclass:: Array4u
+    :show-inheritance:
+.. autoclass:: ArrayXu
+    :show-inheritance:
+.. autoclass:: Array0i
+    :show-inheritance:
+.. autoclass:: Array1i
+    :show-inheritance:
+.. autoclass:: Array2i
+    :show-inheritance:
+.. autoclass:: Array3i
+    :show-inheritance:
+.. autoclass:: Array4i
+    :show-inheritance:
+.. autoclass:: ArrayXi
+    :show-inheritance:
+.. autoclass:: Array0f64
+    :show-inheritance:
+.. autoclass:: Array1f64
+    :show-inheritance:
+.. autoclass:: Array2f64
+    :show-inheritance:
+.. autoclass:: Array3f64
+    :show-inheritance:
+.. autoclass:: Array4f64
+    :show-inheritance:
+.. autoclass:: ArrayXf64
+    :show-inheritance:
+.. autoclass:: Array0u64
+    :show-inheritance:
+.. autoclass:: Array1u64
+    :show-inheritance:
+.. autoclass:: Array2u64
+    :show-inheritance:
+.. autoclass:: Array3u64
+    :show-inheritance:
+.. autoclass:: Array4u64
+    :show-inheritance:
+.. autoclass:: ArrayXu64
+    :show-inheritance:
+.. autoclass:: Array0i64
+    :show-inheritance:
+.. autoclass:: Array1i64
+    :show-inheritance:
+.. autoclass:: Array2i64
+    :show-inheritance:
+.. autoclass:: Array3i64
+    :show-inheritance:
+.. autoclass:: Array4i64
+    :show-inheritance:
+.. autoclass:: ArrayXi64
+    :show-inheritance:
+
+2D arrays
+^^^^^^^^^
+.. autoclass:: Array22b
+    :show-inheritance:
+.. autoclass:: Array33b
+    :show-inheritance:
+.. autoclass:: Array44b
+    :show-inheritance:
+.. autoclass:: Array22f
+    :show-inheritance:
+.. autoclass:: Array33f
+    :show-inheritance:
+.. autoclass:: Array44f
+    :show-inheritance:
+.. autoclass:: Array22f64
+    :show-inheritance:
+.. autoclass:: Array33f64
+    :show-inheritance:
+.. autoclass:: Array44f64
+    :show-inheritance:
+
+Special (complex numbers, etc.)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.. autoclass:: Complex2f
+    :show-inheritance:
+.. autoclass:: Complex2f64
+    :show-inheritance:
+.. autoclass:: Quaternion4f
+    :show-inheritance:
+.. autoclass:: Quaternion4f64
+    :show-inheritance:
+.. autoclass:: Matrix2f
+    :show-inheritance:
+.. autoclass:: Matrix3f
+    :show-inheritance:
+.. autoclass:: Matrix4f
+    :show-inheritance:
+.. autoclass:: Matrix2f64
+    :show-inheritance:
+.. autoclass:: Matrix3f64
+    :show-inheritance:
+.. autoclass:: Matrix4f64
+    :show-inheritance:
+
+Tensors
+^^^^^^^
+.. autoclass:: TensorXb
+    :show-inheritance:
+.. autoclass:: TensorXf
+    :show-inheritance:
+.. autoclass:: TensorXu
+    :show-inheritance:
+.. autoclass:: TensorXi
+    :show-inheritance:
+.. autoclass:: TensorXf64
+    :show-inheritance:
+.. autoclass:: TensorXu64
+    :show-inheritance:
+.. autoclass:: TensorXi64
+    :show-inheritance:
+
+Random number generators
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. autoclass:: PCG32
 
    .. automethod:: __init__
    .. automethod:: seed

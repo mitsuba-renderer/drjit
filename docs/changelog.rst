@@ -24,8 +24,12 @@ incompatibilities and potential stumbling blocks.
 
   - All functions now have a reference documentation that clearly specifies
     their behavior and accepted inputs. Their behavior with respect to less
-    common inputs (tensors, :ref:`Pytrees <pytrees>`) was made consistent
+    common inputs (tensors, :ref:`PyTrees <pytrees>`) was made consistent
     and documented across the codebase.
+
+  - Dr.Jit can now target Python's `stable ABI
+    <https://docs.python.org/3/c-api/stable.html#stable-abi>`__, which means
+    that binary extensions are forward-compatible to future Python versions.
 
   - Due to the magnitude of these changes, you may observe occasional
     incompatibilities. If they are not reported here, please open a ticket so
@@ -39,7 +43,7 @@ incompatibilities and potential stumbling blocks.
 
      from drjit.cuda import Int, Float
 
-     @drjit.syntax
+     @dr.syntax
      def ipow(x: Float, n: Int):
          result = Float(1)
 
@@ -47,7 +51,7 @@ incompatibilities and potential stumbling blocks.
              if n & 1 != 0:
                  result *= x
              x *= x
-             n >> = 1
+             n >>= 1
 
          return result
 
@@ -91,14 +95,27 @@ incompatibilities and potential stumbling blocks.
   specifying the complete location ``matrix[row, col]``. The latter convention
   is consistent between both versions.
 
+- **Half-precision arithmetic**: Dr.Jit now provides ``float16``-valued arrays
+  and tensors on both the LLVM and CUDA backends (e.g.,
+  :py:class:`drjit.cuda.ad.TensorXf16` or :py:class:`drjit.llvm.Float16`).
+
 - **Mixed-precision optimization**: Dr.Jit now maintains one global AD graph
   for all variables, enabling differentiation of computation combining single-,
   double, and half precision variables. Previously, there was a separate graph
   per type, and gradients did not propagate through casts between them.
 
-- **Half-precision arithmetic**: Dr.Jit now provides ``float16``-valued arrays
-  and tensors on both the LLVM and CUDA backends (e.g.,
-  :py:class:`drjit.cuda.ad.TensorXf16` or :py:class:`drjit.llvm.Float16`).
+- **Debug mode**: A new debug validation mode (:py:attr:`dr.JitFlag.Debug`)
+  inserts a number of additional checks to identify sources of undefined
+  behavior. Enable it to catch out-of-bounds reads, writes, and calls to
+  undefined callables. Such operations will trigger a warning that includes the
+  responsible source code location.
+
+- **Symbolic print**: A new high-level *symbolic* print operation
+  (:py:func:`drjit.print`) enables deferred printing from any symbolic context
+  (i.e., within symbolic loops, conditionals, and function calls). It is
+  compatible with Jupyter notebooks and displays arbitrary :ref:`PyTrees
+  <pytrees>` in a structured manner. This operation replaces the function
+  ``drjit.print_async()`` provided in previous releases.
 
 - Reductions operations previously existed as *ordinary* (e.g.,
   :py:func:`drjit.all`) and *nested* (e.g. ``drjit.all_nested``) variants. Both
@@ -231,6 +248,9 @@ Other minor technical improvements
 
 - :py:func:`drjit.switch` and :py:func:`drjit.dispatch` now support all
   standard Python calling conventions (positional, keyword, variable length).
+
+- There is a new C++ interface named :cpp:func:`drjit::dispatch` that works
+  analogously to the Python version.
 
 - the ``drjit.reinterpret_array_v`` function was renamed to
   :py:func:`drjit.reinterpret_array`.
