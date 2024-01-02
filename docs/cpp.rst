@@ -357,7 +357,9 @@ Python bindings
 Regular arrays
 ^^^^^^^^^^^^^^
 
-TBD.
+It is possible to register additional bindings for custom array types from
+within user code. The test case ``tests/custom_type_ext.cpp`` shows how to
+define a ``Color3f`` type that exposes ``.r``, ``.g``, and ``.b`` members.
 
 Instance arrays
 ^^^^^^^^^^^^^^^
