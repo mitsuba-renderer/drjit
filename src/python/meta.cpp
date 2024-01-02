@@ -315,7 +315,10 @@ ArrayMeta meta_get_general(nb::handle h) noexcept {
  *    first operand will be promoted to a mask array
  */
 void promote(nb::object *o, size_t n, bool select) {
-    ArrayMeta m;
+    ArrayMeta m, mi[3];
+
+    if (n > 3)
+        nb::raise("promote(): too many arguments!");
 
     nb::handle h;
     for (size_t i = 0; i < n; ++i) {
@@ -335,16 +338,17 @@ void promote(nb::object *o, size_t n, bool select) {
         else
             m = meta_promote(m, m2);
 
-        if (m == m2) {
-            if (m2.talign) // (if this is a Dr.Jit array)
-                h = o_i;
-        } else {
-            h = nb::handle();
-        }
+        mi[i] = m2;
     }
 
     if (!meta_check(m))
         nb::raise("Incompatible arguments.");
+
+    for (size_t i = 0; i < n; ++i) {
+        // if this is a compatible Dr.Jit array
+        if (m == mi[i] && mi[i].talign)
+            h = o[i];
+    }
 
     if (h.is_valid()) {
         h = h.type();
