@@ -11,6 +11,10 @@ with _detail.scoped_rtld_deepbind():
         err.__cause__ = e
         raise err
 
+# -------------------------------------------------------------------
+#  Predicates and comparison operations for floating point arrays
+# -------------------------------------------------------------------
+
 def isnan(arg, /):
     """
     Performs an elementwise test for *NaN* (Not a Number) values
@@ -183,7 +187,6 @@ def allclose(a, b, rtol: _typing.Optional[float] = None, atol: _typing.Optional[
 #   "Safe" functions that avoid domain errors due to rounding
 # -------------------------------------------------------------------
 
-
 def safe_sqrt(arg, /):
     '''
     Safely evaluate the square root of the provided input avoiding domain errors.
@@ -266,7 +269,9 @@ def clip(value, min, max):
     '''
     return maximum(minimum(value, max), min)
 
-# --- Deprecated wrappers for old Dr.Jit reduction operations ----
+# -------------------------------------------------------------------
+#     Deprecated wrappers for old Dr.Jit operations
+# -------------------------------------------------------------------
 
 def sqr(arg, /):
     import warnings
@@ -316,19 +321,226 @@ def max_nested(arg, /):
     return max(arg, axis=None)
 
 
-def cumsum(arg, /):
+def clamp(value, min, max, /):
+    import warnings
+    warnings.warn("clamp() is deprecated, please use clip(...)",
+                  DeprecationWarning, stacklevel=2)
+    return clip(value, min, max)
+
+# -------------------------------------------------------------------
+#  Special array operations (matrices, quaternions, complex numbers)
+# -------------------------------------------------------------------
+
+def arg(z, /):
+    r'''
+    Return the argument of a complex Dr.Jit array.
+
+    The *argument* refers to the angle (in radians) between the positive real
+    axis and a vector towards ``z`` in the complex plane. When the input isn't
+    complex-valued, the function returns :math:`0` or :math:`\pi` depending on
+    the sign of ``z``.
+
+    Args:
+        z (int | float | complex | drjit.ArrayBase): A Python or Dr.Jit array
+
+    Returns:
+        float | drjit.ArrayBase: Argument of the complex input array
     '''
-    Compute an cumulative sum (aka. inclusive prefix sum) of the input array.
+    if is_complex_v(z) or isinstance(z, complex):
+        return atan2(z.imag, z.real)
+    else:
+        return select(z >= 0, 0, pi)
 
-    This function wraps :py:func:`drjit.prefix_sum` and is implemented as
-
-    .. code-block:: python
-
-       def cumsum(arg, /):
-           return prefix_sum(arg, exclusive=False)
+def real(arg, /):
     '''
-    return prefix_sum(arg, exclusive=False)
+    Return the real part of a complex or quaternion-valued input.
 
+    When the input isn't complex- or quaternion-valued, the function returns
+    the input unchanged.
+
+    Args:
+        arg (int | float | complex | drjit.ArrayBase): A Python or Dr.Jit array
+
+    Returns:
+        float | drjit.ArrayBase: Real part of the input array
+    '''
+    if is_complex_v(arg) or isinstance(arg, complex):
+        return arg.real
+    elif is_quaternion_v(arg):
+        return arg[3]
+    else:
+        return arg
+
+
+def imag(arg, /):
+    '''
+    Return the imaginary part of a complex or quaternion-valued input.
+
+    When the input isn't complex- or quaternion-valued, the function returns
+    zero.
+
+    Args:
+        arg (int | float | complex | drjit.ArrayBase): A Python or Dr.Jit array
+
+    Returns:
+        float | drjit.ArrayBase: Imaginary part of the input array
+    '''
+    tp = type(arg)
+    if is_complex_v(tp) or issubclass(tp, complex):
+        return arg.imag
+    elif is_quaternion_v(tp):
+        import sys
+        Array3f = getattr(sys.modules[tp.__module__], tp.__name__.replace('Quaternion4f', 'Array3f'), None)
+        return Array3f(arg[0], arg[1], arg[2])
+    else:
+        return tp(0)
+
+
+def conj(arg, /):
+    '''
+    Returns the conjugate of the provided complex or quaternion-valued array.
+    For all other types, it returns the input unchanged.
+
+    Args:
+        arg (drjit.ArrayBase): A Dr.Jit 3D array
+
+    Returns:
+        drjit.ArrayBase: Cross-product of the two input 3D arrays
+    '''
+
+    t = type(arg)
+
+    if is_complex_v(t):
+        return t(arg.real, -arg.imag)
+    elif is_quaternion_v(t):
+        return t(-arg.x, -arg.y, -arg.z, arg.w)
+    else:
+        return arg
+
+
+def cross(arg0, arg1, /):
+    '''
+    Returns the cross-product of the two input 3D arrays
+
+    Args:
+        arg0 (drjit.ArrayBase): A Dr.Jit 3D array
+        arg1 (drjit.ArrayBase): A Dr.Jit 3D array
+
+    Returns:
+        drjit.ArrayBase: Cross-product of the two input 3D arrays
+    '''
+
+    if size_v(arg0) != 3 or size_v(arg1) != 3:
+        raise Exception("cross(): requires 3D input arrays!")
+
+    ta, tb = type(arg0), type(arg1)
+
+    return fma(ta(arg0.y, arg0.z, arg0.x),  tb(arg1.z, arg1.x, arg1.y),
+              -ta(arg0.z, arg0.x, arg0.y) * tb(arg1.y, arg1.z, arg1.x))
+
+
+def det(arg, /):
+    '''
+    det(arg, /)
+    Compute the determinant of the provided Dr.Jit matrix.
+
+    Args:
+        arg (drjit.ArrayBase): A Dr.Jit matrix type
+
+    Returns:
+        drjit.ArrayBase: The determinant value of the input matrix
+    '''
+    if not is_matrix_v(arg):
+        raise Exception("Unsupported target type!")
+
+    size = size_v(arg)
+
+    if size == 1:
+        return arg[0, 0]
+    elif size == 2:
+        return fma(arg[0, 0], arg[1, 1], -arg[0, 1] * arg[1, 0])
+    elif size == 3:
+        return dot(arg[0], cross(arg[1], arg[2]))
+    elif size == 4:
+        row0, row1, row2, row3 = arg
+
+        shuffle = lambda perm, arr: type(arr)(arr[i] for i in perm)
+
+        row1 = shuffle((2, 3, 0, 1), row1)
+        row3 = shuffle((2, 3, 0, 1), row3)
+
+        temp = shuffle((1, 0, 3, 2), row2 * row3)
+        col0 = row1 * temp
+        temp = shuffle((2, 3, 0, 1), temp)
+        col0 = fma(row1, temp, -col0)
+
+        temp = shuffle((1, 0, 3, 2), row1 * row2)
+        col0 = fma(row3, temp, col0)
+        temp = shuffle((2, 3, 0, 1), temp)
+        col0 = fma(-row3, temp, col0)
+
+        row1 = shuffle((2, 3, 0, 1), row1)
+        row2 = shuffle((2, 3, 0, 1), row2)
+        temp = shuffle((1, 0, 3, 2), row1 * row3)
+        col0 = fma(row2, temp, col0)
+        temp = shuffle((2, 3, 0, 1), temp)
+        col0 = fma(-row2, temp, col0)
+
+        return dot(row0, col0)
+    else:
+        raise Exception('Unsupported array size!')
+
+
+def diag(arg, /):
+    '''
+    diag(arg, /)
+    This function either returns the diagonal entries of the provided Dr.Jit
+    matrix, or it constructs a new matrix from the diagonal entries.
+
+    Args:
+        arg (drjit.ArrayBase): A Dr.Jit matrix type
+
+    Returns:
+        drjit.ArrayBase: The diagonal matrix of the input matrix
+    '''
+    tp = type(arg)
+    if is_matrix_v(tp):
+        result = value_t(arg)()
+        for i in range(len(arg)):
+            result[i] = arg[i, i]
+        return result
+    elif is_array_v(arg) and 'Array' in tp.__name__:
+        import sys
+        mat_tp = getattr(sys.modules[tp.__module__], tp.__name__.replace('Array', 'Matrix'), None)
+        if mat_tp is None:
+            raise Exception('drjit.diag(): unsupported type!')
+        result = zeros(mat_tp, width(arg))
+        for i, v in enumerate(arg):
+            result[i, i] = v
+        return result
+    else:
+        raise Exception('drjit.diag(): unsupported type!')
+
+
+def trace(arg, /):
+    '''
+    trace(arg, /)
+    Returns the trace of the provided Dr.Jit matrix.
+
+    Args:
+        arg (drjit.ArrayBase): A Dr.Jit matrix type
+
+    Returns:
+        drjit.value_t(arg): The trace of the input matrix
+    '''
+    if is_matrix_v(arg):
+        accum = arg[0, 0]
+        accum = type(accum)(accum)
+        for i in range(1, len(arg)):
+            accum += arg[i, i]
+        return accum
+    else:
+        raise Exception('drjit.trace(): unsupported input type!')
 
 # -------------------------------------------------------------------
 #                      Mathematical constants
@@ -689,6 +901,10 @@ def isolate_grad(when=True):
     return _detail.ADContextManager(_detail.ADScope.Isolate, [])
 
 
+# -------------------------------------------------------------------
+#      Miscellaneous
+# -------------------------------------------------------------------
+
 def copy(arg, /):
     """
     Create a deep copy of a PyTree
@@ -701,149 +917,122 @@ def copy(arg, /):
     return _detail.copy(arg, None)
 
 
-def cross(arg0, arg1, /):
-    '''
-    Returns the cross-product of the two input 3D arrays
+def sign(arg, /):
+    r'''
+    sign(arg, /)
+    Return the element-wise sign of the provided array.
+
+    The function returns
+
+    .. math::
+
+       \mathrm{sign}(\texttt{arg}) = \begin{cases}
+           1&\texttt{arg}>=0,\\
+           -1&\mathrm{otherwise}.
+       \end{cases}
 
     Args:
-        arg0 (drjit.ArrayBase): A Dr.Jit 3D array
-        arg1 (drjit.ArrayBase): A Dr.Jit 3D array
+        arg (int | float | drjit.ArrayBase): A Python or Dr.Jit array
 
     Returns:
-        drjit.ArrayBase: Cross-product of the two input 3D arrays
+        float | int | drjit.ArrayBase: Sign of the input array
     '''
-
-    if size_v(arg0) != 3 or size_v(arg1) != 3:
-        raise Exception("cross(): requires 3D input arrays!")
-
-    ta, tb = type(arg0), type(arg1)
-
-    return fma(ta(arg0.y, arg0.z, arg0.x),  tb(arg1.z, arg1.x, arg1.y),
-              -ta(arg0.z, arg0.x, arg0.y) * tb(arg1.y, arg1.z, arg1.x))
-
-def conj(arg, /):
-    '''
-    Returns the conjugate of the provided complex or quaternion-valued array.
-    For all other types, it returns the input unchanged.
-
-    Args:
-        arg (drjit.ArrayBase): A Dr.Jit 3D array
-
-    Returns:
-        drjit.ArrayBase: Cross-product of the two input 3D arrays
-    '''
-
     t = type(arg)
+    return select(arg >= 0, t(1), t(-1))
 
-    if is_complex_v(t):
-        return t(arg.real, -arg.imag)
-    elif is_quaternion_v(t):
-        return t(-arg.x, -arg.y, -arg.z, arg.w)
-    else:
-        return arg
 
-def det(arg, /):
+def copysign(a, b, /):
     '''
-    det(arg, /)
-    Compute the determinant of the provided Dr.Jit matrix.
+    copysign(arg0, arg1, /)
+    Copy the sign of ``arg1`` to ``arg0` element-wise.
 
     Args:
-        arg (drjit.ArrayBase): A Dr.Jit matrix type
+        arg0 (int | float | drjit.ArrayBase): A Python or Dr.Jit array to change the sign of
+        arg1 (int | float | drjit.ArrayBase): A Python or Dr.Jit array to copy the sign from
 
     Returns:
-        drjit.ArrayBase: The determinant value of the input matrix
+        float | int | drjit.ArrayBase: The values of ``arg0`` with the sign of ``arg1``
     '''
-    if not is_matrix_v(arg):
-        raise Exception("Unsupported target type!")
-
-    size = size_v(arg)
-
-    if size == 1:
-        return arg[0, 0]
-    elif size == 2:
-        return fma(arg[0, 0], arg[1, 1], -arg[0, 1] * arg[1, 0])
-    elif size == 3:
-        return dot(arg[0], cross(arg[1], arg[2]))
-    elif size == 4:
-        row0, row1, row2, row3 = arg
-
-        shuffle = lambda perm, arr: type(arr)(arr[i] for i in perm)
-
-        row1 = shuffle((2, 3, 0, 1), row1)
-        row3 = shuffle((2, 3, 0, 1), row3)
-
-        temp = shuffle((1, 0, 3, 2), row2 * row3)
-        col0 = row1 * temp
-        temp = shuffle((2, 3, 0, 1), temp)
-        col0 = fma(row1, temp, -col0)
-
-        temp = shuffle((1, 0, 3, 2), row1 * row2)
-        col0 = fma(row3, temp, col0)
-        temp = shuffle((2, 3, 0, 1), temp)
-        col0 = fma(-row3, temp, col0)
-
-        row1 = shuffle((2, 3, 0, 1), row1)
-        row2 = shuffle((2, 3, 0, 1), row2)
-        temp = shuffle((1, 0, 3, 2), row1 * row3)
-        col0 = fma(row2, temp, col0)
-        temp = shuffle((2, 3, 0, 1), temp)
-        col0 = fma(-row2, temp, col0)
-
-        return dot(row0, col0)
-    else:
-        raise Exception('Unsupported array size!')
+    a_a = abs(a)
+    return select(b >= 0, a_a, -a_a)
 
 
-def diag(arg, /):
+def mulsign(a, b, /):
     '''
-    diag(arg, /)
-    This function either returns the diagonal entries of the provided Dr.Jit
-    matrix, or it constructs a new matrix from the diagonal entries.
+    mulsign(arg0, arg1, /)
+    Multiply ``arg0`` by the sign of ``arg1` element-wise.
+
+    This function is equivalent to
+
+    .. code-block::
+
+        a * dr.sign(b)
 
     Args:
-        arg (drjit.ArrayBase): A Dr.Jit matrix type
+        arg0 (int | float | drjit.ArrayBase): A Python or Dr.Jit array to multiply the sign of
+        arg1 (int | float | drjit.ArrayBase): A Python or Dr.Jit array to take the sign from
 
     Returns:
-        drjit.ArrayBase: The diagonal matrix of the input matrix
+        float | int | drjit.ArrayBase: The values of ``arg0`` multiplied with the sign of ``arg1``
     '''
-    tp = type(arg)
-    if is_matrix_v(tp):
-        result = value_t(arg)()
-        for i in range(len(arg)):
-            result[i] = arg[i, i]
-        return result
-    elif is_array_v(arg) and 'Array' in tp.__name__:
-        import sys
-        mat_tp = getattr(sys.modules[tp.__module__], tp.__name__.replace('Array', 'Matrix'), None)
-        if mat_tp is None:
-            raise Exception('drjit.diag(): unsupported type!')
-        result = zeros(mat_tp, width(arg))
-        for i, v in enumerate(arg):
-            result[i, i] = v
-        return result
-    else:
-        raise Exception('drjit.diag(): unsupported type!')
+    return select(b >= 0, a, -a)
 
 
-def trace(arg, /):
+def cumsum(arg, /):
     '''
-    trace(arg, /)
-    Returns the trace of the provided Dr.Jit matrix.
+    Compute an cumulative sum (aka. inclusive prefix sum) of the input array.
+
+    This function wraps :py:func:`drjit.prefix_sum` and is implemented as
+
+    .. code-block:: python
+
+       def cumsum(arg, /):
+           return prefix_sum(arg, exclusive=False)
+    '''
+    return prefix_sum(arg, exclusive=False)
+
+
+def hypot(a, b, /):
+    '''
+    Computes :math:`\\sqrt{a^2+b^2}` while avoiding overflow and underflow.
 
     Args:
-        arg (drjit.ArrayBase): A Dr.Jit matrix type
+        arg (list | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
 
     Returns:
-        drjit.value_t(arg): The trace of the input matrix
+        Hypotenuse value
     '''
-    if is_matrix_v(arg):
-        accum = arg[0, 0]
-        accum = type(accum)(accum)
-        for i in range(1, len(arg)):
-            accum += arg[i, i]
-        return accum
-    else:
-        raise Exception('drjit.trace(): unsupported input type!')
+    a, b = abs(a), abs(b)
+    maxval = maximum(a, b)
+    minval = minimum(a, b)
+    ratio = minval / maxval
+
+    return select(
+        (a < inf) & (b < inf) & (ratio < inf),
+        maxval * sqrt(fma(ratio, ratio, 1)),
+        a + b
+    )
+
+def log2i(arg, /):
+    '''
+    Return the floor of the base-2 logarithm.
+
+    This function evaluates the component-wise floor of the base-2 logarithm of
+    the input scalar, array, or tensor. This function assumes that ``arg`` is
+    either an arbitrary Dr.Jit integer array or a 32 bit-sized scalar integer
+    value.
+
+    The operation overflows when ``arg`` is zero.
+
+    Args:
+        arg (int | drjit.ArrayBase): A Python or Dr.Jit array
+
+    Returns:
+        int | drjit.ArrayBase: number of leading zero bits in the input array
+    '''
+
+    sz = itemsize_v(arg) if is_array_v(arg) else 4
+    return (sz * 8 - 1) - lzcnt(arg)
 
 syntax = _ast.syntax
 hint = _ast.hint

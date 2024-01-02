@@ -46,6 +46,13 @@
     }, nb::raw_doc(doc_##name));                                               \
     m.def(#name, [](double v0) { return dr::name(v0); });
 
+#define DR_MATH_UNOP_UINT32(name, op)                                          \
+    m.def(#name, [](nb::handle_t<ArrayBase> h0) {                              \
+        return nb::steal(apply<Normal>(                                        \
+            op, #name, std::make_index_sequence<1>(), h0.ptr()));              \
+    }, nb::raw_doc(doc_##name));                                               \
+    m.def(#name, [](uint32_t v0) { return dr::name(v0); });
+
 #define DR_MATH_UNOP_PAIR(name, op)                                            \
     m.def(#name, [](nb::handle_t<ArrayBase> h0) {                              \
         return apply_ret_pair(op, #name, h0);                                  \
@@ -823,6 +830,10 @@ void export_base(nb::module_ &m) {
     DR_MATH_UNOP(trunc, ArrayOp::Trunc);
     DR_MATH_UNOP(ceil, ArrayOp::Ceil);
     DR_MATH_UNOP(floor, ArrayOp::Floor);
+
+    DR_MATH_UNOP_UINT32(popcnt, ArrayOp::Popcnt);
+    DR_MATH_UNOP_UINT32(lzcnt, ArrayOp::Lzcnt);
+    DR_MATH_UNOP_UINT32(tzcnt, ArrayOp::Tzcnt);
 
     DR_MATH_UNOP(exp, ArrayOp::Exp);
     DR_MATH_UNOP(exp2, ArrayOp::Exp2);

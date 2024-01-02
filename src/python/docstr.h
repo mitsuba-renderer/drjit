@@ -5831,6 +5831,52 @@ Args:
 Returns:
     int: The width of the provided input(s).)";
 
+static const char *doc_popcnt = R"(
+Return the number of nonzero zero bits.
+
+This function evaluates the component-wise population count of the input
+scalar, array, or tensor. This function assumes that ``arg`` is either an
+arbitrary Dr.Jit integer array or a 32 bit-sized scalar integer value.
+
+Args:
+    arg (int | drjit.ArrayBase): A Python or Dr.Jit array
+
+Returns:
+    int | drjit.ArrayBase: number of nonzero zero bits in ``arg``)";
+
+
+static const char *doc_lzcnt = R"(
+Return the number of leading zero bits.
+
+This function evaluates the component-wise leading zero count of the input
+scalar, array, or tensor. This function assumes that ``arg`` is either an
+arbitrary Dr.Jit integer array or a 32 bit-sized scalar integer value.
+
+The operation is well-defined when ``arg`` is zero.
+
+Args:
+    arg (int | drjit.ArrayBase): A Python or Dr.Jit array
+
+Returns:
+    int | drjit.ArrayBase: number of leading zero bits in ``arg``)";
+
+
+static const char *doc_tzcnt = R"(
+Return the number of trailing zero bits.
+
+This function evaluates the component-wise trailing zero count of the input
+scalar, array, or tensor. This function assumes that ``arg`` is either an
+arbitrary Dr.Jit integer array or a 32 bit-sized scalar integer value.
+
+The operation is well-defined when ``arg`` is zero.
+
+Args:
+    arg (int | drjit.ArrayBase): A Python or Dr.Jit array
+
+Returns:
+    int | drjit.ArrayBase: number of trailing zero bits in ``arg``)";
+
+
 #if defined(__GNUC__)
 #  pragma GCC diagnostic pop
 #endif

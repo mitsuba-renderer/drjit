@@ -273,3 +273,32 @@ def test12_div_via_rcp(t, drjit_verbose, capsys):
     print(transcript)
     assert transcript.count('= mul(') == 3
     assert transcript.count('= div(') + transcript.count('= rcp(') + transcript.count('= div.approx(') + transcript.count('= rcp.approx(') == 1
+
+
+@pytest.test_arrays('float, jit, shape=(*)', 'float, shape=(3)')
+def test13_hypot(t):
+    assert dr.allclose(dr.hypot(t(3), t(4)), t(5))
+
+
+@pytest.test_arrays('uint32, jit, shape=(*)')
+def test14_lzcnt(t):
+    assert dr.all(dr.lzcnt(t(0, 1, 100)) == t(32, 31, 25))
+    assert tuple(dr.lzcnt(i) for i in (0, 1, 100)) == (32, 31, 25)
+
+
+@pytest.test_arrays('uint32, jit, shape=(*)')
+def test15_tzcnt(t):
+    assert dr.all(dr.tzcnt(t(0, 1, 100)) == t(32, 0, 2))
+    assert tuple(dr.tzcnt(i) for i in (0, 1, 100)) == (32, 0, 2)
+
+
+@pytest.test_arrays('uint32, jit, shape=(*)')
+def test16_popcnt(t):
+    assert dr.all(dr.popcnt(t(0, 1, 100)) == t(0, 1, 3))
+    assert tuple(dr.popcnt(i) for i in (0, 1, 100)) == (0, 1, 3)
+
+
+@pytest.test_arrays('uint32, jit, shape=(*)')
+def test17_log2i(t):
+    assert dr.all(dr.log2i(t(1, 2, 100)) == t(0, 1, 6))
+    assert tuple(dr.log2i(i) for i in (1, 2, 100)) == (0, 1, 6)
