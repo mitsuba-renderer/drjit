@@ -129,8 +129,13 @@ void bind(nb::module_ &m) {
         .def_rw("opaque", &BT::opaque)
         .def_rw("value", &BT::value);
 
-    dr::ArrayBinding b;
     using BaseArray = dr::DiffArray<Backend, BaseT *>;
+    m.def("dispatch_f", [](BaseArray &self, Float a, Float b) {
+        return dr::dispatch(
+            self, [](BaseT *inst, Float a_, Float b_) { return inst->f(a_, b_); }, a, b);
+    });
+
+    dr::ArrayBinding b;
     auto base_ptr = dr::bind_array_t<BaseArray>(b, m, "BasePtr")
         .def("f",
              [](BaseArray &self, Float a, Float b) { return self->f(a, b); })
@@ -156,7 +161,6 @@ void bind(nb::module_ &m) {
                 return self->constant_getter(m);
              }, "mask"_a = true)
         .def("get_self", [](BaseArray &self) { return self->get_self(); });
-    base_ptr.attr("Domain") = "Base";
 }
 
 NB_MODULE(call_ext, m) {

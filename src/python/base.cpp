@@ -861,11 +861,15 @@ void export_base(nb::module_ &m) {
 
     DR_MATH_BINOP(atan2, ArrayOp::Atan2);
 
-    m.def("fma", [](Py_ssize_t a, Py_ssize_t b, Py_ssize_t c) {
-        return dr::fma(a, b, c);
-    });
-
-    DR_MATH_TERNOP(fma, ArrayOp::Fma);
+    m.def("fma",
+          [](Py_ssize_t a, Py_ssize_t b, Py_ssize_t c) {
+              return dr::fma(a, b, c);
+          }, nb::raw_doc(doc_fma))
+     .def("fma",
+          [](double a, double b, double c) {
+              return dr::fma(a, b, c);
+          })
+     .def("fma", (nb::object (*)(nb::handle, nb::handle, nb::handle)) fma);
 
     m.def("select",
           nb::overload_cast<nb::handle, nb::handle, nb::handle>(&select),

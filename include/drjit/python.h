@@ -841,11 +841,16 @@ nanobind::object bind_array(ArrayBinding &b, nanobind::handle scope = {},
     }
 
     #if defined(DRJIT_PYTHON_BUILD)
-        return bind(b);
+        nb::object result = bind(b);
     #else
         nb::object bind_func = nb::module_::import_("drjit.detail").attr("bind");
-        return bind_func(nb::cast((void *) &b));
+        nb::object result = bind_func(nb::cast((void *) &b));
     #endif
+
+    if constexpr (std::is_pointer_v<value_t<T>>)
+        result.attr("Domain") = T::CallSupport::Domain;
+
+    return result;
 }
 
 template <typename T>

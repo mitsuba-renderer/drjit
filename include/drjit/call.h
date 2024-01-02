@@ -62,7 +62,7 @@ private:                                                                       \
         const {                                                                \
         using Ret = decltype(std::declval<Class &>().Name(args...));           \
         using Ret2 = std::conditional_t<std::is_void_v<Ret>, std::nullptr_t,   \
-                                        vectorize_t<Self, Ret>>;               \
+                                        vectorize_rv_t<Self, Ret>>;            \
         using CallStateT = detail::CallState<Ret2, Args...>;                   \
                                                                                \
         ad_call_func callback = [](void *state_p, void *self,                  \
@@ -91,7 +91,7 @@ private:                                                                       \
 public:                                                                        \
     auto Name(Mask mask = true) const {                                        \
         using Ret =                                                            \
-            vectorize_t<Self, decltype(std::declval<Class &>().Name())>;       \
+            vectorize_rv_t<Self, decltype(std::declval<Class &>().Name())>;    \
         using CallStateT = detail::CallState<Ret, Mask>;                       \
                                                                                \
         ad_call_func callback = [](void *state_p, void *self,                  \
@@ -109,7 +109,7 @@ public:                                                                        \
                                                   true, callback, mask);       \
     }
 template <typename Guide, typename T>
-using vectorize_t =
+using vectorize_rv_t =
     std::conditional_t<std::is_scalar_v<T>, replace_scalar_t<Guide, T>, T>;
 
 NAMESPACE_BEGIN(detail)
@@ -168,8 +168,8 @@ Ret call(const Self &self, const char *domain, const char *name,
     dr_index_vector args_i, rv_i;
     collect_indices<true>(state->args, args_i);
     bool done = ad_call(Self::Backend, domain, 0, name, is_getter,
-                         self.index(), mask.index(), args_i, rv_i, state,
-                         callback, &CallStateT::cleanup, true);
+                        self.index(), mask.index(), args_i, rv_i, state,
+                        callback, &CallStateT::cleanup, true);
 
     if constexpr (!std::is_same_v<Ret, void>) {
         Ret2 result(std::move(state->rv));
@@ -185,5 +185,44 @@ Ret call(const Self &self, const char *domain, const char *name,
     }
 }
 
+template <typename Self, typename Func, typename... Args, size_t... Is>
+auto dispatch_impl(std::index_sequence<Is...>, const Self &self, const Func &func, const Args &... args) {
+    using Ptr = value_t<Self>;
+    using Ret = decltype(func(std::declval<Ptr>(), args...));
+    using Ret2 = std::conditional_t<std::is_void_v<Ret>, std::nullptr_t,
+                                   vectorize_rv_t<Self, Ret>>;
+    using CallStateT = detail::CallState<Ret2, Func, Args...>;
+
+    ad_call_func callback = [](void *state_p, void *self,
+                               const dr_vector<uint64_t> &args_i,
+                               dr_vector<uint64_t> &rv_i) {
+        CallStateT *state = (CallStateT *) state_p;
+        state->update_args(args_i);
+        const Func &func = state->args.template get<0>();
+
+        if constexpr (std::is_same_v<Ret, void>) {
+            if (self)
+                func((Ptr) self, state->args.template get<1 + Is>()...);
+        } else {
+            if (self)
+                state->rv = func((Ptr) self, state->args.template get<1 + Is>()...);
+            else
+                state->rv = zeros<Ret2>();
+            state->collect_rv(rv_i);
+        }
+    };
+
+    return detail::call<Self, Ret, Ret2, Func, Args...>(
+        self, Self::CallSupport::Domain, "drjit::dispatch()", false, callback,
+        func, args...);
+}
+
 NAMESPACE_END(detail)
+
+template <typename Self, typename Func, typename... Args>
+auto dispatch(const Self &self, const Func &func, const Args &... args) {
+    return detail::dispatch_impl(std::make_index_sequence<sizeof...(Args)>(),
+                                 self, func, args...);
+}
+
 NAMESPACE_END(drjit)
