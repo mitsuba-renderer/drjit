@@ -5,7 +5,7 @@
 Array types
 ===========
 
-Dr.Jit exposes an *large* (~500) variety of different type bindings, which include
+Dr.Jit exposes a *large* (~500) variety of different type bindings, which include
 
 - Flat arrays (e.g., :py:class:`drjit.cuda.Float`),
 - Nested arrays (e.g., :py:class:`drjit.cuda.Array4f`),
@@ -15,7 +15,7 @@ Dr.Jit exposes an *large* (~500) variety of different type bindings, which inclu
 - Tensors (e.g., :py:class:`drjit.cuda.TensorXf`).
 
 Each flavor exists for a variety of different dimensions, backends, and
-numerical representations. Every resulting type also has a corresponding C++
+numerical representations. Every type also has a corresponding C++
 analogue, which enables tracing and automatic differentiation of large
 codebases involving a mixture of C++ and Python code.
 
@@ -30,11 +30,11 @@ Backends
 Dr.Jit types are organized into five different *backend*-specific Python
 packages named
 
-- ``drjit.scalar``,
-- ``drjit.cuda``,
-- ``drjit.cuda.ad``,
-- ``drjit.llvm``, and
-- ``drjit.llvm.ad``.
+- :py:mod:`drjit.scalar`,
+- :py:mod:`drjit.cuda`,
+- :py:mod:`drjit.cuda.ad`,
+- :py:mod:`drjit.llvm`, and
+- :py:mod:`drjit.llvm.ad`.
 
 (Additional backends are likely to be added in the future.)
 
@@ -362,8 +362,8 @@ operations:
 Quaternions
 -----------
 
-Types like :py:class:`drjit.scalar.Quaternion2f` or
-:py:class:`drjit.cuda.ad.Quaternion2f64` represent quaternion-valued scalars
+Types like :py:class:`drjit.scalar.Quaternion4f` or
+:py:class:`drjit.cuda.ad.Quaternion4f64` represent quaternion-valued scalars
 and arrays. The use of these types changes the behavior of various standard
 operations:
 

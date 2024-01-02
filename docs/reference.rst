@@ -316,7 +316,7 @@ Just-in-time compilation
 
       **Debug mode**: Enable functionality to uncover errors in application code.
 
-      When debug mode is enabled, Dr. Jit inserts a number of addititional runtime
+      When debug mode is enabled, Dr.Jit inserts a number of additional runtime
       checks to locate sources of undefined behavior.
 
       Debug mode comes at a *significant* cost: it interferes with kernel caching,
