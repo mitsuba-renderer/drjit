@@ -675,17 +675,14 @@ Returns:
     float | int | drjit.ArrayBase: Result of the reduction operation)";
 
 static const char *doc_all = R"(
-Compute an ``&`` (AND) reduction of the input array or tensor along one
-or multiple axes.
+Check if all elements along the specified axis are active.
 
-This type of reduction only applies to masks and is typically used to determine
-whether all array elements evaluate to ``True``.
+Given a boolean-valued input array, tensor, or Python sequence, this function
+reduces elements using the ``&`` (AND) operator.
 
-This function performs horizontal reduction by combining the input
-array, tensor, or Python sequence entries using the ``&`` operator along one or
-multiple axes. By default, it reduces along the outermost axis; specify
-``axis=None`` to reduce over all of them at once. The reduced form of an empty
-array is considered to be ``True``.
+By default, it reduces along the outermost axis; specify ``axis=None`` to
+reduce along all axes. Note that the reduced form of an *empty* array is
+considered to be ``True``. 
 
 See the section on :ref:`horizontal reductions <horizontal-reductions>` for
 important general information about their properties.
@@ -701,17 +698,38 @@ Returns:
     bool | drjit.ArrayBase: Result of the reduction operation)";
 
 static const char *doc_any = R"(
-Compute an ``|`` (OR) reduction of the input array or tensor along one
-or multiple axes.
+Check if any elements along the specified axis are active.
 
-This type of reduction only applies to masks and is typically used to determine
-whether at least one array element evaluates to ``True``.
+Given a boolean-valued input array, tensor, or Python sequence, this function
+reduces elements using the ``|`` (OR) operator.
 
-This function performs a horizontal reduction by combining the input array,
-tensor, or Python sequence entries using the ``|`` operator along one or
-multiple axes. By default, it reduces along the outermost axis; specify
-``axis=None`` to reduce over all of them at once. The reduced form of an empty
-array is considered to be ``False``.
+By default, it reduces along the outermost axis; specify ``axis=None`` to
+reduce along all axes. Note that the reduced form of an *empty* array is
+considered to be ``True``. 
+
+See the section on :ref:`horizontal reductions <horizontal-reductions>` for
+important general information about their properties.
+
+Args:
+    value (bool | Sequence | drjit.ArrayBase): A Python or Dr.Jit mask type
+
+    axis (int | None): The axis along which to reduce (Default: ``0``). A value
+        of ``None`` causes a simultaneous reduction along all axes. Currently, only
+        values of ``0`` and ``None`` are supported.
+
+Returns:
+    bool | drjit.ArrayBase: Result of the reduction operation)";
+
+static const char *doc_none = R"(
+Check if none elements along the specified axis are active.
+
+Given a boolean-valued input array, tensor, or Python sequence, this function
+reduces elements using the ``|`` (OR) operator and finally returns the bit-wise
+*inverse* of the result.
+
+By default, it reduces along the outermost axis; specify ``axis=None`` to
+reduce along all axes. Note that the reduced form of an *empty* array is
+considered to be ``False``. 
 
 See the section on :ref:`horizontal reductions <horizontal-reductions>` for
 important general information about their properties.

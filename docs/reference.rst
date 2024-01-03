@@ -91,6 +91,7 @@ These operations are *horizontal* in the sense that [..]
 .. autofunction:: norm
 .. autofunction:: all
 .. autofunction:: any
+.. autofunction:: none
 .. autofunction:: prefix_sum
 .. autofunction:: cumsum
 .. autofunction:: reverse

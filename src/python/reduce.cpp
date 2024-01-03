@@ -175,6 +175,15 @@ nb::object any(nb::handle h, std::optional<int> axis) {
         [](nb::handle h1, nb::handle h2) { return h1 | h2; });
 }
 
+nb::object none(nb::handle h, std::optional<int> axis) {
+    nb::object result = any(h, axis);
+    if (result.type().is(&PyBool_Type)) {
+        return nb::borrow(result.is(Py_True) ? Py_False : Py_True);
+    } else {
+        return ~result;
+    }
+}
+
 nb::object sum(nb::handle h, std::optional<int> axis) {
     return reduce(
         "sum", ArrayOp::Sum, h, axis,
@@ -279,6 +288,7 @@ nb::object prefix_sum(nb::handle_t<dr::ArrayBase> h, bool exclusive, std::option
 void export_reduce(nb::module_ & m) {
     m.def("all", &all, "value"_a, "axis"_a.none() = 0, doc_all)
      .def("any", &any, "value"_a, "axis"_a.none() = 0, doc_any)
+     .def("none", &none, "value"_a, "axis"_a.none() = 0, doc_none)
      .def("sum", &sum, "value"_a, "axis"_a.none() = 0, doc_sum)
      .def("prod", &prod, "value"_a, "axis"_a.none() = 0, doc_prod)
      .def("min", &min, "value"_a, "axis"_a.none() = 0, doc_min)

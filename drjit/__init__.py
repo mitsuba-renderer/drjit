@@ -279,6 +279,7 @@ def sqr(arg, /):
                   DeprecationWarning, stacklevel=2)
     return square(arg)
 
+
 def all_nested(arg, /):
     import warnings
     warnings.warn("all_nested() is deprecated, please use all(arg, axis=None)",
@@ -319,6 +320,13 @@ def max_nested(arg, /):
     warnings.warn("max_nested() is deprecated, please use max(arg, axis=None)",
                   DeprecationWarning, stacklevel=2)
     return max(arg, axis=None)
+
+
+def none_nested(arg, /):
+    import warnings
+    warnings.warn("none_nested() is deprecated, please use none(arg, axis=None)",
+                  DeprecationWarning, stacklevel=2)
+    return none(arg, axis=None)
 
 
 def clamp(value, min, max, /):
@@ -686,37 +694,6 @@ def largest(arg, /):
         raise TypeError("largest(): input is not a Dr.Jit array or array type!")
 
 
-def reverse(value, axis:int=0):
-    '''
-    Reverses the given Dr.Jit array or Python sequence along the
-    specified axis.
-
-    Args:
-        value (ArrayBase|Sequence): Dr.Jit array or Python sequence type
-
-        axis (int): Axis along which the reversal should be performed. Only
-          ``axis==0`` is supported for now.
-
-    Returns:
-        object: An output of the same type as `value` containing a copy of the
-        reversed array.
-    '''
-    tp = type(value)
-    n = len(value)
-
-    if axis != 0:
-        raise Exception("reverse(): only the axis=0 case is implemented so far!")
-
-    if is_dynamic_v(tp) and depth_v(tp) == 1:
-        return gather(tp, value, n - 1 - arange(uint32_array_t(tp), n))
-    else:
-        result = []
-        for i in range(n):
-            result.append(value[n-1-i])
-        if not isinstance(result, tp):
-            result = tp(result)
-        return result
-
 # -------------------------------------------------------------------
 #                        Enabling/disabling AD
 # -------------------------------------------------------------------
@@ -1033,6 +1010,109 @@ def log2i(arg, /):
 
     sz = itemsize_v(arg) if is_array_v(arg) else 4
     return (sz * 8 - 1) - lzcnt(arg)
+
+
+def reverse(value, axis: int = 0):
+    '''
+    Reverses the given Dr.Jit array or Python sequence along the
+    specified axis.
+
+    Args:
+        value (ArrayBase|Sequence): Dr.Jit array or Python sequence type
+
+        axis (int): Axis along which the reversal should be performed. Only
+          ``axis==0`` is supported for now.
+
+    Returns:
+        object: An output of the same type as `value` containing a copy of the
+        reversed array.
+    '''
+    tp = type(value)
+    n = len(value)
+
+    if axis != 0:
+        raise Exception("reverse(): only the axis=0 case is implemented so far!")
+
+    if is_dynamic_v(tp) and depth_v(tp) == 1:
+        return gather(tp, value, n - 1 - arange(uint32_array_t(tp), n))
+    else:
+        result = []
+        for i in range(n):
+            result.append(value[n-1-i])
+        if not isinstance(result, tp):
+            result = tp(result)
+        return result
+
+
+def meshgrid(*args, indexing='xy'):
+    '''
+    Return flattened N-D coordinate arrays from a sequence of 1D coordinate vectors.
+
+    This function constructs flattened coordinate arrays that are convenient
+    for evaluating and plotting functions on a regular grid. An example is
+    shown below:
+
+    .. code-block::
+
+        import drjit as dr
+
+        x, y = dr.meshgrid(
+            dr.arange(dr.llvm.UInt, 4),
+            dr.arange(dr.llvm.UInt, 4)
+        )
+
+        # x = [0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3]
+        # y = [0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3]
+
+    This function carefully reproduces the behavior of ``numpy.meshgrid``
+    except for one major difference: the output coordinates are returned in
+    flattened/raveled form. Like the NumPy version, the ``indexing=='xy'`` case
+    internally reorders the first two elements of ``*args``.
+
+    Args:
+        *args: A sequence of 1D coordinate arrays
+
+        indexing (str): Specifies the indexing convention. Must be either set
+        to ``'xy'`` (the default) or ``'ij'``.
+
+    Returns:
+        tuple: A tuple of flattened coordinate arrays (one per input)
+    '''
+
+    if indexing != "ij" and indexing != "xy":
+        raise Exception("meshgrid(): 'indexing' argument must equal"
+                        " 'ij' or 'xy'!")
+
+    if len(args) == 0:
+        return ()
+    elif len(args) == 1:
+        return args[0]
+
+    t = type(args[0])
+    for v in args:
+        if not is_array_v(v) or depth_v(v) != 1 or type(v) is not t:
+            raise Exception("meshgrid(): consistent 1D dynamic arrays expected!")
+
+    size = prod((len(v) for v in args))
+    index = arange(uint32_array_t(t), size)
+
+    result = []
+
+    # This seems non-symmetric but is necessary to be consistent with NumPy
+    if indexing == "xy":
+        args = (args[1], args[0], *args[2:])
+
+    for v in args:
+        size //= len(v)
+        index_v = index // size
+        index = fma(-index_v, size, index)
+        result.append(gather(t, v, index_v))
+
+    if indexing == "xy":
+        result[0], result[1] = result[1], result[0]
+
+    return tuple(result)
+
 
 syntax = _ast.syntax
 hint = _ast.hint
