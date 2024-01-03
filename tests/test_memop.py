@@ -322,3 +322,42 @@ def test15_scatter_add_kahan(t):
         )
     assert dr.all(buf1 + buf2 == [0, 1+dr.epsilon(t)*2])
     assert dr.all(buf3 == [0, 1])
+
+
+@pytest.test_arrays('int32,shape=(*)')
+def test16_meshgrid(t):
+    assert dr.all(dr.meshgrid(t(1, 2), indexing='ij') == t(1, 2))
+    assert dr.all(dr.meshgrid(t(1, 2), indexing='xy') == t(1, 2))
+
+    a, b = dr.meshgrid(t(1, 2), t(3, 4, 5))
+    assert dr.all(a == t(1, 2, 1, 2, 1, 2)) and dr.all(b == t(3, 3, 4, 4, 5, 5))
+
+    a, b = dr.meshgrid(t(1, 2), t(3, 4, 5), indexing='ij')
+    assert dr.all(a == t(1, 1, 1, 2, 2, 2)) and dr.all(b == t(3, 4, 5, 3, 4, 5))
+
+    a, b, c = dr.meshgrid(t(1, 2), t(3, 4, 5), t(5, 6), indexing='xy')
+    assert dr.all(a == t(1, 1, 2, 2, 1, 1, 2, 2, 1, 1, 2, 2)) and \
+           dr.all(b == t(3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5)) and \
+           dr.all(c == t(5, 6, 5, 6, 5, 6, 5, 6, 5, 6, 5, 6))
+
+    a, b, c = dr.meshgrid(t(1, 2), t(3, 4, 5), t(5, 6), indexing='ij')
+    assert dr.all(a == t(1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2)) and \
+           dr.all(b == t(3, 3, 4, 4, 5, 5, 3, 3, 4, 4, 5, 5)) and \
+           dr.all(c == t(5, 6, 5, 6, 5, 6, 5, 6, 5, 6, 5, 6))
+
+    # Ensure consistency with NumPy
+    np = pytest.importorskip("numpy")
+
+    a, b = dr.meshgrid(t(1, 2), t(3, 4, 5))
+    a_np, b_np = np.meshgrid((1, 2), (3, 4, 5))
+    assert dr.all(a == a_np.ravel()) and dr.all(b == b_np.ravel())
+    a, b = dr.meshgrid(t(1, 2), t(3, 4, 5), indexing='ij')
+    a_np, b_np = np.meshgrid((1, 2), (3, 4, 5), indexing='ij')
+    assert dr.all(a == a_np.ravel()) and dr.all(b == b_np.ravel())
+
+    a, b, c = dr.meshgrid(t(1, 2), t(3, 4, 5), t(5, 6))
+    a_np, b_np, c_np = np.meshgrid((1, 2), (3, 4, 5), t(5, 6))
+    assert dr.all(a == a_np.ravel()) and dr.all(b == b_np.ravel()) and dr.all(c == c_np.ravel())
+    a, b, c = dr.meshgrid(t(1, 2), t(3, 4, 5), t(5, 6), indexing='ij')
+    a_np, b_np, c_np = np.meshgrid((1, 2), (3, 4, 5), t(5, 6), indexing='ij')
+    assert dr.all(a == a_np.ravel()) and dr.all(b == b_np.ravel()) and dr.all(c == c_np.ravel())

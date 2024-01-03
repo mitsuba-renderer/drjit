@@ -61,10 +61,7 @@ def test07_from_builtin(t):
 
 @pytest.test_arrays('complex')
 def test08_to_numpy(t):
-    try:
-        import numpy as np
-    except ImportError:
-        pytest.skip("Needs NumPy")
+    np = pytest.importorskip("numpy")
 
     a = t(3, 4)
     b = np.array(a)
@@ -79,10 +76,7 @@ def test08_to_numpy(t):
 
 @pytest.test_arrays('complex')
 def test09_from_numpy(t):
-    try:
-        import numpy as np
-    except ImportError:
-        pytest.skip("Needs NumPy")
+    np = pytest.importorskip("numpy")
 
     if dr.depth_v(t) == 1:
         assert dr.all(t(np.array(3+5j)) == t(3, 5))
