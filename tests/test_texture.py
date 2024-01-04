@@ -2,7 +2,10 @@ import drjit as dr
 import pytest
 import sys
 
-@pytest.mark.parametrize("wrap_mode", [dr.WrapMode.Repeat, dr.WrapMode.Clamp, dr.WrapMode.Mirror])
+# Work around a refleak in @pytest.mark.parameterize
+wrap_modes = [int(dr.WrapMode.Repeat), int(dr.WrapMode.Clamp), int(dr.WrapMode.Mirror)]
+
+@pytest.mark.parametrize("wrap_mode", wrap_modes)
 @pytest.mark.parametrize("force_optix", [True, False])
 @pytest.mark.parametrize("texture_type", ['Texture1f', 'Texture1f16'])
 @pytest.test_arrays("is_jit, float32, shape=(*)")
@@ -13,10 +16,10 @@ def test01_interp_1d(t, wrap_mode, force_optix, texture_type):
         Array1f = getattr(mod, 'Array1f')
         TexType = getattr(mod, texture_type)
 
-        tex = TexType([2], 1, True, dr.FilterMode.Linear, wrap_mode)
+        tex = TexType([2], 1, True, dr.FilterMode.Linear, dr.WrapMode(wrap_mode))
         tex.set_value(t(0, 1))
 
-        tex_no_accel = TexType([2], 1, False, dr.FilterMode.Linear, wrap_mode)
+        tex_no_accel = TexType([2], 1, False, dr.FilterMode.Linear, dr.WrapMode(wrap_mode))
         tex_no_accel.set_value(t(0, 1))
 
         N = 9
@@ -70,7 +73,7 @@ def test01_interp_1d(t, wrap_mode, force_optix, texture_type):
             output = tex.eval(pos)
             assert dr.allclose(output, ref)
 
-@pytest.mark.parametrize("wrap_mode", [dr.WrapMode.Repeat, dr.WrapMode.Clamp, dr.WrapMode.Mirror])
+@pytest.mark.parametrize("wrap_mode", wrap_modes)
 @pytest.mark.parametrize("texture_type", ['Texture1f', 'Texture1f16'])
 @pytest.test_arrays("is_jit, float32, shape=(*)")
 def test02_interp_1d(t, wrap_mode, texture_type):
@@ -85,8 +88,8 @@ def test02_interp_1d(t, wrap_mode, texture_type):
         rng_1 = PCG32(N * ch)
         rng_2 = PCG32(1024)
 
-        tex = TexType([N], ch, True, dr.FilterMode.Linear, wrap_mode)
-        tex_no_accel = TexType([N], ch, False, dr.FilterMode.Linear, wrap_mode)
+        tex = TexType([N], ch, True, dr.FilterMode.Linear, dr.WrapMode(wrap_mode))
+        tex_no_accel = TexType([N], ch, False, dr.FilterMode.Linear, dr.WrapMode(wrap_mode))
 
         StorageType = dr.array_t(tex.value())
 
@@ -103,7 +106,7 @@ def test02_interp_1d(t, wrap_mode, texture_type):
 
             assert dr.allclose(result_drjit, result_accel, 5e-3, 5e-3)
 
-@pytest.mark.parametrize("wrap_mode", [dr.WrapMode.Repeat, dr.WrapMode.Clamp, dr.WrapMode.Mirror])
+@pytest.mark.parametrize("wrap_mode", wrap_modes)
 @pytest.mark.parametrize("texture_type", ['Texture2f', 'Texture2f16'])
 @pytest.test_arrays("is_jit, float32, shape=(*)")
 def test03_interp_2d(t, wrap_mode, texture_type):
@@ -118,8 +121,8 @@ def test03_interp_2d(t, wrap_mode, texture_type):
         rng_1 = PCG32(N * M * ch)
         rng_2 = PCG32(1024)
 
-        tex = TexType([N, M], ch, True, dr.FilterMode.Linear, wrap_mode)
-        tex_no_accel = TexType([N, M], ch, False, dr.FilterMode.Linear, wrap_mode)
+        tex = TexType([N, M], ch, True, dr.FilterMode.Linear, dr.WrapMode(wrap_mode))
+        tex_no_accel = TexType([N, M], ch, False, dr.FilterMode.Linear, dr.WrapMode(wrap_mode))
 
         for j in range(0, 4):
             values = rng_1.next_float32()
@@ -133,7 +136,7 @@ def test03_interp_2d(t, wrap_mode, texture_type):
 
             assert(dr.allclose(result_drjit, result_accel, 5e-3, 5e-3))
 
-@pytest.mark.parametrize("wrap_mode", [dr.WrapMode.Repeat, dr.WrapMode.Clamp, dr.WrapMode.Mirror])
+@pytest.mark.parametrize("wrap_mode", wrap_modes)
 @pytest.mark.parametrize("texture_type", ['Texture3f', 'Texture3f16'])
 @pytest.test_arrays("is_jit, float32, shape=(*)")
 def test04_interp_3d(t, wrap_mode, texture_type):
@@ -148,8 +151,8 @@ def test04_interp_3d(t, wrap_mode, texture_type):
         rng_1 = PCG32(N * M * L * ch);
         rng_2 = PCG32(1024);
 
-        tex = TexType([N, M, L], ch, True, dr.FilterMode.Linear, wrap_mode)
-        tex_no_accel = TexType([N, M, L], ch, False, dr.FilterMode.Linear, wrap_mode)
+        tex = TexType([N, M, L], ch, True, dr.FilterMode.Linear, dr.WrapMode(wrap_mode))
+        tex_no_accel = TexType([N, M, L], ch, False, dr.FilterMode.Linear, dr.WrapMode(wrap_mode))
 
         for j in range(0, 4):
             values = rng_1.next_float32()
@@ -250,7 +253,7 @@ def test07_cubic_analytic(t, texture_type):
     assert dr.allclose(grad_64[0][0], ref_grad, 1e-5, 1e-5)
     assert dr.allclose(grad_ad[0], ref_grad, 1e-5, 1e-5)
 
-@pytest.mark.parametrize("wrap_mode", [dr.WrapMode.Repeat, dr.WrapMode.Clamp, dr.WrapMode.Mirror])
+@pytest.mark.parametrize("wrap_mode", wrap_modes)
 @pytest.mark.parametrize("texture_type", ['Texture1f'])
 @pytest.test_arrays("is_jit, float32, shape=(*)")
 def test08_cubic_interp_1d(t, texture_type, wrap_mode):
@@ -258,7 +261,7 @@ def test08_cubic_interp_1d(t, texture_type, wrap_mode):
     Array1f = getattr(mod, 'Array1f')
     TexType = getattr(mod, texture_type)
 
-    tex = TexType([5], 1, True, dr.FilterMode.Linear, wrap_mode)
+    tex = TexType([5], 1, True, dr.FilterMode.Linear, dr.WrapMode(wrap_mode))
     tex.set_value(t(2, 1, 3, 4, 7))
 
     N = 20
@@ -324,7 +327,7 @@ def test08_cubic_interp_1d(t, texture_type, wrap_mode):
         assert dr.allclose(res2, ref)
 
 @pytest.mark.parametrize("texture_type", ['Texture2f'])
-@pytest.mark.parametrize("wrap_mode", [dr.WrapMode.Repeat, dr.WrapMode.Clamp, dr.WrapMode.Mirror])
+@pytest.mark.parametrize("wrap_mode", wrap_modes)
 @pytest.test_arrays("is_jit, float32, shape=(*)")
 def test09_cubic_interp_2d(t, texture_type, wrap_mode):
     mod = sys.modules[t.__module__]
@@ -334,7 +337,7 @@ def test09_cubic_interp_2d(t, texture_type, wrap_mode):
 
     N, M = 5,4
 
-    tex = TexType([N,M], 1, True, dr.FilterMode.Linear, wrap_mode)
+    tex = TexType([N,M], 1, True, dr.FilterMode.Linear, dr.WrapMode(wrap_mode))
     rng1 = PCG32(N*M)
     tex.set_value(rng1.next_float32())
 
