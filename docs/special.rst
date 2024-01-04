@@ -226,7 +226,7 @@ remainder of this section) is based on a suffix characterizing the number of
 dimensions, numeric type, and the number of bits. For example, the following
 flavors of 2D arrays are available:
 
-.. list-table:: Title
+.. list-table::
    :header-rows: 1
 
    * - Type name
@@ -247,6 +247,40 @@ flavors of 2D arrays are available:
      - Single precision 2D array
    * - ``Array2f64``
      - Double precision 2D array
+
+It is legal build nested arrays from flat arrays of different sizes. Usually,
+some of the elements will have size ``1``, which means that they can broadcast
+to any other size as needed. Operations like ``print()`` already perform this
+broadcasting step internally:
+
+.. code-block:: pycon
+
+   >>> vec = dr.llvm.Array2f()
+   >>> vec.x = [1, 2, 3]
+   >>> vec.y = 10 
+   >>> print(vec) # <-- array of three 2D vectors, whose 'y' component is identical
+   [[1, 10],
+    [2, 10],
+    [3, 10]]
+
+Other combinations make less sense and will cause errors:
+
+.. code-block:: pycon
+
+   >>> vec = dr.llvm.Array2f()
+   >>> vec.x = [1, 2, 3]
+   >>> vec.y = [1, 2]
+   >>> print(vec)
+   [ragged array]
+
+   >>> drjit.sum(x)
+   RuntimeError: drjit.llvm.Float.__add__(): jit_var_add(r1, r2): operands have incompatible sizes! (sizes: 2, 3)
+
+   The above exception was the direct cause of the following exception:
+
+   Traceback (most recent call last):
+     File "<stdin>", line 1, in <module>
+   RuntimeError: drjit.sum(<drjit.llvm.Array2f>): failed (see above)!
 
 Matrices
 --------

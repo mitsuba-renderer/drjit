@@ -48,17 +48,19 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
             // or ``Array3f(1.0)``
             PyObject *arg = NB_TUPLE_GET_ITEM(args, 0);
             PyTypeObject *arg_tp = Py_TYPE(arg);
-            bool try_sequence_import = true;
+            bool try_sequence_import = true,
+                 is_drjit_tensor = false;
 
             // Initialization from another Dr.Jit array
             if (is_drjit_type(arg_tp)) {
+                const ArraySupplement &s_arg = supp(arg_tp);
                 // Copy-constructor
                 if (arg_tp == self_tp) {
                     nb::detail::nb_inst_copy(self, arg);
                     return 0;
+                } else if (s_arg.is_tensor) {
+                    is_drjit_tensor = true;
                 } else {
-                    const ArraySupplement &s_arg = supp(arg_tp);
-
                     ArrayMeta m_self = s,
                               m_arg  = s_arg;
 
@@ -118,13 +120,18 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
 
             // Try to construct from an instance created by another
             // array programming framework
-            if (nb::ndarray_check(arg)) {
+            if (is_drjit_tensor || nb::ndarray_check(arg)) {
                 // Import flattened array in C-style ordering
-                nb::object temp = import_ndarray(s, arg);
+                nb::object flattened;
+
+                if (is_drjit_tensor)
+                    flattened = nb::steal(supp(arg_tp).tensor_array(arg));
+                else
+                    flattened = import_ndarray(s, arg);
 
                 nb::object unraveled = unravel(
                     nb::borrow<nb::type_object_t<dr::ArrayBase>>(self_tp),
-                    temp, s.is_complex ? 'F' : 'C');
+                    flattened, s.is_complex ? 'F' : 'C');
 
                 nb::inst_move(self, unraveled);
                 return 0;
