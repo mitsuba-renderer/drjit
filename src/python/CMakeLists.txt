@@ -56,9 +56,13 @@ target_include_directories(drjit-python
 target_compile_definitions(drjit-python PRIVATE -DDRJIT_PYTHON_BUILD)
 
 configure_file(
-  ${CMAKE_CURRENT_SOURCE_DIR}/../../resources/config.py.in
-  ${CMAKE_CURRENT_SOURCE_DIR}/../../drjit/config.py
+  ../../resources/config.py.in
+  ${CMAKE_CURRENT_BINARY_DIR}/../../drjit/config.py
 )
+
+foreach (FNAME IN ITEMS __init__.py ast.py detail.py)
+  configure_file(../../drjit/${FNAME} ${CMAKE_CURRENT_BINARY_DIR}/../../drjit/${FNAME} COPYONLY)
+endforeach()
 
 target_link_libraries(drjit-python PRIVATE drjit drjit-core drjit-extra)
 

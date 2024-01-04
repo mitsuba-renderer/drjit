@@ -1,6 +1,5 @@
 from . import detail as _detail
 from . import ast as _ast
-from . import special as _special
 import typing as _typing
 
 with _detail.scoped_rtld_deepbind():
