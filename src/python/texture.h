@@ -14,8 +14,8 @@ void bind_texture(nb::module_ &m, const char *name) {
                          size_t channels, bool use_accel,
                          dr::FilterMode filter_mode, dr::WrapMode wrap_mode) {
                  new (t) Tex(shape.data(), channels, use_accel, filter_mode, wrap_mode); },
-             "shape"_a, "channels"_a, "use_accel"_a = true, 
-             "filter_mode"_a = dr::FilterMode::Linear, 
+             "shape"_a, "channels"_a, "use_accel"_a = true,
+             "filter_mode"_a = dr::FilterMode::Linear,
              "wrap_mode"_a = dr::WrapMode::Clamp,
              doc_Texture_init)
         .def(nb::init<const typename Tex::TensorXf &, bool, bool, dr::FilterMode,
