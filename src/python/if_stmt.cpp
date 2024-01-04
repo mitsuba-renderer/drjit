@@ -113,7 +113,7 @@ nb::object if_stmt(nb::tuple args, nb::handle cond, nb::callable true_fn,
                 if ((VarType) s.type == VarType::Bool && s.ndim == 1 &&
                     (JitBackend) s.backend != JitBackend::None) {
                     backend = (JitBackend) s.backend;
-                    cond_index = s.index(inst_ptr(cond));
+                    cond_index = (uint32_t) s.index(inst_ptr(cond));
                     if (!cond_index)
                         nb::raise("'cond' cannot be empty.");
                 }

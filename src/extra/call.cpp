@@ -103,8 +103,8 @@ static void ad_call_getter(JitBackend backend, const char *domain,
         {
             scoped_record rec(backend, name, true);
             func(payload, ptr, args2, rv2);
-            for (uint64_t index: rv2)
-                ad_var_check_implicit(index);
+            for (uint64_t index2: rv2)
+                ad_var_check_implicit(index2);
         }
 
         // Perform some sanity checks on the return values
@@ -118,27 +118,27 @@ static void ad_call_getter(JitBackend backend, const char *domain,
 
         // Move return values to a separate array storing them for all callables
         for (size_t j = 0; j < rv2.size(); ++j) {
-            uint64_t index = rv2[j];
-            rv_ad[j] |= (index >> 32) != 0;
-            if (!index)
+            uint64_t index2 = rv2[j];
+            rv_ad[j] |= (index2 >> 32) != 0;
+            if (!index2)
                 jit_raise(
                     "ad_call_getter(\"%s%s%s\"): return value of callable %zu "
                     "is empty/uninitialized, which is not permitted!",
                     domain_or_empty, separator, name, i);
-            size_t size = jit_var_size((uint32_t) index);
-            if (size != 1)
+            size_t size2 = jit_var_size((uint32_t) index2);
+            if (size2 != 1)
                 jit_raise("ad_call_getter(\"%s%s%s\"): return value of "
                           "callable %zu is not a scalar (r%u has size %zu).",
-                          domain_or_empty, separator, name, i, (uint32_t) index,
-                          size);
-            rv3[i*rv2.size()+j] = (uint32_t) index;
-            jit_var_inc_ref((uint32_t) index);
+                          domain_or_empty, separator, name, i, (uint32_t) index2,
+                          size2);
+            rv3[i*rv2.size()+j] = (uint32_t) index2;
+            jit_var_inc_ref((uint32_t) index2);
         }
     }
 
     for (size_t i = 0; i < rv2.size(); ++i) {
         // Deallocate previous entry
-        jit_var_dec_ref(rv[i]);
+        jit_var_dec_ref((uint32_t) rv[i]);
         rv[i] = 0;
 
         // Find the first defined return value
@@ -156,8 +156,8 @@ static void ad_call_getter(JitBackend backend, const char *domain,
         // Check if this is a literal
         bool is_literal = true;
         for (size_t j = 0; j < callable_count; ++j) {
-            uint32_t index = rv3[i+j*rv2.size()];
-            if (index && index != first)
+            uint32_t index3 = rv3[i+j*rv2.size()];
+            if (index3 && index3 != first)
                 is_literal = false;
         }
 
@@ -167,7 +167,7 @@ static void ad_call_getter(JitBackend backend, const char *domain,
             continue;
         }
 
-        VarType type = jit_var_type(rv2[i]);
+        VarType type = jit_var_type((uint32_t) rv2[i]);
         size_t tsize = jit_type_size(type);
 
         void *ptr =
@@ -191,7 +191,7 @@ static void ad_call_getter(JitBackend backend, const char *domain,
         AggregationEntry *p = agg;
 
         for (size_t j = 0; j < callable_count; ++j) {
-            p->offset = (j + 1) * tsize;
+            p->offset = (uint32_t) ((j + 1) * tsize);
 
             uint32_t rv3_i = rv3[i+j*rv2.size()];
             if (!rv3_i) {
@@ -290,12 +290,12 @@ static void ad_call_symbolic(JitBackend backend, const char *domain,
                 // Populate 'rv2' with function return values. This may raise
                 // an exception, in which case everything should be properly
                 // cleaned up in this function's scope
-                scoped_set_self set_self(backend, i + 1);
+                scoped_set_self set_self(backend, (uint32_t) i + 1);
                 func(payload, ptr, args2, rv2);
-                inst_id[callable_count_final] = i + 1;
+                inst_id[callable_count_final] = (uint32_t) i + 1;
 
-                for (uint64_t index: rv2)
-                    ad_var_check_implicit(index);
+                for (uint64_t index2: rv2)
+                    ad_var_check_implicit(index2);
 
                 // Perform some sanity checks on the return values
                 ad_call_check_rv(backend, size, i, rv, rv2);
@@ -308,9 +308,9 @@ static void ad_call_symbolic(JitBackend backend, const char *domain,
                 }
 
                 for (size_t j = 0; j < rv2.size(); ++j) {
-                    uint64_t index = rv2[j];
-                    rv_ad[j] |= (index >> 32) != 0;
-                    rv3.push_back_borrow((uint32_t) index);
+                    uint64_t index2 = rv2[j];
+                    rv_ad[j] |= (index2 >> 32) != 0;
+                    rv3.push_back_borrow((uint32_t) index2);
                 }
                 callable_count_final++;
             }
@@ -322,7 +322,7 @@ static void ad_call_symbolic(JitBackend backend, const char *domain,
         rv4.resize(rv.size());
 
         jit_var_call(
-            combined.c_str(), index, mask.index(), callable_count_final,
+            combined.c_str(), index, mask.index(), (uint32_t) callable_count_final,
             inst_id.data(), (uint32_t) args3.size(), args3.data(),
             (uint32_t) rv3.size(), rv3.data(), checkpoints.data(), rv4.data());
 
@@ -356,7 +356,7 @@ static void ad_call_reduce(JitBackend backend, const char *domain,
     for (uint64_t arg_i : args)
         jit_var_schedule((uint32_t) arg_i);
 
-    uint32_t n_inst = callable_count;
+    uint32_t n_inst = (uint32_t) callable_count;
     CallBucket *buckets =
         jit_var_call_reduce(backend, domain, index.index(), &n_inst);
 
@@ -406,9 +406,9 @@ static void ad_call_reduce(JitBackend backend, const char *domain,
         }
 
         JitVar instance_id = JitVar::steal(
-            ad_var_gather(index.index(), index2, memop_mask.index(), false));
+            (uint32_t) ad_var_gather(index.index(), index2, memop_mask.index(), false));
 
-        scoped_set_self set_self(backend, i + 1, instance_id.index());
+        scoped_set_self set_self(backend, (uint32_t) i + 1, instance_id.index());
         func(payload, ptr, args2, rv2);
 
         // Perform some sanity checks on the return values
@@ -416,18 +416,18 @@ static void ad_call_reduce(JitBackend backend, const char *domain,
 
         // Merge 'rv2' into 'rv' (main function return values)
         for (size_t j = 0; j < rv2.size(); ++j) {
-            uint64_t index =
+            uint64_t r =
                 ad_var_scatter(rv[j], rv2[j], index2, memop_mask.index(),
                                ReduceOp::None, true);
             ad_var_dec_ref(rv[j]);
-            rv[j] = index;
+            rv[j] = r;
         }
 
         args2.release();
     }
 
-    for (uint64_t index : rv)
-        jit_var_schedule((uint32_t) index);
+    for (uint64_t r : rv)
+        jit_var_schedule((uint32_t) r);
 }
 
 // Helper function full of checks (used by all strategies)
@@ -452,7 +452,7 @@ static void ad_call_check_rv(JitBackend backend, size_t size,
                 jit_raise("ad_call(): callable %zu returned an empty/uninitialized "
                           "Dr.Jit array, which is not allowed", callable_index);
 
-            rv[i] = jit_var_literal(backend, jit_var_type(rv2[i]), &zero, size);
+            rv[i] = jit_var_literal(backend, jit_var_type((uint32_t) rv2[i]), &zero, size);
         }
     } else {
         // Some sanity checks
@@ -463,8 +463,8 @@ static void ad_call_check_rv(JitBackend backend, size_t size,
                 jit_raise("ad_call(): callable %zu returned an empty/uninitialized "
                           "Dr.Jit array, which is not allowed", callable_index);
 
-            VarInfo v1 = jit_set_backend(i1),
-                    v2 = jit_set_backend(i2);
+            VarInfo v1 = jit_set_backend((uint32_t) i1),
+                    v2 = jit_set_backend((uint32_t) i2);
 
             if (v2.backend != backend)
                 jit_raise("ad_call(): callable %zu returned an array "
@@ -732,7 +732,7 @@ bool ad_call(JitBackend backend, const char *domain, size_t callable_count,
                           "(%zu and %zu)",
                           domain_or_empty, separator, name, size, size_2);
 
-            needs_ad |= arg_i >> 32;
+            needs_ad |= (arg_i >> 32) != 0;
         }
 
         if (index == 0 || size == 0 || jit_var_is_zero_literal(mask) ||
@@ -743,7 +743,7 @@ bool ad_call(JitBackend backend, const char *domain, size_t callable_count,
             for (uint64_t &i : rv) {
                 uint64_t zero = 0;
                 if (i)
-                    i = jit_var_literal(backend, jit_var_type(i), &zero, size);
+                    i = jit_var_literal(backend, jit_var_type((uint32_t) i), &zero, size);
             }
 
             return true;
@@ -796,18 +796,18 @@ bool ad_call(JitBackend backend, const char *domain, size_t callable_count,
             for (size_t i = 0; i < args.size(); ++i)
                 op->add_input(i, args[i]);
 
-            for (uint32_t index: implicit_in)
-                op->add_index(backend, index, true);
+            for (uint32_t index2: implicit_in)
+                op->add_index(backend, index2, true);
 
             for (size_t i = 0; i < rv.size(); ++i) {
                 if (!rv_ad[i])
                     continue;
 
-                uint64_t index = ad_var_new((uint32_t) rv[i]);
+                uint64_t index2 = ad_var_new((uint32_t) rv[i]);
 
                 jit_var_dec_ref((uint32_t) rv[i]);
-                rv[i] = index;
-                op->add_output(i, index);
+                rv[i] = index2;
+                op->add_output(i, index2);
             }
 
             if (ad_custom_op(op.get())) {
@@ -818,13 +818,13 @@ bool ad_call(JitBackend backend, const char *domain, size_t callable_count,
             // CustomOp was not needed, detach output again..
             op->disable_deleter();
             for (size_t i = 0; i < rv.size(); ++i) {
-                uint64_t index = rv[i],
-                         index_d = (index << 32) >> 32;
-                if (index == index_d)
+                uint64_t index2 = rv[i],
+                         index2_d = (index2 << 32) >> 32;
+                if (index2 == index2_d)
                     continue;
-                jit_var_inc_ref((uint32_t) index_d);
-                ad_var_dec_ref(index);
-                rv[i] = index_d;
+                jit_var_inc_ref((uint32_t) index2_d);
+                ad_var_dec_ref(index2);
+                rv[i] = index2_d;
             }
         }
 

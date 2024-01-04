@@ -148,7 +148,7 @@ extern DRJIT_EXTRA_EXPORT uint64_t ad_var_prefix_sum(uint64_t index,
 
 /// Perform a differentiable gather operation. See jit_var_gather for signature.
 extern DRJIT_EXTRA_EXPORT uint64_t ad_var_gather(uint64_t source,
-                                                 uint64_t offset, uint64_t mask,
+                                                 uint32_t offset, uint32_t mask,
                                                  bool permute);
 
 /// Perform a differentiable scatter operation. See jit_var_scatter for

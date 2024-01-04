@@ -61,7 +61,7 @@ static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu) {
         const ArraySupplement &s2 = supp(owner.type());
 
         if (s2.index) {
-            uint32_t index = s2.index(inst_ptr(owner));
+            uint32_t index = (uint32_t) s2.index(inst_ptr(owner));
             JitBackend backend = (JitBackend) s2.backend;
 
             JitVar value = JitVar::borrow(index);

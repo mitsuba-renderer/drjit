@@ -164,9 +164,9 @@ int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
                     (s.is_class && arg == Py_None)) {
                 element = nb::borrow(arg);
             } else {
-                PyObject *args[2] = { nullptr, arg };
+                PyObject *args2[2] = { nullptr, arg };
                 element = nb::steal(
-                    NB_VECTORCALL((PyObject *) value_tp, args + 1,
+                    NB_VECTORCALL((PyObject *) value_tp, args2 + 1,
                                   1 | PY_VECTORCALL_ARGUMENTS_OFFSET, nullptr));
                 if (NB_UNLIKELY(!element.is_valid())) {
                     nb::error_scope scope;

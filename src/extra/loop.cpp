@@ -68,7 +68,7 @@ static bool ad_loop_symbolic(JitBackend backend, const char *name,
             }
 
             JitVar active = JitVar::steal(
-                jit_var_mask_apply(active_initial, jit_var_size(active_initial)));
+                jit_var_mask_apply(active_initial, (uint32_t) jit_var_size(active_initial)));
 
             JitVar loop_cond = JitVar::steal(
                 jit_var_loop_cond(loop.index(), active.index()));
@@ -156,7 +156,7 @@ static void ad_loop_evaluated(JitBackend backend, const char *name,
     // Evaluate the condition and merge it into 'active'
     uint32_t active_initial = cond_cb(payload);
     JitVar active = JitVar::steal(
-        jit_var_mask_apply(active_initial, jit_var_size(active_initial)));
+        jit_var_mask_apply(active_initial, (uint32_t) jit_var_size(active_initial)));
     active.schedule_force_();
 
     while (true) {
@@ -233,7 +233,7 @@ public:
                 uint32_t ad_index = (uint32_t) (state[i] >> 32);
                 input.has_grad = true;
                 input.has_grad_in = add_index(m_backend, ad_index, true);
-                input.grad_offset = m_diff_count++;
+                input.grad_offset = (uint32_t) m_diff_count++;
             }
 
             jit_var_inc_ref(jit_index);
@@ -450,7 +450,7 @@ bool ad_loop(JitBackend backend, int symbolic, const char *name, void *payload,
                                cond_cb, body_cb, delete_cb, indices_in);
 
                 for (size_t i = 0; i < indices_out.size(); ++i) {
-                    VarType vt = jit_var_type(indices_out[i]);
+                    VarType vt = jit_var_type((uint32_t) indices_out[i]);
                     if (vt != VarType::Float16 && vt != VarType::Float32 &&
                         vt != VarType::Float64)
                         continue;

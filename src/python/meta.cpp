@@ -124,11 +124,11 @@ ArrayMeta meta_promote(ArrayMeta a, ArrayMeta b) noexcept {
                 size_b = (i < ndim_b) ? b.shape[i] : 1;
 
             if (size_a == size_b)
-                r.shape[i] = size_a;
+                r.shape[i] = (uint8_t) size_a;
             else if (size_a == DRJIT_DYNAMIC || size_b == DRJIT_DYNAMIC)
                 r.shape[i] = DRJIT_DYNAMIC;
             else if (size_a == 1 || size_b == 1)
-                r.shape[i] = size_a > size_b ? size_a : size_b;
+                r.shape[i] = (uint8_t) (size_a > size_b ? size_a : size_b);
             else
                 r.is_valid = 0;
         }
@@ -326,11 +326,10 @@ void promote(nb::object *o, size_t n, bool select) {
         ArrayMeta m2 = meta_get(o_i);
 
         if (!m2.is_valid) {
-            nb::str type_name = nb::inst_name(o_i);
             nb::raise(
                 "Encountered an unsupported argument of type '%s' (must be a "
                 "Dr.Jit array or a type that can be converted into one)",
-                type_name.c_str());
+                nb::inst_name(o_i).c_str());
         }
 
         if (i == 0)

@@ -41,6 +41,7 @@ using Float64 = GenericArray<double>;
                     .release();                                                \
             default:                                                           \
                 jit_fail("jit_var_" #name "(): invalid operand!");             \
+            return 0;                                                          \
         }                                                                      \
     }
 
@@ -63,6 +64,7 @@ using Float64 = GenericArray<double>;
                                                                                \
             default:                                                           \
                 jit_fail("jit_var_" #name "(): invalid operand!");             \
+                return 0;                                                      \
         }                                                                      \
     }
 
@@ -81,6 +83,7 @@ using Float64 = GenericArray<double>;
                 return { a.release(), b.release() }; }                         \
             default:                                                           \
                 jit_fail("jit_var_" #name "(): invalid operand!");             \
+                return { 0, 0 };                                               \
         }                                                                      \
     }
 
@@ -123,7 +126,9 @@ DRJIT_EXTRA_EXPORT uint32_t jit_var_exp(uint32_t i0) {
         case VarType::Float64:
             return dr::exp<Float64, false>(Float64::borrow(i0)).release();
 
-        default: jit_fail("jit_var_exp(): invalid operand!");
+        default:
+            jit_fail("jit_var_exp(): invalid operand!");
+            return 0;
     }
 }
 
@@ -142,7 +147,9 @@ DRJIT_EXTRA_EXPORT uint32_t jit_var_exp2(uint32_t i0) {
         case VarType::Float64:
             return dr::exp2<Float64, false>(Float64::borrow(i0)).release();
 
-        default: jit_fail("jit_var_exp2(): invalid operand!");
+        default:
+            jit_fail("jit_var_exp2(): invalid operand!");
+            return 0;
     }
 }
 
@@ -162,7 +169,9 @@ DRJIT_EXTRA_EXPORT uint32_t jit_var_log(uint32_t i0) {
         case VarType::Float64:
             return dr::log<Float64, false>(Float64::borrow(i0)).release();
 
-        default: jit_fail("jit_var_log(): invalid operand!");
+        default: 
+            jit_fail("jit_var_log(): invalid operand!");
+            return 0;
     }
 }
 
@@ -181,7 +190,9 @@ DRJIT_EXTRA_EXPORT uint32_t jit_var_log2(uint32_t i0) {
         case VarType::Float64:
             return dr::log2<Float64, false>(Float64::borrow(i0)).release();
 
-        default: jit_fail("jit_var_log2(): invalid operand!");
+        default:
+            jit_fail("jit_var_log2(): invalid operand!");
+            return 0;
     }
 }
 
@@ -200,7 +211,9 @@ DRJIT_EXTRA_EXPORT uint32_t jit_var_sin(uint32_t i0) {
         case VarType::Float64:
             return dr::sin<Float64, false>(Float64::borrow(i0)).release();
 
-        default: jit_fail("jit_var_sin(): invalid operand!");
+        default:
+            jit_fail("jit_var_sin(): invalid operand!");
+            return 0;
     }
 }
 
@@ -210,13 +223,16 @@ DRJIT_EXTRA_EXPORT uint32_t jit_var_cos(uint32_t i0) {
     switch (info.type) {
         case VarType::Float16:
             return dr::cos<Float16, false>(Float16::borrow(i0)).release();
+
         case VarType::Float32:
             if (info.backend == JitBackend::CUDA)
                 return jit_var_cos_intrinsic(i0);
             return dr::cos<Float32, false>(Float32::borrow(i0)).release();
+
         case VarType::Float64:
             return dr::cos<Float64, false>(Float64::borrow(i0)).release();
-
-        default: jit_fail("jit_var_cos(): invalid operand!");
+        default:
+            jit_fail("jit_var_cos(): invalid operand!");
+            return 0;
     }
 }

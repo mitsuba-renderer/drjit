@@ -398,14 +398,14 @@ struct State {
         if (vars_used) {
             ad_warn("AD Variable leak detected (%zu variables remain in use)!",
                     vars_used);
-            size_t counter = 0;
+            size_t count = 0;
 
             for (size_t i = 0; i < variables.size(); ++i) {
                 if (variables[i].ref_count == 0)
                     continue;
 
                 ad_warn(" - variable a%zu (%u references)", i, variables[i].ref_count);
-                if (++counter == 10) {
+                if (++count == 10) {
                     ad_warn(" - (skipping the rest)");
                     break;
                 }
@@ -746,7 +746,7 @@ static EdgeIndex ad_edge_new() {
     EdgeIndex index;
 
     if (unlikely(unused.empty())) {
-        index = state.edges.size();
+        index = (EdgeIndex) state.edges.size();
         state.edges.emplace_back();
     } else {
         index = unused.top();
@@ -969,11 +969,13 @@ DRJIT_NOINLINE Index ad_var_new_impl(const char *label, JitVar &&result,
         v_source->next_fwd = edge_index_new;
     }
 
-    if (N > 0 && !edge_index) {
-        // All edges were pruned, don't create the node after all
-        ad_trace("ad_var_new(a%u): all edges pruned, removing variable.", ad_index);
-        ad_free(ad_index, var);
-        return result.release();
+    if constexpr (N > 0) {
+        if (!edge_index) {
+            // All edges were pruned, don't create the node after all
+            ad_trace("ad_var_new(a%u): all edges pruned, removing variable.", ad_index);
+            ad_free(ad_index, var);
+            return result.release();
+        }
     }
 
     var->next_bwd = edge_index;
@@ -1867,7 +1869,7 @@ Index ad_var_data(Index index, void **ptr) {
 // ==========================================================================
 
 Index ad_var_copy(Index i0) {
-    JitVar result = JitVar::borrow(i0);
+    JitVar result = JitVar::borrow((JitIndex) i0);
 
     if (likely(is_detached(i0)))
         return result.release();
@@ -2174,7 +2176,7 @@ Index ad_var_log(Index i0) {
     if (is_detached(i0)) {
         return result.release();
     } else {
-        JitVar w0 = dr::rcp(JitVar::borrow(i0));
+        JitVar w0 = dr::rcp(JitVar::borrow((JitIndex) i0));
         return ad_var_new("log", std::move(result), Arg(i0, std::move(w0)));
     }
 }
@@ -2187,7 +2189,7 @@ Index ad_var_log2(Index i0) {
     if (is_detached(i0)) {
         return result.release();
     } else {
-        JitVar w0 = dr::rcp(JitVar::borrow(i0)) * scalar(i0, dr::InvLogTwo<double>);
+        JitVar w0 = dr::rcp(JitVar::borrow((JitIndex) i0)) * scalar(i0, dr::InvLogTwo<double>);
         return ad_var_new("log2", std::move(result), Arg(i0, std::move(w0)));
     }
 }
@@ -2347,7 +2349,7 @@ Index ad_var_select(Index i0, Index i1, Index i2) {
 
         return ad_var_inc_ref_impl(out_index);
     } else {
-        JitMask m = JitMask::borrow(i0);
+        JitMask m = JitMask::borrow((JitIndex) i0);
         return ad_var_new("select", std::move(result),
                           SpecialArg(i1, new MaskEdge(m, false)),
                           SpecialArg(i2, new MaskEdge(m, true)));
@@ -2423,14 +2425,14 @@ Index ad_var_cast(Index i0, VarType vt) {
         return result.release();
     } else {
         return ad_var_new("cast", std::move(result),
-                          SpecialArg(i0, new CastEdge(jit_var_type(i0), vt)));
+                          SpecialArg(i0, new CastEdge(jit_var_type((JitIndex) i0), vt)));
     }
 }
 
 // ==========================================================================
 
-uint64_t ad_var_gather(uint64_t source, uint64_t offset, uint64_t mask, bool permute) {
-    JitVar result = JitVar::steal(jit_var_gather(source, offset, mask));
+uint64_t ad_var_gather(Index source, JitIndex offset, JitIndex mask, bool permute) {
+    JitVar result = JitVar::steal(jit_var_gather((JitIndex) source, offset, mask));
 
     if (is_detached(source)) {
         return result.release();
@@ -2505,7 +2507,7 @@ void ad_var_scatter_add_kahan(Index *target_1, Index *target_2, Index value,
     uint32_t target_1_jit = jit_index(*target_1),
              target_2_jit = jit_index(*target_2);
 
-    jit_var_scatter_add_kahan(&target_1_jit, &target_2_jit, value, offset,
+    jit_var_scatter_add_kahan(&target_1_jit, &target_2_jit, (JitIndex) value, offset,
                               mask);
 
     if (is_detached(value) && detached_1) {
@@ -2566,7 +2568,7 @@ const char *ad_var_whos() {
     for (size_t i = 1; i < state.variables.size(); ++i) {
         if (state.variables[i].ref_count == 0)
             continue;
-        indices.emplace_back(i);
+        indices.emplace_back((uint32_t) i);
     }
 
     std::sort(indices.begin(), indices.end(), [](uint32_t i0, uint32_t i1) {
@@ -3129,13 +3131,13 @@ bool ad_custom_op(dr::detail::CustomOpBase *op) {
         v0i = idx;
 
         for (uint32_t i: inputs) {
-            uint8_t &flags = state[i]->flags;
-            if (flags & (uint8_t) VariableFlags::Visited) {
+            uint8_t &flags_ref = state[i]->flags;
+            if (flags_ref & (uint8_t) VariableFlags::Visited) {
                 ad_log(" - in: a%u (ignored)", i);
                 continue;
             }
 
-            flags |= (uint8_t) VariableFlags::Visited;
+            flags_ref |= (uint8_t) VariableFlags::Visited;
             ad_log(" - in: a%u", i);
             ad_add_special(i, v0i, false, std::make_unique<CopyGrad>());
         }
@@ -3158,13 +3160,13 @@ bool ad_custom_op(dr::detail::CustomOpBase *op) {
         v1i = idx;
 
         for (uint32_t o: outputs) {
-            uint8_t &flags = state[o]->flags;
-            if (flags & (uint8_t) VariableFlags::Visited) {
+            uint8_t & flags_ref = state[o]->flags;
+            if (flags_ref & (uint8_t) VariableFlags::Visited) {
                 ad_log(" - out: a%u (ignored)", o);
                 continue;
             }
 
-            flags |= (uint8_t) VariableFlags::Visited;
+            flags_ref |= (uint8_t) VariableFlags::Visited;
 
             ad_log(" - out: a%u", o);
             ad_add_special(v1i, o, false, std::make_unique<CopyGrad>());
