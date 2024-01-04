@@ -62,7 +62,7 @@ static void repr_array(nb::handle h, size_t indent, size_t threshold,
                 continue;
 
             if (prev || d < 0)
-                buffer.put(d < -1 ? "-" : "+");
+                buffer.put(d < -1 ? '-' : '+');
             buffer.fmt("%g", fabs(d));
             prev = true;
 
@@ -240,7 +240,7 @@ void repr_general(nb::handle h, size_t indent_, size_t threshold) {
     } else {
         nb::object dstruct = nb::getattr(tp, "DRJIT_STRUCT", nb::handle());
         if (dstruct.is_valid() && dstruct.type().is(&PyDict_Type)) {
-            buffer.put_dstr(nb::str(tp.attr("__name__")).c_str());
+            buffer.put_dstr(nb::str((nb::object) tp.attr("__name__")).c_str());
             buffer.put("[\n");
             buffer.put(' ', indent);
             size_t i = 0, size = nb::len(dstruct);
@@ -420,7 +420,7 @@ static nb::object format_impl(const char *name, const std::string &fmt,
 
         size_t limit;
         if (kwargs.contains("limit")) {
-            ssize_t limit_ = nb::cast<ssize_t>(kwargs["limit"]);
+            Py_ssize_t limit_ = nb::cast<Py_ssize_t>(kwargs["limit"]);
             if (limit_ < 0)
                 limit = (size_t) SIZE_MAX;
             else
@@ -453,7 +453,7 @@ static nb::object format_impl(const char *name, const std::string &fmt,
             nb::object active = nb::inst_alloc(mask_tp);
 
             uint32_t mask_1 = jit_var_bool(examine.backend, true);
-            uint32_t mask_2 = jit_var_mask_apply(mask_1, examine.size);
+            uint32_t mask_2 = jit_var_mask_apply(mask_1, (uint32_t) examine.size);
             supp(active.type()).init_index(mask_2, inst_ptr(active));
             nb::inst_mark_ready(active);
             jit_var_dec_ref(mask_1);
@@ -496,7 +496,7 @@ static nb::object format_impl(const char *name, const std::string &fmt,
             };
 
             CaptureData capture(limit, active, slot);
-            jit_var_set_callback(supp(index_tp).index(inst_ptr(slot)),
+            jit_var_set_callback((uint32_t) supp(index_tp).index(inst_ptr(slot)),
                 &DelayedPrint::callback,
                 new DelayedPrint{
                     fmt, nb::borrow(file),
@@ -563,24 +563,24 @@ static nb::object format_impl(const char *name, const std::string &fmt,
                     if (kwargs.contains(key)) {
                         value = kwargs[key];
                     } else {
-                        size_t p = (size_t) -1;
+                        size_t index = (size_t) -1;
                         try {
                             nb::int_ key_i(key);
-                            p = nb::cast<size_t>(key_i);
+                            index = nb::cast<size_t>(key_i);
                         } catch (...) { }
 
-                        if (p != (size_t) -1) {
+                        if (index != (size_t) -1) {
                             if (implicit_numbering)
                                 nb::raise("cannot switch from implicit to "
                                           "explicit field numbering.");
                             explicit_numbering = true;
 
-                            if (p < args.size())
-                                value = args[p];
+                            if (index < args.size())
+                                value = args[index];
                             else
                                 nb::raise("missing positional argument %zu "
                                           "referenced by format string (at "
-                                          "position %zu).", p, pos);
+                                          "position %zu).", index, pos);
                         } else {
                             nb::raise(
                                 "missing keyword argument \"%s\" referenced by "

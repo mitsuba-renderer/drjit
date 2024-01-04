@@ -213,6 +213,10 @@ enum class ArrayOp {
     Count
 };
 
+#if defined(_MSC_VER)
+#  pragma warning(disable: 4201) // nonstandard extension used: nameless struct/union
+#endif
+
 /**
  * \brief Supplemental data stored in Dr.Jit Python array types
  *

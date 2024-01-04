@@ -21,7 +21,7 @@ bool schedule(nb::handle h) {
         void operator()(nb::handle h) override {
             const ArraySupplement &s = supp(h.type());
             if (s.index)
-                result |= jit_var_schedule(s.index(inst_ptr(h))) != 0;
+                result |= jit_var_schedule((uint32_t) s.index(inst_ptr(h))) != 0;
         }
     };
 

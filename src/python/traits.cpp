@@ -20,7 +20,7 @@ static nb::handle scalar_t(nb::handle h) {
     return tp;
 }
 
-static int itemsize_v(nb::handle h) {
+static size_t itemsize_v(nb::handle h) {
     nb::handle tp = h.is_type() ? h : h.type();
     if (is_drjit_type(tp))
         return jit_type_size((VarType) supp(tp).type);
@@ -194,7 +194,7 @@ void export_traits(nb::module_ &m) {
                   if (s.is_tensor)
                       return true;
                   for (int i = 0; i < s.ndim; ++i) {
-                      if (s.shape[i] == (uint8_t) dr::Dynamic)
+                      if (s.shape[i] == DRJIT_DYNAMIC)
                           return true;
                   }
               }

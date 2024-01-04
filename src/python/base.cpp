@@ -607,14 +607,14 @@ nb::object matmul(nb::handle h0, nb::handle h1) {
             // Scalar product
             if (is_dyn_1d(s0) && outer_static(s1)) {
                 nb::object result = expr_t(tp0, tp1)();
-                size_t n = nb::len(h1);
-                for (size_t i = 0; i < n; ++i)
+                size_t n2 = nb::len(h1);
+                for (size_t i = 0; i < n2; ++i)
                     result[i] = h0 * h1[i];
                 return result;
             } else if (is_dyn_1d(s1) && outer_static(s0)) {
                 nb::object result = expr_t(tp0, tp1)();
-                size_t n = nb::len(h0);
-                for (size_t i = 0; i < n; ++i)
+                size_t n2 = nb::len(h0);
+                for (size_t i = 0; i < n2; ++i)
                     result[i] = h0[i] * h1;
                 return result;
             }
@@ -719,7 +719,7 @@ static VarState get_state(nb::handle h_) {
             if (!s.index)
                 return;
 
-            VarState vs = jit_var_state(s.index(inst_ptr(h)));
+            VarState vs = jit_var_state((uint32_t) s.index(inst_ptr(h)));
             if (count++ == 0)
                 state = vs;
             if (state != vs)

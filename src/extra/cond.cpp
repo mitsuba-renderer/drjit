@@ -349,9 +349,9 @@ bool ad_cond(JitBackend backend, int symbolic, const char *name, void *payload,
 
         size_t size = jit_var_size(cond);
 
-        JitVar true_mask = JitVar::steal(jit_var_mask_apply(cond, size)),
+        JitVar true_mask = JitVar::steal(jit_var_mask_apply(cond, (uint32_t) size)),
                neg_mask = JitVar::steal(jit_var_not(cond)),
-               false_mask = JitVar::steal(jit_var_mask_apply(neg_mask.index(), size));
+               false_mask = JitVar::steal(jit_var_mask_apply(neg_mask.index(), (uint32_t) size));
 
         if (symbolic) {
             std::vector<size_t> input_offsets, output_offsets;

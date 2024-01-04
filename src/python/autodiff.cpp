@@ -86,7 +86,7 @@ static bool grad_enabled(nb::handle h) {
         void operator()(nb::handle h) override {
             const ArraySupplement &s = supp(h.type());
             if (s.is_diff && is_float(s))
-                result |= ad_grad_enabled(s.index(inst_ptr(h)));
+                result |= ad_grad_enabled(s.index(inst_ptr(h))) != 0;
         }
     };
 
