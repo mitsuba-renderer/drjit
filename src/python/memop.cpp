@@ -470,7 +470,7 @@ nb::object ravel(nb::handle h, char order,
     nb::handle tp = h.type();
     JitBackend backend = JitBackend::None;
     VarType vt = VarType::Float32;
-    bool is_dynamic = false;
+    bool is_dynamic = false, is_diff = false;
 
     if (is_drjit_type(tp)) {
         const ArraySupplement &s = supp(tp);
@@ -512,6 +512,7 @@ nb::object ravel(nb::handle h, char order,
         backend = (JitBackend) s.backend;
         vt = (VarType) s.type;
         is_dynamic = s.shape[s.ndim - 1] == DRJIT_DYNAMIC;
+        is_diff = s.is_diff;
     } else if (vt_in) {
         vt = (VarType) *vt_in;
     }
@@ -545,6 +546,7 @@ nb::object ravel(nb::handle h, char order,
     ArrayMeta m { };
     m.backend = (uint16_t) backend;
     m.type = (int16_t) vt;
+    m.is_diff = is_diff;
     m.ndim = 1;
     m.shape[0] = DRJIT_DYNAMIC;
 

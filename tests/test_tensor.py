@@ -380,3 +380,19 @@ def test13_convert_tensor_vectorized(t, drjit_verbose, capsys):
 
     transcript = capsys.readouterr().out
     assert transcript.count("jit_var_scatter") == 9
+
+
+@pytest.test_arrays('diff, shape=(3, *), float32')
+def test14_preserve_attached(t):
+    v = t(1,2,3)
+    dr.enable_grad(v)
+    dr.set_grad(v,[10, 20, 30])
+    assert dr.grad_enabled(dr.ravel(v))
+
+    mod = sys.modules[t.__module__]
+    v2 = mod.TensorXf(v)
+    assert dr.grad_enabled(v2)
+
+    v3 = t(v2)
+    dr.forward_to(v3)
+    assert dr.all(v3.grad == [10, 20, 30])
