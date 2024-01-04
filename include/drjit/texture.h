@@ -770,21 +770,23 @@ public:
         };
 
         ArrayX result = empty<ArrayX>(channels);
+        using F = PosType;
+
 
         if constexpr (Dimension == 1) {
             Array3 cx = compute_weight_coord(0);
-            ArrayX f0 = eval_helper(PosF(cx[1]), active),
-                   f1 = eval_helper(PosF(cx[2]), active);
+            ArrayX f0 = eval_helper(PosF(F(cx[1])), active),
+                   f1 = eval_helper(PosF(F(cx[2])), active);
 
             for (size_t ch = 0; ch < channels; ++ch)
                 out[ch] = lerp(f1[ch], f0[ch], cx[0]);
         } else if constexpr (Dimension == 2) {
             Array3 cx = compute_weight_coord(0),
                    cy = compute_weight_coord(1);
-            ArrayX f00 = eval_helper(PosF(cx[1], cy[1]), active),
-                   f01 = eval_helper(PosF(cx[1], cy[2]), active),
-                   f10 = eval_helper(PosF(cx[2], cy[1]), active),
-                   f11 = eval_helper(PosF(cx[2], cy[2]), active);
+            ArrayX f00 = eval_helper(PosF(F(cx[1]), F(cy[1])), active),
+                   f01 = eval_helper(PosF(F(cx[1]), F(cy[2])), active),
+                   f10 = eval_helper(PosF(F(cx[2]), F(cy[1])), active),
+                   f11 = eval_helper(PosF(F(cx[2]), F(cy[2])), active);
 
             Value f0, f1;
             for (size_t ch = 0; ch < channels; ++ch) {
@@ -797,14 +799,14 @@ public:
             Array3 cx = compute_weight_coord(0),
                    cy = compute_weight_coord(1),
                    cz = compute_weight_coord(2);
-            ArrayX f000 = eval_helper(PosF(cx[1], cy[1], cz[1]), active),
-                   f001 = eval_helper(PosF(cx[1], cy[1], cz[2]), active),
-                   f010 = eval_helper(PosF(cx[1], cy[2], cz[1]), active),
-                   f011 = eval_helper(PosF(cx[1], cy[2], cz[2]), active),
-                   f100 = eval_helper(PosF(cx[2], cy[1], cz[1]), active),
-                   f101 = eval_helper(PosF(cx[2], cy[1], cz[2]), active),
-                   f110 = eval_helper(PosF(cx[2], cy[2], cz[1]), active),
-                   f111 = eval_helper(PosF(cx[2], cy[2], cz[2]), active);
+            ArrayX f000 = eval_helper(PosF(F(cx[1]), F(cy[1]), F(cz[1])), active),
+                   f001 = eval_helper(PosF(F(cx[1]), F(cy[1]), F(cz[2])), active),
+                   f010 = eval_helper(PosF(F(cx[1]), F(cy[2]), F(cz[1])), active),
+                   f011 = eval_helper(PosF(F(cx[1]), F(cy[2]), F(cz[2])), active),
+                   f100 = eval_helper(PosF(F(cx[2]), F(cy[1]), F(cz[1])), active),
+                   f101 = eval_helper(PosF(F(cx[2]), F(cy[1]), F(cz[2])), active),
+                   f110 = eval_helper(PosF(F(cx[2]), F(cy[2]), F(cz[1])), active),
+                   f111 = eval_helper(PosF(F(cx[2]), F(cy[2]), F(cz[2])), active);
 
             Value f00, f01, f10, f11, f0, f1;
             for (size_t ch = 0; ch < channels; ++ch) {

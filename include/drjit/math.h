@@ -24,7 +24,7 @@ NAMESPACE_BEGIN(drjit)
 NAMESPACE_BEGIN(detail)
 
 template <typename Value, size_t n>
-DRJIT_INLINE Value estrin_impl(const Value &x, const Value (&coeff)[n]) {
+Value estrin_impl(const Value &x, const Value (&coeff)[n]) {
     constexpr size_t n_rec = (n - 1) / 2, n_fma = n / 2;
 
     Value coeff_rec[n_rec + 1];
@@ -41,7 +41,7 @@ DRJIT_INLINE Value estrin_impl(const Value &x, const Value (&coeff)[n]) {
 }
 
 template <typename Value, size_t n>
-DRJIT_INLINE Value horner_impl(const Value &x, const Value (&coeff)[n]) {
+Value horner_impl(const Value &x, const Value (&coeff)[n]) {
     Value accum = coeff[n - 1];
     for (size_t i = 1; i < n; ++i)
         accum = fmadd(x, accum, coeff[n - 1 - i]);
@@ -52,14 +52,14 @@ NAMESPACE_END(detail)
 
 // Estrin's scheme for polynomial evaluation
 template <typename Value, typename... Ts>
-DRJIT_INLINE Value estrin(const Value &x, Ts... ts) {
+Value estrin(const Value &x, Ts... ts) {
     Value coeffs[] { scalar_t<Value>(ts)... };
     return detail::estrin_impl(x, coeffs);
 }
 
 // Horner's scheme for polynomial evaluation
 template <typename Value, typename... Ts>
-DRJIT_INLINE Value horner(const Value &x, Ts... ts) {
+Value horner(const Value &x, Ts... ts) {
     Value coeffs[] { scalar_t<Value>(ts)... };
     return detail::horner_impl(x, coeffs);
 }

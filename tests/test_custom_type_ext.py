@@ -1,8 +1,8 @@
 import drjit as dr
 import pytest
-import custom_type_ext as m
 
 def get_pkg(t):
+    m = pytest.importorskip('custom_type_ext')
     backend = dr.backend_v(t)
     if backend == dr.JitBackend.LLVM:
         return m.llvm

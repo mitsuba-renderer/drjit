@@ -184,7 +184,7 @@ private:
                               "explained in the Dr.Jit documentation.",
                               name.c_str(), nb::inst_name(h).c_str(), s1, s2);
 
-                if (loop_size != s2 && i1 != i2 && !jit_var_is_dirty(i2)) {
+                if (loop_size != s2 && i1 != i2 && !jit_var_is_dirty((uint32_t) i2)) {
                     if (loop_size != 1 && s2 != 1)
                         nb::raise("The body of this loop operates on arrays of "
                                   "size %zu. Loop state variable '%s' has an "
@@ -200,9 +200,9 @@ private:
                     i2 = indices[indices_pos++];
                     s2 = jit_var_size((uint32_t) i2);
 
-                    nb::handle tp = h.type();
-                    nb::object tmp = nb::inst_alloc(tp);
-                    supp(tp).init_index(i2, inst_ptr(tmp));
+                    nb::handle ht = h.type();
+                    nb::object tmp = nb::inst_alloc(ht);
+                    supp(ht).init_index(i2, inst_ptr(tmp));
                     nb::inst_mark_ready(tmp);
                     nb::inst_replace_move(h, tmp);
                 } else {

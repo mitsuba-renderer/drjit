@@ -1,8 +1,8 @@
 import drjit as dr
-import if_stmt_ext as m
 import pytest
 
 def get_pkg(t):
+    m = pytest.importorskip("if_stmt_ext")
     backend = dr.backend_v(t)
     if backend == dr.JitBackend.LLVM:
         return m.llvm
