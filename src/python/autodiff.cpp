@@ -266,7 +266,7 @@ static void enqueue_impl(dr::ADMode mode_, nb::handle h_) {
 
 static bool check_grad_enabled(const char *name, nb::handle h, uint32_t flags) {
     bool rv = grad_enabled(h);
-    if (!rv & !(flags & dr::ADFlag::AllowNoGrad))
+    if (!rv & !(flags & (uint32_t) dr::ADFlag::AllowNoGrad))
         nb::raise(
             "%s(): the argument does not depend on the input variable(s) being "
             "differentiated. Raising an exception since this is usually "

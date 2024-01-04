@@ -328,7 +328,7 @@ template <int Index> nb::object complex_getter(nb::handle_t<ArrayBase> h) {
     const ArraySupplement &s = supp(h.type());
 
     if (NB_UNLIKELY(!s.is_complex)) {
-        if (Index == 0) {
+        if constexpr (Index == 0) {
             return nb::borrow(h);
         } else {
             return array_module.attr("zeros")(h.type(), array_module.attr("shape")(h));

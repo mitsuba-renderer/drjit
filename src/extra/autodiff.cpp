@@ -43,6 +43,10 @@
  * control flow without the usual tape-style unrolling.
  */
 
+#if defined(_MSC_VER)
+#  pragma warning (disable: 4127) // conditional expression is constant (in TSL robin_set)
+#endif
+
 #include "common.h"
 #include <drjit-core/half.h>
 #include <drjit/jit.h>
@@ -127,6 +131,7 @@ DRJIT_NOINLINE JitVar scalar(JitBackend backend, VarType type, double value) {
             return JitVar::steal(jit_var_f64(backend, value));
         default:
             ad_fail("scalar(): unsupported AD scalar type");
+            return JitVar();
     }
 }
 
@@ -773,6 +778,8 @@ static void ad_propagate_size(Variable *v) {
 
 // This data structure encodes an ordinary dependence on a function argument
 struct Arg {
+    Arg() = default;
+
     Arg(Index index, JitVar &&weight)
         : ad_index(::ad_index(index)), weight(std::move(weight)) { }
 
@@ -857,7 +864,12 @@ DRJIT_NOINLINE Index ad_var_new_impl(const char *label, JitVar &&result,
     #pragma GCC diagnostic ignored "-Wunused-value"
 #endif
 
+#if defined(_MSC_VER)
+    constexpr size_t N = sizeof...(Args) == 0 ? 1 : sizeof...(Args);
+#else
     constexpr size_t N = sizeof...(Args);
+#endif
+
     using ArgType = first_t<Args...>;
     ArgType args[N] { std::move(args_)... };
 
@@ -2412,6 +2424,7 @@ Index ad_var_reduce(JitBackend backend, VarType vt, ReduceOp op, Index i0) {
 
             default:
                 ad_raise("ad_var_reduce(): unsupported reduction!");
+                return 0;
         }
     }
 }
@@ -2595,7 +2608,7 @@ const char *ad_var_graphviz() {
     for (size_t i = 1; i < state.variables.size(); ++i) {
         if (state.variables[i].ref_count == 0)
             continue;
-        indices.emplace_back(i);
+        indices.emplace_back((uint32_t) i);
     }
 
     std::sort(indices.begin(), indices.end(), [](uint32_t i0, uint32_t i1) {

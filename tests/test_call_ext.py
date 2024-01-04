@@ -1,10 +1,10 @@
 import drjit as dr
-import call_ext as m
 import pytest
 import re
 import gc
 
 def get_pkg(t):
+    m = pytest.importorskip('call_ext')
     backend = dr.backend_v(t)
     if backend == dr.JitBackend.LLVM:
         return m.llvm

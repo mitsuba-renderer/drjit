@@ -1,8 +1,8 @@
 import drjit as dr
-import while_loop_ext as m
 import pytest
 
 def get_pkg(t):
+    m = pytest.importorskip("while_loop_ext")
     backend = dr.backend_v(t)
     if backend == dr.JitBackend.LLVM:
         return m.llvm
