@@ -3,9 +3,6 @@ if (SKBUILD)
   set(DRJIT_LTO_FLAG "LTO")
 endif()
 
-message(STATUS ${Python_EXECUTABLE})
-message(STATUS ${Python_INCLUDE_DIRS})
-
 nanobind_add_module(
   drjit-python
 

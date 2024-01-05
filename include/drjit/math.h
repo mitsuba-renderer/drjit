@@ -1617,7 +1617,4 @@ template <typename Value> Value lgamma(Value x_) {
     }
 }
 
-/// Gamma function
-template <typename Value> Value tgamma(Value x) { return exp(lgamma(x)); }
-
 NAMESPACE_END(drjit)

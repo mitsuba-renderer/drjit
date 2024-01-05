@@ -856,6 +856,8 @@ void export_base(nb::module_ &m) {
     DR_MATH_UNOP(atanh, ArrayOp::Atanh);
 
     DR_MATH_UNOP(erf, ArrayOp::Erf);
+    DR_MATH_UNOP(erfinv, ArrayOp::ErfInv);
+    DR_MATH_UNOP(lgamma, ArrayOp::LGamma);
 
     DR_MATH_UNOP_PAIR(sincos, ArrayOp::Sincos);
     DR_MATH_UNOP_PAIR(sincosh, ArrayOp::Sincosh);
