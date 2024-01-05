@@ -169,6 +169,8 @@ enum class ArrayOp {
     Atanh,
 
     Erf,
+    ErfInv,
+    LGamma,
 
     Round,
     Trunc,
@@ -655,6 +657,8 @@ template <typename T> void bind_float_arithmetic(ArrayBinding &b) {
     b[ArrayOp::Acosh] = (void *) +[](const T *a, T *b) { new (b) T(acosh(*a)); };
     b[ArrayOp::Atanh] = (void *) +[](const T *a, T *b) { new (b) T(atanh(*a)); };
     b[ArrayOp::Erf] = (void *) +[](const T *a, T *b) { new (b) T(erf(*a)); };
+    b[ArrayOp::ErfInv] = (void *) +[](const T *a, T *b) { new (b) T(erfinv(*a)); };
+    b[ArrayOp::LGamma] = (void *) +[](const T *a, T *b) { new (b) T(lgamma(*a)); };
     b[ArrayOp::Atan2] = (void *) +[](const T *a, const T *b, T *c) {
         new (c) T(atan2(*a, *b));
     };
@@ -674,6 +678,7 @@ inline void disable_float_arithmetic(ArrayBinding &b) {
     b[ArrayOp::Atan] = b[ArrayOp::Sinh] = b[ArrayOp::Cosh] =
     b[ArrayOp::Sincosh] = b[ArrayOp::Tanh] = b[ArrayOp::Asinh] =
     b[ArrayOp::Acosh] = b[ArrayOp::Atanh] = b[ArrayOp::Erf] =
+    b[ArrayOp::ErfInv] = b[ArrayOp::LGamma] =
     b[ArrayOp::Atan2] = DRJIT_OP_NOT_IMPLEMENTED;
 }
 

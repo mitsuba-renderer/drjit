@@ -303,3 +303,11 @@ def test16_popcnt(t):
 def test17_log2i(t):
     assert dr.all(dr.log2i(t(1, 2, 100)) == t(0, 1, 6))
     assert tuple(dr.log2i(i) for i in (1, 2, 100)) == (0, 1, 6)
+
+@pytest.test_arrays('float, jit, shape=(*)')
+def test18_lgamma_erfinv(t):
+    # Spot-check the bindings of erfinv and tgamma
+    assert dr.allclose(dr.lgamma(1.2), -0.0853741)
+    assert dr.allclose(dr.lgamma(-1.2), 1.57918)
+    assert dr.allclose(dr.erfinv(.3), 0.272463)
+    assert dr.allclose(dr.ervinv(.8), 0.906194)

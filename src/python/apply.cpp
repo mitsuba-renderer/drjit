@@ -54,6 +54,8 @@ static const char *op_names[] = {
     "atanh",
 
     "erf",
+    "erfinv",
+    "lgamma",
 
     "round",
     "trunc",

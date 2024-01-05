@@ -1285,7 +1285,7 @@ template <typename T, bool = true> T atanh(const T &a);
 
 template <typename T, bool = true> T cbrt(const T &a);
 template <typename T, bool = true> T erf(const T &a);
-template <typename T, bool = true> T erfinv(const T &a);
+template <typename T> T erfinv(const T &a);
 
 //! @}
 // -----------------------------------------------------------------------

@@ -975,9 +975,8 @@ Returns:
 
 static const char *doc_round = R"(
 round(arg, /)
-
-Rounds arg to the nearest integer using Banker's rounding for
-half-way values.
+Rounds the input to the nearest integer using Banker's rounding for half-way
+values.
 
 This function is equivalent to ``std::rint`` in C++. It does not convert the
 type of the input array. A separate cast is necessary when integer output is
@@ -993,7 +992,7 @@ Returns:
 
 static const char *doc_log = R"(
 log(arg, /)
-Natural exponential approximation based on the CEPHES library.
+Evaluate the natural logarithm.
 
 This function evaluates the component-wise natural logarithm of the input
 scalar, array, or tensor.
@@ -1014,7 +1013,7 @@ Returns:
 
 static const char *doc_log2 = R"(
 log2(arg, /)
-Base-2 exponential approximation based on the CEPHES library.
+Evaluate the base-2 logarithm.
 
 This function evaluates the component-wise base-2 logarithm of the input
 scalar, array, or tensor.
@@ -1035,12 +1034,11 @@ Returns:
 
 static const char *doc_exp = R"(
 exp(arg, /)
-Natural exponential approximation based on the CEPHES library.
+Evaluate the natural exponential function.
 
 This function evaluates the component-wise natural exponential function of the
-input scalar, array, or tensor.
-It uses a suitable generalization of the operation when the input
-is complex- or quaternion-valued.
+input scalar, array, or tensor. It uses a suitable generalization of the
+operation when the input is complex- or quaternion-valued.
 
 See the section on :ref:`transcendental function approximations
 <transcendental-accuracy>` for details regarding accuracy.
@@ -1056,12 +1054,11 @@ Returns:
 
 static const char *doc_exp2 = R"(
 exp2(arg, /)
-Base-2 exponential approximation based on the CEPHES library.
+Evaluate ``2`` raised to a given power.
 
 This function evaluates the component-wise base-2 exponential function of the
-input scalar, array, or tensor.
-It uses a suitable generalization of the operation when the input
-is complex- or quaternion-valued.
+input scalar, array, or tensor. It uses a suitable generalization of the
+operation when the input is complex- or quaternion-valued.
 
 See the section on :ref:`transcendental function approximations
 <transcendental-accuracy>` for details regarding accuracy.
@@ -1077,7 +1074,14 @@ Returns:
 
 static const char *doc_erf = R"(
 erf(arg, /)
-Error function approximation.
+Evaluate the error function.
+
+The `error function <https://en.wikipedia.org/wiki/Error_function>` is
+defined as
+
+.. math::
+    
+    \operatorname{erf}(z) = \frac{2}{\sqrt\pi}\int_0^z e^{-t^2}\,\mathrm{d}t.
 
 See the section on :ref:`transcendental function approximations
 <transcendental-accuracy>` for details regarding accuracy.
@@ -1088,11 +1092,43 @@ Args:
     arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
 
 Returns:
-    float | drjit.ArrayBase: Sine of the input)";
+    float | drjit.ArrayBase: :math:`\mathrm{erf}(\textt{arg})`)";
+
+static const char *doc_erfinv = R"(
+erf(arg, /)
+Evaluate the inverse error function.
+
+This function evaluates the inverse of :py:func:`drjit.erf()`. Its
+implementation is based on the paper `Approximating the erfinv function
+<https://people.maths.ox.ac.uk/gilesm/files/gems_erfinv.pdf>`__ by Mike Giles.
+
+This function is currently only implemented for real-valued inputs.
+
+Args:
+    arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+Returns:
+    float | drjit.ArrayBase: :math:`\mathrm{erf}^{-1}(\textt{arg})`)";
+
+static const char *doc_lgamma = R"(
+lgamma(arg, /)
+Evaluate the natural logarithm of the absolute value the gamma function.
+
+The implementation of this function is based on the CEPHES library. See the
+section on :ref:`transcendental function approximations
+<transcendental-accuracy>` for details regarding accuracy.
+
+This function is currently only implemented for real-valued inputs.
+
+Args:
+    arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+Returns:
+    float | drjit.ArrayBase: :math:`\log|\Gamma(\texttt{arg})|`)";
 
 static const char *doc_sin = R"(
 sin(arg, /)
-Sine function approximation.
+Evaluate the sine function.
 
 This function evaluates the component-wise sine of the input scalar, array, or
 tensor. It uses a suitable generalization of the operation when the input is
@@ -1115,7 +1151,7 @@ Returns:
 
 static const char *doc_cos = R"(
 cos(arg, /)
-Cosine function approximation.
+Evaluate the cosine function.
 
 This function evaluates the component-wise cosine of the input scalar, array,
 or tensor. It uses a suitable generalization of the operation when the input is
@@ -1139,7 +1175,7 @@ Returns:
 
 static const char *doc_sincos = R"(
 sincos(arg, /)
-Combined sine/cosine function approximation.
+Evaluate both sine and cosine functions at the same time.
 
 This function simultaneously evaluates the component-wise sine and cosine of
 the input scalar, array, or tensor. This is more efficient than two separate
@@ -1165,7 +1201,7 @@ Returns:
 
 static const char *doc_tan = R"(
 tan(arg, /)
-Tangent approximation.
+Evaluate the tangent function.
 
 This function evaluates the component-wise tangent function associated with
 each entry of the input scalar, array, or tensor.
@@ -1189,7 +1225,7 @@ Returns:
 
 static const char *doc_asin = R"(
 asin(arg, /)
-Arcsine approximation.
+Evaluate the arcsine function.
 
 This function evaluates the component-wise arcsine of the input scalar, array,
 or tensor. It uses a suitable generalization of the operation when called with
@@ -1218,7 +1254,7 @@ Returns:
 
 static const char *doc_acos = R"(
 acos(arg, /)
-Arccosine approximation.
+Evaluate the arccosine function.
 
 This function evaluates the component-wise arccosine of the input scalar, array,
 or tensor. It uses a suitable generalization of the operation when the input is
@@ -1247,7 +1283,7 @@ Returns:
 
 static const char *doc_atan = R"(
 atan(arg, /)
-Arctangent approximation
+Evaluate the arctangent function.
 
 This function evaluates the component-wise arctangent of the input scalar, array,
 or tensor. It uses a suitable generalization of the operation when the input is
@@ -1293,7 +1329,7 @@ Returns:
 
 static const char *doc_sinh = R"(
 sinh(arg, /)
-Hyperbolic sine approximation.
+Evaluate the hyperbolic sine function.
 
 This function evaluates the component-wise hyperbolic sine of the input scalar,
 array, or tensor. The function uses a suitable generalization of the operation
@@ -1312,7 +1348,7 @@ Returns:
 
 static const char *doc_cosh = R"(
 cosh(arg, /)
-Hyperbolic cosine approximation.
+Evaluate the hyperbolic cosine function.
 
 This function evaluates the component-wise hyperbolic cosine of the input
 scalar, array, or tensor. The function uses a suitable generalization of the
@@ -1331,7 +1367,7 @@ Returns:
 
 static const char *doc_sincosh = R"(
 sincosh(arg, /)
-Combined hyperbolic sine/cosine function approximation.
+Evaluate both hyperbolic sine and cosine functions at the same time.
 
 This function simultaneously evaluates the component-wise hyperbolic sine and
 cosine of the input scalar, array, or tensor. This is more efficient than two
@@ -1351,7 +1387,7 @@ Returns:
 
 static const char *doc_tanh = R"(
 tanh(arg, /)
-Hyperbolic tangent approximation.
+Evaluate the hyperbolic tangent function.
 
 This function evaluates the component-wise hyperbolic tangent of the input
 scalar, array, or tensor. It uses a suitable generalization of the operation
@@ -1370,7 +1406,7 @@ Returns:
 
 static const char *doc_asinh = R"(
 asinh(arg, /)
-Hyperbolic arcsine approximation.
+Evaluate the hyperbolic arcsine function.
 
 This function evaluates the component-wise hyperbolic arcsine of the input
 scalar, array, or tensor. It uses a suitable generalization of the operation
@@ -1408,7 +1444,7 @@ Returns:
 
 static const char *doc_atanh = R"(
 atanh(arg, /)
-Hyperbolic arctangent approximation.
+Evaluate the hyperbolic arctangent function.
 
 This function evaluates the component-wise hyperbolic arctangent of the input
 scalar, array, or tensor. It uses a suitable generalization of the operation
@@ -1439,7 +1475,7 @@ Returns:
 
 static const char *doc_fma = R"(
 fma(arg0, arg1, arg2, /)
-Perform a *fused multiply-add* (FMA) operation.
+Perform a *fused multiply-addition* (FMA) of the inputs.
 
 Given arguments ``arg0``, ``arg1``, and ``arg2``, this operation computes
 ``arg0`` * ``arg1`` + ``arg2`` using only one final rounding step. The
