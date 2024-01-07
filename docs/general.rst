@@ -163,12 +163,12 @@ Horizontal reductions
 Dr.Jit offers the following *horizontal operations* that reduce the dimension
 of an input array, tensor, or Python sequence:
 
-- :py:func:`drjit.sum`, which reduces using ``+``,
+- :py:func:`drjit.sum` and :py:func:`drjit.mean`, which reduce using ``+``,
 - :py:func:`drjit.prod`, which reduces using ``*``,
 - :py:func:`drjit.min`, which reduces using ``min()``,
 - :py:func:`drjit.max`, which reduces using ``max()``,
 - :py:func:`drjit.all`, which reduces using ``&``, and
-- :py:func:`drjit.any`, which reduces using ``|``.
+- :py:func:`drjit.any` and :py:func:`drjit.none`, which reduce using ``|``.
 
 By default, these functions reduce along the outermost dimension and return an
 instance of the array's element type. For instance, sum-reducing an array ``a`` of

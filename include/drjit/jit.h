@@ -538,11 +538,11 @@ struct DRJIT_TRIVIAL_ABI JitArray
             uint32_t size_out = jit_compress(Backend, (const uint8_t *) data(),
                                              size_in, indices);
             if (size_out > 0) {
-                return int32_array_t<JitArray>::steal(
+                return uint32_array_t<JitArray>::steal(
                     jit_var_mem_map(Backend, VarType::UInt32, indices, size_out, 1));
             } else {
                 jit_free(indices);
-                return int32_array_t<JitArray>();
+                return uint32_array_t<JitArray>();
             }
         }
     }

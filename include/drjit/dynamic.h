@@ -207,10 +207,10 @@ struct DynamicArray
             DynamicArray<uint32_t> result;
             result.init_(m_size);
 
-            uint32_t accum = 0;
+            size_t accum = 0;
             for (size_t i = 0; i < m_size; ++i) {
                 if (m_data[i])
-                    result.m_data[accum++] = Value(i);
+                    result.m_data[accum++] = (uint32_t) i;
             }
             result.m_size = accum;
             return result;

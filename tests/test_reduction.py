@@ -304,3 +304,19 @@ def test08_prefix_sum(t):
     x = dr.full(t, 3, 4)
     assert dr.all(dr.prefix_sum(x) == [0, 3, 6, 9])
     assert dr.all(dr.prefix_sum(x, False) == [3, 6, 9, 12])
+
+@pytest.test_arrays('shape=(*), bool')
+def test09_compress(t):
+    a = t(False, True, True, False, False, True, False, True, True)
+    i = dr.compress(a)
+    assert dr.all(i == [1, 2, 5, 7, 8])
+    assert dr.all(dr.compress(t(False, False, False)) == [])
+    assert dr.all(dr.compress(t()) == [])
+
+@pytest.test_arrays('shape=(3, *), float32')
+def test10_sum_avg_mixed_size(t):
+    assert dr.all(dr.sum(t([1,2],2,3)) == [6, 7])
+    assert dr.all(dr.sum(t([1,2],2,3), axis=None) == [13])
+    assert dr.allclose(dr.mean(t([1,2],2,3)), [2, 7/3])
+    assert dr.allclose(dr.mean(t([1,2],2,3), axis=None), [13/6])
+    assert dr.mean(3) == 3

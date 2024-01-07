@@ -370,6 +370,10 @@ struct DRJIT_TRIVIAL_ABI DiffArray
         return sum(select(*this, (uint32_t) 1, (uint32_t) 0)).entry(0);
     }
 
+    auto compress_() const {
+        return Detached::borrow((uint32_t) m_index).compress_();
+    }
+
     //! @}
     // -----------------------------------------------------------------------
 
