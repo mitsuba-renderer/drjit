@@ -109,6 +109,12 @@ mark_as_advanced(NANOTHREAD_ENABLE_TESTS)
 mark_as_advanced(DRJIT_CORE_ENABLE_TESTS)
 mark_as_advanced(NB_TEST NB_TEST_SHARED_BUILD NB_TEST_STABLE_ABI NB_USE_SUBMODULE_DEPS NB_CREATE_INSTALL_RULES nanobind_DIR)
 
+if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  # In case Clang is used, avoid header file bloat from transitive
+  # includes. Ignored if Clang is used together with libstdc++.
+  add_compile_options(-D_LIBCPP_REMOVE_TRANSITIVE_INCLUDES)
+endif()
+
 if (MSVC)
    add_compile_options(/wd4251) # 'warning C4251: X needs to have dll-interface to be used by clients of struct Y
 endif()

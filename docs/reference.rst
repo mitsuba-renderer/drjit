@@ -80,11 +80,13 @@ These operations are *horizontal* in the sense that [..]
 .. autofunction:: scatter_add
 .. autofunction:: scatter_add_kahan
 .. autofunction:: scatter_inc
+.. autofunction:: compress
 .. autofunction:: ravel
 .. autofunction:: unravel
 .. autofunction:: min
 .. autofunction:: max
 .. autofunction:: sum
+.. autofunction:: mean
 .. autofunction:: prod
 .. autofunction:: dot
 .. autofunction:: abs_dot
@@ -1236,6 +1238,8 @@ Miscellaneous
 .. autofunction:: block_size
 .. autofunction:: set_block_size
 .. autofunction:: log2i
+.. autofunction:: rad2deg
+.. autofunction:: deg2rad
 
 .. py:data:: None
    :type: NoneType

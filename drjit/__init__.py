@@ -412,7 +412,7 @@ def conj(arg, /):
         arg (drjit.ArrayBase): A Dr.Jit 3D array
 
     Returns:
-        drjit.ArrayBase: Cross-product of the two input 3D arrays
+        drjit.ArrayBase: Conjugate form of the input
     '''
 
     t = type(arg)
@@ -1011,6 +1011,31 @@ def log2i(arg, /):
     return (sz * 8 - 1) - lzcnt(arg)
 
 
+def rad2deg(arg, /):
+    '''
+    Convert angles from radians to degrees.
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: The equivalent angle in degrees.
+    '''
+    return arg * (180.0 / pi)
+
+
+def deg2rad(arg, /):
+    '''
+    Convert angles from degrees to radians.
+
+    Args:
+        arg (float | drjit.ArrayBase): A Python or Dr.Jit floating point type
+
+    Returns:
+        float | drjit.ArrayBase: The equivalent angle in radians.
+    '''
+    return arg * (pi / 180.0)
+
 def reverse(value, axis: int = 0):
     '''
     Reverses the given Dr.Jit array or Python sequence along the
@@ -1042,6 +1067,38 @@ def reverse(value, axis: int = 0):
             result = tp(result)
         return result
 
+
+def mean(value, axis: _typing.Optional[None] = 0):
+    """
+    Compute the mean of the input array or tensor along one or multiple axes.
+
+    This function performs a horizontal sum reduction by adding values of the
+    input array, tensor, or Python sequence along one or multiple axes and then
+    dividing by the number of entries. By default, it sums along the outermost
+    axis; specify ``axis=None`` to sum over all of them at once. The mean
+    of an empty array is considered to be zero.
+
+    See the section on :ref:`horizontal reductions <horizontal-reductions>` for
+    important general information about their properties.
+
+    Args:
+        value (float | int | Sequence | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
+
+        axis (int | None): The axis along which to reduce (Default: ``0``). A value
+            of ``None`` causes a simultaneous reduction along all axes. Currently, only
+            values of ``0`` and ``None`` are supported.
+
+    Returns:
+        float | int | drjit.ArrayBase: Result of the reduction operation)";
+    """
+
+    s = sum(value, axis)
+    vs = shape(value)
+
+    n = 1
+    if vs != ():
+        n = prod(vs) if axis is None else vs[axis]
+    return s / n
 
 def meshgrid(*args, indexing='xy'):
     '''

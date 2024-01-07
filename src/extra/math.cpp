@@ -169,7 +169,7 @@ DRJIT_EXTRA_EXPORT uint32_t jit_var_log(uint32_t i0) {
         case VarType::Float64:
             return dr::log<Float64, false>(Float64::borrow(i0)).release();
 
-        default: 
+        default:
             jit_fail("jit_var_log(): invalid operand!");
             return 0;
     }

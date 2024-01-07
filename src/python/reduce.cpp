@@ -220,7 +220,8 @@ nb::object max(nb::handle h, std::optional<int> axis) {
         });
 }
 
-nb::object prefix_sum(nb::handle_t<dr::ArrayBase> h, bool exclusive, std::optional<int> axis) {
+nb::object prefix_sum(nb::handle_t<dr::ArrayBase> h, bool exclusive,
+                      std::optional<int> axis) {
     nb::handle tp = h.type();
     try {
         const ArraySupplement &s = supp(tp);
@@ -277,12 +278,27 @@ nb::object prefix_sum(nb::handle_t<dr::ArrayBase> h, bool exclusive, std::option
                         "drjit.prefix_sum(<%U>): failed (see above)!",
                         tp_name.ptr());
     } catch (const std::exception &e) {
-        nb::str tp_name = nb::type_name(tp);
         nb::chain_error(PyExc_RuntimeError, "drjit.prefix_sum(<%U>): %s",
-                        tp_name.ptr(), e.what());
+                        nb::type_name(tp).c_str(), e.what());
     }
 
     return nb::object();
+}
+
+nb::object compress(nb::handle_t<dr::ArrayBase> h) {
+    nb::handle tp = h.type();
+    const ArraySupplement &s = supp(tp);
+    if (!s.compress)
+        nb::raise(
+            "drjit.compress(<%s>): 'arg' must be a flat (1D) boolean array!",
+            nb::type_name(tp).c_str());
+    ArrayMeta m = s;
+    m.type = (uint16_t) VarType::UInt32;
+    nb::handle t = meta_get_type(m);
+    nb::object result = nb::inst_alloc(t);
+    s.compress(inst_ptr(h), inst_ptr(result));
+    nb::inst_mark_ready(result);
+    return result;
 }
 
 void export_reduce(nb::module_ & m) {
@@ -308,5 +324,6 @@ void export_reduce(nb::module_ & m) {
           }, doc_norm)
      .def("prefix_sum", &prefix_sum,
           "value"_a, "exclusive"_a = true,
-          "axis"_a.none() = 0, doc_prefix_sum);
+          "axis"_a.none() = 0, doc_prefix_sum)
+     .def("compress", &compress, doc_compress);
 }
