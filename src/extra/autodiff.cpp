@@ -43,10 +43,6 @@
  * control flow without the usual tape-style unrolling.
  */
 
-#if defined(_MSC_VER)
-#  pragma warning (disable: 4127) // conditional expression is constant (in TSL robin_set)
-#endif
-
 #include "common.h"
 #include <drjit-core/half.h>
 #include <drjit/jit.h>
@@ -700,8 +696,10 @@ char *concat(const char *s1, const char *s2) {
            l2 = strlen(s1);
 
     char *buf = (char *) malloc(l1 + l2 + 1);
-    if (!buf)
+    if (!buf) {
         ad_fail("concat(): memory allocation failed!");
+        return nullptr;
+    }
     memcpy(buf, s1, l1);
     memcpy(buf + l1, s2, l2);
     buf[l1 + l2] = '\0';
@@ -864,14 +862,15 @@ DRJIT_NOINLINE Index ad_var_new_impl(const char *label, JitVar &&result,
     #pragma GCC diagnostic ignored "-Wunused-value"
 #endif
 
-#if defined(_MSC_VER)
-    constexpr size_t N = sizeof...(Args) == 0 ? 1 : sizeof...(Args);
-#else
     constexpr size_t N = sizeof...(Args);
+#if defined(_MSC_VER)
+    constexpr size_t M = N == 0 ? 1 : N;
+#else
+    constexpr size_t M = N;
 #endif
 
     using ArgType = first_t<Args...>;
-    ArgType args[N] { std::move(args_)... };
+    ArgType args[M] { std::move(args_)... };
 
 #if defined(__GNUC__)
     #pragma GCC diagnostic pop

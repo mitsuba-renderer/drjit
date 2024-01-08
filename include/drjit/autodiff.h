@@ -603,7 +603,7 @@ struct DRJIT_TRIVIAL_ABI DiffArray
         return tmp;
     }
 
-    size_t size() const { return jit_var_size(m_index); }
+    size_t size() const { return jit_var_size((uint32_t) m_index); }
 
     bool grad_enabled_() const {
         if constexpr (IsFloat)
@@ -679,7 +679,7 @@ struct DRJIT_TRIVIAL_ABI DiffArray
 
     const Value *data() const {
         void *p = nullptr;
-        const_cast<DiffArray&>(*this) = steal(ad_var_data(m_index, &p));
+        const_cast<DiffArray&>(*this) = steal((Index) ad_var_data(m_index, &p));
         return (const Value *) p;
     }
 

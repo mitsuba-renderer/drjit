@@ -326,7 +326,7 @@ class Exception : public std::exception {
 public:
     Exception(const char* msg) : m_msg(DRJIT_STRDUP(msg)) { }
     Exception(const Exception& e) : m_msg(DRJIT_STRDUP(e.m_msg)) { }
-    Exception(Exception&& e) : m_msg(e.m_msg) { e.m_msg = nullptr; }
+    Exception(Exception&& e) noexcept : m_msg(e.m_msg) { e.m_msg = nullptr; }
     Exception& operator=(const Exception&) = delete;
     Exception& operator=(Exception&&) = delete;
     virtual const char* what() const noexcept { return m_msg; }

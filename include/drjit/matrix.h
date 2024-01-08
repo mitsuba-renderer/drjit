@@ -15,6 +15,11 @@
 
 #include <drjit/packet.h>
 
+#if defined(_MSC_VER)
+#  pragma warning(push)
+#  pragma warning (disable: 4702) // unreachable code
+#endif
+
 NAMESPACE_BEGIN(drjit)
 
 template <typename Value_, size_t Size_>
@@ -518,3 +523,7 @@ polar_decomp(const Matrix<T, Size> &A, size_t it = 10) {
 template <typename T> using entry_t = typename T::Entry;
 
 NAMESPACE_END(drjit)
+
+#if defined(_MSC_VER)
+#  pragma warning(pop)
+#endif
