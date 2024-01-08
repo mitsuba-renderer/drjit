@@ -7,12 +7,12 @@ Array types
 
 Dr.Jit exposes a *large* (~500) variety of different type bindings, which include
 
-- Flat arrays (e.g., :py:class:`drjit.cuda.Float`),
-- Nested arrays (e.g., :py:class:`drjit.cuda.Array4f`),
-- Matrices (e.g., :py:class:`drjit.cuda.Matrix4f`),
-- Complex numbers (e.g., :py:class:`drjit.cuda.Complex2f`), and
-- Quaternions (e.g., :py:class:`drjit.cuda.Quaternion4f`).
-- Tensors (e.g., :py:class:`drjit.cuda.TensorXf`).
+- :ref:`Flat arrays <flat_arrays>` (e.g., :py:class:`drjit.cuda.Float`),
+- :ref:`Nested arrays <nested_arrays>` (e.g., :py:class:`drjit.cuda.Array4f`),
+- :ref:`Matrices <matrices>` (e.g., :py:class:`drjit.cuda.Matrix4f`),
+- :ref:`Complex numbers <complex_numbers>` (e.g., :py:class:`drjit.cuda.Complex2f`), and
+- :ref:`Quaternions <quaternions>` (e.g., :py:class:`drjit.cuda.Quaternion4f`).
+- :ref:`Tensors <tensors>` (e.g., :py:class:`drjit.cuda.TensorXf`).
 
 Each flavor exists for a variety of different dimensions, backends, and
 numerical representations. Every type also has a corresponding C++
@@ -22,7 +22,7 @@ codebases involving a mixture of C++ and Python code.
 The remainder of this section reviews commonalities and differences between
 the various available array types.
 
-.. _intro:
+.. _backends:
 
 Backends
 --------
@@ -81,6 +81,8 @@ Programs can mix and match types from these different backends. In particular,
 it is normal for a program to simultaneously use the ``drjit.scalar.*`` package
 (for *uniform* values) along with types from a vectorized backend.
 
+.. _flat_arrays:
+
 Flat arrays
 -----------
 
@@ -116,7 +118,7 @@ The following kinds of flat arrays are available
 The register file of GPUs is 32 bit-valued, which motivates this naming convention.
 
 The following example constructs an 1D array with 3 elements, prints its
-contents, and then performs a simple computation. 
+contents, and then performs a simple computation.
 
 .. code-block:: pycon
 
@@ -130,7 +132,7 @@ contents, and then performs a simple computation.
    [0, 0.866025, 0.968246]
 
 The last statement compiles a kernel that implements the expression
-:math:`\sqrt{1-x^2}` using both SIMD-style and multi-core parallelism. 
+:math:`\sqrt{1-x^2}` using both SIMD-style and multi-core parallelism.
 Conceptually, this corresponds to the following C code:
 
 .. code-block:: cpp
@@ -217,7 +219,7 @@ array programming frameworks:
 
    >>> dr.scalar.Array3f(1)
    [1, 1, 1]
-   
+
    >>> dr.scalar.Array3f(1, 2, 3) + 1
    [2, 3, 4]
 
@@ -257,7 +259,7 @@ broadcasting step internally:
 
    >>> vec = dr.llvm.Array2f()
    >>> vec.x = [1, 2, 3]
-   >>> vec.y = 10 
+   >>> vec.y = 10
    >>> print(vec) # <-- array of three 2D vectors, whose 'y' component is identical
    [[1, 10],
     [2, 10],
@@ -282,6 +284,8 @@ Other combinations make less sense and will cause errors:
      File "<stdin>", line 1, in <module>
    RuntimeError: drjit.sum(<drjit.llvm.Array2f>): failed (see above)!
 
+.. _matrices:
+
 Matrices
 --------
 
@@ -296,7 +300,7 @@ Matrices change the behavior of various operations:
   scalar broadcasts to the identity element:
 
   .. code-block:: pycon
-  
+
      >>> dr.scalar.Matrix2f(1, 2, 3, 4) + 10
      [[10, 2],
       [3, 14]]
@@ -340,6 +344,8 @@ matrices is inadvisable: everything is ultimately unrolled into flat array
 operations, hence multiplying two ``1000x1000`` matrices would, e.g., produce
 an unusably large kernel with ~1'000'000'000 instructions.
 
+.. _complex_numbers:
+
 Complex numbers
 ---------------
 
@@ -352,7 +358,7 @@ operations:
   from a non-complex scalar broadcasts to the identity element:
 
   .. code-block:: pycon
-  
+
      >>> dr.scalar.Complex2f(1 + 2j) + 3
      4+2j
 
@@ -393,6 +399,8 @@ operations:
   function and its inverse have not been added (yet). Their behavior is
   considered undefined. External contributions to add them are welcomed.
 
+.. _quaternions:
+
 Quaternions
 -----------
 
@@ -405,7 +413,7 @@ operations:
   from non-quaternionic values or arrays broadcasts to the identity element:
 
   .. code-block:: pycon
-  
+
      >>> dr.scalar.Quaternion4f(1, 2, 3, 4) + 10
      1i+2j+3k+14
 
@@ -432,3 +440,123 @@ operations:
   ordinary and hyperbolic trigonometric functions have not been added (yet).
   Their behavior is considered undefined. External contributions to add them
   are welcomed.
+
+.. _tensors:
+
+Tensors
+-------
+
+Dr.Jit also includes a general n-dimensional array type (nowadays colloquially
+referred to as a `tensor https://en.wikipedia.org/wiki/Tensor>`__, though this
+term technically isn't 100% correct). The tensor types all have a capital ``X``
+in their name to denote their dynamic shape (e.g.,
+:py:class:`drjit.cuda.TensorXf16`).
+
+A tensor is internally represented by a :ref:`flat array <flat_arrays>` and a
+shape tuple. It can be constructed manually, or using various other array
+creation operations.
+
+.. code-block:: pycon
+
+   from drjit.llvm import TensorXf
+   >>> t = TensorXf([1,2,3,4,5,6], shape=(3, 2))
+   >>> print(t)
+   [[1, 2],
+    [3, 4],
+    [5, 6]]
+   >>> drjit.zeros(TensorXf, (1, 2, 3, 4))
+   [[[[0, 0, 0, 0],
+      [0, 0, 0, 0],
+      [0, 0, 0, 0]],
+     [[0, 0, 0, 0],
+      [0, 0, 0, 0],
+      [0, 0, 0, 0]]]]
+
+The shape and flat array underlying a tensor can be accessed using its
+``.shape`` and ``.array`` members.
+
+.. code-block:: pycon
+
+   >>> t.shape
+   (3, 2)
+   >>> t.array
+   [1, 2, 3, 4, 5, 6]
+
+Tensors directly convert to other Dr.Jit types, and vice versa. A potential
+surprise here is that this actually changes the output of operations like
+``print``, :py:func:`drjit.print`, :py:func:`drjit.format`, and
+:py:func:`drjit.ArrayBase.__repr__`:
+
+.. code-block:: pycon
+
+   >>> a = Array3f(t)
+   >>> t = TensorXf(a)
+   >>> a
+   [[1, 3, 5],
+    [2, 4, 6]]
+   >>> t
+   [[1, 2],
+    [3, 4],
+    [5, 6]]
+   >>> a.shape
+   (3, 2)
+   >>> t.shape
+   (3, 2)
+
+This change is cosmetic: the string conversion of ordinary Dr.Jit arrays shows
+them in transposed form. In the above example, this puts the components of each
+3D vector onto the same line, which is usually more intuitive. In contrast, the
+string conversion of tensors matches that of other array programming libraries
+and does not transpose their contents.
+
+Tensors support all normal mathematical operations along with automatic
+differentiation. They share the broadcasting behavior known from other array
+programming frameworks.
+
+
+.. code-block:: pycon
+
+   >>> t = drjit.pi - drjit.atan2(TensorXf([1], shape=(1,1)), TensorXf([1,2], shape=(1,2)))
+   >>> t.shape
+   (1, 2)
+   >>> t
+   [[2.35619, 2.67795]]
+
+Tensors support the full spectrum of slicing operations: slicing using fixed indices,
+ranges, integer arrays, ellipsis (``...``), and adding new axes by
+indexing with :py:attr:`drjit.newaxis` (or equivalently, ``None``).
+
+.. code-block:: pycon
+
+   >>> t = ...
+   >>> t.shape
+   (10, 20, 30, 40)
+   >>> t2 = t[UInt32(5,6), 10:20:4, drjit.newaxis, 1, ...]
+   >>> t2.shape
+   (2, 3, 1, 40)
+
+Slicing internally turns into a :py:func:`drjit.gather` operation that reads
+from the underlying flat array, while slice assignment turns into
+:py:func:`drjit.scatter`.
+
+It should be noted that Dr.Jit is *not* a general array/tensor programming
+library. For example, many standard operations found in other frameworks are missing:
+
+- Operations to split or concatenate tensors and rearrange their axes in various ways.
+- General matrix/tensor product operations, convolutions, FFT, Einstein sums, etc.
+
+While we intend to add features to the tensor interface in the future to make
+it more fully featured (external contributions are also welcomed!), tensors are
+best used sparingly in actual programs.
+
+Tensor-based programs tend to make frequent use of slicing operations. For
+example, the following line adds even and odd-numbered entries of a 1D tensor:
+
+.. code-block:: pycon
+
+   >>> t = t[0::2] + t[1::2]
+
+In a Dr.Jit program, these entries are computed by different threads of the
+program. Correct sequencing of the operation may then require an intermediate
+variable evaluation, which prevents the compilation of a fully fused kernel
+(which is one of the key optimizations implemented by Dr.Jit).
