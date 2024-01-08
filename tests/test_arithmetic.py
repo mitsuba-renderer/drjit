@@ -310,4 +310,4 @@ def test18_lgamma_erfinv(t):
     assert dr.allclose(dr.lgamma(1.2), -0.0853741)
     assert dr.allclose(dr.lgamma(-1.2), 1.57918)
     assert dr.allclose(dr.erfinv(.3), 0.272463)
-    assert dr.allclose(dr.ervinv(.8), 0.906194)
+    assert dr.allclose(dr.erfinv(.8), 0.906194)

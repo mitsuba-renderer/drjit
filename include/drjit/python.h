@@ -203,6 +203,7 @@ enum class ArrayOp {
     // Horizontal reductions
     All,
     Any,
+    Count,
     Sum,
     Prod,
     Min,
@@ -212,7 +213,7 @@ enum class ArrayOp {
     // Miscellaneous
     Richcmp,
 
-    Count
+    OpCount
 };
 
 #if defined(_MSC_VER)
@@ -320,7 +321,7 @@ struct ArraySupplement : ArrayMeta {
             UnaryOp compress;
 
             /// Additional operations
-            void *op[(int) ArrayOp::Count];
+            void *op[(int) ArrayOp::OpCount];
         };
 
         // Tensors expose a different set of operations
@@ -708,6 +709,9 @@ void bind_tensor(ArrayBinding &b) {
 template <typename T> void bind_mask_reductions(ArrayBinding &b) {
     b[ArrayOp::All] = (void *) +[](const T *a, T *b) { new (b) T(a->all_()); };
     b[ArrayOp::Any] = (void *) +[](const T *a, T *b) { new (b) T(a->any_()); };
+    b[ArrayOp::Count] = (void *) +[](const T *a, uint32_array_t<T> *b) {
+        new (b) uint32_array_t<T>(a->count_());
+    };
 
     b.compress =
         (ArraySupplement::UnaryOp) +

@@ -116,6 +116,36 @@ def test04_sum(t):
     assert dr.allclose(a, [6, 9, 12])
     assert type(a) is m.Float
 
+    a = dr.sum(m.ArrayXf([1, 2, 3], [2, 3, 4], [3, 4, 5]), axis=-1)
+    assert dr.allclose(a, [[6], [9], [12]])
+    assert type(a) is m.ArrayXf
+
+    a = dr.sum(m.Array3f([1, 2, 3], [2, 3, 4], [3, 4, 5]), axis=1)
+    assert dr.allclose(a, [[6], [9], [12]])
+    assert type(a) is m.Array3f
+
+    a = dr.sum(dr.scalar.Matrix2f([1, 2], [3, 4]), axis=0)
+    assert dr.allclose(a, [4, 6])
+    assert type(a) is dr.scalar.Array2f
+
+    a = dr.sum(dr.scalar.Matrix2f([1, 2], [3, 4]), axis=1)
+    assert dr.allclose(a, [3, 7])
+    assert type(a) is dr.scalar.Array2f
+
+    a = dr.sum(dr.scalar.Array2f([3, 7]), axis=0)
+    assert dr.allclose(a, 10)
+    assert type(a) is float
+
+    with pytest.raises(RuntimeError) as ei:
+        a = dr.sum(dr.scalar.Matrix2f([1, 2], [3, 4]), axis=3)
+
+    assert "axis 3 is out of bounds" in str(ei.value)
+
+    with pytest.raises(RuntimeError) as ei:
+        a = dr.sum(dr.scalar.Matrix2f([1, 2], [3, 4]), axis=-3)
+
+    assert "axis -1 is out of bounds" in str(ei.value)
+
 
 @pytest.test_arrays('shape=(*), float, -float64, jit')
 def test05_prod(t):
@@ -305,6 +335,7 @@ def test08_prefix_sum(t):
     assert dr.all(dr.prefix_sum(x) == [0, 3, 6, 9])
     assert dr.all(dr.prefix_sum(x, False) == [3, 6, 9, 12])
 
+
 @pytest.test_arrays('shape=(*), bool')
 def test09_compress(t):
     a = t(False, True, True, False, False, True, False, True, True)
@@ -313,6 +344,7 @@ def test09_compress(t):
     assert dr.all(dr.compress(t(False, False, False)) == [])
     assert dr.all(dr.compress(t()) == [])
 
+
 @pytest.test_arrays('shape=(3, *), float32')
 def test10_sum_avg_mixed_size(t):
     assert dr.all(dr.sum(t([1,2],2,3)) == [6, 7])
@@ -320,3 +352,15 @@ def test10_sum_avg_mixed_size(t):
     assert dr.allclose(dr.mean(t([1,2],2,3)), [2, 7/3])
     assert dr.allclose(dr.mean(t([1,2],2,3), axis=None), [13/6])
     assert dr.mean(3) == 3
+
+
+@pytest.test_arrays('shape=(*), bool')
+def test10_sum_avg_mixed_size(t):
+    i = dr.uint32_array_t(t)
+
+    assert dr.count(t(True, False)) == i(1)
+    assert dr.count(t(True, False, True, True, False, False, False)) == i(3)
+    assert dr.count(t()) == i(0)
+    assert dr.count(False) == 0
+    assert dr.count(True) == 1
+    assert dr.count((True, False)) == 1

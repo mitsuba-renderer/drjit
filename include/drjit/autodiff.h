@@ -363,11 +363,8 @@ struct DRJIT_TRIVIAL_ABI DiffArray
 
     DiffArray dot_(const DiffArray &a) const { return sum(*this * a); }
 
-    uint32_t count_() const {
-        if constexpr (!is_mask_v<Value>)
-            drjit_raise("Unsupported operand type");
-
-        return sum(select(*this, (uint32_t) 1, (uint32_t) 0)).entry(0);
+    auto count_() const {
+        return Detached::borrow((uint32_t) m_index).count_();
     }
 
     auto compress_() const {

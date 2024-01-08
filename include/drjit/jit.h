@@ -341,11 +341,14 @@ struct DRJIT_TRIVIAL_ABI JitArray
 
     JitArray dot_(const JitArray &a) const { return sum(*this * a); }
 
-    uint32_t count_() const {
+    auto count_() const {
         if constexpr (!is_mask_v<Value>)
             drjit_raise("Unsupported operand type");
 
-        return sum(select(*this, (uint32_t) 1, (uint32_t) 0)).entry(0);
+        if (!m_index)
+            return uint32_array_t<JitArray>(0);
+
+        return sum(select(*this, (uint32_t) 1, (uint32_t) 0));
     }
 
     //! @}
