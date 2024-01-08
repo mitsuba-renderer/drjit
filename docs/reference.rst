@@ -94,6 +94,7 @@ These operations are *horizontal* in the sense that [..]
 .. autofunction:: all
 .. autofunction:: any
 .. autofunction:: none
+.. autofunction:: count
 .. autofunction:: prefix_sum
 .. autofunction:: cumsum
 .. autofunction:: reverse
@@ -101,7 +102,7 @@ These operations are *horizontal* in the sense that [..]
 Mask operations
 ---------------
 
-Also relevant here are :py:func:`any`, :py:func:`all`.
+Also relevant here are :py:func:`any`, :py:func:`all`, :py:func:`none`, and :py:func:`count`.
 
 .. autofunction:: select
 .. autofunction:: isinf

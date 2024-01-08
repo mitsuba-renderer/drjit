@@ -217,6 +217,20 @@ struct DynamicArray
         }
     }
 
+    DynamicArray<uint32_t> count_() const {
+        if constexpr (!IsMask) {
+            drjit_raise("Unsupported argument type!");
+        } else {
+            uint32_t accum = 0;
+            for (size_t i = 0; i < m_size; ++i) {
+                if (m_data[i])
+                    ++accum;
+            }
+            return DynamicArray<uint32_t>(accum);
+        }
+    }
+
+
     void init_(size_t size) {
         if (size == 0)
             return;

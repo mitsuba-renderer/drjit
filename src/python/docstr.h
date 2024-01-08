@@ -214,14 +214,14 @@ Returns:
 )";
 
 static const char *doc_is_half_v = R"(
-Check whether the input array instance or type is a Dr.Jit half-precision floating 
+Check whether the input array instance or type is a Dr.Jit half-precision floating
 point array or a Python ``half`` value/type.
 
 Args:
     arg (object): An arbitrary Python object
 
 Returns:
-    bool: ``True`` if ``arg`` represents a Dr.Jit half-precision 
+    bool: ``True`` if ``arg`` represents a Dr.Jit half-precision
     floating point array or Python ``half`` instance or type.
 )";
 
@@ -510,11 +510,11 @@ Returns:
 static const char *doc_min = R"(
 Compute the minimum of the input array or tensor along one or multiple axes.
 
-This function performs a horizontal minimum reduction of the input array,
-tensor, or Python sequence along one or multiple axes. By default, it computes
-the minimum along the outermost axis; specify ``axis=None`` to process all of
-them at once. The minimum of an empty array is considered to be equal to
-positive infinity.
+By default, it computes the minimum along index ``0``, which refers to the
+outermost axis. Negative indices (e.g. ``-1``) count backwards from the
+innermost axis. The special argument ``axis=None`` causes a simultaneous
+reduction over all axes. The minimum of an empty array is considered to be
+equal to positive infinity.
 
 See the section on :ref:`horizontal reductions <horizontal-reductions>` for
 important general information about their properties.
@@ -522,9 +522,10 @@ important general information about their properties.
 Args:
     value (float | int | Sequence | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
 
-    axis (int | None): The axis along which to reduce (Default: ``0``). A value
-        of ``None`` causes a simultaneous reduction along all axes. Currently, only
-        values of ``0`` and ``None`` are supported.
+    axis (int | None): The axis along which to reduce. The default value of
+      ``0`` refers to the outermost axis. Negative values count backwards from
+      the innermost axis. A value of ``None`` causes a simultaneous reduction
+      along all axes.
 
 Returns:
     float | int | drjit.ArrayBase: Result of the reduction operation)";
@@ -624,10 +625,13 @@ static const char *doc_max = R"(
 Compute the maximum of the input array or tensor along one or multiple axes.
 
 This function performs a horizontal maximum reduction of the input array,
-tensor, or Python sequence along one or multiple axes. By default, it computes
-the maximum along the outermost axis; specify ``axis=None`` to process all of
-them at once. The maximum of an empty array is considered to be equal to
-positive infinity.
+tensor, or Python sequence along one or multiple axes.
+
+By default, it computes the maximum along index ``0``, which refers to the
+outermost axis. Negative indices (e.g. ``-1``) count backwards from the
+innermost axis. The special argument ``axis=None`` causes a simultaneous
+reduction over all axes. The maximum of an empty array is considered to be
+equal to negative infinity.
 
 See the section on :ref:`horizontal reductions <horizontal-reductions>` for
 important general information about their properties.
@@ -635,9 +639,10 @@ important general information about their properties.
 Args:
     value (float | int | Sequence | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
 
-    axis (int | None): The axis along which to reduce (Default: ``0``). A value
-        of ``None`` causes a simultaneous reduction along all axes. Currently, only
-        values of ``0`` and ``None`` are supported.
+    axis (int | None): The axis along which to reduce. The default value of
+      ``0`` refers to the outermost axis. Negative values count backwards from
+      the innermost axis. A value of ``None`` causes a simultaneous reduction
+      along all axes.
 
 Returns:
     float | int | drjit.ArrayBase: Result of the reduction operation)";
@@ -646,9 +651,12 @@ static const char *doc_sum = R"(
 Compute the sum of the input array or tensor along one or multiple axes.
 
 This function performs a horizontal sum reduction by adding values of the input
-array, tensor, or Python sequence along one or multiple axes. By default, it
-sums along the outermost axis; specify ``axis=None`` to sum over all of them at
-once. The horizontal sum of an empty array is considered to be zero.
+array, tensor, or Python sequence along one or multiple axes.
+
+By default, it sums along index ``0``, which refers to the outermost axis.
+Negative indices (e.g. ``-1``) count backwards from the innermost axis. The
+special argument ``axis=None`` causes a simultaneous reduction over all axes.
+The horizontal sum of an empty array is considered to be zero.
 
 See the section on :ref:`horizontal reductions <horizontal-reductions>` for
 important general information about their properties.
@@ -656,9 +664,10 @@ important general information about their properties.
 Args:
     value (float | int | Sequence | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
 
-    axis (int | None): The axis along which to reduce (Default: ``0``). A value
-        of ``None`` causes a simultaneous reduction along all axes. Currently, only
-        values of ``0`` and ``None`` are supported.
+    axis (int | None): The axis along which to reduce. The default value of
+      ``0`` refers to the outermost axis. Negative values count backwards from
+      the innermost axis. A value of ``None`` causes a simultaneous reduction
+      along all axes.
 
 Returns:
     float | int | drjit.ArrayBase: Result of the reduction operation)";
@@ -667,10 +676,12 @@ static const char *doc_prod = R"(
 Compute the product of the input array or tensor along one or multiple axes.
 
 This function performs horizontal product reduction by multiplying values of
-the input array, tensor, or Python sequence along one or multiple axes. By
-default, it multiplies along the outermost axis; specify ``axis=None`` to
-process all of them at once. The horizontal product of an empty array is
-considered to be equal to one.
+the input array, tensor, or Python sequence along one or multiple axes. 
+
+By default, it multiplies along index ``0``, which refers to the outermost axis.
+Negative indices (e.g. ``-1``) count backwards from the innermost axis. The
+special argument ``axis=None`` causes a simultaneous reduction over all axes.
+The horizontal product of an empty array is considered to be equal to one.
 
 See the section on :ref:`horizontal reductions <horizontal-reductions>` for
 important general information about their properties.
@@ -678,9 +689,10 @@ important general information about their properties.
 Args:
     value (float | int | Sequence | drjit.ArrayBase): A Python or Dr.Jit arithmetic type
 
-    axis (int | None): The axis along which to reduce (Default: ``0``). A value
-        of ``None`` causes a simultaneous reduction along all axes. Currently, only
-        values of ``0`` and ``None`` are supported.
+    axis (int | None): The axis along which to reduce. The default value of
+      ``0`` refers to the outermost axis. Negative values count backwards from
+      the innermost axis. A value of ``None`` causes a simultaneous reduction
+      along all axes.
 
 Returns:
     float | int | drjit.ArrayBase: Result of the reduction operation)";
@@ -691,9 +703,10 @@ Check if all elements along the specified axis are active.
 Given a boolean-valued input array, tensor, or Python sequence, this function
 reduces elements using the ``&`` (AND) operator.
 
-By default, it reduces along the outermost axis; specify ``axis=None`` to
-reduce along all axes. Note that the reduced form of an *empty* array is
-considered to be ``True``. 
+By default, it reduces along index ``0``, which refers to the outermost axis.
+Negative indices (e.g. ``-1``) count backwards from the innermost axis. The
+special argument ``axis=None`` causes a simultaneous reduction over all axes.
+Note that the reduced form of an *empty* array is considered to be ``True``.
 
 See the section on :ref:`horizontal reductions <horizontal-reductions>` for
 important general information about their properties.
@@ -701,9 +714,10 @@ important general information about their properties.
 Args:
     value (bool | Sequence | drjit.ArrayBase): A Python or Dr.Jit mask type
 
-    axis (int | None): The axis along which to reduce (Default: ``0``). A value
-        of ``None`` causes a simultaneous reduction along all axes. Currently, only
-        values of ``0`` and ``None`` are supported.
+    axis (int | None): The axis along which to reduce. The default value of
+      ``0`` refers to the outermost axis. Negative values count backwards from
+      the innermost axis. A value of ``None`` causes a simultaneous reduction
+      along all axes.
 
 Returns:
     bool | drjit.ArrayBase: Result of the reduction operation)";
@@ -714,9 +728,10 @@ Check if any elements along the specified axis are active.
 Given a boolean-valued input array, tensor, or Python sequence, this function
 reduces elements using the ``|`` (OR) operator.
 
-By default, it reduces along the outermost axis; specify ``axis=None`` to
-reduce along all axes. Note that the reduced form of an *empty* array is
-considered to be ``True``. 
+By default, it reduces along index ``0``, which refers to the outermost axis.
+Negative indices (e.g. ``-1``) count backwards from the innermost axis. The
+special argument ``axis=None`` causes a simultaneous reduction over all axes.
+Note that the reduced form of an *empty* array is considered to be ``False``.
 
 See the section on :ref:`horizontal reductions <horizontal-reductions>` for
 important general information about their properties.
@@ -724,9 +739,10 @@ important general information about their properties.
 Args:
     value (bool | Sequence | drjit.ArrayBase): A Python or Dr.Jit mask type
 
-    axis (int | None): The axis along which to reduce (Default: ``0``). A value
-        of ``None`` causes a simultaneous reduction along all axes. Currently, only
-        values of ``0`` and ``None`` are supported.
+    axis (int | None): The axis along which to reduce. The default value of
+      ``0`` refers to the outermost axis. Negative values count backwards from
+      the innermost axis. A value of ``None`` causes a simultaneous reduction
+      along all axes.
 
 Returns:
     bool | drjit.ArrayBase: Result of the reduction operation)";
@@ -738,9 +754,10 @@ Given a boolean-valued input array, tensor, or Python sequence, this function
 reduces elements using the ``|`` (OR) operator and finally returns the bit-wise
 *inverse* of the result.
 
-By default, it reduces along the outermost axis; specify ``axis=None`` to
-reduce along all axes. Note that the reduced form of an *empty* array is
-considered to be ``False``. 
+By default, it reduces along index ``0``, which refers to the outermost axis.
+Negative indices (e.g. ``-1``) count backwards from the innermost axis. The
+special argument ``axis=None`` causes a simultaneous reduction over all axes.
+Note that the reduced form of an *empty* array is considered to be ``False``.
 
 See the section on :ref:`horizontal reductions <horizontal-reductions>` for
 important general information about their properties.
@@ -748,9 +765,10 @@ important general information about their properties.
 Args:
     value (bool | Sequence | drjit.ArrayBase): A Python or Dr.Jit mask type
 
-    axis (int | None): The axis along which to reduce (Default: ``0``). A value
-        of ``None`` causes a simultaneous reduction along all axes. Currently, only
-        values of ``0`` and ``None`` are supported.
+    axis (int | None): The axis along which to reduce. The default value of
+      ``0`` refers to the outermost axis. Negative values count backwards from
+      the innermost axis. A value of ``None`` causes a simultaneous reduction
+      along all axes.
 
 Returns:
     bool | drjit.ArrayBase: Result of the reduction operation)";
@@ -1080,7 +1098,7 @@ The `error function <https://en.wikipedia.org/wiki/Error_function>` is
 defined as
 
 .. math::
-    
+
     \operatorname{erf}(z) = \frac{2}{\sqrt\pi}\int_0^z e^{-t^2}\,\mathrm{d}t.
 
 See the section on :ref:`transcendental function approximations
@@ -5428,7 +5446,7 @@ static const char* doc_Texture_init = R"(
 Create a new texture with the specified size and channel count
 
 On CUDA, this is a slow operation that synchronizes the GPU pipeline, so
-texture objects should be reused/updated via :py:func:`set_value()` and 
+texture objects should be reused/updated via :py:func:`set_value()` and
 :py:func:`set_tensor()` as much as possible.
 
 When ``use_accel`` is set to ``False`` on CUDA mode, the texture will not
@@ -5450,19 +5468,19 @@ which indefinitely extends the colors on the boundary along each dimension.)";
 static const char* doc_Texture_init_tensor = R"(
 Construct a new texture from a given tensor.
 
-This constructor allocates texture memory with the shape information 
-deduced from ``tensor``. It subsequently invokes :py:func:`set_tensor(tensor)` 
+This constructor allocates texture memory with the shape information
+deduced from ``tensor``. It subsequently invokes :py:func:`set_tensor(tensor)`
 to fill the texture memory with the provided tensor.
 
-When both ``migrate`` and ``use_accel`` are set to ``True`` in CUDA mode, the texture 
-exclusively stores a copy of the input data as a CUDA texture to avoid 
+When both ``migrate`` and ``use_accel`` are set to ``True`` in CUDA mode, the texture
+exclusively stores a copy of the input data as a CUDA texture to avoid
 redundant storage. Note that the texture is still differentiable even when migrated.)";
 
 static const char* doc_Texture_set_value = R"(
 Override the texture contents with the provided linearized 1D array.
 
-In CUDA mode, when both the argument ``migrate`` and :py:func:`use_accel()` are ``True``, 
-the texture exclusively stores a copy of the input data as a CUDA texture to avoid 
+In CUDA mode, when both the argument ``migrate`` and :py:func:`use_accel()` are ``True``,
+the texture exclusively stores a copy of the input data as a CUDA texture to avoid
 redundant storage.Note that the texture is still differentiable even when migrated.)";
 
 static const char* doc_Texture_set_tensor = R"(
@@ -5473,8 +5491,8 @@ resolution or its number of channels is also supported. However, on CUDA,
 such operations have a significantly larger overhead (the GPU pipeline
 needs to be synchronized for new texture objects to be created).
 
-In CUDA mode, when both the argument ``migrate`` and :py:func:`use_accel()` are ``True``, 
-the texture exclusively stores a copy of the input data as a CUDA texture to avoid 
+In CUDA mode, when both the argument ``migrate`` and :py:func:`use_accel()` are ``True``,
+the texture exclusively stores a copy of the input data as a CUDA texture to avoid
 redundant storage.Note that the texture is still differentiable even when migrated.)";
 
 static const char* doc_Texture_value = R"(Return the texture data as an array object)";
@@ -5547,7 +5565,7 @@ shape.)";
 static const char* doc_Texture_eval_cubic_helper = R"(
 Helper function to evaluate a clamped cubic B-Spline interpolant
 
-This is an implementation detail and should only be called by the 
+This is an implementation detail and should only be called by the
 :py:func:`eval_cubic()` function to construct an AD graph. When only the cubic
 evaluation result is desired, the :py:func:`eval_cubic()` function is faster
 than this simple implementation)";
@@ -6119,6 +6137,34 @@ Args:
 
 Returns:
     Array of nonzero indices)";
+
+
+static const char *doc_count = R"(
+Compute the number of active entries along the given axis.
+
+Given a boolean-valued input array, tensor, or Python sequence, this function
+reduces elements using the ``+`` operator (interpreting ``True`` elements as
+``1`` and ``False`` elements as ``0``). It returns an unsigned 32-bit version
+of the input array.
+
+By default, it reduces along index ``0``, which refers to the outermost axis.
+Negative indices (e.g. ``-1``) count backwards from the innermost axis. The
+special argument ``axis=None`` causes a simultaneous reduction over all axes.
+Note that the reduced form of an *empty* array is considered to be zero.
+
+See the section on :ref:`horizontal reductions <horizontal-reductions>` for
+important general information about their properties.
+
+Args:
+    value (bool | Sequence | drjit.ArrayBase): A Python or Dr.Jit mask type
+
+    axis (int | None): The axis along which to reduce. The default value of
+      ``0`` refers to the outermost axis. Negative values count backwards from
+      the innermost axis. A value of ``None`` causes a simultaneous reduction
+      along all axes.
+
+Returns:
+    int | drjit.ArrayBase: Result of the reduction operation)";
 
 #if defined(__GNUC__)
 #  pragma GCC diagnostic pop

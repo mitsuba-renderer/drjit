@@ -174,27 +174,29 @@ By default, these functions reduce along the outermost dimension and return an
 instance of the array's element type. For instance, sum-reducing an array ``a`` of
 type :py:class:`drjit.cuda.Array3f` would just be a convenient abbreviation for
 the expression ``a[0] + a[1] + a[2]`` of type :py:class:`drjit.cuda.Float`.
-Dr.Jit can execute this operation symbolically.
+Dr.Jit can trace this operation and include it in the generated kernel (i.e.,
+it is *symbolic*).
 
 Reductions of dynamic 1D arrays (e.g., :py:class:`drjit.cuda.Float`) are an
 important special case. Since each value of such an array represents a
 different execution thread of a parallel program, Dr.Jit must first invoke
 :py:func:`drjit.eval` to evaluate and store the array in memory and then launch
-a device-specific implementation of a horizontal reduction. This interferes
+a device-specific implementation of a horizontal reduction. This interferes with
 Dr.Jit's regular mode of operation, which is to capture a maximally large
 program without intermediate evaluation. In other words, use of such 1D
 reductions may have a negative effect on performance. The operation will fail
 in execution contexts where evaluation is forbidden, e.g., while capturing
-symbolic loops and function calls.
+symbolic loops and function calls. Atomic operations like
+:py:func:`drjit.scatter_add` can be an interesting alternative in such cases.
 
-Furthermore Dr.Jit does *not* reduce 1D arrays to their element type (e.g., a
-standard Python `float`). Instead, it returns a dynamic array of the same type,
-containing only a single element. This is intentional--unboxing the array into
-a Python scalar would require transferring the value to the CPU, which would
-incur GPU<->CPU synchronization overheads. You must explicitly index into the
-result (``result[0]``) to obtain a value with the underlying element type.
-Boolean arrays define a ``__bool__`` method so that such indexing can be
-avoided. For example, the following works as expected:
+Furthermore Dr.Jit does *not* reduce dynamic 1D arrays to their element type
+(e.g., a standard Python `float`). Instead, it returns a dynamic array of the
+same type, containing only a single element. This is intentional--unboxing the
+array into a Python scalar would require transferring the value to the CPU,
+which would incur GPU<->CPU synchronization overheads. You must explicitly
+index into the result (``result[0]``) to obtain a value with the underlying
+element type. Boolean arrays define a ``__bool__`` method so that such indexing
+can be avoided. For example, the following works as expected:
 
 .. code-block:: python
 
@@ -204,9 +206,10 @@ avoided. For example, the following works as expected:
       # ...
 
 All reduction operations take an optional argument ``axis`` that specifies the
-axis of the reduction (default: ``0``). The value ``None`` implies a reduction
-over all array axes. Arguments other than ``0`` and ``None`` are currently
-unsupported.
+axis of the reduction. Its default value ``0`` implies a reduction over the
+outermost axis. Negative indices (e.g. ``-1``) count backwards from the
+innermost axis. The special argument ``axis=None`` causes a simultaneous
+reduction over all axes.
 
 .. _pytrees:
 

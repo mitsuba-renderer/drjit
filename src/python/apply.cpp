@@ -88,6 +88,7 @@ static const char *op_names[] = {
     // Horizontal reductions
     "all",
     "any",
+    "count",
     "sum",
     "prod",
     "min",
@@ -98,7 +99,7 @@ static const char *op_names[] = {
     "__richcmp__",
 };
 
-static_assert(sizeof(op_names) == sizeof(const char *) * (int) ArrayOp::Count,
+static_assert(sizeof(op_names) == sizeof(const char *) * (int) ArrayOp::OpCount,
               "op_names array is missing entries!");
 
 static void raise_incompatible_size_error(Py_ssize_t *sizes, size_t N) {

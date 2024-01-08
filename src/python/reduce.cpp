@@ -59,9 +59,48 @@ nb::object reduce(const char *name, ArrayOp op_id, nb::handle h,
             return o;
         }
 
-        if (axis.value() != 0)
-            nb::raise(
-                "reductions are currently limited to axis=0 or axis=None!");
+        int axis_value = axis.value();
+        dr_vector<size_t> shape;
+
+        if (axis_value != 0 && s) {
+            shape_impl(h, shape);
+            int ndim = (int) shape.size();
+
+            if (axis_value < 0)
+                axis_value += ndim;
+
+            if (axis_value < 0 || axis_value >= ndim)
+                nb::raise("axis %i is out of bounds.", axis_value);
+        }
+
+        if (axis_value != 0) {
+            if (!s || s->is_tensor)
+                nb::raise(
+                    "reductions with 'axis' other than '0' or 'None' "
+                    "are currently only supported for nested arrays.");
+
+            ArrayMeta m = *s;
+            if (axis_value == (int) shape.size() - 1 && m.shape[axis_value] == DRJIT_DYNAMIC) {
+                shape[axis_value] = 1;
+            } else {
+                m.is_matrix = m.is_quaternion = m.is_complex = false;
+                for (int i = axis_value; i < m.ndim - 1; ++i) {
+                    m.shape[i] = m.shape[i + 1];
+                    shape[i] = shape[i + 1];
+                }
+                m.ndim--;
+                shape.resize(shape.size() - 1);
+            }
+
+            nb::object result =
+                array_module.attr("empty")(meta_get_type(m), cast_shape(shape));
+
+            size_t i = 0;
+            for (nb::handle h2 : h)
+                result[i++] = reduce(name, op_id, h2, axis_value - 1, reduce_skip, reduce_init, reduce_combine);
+
+            return result;
+        }
 
         if (s) {
             void *op = s->op[(int) op_id];
@@ -70,6 +109,11 @@ nb::object reduce(const char *name, ArrayOp op_id, nb::handle h,
                                      "or Python sequence as input.");
 
             if (op != DRJIT_OP_DEFAULT) {
+                if (op_id == ArrayOp::Count) {
+                    ArrayMeta m = *s;
+                    m.type = (uint16_t) VarType::UInt32;
+                    tp = meta_get_type(m);
+                }
                 nb::object result = nb::inst_alloc(tp);
                 ((ArraySupplement::UnaryOp) op)(inst_ptr(h), inst_ptr(result));
                 nb::inst_mark_ready(result);
@@ -182,6 +226,16 @@ nb::object none(nb::handle h, std::optional<int> axis) {
     } else {
         return ~result;
     }
+}
+
+nb::object count(nb::handle h, std::optional<int> axis) {
+    return reduce(
+        "count", ArrayOp::Count, h, axis,
+        [](nb::handle tp) { return tp.is(&PyBool_Type); },
+        []() -> nb::object { return nb::int_(0); },
+        [](nb::handle h1, nb::handle h2) {
+            return h1 + array_module.attr("select")(h2, nb::int_(1), nb::int_(0));
+        });
 }
 
 nb::object sum(nb::handle h, std::optional<int> axis) {
@@ -305,6 +359,7 @@ void export_reduce(nb::module_ & m) {
     m.def("all", &all, "value"_a, "axis"_a.none() = 0, doc_all)
      .def("any", &any, "value"_a, "axis"_a.none() = 0, doc_any)
      .def("none", &none, "value"_a, "axis"_a.none() = 0, doc_none)
+     .def("count", &count, "value"_a, "axis"_a.none() = 0, doc_count)
      .def("sum", &sum, "value"_a, "axis"_a.none() = 0, doc_sum)
      .def("prod", &prod, "value"_a, "axis"_a.none() = 0, doc_prod)
      .def("min", &min, "value"_a, "axis"_a.none() = 0, doc_min)
