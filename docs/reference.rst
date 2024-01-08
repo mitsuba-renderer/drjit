@@ -818,8 +818,9 @@ ____________________________________
     :type: NoneType
     :value: None
 
-    Special size value used to create new axes in slicing
-    expressions (analogous to a similar feature in NumPy).
+    This variable stores an alias of ``None``. It is used to create new axes in
+    tensor slicing operations (analogous to ``np.newaxis`` in NumPy). See the
+    discussion of :ref:`tensors <tensors>` for an example.
 
 Access to related types
 _______________________
