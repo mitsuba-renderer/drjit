@@ -355,7 +355,7 @@ struct ArrayBinding : ArraySupplement {
 NAMESPACE_BEGIN(detail)
 
 template <typename T>
-constexpr uint8_t size_or_zero_v = drjit::detail::is_scalar_v<T> ? 0 : (uint8_t) size_v<T>;
+constexpr uint8_t size_or_zero_v = drjit::detail::is_scalar_v<T> ? 0 : (uint8_t) (size_v<T> == (size_t) - 1 ? 255 : size_v<T>);
 
 NAMESPACE_END(detail)
 

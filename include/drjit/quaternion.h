@@ -34,23 +34,23 @@ struct Quaternion : StaticArrayImpl<Value_, 4, false, Quaternion<Value_>> {
     Quaternion() = default;
 
     template <typename T, enable_if_t<is_quaternion_v<T> || depth_v<T> == Base::Depth> = 0>
-    DRJIT_INLINE Quaternion(T&& q) : Base(std::forward<T>(q)) { }
+    Quaternion(T&& q) : Base(std::forward<T>(q)) { }
 
     template <typename T, enable_if_t<!is_quaternion_v<T> && depth_v<T> != Base::Depth &&
                                        (is_array_v<T> || std::is_scalar_v<std::decay_t<T>>)> = 0>
-    DRJIT_INLINE Quaternion(T&& v) : Base(zeros<Value_>(), zeros<Value_>(), zeros<Value_>(), std::forward<T>(v)) { }
+    Quaternion(T&& v) : Base(zeros<Value_>(), zeros<Value_>(), zeros<Value_>(), std::forward<T>(v)) { }
 
     template <typename T, enable_if_t<!is_array_v<T> && !std::is_scalar_v<std::decay_t<T>>> = 0> // __m128, __m256d
-    DRJIT_INLINE Quaternion(T&& v) : Base(v) { }
+    Quaternion(T&& v) : Base(v) { }
 
-    DRJIT_INLINE Quaternion(const Value_ &vi, const Value_ &vj, const Value_ &vk, const Value_ &vr)
+    Quaternion(const Value_ &vi, const Value_ &vj, const Value_ &vk, const Value_ &vr)
         : Base(vi, vj, vk, vr) { }
 
-    DRJIT_INLINE Quaternion(Value_ &&vi, Value_ &&vj, Value_ &&vk, Value_ &&vr)
+    Quaternion(Value_ &&vi, Value_ &&vj, Value_ &&vk, Value_ &&vr)
         : Base(std::move(vi), std::move(vj), std::move(vk), std::move(vr)) { }
 
     template <typename Im, typename Re, enable_if_t<size_v<Im> == 3> = 0>
-    DRJIT_INLINE Quaternion(const Im &im, const Re &re)
+    Quaternion(const Im &im, const Re &re)
         : Base(im.x(), im.y(), im.z(), re) { }
 
     template <typename T1, typename T2, typename T = Quaternion, enable_if_t<

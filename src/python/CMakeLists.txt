@@ -55,6 +55,10 @@ target_include_directories(drjit-python
 
 target_compile_definitions(drjit-python PRIVATE -DDRJIT_PYTHON_BUILD)
 
+if (MSVC)
+  target_compile_options(drjit-python PRIVATE /wd4714) # function marked as __forceinline not inlined
+endif()
+
 configure_file(
   ../../resources/config.py.in
   ${CMAKE_CURRENT_BINARY_DIR}/../../drjit/config.py

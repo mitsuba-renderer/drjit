@@ -35,22 +35,22 @@ struct Complex : StaticArrayImpl<Value_, 2, false, Complex<Value_>> {
     Complex() = default;
 
     template <typename T, enable_if_t<is_complex_v<T> || depth_v<T> == Base::Depth> = 0>
-    DRJIT_INLINE Complex(T&& z) : Base(std::forward<T>(z)) { }
+    Complex(T&& z) : Base(std::forward<T>(z)) { }
 
     template <typename T, enable_if_t<!is_complex_v<T> && depth_v<T> != Base::Depth &&
                                        (is_array_v<T> || drjit::detail::is_scalar_v<std::decay_t<T>>)> = 0>
-    DRJIT_INLINE Complex(T&& z) : Base(std::forward<T>(z), zeros<Value_>()) { }
+    Complex(T&& z) : Base(std::forward<T>(z), zeros<Value_>()) { }
 
     template <typename T, enable_if_t<!is_array_v<T> && !drjit::detail::is_scalar_v<std::decay_t<T>>> = 0> // __m128d
-    DRJIT_INLINE Complex(T&& z) : Base(z) { }
+    Complex(T&& z) : Base(z) { }
 
-    DRJIT_INLINE Complex(const Value_ &v1, const Value_ &v2) : Base(v1, v2) { }
-    DRJIT_INLINE Complex(Value_ &&v1, Value_ &&v2)
+    Complex(const Value_ &v1, const Value_ &v2) : Base(v1, v2) { }
+    Complex(Value_ &&v1, Value_ &&v2)
         : Base(std::move(v1), std::move(v2)) { }
 };
 
-template <typename T> DRJIT_INLINE T real(const Complex<T> &z) { return z.x(); }
-template <typename T> DRJIT_INLINE T imag(const Complex<T> &z) { return z.y(); }
+template <typename T> T real(const Complex<T> &z) { return z.x(); }
+template <typename T> T imag(const Complex<T> &z) { return z.y(); }
 
 template <typename T, enable_if_complex_t<T> = 0>
 T identity(size_t size = 1) {

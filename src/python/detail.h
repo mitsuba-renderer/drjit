@@ -16,7 +16,6 @@
 
 #if defined(_MSC_VER)
 #  pragma warning (disable: 4324) // structure was padded due to alignment specifier (in TSL robin_map)
-#  pragma warning (disable: 4127) // conditional expression is constant (in TSL robin_map)
 #endif
 
 /// Helper data structure to track copies performed by \ref copy(), \ref update_indices()

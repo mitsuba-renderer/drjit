@@ -275,11 +275,6 @@ template <typename T> struct PCG32 {
             return next_uint32_bounded(bound, mask);
     }
 
-#if defined(_MSC_VER)
-  #pragma warning(push)
-  #pragma warning(disable : 4127) /* warning C4127 conditional expression is constant */
-#endif
-
     /**
      * \brief Multi-step advance function (jump-ahead, jump-back)
      *
@@ -347,10 +342,6 @@ template <typename T> struct PCG32 {
 
         return Int64(distance);
     }
-
-#if defined(_MSC_VER)
-#  pragma warning(pop)
-#endif
 
     /**
      * \brief Draw uniformly distributed permutation and permute the
