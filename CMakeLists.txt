@@ -165,7 +165,7 @@ if (DRJIT_MASTER_PROJECT)
 
   if (DRJIT_ENABLE_PYTHON)
     install(TARGETS drjit-python DESTINATION drjit)
-    install(FILES drjit/config.py DESTINATION drjit)
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/drjit/config.py DESTINATION drjit)
   endif()
 
   if (DRJIT_ENABLE_JIT)
