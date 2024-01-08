@@ -1172,3 +1172,4 @@ def meshgrid(*args, indexing='xy'):
 
 syntax = _ast.syntax
 hint = _ast.hint
+newaxis = None
