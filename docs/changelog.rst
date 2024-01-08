@@ -8,32 +8,30 @@ Changelog
 DrJit 1.0.0 (TBA)
 -----------------
 
-Dr.Jit 1.0 represents a major redesign of many parts of this project. The
-following list covers the most important changes and their impact on
+Dr.Jit 1.0 represents a major redesign of many parts of this project. Due to
+the magnitude of these changes, you may observe occasional incompatibilities.
+If they are not reported here, please open a ticket so that they can either be
+documented (if intentional) or fixed.
+
+The following list covers the most important changes and their impact on
 source-level compatibility. Points with an exclamation sign cover
 incompatibilities and potential stumbling blocks.
 
 - ⚠️ **Python bindings**: Dr.Jit comes with an all-new set of Python bindings
   created using the `nanobind <https://github.com/wjakob/nanobind>`__ library.
-  This was also an opportunity to fix many long-standing binding-related
-  problems:
 
   - Tracing Dr.Jit code written in Python is now *significantly* faster. Expect
-    speedups by a factor of ~10-20×. The shared libraries containing the
-    bindings have also become much smaller (from ~10MB to just over ~1MB).
+    speedups by a factor of ~10-20×. 
 
-  - All functions now have a reference documentation that clearly specifies
-    their behavior and accepted inputs. Their behavior with respect to less
-    common inputs (tensors, :ref:`PyTrees <pytrees>`) was made consistent
-    and documented across the codebase.
+    Less important, but also useful: compilation of Dr.Jit itself and of
+    projects *using* Dr.Jit is faster, and produces smaller binaries.
 
   - Dr.Jit can now target Python's `stable ABI
     <https://docs.python.org/3/c-api/stable.html#stable-abi>`__, which means
     that binary extensions are forward-compatible to future Python versions.
 
-  - Due to the magnitude of these changes, you may observe occasional
-    incompatibilities. If they are not reported here, please open a ticket so
-    that they can either be documented (if intentional) or fixed.
+  This was also an opportunity to fix many long-standing binding-related
+  problems:
 
 - ⚠️ **Control flow**: You can now express vectorized loops and conditionals
   using natural Python syntax. Consider the following snippet to compute an
@@ -78,6 +76,11 @@ incompatibilities and potential stumbling blocks.
   previously failed with an error message when they detected differentiable
   variables. Both symbolic loops and conditionals now support differentiation
   in forward and reverse modes.
+
+- **Documentation**: every part of Dr.Jit now provides extensive reference
+  documentation that clearly specifies their behavior and accepted inputs.
+  Their behavior with respect to less common inputs (tensors, :ref:`PyTrees
+  <pytrees>`) was made consistent
 
 - ⚠️ **Comparison operators**: The ``==`` and ``!=`` comparisons previously
   reduced the result of to a single Python ``bool``. They now return an array
