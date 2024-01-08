@@ -447,7 +447,7 @@ Tensors
 -------
 
 Dr.Jit also includes a general n-dimensional array type (nowadays colloquially
-referred to as a `tensor https://en.wikipedia.org/wiki/Tensor>`__, though this
+referred to as a `tensor <https://en.wikipedia.org/wiki/Tensor>`__, though this
 term technically isn't 100% correct). The tensor types all have a capital ``X``
 in their name to denote their dynamic shape (e.g.,
 :py:class:`drjit.cuda.TensorXf16`).
@@ -458,7 +458,7 @@ creation operations.
 
 .. code-block:: pycon
 
-   from drjit.llvm import TensorXf
+   >>> from drjit.llvm import TensorXf
    >>> t = TensorXf([1,2,3,4,5,6], shape=(3, 2))
    >>> print(t)
    [[1, 2],
@@ -473,7 +473,7 @@ creation operations.
       [0, 0, 0, 0]]]]
 
 The shape and flat array underlying a tensor can be accessed using its
-``.shape`` and ``.array`` members.
+:py:attr:`.shape <drjit.ArrayBase.shape>` and :py:attr:`.array <drjit.ArrayBase.array>` members.
 
 .. code-block:: pycon
 
