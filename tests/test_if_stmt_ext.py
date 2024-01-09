@@ -12,13 +12,17 @@ def get_pkg(t):
 
 @pytest.test_arrays('uint32,is_diff,shape=(*)')
 def test01_scalar_cond(t):
-    pkg = get_pkg(t)
+    pkg = pytest.importorskip("if_stmt_ext")
     assert pkg.scalar_cond() == 5
 
+@pytest.test_arrays('uint32,is_diff,shape=(*)')
+def test02_packet_cond(t):
+    pkg = pytest.importorskip("if_stmt_ext")
+    assert pkg.packet_cond()
 
 @pytest.mark.parametrize('symbolic', [True, False])
 @pytest.test_arrays('uint32,is_diff,shape=(*)')
-def test02_simple_cond(t, symbolic):
+def test03_simple_cond(t, symbolic):
     with dr.scoped_set_flag(dr.JitFlag.SymbolicConditionals, symbolic):
         pkg = get_pkg(t)
         i = pkg.simple_cond()
@@ -26,7 +30,7 @@ def test02_simple_cond(t, symbolic):
 
 @pytest.mark.parametrize('symbolic', [True, False])
 @pytest.test_arrays('float32,is_diff,shape=(*)')
-def test03_simple_diff(t, symbolic):
+def test04_simple_diff(t, symbolic):
     with dr.scoped_set_flag(dr.JitFlag.SymbolicConditionals, symbolic):
         pkg = get_pkg(t)
         x = t(-2, -1, 1, 2)

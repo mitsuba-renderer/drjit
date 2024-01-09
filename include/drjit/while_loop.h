@@ -25,10 +25,9 @@ StateD while_loop_impl(std::index_sequence<Is...>, State &&state_, Cond &&cond,
     using Mask = std::decay_t<decltype(cond(dr_get<Is>(state_)...))>;
 
     if constexpr (std::is_same_v<Mask, bool>) {
-        DRJIT_MARK_USED(name);
-
-        StateD state(std::forward<State>(state_));
         // This is a simple scalar loop
+        DRJIT_MARK_USED(name);
+        StateD state(std::forward<State>(state_));
         while (cond(dr_get<Is>(state)...))
             body(dr_get<Is>(state)...);
 
@@ -36,9 +35,9 @@ StateD while_loop_impl(std::index_sequence<Is...>, State &&state_, Cond &&cond,
     } else if constexpr (is_array_v<Mask> && !is_jit_v<Mask>) {
         // This is a packet-based vectorized loop
         DRJIT_MARK_USED(name);
-
         StateD state(std::forward<State>(state_));
         Mask active = true;
+
         while (true) {
             active &= cond(dr_get<Is>(state)...);
             if (none(active))
