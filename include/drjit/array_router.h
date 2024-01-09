@@ -160,6 +160,8 @@ DRJIT_ROUTE_BINARY(operator<,  lt)
 DRJIT_ROUTE_BINARY(operator<=, le)
 DRJIT_ROUTE_BINARY(operator>,  gt)
 DRJIT_ROUTE_BINARY(operator>=, ge)
+DRJIT_ROUTE_BINARY(operator==, eq)
+DRJIT_ROUTE_BINARY(operator!=, neq)
 
 DRJIT_ROUTE_BINARY_SHIFT(operator<<, sl)
 DRJIT_ROUTE_BINARY_SHIFT(operator>>, sr)
@@ -176,8 +178,6 @@ DRJIT_ROUTE_UNARY(operator~, not)
 DRJIT_ROUTE_UNARY(operator!, not)
 
 DRJIT_ROUTE_BINARY_BITOP(andnot, andnot)
-DRJIT_ROUTE_BINARY_FALLBACK(eq,  eq,  a1 == a2)
-DRJIT_ROUTE_BINARY_FALLBACK(neq, neq, a1 != a2)
 
 DRJIT_ROUTE_UNARY_FALLBACK(sqrt,  sqrt,  detail::sqrt_(a))
 DRJIT_ROUTE_UNARY_FALLBACK(abs,   abs,   detail::abs_(a))
@@ -231,6 +231,18 @@ DRJIT_INLINE auto operator/(const T1 &a1, const T2 &a2) {
     else
         return operator/(static_cast<ref_cast_t<T1, E>>(a1),
                          static_cast<ref_cast_t<T2, E>>(a2));
+}
+
+template <typename T1, typename T2>
+[[deprecated("drjit::eq is deprecated, please use the normal '==' operator.")]]
+auto eq(const T1 &a, const T2 &b) {
+    return a == b;
+}
+
+template <typename T1, typename T2>
+[[deprecated("drjit::neq is deprecated, please use the normal '!=' operator.")]]
+auto neq(const T1 &a, const T2 &b) {
+    return a != b;
 }
 
 template <typename T, enable_if_not_array_t<T> = 0> T andnot(const T &a1, const T &a2) {
@@ -505,16 +517,6 @@ DRJIT_INLINE auto mean(const Array &a) {
         return sum(a) * (1.f / a.derived().size());
     else
         return a;
-}
-
-template <typename T1, typename T2, enable_if_array_any_t<T1, T2> = 0>
-DRJIT_INLINE bool operator==(const T1 &a1, const T2 &a2) {
-    return all_nested(eq(a1, a2));
-}
-
-template <typename T1, typename T2, enable_if_array_any_t<T1, T2> = 0>
-DRJIT_INLINE bool operator!=(const T1 &a1, const T2 &a2) {
-    return any_nested(neq(a1, a2));
 }
 
 template <typename T0 = void, typename T = void>

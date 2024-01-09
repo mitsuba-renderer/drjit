@@ -8,30 +8,24 @@ Changelog
 DrJit 1.0.0 (TBA)
 -----------------
 
-Dr.Jit 1.0 represents a major redesign of many parts of this project. Due to
-the magnitude of these changes, you may observe occasional incompatibilities.
-If they are not reported here, please open a ticket so that they can either be
-documented (if intentional) or fixed.
+The 1.0 release of Dr.Jit marks major new phase of this project. We addressed
+many long-standing limitations and thoroughly documented every part of Dr.Jit.
+Due to the magnitude of the changes, some incompatibilities are unavoidable:
+bullet points with an exclamation mark highlight changes with an impact on
+source-level compatibility.
 
-The following list covers the most important changes and their impact on
-source-level compatibility. Points with an exclamation sign cover
-incompatibilities and potential stumbling blocks.
-
-- ⚠️ **Python bindings**: Dr.Jit comes with an all-new set of Python bindings
+- **Python bindings**: Dr.Jit comes with an all-new set of Python bindings
   created using the `nanobind <https://github.com/wjakob/nanobind>`__ library.
+  This has two main consequences:
 
-  - Tracing Dr.Jit code written in Python is now *significantly* faster. Expect
-    speedups by a factor of ~10-20×. 
+  - Tracing Dr.Jit code written in Python is now *significantly* faster (we've
+    observed speedups by a factor of ~10-20×). This should help in situations
+    where performance is limited by tracing rather than kernel evaluation.
 
-    Less important, but also useful: compilation of Dr.Jit itself and of
-    projects *using* Dr.Jit is faster, and produces smaller binaries.
-
-  - Dr.Jit can now target Python's `stable ABI
-    <https://docs.python.org/3/c-api/stable.html#stable-abi>`__, which means
-    that binary extensions are forward-compatible to future Python versions.
-
-  This was also an opportunity to fix many long-standing binding-related
-  problems:
+  - Dr.Jit can now target Python 3.12's `stable ABI
+    <https://docs.python.org/3/c-api/stable.html#stable-abi>`__. This means
+    that binary wheels will work on future versions of Python without
+    recompilation.
 
 - ⚠️ **Control flow**: You can now express vectorized loops and conditionals
   using natural Python syntax. Consider the following snippet to compute an
@@ -72,15 +66,18 @@ incompatibilities and potential stumbling blocks.
   the transformation is minimal and preserves other code along with line number
   information to aid debugging.
 
+  The old "recorded loop" syntax is no longer supported, and existing code will
+  adjustments to use :py:func:`drjit.while_lop`.
+
 - **Differentiable control flow**: symbolic control flow constructs (loops)
   previously failed with an error message when they detected differentiable
-  variables. Both symbolic loops and conditionals now support differentiation
-  in forward and reverse modes.
+  variables. All symbolic operations (loops, function calls, and conditionals)
+  now support differentiation in forward and reverse modes.
 
-- **Documentation**: every part of Dr.Jit now provides extensive reference
-  documentation that clearly specifies their behavior and accepted inputs.
-  Their behavior with respect to less common inputs (tensors, :ref:`PyTrees
-  <pytrees>`) was made consistent
+- **Documentation**: every Dr.Jit function now comes with extensive reference
+  documentation that clearly specifies its behavior and accepted inputs. The
+  behavior with respect to tensors, :ref:`PyTrees <pytrees>` was made
+  consistent.
 
 - ⚠️ **Comparison operators**: The ``==`` and ``!=`` comparisons previously
   reduced the result of to a single Python ``bool``. They now return an array
@@ -107,13 +104,13 @@ incompatibilities and potential stumbling blocks.
   double, and half precision variables. Previously, there was a separate graph
   per type, and gradients did not propagate through casts between them.
 
-- **Debug mode**: A new debug validation mode (:py:attr:`dr.JitFlag.Debug`)
+- **Debug mode**: A new debug validation mode (:py:attr:`drjit.JitFlag.Debug`)
   inserts a number of additional checks to identify sources of undefined
   behavior. Enable it to catch out-of-bounds reads, writes, and calls to
   undefined callables. Such operations will trigger a warning that includes the
   responsible source code location.
 
-- **Symbolic print**: A new high-level *symbolic* print operation
+- **Symbolic print statement**: A new high-level *symbolic* print operation
   (:py:func:`drjit.print`) enables deferred printing from any symbolic context
   (i.e., within symbolic loops, conditionals, and function calls). It is
   compatible with Jupyter notebooks and displays arbitrary :ref:`PyTrees
@@ -138,7 +135,7 @@ incompatibilities and potential stumbling blocks.
   Exceptions raised in custom operations, function dispatch, symbolic loops,
   etc., should not cause failures or leaks. Both Dr.Jit and nanobind are very
   noisy if they detect that objects are still alive when the Python interpreter
-  shuts down. You may occasionally still see such leak warnings.
+  shuts down.
 
 - **Terminology cleanup**: Dr.Jit has two main ways of capturing control flow
   (conditionals, loops, function calls): it can evaluate each possible outcome
@@ -176,9 +173,6 @@ incompatibilities and potential stumbling blocks.
   Note that this causes the internal variable array to steadily grow, hence
   this feature should only be used for brief debugging sessions.
 
-- Dr.Jit can now target the Python 3.12+ stable ABI. This means that binary
-  wheels will work on future versions of Python without recompilation.
-
 - The :py:func:`drjit.empty` function used to immediate allocate an array of
   the desired shape (compared to, say, :py:func:`drjit.zero` which creates a
   literal constant array that consumes no device memory). Users found this
@@ -190,6 +184,9 @@ Internals
 
 This section documents lower level changes that don't directly impact the
 Python API.
+
+- Compilation of Dr.Jit is faster and produces smaller binaries. Downstream
+  projects built on top of Dr.Jit will also see improvements on both metrics.
 
 - Dr.Jit now builds a support library (``libdrjit-extra.so``) containing large
   amounts of functionality that used to be implemented using templates. The
@@ -223,6 +220,12 @@ Python API.
     about calling things in parallel), the header file was renamed to
     ``drjit/call.h``. All macro uses of ``DRJIT_VCALL_*`` should be renamed to
     ``DRJIT_CALL_*``.
+
+  * Analogous to function calls, the Python and C++ interfaces to
+    symbolic/evaluated loops and conditionals are each implemented through a
+    single top-level function (``ad_loop`` and ``ad_cond``) in
+    ``libdrjit-extra.so``. This removes large amounts of template code and
+    accelerates compilation.
 
 - The packet mode backend (``include/drjit/packet.h``) now includes support
   for ``aarch64`` processors via NEON intrinsics. This is actually an old

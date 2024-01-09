@@ -173,7 +173,7 @@ template <typename T> Complex<T> sqrt(const Complex<T> &z) {
       t1 = sqrt(.5f * (n + abs(real(z)))),
       t2 = .5f * imag(z) / t1;
 
-    mask_t<T> zero = eq(n, 0.f);
+    mask_t<T> zero = n == 0.f;
     mask_t<T> m = real(z) >= 0.f;
 
     return {

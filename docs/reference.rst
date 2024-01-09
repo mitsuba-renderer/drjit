@@ -1058,6 +1058,13 @@ Automatic differentiation
 
 .. autofunction:: custom
 
+Other
+_____
+
+.. autofunction:: erf
+.. autofunction:: erfinv
+.. autofunction:: lgamma
+
 
 Constants
 ---------
