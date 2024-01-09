@@ -28,23 +28,39 @@ struct ref_vec : dr_vector<uint64_t> {
 
 template <size_t... Is, typename Args, typename Mask, typename TrueFn,
           typename FalseFn>
-auto if_stmt_impl(std::index_sequence<Is...>, Args &&args_, const Mask &cond,
+auto if_stmt_impl(std::index_sequence<Is...>, Args &&args, const Mask &cond,
                   TrueFn &&true_fn, FalseFn &&false_fn, const char *name) {
     if constexpr (std::is_same_v<Mask, bool>) {
+        // This is a scalar conditional statement
         DRJIT_MARK_USED(name);
-
-        std::decay_t<Args> args(std::forward<Args>(args_));
 
         if (cond)
             return true_fn(dr_get<Is>(args)...);
         else
             return false_fn(dr_get<Is>(args)...);
+    } else if constexpr (is_array_v<Mask> && !is_jit_v<Mask>) {
+        // This is a packet-based conditional statement
+        DRJIT_MARK_USED(name);
+
+        using Result = decltype(true_fn(dr_get<Is>(args)...));
+
+        Result result;
+
+        if (any(cond))
+            result = true_fn(dr_get<Is>(args)...);
+
+        Mask cond2 = !cond;
+
+        if (any(cond2))
+            result = select(cond2, false_fn(dr_get<Is>(args)...), result);
+
+        return result;
     } else {
+        // This is a JIT-compiled conditional statement
 
         using Return = std::decay_t<decltype(std::declval<TrueFn>()(
-              dr_get<Is>(args_)...))>;
+              dr_get<Is>(args)...))>;
 
-        // This is a vectorized conditional statement
         struct IfStmtData {
             std::decay_t<Args> args;
             Mask cond;
@@ -71,7 +87,7 @@ auto if_stmt_impl(std::index_sequence<Is...>, Args &&args_, const Mask &cond,
         ad_cond_delete delete_cb = [](void *p) { delete (IfStmtData *) p; };
 
         IfStmtData *isd =
-            new IfStmtData{ std::forward<Args>(args_), cond,
+            new IfStmtData{ std::forward<Args>(args), cond,
                             std::forward<TrueFn>(true_fn),
                             std::forward<FalseFn>(false_fn),
                             Return() };

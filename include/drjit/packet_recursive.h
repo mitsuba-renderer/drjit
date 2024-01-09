@@ -32,7 +32,7 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
     using Base::Size2;
     using Ref = const Derived &;
     using Scalar = scalar_t<Array1>;
-    static constexpr bool ByteSize1 = Size1 * sizeof(Scalar);
+    static constexpr size_t ByteSize1 = Size1 * sizeof(Scalar);
 
     static constexpr bool IsRecursive = true;
 
