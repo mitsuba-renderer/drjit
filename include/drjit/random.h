@@ -21,6 +21,7 @@
 
 #include <drjit/array.h>
 #include <drjit/idiv.h>
+#include <drjit/while_loop.h>
 
 #define PCG32_DEFAULT_STATE  0x853c49e6748fea9bULL
 #define PCG32_DEFAULT_STREAM 0xda3e39cb94b95bdbULL
@@ -213,21 +214,26 @@ template <typename T> struct PCG32 {
             while (true) {
                 UInt32 result = next_uint32();
 
-                if (all(result >= threshold))
+                if (result >= threshold)
                     return result % bound;
             }
         } else {
             divisor<uint32_t> div(bound);
             UInt32 threshold = imod(~bound + 1u, div);
 
-            UInt32 result = zeros<UInt32>();
-            do {
-                result[mask] = next_uint32(mask);
+            auto [_, rng, result] = dr::while_loop(
+                dr::make_tuple(mask, PCG32(*this), UInt32(0)),
+                [](Mask &m, PCG32 &, UInt32 &) { return m; },
+                [threshold](Mask &m, PCG32 &rng, UInt32 &result) {
+                    result = rng.next_uint32();
 
-                /* Keep track of which SIMD lanes have already
-                   finished and stops advancing the associated PRNGs */
-                mask &= result < threshold;
-            } while (any(mask));
+                    /* Keep track of which SIMD lanes have already
+                       finished and stops advancing the associated PRNGs */
+                    m &= result < threshold;
+                }
+            );
+
+            state = rng.state;
 
             return imod(result, div);
         }
@@ -243,21 +249,26 @@ template <typename T> struct PCG32 {
             while (true) {
                 uint64_t result = next_uint64();
 
-                if (all(result >= threshold))
+                if (result >= threshold)
                     return result % bound;
             }
         } else {
             divisor<uint64_t> div(bound);
             UInt64 threshold = imod(~bound + (uint64_t) 1, div);
 
-            UInt64 result = zeros<UInt64>();
-            do {
-                result[mask] = next_uint64(mask);
+            auto [_, rng, result] = dr::while_loop(
+                dr::make_tuple(mask, PCG32(*this), UInt64(0)),
+                [](Mask &m, PCG32 &, UInt64 &) { return m; },
+                [threshold](Mask &m, PCG32 &rng, UInt64 &result) {
+                    result = rng.next_uint64();
 
-                /* Keep track of which SIMD lanes have already
-                   finished and stops advancing the associated PRNGs */
-                mask &= result < threshold;
-            } while (any(mask));
+                    /* Keep track of which SIMD lanes have already
+                       finished and stops advancing the associated PRNGs */
+                    m &= result < threshold;
+                }
+            );
+
+            state = rng.state;
 
             return imod(result, div);
         }
@@ -283,23 +294,36 @@ template <typename T> struct PCG32 {
      * 1994). The algorithm is very similar to fast exponentiation.
      */
     PCG32 operator+(const Int64 &delta_) const {
-        UInt64 cur_plus = inc,
-               acc_mult = 1,
-               acc_plus = 0,
-               cur_mult = PCG32_MULT;
-
         /* Even though delta is an unsigned integer, we can pass a signed
            integer to go backwards, it just goes "the long way round". */
-        UInt64 delta(delta_);
 
-        for (size_t it = 0; it < 64; ++it) {
-            Mask mask = (delta & 1) != (zeros<UInt64>());
-            masked(acc_mult, mask) = acc_mult * cur_mult;
-            masked(acc_plus, mask) = acc_plus * cur_mult + cur_plus;
-            cur_plus = (cur_mult + 1) * cur_plus;
-            cur_mult *= cur_mult;
-            delta = sr<1>(delta);
-        }
+        auto [cur_mult, cur_plus, acc_mult, acc_plus, delta] = dr::while_loop(
+            // Initial loop state
+            dr::make_tuple(
+                /* cur_mult = */ UInt64(PCG32_MULT),
+                /* cur_plus = */ UInt64(inc),
+                /* acc_mult = */ UInt64(1),
+                /* acc_plus = */ UInt64(0),
+                /* delta    = */ UInt64(delta_)
+            ),
+
+            // Loop condition
+            [](UInt64 &, UInt64 &, UInt64 &, UInt64 &, UInt64 &delta) {
+                return delta != 0;
+            },
+
+            // Loop update step
+            [](UInt64 &cur_mult, UInt64 &cur_plus, UInt64 &acc_mult,
+               UInt64 &acc_plus, UInt64 &delta) {
+                Mask mask = (delta & 1) != 0;
+                delta = sr<1>(delta);
+
+                masked(acc_mult, mask) *= cur_mult;
+                masked(acc_plus, mask) = fmadd(acc_plus, cur_mult, cur_plus);
+                cur_plus *= cur_mult + 1;
+                cur_mult *= cur_mult;
+            }
+        );
 
         return PCG32(initialize_state(), acc_mult * state + acc_plus, inc);
     }
@@ -313,20 +337,34 @@ template <typename T> struct PCG32 {
 
     /// Compute the distance between two PCG32 pseudorandom number generators
     Int64 operator-(const PCG32 &other) const {
-        UInt64 cur_plus = inc,
-               cur_state = other.state,
-               distance = 0,
-               bit = 1,
-               cur_mult = PCG32_MULT;
+        const UInt64 &state = this->state;
 
-        for (size_t it = 0; it < 64; ++it) {
-            Mask mask = (state & bit) != (cur_state & bit);
-            masked(cur_state, mask) = fmadd(cur_state, cur_mult, cur_plus);
-            masked(distance, mask) |= bit;
-            cur_plus = (cur_mult + 1) * cur_plus;
-            cur_mult *= cur_mult;
-            bit = sl<1>(bit);
-        }
+        auto [cur_state, cur_plus, cur_mult, distance, bit] = dr::while_loop(
+            // Initial loop state
+            dr::make_tuple(
+                /* cur_state = */ UInt64(other.state),
+                /* cur_plus  = */ UInt64(inc),
+                /* cur_mult  = */ UInt64(PCG32_MULT),
+                /* distance  = */ UInt64(0),
+                /* bit       = */ UInt64(1)
+            ),
+
+            // Loop condition
+            [state](UInt64 &cur_state, UInt64 &, UInt64 &, UInt64 &, UInt64 &) {
+                return cur_state != state;
+            },
+
+            // Loop update step
+            [state](UInt64 &cur_state, UInt64 &cur_plus, UInt64 &cur_mult,
+               UInt64 &distance, UInt64 &bit) {
+                Mask mask = (state & bit) != (cur_state & bit);
+                masked(cur_state, mask) = fmadd(cur_state, cur_mult, cur_plus);
+                masked(distance, mask) |= bit;
+                cur_plus *= cur_mult + 1;
+                cur_mult *= cur_mult;
+                bit = sl<1>(bit);
+            }
+        );
 
         return Int64(distance);
     }
