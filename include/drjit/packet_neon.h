@@ -416,7 +416,7 @@ template <bool IsMask_, typename Derived_> struct alignas(16)
     DRJIT_INLINE Derived mul_(Ref a) const { return vmulq_f64(m, a.m); }
     DRJIT_INLINE Derived div_(Ref a) const { return vdivq_f64(m, a.m); }
 
-#if defined(ENOKI_ARM_FMA)
+#if defined(DRJIT_ARM_FMA)
     DRJIT_INLINE Derived fmadd_(Ref b, Ref c) const { return vfmaq_f64(c.m, m, b.m); }
     DRJIT_INLINE Derived fnmadd_(Ref b, Ref c) const { return vfmsq_f64(c.m, m, b.m); }
     DRJIT_INLINE Derived fmsub_(Ref b, Ref c) const { return vfmaq_f64(vnegq_f64(c.m), m, b.m); }
@@ -567,7 +567,7 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(16)
     //! @{ \name Reinterpreting constructors, mask converters
     // -----------------------------------------------------------------------
 
-#define ENOKI_REINTERPRET_BOOL(type, target)                   \
+#define DRJIT_REINTERPRET_BOOL(type, target)                   \
     DRJIT_REINTERPRET(type) {                                  \
         m = uint32x4_t {                                       \
             reinterpret_array<uint32_t>(a.derived().entry(0)), \
@@ -586,14 +586,14 @@ template <typename Value_, bool IsMask_, typename Derived_> struct alignas(16)
         vmovn_u64(vreinterpretq_u64_f64(low(a).m)),
         vmovn_u64(vreinterpretq_u64_f64(high(a).m)))) { }
 #else
-    ENOKI_REINTERPRET_BOOL(int64_t, u32)
-    ENOKI_REINTERPRET_BOOL(uint64_t, u32)
-    ENOKI_REINTERPRET_BOOL(double, u32)
+    DRJIT_REINTERPRET_BOOL(int64_t, u32)
+    DRJIT_REINTERPRET_BOOL(uint64_t, u32)
+    DRJIT_REINTERPRET_BOOL(double, u32)
 #endif
     DRJIT_REINTERPRET(float) : m(vreinterpretq_u32_f32(a.derived().m)) { }
-    ENOKI_REINTERPRET_BOOL(bool, u32)
+    DRJIT_REINTERPRET_BOOL(bool, u32)
 
-#undef ENOKI_REINTERPRET_BOOL
+#undef DRJIT_REINTERPRET_BOOL
 
     //! @}
     // -----------------------------------------------------------------------
