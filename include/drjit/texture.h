@@ -1181,7 +1181,7 @@ public:
                 // Starting at 0, flip the texture every other repetition
                 // (flip when: even number of repetitions in negative direction,
                 // or odd number of repetitions in positive direction)
-                mod = select(eq(div & 1, 0) ^ (pos < 0), mod, shape - 1 - mod);
+                mod = select(((div & 1) == 0) ^ (pos < 0), mod, shape - 1 - mod);
 
             return mod;
         }

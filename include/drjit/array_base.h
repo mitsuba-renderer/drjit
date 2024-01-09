@@ -472,8 +472,8 @@ template <typename Value_, bool IsMask_, typename Derived_> struct ArrayBaseT : 
     DRJIT_IMPLEMENT_UNARY_TEMPLATE(sl, int Imm, a << Imm, IsIntegral)
     DRJIT_IMPLEMENT_UNARY_TEMPLATE(sr, int Imm, a >> Imm, IsIntegral)
 
-    DRJIT_IMPLEMENT_BINARY_MASK(eq,  eq(a, b))
-    DRJIT_IMPLEMENT_BINARY_MASK(neq, neq(a, b))
+    DRJIT_IMPLEMENT_BINARY_MASK(eq,  a == b)
+    DRJIT_IMPLEMENT_BINARY_MASK(neq, a != b)
     DRJIT_IMPLEMENT_BINARY_MASK(lt, a < b)
     DRJIT_IMPLEMENT_BINARY_MASK(le, a <= b)
     DRJIT_IMPLEMENT_BINARY_MASK(gt, a > b)

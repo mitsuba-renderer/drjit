@@ -303,7 +303,7 @@ struct Variable {
         if (jit_var_is_finite_literal(v2.index()))
             weight = v2;
         else
-            weight = dr::select(dr::eq(v1, zero), zero, v2);
+            weight = dr::select(v1 == zero, zero, v2);
 
         if (size == 1 && src_size != 1) {
             /* When this variable is scalar (size == 1) and the source is
@@ -2399,7 +2399,7 @@ Index ad_var_reduce(JitBackend backend, VarType vt, ReduceOp op, Index i0) {
             case ReduceOp::Mul: {
                     JitVar v0 = JitVar::borrow(jit_index(i0)),
                            z  = scalar(i0, 0.0),
-                           w0 = dr::select(dr::eq(v0, z), z, result / v0);
+                           w0 = dr::select(v0 == z, z, result / v0);
                     return ad_var_new("prod", std::move(result),
                                       Arg(i0, std::move(w0)));
                 }
@@ -2413,7 +2413,7 @@ Index ad_var_reduce(JitBackend backend, VarType vt, ReduceOp op, Index i0) {
             case ReduceOp::Max: {
                     JitVar v0 = JitVar::borrow(jit_index(i0)),
                            z = scalar(i0, 0.0), o = scalar(i0, 1.0),
-                           w0 = dr::select(dr::eq(v0, result), o, z);
+                           w0 = dr::select(v0 == result, o, z);
 
                     const char *name = op == ReduceOp::Min ? "min" : "max";
 

@@ -93,8 +93,8 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
     DRJIT_INLINE auto gt_ (Ref a) const { return mask_t<Derived>(a1 >  a.a1, a2 >  a.a2); }
     DRJIT_INLINE auto le_ (Ref a) const { return mask_t<Derived>(a1 <= a.a1, a2 <= a.a2); }
     DRJIT_INLINE auto ge_ (Ref a) const { return mask_t<Derived>(a1 >= a.a1, a2 >= a.a2); }
-    DRJIT_INLINE auto eq_ (Ref a) const { return mask_t<Derived>(eq(a1, a.a1), eq(a2, a.a2)); }
-    DRJIT_INLINE auto neq_(Ref a) const { return mask_t<Derived>(neq(a1, a.a1), neq(a2, a.a2)); }
+    DRJIT_INLINE auto eq_ (Ref a) const { return mask_t<Derived>(a1 == a.a1, a2 == a.a2); }
+    DRJIT_INLINE auto neq_(Ref a) const { return mask_t<Derived>(a1 != a.a1, a2 != a.a2); }
 
     DRJIT_INLINE Derived minimum_(Ref a) const { return Derived(minimum(a1, a.a1), minimum(a2, a.a2)); }
     DRJIT_INLINE Derived maximum_(Ref a) const { return Derived(maximum(a1, a.a1), maximum(a2, a.a2)); }

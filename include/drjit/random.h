@@ -292,19 +292,13 @@ template <typename T> struct PCG32 {
            integer to go backwards, it just goes "the long way round". */
         UInt64 delta(delta_);
 
-        int it = 0; DRJIT_MARK_USED(it);
-        while (is_jit_v<T> || delta != zeros<UInt64>()) {
-            Mask mask = neq(delta & 1, zeros<UInt64>());
+        for (size_t it = 0; it < 64; ++it) {
+            Mask mask = (delta & 1) != (zeros<UInt64>());
             masked(acc_mult, mask) = acc_mult * cur_mult;
             masked(acc_plus, mask) = acc_plus * cur_mult + cur_plus;
             cur_plus = (cur_mult + 1) * cur_plus;
             cur_mult *= cur_mult;
             delta = sr<1>(delta);
-
-            if constexpr (is_jit_v<T>) {
-                if (++it == 64)
-                    break;
-            }
         }
 
         return PCG32(initialize_state(), acc_mult * state + acc_plus, inc);
@@ -325,19 +319,13 @@ template <typename T> struct PCG32 {
                bit = 1,
                cur_mult = PCG32_MULT;
 
-        int it = 0; DRJIT_MARK_USED(it);
-        while (is_jit_v<T> || state != cur_state) {
-            Mask mask = neq(state & bit, cur_state & bit);
+        for (size_t it = 0; it < 64; ++it) {
+            Mask mask = (state & bit) != (cur_state & bit);
             masked(cur_state, mask) = fmadd(cur_state, cur_mult, cur_plus);
             masked(distance, mask) |= bit;
             cur_plus = (cur_mult + 1) * cur_plus;
             cur_mult *= cur_mult;
             bit = sl<1>(bit);
-
-            if constexpr (is_jit_v<T>) {
-                if (++it == 64)
-                    break;
-            }
         }
 
         return Int64(distance);

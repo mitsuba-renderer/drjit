@@ -146,7 +146,7 @@ namespace detail {
         }
 
         Value z = sqr(y), s, c;
-        z = detail::or_(z, eq(xa, Infinity<Value>));
+        z = detail::or_(z, xa == Infinity<Value>);
 
         if constexpr (Single) {
             s = estrin(z, -1.6666654611e-1,
@@ -175,7 +175,7 @@ namespace detail {
         s = fmadd(s, y, y);
         c = fmadd(c, z, fmadd(z, Scalar(-0.5), Scalar(1)));
 
-        Mask polymask = eq(j & Int(2), zeros<IntArray>());
+        Mask polymask = (j & Int(2)) == zeros<IntArray>();
 
         if constexpr (Sin)
             *s_out = mulsign(select(polymask, s, c), sign_sin);
@@ -230,7 +230,7 @@ namespace detail {
         }
 
         Value z = y * y;
-        z = detail::or_(z, eq(xa, Infinity<Scalar>));
+        z = detail::or_(z, xa == Infinity<Scalar>);
 
         Value r;
         if constexpr (Single) {
@@ -253,8 +253,8 @@ namespace detail {
 
         r = fmadd(r, z * y, y);
 
-        auto recip_mask = Tan ? neq(j & Int(2), Int(0)) :
-                                 eq(j & Int(2), Int(0));
+        auto recip_mask = Tan ? ((j & Int(2)) != Int(0)) :
+                                ((j & Int(2)) == Int(0));
         drjit::masked(r, xa < Scalar(1e-4)) = y;
         drjit::masked(r, recip_mask) = rcp(r);
 
@@ -591,7 +591,7 @@ template <typename Y, typename X, bool Native> expr_t<Y, X> atan2(const Y &y, co
         t = select(abs_y > abs_x, Pi<Scalar> * Scalar(.5f) - t, t);
         t = select(x < zeros<Value>(), Pi<Scalar> - t, t);
         Value r = select(y < zeros<Value>(), -t, t);
-        r = detail::and_(r, neq(max_val, Scalar(0)));
+        r = detail::and_(r, max_val != Scalar(0));
         return r;
     }
 }
@@ -662,7 +662,7 @@ template <typename Value, bool Native> std::pair<Value, Value> frexp(const Value
 
         // Detect zero/inf/NaN
         IntMask is_normal =
-            IntMask(neq(x, zeros<Value>())) && neq(exponent_bits, exponent_mask);
+            IntMask((x != zeros<Value>())) && (exponent_bits != exponent_mask);
 
         IntArray exponent_i = detail::and_(
             (sr < Single ? 23 : 52 > (exponent_bits)) - bias, is_normal);
@@ -902,8 +902,8 @@ template <typename Value, bool Native> Value log(const Value &x) {
         const Scalar n_inf(-Infinity<Scalar>),
                      p_inf( Infinity<Scalar>);
 
-        masked(r, eq(x, p_inf)) = p_inf;
-        masked(r, eq(x, Scalar(0))) = n_inf;
+        masked(r, x == p_inf) = p_inf;
+        masked(r, x == Scalar(0)) = n_inf;
 
         return detail::or_(r, !valid_mask);
     }
@@ -979,8 +979,8 @@ template <typename Value, bool Native> Value log2(const Value &x) {
         const Scalar n_inf(-Infinity<Scalar>),
                      p_inf( Infinity<Scalar>);
 
-        masked(r, eq(x, p_inf)) = p_inf;
-        masked(r, eq(x, Scalar(0))) = n_inf;
+        masked(r, x == p_inf) = p_inf;
+        masked(r, x == Scalar(0)) = n_inf;
 
         return detail::or_(r, !valid_mask);
     }
@@ -1476,9 +1476,9 @@ template <typename Value, bool Native> Value cbrt(const Value &x) {
 
         Value f1 = select(xe >= 0.f, cbrt2, 1.f / cbrt2),
               f2 = select(xe >= 0.f, cbrt4, 1.f / cbrt4),
-              f  = select(eq(rem, 1.f), f1, f2);
+              f  = select(rem == 1.f, f1, f2);
 
-        masked(xm, neq(rem, 0.f)) *= f;
+        masked(xm, rem != 0.f) *= f;
 
         Value r = ldexp(xm, mulsign(xea1, xe));
         r = mulsign(r, x);
@@ -1610,7 +1610,7 @@ template <typename Value> Value lgamma(Value x_) {
 
         if (any_nested_or<true>(reflect)) {
             masked(result, reflect) = log(abs(Scalar(Pi<Scalar>) / sin(Scalar(Pi<Scalar>) * x_))) - result;
-            masked(result, reflect && eq(x_, round(x_))) = Infinity<Scalar>;
+            masked(result, reflect && (x_ == round(x_))) = Infinity<Scalar>;
         }
 
         return result;

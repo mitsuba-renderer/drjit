@@ -109,7 +109,14 @@ NAMESPACE_BEGIN(drjit)
 /// Constant indicating an unimplemented operation in ``ArraySupplement``
 #define DRJIT_OP_NOT_IMPLEMENTED ((void *) 1)
 
-/// Metadata describing the backend/type/shape/.. of a Dr.Jit array binding
+/**
+ * \brief Metadata describing the backend/type/shape/.. of a Dr.Jit array binding
+ *
+ * All Dr.Jit types include a metadata descriptor that characterizes the type
+ * in more detail. This contains essentially the same information as a type
+ * name like 'drjit.cuda.ad.Array3f', but using an easier-to-manipulate
+ * representation.
+ */
 struct ArrayMeta {
     uint16_t backend       : 2;
     uint16_t type          : 4;
@@ -230,7 +237,7 @@ enum class ArrayOp {
  * available (the former two only for dynamic arrays).
  *
  * The ``op`` array contains additional operations enumerated in ``ArrayOp``.
- * Besides pointing to an implementations, entries of this array can taken on
+ * Besides pointing to an implementations, entries of this array can take on
  * two special values:
  *
  * - ``DRJIT_OP_NOT_IMPLEMENTED`` indicates that the operation is not supported
@@ -729,7 +736,7 @@ template <typename T> void bind_bit_ops(ArrayBinding &b) {
         if constexpr (T::IsIntegral)
             new (c) T(*a ^ *b);
         else
-            new (c) T(neq(*a, *b));
+            new (c) T(*a != *b);
     };
 }
 
@@ -756,8 +763,8 @@ template <typename T> void bind_richcmp(ArrayBinding &b) {
             case Py_LE: new (c) Mask(*a <= *b); break;
             case Py_GT: new (c) Mask(*a > *b); break;
             case Py_GE: new (c) Mask(*a >= *b); break;
-            case Py_EQ: new (c) Mask(eq(*a, *b)); break;
-            case Py_NE: new (c) Mask(neq(*a, *b)); break;
+            case Py_EQ: new (c) Mask(*a == *b); break;
+            case Py_NE: new (c) Mask(*a != *b); break;
         }
     };
 }
