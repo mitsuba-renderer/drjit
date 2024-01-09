@@ -32,6 +32,7 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
     using Base::Size2;
     using Ref = const Derived &;
     using Scalar = scalar_t<Array1>;
+    static constexpr bool ByteSize1 = Size1 * sizeof(Scalar);
 
     static constexpr bool IsRecursive = true;
 
@@ -295,25 +296,25 @@ struct StaticArrayImpl<Value_, Size_, IsMask_, Derived_,
 
     DRJIT_INLINE void store_aligned_(void *mem) const {
         store_aligned((uint8_t *) mem, a1);
-        store_aligned((uint8_t *) mem + sizeof(Array1), a2);
+        store_aligned((uint8_t *) mem + ByteSize1, a2);
     }
 
     DRJIT_INLINE void store_(void *mem) const {
         store((uint8_t *) mem, a1);
-        store((uint8_t *) mem + sizeof(Array1), a2);
+        store((uint8_t *) mem + ByteSize1, a2);
     }
 
     static DRJIT_INLINE Derived load_aligned_(const void *mem, size_t) {
         return Derived(
             load_aligned<Array1>((uint8_t *) mem),
-            load_aligned<Array2>((uint8_t *) mem + sizeof(Array1))
+            load_aligned<Array2>((uint8_t *) mem + ByteSize1)
         );
     }
 
     static DRJIT_INLINE Derived load_(const void *a, size_t) {
         return Derived(
             load<Array1>((uint8_t *) a),
-            load<Array2>((uint8_t *) a + sizeof(Array1))
+            load<Array2>((uint8_t *) a + ByteSize1)
         );
     }
 

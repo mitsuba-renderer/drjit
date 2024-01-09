@@ -1,6 +1,8 @@
 #include <tuple>
 #include <nanobind/stl/pair.h>
 #include <drjit/while_loop.h>
+#include <drjit/packet.h>
+#include <drjit/random.h>
 
 namespace nb = nanobind;
 namespace dr = drjit;
@@ -29,12 +31,24 @@ template <typename UInt> std::pair<UInt, UInt> simple_loop() {
     return { i, j };
 }
 
+bool packet_loop() {
+    using Float = dr::Packet<float, 16>;
+    using RNG = dr::PCG32<Float>;
+
+    RNG a, b, c;
+    for (int i = 0; i < 1000; ++i)
+        a.next_float32();
+    b += 1000;
+
+    return dr::all(a.next_float32() == b.next_float32()) && dr::all((b - c) == 1001);
+}
+
 template <JitBackend Backend> void bind(nb::module_ &m) {
     using UInt = dr::DiffArray<Backend, uint32_t>;
 
-    m.def("scalar_loop", &simple_loop<uint32_t>);
     m.def("simple_loop", &simple_loop<UInt>);
 }
+
 
 NB_MODULE(while_loop_ext, m) {
 #if defined(DRJIT_ENABLE_LLVM)
@@ -46,4 +60,7 @@ NB_MODULE(while_loop_ext, m) {
     nb::module_ cuda = m.def_submodule("cuda");
     bind<JitBackend::CUDA>(cuda);
 #endif
+
+    m.def("scalar_loop", &simple_loop<uint32_t>);
+    m.def("packet_loop", &packet_loop);
 }

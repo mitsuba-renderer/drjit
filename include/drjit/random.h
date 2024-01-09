@@ -221,8 +221,8 @@ template <typename T> struct PCG32 {
             divisor<uint32_t> div(bound);
             UInt32 threshold = imod(~bound + 1u, div);
 
-            auto [_, rng, result] = dr::while_loop(
-                dr::make_tuple(mask, PCG32(*this), UInt32(0)),
+            auto [_, rng, result] = while_loop(
+                make_tuple(mask, PCG32(*this), UInt32(0)),
                 [](Mask &m, PCG32 &, UInt32 &) { return m; },
                 [threshold](Mask &m, PCG32 &rng, UInt32 &result) {
                     result = rng.next_uint32();
@@ -256,8 +256,8 @@ template <typename T> struct PCG32 {
             divisor<uint64_t> div(bound);
             UInt64 threshold = imod(~bound + (uint64_t) 1, div);
 
-            auto [_, rng, result] = dr::while_loop(
-                dr::make_tuple(mask, PCG32(*this), UInt64(0)),
+            auto [_, rng, result] = while_loop(
+                make_tuple(mask, PCG32(*this), UInt64(0)),
                 [](Mask &m, PCG32 &, UInt64 &) { return m; },
                 [threshold](Mask &m, PCG32 &rng, UInt64 &result) {
                     result = rng.next_uint64();
@@ -297,9 +297,9 @@ template <typename T> struct PCG32 {
         /* Even though delta is an unsigned integer, we can pass a signed
            integer to go backwards, it just goes "the long way round". */
 
-        auto [cur_mult, cur_plus, acc_mult, acc_plus, delta] = dr::while_loop(
+        auto [cur_mult, cur_plus, acc_mult, acc_plus, delta] = while_loop(
             // Initial loop state
-            dr::make_tuple(
+            make_tuple(
                 /* cur_mult = */ UInt64(PCG32_MULT),
                 /* cur_plus = */ UInt64(inc),
                 /* acc_mult = */ UInt64(1),
@@ -339,9 +339,9 @@ template <typename T> struct PCG32 {
     Int64 operator-(const PCG32 &other) const {
         const UInt64 &state = this->state;
 
-        auto [cur_state, cur_plus, cur_mult, distance, bit] = dr::while_loop(
+        auto [cur_state, cur_plus, cur_mult, distance, bit] = while_loop(
             // Initial loop state
-            dr::make_tuple(
+            make_tuple(
                 /* cur_state = */ UInt64(other.state),
                 /* cur_plus  = */ UInt64(inc),
                 /* cur_mult  = */ UInt64(PCG32_MULT),

@@ -12,13 +12,18 @@ def get_pkg(t):
 
 @pytest.test_arrays('uint32,is_diff,shape=(*)')
 def test01_scalar_loop(t):
-    pkg = get_pkg(t)
+    pkg = pytest.importorskip("while_loop_ext")
     assert pkg.scalar_loop() == (5, 9)
+
+@pytest.test_arrays('uint32,is_diff,shape=(*)')
+def test02_packet_loop(t):
+    pkg = pytest.importorskip("while_loop_ext")
+    assert pkg.packet_loop()
 
 
 @pytest.mark.parametrize('symbolic', [True, False])
 @pytest.test_arrays('uint32,is_diff,shape=(*)')
-def test02_simple_loop(t, symbolic):
+def test03_jit_loop(t, symbolic):
     with dr.scoped_set_flag(dr.JitFlag.SymbolicLoops, symbolic):
         pkg = get_pkg(t)
         i, z = pkg.simple_loop()
