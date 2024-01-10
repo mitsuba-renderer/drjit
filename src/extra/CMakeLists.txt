@@ -10,7 +10,10 @@ add_library(
   cond.cpp
 )
 
-nanobind_disable_stack_protector(drjit-extra)
+if (NOT MSVC)
+  target_compile_options(drjit-extra PRIVATE $<$<OR:$<CONFIG:Release>,$<CONFIG:MinSizeRel>>:-fno-stack-protector>)
+endif()
+
 target_compile_definitions(drjit-extra PRIVATE -DDRJIT_EXTRA_BUILD)
 target_link_libraries(drjit-extra PRIVATE drjit drjit-core)
 
