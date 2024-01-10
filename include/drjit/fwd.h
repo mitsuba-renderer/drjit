@@ -246,9 +246,6 @@ template <typename Value_, size_t Dimension_> class Texture;
 template <typename T>
 struct struct_support;
 
-/// Recorded/wavefront loops
-template <typename Mask, typename SFINAE = int> struct Loop;
-
 template <typename T, typename Array>
 struct call_support {
     call_support(const Array &) { }

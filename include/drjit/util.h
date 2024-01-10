@@ -12,8 +12,9 @@
 
 #pragma once
 
+#include <tuple>
 #include <drjit/idiv.h>
-#include <drjit/loop.h>
+#include <drjit/while_loop.h>
 
 NAMESPACE_BEGIN(drjit)
 
@@ -190,17 +191,22 @@ Index binary_search(scalar_t<Index> start_, scalar_t<Index> end_,
                      (size_t)(end_ - start_), (size_t) iterations);
 
             Index1 index = zeros<Index1>(width(pred(start)));
-            Loop<Mask1> loop(title, start, end, index);
 
-            while (loop(index < iterations)) {
-                Index middle = sr<1>(start + end);
-                Mask cond = detach(pred(middle));
+            std::tie(start, end, index) = drjit::while_loop(
+                std::make_tuple(start, end, index),
+                [iterations](const Index&, const Index&, const Index1& index) {
+                    return index < iterations;
+                },
+                [pred](Index& start, Index& end, Index1& index) {
+                    Index middle = sr<1>(start + end);
+                    Mask cond = detach(pred(middle));
 
-                start = select(cond, minimum(middle + 1, end), start);
-                end   = select(cond, end, middle);
+                    start = select(cond, minimum(middle + 1, end), start);
+                    end   = select(cond, end, middle);
 
-                index++;
-            }
+                    index++;
+                }
+            );
 
             return start;
         }

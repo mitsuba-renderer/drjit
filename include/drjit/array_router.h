@@ -329,11 +329,11 @@ template <typename T> DRJIT_INLINE auto sqr(const T &value) {
 }
 
 template <typename T> DRJIT_INLINE auto isnan(const T &a) {
-    return !eq(a, a);
+    return !(a == a);
 }
 
 template <typename T> DRJIT_INLINE auto isinf(const T &a) {
-    return eq(abs(a), Infinity<scalar_t<T>>);
+    return abs(a) == Infinity<scalar_t<T>>;
 }
 
 template <typename T> DRJIT_INLINE auto isfinite(const T &a) {
@@ -483,8 +483,8 @@ DRJIT_INLINE Value next_float(const Value &value) {
 
     Int i = reinterpret_array<Int>(value);
 
-    IntMask is_nan_inf = eq(i & exponent_mask, exponent_mask),
-            is_neg_0   = eq(i, sign_mask),
+    IntMask is_nan_inf = i & exponent_mask == exponent_mask,
+            is_neg_0   = i == sign_mask,
             is_gt_0    = i >= 0,
             is_special = is_nan_inf | is_neg_0;
 
@@ -1201,6 +1201,46 @@ decltype(auto) migrate(const T &value, TargetType target) {
         return result;
     } else {
         return (const T &) value;
+    }
+}
+
+template <typename ResultType = void, typename T>
+decltype(auto) slice(const T &value, size_t index = -1) {
+    schedule(value);
+    if constexpr (depth_v<T> > 1) {
+        using Value = std::decay_t<decltype(slice(value.entry(0), index))>;
+        using Result = typename T::template ReplaceValue<Value>;
+        Result result;
+        if constexpr (Result::Size == Dynamic)
+            result = empty<Result>(value.size());
+        for (size_t i = 0; i < value.size(); ++i)
+            result.set_entry(i, slice(value.entry(i), index));
+        return result;
+    } else if constexpr (is_drjit_struct_v<T>) {
+        static_assert(!std::is_same_v<ResultType, void>,
+                      "slice(): return type should be specified for drjit struct!");
+        ResultType result;
+        struct_support_t<T>::apply_2(
+            value, result,
+            [index](auto const &x1, auto &x2) DRJIT_INLINE_LAMBDA {
+                x2 = slice(x1, index);
+            });
+        return result;
+    } else if constexpr (is_dynamic_array_v<T>) {
+        if (index == (size_t) -1) {
+            if (width(value) > 1)
+                drjit_raise("slice(): variable contains more than a single entry!");
+            index = 0;
+        }
+        return scalar_t<T>(value.entry(index));
+    } else if constexpr (is_diff_v<T>) { // Handle DiffArray<float> case
+        if (index != (size_t) -1 && index > 0)
+            drjit_raise("slice(): index out of bound!");
+        return value.detach_();
+    } else {
+        if (index != (size_t) -1 && index > 0)
+            drjit_raise("slice(): index out of bound!");
+        return value;
     }
 }
 
