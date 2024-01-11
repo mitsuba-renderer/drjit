@@ -841,6 +841,7 @@ _______________________
 .. autofunction:: detached_t
 .. autofunction:: expr_t
 .. autofunction:: array_t
+.. autofunction:: tensor_t
 
 Bit-level operations
 --------------------

@@ -125,6 +125,28 @@ Returns:
     type: Returns the array form as per the above description.
 )";
 
+static const char *doc_tensor_t = R"(
+Return a tensor type that is compatible with the provided Dr.Jit array or type.
+
+This type trait is useful when a variable should be converted into a tensor,
+but it is not clear which tensor type is suitable (e.g., because the input
+has a dynamic type).
+
+Example usage:
+
+.. code-block::
+
+   x = dr.llvm.Array3f(...)
+   tp = dr.tensor_t(type(x)) # <-- returns dr.llvm.TensorXf
+   x_t = tp(x)
+
+Args:
+    arg (object): An arbitrary Python object
+
+Returns:
+    type: Returns a compatible tensor type or ``None``.
+)";
+
 static const char *doc_mask_t = R"(
 Return the *mask type* associated with the provided Dr.Jit array or type (i.e., the
 type produced by comparisons involving the argument).
