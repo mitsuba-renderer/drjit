@@ -793,8 +793,14 @@ nb::object transform(const char *op, TransformCallback &tc, nb::handle h) {
                                   &s2 = supp(tp2);
 
             if (s1.is_tensor) {
-                nb::object array = nb::steal(s1.tensor_array(h.ptr()));
-                result = tp2(transform(op, tc, array), shape(h));
+                nb::object array = nb::steal(s1.tensor_array(h.ptr())),
+                           array_t = transform(op, tc, array);
+
+                nb::object s = shape(h);
+                if (nb::len(array) == nb::len(array_t))
+                    result = tp2(array_t, shape(h));
+                else
+                    result = tp2(array_t);
             } else if (s1.ndim != 1) {
                 result = nb::inst_alloc_zero(tp2);
                 dr::ArrayBase *p1 = inst_ptr(h),
