@@ -21,8 +21,6 @@
 
 /// Forward declaration
 static bool array_init_from_seq(PyObject *self, const ArraySupplement &s, PyObject *seq);
-static nb::object import_ndarray(const ArraySupplement &s, PyObject *arg,
-                                 dr_vector<size_t> *shape = nullptr);
 
 /// Constructor for all dr.ArrayBase subclasses (except tensors)
 int tp_init_array(PyObject *self, PyObject *args, PyObject *kwds) noexcept {
@@ -379,25 +377,30 @@ static bool array_init_from_seq(PyObject *self, const ArraySupplement &s, PyObje
 static void ndarray_keep_alive(JitBackend backend, uint32_t index,
                                nb::detail::ndarray_handle *p);
 
-static nb::object import_ndarray(const ArraySupplement &s, PyObject *arg,
-                                 dr_vector<size_t> *shape_out) {
+nb::object import_ndarray(ArrayMeta m, PyObject *arg,
+                          dr_vector<size_t> *shape_out, bool force_ad) {
     size_t shape[4];
     nb::detail::ndarray_req req { };
-    req.ndim = s.ndim;
+    req.ndim = m.ndim;
     req.shape = shape;
-    req.dtype = dlpack_dtype((VarType) s.type);
     req.req_order = 'C';
-    req.req_dtype = true;
-    req.req_shape = s.ndim != 0;
     req.req_ro = true;
 
-    for (size_t i = 0; i < s.ndim; ++i) {
-        shape[i] = s.shape[i];
-        if (shape[i] == DRJIT_DYNAMIC)
-            shape[i] = nb::any;
+    if ((VarType) m.type != VarType::Void) {
+        req.dtype = drjit_type_to_dlpack((VarType) m.type);
+        req.req_dtype = true;
     }
 
-    if (s.is_complex) {
+    if (m.ndim) {
+        req.req_shape = true;
+        for (size_t i = 0; i < m.ndim; ++i) {
+            shape[i] = m.shape[i];
+            if (shape[i] == DRJIT_DYNAMIC)
+                shape[i] = nb::any;
+        }
+    }
+
+    if (m.is_complex) {
         for (uint32_t i = 1; i < req.ndim; ++i)
             shape[i - 1] = shape[i];
         req.dtype.code = (uint8_t) nb::dlpack::dtype_code::Complex;
@@ -408,7 +411,7 @@ static nb::object import_ndarray(const ArraySupplement &s, PyObject *arg,
     nb::detail::ndarray_handle *th = nb::detail::ndarray_import(
         arg, &req, (uint8_t) nb::detail::cast_flags::convert, nullptr);
 
-    if (!th && s.ndim > 1 && s.shape[s.ndim - 1] == DRJIT_DYNAMIC) {
+    if (!th && m.ndim > 1 && m.shape[m.ndim - 1] == DRJIT_DYNAMIC) {
         // Try conversion of scalar to vectorized representation
         req.ndim--;
         th = nb::detail::ndarray_import(
@@ -425,7 +428,7 @@ static nb::object import_ndarray(const ArraySupplement &s, PyObject *arg,
                 "should have the following configuration for this to succeed: ",
                 arg_name.c_str());
 
-        if (s.ndim) {
+        if (req.req_shape) {
             buf.fmt("ndim=%u, shape=(", req.ndim);
 
             for (size_t i = 0; i < req.ndim; ++i) {
@@ -439,21 +442,22 @@ static nb::object import_ndarray(const ArraySupplement &s, PyObject *arg,
             buf.put("), ");
         }
 
-        buf.put("dtype=");
-        nb::dlpack::dtype_code code = (nb::dlpack::dtype_code) req.dtype.code;
-        switch (code) {
-            case nb::dlpack::dtype_code::Bool: buf.put("bool"); break;
-            case nb::dlpack::dtype_code::Int: buf.put("int"); break;
-            case nb::dlpack::dtype_code::UInt: buf.put("uint"); break;
-            case nb::dlpack::dtype_code::Float: buf.put("float"); break;
-            case nb::dlpack::dtype_code::Bfloat: buf.put("bfloat"); break;
-            case nb::dlpack::dtype_code::Complex: buf.put("complex"); break;
+        if (req.req_dtype) {
+            buf.put("dtype=");
+            nb::dlpack::dtype_code code = (nb::dlpack::dtype_code) req.dtype.code;
+            switch (code) {
+                case nb::dlpack::dtype_code::Bool: buf.put("bool"); break;
+                case nb::dlpack::dtype_code::Int: buf.put("int"); break;
+                case nb::dlpack::dtype_code::UInt: buf.put("uint"); break;
+                case nb::dlpack::dtype_code::Float: buf.put("float"); break;
+                case nb::dlpack::dtype_code::Bfloat: buf.put("bfloat"); break;
+                case nb::dlpack::dtype_code::Complex: buf.put("complex"); break;
+            }
+
+            if (code != nb::dlpack::dtype_code::Bool)
+                buf.put_uint32(req.dtype.bits);
+            buf.put(", order='C'.");
         }
-
-        if (code != nb::dlpack::dtype_code::Bool)
-            buf.put_uint32(req.dtype.bits);
-
-        buf.put(", order='C'.");
 
         throw nb::type_error(buf.get());
     }
@@ -469,7 +473,24 @@ static nb::object import_ndarray(const ArraySupplement &s, PyObject *arg,
             shape_out->operator[](i) = cur_size;
     }
 
-    if (s.is_complex) {
+    if (m == ArrayMeta{}) {
+        switch (ndarr.device_type()) {
+            case nb::device::cuda::value:
+                m.backend = (uint8_t) JitBackend::CUDA;
+                break;
+
+            case nb::device::cpu::value:
+                m.backend = (uint8_t) JitBackend::LLVM;
+                break;
+
+            default:
+                nb::raise("import_ndarray(): unsupported device type!");
+        }
+
+        m.type = (uint16_t) dlpack_type_to_drjit(ndarr.dtype());
+    }
+
+    if (m.is_complex) {
         if (shape_out) {
             shape_out->resize(shape_out->size() + 1);
             for (size_t i = 1; i < ndim; ++i)
@@ -481,15 +502,15 @@ static nb::object import_ndarray(const ArraySupplement &s, PyObject *arg,
     }
 
     ArrayMeta temp_meta { };
-    temp_meta.backend = s.backend;
-    temp_meta.is_diff = s.is_diff;
-    temp_meta.type = s.type;
+    temp_meta.backend = m.backend;
+    temp_meta.is_diff = m.is_diff | force_ad;
+    temp_meta.type = m.type;
     temp_meta.ndim = 1;
     temp_meta.shape[0] = DRJIT_DYNAMIC;
     nb::handle temp_t = meta_get_type(temp_meta);
     nb::object temp = nb::inst_alloc(temp_t);
-    JitBackend backend = (JitBackend) s.backend;
-    VarType vt = (VarType) s.type;
+    JitBackend backend = (JitBackend) m.backend;
+    VarType vt = (VarType) m.type;
 
     if (backend != JitBackend::None) {
         int32_t device_type = backend == JitBackend::CUDA
