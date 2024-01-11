@@ -14,7 +14,7 @@
 #include <nanobind/ndarray.h>
 #include <drjit-core/half.h>
 
-nb::dlpack::dtype dlpack_dtype(VarType vt) {
+nb::dlpack::dtype drjit_type_to_dlpack(VarType vt) {
     using half = drjit::half;
     switch (vt) {
         case VarType::Bool:    return nb::dtype<bool>(); break;
@@ -30,9 +30,51 @@ nb::dlpack::dtype dlpack_dtype(VarType vt) {
         case VarType::Float32: return nb::dtype<float>(); break;
         case VarType::Float64: return nb::dtype<double>(); break;
         default:
-            nb::raise_type_error("Type is incompatible with DLPack.");
+            nb::raise_type_error("drjit_type_to_dlpack(): Type is incompatible with DLPack.");
     }
 }
+
+VarType dlpack_type_to_drjit(nb::dlpack::dtype dt) {
+    switch ((nb::dlpack::dtype_code) dt.code) {
+        case nb::dlpack::dtype_code::Float:
+            switch (dt.bits) {
+                case 16: return VarType::Float16;
+                case 32: return VarType::Float32;
+                case 64: return VarType::Float64;
+                default: break;
+            }
+            break;
+
+        case nb::dlpack::dtype_code::Int:
+            switch (dt.bits) {
+                case 32: return VarType::Int32;
+                case 64: return VarType::Int64;
+                default: break;
+            }
+            break;
+
+        case nb::dlpack::dtype_code::UInt:
+            switch (dt.bits) {
+                case 32: return VarType::UInt32;
+                case 64: return VarType::UInt64;
+                default: break;
+            }
+            break;
+
+        case nb::dlpack::dtype_code::Bool:
+            switch (dt.bits) {
+                case 8: return VarType::Bool;
+                default: break;
+            }
+            break;
+
+        default:
+            break;
+    }
+
+    nb::raise("dlpack_type_to_drjit(): unsupported dtype!");
+}
+
 
 using JitVar = drjit::JitArray<JitBackend::None, void>;
 
@@ -47,7 +89,7 @@ static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu, nb::handl
             is_dynamic |= s.shape[i] == DRJIT_DYNAMIC;
     }
 
-    nb::dlpack::dtype dtype = dlpack_dtype((VarType) s.type);
+    nb::dlpack::dtype dtype = drjit_type_to_dlpack((VarType) s.type);
 
     dr_vector<size_t> shape;
     dr_vector<int64_t> strides;

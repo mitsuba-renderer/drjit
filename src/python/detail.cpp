@@ -12,6 +12,8 @@
 #include "apply.h"
 #include "shape.h"
 #include "base.h"
+#include "init.h"
+#include "traits.h"
 
 /**
  * \brief Create a deep copy of a PyTree
@@ -401,7 +403,17 @@ void export_detail(nb::module_ &) {
           "event"_a, "arg"_a = nb::none())
 
      .def("clear_registry", &jit_registry_clear,
-          doc_detail_clear_registry);
+          doc_detail_clear_registry)
+
+     .def("import_tensor",
+          [](nb::handle h, bool ad) {
+              dr::dr_vector<size_t> shape;
+              nb::object flat = import_ndarray(ArrayMeta{}, h.ptr(), &shape, ad);
+              return tensor_t(flat.type())(
+                  flat,
+                  cast_shape(shape)
+              );
+          }, "tensor"_a, "ad"_a = false);
 
     trace_func_handle = d.attr("trace_func");
 }
