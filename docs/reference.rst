@@ -926,6 +926,13 @@ ________________________________________
 .. autofunction:: exp
 .. autofunction:: power
 
+Other
+_____
+
+.. autofunction:: erf
+.. autofunction:: erfinv
+.. autofunction:: lgamma
+
 Safe mathematical functions
 ---------------------------
 
@@ -1057,13 +1064,7 @@ Automatic differentiation
    .. automethod:: add_output
 
 .. autofunction:: custom
-
-Other
-_____
-
-.. autofunction:: erf
-.. autofunction:: erfinv
-.. autofunction:: lgamma
+.. autofunction:: wrap_ad
 
 
 Constants
