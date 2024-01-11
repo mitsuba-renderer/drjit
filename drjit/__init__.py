@@ -1,12 +1,21 @@
-from . import detail as _detail
-from . import ast as _ast
+from . import detail
+from .ast import syntax, hint
+
 import typing as _typing
 
-with _detail.scoped_rtld_deepbind():
+with detail.scoped_rtld_deepbind():
     try:
         from . import drjit_ext
     except ImportError as e:
-        err = ImportError("Could not import the Dr.Jit binary extension. It is likely that the Python version for which Dr.Jit was compiled does not match the current interpeter.")
+        import platform
+        py_ver_pkg = detail.PYTHON_VERSION
+        py_ver_cur = platform.python_version()
+
+        err = ImportError(
+            f'Could not import the Dr.Jit binary extension. It is likely that '
+            f'the Python version for which Dr.Jit was compiled ({py_ver_pkg}) '
+            f'is incompatible with the current interpreter ({py_ver_cur}).')
+
         err.__cause__ = e
         raise err
 
@@ -761,14 +770,14 @@ def suspend_grad(*args, when=True):
           ``when=True``.
     """
     if not when:
-        return _detail.NullContextManager()
+        return detail.NullContextManager()
 
-    array_indices = _detail.collect_indices(args)
+    array_indices = detail.collect_indices(args)
 
     if len(args) > 0 and len(array_indices) == 0:
         array_indices.append(0)
 
-    return _detail.ADContextManager(_detail.ADScope.Suspend, array_indices)
+    return detail.ADContextManager(detail.ADScope.Suspend, array_indices)
 
 
 def resume_grad(*args, when=True):
@@ -813,15 +822,15 @@ def resume_grad(*args, when=True):
           ``when=True``.
     """
     if not when:
-        return _detail.NullContextManager()
+        return detail.NullContextManager()
 
     array_indices = []
-    array_indices = _detail.collect_indices(args)
+    array_indices = detail.collect_indices(args)
 
     if len(args) > 0 and len(array_indices) == 0:
         array_indices.append(0)
 
-    return _detail.ADContextManager(_detail.ADScope.Resume, array_indices)
+    return detail.ADContextManager(detail.ADScope.Resume, array_indices)
 
 
 def isolate_grad(when=True):
@@ -872,9 +881,9 @@ def isolate_grad(when=True):
           ``when=True``.
     """
     if not when:
-        return _detail.NullContextManager()
+        return detail.NullContextManager()
 
-    return _detail.ADContextManager(_detail.ADScope.Isolate, [])
+    return detail.ADContextManager(detail.ADScope.Isolate, [])
 
 
 # -------------------------------------------------------------------
@@ -890,7 +899,7 @@ def copy(arg, /):
     lists, dictionaries, and other :ref:`custom data strutures <custom_types_py>`.
     """
 
-    return _detail.copy(arg, None)
+    return detail.copy(arg, None)
 
 
 def sign(arg, /):
@@ -1170,6 +1179,6 @@ def meshgrid(*args, indexing='xy'):
     return tuple(result)
 
 
-syntax = _ast.syntax
-hint = _ast.hint
+
+
 newaxis = None
