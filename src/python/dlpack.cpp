@@ -140,6 +140,14 @@ static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu, nb::handl
         strides.resize(strides.size() - 1);
     }
 
+    // PyTorch fails to call the capsule destructor when the data pointer is
+    // NULL (which is only a valid value when the array is empty). That's a
+    // problem because it causes Python reference leaks. As a workaround, we
+    // provide a nonzero value in this case. The issue is reported here:
+    // https://github.com/pytorch/pytorch/issues/117273
+    if (!ptr)
+        ptr = (void *) 1;
+
     return {
         ptr,
         shape.size(),
