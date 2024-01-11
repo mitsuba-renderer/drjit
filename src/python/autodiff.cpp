@@ -358,18 +358,22 @@ public:
 
     void forward() override {
         ticket t(nb_trampoline, "forward", false);
-        if (t.key.is_valid())
+        if (t.key.is_valid()) {
             nb_trampoline.base().attr(t.key)();
-        else
+        } else {
+            nb::gil_scoped_acquire r; // type_name requires the GIL
             nb::raise("%s.forward(): not implemented!", type_name().c_str());
+        }
     }
 
     void backward() override {
         ticket t(nb_trampoline, "backward", false);
-        if (t.key.is_valid())
+        if (t.key.is_valid()) {
             nb_trampoline.base().attr(t.key)();
-        else
+        } else {
+            nb::gil_scoped_acquire r; // type_name requires the GIL
             nb::raise("%s.backward(): not implemented!", type_name().c_str());
+        }
     }
 
     void eval(nb::args, nb::kwargs) {
@@ -381,10 +385,12 @@ public:
             return m_name_cache.c_str();
 
         ticket t(nb_trampoline, "name", false);
-        if (t.key.is_valid())
+        if (t.key.is_valid()) {
             m_name_cache = nb::cast<const char *>(nb_trampoline.base().attr(t.key)());
-        else
+        } else {
+            nb::gil_scoped_acquire r; // type_name requires the GIL
             m_name_cache = type_name().c_str();
+        }
 
         return m_name_cache.c_str();
     }
@@ -399,9 +405,12 @@ public:
 
             void operator()(nb::handle h1, nb::handle h2) override {
                 const ArraySupplement &s = supp(h1.type());
-                uint32_t ad_index = (uint32_t) (s.index(inst_ptr(h1)) >> 32);
-                op.add_index((JitBackend) s.backend, ad_index, input);
-                s.init_index(((uint64_t) ad_index) << 32, inst_ptr(h2));
+
+                if (s.index) {
+                    uint32_t ad_index = (uint32_t) (s.index(inst_ptr(h1)) >> 32);
+                    op.add_index((JitBackend) s.backend, ad_index, input);
+                    s.init_index(((uint64_t) ad_index) << 32, inst_ptr(h2));
+                }
             }
         };
 
