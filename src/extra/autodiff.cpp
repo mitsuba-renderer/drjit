@@ -1823,6 +1823,9 @@ struct PrefixSumEdge : Special {
 
 
 Index ad_var_new(JitIndex i0) {
+    if (i0 == 0)
+        return 0;
+
     Index result = ad_var_new(nullptr, JitVar::borrow(i0));
 
     const char *label = jit_var_label(i0);
