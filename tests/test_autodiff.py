@@ -1443,6 +1443,16 @@ class Copy(dr.CustomOp):
     def name(self):
         return "Copy"
 
+class ArgsKwargs(dr.CustomOp):
+    def eval(self, *args, **kwargs):
+        return args[0], kwargs['key']
+
+    def forward(self):
+        self.set_grad_out((self.grad_in('args')[0], self.grad_in('kwargs')['key']))
+
+    def name(self):
+        return "ArgsKWargs"
+
 @pytest.test_arrays('is_diff,float,-float16,shape=(3, *)')
 def test097_custom_op_fwd_1(t):
     d = t(1, 2, 3)
@@ -1680,3 +1690,14 @@ def test110_scatter_add_kahan(t):
     value_d = dr.backward_to(value)
     assert dr.all(buf1 + buf2 == [1, 5])
     assert dr.all(value_d == [10, 20, 20])
+
+
+@pytest.test_arrays('is_diff,float32,shape=(*)')
+def test111_custom_op_args_kwargs(t):
+    x, y = t(1), t(2)
+    dr.enable_grad(x, y)
+    a, b = dr.custom(ArgsKwargs, x, key=y)
+    x.grad = 100
+    y.grad = 200
+    dr.forward_to(a, b)
+    assert a.grad == 100 and b.grad == 200

@@ -462,30 +462,53 @@ private:
     nb::object m_output;
 };
 
+// Cache the value of 'inspect.CO_VARARGS'
+static size_t co_varargs = 0, co_varkeywords = 0;
+
 nb::object custom(nb::type_object_t<PyCustomOp> cls, nb::args args, nb::kwargs kwargs) {
     try {
         nb::object op = cls();
 
-        auto eval_func = op.attr("eval"),
-             eval_code = eval_func.attr("__code__"),
-             eval_argc = eval_code.attr("co_argcount"),
-             eval_argn = eval_code.attr("co_varnames");
-
-        nb::object output = eval_func(*detach(args), **detach(kwargs));
+        nb::object eval_func = op.attr("eval"),
+                   output = eval_func(*detach(args), **detach(kwargs));
 
         // Ensure that the output is registered with the AD layer without depending
         // on previous computation. That dependence is reintroduced later below.
         output = new_grad(output);
 
-        size_t i = 0, argc = nb::cast<size_t>(eval_argc);
-        for (nb::handle arg: args) {
-            if (i + 1 < argc)
-                kwargs[eval_argn[i + 1]] = arg;
-            i++;
+        // The following is based on the implementation of inspect.getargs
+        nb::object co = eval_func.attr("__code__"),
+                   co_varnames = co.attr("co_varnames");
+
+        size_t co_argc  = nb::cast<size_t>(co.attr("co_argcount")),
+               co_flags = nb::cast<size_t>(co.attr("co_flags")),
+               argc = nb::len(args);
+
+        nb::dict inputs;
+
+        // Extract ordinary arguments specified using positional or keyword syntax
+        for (size_t i = 1 /* skip 'self' */; i < co_argc; ++i) {
+            nb::object key = co_varnames[i];
+            if (i - 1 < argc) {
+                inputs[key] = args[i - 1];
+            } else if (kwargs.contains(key)) {
+                inputs[key] = kwargs[key];
+                nb::del(kwargs[key]);
+            }
         }
 
+        size_t co_arg_pos = co_argc;
+
+        // Extract variable-length positional arguments
+        if (co_flags & co_varargs)
+            inputs[co_varnames[co_arg_pos++]] = nb::handle(args)[nb::slice(co_argc - 1, argc)];
+
+        // Extract variable-length keyword arguments
+        if (co_flags & co_varkeywords)
+            inputs[co_varnames[co_arg_pos++]] = kwargs;
+
         PyCustomOp *op_cpp = nb::cast<PyCustomOp *>(op);
-        op_cpp->set_input(kwargs);
+        op_cpp->set_input(inputs);
         op_cpp->set_output(output);
 
         if (!ad_custom_op(op_cpp))
@@ -507,6 +530,11 @@ nb::object custom(nb::type_object_t<PyCustomOp> cls, nb::args args, nb::kwargs k
 }
 
 void export_autodiff(nb::module_ &m) {
+    // Cache some bytecode-related flags that are unavailable in the limited API
+    nb::object inspect = nb::module_::import_("inspect");
+    co_varargs = nb::cast<size_t>(inspect.attr("CO_VARARGS"));
+    co_varkeywords = nb::cast<size_t>(inspect.attr("CO_VARKEYWORDS"));
+
     nb::enum_<dr::ADMode>(m, "ADMode", doc_ADMode)
         .value("Primal", dr::ADMode::Primal, doc_ADMode_Primal)
         .value("Forward", dr::ADMode::Forward, doc_ADMode_Forward)
