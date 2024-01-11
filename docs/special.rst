@@ -446,10 +446,9 @@ operations:
 Tensors
 -------
 
-Dr.Jit also includes a general n-dimensional array type (nowadays colloquially
-referred to as a `tensor <https://en.wikipedia.org/wiki/Tensor>`__, though this
-term technically isn't 100% correct). The tensor types all have a capital ``X``
-in their name to denote their dynamic shape (e.g.,
+Dr.Jit also includes a general n-dimensional array type colloquially referred
+to as a `tensor <https://en.wikipedia.org/wiki/Tensor>`__. The tensor types all
+have a capital ``X`` in their name to denote their dynamic shape (e.g.,
 :py:class:`drjit.cuda.TensorXf16`).
 
 A tensor is internally represented by a :ref:`flat array <flat_arrays>` and a
@@ -459,18 +458,18 @@ creation operations.
 .. code-block:: pycon
 
    >>> from drjit.llvm import TensorXf
-   >>> t = TensorXf([1,2,3,4,5,6], shape=(3, 2))
-   >>> print(t)
-   [[1, 2],
-    [3, 4],
-    [5, 6]]
-   >>> drjit.zeros(TensorXf, (1, 2, 3, 4))
+   >>> drjit.zeros(TensorXf, shape=(1, 2, 3, 4))
    [[[[0, 0, 0, 0],
       [0, 0, 0, 0],
       [0, 0, 0, 0]],
      [[0, 0, 0, 0],
       [0, 0, 0, 0],
       [0, 0, 0, 0]]]]
+   >>> t = TensorXf([1,2,3,4,5,6], shape=(3, 2))
+   >>> print(t)
+   [[1, 2],
+    [3, 4],
+    [5, 6]]
 
 The shape and flat array underlying a tensor can be accessed using its
 :py:attr:`.shape <drjit.ArrayBase.shape>` and :py:attr:`.array <drjit.ArrayBase.array>` members.
@@ -483,7 +482,7 @@ The shape and flat array underlying a tensor can be accessed using its
    [1, 2, 3, 4, 5, 6]
 
 Tensors directly convert to other Dr.Jit types, and vice versa. A potential
-surprise here is that this actually changes the output of operations like
+surprise here is that this changes the output of operations like
 ``print``, :py:func:`drjit.print`, :py:func:`drjit.format`, and
 :py:func:`drjit.ArrayBase.__repr__`:
 
@@ -503,20 +502,21 @@ surprise here is that this actually changes the output of operations like
    >>> t.shape
    (3, 2)
 
-This change is cosmetic: the string conversion of ordinary Dr.Jit arrays shows
-them in transposed form. In the above example, this puts the components of each
-3D vector onto the same line, which is usually more intuitive. In contrast, the
-string conversion of tensors matches that of other array programming libraries
-and does not transpose their contents.
+This is intentional and merely cosmetic: the string conversion of non-tensor
+arrays actually prints the *transpose*, which rearranges the data so that all
+information associated with one thread of the parallel program is shown next to
+each other (e.g. to display a complete 3D vector on each line in the above
+example). In contrast, the string conversion of tensors matches that of other
+array programming libraries and does not transpose the input.
 
 Tensors support all normal mathematical operations along with automatic
 differentiation. They share the broadcasting behavior known from other array
 programming frameworks.
 
-
 .. code-block:: pycon
 
-   >>> t = drjit.pi - drjit.atan2(TensorXf([1], shape=(1,1)), TensorXf([1,2], shape=(1,2)))
+   >>> t = drjit.pi - drjit.atan2(TensorXf([1],   shape=(1,1)),
+   ...                            TensorXf([1,2], shape=(1,2)))
    >>> t.shape
    (1, 2)
    >>> t
@@ -537,26 +537,40 @@ indexing with :py:attr:`drjit.newaxis` (or equivalently, ``None``).
 
 Slicing internally turns into a :py:func:`drjit.gather` operation that reads
 from the underlying flat array, while slice assignment turns into
-:py:func:`drjit.scatter`.
+:py:func:`drjit.scatter`. The conversion from a slice tuple into concrete
+indices is performed by the function :py:`drjit.slice_index` that can also be
+used directly.
+
+Limitations
+^^^^^^^^^^^
 
 It should be noted that Dr.Jit is *not* a general array/tensor programming
-library. For example, many standard operations found in other frameworks are missing:
+library. It currently lacks many standard operations found in frameworks like
+PyTorch or TensorFlow. This includes
 
 - Operations to split or concatenate tensors and rearrange their axes in various ways.
 - General matrix/tensor product operations, convolutions, FFT, Einstein sums, etc.
 
-While we intend to add features to the tensor interface in the future to make
-it more fully featured (external contributions are also welcomed!), tensors are
-best used sparingly in actual programs.
+While we intend to make the interface more feature-complete in the future
+(external help is welcomed!), tensors are best used sparingly in actual
+programs.
 
-Tensor-based programs tend to make frequent use of slicing operations. For
-example, the following line adds even and odd-numbered entries of a 1D tensor:
+The reason for this is that tensor-based programs tend to make frequent use of
+slicing operations. For example, the following snippet adds even and
+odd-numbered entries of a 1D tensor and would not feel out of place in a
+typical NumPy/PyTorch/TensorFlow program.
 
 .. code-block:: pycon
 
    >>> t = t[0::2] + t[1::2]
 
-In a Dr.Jit program, these entries are computed by different threads of the
-program. Correct sequencing of the operation may then require an intermediate
-variable evaluation, which prevents the compilation of a fully fused kernel
-(which is one of the key optimizations implemented by Dr.Jit).
+In a Dr.Jit program, the entries of this tensor would be computed by different
+threads of a parallel program. Correct sequencing of the operation then
+generally requires a *barrier* realized by an intermediate variable evaluation,
+which prevents the compilation of a fully fused kernel. In other words, the use
+of tensors can interfere with one of Dr.Jit's key optimizations, which is its
+ability to aggressively fuse operations into large kernels.
+
+We recommend the use of tensors mainly as storage representation of shaped data
+(images, volumes), and as a container to exchange data with other libraries,
+e.g. via :py:func:`drjit.wrap_ad`.

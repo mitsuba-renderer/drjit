@@ -5,12 +5,12 @@ Dr.Jit — A Just-In-Time-Compiler for Differentiable Rendering
    :maxdepth: 1
    :caption: Contents
 
+   changelog
    general
    special
    cflow
    cpp
    textures
-   changelog
 
 .. toctree::
    :maxdepth: 1
@@ -26,14 +26,10 @@ Alternative layout:
  - array creation
  - mathematical functions
  - memory operations
- - tensors
- - control flow
  - type traits
- - 1d/2d/3d textures, bspline interp
  - automatic differentiation
  - interoperability with other libraries
  - custom data structures
- - C++ interface
  - random number generation
  - debugging, printing, benchmarking, pitfalls
  - faq
