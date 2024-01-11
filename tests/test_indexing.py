@@ -64,7 +64,7 @@ def test03_index_nested(t):
     with pytest.raises(TypeError) as e:
         v[-1, ...]
 
-    assert "Complex slicing operations are only supported on tensors." in str(e.value.__context__)
+    assert "Complex slicing operations are currently only supported on tensors." in str(e.value.__context__)
 
 @pytest.test_arrays('shape=(*), -bool', 'tensor, -bool')
 def test04_masked_assignment(t):

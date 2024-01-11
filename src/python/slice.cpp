@@ -189,7 +189,9 @@ PyObject *mp_subscript(PyObject *self, PyObject *key) noexcept {
     const ArraySupplement &s = supp(self_tp);
 
     try {
-        if (is_drjit_type(key_tp) && (VarType) supp(key_tp).type == VarType::Bool) {
+        bool key_is_array = is_drjit_type(key_tp);
+
+        if (key_is_array && (VarType) supp(key_tp).type == VarType::Bool) {
             Py_INCREF(self);
             return self;
         }
@@ -240,13 +242,13 @@ PyObject *mp_subscript(PyObject *self, PyObject *key) noexcept {
             }
 
             return o.release().ptr();
-        } else if (key == Py_None || key_tp.is(&PyEllipsis_Type) || key_tp.is(&PySlice_Type)) {
+        } else if (key == Py_None || key_tp.is(&PyEllipsis_Type) || key_tp.is(&PySlice_Type) || key_is_array) {
             complex_case = true;
         }
 
         if (complex_case) {
             nb::raise_type_error(
-                "Complex slicing operations are only supported on tensors.");
+                "Complex slicing operations are currently only supported on tensors.");
         } else {
             nb::str key_name = nb::type_name(key_tp);
             nb::raise_type_error("Invalid key of type '%s' specified.",
@@ -273,7 +275,9 @@ int mp_ass_subscript(PyObject *self, PyObject *key, PyObject *value) noexcept {
     const ArraySupplement &s = supp(self_tp);
 
     try {
-        if (is_drjit_type(key_tp) && (VarType) supp(key_tp).type == VarType::Bool) {
+        bool key_is_array = is_drjit_type(key_tp);
+
+        if (key_is_array && (VarType) supp(key_tp).type == VarType::Bool) {
             nb::object result = select(nb::borrow(key), nb::borrow(value), nb::borrow(self));
             nb::inst_replace_move(self, result);
             return 0;
@@ -329,13 +333,13 @@ int mp_ass_subscript(PyObject *self, PyObject *key, PyObject *value) noexcept {
             }
 
             return 0;
-        } else if (key == Py_None || key_tp.is(&PyEllipsis_Type) || key_tp.is(&PySlice_Type)) {
+        } else if (key == Py_None || key_tp.is(&PyEllipsis_Type) || key_tp.is(&PySlice_Type) || key_is_array) {
             complex_case = true;
         }
 
         if (complex_case) {
             nb::raise_type_error(
-                "Complex slicing operations are only supported on tensors.");
+                "Complex slicing operations are currently only supported on tensors.");
         } else {
             nb::str key_name = nb::type_name(key_tp);
             nb::raise_type_error("Invalid key of type '%s' specified.",
