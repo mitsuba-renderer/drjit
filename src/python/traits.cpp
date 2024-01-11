@@ -109,6 +109,21 @@ bool is_quaternion_v(nb::handle h) {
     return is_drjit_type(tp) ? supp(tp).is_quaternion : false;
 }
 
+
+nb::object tensor_t(nb::handle h) {
+    nb::handle tp = h.is_type() ? h : h.type();
+    if (is_drjit_type(tp)) {
+        ArrayMeta m2 { }, m = supp(tp);
+        m2.type = m.type;
+        m2.backend = m.backend;
+        m2.is_diff = m.is_diff;
+        m2.is_tensor = true;
+        m2.is_valid = true;
+        return nb::borrow(meta_get_type(m2));
+    }
+    return nb::none();
+}
+
 void export_traits(nb::module_ &m) {
     m.attr("Dynamic") = -1;
 
@@ -317,6 +332,8 @@ void export_traits(nb::module_ &m) {
           }, doc_is_diff_v);
 
     m.def("itemsize_v", &itemsize_v, doc_itemsize_v);
+
+    m.def("tensor_t", &tensor_t, doc_tensor_t);
 
     m.def("reinterpret_array_t",
           [](nb::handle h, VarType vt) { return reinterpret_array_t(h, vt); },
