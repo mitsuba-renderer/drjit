@@ -1,6 +1,6 @@
 if (SKBUILD)
   # Enable LTO only for release builds targeting PyPI (~5% binary size reduction)
-  set(DRJIT_LTO_FLAG "LTO")
+  set(DRJIT_DIST_FLAGS LTO STABLE_ABI)
 endif()
 
 nanobind_add_module(
@@ -8,8 +8,7 @@ nanobind_add_module(
 
   NB_DOMAIN drjit
   NB_STATIC
-  STABLE_ABI
-  ${DRJIT_LTO_FLAG}
+  ${DRJIT_DIST_FLAGS}
 
   # Entry point
   main.cpp

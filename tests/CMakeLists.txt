@@ -1,8 +1,12 @@
+if (SKBUILD)
+  set(DRJIT_DIST_FLAGS STABLE_ABI)
+endif()
+
 function(add_drjit_test NAME)
   nanobind_add_module(
     ${NAME}
     NB_DOMAIN drjit
-    STABLE_ABI
+    ${DRJIT_DIST_FLAGS}
     ${ARGV}
   )
 
