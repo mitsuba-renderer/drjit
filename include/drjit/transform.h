@@ -22,7 +22,7 @@ template <typename Matrix>
 Matrix translate(const Array<entry_t<Matrix>, size_v<Matrix> - 1> &v) {
     Matrix trafo = identity<Matrix>();
     trafo.entry(size_v<Matrix> - 1) = concat(v, Array<entry_t<Matrix>, 1>(1));
-    return trafo;
+    return transpose(trafo);
 }
 
 template <typename Matrix>
@@ -56,9 +56,9 @@ Matrix rotate(const Array<entry_t<Matrix>, 3> &axis,
             tmp2  = fmsub(axis * shuf2, cos_theta_m, shuf1 * sin_theta);
 
     return Matrix(
-        Vector4(tmp0.x(), tmp1.x(), tmp2.x(), 0.f),
-        Vector4(tmp2.y(), tmp0.y(), tmp1.y(), 0.f),
-        Vector4(tmp1.z(), tmp2.z(), tmp0.z(), 0.f),
+        Vector4(tmp0.x(), tmp2.y(), tmp1.z(), 0.f),
+        Vector4(tmp1.x(), tmp0.y(), tmp2.z(), 0.f),
+        Vector4(tmp2.x(), tmp1.y(), tmp0.z(), 0.f),
         Vector4(0.f, 0.f, 0.f, 1.f)
     );
 }
@@ -163,7 +163,7 @@ Matrix look_at(const Array<entry_t<Matrix>, 3> &origin,
 
     Array<Value, 1> z(0);
 
-    return Matrix(
+    return transpose(Matrix(
         concat(left, z),
         concat(new_up, z),
         concat(-dir, z),
@@ -173,7 +173,7 @@ Matrix look_at(const Array<entry_t<Matrix>, 3> &origin,
              dot(dir, origin),
              1.f
         )
-    );
+    ));
 }
 
 template <typename Value>
@@ -186,7 +186,7 @@ transform_decompose(const Matrix<Value, 4> &a, size_t it = 10) {
     Q = mulsign(Q, sign_q);
     P = mulsign(P, sign_q);
 
-    return std::make_tuple(P, matrix_to_quat(Q), head<3>(a.entry(3)));
+    return std::make_tuple(P, matrix_to_quat(Q), head<3>(transpose(a).entry(3)));
 }
 
 template <typename Matrix4>

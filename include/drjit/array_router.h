@@ -354,7 +354,7 @@ auto clamp(const Value1 &value, const Value2 &min, const Value3 &max) {
 
 namespace detail {
     template <typename T> using has_zero   = decltype(T().zero_(0));
-    template <typename T> using has_opaque = decltype(T().opaque_());
+    template <typename T> using has_schedule_force = decltype(T().schedule_force_());
 
     template <typename Array> DRJIT_INLINE Array sign_mask() {
         using Scalar = scalar_t<Array>;
@@ -455,8 +455,8 @@ DRJIT_INLINE Value prev_float(const Value &value) {
 
     Int i = reinterpret_array<Int>(value);
 
-    IntMask is_nan_inf = eq(i & exponent_mask, exponent_mask),
-            is_pos_0   = eq(i, 0),
+    IntMask is_nan_inf = (i & exponent_mask) == exponent_mask,
+            is_pos_0   = i == 0,
             is_gt_0    = i >= 0,
             is_special = is_nan_inf | is_pos_0;
 
@@ -483,7 +483,7 @@ DRJIT_INLINE Value next_float(const Value &value) {
 
     Int i = reinterpret_array<Int>(value);
 
-    IntMask is_nan_inf = i & exponent_mask == exponent_mask,
+    IntMask is_nan_inf = (i & exponent_mask) == exponent_mask,
             is_neg_0   = i == sign_mask,
             is_gt_0    = i >= 0,
             is_special = is_nan_inf | is_neg_0;
@@ -1434,12 +1434,13 @@ namespace detail {
             bool result = false;
             struct_support_t<T>::apply_1(
                 value,
-                [&](auto const &x) DRJIT_INLINE_LAMBDA {
+                [&](auto &x) DRJIT_INLINE_LAMBDA {
                     result |= schedule_force(x);
                 });
             return result;
+        } else if constexpr (is_detected_v<detail::has_schedule_force, T>) {
+            return value.schedule_force_();
         } else {
-            static_assert(!is_detected_v<detail::has_opaque, T>, "TODO: Let's convert this to schedule_force");
             return false;
         }
     }
@@ -1461,6 +1462,24 @@ DRJIT_INLINE void make_opaque(Ts&... values) {
             eval();
     }
 }
+
+/**
+ * \brief Helper to modify JIT flags within a given scope
+ */
+struct scoped_set_flag {
+    scoped_set_flag(JitFlag flag, bool value) :
+        flag(flag),
+        original_value(jit_flag(flag)) {
+        jit_set_flag(flag, value);
+    }
+
+    ~scoped_set_flag() {
+        jit_set_flag(flag, original_value);
+    }
+
+    JitFlag flag;
+    bool original_value;
+};
 
 DRJIT_INLINE void set_device(int32_t device) {
     jit_cuda_set_device(device);
