@@ -222,15 +222,23 @@ template <typename T> struct PCG32 {
             UInt32 threshold = imod(~bound + 1u, div);
 
             auto [_, rng, result] = while_loop(
+                // Initial loop state
                 make_tuple(mask, PCG32(*this), UInt32(0)),
+
+                // Loop condition
                 [](Mask &m, PCG32 &, UInt32 &) { return m; },
+
+                // Loop update step
                 [threshold](Mask &m, PCG32 &rng, UInt32 &result) {
                     result = rng.next_uint32();
 
                     /* Keep track of which SIMD lanes have already
-                       finished and stops advancing the associated PRNGs */
+                       finished and stop advancing the associated PRNGs */
                     m &= result < threshold;
-                }
+                },
+
+                // Descriptive label
+                "drjit::PCG32::next_uint32_bounded()"
             );
 
             state = rng.state;
@@ -257,15 +265,23 @@ template <typename T> struct PCG32 {
             UInt64 threshold = imod(~bound + (uint64_t) 1, div);
 
             auto [_, rng, result] = while_loop(
+                // Initial loop state
                 make_tuple(mask, PCG32(*this), UInt64(0)),
-                [](Mask &m, PCG32 &, UInt64 &) { return m; },
-                [threshold](Mask &m, PCG32 &rng, UInt64 &result) {
+
+                // Loop condition
+                [](Mask &active, PCG32 &, UInt64 &) { return active; },
+
+                // Loop update step
+                [threshold](Mask &active, PCG32 &rng, UInt64 &result) {
                     result = rng.next_uint64();
 
                     /* Keep track of which SIMD lanes have already
-                       finished and stops advancing the associated PRNGs */
-                    m &= result < threshold;
-                }
+                       finished and stop advancing the associated PRNGs */
+                    active &= result < threshold;
+                },
+
+                // Descriptive label
+                "drjit::PCG32::next_uint64_bounded()"
             );
 
             state = rng.state;
@@ -393,7 +409,7 @@ template <typename T> struct PCG32 {
 
 private:
     struct initialize_state { };
-    DRJIT_INLINE PCG32(initialize_state, const UInt64 &state, const UInt64 &inc)
+    PCG32(initialize_state, const UInt64 &state, const UInt64 &inc)
         : state(state), inc(inc) { }
 };
 
