@@ -1,5 +1,6 @@
 from . import detail
 from .ast import syntax, hint
+from .interop import wrap_ad
 
 import typing as _typing
 
