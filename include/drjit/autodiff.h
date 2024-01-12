@@ -717,7 +717,7 @@ template <typename T> void enqueue(ADMode mode, const T &value) {
             for (size_t i = 0; i < value.size(); ++i)
                 enqueue(mode, value.entry(i));
         } else {
-            ad_enqueue(value.index_combined(), mode);
+            ad_enqueue(mode, value.index_combined());
         }
     } else if constexpr (is_drjit_struct_v<T>) {
         struct_support_t<T>::apply_1(
