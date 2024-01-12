@@ -1727,22 +1727,27 @@ auto grad(const T &value) {
     }
 }
 
-template <bool Accum = false, typename T, typename T2>
+template <typename T, typename T2>
 void set_grad(T &value, const T2 &grad) {
     if constexpr (is_diff_v<T>) {
         if constexpr (is_tensor_v<T2>) {
-            set_grad<Accum>(value.array(), grad.array());
+            set_grad(value.array(), grad.array());
         } else if constexpr (depth_v<T> > 1) {
             for (size_t i = 0; i < value.size(); ++i)
-                set_grad<Accum>(value.entry(i), grad.entry(i));
+                set_grad(value.entry(i), grad.entry(i));
         } else {
-            value.set_grad_(grad.index(), Accum);
+            if constexpr(!std::is_same_v<T, T2>) {
+                T grad_ = T(grad);
+                value.set_grad_(grad_.index());
+            } else {
+                value.set_grad_(grad.index());
+            }
         }
     } else if constexpr (is_drjit_struct_v<T>) {
         struct_support_t<T>::apply_2(
             value, grad,
             [](auto &x1, auto &x2) DRJIT_INLINE_LAMBDA {
-                set_grad<Accum>(x1, x2);
+                set_grad(x1, x2);
             });
     }
 }
