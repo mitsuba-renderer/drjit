@@ -612,8 +612,9 @@ struct DRJIT_TRIVIAL_ABI DiffArray
             return false;
     }
 
-    void set_grad_(uint32_t index, bool accum) {
-        ad_set_grad(m_index, index, accum);
+    void set_grad_(uint32_t index) {
+        ad_clear_grad(index_ad());
+        ad_accum_grad(index_ad(), index);
     }
 
     void set_grad_enabled_(bool value) {
