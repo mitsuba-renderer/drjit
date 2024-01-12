@@ -118,6 +118,7 @@ Miscellaneous operations
 .. autofunction:: slice_index
 .. autofunction:: meshgrid
 .. autofunction:: make_opaque
+.. autofunction:: copy
 
 Just-in-time compilation
 ------------------------
@@ -272,7 +273,6 @@ Just-in-time compilation
 .. autofunction:: has_backend
 .. autofunction:: schedule
 .. autofunction:: eval
-.. autofunction:: sync_thread
 
 .. autoclass:: JitFlag
 
@@ -850,6 +850,8 @@ Bit-level operations
 .. autofunction:: lzcnt
 .. autofunction:: tzcnt
 
+.. autofunction:: log2i
+
 Standard mathematical functions
 -------------------------------
 
@@ -879,6 +881,7 @@ Operations for vectors and matrices
 .. autofunction:: diag
 .. autofunction:: trace
 .. autofunction:: matmul
+
 
 Operations for complex values and quaternions
 ---------------------------------------------
@@ -933,6 +936,8 @@ _____
 .. autofunction:: erf
 .. autofunction:: erfinv
 .. autofunction:: lgamma
+.. autofunction:: rad2deg
+.. autofunction:: deg2rad
 
 Safe mathematical functions
 ---------------------------
@@ -1244,17 +1249,19 @@ Printing arrays
 .. autofunction:: format
 .. autofunction:: print
 
-Miscellaneous
--------------
+Low-level bits
+--------------
 
-.. autofunction:: copy
 .. autofunction:: thread_count
 .. autofunction:: set_thread_count
+.. autofunction:: sync_thread
+.. autofunction:: flush_kernel_cache
+.. autofunction:: flush_malloc_cache
 .. autofunction:: block_size
 .. autofunction:: set_block_size
-.. autofunction:: log2i
-.. autofunction:: rad2deg
-.. autofunction:: deg2rad
+.. autofunction:: kernel_history
+.. autofunction:: kernel_history_clear
+
 
 .. py:data:: None
    :type: NoneType

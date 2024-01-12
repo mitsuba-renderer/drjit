@@ -3486,14 +3486,6 @@ Returns:
     NoneType | str: a human-readable list (if requested).
 )";
 
-static const char *doc_ad_scope_enter = R"(
-TODO
-)";
-
-static const char *doc_ad_scope_leave = R"(
-TODO
-)";
-
 static const char *doc_suspend_grad = R"(
 suspend_grad(*args, when = True)
 Context manager for temporally suspending derivative tracking.
@@ -4835,7 +4827,7 @@ incompatible numbers of elements, dictionaries with different keys, etc.))";
 static const char *doc_detail_collect_indices = R"(
 Return Dr.Jit variable indices associated with the provided data structure.
 
-This function traverses Dr.Jit arrays, tensors, :ref:`Pytree <pytrees>` (lists,
+This function traverses Dr.Jit arrays, tensors, :ref:`PyTree <pytrees>` (lists,
 tuples, dicts, custom data structures) and returns the indices of all detected
 variables (in the order of traversal, may contain duplicates). The index
 information is returned as a list of encoded 64 bit integers, where each
@@ -4856,7 +4848,7 @@ This function works analogously to ``collect_indices``, except that it
 consumes an index array and produces an updated output.
 
 It recursively traverses and copies an input object that may be a Dr.Jit
-array, tensor, or :ref:`Pytree <pytrees>` (list, tuple, dict, custom data
+array, tensor, or :ref:`PyTree <pytrees>` (list, tuple, dict, custom data
 structure) while replacing any detected Dr.Jit variables with new ones based
 on the provided index vector. The function returns the resulting object,
 while leaving the input unchanged. The output array object borrows the
@@ -6238,6 +6230,129 @@ Args:
 
 Returns:
     int | drjit.ArrayBase: Result of the reduction operation)";
+
+static const char *doc_sync_thread = R"(
+Wait for all currently running computation to finish.
+
+This function synchronizes the device (e.g. the GPU) with the host (CPU) by
+waiting for the termination of all computation enqueued by the current host
+thread.
+
+One potential use of this function is to measure the runtime of a kernel
+launched by Dr.Jit. We instead recommend the use of the
+:py:func:`drjit.kernel_history()`, which exposes more accurate device timers.
+
+In general, calling this function in user code is considered **bad practice**.
+Dr.Jit programs "run ahead" of the device to keep it fed with work. This is
+important for performance, and :py:func:`drjit.sync_thread` breaks this
+optimization.
+
+All operations sent to a device (including reads) are strictly ordered, so
+there is generally no reason to wait for this queue to empty. If you find
+that :py:func:`drjit.sync_thread` is needed for your program to run correctly,
+then you have found a bug. Please report it on the project's 
+`GitHub issue tracker <https://github.com/mitsuba-renderer/drjit>`__.)";
+
+static const char *doc_flush_malloc_cache = R"(
+Free the memory allocation cache maintained by Dr.Jit.
+
+Allocating and releasing large chunks of memory tends to be relatively
+expensive, and Dr.Jit programs often need to do so at high rates.
+
+Like most other array programming frameworks, Dr.Jit implements an internal
+cache to reduce such allocation-related costs. This cache starts out empty and
+grows on demand. Allocated memory is never released by default, which can be
+problematic when using multiple array programming frameworks within the same
+Python session, or when running multiple processes in parallel.
+
+The :py:func:`drjit.flush_malloc_cache` function releases all currently unused
+memory back to the operationg system. This is a relatively expensive step: you
+likely don't want to use it within a performance-sensitive program region (e.g.
+an optimization loop).)";
+
+static const char *doc_flush_kernel_cache = R"(
+Release all currently cached kernels.
+
+When Dr.Jit evaluates a previously unseen computation, it compiles a kernel and
+then maps it into the memory of the CPU or GPU. The kernel stays resident so
+that it can be immediately reused when that same computation reoccurs at a
+later point.
+
+In long development sessions (e.g. a Juptyer notebook-based prototyping),
+this cache may eventually become unreasonably large, and calling
+:py:func:`flush_kernel_cache` to free it may be advisable.
+
+Note that this does not free the *disk cache* that also exists to preserve compiled
+programs across sessions. To clear this cache as well, delete the directory
+``$HOME/.drjit`` on Linux/macOS, and ``%AppData%\Local\Temp\drjit`` on Windows.
+(The ``AppData`` folder is typically found in ``C:\Users\<your username>``).)";
+
+static const char *doc_kernel_history = R"(
+Return the history of captured kernel launches.
+
+Dr.Jit can optionally capture performance-related metadata. To do so, set the
+:py:attr:`drjit.JitFlag.KernelHistory` flag as follows:
+
+.. code-block:: python
+
+   with dr.scoped_set_flag(dr.JitFlag.KernelHistory):
+      # .. computation to be analyzed ..
+   
+   hist = dr.kernel_history()
+
+The :py:func:`drjit.kernel_history()` function returns a list of dictionaries
+characterizing each major operation performed by the analyzed region. This
+dictionary has the following entries
+
+- ``backend``: The used JIT backend.
+
+- ``execution_time``: The time (in microseconds) used by this operation.
+
+  On the CUDA backend, this value is captured via CUDA events. On the LLVM
+  backend, this involves querying ``CLOCK_MONOTONIC`` (Linux/macOS) or
+  ``QueryPerformanceCounter`` (Windows).
+
+- ``type``: The type of computation expressed by an enumeration value of type
+  :py:class:`drjit.KernelType`. The most interesting workload generated by Dr.Jit
+  are just-in-time compiled kernels, which are identified by :py:attr:`drjit.KernelType.JIT`.
+
+  These have several additional entries:
+
+  - ``hash``: The hash code identifying the kernel. (This is the same hash code is
+    also shown when increasing the log level via :py:func:`drjit.set_log_level`).
+
+  - ``ir``: A capture of the intermediate representation used in this kernel.
+
+  - ``operation_count``: The number of low-level IR operations. (A rough
+    proxy for the complexity of the operation.)
+
+  - ``cache_hit``: Was this kernel present in Dr.Jit's in-memory cache?
+    Otherwise, it as either loaded from memory or had to be recompiled from scratch.
+
+  - ``cache_disk``: Was this kernel present in Dr.Jit's on-disk cache?
+    Otherwise, it had to be recompiled from scratch.
+
+  - ``codegen_time``: The time (in microseconds) which Dr.Jit needed to
+    generate the textual low-level IR representation of the kernel. This
+    step is always needed even if the resulting kernel is already cached.
+
+  - ``backend_time``: The time (in microseconds) which the backend (either the
+    LLVM compiler framework or the CUDA PTX just-in-time compiler) required to
+    compile and link the low-level IR into machine code. This step is only
+    needed when the kernel did not already exist in the in-memory or on-disk cache.
+
+  - ``uses_optix``: Was this kernel compiled by the
+    `NVIDIA OptiX <https://developer.nvidia.com/rtx/ray-tracing/optix>`__
+    ray tracing engine?
+
+Note that :py:func:`drjit.kernel_history()` clears the history while extracting
+this information. A related ooperation :py:func:`drjit.kernel_history_clear()`
+*only* clears the history without returning any information.)";
+
+static const char *doc_kernel_history_clear = R"(Clear the kernel history.
+
+This operation clears the kernel history without returning any information
+about it. See :py:func:`drjit.kernel_history` for details.)";
 
 #if defined(__GNUC__)
 #  pragma GCC diagnostic pop
