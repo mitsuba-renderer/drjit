@@ -617,6 +617,17 @@ struct DRJIT_TRIVIAL_ABI DiffArray
         ad_accum_grad(index_ad(), index);
     }
 
+    DiffArray copy() const {
+        if constexpr (IsFloat)
+            return steal(ad_var_copy(m_index));
+        else
+            return steal(jit_var_copy(m_index));
+    }
+
+    DiffArray migrate_(AllocType type) const {
+        return steal(jit_var_migrate((uint32_t) m_index, type));
+    }
+
     void set_grad_enabled_(bool value) {
         DRJIT_MARK_USED(value);
         if constexpr (IsFloat) {
@@ -744,14 +755,35 @@ void traverse(ADMode mode, uint32_t flags = (uint32_t) ADFlag::Default) {
     ad_traverse(mode, flags);
 }
 
-struct suspend_grad {
-    suspend_grad() {
-        ad_scope_enter(drjit::ADScope::Suspend, 0, nullptr);
+namespace detail {
+    template <bool IncRef, typename T>
+    void collect_indices(const T &value, dr_vector<uint64_t> &indices);
+}
+
+template <typename T> struct suspend_grad {
+    static constexpr bool Enabled =
+        is_diff_v<T> && std::is_floating_point_v<scalar_t<T>>;
+    template <typename... Args>
+    suspend_grad(bool when, const Args &... args) : condition(when) {
+        if constexpr (Enabled) {
+            if (condition) {
+                dr_vector<uint64_t> indices;
+                (detail::collect_indices<false>(args, indices), ...);
+                ad_scope_enter(ADScope::Suspend, indices.size(), indices.data());
+            }
+        } else {
+            (((void) args), ...);
+        }
     }
 
     ~suspend_grad() {
-        ad_scope_leave(true);
+        if constexpr (Enabled) {
+            if (condition)
+                ad_scope_leave(true);
+        }
     }
+
+    bool condition;
 };
 
 namespace detail {

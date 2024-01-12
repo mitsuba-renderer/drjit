@@ -143,9 +143,9 @@ auto operator*(const Matrix<T0, Size> &m0, const T1 &a1) {
         }
 
         Matrix<T0, Size> t = transpose(m0);
-        Result result = t.entry(0) * a1.entry(0);
+        Result result = t.entry(0) * full<Result>(a1.entry(0));
         for (size_t i = 1; i < Size; ++i)
-            result = fmadd(t.entry(i), a1.entry(i), result);
+            result = fmadd(t.entry(i), full<Result>(a1.entry(i)), result);
 
         return result;
     } else {

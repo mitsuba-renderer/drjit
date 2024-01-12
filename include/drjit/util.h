@@ -168,6 +168,7 @@ template <typename T> std::tuple<T, T, T> meshgrid(const T &x, const T &y, const
         return { ry, rx, rz };
 }
 
+/// Binary search with scalar starting/ending indices
 template <typename Index, typename Predicate>
 Index binary_search(scalar_t<Index> start_, scalar_t<Index> end_,
                     const Predicate &pred) {
@@ -220,6 +221,57 @@ Index binary_search(scalar_t<Index> start_, scalar_t<Index> end_,
         masked(start,  cond) = minimum(middle + 1, end);
         masked(end,   !cond) = middle;
     }
+
+    return start;
+}
+
+/**
+ * \brief Binary search with non-scalar starting/ending indices
+ *
+ * Note: this method forcefully uses recorded loops if called in a recorded
+ * context.
+ */
+template <typename IndexN,
+          typename Index1 = std::conditional_t<is_static_array_v<IndexN>,
+                                               value_t<IndexN>, IndexN>,
+          typename Predicate>
+IndexN binary_search(typename std::enable_if_t<is_jit_v<Index1>, Index1> start_,
+                     typename std::enable_if_t<is_jit_v<Index1>, Index1> end_,
+                     const Predicate &pred) {
+    static_assert(drjit::depth_v<Index1> == 1,
+                  "Starting/ending indices array must have depth 1!");
+
+    using MaskN = mask_t<IndexN>;
+    using Mask1 = mask_t<Index1>;
+
+    Index1 iterations =
+        detach(select(start_ < end_, log2i(end_ - start_) + 1, 0));
+
+    IndexN start(start_), end(end_);
+
+    Index1 index = zeros<Index1>(width(pred(start)));
+
+    bool loop_record = jit_flag(JitFlag::LoopRecord);
+    if (jit_flag(JitFlag::Recording))
+        jit_set_flag(JitFlag::LoopRecord, true);
+
+    std::tie(start, end, index) = drjit::while_loop(
+        std::make_tuple(start, end, index),
+        [iterations](const IndexN&, const IndexN&, const Index1& index) {
+            return index < iterations;
+        },
+        [pred](IndexN& start, IndexN& end, Index1& index) {
+            IndexN middle = sr<1>(start + end);
+            MaskN cond    = detach(pred(middle));
+
+            start = select(cond, minimum(middle + 1, end), start);
+            end   = select(cond, end, middle);
+
+            index++;
+        },
+        "dr::binary_search()");
+
+    jit_set_flag(JitFlag::LoopRecord, loop_record);
 
     return start;
 }
