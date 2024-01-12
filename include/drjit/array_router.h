@@ -1668,15 +1668,11 @@ decltype(auto) detach(T &&value) {
 
             return result;
         } else {
-            if constexpr (is_tensor_v<T>) {
+            if constexpr (is_tensor_v<T>)
                 return Result(detach<PreserveType>(value.array()),
                               value.ndim(), value.shape());
-            } else {
-                if constexpr (PreserveType)
-                    return Result(value.derived().detach_());
-                else
-                    return value.derived().detach_();
-            }
+            else
+                return Result::borrow(value.index());
         }
     } else if constexpr (is_drjit_struct_v<T>) {
         Result result;
