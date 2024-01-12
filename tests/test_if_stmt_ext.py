@@ -2,7 +2,8 @@ import drjit as dr
 import pytest
 
 def get_pkg(t):
-    m = pytest.importorskip("if_stmt_ext")
+    with dr.detail.scoped_rtld_deepbind():
+        m = pytest.importorskip("if_stmt_ext")
     backend = dr.backend_v(t)
     if backend == dr.JitBackend.LLVM:
         return m.llvm

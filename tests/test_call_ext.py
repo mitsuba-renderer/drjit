@@ -4,7 +4,8 @@ import re
 import gc
 
 def get_pkg(t):
-    m = pytest.importorskip('call_ext')
+    with dr.detail.scoped_rtld_deepbind():
+        m = pytest.importorskip('call_ext')
     backend = dr.backend_v(t)
     if backend == dr.JitBackend.LLVM:
         return m.llvm
