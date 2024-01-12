@@ -642,14 +642,6 @@ void traverse_pair_impl(const char *op, TraversePairCallback &tc, nb::handle h1,
             nb::object sh1 = shape(h1),
                        sh2 = shape(h2);
 
-            if (!sh1.equal(sh2)) {
-                if (report_inconsistencies)
-                    nb::raise("incompatible tensor shape (%s and %s)",
-                              nb::str(sh1).c_str(), nb::str(sh2).c_str());
-                else
-                    return;
-            }
-
             name += ".array";
             traverse_pair_impl(
                 op, tc,

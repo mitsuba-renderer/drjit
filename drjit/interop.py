@@ -7,28 +7,66 @@ def pytorch_check(value, /):
     return type(value).__module__ == 'torch' and type(value).__name__ == 'Tensor'
 
 
-def apply(fn, value, /):
+def apply(fn, a, /):
     '''Helper function to recursively map a PyTree through the function ``fn``'''
-    tp = type(value)
+    tp = type(a)
 
-    result = fn(value)
+    result = fn(a)
     if result is not None:
         return result
     elif tp is list:
-        return [apply(fn, v) for v in value]
+        return [apply(fn, v) for v in a]
     elif tp is tuple:
-        return tuple(apply(fn, v) for v in value)
+        return tuple(apply(fn, v) for v in a)
     elif tp is dict:
-        return {k: apply(fn, v) for k, v in value.items()}
+        return {k: apply(fn, v) for k, v in a.items()}
     else:
-        desc = getattr(tp, "DRJIT_STRUCT", None)
+        desc = getattr(tp, 'DRJIT_STRUCT', None)
         if type(desc) is dict:
             result = tp()
-            for k in desc: 
-                setattr(result, k, apply(fn, getattr(value, k)))
+            for k in desc:
+                setattr(result, k, apply(fn, getattr(a, k)))
             return result
         else:
-            return value
+            return a
+
+
+def apply_pair(fn, a, b, /):
+    '''
+    Helper function to recursively map two compatible PyTrees
+    through the function ``fn``
+    '''
+    ta, tb = type(a), type(b)
+
+    if ta is not tb:
+        if tb is float and b == 0.0:
+            # Allow incompatible types when assigning tangents to unknown types
+            # (In this case, the function will be called by pytorch_make_dual
+            # with the output of drjit.grad, which equals float(0))
+            return a
+        raise TypeError(f'Incompatible types: {ta} and {tb}.')
+
+    result = fn(a, b)
+    if result is not None:
+        return result
+    elif ta is list:
+        assert len(a) == len(b)
+        return [apply_pair(fn, a[i], b[i]) for i in range(len(a))]
+    elif ta is tuple:
+        assert len(a) == len(b)
+        return tuple(apply_pair(fn, a[i], b[i]) for i in range(len(a)))
+    elif ta is dict:
+        assert a.keys() == b.keys()
+        return {k: apply_pair(fn, a[k], b[k]) for k, v in a.items()}
+    else:
+        desc = getattr(ta, 'DRJIT_STRUCT', None)
+        if type(desc) is dict:
+            result = type(a)()
+            for k in desc:
+                setattr(result, k, apply_pair(fn, getattr(a, k), getattr(b, k)))
+            return result
+        else:
+            return a
 
 
 def from_drjit(value, target, enable_grad, /):
@@ -103,34 +141,91 @@ def pytorch_grad(value, /):
 
     return apply(fn, value)
 
+def pytorch_tangent(value, /):
+    '''Extract a the tangents of PyTorch arrays from the PyTree ``value``'''
+
+    def fn(h, /):
+        if pytorch_check(h):
+            from torch.autograd.forward_ad import unpack_dual
+            return unpack_dual(h).tangent
+        return None
+
+    return apply(fn, value)
+
+def pytorch_make_dual(a, b, /):
+    '''Build combined primal/tangent PyTrees for PyTorch forward-mode AD'''
+
+    def fn(a, b):
+        if pytorch_check(a) and a.dtype.is_floating_point:
+            from torch.autograd.forward_ad import make_dual
+            return make_dual(a, b)
+        return None
+
+    return apply_pair(fn, a, b)
+
 def pytorch_reshape(a, b, /):
     '''Ensure that tensors in PyTree `a` have the same shape as those in `b`'''
-    tp = type(a)
-    assert tp is type(b)
 
-    if pytorch_check(a):
-        if a.dtype.is_floating_point:
+    def fn(a, b):
+        if pytorch_check(a) and a.dtype.is_floating_point:
             return a.reshape(b)
+        return None
+
+    return apply_pair(fn, a, b)
+
+
+class WrapADOp(dr.CustomOp):
+    '''
+    Dr.Jit custom operation that wraps differentiable computation performed
+    using another AD framework (e.g., PyTorch)
+    '''
+    def eval(self, f, target, *args, **kwargs):
+        # Convert input PyTrees from Dr.Jit
+        self.args, self.args_tp = from_drjit(args, target, True)
+        self.kwargs, self.kwargs_tp = from_drjit(kwargs, target, True)
+        self.target = target
+        self.f = f
+
+        # Evaluate the function using another array programming framework
+        self.out = f(*self.args, **self.kwargs)
+
+        # Convert the out PyTree to Dr.Jit
+        return to_drjit(self.out, target, None)
+
+    def forward(self):
+        target = self.target
+
+        grad_args, _   = from_drjit(self.grad_in('args'), target, False)
+        grad_kwargs, _ = from_drjit(self.grad_in('kwargs'), target, False)
+
+        if target == 'torch':
+            import torch.autograd.forward_ad as fa
+
+            with fa.dual_level():
+                out = self.f( *pytorch_make_dual(self.args,   grad_args),
+                             **pytorch_make_dual(self.kwargs, grad_kwargs))
+
+                grad_out = pytorch_tangent(out)
+
+        self.set_grad_out(to_drjit(grad_out, target, None))
+
+    def backward(self):
+        target = self.target
+
+        grad_out, _ = from_drjit(self.grad_out(), target, False)
+
+        if target == 'torch':
+            import torch
+            torch.autograd.backward(pytorch_flatten(self.out),
+                                    pytorch_flatten(grad_out))
+
+            grad_args = pytorch_grad(self.args)
+            grad_kwargs = pytorch_grad(self.kwargs)
         else:
-            return a
-    elif tp is list:
-        assert len(a) == len(b)
-        return [pytorch_reshape(a[i], b[i]) for i in range(len(a))]
-    elif tp is tuple:
-        assert len(a) == len(b)
-        return tuple(pytorch_reshape(a[i], b[i]) for i in range(len(a)))
-    elif tp is dict:
-        assert a.keys() == b.keys()
-        return {k: pytorch_reshape(a[k], b[k]) for k, v in a}
-    else:
-        desc = getattr(tp, "DRJIT_STRUCT", None)
-        if type(desc) is dict:
-            result = type(a)()
-            for k in desc: 
-                setattr(result, k, pytorch_reshape(getattr(a, k), getattr(b, k)))
-            return result
-        else:
-            return a
+            raise RuntimeError('WrapADOp.backward(): unsupported framework!')
+
+        self.set_grad_in('args', to_drjit(grad_args, target, self.args_tp))
+        self.set_grad_in('kwargs', to_drjit(grad_kwargs, target, self.kwargs_tp))
 
 
 def wrap_ad(source: typing.Union[str, types.ModuleType],
@@ -150,8 +245,14 @@ def wrap_ad(source: typing.Union[str, types.ModuleType],
     the name of the decorator.
 
     When exposing code written using another framework, the wrapped function
-    can take and return any PyTree including flat or nested Dr.Jit arrays and
-    tensors.
+    can take and return any :ref:`Pytree <pytrees>` including flat or nested
+    Dr.Jit arrays, tensors, and arbitrary nested lists/tuples, dictionaries,
+    and custom data structures.
+
+    The wrapped function should be *pure*: in other words, it should read its
+    input(s) and compute an associated output so that re-evaluating the
+    function again still produces the same answer. Multi-framework derivative
+    tracking of impure computation may not behave as expected.
 
     Args:
         source (str | module): The framework used *outside* of the wrapped
@@ -185,43 +286,7 @@ def wrap_ad(source: typing.Union[str, types.ModuleType],
 
     if source == 'drjit':
         def wrapper(f):
-            class WrapADOp(dr.CustomOp):
-                def eval(self, *args, **kwargs):
-                    # Convert input PyTrees from Dr.Jit
-                    self.args, self.args_tp = from_drjit(args, target, True)
-                    self.kwargs, self.kwargs_tp = from_drjit(kwargs, target, True)
-
-                    # Evaluate the function using another array programming framework
-                    self.out = f(*self.args, **self.kwargs)
-
-                    # Convert the out PyTree to Dr.Jit
-                    return to_drjit(self.out, target, None)
-
-                def forward(self):
-                    raise RuntimeError('drjit.wrap_ad(): The PyTorch interface currently '
-                                       'lacks support for forward mode differentiation.')
-
-                def backward(self):
-                    grad_out = from_drjit(self.grad_out(), target, False)
-
-                    if target == 'torch':
-                        import torch
-                        torch.autograd.backward(pytorch_flatten(self.out),
-                                                pytorch_flatten(grad_out))
-
-                        grad_args = pytorch_grad(self.args)
-                        grad_kwargs = pytorch_grad(self.kwargs)
-                    else:
-                        raise RuntimeError("WrapADOp.backward(): unsupported framework!")
-
-                    grad_args   = to_drjit(grad_args, target, self.args_tp)
-                    grad_kwargs = to_drjit(grad_kwargs, target, self.kwargs_tp)
-
-                    self.set_grad_in('args', grad_args)
-                    self.set_grad_in('kwargs', grad_kwargs)
-
-            return lambda *args, **kwargs: dr.custom(WrapADOp, *args, **kwargs)
-
+            return lambda *args, **kwargs: dr.custom(WrapADOp, f, target, *args, **kwargs)
         return wrapper
 
     return None
