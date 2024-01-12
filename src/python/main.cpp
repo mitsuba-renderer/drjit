@@ -153,6 +153,14 @@ NB_MODULE(drjit_ext, m_) {
 
     m.def("has_backend", &jit_has_backend, doc_has_backend);
 
+    m.def("sync_thread", &jit_sync_thread, doc_sync_thread)
+     .def("flush_kernel_cache", &jit_flush_kernel_cache, doc_flush_kernel_cache)
+     .def("flush_malloc_cache", &jit_flush_malloc_cache, doc_flush_malloc_cache)
+     .def("thread_count", &jit_llvm_thread_count, doc_thread_count)
+     .def("set_thread_count", &jit_llvm_set_thread_count, doc_set_thread_count)
+     .def("block_size", &jit_llvm_block_size, doc_block_size)
+     .def("set_block_size", &jit_llvm_set_block_size, doc_set_block_size);
+
     m.def("flag", &jit_flag, doc_flag);
     m.def("set_flag", &set_flag_py, doc_set_flag);
 
@@ -200,14 +208,6 @@ NB_MODULE(drjit_ext, m_) {
             [](nb::intrusive_base *o, PyObject *po) noexcept {
                 o->set_self_py(po);
             }), doc_intrusive_base);
-
-    m.def("thread_count", &jit_llvm_thread_count, doc_thread_count)
-     .def("set_thread_count", &jit_llvm_set_thread_count, doc_set_thread_count)
-     .def("block_size", &jit_llvm_block_size, doc_block_size)
-     .def("set_block_size", &jit_llvm_set_block_size, doc_set_block_size);
-
-    m.def("sync_thread", jit_sync_thread);
-
     jit_init(backends);
 
     export_bind(detail);

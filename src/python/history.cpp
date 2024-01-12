@@ -41,10 +41,11 @@ void export_history(nb::module_ &m) {
                     dict["size"]         = entry->size;
                     dict["input_count"]  = entry->input_count;
                     dict["output_count"] = entry->output_count;
-                    if (entry->type == KernelType::JIT)
+                    if (entry->type == KernelType::JIT) {
                         dict["operation_count"] = entry->operation_count;
-                    dict["codegen_time"]   = entry->codegen_time;
-                    dict["backend_time"]   = entry->backend_time;
+                        dict["codegen_time"]   = entry->codegen_time;
+                        dict["backend_time"]   = entry->backend_time;
+                    }
                     dict["execution_time"] = entry->execution_time;
 
                     history.append(dict);
@@ -56,9 +57,10 @@ void export_history(nb::module_ &m) {
             free(data);
             return history;
         },
-        "types"_a = nb::list());
+        "types"_a = nb::list(), doc_kernel_history);
 
-    m.def("kernel_history_clear", &jit_kernel_history_clear);
+    m.def("kernel_history_clear", &jit_kernel_history_clear,
+          doc_kernel_history_clear);
 
     nb::enum_<KernelType>(m, "KernelType")
         .value("JIT", KernelType::JIT)
