@@ -2,6 +2,7 @@ import ast
 import types
 import inspect
 import linecache
+import warnings
 from typing import Callable, Optional, List
 
 
@@ -510,6 +511,10 @@ class SyntaxVisitor(ast.NodeTransformer):
         )
 
 
+# Counts how many times the @drjit.syntax decorator has been used
+syntax_counter = 0
+
+
 def syntax(
     f: Callable = None,
     recursive: bool = False,
@@ -691,19 +696,30 @@ def syntax(
     merely rewrites the syntax of certain loop and conditional expressions and
     has no further effect following the function definition.
     """
+    global syntax_counter
 
     if f is None:
-
         def wrapper(f2):
             return syntax(f2, recursive, print_ast, print_code)
 
         return wrapper
 
+    # Warn if this function is used many times
+    syntax_counter += 1
+    if syntax_counter > 1000:
+        warnings.warn(
+            'The AST-transforming decorator @drjit.syntax was called more than '
+            '1000 times by your program. Since transforming and recompiling '
+            'Python code is a relatively expensive operation, it should not '
+            'be used within loops or subroutines. Please move the function to '
+            'be transformed to the top program level and decorate it there.',
+            RuntimeWarning
+        )
+
     source = inspect.getsource(f)
 
     if source[0].isspace():
         from textwrap import dedent
-
         source = dedent(source)
 
     old_ast = ast.parse(source)
