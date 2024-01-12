@@ -1,8 +1,4 @@
 from . import detail
-from .ast import syntax, hint
-from .interop import wrap_ad
-
-import typing as _typing
 
 with detail.scoped_rtld_deepbind():
     try:
@@ -19,6 +15,10 @@ with detail.scoped_rtld_deepbind():
 
         err.__cause__ = e
         raise err
+
+from .ast import syntax, hint
+from .interop import wrap_ad
+import typing as _typing
 
 # -------------------------------------------------------------------
 #  Predicates and comparison operations for floating point arrays
