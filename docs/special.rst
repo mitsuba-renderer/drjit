@@ -1,4 +1,4 @@
-.. py:module:: drjit
+.. py:currentmodule:: drjit
 
 .. _special_arrays:
 
@@ -538,7 +538,7 @@ indexing with :py:attr:`drjit.newaxis` (or equivalently, ``None``).
 Slicing internally turns into a :py:func:`drjit.gather` operation that reads
 from the underlying flat array, while slice assignment turns into
 :py:func:`drjit.scatter`. The conversion from a slice tuple into concrete
-indices is performed by the function :py:`drjit.slice_index` that can also be
+indices is performed by the function :py:func:`drjit.slice_index` that can also be
 used directly.
 
 Limitations

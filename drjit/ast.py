@@ -526,7 +526,7 @@ def syntax(
 
     This decorator provides *syntax sugar*. It allows users to write natural
     Python code that it then turns into native Dr.Jit constructs. It *does not
-    compile* or otherwise change the behavior of the function.
+    JIT-compile* or otherwise change the behavior of the function.
 
     The :py:func:`@drjit.syntax <drjit.syntax>` decorator introduces two
     specific changes:

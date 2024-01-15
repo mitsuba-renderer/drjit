@@ -38,10 +38,8 @@ These operations are *horizontal* in the sense that [..]
 
 .. autoclass:: ReduceOp
 
-   List of different atomic read-modify-write (RMW) operations supported by
-   :py:func:`drjit.scatter_reduce()`.
-
    .. autoattribute:: None
+      :noindex:
       :annotation:
 
       Perform an ordinary scatter operation that ignores the current entry.
@@ -125,11 +123,8 @@ Just-in-time compilation
 
 .. autoclass:: JitBackend
 
-   List of just-in-time compilation backends supported by Dr.Jit
-   See also :py:func:`drjit.backend_v()`.
-
    .. autoattribute:: None
-      :annotation:
+      :noindex:
 
       Indicates that a type is not handled by a Dr.Jit backend (e.g., a scalar type)
 
@@ -144,8 +139,6 @@ Just-in-time compilation
       Dr.Jit backend targeting NVIDIA GPUs using PTX ("Parallel Thread Excecution") IR.
 
 .. autoclass:: VarType
-
-   List of possible scalar array types (not all of them are supported).
 
    .. autoattribute:: Void
       :annotation:
@@ -219,10 +212,6 @@ Just-in-time compilation
 
 .. autoclass:: VarState
 
-   The :py:attr:`drjit.ArrayBase.state` property returns one of the following
-   enumeration values describing possible evaluation states of a Dr.Jit
-   variable.
-
    .. autoattribute:: Invalid
       :annotation:
 
@@ -275,33 +264,6 @@ Just-in-time compilation
 .. autofunction:: eval
 
 .. autoclass:: JitFlag
-
-   .. For Sphinx-related technical reasons, the below comment is replicated
-      in docstr.h. Please keep the two in sync when making changes.
-
-   Flags that control how Dr.Jit compiles and optimizes programs.
-
-   This enumeration lists various flag that control how Dr.Jit compiles and
-   optimizes programs, most of which are enabled by default. The status of each
-   flag can be queried via :py:func:`drjit.flag` and enabled/disabled via the
-   :py:func:`drjit.set_flag` or the recommended
-   :py:func:`drjit.scoped_set_flag` functions, e.g.:
-
-   .. code-block:: python
-
-      with dr.scoped_set_flag(dr.JitFlag.SymbolicLoops, False):
-          # code that has this flag disabled goes here
-
-   The most common reason to update the flags is to switch between *symbolic*
-   and *evaluated* execution of loops and functions. The former eagerly
-   executes programs by breaking them into many smaller kernels, while the
-   latter records computation symbolically to assemble large *megakernels*. See
-   explanations below along with the documentation of :py:func:`drjit.switch`
-   and :py:class:`drjit.while_loop` for more details on these two modes.
-
-   Dr.Jit flags are a thread-local property. This means that multiple independent
-   threads using Dr.Jit can set them independently without interfering with each
-   other.
 
    .. autoattribute:: Debug
       :annotation:
@@ -1261,9 +1223,3 @@ Low-level bits
 .. autofunction:: set_block_size
 .. autofunction:: kernel_history
 .. autofunction:: kernel_history_clear
-
-
-.. py:data:: None
-   :type: NoneType
-
-   This is just a copy of the builtin Python ``None`` value.

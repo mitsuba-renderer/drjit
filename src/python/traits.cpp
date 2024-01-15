@@ -147,7 +147,7 @@ void export_traits(nb::module_ &m) {
     m.def("is_array_v",
           [](nb::handle h) -> bool {
               return is_drjit_type(h.is_type() ? h : h.type());
-          }, doc_is_array_v);
+          }, doc_is_array_v, nb::arg().none());
 
     m.def("size_v",
           [](nb::handle h) -> Py_ssize_t {

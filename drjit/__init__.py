@@ -927,10 +927,9 @@ def sign(arg, /):
     return select(arg >= 0, t(1), t(-1))
 
 
-def copysign(a, b, /):
+def copysign(arg0, arg1, /):
     '''
-    copysign(arg0, arg1, /)
-    Copy the sign of ``arg1`` to ``arg0` element-wise.
+    Copy the sign of ``arg1`` to ``arg0`` element-wise.
 
     Args:
         arg0 (int | float | drjit.ArrayBase): A Python or Dr.Jit array to change the sign of
@@ -939,14 +938,13 @@ def copysign(a, b, /):
     Returns:
         float | int | drjit.ArrayBase: The values of ``arg0`` with the sign of ``arg1``
     '''
-    a_a = abs(a)
-    return select(b >= 0, a_a, -a_a)
+    arg0_a = abs(a)
+    return select(arg1 >= 0, arg0_a, -arg0_a)
 
 
-def mulsign(a, b, /):
+def mulsign(arg0, arg1, /):
     '''
-    mulsign(arg0, arg1, /)
-    Multiply ``arg0`` by the sign of ``arg1` element-wise.
+    Multiply ``arg0`` by the sign of ``arg1`` element-wise.
 
     This function is equivalent to
 
@@ -961,7 +959,7 @@ def mulsign(a, b, /):
     Returns:
         float | int | drjit.ArrayBase: The values of ``arg0`` multiplied with the sign of ``arg1``
     '''
-    return select(b >= 0, a, -a)
+    return select(arg1 >= 0, arg0, -arg0)
 
 
 def cumsum(arg, /):

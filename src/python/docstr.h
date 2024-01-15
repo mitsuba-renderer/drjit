@@ -6180,7 +6180,7 @@ This function takes an boolean array as input and then returns an unsigned
 It can be used to reduce a stream to a subset of active entries via the
 following recipe:
 
-.. code-box:: python
+.. code-block:: python
 
    # Input: an active mask and several arrays data_1, data_2, ...
    dr.schedule(active, data_1, data_2, ...)

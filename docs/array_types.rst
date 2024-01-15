@@ -1,4 +1,4 @@
-.. py:module:: drjit
+.. py:currentmodule:: drjit
 
 Array types
 ===========
@@ -242,7 +242,7 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
-   .. automethod:: shape
+   .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
@@ -261,7 +261,7 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
-   .. automethod:: shape
+   .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
@@ -280,7 +280,7 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
-   .. automethod:: shape
+   .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
@@ -299,7 +299,7 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
-   .. automethod:: shape
+   .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
@@ -318,7 +318,7 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
-   .. automethod:: shape
+   .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
@@ -337,7 +337,7 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
-   .. automethod:: shape
+   .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
@@ -356,7 +356,7 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
-   .. automethod:: shape
+   .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
@@ -364,7 +364,7 @@ Textures
    .. automethod:: eval_cubic_hessian
    .. automethod:: eval_cubic_helper
 
-.. autoclass:: drjit.scalar.Texture1f64
+.. autoclass:: drjit.scalar.Texture2f64
 
    .. automethod:: __init__
    .. automethod:: set_value
@@ -375,7 +375,7 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
-   .. automethod:: shape
+   .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
@@ -383,7 +383,7 @@ Textures
    .. automethod:: eval_cubic_hessian
    .. automethod:: eval_cubic_helper
 
-.. autoclass:: drjit.scalar.Texture1f64
+.. autoclass:: drjit.scalar.Texture3f64
 
    .. automethod:: __init__
    .. automethod:: set_value
@@ -394,7 +394,7 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
-   .. automethod:: shape
+   .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
@@ -635,7 +635,7 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
-   .. automethod:: shape
+   .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
@@ -654,7 +654,7 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
-   .. automethod:: shape
+   .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
@@ -673,7 +673,7 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
-   .. automethod:: shape
+   .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
@@ -692,7 +692,7 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
-   .. automethod:: shape
+   .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
@@ -711,7 +711,7 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
-   .. automethod:: shape
+   .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
@@ -730,7 +730,7 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
-   .. automethod:: shape
+   .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
@@ -749,7 +749,7 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
-   .. automethod:: shape
+   .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
@@ -768,7 +768,7 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
-   .. automethod:: shape
+   .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
@@ -787,7 +787,7 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
-   .. automethod:: shape
+   .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
@@ -1024,7 +1024,7 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
-   .. automethod:: shape
+   .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
@@ -1043,7 +1043,7 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
-   .. automethod:: shape
+   .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
@@ -1062,7 +1062,7 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
-   .. automethod:: shape
+   .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
@@ -1081,7 +1081,7 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
-   .. automethod:: shape
+   .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
@@ -1100,7 +1100,7 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
-   .. automethod:: shape
+   .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
@@ -1119,7 +1119,7 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
-   .. automethod:: shape
+   .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
@@ -1138,7 +1138,7 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
-   .. automethod:: shape
+   .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
@@ -1157,7 +1157,7 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
-   .. automethod:: shape
+   .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic
@@ -1176,7 +1176,7 @@ Textures
    .. automethod:: wrap_mode
    .. automethod:: use_accel
    .. automethod:: migrated
-   .. automethod:: shape
+   .. autoproperty:: shape
    .. automethod:: eval
    .. automethod:: eval_fetch
    .. automethod:: eval_cubic

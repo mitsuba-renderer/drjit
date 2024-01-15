@@ -1,4 +1,4 @@
-.. py:module:: drjit
+.. py:currentmodule:: drjit
 
 General information
 ===================

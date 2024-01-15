@@ -37,6 +37,7 @@
 #include "texture.h"
 #include "history.h"
 
+
 static void set_flag_py(JitFlag flag, bool value) {
     if (flag == JitFlag::Debug) {
         if (value)

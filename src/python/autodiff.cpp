@@ -144,14 +144,18 @@ nb::object grad(nb::handle h, bool preserve_type_) {
             return tp;
         }
 
-        nb::object transform_unknown(nb::handle) const override {
-            return nb::float_(0);
+        nb::object transform_unknown(nb::handle h) const override {
+            if (h.type().is(&PyLong_Type))
+                return nb::int_(0);
+            else
+                return nb::float_(0);
         }
 
         void operator()(nb::handle h1, nb::handle h2) override {
             const ArraySupplement &s1 = supp(h1.type());
             if (!s1.backend) {
-                nb::object o2 = full("zeros", h2.type(), nb::int_(0), nb::len(h1));
+                nb::object o2 = full("zeros", h2.type(), nb::int_(0),
+                                     std::max((size_t) 1, nb::len(h1)));
                 nb::inst_replace_move(h2, o2);
                 return;
             }
@@ -160,7 +164,8 @@ nb::object grad(nb::handle h, bool preserve_type_) {
             uint64_t index = s1.index(inst_ptr(h1));
             uint32_t grad_index = ad_grad(index);
             if (!grad_index) {
-                nb::object o2 = full("zeros", h2.type(), nb::int_(0), 1);
+                nb::object o2 = full("zeros", h2.type(), nb::int_(0),
+                                     std::max((size_t) 1, nb::len(h1)));
                 nb::inst_replace_move(h2, o2);
                 return;
             }

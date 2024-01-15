@@ -38,7 +38,7 @@ size_t ndim(nb::handle_t<ArrayBase> h) noexcept {
         return s.ndim;
 }
 
-static bool shape_traverse(nb::handle h, size_t ndim, size_t *shape) noexcept {
+static bool shape_traverse(nb::handle h, size_t ndim, size_t *shape) {
     nb::handle tp = h.type();
 
     size_t size;

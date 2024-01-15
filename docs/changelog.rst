@@ -1,4 +1,4 @@
-.. py:module:: drjit
+.. py:currentmodule:: drjit
 
 .. _changelog:
 
@@ -104,6 +104,14 @@ source-level compatibility.
   double, and half precision variables. Previously, there was a separate graph
   per type, and gradients did not propagate through casts between them.
 
+- **Multi-framework computations**: The :py:func:`@drjit.wrap_ad` decorator
+  provides a differentiable bridge to other AD frameworks. In this new release
+  of Dr.Jit, its capabilities were significantly revamped. Besides PyTorch, it
+  now also supports JAX, and it consistently handles both forward and backward
+  derivatives. The new interface admits functions with arbitrary
+  fixed/variable-length positional and keyword arguments containing arbitrary
+  PyTrees of differentiable and non-differentiable arrays, tensors, etc.
+
 - **Debug mode**: A new debug validation mode (:py:attr:`drjit.JitFlag.Debug`)
   inserts a number of additional checks to identify sources of undefined
   behavior. Enable it to catch out-of-bounds reads, writes, and calls to
@@ -178,6 +186,7 @@ source-level compatibility.
   literal constant array that consumes no device memory). Users found this
   surprising, so the behavior was changed so that :py:func:`drjit.empty`
   similarly delays allocation.
+
 
 Internals
 ---------
