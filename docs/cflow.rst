@@ -114,7 +114,7 @@ operations in full detail.
 .. _sym-eval:
 
 Symbolic versus evaluated modes
---------------------
+-------------------------------
 
 All control flow operations support compilation in either *symbolic* or
 *evaluated* modes. This section discusses them in turn.

@@ -581,8 +581,10 @@ static void ndarray_free_cb(uint32_t, int free, void *p) {
     JitBackend backend = (JitBackend) (msg & mask);
     void *p2 = (void *) (msg & ~mask);
 
-    jit_enqueue_host_func(backend, ndarray_free_cb_2, p2);
-};
+    // Don't run the next step if Dr.Jit has already shut down
+    if (nb::is_alive() && jit_has_backend(backend))
+        jit_enqueue_host_func(backend, ndarray_free_cb_2, p2);
+}
 
 static void ndarray_keep_alive(JitBackend backend, uint32_t index, nb::detail::ndarray_handle *p) {
     if (!index)

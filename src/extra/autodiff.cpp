@@ -1042,11 +1042,12 @@ JitIndex ad_grad(Index index) {
         size = info.size;
     }
 
-    if (!result.valid()) {
+    if (!result.valid() &&
+        (type == VarType::Float16 || type == VarType::Float32 ||
+         type == VarType::Float64))
         result = scalar(backend, type, 0.0);
-    }
 
-    if (result.size() != size)
+    if (result.valid() && result.size() != size)
         result.resize(size);
 
     return result.release();
