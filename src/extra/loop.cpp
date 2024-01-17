@@ -184,81 +184,171 @@ static size_t
 ad_loop_evaluated_compress(JitBackend backend, const char *name, void *payload,
                            ad_loop_read read_cb, ad_loop_write write_cb,
                            ad_loop_cond cond_cb, ad_loop_body body_cb,
+                           dr_index64_vector indices,
                            JitVar active) {
-    size_t size = active.size(), it = 0;
+    uint32_t size = (uint32_t) active.size(), it = 0;
 
     JitVar true_mask = JitVar::steal(jit_var_bool(backend, true)),
            zero = JitVar::steal(jit_var_u32(backend, 0)),
            idx = JitVar::steal(jit_var_counter(backend, size));
 
-    dr_index64_vector indices, out_indices;
+    dr::schedule(idx);
 
-    while (true) {
-        // Increase an atomic counter to determine the position in the output array
-        uint32_t counter = jit_var_u32(backend, 0);
+    dr_index64_vector out_indices;
+    dr::dr_vector<bool> skip;
 
-        JitVar slot = JitVar::steal(
-            jit_var_scatter_inc(&counter, zero.index(), active.index()));
+    skip.reserve(indices.size());
+    out_indices.reserve(indices.size());
 
-        JitVar not_active = JitVar::steal(jit_var_not(active.index()));
+    // Filter out incompatible loop state variables
+    for (uint64_t index: indices) {
+        if (index) {
+            VarInfo info = jit_set_backend((uint32_t) index);
 
-        read_cb(payload, indices);
-
-        for (size_t i = 0; i < indices.size(); ++i) {
-            if (!indices[i])
-                continue;
-
-            VarInfo info = jit_set_backend((uint32_t) indices[i]);
-            if (info.size != size)
-                continue;
-
-            if (it == 0)
+            if (info.size == (size_t) size || info.size == 1) {
                 out_indices.push_back_steal(
                     jit_var_undefined(backend, info.type, size));
-
-            // Write finished entries to 'out_indices'
-            uint64_t f_index =
-                ad_var_scatter(out_indices[i], indices[i], idx.index(),
-                               not_active.index(), ReduceOp::None, true);
-
-            ad_var_dec_ref(out_indices[i]);
-            out_indices[i] = f_index;
-
-            // Write active entries into a new output buffer
-            uint64_t buffer = jit_var_undefined(backend, info.type, size),
-                     t_index =
-                         ad_var_scatter(buffer, indices[i], slot.index(),
-                                        active.index(), ReduceOp::None, true);
-            ad_var_dec_ref(buffer);
-            ad_var_dec_ref(indices[i]);
-            indices[i] = t_index;
+                skip.push_back(false);
+                continue;
+            }
         }
 
-        uint32_t buffer = jit_var_undefined(backend, VarType::UInt32, size);
-        idx = JitVar::steal(jit_var_scatter(buffer, idx.index(), slot.index(),
-                                            active.index(), ReduceOp::None));
-        jit_var_dec_ref(buffer);
+        out_indices.push_back_borrow(index);
+        skip.push_back(true);
+    }
 
-        active = JitVar();
-        not_active = JitVar();
+    /**
+       This function implements two different strategies to progressively
+       reduce the array contents.
 
-        // Evaluate everything queued up to this point
-        jit_eval();
+       1. Reduce, then gather: evaluate all loop state, then launch a
+          specialized reduction kernel that computes an index array. Next,
+          gather the subset of remaining inputs using this index array and
+          perform a single loop iteration.
+
+          In addition to this, a separate kernel writes out the loop state of
+          elements that finished in the current iteration.
+
+          This variant launches two kernels per iteration. Compared to variant
+          2 below, it prefers reads over writes and does not use atomics. For
+          these reasons, it tends to run faster on the LLVM CPU backend.
+
+       2. Reserve a spot, then scatter. This variant appends code at the
+          end of each loop ieration that uses an atomic operation to reserve
+          a spot in a set of loop state output arrays. It then scatters all
+          updated state to the reverved position.
+
+          This variant launches a single kernel per iteration, and it is
+          fairly write and atomic-heavy. It tends to run faster on the CUDA
+          backend
+     */
+    bool reduce_then_gather = backend == JitBackend::LLVM;
+
+    while (true) {
+        // Determine which entries aren't active, these must be written out
+        JitVar not_active = JitVar::steal(jit_var_not(active.index()));
+
         uint32_t size_next = 0;
-        jit_var_read(counter, 0, &size_next);
-        jit_var_dec_ref(counter);
+
+        if (reduce_then_gather) {
+            for (uint64_t &index: indices) {
+                int unused = 0;
+                uint64_t index_new = ad_var_schedule_force(index, &unused);
+                ad_var_dec_ref(index);
+                index = index_new;
+            }
+            active.schedule_force_();
+
+            // Evaluate the loop state
+            jit_eval();
+
+            // Reduce the array to the remaining active entries
+            JitVar active_index = JitVar::steal(jit_var_compress(active.index()));
+            size_next = (uint32_t) active_index.size();
+
+            for (size_t i = 0; i < indices.size(); ++i) {
+                if (skip[i])
+                    continue;
+
+                // Write entries that have become inactive to 'out_indices'
+                uint64_t f_index =
+                    ad_var_scatter(out_indices[i], indices[i], idx.index(),
+                                   not_active.index(), ReduceOp::None, true);
+                ad_var_dec_ref(out_indices[i]);
+                out_indices[i] = f_index;
+            }
+
+            jit_eval();
+
+            for (size_t i = 0; i < indices.size(); ++i) {
+                // Gather remaining active entries. We always do this even when
+                // the loop state was not compressed, to generate identical code
+                // in each iteration and benefit from kernel caching.
+                uint32_t t_index = ad_var_gather(indices[i], active_index.index(),
+                                                 true_mask.index(), true);
+                ad_var_dec_ref(indices[i]);
+                indices[i] = t_index;
+            }
+
+            idx = JitVar::steal(ad_var_gather(idx.index(), active_index.index(),
+                                              true_mask.index(), true));
+            dr::schedule(idx);
+        } else {
+            // Increase an atomic counter to determine the position in the output array
+            uint32_t counter_tmp = jit_var_u32(backend, 0);
+            JitVar slot = JitVar::steal(
+                jit_var_scatter_inc(&counter_tmp, zero.index(), active.index()));
+            JitVar counter = JitVar::steal(counter_tmp);
+
+            for (size_t i = 0; i < indices.size(); ++i) {
+                if (skip[i])
+                    continue;
+
+                // Write entries that have become inactive to 'out_indices'
+                uint64_t f_index =
+                    ad_var_scatter(out_indices[i], indices[i], idx.index(),
+                                   not_active.index(), ReduceOp::None, true);
+
+                ad_var_dec_ref(out_indices[i]);
+                out_indices[i] = f_index;
+
+                // Write remaining active entries into a new output buffer
+                JitVar buffer = JitVar::steal(
+                    jit_var_undefined(backend, jit_var_type(indices[i]), size));
+                uint64_t t_index =
+                    ad_var_scatter(buffer.index(), indices[i], slot.index(),
+                                   active.index(), ReduceOp::None, true);
+                ad_var_dec_ref(indices[i]);
+                indices[i] = t_index;
+            }
+
+            JitVar buffer = JitVar::steal(jit_var_undefined(backend, VarType::UInt32, size));
+            idx = JitVar::steal(jit_var_scatter(buffer.index(), idx.index(), slot.index(),
+                                                active.index(), ReduceOp::None));
+
+            // Evaluate everything queued up to this point
+            jit_eval();
+            jit_var_read(counter.index(), 0, &size_next);
+
+            if (size != size_next && size_next != 0) {
+                for (size_t i = 0; i < indices.size(); ++i) {
+                    if (skip[i])
+                        continue;
+                    ad_var_shrink(indices[i], size_next);
+                }
+                ad_var_shrink(idx.index(), size_next);
+            }
+        }
+
+        active = not_active = JitVar();
 
         if (size_next == 0)
             break; // all done!
 
-        if (size != size_next) {
+        if (size != size_next)
             jit_log(LogLevel::InfoSym,
-                    "ad_loop_evaluated(\"%s\"): compressing loop state from %zu "
+                    "ad_loop_evaluated(\"%s\"): compressed loop state from %u "
                     "to %u entries.", name, size, size_next);
-            for (size_t i = 0; i < indices.size(); ++i)
-                ad_var_shrink(indices[i], size_next);
-            ad_var_shrink(idx.index(), size_next);
-        }
 
         size = size_next;
         write_cb(payload, indices);
@@ -274,6 +364,7 @@ ad_loop_evaluated_compress(JitBackend backend, const char *name, void *payload,
         }
 
         active = JitVar::borrow(cond_cb(payload));
+        read_cb(payload, indices);
     }
 
     if (it > 0)
@@ -320,16 +411,14 @@ static void ad_loop_evaluated(JitBackend backend, const char *name,
     }
 
     size_t it;
-    if (compress) {
-        indices.release();
+    if (compress)
         it = ad_loop_evaluated_compress(backend, name, payload, read_cb,
                                         write_cb, cond_cb, body_cb,
-                                        std::move(active));
-    } else {
+                                        std::move(indices), std::move(active));
+    else
         it = ad_loop_evaluated_mask(backend, name, payload, read_cb, write_cb,
                                     cond_cb, body_cb, std::move(indices),
                                     std::move(active));
-    }
 
     jit_log(LogLevel::Debug,
             "ad_loop_evaluated(\"%s\"): loop finished after %zu iterations.", name, it);

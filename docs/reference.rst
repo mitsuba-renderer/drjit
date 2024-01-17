@@ -406,7 +406,7 @@ Just-in-time compilation
 
       **Fast Math**: this flag is analogous to the ``-ffast-math`` flag in C
       compilers. When set, the system may use approximations and simplifications
-      that sacrifice strict IEEE-754 compatibility. 
+      that sacrifice strict IEEE-754 compatibility.
 
       Currently, it changes two behaviors:
 
@@ -557,6 +557,29 @@ Just-in-time compilation
 
       This flag is enabled by default. Note that it is only meaningful in
       combination with  :py:attr:`SymbolicLoops`.
+
+   .. autoattribute:: CompressLoops
+      :annotation:
+
+      .. For Sphinx-related technical reasons, the below comment is replicated
+         in docstr.h. Please keep the two in sync when making changes.
+
+      Compress the loop state of evaluated loops after every iteration.
+
+      When an evaluated loop processes many elements, and when each element
+      requires a different number of loop iterations, there is question of what
+      should be done with inactive elements. The default implementation keeps
+      them around and does redundant calculations that are, however, masked
+      out. Consequently, later loop iterations don't run faster despite fewer
+      elements being active.
+
+      Setting this falg causes the removal of inactive elements after every
+      iteration. This reorganization is not for free and does not benefit all
+      use cases.
+
+      This flag is *disabled* by default. Note that it only applies to
+      *evaluated* loops (i.e., when :py:attr:`SymbolicLoops` is disabled, or
+      the ``mode='evaluted'`` parameter as passed to the loop in question).
 
    .. autoattribute:: SymbolicConditionals
       :annotation:

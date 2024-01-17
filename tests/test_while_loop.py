@@ -435,3 +435,21 @@ def test21_limitations():
                 break
             else:
                 continue
+
+@pytest.mark.parametrize('mode', ['symbolic', 'evaluated'])
+@pytest.mark.parametrize("compress", [True, False])
+@pytest.test_arrays('uint32,is_jit,shape=(*)')
+@dr.syntax
+def test22_compress(t, mode, compress):
+    state = dr.arange(t, 10000) + 1
+    it_count = dr.zeros(t, 10000)
+
+    while dr.hint(state != 1, mode=mode, compress=compress):
+        state = dr.select(
+            state & 1 == 0,
+            state // 2,
+            3*state + 1
+        )
+        it_count += 1
+
+    assert dr.sum(it_count) == 849666

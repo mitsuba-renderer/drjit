@@ -75,7 +75,6 @@ VarType dlpack_type_to_drjit(nb::dlpack::dtype dt) {
     nb::raise("dlpack_type_to_drjit(): unsupported dtype!");
 }
 
-
 using JitVar = drjit::JitArray<JitBackend::None, void>;
 
 static nb::ndarray<> dlpack(nb::handle_t<ArrayBase> h, bool force_cpu, nb::handle stream = nb::none()) {

@@ -4229,10 +4229,10 @@ explain how this mode is automatically selected).
    suppressing side effects associated with inactive entries.)
 
    Dr.Jit will typically compile a kernel when it runs the first loop
-   iteration. Subsequent iterations can then reuse this kernel since they
-   perform the same sequence of updates. This kernel caching tends to be
-   crucial to achieve good performance, and it is good to be aware of pitfalls
-   that can effectively disable it.
+   iteration. Subsequent iterations can then reuse this cached kernel since
+   they perform the same exact sequence of operations. Kernel caching tends to
+   be crucial to achieve good performance, and it is good to be aware of
+   pitfalls that can effectively disable it.
 
    For example, when you update a scalar (e.g. a Python ``int``) in each loop
    iteration, this changing counter might be merged into the generated program,
@@ -4246,12 +4246,24 @@ explain how this mode is automatically selected).
    and you should carefully inspect your code to ensure that the computation
    stays consistent across iterations.
 
+   When the loop processes many elements, and when each element requires a
+   different number of loop iterations, there is question of what should be
+   done with inactive elements. The default implementation keeps them around
+   and does redundant calculations that are, however, masked out. Consequently,
+   later loop iterations don't run faster despite fewer elements being active.
+
+   Alternatively, you may specify the parameter ``compress=True`` or set the
+   flag :py:attr:`drjit.JiitFlag.CompressLoops`, which causes the removal of
+   inactive elements after every iteration. This reorganization is not for free
+   and does not benefit all use cases, which is why it isn't enabled by
+   default.
+
 A separate section about :ref:`symbolic and evaluated modes <sym-eval>`
 discusses these two options in further detail.
 
 The :py:func:`drjit.while_loop()` function chooses the evaluation mode as follows:
 
-1. When the ``mode`` argument is set to ``"auto"`` (the *default*), the
+1. When the ``mode`` argument is set to ``None`` (the *default*), the
    function examines the loop condition. It uses *scalar* mode when this
    produces a Python `bool`, otherwise it inspects the
    :py:attr:`drjit.JitFlag.SymbolicLoops` flag to switch between *symbolic* (the default)
@@ -4417,13 +4429,20 @@ Args:
       new tuple of state variables that are *compatible* with the previous
       state (see the earlier description regarding what such compatibility entails).
 
-    mode (str): Specify this parameter to override the evaluation mode.
-      Possible values are: ``"scalar"``, ``"symbolic"``, ``"evaluated"``, or
-      ``"auto"``. The default value of ``"auto"`` causes the function to
-      first check if the loop is potentially scalar, in which case it uses a
-      trivial fallback implementation. Otherwise, it queries the state of the
-      Jit flag :py:attr:`drjit.JitFlag.SymbolicLoops` and then either performs
-      a symbolic or an evaluated loop.
+    mode (Optional[str]): Specify this parameter to override the evaluation mode.
+      Possible values besides ``None`` are: ``"scalar"``, ``"symbolic"``, ``"evaluated"``.
+      If not specified, the function first checks if the loop is
+      potentially scalar, in which case it uses a trivial fallback
+      implementation. Otherwise, it queries the state of the Jit flag
+      :py:attr:`drjit.JitFlag.SymbolicLoops` and then either performs a
+      symbolic or an evaluated loop.
+
+    compress (Optional[bool]): Set this this parameter to ``True`` or ``False``
+      to enable or disable *loop state compression* in evaluated loops (see the
+      text above for a description of this feature). The function
+      queries the value of :py:attr:`drjit.JitFlag.CompressLoops` when the
+      parameter is not specified. Symbolic loops completely ignore this
+      parameter. 
 
     state_labels (list[str]): An optional list of labels associated with each
       ``state`` entry. Dr.Jit uses this to provide better error messages in
@@ -4431,9 +4450,9 @@ Args:
       decorator automatically provides these labels based on the transformed
       code.
 
-    name (str): An optional descriptive name. Dr.Jit will include this label in
-      generated low-level IR, which can be helpful when debugging the
-      compilation of large programs. The default is ``"unnamed"``.
+    name (Optional[str]): An optional descriptive name. If specified, Dr.Jit
+      will include this label in generated low-level IR, which can be helpful
+      when debugging the compilation of large programs.
 
     max_iterations (int): The maximum number of loop iterations (default: ``-1``).
       You must specify a correct upper bound here if you wish to differentiate
@@ -4445,7 +4464,7 @@ Returns:
     termination of the loop.)";
 
 static const char *doc_if_stmt = R"(
-if_stmt(args: tuple, cond: bool|drjit.ArrayBase, true_fn: Callable, false_fn: Callable, rv_labels: list[str] = (), label: str = 'unnamed', mode: str = 'auto') -> tuple
+if_stmt(args: tuple, cond: bool|drjit.ArrayBase, true_fn: Callable, false_fn: Callable, rv_labels: list[str] = (), label: Optional[str] = None, Optional[mode]: str = None) -> tuple
 
 Conditionally execute code.
 
@@ -4564,7 +4583,7 @@ explain how this mode is automatically selected).
 
 The mode is chosen as follows:
 
-1. When the ``mode`` argument is set to ``"auto"`` (the *default*), the
+1. When the ``mode`` argument is set to ``None`` (the *default*), the
    function examines the type of the ``cond`` input and uses scalar
    mode if the type is a builtin Python ``bool``.
 
@@ -4684,9 +4703,9 @@ Args:
 
     false_fn (Callable): a callable that implements the body of the ``else`` block.
 
-    mode (str): Specify this parameter to override the evaluation mode.
-      Possible values are: ``"scalar"``, ``"symbolic"``, ``"evaluated"``, or
-      ``"auto"``.
+    mode (Optional[str]): Specify this parameter to override the evaluation
+      mode. Possible values besides ``None`` are: ``"scalar"``, ``"symbolic"``,
+      ``"evaluated"``.
 
     rv_labels (list[str]): An optional list of labels associated with each
       element of the return value. This parameter should only be specified when
@@ -4694,9 +4713,9 @@ Args:
       the :py:func:`@drjit.syntax <drjit.syntax>` decorator to provide better
       error messages in case of detected inconsistencies.
 
-    name (str): An optional descriptive name. Dr.Jit will include this label in
-      generated low-level IR, which can be helpful when debugging the
-      compilation of large programs. The default is ``"unnamed"``.
+    name (Optional[str]): An optional descriptive name. If specified, Dr.Jit
+      will include this label in generated low-level IR, which can be helpful
+      when debugging the compilation of large programs.
 
 Returns:
     object: Combined return value mixing the results of ``true_fn`` and
@@ -5174,6 +5193,26 @@ A practical implication of this optimization flag is that it may cause
 
 This flag is *enabled* by default. Note that it is only meaningful
 in combination with :py:attr:`SymbolicLoops`.)";
+
+// For Sphinx-related technical reasons, this comment is replicated in
+// reference.rst. Please keep them in sync when making changes
+static const char *doc_JitFlag_CompressLoops = R"(
+Compress the loop state of evaluated loops after every iteration.
+
+When an evaluated loop processes many elements, and when each element requires a
+different number of loop iterations, there is question of what should be done
+with inactive elements. The default implementation keeps them around and does
+redundant calculations that are, however, masked out. Consequently, later loop
+iterations don't run faster despite fewer elements being active.
+
+Setting this falg causes the removal of inactive elements after every
+iteration. This reorganization is not for free and does not benefit all use
+cases.
+
+This flag is *disabled* by default. Note that it only applies to *evaluated*
+loops (i.e., when :py:attr:`SymbolicLoops` is disabled, or the
+``mode='evaluted'`` parameter as passed to the loop in question).)";
+
 
 // For Sphinx-related technical reasons, this comment is replicated in
 // reference.rst. Please keep them in sync when making changes

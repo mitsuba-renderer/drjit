@@ -15,8 +15,9 @@
 #include "apply.h"
 #include "base.h"
 #include "shape.h"
-#include <nanobind/stl/vector.h>
 #include <nanobind/stl/string.h>
+#include <nanobind/stl/vector.h>
+#include <nanobind/stl/optional.h>
 
 /// State object passed to callbacks that implement the Python interface around ad_cond().
 struct IfState {
@@ -93,16 +94,16 @@ static void if_stmt_delete_cb(void *p) {
 
 nb::object if_stmt(nb::tuple args, nb::handle cond, nb::callable true_fn,
                    nb::callable false_fn, std::vector<std::string> &&rv_labels,
-                   const std::string &name, const std::string &mode) {
+                   std::optional<std::string> name, std::optional<std::string> mode) {
     try {
         (void) rv_labels;
         JitBackend backend = JitBackend::None;
         uint32_t cond_index = 0;
 
-        bool is_scalar = mode == "scalar",
-             is_auto = mode == "auto";
-
-        if (is_auto)
+        bool is_scalar;
+        if (mode.has_value())
+            is_scalar = mode == "scalar";
+        else
             is_scalar = cond.type().is(&PyBool_Type);
 
         if (!is_scalar) {
@@ -135,15 +136,18 @@ nb::object if_stmt(nb::tuple args, nb::handle cond, nb::callable true_fn,
         // General case: call ad_cond() with a number of callbacks that
         // implement an interface to Python
         int symbolic = -1;
-        if (is_auto)
+        if (!mode.has_value())
             symbolic = -1;
         else if (mode == "symbolic")
             symbolic = 1;
         else if (mode == "evaluated")
             symbolic = 0;
         else
-            nb::raise("invalid 'mode' argument (must equal \"auto\", "
+            nb::raise("invalid 'mode' argument (must equal None, "
                       "\"scalar\", \"symbolic\", or \"evaluated\").");
+
+        const char *name_cstr =
+            name.has_value() ? name.value().c_str() : "unnamed";
 
         IfState *is =
             new IfState(std::move(args), std::move(true_fn),
@@ -158,7 +162,7 @@ nb::object if_stmt(nb::tuple args, nb::handle cond, nb::callable true_fn,
         collect_indices(is->args, args_i, true);
 
         bool all_done =
-            ad_cond(backend, symbolic, name.c_str(), is, cond_index, args_i,
+            ad_cond(backend, symbolic, name_cstr, is, cond_index, args_i,
                     rv_i, if_stmt_body_cb, if_stmt_delete_cb, true);
 
         // Construct the final set of return values
@@ -187,6 +191,6 @@ nb::object if_stmt(nb::tuple args, nb::handle cond, nb::callable true_fn,
 
 void export_if_stmt(nb::module_ &m) {
     m.def("if_stmt", &if_stmt, "args"_a, "cond"_a, "true_fn"_a, "false_fn"_a,
-          "rv_labels"_a = nb::make_tuple(), "label"_a = "unnamed",
-          "mode"_a = "auto", nb::raw_doc(doc_if_stmt));
+          "rv_labels"_a = nb::make_tuple(), "label"_a = nb::none(),
+          "mode"_a = nb::none(), nb::raw_doc(doc_if_stmt));
 }
